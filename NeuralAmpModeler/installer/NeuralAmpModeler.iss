@@ -74,6 +74,12 @@ Source: "..\manual\NeuralAmpModeler manual.pdf"; DestDir: "{app}"
 Source: "changelog.txt"; DestDir: "{app}"
 Source: "readme-win.rtf"; DestDir: "{app}"; DestName: "readme.rtf"; Flags: isreadme
 
+; VoLum: bundled Ampete .nam rigs (standalone finds {app}\rigs\Ampete One; VST3 uses registry path below).
+Source: "..\..\rigs\Ampete One\*.nam"; DestDir: "{app}\rigs\Ampete One"; Check: RigsShouldInstall; Flags: ignoreversion
+
+[Registry]
+Root: HKLM; Subkey: "Software\VoLum\NeuralAmpModeler"; ValueType: string; ValueName: "AmpeteRigsPath"; ValueData: "{app}\rigs\Ampete One"; Flags: uninsdeletekey; Check: RigsShouldInstall
+
 [Icons]
 Name: "{group}\NeuralAmpModeler"; Filename: "{app}\NeuralAmpModeler_x64.exe"
 Name: "{group}\User guide"; Filename: "{app}\NeuralAmpModeler manual.pdf"
@@ -82,6 +88,11 @@ Name: "{group}\Changelog"; Filename: "{app}\changelog.txt"
 Name: "{group}\Uninstall NeuralAmpModeler"; Filename: "{app}\unins000.exe"
 
 [Code]
+function RigsShouldInstall: Boolean;
+begin
+  Result := IsComponentSelected('app') or IsComponentSelected('vst3_64');
+end;
+
 var
   OkToCopyLog : Boolean;
 (*

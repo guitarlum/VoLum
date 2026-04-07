@@ -125,6 +125,34 @@ int _GetConfigFrom_0_7_12(const iplug::IByteChunk& chunk, int startPos, nlohmann
   return pos;
 }
 
+// v0.7.14 (adds VoLum "AmpeteRig"; 13 param doubles after paths — keep 0.7.12..0.7.13 on 12 doubles)
+
+void _UpdateConfigFrom_0_7_14(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_7_12(config);
+}
+
+int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "AmpeteRig"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_7_14(config);
+  return pos;
+}
+
 // 0.7.10
 
 void _UpdateConfigFrom_0_7_10(nlohmann::json& config)
@@ -248,7 +276,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(0, 7, 12))
+  if (version >= _Version(0, 7, 14))
+  {
+    pos = _GetConfigFrom_0_7_14(chunk, pos, config);
+  }
+  else if (version >= _Version(0, 7, 12))
   {
     pos = _GetConfigFrom_0_7_12(chunk, pos, config);
   }

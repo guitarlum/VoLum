@@ -16,6 +16,8 @@
 #include "architecture.hpp"
 
 #include "NeuralAmpModelerControls.h"
+#include "VoLumAmpeteCatalog.h"
+#include "VoLumPaths.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -89,12 +91,26 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kNoiseGateActive)->InitBool("NoiseGateActive", true);
   GetParam(kEQActive)->InitBool("ToneStack", true);
   GetParam(kOutputMode)->InitEnum("OutputMode", 1, {"Raw", "Normalized", "Calibrated"}); // TODO DRY w/ control
+#ifdef APP_API
+  GetParam(kIRToggle)->InitBool("IRToggle", false);
+#else
   GetParam(kIRToggle)->InitBool("IRToggle", true);
+#endif
+  GetParam(kVoLumAmpeteRig)
+    ->InitEnum("AmpeteRig", 0,
+      {volum::kAmpeteLabels[0], volum::kAmpeteLabels[1], volum::kAmpeteLabels[2], volum::kAmpeteLabels[3],
+       volum::kAmpeteLabels[4], volum::kAmpeteLabels[5], volum::kAmpeteLabels[6], volum::kAmpeteLabels[7],
+       volum::kAmpeteLabels[8], volum::kAmpeteLabels[9], volum::kAmpeteLabels[10], volum::kAmpeteLabels[11],
+       volum::kAmpeteLabels[12], volum::kAmpeteLabels[13], volum::kAmpeteLabels[14], volum::kAmpeteLabels[15]});
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
+
+#if VOLUM_AMPETE_PRODUCT
+  ApplyVoLumAmpeteRigFromParam();
+#endif
 
   mMakeGraphicsFunc = [&]() {
 
@@ -177,13 +193,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
 
-    // Model loader button
+#if !VOLUM_AMPETE_PRODUCT
     auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
       if (fileName.GetLength())
       {
-        // Sets mNAMPath and mStagedNAM
         const std::string msg = _StageModel(fileName);
-        // TODO error messages like the IR loader.
         if (msg.size())
         {
           std::stringstream ss;
@@ -193,8 +207,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         std::cout << "Loaded: " << fileName.Get() << std::endl;
       }
     };
+#endif
 
-    // IR loader button
     auto loadIRCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
       if (fileName.GetLength())
       {
@@ -216,6 +230,24 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURAL AMP MODELER", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
+#if VOLUM_AMPETE_PRODUCT
+    pGraphics->AttachControl(
+      new IVMenuButtonControl(modelArea, kVoLumAmpeteRig, "Ampete model", style, EVShape::Rectangle));
+#ifndef APP_API
+#ifdef NAM_PICK_DIRECTORY
+    const std::string defaultIRString = "Select IR directory...";
+#else
+    const std::string defaultIRString = "Select IR...";
+#endif
+    const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
+    pGraphics->AttachControl(new ISVGSwitchControl(irSwitchArea, {irIconOffSVG, irIconOnSVG}, kIRToggle));
+    pGraphics->AttachControl(
+      new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
+                                fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
+                                "Get IRs", getUrl),
+      kCtrlTagIRFileBrowser);
+#endif
+#else
 #ifdef NAM_PICK_DIRECTORY
     const std::string defaultNamFileString = "Select model directory...";
     const std::string defaultIRString = "Select IR directory...";
@@ -223,7 +255,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const std::string defaultNamFileString = "Select model...";
     const std::string defaultIRString = "Select IR...";
 #endif
-    // Getting started page listing additional resources
     const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
     pGraphics->AttachControl(
       new NAMFileBrowserControl(modelArea, kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
@@ -236,6 +267,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
                                 "Get IRs", getUrl),
       kCtrlTagIRFileBrowser);
+#endif
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
     pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
@@ -442,21 +474,23 @@ void NeuralAmpModeler::OnUIOpen()
 {
   Plugin::OnUIOpen();
 
+#if !VOLUM_AMPETE_PRODUCT
   if (mNAMPath.GetLength())
   {
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
-    // If it's not loaded yet, then mark as failed.
-    // If it's yet to be loaded, then the completion handler will set us straight once it runs.
     if (mModel == nullptr && mStagedModel == nullptr)
       SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
   }
+#endif
 
+#ifndef APP_API
   if (mIRPath.GetLength())
   {
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
     if (mIR == nullptr && mStagedIR == nullptr)
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
   }
+#endif
 
   if (mModel != nullptr)
   {
@@ -479,6 +513,9 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneBass: mToneStack->SetParam("bass", GetParam(paramIdx)->Value()); break;
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
+#if VOLUM_AMPETE_PRODUCT
+    case kVoLumAmpeteRig: ApplyVoLumAmpeteRigFromParam(); break;
+#endif
     default: break;
   }
 }
@@ -495,7 +532,9 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
         break;
+#ifndef APP_API
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+#endif
       default: break;
     }
   }
@@ -697,11 +736,15 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     temp->Reset(GetSampleRate(), GetBlockSize());
     mStagedModel = std::move(temp);
     mNAMPath = modelPath;
+#if !VOLUM_AMPETE_PRODUCT
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+#endif
   }
   catch (std::runtime_error& e)
   {
+#if !VOLUM_AMPETE_PRODUCT
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
+#endif
 
     if (mStagedModel != nullptr)
     {
@@ -714,6 +757,27 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
   }
   return "";
 }
+
+#if VOLUM_AMPETE_PRODUCT
+void NeuralAmpModeler::ApplyVoLumAmpeteRigFromParam()
+{
+  const auto dir = volum::FindAmpeteRigsDirectory();
+  if (dir.empty())
+    return;
+
+  const int idx = GetParam(kVoLumAmpeteRig)->Int();
+  const int idxClamp = std::clamp(idx, 0, volum::kAmpeteRigCount - 1);
+  const auto filePath = dir / volum::kAmpeteFiles[idxClamp];
+  if (!std::filesystem::exists(filePath))
+    return;
+
+  WDL_String wdl;
+  wdl.Set(std::filesystem::weakly_canonical(filePath).string().c_str());
+  const std::string err = _StageModel(wdl);
+  if (!err.empty())
+    std::cerr << "VoLum Ampete load failed: " << err << std::endl;
+}
+#endif
 
 dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 {

@@ -1,0 +1,30 @@
+---
+description: VoLum iteration loop, vibe coding, verification, and rollback hygiene
+alwaysApply: true
+---
+
+# VoLum workflow (vibe coding + safety nets)
+
+## Mindset
+
+- Ship **small vertical slices**: one behavior, one bugfix, or one refactor path per pass—**working build + tests** before the next idea.
+- Spikes are fine; **delete or fold** dead spike code before you call the iteration done.
+- Match **existing** naming, patterns, and file layout. No drive-by cleanups outside the task.
+
+## Every meaningful iteration (before you stop or hand off)
+
+1. **Run tests** when C++/NAM/plugin logic changed:
+   - `NeuralAmpModeler/scripts/run-tests-win.ps1` (Release x64), or the equivalent CI command you are using.
+2. **Append a changelog line** so you can bisect and remember intent:
+   - Prefer `NeuralAmpModeler/installer/changelog.txt` (keep project style: date + short note).
+   - One line per user-visible or behavior change; include breaking preset/state format bumps.
+3. **Commit** in a **single coherent chunk** when possible (easy `git revert`). If the user prefers WIP commits, say so in chat.
+
+## Execution
+
+- **You run** builds/tests in this environment; do not only tell the user what to run.
+- After failures: diagnose, fix, retry—do not stop after one error.
+
+## Scope discipline
+
+- Touch only files needed for the request. Do not add docs/README/ADRs unless asked.
