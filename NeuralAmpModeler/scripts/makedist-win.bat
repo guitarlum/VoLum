@@ -51,19 +51,19 @@ echo Building ...
 REM Remove previous build logs
 if exist "build-win.log" (del build-win.log)
 
-if exist "%ProgramFiles(x86)%" (goto 64-Bit) else (goto 32-Bit)
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
+REM Visual Studio 2019 path is obsolete on many machines; use vswhere (VS 2022 Build Tools, Community, etc.)
 if not defined DevEnvDir (
-:32-Bit
-echo 32-Bit O/S detected
-call "%ProgramFiles%\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86_x64
-goto END
+  for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+    if not "%%i"=="" call "%%i\VC\Auxiliary\Build\vcvarsall.bat" x86_x64
+  )
+)
 
-:64-Bit
-echo 64-Bit Host O/S detected
-call "%ProgramFiles(x86)%\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86_x64
-goto END
-:END
+for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe"`) do set "MSBUILD_EXE=%%i"
+if not defined MSBUILD_EXE (
+  echo ERROR: MSBuild not found. Install "Visual Studio Build Tools" with workload "Desktop development with C++" ^(Microsoft.VisualStudio.Workload.VCTools^).
+  exit /b 1
 )
 
 
@@ -84,7 +84,7 @@ REM msbuild NeuralAmpModeler.sln /p:configuration=release /p:platform=win32 /nol
 
 REM echo Building 64 bit binaries...
 REM add projects with /t to build VST2 and AAX
-msbuild NeuralAmpModeler.sln /t:NeuralAmpModeler-app;NeuralAmpModeler-vst3 /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger /m /flp:logfile=build-win.log;errorsonly;append
+"%MSBUILD_EXE%" NeuralAmpModeler.sln /t:NeuralAmpModeler-app;NeuralAmpModeler-vst3 /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger /m /flp:logfile=build-win.log;errorsonly;append
 
 REM --echo Copying AAX Presets
 
