@@ -1,0 +1,30 @@
+---
+description: NeuralAmpModeler (iPlug2 / NAM) C++ conventions and VoLum forks
+globs:
+  - NeuralAmpModeler/**/*.cpp
+  - NeuralAmpModeler/**/*.h
+alwaysApply: false
+---
+
+# NeuralAmpModeler C++ (VoLum)
+
+## Params and presets
+
+- **`EParams` order** is the serialization order. New params need **`Init*`** with a **stable `GetName()`** string.
+- If you add or reorder params, update **`Unserialization.cpp`**: new **version branch** + `paramNames` list; never change the **byte layout** of older versions—add a new **`_GetConfigFrom_*`** path and route by `PLUG_VERSION_STR` / chunk version.
+
+## VoLum product flag (`config.h`)
+
+- **`VOLUM_AMPETE_PRODUCT`**: Ampete catalog UI for **both** standalone and VST3; bundled rigs via Windows installer (`{app}\rigs\Ampete One` + `HKLM\Software\VoLum\NeuralAmpModeler\AmpeteRigsPath`). IR file browser remains on VST3 only unless you change that block.
+
+## Standalone vs plugin
+
+- **`#ifdef APP_API`**: standalone (no IR row in VoLum layout). **`#ifndef APP_API`**: DAW build (IR browser, host I/O).
+
+## Dependencies
+
+- Prefer existing iPlug / repo **include paths**. If vendoring headers (e.g. JSON), call out duplication risk in changelog and align with upstream when merging.
+
+## Verification
+
+- After DSP/UI/state changes: **`run-tests-win.ps1`** and a **targeted MSBuild** of the configuration you touched (e.g. `NeuralAmpModeler-app` or `NeuralAmpModeler-vst3`).
