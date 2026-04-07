@@ -10,6 +10,7 @@
 #include "Colors.h"
 #include "ToneStack.h"
 
+#include "config.h"
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
 
@@ -45,6 +46,7 @@ enum EParams
   kCalibrateInput,
   kInputCalibrationLevel,
   kOutputMode,
+  kVoLumAmpeteRig,
   kNumParams
 };
 
@@ -220,6 +222,9 @@ private:
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
+#if VOLUM_AMPETE_PRODUCT
+  void ApplyVoLumAmpeteRigFromParam();
+#endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
   // it wasn't successful.
