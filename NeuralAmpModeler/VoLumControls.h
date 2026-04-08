@@ -279,6 +279,12 @@ public:
 
   int GetSelected() const { return mSelected; }
 
+  void SetSelected(int idx)
+  {
+    mSelected = idx;
+    SetDirty(false);
+  }
+
 private:
   int mSelected = 3;
   IRECT mBtnRects[4];
