@@ -23,4 +23,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 11/30/2024 - v0.7.12
 12/20/2024 - v0.7.13
 04/07/2026 - VoLum: Windows installer copies bundled Ampete rigs to {app}\rigs\Ampete One and sets HKLM\Software\VoLum\NeuralAmpModeler\AmpeteRigsPath for VST3. Ampete model menu for VST3 (IR browser unchanged). Defines VOLUM_AMPETE_PRODUCT in config.h.
+04/08/2026 - VoLum: New Variant F UI layout (900x600). Sidebar amp browser, speaker mode buttons, hero image area, knob groups [Channel|Input,Gate|Bass,Mid,Treble|Output], I/O meters, toggles. Channel selector is a discrete stepper (not a knob). Knob value labels update live from params. Dark procedural background. VoLumControls.h with custom controls. Original NAM layout preserved under #else.
 

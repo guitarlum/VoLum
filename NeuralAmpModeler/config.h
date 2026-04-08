@@ -30,8 +30,13 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
+#if VOLUM_AMPETE_PRODUCT
+#define PLUG_WIDTH 900
+#define PLUG_HEIGHT 600
+#else
 #define PLUG_WIDTH 600
 #define PLUG_HEIGHT 400
+#endif
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0
