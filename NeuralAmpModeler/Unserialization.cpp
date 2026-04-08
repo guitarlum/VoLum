@@ -153,6 +153,19 @@ int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann
   return pos;
 }
 
+// v0.7.15 (same params as 0.7.14, per-amp settings appended after SerializeParams)
+
+void _UpdateConfigFrom_0_7_15(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_7_14(config);
+}
+
+int _GetConfigFrom_0_7_15(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  int pos = _GetConfigFrom_0_7_14(chunk, startPos, config);
+  return pos;
+}
+
 // 0.7.10
 
 void _UpdateConfigFrom_0_7_10(nlohmann::json& config)
@@ -276,7 +289,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(0, 7, 14))
+  if (version >= _Version(0, 7, 15))
+  {
+    pos = _GetConfigFrom_0_7_15(chunk, pos, config);
+  }
+  else if (version >= _Version(0, 7, 14))
   {
     pos = _GetConfigFrom_0_7_14(chunk, pos, config);
   }
@@ -298,6 +315,42 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     assert(false);
   }
   _UnserializeApplyConfig(config);
+
+#if VOLUM_AMPETE_PRODUCT
+  // v0.7.15+: read per-amp settings after the params
+  if (version >= _Version(0, 7, 15))
+  {
+    // SerializeParams wrote kNumParams doubles; now read the per-amp block
+    pos = chunk.Get(&mVolumAmpIdx, pos);
+    pos = chunk.Get(&mVolumSpeakerIdx, pos);
+    pos = chunk.Get(&mVolumChannelIdx, pos);
+    mVolumAmpIdx = std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1);
+    mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
+
+    for (int i = 0; i < volum::kAmpCount; i++)
+    {
+      auto& s = mVolumAmpSettings[i];
+      pos = chunk.Get(&s.speakerIdx, pos);
+      pos = chunk.Get(&s.channelIdx, pos);
+      pos = chunk.Get(&s.inputLevel, pos);
+      pos = chunk.Get(&s.gateThreshold, pos);
+      pos = chunk.Get(&s.toneBass, pos);
+      pos = chunk.Get(&s.toneMid, pos);
+      pos = chunk.Get(&s.toneTreble, pos);
+      pos = chunk.Get(&s.outputLevel, pos);
+      int ng = 1, eq = 1;
+      pos = chunk.Get(&ng, pos);
+      pos = chunk.Get(&eq, pos);
+      s.noiseGateActive = (ng != 0);
+      s.eqActive = (eq != 0);
+    }
+
+    _VolumRestoreFromSettings(mVolumAmpIdx);
+    _VolumRefreshChannels();
+    mVolumNeedsLoad.store(true);
+  }
+#endif
+
   return pos;
 }
 

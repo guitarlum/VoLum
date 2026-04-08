@@ -14,8 +14,26 @@
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
 
+#include <array>
 #include <unordered_map>
 
+#if VOLUM_AMPETE_PRODUCT
+#include "VoLumAmpeteCatalog.h"
+
+struct VoLumAmpSettings
+{
+  int speakerIdx = 3;
+  int channelIdx = 0;
+  double inputLevel = 0.0;
+  double gateThreshold = -80.0;
+  double toneBass = 5.0;
+  double toneMid = 5.0;
+  double toneTreble = 5.0;
+  double outputLevel = 0.0;
+  bool noiseGateActive = true;
+  bool eqActive = true;
+};
+#endif
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -235,6 +253,10 @@ private:
 #if VOLUM_AMPETE_PRODUCT
   void _VolumRefreshChannels();
   std::string _StageModelFromData(nam::dspData conf, const char* path);
+  void _VolumSaveCurrentToSettings();
+  void _VolumRestoreFromSettings(int ampIdx);
+  void _VolumSaveSettingsToFile();
+  void _VolumLoadSettingsFromFile();
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
@@ -250,6 +272,9 @@ private:
   // Per-amp cache: parsed dspData keyed by filename, avoids re-parsing JSON
   std::unordered_map<std::string, nam::dspData> mVolumDspCache;
   int mVolumCachedAmpIdx = -1;
+
+  // Per-amp settings: remembered across amp switches and sessions
+  std::array<VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if

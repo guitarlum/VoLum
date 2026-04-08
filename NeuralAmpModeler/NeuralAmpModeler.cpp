@@ -1,6 +1,7 @@
 #include <algorithm> // std::clamp, std::min
 #include <cmath> // pow
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <thread>
 #include <utility>
@@ -128,6 +129,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
       mVolumRigsRoot = root.string();
+    _VolumLoadSettingsFromFile();
+    _VolumRestoreFromSettings(mVolumAmpIdx);
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
   }
@@ -184,10 +187,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new VoLumAmpListControl(
         ampListArea, volum::kAmpCount, ampNames,
         [this](int ampIdx) {
+          _VolumSaveCurrentToSettings();
           mVolumAmpIdx = ampIdx;
-          mVolumChannelIdx = 0;
+          _VolumRestoreFromSettings(ampIdx);
           _VolumRefreshChannels();
           mVolumNeedsLoad.store(true);
+          _VolumSaveSettingsToFile();
 
           auto* pGfx = GetUI();
           if (!pGfx) return;
@@ -374,6 +379,43 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
 
+    // Apply loaded settings: select correct amp, speaker, hero image
+    {
+      auto* ampList = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpList)->As<VoLumAmpListControl>();
+      auto* spkRow = pGraphics->GetControlWithTag(kCtrlTagVoLumSpeakerRow)->As<VoLumSpeakerRowControl>();
+      auto* heroCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
+      auto* nameCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpName)->As<VoLumAmpNameControl>();
+
+      if (ampList) ampList->SetSelected(mVolumAmpIdx);
+      if (spkRow) spkRow->SetSelected(mVolumSpeakerIdx);
+      if (nameCtrl) nameCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName);
+      if (heroCtrl)
+      {
+        static const char* ampImageFiles[volum::kAmpCount] = {
+          "ampete-one-ndsp.png", nullptr, "brunetti-ndsp.png", nullptr,
+          nullptr, nullptr, nullptr, "marshall-2203-ndsp.png",
+          nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
+        };
+        bool loaded = false;
+        if (ampImageFiles[mVolumAmpIdx])
+        {
+          namespace fs = std::filesystem;
+          fs::path imgPath = fs::path(mVolumRigsRoot).parent_path()
+            / "NeuralAmpModeler" / "ui-mockup" / "amp-styles" / ampImageFiles[mVolumAmpIdx];
+          if (fs::exists(imgPath))
+          {
+            IBitmap bmp = pGraphics->LoadBitmap(imgPath.string().c_str());
+            if (bmp.W() > 0) { heroCtrl->SetBitmap(bmp); loaded = true; }
+          }
+        }
+        if (!loaded)
+        {
+          char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
+          heroCtrl->SetPlaceholder(ph);
+        }
+      }
+    }
+
 #else
     // ========== Original NAM Layout ==========
     const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
@@ -520,6 +562,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
 NeuralAmpModeler::~NeuralAmpModeler()
 {
+#if VOLUM_AMPETE_PRODUCT
+  _VolumSaveSettingsToFile();
+#endif
   _DeallocateIOPointers();
 }
 
@@ -756,17 +801,38 @@ void NeuralAmpModeler::OnIdle()
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
 {
-  // If this isn't here when unserializing, then we know we're dealing with something before v0.8.0.
   WDL_String header("###NeuralAmpModeler###"); // Don't change this!
   chunk.PutStr(header.Get());
-  // Plugin version, so we can load legacy serialized states in the future!
   WDL_String version(PLUG_VERSION_STR);
   chunk.PutStr(version.Get());
-  // Model directory (don't serialize the model itself; we'll just load it again
-  // when we unserialize)
   chunk.PutStr(mNAMPath.Get());
   chunk.PutStr(mIRPath.Get());
-  return SerializeParams(chunk);
+  bool ok = SerializeParams(chunk);
+
+#if VOLUM_AMPETE_PRODUCT
+  // v0.7.15: append per-amp settings after params
+  chunk.Put(&mVolumAmpIdx);
+  chunk.Put(&mVolumSpeakerIdx);
+  chunk.Put(&mVolumChannelIdx);
+  for (int i = 0; i < volum::kAmpCount; i++)
+  {
+    const auto& s = mVolumAmpSettings[i];
+    chunk.Put(&s.speakerIdx);
+    chunk.Put(&s.channelIdx);
+    chunk.Put(&s.inputLevel);
+    chunk.Put(&s.gateThreshold);
+    chunk.Put(&s.toneBass);
+    chunk.Put(&s.toneMid);
+    chunk.Put(&s.toneTreble);
+    chunk.Put(&s.outputLevel);
+    int ng = s.noiseGateActive ? 1 : 0;
+    int eq = s.eqActive ? 1 : 0;
+    chunk.Put(&ng);
+    chunk.Put(&eq);
+  }
+#endif
+
+  return ok;
 }
 
 int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
@@ -1120,6 +1186,140 @@ std::string NeuralAmpModeler::_StageModelFromData(nam::dspData conf, const char*
     return e.what();
   }
   return "";
+}
+
+void NeuralAmpModeler::_VolumSaveCurrentToSettings()
+{
+  auto& s = mVolumAmpSettings[mVolumAmpIdx];
+  s.speakerIdx = mVolumSpeakerIdx;
+  s.channelIdx = mVolumChannelIdx;
+  s.inputLevel = GetParam(kInputLevel)->Value();
+  s.gateThreshold = GetParam(kNoiseGateThreshold)->Value();
+  s.toneBass = GetParam(kToneBass)->Value();
+  s.toneMid = GetParam(kToneMid)->Value();
+  s.toneTreble = GetParam(kToneTreble)->Value();
+  s.outputLevel = GetParam(kOutputLevel)->Value();
+  s.noiseGateActive = GetParam(kNoiseGateActive)->Bool();
+  s.eqActive = GetParam(kEQActive)->Bool();
+}
+
+void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
+{
+  const auto& s = mVolumAmpSettings[ampIdx];
+  mVolumSpeakerIdx = s.speakerIdx;
+  mVolumChannelIdx = s.channelIdx;
+
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+
+  setParam(kInputLevel, s.inputLevel);
+  setParam(kNoiseGateThreshold, s.gateThreshold);
+  setParam(kToneBass, s.toneBass);
+  setParam(kToneMid, s.toneMid);
+  setParam(kToneTreble, s.toneTreble);
+  setParam(kOutputLevel, s.outputLevel);
+  setParam(kNoiseGateActive, s.noiseGateActive ? 1.0 : 0.0);
+  setParam(kEQActive, s.eqActive ? 1.0 : 0.0);
+
+  // Update speaker row UI if available
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+      spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);
+  }
+}
+
+void NeuralAmpModeler::_VolumSaveSettingsToFile()
+{
+  if (mVolumRigsRoot.empty())
+    return;
+
+  _VolumSaveCurrentToSettings();
+
+  nlohmann::json j;
+  j["version"] = 1;
+  j["lastAmpIdx"] = mVolumAmpIdx;
+
+  nlohmann::json amps = nlohmann::json::object();
+  for (int i = 0; i < volum::kAmpCount; i++)
+  {
+    const auto& s = mVolumAmpSettings[i];
+    nlohmann::json a;
+    a["speaker"] = s.speakerIdx;
+    a["channel"] = s.channelIdx;
+    a["input"] = s.inputLevel;
+    a["gate"] = s.gateThreshold;
+    a["bass"] = s.toneBass;
+    a["mid"] = s.toneMid;
+    a["treble"] = s.toneTreble;
+    a["output"] = s.outputLevel;
+    a["noiseGate"] = s.noiseGateActive;
+    a["eq"] = s.eqActive;
+    amps[volum::kAmps[i].folderName] = a;
+  }
+  j["amps"] = amps;
+
+  namespace fs = std::filesystem;
+  fs::path settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
+  try
+  {
+    std::ofstream out(settingsPath);
+    out << j.dump(2);
+  }
+  catch (...)
+  {
+    std::cerr << "Failed to write volum-settings.json" << std::endl;
+  }
+}
+
+void NeuralAmpModeler::_VolumLoadSettingsFromFile()
+{
+  if (mVolumRigsRoot.empty())
+    return;
+
+  namespace fs = std::filesystem;
+  fs::path settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
+  if (!fs::exists(settingsPath))
+    return;
+
+  try
+  {
+    std::ifstream in(settingsPath);
+    nlohmann::json j;
+    in >> j;
+
+    if (j.contains("lastAmpIdx"))
+      mVolumAmpIdx = std::clamp(j["lastAmpIdx"].get<int>(), 0, volum::kAmpCount - 1);
+
+    if (j.contains("amps") && j["amps"].is_object())
+    {
+      for (int i = 0; i < volum::kAmpCount; i++)
+      {
+        const char* key = volum::kAmps[i].folderName;
+        if (!j["amps"].contains(key))
+          continue;
+
+        const auto& a = j["amps"][key];
+        auto& s = mVolumAmpSettings[i];
+        if (a.contains("speaker")) s.speakerIdx = a["speaker"].get<int>();
+        if (a.contains("channel")) s.channelIdx = a["channel"].get<int>();
+        if (a.contains("input")) s.inputLevel = a["input"].get<double>();
+        if (a.contains("gate")) s.gateThreshold = a["gate"].get<double>();
+        if (a.contains("bass")) s.toneBass = a["bass"].get<double>();
+        if (a.contains("mid")) s.toneMid = a["mid"].get<double>();
+        if (a.contains("treble")) s.toneTreble = a["treble"].get<double>();
+        if (a.contains("output")) s.outputLevel = a["output"].get<double>();
+        if (a.contains("noiseGate")) s.noiseGateActive = a["noiseGate"].get<bool>();
+        if (a.contains("eq")) s.eqActive = a["eq"].get<bool>();
+      }
+    }
+  }
+  catch (...)
+  {
+    std::cerr << "Failed to read volum-settings.json" << std::endl;
+  }
 }
 #endif
 
