@@ -124,7 +124,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
 #if VOLUM_AMPETE_PRODUCT
-  ApplyVoLumAmpeteRigFromParam();
+  {
+    auto root = volum::FindRigsRootDirectory();
+    if (!root.empty())
+      mVolumRigsRoot = root.string();
+    _VolumRefreshChannels();
+    mVolumNeedsLoad.store(true);
+  }
 #endif
 
   mMakeGraphicsFunc = [&]() {
@@ -162,48 +168,52 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float mainW = mainR - mainL;
     const float mainCX = mainL + mainW / 2.f;
 
-    // Dark procedural background with sidebar
     pGraphics->AttachControl(new VoLumBackgroundControl(b, sidebarW));
 
     // Sidebar: logo
     const IRECT logoArea(b.L, b.T + 8.f, b.L + sidebarW, b.T + 48.f);
     pGraphics->AttachControl(new VoLumLogoControl(logoArea));
 
-    // Sidebar: amp list
-    static const char* ampNames[] = {
-      "Ampete One",         "Bad Cat mini Cat",  "Brunetti XL 2",     "Fryette Deliv. 120",
-      "H&K TriAmp Mk2",    "Lichtlaerm Prom.",  "Marshall 2204",     "Marshall JMP 2203",
-      "Marshall JVM",       "Orange OD120",      "Orange ORS100",     "Sebago Texas Fl.",
-      "Soldano SLO100",     "THC Sunset",
-    };
-    const int numAmps = 14;
+    // Sidebar: amp list (names from catalog)
+    static const char* ampNames[volum::kAmpCount];
+    for (int i = 0; i < volum::kAmpCount; i++)
+      ampNames[i] = volum::kAmps[i].displayName;
+
     const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
     pGraphics->AttachControl(
       new VoLumAmpListControl(
-        ampListArea, numAmps, ampNames,
+        ampListArea, volum::kAmpCount, ampNames,
         [this](int ampIdx) {
-          auto* pGraphics = GetUI();
-          if (!pGraphics)
-            return;
-          auto* heroCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
-          auto* nameCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpName)->As<VoLumAmpNameControl>();
+          mVolumAmpIdx = ampIdx;
+          mVolumChannelIdx = 0;
+          _VolumRefreshChannels();
+          mVolumNeedsLoad.store(true);
+
+          auto* pGfx = GetUI();
+          if (!pGfx) return;
+          auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
+          auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumAmpName)->As<VoLumAmpNameControl>();
           if (heroCtrl)
           {
-            char ph[4] = {ampNames[ampIdx][0], (char)('0' + (ampIdx % 10)), 0, 0};
+            char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
             heroCtrl->SetPlaceholder(ph);
           }
           if (nameCtrl)
-            nameCtrl->SetName(ampNames[ampIdx]);
-
-          // Force reload the current rig (tests load perf for all amps)
-          mLastLoadedAmpeteRigIdx = -1;
-          mAmpeteRigNeedsLoad.store(true);
+            nameCtrl->SetName(volum::kAmps[ampIdx].displayName);
         }),
       kCtrlTagVoLumAmpList);
 
-    // Speaker mode row
+    // Speaker mode row (with callback to switch speaker + reload)
     const IRECT speakerArea(mainL, b.T + 18.f, mainR, b.T + 66.f);
-    pGraphics->AttachControl(new VoLumSpeakerRowControl(speakerArea), kCtrlTagVoLumSpeakerRow);
+    pGraphics->AttachControl(
+      new VoLumSpeakerRowControl(speakerArea,
+        [this](int speakerIdx) {
+          mVolumSpeakerIdx = speakerIdx;
+          mVolumChannelIdx = 0;
+          _VolumRefreshChannels();
+          mVolumNeedsLoad.store(true);
+        }),
+      kCtrlTagVoLumSpeakerRow);
 
     // Amp hero image (340 x 160)
     const float heroW = 340.f;
@@ -217,7 +227,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new VoLumAmpNameControl(nameArea), kCtrlTagVoLumAmpName);
 
     // ---- Knobs: [Channel] | [Input, Gate] | [Bass, Mid, Treble] | [Output] ----
-    // Groups separated by dividers, knobs tightly packed within groups
     const float knobDiam = 50.f;
     const float colW = 60.f;
     const float labelH = 16.f;
@@ -225,16 +234,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float divW = 16.f;
     const float knobRowTop = nameArea.B + 12.f;
     const float knobT = knobRowTop + labelH;
-    // Total: 1 + div + 2 + div + 3 + div + 1 = 7 cols + 3 dividers
-    // Extra 20px for the wider channel stepper
     const float totalW = 7 * colW + 3 * divW + 20.f;
     const float rowLeft = mainCX - totalW / 2.f;
 
-    // Compute x for each knob column accounting for group dividers
-    // Groups: [0] | [1,2] | [3,4,5] | [6]
     auto knobX = [&](int slot) -> float {
       float x = rowLeft;
-      // Group boundaries: after slot 0, after slot 2, after slot 5
       int dividers = 0;
       if (slot > 0) dividers++;
       if (slot > 2) dividers++;
@@ -268,7 +272,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         IRECT(cx, knobT + knobDiam + 2.f, cx + colW, knobT + knobDiam + 2.f + valueH), paramId, suffix));
     };
 
-    // Group 1: Channel (discrete stepper, not a knob)
+    // Group 1: Channel (callback-based discrete stepper)
     {
       float cx = knobX(0);
       float stepW = colW + 20.f;
@@ -277,18 +281,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         IRECT(stepL, knobRowTop, stepL + stepW, knobRowTop + labelH), "CHANNEL"));
       float stepH = 32.f;
       float stepTop = knobT + (knobDiam - stepH) / 2.f;
-      pGraphics->AttachControl(new VoLumChannelStepControl(
-        IRECT(stepL, stepTop, stepL + stepW, stepTop + stepH), kVoLumAmpeteRig));
+      auto* channelStep = new VoLumChannelStepControl(
+        IRECT(stepL, stepTop, stepL + stepW, stepTop + stepH),
+        [this](int newIdx) {
+          mVolumChannelIdx = newIdx;
+          mVolumNeedsLoad.store(true);
+        });
+      channelStep->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
+      pGraphics->AttachControl(channelStep, kCtrlTagVoLumChannelStep);
     }
 
-    // Divider after Channel
     drawDivider(knobX(0) + colW);
 
     // Group 2: Input, Gate
     drawKnobCol(1, "INPUT", kInputLevel, "dB");
     drawKnobCol(2, "GATE", kNoiseGateThreshold, "dB");
 
-    // Divider after Gate
     drawDivider(knobX(2) + colW);
 
     // Group 3: Bass, Mid, Treble
@@ -296,27 +304,26 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(4, "MID", kToneMid, "", "EQ_KNOBS");
     drawKnobCol(5, "TREBLE", kToneTreble, "", "EQ_KNOBS");
 
-    // Divider after Treble
     drawDivider(knobX(5) + colW);
 
     // Group 4: Output
     drawKnobCol(6, "OUTPUT", kOutputLevel, "dB");
 
-    // I/O Meters flanking the knob area
+    // I/O Meters flanking the knob area (with extra spacing)
     const float meterW = 6.f;
     const float meterH = knobDiam + 10.f;
     const float meterTop = knobT - 5.f;
 
     pGraphics->AttachControl(new VoLumKnobLabelControl(
-      IRECT(rowLeft - 20.f, meterTop, rowLeft - 8.f, meterTop + meterH), "IN"));
+      IRECT(rowLeft - 38.f, meterTop, rowLeft - 22.f, meterTop + meterH), "IN"));
     pGraphics->AttachControl(new NAMMeterControl(
-      IRECT(rowLeft - 8.f, meterTop, rowLeft - 2.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagInputMeter);
+      IRECT(rowLeft - 22.f, meterTop, rowLeft - 16.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagInputMeter);
 
     const float rowRight = knobX(6) + colW;
     pGraphics->AttachControl(new NAMMeterControl(
-      IRECT(rowRight + 2.f, meterTop, rowRight + 8.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagOutputMeter);
+      IRECT(rowRight + 16.f, meterTop, rowRight + 22.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagOutputMeter);
     pGraphics->AttachControl(new VoLumKnobLabelControl(
-      IRECT(rowRight + 8.f, meterTop, rowRight + 22.f, meterTop + meterH), "OUT"));
+      IRECT(rowRight + 22.f, meterTop, rowRight + 38.f, meterTop + meterH), "OUT"));
 
     // Toggles: Noise Gate, EQ
     const float toggleY = knobRowTop + labelH + knobDiam + valueH + 16.f;
@@ -584,13 +591,45 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
 
 #if VOLUM_AMPETE_PRODUCT
-  if (mAmpeteRigNeedsLoad.exchange(false) && !mAmpeteRigLoading.load())
+  if (mVolumNeedsLoad.load() && !mVolumIsLoading.load())
   {
-    mAmpeteRigLoading.store(true);
-    std::thread([this]() {
-      ApplyVoLumAmpeteRigFromParam();
-      mAmpeteRigLoading.store(false);
-    }).detach();
+    mVolumNeedsLoad.store(false);
+    mVolumIsLoading.store(true);
+
+    // Capture path on main thread to avoid races with _VolumRefreshChannels
+    std::string fileToLoad;
+    if (mVolumChannelIdx < (int)mVolumChannelFiles.size())
+    {
+      namespace fs = std::filesystem;
+      auto rigPath = fs::path(mVolumRigsRoot)
+        / volum::kAmps[mVolumAmpIdx].folderName
+        / mVolumChannelFiles[mVolumChannelIdx];
+      fileToLoad = fs::weakly_canonical(rigPath).string();
+    }
+
+    if (!fileToLoad.empty())
+    {
+      // Update footer immediately so user sees what's loading
+      mVolumLastLoadedFile = std::filesystem::path(fileToLoad).filename().string();
+      if (auto* pGfx = GetUI())
+      {
+        if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
+          footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
+      }
+
+      std::thread([this, fileToLoad]() {
+        WDL_String wdl;
+        wdl.Set(fileToLoad.c_str());
+        const std::string err = _StageModel(wdl);
+        if (!err.empty())
+          std::cerr << "VoLum load failed: " << err << std::endl;
+        mVolumIsLoading.store(false);
+      }).detach();
+    }
+    else
+    {
+      mVolumIsLoading.store(false);
+    }
   }
 #endif
 
@@ -606,9 +645,9 @@ void NeuralAmpModeler::OnIdle()
   {
     if (auto* pGraphics = GetUI())
     {
-      // FIXME -- need to disable only the "normalized" model
-      // pGraphics->GetControlWithTag(kCtrlTagOutputMode)->SetDisabled(false);
+#if !VOLUM_AMPETE_PRODUCT
       static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->ClearModelInfo();
+#endif
       mModelCleared = false;
     }
   }
@@ -691,7 +730,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
 #if VOLUM_AMPETE_PRODUCT
-    case kVoLumAmpeteRig: mAmpeteRigNeedsLoad.store(true); break;
+    case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
 #endif
     default: break;
   }
@@ -936,29 +975,32 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 }
 
 #if VOLUM_AMPETE_PRODUCT
-void NeuralAmpModeler::ApplyVoLumAmpeteRigFromParam()
+void NeuralAmpModeler::_VolumRefreshChannels()
 {
-  const int idx = GetParam(kVoLumAmpeteRig)->Int();
-  const int idxClamp = std::clamp(idx, 0, volum::kAmpeteRigCount - 1);
-
-  if (idxClamp == mLastLoadedAmpeteRigIdx)
+  if (mVolumRigsRoot.empty())
     return;
 
-  const auto dir = volum::FindAmpeteRigsDirectory();
-  if (dir.empty())
-    return;
+  auto channels = volum::DiscoverChannels(
+    std::filesystem::path(mVolumRigsRoot),
+    volum::kAmps[mVolumAmpIdx].folderName,
+    volum::kSpeakerPrefixes[mVolumSpeakerIdx]);
 
-  const auto filePath = dir / volum::kAmpeteFiles[idxClamp];
-  if (!std::filesystem::exists(filePath))
-    return;
+  mVolumChannelFiles.clear();
+  mVolumChannelLabels.clear();
+  for (auto& ch : channels)
+  {
+    mVolumChannelFiles.push_back(std::move(ch.filename));
+    mVolumChannelLabels.push_back(std::move(ch.label));
+  }
 
-  mLastLoadedAmpeteRigIdx = idxClamp;
+  if (mVolumChannelIdx >= (int)mVolumChannelFiles.size())
+    mVolumChannelIdx = 0;
 
-  WDL_String wdl;
-  wdl.Set(std::filesystem::weakly_canonical(filePath).string().c_str());
-  const std::string err = _StageModel(wdl);
-  if (!err.empty())
-    std::cerr << "VoLum Ampete load failed: " << err << std::endl;
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
+      stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
+  }
 }
 #endif
 
@@ -1107,11 +1149,11 @@ void NeuralAmpModeler::_ProcessOutput(iplug::sample** inputs, iplug::sample** ou
 void NeuralAmpModeler::_UpdateControlsFromModel()
 {
   if (mModel == nullptr)
-  {
     return;
-  }
+
   if (auto* pGraphics = GetUI())
   {
+#if !VOLUM_AMPETE_PRODUCT
     ModelInfo modelInfo;
     modelInfo.sampleRate.known = true;
     modelInfo.sampleRate.value = mModel->GetEncapsulatedSampleRate();
@@ -1130,6 +1172,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
       c->SetNormalizedDisable(!mModel->HasLoudness());
       c->SetCalibratedDisable(!mModel->HasOutputLevel());
     }
+#endif
   }
 }
 

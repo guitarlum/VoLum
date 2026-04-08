@@ -68,6 +68,7 @@ enum ECtrlTags
   kCtrlTagVoLumHeroImage,
   kCtrlTagVoLumAmpName,
   kCtrlTagVoLumFooter,
+  kCtrlTagVoLumChannelStep,
 #endif
   kNumCtrlTags
 };
@@ -230,10 +231,19 @@ private:
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
 #if VOLUM_AMPETE_PRODUCT
-  void ApplyVoLumAmpeteRigFromParam();
-  int mLastLoadedAmpeteRigIdx = -1;
-  std::atomic<bool> mAmpeteRigNeedsLoad{false};
-  std::atomic<bool> mAmpeteRigLoading{false};
+  void _VolumRefreshChannels();
+  void _VolumLoadCurrentRig();
+
+  int mVolumAmpIdx = 0;
+  int mVolumSpeakerIdx = 3; // V30 default
+  int mVolumChannelIdx = 0;
+  std::vector<std::string> mVolumChannelFiles;
+  std::vector<std::string> mVolumChannelLabels;
+  std::string mVolumRigsRoot;
+  std::string mVolumLastLoadedFile;
+
+  std::atomic<bool> mVolumNeedsLoad{false};
+  std::atomic<bool> mVolumIsLoading{false};
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if

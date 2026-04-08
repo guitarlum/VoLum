@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #ifdef _WIN32
@@ -86,4 +89,62 @@ inline std::filesystem::path FindAmpeteRigsDirectory()
   }
   return {};
 }
+// Return the parent rigs/ root directory (parent of "Ampete One").
+inline std::filesystem::path FindRigsRootDirectory()
+{
+  auto ampeteDir = FindAmpeteRigsDirectory();
+  if (!ampeteDir.empty())
+    return ampeteDir.parent_path();
+  return {};
+}
+
+struct ChannelFile
+{
+  std::string filename;
+  std::string label;
+};
+
+// Scan an amp folder for .nam files matching a speaker prefix (e.g. "V30"),
+// returning sorted list of {filename, channelLabel} pairs.
+inline std::vector<ChannelFile> DiscoverChannels(
+  const std::filesystem::path& rigsRoot,
+  const char* ampFolder,
+  const char* speakerPrefix)
+{
+  namespace fs = std::filesystem;
+  std::vector<ChannelFile> result;
+
+  fs::path ampDir = rigsRoot / ampFolder;
+  std::error_code ec;
+  if (!fs::is_directory(ampDir, ec))
+    return result;
+
+  std::string prefix = std::string(speakerPrefix) + "-";
+
+  for (const auto& entry : fs::directory_iterator(ampDir, ec))
+  {
+    if (!entry.is_regular_file(ec))
+      continue;
+    std::string name = entry.path().filename().string();
+    if (name.size() > 4
+        && name.compare(name.size() - 4, 4, ".nam") == 0
+        && name.compare(0, prefix.size(), prefix) == 0)
+    {
+      auto lastDash = name.rfind('-');
+      if (lastDash != std::string::npos && lastDash + 1 < name.size() - 4)
+      {
+        std::string label = name.substr(lastDash + 1, name.size() - 4 - lastDash - 1);
+        for (auto& c : label) c = (char)std::toupper((unsigned char)c);
+        result.push_back({name, label});
+      }
+    }
+  }
+
+  std::sort(result.begin(), result.end(), [](const ChannelFile& a, const ChannelFile& b) {
+    return a.label < b.label;
+  });
+
+  return result;
+}
+
 } // namespace volum
