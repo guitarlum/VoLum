@@ -608,7 +608,6 @@ void NeuralAmpModeler::OnIdle()
 
     if (!fileToLoad.empty())
     {
-      // Update footer immediately so user sees what's loading
       mVolumLastLoadedFile = std::filesystem::path(fileToLoad).filename().string();
       if (auto* pGfx = GetUI())
       {
@@ -616,12 +615,80 @@ void NeuralAmpModeler::OnIdle()
           footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
       }
 
-      std::thread([this, fileToLoad]() {
-        WDL_String wdl;
-        wdl.Set(fileToLoad.c_str());
-        const std::string err = _StageModel(wdl);
-        if (!err.empty())
-          std::cerr << "VoLum load failed: " << err << std::endl;
+      const int ampIdx = mVolumAmpIdx;
+      const std::string rigsRoot = mVolumRigsRoot;
+
+      std::thread([this, fileToLoad, ampIdx, rigsRoot]() {
+        namespace fs = std::filesystem;
+        std::string filename = fs::path(fileToLoad).filename().string();
+
+        // Invalidate cache when amp changes
+        if (mVolumCachedAmpIdx != ampIdx)
+        {
+          mVolumDspCache.clear();
+          mVolumCachedAmpIdx = ampIdx;
+        }
+
+        // Check cache: skip JSON parsing if we already have parsed data
+        auto cacheIt = mVolumDspCache.find(filename);
+        if (cacheIt != mVolumDspCache.end())
+        {
+          const std::string err = _StageModelFromData(cacheIt->second, fileToLoad.c_str());
+          if (!err.empty())
+            std::cerr << "VoLum cached load failed: " << err << std::endl;
+        }
+        else
+        {
+          // Parse from file, cache the result
+          try
+          {
+            nam::dspData conf;
+            auto dspPath = fs::u8path(fileToLoad);
+            std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath, conf);
+            mVolumDspCache[filename] = conf;
+
+            auto temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
+            temp->Reset(GetSampleRate(), GetBlockSize());
+            mStagedModel = std::move(temp);
+            mNAMPath.Set(fileToLoad.c_str());
+          }
+          catch (std::runtime_error& e)
+          {
+            std::cerr << "VoLum load failed: " << e.what() << std::endl;
+          }
+        }
+
+        // Pre-parse remaining .nam files for this amp in background
+        if (!mVolumNeedsLoad.load())
+        {
+          fs::path ampDir = fs::path(rigsRoot) / volum::kAmps[ampIdx].folderName;
+          std::error_code ec;
+          if (fs::is_directory(ampDir, ec))
+          {
+            for (const auto& entry : fs::directory_iterator(ampDir, ec))
+            {
+              if (mVolumNeedsLoad.load())
+                break;
+              if (!entry.is_regular_file(ec))
+                continue;
+              std::string name = entry.path().filename().string();
+              if (name.size() > 4 && name.compare(name.size() - 4, 4, ".nam") == 0
+                  && mVolumDspCache.find(name) == mVolumDspCache.end())
+              {
+                try
+                {
+                  nam::dspData conf;
+                  nam::get_dsp(entry.path(), conf);
+                  mVolumDspCache[name] = std::move(conf);
+                }
+                catch (...)
+                {
+                }
+              }
+            }
+          }
+        }
+
         mVolumIsLoading.store(false);
       }).detach();
     }
@@ -1000,6 +1067,24 @@ void NeuralAmpModeler::_VolumRefreshChannels()
     if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
       stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
   }
+}
+
+std::string NeuralAmpModeler::_StageModelFromData(nam::dspData conf, const char* path)
+{
+  try
+  {
+    std::unique_ptr<nam::DSP> model = nam::get_dsp(conf);
+    auto temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
+    temp->Reset(GetSampleRate(), GetBlockSize());
+    mStagedModel = std::move(temp);
+    mNAMPath.Set(path);
+  }
+  catch (std::runtime_error& e)
+  {
+    std::cerr << "Failed to construct model from cached data" << std::endl;
+    return e.what();
+  }
+  return "";
 }
 #endif
 
