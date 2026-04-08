@@ -62,6 +62,13 @@ enum ECtrlTags
   kCtrlTagOutputMode,
   kCtrlTagCalibrateInput,
   kCtrlTagInputCalibrationLevel,
+#if VOLUM_AMPETE_PRODUCT
+  kCtrlTagVoLumAmpList,
+  kCtrlTagVoLumSpeakerRow,
+  kCtrlTagVoLumHeroImage,
+  kCtrlTagVoLumAmpName,
+  kCtrlTagVoLumFooter,
+#endif
   kNumCtrlTags
 };
 
@@ -224,6 +231,9 @@ private:
   std::string _StageModel(const WDL_String& dspFile);
 #if VOLUM_AMPETE_PRODUCT
   void ApplyVoLumAmpeteRigFromParam();
+  int mLastLoadedAmpeteRigIdx = -1;
+  std::atomic<bool> mAmpeteRigNeedsLoad{false};
+  std::atomic<bool> mAmpeteRigLoading{false};
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
