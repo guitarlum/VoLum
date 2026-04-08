@@ -1,18 +1,18 @@
-#define PLUG_NAME "NeuralAmpModeler"
-#define PLUG_MFR "Steven Atkinson"
+#define PLUG_NAME "VoLum"
+#define PLUG_MFR "Lum"
 #define PLUG_VERSION_HEX 0x0000070f
 #define PLUG_VERSION_STR "0.7.15"
-#define PLUG_UNIQUE_ID '1YEo'
-#define PLUG_MFR_ID 'SDAa'
-#define PLUG_URL_STR "https://github.com/sdatkinson/NeuralAmpModelerPlugin"
-#define PLUG_EMAIL_STR "spam@me.com"
-#define PLUG_COPYRIGHT_STR "Copyright 2022 Steven Atkinson"
+#define PLUG_UNIQUE_ID 'VoLm'
+#define PLUG_MFR_ID 'Lum0'
+#define PLUG_URL_STR "https://github.com/guitarlum/VoLum"
+#define PLUG_EMAIL_STR ""
+#define PLUG_COPYRIGHT_STR "Copyright 2026 Lum"
 #define PLUG_CLASS_NAME NeuralAmpModeler
-#define BUNDLE_NAME "NeuralAmpModeler"
-#define BUNDLE_MFR "StevenAtkinson"
+#define BUNDLE_NAME "VoLum"
+#define BUNDLE_MFR "Lum"
 #define BUNDLE_DOMAIN "com"
 
-#define SHARED_RESOURCES_SUBPATH "NeuralAmpModeler"
+#define SHARED_RESOURCES_SUBPATH "VoLum"
 
 // VoLum: Ampete catalog for standalone and VST3; .nam rigs ship with the Windows installer (see installer .iss).
 #define VOLUM_AMPETE_PRODUCT 1
