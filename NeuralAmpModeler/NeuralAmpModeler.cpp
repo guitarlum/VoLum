@@ -193,18 +193,59 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (!pGfx) return;
           auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
           auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumAmpName)->As<VoLumAmpNameControl>();
-          if (heroCtrl)
-          {
-            char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
-            heroCtrl->SetPlaceholder(ph);
-          }
           if (nameCtrl)
             nameCtrl->SetName(volum::kAmps[ampIdx].displayName);
+          if (heroCtrl)
+          {
+            // Try to load NDSP-style amp image from amp-styles directory
+            static const char* ampImageFiles[volum::kAmpCount] = {
+              "ampete-one-ndsp.png", nullptr, "brunetti-ndsp.png", nullptr,
+              nullptr, nullptr, nullptr, "marshall-2203-ndsp.png",
+              nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
+            };
+            bool loaded = false;
+            if (ampImageFiles[ampIdx])
+            {
+              namespace fs = std::filesystem;
+              fs::path imgPath = fs::path(mVolumRigsRoot).parent_path()
+                / "NeuralAmpModeler" / "ui-mockup" / "amp-styles" / ampImageFiles[ampIdx];
+              if (fs::exists(imgPath))
+              {
+                IBitmap bmp = pGfx->LoadBitmap(imgPath.string().c_str());
+                if (bmp.W() > 0)
+                {
+                  heroCtrl->SetBitmap(bmp);
+                  loaded = true;
+                }
+              }
+            }
+            if (!loaded)
+            {
+              char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
+              heroCtrl->SetPlaceholder(ph);
+            }
+          }
         }),
       kCtrlTagVoLumAmpList);
 
-    // Speaker mode row (with callback to switch speaker + reload)
-    const IRECT speakerArea(mainL, b.T + 18.f, mainR, b.T + 66.f);
+    // Vertically center the detail content in the right panel
+    const float speakerH = 48.f;
+    const float heroW = 340.f;
+    const float heroH = 150.f;
+    const float nameH = 28.f;
+    const float knobDiam = 56.f;
+    const float labelH = 18.f;
+    const float valueH = 16.f;
+    const float toggleH = 50.f;
+    const float footerH = 14.f;
+
+    const float contentH = speakerH + 6.f + heroH + 4.f + nameH + 16.f
+                         + labelH + knobDiam + valueH + 2.f + 12.f + toggleH + 6.f + footerH;
+    const float contentTop = b.T + (b.H() - contentH) / 2.f;
+
+    // Speaker mode row
+    float yPos = contentTop;
+    const IRECT speakerArea(mainL, yPos, mainR, yPos + speakerH);
     pGraphics->AttachControl(
       new VoLumSpeakerRowControl(speakerArea,
         [this](int speakerIdx) {
@@ -213,25 +254,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           mVolumNeedsLoad.store(true);
         }),
       kCtrlTagVoLumSpeakerRow);
+    yPos += speakerH + 6.f;
 
-    // Amp hero image (340 x 160)
-    const float heroW = 340.f;
-    const float heroH = 160.f;
-    const float heroTop = speakerArea.B + 6.f;
-    const IRECT heroArea(mainCX - heroW / 2.f, heroTop, mainCX + heroW / 2.f, heroTop + heroH);
+    // Amp hero image
+    const IRECT heroArea(mainCX - heroW / 2.f, yPos, mainCX + heroW / 2.f, yPos + heroH);
     pGraphics->AttachControl(new VoLumHeroImageControl(heroArea), kCtrlTagVoLumHeroImage);
+    yPos += heroH + 4.f;
 
-    // Amp name below hero
-    const IRECT nameArea(mainL, heroArea.B + 4.f, mainR, heroArea.B + 28.f);
+    // Amp name
+    const IRECT nameArea(mainL, yPos, mainR, yPos + nameH);
     pGraphics->AttachControl(new VoLumAmpNameControl(nameArea), kCtrlTagVoLumAmpName);
+    yPos += nameH + 16.f;
 
     // ---- Knobs: [Channel] | [Input, Gate] | [Bass, Mid, Treble] | [Output] ----
-    const float knobDiam = 50.f;
-    const float colW = 60.f;
-    const float labelH = 16.f;
-    const float valueH = 16.f;
-    const float divW = 16.f;
-    const float knobRowTop = nameArea.B + 12.f;
+    const float colW = 64.f;
+    const float divW = 12.f;
+    const float knobRowTop = yPos;
     const float knobT = knobRowTop + labelH;
     const float totalW = 7 * colW + 3 * divW + 20.f;
     const float rowLeft = mainCX - totalW / 2.f;
@@ -246,9 +284,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     };
 
     auto drawDivider = [&](float afterSlotRight) {
-      float dx = afterSlotRight + (divW - 1.f) / 2.f;
+      float dx = afterSlotRight + divW / 2.f - 1.f;
       pGraphics->AttachControl(new VoLumDividerControl(
-        IRECT(dx, knobT, dx + 1.f, knobT + knobDiam)));
+        IRECT(dx, knobT + 4.f, dx + 2.f, knobT + knobDiam - 4.f)));
     };
 
     auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix = "",
@@ -274,14 +312,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Group 1: Channel (callback-based discrete stepper)
     {
       float cx = knobX(0);
-      float stepW = colW + 20.f;
-      float stepL = cx - 10.f;
       pGraphics->AttachControl(new VoLumKnobLabelControl(
-        IRECT(stepL, knobRowTop, stepL + stepW, knobRowTop + labelH), "CHANNEL"));
-      float stepH = 32.f;
+        IRECT(cx, knobRowTop, cx + colW, knobRowTop + labelH), "CHANNEL"));
+      float stepH = 28.f;
       float stepTop = knobT + (knobDiam - stepH) / 2.f;
       auto* channelStep = new VoLumChannelStepControl(
-        IRECT(stepL, stepTop, stepL + stepW, stepTop + stepH),
+        IRECT(cx, stepTop, cx + colW, stepTop + stepH),
         [this](int newIdx) {
           mVolumChannelIdx = newIdx;
           mVolumNeedsLoad.store(true);
@@ -325,9 +361,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       IRECT(rowRight + 22.f, meterTop, rowRight + 38.f, meterTop + meterH), "OUT"));
 
     // Toggles: Noise Gate, EQ
-    const float toggleY = knobRowTop + labelH + knobDiam + valueH + 16.f;
+    const float toggleY = knobT + knobDiam + valueH + 2.f + 12.f;
     const float toggleW = 120.f;
-    const float toggleH = 50.f;
     const IRECT ngToggleArea(mainCX - toggleW - 20.f, toggleY, mainCX - 20.f, toggleY + toggleH);
     const IRECT eqToggleArea(mainCX + 20.f, toggleY, mainCX + toggleW + 20.f, toggleY + toggleH);
     pGraphics->AttachControl(
@@ -336,7 +371,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", volumToggleStyle, switchHandleBitmap));
 
     // Footer
-    const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 20.f);
+    const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
 
 #else

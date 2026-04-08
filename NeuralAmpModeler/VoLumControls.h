@@ -25,7 +25,7 @@ const IColor ACCENT_AMBER(255, 212, 168, 74);
 const IColor METER_GREEN(255, 42, 138, 42);
 const IColor KNOB_BG(255, 21, 21, 24);
 const IColor KNOB_BORDER(12, 255, 255, 255);
-const IColor DIVIDER(10, 255, 255, 255);
+const IColor DIVIDER(30, 255, 255, 255);
 const IColor SPK_BTN_OFF_BG(5, 255, 255, 255);
 const IColor SPK_BTN_OFF_BORDER(12, 255, 255, 255);
 const IColor SPK_BTN_OFF_TEXT(255, 140, 140, 155);
@@ -198,31 +198,39 @@ public:
   void Draw(IGraphics& g) override
   {
     const char* labels[] = {"AMP", "G12", "G65", "V30"};
-    const float btnW = 52.f;
-    const float btnH = 22.f;
-    const float gap = 5.f;
-    const float divW = 12.f;
+    const float btnW = 58.f;
+    const float btnH = 26.f;
+    const float gap = 6.f;
+    const float divGap = 14.f;
 
-    float totalW = 4 * btnW + 3 * gap + divW;
+    // Total: AMP + divGap + G12 + gap + G65 + gap + V30
+    float totalW = btnW + divGap + 3 * btnW + 2 * gap;
     float startX = mRECT.MW() - totalW / 2.f;
-    float y = mRECT.MH() - btnH / 2.f;
+    float btnY = mRECT.MH() - btnH / 2.f + 4.f;
 
-    IText labelText(12.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
-    IRECT directLabel(startX - 40.f, y, startX - 4.f, y + btnH);
-    g.DrawText(labelText, "DIRECT", directLabel);
+    // "SPEAKER MODE" label centered above G65 (middle of cab group)
+    float cabGroupL = startX + btnW + divGap;
+    float cabGroupR = cabGroupL + 3 * btnW + 2 * gap;
+    IText headerText(10.f, VoLumColors::TEXT_DIM, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IRECT headerArea(cabGroupL, mRECT.T, cabGroupR, btnY - 2.f);
+    g.DrawText(headerText, "SPEAKER MODE", headerArea);
 
     for (int i = 0; i < 4; i++)
     {
-      float x = startX + i * (btnW + gap);
+      float x;
+      if (i == 0)
+        x = startX;
+      else
+        x = startX + btnW + divGap + (i - 1) * (btnW + gap);
+
+      // Vertical divider between AMP and cab group
       if (i == 1)
       {
-        float divX = x - gap / 2.f - 1.f;
-        g.DrawLine(VoLumColors::DIVIDER, divX, y + 2.f, divX, y + btnH - 2.f);
-        IRECT cabLabel(x - 4.f, y - 14.f, x + 3 * (btnW + gap), y - 2.f);
-        g.DrawText(labelText, "CABINET", cabLabel);
+        float divX = startX + btnW + divGap / 2.f;
+        g.DrawLine(VoLumColors::DIVIDER, divX, btnY + 3.f, divX, btnY + btnH - 3.f);
       }
 
-      IRECT btn(x, y, x + btnW, y + btnH);
+      IRECT btn(x, btnY, x + btnW, btnY + btnH);
       bool isOn = (i == mSelected);
       bool isAmp = (i == 0);
 
@@ -288,15 +296,22 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRoundRect(IColor(5, 255, 255, 255), mRECT, 12.f);
-    g.DrawRoundRect(IColor(10, 255, 255, 255), mRECT, 12.f);
-
     if (mHasBitmap)
     {
-      g.DrawBitmap(mBitmap, mRECT, 0, 0, nullptr);
+      // Compute centered rect that preserves the image's aspect ratio
+      float imgW = (float)mBitmap.W();
+      float imgH = (float)mBitmap.H() / (float)std::max(1, mBitmap.N());
+      float scale = std::min(mRECT.W() / imgW, mRECT.H() / imgH);
+      float drawW = imgW * scale;
+      float drawH = imgH * scale;
+      IRECT centered(mRECT.MW() - drawW / 2.f, mRECT.MH() - drawH / 2.f,
+                      mRECT.MW() + drawW / 2.f, mRECT.MH() + drawH / 2.f);
+      g.DrawFittedBitmap(mBitmap, centered);
     }
     else
     {
+      g.FillRoundRect(IColor(5, 255, 255, 255), mRECT, 12.f);
+      g.DrawRoundRect(IColor(10, 255, 255, 255), mRECT, 12.f);
       IText phText(48.f, IColor(20, 142, 197, 255), "Roboto-Regular", EAlign::Center, EVAlign::Middle);
       g.DrawText(phText, mPlaceholder.c_str(), mRECT);
     }
@@ -392,7 +407,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(13.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IText text(14.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mLabel.c_str(), mRECT);
   }
 
@@ -469,21 +484,20 @@ public:
     g.DrawRoundRect(IColor(20, 142, 197, 255), mRECT, mRECT.H() / 2.f);
 
     const float arrowW = mRECT.H();
+    const float btnSize = arrowW - 2.f;
 
-    // Left arrow -- always visible
-    IRECT leftArea = mRECT.GetFromLeft(arrowW).GetCentredInside(arrowW - 6.f, arrowW - 6.f);
-    if (mMouseOverLeft)
-      g.FillEllipse(IColor(20, 142, 197, 255), leftArea);
-    IColor leftCol = mMouseOverLeft ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_DIM;
-    IText arrowText(14.f, leftCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    // Left arrow button
+    IRECT leftArea = mRECT.GetFromLeft(arrowW).GetCentredInside(btnSize, btnSize);
+    g.FillEllipse(mMouseOverLeft ? IColor(30, 142, 197, 255) : IColor(15, 255, 255, 255), leftArea);
+    IColor leftCol = mMouseOverLeft ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_MED;
+    IText arrowText(12.f, leftCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowText, "\xe2\x97\x80", leftArea);
 
-    // Right arrow -- always visible
-    IRECT rightArea = mRECT.GetFromRight(arrowW).GetCentredInside(arrowW - 6.f, arrowW - 6.f);
-    if (mMouseOverRight)
-      g.FillEllipse(IColor(20, 142, 197, 255), rightArea);
-    IColor rightCol = mMouseOverRight ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_DIM;
-    IText arrowTextR(14.f, rightCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    // Right arrow button
+    IRECT rightArea = mRECT.GetFromRight(arrowW).GetCentredInside(btnSize, btnSize);
+    g.FillEllipse(mMouseOverRight ? IColor(30, 142, 197, 255) : IColor(15, 255, 255, 255), rightArea);
+    IColor rightCol = mMouseOverRight ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_MED;
+    IText arrowTextR(12.f, rightCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowTextR, "\xe2\x96\xb6", rightArea);
 
     // Center label
