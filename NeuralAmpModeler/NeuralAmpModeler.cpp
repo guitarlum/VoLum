@@ -209,7 +209,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new VoLumSpeakerRowControl(speakerArea,
         [this](int speakerIdx) {
           mVolumSpeakerIdx = speakerIdx;
-          mVolumChannelIdx = 0;
           _VolumRefreshChannels();
           mVolumNeedsLoad.store(true);
         }),
