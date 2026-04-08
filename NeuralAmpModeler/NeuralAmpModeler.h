@@ -14,6 +14,8 @@
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
 
+#include <unordered_map>
+
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -232,7 +234,7 @@ private:
   std::string _StageModel(const WDL_String& dspFile);
 #if VOLUM_AMPETE_PRODUCT
   void _VolumRefreshChannels();
-  void _VolumLoadCurrentRig();
+  std::string _StageModelFromData(nam::dspData conf, const char* path);
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
@@ -244,6 +246,10 @@ private:
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
+
+  // Per-amp cache: parsed dspData keyed by filename, avoids re-parsing JSON
+  std::unordered_map<std::string, nam::dspData> mVolumDspCache;
+  int mVolumCachedAmpIdx = -1;
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
