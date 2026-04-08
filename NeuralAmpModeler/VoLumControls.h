@@ -227,85 +227,196 @@ private:
 
   void DrawMiniFractal(IGraphics& g, const IRECT& r, int idx, const IColor& bright, const IColor& dim)
   {
-    float cx = r.MW(), cy = r.MH(), sz = r.W() * 0.35f;
+    float cx = r.MW(), cy = r.MH(), sz = r.W() * 0.38f;
     switch (idx % 14)
     {
-      case 0: // Dragon mini: zigzag
-        g.DrawLine(bright, cx-sz, cy, cx-sz*0.3f, cy-sz*0.6f, nullptr, 1.5f);
-        g.DrawLine(dim, cx-sz*0.3f, cy-sz*0.6f, cx+sz*0.3f, cy+sz*0.4f, nullptr, 1.5f);
-        g.DrawLine(bright, cx+sz*0.3f, cy+sz*0.4f, cx+sz, cy-sz*0.2f, nullptr, 1.5f);
-        break;
-      case 1: // Sierpinski mini: triangle
-        g.DrawLine(bright, cx, cy-sz, cx-sz, cy+sz*0.7f, nullptr, 1.5f);
-        g.DrawLine(bright, cx-sz, cy+sz*0.7f, cx+sz, cy+sz*0.7f, nullptr, 1.5f);
-        g.DrawLine(bright, cx+sz, cy+sz*0.7f, cx, cy-sz, nullptr, 1.5f);
-        g.DrawLine(dim, cx-sz*0.5f, cy-sz*0.15f, cx+sz*0.5f, cy-sz*0.15f, nullptr, 1.f);
-        break;
-      case 2: // Fern mini: line with branches
-        g.DrawLine(bright, cx, cy+sz, cx, cy-sz, nullptr, 1.5f);
-        g.DrawLine(dim, cx, cy-sz*0.2f, cx+sz*0.6f, cy-sz*0.6f, nullptr, 1.f);
-        g.DrawLine(dim, cx, cy+sz*0.2f, cx-sz*0.5f, cy-sz*0.1f, nullptr, 1.f);
-        break;
-      case 3: // Spiral mini
-        for (int j = 0; j < 12; j++) {
-          float a1 = j * 30.f * 3.14159f / 180.f, a2 = (j+1) * 30.f * 3.14159f / 180.f;
-          float r1 = 2.f + j * 0.5f, r2 = 2.f + (j+1) * 0.5f;
-          g.DrawLine(bright, cx+r1*cosf(a1), cy+r1*sinf(a1), cx+r2*cosf(a2), cy+r2*sinf(a2), nullptr, 1.5f);
+      case 0: // Dragon curve mini (6 iterations)
+      {
+        std::vector<int> turns;
+        for (int i = 0; i < 6; i++) {
+          std::vector<int> n2;
+          for (auto t : turns) n2.push_back(t);
+          n2.push_back(1);
+          for (int j=(int)turns.size()-1;j>=0;j--) n2.push_back(1-turns[j]);
+          turns = n2;
+        }
+        float step = 1.8f, px2 = cx-3.f, py2 = cy+2.f; int dir = 0;
+        const float dx[]={step,0,-step,0}, dy[]={0,-step,0,step};
+        for (int i=0;i<(int)turns.size();i++) {
+          float nx=px2+dx[dir],ny=py2+dy[dir];
+          g.DrawLine(bright, px2,py2,nx,ny,nullptr,1.f);
+          px2=nx;py2=ny; dir=(dir+(turns[i]?1:3))%4;
         }
         break;
+      }
+      case 1: // Sierpinski triangle mini (3 depth)
+      {
+        struct T{float x1,y1,x2,y2,x3,y3;};
+        std::vector<T> ts; ts.push_back({cx,cy-sz,cx-sz,cy+sz*0.7f,cx+sz,cy+sz*0.7f});
+        for (int d=0;d<3;d++) {
+          std::vector<T> n2;
+          for (auto&t:ts) {
+            g.DrawLine(d<1?bright:dim,t.x1,t.y1,t.x2,t.y2,nullptr,1.f);
+            g.DrawLine(d<1?bright:dim,t.x2,t.y2,t.x3,t.y3,nullptr,1.f);
+            g.DrawLine(d<1?bright:dim,t.x3,t.y3,t.x1,t.y1,nullptr,1.f);
+            n2.push_back({t.x1,t.y1,(t.x1+t.x2)/2,(t.y1+t.y2)/2,(t.x3+t.x1)/2,(t.y3+t.y1)/2});
+            n2.push_back({(t.x1+t.x2)/2,(t.y1+t.y2)/2,t.x2,t.y2,(t.x2+t.x3)/2,(t.y2+t.y3)/2});
+            n2.push_back({(t.x3+t.x1)/2,(t.y3+t.y1)/2,(t.x2+t.x3)/2,(t.y2+t.y3)/2,t.x3,t.y3});
+          }
+          ts=n2;
+        }
+        break;
+      }
+      case 2: // Fern mini (scatter dots)
+      {
+        float px2=0,py2=0; unsigned rng=42;
+        for (int i=0;i<300;i++) {
+          rng=rng*1103515245+12345; float rv=(float)(rng%1000)/1000.f;
+          float nx,ny;
+          if(rv<0.01f){nx=0;ny=0.16f*py2;}
+          else if(rv<0.86f){nx=0.85f*px2+0.04f*py2;ny=-0.04f*px2+0.85f*py2+1.6f;}
+          else if(rv<0.93f){nx=0.2f*px2-0.26f*py2;ny=0.23f*px2+0.22f*py2+1.6f;}
+          else{nx=-0.15f*px2+0.28f*py2;ny=0.26f*px2+0.24f*py2+0.44f;}
+          px2=nx;py2=ny;
+          float sx=cx+px2*3.f, sy=r.B-2.f-py2*1.8f;
+          if(sx>r.L&&sx<r.R&&sy>r.T&&sy<r.B) g.FillRect(bright,IRECT(sx,sy,sx+1.f,sy+1.f));
+        }
+        break;
+      }
+      case 3: // Golden spiral mini
+      {
+        float ra=1.5f,ang=0,pvx=cx,pvy=cy;
+        for(int i=0;i<40;i++){
+          float a=ang*3.14159f/180.f;
+          float x2=cx+ra*cosf(a),y2=cy+ra*sinf(a);
+          g.DrawLine(bright,pvx,pvy,x2,y2,nullptr,1.f);
+          pvx=x2;pvy=y2;ang+=15.f;ra+=0.18f;
+        }
+        break;
+      }
       case 4: // Lissajous mini
-        for (int j = 0; j < 20; j++) {
-          float t1 = j * 6.28f / 20.f, t2 = (j+1) * 6.28f / 20.f;
-          g.DrawLine(bright, cx+sinf(3*t1)*sz, cy+sinf(4*t1)*sz*0.8f, cx+sinf(3*t2)*sz, cy+sinf(4*t2)*sz*0.8f, nullptr, 1.5f);
+      {
+        for(int j=0;j<30;j++){
+          float t1=j*6.28f/30.f,t2=(j+1)*6.28f/30.f;
+          g.DrawLine(bright,cx+sinf(3*t1)*sz,cy+sinf(4*t1)*sz*0.8f,cx+sinf(3*t2)*sz,cy+sinf(4*t2)*sz*0.8f,nullptr,1.f);
         }
         break;
-      case 5: // Koch mini: star shape
-        for (int j = 0; j < 6; j++) {
-          float a = j * 60.f * 3.14159f / 180.f;
-          g.DrawLine(bright, cx, cy, cx+sz*cosf(a), cy+sz*sinf(a), nullptr, 1.5f);
+      }
+      case 5: // Koch snowflake mini (2 depth)
+      {
+        struct S{float x1,y1,x2,y2;};
+        std::vector<S> segs;
+        for(int i=0;i<3;i++){
+          float a1=(i*120.f-90.f)*3.14159f/180.f,a2=((i+1)*120.f-90.f)*3.14159f/180.f;
+          segs.push_back({cx+sz*cosf(a1),cy+sz*sinf(a1),cx+sz*cosf(a2),cy+sz*sinf(a2)});
+        }
+        for(int d=0;d<2;d++){
+          std::vector<S> n2;
+          for(auto&s:segs){
+            float dx2=s.x2-s.x1,dy2=s.y2-s.y1;
+            float ax=s.x1+dx2/3,ay=s.y1+dy2/3,bx=s.x1+dx2*2/3,by=s.y1+dy2*2/3;
+            float px2=(s.x1+s.x2)/2-dy2*0.2887f,py2=(s.y1+s.y2)/2+dx2*0.2887f;
+            n2.push_back({s.x1,s.y1,ax,ay}); n2.push_back({ax,ay,px2,py2});
+            n2.push_back({px2,py2,bx,by}); n2.push_back({bx,by,s.x2,s.y2});
+          }
+          segs=n2;
+        }
+        for(auto&s:segs) g.DrawLine(bright,s.x1,s.y1,s.x2,s.y2,nullptr,1.f);
+        break;
+      }
+      case 6: // Fractal tree mini (4 depth)
+      {
+        struct B{float x,y,a,l;int d;};
+        std::vector<B> stk; stk.push_back({cx,r.B-2.f,-90.f,sz*1.2f,0});
+        while(!stk.empty()){
+          auto b=stk.back();stk.pop_back();
+          if(b.d>4||b.l<1.5f)continue;
+          float rad=b.a*3.14159f/180.f,ex=b.x+b.l*cosf(rad),ey=b.y+b.l*sinf(rad);
+          g.DrawLine(b.d<2?bright:dim,b.x,b.y,ex,ey,nullptr,1.f);
+          stk.push_back({ex,ey,b.a-28.f,b.l*0.65f,b.d+1});
+          stk.push_back({ex,ey,b.a+28.f,b.l*0.65f,b.d+1});
         }
         break;
-      case 6: // Tree mini
-        g.DrawLine(bright, cx, cy+sz, cx, cy-sz*0.2f, nullptr, 1.5f);
-        g.DrawLine(dim, cx, cy-sz*0.2f, cx-sz*0.6f, cy-sz, nullptr, 1.f);
-        g.DrawLine(dim, cx, cy-sz*0.2f, cx+sz*0.6f, cy-sz, nullptr, 1.f);
+      }
+      case 7: // Hilbert curve mini (3 order)
+      {
+        int n=8; float cw=r.W()*0.8f/n,ch=r.H()*0.8f/n;
+        float ox=r.L+r.W()*0.1f+cw/2,oy=r.T+r.H()*0.1f+ch/2;
+        auto d2xy=[](int n,int d,int&x,int&y){x=y=0;for(int s=1;s<n;s*=2){int rx=1&(d/2);int ry=1&(d^rx);if(ry==0){if(rx==1){x=s-1-x;y=s-1-y;}int t=x;x=y;y=t;}x+=s*rx;y+=s*ry;d/=4;}};
+        int px2,py2; d2xy(n,0,px2,py2); float pvx=ox+px2*cw,pvy=oy+py2*ch;
+        for(int i=1;i<n*n;i++){d2xy(n,i,px2,py2);float nx=ox+px2*cw,ny=oy+py2*ch;g.DrawLine(bright,pvx,pvy,nx,ny,nullptr,1.f);pvx=nx;pvy=ny;}
         break;
-      case 7: // Hilbert mini: zigzag path
-        g.DrawLine(bright, cx-sz, cy+sz, cx-sz, cy-sz, nullptr, 1.5f);
-        g.DrawLine(dim, cx-sz, cy-sz, cx+sz, cy-sz, nullptr, 1.f);
-        g.DrawLine(bright, cx+sz, cy-sz, cx+sz, cy+sz, nullptr, 1.5f);
+      }
+      case 8: // Levy C mini (6 depth)
+      {
+        struct S{float x1,y1,x2,y2;};
+        std::vector<S> segs; segs.push_back({cx-sz,cy+sz*0.3f,cx+sz,cy+sz*0.3f});
+        for(int d=0;d<6;d++){
+          std::vector<S> n2;
+          for(auto&s:segs){float mx=(s.x1+s.x2)/2+(s.y2-s.y1)/2,my=(s.y1+s.y2)/2-(s.x2-s.x1)/2;n2.push_back({s.x1,s.y1,mx,my});n2.push_back({mx,my,s.x2,s.y2});}
+          segs=n2;
+        }
+        for(auto&s:segs) g.DrawLine(bright,s.x1,s.y1,s.x2,s.y2,nullptr,0.8f);
         break;
-      case 8: // Levy C mini: jagged line
-        g.DrawLine(bright, cx-sz, cy+sz*0.5f, cx-sz*0.3f, cy-sz*0.5f, nullptr, 1.5f);
-        g.DrawLine(dim, cx-sz*0.3f, cy-sz*0.5f, cx+sz*0.3f, cy+sz*0.3f, nullptr, 1.f);
-        g.DrawLine(bright, cx+sz*0.3f, cy+sz*0.3f, cx+sz, cy-sz*0.3f, nullptr, 1.5f);
-        break;
-      case 9: // Mandelbrot mini: concentric circles
-        g.DrawArc(bright, cx, cy, sz*0.4f, 0.f, 360.f, nullptr, 1.5f);
-        g.DrawArc(dim, cx-sz*0.3f, cy, sz*0.6f, 0.f, 360.f, nullptr, 1.f);
-        break;
-      case 10: // Julia mini: figure-8
-        g.DrawArc(bright, cx-sz*0.3f, cy, sz*0.5f, 0.f, 360.f, nullptr, 1.5f);
-        g.DrawArc(dim, cx+sz*0.3f, cy, sz*0.5f, 0.f, 360.f, nullptr, 1.f);
-        break;
-      case 11: // Vicsek mini: cross
-        g.DrawLine(bright, cx-sz, cy, cx+sz, cy, nullptr, 1.5f);
-        g.DrawLine(bright, cx, cy-sz, cx, cy+sz, nullptr, 1.5f);
-        g.DrawLine(dim, cx-sz*0.5f, cy-sz*0.5f, cx+sz*0.5f, cy+sz*0.5f, nullptr, 1.f);
-        g.DrawLine(dim, cx+sz*0.5f, cy-sz*0.5f, cx-sz*0.5f, cy+sz*0.5f, nullptr, 1.f);
-        break;
-      case 12: // Burning ship mini: flame shape
-        g.DrawLine(bright, cx, cy+sz, cx-sz*0.4f, cy-sz*0.3f, nullptr, 1.5f);
-        g.DrawLine(bright, cx-sz*0.4f, cy-sz*0.3f, cx, cy-sz, nullptr, 1.5f);
-        g.DrawLine(dim, cx, cy-sz, cx+sz*0.4f, cy-sz*0.3f, nullptr, 1.f);
-        g.DrawLine(dim, cx+sz*0.4f, cy-sz*0.3f, cx, cy+sz, nullptr, 1.f);
-        break;
-      case 13: // Pentaflake mini: pentagon
-        for (int j = 0; j < 5; j++) {
-          float a1 = (j*72.f-90.f)*3.14159f/180.f, a2 = ((j+1)*72.f-90.f)*3.14159f/180.f;
-          g.DrawLine(bright, cx+sz*cosf(a1), cy+sz*sinf(a1), cx+sz*cosf(a2), cy+sz*sinf(a2), nullptr, 1.5f);
+      }
+      case 9: // Mandelbrot mini (pixel grid)
+      {
+        float step=2.f;
+        for(float px=r.L+1;px<r.R-1;px+=step)for(float py=r.T+1;py<r.B-1;py+=step){
+          double cr=-0.745+((px-r.L)/r.W()-0.5)*0.008,ci=0.186+((py-r.T)/r.H()-0.5)*0.008;
+          double zr=0,zi=0;int it=0;while(zr*zr+zi*zi<4&&it<30){double t=zr*zr-zi*zi+cr;zi=2*zr*zi+ci;zr=t;it++;}
+          if(it<30&&it>3) g.FillRect(IColor(it*8,80+it*3,180+it*2,220),IRECT(px,py,px+step-0.5f,py+step-0.5f));
         }
         break;
+      }
+      case 10: // Julia mini
+      {
+        float step=2.f;
+        for(float px=r.L+1;px<r.R-1;px+=step)for(float py=r.T+1;py<r.B-1;py+=step){
+          double zr=((px-r.L)/r.W()-0.5)*3,zi=((py-r.T)/r.H()-0.5)*2.4;int it=0;
+          while(zr*zr+zi*zi<4&&it<25){double t=zr*zr-zi*zi-0.7;zi=2*zr*zi+0.27015;zr=t;it++;}
+          if(it<25&&it>2) g.FillRect(IColor(it*10,70+it*4,160+it*4,220),IRECT(px,py,px+step-0.5f,py+step-0.5f));
+        }
+        break;
+      }
+      case 11: // Vicsek mini (3 depth)
+      {
+        struct Q{float x,y,s;};
+        std::vector<Q> qs; qs.push_back({cx,cy,sz*2.f});
+        for(int d=0;d<3;d++){
+          std::vector<Q> n2;
+          for(auto&q:qs){g.DrawRect(d<1?bright:dim,IRECT(q.x-q.s/2,q.y-q.s/2,q.x+q.s/2,q.y+q.s/2),nullptr,1.f);
+            float ns=q.s/3; n2.push_back({q.x,q.y,ns});n2.push_back({q.x-q.s/3,q.y,ns});n2.push_back({q.x+q.s/3,q.y,ns});n2.push_back({q.x,q.y-q.s/3,ns});n2.push_back({q.x,q.y+q.s/3,ns});}
+          qs=n2;
+        }
+        break;
+      }
+      case 12: // Burning Ship mini
+      {
+        float step=2.f;
+        for(float px=r.L+1;px<r.R-1;px+=step)for(float py=r.T+1;py<r.B-1;py+=step){
+          double cr=-1.75+((px-r.L)/r.W())*0.15,ci=-0.08+((py-r.T)/r.H())*0.12;
+          double zr=0,zi=0;int it=0;while(zr*zr+zi*zi<4&&it<30){double t=zr*zr-zi*zi+cr;zi=fabs(2*zr*zi)+ci;zr=t;it++;}
+          if(it<30&&it>2) g.FillRect(IColor(it*8,100+it*3,170+it*2,230),IRECT(px,py,px+step-0.5f,py+step-0.5f));
+        }
+        break;
+      }
+      case 13: // Pentaflake mini (2 depth)
+      {
+        struct P{float x,y,r;};
+        std::vector<P> ps; ps.push_back({cx,cy,sz});
+        for(int d=0;d<2;d++){
+          std::vector<P> n2;
+          for(auto&p:ps){
+            for(int i=0;i<5;i++){float a1=(i*72.f-90)*3.14159f/180,a2=((i+1)*72.f-90)*3.14159f/180;
+              g.DrawLine(d==0?bright:dim,p.x+p.r*cosf(a1),p.y+p.r*sinf(a1),p.x+p.r*cosf(a2),p.y+p.r*sinf(a2),nullptr,1.f);}
+            float nr=p.r*0.382f;n2.push_back({p.x,p.y,nr});
+            for(int i=0;i<5;i++){float a=(i*72.f-90)*3.14159f/180;n2.push_back({p.x+(p.r-nr)*cosf(a),p.y+(p.r-nr)*sinf(a),nr});}
+          }
+          ps=n2;
+        }
+        break;
+      }
     }
   }
 
