@@ -66,14 +66,32 @@ const IVStyle radioButtonStyle =
     .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
 
 #if VOLUM_AMPETE_PRODUCT
+const IColor kGold(255, 200, 162, 78);
+const IColor kGoldDim(255, 138, 112, 48);
+const IVColorSpec volumColorSpec{
+  IColor(255, 17, 17, 24),        // Background
+  kGold,                           // Foreground
+  kGold.WithOpacity(0.3f),         // Pressed
+  kGold.WithOpacity(0.25f),        // Frame
+  kGold.WithOpacity(0.5f),         // Highlight (hover)
+  DEFAULT_SHCOLOR,                 // Shadow
+  kGold,                           // Extra 1
+  COLOR_RED,                       // Extra 2 (clipping)
+  kGold.WithContrast(0.1f),        // Extra 3
+};
+const IVStyle volumStyle =
+  IVStyle{true, true, volumColorSpec,
+          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, kGoldDim},
+          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, kGoldDim},
+          DEFAULT_HIDE_CURSOR, DEFAULT_DRAW_FRAME, false, DEFAULT_EMBOSS,
+          0.2f, 2.f, DEFAULT_SHADOW_OFFSET, DEFAULT_WIDGET_FRAC, DEFAULT_WIDGET_ANGLE};
 const IVStyle volumKnobStyle =
-  style.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.75f);
+  volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.75f);
 const IVStyle volumToggleStyle =
-  style.WithShowLabel(true)
+  volumStyle.WithShowLabel(false)
     .WithShowValue(false)
     .WithDrawFrame(false)
-    .WithWidgetFrac(0.5f)
-    .WithLabelText({12.f, EVAlign::Middle, IColor(255, 155, 155, 170)});
+    .WithWidgetFrac(1.0f);
 #endif
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
@@ -156,6 +174,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
     pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
+    pGraphics->LoadFont("Poiret-One", POIRETONE_FN);
+    pGraphics->LoadFont("Josefin-Sans", JOSEFINSANS_FN);
+    pGraphics->LoadFont("Josefin-Bold", JOSEFINSANS_BOLD_FN);
 
     const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
@@ -177,15 +198,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const IRECT logoArea(b.L, b.T + 8.f, b.L + sidebarW, b.T + 48.f);
     pGraphics->AttachControl(new VoLumLogoControl(logoArea));
 
-    // Sidebar: amp list (names from catalog)
+    // Sidebar: amp list (names + abbreviations from catalog)
     static const char* ampNames[volum::kAmpCount];
+    static const char* ampAbbrs[volum::kAmpCount] = {
+      "A1", "BC", "BX", "FD", "HK", "LP", "M4", "MJ", "MV", "O1", "O2", "ST", "SL", "TC"
+    };
     for (int i = 0; i < volum::kAmpCount; i++)
       ampNames[i] = volum::kAmps[i].displayName;
 
     const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
     pGraphics->AttachControl(
       new VoLumAmpListControl(
-        ampListArea, volum::kAmpCount, ampNames,
+        ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
         [this](int ampIdx) {
           _VolumSaveCurrentToSettings();
           mVolumAmpIdx = ampIdx;
@@ -202,50 +226,26 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             nameCtrl->SetName(volum::kAmps[ampIdx].displayName);
           if (heroCtrl)
           {
-            // Try to load NDSP-style amp image from amp-styles directory
-            static const char* ampImageFiles[volum::kAmpCount] = {
-              "ampete-one-ndsp.png", nullptr, "brunetti-ndsp.png", nullptr,
-              nullptr, nullptr, nullptr, "marshall-2203-ndsp.png",
-              nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
-            };
-            bool loaded = false;
-            if (ampImageFiles[ampIdx])
-            {
-              namespace fs = std::filesystem;
-              fs::path imgPath = fs::path(mVolumRigsRoot).parent_path()
-                / "NeuralAmpModeler" / "ui-mockup" / "amp-styles" / ampImageFiles[ampIdx];
-              if (fs::exists(imgPath))
-              {
-                IBitmap bmp = pGfx->LoadBitmap(imgPath.string().c_str());
-                if (bmp.W() > 0)
-                {
-                  heroCtrl->SetBitmap(bmp);
-                  loaded = true;
-                }
-              }
-            }
-            if (!loaded)
-            {
-              char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
-              heroCtrl->SetPlaceholder(ph);
-            }
+            char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
+            heroCtrl->SetPlaceholder(ph, ampIdx);
+            heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
           }
         }),
       kCtrlTagVoLumAmpList);
 
     // Vertically center the detail content in the right panel
     const float speakerH = 48.f;
-    const float heroW = 340.f;
-    const float heroH = 150.f;
-    const float nameH = 28.f;
-    const float knobDiam = 56.f;
+    const float heroW = 450.f;
+    const float heroH = 180.f;
+    const float nameH = 34.f;
+    const float knobDiam = 58.f;
     const float labelH = 18.f;
     const float valueH = 16.f;
-    const float toggleH = 50.f;
-    const float footerH = 14.f;
+    const float toggleH = 34.f;
+    const float footerH = 16.f;
 
-    const float contentH = speakerH + 6.f + heroH + 4.f + nameH + 16.f
-                         + labelH + knobDiam + valueH + 2.f + 12.f + toggleH + 6.f + footerH;
+    const float contentH = speakerH + 6.f + heroH + 4.f + nameH + 14.f
+                         + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + 6.f + footerH;
     const float contentTop = b.T + (b.H() - contentH) / 2.f;
 
     // Speaker mode row
@@ -349,31 +349,40 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Group 4: Output
     drawKnobCol(6, "OUTPUT", kOutputLevel, "dB");
 
-    // I/O Meters flanking the knob area (with extra spacing)
+    // I/O Meters flanking the knob area -- vertical labels
     const float meterW = 6.f;
     const float meterH = knobDiam + 10.f;
     const float meterTop = knobT - 5.f;
 
-    pGraphics->AttachControl(new VoLumKnobLabelControl(
-      IRECT(rowLeft - 38.f, meterTop, rowLeft - 22.f, meterTop + meterH), "IN"));
+    pGraphics->AttachControl(new VoLumVerticalLabelControl(
+      IRECT(rowLeft - 30.f, meterTop, rowLeft - 18.f, meterTop + meterH), "IN"));
     pGraphics->AttachControl(new NAMMeterControl(
-      IRECT(rowLeft - 22.f, meterTop, rowLeft - 16.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagInputMeter);
+      IRECT(rowLeft - 18.f, meterTop, rowLeft - 12.f, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagInputMeter);
 
     const float rowRight = knobX(6) + colW;
     pGraphics->AttachControl(new NAMMeterControl(
-      IRECT(rowRight + 16.f, meterTop, rowRight + 22.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagOutputMeter);
-    pGraphics->AttachControl(new VoLumKnobLabelControl(
-      IRECT(rowRight + 22.f, meterTop, rowRight + 38.f, meterTop + meterH), "OUT"));
+      IRECT(rowRight + 24.f, meterTop, rowRight + 30.f, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagOutputMeter);
+    pGraphics->AttachControl(new VoLumVerticalLabelControl(
+      IRECT(rowRight + 30.f, meterTop, rowRight + 42.f, meterTop + meterH), "OUT"));
 
-    // Toggles: Noise Gate, EQ
-    const float toggleY = knobT + knobDiam + valueH + 2.f + 12.f;
-    const float toggleW = 120.f;
-    const IRECT ngToggleArea(mainCX - toggleW - 20.f, toggleY, mainCX - 20.f, toggleY + toggleH);
-    const IRECT eqToggleArea(mainCX + 20.f, toggleY, mainCX + toggleW + 20.f, toggleY + toggleH);
+    // Toggles: slide switch + label side by side
+    const float toggleY = knobT + knobDiam + valueH + 2.f + 10.f;
+    const float switchW = 60.f;
+    const float switchH = toggleH;
+
+    float ngX = mainCX - 136.f;
     pGraphics->AttachControl(
-      new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", volumToggleStyle, switchHandleBitmap));
+      new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH),
+        kNoiseGateActive, "", volumToggleStyle, switchHandleBitmap));
+    pGraphics->AttachControl(new VoLumKnobLabelControl(
+      IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"));
+
+    float eqX = mainCX + 30.f;
     pGraphics->AttachControl(
-      new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", volumToggleStyle, switchHandleBitmap));
+      new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH),
+        kEQActive, "", volumToggleStyle, switchHandleBitmap));
+    pGraphics->AttachControl(new VoLumKnobLabelControl(
+      IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"));
 
     // Footer
     const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
@@ -391,28 +400,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       if (nameCtrl) nameCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName);
       if (heroCtrl)
       {
-        static const char* ampImageFiles[volum::kAmpCount] = {
-          "ampete-one-ndsp.png", nullptr, "brunetti-ndsp.png", nullptr,
-          nullptr, nullptr, nullptr, "marshall-2203-ndsp.png",
-          nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
-        };
-        bool loaded = false;
-        if (ampImageFiles[mVolumAmpIdx])
-        {
-          namespace fs = std::filesystem;
-          fs::path imgPath = fs::path(mVolumRigsRoot).parent_path()
-            / "NeuralAmpModeler" / "ui-mockup" / "amp-styles" / ampImageFiles[mVolumAmpIdx];
-          if (fs::exists(imgPath))
-          {
-            IBitmap bmp = pGraphics->LoadBitmap(imgPath.string().c_str());
-            if (bmp.W() > 0) { heroCtrl->SetBitmap(bmp); loaded = true; }
-          }
-        }
-        if (!loaded)
-        {
-          char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
-          heroCtrl->SetPlaceholder(ph);
-        }
+        char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
+        heroCtrl->SetPlaceholder(ph, mVolumAmpIdx);
+        heroCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName);
       }
     }
 

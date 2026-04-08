@@ -66,6 +66,9 @@
 
 #define ROBOTO_FN "Roboto-Regular.ttf"
 #define MICHROMA_FN "Michroma-Regular.ttf"
+#define POIRETONE_FN "PoiretOne-Regular.ttf"
+#define JOSEFINSANS_FN "JosefinSans-Regular.ttf"
+#define JOSEFINSANS_BOLD_FN "JosefinSans-SemiBold.ttf"
 
 #define GEAR_FN "Gear.svg"
 #define FILE_FN "File.svg"
