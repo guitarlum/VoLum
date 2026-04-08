@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VoLum – Variant F</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0a0a0c; font-family:'Inter',sans-serif; color:#ccc; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; }
+  .tag { color:#444; font-size:11px; margin-bottom:8px; font-family:monospace; }
+
+  .w {
+    width:900px; height:600px; border-radius:12px; overflow:hidden;
+    position:relative; display:flex;
+    box-shadow:0 30px 80px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);
+    background:#0e0e14;
+  }
+  .w::before {
+    content:''; position:absolute; inset:0; opacity:0.025; pointer-events:none; z-index:50;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ===== LEFT: AMP BROWSER ===== */
+  .browser {
+    width:200px; flex-shrink:0;
+    display:flex; flex-direction:column;
+    background:rgba(255,255,255,0.008);
+    border-right:1px solid rgba(255,255,255,0.03);
+    z-index:2;
+  }
+
+  .browser-header {
+    padding:14px 14px 8px;
+    flex-shrink:0;
+    text-align:center;
+  }
+  .browser-logo {
+    font-family:'Outfit',sans-serif; font-size:18px; font-weight:800; letter-spacing:4px;
+    background:linear-gradient(135deg,#8ec5ff,#7c6ef0); -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  .browser-sub {
+    font-size:7px; color:#2a2a33; letter-spacing:3px; text-transform:uppercase; margin-top:1px;
+  }
+
+  .amp-list {
+    flex:1; padding:0 6px 8px;
+    display:flex; flex-direction:column;
+    gap:1px;
+  }
+
+  .amp-item {
+    display:flex; align-items:center; gap:8px;
+    padding:5px 8px; border-radius:6px; cursor:pointer;
+    transition:all .2s;
+    border:1px solid transparent;
+    flex-shrink:0;
+  }
+  .amp-item:hover {
+    background:rgba(255,255,255,0.03);
+    border-color:rgba(255,255,255,0.04);
+  }
+  .amp-item.sel {
+    background:rgba(91,141,239,0.08);
+    border-color:rgba(91,141,239,0.2);
+  }
+
+  .amp-item-thumb {
+    width:26px; height:26px; border-radius:5px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Outfit',sans-serif; font-size:9px; font-weight:800;
+    color:rgba(255,255,255,0.15);
+  }
+  .amp-item.sel .amp-item-thumb { color:rgba(142,197,255,0.3); }
+
+  .amp-item-name {
+    font-size:10px; font-weight:500; color:#444;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    line-height:1.2;
+  }
+  .amp-item.sel .amp-item-name { color:#aaa; }
+  .amp-item:hover .amp-item-name { color:#888; }
+
+  /* ===== RIGHT: MAIN ===== */
+  .main {
+    flex:1; display:flex; flex-direction:column;
+    position:relative; z-index:1;
+    justify-content:center;
+    padding:0 28px;
+  }
+
+  .main-header {
+    position:absolute; top:0; right:0; padding:12px 20px;
+  }
+  .gear {
+    width:28px; height:28px; border-radius:50%; border:1px solid rgba(255,255,255,0.05);
+    background:rgba(255,255,255,0.02); color:#444; cursor:pointer; font-size:13px;
+    display:flex; align-items:center; justify-content:center; transition:all .25s;
+  }
+  .gear:hover { border-color:rgba(91,141,239,0.3); color:#8ec5ff; }
+
+  /* Speaker row */
+  .speaker-row {
+    display:flex; align-items:center; gap:5px; justify-content:center;
+    flex-shrink:0; margin-bottom:10px;
+  }
+  .spk-label {
+    font-size:7px; color:#2a2a33; text-transform:uppercase; letter-spacing:2px;
+    font-weight:600; margin-right:3px;
+  }
+  .spk-btn {
+    padding:5px 13px; border-radius:6px;
+    border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02);
+    color:#444; font-size:10px; font-weight:600; cursor:pointer;
+    transition:all .25s; font-family:'Inter',sans-serif; letter-spacing:0.5px;
+  }
+  .spk-btn:hover { border-color:rgba(255,255,255,0.12); color:#888; }
+  .spk-btn.cab.on {
+    border-color:rgba(91,141,239,0.4); background:rgba(91,141,239,0.12);
+    color:#8ec5ff; box-shadow:0 0 16px rgba(91,141,239,0.08);
+  }
+  .spk-btn.amp.on {
+    border-color:rgba(200,150,60,0.4); background:rgba(200,150,60,0.1);
+    color:#d4a84a; box-shadow:0 0 12px rgba(200,150,60,0.06);
+  }
+  .spk-divider {
+    width:1px; height:18px;
+    background:linear-gradient(180deg,transparent,rgba(255,255,255,0.06),transparent);
+    margin:0 4px;
+  }
+
+  /* Amp hero: wide landscape rectangle */
+  .amp-hero {
+    display:flex; flex-direction:column; align-items:center;
+    flex-shrink:0; position:relative; margin-bottom:10px;
+  }
+  .amp-hero-glow {
+    position:absolute; width:360px; height:200px; border-radius:50%;
+    background:radial-gradient(ellipse,rgba(91,141,239,0.04) 0%,transparent 65%);
+    pointer-events:none; top:50%; left:50%; transform:translate(-50%,-50%);
+  }
+  .amp-hero-img {
+    width:340px; height:160px; border-radius:12px; position:relative; z-index:1;
+    background:linear-gradient(135deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.04);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 10px 32px rgba(0,0,0,0.4);
+    overflow:hidden;
+  }
+  .amp-hero-img .ph {
+    font-family:'Outfit',sans-serif; font-size:64px; font-weight:900;
+    color:rgba(142,197,255,0.08);
+  }
+  .amp-hero-img.has-image::before { display:none; }
+
+  .amp-hero-title {
+    margin-top:6px; text-align:center; z-index:1;
+  }
+  .amp-hero-title h2 {
+    font-family:'Outfit',sans-serif; font-size:16px; font-weight:700;
+    color:#d0d0d0; letter-spacing:1px;
+  }
+  .amp-hero-title .sub {
+    font-size:9px; color:#333; letter-spacing:1.5px;
+  }
+
+  /* Knobs with meters flanking */
+  .controls-area {
+    display:flex; align-items:center; gap:0; justify-content:center;
+    flex-shrink:0;
+  }
+
+  /* Input/Output meters */
+  .meter {
+    width:5px; height:100px; border-radius:3px; flex-shrink:0;
+    background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.03);
+    position:relative; overflow:hidden;
+  }
+  .meter-fill {
+    position:absolute; bottom:0; left:0; right:0; border-radius:2px;
+    transition:height 0.5s;
+  }
+  .meter-fill.in {
+    height:35%;
+    background:linear-gradient(to top,#1a4a1a,#2a8a2a 60%,#4aca4a);
+    box-shadow:0 0 6px rgba(74,202,74,0.15);
+  }
+  .meter-fill.out {
+    height:50%;
+    background:linear-gradient(to top,#1a4a1a,#2a8a2a 60%,#4aca4a);
+    box-shadow:0 0 6px rgba(74,202,74,0.15);
+  }
+  .meter-label {
+    font-size:6px; color:#2a2a33; text-transform:uppercase; letter-spacing:1px;
+    font-weight:600; writing-mode:vertical-rl; text-orientation:mixed;
+    margin:0 3px;
+  }
+
+  .knobs-row {
+    display:flex; align-items:flex-start; gap:2px; justify-content:center;
+    margin:0 8px;
+  }
+  .knob-col {
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    flex:1; max-width:76px; min-width:0;
+  }
+  .knob-lbl {
+    font-size:7px; color:#2a2a33; text-transform:uppercase; letter-spacing:1.5px; font-weight:600;
+  }
+  .knob {
+    width:48px; height:48px; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%,#2a2a35,#151518);
+    border:2px solid rgba(255,255,255,0.05); position:relative; cursor:pointer;
+    transition:all .3s;
+    box-shadow:0 4px 12px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .knob:hover {
+    border-color:rgba(91,141,239,0.25);
+    box-shadow:0 5px 16px rgba(0,0,0,0.5),0 0 18px rgba(91,141,239,0.06);
+  }
+  .knob::after {
+    content:''; position:absolute; top:6px; left:50%;
+    transform:translateX(-50%) rotate(var(--rot,0deg));
+    transform-origin:50% 18px;
+    width:2px; height:10px; background:#8ec5ff; border-radius:1px;
+    box-shadow:0 0 5px rgba(142,197,255,0.3);
+  }
+  .knob.disabled { opacity:0.22; pointer-events:none; }
+  .knob.ch-knob { border-color:rgba(91,141,239,0.15); }
+  .knob.ch-knob:hover { border-color:rgba(91,141,239,0.35); }
+  .knob-val { font-size:9px; color:#3a3a44; font-variant-numeric:tabular-nums; }
+  .knob-val.ch-val { color:#7aaef0; font-weight:600; }
+  .knob-divider {
+    width:1px; height:48px; background:rgba(255,255,255,0.04);
+    margin:14px 5px 0; flex-shrink:0;
+  }
+
+  /* Toggles */
+  .toggles-row {
+    display:flex; align-items:center; justify-content:center;
+    gap:24px; padding:8px 0 0; flex-shrink:0;
+  }
+  .tgl-group { display:flex; align-items:center; gap:6px; }
+  .tgl {
+    width:32px; height:16px; border-radius:8px;
+    background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);
+    position:relative; cursor:pointer; transition:all .3s;
+  }
+  .tgl::after {
+    content:''; width:11px; height:11px; border-radius:50%; background:#444;
+    position:absolute; top:1.5px; left:2px; transition:all .3s cubic-bezier(0.4,0,0.2,1);
+    box-shadow:0 2px 4px rgba(0,0,0,0.3);
+  }
+  .tgl.on { background:rgba(91,141,239,0.15); border-color:rgba(91,141,239,0.3); }
+  .tgl.on::after { left:17px; background:#8ec5ff; box-shadow:0 0 6px rgba(142,197,255,0.3); }
+  .tgl-lbl {
+    font-size:7px; color:#333; text-transform:uppercase; letter-spacing:1.5px; font-weight:600;
+  }
+  .tgl.on + .tgl-lbl { color:#555; }
+
+  .footer {
+    display:flex; justify-content:center; gap:8px; padding:4px 0 0; flex-shrink:0;
+  }
+  .footer span { font-size:7px; color:#1e1e25; font-family:monospace; letter-spacing:1px; }
+</style>
+</head>
+<body>
+
+<div class="tag">Variant F — No scroll, wide amp image, proper I/O meters flanking knobs</div>
+
+<div class="w">
+  <!-- Left: Amp browser sidebar -->
+  <div class="browser">
+    <div class="browser-header">
+      <div class="browser-logo">VoLum</div>
+      <div class="browser-sub">NAM player</div>
+    </div>
+    <div class="amp-list" id="ampList"></div>
+  </div>
+
+  <!-- Right: Main controls -->
+  <div class="main">
+    <div class="main-header"><div class="gear">&#9881;</div></div>
+
+    <!-- Speaker mode -->
+    <div class="speaker-row">
+      <span class="spk-label">Direct</span>
+      <div class="spk-btn amp">AMP</div>
+      <div class="spk-divider"></div>
+      <span class="spk-label">Cabinet</span>
+      <div class="spk-btn cab">G12</div>
+      <div class="spk-btn cab">G65</div>
+      <div class="spk-btn cab on">V30</div>
+    </div>
+
+    <!-- Amp hero: wide landscape -->
+    <div class="amp-hero">
+      <div class="amp-hero-glow"></div>
+      <div class="amp-hero-img has-image" id="heroImg" style="background:url(amp-styles/ampete-one-ndsp.png) center/cover"><span class="ph" id="heroPh"></span></div>
+      <div class="amp-hero-title">
+        <h2 id="heroName">Ampete One</h2>
+        <div class="sub" id="heroSub"></div>
+      </div>
+    </div>
+
+    <!-- Knobs with I/O meters flanking -->
+    <div class="controls-area">
+      <div class="meter"><div class="meter-fill in"></div></div>
+      <div class="meter-label">In</div>
+
+      <div class="knobs-row">
+        <div class="knob-col">
+          <div class="knob-lbl">Channel</div>
+          <div class="knob ch-knob" style="--rot:-120deg"></div>
+          <div class="knob-val ch-val">Ch 1</div>
+        </div>
+        <div class="knob-divider"></div>
+        <div class="knob-col"><div class="knob-lbl">Input</div><div class="knob" style="--rot:0deg"></div><div class="knob-val">0.0 dB</div></div>
+        <div class="knob-col"><div class="knob-lbl">Gate</div><div class="knob" style="--rot:-100deg"></div><div class="knob-val">-80 dB</div></div>
+        <div class="knob-col"><div class="knob-lbl">Bass</div><div class="knob" style="--rot:0deg"></div><div class="knob-val">5.0</div></div>
+        <div class="knob-col"><div class="knob-lbl">Mid</div><div class="knob" style="--rot:0deg"></div><div class="knob-val">5.0</div></div>
+        <div class="knob-col"><div class="knob-lbl">Treble</div><div class="knob" style="--rot:0deg"></div><div class="knob-val">5.0</div></div>
+        <div class="knob-col"><div class="knob-lbl">Output</div><div class="knob" style="--rot:0deg"></div><div class="knob-val">0.0 dB</div></div>
+      </div>
+
+      <div class="meter-label">Out</div>
+      <div class="meter"><div class="meter-fill out"></div></div>
+    </div>
+
+    <!-- Toggles -->
+    <div class="toggles-row">
+      <div class="tgl-group"><div class="tgl on"></div><span class="tgl-lbl">Noise Gate</span></div>
+      <div class="tgl-group"><div class="tgl on"></div><span class="tgl-lbl">EQ</span></div>
+    </div>
+
+    <div class="footer">
+      <span>V30-Ampt-1.nam</span>
+      <span>&middot;</span>
+      <span>48kHz</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const amps = [
+  { name:"Ampete One", icon:"A1", color:"#1a2a4a", hero:"amp-styles/ampete-one-ndsp.png" },
+  { name:"Bad Cat mini Cat", icon:"BC", color:"#3a1a1a" },
+  { name:"Brunetti XL 2", icon:"BX", color:"#1a2a1a", hero:"amp-styles/brunetti-ndsp.png" },
+  { name:"Fryette Deliv. 120", icon:"FD", color:"#2a2a1a" },
+  { name:"H&K TriAmp Mk2", icon:"HK", color:"#1a1a3a" },
+  { name:"Lichtlaerm Prom.", icon:"LP", color:"#2a1a2a" },
+  { name:"Marshall 2204", icon:"M4", color:"#2a2a1a" },
+  { name:"Marshall JMP 2203", icon:"MJ", color:"#2a1a1a", hero:"amp-styles/marshall-2203-ndsp.png" },
+  { name:"Marshall JVM", icon:"MV", color:"#1a2a2a" },
+  { name:"Orange OD120", icon:"O1", color:"#3a2a1a" },
+  { name:"Orange ORS100", icon:"O2", color:"#3a3a1a" },
+  { name:"Sebago Texas Fl.", icon:"ST", color:"#1a2a2a" },
+  { name:"Soldano SLO100", icon:"SL", color:"#2a1a2a" },
+  { name:"THC Sunset", icon:"TC", color:"#1a2a2a" },
+];
+
+const list = document.getElementById('ampList');
+amps.forEach((amp, i) => {
+  const item = document.createElement('div');
+  item.className = 'amp-item' + (i === 0 ? ' sel' : '');
+  item.innerHTML = `
+    <div class="amp-item-thumb" style="background:${amp.thumb ? `url(${amp.thumb}) center/cover` : amp.color}">${amp.thumb ? '' : amp.icon}</div>
+    <div class="amp-item-name">${amp.name}</div>
+  `;
+  item.onclick = () => {
+    document.querySelectorAll('.amp-item').forEach(el => el.classList.remove('sel'));
+    item.classList.add('sel');
+    const heroImg = document.getElementById('heroImg');
+    if (amp.hero) {
+      heroImg.style.background = `url(${amp.hero}) center/cover`;
+      heroImg.classList.add('has-image');
+      document.getElementById('heroPh').textContent = '';
+    } else {
+      heroImg.style.background = 'rgba(255,255,255,0.02)';
+      heroImg.classList.remove('has-image');
+      document.getElementById('heroPh').textContent = amp.icon;
+    }
+    document.getElementById('heroName').textContent = amp.name;
+  };
+  list.appendChild(item);
+});
+</script>
+
+</body>
+</html>
