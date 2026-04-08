@@ -35,7 +35,6 @@ const IColor SPK_AMP_ON_BG(25, 200, 150, 60);
 const IColor SPK_AMP_ON_BORDER(100, 200, 150, 60);
 } // namespace VoLumColors
 
-// Dark background panel for the whole window
 class VoLumBackgroundControl : public IControl
 {
 public:
@@ -58,7 +57,6 @@ private:
   float mSidebarWidth;
 };
 
-// "VoLum" logo + subtitle at top of sidebar
 class VoLumLogoControl : public IControl
 {
 public:
@@ -80,7 +78,6 @@ public:
   }
 };
 
-// Amp list item in the sidebar
 class VoLumAmpListControl : public IControl
 {
 public:
@@ -101,7 +98,6 @@ public:
     const float dotSize = 10.f;
     const float pad = 6.f;
 
-    // Fixed palette for the colored dots
     static const IColor dotColors[] = {
       IColor(255, 26, 42, 74), IColor(255, 58, 26, 26), IColor(255, 26, 42, 26), IColor(255, 42, 42, 26),
       IColor(255, 26, 26, 58), IColor(255, 42, 26, 42), IColor(255, 42, 42, 26), IColor(255, 42, 26, 26),
@@ -124,13 +120,11 @@ public:
         g.FillRoundRect(VoLumColors::ITEM_HOVER, paddedRow, 6.f);
       }
 
-      // Colored dot/thumbnail
       IRECT dotArea = paddedRow.GetFromLeft(dotSize + 2 * pad).GetCentredInside(dotSize, dotSize);
       dotArea.Translate(pad, 0.f);
       int colorIdx = i % (sizeof(dotColors) / sizeof(dotColors[0]));
       g.FillRoundRect(dotColors[colorIdx], dotArea, 3.f);
 
-      // Amp name
       IRECT nameArea = paddedRow.GetReducedFromLeft(dotSize + 2 * pad + 8.f);
       IText nameText(13.f, (i == mSelected) ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Roboto-Regular",
                      EAlign::Near, EVAlign::Middle);
@@ -189,12 +183,14 @@ private:
   SelectionCallback mCallback;
 };
 
-// Speaker mode button row (AMP | G12 | G65 | V30)
 class VoLumSpeakerRowControl : public IControl
 {
 public:
-  VoLumSpeakerRowControl(const IRECT& bounds)
+  using ChangeCallback = std::function<void(int speakerIdx)>;
+
+  VoLumSpeakerRowControl(const IRECT& bounds, ChangeCallback cb = nullptr)
   : IControl(bounds)
+  , mCallback(cb)
   {
     mSelected = 3; // V30 default
   }
@@ -211,7 +207,7 @@ public:
     float startX = mRECT.MW() - totalW / 2.f;
     float y = mRECT.MH() - btnH / 2.f;
 
-    IText labelText(10.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IText labelText(12.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     IRECT directLabel(startX - 40.f, y, startX - 4.f, y + btnH);
     g.DrawText(labelText, "DIRECT", directLabel);
 
@@ -220,10 +216,8 @@ public:
       float x = startX + i * (btnW + gap);
       if (i == 1)
       {
-        // Divider between AMP and cabs
         float divX = x - gap / 2.f - 1.f;
         g.DrawLine(VoLumColors::DIVIDER, divX, y + 2.f, divX, y + btnH - 2.f);
-        // "Cabinet" label
         IRECT cabLabel(x - 4.f, y - 14.f, x + 3 * (btnW + gap), y - 2.f);
         g.DrawText(labelText, "CABINET", cabLabel);
       }
@@ -253,7 +247,7 @@ public:
 
       IColor textCol = isOn ? (isAmp ? VoLumColors::ACCENT_AMBER : VoLumColors::ACCENT_BLUE)
                             : VoLumColors::SPK_BTN_OFF_TEXT;
-      IText btnText(13.f, textCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+      IText btnText(14.f, textCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
       g.DrawText(btnText, labels[i], btn);
 
       mBtnRects[i] = btn;
@@ -264,9 +258,11 @@ public:
   {
     for (int i = 0; i < 4; i++)
     {
-      if (mBtnRects[i].Contains(x, y))
+      if (mBtnRects[i].Contains(x, y) && i != mSelected)
       {
         mSelected = i;
+        if (mCallback)
+          mCallback(i);
         SetDirty(false);
         return;
       }
@@ -278,9 +274,9 @@ public:
 private:
   int mSelected = 3;
   IRECT mBtnRects[4];
+  ChangeCallback mCallback;
 };
 
-// Hero image area for the selected amp (draws a placeholder if no bitmap loaded)
 class VoLumHeroImageControl : public IControl
 {
 public:
@@ -292,8 +288,6 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    // Subtle glow behind
-    // Rounded rect placeholder
     g.FillRoundRect(IColor(5, 255, 255, 255), mRECT, 12.f);
     g.DrawRoundRect(IColor(10, 255, 255, 255), mRECT, 12.f);
 
@@ -328,7 +322,6 @@ private:
   std::string mPlaceholder = "A1";
 };
 
-// Amp name label below the hero image
 class VoLumAmpNameControl : public IControl
 {
 public:
@@ -340,7 +333,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText nameText(22.f, IColor(255, 230, 230, 235), "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IText nameText(24.f, IColor(255, 230, 230, 235), "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(nameText, mName.c_str(), mRECT);
   }
 
@@ -354,7 +347,6 @@ private:
   std::string mName = "Ampete One";
 };
 
-// Vertical level meter (simplified, NanoVG drawn)
 class VoLumMeterControl : public IControl
 {
 public:
@@ -387,7 +379,6 @@ private:
   float mLevel = 0.35f;
 };
 
-// Knob label drawn above or below a knob
 class VoLumKnobLabelControl : public IControl
 {
 public:
@@ -401,7 +392,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(11.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IText text(13.f, VoLumColors::TEXT_MED, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mLabel.c_str(), mRECT);
   }
 
@@ -410,7 +401,6 @@ private:
   bool mIsChannel;
 };
 
-// Simple vertical divider between channel knob and other knobs
 class VoLumDividerControl : public IControl
 {
 public:
@@ -423,7 +413,6 @@ public:
   void Draw(IGraphics& g) override { g.FillRect(VoLumColors::DIVIDER, mRECT); }
 };
 
-// Footer showing loaded .nam file info
 class VoLumFooterControl : public IControl
 {
 public:
@@ -435,7 +424,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(10.f, VoLumColors::TEXT_DIM, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IText text(12.f, VoLumColors::TEXT_DIM, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mText.c_str(), mRECT);
   }
 
@@ -446,76 +435,81 @@ public:
   }
 
 private:
-  std::string mText = "V30-Ampt-1.nam · 48kHz";
+  std::string mText = "(no rig loaded)";
 };
 
-// Discrete channel stepper: [<] Ch 1 [>]
-// Click left half to go down, right half to go up. Wraps around.
+// Callback-based discrete channel stepper: [<] CH 1 [>]
+// Arrows are always visible. Click left/right thirds to step.
 class VoLumChannelStepControl : public IControl
 {
 public:
-  VoLumChannelStepControl(const IRECT& bounds, int paramIdx)
-  : IControl(bounds, paramIdx)
+  using ChangeCallback = std::function<void(int newChannelIdx)>;
+
+  VoLumChannelStepControl(const IRECT& bounds, ChangeCallback cb)
+  : IControl(bounds, kNoParameter)
+  , mCallback(cb)
   {
   }
 
+  void SetChannels(const std::vector<std::string>& labels, int selected)
+  {
+    mLabels = labels;
+    mSelected = labels.empty() ? 0 : std::clamp(selected, 0, (int)labels.size() - 1);
+    SetDirty(false);
+  }
+
+  int GetSelected() const { return mSelected; }
+  int GetNumChannels() const { return (int)mLabels.size(); }
+
   void Draw(IGraphics& g) override
   {
-    const auto* pParam = GetParam();
-    if (!pParam)
-      return;
+    const int n = (int)mLabels.size();
 
-    const int nSteps = pParam->NDisplayTexts();
-    const int cur = pParam->Int();
-
-    // Background pill
     g.FillRoundRect(IColor(10, 255, 255, 255), mRECT, mRECT.H() / 2.f);
     g.DrawRoundRect(IColor(20, 142, 197, 255), mRECT, mRECT.H() / 2.f);
 
     const float arrowW = mRECT.H();
 
-    // Left arrow circle
+    // Left arrow -- always visible
     IRECT leftArea = mRECT.GetFromLeft(arrowW).GetCentredInside(arrowW - 6.f, arrowW - 6.f);
     if (mMouseOverLeft)
       g.FillEllipse(IColor(20, 142, 197, 255), leftArea);
-    IText arrowText(14.f, mMouseOverLeft ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_MED,
-                    "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IColor leftCol = mMouseOverLeft ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_DIM;
+    IText arrowText(14.f, leftCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowText, "\xe2\x97\x80", leftArea);
 
-    // Right arrow circle
+    // Right arrow -- always visible
     IRECT rightArea = mRECT.GetFromRight(arrowW).GetCentredInside(arrowW - 6.f, arrowW - 6.f);
     if (mMouseOverRight)
       g.FillEllipse(IColor(20, 142, 197, 255), rightArea);
-    IText arrowTextR(14.f, mMouseOverRight ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_MED,
-                     "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IColor rightCol = mMouseOverRight ? VoLumColors::ACCENT_BLUE : VoLumColors::TEXT_DIM;
+    IText arrowTextR(14.f, rightCol, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowTextR, "\xe2\x96\xb6", rightArea);
 
     // Center label
     IRECT center = mRECT.GetReducedFromLeft(arrowW).GetReducedFromRight(arrowW);
-    const char* displayText = pParam->GetDisplayText(cur);
-    IText labelText(13.f, VoLumColors::TEXT_BRIGHT, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
-    g.DrawText(labelText, displayText ? displayText : "---", center);
+    const char* label = (n > 0 && mSelected >= 0 && mSelected < n) ? mLabels[mSelected].c_str() : "---";
+    IText labelText(14.f, VoLumColors::TEXT_BRIGHT, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    g.DrawText(labelText, label, center);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    const auto* pParam = GetParam();
-    if (!pParam)
-      return;
-
-    const int nSteps = pParam->NDisplayTexts();
-    if (nSteps < 1)
+    const int n = (int)mLabels.size();
+    if (n < 1)
       return;
 
     const float hitW = mRECT.H();
-    int cur = pParam->Int();
     if (x < mRECT.L + hitW)
-      cur = (cur - 1 + nSteps) % nSteps;
+      mSelected = (mSelected - 1 + n) % n;
     else if (x > mRECT.R - hitW)
-      cur = (cur + 1) % nSteps;
+      mSelected = (mSelected + 1) % n;
+    else
+      return;
 
-    SetValue(pParam->ToNormalized(cur));
-    SetDirty(true);
+    if (mCallback)
+      mCallback(mSelected);
+    SetDirty(false);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -539,11 +533,13 @@ public:
   }
 
 private:
+  int mSelected = 0;
   bool mMouseOverLeft = false;
   bool mMouseOverRight = false;
+  std::vector<std::string> mLabels;
+  ChangeCallback mCallback;
 };
 
-// Displays a parameter's current value as formatted text. Updates live.
 class VoLumParamValueControl : public IControl
 {
 public:
@@ -568,7 +564,7 @@ public:
       }
     }
 
-    IText text(11.f, VoLumColors::TEXT_DIM, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    IText text(12.f, VoLumColors::TEXT_DIM, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, str.Get(), mRECT);
   }
 
