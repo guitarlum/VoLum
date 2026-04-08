@@ -1,33 +1,34 @@
-# Neural Amp Modeler Plug-in
+# VoLum -- NAM Player
 
-[![Build](https://github.com/sdatkinson/NeuralAmpModelerPlugin/actions/workflows/build-native.yml/badge.svg)](https://github.com/sdatkinson/NeuralAmpModelerPlugin/actions/workflows/build-native.yml)
+A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) by Lum, rebuilt as a personal amp collection player. Ships 14 bundled guitar amp profiles with a custom UI for instant browsing and switching -- available as both standalone app and VST3 plugin.
 
-A VST3/AudioUnit plug-in\* for [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler), built with [iPlug2](https://iplug2.github.io).
+See [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md) for the full feature list, amp inventory, rig file structure, and developer guide.
 
-- https://www.youtube.com/user/RunawayThumbtack
-- https://github.com/sdatkinson/neural-amp-modeler
+## Quick overview
 
-## Installation
+- **14 bundled amps** with 4 speaker modes (AMP/G12/G65/V30) and 2-6 gain stages each (~224 NAM profiles)
+- **Custom dark-theme UI** (900x600) with sidebar amp browser, hero image, speaker mode buttons, channel stepper, grouped knobs
+- **Per-amp settings** -- EQ, gain, speaker, channel remembered per amp and persisted across sessions
+- **Fast switching** -- background model loading + parsed data cache; no UI freezing
+- **Standalone + VST3** -- same codebase, same UI, same features in both formats
 
-Check the [Releases](https://github.com/sdatkinson/NeuralAmpModelerPlugin/releases) for pre-built installers for the plugin!
+## Upstream
 
-## Supported Platforms
+This is a fork of [NeuralAmpModelerPlugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin). All VoLum-specific code is gated behind `#if VOLUM_AMPETE_PRODUCT` so the original NAM plugin can still be built by setting `VOLUM_AMPETE_PRODUCT 0` in `config.h`.
 
-The Neural Amp Modeler plugin currently supports Windows 10 (64bit) or later, and macOS 10.15 (Catalina) or later.
+## Build
 
-For Linux support, there is an LV2 plugin available: https://github.com/mikeoliphant/neural-amp-modeler-lv2.
+Requires Windows 10+ (x64) and Visual Studio 2022 Build Tools (MSVC v143). All dependencies are vendored.
 
-## About
+```
+NeuralAmpModeler/NeuralAmpModeler.sln
+  -> NeuralAmpModeler-app   (standalone, Release x64)
+  -> NeuralAmpModeler-vst3  (VST3 plugin, Release x64)
+```
 
-This is a cleaned up version of [the original iPlug2-based NAM plugin](https://github.com/sdatkinson/iPlug2) with some refactoring to adopt better practices recommended by the developers of iPlug2.
-(Thanks [Oli](https://github.com/olilarkin) for your generous suggestions!)
+## Credits
 
-\*could also support AAX, CLAP, Linux, iOS soon.
-
-## Rough edges
-
-### Standalone I/O
-The I/O for the standalone doesn't inherit the stability of most plugin hosts (DAWs), so it's a bit sparser on features. The most common sharp edge is that **only input 1 is supported**. If you have a dual-input interface where the guitar goes in input 2 (e.g. Focusrite Solo), then you're going to need to either (A) use input 1 (and, perhaps, a DI box) or (B) use the plugin (VST3/AU) inside a plugin host.
-
-### Graphics backend
-If you're having trouble with NAM crashing before the GUI comes up, then you might have an unsupported graphics configuration. Usually, this is when you have a dedicated graphics card (like an nVIDIA GPU) and you're using the integrated (CPU) graphics on a Windows system. To fix this, Go to the control panel, pick NAM (or your DAW), and make sure that it uses your graphics card. (If you know more and can help fix this, please make an Issue and let me know more!)
+- [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) by Steven Atkinson
+- [NAM Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) -- upstream fork base
+- [iPlug2](https://iplug2.github.io) -- plugin framework
+- Amp profiles by Lum
