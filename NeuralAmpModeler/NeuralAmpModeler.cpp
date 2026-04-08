@@ -2,6 +2,7 @@
 #include <cmath> // pow
 #include <filesystem>
 #include <iostream>
+#include <thread>
 #include <utility>
 
 #include "Colors.h"
@@ -18,6 +19,9 @@
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumPaths.h"
+#if VOLUM_AMPETE_PRODUCT
+#include "VoLumControls.h"
+#endif
 
 using namespace iplug;
 using namespace igraphics;
@@ -59,6 +63,17 @@ const IVStyle radioButtonStyle =
     .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
     .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
     .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
+
+#if VOLUM_AMPETE_PRODUCT
+const IVStyle volumKnobStyle =
+  style.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.75f);
+const IVStyle volumToggleStyle =
+  style.WithShowLabel(true)
+    .WithShowValue(false)
+    .WithDrawFrame(false)
+    .WithWidgetFrac(0.5f)
+    .WithLabelText({12.f, EVAlign::Middle, IColor(255, 155, 155, 170)});
+#endif
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -133,31 +148,212 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
     pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
 
-    const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
-    const auto fileSVG = pGraphics->LoadSVG(FILE_FN);
-    const auto globeSVG = pGraphics->LoadSVG(GLOBE_ICON_FN);
-    const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
-    const auto rightArrowSVG = pGraphics->LoadSVG(RIGHT_ARROW_FN);
-    const auto leftArrowSVG = pGraphics->LoadSVG(LEFT_ARROW_FN);
-    const auto modelIconSVG = pGraphics->LoadSVG(MODEL_ICON_FN);
-    const auto irIconOnSVG = pGraphics->LoadSVG(IR_ICON_ON_FN);
-    const auto irIconOffSVG = pGraphics->LoadSVG(IR_ICON_OFF_FN);
-
-    const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
-    const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
-    const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
-    const auto linesBitmap = pGraphics->LoadBitmap(LINES_FN);
     const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
     const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
 
     const auto b = pGraphics->GetBounds();
+
+#if VOLUM_AMPETE_PRODUCT
+    // ========== VoLum Variant F Layout ==========
+    const float sidebarW = 200.f;
+    const float mainL = b.L + sidebarW;
+    const float mainR = b.R;
+    const float mainW = mainR - mainL;
+    const float mainCX = mainL + mainW / 2.f;
+
+    // Dark procedural background with sidebar
+    pGraphics->AttachControl(new VoLumBackgroundControl(b, sidebarW));
+
+    // Sidebar: logo
+    const IRECT logoArea(b.L, b.T + 8.f, b.L + sidebarW, b.T + 48.f);
+    pGraphics->AttachControl(new VoLumLogoControl(logoArea));
+
+    // Sidebar: amp list
+    static const char* ampNames[] = {
+      "Ampete One",         "Bad Cat mini Cat",  "Brunetti XL 2",     "Fryette Deliv. 120",
+      "H&K TriAmp Mk2",    "Lichtlaerm Prom.",  "Marshall 2204",     "Marshall JMP 2203",
+      "Marshall JVM",       "Orange OD120",      "Orange ORS100",     "Sebago Texas Fl.",
+      "Soldano SLO100",     "THC Sunset",
+    };
+    const int numAmps = 14;
+    const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
+    pGraphics->AttachControl(
+      new VoLumAmpListControl(
+        ampListArea, numAmps, ampNames,
+        [this](int ampIdx) {
+          auto* pGraphics = GetUI();
+          if (!pGraphics)
+            return;
+          auto* heroCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
+          auto* nameCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpName)->As<VoLumAmpNameControl>();
+          if (heroCtrl)
+          {
+            char ph[4] = {ampNames[ampIdx][0], (char)('0' + (ampIdx % 10)), 0, 0};
+            heroCtrl->SetPlaceholder(ph);
+          }
+          if (nameCtrl)
+            nameCtrl->SetName(ampNames[ampIdx]);
+
+          // Force reload the current rig (tests load perf for all amps)
+          mLastLoadedAmpeteRigIdx = -1;
+          mAmpeteRigNeedsLoad.store(true);
+        }),
+      kCtrlTagVoLumAmpList);
+
+    // Speaker mode row
+    const IRECT speakerArea(mainL, b.T + 18.f, mainR, b.T + 66.f);
+    pGraphics->AttachControl(new VoLumSpeakerRowControl(speakerArea), kCtrlTagVoLumSpeakerRow);
+
+    // Amp hero image (340 x 160)
+    const float heroW = 340.f;
+    const float heroH = 160.f;
+    const float heroTop = speakerArea.B + 6.f;
+    const IRECT heroArea(mainCX - heroW / 2.f, heroTop, mainCX + heroW / 2.f, heroTop + heroH);
+    pGraphics->AttachControl(new VoLumHeroImageControl(heroArea), kCtrlTagVoLumHeroImage);
+
+    // Amp name below hero
+    const IRECT nameArea(mainL, heroArea.B + 4.f, mainR, heroArea.B + 28.f);
+    pGraphics->AttachControl(new VoLumAmpNameControl(nameArea), kCtrlTagVoLumAmpName);
+
+    // ---- Knobs: [Channel] | [Input, Gate] | [Bass, Mid, Treble] | [Output] ----
+    // Groups separated by dividers, knobs tightly packed within groups
+    const float knobDiam = 50.f;
+    const float colW = 60.f;
+    const float labelH = 16.f;
+    const float valueH = 16.f;
+    const float divW = 16.f;
+    const float knobRowTop = nameArea.B + 12.f;
+    const float knobT = knobRowTop + labelH;
+    // Total: 1 + div + 2 + div + 3 + div + 1 = 7 cols + 3 dividers
+    // Extra 20px for the wider channel stepper
+    const float totalW = 7 * colW + 3 * divW + 20.f;
+    const float rowLeft = mainCX - totalW / 2.f;
+
+    // Compute x for each knob column accounting for group dividers
+    // Groups: [0] | [1,2] | [3,4,5] | [6]
+    auto knobX = [&](int slot) -> float {
+      float x = rowLeft;
+      // Group boundaries: after slot 0, after slot 2, after slot 5
+      int dividers = 0;
+      if (slot > 0) dividers++;
+      if (slot > 2) dividers++;
+      if (slot > 5) dividers++;
+      return x + slot * colW + dividers * divW;
+    };
+
+    auto drawDivider = [&](float afterSlotRight) {
+      float dx = afterSlotRight + (divW - 1.f) / 2.f;
+      pGraphics->AttachControl(new VoLumDividerControl(
+        IRECT(dx, knobT, dx + 1.f, knobT + knobDiam)));
+    };
+
+    auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix = "",
+                            const char* group = "") {
+      float cx = knobX(slot);
+      float kL = cx + (colW - knobDiam) / 2.f;
+
+      pGraphics->AttachControl(new VoLumKnobLabelControl(
+        IRECT(cx, knobRowTop, cx + colW, knobRowTop + labelH), label));
+
+      auto* knob = new NAMKnobControl(
+        IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam),
+        paramId, "", volumKnobStyle, knobBackgroundBitmap);
+      if (group[0])
+        pGraphics->AttachControl(knob, -1, group);
+      else
+        pGraphics->AttachControl(knob);
+
+      pGraphics->AttachControl(new VoLumParamValueControl(
+        IRECT(cx, knobT + knobDiam + 2.f, cx + colW, knobT + knobDiam + 2.f + valueH), paramId, suffix));
+    };
+
+    // Group 1: Channel (discrete stepper, not a knob)
+    {
+      float cx = knobX(0);
+      float stepW = colW + 20.f;
+      float stepL = cx - 10.f;
+      pGraphics->AttachControl(new VoLumKnobLabelControl(
+        IRECT(stepL, knobRowTop, stepL + stepW, knobRowTop + labelH), "CHANNEL"));
+      float stepH = 32.f;
+      float stepTop = knobT + (knobDiam - stepH) / 2.f;
+      pGraphics->AttachControl(new VoLumChannelStepControl(
+        IRECT(stepL, stepTop, stepL + stepW, stepTop + stepH), kVoLumAmpeteRig));
+    }
+
+    // Divider after Channel
+    drawDivider(knobX(0) + colW);
+
+    // Group 2: Input, Gate
+    drawKnobCol(1, "INPUT", kInputLevel, "dB");
+    drawKnobCol(2, "GATE", kNoiseGateThreshold, "dB");
+
+    // Divider after Gate
+    drawDivider(knobX(2) + colW);
+
+    // Group 3: Bass, Mid, Treble
+    drawKnobCol(3, "BASS", kToneBass, "", "EQ_KNOBS");
+    drawKnobCol(4, "MID", kToneMid, "", "EQ_KNOBS");
+    drawKnobCol(5, "TREBLE", kToneTreble, "", "EQ_KNOBS");
+
+    // Divider after Treble
+    drawDivider(knobX(5) + colW);
+
+    // Group 4: Output
+    drawKnobCol(6, "OUTPUT", kOutputLevel, "dB");
+
+    // I/O Meters flanking the knob area
+    const float meterW = 6.f;
+    const float meterH = knobDiam + 10.f;
+    const float meterTop = knobT - 5.f;
+
+    pGraphics->AttachControl(new VoLumKnobLabelControl(
+      IRECT(rowLeft - 20.f, meterTop, rowLeft - 8.f, meterTop + meterH), "IN"));
+    pGraphics->AttachControl(new NAMMeterControl(
+      IRECT(rowLeft - 8.f, meterTop, rowLeft - 2.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagInputMeter);
+
+    const float rowRight = knobX(6) + colW;
+    pGraphics->AttachControl(new NAMMeterControl(
+      IRECT(rowRight + 2.f, meterTop, rowRight + 8.f, meterTop + meterH), meterBackgroundBitmap, style), kCtrlTagOutputMeter);
+    pGraphics->AttachControl(new VoLumKnobLabelControl(
+      IRECT(rowRight + 8.f, meterTop, rowRight + 22.f, meterTop + meterH), "OUT"));
+
+    // Toggles: Noise Gate, EQ
+    const float toggleY = knobRowTop + labelH + knobDiam + valueH + 16.f;
+    const float toggleW = 120.f;
+    const float toggleH = 50.f;
+    const IRECT ngToggleArea(mainCX - toggleW - 20.f, toggleY, mainCX - 20.f, toggleY + toggleH);
+    const IRECT eqToggleArea(mainCX + 20.f, toggleY, mainCX + toggleW + 20.f, toggleY + toggleH);
+    pGraphics->AttachControl(
+      new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", volumToggleStyle, switchHandleBitmap));
+    pGraphics->AttachControl(
+      new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", volumToggleStyle, switchHandleBitmap));
+
+    // Footer
+    const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 20.f);
+    pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
+
+#else
+    // ========== Original NAM Layout ==========
+    const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
+    const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
+    const auto fileSVG = pGraphics->LoadSVG(FILE_FN);
+    const auto globeSVG = pGraphics->LoadSVG(GLOBE_ICON_FN);
+    const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
+    const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
+    const auto rightArrowSVG = pGraphics->LoadSVG(RIGHT_ARROW_FN);
+    const auto leftArrowSVG = pGraphics->LoadSVG(LEFT_ARROW_FN);
+    const auto modelIconSVG = pGraphics->LoadSVG(MODEL_ICON_FN);
+    const auto irIconOnSVG = pGraphics->LoadSVG(IR_ICON_ON_FN);
+    const auto irIconOffSVG = pGraphics->LoadSVG(IR_ICON_OFF_FN);
+    const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
+    const auto linesBitmap = pGraphics->LoadBitmap(LINES_FN);
+
     const auto mainArea = b.GetPadded(-20);
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
 
-    // Areas for knobs
     const auto knobsPad = 20.0f;
     const auto knobsExtraSpaceBelowTitle = 25.0f;
     const auto singleKnobPad = -2.0f;
@@ -176,7 +372,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto eqToggleArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
-    // Areas for model and IR
     const auto fileWidth = 200.0f;
     const auto fileHeight = 30.0f;
     const auto irYOffset = 38.0f;
@@ -186,14 +381,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
 
-    // Areas for meters
     const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
     const auto outputMeterArea = contentArea.GetFromRight(30).GetHShifted(20).GetMidVPadded(100).GetVShifted(-25);
-
-    // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
 
-#if !VOLUM_AMPETE_PRODUCT
     auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
       if (fileName.GetLength())
       {
@@ -207,7 +398,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         std::cout << "Loaded: " << fileName.Get() << std::endl;
       }
     };
-#endif
 
     auto loadIRCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
       if (fileName.GetLength())
@@ -219,7 +409,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           std::stringstream message;
           message << "Failed to load IR file " << fileName.Get() << ":\n";
           message << dsp::wav::GetMsgForLoadReturnCode(retCode);
-
           _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
         }
       }
@@ -230,24 +419,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURAL AMP MODELER", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
-#if VOLUM_AMPETE_PRODUCT
-    pGraphics->AttachControl(
-      new IVMenuButtonControl(modelArea, kVoLumAmpeteRig, "Ampete model", style, EVShape::Rectangle));
-#ifndef APP_API
-#ifdef NAM_PICK_DIRECTORY
-    const std::string defaultIRString = "Select IR directory...";
-#else
-    const std::string defaultIRString = "Select IR...";
-#endif
-    const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
-    pGraphics->AttachControl(new ISVGSwitchControl(irSwitchArea, {irIconOffSVG, irIconOnSVG}, kIRToggle));
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
-                                fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl),
-      kCtrlTagIRFileBrowser);
-#endif
-#else
 #ifdef NAM_PICK_DIRECTORY
     const std::string defaultNamFileString = "Select model directory...";
     const std::string defaultIRString = "Select IR directory...";
@@ -267,12 +438,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
                                 "Get IRs", getUrl),
       kCtrlTagIRFileBrowser);
-#endif
+
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
     pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
 
-    // The knobs
     pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));
     pGraphics->AttachControl(new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, knobBackgroundBitmap));
     pGraphics->AttachControl(
@@ -283,11 +453,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new NAMKnobControl(trebleKnobArea, kToneTreble, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
     pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", style, knobBackgroundBitmap));
 
-    // The meters
     pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
     pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
 
-    // Settings/help/about box
     pGraphics->AttachControl(new NAMCircleButtonControl(
       settingsButtonArea,
       [pGraphics](IControl* pCaller) {
@@ -300,14 +468,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                  crossSVG, style, radioButtonStyle),
                       kCtrlTagSettingsBox)
       ->Hide(true);
+#endif // VOLUM_AMPETE_PRODUCT
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);
       pControl->SetMouseOverWhenDisabled(true);
     });
-
-    // pGraphics->GetControlWithTag(kCtrlTagOutNorm)->SetMouseEventsWhenDisabled(false);
-    // pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetMouseEventsWhenDisabled(false);
   };
 }
 
@@ -417,6 +583,17 @@ void NeuralAmpModeler::OnIdle()
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
+#if VOLUM_AMPETE_PRODUCT
+  if (mAmpeteRigNeedsLoad.exchange(false) && !mAmpeteRigLoading.load())
+  {
+    mAmpeteRigLoading.store(true);
+    std::thread([this]() {
+      ApplyVoLumAmpeteRigFromParam();
+      mAmpeteRigLoading.store(false);
+    }).detach();
+  }
+#endif
+
   if (mNewModelLoadedInDSP)
   {
     if (auto* pGraphics = GetUI())
@@ -514,7 +691,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
 #if VOLUM_AMPETE_PRODUCT
-    case kVoLumAmpeteRig: ApplyVoLumAmpeteRigFromParam(); break;
+    case kVoLumAmpeteRig: mAmpeteRigNeedsLoad.store(true); break;
 #endif
     default: break;
   }
@@ -761,15 +938,21 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 #if VOLUM_AMPETE_PRODUCT
 void NeuralAmpModeler::ApplyVoLumAmpeteRigFromParam()
 {
+  const int idx = GetParam(kVoLumAmpeteRig)->Int();
+  const int idxClamp = std::clamp(idx, 0, volum::kAmpeteRigCount - 1);
+
+  if (idxClamp == mLastLoadedAmpeteRigIdx)
+    return;
+
   const auto dir = volum::FindAmpeteRigsDirectory();
   if (dir.empty())
     return;
 
-  const int idx = GetParam(kVoLumAmpeteRig)->Int();
-  const int idxClamp = std::clamp(idx, 0, volum::kAmpeteRigCount - 1);
   const auto filePath = dir / volum::kAmpeteFiles[idxClamp];
   if (!std::filesystem::exists(filePath))
     return;
+
+  mLastLoadedAmpeteRigIdx = idxClamp;
 
   WDL_String wdl;
   wdl.Set(std::filesystem::weakly_canonical(filePath).string().c_str());
