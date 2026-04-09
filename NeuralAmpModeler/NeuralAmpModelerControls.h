@@ -658,6 +658,7 @@ public:
   {
     const int hit = GetSelectedIdx();
     const float textGap = 9.f;
+    float maxContentW = mButtonAreaWidth + textGap + 8.f;
     for (int i = 0; i < mNumStates; i++)
     {
       const IRECT rowR = mButtons.Get()[i];
@@ -668,14 +669,21 @@ public:
         g.MeasureText(mStyle.valueText, s, textMeas);
       const float tw = std::max(8.f, textMeas.W());
       const float contentW = mButtonAreaWidth + textGap + tw;
-      const float x0 = rowR.MW() - contentW * 0.5f;
+      maxContentW = std::max(maxContentW, contentW);
+    }
+    for (int i = 0; i < mNumStates; i++)
+    {
+      const IRECT rowR = mButtons.Get()[i];
+      WDL_String* pLab = mTabLabels.Get(i);
+      const char* s = (pLab && pLab->Get() && pLab->Get()[0]) ? pLab->Get() : "";
+      const float x0 = rowR.MW() - maxContentW * 0.5f;
       IRECT btnSlot(x0, rowR.T, x0 + mButtonAreaWidth, rowR.B);
       DrawButton(g, btnSlot.GetFromLeft(mButtonAreaWidth).GetCentredInside(mButtonSize), i == hit,
                  mMouseOverButton == i, IVTabSwitchControl::ETabSegment::Mid, IsDisabled() || GetStateDisabled(i));
       if (s[0] != '\0')
       {
         const IColor fg = (i == hit) ? GetColor(kON) : GetColor(kX1);
-        IRECT textR(x0 + mButtonAreaWidth + textGap, rowR.T, x0 + contentW + 2.f, rowR.B);
+        IRECT textR(x0 + mButtonAreaWidth + textGap, rowR.T, x0 + maxContentW + 2.f, rowR.B);
         g.DrawText(mStyle.valueText.WithFGColor(fg), s, textR, &mBlend);
       }
     }
