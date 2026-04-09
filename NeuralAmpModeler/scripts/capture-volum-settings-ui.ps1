@@ -16,7 +16,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-Add-Type -AssemblyName System.Drawing
+# Full .NET Framework System.Drawing (needed for PS 7+; -AssemblyName alone is not enough on Core)
+$fxDrawing = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\System.Drawing.dll"
+if (-not (Test-Path $fxDrawing)) {
+  Write-Error "System.Drawing not found at $fxDrawing - use Windows with .NET Framework 4.x."
+}
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = Resolve-Path (Join-Path $here "..")
 if (-not $OutPath) {
@@ -28,7 +32,7 @@ if (-not $ExePath) {
   $ExePath = Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe"
 }
 
-Add-Type @"
+$capSrc = @'
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -76,7 +80,8 @@ public static class VoLumWinCap
     }
   }
 }
-"@
+'@
+Add-Type -TypeDefinition $capSrc -ReferencedAssemblies $fxDrawing
 
 if ($Launch) {
   if (-not (Test-Path $ExePath)) { Write-Error "Exe not found: $ExePath" }
@@ -84,7 +89,7 @@ if ($Launch) {
   Start-Sleep -Seconds 2
 }
 
-Add-Type @"
+$findSrc = @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -116,11 +121,17 @@ public static class VoLumFindWin
     return found;
   }
 }
-"@
+'@
+Add-Type -TypeDefinition $findSrc
 
 $hwnd = [VoLumFindWin]::FindByTitleSubstring($WindowTitle)
 if ($hwnd -eq [IntPtr]::Zero) {
   Write-Error "No window with title containing '$WindowTitle'. Launch VoLum (use -Launch) or open settings if capturing overlay."
+}
+
+$outDir = Split-Path -Parent $OutPath
+if ($outDir -and -not (Test-Path $outDir)) {
+  New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 }
 
 [VoLumWinCap]::SaveWindowPng($hwnd, $OutPath)

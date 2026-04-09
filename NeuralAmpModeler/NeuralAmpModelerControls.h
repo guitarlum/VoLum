@@ -632,7 +632,13 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(bounds, paramIdx, {}, "Output Mode", style, EVShape::Ellipse, EDirection::Vertical,
+  : IVRadioButtonControl(bounds, paramIdx, {},
+#if VOLUM_AMPETE_PRODUCT
+                         "",
+#else
+                         "Output Mode",
+#endif
+                         style, EVShape::Ellipse, EDirection::Vertical,
                          buttonSize) {};
 
   void SetNormalizedDisable(const bool disable)
