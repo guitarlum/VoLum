@@ -105,7 +105,7 @@ const IVStyle volumSettingsRadioStyle =
     .WithColor(EVColor::kOFF, kGold.WithOpacity(0.14f))
     .WithColor(EVColor::kX1, kGoldBright.WithOpacity(0.95f))
     // IVRadioButtonControl / IVTabSwitchControl draw option text with valueText (not labelText).
-    .WithValueText(IText(14.f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Middle))
+    .WithValueText(IText(13.f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Middle))
     // Short stack rect in NAMSettingsPageControl; use full rect so three rows stay tight.
     .WithWidgetFrac(1.0f);
 #endif
