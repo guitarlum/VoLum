@@ -65,8 +65,10 @@ if %PLATFORM% == "Win32" (
     copy /y %BUILT_BINARY% %BUILD_DIR%\%NAME%.vst3\Contents\x86-win
     if exist %VST3_32_PATH% ( 
       echo copying VST3 bundle to 32bit VST3 Plugins folder ...
-      call %CREATE_BUNDLE_SCRIPT% %VST3_32_PATH%\%NAME%.vst3 %VST_ICON% %FORMAT%
-      xcopy /E /H /Y %BUILD_DIR%\%NAME%.vst3\Contents\*  %VST3_32_PATH%\%NAME%.vst3\Contents\
+      xcopy /E /H /Y /I %BUILD_DIR%\%NAME%.vst3\* %VST3_32_PATH%\%NAME%.vst3\
+      if errorlevel 1 (
+        echo WARNING: Could not copy VST3 into Program Files. Bundle for installer: %BUILD_DIR%\%NAME%.vst3
+      )
     )
   )
   
@@ -108,8 +110,10 @@ if %PLATFORM% == "x64" (
     copy /y %BUILT_BINARY% %BUILD_DIR%\%NAME%.vst3\Contents\x86_64-win
     if exist %VST3_64_PATH% (
       echo copying VST3 bundle to 64bit VST3 Plugins folder ...
-      call %CREATE_BUNDLE_SCRIPT% %VST3_64_PATH%\%NAME%.vst3 %VST_ICON% %FORMAT%
-      xcopy /E /H /Y %BUILD_DIR%\%NAME%.vst3\Contents\*  %VST3_64_PATH%\%NAME%.vst3\Contents\
+      xcopy /E /H /Y /I %BUILD_DIR%\%NAME%.vst3\* %VST3_64_PATH%\%NAME%.vst3\
+      if errorlevel 1 (
+        echo WARNING: Could not copy VST3 into Program Files. Bundle for installer: %BUILD_DIR%\%NAME%.vst3
+      )
     )
   )
   
@@ -122,3 +126,6 @@ if %PLATFORM% == "x64" (
     xcopy /E /H /Y %BUILD_DIR%\%NAME%.aaxplugin\Contents\* %AAX_64_PATH%\%NAME%.aaxplugin\Contents\
   )
 )
+
+REM Do not fail the MSBuild postbuild step if optional "copy to Program Files" steps above hit permission errors.
+exit /b 0

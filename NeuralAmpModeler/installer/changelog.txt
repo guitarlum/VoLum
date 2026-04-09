@@ -46,4 +46,6 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Remove legacy NeuralAmpModeler.iss (Ampete-only rigs). Ship Windows installer via VoLum.iss only; registry VoLumRigsRoot={app}\rigs; VoLumPaths reads legacy AmpeteRigsPath as parent folder for upgrades.
 04/09/2026 - VoLum: UI readability — brighter TEXT_* and off-button labels; larger sidebar/footer/knob value/speaker row type; stronger list icon contrast; footer strip height +1px line.
 04/09/2026 - VoLum: UI — more space between IN/OUT strips and meters/knobs; lighter label palette + kGoldBright; speaker row active fills readable + optically centered caps; IN/OUT/ch/footer text uses high-contrast colors.
+04/09/2026 - VoLum: Main panel — taller amp name band (gold rule no longer clipped), hairline above knob label row, knob labels 12pt; CHANNEL left-aligned with inset to avoid clipping.
+04/09/2026 - VoLum: Windows postbuild — copy full VST3 bundle from build-win (no create_bundle under Program Files); warn on optional system-folder copy; postbuild exits 0 so Release builds and Inno work without elevated shell.
 
