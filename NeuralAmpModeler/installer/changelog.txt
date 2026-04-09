@@ -42,4 +42,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Settings footer — ModelInfoControl stays visible without a loaded model so “Model information” heading always shows (sample line still fills when model loads).
 04/09/2026 - VoLum: Settings — output mode radios use a shared row width when centering so dots and labels align vertically (no stagger).
 04/09/2026 - VoLum: Docs — README/CONTRIBUTING/plan updated (keyboard shortcuts, per-amp persistence, fast switching); ModelInfoControl and NAM browser cleanup (removed stale commented code).
+04/09/2026 - VoLum: Product version reset to 0.1.0 (PLUG_VERSION_*, Windows VERSIONINFO, VoLum.iss, Apple plists). State blob format comments in Unserialization.cpp unchanged (NAM lineage).
 

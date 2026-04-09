@@ -908,7 +908,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   bool ok = SerializeParams(chunk);
 
 #if VOLUM_AMPETE_PRODUCT
-  // v0.7.15: append per-amp settings after params
+  // VoLum: append per-amp settings after params (see Unserialization.cpp)
   chunk.Put(&mVolumAmpIdx);
   chunk.Put(&mVolumSpeakerIdx);
   chunk.Put(&mVolumChannelIdx);
