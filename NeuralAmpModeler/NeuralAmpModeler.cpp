@@ -79,7 +79,7 @@ const IVColorSpec volumColorSpec{
   COLOR_RED,                       // Extra 2 (clipping)
   kGold.WithContrast(0.1f),        // Extra 3
 };
-const IColor kGoldBright(255, 248, 212, 125);
+const IColor kGoldBright(255, 252, 235, 218);
 const IVStyle volumStyle =
   IVStyle{true, true, volumColorSpec,
           {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, kGoldBright},
@@ -365,21 +365,34 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Group 4: Output
     drawKnobCol(6, "OUTPUT", kOutputLevel, "dB");
 
-    // I/O Meters flanking the knob area -- vertical labels
+    // I/O meters: leave generous gaps so channel column / output knob don’t crowd the strips
     const float meterW = 6.f;
     const float meterH = knobDiam + 10.f;
     const float meterTop = knobT - 5.f;
+    const float gapMeterToKnob = 22.f;
+    const float gapLabelToMeter = 10.f;
+    const float meterLabelStripW = 14.f;
+
+    const float inMeterR = rowLeft - gapMeterToKnob;
+    const float inMeterL = inMeterR - meterW;
+    const float inLabelR = inMeterL - gapLabelToMeter;
+    const float inLabelL = inLabelR - meterLabelStripW;
 
     pGraphics->AttachControl(new VoLumVerticalLabelControl(
-      IRECT(rowLeft - 30.f, meterTop, rowLeft - 18.f, meterTop + meterH), "IN"));
+      IRECT(inLabelL, meterTop, inLabelR, meterTop + meterH), "IN"));
     pGraphics->AttachControl(new NAMMeterControl(
-      IRECT(rowLeft - 18.f, meterTop, rowLeft - 12.f, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagInputMeter);
+      IRECT(inMeterL, meterTop, inMeterR, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagInputMeter);
 
     const float rowRight = knobX(6) + colW;
+    const float outMeterL = rowRight + gapMeterToKnob;
+    const float outMeterR = outMeterL + meterW;
+    const float outLabelL = outMeterR + gapLabelToMeter;
+    const float outLabelR = outLabelL + meterLabelStripW;
+
     pGraphics->AttachControl(new NAMMeterControl(
-      IRECT(rowRight + 24.f, meterTop, rowRight + 30.f, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagOutputMeter);
+      IRECT(outMeterL, meterTop, outMeterR, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagOutputMeter);
     pGraphics->AttachControl(new VoLumVerticalLabelControl(
-      IRECT(rowRight + 30.f, meterTop, rowRight + 42.f, meterTop + meterH), "OUT"));
+      IRECT(outLabelL, meterTop, outLabelR, meterTop + meterH), "OUT"));
 
     // Toggles: slide switch + label side by side
     const float toggleY = knobT + knobDiam + valueH + 2.f + 10.f;
