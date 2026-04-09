@@ -49,4 +49,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Main panel — taller amp name band (gold rule no longer clipped), hairline above knob label row, knob labels 12pt; CHANNEL left-aligned with inset to avoid clipping.
 04/09/2026 - VoLum: Windows postbuild — copy full VST3 bundle from build-win (no create_bundle under Program Files); warn on optional system-folder copy; postbuild exits 0 so Release builds and Inno work without elevated shell.
 04/09/2026 - VoLum: Fix REAPER crash on project reopen — version 0.1.0 was not handled in Unserialization.cpp version ladder (fell through to assert+empty config→nlohmann::json type_error→std::terminate). VoLum 0.1.x now maps to the 0.7.15 serialization format.
+04/09/2026 - VoLum: Fix per-amp settings not saved on close — knob changes now sync to mVolumAmpSettings on every OnParamChange so the destructor's file write always has current values.
 
