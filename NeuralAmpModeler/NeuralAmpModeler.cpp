@@ -1022,6 +1022,25 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 #endif
     default: break;
   }
+
+#if VOLUM_AMPETE_PRODUCT
+  // Keep in-memory per-amp snapshot current so the destructor (and
+  // SerializeState) always write the latest knob values to disk.
+  switch (paramIdx)
+  {
+    case kInputLevel:
+    case kNoiseGateThreshold:
+    case kToneBass:
+    case kToneMid:
+    case kToneTreble:
+    case kOutputLevel:
+    case kNoiseGateActive:
+    case kEQActive:
+      _VolumSaveCurrentToSettings();
+      break;
+    default: break;
+  }
+#endif
 }
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
