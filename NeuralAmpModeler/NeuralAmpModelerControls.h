@@ -3,7 +3,11 @@
 #include <cmath> // std::round
 #include <sstream> // std::stringstream
 #include <unordered_map> // std::unordered_map
+#include "config.h"
 #include "IControls.h"
+#if VOLUM_AMPETE_PRODUCT
+#include "VoLumControls.h"
+#endif
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
 #define NAM_KNOB_HEIGHT 120.0f
@@ -723,30 +727,68 @@ public:
 
   void OnAttached() override
   {
+#if VOLUM_AMPETE_PRODUCT
+    const float pad = 16.0f;
+    const float panelInset = 36.0f;
+    const IRECT panel = GetRECT().GetPadded(panelInset);
+    const IVStyle titleStyle = DEFAULT_STYLE
+                               .WithValueText(IText(26.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center,
+                                                    EVAlign::Middle))
+                               .WithDrawFrame(false)
+                               .WithShadowOffset(0.f);
+    const auto text = IText(13.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
+    const auto leftText =
+      text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
+#else
     const float pad = 20.0f;
+    const IRECT panel = GetRECT();
     const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
                                  .WithDrawFrame(false)
                                  .WithShadowOffset(2.f);
     const auto text = IText(DEFAULT_TEXT_SIZE, EAlign::Center, PluginColors::HELP_TEXT);
     const auto leftText = text.WithAlign(EAlign::Near);
+#endif
     const auto style = mStyle.WithDrawFrame(false).WithValueText(text);
     const IVStyle leftStyle = style.WithValueText(leftText);
 
+#if VOLUM_AMPETE_PRODUCT
+    AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panelInset), mControlNames.bitmap)
+      ->SetIgnoreMouse(true);
+#else
     AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
-    const auto titleArea = GetRECT().GetPadded(-(pad + 10.0f)).GetFromTop(50.0f);
-    AddNamedChildControl(new IVLabelControl(titleArea, "SETTINGS", titleStyle), mControlNames.title);
+#endif
 
-    // Attach input/output calibration controls
+    IRECT inner = panel.GetPadded(-pad);
+
+    auto headerRow = inner.ReduceFromTop(48.0f);
+    AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
+
+    auto closeAction = [&](IControl* pCaller) {
+      static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
+    };
+#if VOLUM_AMPETE_PRODUCT
+    const IRECT closeR = headerRow.GetFromRight(40.f).GetCentredInside(28.f, 28.f);
+#else
+    const IRECT closeR = CornerButtonArea(GetRECT());
+#endif
+    AddNamedChildControl(new NAMSquareButtonControl(closeR, closeAction, mCloseSVG), mControlNames.close);
+
+    // Input calibration (left) + output mode radios (right)
     {
-      const float height = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 10.0f;
-      const float width = titleArea.W();
-      const auto inputOutputArea = titleArea.GetFromBottom(height).GetTranslated(0.0f, height);
-      const auto inputArea = inputOutputArea.GetFromLeft(0.5f * width);
-      const auto outputArea = inputOutputArea.GetFromRight(0.5f * width);
+      const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
+      auto calRow = inner.ReduceFromTop(calBlockH);
+      const float rowW = calRow.W();
+#if VOLUM_AMPETE_PRODUCT
+      const float leftCol = rowW * 0.40f;
+#else
+      const float leftCol = rowW * 0.50f;
+#endif
+      const auto inputArea = calRow.GetFromLeft(leftCol);
+      const auto outputArea = calRow.GetFromRight(rowW - leftCol);
 
-      const float knobWidth = 87.0f; // HACK based on looking at the main page knobs.
+      const float knobWidth = 87.0f;
       const auto inputLevelArea =
-        inputArea.GetFromTop(NAM_KNOB_HEIGHT).GetFromBottom(25.0f).GetMidHPadded(0.5f * knobWidth);
+        inputArea.GetFromTop(NAM_KNOB_HEIGHT).GetFromBottom(28.0f).GetMidHPadded(0.5f * knobWidth);
       const auto inputSwitchArea = inputArea.GetFromBottom(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
 
       auto* inputLevelControl = AddNamedChildControl(
@@ -759,10 +801,12 @@ public:
         new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
-      // Same-ish height & width as input controls
-      const auto outputRadioArea = outputArea.GetFromBottom(
-        1.1f * (inputLevelArea.H() + inputSwitchArea.H())); // .GetMidHPadded(0.55f * knobWidth);
+      const auto outputRadioArea = outputArea.GetPadded(4.f);
+#if VOLUM_AMPETE_PRODUCT
+      const float buttonSize = 11.0f;
+#else
       const float buttonSize = 10.0f;
+#endif
       auto* outputModeControl =
         AddNamedChildControl(new OutputModeControl(outputRadioArea, kOutputMode, mRadioButtonStyle, buttonSize),
                              mControlNames.outputMode, kCtrlTagOutputMode);
@@ -771,19 +815,14 @@ public:
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
     }
 
-    const float halfWidth = PLUG_WIDTH / 2.0f - pad;
-    const auto bottomArea = GetRECT().GetPadded(-pad).GetFromBottom(78.0f);
-    const float lineHeight = 15.0f;
-    const auto modelInfoArea = bottomArea.GetFromLeft(halfWidth).GetFromTop(4 * lineHeight);
-    const auto aboutArea = bottomArea.GetFromRight(halfWidth).GetFromTop(5 * lineHeight);
+    const float bottomH = 88.0f;
+    auto bottomStrip = inner.ReduceFromBottom(bottomH);
+    const float halfWidth = bottomStrip.W() * 0.5f;
+    const float lineHeight = 17.0f;
+    const auto modelInfoArea = bottomStrip.GetFromLeft(halfWidth).GetFromTop(5 * lineHeight);
+    const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - halfWidth).GetFromTop(6 * lineHeight);
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
     AddNamedChildControl(new AboutControl(aboutArea, leftStyle, leftText), mControlNames.about);
-
-    auto closeAction = [&](IControl* pCaller) {
-      static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
-    };
-    AddNamedChildControl(
-      new NAMSquareButtonControl(CornerButtonArea(GetRECT()), closeAction, mCloseSVG), mControlNames.close);
 
     OnResize();
   }
@@ -883,13 +922,20 @@ private:
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 0), "VOLUM", mStyle));
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "By Lum", mStyle));
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 2), buildInfoStr.Get(), mStyle));
+#if VOLUM_AMPETE_PRODUCT
+      const IColor urlMo = VoLumColors::GOLD_DIM;
+      const IColor urlClk = VoLumColors::GOLD;
+#else
+      const IColor urlMo = PluginColors::HELP_TEXT_MO;
+      const IColor urlClk = PluginColors::HELP_TEXT_CLICKED;
+#endif
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 3),
                                       "Based on Neural Amp Modeler by Steve Atkinson",
                                       "https://github.com/guitarlum/VoLum", mText,
-                                      COLOR_TRANSPARENT, PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED));
+                                      COLOR_TRANSPARENT, urlMo, urlClk));
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 4), "github.com/guitarlum/VoLum",
-                                      "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT,
-                                      PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED));
+                                      "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
+                                      urlClk));
     };
 
   private:
