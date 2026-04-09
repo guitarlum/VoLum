@@ -424,6 +424,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         ->Hide(true);
     }
 
+#if defined(APP_API) && VOLUM_OPEN_SETTINGS_AT_LAUNCH
+    if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
+      settings->As<NAMSettingsPageControl>()->HideAnimated(false);
+#endif
+
     // Apply loaded settings: select correct amp, speaker, hero image
     {
       auto* ampList = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpList)->As<VoLumAmpListControl>();

@@ -1303,9 +1303,27 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(IColor(35, 20, 20, 26), mRECT);
-    g.DrawRect(IColor(70, 200, 175, 95), mRECT);
-    g.DrawRect(IColor(40, 200, 162, 78), mRECT.GetPadded(3.f));
+    // Match ui-mockup/settings-overlay-mockup.html output card (group-fill + gold border + inner hairline).
+    g.FillRect(IColor(235, 20, 20, 26), mRECT);
+    g.DrawRect(IColor(89, 200, 162, 78), mRECT);
+    g.DrawRect(IColor(31, 200, 162, 78), mRECT.GetPadded(3.f));
+  }
+};
+
+/** Thin horizontal rule above settings footer (mouse passes through). */
+class VoLumSettingsFooterSepControl : public IControl
+{
+public:
+  explicit VoLumSettingsFooterSepControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IColor c(31, 200, 162, 78);
+    g.FillRect(c, mRECT);
   }
 };
 
@@ -1322,8 +1340,12 @@ public:
   void Draw(IGraphics& g) override
   {
     const float cx = mRECT.MW();
-    const IColor c(90, 200, 162, 78);
-    g.DrawLine(c, cx, mRECT.T, cx, mRECT.B, nullptr, 1.f);
+    const float t = mRECT.H() * 0.12f;
+    const IColor mid(90, 200, 162, 78);
+    const IColor end(35, 200, 162, 78);
+    g.DrawLine(end, cx, mRECT.T, cx, mRECT.T + t, nullptr, 1.f);
+    g.DrawLine(mid, cx, mRECT.T + t, cx, mRECT.B - t, nullptr, 1.f);
+    g.DrawLine(end, cx, mRECT.B - t, cx, mRECT.B, nullptr, 1.f);
   }
 };
 
