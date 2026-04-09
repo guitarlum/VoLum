@@ -20,24 +20,24 @@ const IColor SIDEBAR_BORDER(50, 200, 162, 78);
 const IColor ITEM_HOVER(10, 200, 162, 78);
 const IColor ITEM_SEL_BG(18, 200, 162, 78);
 const IColor ITEM_SEL_BORDER(51, 200, 162, 78);
-// Brighter secondary text for low-contrast / budget displays (was easy to lose on charcoal)
-const IColor TEXT_DIM(255, 218, 202, 175);
-const IColor TEXT_MED(255, 236, 220, 195);
-const IColor TEXT_BRIGHT(255, 252, 245, 235);
-const IColor GOLD(255, 248, 212, 125);
-const IColor GOLD_DIM(255, 220, 192, 120);
+// High-contrast body copy on charcoal (avoid greyed-out look on poor panels)
+const IColor TEXT_DIM(255, 232, 218, 200);
+const IColor TEXT_MED(255, 245, 232, 218);
+const IColor TEXT_BRIGHT(255, 255, 248, 238);
+const IColor GOLD(255, 252, 222, 145);
+const IColor GOLD_DIM(255, 235, 210, 145);
 const IColor METER_GREEN(255, 42, 138, 42);
 const IColor DIVIDER(30, 200, 162, 78);
 const IColor FRAME(72, 200, 162, 78);
 const IColor CORNER(255, 200, 162, 78);
 const IColor BTN_OFF_BG(5, 200, 162, 78);
 const IColor BTN_OFF_BORDER(40, 200, 162, 78);
-const IColor BTN_OFF_TEXT(255, 232, 214, 188);
-const IColor BTN_CAB_ON_BG(30, 200, 162, 78);
-const IColor BTN_CAB_ON_BORDER(220, 200, 162, 78);
-const IColor BTN_AMP_ON_BG(20, 120, 200, 180);
-const IColor BTN_AMP_ON_BORDER(180, 120, 200, 180);
-const IColor BTN_AMP_ON_TEXT(255, 140, 220, 200);
+const IColor BTN_OFF_TEXT(255, 244, 228, 210);
+const IColor BTN_CAB_ON_BG(72, 115, 88, 52);
+const IColor BTN_CAB_ON_BORDER(235, 225, 195, 115);
+const IColor BTN_AMP_ON_BG(78, 48, 125, 118);
+const IColor BTN_AMP_ON_BORDER(215, 165, 230, 220);
+const IColor BTN_AMP_ON_TEXT(255, 252, 255, 248);
 const IColor HERO_BG(255, 12, 12, 18);
 const IColor HERO_BORDER(50, 200, 162, 78);
 const IColor HERO_CORNER(102, 200, 162, 78);
@@ -451,16 +451,18 @@ public:
     const float labelGap = 6.f;
 
     // Single line: DIRECT [AMP] | CABINET [G12] [G65] [V30]
-    IText sectionText(13.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText sectionText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     const float directLblW = 50.f;
     const float cabLblW = 66.f;
 
     float totalW = directLblW + labelGap + btnW + divGap + cabLblW + labelGap + 3 * btnW + 2 * gap;
     float x = mRECT.MW() - totalW / 2.f;
     float btnY = mRECT.MH() - btnH / 2.f;
+    // IV/Josefin bold caps sit visually high in short rects — nudge text area down for optical centering
+    const float btnTextNudgeY = 3.f;
 
     // "DIRECT" label
-    IRECT directLabel(x, btnY, x + directLblW, btnY + btnH);
+    IRECT directLabel(x, btnY + btnTextNudgeY, x + directLblW, btnY + btnH);
     g.DrawText(sectionText, "DIRECT", directLabel);
     x += directLblW + labelGap;
 
@@ -471,7 +473,7 @@ public:
       g.FillRoundRect(isOn ? VoLumColors::BTN_AMP_ON_BG : VoLumColors::BTN_OFF_BG, btn, 3.f);
       g.DrawRoundRect(isOn ? VoLumColors::BTN_AMP_ON_BORDER : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
       IText btnText(14.f, isOn ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-      g.DrawText(btnText, labels[0], btn);
+      g.DrawText(btnText, labels[0], IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
       mBtnRects[0] = btn;
       x += btnW;
     }
@@ -482,7 +484,7 @@ public:
     x += divGap;
 
     // "CABINET" label
-    IRECT cabLabel(x, btnY, x + cabLblW, btnY + btnH);
+    IRECT cabLabel(x, btnY + btnTextNudgeY, x + cabLblW, btnY + btnH);
     g.DrawText(sectionText, "CABINET", cabLabel);
     x += cabLblW + labelGap;
 
@@ -493,9 +495,9 @@ public:
       bool isOn = (i == mSelected);
       g.FillRoundRect(isOn ? VoLumColors::BTN_CAB_ON_BG : VoLumColors::BTN_OFF_BG, btn, 3.f);
       g.DrawRoundRect(isOn ? VoLumColors::BTN_CAB_ON_BORDER : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
-      IColor cabTextCol = isOn ? IColor(255, 255, 235, 150) : VoLumColors::BTN_OFF_TEXT;
+      IColor cabTextCol = isOn ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT;
       IText btnTextCab(14.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-      g.DrawText(btnTextCab, labels[i], btn);
+      g.DrawText(btnTextCab, labels[i], IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
       mBtnRects[i] = btn;
       x += btnW + gap;
     }
@@ -1061,7 +1063,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(10.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(10.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     int len = (int)mLabel.size();
     float charH = 11.f;
     float totalH = len * charH;
@@ -1101,7 +1103,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(12.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mText.c_str(), mRECT);
   }
 
@@ -1149,13 +1151,13 @@ public:
 
     // Left arrow: <
     IRECT leftArea(mRECT.L, mRECT.T, mRECT.L + arrowW, mRECT.B);
-    IColor leftCol = mMouseOverLeft ? VoLumColors::GOLD : VoLumColors::TEXT_MED;
+    IColor leftCol = mMouseOverLeft ? VoLumColors::GOLD : VoLumColors::TEXT_BRIGHT;
     IText arrowText(17.f, leftCol, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowText, "<", leftArea);
 
     // Right arrow: >
     IRECT rightArea(mRECT.R - arrowW, mRECT.T, mRECT.R, mRECT.B);
-    IColor rightCol = mMouseOverRight ? VoLumColors::GOLD : VoLumColors::TEXT_MED;
+    IColor rightCol = mMouseOverRight ? VoLumColors::GOLD : VoLumColors::TEXT_BRIGHT;
     IText arrowTextR(17.f, rightCol, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowTextR, ">", rightArea);
 
