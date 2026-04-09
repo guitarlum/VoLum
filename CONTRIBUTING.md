@@ -1,4 +1,7 @@
 # Contributing to the Neural Amp Modeler Plugin
+
+> **VoLum fork** ([guitarlum/VoLum](https://github.com/guitarlum/VoLum)): this document still describes **upstream NAM** (tests, AU, issue links). For VoLum-specific behavior (curated rigs, per-amp JSON persistence, Windows-focused build), use the root [README.md](README.md) and [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md). VoLum ships Windows **standalone + VST3** with `scripts/run-tests-win.ps1` for Release **x64** tests.
+
 Thanks for your interest in the project! Here are a few quick tips to make sure that your PR will go smoothly:
 
 ## "Communication is the best policy"

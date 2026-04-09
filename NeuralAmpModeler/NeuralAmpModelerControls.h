@@ -338,8 +338,6 @@ public:
       pCaller->GetDelegate()->SendArbitraryMsgFromUI(mClearMsgTag);
       mFileNameControl->SetLabelAndTooltip(mDefaultLabelStr.Get());
       SetBrowserState(NAMBrowserState::Empty);
-      // FIXME disabling output mode...
-      //      pCaller->GetUI()->GetControlWithTag(kCtrlTagOutputMode)->SetDisabled(false);
     };
 
     auto chooseFileFunc = [&, loadFileFunc](IControl* pCaller) {
@@ -596,10 +594,6 @@ public:
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information:", mStyle));
     AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 1), "", mStyle), mControlNames.sampleRate);
 #endif
-    // AddNamedChildControl(
-    //   new IVLabelControl(GetRECT().SubRectVertical(4, 2), "", mStyle), mControlNames.inputCalibrationLevel);
-    // AddNamedChildControl(
-    //   new IVLabelControl(GetRECT().SubRectVertical(4, 3), "", mStyle), mControlNames.outputCalibrationLevel);
   };
 
   void SetModelInfo(const ModelInfo& modelInfo)
@@ -620,10 +614,6 @@ public:
     };
 
     SetControlStr("Sample rate", modelInfo.sampleRate, "Hz", mControlNames.sampleRate);
-    // SetControlStr(
-    //   "Input calibration level", modelInfo.inputCalibrationLevel, "dBu", mControlNames.inputCalibrationLevel);
-    // SetControlStr(
-    //   "Output calibration level", modelInfo.outputCalibrationLevel, "dBu", mControlNames.outputCalibrationLevel);
 
     mHasInfo = true;
   };
@@ -633,8 +623,6 @@ private:
   struct
   {
     const std::string sampleRate = "sampleRate";
-    // const std::string inputCalibrationLevel = "inputCalibrationLevel";
-    // const std::string outputCalibrationLevel = "outputCalibrationLevel";
   } mControlNames;
   // Do I have info?
   bool mHasInfo = false;

@@ -8,8 +8,9 @@ See [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md) for the full featur
 
 - **14 bundled amps** with 4 speaker modes (AMP/G12/G65/V30) and 2-6 gain stages each (~224 NAM profiles)
 - **Custom dark-theme UI** (900x600) with sidebar amp browser, hero image, speaker mode buttons, channel stepper, grouped knobs
-- **Per-amp settings** -- EQ, gain, speaker, channel remembered per amp and persisted across sessions
-- **Fast switching** -- background model loading + parsed data cache; no UI freezing
+- **Per-amp persistent settings** -- all knobs, toggles, speaker mode, and channel are saved per amp to `rigs/volum-settings.json` and restored when you return to that amp or on the next launch (VST3 state includes the same data)
+- **Super-fast amp changes** -- click another amp (or use **Up/Down** arrow keys): the UI stays responsive because NAM models load on a **background thread**, and parsed DSP data is **cached per amp folder** so repeat visits avoid re-parsing JSON
+- **Keyboard** -- **Up/Down**: previous/next amp; **Left/Right**: previous/next channel on the channel stepper (standalone focused; host may capture keys in VST3)
 - **Standalone + VST3** -- same codebase, same UI, same features in both formats
 
 ## Upstream
