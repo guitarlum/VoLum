@@ -20,18 +20,19 @@ const IColor SIDEBAR_BORDER(50, 200, 162, 78);
 const IColor ITEM_HOVER(10, 200, 162, 78);
 const IColor ITEM_SEL_BG(18, 200, 162, 78);
 const IColor ITEM_SEL_BORDER(51, 200, 162, 78);
-const IColor TEXT_DIM(255, 200, 182, 140);
-const IColor TEXT_MED(255, 228, 205, 148);
-const IColor TEXT_BRIGHT(255, 248, 242, 225);
+// Brighter secondary text for low-contrast / budget displays (was easy to lose on charcoal)
+const IColor TEXT_DIM(255, 218, 202, 175);
+const IColor TEXT_MED(255, 236, 220, 195);
+const IColor TEXT_BRIGHT(255, 252, 245, 235);
 const IColor GOLD(255, 248, 212, 125);
-const IColor GOLD_DIM(255, 200, 175, 100);
+const IColor GOLD_DIM(255, 220, 192, 120);
 const IColor METER_GREEN(255, 42, 138, 42);
 const IColor DIVIDER(30, 200, 162, 78);
 const IColor FRAME(72, 200, 162, 78);
 const IColor CORNER(255, 200, 162, 78);
 const IColor BTN_OFF_BG(5, 200, 162, 78);
 const IColor BTN_OFF_BORDER(40, 200, 162, 78);
-const IColor BTN_OFF_TEXT(255, 200, 182, 140);
+const IColor BTN_OFF_TEXT(255, 232, 214, 188);
 const IColor BTN_CAB_ON_BG(30, 200, 162, 78);
 const IColor BTN_CAB_ON_BORDER(220, 200, 162, 78);
 const IColor BTN_AMP_ON_BG(20, 120, 200, 180);
@@ -111,7 +112,7 @@ public:
     IRECT logoArea = mRECT.GetFromTop(34.f).GetVShifted(2.f);
     g.DrawText(logoText, "VoLum", logoArea);
 
-    IText subText(9.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText subText(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     IRECT subArea = mRECT.GetFromTop(32.f).GetVShifted(22.f);
     g.DrawText(subText, "NAM PLAYER", subArea);
 
@@ -168,9 +169,9 @@ public:
       IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f,
                      paddedRow.L + pad + iconSize, paddedRow.MH() + iconSize / 2.f);
 
-      IColor thmBright = (i == mSelected) ? IColor(200, 120, 210, 220) : IColor(120, 80, 150, 170);
-      IColor thmDim = (i == mSelected) ? IColor(100, 100, 180, 200) : IColor(60, 60, 120, 140);
-      g.DrawRect(IColor(i == mSelected ? 80 : 40, 100, 180, 200), iconArea);
+      IColor thmBright = (i == mSelected) ? IColor(200, 120, 210, 220) : IColor(145, 105, 175, 195);
+      IColor thmDim = (i == mSelected) ? IColor(100, 100, 180, 200) : IColor(85, 85, 145, 175);
+      g.DrawRect(IColor(i == mSelected ? 80 : 58, 120, 195, 210), iconArea);
       DrawMiniFractal(g, iconArea, i, thmBright, thmDim);
 
       // Amp name -- always prominent
@@ -450,7 +451,7 @@ public:
     const float labelGap = 6.f;
 
     // Single line: DIRECT [AMP] | CABINET [G12] [G65] [V30]
-    IText sectionText(12.f, IColor(255, 252, 232, 160), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText sectionText(13.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     const float directLblW = 50.f;
     const float cabLblW = 66.f;
 
@@ -469,7 +470,7 @@ public:
       bool isOn = (0 == mSelected);
       g.FillRoundRect(isOn ? VoLumColors::BTN_AMP_ON_BG : VoLumColors::BTN_OFF_BG, btn, 3.f);
       g.DrawRoundRect(isOn ? VoLumColors::BTN_AMP_ON_BORDER : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
-      IText btnText(13.f, isOn ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      IText btnText(14.f, isOn ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       g.DrawText(btnText, labels[0], btn);
       mBtnRects[0] = btn;
       x += btnW;
@@ -493,7 +494,7 @@ public:
       g.FillRoundRect(isOn ? VoLumColors::BTN_CAB_ON_BG : VoLumColors::BTN_OFF_BG, btn, 3.f);
       g.DrawRoundRect(isOn ? VoLumColors::BTN_CAB_ON_BORDER : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
       IColor cabTextCol = isOn ? IColor(255, 255, 235, 150) : VoLumColors::BTN_OFF_TEXT;
-      IText btnTextCab(13.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      IText btnTextCab(14.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       g.DrawText(btnTextCab, labels[i], btn);
       mBtnRects[i] = btn;
       x += btnW + gap;
@@ -971,8 +972,8 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText nameText(26.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle);
-    IRECT textArea = mRECT.GetFromTop(28.f);
+    IText nameText(28.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle);
+    IRECT textArea = mRECT.GetFromTop(30.f);
     g.DrawText(nameText, mName.c_str(), textArea);
 
     // Gold divider with diamond below the name
@@ -1038,7 +1039,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(13.f, IColor(255, 252, 232, 160), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText text(14.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mLabel.c_str(), mRECT);
   }
 
@@ -1060,9 +1061,9 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(8.f, VoLumColors::GOLD_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(10.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     int len = (int)mLabel.size();
-    float charH = 10.f;
+    float charH = 11.f;
     float totalH = len * charH;
     float startY = mRECT.MH() - totalH / 2.f;
     for (int i = 0; i < len; i++)
@@ -1100,7 +1101,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(12.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mText.c_str(), mRECT);
   }
 
@@ -1149,19 +1150,19 @@ public:
     // Left arrow: <
     IRECT leftArea(mRECT.L, mRECT.T, mRECT.L + arrowW, mRECT.B);
     IColor leftCol = mMouseOverLeft ? VoLumColors::GOLD : VoLumColors::TEXT_MED;
-    IText arrowText(16.f, leftCol, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText arrowText(17.f, leftCol, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowText, "<", leftArea);
 
     // Right arrow: >
     IRECT rightArea(mRECT.R - arrowW, mRECT.T, mRECT.R, mRECT.B);
     IColor rightCol = mMouseOverRight ? VoLumColors::GOLD : VoLumColors::TEXT_MED;
-    IText arrowTextR(16.f, rightCol, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText arrowTextR(17.f, rightCol, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(arrowTextR, ">", rightArea);
 
     // Center: channel number
     IRECT center(mRECT.L + arrowW, mRECT.T, mRECT.R - arrowW, mRECT.B);
     const char* label = (n > 0 && mSelected >= 0 && mSelected < n) ? mLabels[mSelected].c_str() : "---";
-    IText labelText(18.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText labelText(19.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     g.DrawText(labelText, label, center);
   }
 
@@ -1236,7 +1237,7 @@ public:
       }
     }
 
-    IText text(11.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(12.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, str.Get(), mRECT);
   }
 

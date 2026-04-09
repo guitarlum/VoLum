@@ -258,7 +258,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float labelH = 18.f;
     const float valueH = 16.f;
     const float toggleH = 34.f;
-    const float footerH = 16.f;
+    const float footerH = 18.f;
 
     const float contentH = speakerH + 6.f + heroH + 4.f + nameH + 14.f
                          + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + 6.f + footerH;
