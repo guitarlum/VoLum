@@ -41,4 +41,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Settings alignment — footer divider gap + shared footerBody; “Model information” / “VoLum · By Lum” same 15pt Josefin-Bold gold cap row; centered 15pt section caps + extra cap-to-card gap; centered radio rows (custom DrawWidget); slightly smaller panel + larger body type.
 04/09/2026 - VoLum: Settings footer — ModelInfoControl stays visible without a loaded model so “Model information” heading always shows (sample line still fills when model loads).
 04/09/2026 - VoLum: Settings — output mode radios use a shared row width when centering so dots and labels align vertically (no stagger).
+04/09/2026 - VoLum: Docs — README/CONTRIBUTING/plan updated (keyboard shortcuts, per-amp persistence, fast switching); ModelInfoControl and NAM browser cleanup (removed stale commented code).
 

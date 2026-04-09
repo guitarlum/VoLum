@@ -20,10 +20,12 @@ A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpMod
 - **14 bundled amps** -- Ampete One, Bad Cat, Brunetti, Fryette, H&K TriAmp, Lichtlaerm, Marshall 2204/2203/JVM, Orange OD120/ORS100, Sebago, Soldano SLO100, THC Sunset
 - **4 speaker modes per amp** -- AMP (direct), G12, G65, V30 (cabinet simulations baked into the NAM profiles)
 - **2-6 gain stages per amp** -- channel stepper dynamically discovers available channels from the rig files
-- **Per-amp snapshots** -- switch amps and your EQ, gain, gate, speaker, channel settings are saved and restored automatically
-- **Fast switching** -- parsed model data is cached per amp folder; switching channels/speakers skips JSON re-parsing
-- **Non-blocking UI** -- model loading runs in a background thread so the interface stays responsive
-- **Cross-session persistence** -- settings saved to `rigs/volum-settings.json`, last-used amp restored on startup
+- **Per-amp persistent settings** -- every knob, toggle, speaker mode, and channel is stored **per amp**; switching amps saves the current amp’s state and loads the target amp’s last state. Everything is written to `rigs/volum-settings.json` for the next session. **VST3** also serializes the same per-amp bank in the plugin state chunk (v0.7.15+)
+- **Super-fast amp switching** -- UI never blocks on load: models are prepared on a **background thread**, and **per-amp DSP JSON is cached** after the first parse so flipping back to an amp you already used is especially quick
+- **Channel / amp from the keyboard** -- **Left/Right** arrows step the channel; **Up/Down** step through amps in sidebar order (helps live tweaking). In a DAW, the host may eat key events before they reach the plugin UI
+- **Fast path for speaker/channel** -- parsed model data is cached per amp folder; changing only speaker or channel reuses work where possible
+- **Non-blocking UI** -- the main thread shows progress via the footer filename while the worker loads the next `.nam`
+- **Cross-session persistence** -- settings JSON + last amp index; standalone app resolves `rigs/` next to the binary/install
 - **NDSP-style amp images** -- hero image area displays amp illustrations (Ampete, Brunetti, Marshall 2203 so far)
 - **Original NAM preserved** -- set `VOLUM_AMPETE_PRODUCT 0` in `config.h` to build the stock NAM plugin
 
