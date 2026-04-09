@@ -406,6 +406,73 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       }
     }
 
+    // Keyboard: Up/Down = switch amps, Left/Right = switch channels
+    pGraphics->SetKeyHandlerFunc([this](const IKeyPress& key, bool isUp) {
+      if (isUp) return false;
+      if (key.VK == 0x26 || key.VK == 0x28) // VK_UP or VK_DOWN
+      {
+        int newIdx = (key.VK == 0x26)
+          ? (mVolumAmpIdx - 1 + volum::kAmpCount) % volum::kAmpCount
+          : (mVolumAmpIdx + 1) % volum::kAmpCount;
+        // Simulate sidebar click via the same path
+        _VolumSaveCurrentToSettings();
+        mVolumAmpIdx = newIdx;
+        _VolumRestoreFromSettings(newIdx);
+        _VolumRefreshChannels();
+        mVolumNeedsLoad.store(true);
+        _VolumSaveSettingsToFile();
+        if (auto* pGfx = GetUI())
+        {
+          if (auto* ampList = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+            ampList->As<VoLumAmpListControl>()->SetSelected(newIdx);
+          if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
+          {
+            char ph[4] = {volum::kAmps[newIdx].displayName[0], (char)('0' + (newIdx % 10)), 0, 0};
+            heroCtrl->As<VoLumHeroImageControl>()->SetPlaceholder(ph, newIdx);
+            heroCtrl->As<VoLumHeroImageControl>()->SetName(volum::kAmps[newIdx].displayName);
+          }
+          if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumAmpName))
+            nameCtrl->As<VoLumAmpNameControl>()->SetName(volum::kAmps[newIdx].displayName);
+        }
+        return true;
+      }
+      if (key.VK == 0x25) // VK_LEFT
+      {
+        if (auto* pGfx = GetUI())
+          if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
+          {
+            auto* s = stepper->As<VoLumChannelStepControl>();
+            int n = s->GetNumChannels();
+            if (n > 0)
+            {
+              int newCh = (s->GetSelected() - 1 + n) % n;
+              s->SetChannels(mVolumChannelLabels, newCh);
+              mVolumChannelIdx = newCh;
+              mVolumNeedsLoad.store(true);
+            }
+          }
+        return true;
+      }
+      if (key.VK == 0x27) // VK_RIGHT
+      {
+        if (auto* pGfx = GetUI())
+          if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
+          {
+            auto* s = stepper->As<VoLumChannelStepControl>();
+            int n = s->GetNumChannels();
+            if (n > 0)
+            {
+              int newCh = (s->GetSelected() + 1) % n;
+              s->SetChannels(mVolumChannelLabels, newCh);
+              mVolumChannelIdx = newCh;
+              mVolumNeedsLoad.store(true);
+            }
+          }
+        return true;
+      }
+      return false;
+    });
+
 #else
     // ========== Original NAM Layout ==========
     const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
