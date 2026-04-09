@@ -104,9 +104,10 @@ const IVStyle volumSettingsRadioStyle =
     .WithColor(EVColor::kON, kGold)
     .WithColor(EVColor::kOFF, kGold.WithOpacity(0.14f))
     .WithColor(EVColor::kX1, kGoldBright.WithOpacity(0.95f))
-    .WithLabelText(IText(14.f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Top))
-    // Shrink widget band so vertical radios are not stretched across the full column height
-    .WithWidgetFrac(0.38f);
+    // IVRadioButtonControl / IVTabSwitchControl draw option text with valueText (not labelText).
+    .WithValueText(IText(14.f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Middle))
+    // Short stack rect in NAMSettingsPageControl; use full rect so three rows stay tight.
+    .WithWidgetFrac(1.0f);
 #endif
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
