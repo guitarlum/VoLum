@@ -289,7 +289,10 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(0, 7, 15))
+  // VoLum 0.1.x uses the same serialization format as NAM 0.7.15
+  const bool isVolumVersion = version >= _Version(0, 1, 0) && !( version >= _Version(0, 7, 0) );
+
+  if (version >= _Version(0, 7, 15) || isVolumVersion)
   {
     pos = _GetConfigFrom_0_7_15(chunk, pos, config);
   }
@@ -317,8 +320,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _UnserializeApplyConfig(config);
 
 #if VOLUM_AMPETE_PRODUCT
-  // v0.7.15+: read per-amp settings after the params
-  if (version >= _Version(0, 7, 15))
+  // v0.7.15+ and VoLum 0.1.x: read per-amp settings after the params
+  if (version >= _Version(0, 7, 15) || isVolumVersion)
   {
     // SerializeParams wrote kNumParams doubles; now read the per-amp block
     pos = chunk.Get(&mVolumAmpIdx, pos);
