@@ -94,7 +94,7 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 - Speaker mode is orthogonal to channel: changing speaker recalculates the available channels. A flat enum of all combinations would be 224 entries and would make the UI confusing.
 - The controls (`VoLumChannelStepControl`, `VoLumSpeakerRowControl`) use callbacks that directly update the member state and set an atomic `mVolumNeedsLoad` flag, bypassing the param system entirely.
 
-**Update (v0.7.15+):** `SerializeState` / `UnserializeState` (and standalone `rigs/volum-settings.json`) now persist amp/speaker/channel plus per-amp knob/toggle snapshots. The legacy `kVoLumAmpeteRig` param remains initialized for backward compat with older saved state but is not used at runtime.
+**Update:** `SerializeState` / `UnserializeState` (and standalone `rigs/volum-settings.json`) persist amp/speaker/channel plus per-amp knob/toggle snapshots. The legacy `kVoLumAmpeteRig` param remains initialized for backward compat with older saved state but is not used at runtime.
 
 **Open question:** Should amp/speaker/channel be proper params for DAW automation? If so, the param ranges would need to be worst-case (max 14 amps, 4 speakers, 8 channels) with clamping.
 
@@ -192,12 +192,12 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 ## Remaining Work
 
 ### Must-have before release
-- [ ] **Installer:** bundle all 14 amp folders (repo `NeuralAmpModeler.iss` still copies only `rigs\Ampete One` as of last edit; extend `[Files]` + docs when full catalog ships)
+- [ ] **Legacy installer:** `installer/NeuralAmpModeler.iss` (upstream-named) still lists only `rigs\Ampete One`; the VoLum ship script is `installer/VoLum.iss`, which copies **all 14** amp folders. Remove or sync the legacy script so docs/build instructions are unambiguous.
 - [ ] **Hero art:** comic-style / final amp images for every model in the sidebar + hero area
 - [ ] Per-amp **human-readable channel labels** (e.g. “Clean”, “Lead”) instead of only numeric / suffix codes where desired
 
 ### Done (keep for history)
-- [x] Per-amp persistence: knobs, toggles, speaker, channel; JSON + VST3 state (v0.7.15 — see `Unserialization.cpp` / changelog)
+- [x] Per-amp persistence: knobs, toggles, speaker, channel; JSON + VST3 state (see `Unserialization.cpp` / changelog)
 - [x] User-facing README with amp table, rig naming, dev file map
 
 ### Nice-to-have
