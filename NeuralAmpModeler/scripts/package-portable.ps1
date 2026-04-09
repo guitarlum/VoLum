@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path (Split-Path $PSScriptRoot)
 $buildDir = "$repoRoot\NeuralAmpModeler\build-win"
-$exe = "$buildDir\app\x64\Release\NeuralAmpModeler.exe"
+$exe = "$buildDir\app\x64\Release\VoLum.exe"
 $rigsDir = "$repoRoot\rigs"
 $outDir = "$buildDir\portable"
 $zipName = "VoLum-Portable.zip"
