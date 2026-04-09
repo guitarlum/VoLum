@@ -18,8 +18,11 @@ If you'd like to work on an [existing Issue](https://github.com/sdatkinson/Neura
 I would like to ask that you please try to give me a timeline for your work--I'd hate to have you duplicate work if I know that I'm going to e.g. get to it today and beat you to the punch.
 
 ## Testing
-This repo doesn't currently have unit tests (gasp! Sorry! If you want to help by proposing a framework, please [raise an Issue](https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)!)
-However, there are a few things I'd appreciate if you did to make sure that everything is working as expected:
+The **VoLum fork** includes a small **doctest** suite (`NeuralAmpModeler-Tests`, Release x64): run `NeuralAmpModeler/scripts/run-tests-win.ps1` before landing C++/DSP/UI changes.
+
+The **historical upstream** NAM plugin did not ship unit tests in-tree. If you are contributing to upstream NAM and want to help by proposing a framework, please [raise an Issue](https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D).
+
+Either way, there are practical checks that help catch regressions:
 - [ ] The standalone plugin builds.
 - [ ] The plugin runs.
   - [ ] The plugin makes sound.
