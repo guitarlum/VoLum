@@ -81,6 +81,7 @@ Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam`
 | File | Role |
 |------|------|
 | `config.h` | `VOLUM_AMPETE_PRODUCT`, window size, version |
+| `installer/VoLum.iss` | Windows installer: standalone + VST3 + all amp folders; sets `VoLumRigsRoot` in HKLM for the plugin |
 | `VoLumAmpeteCatalog.h` | Amp metadata (folder names, display names, speaker prefixes) |
 | `VoLumPaths.h` | Rig directory discovery + channel file scanning |
 | `VoLumControls.h` | Custom iPlug2 UI controls for the VoLum layout |
