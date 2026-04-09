@@ -225,6 +225,7 @@ public:
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
   void OnUIOpen() override;
+  void OnUIClose() override;
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }
 
   void OnParamChange(int paramIdx) override;
@@ -268,6 +269,8 @@ private:
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
+  bool mVolumInitComplete = false;
+  bool mVolumSettingsDirty = false;
 
   // Per-amp cache: parsed dspData keyed by filename, avoids re-parsing JSON
   std::unordered_map<std::string, nam::dspData> mVolumDspCache;

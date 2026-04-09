@@ -167,6 +167,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     _VolumRestoreFromSettings(mVolumAmpIdx);
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
+    mVolumInitComplete = true;
   }
 #endif
 
@@ -276,6 +277,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new VoLumSpeakerRowControl(speakerArea,
         [this](int speakerIdx) {
           mVolumSpeakerIdx = speakerIdx;
+          mVolumAmpSettings[mVolumAmpIdx].speakerIdx = speakerIdx;
+          mVolumSettingsDirty = true;
           _VolumRefreshChannels();
           mVolumNeedsLoad.store(true);
         }),
@@ -349,6 +352,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         IRECT(cx, stepTop, cx + colW, stepTop + stepH),
         [this](int newIdx) {
           mVolumChannelIdx = newIdx;
+          mVolumAmpSettings[mVolumAmpIdx].channelIdx = newIdx;
+          mVolumSettingsDirty = true;
           mVolumNeedsLoad.store(true);
         });
       channelStep->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
@@ -684,6 +689,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 NeuralAmpModeler::~NeuralAmpModeler()
 {
 #if VOLUM_AMPETE_PRODUCT
+  _VolumSaveCurrentToSettings();
   _VolumSaveSettingsToFile();
 #endif
   _DeallocateIOPointers();
@@ -898,6 +904,17 @@ void NeuralAmpModeler::OnIdle()
       mVolumIsLoading.store(false);
     }
   }
+
+  // Always keep in-memory settings current (OnIdle runs on main thread, params valid)
+  if (mVolumInitComplete)
+    _VolumSaveCurrentToSettings();
+
+  // Write settings file when dirty (knob/speaker/channel changed)
+  if (mVolumSettingsDirty)
+  {
+    mVolumSettingsDirty = false;
+    _VolumSaveSettingsToFile();
+  }
 #endif
 
   if (mNewModelLoadedInDSP)
@@ -1002,6 +1019,15 @@ void NeuralAmpModeler::OnUIOpen()
   }
 }
 
+void NeuralAmpModeler::OnUIClose()
+{
+#if VOLUM_AMPETE_PRODUCT
+  // Save while params are still valid (destructor may run after teardown)
+  _VolumSaveCurrentToSettings();
+  _VolumSaveSettingsToFile();
+#endif
+}
+
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
   switch (paramIdx)
@@ -1024,22 +1050,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
   }
 
 #if VOLUM_AMPETE_PRODUCT
-  // Keep in-memory per-amp snapshot current so the destructor (and
-  // SerializeState) always write the latest knob values to disk.
-  switch (paramIdx)
-  {
-    case kInputLevel:
-    case kNoiseGateThreshold:
-    case kToneBass:
-    case kToneMid:
-    case kToneTreble:
-    case kOutputLevel:
-    case kNoiseGateActive:
-    case kEQActive:
-      _VolumSaveCurrentToSettings();
-      break;
-    default: break;
-  }
+  if (mVolumInitComplete)
+    mVolumSettingsDirty = true;
 #endif
 }
 
@@ -1375,11 +1387,6 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
 {
-  if (mVolumRigsRoot.empty())
-    return;
-
-  _VolumSaveCurrentToSettings();
-
   nlohmann::json j;
   j["version"] = 1;
   j["lastAmpIdx"] = mVolumAmpIdx;
@@ -1404,26 +1411,44 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   j["amps"] = amps;
 
   namespace fs = std::filesystem;
-  fs::path settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
-  try
+  fs::path settingsPath = volum::VolumUserSettingsFilePath();
+  if (settingsPath.empty())
   {
-    std::ofstream out(settingsPath);
-    out << j.dump(2);
+    if (mVolumRigsRoot.empty())
+      return;
+    settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
   }
-  catch (...)
+
+  std::error_code ec;
+  const fs::path parent = settingsPath.parent_path();
+  if (!parent.empty())
+    fs::create_directories(parent, ec);
+
+  std::ofstream out(settingsPath, std::ios::out | std::ios::trunc);
+  if (!out)
   {
-    std::cerr << "Failed to write volum-settings.json" << std::endl;
+    std::cerr << "VoLum: cannot open settings file for write: " << settingsPath.string() << std::endl;
+    return;
   }
+  out << j.dump(2);
+  if (!out.good())
+    std::cerr << "VoLum: write failed for settings file: " << settingsPath.string() << std::endl;
 }
 
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 {
-  if (mVolumRigsRoot.empty())
-    return;
-
   namespace fs = std::filesystem;
-  fs::path settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
-  if (!fs::exists(settingsPath))
+  const fs::path userPath = volum::VolumUserSettingsFilePath();
+  fs::path legacyPath;
+  if (!mVolumRigsRoot.empty())
+    legacyPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
+
+  fs::path settingsPath;
+  if (!userPath.empty() && fs::exists(userPath))
+    settingsPath = userPath;
+  else if (!legacyPath.empty() && fs::exists(legacyPath))
+    settingsPath = legacyPath;
+  else
     return;
 
   try
