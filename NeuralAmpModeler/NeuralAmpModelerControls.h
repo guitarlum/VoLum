@@ -757,7 +757,7 @@ public:
     const IVStyle titleStyle =
       mStyle.WithShowValue(false)
         .WithShowLabel(true)
-        .WithLabelText(IText(32.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle));
+        .WithLabelText(IText(40.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Top));
     const auto text = IText(14.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
@@ -781,15 +781,15 @@ public:
 
     IRECT inner = panel.GetPadded(-pad);
 
-    auto headerRow = inner.ReduceFromTop(56.0f);
+    auto headerRow = inner.ReduceFromTop(52.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
-    (void) inner.ReduceFromTop(6.0f); // mockup .hdr margin-bottom
+    (void) inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
 
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
     };
 #if VOLUM_AMPETE_PRODUCT
-    const IRECT closeR = headerRow.GetFromRight(48.f).GetCentredInside(32.f, 32.f);
+    const IRECT closeR(headerRow.R - 36.f, headerRow.T + 4.f, headerRow.R - 6.f, headerRow.T + 32.f);
     AddNamedChildControl(new VoLumSettingsCloseControl(closeR, closeAction), mControlNames.close);
 #else
     const IRECT closeR = CornerButtonArea(GetRECT());
@@ -844,13 +844,6 @@ public:
       AddNamedChildControl(
         new IVLabelControl(inputTitleR, "Input calibration", sectionLeft), mControlNames.inputSection);
       const auto inputBody = inputArea.GetReducedFromTop(secH);
-
-      const float knobWidth = 92.0f;
-      const float stackH = 40.f + 12.f + NAM_SWTICH_HEIGHT;
-      auto inputStack = inputBody.GetCentredInside(inputBody.W(), static_cast<int>(stackH));
-      const auto inputLevelArea = inputStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
-      (void) inputStack.ReduceFromTop(12.f);
-      const auto inputSwitchArea = inputStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
 #else
       const float inputLevelH = NAM_KNOB_HEIGHT;
       const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
@@ -864,7 +857,38 @@ public:
       const auto inputLevelArea =
         inputArea.GetFromTop(inputLevelH).GetFromBottom(28.0f).GetMidHPadded(0.5f * knobWidth);
       const auto inputSwitchArea = inputArea.GetFromBottom(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
+      auto* inputLevelControl = AddNamedChildControl(
+        new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
+        mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
+      inputLevelControl->SetTooltip(
+        "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
+        "enters this plugin.");
+      AddNamedChildControl(
+        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
+        mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 #endif
+
+#if VOLUM_AMPETE_PRODUCT
+      auto outputTitleR = outputArea.GetFromTop(secH);
+      AddNamedChildControl(
+        new IVLabelControl(outputTitleR, "Output mode", sectionCenter), mControlNames.outputSection);
+      const auto outputBody = outputArea.GetReducedFromTop(secH);
+
+      const float outCardMaxW = 280.f;
+      const float bodyMinH = std::min(inputBody.H(), outputBody.H());
+      const float cardH = std::min(158.f, std::max(128.f, bodyMinH - 6.f));
+      const float cardW = std::min(outCardMaxW, std::min(inputBody.W(), outputBody.W()));
+
+      const auto inputBlock = inputBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputBlock.GetPadded(12.f)),
+                           mControlNames.inputGroupFrame);
+      const auto inputInner = inputBlock.GetPadded(18.f);
+      const float knobWidth = 92.0f;
+      const float stackH = 40.f + 12.f + NAM_SWTICH_HEIGHT;
+      auto inputStack = inputInner.GetCentredInside(inputInner.W(), static_cast<int>(stackH));
+      const auto inputLevelArea = inputStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
+      (void) inputStack.ReduceFromTop(12.f);
+      const auto inputSwitchArea = inputStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
 
       auto* inputLevelControl = AddNamedChildControl(
         new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
@@ -876,16 +900,8 @@ public:
         new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
-#if VOLUM_AMPETE_PRODUCT
-      auto outputTitleR = outputArea.GetFromTop(secH);
-      AddNamedChildControl(
-        new IVLabelControl(outputTitleR, "Output mode", sectionCenter), mControlNames.outputSection);
-      const auto outputBody = outputArea.GetReducedFromTop(secH);
-      const float outCardMaxW = 280.f;
-      const float outW = std::min(outCardMaxW, outputBody.W());
-      const float outH = std::min(128.f, std::max(96.f, outputBody.H() - 10.f));
-      const IRECT outputRadioArea =
-        outputBody.GetFromTop(outH).GetCentredInside(outW, outH).GetPadded(4.f);
+      const auto outputBlock = outputBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
+      const IRECT outputRadioArea = outputBlock.GetPadded(4.f);
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
                            mControlNames.outputGroupFrame);
       const float buttonSize = 11.0f;
@@ -947,6 +963,7 @@ private:
     const std::string modelInfo = "ModelInfo";
     const std::string outputMode = "OutputMode";
     const std::string outputGroupFrame = "OutputGroupFrame";
+    const std::string inputGroupFrame = "InputGroupFrame";
     const std::string title = "Title";
   } mControlNames;
 
