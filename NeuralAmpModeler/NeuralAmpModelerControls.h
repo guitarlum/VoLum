@@ -582,7 +582,7 @@ public:
     const IVStyle headingStyle =
       mStyle.WithDrawFrame(false)
         .WithValueText(
-          IText(13.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top));
+          IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top));
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information", headingStyle));
 #else
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information:", mStyle));
@@ -758,10 +758,11 @@ public:
     const float panelW = rootB.W() * 0.86f;
     const float panelH = rootB.H() * 0.82f;
     const IRECT panel = rootB.GetCentredInside(static_cast<int>(panelW), static_cast<int>(panelH));
+    // Poiret reads too light/small for an overlay title; use Josefin-Bold for a clear “panel” headline.
     const IVStyle titleStyle = mStyle.WithDrawFrame(false)
                                  .WithShowValue(false)
                                  .WithValueText(
-                                   IText(52.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Top));
+                                   IText(40.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
     const auto text = IText(14.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
@@ -785,7 +786,7 @@ public:
 
     IRECT inner = panel.GetPadded(-pad);
 
-    auto headerRow = inner.ReduceFromTop(68.0f);
+    auto headerRow = inner.ReduceFromTop(64.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
     (void) inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
 
@@ -819,7 +820,7 @@ public:
     const float lineHeight = 20.0f;
     const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
 #if VOLUM_AMPETE_PRODUCT
-    const float aboutLineH = 15.f;
+    const float aboutLineH = 13.f;
     const float aboutBlockH = 4.f * aboutLineH;
     const auto aboutArea =
       bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(aboutBlockH);
@@ -839,18 +840,18 @@ public:
       const IRECT outputArea(calRow.L + colW + 2.f * gutter + ruleW, calRow.T, calRow.R, calRow.B);
       AddNamedChildControl(new VoLumSettingsVertRuleControl(ruleArea), mControlNames.midRule);
 
-      const float secH = 22.f;
-      const float secGap = 16.f;
+      const float secH = 24.f;
+      const float secGap = 22.f;
       const IVStyle sectionLeft =
         mStyle.WithDrawFrame(false)
           .WithShowValue(false)
           .WithValueText(
-            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top));
+            IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top));
       const IVStyle sectionCenter =
         mStyle.WithDrawFrame(false)
           .WithShowValue(false)
           .WithValueText(
-            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Top));
+            IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
 
       const auto inputTitleR = inputArea.GetFromTop(secH);
       const auto inputBody = inputArea.GetReducedFromTop(secH);
@@ -886,12 +887,13 @@ public:
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
       const auto outputBlock = outputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
-      const float radioStackH = 72.f;
-      const IRECT outputRadioArea =
-        outputBlock.GetCentredInside(static_cast<int>(outputBlock.W()), static_cast<int>(radioStackH))
-          .GetPadded(4.f);
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
+      // Match input column: full card frame, then inner padding (radios only in a short band — not a tall rect).
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputBlock.GetPadded(12.f)),
                            mControlNames.outputGroupFrame);
+      const auto outputInner = outputBlock.GetPadded(18.f);
+      const float radioBandH = 46.f;
+      const IRECT outputRadioArea =
+        outputInner.GetCentredInside(static_cast<int>(outputInner.W()), static_cast<int>(radioBandH));
       const float buttonSize = 11.0f;
 #else
       const float inputLevelH = NAM_KNOB_HEIGHT;
@@ -931,11 +933,17 @@ public:
                            mControlNames.outputSection);
 #endif
     }
+#if VOLUM_AMPETE_PRODUCT
+    const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
+    AddNamedChildControl(new ModelInfoControl(modelInfoArea, modelInfoStyle), mControlNames.modelInfo);
+#else
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
+#endif
 #if VOLUM_AMPETE_PRODUCT
     {
-      const IVStyle aboutStyle = leftStyle.WithValueText(leftText.WithAlign(EAlign::Far));
-      const auto urlText = leftText.WithAlign(EAlign::Far);
+      const auto aboutLineText = leftText.WithAlign(EAlign::Far).WithVAlign(EVAlign::Top);
+      const IVStyle aboutStyle = leftStyle.WithValueText(aboutLineText);
+      const auto urlText = aboutLineText;
       AddNamedChildControl(new AboutControl(aboutArea, aboutStyle, urlText), mControlNames.about);
     }
 #else
@@ -1052,11 +1060,11 @@ private:
 #if VOLUM_AMPETE_PRODUCT
       {
         IRECT lineR(GetRECT());
-        const float lh =
-          GetRECT().H() > 1.f ? (GetRECT().H() / 4.f) : 15.f;
-        const IText brandText(18.f, VoLumColors::GOLD, "Poiret-One", EAlign::Far, EVAlign::Middle);
+        const float lh = GetRECT().H() > 1.f ? (GetRECT().H() / 4.f) : 13.f;
+        const IText brandText(17.f, VoLumColors::GOLD, "Poiret-One", EAlign::Far, EVAlign::Top);
+        const IText rowText = mStyle.valueText.WithVAlign(EVAlign::Top);
         AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), "VoLum · By Lum", mStyle.WithValueText(brandText)));
-        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), buildInfoStr.Get(), mStyle));
+        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), buildInfoStr.Get(), mStyle.WithValueText(rowText)));
         const IColor urlMo = VoLumColors::GOLD_DIM;
         const IColor urlClk = VoLumColors::GOLD;
         AddChildControl(new IURLControl(lineR.ReduceFromTop(lh), "Based on Neural Amp Modeler by Steve Atkinson",
