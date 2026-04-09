@@ -388,6 +388,33 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
 
+    // Settings gear button (top-right corner)
+    {
+      const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
+      const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
+      const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
+      const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
+
+      const auto settingsButtonArea = CornerButtonArea(b);
+      const IVStyle volumRadioStyle = volumStyle
+        .WithColor(EVColor::kON, kGold)
+        .WithColor(EVColor::kOFF, kGold.WithOpacity(0.1f))
+        .WithColor(EVColor::kX1, kGold.WithOpacity(0.6f));
+
+      pGraphics->AttachControl(new NAMCircleButtonControl(
+        settingsButtonArea,
+        [pGraphics](IControl* pCaller) {
+          pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
+        },
+        gearSVG));
+
+      pGraphics
+        ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
+                                                   crossSVG, volumStyle, volumRadioStyle),
+                        kCtrlTagSettingsBox)
+        ->Hide(true);
+    }
+
     // Apply loaded settings: select correct amp, speaker, hero image
     {
       auto* ampList = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpList)->As<VoLumAmpListControl>();
@@ -848,9 +875,7 @@ void NeuralAmpModeler::OnIdle()
   {
     if (auto* pGraphics = GetUI())
     {
-#if !VOLUM_AMPETE_PRODUCT
       static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->ClearModelInfo();
-#endif
       mModelCleared = false;
     }
   }
@@ -1537,7 +1562,6 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
 
   if (auto* pGraphics = GetUI())
   {
-#if !VOLUM_AMPETE_PRODUCT
     ModelInfo modelInfo;
     modelInfo.sampleRate.known = true;
     modelInfo.sampleRate.value = mModel->GetEncapsulatedSampleRate();
@@ -1556,7 +1580,6 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
       c->SetNormalizedDisable(!mModel->HasLoudness());
       c->SetCalibratedDisable(!mModel->HasOutputLevel());
     }
-#endif
   }
 }
 
