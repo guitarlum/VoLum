@@ -103,6 +103,13 @@
 #define METERBACKGROUND2X_FN "MeterBackground@2x.png"
 #define METERBACKGROUND3X_FN "MeterBackground@3x.png"
 
+// Standalone only: if 1, settings overlay opens on launch (for scripts/ui-mockup capture — see scripts/capture-volum-settings-ui.ps1).
+#if defined(APP_API)
+  #ifndef VOLUM_OPEN_SETTINGS_AT_LAUNCH
+    #define VOLUM_OPEN_SETTINGS_AT_LAUNCH 0
+  #endif
+#endif
+
 // Issue 291
 // On the macOS standalone, we might not have permissions to traverse the file directory, so we have the app ask the
 // user to pick a directory instead of the file in the directory.

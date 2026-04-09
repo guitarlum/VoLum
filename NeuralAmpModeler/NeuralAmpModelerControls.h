@@ -578,7 +578,11 @@ public:
 
   void OnAttached() override
   {
+#if VOLUM_AMPETE_PRODUCT
+    AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information", mStyle));
+#else
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information:", mStyle));
+#endif
     AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 1), "", mStyle), mControlNames.sampleRate);
     // AddNamedChildControl(
     //   new IVLabelControl(GetRECT().SubRectVertical(4, 2), "", mStyle), mControlNames.inputCalibrationLevel);
@@ -773,6 +777,7 @@ public:
 
     auto headerRow = inner.ReduceFromTop(56.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
+    (void) inner.ReduceFromTop(6.0f); // mockup .hdr margin-bottom
 
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
@@ -793,6 +798,9 @@ public:
     auto bottomStrip = inner.ReduceFromBottom(bottomH);
     bottomStrip = bottomStrip.GetPadded(10.f);
 #if VOLUM_AMPETE_PRODUCT
+    AddNamedChildControl(
+      new VoLumSettingsFooterSepControl(IRECT(bottomStrip.L, bottomStrip.T, bottomStrip.R, bottomStrip.T + 1.f)),
+      mControlNames.footerSep);
     const float modelColFrac = 0.42f;
 #else
     const float modelColFrac = 0.50f;
@@ -828,7 +836,7 @@ public:
 
       auto inputTitleR = inputArea.GetFromTop(secH);
       AddNamedChildControl(
-        new IVLabelControl(inputTitleR, "INPUT CALIBRATION", sectionLeft), mControlNames.inputSection);
+        new IVLabelControl(inputTitleR, "Input calibration", sectionLeft), mControlNames.inputSection);
       const auto inputBody = inputArea.GetReducedFromTop(secH);
 
       const float knobWidth = 92.0f;
@@ -859,15 +867,16 @@ public:
         "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
         "enters this plugin.");
       AddNamedChildControl(
-        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", mStyle, mSwitchBitmap),
+        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
 #if VOLUM_AMPETE_PRODUCT
       auto outputTitleR = outputArea.GetFromTop(secH);
       AddNamedChildControl(
-        new IVLabelControl(outputTitleR, "OUTPUT MODE", sectionCenter), mControlNames.outputSection);
+        new IVLabelControl(outputTitleR, "Output mode", sectionCenter), mControlNames.outputSection);
       const auto outputBody = outputArea.GetReducedFromTop(secH);
-      const float outW = outputBody.W();
+      const float outCardMaxW = 280.f;
+      const float outW = std::min(outCardMaxW, outputBody.W());
       const float outH = std::min(128.f, std::max(96.f, outputBody.H() - 10.f));
       const IRECT outputRadioArea =
         outputBody.GetFromTop(outH).GetCentredInside(outW, outH).GetPadded(4.f);
@@ -925,6 +934,7 @@ private:
     const std::string inputSection = "InputSection";
     const std::string outputSection = "OutputSection";
     const std::string midRule = "MidRule";
+    const std::string footerSep = "FooterSep";
     const std::string calibrateInput = "CalibrateInput";
     const std::string close = "Close";
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
@@ -1001,16 +1011,28 @@ private:
 
       buildInfoStr.SetFormatted(100, "Version %s %s %s", verStr.Get(), PLUG()->GetArchStr(), PLUG()->GetAPIStr());
 
+#if VOLUM_AMPETE_PRODUCT
+      {
+        const IText brandText(18.f, VoLumColors::GOLD, "Poiret-One", EAlign::Far, EVAlign::Middle);
+        AddChildControl(new IVLabelControl(
+          GetRECT().SubRectVertical(4, 0), "VoLum · By Lum", mStyle.WithValueText(brandText)));
+        AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 1), buildInfoStr.Get(), mStyle));
+        const IColor urlMo = VoLumColors::GOLD_DIM;
+        const IColor urlClk = VoLumColors::GOLD;
+        AddChildControl(new IURLControl(GetRECT().SubRectVertical(4, 2),
+                                        "Based on Neural Amp Modeler by Steve Atkinson",
+                                        "https://github.com/guitarlum/VoLum", mText,
+                                        COLOR_TRANSPARENT, urlMo, urlClk));
+        AddChildControl(new IURLControl(GetRECT().SubRectVertical(4, 3), "github.com/guitarlum/VoLum",
+                                        "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
+                                        urlClk));
+      }
+#else
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 0), "VOLUM", mStyle));
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "By Lum", mStyle));
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 2), buildInfoStr.Get(), mStyle));
-#if VOLUM_AMPETE_PRODUCT
-      const IColor urlMo = VoLumColors::GOLD_DIM;
-      const IColor urlClk = VoLumColors::GOLD;
-#else
       const IColor urlMo = PluginColors::HELP_TEXT_MO;
       const IColor urlClk = PluginColors::HELP_TEXT_CLICKED;
-#endif
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 3),
                                       "Based on Neural Amp Modeler by Steve Atkinson",
                                       "https://github.com/guitarlum/VoLum", mText,
@@ -1018,6 +1040,7 @@ private:
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 4), "github.com/guitarlum/VoLum",
                                       "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
                                       urlClk));
+#endif
     };
 
   private:
