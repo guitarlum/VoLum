@@ -103,11 +103,11 @@ echo Making Installer ...
   REM if exist "%ProgramFiles(x86)%" (goto 64-Bit-is) else (goto 32-Bit-is)
 
   REM :32-Bit-is
-  REM REM "%ProgramFiles%\Inno Setup 6\iscc" /Q ".\installer\NeuralAmpModeler.iss"
+  REM REM "%ProgramFiles%\Inno Setup 6\iscc" /Q ".\installer\VoLum.iss"
   REM goto END-is
 
   REM :64-Bit-is
-  "%ProgramFiles(x86)%\Inno Setup 6\iscc" /Q ".\installer\NeuralAmpModeler.iss"
+  "%ProgramFiles(x86)%\Inno Setup 6\iscc" /Q ".\installer\VoLum.iss"
   REM goto END-is
 
   REM :END-is
