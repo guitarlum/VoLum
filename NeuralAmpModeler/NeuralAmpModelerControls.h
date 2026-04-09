@@ -579,7 +579,11 @@ public:
   void OnAttached() override
   {
 #if VOLUM_AMPETE_PRODUCT
-    AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information", mStyle));
+    const IVStyle headingStyle =
+      mStyle.WithDrawFrame(false)
+        .WithValueText(
+          IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle));
+    AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information", headingStyle));
 #else
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information:", mStyle));
 #endif
@@ -754,10 +758,10 @@ public:
     const float panelW = rootB.W() * 0.86f;
     const float panelH = rootB.H() * 0.82f;
     const IRECT panel = rootB.GetCentredInside(static_cast<int>(panelW), static_cast<int>(panelH));
-    const IVStyle titleStyle =
-      mStyle.WithShowValue(false)
-        .WithShowLabel(true)
-        .WithLabelText(IText(40.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Top));
+    const IVStyle titleStyle = mStyle.WithDrawFrame(false)
+                                 .WithShowValue(false)
+                                 .WithValueText(
+                                   IText(52.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Top));
     const auto text = IText(14.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
@@ -781,7 +785,7 @@ public:
 
     IRECT inner = panel.GetPadded(-pad);
 
-    auto headerRow = inner.ReduceFromTop(52.0f);
+    auto headerRow = inner.ReduceFromTop(60.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
     (void) inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
 
@@ -814,7 +818,13 @@ public:
     const float modelColW = bottomStrip.W() * modelColFrac;
     const float lineHeight = 20.0f;
     const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
+#if VOLUM_AMPETE_PRODUCT
+    const float aboutBlockH = 4.f * 17.f;
+    const auto aboutArea =
+      bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(aboutBlockH);
+#else
     const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(6 * lineHeight);
+#endif
 
     // Input calibration + output mode: VoLum fills mid band; balanced columns + rule (see ui-mockup/settings-overlay-mockup.html)
     {
@@ -828,22 +838,57 @@ public:
       const IRECT outputArea(calRow.L + colW + 2.f * gutter + ruleW, calRow.T, calRow.R, calRow.B);
       AddNamedChildControl(new VoLumSettingsVertRuleControl(ruleArea), mControlNames.midRule);
 
-      const float secH = 22.f;
-      const IVStyle sectionLeft = mStyle.WithDrawFrame(false)
-                                    .WithShowValue(false)
-                                    .WithShowLabel(true)
-                                    .WithLabelText(
-                                      IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle));
-      const IVStyle sectionCenter = mStyle.WithDrawFrame(false)
-                                      .WithShowValue(false)
-                                      .WithShowLabel(true)
-                                      .WithLabelText(
-                                        IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle));
+      const float secH = 26.f;
+      const float secGap = 8.f;
+      const IVStyle sectionLeft =
+        mStyle.WithDrawFrame(false)
+          .WithShowValue(false)
+          .WithValueText(
+            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle));
+      const IVStyle sectionCenter =
+        mStyle.WithDrawFrame(false)
+          .WithShowValue(false)
+          .WithValueText(
+            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle));
 
-      auto inputTitleR = inputArea.GetFromTop(secH);
-      AddNamedChildControl(
-        new IVLabelControl(inputTitleR, "Input calibration", sectionLeft), mControlNames.inputSection);
+      const auto inputTitleR = inputArea.GetFromTop(secH);
       const auto inputBody = inputArea.GetReducedFromTop(secH);
+      const auto outputTitleR = outputArea.GetFromTop(secH);
+      const auto outputBody = outputArea.GetReducedFromTop(secH);
+      const auto inputCardBody = inputBody.GetReducedFromTop(secGap);
+      const auto outputCardBody = outputBody.GetReducedFromTop(secGap);
+
+      const float outCardMaxW = 280.f;
+      const float bodyMinH = std::min(inputCardBody.H(), outputCardBody.H());
+      const float cardH = std::min(158.f, std::max(128.f, bodyMinH - 6.f));
+      const float cardW = std::min(outCardMaxW, std::min(inputCardBody.W(), outputCardBody.W()));
+
+      const auto inputBlock = inputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputBlock.GetPadded(12.f)),
+                           mControlNames.inputGroupFrame);
+      const auto inputInner = inputBlock.GetPadded(18.f);
+      const float knobWidth = 92.0f;
+      const float stackH = 40.f + 12.f + NAM_SWTICH_HEIGHT;
+      auto inputStack = inputInner.GetCentredInside(inputInner.W(), static_cast<int>(stackH));
+      const auto inputLevelArea = inputStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
+      (void) inputStack.ReduceFromTop(12.f);
+      const auto inputSwitchArea = inputStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
+
+      auto* inputLevelControl = AddNamedChildControl(
+        new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
+        mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
+      inputLevelControl->SetTooltip(
+        "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
+        "enters this plugin.");
+      AddNamedChildControl(
+        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
+        mControlNames.calibrateInput, kCtrlTagCalibrateInput);
+
+      const auto outputBlock = outputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
+      const IRECT outputRadioArea = outputBlock.GetPadded(4.f);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
+                           mControlNames.outputGroupFrame);
+      const float buttonSize = 11.0f;
 #else
       const float inputLevelH = NAM_KNOB_HEIGHT;
       const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
@@ -866,46 +911,6 @@ public:
       AddNamedChildControl(
         new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
-#endif
-
-#if VOLUM_AMPETE_PRODUCT
-      auto outputTitleR = outputArea.GetFromTop(secH);
-      AddNamedChildControl(
-        new IVLabelControl(outputTitleR, "Output mode", sectionCenter), mControlNames.outputSection);
-      const auto outputBody = outputArea.GetReducedFromTop(secH);
-
-      const float outCardMaxW = 280.f;
-      const float bodyMinH = std::min(inputBody.H(), outputBody.H());
-      const float cardH = std::min(158.f, std::max(128.f, bodyMinH - 6.f));
-      const float cardW = std::min(outCardMaxW, std::min(inputBody.W(), outputBody.W()));
-
-      const auto inputBlock = inputBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputBlock.GetPadded(12.f)),
-                           mControlNames.inputGroupFrame);
-      const auto inputInner = inputBlock.GetPadded(18.f);
-      const float knobWidth = 92.0f;
-      const float stackH = 40.f + 12.f + NAM_SWTICH_HEIGHT;
-      auto inputStack = inputInner.GetCentredInside(inputInner.W(), static_cast<int>(stackH));
-      const auto inputLevelArea = inputStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
-      (void) inputStack.ReduceFromTop(12.f);
-      const auto inputSwitchArea = inputStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
-
-      auto* inputLevelControl = AddNamedChildControl(
-        new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
-        mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
-      inputLevelControl->SetTooltip(
-        "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
-        "enters this plugin.");
-      AddNamedChildControl(
-        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
-        mControlNames.calibrateInput, kCtrlTagCalibrateInput);
-
-      const auto outputBlock = outputBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
-      const IRECT outputRadioArea = outputBlock.GetPadded(4.f);
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
-                           mControlNames.outputGroupFrame);
-      const float buttonSize = 11.0f;
-#else
       const auto outputRadioArea = outputArea.GetPadded(6.f);
       const float buttonSize = 10.0f;
 #endif
@@ -915,6 +920,12 @@ public:
       outputModeControl->SetTooltip(
         "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
+#if VOLUM_AMPETE_PRODUCT
+      AddNamedChildControl(new IVLabelControl(inputTitleR, "Input calibration", sectionLeft),
+                           mControlNames.inputSection);
+      AddNamedChildControl(new IVLabelControl(outputTitleR, "Output mode", sectionCenter),
+                           mControlNames.outputSection);
+#endif
     }
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
 #if VOLUM_AMPETE_PRODUCT
@@ -1036,17 +1047,17 @@ private:
 
 #if VOLUM_AMPETE_PRODUCT
       {
+        IRECT lineR(GetRECT());
+        const float lh = 17.f;
         const IText brandText(18.f, VoLumColors::GOLD, "Poiret-One", EAlign::Far, EVAlign::Middle);
-        AddChildControl(new IVLabelControl(
-          GetRECT().SubRectVertical(4, 0), "VoLum · By Lum", mStyle.WithValueText(brandText)));
-        AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 1), buildInfoStr.Get(), mStyle));
+        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), "VoLum · By Lum", mStyle.WithValueText(brandText)));
+        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), buildInfoStr.Get(), mStyle));
         const IColor urlMo = VoLumColors::GOLD_DIM;
         const IColor urlClk = VoLumColors::GOLD;
-        AddChildControl(new IURLControl(GetRECT().SubRectVertical(4, 2),
-                                        "Based on Neural Amp Modeler by Steve Atkinson",
+        AddChildControl(new IURLControl(lineR.ReduceFromTop(lh), "Based on Neural Amp Modeler by Steve Atkinson",
                                         "https://github.com/guitarlum/VoLum", mText,
                                         COLOR_TRANSPARENT, urlMo, urlClk));
-        AddChildControl(new IURLControl(GetRECT().SubRectVertical(4, 3), "github.com/guitarlum/VoLum",
+        AddChildControl(new IURLControl(lineR.ReduceFromTop(lh), "github.com/guitarlum/VoLum",
                                         "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
                                         urlClk));
       }
