@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm> // std::max, std::min
 #include <cmath> // std::round
 #include <sstream> // std::stringstream
 #include <unordered_map> // std::unordered_map
@@ -747,7 +748,7 @@ public:
       mStyle.WithShowValue(false)
         .WithShowLabel(true)
         .WithLabelText(IText(32.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle));
-    const auto text = IText(13.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
+    const auto text = IText(14.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
 #else
@@ -797,25 +798,45 @@ public:
     const float modelColFrac = 0.50f;
 #endif
     const float modelColW = bottomStrip.W() * modelColFrac;
-    const float lineHeight = 18.0f;
+    const float lineHeight = 20.0f;
     const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
     const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(6 * lineHeight);
 
-    // Input calibration + output mode: VoLum centers this block in the middle vertical gap
+    // Input calibration + output mode: VoLum fills mid band; balanced columns + rule (see ui-mockup/settings-overlay-mockup.html)
     {
 #if VOLUM_AMPETE_PRODUCT
-      const float calBlockH = 168.0f;
-      const IRECT calRow = inner.GetCentredInside(static_cast<int>(inner.W()), static_cast<int>(calBlockH));
-      const float rowW = calRow.W();
-      const float leftCol = rowW * 0.34f;
-      const auto inputArea = calRow.GetFromLeft(leftCol);
-      const auto outputArea = calRow.GetFromRight(rowW - leftCol);
+      const IRECT calRow = inner.GetPadded(10.f, 14.f, 10.f, 14.f);
+      const float gutter = 6.f;
+      const float ruleW = 1.f;
+      const float colW = (calRow.W() - (2.f * gutter + ruleW)) * 0.5f;
+      const IRECT inputArea(calRow.L, calRow.T, calRow.L + colW, calRow.B);
+      const IRECT ruleArea(calRow.L + colW + gutter, calRow.T + 10.f, calRow.L + colW + gutter + ruleW, calRow.B - 10.f);
+      const IRECT outputArea(calRow.L + colW + 2.f * gutter + ruleW, calRow.T, calRow.R, calRow.B);
+      AddNamedChildControl(new VoLumSettingsVertRuleControl(ruleArea), mControlNames.midRule);
+
+      const float secH = 22.f;
+      const IVStyle sectionLeft = mStyle.WithDrawFrame(false)
+                                    .WithShowValue(false)
+                                    .WithShowLabel(true)
+                                    .WithLabelText(
+                                      IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle));
+      const IVStyle sectionCenter = mStyle.WithDrawFrame(false)
+                                      .WithShowValue(false)
+                                      .WithShowLabel(true)
+                                      .WithLabelText(
+                                        IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle));
+
+      auto inputTitleR = inputArea.GetFromTop(secH);
+      AddNamedChildControl(
+        new IVLabelControl(inputTitleR, "INPUT CALIBRATION", sectionLeft), mControlNames.inputSection);
+      const auto inputBody = inputArea.GetReducedFromTop(secH);
 
       const float knobWidth = 92.0f;
-      IRECT leftStack = inputArea;
-      const auto inputLevelArea = leftStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
-      (void) leftStack.ReduceFromTop(10.f); // gap
-      const auto inputSwitchArea = leftStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
+      const float stackH = 40.f + 12.f + NAM_SWTICH_HEIGHT;
+      auto inputStack = inputBody.GetCentredInside(inputBody.W(), static_cast<int>(stackH));
+      const auto inputLevelArea = inputStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
+      (void) inputStack.ReduceFromTop(12.f);
+      const auto inputSwitchArea = inputStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
 #else
       const float inputLevelH = NAM_KNOB_HEIGHT;
       const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
@@ -842,9 +863,14 @@ public:
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
 #if VOLUM_AMPETE_PRODUCT
-      const int outW = static_cast<int>(outputArea.W());
-      const int outH = 108;
-      const IRECT outputRadioArea = outputArea.GetCentredInside(outW, outH).GetPadded(4.f);
+      auto outputTitleR = outputArea.GetFromTop(secH);
+      AddNamedChildControl(
+        new IVLabelControl(outputTitleR, "OUTPUT MODE", sectionCenter), mControlNames.outputSection);
+      const auto outputBody = outputArea.GetReducedFromTop(secH);
+      const float outW = outputBody.W();
+      const float outH = std::min(128.f, std::max(96.f, outputBody.H() - 10.f));
+      const IRECT outputRadioArea =
+        outputBody.GetFromTop(outH).GetCentredInside(outW, outH).GetPadded(4.f);
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
                            mControlNames.outputGroupFrame);
       const float buttonSize = 11.0f;
@@ -896,6 +922,9 @@ private:
   {
     const std::string about = "About";
     const std::string bitmap = "Bitmap";
+    const std::string inputSection = "InputSection";
+    const std::string outputSection = "OutputSection";
+    const std::string midRule = "MidRule";
     const std::string calibrateInput = "CalibrateInput";
     const std::string close = "Close";
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
