@@ -582,7 +582,7 @@ public:
     const IVStyle headingStyle =
       mStyle.WithDrawFrame(false)
         .WithValueText(
-          IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle));
+          IText(13.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top));
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information", headingStyle));
 #else
     AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information:", mStyle));
@@ -785,7 +785,7 @@ public:
 
     IRECT inner = panel.GetPadded(-pad);
 
-    auto headerRow = inner.ReduceFromTop(60.0f);
+    auto headerRow = inner.ReduceFromTop(68.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
     (void) inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
 
@@ -819,7 +819,8 @@ public:
     const float lineHeight = 20.0f;
     const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
 #if VOLUM_AMPETE_PRODUCT
-    const float aboutBlockH = 4.f * 17.f;
+    const float aboutLineH = 15.f;
+    const float aboutBlockH = 4.f * aboutLineH;
     const auto aboutArea =
       bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(aboutBlockH);
 #else
@@ -838,18 +839,18 @@ public:
       const IRECT outputArea(calRow.L + colW + 2.f * gutter + ruleW, calRow.T, calRow.R, calRow.B);
       AddNamedChildControl(new VoLumSettingsVertRuleControl(ruleArea), mControlNames.midRule);
 
-      const float secH = 26.f;
-      const float secGap = 8.f;
+      const float secH = 22.f;
+      const float secGap = 16.f;
       const IVStyle sectionLeft =
         mStyle.WithDrawFrame(false)
           .WithShowValue(false)
           .WithValueText(
-            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle));
+            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top));
       const IVStyle sectionCenter =
         mStyle.WithDrawFrame(false)
           .WithShowValue(false)
           .WithValueText(
-            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle));
+            IText(12.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Top));
 
       const auto inputTitleR = inputArea.GetFromTop(secH);
       const auto inputBody = inputArea.GetReducedFromTop(secH);
@@ -885,7 +886,10 @@ public:
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
       const auto outputBlock = outputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
-      const IRECT outputRadioArea = outputBlock.GetPadded(4.f);
+      const float radioStackH = 72.f;
+      const IRECT outputRadioArea =
+        outputBlock.GetCentredInside(static_cast<int>(outputBlock.W()), static_cast<int>(radioStackH))
+          .GetPadded(4.f);
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
                            mControlNames.outputGroupFrame);
       const float buttonSize = 11.0f;
@@ -1048,7 +1052,8 @@ private:
 #if VOLUM_AMPETE_PRODUCT
       {
         IRECT lineR(GetRECT());
-        const float lh = 17.f;
+        const float lh =
+          GetRECT().H() > 1.f ? (GetRECT().H() / 4.f) : 15.f;
         const IText brandText(18.f, VoLumColors::GOLD, "Poiret-One", EAlign::Far, EVAlign::Middle);
         AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), "VoLum · By Lum", mStyle.WithValueText(brandText)));
         AddChildControl(new IVLabelControl(lineR.ReduceFromTop(lh), buildInfoStr.Get(), mStyle));

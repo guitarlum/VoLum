@@ -124,7 +124,7 @@
   .corner-br { right: var(--corner-inset); bottom: var(--corner-inset); border-bottom-width: 2px; border-right-width: 2px; }
 
   .hdr {
-    height: 60px;
+    height: 68px;
     flex-shrink: 0;
     display: grid;
     grid-template-columns: 1fr auto 1fr;
@@ -200,7 +200,7 @@
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--gold-dim);
-    margin-bottom: 20px;
+    margin-bottom: 24px;
     line-height: 1.2;
   }
   .col:first-child .sec-cap { text-align: left; }
@@ -281,7 +281,10 @@
   .radios {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 2px;
+    max-height: 72px;
+    justify-content: center;
+    margin: 0 auto;
   }
   .radio-line {
     display: flex;
