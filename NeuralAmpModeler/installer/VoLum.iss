@@ -36,10 +36,10 @@ Name: "{cf64}\VST3\VoLum.vst3\"; Attribs: readonly; Check: Is64BitInstallMode; C
 
 [Files]
 ; Standalone exe
-Source: "..\build-win\app\x64\Release\NeuralAmpModeler.exe"; DestDir: "{app}"; DestName: "VoLum.exe"; Check: Is64BitInstallMode; Components:app; Flags: ignoreversion;
+Source: "..\build-win\app\x64\Release\VoLum.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Components:app; Flags: ignoreversion;
 
 ; VST3 plugin
-Source: "..\build-win\NeuralAmpModeler.vst3\*.*"; Excludes: "\Contents\x86\*,*.pdb,*.exp,*.lib,*.ilk,*.ico,*.ini"; DestDir: "{cf64}\VST3\VoLum.vst3\"; Check: Is64BitInstallMode; Components:vst3_64; Flags: ignoreversion recursesubdirs;
+Source: "..\build-win\VoLum.vst3\*.*"; Excludes: "\Contents\x86\*,*.pdb,*.exp,*.lib,*.ilk,*.ico,*.ini"; DestDir: "{cf64}\VST3\VoLum.vst3\"; Check: Is64BitInstallMode; Components:vst3_64; Flags: ignoreversion recursesubdirs;
 
 ; All 14 amp rig folders
 Source: "..\..\rigs\Ampete One\*.nam"; DestDir: "{app}\rigs\Ampete One"; Flags: ignoreversion
