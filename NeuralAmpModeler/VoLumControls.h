@@ -1280,3 +1280,44 @@ public:
 private:
   IRECT mPanel;
 };
+
+/** Gold “×” close control (no grey SVG) for the settings overlay. */
+class VoLumSettingsCloseControl : public IControl
+{
+public:
+  VoLumSettingsCloseControl(const IRECT& bounds, IActionFunction actionFunc)
+  : IControl(bounds, actionFunc)
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IColor c = mMouseIsOver ? VoLumColors::GOLD : VoLumColors::GOLD_DIM;
+    const float inset = 8.f;
+    const float t = mMouseIsOver ? 2.25f : 1.75f;
+    const float x0 = mRECT.L + inset;
+    const float y0 = mRECT.T + inset;
+    const float x1 = mRECT.R - inset;
+    const float y1 = mRECT.B - inset;
+    g.DrawLine(c, x0, y0, x1, y1, nullptr, t);
+    g.DrawLine(c, x1, y0, x0, y1, nullptr, t);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (GetActionFunction())
+      GetActionFunction()(this);
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    IControl::OnMouseOver(x, y, mod);
+    SetDirty(true);
+  }
+
+  void OnMouseOut() override
+  {
+    IControl::OnMouseOut();
+    SetDirty(true);
+  }
+};
