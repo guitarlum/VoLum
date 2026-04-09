@@ -253,14 +253,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float speakerH = 48.f;
     const float heroW = 450.f;
     const float heroH = 180.f;
-    const float nameH = 34.f;
+    // Amp name block: title + gold rule + diamond; needs enough H so the rule is not clipped.
+    const float nameH = 48.f;
+    const float gapAfterAmpName = 8.f;
+    const float ampToKnobHairlineH = 2.f;
+    const float gapAfterHairline = 12.f;
     const float knobDiam = 58.f;
     const float labelH = 18.f;
     const float valueH = 16.f;
     const float toggleH = 34.f;
     const float footerH = 18.f;
 
-    const float contentH = speakerH + 6.f + heroH + 4.f + nameH + 14.f
+    const float contentH = speakerH + 6.f + heroH + 4.f + nameH
+                         + gapAfterAmpName + ampToKnobHairlineH + gapAfterHairline
                          + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + 6.f + footerH;
     const float contentTop = b.T + (b.H() - contentH) / 2.f;
 
@@ -285,7 +290,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Amp name
     const IRECT nameArea(mainL, yPos, mainR, yPos + nameH);
     pGraphics->AttachControl(new VoLumAmpNameControl(nameArea), kCtrlTagVoLumAmpName);
-    yPos += nameH + 16.f;
+    yPos += nameH + gapAfterAmpName;
+    pGraphics->AttachControl(new VoLumHorizontalRuleControl(
+      IRECT(mainL + 24.f, yPos, mainR - 24.f, yPos + ampToKnobHairlineH)));
+    yPos += ampToKnobHairlineH + gapAfterHairline;
 
     // ---- Knobs: [Channel] | [Input, Gate] | [Bass, Mid, Treble] | [Output] ----
     const float colW = 64.f;
@@ -334,7 +342,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     {
       float cx = knobX(0);
       pGraphics->AttachControl(new VoLumKnobLabelControl(
-        IRECT(cx, knobRowTop, cx + colW, knobRowTop + labelH), "CHANNEL"));
+        IRECT(cx, knobRowTop, cx + colW, knobRowTop + labelH), "CHANNEL", true));
       float stepH = 28.f;
       float stepTop = knobT + (knobDiam - stepH) / 2.f;
       auto* channelStep = new VoLumChannelStepControl(
