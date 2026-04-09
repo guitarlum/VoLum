@@ -37,4 +37,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Settings — larger top-aligned SETTINGS title; WithShowLabel(false) on settings radio style (removes duplicate param label); input calibration in matching group frame; shared card width/height for vertical alignment; mockup settings-card for both columns.
 04/09/2026 - VoLum: Settings typography/layout — 52pt Poiret SETTINGS + section caps use IVLabel valueText (fixes wrong/small title and cap font), gap under caps + labels after group frames, gold-dim bold “Model information”, tighter about lines, radios widgetFrac; HTML mockup parity.
 04/09/2026 - VoLum: Settings — IVRadio option labels use valueText (Josefin-Bold); centered ~72px-tall radio stack + widgetFrac 1.0; larger cap-to-card gap; SETTINGS header row 68px; about/footer line height from strip; “Model information” 13pt top-aligned.
+04/09/2026 - VoLum: Settings pass — full-height output card frame (matches input); radios in ~46px band inside padded inner; Josefin-Bold SETTINGS title; brighter 13pt section caps; model-info + footer rows top-aligned; tighter about strip.
 
