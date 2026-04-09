@@ -14,7 +14,7 @@
 
 #define SHARED_RESOURCES_SUBPATH "VoLum"
 
-// VoLum: Ampete catalog for standalone and VST3; .nam rigs ship with the Windows installer (see installer .iss).
+// VoLum: curated amp catalog for standalone and VST3; bundled rigs ship with installer/VoLum.iss (HKLM VoLumRigsRoot).
 #define VOLUM_AMPETE_PRODUCT 1
 
 #ifdef APP_API

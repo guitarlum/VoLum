@@ -61,8 +61,8 @@ Source: "..\..\rigs\THC Sunset\*.nam"; DestDir: "{app}\rigs\THC Sunset"; Flags: 
 Source: "changelog.txt"; DestDir: "{app}"
 
 [Registry]
-; VST3 needs this to find the rigs folder
-Root: HKLM; Subkey: "Software\VoLum\NeuralAmpModeler"; ValueType: string; ValueName: "AmpeteRigsPath"; ValueData: "{app}\rigs\Ampete One"; Flags: uninsdeletekey
+; VST3 lives under Program Files\Common Files — pointer to bundled rigs root (all amp subfolders).
+Root: HKLM; Subkey: "Software\VoLum\NeuralAmpModeler"; ValueType: string; ValueName: "VoLumRigsRoot"; ValueData: "{app}\rigs"; Flags: uninsdeletekey
 
 [Icons]
 Name: "{group}\VoLum"; Filename: "{app}\VoLum.exe"

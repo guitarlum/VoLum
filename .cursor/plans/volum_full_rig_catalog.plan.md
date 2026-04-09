@@ -183,7 +183,7 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 | `NeuralAmpModeler/VoLumControls.h` | All custom iPlug2 controls (sidebar, speaker row, channel stepper, hero image, footer, etc.) |
 | `NeuralAmpModeler/NeuralAmpModeler.h` | Plugin class with VoLum state members |
 | `NeuralAmpModeler/NeuralAmpModeler.cpp` | Plugin impl: layout, callbacks, loading, OnIdle |
-| `NeuralAmpModeler/installer/NeuralAmpModeler.iss` | Inno Setup script for Windows installer |
+| `NeuralAmpModeler/installer/VoLum.iss` | Windows installer (standalone + VST3 + all amp rig folders) |
 | `NeuralAmpModeler/installer/changelog.txt` | Version history |
 | `rigs/` | All amp folders with `.nam` files (not in git, bundled by installer) |
 
@@ -192,7 +192,6 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 ## Remaining Work
 
 ### Must-have before release
-- [ ] **Legacy installer:** `installer/NeuralAmpModeler.iss` (upstream-named) still lists only `rigs\Ampete One`; the VoLum ship script is `installer/VoLum.iss`, which copies **all 14** amp folders. Remove or sync the legacy script so docs/build instructions are unambiguous.
 - [ ] **Hero art:** comic-style / final amp images for every model in the sidebar + hero area
 - [ ] Per-amp **human-readable channel labels** (e.g. “Clean”, “Lead”) instead of only numeric / suffix codes where desired
 

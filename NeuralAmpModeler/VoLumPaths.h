@@ -14,8 +14,8 @@
 namespace volum
 {
 #ifdef _WIN32
-// Set by the Windows installer (Inno Setup) so VST3 (under Common Files\VST3\...) can find bundled rigs.
-inline std::filesystem::path RegistryAmpeteRigsDirectory()
+// Installer (Inno) sets this so VST3 — installed under Common Files\VST3\ — can find bundled rigs.
+inline std::filesystem::path RegistryRigsRootFromInstaller()
 {
   namespace fs = std::filesystem;
   HKEY hKey = nullptr;
@@ -23,42 +23,57 @@ inline std::filesystem::path RegistryAmpeteRigsDirectory()
   if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\VoLum\\NeuralAmpModeler", 0, kAccess, &hKey) != ERROR_SUCCESS)
     return {};
 
-  wchar_t buf[4096]{};
-  DWORD bufBytes = sizeof(buf) - sizeof(wchar_t);
-  DWORD type = 0;
-  const LSTATUS q = RegQueryValueExW(hKey, L"AmpeteRigsPath", nullptr, &type, reinterpret_cast<BYTE*>(buf), &bufBytes);
-  RegCloseKey(hKey);
-  if (q != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ))
-    return {};
-
-  const wchar_t* pathStr = buf;
-  wchar_t expanded[4096];
-  if (type == REG_EXPAND_SZ)
-  {
-    const DWORD n = ExpandEnvironmentStringsW(buf, expanded, 4096);
-    if (n == 0 || n > 4096)
+  auto querySz = [&](const wchar_t* valueName) -> fs::path {
+    wchar_t buf[4096]{};
+    DWORD bufBytes = sizeof(buf) - sizeof(wchar_t);
+    DWORD type = 0;
+    const LSTATUS q = RegQueryValueExW(hKey, valueName, nullptr, &type, reinterpret_cast<BYTE*>(buf), &bufBytes);
+    if (q != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ))
       return {};
-    pathStr = expanded;
+
+    const wchar_t* pathStr = buf;
+    wchar_t expanded[4096];
+    if (type == REG_EXPAND_SZ)
+    {
+      const DWORD n = ExpandEnvironmentStringsW(buf, expanded, 4096);
+      if (n == 0 || n > 4096)
+        return {};
+      pathStr = expanded;
+    }
+    std::error_code ec;
+    fs::path p(pathStr);
+    if (!fs::is_directory(p, ec))
+      return {};
+    return fs::weakly_canonical(p, ec);
+  };
+
+  fs::path root = querySz(L"VoLumRigsRoot");
+  if (!root.empty())
+  {
+    RegCloseKey(hKey);
+    return root;
   }
-  std::error_code ec;
-  fs::path p(pathStr);
-  if (!fs::is_directory(p, ec))
-    return {};
-  return fs::weakly_canonical(p, ec);
+
+  // Legacy installs: AmpeteRigsPath was ...\rigs\Ampete One — use parent as rigs root.
+  fs::path legacyAmpete = querySz(L"AmpeteRigsPath");
+  RegCloseKey(hKey);
+  if (!legacyAmpete.empty())
+    return legacyAmpete.parent_path();
+  return {};
 }
 #endif
 
-// Locate rigs/Ampete One: installer registry (Windows VST3), relative to module / repo tree, or CWD.
-inline std::filesystem::path FindAmpeteRigsDirectory()
+// Bundled rigs root: registry (VST3), then walk up from the executable, then CWD ./rigs (dev / repo).
+inline std::filesystem::path FindRigsRootDirectory()
 {
   namespace fs = std::filesystem;
   std::vector<fs::path> candidates;
 
 #ifdef _WIN32
   {
-    const fs::path regDir = RegistryAmpeteRigsDirectory();
-    if (!regDir.empty())
-      candidates.push_back(regDir);
+    const fs::path regRoot = RegistryRigsRootFromInstaller();
+    if (!regRoot.empty())
+      candidates.push_back(regRoot);
   }
 
   wchar_t module[MAX_PATH];
@@ -69,32 +84,21 @@ inline std::filesystem::path FindAmpeteRigsDirectory()
     fs::path d = exe.parent_path();
     for (int depth = 0; depth < 12; ++depth)
     {
-      candidates.push_back(d / "rigs" / "Ampete One");
+      candidates.push_back(d / "rigs");
       d = d.parent_path();
     }
   }
 #endif
 
-  // Working directory (e.g. run from repo root)
-  candidates.push_back(fs::path("rigs") / "Ampete One");
+  candidates.push_back(fs::path("rigs"));
 
   std::error_code ec;
   for (const auto& c : candidates)
   {
     const auto norm = c.lexically_normal();
     if (fs::is_directory(norm, ec))
-    {
       return fs::weakly_canonical(norm, ec);
-    }
   }
-  return {};
-}
-// Return the parent rigs/ root directory (parent of "Ampete One").
-inline std::filesystem::path FindRigsRootDirectory()
-{
-  auto ampeteDir = FindAmpeteRigsDirectory();
-  if (!ampeteDir.empty())
-    return ampeteDir.parent_path();
   return {};
 }
 

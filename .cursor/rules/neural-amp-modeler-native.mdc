@@ -15,7 +15,7 @@ alwaysApply: false
 
 ## VoLum product flag (`config.h`)
 
-- **`VOLUM_AMPETE_PRODUCT`**: Ampete catalog UI for **both** standalone and VST3; bundled rigs via Windows installer (`{app}\rigs\Ampete One` + `HKLM\Software\VoLum\NeuralAmpModeler\AmpeteRigsPath`). IR file browser remains on VST3 only unless you change that block.
+- **`VOLUM_AMPETE_PRODUCT`**: Curated amp catalog UI for **both** standalone and VST3; bundled rigs via **`installer/VoLum.iss`** into `{app}\rigs\<amp folders>` and **`HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot`** = `{app}\rigs` (legacy **`AmpeteRigsPath`** still read — parent used as rigs root). IR file browser remains on VST3 only unless you change that block.
 
 ## Standalone vs plugin
 

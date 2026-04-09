@@ -355,7 +355,7 @@ mv ./build-mac/*.zip ./build-mac/out
 
 #if [ $DEMO == 1 ]
 #then
-#  git checkout installer/NeuralAmpModeler.iss
+#  git checkout installer/VoLum.iss
 #  git checkout installer/NeuralAmpModeler.pkgproj
 #  git checkout resources/img/AboutBox.png
 #fi
