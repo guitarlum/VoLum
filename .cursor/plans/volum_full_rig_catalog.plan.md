@@ -94,7 +94,7 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 - Speaker mode is orthogonal to channel: changing speaker recalculates the available channels. A flat enum of all combinations would be 224 entries and would make the UI confusing.
 - The controls (`VoLumChannelStepControl`, `VoLumSpeakerRowControl`) use callbacks that directly update the member state and set an atomic `mVolumNeedsLoad` flag, bypassing the param system entirely.
 
-**Update:** `SerializeState` / `UnserializeState` (and standalone `rigs/volum-settings.json`) persist amp/speaker/channel plus per-amp knob/toggle snapshots. The legacy `kVoLumAmpeteRig` param remains initialized for backward compat with older saved state but is not used at runtime.
+**Update:** `SerializeState` / `UnserializeState` (and standalone user-profile `volum-settings.json`, with legacy read of `rigs/volum-settings.json`) persist amp/speaker/channel plus per-amp knob/toggle snapshots. The legacy `kVoLumAmpeteRig` param remains initialized for backward compat with older saved state but is not used at runtime.
 
 **Open question:** Should amp/speaker/channel be proper params for DAW automation? If so, the param ranges would need to be worst-case (max 14 amps, 4 speakers, 8 channels) with clamping.
 
