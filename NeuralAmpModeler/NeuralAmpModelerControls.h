@@ -572,8 +572,13 @@ public:
 
   void Hide(bool hide) override
   {
+#if VOLUM_AMPETE_PRODUCT
+    // Keep heading visible in settings footer; only the sample line populates when a model loads.
+    IContainerBase::Hide(hide);
+#else
     // Don't show me unless I have info to show!
     IContainerBase::Hide(hide || (!mHasInfo));
+#endif
   };
 
   void OnAttached() override
