@@ -1258,7 +1258,17 @@ public:
   : IControl(fullBounds)
   , mPanel(panelRect)
   {
-    mIgnoreMouse = true;
+    // Must receive hits: if ignored, dim/panel “empty” pixels fall through to main UI and can steal
+    // mouse up/down when the cursor moves quickly (settings appears to close at random).
+    mIgnoreMouse = false;
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    (void) x;
+    (void) y;
+    (void) mod;
+    // Consume clicks on overlay shell (dim + filler); interactive children sit above in z-order.
   }
 
   void Draw(IGraphics& g) override
@@ -1279,6 +1289,24 @@ public:
 
 private:
   IRECT mPanel;
+};
+
+/** Subtle frame behind grouped settings controls (ignores mouse so widgets on top still hit-test). */
+class VoLumSettingsGroupFrameControl : public IControl
+{
+public:
+  explicit VoLumSettingsGroupFrameControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRect(IColor(35, 20, 20, 26), mRECT);
+    g.DrawRect(IColor(70, 200, 175, 95), mRECT);
+    g.DrawRect(IColor(40, 200, 162, 78), mRECT.GetPadded(3.f));
+  }
 };
 
 /** Gold “×” close control (no grey SVG) for the settings overlay. */

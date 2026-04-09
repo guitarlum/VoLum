@@ -103,7 +103,9 @@ const IVStyle volumSettingsRadioStyle =
   volumSettingsStyle.WithColor(EVColor::kON, kGold)
     .WithColor(EVColor::kOFF, kGold.WithOpacity(0.14f))
     .WithColor(EVColor::kX1, kGoldBright.WithOpacity(0.95f))
-    .WithLabelText(IText(12.5f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Top));
+    .WithLabelText(IText(14.f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Top))
+    // Shrink widget band so vertical radios are not stretched across the full column height
+    .WithWidgetFrac(0.58f);
 #endif
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
