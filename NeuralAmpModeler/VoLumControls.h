@@ -20,18 +20,18 @@ const IColor SIDEBAR_BORDER(50, 200, 162, 78);
 const IColor ITEM_HOVER(10, 200, 162, 78);
 const IColor ITEM_SEL_BG(18, 200, 162, 78);
 const IColor ITEM_SEL_BORDER(51, 200, 162, 78);
-const IColor TEXT_DIM(255, 180, 162, 122);
-const IColor TEXT_MED(255, 215, 190, 130);
-const IColor TEXT_BRIGHT(255, 242, 235, 212);
-const IColor GOLD(255, 240, 200, 112);
-const IColor GOLD_DIM(255, 182, 158, 82);
+const IColor TEXT_DIM(255, 200, 182, 140);
+const IColor TEXT_MED(255, 228, 205, 148);
+const IColor TEXT_BRIGHT(255, 248, 242, 225);
+const IColor GOLD(255, 248, 212, 125);
+const IColor GOLD_DIM(255, 200, 175, 100);
 const IColor METER_GREEN(255, 42, 138, 42);
 const IColor DIVIDER(30, 200, 162, 78);
 const IColor FRAME(72, 200, 162, 78);
 const IColor CORNER(255, 200, 162, 78);
 const IColor BTN_OFF_BG(5, 200, 162, 78);
 const IColor BTN_OFF_BORDER(40, 200, 162, 78);
-const IColor BTN_OFF_TEXT(255, 180, 162, 122);
+const IColor BTN_OFF_TEXT(255, 200, 182, 140);
 const IColor BTN_CAB_ON_BG(30, 200, 162, 78);
 const IColor BTN_CAB_ON_BORDER(220, 200, 162, 78);
 const IColor BTN_AMP_ON_BG(20, 120, 200, 180);
@@ -450,7 +450,7 @@ public:
     const float labelGap = 6.f;
 
     // Single line: DIRECT [AMP] | CABINET [G12] [G65] [V30]
-    IText sectionText(12.f, IColor(255, 248, 222, 140), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText sectionText(12.f, IColor(255, 252, 232, 160), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     const float directLblW = 50.f;
     const float cabLblW = 66.f;
 
@@ -492,7 +492,7 @@ public:
       bool isOn = (i == mSelected);
       g.FillRoundRect(isOn ? VoLumColors::BTN_CAB_ON_BG : VoLumColors::BTN_OFF_BG, btn, 3.f);
       g.DrawRoundRect(isOn ? VoLumColors::BTN_CAB_ON_BORDER : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
-      IColor cabTextCol = isOn ? IColor(255, 250, 220, 130) : VoLumColors::BTN_OFF_TEXT;
+      IColor cabTextCol = isOn ? IColor(255, 255, 235, 150) : VoLumColors::BTN_OFF_TEXT;
       IText btnTextCab(13.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       g.DrawText(btnTextCab, labels[i], btn);
       mBtnRects[i] = btn;
@@ -1038,7 +1038,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(13.f, IColor(255, 248, 222, 140), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    IText text(13.f, IColor(255, 252, 232, 160), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mLabel.c_str(), mRECT);
   }
 
@@ -1248,4 +1248,33 @@ public:
 
 private:
   const char* mSuffix;
+};
+
+/** Full-window dim + inset panel matching VoLum main chrome (used by settings overlay). */
+class VoLumSettingsBackdropControl : public IControl
+{
+public:
+  VoLumSettingsBackdropControl(const IRECT& fullBounds, float panelInset)
+  : IControl(fullBounds)
+  , mInset(panelInset)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRect(IColor(200, 0, 0, 0), mRECT);
+    const IRECT p = mRECT.GetPadded(mInset);
+    g.FillRect(VoLumColors::BG, p);
+    g.DrawRect(VoLumColors::FRAME, p);
+    const float cs = 18.f;
+    const float m = 7.f;
+    DrawCornerAccent(g, p.L + m, p.T + m, cs, false, false);
+    DrawCornerAccent(g, p.R - m, p.T + m, cs, true, false);
+    DrawCornerAccent(g, p.L + m, p.B - m, cs, false, true);
+    DrawCornerAccent(g, p.R - m, p.B - m, cs, true, true);
+  }
+
+private:
+  float mInset;
 };
