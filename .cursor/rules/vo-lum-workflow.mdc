@@ -15,10 +15,12 @@ alwaysApply: true
 
 1. **Run tests** when C++/NAM/plugin logic changed:
    - `NeuralAmpModeler/scripts/run-tests-win.ps1` (Release x64), or the equivalent CI command you are using.
-2. **Append a changelog line** so you can bisect and remember intent:
+2. **Build and launch the standalone app** when VoLum **UI** changed (layout, controls, styling) so you can judge the result:
+   - `NeuralAmpModeler/scripts/run-app-win.ps1` (Release x64). Close a running VoLum if postbuild cannot copy the exe.
+3. **Append a changelog line** so you can bisect and remember intent:
    - Prefer `NeuralAmpModeler/installer/changelog.txt` (keep project style: date + short note).
    - One line per user-visible or behavior change; include breaking preset/state format bumps.
-3. **Commit** in a **single coherent chunk** when possible (easy `git revert`). If the user prefers WIP commits, say so in chat.
+4. **Commit** in a **single coherent chunk** when possible (easy `git revert`). If the user prefers WIP commits, say so in chat.
 
 ## Execution
 
