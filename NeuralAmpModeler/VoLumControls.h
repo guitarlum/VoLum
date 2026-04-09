@@ -1309,6 +1309,24 @@ public:
   }
 };
 
+/** Thin vertical rule between settings columns (mouse passes through). */
+class VoLumSettingsVertRuleControl : public IControl
+{
+public:
+  explicit VoLumSettingsVertRuleControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const float cx = mRECT.MW();
+    const IColor c(90, 200, 162, 78);
+    g.DrawLine(c, cx, mRECT.T, cx, mRECT.B, nullptr, 1.f);
+  }
+};
+
 /** Gold “×” close control (no grey SVG) for the settings overlay. */
 class VoLumSettingsCloseControl : public IControl
 {
