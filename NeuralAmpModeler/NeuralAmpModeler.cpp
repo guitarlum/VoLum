@@ -856,6 +856,7 @@ void NeuralAmpModeler::OnUIOpen()
   }
 #endif
 
+#if !VOLUM_AMPETE_PRODUCT
 #ifndef APP_API
   if (mIRPath.GetLength())
   {
@@ -863,6 +864,7 @@ void NeuralAmpModeler::OnUIOpen()
     if (mIR == nullptr && mStagedIR == nullptr)
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
   }
+#endif
 #endif
 
   if (mModel != nullptr)
@@ -905,8 +907,10 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
         break;
+#if !VOLUM_AMPETE_PRODUCT
 #ifndef APP_API
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+#endif
 #endif
       default: break;
     }
@@ -1336,7 +1340,9 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
   {
     mIRPath = irPath;
+#if !VOLUM_AMPETE_PRODUCT
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
+#endif
   }
   else
   {
@@ -1345,7 +1351,9 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
       mStagedIR = nullptr;
     }
     mIRPath = previousIRPath;
+#if !VOLUM_AMPETE_PRODUCT
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
+#endif
   }
 
   return wavState;
