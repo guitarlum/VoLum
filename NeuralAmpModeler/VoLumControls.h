@@ -1041,8 +1041,10 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(14.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    g.DrawText(text, mLabel.c_str(), mRECT);
+    const auto align = mIsChannel ? EAlign::Near : EAlign::Center;
+    IText text(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", align, EVAlign::Middle);
+    IRECT area = mIsChannel ? mRECT.GetPadded(-3.f, 0.f, 0.f, 0.f) : mRECT;
+    g.DrawText(text, mLabel.c_str(), area);
   }
 
 private:
@@ -1090,6 +1092,22 @@ public:
   }
 
   void Draw(IGraphics& g) override { g.FillRect(VoLumColors::DIVIDER, mRECT); }
+};
+
+/** Thin horizontal hairline (full-width segment in layout). */
+class VoLumHorizontalRuleControl : public IControl
+{
+public:
+  explicit VoLumHorizontalRuleControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRect(IColor(72, 200, 162, 78), mRECT);
+  }
 };
 
 class VoLumFooterControl : public IControl
