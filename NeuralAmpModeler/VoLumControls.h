@@ -4,6 +4,7 @@
 #include "VoLumAmpeteCatalog.h"
 #include <cmath>
 #include <functional>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -349,13 +350,24 @@ private:
         }
         break;
       }
-      case 7: // Hilbert curve mini (3 order)
+      case 7: // H-tree mini (Marshall JMP 2203)
       {
-        int n=8; float cw=r.W()*0.8f/n,ch=r.H()*0.8f/n;
-        float ox=r.L+r.W()*0.1f+cw/2,oy=r.T+r.H()*0.1f+ch/2;
-        auto d2xy=[](int n,int d,int&x,int&y){x=y=0;for(int s=1;s<n;s*=2){int rx=1&(d/2);int ry=1&(d^rx);if(ry==0){if(rx==1){x=s-1-x;y=s-1-y;}int t=x;x=y;y=t;}x+=s*rx;y+=s*ry;d/=4;}};
-        int px2,py2; d2xy(n,0,px2,py2); float pvx=ox+px2*cw,pvy=oy+py2*ch;
-        for(int i=1;i<n*n;i++){d2xy(n,i,px2,py2);float nx=ox+px2*cw,ny=oy+py2*ch;g.DrawLine(bright,pvx,pvy,nx,ny,nullptr,1.f);pvx=nx;pvy=ny;}
+        auto drawH = [&](auto&& self, float x, float y, float half, int dep) -> void {
+          if (dep <= 0 || half < 0.8f) return;
+          float x0 = x - half, x1 = x + half;
+          float y0 = y - half, y1 = y + half;
+          const IColor& col = (dep >= 3) ? bright : dim;
+          g.DrawLine(col, x0, y, x1, y, nullptr, 1.f);
+          g.DrawLine(col, x0, y0, x0, y1, nullptr, 1.f);
+          g.DrawLine(col, x1, y0, x1, y1, nullptr, 1.f);
+          float nh = half * 0.5f;
+          self(self, x0, y0, nh, dep - 1);
+          self(self, x0, y1, nh, dep - 1);
+          self(self, x1, y0, nh, dep - 1);
+          self(self, x1, y1, nh, dep - 1);
+        };
+        float half = std::min(r.W(), r.H()) * 0.42f;
+        drawH(drawH, cx, cy, half, 4);
         break;
       }
       case 8: // Levy C mini (6 depth)
@@ -390,15 +402,23 @@ private:
         }
         break;
       }
-      case 11: // Vicsek mini (3 depth)
+      case 11: // Clifford attractor mini (Sebago)
       {
-        struct Q{float x,y,s;};
-        std::vector<Q> qs; qs.push_back({cx,cy,sz*2.f});
-        for(int d=0;d<3;d++){
-          std::vector<Q> n2;
-          for(auto&q:qs){g.DrawRect(d<1?bright:dim,IRECT(q.x-q.s/2,q.y-q.s/2,q.x+q.s/2,q.y+q.s/2),nullptr,1.f);
-            float ns=q.s/3; n2.push_back({q.x,q.y,ns});n2.push_back({q.x-q.s/3,q.y,ns});n2.push_back({q.x+q.s/3,q.y,ns});n2.push_back({q.x,q.y-q.s/3,ns});n2.push_back({q.x,q.y+q.s/3,ns});}
-          qs=n2;
+        const double a = -1.4, b = 1.6, c = 1.0, d = 0.75;
+        double x = 0.0, y = 0.0;
+        float scale = std::min(r.W(), r.H()) * 0.21f;
+        for (int i = 0; i < 2200; i++)
+        {
+          double nx = sin(a * y) + c * cos(a * x);
+          double ny = sin(b * x) + d * cos(b * y);
+          x = nx;
+          y = ny;
+          if (i < 120) continue;
+          float px = cx + (float)x * scale;
+          float py = cy - (float)y * scale;
+          if (px < r.L || px > r.R || py < r.T || py > r.B) continue;
+          int al = 70 + (i % 90);
+          g.FillRect(IColor(al, 90 + (i % 80), 175 + (i % 70), 220), IRECT(px, py, px + 1.f, py + 1.f));
         }
         break;
       }
@@ -792,38 +812,24 @@ private:
         }
         break;
       }
-      case 7: // Hilbert curve
+      case 7: // H-tree (Marshall JMP 2203 — centered in hero)
       {
-        int order = 5;
-        int n = 1 << order;
-        float cellW = (w * 0.75f) / n;
-        float cellH = (h * 0.85f) / n;
-        float offX = cx - (n * cellW) / 2.f + cellW / 2.f;
-        float offY = cy - (n * cellH) / 2.f + cellH / 2.f;
-        auto d2xy = [](int n, int d, int& x, int& y) {
-          x = y = 0;
-          for (int s = 1; s < n; s *= 2)
-          {
-            int rx = 1 & (d / 2);
-            int ry = 1 & (d ^ rx);
-            if (ry == 0) { if (rx == 1) { x = s - 1 - x; y = s - 1 - y; } int t = x; x = y; y = t; }
-            x += s * rx;
-            y += s * ry;
-            d /= 4;
-          }
+        auto drawH = [&](auto&& self, float x, float y, float half, int dep) -> void {
+          if (dep <= 0 || half < 2.f) return;
+          float x0 = x - half, x1 = x + half;
+          float y0 = y - half, y1 = y + half;
+          IColor lc = (dep >= 4) ? bright : ((dep >= 2) ? mid : dim);
+          g.DrawLine(lc, x0, y, x1, y, nullptr, (dep >= 3) ? tk : tkThin);
+          g.DrawLine(lc, x0, y0, x0, y1, nullptr, (dep >= 3) ? tk : tkThin);
+          g.DrawLine(lc, x1, y0, x1, y1, nullptr, (dep >= 3) ? tk : tkThin);
+          float nh = half * 0.5f;
+          self(self, x0, y0, nh, dep - 1);
+          self(self, x0, y1, nh, dep - 1);
+          self(self, x1, y0, nh, dep - 1);
+          self(self, x1, y1, nh, dep - 1);
         };
-        int total = n * n;
-        int px2, py2;
-        d2xy(n, 0, px2, py2);
-        float prevX2 = offX + px2 * cellW, prevY2 = offY + py2 * cellH;
-        for (int i = 1; i < total; i++)
-        {
-          d2xy(n, i, px2, py2);
-          float nx = offX + px2 * cellW, ny = offY + py2 * cellH;
-          int alpha = 40 + (int)(90.f * i / total);
-          g.DrawLine(IColor(alpha, 120, 210, 220), prevX2, prevY2, nx, ny, nullptr, tkThin);
-          prevX2 = nx; prevY2 = ny;
-        }
+        float maxHalf = std::min(w * 0.38f, h * 0.42f);
+        drawH(drawH, cx, cy, maxHalf, 6);
         break;
       }
       case 8: // Levy C curve
@@ -889,29 +895,25 @@ private:
           }
         break;
       }
-      case 11: // Vicsek fractal (cross)
+      case 11: // Clifford attractor (Sebago — fills rectangular viewport)
       {
-        struct Sq { float x, y, sz; };
-        std::vector<Sq> squares;
-        float sz = std::min(w * 0.35f, h * 0.7f);
-        squares.push_back({cx, cy, sz});
-        for (int depth = 0; depth < 4; depth++)
+        const double a = -1.4, b = 1.6, c = 1.0, d = 0.75;
+        double x = 0.0, y = 0.0;
+        float plotW = w * 0.88f, plotH = h * 0.88f;
+        float scale = std::min(plotW, plotH) * 0.32f;
+        for (int i = 0; i < 48000; i++)
         {
-          std::vector<Sq> next;
-          IColor col = (depth < 1) ? bright : ((depth < 3) ? mid : dim);
-          for (auto& s : squares)
-          {
-            float half = s.sz / 2.f;
-            IRECT r(s.x - half, s.y - half, s.x + half, s.y + half);
-            g.DrawRect(col, r, nullptr, tk);
-            float ns = s.sz / 3.f;
-            next.push_back({s.x, s.y, ns});
-            next.push_back({s.x - s.sz / 3.f, s.y, ns});
-            next.push_back({s.x + s.sz / 3.f, s.y, ns});
-            next.push_back({s.x, s.y - s.sz / 3.f, ns});
-            next.push_back({s.x, s.y + s.sz / 3.f, ns});
-          }
-          squares = next;
+          double nx = sin(a * y) + c * cos(a * x);
+          double ny = sin(b * x) + d * cos(b * y);
+          x = nx;
+          y = ny;
+          if (i < 800) continue;
+          float px = cx + (float)x * scale;
+          float py = cy - (float)y * scale;
+          if (px < mRECT.L + 4.f || px > mRECT.R - 4.f || py < mRECT.T + 4.f || py > mRECT.B - 4.f) continue;
+          int alpha = 28 + (i & 95);
+          float dot = 1.f + (float)((i >> 3) % 3) * 0.35f;
+          g.FillRect(IColor(alpha, 75 + (i % 90), 165 + (i % 85), 215), IRECT(px, py, px + dot, py + dot));
         }
         break;
       }
