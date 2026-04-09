@@ -79,10 +79,11 @@ const IVColorSpec volumColorSpec{
   COLOR_RED,                       // Extra 2 (clipping)
   kGold.WithContrast(0.1f),        // Extra 3
 };
+const IColor kGoldBright(255, 248, 212, 125);
 const IVStyle volumStyle =
   IVStyle{true, true, volumColorSpec,
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, kGoldDim},
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, kGoldDim},
+          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, kGoldBright},
+          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, kGoldBright},
           DEFAULT_HIDE_CURSOR, DEFAULT_DRAW_FRAME, false, DEFAULT_EMBOSS,
           0.2f, 2.f, DEFAULT_SHADOW_OFFSET, DEFAULT_WIDGET_FRAC, DEFAULT_WIDGET_ANGLE};
 const IVStyle volumKnobStyle =
@@ -92,6 +93,17 @@ const IVStyle volumToggleStyle =
     .WithShowValue(false)
     .WithDrawFrame(false)
     .WithWidgetFrac(1.0f);
+/** Settings overlay: flat controls on top of VoLumSettingsBackdropControl (no “patch” panels). */
+const IVStyle volumSettingsStyle = volumStyle.WithDrawFrame(false)
+                                    .WithDrawShadows(false)
+                                    .WithColor(EVColor::kBG, COLOR_TRANSPARENT)
+                                    .WithColor(EVColor::kFR, kGold.WithOpacity(0.22f))
+                                    .WithColor(EVColor::kHL, kGold.WithOpacity(0.12f));
+const IVStyle volumSettingsRadioStyle =
+  volumSettingsStyle.WithColor(EVColor::kON, kGold)
+    .WithColor(EVColor::kOFF, kGold.WithOpacity(0.14f))
+    .WithColor(EVColor::kX1, kGoldBright.WithOpacity(0.95f))
+    .WithLabelText(IText(12.5f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Top));
 #endif
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
@@ -388,21 +400,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
 
-    // Settings gear button (top-right corner)
+    // Settings gear button (top-right of main panel)
     {
       const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
       const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
       const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
       const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
 
-      const auto settingsButtonArea = CornerButtonArea(b);
-      const IVStyle volumRadioStyle = volumStyle
-        .WithColor(EVColor::kON, kGold)
-        .WithColor(EVColor::kOFF, kGold.WithOpacity(0.1f))
-        .WithColor(EVColor::kX1, kGold.WithOpacity(0.6f));
-
+      const IRECT gearArea(mainR - 44.f, b.T + 14.f, mainR - 18.f, b.T + 40.f);
       pGraphics->AttachControl(new NAMCircleButtonControl(
-        settingsButtonArea,
+        gearArea,
         [pGraphics](IControl* pCaller) {
           pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
         },
@@ -410,7 +417,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       pGraphics
         ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
-                                                   crossSVG, volumStyle, volumRadioStyle),
+                                                   crossSVG, volumSettingsStyle, volumSettingsRadioStyle),
                         kCtrlTagSettingsBox)
         ->Hide(true);
     }

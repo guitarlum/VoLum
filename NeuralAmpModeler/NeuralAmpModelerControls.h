@@ -627,13 +627,7 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(bounds, paramIdx, {}, "Output Mode", style, EVShape::Ellipse,
-#if VOLUM_AMPETE_PRODUCT
-                         // Horizontal row fits the VoLum panel without clipping the title above the client area
-                         EDirection::Horizontal,
-#else
-                         EDirection::Vertical,
-#endif
+  : IVRadioButtonControl(bounds, paramIdx, {}, "Output Mode", style, EVShape::Ellipse, EDirection::Vertical,
                          buttonSize) {};
 
   void SetNormalizedDisable(const bool disable)
@@ -658,7 +652,11 @@ public:
     ss << "Calibrated";
     if (disable)
     {
+#if VOLUM_AMPETE_PRODUCT
+      ss << " (n/a)";
+#else
       ss << " [Not supported by model]";
+#endif
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
   };
@@ -745,11 +743,10 @@ public:
     const float panelW = rootB.W() * 0.86f;
     const float panelH = rootB.H() * 0.82f;
     const IRECT panel = rootB.GetCentredInside(static_cast<int>(panelW), static_cast<int>(panelH));
-    const IVStyle titleStyle = DEFAULT_STYLE
-                               .WithValueText(IText(24.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center,
-                                                    EVAlign::Middle))
-                               .WithDrawFrame(false)
-                               .WithShadowOffset(0.f);
+    const IVStyle titleStyle =
+      mStyle.WithShowValue(false)
+        .WithShowLabel(true)
+        .WithLabelText(IText(24.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle));
     const auto text = IText(13.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
@@ -782,27 +779,50 @@ public:
     };
 #if VOLUM_AMPETE_PRODUCT
     const IRECT closeR = headerRow.GetFromRight(48.f).GetCentredInside(32.f, 32.f);
+    AddNamedChildControl(new VoLumSettingsCloseControl(closeR, closeAction), mControlNames.close);
 #else
     const IRECT closeR = CornerButtonArea(GetRECT());
-#endif
     AddNamedChildControl(new NAMSquareButtonControl(closeR, closeAction, mCloseSVG), mControlNames.close);
+#endif
 
-    // Input calibration (left) + output mode radios (right)
+#if VOLUM_AMPETE_PRODUCT
+    const float bottomH = 112.0f;
+#else
+    const float bottomH = 88.0f;
+#endif
+    auto bottomStrip = inner.ReduceFromBottom(bottomH);
+    bottomStrip = bottomStrip.GetPadded(10.f);
+#if VOLUM_AMPETE_PRODUCT
+    const float modelColFrac = 0.42f;
+#else
+    const float modelColFrac = 0.50f;
+#endif
+    const float modelColW = bottomStrip.W() * modelColFrac;
+    const float lineHeight = 18.0f;
+    const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
+    const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(6 * lineHeight);
+
+    // Input calibration + output mode: VoLum centers this block in the middle vertical gap
     {
 #if VOLUM_AMPETE_PRODUCT
-      const float inputLevelH = 68.0f;
-      const float calBlockH = inputLevelH + NAM_SWTICH_HEIGHT + 28.0f;
+      const float calBlockH = 168.0f;
+      const IRECT calRow = inner.GetCentredInside(static_cast<int>(inner.W()), static_cast<int>(calBlockH));
+      const float rowW = calRow.W();
+      const float leftCol = rowW * 0.34f;
+      const auto inputArea = calRow.GetFromLeft(leftCol);
+      const auto outputArea = calRow.GetFromRight(rowW - leftCol);
+
+      const float knobWidth = 92.0f;
+      IRECT leftStack = inputArea;
+      const auto inputLevelArea = leftStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
+      (void) leftStack.ReduceFromTop(10.f); // gap
+      const auto inputSwitchArea = leftStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
 #else
       const float inputLevelH = NAM_KNOB_HEIGHT;
       const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
-#endif
       auto calRow = inner.ReduceFromTop(calBlockH);
       const float rowW = calRow.W();
-#if VOLUM_AMPETE_PRODUCT
-      const float leftCol = rowW * 0.38f;
-#else
       const float leftCol = rowW * 0.50f;
-#endif
       const auto inputArea = calRow.GetFromLeft(leftCol);
       const auto outputArea = calRow.GetFromRight(rowW - leftCol);
 
@@ -810,6 +830,7 @@ public:
       const auto inputLevelArea =
         inputArea.GetFromTop(inputLevelH).GetFromBottom(28.0f).GetMidHPadded(0.5f * knobWidth);
       const auto inputSwitchArea = inputArea.GetFromBottom(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
+#endif
 
       auto* inputLevelControl = AddNamedChildControl(
         new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
@@ -821,9 +842,9 @@ public:
         new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
-      const auto outputRadioArea = outputArea.GetPadded(8.f);
+      const auto outputRadioArea = outputArea.GetPadded(6.f);
 #if VOLUM_AMPETE_PRODUCT
-      const float buttonSize = 12.0f;
+      const float buttonSize = 11.0f;
 #else
       const float buttonSize = 10.0f;
 #endif
@@ -834,18 +855,6 @@ public:
         "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
     }
-
-#if VOLUM_AMPETE_PRODUCT
-    const float bottomH = 108.0f;
-#else
-    const float bottomH = 88.0f;
-#endif
-    auto bottomStrip = inner.ReduceFromBottom(bottomH);
-    bottomStrip = bottomStrip.GetPadded(10.f);
-    const float halfWidth = bottomStrip.W() * 0.5f;
-    const float lineHeight = 18.0f;
-    const auto modelInfoArea = bottomStrip.GetFromLeft(halfWidth).GetFromTop(5 * lineHeight);
-    const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - halfWidth).GetFromTop(6 * lineHeight);
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
     AddNamedChildControl(new AboutControl(aboutArea, leftStyle, leftText), mControlNames.about);
 
