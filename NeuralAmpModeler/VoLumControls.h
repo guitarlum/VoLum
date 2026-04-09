@@ -1250,25 +1250,27 @@ private:
   const char* mSuffix;
 };
 
-/** Full-window dim + inset panel matching VoLum main chrome (used by settings overlay). */
+/** Full-window dim + explicit panel rect (must match layout math in NAMSettingsPageControl). */
 class VoLumSettingsBackdropControl : public IControl
 {
 public:
-  VoLumSettingsBackdropControl(const IRECT& fullBounds, float panelInset)
+  VoLumSettingsBackdropControl(const IRECT& fullBounds, const IRECT& panelRect)
   : IControl(fullBounds)
-  , mInset(panelInset)
+  , mPanel(panelRect)
   {
     mIgnoreMouse = true;
   }
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(IColor(200, 0, 0, 0), mRECT);
-    const IRECT p = mRECT.GetPadded(mInset);
-    g.FillRect(VoLumColors::BG, p);
+    g.FillRect(IColor(185, 8, 10, 14), mRECT);
+    const IRECT& p = mPanel;
+    // Slightly lifted panel so it reads clearly over the dim layer
+    g.FillRect(IColor(255, 22, 22, 30), p);
     g.DrawRect(VoLumColors::FRAME, p);
+    g.DrawRect(IColor(90, 200, 180, 100), p.GetPadded(2.f));
     const float cs = 18.f;
-    const float m = 7.f;
+    const float m = 8.f;
     DrawCornerAccent(g, p.L + m, p.T + m, cs, false, false);
     DrawCornerAccent(g, p.R - m, p.T + m, cs, true, false);
     DrawCornerAccent(g, p.L + m, p.B - m, cs, false, true);
@@ -1276,5 +1278,5 @@ public:
   }
 
 private:
-  float mInset;
+  IRECT mPanel;
 };

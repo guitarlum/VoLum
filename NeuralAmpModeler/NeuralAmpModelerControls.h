@@ -627,8 +627,14 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(
-      bounds, paramIdx, {}, "Output Mode", style, EVShape::Ellipse, EDirection::Vertical, buttonSize) {};
+  : IVRadioButtonControl(bounds, paramIdx, {}, "Output Mode", style, EVShape::Ellipse,
+#if VOLUM_AMPETE_PRODUCT
+                         // Horizontal row fits the VoLum panel without clipping the title above the client area
+                         EDirection::Horizontal,
+#else
+                         EDirection::Vertical,
+#endif
+                         buttonSize) {};
 
   void SetNormalizedDisable(const bool disable)
   {
@@ -637,7 +643,11 @@ public:
     ss << "Normalized";
     if (disable)
     {
+#if VOLUM_AMPETE_PRODUCT
+      ss << " (n/a)";
+#else
       ss << " [Not supported by model]";
+#endif
     }
     mTabLabels.Get(1)->Set(ss.str().c_str());
   };
@@ -697,6 +707,8 @@ public:
     if (hide == false)
     {
       mHide = false;
+      // Children were hidden on close; unhide immediately so they paint during the fade-in
+      ForAllChildrenFunc([](int childIdx, IControl* pChild) { pChild->Hide(false); });
     }
     else // hide subcontrols immediately
     {
@@ -728,11 +740,13 @@ public:
   void OnAttached() override
   {
 #if VOLUM_AMPETE_PRODUCT
-    const float pad = 16.0f;
-    const float panelInset = 36.0f;
-    const IRECT panel = GetRECT().GetPadded(panelInset);
+    const float pad = 22.0f;
+    const IRECT rootB = GetRECT();
+    const float panelW = rootB.W() * 0.86f;
+    const float panelH = rootB.H() * 0.82f;
+    const IRECT panel = rootB.GetCentredInside(static_cast<int>(panelW), static_cast<int>(panelH));
     const IVStyle titleStyle = DEFAULT_STYLE
-                               .WithValueText(IText(26.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center,
+                               .WithValueText(IText(24.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center,
                                                     EVAlign::Middle))
                                .WithDrawFrame(false)
                                .WithShadowOffset(0.f);
@@ -752,7 +766,7 @@ public:
     const IVStyle leftStyle = style.WithValueText(leftText);
 
 #if VOLUM_AMPETE_PRODUCT
-    AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panelInset), mControlNames.bitmap)
+    AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panel), mControlNames.bitmap)
       ->SetIgnoreMouse(true);
 #else
     AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
@@ -760,14 +774,14 @@ public:
 
     IRECT inner = panel.GetPadded(-pad);
 
-    auto headerRow = inner.ReduceFromTop(48.0f);
+    auto headerRow = inner.ReduceFromTop(56.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
 
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
     };
 #if VOLUM_AMPETE_PRODUCT
-    const IRECT closeR = headerRow.GetFromRight(40.f).GetCentredInside(28.f, 28.f);
+    const IRECT closeR = headerRow.GetFromRight(48.f).GetCentredInside(32.f, 32.f);
 #else
     const IRECT closeR = CornerButtonArea(GetRECT());
 #endif
@@ -775,11 +789,17 @@ public:
 
     // Input calibration (left) + output mode radios (right)
     {
+#if VOLUM_AMPETE_PRODUCT
+      const float inputLevelH = 68.0f;
+      const float calBlockH = inputLevelH + NAM_SWTICH_HEIGHT + 28.0f;
+#else
+      const float inputLevelH = NAM_KNOB_HEIGHT;
       const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
+#endif
       auto calRow = inner.ReduceFromTop(calBlockH);
       const float rowW = calRow.W();
 #if VOLUM_AMPETE_PRODUCT
-      const float leftCol = rowW * 0.40f;
+      const float leftCol = rowW * 0.38f;
 #else
       const float leftCol = rowW * 0.50f;
 #endif
@@ -788,7 +808,7 @@ public:
 
       const float knobWidth = 87.0f;
       const auto inputLevelArea =
-        inputArea.GetFromTop(NAM_KNOB_HEIGHT).GetFromBottom(28.0f).GetMidHPadded(0.5f * knobWidth);
+        inputArea.GetFromTop(inputLevelH).GetFromBottom(28.0f).GetMidHPadded(0.5f * knobWidth);
       const auto inputSwitchArea = inputArea.GetFromBottom(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
 
       auto* inputLevelControl = AddNamedChildControl(
@@ -801,9 +821,9 @@ public:
         new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
-      const auto outputRadioArea = outputArea.GetPadded(4.f);
+      const auto outputRadioArea = outputArea.GetPadded(8.f);
 #if VOLUM_AMPETE_PRODUCT
-      const float buttonSize = 11.0f;
+      const float buttonSize = 12.0f;
 #else
       const float buttonSize = 10.0f;
 #endif
@@ -815,10 +835,15 @@ public:
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
     }
 
+#if VOLUM_AMPETE_PRODUCT
+    const float bottomH = 108.0f;
+#else
     const float bottomH = 88.0f;
+#endif
     auto bottomStrip = inner.ReduceFromBottom(bottomH);
+    bottomStrip = bottomStrip.GetPadded(10.f);
     const float halfWidth = bottomStrip.W() * 0.5f;
-    const float lineHeight = 17.0f;
+    const float lineHeight = 18.0f;
     const auto modelInfoArea = bottomStrip.GetFromLeft(halfWidth).GetFromTop(5 * lineHeight);
     const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - halfWidth).GetFromTop(6 * lineHeight);
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
@@ -871,7 +896,13 @@ private:
 
     void Draw(IGraphics& g) override
     {
+#if VOLUM_AMPETE_PRODUCT
+      g.FillRect(VoLumColors::HERO_BG, mRECT);
+      g.DrawRect(VoLumColors::FRAME, mRECT);
+      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f));
+#else
       g.DrawFittedBitmap(mBitmap, mRECT);
+#endif
       ITextControl::Draw(g);
     };
 
