@@ -746,7 +746,7 @@ public:
     const IVStyle titleStyle =
       mStyle.WithShowValue(false)
         .WithShowLabel(true)
-        .WithLabelText(IText(24.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle));
+        .WithLabelText(IText(32.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle));
     const auto text = IText(13.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
@@ -763,8 +763,7 @@ public:
     const IVStyle leftStyle = style.WithValueText(leftText);
 
 #if VOLUM_AMPETE_PRODUCT
-    AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panel), mControlNames.bitmap)
-      ->SetIgnoreMouse(true);
+    AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panel), mControlNames.bitmap);
 #else
     AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
 #endif
@@ -842,10 +841,15 @@ public:
         new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", mStyle, mSwitchBitmap),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
-      const auto outputRadioArea = outputArea.GetPadded(6.f);
 #if VOLUM_AMPETE_PRODUCT
+      const int outW = static_cast<int>(outputArea.W());
+      const int outH = 108;
+      const IRECT outputRadioArea = outputArea.GetCentredInside(outW, outH).GetPadded(4.f);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputRadioArea.GetPadded(12.f)),
+                           mControlNames.outputGroupFrame);
       const float buttonSize = 11.0f;
 #else
+      const auto outputRadioArea = outputArea.GetPadded(6.f);
       const float buttonSize = 10.0f;
 #endif
       auto* outputModeControl =
@@ -856,7 +860,15 @@ public:
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
     }
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
+#if VOLUM_AMPETE_PRODUCT
+    {
+      const IVStyle aboutStyle = leftStyle.WithValueText(leftText.WithAlign(EAlign::Far));
+      const auto urlText = leftText.WithAlign(EAlign::Far);
+      AddNamedChildControl(new AboutControl(aboutArea, aboutStyle, urlText), mControlNames.about);
+    }
+#else
     AddNamedChildControl(new AboutControl(aboutArea, leftStyle, leftText), mControlNames.about);
+#endif
 
     OnResize();
   }
@@ -889,6 +901,7 @@ private:
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
     const std::string modelInfo = "ModelInfo";
     const std::string outputMode = "OutputMode";
+    const std::string outputGroupFrame = "OutputGroupFrame";
     const std::string title = "Title";
   } mControlNames;
 
