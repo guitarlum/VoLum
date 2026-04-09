@@ -34,4 +34,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Settings layout — full mid band (no floating 168px island), 50/50 columns with vertical rule, INPUT CALIBRATION / OUTPUT MODE caps, slightly larger footer text; HTML reference ui-mockup/settings-overlay-mockup.html.
 04/09/2026 - VoLum: Settings match approved mockup — sentence-case section titles, 280px-max output card, footer hairline, tapered column rule, group frame tint, header gap, “VoLum · By Lum” about line, capture script scripts/capture-volum-settings-ui.ps1; VOLUM_OPEN_SETTINGS_AT_LAUNCH (APP) for auto-open when capturing.
 04/09/2026 - VoLum: Settings — single “Output mode” title (IVRadio group label empty on VoLum; section cap label only). Capture script: single-quoted here-strings, Framework System.Drawing ref, create output dir.
+04/09/2026 - VoLum: Settings — larger top-aligned SETTINGS title; WithShowLabel(false) on settings radio style (removes duplicate param label); input calibration in matching group frame; shared card width/height for vertical alignment; mockup settings-card for both columns.
 

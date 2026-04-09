@@ -100,7 +100,8 @@ const IVStyle volumSettingsStyle = volumStyle.WithDrawFrame(false)
                                     .WithColor(EVColor::kFR, kGold.WithOpacity(0.22f))
                                     .WithColor(EVColor::kHL, kGold.WithOpacity(0.12f));
 const IVStyle volumSettingsRadioStyle =
-  volumSettingsStyle.WithColor(EVColor::kON, kGold)
+  volumSettingsStyle.WithShowLabel(false)
+    .WithColor(EVColor::kON, kGold)
     .WithColor(EVColor::kOFF, kGold.WithOpacity(0.14f))
     .WithColor(EVColor::kX1, kGoldBright.WithOpacity(0.95f))
     .WithLabelText(IText(14.f, kGoldBright, "Josefin-Bold", EAlign::Near, EVAlign::Top))
