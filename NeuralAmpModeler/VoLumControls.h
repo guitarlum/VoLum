@@ -1314,7 +1314,8 @@ class VoLumSettingsCloseControl : public IControl
 {
 public:
   VoLumSettingsCloseControl(const IRECT& bounds, IActionFunction actionFunc)
-  : IControl(bounds, actionFunc)
+  : IControl(bounds, kNoParameter, nullptr)
+  , mCloseAction(std::move(actionFunc))
   {
   }
 
@@ -1333,19 +1334,13 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    if (GetActionFunction())
-      GetActionFunction()(this);
+    (void) x;
+    (void) y;
+    (void) mod;
+    if (mCloseAction)
+      mCloseAction(this);
   }
 
-  void OnMouseOver(float x, float y, const IMouseMod& mod) override
-  {
-    IControl::OnMouseOver(x, y, mod);
-    SetDirty(true);
-  }
-
-  void OnMouseOut() override
-  {
-    IControl::OnMouseOut();
-    SetDirty(true);
-  }
+private:
+  IActionFunction mCloseAction;
 };
