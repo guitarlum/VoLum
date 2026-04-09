@@ -348,9 +348,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       s.eqActive = (eq != 0);
     }
 
+    mVolumInitComplete = false;
     _VolumRestoreFromSettings(mVolumAmpIdx);
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
+    mVolumInitComplete = true;
   }
 #endif
 

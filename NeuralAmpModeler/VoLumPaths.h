@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -149,6 +150,27 @@ inline std::vector<ChannelFile> DiscoverChannels(
   });
 
   return result;
+}
+
+// User-writable JSON for VoLum per-amp UI state. Do not use rigs root alone — it may be under
+// Program Files (installer) and rejects writes for non-admin users.
+inline std::filesystem::path VolumUserSettingsFilePath()
+{
+  namespace fs = std::filesystem;
+#ifdef _WIN32
+  const char* la = std::getenv("LOCALAPPDATA");
+  if (!la || !*la)
+    return {};
+  return fs::path(la) / "VoLum" / "volum-settings.json";
+#elif defined(__APPLE__)
+  const char* home = std::getenv("HOME");
+  if (!home || !*home)
+    return {};
+  return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-settings.json";
+#else
+  (void)0;
+  return {};
+#endif
 }
 
 } // namespace volum

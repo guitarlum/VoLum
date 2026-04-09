@@ -149,6 +149,10 @@ public:
     const float iconSize = 22.f;
     const float pad = 8.f;
 
+    // Ensure fractal icon cache is the right size
+    if ((int)mIconLayers.size() != mNumAmps)
+      mIconLayers.resize(mNumAmps);
+
     for (int i = 0; i < mNumAmps; i++)
     {
       IRECT row(mRECT.L, mRECT.T + i * itemH, mRECT.R, mRECT.T + (i + 1) * itemH);
@@ -165,16 +169,22 @@ public:
         g.DrawRect(IColor(20, 200, 162, 78), paddedRow);
       }
 
-      // Mini fractal thumbnail
       IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f,
                      paddedRow.L + pad + iconSize, paddedRow.MH() + iconSize / 2.f);
 
-      IColor thmBright = (i == mSelected) ? IColor(200, 120, 210, 220) : IColor(145, 105, 175, 195);
-      IColor thmDim = (i == mSelected) ? IColor(100, 100, 180, 200) : IColor(85, 85, 145, 175);
-      g.DrawRect(IColor(i == mSelected ? 80 : 58, 120, 195, 210), iconArea);
-      DrawMiniFractal(g, iconArea, i, thmBright, thmDim);
+      // Cached fractal thumbnail (deterministic per amp index + bounds)
+      if (!mIconLayers[i] || g.CheckLayer(mIconLayers[i]))
+      {
+        g.StartLayer(this, iconArea);
+        IColor thmBright(200, 120, 210, 220);
+        IColor thmDim(100, 100, 180, 200);
+        DrawMiniFractal(g, iconArea, i, thmBright, thmDim);
+        mIconLayers[i] = g.EndLayer();
+      }
 
-      // Amp name -- always prominent
+      g.DrawRect(IColor(i == mSelected ? 80 : 58, 120, 195, 210), iconArea);
+      g.DrawLayer(mIconLayers[i]);
+
       IRECT nameArea = paddedRow.GetReducedFromLeft(pad + iconSize + 8.f);
       IColor nameCol = (i == mSelected) ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED;
       IText nameText(13.f, nameCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
@@ -427,6 +437,7 @@ private:
   std::vector<std::string> mAmpNames;
   std::vector<std::string> mAmpAbbrs;
   SelectionCallback mCallback;
+  std::vector<ILayerPtr> mIconLayers;
 };
 
 class VoLumSpeakerRowControl : public IControl
@@ -556,23 +567,31 @@ public:
     }
     else
     {
-      g.FillRect(VoLumColors::HERO_BG, mRECT);
-      g.DrawRect(VoLumColors::HERO_BORDER, mRECT);
-
-      const float cs = 16.f;
-      const float m = 6.f;
-      DrawCornerAccent(g, mRECT.L + m, mRECT.T + m, cs, false, false, VoLumColors::HERO_CORNER);
-      DrawCornerAccent(g, mRECT.R - m, mRECT.T + m, cs, true, false, VoLumColors::HERO_CORNER);
-      DrawCornerAccent(g, mRECT.L + m, mRECT.B - m, cs, false, true, VoLumColors::HERO_CORNER);
-      DrawCornerAccent(g, mRECT.R - m, mRECT.B - m, cs, true, true, VoLumColors::HERO_CORNER);
-
-      DrawGeometricArt(g);
+      // Cached procedural art: only recompute when bounds or amp index change
+      if (!mArtLayer || g.CheckLayer(mArtLayer) || mCachedArtIdx != mAmpIdx)
+      {
+        g.StartLayer(this, mRECT);
+        g.FillRect(VoLumColors::HERO_BG, mRECT);
+        g.DrawRect(VoLumColors::HERO_BORDER, mRECT);
+        const float cs = 16.f;
+        const float m = 6.f;
+        DrawCornerAccent(g, mRECT.L + m, mRECT.T + m, cs, false, false, VoLumColors::HERO_CORNER);
+        DrawCornerAccent(g, mRECT.R - m, mRECT.T + m, cs, true, false, VoLumColors::HERO_CORNER);
+        DrawCornerAccent(g, mRECT.L + m, mRECT.B - m, cs, false, true, VoLumColors::HERO_CORNER);
+        DrawCornerAccent(g, mRECT.R - m, mRECT.B - m, cs, true, true, VoLumColors::HERO_CORNER);
+        DrawGeometricArt(g);
+        mArtLayer = g.EndLayer();
+        mCachedArtIdx = mAmpIdx;
+      }
+      g.DrawLayer(mArtLayer);
     }
   }
 
   void SetPlaceholder(const char* text, int ampIdx = 0)
   {
     mPlaceholder = text;
+    if (mAmpIdx != ampIdx)
+      mArtLayer.reset();
     mAmpIdx = ampIdx;
     mHasBitmap = false;
     SetDirty(false);
@@ -961,6 +980,8 @@ private:
   std::string mPlaceholder = "A1";
   std::string mName = "Ampete One";
   int mAmpIdx = 0;
+  ILayerPtr mArtLayer;
+  int mCachedArtIdx = -1;
 };
 
 class VoLumAmpNameControl : public IControl
