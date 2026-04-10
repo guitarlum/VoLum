@@ -39,7 +39,13 @@ VoLumRigs/                       (amp profiles -- required!)
 ```
 
 3. **Standalone** -- just run `VoLum_x64.exe`. It finds `VoLumRigs` next to itself.
-4. **VST3 in a DAW** -- copy the entire `VoLum.vst3` **folder** into your DAW's VST3 scan path (typically `C:\Program Files\Common Files\VST3\`). Then also copy the `VoLumRigs` folder next to the `.vst3` bundle, or next to `VoLum_x64.exe` if you keep the standalone around -- the plugin searches upward from its own location.
+4. **VST3 in a DAW** -- copy the `VoLum.vst3` **folder** and the `VoLumRigs` **folder** into your VST3 scan path so they sit side by side:
+
+```
+C:\Program Files\Common Files\VST3\
+  VoLum.vst3/                    <-- the whole folder, not just the inner file
+  VoLumRigs/                     <-- amp profiles, right next to it
+```
 
 ### Windows (installer from a tagged release)
 
@@ -50,7 +56,7 @@ Run `VoLum-Setup.exe`. It places the standalone in `Program Files\VoLum`, the VS
 1. Unzip the **VoLum-mac** artifact, open the main zip.
 2. Keep `VoLum.app`, `VoLum.vst3`, and `VoLumRigs/` in the same folder.
 3. **Standalone** -- double-click `VoLum.app`.
-4. **VST3** -- move `VoLum.vst3` to `~/Library/Audio/Plug-Ins/VST3/` and place `VoLumRigs` beside the `.vst3` or beside the `.app`.
+4. **VST3** -- copy `VoLum.vst3` and `VoLumRigs` side by side into `~/Library/Audio/Plug-Ins/VST3/`.
 
 ## Bundled amps
 
