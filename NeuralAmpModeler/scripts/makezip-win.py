@@ -80,8 +80,6 @@ def main():
         if os.path.isdir(rigs_root):
             print("adding rigs from " + rigs_root)
             for dirpath, dirnames, filenames in os.walk(rigs_root):
-                if "ampPictures" in dirnames:
-                    dirnames.remove("ampPictures")
                 for name in filenames:
                     if not name.lower().endswith(".nam"):
                         continue
