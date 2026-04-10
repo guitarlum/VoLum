@@ -10,6 +10,8 @@
 #ifdef _WIN32
   #define WIN32_LEAN_AND_MEAN
   #include <Windows.h>
+#elif defined(__APPLE__)
+  #include <mach-o/dyld.h>
 #endif
 
 namespace volum
@@ -87,6 +89,24 @@ inline std::filesystem::path FindRigsRootDirectory()
     {
       candidates.push_back(d / "rigs");
       d = d.parent_path();
+    }
+  }
+#elif defined(__APPLE__)
+  {
+    char buf[4096];
+    uint32_t bufSize = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &bufSize) == 0)
+    {
+      fs::path exe = fs::weakly_canonical(fs::path(buf));
+      fs::path d = exe.parent_path();
+      // Inside .app bundle: .../VoLum.app/Contents/MacOS/VoLum
+      // Resources dir:      .../VoLum.app/Contents/Resources/rigs
+      candidates.push_back(d.parent_path() / "Resources" / "rigs");
+      for (int depth = 0; depth < 12; ++depth)
+      {
+        candidates.push_back(d / "rigs");
+        d = d.parent_path();
+      }
     }
   }
 #endif

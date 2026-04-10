@@ -17,9 +17,9 @@ jobs:
       upload_url: ${{steps.create_release.outputs.upload_url}}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
       - name: Create release
         id: create_release
@@ -47,7 +47,7 @@ jobs:
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         submodules: recursive
 
@@ -65,21 +65,21 @@ jobs:
 
     - name: Get Archive Name macOS
       id: mac_archivename_step
-      if: matrix.os == 'macOS-latest'
+      if: matrix.os == 'macos-latest'
       run: |
         ARCHIVE_NAME=`python3 iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_NAME}} mac full`
         echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Build macOS
-      if: matrix.os == 'macOS-latest'
+      if: matrix.os == 'macos-latest'
       run: |
         cd ${{env.PROJECT_NAME}}/scripts
         ./makedist-mac.sh full installer
       shell: bash
 
     - name: Upload mac DSYMs release asset
-      if: matrix.os == 'macOS-latest'
+      if: matrix.os == 'macos-latest'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -90,7 +90,7 @@ jobs:
         asset_content_type: application/zip
 
     - name: Upload mac dmg release asset
-      if: matrix.os == 'macOS-latest'
+      if: matrix.os == 'macos-latest'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}

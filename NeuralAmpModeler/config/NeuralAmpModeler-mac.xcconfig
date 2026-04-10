@@ -11,7 +11,7 @@ IPLUG2_ROOT = ../../iPlug2
 // Global build settings
 
 // the basename of the vst, vst3, app, component, aaxplugin
-BINARY_NAME = NeuralAmpModeler
+BINARY_NAME = VoLum
 
 // ------------------------------
 // HEADER AND LIBRARY SEARCH PATHS
