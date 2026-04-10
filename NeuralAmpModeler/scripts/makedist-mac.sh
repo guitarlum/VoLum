@@ -152,11 +152,12 @@ fi
 #---------------------------------------------------------------------------------------------------------
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
-# GitHub Actions runners have no Developer ID certs. Upstream NAM's CI skips mac builds entirely
-# (workflow uses matrix.os == 'macOS-latest' while the matrix label is macos-latest).
+# GitHub Actions runners have no Apple dev certs. Use ad-hoc signing (identity "-") so binaries are
+# still signed — required when targets use entitlements (CODE_SIGNING_REQUIRED=NO breaks APP with
+# "isn't code signed but requires entitlements"). Manual + empty team avoids Automatic signing.
 XC_EXTRA=()
 if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
-  XC_EXTRA=(CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=)
+  XC_EXTRA=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=)
 fi
 
 set -o pipefail
