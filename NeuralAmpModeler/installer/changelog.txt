@@ -72,3 +72,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/11/2026 - VoLum: Build Native portable zips bundle rigs (all .nam files, amp folders only) — Windows makezip-win.py zip-loose mode; macOS makedist-mac.sh zip path before ditto. Release Native installer flow unchanged.
 
+04/11/2026 - VoLum: Removed rigs/ampPictures (legacy bitmap heroes); UI uses procedural fractal art instead.
+
