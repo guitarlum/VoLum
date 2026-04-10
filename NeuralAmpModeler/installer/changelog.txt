@@ -60,3 +60,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/10/2026 - VoLum: CI aligned with upstream NAM — Build Native uses full zip (GitHub runners have no Inno Setup); makedist-mac.sh runs under bash with pipefail and optional xcpretty; makeinstaller-mac.sh AAX install-location quoting fixed; Release Native installs Inno Setup (choco) before Windows installer build.
 
+04/10/2026 - VoLum: Fix Windows makedist-win.bat — quote MSBuild /t and /flp so cmd.exe does not split on ';' (second target was executed as a command; CI failed in seconds). macOS CI: pass ad-hoc CODE_SIGN_* overrides on GITHUB_ACTIONS (upstream CI never built mac due to macOS-latest typo).
+

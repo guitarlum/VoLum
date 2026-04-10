@@ -152,11 +152,18 @@ fi
 #---------------------------------------------------------------------------------------------------------
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
+# GitHub Actions runners have no Developer ID certs. Upstream NAM's CI skips mac builds entirely
+# (workflow uses matrix.os == 'macOS-latest' while the matrix label is macos-latest).
+XC_EXTRA=()
+if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
+  XC_EXTRA=(CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=)
+fi
+
 set -o pipefail
 if command -v xcpretty >/dev/null 2>&1; then
-  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
+  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log | xcpretty
 else
-  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
+  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log
 fi
 XC_EC=$?
 set +o pipefail
