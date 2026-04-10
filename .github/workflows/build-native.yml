@@ -45,7 +45,7 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         cd ${{env.PROJECT_NAME}}/scripts
-        ./makedist-mac.sh full zip
+        ./makedist-mac.sh full installer
       shell: bash
 
     - name: Upload macOS artifacts

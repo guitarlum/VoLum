@@ -44,9 +44,9 @@ def main():
             line = "AppVersion=" + config["FULL_VER_STR"] + "\n"
         if "OutputBaseFilename" in line:
             if demo:
-                line = "OutputBaseFilename=NeuralAmpModeler Demo Installer\n"
+                line = "OutputBaseFilename=VoLum-Demo-Setup\n"
             else:
-                line = "OutputBaseFilename=NeuralAmpModeler Installer\n"
+                line = "OutputBaseFilename=VoLum-Setup\n"
 
         if 'Source: "readme' in line:
             if demo:
@@ -56,15 +56,15 @@ def main():
 
         if "WelcomeLabel1" in line:
             if demo:
-                line = "WelcomeLabel1=Welcome to the NeuralAmpModeler Demo installer\n"
+                line = "WelcomeLabel1=Welcome to the VoLum demo installer\n"
             else:
-                line = "WelcomeLabel1=Welcome to the NeuralAmpModeler installer\n"
+                line = "WelcomeLabel1=Welcome to VoLum - NAM Player\n"
 
         if "SetupWindowTitle" in line:
             if demo:
-                line = "SetupWindowTitle=NeuralAmpModeler Demo installer\n"
+                line = "SetupWindowTitle=VoLum demo installer\n"
             else:
-                line = "SetupWindowTitle=NeuralAmpModeler installer\n"
+                line = "SetupWindowTitle=VoLum Installer\n"
 
         sys.stdout.write(line)
 
