@@ -25,6 +25,21 @@ def main():
         os.path.join(os.getcwd(), IPLUG2_ROOT + "/../common-mac.xcconfig")
     )
 
+    def resource_plist_path(name_suffix: str) -> str:
+        """resources/<BUNDLE_NAME><suffix> if present, else NeuralAmpModeler<suffix>.
+
+        VoLum uses BUNDLE_NAME VoLum but keeps upstream NeuralAmpModeler-* plist
+        filenames referenced by the Xcode project.
+        """
+        base = os.path.join(projectpath, "resources")
+        primary = os.path.join(base, config["BUNDLE_NAME"] + name_suffix)
+        if os.path.isfile(primary):
+            return primary
+        fallback = os.path.join(base, "NeuralAmpModeler" + name_suffix)
+        if os.path.isfile(fallback):
+            return fallback
+        return primary
+
     CFBundleGetInfoString = (
         config["BUNDLE_NAME"]
         + " v"
@@ -41,7 +56,7 @@ def main():
 
     # VST3
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-VST3-Info.plist"
+    plistpath = resource_plist_path("-VST3-Info.plist")
     with open(plistpath, "rb") as f:
         vst3 = plistlib.load(f)
         vst3["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -67,7 +82,7 @@ def main():
 
     # VST2
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-VST2-Info.plist"
+    plistpath = resource_plist_path("-VST2-Info.plist")
     with open(plistpath, "rb") as f:
         vst2 = plistlib.load(f)
         vst2["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -93,7 +108,7 @@ def main():
 
     # AUDIOUNIT v2
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-AU-Info.plist"
+    plistpath = resource_plist_path("-AU-Info.plist")
     with open(plistpath, "rb") as f:
         auv2 = plistlib.load(f)
         auv2["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -147,9 +162,7 @@ def main():
     else:
         NSEXTENSIONPOINTIDENTIFIER = "com.apple.AudioUnit"
 
-    plistpath = (
-        projectpath + "/resources/" + config["BUNDLE_NAME"] + "-macOS-AUv3-Info.plist"
-    )
+    plistpath = resource_plist_path("-macOS-AUv3-Info.plist")
 
     with open(plistpath, "rb") as f:
         auv3 = plistlib.load(f)
@@ -219,7 +232,7 @@ def main():
 
     # AAX
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-AAX-Info.plist"
+    plistpath = resource_plist_path("-AAX-Info.plist")
     with open(plistpath, "rb") as f:
         aax = plistlib.load(f)
         aax["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -243,9 +256,7 @@ def main():
 
     # APP
 
-    plistpath = (
-        projectpath + "/resources/" + config["BUNDLE_NAME"] + "-macOS-Info.plist"
-    )
+    plistpath = resource_plist_path("-macOS-Info.plist")
 
     with open(plistpath, "rb") as f:
         macOSapp = plistlib.load(f)
