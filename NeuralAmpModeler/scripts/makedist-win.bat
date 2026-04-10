@@ -51,6 +51,18 @@ echo Building ...
 REM Remove previous build logs
 if exist "build-win.log" (del build-win.log)
 
+REM GitHub Actions: use microsoft/setup-msbuild — PATH already has MSBuild. Skip vcvarsall/vswhere
+REM (nested for /f + paths under "Program Files" can break and yield 'C:\Program' is not recognized).
+if /i "%GITHUB_ACTIONS%"=="true" (
+  echo Using MSBuild from PATH ^(GITHUB_ACTIONS^)
+  for /f "delims=" %%G in ('where msbuild 2^>nul') do (
+    set "MSBUILD_EXE=%%G"
+    goto :msbuild_ready
+  )
+  echo ERROR: msbuild not on PATH. Add microsoft/setup-msbuild@v2 before makedist-win.bat.
+  exit /b 1
+)
+
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
 REM Visual Studio 2019 path is obsolete on many machines; use vswhere (VS 2022 Build Tools, Community, etc.)
@@ -65,6 +77,8 @@ if not defined MSBUILD_EXE (
   echo ERROR: MSBuild not found. Install "Visual Studio Build Tools" with workload "Desktop development with C++" ^(Microsoft.VisualStudio.Workload.VCTools^).
   exit /b 1
 )
+
+:msbuild_ready
 
 
 REM - set preprocessor macros like this, for instance to set demo preprocessor macro:

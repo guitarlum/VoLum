@@ -152,12 +152,18 @@ fi
 #---------------------------------------------------------------------------------------------------------
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
-# GitHub Actions runners have no Apple dev certs. Use ad-hoc signing (identity "-") so binaries are
-# still signed — required when targets use entitlements (CODE_SIGNING_REQUIRED=NO breaks APP with
-# "isn't code signed but requires entitlements"). Manual + empty team avoids Automatic signing.
+# GitHub Actions: no Apple dev certs. APP/AUv3 targets use Automatic + DEVELOPMENT_TEAM in the
+# xcodeproj; command-line overrides must clear entitlements for CI or Xcode errors:
+# "APP isn't code signed but requires entitlements".
 XC_EXTRA=()
 if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
-  XC_EXTRA=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=)
+  XC_EXTRA=(
+    CODE_SIGN_IDENTITY=-
+    CODE_SIGN_STYLE=Manual
+    DEVELOPMENT_TEAM=
+    CODE_SIGN_ENTITLEMENTS=
+    ENABLE_HARDENED_RUNTIME=NO
+  )
 fi
 
 set -o pipefail

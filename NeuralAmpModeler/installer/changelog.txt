@@ -64,3 +64,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/10/2026 - VoLum: macOS CI signing — drop CODE_SIGNING_REQUIRED=NO (conflicts with APP entitlements); use CODE_SIGN_IDENTITY=- and CODE_SIGN_STYLE=Manual with empty DEVELOPMENT_TEAM on CI.
 
+04/10/2026 - VoLum: CI — Windows makedist-win uses PATH msbuild when GITHUB_ACTIONS (avoids vcvarsall/vswhere path bugs). macOS CI adds CODE_SIGN_ENTITLEMENTS= and ENABLE_HARDENED_RUNTIME=NO so APP overrides Automatic/team from xcodeproj.
+
