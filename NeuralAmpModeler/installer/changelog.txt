@@ -62,3 +62,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/10/2026 - VoLum: Fix Windows makedist-win.bat — quote MSBuild /t and /flp so cmd.exe does not split on ';' (second target was executed as a command; CI failed in seconds). macOS CI: pass ad-hoc CODE_SIGN_* overrides on GITHUB_ACTIONS (upstream CI never built mac due to macOS-latest typo).
 
+04/10/2026 - VoLum: macOS CI signing — drop CODE_SIGNING_REQUIRED=NO (conflicts with APP entitlements); use CODE_SIGN_IDENTITY=- and CODE_SIGN_STYLE=Manual with empty DEVELOPMENT_TEAM on CI.
+
