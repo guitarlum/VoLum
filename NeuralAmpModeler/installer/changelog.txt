@@ -66,3 +66,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/10/2026 - VoLum: CI — Windows makedist-win uses PATH msbuild when GITHUB_ACTIONS (avoids vcvarsall/vswhere path bugs). macOS CI adds CODE_SIGN_ENTITLEMENTS= and ENABLE_HARDENED_RUNTIME=NO so APP overrides Automatic/team from xcodeproj.
 
+04/10/2026 - VoLum: macOS CI builds VST3+APP only (skip AU in aggregate All) — AU Carbon/Rez phases fail on current GitHub Xcode; tail build-mac.log on failure for actionable logs.
+

@@ -13,7 +13,7 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 1. Open the [**Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) workflow and pick the latest green run.
 2. Under **Artifacts**, download **VoLum-win** or **VoLum-mac**:
    - **VoLum-win** -- zip with the standalone `.exe`, VST3 binary, and changelog (extract and run / copy the VST3 where your host expects it).
-   - **VoLum-mac** -- zip with the `.app` bundle and plug-in formats from the build.
+   - **VoLum-mac** -- zip with the `.app` and **VST3** (GitHub CI skips the legacy AU target so builds stay green on current Xcode; full formats come from local/release builds).
 
 **Installer builds** (Windows setup exe, macOS `.dmg` / `.pkg`) are produced when you cut a **tagged release** via the Release workflow (Windows runner installs Inno Setup there). Published downloads also show on [**Releases**](https://github.com/guitarlum/VoLum/releases).
 
