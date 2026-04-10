@@ -84,7 +84,12 @@ REM msbuild NeuralAmpModeler.sln /p:configuration=release /p:platform=win32 /nol
 
 REM echo Building 64 bit binaries...
 REM add projects with /t to build VST2 and AAX
-"%MSBUILD_EXE%" NeuralAmpModeler.sln /t:NeuralAmpModeler-app;NeuralAmpModeler-vst3 /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger /m /flp:logfile=build-win.log;errorsonly;append
+REM NOTE: In cmd.exe, semicolons split commands unless quoted — targets and file logger must be quoted.
+"%MSBUILD_EXE%" NeuralAmpModeler.sln /t:"NeuralAmpModeler-app;NeuralAmpModeler-vst3" /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger /m /flp:"logfile=build-win.log;errorsonly;append"
+if errorlevel 1 (
+  echo ERROR: MSBuild failed
+  exit /b 1
+)
 
 REM --echo Copying AAX Presets
 
