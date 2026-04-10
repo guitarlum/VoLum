@@ -42,11 +42,12 @@ jobs:
         ./download-prebuilt-libs.sh
       shell: bash
 
+    # Match upstream NAM: zip-only on CI (no Inno Setup / pkg+dmg toolchain on GitHub runners).
     - name: Build macOS
       if: matrix.os == 'macos-latest'
       run: |
         cd ${{env.PROJECT_NAME}}/scripts
-        ./makedist-mac.sh full installer
+        ./makedist-mac.sh full zip
       shell: bash
 
     - name: Upload macOS artifacts
@@ -71,7 +72,7 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: |
         cd ${{env.PROJECT_NAME}}\scripts
-        .\makedist-win.bat full installer
+        .\makedist-win.bat full zip
       shell: pwsh
 
     - name: Upload Windows artifacts

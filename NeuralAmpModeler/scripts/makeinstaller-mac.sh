@@ -87,7 +87,7 @@ fi
 
 # # try to build AAX package
 if [[ -d $PRODUCTS/$AAX ]]; then
-  build_flavor "AAX" $AAX "com.Lum.aax.pkg.${PRODUCT_NAME}" ""/Library/Application Support/Avid/Audio/Plug-Ins""
+  build_flavor "AAX" $AAX "com.Lum.aax.pkg.${PRODUCT_NAME}" "/Library/Application Support/Avid/Audio/Plug-Ins"
 fi
 
 # try to build App package

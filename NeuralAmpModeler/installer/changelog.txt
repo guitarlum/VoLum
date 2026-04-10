@@ -58,3 +58,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/10/2026 - VoLum: CI — Build Native runs macOS full installer (DMG in VoLum-mac artifact); README documents where to download CI artifacts and draft releases; Release Native manual dispatch takes a tag input; Windows makezip/update_installer use VoLum-Setup.exe / VoLum-Demo-Setup.exe and optional extras only if present.
 
+04/10/2026 - VoLum: CI aligned with upstream NAM — Build Native uses full zip (GitHub runners have no Inno Setup); makedist-mac.sh runs under bash with pipefail and optional xcpretty; makeinstaller-mac.sh AAX install-location quoting fixed; Release Native installs Inno Setup (choco) before Windows installer build.
+

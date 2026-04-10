@@ -117,6 +117,11 @@ jobs:
         python-version: '3.x'
         architecture: 'x64'
 
+    - name: Install Inno Setup
+      if: matrix.os == 'windows-latest'
+      run: choco install innosetup -y
+      shell: pwsh
+
     - name: Get Archive Name Windows
       id: win_archivename_step
       if: matrix.os == 'windows-latest'
