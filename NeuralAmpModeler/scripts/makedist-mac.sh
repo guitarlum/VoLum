@@ -21,8 +21,8 @@ SCRIPTS=$IPLUG2_ROOT/Scripts
 CODESIGN=0
 
 # macOS codesigning/notarization
-NOTARIZE_BUNDLE_ID=com.StevenAtkinson.NeuralAmpModeler
-NOTARIZE_BUNDLE_ID_DEMO=com.StevenAtkinson.NeuralAmpModeler.DEMO
+NOTARIZE_BUNDLE_ID=com.Lum.VoLum
+NOTARIZE_BUNDLE_ID_DEMO=com.Lum.VoLum.DEMO
 APP_SPECIFIC_ID=TODO
 APP_SPECIFIC_PWD=TODO
 
@@ -264,8 +264,12 @@ if [ $BUILD_INSTALLER == 1 ]; then
     dmgcanvas installer/$PLUGIN_NAME.dmgCanvas build-mac/$ARCHIVE_NAME.dmg
   else
     cp installer/changelog.txt build-mac/installer/
-    cp installer/known-issues.txt build-mac/installer/
-    cp "manual/$PLUGIN_NAME manual.pdf" build-mac/installer/
+    if [ -f installer/known-issues.txt ]; then
+      cp installer/known-issues.txt build-mac/installer/
+    fi
+    if [ -f "manual/$PLUGIN_NAME manual.pdf" ]; then
+      cp "manual/$PLUGIN_NAME manual.pdf" build-mac/installer/
+    fi
     hdiutil create build-mac/$ARCHIVE_NAME.dmg -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname $PLUGIN_NAME
   fi
 

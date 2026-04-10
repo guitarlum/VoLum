@@ -32,6 +32,7 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - Docs: README + NeuralAmpModeler/README describe user-profile settings path and rigs discovery; CONTRIBUTING notes VoLum doctest suite.
 04/09/2026 - Docs: Root README includes VoLum UI screenshot (docs/volum-ui.png).
 04/10/2026 - VoLum: Marshall JMP 2203 procedural art = H-tree fractal; Sebago = Clifford attractor. List thumbnails + hero placeholder; ILayer caching unchanged.
+04/10/2026 - VoLum: macOS build support. Fixed GitHub Actions workflow (macOS-latest case bug), added build-native.yml CI. Updated mac config/scripts with VoLum/Lum identity and com.Lum bundle IDs. Bundled rigs in macOS installer (.pkg). macOS binary path discovery for .app bundles (Contents/Resources/rigs).
 04/09/2026 - VoLum: Settings polish — transparent IV backgrounds (volumSettingsStyle), gold drawn close, vertical output radios with wider column + (n/a) fix, calibration block vertically centered, footer 42/58 columns, tighter dBu row layout.
 04/09/2026 - VoLum: Settings — backdrop captures mouse (fixes stray hit-through), larger SETTINGS title, compact output mode (widgetFrac + short rect + group frame), about block right-aligned.
 04/09/2026 - VoLum: Settings close (X) no longer triggers on hover or when the pointer leaves the window; close runs only on mouse down (SetDirty(true) was invoking IControl action).
