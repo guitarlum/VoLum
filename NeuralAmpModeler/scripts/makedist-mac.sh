@@ -166,18 +166,27 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
   )
 fi
 
+# "All" = APP + AU + VST3. AU still uses legacy Carbon Resources/Rez; Xcode 16+ runners often fail there.
+# CI zip only needs standalone + VST3 (same as primary user deliverables).
+XCODE_TARGETS=( -target "All" )
+if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
+  XCODE_TARGETS=( -target "VST3" -target "APP" )
+fi
+
 set -o pipefail
 if command -v xcpretty >/dev/null 2>&1; then
-  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log | xcpretty
+  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO "${XCODE_TARGETS[@]}" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log | xcpretty
 else
-  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log
+  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO "${XCODE_TARGETS[@]}" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log
 fi
 XC_EC=$?
 set +o pipefail
 
 if [ "$XC_EC" -ne 0 ]; then
   echo "ERROR: build failed, aborting"
-  echo ""
+  echo "---- build-mac.log (tail) ----"
+  tail -n 200 build-mac.log 2>/dev/null || true
+  echo "------------------------------"
   exit 1
 else
   rm -f build-mac.log
