@@ -1,6 +1,6 @@
-# VoLum -- NAM Player
+# VoLum -- Developer Guide
 
-A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) by Lum, rebuilt as a personal amp collection player. VoLum ships 14 of Lum's guitar amp profiles with a custom UI designed for instant browsing and switching -- no file hunting, no setup, just pick an amp and play.
+This is the build and architecture reference for contributors. For download and install instructions, see the [root README](../README.md).
 
 ## What's different from NAM
 
@@ -11,23 +11,63 @@ A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpMod
 | **Speaker / cab** | Separate IR loader | Built-in speaker modes (AMP / G12 / G65 / V30) per amp |
 | **Channel switching** | N/A | Discrete gain-stage stepper per amp+speaker combo |
 | **Per-amp settings** | N/A | All knobs, toggles, speaker & channel remembered per amp |
-| **Session persistence** | DAW project only | Settings saved to user profile JSON (see below), restored on next launch; VST3 bank also in project state |
-| **Model loading** | Blocks UI | Background thread + per-amp dspData cache |
-| **UI** | 600x400, file-browser focused | 900x600 dark theme, amp gallery sidebar, hero image, grouped knobs |
+| **Session persistence** | DAW project only | Settings saved to user profile JSON, restored on next launch; VST3 also serializes per-amp bank in plugin state |
+| **Model loading** | Blocks UI | Background thread + per-amp DSP cache |
+| **UI** | 600x400, file-browser focused | 900x600 dark theme, amp gallery sidebar, procedural hero art, grouped knobs |
 
-## Features
+## Quick start
 
-- **14 bundled amps** -- Ampete One, Bad Cat, Brunetti, Fryette, H&K TriAmp, Lichtlaerm, Marshall 2204/2203/JVM, Orange OD120/ORS100, Sebago, Soldano SLO100, THC Sunset
-- **4 speaker modes per amp** -- AMP (direct), G12, G65, V30 (cabinet simulations baked into the NAM profiles)
-- **2-6 gain stages per amp** -- channel stepper dynamically discovers available channels from the rig files
-- **Per-amp persistent settings** -- every knob, toggle, speaker mode, and channel is stored **per amp**; switching amps saves the current amp’s state and loads the target amp’s last state. Standalone writes to **`%LOCALAPPDATA%\VoLum\volum-settings.json`** (Windows) or **`~/Library/Application Support/VoLum/volum-settings.json`** (macOS). A legacy **`rigs/volum-settings.json`** next to the resolved rigs folder is still loaded if the user profile file does not exist yet. **VST3** also serializes the same per-amp bank in the plugin state chunk (see `Unserialization.cpp`)
-- **Super-fast amp switching** -- UI never blocks on load: models are prepared on a **background thread**, and **per-amp DSP JSON is cached** after the first parse so flipping back to an amp you already used is especially quick
-- **Channel / amp from the keyboard** -- **Left/Right** arrows step the channel; **Up/Down** step through amps in sidebar order (helps live tweaking). In a DAW, the host may eat key events before they reach the plugin UI
-- **Fast path for speaker/channel** -- parsed model data is cached per amp folder; changing only speaker or channel reuses work where possible
-- **Non-blocking UI** -- the main thread shows progress via the footer filename while the worker loads the next `.nam`
-- **Cross-session persistence** -- settings JSON + last amp index; `.nam` discovery uses **`VoLumRigs`** (shipped / portable) or legacy **`rigs`**, resolved via registry **VoLumRigsRoot** (Windows installer), walk-up from the **plugin module** (not the host `.exe`), or repo **`rigs/`** for dev builds (`VoLumPaths.h`)
-- **NDSP-style amp images** -- hero image area displays amp illustrations (Ampete, Brunetti, Marshall 2203 so far)
-- **Original NAM preserved** -- set `VOLUM_AMPETE_PRODUCT 0` in `config.h` to build the stock NAM plugin
+1. Open `NeuralAmpModeler.sln` in Visual Studio 2022 (Build Tools or Community), or `projects/NeuralAmpModeler-macOS.xcodeproj` in Xcode.
+2. Select **NeuralAmpModeler-app** | **Release** | **x64** (Windows) or **APP** target (macOS).
+3. Build and run. The standalone reads rigs from `rigs/` at the repo root.
+
+## Build requirements
+
+- **Windows:** Windows 10+ (x64), Visual Studio 2022 Build Tools (MSVC v143)
+- **macOS:** macOS 11+, Xcode 15+
+- All dependencies (iPlug2, Eigen, NAMCore) are vendored in the repo
+
+## CI and packaging
+
+| Path | What it does |
+|------|-------------|
+| `scripts/makedist-win.bat full zip` | Build + portable zip (exe + VST3 bundle + VoLumRigs) |
+| `scripts/makedist-win.bat full installer` | Build + Inno Setup installer |
+| `scripts/makedist-mac.sh full zip` | Build + portable zip (app + VST3 + VoLumRigs) |
+| `scripts/makedist-mac.sh full installer` | Build + pkg/dmg installer |
+| `scripts/package-portable.ps1` | Local portable zip from an existing Windows build |
+| `scripts/run-tests-win.ps1` | Build and run the doctest suite |
+| `scripts/run-app-win.ps1` | Build and launch the standalone (for UI iteration) |
+
+**Build Native** (`.github/workflows/build-native.yml`) runs on every push -- portable zip mode. **Release Native** (`.github/workflows/release-native.yml`) runs on tags -- full installer mode.
+
+## Rig file structure
+
+In the repo, profiles live under `rigs/` at the tree root. Shipped builds use `VoLumRigs/` (same amp subfolders).
+
+```
+rigs/                               (repo / dev)
+VoLumRigs/                          (installer / portable zip)
+  {AmpFolder}/
+    {Speaker}-{AmpCode}-{Channel}.nam
+```
+
+- **Speaker prefix:** `AMP` (direct), `G12`, `G65`, `V30`
+- **AmpCode:** short identifier (e.g. `Ampt`, `2203`, `BadC`)
+- **Channel suffix:** gain stage (`1`-`6`) or special (`f` = FatBee, `x` = FatBee+Clone)
+
+Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam`
+
+## Rig discovery
+
+`VoLumPaths.h` > `FindRigsRootDirectory()` checks in order:
+
+1. **Windows registry** `HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot` (set by the Inno installer so VST3 under Common Files can reach models in the VoLum install directory)
+2. Walk up from the **plugin module** (VST3 DLL or standalone exe -- uses `GetModuleHandleEx` on Windows so it resolves to the plugin, not the host process). Checks for `VoLumRigs/` then `rigs/` at each level.
+3. **macOS .app bundle** `Contents/Resources/VoLumRigs` (then `rigs`)
+4. **CWD** `./VoLumRigs` then `./rigs` (dev fallback)
+
+Settings are stored under the user profile (`%LOCALAPPDATA%\VoLum\` on Windows, `~/Library/Application Support/VoLum/` on macOS) so they work regardless of install location.
 
 ## Bundled amps
 
@@ -50,49 +90,25 @@ A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpMod
 
 Each amp x 4 speaker modes x channels = ~224 `.nam` files total.
 
-## Rig file structure
-
-In the **repo** (and when developing), profiles live under **`rigs/`**. **Installers and portable zips** use the same amp subfolders under **`VoLumRigs/`** (see root `README.md`).
-
-```
-rigs/   (dev)   or   VoLumRigs/   (shipped)
-  {AmpFolder}/
-    {Speaker}-{AmpCode}-{Channel}.nam
-```
-
-- **Speaker prefix:** `AMP` (direct), `G12`, `G65`, `V30`
-- **AmpCode:** short identifier (e.g. `Ampt`, `2203`, `BadC`)
-- **Channel suffix:** gain stage (`1`-`6`) or special (`f`, `x`)
-
-Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam` (or the same path under `VoLumRigs/` in a build)
-
-## Quick start (dev)
-
-1. Open `NeuralAmpModeler/NeuralAmpModeler.sln` in Visual Studio 2022 (Build Tools or Community).
-2. Select **NeuralAmpModeler-app** | **Release** | **x64**.
-3. Build and run. The standalone app reads rigs from `rigs/` relative to the repo root.
-
-## Build requirements
-
-- Windows 10+ (x64)
-- Visual Studio 2022 Build Tools (MSVC v143)
-- All dependencies (iPlug2, Eigen, NAMCore) are vendored in the repo
-
 ## Key source files
 
 | File | Role |
 |------|------|
 | `config.h` | `VOLUM_AMPETE_PRODUCT`, window size, version |
-| `installer/VoLum.iss` | Windows installer: standalone + VST3 + **`{app}\VoLumRigs`**; sets `VoLumRigsRoot` in HKLM for the plugin |
+| `installer/VoLum.iss` | Windows installer (Inno): standalone + VST3 + `VoLumRigs`; sets `VoLumRigsRoot` in HKLM |
 | `VoLumAmpeteCatalog.h` | Amp metadata (folder names, display names, speaker prefixes) |
-| `VoLumPaths.h` | Rig directory discovery, channel file scanning, user `volum-settings.json` path |
-| `VoLumControls.h` | Custom iPlug2 UI controls for the VoLum layout |
-| `NeuralAmpModeler.h/cpp` | Plugin class with VoLum state, layout, loading, per-amp settings |
-| `Unserialization.cpp` | Version-aware state deserialization (per-amp settings bank; format lineage in file comments) |
+| `VoLumPaths.h` | Rig directory discovery, channel file scanning, settings path |
+| `VoLumControls.h` | Custom iPlug2 UI controls (sidebar, knobs, speaker buttons, channel stepper) |
+| `NeuralAmpModeler.h/cpp` | Plugin class with VoLum state, layout, model loading, per-amp settings |
+| `Unserialization.cpp` | Version-aware state deserialization (per-amp settings bank) |
+
+## Building the original NAM plugin
+
+Set `VOLUM_AMPETE_PRODUCT 0` in `config.h` to build the stock NAM plugin UI (600x400, file browser).
 
 ## Credits
 
 - [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) by Steven Atkinson
-- [NAM Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) -- the upstream this fork is based on
-- [iPlug2](https://iplug2.github.io) -- the plugin framework
+- [NAM Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) -- upstream fork base
+- [iPlug2](https://iplug2.github.io) -- plugin framework
 - Amp profiles created by Lum

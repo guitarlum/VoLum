@@ -4,50 +4,87 @@
 
 A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 14 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
 
-## Download
-
-[![Build](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml)
-
-VoLum is built in two ways on GitHub:
-
-| Workflow | When it runs | What you get |
-|----------|----------------|----------------|
-| [**Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) | Every push to `main`, PRs, or manual run | **Portable zips** (CI artifacts): binaries + bundled **`.nam`** profiles under **`VoLumRigs/`**, plus a separate **debug symbols** archive (Windows `.pdb` / macOS dSYM). **No installer** — this job does not run Inno Setup or build a macOS `.dmg`. |
-| [**Release Native**](https://github.com/guitarlum/VoLum/actions/workflows/release-native.yml) | Git tag `v*` or manual dispatch | **Release assets**: Windows **`VoLum-Setup.exe`** (Inno Setup: app + VST3 bundle under Common Files + **`VoLumRigs`** under the install dir + registry so VST3 finds models), macOS **`.dmg`**, plus symbol zips. Draft appears under [**Releases**](https://github.com/guitarlum/VoLum/releases). |
-
-### Build Native artifacts (quick try)
-
-1. Open **Build Native** and pick the latest green run.
-2. Under **Artifacts**, download **VoLum-win** or **VoLum-mac**. Each artifact folder contains **two** zips: the **main** package and a **symbols**-only zip (for crash debugging; not needed to run).
-3. Unzip the **main** zip and keep this layout:
-   - **Windows:** `VoLum_x64.exe`, the **`VoLum.vst3`** module file, and a **`VoLumRigs/`** folder (amp subfolders with `.nam` files) **in the same directory**. Do not split only the `.vst3` into `%CommonProgramW6432%\VST3\` without also giving the plugin a way to find **`VoLumRigs`** (see below).
-   - **macOS:** `VoLum.app`, `VoLum.vst3`, and **`VoLumRigs/`** together (same folder).
-
-The app discovers profiles by checking **`VoLumRigs`** first, then legacy **`rigs`**, relative to the plugin/standalone binary and current working directory (see `NeuralAmpModeler/VoLumPaths.h`). **Installer builds** also set **`HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot`** so the VST3 in Program Files **Common Files** can load models even though they live under the VoLum install directory.
-
-### Recommended: full install (VST3 in a DAW)
-
-For everyday use with a host, prefer a **tagged release** and run **`VoLum-Setup.exe`** (Windows) or the **`.dmg`** (macOS). You do **not** need to place **`VoLumRigs`** next to the `.vst3` in Common Files; the installer wires that path through the registry (Windows) and bundles data under the application install location.
-
 ## Features
 
-- **14 bundled amps** with 4 speaker modes and 2-6 gain stages each (~224 profiles)
-- **Dark-theme UI** with sidebar amp browser, hero art, speaker buttons, channel stepper, and grouped knobs
+- **14 bundled amps** with 4 speaker modes and multiple gain stages each (~224 profiles total)
+- **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
 - **Per-amp settings** -- knobs, toggles, speaker mode, and channel are saved per amp and restored on next launch
-- **Fast amp switching** -- models load on a background thread; parsed DSP data is cached
+- **Fast amp switching** -- models load on a background thread; switching back to a previously loaded amp is instant
 - **Keyboard shortcuts** -- Up/Down: switch amp; Left/Right: switch channel
 - **Standalone + VST3** -- same UI and features in both formats
 
+## Download
+
+[![Build status](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml)
+
+Grab the latest build from [**Actions > Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) -- pick the latest green run, scroll to **Artifacts**, and download **VoLum-win** (Windows) or **VoLum-mac** (macOS).
+
+Stable releases with a Windows installer and macOS `.dmg` will appear under [**Releases**](https://github.com/guitarlum/VoLum/releases) once tagged.
+
+## Install
+
+### Windows (portable zip from CI)
+
+1. Download and unzip the **VoLum-win** artifact. Inside you will find two zips -- open the **main** one (not the `-pdbs` symbols archive).
+2. You should see this layout:
+
+```
+VoLum_x64.exe                    (standalone app)
+VoLum.vst3/                      (VST3 plugin bundle)
+  Contents/x86_64-win/VoLum.vst3
+VoLumRigs/                       (amp profiles -- required!)
+  Ampete One/
+  Marshall JMP 2203 1976/
+  ...
+```
+
+3. **Standalone** -- just run `VoLum_x64.exe`. It finds `VoLumRigs` next to itself.
+4. **VST3 in a DAW** -- copy the entire `VoLum.vst3` **folder** into your DAW's VST3 scan path (typically `C:\Program Files\Common Files\VST3\`). Then also copy the `VoLumRigs` folder next to the `.vst3` bundle, or next to `VoLum_x64.exe` if you keep the standalone around -- the plugin searches upward from its own location.
+
+### Windows (installer from a tagged release)
+
+Run `VoLum-Setup.exe`. It places the standalone in `Program Files\VoLum`, the VST3 bundle in `Common Files\VST3`, and the amp profiles under the install directory. The VST3 finds models automatically via registry -- no manual copying needed.
+
+### macOS (portable zip from CI)
+
+1. Unzip the **VoLum-mac** artifact, open the main zip.
+2. Keep `VoLum.app`, `VoLum.vst3`, and `VoLumRigs/` in the same folder.
+3. **Standalone** -- double-click `VoLum.app`.
+4. **VST3** -- move `VoLum.vst3` to `~/Library/Audio/Plug-Ins/VST3/` and place `VoLumRigs` beside the `.vst3` or beside the `.app`.
+
+## Bundled amps
+
+| Amp | Channels |
+|-----|----------|
+| Ampete One | 4 |
+| Bad Cat mini Cat | 3 |
+| Brunetti XL 2 | 3 |
+| Fryette Deliverance 120 | 2 |
+| H&K TriAmp Mk2 | 6 |
+| Lichtlaerm Prometheus | 3 |
+| Marshall 2204 1982 | 6 |
+| Marshall JMP 2203 1976 | 6 |
+| Marshall JVM 210H OD1 | 6 |
+| Orange OD120 1975 | 5 |
+| Orange ORS100 1972 | 2 |
+| Sebago Texas Flood | 2 |
+| Soldano SLO100 | 3 |
+| THC Sunset | 5 |
+
+Each amp has 4 speaker modes (AMP direct, G12, G65, V30) and a number of gain-stage channels.
+
+## Settings
+
+Your per-amp knob, toggle, speaker, and channel settings are stored automatically:
+
+- **Windows:** `%LOCALAPPDATA%\VoLum\volum-settings.json`
+- **macOS:** `~/Library/Application Support/VoLum/volum-settings.json`
+
+Settings persist across sessions for both standalone and VST3.
+
 ## Build from source
 
-Requires Windows 10+ (x64) with Visual Studio 2022 Build Tools, or macOS with Xcode. All dependencies are vendored.
-
-```
-NeuralAmpModeler/NeuralAmpModeler.sln        (Windows)
-NeuralAmpModeler/projects/NeuralAmpModeler.xcodeproj  (macOS)
-```
-
-The repo keeps amp models under **`rigs/`** at the tree root for development; shipping layouts use **`VoLumRigs/`** as above. See [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md) for the full developer guide, amp inventory, and rig file structure.
+See the [developer guide](NeuralAmpModeler/README.md).
 
 ## Credits
 
