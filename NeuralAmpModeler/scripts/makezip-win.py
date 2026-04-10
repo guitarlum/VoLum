@@ -84,7 +84,8 @@ def main():
                     if not name.lower().endswith(".nam"):
                         continue
                     full = os.path.join(dirpath, name)
-                    arc = os.path.relpath(full, repo_root).replace("\\", "/")
+                    rel_under_rigs = os.path.relpath(full, rigs_root).replace("\\", "/")
+                    arc = "VoLumRigs/" + rel_under_rigs
                     print("adding " + full)
                     zf.write(full, arc, zipfile.ZIP_DEFLATED)
         else:

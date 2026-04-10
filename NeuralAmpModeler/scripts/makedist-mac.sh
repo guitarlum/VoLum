@@ -363,16 +363,16 @@ else
     cp -R $AAX_FINAL build-mac/zip/$PLUGIN_NAME.aaxplugin
   fi
 
-  # Bundle rigs for portable CI zip (same layout as repo rigs/, .nam only)
+  # Bundle rigs for portable CI zip (repo rigs/ -> zip VoLumRigs/, .nam only)
   RIGS_SRC="$(cd "$BASEDIR/../.." && pwd)/rigs"
   if [ -d "$RIGS_SRC" ]; then
-    echo "bundling rigs..."
-    mkdir -p build-mac/zip/rigs
+    echo "bundling VoLumRigs..."
+    mkdir -p build-mac/zip/VoLumRigs
     for amp_dir in "$RIGS_SRC"/*/; do
       [ -d "$amp_dir" ] || continue
       amp_name=$(basename "$amp_dir")
-      mkdir -p "build-mac/zip/rigs/$amp_name"
-      cp "$amp_dir"*.nam "build-mac/zip/rigs/$amp_name/" 2>/dev/null || true
+      mkdir -p "build-mac/zip/VoLumRigs/$amp_name"
+      cp "$amp_dir"*.nam "build-mac/zip/VoLumRigs/$amp_name/" 2>/dev/null || true
     done
   else
     echo "WARNING: rigs directory not found: $RIGS_SRC"

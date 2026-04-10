@@ -25,7 +25,7 @@ A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpMod
 - **Channel / amp from the keyboard** -- **Left/Right** arrows step the channel; **Up/Down** step through amps in sidebar order (helps live tweaking). In a DAW, the host may eat key events before they reach the plugin UI
 - **Fast path for speaker/channel** -- parsed model data is cached per amp folder; changing only speaker or channel reuses work where possible
 - **Non-blocking UI** -- the main thread shows progress via the footer filename while the worker loads the next `.nam`
-- **Cross-session persistence** -- settings JSON + last amp index; `.nam` discovery still uses `rigs/` resolved via registry **VoLumRigsRoot** (installer), walk-up from the binary, or repo `rigs/` for dev builds (`VoLumPaths.h`)
+- **Cross-session persistence** -- settings JSON + last amp index; `.nam` discovery uses **`VoLumRigs`** (shipped / portable) or legacy **`rigs`**, resolved via registry **VoLumRigsRoot** (Windows installer), walk-up from the **plugin module** (not the host `.exe`), or repo **`rigs/`** for dev builds (`VoLumPaths.h`)
 - **NDSP-style amp images** -- hero image area displays amp illustrations (Ampete, Brunetti, Marshall 2203 so far)
 - **Original NAM preserved** -- set `VOLUM_AMPETE_PRODUCT 0` in `config.h` to build the stock NAM plugin
 
@@ -52,8 +52,10 @@ Each amp x 4 speaker modes x channels = ~224 `.nam` files total.
 
 ## Rig file structure
 
+In the **repo** (and when developing), profiles live under **`rigs/`**. **Installers and portable zips** use the same amp subfolders under **`VoLumRigs/`** (see root `README.md`).
+
 ```
-rigs/
+rigs/   (dev)   or   VoLumRigs/   (shipped)
   {AmpFolder}/
     {Speaker}-{AmpCode}-{Channel}.nam
 ```
@@ -62,7 +64,7 @@ rigs/
 - **AmpCode:** short identifier (e.g. `Ampt`, `2203`, `BadC`)
 - **Channel suffix:** gain stage (`1`-`6`) or special (`f`, `x`)
 
-Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam`
+Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam` (or the same path under `VoLumRigs/` in a build)
 
 ## Quick start (dev)
 
@@ -81,7 +83,7 @@ Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam`
 | File | Role |
 |------|------|
 | `config.h` | `VOLUM_AMPETE_PRODUCT`, window size, version |
-| `installer/VoLum.iss` | Windows installer: standalone + VST3 + all amp folders; sets `VoLumRigsRoot` in HKLM for the plugin |
+| `installer/VoLum.iss` | Windows installer: standalone + VST3 + **`{app}\VoLumRigs`**; sets `VoLumRigsRoot` in HKLM for the plugin |
 | `VoLumAmpeteCatalog.h` | Amp metadata (folder names, display names, speaker prefixes) |
 | `VoLumPaths.h` | Rig directory discovery, channel file scanning, user `volum-settings.json` path |
 | `VoLumControls.h` | Custom iPlug2 UI controls for the VoLum layout |

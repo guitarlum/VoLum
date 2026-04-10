@@ -66,7 +66,8 @@ inline std::filesystem::path RegistryRigsRootFromInstaller()
 }
 #endif
 
-// Bundled rigs root: registry (VST3), then walk up from the executable, then CWD ./rigs (dev / repo).
+// Bundled rigs root: registry (installer VST3), then walk up from this module (VST3 DLL or standalone
+// .exe — not the host process), then CWD ./VoLumRigs or ./rigs (dev uses repo rigs/).
 inline std::filesystem::path FindRigsRootDirectory()
 {
   namespace fs = std::filesystem;
@@ -79,16 +80,22 @@ inline std::filesystem::path FindRigsRootDirectory()
       candidates.push_back(regRoot);
   }
 
-  wchar_t module[MAX_PATH];
-  const DWORD n = GetModuleFileNameW(nullptr, module, MAX_PATH);
-  if (n > 0 && n < MAX_PATH)
+  HMODULE hMod = nullptr;
+  if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         reinterpret_cast<LPCWSTR>(&FindRigsRootDirectory), &hMod)
+      && hMod != nullptr)
   {
-    fs::path exe(module);
-    fs::path d = exe.parent_path();
-    for (int depth = 0; depth < 12; ++depth)
+    wchar_t module[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(hMod, module, MAX_PATH);
+    if (n > 0 && n < MAX_PATH)
     {
-      candidates.push_back(d / "rigs");
-      d = d.parent_path();
+      fs::path d = fs::path(module).parent_path();
+      for (int depth = 0; depth < 12; ++depth)
+      {
+        candidates.push_back(d / "VoLumRigs");
+        candidates.push_back(d / "rigs");
+        d = d.parent_path();
+      }
     }
   }
 #elif defined(__APPLE__)
@@ -100,10 +107,11 @@ inline std::filesystem::path FindRigsRootDirectory()
       fs::path exe = fs::weakly_canonical(fs::path(buf));
       fs::path d = exe.parent_path();
       // Inside .app bundle: .../VoLum.app/Contents/MacOS/VoLum
-      // Resources dir:      .../VoLum.app/Contents/Resources/rigs
+      candidates.push_back(d.parent_path() / "Resources" / "VoLumRigs");
       candidates.push_back(d.parent_path() / "Resources" / "rigs");
       for (int depth = 0; depth < 12; ++depth)
       {
+        candidates.push_back(d / "VoLumRigs");
         candidates.push_back(d / "rigs");
         d = d.parent_path();
       }
@@ -111,6 +119,7 @@ inline std::filesystem::path FindRigsRootDirectory()
   }
 #endif
 
+  candidates.push_back(fs::path("VoLumRigs"));
   candidates.push_back(fs::path("rigs"));
 
   std::error_code ec;
