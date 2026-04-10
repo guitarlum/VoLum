@@ -8,15 +8,14 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 
 [![Build](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml)
 
-**Windows** and **macOS** installers are built automatically from the latest code.
+**Windows** and **macOS** builds are produced automatically from the latest code (same approach as [upstream NAM CI](https://github.com/sdatkinson/NeuralAmpModelerPlugin/blob/main/.github/workflows/build-native.yml): portable **zip** artifacts, not installers).
 
-1. Go to the [**latest build**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) page.
-2. Click the top run with a green checkmark.
-3. Scroll down to **Artifacts** and download:
-   - **VoLum-win** -- contains `VoLum-Setup.exe`
-   - **VoLum-mac** -- contains the `.dmg` installer
+1. Open the [**Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) workflow and pick the latest green run.
+2. Under **Artifacts**, download **VoLum-win** or **VoLum-mac**:
+   - **VoLum-win** -- zip with the standalone `.exe`, VST3 binary, and changelog (extract and run / copy the VST3 where your host expects it).
+   - **VoLum-mac** -- zip with the `.app` bundle and plug-in formats from the build.
 
-Stable releases will appear on the [**Releases**](https://github.com/guitarlum/VoLum/releases) page.
+**Installer builds** (Windows setup exe, macOS `.dmg` / `.pkg`) are produced when you cut a **tagged release** via the Release workflow (Windows runner installs Inno Setup there). Published downloads also show on [**Releases**](https://github.com/guitarlum/VoLum/releases).
 
 ## Features
 

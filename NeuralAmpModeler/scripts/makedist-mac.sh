@@ -1,6 +1,7 @@
-#! /bin/sh
+#!/usr/bin/env bash
+# Uses bash for pipefail / PIPESTATUS (GitHub macOS /bin/sh may not be bash).
 
-# this script requires xcpretty https://github.com/xcpretty/xcpretty
+# Optional: xcpretty https://github.com/xcpretty/xcpretty (CI falls back to plain tee)
 
 BASEDIR=$(dirname $0)
 
@@ -151,15 +152,21 @@ fi
 #---------------------------------------------------------------------------------------------------------
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
-xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release | tee build-mac.log | xcpretty #&& exit ${PIPESTATUS[0]}
+set -o pipefail
+if command -v xcpretty >/dev/null 2>&1; then
+  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
+else
+  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
+fi
+XC_EC=$?
+set +o pipefail
 
-if [ "${PIPESTATUS[0]}" -ne "0" ]; then
+if [ "$XC_EC" -ne 0 ]; then
   echo "ERROR: build failed, aborting"
   echo ""
-  # cat build-mac.log
   exit 1
 else
-  rm build-mac.log
+  rm -f build-mac.log
 fi
 
 #---------------------------------------------------------------------------------------------------------
