@@ -68,3 +68,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/10/2026 - VoLum: macOS CI builds VST3+APP only (skip AU in aggregate All) — AU Carbon/Rez phases fail on current GitHub Xcode; tail build-mac.log on failure for actionable logs.
 
+04/10/2026 - VoLum: update_version-mac.py resolves Info.plist paths — use NeuralAmpModeler-* resource files when BUNDLE_NAME (VoLum) has no matching plist (fixes macOS Update plists / CI).
+
