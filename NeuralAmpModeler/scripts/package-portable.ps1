@@ -26,11 +26,13 @@ New-Item -ItemType Directory -Path "$outDir\VoLum" | Out-Null
 # Copy exe (renamed to VoLum.exe)
 Copy-Item $exe "$outDir\VoLum\VoLum.exe"
 
-# Copy all rigs
-Copy-Item $rigsDir "$outDir\VoLum\rigs" -Recurse
-
-# Remove non-.nam files from rigs (e.g. stray images, settings)
-Get-ChildItem "$outDir\VoLum\rigs" -Recurse -File | Where-Object { $_.Extension -ne ".nam" } | Remove-Item -Force
+# Copy amp .nam trees as VoLumRigs (matches installer / CI portable layout)
+New-Item -ItemType Directory -Path "$outDir\VoLum\VoLumRigs" | Out-Null
+Get-ChildItem $rigsDir -Directory | ForEach-Object {
+    $dest = Join-Path "$outDir\VoLum\VoLumRigs" $_.Name
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    Get-ChildItem $_.FullName -Filter *.nam -File | Copy-Item -Destination $dest
+}
 
 # Copy changelog
 Copy-Item "$repoRoot\NeuralAmpModeler\installer\changelog.txt" "$outDir\VoLum\"
