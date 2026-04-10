@@ -76,3 +76,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/11/2026 - VoLum: Shipped profile folder renamed to VoLumRigs (installer, CI zips, portable script). VoLumPaths accepts VoLumRigs or legacy rigs; Windows rig discovery uses plugin module path (not host exe). README documents Build Native vs Release Native.
 
+04/11/2026 - VoLum: Windows portable zip includes full VST3 bundle folder (not just inner binary). READMEs rewritten: root = user install guide, NeuralAmpModeler/ = dev reference.
+

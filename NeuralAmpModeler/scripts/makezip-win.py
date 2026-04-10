@@ -50,16 +50,8 @@ def main():
             print("ERROR: installer not found: " + files[0])
             sys.exit(1)
     else:
-        vst3_inner = os.path.join(
-            projectpath,
-            "build-win",
-            f"{plug}.vst3",
-            "Contents",
-            "x86_64-win",
-            f"{plug}.vst3",
-        )
         app_copy = os.path.join(projectpath, "build-win", f"{plug}_x64.exe")
-        files = [vst3_inner, app_copy]
+        files = [app_copy]
 
     zipname = get_archive_name(projectpath, "win", "demo" if demo == 1 else "full")
 
@@ -75,6 +67,21 @@ def main():
         zf.write(f, os.path.basename(f), zipfile.ZIP_DEFLATED)
 
     if zip_loose:
+        vst3_bundle = os.path.join(projectpath, "build-win", f"{plug}.vst3")
+        if os.path.isdir(vst3_bundle):
+            print("adding VST3 bundle from " + vst3_bundle)
+            for dirpath, dirnames, filenames in os.walk(vst3_bundle):
+                for name in filenames:
+                    if any(name.lower().endswith(e) for e in (".pdb", ".exp", ".lib", ".ilk", ".ico", ".ini")):
+                        continue
+                    full = os.path.join(dirpath, name)
+                    arc = os.path.relpath(full, os.path.dirname(vst3_bundle)).replace("\\", "/")
+                    print("adding " + full)
+                    zf.write(full, arc, zipfile.ZIP_DEFLATED)
+        else:
+            print("ERROR: VST3 bundle not found: " + vst3_bundle)
+            sys.exit(1)
+
         repo_root = os.path.normpath(os.path.join(projectpath, os.pardir))
         rigs_root = os.path.join(repo_root, "rigs")
         if os.path.isdir(rigs_root):
