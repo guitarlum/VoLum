@@ -74,6 +74,24 @@ def main():
             sys.exit(1)
         zf.write(f, os.path.basename(f), zipfile.ZIP_DEFLATED)
 
+    if zip_loose:
+        repo_root = os.path.normpath(os.path.join(projectpath, os.pardir))
+        rigs_root = os.path.join(repo_root, "rigs")
+        if os.path.isdir(rigs_root):
+            print("adding rigs from " + rigs_root)
+            for dirpath, dirnames, filenames in os.walk(rigs_root):
+                if "ampPictures" in dirnames:
+                    dirnames.remove("ampPictures")
+                for name in filenames:
+                    if not name.lower().endswith(".nam"):
+                        continue
+                    full = os.path.join(dirpath, name)
+                    arc = os.path.relpath(full, repo_root).replace("\\", "/")
+                    print("adding " + full)
+                    zf.write(full, arc, zipfile.ZIP_DEFLATED)
+        else:
+            print("WARNING: rigs directory not found: " + rigs_root)
+
     zf.close()
     print("wrote " + zipname)
 
