@@ -42,7 +42,7 @@ jobs:
         ./download-prebuilt-libs.sh
       shell: bash
 
-    # Match upstream NAM: zip-only on CI (no Inno Setup / pkg+dmg toolchain on GitHub runners).
+    # Portable zips only on CI (no Inno / release dmg here). Zips include VoLumRigs/*.nam; Release Native builds installers.
     - name: Build macOS
       if: matrix.os == 'macos-latest'
       run: |

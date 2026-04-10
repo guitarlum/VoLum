@@ -8,14 +8,26 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 
 [![Build](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml)
 
-**Windows** and **macOS** builds are produced automatically from the latest code (same approach as [upstream NAM CI](https://github.com/sdatkinson/NeuralAmpModelerPlugin/blob/main/.github/workflows/build-native.yml): portable **zip** artifacts, not installers).
+VoLum is built in two ways on GitHub:
 
-1. Open the [**Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) workflow and pick the latest green run.
-2. Under **Artifacts**, download **VoLum-win** or **VoLum-mac**:
-   - **VoLum-win** -- zip with the standalone `.exe`, VST3 binary, and changelog (extract and run / copy the VST3 where your host expects it).
-   - **VoLum-mac** -- zip with the `.app` and **VST3** (GitHub CI skips the legacy AU target so builds stay green on current Xcode; full formats come from local/release builds).
+| Workflow | When it runs | What you get |
+|----------|----------------|----------------|
+| [**Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) | Every push to `main`, PRs, or manual run | **Portable zips** (CI artifacts): binaries + bundled **`.nam`** profiles under **`VoLumRigs/`**, plus a separate **debug symbols** archive (Windows `.pdb` / macOS dSYM). **No installer** — this job does not run Inno Setup or build a macOS `.dmg`. |
+| [**Release Native**](https://github.com/guitarlum/VoLum/actions/workflows/release-native.yml) | Git tag `v*` or manual dispatch | **Release assets**: Windows **`VoLum-Setup.exe`** (Inno Setup: app + VST3 bundle under Common Files + **`VoLumRigs`** under the install dir + registry so VST3 finds models), macOS **`.dmg`**, plus symbol zips. Draft appears under [**Releases**](https://github.com/guitarlum/VoLum/releases). |
 
-**Installer builds** (Windows setup exe, macOS `.dmg` / `.pkg`) are produced when you cut a **tagged release** via the Release workflow (Windows runner installs Inno Setup there). Published downloads also show on [**Releases**](https://github.com/guitarlum/VoLum/releases).
+### Build Native artifacts (quick try)
+
+1. Open **Build Native** and pick the latest green run.
+2. Under **Artifacts**, download **VoLum-win** or **VoLum-mac**. Each artifact folder contains **two** zips: the **main** package and a **symbols**-only zip (for crash debugging; not needed to run).
+3. Unzip the **main** zip and keep this layout:
+   - **Windows:** `VoLum_x64.exe`, the **`VoLum.vst3`** module file, and a **`VoLumRigs/`** folder (amp subfolders with `.nam` files) **in the same directory**. Do not split only the `.vst3` into `%CommonProgramW6432%\VST3\` without also giving the plugin a way to find **`VoLumRigs`** (see below).
+   - **macOS:** `VoLum.app`, `VoLum.vst3`, and **`VoLumRigs/`** together (same folder).
+
+The app discovers profiles by checking **`VoLumRigs`** first, then legacy **`rigs`**, relative to the plugin/standalone binary and current working directory (see `NeuralAmpModeler/VoLumPaths.h`). **Installer builds** also set **`HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot`** so the VST3 in Program Files **Common Files** can load models even though they live under the VoLum install directory.
+
+### Recommended: full install (VST3 in a DAW)
+
+For everyday use with a host, prefer a **tagged release** and run **`VoLum-Setup.exe`** (Windows) or the **`.dmg`** (macOS). You do **not** need to place **`VoLumRigs`** next to the `.vst3` in Common Files; the installer wires that path through the registry (Windows) and bundles data under the application install location.
 
 ## Features
 
@@ -35,7 +47,7 @@ NeuralAmpModeler/NeuralAmpModeler.sln        (Windows)
 NeuralAmpModeler/projects/NeuralAmpModeler.xcodeproj  (macOS)
 ```
 
-See [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md) for the full developer guide, amp inventory, and rig file structure.
+The repo keeps amp models under **`rigs/`** at the tree root for development; shipping layouts use **`VoLumRigs/`** as above. See [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md) for the full developer guide, amp inventory, and rig file structure.
 
 ## Credits
 

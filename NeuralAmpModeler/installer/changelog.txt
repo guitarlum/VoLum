@@ -74,3 +74,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/11/2026 - VoLum: Removed rigs/ampPictures (legacy bitmap heroes); UI uses procedural fractal art instead.
 
+04/11/2026 - VoLum: Shipped profile folder renamed to VoLumRigs (installer, CI zips, portable script). VoLumPaths accepts VoLumRigs or legacy rigs; Windows rig discovery uses plugin module path (not host exe). README documents Build Native vs Release Native.
+
