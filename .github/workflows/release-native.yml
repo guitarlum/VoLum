@@ -2,6 +2,11 @@ name: Release Native
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag for this draft release (e.g. v0.2.0). The tag is created at the workflow commit if it does not exist yet."
+        required: true
+        default: "v0.0.0-ci"
   push:
     tags:
       - "v*"
@@ -17,9 +22,9 @@ jobs:
       upload_url: ${{steps.create_release.outputs.upload_url}}
     steps:
       - name: Check out repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Create release
         id: create_release
@@ -28,8 +33,9 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
           draft: true
-          tag_name: ${{github.ref}}
-          release_name: Release ${{github.ref}}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          release_name: Release ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          commitish: ${{ github.sha }}
           body_path: ${{env.PROJECT_NAME}}/installer/changelog.txt
 
   build:

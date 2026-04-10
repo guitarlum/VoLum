@@ -56,3 +56,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Fix REAPER crash on project reopen — version 0.1.0 was not handled in Unserialization.cpp version ladder (fell through to assert+empty config→nlohmann::json type_error→std::terminate). VoLum 0.1.x now maps to the 0.7.15 serialization format.
 04/09/2026 - VoLum: Fix per-amp settings not saved on close — knob changes now sync to mVolumAmpSettings on every OnParamChange so the destructor's file write always has current values.
 
+04/10/2026 - VoLum: CI — Build Native runs macOS full installer (DMG in VoLum-mac artifact); README documents where to download CI artifacts and draft releases; Release Native manual dispatch takes a tag input; Windows makezip/update_installer use VoLum-Setup.exe / VoLum-Demo-Setup.exe and optional extras only if present.
+
