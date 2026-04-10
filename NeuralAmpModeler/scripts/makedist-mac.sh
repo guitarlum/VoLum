@@ -56,6 +56,10 @@ PLUGIN_NAME=`echo | grep BUNDLE_NAME config.h`
 PLUGIN_NAME=${PLUGIN_NAME//\#define BUNDLE_NAME }
 PLUGIN_NAME=${PLUGIN_NAME//\"}
 
+# Project/config files keep the upstream "NeuralAmpModeler" prefix even though
+# BUNDLE_NAME (and therefore PLUGIN_NAME) is now "VoLum".
+PROJECT_PREFIX=NeuralAmpModeler
+
 ARCHIVE_NAME=$PLUGIN_NAME-v$FULL_VERSION-mac
 
 if [ $DEMO == 1 ]; then
@@ -147,7 +151,7 @@ fi
 #---------------------------------------------------------------------------------------------------------
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
-xcodebuild -project ./projects/$PLUGIN_NAME-macOS.xcodeproj -xcconfig ./config/$PLUGIN_NAME-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release | tee build-mac.log | xcpretty #&& exit ${PIPESTATUS[0]}
+xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release | tee build-mac.log | xcpretty #&& exit ${PIPESTATUS[0]}
 
 if [ "${PIPESTATUS[0]}" -ne "0" ]; then
   echo "ERROR: build failed, aborting"
