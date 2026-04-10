@@ -6,6 +6,15 @@ A fork of [Neural Amp Modeler Plugin](https://github.com/sdatkinson/NeuralAmpMod
 
 See [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md) for the full feature list, amp inventory, rig file structure, and developer guide.
 
+## Downloads (CI and releases)
+
+[![Build Native](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml)
+
+- **Latest installers from `main`:** open the [**Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) workflow, click the most recent **green** run, scroll to **Artifacts**, and download **VoLum-win** and **VoLum-mac**. Inside **VoLum-win** you will find `VoLum-Setup.exe` (and a zip of the installer plus changelog). Inside **VoLum-mac** you will find the `.dmg` (and dSYM zip).
+- **Draft release builds (tagged):** push a version tag matching `v*` (for example `v0.1.0`), or run [**Release Native**](https://github.com/guitarlum/VoLum/actions/workflows/release-native.yml) manually and set the **tag** input. Then open [**Releases**](https://github.com/guitarlum/VoLum/releases) and open the new **Draft** to download the `.dmg` and Windows zip assets.
+
+There is no permanent “latest installer” URL until you publish a release; use the workflow links above or attach binaries to a GitHub Release when you want a stable download page.
+
 ## Quick overview
 
 - **14 bundled amps** with 4 speaker modes (AMP/G12/G65/V30) and 2-6 gain stages each (~224 NAM profiles)
