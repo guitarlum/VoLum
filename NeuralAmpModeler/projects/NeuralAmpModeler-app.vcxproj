@@ -411,7 +411,7 @@
     <ResourceCompile Include="..\resources\main.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\resources\NeuralAmpModeler.ico" />
+    <Image Include="..\resources\icons\VoLum.ico" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\config\NeuralAmpModeler-ios.xcconfig" />
