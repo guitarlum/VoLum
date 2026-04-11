@@ -42,12 +42,60 @@ jobs:
         ./download-prebuilt-libs.sh
       shell: bash
 
-    # Portable zips only on CI (no Inno / release dmg here). Zips include VoLumRigs/*.nam; Release Native builds installers.
+    - name: Get Archive Name macOS
+      id: mac_archivename_step
+      if: matrix.os == 'macos-latest'
+      run: |
+        ARCHIVE_NAME=`python3 iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_NAME}} mac full`
+        echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+      shell: bash
+
+    # CI produces macOS user-facing artifacts (standalone DMG + VST3 zip)
+    # and a Windows portable zip. Tagged releases add the Windows installer.
     - name: Build macOS
       if: matrix.os == 'macos-latest'
       run: |
         cd ${{env.PROJECT_NAME}}/scripts
         ./makedist-mac.sh full zip
+      shell: bash
+
+    - name: Verify macOS artifacts
+      if: matrix.os == 'macos-latest'
+      run: |
+        APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
+        VST3_BIN="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/MacOS/VoLum"
+        APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
+        APP_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg"
+        VST3_ZIP="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip"
+        VERIFY_DIR="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/verify-mac"
+
+        app_archs=$(lipo -archs "$APP_BIN")
+        vst3_archs=$(lipo -archs "$VST3_BIN")
+        main_nib=$(/usr/libexec/PlistBuddy -c 'Print :NSMainNibFile' "$APP_PLIST")
+
+        echo "APP architectures: $app_archs"
+        echo "VST3 architectures: $vst3_archs"
+        echo "APP main nib: $main_nib"
+
+        [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
+        [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
+        test -f "$HOME/Applications/VoLum.app/Contents/Resources/${main_nib}.nib"
+        test -d "$HOME/Applications/VoLum.app/Contents/Resources/VoLumRigs"
+        test -f "$APP_DMG"
+        test -f "$VST3_ZIP"
+
+        rm -rf "$VERIFY_DIR"
+        mkdir -p "$VERIFY_DIR"
+        hdiutil attach "$APP_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/dmg"
+        unzip -q "$VST3_ZIP" -d "$VERIFY_DIR/vst3"
+
+        test -d "$VERIFY_DIR/dmg/VoLum.app"
+        test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
+        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+        test -d "$VERIFY_DIR/vst3/VoLum.vst3"
+        test -d "$VERIFY_DIR/vst3/VoLumRigs"
+        test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+        hdiutil detach "$VERIFY_DIR/dmg"
       shell: bash
 
     - name: Upload macOS artifacts
