@@ -178,15 +178,22 @@ jobs:
         hdiutil detach "$VERIFY_DIR/dmg"
       shell: bash
 
-    - name: Upload mac DSYMs release asset
+    - name: Upload macOS release assets
       if: matrix.os == 'macos-latest'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        RELEASE_VERSION="${{ needs.prepare_release.outputs.release_version }}"
+        RELEASE_DIR="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/release-assets"
+        rm -rf "$RELEASE_DIR"
+        mkdir -p "$RELEASE_DIR"
+
+        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg"
+        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip"
+
         gh release upload "${{ needs.prepare_release.outputs.release_tag }}" \
-          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip" \
-          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg" \
-          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip" \
+          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg" \
+          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip" \
           --clobber
       shell: bash
 
@@ -258,10 +265,21 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         $tag = "${{ needs.prepare_release.outputs.release_tag }}"
+        $version = "${{ needs.prepare_release.outputs.release_version }}"
         $archive = "${{ steps.win_archivename_step.outputs.archive_name }}"
+        $releaseDir = Join-Path "${{env.PROJECT_NAME}}\${{matrix.build_dir}}" "release-assets"
+
+        if (Test-Path $releaseDir) { Remove-Item $releaseDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $releaseDir | Out-Null
+
+        $setupOut = Join-Path $releaseDir ("VoLum-v{0}-windows-setup.exe" -f $version)
+        $portableOut = Join-Path $releaseDir ("VoLum-v{0}-windows-portable.zip" -f $version)
+
+        Copy-Item "${{env.PROJECT_NAME}}/build-win/installer/VoLum-Setup.exe" $setupOut
+        Copy-Item "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/$archive.zip" $portableOut
+
         gh release upload $tag `
-          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/$archive-pdbs.zip" `
-          "${{env.PROJECT_NAME}}/build-win/installer/VoLum-Setup.exe#VoLum-Setup.exe" `
-          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/$archive.zip#$archive-portable.zip" `
+          $setupOut `
+          $portableOut `
           --clobber
       shell: pwsh
