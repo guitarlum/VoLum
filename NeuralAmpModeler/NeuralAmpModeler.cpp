@@ -255,19 +255,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // Vertically center the detail content in the right panel
     const float speakerH = 48.f;
-    const float heroW = 450.f;
-    const float heroH = 180.f;
+    const float heroW = 434.f;
+    const float heroH = 166.f;
     // Amp name block: title + gold rule + diamond; needs enough H so the rule is not clipped.
-    const float nameH = 48.f;
-    const float gapAfterAmpName = 8.f;
+    const float nameH = 54.f;
+    const float gapAfterAmpName = 12.f;
     const float ampToKnobHairlineH = 2.f;
-    const float gapAfterHairline = 12.f;
+    const float gapAfterHairline = 16.f;
     const float knobDiam = 58.f;
-    const float labelH = 18.f;
-    const float valueH = 16.f;
+    const float labelH = 20.f;
+    const float valueH = 18.f;
     const float toggleH = 34.f;
-    const float hintH = 38.f;
-    const float hintGap = 6.f;
+    const float hintH = 44.f;
+    const float hintGap = 10.f;
     const float footerH = 18.f;
 
     const float contentH = speakerH + 6.f + heroH + 4.f + nameH
@@ -386,12 +386,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(6, "OUTPUT", kOutputLevel, "dB");
 
     // I/O meters: leave generous gaps so channel column / output knob don’t crowd the strips
-    const float meterW = 6.f;
+    const float meterW = 8.f;
     const float meterH = knobDiam + 10.f;
     const float meterTop = knobT - 5.f;
-    const float gapMeterToKnob = 22.f;
-    const float gapLabelToMeter = 10.f;
-    const float meterLabelStripW = 14.f;
+    const float gapMeterToKnob = 18.f;
+    const float gapLabelToMeter = 8.f;
+    const float meterLabelStripW = 16.f;
 
     const float inMeterR = rowLeft - gapMeterToKnob;
     const float inMeterL = inMeterR - meterW;
@@ -1363,15 +1363,6 @@ double GetVoLumKeyboardStepForParam(int paramIdx, bool fine)
   }
 }
 
-void AppendValueWithOptionalLabel(WDL_String& text, double value, const char* label)
-{
-  text.AppendFormatted(64, "%.1f", value);
-  if (label && label[0])
-  {
-    text.Append(" ");
-    text.Append(label);
-  }
-}
 }
 
 std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
@@ -1380,15 +1371,9 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
   if (!pParam)
     return {};
 
-  WDL_String minText;
-  WDL_String maxText;
-  AppendValueWithOptionalLabel(minText, pParam->GetMin(), pParam->GetLabel());
-  AppendValueWithOptionalLabel(maxText, pParam->GetMax(), pParam->GetLabel());
-
   WDL_String line;
-  line.SetFormatted(512, "%s  |  Range %s to %s  |  Up/Down %.1f  |  Shift %.1f  |  Left/Right focus  |  Enter exact  |  Esc done",
-                    pParam->GetName(), minText.Get(), maxText.Get(), GetVoLumKeyboardStepForParam(paramIdx, false),
-                    GetVoLumKeyboardStepForParam(paramIdx, true));
+  line.SetFormatted(512, "%s  |  Up/Down adjust  |  Left/Right select  |  Enter exact  |  Delete reset  |  Shift fine",
+                    pParam->GetName());
   return line.Get();
 }
 

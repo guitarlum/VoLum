@@ -1034,12 +1034,15 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText nameText(28.f, VoLumColors::GOLD, "Poiret-One", EAlign::Center, EVAlign::Middle);
-    IRECT textArea = mRECT.GetFromTop(30.f);
-    g.DrawText(nameText, mName.c_str(), textArea);
+    const IRECT titleArea = mRECT.GetFromTop(16.f);
+    const IRECT nameArea = IRECT(mRECT.L + 18.f, titleArea.B + 2.f, mRECT.R - 18.f, mRECT.T + 38.f);
+    g.DrawText(IText(10.5f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+               "SELECTED AMP", titleArea);
+    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+               mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
-    float cy = textArea.B + 6.f;
+    float cy = nameArea.B + 8.f;
     float cx = mRECT.MW();
     g.DrawLine(IColor(51, 200, 162, 78), cx - 50.f, cy, cx - 6.f, cy);
     g.DrawLine(IColor(51, 200, 162, 78), cx + 6.f, cy, cx + 50.f, cy);
@@ -1101,9 +1104,10 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    const auto align = mIsChannel ? EAlign::Near : EAlign::Center;
-    IText text(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", align, EVAlign::Middle);
-    IRECT area = mIsChannel ? mRECT.GetPadded(-3.f, 0.f, 0.f, 0.f) : mRECT;
+    const auto align = EAlign::Center;
+    const float size = mIsChannel ? 12.f : 13.f;
+    IText text(size, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", align, EVAlign::Middle);
+    IRECT area = mRECT;
     g.DrawText(text, mLabel.c_str(), area);
   }
 
@@ -1125,9 +1129,9 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(10.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(11.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     int len = (int)mLabel.size();
-    float charH = 11.f;
+    float charH = 12.f;
     float totalH = len * charH;
     float startY = mRECT.MH() - totalH / 2.f;
     for (int i = 0; i < len; i++)
@@ -1181,7 +1185,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(12.5f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, mText.c_str(), mRECT);
   }
 
@@ -1312,12 +1316,12 @@ public:
     g.FillRoundRect(IColor(168, 14, 16, 22), mRECT, 7.f);
     g.DrawRoundRect(IColor(72, 200, 162, 78), mRECT, 7.f, nullptr, 1.f);
 
-    const IText titleText(11.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    const IText detailText(10.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    const IText titleText(12.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const IText detailText(11.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
 
-    const IRECT inner = mRECT.GetPadded(-16.f, -4.f, -16.f, -4.f);
-    const IRECT top = inner.GetFromTop(inner.H() * 0.46f).GetPadded(0.f, 1.f, 0.f, -2.f);
-    const IRECT bottom = inner.GetFromBottom(inner.H() * 0.54f).GetPadded(0.f, -2.f, 0.f, 1.f);
+    const IRECT inner = mRECT.GetPadded(-18.f, -6.f, -18.f, -6.f);
+    const IRECT top = inner.GetFromTop(17.f);
+    const IRECT bottom = IRECT(inner.L, top.B + 2.f, inner.R, inner.B);
     g.DrawText(titleText, mHintTitle.c_str(), top);
     g.DrawText(detailText, mHintDetail.c_str(), bottom);
   }
@@ -1390,14 +1394,14 @@ public:
 
     g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                mLabel.empty() ? "EXACT VALUE" : mLabel.c_str(), titleRect);
-    g.DrawText(IText(11.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+    g.DrawText(IText(11.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
                mRangeText.c_str(), rangeRect);
 
     g.FillRoundRect(IColor(235, 14, 16, 22), entry, 6.f);
     g.DrawRoundRect(IColor(72, 200, 162, 78), entry, 6.f, nullptr, 1.f);
     g.DrawRoundRect(IColor(36, 200, 162, 78), entry.GetPadded(2.f), 5.f, nullptr, 1.f);
 
-    g.DrawText(IText(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+    g.DrawText(IText(10.5f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
                "Type a number, press Enter to apply, Esc to cancel", hintRect);
   }
 
@@ -1556,7 +1560,7 @@ public:
       }
     }
 
-    IText text(12.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    IText text(13.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     g.DrawText(text, str.Get(), mRECT);
   }
 
