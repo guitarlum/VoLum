@@ -3,12 +3,12 @@
 
 # Optional: xcpretty https://github.com/xcpretty/xcpretty (CI falls back to plain tee)
 
-BASEDIR=$(dirname $0)
+BASEDIR=$(dirname "$0")
 
-cd $BASEDIR/..
+cd "$BASEDIR/.."
 
 if [ -d build-mac ]; then
-  sudo rm -f -R build-mac
+  rm -f -R build-mac
 fi
 
 #---------------------------------------------------------------------------------------------------------
@@ -60,6 +60,10 @@ PLUGIN_NAME=${PLUGIN_NAME//\"}
 # Project/config files keep the upstream "NeuralAmpModeler" prefix even though
 # BUNDLE_NAME (and therefore PLUGIN_NAME) is now "VoLum".
 PROJECT_PREFIX=NeuralAmpModeler
+ICON_NAME=$PLUGIN_NAME
+if [ ! -f "resources/$ICON_NAME.icns" ]; then
+  ICON_NAME=$PROJECT_PREFIX
+fi
 
 ARCHIVE_NAME=$PLUGIN_NAME-v$FULL_VERSION-mac
 
@@ -126,19 +130,19 @@ echo "remove existing binaries"
 echo ""
 
 if [ -d $APP ]; then
-  sudo rm -f -R -f $APP
+  rm -f -R -f $APP
 fi
 
 if [ -d $AU ]; then
- sudo rm -f -R $AU
+ rm -f -R $AU
 fi
 
 if [ -d $VST2 ]; then
-  sudo rm -f -R $VST2
+  rm -f -R $VST2
 fi
 
 if [ -d $VST3 ]; then
-  sudo rm -f -R $VST3
+  rm -f -R $VST3
 fi
 
 if [ -d "${AAX}" ]; then
@@ -155,9 +159,13 @@ fi
 # GitHub Actions: no Apple dev certs. APP/AUv3 targets use Automatic + DEVELOPMENT_TEAM in the
 # xcodeproj; command-line overrides must clear entitlements for CI or Xcode errors:
 # "APP isn't code signed but requires entitlements".
-XC_EXTRA=()
-if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
+XC_EXTRA=(
+  ARCHS="arm64 x86_64"
+  ONLY_ACTIVE_ARCH=NO
+)
+if [ "$CODESIGN" != "1" ]; then
   XC_EXTRA=(
+    "${XC_EXTRA[@]}"
     CODE_SIGN_IDENTITY=-
     CODE_SIGN_STYLE=Manual
     DEVELOPMENT_TEAM=
@@ -166,11 +174,11 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
   )
 fi
 
-# "All" = APP + AU + VST3. AU still uses legacy Carbon Resources/Rez; Xcode 16+ runners often fail there.
-# CI zip only needs standalone + VST3 (same as primary user deliverables).
-XCODE_TARGETS=( -target "All" )
-if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${CI:-}" = "true" ]; then
-  XCODE_TARGETS=( -target "VST3" -target "APP" )
+# Default to the deliverables we actually ship and test. AU still uses legacy
+# Carbon Resources/Rez and is currently best treated as opt-in work.
+XCODE_TARGETS=( -target "VST3" -target "APP" )
+if [ "${MACOS_BUILD_ALL_TARGETS:-0}" = "1" ]; then
+  XCODE_TARGETS=( -target "All" )
 fi
 
 set -o pipefail
@@ -199,19 +207,19 @@ echo "setting icons"
 echo ""
 
 if [ -d $AU ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file $AU
+  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $AU
 fi
 
 if [ -d $VST2 ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file $VST2
+  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $VST2
 fi
 
 if [ -d $VST3 ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file $VST3
+  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $VST3
 fi
 
 if [ -d "${AAX}" ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file "${AAX}"
+  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file "${AAX}"
 fi
 
 #---------------------------------------------------------------------------------------------------------
@@ -271,7 +279,7 @@ if [ $BUILD_INSTALLER == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # installer
 
-  sudo rm -R -f build-mac/$PLUGIN_NAME-*.dmg
+  rm -R -f build-mac/$PLUGIN_NAME-*.dmg
 
   echo "building installer"
   echo ""
@@ -307,7 +315,7 @@ if [ $BUILD_INSTALLER == 1 ]; then
     hdiutil create build-mac/$ARCHIVE_NAME.dmg -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname $PLUGIN_NAME
   fi
 
-  sudo rm -R -f build-mac/installer/
+  rm -R -f build-mac/installer/
 
   if [ $CODESIGN == 1 ]; then
     #---------------------------------------------------------------------------------------------------------
@@ -335,58 +343,72 @@ if [ $BUILD_INSTALLER == 1 ]; then
   fi
 else
   #---------------------------------------------------------------------------------------------------------
-  # zip
+  # app dmg + vst3 zip
 
-  if [ -d build-mac/zip ]; then
-    rm -R build-mac/zip
-  fi
-
-  mkdir -p build-mac/zip
-
-  if [ -d $APP ]; then
-    cp -R $APP build-mac/zip/$PLUGIN_NAME.app
-  fi
-
-  if [ -d $AU ]; then
-    cp -R $AU build-mac/zip/$PLUGIN_NAME.component
-  fi
-
-  if [ -d $VST2 ]; then
-    cp -R $VST2 build-mac/zip/$PLUGIN_NAME.vst
-  fi
-
-  if [ -d $VST3 ]; then
-    cp -R $VST3 build-mac/zip/$PLUGIN_NAME.vst3
-  fi
-
-  if [ -d "${AAX_FINAL}" ]; then
-    cp -R $AAX_FINAL build-mac/zip/$PLUGIN_NAME.aaxplugin
-  fi
-
-  # Bundle rigs for portable CI zip (repo rigs/ -> zip VoLumRigs/, .nam only)
-  RIGS_SRC="$(cd "$BASEDIR/../.." && pwd)/rigs"
-  if [ -d "$RIGS_SRC" ]; then
-    echo "bundling VoLumRigs..."
-    mkdir -p build-mac/zip/VoLumRigs
+  # Make the standalone self-contained before we copy it into the archive.
+  # VoLumPaths on macOS checks the app bundle's Contents/Resources/VoLumRigs
+  # first, so keep the built app populated there.
+  RIGS_SRC="$(pwd)/../rigs"
+  APP_DMG="build-mac/${ARCHIVE_NAME}-app.dmg"
+  VST3_ZIP="build-mac/${ARCHIVE_NAME}-vst3.zip"
+  if [ -d "$RIGS_SRC" ] && [ -d "$APP" ]; then
+    echo "embedding VoLumRigs into app bundle..."
+    rm -R -f "$APP/Contents/Resources/VoLumRigs"
+    mkdir -p "$APP/Contents/Resources/VoLumRigs"
     for amp_dir in "$RIGS_SRC"/*/; do
       [ -d "$amp_dir" ] || continue
       amp_name=$(basename "$amp_dir")
-      mkdir -p "build-mac/zip/VoLumRigs/$amp_name"
-      cp "$amp_dir"*.nam "build-mac/zip/VoLumRigs/$amp_name/" 2>/dev/null || true
+      mkdir -p "$APP/Contents/Resources/VoLumRigs/$amp_name"
+      cp "$amp_dir"*.nam "$APP/Contents/Resources/VoLumRigs/$amp_name/" 2>/dev/null || true
+    done
+  fi
+
+  if [ ! -d "$APP" ]; then
+    echo "ERROR: missing app bundle: $APP"
+    exit 1
+  fi
+
+  if [ ! -d "$VST3" ]; then
+    echo "ERROR: missing VST3 bundle: $VST3"
+    exit 1
+  fi
+
+  rm -R -f build-mac/dmg build-mac/vst3-zip "$APP_DMG" "$VST3_ZIP"
+  mkdir -p build-mac/dmg build-mac/vst3-zip
+
+  echo "building standalone dmg..."
+  echo ""
+  cp -R "$APP" "build-mac/dmg/$PLUGIN_NAME.app"
+  ln -s /Applications build-mac/dmg/Applications
+  hdiutil create "$APP_DMG" -format UDZO -srcfolder build-mac/dmg -ov -anyowners -volname "$PLUGIN_NAME"
+  rm -R build-mac/dmg
+
+  cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
+
+  # Portable VST3 packaging keeps rigs as a sibling folder so the plugin can
+  # resolve them from the extracted archive or the user's VST3 directory.
+  if [ -d "$RIGS_SRC" ]; then
+    echo "bundling VoLumRigs..."
+    mkdir -p build-mac/vst3-zip/VoLumRigs
+    for amp_dir in "$RIGS_SRC"/*/; do
+      [ -d "$amp_dir" ] || continue
+      amp_name=$(basename "$amp_dir")
+      mkdir -p "build-mac/vst3-zip/VoLumRigs/$amp_name"
+      cp "$amp_dir"*.nam "build-mac/vst3-zip/VoLumRigs/$amp_name/" 2>/dev/null || true
     done
   else
     echo "WARNING: rigs directory not found: $RIGS_SRC"
   fi
 
-  echo "zipping binaries..."
+  echo "zipping VST3 package..."
   echo ""
-  ditto -c -k build-mac/zip build-mac/$ARCHIVE_NAME.zip
-  rm -R build-mac/zip
+  ditto -c -k build-mac/vst3-zip "$VST3_ZIP"
+  rm -R build-mac/vst3-zip
 fi
 
 #---------------------------------------------------------------------------------------------------------
 # dSYMs
-sudo rm -R -f build-mac/*-dSYMs.zip
+rm -R -f build-mac/*-dSYMs.zip
 
 echo "packaging dSYMs"
 echo ""
@@ -399,9 +421,7 @@ zip -r ./build-mac/$ARCHIVE_NAME-dSYMs.zip ./build-mac/*.dSYM
 echo "preparing output folder"
 echo ""
 mkdir -p ./build-mac/out
-if [ -f ./build-mac/$ARCHIVE_NAME.dmg ]; then
-  mv ./build-mac/$ARCHIVE_NAME.dmg ./build-mac/out
-fi
+mv ./build-mac/*.dmg ./build-mac/out 2>/dev/null || true
 mv ./build-mac/*.zip ./build-mac/out
 
 #---------------------------------------------------------------------------------------------------------
