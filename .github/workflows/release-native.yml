@@ -3,46 +3,100 @@ name: Release Native
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Git tag for this draft release (e.g. v0.2.0). The tag is created at the workflow commit if it does not exist yet."
+      release_type:
+        description: "How to choose the release version."
         required: true
-        default: "v0.0.0-ci"
-  push:
-    tags:
-      - "v*"
+        default: minor
+        type: choice
+        options:
+          - minor
+          - patch
+          - major
+          - manual
+      manual_version:
+        description: "Manual version override, for example 0.3.0. Only used when release_type is manual."
+        required: false
+        type: string
 
 env:
   PROJECT_NAME: NeuralAmpModeler
 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-native
+  cancel-in-progress: false
+
 jobs:
-  create_release:
-    name: Create release
+  prepare_release:
+    name: Prepare release
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{steps.create_release.outputs.upload_url}}
+      release_tag: ${{steps.prepare.outputs.tag}}
+      release_version: ${{steps.prepare.outputs.version}}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          ref: main
+          fetch-depth: 0
           submodules: recursive
 
-      - name: Create release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Prepare release metadata
+        id: prepare
+        run: |
+          VERSION_ARGS=()
+          BUMP_TYPE="${{ inputs.release_type }}"
+
+          if [ "$BUMP_TYPE" = "manual" ]; then
+            if [ -z "${{ inputs.manual_version }}" ]; then
+              echo "manual_version is required when release_type is manual" >&2
+              exit 1
+            fi
+            VERSION_ARGS+=(--version "${{ inputs.manual_version }}")
+            BUMP_TYPE="minor"
+          fi
+
+          python3 prepare_release.py --bump "$BUMP_TYPE" "${VERSION_ARGS[@]}" --github-output "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Commit release metadata
+        run: |
+          git add \
+            NeuralAmpModeler/config.h \
+            NeuralAmpModeler/installer/changelog.txt \
+            NeuralAmpModeler/installer/VoLum.iss \
+            NeuralAmpModeler/resources/*.plist
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "release: prepare ${{ steps.prepare.outputs.tag }}"
+        shell: bash
+
+      - name: Push release commit
+        run: git push origin HEAD:main
+        shell: bash
+
+      - name: Create and push release tag
+        run: |
+          git tag "${{ steps.prepare.outputs.tag }}"
+          git push origin "${{ steps.prepare.outputs.tag }}"
+        shell: bash
+
+      - name: Create draft release
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-        with:
-          draft: true
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          release_name: Release ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          commitish: ${{ github.sha }}
-          body_path: ${{env.PROJECT_NAME}}/installer/changelog.txt
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.prepare.outputs.tag }}" \
+            --draft \
+            --generate-notes \
+            --title "VoLum ${{ steps.prepare.outputs.tag }}"
+        shell: bash
 
   build:
     name: Build
-    needs: create_release
+    needs: prepare_release
     runs-on: ${{matrix.os}}
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
         include:
@@ -55,6 +109,7 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v4
       with:
+        ref: refs/tags/${{ needs.prepare_release.outputs.release_tag }}
         submodules: recursive
 
     - name: Get VST3 SDK
@@ -125,44 +180,23 @@ jobs:
 
     - name: Upload mac DSYMs release asset
       if: matrix.os == 'macos-latest'
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
-        asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
-        asset_content_type: application/zip
-
-    - name: Upload mac app dmg release asset
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg
-        asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg
-        asset_content_type: application/octet-stream
-
-    - name: Upload mac VST3 zip release asset
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip
-        asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip
-        asset_content_type: application/zip
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release upload "${{ needs.prepare_release.outputs.release_tag }}" \
+          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip" \
+          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg" \
+          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip" \
+          --clobber
+      shell: bash
 
     - name: Add msbuild to PATH (Windows)
       if: matrix.os == 'windows-latest'
-      uses: microsoft/setup-msbuild@v1.0.2
+      uses: microsoft/setup-msbuild@v2
 
     - name: Setup Python3
       if: matrix.os == 'windows-latest'
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
         architecture: 'x64'
@@ -218,35 +252,16 @@ jobs:
         if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
       shell: pwsh
 
-    - name: Upload Windows pdb release asset
+    - name: Upload Windows release assets
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
-        asset_name: ${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
-        asset_content_type: application/zip
-
-    - name: Upload Windows installer release asset
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/build-win/installer/VoLum-Setup.exe
-        asset_name: VoLum-Setup.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload Windows portable zip release asset
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}.zip
-        asset_name: ${{steps.win_archivename_step.outputs.archive_name}}-portable.zip
-        asset_content_type: application/zip
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $tag = "${{ needs.prepare_release.outputs.release_tag }}"
+        $archive = "${{ steps.win_archivename_step.outputs.archive_name }}"
+        gh release upload $tag `
+          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/$archive-pdbs.zip" `
+          "${{env.PROJECT_NAME}}/build-win/installer/VoLum-Setup.exe#VoLum-Setup.exe" `
+          "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/$archive.zip#$archive-portable.zip" `
+          --clobber
+      shell: pwsh
