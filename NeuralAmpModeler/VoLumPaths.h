@@ -11,6 +11,7 @@
   #define WIN32_LEAN_AND_MEAN
   #include <Windows.h>
 #elif defined(__APPLE__)
+  #include <dlfcn.h>
   #include <mach-o/dyld.h>
 #endif
 
@@ -100,15 +101,34 @@ inline std::filesystem::path FindRigsRootDirectory()
   }
 #elif defined(__APPLE__)
   {
-    char buf[4096];
-    uint32_t bufSize = sizeof(buf);
-    if (_NSGetExecutablePath(buf, &bufSize) == 0)
+    fs::path modulePath;
+    Dl_info info{};
+    if (dladdr(reinterpret_cast<const void*>(&FindRigsRootDirectory), &info) != 0 && info.dli_fname)
     {
-      fs::path exe = fs::weakly_canonical(fs::path(buf));
-      fs::path d = exe.parent_path();
+      modulePath = fs::weakly_canonical(fs::path(info.dli_fname));
+    }
+    else
+    {
+      char buf[4096];
+      uint32_t bufSize = sizeof(buf);
+      if (_NSGetExecutablePath(buf, &bufSize) == 0)
+        modulePath = fs::weakly_canonical(fs::path(buf));
+    }
+
+    if (!modulePath.empty())
+    {
+      fs::path d = modulePath.parent_path();
       // Inside .app bundle: .../VoLum.app/Contents/MacOS/VoLum
       candidates.push_back(d.parent_path() / "Resources" / "VoLumRigs");
       candidates.push_back(d.parent_path() / "Resources" / "rigs");
+      if (const char* home = std::getenv("HOME"); home && *home)
+      {
+        const fs::path appSupport = fs::path(home) / "Library" / "Application Support" / "VoLum";
+        candidates.push_back(appSupport / "VoLumRigs");
+        candidates.push_back(appSupport / "rigs");
+      }
+      candidates.push_back(fs::path("/Library/Application Support/VoLum/VoLumRigs"));
+      candidates.push_back(fs::path("/Library/Application Support/VoLum/rigs"));
       for (int depth = 0; depth < 12; ++depth)
       {
         candidates.push_back(d / "VoLumRigs");
