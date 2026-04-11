@@ -10,10 +10,10 @@
         <customObject id="-3" userLabel="Application" customClass="SWELLApplication"/>
         <menu title="AMainMenu" systemMenu="main" id="29" userLabel="MainMenu">
             <items>
-                <menuItem title="NeuralAmpModeler" id="56">
-                    <menu key="submenu" title="NeuralAmpModeler" systemMenu="apple" id="57">
+                <menuItem title="VoLum" id="56">
+                    <menu key="submenu" title="VoLum" systemMenu="apple" id="57">
                         <items>
-                            <menuItem title="About NeuralAmpModeler" tag="40005" id="58">
+                            <menuItem title="About VoLum" tag="40005" id="58">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
                                     <action selector="onSysMenuCommand:" target="450" id="451"/>
@@ -32,7 +32,7 @@
                             <menuItem isSeparatorItem="YES" id="144">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Hide NeuralAmpModeler" keyEquivalent="h" id="134">
+                            <menuItem title="Hide VoLum" keyEquivalent="h" id="134">
                                 <connections>
                                     <action selector="hide:" target="-1" id="367"/>
                                 </connections>
@@ -51,7 +51,7 @@
                             <menuItem isSeparatorItem="YES" id="149">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Quit NeuralAmpModeler" tag="40007" keyEquivalent="q" id="136">
+                            <menuItem title="Quit VoLum" tag="40007" keyEquivalent="q" id="136">
                                 <connections>
                                     <action selector="terminate:" target="-3" id="449"/>
                                 </connections>
