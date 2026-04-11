@@ -125,6 +125,10 @@ public:
       case kVK_RETURN:
         PromptExactValueEntry();
         return true;
+      case kVK_DELETE:
+      case kVK_BACK:
+        SetValueToDefault();
+        return true;
       case kVK_ESCAPE:
         SetSelectedForKeyboard(false);
         return true;
