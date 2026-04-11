@@ -7,10 +7,6 @@ BASEDIR=$(dirname "$0")
 
 cd "$BASEDIR/.."
 
-if [ -d build-mac ]; then
-  rm -f -R build-mac
-fi
-
 #---------------------------------------------------------------------------------------------------------
 #variables
 
@@ -33,13 +29,39 @@ ILOK_PWD=TODO
 WRAP_GUID=TODO
 
 DEMO=0
-if [ "$1" == "demo" ]; then
-  DEMO=1
-fi
-
 BUILD_INSTALLER=1
-if [ "$2" == "zip" ]; then
-  BUILD_INSTALLER=0
+FAST_DEV=0
+
+for arg in "$@"; do
+  case "$arg" in
+    demo)
+      DEMO=1
+      ;;
+    full)
+      ;;
+    zip)
+      BUILD_INSTALLER=0
+      ;;
+    installer)
+      BUILD_INSTALLER=1
+      ;;
+    dev|fast)
+      FAST_DEV=1
+      BUILD_INSTALLER=0
+      ;;
+  esac
+done
+
+CLEAN_BUILD=1
+FORCE_RECOMPILE=1
+PACKAGE_DSYMS=1
+DMG_FORMAT=UDZO
+
+if [ "$FAST_DEV" == "1" ]; then
+  CLEAN_BUILD=0
+  FORCE_RECOMPILE=0
+  PACKAGE_DSYMS=0
+  DMG_FORMAT=UDRW
 fi
 
 VERSION=`echo | grep PLUG_VERSION_HEX config.h`
@@ -66,6 +88,10 @@ ARCHIVE_NAME=$PLUGIN_NAME-v$FULL_VERSION-mac
 
 if [ $DEMO == 1 ]; then
   ARCHIVE_NAME=$ARCHIVE_NAME-demo
+fi
+
+if [ "$FAST_DEV" == "1" ]; then
+  ARCHIVE_NAME=$ARCHIVE_NAME-dev
 fi
 
 # TODO: use get_archive_name script
@@ -107,19 +133,35 @@ echo $AU
 echo $APP
 echo $AAX
 
+if [ "$CLEAN_BUILD" == "1" ] && [ -d build-mac ]; then
+  rm -f -R build-mac
+fi
+
 if [ $DEMO == 1 ]; then
- echo "making $PLUGIN_NAME version $FULL_VERSION DEMO mac distribution..."
+  if [ "$FAST_DEV" == "1" ]; then
+    echo "making $PLUGIN_NAME version $FULL_VERSION DEMO mac development build..."
+  else
+    echo "making $PLUGIN_NAME version $FULL_VERSION DEMO mac distribution..."
+  fi
 #   cp "resources/img/AboutBox_Demo.png" "resources/img/AboutBox.png"
 else
- echo "making $PLUGIN_NAME version $FULL_VERSION mac distribution..."
+  if [ "$FAST_DEV" == "1" ]; then
+    echo "making $PLUGIN_NAME version $FULL_VERSION mac development build..."
+  else
+    echo "making $PLUGIN_NAME version $FULL_VERSION mac distribution..."
+  fi
 #   cp "resources/img/AboutBox_Registered.png" "resources/img/AboutBox.png"
 fi
 
-sleep 2
+if [ "$FAST_DEV" != "1" ]; then
+  sleep 2
+fi
 
-echo "touching source to force recompile"
-echo ""
-touch *.cpp
+if [ "$FORCE_RECOMPILE" == "1" ]; then
+  echo "touching source to force recompile"
+  echo ""
+  touch *.cpp
+fi
 
 #---------------------------------------------------------------------------------------------------------
 #remove existing binaries
@@ -157,10 +199,17 @@ fi
 # GitHub Actions: no Apple dev certs. APP/AUv3 targets use Automatic + DEVELOPMENT_TEAM in the
 # xcodeproj; command-line overrides must clear entitlements for CI or Xcode errors:
 # "APP isn't code signed but requires entitlements".
+HOST_ARCH=$(uname -m)
 XC_EXTRA=(
   ARCHS="arm64 x86_64"
   ONLY_ACTIVE_ARCH=NO
 )
+if [ "$FAST_DEV" == "1" ]; then
+  XC_EXTRA=(
+    ARCHS="$HOST_ARCH"
+    ONLY_ACTIVE_ARCH=YES
+  )
+fi
 if [ "$CODESIGN" != "1" ]; then
   XC_EXTRA=(
     "${XC_EXTRA[@]}"
@@ -175,6 +224,9 @@ fi
 # Default to the deliverables we actually ship and test. AU still uses legacy
 # Carbon Resources/Rez and is currently best treated as opt-in work.
 XCODE_TARGETS=( -target "VST3" -target "APP" )
+if [ "$FAST_DEV" == "1" ]; then
+  XCODE_TARGETS=( -target "APP" )
+fi
 if [ "${MACOS_BUILD_ALL_TARGETS:-0}" = "1" ]; then
   XCODE_TARGETS=( -target "All" )
 fi
@@ -353,64 +405,81 @@ if [ $BUILD_INSTALLER == 1 ]; then
   fi
 else
   #---------------------------------------------------------------------------------------------------------
-  # app dmg + vst3 zip
+  # app dmg + vst3 zip, or a faster standalone-only dev dmg
 
   # Make the standalone self-contained before we copy it into the archive.
   # VoLumPaths on macOS checks the app bundle's Contents/Resources/VoLumRigs
   # first, so keep the built app populated there.
-  APP_DMG="build-mac/${ARCHIVE_NAME}-app.dmg"
-  VST3_ZIP="build-mac/${ARCHIVE_NAME}-vst3.zip"
+  if [ "$FAST_DEV" == "1" ]; then
+    APP_DMG="build-mac/${ARCHIVE_NAME}.dmg"
+  else
+    APP_DMG="build-mac/${ARCHIVE_NAME}-app.dmg"
+    VST3_ZIP="build-mac/${ARCHIVE_NAME}-vst3.zip"
+  fi
 
   if [ ! -d "$APP" ]; then
     echo "ERROR: missing app bundle: $APP"
     exit 1
   fi
 
-  if [ ! -d "$VST3" ]; then
+  if [ "$FAST_DEV" != "1" ] && [ ! -d "$VST3" ]; then
     echo "ERROR: missing VST3 bundle: $VST3"
     exit 1
   fi
 
-  rm -R -f build-mac/dmg build-mac/vst3-zip "$APP_DMG" "$VST3_ZIP"
-  mkdir -p build-mac/dmg build-mac/vst3-zip
+  if [ "$FAST_DEV" == "1" ]; then
+    rm -R -f build-mac/dmg "$APP_DMG"
+    mkdir -p build-mac/dmg
+  else
+    rm -R -f build-mac/dmg build-mac/vst3-zip "$APP_DMG" "$VST3_ZIP"
+    mkdir -p build-mac/dmg build-mac/vst3-zip
+  fi
 
-  echo "building standalone dmg..."
+  if [ "$FAST_DEV" == "1" ]; then
+    echo "building standalone dev dmg..."
+  else
+    echo "building standalone dmg..."
+  fi
   echo ""
   cp -R "$APP" "build-mac/dmg/$PLUGIN_NAME.app"
   ln -s /Applications build-mac/dmg/Applications
-  hdiutil create "$APP_DMG" -format UDZO -srcfolder build-mac/dmg -ov -anyowners -volname "$PLUGIN_NAME"
+  hdiutil create "$APP_DMG" -format "$DMG_FORMAT" -srcfolder build-mac/dmg -ov -anyowners -volname "$PLUGIN_NAME"
   rm -R build-mac/dmg
 
-  cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
+  if [ "$FAST_DEV" != "1" ]; then
+    cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
 
-  # Portable VST3 packaging keeps rigs as a sibling folder so the plugin can
-  # resolve them from the extracted archive or the user's VST3 directory.
-  if [ -d "$RIGS_SRC" ]; then
-    echo "bundling VoLumRigs..."
-    mkdir -p build-mac/vst3-zip/VoLumRigs
-    for amp_dir in "$RIGS_SRC"/*/; do
-      [ -d "$amp_dir" ] || continue
-      amp_name=$(basename "$amp_dir")
-      mkdir -p "build-mac/vst3-zip/VoLumRigs/$amp_name"
-      cp "$amp_dir"*.nam "build-mac/vst3-zip/VoLumRigs/$amp_name/" 2>/dev/null || true
-    done
-  else
-    echo "WARNING: rigs directory not found: $RIGS_SRC"
+    # Portable VST3 packaging keeps rigs as a sibling folder so the plugin can
+    # resolve them from the extracted archive or the user's VST3 directory.
+    if [ -d "$RIGS_SRC" ]; then
+      echo "bundling VoLumRigs..."
+      mkdir -p build-mac/vst3-zip/VoLumRigs
+      for amp_dir in "$RIGS_SRC"/*/; do
+        [ -d "$amp_dir" ] || continue
+        amp_name=$(basename "$amp_dir")
+        mkdir -p "build-mac/vst3-zip/VoLumRigs/$amp_name"
+        cp "$amp_dir"*.nam "build-mac/vst3-zip/VoLumRigs/$amp_name/" 2>/dev/null || true
+      done
+    else
+      echo "WARNING: rigs directory not found: $RIGS_SRC"
+    fi
+
+    echo "zipping VST3 package..."
+    echo ""
+    ditto -c -k build-mac/vst3-zip "$VST3_ZIP"
+    rm -R build-mac/vst3-zip
   fi
-
-  echo "zipping VST3 package..."
-  echo ""
-  ditto -c -k build-mac/vst3-zip "$VST3_ZIP"
-  rm -R build-mac/vst3-zip
 fi
 
 #---------------------------------------------------------------------------------------------------------
 # dSYMs
-rm -R -f build-mac/*-dSYMs.zip
+if [ "$PACKAGE_DSYMS" == "1" ]; then
+  rm -R -f build-mac/*-dSYMs.zip
 
-echo "packaging dSYMs"
-echo ""
-zip -r ./build-mac/$ARCHIVE_NAME-dSYMs.zip ./build-mac/*.dSYM
+  echo "packaging dSYMs"
+  echo ""
+  zip -r ./build-mac/$ARCHIVE_NAME-dSYMs.zip ./build-mac/*.dSYM
+fi
 
 #---------------------------------------------------------------------------------------------------------
 
@@ -419,8 +488,12 @@ zip -r ./build-mac/$ARCHIVE_NAME-dSYMs.zip ./build-mac/*.dSYM
 echo "preparing output folder"
 echo ""
 mkdir -p ./build-mac/out
+rm -f ./build-mac/out/${ARCHIVE_NAME}*.dmg ./build-mac/out/${ARCHIVE_NAME}*.zip
+if [ "$PACKAGE_DSYMS" != "1" ]; then
+  rm -f ./build-mac/out/${ARCHIVE_NAME}*-dSYMs.zip
+fi
 mv ./build-mac/*.dmg ./build-mac/out 2>/dev/null || true
-mv ./build-mac/*.zip ./build-mac/out
+mv ./build-mac/*.zip ./build-mac/out 2>/dev/null || true
 
 #---------------------------------------------------------------------------------------------------------
 

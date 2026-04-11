@@ -120,10 +120,10 @@ Settings persist across sessions for both standalone and VST3.
 
 - With no knob selected: `Up/Down` switches amp, `Left/Right` switches channel
 - Click a knob to select it for keyboard control
-- Selected knobs show their valid range and step size in the UI
-- Selected knob: arrow keys adjust it
+- Selected knob: `Up/Down` adjusts, `Left/Right` selects the next knob
 - Hold `Shift` for finer `0.1` adjustments
 - Press `Enter` for exact numeric entry
+- Press `Delete` or `Backspace` to reset the selected knob to its default value
 - Press `Esc` to leave knob keyboard mode and return arrows to amp/channel navigation
 
 ## Build from source
