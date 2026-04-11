@@ -210,6 +210,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float mainCX = mainL + mainW / 2.f;
 
     pGraphics->AttachControl(new VoLumBackgroundControl(b, sidebarW));
+    pGraphics->AttachControl(new VoLumKnobSelectionClearControl(
+      IRECT(mainL, b.T, mainR, b.B),
+      [this]() { _ClearVoLumKnobSelection(); }));
 
     // Sidebar: logo
     const IRECT logoArea(b.L, b.T + 8.f, b.L + sidebarW, b.T + 48.f);
@@ -263,11 +266,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float labelH = 18.f;
     const float valueH = 16.f;
     const float toggleH = 34.f;
+    const float hintH = 38.f;
+    const float hintGap = 6.f;
     const float footerH = 18.f;
 
     const float contentH = speakerH + 6.f + heroH + 4.f + nameH
-                         + gapAfterAmpName + ampToKnobHairlineH + gapAfterHairline
-                         + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + 6.f + footerH;
+                          + gapAfterAmpName + ampToKnobHairlineH + gapAfterHairline
+                          + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + hintGap + hintH + 6.f + footerH;
     const float contentTop = b.T + (b.H() - contentH) / 2.f;
 
     // Speaker mode row
@@ -336,6 +341,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         pGraphics->AttachControl(knob, -1, group);
       else
         pGraphics->AttachControl(knob);
+
+      knob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == paramId);
 
       pGraphics->AttachControl(new VoLumParamValueControl(
         IRECT(cx, knobT + knobDiam + 2.f, cx + colW, knobT + knobDiam + 2.f + valueH), paramId, suffix));
@@ -426,11 +433,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new VoLumKnobLabelControl(
       IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"));
 
+    const IRECT hintArea(mainCX - 270.f, toggleY + toggleH + hintGap, mainCX + 270.f,
+                         toggleY + toggleH + hintGap + hintH);
+    pGraphics->AttachControl(new VoLumKeyboardHintControl(hintArea), kCtrlTagVoLumKeyboardHint);
+
     // Footer
-    const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
+    const IRECT footerArea(mainL, hintArea.B + 6.f, mainR, hintArea.B + 6.f + footerH);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
     if (!mVolumLastLoadedFile.empty())
       pGraphics->GetControlWithTag(kCtrlTagVoLumFooter)->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
+
+    pGraphics->AttachControl(new VoLumExactEntryControl(b, kInputLevel, "INPUT"), kCtrlTagVoLumExactEntry)->Hide(true);
 
     // Settings gear button (top-right of main panel)
     {
@@ -477,15 +490,34 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       }
     }
 
+    _SyncVoLumExactEntry();
+
     // Keyboard: Up/Down = switch amps, Left/Right = switch channels
     pGraphics->SetKeyHandlerFunc([this](const IKeyPress& key, bool isUp) {
       if (isUp) return false;
-      if (key.VK == 0x26 || key.VK == 0x28) // VK_UP or VK_DOWN
+
+      if (auto* pGfx = GetUI())
       {
-        int newIdx = (key.VK == 0x26)
+        if (pGfx->GetControlInTextEntry())
+          return false;
+
+        if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+        {
+          if (!settings->IsHidden())
+            return false;
+        }
+      }
+
+      if (_HandleVoLumSelectedKnobKey(key))
+        return true;
+
+      if (key.VK == kVK_UP || key.VK == kVK_DOWN)
+      {
+        int newIdx = (key.VK == kVK_UP)
           ? (mVolumAmpIdx - 1 + volum::kAmpCount) % volum::kAmpCount
           : (mVolumAmpIdx + 1) % volum::kAmpCount;
         // Simulate sidebar click via the same path
+        _ClearVoLumKnobSelection();
         _VolumSaveCurrentToSettings();
         mVolumAmpIdx = newIdx;
         _VolumRestoreFromSettings(newIdx);
@@ -507,8 +539,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         }
         return true;
       }
-      if (key.VK == 0x25) // VK_LEFT
+      if (key.VK == kVK_LEFT)
       {
+        _ClearVoLumKnobSelection();
         if (auto* pGfx = GetUI())
           if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
           {
@@ -521,11 +554,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               mVolumChannelIdx = newCh;
               mVolumNeedsLoad.store(true);
             }
-          }
+        }
         return true;
       }
-      if (key.VK == 0x27) // VK_RIGHT
+      if (key.VK == kVK_RIGHT)
       {
+        _ClearVoLumKnobSelection();
         if (auto* pGfx = GetUI())
           if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
           {
@@ -540,6 +574,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             }
           }
         return true;
+      }
+      if (key.VK == kVK_ESCAPE)
+      {
+        _ClearVoLumKnobSelection();
+        return false;
       }
       return false;
     });
@@ -1298,6 +1337,201 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 }
 
 #if VOLUM_AMPETE_PRODUCT
+namespace {
+constexpr std::array<int, 6> kVoLumKeyboardKnobParams = {
+  kInputLevel,
+  kNoiseGateThreshold,
+  kToneBass,
+  kToneMid,
+  kToneTreble,
+  kOutputLevel,
+};
+
+double GetVoLumKeyboardStepForParam(int paramIdx, bool fine)
+{
+  if (fine)
+    return 0.1;
+
+  switch (paramIdx)
+  {
+    case kToneBass:
+    case kToneMid:
+    case kToneTreble:
+      return 0.5;
+    default:
+      return 1.0;
+  }
+}
+
+void AppendValueWithOptionalLabel(WDL_String& text, double value, const char* label)
+{
+  text.AppendFormatted(64, "%.1f", value);
+  if (label && label[0])
+  {
+    text.Append(" ");
+    text.Append(label);
+  }
+}
+}
+
+std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
+{
+  const IParam* pParam = GetParam(paramIdx);
+  if (!pParam)
+    return {};
+
+  WDL_String minText;
+  WDL_String maxText;
+  AppendValueWithOptionalLabel(minText, pParam->GetMin(), pParam->GetLabel());
+  AppendValueWithOptionalLabel(maxText, pParam->GetMax(), pParam->GetLabel());
+
+  WDL_String line;
+  line.SetFormatted(512, "%s  |  Range %s to %s  |  Up/Down %.1f  |  Shift %.1f  |  Left/Right focus  |  Enter exact  |  Esc done",
+                    pParam->GetName(), minText.Get(), maxText.Get(), GetVoLumKeyboardStepForParam(paramIdx, false),
+                    GetVoLumKeyboardStepForParam(paramIdx, true));
+  return line.Get();
+}
+
+bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int direction)
+{
+  const auto it = std::find(kVoLumKeyboardKnobParams.begin(), kVoLumKeyboardKnobParams.end(), currentParamIdx);
+  if (it == kVoLumKeyboardKnobParams.end())
+    return false;
+
+  const int idx = static_cast<int>(std::distance(kVoLumKeyboardKnobParams.begin(), it));
+  const int count = static_cast<int>(kVoLumKeyboardKnobParams.size());
+  const int nextIdx = (idx + direction + count) % count;
+  _SelectVoLumKnob(kVoLumKeyboardKnobParams[nextIdx]);
+  return true;
+}
+
+void NeuralAmpModeler::_SelectVoLumKnob(int paramIdx)
+{
+  mVolumSelectedKnobParamIdx = paramIdx;
+  mVolumSelectedKnobHintText.clear();
+
+  if (auto* pGfx = GetUI())
+  {
+    pGfx->ForAllControlsFunc([paramIdx](IControl* pControl) {
+      if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
+      {
+        pKnob->SetSelectedForKeyboard(pKnob->GetParamIdx() == paramIdx);
+      }
+    });
+
+    mVolumSelectedKnobHintText = _GetVoLumKnobHintText(paramIdx);
+
+    if (auto* hint = pGfx->GetControlWithTag(kCtrlTagVoLumKeyboardHint))
+      hint->As<VoLumKeyboardHintControl>()->SetHintText(mVolumSelectedKnobHintText.c_str());
+
+    _SyncVoLumExactEntry();
+  }
+}
+
+void NeuralAmpModeler::_ClearVoLumKnobSelection()
+{
+  mVolumSelectedKnobParamIdx = kNoParameter;
+  mVolumSelectedKnobHintText.clear();
+
+  if (auto* pGfx = GetUI())
+  {
+    pGfx->ForAllControlsFunc([](IControl* pControl) {
+      if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
+        pKnob->SetSelectedForKeyboard(false);
+    });
+
+    if (auto* hint = pGfx->GetControlWithTag(kCtrlTagVoLumKeyboardHint))
+      hint->As<VoLumKeyboardHintControl>()->SetHintText(nullptr);
+
+    _HideVoLumExactEntry();
+  }
+}
+
+void NeuralAmpModeler::_PromptVoLumKnobExactEntry(int paramIdx, const char* label)
+{
+  _SelectVoLumKnob(paramIdx);
+
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
+    {
+      auto* exact = entry->As<VoLumExactEntryControl>();
+      exact->ShowForParam(paramIdx, label);
+      exact->StartEntry();
+    }
+  }
+}
+
+bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
+{
+  if (mVolumSelectedKnobParamIdx == kNoParameter)
+    return false;
+
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* pControl = pGfx->GetControlWithParamIdx(mVolumSelectedKnobParamIdx))
+    {
+        if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
+        {
+          const bool handled = pKnob->HandleKeyboardInput(key);
+
+          if (handled && key.VK == kVK_ESCAPE)
+            mVolumSelectedKnobParamIdx = kNoParameter;
+
+          if (handled)
+            _SyncVoLumExactEntry();
+
+          return handled;
+        }
+      }
+    }
+
+  mVolumSelectedKnobParamIdx = kNoParameter;
+  return false;
+}
+
+void NeuralAmpModeler::_SyncVoLumExactEntry()
+{
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
+    {
+      auto* exact = entry->As<VoLumExactEntryControl>();
+      if (!exact)
+        return;
+
+      exact->SyncTextEntryState();
+
+      if (mVolumSelectedKnobParamIdx == kNoParameter)
+      {
+        exact->Hide(true);
+        return;
+      }
+
+      if (exact->IsHidden())
+        return;
+
+      if (auto* pControl = pGfx->GetControlWithParamIdx(mVolumSelectedKnobParamIdx))
+      {
+        if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
+          exact->ShowForParam(mVolumSelectedKnobParamIdx, pKnob->GetKeyboardLabel());
+      }
+    }
+  }
+}
+
+void NeuralAmpModeler::_HideVoLumExactEntry()
+{
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
+    {
+      if (auto* exact = entry->As<VoLumExactEntryControl>())
+        exact->Hide(true);
+    }
+  }
+}
+
 void NeuralAmpModeler::_VolumRefreshChannels()
 {
   if (mVolumRigsRoot.empty())
