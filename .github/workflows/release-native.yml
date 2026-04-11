@@ -194,6 +194,30 @@ jobs:
         .\makedist-win.bat full zip
       shell: pwsh
 
+    - name: Verify Windows portable artifacts
+      if: matrix.os == 'windows-latest'
+      run: |
+        $zipPath = Join-Path "${{env.PROJECT_NAME}}\${{matrix.build_dir}}\out" "${{steps.win_archivename_step.outputs.archive_name}}.zip"
+        $verifyDir = Join-Path "${{env.PROJECT_NAME}}\${{matrix.build_dir}}" "verify-win"
+
+        Write-Host "Portable zip: $zipPath"
+        if (-not (Test-Path $zipPath)) { throw "Portable zip not found: $zipPath" }
+
+        if (Test-Path $verifyDir) { Remove-Item $verifyDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $verifyDir | Out-Null
+        Expand-Archive -Path $zipPath -DestinationPath $verifyDir -Force
+
+        $exePath = Join-Path $verifyDir "VoLum_x64.exe"
+        $vst3Path = Join-Path $verifyDir "VoLum.vst3"
+        $rigsPath = Join-Path $verifyDir "VoLumRigs"
+        $sampleRig = Join-Path $rigsPath "Ampete One\AMP-Ampt-1.nam"
+
+        if (-not (Test-Path $exePath)) { throw "Missing standalone exe: $exePath" }
+        if (-not (Test-Path $vst3Path)) { throw "Missing VST3 bundle: $vst3Path" }
+        if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
+        if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
+      shell: pwsh
+
     - name: Upload Windows pdb release asset
       if: matrix.os == 'windows-latest'
       uses: actions/upload-release-asset@v1
