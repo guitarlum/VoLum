@@ -429,6 +429,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Footer
     const IRECT footerArea(mainL, toggleY + toggleH + 6.f, mainR, toggleY + toggleH + 6.f + footerH);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
+    if (!mVolumLastLoadedFile.empty())
+      pGraphics->GetControlWithTag(kCtrlTagVoLumFooter)->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
 
     // Settings gear button (top-right of main panel)
     {
@@ -1317,10 +1319,17 @@ void NeuralAmpModeler::_VolumRefreshChannels()
   if (mVolumChannelIdx >= (int)mVolumChannelFiles.size())
     mVolumChannelIdx = 0;
 
+  if (!mVolumChannelFiles.empty() && mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
+    mVolumLastLoadedFile = std::filesystem::path(mVolumChannelFiles[mVolumChannelIdx]).filename().string();
+  else
+    mVolumLastLoadedFile.clear();
+
   if (auto* pGfx = GetUI())
   {
     if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
       stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
+    if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
+      footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.empty() ? "(no rig loaded)" : mVolumLastLoadedFile.c_str());
   }
 }
 
