@@ -78,3 +78,6 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/11/2026 - VoLum: Windows portable zip includes full VST3 bundle folder (not just inner binary). READMEs rewritten: root = user install guide, NeuralAmpModeler/ = dev reference.
 
+04/11/2026 - VoLum: Keyboard knob workflow + readability pass. Click a knob to select it, use Up/Down to adjust, Left/Right to move between knobs, Enter for exact numeric entry, and Delete/Backspace to reset to default. UI typography and spacing improved for readability while preserving the current look.
+
+04/11/2026 - VoLum: macOS rig packaging/runtime fixes. Standalone app embeds VoLumRigs, mac installer ships a dedicated rigs package to Application Support, and rig discovery now checks module path plus macOS Application Support locations. Added `scripts/makedist-mac.sh dev` for faster standalone-only local DMG builds.

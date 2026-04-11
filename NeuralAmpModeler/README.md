@@ -33,6 +33,7 @@ This is the build and architecture reference for contributors. For download and 
 |------|-------------|
 | `scripts/makedist-win.bat full zip` | Build + portable zip (exe + VST3 bundle + VoLumRigs) |
 | `scripts/makedist-win.bat full installer` | Build + Inno Setup installer |
+| `scripts/makedist-mac.sh dev` | Fast local macOS standalone DMG for UI iteration (host arch only, no installer, no VST3 zip, no dSYM zip) |
 | `scripts/makedist-mac.sh full zip` | Build macOS release artifacts (standalone DMG with embedded rigs, plus VST3 zip with sibling `VoLumRigs`) |
 | `scripts/makedist-mac.sh full installer` | Legacy pkg/dmg path; current CI/release flow ships zip on macOS |
 | `scripts/package-portable.ps1` | Local portable zip from an existing Windows build |
@@ -65,8 +66,9 @@ Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam`
 1. **Windows registry** `HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot` (set by the Inno installer so VST3 under Common Files can reach models in the VoLum install directory)
 2. Walk up from the **plugin module** (VST3 DLL or standalone exe -- uses `GetModuleHandleEx` on Windows so it resolves to the plugin, not the host process). Checks for `VoLumRigs/` then `rigs/` at each level.
 3. **macOS .app bundle** `Contents/Resources/VoLumRigs` (then `rigs`) for the standalone app
-4. Walk up from the module / extracted archive and check sibling `VoLumRigs/` then `rigs/` (used by portable VST3 packaging)
-5. **CWD** `./VoLumRigs` then `./rigs` (dev fallback)
+4. **macOS Application Support** lookup in `~/Library/Application Support/VoLum/VoLumRigs` and `/Library/Application Support/VoLum/VoLumRigs` (then legacy `rigs`) for installed rigs outside the app bundle
+5. Walk up from the module / extracted archive and check sibling `VoLumRigs/` then `rigs/` (used by portable VST3 packaging)
+6. **CWD** `./VoLumRigs` then `./rigs` (dev fallback)
 
 Settings are stored under the user profile (`%LOCALAPPDATA%\VoLum\` on Windows, `~/Library/Application Support/VoLum/` on macOS) so they work regardless of install location.
 
