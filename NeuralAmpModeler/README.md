@@ -40,7 +40,14 @@ This is the build and architecture reference for contributors. For download and 
 | `scripts/run-tests-win.ps1` | Build and run the doctest suite |
 | `scripts/run-app-win.ps1` | Build and launch the standalone (for UI iteration) |
 
-**Build Native** (`.github/workflows/build-native.yml`) runs on every push and produces a macOS standalone DMG plus a macOS VST3 zip. **Release Native** (`.github/workflows/release-native.yml`) publishes those same macOS artifacts on tags, alongside the Windows installer and portable zip.
+**Build Native** (`.github/workflows/build-native.yml`) runs on every push and produces CI artifacts for macOS and Windows. **Release Native** (`.github/workflows/release-native.yml`) is the one-button draft release flow: it defaults to the next minor version, accepts `minor`/`patch`/`major`/`manual` input, creates the tag and draft release, then uploads the user-facing assets only.
+
+Current release asset names:
+
+- `VoLum-vX.Y.Z-macos-standalone.dmg`
+- `VoLum-vX.Y.Z-macos-vst3.zip`
+- `VoLum-vX.Y.Z-windows-setup.exe`
+- `VoLum-vX.Y.Z-windows-portable.zip`
 
 ## Rig file structure
 

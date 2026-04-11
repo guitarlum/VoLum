@@ -21,20 +21,41 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 
 [![Build status](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml)
 
-Grab the latest build from [**Actions > Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml) -- pick the latest green run, scroll to **Artifacts**, and download **VoLum-win** (Windows) or **VoLum-mac** (macOS).
+Most users should download VoLum from [**Releases**](https://github.com/guitarlum/VoLum/releases):
 
-Tagged releases appear under [**Releases**](https://github.com/guitarlum/VoLum/releases) with separate artifacts for each install path:
+- `VoLum-vX.Y.Z-windows-setup.exe` for the recommended Windows install
+- `VoLum-vX.Y.Z-windows-portable.zip` for portable Windows use
+- `VoLum-vX.Y.Z-macos-standalone.dmg` for the recommended macOS standalone app install
+- `VoLum-vX.Y.Z-macos-vst3.zip` for macOS VST3 plugin installation
 
-- `VoLum-Setup.exe` for the recommended Windows install
-- `VoLum-vX.Y.Z-win-portable.zip` for portable Windows use
-- `VoLum-vX.Y.Z-mac-app.dmg` for the recommended macOS standalone app install
-- `VoLum-vX.Y.Z-mac-vst3.zip` for macOS VST3 plugin installation
+If you want the newest preview build before a release, open [**Actions > Build Native**](https://github.com/guitarlum/VoLum/actions/workflows/build-native.yml), pick the latest green run, and download **VoLum-win** or **VoLum-mac** from **Artifacts**.
+
+### Which download should I choose?
+
+- **Windows installer** if you want the easiest setup for standalone plus VST3
+- **Windows portable** if you want a zip you can unpack anywhere
+- **macOS standalone** if you just want to play through the app
+- **macOS VST3** if you want to use VoLum inside a DAW
 
 ## Install
 
-### Windows (portable zip from CI)
+### Windows (recommended)
 
-1. Download and unzip the **VoLum-win** artifact. Inside you will find two zips -- open the **main** one (not the `-pdbs` symbols archive).
+Run `VoLum-vX.Y.Z-windows-setup.exe`.
+
+It installs:
+
+- `VoLum.exe` in `C:\Program Files\VoLum`
+- `VoLum.vst3` in `C:\Program Files\Common Files\VST3`
+- `VoLumRigs` in the VoLum install folder
+
+The VST3 plugin finds the bundled rigs automatically through the installer registry entry, so no manual copying is needed.
+
+### Windows (portable)
+
+Use `VoLum-vX.Y.Z-windows-portable.zip` from a release, or the Windows artifact from **Build Native**.
+
+1. Unzip the portable package.
 2. You should see this layout:
 
 ```
@@ -56,23 +77,21 @@ C:\Program Files\Common Files\VST3\
   VoLumRigs/                     <-- amp profiles, right next to it
 ```
 
-### Windows (installer from a tagged release)
+### macOS standalone app (recommended)
 
-Run `VoLum-Setup.exe`. It places the standalone in `Program Files\VoLum`, the VST3 bundle in `Common Files\VST3`, and the amp profiles under the install directory. The VST3 finds models automatically via registry -- no manual copying needed.
+1. Download `VoLum-vX.Y.Z-macos-standalone.dmg`.
+2. Open it and drag `VoLum.app` into `Applications`.
+3. Launch `VoLum.app`.
 
-### macOS (portable zip from CI)
+The standalone already contains the bundled rigs inside the app.
 
-1. Unzip the **VoLum-mac** artifact, open the main zip.
-2. The extracted folder contains:
+Because the macOS builds are currently unsigned, macOS may ask you to right-click `VoLum.app` and choose `Open` the first time.
 
-```
-VoLum.app/                        (standalone app; rigs already embedded)
-VoLum.vst3/                       (VST3 plugin bundle)
-VoLumRigs/                        (amp profiles for the VST3 plugin)
-```
+### macOS VST3 plugin
 
-3. **Standalone** -- double-click `VoLum.app`. It already contains `VoLumRigs` inside `Contents/Resources`.
-4. **VST3** -- copy `VoLum.vst3` and `VoLumRigs` side by side into `~/Library/Audio/Plug-Ins/VST3/`:
+1. Download `VoLum-vX.Y.Z-macos-vst3.zip`.
+2. Unzip it.
+3. Copy `VoLum.vst3` and `VoLumRigs` side by side into `~/Library/Audio/Plug-Ins/VST3/`:
 
 ```
 ~/Library/Audio/Plug-Ins/VST3/
@@ -80,11 +99,14 @@ VoLumRigs/                        (amp profiles for the VST3 plugin)
   VoLumRigs/
 ```
 
-### macOS (tagged release)
+### macOS preview builds
 
-1. **Standalone app** -- download `VoLum-vX.Y.Z-mac-app.dmg`, open it, drag `VoLum.app` into `Applications`, then launch it. The app already contains the bundled rigs.
-2. **VST3 plugin** -- download `VoLum-vX.Y.Z-mac-vst3.zip`, unzip it, then copy `VoLum.vst3` and `VoLumRigs` side by side into `~/Library/Audio/Plug-Ins/VST3/`.
-3. Because the mac builds are currently unsigned, macOS may ask you to right-click `VoLum.app` and choose `Open` the first time.
+If you are installing from the **Build Native** artifact instead of a tagged release:
+
+1. Download **VoLum-mac** from the latest green run.
+2. Use the `*-standalone.dmg` or `*-app.dmg` file for the standalone app.
+3. Use the `*-vst3.zip` file for the plugin.
+4. Install them the same way as the macOS release downloads above.
 
 ## Bundled amps
 
