@@ -87,7 +87,9 @@ enum ECtrlTags
   kCtrlTagVoLumSpeakerRow,
   kCtrlTagVoLumHeroImage,
   kCtrlTagVoLumAmpName,
+  kCtrlTagVoLumKeyboardHint,
   kCtrlTagVoLumFooter,
+  kCtrlTagVoLumExactEntry,
   kCtrlTagVoLumChannelStep,
 #endif
   kNumCtrlTags
@@ -252,16 +254,30 @@ private:
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
 #if VOLUM_AMPETE_PRODUCT
+public:
   void _VolumRefreshChannels();
   std::string _StageModelFromData(nam::dspData conf, const char* path);
   void _VolumSaveCurrentToSettings();
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
+  void _SelectVoLumKnob(int paramIdx);
+  bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
+  void _ClearVoLumKnobSelection();
+  void _PromptVoLumKnobExactEntry(int paramIdx, const char* label);
+  bool _HandleVoLumSelectedKnobKey(const iplug::IKeyPress& key);
+  std::string _GetVoLumKnobHintText(int paramIdx) const;
+  void _SyncVoLumExactEntry();
+  void _HideVoLumExactEntry();
+
+private:
+  friend class NAMKnobControl;
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
   int mVolumChannelIdx = 0;
+  int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
+  std::string mVolumSelectedKnobHintText;
   std::vector<std::string> mVolumChannelFiles;
   std::vector<std::string> mVolumChannelLabels;
   std::string mVolumRigsRoot;

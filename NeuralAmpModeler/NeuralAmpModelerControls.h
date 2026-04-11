@@ -73,6 +73,105 @@ public:
   , IBitmapBase(bitmap)
   {
     mInnerPointerFrac = 0.55;
+    if (label)
+      mKeyboardLabel = label;
+
+    mText = IText(16.f, COLOR_WHITE, "Josefin-Bold", EAlign::Center, EVAlign::Middle, 0.f,
+                  IColor(235, 18, 20, 28), IColor(255, 255, 248, 238));
+    SetTextEntryLength(12);
+  }
+
+  void SetSelectedForKeyboard(bool selected)
+  {
+    if (mKeyboardSelected != selected)
+    {
+      mKeyboardSelected = selected;
+      SetDirty(false);
+    }
+  }
+
+  bool IsSelectedForKeyboard() const { return mKeyboardSelected; }
+  const char* GetKeyboardLabel() const { return mKeyboardLabel.c_str(); }
+  IRECT GetKeyboardEntryBounds() const
+  {
+    return mValueBounds.GetCentredInside(132.f, 36.f).GetVShifted(8.f);
+  }
+
+  void PromptExactValueEntry()
+  {
+    if (auto* pPlugin = PLUG())
+      pPlugin->_PromptVoLumKnobExactEntry(GetParamIdx(), GetKeyboardLabel());
+  }
+
+  bool HandleKeyboardInput(const IKeyPress& key)
+  {
+    if (!mKeyboardSelected || IsDisabled())
+      return false;
+
+    switch (key.VK)
+    {
+      case kVK_LEFT:
+        if (auto* pPlugin = PLUG())
+          return pPlugin->_SelectAdjacentVoLumKnob(GetParamIdx(), -1);
+        return false;
+      case kVK_RIGHT:
+        if (auto* pPlugin = PLUG())
+          return pPlugin->_SelectAdjacentVoLumKnob(GetParamIdx(), 1);
+        return false;
+      case kVK_DOWN:
+        return Nudge(false, key.S);
+      case kVK_UP:
+        return Nudge(true, key.S);
+      case kVK_RETURN:
+        PromptExactValueEntry();
+        return true;
+      case kVK_ESCAPE:
+        SetSelectedForKeyboard(false);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool Nudge(bool increase, bool fine)
+  {
+    if (IsDisabled())
+      return false;
+
+    const IParam* pParam = GetParam();
+    if (!pParam)
+      return false;
+
+    const double current = pParam->FromNormalized(GetValue());
+    const double delta = (increase ? 1.0 : -1.0) * GetKeyboardStep(fine);
+    const double next = std::clamp(current + delta, pParam->GetMin(), pParam->GetMax());
+    const double normalized = pParam->ToNormalized(next);
+
+    if (normalized == GetValue())
+      return false;
+
+    SetValueFromUserInput(normalized);
+    return true;
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (!IsDisabled())
+    {
+      SetSelectedForKeyboard(true);
+
+      if (auto* pPlugin = PLUG())
+        pPlugin->_SelectVoLumKnob(GetParamIdx());
+    }
+
+    IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  bool OnKeyDown(float x, float y, const IKeyPress& key) override
+  {
+    (void) x;
+    (void) y;
+    return HandleKeyboardInput(key);
   }
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
@@ -94,7 +193,33 @@ public:
                                                {COLOR_TRANSPARENT, 1.0f}}),
                {}, &mBlend);
     g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
+
+    if (mKeyboardSelected)
+    {
+      const auto selectionColor = GetColor(kX1).WithOpacity(0.8f);
+      g.DrawCircle(selectionColor, cx, cy, widgetRadius + 5.f, nullptr, 1.5f);
+    }
   }
+
+private:
+  double GetKeyboardStep(bool fine) const
+  {
+    if (fine)
+      return 0.1;
+
+    switch (GetParamIdx())
+    {
+      case kToneBass:
+      case kToneMid:
+      case kToneTreble:
+        return 0.5;
+      default:
+        return 1.0;
+    }
+  }
+
+  bool mKeyboardSelected = false;
+  std::string mKeyboardLabel;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
