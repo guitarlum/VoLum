@@ -116,7 +116,6 @@ def update_config(version: Version) -> None:
 def update_generated_metadata() -> None:
     python = sys.executable
     run([python, "update_version-mac.py"], cwd=PROJECT_SCRIPTS)
-    run([python, "update_version-ios.py"], cwd=PROJECT_SCRIPTS)
     run([python, "update_installer-win.py", "0"], cwd=PROJECT_SCRIPTS)
 
 
