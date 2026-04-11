@@ -435,7 +435,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\resources\NeuralAmpModeler.ico">
+    <Image Include="..\resources\icons\VoLum.ico">
       <Filter>resources</Filter>
     </Image>
   </ItemGroup>

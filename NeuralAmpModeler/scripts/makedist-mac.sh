@@ -60,10 +60,7 @@ PLUGIN_NAME=${PLUGIN_NAME//\"}
 # Project/config files keep the upstream "NeuralAmpModeler" prefix even though
 # BUNDLE_NAME (and therefore PLUGIN_NAME) is now "VoLum".
 PROJECT_PREFIX=NeuralAmpModeler
-ICON_NAME=$PLUGIN_NAME
-if [ ! -f "resources/$ICON_NAME.icns" ]; then
-  ICON_NAME=$PROJECT_PREFIX
-fi
+ICON_NAME=icons/$PLUGIN_NAME
 
 ARCHIVE_NAME=$PLUGIN_NAME-v$FULL_VERSION-mac
 
