@@ -1,14 +1,14 @@
 # VoLum -- NAM Player
 
-<p align="center">
-  <img src="NeuralAmpModeler/resources/Images.xcassets/AppIcon.appiconset/iOSAppIcon.png" alt="VoLum app icon" width="160">
-</p>
-
 ![VoLum standalone UI](docs/volum-ui.png)
 
 A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 14 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
 
 ## Features
+
+<p align="center">
+  <img src="NeuralAmpModeler/resources/Images.xcassets/AppIcon.appiconset/iOSAppIcon.png" alt="VoLum app icon" width="160">
+</p>
 
 - **14 bundled amps** with 4 speaker modes and multiple gain stages each (~224 profiles total)
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
