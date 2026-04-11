@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IControls.h"
+#include "ITextEntryControl.h"
 #include "VoLumAmpeteCatalog.h"
 #include <cmath>
 #include <functional>
@@ -10,6 +11,15 @@
 
 using namespace iplug;
 using namespace igraphics;
+
+inline void ClearVoLumKnobSelection(IControl* control)
+{
+  if (!control)
+    return;
+
+  if (auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(control->GetDelegate()))
+    plugin->_ClearVoLumKnobSelection();
+}
 
 // Art Deco Noir palette
 namespace VoLumColors
@@ -96,6 +106,29 @@ public:
 
 private:
   float mSidebarWidth;
+};
+
+class VoLumKnobSelectionClearControl : public IControl
+{
+public:
+  using ClearCallback = std::function<void()>;
+
+  VoLumKnobSelectionClearControl(const IRECT& bounds, ClearCallback callback)
+  : IControl(bounds)
+  , mCallback(callback)
+  {
+  }
+
+  void Draw(IGraphics& g) override {}
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mCallback)
+      mCallback();
+  }
+
+private:
+  ClearCallback mCallback;
 };
 
 class VoLumLogoControl : public IControl
@@ -195,6 +228,8 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    ClearVoLumKnobSelection(this);
+
     int idx = HitTestItem(y);
     if (idx >= 0 && idx < mNumAmps)
     {
@@ -536,6 +571,8 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    ClearVoLumKnobSelection(this);
+
     for (int i = 0; i < 4; i++)
     {
       if (mBtnRects[i].Contains(x, y) && i != mSelected)
@@ -1211,6 +1248,8 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    ClearVoLumKnobSelection(this);
+
     const int n = (int)mLabels.size();
     if (n < 1)
       return;
@@ -1254,6 +1293,243 @@ private:
   bool mMouseOverRight = false;
   std::vector<std::string> mLabels;
   ChangeCallback mCallback;
+};
+
+class VoLumKeyboardHintControl : public IControl
+{
+public:
+  explicit VoLumKeyboardHintControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mHintText.empty())
+      return;
+
+    g.FillRoundRect(IColor(168, 14, 16, 22), mRECT, 7.f);
+    g.DrawRoundRect(IColor(72, 200, 162, 78), mRECT, 7.f, nullptr, 1.f);
+
+    const IText titleText(11.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const IText detailText(10.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+
+    const IRECT inner = mRECT.GetPadded(-16.f, -4.f, -16.f, -4.f);
+    const IRECT top = inner.GetFromTop(inner.H() * 0.46f).GetPadded(0.f, 1.f, 0.f, -2.f);
+    const IRECT bottom = inner.GetFromBottom(inner.H() * 0.54f).GetPadded(0.f, -2.f, 0.f, 1.f);
+    g.DrawText(titleText, mHintTitle.c_str(), top);
+    g.DrawText(detailText, mHintDetail.c_str(), bottom);
+  }
+
+  void SetHintText(const char* hintText)
+  {
+    mHintText = (hintText && hintText[0]) ? hintText : "";
+    mHintTitle.clear();
+    mHintDetail.clear();
+
+    if (!mHintText.empty())
+    {
+      const std::string divider = "  |  ";
+      const auto firstSplit = mHintText.find(divider);
+      if (firstSplit == std::string::npos)
+      {
+        mHintTitle = mHintText;
+      }
+      else
+      {
+        mHintTitle = mHintText.substr(0, firstSplit);
+        mHintDetail = mHintText.substr(firstSplit + divider.size());
+      }
+    }
+
+    SetDirty(false);
+  }
+
+private:
+  std::string mHintText;
+  std::string mHintTitle;
+  std::string mHintDetail;
+};
+
+class VoLumExactEntryControl : public IControl
+{
+public:
+  VoLumExactEntryControl(const IRECT& bounds, int paramIdx, const char* label = "")
+  : IControl(bounds, paramIdx)
+  , mLabel(label ? label : "")
+  {
+    mIgnoreMouse = false;
+    mText = IText(22.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle, 0.f,
+                  IColor(245, 14, 16, 22), VoLumColors::TEXT_BRIGHT);
+    SetTextEntryLength(12);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mHide)
+      return;
+
+    g.FillRect(IColor(182, 8, 10, 14), mRECT);
+
+    const IRECT panel = GetPanelRect();
+    const IRECT frame = panel.GetPadded(10.f);
+    const IRECT entry = GetEntryRect();
+    const IRECT titleRect(panel.L + 24.f, panel.T + 18.f, panel.R - 24.f, panel.T + 38.f);
+    const IRECT rangeRect(panel.L + 24.f, titleRect.B + 8.f, panel.R - 24.f, titleRect.B + 26.f);
+    const IRECT hintRect(panel.L + 24.f, entry.B + 10.f, panel.R - 24.f, entry.B + 26.f);
+
+    g.FillRoundRect(IColor(255, 22, 22, 30), panel, 10.f);
+    g.DrawRoundRect(VoLumColors::FRAME, panel, 10.f, nullptr, 1.2f);
+    g.DrawRoundRect(IColor(90, 200, 180, 100), frame, 8.f, nullptr, 1.f);
+
+    DrawCornerAccent(g, panel.L + 11.f, panel.T + 11.f, 16.f, false, false);
+    DrawCornerAccent(g, panel.R - 11.f, panel.T + 11.f, 16.f, true, false);
+    DrawCornerAccent(g, panel.L + 11.f, panel.B - 11.f, 16.f, false, true);
+    DrawCornerAccent(g, panel.R - 11.f, panel.B - 11.f, 16.f, true, true);
+
+    g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+               mLabel.empty() ? "EXACT VALUE" : mLabel.c_str(), titleRect);
+    g.DrawText(IText(11.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+               mRangeText.c_str(), rangeRect);
+
+    g.FillRoundRect(IColor(235, 14, 16, 22), entry, 6.f);
+    g.DrawRoundRect(IColor(72, 200, 162, 78), entry, 6.f, nullptr, 1.f);
+    g.DrawRoundRect(IColor(36, 200, 162, 78), entry.GetPadded(2.f), 5.f, nullptr, 1.f);
+
+    g.DrawText(IText(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+               "Type a number, press Enter to apply, Esc to cancel", hintRect);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mHide)
+      return;
+
+    auto* ui = GetUI();
+    if (!ui)
+      return;
+
+    if (!GetPanelRect().Contains(x, y))
+    {
+      Hide(true);
+      if (auto* textEntry = ui->GetTextEntryControl())
+        textEntry->DismissEdit();
+      return;
+    }
+
+    if (!mEditing && GetEntryRect().Contains(x, y))
+      StartEntry();
+  }
+
+  void OnTextEntryCompletion(const char* str, int valIdx) override
+  {
+    mEditing = false;
+    Hide(true);
+    IControl::OnTextEntryCompletion(str, valIdx);
+  }
+
+  void SetValueFromUserInput(double value, int valIdx) override
+  {
+    mEditing = false;
+    Hide(true);
+    IControl::SetValueFromUserInput(value, valIdx);
+  }
+
+  void SetLabel(const char* label)
+  {
+    mLabel = label ? label : "";
+    SetDirty(false);
+  }
+
+  void ShowForParam(int paramIdx, const char* label = nullptr)
+  {
+    SetParamIdx(paramIdx);
+    SetLabel(label);
+    BuildRangeText();
+    Hide(false);
+    mEditing = false;
+    SetDirty(false);
+  }
+
+  void StartEntry()
+  {
+    if (mHide)
+      return;
+
+    auto* ui = GetUI();
+    if (!ui)
+      return;
+
+    WDL_String currentText;
+    if (const auto* pParam = GetParam())
+      pParam->GetDisplay(currentText, false);
+
+    mEditing = true;
+    BuildRangeText();
+    ui->CreateTextEntry(*this, mText, GetEntryRect(), currentText.Get());
+    SetDirty(false);
+  }
+
+  bool IsEditing() const { return mEditing; }
+
+  void SyncTextEntryState()
+  {
+    auto* ui = GetUI();
+    if (!ui)
+      return;
+
+    if (mEditing && ui->GetControlInTextEntry() != this)
+    {
+      mEditing = false;
+      Hide(true);
+      SetDirty(false);
+    }
+  }
+
+  void Hide(bool hide) override
+  {
+    IControl::Hide(hide);
+    if (hide)
+      mEditing = false;
+  }
+
+private:
+  IRECT GetPanelRect() const
+  {
+    return mRECT.GetCentredInside(340.f, 156.f);
+  }
+
+  IRECT GetEntryRect() const
+  {
+    const IRECT panel = GetPanelRect();
+    return IRECT(panel.L + 28.f, panel.T + 64.f, panel.R - 28.f, panel.T + 106.f);
+  }
+
+  void BuildRangeText()
+  {
+    mRangeText.clear();
+    if (const auto* pParam = GetParam())
+    {
+      WDL_String minText;
+      WDL_String maxText;
+      pParam->GetDisplay(pParam->GetMin(), false, minText, false);
+      pParam->GetDisplay(pParam->GetMax(), false, maxText, false);
+      mRangeText = "Range ";
+      mRangeText += minText.Get();
+      mRangeText += " to ";
+      mRangeText += maxText.Get();
+      if (const char* label = pParam->GetLabel(); label && label[0])
+      {
+        mRangeText += " ";
+        mRangeText += label;
+      }
+    }
+  }
+
+  std::string mLabel;
+  std::string mRangeText;
+  bool mEditing = false;
 };
 
 class VoLumParamValueControl : public IControl

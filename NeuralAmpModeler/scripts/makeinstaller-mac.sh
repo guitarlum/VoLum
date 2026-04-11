@@ -54,7 +54,7 @@ fi
 
 build_flavor()
 {
-  TMPDIR=${TARGET_DIR}/tmp
+  FLAVOR_TMPDIR=${TARGET_DIR}/tmp
   flavor=$1
   flavorprod=$2
   ident=$3
@@ -62,12 +62,13 @@ build_flavor()
 
   echo --- BUILDING ${PRODUCT_NAME}_${flavor}.pkg ---
 
-  mkdir -p $TMPDIR
-  cp -R -L $PRODUCTS/$flavorprod $TMPDIR
+  mkdir -p "$PKG_DIR"
+  mkdir -p "$FLAVOR_TMPDIR"
+  cp -R -L "$PRODUCTS/$flavorprod" "$FLAVOR_TMPDIR"
 
-  pkgbuild --root $TMPDIR --identifier $ident --version $VERSION --install-location $loc ${PKG_DIR}/${PRODUCT_NAME}_${flavor}.pkg #|| exit 1
+  pkgbuild --root "$FLAVOR_TMPDIR" --identifier "$ident" --version "$VERSION" --install-location "$loc" "${PKG_DIR}/${PRODUCT_NAME}_${flavor}.pkg" #|| exit 1
 
-  rm -r $TMPDIR
+  rm -r "$FLAVOR_TMPDIR"
 }
 
 # try to build VST2 package
@@ -96,17 +97,18 @@ if [[ -d $PRODUCTS/$APP ]]; then
 fi
 
 # build bundled rigs package (14 amp folders with .nam files)
-RIGS_SRC="../../rigs"
+RIGS_SRC="../rigs"
 if [[ -d $RIGS_SRC ]]; then
   echo "--- BUILDING ${PRODUCT_NAME}_RIGS.pkg ---"
   RIGS_TMP=${TARGET_DIR}/tmp-rigs
-  mkdir -p "$RIGS_TMP/rigs"
+  mkdir -p "$PKG_DIR"
+  mkdir -p "$RIGS_TMP/VoLumRigs"
   for ampdir in "$RIGS_SRC"/*/; do
     dirname=$(basename "$ampdir")
-    mkdir -p "$RIGS_TMP/rigs/$dirname"
-    cp "$ampdir"*.nam "$RIGS_TMP/rigs/$dirname/" 2>/dev/null
+    mkdir -p "$RIGS_TMP/VoLumRigs/$dirname"
+    cp "$ampdir"*.nam "$RIGS_TMP/VoLumRigs/$dirname/" 2>/dev/null
   done
-  pkgbuild --root "$RIGS_TMP" --identifier "com.Lum.rigs.pkg.${PRODUCT_NAME}" --version $VERSION --install-location "/Applications/${PRODUCT_NAME}.app/Contents/Resources" ${PKG_DIR}/${PRODUCT_NAME}_RIGS.pkg
+  pkgbuild --root "$RIGS_TMP" --identifier "com.Lum.rigs.pkg.${PRODUCT_NAME}" --version "$VERSION" --install-location "/Library/Application Support/${PRODUCT_NAME}" "${PKG_DIR}/${PRODUCT_NAME}_RIGS.pkg"
   rm -rf "$RIGS_TMP"
 fi
 

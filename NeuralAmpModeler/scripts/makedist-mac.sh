@@ -94,6 +94,7 @@ AAX_FINAL="/Library/Application Support/Avid/Audio/Plug-Ins/$PLUGIN_NAME.aaxplug
 
 PKG="build-mac/installer/$PLUGIN_NAME Installer.pkg"
 PKG_US="build-mac/installer/$PLUGIN_NAME Installer.unsigned.pkg"
+RIGS_SRC="$(pwd)/../rigs"
 
 CERT_ID=`echo | grep CERTIFICATE_ID $XCCONFIG`
 CERT_ID=${CERT_ID//\CERTIFICATE_ID = }
@@ -245,6 +246,18 @@ if [ -d "${AAX}" ]; then
   strip -x "${AAX}/Contents/MacOS/$PLUGIN_NAME"
 fi
 
+if [ -d "$RIGS_SRC" ] && [ -d "$APP" ]; then
+  echo "embedding VoLumRigs into app bundle..."
+  rm -R -f "$APP/Contents/Resources/VoLumRigs"
+  mkdir -p "$APP/Contents/Resources/VoLumRigs"
+  for amp_dir in "$RIGS_SRC"/*/; do
+    [ -d "$amp_dir" ] || continue
+    amp_name=$(basename "$amp_dir")
+    mkdir -p "$APP/Contents/Resources/VoLumRigs/$amp_name"
+    cp "$amp_dir"*.nam "$APP/Contents/Resources/VoLumRigs/$amp_name/" 2>/dev/null || true
+  done
+fi
+
 if [ $CODESIGN == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # code sign AAX binary with wraptool
@@ -292,7 +305,7 @@ if [ $BUILD_INSTALLER == 1 ]; then
   fi
 
   #set installer icon
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file "${PKG}"
+  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file "${PKG}"
 
   #---------------------------------------------------------------------------------------------------------
   # make dmg, can use dmgcanvas http://www.araelium.com/dmgcanvas/ to make a nice dmg, fallback to hdiutil
@@ -345,20 +358,8 @@ else
   # Make the standalone self-contained before we copy it into the archive.
   # VoLumPaths on macOS checks the app bundle's Contents/Resources/VoLumRigs
   # first, so keep the built app populated there.
-  RIGS_SRC="$(pwd)/../rigs"
   APP_DMG="build-mac/${ARCHIVE_NAME}-app.dmg"
   VST3_ZIP="build-mac/${ARCHIVE_NAME}-vst3.zip"
-  if [ -d "$RIGS_SRC" ] && [ -d "$APP" ]; then
-    echo "embedding VoLumRigs into app bundle..."
-    rm -R -f "$APP/Contents/Resources/VoLumRigs"
-    mkdir -p "$APP/Contents/Resources/VoLumRigs"
-    for amp_dir in "$RIGS_SRC"/*/; do
-      [ -d "$amp_dir" ] || continue
-      amp_name=$(basename "$amp_dir")
-      mkdir -p "$APP/Contents/Resources/VoLumRigs/$amp_name"
-      cp "$amp_dir"*.nam "$APP/Contents/Resources/VoLumRigs/$amp_name/" 2>/dev/null || true
-    done
-  fi
 
   if [ ! -d "$APP" ]; then
     echo "ERROR: missing app bundle: $APP"

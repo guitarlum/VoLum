@@ -14,7 +14,7 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
 - **Per-amp settings** -- knobs, toggles, speaker mode, and channel are saved per amp and restored on next launch
 - **Fast amp switching** -- models load on a background thread; switching back to a previously loaded amp is instant
-- **Keyboard shortcuts** -- Up/Down: switch amp; Left/Right: switch channel
+- **Keyboard shortcuts** -- Up/Down: switch amp; Left/Right: switch channel; click a knob for keyboard fine-tuning
 - **Standalone + VST3** -- same UI and features in both formats
 
 ## Download
@@ -115,6 +115,16 @@ Your per-amp knob, toggle, speaker, and channel settings are stored automaticall
 - **macOS:** `~/Library/Application Support/VoLum/volum-settings.json`
 
 Settings persist across sessions for both standalone and VST3.
+
+## Keyboard controls
+
+- With no knob selected: `Up/Down` switches amp, `Left/Right` switches channel
+- Click a knob to select it for keyboard control
+- Selected knobs show their valid range and step size in the UI
+- Selected knob: arrow keys adjust it
+- Hold `Shift` for finer `0.1` adjustments
+- Press `Enter` for exact numeric entry
+- Press `Esc` to leave knob keyboard mode and return arrows to amp/channel navigation
 
 ## Build from source
 
