@@ -83,3 +83,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/11/2026 - VoLum: macOS rig packaging/runtime fixes. Standalone app embeds VoLumRigs, mac installer ships a dedicated rigs package to Application Support, and rig discovery now checks module path plus macOS Application Support locations. Added `scripts/makedist-mac.sh dev` for faster standalone-only local DMG builds.
 
 04/11/2026 - v0.2.0 VoLum release. See GitHub release notes for included changes.
+
+04/12/2026 - VoLum: Removed redundant “SELECTED AMP” caption above the main amp name.
