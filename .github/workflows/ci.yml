@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_NAME: NeuralAmpModeler
+
+jobs:
+  windows:
+    name: Windows (tests + portable zip)
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-iplug-sdks.sh
+        shell: bash
+
+      - name: Get Prebuilt Libs
+        run: |
+          cd iPlug2/Dependencies
+          ./download-prebuilt-libs.sh
+        shell: bash
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup Python3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          architecture: "x64"
+
+      - name: Unit tests (doctest)
+        run: ./NeuralAmpModeler/scripts/run-tests-win.ps1
+        shell: pwsh
+
+      - name: Build Windows portable zip
+        run: |
+          cd NeuralAmpModeler\scripts
+          .\makedist-win.bat full zip
+        shell: cmd
+
+      - name: Verify portable package layout
+        run: ./NeuralAmpModeler/scripts/verify-packaging-win.ps1
+        shell: pwsh
+
+  macos:
+    name: macOS (zip distribution + packaging verify)
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-iplug-sdks.sh
+
+      - name: Get Prebuilt Libs
+        run: |
+          cd iPlug2/Dependencies
+          ./download-prebuilt-libs.sh
+
+      - name: Build macOS zip distribution
+        run: |
+          cd NeuralAmpModeler/scripts
+          ./makedist-mac.sh full zip
+
+      - name: Verify DMG and VST3 zip layout
+        run: |
+          chmod +x NeuralAmpModeler/scripts/verify-packaging-mac.sh
+          NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
