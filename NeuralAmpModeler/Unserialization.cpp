@@ -1,3 +1,5 @@
+#include "VoLumChunkVersion.h"
+
 // Unserialization
 //
 // This plugin is used in important places, so we need to be considerate when
@@ -212,71 +214,6 @@ int _GetConfigFrom_Earlier(const iplug::IByteChunk& chunk, int startPos, nlohman
 
 //==============================================================================
 
-class _Version
-{
-public:
-  _Version(const int major, const int minor, const int patch)
-  : mMajor(major)
-  , mMinor(minor)
-  , mPatch(patch) {};
-  _Version(const std::string& versionStr)
-  {
-    std::istringstream stream(versionStr);
-    std::string token;
-    std::vector<int> parts;
-
-    // Split the string by "."
-    while (std::getline(stream, token, '.'))
-    {
-      parts.push_back(std::stoi(token)); // Convert to int and store
-    }
-
-    // Check if we have exactly 3 parts
-    if (parts.size() != 3)
-    {
-      throw std::invalid_argument("Input string does not contain exactly 3 segments separated by '.'");
-    }
-
-    // Assign the parts to the provided int variables
-    mMajor = parts[0];
-    mMinor = parts[1];
-    mPatch = parts[2];
-  };
-
-  bool operator>=(const _Version& other) const
-  {
-    // Compare on major version:
-    if (GetMajor() > other.GetMajor())
-    {
-      return true;
-    }
-    if (GetMajor() < other.GetMajor())
-    {
-      return false;
-    }
-    // Compare on minor
-    if (GetMinor() > other.GetMinor())
-    {
-      return true;
-    }
-    if (GetMinor() < other.GetMinor())
-    {
-      return false;
-    }
-    // Compare on patch
-    return GetPatch() >= other.GetPatch();
-  };
-
-  int GetMajor() const { return mMajor; };
-  int GetMinor() const { return mMinor; };
-  int GetPatch() const { return mPatch; };
-
-private:
-  int mMajor;
-  int mMinor;
-  int mPatch;
-};
-
 int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk& chunk, int startPos)
 {
   // We already got through the header before calling this.
@@ -286,29 +223,27 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   WDL_String wVersion;
   pos = chunk.GetStr(wVersion, pos);
   std::string versionStr(wVersion.Get());
-  _Version version(versionStr);
+  volum::ChunkVersion version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  // VoLum 0.1.x uses the same serialization format as NAM 0.7.15
-  const bool isVolumVersion = version >= _Version(0, 1, 0) && !( version >= _Version(0, 7, 0) );
 
-  if (version >= _Version(0, 7, 15) || isVolumVersion)
+  if (volum::ChunkUses0715SerializedConfig(version))
   {
     pos = _GetConfigFrom_0_7_15(chunk, pos, config);
   }
-  else if (version >= _Version(0, 7, 14))
+  else if (version >= volum::ChunkVersion(0, 7, 14))
   {
     pos = _GetConfigFrom_0_7_14(chunk, pos, config);
   }
-  else if (version >= _Version(0, 7, 12))
+  else if (version >= volum::ChunkVersion(0, 7, 12))
   {
     pos = _GetConfigFrom_0_7_12(chunk, pos, config);
   }
-  else if (version >= _Version(0, 7, 10))
+  else if (version >= volum::ChunkVersion(0, 7, 10))
   {
     pos = _GetConfigFrom_0_7_10(chunk, pos, config);
   }
-  else if (version >= _Version(0, 7, 9))
+  else if (version >= volum::ChunkVersion(0, 7, 9))
   {
     pos = _GetConfigFrom_Earlier(chunk, pos, config);
   }
@@ -321,7 +256,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
 
 #if VOLUM_AMPETE_PRODUCT
   // v0.7.15+ and VoLum 0.1.x: read per-amp settings after the params
-  if (version >= _Version(0, 7, 15) || isVolumVersion)
+  if (volum::ChunkUses0715SerializedConfig(version))
   {
     // SerializeParams wrote kNumParams doubles; now read the per-amp block
     pos = chunk.Get(&mVolumAmpIdx, pos);

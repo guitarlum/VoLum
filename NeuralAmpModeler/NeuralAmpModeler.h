@@ -19,20 +19,6 @@
 
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumAmpeteCatalog.h"
-
-struct VoLumAmpSettings
-{
-  int speakerIdx = 3;
-  int channelIdx = 0;
-  double inputLevel = 0.0;
-  double gateThreshold = -80.0;
-  double toneBass = 5.0;
-  double toneMid = 5.0;
-  double toneTreble = 5.0;
-  double outputLevel = 0.0;
-  bool noiseGateActive = true;
-  bool eqActive = true;
-};
 #endif
 
 const int kNumPresets = 1;
@@ -293,7 +279,7 @@ private:
   int mVolumCachedAmpIdx = -1;
 
   // Per-amp settings: remembered across amp switches and sessions
-  std::array<VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
+  std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if

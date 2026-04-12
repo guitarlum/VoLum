@@ -1,48 +1,44 @@
 #include "third_party/doctest.h"
-#include <cstddef>
+#include "../VoLumProcessIO.h"
 #include <vector>
-
-// Mirrors NeuralAmpModeler::_ProcessInput contribution to mono bus (simplified: one frame).
-static float MixInputMono(float inL, float inR, size_t nChansIn, double baseGain, bool appApi)
-{
-  double gain = baseGain;
-  if (!appApi && nChansIn > 0)
-    gain /= static_cast<double>(nChansIn);
-  float acc = 0.f;
-  if (nChansIn > 0)
-    acc += static_cast<float>(gain * static_cast<double>(inL));
-  if (nChansIn > 1)
-    acc += static_cast<float>(gain * static_cast<double>(inR));
-  return acc;
-}
 
 TEST_CASE("APP_API stereo sum uses full per-channel gain")
 {
-  const float y = MixInputMono(1.f, 1.f, 2, 1.0, true);
-  DOCTEST_CHECK(y == doctest::Approx(2.f));
+  std::vector<float> L(1, 1.f), R(1, 1.f);
+  float* inputs[2] = {L.data(), R.data()};
+  std::vector<float> mono(1, 0.f);
+  volum::process_io::MixExternalInputsToMono(inputs, 1, 2, 1.0, true, mono.data());
+  DOCTEST_CHECK(mono[0] == doctest::Approx(2.f));
 }
 
 TEST_CASE("DAW path averages stereo before gain")
 {
-  const float y = MixInputMono(1.f, 1.f, 2, 1.0, false);
-  DOCTEST_CHECK(y == doctest::Approx(1.f));
-}
-
-static float ApplyOutputGain(float x, double outGain, bool appApi)
-{
-  const double y = outGain * static_cast<double>(x);
-  if (appApi)
-    return static_cast<float>(y < -1.0 ? -1.0 : (y > 1.0 ? 1.0 : y));
-  return static_cast<float>(y);
+  std::vector<float> L(1, 1.f), R(1, 1.f);
+  float* inputs[2] = {L.data(), R.data()};
+  std::vector<float> mono(1, 0.f);
+  volum::process_io::MixExternalInputsToMono(inputs, 1, 2, 1.0, false, mono.data());
+  DOCTEST_CHECK(mono[0] == doctest::Approx(1.f));
 }
 
 TEST_CASE("APP_API clamps output")
 {
-  DOCTEST_CHECK(ApplyOutputGain(10.f, 1.0, true) == doctest::Approx(1.f));
-  DOCTEST_CHECK(ApplyOutputGain(-10.f, 1.0, true) == doctest::Approx(-1.f));
+  std::vector<float> monoIn(1, 10.f);
+  std::vector<float> out0(1, 0.f), out1(1, 0.f);
+  float* outputs[2] = {out0.data(), out1.data()};
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 2, 1.0, true);
+  DOCTEST_CHECK(out0[0] == doctest::Approx(1.f));
+  DOCTEST_CHECK(out1[0] == doctest::Approx(1.f));
+
+  monoIn[0] = -10.f;
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 2, 1.0, true);
+  DOCTEST_CHECK(out0[0] == doctest::Approx(-1.f));
 }
 
 TEST_CASE("DAW path does not clamp output in plugin")
 {
-  DOCTEST_CHECK(ApplyOutputGain(10.f, 1.0, false) == doctest::Approx(10.f));
+  std::vector<float> monoIn(1, 10.f);
+  std::vector<float> out0(1, 0.f);
+  float* outputs[1] = {out0.data()};
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 1, 1.0, false);
+  DOCTEST_CHECK(out0[0] == doctest::Approx(10.f));
 }
