@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>VoLum</string>
 	<key>CFBundleGetInfoString</key>
-	<string>VoLum v0.2.0 Copyright 2026 Lum</string>
+	<string>VoLum v0.3.0 Copyright 2026 Lum</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.Lum.vst3.VoLum</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -17,11 +17,11 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleSignature</key>
 	<string>VoLm</string>
 	<key>CFBundleVersion</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>
