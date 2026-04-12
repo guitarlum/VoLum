@@ -20,7 +20,9 @@
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumPaths.h"
+#include "VoLumProcessIO.h"
 #if VOLUM_AMPETE_PRODUCT
+#include "VoLumUserSettingsIO.h"
 #include "VoLumControls.h"
 #endif
 
@@ -1615,28 +1617,7 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
 {
-  nlohmann::json j;
-  j["version"] = 1;
-  j["lastAmpIdx"] = mVolumAmpIdx;
-
-  nlohmann::json amps = nlohmann::json::object();
-  for (int i = 0; i < volum::kAmpCount; i++)
-  {
-    const auto& s = mVolumAmpSettings[i];
-    nlohmann::json a;
-    a["speaker"] = s.speakerIdx;
-    a["channel"] = s.channelIdx;
-    a["input"] = s.inputLevel;
-    a["gate"] = s.gateThreshold;
-    a["bass"] = s.toneBass;
-    a["mid"] = s.toneMid;
-    a["treble"] = s.toneTreble;
-    a["output"] = s.outputLevel;
-    a["noiseGate"] = s.noiseGateActive;
-    a["eq"] = s.eqActive;
-    amps[volum::kAmps[i].folderName] = a;
-  }
-  j["amps"] = amps;
+  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx);
 
   namespace fs = std::filesystem;
   fs::path settingsPath = volum::VolumUserSettingsFilePath();
@@ -1685,31 +1666,7 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     nlohmann::json j;
     in >> j;
 
-    if (j.contains("lastAmpIdx"))
-      mVolumAmpIdx = std::clamp(j["lastAmpIdx"].get<int>(), 0, volum::kAmpCount - 1);
-
-    if (j.contains("amps") && j["amps"].is_object())
-    {
-      for (int i = 0; i < volum::kAmpCount; i++)
-      {
-        const char* key = volum::kAmps[i].folderName;
-        if (!j["amps"].contains(key))
-          continue;
-
-        const auto& a = j["amps"][key];
-        auto& s = mVolumAmpSettings[i];
-        if (a.contains("speaker")) s.speakerIdx = a["speaker"].get<int>();
-        if (a.contains("channel")) s.channelIdx = a["channel"].get<int>();
-        if (a.contains("input")) s.inputLevel = a["input"].get<double>();
-        if (a.contains("gate")) s.gateThreshold = a["gate"].get<double>();
-        if (a.contains("bass")) s.toneBass = a["bass"].get<double>();
-        if (a.contains("mid")) s.toneMid = a["mid"].get<double>();
-        if (a.contains("treble")) s.toneTreble = a["treble"].get<double>();
-        if (a.contains("output")) s.outputLevel = a["output"].get<double>();
-        if (a.contains("noiseGate")) s.noiseGateActive = a["noiseGate"].get<bool>();
-        if (a.contains("eq")) s.eqActive = a["eq"].get<bool>();
-      }
-    }
+    volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx);
   }
   catch (...)
   {
@@ -1828,21 +1785,12 @@ void NeuralAmpModeler::_ProcessInput(iplug::sample** inputs, const size_t nFrame
     throw std::runtime_error(ss.str());
   }
 
-  // On the standalone, we can probably assume that the user has plugged into only one input and they expect it to be
-  // carried straight through. Don't apply any division over nChansIn because we're just "catching anything out there."
-  // However, in a DAW, it's probably something providing stereo, and we want to take the average in order to avoid
-  // doubling the loudness. (This would change w/ double mono processing)
-  double gain = mInputGain;
-#ifndef APP_API
-  gain /= (float)nChansIn;
+#if defined(APP_API)
+  constexpr bool kAppApi = true;
+#else
+  constexpr bool kAppApi = false;
 #endif
-  // Assume _PrepareBuffers() was already called
-  for (size_t c = 0; c < nChansIn; c++)
-    for (size_t s = 0; s < nFrames; s++)
-      if (c == 0)
-        mInputArray[0][s] = gain * inputs[c][s];
-      else
-        mInputArray[0][s] += gain * inputs[c][s];
+  volum::process_io::MixExternalInputsToMono(inputs, nFrames, nChansIn, mInputGain, kAppApi, mInputArray[0].data());
 }
 
 void NeuralAmpModeler::_ProcessOutput(iplug::sample** inputs, iplug::sample** outputs, const size_t nFrames,
@@ -1852,16 +1800,13 @@ void NeuralAmpModeler::_ProcessOutput(iplug::sample** inputs, iplug::sample** ou
   // Assume _PrepareBuffers() was already called
   if (nChansIn != 1)
     throw std::runtime_error("Plugin is supposed to process in mono.");
-  // Broadcast the internal mono stream to all output channels.
   const size_t cin = 0;
-  for (auto cout = 0; cout < nChansOut; cout++)
-    for (auto s = 0; s < nFrames; s++)
-#ifdef APP_API // Ensure valid output to interface
-      outputs[cout][s] = std::clamp(gain * inputs[cin][s], -1.0, 1.0);
-#else // In a DAW, other things may come next and should be able to handle large
-      // values.
-      outputs[cout][s] = gain * inputs[cin][s];
+#if defined(APP_API)
+  constexpr bool kAppApi = true;
+#else
+  constexpr bool kAppApi = false;
 #endif
+  volum::process_io::ApplyOutputGainBroadcast(inputs[cin], outputs, nFrames, nChansOut, gain, kAppApi);
 }
 
 void NeuralAmpModeler::_UpdateControlsFromModel()

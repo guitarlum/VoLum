@@ -85,3 +85,7 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/11/2026 - v0.2.0 VoLum release. See GitHub release notes for included changes.
 
 04/12/2026 - VoLum: Removed redundant “SELECTED AMP” caption above the main amp name.
+
+04/12/2026 - VoLum: Expanded native tests (shared process I/O helpers, state chunk version routing, volum-settings JSON, path helpers); added packaging verification scripts and GitHub Actions CI (Windows tests + portable zip smoke, macOS zip smoke).
+
+04/12/2026 - VoLum: CI: skip LOCALAPPDATA env mutation test on hosted runners; prefer PATH msbuild in run-tests-win.ps1 on GitHub Actions.

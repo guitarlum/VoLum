@@ -54,43 +54,43 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>_DEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;VOLUM_AMPETE_PRODUCT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>_DEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;VOLUM_AMPETE_PRODUCT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>NDEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;VOLUM_AMPETE_PRODUCT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>NDEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;VOLUM_AMPETE_PRODUCT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;VOLUM_AMPETE_PRODUCT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;VOLUM_AMPETE_PRODUCT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
@@ -98,6 +98,9 @@
     <ClCompile Include="..\tests\test_main.cpp" />
     <ClCompile Include="..\tests\test_nam_rigs.cpp" />
     <ClCompile Include="..\tests\test_process_io.cpp" />
+    <ClCompile Include="..\tests\test_volum_chunk_version.cpp" />
+    <ClCompile Include="..\tests\test_volum_paths.cpp" />
+    <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\convnet.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\dsp.cpp">
