@@ -1,5 +1,7 @@
 #pragma once
 
+#include "config.h"
+
 namespace volum
 {
 struct AmpInfo
@@ -36,4 +38,20 @@ inline constexpr const char* kAmpeteFiles[kAmpeteRigCount] = {"AMP-Ampt-1.nam", 
   "V30-Ampt-4.nam"};
 inline constexpr const char* kAmpeteLabels[kAmpeteRigCount] = {"AMP 1", "AMP 2", "AMP 3", "AMP 4", "G12 1", "G12 2",
   "G12 3", "G12 4", "G65 1", "G65 2", "G65 3", "G65 4", "V30 1", "V30 2", "V30 3", "V30 4"};
+
+#if VOLUM_AMPETE_PRODUCT
+struct VoLumAmpSettings
+{
+  int speakerIdx = 3;
+  int channelIdx = 0;
+  double inputLevel = 0.0;
+  double gateThreshold = -80.0;
+  double toneBass = 5.0;
+  double toneMid = 5.0;
+  double toneTreble = 5.0;
+  double outputLevel = 0.0;
+  bool noiseGateActive = true;
+  bool eqActive = true;
+};
+#endif
 } // namespace volum
