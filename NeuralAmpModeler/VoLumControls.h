@@ -1034,10 +1034,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    const IRECT titleArea = mRECT.GetFromTop(16.f);
-    const IRECT nameArea = IRECT(mRECT.L + 18.f, titleArea.B + 2.f, mRECT.R - 18.f, mRECT.T + 38.f);
-    g.DrawText(IText(10.5f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               "SELECTED AMP", titleArea);
+    const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
     g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                mName.c_str(), nameArea);
 
