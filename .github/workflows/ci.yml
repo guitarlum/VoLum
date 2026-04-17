@@ -1,10 +1,15 @@
 name: CI
 
+# pull_request: runs when a PR to main is opened/updated (one run per push — no duplicate with push).
+# push (main only): runs after merge to main; feature-branch pushes rely on the PR workflow until merged.
 on:
+  workflow_dispatch:
   push:
     branches:
-      - "**"
+      - main
   pull_request:
+    branches:
+      - main
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -58,8 +63,15 @@ jobs:
         run: ./NeuralAmpModeler/scripts/verify-packaging-win.ps1
         shell: pwsh
 
+      - name: Upload Windows artifacts (VoLum-win)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-win
+          path: NeuralAmpModeler/build-win/out/
+          if-no-files-found: error
+
   macos:
-    name: macOS (zip distribution + packaging verify)
+    name: macOS (full distribution + packaging verify)
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -77,12 +89,34 @@ jobs:
           cd iPlug2/Dependencies
           ./download-prebuilt-libs.sh
 
-      - name: Build macOS zip distribution
+      - name: Build macOS distribution (installer + standalone + VST3 zip)
+        env:
+          PACKAGE_DSYMS: "0"
         run: |
           cd NeuralAmpModeler/scripts
-          ./makedist-mac.sh full zip
+          ./makedist-mac.sh full all
 
-      - name: Verify DMG and VST3 zip layout
+      - name: Verify macOS binary architectures
+        run: |
+          APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
+          VST3_BIN="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/MacOS/VoLum"
+          app_archs=$(lipo -archs "$APP_BIN")
+          vst3_archs=$(lipo -archs "$VST3_BIN")
+          echo "APP architectures: $app_archs"
+          echo "VST3 architectures: $vst3_archs"
+          [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
+          [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
+
+      - name: Verify DMG, VST3 zip, and installer PKG layout
+        env:
+          VERIFY_MAC_REQUIRE_INSTALLER: "1"
         run: |
           chmod +x NeuralAmpModeler/scripts/verify-packaging-mac.sh
           NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
+
+      - name: Upload macOS artifacts (VoLum-mac)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac
+          path: NeuralAmpModeler/build-mac/out/
+          if-no-files-found: error

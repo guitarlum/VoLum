@@ -28,6 +28,11 @@ fi
 
 PRODUCT_NAME=VoLum
 
+# Repo rigs/ (must not depend on cwd — makedist runs from NeuralAmpModeler, but this is robust if cwd differs)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+RIGS_SRC="$REPO_ROOT/rigs"
+
 # locations
 PRODUCTS="build-mac"
 
@@ -91,25 +96,34 @@ if [[ -d $PRODUCTS/$AAX ]]; then
   build_flavor "AAX" $AAX "com.Lum.aax.pkg.${PRODUCT_NAME}" "/Library/Application Support/Avid/Audio/Plug-Ins"
 fi
 
-# try to build App package
+# Stand-alone .app: use pkgbuild --component (Apple-recommended for bundles). A flat --root tree
+# around VoLum.app can produce a subpackage that does not reliably install into /Applications while
+# plug-in bundles (VST3 etc.) still work — see VoLum issue: VST3 installs, app missing from /Applications.
 if [[ -d $PRODUCTS/$APP ]]; then
-  build_flavor "APP" $APP "com.Lum.app.pkg.${PRODUCT_NAME}" "/Applications"
+  echo "--- BUILDING ${PRODUCT_NAME}_APP.pkg (component bundle) ---"
+  mkdir -p "$PKG_DIR"
+  pkgbuild --component "$PRODUCTS/$APP" \
+    --identifier "com.Lum.app.pkg.${PRODUCT_NAME}" \
+    --version "$VERSION" \
+    --install-location "/Applications" \
+    "${PKG_DIR}/${PRODUCT_NAME}_APP.pkg"
 fi
 
-# build bundled rigs package (14 amp folders with .nam files)
-RIGS_SRC="../rigs"
-if [[ -d $RIGS_SRC ]]; then
-  echo "--- BUILDING ${PRODUCT_NAME}_RIGS.pkg ---"
+# build bundled rigs package — standard system-wide app support path (VoLumPaths checks here on macOS)
+if [[ -d "$RIGS_SRC" ]]; then
+  echo "--- BUILDING ${PRODUCT_NAME}_RIGS.pkg from $RIGS_SRC ---"
   RIGS_TMP=${TARGET_DIR}/tmp-rigs
   mkdir -p "$PKG_DIR"
   mkdir -p "$RIGS_TMP/VoLumRigs"
   for ampdir in "$RIGS_SRC"/*/; do
     dirname=$(basename "$ampdir")
     mkdir -p "$RIGS_TMP/VoLumRigs/$dirname"
-    cp "$ampdir"*.nam "$RIGS_TMP/VoLumRigs/$dirname/" 2>/dev/null
+    cp "$ampdir"*.nam "$RIGS_TMP/VoLumRigs/$dirname/" 2>/dev/null || true
   done
   pkgbuild --root "$RIGS_TMP" --identifier "com.Lum.rigs.pkg.${PRODUCT_NAME}" --version "$VERSION" --install-location "/Library/Application Support/${PRODUCT_NAME}" "${PKG_DIR}/${PRODUCT_NAME}_RIGS.pkg"
   rm -rf "$RIGS_TMP"
+else
+  echo "WARNING: rigs not found at $RIGS_SRC — ${PRODUCT_NAME}_RIGS.pkg will be missing"
 fi
 
 # write build info to resources folder
