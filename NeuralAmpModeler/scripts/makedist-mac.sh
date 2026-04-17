@@ -30,6 +30,8 @@ WRAP_GUID=TODO
 
 DEMO=0
 BUILD_INSTALLER=1
+# When 1 with BUILD_INSTALLER, also build standalone DMG + VST3 zip after the installer (`full all`).
+PACKAGE_ZIP=0
 FAST_DEV=0
 
 for arg in "$@"; do
@@ -44,6 +46,11 @@ for arg in "$@"; do
       ;;
     installer)
       BUILD_INSTALLER=1
+      PACKAGE_ZIP=0
+      ;;
+    all)
+      BUILD_INSTALLER=1
+      PACKAGE_ZIP=1
       ;;
     dev|fast)
       FAST_DEV=1
@@ -54,7 +61,8 @@ done
 
 CLEAN_BUILD=1
 FORCE_RECOMPILE=1
-PACKAGE_DSYMS=1
+# Default 1; set PACKAGE_DSYMS=0 to skip *-dSYMs.zip (e.g. release CI). FAST_DEV always skips.
+PACKAGE_DSYMS="${PACKAGE_DSYMS:-1}"
 DMG_FORMAT=UDZO
 
 if [ "$FAST_DEV" == "1" ]; then
@@ -310,6 +318,22 @@ if [ -d "$RIGS_SRC" ] && [ -d "$APP" ]; then
   done
 fi
 
+# Same sibling layout as the portable VST3 zip: ~/Library/Audio/Plug-Ins/VST3/VoLumRigs next to VoLum.vst3
+if [ -d "$RIGS_SRC" ] && [ -d "$VST3" ]; then
+  echo "copying VoLumRigs next to VST3 install..."
+  VST3_PARENT=$(dirname "$VST3")
+  rm -R -f "$VST3_PARENT/VoLumRigs"
+  mkdir -p "$VST3_PARENT/VoLumRigs"
+  for amp_dir in "$RIGS_SRC"/*/; do
+    [ -d "$amp_dir" ] || continue
+    amp_name=$(basename "$amp_dir")
+    mkdir -p "$VST3_PARENT/VoLumRigs/$amp_name"
+    cp "$amp_dir"*.nam "$VST3_PARENT/VoLumRigs/$amp_name/" 2>/dev/null || true
+  done
+elif [ -d "$VST3" ] && [ ! -d "$RIGS_SRC" ]; then
+  echo "WARNING: rigs directory not found: $RIGS_SRC (VST3 install has no VoLumRigs copy)"
+fi
+
 if [ $CODESIGN == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # code sign AAX binary with wraptool
@@ -341,10 +365,25 @@ if [ $BUILD_INSTALLER == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # installer
 
-  rm -R -f build-mac/$PLUGIN_NAME-*.dmg
+  # Only remove the installer DMG name (wildcard VoLum-*.dmg also matched *-app.dmg and broke `full all`).
+  rm -f "build-mac/${ARCHIVE_NAME}.dmg"
 
   echo "building installer"
   echo ""
+
+  # makeinstaller-mac.sh packages from build-mac/<name>.{app,vst3}; Xcode installs to DSTROOT (~).
+  echo "staging ${PLUGIN_NAME}.app and ${PLUGIN_NAME}.vst3 into build-mac/ for pkgbuild..."
+  rm -rf "build-mac/${PLUGIN_NAME}.app" "build-mac/${PLUGIN_NAME}.vst3"
+  if [ -d "$APP" ]; then
+    cp -R "$APP" "build-mac/${PLUGIN_NAME}.app"
+  else
+    echo "WARNING: missing $APP — installer will omit standalone app"
+  fi
+  if [ -d "$VST3" ]; then
+    cp -R "$VST3" "build-mac/${PLUGIN_NAME}.vst3"
+  else
+    echo "WARNING: missing $VST3 — installer will omit VST3"
+  fi
 
   ./scripts/makeinstaller-mac.sh $FULL_VERSION
 
@@ -403,7 +442,10 @@ if [ $BUILD_INSTALLER == 1 ]; then
     fi
 
   fi
-else
+fi
+
+# Standalone DMG + VST3 zip (also runs after installer when PACKAGE_ZIP=1 / `full all`).
+if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # app dmg + vst3 zip, or a faster standalone-only dev dmg
 

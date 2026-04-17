@@ -9,7 +9,7 @@
 - Windows doctests: `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`
 - Windows standalone UI check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`
 - macOS fast local build: `bash NeuralAmpModeler/scripts/makedist-mac.sh dev`
-- macOS CI/release-matching build: `bash NeuralAmpModeler/scripts/makedist-mac.sh full zip`
+- macOS CI (PR to main / push to main): `bash NeuralAmpModeler/scripts/makedist-mac.sh full all` (same artifacts as release; `PACKAGE_DSYMS=0` in CI).
 - Windows portable package: `cmd /c NeuralAmpModeler\scripts\makedist-win.bat full zip`
 - Windows installer package: `cmd /c NeuralAmpModeler\scripts\makedist-win.bat full installer`
 - C++ formatting: `bash format.bash`
