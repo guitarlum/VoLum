@@ -134,9 +134,11 @@ jobs:
 
     - name: Build macOS
       if: matrix.os == 'macos-latest'
+      env:
+        PACKAGE_DSYMS: "0"
       run: |
         cd ${{env.PROJECT_NAME}}/scripts
-        ./makedist-mac.sh full zip
+        ./makedist-mac.sh full all
       shell: bash
 
     - name: Verify macOS artifacts
@@ -147,6 +149,7 @@ jobs:
         APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
         APP_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg"
         VST3_ZIP="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip"
+        INSTALLER_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg"
         VERIFY_DIR="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/verify-mac"
 
         app_archs=$(lipo -archs "$APP_BIN")
@@ -163,6 +166,7 @@ jobs:
         test -d "$HOME/Applications/VoLum.app/Contents/Resources/VoLumRigs"
         test -f "$APP_DMG"
         test -f "$VST3_ZIP"
+        test -f "$INSTALLER_DMG"
 
         rm -rf "$VERIFY_DIR"
         mkdir -p "$VERIFY_DIR"
@@ -176,6 +180,10 @@ jobs:
         test -d "$VERIFY_DIR/vst3/VoLumRigs"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         hdiutil detach "$VERIFY_DIR/dmg"
+
+        hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
+        test -f "$VERIFY_DIR/installer-dmg/VoLum Installer.pkg"
+        hdiutil detach "$VERIFY_DIR/installer-dmg"
       shell: bash
 
     - name: Upload macOS release assets
@@ -190,10 +198,12 @@ jobs:
 
         cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg"
         cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip"
+        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-installer.dmg"
 
         gh release upload "${{ needs.prepare_release.outputs.release_tag }}" \
           "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg" \
           "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip" \
+          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-installer.dmg" \
           --clobber
       shell: bash
 

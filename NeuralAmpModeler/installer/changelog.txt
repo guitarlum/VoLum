@@ -91,3 +91,27 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/12/2026 - VoLum: CI: skip LOCALAPPDATA env mutation test on hosted runners; prefer PATH msbuild in run-tests-win.ps1 on GitHub Actions.
 
 04/12/2026 - v0.3.0 VoLum release. See GitHub release notes for included changes.
+
+04/17/2026 - CI: triggers are `pull_request` to **main** and `push` to **main** only (avoids duplicate runs from `push` + `pull_request` on the same PR update).
+
+04/17/2026 - CI: remove duplicate **Build Native** workflow; single **CI** workflow (`ci.yml`) with `workflow_dispatch`, macOS arch check, **VoLum-mac** + **VoLum-win** artifacts.
+
+04/17/2026 - macOS installer: build the stand-alone app subpackage with `pkgbuild --component` (not a flat `--root` copy) so `VoLum.app` installs to `/Applications` reliably when the VST3 subpackage succeeds.
+
+04/17/2026 - **Build Native** workflow: align macOS with **CI** (`full all`, `PACKAGE_DSYMS=0`, `verify-packaging-mac.sh`); **VoLum-mac** artifact now includes installer DMG with `.pkg` (previously `full zip` only).
+
+04/17/2026 - CI: upload `NeuralAmpModeler/build-mac/out/` as artifact **VoLum-mac** (installer DMG `VoLum-v*-mac.dmg` with `.pkg`, standalone `*-app.dmg`, `*-vst3.zip`; no dSYM zip when `PACKAGE_DSYMS=0`).
+
+04/17/2026 - CI: macOS job runs `makedist-mac.sh full all` (matches release) and `verify-packaging-mac.sh auto` with `VERIFY_MAC_REQUIRE_INSTALLER=1` (checks `VoLum Installer.pkg` in the installer DMG).
+
+04/17/2026 - VoLum: macOS makedist-mac.sh copies VoLumRigs next to the installed VST3 bundle (user VST3 folder), matching portable zip layout.
+
+04/17/2026 - Docs: German README (`README.de.md`) parallel to English; language links at top of both files.
+
+04/17/2026 - Docs: README recommends macOS `.pkg` installer when available; standalone DMG for app-only; VST3 zip documented as advanced/manual. Restored screenshot + build badge markdown.
+
+04/17/2026 - macOS: `makedist-mac.sh full all` runs one build and produces installer DMG (`.pkg`), standalone DMG, and VST3 zip; **Release Native** uses this and uploads `VoLum-v*-macos-installer.dmg`. Installer pre-clean only removes `${ARCHIVE_NAME}.dmg` (no longer wildcard `VoLum-*.dmg`, which could delete the standalone DMG).
+
+04/17/2026 - Release: GitHub macOS build sets `PACKAGE_DSYMS=0` so release artifacts omit the dSYM zip.
+
+04/17/2026 - VoLum: macOS `makeinstaller-mac.sh` installs bundled rigs to `/Library/Application Support/VoLum/VoLumRigs` (idiomatic app support path); resolve repo `rigs/` from script path. `makedist-mac.sh` stages `.app`/`.vst3` into `build-mac/` before pkgbuild.
