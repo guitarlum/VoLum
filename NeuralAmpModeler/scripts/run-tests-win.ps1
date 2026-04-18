@@ -6,6 +6,9 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = (Resolve-Path (Join-Path $here "..")).Path
 Set-Location $slnDir
 
+# Apply our local iPlug2 patches (idempotent). See NeuralAmpModeler/iplug2-patches/README.md.
+& (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source

@@ -49,6 +49,10 @@ jobs:
           python-version: "3.x"
           architecture: "x64"
 
+      - name: Apply iPlug2 patches
+        run: ./NeuralAmpModeler/iplug2-patches/apply-iplug2-patches.ps1
+        shell: pwsh
+
       - name: Unit tests (doctest)
         run: ./NeuralAmpModeler/scripts/run-tests-win.ps1
         shell: pwsh
