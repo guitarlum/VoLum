@@ -223,6 +223,11 @@ jobs:
       run: choco install innosetup -y
       shell: pwsh
 
+    - name: Apply iPlug2 patches
+      if: matrix.os == 'windows-latest'
+      run: ./NeuralAmpModeler/iplug2-patches/apply-iplug2-patches.ps1
+      shell: pwsh
+
     - name: Get Archive Name Windows
       id: win_archivename_step
       if: matrix.os == 'windows-latest'
