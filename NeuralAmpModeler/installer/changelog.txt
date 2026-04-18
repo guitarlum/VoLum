@@ -119,3 +119,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/18/2026 - v0.4.0 VoLum release. See GitHub release notes for included changes.
 04/18/2026 - VoLum: Windows label readability - Josefin aliases load one weight heavier on Windows only (SemiBold body, Bold caps) to match macOS rendering; macOS unchanged.
 04/18/2026 - VoLum: Standalone (Windows ASIO) - Audio Settings input/output channel selection is now actually applied. Multi-channel interfaces like the RME Babyface Pro FS now route the user-picked physical input to the plugin (instead of always grabbing input 1) and play back on the picked physical outputs (with all other device outputs left silent). Also fixes a missing-braces bug in the L/R combo handlers and an off-by-one that hid the device's last channel from the L combo. Implemented as a tracked patch over the iPlug2 submodule, applied automatically by the Windows build/test scripts and CI.
+
+04/18/2026 - v0.4.1 VoLum release. See GitHub release notes for included changes.
