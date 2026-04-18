@@ -115,3 +115,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/17/2026 - Release: GitHub macOS build sets `PACKAGE_DSYMS=0` so release artifacts omit the dSYM zip.
 
 04/17/2026 - VoLum: macOS `makeinstaller-mac.sh` installs bundled rigs to `/Library/Application Support/VoLum/VoLumRigs` (idiomatic app support path); resolve repo `rigs/` from script path. `makedist-mac.sh` stages `.app`/`.vst3` into `build-mac/` before pkgbuild.
+
+04/18/2026 - v0.4.0 VoLum release. See GitHub release notes for included changes.
