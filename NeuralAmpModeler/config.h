@@ -1,7 +1,7 @@
 #define PLUG_NAME "VoLum"
 #define PLUG_MFR "Lum"
-#define PLUG_VERSION_HEX 0x00000300
-#define PLUG_VERSION_STR "0.3.0"
+#define PLUG_VERSION_HEX 0x00000400
+#define PLUG_VERSION_STR "0.4.0"
 #define PLUG_UNIQUE_ID 'VoLm'
 #define PLUG_MFR_ID 'Lum0'
 #define PLUG_URL_STR "https://github.com/guitarlum/VoLum"
