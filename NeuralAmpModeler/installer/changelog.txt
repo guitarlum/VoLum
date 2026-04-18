@@ -117,3 +117,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/17/2026 - VoLum: macOS `makeinstaller-mac.sh` installs bundled rigs to `/Library/Application Support/VoLum/VoLumRigs` (idiomatic app support path); resolve repo `rigs/` from script path. `makedist-mac.sh` stages `.app`/`.vst3` into `build-mac/` before pkgbuild.
 
 04/18/2026 - v0.4.0 VoLum release. See GitHub release notes for included changes.
+04/18/2026 - VoLum: Windows label readability - Josefin aliases load one weight heavier on Windows only (SemiBold body, Bold caps) to match macOS rendering; macOS unchanged.
