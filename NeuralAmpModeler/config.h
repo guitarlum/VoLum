@@ -69,6 +69,7 @@
 #define POIRETONE_FN "PoiretOne-Regular.ttf"
 #define JOSEFINSANS_FN "JosefinSans-Regular.ttf"
 #define JOSEFINSANS_BOLD_FN "JosefinSans-SemiBold.ttf"
+#define JOSEFINSANS_BOLD_HEAVY_FN "JosefinSans-Bold.ttf"
 
 #define GEAR_FN "Gear.svg"
 #define FILE_FN "File.svg"
