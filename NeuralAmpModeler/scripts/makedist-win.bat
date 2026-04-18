@@ -41,6 +41,14 @@ call python update_installer-win.py %DEMO%
 
 cd ..\
 
+echo ------------------------------------------------------------------
+echo Applying iPlug2 patches ...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\iplug2-patches\apply-iplug2-patches.ps1"
+if errorlevel 1 (
+  echo ERROR: failed to apply iPlug2 patches.
+  exit /b 1
+)
+
 echo "touching source"
 
 copy /b *.cpp+,,
