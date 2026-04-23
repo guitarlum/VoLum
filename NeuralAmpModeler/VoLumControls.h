@@ -52,6 +52,12 @@ const IColor BTN_AMP_ON_TEXT(255, 252, 255, 248);
 const IColor HERO_BG(255, 12, 12, 18);
 const IColor HERO_BORDER(50, 200, 162, 78);
 const IColor HERO_CORNER(102, 200, 162, 78);
+
+const IColor TEAL(255, 91, 196, 196);
+const IColor TEAL_DIM(255, 75, 162, 162);
+const IColor AMBER(255, 232, 168, 92);
+const IColor CREAM(255, 237, 227, 208);
+const IColor CREAM_DIM(255, 166, 149, 124);
 } // namespace VoLumColors
 
 // Helper: draw L-shaped corner accent (2 lines)
@@ -481,6 +487,51 @@ private:
           }
           ps=n2;
         }
+        break;
+      }
+      case 14: // Logistic Bifurcation mini
+      {
+        float xMin = 2.4f, xMax = 4.0f;
+        for (int i = 0; i < 400; i++) {
+            float r = xMin + (xMax - xMin) * (i / 400.0f);
+            float x = 0.5f;
+            for (int j = 0; j < 40; j++) x = r * x * (1.f - x);
+            for (int j = 0; j < 10; j++) {
+                x = r * x * (1.f - x);
+                float px = cx - sz + (i / 400.0f) * 2.f * sz;
+                float py = cy + sz - x * 2.f * sz;
+                g.FillRect(dim, IRECT(px, py, px+1.f, py+1.f));
+            }
+        }
+        break;
+      }
+      case 15: // Lichtenberg mini
+      {
+        struct Pt { float x, y; };
+        std::vector<Pt> pts;
+        pts.push_back({cx, cy + sz});
+        unsigned int rng = 12345;
+        for (int i = 0; i < 150; i++) {
+            rng = rng * 1103515245 + 12345;
+            int parentIdx = rng % pts.size();
+            float angle = -90.f + (float)(rng % 120) - 60.f;
+            float rad = angle * 3.14159f / 180.f;
+            float len = sz * 0.2f;
+            Pt next = {pts[parentIdx].x + len * cosf(rad), pts[parentIdx].y + len * sinf(rad)};
+            g.DrawLine(dim, pts[parentIdx].x, pts[parentIdx].y, next.x, next.y, nullptr, 1.f);
+            pts.push_back(next);
+        }
+        break;
+      }
+      case 16: // Cantor Dust mini
+      {
+        auto drawC = [&](auto&& self, float x, float y, float len, int d) -> void {
+            if (d == 0) { g.DrawLine(dim, x, y, x + len, y, nullptr, 1.f); return; }
+            float nl = len / 3.f;
+            self(self, x, y - 2.f, nl, d - 1);
+            self(self, x + 2.f * nl, y + 2.f, nl, d - 1);
+        };
+        drawC(drawC, cx - sz, cy, sz * 2.f, 3);
         break;
       }
     }
@@ -1010,6 +1061,63 @@ private:
         }
         break;
       }
+      case 14: // Logistic Bifurcation
+      {
+        float xMin = 2.4f, xMax = 4.0f;
+        float plotW = w * 0.8f, plotH = h * 0.8f;
+        float plotL = cx - plotW / 2.f, plotT = cy - plotH / 2.f;
+        for (int i = 0; i < 8000; i++) {
+            float r = xMin + (xMax - xMin) * (i / 8000.0f);
+            float x = 0.5f;
+            for (int j = 0; j < 100; j++) x = r * x * (1.f - x); // settle
+            for (int j = 0; j < 30; j++) {
+                x = r * x * (1.f - x);
+                float px = plotL + (i / 8000.0f) * plotW;
+                float py = plotT + plotH - x * plotH;
+                int alpha = 40 + (j % 4) * 20;
+                g.FillRect(IColor(alpha, 80, 200, 180), IRECT(px, py, px+1.f, py+1.f));
+            }
+        }
+        break;
+      }
+      case 15: // Lichtenberg
+      {
+        struct Pt { float x, y; };
+        std::vector<Pt> pts;
+        pts.push_back({cx, mRECT.B - 15.f});
+        unsigned int rng = 12345;
+        for (int i = 0; i < 2000; i++) {
+            rng = rng * 1103515245 + 12345;
+            int parentIdx = rng % pts.size();
+            float angle = -90.f + (float)(rng % 180) - 90.f;
+            float rad = angle * 3.14159f / 180.f;
+            float len = 8.f;
+            Pt next = {pts[parentIdx].x + len * cosf(rad), pts[parentIdx].y + len * sinf(rad)};
+            
+            if (next.x > mRECT.L + 10.f && next.x < mRECT.R - 10.f && next.y > mRECT.T + 10.f && next.y < mRECT.B - 10.f) {
+                IColor col = (i < 100) ? bright : ((i < 500) ? mid : dim);
+                g.DrawLine(col, pts[parentIdx].x, pts[parentIdx].y, next.x, next.y, nullptr, (i < 200) ? tk : tkThin);
+                pts.push_back(next);
+            }
+        }
+        break;
+      }
+      case 16: // Cantor Dust
+      {
+        auto drawC = [&](auto&& self, float x, float y, float len, int d, float yOffset) -> void {
+            if (d == 0) { 
+                g.DrawLine(dim, x, y, x + len, y, nullptr, tkThin); 
+                return; 
+            }
+            float nl = len / 3.f;
+            IColor col = (d >= 4) ? bright : ((d >= 2) ? mid : dim);
+            g.DrawLine(col, x, y, x + len, y, nullptr, (d >= 3) ? tk : tkThin);
+            self(self, x, y - yOffset, nl, d - 1, yOffset * 0.8f);
+            self(self, x + 2.f * nl, y + yOffset, nl, d - 1, yOffset * 0.8f);
+        };
+        drawC(drawC, cx - w * 0.35f, cy, w * 0.7f, 5, h * 0.15f);
+        break;
+      }
     }
 
   }
@@ -1021,6 +1129,45 @@ private:
   int mAmpIdx = 0;
   ILayerPtr mArtLayer;
   int mCachedArtIdx = -1;
+};
+
+class VoLumSubRowTextControl : public IControl
+{
+public:
+  VoLumSubRowTextControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mName.empty()) return;
+    const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
+
+    // If it's the Amp name, use gold. If effect, use cream
+    IColor col = mIsAmp ? VoLumColors::GOLD : VoLumColors::CREAM;
+    g.DrawText(IText(21.f, col, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+               mName.c_str(), nameArea);
+
+    // Gold divider with diamond below the name
+    float cy = nameArea.B + 8.f;
+    float cx = mRECT.MW();
+    g.DrawLine(IColor(51, 200, 162, 78), cx - 50.f, cy, cx - 6.f, cy);
+    g.DrawLine(IColor(51, 200, 162, 78), cx + 6.f, cy, cx + 50.f, cy);
+    DrawDiamond(g, cx, cy, 3.f, VoLumColors::GOLD_DIM);
+  }
+
+  void SetName(const char* name, bool isAmp)
+  {
+    mName = name;
+    mIsAmp = isAmp;
+    SetDirty(false);
+  }
+
+private:
+  std::string mName;
+  bool mIsAmp = true;
 };
 
 class VoLumAmpNameControl : public IControl
@@ -1705,3 +1852,280 @@ public:
 private:
   IActionFunction mCloseAction;
 };
+
+//==============================================================================
+// Reverb & Delay Extension Controls (PRE / AMP / POST)
+//==============================================================================
+
+#include "VoLumTriptychState.h"
+
+// Forward declare DrawMiniFractal if needed, or we can just keep the layout logic in _AttachVoLumGraphics
+// and use simple controls. Let's make VoLumTriptychControl very simple.
+
+class VoLumChainConnectorControl : public IControl
+{
+public:
+  VoLumChainConnectorControl(const IRECT& bounds) : IControl(bounds) { mIgnoreMouse = true; }
+  void Draw(IGraphics& g) override
+  {
+    g.DrawLine(VoLumColors::TEAL.WithOpacity(0.55f), mRECT.L, mRECT.MH(), mRECT.R, mRECT.MH(), nullptr, 1.f);
+    g.FillCircle(VoLumColors::TEAL, mRECT.MW(), mRECT.MH(), 2.f);
+  }
+};
+
+class VoLumTriptychControl : public IControl
+{
+public:
+  using StateCallback = std::function<void(EVoLumSection, EVoLumEffectFocus)>;
+
+  VoLumTriptychControl(const IRECT& bounds, StateCallback cb)
+  : IControl(bounds)
+  , mCallback(std::move(cb))
+  {}
+
+  void Draw(IGraphics& g) override
+  {
+    const float stripW = 30.f;
+    const float expandedW = (mExpandedSection == EVoLumSection::AMP) ? 400.f : 460.f;
+    const float gap = 10.f;
+    const float cx = mRECT.MW();
+
+    // Calculate layout
+    IRECT preRect, ampRect, postRect;
+
+    if (mExpandedSection == EVoLumSection::AMP)
+    {
+      const float totalW = stripW + gap + expandedW + gap + stripW;
+      const float left = cx - totalW / 2.f;
+      preRect = IRECT(left, mRECT.T, left + stripW, mRECT.B);
+      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + expandedW, mRECT.B);
+      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + stripW, mRECT.B);
+    }
+    else if (mExpandedSection == EVoLumSection::PRE)
+    {
+      const float ampStripW = 70.f;
+      const float totalW = expandedW + gap + ampStripW + gap + stripW;
+      const float left = cx - totalW / 2.f;
+      preRect = IRECT(left, mRECT.T, left + expandedW, mRECT.B);
+      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
+      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + stripW, mRECT.B);
+    }
+    else // POST
+    {
+      const float ampStripW = 70.f;
+      const float preStripW = mPreActive ? 70.f : 30.f;
+      const float totalW = preStripW + gap + ampStripW + gap + expandedW;
+      const float left = cx - totalW / 2.f;
+      preRect = IRECT(left, mRECT.T, left + preStripW, mRECT.B);
+      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
+      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + expandedW, mRECT.B);
+    }
+
+    mPreRect = preRect;
+    mAmpRect = ampRect;
+    mPostRect = postRect;
+
+    // Draw the sections
+    _DrawStrip(g, preRect, "PRE", mExpandedSection == EVoLumSection::PRE, mPreActive, false);
+    
+    // AMP: we draw the strip, or we draw the hero frame
+    if (mExpandedSection == EVoLumSection::AMP) {
+      // Just the frame, the VoLumHeroImageControl will draw on top (it's attached)
+      // Actually we must resize the HeroImageControl!
+    } else {
+      _DrawAmpStrip(g, ampRect);
+    }
+
+    _DrawStrip(g, postRect, "POST", mExpandedSection == EVoLumSection::POST, mPostActive, true);
+  }
+  
+  void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName)
+  {
+    mPreActive = preActive;
+    mPostActive = postActive;
+    mAmpIdx = ampIdx;
+    mAmpName = ampName;
+    SetDirty(false);
+  }
+  
+  void SetExpandedSection(EVoLumSection s)
+  {
+    mExpandedSection = s;
+    SetDirty(false);
+  }
+private:
+  void _DrawStrip(IGraphics& g, const IRECT& r, const char* label, bool expanded, bool active, bool isPost)
+  {
+    if (expanded)
+    {
+      // The content (pedals or boost art) will be drawn by other controls.
+      // Just draw the section header inside the expanded area.
+      IText txt(9.f, VoLumColors::TEAL, "Michroma", EAlign::Near, EVAlign::Middle);
+      g.DrawText(txt, label, r.GetPadded(-8.f).GetFromTop(20.f).GetTranslated(16.f, 0.f));
+      g.FillCircle(VoLumColors::TEAL, r.L + 12.f, r.T + 18.f, 3.f);
+    }
+    else
+    {
+      bool dormant = !active;
+      if (dormant)
+      {
+        g.DrawRect(IColor(153, 43, 47, 55), r);
+        const float cs = 6.f;
+        DrawCornerAccent(g, r.L + 3.f, r.T + 3.f, cs, false, false, VoLumColors::TEAL_DIM.WithOpacity(0.45f));
+        DrawCornerAccent(g, r.R - 3.f, r.T + 3.f, cs, true, false, VoLumColors::TEAL_DIM.WithOpacity(0.45f));
+        DrawCornerAccent(g, r.L + 3.f, r.B - 3.f, cs, false, true, VoLumColors::TEAL_DIM.WithOpacity(0.45f));
+        DrawCornerAccent(g, r.R - 3.f, r.B - 3.f, cs, true, true, VoLumColors::TEAL_DIM.WithOpacity(0.45f));
+      }
+      else
+      {
+        g.FillRect(IColor(255, 22, 25, 33), r); // bg-strip
+        g.DrawRect(VoLumColors::FRAME, r);
+      }
+
+      g.FillCircle(active ? VoLumColors::TEAL : IColor(255, 42, 48, 52), r.MW(), r.T + 12.f, 3.5f);
+
+      IText t(dormant ? 8.f : 10.f, dormant ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Michroma", EAlign::Center, EVAlign::Middle);
+      // Vertical text drawing fallback
+      float ty = r.MH() - (strlen(label) * t.mSize) / 2.0f;
+      for (size_t i = 0; i < strlen(label); i++) {
+        char ch[2] = { label[i], 0 };
+        g.DrawText(t, ch, IRECT(r.L, ty + i * t.mSize, r.R, ty + (i + 1) * t.mSize));
+      }
+    }
+  }
+
+  void _DrawAmpStrip(IGraphics& g, const IRECT& r)
+  {
+    g.FillRect(IColor(255, 22, 25, 33), r); // bg-strip
+    g.DrawRect(VoLumColors::FRAME, r);
+    
+    // Draw mini fractal
+    // This is a quick mock. We can instantiate an AmpList control or duplicate DrawMiniFractal if needed.
+    IText t(10.f, VoLumColors::CREAM, "Michroma", EAlign::Center, EVAlign::Middle);
+    g.DrawText(t, "A", r.GetFromTop(40.f).GetVShifted(80.f));
+    g.DrawText(t, "M", r.GetFromTop(40.f).GetVShifted(95.f));
+    g.DrawText(t, "P", r.GetFromTop(40.f).GetVShifted(110.f));
+
+    g.FillCircle(VoLumColors::TEAL, r.MW(), r.B - 12.f, 3.5f);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mPreRect.Contains(x, y) && mExpandedSection != EVoLumSection::PRE)
+    {
+      mExpandedSection = EVoLumSection::PRE;
+      if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::BOOST);
+      SetDirty(false);
+    }
+    else if (mAmpRect.Contains(x, y) && mExpandedSection != EVoLumSection::AMP)
+    {
+      mExpandedSection = EVoLumSection::AMP;
+      if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::AMP);
+      SetDirty(false);
+    }
+    else if (mPostRect.Contains(x, y) && mExpandedSection != EVoLumSection::POST)
+    {
+      mExpandedSection = EVoLumSection::POST;
+      if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::DELAY); // Default to Delay when expanding POST
+      SetDirty(false);
+    }
+  }
+  
+  StateCallback mCallback;
+  bool mPreActive = false;
+  bool mPostActive = false;
+  int mAmpIdx = 0;
+  std::string mAmpName;
+  EVoLumSection mExpandedSection = EVoLumSection::AMP;
+
+  IRECT mPreRect;
+  IRECT mAmpRect;
+  IRECT mPostRect;
+};
+
+class VoLumPedalCardControl : public IControl
+{
+public:
+  using ClickCallback = std::function<void(VoLumPedalCardControl*, bool isBypassClick)>;
+
+  VoLumPedalCardControl(const IRECT& bounds, EVoLumEffectFocus effect, const char* name, int fractalCase, int activeParamIdx, ClickCallback cb)
+  : IControl(bounds)
+  , mEffect(effect)
+  , mName(name)
+  , mFractalCase(fractalCase)
+  , mActiveParamIdx(activeParamIdx)
+  , mCallback(std::move(cb))
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    bool focused = mIsFocused;
+    bool bypassed = !GetParam(mActiveParamIdx)->Value();
+
+    // Card background
+    g.FillRect(IColor(255, 35, 39, 48), mRECT.GetFromTop(mRECT.H() / 2.f));
+    g.FillRect(IColor(255, 23, 26, 32), mRECT.GetFromBottom(mRECT.H() / 2.f));
+    
+    IColor borderCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::FRAME : VoLumColors::TEAL_DIM);
+    g.DrawRoundRect(borderCol, mRECT, 4.f);
+
+    // Corners
+    const float cs = 8.f;
+    DrawCornerAccent(g, mRECT.L + 4.f, mRECT.T + 4.f, cs, false, false, borderCol);
+    DrawCornerAccent(g, mRECT.R - 4.f, mRECT.T + 4.f, cs, true, false, borderCol);
+    DrawCornerAccent(g, mRECT.L + 4.f, mRECT.B - 4.f, cs, false, true, borderCol);
+    DrawCornerAccent(g, mRECT.R - 4.f, mRECT.B - 4.f, cs, true, true, borderCol);
+
+    // Name
+    IColor nameCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM);
+    IText nameTxt(11.f, nameCol, "Michroma", EAlign::Center, EVAlign::Top);
+    g.DrawText(nameTxt, mName.c_str(), mRECT.GetPadded(-10.f));
+
+    if (focused)
+    {
+      g.DrawLine(VoLumColors::AMBER, mRECT.L + 28.f, mRECT.T + 22.f, mRECT.R - 28.f, mRECT.T + 22.f);
+    }
+
+    // Art box
+    IRECT artRect = mRECT.GetPadded(-12.f).GetVShifted(10.f).GetFromTop(70.f);
+    g.DrawRect(IColor(60, 91, 196, 196), artRect, nullptr, 1.f);
+    
+    // Draw mini fractal inside art box (assuming a global helper or inline)
+    
+    // Bypass LED
+    IRECT ledRect(mRECT.R - 14.f, mRECT.B - 14.f, mRECT.R - 6.f, mRECT.B - 6.f);
+    g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.f);
+    mLedRect = ledRect;
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    bool isBypass = mLedRect.Contains(x, y);
+    if (mCallback)
+      mCallback(this, isBypass);
+  }
+  
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    // Make sure we catch hovers so cursor can change, but we don't necessarily need to draw anything
+  }
+
+  void SetFocused(bool focused)
+  {
+    mIsFocused = focused;
+    SetDirty(false);
+  }
+
+  EVoLumEffectFocus GetEffect() const { return mEffect; }
+
+private:
+  EVoLumEffectFocus mEffect;
+  std::string mName;
+  int mFractalCase;
+  int mActiveParamIdx;
+  bool mIsFocused = false;
+  IRECT mLedRect;
+  ClickCallback mCallback;
+};
+

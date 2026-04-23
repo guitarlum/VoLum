@@ -168,6 +168,49 @@ int _GetConfigFrom_0_7_15(const iplug::IByteChunk& chunk, int startPos, nlohmann
   return pos;
 }
 
+// VoLum 0.5.0 (Reverb, Delay, Boost added)
+
+void _UpdateConfigFrom_0_5_0(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_7_15(config);
+}
+
+int _GetConfigFrom_0_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{
+    "Input",
+    "Threshold",
+    "Bass",
+    "Middle",
+    "Treble",
+    "Output",
+    "NoiseGateActive",
+    "ToneStack",
+    "IRToggle",
+    "DelayActive",
+    "DelayTime",
+    "DelayFeedback",
+    "DelayMix",
+    "DelayMode",
+    "ReverbActive",
+    "ReverbMix",
+    "ReverbDecay",
+    "ReverbTone",
+    "ReverbMode",
+    "BoostActive",
+    "BoostDrive",
+    "BoostTone",
+    "BoostLevel",
+    "CalibrateInput",
+    "InputCalibrationLevel",
+    "OutputMode",
+    "AmpeteRig"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_5_0(config);
+  return pos;
+}
+
 // 0.7.10
 
 void _UpdateConfigFrom_0_7_10(nlohmann::json& config)
@@ -227,7 +270,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // Act accordingly
   nlohmann::json config;
 
-  if (volum::ChunkUses0715SerializedConfig(version))
+  if (volum::ChunkUses0500SerializedConfig(version))
+  {
+    pos = _GetConfigFrom_0_5_0(chunk, pos, config);
+  }
+  else if (volum::ChunkUses0715SerializedConfig(version))
   {
     pos = _GetConfigFrom_0_7_15(chunk, pos, config);
   }
@@ -256,7 +303,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
 
 #if VOLUM_AMPETE_PRODUCT
   // v0.7.15+ and VoLum 0.1.x: read per-amp settings after the params
-  if (volum::ChunkUses0715SerializedConfig(version))
+  if (volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
     // SerializeParams wrote kNumParams doubles; now read the per-amp block
     pos = chunk.Get(&mVolumAmpIdx, pos);
