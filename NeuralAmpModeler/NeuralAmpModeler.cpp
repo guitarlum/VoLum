@@ -335,19 +335,36 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Re-attach VoLumHeroImageControl so the procedural art can actually draw
     // The triptych provides a space for it, but the hero control holds the fractal caching logic.
     // It should be centered within the AMP-expanded area of the triptych.
-    // AMP expanded area is 400px wide, centered in triptychArea when AMP is expanded.
+    // When AMP is expanded, the center of the expanded section is exactly at `mainCX`
     const float newHeroW = 400.f;
     const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, yPos + triptychH);
     pGraphics->AttachControl(new VoLumHeroImageControl(heroArea), kCtrlTagVoLumHeroImage);
 
-    // POST Expanded Pedal Cards
+    // Pedal Cards logic
     const float pedalW = 210.f;
     const float pedalH = 158.f;
-    const float postCx = triptychArea.MW(); // Center of Triptych
-    // When POST is expanded, pedals are centered.
-    const IRECT delayCardRect(postCx - pedalW - 10.f, yPos + 20.f, postCx - 10.f, yPos + 20.f + pedalH);
-    const IRECT reverbCardRect(postCx + 10.f, yPos + 20.f, postCx + 10.f + pedalW, yPos + 20.f + pedalH);
-    const IRECT chainLinkRect(postCx - 10.f, yPos + 20.f + pedalH/2.f - 6.f, postCx + 10.f, yPos + 20.f + pedalH/2.f + 6.f);
+    const float gap = 10.f;
+
+    // PRE Expanded Pedal Cards
+    const float preStripW = 30.f; // The strip width is 30 by default when NOT active
+    // When PRE is expanded, its center is calculated differently. 
+    // Wait, triptychArea.MW() is NOT the center of PRE! 
+    // If PRE is expanded: totalW = 460 + 10 + 70 + 10 + 30 = 580.
+    // Left = mainCX - 290. So PRE rect is [mainCX-290, mainCX-290+460].
+    // Center of PRE is (mainCX-290 + mainCX+170) / 2 = mainCX - 60.
+    const float preExpandedCenter = mainCX - 60.f;
+    const IRECT boostCardRect(preExpandedCenter - (pedalW / 2.f), yPos + 20.f, preExpandedCenter + (pedalW / 2.f), yPos + 20.f + pedalH);
+
+    // POST Expanded Pedal Cards
+    // When POST is expanded: totalW = preStripW + 10 + 70 + 10 + 460.
+    // If mPreActive is false (which it is on init), preStripW = 30. totalW = 580.
+    // Left = mainCX - 290. POST starts at mainCX-290 + 30 + 10 + 70 + 10 = mainCX - 170.
+    // POST ends at mainCX-170 + 460 = mainCX + 290.
+    // Center of POST is (mainCX-170 + mainCX+290)/2 = mainCX + 60.
+    const float postExpandedCenter = mainCX + 60.f;
+    const IRECT delayCardRect(postExpandedCenter - pedalW - gap/2.f, yPos + 20.f, postExpandedCenter - gap/2.f, yPos + 20.f + pedalH);
+    const IRECT reverbCardRect(postExpandedCenter + gap/2.f, yPos + 20.f, postExpandedCenter + gap/2.f + pedalW, yPos + 20.f + pedalH);
+    const IRECT chainLinkRect(postExpandedCenter - gap/2.f, yPos + 20.f + pedalH/2.f - 6.f, postExpandedCenter + gap/2.f, yPos + 20.f + pedalH/2.f + 6.f);
 
     auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
         if (isBypassClick) {
@@ -355,6 +372,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                 GetParam(kDelayActive)->Set(!GetParam(kDelayActive)->Value());
             } else if (card->GetEffect() == EVoLumEffectFocus::REVERB) {
                 GetParam(kReverbActive)->Set(!GetParam(kReverbActive)->Value());
+            } else if (card->GetEffect() == EVoLumEffectFocus::BOOST) {
+                GetParam(kBoostActive)->Set(!GetParam(kBoostActive)->Value());
             }
         } else {
             mVolumFocusedEffect = card->GetEffect();
@@ -362,9 +381,24 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         _UpdateVoLumLayout();
     };
 
-    pGraphics->AttachControl(new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::DELAY, "DELAY", 16, kDelayActive, onPedalClick), kCtrlTagVoLumDelayCard)->Hide(true);
-    pGraphics->AttachControl(new VoLumChainConnectorControl(chainLinkRect), -1, "POST_CARDS")->Hide(true);
-    pGraphics->AttachControl(new VoLumPedalCardControl(reverbCardRect, EVoLumEffectFocus::REVERB, "REVERB", 15, kReverbActive, onPedalClick), kCtrlTagVoLumReverbCard)->Hide(true);
+    // If mPreActive is TRUE, preStripW = 70. totalW = 620.
+    // Left = mainCX - 310. POST starts at mainCX-310 + 70 + 10 + 70 + 10 = mainCX - 150.
+    // POST ends at mainCX-150 + 460 = mainCX + 310.
+    // Center of POST is (mainCX-150 + mainCX+310)/2 = mainCX + 80.
+    
+    // We must calculate the center dynamically in _UpdateVoLumLayout or just attach it wider!
+    // Wait, if we attach controls once, their coordinates are fixed unless we call SetTargetAndDrawRects!
+    // IPlug 2 `IControl::SetTargetAndDrawRects(IRECT)` allows moving controls after creation.
+    // So let's save pointers to the cards and move them in `_UpdateVoLumLayout`.
+    auto* boostCard = new VoLumPedalCardControl(boostCardRect, EVoLumEffectFocus::BOOST, "BOOST", 14, kBoostActive, onPedalClick);
+    auto* delayCard = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::DELAY, "DELAY", 16, kDelayActive, onPedalClick);
+    auto* reverbCard = new VoLumPedalCardControl(reverbCardRect, EVoLumEffectFocus::REVERB, "REVERB", 15, kReverbActive, onPedalClick);
+    auto* chainLink = new VoLumChainConnectorControl(chainLinkRect);
+    
+    pGraphics->AttachControl(boostCard, kCtrlTagVoLumBoostCard)->Hide(true);
+    pGraphics->AttachControl(delayCard, kCtrlTagVoLumDelayCard)->Hide(true);
+    pGraphics->AttachControl(chainLink, kCtrlTagVoLumChainConnector)->Hide(true);
+    pGraphics->AttachControl(reverbCard, kCtrlTagVoLumReverbCard)->Hide(true);
 
     yPos += triptychH + 4.f;
 
@@ -397,14 +431,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     };
 
     auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix, const char* group, bool center_offset = false) {
-      float cx = center_offset ? (mainCX - (3 * colW + 1 * divW) / 2.f + slot * colW) : knobX(slot);
-      float kL = cx + (colW - knobDiam) / 2.f;
+      float customColW = center_offset ? 80.f : colW;
+      float cx = center_offset ? (mainCX - (3 * customColW) / 2.f + (slot - 2) * customColW + (customColW / 2.f)) : knobX(slot) + (colW / 2.f);
+      float kL = cx - (knobDiam / 2.f);
 
-      pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(cx, knobRowTop, cx + colW, knobRowTop + 20.f), label), -1, group);
+      // Use a wider label rect (-40.f to +40.f = 80px wide) to prevent "FEEDBACK" clipping
+      pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), label), -1, group);
       auto* knob = new NAMKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(knob, -1, group);
       knob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == paramId);
-      pGraphics->AttachControl(new VoLumParamValueControl(IRECT(cx, knobT + knobDiam + 2.f, cx + colW, knobT + knobDiam + 2.f + valueH), paramId, suffix), -1, group);
+      pGraphics->AttachControl(new VoLumParamValueControl(IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), paramId, suffix), -1, group);
     };
 
     // AMP KNOBS
@@ -433,19 +469,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(6, "OUTPUT", kOutputLevel, "dB", "AMP_KNOBS", false);
 
     // REVERB KNOBS (Centered)
-    drawKnobCol(0, "MIX", kReverbMix, "%", "REVERB_KNOBS", true);
-    drawKnobCol(1, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true);
-    drawKnobCol(2, "TONE", kReverbTone, "", "REVERB_KNOBS", true);
+    drawKnobCol(2, "MIX", kReverbMix, "%", "REVERB_KNOBS", true);
+    drawKnobCol(3, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true);
+    drawKnobCol(4, "TONE", kReverbTone, "", "REVERB_KNOBS", true);
+    IRECT reverbPickerRect(mainCX + 140.f, knobT, mainCX + 210.f, knobT + knobDiam + valueH);
+    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"SPRING", "PLATE", "HALL", "SHIMMER"}), -1, "REVERB_KNOBS");
 
     // DELAY KNOBS (Centered)
-    drawKnobCol(0, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true);
-    drawKnobCol(1, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true);
-    drawKnobCol(2, "MIX", kDelayMix, "%", "DELAY_KNOBS", true);
+    drawKnobCol(2, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true);
+    drawKnobCol(3, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true);
+    drawKnobCol(4, "MIX", kDelayMix, "%", "DELAY_KNOBS", true);
+    IRECT delayPickerRect(mainCX + 140.f, knobT, mainCX + 210.f, knobT + knobDiam + valueH);
+    pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG"}), -1, "DELAY_KNOBS");
 
     // BOOST KNOBS (Centered)
-    drawKnobCol(0, "DRIVE", kBoostDrive, "", "BOOST_KNOBS", true);
-    drawKnobCol(1, "TONE", kBoostTone, "", "BOOST_KNOBS", true);
-    drawKnobCol(2, "LEVEL", kBoostLevel, "dB", "BOOST_KNOBS", true);
+    drawKnobCol(2, "DRIVE", kBoostDrive, "", "BOOST_KNOBS", true);
+    drawKnobCol(3, "TONE", kBoostTone, "", "BOOST_KNOBS", true);
+    drawKnobCol(4, "LEVEL", kBoostLevel, "dB", "BOOST_KNOBS", true);
 
     // I/O meters
     const float meterW = 8.f;
@@ -498,7 +538,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics->AttachControl(new VoLumExactEntryControl(b, kInputLevel, "INPUT"), kCtrlTagVoLumExactEntry)->Hide(true);
 
-    _UpdateVoLumLayout();
+    _UpdateVoLumLayout(pGraphics);
 
     // Settings gear button (top-right of main panel)
     {
@@ -1597,9 +1637,9 @@ void NeuralAmpModeler::_HideVoLumExactEntry()
   }
 }
 
-void NeuralAmpModeler::_HideControlGroup(const char* group, bool hide)
+void NeuralAmpModeler::_HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide)
 {
-  if (auto* pGfx = GetUI()) {
+  if (pGfx) {
     pGfx->ForAllControlsFunc([group, hide](iplug::igraphics::IControl* c) {
       if (c->GetGroup() && std::strcmp(c->GetGroup(), group) == 0) {
         c->Hide(hide);
@@ -1608,22 +1648,23 @@ void NeuralAmpModeler::_HideControlGroup(const char* group, bool hide)
   }
 }
 
-void NeuralAmpModeler::_UpdateVoLumLayout()
+void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 {
-  if (auto* pGfx = GetUI())
+  if (!pGfx) pGfx = GetUI();
+  if (pGfx)
   {
-    _HideControlGroup("AMP_KNOBS", true);
-    _HideControlGroup("REVERB_KNOBS", true);
-    _HideControlGroup("DELAY_KNOBS", true);
-    _HideControlGroup("BOOST_KNOBS", true);
+    _HideControlGroup(pGfx, "AMP_KNOBS", true);
+    _HideControlGroup(pGfx, "REVERB_KNOBS", true);
+    _HideControlGroup(pGfx, "DELAY_KNOBS", true);
+    _HideControlGroup(pGfx, "BOOST_KNOBS", true);
     
     // Hide/show the correct group based on focused effect
     switch (mVolumFocusedEffect)
     {
-      case EVoLumEffectFocus::AMP: _HideControlGroup("AMP_KNOBS", false); break;
-      case EVoLumEffectFocus::REVERB: _HideControlGroup("REVERB_KNOBS", false); break;
-      case EVoLumEffectFocus::DELAY: _HideControlGroup("DELAY_KNOBS", false); break;
-      case EVoLumEffectFocus::BOOST: _HideControlGroup("BOOST_KNOBS", false); break;
+      case EVoLumEffectFocus::AMP: _HideControlGroup(pGfx, "AMP_KNOBS", false); break;
+      case EVoLumEffectFocus::REVERB: _HideControlGroup(pGfx, "REVERB_KNOBS", false); break;
+      case EVoLumEffectFocus::DELAY: _HideControlGroup(pGfx, "DELAY_KNOBS", false); break;
+      case EVoLumEffectFocus::BOOST: _HideControlGroup(pGfx, "BOOST_KNOBS", false); break;
     }
 
     // Toggles for Amp (Noise Gate / EQ) are hidden unless AMP is expanded
@@ -1654,8 +1695,38 @@ void NeuralAmpModeler::_UpdateVoLumLayout()
       trip->SetState(GetParam(kBoostActive)->Value(), GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), mVolumAmpIdx, volum::kAmps[mVolumAmpIdx].displayName);
       trip->SetExpandedSection(mVolumExpandedSection);
       
-      // Update Pedal Cards visibility and state based on whether POST is expanded
+      // Update Pedal Cards visibility, layout, and state based on whether POST is expanded
       bool postExpanded = (mVolumExpandedSection == EVoLumSection::POST);
+      bool preExpanded = (mVolumExpandedSection == EVoLumSection::PRE);
+      
+      if (postExpanded) {
+        IRECT postRect = trip->GetPostExpandedRect();
+        
+        const float gap = 10.f;
+        const float pedalW = 210.f;
+        const float pedalH = 158.f;
+        const float postCx = postRect.MW();
+        
+        IRECT dRect(postCx - pedalW - gap/2.f, postRect.T + 20.f, postCx - gap/2.f, postRect.T + 20.f + pedalH);
+        IRECT rRect(postCx + gap/2.f, postRect.T + 20.f, postCx + gap/2.f + pedalW, postRect.T + 20.f + pedalH);
+        IRECT lRect(postCx - gap/2.f, postRect.T + 20.f + pedalH/2.f - 6.f, postCx + gap/2.f, postRect.T + 20.f + pedalH/2.f + 6.f);
+
+        if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {
+          delayCard->SetTargetAndDrawRECTs(dRect);
+        }
+        if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard)) {
+          reverbCard->SetTargetAndDrawRECTs(rRect);
+        }
+        if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector)) {
+          linkCard->SetTargetAndDrawRECTs(lRect);
+        }
+      }
+
+      if (auto* boostCard = pGfx->GetControlWithTag(kCtrlTagVoLumBoostCard)) {
+        boostCard->Hide(!preExpanded);
+        if (preExpanded) boostCard->As<VoLumPedalCardControl>()->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::BOOST);
+      }
+      
       if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {
         delayCard->Hide(!postExpanded);
         if (postExpanded) delayCard->As<VoLumPedalCardControl>()->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::DELAY);
@@ -1664,7 +1735,9 @@ void NeuralAmpModeler::_UpdateVoLumLayout()
         reverbCard->Hide(!postExpanded);
         if (postExpanded) reverbCard->As<VoLumPedalCardControl>()->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::REVERB);
       }
-      _HideControlGroup("POST_CARDS", !postExpanded);
+      if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector)) {
+        chain->Hide(!postExpanded);
+      }
     }
   }
 }
