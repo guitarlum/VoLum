@@ -22,10 +22,26 @@ alwaysApply: true
    - One line per user-visible or behavior change; include breaking preset/state format bumps.
 4. **Commit** in a **single coherent chunk** when possible (easy `git revert`). If the user prefers WIP commits, say so in chat.
 
+## Tests are mandatory, not optional
+
+- **Write tests for every confirmed-working feature or bugfix.** Do not wait for the user to ask.
+- New DSP behavior → doctest in `NeuralAmpModeler/tests/`. Cover: no NaN, passthrough at zero mix, bounded output, all modes.
+- New parameter → pin its index and step size in `test_eparam_order.cpp` / `test_keyboard_steps.cpp`.
+- New serialization path → version-branch test in `test_volum_chunk_version.cpp`.
+- If a bug was caused by a missing test, add the test that would have caught it.
+
+## Code hygiene is part of the task
+
+- **Refactor proactively** when a file crosses ~500 lines or a class accumulates unrelated responsibilities. Don't wait to be asked.
+- Follow the existing file split pattern (see AGENTS.md "UI File Map"). New controls go in the correct file, not dumped into a monolith.
+- Keep fractal/art code in `VoLumFractalArt.h`, triptych/POST controls in `VoLumTriptych.h`, core controls in `VoLumCoreControls.h`.
+- If you add a new file, update the file map table in `AGENTS.md`.
+
 ## Execution
 
 - **You run** builds/tests in this environment; do not only tell the user what to run.
 - After failures: diagnose, fix, retry—do not stop after one error.
+- Kill stale `VoLum.exe` processes before rebuilding if the linker reports a locked file.
 
 ## Scope discipline
 

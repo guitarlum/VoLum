@@ -20,12 +20,24 @@
 
 ## Real Entry Points
 
-- `NeuralAmpModeler/NeuralAmpModeler.cpp` and `.h` are the real app/plugin entrypoints.
-- VoLum-specific UI controls live in `NeuralAmpModeler/VoLumControls.h`.
-- Amp metadata lives in `NeuralAmpModeler/VoLumAmpeteCatalog.h`.
-- Rig lookup and settings-path logic live in `NeuralAmpModeler/VoLumPaths.h`.
-- State migration logic lives in `NeuralAmpModeler/Unserialization.cpp`.
-- `NeuralAmpModeler/config.h` still controls product identity, version, window size, and feature forks; `VOLUM_AMPETE_PRODUCT` is enabled here.
+- `NeuralAmpModeler/NeuralAmpModeler.cpp` and `.h` — plugin entrypoint, ProcessBlock, layout, keyboard handling.
+- `NeuralAmpModeler/config.h` — product identity, version, window size, `VOLUM_AMPETE_PRODUCT` flag.
+
+## UI File Map (read the right file first — saves tokens)
+
+| File | What's inside | ~Lines |
+|------|--------------|--------|
+| `VoLumControls.h` | **Thin umbrella** — just includes the three below. Never edit directly. | 12 |
+| `VoLumColorHelpers.h` | `VoLumColors` namespace, `DrawCornerAccent`, `DrawDiamond`, `ClearVoLumKnobSelection`. Includes `VoLumFractalArt.h`. | 82 |
+| `VoLumFractalArt.h` | **All procedural fractal art** (rarely changes): `DrawStripMiniFractal` (14-variant auto-scaling), `DrawSidebarMiniFractal` (sidebar thumbnails), `DrawHeroFractalArt` (full-size hero). ~700 lines of pure drawing math — read only when changing fractals. | 705 |
+| `VoLumCoreControls.h` | All "base" controls: sidebar list, speaker row, hero image (delegates to `DrawHeroFractalArt`), mode picker, knob labels, channel stepper, exact entry, settings backdrop, etc. | 1168 |
+| `VoLumTriptych.h` | POST effects UI: `VoLumTriptychControl` (PRE/AMP/POST layout + mouse expand), `VoLumPedalCardControl` (delay/reverb cards with cached Lichtenberg/waveform art), `VoLumChainConnectorControl` | 390 |
+| `VoLumTriptychState.h` | `EVoLumSection` and `EVoLumEffectFocus` enums (tiny, breaks circular deps) | 5 |
+| `VoLumAmpeteCatalog.h` | Amp metadata (names, folders, speaker prefixes) | — |
+| `VoLumPaths.h` | Rig root discovery, channel file enumeration | — |
+| `VoLumUserSettingsIO.h` | Per-amp JSON settings read/write | — |
+| `Unserialization.cpp` | State migration for DAW preset recall across versions | — |
+| `NeuralAmpModelerControls.h` | `NAMKnobControl` (keyboard step sizes live here in `GetKeyboardStep`), `NAMSwitchControl`, `NAMSettingsPageControl`, `NAMFileBrowserControl` | — |
 
 ## Build Variants
 
@@ -51,6 +63,15 @@
 - macOS standalone embeds `VoLumRigs` inside `VoLum.app/Contents/Resources`; the macOS VST3 zip keeps rigs as a sibling folder instead.
 - `NeuralAmpModeler/tests/test_nam_rigs.cpp` expects bundled repo rigs under `rigs/Ampete One/...`.
 
+## Testing And Code Quality
+
+- **Tests are mandatory.** Every confirmed-working feature or bugfix gets a test before the iteration is done. Don't wait for the user to ask.
+- Test files live in `NeuralAmpModeler/tests/`. Framework: doctest (single-header, `test_main.cpp` has the runner).
+- Test project: `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj`. Add new `.cpp` files there.
+- DSP tests can run without IPlug2/IGraphics — include headers from `AudioDSPTools/dsp/` directly.
+- Param-order and keyboard-step tests use a local `EParams` enum copy (avoids IGraphics dependency). If `EParams` changes, both the header and the test must update — that's the point.
+- **Refactor proactively.** Files over ~500 lines or classes with unrelated responsibilities get split without being asked. Follow the file map below.
+
 ## Release Housekeeping
 
 - For user-visible or behavior changes, append one dated line to `NeuralAmpModeler/installer/changelog.txt`; `release-native.yml` uses that file as the GitHub release body.
@@ -61,4 +82,5 @@
 
 - VoLum's interface uses a triptych layout managed by `VoLumTriptychControl`. Only one section is expanded at a time: PRE (Boosts/Drives), AMP (Rig), or POST (Delay/Reverb pedalboard).
 - The bottom knob row uses "replace mode" logic in `_AttachVoLumGraphics`: clicking a section tab or a pedal card (via `VoLumPedalCardControl`) hides the previously focused controls and shows the newly focused effect's controls.
-- Effect identity artwork (e.g. Lichtenberg figure for Reverb, Cantor dust for Delay) are procedural fractals defined in `DrawMiniFractal` (cases 14 and up) in `NeuralAmpModeler/VoLumControls.h`.
+- Effect identity artwork: Lichtenberg (Reverb) and echo waveform (Delay) in `VoLumTriptych.h` `_DrawFractalArt`. Amp sidebar/hero fractals in `DrawStripMiniFractal` (14 variants, auto-scales for 22px thumbnails vs 200px cards) in `VoLumColorHelpers.h`. Hero full-size fractals in `VoLumHeroImageControl::DrawGeometricArt` in `VoLumCoreControls.h`.
+- PRE strip background: diagonal crosshatch. AMP collapsed strip: circuit-board grid. Both in `VoLumTriptych.h` `_DrawStrip` / `_DrawAmpStrip`.
