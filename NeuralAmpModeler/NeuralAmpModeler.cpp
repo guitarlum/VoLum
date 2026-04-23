@@ -449,22 +449,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(2, "MIX", kReverbMix, "%", "REVERB_KNOBS", true);
     drawKnobCol(3, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true);
     drawKnobCol(4, "TONE", kReverbTone, "", "REVERB_KNOBS", true);
-    IRECT reverbPickerRect(mainCX + 140.f, knobT, mainCX + 210.f, knobT + knobDiam + valueH);
+    IRECT reverbPickerRect(mainCX + 140.f, knobT, mainCX + 240.f, knobT + knobDiam + valueH);
     pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"SPRING", "PLATE", "HALL", "SHIMMER"}), -1, "REVERB_KNOBS");
     
     float revSwX = knobX(1) + colW/2.f;
-    pGraphics->AttachControl(new NAMSwitchControl(IRECT(revSwX - 25.f, knobT + 20.f, revSwX + 25.f, knobT + 20.f + 25.f), kReverbActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "REVERB_KNOBS");
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(revSwX - 32.f, knobT + 14.f, revSwX + 32.f, knobT + 14.f + 34.f), kReverbActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "REVERB_KNOBS");
     pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(revSwX - 30.f, knobT - 20.f, revSwX + 30.f, knobT), "REVERB"), -1, "REVERB_KNOBS");
 
     // DELAY KNOBS (Centered)
     drawKnobCol(2, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true);
     drawKnobCol(3, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true);
     drawKnobCol(4, "MIX", kDelayMix, "%", "DELAY_KNOBS", true);
-    IRECT delayPickerRect(mainCX + 140.f, knobT, mainCX + 210.f, knobT + knobDiam + valueH);
+    IRECT delayPickerRect(mainCX + 140.f, knobT, mainCX + 240.f, knobT + knobDiam + valueH);
     pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG"}), -1, "DELAY_KNOBS");
 
     float dlySwX = knobX(1) + colW/2.f;
-    pGraphics->AttachControl(new NAMSwitchControl(IRECT(dlySwX - 25.f, knobT + 20.f, dlySwX + 25.f, knobT + 20.f + 25.f), kDelayActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "DELAY_KNOBS");
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(dlySwX - 32.f, knobT + 14.f, dlySwX + 32.f, knobT + 14.f + 34.f), kDelayActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "DELAY_KNOBS");
     pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(dlySwX - 30.f, knobT - 20.f, dlySwX + 30.f, knobT), "DELAY"), -1, "DELAY_KNOBS");
 
     // I/O meters
@@ -499,13 +499,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     float ngX = mainCX - 136.f;
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH), kNoiseGateActive, "", volumToggleStyle, switchHandleBitmap), kCtrlTagVoLumNoiseGate);
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"), kCtrlTagVoLumNoiseGate);
+      new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH), kNoiseGateActive, "", volumToggleStyle, switchHandleBitmap), kCtrlTagVoLumNoiseGate, "AMP_TOGGLES");
+    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"), -1, "AMP_TOGGLES");
 
     float eqX = mainCX + 30.f;
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH), kEQActive, "", volumToggleStyle, switchHandleBitmap), kCtrlTagVoLumEQ);
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), kCtrlTagVoLumEQ);
+      new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH), kEQActive, "", volumToggleStyle, switchHandleBitmap), kCtrlTagVoLumEQ, "AMP_TOGGLES");
+    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), -1, "AMP_TOGGLES");
 
     const IRECT hintArea(mainCX - 270.f, toggleY + toggleH + 10.f, mainCX + 270.f, toggleY + toggleH + 10.f + 44.f);
     pGraphics->AttachControl(new VoLumKeyboardHintControl(hintArea), kCtrlTagVoLumKeyboardHint);
@@ -618,41 +618,31 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         }
         return true;
       }
-      if (key.VK == kVK_LEFT)
+      if (key.VK == kVK_LEFT || key.VK == kVK_RIGHT)
       {
-        _ClearVoLumKnobSelection();
-        if (auto* pGfx = GetUI())
-          if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
-          {
-            auto* s = stepper->As<VoLumChannelStepControl>();
-            int n = s->GetNumChannels();
-            if (n > 0)
+        if (mVolumSelectedKnobParamIdx != kNoParameter)
+          return false;
+
+        if (mVolumExpandedSection == EVoLumSection::AMP)
+        {
+          if (auto* pGfx = GetUI())
+            if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
             {
-              int newCh = (s->GetSelected() - 1 + n) % n;
-              s->SetChannels(mVolumChannelLabels, newCh);
-              mVolumChannelIdx = newCh;
-              mVolumNeedsLoad.store(true);
+              auto* s = stepper->As<VoLumChannelStepControl>();
+              int n = s->GetNumChannels();
+              if (n > 0)
+              {
+                int newCh = (key.VK == kVK_LEFT)
+                  ? (s->GetSelected() - 1 + n) % n
+                  : (s->GetSelected() + 1) % n;
+                s->SetChannels(mVolumChannelLabels, newCh);
+                mVolumChannelIdx = newCh;
+                mVolumNeedsLoad.store(true);
+              }
             }
+          return true;
         }
-        return true;
-      }
-      if (key.VK == kVK_RIGHT)
-      {
-        _ClearVoLumKnobSelection();
-        if (auto* pGfx = GetUI())
-          if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
-          {
-            auto* s = stepper->As<VoLumChannelStepControl>();
-            int n = s->GetNumChannels();
-            if (n > 0)
-            {
-              int newCh = (s->GetSelected() + 1) % n;
-              s->SetChannels(mVolumChannelLabels, newCh);
-              mVolumChannelIdx = newCh;
-              mVolumNeedsLoad.store(true);
-            }
-          }
-        return true;
+        return false;
       }
       if (key.VK == kVK_ESCAPE)
       {
@@ -1211,6 +1201,11 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
+#if VOLUM_AMPETE_PRODUCT
+        if (auto* c = pGraphics->GetControlWithParamIdx(kToneBass)) c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kToneMid)) c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kToneTreble)) c->SetDisabled(!active);
+#endif
         break;
 #if !VOLUM_AMPETE_PRODUCT
 #ifndef APP_API
@@ -1655,10 +1650,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       case EVoLumEffectFocus::BOOST: break;
     }
 
-    // Toggles for Amp (Noise Gate / EQ) are hidden unless AMP is expanded
     bool ampExpanded = (mVolumExpandedSection == EVoLumSection::AMP);
-    if (auto* c = pGfx->GetControlWithTag(kCtrlTagVoLumNoiseGate)) c->Hide(!ampExpanded);
-    if (auto* c = pGfx->GetControlWithTag(kCtrlTagVoLumEQ)) c->Hide(!ampExpanded);
+    _HideControlGroup(pGfx, "AMP_TOGGLES", !ampExpanded);
     
     if (auto* hero = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)) hero->Hide(!ampExpanded);
 
