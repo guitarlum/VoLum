@@ -332,6 +332,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     });
     pGraphics->AttachControl(triptych, kCtrlTagVoLumTriptych);
 
+    // Re-attach VoLumHeroImageControl so the procedural art can actually draw
+    // The triptych provides a space for it, but the hero control holds the fractal caching logic.
+    // It should be centered within the AMP-expanded area of the triptych.
+    // AMP expanded area is 400px wide, centered in triptychArea when AMP is expanded.
+    const float newHeroW = 400.f;
+    const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, yPos + triptychH);
+    pGraphics->AttachControl(new VoLumHeroImageControl(heroArea), kCtrlTagVoLumHeroImage);
+
     // POST Expanded Pedal Cards
     const float pedalW = 210.f;
     const float pedalH = 158.f;
@@ -489,6 +497,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       pGraphics->GetControlWithTag(kCtrlTagVoLumFooter)->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
 
     pGraphics->AttachControl(new VoLumExactEntryControl(b, kInputLevel, "INPUT"), kCtrlTagVoLumExactEntry)->Hide(true);
+
+    _UpdateVoLumLayout();
 
     // Settings gear button (top-right of main panel)
     {
@@ -1620,6 +1630,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout()
     bool ampExpanded = (mVolumExpandedSection == EVoLumSection::AMP);
     if (auto* c = pGfx->GetControlWithTag(kCtrlTagVoLumNoiseGate)) c->Hide(!ampExpanded);
     if (auto* c = pGfx->GetControlWithTag(kCtrlTagVoLumEQ)) c->Hide(!ampExpanded);
+    
+    if (auto* hero = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)) hero->Hide(!ampExpanded);
 
     // Update Sub-row text
     if (auto* subTextCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
