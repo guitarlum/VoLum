@@ -98,8 +98,10 @@ enum ECtrlTags
   kCtrlTagVoLumExactEntry,
   kCtrlTagVoLumChannelStep,
   kCtrlTagVoLumTriptych,
+  kCtrlTagVoLumBoostCard,
   kCtrlTagVoLumDelayCard,
   kCtrlTagVoLumReverbCard,
+  kCtrlTagVoLumChainConnector,
   kCtrlTagVoLumSubRowText,
   kCtrlTagVoLumNoiseGate,
   kCtrlTagVoLumEQ,
@@ -281,9 +283,8 @@ public:
   std::string _GetVoLumKnobHintText(int paramIdx) const;
   void _SyncVoLumExactEntry();
   void _HideVoLumExactEntry();
-  void _HideControlGroup(const char* group, bool hide);
-
-  void _UpdateVoLumLayout();
+  void _HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide);
+  void _UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx = nullptr);
 
 private:
   friend class NAMKnobControl;

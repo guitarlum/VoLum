@@ -1131,6 +1131,54 @@ private:
   int mCachedArtIdx = -1;
 };
 
+class VoLumModePickerControl : public IControl
+{
+public:
+  VoLumModePickerControl(const IRECT& bounds, int paramIdx, const std::vector<std::string>& modes)
+  : IControl(bounds, paramIdx)
+  , mModes(modes)
+  {}
+
+  void Draw(IGraphics& g) override
+  {
+    int selected = static_cast<int>(GetValue() * (mModes.size() - 1));
+    float itemH = mRECT.H() / static_cast<float>(mModes.size());
+
+    // Left border
+    g.DrawLine(VoLumColors::FRAME, mRECT.L, mRECT.T, mRECT.L, mRECT.B, nullptr, 1.f);
+
+    for (size_t i = 0; i < mModes.size(); ++i)
+    {
+      IRECT itemArea = IRECT(mRECT.L + 12.f, mRECT.T + i * itemH, mRECT.R, mRECT.T + (i + 1) * itemH);
+      bool isSelected = (i == selected);
+
+      if (isSelected) {
+        g.FillRect(VoLumColors::AMBER, itemArea.GetPadded(-1.f));
+      }
+
+      IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::CREAM_DIM;
+      IText text(10.f, textCol, "Michroma-Regular", EAlign::Near, EVAlign::Middle);
+      IRECT textArea = itemArea;
+      textArea.L += 6.f; // manually indent instead of GetTranslated which shifts the whole rect
+      g.DrawText(text, mModes[i].c_str(), textArea);
+    }
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    float itemH = mRECT.H() / static_cast<float>(mModes.size());
+    int clickedIdx = static_cast<int>((y - mRECT.T) / itemH);
+    if (clickedIdx >= 0 && clickedIdx < static_cast<int>(mModes.size()))
+    {
+      SetValue(static_cast<double>(clickedIdx) / (mModes.size() - 1));
+      SetDirty(true);
+    }
+  }
+
+private:
+  std::vector<std::string> mModes;
+};
+
 class VoLumSubRowTextControl : public IControl
 {
 public:
@@ -1953,6 +2001,10 @@ public:
     mExpandedSection = s;
     SetDirty(false);
   }
+  
+  IRECT GetPostExpandedRect() const { return mPostRect; }
+  IRECT GetPreExpandedRect() const { return mPreRect; }
+  
 private:
   void _DrawStrip(IGraphics& g, const IRECT& r, const char* label, bool expanded, bool active, bool isPost)
   {
@@ -1960,7 +2012,7 @@ private:
     {
       // The content (pedals or boost art) will be drawn by other controls.
       // Just draw the section header inside the expanded area.
-      IText txt(9.f, VoLumColors::TEAL, "Michroma", EAlign::Near, EVAlign::Middle);
+      IText txt(9.f, VoLumColors::TEAL, "Michroma-Regular", EAlign::Near, EVAlign::Middle);
       g.DrawText(txt, label, r.GetPadded(-8.f).GetFromTop(20.f).GetTranslated(16.f, 0.f));
       g.FillCircle(VoLumColors::TEAL, r.L + 12.f, r.T + 18.f, 3.f);
     }
@@ -1984,12 +2036,14 @@ private:
 
       g.FillCircle(active ? VoLumColors::TEAL : IColor(255, 42, 48, 52), r.MW(), r.T + 12.f, 3.5f);
 
-      IText t(dormant ? 8.f : 10.f, dormant ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Michroma", EAlign::Center, EVAlign::Middle);
+      IText t(dormant ? 8.f : 10.f, dormant ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       // Vertical text drawing fallback
-      float ty = r.MH() - (strlen(label) * t.mSize) / 2.0f;
+      float charH = 12.f;
+      float totalH = strlen(label) * charH;
+      float ty = r.MH() - totalH / 2.0f;
       for (size_t i = 0; i < strlen(label); i++) {
         char ch[2] = { label[i], 0 };
-        g.DrawText(t, ch, IRECT(r.L, ty + i * t.mSize, r.R, ty + (i + 1) * t.mSize));
+        g.DrawText(t, ch, IRECT(r.L, ty + i * charH, r.R, ty + (i + 1) * charH));
       }
     }
   }
@@ -2001,7 +2055,7 @@ private:
     
     // Draw mini fractal
     // This is a quick mock. We can instantiate an AmpList control or duplicate DrawMiniFractal if needed.
-    IText t(10.f, VoLumColors::CREAM, "Michroma", EAlign::Center, EVAlign::Middle);
+    IText t(10.f, VoLumColors::CREAM, "Michroma-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(t, "A", r.GetFromTop(40.f).GetVShifted(80.f));
     g.DrawText(t, "M", r.GetFromTop(40.f).GetVShifted(95.f));
     g.DrawText(t, "P", r.GetFromTop(40.f).GetVShifted(110.f));
@@ -2049,7 +2103,7 @@ public:
   using ClickCallback = std::function<void(VoLumPedalCardControl*, bool isBypassClick)>;
 
   VoLumPedalCardControl(const IRECT& bounds, EVoLumEffectFocus effect, const char* name, int fractalCase, int activeParamIdx, ClickCallback cb)
-  : IControl(bounds)
+  : IControl(bounds, activeParamIdx)
   , mEffect(effect)
   , mName(name)
   , mFractalCase(fractalCase)
@@ -2061,7 +2115,7 @@ public:
   void Draw(IGraphics& g) override
   {
     bool focused = mIsFocused;
-    bool bypassed = !GetParam(mActiveParamIdx)->Value();
+    bool bypassed = (GetValue() < 0.5); // Control is bound to active param, so 0 = bypassed, 1 = active
 
     // Card background
     g.FillRect(IColor(255, 35, 39, 48), mRECT.GetFromTop(mRECT.H() / 2.f));
@@ -2079,7 +2133,7 @@ public:
 
     // Name
     IColor nameCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM);
-    IText nameTxt(11.f, nameCol, "Michroma", EAlign::Center, EVAlign::Top);
+    IText nameTxt(11.f, nameCol, "Michroma-Regular", EAlign::Center, EVAlign::Top);
     g.DrawText(nameTxt, mName.c_str(), mRECT.GetPadded(-10.f));
 
     if (focused)
@@ -2091,8 +2145,16 @@ public:
     IRECT artRect = mRECT.GetPadded(-12.f).GetVShifted(10.f).GetFromTop(70.f);
     g.DrawRect(IColor(60, 91, 196, 196), artRect, nullptr, 1.f);
     
-    // Draw mini fractal inside art box (assuming a global helper or inline)
-    
+    // Draw mini fractal inside art box
+    IText artTxt(10.f, VoLumColors::TEAL, "Michroma-Regular", EAlign::Center, EVAlign::Middle);
+    const char* artName = (mEffect == EVoLumEffectFocus::DELAY) ? "CANTOR DUST" : "LICHTENBERG";
+    g.DrawText(artTxt, artName, artRect);
+
+    // Preset Label
+    IText presetTxt(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Bottom);
+    const char* presetName = (mEffect == EVoLumEffectFocus::DELAY) ? "DIGITAL . 380 ms" : "HALL . 50%";
+    g.DrawText(presetTxt, presetName, mRECT.GetPadded(-10.f));
+
     // Bypass LED
     IRECT ledRect(mRECT.R - 14.f, mRECT.B - 14.f, mRECT.R - 6.f, mRECT.B - 6.f);
     g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.f);
