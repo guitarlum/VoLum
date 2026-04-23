@@ -70,6 +70,37 @@ inline void DrawCornerAccent(IGraphics& g, float x, float y, float size, bool fl
   g.DrawLine(col, x, y, x, y + dy);
 }
 
+// Helper: draw mini fractal art for amp strip/pedal card (idx selects variant)
+inline void DrawStripMiniFractal(IGraphics& g, const IRECT& r, int idx,
+                                  const IColor& bright = IColor(60, 120, 210, 220),
+                                  const IColor& dim = IColor(30, 80, 150, 170))
+{
+  float cx = r.MW(), cy = r.MH();
+  float scale = std::min(r.W(), r.H());
+  float sz = scale * 0.42f;
+  bool big = (scale > 40.f);
+  int depth = big ? 5 : 3;
+  int dots = big ? 2000 : 200;
+  int curves = big ? 60 : 30;
+  float tk = big ? 1.5f : 1.f;
+  switch (idx % 14) {
+    case 0: { std::vector<int> turns; for(int i=0;i<(big?8:6);i++){std::vector<int> n2;for(auto t:turns)n2.push_back(t);n2.push_back(1);for(int j=(int)turns.size()-1;j>=0;j--)n2.push_back(1-turns[j]);turns=n2;} float step=big?scale*0.012f:1.8f,px2=cx-scale*0.1f,py2=cy+scale*0.06f;int dir=0;const float dx[]={step,0,-step,0},dy[]={0,-step,0,step};for(int i=0;i<(int)turns.size();i++){float nx=px2+dx[dir],ny=py2+dy[dir];g.DrawLine(bright,px2,py2,nx,ny,nullptr,tk);px2=nx;py2=ny;dir=(dir+(turns[i]?1:3))%4;} break; }
+    case 1: { struct T{float x1,y1,x2,y2,x3,y3;};std::vector<T> ts;ts.push_back({cx,cy-sz,cx-sz,cy+sz*0.7f,cx+sz,cy+sz*0.7f});for(int d=0;d<depth;d++){std::vector<T> n2;for(auto&t:ts){g.DrawLine(dim,t.x1,t.y1,t.x2,t.y2,nullptr,tk);g.DrawLine(dim,t.x2,t.y2,t.x3,t.y3,nullptr,tk);g.DrawLine(dim,t.x3,t.y3,t.x1,t.y1,nullptr,tk);n2.push_back({t.x1,t.y1,(t.x1+t.x2)/2,(t.y1+t.y2)/2,(t.x3+t.x1)/2,(t.y3+t.y1)/2});n2.push_back({(t.x1+t.x2)/2,(t.y1+t.y2)/2,t.x2,t.y2,(t.x2+t.x3)/2,(t.y2+t.y3)/2});n2.push_back({(t.x3+t.x1)/2,(t.y3+t.y1)/2,(t.x2+t.x3)/2,(t.y2+t.y3)/2,t.x3,t.y3});}ts=n2;} break; }
+    case 2: { float px2=0,py2=0;unsigned rng=42;float fscale=scale*0.07f,fh=scale*0.035f;for(int i=0;i<dots;i++){rng=rng*1103515245+12345;float rv=(float)(rng%1000)/1000.f;float nx,ny;if(rv<0.01f){nx=0;ny=0.16f*py2;}else if(rv<0.86f){nx=0.85f*px2+0.04f*py2;ny=-0.04f*px2+0.85f*py2+1.6f;}else if(rv<0.93f){nx=0.2f*px2-0.26f*py2;ny=0.23f*px2+0.22f*py2+1.6f;}else{nx=-0.15f*px2+0.28f*py2;ny=0.26f*px2+0.24f*py2+0.44f;}px2=nx;py2=ny;float sx=cx+px2*fscale,sy=r.B-2.f-py2*fh;if(sx>r.L&&sx<r.R&&sy>r.T&&sy<r.B)g.FillRect(dim,IRECT(sx,sy,sx+1.f,sy+1.f));} break; }
+    case 3: { float ra=scale*0.02f,ang=0,pvx=cx,pvy=cy;for(int i=0;i<(big?120:40);i++){float a=ang*3.14159f/180.f;float x2=cx+ra*cosf(a),y2=cy+ra*sinf(a);g.DrawLine(bright,pvx,pvy,x2,y2,nullptr,tk);pvx=x2;pvy=y2;ang+=8.f;ra+=scale*0.003f;} break; }
+    case 4: { for(int j=0;j<curves;j++){float t1=j*6.28f/curves,t2=(j+1)*6.28f/curves;g.DrawLine(bright,cx+sinf(3*t1)*sz,cy+sinf(4*t1)*sz*0.8f,cx+sinf(3*t2)*sz,cy+sinf(4*t2)*sz*0.8f,nullptr,tk);} break; }
+    case 5: { struct S{float x1,y1,x2,y2;};std::vector<S> segs;for(int i=0;i<3;i++){float a1=(i*120.f-90.f)*3.14159f/180.f,a2=((i+1)*120.f-90.f)*3.14159f/180.f;segs.push_back({cx+sz*cosf(a1),cy+sz*sinf(a1),cx+sz*cosf(a2),cy+sz*sinf(a2)});}for(int d=0;d<(big?4:2);d++){std::vector<S> n2;for(auto&s:segs){float dx2=s.x2-s.x1,dy2=s.y2-s.y1;float ax=s.x1+dx2/3,ay=s.y1+dy2/3,bx=s.x1+dx2*2/3,by=s.y1+dy2*2/3;float px2=(s.x1+s.x2)/2-dy2*0.2887f,py2=(s.y1+s.y2)/2+dx2*0.2887f;n2.push_back({s.x1,s.y1,ax,ay});n2.push_back({ax,ay,px2,py2});n2.push_back({px2,py2,bx,by});n2.push_back({bx,by,s.x2,s.y2});}segs=n2;}for(auto&s:segs)g.DrawLine(dim,s.x1,s.y1,s.x2,s.y2,nullptr,tk); break; }
+    case 6: { struct B{float x,y,a,l;int d;};int maxD=big?7:4;std::vector<B> stk;stk.push_back({cx,r.B-2.f,-90.f,sz*1.2f,0});while(!stk.empty()){auto b=stk.back();stk.pop_back();if(b.d>maxD||b.l<1.5f)continue;float rad=b.a*3.14159f/180.f,ex=b.x+b.l*cosf(rad),ey=b.y+b.l*sinf(rad);g.DrawLine(dim,b.x,b.y,ex,ey,nullptr,tk);stk.push_back({ex,ey,b.a-28.f,b.l*0.65f,b.d+1});stk.push_back({ex,ey,b.a+28.f,b.l*0.65f,b.d+1});} break; }
+    case 7: { auto drawH=[&](auto&&self,float x,float y,float half,int dep)->void{if(dep<=0||half<1.f)return;g.DrawLine(dim,x-half,y,x+half,y,nullptr,tk);g.DrawLine(dim,x-half,y-half,x-half,y+half,nullptr,tk);g.DrawLine(dim,x+half,y-half,x+half,y+half,nullptr,tk);float nh=half*0.5f;self(self,x-half,y-half,nh,dep-1);self(self,x-half,y+half,nh,dep-1);self(self,x+half,y-half,nh,dep-1);self(self,x+half,y+half,nh,dep-1);};drawH(drawH,cx,cy,std::min(r.W(),r.H())*0.42f,big?6:4); break; }
+    case 8: { struct Seg{float x1,y1,x2,y2;};std::vector<Seg> segs;segs.push_back({cx-sz*2,cy+sz*0.3f,cx+sz*2,cy+sz*0.3f});for(int d=0;d<(big?10:6);d++){std::vector<Seg> n2;for(auto&s:segs){float mx=(s.x1+s.x2)/2+(s.y2-s.y1)/2,my=(s.y1+s.y2)/2-(s.x2-s.x1)/2;n2.push_back({s.x1,s.y1,mx,my});n2.push_back({mx,my,s.x2,s.y2});}segs=n2;}for(auto&s:segs)g.DrawLine(bright,s.x1,s.y1,s.x2,s.y2,nullptr,0.8f); break; }
+    case 9: { float step=big?2.f:3.f;float pw=r.W()*0.85f,ph=r.H()*0.85f;float pl=cx-pw/2,pt=cy-ph/2;for(float px=0;px<pw;px+=step)for(float py=0;py<ph;py+=step){double cr=-0.745+(px/pw-0.5)*0.008,ci=0.186+(py/ph-0.5)*0.008;double zr=0,zi=0;int it=0;while(zr*zr+zi*zi<4&&it<40){double t=zr*zr-zi*zi+cr;zi=2*zr*zi+ci;zr=t;it++;}if(it<40&&it>3)g.FillRect(IColor(it*4,80+it,std::min(255,180+it*2),220),IRECT(pl+px,pt+py,pl+px+step-0.5f,pt+py+step-0.5f));} break; }
+    case 10: { float step=big?2.f:3.f;float pw=r.W()*0.85f,ph=r.H()*0.85f;float pl=cx-pw/2,pt=cy-ph/2;for(float px=0;px<pw;px+=step)for(float py=0;py<ph;py+=step){double zr=(px/pw-0.5)*3,zi=(py/ph-0.5)*2.4;int it=0;while(zr*zr+zi*zi<4&&it<30){double t=zr*zr-zi*zi-0.7;zi=2*zr*zi+0.27015;zr=t;it++;}if(it<30&&it>2)g.FillRect(IColor(it*6,70+it*2,std::min(255,160+it*3),220),IRECT(pl+px,pt+py,pl+px+step-0.5f,pt+py+step-0.5f));} break; }
+    case 11: { const double a=-1.4,b=1.6,c=1.0,d=0.75;double x=0.0,y=0.0;float sc2=std::min(r.W(),r.H())*0.28f;for(int i=0;i<(big?8000:2200);i++){double nx=sin(a*y)+c*cos(a*x),ny=sin(b*x)+d*cos(b*y);x=nx;y=ny;if(i<120)continue;float px=cx+(float)x*sc2,py=cy-(float)y*sc2;if(px>r.L&&px<r.R&&py>r.T&&py<r.B){int al=28+(i&95);g.FillRect(IColor(al,75+(i%90),165+(i%85),215),IRECT(px,py,px+1.f,py+1.f));}} break; }
+    case 12: { float step=big?2.f:3.f;float pw=r.W()*0.85f,ph=r.H()*0.85f;float pl=cx-pw/2,pt=cy-ph/2;for(float px=0;px<pw;px+=step)for(float py=0;py<ph;py+=step){double cr=-1.75+(px/pw)*0.15,ci=-0.08+(py/ph)*0.12;double zr=0,zi=0;int it=0;while(zr*zr+zi*zi<4&&it<40){double t=zr*zr-zi*zi+cr;zi=fabs(2*zr*zi)+ci;zr=t;it++;}if(it<40&&it>2)g.FillRect(IColor(it*5,100+it*2,std::min(255,170+it*2),230),IRECT(pl+px,pt+py,pl+px+step-0.5f,pt+py+step-0.5f));} break; }
+    default: { struct P{float x,y,r2;};std::vector<P> ps;ps.push_back({cx,cy,sz});for(int d=0;d<(big?3:2);d++){std::vector<P> n2;for(auto&p:ps){for(int i=0;i<5;i++){float a1=(i*72.f-90)*3.14159f/180,a2=((i+1)*72.f-90)*3.14159f/180;g.DrawLine(dim,p.x+p.r2*cosf(a1),p.y+p.r2*sinf(a1),p.x+p.r2*cosf(a2),p.y+p.r2*sinf(a2),nullptr,tk);}float nr=p.r2*0.382f;n2.push_back({p.x,p.y,nr});for(int i=0;i<5;i++){float a=(i*72.f-90)*3.14159f/180;n2.push_back({p.x+(p.r2-nr)*cosf(a),p.y+(p.r2-nr)*sinf(a),nr});}}ps=n2;} break; }
+  }
+}
+
 // Helper: draw a small diamond (rotated square)
 inline void DrawDiamond(IGraphics& g, float cx, float cy, float halfSize, const IColor& col)
 {
@@ -1156,8 +1187,8 @@ public:
         g.FillRect(VoLumColors::AMBER, itemArea.GetPadded(-1.f));
       }
 
-      IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::CREAM_DIM;
-      IText text(10.f, textCol, "Michroma-Regular", EAlign::Near, EVAlign::Middle);
+      IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
+      IText text(11.f, textCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
       IRECT textArea = itemArea;
       textArea.L += 6.f; // manually indent instead of GetTranslated which shifts the whole rect
       g.DrawText(text, mModes[i].c_str(), textArea);
@@ -1193,8 +1224,7 @@ public:
     if (mName.empty()) return;
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
 
-    // If it's the Amp name, use gold. If effect, use cream
-    IColor col = mIsAmp ? VoLumColors::GOLD : VoLumColors::CREAM;
+    IColor col = VoLumColors::GOLD;
     g.DrawText(IText(21.f, col, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                mName.c_str(), nameArea);
 
@@ -2004,23 +2034,35 @@ private:
   {
     if (expanded)
     {
-      g.FillRect(IColor(255, 22, 25, 33), r);
+      g.FillRect(VoLumColors::HERO_BG, r);
       g.DrawRect(VoLumColors::FRAME, r);
       const float cs = 8.f;
       DrawCornerAccent(g, r.L + 4.f, r.T + 4.f, cs, false, false, VoLumColors::TEAL_DIM);
       DrawCornerAccent(g, r.R - 4.f, r.T + 4.f, cs, true, false, VoLumColors::TEAL_DIM);
       DrawCornerAccent(g, r.L + 4.f, r.B - 4.f, cs, false, true, VoLumColors::TEAL_DIM);
       DrawCornerAccent(g, r.R - 4.f, r.B - 4.f, cs, true, true, VoLumColors::TEAL_DIM);
-      IText txt(9.f, VoLumColors::TEAL, "Michroma-Regular", EAlign::Near, EVAlign::Middle);
-      g.DrawText(txt, label, r.GetPadded(-8.f).GetFromTop(20.f).GetTranslated(16.f, 0.f));
-      g.FillCircle(VoLumColors::TEAL, r.L + 12.f, r.T + 14.f, 3.f);
+      IText txt(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+      g.DrawText(txt, label, IRECT(r.L + 10.f, r.T + 4.f, r.L + 80.f, r.T + 22.f));
     }
     else
     {
       bool dormant = !active;
       if (dormant)
       {
+        g.FillRect(VoLumColors::HERO_BG, r);
         g.DrawRect(IColor(153, 43, 47, 55), r);
+        // Diagonal crosshatch (clipped to rect)
+        IColor hatch(25, 100, 180, 200);
+        for (float d = -r.H(); d < r.W(); d += 8.f) {
+          float x1 = r.L + d, y1 = r.T, x2 = r.L + d + r.H(), y2 = r.B;
+          if (x1 < r.L) { y1 += (r.L - x1); x1 = r.L; }
+          if (x2 > r.R) { y2 -= (x2 - r.R); x2 = r.R; }
+          if (y1 < r.B && y2 > r.T) g.DrawLine(hatch, x1, y1, x2, y2, nullptr, 0.7f);
+          x1 = r.R - d; y1 = r.T; x2 = r.R - d - r.H(); y2 = r.B;
+          if (x1 > r.R) { y1 += (x1 - r.R); x1 = r.R; }
+          if (x2 < r.L) { y2 -= (r.L - x2); x2 = r.L; }
+          if (y1 < r.B && y2 > r.T) g.DrawLine(hatch, x1, y1, x2, y2, nullptr, 0.7f);
+        }
         const float cs = 6.f;
         DrawCornerAccent(g, r.L + 3.f, r.T + 3.f, cs, false, false, VoLumColors::TEAL_DIM.WithOpacity(0.45f));
         DrawCornerAccent(g, r.R - 3.f, r.T + 3.f, cs, true, false, VoLumColors::TEAL_DIM.WithOpacity(0.45f));
@@ -2029,14 +2071,14 @@ private:
       }
       else
       {
-        g.FillRect(IColor(255, 22, 25, 33), r); // bg-strip
+        g.FillRect(VoLumColors::HERO_BG, r);
         g.DrawRect(VoLumColors::FRAME, r);
       }
 
-      g.FillCircle(active ? VoLumColors::TEAL : IColor(255, 42, 48, 52), r.MW(), r.T + 12.f, 3.5f);
+      if (active)
+        g.FillCircle(VoLumColors::TEAL, r.MW(), r.T + 12.f, 3.5f);
 
-      IText t(dormant ? 8.f : 10.f, dormant ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-      // Vertical text drawing fallback
+      IText t(11.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       float charH = 12.f;
       float totalH = strlen(label) * charH;
       float ty = r.MH() - totalH / 2.0f;
@@ -2049,18 +2091,36 @@ private:
 
   void _DrawAmpStrip(IGraphics& g, const IRECT& r)
   {
-    g.FillRect(IColor(255, 22, 25, 33), r); // bg-strip
+    g.FillRect(VoLumColors::HERO_BG, r);
     g.DrawRect(VoLumColors::FRAME, r);
-    
-    // Draw mini fractal
-    // This is a quick mock. We can instantiate an AmpList control or duplicate DrawMiniFractal if needed.
-    IText t(10.f, VoLumColors::CREAM, "Michroma-Regular", EAlign::Center, EVAlign::Middle);
-    g.DrawText(t, "A", r.GetFromTop(40.f).GetVShifted(80.f));
-    g.DrawText(t, "M", r.GetFromTop(40.f).GetVShifted(95.f));
-    g.DrawText(t, "P", r.GetFromTop(40.f).GetVShifted(110.f));
 
-    g.FillCircle(VoLumColors::TEAL, r.MW(), r.B - 12.f, 3.5f);
+    // Circuit-board grid behind amp name (clipped to rect)
+    IColor grid(28, 100, 180, 200);
+    float step = 12.f;
+    for (float y = r.T + step; y < r.B - 1.f; y += step)
+      g.DrawLine(grid, r.L + 4.f, y, r.R - 4.f, y, nullptr, 0.6f);
+    for (float x = r.L + step / 2.f; x < r.R - 1.f; x += step)
+      g.DrawLine(grid, x, r.T + 4.f, x, r.B - 4.f, nullptr, 0.6f);
+    IColor node(35, 120, 210, 220);
+    for (float y = r.T + step; y < r.B - 1.f; y += step * 2.f)
+      for (float x = r.L + step / 2.f; x < r.R - 1.f; x += step * 2.f)
+        if (x > r.L + 2.f && x < r.R - 2.f && y > r.T + 2.f && y < r.B - 2.f)
+          g.FillCircle(node, x, y, 1.5f);
+
+    IText t(11.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const char* name = mAmpName.empty() ? "AMP" : mAmpName.c_str();
+    float charH = 12.f;
+    int len = (int)strlen(name);
+    int maxChars = (int)(r.H() / charH) - 2;
+    if (len > maxChars) len = maxChars;
+    float totalH = len * charH;
+    float ty = r.MH() - totalH / 2.f;
+    for (int i = 0; i < len; i++) {
+      char ch[2] = { name[i], 0 };
+      g.DrawText(t, ch, IRECT(r.L, ty + i * charH, r.R, ty + (i + 1) * charH));
+    }
   }
+
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
@@ -2108,51 +2168,34 @@ public:
   void Draw(IGraphics& g) override
   {
     bool focused = mIsFocused;
-    bool bypassed = (GetValue() < 0.5); // Control is bound to active param, so 0 = bypassed, 1 = active
+    bool bypassed = (GetValue() < 0.5);
 
-    // Card background
-    g.FillRect(IColor(255, 35, 39, 48), mRECT.GetFromTop(mRECT.H() / 2.f));
-    g.FillRect(IColor(255, 23, 26, 32), mRECT.GetFromBottom(mRECT.H() / 2.f));
+    g.FillRect(VoLumColors::HERO_BG, mRECT);
     
     IColor borderCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::FRAME : VoLumColors::TEAL_DIM);
     g.DrawRoundRect(borderCol, mRECT, 4.f);
-
-    // Corners
     const float cs = 8.f;
     DrawCornerAccent(g, mRECT.L + 4.f, mRECT.T + 4.f, cs, false, false, borderCol);
     DrawCornerAccent(g, mRECT.R - 4.f, mRECT.T + 4.f, cs, true, false, borderCol);
     DrawCornerAccent(g, mRECT.L + 4.f, mRECT.B - 4.f, cs, false, true, borderCol);
     DrawCornerAccent(g, mRECT.R - 4.f, mRECT.B - 4.f, cs, true, true, borderCol);
 
-    // Name
-    IColor nameCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM);
-    IText nameTxt(11.f, nameCol, "Michroma-Regular", EAlign::Center, EVAlign::Top);
-    const IRECT titleRect(mRECT.L + 12.f, mRECT.T + 8.f, mRECT.R - 12.f, mRECT.T + 24.f);
-    g.DrawText(nameTxt, mName.c_str(), titleRect);
-
-    if (focused)
-    {
-      g.DrawLine(VoLumColors::AMBER, mRECT.L + 28.f, titleRect.B + 2.f, mRECT.R - 28.f, titleRect.B + 2.f);
+    IRECT artRect = mRECT.GetPadded(-2.f, -2.f, -2.f, -22.f);
+    if (!mArtLayer || g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed) {
+      g.StartLayer(this, artRect);
+      _DrawFractalArt(g, artRect, bypassed);
+      mArtLayer = g.EndLayer();
+      mCachedBypassed = bypassed;
     }
+    g.DrawLayer(mArtLayer);
 
-    // Art box
-    IRECT artRect(mRECT.L + 12.f, mRECT.T + 22.f, mRECT.R - 12.f, mRECT.T + 92.f);
-    g.DrawRect(IColor(60, 91, 196, 196), artRect, nullptr, 1.f);
-    
-    // Draw mini fractal inside art box
-    IText artTxt(10.f, VoLumColors::TEAL, "Michroma-Regular", EAlign::Center, EVAlign::Middle);
-    const char* artName = _GetArtName();
-    g.DrawText(artTxt, artName, artRect);
-
-    // Preset Label
-    IText presetTxt(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Bottom);
+    IText presetTxt(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     const std::string presetName = _GetPresetName();
-    const IRECT presetRect(mRECT.L + 12.f, mRECT.B - 28.f, mRECT.R - 18.f, mRECT.B - 8.f);
+    const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 22.f, mRECT.B - 4.f);
     g.DrawText(presetTxt, presetName.c_str(), presetRect);
 
-    // Bypass LED
-    IRECT ledRect(mRECT.R - 14.f, mRECT.B - 14.f, mRECT.R - 6.f, mRECT.B - 6.f);
-    g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.f);
+    IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
+    g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.5f);
     mLedRect = ledRect;
   }
 
@@ -2177,13 +2220,73 @@ public:
   EVoLumEffectFocus GetEffect() const { return mEffect; }
 
 private:
-  const char* _GetArtName() const
+  void _DrawFractalArt(IGraphics& g, const IRECT& r, bool dimmed)
   {
-    switch (mEffect)
+    float cx = r.MW(), cy = r.MH();
+    IColor bright(dimmed ? 70 : 150, 120, 210, 220);
+    IColor mid(dimmed ? 40 : 80, 100, 180, 200);
+    IColor dim(dimmed ? 20 : 45, 80, 150, 170);
+
+    if (mEffect == EVoLumEffectFocus::DELAY)
     {
-      case EVoLumEffectFocus::DELAY: return "CANTOR DUST";
-      case EVoLumEffectFocus::REVERB: return "LICHTENBERG";
-      default: return "BYPASS";
+      // Echo pulse waveform — repeating decaying sine waves
+      int taps = 5;
+      float tapW = r.W() / (float)taps;
+      for (int t = 0; t < taps; t++) {
+        float decay = 1.f - (float)t / (float)taps * 0.7f;
+        float ampY = r.H() * 0.35f * decay;
+        int alpha = (int)(140.f * decay);
+        float baseX = r.L + t * tapW;
+        int segs = 40;
+        for (int j = 0; j < segs; j++) {
+          float t1 = (float)j / segs;
+          float t2 = (float)(j + 1) / segs;
+          float x1 = baseX + t1 * tapW;
+          float x2 = baseX + t2 * tapW;
+          float env1 = sinf(t1 * 3.14159f);
+          float env2 = sinf(t2 * 3.14159f);
+          float y1 = cy + sinf(t1 * 6.28318f * 3.f) * ampY * env1;
+          float y2 = cy + sinf(t2 * 6.28318f * 3.f) * ampY * env2;
+          g.DrawLine(IColor(alpha, 100, 190, 210), x1, y1, x2, y2, nullptr, 1.5f * decay);
+        }
+        // Tap marker line
+        if (t > 0) {
+          float tx = baseX;
+          g.DrawLine(IColor(alpha / 3, 100, 190, 210), tx, r.T + 4.f, tx, r.B - 4.f, nullptr, 0.5f);
+        }
+      }
+      // Center baseline
+      g.DrawLine(IColor(20, 100, 190, 210), r.L, cy, r.R, cy, nullptr, 0.5f);
+    }
+    else
+    {
+      // Lichtenberg — cached, so go big: seeds across bottom, mid, top
+      struct Pt { float x, y; };
+      std::vector<Pt> pts;
+      for (float f = 0.05f; f <= 0.95f; f += 0.15f)
+        pts.push_back({r.L + r.W() * f, r.B});
+      for (float f = 0.1f; f <= 0.9f; f += 0.2f)
+        pts.push_back({r.L + r.W() * f, cy + r.H() * 0.15f});
+      for (float f = 0.15f; f <= 0.85f; f += 0.25f)
+        pts.push_back({r.L + r.W() * f, cy - r.H() * 0.15f});
+      for (float f = 0.2f; f <= 0.8f; f += 0.3f)
+        pts.push_back({r.L + r.W() * f, r.T + r.H() * 0.1f});
+      unsigned int rng = 54321;
+      int count = 12000;
+      for (int i = 0; i < count; i++) {
+        rng = rng * 1103515245 + 12345;
+        int parentIdx = rng % pts.size();
+        float angle = (float)(rng % 360);
+        float rad = angle * 3.14159f / 180.f;
+        float len = 2.f + (float)(rng % 4);
+        Pt next = {pts[parentIdx].x + len * cosf(rad), pts[parentIdx].y + len * sinf(rad)};
+        if (next.x >= r.L && next.x <= r.R && next.y >= r.T && next.y <= r.B) {
+          IColor col = (i < 300) ? bright : ((i < 1500) ? mid : dim);
+          float tk = (i < 200) ? 2.f : ((i < 800) ? 1.5f : 1.f);
+          g.DrawLine(col, pts[parentIdx].x, pts[parentIdx].y, next.x, next.y, nullptr, tk);
+          pts.push_back(next);
+        }
+      }
     }
   }
 
@@ -2215,6 +2318,8 @@ private:
   int mFractalCase;
   int mActiveParamIdx;
   bool mIsFocused = false;
+  ILayerPtr mArtLayer;
+  bool mCachedBypassed = false;
   IRECT mLedRect;
   ClickCallback mCallback;
 };
