@@ -208,17 +208,24 @@ public:
 private:
   double GetKeyboardStep(bool fine) const
   {
-    if (fine)
-      return 0.1;
-
     switch (GetParamIdx())
     {
       case kToneBass:
       case kToneMid:
       case kToneTreble:
-        return 0.5;
+      case kReverbTone:
+      case kBoostTone:
+      case kBoostDrive:
+        return fine ? 0.1 : 0.5;
+      case kDelayTime:
+        return fine ? 1.0 : 5.0;
+      case kDelayFeedback:
+      case kDelayMix:
+      case kReverbMix:
+      case kReverbDecay:
+        return fine ? 0.01 : 0.05;
       default:
-        return 1.0;
+        return fine ? 0.1 : 1.0;
     }
   }
 
