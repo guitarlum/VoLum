@@ -1934,14 +1934,16 @@ public:
   void Draw(IGraphics& g) override
   {
     const float stripW = 30.f;
-    const float expandedW = (mExpandedSection == EVoLumSection::AMP) ? 400.f : 460.f;
+    const EVoLumSection displaySection =
+      (mExpandedSection == EVoLumSection::PRE) ? EVoLumSection::AMP : mExpandedSection;
+    const float expandedW = (displaySection == EVoLumSection::AMP) ? 400.f : 460.f;
     const float gap = 10.f;
     const float cx = mRECT.MW();
 
     // Calculate layout
     IRECT preRect, ampRect, postRect;
 
-    if (mExpandedSection == EVoLumSection::AMP)
+    if (displaySection == EVoLumSection::AMP)
     {
       const float totalW = stripW + gap + expandedW + gap + stripW;
       const float left = cx - totalW / 2.f;
@@ -1949,19 +1951,10 @@ public:
       ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + expandedW, mRECT.B);
       postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + stripW, mRECT.B);
     }
-    else if (mExpandedSection == EVoLumSection::PRE)
-    {
-      const float ampStripW = 70.f;
-      const float totalW = expandedW + gap + ampStripW + gap + stripW;
-      const float left = cx - totalW / 2.f;
-      preRect = IRECT(left, mRECT.T, left + expandedW, mRECT.B);
-      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
-      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + stripW, mRECT.B);
-    }
     else // POST
     {
       const float ampStripW = 70.f;
-      const float preStripW = mPreActive ? 70.f : 30.f;
+      const float preStripW = stripW;
       const float totalW = preStripW + gap + ampStripW + gap + expandedW;
       const float left = cx - totalW / 2.f;
       preRect = IRECT(left, mRECT.T, left + preStripW, mRECT.B);
@@ -1974,22 +1967,23 @@ public:
     mPostRect = postRect;
 
     // Draw the sections
-    _DrawStrip(g, preRect, "PRE", mExpandedSection == EVoLumSection::PRE, mPreActive, false);
+    _DrawStrip(g, preRect, "PRE", false, false, false);
     
     // AMP: we draw the strip, or we draw the hero frame
-    if (mExpandedSection == EVoLumSection::AMP) {
+    if (displaySection == EVoLumSection::AMP) {
       // Just the frame, the VoLumHeroImageControl will draw on top (it's attached)
       // Actually we must resize the HeroImageControl!
     } else {
       _DrawAmpStrip(g, ampRect);
     }
 
-    _DrawStrip(g, postRect, "POST", mExpandedSection == EVoLumSection::POST, mPostActive, true);
+    _DrawStrip(g, postRect, "POST", displaySection == EVoLumSection::POST, mPostActive, true);
   }
   
   void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName)
   {
-    mPreActive = preActive;
+    (void) preActive;
+    mPreActive = false;
     mPostActive = postActive;
     mAmpIdx = ampIdx;
     mAmpName = ampName;
@@ -1998,7 +1992,7 @@ public:
   
   void SetExpandedSection(EVoLumSection s)
   {
-    mExpandedSection = s;
+    mExpandedSection = (s == EVoLumSection::PRE) ? EVoLumSection::AMP : s;
     SetDirty(false);
   }
   
@@ -2010,11 +2004,16 @@ private:
   {
     if (expanded)
     {
-      // The content (pedals or boost art) will be drawn by other controls.
-      // Just draw the section header inside the expanded area.
+      g.FillRect(IColor(255, 22, 25, 33), r);
+      g.DrawRect(VoLumColors::FRAME, r);
+      const float cs = 8.f;
+      DrawCornerAccent(g, r.L + 4.f, r.T + 4.f, cs, false, false, VoLumColors::TEAL_DIM);
+      DrawCornerAccent(g, r.R - 4.f, r.T + 4.f, cs, true, false, VoLumColors::TEAL_DIM);
+      DrawCornerAccent(g, r.L + 4.f, r.B - 4.f, cs, false, true, VoLumColors::TEAL_DIM);
+      DrawCornerAccent(g, r.R - 4.f, r.B - 4.f, cs, true, true, VoLumColors::TEAL_DIM);
       IText txt(9.f, VoLumColors::TEAL, "Michroma-Regular", EAlign::Near, EVAlign::Middle);
       g.DrawText(txt, label, r.GetPadded(-8.f).GetFromTop(20.f).GetTranslated(16.f, 0.f));
-      g.FillCircle(VoLumColors::TEAL, r.L + 12.f, r.T + 18.f, 3.f);
+      g.FillCircle(VoLumColors::TEAL, r.L + 12.f, r.T + 14.f, 3.f);
     }
     else
     {
@@ -2065,13 +2064,7 @@ private:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    if (mPreRect.Contains(x, y) && mExpandedSection != EVoLumSection::PRE)
-    {
-      mExpandedSection = EVoLumSection::PRE;
-      if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::BOOST);
-      SetDirty(false);
-    }
-    else if (mAmpRect.Contains(x, y) && mExpandedSection != EVoLumSection::AMP)
+    if (mAmpRect.Contains(x, y) && mExpandedSection != EVoLumSection::AMP)
     {
       mExpandedSection = EVoLumSection::AMP;
       if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::AMP);
@@ -2134,26 +2127,28 @@ public:
     // Name
     IColor nameCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM);
     IText nameTxt(11.f, nameCol, "Michroma-Regular", EAlign::Center, EVAlign::Top);
-    g.DrawText(nameTxt, mName.c_str(), mRECT.GetPadded(-10.f));
+    const IRECT titleRect(mRECT.L + 12.f, mRECT.T + 8.f, mRECT.R - 12.f, mRECT.T + 24.f);
+    g.DrawText(nameTxt, mName.c_str(), titleRect);
 
     if (focused)
     {
-      g.DrawLine(VoLumColors::AMBER, mRECT.L + 28.f, mRECT.T + 22.f, mRECT.R - 28.f, mRECT.T + 22.f);
+      g.DrawLine(VoLumColors::AMBER, mRECT.L + 28.f, titleRect.B + 2.f, mRECT.R - 28.f, titleRect.B + 2.f);
     }
 
     // Art box
-    IRECT artRect = mRECT.GetPadded(-12.f).GetVShifted(10.f).GetFromTop(70.f);
+    IRECT artRect(mRECT.L + 12.f, mRECT.T + 22.f, mRECT.R - 12.f, mRECT.T + 92.f);
     g.DrawRect(IColor(60, 91, 196, 196), artRect, nullptr, 1.f);
     
     // Draw mini fractal inside art box
     IText artTxt(10.f, VoLumColors::TEAL, "Michroma-Regular", EAlign::Center, EVAlign::Middle);
-    const char* artName = (mEffect == EVoLumEffectFocus::DELAY) ? "CANTOR DUST" : "LICHTENBERG";
+    const char* artName = _GetArtName();
     g.DrawText(artTxt, artName, artRect);
 
     // Preset Label
     IText presetTxt(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Bottom);
-    const char* presetName = (mEffect == EVoLumEffectFocus::DELAY) ? "DIGITAL . 380 ms" : "HALL . 50%";
-    g.DrawText(presetTxt, presetName, mRECT.GetPadded(-10.f));
+    const std::string presetName = _GetPresetName();
+    const IRECT presetRect(mRECT.L + 12.f, mRECT.B - 28.f, mRECT.R - 18.f, mRECT.B - 8.f);
+    g.DrawText(presetTxt, presetName.c_str(), presetRect);
 
     // Bypass LED
     IRECT ledRect(mRECT.R - 14.f, mRECT.B - 14.f, mRECT.R - 6.f, mRECT.B - 6.f);
@@ -2182,6 +2177,39 @@ public:
   EVoLumEffectFocus GetEffect() const { return mEffect; }
 
 private:
+  const char* _GetArtName() const
+  {
+    switch (mEffect)
+    {
+      case EVoLumEffectFocus::DELAY: return "CANTOR DUST";
+      case EVoLumEffectFocus::REVERB: return "LICHTENBERG";
+      default: return "BYPASS";
+    }
+  }
+
+  std::string _GetPresetName()
+  {
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    if (!plugin)
+      return (mEffect == EVoLumEffectFocus::DELAY) ? "DIGITAL . 380 ms" : "HALL . 50%";
+
+    WDL_String modeText;
+    WDL_String summary;
+    switch (mEffect)
+    {
+      case EVoLumEffectFocus::DELAY:
+        plugin->GetParam(kDelayMode)->GetDisplay(modeText);
+        summary.SetFormatted(64, "%s . %.0f ms", modeText.Get(), plugin->GetParam(kDelayTime)->Value());
+        return summary.Get();
+      case EVoLumEffectFocus::REVERB:
+        plugin->GetParam(kReverbMode)->GetDisplay(modeText);
+        summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kReverbMix)->Value() * 100.0);
+        return summary.Get();
+      default:
+        return "BYPASS";
+    }
+  }
+
   EVoLumEffectFocus mEffect;
   std::string mName;
   int mFractalCase;
