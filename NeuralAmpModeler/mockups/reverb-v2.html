@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<!--
+  VoLum reverb mockup v2 — PRE | AMP | POST triptych with replace-mode knob row.
+  Four frames stacked vertically, each 900x600.
+
+  Frame 1 — AMP expanded (default state on plugin open).
+  Frame 2 — PRE expanded (booster section). AMP + POST collapse to vertical strips.
+  Frame 3 — POST expanded, REVERB focused. Chain shows REVERB · DELAY connected.
+  Frame 4 — POST expanded, DELAY focused. Same chain, focus moved to DELAY.
+
+  Open in any browser by double-clicking. No server, no JS required.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>VoLum — Reverb integration mockup v2 (PRE | AMP | POST triptych)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;500;600;700&family=Michroma&family=Poiret+One&display=swap');
+
+  :root {
+    --bg-page: #0a0c11;
+    --bg-window: #15171e;
+    --bg-sidebar: #1a1d24;
+    --bg-elev: #1d2028;
+    --bg-strip: #161921;
+    --teal: #5bc4c4;
+    --teal-glow: rgba(91, 196, 196, 0.45);
+    --teal-dim: #4ba2a2;
+    --teal-faint: rgba(91, 196, 196, 0.22);
+    --amber: #e8a85c;
+    --amber-dim: #b58447;
+    --cream: #ede3d0;
+    --cream-dim: #a6957c;
+    --gold-rule: #a88e5e;
+    --hairline: #2b2f37;
+    --hairline-warm: #3d3326;
+    --shadow-knob: rgba(0, 0, 0, 0.55);
+    --led-off: #2a3034;
+
+    --font-sans: 'Josefin Sans', Optima, 'Gill Sans', sans-serif;
+    --font-display: 'Poiret One', Futura, 'Century Gothic', sans-serif;
+    --font-tech: 'Michroma', 'Bank Gothic', 'Trade Gothic', 'Helvetica Neue Condensed', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-page);
+    color: var(--cream);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 56px 16px;
+    gap: 28px;
+  }
+
+  /* ───── Caption above each canvas ───── */
+  .frame-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .frame-title {
+    font-family: var(--font-tech);
+    font-size: 11px;
+    letter-spacing: 0.32em;
+    color: var(--teal);
+    text-transform: uppercase;
+  }
+  .frame-title .frame-num {
+    color: var(--cream-dim);
+    margin-right: 8px;
+  }
+  .frame-tradeoff {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--cream-dim);
+    max-width: 900px;
+    text-align: center;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .frame-tradeoff .accent { color: var(--teal); font-style: normal; }
+  .frame-tradeoff .amber { color: var(--amber); font-style: normal; }
+
+  /* ───── 900x600 canvas (one per frame) ───── */
+  .canvas {
+    width: 900px;
+    height: 600px;
+    background: var(--bg-window);
+    color: var(--cream);
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 14px 60px rgba(0, 0, 0, 0.55);
+    border-radius: 2px;
+    font-family: var(--font-sans);
+  }
+
+  /* ───── Sidebar (identical across all four frames) ───── */
+  .sidebar {
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    padding: 14px 0 10px 0;
+  }
+  .logo { padding: 4px 16px 14px 16px; line-height: 1; }
+  .logo-mark {
+    font-family: var(--font-display);
+    font-size: 30px;
+    color: var(--teal);
+    letter-spacing: 0.04em;
+  }
+  .logo-mark span.cap { font-style: italic; font-weight: 400; }
+  .logo-sub {
+    margin-top: 4px;
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.32em;
+    color: var(--cream-dim);
+  }
+  .amp-list {
+    flex: 1;
+    overflow: hidden;
+    padding: 4px 0 0 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .amp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--cream);
+    cursor: default;
+    position: relative;
+    flex: 0 0 auto;
+    line-height: 1;
+  }
+  .amp .glyph {
+    width: 18px; height: 18px; flex: 0 0 18px;
+    color: var(--teal-dim);
+    opacity: 0.75;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .amp .glyph svg { width: 100%; height: 100%; display: block; }
+  .amp.selected .glyph { color: var(--teal); opacity: 1; }
+  .amp.selected::before, .amp.selected::after {
+    content: ''; position: absolute; width: 8px; height: 8px;
+    border-color: var(--teal); border-style: solid;
+  }
+  .amp.selected::before { left: 4px; top: 4px; border-width: 1px 0 0 1px; }
+  .amp.selected::after { right: 4px; bottom: 4px; border-width: 0 1px 1px 0; }
+  .amp.selected .bracket-tr,
+  .amp.selected .bracket-bl {
+    position: absolute; width: 8px; height: 8px;
+    border-color: var(--teal); border-style: solid;
+  }
+  .amp.selected .bracket-tr { right: 4px; top: 4px; border-width: 1px 1px 0 0; }
+  .amp.selected .bracket-bl { left: 4px; bottom: 4px; border-width: 0 0 1px 1px; }
+
+  /* ───── Main panel (right of sidebar) ───── */
+  .main {
+    position: relative;
+    padding: 14px 22px 12px 22px;
+    display: grid;
+    grid-template-rows: 38px 1fr 28px;
+    gap: 0;
+  }
+  .gear {
+    position: absolute;
+    top: 10px; right: 16px;
+    width: 22px; height: 22px;
+    color: var(--cream-dim);
+  }
+  .gear svg { width: 100%; height: 100%; }
+
+  .tabs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    color: var(--cream);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+  }
+  .tab-label { color: var(--cream); text-transform: uppercase; }
+  .pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 5px 12px;
+    border: 1px solid var(--hairline-warm);
+    border-radius: 4px;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--cream);
+    background: transparent;
+    text-transform: uppercase;
+  }
+  .pill.active {
+    background: var(--amber);
+    color: #1a1208;
+    border-color: var(--amber);
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 4px;
+  }
+
+  /* ───────── THE TRIPTYCH (PRE | AMP | POST) ───────── */
+  .triptych {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 10px;
+    height: 196px;
+    margin-top: 2px;
+  }
+
+  /* Collapsed strip (used for whichever sections aren't expanded) */
+  .strip {
+    width: 70px;
+    background: var(--bg-strip);
+    border: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    cursor: default;
+    position: relative;
+  }
+  .strip .led-section {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--led-off);
+    box-shadow: none;
+  }
+  .strip .led-section.on {
+    background: var(--teal);
+    box-shadow: 0 0 6px var(--teal-glow), 0 0 2px #fff inset;
+  }
+  .strip .strip-label {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: var(--font-tech);
+    font-size: 10px;
+    letter-spacing: 0.36em;
+    color: var(--cream);
+  }
+  .strip .strip-chev {
+    color: var(--cream-dim);
+    font-family: var(--font-tech);
+    font-size: 10px;
+  }
+  /* Strip caption beneath (only used by AMP collapsed to show "Brunetti XL 2") */
+  .strip-with-caption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .strip-caption {
+    font-family: var(--font-sans);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: var(--cream-dim);
+    text-align: center;
+    line-height: 1.1;
+    width: 80px;
+  }
+  .strip-caption .em { color: var(--cream); }
+
+  /* Expanded section (AMP expanded uses a real fern; PRE/POST use a placeholder square) */
+  .expanded {
+    width: 400px;
+    background: #0e1014;
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .expanded .br {
+    position: absolute;
+    width: 22px; height: 22px;
+    border-color: var(--amber);
+    border-style: solid;
+    border-width: 0;
+  }
+  .expanded .br.tl { left: -1px; top: -1px; border-width: 1.5px 0 0 1.5px; }
+  .expanded .br.tr { right: -1px; top: -1px; border-width: 1.5px 1.5px 0 0; }
+  .expanded .br.bl { left: -1px; bottom: -1px; border-width: 0 0 1.5px 1.5px; }
+  .expanded .br.brc { right: -1px; bottom: -1px; border-width: 0 1.5px 1.5px 0; }
+
+  /* Fern art (only used inside AMP expanded) */
+  .expanded .fern {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .expanded .fern svg {
+    height: 86%;
+    color: var(--teal);
+    filter: drop-shadow(0 0 8px rgba(91, 196, 196, 0.25));
+  }
+
+  /* Mini fern used inside collapsed AMP strip */
+  .strip .mini-fern {
+    width: 30px; height: 60px;
+    color: var(--teal);
+    opacity: 0.85;
+  }
+  .strip .mini-fern svg { width: 100%; height: 100%; }
+
+  /* Placeholder square for PRE/POST hero art */
+  .expanded .placeholder {
+    position: absolute; inset: 18px;
+    border: 1px solid var(--teal);
+    background: rgba(91, 196, 196, 0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--teal);
+  }
+  .expanded .placeholder .ph-glyph {
+    width: 88px; height: 88px;
+    border: 1px dashed var(--teal-faint);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.18em;
+    color: var(--cream-dim);
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .expanded .placeholder .ph-name {
+    font-family: var(--font-tech);
+    font-size: 10px;
+    letter-spacing: 0.36em;
+    color: var(--teal);
+  }
+  .expanded .placeholder .ph-note {
+    font-family: var(--font-sans);
+    font-size: 9px;
+    color: var(--cream-dim);
+    letter-spacing: 0.04em;
+    font-style: italic;
+  }
+
+  /* Section header inside expanded PRE/POST (shows section title + close affordance) */
+  .expanded .section-head {
+    position: absolute;
+    top: 6px; left: 8px; right: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 2;
+  }
+  .expanded .section-title {
+    font-family: var(--font-tech);
+    font-size: 9px;
+    letter-spacing: 0.36em;
+    color: var(--teal);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .expanded .section-title .led-section {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 5px var(--teal-glow);
+    display: inline-block;
+  }
+
+  /* ───── Sub-row beneath the triptych (amp-name OR chain row) ───── */
+  .sub-row {
+    margin-top: 12px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 38px;
+  }
+
+  /* AMP-expanded: show the "Brunetti XL 2" name + gold rule + diamond */
+  .amp-name {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 28px;
+    color: var(--cream);
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .gold-rule {
+    margin: 8px auto 0 auto;
+    width: 460px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, var(--gold-rule) 18%, var(--gold-rule) 82%, transparent 100%);
+    position: relative;
+  }
+  .gold-rule::after {
+    content: '';
+    position: absolute;
+    width: 6px; height: 6px;
+    background: var(--gold-rule);
+    transform: rotate(45deg);
+    left: 50%; top: 50%;
+    margin-left: -3px; margin-top: -3px;
+  }
+  .amp-name-block {
+    display: flex; flex-direction: column; align-items: center;
+  }
+
+  /* PRE/POST-expanded: show the chain row */
+  .chain-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+  .chain-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+    width: 64px;
+  }
+  .chain-glyph {
+    width: 44px; height: 44px;
+    border: 1px solid var(--teal);
+    background: rgba(0, 0, 0, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-tech);
+    font-size: 7px;
+    letter-spacing: 0.18em;
+    color: var(--cream-dim);
+    position: relative;
+  }
+  .chain-glyph .led-corner {
+    position: absolute;
+    top: 3px; right: 3px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 4px var(--teal-glow);
+  }
+  .chain-glyph .led-corner.off {
+    background: var(--led-off);
+    box-shadow: none;
+  }
+  .chain-item.dimmed .chain-glyph {
+    border-color: var(--teal-dim);
+    opacity: 0.6;
+  }
+  .chain-label {
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.28em;
+    color: var(--cream);
+  }
+  .chain-item.dimmed .chain-label { color: var(--cream-dim); }
+  .chain-item.focused::after {
+    content: '';
+    position: absolute;
+    bottom: -3px; left: 12px; right: 12px;
+    height: 2px;
+    background: var(--amber);
+    box-shadow: 0 0 5px rgba(232, 168, 92, 0.6);
+  }
+  .chain-link {
+    width: 24px;
+    height: 1px;
+    background: var(--teal);
+    align-self: center;
+    margin-top: -10px;
+    opacity: 0.7;
+  }
+
+  /* ───── Knob row (replace-mode; contents vary per frame) ───── */
+  .knobs-shell {
+    margin-top: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .vlabel {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.4em;
+    color: var(--cream);
+    text-align: center;
+    line-height: 1;
+    width: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .meter {
+    width: 4px; height: 88px;
+    background: linear-gradient(180deg, #2a2e36 0%, #181b21 100%);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+    align-self: center;
+  }
+  .meter::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 28%;
+    background: linear-gradient(180deg, var(--amber) 0%, var(--amber-dim) 100%);
+    opacity: 0.7;
+  }
+
+  .knob-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+  .knob-col {
+    display: flex; flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 64px;
+  }
+  .knob-col .lbl {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    color: var(--cream);
+    text-transform: uppercase;
+  }
+  .knob {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #2c2f37 0%, #1a1c22 70%, #0e1014 100%);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.06),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.6),
+      0 2px 6px var(--shadow-knob);
+    position: relative;
+  }
+  .knob .tick {
+    position: absolute;
+    width: 2px; height: 12px;
+    background: var(--amber);
+    border-radius: 1px;
+    left: 50%; top: 6px;
+    margin-left: -1px;
+    transform-origin: 50% 19px;
+    box-shadow: 0 0 4px rgba(232, 168, 92, 0.7);
+  }
+  .knob-col .val {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--cream);
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+  }
+  .channel-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 50px;
+    color: var(--cream);
+    font-family: var(--font-sans);
+    font-size: 18px;
+  }
+  .channel-step .arrow { color: var(--teal); font-size: 14px; }
+  .channel-step .num {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--cream);
+  }
+  .divider {
+    width: 1px;
+    align-self: center;
+    height: 50px;
+    background: var(--hairline);
+    margin: 0 6px;
+  }
+
+  /* Algorithm / mode picker beside reverb / delay knobs */
+  .picker {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 3px;
+    border-left: 1px solid var(--hairline);
+    padding-left: 12px;
+    margin-left: 6px;
+    height: 88px;
+  }
+  .picker .opt {
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.24em;
+    color: var(--cream-dim);
+    text-transform: uppercase;
+    padding: 1px 6px;
+  }
+  .picker .opt.active {
+    color: #1a1208;
+    background: var(--amber);
+  }
+
+  /* ───── Toggle row (NOISE GATE + EQ; always visible across all frames) ───── */
+  .toggles {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 96px;
+  }
+  .toggle-cell { display: flex; align-items: center; gap: 10px; }
+  .switch-baseline {
+    width: 38px; height: 18px;
+    background: #14161b;
+    border: 1px solid var(--hairline-warm);
+    border-radius: 10px;
+    position: relative;
+  }
+  .switch-baseline.on { background: rgba(232, 168, 92, 0.14); }
+  .switch-baseline .knob-handle {
+    position: absolute;
+    top: 1px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--amber) 0%, var(--amber-dim) 100%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 6px rgba(232, 168, 92, 0.55);
+  }
+  .switch-baseline.on .knob-handle { right: 1px; }
+  .switch-baseline.off .knob-handle {
+    left: 1px;
+    background: linear-gradient(180deg, #4a4036 0%, #2e261e 100%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  }
+  .toggle-cell .lbl {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--cream);
+    text-transform: uppercase;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    color: var(--cream-dim);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    align-self: end;
+    padding-bottom: 4px;
+  }
+
+  /* Diagram caption beneath all four frames */
+  .legend {
+    width: 900px;
+    margin-top: 10px;
+    padding: 16px 20px;
+    background: var(--bg-window);
+    border: 1px solid var(--hairline);
+    color: var(--cream);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 1.55;
+    border-radius: 2px;
+  }
+  .legend h3 {
+    margin: 0 0 8px 0;
+    font-family: var(--font-tech);
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    color: var(--teal);
+    text-transform: uppercase;
+    font-weight: 400;
+  }
+  .legend p { margin: 0 0 6px 0; }
+  .legend .a { color: var(--teal); }
+  .legend .b { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- FRAME 1 — AMP expanded (default state on plugin open)                 -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="frame-block">
+  <div class="frame-title"><span class="frame-num">Frame 1</span>AMP expanded · default state</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <!-- TRIPTYCH: PRE collapsed | AMP expanded (fern) | POST collapsed -->
+        <div class="triptych">
+          <div class="strip" title="PRE — click to expand">
+            <span class="led-section" title="No effects active in PRE"></span>
+            <span class="strip-label">PRE</span>
+            <span class="strip-chev">›</span>
+          </div>
+          <div class="expanded">
+            <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brc"></span>
+            <div class="fern">
+              <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.6" stroke-linecap="round">
+                <path d="M100 230 C 100 200 100 150 100 90"/>
+                <g>
+                  <path d="M100 220 C 110 215 130 210 145 198 C 152 192 156 184 158 178"/>
+                  <path d="M100 200 C 113 195 132 188 148 170 C 156 162 160 152 162 144"/>
+                  <path d="M100 180 C 114 174 134 164 148 144 C 156 134 160 122 162 114"/>
+                  <path d="M100 160 C 114 152 132 138 144 118 C 150 108 152 96 152 88"/>
+                  <path d="M100 142 C 112 134 128 118 138 100 C 142 90 144 78 144 70"/>
+                  <path d="M100 124 C 110 116 122 102 130 86 C 134 76 134 66 134 58"/>
+                  <path d="M100 108 C 108 98 116 88 122 76 C 126 68 126 58 126 50"/>
+                  <path d="M100 96 C 105 88 110 80 114 70 C 116 64 116 56 116 50"/>
+                  <path d="M100 220 C 90 215 70 210 55 198 C 48 192 44 184 42 178"/>
+                  <path d="M100 200 C 87 195 68 188 52 170 C 44 162 40 152 38 144"/>
+                  <path d="M100 180 C 86 174 66 164 52 144 C 44 134 40 122 38 114"/>
+                  <path d="M100 160 C 86 152 68 138 56 118 C 50 108 48 96 48 88"/>
+                  <path d="M100 142 C 88 134 72 118 62 100 C 58 90 56 78 56 70"/>
+                  <path d="M100 124 C 90 116 78 102 70 86 C 66 76 66 66 66 58"/>
+                  <path d="M100 108 C 92 98 84 88 78 76 C 74 68 74 58 74 50"/>
+                  <path d="M100 96 C 95 88 90 80 86 70 C 84 64 84 56 84 50"/>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="strip" title="POST — click to expand">
+            <span class="led-section" title="No effects active in POST"></span>
+            <span class="strip-label">POST</span>
+            <span class="strip-chev">‹</span>
+          </div>
+        </div>
+
+        <!-- AMP-expanded sub-row: amp name + gold rule + diamond -->
+        <div class="sub-row">
+          <div class="amp-name-block">
+            <div class="amp-name">Brunetti XL 2</div>
+            <div class="gold-rule"></div>
+          </div>
+        </div>
+
+        <!-- Knob row: today's exact six knobs + channel stepper -->
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col">
+              <div class="lbl">CHANNEL</div>
+              <div class="channel-step">
+                <span class="arrow">&lt;</span><span class="num">3</span><span class="arrow">&gt;</span>
+              </div>
+              <div class="val">&nbsp;</div>
+            </div>
+            <div class="divider"></div>
+            <div class="knob-col"><div class="lbl">INPUT</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">0.0 dB</div></div>
+            <div class="knob-col"><div class="lbl">GATE</div><div class="knob"><div class="tick" style="transform:rotate(-130deg)"></div></div><div class="val">-80.0 dB</div></div>
+            <div class="divider"></div>
+            <div class="knob-col"><div class="lbl">BASS</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">5.0</div></div>
+            <div class="knob-col"><div class="lbl">MID</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">5.0</div></div>
+            <div class="knob-col"><div class="lbl">TREBLE</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">5.0</div></div>
+            <div class="divider"></div>
+            <div class="knob-col"><div class="lbl">OUTPUT</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">0.0 dB</div></div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+
+        <div class="toggles">
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">NOISE GATE</div></div>
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">EQ</div></div>
+        </div>
+      </div>
+
+      <div class="footer">V30-Brun-3.nam</div>
+    </section>
+  </div>
+  <div class="frame-tradeoff">
+    Default state: identical to today's UI plus two slim <span class="accent">PRE</span> / <span class="accent">POST</span> tabs flanking the hero.
+    Trade-off: the hero shrinks <span class="amber">540 → 400 px</span> permanently to make room for the tabs, even when nothing else is engaged.
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- FRAME 2 — PRE expanded                                               -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="frame-block">
+  <div class="frame-title"><span class="frame-num">Frame 2</span>PRE expanded · booster section</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <!-- TRIPTYCH: PRE expanded | AMP collapsed (with mini fern + amp name caption) | POST collapsed -->
+        <div class="triptych">
+          <div class="expanded">
+            <div class="section-head">
+              <div class="section-title"><span class="led-section"></span><span>PRE</span></div>
+              <span style="font-family:var(--font-tech);font-size:9px;letter-spacing:0.32em;color:var(--cream-dim)">SECTION ACTIVE</span>
+            </div>
+            <div class="placeholder">
+              <div class="ph-glyph">FRACTAL ART<br/>placeholder</div>
+              <div class="ph-name">BOOST</div>
+              <div class="ph-note">// real art = procedural fractal, drawn in C++ at runtime</div>
+            </div>
+          </div>
+
+          <div class="strip-with-caption" style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div class="strip" title="AMP — click to expand" style="height:196px">
+              <div class="mini-fern">
+                <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
+                  <path d="M100 230 C 100 200 100 150 100 90"/>
+                  <path d="M100 200 C 113 195 132 188 148 170"/>
+                  <path d="M100 180 C 114 174 134 164 148 144"/>
+                  <path d="M100 160 C 114 152 132 138 144 118"/>
+                  <path d="M100 200 C 87 195 68 188 52 170"/>
+                  <path d="M100 180 C 86 174 66 164 52 144"/>
+                  <path d="M100 160 C 86 152 68 138 56 118"/>
+                </svg>
+              </div>
+              <span class="strip-label">AMP</span>
+              <span class="led-section on" title="Amp always running"></span>
+            </div>
+            <div class="strip-caption"><span class="em">Brunetti</span><br/>XL 2</div>
+          </div>
+
+          <div class="strip" title="POST — click to expand">
+            <span class="led-section" title="No effects active in POST"></span>
+            <span class="strip-label">POST</span>
+            <span class="strip-chev">‹</span>
+          </div>
+        </div>
+
+        <!-- PRE-expanded sub-row: chain row of one BOOST placeholder -->
+        <div class="sub-row">
+          <div class="chain-row">
+            <div class="chain-item focused">
+              <div class="chain-glyph">BOOST<span class="led-corner off"></span></div>
+              <div class="chain-label">BOOST</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Knob row: BOOST controls (DRIVE / TONE / LEVEL) + bypass -->
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col"><div class="lbl">DRIVE</div><div class="knob"><div class="tick" style="transform:rotate(-30deg)"></div></div><div class="val">4.5</div></div>
+            <div class="knob-col"><div class="lbl">TONE</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">6.0</div></div>
+            <div class="knob-col"><div class="lbl">LEVEL</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">0.0 dB</div></div>
+            <div class="divider"></div>
+            <div class="knob-col" style="width:90px;justify-content:center">
+              <div class="lbl">BOOST</div>
+              <div style="display:flex;align-items:center;justify-content:center;height:50px">
+                <div class="switch-baseline off"><div class="knob-handle"></div></div>
+              </div>
+              <div class="val" style="color:var(--cream-dim)">bypassed</div>
+            </div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+
+        <div class="toggles">
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">NOISE GATE</div></div>
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">EQ</div></div>
+        </div>
+      </div>
+
+      <div class="footer">V30-Brun-3.nam</div>
+    </section>
+  </div>
+  <div class="frame-tradeoff">
+    PRE focused: amp tone controls <span class="accent">disappear from view</span> while the boost chain is open.
+    AMP collapsed strip preserves rig identity (mini fern + caption) so you always see which amp is loaded.
+    Trade-off: you can't tweak Bass/Mid/Treble at the same time as Drive without flipping back to AMP.
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- FRAME 3 — POST expanded, REVERB focused                              -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="frame-block">
+  <div class="frame-title"><span class="frame-num">Frame 3</span>POST expanded · REVERB focused</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <!-- TRIPTYCH: PRE collapsed | AMP collapsed | POST expanded -->
+        <div class="triptych">
+          <div class="strip" title="PRE">
+            <span class="led-section" title="No effects active in PRE"></span>
+            <span class="strip-label">PRE</span>
+            <span class="strip-chev">›</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div class="strip" title="AMP — click to expand" style="height:196px">
+              <div class="mini-fern">
+                <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
+                  <path d="M100 230 C 100 200 100 150 100 90"/>
+                  <path d="M100 200 C 113 195 132 188 148 170"/>
+                  <path d="M100 180 C 114 174 134 164 148 144"/>
+                  <path d="M100 160 C 114 152 132 138 144 118"/>
+                  <path d="M100 200 C 87 195 68 188 52 170"/>
+                  <path d="M100 180 C 86 174 66 164 52 144"/>
+                  <path d="M100 160 C 86 152 68 138 56 118"/>
+                </svg>
+              </div>
+              <span class="strip-label">AMP</span>
+              <span class="led-section on" title="Amp always running"></span>
+            </div>
+            <div class="strip-caption"><span class="em">Brunetti</span><br/>XL 2</div>
+          </div>
+
+          <div class="expanded">
+            <div class="section-head">
+              <div class="section-title"><span class="led-section"></span><span>POST</span></div>
+              <span style="font-family:var(--font-tech);font-size:9px;letter-spacing:0.32em;color:var(--cream-dim)">REVERB · DELAY</span>
+            </div>
+            <div class="placeholder">
+              <div class="ph-glyph">LICHTENBERG<br/>placeholder</div>
+              <div class="ph-name">REVERB</div>
+              <div class="ph-note">// real art = procedural Lichtenberg figure (case 14)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST-expanded sub-row: chain row REVERB · DELAY (REVERB focused) -->
+        <div class="sub-row">
+          <div class="chain-row">
+            <div class="chain-item focused">
+              <div class="chain-glyph">~~~~<span class="led-corner"></span></div>
+              <div class="chain-label">REVERB</div>
+            </div>
+            <div class="chain-link"></div>
+            <div class="chain-item">
+              <div class="chain-glyph">···<span class="led-corner"></span></div>
+              <div class="chain-label">DELAY</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Knob row: REVERB controls + bypass + algorithm picker -->
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col"><div class="lbl">MIX</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">50%</div></div>
+            <div class="knob-col"><div class="lbl">DECAY</div><div class="knob"><div class="tick" style="transform:rotate(-15deg)"></div></div><div class="val">3.0 s</div></div>
+            <div class="knob-col"><div class="lbl">TONE</div><div class="knob"><div class="tick" style="transform:rotate(20deg)"></div></div><div class="val">6.0</div></div>
+            <div class="divider"></div>
+            <div class="knob-col" style="width:80px;justify-content:center">
+              <div class="lbl">REVERB</div>
+              <div style="display:flex;align-items:center;justify-content:center;height:50px">
+                <div class="switch-baseline on"><div class="knob-handle"></div></div>
+              </div>
+              <div class="val">on</div>
+            </div>
+            <div class="picker">
+              <div class="opt">SPRING</div>
+              <div class="opt">PLATE</div>
+              <div class="opt active">HALL</div>
+              <div class="opt">SHIMMER</div>
+            </div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+
+        <div class="toggles">
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">NOISE GATE</div></div>
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">EQ</div></div>
+        </div>
+      </div>
+
+      <div class="footer">V30-Brun-3.nam &nbsp;·&nbsp; reverb HALL active · delay active</div>
+    </section>
+  </div>
+  <div class="frame-tradeoff">
+    POST holds two effects in signal-flow order. Both LEDs lit (both active), but only <span class="accent">REVERB</span> is focused
+    (amber underline) so its knobs occupy the bottom row. Click DELAY in the chain to swap focus → see Frame 4.
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- FRAME 4 — POST expanded, DELAY focused                               -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="frame-block">
+  <div class="frame-title"><span class="frame-num">Frame 4</span>POST expanded · DELAY focused</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <div class="triptych">
+          <div class="strip" title="PRE">
+            <span class="led-section"></span>
+            <span class="strip-label">PRE</span>
+            <span class="strip-chev">›</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div class="strip" title="AMP — click to expand" style="height:196px">
+              <div class="mini-fern">
+                <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
+                  <path d="M100 230 C 100 200 100 150 100 90"/>
+                  <path d="M100 200 C 113 195 132 188 148 170"/>
+                  <path d="M100 180 C 114 174 134 164 148 144"/>
+                  <path d="M100 160 C 114 152 132 138 144 118"/>
+                  <path d="M100 200 C 87 195 68 188 52 170"/>
+                  <path d="M100 180 C 86 174 66 164 52 144"/>
+                  <path d="M100 160 C 86 152 68 138 56 118"/>
+                </svg>
+              </div>
+              <span class="strip-label">AMP</span>
+              <span class="led-section on"></span>
+            </div>
+            <div class="strip-caption"><span class="em">Brunetti</span><br/>XL 2</div>
+          </div>
+
+          <div class="expanded">
+            <div class="section-head">
+              <div class="section-title"><span class="led-section"></span><span>POST</span></div>
+              <span style="font-family:var(--font-tech);font-size:9px;letter-spacing:0.32em;color:var(--cream-dim)">REVERB · DELAY</span>
+            </div>
+            <div class="placeholder">
+              <div class="ph-glyph">CANTOR DUST<br/>placeholder</div>
+              <div class="ph-name">DELAY</div>
+              <div class="ph-note">// real art = procedural Cantor dust on log axis (case 16)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST-expanded sub-row: chain row REVERB · DELAY (DELAY focused) -->
+        <div class="sub-row">
+          <div class="chain-row">
+            <div class="chain-item">
+              <div class="chain-glyph">~~~~<span class="led-corner"></span></div>
+              <div class="chain-label">REVERB</div>
+            </div>
+            <div class="chain-link"></div>
+            <div class="chain-item focused">
+              <div class="chain-glyph">···<span class="led-corner"></span></div>
+              <div class="chain-label">DELAY</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Knob row: DELAY controls + bypass + mode picker -->
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col"><div class="lbl">TIME</div><div class="knob"><div class="tick" style="transform:rotate(-40deg)"></div></div><div class="val">380 ms</div></div>
+            <div class="knob-col"><div class="lbl">FEEDBACK</div><div class="knob"><div class="tick" style="transform:rotate(-50deg)"></div></div><div class="val">35%</div></div>
+            <div class="knob-col"><div class="lbl">MIX</div><div class="knob"><div class="tick" style="transform:rotate(-60deg)"></div></div><div class="val">28%</div></div>
+            <div class="divider"></div>
+            <div class="knob-col" style="width:80px;justify-content:center">
+              <div class="lbl">DELAY</div>
+              <div style="display:flex;align-items:center;justify-content:center;height:50px">
+                <div class="switch-baseline on"><div class="knob-handle"></div></div>
+              </div>
+              <div class="val">on</div>
+            </div>
+            <div class="picker">
+              <div class="opt">TAPE</div>
+              <div class="opt active">DIGITAL</div>
+              <div class="opt">PING PONG</div>
+            </div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+
+        <div class="toggles">
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">NOISE GATE</div></div>
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">EQ</div></div>
+        </div>
+      </div>
+
+      <div class="footer">V30-Brun-3.nam &nbsp;·&nbsp; reverb HALL active · delay DIGITAL active</div>
+    </section>
+  </div>
+  <div class="frame-tradeoff">
+    Same POST section as Frame 3 — only the chain focus moved. <span class="accent">DELAY</span> now has the amber underline,
+    its controls fill the bottom row, REVERB stays active (LED lit) but its knobs are out of view until you click it back.
+  </div>
+</div>
+
+
+<!-- ───────── Reading guide ───────── -->
+<div class="legend">
+  <h3>How to read this mockup</h3>
+  <p>
+    <span class="a">Triptych:</span> the central row has three sections — PRE, AMP, POST — and exactly one is expanded at a time.
+    The collapsed two become 70 px vertical strips. Click a strip to expand it; the previously expanded one collapses.
+    AMP collapse keeps a mini fern + caption so you always see the loaded amp.
+  </p>
+  <p>
+    <span class="a">Chain row:</span> only appears when PRE or POST is expanded. Each effect is a placeholder square (the
+    real art will be a procedural fractal in the same family as the amp art — Logistic map / Lichtenberg / Cantor dust,
+    drawn at runtime). Connected by thin teal hairlines in signal-flow order. The currently focused effect has a thin
+    <span class="b">amber underline</span>; its knobs fill the bottom row.
+  </p>
+  <p>
+    <span class="a">Bottom knob row:</span> "replace mode" — never shows two effects' knobs at the same time. AMP shows the
+    six existing knobs + CHANNEL stepper. PRE shows the focused booster's knobs. POST shows the focused POST effect's knobs.
+  </p>
+  <p>
+    <span class="a">Bypass:</span> each effect has its own slide switch (same amber style as NOISE GATE / EQ today), shown
+    in the knob row when that effect is focused. The chain LED in the corner of each placeholder square mirrors the
+    bypass state at a glance.
+  </p>
+  <p>
+    <span class="a">NOISE GATE / EQ:</span> always visible across all four frames, beneath the knob row, exactly as today.
+    They belong to the amp signal path, not to PRE/POST.
+  </p>
+  <p>
+    <span class="a">Default state:</span> Frame 1 — AMP expanded, no effects active in PRE or POST, plugin opens like
+    today's UI plus two slim navigation tabs.
+  </p>
+</div>
+
+</body>
+</html>
