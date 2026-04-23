@@ -474,6 +474,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(4, "TONE", kReverbTone, "", "REVERB_KNOBS", true);
     IRECT reverbPickerRect(mainCX + 140.f, knobT, mainCX + 210.f, knobT + knobDiam + valueH);
     pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"SPRING", "PLATE", "HALL", "SHIMMER"}), -1, "REVERB_KNOBS");
+    
+    float revSwX = knobX(1) + colW/2.f;
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(revSwX - 25.f, knobT + 20.f, revSwX + 25.f, knobT + 20.f + 25.f), kReverbActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "REVERB_KNOBS");
+    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(revSwX - 30.f, knobT - 20.f, revSwX + 30.f, knobT), "REVERB"), -1, "REVERB_KNOBS");
 
     // DELAY KNOBS (Centered)
     drawKnobCol(2, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true);
@@ -482,10 +486,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     IRECT delayPickerRect(mainCX + 140.f, knobT, mainCX + 210.f, knobT + knobDiam + valueH);
     pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG"}), -1, "DELAY_KNOBS");
 
+    float dlySwX = knobX(1) + colW/2.f;
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(dlySwX - 25.f, knobT + 20.f, dlySwX + 25.f, knobT + 20.f + 25.f), kDelayActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "DELAY_KNOBS");
+    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(dlySwX - 30.f, knobT - 20.f, dlySwX + 30.f, knobT), "DELAY"), -1, "DELAY_KNOBS");
+
     // BOOST KNOBS (Centered)
     drawKnobCol(2, "DRIVE", kBoostDrive, "", "BOOST_KNOBS", true);
     drawKnobCol(3, "TONE", kBoostTone, "", "BOOST_KNOBS", true);
     drawKnobCol(4, "LEVEL", kBoostLevel, "dB", "BOOST_KNOBS", true);
+    
+    float bstSwX = knobX(1) + colW/2.f;
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(bstSwX - 25.f, knobT + 20.f, bstSwX + 25.f, knobT + 20.f + 25.f), kBoostActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "BOOST_KNOBS");
+    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(bstSwX - 30.f, knobT - 20.f, bstSwX + 30.f, knobT), "BOOST"), -1, "BOOST_KNOBS");
 
     // I/O meters
     const float meterW = 8.f;
@@ -1700,16 +1712,18 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       bool preExpanded = (mVolumExpandedSection == EVoLumSection::PRE);
       
       if (postExpanded) {
-        IRECT postRect = trip->GetPostExpandedRect();
+        float cx = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->GetRECT().MW();
+        float triptychCX = trip->GetRECT().MW();
         
         const float gap = 10.f;
         const float pedalW = 210.f;
         const float pedalH = 158.f;
-        const float postCx = postRect.MW();
+        const float postCx = triptychCX + 60.f; // Hardcoded safe center for POST pedals
+        const float topY = trip->GetRECT().T;
         
-        IRECT dRect(postCx - pedalW - gap/2.f, postRect.T + 20.f, postCx - gap/2.f, postRect.T + 20.f + pedalH);
-        IRECT rRect(postCx + gap/2.f, postRect.T + 20.f, postCx + gap/2.f + pedalW, postRect.T + 20.f + pedalH);
-        IRECT lRect(postCx - gap/2.f, postRect.T + 20.f + pedalH/2.f - 6.f, postCx + gap/2.f, postRect.T + 20.f + pedalH/2.f + 6.f);
+        IRECT dRect(postCx - pedalW - gap/2.f, topY + 20.f, postCx - gap/2.f, topY + 20.f + pedalH);
+        IRECT rRect(postCx + gap/2.f, topY + 20.f, postCx + gap/2.f + pedalW, topY + 20.f + pedalH);
+        IRECT lRect(postCx - gap/2.f, topY + 20.f + pedalH/2.f - 6.f, postCx + gap/2.f, topY + 20.f + pedalH/2.f + 6.f);
 
         if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {
           delayCard->SetTargetAndDrawRECTs(dRect);
