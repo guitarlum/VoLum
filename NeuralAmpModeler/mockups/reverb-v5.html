@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<!--
+  VoLum reverb mockup v5 — GPT-5.4 pass.
+
+  Goals:
+  - Stay much closer to the baseline UI from docs/UI.png.
+  - Keep Frame 1 effectively identical to the current "AMP" view.
+  - Keep the accepted UX from v4:
+      * PRE | AMP | POST triptych
+      * Default = AMP expanded
+      * POST expanded shows DELAY then REVERB pedal cards side-by-side
+      * Clicking a pedal focuses it and swaps the control row
+      * AMP-only toggles (Noise Gate / EQ) disappear in POST view
+  - Remove over-explanation and visual noise.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>VoLum — Reverb integration mockup v5</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;500;600;700&family=Michroma&family=Poiret+One&display=swap');
+
+  :root {
+    --bg-page: #0a0c11;
+    --bg-window: #15171e;
+    --bg-sidebar: #1a1d24;
+    --bg-strip: #171a21;
+    --bg-panel: #0f1217;
+    --bg-card-top: #232730;
+    --bg-card-bot: #171a20;
+    --teal: #5bc4c4;
+    --teal-dim: #4ba2a2;
+    --teal-faint: rgba(91, 196, 196, 0.16);
+    --teal-glow: rgba(91, 196, 196, 0.36);
+    --amber: #e8a85c;
+    --amber-dim: #b58447;
+    --amber-glow: rgba(232, 168, 92, 0.32);
+    --cream: #ede3d0;
+    --cream-dim: #a6957c;
+    --gold-rule: #a88e5e;
+    --hairline: #2b2f37;
+    --hairline-warm: #3d3326;
+    --led-off: #2a3034;
+    --shadow-knob: rgba(0, 0, 0, 0.55);
+
+    --font-sans: 'Josefin Sans', Optima, 'Gill Sans', sans-serif;
+    --font-display: 'Poiret One', Futura, 'Century Gothic', sans-serif;
+    --font-tech: 'Michroma', 'Bank Gothic', 'Trade Gothic', 'Helvetica Neue Condensed', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-page);
+    color: var(--cream);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 26px;
+    padding: 30px 16px 44px 16px;
+  }
+
+  .frame-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .frame-title {
+    font-family: var(--font-tech);
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--teal);
+  }
+
+  .frame-title .n {
+    color: var(--cream-dim);
+    margin-right: 8px;
+  }
+
+  .frame-note {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--cream-dim);
+    max-width: 900px;
+    text-align: center;
+    font-style: italic;
+  }
+
+  .frame-note .accent { color: var(--teal); font-style: normal; }
+  .frame-note .amber { color: var(--amber); font-style: normal; }
+
+  .canvas {
+    width: 900px;
+    height: 600px;
+    background: var(--bg-window);
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    overflow: hidden;
+    box-shadow: 0 14px 60px rgba(0, 0, 0, 0.55);
+    border-radius: 2px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    padding: 14px 0 10px 0;
+  }
+
+  .logo {
+    padding: 4px 16px 14px 16px;
+    line-height: 1;
+  }
+
+  .logo-mark {
+    font-family: var(--font-display);
+    font-size: 30px;
+    color: var(--teal);
+    letter-spacing: 0.04em;
+  }
+
+  .logo-mark span.cap { font-style: italic; font-weight: 400; }
+
+  .logo-sub {
+    margin-top: 4px;
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.32em;
+    color: var(--cream-dim);
+  }
+
+  .amp-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-top: 4px;
+  }
+
+  .amp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    position: relative;
+    line-height: 1;
+    color: var(--cream);
+  }
+
+  .amp .glyph {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--teal-dim);
+    opacity: 0.75;
+  }
+
+  .amp .glyph svg { width: 100%; height: 100%; display: block; }
+
+  .amp.selected .glyph { color: var(--teal); opacity: 1; }
+  .amp.selected::before, .amp.selected::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-color: var(--teal);
+    border-style: solid;
+  }
+  .amp.selected::before { left: 4px; top: 4px; border-width: 1px 0 0 1px; }
+  .amp.selected::after { right: 4px; bottom: 4px; border-width: 0 1px 1px 0; }
+  .amp.selected .bracket-tr,
+  .amp.selected .bracket-bl {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-color: var(--teal);
+    border-style: solid;
+  }
+  .amp.selected .bracket-tr { right: 4px; top: 4px; border-width: 1px 1px 0 0; }
+  .amp.selected .bracket-bl { left: 4px; bottom: 4px; border-width: 0 0 1px 1px; }
+
+  /* Main panel */
+  .main {
+    position: relative;
+    padding: 14px 22px 12px 22px;
+    display: grid;
+    grid-template-rows: 38px 1fr 28px;
+  }
+
+  .gear {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    width: 22px;
+    height: 22px;
+    color: var(--cream-dim);
+  }
+
+  .gear svg { width: 100%; height: 100%; }
+
+  .tabs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--cream);
+  }
+
+  .tab-label { text-transform: uppercase; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    border: 1px solid var(--hairline-warm);
+    border-radius: 4px;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--cream);
+    text-transform: uppercase;
+  }
+
+  .pill.active {
+    background: var(--amber);
+    color: #1a1208;
+    border-color: var(--amber);
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 4px;
+  }
+
+  /* Triptych */
+  .triptych {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    height: 196px;
+    margin-top: 2px;
+  }
+
+  .strip {
+    width: 70px;
+    height: 196px;
+    background: var(--bg-strip);
+    border: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+  }
+
+  .strip .led-section {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--led-off);
+  }
+
+  .strip .led-section.on {
+    background: var(--teal);
+    box-shadow: 0 0 6px var(--teal-glow), 0 0 2px rgba(255,255,255,0.45) inset;
+  }
+
+  .strip .strip-label {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: var(--font-tech);
+    font-size: 10px;
+    letter-spacing: 0.36em;
+    color: var(--cream);
+  }
+
+  .strip .strip-chev {
+    color: var(--cream-dim);
+    font-family: var(--font-tech);
+    font-size: 10px;
+  }
+
+  .mini-fern {
+    width: 30px;
+    height: 60px;
+    color: var(--teal);
+    opacity: 0.85;
+  }
+
+  .mini-fern svg { width: 100%; height: 100%; }
+
+  .strip-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .strip-caption {
+    width: 80px;
+    text-align: center;
+    line-height: 1.1;
+    font-size: 9px;
+    color: var(--cream-dim);
+    letter-spacing: 0.06em;
+  }
+
+  .strip-caption .em { color: var(--cream); }
+
+  .expanded {
+    position: relative;
+    width: 400px;
+    height: 196px;
+    background: #0e1014;
+    flex: 0 0 auto;
+  }
+
+  .expanded--post { width: 460px; }
+
+  .expanded .br {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-color: var(--amber);
+    border-style: solid;
+    border-width: 0;
+  }
+  .expanded .br.tl { left: -1px; top: -1px; border-width: 1.5px 0 0 1.5px; }
+  .expanded .br.tr { right: -1px; top: -1px; border-width: 1.5px 1.5px 0 0; }
+  .expanded .br.bl { left: -1px; bottom: -1px; border-width: 0 0 1.5px 1.5px; }
+  .expanded .br.brc { right: -1px; bottom: -1px; border-width: 0 1.5px 1.5px 0; }
+
+  .fern {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fern svg {
+    height: 86%;
+    color: var(--teal);
+    filter: drop-shadow(0 0 8px rgba(91, 196, 196, 0.25));
+  }
+
+  /* Gold title block */
+  .sub-row {
+    margin-top: 12px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 38px;
+  }
+
+  .amp-name-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .amp-name {
+    font-family: var(--font-display);
+    font-size: 28px;
+    line-height: 1;
+    color: var(--cream);
+  }
+
+  .gold-rule {
+    margin-top: 8px;
+    width: 460px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, var(--gold-rule) 18%, var(--gold-rule) 82%, transparent 100%);
+    position: relative;
+  }
+
+  .gold-rule::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: var(--gold-rule);
+    transform: rotate(45deg);
+    left: 50%;
+    top: 50%;
+    margin-left: -3px;
+    margin-top: -3px;
+  }
+
+  /* Pedalboard in POST */
+  .pedalboard {
+    position: absolute;
+    inset: 0;
+    padding: 12px 12px 10px 12px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pedalboard-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 0 2px;
+  }
+
+  .pb-label {
+    font-family: var(--font-tech);
+    font-size: 9px;
+    letter-spacing: 0.36em;
+    color: var(--teal);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pb-led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 5px var(--teal-glow);
+  }
+
+  .pb-meta {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--cream-dim);
+    text-transform: uppercase;
+  }
+
+  .pb-row {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 14px;
+  }
+
+  .pedal {
+    flex: 1 1 0;
+    max-width: 220px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 12px 10px 12px;
+    border-radius: 5px;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(91, 196, 196, 0.05) 0%, transparent 60%),
+      linear-gradient(180deg, var(--bg-card-top) 0%, var(--bg-card-bot) 100%);
+    border: 1px solid var(--teal-dim);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 -1px 0 rgba(0,0,0,0.45),
+      0 3px 10px rgba(0,0,0,0.55);
+  }
+
+  .pedal::before,
+  .pedal::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border: 1px solid var(--teal-dim);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  .pedal::before { top: 4px; left: 4px; border-width: 1px 0 0 1px; }
+  .pedal::after  { bottom: 4px; right: 4px; border-width: 0 1px 1px 0; }
+
+  .pedal.focused {
+    border-color: var(--amber);
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(232,168,92,0.08) 0%, transparent 60%),
+      linear-gradient(180deg, var(--bg-card-top) 0%, var(--bg-card-bot) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      inset 0 -1px 0 rgba(0,0,0,0.45),
+      0 0 0 1px rgba(232,168,92,0.30),
+      0 3px 14px rgba(232,168,92,0.18),
+      0 3px 10px rgba(0,0,0,0.55);
+  }
+
+  .pedal.focused::before,
+  .pedal.focused::after {
+    border-color: var(--amber);
+    opacity: 1;
+  }
+
+  .pedal-name {
+    text-align: center;
+    font-family: var(--font-tech);
+    font-size: 11px;
+    letter-spacing: 0.34em;
+    color: var(--cream);
+    padding-bottom: 10px;
+  }
+
+  .pedal.focused .pedal-name { color: var(--amber); }
+
+  .pedal-art {
+    flex: 1;
+    margin: 0 2px 8px 2px;
+    border: 1px dashed rgba(91, 196, 196, 0.24);
+    background: rgba(0, 0, 0, 0.32);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-tech);
+    font-size: 8.5px;
+    letter-spacing: 0.32em;
+    color: var(--teal);
+    text-align: center;
+  }
+
+  .pedal.focused .pedal-art {
+    border-color: rgba(232,168,92,0.30);
+    color: var(--amber);
+  }
+
+  .pedal-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px;
+  }
+
+  .pedal-preset {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--cream);
+  }
+
+  .pedal-led {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 8px var(--teal-glow), 0 0 2px rgba(255,255,255,0.55) inset;
+  }
+
+  .pb-link {
+    align-self: center;
+    width: 26px;
+    height: 12px;
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .pb-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: var(--teal);
+    opacity: 0.55;
+  }
+
+  .pb-link::after {
+    content: '';
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    left: 50%;
+    top: 50%;
+    margin-left: -2px;
+    margin-top: -2px;
+    background: var(--teal);
+    border-radius: 50%;
+    box-shadow: 0 0 4px var(--teal-glow);
+  }
+
+  /* Knob area */
+  .knobs-shell {
+    margin-top: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .vlabel {
+    width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.4em;
+    color: var(--cream);
+  }
+
+  .meter {
+    width: 4px;
+    height: 88px;
+    align-self: center;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #2a2e36 0%, #181b21 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .meter::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 28%;
+    background: linear-gradient(180deg, var(--amber) 0%, var(--amber-dim) 100%);
+    opacity: 0.7;
+  }
+
+  .knob-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .knob-col {
+    width: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .knob-col .lbl {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cream);
+  }
+
+  .knob {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #2c2f37 0%, #1a1c22 70%, #0e1014 100%);
+    box-shadow:
+      inset 0 1px 1px rgba(255,255,255,0.06),
+      inset 0 -2px 4px rgba(0,0,0,0.6),
+      0 2px 6px var(--shadow-knob);
+    position: relative;
+  }
+
+  .knob .tick {
+    position: absolute;
+    width: 2px;
+    height: 12px;
+    left: 50%;
+    top: 6px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--amber);
+    transform-origin: 50% 19px;
+    box-shadow: 0 0 4px rgba(232,168,92,0.7);
+  }
+
+  .knob-col .val {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--cream);
+  }
+
+  .channel-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 50px;
+    color: var(--cream);
+    font-size: 18px;
+  }
+
+  .channel-step .arrow { color: var(--teal); font-size: 14px; }
+  .channel-step .num {
+    font-family: var(--font-display);
+    font-size: 22px;
+  }
+
+  .divider {
+    width: 1px;
+    height: 50px;
+    align-self: center;
+    background: var(--hairline);
+    margin: 0 6px;
+  }
+
+  .picker {
+    height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    border-left: 1px solid var(--hairline);
+    padding-left: 12px;
+    margin-left: 6px;
+  }
+
+  .picker .opt {
+    font-family: var(--font-tech);
+    font-size: 8px;
+    letter-spacing: 0.24em;
+    color: var(--cream-dim);
+    text-transform: uppercase;
+    padding: 1px 6px;
+  }
+
+  .picker .opt.active {
+    background: var(--amber);
+    color: #1a1208;
+  }
+
+  .toggles {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 96px;
+  }
+
+  .toggle-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .switch-baseline {
+    width: 38px;
+    height: 18px;
+    background: #14161b;
+    border: 1px solid var(--hairline-warm);
+    border-radius: 10px;
+    position: relative;
+  }
+
+  .switch-baseline.on {
+    background: rgba(232,168,92,0.14);
+  }
+
+  .switch-baseline .knob-handle {
+    position: absolute;
+    top: 1px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--amber) 0%, var(--amber-dim) 100%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6), 0 0 6px rgba(232,168,92,0.55);
+  }
+
+  .switch-baseline.on .knob-handle { right: 1px; }
+
+  .toggle-cell .lbl {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--cream);
+  }
+
+  .footer {
+    text-align: center;
+    color: var(--cream-dim);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    align-self: end;
+    padding-bottom: 4px;
+  }
+
+  .legend {
+    width: 900px;
+    margin-top: 6px;
+    padding: 14px 18px;
+    background: var(--bg-window);
+    border: 1px solid var(--hairline);
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--cream);
+  }
+
+  .legend h3 {
+    margin: 0 0 6px 0;
+    font-family: var(--font-tech);
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--teal);
+    font-weight: 400;
+  }
+
+  .legend p { margin: 0; }
+  .legend .a { color: var(--teal); }
+  .legend .b { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<!-- FRAME 1 -->
+<div class="frame-block">
+  <div class="frame-title"><span class="n">Frame 1</span>Default state · unchanged from v4</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <div class="triptych">
+          <div class="strip">
+            <span class="led-section"></span>
+            <span class="strip-label">PRE</span>
+            <span class="strip-chev">›</span>
+          </div>
+
+          <div class="expanded">
+            <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brc"></span>
+            <div class="fern">
+              <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.6" stroke-linecap="round">
+                <path d="M100 230 C 100 200 100 150 100 90"/>
+                <g>
+                  <path d="M100 220 C 110 215 130 210 145 198 C 152 192 156 184 158 178"/>
+                  <path d="M100 200 C 113 195 132 188 148 170 C 156 162 160 152 162 144"/>
+                  <path d="M100 180 C 114 174 134 164 148 144 C 156 134 160 122 162 114"/>
+                  <path d="M100 160 C 114 152 132 138 144 118 C 150 108 152 96 152 88"/>
+                  <path d="M100 142 C 112 134 128 118 138 100 C 142 90 144 78 144 70"/>
+                  <path d="M100 124 C 110 116 122 102 130 86 C 134 76 134 66 134 58"/>
+                  <path d="M100 108 C 108 98 116 88 122 76 C 126 68 126 58 126 50"/>
+                  <path d="M100 96 C 105 88 110 80 114 70 C 116 64 116 56 116 50"/>
+                  <path d="M100 220 C 90 215 70 210 55 198 C 48 192 44 184 42 178"/>
+                  <path d="M100 200 C 87 195 68 188 52 170 C 44 162 40 152 38 144"/>
+                  <path d="M100 180 C 86 174 66 164 52 144 C 44 134 40 122 38 114"/>
+                  <path d="M100 160 C 86 152 68 138 56 118 C 50 108 48 96 48 88"/>
+                  <path d="M100 142 C 88 134 72 118 62 100 C 58 90 56 78 56 70"/>
+                  <path d="M100 124 C 90 116 78 102 70 86 C 66 76 66 66 66 58"/>
+                  <path d="M100 108 C 92 98 84 88 78 76 C 74 68 74 58 74 50"/>
+                  <path d="M100 96 C 95 88 90 80 86 70 C 84 64 84 56 84 50"/>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="strip">
+            <span class="led-section"></span>
+            <span class="strip-label">POST</span>
+            <span class="strip-chev">‹</span>
+          </div>
+        </div>
+
+        <div class="sub-row">
+          <div class="amp-name-block">
+            <div class="amp-name">Brunetti XL 2</div>
+            <div class="gold-rule"></div>
+          </div>
+        </div>
+
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col">
+              <div class="lbl">CHANNEL</div>
+              <div class="channel-step"><span class="arrow">&lt;</span><span class="num">3</span><span class="arrow">&gt;</span></div>
+              <div class="val">&nbsp;</div>
+            </div>
+            <div class="divider"></div>
+            <div class="knob-col"><div class="lbl">INPUT</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">0.0 dB</div></div>
+            <div class="knob-col"><div class="lbl">GATE</div><div class="knob"><div class="tick" style="transform:rotate(-130deg)"></div></div><div class="val">-80.0 dB</div></div>
+            <div class="divider"></div>
+            <div class="knob-col"><div class="lbl">BASS</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">5.0</div></div>
+            <div class="knob-col"><div class="lbl">MID</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">5.0</div></div>
+            <div class="knob-col"><div class="lbl">TREBLE</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">5.0</div></div>
+            <div class="divider"></div>
+            <div class="knob-col"><div class="lbl">OUTPUT</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">0.0 dB</div></div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+
+        <div class="toggles">
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">NOISE GATE</div></div>
+          <div class="toggle-cell"><div class="switch-baseline on"><div class="knob-handle"></div></div><div class="lbl">EQ</div></div>
+        </div>
+      </div>
+
+      <div class="footer">V30-Brun-3.nam</div>
+    </section>
+  </div>
+  <div class="frame-note">
+    Default state intentionally left alone. This is still the best baseline: <span class="accent">AMP</span> view looks almost exactly like today's UI,
+    just with PRE/POST tabs parked on either side of the hero.
+  </div>
+</div>
+
+
+<!-- FRAME 2 -->
+<div class="frame-block">
+  <div class="frame-title"><span class="n">Frame 2</span>POST expanded · reverb focused</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <div class="triptych">
+          <div class="strip">
+            <span class="led-section"></span>
+            <span class="strip-label">PRE</span>
+            <span class="strip-chev">›</span>
+          </div>
+
+          <div class="strip-wrap">
+            <div class="strip">
+              <div class="mini-fern">
+                <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
+                  <path d="M100 230 C 100 200 100 150 100 90"/>
+                  <path d="M100 200 C 113 195 132 188 148 170"/>
+                  <path d="M100 180 C 114 174 134 164 148 144"/>
+                  <path d="M100 160 C 114 152 132 138 144 118"/>
+                  <path d="M100 200 C 87 195 68 188 52 170"/>
+                  <path d="M100 180 C 86 174 66 164 52 144"/>
+                  <path d="M100 160 C 86 152 68 138 56 118"/>
+                </svg>
+              </div>
+              <span class="strip-label">AMP</span>
+              <span class="led-section on"></span>
+            </div>
+            <div class="strip-caption"><span class="em">Brunetti</span><br/>XL 2</div>
+          </div>
+
+          <div class="expanded expanded--post">
+            <div class="pedalboard">
+              <div class="pedalboard-head">
+                <div class="pb-label"><span class="pb-led"></span><span>POST</span></div>
+                <div class="pb-meta">2 effects active</div>
+              </div>
+              <div class="pb-row">
+                <div class="pedal">
+                  <div class="pedal-name">DELAY</div>
+                  <div class="pedal-art">CANTOR DUST</div>
+                  <div class="pedal-foot">
+                    <div class="pedal-preset">DIGITAL · 380 ms</div>
+                    <div class="pedal-led"></div>
+                  </div>
+                </div>
+                <div class="pb-link"></div>
+                <div class="pedal focused">
+                  <div class="pedal-name">REVERB</div>
+                  <div class="pedal-art">LICHTENBERG</div>
+                  <div class="pedal-foot">
+                    <div class="pedal-preset">HALL · 50%</div>
+                    <div class="pedal-led"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-row">
+          <div class="amp-name-block">
+            <div class="amp-name" style="font-size:24px">Reverb · <span style="color:var(--amber)">Hall</span></div>
+            <div class="gold-rule"></div>
+          </div>
+        </div>
+
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col"><div class="lbl">MIX</div><div class="knob"><div class="tick" style="transform:rotate(0deg)"></div></div><div class="val">50%</div></div>
+            <div class="knob-col"><div class="lbl">DECAY</div><div class="knob"><div class="tick" style="transform:rotate(-15deg)"></div></div><div class="val">3.0 s</div></div>
+            <div class="knob-col"><div class="lbl">TONE</div><div class="knob"><div class="tick" style="transform:rotate(20deg)"></div></div><div class="val">6.0</div></div>
+            <div class="divider"></div>
+            <div class="picker">
+              <div class="opt">SPRING</div>
+              <div class="opt">PLATE</div>
+              <div class="opt active">HALL</div>
+              <div class="opt">SHIMMER</div>
+            </div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+
+      </div>
+
+      <div class="footer">V30-Brun-3.nam &nbsp;·&nbsp; reverb HALL on · delay DIGITAL on</div>
+    </section>
+  </div>
+  <div class="frame-note">
+    <span class="accent">POST</span> now reads like a real pedalboard. Signal flow is <span class="amber">AMP → DELAY → REVERB → OUT</span>.
+    REVERB is focused, so its controls fill the row below; DELAY stays visible and active to the left.
+  </div>
+</div>
+
+
+<!-- FRAME 3 -->
+<div class="frame-block">
+  <div class="frame-title"><span class="n">Frame 3</span>POST expanded · delay focused</div>
+  <div class="canvas">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span class="cap">V</span>o<span class="cap">L</span>um</div>
+        <div class="logo-sub">NAM PLAYER</div>
+      </div>
+      <nav class="amp-list">
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="name">Ampete One</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18 L12 6 L20 18 Z"/></svg></span><span class="name">Bad Cat mini Cat</span></div>
+        <div class="amp selected"><span class="bracket-tr"></span><span class="bracket-bl"></span><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 C 9 11, 15 11, 19 19" /><circle cx="12" cy="9" r="2.4"/></svg></span><span class="name">Brunetti XL 2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 18 Q12 4 18 18" /></svg></span><span class="name">Fryette Deliv. 120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="6" width="14" height="12" rx="1.5"/><line x1="9" y1="6" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="18"/></svg></span><span class="name">H&amp;K TriAmp Mk2</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 5 L18 12 L12 19 L6 12 Z"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Lichtlaerm Prom.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19" /><line x1="12" y1="11" x2="12" y2="19"/></svg></span><span class="name">Marshall 2204</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 19 L12 5 L19 19 M5 14 L19 14"/></svg></span><span class="name">Marshall JMP 2203</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19 L9 7 L12 14 L15 7 L20 19"/></svg></span><span class="name">Marshall JVM</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 14 Q12 18 15 14"/></svg></span><span class="name">Orange OD120</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="7"/><path d="M9 11 Q12 15 15 11"/></svg></span><span class="name">Orange ORS100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9 L12 5 L16 9"/></svg></span><span class="name">Sebago Texas Fl.</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span class="name">Soldano SLO100</span></div>
+        <div class="amp"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 18 L12 6 L19 18 Z"/><line x1="12" y1="13" x2="12" y2="18"/></svg></span><span class="name">THC Sunset</span></div>
+      </nav>
+    </aside>
+
+    <section class="main">
+      <div class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"/></svg></div>
+      <div class="tabs">
+        <span class="tab-label">DIRECT</span>
+        <span class="pill">AMP</span>
+        <span class="tab-label" style="margin-left:18px">CABINET</span>
+        <span class="pill">G12</span>
+        <span class="pill">G65</span>
+        <span class="pill active">V30</span>
+      </div>
+
+      <div class="stack">
+        <div class="triptych">
+          <div class="strip">
+            <span class="led-section"></span>
+            <span class="strip-label">PRE</span>
+            <span class="strip-chev">›</span>
+          </div>
+
+          <div class="strip-wrap">
+            <div class="strip">
+              <div class="mini-fern">
+                <svg viewBox="0 0 200 240" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round">
+                  <path d="M100 230 C 100 200 100 150 100 90"/>
+                  <path d="M100 200 C 113 195 132 188 148 170"/>
+                  <path d="M100 180 C 114 174 134 164 148 144"/>
+                  <path d="M100 160 C 114 152 132 138 144 118"/>
+                  <path d="M100 200 C 87 195 68 188 52 170"/>
+                  <path d="M100 180 C 86 174 66 164 52 144"/>
+                  <path d="M100 160 C 86 152 68 138 56 118"/>
+                </svg>
+              </div>
+              <span class="strip-label">AMP</span>
+              <span class="led-section on"></span>
+            </div>
+            <div class="strip-caption"><span class="em">Brunetti</span><br/>XL 2</div>
+          </div>
+
+          <div class="expanded expanded--post">
+            <div class="pedalboard">
+              <div class="pedalboard-head">
+                <div class="pb-label"><span class="pb-led"></span><span>POST</span></div>
+                <div class="pb-meta">2 effects active</div>
+              </div>
+              <div class="pb-row">
+                <div class="pedal focused">
+                  <div class="pedal-name">DELAY</div>
+                  <div class="pedal-art">CANTOR DUST</div>
+                  <div class="pedal-foot">
+                    <div class="pedal-preset">DIGITAL · 380 ms</div>
+                    <div class="pedal-led"></div>
+                  </div>
+                </div>
+                <div class="pb-link"></div>
+                <div class="pedal">
+                  <div class="pedal-name">REVERB</div>
+                  <div class="pedal-art">LICHTENBERG</div>
+                  <div class="pedal-foot">
+                    <div class="pedal-preset">HALL · 50%</div>
+                    <div class="pedal-led"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-row">
+          <div class="amp-name-block">
+            <div class="amp-name" style="font-size:24px">Delay · <span style="color:var(--amber)">Digital</span></div>
+            <div class="gold-rule"></div>
+          </div>
+        </div>
+
+        <div class="knobs-shell">
+          <div class="vlabel">IN</div>
+          <div class="meter"></div>
+          <div class="knob-row">
+            <div class="knob-col"><div class="lbl">TIME</div><div class="knob"><div class="tick" style="transform:rotate(-40deg)"></div></div><div class="val">380 ms</div></div>
+            <div class="knob-col"><div class="lbl">FEEDBACK</div><div class="knob"><div class="tick" style="transform:rotate(-50deg)"></div></div><div class="val">35%</div></div>
+            <div class="knob-col"><div class="lbl">MIX</div><div class="knob"><div class="tick" style="transform:rotate(-60deg)"></div></div><div class="val">28%</div></div>
+            <div class="divider"></div>
+            <div class="picker">
+              <div class="opt">TAPE</div>
+              <div class="opt active">DIGITAL</div>
+              <div class="opt">PING PONG</div>
+            </div>
+          </div>
+          <div class="meter"></div>
+          <div class="vlabel">OUT</div>
+        </div>
+      </div>
+
+      <div class="footer">V30-Brun-3.nam &nbsp;·&nbsp; reverb HALL on · delay DIGITAL on</div>
+    </section>
+  </div>
+  <div class="frame-note">
+    Same layout, focus moved to <span class="accent">DELAY</span>. Knob row swaps to TIME / FEEDBACK / MIX; REVERB stays visible to the right
+    so the full post chain remains readable at a glance.
+  </div>
+</div>
+
+<div class="legend">
+  <h3>What changed in v5</h3>
+  <p>
+    This pass keeps the accepted v4 UX but tightens the visual language: quieter copy, cleaner cards, stronger baseline resemblance,
+    and a more legible <span class="a">DELAY → REVERB</span> signal flow. The bypass affordance still lives on each pedal card's LED, and
+    AMP-only toggles stay hidden whenever POST is expanded.
+  </p>
+</div>
+
+</body>
+</html>
