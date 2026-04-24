@@ -1791,6 +1791,39 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.eqActive = GetParam(kEQActive)->Bool();
 }
 
+void NeuralAmpModeler::_VolumSaveEffectSettings()
+{
+  mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
+  mVolumEffectSettings.delayTime = GetParam(kDelayTime)->Value();
+  mVolumEffectSettings.delayFeedback = GetParam(kDelayFeedback)->Value();
+  mVolumEffectSettings.delayMix = GetParam(kDelayMix)->Value();
+  mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
+  mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
+  mVolumEffectSettings.reverbMix = GetParam(kReverbMix)->Value();
+  mVolumEffectSettings.reverbDecay = GetParam(kReverbDecay)->Value();
+  mVolumEffectSettings.reverbTone = GetParam(kReverbTone)->Value();
+  mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
+}
+
+void NeuralAmpModeler::_VolumRestoreEffectSettings()
+{
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+  const auto& fx = mVolumEffectSettings;
+  setParam(kDelayActive, fx.delayActive ? 1.0 : 0.0);
+  setParam(kDelayTime, fx.delayTime);
+  setParam(kDelayFeedback, fx.delayFeedback);
+  setParam(kDelayMix, fx.delayMix);
+  setParam(kDelayMode, fx.delayMode);
+  setParam(kReverbActive, fx.reverbActive ? 1.0 : 0.0);
+  setParam(kReverbMix, fx.reverbMix);
+  setParam(kReverbDecay, fx.reverbDecay);
+  setParam(kReverbTone, fx.reverbTone);
+  setParam(kReverbMode, fx.reverbMode);
+}
+
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 {
   const auto& s = mVolumAmpSettings[ampIdx];
@@ -1821,7 +1854,8 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
 {
-  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx);
+  _VolumSaveEffectSettings();
+  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings);
 
   namespace fs = std::filesystem;
   fs::path settingsPath = volum::VolumUserSettingsFilePath();
@@ -1870,7 +1904,8 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     nlohmann::json j;
     in >> j;
 
-    volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx);
+    volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx, &mVolumEffectSettings);
+    _VolumRestoreEffectSettings();
   }
   catch (...)
   {

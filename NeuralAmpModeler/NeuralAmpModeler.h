@@ -22,6 +22,7 @@
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumTriptychState.h"
+#include "VoLumUserSettingsIO.h"
 #endif
 
 const int kNumPresets = 1;
@@ -275,6 +276,8 @@ public:
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
+  void _VolumSaveEffectSettings();
+  void _VolumRestoreEffectSettings();
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
   void _ClearVoLumKnobSelection();
@@ -313,6 +316,7 @@ private:
 
   // Per-amp settings: remembered across amp switches and sessions
   std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
+  volum::VoLumEffectSettings mVolumEffectSettings;
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
