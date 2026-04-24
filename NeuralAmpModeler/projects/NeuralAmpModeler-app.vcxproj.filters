@@ -107,6 +107,12 @@
     <ClCompile Include="..\AudioDSPTools\dsp\NoiseGate.cpp">
       <Filter>dsp</Filter>
     </ClCompile>
+    <ClCompile Include="..\AudioDSPTools\dsp\Reverb.cpp">
+      <Filter>dsp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\AudioDSPTools\dsp\Delay.cpp">
+      <Filter>dsp</Filter>
+    </ClCompile>
     <ClCompile Include="..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp">
       <Filter>dsp</Filter>
     </ClCompile>

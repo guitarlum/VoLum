@@ -59,11 +59,16 @@ private:
   int mPatch = 0;
 };
 
-// VoLum 0.1.x uses the same serialized param layout as NAM 0.7.15.
+inline bool ChunkUses0500SerializedConfig(const ChunkVersion& version)
+{
+  return version >= ChunkVersion(0, 5, 0) && !(version >= ChunkVersion(0, 7, 0));
+}
+
+// VoLum 0.1.x-0.4.x uses the same serialized param layout as NAM 0.7.15.
 inline bool ChunkUses0715SerializedConfig(const ChunkVersion& version)
 {
-  const bool isVolumVersion = version >= ChunkVersion(0, 1, 0) && !(version >= ChunkVersion(0, 7, 0));
-  return version >= ChunkVersion(0, 7, 15) || isVolumVersion;
+  const bool isVolum01to04 = version >= ChunkVersion(0, 1, 0) && !(version >= ChunkVersion(0, 5, 0));
+  return version >= ChunkVersion(0, 7, 15) || isVolum01to04;
 }
 
 } // namespace volum

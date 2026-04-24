@@ -55,3 +55,62 @@ TEST_CASE("lastAmpIdx is clamped to catalog range")
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &lastAmp);
   REQUIRE(lastAmp == 0);
 }
+
+TEST_CASE("Effect settings JSON roundtrip preserves all params")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.delayActive = true;
+  fx.delayTime = 500.0;
+  fx.delayFeedback = 0.6;
+  fx.delayMix = 0.4;
+  fx.delayMode = 2;
+  fx.reverbActive = true;
+  fx.reverbMix = 0.7;
+  fx.reverbDecay = 5.5;
+  fx.reverbTone = 8.0;
+  fx.reverbMode = 1;
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  CHECK(loaded.delayActive == true);
+  CHECK(loaded.delayTime == doctest::Approx(500.0));
+  CHECK(loaded.delayFeedback == doctest::Approx(0.6));
+  CHECK(loaded.delayMix == doctest::Approx(0.4));
+  CHECK(loaded.delayMode == 2);
+  CHECK(loaded.reverbActive == true);
+  CHECK(loaded.reverbMix == doctest::Approx(0.7));
+  CHECK(loaded.reverbDecay == doctest::Approx(5.5));
+  CHECK(loaded.reverbTone == doctest::Approx(8.0));
+  CHECK(loaded.reverbMode == 1);
+}
+
+TEST_CASE("Old settings without effects key loads defaults")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  // j has no "effects" key (nullptr passed)
+
+  volum::VoLumEffectSettings loaded;
+  loaded.delayActive = true;
+  loaded.delayTime = 999.0;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  // Should remain unchanged — no "effects" in JSON
+  CHECK(loaded.delayActive == true);
+  CHECK(loaded.delayTime == doctest::Approx(999.0));
+}
+
+TEST_CASE("Effect settings nullptr is safe")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.delayActive = true;
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+
+  // Pass nullptr for fx — should not crash
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr);
+}
