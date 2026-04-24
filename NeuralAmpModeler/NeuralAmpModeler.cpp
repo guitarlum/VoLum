@@ -161,7 +161,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kReverbMix)->InitDouble("ReverbMix", 0.5, 0.0, 1.0, 0.01);
   GetParam(kReverbDecay)->InitDouble("ReverbDecay", 3.0, 0.1, 10.0, 0.1, "s");
   GetParam(kReverbTone)->InitDouble("ReverbTone", 6.0, 0.0, 10.0, 0.1);
-  GetParam(kReverbMode)->InitEnum("ReverbMode", 2, {"Spring", "Plate", "Hall", "Shimmer"});
+  GetParam(kReverbMode)->InitEnum("ReverbMode", 0, {"Hall", "Plate"});
 
   // Boost (stub)
   GetParam(kBoostActive)->InitBool("BoostActive", false);
@@ -450,7 +450,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(3, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true);
     drawKnobCol(4, "TONE", kReverbTone, "", "REVERB_KNOBS", true);
     IRECT reverbPickerRect(mainCX + 140.f, knobT, mainCX + 240.f, knobT + knobDiam + valueH);
-    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"SPRING", "PLATE", "HALL", "SHIMMER"}), -1, "REVERB_KNOBS");
+    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE"}), -1, "REVERB_KNOBS");
     
     float revSwX = knobX(1) + colW/2.f;
     pGraphics->AttachControl(new NAMSwitchControl(IRECT(revSwX - 32.f, knobT + 14.f, revSwX + 32.f, knobT + 14.f + 34.f), kReverbActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "REVERB_KNOBS");
