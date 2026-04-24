@@ -122,3 +122,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 04/18/2026 - v0.4.1 VoLum release. See GitHub release notes for included changes.
 04/19/2026 - VoLum: Standalone (Windows ASIO) - hardening of audio device init: probe the ASIO device only once (inId == outId), clear input/output buffer-pointer lists between InitAudio calls, and defensively clamp active channel offsets in the audio callback. Helps mitigate heap-corruption symptoms (0xc0000374) seen on systems with multiple/stale ASIO drivers registered (real-world repro tracked down to a stale Steinberg ASIO install conflicting with the active RME driver).
+
+04/24/2026 - v0.4.2 VoLum release. See GitHub release notes for included changes.
