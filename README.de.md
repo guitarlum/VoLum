@@ -12,6 +12,9 @@ Ein Gitarren-Amp-Sammlungsspieler auf Basis von [Neural Amp Modeler](https://git
 
 - **14 mitgelieferte Amps** mit 4 Speaker-Modi und mehreren Gain-Stufen pro Amp (insgesamt ~224 Profile)
 - **Dark-Theme-Oberfläche** mit Amp-Browser in der Seitenleiste, Speaker-Tasten, Channel-Stepper und gruppierten Reglern
+- **Delay-Effekt** — Tape-, Digital- und Ping-Pong-Modi mit Time-, Feedback- und Mix-Reglern
+- **Reverb-Effekt** — Hall (8-Zeilen-FDN) und Plate (Dattorro Allpass-Loop) mit Decay-, Tone- und Mix-Reglern
+- **POST-Pedalboard-Ansicht** — Klick auf den POST-Streifen zeigt Delay- und Reverb-Karten mit prozeduraler Fraktal-Kunst und Live-Preset-Infos
 - **Einstellungen pro Amp** — Regler, Schalter, Speaker-Modus und Kanal werden pro Amp gespeichert und beim nächsten Start wiederhergestellt
 - **Schnelles Amp-Wechseln** — Modelle laden im Hintergrund; ein bereits geladener Amp ist beim Zurückwechseln sofort da
 - **Tastenkürzel** — Hoch/Runter: Amp wechseln; Links/Rechts: Kanal wechseln; Klick auf einen Regler für Feineinstellung per Tastatur
