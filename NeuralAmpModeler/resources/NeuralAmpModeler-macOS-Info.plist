@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>VoLum</string>
 	<key>CFBundleGetInfoString</key>
-	<string>VoLum v0.4.2 Copyright 2026 Lum</string>
+	<string>VoLum v0.6.0 Copyright 2026 Lum</string>
 	<key>CFBundleIconFile</key>
 	<string>icons/VoLum.icns</string>
 	<key>CFBundleIdentifier</key>
@@ -19,11 +19,11 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.2</string>
+	<string>0.6.0</string>
 	<key>CFBundleSignature</key>
 	<string>VoLm</string>
 	<key>CFBundleVersion</key>
-	<string>0.4.2</string>
+	<string>0.6.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSApplicationCategoryType</key>
