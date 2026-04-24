@@ -388,6 +388,8 @@
     <ClCompile Include="..\..\AudioDSPTools\dsp\dsp.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\ImpulseResponse.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\NoiseGate.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\Delay.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\NeuralAmpModeler.cpp" />
