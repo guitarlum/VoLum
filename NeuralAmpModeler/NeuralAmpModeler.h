@@ -2,6 +2,8 @@
 
 #include "../AudioDSPTools/dsp/ImpulseResponse.h"
 #include "../AudioDSPTools/dsp/NoiseGate.h"
+#include "../AudioDSPTools/dsp/Delay.h"
+#include "../AudioDSPTools/dsp/Reverb.h"
 #include "../AudioDSPTools/dsp/dsp.h"
 #include "../AudioDSPTools/dsp/wav.h"
 #include "../AudioDSPTools/dsp/ResamplingContainer/ResamplingContainer.h"
@@ -19,6 +21,8 @@
 
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumTriptychState.h"
+#include "VoLumUserSettingsIO.h"
 #endif
 
 const int kNumPresets = 1;
@@ -48,6 +52,23 @@ enum EParams
   kNoiseGateActive,
   kEQActive,
   kIRToggle,
+  // Delay (POST)
+  kDelayActive,
+  kDelayTime,
+  kDelayFeedback,
+  kDelayMix,
+  kDelayMode,
+  // Reverb (POST)
+  kReverbActive,
+  kReverbMix,
+  kReverbDecay,
+  kReverbTone,
+  kReverbMode,
+  // Boost (PRE - stub for future)
+  kBoostActive,
+  kBoostDrive,
+  kBoostTone,
+  kBoostLevel,
   // Input calibration
   kCalibrateInput,
   kInputCalibrationLevel,
@@ -77,6 +98,14 @@ enum ECtrlTags
   kCtrlTagVoLumFooter,
   kCtrlTagVoLumExactEntry,
   kCtrlTagVoLumChannelStep,
+  kCtrlTagVoLumTriptych,
+  kCtrlTagVoLumBoostCard,
+  kCtrlTagVoLumDelayCard,
+  kCtrlTagVoLumReverbCard,
+  kCtrlTagVoLumChainConnector,
+  kCtrlTagVoLumSubRowText,
+  kCtrlTagVoLumNoiseGate,
+  kCtrlTagVoLumEQ,
 #endif
   kNumCtrlTags
 };
@@ -247,6 +276,8 @@ public:
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
+  void _VolumSaveEffectSettings();
+  void _VolumRestoreEffectSettings();
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
   void _ClearVoLumKnobSelection();
@@ -255,9 +286,14 @@ public:
   std::string _GetVoLumKnobHintText(int paramIdx) const;
   void _SyncVoLumExactEntry();
   void _HideVoLumExactEntry();
+  void _HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide);
+  void _UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx = nullptr);
 
 private:
   friend class NAMKnobControl;
+
+  EVoLumSection mVolumExpandedSection = EVoLumSection::AMP;
+  EVoLumEffectFocus mVolumFocusedEffect = EVoLumEffectFocus::AMP;
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
@@ -280,6 +316,7 @@ private:
 
   // Per-amp settings: remembered across amp switches and sessions
   std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
+  volum::VoLumEffectSettings mVolumEffectSettings;
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
@@ -342,6 +379,8 @@ private:
   // Noise gates
   dsp::noise_gate::Trigger mNoiseGateTrigger;
   dsp::noise_gate::Gain mNoiseGateGain;
+  dsp::effect::Delay mDelay;
+  dsp::effect::Reverb mReverb;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
   // And the IR
