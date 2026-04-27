@@ -13,6 +13,7 @@ This is the build and architecture reference for contributors. For download and 
 | **Channel switching**   | N/A                                       | Discrete gain-stage stepper per amp+speaker combo                                                               |
 | **Per-amp settings**    | N/A                                       | All knobs, toggles, speaker & channel remembered per amp                                                        |
 | **Session persistence** | DAW project only                          | Settings saved to user profile JSON, restored on next launch; VST3 also serializes per-amp bank in plugin state |
+| **Practice tools**      | N/A                                       | Built-in chromatic tuner and metronome in standalone and VST3                                                   |
 | **Model loading**       | Blocks UI                                 | Background thread + per-amp DSP cache                                                                           |
 | **UI**                  | 600x400, file-browser focused             | 900x600 dark theme, amp gallery sidebar, procedural hero art, grouped knobs                                     |
 
@@ -118,6 +119,8 @@ Each amp x 4 speaker modes x channels = ~224 `.nam` files total.
 | `VoLumAmpeteCatalog.h`   | Amp metadata (folder names, display names, speaker prefixes)                            |
 | `VoLumPaths.h`           | Rig directory discovery, channel file scanning, settings path                           |
 | `VoLumControls.h`        | Custom iPlug2 UI controls (sidebar, knobs, speaker buttons, channel stepper)            |
+| `VoLumTunerDSP.h`        | Chromatic tuner pitch detection and smoothing                                            |
+| `VoLumMetronomeDSP.h`    | Sample-accurate metronome click generator and accent patterns                           |
 | `NeuralAmpModeler.h/cpp` | Plugin class with VoLum state, layout, model loading, per-amp settings                  |
 | `Unserialization.cpp`    | Version-aware state deserialization (per-amp settings bank)                             |
 

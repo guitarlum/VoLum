@@ -64,6 +64,11 @@ inline bool ChunkUses0500SerializedConfig(const ChunkVersion& version)
   return version >= ChunkVersion(0, 5, 0) && !(version >= ChunkVersion(0, 6, 0));
 }
 
+inline bool ChunkUses0700SerializedConfig(const ChunkVersion& version)
+{
+  return version >= ChunkVersion(0, 7, 0) && !(version >= ChunkVersion(0, 7, 9));
+}
+
 inline bool ChunkUses0600SerializedConfig(const ChunkVersion& version)
 {
   return version >= ChunkVersion(0, 6, 0) && !(version >= ChunkVersion(0, 7, 0));

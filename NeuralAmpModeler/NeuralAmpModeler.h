@@ -23,6 +23,8 @@
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumTriptychState.h"
 #include "VoLumUserSettingsIO.h"
+#include "VoLumTunerDSP.h"
+#include "VoLumMetronomeDSP.h"
 #endif
 
 const int kNumPresets = 1;
@@ -108,6 +110,9 @@ enum ECtrlTags
   kCtrlTagVoLumSubRowText,
   kCtrlTagVoLumNoiseGate,
   kCtrlTagVoLumEQ,
+  kCtrlTagVoLumTuner,
+  kCtrlTagVoLumMetronome,
+  kCtrlTagVoLumMetronomeButton,
 #endif
   kNumCtrlTags
 };
@@ -294,6 +299,8 @@ public:
   void _HideVoLumExactEntry();
   void _HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide);
   void _UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx = nullptr);
+  void _ToggleVoLumTuner();
+  void _ToggleVoLumMetronomePanel();
 
 private:
   friend class NAMKnobControl;
@@ -323,6 +330,10 @@ private:
   // Per-amp settings: remembered across amp switches and sessions
   std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
   volum::VoLumEffectSettings mVolumEffectSettings;
+
+  // Tuner & Metronome DSP
+  volum::TunerDSP mTunerDSP;
+  volum::MetronomeDSP mMetronomeDSP;
 #endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
