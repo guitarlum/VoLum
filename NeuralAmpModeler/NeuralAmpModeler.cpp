@@ -172,11 +172,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kBoostLevel)->InitDouble("BoostLevel", 0.0, -20.0, 20.0, 0.1, "dB");
 
   GetParam(kVoLumAmpeteRig)
-    ->InitEnum("AmpeteRig", 0,
-      {volum::kAmpeteLabels[0], volum::kAmpeteLabels[1], volum::kAmpeteLabels[2], volum::kAmpeteLabels[3],
-       volum::kAmpeteLabels[4], volum::kAmpeteLabels[5], volum::kAmpeteLabels[6], volum::kAmpeteLabels[7],
-       volum::kAmpeteLabels[8], volum::kAmpeteLabels[9], volum::kAmpeteLabels[10], volum::kAmpeteLabels[11],
-       volum::kAmpeteLabels[12], volum::kAmpeteLabels[13], volum::kAmpeteLabels[14], volum::kAmpeteLabels[15]});
+    ->InitEnum("RigFile", 0,
+      {volum::kAmpeteFiles[0], volum::kAmpeteFiles[1], volum::kAmpeteFiles[2], volum::kAmpeteFiles[3],
+       volum::kAmpeteFiles[4], volum::kAmpeteFiles[5], volum::kAmpeteFiles[6], volum::kAmpeteFiles[7],
+       volum::kAmpeteFiles[8], volum::kAmpeteFiles[9], volum::kAmpeteFiles[10], volum::kAmpeteFiles[11],
+       volum::kAmpeteFiles[12], volum::kAmpeteFiles[13], volum::kAmpeteFiles[14], volum::kAmpeteFiles[15]});
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
@@ -526,14 +526,33 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     _UpdateVoLumLayout(pGraphics);
 
-    // Settings gear button (top-right of main panel)
+    // Toolbar buttons (top-right of main panel): Tuner | Metronome | Gear
     {
       const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
+      const auto tunerSVG = pGraphics->LoadSVG(TUNER_FN);
+      const auto metronomeSVG = pGraphics->LoadSVG(METRONOME_FN);
       const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
       const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
       const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
 
       const IRECT gearArea(mainR - 44.f, b.T + 14.f, mainR - 18.f, b.T + 40.f);
+      const IRECT metronomeArea(mainR - 80.f, b.T + 14.f, mainR - 54.f, b.T + 40.f);
+      const IRECT tunerArea(mainR - 116.f, b.T + 14.f, mainR - 90.f, b.T + 40.f);
+
+      // Tuner button
+      auto* pPlugin = this;
+      pGraphics->AttachControl(new NAMCircleButtonControl(
+        tunerArea,
+        [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); },
+        tunerSVG));
+
+      // Metronome button
+      pGraphics->AttachControl(new VoLumMetronomeButtonControl(
+        metronomeArea,
+        [pPlugin](IControl*) { pPlugin->_ToggleVoLumMetronomePanel(); },
+        metronomeSVG), kCtrlTagVoLumMetronomeButton);
+
+      // Gear button
       pGraphics->AttachControl(new NAMCircleButtonControl(
         gearArea,
         [pGraphics](IControl* pCaller) {
@@ -546,6 +565,27 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                    crossSVG, volumSettingsStyle, volumSettingsRadioStyle),
                         kCtrlTagSettingsBox)
         ->Hide(true);
+
+      // Tuner overlay (on top of everything)
+      {
+        auto* tunerCtrl = new VoLumTunerControl(b);
+        tunerCtrl->SetDismissAction([pPlugin]() { pPlugin->mTunerDSP.SetActive(false); });
+        pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
+      }
+
+      // Metronome config overlay
+      {
+        auto* metCtrl = new VoLumMetronomeControl(b);
+        metCtrl->mOnActiveChanged = [pPlugin](bool active) {
+          pPlugin->mMetronomeDSP.SetActive(active);
+          if (auto* btn = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumMetronomeButton))
+            btn->As<VoLumMetronomeButtonControl>()->SetActive(active);
+        };
+        metCtrl->mOnBPMChanged = [pPlugin](float bpm) { pPlugin->mMetronomeDSP.SetBPM(bpm); };
+        metCtrl->mOnVolumeChanged = [pPlugin](float vol) { pPlugin->mMetronomeDSP.SetVolume(vol); };
+        metCtrl->mOnTimeSigChanged = [pPlugin](volum::MetronomeTimeSig sig) { pPlugin->mMetronomeDSP.SetTimeSig(sig); };
+        pGraphics->AttachControl(metCtrl, kCtrlTagVoLumMetronome)->Hide(true);
+      }
     }
 
 #if defined(APP_API) && VOLUM_OPEN_SETTINGS_AT_LAUNCH
@@ -827,6 +867,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   _PrepareBuffers(numChannelsInternal, numFrames);
   // Input is collapsed to mono in preparation for the NAM.
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
+
+#if VOLUM_AMPETE_PRODUCT
+  // Tuner reads from mono input (post-gain, pre-NAM)
+  mTunerDSP.Process(mInputPointers[0], nFrames);
+#endif
   _ApplyDSPStaging();
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
   const bool toneStackActive = GetParam(kEQActive)->Value();
@@ -908,6 +953,18 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
       std::memcpy(outputs[c], postPointers[c], numFrames * sizeof(iplug::sample));
   }
 
+#if VOLUM_AMPETE_PRODUCT
+  // Metronome: sum click into output
+  mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
+
+  // Tuner active: silence output so player can tune without hearing amp
+  if (mTunerDSP.IsActive())
+  {
+    for (size_t c = 0; c < numChannelsExternalOut; c++)
+      std::memset(outputs[c], 0, numFrames * sizeof(iplug::sample));
+  }
+#endif
+
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
   _UpdateMeters(mInputPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
@@ -930,6 +987,10 @@ void NeuralAmpModeler::OnReset()
   mToneStack->Reset(sampleRate, maxBlockSize);
   mDelay.Reset();
   mReverb.Reset();
+#if VOLUM_AMPETE_PRODUCT
+  mTunerDSP.Reset(sampleRate);
+  mMetronomeDSP.Reset(sampleRate);
+#endif
   _UpdateLatency();
 }
 
@@ -939,6 +1000,16 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
 
 #if VOLUM_AMPETE_PRODUCT
+  // Push tuner result to UI
+  if (mTunerDSP.IsActive())
+  {
+    if (auto* pGfx = GetUI())
+    {
+      if (auto* tuner = pGfx->GetControlWithTag(kCtrlTagVoLumTuner))
+        tuner->As<VoLumTunerControl>()->SetResult(mTunerDSP.GetResult());
+    }
+  }
+
   if (mVolumNeedsLoad.load() && !mVolumIsLoading.load())
   {
     mVolumNeedsLoad.store(false);
@@ -1841,6 +1912,44 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector)) {
         chain->Hide(!postExpanded);
       }
+    }
+  }
+}
+
+void NeuralAmpModeler::_ToggleVoLumTuner()
+{
+  if (auto* pGfx = GetUI())
+  {
+    auto* tuner = pGfx->GetControlWithTag(kCtrlTagVoLumTuner)->As<VoLumTunerControl>();
+    if (tuner->IsHidden())
+    {
+      mTunerDSP.SetActive(true);
+      tuner->Show();
+    }
+    else
+    {
+      mTunerDSP.SetActive(false);
+      tuner->Hide(true);
+    }
+  }
+}
+
+void NeuralAmpModeler::_ToggleVoLumMetronomePanel()
+{
+  if (auto* pGfx = GetUI())
+  {
+    auto* panel = pGfx->GetControlWithTag(kCtrlTagVoLumMetronome)->As<VoLumMetronomeControl>();
+    if (panel->IsHidden())
+    {
+      panel->Show(
+        mMetronomeDSP.IsActive(),
+        mMetronomeDSP.GetBPM(),
+        mMetronomeDSP.GetVolume(),
+        mMetronomeDSP.GetTimeSig());
+    }
+    else
+    {
+      panel->Hide(true);
     }
   }
 }
