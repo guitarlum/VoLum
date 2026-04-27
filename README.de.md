@@ -15,6 +15,8 @@ Ein Gitarren-Amp-Sammlungsspieler auf Basis von [Neural Amp Modeler](https://git
 - **Delay-Effekt** — Tape-, Digital- und Ping-Pong-Modi mit Time-, Feedback- und Mix-Reglern
 - **Reverb-Effekt** — Hall (8-Zeilen-FDN) und Plate (Dattorro Allpass-Loop) mit Decay-, Tone- und Mix-Reglern
 - **POST-Pedalboard-Ansicht** — Klick auf den POST-Streifen zeigt Delay- und Reverb-Karten mit prozeduraler Fraktal-Kunst und Live-Preset-Infos
+- **Eingebauter Tuner** — chromatischer Tuner mit stabiler Cent-Anzeige; schaltet den Ausgang beim Stimmen stumm
+- **Eingebautes Metronom** — einstellbare BPM, Lautstärke und Modi `1/4`, `2/4`, `3/4`, `4/4`, `6/8`
 - **Einstellungen pro Amp** — Regler, Schalter, Speaker-Modus und Kanal werden pro Amp gespeichert und beim nächsten Start wiederhergestellt
 - **Schnelles Amp-Wechseln** — Modelle laden im Hintergrund; ein bereits geladener Amp ist beim Zurückwechseln sofort da
 - **Tastenkürzel** — Hoch/Runter: Amp wechseln; Links/Rechts: Kanal wechseln; Klick auf einen Regler für Feineinstellung per Tastatur
@@ -181,6 +183,13 @@ Die Einstellungen bleiben für Standalone und VST3 über Sitzungen hinweg erhalt
 - `Enter` für direkte Zahleingabe
 - `Entf` oder `Rücktaste` setzt den gewählten Regler auf den Standardwert
 - `Esc` beendet den Regler-Tastaturmodus; Pfeiltasten steuern wieder Amp/Kanal
+
+## Tuner und Metronom
+
+Die Symbole für Tuner und Metronom sitzen oben rechts, links neben den Einstellungen.
+
+- **Tuner:** öffnet einen chromatischen Tuner. Solange er geöffnet ist, schaltet VoLum den Ausgang stumm. Klick außerhalb des Fensters oder `Esc` schließt den Tuner.
+- **Metronom:** öffnet die Metronom-Steuerung. Ein-/ausschalten, BPM mit `+`/`-` oder Klick auf den BPM-Wert und Tippen setzen, Lautstärke einstellen und zwischen `1/4`, `2/4`, `3/4`, `4/4` und `6/8` wählen.
 
 ## Aus dem Quellcode bauen
 
