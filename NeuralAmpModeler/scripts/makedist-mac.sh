@@ -72,8 +72,9 @@ if [ "$FAST_DEV" == "1" ]; then
   DMG_FORMAT=UDRW
 fi
 
-VERSION=`echo | grep PLUG_VERSION_HEX config.h`
-VERSION=${VERSION//\#define PLUG_VERSION_HEX }
+# Use last matching line so duplicate defines cannot desync archive names vs get_archive_name.py / CI verify.
+VERSION_LINE=$(grep '^#define PLUG_VERSION_HEX' config.h | tail -n 1)
+VERSION=${VERSION_LINE//#define PLUG_VERSION_HEX }
 VERSION=${VERSION//\'}
 MAJOR_VERSION=$(($VERSION & 0xFFFF0000))
 MAJOR_VERSION=$(($MAJOR_VERSION >> 16))
@@ -83,8 +84,8 @@ BUG_FIX=$(($VERSION & 0x000000FF))
 
 FULL_VERSION=$MAJOR_VERSION"."$MINOR_VERSION"."$BUG_FIX
 
-PLUGIN_NAME=`echo | grep BUNDLE_NAME config.h`
-PLUGIN_NAME=${PLUGIN_NAME//\#define BUNDLE_NAME }
+PLUGIN_LINE=$(grep '^#define BUNDLE_NAME' config.h | tail -n 1)
+PLUGIN_NAME=${PLUGIN_LINE//#define BUNDLE_NAME }
 PLUGIN_NAME=${PLUGIN_NAME//\"}
 
 # Project/config files keep the upstream "NeuralAmpModeler" prefix even though

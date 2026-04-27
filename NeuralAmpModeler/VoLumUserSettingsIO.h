@@ -19,7 +19,32 @@
 namespace volum
 {
 
-inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx)
+struct DelayModeSnapshot {
+  double time = 380.0;
+  double feedback = 0.35;
+  double mix = 0.28;
+};
+
+struct ReverbModeSnapshot {
+  double mix = 0.3;
+  double decay = 3.0;
+  double tone = 4.5;
+  double preDelay = 20.0;
+  double shimmer = 0.5;
+};
+
+struct VoLumEffectSettings {
+  bool reverbActive = false;
+  int reverbMode = 0;
+  ReverbModeSnapshot reverbModes[3];
+
+  bool delayActive = false;
+  int delayMode = 1;
+  DelayModeSnapshot delayModes[3];
+};
+
+inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
+                                               const VoLumEffectSettings* fx = nullptr)
 {
   nlohmann::json j;
   j["version"] = 1;
@@ -43,46 +68,131 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     amps[kAmps[i].folderName] = a;
   }
   j["amps"] = amps;
+
+  if (fx) {
+    nlohmann::json e;
+    e["delayActive"] = fx->delayActive;
+    e["delayMode"] = fx->delayMode;
+    e["reverbActive"] = fx->reverbActive;
+    e["reverbMode"] = fx->reverbMode;
+    e["delayModes"] = nlohmann::json::array();
+    for (const auto& mode : fx->delayModes)
+    {
+      e["delayModes"].push_back({
+        {"time", mode.time},
+        {"feedback", mode.feedback},
+        {"mix", mode.mix},
+      });
+    }
+    e["reverbModes"] = nlohmann::json::array();
+    for (const auto& mode : fx->reverbModes)
+    {
+      e["reverbModes"].push_back({
+        {"mix", mode.mix},
+        {"decay", mode.decay},
+        {"tone", mode.tone},
+        {"preDelay", mode.preDelay},
+        {"shimmer", mode.shimmer},
+      });
+    }
+    j["effects"] = e;
+  }
+
   return j;
 }
 
 inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings* ampSettings, int ampCount,
-                                      int* lastAmpIdx)
+                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr)
 {
   if (lastAmpIdx && j.contains("lastAmpIdx"))
     *lastAmpIdx = std::clamp(j["lastAmpIdx"].get<int>(), 0, ampCount - 1);
 
-  if (!j.contains("amps") || !j["amps"].is_object())
-    return;
-
-  for (int i = 0; i < ampCount; ++i)
+  if (j.contains("amps") && j["amps"].is_object())
   {
-    const char* key = kAmps[i].folderName;
-    if (!j["amps"].contains(key))
-      continue;
+    for (int i = 0; i < ampCount; ++i)
+    {
+      const char* key = kAmps[i].folderName;
+      if (!j["amps"].contains(key))
+        continue;
 
-    const auto& a = j["amps"][key];
-    auto& s = ampSettings[i];
-    if (a.contains("speaker"))
-      s.speakerIdx = a["speaker"].get<int>();
-    if (a.contains("channel"))
-      s.channelIdx = a["channel"].get<int>();
-    if (a.contains("input"))
-      s.inputLevel = a["input"].get<double>();
-    if (a.contains("gate"))
-      s.gateThreshold = a["gate"].get<double>();
-    if (a.contains("bass"))
-      s.toneBass = a["bass"].get<double>();
-    if (a.contains("mid"))
-      s.toneMid = a["mid"].get<double>();
-    if (a.contains("treble"))
-      s.toneTreble = a["treble"].get<double>();
-    if (a.contains("output"))
-      s.outputLevel = a["output"].get<double>();
-    if (a.contains("noiseGate"))
-      s.noiseGateActive = a["noiseGate"].get<bool>();
-    if (a.contains("eq"))
-      s.eqActive = a["eq"].get<bool>();
+      const auto& a = j["amps"][key];
+      auto& s = ampSettings[i];
+      if (a.contains("speaker"))
+        s.speakerIdx = a["speaker"].get<int>();
+      if (a.contains("channel"))
+        s.channelIdx = a["channel"].get<int>();
+      if (a.contains("input"))
+        s.inputLevel = a["input"].get<double>();
+      if (a.contains("gate"))
+        s.gateThreshold = a["gate"].get<double>();
+      if (a.contains("bass"))
+        s.toneBass = a["bass"].get<double>();
+      if (a.contains("mid"))
+        s.toneMid = a["mid"].get<double>();
+      if (a.contains("treble"))
+        s.toneTreble = a["treble"].get<double>();
+      if (a.contains("output"))
+        s.outputLevel = a["output"].get<double>();
+      if (a.contains("noiseGate"))
+        s.noiseGateActive = a["noiseGate"].get<bool>();
+      if (a.contains("eq"))
+        s.eqActive = a["eq"].get<bool>();
+    }
+  }
+
+  if (fx && j.contains("effects") && j["effects"].is_object())
+  {
+    const auto& e = j["effects"];
+    if (e.contains("delayActive")) fx->delayActive = e["delayActive"].get<bool>();
+    if (e.contains("delayMode")) fx->delayMode = e["delayMode"].get<int>();
+    if (e.contains("reverbActive")) fx->reverbActive = e["reverbActive"].get<bool>();
+    if (e.contains("reverbMode")) fx->reverbMode = e["reverbMode"].get<int>();
+
+    if (e.contains("delayModes") && e["delayModes"].is_array())
+    {
+      const auto& modes = e["delayModes"];
+      for (int i = 0; i < 3 && i < static_cast<int>(modes.size()); ++i)
+      {
+        const auto& mode = modes[i];
+        if (mode.contains("time")) fx->delayModes[i].time = mode["time"].get<double>();
+        if (mode.contains("feedback")) fx->delayModes[i].feedback = mode["feedback"].get<double>();
+        if (mode.contains("mix")) fx->delayModes[i].mix = mode["mix"].get<double>();
+      }
+    }
+    else
+    {
+      DelayModeSnapshot legacy;
+      if (e.contains("delayTime")) legacy.time = e["delayTime"].get<double>();
+      if (e.contains("delayFeedback")) legacy.feedback = e["delayFeedback"].get<double>();
+      if (e.contains("delayMix")) legacy.mix = e["delayMix"].get<double>();
+      for (auto& mode : fx->delayModes)
+        mode = legacy;
+    }
+
+    if (e.contains("reverbModes") && e["reverbModes"].is_array())
+    {
+      const auto& modes = e["reverbModes"];
+      for (int i = 0; i < 3 && i < static_cast<int>(modes.size()); ++i)
+      {
+        const auto& mode = modes[i];
+        if (mode.contains("mix")) fx->reverbModes[i].mix = mode["mix"].get<double>();
+        if (mode.contains("decay")) fx->reverbModes[i].decay = mode["decay"].get<double>();
+        if (mode.contains("tone")) fx->reverbModes[i].tone = mode["tone"].get<double>();
+        if (mode.contains("preDelay")) fx->reverbModes[i].preDelay = mode["preDelay"].get<double>();
+        if (mode.contains("shimmer")) fx->reverbModes[i].shimmer = mode["shimmer"].get<double>();
+      }
+    }
+    else
+    {
+      ReverbModeSnapshot legacy;
+      if (e.contains("reverbMix")) legacy.mix = e["reverbMix"].get<double>();
+      if (e.contains("reverbDecay")) legacy.decay = e["reverbDecay"].get<double>();
+      if (e.contains("reverbTone")) legacy.tone = e["reverbTone"].get<double>();
+      if (e.contains("reverbPreDelay")) legacy.preDelay = e["reverbPreDelay"].get<double>();
+      if (e.contains("reverbShimmer")) legacy.shimmer = e["reverbShimmer"].get<double>();
+      for (auto& mode : fx->reverbModes)
+        mode = legacy;
+    }
   }
 }
 
