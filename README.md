@@ -10,6 +10,9 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 
 - **14 bundled amps** with 4 speaker modes and multiple gain stages each (~224 profiles total)
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
+- **Delay effect** -- Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix controls
+- **Reverb effect** -- Hall (8-line FDN) and Plate (Dattorro allpass-loop) with Decay, Tone, and Mix controls
+- **POST pedalboard view** -- click the POST strip to expand Delay and Reverb cards with procedural fractal art, live preset summaries, and bypass LEDs
 - **Per-amp settings** -- knobs, toggles, speaker mode, and channel are saved per amp and restored on next launch
 - **Fast amp switching** -- models load on a background thread; switching back to a previously loaded amp is instant
 - **Keyboard shortcuts** -- Up/Down: switch amp; Left/Right: switch channel; click a knob for keyboard fine-tuning
@@ -172,10 +175,10 @@ Settings persist across sessions for both standalone and VST3.
 
 ## Keyboard controls
 
-- With no knob selected: `Up/Down` switches amp, `Left/Right` switches channel
+- With no knob selected: `Up/Down` switches amp, `Left/Right` switches channel (AMP view only)
 - Click a knob to select it for keyboard control
 - Selected knob: `Up/Down` adjusts, `Left/Right` selects the next knob
-- Hold `Shift` for finer `0.1` adjustments
+- Step sizes adapt per parameter: delay time 5ms (1ms with Shift), mix/feedback 5% (1% with Shift), tone knobs 0.5 (0.1 with Shift)
 - Press `Enter` for exact numeric entry
 - Press `Delete` or `Backspace` to reset the selected knob to its default value
 - Press `Esc` to leave knob keyboard mode and return arrows to amp/channel navigation
