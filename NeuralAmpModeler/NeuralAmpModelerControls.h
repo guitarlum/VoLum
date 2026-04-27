@@ -208,17 +208,26 @@ public:
 private:
   double GetKeyboardStep(bool fine) const
   {
-    if (fine)
-      return 0.1;
-
     switch (GetParamIdx())
     {
       case kToneBass:
       case kToneMid:
       case kToneTreble:
-        return 0.5;
+      case kReverbTone:
+      case kBoostTone:
+      case kBoostDrive:
+        return fine ? 0.1 : 0.5;
+      case kDelayTime:
+      case kReverbPreDelay:
+        return fine ? 1.0 : 5.0;
+      case kDelayFeedback:
+      case kDelayMix:
+      case kReverbMix:
+      case kReverbDecay:
+      case kReverbShimmer:
+        return fine ? 0.01 : 0.05;
       default:
-        return 1.0;
+        return fine ? 0.1 : 1.0;
     }
   }
 
@@ -311,6 +320,45 @@ public:
     g.DrawBitmap(mBitmap, r, 0, 0, nullptr);
   }
 };
+
+#if VOLUM_AMPETE_PRODUCT
+class VoLumPowerSwitchControl : public IControl
+{
+public:
+  VoLumPowerSwitchControl(const IRECT& bounds, int paramIdx)
+  : IControl(bounds, paramIdx)
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const bool on = GetValue() > 0.5;
+    const IColor track = on ? VoLumColors::GOLD.WithOpacity(0.35f) : VoLumColors::FRAME;
+    const IColor thumb = on ? VoLumColors::GOLD : VoLumColors::TEXT_DIM;
+    const IColor text = on ? VoLumColors::GOLD : VoLumColors::TEXT_DIM;
+
+    g.DrawText(IText(18.f, text, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "⏻",
+               IRECT(mRECT.L, mRECT.T, mRECT.R, mRECT.T + 18.f));
+
+    const IRECT trackR = IRECT(mRECT.MW() - 6.f, mRECT.T + 22.f, mRECT.MW() + 6.f, mRECT.B - 2.f);
+    g.FillRoundRect(IColor(255, 8, 10, 14), trackR, 6.f);
+    g.DrawRoundRect(track, trackR, 6.f);
+
+    const float cy = on ? trackR.T + 8.f : trackR.B - 8.f;
+    g.FillEllipse(thumb, IRECT(mRECT.MW() - 8.f, cy - 8.f, mRECT.MW() + 8.f, cy + 8.f));
+    if (mMouseIsOver)
+      g.DrawEllipse(VoLumColors::TEXT_BRIGHT, IRECT(mRECT.MW() - 10.f, cy - 10.f, mRECT.MW() + 10.f, cy + 10.f));
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    (void) x;
+    (void) y;
+    (void) mod;
+    SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
+  }
+};
+#endif
 
 class NAMFileNameControl : public IVButtonControl
 {
