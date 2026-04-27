@@ -11,7 +11,7 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 - **14 bundled amps** with 4 speaker modes and multiple gain stages each (~224 profiles total)
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
 - **Delay effect** -- Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix controls
-- **Reverb effect** -- Hall (8-line FDN) and Plate (Dattorro allpass-loop) with Decay, Tone, and Mix controls
+- **Reverb effect** -- Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer controls
 - **POST pedalboard view** -- click the POST strip to expand Delay and Reverb cards with procedural fractal art, live preset summaries, and bypass LEDs
 - **Built-in tuner** -- chromatic tuner overlay with stable cents display; mutes output while tuning
 - **Built-in metronome** -- configurable BPM, volume, and 1/4, 2/4, 3/4, 4/4, 6/8 modes
@@ -191,6 +191,13 @@ Use the tuner and metronome icons in the top-right toolbar, left of Settings.
 
 - **Tuner:** opens a chromatic tuner. While it is open, VoLum mutes outgoing audio so you can tune silently. Click outside the tuner or press `Esc` to close it.
 - **Metronome:** click the metronome icon to open its controls. Enable/disable it, set BPM with the `+`/`-` buttons or by clicking the BPM value and typing, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
+
+## Delay and Reverb
+
+Click the **POST** strip to expand VoLum's pedalboard-style post effects.
+
+- **Delay:** Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix.
+- **Reverb:** Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer. Oktaverb adds a sub-octave shimmer layer for heavier ambient tails.
 
 ## Build from source
 
