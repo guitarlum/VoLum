@@ -287,27 +287,35 @@ inline void DrawSidebarMiniFractal(IGraphics& g, const IRECT& r, int idx, const 
         }
         break;
       }
-      case 14: // Lichtenberg mini (Diezel Herbert) - twin opposing arcs
+      case 14: // Lichtenberg mini (Diezel Herbert) - readable bolt at sidebar size
       {
-        struct Pt { float x, y; };
-        std::vector<Pt> pts;
-        pts.push_back({cx, cy + sz});
-        pts.push_back({cx, cy - sz});
-        unsigned rng = 0xBEEFu;
-        const float step = sz * 0.18f;
-        for (int i = 0; i < 70; i++) {
-          rng = rng * 1664525u + 1013904223u;
-          Pt& parent = pts[rng % pts.size()];
-          rng = rng * 1664525u + 1013904223u;
-          bool fromBottom = (parent.y > cy);
-          float baseAng = fromBottom ? -90.f : 90.f;
-          float jitter = ((float)(rng % 100) / 100.f - 0.5f) * 110.f;
-          float rad = (baseAng + jitter) * 3.14159f / 180.f;
-          Pt next{parent.x + cosf(rad) * step, parent.y + sinf(rad) * step};
-          if (next.x < r.L + 1.f || next.x > r.R - 1.f || next.y < r.T + 1.f || next.y > r.B - 1.f) continue;
-          g.DrawLine(i < 12 ? bright : dim, parent.x, parent.y, next.x, next.y, nullptr, 1.f);
-          pts.push_back(next);
-        }
+        auto drawBolt = [&](float x0, float y0, float x1, float y1, bool flip) {
+          const int steps = 5;
+          float px = x0;
+          float py = y0;
+          for (int i = 1; i <= steps; ++i)
+          {
+            const float t = (float)i / (float)steps;
+            float nx = x0 + (x1 - x0) * t + ((i & 1) ? -1.f : 1.f) * sz * 0.22f * (flip ? -1.f : 1.f);
+            float ny = y0 + (y1 - y0) * t;
+            if (i == steps) { nx = x1; ny = y1; }
+            g.DrawLine(i < 3 ? bright : dim, px, py, nx, ny, nullptr, 1.2f);
+
+            if (i >= 2 && i <= 4)
+            {
+              float bx = nx + (flip ? -1.f : 1.f) * sz * 0.38f;
+              float by = ny + ((i & 1) ? -1.f : 1.f) * sz * 0.18f;
+              if (bx > r.L + 1.f && bx < r.R - 1.f && by > r.T + 1.f && by < r.B - 1.f)
+                g.DrawLine(dim, nx, ny, bx, by, nullptr, 0.8f);
+            }
+
+            px = nx;
+            py = ny;
+          }
+        };
+
+        drawBolt(cx - sz * 0.45f, r.B - 2.f, cx + sz * 0.12f, cy + sz * 0.05f, false);
+        drawBolt(cx + sz * 0.45f, r.T + 2.f, cx - sz * 0.10f, cy - sz * 0.04f, true);
         break;
       }
     }
@@ -733,10 +741,6 @@ inline void DrawHeroFractalArt(IGraphics& g, const IRECT& rect, int ampIdx)
           pts.push_back(next);
         }
 
-        // Highlight the seed points so the ends read as "discharge poles"
-        IColor accent(220, 200, 162, 78);
-        DrawDiamond(g, cx, rect.B - 16.f, 4.f, accent);
-        DrawDiamond(g, cx, rect.T + 16.f, 4.f, accent);
         break;
       }
     }
