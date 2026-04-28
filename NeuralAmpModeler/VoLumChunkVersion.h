@@ -61,7 +61,17 @@ private:
 
 inline bool ChunkUses0500SerializedConfig(const ChunkVersion& version)
 {
-  return version >= ChunkVersion(0, 5, 0) && !(version >= ChunkVersion(0, 7, 0));
+  return version >= ChunkVersion(0, 5, 0) && !(version >= ChunkVersion(0, 6, 0));
+}
+
+inline bool ChunkUses0700SerializedConfig(const ChunkVersion& version)
+{
+  return version >= ChunkVersion(0, 7, 0) && !(version >= ChunkVersion(0, 7, 9));
+}
+
+inline bool ChunkUses0600SerializedConfig(const ChunkVersion& version)
+{
+  return version >= ChunkVersion(0, 6, 0) && !(version >= ChunkVersion(0, 7, 0));
 }
 
 // VoLum 0.1.x-0.4.x uses the same serialized param layout as NAM 0.7.15.

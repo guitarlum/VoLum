@@ -7,7 +7,7 @@ enum EParams {
   kInputLevel = 0, kNoiseGateThreshold, kToneBass, kToneMid, kToneTreble, kOutputLevel,
   kNoiseGateActive, kEQActive, kIRToggle,
   kDelayActive, kDelayTime, kDelayFeedback, kDelayMix, kDelayMode,
-  kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbMode,
+  kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode,
   kBoostActive, kBoostDrive, kBoostTone, kBoostLevel,
   kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig, kNumParams
 };
@@ -37,7 +37,9 @@ TEST_CASE("EParam: reverb params follow delay")
   CHECK(kReverbMix == kReverbActive + 1);
   CHECK(kReverbDecay == kReverbMix + 1);
   CHECK(kReverbTone == kReverbDecay + 1);
-  CHECK(kReverbMode == kReverbTone + 1);
+  CHECK(kReverbPreDelay == kReverbTone + 1);
+  CHECK(kReverbShimmer == kReverbPreDelay + 1);
+  CHECK(kReverbMode == kReverbShimmer + 1);
 }
 
 TEST_CASE("EParam: boost params follow reverb")
@@ -59,5 +61,5 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
 
 TEST_CASE("EParam: total count is stable")
 {
-  CHECK(kNumParams == 27);
+  CHECK(kNumParams == 29);
 }

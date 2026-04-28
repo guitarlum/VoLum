@@ -1,0 +1,10 @@
+<svg width="500" height="500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tuner gauge icon -->
+  <path d="M110,290 A140,140 0 0 1 390,290" fill="none" stroke="white" stroke-width="34" stroke-linecap="round"/>
+  <line x1="250" y1="290" x2="250" y2="150" stroke="white" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="250" cy="290" r="28" fill="white"/>
+  <line x1="165" y1="250" x2="135" y2="230" stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.72"/>
+  <line x1="335" y1="250" x2="365" y2="230" stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.72"/>
+  <path d="M155,355 H345" stroke="white" stroke-width="28" stroke-linecap="round"/>
+  <path d="M210,405 H290" stroke="white" stroke-width="28" stroke-linecap="round"/>
+</svg>

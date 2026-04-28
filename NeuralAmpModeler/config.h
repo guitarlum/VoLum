@@ -1,7 +1,7 @@
 #define PLUG_NAME "VoLum"
 #define PLUG_MFR "Lum"
-#define PLUG_VERSION_HEX 0x00000600
-#define PLUG_VERSION_STR "0.6.0"
+#define PLUG_VERSION_HEX 0x00000700
+#define PLUG_VERSION_STR "0.7.0"
 #define PLUG_UNIQUE_ID 'VoLm'
 #define PLUG_MFR_ID 'Lum0'
 #define PLUG_URL_STR "https://github.com/guitarlum/VoLum"
@@ -72,6 +72,8 @@
 #define JOSEFINSANS_BOLD_HEAVY_FN "JosefinSans-Bold.ttf"
 
 #define GEAR_FN "Gear.svg"
+#define TUNER_FN "Tuner.svg"
+#define METRONOME_FN "Metronome.svg"
 #define FILE_FN "File.svg"
 #define CLOSE_BUTTON_FN "Cross.svg"
 #define LEFT_ARROW_FN "ArrowLeft.svg"
