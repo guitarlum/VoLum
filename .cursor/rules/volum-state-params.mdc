@@ -1,0 +1,39 @@
+---
+description: VoLum parameter order, preset migration, and state persistence rules
+globs:
+  - NeuralAmpModeler/NeuralAmpModeler.cpp
+  - NeuralAmpModeler/NeuralAmpModeler.h
+  - NeuralAmpModeler/Unserialization.cpp
+  - NeuralAmpModeler/VoLumChunkVersion.h
+  - NeuralAmpModeler/VoLumUserSettingsIO.h
+  - NeuralAmpModeler/tests/test_*.cpp
+alwaysApply: false
+---
+
+# VoLum State And Params
+
+Parameter rules:
+
+- `EParams` order is serialization-sensitive.
+- New params need stable `GetName()` strings.
+- Do not reorder params or rename stable names without updating migration code.
+- Keep `test_eparam_order.cpp` and `test_keyboard_steps.cpp` in sync with param changes.
+
+Preset/session migration:
+
+- Add a new version/chunk branch in `Unserialization.cpp`; never rewrite old readers.
+- VoLum `0.1.x` intentionally routes through the NAM `0.7.15` reader.
+- VoLum `0.6.0` adds `ReverbPreDelay` and `ReverbShimmer`; preserve those migration paths.
+- If serialization behavior changes, add/update `test_volum_chunk_version.cpp`.
+
+Settings persistence:
+
+- Per-amp settings write to user profile, not rigs:
+  - Windows: `%LOCALAPPDATA%\VoLum\volum-settings.json`
+  - macOS: `~/Library/Application Support/VoLum/volum-settings.json`
+- `<rigsRoot>/volum-settings.json` remains a legacy read fallback.
+
+Verification:
+
+- Run `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`.
+- Add focused doctests for new DSP/state behavior before calling work done.

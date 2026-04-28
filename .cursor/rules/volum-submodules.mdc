@@ -1,0 +1,30 @@
+---
+description: VoLum submodule and vendored dependency boundaries
+globs:
+  - .gitmodules
+  - AudioDSPTools/**
+  - iPlug2/**
+  - NeuralAmpModelerCore/**
+  - eigen/**
+alwaysApply: false
+---
+
+# VoLum Submodules
+
+Boundaries:
+
+- Treat `iPlug2/`, `NeuralAmpModelerCore/`, and `eigen/` as vendored unless the task explicitly targets them.
+- `AudioDSPTools/` is also a submodule, but VoLum may require DSP changes there.
+- Expected local dirt: `iPlug2` can be dirty from the Windows ASIO patch. Do not reset or commit it unless asked.
+
+When changing submodules:
+
+- Verify the desired commit exists on the remote branch/fork CI can fetch.
+- Commit the superproject pointer update separately or call it out clearly.
+- For DSP changes in `AudioDSPTools/dsp/`, add/update VoLum tests in `NeuralAmpModeler/tests/`.
+
+Before commits:
+
+- Run `git status --short --branch`.
+- Do not include unrelated submodule dirt.
+- Prefer explicit path staging over `git add .`.
