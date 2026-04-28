@@ -46,3 +46,10 @@ alwaysApply: true
 ## Scope discipline
 
 - Touch only files needed for the request. Do not add docs/README/ADRs unless asked.
+
+## Branching
+
+- `main` is the released branch, `dev` is the integration branch.
+- After every release lands on `main`, merge `main` into `dev` and push.
+- New feature work branches off the latest `dev` as `feature/<short-topic>`; merge feature back into `dev` once verified.
+- Only promote `dev` to `main` as part of a release (see `release-manager` skill / `volum-release-packaging` rule).
