@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Herbert Hero Art Preview</title>
+<style>
+  body {
+    margin: 0;
+    background: #1a1d22;
+    color: #e0d8b8;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  header {
+    padding: 24px 32px 8px;
+    border-bottom: 1px solid #2c3138;
+  }
+  header h1 { margin: 0 0 4px; font-weight: 400; letter-spacing: .04em; color: #c8a557; }
+  header p  { margin: 0; opacity: .7; max-width: 800px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    padding: 24px 32px;
+  }
+  .card {
+    background: #20242b;
+    border: 1px solid #2c3138;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card h2 { margin: 0; padding: 12px 16px; font-size: 16px; font-weight: 500; color: #c8a557; border-bottom: 1px solid #2c3138; }
+  .card .meta { padding: 4px 16px 8px; font-size: 13px; opacity: .7; border-bottom: 1px solid #2c3138; }
+  canvas {
+    width: 100%;
+    height: 280px;
+    display: block;
+    background: #15171b;
+  }
+  .desc { padding: 12px 16px; font-size: 13px; line-height: 1.45; opacity: .85; }
+  footer { padding: 16px 32px 32px; opacity: .55; font-size: 12px; }
+  code { background: #2c3138; padding: 1px 6px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Diezel Herbert Mk1 - Hero Art Candidates</h1>
+  <p>Three options for the Herbert hero panel. Algorithms are ported from <code>NeuralAmpModeler/VoLumFractalArt.h</code>; same color palette and tone as the existing 14 amps.</p>
+</header>
+
+<section class="grid">
+  <div class="card">
+    <h2>A: Lichtenberg</h2>
+    <div class="meta">High-voltage discharge / branching electric</div>
+    <canvas id="cA" width="600" height="420"></canvas>
+    <div class="desc">Existing dead-code variant (<code>case 15</code>). Branching cascade upward from base, evokes the 100W Diezel slam: high voltage, unpredictable, aggressive. Fits "Mid Cut on, gain at max".</div>
+  </div>
+  <div class="card">
+    <h2>B: Logistic Bifurcation</h2>
+    <div class="meta">Mathematical chaos cascade</div>
+    <canvas id="cB" width="600" height="420"></canvas>
+    <div class="desc">Existing dead-code variant (<code>case 14</code>). Sharp bifurcation tree, the canonical "order into chaos" plot. Implies the 4 channels splitting into broader textures. Cleanest geometry of the three.</div>
+  </div>
+  <div class="card">
+    <h2>C: Vortex Resonator (new)</h2>
+    <div class="meta">Concentric rings + logarithmic spiral</div>
+    <canvas id="cC" width="600" height="420"></canvas>
+    <div class="desc">New Herbert-specific variant. Logarithmic spiral inside layered resonant rings, like a transformer / speaker-cone cross section. Mechanical and German-precise; differs visibly from anything in the catalog.</div>
+  </div>
+</section>
+
+<footer>
+  Tip: open this file in a browser. The canvases render at 600x420 internally and scale to the card width.
+  Once you pick one, the corresponding C++ variant in <code>VoLumFractalArt.h</code> will be wired to the Herbert amp index.
+</footer>
+
+<script>
+// Shared palette
+const BRIGHT = "rgba(120,210,220,";
+const MID    = "rgba(100,180,200,";
+const DIM    = "rgba( 80,150,170,";
+const ACCENT = "rgba(200,162, 78,";
+
+function fillBg(ctx, w, h) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, "#181b20");
+  grad.addColorStop(1, "#12141a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// ----- A: Lichtenberg (re-tuned for hero panel) -----
+function lichtenberg(ctx, w, h) {
+  fillBg(ctx, w, h);
+  const cx = w / 2;
+  // Two opposing seeds (top + bottom) for a discharge-arc feel
+  const seeds = [
+    {x: cx, y: h - 16},
+    {x: cx, y: 16},
+  ];
+  // Diffusion-limited aggregation-ish: random walks attaching to existing structure
+  const pts = seeds.slice();
+  const grid = new Map();
+  const cell = 6;
+  const key = (x, y) => Math.floor(x / cell) + "," + Math.floor(y / cell);
+  for (const p of pts) grid.set(key(p.x, p.y), p);
+
+  let rng = 12345;
+  function rand() { rng = (rng * 1664525 + 1013904223) >>> 0; return rng / 0xFFFFFFFF; }
+
+  // Pre-place attractors to bias direction (vertical column of charge)
+  const targets = [];
+  for (let i = 0; i < 400; i++) {
+    targets.push({
+      x: cx + (rand() - 0.5) * w * 0.7,
+      y: 20 + rand() * (h - 40),
+    });
+  }
+
+  for (let i = 0; i < 1200; i++) {
+    // Pick a target attractor
+    const t = targets[Math.floor(rand() * targets.length)];
+    // Find nearest existing point (sample-based, fast)
+    let nearest = pts[0];
+    let bestD = 1e9;
+    const trials = Math.min(40, pts.length);
+    for (let k = 0; k < trials; k++) {
+      const cand = pts[Math.floor(rand() * pts.length)];
+      const d = (cand.x - t.x) ** 2 + (cand.y - t.y) ** 2;
+      if (d < bestD) { bestD = d; nearest = cand; }
+    }
+    // Step toward target with short branch length
+    const dx = t.x - nearest.x, dy = t.y - nearest.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const len = 9 + rand() * 5;
+    const jitter = (rand() - 0.5) * 0.6;
+    const ang = Math.atan2(dy, dx) + jitter;
+    const next = {
+      x: nearest.x + Math.cos(ang) * len,
+      y: nearest.y + Math.sin(ang) * len,
+    };
+    if (next.x < 16 || next.x > w - 16 || next.y < 12 || next.y > h - 12) continue;
+    const k = key(next.x, next.y);
+    if (grid.has(k)) continue;
+    grid.set(k, next);
+    pts.push(next);
+    let col;
+    if (i < 80) col = BRIGHT + "0.95)";
+    else if (i < 350) col = MID + "0.75)";
+    else col = DIM + "0.45)";
+    ctx.strokeStyle = col;
+    ctx.lineWidth = (i < 120) ? 2.2 : (i < 400 ? 1.4 : 1.0);
+    ctx.beginPath();
+    ctx.moveTo(nearest.x, nearest.y);
+    ctx.lineTo(next.x, next.y);
+    ctx.stroke();
+  }
+
+  // Bright endpoints highlight
+  ctx.fillStyle = ACCENT + "0.9)";
+  for (const s of seeds) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ----- B: Logistic Bifurcation (port of case 14) -----
+function logistic(ctx, w, h) {
+  fillBg(ctx, w, h);
+  const cx = w / 2, cy = h / 2;
+  const xMin = 2.4, xMax = 4.0;
+  const plotW = w * 0.86, plotH = h * 0.84;
+  const plotL = cx - plotW / 2, plotT = cy - plotH / 2;
+  const N = 12000;
+  for (let i = 0; i < N; i++) {
+    const r = xMin + (xMax - xMin) * (i / N);
+    let x = 0.5;
+    for (let j = 0; j < 120; j++) x = r * x * (1 - x);
+    for (let j = 0; j < 40; j++) {
+      x = r * x * (1 - x);
+      const px = plotL + (i / N) * plotW;
+      const py = plotT + plotH - x * plotH;
+      const a = 0.18 + 0.10 * (j % 4);
+      ctx.fillStyle = MID + a.toFixed(2) + ")";
+      ctx.fillRect(px, py, 1, 1);
+    }
+  }
+  // Soft accent baseline
+  ctx.strokeStyle = ACCENT + "0.3)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(plotL, plotT + plotH);
+  ctx.lineTo(plotL + plotW, plotT + plotH);
+  ctx.stroke();
+}
+
+// ----- C: Vortex Resonator (new, Herbert-specific) -----
+function vortex(ctx, w, h) {
+  fillBg(ctx, w, h);
+  const cx = w / 2, cy = h / 2;
+  const maxR = Math.min(w, h) * 0.42;
+
+  // Concentric resonant rings
+  const rings = 9;
+  for (let i = 0; i < rings; i++) {
+    const t = i / (rings - 1);
+    const r = maxR * (0.18 + 0.82 * t);
+    const alpha = 0.20 + 0.55 * (1 - t);
+    ctx.strokeStyle = (i % 2 === 0 ? BRIGHT : MID) + alpha.toFixed(2) + ")";
+    ctx.lineWidth = (i === rings - 1) ? 2 : 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Logarithmic spiral
+  ctx.strokeStyle = ACCENT + "0.85)";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  const a = 2.0, b = 0.18;
+  let prevX = cx, prevY = cy;
+  let first = true;
+  for (let theta = 0; theta < 9 * Math.PI; theta += 0.05) {
+    const rr = a * Math.exp(b * theta);
+    if (rr > maxR * 0.95) break;
+    const x = cx + rr * Math.cos(theta);
+    const y = cy + rr * Math.sin(theta);
+    if (first) { ctx.moveTo(x, y); first = false; } else { ctx.lineTo(x, y); }
+    prevX = x; prevY = y;
+  }
+  ctx.stroke();
+
+  // Radial spokes (transformer feel)
+  const spokes = 12;
+  for (let i = 0; i < spokes; i++) {
+    const ang = (i / spokes) * Math.PI * 2;
+    const x1 = cx + Math.cos(ang) * maxR * 0.20;
+    const y1 = cy + Math.sin(ang) * maxR * 0.20;
+    const x2 = cx + Math.cos(ang) * maxR * 1.00;
+    const y2 = cy + Math.sin(ang) * maxR * 1.00;
+    ctx.strokeStyle = DIM + "0.35)";
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  // Center dot
+  ctx.fillStyle = ACCENT + "1.0)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const ctxA = document.getElementById("cA").getContext("2d");
+  const ctxB = document.getElementById("cB").getContext("2d");
+  const ctxC = document.getElementById("cC").getContext("2d");
+  lichtenberg(ctxA, 600, 420);
+  logistic(ctxB, 600, 420);
+  vortex(ctxC, 600, 420);
+});
+</script>
+</body>
+</html>

@@ -253,7 +253,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Sidebar: amp list (names + abbreviations from catalog)
     static const char* ampNames[volum::kAmpCount];
     static const char* ampAbbrs[volum::kAmpCount] = {
-      "A1", "BC", "BX", "FD", "HK", "LP", "M4", "MJ", "MV", "O1", "O2", "ST", "SL", "TC"
+      "A1", "BC", "BX", "DH", "FD", "HK", "LP", "M4", "MJ", "MV", "O1", "O2", "ST", "SL", "TC"
     };
     for (int i = 0; i < volum::kAmpCount; i++)
       ampNames[i] = volum::kAmps[i].displayName;

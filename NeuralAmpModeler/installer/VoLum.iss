@@ -41,10 +41,11 @@ Source: "..\build-win\app\x64\Release\VoLum.exe"; DestDir: "{app}"; Check: Is64B
 ; VST3 plugin
 Source: "..\build-win\VoLum.vst3\*.*"; Excludes: "\Contents\x86\*,*.pdb,*.exp,*.lib,*.ilk,*.ico,*.ini"; DestDir: "{cf64}\VST3\VoLum.vst3\"; Check: Is64BitInstallMode; Components:vst3_64; Flags: ignoreversion recursesubdirs;
 
-; All 14 amp rig folders (VoLumRigs matches registry VoLumRigsRoot and portable zips)
+; All 15 amp rig folders (VoLumRigs matches registry VoLumRigsRoot and portable zips)
 Source: "..\..\rigs\Ampete One\*.nam"; DestDir: "{app}\VoLumRigs\Ampete One"; Flags: ignoreversion
 Source: "..\..\rigs\Bad Cat mini Cat\*.nam"; DestDir: "{app}\VoLumRigs\Bad Cat mini Cat"; Flags: ignoreversion
 Source: "..\..\rigs\Brunetti XL 2\*.nam"; DestDir: "{app}\VoLumRigs\Brunetti XL 2"; Flags: ignoreversion
+Source: "..\..\rigs\Diezel Herbert Mk1\*.nam"; DestDir: "{app}\VoLumRigs\Diezel Herbert Mk1"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\..\rigs\Fryette Deliverance 120\*.nam"; DestDir: "{app}\VoLumRigs\Fryette Deliverance 120"; Flags: ignoreversion
 Source: "..\..\rigs\H&K TriAmp Mk2\*.nam"; DestDir: "{app}\VoLumRigs\H&K TriAmp Mk2"; Flags: ignoreversion
 Source: "..\..\rigs\Lichtlaerm Prometheus\*.nam"; DestDir: "{app}\VoLumRigs\Lichtlaerm Prometheus"; Flags: ignoreversion
