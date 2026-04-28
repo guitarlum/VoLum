@@ -30,7 +30,9 @@
 | `VoLumControls.h` | **Thin umbrella** — just includes the three below. Never edit directly. | 12 |
 | `VoLumColorHelpers.h` | `VoLumColors` namespace, `DrawCornerAccent`, `DrawDiamond`, `ClearVoLumKnobSelection`. Includes `VoLumFractalArt.h`. | 82 |
 | `VoLumFractalArt.h` | **All procedural fractal art** (rarely changes): `DrawStripMiniFractal` (14-variant auto-scaling), `DrawSidebarMiniFractal` (sidebar thumbnails), `DrawHeroFractalArt` (full-size hero). ~700 lines of pure drawing math — read only when changing fractals. | 705 |
-| `VoLumCoreControls.h` | All "base" controls: sidebar list, speaker row, hero image (delegates to `DrawHeroFractalArt`), mode picker, knob labels, channel stepper, exact entry, settings backdrop, etc. | 1168 |
+| `VoLumCoreControls.h` | All "base" controls: sidebar list, speaker row, hero image (delegates to `DrawHeroFractalArt`), mode picker, knob labels, channel stepper, exact entry, tuner overlay, metronome overlay, settings backdrop, etc. | ~1600 |
+| `VoLumTunerDSP.h` | YIN pitch detector for chromatic tuner (ring buffer, frequency/note/cents output, atomic interface) | ~180 |
+| `VoLumMetronomeDSP.h` | Click generator with configurable BPM, volume, and time signature (atomic interface) | ~170 |
 | `VoLumTriptych.h` | POST effects UI: `VoLumTriptychControl` (PRE/AMP/POST layout + mouse expand), `VoLumPedalCardControl` (delay/reverb cards with cached Lichtenberg/waveform art), `VoLumChainConnectorControl` | 390 |
 | `VoLumTriptychState.h` | `EVoLumSection` and `EVoLumEffectFocus` enums (tiny, breaks circular deps) | 5 |
 | `VoLumAmpeteCatalog.h` | Amp metadata (names, folders, speaker prefixes) | — |
@@ -49,6 +51,7 @@
 ## State And Persistence
 
 - Do not reorder `EParams` or rename parameter `GetName()` strings without updating `Unserialization.cpp`; deserialization matches params by name and version-specific readers preserve old sessions.
+- VoLum `0.6.0` adds `ReverbPreDelay` and `ReverbShimmer`; keep them in `Unserialization.cpp`, `test_eparam_order.cpp`, and `test_keyboard_steps.cpp` when touching POST params.
 - VoLum `0.1.x` state is intentionally read through the NAM `0.7.15` path in `Unserialization.cpp`. If the chunk format changes, add a new version branch instead of changing old readers.
 - Per-amp settings write to the user profile, not the rigs folder:
   - Windows: `%LOCALAPPDATA%\VoLum\volum-settings.json`

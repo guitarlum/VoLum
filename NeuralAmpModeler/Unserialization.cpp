@@ -131,6 +131,8 @@ int _GetConfigFrom_0_7_12(const iplug::IByteChunk& chunk, int startPos, nlohmann
 
 void _UpdateConfigFrom_0_7_14(nlohmann::json& config)
 {
+  std::unordered_map<std::string, std::string> renames{{"AmpeteRig", "RigFile"}};
+  _RenameKeys(config, renames);
   _UpdateConfigFrom_0_7_12(config);
 }
 
@@ -173,6 +175,8 @@ int _GetConfigFrom_0_7_15(const iplug::IByteChunk& chunk, int startPos, nlohmann
 void _UpdateConfigFrom_0_5_0(nlohmann::json& config)
 {
   _UpdateConfigFrom_0_7_15(config);
+  config["ReverbPreDelay"] = 20.0;
+  config["ReverbShimmer"] = 0.5;
 }
 
 int _GetConfigFrom_0_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -208,6 +212,96 @@ int _GetConfigFrom_0_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann:
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_5_0(config);
+  return pos;
+}
+
+// VoLum 0.6.0 (Reverb pre-delay, shimmer, Oktaverb mode)
+
+void _UpdateConfigFrom_0_6_0(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_7_15(config);
+}
+
+int _GetConfigFrom_0_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{
+    "Input",
+    "Threshold",
+    "Bass",
+    "Middle",
+    "Treble",
+    "Output",
+    "NoiseGateActive",
+    "ToneStack",
+    "IRToggle",
+    "DelayActive",
+    "DelayTime",
+    "DelayFeedback",
+    "DelayMix",
+    "DelayMode",
+    "ReverbActive",
+    "ReverbMix",
+    "ReverbDecay",
+    "ReverbTone",
+    "ReverbPreDelay",
+    "ReverbShimmer",
+    "ReverbMode",
+    "BoostActive",
+    "BoostDrive",
+    "BoostTone",
+    "BoostLevel",
+    "CalibrateInput",
+    "InputCalibrationLevel",
+    "OutputMode",
+    "AmpeteRig"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_6_0(config);
+  return pos;
+}
+
+// VoLum 0.7.0 (renames "AmpeteRig" -> "RigFile"; same layout as 0.6.0 otherwise)
+
+void _UpdateConfigFrom_0_7_0(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_7_12(config);
+}
+
+int _GetConfigFrom_0_7_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{
+    "Input",
+    "Threshold",
+    "Bass",
+    "Middle",
+    "Treble",
+    "Output",
+    "NoiseGateActive",
+    "ToneStack",
+    "IRToggle",
+    "DelayActive",
+    "DelayTime",
+    "DelayFeedback",
+    "DelayMix",
+    "DelayMode",
+    "ReverbActive",
+    "ReverbMix",
+    "ReverbDecay",
+    "ReverbTone",
+    "ReverbPreDelay",
+    "ReverbShimmer",
+    "ReverbMode",
+    "BoostActive",
+    "BoostDrive",
+    "BoostTone",
+    "BoostLevel",
+    "CalibrateInput",
+    "InputCalibrationLevel",
+    "OutputMode",
+    "RigFile"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_7_0(config);
   return pos;
 }
 
@@ -270,7 +364,15 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // Act accordingly
   nlohmann::json config;
 
-  if (volum::ChunkUses0500SerializedConfig(version))
+  if (volum::ChunkUses0700SerializedConfig(version))
+  {
+    pos = _GetConfigFrom_0_7_0(chunk, pos, config);
+  }
+  else if (volum::ChunkUses0600SerializedConfig(version))
+  {
+    pos = _GetConfigFrom_0_6_0(chunk, pos, config);
+  }
+  else if (volum::ChunkUses0500SerializedConfig(version))
   {
     pos = _GetConfigFrom_0_5_0(chunk, pos, config);
   }
@@ -303,7 +405,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
 
 #if VOLUM_AMPETE_PRODUCT
   // v0.7.15+ and VoLum 0.1.x: read per-amp settings after the params
-  if (volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
+  if (volum::ChunkUses0700SerializedConfig(version) || volum::ChunkUses0600SerializedConfig(version) ||
+      volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
     // SerializeParams wrote kNumParams doubles; now read the per-amp block
     pos = chunk.Get(&mVolumAmpIdx, pos);
