@@ -11,8 +11,10 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 - **14 bundled amps** with 4 speaker modes and multiple gain stages each (~224 profiles total)
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
 - **Delay effect** -- Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix controls
-- **Reverb effect** -- Hall (8-line FDN) and Plate (Dattorro allpass-loop) with Decay, Tone, and Mix controls
+- **Reverb effect** -- Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer controls
 - **POST pedalboard view** -- click the POST strip to expand Delay and Reverb cards with procedural fractal art, live preset summaries, and bypass LEDs
+- **Built-in tuner** -- chromatic tuner overlay with stable cents display; mutes output while tuning
+- **Built-in metronome** -- configurable BPM, volume, and 1/4, 2/4, 3/4, 4/4, 6/8 modes
 - **Per-amp settings** -- knobs, toggles, speaker mode, and channel are saved per amp and restored on next launch
 - **Fast amp switching** -- models load on a background thread; switching back to a previously loaded amp is instant
 - **Keyboard shortcuts** -- Up/Down: switch amp; Left/Right: switch channel; click a knob for keyboard fine-tuning
@@ -138,7 +140,7 @@ Then rescan plug-ins again.
 If you are installing from **CI** artifacts instead of a tagged release:
 
 1. Open **Actions → CI**, pick the latest green run, and download **VoLum-mac** (and **VoLum-win** on Windows if needed).
-2. Prefer **`*-macos-installer.dmg`** ( **`VoLum Installer.pkg`** ) when it is included; otherwise use **`*-macos-standalone.dmg`** for the app and **`*-macos-vst3.zip`** for the manual plug-in install.
+2. Prefer **`*-macos-installer.dmg`** (**`VoLum Installer.pkg`**) when it is included; otherwise use **`*-macos-standalone.dmg`** for the app and **`*-macos-vst3.zip`** for the manual plug-in install.
 3. Follow the matching sections above (**installer**, **standalone only**, or **VST3 zip**).
 
 ## Bundled amps
@@ -182,6 +184,20 @@ Settings persist across sessions for both standalone and VST3.
 - Press `Enter` for exact numeric entry
 - Press `Delete` or `Backspace` to reset the selected knob to its default value
 - Press `Esc` to leave knob keyboard mode and return arrows to amp/channel navigation
+
+## Tuner and metronome
+
+Use the tuner and metronome icons in the top-right toolbar, left of Settings.
+
+- **Tuner:** opens a chromatic tuner. While it is open, VoLum mutes outgoing audio so you can tune silently. Click outside the tuner or press `Esc` to close it.
+- **Metronome:** click the metronome icon to open its controls. Enable/disable it, set BPM with the `+`/`-` buttons or by clicking the BPM value and typing, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
+
+## Delay and Reverb
+
+Click the **POST** strip to expand VoLum's pedalboard-style post effects.
+
+- **Delay:** Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix.
+- **Reverb:** Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer. Oktaverb adds a sub-octave shimmer layer for heavier ambient tails.
 
 ## Build from source
 

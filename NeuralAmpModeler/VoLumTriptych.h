@@ -298,12 +298,13 @@ private:
 
     if (mEffect == EVoLumEffectFocus::DELAY)
     {
+      const float activeMul = dimmed ? 0.28f : 1.0f;
       int taps = 5;
       float tapW = r.W() / (float)taps;
       for (int t = 0; t < taps; t++) {
         float decay = 1.f - (float)t / (float)taps * 0.7f;
         float ampY = r.H() * 0.35f * decay;
-        int alpha = (int)(140.f * decay);
+        int alpha = (int)(140.f * decay * activeMul);
         float baseX = r.L + t * tapW;
         int segs = 40;
         for (int j = 0; j < segs; j++) {
@@ -322,7 +323,7 @@ private:
           g.DrawLine(IColor(alpha / 3, 100, 190, 210), tx, r.T + 4.f, tx, r.B - 4.f, nullptr, 0.5f);
         }
       }
-      g.DrawLine(IColor(20, 100, 190, 210), r.L, cy, r.R, cy, nullptr, 0.5f);
+      g.DrawLine(IColor((int)(35.f * activeMul), 100, 190, 210), r.L, cy, r.R, cy, nullptr, 0.5f);
     }
     else
     {

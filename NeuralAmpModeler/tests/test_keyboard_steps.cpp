@@ -6,7 +6,7 @@ enum EParams {
   kInputLevel = 0, kNoiseGateThreshold, kToneBass, kToneMid, kToneTreble, kOutputLevel,
   kNoiseGateActive, kEQActive, kIRToggle,
   kDelayActive, kDelayTime, kDelayFeedback, kDelayMix, kDelayMode,
-  kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbMode,
+  kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode,
   kBoostActive, kBoostDrive, kBoostTone, kBoostLevel,
   kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig, kNumParams
 };
@@ -25,11 +25,13 @@ static double ExpectedStep(int paramIdx, bool fine)
     case kBoostDrive:
       return fine ? 0.1 : 0.5;
     case kDelayTime:
+    case kReverbPreDelay:
       return fine ? 1.0 : 5.0;
     case kDelayFeedback:
     case kDelayMix:
     case kReverbMix:
     case kReverbDecay:
+    case kReverbShimmer:
       return fine ? 0.01 : 0.05;
     default:
       return fine ? 0.1 : 1.0;
@@ -64,6 +66,18 @@ TEST_CASE("Keyboard step: reverb decay = 0.05 normal, 0.01 fine")
 {
   CHECK(ExpectedStep(kReverbDecay, false) == 0.05);
   CHECK(ExpectedStep(kReverbDecay, true) == 0.01);
+}
+
+TEST_CASE("Keyboard step: reverb pre-delay = 5ms normal, 1ms fine")
+{
+  CHECK(ExpectedStep(kReverbPreDelay, false) == 5.0);
+  CHECK(ExpectedStep(kReverbPreDelay, true) == 1.0);
+}
+
+TEST_CASE("Keyboard step: reverb shimmer = 0.05 normal, 0.01 fine")
+{
+  CHECK(ExpectedStep(kReverbShimmer, false) == 0.05);
+  CHECK(ExpectedStep(kReverbShimmer, true) == 0.01);
 }
 
 TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")

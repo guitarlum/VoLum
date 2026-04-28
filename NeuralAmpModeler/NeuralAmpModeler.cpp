@@ -158,10 +158,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
   // Reverb
   GetParam(kReverbActive)->InitBool("ReverbActive", false);
-  GetParam(kReverbMix)->InitDouble("ReverbMix", 0.5, 0.0, 1.0, 0.01);
+  GetParam(kReverbMix)->InitDouble("ReverbMix", 0.3, 0.0, 1.0, 0.01);
   GetParam(kReverbDecay)->InitDouble("ReverbDecay", 3.0, 0.1, 10.0, 0.1, "s");
-  GetParam(kReverbTone)->InitDouble("ReverbTone", 6.0, 0.0, 10.0, 0.1);
-  GetParam(kReverbMode)->InitEnum("ReverbMode", 0, {"Hall", "Plate"});
+  GetParam(kReverbTone)->InitDouble("ReverbTone", 4.5, 0.0, 10.0, 0.1);
+  GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 20.0, 0.0, 80.0, 1.0, "ms");
+  GetParam(kReverbShimmer)->InitDouble("ReverbShimmer", 0.5, 0.0, 1.0, 0.01);
+  GetParam(kReverbMode)->InitEnum("ReverbMode", 0, {"Hall", "Plate", "Oktaverb"});
 
   // Boost (stub)
   GetParam(kBoostActive)->InitBool("BoostActive", false);
@@ -170,11 +172,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kBoostLevel)->InitDouble("BoostLevel", 0.0, -20.0, 20.0, 0.1, "dB");
 
   GetParam(kVoLumAmpeteRig)
-    ->InitEnum("AmpeteRig", 0,
-      {volum::kAmpeteLabels[0], volum::kAmpeteLabels[1], volum::kAmpeteLabels[2], volum::kAmpeteLabels[3],
-       volum::kAmpeteLabels[4], volum::kAmpeteLabels[5], volum::kAmpeteLabels[6], volum::kAmpeteLabels[7],
-       volum::kAmpeteLabels[8], volum::kAmpeteLabels[9], volum::kAmpeteLabels[10], volum::kAmpeteLabels[11],
-       volum::kAmpeteLabels[12], volum::kAmpeteLabels[13], volum::kAmpeteLabels[14], volum::kAmpeteLabels[15]});
+    ->InitEnum("RigFile", 0,
+      {volum::kAmpeteFiles[0], volum::kAmpeteFiles[1], volum::kAmpeteFiles[2], volum::kAmpeteFiles[3],
+       volum::kAmpeteFiles[4], volum::kAmpeteFiles[5], volum::kAmpeteFiles[6], volum::kAmpeteFiles[7],
+       volum::kAmpeteFiles[8], volum::kAmpeteFiles[9], volum::kAmpeteFiles[10], volum::kAmpeteFiles[11],
+       volum::kAmpeteFiles[12], volum::kAmpeteFiles[13], volum::kAmpeteFiles[14], volum::kAmpeteFiles[15]});
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
@@ -407,9 +409,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       pGraphics->AttachControl(ctrl, -1, group);
     };
 
-    auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix, const char* group, bool center_offset = false) {
-      float customColW = center_offset ? 80.f : colW;
-      float cx = center_offset ? (mainCX - (3 * customColW) / 2.f + (slot - 2) * customColW + (customColW / 2.f)) : knobX(slot) + (colW / 2.f);
+    auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix, const char* group,
+                           bool center_offset = false, int centerSlots = 3, int centerStart = 2,
+                           float centerOffset = 0.f, float centerColW = 80.f) {
+      float customColW = center_offset ? centerColW : colW;
+      float cx = center_offset ? (mainCX + centerOffset - (centerSlots * customColW) / 2.f + (slot - centerStart) * customColW + (customColW / 2.f)) : knobX(slot) + (colW / 2.f);
       float kL = cx - (knobDiam / 2.f);
 
       // Use a wider label rect (-40.f to +40.f = 80px wide) to prevent "FEEDBACK" clipping
@@ -446,26 +450,28 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(6, "OUTPUT", kOutputLevel, "dB", "AMP_KNOBS", false);
 
     // REVERB KNOBS (Centered)
-    drawKnobCol(2, "MIX", kReverbMix, "%", "REVERB_KNOBS", true);
-    drawKnobCol(3, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true);
-    drawKnobCol(4, "TONE", kReverbTone, "", "REVERB_KNOBS", true);
-    IRECT reverbPickerRect(mainCX + 140.f, knobT, mainCX + 240.f, knobT + knobDiam + valueH);
-    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE"}), -1, "REVERB_KNOBS");
+    const float effectKnobOffset = -38.f;
+    const float effectColW = 70.f;
+    drawKnobCol(1, "MIX", kReverbMix, "%", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(2, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(3, "TONE", kReverbTone, "", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(4, "PRE-DLY", kReverbPreDelay, "ms", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(5, "SHIMMER", kReverbShimmer, "%", "REVERB_SHIMMER", true, 5, 1, effectKnobOffset, effectColW);
+    IRECT reverbPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
+    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE", "OKTAVERB"}), -1, "REVERB_KNOBS");
     
-    float revSwX = knobX(1) + colW/2.f;
-    pGraphics->AttachControl(new NAMSwitchControl(IRECT(revSwX - 32.f, knobT + 14.f, revSwX + 32.f, knobT + 14.f + 34.f), kReverbActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "REVERB_KNOBS");
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(revSwX - 30.f, knobT - 20.f, revSwX + 30.f, knobT), "REVERB"), -1, "REVERB_KNOBS");
+    float revSwX = mainCX - 242.f;
+    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(revSwX - 14.f, knobT - 4.f, revSwX + 14.f, knobT + knobDiam + 2.f), kReverbActive), -1, "REVERB_POWER");
 
     // DELAY KNOBS (Centered)
-    drawKnobCol(2, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true);
-    drawKnobCol(3, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true);
-    drawKnobCol(4, "MIX", kDelayMix, "%", "DELAY_KNOBS", true);
-    IRECT delayPickerRect(mainCX + 140.f, knobT, mainCX + 240.f, knobT + knobDiam + valueH);
+    drawKnobCol(2, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
+    drawKnobCol(3, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
+    drawKnobCol(4, "MIX", kDelayMix, "%", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
+    IRECT delayPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
     pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG"}), -1, "DELAY_KNOBS");
 
-    float dlySwX = knobX(1) + colW/2.f;
-    pGraphics->AttachControl(new NAMSwitchControl(IRECT(dlySwX - 32.f, knobT + 14.f, dlySwX + 32.f, knobT + 14.f + 34.f), kDelayActive, "ON", volumToggleStyle, switchHandleBitmap), -1, "DELAY_KNOBS");
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(dlySwX - 30.f, knobT - 20.f, dlySwX + 30.f, knobT), "DELAY"), -1, "DELAY_KNOBS");
+    float dlySwX = mainCX - 242.f;
+    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(dlySwX - 14.f, knobT - 4.f, dlySwX + 14.f, knobT + knobDiam + 2.f), kDelayActive), -1, "DELAY_POWER");
 
     // I/O meters
     const float meterW = 8.f;
@@ -520,14 +526,33 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     _UpdateVoLumLayout(pGraphics);
 
-    // Settings gear button (top-right of main panel)
+    // Toolbar buttons (top-right of main panel): Tuner | Metronome | Gear
     {
       const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
+      const auto tunerSVG = pGraphics->LoadSVG(TUNER_FN);
+      const auto metronomeSVG = pGraphics->LoadSVG(METRONOME_FN);
       const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
       const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
       const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
 
       const IRECT gearArea(mainR - 44.f, b.T + 14.f, mainR - 18.f, b.T + 40.f);
+      const IRECT metronomeArea(mainR - 80.f, b.T + 14.f, mainR - 54.f, b.T + 40.f);
+      const IRECT tunerArea(mainR - 116.f, b.T + 14.f, mainR - 90.f, b.T + 40.f);
+
+      // Tuner button
+      auto* pPlugin = this;
+      pGraphics->AttachControl(new NAMCircleButtonControl(
+        tunerArea,
+        [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); },
+        tunerSVG));
+
+      // Metronome button
+      pGraphics->AttachControl(new VoLumMetronomeButtonControl(
+        metronomeArea,
+        [pPlugin](IControl*) { pPlugin->_ToggleVoLumMetronomePanel(); },
+        metronomeSVG), kCtrlTagVoLumMetronomeButton);
+
+      // Gear button
       pGraphics->AttachControl(new NAMCircleButtonControl(
         gearArea,
         [pGraphics](IControl* pCaller) {
@@ -540,6 +565,27 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                    crossSVG, volumSettingsStyle, volumSettingsRadioStyle),
                         kCtrlTagSettingsBox)
         ->Hide(true);
+
+      // Tuner overlay (on top of everything)
+      {
+        auto* tunerCtrl = new VoLumTunerControl(b);
+        tunerCtrl->SetDismissAction([pPlugin]() { pPlugin->mTunerDSP.SetActive(false); });
+        pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
+      }
+
+      // Metronome config overlay
+      {
+        auto* metCtrl = new VoLumMetronomeControl(b);
+        metCtrl->mOnActiveChanged = [pPlugin](bool active) {
+          pPlugin->mMetronomeDSP.SetActive(active);
+          if (auto* btn = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumMetronomeButton))
+            btn->As<VoLumMetronomeButtonControl>()->SetActive(active);
+        };
+        metCtrl->mOnBPMChanged = [pPlugin](float bpm) { pPlugin->mMetronomeDSP.SetBPM(bpm); };
+        metCtrl->mOnVolumeChanged = [pPlugin](float vol) { pPlugin->mMetronomeDSP.SetVolume(vol); };
+        metCtrl->mOnTimeSigChanged = [pPlugin](volum::MetronomeTimeSig sig) { pPlugin->mMetronomeDSP.SetTimeSig(sig); };
+        pGraphics->AttachControl(metCtrl, kCtrlTagVoLumMetronome)->Hide(true);
+      }
     }
 
 #if defined(APP_API) && VOLUM_OPEN_SETTINGS_AT_LAUNCH
@@ -821,6 +867,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   _PrepareBuffers(numChannelsInternal, numFrames);
   // Input is collapsed to mono in preparation for the NAM.
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
+
+#if VOLUM_AMPETE_PRODUCT
+  // Tuner reads from mono input (post-gain, pre-NAM)
+  mTunerDSP.Process(mInputPointers[0], nFrames);
+#endif
   _ApplyDSPStaging();
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
   const bool toneStackActive = GetParam(kEQActive)->Value();
@@ -891,7 +942,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   if (GetParam(kReverbActive)->Value())
   {
     mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
-                      GetParam(kReverbTone)->Value(), GetParam(kReverbMode)->Int(), sampleRate);
+                      GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
+                      GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate);
     postPointers = mReverb.Process(postPointers, numChannelsExternalOut, numFrames);
   }
 
@@ -900,6 +952,18 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     for (size_t c = 0; c < numChannelsExternalOut; c++)
       std::memcpy(outputs[c], postPointers[c], numFrames * sizeof(iplug::sample));
   }
+
+#if VOLUM_AMPETE_PRODUCT
+  // Metronome: sum click into output
+  mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
+
+  // Tuner active: silence output so player can tune without hearing amp
+  if (mTunerDSP.IsActive())
+  {
+    for (size_t c = 0; c < numChannelsExternalOut; c++)
+      std::memset(outputs[c], 0, numFrames * sizeof(iplug::sample));
+  }
+#endif
 
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
@@ -923,6 +987,10 @@ void NeuralAmpModeler::OnReset()
   mToneStack->Reset(sampleRate, maxBlockSize);
   mDelay.Reset();
   mReverb.Reset();
+#if VOLUM_AMPETE_PRODUCT
+  mTunerDSP.Reset(sampleRate);
+  mMetronomeDSP.Reset(sampleRate);
+#endif
   _UpdateLatency();
 }
 
@@ -932,6 +1000,16 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
 
 #if VOLUM_AMPETE_PRODUCT
+  // Push tuner result to UI
+  if (mTunerDSP.IsActive())
+  {
+    if (auto* pGfx = GetUI())
+    {
+      if (auto* tuner = pGfx->GetControlWithTag(kCtrlTagVoLumTuner))
+        tuner->As<VoLumTunerControl>()->SetResult(mTunerDSP.GetResult());
+    }
+  }
+
   if (mVolumNeedsLoad.load() && !mVolumIsLoading.load())
   {
     mVolumNeedsLoad.store(false);
@@ -1179,6 +1257,30 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
 #if VOLUM_AMPETE_PRODUCT
+    case kDelayActive:
+    case kDelayTime:
+    case kDelayFeedback:
+    case kDelayMix:
+      if (mVolumInitComplete)
+      {
+        mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
+        mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
+        _VolumSaveDelayModeSnapshot(std::clamp(GetParam(kDelayMode)->Int(), 0, 2));
+      }
+      break;
+    case kReverbActive:
+    case kReverbMix:
+    case kReverbDecay:
+    case kReverbTone:
+    case kReverbPreDelay:
+    case kReverbShimmer:
+      if (mVolumInitComplete)
+      {
+        mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
+        mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
+        _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, 2));
+      }
+      break;
     case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
 #endif
     default: break;
@@ -1199,6 +1301,12 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
     switch (paramIdx)
     {
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
+      case kDelayActive:
+      case kReverbActive:
+#if VOLUM_AMPETE_PRODUCT
+        _UpdateVoLumLayout(pGraphics);
+#endif
+        break;
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
 #if VOLUM_AMPETE_PRODUCT
@@ -1211,6 +1319,26 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 #ifndef APP_API
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
 #endif
+#else
+      case kDelayMode:
+      {
+        const int oldMode = std::clamp(mVolumEffectSettings.delayMode, 0, 2);
+        _VolumSaveDelayModeSnapshot(oldMode);
+        const int newMode = std::clamp(GetParam(kDelayMode)->Int(), 0, 2);
+        mVolumEffectSettings.delayMode = newMode;
+        _VolumRestoreDelayModeSnapshot(newMode);
+        break;
+      }
+      case kReverbMode:
+      {
+        const int oldMode = std::clamp(mVolumEffectSettings.reverbMode, 0, 2);
+        _VolumSaveReverbModeSnapshot(oldMode);
+        const int newMode = std::clamp(GetParam(kReverbMode)->Int(), 0, 2);
+        mVolumEffectSettings.reverbMode = newMode;
+        _VolumRestoreReverbModeSnapshot(newMode);
+        _UpdateVoLumLayout(pGraphics);
+        break;
+      }
 #endif
       default: break;
     }
@@ -1437,7 +1565,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 
 #if VOLUM_AMPETE_PRODUCT
 namespace {
-constexpr std::array<int, 6> kVoLumKeyboardKnobParams = {
+constexpr std::array<int, 6> kVoLumAmpKeyboardKnobParams = {
   kInputLevel,
   kNoiseGateThreshold,
   kToneBass,
@@ -1445,21 +1573,62 @@ constexpr std::array<int, 6> kVoLumKeyboardKnobParams = {
   kToneTreble,
   kOutputLevel,
 };
+constexpr std::array<int, 3> kVoLumDelayKeyboardKnobParams = {
+  kDelayTime,
+  kDelayFeedback,
+  kDelayMix,
+};
+constexpr std::array<int, 4> kVoLumReverbKeyboardKnobParams = {
+  kReverbMix,
+  kReverbDecay,
+  kReverbTone,
+  kReverbPreDelay,
+};
+constexpr std::array<int, 5> kVoLumOktaverbKeyboardKnobParams = {
+  kReverbMix,
+  kReverbDecay,
+  kReverbTone,
+  kReverbPreDelay,
+  kReverbShimmer,
+};
 
 double GetVoLumKeyboardStepForParam(int paramIdx, bool fine)
 {
-  if (fine)
-    return 0.1;
-
   switch (paramIdx)
   {
     case kToneBass:
     case kToneMid:
     case kToneTreble:
-      return 0.5;
+    case kReverbTone:
+    case kBoostTone:
+    case kBoostDrive:
+      return fine ? 0.1 : 0.5;
+    case kDelayTime:
+    case kReverbPreDelay:
+      return fine ? 1.0 : 5.0;
+    case kDelayFeedback:
+    case kDelayMix:
+    case kReverbMix:
+    case kReverbDecay:
+    case kReverbShimmer:
+      return fine ? 0.01 : 0.05;
     default:
-      return 1.0;
+      return fine ? 0.1 : 1.0;
   }
+}
+
+template <size_t N>
+bool SelectAdjacentFromList(NeuralAmpModeler* plugin, const std::array<int, N>& params, int currentParamIdx, int direction)
+{
+  const auto it = std::find(params.begin(), params.end(), currentParamIdx);
+  if (it == params.end())
+    return false;
+
+  const int idx = static_cast<int>(std::distance(params.begin(), it));
+  const int count = static_cast<int>(params.size());
+  const int nextIdx = (idx + direction + count) % count;
+  plugin->_SelectVoLumKnob(params[nextIdx]);
+  return true;
 }
 
 }
@@ -1478,15 +1647,19 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
 
 bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int direction)
 {
-  const auto it = std::find(kVoLumKeyboardKnobParams.begin(), kVoLumKeyboardKnobParams.end(), currentParamIdx);
-  if (it == kVoLumKeyboardKnobParams.end())
-    return false;
-
-  const int idx = static_cast<int>(std::distance(kVoLumKeyboardKnobParams.begin(), it));
-  const int count = static_cast<int>(kVoLumKeyboardKnobParams.size());
-  const int nextIdx = (idx + direction + count) % count;
-  _SelectVoLumKnob(kVoLumKeyboardKnobParams[nextIdx]);
-  return true;
+  switch (mVolumFocusedEffect)
+  {
+    case EVoLumEffectFocus::DELAY:
+      return SelectAdjacentFromList(this, kVoLumDelayKeyboardKnobParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::REVERB:
+      if (GetParam(kReverbMode)->Int() == 2)
+        return SelectAdjacentFromList(this, kVoLumOktaverbKeyboardKnobParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kVoLumReverbKeyboardKnobParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::AMP:
+    case EVoLumEffectFocus::BOOST:
+      return SelectAdjacentFromList(this, kVoLumAmpKeyboardKnobParams, currentParamIdx, direction);
+  }
+  return false;
 }
 
 void NeuralAmpModeler::_SelectVoLumKnob(int paramIdx)
@@ -1637,16 +1810,36 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     if (mVolumFocusedEffect == EVoLumEffectFocus::BOOST)
       mVolumFocusedEffect = EVoLumEffectFocus::AMP;
 
+    auto disableGroup = [pGfx](const char* group, bool disable) {
+      pGfx->ForAllControlsFunc([group, disable](iplug::igraphics::IControl* c) {
+        if (c->GetGroup() && std::strcmp(c->GetGroup(), group) == 0)
+          c->SetDisabled(disable);
+      });
+    };
+
     _HideControlGroup(pGfx, "AMP_KNOBS", true);
     _HideControlGroup(pGfx, "REVERB_KNOBS", true);
+    _HideControlGroup(pGfx, "REVERB_SHIMMER", true);
+    _HideControlGroup(pGfx, "REVERB_POWER", true);
     _HideControlGroup(pGfx, "DELAY_KNOBS", true);
+    _HideControlGroup(pGfx, "DELAY_POWER", true);
     
     // Hide/show the correct group based on focused effect
     switch (mVolumFocusedEffect)
     {
       case EVoLumEffectFocus::AMP: _HideControlGroup(pGfx, "AMP_KNOBS", false); break;
-      case EVoLumEffectFocus::REVERB: _HideControlGroup(pGfx, "REVERB_KNOBS", false); break;
-      case EVoLumEffectFocus::DELAY: _HideControlGroup(pGfx, "DELAY_KNOBS", false); break;
+      case EVoLumEffectFocus::REVERB:
+        _HideControlGroup(pGfx, "REVERB_POWER", false);
+        _HideControlGroup(pGfx, "REVERB_KNOBS", false);
+        _HideControlGroup(pGfx, "REVERB_SHIMMER", GetParam(kReverbMode)->Int() != 2);
+        disableGroup("REVERB_KNOBS", !GetParam(kReverbActive)->Bool());
+        disableGroup("REVERB_SHIMMER", !GetParam(kReverbActive)->Bool());
+        break;
+      case EVoLumEffectFocus::DELAY:
+        _HideControlGroup(pGfx, "DELAY_POWER", false);
+        _HideControlGroup(pGfx, "DELAY_KNOBS", false);
+        disableGroup("DELAY_KNOBS", !GetParam(kDelayActive)->Bool());
+        break;
       case EVoLumEffectFocus::BOOST: break;
     }
 
@@ -1723,6 +1916,44 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
   }
 }
 
+void NeuralAmpModeler::_ToggleVoLumTuner()
+{
+  if (auto* pGfx = GetUI())
+  {
+    auto* tuner = pGfx->GetControlWithTag(kCtrlTagVoLumTuner)->As<VoLumTunerControl>();
+    if (tuner->IsHidden())
+    {
+      mTunerDSP.SetActive(true);
+      tuner->Show();
+    }
+    else
+    {
+      mTunerDSP.SetActive(false);
+      tuner->Hide(true);
+    }
+  }
+}
+
+void NeuralAmpModeler::_ToggleVoLumMetronomePanel()
+{
+  if (auto* pGfx = GetUI())
+  {
+    auto* panel = pGfx->GetControlWithTag(kCtrlTagVoLumMetronome)->As<VoLumMetronomeControl>();
+    if (panel->IsHidden())
+    {
+      panel->Show(
+        mMetronomeDSP.IsActive(),
+        mMetronomeDSP.GetBPM(),
+        mMetronomeDSP.GetVolume(),
+        mMetronomeDSP.GetTimeSig());
+    }
+    else
+    {
+      panel->Hide(true);
+    }
+  }
+}
+
 void NeuralAmpModeler::_VolumRefreshChannels()
 {
   if (mVolumRigsRoot.empty())
@@ -1794,15 +2025,11 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 void NeuralAmpModeler::_VolumSaveEffectSettings()
 {
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
-  mVolumEffectSettings.delayTime = GetParam(kDelayTime)->Value();
-  mVolumEffectSettings.delayFeedback = GetParam(kDelayFeedback)->Value();
-  mVolumEffectSettings.delayMix = GetParam(kDelayMix)->Value();
   mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-  mVolumEffectSettings.reverbMix = GetParam(kReverbMix)->Value();
-  mVolumEffectSettings.reverbDecay = GetParam(kReverbDecay)->Value();
-  mVolumEffectSettings.reverbTone = GetParam(kReverbTone)->Value();
   mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
+  _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, 2));
+  _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, 2));
 }
 
 void NeuralAmpModeler::_VolumRestoreEffectSettings()
@@ -1813,15 +2040,56 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
   };
   const auto& fx = mVolumEffectSettings;
   setParam(kDelayActive, fx.delayActive ? 1.0 : 0.0);
-  setParam(kDelayTime, fx.delayTime);
-  setParam(kDelayFeedback, fx.delayFeedback);
-  setParam(kDelayMix, fx.delayMix);
   setParam(kDelayMode, fx.delayMode);
+  _VolumRestoreDelayModeSnapshot(std::clamp(fx.delayMode, 0, 2));
   setParam(kReverbActive, fx.reverbActive ? 1.0 : 0.0);
-  setParam(kReverbMix, fx.reverbMix);
-  setParam(kReverbDecay, fx.reverbDecay);
-  setParam(kReverbTone, fx.reverbTone);
   setParam(kReverbMode, fx.reverbMode);
+  _VolumRestoreReverbModeSnapshot(std::clamp(fx.reverbMode, 0, 2));
+  _UpdateVoLumLayout();
+}
+
+void NeuralAmpModeler::_VolumSaveDelayModeSnapshot(int mode)
+{
+  auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, 2)];
+  s.time = GetParam(kDelayTime)->Value();
+  s.feedback = GetParam(kDelayFeedback)->Value();
+  s.mix = GetParam(kDelayMix)->Value();
+}
+
+void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
+{
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+  const auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, 2)];
+  setParam(kDelayTime, s.time);
+  setParam(kDelayFeedback, s.feedback);
+  setParam(kDelayMix, s.mix);
+}
+
+void NeuralAmpModeler::_VolumSaveReverbModeSnapshot(int mode)
+{
+  auto& s = mVolumEffectSettings.reverbModes[std::clamp(mode, 0, 2)];
+  s.mix = GetParam(kReverbMix)->Value();
+  s.decay = GetParam(kReverbDecay)->Value();
+  s.tone = GetParam(kReverbTone)->Value();
+  s.preDelay = GetParam(kReverbPreDelay)->Value();
+  s.shimmer = GetParam(kReverbShimmer)->Value();
+}
+
+void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
+{
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+  const auto& s = mVolumEffectSettings.reverbModes[std::clamp(mode, 0, 2)];
+  setParam(kReverbMix, s.mix);
+  setParam(kReverbDecay, s.decay);
+  setParam(kReverbTone, s.tone);
+  setParam(kReverbPreDelay, s.preDelay);
+  setParam(kReverbShimmer, s.shimmer);
 }
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)

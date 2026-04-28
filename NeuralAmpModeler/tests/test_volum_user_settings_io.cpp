@@ -61,15 +61,17 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   volum::VoLumEffectSettings fx;
   fx.delayActive = true;
-  fx.delayTime = 500.0;
-  fx.delayFeedback = 0.6;
-  fx.delayMix = 0.4;
   fx.delayMode = 2;
+  fx.delayModes[2].time = 500.0;
+  fx.delayModes[2].feedback = 0.6;
+  fx.delayModes[2].mix = 0.4;
   fx.reverbActive = true;
-  fx.reverbMix = 0.7;
-  fx.reverbDecay = 5.5;
-  fx.reverbTone = 8.0;
   fx.reverbMode = 1;
+  fx.reverbModes[1].mix = 0.7;
+  fx.reverbModes[1].decay = 5.5;
+  fx.reverbModes[1].tone = 8.0;
+  fx.reverbModes[1].preDelay = 37.0;
+  fx.reverbModes[1].shimmer = 0.25;
 
   const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
 
@@ -77,15 +79,17 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
 
   CHECK(loaded.delayActive == true);
-  CHECK(loaded.delayTime == doctest::Approx(500.0));
-  CHECK(loaded.delayFeedback == doctest::Approx(0.6));
-  CHECK(loaded.delayMix == doctest::Approx(0.4));
   CHECK(loaded.delayMode == 2);
+  CHECK(loaded.delayModes[2].time == doctest::Approx(500.0));
+  CHECK(loaded.delayModes[2].feedback == doctest::Approx(0.6));
+  CHECK(loaded.delayModes[2].mix == doctest::Approx(0.4));
   CHECK(loaded.reverbActive == true);
-  CHECK(loaded.reverbMix == doctest::Approx(0.7));
-  CHECK(loaded.reverbDecay == doctest::Approx(5.5));
-  CHECK(loaded.reverbTone == doctest::Approx(8.0));
   CHECK(loaded.reverbMode == 1);
+  CHECK(loaded.reverbModes[1].mix == doctest::Approx(0.7));
+  CHECK(loaded.reverbModes[1].decay == doctest::Approx(5.5));
+  CHECK(loaded.reverbModes[1].tone == doctest::Approx(8.0));
+  CHECK(loaded.reverbModes[1].preDelay == doctest::Approx(37.0));
+  CHECK(loaded.reverbModes[1].shimmer == doctest::Approx(0.25));
 }
 
 TEST_CASE("Old settings without effects key loads defaults")
@@ -96,12 +100,12 @@ TEST_CASE("Old settings without effects key loads defaults")
 
   volum::VoLumEffectSettings loaded;
   loaded.delayActive = true;
-  loaded.delayTime = 999.0;
+  loaded.delayModes[0].time = 999.0;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
 
   // Should remain unchanged — no "effects" in JSON
   CHECK(loaded.delayActive == true);
-  CHECK(loaded.delayTime == doctest::Approx(999.0));
+  CHECK(loaded.delayModes[0].time == doctest::Approx(999.0));
 }
 
 TEST_CASE("Effect settings nullptr is safe")
@@ -113,4 +117,37 @@ TEST_CASE("Effect settings nullptr is safe")
 
   // Pass nullptr for fx — should not crash
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr);
+}
+
+TEST_CASE("Legacy flat effect settings populate every mode snapshot")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayTime", 625.0},
+    {"delayFeedback", 0.7},
+    {"delayMix", 0.33},
+    {"delayMode", 1},
+    {"reverbActive", true},
+    {"reverbMix", 0.44},
+    {"reverbDecay", 6.0},
+    {"reverbTone", 3.0},
+    {"reverbMode", 2},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  for (int i = 0; i < 3; ++i)
+  {
+    CHECK(loaded.delayModes[i].time == doctest::Approx(625.0));
+    CHECK(loaded.delayModes[i].feedback == doctest::Approx(0.7));
+    CHECK(loaded.delayModes[i].mix == doctest::Approx(0.33));
+    CHECK(loaded.reverbModes[i].mix == doctest::Approx(0.44));
+    CHECK(loaded.reverbModes[i].decay == doctest::Approx(6.0));
+    CHECK(loaded.reverbModes[i].tone == doctest::Approx(3.0));
+    CHECK(loaded.reverbModes[i].preDelay == doctest::Approx(20.0));
+    CHECK(loaded.reverbModes[i].shimmer == doctest::Approx(0.5));
+  }
 }
