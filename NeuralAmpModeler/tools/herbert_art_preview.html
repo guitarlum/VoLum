@@ -54,7 +54,7 @@
     <h2>A: Lichtenberg</h2>
     <div class="meta">High-voltage discharge / branching electric</div>
     <canvas id="cA" width="600" height="420"></canvas>
-    <div class="desc">Existing dead-code variant (<code>case 15</code>). Branching cascade upward from base, evokes the 100W Diezel slam: high voltage, unpredictable, aggressive. Fits "Mid Cut on, gain at max".</div>
+    <div class="desc">Existing dead-code variant retuned for Herbert. Twin branching arcs evoke the 100W Diezel slam: high voltage, unpredictable, aggressive. Fits "Mid Cut on, gain at max".</div>
   </div>
   <div class="card">
     <h2>B: Logistic Bifurcation</h2>
@@ -155,14 +155,6 @@ function lichtenberg(ctx, w, h) {
     ctx.moveTo(nearest.x, nearest.y);
     ctx.lineTo(next.x, next.y);
     ctx.stroke();
-  }
-
-  // Bright endpoints highlight
-  ctx.fillStyle = ACCENT + "0.9)";
-  for (const s of seeds) {
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
-    ctx.fill();
   }
 }
 
