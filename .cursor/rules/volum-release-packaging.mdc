@@ -1,0 +1,40 @@
+---
+description: VoLum CI, artifacts, installers, release workflow, and version metadata
+globs:
+  - .github/workflows/*.yml
+  - NeuralAmpModeler/scripts/*
+  - NeuralAmpModeler/installer/*
+  - NeuralAmpModeler/resources/*.plist
+  - NeuralAmpModeler/config.h
+  - README*.md
+alwaysApply: false
+---
+
+# VoLum Release And Packaging
+
+Branch/workflow facts:
+
+- `CI` uploads `VoLum-win` and `VoLum-mac`; automatic push/PR runs target `main`.
+- Manual `CI` runs build the selected ref unless checkout is overridden.
+- `Release Native` is main-only: it checks out `main`, bumps metadata, tags, then builds from that tag.
+
+Packaging layout:
+
+- Dev rigs live in `rigs/`; shipped artifacts rename/copy them as `VoLumRigs/`.
+- Windows installer writes `HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot`.
+- Legacy installs may expose `AmpeteRigsPath`; code treats that as a fallback.
+- Portable packages keep `VoLum.vst3` and sibling `VoLumRigs/` together.
+- macOS standalone embeds `VoLumRigs` in `VoLum.app/Contents/Resources`.
+- macOS VST3 zip keeps `VoLumRigs` beside `VoLum.vst3`.
+
+Version metadata:
+
+- Use `python3 bump_version.py patch|minor|major` for manual bumps.
+- Release workflow uses `prepare_release.py`, then `update_version-mac.py` and `update_installer-win.py`.
+- Keep `config.h`, `installer/VoLum.iss`, and `resources/*.plist` versions consistent.
+- macOS plist filenames keep `NeuralAmpModeler-*` even though product name is `VoLum`.
+
+Release notes:
+
+- Inspect actual assets with `gh release view` before writing notes.
+- Do not remove README screenshots or CI badges unless explicitly asked.
