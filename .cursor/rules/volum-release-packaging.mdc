@@ -18,6 +18,15 @@ Branch/workflow facts:
 - Manual `CI` runs build the selected ref unless checkout is overridden.
 - `Release Native` is main-only: it checks out `main`, bumps metadata, tags, then builds from that tag.
 
+Branch policy (use this whenever starting new work):
+
+- Long-lived branches: `main` is the released branch; `dev` is the integration branch.
+- Right after any release lands on `main`, merge `main` into `dev` (`git checkout dev && git merge origin/main`) and push, so `dev` carries the released commits + version metadata.
+- Feature work always branches off the latest `dev`, e.g. `feature/<short-topic>`.
+- When a feature is verified, merge it back into `dev` (PR or fast-forward). Do not merge feature branches directly into `main`.
+- Promote `dev` to `main` only as part of a release (use `release-manager` skill for the PR; see `Release Native` workflow above).
+- Keep unrelated local dirt (especially `iPlug2` ASIO patch dirt) out of any of these merges.
+
 Packaging layout:
 
 - Dev rigs live in `rigs/`; shipped artifacts rename/copy them as `VoLumRigs/`.

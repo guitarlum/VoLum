@@ -3,13 +3,24 @@
 // Procedural fractal art generators extracted from VoLumColorHelpers / VoLumCoreControls.
 
 #include "IControls.h"
+#include "VoLumAmpeteCatalog.h"
 #include "VoLumColorHelpers.h"
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
 using namespace iplug;
 using namespace igraphics;
+
+// Map an amp index to a fractal art case. Use this everywhere amp art is drawn so
+// that adding amps keeps existing visual identity intact (see kAmpFractalCase).
+inline int FractalCaseForAmp(int ampIdx)
+{
+  if (ampIdx < 0 || ampIdx >= volum::kAmpCount)
+    return 0;
+  return volum::kAmpFractalCase[ampIdx];
+}
 
 // Helper: draw mini fractal art for amp strip/pedal card (idx selects variant)
 inline void DrawStripMiniFractal(IGraphics& g, const IRECT& r, int idx,
@@ -24,7 +35,7 @@ inline void DrawStripMiniFractal(IGraphics& g, const IRECT& r, int idx,
   int dots = big ? 2000 : 200;
   int curves = big ? 60 : 30;
   float tk = big ? 1.5f : 1.f;
-  switch (idx % 14) {
+  switch (idx % 15) {
     case 0: { std::vector<int> turns; for(int i=0;i<(big?8:6);i++){std::vector<int> n2;for(auto t:turns)n2.push_back(t);n2.push_back(1);for(int j=(int)turns.size()-1;j>=0;j--)n2.push_back(1-turns[j]);turns=n2;} float step=big?scale*0.012f:1.8f,px2=cx-scale*0.1f,py2=cy+scale*0.06f;int dir=0;const float dx[]={step,0,-step,0},dy[]={0,-step,0,step};for(int i=0;i<(int)turns.size();i++){float nx=px2+dx[dir],ny=py2+dy[dir];g.DrawLine(bright,px2,py2,nx,ny,nullptr,tk);px2=nx;py2=ny;dir=(dir+(turns[i]?1:3))%4;} break; }
     case 1: { struct T{float x1,y1,x2,y2,x3,y3;};std::vector<T> ts;ts.push_back({cx,cy-sz,cx-sz,cy+sz*0.7f,cx+sz,cy+sz*0.7f});for(int d=0;d<depth;d++){std::vector<T> n2;for(auto&t:ts){g.DrawLine(dim,t.x1,t.y1,t.x2,t.y2,nullptr,tk);g.DrawLine(dim,t.x2,t.y2,t.x3,t.y3,nullptr,tk);g.DrawLine(dim,t.x3,t.y3,t.x1,t.y1,nullptr,tk);n2.push_back({t.x1,t.y1,(t.x1+t.x2)/2,(t.y1+t.y2)/2,(t.x3+t.x1)/2,(t.y3+t.y1)/2});n2.push_back({(t.x1+t.x2)/2,(t.y1+t.y2)/2,t.x2,t.y2,(t.x2+t.x3)/2,(t.y2+t.y3)/2});n2.push_back({(t.x3+t.x1)/2,(t.y3+t.y1)/2,(t.x2+t.x3)/2,(t.y2+t.y3)/2,t.x3,t.y3});}ts=n2;} break; }
     case 2: { float px2=0,py2=0;unsigned rng=42;float fscale=scale*0.07f,fh=scale*0.035f;for(int i=0;i<dots;i++){rng=rng*1103515245+12345;float rv=(float)(rng%1000)/1000.f;float nx,ny;if(rv<0.01f){nx=0;ny=0.16f*py2;}else if(rv<0.86f){nx=0.85f*px2+0.04f*py2;ny=-0.04f*px2+0.85f*py2+1.6f;}else if(rv<0.93f){nx=0.2f*px2-0.26f*py2;ny=0.23f*px2+0.22f*py2+1.6f;}else{nx=-0.15f*px2+0.28f*py2;ny=0.26f*px2+0.24f*py2+0.44f;}px2=nx;py2=ny;float sx=cx+px2*fscale,sy=r.B-2.f-py2*fh;if(sx>r.L&&sx<r.R&&sy>r.T&&sy<r.B)g.FillRect(dim,IRECT(sx,sy,sx+1.f,sy+1.f));} break; }
@@ -38,14 +49,37 @@ inline void DrawStripMiniFractal(IGraphics& g, const IRECT& r, int idx,
     case 10: { float step=big?2.f:3.f;float pw=r.W()*0.85f,ph=r.H()*0.85f;float pl=cx-pw/2,pt=cy-ph/2;for(float px=0;px<pw;px+=step)for(float py=0;py<ph;py+=step){double zr=(px/pw-0.5)*3,zi=(py/ph-0.5)*2.4;int it=0;while(zr*zr+zi*zi<4&&it<30){double t=zr*zr-zi*zi-0.7;zi=2*zr*zi+0.27015;zr=t;it++;}if(it<30&&it>2)g.FillRect(IColor(it*6,70+it*2,std::min(255,160+it*3),220),IRECT(pl+px,pt+py,pl+px+step-0.5f,pt+py+step-0.5f));} break; }
     case 11: { const double a=-1.4,b=1.6,c=1.0,d=0.75;double x=0.0,y=0.0;float sc2=std::min(r.W(),r.H())*0.28f;for(int i=0;i<(big?8000:2200);i++){double nx=sin(a*y)+c*cos(a*x),ny=sin(b*x)+d*cos(b*y);x=nx;y=ny;if(i<120)continue;float px=cx+(float)x*sc2,py=cy-(float)y*sc2;if(px>r.L&&px<r.R&&py>r.T&&py<r.B){int al=28+(i&95);g.FillRect(IColor(al,75+(i%90),165+(i%85),215),IRECT(px,py,px+1.f,py+1.f));}} break; }
     case 12: { float step=big?2.f:3.f;float pw=r.W()*0.85f,ph=r.H()*0.85f;float pl=cx-pw/2,pt=cy-ph/2;for(float px=0;px<pw;px+=step)for(float py=0;py<ph;py+=step){double cr=-1.75+(px/pw)*0.15,ci=-0.08+(py/ph)*0.12;double zr=0,zi=0;int it=0;while(zr*zr+zi*zi<4&&it<40){double t=zr*zr-zi*zi+cr;zi=fabs(2*zr*zi)+ci;zr=t;it++;}if(it<40&&it>2)g.FillRect(IColor(it*5,100+it*2,std::min(255,170+it*2),230),IRECT(pl+px,pt+py,pl+px+step-0.5f,pt+py+step-0.5f));} break; }
-    default: { struct P{float x,y,r2;};std::vector<P> ps;ps.push_back({cx,cy,sz});for(int d=0;d<(big?3:2);d++){std::vector<P> n2;for(auto&p:ps){for(int i=0;i<5;i++){float a1=(i*72.f-90)*3.14159f/180,a2=((i+1)*72.f-90)*3.14159f/180;g.DrawLine(dim,p.x+p.r2*cosf(a1),p.y+p.r2*sinf(a1),p.x+p.r2*cosf(a2),p.y+p.r2*sinf(a2),nullptr,tk);}float nr=p.r2*0.382f;n2.push_back({p.x,p.y,nr});for(int i=0;i<5;i++){float a=(i*72.f-90)*3.14159f/180;n2.push_back({p.x+(p.r2-nr)*cosf(a),p.y+(p.r2-nr)*sinf(a),nr});}}ps=n2;} break; }
+    case 13: { struct P{float x,y,r2;};std::vector<P> ps;ps.push_back({cx,cy,sz});for(int d=0;d<(big?3:2);d++){std::vector<P> n2;for(auto&p:ps){for(int i=0;i<5;i++){float a1=(i*72.f-90)*3.14159f/180,a2=((i+1)*72.f-90)*3.14159f/180;g.DrawLine(dim,p.x+p.r2*cosf(a1),p.y+p.r2*sinf(a1),p.x+p.r2*cosf(a2),p.y+p.r2*sinf(a2),nullptr,tk);}float nr=p.r2*0.382f;n2.push_back({p.x,p.y,nr});for(int i=0;i<5;i++){float a=(i*72.f-90)*3.14159f/180;n2.push_back({p.x+(p.r2-nr)*cosf(a),p.y+(p.r2-nr)*sinf(a),nr});}}ps=n2;} break; }
+    default: { // case 14 - Lichtenberg discharge (Diezel Herbert)
+      // Two opposing seeds with branching arcs
+      struct Pt { float x, y; };
+      std::vector<Pt> pts; pts.push_back({cx, r.B - 1.f}); pts.push_back({cx, r.T + 1.f});
+      unsigned rng = 0xBEEFu;
+      int iters = big ? 220 : 90;
+      float step = big ? 2.4f : 1.4f;
+      for (int i = 0; i < iters; i++) {
+        rng = rng * 1664525u + 1013904223u;
+        Pt& parent = pts[rng % pts.size()];
+        rng = rng * 1664525u + 1013904223u;
+        bool fromBottom = (parent.y > cy);
+        float baseAng = fromBottom ? -90.f : 90.f;
+        float jitter = ((float)(rng % 100) / 100.f - 0.5f) * 110.f;
+        float ang = (baseAng + jitter) * 3.14159f / 180.f;
+        Pt next{parent.x + cosf(ang) * step, parent.y + sinf(ang) * step};
+        if (next.x < r.L + 1.f || next.x > r.R - 1.f || next.y < r.T + 1.f || next.y > r.B - 1.f) continue;
+        IColor col = (i < iters / 4) ? bright : dim;
+        g.DrawLine(col, parent.x, parent.y, next.x, next.y, nullptr, (i < iters / 6) ? tk : 1.f);
+        pts.push_back(next);
+      }
+      break;
+    }
   }
 }
 
 inline void DrawSidebarMiniFractal(IGraphics& g, const IRECT& r, int idx, const IColor& bright, const IColor& dim)
 {
     float cx = r.MW(), cy = r.MH(), sz = r.W() * 0.38f;
-    switch (idx % 14)
+    switch (idx % 15)
     {
       case 0: // Dragon curve mini (6 iterations)
       {
@@ -253,49 +287,27 @@ inline void DrawSidebarMiniFractal(IGraphics& g, const IRECT& r, int idx, const 
         }
         break;
       }
-      case 14: // Logistic Bifurcation mini
-      {
-        float xMin = 2.4f, xMax = 4.0f;
-        for (int i = 0; i < 400; i++) {
-            float r = xMin + (xMax - xMin) * (i / 400.0f);
-            float x = 0.5f;
-            for (int j = 0; j < 40; j++) x = r * x * (1.f - x);
-            for (int j = 0; j < 10; j++) {
-                x = r * x * (1.f - x);
-                float px = cx - sz + (i / 400.0f) * 2.f * sz;
-                float py = cy + sz - x * 2.f * sz;
-                g.FillRect(dim, IRECT(px, py, px+1.f, py+1.f));
-            }
-        }
-        break;
-      }
-      case 15: // Lichtenberg mini
+      case 14: // Lichtenberg mini (Diezel Herbert) - twin opposing arcs
       {
         struct Pt { float x, y; };
         std::vector<Pt> pts;
         pts.push_back({cx, cy + sz});
-        unsigned int rng = 12345;
-        for (int i = 0; i < 150; i++) {
-            rng = rng * 1103515245 + 12345;
-            int parentIdx = rng % pts.size();
-            float angle = -90.f + (float)(rng % 120) - 60.f;
-            float rad = angle * 3.14159f / 180.f;
-            float len = sz * 0.2f;
-            Pt next = {pts[parentIdx].x + len * cosf(rad), pts[parentIdx].y + len * sinf(rad)};
-            g.DrawLine(dim, pts[parentIdx].x, pts[parentIdx].y, next.x, next.y, nullptr, 1.f);
-            pts.push_back(next);
+        pts.push_back({cx, cy - sz});
+        unsigned rng = 0xBEEFu;
+        const float step = sz * 0.18f;
+        for (int i = 0; i < 70; i++) {
+          rng = rng * 1664525u + 1013904223u;
+          Pt& parent = pts[rng % pts.size()];
+          rng = rng * 1664525u + 1013904223u;
+          bool fromBottom = (parent.y > cy);
+          float baseAng = fromBottom ? -90.f : 90.f;
+          float jitter = ((float)(rng % 100) / 100.f - 0.5f) * 110.f;
+          float rad = (baseAng + jitter) * 3.14159f / 180.f;
+          Pt next{parent.x + cosf(rad) * step, parent.y + sinf(rad) * step};
+          if (next.x < r.L + 1.f || next.x > r.R - 1.f || next.y < r.T + 1.f || next.y > r.B - 1.f) continue;
+          g.DrawLine(i < 12 ? bright : dim, parent.x, parent.y, next.x, next.y, nullptr, 1.f);
+          pts.push_back(next);
         }
-        break;
-      }
-      case 16: // Cantor Dust mini
-      {
-        auto drawC = [&](auto&& self, float x, float y, float len, int d) -> void {
-            if (d == 0) { g.DrawLine(dim, x, y, x + len, y, nullptr, 1.f); return; }
-            float nl = len / 3.f;
-            self(self, x, y - 2.f, nl, d - 1);
-            self(self, x + 2.f * nl, y + 2.f, nl, d - 1);
-        };
-        drawC(drawC, cx - sz, cy, sz * 2.f, 3);
         break;
       }
     }
@@ -314,7 +326,7 @@ inline void DrawHeroFractalArt(IGraphics& g, const IRECT& rect, int ampIdx)
     const float tk = 2.f;
     const float tkThin = 1.5f;
 
-    switch (ampIdx % 14)
+    switch (ampIdx % 15)
     {
       case 0: // Dragon curve
       {
@@ -643,61 +655,88 @@ inline void DrawHeroFractalArt(IGraphics& g, const IRECT& rect, int ampIdx)
         }
         break;
       }
-      case 14: // Logistic Bifurcation
+      case 14: // Lichtenberg discharge (Diezel Herbert Mk1)
       {
-        float xMin = 2.4f, xMax = 4.0f;
-        float plotW = w * 0.8f, plotH = h * 0.8f;
-        float plotL = cx - plotW / 2.f, plotT = cy - plotH / 2.f;
-        for (int i = 0; i < 8000; i++) {
-            float r = xMin + (xMax - xMin) * (i / 8000.0f);
-            float x = 0.5f;
-            for (int j = 0; j < 100; j++) x = r * x * (1.f - x); // settle
-            for (int j = 0; j < 30; j++) {
-                x = r * x * (1.f - x);
-                float px = plotL + (i / 8000.0f) * plotW;
-                float py = plotT + plotH - x * plotH;
-                int alpha = 40 + (j % 4) * 20;
-                g.FillRect(IColor(alpha, 80, 200, 180), IRECT(px, py, px+1.f, py+1.f));
-            }
-        }
-        break;
-      }
-      case 15: // Lichtenberg
-      {
+        // Two opposing seeds (top and bottom), DLA-style branching toward random
+        // attractor points distributed across the panel. Result: dual branching
+        // electric arcs evoking high-voltage transformer discharge.
         struct Pt { float x, y; };
         std::vector<Pt> pts;
-        pts.push_back({cx, rect.B - 15.f});
-        unsigned int rng = 12345;
-        for (int i = 0; i < 2000; i++) {
-            rng = rng * 1103515245 + 12345;
-            int parentIdx = rng % pts.size();
-            float angle = -90.f + (float)(rng % 180) - 90.f;
-            float rad = angle * 3.14159f / 180.f;
-            float len = 8.f;
-            Pt next = {pts[parentIdx].x + len * cosf(rad), pts[parentIdx].y + len * sinf(rad)};
-            
-            if (next.x > rect.L + 10.f && next.x < rect.R - 10.f && next.y > rect.T + 10.f && next.y < rect.B - 10.f) {
-                IColor col = (i < 100) ? bright : ((i < 500) ? mid : dim);
-                g.DrawLine(col, pts[parentIdx].x, pts[parentIdx].y, next.x, next.y, nullptr, (i < 200) ? tk : tkThin);
-                pts.push_back(next);
-            }
-        }
-        break;
-      }
-      case 16: // Cantor Dust
-      {
-        auto drawC = [&](auto&& self, float x, float y, float len, int d, float yOffset) -> void {
-            if (d == 0) { 
-                g.DrawLine(dim, x, y, x + len, y, nullptr, tkThin); 
-                return; 
-            }
-            float nl = len / 3.f;
-            IColor col = (d >= 4) ? bright : ((d >= 2) ? mid : dim);
-            g.DrawLine(col, x, y, x + len, y, nullptr, (d >= 3) ? tk : tkThin);
-            self(self, x, y - yOffset, nl, d - 1, yOffset * 0.8f);
-            self(self, x + 2.f * nl, y + yOffset, nl, d - 1, yOffset * 0.8f);
+        pts.reserve(1500);
+        pts.push_back({cx, rect.B - 16.f});
+        pts.push_back({cx, rect.T + 16.f});
+
+        // Spatial hash to skip near-duplicate placements (keeps the drawing crisp)
+        const float cellSz = 6.f;
+        std::unordered_set<long long> grid;
+        auto cellKey = [&](float x, float y) -> long long {
+          long long ix = (long long)std::floor(x / cellSz);
+          long long iy = (long long)std::floor(y / cellSz);
+          return (ix << 32) ^ (long long)(unsigned long long)iy;
         };
-        drawC(drawC, cx - w * 0.35f, cy, w * 0.7f, 5, h * 0.15f);
+        grid.insert(cellKey(pts[0].x, pts[0].y));
+        grid.insert(cellKey(pts[1].x, pts[1].y));
+
+        // Randomly distributed attractors - bias toward column near center
+        constexpr int kAttractors = 360;
+        std::vector<Pt> targets;
+        targets.reserve(kAttractors);
+        unsigned rng = 0xBEEFu;
+        auto frand = [&]() -> float {
+          rng = rng * 1664525u + 1013904223u;
+          return (float)rng / (float)0xFFFFFFFFu;
+        };
+        for (int i = 0; i < kAttractors; ++i)
+        {
+          targets.push_back({cx + (frand() - 0.5f) * w * 0.72f,
+                             rect.T + 18.f + frand() * (h - 36.f)});
+        }
+
+        constexpr int kIters = 1400;
+        for (int i = 0; i < kIters; ++i)
+        {
+          const Pt& target = targets[(int)(frand() * kAttractors) % kAttractors];
+
+          // Sample-based nearest search (fast enough; pts grows to ~1.4k)
+          int trials = std::min(48, (int)pts.size());
+          int nearestIdx = 0;
+          float bestD = 1e30f;
+          for (int k = 0; k < trials; ++k)
+          {
+            int idx2 = (int)(frand() * pts.size()) % (int)pts.size();
+            float dx = pts[idx2].x - target.x;
+            float dy = pts[idx2].y - target.y;
+            float d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; nearestIdx = idx2; }
+          }
+
+          const Pt& parent = pts[nearestIdx];
+          float dx = target.x - parent.x;
+          float dy = target.y - parent.y;
+          float dist = std::sqrt(dx * dx + dy * dy);
+          if (dist < 0.001f) continue;
+          float ang = std::atan2(dy, dx) + (frand() - 0.5f) * 0.6f;
+          float len = 9.f + frand() * 5.f;
+          Pt next{parent.x + std::cos(ang) * len, parent.y + std::sin(ang) * len};
+          if (next.x < rect.L + 14.f || next.x > rect.R - 14.f
+              || next.y < rect.T + 12.f || next.y > rect.B - 12.f) continue;
+
+          long long key = cellKey(next.x, next.y);
+          if (!grid.insert(key).second) continue;
+
+          IColor col;
+          float thickness;
+          if (i < 90)        { col = bright; thickness = 2.4f; }
+          else if (i < 380)  { col = mid;    thickness = 1.5f; }
+          else               { col = dim;    thickness = 1.0f; }
+          g.DrawLine(col, parent.x, parent.y, next.x, next.y, nullptr, thickness);
+          pts.push_back(next);
+        }
+
+        // Highlight the seed points so the ends read as "discharge poles"
+        IColor accent(220, 200, 162, 78);
+        DrawDiamond(g, cx, rect.B - 16.f, 4.f, accent);
+        DrawDiamond(g, cx, rect.T + 16.f, 4.f, accent);
         break;
       }
     }
