@@ -2,7 +2,7 @@
 
 # VoLum -- NAM Player
 
-![VoLum standalone UI](docs/UI.png)
+![VoLum standalone UI](docs/ui0.8.0.png)
 
 A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 14 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
 
