@@ -1,0 +1,32 @@
+---
+description: VoLum UI file map, layout ownership, and token-saving read order
+globs:
+  - NeuralAmpModeler/VoLum*.h
+  - NeuralAmpModeler/NeuralAmpModeler.cpp
+  - NeuralAmpModeler/NeuralAmpModeler.h
+alwaysApply: false
+---
+
+# VoLum UI
+
+Read the smallest owner first:
+
+- `VoLumControls.h`: umbrella only. Do not edit unless adding/removing includes.
+- `VoLumCoreControls.h`: base controls, sidebar, speaker row, hero, knobs, exact entry, tuner/metronome overlays, settings backdrop.
+- `VoLumTriptych.h`: PRE/AMP/POST strip, Delay/Reverb pedal cards, chain connector, effect artwork.
+- `VoLumTriptychState.h`: tiny shared enums.
+- `VoLumColorHelpers.h`: shared colors and small drawing helpers.
+- `VoLumFractalArt.h`: large procedural art. Read only when changing fractals or hero/sidebar art.
+
+Architecture:
+
+- Layout attaches in `_AttachVoLumGraphics` in `NeuralAmpModeler.cpp`.
+- `APP_API` means standalone; VST3-only behavior stays under `#ifndef APP_API`.
+- Triptych has one expanded section at a time: PRE, AMP, or POST.
+- Bottom knob row uses replace mode: section/pedal selection hides previous focused controls and shows new controls.
+- PRE strip background is diagonal crosshatch; collapsed AMP strip is circuit-board grid.
+
+Verification:
+
+- UI/layout change: run `pwsh NeuralAmpModeler/scripts/run-app-win.ps1` and inspect the app.
+- If params/keyboard behavior changed too, also run Windows tests.
