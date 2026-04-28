@@ -10,6 +10,7 @@ description: Prepare VoLum PRs and GitHub releases. Use when creating release PR
 1. Check branch and dirt first:
    - `git status --short --branch`
    - Keep unrelated local dirt, especially `iPlug2`, out of commits.
+   - Branching: `main` = released, `dev` = integration. After any `main` release, merge `main` -> `dev` and push. New work branches off `dev` (`feature/<topic>`); merge feature -> `dev` when verified; promote `dev` -> `main` only as part of a release.
 2. Identify workflow type:
    - PR to `main`: inspect full `origin/main...HEAD` diff, not only latest commit.
    - Draft release: inspect actual release assets with `gh release view`.

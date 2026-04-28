@@ -130,3 +130,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/28/2026 - VoLum v0.7.0: Chromatic tuner (YIN pitch detection, NDSP-style overlay, mutes output while tuning). Metronome with configurable BPM, volume, and time signature (1/4, 2/4, 3/4, 4/4, 6/8). VST3 parameter "AmpeteRig" renamed to "RigFile" (backward-compatible unserialization for older sessions).
 
 04/28/2026 - v0.8.0 VoLum release. See GitHub release notes for included changes.
+04/28/2026 - VoLum: Diezel Herbert Mk1 added to the Rig Collection (15th amp). 4 channels (Herb-1..Herb-4) profiled with Mid Cut on, across all 4 cab modes (Direct/G12/G65/V30). New Lichtenberg discharge hero artwork. AMP sidebar list is now scrollable (mouse wheel + auto-reveal) for catalogs that exceed the visible area.
+
