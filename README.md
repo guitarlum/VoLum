@@ -2,7 +2,7 @@
 
 # VoLum -- NAM Player
 
-![VoLum standalone UI](docs/UI.png)
+VoLum standalone UI
 
 A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 14 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
 
@@ -22,7 +22,7 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 
 ## Download
 
-[![Build status](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)
+[Build status](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)
 
 Get VoLum from **[Releases](https://github.com/guitarlum/VoLum/releases)**, or **[Actions → CI](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)** for the latest workflow artifacts.
 
@@ -140,7 +140,7 @@ Then rescan plug-ins again.
 If you are installing from **CI** artifacts instead of a tagged release:
 
 1. Open **Actions → CI**, pick the latest green run, and download **VoLum-mac** (and **VoLum-win** on Windows if needed).
-2. Prefer **`*-macos-installer.dmg`** ( **`VoLum Installer.pkg`** ) when it is included; otherwise use **`*-macos-standalone.dmg`** for the app and **`*-macos-vst3.zip`** for the manual plug-in install.
+2. Prefer **`*-macos-installer.dmg`** (**`VoLum Installer.pkg`**) when it is included; otherwise use **`*-macos-standalone.dmg`** for the app and **`*-macos-vst3.zip`** for the manual plug-in install.
 3. Follow the matching sections above (**installer**, **standalone only**, or **VST3 zip**).
 
 ## Bundled amps
