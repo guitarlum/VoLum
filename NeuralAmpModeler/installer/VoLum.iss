@@ -45,7 +45,7 @@ Source: "..\build-win\VoLum.vst3\*.*"; Excludes: "\Contents\x86\*,*.pdb,*.exp,*.
 Source: "..\..\rigs\Ampete One\*.nam"; DestDir: "{app}\VoLumRigs\Ampete One"; Flags: ignoreversion
 Source: "..\..\rigs\Bad Cat mini Cat\*.nam"; DestDir: "{app}\VoLumRigs\Bad Cat mini Cat"; Flags: ignoreversion
 Source: "..\..\rigs\Brunetti XL 2\*.nam"; DestDir: "{app}\VoLumRigs\Brunetti XL 2"; Flags: ignoreversion
-Source: "..\..\rigs\Diezel Herbert Mk1\*.nam"; DestDir: "{app}\VoLumRigs\Diezel Herbert Mk1"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\..\rigs\Diezel Herbert Mk1\*.nam"; DestDir: "{app}\VoLumRigs\Diezel Herbert Mk1"; Flags: ignoreversion
 Source: "..\..\rigs\Fryette Deliverance 120\*.nam"; DestDir: "{app}\VoLumRigs\Fryette Deliverance 120"; Flags: ignoreversion
 Source: "..\..\rigs\H&K TriAmp Mk2\*.nam"; DestDir: "{app}\VoLumRigs\H&K TriAmp Mk2"; Flags: ignoreversion
 Source: "..\..\rigs\Lichtlaerm Prometheus\*.nam"; DestDir: "{app}\VoLumRigs\Lichtlaerm Prometheus"; Flags: ignoreversion
