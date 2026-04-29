@@ -14,6 +14,29 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
   amps[0].outputLevel = -2.0;
   amps[0].noiseGateActive = false;
   amps[0].eqActive = false;
+  amps[0].preCompActive = true;
+  amps[0].preCompAmount = 6.5;
+  amps[0].preCompRatio = 8.0;
+  amps[0].preCompAttack = 2.5;
+  amps[0].preCompRelease = 180.0;
+  amps[0].preCompMix = 0.65;
+  amps[0].preCompLevel = 1.5;
+  amps[0].preNam1Active = true;
+  amps[0].preNam1Capture = 2;
+  amps[0].preNam1Gain = -3.0;
+  amps[0].preNam1Bass = 4.0;
+  amps[0].preNam1Mid = 6.0;
+  amps[0].preNam1MidFreq = 750.0;
+  amps[0].preNam1Treble = 7.0;
+  amps[0].preNam1Level = -1.0;
+  amps[0].preNam2Active = true;
+  amps[0].preNam2Capture = 4;
+  amps[0].preNam2Gain = 2.0;
+  amps[0].preNam2Bass = 3.0;
+  amps[0].preNam2Mid = 5.5;
+  amps[0].preNam2MidFreq = 1200.0;
+  amps[0].preNam2Treble = 8.0;
+  amps[0].preNam2Level = 0.5;
 
   const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
 
@@ -32,12 +55,36 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
   REQUIRE(loaded[0].outputLevel == doctest::Approx(-2.0));
   REQUIRE(loaded[0].noiseGateActive == false);
   REQUIRE(loaded[0].eqActive == false);
+  REQUIRE(loaded[0].preCompActive == true);
+  REQUIRE(loaded[0].preCompAmount == doctest::Approx(6.5));
+  REQUIRE(loaded[0].preCompRatio == doctest::Approx(8.0));
+  REQUIRE(loaded[0].preCompAttack == doctest::Approx(2.5));
+  REQUIRE(loaded[0].preCompRelease == doctest::Approx(180.0));
+  REQUIRE(loaded[0].preCompMix == doctest::Approx(0.65));
+  REQUIRE(loaded[0].preCompLevel == doctest::Approx(1.5));
+  REQUIRE(loaded[0].preNam1Active == true);
+  REQUIRE(loaded[0].preNam1Capture == 2);
+  REQUIRE(loaded[0].preNam1Gain == doctest::Approx(-3.0));
+  REQUIRE(loaded[0].preNam1Bass == doctest::Approx(4.0));
+  REQUIRE(loaded[0].preNam1Mid == doctest::Approx(6.0));
+  REQUIRE(loaded[0].preNam1MidFreq == doctest::Approx(750.0));
+  REQUIRE(loaded[0].preNam1Treble == doctest::Approx(7.0));
+  REQUIRE(loaded[0].preNam1Level == doctest::Approx(-1.0));
+  REQUIRE(loaded[0].preNam2Active == true);
+  REQUIRE(loaded[0].preNam2Capture == 4);
+  REQUIRE(loaded[0].preNam2Gain == doctest::Approx(2.0));
+  REQUIRE(loaded[0].preNam2Bass == doctest::Approx(3.0));
+  REQUIRE(loaded[0].preNam2Mid == doctest::Approx(5.5));
+  REQUIRE(loaded[0].preNam2MidFreq == doctest::Approx(1200.0));
+  REQUIRE(loaded[0].preNam2Treble == doctest::Approx(8.0));
+  REQUIRE(loaded[0].preNam2Level == doctest::Approx(0.5));
 
   // Other amps unchanged (defaults)
   for (int i = 1; i < volum::kAmpCount; ++i)
   {
     REQUIRE(loaded[i].speakerIdx == 3);
     REQUIRE(loaded[i].noiseGateActive == true);
+    REQUIRE(loaded[i].preNam1Active == false);
   }
 }
 
@@ -54,6 +101,42 @@ TEST_CASE("lastAmpIdx is clamped to catalog range")
   j["lastAmpIdx"] = -50;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &lastAmp);
   REQUIRE(lastAmp == 0);
+}
+
+TEST_CASE("Corrupt per-amp speaker and channel settings auto-heal")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["amps"]["Marshall JMP 2203 1976"]["speaker"] = 999;
+  j["amps"]["Marshall JMP 2203 1976"]["channel"] = -1068236800;
+  j["amps"]["Marshall JVM 210H OD1"]["speaker"] = -42;
+  j["amps"]["Marshall JVM 210H OD1"]["channel"] = -1;
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+
+  REQUIRE(healed == true);
+  CHECK(loaded[8].speakerIdx == 3);
+  CHECK(loaded[8].channelIdx == 0);
+  CHECK(loaded[9].speakerIdx == 0);
+  CHECK(loaded[9].channelIdx == 0);
+}
+
+TEST_CASE("Valid per-amp speaker and channel settings do not request auto-heal")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["amps"]["Soldano SLO100"]["speaker"] = 2;
+  j["amps"]["Soldano SLO100"]["channel"] = 3;
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+
+  REQUIRE(healed == false);
+  CHECK(loaded[13].speakerIdx == 2);
+  CHECK(loaded[13].channelIdx == 3);
 }
 
 TEST_CASE("Effect settings JSON roundtrip preserves all params")

@@ -170,6 +170,30 @@ int _GetConfigFrom_0_7_15(const iplug::IByteChunk& chunk, int startPos, nlohmann
   return pos;
 }
 
+// v0.8.1 (PRE pedalboard params added)
+
+void _UpdateConfigFrom_0_8_1(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_7_15(config);
+}
+
+int _GetConfigFrom_0_8_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{
+    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
+    "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
+    "ReverbActive", "ReverbMix", "ReverbDecay", "ReverbTone", "ReverbPreDelay", "ReverbShimmer", "ReverbMode",
+    "BoostActive", "BoostDrive", "BoostTone", "BoostLevel",
+    "PreCompActive", "PreCompAmount", "PreCompRatio", "PreCompAttack", "PreCompRelease", "PreCompMix", "PreCompLevel",
+    "PreNam1Active", "PreNam1Capture", "PreNam1Gain", "PreNam1Bass", "PreNam1Mid", "PreNam1MidFreq", "PreNam1Treble", "PreNam1Level",
+    "PreNam2Active", "PreNam2Capture", "PreNam2Gain", "PreNam2Bass", "PreNam2Mid", "PreNam2MidFreq", "PreNam2Treble", "PreNam2Level",
+    "CalibrateInput", "InputCalibrationLevel", "OutputMode", "RigFile"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_8_1(config);
+  return pos;
+}
+
 // VoLum 0.5.0 (Reverb, Delay, Boost added)
 
 void _UpdateConfigFrom_0_5_0(nlohmann::json& config)
@@ -364,7 +388,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // Act accordingly
   nlohmann::json config;
 
-  if (volum::ChunkUses0700SerializedConfig(version))
+  if (version >= volum::ChunkVersion(0, 8, 1))
+  {
+    pos = _GetConfigFrom_0_8_1(chunk, pos, config);
+  }
+  else if (volum::ChunkUses0700SerializedConfig(version))
   {
     pos = _GetConfigFrom_0_7_0(chunk, pos, config);
   }
@@ -415,6 +443,9 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     mVolumAmpIdx = std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1);
     mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
 
+    const int oldPerAmpBytes = static_cast<int>(sizeof(int) * 4 + sizeof(double) * 6);
+    const bool hasPreAmpSettings = (chunk.Size() - pos) > oldPerAmpBytes * volum::kAmpCount;
+
     for (int i = 0; i < volum::kAmpCount; i++)
     {
       auto& s = mVolumAmpSettings[i];
@@ -431,6 +462,39 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       pos = chunk.Get(&eq, pos);
       s.noiseGateActive = (ng != 0);
       s.eqActive = (eq != 0);
+      if (hasPreAmpSettings)
+      {
+        int pc = 0, p1 = 0, p2 = 0;
+        pos = chunk.Get(&pc, pos);
+        pos = chunk.Get(&s.preCompAmount, pos);
+        if (version >= volum::ChunkVersion(0, 8, 1))
+        {
+          pos = chunk.Get(&s.preCompRatio, pos);
+          pos = chunk.Get(&s.preCompAttack, pos);
+          pos = chunk.Get(&s.preCompRelease, pos);
+          pos = chunk.Get(&s.preCompMix, pos);
+        }
+        pos = chunk.Get(&s.preCompLevel, pos);
+        pos = chunk.Get(&p1, pos);
+        pos = chunk.Get(&s.preNam1Capture, pos);
+        pos = chunk.Get(&s.preNam1Gain, pos);
+        pos = chunk.Get(&s.preNam1Bass, pos);
+        pos = chunk.Get(&s.preNam1Mid, pos);
+        pos = chunk.Get(&s.preNam1MidFreq, pos);
+        pos = chunk.Get(&s.preNam1Treble, pos);
+        pos = chunk.Get(&s.preNam1Level, pos);
+        pos = chunk.Get(&p2, pos);
+        pos = chunk.Get(&s.preNam2Capture, pos);
+        pos = chunk.Get(&s.preNam2Gain, pos);
+        pos = chunk.Get(&s.preNam2Bass, pos);
+        pos = chunk.Get(&s.preNam2Mid, pos);
+        pos = chunk.Get(&s.preNam2MidFreq, pos);
+        pos = chunk.Get(&s.preNam2Treble, pos);
+        pos = chunk.Get(&s.preNam2Level, pos);
+        s.preCompActive = (pc != 0);
+        s.preNam1Active = (p1 != 0);
+        s.preNam2Active = (p2 != 0);
+      }
     }
 
     mVolumInitComplete = false;
