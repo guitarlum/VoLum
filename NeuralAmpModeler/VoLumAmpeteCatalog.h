@@ -75,6 +75,29 @@ struct VoLumAmpSettings
   double outputLevel = 0.0;
   bool noiseGateActive = true;
   bool eqActive = true;
+  bool preCompActive = false;
+  double preCompAmount = 3.0;
+  double preCompRatio = 4.0;
+  double preCompAttack = 4.0;
+  double preCompRelease = 120.0;
+  double preCompMix = 1.0;
+  double preCompLevel = 0.0;
+  bool preNam1Active = false;
+  int preNam1Capture = 0;
+  double preNam1Gain = 0.0;
+  double preNam1Bass = 5.0;
+  double preNam1Mid = 5.0;
+  double preNam1MidFreq = 650.0;
+  double preNam1Treble = 5.0;
+  double preNam1Level = 0.0;
+  bool preNam2Active = false;
+  int preNam2Capture = 0;
+  double preNam2Gain = 0.0;
+  double preNam2Bass = 5.0;
+  double preNam2Mid = 5.0;
+  double preNam2MidFreq = 650.0;
+  double preNam2Treble = 5.0;
+  double preNam2Level = 0.0;
 };
 #endif
 } // namespace volum
