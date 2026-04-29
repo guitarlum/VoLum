@@ -176,9 +176,11 @@ jobs:
         test -d "$VERIFY_DIR/dmg/VoLum.app"
         test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
         test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
         test -d "$VERIFY_DIR/vst3/VoLum.vst3"
         test -d "$VERIFY_DIR/vst3/VoLumRigs"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+        test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
         hdiutil detach "$VERIFY_DIR/dmg"
 
         hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
@@ -267,11 +269,13 @@ jobs:
         $vst3Path = Join-Path $verifyDir "VoLum.vst3"
         $rigsPath = Join-Path $verifyDir "VoLumRigs"
         $sampleRig = Join-Path $rigsPath "Ampete One\AMP-Ampt-1.nam"
+        $herbertRig = Join-Path $rigsPath "Diezel Herbert Mk1\V30-Herb-4.nam"
 
         if (-not (Test-Path $exePath)) { throw "Missing standalone exe: $exePath" }
         if (-not (Test-Path $vst3Path)) { throw "Missing VST3 bundle: $vst3Path" }
         if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
         if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
+        if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
       shell: pwsh
 
     - name: Upload Windows release assets
