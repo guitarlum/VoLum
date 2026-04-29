@@ -2165,11 +2165,19 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 
       if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {
         delayCard->Hide(!postExpanded);
-        if (postExpanded) delayCard->As<VoLumPedalCardControl>()->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::DELAY);
+        if (postExpanded) {
+          auto* card = delayCard->As<VoLumPedalCardControl>();
+          card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::DELAY);
+          card->SetActiveState(GetParam(kDelayActive)->Bool());
+        }
       }
       if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard)) {
         reverbCard->Hide(!postExpanded);
-        if (postExpanded) reverbCard->As<VoLumPedalCardControl>()->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::REVERB);
+        if (postExpanded) {
+          auto* card = reverbCard->As<VoLumPedalCardControl>();
+          card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::REVERB);
+          card->SetActiveState(GetParam(kReverbActive)->Bool());
+        }
       }
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector)) {
         chain->Hide(!postExpanded);
