@@ -2259,7 +2259,7 @@ void NeuralAmpModeler::_VolumRefreshChannels()
 
   if (mVolumSpeakerIdx < 0 || mVolumSpeakerIdx >= 4)
   {
-    mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
+    mVolumSpeakerIdx = volum::VoLumAmpSettings{}.speakerIdx;
     mVolumAmpSettings[mVolumAmpIdx].speakerIdx = mVolumSpeakerIdx;
     mVolumSettingsDirty = true;
   }

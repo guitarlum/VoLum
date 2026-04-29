@@ -137,4 +137,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/29/2026 - v0.8.1 VoLum release. See GitHub release notes for included changes.
 
 04/29/2026 - VoLum: Per-user settings auto-heal corrupt speaker/channel values on load. Prevents stale or damaged volum-settings.json files from making amps appear empty or indexing invalid channel slots.
+04/30/2026 - VoLum: Corrupt per-user settings now heal to real VoLum defaults instead of numeric minimum/maximum parameter limits, preventing broken files from cranking the noise gate or tone/input controls.
 04/29/2026 - v0.8.2 VoLum release. See GitHub release notes for included changes.
