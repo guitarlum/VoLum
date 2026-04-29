@@ -65,6 +65,29 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["output"] = s.outputLevel;
     a["noiseGate"] = s.noiseGateActive;
     a["eq"] = s.eqActive;
+    a["preCompActive"] = s.preCompActive;
+    a["preCompAmount"] = s.preCompAmount;
+    a["preCompRatio"] = s.preCompRatio;
+    a["preCompAttack"] = s.preCompAttack;
+    a["preCompRelease"] = s.preCompRelease;
+    a["preCompMix"] = s.preCompMix;
+    a["preCompLevel"] = s.preCompLevel;
+    a["preNam1Active"] = s.preNam1Active;
+    a["preNam1Capture"] = s.preNam1Capture;
+    a["preNam1Gain"] = s.preNam1Gain;
+    a["preNam1Bass"] = s.preNam1Bass;
+    a["preNam1Mid"] = s.preNam1Mid;
+    a["preNam1MidFreq"] = s.preNam1MidFreq;
+    a["preNam1Treble"] = s.preNam1Treble;
+    a["preNam1Level"] = s.preNam1Level;
+    a["preNam2Active"] = s.preNam2Active;
+    a["preNam2Capture"] = s.preNam2Capture;
+    a["preNam2Gain"] = s.preNam2Gain;
+    a["preNam2Bass"] = s.preNam2Bass;
+    a["preNam2Mid"] = s.preNam2Mid;
+    a["preNam2MidFreq"] = s.preNam2MidFreq;
+    a["preNam2Treble"] = s.preNam2Treble;
+    a["preNam2Level"] = s.preNam2Level;
     amps[kAmps[i].folderName] = a;
   }
   j["amps"] = amps;
@@ -102,10 +125,18 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
 }
 
 inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings* ampSettings, int ampCount,
-                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr)
+                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr, bool* didHeal = nullptr)
 {
+  bool healed = false;
+  auto sanitizeInt = [&](int value, int minValue, int maxValue) {
+    const int clamped = std::clamp(value, minValue, maxValue);
+    if (clamped != value)
+      healed = true;
+    return clamped;
+  };
+
   if (lastAmpIdx && j.contains("lastAmpIdx"))
-    *lastAmpIdx = std::clamp(j["lastAmpIdx"].get<int>(), 0, ampCount - 1);
+    *lastAmpIdx = sanitizeInt(j["lastAmpIdx"].get<int>(), 0, ampCount - 1);
 
   if (j.contains("amps") && j["amps"].is_object())
   {
@@ -118,9 +149,9 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
       const auto& a = j["amps"][key];
       auto& s = ampSettings[i];
       if (a.contains("speaker"))
-        s.speakerIdx = a["speaker"].get<int>();
+        s.speakerIdx = sanitizeInt(a["speaker"].get<int>(), 0, 3);
       if (a.contains("channel"))
-        s.channelIdx = a["channel"].get<int>();
+        s.channelIdx = sanitizeInt(a["channel"].get<int>(), 0, 127);
       if (a.contains("input"))
         s.inputLevel = a["input"].get<double>();
       if (a.contains("gate"))
@@ -137,6 +168,52 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         s.noiseGateActive = a["noiseGate"].get<bool>();
       if (a.contains("eq"))
         s.eqActive = a["eq"].get<bool>();
+      if (a.contains("preCompActive"))
+        s.preCompActive = a["preCompActive"].get<bool>();
+      if (a.contains("preCompAmount"))
+        s.preCompAmount = a["preCompAmount"].get<double>();
+      if (a.contains("preCompRatio"))
+        s.preCompRatio = a["preCompRatio"].get<double>();
+      if (a.contains("preCompAttack"))
+        s.preCompAttack = a["preCompAttack"].get<double>();
+      if (a.contains("preCompRelease"))
+        s.preCompRelease = a["preCompRelease"].get<double>();
+      if (a.contains("preCompMix"))
+        s.preCompMix = a["preCompMix"].get<double>();
+      if (a.contains("preCompLevel"))
+        s.preCompLevel = a["preCompLevel"].get<double>();
+      if (a.contains("preNam1Active"))
+        s.preNam1Active = a["preNam1Active"].get<bool>();
+      if (a.contains("preNam1Capture"))
+        s.preNam1Capture = a["preNam1Capture"].get<int>();
+      if (a.contains("preNam1Gain"))
+        s.preNam1Gain = a["preNam1Gain"].get<double>();
+      if (a.contains("preNam1Bass"))
+        s.preNam1Bass = a["preNam1Bass"].get<double>();
+      if (a.contains("preNam1Mid"))
+        s.preNam1Mid = a["preNam1Mid"].get<double>();
+      if (a.contains("preNam1MidFreq"))
+        s.preNam1MidFreq = a["preNam1MidFreq"].get<double>();
+      if (a.contains("preNam1Treble"))
+        s.preNam1Treble = a["preNam1Treble"].get<double>();
+      if (a.contains("preNam1Level"))
+        s.preNam1Level = a["preNam1Level"].get<double>();
+      if (a.contains("preNam2Active"))
+        s.preNam2Active = a["preNam2Active"].get<bool>();
+      if (a.contains("preNam2Capture"))
+        s.preNam2Capture = a["preNam2Capture"].get<int>();
+      if (a.contains("preNam2Gain"))
+        s.preNam2Gain = a["preNam2Gain"].get<double>();
+      if (a.contains("preNam2Bass"))
+        s.preNam2Bass = a["preNam2Bass"].get<double>();
+      if (a.contains("preNam2Mid"))
+        s.preNam2Mid = a["preNam2Mid"].get<double>();
+      if (a.contains("preNam2MidFreq"))
+        s.preNam2MidFreq = a["preNam2MidFreq"].get<double>();
+      if (a.contains("preNam2Treble"))
+        s.preNam2Treble = a["preNam2Treble"].get<double>();
+      if (a.contains("preNam2Level"))
+        s.preNam2Level = a["preNam2Level"].get<double>();
     }
   }
 
@@ -194,6 +271,9 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         mode = legacy;
     }
   }
+
+  if (didHeal)
+    *didHeal = healed;
 }
 
 } // namespace volum

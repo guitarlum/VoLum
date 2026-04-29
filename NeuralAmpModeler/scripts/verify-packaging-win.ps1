@@ -29,10 +29,12 @@ $vst3Path = Join-Path $verifyDir "VoLum.vst3"
 $rigsPath = Join-Path $verifyDir "VoLumRigs"
 $sampleRig = Join-Path $rigsPath "Ampete One\AMP-Ampt-1.nam"
 $herbertRig = Join-Path $rigsPath "Diezel Herbert Mk1\V30-Herb-4.nam"
+$prePedalsPath = Join-Path $rigsPath "PrePedals"
 
 if (-not (Test-Path $exePath)) { throw "Missing standalone exe: $exePath" }
 if (-not (Test-Path $vst3Path)) { throw "Missing VST3 bundle: $vst3Path" }
 if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
+if (-not (Test-Path $prePedalsPath)) { throw "Missing PrePedals folder: $prePedalsPath" }
 if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
 if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
 
