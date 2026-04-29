@@ -332,7 +332,7 @@ public:
   using ClickCallback = std::function<void(VoLumPedalCardControl*, bool isBypassClick)>;
 
   VoLumPedalCardControl(const IRECT& bounds, EVoLumEffectFocus effect, const char* name, int fractalCase, int activeParamIdx, ClickCallback cb)
-  : IControl(bounds, activeParamIdx)
+  : IControl(bounds)
   , mEffect(effect)
   , mName(name)
   , mFractalCase(fractalCase)
