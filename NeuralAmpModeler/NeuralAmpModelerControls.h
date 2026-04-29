@@ -216,15 +216,26 @@ private:
       case kReverbTone:
       case kBoostTone:
       case kBoostDrive:
+      case kPreNam1Bass:
+      case kPreNam1Mid:
+      case kPreNam1Treble:
+      case kPreNam2Bass:
+      case kPreNam2Mid:
+      case kPreNam2Treble:
         return fine ? 0.1 : 0.5;
       case kDelayTime:
       case kReverbPreDelay:
+      case kPreNam1MidFreq:
+      case kPreNam2MidFreq:
+      case kPreCompAttack:
+      case kPreCompRelease:
         return fine ? 1.0 : 5.0;
       case kDelayFeedback:
       case kDelayMix:
       case kReverbMix:
       case kReverbDecay:
       case kReverbShimmer:
+      case kPreCompMix:
         return fine ? 0.01 : 0.05;
       default:
         return fine ? 0.1 : 1.0;

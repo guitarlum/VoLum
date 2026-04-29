@@ -4,6 +4,8 @@
 #include "VoLumTriptychState.h"
 #include "NeuralAmpModeler.h"
 
+#include <algorithm>
+
 using namespace iplug;
 using namespace igraphics;
 
@@ -35,8 +37,7 @@ public:
   void Draw(IGraphics& g) override
   {
     const float stripW = 30.f;
-    const EVoLumSection displaySection =
-      (mExpandedSection == EVoLumSection::PRE) ? EVoLumSection::AMP : mExpandedSection;
+    const EVoLumSection displaySection = mExpandedSection;
     const float expandedW = (displaySection == EVoLumSection::AMP) ? 400.f : 460.f;
     const float gap = 10.f;
     const float cx = mRECT.MW();
@@ -52,7 +53,7 @@ public:
       ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + expandedW, mRECT.B);
       postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + stripW, mRECT.B);
     }
-    else // POST
+    else if (displaySection == EVoLumSection::POST)
     {
       const float ampStripW = 70.f;
       const float preStripW = stripW;
@@ -62,13 +63,23 @@ public:
       ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
       postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + expandedW, mRECT.B);
     }
+    else // PRE
+    {
+      const float ampStripW = 70.f;
+      const float postStripW = stripW;
+      const float totalW = expandedW + gap + ampStripW + gap + postStripW;
+      const float left = cx - totalW / 2.f;
+      preRect = IRECT(left, mRECT.T, left + expandedW, mRECT.B);
+      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
+      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + postStripW, mRECT.B);
+    }
 
     mPreRect = preRect;
     mAmpRect = ampRect;
     mPostRect = postRect;
 
     // Draw the sections
-    _DrawStrip(g, preRect, "PRE", false, false, false);
+    _DrawStrip(g, preRect, "PRE", displaySection == EVoLumSection::PRE, mPreActive, false);
     
     // AMP: we draw the strip, or we draw the hero frame
     if (displaySection == EVoLumSection::AMP) {
@@ -84,7 +95,7 @@ public:
   void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName)
   {
     (void) preActive;
-    mPreActive = false;
+    mPreActive = preActive;
     mPostActive = postActive;
     mAmpIdx = ampIdx;
     mAmpName = ampName;
@@ -93,7 +104,7 @@ public:
   
   void SetExpandedSection(EVoLumSection s)
   {
-    mExpandedSection = (s == EVoLumSection::PRE) ? EVoLumSection::AMP : s;
+    mExpandedSection = s;
     SetDirty(false);
   }
   
@@ -194,7 +205,13 @@ private:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    if (mAmpRect.Contains(x, y) && mExpandedSection != EVoLumSection::AMP)
+    if (mPreRect.Contains(x, y) && mExpandedSection != EVoLumSection::PRE)
+    {
+      mExpandedSection = EVoLumSection::PRE;
+      if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::COMP);
+      SetDirty(false);
+    }
+    else if (mAmpRect.Contains(x, y) && mExpandedSection != EVoLumSection::AMP)
     {
       mExpandedSection = EVoLumSection::AMP;
       if (mCallback) mCallback(mExpandedSection, EVoLumEffectFocus::AMP);
@@ -218,6 +235,95 @@ private:
   IRECT mPreRect;
   IRECT mAmpRect;
   IRECT mPostRect;
+};
+
+class VoLumPreCaptureMenuControl : public IControl
+{
+public:
+  VoLumPreCaptureMenuControl(const IRECT& bounds) : IControl(bounds) { mIgnoreMouse = false; }
+
+  void SetItems(int slot, const std::vector<std::string>& labels, int selectedIdx)
+  {
+    mSlot = slot;
+    mLabels = labels;
+    mSelectedIdx = selectedIdx;
+    mHovered = -1;
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRoundRect(VoLumColors::HERO_BG, mRECT, 4.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, mRECT, 4.f, nullptr, 1.5f);
+    DrawCornerAccent(g, mRECT.L + 5.f, mRECT.T + 5.f, 8.f, false, false, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, mRECT.R - 5.f, mRECT.B - 5.f, 8.f, true, true, VoLumColors::TEAL_DIM);
+
+    const IText text(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    const IText dimText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    for (int i = 0; i < static_cast<int>(mLabels.size()); ++i)
+    {
+      const IRECT row(mRECT.L + 8.f, mRECT.T + 6.f + i * mItemH, mRECT.R - 8.f, mRECT.T + 6.f + (i + 1) * mItemH);
+      const bool selected = i == mSelectedIdx;
+      if (selected)
+      {
+        g.FillRoundRect(VoLumColors::ITEM_SEL_BG, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+        g.DrawRoundRect(VoLumColors::ITEM_SEL_BORDER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+      }
+      else if (i == mHovered)
+      {
+        g.FillRoundRect(VoLumColors::ITEM_HOVER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+        g.DrawRoundRect(IColor(20, 200, 162, 78), row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+      }
+      if (selected)
+        g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
+      g.DrawText(selected ? text : dimText, mLabels[static_cast<size_t>(i)].c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
+    }
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    (void) mod;
+    const int idx = static_cast<int>((y - (mRECT.T + 6.f)) / mItemH);
+    if (idx < 0 || idx >= static_cast<int>(mLabels.size()))
+      return;
+
+    if (auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+    {
+      plugin->_VolumSetPreNamCapture(mSlot, idx);
+      plugin->_VolumHidePreCaptureMenu();
+    }
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    (void) x;
+    (void) mod;
+    const int idx = static_cast<int>((y - (mRECT.T + 6.f)) / mItemH);
+    const int next = (idx >= 0 && idx < static_cast<int>(mLabels.size())) ? idx : -1;
+    if (next != mHovered)
+    {
+      mHovered = next;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHovered != -1)
+    {
+      mHovered = -1;
+      SetDirty(false);
+    }
+  }
+
+  static constexpr float ItemHeight() { return 22.f; }
+
+private:
+  int mSlot = 0;
+  int mSelectedIdx = 0;
+  int mHovered = -1;
+  float mItemH = ItemHeight();
+  std::vector<std::string> mLabels;
 };
 
 class VoLumPedalCardControl : public IControl
@@ -258,8 +364,10 @@ public:
       mCachedBypassed = bypassed;
     }
     g.DrawLayer(mArtLayer);
+    if (bypassed)
+      g.FillRect(VoLumColors::HERO_BG.WithOpacity(0.68f), artRect);
 
-    IText presetTxt(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    IText presetTxt(11.5f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     const std::string presetName = _GetPresetName();
     const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 22.f, mRECT.B - 4.f);
     g.DrawText(presetTxt, presetName.c_str(), presetRect);
@@ -271,9 +379,22 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    bool isBypass = mLedRect.Contains(x, y);
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    if (mIsFocused)
+    {
+      if (plugin && mEffect == EVoLumEffectFocus::PRE_NAM1)
+      {
+        plugin->_VolumShowPreCaptureMenu(0, mRECT);
+        return;
+      }
+      if (plugin && mEffect == EVoLumEffectFocus::PRE_NAM2)
+      {
+        plugin->_VolumShowPreCaptureMenu(1, mRECT);
+        return;
+      }
+    }
     if (mCallback)
-      mCallback(this, isBypass);
+      mCallback(this, false);
   }
   
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -286,17 +407,119 @@ public:
     SetDirty(false);
   }
 
+  void SetActiveState(bool active)
+  {
+    const double value = active ? 1.0 : 0.0;
+    const bool wasBypassed = GetValue() < 0.5;
+    const bool willBypass = !active;
+    if (GetValue() != value)
+      SetValue(value);
+    if (wasBypassed != willBypass || mCachedBypassed != willBypass)
+      mArtLayer = nullptr;
+    SetDirty(false);
+  }
+
   EVoLumEffectFocus GetEffect() const { return mEffect; }
 
 private:
   void _DrawFractalArt(IGraphics& g, const IRECT& r, bool dimmed)
   {
-    float cx = r.MW(), cy = r.MH();
+    float cy = r.MH();
     IColor bright(dimmed ? 70 : 150, 120, 210, 220);
     IColor mid(dimmed ? 40 : 80, 100, 180, 200);
     IColor dim(dimmed ? 20 : 45, 80, 150, 170);
 
-    if (mEffect == EVoLumEffectFocus::DELAY)
+    if (mEffect == EVoLumEffectFocus::COMP)
+    {
+      const float activeMul = dimmed ? 0.25f : 1.0f;
+      const IColor teal((int)(125.f * activeMul), 90, 205, 220);
+      const IColor blue((int)(135.f * activeMul), 145, 220, 245);
+      const float cx = r.MW();
+      const float radii[][2] = {{r.W() * 0.24f, r.H() * 0.11f}, {r.W() * 0.33f, r.H() * 0.16f},
+                                {r.W() * 0.42f, r.H() * 0.21f}, {r.W() * 0.50f, r.H() * 0.26f}};
+      for (int i = 0; i < 4; ++i)
+      {
+        const float rotation = i * 23.f * 3.14159f / 180.f;
+        float prevX = cx + radii[i][0] * cosf(rotation);
+        float prevY = cy + radii[i][0] * sinf(rotation) * 0.28f;
+        for (int s = 1; s <= 72; ++s)
+        {
+          const float a = (float)s / 72.f * 6.28318f;
+          const float x = cx + radii[i][0] * cosf(a) * cosf(rotation) - radii[i][1] * sinf(a) * sinf(rotation);
+          const float y = cy + radii[i][0] * cosf(a) * sinf(rotation) + radii[i][1] * sinf(a) * cosf(rotation);
+          g.DrawLine((i % 2) ? blue : teal, prevX, prevY, x, y, nullptr, 1.2f);
+          prevX = x;
+          prevY = y;
+        }
+      }
+      g.FillCircle(teal, cx - r.W() * 0.32f, cy + r.H() * 0.13f, 3.5f);
+      g.FillCircle(blue, cx - r.W() * 0.12f, cy - r.H() * 0.10f, 3.f);
+      g.FillCircle(teal, cx + r.W() * 0.15f, cy + r.H() * 0.12f, 3.5f);
+      g.FillCircle(blue, cx + r.W() * 0.36f, cy - r.H() * 0.09f, 3.f);
+    }
+    else if (mEffect == EVoLumEffectFocus::PRE_NAM1)
+    {
+      const float activeMul = dimmed ? 0.25f : 1.0f;
+      const IColor teal((int)(135.f * activeMul), 90, 205, 220);
+      const IColor blue((int)(145.f * activeMul), 145, 220, 245);
+      const float cell = std::min(r.W() * 0.12f, r.H() * 0.18f);
+      const float gridW = cell * 6.8f;
+      const float gridH = cell * 4.3f;
+      const float left = r.MW() - gridW * 0.5f;
+      const float top = cy - gridH * 0.5f;
+      for (int y = 0; y < 4; ++y)
+      {
+        for (int x = 0; x < 6; ++x)
+        {
+          const float px = left + x * cell * 1.16f;
+          const float py = top + y * cell * 1.10f;
+          const bool hole = (x == 2 || x == 3) && (y == 1 || y == 2);
+          const IColor col = ((x + y) % 2) ? blue.WithOpacity(0.72f) : teal;
+          if (hole)
+            g.FillRect(IColor((int)(28.f * activeMul), 24, 42, 58), IRECT(px, py, px + cell, py + cell));
+          else
+            g.DrawRect(col, IRECT(px, py, px + cell, py + cell), nullptr, 1.3f);
+
+          if (!hole && (x + y) % 3 == 0)
+          {
+            const float sub = cell * 0.32f;
+            g.DrawRect(dim.WithOpacity(0.65f), IRECT(px + sub, py + sub, px + cell - sub, py + cell - sub), nullptr, 0.9f);
+          }
+        }
+      }
+      g.DrawRect(teal.WithOpacity(0.55f), IRECT(left - 2.f, top - 2.f, left + cell * 6.8f, top + cell * 4.3f), nullptr, 1.2f);
+    }
+    else if (mEffect == EVoLumEffectFocus::PRE_NAM2)
+    {
+      const float activeMul = dimmed ? 0.25f : 1.0f;
+      const IColor teal((int)(135.f * activeMul), 90, 205, 220);
+      const IColor blue((int)(145.f * activeMul), 145, 220, 245);
+      const float cxA = r.MW() - r.W() * 0.11f;
+      const float cxB = r.MW() + r.W() * 0.11f;
+      for (int i = 0; i < 7; ++i)
+      {
+        const float radius = r.H() * (0.12f + i * 0.045f);
+        float prevAX = cxA + radius;
+        float prevAY = cy;
+        float prevBX = cxB + radius;
+        float prevBY = cy;
+        for (int s = 1; s <= 48; ++s)
+        {
+          const float a = (float)s / 48.f * 6.28318f;
+          const float ax = cxA + cosf(a) * radius;
+          const float ay = cy + sinf(a) * radius;
+          const float bx = cxB + cosf(a + 0.16f) * radius;
+          const float by = cy + sinf(a + 0.16f) * radius;
+          g.DrawLine(teal.WithOpacity(0.28f + i * 0.06f), prevAX, prevAY, ax, ay, nullptr, 1.0f);
+          g.DrawLine(blue.WithOpacity(0.24f + i * 0.05f), prevBX, prevBY, bx, by, nullptr, 1.0f);
+          prevAX = ax;
+          prevAY = ay;
+          prevBX = bx;
+          prevBY = by;
+        }
+      }
+    }
+    else if (mEffect == EVoLumEffectFocus::DELAY)
     {
       const float activeMul = dimmed ? 0.28f : 1.0f;
       int taps = 5;
@@ -374,6 +597,13 @@ private:
         plugin->GetParam(kReverbMode)->GetDisplay(modeText);
         summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kReverbMix)->Value() * 100.0);
         return summary.Get();
+      case EVoLumEffectFocus::COMP:
+        summary.SetFormatted(64, "%.1f:1 . %.1f", plugin->GetParam(kPreCompRatio)->Value(), plugin->GetParam(kPreCompAmount)->Value());
+        return summary.Get();
+      case EVoLumEffectFocus::PRE_NAM1:
+        return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam1Capture)->Int());
+      case EVoLumEffectFocus::PRE_NAM2:
+        return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam2Capture)->Int());
       default:
         return "BYPASS";
     }

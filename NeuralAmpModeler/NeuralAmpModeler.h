@@ -11,6 +11,7 @@
 
 #include "Colors.h"
 #include "ToneStack.h"
+#include "VoLumPreEffects.h"
 
 #include "config.h"
 #include "IPlug_include_in_plug_hdr.h"
@@ -73,6 +74,30 @@ enum EParams
   kBoostDrive,
   kBoostTone,
   kBoostLevel,
+  // PRE pedalboard
+  kPreCompActive,
+  kPreCompAmount,
+  kPreCompRatio,
+  kPreCompAttack,
+  kPreCompRelease,
+  kPreCompMix,
+  kPreCompLevel,
+  kPreNam1Active,
+  kPreNam1Capture,
+  kPreNam1Gain,
+  kPreNam1Bass,
+  kPreNam1Mid,
+  kPreNam1MidFreq,
+  kPreNam1Treble,
+  kPreNam1Level,
+  kPreNam2Active,
+  kPreNam2Capture,
+  kPreNam2Gain,
+  kPreNam2Bass,
+  kPreNam2Mid,
+  kPreNam2MidFreq,
+  kPreNam2Treble,
+  kPreNam2Level,
   // Input calibration
   kCalibrateInput,
   kInputCalibrationLevel,
@@ -104,6 +129,12 @@ enum ECtrlTags
   kCtrlTagVoLumChannelStep,
   kCtrlTagVoLumTriptych,
   kCtrlTagVoLumBoostCard,
+  kCtrlTagVoLumCompCard,
+  kCtrlTagVoLumPreNam1Card,
+  kCtrlTagVoLumPreNam2Card,
+  kCtrlTagVoLumPreCaptureMenu,
+  kCtrlTagVoLumPreChainConnector1,
+  kCtrlTagVoLumPreChainConnector2,
   kCtrlTagVoLumDelayCard,
   kCtrlTagVoLumReverbCard,
   kCtrlTagVoLumChainConnector,
@@ -301,6 +332,15 @@ public:
   void _UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx = nullptr);
   void _ToggleVoLumTuner();
   void _ToggleVoLumMetronomePanel();
+  void _VolumRefreshPrePedalCaptures();
+  void _VolumRequestPreNamLoad(int slot);
+  void _VolumCyclePreNamCapture(int slot, int direction);
+  void _VolumSetPreNamCapture(int slot, int captureIdx);
+  void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
+  void _VolumHidePreCaptureMenu();
+  int _VolumGetPreCaptureCount() const;
+  const char* _VolumGetPreCaptureLabel(int captureIdx) const;
+  std::string _VolumGetPreCaptureFilename(int captureIdx) const;
 
 private:
   friend class NAMKnobControl;
@@ -315,11 +355,15 @@ private:
   std::string mVolumSelectedKnobHintText;
   std::vector<std::string> mVolumChannelFiles;
   std::vector<std::string> mVolumChannelLabels;
+  std::vector<std::string> mVolumPreCaptureFiles;
+  std::vector<std::string> mVolumPreCaptureLabels;
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
+  std::atomic<bool> mVolumPreNeedsLoad[2]{{false}, {false}};
+  std::atomic<bool> mVolumPreIsLoading[2]{{false}, {false}};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
 
@@ -396,17 +440,24 @@ private:
   // Noise gates
   dsp::noise_gate::Trigger mNoiseGateTrigger;
   dsp::noise_gate::Gain mNoiseGateGain;
+  dsp::effect::VoLumCompressor mPreCompressor;
+  dsp::effect::VoLumPreEq mPreEq[2];
+  recursive_linear_filter::Level mPreInputGain[2];
+  recursive_linear_filter::Level mPreOutputGain[2];
   dsp::effect::Delay mDelay;
   dsp::effect::Reverb mReverb;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
+  std::unique_ptr<ResamplingNAM> mPreModel[2];
   // And the IR
   std::unique_ptr<dsp::ImpulseResponse> mIR;
   // Manages switching what DSP is being used.
   std::unique_ptr<ResamplingNAM> mStagedModel;
+  std::unique_ptr<ResamplingNAM> mStagedPreModel[2];
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
+  std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
 
   std::atomic<bool> mNewModelLoadedInDSP = false;

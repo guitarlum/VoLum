@@ -1,3 +1,4 @@
+04/29/2026 - VoLum: PRE pedalboard groundwork. Added compressor plus two assignable PRE NAM slots with per-amp settings, placeholder PrePedals asset folder, packaging hooks, and native PRE triptych UI wiring.
 NeuralAmpModeler changelog
 https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
@@ -132,4 +133,8 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/28/2026 - v0.8.0 VoLum release. See GitHub release notes for included changes.
 04/28/2026 - VoLum: Diezel Herbert Mk1 added to the Rig Collection (15th amp). 4 channels (Herb-1..Herb-4) profiled with Mid Cut on, across all 4 cab modes (Direct/G12/G65/V30). New Lichtenberg discharge hero artwork. AMP sidebar list is now scrollable (mouse wheel + auto-reveal) for catalogs that exceed the visible area.
 
+04/29/2026 - VoLum: PRE pedalboard added with compressor and two NAM pedal slots. Includes PrePedals folder discovery, per-amp PRE settings, PRE/AMP/POST triptych integration, and focused tests for PRE effects/state.
 04/29/2026 - v0.8.1 VoLum release. See GitHub release notes for included changes.
+
+04/29/2026 - VoLum: Per-user settings auto-heal corrupt speaker/channel values on load. Prevents stale or damaged volum-settings.json files from making amps appear empty or indexing invalid channel slots.
+04/29/2026 - v0.8.2 VoLum release. See GitHub release notes for included changes.
