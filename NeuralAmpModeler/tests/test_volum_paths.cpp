@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../VoLumAmpeteCatalog.h"
 #include "../VoLumPaths.h"
 #include <cstdlib>
 #include <fstream>
@@ -32,6 +33,28 @@ TEST_CASE("FindRigsRootDirectory returns a rigs tree in typical dev/repo layout"
   REQUIRE(fs::is_directory(root));
   // Bundled catalog expects this folder when developing from the VoLum repo.
   REQUIRE(fs::is_directory(root / "Ampete One"));
+}
+
+TEST_CASE("Diezel Herbert Mk1 rig files expose 4 channels for every speaker mode")
+{
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(__FILE__).parent_path().parent_path().parent_path() / "rigs";
+  REQUIRE(fs::is_directory(root / "Diezel Herbert Mk1"));
+
+  for (const char* prefix : volum::kSpeakerPrefixes)
+  {
+    const auto channels = volum::DiscoverChannels(root, "Diezel Herbert Mk1", prefix);
+    INFO(prefix);
+    REQUIRE(channels.size() == 4);
+    CHECK(channels[0].filename == std::string(prefix) + "-Herb-1.nam");
+    CHECK(channels[1].filename == std::string(prefix) + "-Herb-2.nam");
+    CHECK(channels[2].filename == std::string(prefix) + "-Herb-3.nam");
+    CHECK(channels[3].filename == std::string(prefix) + "-Herb-4.nam");
+    CHECK(channels[0].label == "1");
+    CHECK(channels[1].label == "2");
+    CHECK(channels[2].label == "3");
+    CHECK(channels[3].label == "4");
+  }
 }
 
 #ifdef _WIN32
