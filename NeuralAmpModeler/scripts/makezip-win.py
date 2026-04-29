@@ -87,6 +87,12 @@ def main():
         if os.path.isdir(rigs_root):
             print("adding rigs from " + rigs_root)
             for dirpath, dirnames, filenames in os.walk(rigs_root):
+                for dirname in dirnames:
+                    full_dir = os.path.join(dirpath, dirname)
+                    rel_under_rigs = os.path.relpath(full_dir, rigs_root).replace("\\", "/")
+                    arc = "VoLumRigs/" + rel_under_rigs + "/"
+                    print("adding " + full_dir)
+                    zf.writestr(arc, "")
                 for name in filenames:
                     if not name.lower().endswith(".nam"):
                         continue
