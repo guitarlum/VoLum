@@ -9,6 +9,9 @@ enum EParams {
   kDelayActive, kDelayTime, kDelayFeedback, kDelayMix, kDelayMode,
   kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode,
   kBoostActive, kBoostDrive, kBoostTone, kBoostLevel,
+  kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
+  kPreNam1Active, kPreNam1Capture, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
+  kPreNam2Active, kPreNam2Capture, kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble, kPreNam2Level,
   kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig, kNumParams
 };
 
@@ -52,7 +55,30 @@ TEST_CASE("EParam: boost params follow reverb")
 
 TEST_CASE("EParam: calibration params at end before kNumParams")
 {
-  CHECK(kCalibrateInput == kBoostLevel + 1);
+  CHECK(kPreCompActive == kBoostLevel + 1);
+  CHECK(kPreCompAmount == kPreCompActive + 1);
+  CHECK(kPreCompRatio == kPreCompAmount + 1);
+  CHECK(kPreCompAttack == kPreCompRatio + 1);
+  CHECK(kPreCompRelease == kPreCompAttack + 1);
+  CHECK(kPreCompMix == kPreCompRelease + 1);
+  CHECK(kPreCompLevel == kPreCompMix + 1);
+  CHECK(kPreNam1Active == kPreCompLevel + 1);
+  CHECK(kPreNam1Capture == kPreNam1Active + 1);
+  CHECK(kPreNam1Gain == kPreNam1Capture + 1);
+  CHECK(kPreNam1Bass == kPreNam1Gain + 1);
+  CHECK(kPreNam1Mid == kPreNam1Bass + 1);
+  CHECK(kPreNam1MidFreq == kPreNam1Mid + 1);
+  CHECK(kPreNam1Treble == kPreNam1MidFreq + 1);
+  CHECK(kPreNam1Level == kPreNam1Treble + 1);
+  CHECK(kPreNam2Active == kPreNam1Level + 1);
+  CHECK(kPreNam2Capture == kPreNam2Active + 1);
+  CHECK(kPreNam2Gain == kPreNam2Capture + 1);
+  CHECK(kPreNam2Bass == kPreNam2Gain + 1);
+  CHECK(kPreNam2Mid == kPreNam2Bass + 1);
+  CHECK(kPreNam2MidFreq == kPreNam2Mid + 1);
+  CHECK(kPreNam2Treble == kPreNam2MidFreq + 1);
+  CHECK(kPreNam2Level == kPreNam2Treble + 1);
+  CHECK(kCalibrateInput == kPreNam2Level + 1);
   CHECK(kInputCalibrationLevel == kCalibrateInput + 1);
   CHECK(kOutputMode == kInputCalibrationLevel + 1);
   CHECK(kVoLumAmpeteRig == kOutputMode + 1);
@@ -61,5 +87,5 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
 
 TEST_CASE("EParam: total count is stable")
 {
-  CHECK(kNumParams == 29);
+  CHECK(kNumParams == 52);
 }

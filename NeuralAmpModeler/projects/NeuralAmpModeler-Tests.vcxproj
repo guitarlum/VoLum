@@ -103,11 +103,13 @@
     <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
+    <ClCompile Include="..\tests\test_volum_pre_effects.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\dsp.cpp">
       <ObjectFileName>$(IntDir)audiodsp_dsp.obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="..\..\AudioDSPTools\dsp\Delay.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />
     <ClCompile Include="..\tests\test_eparam_order.cpp" />
     <ClCompile Include="..\tests\test_tuner_dsp.cpp" />

@@ -5,7 +5,7 @@ AppCopyright=Copyright (C) 2026 Lum
 AppPublisher=Lum
 AppPublisherURL=https://github.com/guitarlum/VoLum
 AppSupportURL=https://github.com/guitarlum/VoLum
-AppVersion=0.8.1
+AppVersion=0.8.2
 VersionInfoVersion=0.1.0
 DefaultDirName={autopf}\VoLum
 DefaultGroupName=VoLum
@@ -33,6 +33,7 @@ Name: "vst3_64"; Description: "64-bit VST3 Plugin (.vst3)"; Types: full custom; 
 
 [Dirs]
 Name: "{cf64}\VST3\VoLum.vst3\"; Attribs: readonly; Check: Is64BitInstallMode; Components:vst3_64;
+Name: "{app}\VoLumRigs\PrePedals";
 
 [Files]
 ; Standalone exe
@@ -57,6 +58,7 @@ Source: "..\..\rigs\Orange ORS100 1972\*.nam"; DestDir: "{app}\VoLumRigs\Orange 
 Source: "..\..\rigs\Sebago Texas Flood\*.nam"; DestDir: "{app}\VoLumRigs\Sebago Texas Flood"; Flags: ignoreversion
 Source: "..\..\rigs\Soldano SLO100\*.nam"; DestDir: "{app}\VoLumRigs\Soldano SLO100"; Flags: ignoreversion
 Source: "..\..\rigs\THC Sunset\*.nam"; DestDir: "{app}\VoLumRigs\THC Sunset"; Flags: ignoreversion
+Source: "..\..\rigs\PrePedals\*.nam"; DestDir: "{app}\VoLumRigs\PrePedals"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Docs
 Source: "changelog.txt"; DestDir: "{app}"
