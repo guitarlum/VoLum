@@ -47,6 +47,7 @@ hdiutil attach "$APP_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/dmg"
 test -d "$VERIFY_DIR/dmg/VoLum.app"
 test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
 test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
 
 hdiutil detach "$VERIFY_DIR/dmg"
 
@@ -54,6 +55,7 @@ unzip -q "$VST3_ZIP" -d "$VERIFY_DIR/vst3"
 test -d "$VERIFY_DIR/vst3/VoLum.vst3"
 test -d "$VERIFY_DIR/vst3/VoLumRigs"
 test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
 
 if [[ -n "$INSTALLER_DMG" ]] && [[ -f "$INSTALLER_DMG" ]]; then
   echo "Verifying macOS installer DMG: $INSTALLER_DMG"
