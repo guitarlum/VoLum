@@ -8,7 +8,7 @@ This is the build and architecture reference for contributors. For download and 
 |                         | NAM Plugin                                | VoLum                                                                                                           |
 | ----------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | **Purpose**             | General-purpose NAM model loader          | Curated amp collection player                                                                                   |
-| **Model selection**     | File browser (find your own `.nam` files) | Sidebar amp gallery with 14 bundled amps                                                                        |
+| **Model selection**     | File browser (find your own `.nam` files) | Sidebar amp gallery with 15 bundled amps                                                                        |
 | **Speaker / cab**       | Separate IR loader                        | Built-in speaker modes (AMP / G12 / G65 / V30) per amp                                                          |
 | **Channel switching**   | N/A                                       | Discrete gain-stage stepper per amp+speaker combo                                                               |
 | **Per-amp settings**    | N/A                                       | All knobs, toggles, speaker & channel remembered per amp                                                        |
@@ -94,6 +94,7 @@ Settings are stored under the user profile (`%LOCALAPPDATA%\VoLum\` on Windows, 
 | Ampete One              | 4        |                                          |
 | Bad Cat mini Cat        | 3        |                                          |
 | Brunetti XL 2           | 3        |                                          |
+| Diezel Herbert Mk1      | 4        | Mid-cut captures                         |
 | Fryette Deliverance 120 | 2        | Channels 3-4 only                        |
 | H&K TriAmp Mk2          | 6        |                                          |
 | Lichtlaerm Prometheus   | 3        |                                          |
@@ -107,7 +108,7 @@ Settings are stored under the user profile (`%LOCALAPPDATA%\VoLum\` on Windows, 
 | THC Sunset              | 5        |                                          |
 
 
-Each amp x 4 speaker modes x channels = ~224 `.nam` files total.
+Each amp x 4 speaker modes x channels = ~240 `.nam` files total.
 
 ## Key source files
 
