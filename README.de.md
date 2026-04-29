@@ -4,13 +4,13 @@
 
 ![VoLum standalone UI](docs/volum-ui.png)
 
-Ein Gitarren-Amp-Sammlungsspieler auf Basis von [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Enthält 14 Amp-Profile mit einer eigenen Oberfläche zum schnellen Durchstöbern und Umschalten — Standalone-App und VST3-Plugin.
+Ein Gitarren-Amp-Sammlungsspieler auf Basis von [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Enthält 15 Amp-Profile mit einer eigenen Oberfläche zum schnellen Durchstöbern und Umschalten — Standalone-App und VST3-Plugin.
 
 ## Funktionen
 
 
 
-- **14 mitgelieferte Amps** mit 4 Speaker-Modi und mehreren Gain-Stufen pro Amp (insgesamt ~224 Profile)
+- **15 mitgelieferte Amps** mit 4 Speaker-Modi und mehreren Gain-Stufen pro Amp (insgesamt ~240 Profile)
 - **Dark-Theme-Oberfläche** mit Amp-Browser in der Seitenleiste, Speaker-Tasten, Channel-Stepper und gruppierten Reglern
 - **Delay-Effekt** — Tape-, Digital- und Ping-Pong-Modi mit Time-, Feedback- und Mix-Reglern
 - **Reverb-Effekt** — Hall-, Plate- und Oktaverb-Modi mit Decay-, Tone-, Mix-, Pre-Delay- und Shimmer-Reglern
@@ -150,6 +150,7 @@ Artefakte vom **CI**-Workflow (**VoLum-mac** / **VoLum-win**):
 | Ampete One              | 4      |
 | Bad Cat mini Cat        | 3      |
 | Brunetti XL 2           | 3      |
+| Diezel Herbert Mk1      | 4      |
 | Fryette Deliverance 120 | 2      |
 | H&K TriAmp Mk2          | 6      |
 | Lichtlaerm Prometheus   | 3      |

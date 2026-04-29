@@ -4,11 +4,11 @@
 
 ![VoLum standalone UI](docs/ui0.8.0.png)
 
-A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 14 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
+A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 15 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
 
 ## Features
 
-- **14 bundled amps** with 4 speaker modes and multiple gain stages each (~224 profiles total)
+- **15 bundled amps** with 4 speaker modes and multiple gain stages each (~240 profiles total)
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
 - **Delay effect** -- Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix controls
 - **Reverb effect** -- Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer controls
@@ -151,6 +151,7 @@ If you are installing from **CI** artifacts instead of a tagged release:
 | Ampete One              | 4        |
 | Bad Cat mini Cat        | 3        |
 | Brunetti XL 2           | 3        |
+| Diezel Herbert Mk1      | 4        |
 | Fryette Deliverance 120 | 2        |
 | H&K TriAmp Mk2          | 6        |
 | Lichtlaerm Prometheus   | 3        |
