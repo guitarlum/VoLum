@@ -2516,7 +2516,9 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
         std::unique_ptr<nam::DSP> model;
         if (cacheIt != mVolumDspCache.end())
         {
-          model = nam::get_dsp(cacheIt->second);
+          // Core consumes dspData::weights during construction, so keep the cached copy immutable.
+          nam::dspData cachedConfig = cacheIt->second;
+          model = nam::get_dsp(cachedConfig);
         }
         else
         {
