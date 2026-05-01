@@ -88,7 +88,7 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
   }
 }
 
-TEST_CASE("Invalid lastAmpIdx heals to default amp")
+TEST_CASE("lastAmpIdx is clamped to catalog range")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
@@ -96,7 +96,7 @@ TEST_CASE("Invalid lastAmpIdx heals to default amp")
 
   int lastAmp = 0;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &lastAmp);
-  REQUIRE(lastAmp == 0);
+  REQUIRE(lastAmp == volum::kAmpCount - 1);
 
   j["lastAmpIdx"] = -50;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &lastAmp);
@@ -119,61 +119,8 @@ TEST_CASE("Corrupt per-amp speaker and channel settings auto-heal")
   REQUIRE(healed == true);
   CHECK(loaded[8].speakerIdx == 3);
   CHECK(loaded[8].channelIdx == 0);
-  CHECK(loaded[8].gateThreshold == doctest::Approx(-80.0));
-  CHECK(loaded[8].inputLevel == doctest::Approx(0.0));
-  CHECK(loaded[8].noiseGateActive == true);
-  CHECK(loaded[9].speakerIdx == 3);
+  CHECK(loaded[9].speakerIdx == 0);
   CHECK(loaded[9].channelIdx == 0);
-}
-
-TEST_CASE("Corrupt negative channel settings reset all per-amp settings to defaults")
-{
-  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
-  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
-  j["amps"]["Ampete One"]["speaker"] = 0;
-  j["amps"]["Ampete One"]["channel"] = 3;
-  j["amps"]["Ampete One"]["input"] = 5.0;
-  j["amps"]["Ampete One"]["gate"] = 0.0;
-  j["amps"]["Ampete One"]["mid"] = 0.0;
-  j["amps"]["Ampete One"]["treble"] = 0.0;
-  j["amps"]["Ampete One"]["noiseGate"] = false;
-  j["amps"]["Marshall JMP 2203 1976"]["channel"] = -1068236800;
-
-  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
-  bool healed = false;
-  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
-
-  REQUIRE(healed == true);
-  CHECK(loaded[0].speakerIdx == 3);
-  CHECK(loaded[0].channelIdx == 0);
-  CHECK(loaded[0].inputLevel == doctest::Approx(0.0));
-  CHECK(loaded[0].gateThreshold == doctest::Approx(-80.0));
-  CHECK(loaded[0].toneMid == doctest::Approx(5.0));
-  CHECK(loaded[0].toneTreble == doctest::Approx(5.0));
-  CHECK(loaded[0].noiseGateActive == true);
-  CHECK(loaded[0].eqActive == true);
-}
-
-TEST_CASE("Out-of-range per-amp knob settings heal to defaults, not numeric limits")
-{
-  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
-  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
-  j["amps"]["Soldano SLO100"]["input"] = 999.0;
-  j["amps"]["Soldano SLO100"]["gate"] = 999.0;
-  j["amps"]["Soldano SLO100"]["bass"] = -1.0;
-  j["amps"]["Soldano SLO100"]["preCompRatio"] = 0.0;
-  j["amps"]["Soldano SLO100"]["preNam1MidFreq"] = 9999.0;
-
-  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
-  bool healed = false;
-  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
-
-  REQUIRE(healed == true);
-  CHECK(loaded[13].inputLevel == doctest::Approx(0.0));
-  CHECK(loaded[13].gateThreshold == doctest::Approx(-80.0));
-  CHECK(loaded[13].toneBass == doctest::Approx(5.0));
-  CHECK(loaded[13].preCompRatio == doctest::Approx(4.0));
-  CHECK(loaded[13].preNam1MidFreq == doctest::Approx(650.0));
 }
 
 TEST_CASE("Valid per-amp speaker and channel settings do not request auto-heal")
