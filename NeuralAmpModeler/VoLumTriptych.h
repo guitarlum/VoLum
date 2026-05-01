@@ -284,7 +284,15 @@ public:
     mPreActive = preActive;
     mPostActive = postActive;
     mAmpIdx = ampIdx;
-    mAmpName = ampName;
+    if (mAmpName != ampName)
+    {
+      mAmpName = ampName;
+      // Invalidate the spine font-size cache so the next redraw re-measures
+      // for the new name.
+      mCachedSpineSize = 0.f;
+      mCachedSpineMaxLen = -1.f;
+      mCachedSpineName.clear();
+    }
     SetDirty(false);
   }
 
@@ -533,6 +541,25 @@ private:
                        block.R - 4.f, block.B - 6.f);
     const char* name = mAmpName.empty() ? "AMP" : mAmpName.c_str();
     const float maxLen = spineR.H() - 2.f;
+    const float chosenSize = _ResolveSpineFontSize(g, name, maxLen);
+    IText spineText(chosenSize, VoLumColors::CREAM, "Josefin-Bold",
+                    EAlign::Center, EVAlign::Middle);
+    spineText.mAngle = -90.f; // bottom-to-top: head tilts left to read.
+    g.DrawText(spineText, name, spineR);
+  }
+
+  // Picks the largest font size from a fixed descending table whose rendered
+  // width fits in maxLen (the rotated text's vertical extent). MeasureText
+  // hits GDI/DirectWrite on Windows so cache the answer keyed by amp name +
+  // spine height; the cache is invalidated in SetState when the amp name
+  // changes and is also implicitly refreshed if the layout changes maxLen.
+  float _ResolveSpineFontSize(IGraphics& g, const char* name, float maxLen)
+  {
+    if (mCachedSpineSize > 0.f
+        && mCachedSpineMaxLen == maxLen
+        && mCachedSpineName == name)
+      return mCachedSpineSize;
+
     static const float kSpineSizes[] = {16.f, 14.f, 12.f, 11.f, 10.f, 9.f, 8.f};
     float chosenSize = 8.f;
     for (float s : kSpineSizes)
@@ -546,10 +573,11 @@ private:
         break;
       }
     }
-    IText spineText(chosenSize, VoLumColors::CREAM, "Josefin-Bold",
-                    EAlign::Center, EVAlign::Middle);
-    spineText.mAngle = -90.f; // bottom-to-top: head tilts left to read.
-    g.DrawText(spineText, name, spineR);
+
+    mCachedSpineName = name;
+    mCachedSpineMaxLen = maxLen;
+    mCachedSpineSize = chosenSize;
+    return chosenSize;
   }
 
 
@@ -688,11 +716,18 @@ private:
 
   IRECT mPreRect;
   IRECT mAmpRect;
-  // Visible AMP block (140 H, centered inside the 196 H strip rect) - used for
+  // Visible AMP block (180 H, centered inside the 196 H strip rect) - used for
   // hover hit-testing so the hover lift only fires when the cursor is over the
   // block, not the empty whitespace above/below it. Click hit-testing still
   // uses mAmpRect (the full strip) so clicks near the block still register.
   IRECT mAmpBlockRect;
+
+  // Cached auto-shrink result for the rotated spine font size. MeasureText
+  // hits GDI/DirectWrite on Windows; caching by (name, maxLen) skips up to
+  // 7 measure calls per redraw in the steady state.
+  std::string mCachedSpineName;
+  float mCachedSpineMaxLen = -1.f;
+  float mCachedSpineSize = 0.f;
   IRECT mPostRect;
 
   // Quiet block hit-zones, repopulated each Draw().
