@@ -216,3 +216,12 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   RequireContains(source, "_VolumDrainLoaderResults();");
   RequireContains(source, "mVolumLoadResults.push_back(std::move(result));");
 }
+
+TEST_CASE("VoLum NAM cache copies dspData before Core consumes weights")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+
+  RequireContains(source, "nam::dspData cachedConfig = cacheIt->second;");
+  RequireContains(source, "model = nam::get_dsp(cachedConfig);");
+  RequireDoesNotContain(source, "model = nam::get_dsp(cacheIt->second);");
+}
