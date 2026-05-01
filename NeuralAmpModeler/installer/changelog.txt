@@ -144,3 +144,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/30/2026 - VoLum: Added UI regression tests for POST pedal active-art refresh and PRE pedal dropdown close behavior.
 05/01/2026 - VoLum: Restored robust per-user settings healing and silenced the guitar path when the main amp model is missing.
 05/01/2026 - VoLum: Fixed cached UI artwork rebuilds for pedal cards, amp list icons, and fallback hero art to improve hover responsiveness.
+05/01/2026 - VoLum: Replaced detached NAM model loader threads with an owned loader queue and explicit DSP staging handoff.
