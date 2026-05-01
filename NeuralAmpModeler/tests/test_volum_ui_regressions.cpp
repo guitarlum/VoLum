@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../VoLumTriptychLayout.h"
 
 #include <filesystem>
 #include <fstream>
@@ -92,7 +93,7 @@ TEST_CASE("Collapsed AMP strip falls back to 'AMP' label when amp name is empty"
   RequireContains(triptych, "const char* name = mAmpName.empty() ? \"AMP\" : mAmpName.c_str();");
 }
 
-TEST_CASE("Slot motif layer cache uses the !g.CheckLayer idiom (re-render only when invalid)")
+TEST_CASE("VoLum layer caches use the !g.CheckLayer idiom (re-render only when invalid)")
 {
   // iPlug2 CheckLayer returns true when the layer is still valid (cache hit)
   // and false when it must be re-rendered. The standard idiom across the
@@ -105,9 +106,14 @@ TEST_CASE("Slot motif layer cache uses the !g.CheckLayer idiom (re-render only w
   // pedal-card art layer was thrashing on the same pattern). This test
   // pins the correct idiom in place so future cleanup does not flip it back.
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+  const std::string coreControls = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
 
   RequireContains(triptych, "if (!g.CheckLayer(motifLayer)");
-  RequireDoesNotContain(triptych, "|| g.CheckLayer(motifLayer)");
+  RequireContains(triptych, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed)");
+  RequireContains(coreControls, "if (!g.CheckLayer(mIconLayers[i]))");
+  RequireContains(coreControls, "if (!g.CheckLayer(mArtLayer) || mCachedArtIdx != mAmpIdx)");
+  RequireDoesNotContain(triptych, "|| g.CheckLayer(");
+  RequireDoesNotContain(coreControls, "|| g.CheckLayer(");
 }
 
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
@@ -151,4 +157,50 @@ TEST_CASE("Collapsed AMP strip hover is gated on the visible block, not the stri
   RequireContains(triptych, "mAmpBlockRect = block;");
   RequireContains(triptych, "&& mAmpBlockRect.W() > 0");
   RequireContains(triptych, "&& mAmpBlockRect.Contains(x, y);");
+}
+
+TEST_CASE("Triptych shared layout keeps PRE AMP POST geometry aligned")
+{
+  const auto triptych = volum::triptych_layout::BoundsForCenter(450.f, 100.f);
+  CHECK(triptych.L == doctest::Approx(140.f));
+  CHECK(triptych.R == doctest::Approx(760.f));
+  CHECK(triptych.H() == doctest::Approx(volum::triptych_layout::kTriptychH));
+
+  const auto ampFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::AMP);
+  CHECK(ampFrames.pre.L == doctest::Approx(140.f));
+  CHECK(ampFrames.pre.R == doctest::Approx(240.f));
+  CHECK(ampFrames.amp.L == doctest::Approx(250.f));
+  CHECK(ampFrames.amp.R == doctest::Approx(650.f));
+  CHECK(ampFrames.post.L == doctest::Approx(660.f));
+  CHECK(ampFrames.post.R == doctest::Approx(760.f));
+
+  const auto postFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::POST);
+  CHECK(postFrames.pre.L == doctest::Approx(140.f));
+  CHECK(postFrames.amp.L == doctest::Approx(250.f));
+  CHECK(postFrames.amp.R == doctest::Approx(320.f));
+  CHECK(postFrames.post.L == doctest::Approx(330.f));
+  CHECK(postFrames.post.R == doctest::Approx(760.f));
+}
+
+TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
+{
+  const auto triptych = volum::triptych_layout::BoundsForCenter(450.f, 100.f);
+  const auto preFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::PRE);
+  const auto preCards = volum::triptych_layout::ComputePreCards(preFrames.pre);
+
+  CHECK(preCards.comp.L == doctest::Approx(154.f));
+  CHECK(preCards.comp.R == doctest::Approx(282.6667f));
+  CHECK(preCards.nam1.L == doctest::Approx(290.6667f));
+  CHECK(preCards.nam2.R == doctest::Approx(556.f));
+  CHECK(preCards.connector1.L == doctest::Approx(preCards.comp.R));
+  CHECK(preCards.connector1.R == doctest::Approx(preCards.nam1.L));
+
+  const auto postFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::POST);
+  const auto postCards = volum::triptych_layout::ComputePostCards(postFrames.post);
+  CHECK(postCards.delay.L == doctest::Approx(344.f));
+  CHECK(postCards.delay.R == doctest::Approx(540.f));
+  CHECK(postCards.reverb.L == doctest::Approx(550.f));
+  CHECK(postCards.reverb.R == doctest::Approx(746.f));
+  CHECK(postCards.connector.L == doctest::Approx(postCards.delay.R));
+  CHECK(postCards.connector.R == doctest::Approx(postCards.reverb.L));
 }

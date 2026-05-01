@@ -297,7 +297,7 @@ private:
   void _ApplyDSPStaging();
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
-  // Fallback that just copies inputs to outputs if mDSP doesn't hold a model.
+  // Fallback used when no main NAM model is loaded.
   void _FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels, const size_t numFrames);
   // Sizes based on mInputArray
   size_t _GetBufferNumChannels() const;
@@ -462,6 +462,7 @@ private:
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;
+  bool mPostEffectsClearedForMissingModel = false;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;

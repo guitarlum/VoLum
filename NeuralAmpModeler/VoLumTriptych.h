@@ -1,11 +1,13 @@
 ﻿#pragma once
 
 #include "VoLumColorHelpers.h"
+#include "VoLumTriptychLayout.h"
 #include "VoLumTriptychState.h"
 #include "NeuralAmpModeler.h"
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 
 using namespace iplug;
 using namespace igraphics;
@@ -211,42 +213,11 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    const float stripW = 100.f;
     const EVoLumSection displaySection = mExpandedSection;
-    const float expandedW = (displaySection == EVoLumSection::AMP) ? 400.f : 430.f;
-    const float gap = 10.f;
-    const float cx = mRECT.MW();
-
-    IRECT preRect, ampRect, postRect;
-
-    if (displaySection == EVoLumSection::AMP)
-    {
-      const float totalW = stripW + gap + expandedW + gap + stripW;
-      const float left = cx - totalW / 2.f;
-      preRect = IRECT(left, mRECT.T, left + stripW, mRECT.B);
-      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + expandedW, mRECT.B);
-      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + stripW, mRECT.B);
-    }
-    else if (displaySection == EVoLumSection::POST)
-    {
-      const float ampStripW = 70.f;
-      const float preStripW = stripW;
-      const float totalW = preStripW + gap + ampStripW + gap + expandedW;
-      const float left = cx - totalW / 2.f;
-      preRect = IRECT(left, mRECT.T, left + preStripW, mRECT.B);
-      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
-      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + expandedW, mRECT.B);
-    }
-    else // PRE
-    {
-      const float ampStripW = 70.f;
-      const float postStripW = stripW;
-      const float totalW = expandedW + gap + ampStripW + gap + postStripW;
-      const float left = cx - totalW / 2.f;
-      preRect = IRECT(left, mRECT.T, left + expandedW, mRECT.B);
-      ampRect = IRECT(preRect.R + gap, mRECT.T, preRect.R + gap + ampStripW, mRECT.B);
-      postRect = IRECT(ampRect.R + gap, mRECT.T, ampRect.R + gap + postStripW, mRECT.B);
-    }
+    const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(mRECT), displaySection);
+    const IRECT preRect = frames.pre.As<IRECT>();
+    const IRECT ampRect = frames.amp.As<IRECT>();
+    const IRECT postRect = frames.post.As<IRECT>();
 
     mPreRect = preRect;
     mAmpRect = ampRect;
@@ -282,8 +253,7 @@ public:
   void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName)
   {
     (void) preActive;
-    mPreActive = preActive;
-    mPostActive = postActive;
+    (void) postActive;
     mAmpIdx = ampIdx;
     if (mAmpName != ampName)
     {
@@ -468,7 +438,7 @@ private:
     // the layer whenever CheckLayer reports it is no longer valid (scale or
     // owner-RECT change), and we additionally rebuild on a bypass flip
     // because that changes the colour ramp inside DrawEffectMotif.
-    const int focusIdx = (int)slot.focus;
+    const size_t focusIdx = static_cast<size_t>(slot.focus);
     auto& motifLayer = mSlotMotifLayers[focusIdx];
     auto& cachedBypass = mSlotMotifCachedBypass[focusIdx];
     if (!g.CheckLayer(motifLayer) || cachedBypass != bypassed)
@@ -756,8 +726,6 @@ private:
   }
 
   StateCallback mCallback;
-  bool mPreActive = false;
-  bool mPostActive = false;
   int mAmpIdx = 0;
   std::string mAmpName;
   EVoLumSection mExpandedSection = EVoLumSection::AMP;
@@ -782,8 +750,9 @@ private:
   // DrawEffectMotif is the most expensive op in this control (recursive
   // fractal art); caching the rendered output to a layer means hover
   // transitions only redraw cheap overlays + frames on top.
-  std::array<ILayerPtr, 6> mSlotMotifLayers;
-  std::array<bool, 6> mSlotMotifCachedBypass{};
+  static constexpr size_t kEffectFocusCount = static_cast<size_t>(EVoLumEffectFocus::REVERB) + 1;
+  std::array<ILayerPtr, kEffectFocusCount> mSlotMotifLayers;
+  std::array<bool, kEffectFocusCount> mSlotMotifCachedBypass{};
   IRECT mPostRect;
 
   // Quiet block hit-zones, repopulated each Draw().
@@ -894,12 +863,9 @@ class VoLumPedalCardControl : public IControl
 public:
   using ClickCallback = std::function<void(VoLumPedalCardControl*, bool isBypassClick)>;
 
-  VoLumPedalCardControl(const IRECT& bounds, EVoLumEffectFocus effect, const char* name, int fractalCase, int activeParamIdx, ClickCallback cb)
+  VoLumPedalCardControl(const IRECT& bounds, EVoLumEffectFocus effect, ClickCallback cb)
   : IControl(bounds)
   , mEffect(effect)
-  , mName(name)
-  , mFractalCase(fractalCase)
-  , mActiveParamIdx(activeParamIdx)
   , mCallback(std::move(cb))
   {
   }
@@ -920,7 +886,7 @@ public:
     DrawCornerAccent(g, mRECT.R - 4.f, mRECT.B - 4.f, cs, true, true, borderCol);
 
     IRECT artRect = mRECT.GetPadded(-2.f, -2.f, -2.f, -22.f);
-    if (!mArtLayer || g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed) {
+    if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed) {
       g.StartLayer(this, artRect);
       _DrawFractalArt(g, artRect, bypassed);
       mArtLayer = g.EndLayer();
@@ -935,9 +901,8 @@ public:
     const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 22.f, mRECT.B - 4.f);
     g.DrawText(presetTxt, presetName.c_str(), presetRect);
 
-    IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
+    const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
     g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.5f);
-    mLedRect = ledRect;
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -1022,12 +987,8 @@ private:
   }
 
   EVoLumEffectFocus mEffect;
-  std::string mName;
-  int mFractalCase;
-  int mActiveParamIdx;
   bool mIsFocused = false;
   ILayerPtr mArtLayer;
   bool mCachedBypassed = false;
-  IRECT mLedRect;
   ClickCallback mCallback;
 };

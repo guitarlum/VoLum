@@ -42,3 +42,17 @@ TEST_CASE("DAW path does not clamp output in plugin")
   volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 1, 1.0, false);
   DOCTEST_CHECK(out0[0] == doctest::Approx(10.f));
 }
+
+TEST_CASE("ClearBuffers silences every output channel")
+{
+  std::vector<float> out0{1.f, -2.f, 3.f};
+  std::vector<float> out1{4.f, 5.f, -6.f};
+  float* outputs[2] = {out0.data(), out1.data()};
+
+  volum::process_io::ClearBuffers(outputs, out0.size(), 2);
+
+  for (float sample : out0)
+    DOCTEST_CHECK(sample == doctest::Approx(0.f));
+  for (float sample : out1)
+    DOCTEST_CHECK(sample == doctest::Approx(0.f));
+}
