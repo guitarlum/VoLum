@@ -1,4 +1,5 @@
 #include "VoLumChunkVersion.h"
+#include "VoLumChunkLayout.h"
 
 // Unserialization
 //
@@ -443,8 +444,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     mVolumAmpIdx = std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1);
     mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
 
-    const int oldPerAmpBytes = static_cast<int>(sizeof(int) * 4 + sizeof(double) * 6);
-    const bool hasPreAmpSettings = (chunk.Size() - pos) > oldPerAmpBytes * volum::kAmpCount;
+    const bool hasPreAmpSettings = volum::ChunkHasExtendedPerAmpSettings(chunk.Size() - pos, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
