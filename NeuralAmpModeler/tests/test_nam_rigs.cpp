@@ -30,7 +30,7 @@ TEST_CASE("Ampete NAM files exist")
 TEST_CASE("Load Ampete NAM via nam::get_dsp(path)")
 {
   nam::activations::Activation::enable_fast_tanh();
-  const auto path = std::filesystem::u8path((AmpeteDir() / "AMP-Ampt-1.nam").string());
+  const auto path = AmpeteDir() / "AMP-Ampt-1.nam";
   REQUIRE(std::filesystem::exists(path));
   auto model = nam::get_dsp(path);
   REQUIRE(model != nullptr);
@@ -40,7 +40,7 @@ TEST_CASE("Load Ampete NAM via nam::get_dsp(path)")
 TEST_CASE("Load second Ampete NAM via path")
 {
   nam::activations::Activation::enable_fast_tanh();
-  const auto path = std::filesystem::u8path((AmpeteDir() / "G12-Ampt-2.nam").string());
+  const auto path = AmpeteDir() / "G12-Ampt-2.nam";
   REQUIRE(std::filesystem::exists(path));
   auto model = nam::get_dsp(path);
   REQUIRE(model != nullptr);

@@ -30,6 +30,27 @@ Do **not** commit the modified `iPlug2/` working tree. Instead:
 3. Reset the iPlug2 working tree (`git -C iPlug2 checkout -- .`) and verify the
    apply script reproduces the change cleanly.
 
+## Expected git status
+
+After running a Windows build/test script, the parent repo may show `m iPlug2`.
+That is expected when the ASIO patch has been applied to the submodule working
+tree. Before committing parent-repo changes, verify the submodule dirt is only
+the patch-managed files:
+
+```pwsh
+git -C iPlug2 status --short
+```
+
+Expected patched files:
+
+- `IPlug/APP/IPlugAPP_dialog.cpp`
+- `IPlug/APP/IPlugAPP_host.cpp`
+- `IPlug/APP/IPlugAPP_host.h`
+
+Do not stage or commit those `iPlug2/` modifications in the parent repo. If you
+need a clean submodule working tree for inspection, reset `iPlug2` and rerun the
+apply script before the next Windows build.
+
 ## Current patches
 
 - `0001-app-host-route-selected-asio-channels.patch` — Makes the standalone

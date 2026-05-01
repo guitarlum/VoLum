@@ -62,6 +62,12 @@
     <ClCompile Include="..\NeuralAmpModelerCore\NAM\convnet.cpp">
       <Filter>NAM</Filter>
     </ClCompile>
+    <ClCompile Include="..\NeuralAmpModelerCore\NAM\conv1d.cpp">
+      <Filter>NAM</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NeuralAmpModelerCore\NAM\container.cpp">
+      <Filter>NAM</Filter>
+    </ClCompile>
     <ClCompile Include="..\NeuralAmpModelerCore\NAM\dsp.cpp">
       <Filter>NAM</Filter>
     </ClCompile>
@@ -71,10 +77,16 @@
     <ClCompile Include="..\NeuralAmpModelerCore\NAM\lstm.cpp">
       <Filter>NAM</Filter>
     </ClCompile>
-    <ClCompile Include="..\NeuralAmpModelerCore\NAM\util.cpp">
+    <ClCompile Include="..\NeuralAmpModelerCore\NAM\ring_buffer.cpp">
       <Filter>NAM</Filter>
     </ClCompile>
-    <ClCompile Include="..\NeuralAmpModelerCore\NAM\wavenet.cpp">
+    <ClCompile Include="..\NeuralAmpModelerCore\NAM\wavenet\a2_fast.cpp">
+      <Filter>NAM</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NeuralAmpModelerCore\NAM\wavenet\model.cpp">
+      <Filter>NAM</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NeuralAmpModelerCore\NAM\wavenet\slimmable.cpp">
       <Filter>NAM</Filter>
     </ClCompile>
     <ClCompile Include="..\NeuralAmpModelerCore\NAM\activations.cpp">
