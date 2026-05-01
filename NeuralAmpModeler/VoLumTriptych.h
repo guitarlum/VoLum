@@ -5,6 +5,7 @@
 #include "NeuralAmpModeler.h"
 
 #include <algorithm>
+#include <array>
 
 using namespace iplug;
 using namespace igraphics;
@@ -461,7 +462,23 @@ private:
     const IRECT labelR(motifR.R + 4.f, slotR.T + 2.f,
                        pillR.L - 4.f, slotR.B - 2.f);
 
-    DrawEffectMotif(g, motifR, slot.focus, bypassed);
+    // Motif drawing is the single most expensive operation in this control
+    // (recursive fractal art). Cache it to a layer keyed by (focus, bypass)
+    // so hover redraws skip the recursion. The iPlug2 idiom is to recreate
+    // the layer whenever CheckLayer reports it is no longer valid (scale or
+    // owner-RECT change), and we additionally rebuild on a bypass flip
+    // because that changes the colour ramp inside DrawEffectMotif.
+    const int focusIdx = (int)slot.focus;
+    auto& motifLayer = mSlotMotifLayers[focusIdx];
+    auto& cachedBypass = mSlotMotifCachedBypass[focusIdx];
+    if (!g.CheckLayer(motifLayer) || cachedBypass != bypassed)
+    {
+      g.StartLayer(this, motifR);
+      DrawEffectMotif(g, motifR, slot.focus, bypassed);
+      motifLayer = g.EndLayer();
+      cachedBypass = bypassed;
+    }
+    g.DrawLayer(motifLayer);
     IText labelText(9.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM,
                     "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     g.DrawText(labelText, slot.label, labelR);
@@ -545,6 +562,12 @@ private:
     IText spineText(chosenSize, VoLumColors::CREAM, "Josefin-Bold",
                     EAlign::Center, EVAlign::Middle);
     spineText.mAngle = -90.f; // bottom-to-top: head tilts left to read.
+
+    // Drawn directly (no layer cache). Wrapping rotated DrawText in
+    // StartLayer/EndLayer/DrawLayer caused intermittently-empty spine
+    // bitmaps on some hover transitions; the rotated text is a single
+    // glyph-run draw which is cheap enough not to need caching, especially
+    // since the auto-shrink size is already cached separately.
     g.DrawText(spineText, name, spineR);
   }
 
@@ -596,11 +619,36 @@ private:
     auto* del = GetDelegate();
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(del);
     if (!plugin) return;
-    const double cur = plugin->GetParam(paramIdx)->Value();
+    auto* param = plugin->GetParam(paramIdx);
+    if (!param) return;
+    const double cur = param->Value();
     const double next = (cur > 0.5) ? 0.0 : 1.0;
     del->BeginInformHostOfParamChangeFromUI(paramIdx);
     del->SendParameterValueFromUI(paramIdx, next);
     del->EndInformHostOfParamChangeFromUI(paramIdx);
+
+    // Mirror the value to all peer controls bound to this param so their
+    // cached value stays in sync. SendParameterValueFromUI pushes to the
+    // host/audio side but does NOT refresh other GUI controls; the standard
+    // IControl::SetDirty(true) path calls UpdatePeers internally to do that,
+    // and we mimic the same peer-refresh here because VoLumTriptychControl
+    // is not itself linked to the param. Without this, e.g. the on/off
+    // switch in the expanded POST view's knob row keeps its stale cached
+    // value after a mini-pill toggle from the AMP-view.
+    if (auto* gfx = GetUI())
+    {
+      const double normalized = param->ToNormalized(next);
+      gfx->ForControlWithParam(paramIdx, [normalized, paramIdx](IControl* pControl)
+      {
+        const int nVals = pControl->NVals();
+        for (int v = 0; v < nVals; ++v)
+        {
+          if (pControl->GetParamIdx(v) == paramIdx)
+            pControl->SetValueFromDelegate(normalized, v);
+        }
+      });
+    }
+
     SetDirty(false);
   }
 
@@ -728,6 +776,14 @@ private:
   std::string mCachedSpineName;
   float mCachedSpineMaxLen = -1.f;
   float mCachedSpineSize = 0.f;
+
+  // Per-slot motif layers indexed by EVoLumEffectFocus (6 values - one slot
+  // is "AMP" and unused here since the AMP block does not use a slot motif).
+  // DrawEffectMotif is the most expensive op in this control (recursive
+  // fractal art); caching the rendered output to a layer means hover
+  // transitions only redraw cheap overlays + frames on top.
+  std::array<ILayerPtr, 6> mSlotMotifLayers;
+  std::array<bool, 6> mSlotMotifCachedBypass{};
   IRECT mPostRect;
 
   // Quiet block hit-zones, repopulated each Draw().
