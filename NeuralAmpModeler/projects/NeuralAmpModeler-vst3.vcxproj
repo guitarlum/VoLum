@@ -150,6 +150,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>$(VST3_DEFS);$(DEBUG_DEFS);$(EXTRA_DEBUG_DEFS);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -165,6 +166,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>$(VST3_DEFS);$(DEBUG_DEFS);$(EXTRA_DEBUG_DEFS);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -179,6 +181,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -199,6 +202,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -218,6 +222,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -236,6 +241,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -423,6 +429,8 @@
     <ClCompile Include="..\NeuralAmpModeler.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\convnet.cpp" />
+    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\conv1d.cpp" />
+    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\container.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\dsp.cpp">
       <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(RelativeDir)</ObjectFileName>
       <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Tracer|Win32'">$(IntDir)%(RelativeDir)</ObjectFileName>
@@ -433,8 +441,10 @@
     </ClCompile>
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\get_dsp.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\lstm.cpp" />
-    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\util.cpp" />
-    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet.cpp" />
+    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\ring_buffer.cpp" />
+    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\a2_fast.cpp" />
+    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\model.cpp" />
+    <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\slimmable.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
   </ItemGroup>
   <ItemGroup>
