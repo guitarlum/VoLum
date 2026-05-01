@@ -1098,6 +1098,9 @@ void NeuralAmpModeler::OnReset()
   for (int i = 0; i < 2; ++i)
     mPreEq[i].Reset(sampleRate, maxBlockSize);
   mPreCompressor.Reset();
+  const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
+  mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+  mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mDelay.Reset();
   mReverb.Reset();
 #if VOLUM_AMPETE_PRODUCT
