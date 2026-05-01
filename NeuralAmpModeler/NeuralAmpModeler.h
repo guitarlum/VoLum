@@ -18,6 +18,12 @@
 #include "ISender.h"
 
 #include <array>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
 #include <unordered_map>
 
 #if VOLUM_AMPETE_PRODUCT
@@ -309,7 +315,6 @@ private:
 #if VOLUM_AMPETE_PRODUCT
 public:
   void _VolumRefreshChannels();
-  std::string _StageModelFromData(nam::dspData conf, const char* path);
   void _VolumSaveCurrentToSettings();
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
@@ -334,6 +339,12 @@ public:
   void _ToggleVoLumMetronomePanel();
   void _VolumRefreshPrePedalCaptures();
   void _VolumRequestPreNamLoad(int slot);
+  void _VolumStartLoader();
+  void _VolumStopLoader();
+  void _VolumQueueMainModelLoad(std::string fileToLoad, int ampIdx, std::string rigsRoot);
+  void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
+  void _VolumDrainLoaderResults();
+  void _VolumLoaderThreadMain();
   void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
@@ -366,6 +377,33 @@ private:
   std::atomic<bool> mVolumPreIsLoading[2]{{false}, {false}};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
+
+  enum class VoLumLoadKind { Main, Pre };
+  struct VoLumLoadRequest
+  {
+    VoLumLoadKind kind = VoLumLoadKind::Main;
+    int slot = -1;
+    int ampIdx = -1;
+    std::string fileToLoad;
+    std::string rigsRoot;
+    double sampleRate = 0.0;
+    int blockSize = 0;
+  };
+  struct VoLumLoadResult
+  {
+    VoLumLoadKind kind = VoLumLoadKind::Main;
+    int slot = -1;
+    std::string path;
+    std::string error;
+    std::unique_ptr<ResamplingNAM> model;
+  };
+
+  std::thread mVolumLoaderThread;
+  std::mutex mVolumLoaderMutex;
+  std::condition_variable mVolumLoaderCv;
+  std::deque<VoLumLoadRequest> mVolumLoadRequests;
+  std::deque<VoLumLoadResult> mVolumLoadResults;
+  std::atomic<bool> mVolumLoaderStop{false};
 
   // Per-amp cache: parsed dspData keyed by filename, avoids re-parsing JSON
   std::unordered_map<std::string, nam::dspData> mVolumDspCache;

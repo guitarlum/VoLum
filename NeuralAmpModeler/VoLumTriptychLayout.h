@@ -19,8 +19,8 @@ struct Rect
   float MW() const { return (L + R) / 2.f; }
   float MH() const { return (T + B) / 2.f; }
 
-  template<typename T>
-  T As() const { return T(L, T, R, B); }
+  template<typename TargetRect>
+  TargetRect As() const { return TargetRect(L, T, R, B); }
 };
 
 static constexpr float kTriptychW = 620.f;
