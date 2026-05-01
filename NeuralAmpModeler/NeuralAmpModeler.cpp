@@ -358,9 +358,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     yPos += speakerH + 6.f;
 
     // Triptych (PRE | AMP | POST)
-    const float triptychW = 620.f;
-    const float triptychH = 196.f;
-    const IRECT triptychArea(mainCX - triptychW / 2.f, yPos, mainCX + triptychW / 2.f, yPos + triptychH);
+    const auto triptychBounds = volum::triptych_layout::BoundsForCenter(mainCX, yPos);
+    const IRECT triptychArea = triptychBounds.As<IRECT>();
     
     auto* triptych = new VoLumTriptychControl(triptychArea, [this](EVoLumSection sec, EVoLumEffectFocus focus) {
         mVolumExpandedSection = sec;
@@ -373,24 +372,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // The triptych provides a space for it, but the hero control holds the fractal caching logic.
     // It should be centered within the AMP-expanded area of the triptych.
     // When AMP is expanded, the center of the expanded section is exactly at `mainCX`
-    const float newHeroW = 400.f;
-    const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, yPos + triptychH);
+    const float newHeroW = volum::triptych_layout::kAmpExpandedW;
+    const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, triptychArea.B);
     pGraphics->AttachControl(new VoLumHeroImageControl(heroArea), kCtrlTagVoLumHeroImage);
 
-    // Pedal Cards logic
-    const float pedalW = 210.f;
-    const float pedalH = 158.f;
-    const float gap = 10.f;
-
-    // POST Expanded Pedal Cards
-    // Triptych totals: stripW(100) + gap(10) + ampStripW(70) + gap(10) + expandedW(430) = 620
-    // Triptych is centered on mainCX, so left edge sits at mainCX - 310. The
-    // POST-expanded section center then lands at left + 100 + 10 + 70 + 10 + 215
-    // = mainCX + 95.
-    const float postExpandedCenter = mainCX + 95.f;
-    const IRECT delayCardRect(postExpandedCenter - pedalW - gap/2.f, yPos + 20.f, postExpandedCenter - gap/2.f, yPos + 20.f + pedalH);
-    const IRECT reverbCardRect(postExpandedCenter + gap/2.f, yPos + 20.f, postExpandedCenter + gap/2.f + pedalW, yPos + 20.f + pedalH);
-    const IRECT chainLinkRect(postExpandedCenter - gap/2.f, yPos + 20.f + pedalH/2.f - 6.f, postExpandedCenter + gap/2.f, yPos + 20.f + pedalH/2.f + 6.f);
+    const auto preCards = volum::triptych_layout::ComputePreCards(
+      volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::PRE).pre);
+    const auto postCards = volum::triptych_layout::ComputePostCards(
+      volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::POST).post);
 
     auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
         (void) isBypassClick;
@@ -398,14 +387,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         _UpdateVoLumLayout();
     };
 
-    auto* delayCard = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::DELAY, "DELAY", 16, kDelayActive, onPedalClick);
-    auto* reverbCard = new VoLumPedalCardControl(reverbCardRect, EVoLumEffectFocus::REVERB, "REVERB", 15, kReverbActive, onPedalClick);
-    auto* chainLink = new VoLumChainConnectorControl(chainLinkRect);
-    auto* compCard = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::COMP, "COMP", 17, kPreCompActive, onPedalClick);
-    auto* preNam1Card = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::PRE_NAM1, "NAM Pedal 1", 18, kPreNam1Active, onPedalClick);
-    auto* preNam2Card = new VoLumPedalCardControl(reverbCardRect, EVoLumEffectFocus::PRE_NAM2, "NAM Pedal 2", 19, kPreNam2Active, onPedalClick);
-    auto* preChainLink1 = new VoLumChainConnectorControl(chainLinkRect);
-    auto* preChainLink2 = new VoLumChainConnectorControl(chainLinkRect);
+    auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
+    auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
+    auto* chainLink = new VoLumChainConnectorControl(postCards.connector.As<IRECT>());
+    auto* compCard = new VoLumPedalCardControl(preCards.comp.As<IRECT>(), EVoLumEffectFocus::COMP, onPedalClick);
+    auto* preNam1Card = new VoLumPedalCardControl(preCards.nam1.As<IRECT>(), EVoLumEffectFocus::PRE_NAM1, onPedalClick);
+    auto* preNam2Card = new VoLumPedalCardControl(preCards.nam2.As<IRECT>(), EVoLumEffectFocus::PRE_NAM2, onPedalClick);
+    auto* preChainLink1 = new VoLumChainConnectorControl(preCards.connector1.As<IRECT>());
+    auto* preChainLink2 = new VoLumChainConnectorControl(preCards.connector2.As<IRECT>());
     
     pGraphics->AttachControl(compCard, kCtrlTagVoLumCompCard)->Hide(true);
     pGraphics->AttachControl(preChainLink1, kCtrlTagVoLumPreChainConnector1)->Hide(true);
@@ -416,7 +405,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(chainLink, kCtrlTagVoLumChainConnector)->Hide(true);
     pGraphics->AttachControl(reverbCard, kCtrlTagVoLumReverbCard)->Hide(true);
 
-    yPos += triptychH + 4.f;
+    yPos += volum::triptych_layout::kTriptychH + 4.f;
 
     // Sub-row text (Replaces Amp Name / Focus Header)
     const IRECT subRowArea(mainL, yPos, mainR, yPos + 54.f);
@@ -995,35 +984,51 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     triggerOutput = mNoiseGateTrigger.Process(preAmpPointers, numChannelsInternal, numFrames);
   }
 
-  if (mModel != nullptr)
+  const bool haveMainModel = (mModel != nullptr);
+  if (haveMainModel)
   {
     mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
   }
   else
   {
     _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, numFrames);
+#if VOLUM_AMPETE_PRODUCT
+    if (!mPostEffectsClearedForMissingModel)
+    {
+      mDelay.Reset();
+      mReverb.Reset();
+      mPostEffectsClearedForMissingModel = true;
+    }
+#endif
   }
-  // Apply the noise gate after the NAM
-  sample** gateGainOutput =
-    noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
+  if (haveMainModel)
+    mPostEffectsClearedForMissingModel = false;
 
-  sample** toneStackOutPointers = (toneStackActive && mToneStack != nullptr)
-                                    ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
-                                    : gateGainOutput;
+  sample** hpfPointers = mOutputPointers;
+  if (haveMainModel)
+  {
+    // Apply the noise gate after the NAM
+    sample** gateGainOutput =
+      noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
 
-  sample** irPointers = toneStackOutPointers;
-  if (mIR != nullptr && GetParam(kIRToggle)->Value())
-    irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
+    sample** toneStackOutPointers = (toneStackActive && mToneStack != nullptr)
+                                      ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
+                                      : gateGainOutput;
 
-  // And the HPF for DC offset (Issue 271)
-  const double highPassCutoffFreq = kDCBlockerFrequency;
-  // const double lowPassCutoffFreq = 20000.0;
-  const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
-  // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
-  mHighPass.SetParams(highPassParams);
-  // mLowPass.SetParams(lowPassParams);
-  sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
-  // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
+    sample** irPointers = toneStackOutPointers;
+    if (mIR != nullptr && GetParam(kIRToggle)->Value())
+      irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
+
+    // And the HPF for DC offset (Issue 271)
+    const double highPassCutoffFreq = kDCBlockerFrequency;
+    // const double lowPassCutoffFreq = 20000.0;
+    const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
+    // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
+    mHighPass.SetParams(highPassParams);
+    // mLowPass.SetParams(lowPassParams);
+    hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
+    // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
+  }
 
   // restore previous floating point state
   std::feupdateenv(&fe_state);
@@ -1035,14 +1040,14 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // Apply POST effects (Delay -> Reverb) in stereo
   iplug::sample** postPointers = outputs;
 
-  if (GetParam(kDelayActive)->Value())
+  if (haveMainModel && GetParam(kDelayActive)->Value())
   {
     mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
                      GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate);
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, numFrames);
   }
 
-  if (GetParam(kReverbActive)->Value())
+  if (haveMainModel && GetParam(kReverbActive)->Value())
   {
     mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
                       GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
@@ -1622,9 +1627,8 @@ void NeuralAmpModeler::_DeallocateIOPointers()
 void NeuralAmpModeler::_FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels,
                                     const size_t numFrames)
 {
-  for (auto c = 0; c < numChannels; c++)
-    for (auto s = 0; s < numFrames; s++)
-      mOutputArray[c][s] = mInputArray[c][s];
+  (void) inputs;
+  volum::process_io::ClearBuffers(outputs, numFrames, numChannels);
 }
 
 void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBlockSize)
@@ -2102,69 +2106,32 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 
       if (preExpanded) {
         const IRECT tripBounds = trip->GetRECT();
-        const float stripW = 100.f;
-        const float tGap = 10.f;
-        const float ampStripW = 70.f;
-        const float expandedW = 430.f;
-        const float totalTripW = expandedW + tGap + ampStripW + tGap + stripW;
-        const float tripLeft = tripBounds.MW() - totalTripW / 2.f;
-        const IRECT preRect(tripLeft, tripBounds.T, tripLeft + expandedW, tripBounds.B);
-
-        const float cardPad = 14.f;
-        const float cardGap = 8.f;
-        const float cardTop = preRect.T + 24.f;
-        const float cardBot = preRect.B - 8.f;
-        const float cardH = cardBot - cardTop;
-        const float cardW = (preRect.W() - cardPad * 2.f - cardGap * 2.f) / 3.f;
-        const float cardL = preRect.L + cardPad;
-
-        IRECT cRect(cardL, cardTop, cardL + cardW, cardTop + cardH);
-        IRECT n1Rect(cRect.R + cardGap, cardTop, cRect.R + cardGap + cardW, cardTop + cardH);
-        IRECT n2Rect(n1Rect.R + cardGap, cardTop, n1Rect.R + cardGap + cardW, cardTop + cardH);
-        IRECT l1Rect(cRect.R, preRect.MH() - 6.f, n1Rect.L, preRect.MH() + 6.f);
-        IRECT l2Rect(n1Rect.R, preRect.MH() - 6.f, n2Rect.L, preRect.MH() + 6.f);
+        const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::PRE);
+        const auto cards = volum::triptych_layout::ComputePreCards(frames.pre);
 
         if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard))
-          compCard->SetTargetAndDrawRECTs(cRect);
+          compCard->SetTargetAndDrawRECTs(cards.comp.As<IRECT>());
         if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam1Card))
-          preCard->SetTargetAndDrawRECTs(n1Rect);
+          preCard->SetTargetAndDrawRECTs(cards.nam1.As<IRECT>());
         if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam2Card))
-          preCard->SetTargetAndDrawRECTs(n2Rect);
+          preCard->SetTargetAndDrawRECTs(cards.nam2.As<IRECT>());
         if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector1))
-          link->SetTargetAndDrawRECTs(l1Rect);
+          link->SetTargetAndDrawRECTs(cards.connector1.As<IRECT>());
         if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector2))
-          link->SetTargetAndDrawRECTs(l2Rect);
+          link->SetTargetAndDrawRECTs(cards.connector2.As<IRECT>());
       }
       
       if (postExpanded) {
         const IRECT tripBounds = trip->GetRECT();
-        const float stripW = 100.f;
-        const float tGap = 10.f;
-        const float ampStripW = 70.f;
-        const float expandedW = 430.f;
-        const float totalTripW = stripW + tGap + ampStripW + tGap + expandedW;
-        const float tripLeft = tripBounds.MW() - totalTripW / 2.f;
-        const IRECT postRect(tripLeft + stripW + tGap + ampStripW + tGap, tripBounds.T,
-                             tripLeft + totalTripW, tripBounds.B);
-
-        const float cardPad = 14.f;
-        const float cardGap = 10.f;
-        const float cardTop = postRect.T + 24.f;
-        const float cardBot = postRect.B - 8.f;
-        const float cardH = cardBot - cardTop;
-        const float cardW = (postRect.W() - cardPad * 2.f - cardGap) / 2.f;
-        const float cardL = postRect.L + cardPad;
-
-        IRECT dRect(cardL, cardTop, cardL + cardW, cardTop + cardH);
-        IRECT rRect(dRect.R + cardGap, cardTop, dRect.R + cardGap + cardW, cardTop + cardH);
-        IRECT lRect(dRect.R, postRect.MH() - 6.f, rRect.L, postRect.MH() + 6.f);
+        const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::POST);
+        const auto cards = volum::triptych_layout::ComputePostCards(frames.post);
 
         if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
-          delayCard->SetTargetAndDrawRECTs(dRect);
+          delayCard->SetTargetAndDrawRECTs(cards.delay.As<IRECT>());
         if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard))
-          reverbCard->SetTargetAndDrawRECTs(rRect);
+          reverbCard->SetTargetAndDrawRECTs(cards.reverb.As<IRECT>());
         if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector))
-          linkCard->SetTargetAndDrawRECTs(lRect);
+          linkCard->SetTargetAndDrawRECTs(cards.connector.As<IRECT>());
       }
 
       if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {

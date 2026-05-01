@@ -142,3 +142,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/30/2026 - VoLum: PRE compressor now feeds the amp path correctly when the noise gate is enabled, with focused tests for dry mix and sustained compression behavior.
 04/30/2026 - VoLum: POST pedal cards refresh their active art state again when Delay/Reverb are toggled.
 04/30/2026 - VoLum: Added UI regression tests for POST pedal active-art refresh and PRE pedal dropdown close behavior.
+05/01/2026 - VoLum: Restored robust per-user settings healing and silenced the guitar path when the main amp model is missing.
+05/01/2026 - VoLum: Fixed cached UI artwork rebuilds for pedal cards, amp list icons, and fallback hero art to improve hover responsiveness.
