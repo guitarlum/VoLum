@@ -88,22 +88,23 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
   }
 }
 
-TEST_CASE("lastAmpIdx is clamped to catalog range")
+TEST_CASE("invalid lastAmpIdx heals to default amp")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
   j["lastAmpIdx"] = 9999;
 
-  int lastAmp = 0;
+  int lastAmp = 7;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &lastAmp);
-  REQUIRE(lastAmp == volum::kAmpCount - 1);
+  REQUIRE(lastAmp == 0);
 
   j["lastAmpIdx"] = -50;
+  lastAmp = 7;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &lastAmp);
   REQUIRE(lastAmp == 0);
 }
 
-TEST_CASE("Corrupt per-amp speaker and channel settings auto-heal")
+TEST_CASE("Negative per-amp channel settings reset amp settings to defaults")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
@@ -119,8 +120,45 @@ TEST_CASE("Corrupt per-amp speaker and channel settings auto-heal")
   REQUIRE(healed == true);
   CHECK(loaded[8].speakerIdx == 3);
   CHECK(loaded[8].channelIdx == 0);
-  CHECK(loaded[9].speakerIdx == 0);
+  CHECK(loaded[9].speakerIdx == 3);
   CHECK(loaded[9].channelIdx == 0);
+}
+
+TEST_CASE("Corrupt per-amp scalar settings heal to real defaults")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  auto& amp = j["amps"]["Soldano SLO100"];
+  amp["speaker"] = 999;
+  amp["input"] = 999.0;
+  amp["gate"] = -999.0;
+  amp["bass"] = "loud";
+  amp["noiseGate"] = "yes";
+  amp["preCompRatio"] = 999.0;
+  amp["preCompAttack"] = 0.0;
+  amp["preNam1MidFreq"] = 99999.0;
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  loaded[13].speakerIdx = 1;
+  loaded[13].inputLevel = 7.0;
+  loaded[13].gateThreshold = -20.0;
+  loaded[13].toneBass = 8.0;
+  loaded[13].noiseGateActive = false;
+  loaded[13].preCompRatio = 12.0;
+  loaded[13].preCompAttack = 12.0;
+  loaded[13].preNam1MidFreq = 1200.0;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+
+  REQUIRE(healed == true);
+  CHECK(loaded[13].speakerIdx == 3);
+  CHECK(loaded[13].inputLevel == doctest::Approx(0.0));
+  CHECK(loaded[13].gateThreshold == doctest::Approx(-80.0));
+  CHECK(loaded[13].toneBass == doctest::Approx(5.0));
+  CHECK(loaded[13].noiseGateActive == true);
+  CHECK(loaded[13].preCompRatio == doctest::Approx(4.0));
+  CHECK(loaded[13].preCompAttack == doctest::Approx(4.0));
+  CHECK(loaded[13].preNam1MidFreq == doctest::Approx(650.0));
 }
 
 TEST_CASE("Valid per-amp speaker and channel settings do not request auto-heal")
@@ -200,6 +238,51 @@ TEST_CASE("Effect settings nullptr is safe")
 
   // Pass nullptr for fx — should not crash
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr);
+}
+
+TEST_CASE("Corrupt effect settings heal to defaults")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["effects"] = {
+    {"delayActive", "yes"},
+    {"delayMode", 99},
+    {"reverbActive", 1},
+    {"reverbMode", -1},
+    {"delayModes", nlohmann::json::array({{{"time", 99999.0}, {"feedback", -0.1}, {"mix", "wet"}}})},
+    {"reverbModes", nlohmann::json::array({{{"mix", 5.0}, {"decay", -1.0}, {"tone", "dark"},
+                                             {"preDelay", 999.0}, {"shimmer", -0.5}}})},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  loaded.delayActive = true;
+  loaded.delayMode = 2;
+  loaded.reverbActive = true;
+  loaded.reverbMode = 2;
+  loaded.delayModes[0].time = 700.0;
+  loaded.delayModes[0].feedback = 0.8;
+  loaded.delayModes[0].mix = 0.8;
+  loaded.reverbModes[0].mix = 0.8;
+  loaded.reverbModes[0].decay = 8.0;
+  loaded.reverbModes[0].tone = 8.0;
+  loaded.reverbModes[0].preDelay = 60.0;
+  loaded.reverbModes[0].shimmer = 0.8;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded, &healed);
+
+  REQUIRE(healed == true);
+  CHECK(loaded.delayActive == false);
+  CHECK(loaded.delayMode == 1);
+  CHECK(loaded.reverbActive == false);
+  CHECK(loaded.reverbMode == 0);
+  CHECK(loaded.delayModes[0].time == doctest::Approx(380.0));
+  CHECK(loaded.delayModes[0].feedback == doctest::Approx(0.35));
+  CHECK(loaded.delayModes[0].mix == doctest::Approx(0.28));
+  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.3));
+  CHECK(loaded.reverbModes[0].decay == doctest::Approx(3.0));
+  CHECK(loaded.reverbModes[0].tone == doctest::Approx(4.5));
+  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(20.0));
+  CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.5));
 }
 
 TEST_CASE("Legacy flat effect settings populate every mode snapshot")
