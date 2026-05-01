@@ -204,3 +204,15 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
   CHECK(postCards.connector.L == doctest::Approx(postCards.delay.R));
   CHECK(postCards.connector.R == doctest::Approx(postCards.reverb.L));
 }
+
+TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireDoesNotContain(source, ".detach()");
+  RequireContains(header, "std::thread mVolumLoaderThread;");
+  RequireContains(source, "_VolumStopLoader();");
+  RequireContains(source, "_VolumDrainLoaderResults();");
+  RequireContains(source, "mVolumLoadResults.push_back(std::move(result));");
+}
