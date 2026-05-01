@@ -259,6 +259,7 @@ public:
     mSlotSection.clear();
     mPreHeaderRect = IRECT();
     mPostHeaderRect = IRECT();
+    mAmpBlockRect = IRECT();
 
     if (displaySection == EVoLumSection::PRE)
       _DrawExpandedFrame(g, preRect, "PRE");
@@ -482,41 +483,73 @@ private:
 
   void _DrawAmpStrip(IGraphics& g, const IRECT& r)
   {
-    g.FillRect(VoLumColors::HERO_BG, r);
+    // Quiet block in the same frame language as the PRE/POST collapsed blocks
+    // but taller (180 H vs 140 H) so the AMP reads as the centerpiece of the
+    // row and the rotated amp name has room to breathe. No thumbnail motif -
+    // the spine is the whole point. Click anywhere in the strip navigates to
+    // the AMP-expanded view (handled by OnMouseDown via mAmpRect).
+    const float blockH = 180.f;
+    const float blockTop = r.MH() - blockH / 2.f;
+    const IRECT block(r.L, blockTop, r.R, blockTop + blockH);
+    mAmpBlockRect = block;
+
+    g.FillRect(VoLumColors::HERO_BG, block);
     if (mAmpHovered)
     {
-      // Match the slot hover treatment: ~5% lighter background + faint teal
-      // inner edge so the AMP strip telegraphs that it's clickable.
-      g.FillRect(IColor(20, 80, 140, 160), r);
+      g.FillRect(IColor(20, 80, 140, 160), block);
       g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.55f),
-                 r.GetPadded(-1.f, -1.f, -1.f, -1.f));
+                 block.GetPadded(-1.f, -1.f, -1.f, -1.f));
     }
-    g.DrawRect(VoLumColors::FRAME, r);
+    g.DrawRect(VoLumColors::FRAME, block);
+    const float cs = 6.f;
+    DrawCornerAccent(g, block.L + 3.f, block.T + 3.f, cs, false, false, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.R - 3.f, block.T + 3.f, cs, true,  false, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.L + 3.f, block.B - 3.f, cs, false, true,  VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.R - 3.f, block.B - 3.f, cs, true,  true,  VoLumColors::TEAL_DIM);
 
-    IColor grid(28, 100, 180, 200);
-    float step = 12.f;
-    for (float y = r.T + step; y < r.B - 1.f; y += step)
-      g.DrawLine(grid, r.L + 4.f, y, r.R - 4.f, y, nullptr, 0.6f);
-    for (float x = r.L + step / 2.f; x < r.R - 1.f; x += step)
-      g.DrawLine(grid, x, r.T + 4.f, x, r.B - 4.f, nullptr, 0.6f);
-    IColor node(35, 120, 210, 220);
-    for (float y = r.T + step; y < r.B - 1.f; y += step * 2.f)
-      for (float x = r.L + step / 2.f; x < r.R - 1.f; x += step * 2.f)
-        if (x > r.L + 2.f && x < r.R - 2.f && y > r.T + 2.f && y < r.B - 2.f)
-          g.FillCircle(node, x, y, 1.5f);
+    // Header: "AMP" + chevron + 1px teal hairline (mirrors PRE/POST exactly).
+    const float headerH = 22.f;
+    const IRECT header(block.L + 4.f, block.T + 2.f, block.R - 4.f, block.T + 2.f + headerH);
+    IText hdrText(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const float chevronW = 7.f;
+    const IRECT hdrTextRect(header.L, header.T, header.R - chevronW - 2.f, header.B);
+    g.DrawText(hdrText, "AMP", hdrTextRect);
 
-    IText t(11.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const float cxC = header.R - chevronW;
+    const float cyC = header.MH();
+    const float chs = 3.5f;
+    const IColor chevronCol = VoLumColors::GOLD_DIM;
+    g.DrawLine(chevronCol, cxC, cyC - chs, cxC + chs, cyC, nullptr, 1.2f);
+    g.DrawLine(chevronCol, cxC + chs, cyC, cxC, cyC + chs, nullptr, 1.2f);
+
+    const float underlineY = header.B + 1.f;
+    g.DrawLine(VoLumColors::TEAL_DIM.WithOpacity(0.55f),
+               block.L + 6.f, underlineY, block.R - 6.f, underlineY, nullptr, 1.f);
+
+    // Rotated spine fills the rest of the block. With ~150 px of vertical
+    // budget the auto-shrink picks ~14pt for "Diezel Herbert Mk1" and ~16pt
+    // for short names like "AMP" or "Marshall JMP", floor at 8pt.
+    const IRECT spineR(block.L + 4.f, underlineY + 4.f,
+                       block.R - 4.f, block.B - 6.f);
     const char* name = mAmpName.empty() ? "AMP" : mAmpName.c_str();
-    float charH = 12.f;
-    int len = (int)strlen(name);
-    int maxChars = (int)(r.H() / charH) - 2;
-    if (len > maxChars) len = maxChars;
-    float totalH = len * charH;
-    float ty = r.MH() - totalH / 2.f;
-    for (int i = 0; i < len; i++) {
-      char ch[2] = { name[i], 0 };
-      g.DrawText(t, ch, IRECT(r.L, ty + i * charH, r.R, ty + (i + 1) * charH));
+    const float maxLen = spineR.H() - 2.f;
+    static const float kSpineSizes[] = {16.f, 14.f, 12.f, 11.f, 10.f, 9.f, 8.f};
+    float chosenSize = 8.f;
+    for (float s : kSpineSizes)
+    {
+      IText probe(s, VoLumColors::CREAM, "Josefin-Bold");
+      IRECT measured;
+      g.MeasureText(probe, name, measured);
+      if (measured.W() <= maxLen)
+      {
+        chosenSize = s;
+        break;
+      }
     }
+    IText spineText(chosenSize, VoLumColors::CREAM, "Josefin-Bold",
+                    EAlign::Center, EVAlign::Middle);
+    spineText.mAngle = -90.f; // bottom-to-top: head tilts left to read.
+    g.DrawText(spineText, name, spineR);
   }
 
 
@@ -626,9 +659,12 @@ private:
       }
     }
     // AMP strip hover only matters when AMP is collapsed (i.e. PRE or POST is
-    // expanded), so a subtle hover invites a click back to AMP view.
+    // expanded), so a subtle hover invites a click back to AMP view. Hover is
+    // gated on the visible block rect so the empty whitespace around it does
+    // not light up.
     const bool ampHov = (mExpandedSection != EVoLumSection::AMP)
-                        && mAmpRect.Contains(x, y);
+                        && mAmpBlockRect.W() > 0
+                        && mAmpBlockRect.Contains(x, y);
     bool dirty = false;
     if (next != mHoveredSlot) { mHoveredSlot = next; dirty = true; }
     if (ampHov != mAmpHovered) { mAmpHovered = ampHov; dirty = true; }
@@ -652,6 +688,11 @@ private:
 
   IRECT mPreRect;
   IRECT mAmpRect;
+  // Visible AMP block (140 H, centered inside the 196 H strip rect) - used for
+  // hover hit-testing so the hover lift only fires when the cursor is over the
+  // block, not the empty whitespace above/below it. Click hit-testing still
+  // uses mAmpRect (the full strip) so clicks near the block still register.
+  IRECT mAmpBlockRect;
   IRECT mPostRect;
 
   // Quiet block hit-zones, repopulated each Draw().
