@@ -383,7 +383,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float gap = 10.f;
 
     // POST Expanded Pedal Cards
-    const float postExpandedCenter = mainCX + 60.f;
+    // Triptych totals: stripW(100) + gap(10) + ampStripW(70) + gap(10) + expandedW(430) = 620
+    // Triptych is centered on mainCX, so left edge sits at mainCX - 310. The
+    // POST-expanded section center then lands at left + 100 + 10 + 70 + 10 + 215
+    // = mainCX + 95.
+    const float postExpandedCenter = mainCX + 95.f;
     const IRECT delayCardRect(postExpandedCenter - pedalW - gap/2.f, yPos + 20.f, postExpandedCenter - gap/2.f, yPos + 20.f + pedalH);
     const IRECT reverbCardRect(postExpandedCenter + gap/2.f, yPos + 20.f, postExpandedCenter + gap/2.f + pedalW, yPos + 20.f + pedalH);
     const IRECT chainLinkRect(postExpandedCenter - gap/2.f, yPos + 20.f + pedalH/2.f - 6.f, postExpandedCenter + gap/2.f, yPos + 20.f + pedalH/2.f + 6.f);
@@ -988,7 +992,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
     mNoiseGateTrigger.SetParams(triggerParams);
     mNoiseGateTrigger.SetSampleRate(sampleRate);
-    triggerOutput = mNoiseGateTrigger.Process(mInputPointers, numChannelsInternal, numFrames);
+    triggerOutput = mNoiseGateTrigger.Process(preAmpPointers, numChannelsInternal, numFrames);
   }
 
   if (mModel != nullptr)
@@ -2098,10 +2102,10 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 
       if (preExpanded) {
         const IRECT tripBounds = trip->GetRECT();
-        const float stripW = 30.f;
+        const float stripW = 100.f;
         const float tGap = 10.f;
         const float ampStripW = 70.f;
-        const float expandedW = 460.f;
+        const float expandedW = 430.f;
         const float totalTripW = expandedW + tGap + ampStripW + tGap + stripW;
         const float tripLeft = tripBounds.MW() - totalTripW / 2.f;
         const IRECT preRect(tripLeft, tripBounds.T, tripLeft + expandedW, tripBounds.B);
@@ -2134,10 +2138,10 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       
       if (postExpanded) {
         const IRECT tripBounds = trip->GetRECT();
-        const float stripW = 30.f;
+        const float stripW = 100.f;
         const float tGap = 10.f;
         const float ampStripW = 70.f;
-        const float expandedW = 460.f;
+        const float expandedW = 430.f;
         const float totalTripW = stripW + tGap + ampStripW + tGap + expandedW;
         const float tripLeft = tripBounds.MW() - totalTripW / 2.f;
         const IRECT postRect(tripLeft + stripW + tGap + ampStripW + tGap, tripBounds.T,
@@ -2259,7 +2263,7 @@ void NeuralAmpModeler::_VolumRefreshChannels()
 
   if (mVolumSpeakerIdx < 0 || mVolumSpeakerIdx >= 4)
   {
-    mVolumSpeakerIdx = volum::VoLumAmpSettings{}.speakerIdx;
+    mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
     mVolumAmpSettings[mVolumAmpIdx].speakerIdx = mVolumSpeakerIdx;
     mVolumSettingsDirty = true;
   }
@@ -2434,6 +2438,13 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   if (!rawCtrl)
     return;
 
+  auto* menu = rawCtrl->As<VoLumPreCaptureMenuControl>();
+  if (!rawCtrl->IsHidden() && menu && menu->GetSlot() == slot)
+  {
+    _VolumHidePreCaptureMenu();
+    return;
+  }
+
   const int captureCount = std::max(1, _VolumGetPreCaptureCount());
   std::vector<std::string> labels;
   labels.reserve(static_cast<size_t>(captureCount));
@@ -2446,7 +2457,6 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   const float menuH = VoLumPreCaptureMenuControl::ItemHeight() * captureCount + 12.f;
   const IRECT menuRect(anchorRect.L, anchorRect.B + 6.f, anchorRect.L + menuW, anchorRect.B + 6.f + menuH);
 
-  auto* menu = rawCtrl->As<VoLumPreCaptureMenuControl>();
   menu->SetTargetAndDrawRECTs(menuRect);
   menu->SetItems(slot, labels, selected);
   menu->Hide(false);
