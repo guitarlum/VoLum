@@ -80,6 +80,11 @@ if not defined DevEnvDir (
   )
 )
 
+for /f "delims=" %%G in ('where msbuild 2^>nul') do (
+  set "MSBUILD_EXE=%%G"
+  goto :msbuild_ready
+)
+
 for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe"`) do set "MSBUILD_EXE=%%i"
 if not defined MSBUILD_EXE (
   echo ERROR: MSBuild not found. Install "Visual Studio Build Tools" with workload "Desktop development with C++" ^(Microsoft.VisualStudio.Workload.VCTools^).
@@ -107,7 +112,8 @@ REM msbuild NeuralAmpModeler.sln /p:configuration=release /p:platform=win32 /nol
 REM echo Building 64 bit binaries...
 REM add projects with /t to build VST2 and AAX
 REM NOTE: In cmd.exe, semicolons split commands unless quoted — targets and file logger must be quoted.
-"%MSBUILD_EXE%" NeuralAmpModeler.sln /t:"NeuralAmpModeler-app;NeuralAmpModeler-vst3" /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger /m /flp:"logfile=build-win.log;errorsonly;append"
+if not defined MSBUILD_MAX_CPU_COUNT set "MSBUILD_MAX_CPU_COUNT=/m:2"
+"%MSBUILD_EXE%" NeuralAmpModeler.sln /t:"NeuralAmpModeler-app;NeuralAmpModeler-vst3" /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger %MSBUILD_MAX_CPU_COUNT% /flp:"logfile=build-win.log;errorsonly;append"
 if errorlevel 1 (
   echo ERROR: MSBuild failed
   exit /b 1

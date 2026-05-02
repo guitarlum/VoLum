@@ -115,6 +115,11 @@
     <ClCompile Include="..\tests\test_eparam_order.cpp" />
     <ClCompile Include="..\tests\test_tuner_dsp.cpp" />
     <ClCompile Include="..\tests\test_metronome_dsp.cpp" />
+    <ClCompile Include="..\tests\test_tone_stack.cpp" />
+    <ClCompile Include="..\tests\test_volum_pre_pedal_captures.cpp" />
+    <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
+    <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />
+    <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\convnet.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\conv1d.cpp" />

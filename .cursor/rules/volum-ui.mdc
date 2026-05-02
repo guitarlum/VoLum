@@ -30,3 +30,7 @@ Verification:
 
 - UI/layout change: run `pwsh NeuralAmpModeler/scripts/run-app-win.ps1` and inspect the app.
 - If params/keyboard behavior changed too, also run Windows tests.
+- Prefer pure helper tests for layout/state before source-string locks:
+  - Triptych geometry belongs in `VoLumTriptychLayout.h` / `test_volum_ui_regressions.cpp`.
+  - PRE capture discovery belongs in `VoLumPrePedalCaptures.h` / `test_volum_pre_pedal_captures.cpp`.
+  - Signal-chain visibility/enablement decisions belong in `VoLumProcessingPlan.h` / `test_volum_processing_plan.cpp`.

@@ -20,8 +20,11 @@
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumPaths.h"
+#include "VoLumPrePedalCaptures.h"
 #include "VoLumProcessIO.h"
+#include "VoLumProcessingPlan.h"
 #if VOLUM_AMPETE_PRODUCT
+#include "VoLumChunkCodec.h"
 #include "VoLumUserSettingsIO.h"
 #include "VoLumControls.h"
 #endif
@@ -932,8 +935,17 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 #endif
   _ApplyDSPStaging();
   sample** preAmpPointers = mInputPointers;
+  const bool haveMainModel = (mModel != nullptr);
+  const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
+  const bool toneStackActive = GetParam(kEQActive)->Value();
 #if VOLUM_AMPETE_PRODUCT
-  if (GetParam(kPreCompActive)->Bool())
+  const bool preNamActive[2] = {GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam2Active)->Bool()};
+  const bool havePreNam[2] = {mPreModel[0] != nullptr, mPreModel[1] != nullptr};
+  const auto processingPlan =
+    volum::MakeProcessingPlan(haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(),
+                              mIR != nullptr, GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam,
+                              GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive());
+  if (processingPlan.runPreComp)
   {
     mPreCompressor.SetParams(GetParam(kPreCompAmount)->Value(), GetParam(kPreCompRatio)->Value(),
                              GetParam(kPreCompAttack)->Value(), GetParam(kPreCompRelease)->Value(),
@@ -943,7 +955,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   auto processPreSlot = [&](int slot, int activeParam, int gainParam, int bassParam, int midParam, int midFreqParam,
                             int trebleParam, int levelParam) {
-    if (!GetParam(activeParam)->Bool() || mPreModel[slot] == nullptr)
+    (void)activeParam;
+    if (!processingPlan.runPreNam[slot])
       return;
 
     const double inGain = std::pow(10.0, GetParam(gainParam)->Value() / 20.0);
@@ -966,13 +979,18 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
                  kPreNam1Level);
   processPreSlot(1, kPreNam2Active, kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble,
                  kPreNam2Level);
+#else
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+  const auto processingPlan =
+    volum::MakeProcessingPlan(haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(),
+                              mIR != nullptr, false, preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
+                              GetParam(kReverbActive)->Bool(), false);
 #endif
-  const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
-  const bool toneStackActive = GetParam(kEQActive)->Value();
 
   // Noise gate trigger
   sample** triggerOutput = preAmpPointers;
-  if (noiseGateActive)
+  if (processingPlan.runNoiseGate)
   {
     const double time = 0.01;
     const double threshold = GetParam(kNoiseGateThreshold)->Value(); // GetParam...
@@ -986,8 +1004,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     triggerOutput = mNoiseGateTrigger.Process(preAmpPointers, numChannelsInternal, numFrames);
   }
 
-  const bool haveMainModel = (mModel != nullptr);
-  if (haveMainModel)
+  if (processingPlan.runMainModel)
   {
     mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
   }
@@ -1003,22 +1020,22 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     }
 #endif
   }
-  if (haveMainModel)
+  if (processingPlan.runMainModel)
     mPostEffectsClearedForMissingModel = false;
 
   sample** hpfPointers = mOutputPointers;
-  if (haveMainModel)
+  if (processingPlan.runMainModel)
   {
     // Apply the noise gate after the NAM
     sample** gateGainOutput =
-      noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
+      processingPlan.runNoiseGate ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
 
-    sample** toneStackOutPointers = (toneStackActive && mToneStack != nullptr)
+    sample** toneStackOutPointers = (processingPlan.runToneStack && mToneStack != nullptr)
                                       ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
                                       : gateGainOutput;
 
     sample** irPointers = toneStackOutPointers;
-    if (mIR != nullptr && GetParam(kIRToggle)->Value())
+    if (processingPlan.runIR)
       irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
 
     // And the HPF for DC offset (Issue 271)
@@ -1042,14 +1059,14 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // Apply POST effects (Delay -> Reverb) in stereo
   iplug::sample** postPointers = outputs;
 
-  if (haveMainModel && GetParam(kDelayActive)->Value())
+  if (processingPlan.runDelay)
   {
     mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
                      GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate);
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, numFrames);
   }
 
-  if (haveMainModel && GetParam(kReverbActive)->Value())
+  if (processingPlan.runReverb)
   {
     mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
                       GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
@@ -1068,7 +1085,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
 
   // Tuner active: silence output so player can tune without hearing amp
-  if (mTunerDSP.IsActive())
+  if (processingPlan.silenceForTuner)
   {
     for (size_t c = 0; c < numChannelsExternalOut; c++)
       std::memset(outputs[c], 0, numFrames * sizeof(iplug::sample));
@@ -1212,51 +1229,8 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
 
 #if VOLUM_AMPETE_PRODUCT
   // VoLum: append per-amp settings after params (see Unserialization.cpp)
-  chunk.Put(&mVolumAmpIdx);
-  chunk.Put(&mVolumSpeakerIdx);
-  chunk.Put(&mVolumChannelIdx);
-  for (int i = 0; i < volum::kAmpCount; i++)
-  {
-    const auto& s = mVolumAmpSettings[i];
-    chunk.Put(&s.speakerIdx);
-    chunk.Put(&s.channelIdx);
-    chunk.Put(&s.inputLevel);
-    chunk.Put(&s.gateThreshold);
-    chunk.Put(&s.toneBass);
-    chunk.Put(&s.toneMid);
-    chunk.Put(&s.toneTreble);
-    chunk.Put(&s.outputLevel);
-    int ng = s.noiseGateActive ? 1 : 0;
-    int eq = s.eqActive ? 1 : 0;
-    chunk.Put(&ng);
-    chunk.Put(&eq);
-    int pc = s.preCompActive ? 1 : 0;
-    int p1 = s.preNam1Active ? 1 : 0;
-    int p2 = s.preNam2Active ? 1 : 0;
-    chunk.Put(&pc);
-    chunk.Put(&s.preCompAmount);
-    chunk.Put(&s.preCompRatio);
-    chunk.Put(&s.preCompAttack);
-    chunk.Put(&s.preCompRelease);
-    chunk.Put(&s.preCompMix);
-    chunk.Put(&s.preCompLevel);
-    chunk.Put(&p1);
-    chunk.Put(&s.preNam1Capture);
-    chunk.Put(&s.preNam1Gain);
-    chunk.Put(&s.preNam1Bass);
-    chunk.Put(&s.preNam1Mid);
-    chunk.Put(&s.preNam1MidFreq);
-    chunk.Put(&s.preNam1Treble);
-    chunk.Put(&s.preNam1Level);
-    chunk.Put(&p2);
-    chunk.Put(&s.preNam2Capture);
-    chunk.Put(&s.preNam2Gain);
-    chunk.Put(&s.preNam2Bass);
-    chunk.Put(&s.preNam2Mid);
-    chunk.Put(&s.preNam2MidFreq);
-    chunk.Put(&s.preNam2Treble);
-    chunk.Put(&s.preNam2Level);
-  }
+  volum::PutCurrentVoLumChunkState(
+    chunk, {mVolumAmpIdx, mVolumSpeakerIdx, mVolumChannelIdx}, mVolumAmpSettings.data(), volum::kAmpCount);
 #endif
 
   return ok;
@@ -2231,38 +2205,11 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
     return;
   }
 
-  namespace fs = std::filesystem;
-  const fs::path preDir = fs::path(mVolumRigsRoot) / "PrePedals";
-  std::error_code ec;
-  if (!fs::is_directory(preDir, ec))
-  {
-    addMockCaptures();
-    return;
-  }
-
-  std::vector<std::pair<std::string, std::string>> captures;
-  for (const auto& entry : fs::directory_iterator(preDir, ec))
-  {
-    if (!entry.is_regular_file(ec))
-      continue;
-
-    std::string name = entry.path().filename().string();
-    if (name.size() <= 4 || name.compare(name.size() - 4, 4, ".nam") != 0)
-      continue;
-
-    std::string label = entry.path().stem().string();
-    const auto dash = label.find('-');
-    if (dash != std::string::npos && dash > 0)
-      label = label.substr(0, dash);
-    captures.push_back({name, label});
-  }
-
-  std::sort(captures.begin(), captures.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-
+  const auto captures = volum::DiscoverPrePedalCaptures(std::filesystem::path(mVolumRigsRoot));
   for (const auto& capture : captures)
   {
-    mVolumPreCaptureFiles.push_back(capture.first);
-    mVolumPreCaptureLabels.push_back(capture.second);
+    mVolumPreCaptureFiles.push_back(capture.filename);
+    mVolumPreCaptureLabels.push_back(capture.label);
   }
 
   if (mVolumPreCaptureLabels.empty())

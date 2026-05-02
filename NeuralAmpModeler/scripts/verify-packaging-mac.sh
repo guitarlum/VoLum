@@ -49,6 +49,10 @@ test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
 test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/PrePedals"
 test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
 test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+while IFS= read -r pre_capture; do
+  pre_name="$(basename "$pre_capture")"
+  test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/PrePedals/$pre_name"
+done < <(find "$REPO_ROOT/rigs/PrePedals" -maxdepth 1 -type f -name '*.nam' | sort)
 
 hdiutil detach "$VERIFY_DIR/dmg"
 
@@ -58,6 +62,10 @@ test -d "$VERIFY_DIR/vst3/VoLumRigs"
 test -d "$VERIFY_DIR/vst3/VoLumRigs/PrePedals"
 test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
 test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+while IFS= read -r pre_capture; do
+  pre_name="$(basename "$pre_capture")"
+  test -f "$VERIFY_DIR/vst3/VoLumRigs/PrePedals/$pre_name"
+done < <(find "$REPO_ROOT/rigs/PrePedals" -maxdepth 1 -type f -name '*.nam' | sort)
 
 if [[ -n "$INSTALLER_DMG" ]] && [[ -f "$INSTALLER_DMG" ]]; then
   echo "Verifying macOS installer DMG: $INSTALLER_DMG"

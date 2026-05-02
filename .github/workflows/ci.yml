@@ -1,14 +1,16 @@
 name: CI
 
-# pull_request: runs when a PR to main is opened/updated (one run per push — no duplicate with push).
-# push (main only): runs after merge to main; feature-branch pushes rely on the PR workflow until merged.
+# pull_request: runs when a PR to dev/main is opened/updated.
+# push: dev is the integration gate, main is the release branch gate.
 on:
   workflow_dispatch:
   push:
     branches:
+      - dev
       - main
   pull_request:
     branches:
+      - dev
       - main
 
 concurrency:
@@ -19,8 +21,48 @@ env:
   PROJECT_NAME: NeuralAmpModeler
 
 jobs:
+  formatting:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check clang-format output
+        run: |
+          bash format.bash
+          git diff --exit-code
+        shell: bash
+
+  namcore:
+    name: NAMCore regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build NAMCore tools
+        working-directory: NeuralAmpModelerCore
+        env:
+          CXX: clang++
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build -j4
+
+      - name: Run NAMCore tests and render smoke checks
+        working-directory: NeuralAmpModelerCore
+        run: |
+          ./build/tools/run_tests
+          ./build/tools/benchmodel ./example_models/wavenet.nam
+          ./build/tools/benchmodel ./example_models/lstm.nam
+          ./build/tools/render ./example_models/wavenet.nam ./example_audio/input.wav ./example_audio/output.wav
+
   windows:
-    name: Windows (tests + portable zip)
+    name: Windows (tests + installer + portable zip + plugin validation)
     runs-on: windows-latest
     steps:
       - name: Check out repository
@@ -28,10 +70,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
       - name: Get VST3 SDK
         run: |
           cd iPlug2/Dependencies/IPlug
-          ./download-iplug-sdks.sh
+          ./download-vst3-sdk.sh master build-validator
+          ./download-wam-sdk.sh
         shell: bash
 
       - name: Get Prebuilt Libs
@@ -40,8 +86,9 @@ jobs:
           ./download-prebuilt-libs.sh
         shell: bash
 
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v2
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+        shell: pwsh
 
       - name: Setup Python3
         uses: actions/setup-python@v5
@@ -57,6 +104,16 @@ jobs:
         run: ./NeuralAmpModeler/scripts/run-tests-win.ps1
         shell: pwsh
 
+      - name: Build Windows installer
+        run: |
+          cd NeuralAmpModeler\scripts
+          .\makedist-win.bat full installer
+        shell: cmd
+
+      - name: Verify Windows installer layout
+        run: ./NeuralAmpModeler/scripts/verify-installer-win.ps1 -RunSilentInstall
+        shell: pwsh
+
       - name: Build Windows portable zip
         run: |
           cd NeuralAmpModeler\scripts
@@ -67,6 +124,10 @@ jobs:
         run: ./NeuralAmpModeler/scripts/verify-packaging-win.ps1
         shell: pwsh
 
+      - name: Validate Windows VST3 with pluginval
+        run: ./NeuralAmpModeler/scripts/validate-vst3-win.ps1
+        shell: pwsh
+
       - name: Upload Windows artifacts (VoLum-win)
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +136,7 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macOS (full distribution + packaging verify)
+    name: macOS (tests + full distribution + plugin validation)
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -86,12 +147,19 @@ jobs:
       - name: Get VST3 SDK
         run: |
           cd iPlug2/Dependencies/IPlug
-          ./download-iplug-sdks.sh
+          ./download-vst3-sdk.sh master build-validator
+          ./download-wam-sdk.sh
 
       - name: Get Prebuilt Libs
         run: |
           cd iPlug2/Dependencies
           ./download-prebuilt-libs.sh
+
+      - name: Unit tests (doctest)
+        run: bash NeuralAmpModeler/scripts/run-tests-mac.sh
+
+      - name: Sanitized unit tests (ASan/UBSan)
+        run: bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize
 
       - name: Build macOS distribution (installer + standalone + VST3 zip)
         env:
@@ -110,6 +178,9 @@ jobs:
           echo "VST3 architectures: $vst3_archs"
           [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
           [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
+
+      - name: Validate macOS VST3 with pluginval
+        run: bash NeuralAmpModeler/scripts/validate-vst3-mac.sh
 
       - name: Verify DMG, VST3 zip, and installer PKG layout
         env:

@@ -438,63 +438,20 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
     // SerializeParams wrote kNumParams doubles; now read the per-amp block
-    pos = chunk.Get(&mVolumAmpIdx, pos);
-    pos = chunk.Get(&mVolumSpeakerIdx, pos);
-    pos = chunk.Get(&mVolumChannelIdx, pos);
-    mVolumAmpIdx = std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1);
-    mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
+    volum::VoLumChunkSelection selection;
+    pos = volum::GetVoLumChunkSelection(chunk, pos, selection);
+    mVolumAmpIdx = selection.ampIdx;
+    mVolumSpeakerIdx = selection.speakerIdx;
+    mVolumChannelIdx = selection.channelIdx;
 
     const bool hasPreAmpSettings = volum::ChunkHasExtendedPerAmpSettings(chunk.Size() - pos, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
       auto& s = mVolumAmpSettings[i];
-      pos = chunk.Get(&s.speakerIdx, pos);
-      pos = chunk.Get(&s.channelIdx, pos);
-      pos = chunk.Get(&s.inputLevel, pos);
-      pos = chunk.Get(&s.gateThreshold, pos);
-      pos = chunk.Get(&s.toneBass, pos);
-      pos = chunk.Get(&s.toneMid, pos);
-      pos = chunk.Get(&s.toneTreble, pos);
-      pos = chunk.Get(&s.outputLevel, pos);
-      int ng = 1, eq = 1;
-      pos = chunk.Get(&ng, pos);
-      pos = chunk.Get(&eq, pos);
-      s.noiseGateActive = (ng != 0);
-      s.eqActive = (eq != 0);
+      pos = volum::GetLegacyPerAmpSettings(chunk, pos, s);
       if (hasPreAmpSettings)
-      {
-        int pc = 0, p1 = 0, p2 = 0;
-        pos = chunk.Get(&pc, pos);
-        pos = chunk.Get(&s.preCompAmount, pos);
-        if (version >= volum::ChunkVersion(0, 8, 1))
-        {
-          pos = chunk.Get(&s.preCompRatio, pos);
-          pos = chunk.Get(&s.preCompAttack, pos);
-          pos = chunk.Get(&s.preCompRelease, pos);
-          pos = chunk.Get(&s.preCompMix, pos);
-        }
-        pos = chunk.Get(&s.preCompLevel, pos);
-        pos = chunk.Get(&p1, pos);
-        pos = chunk.Get(&s.preNam1Capture, pos);
-        pos = chunk.Get(&s.preNam1Gain, pos);
-        pos = chunk.Get(&s.preNam1Bass, pos);
-        pos = chunk.Get(&s.preNam1Mid, pos);
-        pos = chunk.Get(&s.preNam1MidFreq, pos);
-        pos = chunk.Get(&s.preNam1Treble, pos);
-        pos = chunk.Get(&s.preNam1Level, pos);
-        pos = chunk.Get(&p2, pos);
-        pos = chunk.Get(&s.preNam2Capture, pos);
-        pos = chunk.Get(&s.preNam2Gain, pos);
-        pos = chunk.Get(&s.preNam2Bass, pos);
-        pos = chunk.Get(&s.preNam2Mid, pos);
-        pos = chunk.Get(&s.preNam2MidFreq, pos);
-        pos = chunk.Get(&s.preNam2Treble, pos);
-        pos = chunk.Get(&s.preNam2Level, pos);
-        s.preCompActive = (pc != 0);
-        s.preNam1Active = (p1 != 0);
-        s.preNam2Active = (p2 != 0);
-      }
+        pos = volum::GetExtendedPerAmpSettings(chunk, pos, s, version >= volum::ChunkVersion(0, 8, 1));
     }
 
     mVolumInitComplete = false;

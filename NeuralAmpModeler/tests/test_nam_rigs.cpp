@@ -116,12 +116,38 @@ TEST_CASE("Load all bundled NAM files")
   std::vector<fs::path> namFiles;
   for (const auto& entry : fs::recursive_directory_iterator(rigsRoot))
   {
-    if (entry.is_regular_file() && entry.path().extension() == ".nam")
+    if (entry.is_regular_file() && entry.path().extension() == ".nam"
+        && entry.path().parent_path().filename() != "PrePedals")
       namFiles.push_back(entry.path());
   }
 
   REQUIRE(namFiles.size() == 240);
 
+  for (const auto& path : namFiles)
+  {
+    CAPTURE(path.string());
+    auto model = nam::get_dsp(path);
+    REQUIRE(model != nullptr);
+    model->Reset(48000.0, 512);
+  }
+}
+
+TEST_CASE("Load all PRE pedal NAM captures")
+{
+  namespace fs = std::filesystem;
+  nam::activations::Activation::enable_fast_tanh();
+
+  const auto prePedalsRoot = RepoRoot() / "rigs" / "PrePedals";
+  REQUIRE(fs::is_directory(prePedalsRoot));
+
+  std::vector<fs::path> namFiles;
+  for (const auto& entry : fs::directory_iterator(prePedalsRoot))
+  {
+    if (entry.is_regular_file() && entry.path().extension() == ".nam")
+      namFiles.push_back(entry.path());
+  }
+
+  std::sort(namFiles.begin(), namFiles.end());
   for (const auto& path : namFiles)
   {
     CAPTURE(path.string());

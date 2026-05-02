@@ -18,13 +18,14 @@ Parameter rules:
 - New params need stable `GetName()` strings.
 - Do not reorder params or rename stable names without updating migration code.
 - Keep `test_eparam_order.cpp` and `test_keyboard_steps.cpp` in sync with param changes.
+- PRE NAM capture params (`PreNam1Capture`, `PreNam2Capture`) use `0` as EMPTY and are bounded by the PRE capture list / param range; update `test_volum_pre_pedal_captures.cpp` and `test_volum_chunk_codec.cpp` when that behavior changes.
 
 Preset/session migration:
 
 - Add a new version/chunk branch in `Unserialization.cpp`; never rewrite old readers.
 - VoLum `0.1.x` intentionally routes through the NAM `0.7.15` reader.
 - VoLum `0.6.0` adds `ReverbPreDelay` and `ReverbShimmer`; preserve those migration paths.
-- If serialization behavior changes, add/update `test_volum_chunk_version.cpp`.
+- If serialization behavior changes, add/update `test_volum_chunk_version.cpp` and `test_volum_chunk_codec.cpp`.
 
 Settings persistence:
 
@@ -37,3 +38,4 @@ Verification:
 
 - Run `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`.
 - Add focused doctests for new DSP/state behavior before calling work done.
+- Register new test files in both `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj` and `NeuralAmpModeler/tests/CMakeLists.txt`.
