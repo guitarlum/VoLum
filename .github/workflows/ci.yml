@@ -188,6 +188,20 @@ jobs:
           cd NeuralAmpModeler/scripts
           ./makedist-mac.sh full all
 
+      - name: Show macOS build failure diagnostics
+        if: failure()
+        run: |
+          echo "macOS packaging failed. Recent build logs:"
+          if [[ -f NeuralAmpModeler/build-mac.log ]]; then
+            tail -n 200 NeuralAmpModeler/build-mac.log
+          fi
+          if [[ -f NeuralAmpModeler/build-mac/build-mac.log ]]; then
+            tail -n 200 NeuralAmpModeler/build-mac/build-mac.log
+          fi
+          if [[ -d NeuralAmpModeler/build-mac ]]; then
+            find NeuralAmpModeler/build-mac -maxdepth 3 -type f | sort | tail -n 100
+          fi
+
       - name: Verify macOS binary architectures
         run: |
           APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
