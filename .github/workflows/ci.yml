@@ -185,8 +185,9 @@ jobs:
         env:
           PACKAGE_DSYMS: "0"
         run: |
+          set -o pipefail
           cd NeuralAmpModeler/scripts
-          ./makedist-mac.sh full all
+          ./makedist-mac.sh full all 2>&1 | tee ../../mac-package.log
 
       - name: Show macOS build failure diagnostics
         if: failure()
@@ -209,6 +210,10 @@ jobs:
           if [[ -f NeuralAmpModeler/build-mac.log ]]; then
             tail -n 200 NeuralAmpModeler/build-mac.log
             emit_annotation NeuralAmpModeler/build-mac.log
+          fi
+          if [[ -f mac-package.log ]]; then
+            tail -n 240 mac-package.log
+            emit_annotation mac-package.log
           fi
           if [[ -f NeuralAmpModeler/build-mac/build-mac.log ]]; then
             tail -n 200 NeuralAmpModeler/build-mac/build-mac.log
