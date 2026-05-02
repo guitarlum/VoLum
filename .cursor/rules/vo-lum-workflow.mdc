@@ -15,6 +15,7 @@ alwaysApply: true
 
 1. **Run tests** when C++/NAM/plugin logic changed:
    - `NeuralAmpModeler/scripts/run-tests-win.ps1` (Release x64), or the equivalent CI command you are using.
+   - macOS parity: `NeuralAmpModeler/scripts/run-tests-mac.sh`; sanitizer parity: `NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`.
 2. **Build and launch the standalone app** when VoLum **UI** changed (layout, controls, styling) so you can judge the result:
    - `NeuralAmpModeler/scripts/run-app-win.ps1` (Release x64). Close a running VoLum if postbuild cannot copy the exe.
 3. **Append a changelog line** so you can bisect and remember intent:
@@ -26,8 +27,11 @@ alwaysApply: true
 
 - **Write tests for every confirmed-working feature or bugfix.** Do not wait for the user to ask.
 - New DSP behavior → doctest in `NeuralAmpModeler/tests/`. Cover: no NaN, passthrough at zero mix, bounded output, all modes.
+- Main signal-chain behavior → `VoLumProcessingPlan.h` plus `test_volum_processing_plan.cpp` when it can be expressed as routing/enablement decisions.
 - New parameter → pin its index and step size in `test_eparam_order.cpp` / `test_keyboard_steps.cpp`.
-- New serialization path → version-branch test in `test_volum_chunk_version.cpp`.
+- New serialization path → version-branch test in `test_volum_chunk_version.cpp` and chunk round-trip/bounds coverage in `test_volum_chunk_codec.cpp`.
+- New main amp `.nam` under `rigs/` → keep `test_nam_rigs.cpp` loading it.
+- New PRE capture `.nam` under `rigs/PrePedals/` → update/keep `test_volum_pre_pedal_captures.cpp`, the PRE capture load-smoke in `test_nam_rigs.cpp`, and packaging verification.
 - If a bug was caused by a missing test, add the test that would have caught it.
 
 ## Code hygiene is part of the task

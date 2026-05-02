@@ -18,21 +18,13 @@ If you'd like to work on an [existing Issue](https://github.com/sdatkinson/Neura
 I would like to ask that you please try to give me a timeline for your work--I'd hate to have you duplicate work if I know that I'm going to e.g. get to it today and beat you to the punch.
 
 ## Testing
-The **VoLum fork** includes a small **doctest** suite (`NeuralAmpModeler-Tests`, Release x64): run `NeuralAmpModeler/scripts/run-tests-win.ps1` before landing C++/DSP/UI changes.
+The **VoLum fork** includes a **doctest** suite (`NeuralAmpModeler-Tests`) that runs on Windows and macOS CI. Run `NeuralAmpModeler/scripts/run-tests-win.ps1` on Windows, or `NeuralAmpModeler/scripts/run-tests-mac.sh` on macOS, before landing C++/DSP/UI changes.
+
+Use the test map in `NeuralAmpModeler/README.md` when deciding what to update. In short: DSP changes need focused doctests, parameter/state changes need `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, or `test_volum_chunk_codec.cpp`, main amp `.nam` changes need `test_nam_rigs.cpp`, and PRE capture `.nam` changes under `rigs/PrePedals/` need discovery, load, and package coverage.
 
 The **historical upstream** NAM plugin did not ship unit tests in-tree. If you are contributing to upstream NAM and want to help by proposing a framework, please [raise an Issue](https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D).
 
-Either way, there are practical checks that help catch regressions:
-- [ ] The standalone plugin builds.
-- [ ] The plugin runs.
-  - [ ] The plugin makes sound.
-  - [ ] You can load a new-style (file) model.
-  - [ ] You can load an old-style (directory) model.
-  - [ ] You can load a supported IR.
-  - [ ] The EQ section works.
-- [ ] The VST3 plugin builds and can be loaded in [the VST3 SDK VST3PluginTestHost](https://steinbergmedia.github.io/vst3_dev_portal/pages/What+is+the+VST+3+SDK/Plug-in+Test+Host.html)
-  - [ ] The plugin passes all unit tests implemented by the VST3PluginTestHost's unit testing tool.
-- [ ] The AU plugin builds.
+CI also builds and verifies Windows/macOS packages, runs VST3 validation through pluginval, uses the Steinberg validator when available, and smoke-tests the Windows installer. Manual standalone/DAW checks are still useful for audio feel and visual review, but they should not be the only regression coverage for a shipped behavior.
 
 ## Code style
 I don't care too much about the specifics of style, but it helps keep things orderly and helps make sure that the changes in a PR are real changes and not just e.g. an IDE replacing tabs with spaces.
