@@ -219,6 +219,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
     mVolumInitComplete = true;
+    _VolumStartLoader();
   }
 #endif
 
@@ -358,9 +359,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     yPos += speakerH + 6.f;
 
     // Triptych (PRE | AMP | POST)
-    const float triptychW = 620.f;
-    const float triptychH = 196.f;
-    const IRECT triptychArea(mainCX - triptychW / 2.f, yPos, mainCX + triptychW / 2.f, yPos + triptychH);
+    const auto triptychBounds = volum::triptych_layout::BoundsForCenter(mainCX, yPos);
+    const IRECT triptychArea = triptychBounds.As<IRECT>();
     
     auto* triptych = new VoLumTriptychControl(triptychArea, [this](EVoLumSection sec, EVoLumEffectFocus focus) {
         mVolumExpandedSection = sec;
@@ -373,20 +373,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // The triptych provides a space for it, but the hero control holds the fractal caching logic.
     // It should be centered within the AMP-expanded area of the triptych.
     // When AMP is expanded, the center of the expanded section is exactly at `mainCX`
-    const float newHeroW = 400.f;
-    const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, yPos + triptychH);
+    const float newHeroW = volum::triptych_layout::kAmpExpandedW;
+    const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, triptychArea.B);
     pGraphics->AttachControl(new VoLumHeroImageControl(heroArea), kCtrlTagVoLumHeroImage);
 
-    // Pedal Cards logic
-    const float pedalW = 210.f;
-    const float pedalH = 158.f;
-    const float gap = 10.f;
-
-    // POST Expanded Pedal Cards
-    const float postExpandedCenter = mainCX + 60.f;
-    const IRECT delayCardRect(postExpandedCenter - pedalW - gap/2.f, yPos + 20.f, postExpandedCenter - gap/2.f, yPos + 20.f + pedalH);
-    const IRECT reverbCardRect(postExpandedCenter + gap/2.f, yPos + 20.f, postExpandedCenter + gap/2.f + pedalW, yPos + 20.f + pedalH);
-    const IRECT chainLinkRect(postExpandedCenter - gap/2.f, yPos + 20.f + pedalH/2.f - 6.f, postExpandedCenter + gap/2.f, yPos + 20.f + pedalH/2.f + 6.f);
+    const auto preCards = volum::triptych_layout::ComputePreCards(
+      volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::PRE).pre);
+    const auto postCards = volum::triptych_layout::ComputePostCards(
+      volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::POST).post);
 
     auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
         (void) isBypassClick;
@@ -394,14 +388,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         _UpdateVoLumLayout();
     };
 
-    auto* delayCard = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::DELAY, "DELAY", 16, kDelayActive, onPedalClick);
-    auto* reverbCard = new VoLumPedalCardControl(reverbCardRect, EVoLumEffectFocus::REVERB, "REVERB", 15, kReverbActive, onPedalClick);
-    auto* chainLink = new VoLumChainConnectorControl(chainLinkRect);
-    auto* compCard = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::COMP, "COMP", 17, kPreCompActive, onPedalClick);
-    auto* preNam1Card = new VoLumPedalCardControl(delayCardRect, EVoLumEffectFocus::PRE_NAM1, "NAM Pedal 1", 18, kPreNam1Active, onPedalClick);
-    auto* preNam2Card = new VoLumPedalCardControl(reverbCardRect, EVoLumEffectFocus::PRE_NAM2, "NAM Pedal 2", 19, kPreNam2Active, onPedalClick);
-    auto* preChainLink1 = new VoLumChainConnectorControl(chainLinkRect);
-    auto* preChainLink2 = new VoLumChainConnectorControl(chainLinkRect);
+    auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
+    auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
+    auto* chainLink = new VoLumChainConnectorControl(postCards.connector.As<IRECT>());
+    auto* compCard = new VoLumPedalCardControl(preCards.comp.As<IRECT>(), EVoLumEffectFocus::COMP, onPedalClick);
+    auto* preNam1Card = new VoLumPedalCardControl(preCards.nam1.As<IRECT>(), EVoLumEffectFocus::PRE_NAM1, onPedalClick);
+    auto* preNam2Card = new VoLumPedalCardControl(preCards.nam2.As<IRECT>(), EVoLumEffectFocus::PRE_NAM2, onPedalClick);
+    auto* preChainLink1 = new VoLumChainConnectorControl(preCards.connector1.As<IRECT>());
+    auto* preChainLink2 = new VoLumChainConnectorControl(preCards.connector2.As<IRECT>());
     
     pGraphics->AttachControl(compCard, kCtrlTagVoLumCompCard)->Hide(true);
     pGraphics->AttachControl(preChainLink1, kCtrlTagVoLumPreChainConnector1)->Hide(true);
@@ -412,7 +406,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(chainLink, kCtrlTagVoLumChainConnector)->Hide(true);
     pGraphics->AttachControl(reverbCard, kCtrlTagVoLumReverbCard)->Hide(true);
 
-    yPos += triptychH + 4.f;
+    yPos += volum::triptych_layout::kTriptychH + 4.f;
 
     // Sub-row text (Replaces Amp Name / Focus Header)
     const IRECT subRowArea(mainL, yPos, mainR, yPos + 54.f);
@@ -908,6 +902,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 NeuralAmpModeler::~NeuralAmpModeler()
 {
 #if VOLUM_AMPETE_PRODUCT
+  _VolumStopLoader();
   _VolumSaveCurrentToSettings();
   _VolumSaveSettingsToFile();
 #endif
@@ -988,38 +983,54 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
     mNoiseGateTrigger.SetParams(triggerParams);
     mNoiseGateTrigger.SetSampleRate(sampleRate);
-    triggerOutput = mNoiseGateTrigger.Process(mInputPointers, numChannelsInternal, numFrames);
+    triggerOutput = mNoiseGateTrigger.Process(preAmpPointers, numChannelsInternal, numFrames);
   }
 
-  if (mModel != nullptr)
+  const bool haveMainModel = (mModel != nullptr);
+  if (haveMainModel)
   {
     mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
   }
   else
   {
     _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, numFrames);
+#if VOLUM_AMPETE_PRODUCT
+    if (!mPostEffectsClearedForMissingModel)
+    {
+      mDelay.Reset();
+      mReverb.Reset();
+      mPostEffectsClearedForMissingModel = true;
+    }
+#endif
   }
-  // Apply the noise gate after the NAM
-  sample** gateGainOutput =
-    noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
+  if (haveMainModel)
+    mPostEffectsClearedForMissingModel = false;
 
-  sample** toneStackOutPointers = (toneStackActive && mToneStack != nullptr)
-                                    ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
-                                    : gateGainOutput;
+  sample** hpfPointers = mOutputPointers;
+  if (haveMainModel)
+  {
+    // Apply the noise gate after the NAM
+    sample** gateGainOutput =
+      noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
 
-  sample** irPointers = toneStackOutPointers;
-  if (mIR != nullptr && GetParam(kIRToggle)->Value())
-    irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
+    sample** toneStackOutPointers = (toneStackActive && mToneStack != nullptr)
+                                      ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
+                                      : gateGainOutput;
 
-  // And the HPF for DC offset (Issue 271)
-  const double highPassCutoffFreq = kDCBlockerFrequency;
-  // const double lowPassCutoffFreq = 20000.0;
-  const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
-  // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
-  mHighPass.SetParams(highPassParams);
-  // mLowPass.SetParams(lowPassParams);
-  sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
-  // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
+    sample** irPointers = toneStackOutPointers;
+    if (mIR != nullptr && GetParam(kIRToggle)->Value())
+      irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
+
+    // And the HPF for DC offset (Issue 271)
+    const double highPassCutoffFreq = kDCBlockerFrequency;
+    // const double lowPassCutoffFreq = 20000.0;
+    const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
+    // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
+    mHighPass.SetParams(highPassParams);
+    // mLowPass.SetParams(lowPassParams);
+    hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
+    // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
+  }
 
   // restore previous floating point state
   std::feupdateenv(&fe_state);
@@ -1031,14 +1042,14 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // Apply POST effects (Delay -> Reverb) in stereo
   iplug::sample** postPointers = outputs;
 
-  if (GetParam(kDelayActive)->Value())
+  if (haveMainModel && GetParam(kDelayActive)->Value())
   {
     mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
                      GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate);
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, numFrames);
   }
 
-  if (GetParam(kReverbActive)->Value())
+  if (haveMainModel && GetParam(kReverbActive)->Value())
   {
     mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
                       GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
@@ -1087,6 +1098,9 @@ void NeuralAmpModeler::OnReset()
   for (int i = 0; i < 2; ++i)
     mPreEq[i].Reset(sampleRate, maxBlockSize);
   mPreCompressor.Reset();
+  const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
+  mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+  mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mDelay.Reset();
   mReverb.Reset();
 #if VOLUM_AMPETE_PRODUCT
@@ -1115,7 +1129,6 @@ void NeuralAmpModeler::OnIdle()
   if (mVolumNeedsLoad.load() && !mVolumIsLoading.load())
   {
     mVolumNeedsLoad.store(false);
-    mVolumIsLoading.store(true);
 
     // Capture path on main thread to avoid races with _VolumRefreshChannels
     std::string fileToLoad;
@@ -1139,80 +1152,8 @@ void NeuralAmpModeler::OnIdle()
 
       const int ampIdx = mVolumAmpIdx;
       const std::string rigsRoot = mVolumRigsRoot;
-
-      std::thread([this, fileToLoad, ampIdx, rigsRoot]() {
-        namespace fs = std::filesystem;
-        std::string filename = fs::path(fileToLoad).filename().string();
-
-        // Invalidate cache when amp changes
-        if (mVolumCachedAmpIdx != ampIdx)
-        {
-          mVolumDspCache.clear();
-          mVolumCachedAmpIdx = ampIdx;
-        }
-
-        // Check cache: skip JSON parsing if we already have parsed data
-        auto cacheIt = mVolumDspCache.find(filename);
-        if (cacheIt != mVolumDspCache.end())
-        {
-          const std::string err = _StageModelFromData(cacheIt->second, fileToLoad.c_str());
-          if (!err.empty())
-            std::cerr << "VoLum cached load failed: " << err << std::endl;
-        }
-        else
-        {
-          // Parse from file, cache the result
-          try
-          {
-            nam::dspData conf;
-            auto dspPath = fs::u8path(fileToLoad);
-            std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath, conf);
-            mVolumDspCache[filename] = conf;
-
-            auto temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
-            temp->Reset(GetSampleRate(), GetBlockSize());
-            mStagedModel = std::move(temp);
-            mNAMPath.Set(fileToLoad.c_str());
-          }
-          catch (std::runtime_error& e)
-          {
-            std::cerr << "VoLum load failed: " << e.what() << std::endl;
-          }
-        }
-
-        // Pre-parse remaining .nam files for this amp in background
-        if (!mVolumNeedsLoad.load())
-        {
-          fs::path ampDir = fs::path(rigsRoot) / volum::kAmps[ampIdx].folderName;
-          std::error_code ec;
-          if (fs::is_directory(ampDir, ec))
-          {
-            for (const auto& entry : fs::directory_iterator(ampDir, ec))
-            {
-              if (mVolumNeedsLoad.load())
-                break;
-              if (!entry.is_regular_file(ec))
-                continue;
-              std::string name = entry.path().filename().string();
-              if (name.size() > 4 && name.compare(name.size() - 4, 4, ".nam") == 0
-                  && mVolumDspCache.find(name) == mVolumDspCache.end())
-              {
-                try
-                {
-                  nam::dspData conf;
-                  nam::get_dsp(entry.path(), conf);
-                  mVolumDspCache[name] = std::move(conf);
-                }
-                catch (...)
-                {
-                }
-              }
-            }
-          }
-        }
-
-        mVolumIsLoading.store(false);
-      }).detach();
+      mVolumIsLoading.store(true);
+      _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
     }
     else
     {
@@ -1547,6 +1488,10 @@ void NeuralAmpModeler::_AllocateIOPointers(const size_t nChans)
 
 void NeuralAmpModeler::_ApplyDSPStaging()
 {
+#if VOLUM_AMPETE_PRODUCT
+  _VolumDrainLoaderResults();
+#endif
+
   // Remove marked modules
   if (mShouldRemoveModel)
   {
@@ -1618,9 +1563,8 @@ void NeuralAmpModeler::_DeallocateIOPointers()
 void NeuralAmpModeler::_FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels,
                                     const size_t numFrames)
 {
-  for (auto c = 0; c < numChannels; c++)
-    for (auto s = 0; s < numFrames; s++)
-      mOutputArray[c][s] = mInputArray[c][s];
+  (void) inputs;
+  volum::process_io::ClearBuffers(outputs, numFrames, numChannels);
 }
 
 void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBlockSize)
@@ -2098,69 +2042,32 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 
       if (preExpanded) {
         const IRECT tripBounds = trip->GetRECT();
-        const float stripW = 30.f;
-        const float tGap = 10.f;
-        const float ampStripW = 70.f;
-        const float expandedW = 460.f;
-        const float totalTripW = expandedW + tGap + ampStripW + tGap + stripW;
-        const float tripLeft = tripBounds.MW() - totalTripW / 2.f;
-        const IRECT preRect(tripLeft, tripBounds.T, tripLeft + expandedW, tripBounds.B);
-
-        const float cardPad = 14.f;
-        const float cardGap = 8.f;
-        const float cardTop = preRect.T + 24.f;
-        const float cardBot = preRect.B - 8.f;
-        const float cardH = cardBot - cardTop;
-        const float cardW = (preRect.W() - cardPad * 2.f - cardGap * 2.f) / 3.f;
-        const float cardL = preRect.L + cardPad;
-
-        IRECT cRect(cardL, cardTop, cardL + cardW, cardTop + cardH);
-        IRECT n1Rect(cRect.R + cardGap, cardTop, cRect.R + cardGap + cardW, cardTop + cardH);
-        IRECT n2Rect(n1Rect.R + cardGap, cardTop, n1Rect.R + cardGap + cardW, cardTop + cardH);
-        IRECT l1Rect(cRect.R, preRect.MH() - 6.f, n1Rect.L, preRect.MH() + 6.f);
-        IRECT l2Rect(n1Rect.R, preRect.MH() - 6.f, n2Rect.L, preRect.MH() + 6.f);
+        const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::PRE);
+        const auto cards = volum::triptych_layout::ComputePreCards(frames.pre);
 
         if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard))
-          compCard->SetTargetAndDrawRECTs(cRect);
+          compCard->SetTargetAndDrawRECTs(cards.comp.As<IRECT>());
         if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam1Card))
-          preCard->SetTargetAndDrawRECTs(n1Rect);
+          preCard->SetTargetAndDrawRECTs(cards.nam1.As<IRECT>());
         if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam2Card))
-          preCard->SetTargetAndDrawRECTs(n2Rect);
+          preCard->SetTargetAndDrawRECTs(cards.nam2.As<IRECT>());
         if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector1))
-          link->SetTargetAndDrawRECTs(l1Rect);
+          link->SetTargetAndDrawRECTs(cards.connector1.As<IRECT>());
         if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector2))
-          link->SetTargetAndDrawRECTs(l2Rect);
+          link->SetTargetAndDrawRECTs(cards.connector2.As<IRECT>());
       }
       
       if (postExpanded) {
         const IRECT tripBounds = trip->GetRECT();
-        const float stripW = 30.f;
-        const float tGap = 10.f;
-        const float ampStripW = 70.f;
-        const float expandedW = 460.f;
-        const float totalTripW = stripW + tGap + ampStripW + tGap + expandedW;
-        const float tripLeft = tripBounds.MW() - totalTripW / 2.f;
-        const IRECT postRect(tripLeft + stripW + tGap + ampStripW + tGap, tripBounds.T,
-                             tripLeft + totalTripW, tripBounds.B);
-
-        const float cardPad = 14.f;
-        const float cardGap = 10.f;
-        const float cardTop = postRect.T + 24.f;
-        const float cardBot = postRect.B - 8.f;
-        const float cardH = cardBot - cardTop;
-        const float cardW = (postRect.W() - cardPad * 2.f - cardGap) / 2.f;
-        const float cardL = postRect.L + cardPad;
-
-        IRECT dRect(cardL, cardTop, cardL + cardW, cardTop + cardH);
-        IRECT rRect(dRect.R + cardGap, cardTop, dRect.R + cardGap + cardW, cardTop + cardH);
-        IRECT lRect(dRect.R, postRect.MH() - 6.f, rRect.L, postRect.MH() + 6.f);
+        const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::POST);
+        const auto cards = volum::triptych_layout::ComputePostCards(frames.post);
 
         if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
-          delayCard->SetTargetAndDrawRECTs(dRect);
+          delayCard->SetTargetAndDrawRECTs(cards.delay.As<IRECT>());
         if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard))
-          reverbCard->SetTargetAndDrawRECTs(rRect);
+          reverbCard->SetTargetAndDrawRECTs(cards.reverb.As<IRECT>());
         if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector))
-          linkCard->SetTargetAndDrawRECTs(lRect);
+          linkCard->SetTargetAndDrawRECTs(cards.connector.As<IRECT>());
       }
 
       if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {
@@ -2259,7 +2166,7 @@ void NeuralAmpModeler::_VolumRefreshChannels()
 
   if (mVolumSpeakerIdx < 0 || mVolumSpeakerIdx >= 4)
   {
-    mVolumSpeakerIdx = volum::VoLumAmpSettings{}.speakerIdx;
+    mVolumSpeakerIdx = std::clamp(mVolumSpeakerIdx, 0, 3);
     mVolumAmpSettings[mVolumAmpIdx].speakerIdx = mVolumSpeakerIdx;
     mVolumSettingsDirty = true;
   }
@@ -2434,6 +2341,13 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   if (!rawCtrl)
     return;
 
+  auto* menu = rawCtrl->As<VoLumPreCaptureMenuControl>();
+  if (!rawCtrl->IsHidden() && menu && menu->GetSlot() == slot)
+  {
+    _VolumHidePreCaptureMenu();
+    return;
+  }
+
   const int captureCount = std::max(1, _VolumGetPreCaptureCount());
   std::vector<std::string> labels;
   labels.reserve(static_cast<size_t>(captureCount));
@@ -2446,7 +2360,6 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   const float menuH = VoLumPreCaptureMenuControl::ItemHeight() * captureCount + 12.f;
   const IRECT menuRect(anchorRect.L, anchorRect.B + 6.f, anchorRect.L + menuW, anchorRect.B + 6.f + menuH);
 
-  auto* menu = rawCtrl->As<VoLumPreCaptureMenuControl>();
   menu->SetTargetAndDrawRECTs(menuRect);
   menu->SetItems(slot, labels, selected);
   menu->Hide(false);
@@ -2461,6 +2374,217 @@ void NeuralAmpModeler::_VolumHidePreCaptureMenu()
   }
 }
 
+void NeuralAmpModeler::_VolumStartLoader()
+{
+  if (mVolumLoaderThread.joinable())
+    return;
+
+  mVolumLoaderStop.store(false);
+  mVolumLoaderThread = std::thread([this]() { _VolumLoaderThreadMain(); });
+}
+
+void NeuralAmpModeler::_VolumStopLoader()
+{
+  {
+    std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    mVolumLoaderStop.store(true);
+    mVolumLoadRequests.clear();
+  }
+  mVolumLoaderCv.notify_one();
+
+  if (mVolumLoaderThread.joinable())
+    mVolumLoaderThread.join();
+}
+
+void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampIdx, std::string rigsRoot)
+{
+  VoLumLoadRequest request;
+  request.kind = VoLumLoadKind::Main;
+  request.ampIdx = ampIdx;
+  request.fileToLoad = std::move(fileToLoad);
+  request.rigsRoot = std::move(rigsRoot);
+  request.sampleRate = GetSampleRate();
+  request.blockSize = GetBlockSize();
+
+  {
+    std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    mVolumLoadRequests.push_back(std::move(request));
+  }
+  mVolumLoaderCv.notify_one();
+}
+
+void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
+{
+  VoLumLoadRequest request;
+  request.kind = VoLumLoadKind::Pre;
+  request.slot = slot;
+  request.fileToLoad = std::move(fileToLoad);
+  request.sampleRate = GetSampleRate();
+  request.blockSize = GetBlockSize();
+
+  {
+    std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    mVolumLoadRequests.push_back(std::move(request));
+  }
+  mVolumLoaderCv.notify_one();
+}
+
+void NeuralAmpModeler::_VolumDrainLoaderResults()
+{
+  std::deque<VoLumLoadResult> results;
+  {
+    std::unique_lock<std::mutex> lock(mVolumLoaderMutex, std::try_to_lock);
+    if (!lock.owns_lock())
+      return;
+    results.swap(mVolumLoadResults);
+  }
+
+  for (auto& result : results)
+  {
+    if (result.kind == VoLumLoadKind::Main)
+    {
+      mVolumIsLoading.store(false);
+      if (mVolumNeedsLoad.load())
+        continue;
+
+      if (!result.error.empty())
+        continue;
+
+      if (result.model != nullptr)
+      {
+        mStagedModel = std::move(result.model);
+        mNAMPath.Set(result.path.c_str());
+      }
+      continue;
+    }
+
+    const int slot = result.slot;
+    if (slot < 0 || slot >= 2)
+      continue;
+
+    mVolumPreIsLoading[slot].store(false);
+    if (mVolumPreNeedsLoad[slot].load())
+      continue;
+
+    if (!result.error.empty())
+    {
+      mShouldRemovePreModel[slot].store(true);
+      continue;
+    }
+
+    if (result.model != nullptr)
+      mStagedPreModel[slot] = std::move(result.model);
+  }
+}
+
+void NeuralAmpModeler::_VolumLoaderThreadMain()
+{
+  namespace fs = std::filesystem;
+
+  for (;;)
+  {
+    VoLumLoadRequest request;
+    {
+      std::unique_lock<std::mutex> lock(mVolumLoaderMutex);
+      mVolumLoaderCv.wait(lock, [&]() { return mVolumLoaderStop.load() || !mVolumLoadRequests.empty(); });
+
+      if (mVolumLoaderStop.load() && mVolumLoadRequests.empty())
+        break;
+
+      request = std::move(mVolumLoadRequests.front());
+      mVolumLoadRequests.pop_front();
+    }
+
+    VoLumLoadResult result;
+    result.kind = request.kind;
+    result.slot = request.slot;
+    result.path = request.fileToLoad;
+
+    try
+    {
+      if (request.kind == VoLumLoadKind::Main)
+      {
+        const std::string filename = fs::path(request.fileToLoad).filename().string();
+
+        if (mVolumCachedAmpIdx != request.ampIdx)
+        {
+          mVolumDspCache.clear();
+          mVolumCachedAmpIdx = request.ampIdx;
+        }
+
+        auto cacheIt = mVolumDspCache.find(filename);
+        std::unique_ptr<nam::DSP> model;
+        if (cacheIt != mVolumDspCache.end())
+        {
+          // Core consumes dspData::weights during construction, so keep the cached copy immutable.
+          nam::dspData cachedConfig = cacheIt->second;
+          model = nam::get_dsp(cachedConfig);
+        }
+        else
+        {
+          nam::dspData conf;
+          model = nam::get_dsp(fs::u8path(request.fileToLoad), conf);
+          mVolumDspCache[filename] = std::move(conf);
+        }
+
+        result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
+        result.model->Reset(request.sampleRate, request.blockSize);
+
+        if (!mVolumNeedsLoad.load())
+        {
+          const fs::path ampDir = fs::path(request.rigsRoot) / volum::kAmps[request.ampIdx].folderName;
+          std::error_code ec;
+          if (fs::is_directory(ampDir, ec))
+          {
+            for (const auto& entry : fs::directory_iterator(ampDir, ec))
+            {
+              if (mVolumNeedsLoad.load() || mVolumLoaderStop.load())
+                break;
+              if (!entry.is_regular_file(ec))
+                continue;
+
+              const std::string name = entry.path().filename().string();
+              if (name.size() > 4 && name.compare(name.size() - 4, 4, ".nam") == 0
+                  && mVolumDspCache.find(name) == mVolumDspCache.end())
+              {
+                try
+                {
+                  nam::dspData conf;
+                  nam::get_dsp(entry.path(), conf);
+                  mVolumDspCache[name] = std::move(conf);
+                }
+                catch (...)
+                {
+                }
+              }
+            }
+          }
+        }
+      }
+      else
+      {
+        nam::dspData conf;
+        std::unique_ptr<nam::DSP> model = nam::get_dsp(fs::u8path(request.fileToLoad), conf);
+        result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
+        result.model->Reset(request.sampleRate, request.blockSize);
+      }
+    }
+    catch (const std::runtime_error& e)
+    {
+      result.error = e.what();
+      if (request.kind == VoLumLoadKind::Main)
+        std::cerr << "VoLum load failed: " << result.error << std::endl;
+      else
+        std::cerr << "VoLum PRE load failed: " << result.error << std::endl;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+      mVolumLoadResults.push_back(std::move(result));
+    }
+  }
+}
+
 void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
 {
   if (slot < 0 || slot >= 2)
@@ -2471,46 +2595,13 @@ void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
   if (filename.empty() || mVolumRigsRoot.empty())
   {
     mShouldRemovePreModel[slot].store(true);
+    mVolumPreIsLoading[slot].store(false);
     return;
   }
 
   mVolumPreIsLoading[slot].store(true);
   const std::string fileToLoad = (std::filesystem::path(mVolumRigsRoot) / "PrePedals" / filename).string();
-  std::thread([this, slot, fileToLoad]() {
-    try
-    {
-      nam::dspData conf;
-      auto dspPath = std::filesystem::u8path(fileToLoad);
-      std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath, conf);
-      auto temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
-      temp->Reset(GetSampleRate(), GetBlockSize());
-      mStagedPreModel[slot] = std::move(temp);
-    }
-    catch (std::runtime_error& e)
-    {
-      std::cerr << "VoLum PRE load failed: " << e.what() << std::endl;
-      mShouldRemovePreModel[slot].store(true);
-    }
-    mVolumPreIsLoading[slot].store(false);
-  }).detach();
-}
-
-std::string NeuralAmpModeler::_StageModelFromData(nam::dspData conf, const char* path)
-{
-  try
-  {
-    std::unique_ptr<nam::DSP> model = nam::get_dsp(conf);
-    auto temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
-    temp->Reset(GetSampleRate(), GetBlockSize());
-    mStagedModel = std::move(temp);
-    mNAMPath.Set(path);
-  }
-  catch (std::runtime_error& e)
-  {
-    std::cerr << "Failed to construct model from cached data" << std::endl;
-    return e.what();
-  }
-  return "";
+  _VolumQueuePreNamLoad(slot, fileToLoad);
 }
 
 void NeuralAmpModeler::_VolumSaveCurrentToSettings()

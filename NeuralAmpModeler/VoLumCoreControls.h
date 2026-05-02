@@ -141,7 +141,7 @@ public:
       IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f,
                      paddedRow.L + pad + iconSize, paddedRow.MH() + iconSize / 2.f);
 
-      if (!mIconLayers[i] || g.CheckLayer(mIconLayers[i]))
+      if (!g.CheckLayer(mIconLayers[i]))
       {
         g.StartLayer(this, iconArea);
         IColor thmBright(200, 120, 210, 220);
@@ -446,7 +446,7 @@ public:
     else
     {
       // Cached procedural art: only recompute when bounds or amp index change
-      if (!mArtLayer || g.CheckLayer(mArtLayer) || mCachedArtIdx != mAmpIdx)
+      if (!g.CheckLayer(mArtLayer) || mCachedArtIdx != mAmpIdx)
       {
         g.StartLayer(this, mRECT);
         g.FillRect(VoLumColors::HERO_BG, mRECT);
