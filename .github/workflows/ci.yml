@@ -30,6 +30,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+        shell: bash
+
       - name: Check clang-format output
         run: |
           bash format.bash
