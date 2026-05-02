@@ -1,60 +1,45 @@
 # iPlug2 patches
 
-This folder contains patches that are applied to the `iPlug2` git submodule at
-build time. The submodule itself stays at the upstream commit recorded in the
-parent repo (no fork required).
+VoLum now uses a private `guitarlum/iPlug2` mirror for local iPlug2 changes.
+The submodule should point at a pinned commit in that mirror, so normal
+build/test runs should not leave `iPlug2/` dirty.
 
 ## How it works
 
-- Each `*.patch` file in this folder is a `git diff` against the iPlug2 working
-  tree at the recorded submodule SHA.
-- `apply-iplug2-patches.ps1` (Windows) and `apply-iplug2-patches.sh`
-  (macOS / Linux / CI) iterate the patches in lexicographic order and apply
-  each one with `git -C iPlug2 apply`. Both scripts are idempotent: if a patch
-  is already applied they skip it instead of failing.
-- The Windows entry points (`run-app-win.ps1`, `run-tests-win.ps1`,
-  `makedist-win.bat`) and the Windows CI jobs invoke the apply script before
-  building.
+- `.gitmodules` points `iPlug2` at `git@github.com:guitarlum/iPlug2.git`.
+- The VoLum patch is committed in the iPlug2 mirror branch
+  `volum/asio-channel-routing` and pinned by the parent repo submodule SHA.
+- `apply-iplug2-patches.ps1` and `apply-iplug2-patches.sh` are retained as
+  no-op compatible build hooks. If this folder has no `*.patch` files, they
+  print "nothing to apply" and exit successfully.
 
-## Editing patches
+## Changing iPlug2
 
-Do **not** commit the modified `iPlug2/` working tree. Instead:
+Commit iPlug2 changes in the private mirror, then update the parent repo
+submodule pointer:
 
-1. Make the changes inside `iPlug2/...` directly.
-2. Regenerate the patch file from the parent repo root:
-
-   ```pwsh
-   git -C iPlug2 diff > NeuralAmpModeler/iplug2-patches/0001-app-host-route-selected-asio-channels.patch
-   ```
-
-3. Reset the iPlug2 working tree (`git -C iPlug2 checkout -- .`) and verify the
-   apply script reproduces the change cleanly.
+```pwsh
+git -C iPlug2 switch volum/asio-channel-routing
+git -C iPlug2 commit
+git -C iPlug2 push
+git add iPlug2
+git commit
+```
 
 ## Expected git status
 
-After running a Windows build/test script, the parent repo may show `m iPlug2`.
-That is expected when the ASIO patch has been applied to the submodule working
-tree. Before committing parent-repo changes, verify the submodule dirt is only
-the patch-managed files:
+After running a Windows build/test script, the parent repo should not show
+`m iPlug2` solely from the VoLum ASIO channel routing change. If `iPlug2` is
+dirty, inspect it before committing:
 
 ```pwsh
 git -C iPlug2 status --short
 ```
 
-Expected patched files:
+## Current mirror patch
 
-- `IPlug/APP/IPlugAPP_dialog.cpp`
-- `IPlug/APP/IPlugAPP_host.cpp`
-- `IPlug/APP/IPlugAPP_host.h`
-
-Do not stage or commit those `iPlug2/` modifications in the parent repo. If you
-need a clean submodule working tree for inspection, reset `iPlug2` and rerun the
-apply script before the next Windows build.
-
-## Current patches
-
-- `0001-app-host-route-selected-asio-channels.patch` — Makes the standalone
-  audio host honor the Audio Settings input/output channel selection on
-  Windows ASIO (and other RtAudio backends). Without it, multi-channel
+- `ad391b96b APP: route selected standalone audio channels` — Makes the
+  standalone audio host honor the Audio Settings input/output channel selection
+  on Windows ASIO and other RtAudio backends. Without it, multi-channel
   interfaces like the RME Babyface Pro FS effectively ignore the channel
   pickers and always use device input 1 / outputs 1+2.
