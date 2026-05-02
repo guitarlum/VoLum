@@ -192,11 +192,30 @@ jobs:
         if: failure()
         run: |
           echo "macOS packaging failed. Recent build logs:"
+          emit_annotation() {
+            local file="$1"
+            if [[ -f "$file" ]]; then
+              {
+                echo "---- $file ----"
+                tail -n 80 "$file"
+              } > macos-build-diagnostic.txt
+              message="$(python3 - <<'PY'
+from pathlib import Path
+text = Path("macos-build-diagnostic.txt").read_text(errors="replace")
+text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+print(text[-7000:])
+PY
+)"
+              echo "::error title=macOS build log::$message"
+            fi
+          }
           if [[ -f NeuralAmpModeler/build-mac.log ]]; then
             tail -n 200 NeuralAmpModeler/build-mac.log
+            emit_annotation NeuralAmpModeler/build-mac.log
           fi
           if [[ -f NeuralAmpModeler/build-mac/build-mac.log ]]; then
             tail -n 200 NeuralAmpModeler/build-mac/build-mac.log
+            emit_annotation NeuralAmpModeler/build-mac/build-mac.log
           fi
           if [[ -d NeuralAmpModeler/build-mac ]]; then
             find NeuralAmpModeler/build-mac -maxdepth 3 -type f | sort | tail -n 100
