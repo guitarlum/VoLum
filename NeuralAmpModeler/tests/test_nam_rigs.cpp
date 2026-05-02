@@ -1,9 +1,12 @@
 #include "third_party/doctest.h"
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <vector>
 
 #include "activations.h"
 #include "get_dsp.h"
+#include "slimmable.h"
 
 namespace
 {
@@ -68,6 +71,38 @@ TEST_CASE("Cached NAM dspData can construct multiple models when copied")
   auto secondCachedModel = nam::get_dsp(secondCopy);
   REQUIRE(secondCachedModel != nullptr);
   secondCachedModel->Reset(48000.0, 512);
+}
+
+TEST_CASE("Core slimmable NAM example loads and processes")
+{
+  nam::activations::Activation::enable_fast_tanh();
+  const auto path = RepoRoot() / "NeuralAmpModelerCore" / "example_models" / "slimmable_wavenet.nam";
+  REQUIRE(std::filesystem::exists(path));
+
+  auto model = nam::get_dsp(path);
+  REQUIRE(model != nullptr);
+
+  auto* slimmable = dynamic_cast<nam::SlimmableModel*>(model.get());
+  REQUIRE(slimmable != nullptr);
+
+  constexpr int blockSize = 64;
+  const double sampleRate = model->GetExpectedSampleRate() > 0.0 ? model->GetExpectedSampleRate() : 48000.0;
+  std::vector<NAM_SAMPLE> input(blockSize, static_cast<NAM_SAMPLE>(0.05));
+  std::vector<NAM_SAMPLE> output(blockSize, static_cast<NAM_SAMPLE>(0.0));
+  NAM_SAMPLE* inPtr = input.data();
+  NAM_SAMPLE* outPtr = output.data();
+
+  for (double size : {0.0, 1.0})
+  {
+    slimmable->SetSlimmableSize(size);
+    model->Reset(sampleRate, blockSize);
+    std::fill(output.begin(), output.end(), static_cast<NAM_SAMPLE>(0.0));
+    model->process(&inPtr, &outPtr, blockSize);
+
+    CAPTURE(size);
+    for (const auto sample : output)
+      CHECK(std::isfinite(static_cast<double>(sample)));
+  }
 }
 
 TEST_CASE("Load all bundled NAM files")
