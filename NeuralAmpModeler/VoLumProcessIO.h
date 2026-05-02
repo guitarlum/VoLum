@@ -47,4 +47,12 @@ inline void ApplyOutputGainBroadcast(const Sample* monoIn, Sample* const* output
   }
 }
 
+template<typename Sample>
+inline void ClearBuffers(Sample* const* outputs, std::size_t nFrames, std::size_t nChansOut)
+{
+  for (std::size_t c = 0; c < nChansOut; ++c)
+    for (std::size_t s = 0; s < nFrames; ++s)
+      outputs[c][s] = static_cast<Sample>(0);
+}
+
 } // namespace volum::process_io

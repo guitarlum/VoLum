@@ -91,6 +91,26 @@ TEST_CASE("Delay: all three modes produce output without NaN")
   }
 }
 
+TEST_CASE("Delay: Prepare keeps output storage stable across parameter updates")
+{
+  dsp::effect::Delay delay;
+  constexpr size_t frames = 128;
+  delay.Prepare(2, frames, 48000.0);
+  delay.SetParams(120.0, 0.3, 0.2, 1, 48000.0);
+
+  std::vector<double> inL(frames, 0.2), inR(frames, -0.2);
+  double* inputs[2] = {inL.data(), inR.data()};
+  auto** first = delay.Process(inputs, 2, frames);
+  auto* firstL = first[0];
+  auto* firstR = first[1];
+
+  delay.SetParams(480.0, 0.6, 0.5, 2, 48000.0);
+  auto** second = delay.Process(inputs, 2, frames);
+  CHECK(second == first);
+  CHECK(second[0] == firstL);
+  CHECK(second[1] == firstR);
+}
+
 TEST_CASE("Delay: high feedback stays bounded")
 {
   dsp::effect::Delay delay;
@@ -340,6 +360,28 @@ TEST_CASE("Reverb: pre-delay defers early Hall wet taps")
   const size_t firstHallTap = 1500;
   CHECK(std::abs(noPreOut[0][firstHallTap]) > 0.000001);
   CHECK(std::abs(longPreOut[0][firstHallTap]) < 0.000001);
+}
+
+TEST_CASE("Reverb: Prepare keeps output storage stable across mode and predelay updates")
+{
+  dsp::effect::Reverb reverb;
+  constexpr size_t frames = 256;
+  reverb.Prepare(2, frames, 48000.0);
+  reverb.SetParams(0.7, 4.0, 5.0, 10.0, 0.0, 0, 48000.0);
+
+  std::vector<double> inL(frames, 0.2), inR(frames, -0.2);
+  double* inputs[2] = {inL.data(), inR.data()};
+  auto** first = reverb.Process(inputs, 2, frames);
+  auto* firstL = first[0];
+  auto* firstR = first[1];
+
+  reverb.SetParams(0.7, 4.0, 5.0, 70.0, 1.0, 2, 48000.0);
+  auto** second = reverb.Process(inputs, 2, frames);
+  CHECK(second == first);
+  CHECK(second[0] == firstL);
+  CHECK(second[1] == firstR);
+  REQUIRE_FALSE(hasNaN(second[0], frames));
+  REQUIRE_FALSE(hasNaN(second[1], frames));
 }
 
 TEST_CASE("Reverb: Plate stays bounded with long decay")
