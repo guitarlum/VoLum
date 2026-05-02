@@ -18,6 +18,12 @@
 #include "ISender.h"
 
 #include <array>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
 #include <unordered_map>
 
 #if VOLUM_AMPETE_PRODUCT
@@ -180,13 +186,13 @@ class ResamplingNAM : public nam::DSP
 public:
   // Resampling wrapper around the NAM models
   ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated, const double expected_sample_rate)
-  : nam::DSP(expected_sample_rate)
+  : nam::DSP(1, 1, expected_sample_rate)
   , mEncapsulated(std::move(encapsulated))
   , mResampler(GetNAMSampleRate(mEncapsulated))
   {
-    // Assign the encapsulated object's processing function  to this object's member so that the resampler can use it:
+    // Assign the encapsulated object's processing function to this object's member so that the resampler can use it:
     auto ProcessBlockFunc = [&](NAM_SAMPLE** input, NAM_SAMPLE** output, int numFrames) {
-      mEncapsulated->process(input[0], output[0], numFrames);
+      mEncapsulated->process(input, output, numFrames);
     };
     mBlockProcessFunc = ProcessBlockFunc;
 
@@ -218,7 +224,7 @@ public:
 
   void prewarm() override { mEncapsulated->prewarm(); };
 
-  void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames) override
+  void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
     if (num_frames > mMaxExternalBlockSize)
       // We can afford to be careful
@@ -230,8 +236,15 @@ public:
     }
     else
     {
-      mResampler.ProcessBlock(&input, &output, num_frames, mBlockProcessFunc);
+      mResampler.ProcessBlock(input, output, num_frames, mBlockProcessFunc);
     }
+  };
+
+  void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)
+  {
+    NAM_SAMPLE* inputPtrs[1] = {input};
+    NAM_SAMPLE* outputPtrs[1] = {output};
+    process(inputPtrs, outputPtrs, num_frames);
   };
 
   int GetLatency() const { return NeedToResample() ? mResampler.GetLatency() : 0; };
@@ -297,7 +310,7 @@ private:
   void _ApplyDSPStaging();
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
-  // Fallback that just copies inputs to outputs if mDSP doesn't hold a model.
+  // Fallback used when no main NAM model is loaded.
   void _FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels, const size_t numFrames);
   // Sizes based on mInputArray
   size_t _GetBufferNumChannels() const;
@@ -309,7 +322,6 @@ private:
 #if VOLUM_AMPETE_PRODUCT
 public:
   void _VolumRefreshChannels();
-  std::string _StageModelFromData(nam::dspData conf, const char* path);
   void _VolumSaveCurrentToSettings();
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
@@ -334,6 +346,12 @@ public:
   void _ToggleVoLumMetronomePanel();
   void _VolumRefreshPrePedalCaptures();
   void _VolumRequestPreNamLoad(int slot);
+  void _VolumStartLoader();
+  void _VolumStopLoader();
+  void _VolumQueueMainModelLoad(std::string fileToLoad, int ampIdx, std::string rigsRoot);
+  void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
+  void _VolumDrainLoaderResults();
+  void _VolumLoaderThreadMain();
   void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
@@ -366,6 +384,33 @@ private:
   std::atomic<bool> mVolumPreIsLoading[2]{{false}, {false}};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
+
+  enum class VoLumLoadKind { Main, Pre };
+  struct VoLumLoadRequest
+  {
+    VoLumLoadKind kind = VoLumLoadKind::Main;
+    int slot = -1;
+    int ampIdx = -1;
+    std::string fileToLoad;
+    std::string rigsRoot;
+    double sampleRate = 0.0;
+    int blockSize = 0;
+  };
+  struct VoLumLoadResult
+  {
+    VoLumLoadKind kind = VoLumLoadKind::Main;
+    int slot = -1;
+    std::string path;
+    std::string error;
+    std::unique_ptr<ResamplingNAM> model;
+  };
+
+  std::thread mVolumLoaderThread;
+  std::mutex mVolumLoaderMutex;
+  std::condition_variable mVolumLoaderCv;
+  std::deque<VoLumLoadRequest> mVolumLoadRequests;
+  std::deque<VoLumLoadResult> mVolumLoadResults;
+  std::atomic<bool> mVolumLoaderStop{false};
 
   // Per-amp cache: parsed dspData keyed by filename, avoids re-parsing JSON
   std::unordered_map<std::string, nam::dspData> mVolumDspCache;
@@ -462,6 +507,7 @@ private:
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;
+  bool mPostEffectsClearedForMissingModel = false;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
