@@ -197,6 +197,9 @@ jobs:
             if [[ -f "$file" ]]; then
               {
                 echo "---- $file ----"
+                grep -Ein '(^|[[:space:]])(error:|fatal error:|BUILD FAILED|The following build commands failed|failed|Command .* failed)' "$file" | tail -n 120 || true
+                echo ""
+                echo "---- tail ----"
                 tail -n 80 "$file"
               } > macos-build-diagnostic.txt
               message="$(python3 -c 'from pathlib import Path; text = Path("macos-build-diagnostic.txt").read_text(errors="replace"); text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"); print(text[-7000:])')"
