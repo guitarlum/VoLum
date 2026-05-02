@@ -212,11 +212,13 @@ HOST_ARCH=$(uname -m)
 XC_EXTRA=(
   ARCHS="arm64 x86_64"
   ONLY_ACTIVE_ARCH=NO
+  CLANG_CXX_LANGUAGE_STANDARD=c++20
 )
 if [ "$FAST_DEV" == "1" ]; then
   XC_EXTRA=(
     ARCHS="$HOST_ARCH"
     ONLY_ACTIVE_ARCH=YES
+    CLANG_CXX_LANGUAGE_STANDARD=c++20
   )
 fi
 if [ "$CODESIGN" != "1" ]; then
@@ -240,11 +242,18 @@ if [ "${MACOS_BUILD_ALL_TARGETS:-0}" = "1" ]; then
   XCODE_TARGETS=( -target "All" )
 fi
 
+XCODEBUILD_JOBS="${XCODEBUILD_JOBS:-2}"
+XCODEBUILD_JOB_ARGS=()
+if [ "$XCODEBUILD_JOBS" != "0" ]; then
+  XCODEBUILD_JOB_ARGS=( -jobs "$XCODEBUILD_JOBS" )
+fi
+
 set -o pipefail
+echo "xcodebuild jobs: ${XCODEBUILD_JOBS}"
 if command -v xcpretty >/dev/null 2>&1; then
-  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO "${XCODE_TARGETS[@]}" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log | xcpretty
+  xcodebuild "${XCODEBUILD_JOB_ARGS[@]}" -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO "${XCODE_TARGETS[@]}" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log | xcpretty
 else
-  xcodebuild -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO "${XCODE_TARGETS[@]}" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log
+  xcodebuild "${XCODEBUILD_JOB_ARGS[@]}" -project ./projects/$PROJECT_PREFIX-macOS.xcodeproj -xcconfig ./config/$PROJECT_PREFIX-mac.xcconfig DEMO_VERSION=$DEMO "${XCODE_TARGETS[@]}" -UseModernBuildSystem=NO -configuration Release "${XC_EXTRA[@]}" 2>&1 | tee build-mac.log
 fi
 XC_EC=$?
 set +o pipefail
