@@ -20,10 +20,10 @@ for arg in "$@"; do
   esac
 done
 
-BUILD_DIR="$PROJECT_DIR/build-mac/tests"
+BUILD_DIR="$PROJECT_DIR/build-tests-mac/tests"
 BUILD_TYPE=Release
 if [[ "$SANITIZE" == "1" ]]; then
-  BUILD_DIR="$PROJECT_DIR/build-mac/tests-sanitized"
+  BUILD_DIR="$PROJECT_DIR/build-tests-mac/tests-sanitized"
   BUILD_TYPE=Debug
 fi
 
