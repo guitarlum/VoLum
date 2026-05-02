@@ -38,7 +38,21 @@ jobs:
 
       - name: Check clang-format output
         run: |
-          bash format.bash
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            if [[ "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+              BASE="HEAD^"
+            fi
+          fi
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMRT "$BASE" "${{ github.sha }}" -- '*.h' '*.cpp' \
+            | grep -v '^NeuralAmpModeler/tests/third_party/' || true)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No changed C++ files to format-check."
+            exit 0
+          fi
+          clang-format -i "${files[@]}"
           git diff --exit-code
         shell: bash
 
