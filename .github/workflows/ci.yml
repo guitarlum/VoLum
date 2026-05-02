@@ -199,13 +199,7 @@ jobs:
                 echo "---- $file ----"
                 tail -n 80 "$file"
               } > macos-build-diagnostic.txt
-              message="$(python3 - <<'PY'
-from pathlib import Path
-text = Path("macos-build-diagnostic.txt").read_text(errors="replace")
-text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-print(text[-7000:])
-PY
-)"
+              message="$(python3 -c 'from pathlib import Path; text = Path("macos-build-diagnostic.txt").read_text(errors="replace"); text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"); print(text[-7000:])')"
               echo "::error title=macOS build log::$message"
             fi
           }
