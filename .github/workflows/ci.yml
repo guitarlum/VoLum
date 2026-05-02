@@ -184,6 +184,7 @@ jobs:
       - name: Build macOS distribution (installer + standalone + VST3 zip)
         env:
           PACKAGE_DSYMS: "0"
+          XCODEBUILD_JOBS: "2"
         run: |
           set -o pipefail
           cd NeuralAmpModeler/scripts
@@ -196,13 +197,35 @@ jobs:
           emit_annotation() {
             local file="$1"
             if [[ -f "$file" ]]; then
-              {
-                echo "---- $file ----"
-                grep -Ein '(^|[[:space:]])(error:|fatal error:|BUILD FAILED|The following build commands failed|failed|Command .* failed)' "$file" | tail -n 120 || true
-                echo ""
-                echo "---- tail ----"
-                tail -n 80 "$file"
-              } > macos-build-diagnostic.txt
+              python3 - "$file" > macos-build-diagnostic.txt <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+lines = path.read_text(errors="replace").splitlines()
+pattern = re.compile(
+    r"(error:|fatal error:|BUILD FAILED|The following build commands failed|"
+    r"failed with|Command .* failed|clang: error|ld: error)",
+    re.IGNORECASE,
+)
+
+def trimmed(line):
+    return line[:500] + (" ..." if len(line) > 500 else "")
+
+matches = [(idx + 1, line) for idx, line in enumerate(lines) if pattern.search(line)]
+print(f"---- {path} tail ----")
+for offset, line in enumerate(lines[-20:], start=max(1, len(lines) - 19)):
+    print(f"{offset}: {trimmed(line)}")
+
+print("")
+print(f"---- {path} matches ----")
+if matches:
+    for number, line in matches[-40:]:
+        print(f"{number}: {trimmed(line)}")
+else:
+    print("No explicit error lines matched.")
+PY
               message="$(python3 -c 'from pathlib import Path; text = Path("macos-build-diagnostic.txt").read_text(errors="replace"); text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"); print(text[-7000:])')"
               echo "::error title=macOS build log::$message"
             fi
