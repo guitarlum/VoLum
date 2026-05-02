@@ -43,10 +43,29 @@ This is the build and architecture reference for contributors. For download and 
 | `scripts/makedist-mac.sh full all`        | One Xcode build: installer DMG **and** standalone DMG **and** VST3 zip (used by **Release Native**).                                                                              |
 | `scripts/package-portable.ps1`            | Local portable zip from an existing Windows build                                                                                                                                 |
 | `scripts/run-tests-win.ps1`               | Build and run the doctest suite                                                                                                                                                   |
+| `scripts/run-tests-mac.sh`                | Build and run the same doctest suite with CMake/clang on macOS                                                                                                                    |
+| `scripts/run-tests-mac.sh --sanitize`     | Run the macOS doctest suite with ASan/UBSan                                                                                                                                        |
 | `scripts/run-app-win.ps1`                 | Build and launch the standalone (for UI iteration)                                                                                                                                |
+| `scripts/validate-vst3-win.ps1`           | Validate the built Windows VST3 with pluginval and the Steinberg validator when available                                                                                         |
+| `scripts/validate-vst3-mac.sh`            | Validate the built macOS VST3 with pluginval and the Steinberg validator when available                                                                                           |
 
 
-**CI** (`.github/workflows/ci.yml`) runs on **pull requests to `main`**, on **pushes to `main`**, and manually (**Actions → CI → Run workflow**), and builds the same macOS set as releases (`full all`: installer DMG with `.pkg`, standalone DMG, VST3 zip; no dSYM zip) plus Windows tests/portable zip. Artifacts: **VoLum-mac** (`build-mac/out/`, including **`VoLum-v*-mac.dmg`** for **`VoLum Installer.pkg`**) and **VoLum-win** (`build-win/out/`). **Release Native** (`.github/workflows/release-native.yml`) is the one-button draft release flow: it defaults to the next minor version, accepts `minor`/`patch`/`major`/`manual` input, creates the tag and draft release, then uploads the user-facing assets only.
+**CI** (`.github/workflows/ci.yml`) runs on **pull requests to `dev` or `main`**, on **pushes to `dev` or `main`**, and manually (**Actions → CI → Run workflow**). It runs formatting checks, NAMCore regression tests, Windows doctests, Windows installer smoke verification, Windows portable packaging verification, macOS doctests, macOS sanitizer doctests, macOS release-equivalent packaging (`full all`: installer DMG with `.pkg`, standalone DMG, VST3 zip; no dSYM zip), and VST3 validation with pluginval plus the Steinberg validator when the SDK build provides it. Artifacts: **VoLum-mac** (`build-mac/out/`, including **`VoLum-v*-mac.dmg`** for **`VoLum Installer.pkg`**) and **VoLum-win** (`build-win/out/`). **Release Native** (`.github/workflows/release-native.yml`) is the one-button draft release flow: it defaults to the next minor version, accepts `minor`/`patch`/`major`/`manual` input, creates the tag and draft release, then uploads the user-facing assets only.
+
+## Test suite map
+
+Both Windows and macOS run the doctest suite. Windows uses the Visual Studio project `projects/NeuralAmpModeler-Tests.vcxproj`; macOS uses `tests/CMakeLists.txt`. When adding a new `test_*.cpp`, register it in both places.
+
+| Change area | Tests to update |
+| ----------- | --------------- |
+| DSP/process helpers | `tests/test_process_io.cpp`, `tests/test_delay_reverb_dsp.cpp`, `tests/test_volum_pre_effects.cpp`, `tests/test_tone_stack.cpp` |
+| Main signal-chain decisions | `VoLumProcessingPlan.h`, `tests/test_volum_processing_plan.cpp` |
+| Params, keyboard steps, serialized state | `tests/test_eparam_order.cpp`, `tests/test_keyboard_steps.cpp`, `tests/test_volum_chunk_version.cpp`, `tests/test_volum_chunk_codec.cpp` |
+| User settings JSON | `tests/test_volum_user_settings_io.cpp` |
+| Main amp `.nam` files under `rigs/` | `tests/test_nam_rigs.cpp` |
+| PRE captures under `rigs/PrePedals/` | `VoLumPrePedalCaptures.h`, `tests/test_volum_pre_pedal_captures.cpp`, `tests/test_nam_rigs.cpp`, packaging verify scripts |
+| UI/layout behavior | `tests/test_volum_ui_regressions.cpp` and pure layout helpers before source-string locks |
+| Packaging/installers/VST3 validity | `scripts/verify-packaging-win.ps1`, `scripts/verify-packaging-mac.sh`, `scripts/verify-installer-win.ps1`, `scripts/validate-vst3-win.ps1`, `scripts/validate-vst3-mac.sh` |
 
 Current release asset names:
 

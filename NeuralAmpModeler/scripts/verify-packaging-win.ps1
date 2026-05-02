@@ -30,6 +30,7 @@ $rigsPath = Join-Path $verifyDir "VoLumRigs"
 $sampleRig = Join-Path $rigsPath "Ampete One\AMP-Ampt-1.nam"
 $herbertRig = Join-Path $rigsPath "Diezel Herbert Mk1\V30-Herb-4.nam"
 $prePedalsPath = Join-Path $rigsPath "PrePedals"
+$prePedalsSource = Join-Path $RepoRoot "rigs\PrePedals"
 
 if (-not (Test-Path $exePath)) { throw "Missing standalone exe: $exePath" }
 if (-not (Test-Path $vst3Path)) { throw "Missing VST3 bundle: $vst3Path" }
@@ -37,5 +38,12 @@ if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
 if (-not (Test-Path $prePedalsPath)) { throw "Missing PrePedals folder: $prePedalsPath" }
 if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
 if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
+
+if (Test-Path $prePedalsSource) {
+  Get-ChildItem $prePedalsSource -Filter "*.nam" -File | ForEach-Object {
+    $expected = Join-Path $prePedalsPath $_.Name
+    if (-not (Test-Path $expected)) { throw "Missing packaged PRE pedal capture: $expected" }
+  }
+}
 
 Write-Host "Windows portable package OK."

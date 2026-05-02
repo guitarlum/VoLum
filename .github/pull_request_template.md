@@ -6,12 +6,15 @@ What does your PR do?
 Include [Closing words](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) to link this PR to the Issue(s) that it relates to.
 
 ## PR Checklist
-- [ ] Did you format your code using [`format.bash`](https://github.com/sdatkinson/NeuralAmpModelerPlugin/blob/main/format.bash)?
-- [ ] Does the VST3 plugin pass all of the unit tests in the [VST3PluginTestHost](https://steinbergmedia.github.io/vst3_dev_portal/pages/What+is+the+VST+3+SDK/Plug-in+Test+Host.html)? (Download it as part of the VST3 SDK [here](https://www.steinberg.net/developers/).)
-  - [ ] Windows
-  - [ ] macOS
+- [ ] Did you format your code using `bash format.bash`?
+- [ ] Did you add/update focused doctests for the behavior changed?
+- [ ] Did you run `NeuralAmpModeler/scripts/run-tests-win.ps1` or `NeuralAmpModeler/scripts/run-tests-mac.sh`?
+- [ ] If this changes main amp `.nam` files under `rigs/`, did you update `test_nam_rigs.cpp` coverage as needed?
+- [ ] If this changes PRE captures under `rigs/PrePedals/`, did you update discovery/load/package coverage?
+- [ ] If this changes packaging, installers, or VST3 layout, did you update the verify/validation scripts?
 - [ ] Does your PR add, remove, or rename any plugin parameters? If yes...
   - [ ] Have you ensured that the plug-in unserializes correctly?
-  - [ ] Have you ensured that _older_ versions of the plug-in load correctly? (See [`Unserialization.cpp`](https://github.com/sdatkinson/NeuralAmpModelerPlugin/blob/main/NeuralAmpModeler/Unserialization.cpp).)
+  - [ ] Have you updated `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, or `test_volum_chunk_codec.cpp`?
+  - [ ] Have you ensured that _older_ versions of the plug-in load correctly? (See `NeuralAmpModeler/Unserialization.cpp`.)
 - [ ] Does your PR add or remove any graphical assets? If yes, are they defined in [config.h](https://github.com/olilarkin/NeuralAmpModelerPlugin/blob/main/NeuralAmpModeler/config.h) and added in the two required locations in [main.rc](https://github.com/olilarkin/NeuralAmpModelerPlugin/blob/main/NeuralAmpModeler/resources/main.rc)?
   

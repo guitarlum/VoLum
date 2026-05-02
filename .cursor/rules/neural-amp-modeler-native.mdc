@@ -28,3 +28,4 @@ alwaysApply: false
 ## Verification
 
 - After DSP/UI/state changes: **`run-tests-win.ps1`** and a **targeted MSBuild** of the configuration you touched (e.g. `NeuralAmpModeler-app` or `NeuralAmpModeler-vst3`).
+- Cross-platform test additions must be registered in both `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj` and `NeuralAmpModeler/tests/CMakeLists.txt`.

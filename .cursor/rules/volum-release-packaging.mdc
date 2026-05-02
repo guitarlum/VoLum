@@ -14,9 +14,10 @@ alwaysApply: false
 
 Branch/workflow facts:
 
-- `CI` uploads `VoLum-win` and `VoLum-mac`; automatic push/PR runs target `main`.
+- `CI` uploads `VoLum-win` and `VoLum-mac`; automatic push/PR runs target `dev` and `main`.
 - Manual `CI` runs build the selected ref unless checkout is overridden.
 - `Release Native` is main-only: it checks out `main`, bumps metadata, tags, then builds from that tag.
+- Regular CI now runs Windows/macOS doctests, macOS sanitizer doctests, NAMCore regression tests, Windows installer smoke verification, package layout checks, and VST3 validation through pluginval plus the Steinberg validator when available.
 
 Branch policy (use this whenever starting new work):
 
@@ -35,6 +36,7 @@ Packaging layout:
 - Portable packages keep `VoLum.vst3` and sibling `VoLumRigs/` together.
 - macOS standalone embeds `VoLumRigs` in `VoLum.app/Contents/Resources`.
 - macOS VST3 zip keeps `VoLumRigs` beside `VoLum.vst3`.
+- PRE NAM captures live in `rigs/PrePedals/` during development and ship as `VoLumRigs/PrePedals/`; package verification must check any `.nam` files in that folder, not only the directory.
 
 Version metadata:
 
