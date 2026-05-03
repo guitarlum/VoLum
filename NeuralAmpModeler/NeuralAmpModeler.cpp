@@ -3521,15 +3521,22 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
 {
   _VolumSaveEffectSettings();
-  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings);
+  // Keep the shared legacy file readable by already-installed older VoLum builds. New dual-amp
+  // fields live in a sidecar that older builds do not know about, avoiding crashes when users
+  // run a newer standalone and then open an older VST3 in a DAW.
+  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx,
+                                                    &mVolumEffectSettings, /*includeDualAmp=*/false);
+  nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   namespace fs = std::filesystem;
   fs::path settingsPath = volum::VolumUserSettingsFilePath();
+  fs::path dualAmpSettingsPath = volum::VolumDualAmpSettingsFilePath();
   if (settingsPath.empty())
   {
     if (mVolumRigsRoot.empty())
       return;
     settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
+    dualAmpSettingsPath = fs::path(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
   std::error_code ec;
@@ -3546,15 +3553,30 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   out << j.dump(2);
   if (!out.good())
     std::cerr << "VoLum: write failed for settings file: " << settingsPath.string() << std::endl;
+
+  std::ofstream dualOut(dualAmpSettingsPath, std::ios::out | std::ios::trunc);
+  if (!dualOut)
+  {
+    std::cerr << "VoLum: cannot open dual-amp settings file for write: " << dualAmpSettingsPath.string() << std::endl;
+    return;
+  }
+  dualOut << dualAmpJson.dump(2);
+  if (!dualOut.good())
+    std::cerr << "VoLum: write failed for dual-amp settings file: " << dualAmpSettingsPath.string() << std::endl;
 }
 
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 {
   namespace fs = std::filesystem;
   const fs::path userPath = volum::VolumUserSettingsFilePath();
+  const fs::path dualAmpUserPath = volum::VolumDualAmpSettingsFilePath();
   fs::path legacyPath;
+  fs::path dualAmpLegacyPath;
   if (!mVolumRigsRoot.empty())
+  {
     legacyPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
+    dualAmpLegacyPath = fs::path(mVolumRigsRoot) / "volum-dual-amp-settings.json";
+  }
 
   fs::path settingsPath;
   if (!userPath.empty() && fs::exists(userPath))
@@ -3573,6 +3595,26 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     bool settingsHealed = false;
     volum::VolumUserSettingsFromJson(
       j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx, &mVolumEffectSettings, &settingsHealed);
+    if (volum::HasDualAmpUserSettings(j))
+      settingsHealed = true; // Rewrite shared settings without new-only dual-amp fields.
+
+    fs::path dualAmpSettingsPath;
+    if (!dualAmpUserPath.empty() && fs::exists(dualAmpUserPath))
+      dualAmpSettingsPath = dualAmpUserPath;
+    else if (!dualAmpLegacyPath.empty() && fs::exists(dualAmpLegacyPath))
+      dualAmpSettingsPath = dualAmpLegacyPath;
+
+    if (!dualAmpSettingsPath.empty())
+    {
+      std::ifstream dualIn(dualAmpSettingsPath);
+      nlohmann::json dualAmpJson;
+      dualIn >> dualAmpJson;
+      bool dualAmpSettingsHealed = false;
+      volum::VolumUserSettingsFromJson(
+        dualAmpJson, mVolumAmpSettings.data(), volum::kAmpCount, nullptr, nullptr, &dualAmpSettingsHealed);
+      settingsHealed = settingsHealed || dualAmpSettingsHealed;
+    }
+
     if (settingsHealed)
       mVolumSettingsDirty = true;
     _VolumRestoreEffectSettings();

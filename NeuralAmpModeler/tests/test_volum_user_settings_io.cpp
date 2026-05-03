@@ -210,6 +210,70 @@ TEST_CASE("supportOutputLevel at the +10 dB cap loads through unchanged")
   CHECK(loaded[13].supportOutputLevel == doctest::Approx(10.0));
 }
 
+TEST_CASE("Legacy-safe settings omit dual-amp fields")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].dualAmpActive = true;
+  amps[0].mainAmpPan = -1.0;
+  amps[0].supportAmpIdx = 1;
+  amps[0].supportOutputLevel = 3.0;
+  amps[0].supportAmpPan = 1.0;
+
+  const nlohmann::json j =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, /*includeDualAmp=*/false);
+
+  REQUIRE(volum::HasDualAmpUserSettings(j) == false);
+  CHECK(j["amps"]["Ampete One"].contains("speaker"));
+  CHECK_FALSE(j["amps"]["Ampete One"].contains("dualAmpActive"));
+  CHECK_FALSE(j["amps"]["Ampete One"].contains("supportOutput"));
+}
+
+TEST_CASE("Dual-amp sidecar overlays current-only support settings")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].dualAmpActive = true;
+  amps[0].dualAmpRoute = 2;
+  amps[0].mainAmpPan = -1.0;
+  amps[0].supportAmpIdx = 1;
+  amps[0].supportSpeakerIdx = 2;
+  amps[0].supportChannelIdx = 3;
+  amps[0].supportInputLevel = 1.5;
+  amps[0].supportGateThreshold = -60.0;
+  amps[0].supportToneBass = 4.0;
+  amps[0].supportToneMid = 6.0;
+  amps[0].supportToneTreble = 7.0;
+  amps[0].supportOutputLevel = 3.0;
+  amps[0].supportNoiseGateActive = false;
+  amps[0].supportEqActive = false;
+  amps[0].supportAmpPan = 1.0;
+
+  const nlohmann::json legacy =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, /*includeDualAmp=*/false);
+  const nlohmann::json sidecar = volum::VolumDualAmpUserSettingsToJson(amps, volum::kAmpCount);
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VolumUserSettingsFromJson(legacy, loaded, volum::kAmpCount, nullptr);
+  CHECK(loaded[0].dualAmpActive == false);
+  CHECK(loaded[0].supportAmpIdx == -1);
+
+  volum::VolumUserSettingsFromJson(sidecar, loaded, volum::kAmpCount, nullptr);
+  CHECK(loaded[0].dualAmpActive == true);
+  CHECK(loaded[0].dualAmpRoute == 2);
+  CHECK(loaded[0].mainAmpPan == doctest::Approx(-1.0));
+  CHECK(loaded[0].supportAmpIdx == 1);
+  CHECK(loaded[0].supportSpeakerIdx == 2);
+  CHECK(loaded[0].supportChannelIdx == 3);
+  CHECK(loaded[0].supportInputLevel == doctest::Approx(1.5));
+  CHECK(loaded[0].supportGateThreshold == doctest::Approx(-60.0));
+  CHECK(loaded[0].supportToneBass == doctest::Approx(4.0));
+  CHECK(loaded[0].supportToneMid == doctest::Approx(6.0));
+  CHECK(loaded[0].supportToneTreble == doctest::Approx(7.0));
+  CHECK(loaded[0].supportOutputLevel == doctest::Approx(3.0));
+  CHECK(loaded[0].supportNoiseGateActive == false);
+  CHECK(loaded[0].supportEqActive == false);
+  CHECK(loaded[0].supportAmpPan == doctest::Approx(1.0));
+}
+
 TEST_CASE("Effect settings JSON roundtrip preserves all params")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
