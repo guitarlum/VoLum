@@ -858,6 +858,105 @@ private:
   std::vector<std::string> mLabels;
 };
 
+// Dual Amp support-amp dropdown picker. Visually matches VoLumPreCaptureMenuControl but
+// operates on the support-amp index. Item 0 represents "(none)" so the user can clear the
+// support amp without disabling Dual Amp.
+class VoLumSupportAmpMenuControl : public IControl
+{
+public:
+  VoLumSupportAmpMenuControl(const IRECT& bounds) : IControl(bounds) { mIgnoreMouse = false; }
+
+  void SetItems(const std::vector<std::string>& labels, int selectedIdx)
+  {
+    mLabels = labels;
+    mSelectedIdx = selectedIdx;
+    mHovered = -1;
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRoundRect(VoLumColors::HERO_BG, mRECT, 4.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, mRECT, 4.f, nullptr, 1.5f);
+    DrawCornerAccent(g, mRECT.L + 5.f, mRECT.T + 5.f, 8.f, false, false, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, mRECT.R - 5.f, mRECT.B - 5.f, 8.f, true, true, VoLumColors::TEAL_DIM);
+
+    const IText text(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    const IText dimText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    for (int i = 0; i < static_cast<int>(mLabels.size()); ++i)
+    {
+      const IRECT row(mRECT.L + 8.f, mRECT.T + 6.f + i * mItemH, mRECT.R - 8.f, mRECT.T + 6.f + (i + 1) * mItemH);
+      const bool selected = i == mSelectedIdx;
+      if (selected)
+      {
+        g.FillRoundRect(VoLumColors::ITEM_SEL_BG, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+        g.DrawRoundRect(VoLumColors::ITEM_SEL_BORDER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+      }
+      else if (i == mHovered)
+      {
+        g.FillRoundRect(VoLumColors::ITEM_HOVER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+        g.DrawRoundRect(IColor(20, 200, 162, 78), row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+      }
+      if (selected)
+        g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
+      g.DrawText(selected ? text : dimText, mLabels[static_cast<size_t>(i)].c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
+    }
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    (void) x; (void) mod;
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    if (!plugin) return;
+
+    const int idx = static_cast<int>((y - (mRECT.T + 6.f)) / mItemH);
+    if (idx < 0 || idx >= static_cast<int>(mLabels.size()))
+    {
+      // Click on the menu's padding (top/bottom border or below the last item) — dismiss without
+      // changing the selection, same as clicking outside the menu rect.
+      plugin->_VolumHideSupportAmpMenu();
+      return;
+    }
+
+    // Item 0 is "(none)" -> map to support-amp index -1; subsequent items map to amp index 0..N-1.
+    plugin->_VolumSetSupportAmp(idx - 1);
+    plugin->_VolumHideSupportAmpMenu();
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    (void) x;
+    (void) mod;
+    const int idx = static_cast<int>((y - (mRECT.T + 6.f)) / mItemH);
+    const int next = (idx >= 0 && idx < static_cast<int>(mLabels.size())) ? idx : -1;
+    if (next != mHovered)
+    {
+      mHovered = next;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHovered != -1)
+    {
+      mHovered = -1;
+      SetDirty(false);
+    }
+  }
+
+  // 17px keeps the full 16-amp list (15 amps + "(none)") inside the standalone window without
+  // bottom clipping. Combined with the 6+6 px padding handled in Draw, total menu height stays
+  // under ~290 px, leaving headroom even when the standalone toolbar shrinks the canvas.
+  static constexpr float ItemHeight() { return 17.f; }
+
+private:
+  int mSelectedIdx = 0;
+  int mHovered = -1;
+  float mItemH = ItemHeight();
+  std::vector<std::string> mLabels;
+};
+
 class VoLumPedalCardControl : public IControl
 {
 public:
