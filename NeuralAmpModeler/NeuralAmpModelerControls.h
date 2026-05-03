@@ -756,6 +756,14 @@ public:
     mHasInfo = false;
   };
 
+  void SetCurrentLatency(int samples, double sampleRate)
+  {
+    const double ms = sampleRate > 0.0 ? 1000.0 * static_cast<double>(samples) / sampleRate : 0.0;
+    WDL_String text;
+    text.SetFormatted(80, "Current latency: %.1f ms (%d samples)", ms, samples);
+    static_cast<IVLabelControl*>(GetNamedChild(mControlNames.currentLatency))->SetStr(text.Get());
+  }
+
   void Hide(bool hide) override
   {
 #if VOLUM_AMPETE_PRODUCT
@@ -777,10 +785,13 @@ public:
         .WithValueText(
           IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top));
     AddChildControl(new IVLabelControl(r.ReduceFromTop(footerCapH), "Model information", headingStyle));
-    AddNamedChildControl(new IVLabelControl(r, "", mStyle), mControlNames.sampleRate);
+    const float rowH = 14.f;
+    AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.sampleRate);
+    AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.currentLatency);
 #else
-    AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 0), "Model information:", mStyle));
-    AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(4, 1), "", mStyle), mControlNames.sampleRate);
+    AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 0), "Model information:", mStyle));
+    AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "", mStyle), mControlNames.sampleRate);
+    AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 2), "", mStyle), mControlNames.currentLatency);
 #endif
   };
 
@@ -811,6 +822,7 @@ private:
   struct
   {
     const std::string sampleRate = "sampleRate";
+    const std::string currentLatency = "currentLatency";
   } mControlNames;
   // Do I have info?
   bool mHasInfo = false;
@@ -1175,6 +1187,13 @@ public:
     assert(modelInfoControl != nullptr);
     modelInfoControl->SetModelInfo(modelInfo);
   };
+
+  void SetCurrentLatency(int samples, double sampleRate)
+  {
+    auto* modelInfoControl = static_cast<ModelInfoControl*>(GetNamedChild(mControlNames.modelInfo));
+    assert(modelInfoControl != nullptr);
+    modelInfoControl->SetCurrentLatency(samples, sampleRate);
+  }
 
 private:
   IBitmap mBitmap;
