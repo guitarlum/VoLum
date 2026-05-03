@@ -489,7 +489,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       auto& s = mVolumAmpSettings[i];
       pos = volum::GetLegacyPerAmpSettings(chunk, pos, s);
       if (hasPreAmpSettings)
+      {
         pos = volum::GetExtendedPerAmpSettings(chunk, pos, s, version >= volum::ChunkVersion(0, 8, 1));
+        if (volum::ShouldResetPreCaptureSlotsForChunkVersion(version))
+          volum::ResetPreCaptureSlots(s);
+      }
       if (hasDualAmpSettings)
         pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s);
     }

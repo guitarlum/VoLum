@@ -29,6 +29,7 @@
 
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumPrePedalCaptures.h"
 #include "VoLumTriptychState.h"
 #include "VoLumUserSettingsIO.h"
 #include "VoLumTunerDSP.h"
@@ -407,6 +408,7 @@ private:
   std::vector<std::string> mVolumSupportChannelLabels;
   std::vector<std::string> mVolumPreCaptureFiles;
   std::vector<std::string> mVolumPreCaptureLabels;
+  std::vector<volum::PrePedalCaptureGroup> mVolumPreCaptureGroups;
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
   std::string mVolumLastLoadedSupportFile;

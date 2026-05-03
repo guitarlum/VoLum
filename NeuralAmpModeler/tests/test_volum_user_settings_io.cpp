@@ -39,6 +39,7 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
   amps[0].preNam2Level = 0.5;
 
   const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE(j["version"] == volum::kVoLumUserSettingsVersion);
 
   volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
   int lastAmp = -1;
@@ -86,6 +87,32 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
     REQUIRE(loaded[i].noiseGateActive == true);
     REQUIRE(loaded[i].preNam1Active == false);
   }
+}
+
+TEST_CASE("Legacy user settings reset PRE capture selections before real captures")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].preNam1Active = true;
+  amps[0].preNam1Capture = 2;
+  amps[0].preNam1Gain = 3.0;
+  amps[0].preNam2Active = true;
+  amps[0].preNam2Capture = 4;
+  amps[0].preNam2Level = -2.0;
+
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 1;
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+
+  REQUIRE(healed == true);
+  CHECK(loaded[0].preNam1Active == true);
+  CHECK(loaded[0].preNam1Capture == 0);
+  CHECK(loaded[0].preNam1Gain == doctest::Approx(3.0));
+  CHECK(loaded[0].preNam2Active == true);
+  CHECK(loaded[0].preNam2Capture == 0);
+  CHECK(loaded[0].preNam2Level == doctest::Approx(-2.0));
 }
 
 TEST_CASE("invalid lastAmpIdx heals to default amp")

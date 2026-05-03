@@ -2719,19 +2719,21 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
 {
   mVolumPreCaptureFiles.clear();
   mVolumPreCaptureLabels.clear();
+  mVolumPreCaptureGroups.clear();
 
   auto addMockCaptures = [&]() {
-    const char* labels[] = {
-      "Klon - Gold Horse",
-      "TS - Green Drive",
-      "Fuzz - Velvet Doom",
-      "Nuke - Petty Push",
-      "Boost - Clean Lift",
+    const std::pair<const char*, volum::PrePedalCaptureGroup> captures[] = {
+      {"Klon - Gold Horse", volum::PrePedalCaptureGroup::Klon},
+      {"TS - Green Drive", volum::PrePedalCaptureGroup::TsBoost},
+      {"Fuzz - Velvet Doom", volum::PrePedalCaptureGroup::Fuzz},
+      {"Nuke - Petty Push", volum::PrePedalCaptureGroup::Fuzz},
+      {"Boost - Clean Lift", volum::PrePedalCaptureGroup::TsBoost},
     };
-    for (const char* label : labels)
+    for (const auto& capture : captures)
     {
       mVolumPreCaptureFiles.emplace_back();
-      mVolumPreCaptureLabels.emplace_back(label);
+      mVolumPreCaptureLabels.emplace_back(capture.first);
+      mVolumPreCaptureGroups.emplace_back(capture.second);
     }
   };
 
@@ -2746,6 +2748,7 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
   {
     mVolumPreCaptureFiles.push_back(capture.filename);
     mVolumPreCaptureLabels.push_back(capture.label);
+    mVolumPreCaptureGroups.push_back(capture.group);
   }
 
   if (mVolumPreCaptureLabels.empty())
@@ -2832,19 +2835,31 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   }
 
   const int captureCount = std::max(1, _VolumGetPreCaptureCount());
-  std::vector<std::string> labels;
-  labels.reserve(static_cast<size_t>(captureCount));
-  for (int i = 0; i < captureCount; ++i)
-    labels.emplace_back(_VolumGetPreCaptureLabel(i));
+  std::vector<VoLumPreCaptureMenuItem> items;
+  items.reserve(static_cast<size_t>(captureCount + 4));
+  items.push_back({_VolumGetPreCaptureLabel(0), 0, false, volum::PrePedalCaptureGroup::None});
+  volum::PrePedalCaptureGroup lastGroup = volum::PrePedalCaptureGroup::None;
+  for (int i = 1; i < captureCount; ++i)
+  {
+    const auto group = (i - 1 < static_cast<int>(mVolumPreCaptureGroups.size()))
+                         ? mVolumPreCaptureGroups[static_cast<size_t>(i - 1)]
+                         : volum::PrePedalCaptureGroup::None;
+    if (group != lastGroup)
+    {
+      items.push_back({volum::PrePedalCaptureGroupLabel(group), 0, true, group});
+      lastGroup = group;
+    }
+    items.push_back({_VolumGetPreCaptureLabel(i), i, false, group});
+  }
 
   const int captureParam = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
   const int selected = std::clamp(GetParam(captureParam)->Int(), 0, captureCount - 1);
   const float menuW = std::max(anchorRect.W() * 0.88f, 180.f);
-  const float menuH = VoLumPreCaptureMenuControl::ItemHeight() * captureCount + 12.f;
+  const float menuH = VoLumPreCaptureMenuControl::MenuHeight(items);
   const IRECT menuRect(anchorRect.L, anchorRect.B + 6.f, anchorRect.L + menuW, anchorRect.B + 6.f + menuH);
 
   menu->SetTargetAndDrawRECTs(menuRect);
-  menu->SetItems(slot, labels, selected);
+  menu->SetItems(slot, items, selected);
   menu->Hide(false);
 }
 
