@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../VoLumDualAmpPlan.h"
 #include "../VoLumProcessIO.h"
 #include <vector>
 
@@ -55,4 +56,31 @@ TEST_CASE("ClearBuffers silences every output channel")
     DOCTEST_CHECK(sample == doctest::Approx(0.f));
   for (float sample : out1)
     DOCTEST_CHECK(sample == doctest::Approx(0.f));
+}
+
+TEST_CASE("Dual amp L/R route hard-pans main and support lanes")
+{
+  std::vector<float> main{1.f};
+  std::vector<float> support{0.5f};
+  std::vector<float> left(1, 0.f), right(1, 0.f);
+  float* outputs[2] = {left.data(), right.data()};
+
+  const auto gains = volum::MakeDualAmpPanGains(volum::DualAmpRoute::LeftRight, 0.0, 0.0);
+  volum::MergeDualAmpToStereo(main.data(), support.data(), outputs, 1, 2, 1.0, 1.0, gains, false);
+
+  DOCTEST_CHECK(left[0] == doctest::Approx(1.f));
+  DOCTEST_CHECK(right[0] == doctest::Approx(0.5f));
+}
+
+TEST_CASE("Dual amp stack route sends matching mono mix to stereo outputs")
+{
+  std::vector<float> main{1.f};
+  std::vector<float> support{1.f};
+  std::vector<float> left(1, 0.f), right(1, 0.f);
+  float* outputs[2] = {left.data(), right.data()};
+
+  const auto gains = volum::MakeDualAmpPanGains(volum::DualAmpRoute::Stack, -1.0, 1.0);
+  volum::MergeDualAmpToStereo(main.data(), support.data(), outputs, 1, 2, 1.0, 1.0, gains, false);
+
+  DOCTEST_CHECK(left[0] == doctest::Approx(right[0]));
 }

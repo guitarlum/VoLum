@@ -76,6 +76,28 @@ void AppendCurrentPerAmpBlock(std::vector<unsigned char>& bytes)
   AppendBytes(bytes, midFreq);
   AppendBytes(bytes, five);
   AppendBytes(bytes, zero);
+
+  const int stackRoute = 0;
+  const int emptySupportAmp = -1;
+  const int defaultSpeaker = 3;
+  const double supportGate = -80.0;
+  const double minusSix = -6.0;
+  const int active = 1;
+  AppendBytes(bytes, inactive);
+  AppendBytes(bytes, stackRoute);
+  AppendBytes(bytes, zero);
+  AppendBytes(bytes, emptySupportAmp);
+  AppendBytes(bytes, defaultSpeaker);
+  AppendBytes(bytes, inactive);
+  AppendBytes(bytes, zero);
+  AppendBytes(bytes, supportGate);
+  AppendBytes(bytes, five);
+  AppendBytes(bytes, five);
+  AppendBytes(bytes, five);
+  AppendBytes(bytes, minusSix);
+  AppendBytes(bytes, active);
+  AppendBytes(bytes, active);
+  AppendBytes(bytes, zero);
 }
 } // namespace
 
@@ -146,4 +168,5 @@ TEST_CASE("VoLum current per-amp chunk byte count is stable")
 
   REQUIRE(bytes.size() == static_cast<size_t>(volum::CurrentPerAmpSettingsPayloadBytes(volum::kAmpCount)));
   CHECK(volum::ChunkHasExtendedPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
+  CHECK(volum::ChunkHasDualAmpPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
 }

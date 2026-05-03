@@ -12,7 +12,10 @@ enum EParams {
   kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
   kPreNam1Active, kPreNam1Capture, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
   kPreNam2Active, kPreNam2Capture, kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble, kPreNam2Level,
-  kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig, kNumParams
+  kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig,
+  kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
+  kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
+  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan, kNumParams
 };
 
 TEST_CASE("EParam: core amp params at expected indices")
@@ -82,10 +85,25 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
   CHECK(kInputCalibrationLevel == kCalibrateInput + 1);
   CHECK(kOutputMode == kInputCalibrationLevel + 1);
   CHECK(kVoLumAmpeteRig == kOutputMode + 1);
-  CHECK(kNumParams == kVoLumAmpeteRig + 1);
+  CHECK(kDualAmpActive == kVoLumAmpeteRig + 1);
+  CHECK(kDualAmpRoute == kDualAmpActive + 1);
+  CHECK(kMainAmpPan == kDualAmpRoute + 1);
+  CHECK(kSupportAmpIdx == kMainAmpPan + 1);
+  CHECK(kSupportSpeakerIdx == kSupportAmpIdx + 1);
+  CHECK(kSupportChannelIdx == kSupportSpeakerIdx + 1);
+  CHECK(kSupportInputLevel == kSupportChannelIdx + 1);
+  CHECK(kSupportNoiseGateThreshold == kSupportInputLevel + 1);
+  CHECK(kSupportToneBass == kSupportNoiseGateThreshold + 1);
+  CHECK(kSupportToneMid == kSupportToneBass + 1);
+  CHECK(kSupportToneTreble == kSupportToneMid + 1);
+  CHECK(kSupportOutputLevel == kSupportToneTreble + 1);
+  CHECK(kSupportNoiseGateActive == kSupportOutputLevel + 1);
+  CHECK(kSupportEQActive == kSupportNoiseGateActive + 1);
+  CHECK(kSupportAmpPan == kSupportEQActive + 1);
+  CHECK(kNumParams == kSupportAmpPan + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
 {
-  CHECK(kNumParams == 52);
+  CHECK(kNumParams == 67);
 }

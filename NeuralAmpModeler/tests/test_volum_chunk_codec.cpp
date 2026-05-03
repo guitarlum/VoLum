@@ -46,6 +46,21 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   amps[0].preNam1Capture = 7;
   amps[0].preNam2Active = true;
   amps[0].preNam2Capture = 8;
+  amps[0].dualAmpActive = true;
+  amps[0].dualAmpRoute = 1;
+  amps[0].mainAmpPan = -0.25;
+  amps[0].supportAmpIdx = 13;
+  amps[0].supportSpeakerIdx = 2;
+  amps[0].supportChannelIdx = 1;
+  amps[0].supportInputLevel = -1.5;
+  amps[0].supportGateThreshold = -65.0;
+  amps[0].supportToneBass = 4.0;
+  amps[0].supportToneMid = 6.0;
+  amps[0].supportToneTreble = 7.0;
+  amps[0].supportOutputLevel = -6.0;
+  amps[0].supportNoiseGateActive = false;
+  amps[0].supportEqActive = true;
+  amps[0].supportAmpPan = 0.75;
 
   MemoryChunk chunk;
   volum::PutCurrentVoLumChunkState(chunk, {3, 2, 1}, amps, volum::kAmpCount);
@@ -59,6 +74,7 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   volum::VoLumAmpSettings loaded;
   pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded);
   pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded, true);
+  pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded);
 
   CHECK(loaded.speakerIdx == 1);
   CHECK(loaded.channelIdx == 2);
@@ -75,6 +91,21 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   CHECK(loaded.preNam1Capture == 7);
   CHECK(loaded.preNam2Active);
   CHECK(loaded.preNam2Capture == 8);
+  CHECK(loaded.dualAmpActive);
+  CHECK(loaded.dualAmpRoute == 1);
+  CHECK(loaded.mainAmpPan == doctest::Approx(-0.25));
+  CHECK(loaded.supportAmpIdx == 13);
+  CHECK(loaded.supportSpeakerIdx == 2);
+  CHECK(loaded.supportChannelIdx == 1);
+  CHECK(loaded.supportInputLevel == doctest::Approx(-1.5));
+  CHECK(loaded.supportGateThreshold == doctest::Approx(-65.0));
+  CHECK(loaded.supportToneBass == doctest::Approx(4.0));
+  CHECK(loaded.supportToneMid == doctest::Approx(6.0));
+  CHECK(loaded.supportToneTreble == doctest::Approx(7.0));
+  CHECK(loaded.supportOutputLevel == doctest::Approx(-6.0));
+  CHECK_FALSE(loaded.supportNoiseGateActive);
+  CHECK(loaded.supportEqActive);
+  CHECK(loaded.supportAmpPan == doctest::Approx(0.75));
 }
 
 TEST_CASE("VoLum chunk codec clamps selection and PRE capture indices")
