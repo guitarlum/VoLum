@@ -93,6 +93,17 @@ TEST_CASE("Repository PrePedals use curated labels and type order")
     "PettyJohn Nuke",
     "JHS Bender",
   };
+  const std::vector<std::string> shortLabels = {
+    "Klon",
+    "Myth",
+    "TS",
+    "TS+",
+    "Mash",
+    "Revi",
+    "FatB",
+    "Nuke",
+    "Bndr",
+  };
   const std::vector<volum::PrePedalCaptureGroup> groups = {
     volum::PrePedalCaptureGroup::Klon,
     volum::PrePedalCaptureGroup::Klon,
@@ -111,6 +122,7 @@ TEST_CASE("Repository PrePedals use curated labels and type order")
     CAPTURE(i);
     CHECK(captures[i].filename == filenames[i]);
     CHECK(captures[i].label == labels[i]);
+    CHECK(captures[i].shortLabel == shortLabels[i]);
     CHECK(captures[i].group == groups[i]);
   }
 

@@ -389,6 +389,7 @@ public:
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;
+  const char* _VolumGetPreCaptureShortLabel(int captureIdx, const char* fallback) const;
   std::string _VolumGetPreCaptureFilename(int captureIdx) const;
 
 private:
@@ -409,6 +410,7 @@ private:
   std::vector<std::string> mVolumSupportChannelLabels;
   std::vector<std::string> mVolumPreCaptureFiles;
   std::vector<std::string> mVolumPreCaptureLabels;
+  std::vector<std::string> mVolumPreCaptureShortLabels;
   std::vector<volum::PrePedalCaptureGroup> mVolumPreCaptureGroups;
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;

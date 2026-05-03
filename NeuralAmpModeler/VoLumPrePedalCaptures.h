@@ -25,6 +25,7 @@ struct PrePedalCapture
 {
   std::string filename;
   std::string label;
+  std::string shortLabel;
   PrePedalCaptureGroup group = PrePedalCaptureGroup::None;
   int sortRank = 0;
 };
@@ -33,20 +34,21 @@ struct PrePedalCaptureMetadata
 {
   const char* filename;
   const char* label;
+  const char* shortLabel;
   PrePedalCaptureGroup group;
   int sortRank;
 };
 
 inline constexpr PrePedalCaptureMetadata kPrePedalCaptureMetadata[] = {
-  {"FX-Minotaur-Klon-1.nam", "Klon", PrePedalCaptureGroup::Klon, 10},
-  {"FX-PettyJohn-Myth-1.nam", "PettyJohn Myth", PrePedalCaptureGroup::Klon, 20},
-  {"FX-OriginEffects-Halcyon-1.nam", "Halcyon TS", PrePedalCaptureGroup::TsBoost, 30},
-  {"FX-OriginEffects-Halcyon-2.nam", "Halcyon TS +Gain", PrePedalCaptureGroup::TsBoost, 40},
-  {"FX-PettyJohn-Mash-1.nam", "PettyJohn Mash", PrePedalCaptureGroup::TsBoost, 50},
-  {"FX-OriginEffects-Revival-1.nam", "Revival Drive", PrePedalCaptureGroup::Distortion, 60},
-  {"FX-Beetronics-Fatbee-1.nam", "Fatbee", PrePedalCaptureGroup::Fuzz, 70},
-  {"FX-PettyJohn-Nuke-1.nam", "PettyJohn Nuke", PrePedalCaptureGroup::Fuzz, 80},
-  {"FX-JHS-Bender-1.nam", "JHS Bender", PrePedalCaptureGroup::Fuzz, 90},
+  {"FX-Minotaur-Klon-1.nam", "Klon", "Klon", PrePedalCaptureGroup::Klon, 10},
+  {"FX-PettyJohn-Myth-1.nam", "PettyJohn Myth", "Myth", PrePedalCaptureGroup::Klon, 20},
+  {"FX-OriginEffects-Halcyon-1.nam", "Halcyon TS", "TS", PrePedalCaptureGroup::TsBoost, 30},
+  {"FX-OriginEffects-Halcyon-2.nam", "Halcyon TS +Gain", "TS+", PrePedalCaptureGroup::TsBoost, 40},
+  {"FX-PettyJohn-Mash-1.nam", "PettyJohn Mash", "Mash", PrePedalCaptureGroup::TsBoost, 50},
+  {"FX-OriginEffects-Revival-1.nam", "Revival Drive", "Revi", PrePedalCaptureGroup::Distortion, 60},
+  {"FX-Beetronics-Fatbee-1.nam", "Fatbee", "FatB", PrePedalCaptureGroup::Fuzz, 70},
+  {"FX-PettyJohn-Nuke-1.nam", "PettyJohn Nuke", "Nuke", PrePedalCaptureGroup::Fuzz, 80},
+  {"FX-JHS-Bender-1.nam", "JHS Bender", "Bndr", PrePedalCaptureGroup::Fuzz, 90},
 };
 
 inline const PrePedalCaptureMetadata* GetPrePedalCaptureMetadata(const std::string& filename)
@@ -96,10 +98,11 @@ inline std::vector<PrePedalCapture> DiscoverPrePedalCaptures(const std::filesyst
 
     const std::string filename = entry.path().filename().string();
     if (const auto* metadata = GetPrePedalCaptureMetadata(filename))
-      captures.push_back({filename, metadata->label, metadata->group, metadata->sortRank});
+      captures.push_back({filename, metadata->label, metadata->shortLabel, metadata->group, metadata->sortRank});
     else
       captures.push_back(
-        {filename, PrePedalCaptureFallbackLabelFromFilename(entry.path()), PrePedalCaptureGroup::None, 10000});
+        {filename, PrePedalCaptureFallbackLabelFromFilename(entry.path()),
+         PrePedalCaptureFallbackLabelFromFilename(entry.path()), PrePedalCaptureGroup::None, 10000});
   }
 
   std::sort(captures.begin(), captures.end(), [](const PrePedalCapture& a, const PrePedalCapture& b) {

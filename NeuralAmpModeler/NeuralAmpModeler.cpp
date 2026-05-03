@@ -397,7 +397,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych)) {
              auto* trip = tripCtrl->As<VoLumTriptychControl>();
              const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-             trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx, volum::kAmps[ampIdx].displayName);
+            trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx,
+                           volum::kAmps[ampIdx].displayName,
+                           _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+                           _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
           }
         }),
       kCtrlTagVoLumAmpList);
@@ -908,7 +911,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[newIdx].displayName, true);
           if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych)) {
              const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-             tripCtrl->As<VoLumTriptychControl>()->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), newIdx, volum::kAmps[newIdx].displayName);
+             tripCtrl->As<VoLumTriptychControl>()->SetState(
+               preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), newIdx,
+               volum::kAmps[newIdx].displayName,
+               _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+               _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
           }
         }
         return true;
@@ -2564,7 +2571,10 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     {
       auto* trip = tripCtrl->As<VoLumTriptychControl>();
       const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-      trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), mVolumAmpIdx, volum::kAmps[mVolumAmpIdx].displayName);
+      trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), mVolumAmpIdx,
+                     volum::kAmps[mVolumAmpIdx].displayName,
+                     _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+                     _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
       trip->SetExpandedSection(mVolumExpandedSection);
       
       // Update Pedal Cards visibility, layout, and state based on whether POST is expanded
@@ -2740,21 +2750,29 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
 {
   mVolumPreCaptureFiles.clear();
   mVolumPreCaptureLabels.clear();
+  mVolumPreCaptureShortLabels.clear();
   mVolumPreCaptureGroups.clear();
 
   auto addMockCaptures = [&]() {
-    const std::pair<const char*, volum::PrePedalCaptureGroup> captures[] = {
-      {"Klon - Gold Horse", volum::PrePedalCaptureGroup::Klon},
-      {"TS - Green Drive", volum::PrePedalCaptureGroup::TsBoost},
-      {"Fuzz - Velvet Doom", volum::PrePedalCaptureGroup::Fuzz},
-      {"Nuke - Petty Push", volum::PrePedalCaptureGroup::Fuzz},
-      {"Boost - Clean Lift", volum::PrePedalCaptureGroup::TsBoost},
+    struct MockCapture
+    {
+      const char* label;
+      const char* shortLabel;
+      volum::PrePedalCaptureGroup group;
+    };
+    const MockCapture captures[] = {
+      {"Klon - Gold Horse", "Klon", volum::PrePedalCaptureGroup::Klon},
+      {"TS - Green Drive", "TS", volum::PrePedalCaptureGroup::TsBoost},
+      {"Fuzz - Velvet Doom", "Fuzz", volum::PrePedalCaptureGroup::Fuzz},
+      {"Nuke - Petty Push", "Nuke", volum::PrePedalCaptureGroup::Fuzz},
+      {"Boost - Clean Lift", "Boost", volum::PrePedalCaptureGroup::TsBoost},
     };
     for (const auto& capture : captures)
     {
       mVolumPreCaptureFiles.emplace_back();
-      mVolumPreCaptureLabels.emplace_back(capture.first);
-      mVolumPreCaptureGroups.emplace_back(capture.second);
+      mVolumPreCaptureLabels.emplace_back(capture.label);
+      mVolumPreCaptureShortLabels.emplace_back(capture.shortLabel);
+      mVolumPreCaptureGroups.emplace_back(capture.group);
     }
   };
 
@@ -2769,6 +2787,7 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
   {
     mVolumPreCaptureFiles.push_back(capture.filename);
     mVolumPreCaptureLabels.push_back(capture.label);
+    mVolumPreCaptureShortLabels.push_back(capture.shortLabel);
     mVolumPreCaptureGroups.push_back(capture.group);
   }
 
@@ -2781,6 +2800,13 @@ const char* NeuralAmpModeler::_VolumGetPreCaptureLabel(int captureIdx) const
   if (captureIdx <= 0 || captureIdx > static_cast<int>(mVolumPreCaptureLabels.size()))
     return "Click to change";
   return mVolumPreCaptureLabels[static_cast<size_t>(captureIdx - 1)].c_str();
+}
+
+const char* NeuralAmpModeler::_VolumGetPreCaptureShortLabel(int captureIdx, const char* fallback) const
+{
+  if (captureIdx <= 0 || captureIdx > static_cast<int>(mVolumPreCaptureShortLabels.size()))
+    return fallback;
+  return mVolumPreCaptureShortLabels[static_cast<size_t>(captureIdx - 1)].c_str();
 }
 
 int NeuralAmpModeler::_VolumGetPreCaptureCount() const
@@ -3022,6 +3048,7 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
 
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
   const bool supportFocus = dualActive && mVolumDualAmpFocusedSupport;
+  const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
@@ -3040,11 +3067,11 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
     {
       mainPanGrp->ForControlInGroup("MAIN_PAN_KNOB", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetMainPanKnobSlot());
-        c->Hide(!dualActive);
+        c->Hide(!showPanKnobs);
       });
       mainPanGrp->ForControlInGroup("SUPPORT_PAN_KNOB", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPanKnobSlot());
-        c->Hide(!dualActive);
+        c->Hide(!showPanKnobs);
       });
     }
   }
