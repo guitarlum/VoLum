@@ -222,4 +222,25 @@ inline std::filesystem::path VolumUserSettingsFilePath()
 #endif
 }
 
+// Current-build-only settings. Keep new schema extensions out of volum-settings.json so older
+// installed VoLum builds can still read the shared settings file safely.
+inline std::filesystem::path VolumDualAmpSettingsFilePath()
+{
+  namespace fs = std::filesystem;
+#ifdef _WIN32
+  const char* la = std::getenv("LOCALAPPDATA");
+  if (!la || !*la)
+    return {};
+  return fs::path(la) / "VoLum" / "volum-dual-amp-settings.json";
+#elif defined(__APPLE__)
+  const char* home = std::getenv("HOME");
+  if (!home || !*home)
+    return {};
+  return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-dual-amp-settings.json";
+#else
+  (void)0;
+  return {};
+#endif
+}
+
 } // namespace volum

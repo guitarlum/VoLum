@@ -76,6 +76,7 @@ TEST_CASE("VolumUserSettingsFilePath uses LOCALAPPDATA")
   _putenv_s("LOCALAPPDATA", la.c_str());
 
   const fs::path p = volum::VolumUserSettingsFilePath();
+  const fs::path dual = volum::VolumDualAmpSettingsFilePath();
 
   if (prevStr.empty())
     _putenv_s("LOCALAPPDATA", "");
@@ -84,5 +85,6 @@ TEST_CASE("VolumUserSettingsFilePath uses LOCALAPPDATA")
 
   std::error_code ec;
   REQUIRE(fs::weakly_canonical(p, ec) == fs::weakly_canonical(tmp / "VoLum" / "volum-settings.json", ec));
+  REQUIRE(fs::weakly_canonical(dual, ec) == fs::weakly_canonical(tmp / "VoLum" / "volum-dual-amp-settings.json", ec));
 }
 #endif
