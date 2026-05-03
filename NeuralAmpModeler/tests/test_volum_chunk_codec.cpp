@@ -169,6 +169,29 @@ TEST_CASE("VoLum chunk codec clamps selection and PRE capture indices")
   CHECK(settings.preNam2Capture == volum::kPreCaptureMaxParamIndex);
 }
 
+TEST_CASE("VoLum chunk codec resets legacy PRE captures before 0.8.4")
+{
+  CHECK(volum::ShouldResetPreCaptureSlotsForChunkVersion(volum::ChunkVersion("0.8.3")));
+  CHECK_FALSE(volum::ShouldResetPreCaptureSlotsForChunkVersion(volum::ChunkVersion("0.8.4")));
+
+  volum::VoLumAmpSettings settings;
+  settings.preNam1Active = true;
+  settings.preNam1Capture = 3;
+  settings.preNam1Gain = 4.0;
+  settings.preNam2Active = true;
+  settings.preNam2Capture = 7;
+  settings.preNam2Level = -2.0;
+
+  volum::ResetPreCaptureSlots(settings);
+
+  CHECK(settings.preNam1Active == true);
+  CHECK(settings.preNam1Capture == 0);
+  CHECK(settings.preNam1Gain == doctest::Approx(4.0));
+  CHECK(settings.preNam2Active == true);
+  CHECK(settings.preNam2Capture == 0);
+  CHECK(settings.preNam2Level == doctest::Approx(-2.0));
+}
+
 TEST_CASE("VoLum JSON migration does not synthesize null params for missing legacy keys")
 {
   nlohmann::json config = {

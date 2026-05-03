@@ -12,19 +12,71 @@ inline constexpr const char* kPrePedalsFolderName = "PrePedals";
 inline constexpr int kPreCaptureEmptyIndex = 0;
 inline constexpr int kPreCaptureMaxParamIndex = 127;
 
+enum class PrePedalCaptureGroup
+{
+  None,
+  Klon,
+  TsBoost,
+  Distortion,
+  Fuzz,
+};
+
 struct PrePedalCapture
 {
   std::string filename;
   std::string label;
+  PrePedalCaptureGroup group = PrePedalCaptureGroup::None;
+  int sortRank = 0;
 };
 
-inline std::string PrePedalCaptureLabelFromFilename(const std::filesystem::path& path)
+struct PrePedalCaptureMetadata
 {
-  std::string label = path.stem().string();
-  const auto dash = label.find('-');
-  if (dash != std::string::npos && dash > 0)
-    label = label.substr(0, dash);
-  return label;
+  const char* filename;
+  const char* label;
+  PrePedalCaptureGroup group;
+  int sortRank;
+};
+
+inline constexpr PrePedalCaptureMetadata kPrePedalCaptureMetadata[] = {
+  {"FX-Minotaur-Klon-1.nam", "Klon", PrePedalCaptureGroup::Klon, 10},
+  {"FX-PettyJohn-Myth-1.nam", "PettyJohn Myth", PrePedalCaptureGroup::Klon, 20},
+  {"FX-OriginEffects-Halcyon-1.nam", "Halcyon TS", PrePedalCaptureGroup::TsBoost, 30},
+  {"FX-OriginEffects-Halcyon-2.nam", "Halcyon TS +Gain", PrePedalCaptureGroup::TsBoost, 40},
+  {"FX-PettyJohn-Mash-1.nam", "PettyJohn Mash", PrePedalCaptureGroup::TsBoost, 50},
+  {"FX-OriginEffects-Revival-1.nam", "Revival Drive", PrePedalCaptureGroup::Distortion, 60},
+  {"FX-Beetronics-Fatbee-1.nam", "Fatbee", PrePedalCaptureGroup::Fuzz, 70},
+  {"FX-PettyJohn-Nuke-1.nam", "PettyJohn Nuke", PrePedalCaptureGroup::Fuzz, 80},
+  {"FX-JHS-Bender-1.nam", "JHS Bender", PrePedalCaptureGroup::Fuzz, 90},
+};
+
+inline const PrePedalCaptureMetadata* GetPrePedalCaptureMetadata(const std::string& filename)
+{
+  for (const auto& metadata : kPrePedalCaptureMetadata)
+    if (filename == metadata.filename)
+      return &metadata;
+  return nullptr;
+}
+
+inline const char* PrePedalCaptureGroupLabel(PrePedalCaptureGroup group)
+{
+  switch (group)
+  {
+    case PrePedalCaptureGroup::Klon:
+      return "Klon";
+    case PrePedalCaptureGroup::TsBoost:
+      return "TS / Boost";
+    case PrePedalCaptureGroup::Distortion:
+      return "Distortion";
+    case PrePedalCaptureGroup::Fuzz:
+      return "Fuzz";
+    default:
+      return "Other";
+  }
+}
+
+inline std::string PrePedalCaptureFallbackLabelFromFilename(const std::filesystem::path& path)
+{
+  return path.stem().string();
 }
 
 inline std::vector<PrePedalCapture> DiscoverPrePedalCaptures(const std::filesystem::path& rigsRoot)
@@ -42,10 +94,17 @@ inline std::vector<PrePedalCapture> DiscoverPrePedalCaptures(const std::filesyst
     if (!entry.is_regular_file(ec) || entry.path().extension() != ".nam")
       continue;
 
-    captures.push_back({entry.path().filename().string(), PrePedalCaptureLabelFromFilename(entry.path())});
+    const std::string filename = entry.path().filename().string();
+    if (const auto* metadata = GetPrePedalCaptureMetadata(filename))
+      captures.push_back({filename, metadata->label, metadata->group, metadata->sortRank});
+    else
+      captures.push_back(
+        {filename, PrePedalCaptureFallbackLabelFromFilename(entry.path()), PrePedalCaptureGroup::None, 10000});
   }
 
   std::sort(captures.begin(), captures.end(), [](const PrePedalCapture& a, const PrePedalCapture& b) {
+    if (a.sortRank != b.sortRank)
+      return a.sortRank < b.sortRank;
     return a.filename < b.filename;
   });
   return captures;

@@ -30,6 +30,17 @@ inline void ClampPreCaptureSlots(VoLumAmpSettings& settings, int captureCount = 
   settings.preNam2Capture = ClampPreCaptureIndex(settings.preNam2Capture, captureCount);
 }
 
+inline void ResetPreCaptureSlots(VoLumAmpSettings& settings)
+{
+  settings.preNam1Capture = kPreCaptureEmptyIndex;
+  settings.preNam2Capture = kPreCaptureEmptyIndex;
+}
+
+inline bool ShouldResetPreCaptureSlotsForChunkVersion(const ChunkVersion& version)
+{
+  return !(version >= ChunkVersion(0, 8, 4));
+}
+
 template<typename Chunk>
 void PutCurrentPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
 {
