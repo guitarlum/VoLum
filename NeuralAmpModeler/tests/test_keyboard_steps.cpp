@@ -11,7 +11,10 @@ enum EParams {
   kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
   kPreNam1Active, kPreNam1Capture, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
   kPreNam2Active, kPreNam2Capture, kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble, kPreNam2Level,
-  kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig, kNumParams
+  kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig,
+  kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
+  kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
+  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan, kNumParams
 };
 
 // Mirror of NAMKnobControl::GetKeyboardStep — must stay in sync.
@@ -32,6 +35,9 @@ static double ExpectedStep(int paramIdx, bool fine)
     case kPreNam2Bass:
     case kPreNam2Mid:
     case kPreNam2Treble:
+    case kSupportToneBass:
+    case kSupportToneMid:
+    case kSupportToneTreble:
       return fine ? 0.1 : 0.5;
     case kDelayTime:
     case kReverbPreDelay:
@@ -96,8 +102,8 @@ TEST_CASE("Keyboard step: reverb shimmer = 0.05 normal, 0.01 fine")
 
 TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")
 {
-  int toneParams[] = {kToneBass, kToneMid, kToneTreble, kReverbTone};
-  for (int i = 0; i < 4; i++)
+  int toneParams[] = {kToneBass, kToneMid, kToneTreble, kReverbTone, kSupportToneBass, kSupportToneMid, kSupportToneTreble};
+  for (int i = 0; i < 7; i++)
   {
     CHECK(ExpectedStep(toneParams[i], false) == 0.5);
     CHECK(ExpectedStep(toneParams[i], true) == 0.1);
@@ -106,8 +112,8 @@ TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")
 
 TEST_CASE("Keyboard step: input/output = 1.0 normal, 0.1 fine")
 {
-  int gainParams[] = {kInputLevel, kOutputLevel, kNoiseGateThreshold};
-  for (int i = 0; i < 3; i++)
+  int gainParams[] = {kInputLevel, kOutputLevel, kNoiseGateThreshold, kSupportInputLevel, kSupportOutputLevel, kSupportNoiseGateThreshold};
+  for (int i = 0; i < 6; i++)
   {
     CHECK(ExpectedStep(gainParams[i], false) == 1.0);
     CHECK(ExpectedStep(gainParams[i], true) == 0.1);

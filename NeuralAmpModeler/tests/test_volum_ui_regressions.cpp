@@ -105,13 +105,18 @@ TEST_CASE("VoLum layer caches use the !g.CheckLayer idiom (re-render only when i
   // broke the AMP/POST hover lift when COMP was focused (because COMP's own
   // pedal-card art layer was thrashing on the same pattern). This test
   // pins the correct idiom in place so future cleanup does not flip it back.
+  //
+  // NOTE: The hero-image art layer was intentionally removed when the Dual
+  // Amp UX added per-frame overlays (DUAL chip + per-lane PAN dot). Caching
+  // the hero art behind a layer made those overlays painful to keep in sync,
+  // and the procedural fractal is cheap enough to redraw each frame, so the
+  // hero now draws directly. This test no longer pins that specific cache.
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
   const std::string coreControls = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
 
   RequireContains(triptych, "if (!g.CheckLayer(motifLayer)");
   RequireContains(triptych, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed)");
   RequireContains(coreControls, "if (!g.CheckLayer(mIconLayers[i]))");
-  RequireContains(coreControls, "if (!g.CheckLayer(mArtLayer) || mCachedArtIdx != mAmpIdx)");
   RequireDoesNotContain(triptych, "|| g.CheckLayer(");
   RequireDoesNotContain(coreControls, "|| g.CheckLayer(");
 }

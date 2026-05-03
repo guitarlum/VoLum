@@ -195,6 +195,33 @@ int _GetConfigFrom_0_8_1(const iplug::IByteChunk& chunk, int startPos, nlohmann:
   return pos;
 }
 
+// v0.8.3 (Dual Amp stereo params added)
+
+void _UpdateConfigFrom_0_8_3(nlohmann::json& config)
+{
+  _UpdateConfigFrom_0_8_1(config);
+}
+
+int _GetConfigFrom_0_8_3(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{
+    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
+    "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
+    "ReverbActive", "ReverbMix", "ReverbDecay", "ReverbTone", "ReverbPreDelay", "ReverbShimmer", "ReverbMode",
+    "BoostActive", "BoostDrive", "BoostTone", "BoostLevel",
+    "PreCompActive", "PreCompAmount", "PreCompRatio", "PreCompAttack", "PreCompRelease", "PreCompMix", "PreCompLevel",
+    "PreNam1Active", "PreNam1Capture", "PreNam1Gain", "PreNam1Bass", "PreNam1Mid", "PreNam1MidFreq", "PreNam1Treble", "PreNam1Level",
+    "PreNam2Active", "PreNam2Capture", "PreNam2Gain", "PreNam2Bass", "PreNam2Mid", "PreNam2MidFreq", "PreNam2Treble", "PreNam2Level",
+    "CalibrateInput", "InputCalibrationLevel", "OutputMode", "RigFile",
+    "DualAmpActive", "DualAmpRoute", "MainAmpPan", "SupportAmp", "SupportSpeaker", "SupportChannel",
+    "SupportInput", "SupportThreshold", "SupportBass", "SupportMiddle", "SupportTreble", "SupportOutput",
+    "SupportNoiseGateActive", "SupportToneStack", "SupportAmpPan"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_8_3(config);
+  return pos;
+}
+
 // VoLum 0.5.0 (Reverb, Delay, Boost added)
 
 void _UpdateConfigFrom_0_5_0(nlohmann::json& config)
@@ -389,7 +416,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // Act accordingly
   nlohmann::json config;
 
-  if (version >= volum::ChunkVersion(0, 8, 1))
+  if (version >= volum::ChunkVersion(0, 8, 3))
+  {
+    pos = _GetConfigFrom_0_8_3(chunk, pos, config);
+  }
+  else if (version >= volum::ChunkVersion(0, 8, 1))
   {
     pos = _GetConfigFrom_0_8_1(chunk, pos, config);
   }
@@ -444,7 +475,9 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     mVolumSpeakerIdx = selection.speakerIdx;
     mVolumChannelIdx = selection.channelIdx;
 
-    const bool hasPreAmpSettings = volum::ChunkHasExtendedPerAmpSettings(chunk.Size() - pos, volum::kAmpCount);
+    const int remainingPerAmpBytes = chunk.Size() - pos;
+    const bool hasPreAmpSettings = volum::ChunkHasExtendedPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasDualAmpSettings = volum::ChunkHasDualAmpPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -452,6 +485,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       pos = volum::GetLegacyPerAmpSettings(chunk, pos, s);
       if (hasPreAmpSettings)
         pos = volum::GetExtendedPerAmpSettings(chunk, pos, s, version >= volum::ChunkVersion(0, 8, 1));
+      if (hasDualAmpSettings)
+        pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s);
     }
 
     mVolumInitComplete = false;
