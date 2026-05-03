@@ -43,6 +43,27 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
   RequireContains(source, "card->SetActiveState(GetParam(kReverbActive)->Bool());");
 }
 
+TEST_CASE("Collapsed PRE slots show selected pedal short labels")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+
+  RequireContains(triptych, "mPreNam1Label = (preNam1Label && preNam1Label[0] != '\\0') ? preNam1Label : \"NAM 1\";");
+  RequireContains(triptych, "preSlots[1].label = mPreNam1Label.c_str();");
+  RequireContains(source, "_VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), \"NAM 1\")");
+  RequireContains(source, "_VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), \"NAM 2\")");
+  RequireContains(triptych, "std::toupper(c)");
+  RequireContains(triptych, "IText labelText(10.f");
+}
+
+TEST_CASE("Dual amp pan knobs only show in AMP view")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+
+  RequireContains(source, "const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;");
+  RequireContains(source, "c->Hide(!showPanKnobs);");
+}
+
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
