@@ -74,9 +74,9 @@ TEST_CASE("Delay: Reset clears state, no stale audio leaks")
   CHECK(maxVal < 0.01);
 }
 
-TEST_CASE("Delay: all three modes produce output without NaN")
+TEST_CASE("Delay: all four modes produce output without NaN")
 {
-  for (int mode = 0; mode < 3; mode++)
+  for (int mode = 0; mode < 4; mode++)
   {
     dsp::effect::Delay delay;
     delay.SetParams(200.0, 0.4, 0.5, mode, 48000.0);
@@ -89,6 +89,84 @@ TEST_CASE("Delay: all three modes produce output without NaN")
     REQUIRE_FALSE(hasNaN(out[0], frames));
     REQUIRE_FALSE(hasNaN(out[1], frames));
   }
+}
+
+TEST_CASE("Delay: reverse mode mix=0 passes input through unchanged")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(100.0, 0.5, 0.0, 3, 1000.0);
+
+  const size_t frames = 100;
+  std::vector<double> inL(frames, 0.25);
+  double* inputs[1] = {inL.data()};
+
+  for (int block = 0; block < 3; ++block)
+  {
+    auto** out = delay.Process(inputs, 1, frames);
+    for (size_t i = 0; i < frames; i++)
+      CHECK(out[0][i] == doctest::Approx(0.25));
+  }
+}
+
+TEST_CASE("Delay: reverse mode plays completed slice backwards")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(100.0, 0.0, 1.0, 3, 1000.0);
+
+  const size_t frames = 100;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[20] = 1.0;
+  double* inputs[1] = {impulse.data()};
+  delay.Process(inputs, 1, frames);
+
+  std::fill(impulse.begin(), impulse.end(), 0.0);
+  auto** out = delay.Process(inputs, 1, frames);
+
+  REQUIRE_FALSE(hasNaN(out[0], frames));
+  CHECK(std::abs(out[0][79]) > 0.2);
+  CHECK(std::abs(out[0][20]) < 0.001);
+}
+
+TEST_CASE("Delay: reverse mode mix=1 suppresses straight dry signal")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(100.0, 0.0, 1.0, 3, 1000.0);
+
+  const size_t frames = 100;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[20] = 1.0;
+  double* inputs[1] = {impulse.data()};
+
+  auto** first = delay.Process(inputs, 1, frames);
+  REQUIRE_FALSE(hasNaN(first[0], frames));
+  CHECK(std::abs(first[0][20]) < 0.001);
+
+  std::fill(impulse.begin(), impulse.end(), 0.0);
+  auto** second = delay.Process(inputs, 1, frames);
+  REQUIRE_FALSE(hasNaN(second[0], frames));
+  CHECK(std::abs(second[0][79]) > 0.2);
+}
+
+TEST_CASE("Delay: reverse mode high feedback stays bounded")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(10.0, 0.99, 0.8, 3, 44100.0);
+  const size_t frames = 128;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[32] = 1.0;
+  double* inputs[1] = {impulse.data()};
+  double maxVal = 0.0;
+
+  for (int block = 0; block < 30; block++)
+  {
+    auto** out = delay.Process(inputs, 1, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    for (size_t i = 0; i < frames; i++)
+      maxVal = std::max(maxVal, std::abs(out[0][i]));
+    std::fill(impulse.begin(), impulse.end(), 0.0);
+  }
+
+  CHECK(maxVal < 10.0);
 }
 
 TEST_CASE("Delay: Prepare keeps output storage stable across parameter updates")
