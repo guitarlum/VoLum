@@ -148,3 +148,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/03/2026 - VoLum: Output knob (main + support) capped at +10 dB; everything above clipped anyway. Default stays 0 dB.
 05/03/2026 - VoLum: Stereo OUT meter shows separate L/R bars when Dual Amp is active; mono OUT meter otherwise.
 05/03/2026 - VoLum: Added dual-amp test coverage for hard-pan symmetry, per-lane gain scaling, custom-route pan params, chunk codec clamping of legacy out-of-range routes/levels, and user-settings healing of supportOutputLevel above the +10 dB cap.
+05/03/2026 - VoLum: Store new Dual Amp browse-memory fields in a sidecar settings file so older VST3 builds can still read the shared user settings safely.
