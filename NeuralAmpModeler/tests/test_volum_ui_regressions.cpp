@@ -227,6 +227,17 @@ TEST_CASE("VoLum NAM cache copies dspData before Core consumes weights")
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
 
   RequireContains(source, "nam::dspData cachedConfig = cacheIt->second;");
-  RequireContains(source, "model = nam::get_dsp(cachedConfig);");
-  RequireDoesNotContain(source, "model = nam::get_dsp(cacheIt->second);");
+  RequireContains(source, "return nam::get_dsp(cachedConfig);");
+  RequireDoesNotContain(source, "return nam::get_dsp(cacheIt->second);");
+}
+
+TEST_CASE("VoLum settings panel shows current latency under model information")
+{
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+
+  RequireContains(controls, "Current latency: %.1f ms (%d samples)");
+  RequireContains(controls, "SetCurrentLatency(int samples, double sampleRate)");
+  RequireContains(source, "SetCurrentLatency(GetLatency(), GetSampleRate())");
+  RequireDoesNotContain(source, " |  Latency:");
 }

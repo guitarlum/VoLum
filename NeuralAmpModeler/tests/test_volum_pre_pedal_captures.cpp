@@ -46,6 +46,9 @@ TEST_CASE("PrePedals empty index and capture bounds stay stable")
   CHECK(volum::ClampPreCaptureIndex(5, 12) == 5);
   CHECK(volum::ClampPreCaptureIndex(15, 12) == 12);
   CHECK(volum::ClampPreCaptureIndex(200, 200) == volum::kPreCaptureMaxParamIndex);
+  CHECK_FALSE(volum::ShouldLoadPrePedalCapture(false, 1));
+  CHECK_FALSE(volum::ShouldLoadPrePedalCapture(true, volum::kPreCaptureEmptyIndex));
+  CHECK(volum::ShouldLoadPrePedalCapture(true, 1));
 }
 
 TEST_CASE("Repository PrePedals directory is discoverable")
