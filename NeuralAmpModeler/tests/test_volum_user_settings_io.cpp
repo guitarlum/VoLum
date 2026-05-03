@@ -177,6 +177,39 @@ TEST_CASE("Valid per-amp speaker and channel settings do not request auto-heal")
   CHECK(loaded[13].channelIdx == 3);
 }
 
+TEST_CASE("Out-of-range supportOutputLevel above the +10 dB cap heals to default")
+{
+  // The OUTPUT knob (main + support) is capped at +10 dB. Old or hand-edited settings
+  // files may contain >10 dB values — those must heal back to a safe default rather
+  // than passing through and clipping the bus.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["amps"]["Soldano SLO100"]["supportOutput"] = 30.0;
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  loaded[13].supportOutputLevel = -3.0; // sentinel so we can prove the loader touched it
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+
+  REQUIRE(healed == true);
+  CHECK(loaded[13].supportOutputLevel <= 10.0);
+  CHECK(loaded[13].supportOutputLevel == doctest::Approx(volum::VoLumAmpSettings{}.supportOutputLevel));
+}
+
+TEST_CASE("supportOutputLevel at the +10 dB cap loads through unchanged")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["amps"]["Soldano SLO100"]["supportOutput"] = 10.0;
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+
+  CHECK(healed == false);
+  CHECK(loaded[13].supportOutputLevel == doctest::Approx(10.0));
+}
+
 TEST_CASE("Effect settings JSON roundtrip preserves all params")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};

@@ -108,6 +108,50 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   CHECK(loaded.supportAmpPan == doctest::Approx(0.75));
 }
 
+TEST_CASE("VoLum chunk codec clamps legacy out-of-range dualAmpRoute and supportOutputLevel")
+{
+  // Synthesize a chunk whose dual-amp block carries values outside the new accepted ranges.
+  // The decoder must clamp on the way out so old / hand-edited presets can't poison runtime state.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].dualAmpActive = true;
+  amps[0].dualAmpRoute = 99;
+  amps[0].mainAmpPan = -5.0;
+  amps[0].supportAmpIdx = 999;
+  amps[0].supportSpeakerIdx = 99;
+  amps[0].supportInputLevel = 50.0;
+  amps[0].supportGateThreshold = 50.0;
+  amps[0].supportToneBass = 99.0;
+  amps[0].supportToneMid = -10.0;
+  amps[0].supportToneTreble = 99.0;
+  amps[0].supportOutputLevel = 30.0;
+  amps[0].supportAmpPan = 5.0;
+
+  MemoryChunk chunk;
+  volum::PutCurrentVoLumChunkState(chunk, {0, 0, 0}, amps, volum::kAmpCount);
+
+  volum::VoLumChunkSelection selection;
+  int pos = volum::GetVoLumChunkSelection(chunk, 0, selection);
+
+  volum::VoLumAmpSettings loaded;
+  pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded);
+  pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded, true);
+  pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded);
+
+  CHECK(loaded.dualAmpRoute >= 0);
+  CHECK(loaded.dualAmpRoute <= 2);
+  CHECK(loaded.dualAmpRoute == 2);
+  CHECK(loaded.mainAmpPan == doctest::Approx(-1.0));
+  CHECK(loaded.supportAmpIdx == volum::kAmpCount - 1);
+  CHECK(loaded.supportSpeakerIdx == 3);
+  CHECK(loaded.supportInputLevel == doctest::Approx(20.0));
+  CHECK(loaded.supportGateThreshold == doctest::Approx(0.0));
+  CHECK(loaded.supportToneBass == doctest::Approx(10.0));
+  CHECK(loaded.supportToneMid == doctest::Approx(0.0));
+  CHECK(loaded.supportToneTreble == doctest::Approx(10.0));
+  CHECK(loaded.supportOutputLevel == doctest::Approx(10.0));
+  CHECK(loaded.supportAmpPan == doctest::Approx(1.0));
+}
+
 TEST_CASE("VoLum chunk codec clamps selection and PRE capture indices")
 {
   volum::VoLumChunkSelection selection{-99, 99, -1};
