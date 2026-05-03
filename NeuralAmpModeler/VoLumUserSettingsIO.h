@@ -23,6 +23,7 @@ namespace volum
 inline constexpr int kVoLumDelayModeCount = 4;
 inline constexpr int kVoLumReverbModeCount = 3;
 inline constexpr int kVoLumReverseDelayMode = 3;
+inline constexpr int kVoLumUserSettingsVersion = 2;
 
 struct DelayModeSnapshot {
   double time = 380.0;
@@ -97,7 +98,7 @@ inline bool HasDualAmpUserSettings(const nlohmann::json& j)
 inline nlohmann::json VolumDualAmpUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount)
 {
   nlohmann::json j;
-  j["version"] = 1;
+  j["version"] = kVoLumUserSettingsVersion;
 
   nlohmann::json amps = nlohmann::json::object();
   for (int i = 0; i < ampCount; ++i)
@@ -114,7 +115,7 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
                                                const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true)
 {
   nlohmann::json j;
-  j["version"] = 1;
+  j["version"] = kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = lastAmpIdx;
 
   nlohmann::json amps = nlohmann::json::object();
@@ -249,6 +250,11 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     target = field.get<bool>();
   };
 
+  int settingsVersion = 1;
+  if (j.contains("version"))
+    loadInt(j, "version", settingsVersion, 1, kVoLumUserSettingsVersion, 1);
+  const bool resetLegacyPreCaptureSelections = settingsVersion < kVoLumUserSettingsVersion;
+
   if (lastAmpIdx && j.contains("lastAmpIdx"))
   {
     const int defaultLastAmpIdx = 0;
@@ -308,6 +314,11 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preCompLevel", s.preCompLevel, -20.0, 20.0, defaults.preCompLevel);
         loadBool(a, "preNam1Active", s.preNam1Active, defaults.preNam1Active);
         loadInt(a, "preNam1Capture", s.preNam1Capture, 0, 127, defaults.preNam1Capture);
+        if (resetLegacyPreCaptureSelections && a.contains("preNam1Capture") && s.preNam1Capture != defaults.preNam1Capture)
+        {
+          s.preNam1Capture = defaults.preNam1Capture;
+          healed = true;
+        }
         loadDouble(a, "preNam1Gain", s.preNam1Gain, -20.0, 20.0, defaults.preNam1Gain);
         loadDouble(a, "preNam1Bass", s.preNam1Bass, 0.0, 10.0, defaults.preNam1Bass);
         loadDouble(a, "preNam1Mid", s.preNam1Mid, 0.0, 10.0, defaults.preNam1Mid);
@@ -316,6 +327,11 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preNam1Level", s.preNam1Level, -20.0, 20.0, defaults.preNam1Level);
         loadBool(a, "preNam2Active", s.preNam2Active, defaults.preNam2Active);
         loadInt(a, "preNam2Capture", s.preNam2Capture, 0, 127, defaults.preNam2Capture);
+        if (resetLegacyPreCaptureSelections && a.contains("preNam2Capture") && s.preNam2Capture != defaults.preNam2Capture)
+        {
+          s.preNam2Capture = defaults.preNam2Capture;
+          healed = true;
+        }
         loadDouble(a, "preNam2Gain", s.preNam2Gain, -20.0, 20.0, defaults.preNam2Gain);
         loadDouble(a, "preNam2Bass", s.preNam2Bass, 0.0, 10.0, defaults.preNam2Bass);
         loadDouble(a, "preNam2Mid", s.preNam2Mid, 0.0, 10.0, defaults.preNam2Mid);
