@@ -1,3 +1,5 @@
+05/04/2026 - VoLum: Collapsed PRE slots now show short selected pedal labels such as Klon, TS+, Revi, and FatB instead of generic NAM slot names.
+05/04/2026 - VoLum: Fixed dual-amp pan knobs leaking into PRE/POST views; pan controls now only appear in the AMP view.
 05/04/2026 - VoLum: Improved amp-switch responsiveness by prioritizing MAIN loads, moving channel prefetch off the critical path, adding a small NAM config cache, and showing current latency in Settings under Model information.
 05/03/2026 - VoLum: Added real PRE pedal NAM captures with type-grouped labels, grouped dropdown UI, and safe legacy PRE selection reset for 0.8.4 updates.
 04/29/2026 - VoLum: PRE pedalboard groundwork. Added compressor plus two assignable PRE NAM slots with per-amp settings, placeholder PrePedals asset folder, packaging hooks, and native PRE triptych UI wiring.

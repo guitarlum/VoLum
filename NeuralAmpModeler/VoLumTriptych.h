@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -260,7 +261,8 @@ public:
       _DrawQuietBlock(g, postRect, EVoLumSection::POST);
   }
 
-  void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName)
+  void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName, const char* preNam1Label = "NAM 1",
+                const char* preNam2Label = "NAM 2")
   {
     (void) preActive;
     (void) postActive;
@@ -274,6 +276,8 @@ public:
       mCachedSpineMaxLen = -1.f;
       mCachedSpineName.clear();
     }
+    mPreNam1Label = (preNam1Label && preNam1Label[0] != '\0') ? preNam1Label : "NAM 1";
+    mPreNam2Label = (preNam2Label && preNam2Label[0] != '\0') ? preNam2Label : "NAM 2";
     SetDirty(false);
   }
 
@@ -386,7 +390,10 @@ private:
       mPostHeaderRect = IRECT(block.L, block.T, block.R, header.B + 2.f);
 
     // Slot iteration.
-    const QuietSlot* slots = (section == EVoLumSection::PRE) ? kPreSlots : kPostSlots;
+    std::array<QuietSlot, 3> preSlots = {kPreSlots[0], kPreSlots[1], kPreSlots[2]};
+    preSlots[1].label = mPreNam1Label.c_str();
+    preSlots[2].label = mPreNam2Label.c_str();
+    const QuietSlot* slots = (section == EVoLumSection::PRE) ? preSlots.data() : kPostSlots;
     const int slotCount = (section == EVoLumSection::PRE) ? 3 : 2;
     const float innerTop = underlineY + 2.f;
     const float innerBot = block.B - 4.f;
@@ -459,9 +466,12 @@ private:
       cachedBypass = bypassed;
     }
     g.DrawLayer(motifLayer);
-    IText labelText(9.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM,
+    std::string slotLabel = slot.label;
+    std::transform(slotLabel.begin(), slotLabel.end(), slotLabel.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    IText labelText(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM,
                     "Josefin-Bold", EAlign::Near, EVAlign::Middle);
-    g.DrawText(labelText, slot.label, labelR);
+    g.DrawText(labelText, slotLabel.c_str(), labelR);
 
     _DrawMiniPill(g, pillR, active, bypassed && !active);
 
@@ -738,6 +748,8 @@ private:
   StateCallback mCallback;
   int mAmpIdx = 0;
   std::string mAmpName;
+  std::string mPreNam1Label = "NAM 1";
+  std::string mPreNam2Label = "NAM 2";
   EVoLumSection mExpandedSection = EVoLumSection::AMP;
 
   IRECT mPreRect;
@@ -840,6 +852,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void) mod;
+    (void) x;
     const int idx = ItemIndexAtY(y);
     if (idx < 0 || idx >= static_cast<int>(mItems.size()) || mItems[static_cast<size_t>(idx)].isHeader)
       return;
