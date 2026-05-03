@@ -26,6 +26,8 @@ A guitar amp collection player built on [Neural Amp Modeler](https://github.com/
 
 Get VoLum from **[Releases](https://github.com/guitarlum/VoLum/releases)**, or **[Actions → CI](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)** for the latest workflow artifacts.
 
+Windows release signing is being set up through SignPath Foundation; see the [code signing policy](CODE_SIGNING.md).
+
 **Windows**
 
 - **`VoLum-vX.Y.Z-windows-setup.exe`** — **recommended:** one installer for standalone, VST3, and bundled rigs.
