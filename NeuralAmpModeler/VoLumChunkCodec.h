@@ -73,6 +73,25 @@ void PutCurrentPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
   chunk.Put(&s.preNam2MidFreq);
   chunk.Put(&s.preNam2Treble);
   chunk.Put(&s.preNam2Level);
+
+  int dual = s.dualAmpActive ? 1 : 0;
+  int supportNg = s.supportNoiseGateActive ? 1 : 0;
+  int supportEq = s.supportEqActive ? 1 : 0;
+  chunk.Put(&dual);
+  chunk.Put(&s.dualAmpRoute);
+  chunk.Put(&s.mainAmpPan);
+  chunk.Put(&s.supportAmpIdx);
+  chunk.Put(&s.supportSpeakerIdx);
+  chunk.Put(&s.supportChannelIdx);
+  chunk.Put(&s.supportInputLevel);
+  chunk.Put(&s.supportGateThreshold);
+  chunk.Put(&s.supportToneBass);
+  chunk.Put(&s.supportToneMid);
+  chunk.Put(&s.supportToneTreble);
+  chunk.Put(&s.supportOutputLevel);
+  chunk.Put(&supportNg);
+  chunk.Put(&supportEq);
+  chunk.Put(&s.supportAmpPan);
 }
 
 template<typename Chunk>
@@ -145,6 +164,46 @@ int GetExtendedPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s, 
   s.preNam1Active = (p1 != 0);
   s.preNam2Active = (p2 != 0);
   ClampPreCaptureSlots(s);
+  return pos;
+}
+
+template<typename Chunk>
+int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
+{
+  int dual = 0;
+  int supportNg = 1;
+  int supportEq = 1;
+  pos = chunk.Get(&dual, pos);
+  pos = chunk.Get(&s.dualAmpRoute, pos);
+  pos = chunk.Get(&s.mainAmpPan, pos);
+  pos = chunk.Get(&s.supportAmpIdx, pos);
+  pos = chunk.Get(&s.supportSpeakerIdx, pos);
+  pos = chunk.Get(&s.supportChannelIdx, pos);
+  pos = chunk.Get(&s.supportInputLevel, pos);
+  pos = chunk.Get(&s.supportGateThreshold, pos);
+  pos = chunk.Get(&s.supportToneBass, pos);
+  pos = chunk.Get(&s.supportToneMid, pos);
+  pos = chunk.Get(&s.supportToneTreble, pos);
+  pos = chunk.Get(&s.supportOutputLevel, pos);
+  pos = chunk.Get(&supportNg, pos);
+  pos = chunk.Get(&supportEq, pos);
+  pos = chunk.Get(&s.supportAmpPan, pos);
+
+  s.dualAmpActive = (dual != 0);
+  s.dualAmpRoute = std::clamp(s.dualAmpRoute, 0, 2);
+  s.mainAmpPan = std::clamp(s.mainAmpPan, -1.0, 1.0);
+  s.supportAmpIdx = std::clamp(s.supportAmpIdx, -1, kAmpCount - 1);
+  s.supportSpeakerIdx = std::clamp(s.supportSpeakerIdx, 0, 3);
+  s.supportChannelIdx = std::max(0, s.supportChannelIdx);
+  s.supportInputLevel = std::clamp(s.supportInputLevel, -20.0, 20.0);
+  s.supportGateThreshold = std::clamp(s.supportGateThreshold, -100.0, 0.0);
+  s.supportToneBass = std::clamp(s.supportToneBass, 0.0, 10.0);
+  s.supportToneMid = std::clamp(s.supportToneMid, 0.0, 10.0);
+  s.supportToneTreble = std::clamp(s.supportToneTreble, 0.0, 10.0);
+  s.supportOutputLevel = std::clamp(s.supportOutputLevel, -40.0, 10.0);
+  s.supportNoiseGateActive = (supportNg != 0);
+  s.supportEqActive = (supportEq != 0);
+  s.supportAmpPan = std::clamp(s.supportAmpPan, -1.0, 1.0);
   return pos;
 }
 

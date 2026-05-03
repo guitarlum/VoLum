@@ -89,6 +89,21 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["preNam2MidFreq"] = s.preNam2MidFreq;
     a["preNam2Treble"] = s.preNam2Treble;
     a["preNam2Level"] = s.preNam2Level;
+    a["dualAmpActive"] = s.dualAmpActive;
+    a["dualAmpRoute"] = s.dualAmpRoute;
+    a["mainAmpPan"] = s.mainAmpPan;
+    a["supportAmp"] = s.supportAmpIdx;
+    a["supportSpeaker"] = s.supportSpeakerIdx;
+    a["supportChannel"] = s.supportChannelIdx;
+    a["supportInput"] = s.supportInputLevel;
+    a["supportGate"] = s.supportGateThreshold;
+    a["supportBass"] = s.supportToneBass;
+    a["supportMid"] = s.supportToneMid;
+    a["supportTreble"] = s.supportToneTreble;
+    a["supportOutput"] = s.supportOutputLevel;
+    a["supportNoiseGate"] = s.supportNoiseGateActive;
+    a["supportEq"] = s.supportEqActive;
+    a["supportPan"] = s.supportAmpPan;
     amps[kAmps[i].folderName] = a;
   }
   j["amps"] = amps;
@@ -228,7 +243,7 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "bass", s.toneBass, 0.0, 10.0, defaults.toneBass);
         loadDouble(a, "mid", s.toneMid, 0.0, 10.0, defaults.toneMid);
         loadDouble(a, "treble", s.toneTreble, 0.0, 10.0, defaults.toneTreble);
-        loadDouble(a, "output", s.outputLevel, -40.0, 40.0, defaults.outputLevel);
+        loadDouble(a, "output", s.outputLevel, -40.0, 10.0, defaults.outputLevel);
         loadBool(a, "noiseGate", s.noiseGateActive, defaults.noiseGateActive);
         loadBool(a, "eq", s.eqActive, defaults.eqActive);
         loadBool(a, "preCompActive", s.preCompActive, defaults.preCompActive);
@@ -254,6 +269,21 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preNam2MidFreq", s.preNam2MidFreq, 150.0, 2500.0, defaults.preNam2MidFreq);
         loadDouble(a, "preNam2Treble", s.preNam2Treble, 0.0, 10.0, defaults.preNam2Treble);
         loadDouble(a, "preNam2Level", s.preNam2Level, -20.0, 20.0, defaults.preNam2Level);
+        loadBool(a, "dualAmpActive", s.dualAmpActive, defaults.dualAmpActive);
+        loadInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2, defaults.dualAmpRoute);
+        loadDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0, defaults.mainAmpPan);
+        loadInt(a, "supportAmp", s.supportAmpIdx, -1, ampCount - 1, defaults.supportAmpIdx);
+        loadInt(a, "supportSpeaker", s.supportSpeakerIdx, 0, 3, defaults.supportSpeakerIdx);
+        loadInt(a, "supportChannel", s.supportChannelIdx, 0, 127, defaults.supportChannelIdx);
+        loadDouble(a, "supportInput", s.supportInputLevel, -20.0, 20.0, defaults.supportInputLevel);
+        loadDouble(a, "supportGate", s.supportGateThreshold, -100.0, 0.0, defaults.supportGateThreshold);
+        loadDouble(a, "supportBass", s.supportToneBass, 0.0, 10.0, defaults.supportToneBass);
+        loadDouble(a, "supportMid", s.supportToneMid, 0.0, 10.0, defaults.supportToneMid);
+        loadDouble(a, "supportTreble", s.supportToneTreble, 0.0, 10.0, defaults.supportToneTreble);
+        loadDouble(a, "supportOutput", s.supportOutputLevel, -40.0, 10.0, defaults.supportOutputLevel);
+        loadBool(a, "supportNoiseGate", s.supportNoiseGateActive, defaults.supportNoiseGateActive);
+        loadBool(a, "supportEq", s.supportEqActive, defaults.supportEqActive);
+        loadDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0, defaults.supportAmpPan);
       }
     }
   }

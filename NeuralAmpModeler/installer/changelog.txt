@@ -145,3 +145,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/01/2026 - VoLum: Restored robust per-user settings healing and silenced the guitar path when the main amp model is missing.
 05/01/2026 - VoLum: Fixed cached UI artwork rebuilds for pedal cards, amp list icons, and fallback hero art to improve hover responsiveness.
 05/01/2026 - VoLum: Replaced detached NAM model loader threads with an owned loader queue and explicit DSP staging handoff.
+05/03/2026 - VoLum: Output knob (main + support) capped at +10 dB; everything above clipped anyway. Default stays 0 dB.
+05/03/2026 - VoLum: Stereo OUT meter shows separate L/R bars when Dual Amp is active; mono OUT meter otherwise.

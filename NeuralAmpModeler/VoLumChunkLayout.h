@@ -10,7 +10,9 @@ namespace volum
 // new explicit reader branch in Unserialization.cpp.
 static constexpr int kPerAmpSettingsHeaderBytes = static_cast<int>(sizeof(int) * 3);
 static constexpr int kLegacyPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 4 + sizeof(double) * 6);
-static constexpr int kCurrentPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 9 + sizeof(double) * 24);
+static constexpr int kPrePedalPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 9 + sizeof(double) * 24);
+static constexpr int kDualAmpPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 16 + sizeof(double) * 32);
+static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes;
 
 inline int LegacyPerAmpSettingsPayloadBytes(int ampCount)
 {
@@ -25,6 +27,11 @@ inline int CurrentPerAmpSettingsPayloadBytes(int ampCount)
 inline bool ChunkHasExtendedPerAmpSettings(int remainingBytes, int ampCount)
 {
   return remainingBytes > LegacyPerAmpSettingsPayloadBytes(ampCount);
+}
+
+inline bool ChunkHasDualAmpPerAmpSettings(int remainingBytes, int ampCount)
+{
+  return remainingBytes >= kDualAmpPerAmpSettingsBytes * ampCount;
 }
 
 } // namespace volum

@@ -11,6 +11,7 @@
 
 #include "Colors.h"
 #include "ToneStack.h"
+#include "VoLumDualAmpPlan.h"
 #include "VoLumPreEffects.h"
 
 #include "config.h"
@@ -109,6 +110,23 @@ enum EParams
   kInputCalibrationLevel,
   kOutputMode,
   kVoLumAmpeteRig,
+#if VOLUM_AMPETE_PRODUCT
+  kDualAmpActive,
+  kDualAmpRoute,
+  kMainAmpPan,
+  kSupportAmpIdx,
+  kSupportSpeakerIdx,
+  kSupportChannelIdx,
+  kSupportInputLevel,
+  kSupportNoiseGateThreshold,
+  kSupportToneBass,
+  kSupportToneMid,
+  kSupportToneTreble,
+  kSupportOutputLevel,
+  kSupportNoiseGateActive,
+  kSupportEQActive,
+  kSupportAmpPan,
+#endif
   kNumParams
 };
 
@@ -120,6 +138,7 @@ enum ECtrlTags
   kCtrlTagIRFileBrowser,
   kCtrlTagInputMeter,
   kCtrlTagOutputMeter,
+  kCtrlTagOutputMeterR,
   kCtrlTagSettingsBox,
   kCtrlTagOutputMode,
   kCtrlTagCalibrateInput,
@@ -133,6 +152,9 @@ enum ECtrlTags
   kCtrlTagVoLumFooter,
   kCtrlTagVoLumExactEntry,
   kCtrlTagVoLumChannelStep,
+  kCtrlTagVoLumSupportChannelStep,
+  kCtrlTagVoLumSupportAmpMenu,
+  kCtrlTagVoLumDualAmpRoute,
   kCtrlTagVoLumTriptych,
   kCtrlTagVoLumBoostCard,
   kCtrlTagVoLumCompCard,
@@ -322,6 +344,11 @@ private:
 #if VOLUM_AMPETE_PRODUCT
 public:
   void _VolumRefreshChannels();
+  void _VolumRefreshSupportChannels();
+  void _VolumApplyDualAmpFocus();
+  void _VolumShowSupportAmpMenu(const iplug::igraphics::IRECT& anchorRect);
+  void _VolumHideSupportAmpMenu();
+  void _VolumSetSupportAmp(int ampIdx);
   void _VolumSaveCurrentToSettings();
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
@@ -349,9 +376,11 @@ public:
   void _VolumStartLoader();
   void _VolumStopLoader();
   void _VolumQueueMainModelLoad(std::string fileToLoad, int ampIdx, std::string rigsRoot);
+  void _VolumQueueSupportModelLoad(std::string fileToLoad, int ampIdx);
   void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
   void _VolumDrainLoaderResults();
   void _VolumLoaderThreadMain();
+  void _VolumRequestSupportModelLoad();
   void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
@@ -365,6 +394,7 @@ private:
 
   EVoLumSection mVolumExpandedSection = EVoLumSection::AMP;
   EVoLumEffectFocus mVolumFocusedEffect = EVoLumEffectFocus::AMP;
+  bool mVolumDualAmpFocusedSupport = false;
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
@@ -373,10 +403,13 @@ private:
   std::string mVolumSelectedKnobHintText;
   std::vector<std::string> mVolumChannelFiles;
   std::vector<std::string> mVolumChannelLabels;
+  std::vector<std::string> mVolumSupportChannelFiles;
+  std::vector<std::string> mVolumSupportChannelLabels;
   std::vector<std::string> mVolumPreCaptureFiles;
   std::vector<std::string> mVolumPreCaptureLabels;
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
+  std::string mVolumLastLoadedSupportFile;
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
@@ -384,8 +417,11 @@ private:
   std::atomic<bool> mVolumPreIsLoading[2]{{false}, {false}};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
+  std::atomic<bool> mVolumSupportNeedsLoad{false};
+  std::atomic<bool> mVolumSupportIsLoading{false};
+  std::atomic<bool> mVolumDualAmpOutputHot{false};
 
-  enum class VoLumLoadKind { Main, Pre };
+  enum class VoLumLoadKind { Main, Support, Pre };
   struct VoLumLoadRequest
   {
     VoLumLoadKind kind = VoLumLoadKind::Main;
@@ -448,6 +484,10 @@ private:
 
   void _SetInputGain();
   void _SetOutputGain();
+  // Mirror of _SetOutputGain for the support lane: factors in the support model's loudness
+  // (when OutputMode is Normalized) or its calibration level (when Calibrated) so support
+  // matches main at identical knob settings, identical models, and identical OutputMode.
+  void _SetSupportOutputGain();
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -481,6 +521,9 @@ private:
   // Input and output gain
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
+  // Cached support-lane equivalent of mOutputGain. Recomputed by _SetSupportOutputGain when
+  // kSupportOutputLevel, kOutputMode, or the support model itself changes.
+  double mSupportOutputGain = 1.0;
 
   // Noise gates
   dsp::noise_gate::Trigger mNoiseGateTrigger;
@@ -493,15 +536,18 @@ private:
   dsp::effect::Reverb mReverb;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
+  std::unique_ptr<ResamplingNAM> mSupportModel;
   std::unique_ptr<ResamplingNAM> mPreModel[2];
   // And the IR
   std::unique_ptr<dsp::ImpulseResponse> mIR;
   // Manages switching what DSP is being used.
   std::unique_ptr<ResamplingNAM> mStagedModel;
+  std::unique_ptr<ResamplingNAM> mStagedSupportModel;
   std::unique_ptr<ResamplingNAM> mStagedPreModel[2];
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
+  std::atomic<bool> mShouldRemoveSupportModel = false;
   std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
 
@@ -511,10 +557,19 @@ private:
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
+  std::unique_ptr<dsp::tone_stack::AbstractToneStack> mSupportToneStack;
 
   // Post-IR filters
   recursive_linear_filter::HighPass mHighPass;
+  recursive_linear_filter::HighPass mSupportHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
+
+#if VOLUM_AMPETE_PRODUCT
+  dsp::noise_gate::Trigger mSupportNoiseGateTrigger;
+  dsp::noise_gate::Gain mSupportNoiseGateGain;
+  std::vector<iplug::sample> mDualMainLaneBuffer;
+  std::vector<iplug::sample> mDualSupportLaneBuffer;
+#endif
 
   // Path to model's config.json or model.nam
   WDL_String mNAMPath;
@@ -526,4 +581,6 @@ private:
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 
   NAMSender mInputSender, mOutputSender;
+  // Right-channel output meter sender (used in dual-amp/stereo mode for the second OUT bar).
+  NAMSender mOutputSenderR;
 };
