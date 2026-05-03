@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../VoLumChunkCodec.h"
+#include "../VoLumJsonMigration.h"
 
 #include <cstring>
 #include <vector>
@@ -166,4 +167,22 @@ TEST_CASE("VoLum chunk codec clamps selection and PRE capture indices")
   volum::ClampPreCaptureSlots(settings, 200);
   CHECK(settings.preNam1Capture == 0);
   CHECK(settings.preNam2Capture == volum::kPreCaptureMaxParamIndex);
+}
+
+TEST_CASE("VoLum JSON migration does not synthesize null params for missing legacy keys")
+{
+  nlohmann::json config = {
+    {"RigFile", 2.0},
+    {"Input", 0.0},
+  };
+
+  CHECK_FALSE(volum::RenameJsonKeyIfPresent(config, "AmpeteRig", "RigFile"));
+  REQUIRE(config.contains("RigFile"));
+  CHECK(config["RigFile"].is_number());
+  CHECK(config["RigFile"].get<double>() == doctest::Approx(2.0));
+
+  CHECK(volum::RenameJsonKeyIfPresent(config, "RigFile", "RigFileMigrated"));
+  CHECK_FALSE(config.contains("RigFile"));
+  REQUIRE(config.contains("RigFileMigrated"));
+  CHECK(config["RigFileMigrated"].get<double>() == doctest::Approx(2.0));
 }
