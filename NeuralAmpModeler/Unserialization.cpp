@@ -1,5 +1,6 @@
 #include "VoLumChunkVersion.h"
 #include "VoLumChunkLayout.h"
+#include "VoLumJsonMigration.h"
 
 // Unserialization
 //
@@ -46,6 +47,11 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     iplug::IParam* pParam = getParamByName(name);
     if (pParam != nullptr)
     {
+      if (!it->is_number())
+      {
+        iplug::Trace(TRACELOC, "%s SKIPPED-NON-NUMERIC", name.c_str());
+        continue;
+      }
       pParam->Set(*it);
       iplug::Trace(TRACELOC, "%s %f", pParam->GetName(), pParam->Value());
     }
@@ -57,8 +63,8 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   OnParamReset(iplug::EParamSource::kPresetRecall);
   LEAVE_PARAMS_MUTEX
 
-  mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
-  mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
+  mNAMPath.Set(config.value("NAMPath", "").c_str());
+  mIRPath.Set(config.value("IRPath", "").c_str());
 
   if (mNAMPath.GetLength())
   {
@@ -95,8 +101,7 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   // Assumes no aliasing!
   for (auto it = newNames.begin(); it != newNames.end(); ++it)
   {
-    j[it->second] = j[it->first];
-    j.erase(it->first);
+    volum::RenameJsonKeyIfPresent(j, it->first.c_str(), it->second.c_str());
   }
 }
 
