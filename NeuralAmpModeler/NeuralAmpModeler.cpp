@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <utility>
 
@@ -1467,8 +1468,15 @@ void NeuralAmpModeler::OnIdle()
 
       const int ampIdx = mVolumAmpIdx;
       const std::string rigsRoot = mVolumRigsRoot;
-      mVolumIsLoading.store(true);
-      _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
+      if (fileToLoad == mNAMPath.Get())
+      {
+        mVolumIsLoading.store(false);
+      }
+      else
+      {
+        mVolumIsLoading.store(true);
+        _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
+      }
     }
     else
     {
@@ -1521,6 +1529,10 @@ void NeuralAmpModeler::OnIdle()
       else if (!mVolumLastLoadedFile.empty())
       {
         footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
+      }
+      else
+      {
+        footer->As<VoLumFooterControl>()->SetText("(no rig loaded)");
       }
     }
   }
@@ -1609,6 +1621,7 @@ void NeuralAmpModeler::OnUIOpen()
   {
     _UpdateControlsFromModel();
   }
+  _UpdateLatency();
 }
 
 void NeuralAmpModeler::OnUIClose()
@@ -1737,12 +1750,18 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kPreNam1Capture:
     case kPreNam1Active:
       if (mVolumInitComplete)
+      {
         mVolumPreNeedsLoad[0].store(true);
+        _UpdateLatency();
+      }
       break;
     case kPreNam2Capture:
     case kPreNam2Active:
       if (mVolumInitComplete)
+      {
         mVolumPreNeedsLoad[1].store(true);
+        _UpdateLatency();
+      }
       break;
     case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
 #endif
@@ -1914,6 +1933,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     {
       mPreModel[i] = nullptr;
       mShouldRemovePreModel[i] = false;
+      _UpdateLatency();
     }
   }
   // Move things from staged to live
@@ -1941,6 +1961,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     {
       mPreModel[i] = std::move(mStagedPreModel[i]);
       mStagedPreModel[i] = nullptr;
+      _UpdateLatency();
     }
   }
   if (mStagedIR != nullptr)
@@ -3044,6 +3065,10 @@ void NeuralAmpModeler::_VolumStopLoader()
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
     mVolumLoaderStop.store(true);
     mVolumLoadRequests.clear();
+    mVolumLoadingMainPath.clear();
+    mVolumLoadingSupportPath.clear();
+    mVolumLoadingPrePath[0].clear();
+    mVolumLoadingPrePath[1].clear();
   }
   mVolumLoaderCv.notify_one();
 
@@ -3053,16 +3078,52 @@ void NeuralAmpModeler::_VolumStopLoader()
 
 void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampIdx, std::string rigsRoot)
 {
+  if (fileToLoad.empty())
+    return;
+
   VoLumLoadRequest request;
   request.kind = VoLumLoadKind::Main;
   request.ampIdx = ampIdx;
-  request.fileToLoad = std::move(fileToLoad);
+  request.fileToLoad = fileToLoad;
   request.rigsRoot = std::move(rigsRoot);
   request.sampleRate = GetSampleRate();
   request.blockSize = GetBlockSize();
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    if (mVolumLoadingMainPath == fileToLoad)
+      return;
+
+    mVolumLoadingMainPath = fileToLoad;
+    mVolumLoadRequests.erase(
+      std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), [](const VoLumLoadRequest& queued) {
+        return queued.kind == VoLumLoadKind::Main || queued.kind == VoLumLoadKind::MainPrefetch;
+      }),
+      mVolumLoadRequests.end());
+    mVolumLoadRequests.push_front(std::move(request));
+  }
+  mVolumLoaderCv.notify_one();
+}
+
+void NeuralAmpModeler::_VolumQueueMainPrefetch(std::string fileToLoad)
+{
+  if (fileToLoad.empty())
+    return;
+
+  VoLumLoadRequest request;
+  request.kind = VoLumLoadKind::MainPrefetch;
+  request.fileToLoad = fileToLoad;
+
+  {
+    std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    if (mVolumDspCache.find(fileToLoad) != mVolumDspCache.end())
+      return;
+    const auto alreadyQueued =
+      std::any_of(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), [&](const VoLumLoadRequest& queued) {
+        return queued.kind == VoLumLoadKind::MainPrefetch && queued.fileToLoad == fileToLoad;
+      });
+    if (alreadyQueued)
+      return;
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -3070,15 +3131,21 @@ void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampI
 
 void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int ampIdx)
 {
+  if (fileToLoad.empty())
+    return;
+
   VoLumLoadRequest request;
   request.kind = VoLumLoadKind::Support;
   request.ampIdx = ampIdx;
-  request.fileToLoad = std::move(fileToLoad);
+  request.fileToLoad = fileToLoad;
   request.sampleRate = GetSampleRate();
   request.blockSize = GetBlockSize();
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    if (mVolumLoadingSupportPath == fileToLoad)
+      return;
+    mVolumLoadingSupportPath = fileToLoad;
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -3086,15 +3153,21 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
 
 void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
 {
+  if (slot < 0 || slot >= 2 || fileToLoad.empty())
+    return;
+
   VoLumLoadRequest request;
   request.kind = VoLumLoadKind::Pre;
   request.slot = slot;
-  request.fileToLoad = std::move(fileToLoad);
+  request.fileToLoad = fileToLoad;
   request.sampleRate = GetSampleRate();
   request.blockSize = GetBlockSize();
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+    if (mVolumLoadingPrePath[slot] == fileToLoad)
+      return;
+    mVolumLoadingPrePath[slot] = fileToLoad;
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -3114,6 +3187,11 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
   {
     if (result.kind == VoLumLoadKind::Main)
     {
+      {
+        std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+        if (mVolumLoadingMainPath == result.path)
+          mVolumLoadingMainPath.clear();
+      }
       mVolumIsLoading.store(false);
       if (mVolumNeedsLoad.load())
         continue;
@@ -3131,6 +3209,11 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
     if (result.kind == VoLumLoadKind::Support)
     {
+      {
+        std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+        if (mVolumLoadingSupportPath == result.path)
+          mVolumLoadingSupportPath.clear();
+      }
       mVolumSupportIsLoading.store(false);
       if (mVolumSupportNeedsLoad.load())
         continue;
@@ -3151,6 +3234,11 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       continue;
 
     mVolumPreIsLoading[slot].store(false);
+    {
+      std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
+      if (mVolumLoadingPrePath[slot] == result.path)
+        mVolumLoadingPrePath[slot].clear();
+    }
     if (mVolumPreNeedsLoad[slot].load())
       continue;
 
@@ -3168,6 +3256,38 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 void NeuralAmpModeler::_VolumLoaderThreadMain()
 {
   namespace fs = std::filesystem;
+
+  auto touchCache = [&](const std::string& key) {
+    mVolumDspCacheOrder.erase(std::remove(mVolumDspCacheOrder.begin(), mVolumDspCacheOrder.end(), key),
+                              mVolumDspCacheOrder.end());
+    mVolumDspCacheOrder.push_front(key);
+  };
+
+  auto storeCache = [&](const std::string& key, nam::dspData&& config) {
+    mVolumDspCache[key] = std::move(config);
+    touchCache(key);
+    while (mVolumDspCacheOrder.size() > kVolumDspCacheMaxEntries)
+    {
+      mVolumDspCache.erase(mVolumDspCacheOrder.back());
+      mVolumDspCacheOrder.pop_back();
+    }
+  };
+
+  auto makeModel = [&](const std::string& path) {
+    auto cacheIt = mVolumDspCache.find(path);
+    if (cacheIt != mVolumDspCache.end())
+    {
+      touchCache(path);
+      // Core consumes dspData::weights during construction, so keep the cached copy immutable.
+      nam::dspData cachedConfig = cacheIt->second;
+      return nam::get_dsp(cachedConfig);
+    }
+
+    nam::dspData conf;
+    auto model = nam::get_dsp(fs::u8path(path), conf);
+    storeCache(path, std::move(conf));
+    return model;
+  };
 
   for (;;)
   {
@@ -3192,29 +3312,7 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
     {
       if (request.kind == VoLumLoadKind::Main)
       {
-        const std::string filename = fs::path(request.fileToLoad).filename().string();
-
-        if (mVolumCachedAmpIdx != request.ampIdx)
-        {
-          mVolumDspCache.clear();
-          mVolumCachedAmpIdx = request.ampIdx;
-        }
-
-        auto cacheIt = mVolumDspCache.find(filename);
-        std::unique_ptr<nam::DSP> model;
-        if (cacheIt != mVolumDspCache.end())
-        {
-          // Core consumes dspData::weights during construction, so keep the cached copy immutable.
-          nam::dspData cachedConfig = cacheIt->second;
-          model = nam::get_dsp(cachedConfig);
-        }
-        else
-        {
-          nam::dspData conf;
-          model = nam::get_dsp(fs::u8path(request.fileToLoad), conf);
-          mVolumDspCache[filename] = std::move(conf);
-        }
-
+        auto model = makeModel(request.fileToLoad);
         result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
         result.model->Reset(request.sampleRate, request.blockSize);
 
@@ -3231,28 +3329,33 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
               if (!entry.is_regular_file(ec))
                 continue;
 
-              const std::string name = entry.path().filename().string();
-              if (name.size() > 4 && name.compare(name.size() - 4, 4, ".nam") == 0
-                  && mVolumDspCache.find(name) == mVolumDspCache.end())
+              if (entry.path().extension() != ".nam")
+                continue;
+
+              std::error_code pathEc;
+              const std::string prefetchPath = fs::weakly_canonical(entry.path(), pathEc).string();
+              if (pathEc || prefetchPath.empty() || prefetchPath == request.fileToLoad)
+                continue;
+              if (mVolumDspCache.find(prefetchPath) == mVolumDspCache.end())
               {
-                try
-                {
-                  nam::dspData conf;
-                  nam::get_dsp(entry.path(), conf);
-                  mVolumDspCache[name] = std::move(conf);
-                }
-                catch (...)
-                {
-                }
+                _VolumQueueMainPrefetch(prefetchPath);
               }
             }
           }
         }
       }
+      else if (request.kind == VoLumLoadKind::MainPrefetch)
+      {
+        if (!mVolumNeedsLoad.load() && !mVolumLoaderStop.load() && mVolumDspCache.find(request.fileToLoad) == mVolumDspCache.end())
+        {
+          nam::dspData conf;
+          nam::get_dsp(fs::u8path(request.fileToLoad), conf);
+          storeCache(request.fileToLoad, std::move(conf));
+        }
+      }
       else
       {
-        nam::dspData conf;
-        std::unique_ptr<nam::DSP> model = nam::get_dsp(fs::u8path(request.fileToLoad), conf);
+        auto model = makeModel(request.fileToLoad);
         result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
         result.model->Reset(request.sampleRate, request.blockSize);
       }
@@ -3264,9 +3367,14 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
         std::cerr << "VoLum load failed: " << result.error << std::endl;
       else if (request.kind == VoLumLoadKind::Support)
         std::cerr << "VoLum support load failed: " << result.error << std::endl;
+      else if (request.kind == VoLumLoadKind::MainPrefetch)
+        std::cerr << "VoLum prefetch failed: " << result.error << std::endl;
       else
         std::cerr << "VoLum PRE load failed: " << result.error << std::endl;
     }
+
+    if (request.kind == VoLumLoadKind::MainPrefetch)
+      continue;
 
     {
       std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -3280,7 +3388,15 @@ void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
   if (slot < 0 || slot >= 2)
     return;
 
+  const int activeParam = slot == 0 ? kPreNam1Active : kPreNam2Active;
   const int captureParam = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
+  if (!volum::ShouldLoadPrePedalCapture(GetParam(activeParam)->Bool(), GetParam(captureParam)->Int()))
+  {
+    mShouldRemovePreModel[slot].store(true);
+    mVolumPreIsLoading[slot].store(false);
+    return;
+  }
+
   const std::string filename = _VolumGetPreCaptureFilename(GetParam(captureParam)->Int());
   if (filename.empty() || mVolumRigsRoot.empty())
   {
@@ -3521,8 +3637,12 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   setParam(kSupportNoiseGateActive, s.supportNoiseGateActive ? 1.0 : 0.0);
   setParam(kSupportEQActive, s.supportEqActive ? 1.0 : 0.0);
   setParam(kSupportAmpPan, s.supportAmpPan);
-  mVolumPreNeedsLoad[0].store(true);
-  mVolumPreNeedsLoad[1].store(true);
+  const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
+  const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);
+  mVolumPreNeedsLoad[0].store(shouldLoadPreNam1);
+  mVolumPreNeedsLoad[1].store(shouldLoadPreNam2);
+  mShouldRemovePreModel[0].store(!shouldLoadPreNam1);
+  mShouldRemovePreModel[1].store(!shouldLoadPreNam2);
   mVolumSupportNeedsLoad.store(true);
 
   // Update speaker row UI if available
@@ -3808,23 +3928,42 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
 
 void NeuralAmpModeler::_UpdateLatency()
 {
-  int latency = 0;
+  int preLatency = 0;
+#if VOLUM_AMPETE_PRODUCT
+  const bool preNam1ShouldLoad =
+    volum::ShouldLoadPrePedalCapture(GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam1Capture)->Int());
+  const bool preNam2ShouldLoad =
+    volum::ShouldLoadPrePedalCapture(GetParam(kPreNam2Active)->Bool(), GetParam(kPreNam2Capture)->Int());
+  if (preNam1ShouldLoad && mPreModel[0])
+    preLatency += mPreModel[0]->GetLatency();
+  if (preNam2ShouldLoad && mPreModel[1])
+    preLatency += mPreModel[1]->GetLatency();
+#endif
+
+  int ampLatency = 0;
   if (mModel)
   {
-    latency += mModel->GetLatency();
+    ampLatency = mModel->GetLatency();
   }
 #if VOLUM_AMPETE_PRODUCT
-  if (mSupportModel)
+  if (GetParam(kDualAmpActive)->Bool() && mSupportModel)
   {
-    latency = std::max(latency, mSupportModel->GetLatency());
+    ampLatency = std::max(ampLatency, mSupportModel->GetLatency());
   }
 #endif
   // Other things that add latency here...
+  const int latency = preLatency + ampLatency;
 
   // Feels weird to have to do this.
   if (GetLatency() != latency)
   {
     SetLatency(latency);
+  }
+
+  if (auto* pGraphics = GetUI())
+  {
+    if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
+      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(GetLatency(), GetSampleRate());
   }
 }
 

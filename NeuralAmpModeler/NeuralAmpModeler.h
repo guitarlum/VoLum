@@ -377,6 +377,7 @@ public:
   void _VolumStartLoader();
   void _VolumStopLoader();
   void _VolumQueueMainModelLoad(std::string fileToLoad, int ampIdx, std::string rigsRoot);
+  void _VolumQueueMainPrefetch(std::string fileToLoad);
   void _VolumQueueSupportModelLoad(std::string fileToLoad, int ampIdx);
   void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
   void _VolumDrainLoaderResults();
@@ -423,7 +424,7 @@ private:
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
 
-  enum class VoLumLoadKind { Main, Support, Pre };
+  enum class VoLumLoadKind { Main, MainPrefetch, Support, Pre };
   struct VoLumLoadRequest
   {
     VoLumLoadKind kind = VoLumLoadKind::Main;
@@ -450,9 +451,13 @@ private:
   std::deque<VoLumLoadResult> mVolumLoadResults;
   std::atomic<bool> mVolumLoaderStop{false};
 
-  // Per-amp cache: parsed dspData keyed by filename, avoids re-parsing JSON
+  // Parsed NAM configs keyed by full path. Small LRU keeps switch-back fast without retaining every rig.
+  static constexpr size_t kVolumDspCacheMaxEntries = 8;
   std::unordered_map<std::string, nam::dspData> mVolumDspCache;
-  int mVolumCachedAmpIdx = -1;
+  std::deque<std::string> mVolumDspCacheOrder;
+  std::string mVolumLoadingMainPath;
+  std::string mVolumLoadingSupportPath;
+  std::string mVolumLoadingPrePath[2];
 
   // Per-amp settings: remembered across amp switches and sessions
   std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;

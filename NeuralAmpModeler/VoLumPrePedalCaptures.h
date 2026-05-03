@@ -116,4 +116,9 @@ inline int ClampPreCaptureIndex(int captureIdx, int captureCount)
   return std::clamp(captureIdx, kPreCaptureEmptyIndex, maxIdx);
 }
 
+inline bool ShouldLoadPrePedalCapture(bool active, int captureIdx)
+{
+  return active && captureIdx > kPreCaptureEmptyIndex;
+}
+
 } // namespace volum
