@@ -98,6 +98,21 @@ struct VoLumAmpSettings
   double preNam2MidFreq = 650.0;
   double preNam2Treble = 5.0;
   double preNam2Level = 0.0;
+  bool dualAmpActive = false;
+  int dualAmpRoute = 2; // 0=STACK, 1=L/R, 2=CUSTOM. UI no longer exposes the picker — Custom honours per-lane PAN.
+  double mainAmpPan = 0.0;
+  int supportAmpIdx = -1;
+  int supportSpeakerIdx = 3;
+  int supportChannelIdx = 0;
+  double supportInputLevel = 0.0;
+  double supportGateThreshold = -80.0;
+  double supportToneBass = 5.0;
+  double supportToneMid = 5.0;
+  double supportToneTreble = 5.0;
+  double supportOutputLevel = 0.0;
+  bool supportNoiseGateActive = true;
+  bool supportEqActive = true;
+  double supportAmpPan = 0.0;
 };
 #endif
 } // namespace volum

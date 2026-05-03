@@ -53,3 +53,35 @@ TEST_CASE("Processing plan refuses IR when the IR is unavailable")
   CHECK(plan.runMainModel);
   CHECK_FALSE(plan.runIR);
 }
+
+TEST_CASE("Processing plan enables dual amp only when main and support models exist")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  const auto plan = volum::MakeProcessingPlan(true, true, true, false, false, false, preNamActive, havePreNam, true,
+                                             true, false, true, true, true);
+
+  CHECK(plan.runMainModel);
+  CHECK(plan.runSupportModel);
+  CHECK(plan.runDualAmp);
+  CHECK(plan.runToneStack);
+  CHECK(plan.runSupportToneStack);
+  CHECK(plan.runDelay);
+  CHECK(plan.runReverb);
+}
+
+TEST_CASE("Processing plan keeps dual amp disabled until support model loads")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  const auto plan = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam, true,
+                                             true, false, true, false, true);
+
+  CHECK(plan.runMainModel);
+  CHECK_FALSE(plan.runSupportModel);
+  CHECK_FALSE(plan.runDualAmp);
+  CHECK(plan.runDelay);
+  CHECK(plan.runReverb);
+}
