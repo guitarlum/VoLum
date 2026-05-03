@@ -212,7 +212,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kDelayTime)->InitDouble("DelayTime", 380.0, 10.0, 2000.0, 1.0, "ms");
   GetParam(kDelayFeedback)->InitDouble("DelayFeedback", 0.35, 0.0, 0.99, 0.01);
   GetParam(kDelayMix)->InitDouble("DelayMix", 0.28, 0.0, 1.0, 0.01);
-  GetParam(kDelayMode)->InitEnum("DelayMode", 1, {"Tape", "Digital", "Ping Pong"});
+  GetParam(kDelayMode)->InitEnum("DelayMode", 1, {"Tape", "Digital", "Ping Pong", "Reverse"});
 
   // Reverb
   GetParam(kReverbActive)->InitBool("ReverbActive", false);
@@ -654,7 +654,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(3, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
     drawKnobCol(4, "MIX", kDelayMix, "%", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
     IRECT delayPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG"}), -1, "DELAY_KNOBS");
+    pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG", "REVERSE"}), -1, "DELAY_KNOBS");
 
     float dlySwX = mainCX - 242.f;
     pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(dlySwX - 14.f, knobT - 4.f, dlySwX + 14.f, knobT + knobDiam + 2.f), kDelayActive), -1, "DELAY_POWER");
@@ -1718,7 +1718,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       {
         mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
         mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
-        _VolumSaveDelayModeSnapshot(std::clamp(GetParam(kDelayMode)->Int(), 0, 2));
+        _VolumSaveDelayModeSnapshot(std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1));
       }
       break;
     case kReverbActive:
@@ -1805,9 +1805,9 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 #else
       case kDelayMode:
       {
-        const int oldMode = std::clamp(mVolumEffectSettings.delayMode, 0, 2);
+        const int oldMode = std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1);
         _VolumSaveDelayModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kDelayMode)->Int(), 0, 2);
+        const int newMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
         mVolumEffectSettings.delayMode = newMode;
         _VolumRestoreDelayModeSnapshot(newMode);
         break;
@@ -3385,7 +3385,7 @@ void NeuralAmpModeler::_VolumSaveEffectSettings()
   mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
   mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-  _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, 2));
+  _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, 2));
 }
 
@@ -3398,7 +3398,7 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
   const auto& fx = mVolumEffectSettings;
   setParam(kDelayActive, fx.delayActive ? 1.0 : 0.0);
   setParam(kDelayMode, fx.delayMode);
-  _VolumRestoreDelayModeSnapshot(std::clamp(fx.delayMode, 0, 2));
+  _VolumRestoreDelayModeSnapshot(std::clamp(fx.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   setParam(kReverbActive, fx.reverbActive ? 1.0 : 0.0);
   setParam(kReverbMode, fx.reverbMode);
   _VolumRestoreReverbModeSnapshot(std::clamp(fx.reverbMode, 0, 2));
@@ -3407,7 +3407,7 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
 
 void NeuralAmpModeler::_VolumSaveDelayModeSnapshot(int mode)
 {
-  auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, 2)];
+  auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, volum::kVoLumDelayModeCount - 1)];
   s.time = GetParam(kDelayTime)->Value();
   s.feedback = GetParam(kDelayFeedback)->Value();
   s.mix = GetParam(kDelayMix)->Value();
@@ -3419,7 +3419,7 @@ void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
-  const auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, 2)];
+  const auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, volum::kVoLumDelayModeCount - 1)];
   setParam(kDelayTime, s.time);
   setParam(kDelayFeedback, s.feedback);
   setParam(kDelayMix, s.mix);
