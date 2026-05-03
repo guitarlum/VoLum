@@ -44,8 +44,65 @@ struct VoLumEffectSettings {
   DelayModeSnapshot delayModes[3];
 };
 
+inline void WriteDualAmpUserSettings(nlohmann::json& a, const VoLumAmpSettings& s)
+{
+  a["dualAmpActive"] = s.dualAmpActive;
+  a["dualAmpRoute"] = s.dualAmpRoute;
+  a["mainAmpPan"] = s.mainAmpPan;
+  a["supportAmp"] = s.supportAmpIdx;
+  a["supportSpeaker"] = s.supportSpeakerIdx;
+  a["supportChannel"] = s.supportChannelIdx;
+  a["supportInput"] = s.supportInputLevel;
+  a["supportGate"] = s.supportGateThreshold;
+  a["supportBass"] = s.supportToneBass;
+  a["supportMid"] = s.supportToneMid;
+  a["supportTreble"] = s.supportToneTreble;
+  a["supportOutput"] = s.supportOutputLevel;
+  a["supportNoiseGate"] = s.supportNoiseGateActive;
+  a["supportEq"] = s.supportEqActive;
+  a["supportPan"] = s.supportAmpPan;
+}
+
+inline bool HasDualAmpUserSettings(const nlohmann::json& j)
+{
+  if (!j.contains("amps") || !j["amps"].is_object())
+    return false;
+
+  static constexpr const char* kDualKeys[] = {
+    "dualAmpActive", "dualAmpRoute", "mainAmpPan", "supportAmp", "supportSpeaker", "supportChannel",
+    "supportInput", "supportGate", "supportBass", "supportMid", "supportTreble", "supportOutput",
+    "supportNoiseGate", "supportEq", "supportPan",
+  };
+
+  for (const auto& item : j["amps"].items())
+  {
+    if (!item.value().is_object())
+      continue;
+    for (const char* key : kDualKeys)
+      if (item.value().contains(key))
+        return true;
+  }
+  return false;
+}
+
+inline nlohmann::json VolumDualAmpUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount)
+{
+  nlohmann::json j;
+  j["version"] = 1;
+
+  nlohmann::json amps = nlohmann::json::object();
+  for (int i = 0; i < ampCount; ++i)
+  {
+    nlohmann::json a;
+    WriteDualAmpUserSettings(a, ampSettings[i]);
+    amps[kAmps[i].folderName] = a;
+  }
+  j["amps"] = amps;
+  return j;
+}
+
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
-                                               const VoLumEffectSettings* fx = nullptr)
+                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true)
 {
   nlohmann::json j;
   j["version"] = 1;
@@ -89,21 +146,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["preNam2MidFreq"] = s.preNam2MidFreq;
     a["preNam2Treble"] = s.preNam2Treble;
     a["preNam2Level"] = s.preNam2Level;
-    a["dualAmpActive"] = s.dualAmpActive;
-    a["dualAmpRoute"] = s.dualAmpRoute;
-    a["mainAmpPan"] = s.mainAmpPan;
-    a["supportAmp"] = s.supportAmpIdx;
-    a["supportSpeaker"] = s.supportSpeakerIdx;
-    a["supportChannel"] = s.supportChannelIdx;
-    a["supportInput"] = s.supportInputLevel;
-    a["supportGate"] = s.supportGateThreshold;
-    a["supportBass"] = s.supportToneBass;
-    a["supportMid"] = s.supportToneMid;
-    a["supportTreble"] = s.supportToneTreble;
-    a["supportOutput"] = s.supportOutputLevel;
-    a["supportNoiseGate"] = s.supportNoiseGateActive;
-    a["supportEq"] = s.supportEqActive;
-    a["supportPan"] = s.supportAmpPan;
+    if (includeDualAmp)
+      WriteDualAmpUserSettings(a, s);
     amps[kAmps[i].folderName] = a;
   }
   j["amps"] = amps;
