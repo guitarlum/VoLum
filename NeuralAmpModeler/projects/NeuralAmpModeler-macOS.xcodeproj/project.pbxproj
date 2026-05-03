@@ -185,15 +185,60 @@
 		4F2FB1B82A0047430027AB66 /* activations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1512A0047420027AB66 /* activations.cpp */; };
 		4F2FB1B92A0047430027AB66 /* activations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1512A0047420027AB66 /* activations.cpp */; };
 		4F2FB1BA2A0047430027AB66 /* activations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1512A0047420027AB66 /* activations.cpp */; };
-		4F2FB1BB2A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1BC2A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1BD2A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1BE2A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1BF2A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1C02A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1C12A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1C22A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
-		4F2FB1C32A0047430027AB66 /* wavenet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1522A0047420027AB66 /* wavenet.cpp */; };
+		AA7001010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7001020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7001030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7001040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7001050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7001060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7002010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7002020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7002030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7002040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7002050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7002060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7003010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7003020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7003030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7003040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7003050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7003060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7004010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7004020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7004030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7004040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7004050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7004060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7005010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7005020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7005030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7005040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7005050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7005060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7006010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7006020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7006030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7006040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7006050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7006060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7007010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7007020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7007030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7007040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7007050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7007060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7008010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7008020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7008030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7008040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7008050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7008060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
+		AA7009010000000000000000 /* conv1d.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7101000000000000000000 /* conv1d.cpp */; };
+		AA7009020000000000000000 /* container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7102000000000000000000 /* container.cpp */; };
+		AA7009030000000000000000 /* ring_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7103000000000000000000 /* ring_buffer.cpp */; };
+		AA7009040000000000000000 /* a2_fast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7104000000000000000000 /* a2_fast.cpp */; };
+		AA7009050000000000000000 /* model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7105000000000000000000 /* model.cpp */; };
+		AA7009060000000000000000 /* slimmable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA7106000000000000000000 /* slimmable.cpp */; };
 		4F2FB1C42A0047430027AB66 /* get_dsp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1532A0047420027AB66 /* get_dsp.cpp */; };
 		4F2FB1C52A0047430027AB66 /* get_dsp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1532A0047420027AB66 /* get_dsp.cpp */; };
 		4F2FB1C62A0047430027AB66 /* get_dsp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F2FB1532A0047420027AB66 /* get_dsp.cpp */; };
@@ -698,7 +743,12 @@
 		4F2FB14F2A0047420027AB66 /* dsp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dsp.h; sourceTree = "<group>"; };
 		4F2FB1502A0047420027AB66 /* activations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = activations.h; sourceTree = "<group>"; };
 		4F2FB1512A0047420027AB66 /* activations.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = activations.cpp; sourceTree = "<group>"; };
-		4F2FB1522A0047420027AB66 /* wavenet.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet.cpp; sourceTree = "<group>"; };
+		AA7101000000000000000000 /* conv1d.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = conv1d.cpp; sourceTree = "<group>"; };
+		AA7102000000000000000000 /* container.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = container.cpp; sourceTree = "<group>"; };
+		AA7103000000000000000000 /* ring_buffer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ring_buffer.cpp; sourceTree = "<group>"; };
+		AA7104000000000000000000 /* a2_fast.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/a2_fast.cpp; sourceTree = "<group>"; };
+		AA7105000000000000000000 /* model.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/model.cpp; sourceTree = "<group>"; };
+		AA7106000000000000000000 /* slimmable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wavenet/slimmable.cpp; sourceTree = "<group>"; };
 		4F2FB1532A0047420027AB66 /* get_dsp.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = get_dsp.cpp; sourceTree = "<group>"; };
 		4F35DEAB207E5C5A00867D8F /* IPlugPluginBase.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 2; lastKnownFileType = sourcecode.cpp.cpp; name = IPlugPluginBase.cpp; path = ../../iPlug2/IPlug/IPlugPluginBase.cpp; sourceTree = "<group>"; tabWidth = 2; };
 		4F35DEAC207E5C5A00867D8F /* IPlugPluginBase.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 2; lastKnownFileType = sourcecode.c.h; name = IPlugPluginBase.h; path = ../../iPlug2/IPlug/IPlugPluginBase.h; sourceTree = "<group>"; tabWidth = 2; };
@@ -1331,7 +1381,12 @@
 				4F2FB1462A0047420027AB66 /* util.cpp */,
 				4F2FB14E2A0047420027AB66 /* util.h */,
 				4F2FB1472A0047420027AB66 /* version.h */,
-				4F2FB1522A0047420027AB66 /* wavenet.cpp */,
+				AA7101000000000000000000 /* conv1d.cpp */,
+				AA7102000000000000000000 /* container.cpp */,
+				AA7103000000000000000000 /* ring_buffer.cpp */,
+				AA7104000000000000000000 /* a2_fast.cpp */,
+				AA7105000000000000000000 /* model.cpp */,
+				AA7106000000000000000000 /* slimmable.cpp */,
 				4F2FB14C2A0047420027AB66 /* wavenet.h */,
 			);
 			name = NAM;
@@ -2666,7 +2721,12 @@
 				4F6369DE20A464BB0022C370 /* IGraphicsNanoVG_src.m in Sources */,
 				4F7C4958255DDFC400DF7588 /* IControls.cpp in Sources */,
 				4F2FB1562A0047420027AB66 /* RecursiveLinearFilter.cpp in Sources */,
-				4F2FB1BC2A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7002010000000000000000 /* conv1d.cpp in Sources */,
+				AA7002020000000000000000 /* container.cpp in Sources */,
+				AA7002030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7002040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7002050000000000000000 /* model.cpp in Sources */,
+				AA7002060000000000000000 /* slimmable.cpp in Sources */,
 				4F2FB1922A0047430027AB66 /* dsp.cpp in Sources */,
 				4F8D9707209EF5AC006E2A11 /* NeuralAmpModeler.cpp in Sources */,
 				4F7C495A255DDFC400DF7588 /* ITextEntryControl.cpp in Sources */,
@@ -2689,7 +2749,12 @@
 			files = (
 				4F2FB1A22A0047430027AB66 /* convnet.cpp in Sources */,
 				4F2FB1842A0047430027AB66 /* wav.cpp in Sources */,
-				4F2FB1C12A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7007010000000000000000 /* conv1d.cpp in Sources */,
+				AA7007020000000000000000 /* container.cpp in Sources */,
+				AA7007030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7007040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7007050000000000000000 /* model.cpp in Sources */,
+				AA7007060000000000000000 /* slimmable.cpp in Sources */,
 				4F2FB1662A0047430027AB66 /* dsp.cpp in Sources */,
 				4F2FB1AC2A0047430027AB66 /* lstm.cpp in Sources */,
 				4F2FB1B82A0047430027AB66 /* activations.cpp in Sources */,
@@ -2726,7 +2791,12 @@
 				4F2FB1582A0047420027AB66 /* RecursiveLinearFilter.cpp in Sources */,
 				4F2FB18A2A0047430027AB66 /* util.cpp in Sources */,
 				4F993F7423055C96000313AF /* IPlugProcessor.cpp in Sources */,
-				4F2FB1BE2A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7004010000000000000000 /* conv1d.cpp in Sources */,
+				AA7004020000000000000000 /* container.cpp in Sources */,
+				AA7004030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7004040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7004050000000000000000 /* model.cpp in Sources */,
+				AA7004060000000000000000 /* slimmable.cpp in Sources */,
 				4F8C10E320BA2796006320CD /* IGraphicsEditorDelegate.cpp in Sources */,
 				4F6FD2B422675B6300FC59E6 /* IGraphicsCoreText.mm in Sources */,
 				4FDAC0ED207D76C600299363 /* IPlugTimer.cpp in Sources */,
@@ -2766,7 +2836,12 @@
 				4F7C496F255DDFCB00DF7588 /* ITextEntryControl.cpp in Sources */,
 				4F3EE1CF231438D000004786 /* swell-menu.mm in Sources */,
 				4F2FB1992A0047430027AB66 /* dsp.cpp in Sources */,
-				4F2FB1C32A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7009010000000000000000 /* conv1d.cpp in Sources */,
+				AA7009020000000000000000 /* container.cpp in Sources */,
+				AA7009030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7009040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7009050000000000000000 /* model.cpp in Sources */,
+				AA7009060000000000000000 /* slimmable.cpp in Sources */,
 				4F3EE1D0231438D000004786 /* IGraphicsMac_view.mm in Sources */,
 				4F7C496E255DDFCB00DF7588 /* IPopupMenuControl.cpp in Sources */,
 				4F3EE1D1231438D000004786 /* swell-appstub.mm in Sources */,
@@ -2834,7 +2909,12 @@
 				4F2FB1982A0047430027AB66 /* dsp.cpp in Sources */,
 				AA341E252B9E5A530069C260 /* ToneStack.cpp in Sources */,
 				4F78BE2522E7406D00AD537E /* IPlugPluginBase.cpp in Sources */,
-				4F2FB1C22A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7008010000000000000000 /* conv1d.cpp in Sources */,
+				AA7008020000000000000000 /* container.cpp in Sources */,
+				AA7008030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7008040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7008050000000000000000 /* model.cpp in Sources */,
+				AA7008060000000000000000 /* slimmable.cpp in Sources */,
 				4F2FB1A32A0047430027AB66 /* convnet.cpp in Sources */,
 				4F78BE2622E7406D00AD537E /* IPlugAPIBase.cpp in Sources */,
 				4F2FB1AD2A0047430027AB66 /* lstm.cpp in Sources */,
@@ -2866,7 +2946,12 @@
 				4F81597F205D50EB00393585 /* fdynlib.cpp in Sources */,
 				4F2FB1802A0047430027AB66 /* wav.cpp in Sources */,
 				4F2FB1622A0047430027AB66 /* dsp.cpp in Sources */,
-				4F2FB1BD2A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7003010000000000000000 /* conv1d.cpp in Sources */,
+				AA7003020000000000000000 /* container.cpp in Sources */,
+				AA7003030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7003040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7003050000000000000000 /* model.cpp in Sources */,
+				AA7003060000000000000000 /* slimmable.cpp in Sources */,
 				4F815919205D50EB00393585 /* memorystream.cpp in Sources */,
 				4F9828C1140A9EB700F3FCC1 /* IPlugParameter.cpp in Sources */,
 				4F81591A205D50EB00393585 /* pluginview.cpp in Sources */,
@@ -2948,7 +3033,12 @@
 				4F2FB1952A0047430027AB66 /* dsp.cpp in Sources */,
 				AA341E212B9E5A530069C260 /* ToneStack.cpp in Sources */,
 				4FB600231567CB0A0020189A /* IPlugParameter.cpp in Sources */,
-				4F2FB1BF2A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7005010000000000000000 /* conv1d.cpp in Sources */,
+				AA7005020000000000000000 /* container.cpp in Sources */,
+				AA7005030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7005040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7005050000000000000000 /* model.cpp in Sources */,
+				AA7005060000000000000000 /* slimmable.cpp in Sources */,
 				4F2FB1A02A0047430027AB66 /* convnet.cpp in Sources */,
 				4FB600261567CB0A0020189A /* AAX_Exports.cpp in Sources */,
 				4F2FB1AA2A0047430027AB66 /* lstm.cpp in Sources */,
@@ -3002,7 +3092,12 @@
 				4F7C4957255DDFC300DF7588 /* ITextEntryControl.cpp in Sources */,
 				4FD16D3E13B63595001D0217 /* swell-menu.mm in Sources */,
 				4F2FB1912A0047430027AB66 /* dsp.cpp in Sources */,
-				4F2FB1BB2A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7001010000000000000000 /* conv1d.cpp in Sources */,
+				AA7001020000000000000000 /* container.cpp in Sources */,
+				AA7001030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7001040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7001050000000000000000 /* model.cpp in Sources */,
+				AA7001060000000000000000 /* slimmable.cpp in Sources */,
 				4FB1F59120E4B011004157C8 /* IGraphicsMac_view.mm in Sources */,
 				4F7C4956255DDFC300DF7588 /* IPopupMenuControl.cpp in Sources */,
 				4F5C5F6B21BED08700E024A7 /* swell-appstub.mm in Sources */,
@@ -3079,7 +3174,12 @@
 				AA00000000000000000EB1A8 /* Reverb.cpp in Sources */,
 				4F2FB1652A0047430027AB66 /* dsp.cpp in Sources */,
 				4F2FB1AB2A0047430027AB66 /* lstm.cpp in Sources */,
-				4F2FB1C02A0047430027AB66 /* wavenet.cpp in Sources */,
+				AA7006010000000000000000 /* conv1d.cpp in Sources */,
+				AA7006020000000000000000 /* container.cpp in Sources */,
+				AA7006030000000000000000 /* ring_buffer.cpp in Sources */,
+				AA7006040000000000000000 /* a2_fast.cpp in Sources */,
+				AA7006050000000000000000 /* model.cpp in Sources */,
+				AA7006060000000000000000 /* slimmable.cpp in Sources */,
 				4FFBB91F20863B0E00DDD0E7 /* vstparameters.cpp in Sources */,
 				4FFBB92120863B0E00DDD0E7 /* vstcomponentbase.cpp in Sources */,
 				4FFBB92220863B0E00DDD0E7 /* IPlugVST3_Processor.cpp in Sources */,
