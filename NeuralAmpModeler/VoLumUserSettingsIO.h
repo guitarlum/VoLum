@@ -20,6 +20,10 @@
 namespace volum
 {
 
+inline constexpr int kVoLumDelayModeCount = 4;
+inline constexpr int kVoLumReverbModeCount = 3;
+inline constexpr int kVoLumReverseDelayMode = 3;
+
 struct DelayModeSnapshot {
   double time = 380.0;
   double feedback = 0.35;
@@ -37,11 +41,16 @@ struct ReverbModeSnapshot {
 struct VoLumEffectSettings {
   bool reverbActive = false;
   int reverbMode = 0;
-  ReverbModeSnapshot reverbModes[3];
+  ReverbModeSnapshot reverbModes[kVoLumReverbModeCount];
 
   bool delayActive = false;
   int delayMode = 1;
-  DelayModeSnapshot delayModes[3];
+  DelayModeSnapshot delayModes[kVoLumDelayModeCount] = {
+    DelayModeSnapshot{},
+    DelayModeSnapshot{},
+    DelayModeSnapshot{},
+    DelayModeSnapshot{600.0, 0.35, 0.28},
+  };
 };
 
 inline void WriteDualAmpUserSettings(nlohmann::json& a, const VoLumAmpSettings& s)
@@ -337,14 +346,14 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     const auto& e = j["effects"];
     const VoLumEffectSettings defaults;
     loadBool(e, "delayActive", fx->delayActive, defaults.delayActive);
-    loadInt(e, "delayMode", fx->delayMode, 0, 2, defaults.delayMode);
+    loadInt(e, "delayMode", fx->delayMode, 0, kVoLumDelayModeCount - 1, defaults.delayMode);
     loadBool(e, "reverbActive", fx->reverbActive, defaults.reverbActive);
-    loadInt(e, "reverbMode", fx->reverbMode, 0, 2, defaults.reverbMode);
+    loadInt(e, "reverbMode", fx->reverbMode, 0, kVoLumReverbModeCount - 1, defaults.reverbMode);
 
     if (e.contains("delayModes") && e["delayModes"].is_array())
     {
       const auto& modes = e["delayModes"];
-      for (int i = 0; i < 3 && i < static_cast<int>(modes.size()); ++i)
+      for (int i = 0; i < kVoLumDelayModeCount && i < static_cast<int>(modes.size()); ++i)
       {
         const auto& mode = modes[i];
         loadDouble(mode, "time", fx->delayModes[i].time, 10.0, 2000.0, defaults.delayModes[i].time);
@@ -358,14 +367,14 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
       loadDouble(e, "delayTime", legacy.time, 10.0, 2000.0, DelayModeSnapshot{}.time);
       loadDouble(e, "delayFeedback", legacy.feedback, 0.0, 0.99, DelayModeSnapshot{}.feedback);
       loadDouble(e, "delayMix", legacy.mix, 0.0, 1.0, DelayModeSnapshot{}.mix);
-      for (auto& mode : fx->delayModes)
-        mode = legacy;
+      for (int i = 0; i < kVoLumReverseDelayMode; ++i)
+        fx->delayModes[i] = legacy;
     }
 
     if (e.contains("reverbModes") && e["reverbModes"].is_array())
     {
       const auto& modes = e["reverbModes"];
-      for (int i = 0; i < 3 && i < static_cast<int>(modes.size()); ++i)
+      for (int i = 0; i < kVoLumReverbModeCount && i < static_cast<int>(modes.size()); ++i)
       {
         const auto& mode = modes[i];
         loadDouble(mode, "mix", fx->reverbModes[i].mix, 0.0, 1.0, defaults.reverbModes[i].mix);
