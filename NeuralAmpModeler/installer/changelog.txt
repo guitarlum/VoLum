@@ -1,3 +1,4 @@
+05/04/2026 - VoLum: Fixed restored dual-amp support selections showing an empty channel list after switching main amps.
 05/04/2026 - VoLum: Corrected the Bad Cat Mini Cat display casing in the amp catalog.
 05/04/2026 - VoLum: Shortened the collapsed POST reverb label to REVRB so it fits the mini slot.
 05/04/2026 - VoLum: Collapsed PRE slots now show short selected pedal labels such as Klon, TS+, Revi, and FatB instead of generic NAM slot names.
