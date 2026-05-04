@@ -1,3 +1,6 @@
+05/04/2026 - Docs: Updated the README hero screenshot to show a configured Soldano SLO100 preset with V30, channel 3, TS/Klon PRE slots, and active Reverb.
+05/04/2026 - Docs: Expanded the bilingual user guide with short amp-background notes for vintage, modern, and boutique captures.
+05/04/2026 - Docs: Added bilingual VoLum user guides with fresh screenshots for main view, tuner, metronome, Dual Amp, PRE, and POST workflows.
 05/04/2026 - VoLum: Fixed restored dual-amp support selections showing an empty channel list after switching main amps.
 05/04/2026 - VoLum: Corrected the Bad Cat Mini Cat display casing in the amp catalog.
 05/04/2026 - VoLum: Shortened the collapsed POST reverb label to REVRB so it fits the mini slot.
@@ -38,7 +41,7 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 04/09/2026 - VoLum: Settings panel centered with safe padding; backdrop uses explicit panel rect; unhide children when opening overlay; horizontal output mode + shorter n/a labels; dBu field uses VoLum frame (no grey bitmap).
 04/09/2026 - VoLum: Per-amp settings JSON moved to a user-writable path (%LOCALAPPDATA%\VoLum\volum-settings.json on Windows). Still reads legacy rigs/volum-settings.json if present. Fixes silent save failure when rigs root pointed at Program Files.
 04/09/2026 - Docs: README + NeuralAmpModeler/README describe user-profile settings path and rigs discovery; CONTRIBUTING notes VoLum doctest suite.
-04/09/2026 - Docs: Root README includes VoLum UI screenshot (docs/volum-ui.png).
+04/09/2026 - Docs: Root README added a VoLum UI screenshot.
 04/10/2026 - VoLum: Marshall JMP 2203 procedural art = H-tree fractal; Sebago = Clifford attractor. List thumbnails + hero placeholder; ILayer caching unchanged.
 04/10/2026 - VoLum: macOS build support. Fixed GitHub Actions workflow (macOS-latest case bug), added build-native.yml CI. Updated mac config/scripts with VoLum/Lum identity and com.Lum bundle IDs. Bundled rigs in macOS installer (.pkg). macOS binary path discovery for .app bundles (Contents/Resources/rigs).
 04/09/2026 - VoLum: Settings polish — transparent IV backgrounds (volumSettingsStyle), gold drawn close, vertical output radios with wider column + (n/a) fix, calibration block vertically centered, footer 42/58 columns, tighter dBu row layout.
