@@ -71,6 +71,7 @@ inline void WriteDualAmpUserSettings(nlohmann::json& a, const VoLumAmpSettings& 
   a["supportNoiseGate"] = s.supportNoiseGateActive;
   a["supportEq"] = s.supportEqActive;
   a["supportPan"] = s.supportAmpPan;
+  a["supportPolarityInvert"] = s.supportPolarityInvert;
 }
 
 inline bool HasDualAmpUserSettings(const nlohmann::json& j)
@@ -81,7 +82,7 @@ inline bool HasDualAmpUserSettings(const nlohmann::json& j)
   static constexpr const char* kDualKeys[] = {
     "dualAmpActive", "dualAmpRoute", "mainAmpPan", "supportAmp", "supportSpeaker", "supportChannel",
     "supportInput", "supportGate", "supportBass", "supportMid", "supportTreble", "supportOutput",
-    "supportNoiseGate", "supportEq", "supportPan",
+    "supportNoiseGate", "supportEq", "supportPan", "supportPolarityInvert",
   };
 
   for (const auto& item : j["amps"].items())
@@ -353,6 +354,7 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadBool(a, "supportNoiseGate", s.supportNoiseGateActive, defaults.supportNoiseGateActive);
         loadBool(a, "supportEq", s.supportEqActive, defaults.supportEqActive);
         loadDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0, defaults.supportAmpPan);
+        loadBool(a, "supportPolarityInvert", s.supportPolarityInvert, defaults.supportPolarityInvert);
       }
     }
   }

@@ -88,6 +88,7 @@ void PutCurrentPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
   int dual = s.dualAmpActive ? 1 : 0;
   int supportNg = s.supportNoiseGateActive ? 1 : 0;
   int supportEq = s.supportEqActive ? 1 : 0;
+  int supportPolarityInvert = s.supportPolarityInvert ? 1 : 0;
   chunk.Put(&dual);
   chunk.Put(&s.dualAmpRoute);
   chunk.Put(&s.mainAmpPan);
@@ -103,6 +104,7 @@ void PutCurrentPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
   chunk.Put(&supportNg);
   chunk.Put(&supportEq);
   chunk.Put(&s.supportAmpPan);
+  chunk.Put(&supportPolarityInvert);
 }
 
 template<typename Chunk>
@@ -179,11 +181,12 @@ int GetExtendedPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s, 
 }
 
 template<typename Chunk>
-int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
+int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s, bool hasSupportPolarityInvert = true)
 {
   int dual = 0;
   int supportNg = 1;
   int supportEq = 1;
+  int supportPolarityInvert = 0;
   pos = chunk.Get(&dual, pos);
   pos = chunk.Get(&s.dualAmpRoute, pos);
   pos = chunk.Get(&s.mainAmpPan, pos);
@@ -199,6 +202,8 @@ int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
   pos = chunk.Get(&supportNg, pos);
   pos = chunk.Get(&supportEq, pos);
   pos = chunk.Get(&s.supportAmpPan, pos);
+  if (hasSupportPolarityInvert)
+    pos = chunk.Get(&supportPolarityInvert, pos);
 
   s.dualAmpActive = (dual != 0);
   s.dualAmpRoute = std::clamp(s.dualAmpRoute, 0, 2);
@@ -215,6 +220,7 @@ int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
   s.supportNoiseGateActive = (supportNg != 0);
   s.supportEqActive = (supportEq != 0);
   s.supportAmpPan = std::clamp(s.supportAmpPan, -1.0, 1.0);
+  s.supportPolarityInvert = (supportPolarityInvert != 0);
   return pos;
 }
 

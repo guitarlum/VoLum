@@ -273,6 +273,7 @@ TEST_CASE("Dual-amp sidecar overlays current-only support settings")
   amps[0].supportNoiseGateActive = false;
   amps[0].supportEqActive = false;
   amps[0].supportAmpPan = 1.0;
+  amps[0].supportPolarityInvert = true;
 
   const nlohmann::json legacy =
     volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, /*includeDualAmp=*/false);
@@ -299,6 +300,7 @@ TEST_CASE("Dual-amp sidecar overlays current-only support settings")
   CHECK(loaded[0].supportNoiseGateActive == false);
   CHECK(loaded[0].supportEqActive == false);
   CHECK(loaded[0].supportAmpPan == doctest::Approx(1.0));
+  CHECK(loaded[0].supportPolarityInvert == true);
 }
 
 TEST_CASE("Effect settings JSON roundtrip preserves all params")

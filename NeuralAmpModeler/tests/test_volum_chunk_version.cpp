@@ -83,6 +83,7 @@ void AppendCurrentPerAmpBlock(std::vector<unsigned char>& bytes)
   const double supportGate = -80.0;
   const double minusSix = -6.0;
   const int active = 1;
+  const int supportPolarityInvert = 0;
   AppendBytes(bytes, inactive);
   AppendBytes(bytes, stackRoute);
   AppendBytes(bytes, zero);
@@ -98,6 +99,7 @@ void AppendCurrentPerAmpBlock(std::vector<unsigned char>& bytes)
   AppendBytes(bytes, active);
   AppendBytes(bytes, active);
   AppendBytes(bytes, zero);
+  AppendBytes(bytes, supportPolarityInvert);
 }
 } // namespace
 

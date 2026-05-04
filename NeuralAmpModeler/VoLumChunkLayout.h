@@ -11,7 +11,8 @@ namespace volum
 static constexpr int kPerAmpSettingsHeaderBytes = static_cast<int>(sizeof(int) * 3);
 static constexpr int kLegacyPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 4 + sizeof(double) * 6);
 static constexpr int kPrePedalPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 9 + sizeof(double) * 24);
-static constexpr int kDualAmpPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 16 + sizeof(double) * 32);
+static constexpr int kDualAmpPerAmpSettingsBytesV1 = static_cast<int>(sizeof(int) * 16 + sizeof(double) * 32);
+static constexpr int kDualAmpPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 17 + sizeof(double) * 32);
 static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes;
 
 inline int LegacyPerAmpSettingsPayloadBytes(int ampCount)
@@ -30,6 +31,11 @@ inline bool ChunkHasExtendedPerAmpSettings(int remainingBytes, int ampCount)
 }
 
 inline bool ChunkHasDualAmpPerAmpSettings(int remainingBytes, int ampCount)
+{
+  return remainingBytes >= kDualAmpPerAmpSettingsBytesV1 * ampCount;
+}
+
+inline bool ChunkHasSupportPolarityPerAmpSettings(int remainingBytes, int ampCount)
 {
   return remainingBytes >= kDualAmpPerAmpSettingsBytes * ampCount;
 }

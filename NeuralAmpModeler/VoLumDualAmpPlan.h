@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace volum
 {
@@ -28,6 +29,12 @@ struct DualAmpPanGains
   double supportRight = 1.0;
 };
 
+struct DualAmpLatencyCompensation
+{
+  int mainDelaySamples = 0;
+  int supportDelaySamples = 0;
+};
+
 inline double ClampPan(double pan)
 {
   return std::clamp(pan, -1.0, 1.0);
@@ -42,6 +49,14 @@ inline DualAmpRoute ClampDualAmpRoute(int route)
     case 2: return DualAmpRoute::Custom;
     default: return DualAmpRoute::Stack;
   }
+}
+
+inline DualAmpLatencyCompensation MakeDualAmpLatencyCompensation(int mainLatencySamples, int supportLatencySamples)
+{
+  const int mainLatency = std::max(0, mainLatencySamples);
+  const int supportLatency = std::max(0, supportLatencySamples);
+  const int targetLatency = std::max(mainLatency, supportLatency);
+  return {targetLatency - mainLatency, targetLatency - supportLatency};
 }
 
 inline void ConstantPowerPan(double pan, double& left, double& right)
@@ -98,5 +113,47 @@ inline void MergeDualAmpToStereo(const Sample* mainMono, const Sample* supportMo
     }
   }
 }
+
+template<typename Sample>
+class DualAmpDelayLine
+{
+public:
+  void Reset()
+  {
+    mState.clear();
+    mDelaySamples = 0;
+    mWriteIndex = 0;
+  }
+
+  const Sample* Process(const Sample* input, Sample* output, std::size_t nFrames, int delaySamples)
+  {
+    if (delaySamples <= 0)
+    {
+      Reset();
+      return input;
+    }
+
+    if (mDelaySamples != delaySamples)
+    {
+      mState.assign(static_cast<std::size_t>(delaySamples), static_cast<Sample>(0));
+      mDelaySamples = delaySamples;
+      mWriteIndex = 0;
+    }
+
+    for (std::size_t s = 0; s < nFrames; ++s)
+    {
+      output[s] = mState[mWriteIndex];
+      mState[mWriteIndex] = input[s];
+      mWriteIndex = (mWriteIndex + 1) % mState.size();
+    }
+
+    return output;
+  }
+
+private:
+  std::vector<Sample> mState;
+  int mDelaySamples = 0;
+  std::size_t mWriteIndex = 0;
+};
 
 } // namespace volum

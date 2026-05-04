@@ -513,6 +513,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new VoLumPanKnobControl(hero->GetSupportPanKnobSlot(), kSupportAmpPan, volumPanKnobStyleSupport),
       -1, "SUPPORT_PAN_KNOB");
+    pGraphics->AttachControl(
+      new VoLumSupportPolarityControl(hero->GetSupportPolarityToggleSlot(),
+        [this]() { return mSupportPolarityInvert.load(); },
+        [this]() {
+          const bool next = !mSupportPolarityInvert.load();
+          mSupportPolarityInvert.store(next);
+          mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = next;
+          mVolumSettingsDirty = true;
+          if (auto* pGfx = GetUI())
+            pGfx->SetAllControlsDirty();
+        }),
+      -1, "SUPPORT_POLARITY_TOGGLE");
 
     const auto preCards = volum::triptych_layout::ComputePreCards(
       volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::PRE).pre);
@@ -1334,12 +1346,32 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     const auto panGains = volum::MakeDualAmpPanGains(volum::DualAmpRoute::Custom,
                                                      GetParam(kMainAmpPan)->Value(),
                                                      GetParam(kSupportAmpPan)->Value());
-    volum::MergeDualAmpToStereo(hpfPointers[0], supportLane, outputs, numFrames, numChannelsExternalOut, mOutputGain,
-                                mSupportOutputGain, panGains, kAppApi);
+    int mainLatency = 0;
+    int supportLatency = 0;
+    if (mModel)
+      mainLatency = mModel->GetLatency();
+    if (mSupportModel)
+      supportLatency = mSupportModel->GetLatency();
+    const auto latencyComp = volum::MakeDualAmpLatencyCompensation(mainLatency, supportLatency);
+    mDualMainAlignedBuffer.resize(numFrames);
+    mDualSupportAlignedBuffer.resize(numFrames);
+    const sample* mainLane =
+      mDualMainLatencyDelay.Process(hpfPointers[0], mDualMainAlignedBuffer.data(), numFrames,
+                                    latencyComp.mainDelaySamples);
+    const sample* compensatedSupportLane =
+      mDualSupportLatencyDelay.Process(supportLane, mDualSupportAlignedBuffer.data(), numFrames,
+                                       latencyComp.supportDelaySamples);
+    const double supportOutputGain = mSupportPolarityInvert.load() ? -mSupportOutputGain : mSupportOutputGain;
+    volum::MergeDualAmpToStereo(mainLane, compensatedSupportLane, outputs, numFrames, numChannelsExternalOut,
+                                mOutputGain, supportOutputGain, panGains, kAppApi);
   }
   else
 #endif
   {
+#if VOLUM_AMPETE_PRODUCT
+    mDualMainLatencyDelay.Reset();
+    mDualSupportLatencyDelay.Reset();
+#endif
     _ProcessOutput(hpfPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
   }
 
@@ -1416,6 +1448,8 @@ void NeuralAmpModeler::OnReset()
 #if VOLUM_AMPETE_PRODUCT
   if (mSupportToneStack)
     mSupportToneStack->Reset(sampleRate, maxBlockSize);
+  mDualMainLatencyDelay.Reset();
+  mDualSupportLatencyDelay.Reset();
 #endif
   for (int i = 0; i < 2; ++i)
     mPreEq[i].Reset(sampleRate, maxBlockSize);
@@ -3049,6 +3083,8 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
   const bool supportFocus = dualActive && mVolumDualAmpFocusedSupport;
   const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;
+  const bool showSupportPolarity =
+    showPanKnobs && GetParam(kSupportAmpIdx)->Int() >= 0 && GetParam(kSupportAmpIdx)->Int() < volum::kAmpCount;
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
@@ -3072,6 +3108,10 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
       mainPanGrp->ForControlInGroup("SUPPORT_PAN_KNOB", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPanKnobSlot());
         c->Hide(!showPanKnobs);
+      });
+      mainPanGrp->ForControlInGroup("SUPPORT_POLARITY_TOGGLE", [&](IControl* c) {
+        c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPolarityToggleSlot());
+        c->Hide(!showSupportPolarity);
       });
     }
   }
@@ -3535,6 +3575,7 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.supportNoiseGateActive = GetParam(kSupportNoiseGateActive)->Bool();
   s.supportEqActive = GetParam(kSupportEQActive)->Bool();
   s.supportAmpPan = GetParam(kSupportAmpPan)->Value();
+  s.supportPolarityInvert = mSupportPolarityInvert.load();
 }
 
 void NeuralAmpModeler::_VolumSaveEffectSettings()
@@ -3664,6 +3705,7 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   setParam(kSupportNoiseGateActive, s.supportNoiseGateActive ? 1.0 : 0.0);
   setParam(kSupportEQActive, s.supportEqActive ? 1.0 : 0.0);
   setParam(kSupportAmpPan, s.supportAmpPan);
+  mSupportPolarityInvert.store(s.supportPolarityInvert);
   _VolumRefreshSupportChannels();
   const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
   const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);
