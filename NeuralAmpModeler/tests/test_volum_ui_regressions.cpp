@@ -38,9 +38,11 @@ void RequireDoesNotContain(const std::string& haystack, const char* needle)
 TEST_CASE("POST pedal cards refresh active art state from delay and reverb params")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
 
   RequireContains(source, "card->SetActiveState(GetParam(kDelayActive)->Bool());");
   RequireContains(source, "card->SetActiveState(GetParam(kReverbActive)->Bool());");
+  RequireContains(triptych, "{ EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive }");
 }
 
 TEST_CASE("Collapsed PRE slots show selected pedal short labels")
