@@ -42,6 +42,7 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 ## Non-Negotiables
 
 - Write/update focused tests for confirmed feature or bugfix work.
+- User-facing UI or feature changes must update `docs/user-guide.en.md` and `docs/user-guide.de.md` together; refresh stable `docs/user-guide-*.png` screenshots when the visible UI changes.
 - Append one dated line to `NeuralAmpModeler/installer/changelog.txt` for user-visible behavior.
 - Do not reorder `EParams` or rename stable parameter names without state migration and tests.
 - Keep unrelated local dirt, especially expected `iPlug2` ASIO patch dirt, out of commits.
