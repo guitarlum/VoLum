@@ -6,7 +6,7 @@ Dieses Handbuch erklärt die VoLum-Oberfläche nach der Installation. Download u
 
 ## Hauptansicht
 
-VoLum Hauptansicht
+![VoLum Hauptansicht](user-guide-main.png)
 
 1. **Amp-Browser:** wähle einen der mitgelieferten Amp-Modelle in der linken Seitenleiste.
 2. **Amp-Panel:** zeigt den aktuell gewählten Amp. Im Dual-Amp-Modus teilt es sich in MAIN- und SUPPORT-Spur.
@@ -34,17 +34,17 @@ VoLum enthält eine Mischung aus Vintage-, modernen und Boutique-Amp-Captures. D
 
 ## Tuner Und Metronom
 
-VoLum Tuner-Overlay
+![VoLum Tuner-Overlay](user-guide-tuner.png)
 
 Öffne den Tuner über die Toolbar oben rechts. Solange der Tuner geöffnet ist, schaltet VoLum den Ausgang stumm, damit du lautlos stimmen kannst. Klick außerhalb des Tuners oder drücke `Esc`, um ihn zu schließen.
 
-VoLum Metronom-Steuerung
+![VoLum Metronom-Steuerung](user-guide-metronome.png)
 
 Öffne das Metronom über die Toolbar oben rechts. Du kannst es ein- oder ausschalten, BPM mit `+` und `-` oder per direkter Eingabe setzen, die Lautstärke ändern und `1/4`, `2/4`, `3/4`, `4/4` oder `6/8` wählen.
 
 ## Dual Amp
 
-VoLum Dual-Amp-Ansicht
+![VoLum Dual-Amp-Ansicht](user-guide-dual-amp.png)
 
 Dual Amp kombiniert den Haupt-Amp mit einem Support-Amp.
 
@@ -57,7 +57,7 @@ Wenn Dual Amp aktiv ist, zeigt die OUT-Anzeige getrennte linke und rechte Balken
 
 ## PRE-Bereich
 
-VoLum PRE-Bereich
+![VoLum PRE-Bereich](user-guide-pre.png)
 
 Der PRE-Bereich liegt vor dem Amp. Er enthält einen Kompressor und zwei frei belegbare NAM-Pedal-Slots. Klick auf PRE in der Triptych-Leiste, um den Bereich auszuklappen, und dann auf eine Karte, um ihre Regler in der Reglerzeile zu fokussieren.
 
@@ -75,7 +75,7 @@ PRE-Einstellungen sind lokal für den aktuellen Amp. So kann jeder Amp eigene Co
 
 ## POST-Bereich
 
-VoLum POST-Bereich
+![VoLum POST-Bereich](user-guide-post.png)
 
 Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Klick auf POST in der Triptych-Leiste, um den Bereich auszuklappen, und dann auf eine Karte, um ihre Regler in der Reglerzeile zu fokussieren.
 

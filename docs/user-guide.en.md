@@ -6,7 +6,7 @@ This guide explains the VoLum interface after installation. For download and set
 
 ## Main View
 
-VoLum main view
+![VoLum main view](user-guide-main.png)
 
 1. **Amp browser:** choose one of the bundled amp models from the left sidebar.
 2. **Amp panel:** shows the currently selected amp. In Dual Amp mode it splits into MAIN and SUPPORT lanes.
@@ -34,17 +34,17 @@ VoLum includes a mix of vintage, modern, and boutique amp captures. These notes 
 
 ## Tuner And Metronome
 
-VoLum tuner overlay
+![VoLum tuner overlay](user-guide-tuner.png)
 
 Open the tuner from the top-right toolbar. While the tuner is open, VoLum mutes the output so you can tune silently. Click outside the tuner or press `Esc` to close it.
 
-VoLum metronome controls
+![VoLum metronome controls](user-guide-metronome.png)
 
 Open the metronome from the top-right toolbar. You can enable or disable it, set BPM with the `+` and `-` controls or by typing a value, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
 
 ## Dual Amp
 
-VoLum Dual Amp view
+![VoLum Dual Amp view](user-guide-dual-amp.png)
 
 Dual Amp lets you combine the main amp with a support amp.
 
@@ -57,7 +57,7 @@ When Dual Amp is active, the output meter shows separate left and right bars. MA
 
 ## PRE Section
 
-VoLum PRE section
+![VoLum PRE section](user-guide-pre.png)
 
 The PRE section runs before the amp. It contains a compressor and two assignable NAM pedal slots. Click PRE in the triptych strip to expand it, then click a card to focus its controls in the knob row.
 
@@ -75,7 +75,7 @@ PRE settings are local to the current amp. This makes it possible to keep differ
 
 ## POST Section
 
-VoLum POST section
+![VoLum POST section](user-guide-post.png)
 
 The POST section runs after the amp. It contains Delay and Reverb cards. Click POST in the triptych strip to expand it, then click a card to focus its controls in the knob row.
 
