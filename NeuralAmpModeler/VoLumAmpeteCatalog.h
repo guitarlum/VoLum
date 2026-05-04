@@ -13,7 +13,7 @@ struct AmpInfo
 inline constexpr int kAmpCount = 15;
 inline constexpr AmpInfo kAmps[kAmpCount] = {
   {"Ampete One", "Ampete One"},
-  {"Bad Cat mini Cat", "Bad Cat mini Cat"},
+  {"Bad Cat mini Cat", "Bad Cat Mini Cat"},
   {"Brunetti XL 2", "Brunetti XL 2"},
   {"Diezel Herbert Mk1", "Diezel Herbert Mk1"},
   {"Fryette Deliverance 120", "Fryette Deliv. 120"},
@@ -37,7 +37,7 @@ inline constexpr const char* kSpeakerPrefixes[4] = {"AMP", "G12", "G65", "V30"};
 // Keep the order in sync with kAmps so existing amps preserve their visual identity.
 inline constexpr int kAmpFractalCase[kAmpCount] = {
   0,   // Ampete One               -> Dragon curve
-  1,   // Bad Cat mini Cat         -> Sierpinski triangle
+  1,   // Bad Cat Mini Cat         -> Sierpinski triangle
   2,   // Brunetti XL 2            -> Barnsley fern
   14,  // Diezel Herbert Mk1       -> Lichtenberg discharge (NEW)
   3,   // Fryette Deliverance 120  -> Golden spiral
