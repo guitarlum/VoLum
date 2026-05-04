@@ -483,6 +483,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     const int remainingPerAmpBytes = chunk.Size() - pos;
     const bool hasPreAmpSettings = volum::ChunkHasExtendedPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasDualAmpSettings = volum::ChunkHasDualAmpPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasSupportPolaritySettings =
+      volum::ChunkHasSupportPolarityPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -495,7 +497,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
           volum::ResetPreCaptureSlots(s);
       }
       if (hasDualAmpSettings)
-        pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s);
+        pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s, hasSupportPolaritySettings);
     }
 
     mVolumInitComplete = false;

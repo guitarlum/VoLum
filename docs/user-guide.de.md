@@ -55,6 +55,8 @@ Dual Amp kombiniert den Haupt-Amp mit einem Support-Amp.
 
 Wenn Dual Amp aktiv ist, zeigt die OUT-Anzeige getrennte linke und rechte Balken. MAIN- und SUPPORT-Einstellungen werden mit dem aktuellen Haupt-Amp gespeichert, sodass jeder Amp sein eigenes Pairing haben kann.
 
+VoLum gleicht unterschiedliche NAM-Resampler-Latenzen zwischen MAIN und SUPPORT aus, bevor die Spuren gepannt und summiert werden. Der `Ø`-Button unten links am SUPPORT-Amp invertiert dessen Polarität gegenüber MAIN; das kann mittige Mono-Stacks bei manchen Capture-Paaren verbessern. Wenn ein mittig gestackter Dual-Amp-Sound trotzdem phasig klingt, prüfe, ob beide Spuren die gewünschte Speaker-/Channel-Datei nutzen, und vergleiche Gate-, EQ-, IR- und Output-Einstellungen.
+
 ## PRE-Bereich
 
 ![VoLum PRE-Bereich](user-guide-pre.png)

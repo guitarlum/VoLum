@@ -172,6 +172,20 @@ TEST_CASE("Dual amp supportLevel scales support lane only")
   DOCTEST_CHECK(right[0] == doctest::Approx(0.25f));
 }
 
+TEST_CASE("Dual amp inverted support polarity subtracts centered matching lanes")
+{
+  std::vector<float> main{1.f};
+  std::vector<float> support{1.f};
+  std::vector<float> left(1, 0.f), right(1, 0.f);
+  float* outputs[2] = {left.data(), right.data()};
+
+  const auto gains = volum::MakeDualAmpPanGains(volum::DualAmpRoute::Custom, 0.0, 0.0);
+  volum::MergeDualAmpToStereo(main.data(), support.data(), outputs, 1, 2, 1.0, -1.0, gains, false);
+
+  DOCTEST_CHECK(left[0] == doctest::Approx(0.f));
+  DOCTEST_CHECK(right[0] == doctest::Approx(0.f));
+}
+
 TEST_CASE("MakeDualAmpPanGains custom routing honors both pan params")
 {
   // Hard-left main, mid-right support: main shows full L, zero R; support has unequal L/R weights.
@@ -189,4 +203,64 @@ TEST_CASE("MakeDualAmpPanGains stack ignores pan params and centers both lanes")
   DOCTEST_CHECK(gains.mainLeft == doctest::Approx(gains.mainRight));
   DOCTEST_CHECK(gains.supportLeft == doctest::Approx(gains.supportRight));
   DOCTEST_CHECK(gains.mainLeft == doctest::Approx(0.70710678));
+}
+
+TEST_CASE("Dual amp latency compensation delays the lower-latency lane")
+{
+  auto comp = volum::MakeDualAmpLatencyCompensation(0, 3);
+  DOCTEST_CHECK(comp.mainDelaySamples == 3);
+  DOCTEST_CHECK(comp.supportDelaySamples == 0);
+
+  comp = volum::MakeDualAmpLatencyCompensation(4, 1);
+  DOCTEST_CHECK(comp.mainDelaySamples == 0);
+  DOCTEST_CHECK(comp.supportDelaySamples == 3);
+
+  comp = volum::MakeDualAmpLatencyCompensation(2, 2);
+  DOCTEST_CHECK(comp.mainDelaySamples == 0);
+  DOCTEST_CHECK(comp.supportDelaySamples == 0);
+}
+
+TEST_CASE("Dual amp delay line carries latency compensation across blocks")
+{
+  volum::DualAmpDelayLine<float> delay;
+  std::vector<float> firstIn{1.f, 2.f};
+  std::vector<float> secondIn{3.f, 4.f};
+  std::vector<float> firstOut(2, -1.f);
+  std::vector<float> secondOut(2, -1.f);
+
+  const float* first = delay.Process(firstIn.data(), firstOut.data(), firstIn.size(), 3);
+  const float* second = delay.Process(secondIn.data(), secondOut.data(), secondIn.size(), 3);
+
+  DOCTEST_CHECK(first == firstOut.data());
+  DOCTEST_CHECK(second == secondOut.data());
+  DOCTEST_CHECK(firstOut[0] == doctest::Approx(0.f));
+  DOCTEST_CHECK(firstOut[1] == doctest::Approx(0.f));
+  DOCTEST_CHECK(secondOut[0] == doctest::Approx(0.f));
+  DOCTEST_CHECK(secondOut[1] == doctest::Approx(1.f));
+}
+
+TEST_CASE("Dual amp center stack can align a delayed support impulse")
+{
+  std::vector<float> main{1.f, 0.f, 0.f};
+  std::vector<float> support{0.f, 1.f, 0.f};
+  std::vector<float> alignedMain(3, 0.f);
+  std::vector<float> alignedSupport(3, 0.f);
+  std::vector<float> left(3, -1.f), right(3, -1.f);
+  float* outputs[2] = {left.data(), right.data()};
+
+  volum::DualAmpDelayLine<float> mainDelay;
+  volum::DualAmpDelayLine<float> supportDelay;
+  const auto comp = volum::MakeDualAmpLatencyCompensation(0, 1);
+  const float* mainLane = mainDelay.Process(main.data(), alignedMain.data(), main.size(), comp.mainDelaySamples);
+  const float* supportLane =
+    supportDelay.Process(support.data(), alignedSupport.data(), support.size(), comp.supportDelaySamples);
+  const auto gains = volum::MakeDualAmpPanGains(volum::DualAmpRoute::Custom, 0.0, 0.0);
+
+  volum::MergeDualAmpToStereo(mainLane, supportLane, outputs, main.size(), 2, 1.0, 1.0, gains, false);
+
+  DOCTEST_CHECK(left[0] == doctest::Approx(0.f));
+  DOCTEST_CHECK(right[0] == doctest::Approx(0.f));
+  const float expected = static_cast<float>(0.70710678 * 2.0);
+  DOCTEST_CHECK(left[1] == doctest::Approx(expected));
+  DOCTEST_CHECK(right[1] == doctest::Approx(expected));
 }
