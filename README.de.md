@@ -2,9 +2,11 @@
 
 # VoLum — NAM Player
 
-![VoLum standalone UI](docs/volum-ui.png)
+![VoLum standalone UI](docs/user-guide-main.png)
 
 Ein Gitarren-Amp-Sammlungsspieler auf Basis von [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Enthält 15 Amp-Profile mit einer eigenen Oberfläche zum schnellen Durchstöbern und Umschalten — Standalone-App und VST3-Plugin.
+
+Eine Einführung in Oberfläche, Dual Amp, PRE-Pedale, POST-Effekte, Tuner und Metronom findest du im [VoLum Benutzerhandbuch](docs/user-guide.de.md).
 
 ## Funktionen
 

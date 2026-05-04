@@ -21,7 +21,10 @@ alwaysApply: true
 3. **Append a changelog line** so you can bisect and remember intent:
    - Prefer `NeuralAmpModeler/installer/changelog.txt` (keep project style: date + short note).
    - One line per user-visible or behavior change; include breaking preset/state format bumps.
-4. **Commit** in a **single coherent chunk** when possible (easy `git revert`). If the user prefers WIP commits, say so in chat.
+4. **Update user docs** when behavior is user-facing:
+   - Keep `docs/user-guide.en.md` and `docs/user-guide.de.md` in sync.
+   - Refresh stable `docs/user-guide-*.png` screenshots when the visible UI changes.
+5. **Commit** in a **single coherent chunk** when possible (easy `git revert`). If the user prefers WIP commits, say so in chat.
 
 ## Tests are mandatory, not optional
 
