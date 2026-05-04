@@ -1,3 +1,4 @@
+05/04/2026 - Docs: Restored English user guide image embeds so GitHub renders the screenshots inline.
 05/04/2026 - Docs: Updated the README hero screenshot to show a configured Soldano SLO100 preset with V30, channel 3, TS/Klon PRE slots, and active Reverb.
 05/04/2026 - Docs: Expanded the bilingual user guide with short amp-background notes for vintage, modern, and boutique captures.
 05/04/2026 - Docs: Added bilingual VoLum user guides with fresh screenshots for main view, tuner, metronome, Dual Amp, PRE, and POST workflows.
