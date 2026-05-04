@@ -298,7 +298,7 @@ private:
   };
   static constexpr QuietSlot kPostSlots[2] = {
     { EVoLumEffectFocus::DELAY,  "DELAY",  kDelayActive },
-    { EVoLumEffectFocus::REVERB, "REVERB", kReverbActive },
+    { EVoLumEffectFocus::REVERB, "REVRB", kReverbActive },
   };
 
   void _DrawExpandedFrame(IGraphics& g, const IRECT& r, const char* label)
