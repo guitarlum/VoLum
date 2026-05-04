@@ -66,6 +66,18 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
   RequireContains(source, "c->Hide(!showPanKnobs);");
 }
 
+TEST_CASE("Amp settings restore refreshes support channel list")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto restorePos = source.find("void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)");
+  REQUIRE(restorePos != std::string::npos);
+  const auto refreshPos = source.find("_VolumRefreshSupportChannels();", restorePos);
+
+  REQUIRE(refreshPos != std::string::npos);
+  CHECK(refreshPos > source.find("setParam(kSupportAmpPan, s.supportAmpPan);", restorePos));
+  CHECK(refreshPos < source.find("mVolumSupportNeedsLoad.store(true);", restorePos));
+}
+
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
