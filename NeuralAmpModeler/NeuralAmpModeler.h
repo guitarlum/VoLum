@@ -26,6 +26,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumAmpeteCatalog.h"
@@ -425,6 +426,7 @@ private:
   std::atomic<bool> mVolumSupportNeedsLoad{false};
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
+  std::atomic<bool> mSupportPolarityInvert{false};
 
   enum class VoLumLoadKind { Main, MainPrefetch, Support, Pre };
   struct VoLumLoadRequest
@@ -578,6 +580,10 @@ private:
   dsp::noise_gate::Gain mSupportNoiseGateGain;
   std::vector<iplug::sample> mDualMainLaneBuffer;
   std::vector<iplug::sample> mDualSupportLaneBuffer;
+  std::vector<iplug::sample> mDualMainAlignedBuffer;
+  std::vector<iplug::sample> mDualSupportAlignedBuffer;
+  volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
+  volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
 #endif
 
   // Path to model's config.json or model.nam

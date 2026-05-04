@@ -162,3 +162,7 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/03/2026 - VoLum: Added dual-amp test coverage for hard-pan symmetry, per-lane gain scaling, custom-route pan params, chunk codec clamping of legacy out-of-range routes/levels, and user-settings healing of supportOutputLevel above the +10 dB cap.
 05/03/2026 - VoLum: Store new Dual Amp browse-memory fields in a sidecar settings file so older VST3 builds can still read the shared user settings safely.
 05/03/2026 - VoLum: Added Reverse as a fourth POST Delay mode, with its own saved TIME/FEEDBACK/MIX snapshot and focused DSP/settings tests.
+05/04/2026 - VoLum: Dual Amp now compensates mismatched NAM resampler latency between MAIN and SUPPORT before panning/summing, reducing center-stack comb filtering.
+05/04/2026 - VoLum: Added a saved SUPPORT-lane polarity invert button for Dual Amp, useful when centered mono amp pairs need a polarity flip to stack cleanly.
+05/04/2026 - VoLum: Added hover feedback to expanded PRE/POST pedal cards and the Dual Amp toggle chip.
+05/04/2026 - VoLum: Renamed the PRE compressor card's bottom art label to "Compressor".

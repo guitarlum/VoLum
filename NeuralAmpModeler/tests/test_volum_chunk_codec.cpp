@@ -62,6 +62,7 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   amps[0].supportNoiseGateActive = false;
   amps[0].supportEqActive = true;
   amps[0].supportAmpPan = 0.75;
+  amps[0].supportPolarityInvert = true;
 
   MemoryChunk chunk;
   volum::PutCurrentVoLumChunkState(chunk, {3, 2, 1}, amps, volum::kAmpCount);
@@ -107,6 +108,7 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   CHECK_FALSE(loaded.supportNoiseGateActive);
   CHECK(loaded.supportEqActive);
   CHECK(loaded.supportAmpPan == doctest::Approx(0.75));
+  CHECK(loaded.supportPolarityInvert);
 }
 
 TEST_CASE("VoLum chunk codec clamps legacy out-of-range dualAmpRoute and supportOutputLevel")

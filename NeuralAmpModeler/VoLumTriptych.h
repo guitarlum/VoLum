@@ -1057,8 +1057,16 @@ public:
     bool bypassed = (GetValue() < 0.5);
 
     g.FillRect(VoLumColors::HERO_BG, mRECT);
+    if (mHovered)
+    {
+      g.FillRect(IColor(18, 80, 140, 160), mRECT);
+      g.DrawRoundRect(VoLumColors::TEAL_DIM.WithOpacity(0.48f),
+                      mRECT.GetPadded(-1.f, -1.f, -1.f, -1.f), 4.f);
+    }
     
     IColor borderCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::FRAME : VoLumColors::TEAL_DIM);
+    if (mHovered && !focused)
+      borderCol = bypassed ? VoLumColors::GOLD_DIM : VoLumColors::TEAL;
     g.DrawRoundRect(borderCol, mRECT, 4.f);
     const float cs = 8.f;
     DrawCornerAccent(g, mRECT.L + 4.f, mRECT.T + 4.f, cs, false, false, borderCol);
@@ -1108,6 +1116,23 @@ public:
   
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
+    (void) x;
+    (void) y;
+    (void) mod;
+    if (!mHovered)
+    {
+      mHovered = true;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHovered)
+    {
+      mHovered = false;
+      SetDirty(false);
+    }
   }
 
   void SetFocused(bool focused)
@@ -1156,8 +1181,7 @@ private:
         summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kReverbMix)->Value() * 100.0);
         return summary.Get();
       case EVoLumEffectFocus::COMP:
-        summary.SetFormatted(64, "%.1f:1 . %.1f", plugin->GetParam(kPreCompRatio)->Value(), plugin->GetParam(kPreCompAmount)->Value());
-        return summary.Get();
+        return "Compressor";
       case EVoLumEffectFocus::PRE_NAM1:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam1Capture)->Int());
       case EVoLumEffectFocus::PRE_NAM2:
@@ -1169,6 +1193,7 @@ private:
 
   EVoLumEffectFocus mEffect;
   bool mIsFocused = false;
+  bool mHovered = false;
   ILayerPtr mArtLayer;
   bool mCachedBypassed = false;
   ClickCallback mCallback;

@@ -357,9 +357,10 @@ public:
     {
       IRECT btn(x, btnY, x + btnW, btnY + btnH);
       bool isOn = (0 == mSelected);
-      g.FillRoundRect(isOn ? VoLumColors::BTN_AMP_ON_BG : VoLumColors::BTN_OFF_BG, btn, 3.f);
-      g.DrawRoundRect(isOn ? VoLumColors::BTN_AMP_ON_BORDER : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
-      IText btnText(14.f, isOn ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      bool isHovered = (0 == mHovered);
+      g.FillRoundRect(ButtonFill(isOn, isHovered, true), btn, 3.f);
+      g.DrawRoundRect(ButtonBorder(isOn, isHovered, true), btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
+      IText btnText(14.f, ButtonText(isOn, isHovered), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       g.DrawText(btnText, labels[0], IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
       mBtnRects[0] = btn;
       x += btnW;
@@ -383,13 +384,35 @@ public:
     {
       IRECT btn(x, btnY, x + btnW, btnY + btnH);
       bool isOn = (i == mSelected);
-      g.FillRoundRect(isOn ? cabOnBg : VoLumColors::BTN_OFF_BG, btn, 3.f);
-      g.DrawRoundRect(isOn ? cabOnBorder : VoLumColors::BTN_OFF_BORDER, btn, 3.f);
-      IColor cabTextCol = isOn ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT;
+      bool isHovered = (i == mHovered);
+      g.FillRoundRect(isOn ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
+      g.DrawRoundRect(isOn ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false),
+                      btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
+      IColor cabTextCol = ButtonText(isOn, isHovered);
       IText btnTextCab(14.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       g.DrawText(btnTextCab, labels[i], IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
       mBtnRects[i] = btn;
       x += btnW + gap;
+    }
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    (void) mod;
+    const int next = HitTestButton(x, y);
+    if (next != mHovered)
+    {
+      mHovered = next;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHovered != -1)
+    {
+      mHovered = -1;
+      SetDirty(false);
     }
   }
 
@@ -423,7 +446,39 @@ public:
   void SetSupportAccent(bool /*support*/) {}
 
 private:
+  int HitTestButton(float x, float y) const
+  {
+    for (int i = 0; i < 4; ++i)
+      if (mBtnRects[i].Contains(x, y))
+        return i;
+    return -1;
+  }
+
+  static IColor ButtonFill(bool active, bool hovered, bool ampButton)
+  {
+    if (active)
+      return ampButton ? VoLumColors::BTN_AMP_ON_BG : VoLumColors::BTN_CAB_ON_BG;
+    if (hovered)
+      return IColor(58, 33, 46, 50);
+    return VoLumColors::BTN_OFF_BG;
+  }
+
+  static IColor ButtonBorder(bool active, bool hovered, bool ampButton)
+  {
+    if (hovered)
+      return ampButton ? VoLumColors::TEAL : VoLumColors::GOLD_DIM;
+    if (active)
+      return ampButton ? VoLumColors::BTN_AMP_ON_BORDER : VoLumColors::BTN_CAB_ON_BORDER;
+    return VoLumColors::BTN_OFF_BORDER;
+  }
+
+  static IColor ButtonText(bool active, bool hovered)
+  {
+    return (active || hovered) ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT;
+  }
+
   int mSelected = 3;
+  int mHovered = -1;
   IRECT mBtnRects[4];
   ChangeCallback mCallback;
 };
@@ -570,6 +625,26 @@ public:
     SetDirty(false);
   }
 
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    (void) mod;
+    const bool chipHovered = mDualToggleCallback && DualChipRect().Contains(x, y);
+    if (chipHovered != mDualChipHovered)
+    {
+      mDualChipHovered = chipHovered;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mDualChipHovered)
+    {
+      mDualChipHovered = false;
+      SetDirty(false);
+    }
+  }
+
   // Reserve a square slot in the bottom-right of each lane for a PAN knob attached at the IGraphics
   // level (NAMKnobControl). Only the dual-mode lanes need it; mono mode has no PAN.
   IRECT GetMainPanKnobSlot() const
@@ -586,6 +661,14 @@ public:
     const float mid = mRECT.MW();
     const IRECT lane(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
     return PanKnobSlotInLane(lane);
+  }
+
+  IRECT GetSupportPolarityToggleSlot() const
+  {
+    const float gap = 8.f;
+    const float mid = mRECT.MW();
+    const IRECT lane(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
+    return PolarityToggleSlotInLane(lane);
   }
 
 private:
@@ -623,6 +706,14 @@ private:
     return IRECT(right - kPanKnobSize, top, right, top + kPanKnobSize);
   }
 
+  static IRECT PolarityToggleSlotInLane(const IRECT& lane)
+  {
+    const float size = 22.f;
+    const float right = lane.R - 8.f;
+    const float top = lane.T + 8.f;
+    return IRECT(right - size, top, right, top + size);
+  }
+
   /* ---------- draw helpers ---------- */
 
   // Two-rect "split" glyph (◫): two small rectangles representing two amp panels side-by-side.
@@ -631,10 +722,12 @@ private:
   {
     const IRECT chip = DualChipRect();
     const bool active = mDualAmpActive;
-    const IColor border = active ? accent : VoLumColors::GOLD_DIM;
-    const IColor fill = active ? IColor(70, accent.R, accent.G, accent.B) : IColor(0, 0, 0, 0);
+    const IColor border = (active || mDualChipHovered) ? accent : VoLumColors::GOLD_DIM;
+    const IColor fill = active ? IColor(mDualChipHovered ? 95 : 70, accent.R, accent.G, accent.B)
+                               : (mDualChipHovered ? IColor(34, accent.R, accent.G, accent.B)
+                                                   : IColor(0, 0, 0, 0));
     g.FillRect(fill, chip);
-    g.DrawRect(border, chip);
+    g.DrawRect(border, chip, nullptr, mDualChipHovered ? 1.4f : 1.f);
     const float cy = chip.MH();
     const float h = 8.f;
     const float w = 4.f;
@@ -703,11 +796,14 @@ private:
 
     // Title strip with amp name
     const IRECT titleStrip(r.L + 8.f, r.B - 30.f, r.R - 8.f, r.B - 8.f);
+    const bool supportLane = role != nullptr && role[0] == 'S';
+    const IRECT nameRect = supportLane ? IRECT(titleStrip.L, titleStrip.T, titleStrip.R - 34.f, titleStrip.B)
+                                       : titleStrip;
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
     g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
                role, IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
     g.DrawText(IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               name, titleStrip);
+               name, nameRect);
   }
 
   void DrawDualHero(IGraphics& g)
@@ -735,11 +831,62 @@ private:
   int mSupportAmpIdx = -1;
   bool mDualAmpActive = false;
   bool mSupportFocused = false;
+  bool mDualChipHovered = false;
   FocusCallback mFocusCallback;
   PickerCallback mPickerCallback;
   DualToggleCallback mDualToggleCallback;
   DismissPickerCallback mDismissPickerCallback;
   IsPickerOpenCallback mIsPickerOpenCallback;
+};
+
+class VoLumSupportPolarityControl : public IControl
+{
+public:
+  using IsActiveCallback = std::function<bool()>;
+  using ToggleCallback = std::function<void()>;
+
+  VoLumSupportPolarityControl(const IRECT& bounds, IsActiveCallback isActiveCb, ToggleCallback toggleCb)
+  : IControl(bounds)
+  , mIsActiveCallback(std::move(isActiveCb))
+  , mToggleCallback(std::move(toggleCb))
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const bool active = mIsActiveCallback ? mIsActiveCallback() : false;
+    const bool hot = mMouseIsOver;
+    const IColor fill = active ? IColor(hot ? 150 : 110, VoLumColors::TEAL.R, VoLumColors::TEAL.G, VoLumColors::TEAL.B)
+                               : IColor(hot ? 120 : 88, 12, 12, 18);
+    const IColor border = active || hot ? VoLumColors::TEAL
+                                        : IColor(150, VoLumColors::TEAL.R, VoLumColors::TEAL.G, VoLumColors::TEAL.B);
+    const IColor glyph = active || hot ? VoLumColors::TEXT_BRIGHT : IColor(210, VoLumColors::TEAL.R, VoLumColors::TEAL.G, VoLumColors::TEAL.B);
+    const float cx = mRECT.MW();
+    const float cy = mRECT.MH();
+    const float radius = std::min(mRECT.W(), mRECT.H()) * 0.5f - 0.75f;
+    g.FillCircle(fill, cx, cy, radius);
+    g.DrawCircle(border, cx, cy, radius, nullptr, hot ? 1.6f : 1.1f);
+
+    // Draw the polarity glyph as geometry instead of relying on font centering for "Ø".
+    const float glyphR = 4.6f;
+    g.DrawCircle(glyph, cx, cy, glyphR, nullptr, 1.4f);
+    g.DrawLine(glyph, cx - glyphR * 0.72f, cy + glyphR * 0.72f,
+               cx + glyphR * 0.72f, cy - glyphR * 0.72f, nullptr, 1.4f);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    (void) x;
+    (void) y;
+    (void) mod;
+    if (mToggleCallback)
+      mToggleCallback();
+    SetDirty(false);
+  }
+
+private:
+  IsActiveCallback mIsActiveCallback;
+  ToggleCallback mToggleCallback;
 };
 
 class VoLumModePickerControl : public IControl
