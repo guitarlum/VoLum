@@ -3664,6 +3664,7 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   setParam(kSupportNoiseGateActive, s.supportNoiseGateActive ? 1.0 : 0.0);
   setParam(kSupportEQActive, s.supportEqActive ? 1.0 : 0.0);
   setParam(kSupportAmpPan, s.supportAmpPan);
+  _VolumRefreshSupportChannels();
   const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
   const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);
   mVolumPreNeedsLoad[0].store(shouldLoadPreNam1);
