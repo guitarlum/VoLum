@@ -55,7 +55,7 @@ Dual Amp lets you combine the main amp with a support amp.
 
 When Dual Amp is active, the output meter shows separate left and right bars. MAIN and SUPPORT settings are stored with the current main amp, so each amp can have its own paired setup.
 
-VoLum compensates different NAM resampler latencies between MAIN and SUPPORT before the lanes are panned and summed. The `Ø` button at the bottom-left of the SUPPORT amp flips its polarity against MAIN, which can improve centered mono stacks for some capture pairs. If a centered dual-amp stack still sounds phasey, check that both lanes use the intended speaker/channel file and compare gate, EQ, IR, and output settings.
+VoLum compensates different NAM resampler latencies between MAIN and SUPPORT before the lanes are panned and summed. The `Ø` symbol in the upper-right of the SUPPORT amp flips its polarity against MAIN and is on by default for new Dual Amp setups; this can improve centered mono stacks for some capture pairs. If a centered dual-amp stack still sounds phasey, check that both lanes use the intended speaker/channel file and compare gate, EQ, IR, and output settings.
 
 ## PRE Section
 

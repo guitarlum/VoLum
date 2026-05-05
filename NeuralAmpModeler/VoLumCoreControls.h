@@ -632,6 +632,7 @@ public:
     if (chipHovered != mDualChipHovered)
     {
       mDualChipHovered = chipHovered;
+      SetTooltip(mDualChipHovered ? (mDualAmpActive ? "Switch to Single Amp" : "Switch to Dual Amp") : "");
       SetDirty(false);
     }
   }
@@ -641,6 +642,7 @@ public:
     if (mDualChipHovered)
     {
       mDualChipHovered = false;
+      SetTooltip("");
       SetDirty(false);
     }
   }
@@ -708,7 +710,7 @@ private:
 
   static IRECT PolarityToggleSlotInLane(const IRECT& lane)
   {
-    const float size = 22.f;
+    const float size = 24.f;
     const float right = lane.R - 8.f;
     const float top = lane.T + 8.f;
     return IRECT(right - size, top, right, top + size);
@@ -796,14 +798,11 @@ private:
 
     // Title strip with amp name
     const IRECT titleStrip(r.L + 8.f, r.B - 30.f, r.R - 8.f, r.B - 8.f);
-    const bool supportLane = role != nullptr && role[0] == 'S';
-    const IRECT nameRect = supportLane ? IRECT(titleStrip.L, titleStrip.T, titleStrip.R - 34.f, titleStrip.B)
-                                       : titleStrip;
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
     g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
                role, IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
     g.DrawText(IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               name, nameRect);
+               name, titleStrip);
   }
 
   void DrawDualHero(IGraphics& g)
@@ -850,28 +849,26 @@ public:
   , mIsActiveCallback(std::move(isActiveCb))
   , mToggleCallback(std::move(toggleCb))
   {
+    SetTooltip("Flip polarity");
   }
 
   void Draw(IGraphics& g) override
   {
     const bool active = mIsActiveCallback ? mIsActiveCallback() : false;
     const bool hot = mMouseIsOver;
-    const IColor fill = active ? IColor(hot ? 150 : 110, VoLumColors::TEAL.R, VoLumColors::TEAL.G, VoLumColors::TEAL.B)
-                               : IColor(hot ? 120 : 88, 12, 12, 18);
-    const IColor border = active || hot ? VoLumColors::TEAL
-                                        : IColor(150, VoLumColors::TEAL.R, VoLumColors::TEAL.G, VoLumColors::TEAL.B);
-    const IColor glyph = active || hot ? VoLumColors::TEXT_BRIGHT : IColor(210, VoLumColors::TEAL.R, VoLumColors::TEAL.G, VoLumColors::TEAL.B);
+    const IColor glyph = active ? (hot ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEAL)
+                                : (hot ? VoLumColors::CREAM_DIM : IColor(135, 92, 98, 110));
     const float cx = mRECT.MW();
     const float cy = mRECT.MH();
-    const float radius = std::min(mRECT.W(), mRECT.H()) * 0.5f - 0.75f;
-    g.FillCircle(fill, cx, cy, radius);
-    g.DrawCircle(border, cx, cy, radius, nullptr, hot ? 1.6f : 1.1f);
+    const float outerR = active ? (hot ? 7.55f : 7.25f) : 6.8f;
+    const float innerR = outerR * 0.66f;
+    const float slash = outerR * 1.2f;
+    const float stroke = active ? (hot ? 2.25f : 1.9f) : 1.45f;
 
-    // Draw the polarity glyph as geometry instead of relying on font centering for "Ø".
-    const float glyphR = 4.6f;
-    g.DrawCircle(glyph, cx, cy, glyphR, nullptr, 1.4f);
-    g.DrawLine(glyph, cx - glyphR * 0.72f, cy + glyphR * 0.72f,
-               cx + glyphR * 0.72f, cy - glyphR * 0.72f, nullptr, 1.4f);
+    // Filled DAW-style polarity glyph: solid ring + diagonal bar, no surrounding button frame.
+    g.FillCircle(glyph, cx, cy, outerR);
+    g.FillCircle(VoLumColors::HERO_BG, cx, cy, innerR);
+    g.DrawLine(glyph, cx - slash, cy + slash, cx + slash, cy - slash, nullptr, stroke);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override

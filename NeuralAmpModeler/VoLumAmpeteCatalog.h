@@ -113,7 +113,7 @@ struct VoLumAmpSettings
   bool supportNoiseGateActive = true;
   bool supportEqActive = true;
   double supportAmpPan = 0.0;
-  bool supportPolarityInvert = false;
+  bool supportPolarityInvert = true;
 };
 #endif
 } // namespace volum
