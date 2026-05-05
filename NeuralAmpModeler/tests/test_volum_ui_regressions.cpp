@@ -64,6 +64,31 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
 
   RequireContains(source, "const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;");
   RequireContains(source, "c->Hide(!showPanKnobs);");
+  RequireContains(source, "Pan the SUPPORT amp lane.");
+  RequireContains(source, "Pan the MAIN amp lane.");
+}
+
+TEST_CASE("Support amp keyboard channel navigation refreshes support stepper")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+
+  RequireContains(source, "GetControlWithTag(kCtrlTagVoLumSupportChannelStep)");
+  RequireContains(source, "SetChannels(mVolumSupportChannelLabels, next)");
+  RequireContains(source, "mVolumSettingsDirty = true;");
+}
+
+TEST_CASE("Support hero label remains centered with polarity glyph")
+{
+  const std::string core = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
+
+  RequireContains(core, "Filled DAW-style polarity glyph");
+  RequireContains(core, "const float right = lane.R - 8.f;");
+  RequireContains(core, "const float top = lane.T + 8.f;");
+  RequireContains(core, "Flip polarity");
+  RequireContains(core, "Switch to Single Amp");
+  RequireContains(core, "Switch to Dual Amp");
+  RequireContains(core, "name, titleStrip);");
+  RequireDoesNotContain(core, "titleStrip.R - 34.f");
 }
 
 TEST_CASE("Amp settings restore refreshes support channel list")

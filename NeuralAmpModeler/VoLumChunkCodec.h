@@ -220,7 +220,8 @@ int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s, b
   s.supportNoiseGateActive = (supportNg != 0);
   s.supportEqActive = (supportEq != 0);
   s.supportAmpPan = std::clamp(s.supportAmpPan, -1.0, 1.0);
-  s.supportPolarityInvert = (supportPolarityInvert != 0);
+  if (hasSupportPolarityInvert)
+    s.supportPolarityInvert = (supportPolarityInvert != 0);
   return pos;
 }
 
