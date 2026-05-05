@@ -155,6 +155,30 @@ TEST_CASE("VoLum chunk codec clamps legacy out-of-range dualAmpRoute and support
   CHECK(loaded.supportAmpPan == doctest::Approx(1.0));
 }
 
+TEST_CASE("Legacy dual-amp chunk defaults support polarity invert on")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].dualAmpActive = true;
+  amps[0].supportAmpIdx = 1;
+  amps[0].supportPolarityInvert = false;
+
+  MemoryChunk chunk;
+  volum::PutCurrentVoLumChunkState(chunk, {0, 0, 0}, amps, volum::kAmpCount);
+
+  volum::VoLumChunkSelection selection;
+  int pos = volum::GetVoLumChunkSelection(chunk, 0, selection);
+
+  volum::VoLumAmpSettings loaded;
+  loaded.supportPolarityInvert = true;
+  pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded);
+  pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded, true);
+  pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded, /*hasSupportPolarityInvert=*/false);
+
+  CHECK(loaded.dualAmpActive == true);
+  CHECK(loaded.supportAmpIdx == 1);
+  CHECK(loaded.supportPolarityInvert == true);
+}
+
 TEST_CASE("VoLum chunk codec clamps selection and PRE capture indices")
 {
   volum::VoLumChunkSelection selection{-99, 99, -1};

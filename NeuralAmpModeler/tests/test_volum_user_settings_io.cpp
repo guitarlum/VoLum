@@ -303,6 +303,30 @@ TEST_CASE("Dual-amp sidecar overlays current-only support settings")
   CHECK(loaded[0].supportPolarityInvert == true);
 }
 
+TEST_CASE("Legacy dual-amp settings default support polarity invert on")
+{
+  CHECK(volum::VoLumAmpSettings{}.supportPolarityInvert == true);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].dualAmpActive = true;
+  amps[0].supportAmpIdx = 1;
+  amps[0].supportPolarityInvert = false;
+
+  nlohmann::json legacySidecar = volum::VolumDualAmpUserSettingsToJson(amps, volum::kAmpCount);
+  legacySidecar["amps"]["Ampete One"].erase("supportPolarityInvert");
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VolumUserSettingsFromJson(legacySidecar, loaded, volum::kAmpCount, nullptr);
+
+  CHECK(loaded[0].dualAmpActive == true);
+  CHECK(loaded[0].supportAmpIdx == 1);
+  CHECK(loaded[0].supportPolarityInvert == true);
+
+  nlohmann::json explicitOff = volum::VolumDualAmpUserSettingsToJson(amps, volum::kAmpCount);
+  volum::VolumUserSettingsFromJson(explicitOff, loaded, volum::kAmpCount, nullptr);
+  CHECK(loaded[0].supportPolarityInvert == false);
+}
+
 TEST_CASE("Effect settings JSON roundtrip preserves all params")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};

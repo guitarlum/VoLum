@@ -166,3 +166,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/04/2026 - VoLum: Added a saved SUPPORT-lane polarity invert button for Dual Amp, useful when centered mono amp pairs need a polarity flip to stack cleanly.
 05/04/2026 - VoLum: Added hover feedback to expanded PRE/POST pedal cards and the Dual Amp toggle chip.
 05/04/2026 - VoLum: Renamed the PRE compressor card's bottom art label to "Compressor".
+05/05/2026 - VoLum: Polished Dual Amp SUPPORT UI: centered amp label, glyph-only Ø polarity control defaulting on for new/legacy setups, clearer PAN hover/tooltips, and support-channel keyboard refresh.

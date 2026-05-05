@@ -119,6 +119,7 @@ public:
   VoLumPanKnobControl(const IRECT& bounds, int paramIdx, const IVStyle& style)
   : NAMKnobControl(bounds, paramIdx, "", style, IBitmap())
   {
+    SetTooltip(paramIdx == kSupportAmpPan ? "Pan the SUPPORT amp lane." : "Pan the MAIN amp lane.");
   }
 
   // Parent OnRescale would try to rescale a null bitmap — skip it for this transparent knob.
@@ -133,8 +134,12 @@ public:
 
     const IColor accent = GetColor(mMouseIsOver ? kX3 : kX1);
 
+    if (mMouseIsOver)
+      g.FillCircle(accent.WithOpacity(0.15f), cx, cy, widgetRadius + 3.f);
+
     // Subtle outer ring matches the lane accent without a heavy disc fill.
-    g.DrawCircle(accent.WithOpacity(0.35f), cx, cy, widgetRadius - 0.5f);
+    g.DrawCircle(accent.WithOpacity(mMouseIsOver ? 0.85f : 0.35f), cx, cy, widgetRadius - 0.5f,
+                 nullptr, mMouseIsOver ? 1.75f : 1.f);
     DrawIndicatorTrack(g, angle, cx + 0.5f, cy, widgetRadius);
 
     float data[2][2];
@@ -942,10 +947,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
           {
             const int delta = key.VK == kVK_LEFT ? -1 : 1;
-            const int next = std::clamp(GetParam(kSupportChannelIdx)->Int() + delta, 0, 127);
+            const int channelCount = !mVolumSupportChannelLabels.empty()
+              ? static_cast<int>(mVolumSupportChannelLabels.size())
+              : 128;
+            const int current = std::clamp(GetParam(kSupportChannelIdx)->Int(), 0, channelCount - 1);
+            const int next = (current + delta + channelCount) % channelCount;
             GetParam(kSupportChannelIdx)->Set(next);
             SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
+            if (auto* pGfx = GetUI())
+              if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumSupportChannelStep))
+                stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumSupportChannelLabels, next);
             mVolumSupportNeedsLoad.store(true);
+            mVolumSettingsDirty = true;
             return true;
           }
           if (auto* pGfx = GetUI())
@@ -1721,6 +1734,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
             && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3
             && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
         {
+          mSupportPolarityInvert.store(true);
+          mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = true;
           GetParam(kMainAmpPan)->Set(-1.0);
           SendParameterValueFromDelegate(kMainAmpPan, GetParam(kMainAmpPan)->GetNormalized(), true);
           GetParam(kSupportAmpPan)->Set(1.0);
