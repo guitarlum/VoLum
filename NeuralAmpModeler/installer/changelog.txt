@@ -167,3 +167,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/04/2026 - VoLum: Added hover feedback to expanded PRE/POST pedal cards and the Dual Amp toggle chip.
 05/04/2026 - VoLum: Renamed the PRE compressor card's bottom art label to "Compressor".
 05/05/2026 - VoLum: Polished Dual Amp SUPPORT UI: centered amp label, glyph-only Ø polarity control defaulting on for new/legacy setups, clearer PAN hover/tooltips, and support-channel keyboard refresh.
+05/08/2026 - VoLum: Effect staging branch trims POST effects to Digital/Analog/Reverse delay and Hall/Plate/Oktaverb reverb, keeps the repaired sub-mode UI for Oktaverb, calibrates the new 1176 PRE compressor output by -5 dB internally at displayed 0 dB, removes Tape/TremVerb WIP modes, and adds focused migration/DSP tests.

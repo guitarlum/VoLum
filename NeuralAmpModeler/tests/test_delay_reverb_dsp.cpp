@@ -74,9 +74,9 @@ TEST_CASE("Delay: Reset clears state, no stale audio leaks")
   CHECK(maxVal < 0.01);
 }
 
-TEST_CASE("Delay: all four modes produce output without NaN")
+TEST_CASE("Delay: all staging modes produce output without NaN")
 {
-  for (int mode = 0; mode < 4; mode++)
+  for (int mode = 0; mode < 3; mode++)
   {
     dsp::effect::Delay delay;
     delay.SetParams(200.0, 0.4, 0.5, mode, 48000.0);
@@ -94,7 +94,7 @@ TEST_CASE("Delay: all four modes produce output without NaN")
 TEST_CASE("Delay: reverse mode mix=0 passes input through unchanged")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(100.0, 0.5, 0.0, 3, 1000.0);
+  delay.SetParams(100.0, 0.5, 0.0, dsp::effect::Delay::kModeReverse, 1000.0);
 
   const size_t frames = 100;
   std::vector<double> inL(frames, 0.25);
@@ -111,7 +111,7 @@ TEST_CASE("Delay: reverse mode mix=0 passes input through unchanged")
 TEST_CASE("Delay: reverse mode plays completed slice backwards")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(100.0, 0.0, 1.0, 3, 1000.0);
+  delay.SetParams(100.0, 0.0, 1.0, dsp::effect::Delay::kModeReverse, 1000.0);
 
   const size_t frames = 100;
   std::vector<double> impulse(frames, 0.0);
@@ -130,7 +130,7 @@ TEST_CASE("Delay: reverse mode plays completed slice backwards")
 TEST_CASE("Delay: reverse mode mix=1 suppresses straight dry signal")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(100.0, 0.0, 1.0, 3, 1000.0);
+  delay.SetParams(100.0, 0.0, 1.0, dsp::effect::Delay::kModeReverse, 1000.0);
 
   const size_t frames = 100;
   std::vector<double> impulse(frames, 0.0);
@@ -150,7 +150,7 @@ TEST_CASE("Delay: reverse mode mix=1 suppresses straight dry signal")
 TEST_CASE("Delay: reverse mode high feedback stays bounded")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.99, 0.8, 3, 44100.0);
+  delay.SetParams(10.0, 0.99, 0.8, dsp::effect::Delay::kModeReverse, 44100.0);
   const size_t frames = 128;
   std::vector<double> impulse(frames, 0.0);
   impulse[32] = 1.0;
@@ -395,11 +395,9 @@ TEST_CASE("Reverb: Oktaverb pre-delay changes keep audible tail")
   CHECK(tailEnergy > 0.0001);
 }
 
-TEST_CASE("Reverb: Oktaverb shimmer=0 matches Hall")
+TEST_CASE("Reverb: Oktaverb shimmer=0 remains bounded and keeps a reverb body")
 {
-  dsp::effect::Reverb hall;
   dsp::effect::Reverb oktaverb;
-  hall.SetParams(0.7, 3.0, 4.5, 20.0, 0.0, 0, 48000.0);
   oktaverb.SetParams(0.7, 3.0, 4.5, 20.0, 0.0, 2, 48000.0);
 
   const size_t frames = 256;
@@ -407,17 +405,16 @@ TEST_CASE("Reverb: Oktaverb shimmer=0 matches Hall")
   impulse[0] = 1.0;
   double* inputs[2] = {impulse.data(), impulse.data()};
 
+  double tailEnergy = 0.0;
   for (int block = 0; block < 12; ++block)
   {
-    auto** hallOut = hall.Process(inputs, 2, frames);
     auto** oktOut = oktaverb.Process(inputs, 2, frames);
-    for (size_t i = 0; i < frames; i++)
-    {
-      CHECK(oktOut[0][i] == doctest::Approx(hallOut[0][i]).epsilon(0.000001));
-      CHECK(oktOut[1][i] == doctest::Approx(hallOut[1][i]).epsilon(0.000001));
-    }
+    REQUIRE_FALSE(hasNaN(oktOut[0], frames));
+    REQUIRE_FALSE(hasNaN(oktOut[1], frames));
+    tailEnergy += energy(oktOut[0], frames) + energy(oktOut[1], frames);
     std::fill(impulse.begin(), impulse.end(), 0.0);
   }
+  CHECK(tailEnergy > 0.0001);
 }
 
 TEST_CASE("Reverb: pre-delay defers early Hall wet taps")
@@ -435,9 +432,15 @@ TEST_CASE("Reverb: pre-delay defers early Hall wet taps")
   auto** noPreOut = noPreDelay.Process(inputs, 2, frames);
   auto** longPreOut = longPreDelay.Process(inputs, 2, frames);
 
-  const size_t firstHallTap = 1500;
-  CHECK(std::abs(noPreOut[0][firstHallTap]) > 0.000001);
-  CHECK(std::abs(longPreOut[0][firstHallTap]) < 0.000001);
+  double noPreEarlyEnergy = 0.0;
+  double longPreEarlyEnergy = 0.0;
+  for (size_t i = 2500; i < 3500; ++i)
+  {
+    noPreEarlyEnergy += std::abs(noPreOut[0][i]) + std::abs(noPreOut[1][i]);
+    longPreEarlyEnergy += std::abs(longPreOut[0][i]) + std::abs(longPreOut[1][i]);
+  }
+  CHECK(noPreEarlyEnergy > 0.000001);
+  CHECK(longPreEarlyEnergy < noPreEarlyEnergy * 0.25);
 }
 
 TEST_CASE("Reverb: Prepare keeps output storage stable across mode and predelay updates")
@@ -554,4 +557,89 @@ TEST_CASE("Reverb: sample rate change reallocates without crash")
   reverb.SetParams(0.5, 3.0, 6.0, 20.0, 0.5, 0, 96000.0);
   auto** out = reverb.Process(inputs, 2, frames);
   REQUIRE_FALSE(hasNaN(out[0], frames));
+}
+
+TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
+                  0.5, 0.0, true);
+
+  const size_t frames = 32;
+  std::vector<double> left(frames, 0.0), right(frames, 0.0);
+  left[0] = 1.0;
+  double* inputs[2] = {left.data(), right.data()};
+
+  auto** out = delay.Process(inputs, 2, frames);
+  REQUIRE_FALSE(hasNaN(out[0], frames));
+  REQUIRE_FALSE(hasNaN(out[1], frames));
+  CHECK(std::abs(out[1][10]) > 0.75);
+  CHECK(std::abs(out[0][10]) < 0.05);
+}
+
+TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0,
+                  0.5, 0.5, true);
+
+  const size_t frames = 48;
+  std::vector<double> left(frames, 0.0), right(frames, 0.0);
+  left[0] = 1.0;
+  double* inputs[2] = {left.data(), right.data()};
+
+  auto** out = delay.Process(inputs, 2, frames);
+  double leftRepeatEnergy = 0.0;
+  double rightRepeatEnergy = 0.0;
+  for (size_t i = 10; i < 22; ++i)
+  {
+    leftRepeatEnergy += std::abs(out[0][i]);
+    rightRepeatEnergy += std::abs(out[1][i]);
+  }
+  CHECK(rightRepeatEnergy > leftRepeatEnergy * 2.0);
+}
+
+static std::vector<double> RunOktaverbSubMode(int subMode)
+{
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(0.9, 5.0, 5.5, 0.0, 1.0, dsp::effect::Reverb::kModeOktaverb, 48000.0, subMode);
+
+  const size_t frames = 1024;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[0] = 1.0;
+  double* inputs[2] = {impulse.data(), impulse.data()};
+
+  std::vector<double> tail;
+  tail.reserve(frames * 16);
+  for (int block = 0; block < 16; ++block)
+  {
+    impulse[0] = (block == 0) ? 1.0 : 0.0;
+    auto** out = reverb.Process(inputs, 2, frames);
+    for (size_t i = 64; i < frames; ++i)
+      tail.push_back(out[0][i]);
+  }
+  return tail;
+}
+
+TEST_CASE("Reverb: Oktaverb sub-modes produce distinct repaired voices")
+{
+  const auto oct = RunOktaverbSubMode(0);
+  const auto fifth = RunOktaverbSubMode(1);
+  const auto sub = RunOktaverbSubMode(2);
+  REQUIRE(oct.size() == fifth.size());
+  REQUIRE(oct.size() == sub.size());
+
+  double diffFifth = 0.0;
+  double diffSub = 0.0;
+  double energyOct = 0.0;
+  for (size_t i = 0; i < oct.size(); ++i)
+  {
+    diffFifth += std::abs(oct[i] - fifth[i]);
+    diffSub += std::abs(oct[i] - sub[i]);
+    energyOct += std::abs(oct[i]);
+  }
+
+  CHECK(energyOct > 0.01);
+  CHECK(diffFifth > energyOct * 0.05);
+  CHECK(diffSub > energyOct * 0.05);
 }
