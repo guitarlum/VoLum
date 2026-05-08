@@ -82,7 +82,7 @@ PRE-Einstellungen sind lokal für den aktuellen Amp. So kann jeder Amp eigene Co
 Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Klick auf POST in der Triptych-Leiste, um den Bereich auszuklappen, und dann auf eine Karte, um ihre Regler in der Reglerzeile zu fokussieren.
 
 - **Delay:** Digital-, Analog- und Reverse-Modus mit Time, Feedback, Mix, Tone und einem modusspezifischen fünften Regler (`Grit`, `Wear` oder `Bloom`). Ping-Pong ist ein Stereo-Schalter für Digital und Analog.
-- **Reverb:** Hall-, Plate- und Oktaverb-Modus mit Mix, Decay, Tone und Pre-Delay. Oktaverb ergänzt Shimmer und einen `OCT / OCT+5TH / OCT+SUB`-Submode-Schalter.
+- **Reverb:** Hall-, Plate- und Oktaverb-Modus mit Mix, Decay, Tone und Pre-Delay. Oktaverb ergänzt Intensity und einen `HALO / SHIMMER / BLOOM`-Submode-Schalter. Halo speist gleichzeitig Oktave-aufwärts- und Oktave-abwärts-Stimmen ins Feedback und liefert so eine dichte Dual-Pitch-Wand mit echtem Körper, Shimmer baut reines Oktave-aufwärts-Feedback für einen üppigen, kletternden Tail auf, und Bloom blendet den Wet-Tail langsam für Pad-artige Swells ein. Jeder Oktaverb-Submode merkt sich eigene Werte für Mix/Decay/Tone/Pre-Delay/Intensity.
 
 Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Effekte sind geteilt/global statt pro Amp gespeichert, also wie finale Effekte hinter der Amp-Sektion.
 

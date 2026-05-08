@@ -62,4 +62,27 @@ inline void MigrateDelayReverbToV0_9_0(nlohmann::json& config)
   config["ReverbSubMode"] = 0.0;
 }
 
+inline int RemapLegacyOktaverbSubModeToV0_9_1(int oldSubMode)
+{
+  switch (oldSubMode)
+  {
+    case 2: return 0; // old Oct+Sub -> slot 0 (now Halo, was Dark in 0.9.1)
+    case 0:
+    case 1:
+    default: return 1; // old Oct / Oct+5th -> new Shimmer
+  }
+}
+
+inline void MigrateOktaverbSubModeToV0_9_1(nlohmann::json& config)
+{
+  if (!config.contains("ReverbSubMode") || !config["ReverbSubMode"].is_number())
+  {
+    config["ReverbSubMode"] = 1.0;
+    return;
+  }
+
+  const int oldSubMode = static_cast<int>(std::round(config["ReverbSubMode"].get<double>()));
+  config["ReverbSubMode"] = static_cast<double>(RemapLegacyOktaverbSubModeToV0_9_1(oldSubMode));
+}
+
 } // namespace volum

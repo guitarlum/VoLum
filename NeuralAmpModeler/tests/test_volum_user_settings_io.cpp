@@ -330,6 +330,14 @@ TEST_CASE("effect-staging effect snapshot fields round-trip through user setting
     fx.reverbModes[i].shimmer = 0.10 + 0.10 * i;
     fx.reverbModes[i].subMode = i % 3;
   }
+  for (int i = 0; i < 3; ++i)
+  {
+    fx.oktaverbSubModes[i].mix = 0.40 + 0.05 * i;
+    fx.oktaverbSubModes[i].decay = 4.0 + i;
+    fx.oktaverbSubModes[i].tone = 3.0 + i;
+    fx.oktaverbSubModes[i].preDelay = 20.0 + 10.0 * i;
+    fx.oktaverbSubModes[i].shimmer = 0.30 + 0.10 * i;
+  }
 
   const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
   volum::VoLumEffectSettings loaded;
@@ -357,6 +365,65 @@ TEST_CASE("effect-staging effect snapshot fields round-trip through user setting
     CHECK(loaded.reverbModes[i].shimmer == doctest::Approx(0.10 + 0.10 * i));
     CHECK(loaded.reverbModes[i].subMode == i % 3);
   }
+  for (int i = 0; i < 3; ++i)
+  {
+    CHECK(loaded.oktaverbSubModes[i].mix == doctest::Approx(0.40 + 0.05 * i));
+    CHECK(loaded.oktaverbSubModes[i].decay == doctest::Approx(4.0 + i));
+    CHECK(loaded.oktaverbSubModes[i].tone == doctest::Approx(3.0 + i));
+    CHECK(loaded.oktaverbSubModes[i].preDelay == doctest::Approx(20.0 + 10.0 * i));
+    CHECK(loaded.oktaverbSubModes[i].shimmer == doctest::Approx(0.30 + 0.10 * i));
+  }
+}
+
+TEST_CASE("legacy v4 settings seed Oktaverb sub-mode snapshots from current Oktaverb values")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  auto& okt = fx.reverbModes[volum::kVoLumReverbModeOktaverb];
+  okt.mix = 0.77;
+  okt.decay = 8.0;
+  okt.tone = 2.5;
+  okt.preDelay = 44.0;
+  okt.shimmer = 0.33;
+
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  j["version"] = 4;
+  j["effects"].erase("oktaverbSubModes");
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  for (int i = 0; i < 3; ++i)
+  {
+    CHECK(loaded.oktaverbSubModes[i].mix == doctest::Approx(0.77));
+    CHECK(loaded.oktaverbSubModes[i].decay == doctest::Approx(8.0));
+    CHECK(loaded.oktaverbSubModes[i].tone == doctest::Approx(2.5));
+    CHECK(loaded.oktaverbSubModes[i].preDelay == doctest::Approx(44.0));
+    CHECK(loaded.oktaverbSubModes[i].shimmer == doctest::Approx(0.33));
+  }
+}
+
+TEST_CASE("legacy v3 Oktaverb sub-modes migrate to Halo and Shimmer")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.reverbMode = volum::kVoLumReverbModeOktaverb;
+  fx.reverbModes[volum::kVoLumReverbModeOktaverb].subMode = 2; // old Oct+Sub
+
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  j["version"] = 3;
+
+  volum::VoLumEffectSettings loaded;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded, &healed);
+  CHECK(healed);
+  CHECK(loaded.reverbModes[volum::kVoLumReverbModeOktaverb].subMode == volum::kVoLumOktaverbSubModeDark);
+
+  j["effects"]["reverbModes"][volum::kVoLumReverbModeOktaverb]["subMode"] = 0; // old Oct
+  healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded, &healed);
+  CHECK(healed);
+  CHECK(loaded.reverbModes[volum::kVoLumReverbModeOktaverb].subMode == volum::kVoLumOktaverbSubModeShimmer);
 }
 
 TEST_CASE("legacy v2 delayModes migrate to effect-staging mode order")
