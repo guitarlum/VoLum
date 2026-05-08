@@ -82,7 +82,7 @@ VoLum POST section
 The POST section runs after the amp. It contains Delay and Reverb cards. Click POST in the triptych strip to expand it, then click a card to focus its controls in the knob row.
 
 - **Delay:** Digital, Analog, and Reverse modes with Time, Feedback, Mix, Tone, and a mode-specific fifth knob (`Grit`, `Wear`, or `Bloom`). Ping-Pong is a stereo toggle for Digital and Analog.
-- **Reverb:** Hall, Plate, and Oktaverb modes with Mix, Decay, Tone, and Pre-Delay. Oktaverb adds Shimmer and an `OCT / OCT+5TH / OCT+SUB` sub-mode selector.
+- **Reverb:** Hall, Plate, and Oktaverb modes with Mix, Decay, Tone, and Pre-Delay. Oktaverb adds Intensity and a `HALO / SHIMMER / BLOOM` selector. Halo runs both octave-up and octave-down voices in the feedback loop at once for a dual pitch-vector wash that keeps real body, Shimmer builds pure octave-up feedback for a lush climbing tail, and Bloom fades the wet signal in slowly for pad-like swells. Each Oktaverb sub-mode remembers its own Mix/Decay/Tone/Pre-Delay/Intensity values.
 
 The small LED on each card shows whether the effect is active. The bottom label shows the current mode or preset summary. POST effects are shared/global rather than per-amp, so they behave like the final effects placed after the amp section.
 

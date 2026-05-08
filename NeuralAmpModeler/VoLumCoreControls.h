@@ -1105,7 +1105,7 @@ private:
 
 // Compact horizontal 3-way pill switch bound to a parameter index.
 // Effect staging currently uses this for Oktaverb sub-modes
-// (Oct / Oct+5th / Oct+Sub), but the control remains generic.
+// (Dark / Shimmer / Bloom), but the control remains generic.
 // Labels can be swapped at runtime via SetLabels so a single pill can repurpose
 // per-mode without re-attaching controls.
 class VoLumSubModePillControl : public IControl

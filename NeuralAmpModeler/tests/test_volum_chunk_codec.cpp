@@ -274,3 +274,22 @@ TEST_CASE("effect-staging migration: adds only live staging params")
   CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
   CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(0.0));
 }
+
+TEST_CASE("Oktaverb v0.9.1 migration remaps legacy sub-modes")
+{
+  {
+    nlohmann::json config = {{"ReverbSubMode", 0.0}};
+    volum::MigrateOktaverbSubModeToV0_9_1(config);
+    CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(1.0));
+  }
+  {
+    nlohmann::json config = {{"ReverbSubMode", 1.0}};
+    volum::MigrateOktaverbSubModeToV0_9_1(config);
+    CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(1.0));
+  }
+  {
+    nlohmann::json config = {{"ReverbSubMode", 2.0}};
+    volum::MigrateOktaverbSubModeToV0_9_1(config);
+    CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(0.0));
+  }
+}

@@ -234,7 +234,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kReverbMode)->InitEnum("ReverbMode", volum::kVoLumReverbModeHall,
                                   {"Hall", "Plate", "Oktaverb"});
   // Oktaverb-only sub-toggle.
-  GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 0, {"Oct", "Oct+5th", "Oct+Sub"});
+  GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 1, {"Halo", "Shimmer", "Bloom"});
 
   // Boost (stub)
   GetParam(kBoostActive)->InitBool("BoostActive", false);
@@ -670,7 +670,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(2, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(3, "TONE", kReverbTone, "", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(4, "PRE-DLY", kReverbPreDelay, "ms", "REVERB_PREDELAY", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(5, "SHIMMER", kReverbShimmer, "%", "REVERB_SHIMMER", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(5, "INTENSITY", kReverbShimmer, "%", "REVERB_SHIMMER", true, 5, 1, effectKnobOffset, effectColW);
     IRECT reverbPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
     pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE", "OKTAVERB"}), -1, "REVERB_KNOBS");
 
@@ -683,7 +683,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float subPillY = knobT + knobDiam + valueH + 18.f;
     IRECT reverbSubPillRect(mainCX - subPillW / 2.f, subPillY, mainCX + subPillW / 2.f, subPillY + subPillH);
     auto* reverbSubPill = new VoLumSubModePillControl(reverbSubPillRect, kReverbSubMode,
-                                                     {"OCT", "OCT+5TH", "OCT+SUB"});
+                                                     {"HALO", "SHIMMER", "BLOOM"});
     pGraphics->AttachControl(reverbSubPill, -1, "REVERB_SUBTOGGLE");
     mVolumReverbSubModePill = reverbSubPill;
 
@@ -1866,13 +1866,22 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kReverbTone:
     case kReverbPreDelay:
     case kReverbShimmer:
-    case kReverbSubMode:
-      if (mVolumInitComplete)
+      // Skip while restoring a snapshot: the setParam cascade would otherwise re-save
+      // the partially-restored knob values back into the very snapshot we are loading.
+      if (mVolumInitComplete && !mVolumReverbRestoreInProgress)
       {
         mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
         mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
         _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1));
       }
+      break;
+    case kReverbSubMode:
+      // Do NOT write the new sub-mode to mVolumEffectSettings here. OnParamChangeUI runs after
+      // this and needs the previously selected sub-mode (held in settings) to know which slot
+      // to snapshot the current knob values into before swapping in the new slot's values.
+      // Mirrors the kDelayMode / kReverbMode pattern, which are handled UI-only for the same
+      // reason. Without this guard, switching sub-modes would overwrite the destination slot
+      // with the source slot's knobs, defeating per-sub-mode persistence.
       break;
     case kPreNam1Capture:
     case kPreNam1Active:
@@ -1966,6 +1975,31 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         const int newMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
         mVolumEffectSettings.reverbMode = newMode;
         _VolumRestoreReverbModeSnapshot(newMode);
+        _UpdateVoLumLayout(pGraphics);
+        break;
+      }
+      case kReverbSubMode:
+      {
+        // Skip while a reverb mode / sub-mode restoration is in flight: the cascading
+        // setParam handlers would otherwise overwrite the freshly-loaded sub-mode
+        // snapshot with whatever knob values happened to be on screen mid-restore.
+        // Also skip when the current reverb mode is not Oktaverb, since the sub-mode
+        // pill is irrelevant outside Oktaverb and any apparent change there is just
+        // the cascade from a Hall / Plate restoration.
+        if (mVolumReverbRestoreInProgress)
+          break;
+        if (GetParam(kReverbMode)->Int() != volum::kVoLumReverbModeOktaverb)
+          break;
+        const int oldSubMode = std::clamp(
+          mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode, 0, 2);
+        const int newSubMode = std::clamp(GetParam(kReverbSubMode)->Int(), 0, 2);
+        // No-op if the user re-clicked the same sub-mode pill: avoids unnecessary
+        // snapshot churn that has no observable effect anyway.
+        if (newSubMode == oldSubMode)
+          break;
+        _VolumSaveOktaverbSubModeSnapshot(oldSubMode);
+        mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode = newSubMode;
+        _VolumRestoreOktaverbSubModeSnapshot(newSubMode);
         _UpdateVoLumLayout(pGraphics);
         break;
       }
@@ -2630,12 +2664,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         _HideControlGroup(pGfx, "REVERB_KNOBS", false);
         _HideControlGroup(pGfx, "REVERB_PREDELAY", false);
         _HideControlGroup(pGfx, "REVERB_SHIMMER", !isOktaverb);
-        // 3-way sub-mode pill is only visible for repaired Oktaverb modes.
+        // 3-way sub-mode pill is only visible for Oktaverb modes.
         _HideControlGroup(pGfx, "REVERB_SUBTOGGLE", !isOktaverb);
         if (mVolumReverbSubModePill)
         {
           if (isOktaverb)
-            mVolumReverbSubModePill->SetLabels({"OCT", "OCT+5TH", "OCT+SUB"});
+            mVolumReverbSubModePill->SetLabels({"HALO", "SHIMMER", "BLOOM"});
         }
         (void) isHall;
         (void) isPlate;
@@ -3809,33 +3843,113 @@ void NeuralAmpModeler::_VolumSaveReverbModeSnapshot(int mode)
   s.preDelay = GetParam(kReverbPreDelay)->Value();
   s.shimmer = GetParam(kReverbShimmer)->Value();
   s.subMode = GetParam(kReverbSubMode)->Int();
+  if (mode == volum::kVoLumReverbModeOktaverb)
+    _VolumSaveOktaverbSubModeSnapshot(s.subMode);
 }
 
 void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
 {
+  // Guard so the setParam cascade below cannot re-enter our own snapshot save / restore
+  // logic. Without this, switching reverb modes triggers OnParamChangeUI for kReverbMix
+  // / kReverbSubMode etc. mid-restore, which writes the partially-restored state back
+  // into the snapshot we are loading from. RAII saves and restores the previous value
+  // so nested calls (this -> _VolumRestoreOktaverbSubModeSnapshot) keep the guard set.
+  struct RestoreGuard {
+    bool& flag;
+    bool prev;
+    explicit RestoreGuard(bool& f) : flag(f), prev(f) { flag = true; }
+    ~RestoreGuard() { flag = prev; }
+  } guard(mVolumReverbRestoreInProgress);
+
   // Mirror the delay-side per-mode default update so that double-clicking a reverb knob
   // resets it to the design-guide value for the currently selected mode.
   const volum::VoLumEffectSettings designDefaults;
   const int clampedMode = std::clamp(mode, 0, volum::kVoLumReverbModeCount - 1);
   const auto& d = designDefaults.reverbModes[clampedMode];
-  GetParam(kReverbMix)->SetDefault(d.mix);
-  GetParam(kReverbDecay)->SetDefault(d.decay);
-  GetParam(kReverbTone)->SetDefault(d.tone);
-  GetParam(kReverbPreDelay)->SetDefault(d.preDelay);
-  GetParam(kReverbShimmer)->SetDefault(d.shimmer);
-  GetParam(kReverbSubMode)->SetDefault(static_cast<double>(std::clamp(d.subMode, 0, 2)));
+  const int restoredSubMode = clampedMode == volum::kVoLumReverbModeOktaverb
+                                ? std::clamp(mVolumEffectSettings.reverbModes[clampedMode].subMode, 0, 2)
+                                : std::clamp(d.subMode, 0, 2);
+  if (clampedMode == volum::kVoLumReverbModeOktaverb)
+  {
+    const auto& subDefaults = designDefaults.oktaverbSubModes[restoredSubMode];
+    GetParam(kReverbMix)->SetDefault(subDefaults.mix);
+    GetParam(kReverbDecay)->SetDefault(subDefaults.decay);
+    GetParam(kReverbTone)->SetDefault(subDefaults.tone);
+    GetParam(kReverbPreDelay)->SetDefault(subDefaults.preDelay);
+    GetParam(kReverbShimmer)->SetDefault(subDefaults.shimmer);
+  }
+  else
+  {
+    GetParam(kReverbMix)->SetDefault(d.mix);
+    GetParam(kReverbDecay)->SetDefault(d.decay);
+    GetParam(kReverbTone)->SetDefault(d.tone);
+    GetParam(kReverbPreDelay)->SetDefault(d.preDelay);
+    GetParam(kReverbShimmer)->SetDefault(d.shimmer);
+  }
+  GetParam(kReverbSubMode)->SetDefault(static_cast<double>(restoredSubMode));
 
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   const auto& s = mVolumEffectSettings.reverbModes[clampedMode];
+  if (clampedMode == volum::kVoLumReverbModeOktaverb)
+  {
+    setParam(kReverbSubMode, static_cast<double>(restoredSubMode));
+    _VolumRestoreOktaverbSubModeSnapshot(restoredSubMode);
+  }
+  else
+  {
+    setParam(kReverbMix, s.mix);
+    setParam(kReverbDecay, s.decay);
+    setParam(kReverbTone, s.tone);
+    setParam(kReverbPreDelay, s.preDelay);
+    setParam(kReverbShimmer, s.shimmer);
+    setParam(kReverbSubMode, static_cast<double>(std::clamp(s.subMode, 0, 2)));
+  }
+}
+
+void NeuralAmpModeler::_VolumSaveOktaverbSubModeSnapshot(int subMode)
+{
+  auto& s = mVolumEffectSettings.oktaverbSubModes[std::clamp(subMode, 0, 2)];
+  s.mix = GetParam(kReverbMix)->Value();
+  s.decay = GetParam(kReverbDecay)->Value();
+  s.tone = GetParam(kReverbTone)->Value();
+  s.preDelay = GetParam(kReverbPreDelay)->Value();
+  s.shimmer = GetParam(kReverbShimmer)->Value();
+}
+
+void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
+{
+  // Same RAII guard as _VolumRestoreReverbModeSnapshot: the setParam calls below send
+  // values via SendParameterValueFromDelegate, which triggers OnParamChangeUI for the
+  // reverb knobs and would otherwise overwrite the snapshot we are restoring from.
+  struct RestoreGuard {
+    bool& flag;
+    bool prev;
+    explicit RestoreGuard(bool& f) : flag(f), prev(f) { flag = true; }
+    ~RestoreGuard() { flag = prev; }
+  } guard(mVolumReverbRestoreInProgress);
+
+  const volum::VoLumEffectSettings designDefaults;
+  const int clampedSubMode = std::clamp(subMode, 0, 2);
+  const auto& d = designDefaults.oktaverbSubModes[clampedSubMode];
+  GetParam(kReverbMix)->SetDefault(d.mix);
+  GetParam(kReverbDecay)->SetDefault(d.decay);
+  GetParam(kReverbTone)->SetDefault(d.tone);
+  GetParam(kReverbPreDelay)->SetDefault(d.preDelay);
+  GetParam(kReverbShimmer)->SetDefault(d.shimmer);
+
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+  const auto& s = mVolumEffectSettings.oktaverbSubModes[clampedSubMode];
   setParam(kReverbMix, s.mix);
   setParam(kReverbDecay, s.decay);
   setParam(kReverbTone, s.tone);
   setParam(kReverbPreDelay, s.preDelay);
   setParam(kReverbShimmer, s.shimmer);
-  setParam(kReverbSubMode, static_cast<double>(std::clamp(s.subMode, 0, 2)));
 }
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)

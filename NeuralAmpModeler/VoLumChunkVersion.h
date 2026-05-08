@@ -81,4 +81,9 @@ inline bool ChunkUses0715SerializedConfig(const ChunkVersion& version)
   return version >= ChunkVersion(0, 7, 15) || isVolum01to04;
 }
 
+inline bool ShouldRemapOktaverbSubModeForChunkVersion(const ChunkVersion& version)
+{
+  return !(version >= ChunkVersion(0, 9, 1));
+}
+
 } // namespace volum
