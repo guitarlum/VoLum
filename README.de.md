@@ -14,8 +14,8 @@ Eine Einführung in Oberfläche, Dual Amp, PRE-Pedale, POST-Effekte, Tuner und M
 
 - **15 mitgelieferte Amps** mit 4 Speaker-Modi und mehreren Gain-Stufen pro Amp (insgesamt ~240 Profile)
 - **Dark-Theme-Oberfläche** mit Amp-Browser in der Seitenleiste, Speaker-Tasten, Channel-Stepper und gruppierten Reglern
-- **Delay-Effekt** — Tape-, Digital- und Ping-Pong-Modi mit Time-, Feedback- und Mix-Reglern
-- **Reverb-Effekt** — Hall-, Plate- und Oktaverb-Modi mit Decay-, Tone-, Mix-, Pre-Delay- und Shimmer-Reglern
+- **Delay-Effekt** — Digital-, Analog- und Reverse-Modi mit Time, Feedback, Mix, Tone, modusspezifischem Charakterregler und Ping-Pong für Digital/Analog
+- **Reverb-Effekt** — Hall-, Plate- und Oktaverb-Modi mit Decay, Tone, Mix, Pre-Delay sowie Oktaverb-Shimmer/Submodes
 - **POST-Pedalboard-Ansicht** — Klick auf den POST-Streifen zeigt Delay- und Reverb-Karten mit prozeduraler Fraktal-Kunst und Live-Preset-Infos
 - **Eingebauter Tuner** — chromatischer Tuner mit stabiler Cent-Anzeige; schaltet den Ausgang beim Stimmen stumm
 - **Eingebautes Metronom** — einstellbare BPM, Lautstärke und Modi `1/4`, `2/4`, `3/4`, `4/4`, `6/8`
@@ -198,8 +198,8 @@ Die Symbole für Tuner und Metronom sitzen oben rechts, links neben den Einstell
 
 Klick auf den **POST**-Streifen öffnet die Pedalboard-Ansicht für VoLums Post-Effekte.
 
-- **Delay:** Tape-, Digital- und Ping-Pong-Modi mit Time, Feedback und Mix.
-- **Reverb:** Hall-, Plate- und Oktaverb-Modi mit Decay, Tone, Mix, Pre-Delay und Shimmer. Oktaverb fügt eine Suboktav-Shimmer-Ebene für schwerere Ambient-Tails hinzu.
+- **Delay:** Digital-, Analog- und Reverse-Modi mit Time, Feedback, Mix, Tone und `Grit` / `Wear` / `Bloom`. Ping-Pong ist ein Stereo-Schalter für Digital und Analog.
+- **Reverb:** Hall-, Plate- und Oktaverb-Modi mit Decay, Tone, Mix und Pre-Delay. Oktaverb ergänzt Shimmer sowie die Submodes `OCT`, `OCT+5TH` und `OCT+SUB`.
 
 ## Aus dem Quellcode bauen
 
