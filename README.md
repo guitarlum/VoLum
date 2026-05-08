@@ -12,8 +12,8 @@ For a walkthrough of the interface, Dual Amp, PRE pedals, POST effects, tuner, a
 
 - **15 bundled amps** with 4 speaker modes and multiple gain stages each (~240 profiles total)
 - **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
-- **Delay effect** -- Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix controls
-- **Reverb effect** -- Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer controls
+- **Delay effect** -- Digital, Analog, and Reverse modes with Time, Feedback, Mix, Tone, a mode-specific character knob, and Ping-Pong for Digital/Analog
+- **Reverb effect** -- Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Oktaverb Shimmer/sub-modes
 - **POST pedalboard view** -- click the POST strip to expand Delay and Reverb cards with procedural fractal art, live preset summaries, and bypass LEDs
 - **Built-in tuner** -- chromatic tuner overlay with stable cents display; mutes output while tuning
 - **Built-in metronome** -- configurable BPM, volume, and 1/4, 2/4, 3/4, 4/4, 6/8 modes
@@ -201,8 +201,8 @@ Use the tuner and metronome icons in the top-right toolbar, left of Settings.
 
 Click the **POST** strip to expand VoLum's pedalboard-style post effects.
 
-- **Delay:** Tape, Digital, and Ping Pong modes with Time, Feedback, and Mix.
-- **Reverb:** Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Shimmer. Oktaverb adds a sub-octave shimmer layer for heavier ambient tails.
+- **Delay:** Digital, Analog, and Reverse modes with Time, Feedback, Mix, Tone, and `Grit` / `Wear` / `Bloom`. Ping-Pong is a stereo toggle for Digital and Analog.
+- **Reverb:** Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, and Pre-Delay. Oktaverb adds Shimmer plus `OCT`, `OCT+5TH`, and `OCT+SUB` sub-modes.
 
 ## Build from source
 
