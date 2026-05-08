@@ -70,6 +70,11 @@ enum EParams
   kDelayFeedback,
   kDelayMix,
   kDelayMode,
+  // Effects iteration 2 (delay)
+  kDelayTone,
+  kDelayAge,
+  kDelayPingPong,
+  kDelayTapeSubMode,
   // Reverb (POST)
   kReverbActive,
   kReverbMix,
@@ -78,6 +83,9 @@ enum EParams
   kReverbPreDelay,
   kReverbShimmer,
   kReverbMode,
+  // Effects iteration 2 (reverb)
+  kReverbSubMode,
+  kReverbTremRate,
   // Boost (PRE - stub for future)
   kBoostActive,
   kBoostDrive,
@@ -405,6 +413,16 @@ private:
   int mVolumChannelIdx = 0;
   int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
   std::string mVolumSelectedKnobHintText;
+  // Reverb sub-mode pill is shared across Hall/Plate/Oktaverb (labels swap per mode).
+  // Reverb shimmer-knob label is repurposed as "TREM DEPTH" when reverb mode == TremVerb.
+  // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
+  // pick up a per-mode tooltip explaining what the knob actually does in that mode.
+  // All pointers are non-owning views into the IGraphics tree; nullptr until UI is attached.
+  class VoLumSubModePillControl* mVolumReverbSubModePill = nullptr;
+  class VoLumKnobLabelControl* mVolumReverbShimmerLabel = nullptr;
+  class VoLumKnobLabelControl* mVolumDelayAgeLabel = nullptr;
+  iplug::igraphics::IControl* mVolumDelayAgeKnob = nullptr;
+  iplug::igraphics::IControl* mVolumDelayAgeValue = nullptr;
   std::vector<std::string> mVolumChannelFiles;
   std::vector<std::string> mVolumChannelLabels;
   std::vector<std::string> mVolumSupportChannelFiles;

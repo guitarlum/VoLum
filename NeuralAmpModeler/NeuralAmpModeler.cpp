@@ -213,21 +213,32 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kIRToggle)->InitBool("IRToggle", true);
 #endif
 
-  // Delay
+  // Delay (mode order at v0.9.0: Digital, Analog, Tape, Reverse)
   GetParam(kDelayActive)->InitBool("DelayActive", false);
   GetParam(kDelayTime)->InitDouble("DelayTime", 380.0, 10.0, 2000.0, 1.0, "ms");
   GetParam(kDelayFeedback)->InitDouble("DelayFeedback", 0.35, 0.0, 0.99, 0.01);
   GetParam(kDelayMix)->InitDouble("DelayMix", 0.28, 0.0, 1.0, 0.01);
-  GetParam(kDelayMode)->InitEnum("DelayMode", 1, {"Tape", "Digital", "Ping Pong", "Reverse"});
+  GetParam(kDelayMode)->InitEnum("DelayMode", volum::kVoLumDelayModeDigital,
+                                  {"Digital", "Analog", "Tape", "Reverse"});
+  GetParam(kDelayTone)->InitDouble("DelayTone", 0.5, 0.0, 1.0, 0.01);
+  GetParam(kDelayAge)->InitDouble("DelayAge", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kDelayPingPong)->InitBool("DelayPingPong", false);
+  GetParam(kDelayTapeSubMode)
+    ->InitEnum("DelayTapeSubMode", 1, {"Studio", "Vintage", "Broken"});
 
-  // Reverb
+  // Reverb (mode order at v0.9.0: Hall, Plate, Oktaverb, TremVerb)
   GetParam(kReverbActive)->InitBool("ReverbActive", false);
-  GetParam(kReverbMix)->InitDouble("ReverbMix", 0.3, 0.0, 1.0, 0.01);
-  GetParam(kReverbDecay)->InitDouble("ReverbDecay", 3.0, 0.1, 10.0, 0.1, "s");
-  GetParam(kReverbTone)->InitDouble("ReverbTone", 4.5, 0.0, 10.0, 0.1);
-  GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 20.0, 0.0, 80.0, 1.0, "ms");
-  GetParam(kReverbShimmer)->InitDouble("ReverbShimmer", 0.5, 0.0, 1.0, 0.01);
-  GetParam(kReverbMode)->InitEnum("ReverbMode", 0, {"Hall", "Plate", "Oktaverb"});
+  GetParam(kReverbMix)->InitDouble("ReverbMix", 0.32, 0.0, 1.0, 0.01);
+  GetParam(kReverbDecay)->InitDouble("ReverbDecay", 3.5, 0.1, 10.0, 0.1, "s");
+  GetParam(kReverbTone)->InitDouble("ReverbTone", 5.5, 0.0, 10.0, 0.1);
+  GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 30.0, 0.0, 200.0, 1.0, "ms");
+  GetParam(kReverbShimmer)->InitDouble("ReverbShimmer", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kReverbMode)->InitEnum("ReverbMode", volum::kVoLumReverbModeHall,
+                                  {"Hall", "Plate", "Oktaverb", "TremVerb"});
+  // Per-mode sub-toggle (Hall: Studio/Concert/Cathedral, Plate: Steel/Brass/Copper,
+  // Oktaverb: Oct/Oct+5th/Oct+SubOct, TremVerb: ignored).
+  GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 1, {"A", "B", "C"});
+  GetParam(kReverbTremRate)->InitDouble("ReverbTremRate", 4.0, 0.5, 10.0, 0.1, "Hz");
 
   // Boost (stub)
   GetParam(kBoostActive)->InitBool("BoostActive", false);
@@ -657,25 +668,110 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(6, "OUTPUT", kSupportOutputLevel, "dB", "SUPPORT_AMP_KNOBS", false);
 
     // REVERB KNOBS (Centered)
+    // Slot 4 hosts BOTH the PRE-DLY knob (Hall/Plate/Oktaverb) and the TREM RATE knob (TremVerb)
+    // in the same physical position; visibility is toggled in _UpdateVoLumLayout.
+    // Slot 5 hosts SHIMMER, which is repurposed as TREM DEPTH for TremVerb (label is swapped at
+    // runtime via mVolumReverbShimmerLabel->SetLabel(...)).
     const float effectKnobOffset = -38.f;
     const float effectColW = 70.f;
     drawKnobCol(1, "MIX", kReverbMix, "%", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(2, "DECAY", kReverbDecay, "s", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(3, "TONE", kReverbTone, "", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(4, "PRE-DLY", kReverbPreDelay, "ms", "REVERB_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(4, "PRE-DLY", kReverbPreDelay, "ms", "REVERB_PREDELAY", true, 5, 1, effectKnobOffset, effectColW);
+    // Slot 4 hosts "RATE" (TremVerb) and "PRE-DLY" (Hall/Plate/Oktaverb) at the same physical
+    // position. Short label so the knob value column doesn't bleed into slot 5's "DEPTH".
+    drawKnobCol(4, "RATE", kReverbTremRate, "Hz", "REVERB_TREMRATE", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(5, "SHIMMER", kReverbShimmer, "%", "REVERB_SHIMMER", true, 5, 1, effectKnobOffset, effectColW);
+    // Capture the SHIMMER label so we can swap it to "TREM DEPTH" when TremVerb is selected.
+    pGraphics->ForAllControlsFunc([this](iplug::igraphics::IControl* c) {
+      const char* g = c->GetGroup();
+      if (!g || std::strcmp(g, "REVERB_SHIMMER") != 0)
+        return;
+      if (auto* lbl = dynamic_cast<VoLumKnobLabelControl*>(c))
+        mVolumReverbShimmerLabel = lbl;
+    });
     IRECT reverbPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE", "OKTAVERB"}), -1, "REVERB_KNOBS");
-    
+    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE", "OKTAVERB", "TREMVERB"}), -1, "REVERB_KNOBS");
+
+    // Reverb sub-mode pill (3-way) sits in the toggle row area below the knobs. Labels are
+    // refreshed per mode in _UpdateVoLumLayout. Hidden entirely for TremVerb.
+    // Width sized for the longest mode label trio (Hall: CATHEDRAL @ 9 chars, Oktaverb:
+    // OCT+5TH @ 7 chars). Height matches the standard toggleH so the pill aligns vertically
+    // with neighbouring slide-switches that share this toggle row in other lanes.
+    const float subPillW = 256.f;
+    // Slimmer than the AMP-row toggleH (34) — the row carries text-only pill labels and a
+    // single slide-switch, so a tighter 28 px height keeps it from feeling visually heavy.
+    const float subPillH = 28.f;
+    const float subPillY = knobT + knobDiam + valueH + 18.f;
+    IRECT reverbSubPillRect(mainCX - subPillW / 2.f, subPillY, mainCX + subPillW / 2.f, subPillY + subPillH);
+    auto* reverbSubPill = new VoLumSubModePillControl(reverbSubPillRect, kReverbSubMode,
+                                                     {"STUDIO", "CONCERT", "CATHEDRAL"});
+    pGraphics->AttachControl(reverbSubPill, -1, "REVERB_SUBTOGGLE");
+    mVolumReverbSubModePill = reverbSubPill;
+
     float revSwX = mainCX - 242.f;
     pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(revSwX - 14.f, knobT - 4.f, revSwX + 14.f, knobT + knobDiam + 2.f), kReverbActive), -1, "REVERB_POWER");
 
-    // DELAY KNOBS (Centered)
-    drawKnobCol(2, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
-    drawKnobCol(3, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
-    drawKnobCol(4, "MIX", kDelayMix, "%", "DELAY_KNOBS", true, 3, 2, effectKnobOffset, effectColW);
+    // DELAY KNOBS (Centered) - 5 slots: TIME, FEEDBACK, MIX, TONE, AGE
+    drawKnobCol(1, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(2, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(3, "MIX", kDelayMix, "%", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(4, "TONE", kDelayTone, "", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    // AGE slot is built manually so we can capture pointers to the label, knob and value
+    // controls. The slot's label and tooltip swap per delay mode (GRIT/WEAR/AGE/BLOOM)
+    // because the underlying parameter does meaningfully different things in each mode
+    // (Digital: bit-crush+noise, Analog: BBD wear, Tape: wow/flutter/saturation, Reverse:
+    // fade-shape softness). Mirrors the SHIMMER<->TREM DEPTH pattern in the reverb lane.
+    {
+      const int slot = 5;
+      const float customColW = effectColW;
+      const float cx = mainCX + effectKnobOffset - (5 * customColW) / 2.f + (slot - 1) * customColW + (customColW / 2.f);
+      const float kL = cx - (knobDiam / 2.f);
+      auto* ageLabel = new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), "AGE");
+      pGraphics->AttachControl(ageLabel, -1, "DELAY_KNOBS");
+      auto* ageKnob = new NAMKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), kDelayAge, "", volumKnobStyle, knobBackgroundBitmap);
+      pGraphics->AttachControl(ageKnob, -1, "DELAY_KNOBS");
+      ageKnob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == kDelayAge);
+      auto* ageValue = new VoLumParamValueControl(IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), kDelayAge, "");
+      pGraphics->AttachControl(ageValue, -1, "DELAY_KNOBS");
+      mVolumDelayAgeLabel = ageLabel;
+      mVolumDelayAgeKnob = ageKnob;
+      mVolumDelayAgeValue = ageValue;
+    }
     IRECT delayPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"TAPE", "DIGITAL", "PING PONG", "REVERSE"}), -1, "DELAY_KNOBS");
+    pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"DIGITAL", "ANALOG", "TAPE", "REVERSE"}), -1, "DELAY_KNOBS");
+
+    // Delay PingPong toggle and Tape sub-mode pill share the toggle row below the knob block.
+    // Layout (left-to-right): [toggle][PING-PONG label] ............ [STUDIO|VINTAGE|BROKEN pill]
+    // The slide-switch needs the standard 34 px height to render the bitmap handle without
+    // clipping, while the pill itself stays slim at 28 px. We therefore center the toggle
+    // vertically on the pill's center so the two sit on a shared visual baseline despite the
+    // height mismatch. Visibility is mode-dependent (PingPong hides on Reverse, Tape pill
+    // shows on Tape only); when both are visible (Tape mode) the label gap keeps text apart.
+    const float pillRowY = knobT + knobDiam + valueH + 18.f;
+    const float pillRowH = 28.f; // matches subPillH; slim pill height
+    const float ppSwitchW = 60.f;
+    const float ppSwitchH = 34.f; // standard slide-switch height; less than this clips bitmap
+    const float ppSwitchY = pillRowY - (ppSwitchH - pillRowH) * 0.5f;
+    const float ppSwitchX = mainCX - 220.f;
+    const float ppLabelW = 90.f;
+    pGraphics->AttachControl(
+      new NAMSwitchControl(IRECT(ppSwitchX, ppSwitchY, ppSwitchX + ppSwitchW, ppSwitchY + ppSwitchH),
+                           kDelayPingPong, "", volumToggleStyle, switchHandleBitmap),
+      -1, "DELAY_PINGPONG");
+    pGraphics->AttachControl(
+      new VoLumKnobLabelControl(IRECT(ppSwitchX + ppSwitchW + 4.f, ppSwitchY,
+                                       ppSwitchX + ppSwitchW + 4.f + ppLabelW, ppSwitchY + ppSwitchH),
+                                "PING-PONG"),
+      -1, "DELAY_PINGPONG");
+
+    const float tapePillW = 230.f;
+    const float tapePillH = pillRowH;
+    const float tapePillX = mainCX + 18.f;
+    pGraphics->AttachControl(
+      new VoLumSubModePillControl(IRECT(tapePillX, pillRowY, tapePillX + tapePillW, pillRowY + tapePillH),
+                                  kDelayTapeSubMode, {"STUDIO", "VINTAGE", "BROKEN"}),
+      -1, "DELAY_TAPE_SUBTOGGLE");
 
     float dlySwX = mainCX - 242.f;
     pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(dlySwX - 14.f, knobT - 4.f, dlySwX + 14.f, knobT + knobDiam + 2.f), kDelayActive), -1, "DELAY_POWER");
@@ -695,12 +791,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(5, "TREBLE", kPreNam2Treble, "", "PRE_NAM2_KNOBS", true, 6, 1, 0.f, 66.f);
     drawKnobCol(6, "LEVEL", kPreNam2Level, "dB", "PRE_NAM2_KNOBS", true, 6, 1, 0.f, 66.f);
 
-    drawKnobCol(1, "AMOUNT", kPreCompAmount, "", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
-    drawKnobCol(2, "RATIO", kPreCompRatio, ":1", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
+    // 1176-style FET compressor: Input drives, Attack/Release, Output. Ratio fixed at 4:1; Mix locked at 1.0
+    // (kPreCompRatio and kPreCompMix retained as EParams for state compatibility but hidden from UI).
+    drawKnobCol(2, "INPUT", kPreCompAmount, "", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
     drawKnobCol(3, "ATTACK", kPreCompAttack, "ms", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
     drawKnobCol(4, "RELEASE", kPreCompRelease, "ms", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
-    drawKnobCol(5, "MIX", kPreCompMix, "%", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
-    drawKnobCol(6, "LEVEL", kPreCompLevel, "dB", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
+    drawKnobCol(5, "OUTPUT", kPreCompLevel, "dB", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
 
     const float preSwX = mainCX - 242.f;
     pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreCompActive), -1, "COMP_POWER");
@@ -1394,7 +1490,9 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   if (processingPlan.runDelay)
   {
     mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
-                     GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate);
+                     GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate,
+                     GetParam(kDelayTone)->Value(), GetParam(kDelayAge)->Value(),
+                     GetParam(kDelayPingPong)->Bool(), GetParam(kDelayTapeSubMode)->Int());
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, numFrames);
   }
 
@@ -1402,7 +1500,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   {
     mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
                       GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
-                      GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate);
+                      GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate,
+                      GetParam(kReverbSubMode)->Int(), GetParam(kReverbTremRate)->Value());
     postPointers = mReverb.Process(postPointers, numChannelsExternalOut, numFrames);
   }
 
@@ -1783,6 +1882,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kDelayTime:
     case kDelayFeedback:
     case kDelayMix:
+    case kDelayTone:
+    case kDelayAge:
+    case kDelayPingPong:
+    case kDelayTapeSubMode:
       if (mVolumInitComplete)
       {
         mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
@@ -1796,11 +1899,13 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kReverbTone:
     case kReverbPreDelay:
     case kReverbShimmer:
+    case kReverbSubMode:
+    case kReverbTremRate:
       if (mVolumInitComplete)
       {
         mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
         mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-        _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, 2));
+        _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1));
       }
       break;
     case kPreNam1Capture:
@@ -1885,13 +1990,14 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         const int newMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
         mVolumEffectSettings.delayMode = newMode;
         _VolumRestoreDelayModeSnapshot(newMode);
+        _UpdateVoLumLayout(pGraphics);
         break;
       }
       case kReverbMode:
       {
-        const int oldMode = std::clamp(mVolumEffectSettings.reverbMode, 0, 2);
+        const int oldMode = std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1);
         _VolumSaveReverbModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kReverbMode)->Int(), 0, 2);
+        const int newMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
         mVolumEffectSettings.reverbMode = newMode;
         _VolumRestoreReverbModeSnapshot(newMode);
         _UpdateVoLumLayout(pGraphics);
@@ -2237,10 +2343,12 @@ constexpr std::array<int, 10> kVoLumSupportAmpKeyboardKnobParams = {
   kSupportOutputLevel,
   kSupportAmpPan,
 };
-constexpr std::array<int, 3> kVoLumDelayKeyboardKnobParams = {
+constexpr std::array<int, 5> kVoLumDelayKeyboardKnobParams = {
   kDelayTime,
   kDelayFeedback,
   kDelayMix,
+  kDelayTone,
+  kDelayAge,
 };
 constexpr std::array<int, 4> kVoLumReverbKeyboardKnobParams = {
   kReverbMix,
@@ -2255,14 +2363,23 @@ constexpr std::array<int, 5> kVoLumOktaverbKeyboardKnobParams = {
   kReverbPreDelay,
   kReverbShimmer,
 };
+// TremVerb shows Trem Depth (kReverbShimmer repurposed) + Trem Rate alongside the standard reverb knobs.
+constexpr std::array<int, 6> kVoLumTremVerbKeyboardKnobParams = {
+  kReverbMix,
+  kReverbDecay,
+  kReverbTone,
+  kReverbPreDelay,
+  kReverbShimmer,
+  kReverbTremRate,
+};
 constexpr std::array<int, 6> kVoLumPreNam1KeyboardKnobParams = {
   kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
 };
 constexpr std::array<int, 6> kVoLumPreNam2KeyboardKnobParams = {
   kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble, kPreNam2Level,
 };
-constexpr std::array<int, 6> kVoLumCompKeyboardKnobParams = {
-  kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
+constexpr std::array<int, 4> kVoLumCompKeyboardKnobParams = {
+  kPreCompAmount, kPreCompAttack, kPreCompRelease, kPreCompLevel,
 };
 
 double GetVoLumKeyboardStepForParam(int paramIdx, bool fine)
@@ -2294,11 +2411,15 @@ double GetVoLumKeyboardStepForParam(int paramIdx, bool fine)
       return fine ? 1.0 : 5.0;
     case kDelayFeedback:
     case kDelayMix:
+    case kDelayTone:
+    case kDelayAge:
     case kReverbMix:
     case kReverbDecay:
     case kReverbShimmer:
     case kPreCompMix:
       return fine ? 0.01 : 0.05;
+    case kReverbTremRate:
+      return fine ? 0.1 : 0.5;
     default:
       return fine ? 0.1 : 1.0;
   }
@@ -2339,9 +2460,14 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
     case EVoLumEffectFocus::DELAY:
       return SelectAdjacentFromList(this, kVoLumDelayKeyboardKnobParams, currentParamIdx, direction);
     case EVoLumEffectFocus::REVERB:
-      if (GetParam(kReverbMode)->Int() == 2)
+    {
+      const int reverbMode = GetParam(kReverbMode)->Int();
+      if (reverbMode == volum::kVoLumReverbModeTremVerb)
+        return SelectAdjacentFromList(this, kVoLumTremVerbKeyboardKnobParams, currentParamIdx, direction);
+      if (reverbMode == volum::kVoLumReverbModeOktaverb)
         return SelectAdjacentFromList(this, kVoLumOktaverbKeyboardKnobParams, currentParamIdx, direction);
       return SelectAdjacentFromList(this, kVoLumReverbKeyboardKnobParams, currentParamIdx, direction);
+    }
     case EVoLumEffectFocus::AMP:
       if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
         return SelectAdjacentFromList(this, kVoLumSupportAmpKeyboardKnobParams, currentParamIdx, direction);
@@ -2510,8 +2636,13 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     _HideControlGroup(pGfx, "SUPPORT_AMP_KNOBS", true);
     _HideControlGroup(pGfx, "REVERB_KNOBS", true);
     _HideControlGroup(pGfx, "REVERB_SHIMMER", true);
+    _HideControlGroup(pGfx, "REVERB_PREDELAY", true);
+    _HideControlGroup(pGfx, "REVERB_TREMRATE", true);
+    _HideControlGroup(pGfx, "REVERB_SUBTOGGLE", true);
     _HideControlGroup(pGfx, "REVERB_POWER", true);
     _HideControlGroup(pGfx, "DELAY_KNOBS", true);
+    _HideControlGroup(pGfx, "DELAY_PINGPONG", true);
+    _HideControlGroup(pGfx, "DELAY_TAPE_SUBTOGGLE", true);
     _HideControlGroup(pGfx, "DELAY_POWER", true);
     _HideControlGroup(pGfx, "COMP_KNOBS", true);
     _HideControlGroup(pGfx, "COMP_POWER", true);
@@ -2539,17 +2670,93 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         break;
       }
       case EVoLumEffectFocus::REVERB:
+      {
+        const int reverbMode = GetParam(kReverbMode)->Int();
+        const bool isHall = reverbMode == volum::kVoLumReverbModeHall;
+        const bool isPlate = reverbMode == volum::kVoLumReverbModePlate;
+        const bool isOktaverb = reverbMode == volum::kVoLumReverbModeOktaverb;
+        const bool isTremVerb = reverbMode == volum::kVoLumReverbModeTremVerb;
         _HideControlGroup(pGfx, "REVERB_POWER", false);
         _HideControlGroup(pGfx, "REVERB_KNOBS", false);
-        _HideControlGroup(pGfx, "REVERB_SHIMMER", GetParam(kReverbMode)->Int() != 2);
+        // Slot 4 hosts PRE-DLY (Hall/Plate/Oktaverb) and TREM RATE (TremVerb) at the same
+        // physical position; only one is visible at a time.
+        _HideControlGroup(pGfx, "REVERB_PREDELAY", isTremVerb);
+        _HideControlGroup(pGfx, "REVERB_TREMRATE", !isTremVerb);
+        // REVERB_SHIMMER hosts Shimmer (Oktaverb) and Trem Depth (TremVerb). Label swaps to
+        // "TREM DEPTH" when TremVerb is selected.
+        _HideControlGroup(pGfx, "REVERB_SHIMMER", !(isOktaverb || isTremVerb));
+        if (mVolumReverbShimmerLabel)
+          mVolumReverbShimmerLabel->SetLabel(isTremVerb ? "DEPTH" : "SHIMMER");
+        // 3-way sub-mode pill is visible for Hall/Plate/Oktaverb. Labels are swapped per mode.
+        _HideControlGroup(pGfx, "REVERB_SUBTOGGLE", isTremVerb);
+        if (mVolumReverbSubModePill)
+        {
+          if (isHall)
+            mVolumReverbSubModePill->SetLabels({"STUDIO", "CONCERT", "CATHEDRAL"});
+          else if (isPlate)
+            mVolumReverbSubModePill->SetLabels({"STEEL", "BRASS", "COPPER"});
+          else if (isOktaverb)
+            mVolumReverbSubModePill->SetLabels({"OCT", "OCT+5TH", "OCT+SUB"});
+        }
         disableGroup("REVERB_KNOBS", !GetParam(kReverbActive)->Bool());
+        disableGroup("REVERB_PREDELAY", !GetParam(kReverbActive)->Bool());
+        disableGroup("REVERB_TREMRATE", !GetParam(kReverbActive)->Bool());
         disableGroup("REVERB_SHIMMER", !GetParam(kReverbActive)->Bool());
+        disableGroup("REVERB_SUBTOGGLE", !GetParam(kReverbActive)->Bool());
         break;
+      }
       case EVoLumEffectFocus::DELAY:
+      {
+        const int delayMode = GetParam(kDelayMode)->Int();
+        const bool isReverse = delayMode == volum::kVoLumDelayModeReverse;
+        const bool isTape = delayMode == volum::kVoLumDelayModeTape;
         _HideControlGroup(pGfx, "DELAY_POWER", false);
         _HideControlGroup(pGfx, "DELAY_KNOBS", false);
+        // Ping-pong has no meaning for reversed taps; hide that control row when Reverse.
+        _HideControlGroup(pGfx, "DELAY_PINGPONG", isReverse);
+        // Tape sub-mode pill is only relevant when Tape mode is selected.
+        _HideControlGroup(pGfx, "DELAY_TAPE_SUBTOGGLE", !isTape);
+        // The shared kDelayAge slot does meaningfully different things per mode. Swap the
+        // visible label and the knob/value tooltip so the user can read what the knob does
+        // without having to consult the design guide.
+        const char* ageLabel = "AGE";
+        const char* ageTip =
+          "Adds character to the delay tail (effect varies by mode).";
+        switch (delayMode)
+        {
+          case volum::kVoLumDelayModeDigital:
+            ageLabel = "GRIT";
+            ageTip = "Digital mode: adds bit-crush quantisation and a tape-machine noise "
+                     "floor on top of the repeats. At 0 the wet signal is bit-perfect.";
+            break;
+          case volum::kVoLumDelayModeAnalog:
+            ageLabel = "WEAR";
+            ageTip = "Analog mode: increases BBD chorus depth, HF darkness and compander "
+                     "softness. 0.5 is classic Memory Man, 1.0 is heavy chorused wear.";
+            break;
+          case volum::kVoLumDelayModeTape:
+            ageLabel = "AGE";
+            ageTip = "Tape mode: scales wow/flutter, head-bump saturation and HF roll-off "
+                     "together with the Studio/Vintage/Broken sub-mode.";
+            break;
+          case volum::kVoLumDelayModeReverse:
+            ageLabel = "BLOOM";
+            ageTip = "Reverse mode: shapes the reverse-fade envelope from a sharp triangular "
+                     "in/out (0) to a soft sin^2 swell (1). Higher = more pad-like bloom.";
+            break;
+          default: break;
+        }
+        if (mVolumDelayAgeLabel)
+          mVolumDelayAgeLabel->SetLabel(ageLabel);
+        if (mVolumDelayAgeKnob)
+          mVolumDelayAgeKnob->SetTooltip(ageTip);
+        if (mVolumDelayAgeValue)
+          mVolumDelayAgeValue->SetTooltip(ageTip);
         disableGroup("DELAY_KNOBS", !GetParam(kDelayActive)->Bool());
+        disableGroup("DELAY_PINGPONG", !GetParam(kDelayActive)->Bool());
+        disableGroup("DELAY_TAPE_SUBTOGGLE", !GetParam(kDelayActive)->Bool());
         break;
+      }
       case EVoLumEffectFocus::COMP:
         _HideControlGroup(pGfx, "COMP_POWER", false);
         _HideControlGroup(pGfx, "COMP_KNOBS", false);
@@ -3600,7 +3807,7 @@ void NeuralAmpModeler::_VolumSaveEffectSettings()
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
   mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
-  _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, 2));
+  _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
 }
 
 void NeuralAmpModeler::_VolumRestoreEffectSettings()
@@ -3615,7 +3822,7 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
   _VolumRestoreDelayModeSnapshot(std::clamp(fx.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   setParam(kReverbActive, fx.reverbActive ? 1.0 : 0.0);
   setParam(kReverbMode, fx.reverbMode);
-  _VolumRestoreReverbModeSnapshot(std::clamp(fx.reverbMode, 0, 2));
+  _VolumRestoreReverbModeSnapshot(std::clamp(fx.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   _UpdateVoLumLayout();
 }
 
@@ -3625,42 +3832,86 @@ void NeuralAmpModeler::_VolumSaveDelayModeSnapshot(int mode)
   s.time = GetParam(kDelayTime)->Value();
   s.feedback = GetParam(kDelayFeedback)->Value();
   s.mix = GetParam(kDelayMix)->Value();
+  s.tone = GetParam(kDelayTone)->Value();
+  s.age = GetParam(kDelayAge)->Value();
+  s.pingPong = GetParam(kDelayPingPong)->Bool();
+  s.tapeSubMode = GetParam(kDelayTapeSubMode)->Int();
 }
 
 void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
 {
+  // Per-knob double-click "reset to default" should land on the design-guide value for the
+  // CURRENT mode (e.g. Tape.age=0.5, Digital.age=0.0), not the static InitDouble default.
+  // We update each delay knob's mDefault to the per-mode design value here, which is also
+  // a natural place since it runs on every mode switch and on initial settings restore.
+  // Note: SetDefault() also overwrites mValue with the new default — we therefore call
+  // SetDefault() FIRST and then apply the user's saved snapshot value via Set(). The final
+  // SendParameterValueFromDelegate carries the saved value through to the UI.
+  const volum::VoLumEffectSettings designDefaults;
+  const int clampedMode = std::clamp(mode, 0, volum::kVoLumDelayModeCount - 1);
+  const auto& d = designDefaults.delayModes[clampedMode];
+  GetParam(kDelayTime)->SetDefault(d.time);
+  GetParam(kDelayFeedback)->SetDefault(d.feedback);
+  GetParam(kDelayMix)->SetDefault(d.mix);
+  GetParam(kDelayTone)->SetDefault(d.tone);
+  GetParam(kDelayAge)->SetDefault(d.age);
+  GetParam(kDelayPingPong)->SetDefault(d.pingPong ? 1.0 : 0.0);
+  GetParam(kDelayTapeSubMode)->SetDefault(static_cast<double>(std::clamp(d.tapeSubMode, 0, 2)));
+
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
-  const auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, volum::kVoLumDelayModeCount - 1)];
+  const auto& s = mVolumEffectSettings.delayModes[clampedMode];
   setParam(kDelayTime, s.time);
   setParam(kDelayFeedback, s.feedback);
   setParam(kDelayMix, s.mix);
+  setParam(kDelayTone, s.tone);
+  setParam(kDelayAge, s.age);
+  setParam(kDelayPingPong, s.pingPong ? 1.0 : 0.0);
+  setParam(kDelayTapeSubMode, static_cast<double>(std::clamp(s.tapeSubMode, 0, 2)));
 }
 
 void NeuralAmpModeler::_VolumSaveReverbModeSnapshot(int mode)
 {
-  auto& s = mVolumEffectSettings.reverbModes[std::clamp(mode, 0, 2)];
+  auto& s = mVolumEffectSettings.reverbModes[std::clamp(mode, 0, volum::kVoLumReverbModeCount - 1)];
   s.mix = GetParam(kReverbMix)->Value();
   s.decay = GetParam(kReverbDecay)->Value();
   s.tone = GetParam(kReverbTone)->Value();
   s.preDelay = GetParam(kReverbPreDelay)->Value();
   s.shimmer = GetParam(kReverbShimmer)->Value();
+  s.subMode = GetParam(kReverbSubMode)->Int();
+  s.tremRate = GetParam(kReverbTremRate)->Value();
 }
 
 void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
 {
+  // Mirror the delay-side per-mode default update so that double-clicking a reverb knob
+  // resets it to the design-guide value for the currently selected mode (e.g. Plate.tone
+  // brighter than Hall.tone, Oktaverb.shimmer cranked, TremVerb.tremRate at 4 Hz).
+  const volum::VoLumEffectSettings designDefaults;
+  const int clampedMode = std::clamp(mode, 0, volum::kVoLumReverbModeCount - 1);
+  const auto& d = designDefaults.reverbModes[clampedMode];
+  GetParam(kReverbMix)->SetDefault(d.mix);
+  GetParam(kReverbDecay)->SetDefault(d.decay);
+  GetParam(kReverbTone)->SetDefault(d.tone);
+  GetParam(kReverbPreDelay)->SetDefault(d.preDelay);
+  GetParam(kReverbShimmer)->SetDefault(d.shimmer);
+  GetParam(kReverbSubMode)->SetDefault(static_cast<double>(std::clamp(d.subMode, 0, 2)));
+  GetParam(kReverbTremRate)->SetDefault(d.tremRate);
+
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
-  const auto& s = mVolumEffectSettings.reverbModes[std::clamp(mode, 0, 2)];
+  const auto& s = mVolumEffectSettings.reverbModes[clampedMode];
   setParam(kReverbMix, s.mix);
   setParam(kReverbDecay, s.decay);
   setParam(kReverbTone, s.tone);
   setParam(kReverbPreDelay, s.preDelay);
   setParam(kReverbShimmer, s.shimmer);
+  setParam(kReverbSubMode, static_cast<double>(std::clamp(s.subMode, 0, 2)));
+  setParam(kReverbTremRate, s.tremRate);
 }
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)

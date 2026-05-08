@@ -422,17 +422,20 @@ TEST_CASE("Corrupt effect settings heal to defaults")
 
   REQUIRE(healed == true);
   CHECK(loaded.delayActive == false);
-  CHECK(loaded.delayMode == 1);
+  // v0.9.0 default delay mode is Digital (index 0) under the new mode order.
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeDigital);
   CHECK(loaded.reverbActive == false);
-  CHECK(loaded.reverbMode == 0);
+  CHECK(loaded.reverbMode == volum::kVoLumReverbModeHall);
+  // Digital snapshot defaults: time/feedback/mix unchanged from previous version.
   CHECK(loaded.delayModes[0].time == doctest::Approx(380.0));
   CHECK(loaded.delayModes[0].feedback == doctest::Approx(0.35));
   CHECK(loaded.delayModes[0].mix == doctest::Approx(0.28));
-  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.3));
-  CHECK(loaded.reverbModes[0].decay == doctest::Approx(3.0));
-  CHECK(loaded.reverbModes[0].tone == doctest::Approx(4.5));
-  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(20.0));
-  CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.5));
+  // Hall snapshot defaults stronger per design guide (mix 0.32, decay 3.5s, tone slightly bright).
+  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.32));
+  CHECK(loaded.reverbModes[0].decay == doctest::Approx(3.5));
+  CHECK(loaded.reverbModes[0].tone == doctest::Approx(5.5));
+  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(30.0));
+  CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.0));
 }
 
 TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
@@ -462,16 +465,257 @@ TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
     CHECK(loaded.delayModes[i].mix == doctest::Approx(0.33));
   }
   CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].time == doctest::Approx(600.0));
-  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].feedback == doctest::Approx(0.35));
-  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].mix == doctest::Approx(0.28));
+  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].feedback == doctest::Approx(0.30));
+  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].mix == doctest::Approx(0.40));
 
-  for (int i = 0; i < 3; ++i)
+  // Legacy flat reverb fields populate every reverb-mode snapshot, including the new
+  // TremVerb (index 3) that didn't exist in old saves.
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
   {
     CHECK(loaded.reverbModes[i].mix == doctest::Approx(0.44));
     CHECK(loaded.reverbModes[i].decay == doctest::Approx(6.0));
     CHECK(loaded.reverbModes[i].tone == doctest::Approx(3.0));
     CHECK(loaded.reverbModes[i].preDelay == doctest::Approx(20.0));
     CHECK(loaded.reverbModes[i].shimmer == doctest::Approx(0.5));
+  }
+}
+
+TEST_CASE("Legacy v2 delayModes array migrates to v0.9.0 with correct per-slot v3 defaults")
+{
+  // Regression for: v2 settings.json saves the delayModes array in old order
+  // {Tape, Digital, PingPong, Reverse} but only authors {time, feedback, mix} per slot.
+  // After migration the new slots {Digital, Analog, Tape, Reverse} must each carry the
+  // user's saved time/feedback/mix in the right place AND get the v0.9.0 design-guide
+  // defaults for age/tone/pingPong/tapeSubMode (since v2 couldn't author them).
+  // Specifically, new Tape.age must be 0.5 (not Digital's 0.0) — the bug was that the
+  // pre-load step seeded raw slot 0 with new-Digital defaults, then the mapping carried
+  // those wrong defaults into new Tape.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  // Force v2 layout: the writer emits the current version, so override + supply a
+  // 4-entry delayModes array in the OLD order with only legacy fields.
+  j["version"] = 2;
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayMode", 0}, // old "Tape" -> new Tape (index 2)
+    {"delayModes", nlohmann::json::array({
+                     {{"time", 480.0}, {"feedback", 0.55}, {"mix", 0.40}},  // old Tape
+                     {{"time", 250.0}, {"feedback", 0.30}, {"mix", 0.20}},  // old Digital
+                     {{"time", 350.0}, {"feedback", 0.40}, {"mix", 0.35}},  // old PingPong
+                     {{"time", 700.0}, {"feedback", 0.25}, {"mix", 0.45}},  // old Reverse
+                   })},
+    {"reverbActive", false},
+    {"reverbMode", 0},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  // Active mode: old Tape (0) maps to new Tape (kVoLumDelayModeTape == 2).
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeTape);
+
+  // User's saved time/feedback/mix carry over to the right new slot.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].time == doctest::Approx(250.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].feedback == doctest::Approx(0.30));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].mix == doctest::Approx(0.20));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].time == doctest::Approx(480.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].feedback == doctest::Approx(0.55));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].mix == doctest::Approx(0.40));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].time == doctest::Approx(700.0));
+
+  // v3 fields take per-slot design-guide defaults (NOT zero, NOT the wrong slot's defaults).
+  // Defaults from VoLumUserSettingsIO.h: Digital age=0.0, Analog age=0.5, Tape age=0.5, Reverse age=0.5.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].age == doctest::Approx(0.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].age == doctest::Approx(0.5));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].age == doctest::Approx(0.5));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].age == doctest::Approx(0.5));
+
+  // Tape sub-mode default: Vintage (1).
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].tapeSubMode == 1);
+
+  // PingPong default off for all slots when the user wasn't actively in PingPong mode.
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+    CHECK_FALSE(loaded.delayModes[i].pingPong);
+
+  // Analog slot is brand new; it inherits new-default time/feedback/mix.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].time == doctest::Approx(320.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].feedback == doctest::Approx(0.42));
+}
+
+TEST_CASE("Legacy v2 PingPong-active save folds into Digital with pingPong=true and correct age")
+{
+  // When the user was actively in old PingPong mode (delayMode=2), the migration must:
+  //   - Map the active mode to new Digital (0).
+  //   - Carry the old PingPong snapshot's time/feedback/mix into new Digital.
+  //   - Set pingPong=true on new Digital.
+  //   - Still apply the new-Digital design-guide defaults for age/tone (age=0.0, tone=0.5).
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 2;
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayMode", 2}, // old PingPong
+    {"delayModes", nlohmann::json::array({
+                     {{"time", 480.0}, {"feedback", 0.55}, {"mix", 0.40}},
+                     {{"time", 250.0}, {"feedback", 0.30}, {"mix", 0.20}},
+                     {{"time", 333.0}, {"feedback", 0.66}, {"mix", 0.55}}, // old PingPong values
+                     {{"time", 700.0}, {"feedback", 0.25}, {"mix", 0.45}},
+                   })},
+    {"reverbActive", false},
+    {"reverbMode", 0},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeDigital);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].pingPong == true);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].time == doctest::Approx(333.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].feedback == doctest::Approx(0.66));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].mix == doctest::Approx(0.55));
+  // Even with PingPong fold-in, age stays at the new-Digital design-guide default.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].age == doctest::Approx(0.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].tone == doctest::Approx(0.5));
+}
+
+TEST_CASE("v3->v4 heals zero-age Analog/Tape that came from buggy early v2->v3 migration")
+{
+  // A v3 file produced by the early buggy migration has Analog.age == Tape.age == 0.0,
+  // which is wrong (design-guide defaults are 0.5 for both). v3->v4 resets those ages.
+  // Other fields (time/feedback/mix/tone/pingPong) MUST be preserved.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 3;
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayMode", 2},
+    {"delayModes", nlohmann::json::array({
+                     {{"time", 250.0}, {"feedback", 0.30}, {"mix", 0.20},
+                      {"tone", 0.5}, {"age", 0.0}, {"pingPong", false}, {"tapeSubMode", 1}},
+                     {{"time", 320.0}, {"feedback", 0.42}, {"mix", 0.32},
+                      {"tone", 0.5}, {"age", 0.0}, {"pingPong", false}, {"tapeSubMode", 1}}, // bug
+                     {{"time", 420.0}, {"feedback", 0.45}, {"mix", 0.30},
+                      {"tone", 0.45}, {"age", 0.0}, {"pingPong", true}, {"tapeSubMode", 2}}, // bug
+                     {{"time", 600.0}, {"feedback", 0.30}, {"mix", 0.40},
+                      {"tone", 0.5}, {"age", 0.5}, {"pingPong", false}, {"tapeSubMode", 1}},
+                   })},
+    {"reverbActive", false},
+    {"reverbMode", 0},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded, &healed);
+
+  CHECK(healed);
+  // Ages restored to defaults for Analog and Tape.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].age == doctest::Approx(0.5));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].age == doctest::Approx(0.5));
+  // Digital and Reverse ages untouched.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].age == doctest::Approx(0.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].age == doctest::Approx(0.5));
+  // Other Tape fields preserved.
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].time == doctest::Approx(420.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].feedback == doctest::Approx(0.45));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].mix == doctest::Approx(0.30));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].tone == doctest::Approx(0.45));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].pingPong == true);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].tapeSubMode == 2);
+}
+
+TEST_CASE("v3->v4 leaves non-buggy v3 file alone (one of Analog/Tape age != 0)")
+{
+  // If the user intentionally has Analog.age=0.0 but Tape.age=0.6 (or any non-zero), don't
+  // touch ages — the buggy pattern requires BOTH to be exactly 0.0.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 3;
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayMode", 2},
+    {"delayModes", nlohmann::json::array({
+                     {{"time", 250.0}, {"feedback", 0.30}, {"mix", 0.20},
+                      {"tone", 0.5}, {"age", 0.0}, {"pingPong", false}, {"tapeSubMode", 1}},
+                     {{"time", 320.0}, {"feedback", 0.42}, {"mix", 0.32},
+                      {"tone", 0.5}, {"age", 0.0}, {"pingPong", false}, {"tapeSubMode", 1}},
+                     {{"time", 420.0}, {"feedback", 0.45}, {"mix", 0.30},
+                      {"tone", 0.45}, {"age", 0.6}, {"pingPong", true}, {"tapeSubMode", 2}}, // user set
+                     {{"time", 600.0}, {"feedback", 0.30}, {"mix", 0.40},
+                      {"tone", 0.5}, {"age", 0.5}, {"pingPong", false}, {"tapeSubMode", 1}},
+                   })},
+    {"reverbActive", false},
+    {"reverbMode", 0},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].age == doctest::Approx(0.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeTape].age == doctest::Approx(0.6));
+}
+
+TEST_CASE("v0.9.0 effect snapshot fields round-trip through user settings JSON")
+{
+  // Round-trip test for the new per-mode-snapshot fields added in v0.9.0:
+  //   delay: tone, age, pingPong, tapeSubMode
+  //   reverb: subMode, tremRate
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.delayActive = true;
+  fx.delayMode = volum::kVoLumDelayModeTape;
+  fx.reverbActive = true;
+  fx.reverbMode = volum::kVoLumReverbModeTremVerb;
+
+  // Distinguishable per-mode values so we can detect any cross-talk.
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    fx.delayModes[i].time = 250.0 + 50.0 * i;
+    fx.delayModes[i].feedback = 0.30 + 0.05 * i;
+    fx.delayModes[i].mix = 0.20 + 0.05 * i;
+    fx.delayModes[i].tone = 0.20 + 0.10 * i;
+    fx.delayModes[i].age = 0.10 + 0.10 * i;
+    fx.delayModes[i].pingPong = (i == volum::kVoLumDelayModeDigital);
+    fx.delayModes[i].tapeSubMode = i % 3;
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    fx.reverbModes[i].mix = 0.30 + 0.05 * i;
+    fx.reverbModes[i].decay = 2.0 + 0.5 * i;
+    fx.reverbModes[i].tone = 4.0 + 0.5 * i;
+    fx.reverbModes[i].preDelay = 15.0 + 5.0 * i;
+    fx.reverbModes[i].shimmer = 0.10 + 0.10 * i;
+    fx.reverbModes[i].subMode = i % 3;
+    fx.reverbModes[i].tremRate = 3.0 + 0.5 * i;
+  }
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  CHECK(loaded.delayActive == true);
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeTape);
+  CHECK(loaded.reverbActive == true);
+  CHECK(loaded.reverbMode == volum::kVoLumReverbModeTremVerb);
+
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    CHECK(loaded.delayModes[i].time == doctest::Approx(250.0 + 50.0 * i));
+    CHECK(loaded.delayModes[i].feedback == doctest::Approx(0.30 + 0.05 * i));
+    CHECK(loaded.delayModes[i].mix == doctest::Approx(0.20 + 0.05 * i));
+    CHECK(loaded.delayModes[i].tone == doctest::Approx(0.20 + 0.10 * i));
+    CHECK(loaded.delayModes[i].age == doctest::Approx(0.10 + 0.10 * i));
+    CHECK(loaded.delayModes[i].pingPong == (i == volum::kVoLumDelayModeDigital));
+    CHECK(loaded.delayModes[i].tapeSubMode == i % 3);
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    CHECK(loaded.reverbModes[i].mix == doctest::Approx(0.30 + 0.05 * i));
+    CHECK(loaded.reverbModes[i].decay == doctest::Approx(2.0 + 0.5 * i));
+    CHECK(loaded.reverbModes[i].tone == doctest::Approx(4.0 + 0.5 * i));
+    CHECK(loaded.reverbModes[i].preDelay == doctest::Approx(15.0 + 5.0 * i));
+    CHECK(loaded.reverbModes[i].shimmer == doctest::Approx(0.10 + 0.10 * i));
+    CHECK(loaded.reverbModes[i].subMode == i % 3);
+    CHECK(loaded.reverbModes[i].tremRate == doctest::Approx(3.0 + 0.5 * i));
   }
 }
 
@@ -495,7 +739,8 @@ TEST_CASE("Three-entry delay mode settings leave reverse delay defaults")
   CHECK(loaded.delayModes[0].time == doctest::Approx(400.0));
   CHECK(loaded.delayModes[1].time == doctest::Approx(500.0));
   CHECK(loaded.delayModes[2].time == doctest::Approx(700.0));
+  // Slot 3 (Reverse) keeps its iteration-2 default (design-guide values).
   CHECK(loaded.delayModes[3].time == doctest::Approx(600.0));
-  CHECK(loaded.delayModes[3].feedback == doctest::Approx(0.35));
-  CHECK(loaded.delayModes[3].mix == doctest::Approx(0.28));
+  CHECK(loaded.delayModes[3].feedback == doctest::Approx(0.30));
+  CHECK(loaded.delayModes[3].mix == doctest::Approx(0.40));
 }

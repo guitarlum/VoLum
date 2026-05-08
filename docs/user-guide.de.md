@@ -81,8 +81,8 @@ PRE-Einstellungen sind lokal für den aktuellen Amp. So kann jeder Amp eigene Co
 
 Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Klick auf POST in der Triptych-Leiste, um den Bereich auszuklappen, und dann auf eine Karte, um ihre Regler in der Reglerzeile zu fokussieren.
 
-- **Delay:** Tape-, Digital-, Ping-Pong- und Reverse-Modus mit Time, Feedback und Mix.
-- **Reverb:** Hall-, Plate- und Oktaverb-Modus mit Mix, Decay, Tone, Pre-Delay und Shimmer.
+- **Delay:** Digital-, Analog-, Tape- und Reverse-Modus mit Time, Feedback, Mix, Tone und einem fünften Regler, dessen Bezeichnung und Verhalten je nach Modus wechselt: **Grit** (Digital, Bit-Crush + Rauschteppich), **Wear** (Analog, BBD-Höhenrolloff + Chorus-Tiefe + Compander-Weichheit), **Age** (Tape, Wow/Flutter + Sättigung + Höhenrolloff-Skalierung), **Bloom** (Reverse, Weichheit der Einblendkurve von harter Dreiecksform bis zu sanftem sin²-Swell). Ein globaler Ping-Pong-Schalter wechselt die Wiederholungen zwischen links und rechts (im Reverse-Modus automatisch ausgeblendet). Der Tape-Modus zeigt zusätzlich einen Studio / Vintage / Broken Unter-Schalter für den Bandcharakter. Beim Überfahren des Reglers erscheint ein Tooltip, der das Verhalten im aktuellen Modus erklärt.
+- **Reverb:** Hall-, Plate-, Oktaverb- und TremVerb-Modus mit Mix, Decay, Tone, Pre-Delay und Shimmer. Ein 3-Weg Unter-Schalter ändert den Reverb-Charakter pro Modus: Hall = Studio / Concert / Cathedral, Plate = Steel / Brass / Copper, Oktaverb = Oct / Oct+5th / Oct+SubOct (Oktav-Aufwärts-Shimmer mit optionaler Quint- oder Sub-Oktav-Stimme). TremVerb ist ein kurzer Plate-artiger Raum mit Photozellen-Tremolo nur auf dem Wet-Signal — der Shimmer-Regler wird zu Trem Depth und ein neuer Trem-Rate-Regler ersetzt Pre-Delay; der Unter-Schalter ist in diesem Modus ausgeblendet.
 
 Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Effekte sind geteilt/global statt pro Amp gespeichert, also wie finale Effekte hinter der Amp-Sektion.
 

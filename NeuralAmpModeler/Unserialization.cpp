@@ -205,7 +205,14 @@ int _GetConfigFrom_0_8_1(const iplug::IByteChunk& chunk, int startPos, nlohmann:
 void _UpdateConfigFrom_0_8_3(nlohmann::json& config)
 {
   _UpdateConfigFrom_0_8_1(config);
+  // v0.8.3 itself didn't add params past what the loader names; the v0.9.0 jump is handled
+  // by _MigrateDelayReverbToV0_9_0 from _UnserializeStateWithKnownVersion for ALL pre-0.9.0
+  // chunks (so 0.5.0-0.8.3 all migrate, not just 0.8.3).
 }
+
+// v0.9.0 chunk migration: implemented in VoLumJsonMigration.h as
+// volum::MigrateDelayReverbToV0_9_0 so it's reachable from tests without exposing the
+// file-static _GetConfigFrom_X chain.
 
 int _GetConfigFrom_0_8_3(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
@@ -224,6 +231,37 @@ int _GetConfigFrom_0_8_3(const iplug::IByteChunk& chunk, int startPos, nlohmann:
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_8_3(config);
+  return pos;
+}
+
+// v0.9.0 (Effects iteration 2: DelayTone/Age/PingPong/TapeSubMode + ReverbSubMode/TremRate;
+// new delay mode order Digital/Analog/Tape/Reverse; new reverb mode TremVerb at index 3).
+
+void _UpdateConfigFrom_0_9_0(nlohmann::json& /*config*/)
+{
+  // No-op: 0.9.0 is the current schema, so chunks saved here need no field changes.
+}
+
+int _GetConfigFrom_0_9_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  // Param order matches the EParams enum at v0.9.0.
+  std::vector<std::string> paramNames{
+    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
+    "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
+    "DelayTone", "DelayAge", "DelayPingPong", "DelayTapeSubMode",
+    "ReverbActive", "ReverbMix", "ReverbDecay", "ReverbTone", "ReverbPreDelay", "ReverbShimmer", "ReverbMode",
+    "ReverbSubMode", "ReverbTremRate",
+    "BoostActive", "BoostDrive", "BoostTone", "BoostLevel",
+    "PreCompActive", "PreCompAmount", "PreCompRatio", "PreCompAttack", "PreCompRelease", "PreCompMix", "PreCompLevel",
+    "PreNam1Active", "PreNam1Capture", "PreNam1Gain", "PreNam1Bass", "PreNam1Mid", "PreNam1MidFreq", "PreNam1Treble", "PreNam1Level",
+    "PreNam2Active", "PreNam2Capture", "PreNam2Gain", "PreNam2Bass", "PreNam2Mid", "PreNam2MidFreq", "PreNam2Treble", "PreNam2Level",
+    "CalibrateInput", "InputCalibrationLevel", "OutputMode", "RigFile",
+    "DualAmpActive", "DualAmpRoute", "MainAmpPan", "SupportAmp", "SupportSpeaker", "SupportChannel",
+    "SupportInput", "SupportThreshold", "SupportBass", "SupportMiddle", "SupportTreble", "SupportOutput",
+    "SupportNoiseGateActive", "SupportToneStack", "SupportAmpPan"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_0_9_0(config);
   return pos;
 }
 
@@ -421,7 +459,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // Act accordingly
   nlohmann::json config;
 
-  if (version >= volum::ChunkVersion(0, 8, 3))
+  if (version >= volum::ChunkVersion(0, 9, 0))
+  {
+    pos = _GetConfigFrom_0_9_0(chunk, pos, config);
+  }
+  else if (version >= volum::ChunkVersion(0, 8, 3))
   {
     pos = _GetConfigFrom_0_8_3(chunk, pos, config);
   }
@@ -466,6 +508,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // You shouldn't be here...
     assert(false);
   }
+  // v0.9.0 migration: applied for ALL pre-0.9.0 chunks regardless of which
+  // _GetConfigFrom_X_X_X path produced the dict above. Each pre-0.9.0 loader's per-version
+  // _UpdateConfigFrom only chains backwards (predecessor), so this single call is what
+  // brings the loaded config up to current schema (delay mode reorder + new EParams).
+  if (!(version >= volum::ChunkVersion(0, 9, 0)))
+    volum::MigrateDelayReverbToV0_9_0(config);
   _UnserializeApplyConfig(config);
 
 #if VOLUM_AMPETE_PRODUCT

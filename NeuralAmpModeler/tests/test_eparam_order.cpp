@@ -7,7 +7,9 @@ enum EParams {
   kInputLevel = 0, kNoiseGateThreshold, kToneBass, kToneMid, kToneTreble, kOutputLevel,
   kNoiseGateActive, kEQActive, kIRToggle,
   kDelayActive, kDelayTime, kDelayFeedback, kDelayMix, kDelayMode,
+  kDelayTone, kDelayAge, kDelayPingPong, kDelayTapeSubMode,
   kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode,
+  kReverbSubMode, kReverbTremRate,
   kBoostActive, kBoostDrive, kBoostTone, kBoostLevel,
   kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
   kPreNam1Active, kPreNam1Capture, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
@@ -37,9 +39,17 @@ TEST_CASE("EParam: delay params are contiguous after IRToggle")
   CHECK(kDelayMode == kDelayMix + 1);
 }
 
+TEST_CASE("EParam: delay iteration-2 params follow DelayMode")
+{
+  CHECK(kDelayTone == kDelayMode + 1);
+  CHECK(kDelayAge == kDelayTone + 1);
+  CHECK(kDelayPingPong == kDelayAge + 1);
+  CHECK(kDelayTapeSubMode == kDelayPingPong + 1);
+}
+
 TEST_CASE("EParam: reverb params follow delay")
 {
-  CHECK(kReverbActive == kDelayMode + 1);
+  CHECK(kReverbActive == kDelayTapeSubMode + 1);
   CHECK(kReverbMix == kReverbActive + 1);
   CHECK(kReverbDecay == kReverbMix + 1);
   CHECK(kReverbTone == kReverbDecay + 1);
@@ -48,9 +58,15 @@ TEST_CASE("EParam: reverb params follow delay")
   CHECK(kReverbMode == kReverbShimmer + 1);
 }
 
-TEST_CASE("EParam: boost params follow reverb")
+TEST_CASE("EParam: reverb iteration-2 params follow ReverbMode")
 {
-  CHECK(kBoostActive == kReverbMode + 1);
+  CHECK(kReverbSubMode == kReverbMode + 1);
+  CHECK(kReverbTremRate == kReverbSubMode + 1);
+}
+
+TEST_CASE("EParam: boost params follow reverb iteration-2")
+{
+  CHECK(kBoostActive == kReverbTremRate + 1);
   CHECK(kBoostDrive == kBoostActive + 1);
   CHECK(kBoostTone == kBoostDrive + 1);
   CHECK(kBoostLevel == kBoostTone + 1);
@@ -105,5 +121,7 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
 
 TEST_CASE("EParam: total count is stable")
 {
-  CHECK(kNumParams == 67);
+  // v0.9.0 added 6 new params: DelayTone, DelayAge, DelayPingPong, DelayTapeSubMode,
+  //                            ReverbSubMode, ReverbTremRate.
+  CHECK(kNumParams == 73);
 }

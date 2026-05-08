@@ -81,8 +81,8 @@ VoLum POST section
 
 The POST section runs after the amp. It contains Delay and Reverb cards. Click POST in the triptych strip to expand it, then click a card to focus its controls in the knob row.
 
-- **Delay:** Tape, Digital, Ping Pong, and Reverse modes with Time, Feedback, and Mix.
-- **Reverb:** Hall, Plate, and Oktaverb modes with Mix, Decay, Tone, Pre-Delay, and Shimmer.
+- **Delay:** Digital, Analog, Tape, and Reverse modes with Time, Feedback, Mix, Tone, and a fifth knob whose label and behaviour swap per mode: **Grit** (Digital, bit-crush + noise floor), **Wear** (Analog, BBD HF rolloff + chorus depth + compander softness), **Age** (Tape, wow/flutter + saturation + HF rolloff scaler), **Bloom** (Reverse, fade-shape softness from sharp triangle to soft sin² swell). A global Ping-Pong toggle alternates repeats between left and right (auto-hidden when Reverse is selected). Tape mode adds a Studio / Vintage / Broken sub-toggle for the tape character. Hovering the knob shows a per-mode tooltip describing the effect.
+- **Reverb:** Hall, Plate, Oktaverb, and TremVerb modes with Mix, Decay, Tone, Pre-Delay, and Shimmer. A 3-way sub-toggle changes the reverb character per mode: Hall = Studio / Concert / Cathedral, Plate = Steel / Brass / Copper, Oktaverb = Oct / Oct+5th / Oct+SubOct (octave-up shimmer with optional fifth-up or sub-octave voice). TremVerb is a short plate-style room with a photocell tremolo on the wet signal only — the Shimmer knob becomes Trem Depth and a new Trem Rate knob replaces Pre-Delay; the sub-toggle is hidden in this mode.
 
 The small LED on each card shows whether the effect is active. The bottom label shows the current mode or preset summary. POST effects are shared/global rather than per-amp, so they behave like the final effects placed after the amp section.
 

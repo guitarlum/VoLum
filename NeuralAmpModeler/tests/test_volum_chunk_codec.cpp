@@ -235,3 +235,90 @@ TEST_CASE("VoLum JSON migration does not synthesize null params for missing lega
   REQUIRE(config.contains("RigFileMigrated"));
   CHECK(config["RigFileMigrated"].get<double>() == doctest::Approx(2.0));
 }
+
+// =====================================================================================
+// v0.9.0 chunk-state migration: pre-0.9.0 saves stored DelayMode under the old
+// {Tape, Digital, PingPong, Reverse} order. v0.9.0 reorders to {Digital, Analog, Tape,
+// Reverse} and folds PingPong into Digital + DelayPingPong=true. Six new EParams must be
+// populated with neutral defaults so _UnserializeApplyConfig has values to write.
+// =====================================================================================
+
+TEST_CASE("v0.9.0 migration: old Tape (mode 0) -> new Tape (mode 2), PingPong stays off")
+{
+  nlohmann::json config = {{"DelayMode", 0.0}};
+  volum::MigrateDelayReverbToV0_9_0(config);
+  CHECK(config["DelayMode"].get<double>() == doctest::Approx(2.0));
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+}
+
+TEST_CASE("v0.9.0 migration: old Digital (mode 1) -> new Digital (mode 0), PingPong stays off")
+{
+  nlohmann::json config = {{"DelayMode", 1.0}};
+  volum::MigrateDelayReverbToV0_9_0(config);
+  CHECK(config["DelayMode"].get<double>() == doctest::Approx(0.0));
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+}
+
+TEST_CASE("v0.9.0 migration: old PingPong (mode 2) -> new Digital (mode 0) + DelayPingPong=true")
+{
+  nlohmann::json config = {{"DelayMode", 2.0}};
+  volum::MigrateDelayReverbToV0_9_0(config);
+  CHECK(config["DelayMode"].get<double>() == doctest::Approx(0.0));
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(1.0));
+}
+
+TEST_CASE("v0.9.0 migration: old Reverse (mode 3) stays at new Reverse (mode 3)")
+{
+  nlohmann::json config = {{"DelayMode", 3.0}};
+  volum::MigrateDelayReverbToV0_9_0(config);
+  CHECK(config["DelayMode"].get<double>() == doctest::Approx(3.0));
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+}
+
+TEST_CASE("v0.9.0 migration: populates neutral defaults for new EParams when missing")
+{
+  // A pre-0.9.0 chunk only has the old keys; the migration must add neutral defaults for
+  // every new v0.9.0 EParam so _UnserializeApplyConfig can write them. We don't assume the
+  // chunk had a DelayMode at all (some early versions pre-date it).
+  nlohmann::json config = nlohmann::json::object();
+  volum::MigrateDelayReverbToV0_9_0(config);
+
+  REQUIRE(config.contains("DelayTone"));
+  REQUIRE(config.contains("DelayAge"));
+  REQUIRE(config.contains("DelayPingPong"));
+  REQUIRE(config.contains("DelayTapeSubMode"));
+  REQUIRE(config.contains("ReverbSubMode"));
+  REQUIRE(config.contains("ReverbTremRate"));
+  CHECK(config["DelayTone"].get<double>() == doctest::Approx(0.5));
+  CHECK(config["DelayAge"].get<double>() == doctest::Approx(0.0));
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+  CHECK(config["DelayTapeSubMode"].get<double>() == doctest::Approx(1.0));
+  CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(1.0));
+  CHECK(config["ReverbTremRate"].get<double>() == doctest::Approx(4.0));
+}
+
+TEST_CASE("v0.9.0 migration: leaves reverb mode index untouched (Hall/Plate/Oktaverb)")
+{
+  // Old reverb modes 0/1/2 keep their meaning under v0.9.0; only mode 3 (TremVerb) is new.
+  for (double m : {0.0, 1.0, 2.0})
+  {
+    nlohmann::json config = {{"ReverbMode", m}};
+    volum::MigrateDelayReverbToV0_9_0(config);
+    CHECK(config["ReverbMode"].get<double>() == doctest::Approx(m));
+  }
+}
+
+TEST_CASE("v0.9.0 migration: ignores non-numeric or out-of-range DelayMode safely")
+{
+  // Make sure malformed input doesn't crash and lands on a sane new mode.
+  nlohmann::json config = {{"DelayMode", "garbage"}};
+  volum::MigrateDelayReverbToV0_9_0(config);
+  // Non-number input: original DelayMode stays as-is (string), but new EParams are populated.
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+
+  nlohmann::json config2 = {{"DelayMode", 99.0}};
+  volum::MigrateDelayReverbToV0_9_0(config2);
+  // Out-of-range: maps to new Digital (0) with PingPong off.
+  CHECK(config2["DelayMode"].get<double>() == doctest::Approx(0.0));
+  CHECK(config2["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+}

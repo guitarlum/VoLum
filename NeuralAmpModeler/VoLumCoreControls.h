@@ -910,6 +910,12 @@ public:
       if (isSelected) {
         g.FillRect(VoLumColors::AMBER, itemArea.GetPadded(-1.f));
       }
+      else if (static_cast<int>(i) == mHovered)
+      {
+        // Soft amber wash to telegraph the click target without competing with the
+        // current selection's solid amber fill.
+        g.FillRect(IColor(48, 226, 165, 78), itemArea.GetPadded(-1.f));
+      }
 
       IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
       IText text(11.f, textCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
@@ -930,8 +936,29 @@ public:
     }
   }
 
+  void OnMouseOver(float /*x*/, float y, const IMouseMod& /*mod*/) override
+  {
+    const float itemH = mRECT.H() / static_cast<float>(mModes.size());
+    const int idx = std::clamp(static_cast<int>((y - mRECT.T) / itemH), 0, static_cast<int>(mModes.size()) - 1);
+    if (idx != mHovered)
+    {
+      mHovered = idx;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHovered != -1)
+    {
+      mHovered = -1;
+      SetDirty(false);
+    }
+  }
+
 private:
   std::vector<std::string> mModes;
+  int mHovered = -1;
 };
 
 class VoLumSubRowTextControl : public IControl
@@ -1055,6 +1082,17 @@ public:
     g.DrawText(text, mLabel.c_str(), mRECT);
   }
 
+  // Allow swapping the displayed label at runtime (e.g. SHIMMER <-> TREM DEPTH for the
+  // shared Shimmer knob slot when reverb mode flips between Oktaverb and TremVerb).
+  void SetLabel(const char* label)
+  {
+    if (label && mLabel != label)
+    {
+      mLabel = label;
+      SetDirty(false);
+    }
+  }
+
   // Lane belonging is conveyed by the knob pointer-dot colour and value-text colour.
   // Labels stay neutral so the row reads cleanly. Methods kept as no-ops for ABI parity.
   enum class LaneAccent : int { None = 0, Main = 1, Support = 2 };
@@ -1064,6 +1102,106 @@ public:
 private:
   std::string mLabel;
   bool mIsChannel;
+};
+
+// Compact horizontal 3-way pill switch bound to a parameter index.
+// Used for delay Tape sub-mode (Studio/Vintage/Broken) and reverb sub-mode trios
+// (Hall: Studio/Concert/Cathedral, Plate: Steel/Brass/Copper, Oktaverb: Oct/Oct+5th/Oct+SubOct).
+// Labels can be swapped at runtime via SetLabels so a single pill can repurpose
+// per-mode without re-attaching controls.
+class VoLumSubModePillControl : public IControl
+{
+public:
+  VoLumSubModePillControl(const IRECT& bounds, int paramIdx, const std::vector<std::string>& labels)
+  : IControl(bounds, paramIdx)
+  , mLabels(labels)
+  {
+  }
+
+  void SetLabels(const std::vector<std::string>& labels)
+  {
+    if (mLabels == labels)
+      return;
+    mLabels = labels;
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const int n = static_cast<int>(mLabels.size());
+    if (n <= 0)
+      return;
+    const int selected = std::clamp(static_cast<int>(GetValue() * (n - 1) + 0.5), 0, n - 1);
+    const float itemW = mRECT.W() / static_cast<float>(n);
+
+    g.FillRoundRect(IColor(160, 14, 16, 22), mRECT, 4.f);
+    g.DrawRoundRect(VoLumColors::FRAME, mRECT, 4.f, nullptr, 1.f);
+
+    // Font size scales with pill height. Cap is ~2pt smaller than the prior 11.5 so the
+    // slim 28-tall row reads as a single horizontal lockup without the labels feeling
+    // chunky next to neighbouring 34 px AMP-row toggles. Lower bound preserves legibility
+    // if a host sizes the pill smaller still.
+    const float fontSize = std::clamp(mRECT.H() * 0.34f, 7.5f, 9.5f);
+
+    for (int i = 0; i < n; ++i)
+    {
+      const float l = mRECT.L + i * itemW;
+      const float r = (i == n - 1) ? mRECT.R : (mRECT.L + (i + 1) * itemW);
+      const IRECT itemArea(l, mRECT.T, r, mRECT.B);
+      const bool isSelected = (i == selected);
+
+      if (isSelected)
+        g.FillRoundRect(VoLumColors::AMBER, itemArea.GetPadded(-1.5f), 3.f);
+      else if (i == mHovered)
+        g.FillRoundRect(IColor(48, 226, 165, 78), itemArea.GetPadded(-1.5f), 3.f);
+
+      if (i > 0)
+        g.DrawLine(IColor(96, 200, 162, 78), itemArea.L, mRECT.T + 3.f, itemArea.L, mRECT.B - 3.f, nullptr, 1.f);
+
+      const IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
+      const IText text(fontSize, textCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      const IRECT textArea = itemArea.GetPadded(-3.f, 0.f, -3.f, 0.f);
+      g.DrawText(text, mLabels[i].c_str(), textArea);
+    }
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& /*mod*/) override
+  {
+    const int n = static_cast<int>(mLabels.size());
+    if (n <= 0)
+      return;
+    const float itemW = mRECT.W() / static_cast<float>(n);
+    const int idx = std::clamp(static_cast<int>((x - mRECT.L) / itemW), 0, n - 1);
+    SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
+    SetDirty(true);
+  }
+
+  void OnMouseOver(float x, float /*y*/, const IMouseMod& /*mod*/) override
+  {
+    const int n = static_cast<int>(mLabels.size());
+    if (n <= 0)
+      return;
+    const float itemW = mRECT.W() / static_cast<float>(n);
+    const int idx = std::clamp(static_cast<int>((x - mRECT.L) / itemW), 0, n - 1);
+    if (idx != mHovered)
+    {
+      mHovered = idx;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHovered != -1)
+    {
+      mHovered = -1;
+      SetDirty(false);
+    }
+  }
+
+private:
+  std::vector<std::string> mLabels;
+  int mHovered = -1;
 };
 
 // Vertical text label (draws each character stacked)

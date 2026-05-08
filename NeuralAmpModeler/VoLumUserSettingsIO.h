@@ -21,14 +21,36 @@ namespace volum
 {
 
 inline constexpr int kVoLumDelayModeCount = 4;
-inline constexpr int kVoLumReverbModeCount = 3;
-inline constexpr int kVoLumReverseDelayMode = 3;
-inline constexpr int kVoLumUserSettingsVersion = 2;
+inline constexpr int kVoLumReverbModeCount = 4; // v0.9.0: added TremVerb
+// v4 heals v3 files saved by an early buggy v2->v3 migration that left Analog/Tape ages at 0.0
+// instead of the design-guide 0.5 (the pre-load step seeded the wrong-slot defaults for legacy
+// reads). When a v3 file presents the buggy pattern (Analog.age == Tape.age == 0.0), v3->v4
+// resets those two ages to per-slot defaults. Other fields are left intact.
+inline constexpr int kVoLumUserSettingsVersion = 4;
+
+// v0.9.0 delay-mode order: 0=Digital, 1=Analog, 2=Tape, 3=Reverse
+inline constexpr int kVoLumDelayModeDigital = 0;
+inline constexpr int kVoLumDelayModeAnalog = 1;
+inline constexpr int kVoLumDelayModeTape = 2;
+inline constexpr int kVoLumDelayModeReverse = 3;
+// Back-compat alias: pre-v0.9.0 code referenced kVoLumReverseDelayMode by name.
+inline constexpr int kVoLumReverseDelayMode = kVoLumDelayModeReverse;
+
+// v0.9.0 reverb-mode order: 0=Hall, 1=Plate, 2=Oktaverb, 3=TremVerb
+inline constexpr int kVoLumReverbModeHall = 0;
+inline constexpr int kVoLumReverbModePlate = 1;
+inline constexpr int kVoLumReverbModeOktaverb = 2;
+inline constexpr int kVoLumReverbModeTremVerb = 3;
 
 struct DelayModeSnapshot {
   double time = 380.0;
   double feedback = 0.35;
   double mix = 0.28;
+  // Iteration 2 additions (v0.9.0):
+  double tone = 0.5;       // 0..1, per-mode DSP curve
+  double age = 0.0;        // 0..1, per-mode DSP meaning
+  bool pingPong = false;   // ignored when mode == Reverse
+  int tapeSubMode = 1;     // 0=Studio,1=Vintage,2=Broken (Tape only; ignored elsewhere)
 };
 
 struct ReverbModeSnapshot {
@@ -37,20 +59,37 @@ struct ReverbModeSnapshot {
   double tone = 4.5;
   double preDelay = 20.0;
   double shimmer = 0.5;
+  // Iteration 2 additions (v0.9.0):
+  int subMode = 0;       // per-mode meaning (Hall/Plate/Oktaverb); ignored for TremVerb
+  double tremRate = 4.0; // Hz, only used by TremVerb mode
 };
 
 struct VoLumEffectSettings {
   bool reverbActive = false;
   int reverbMode = 0;
-  ReverbModeSnapshot reverbModes[kVoLumReverbModeCount];
+  ReverbModeSnapshot reverbModes[kVoLumReverbModeCount] = {
+    // Hall: stronger defaults per design guide (mix ~0.32, decay ~3.5s, tone slightly bright)
+    ReverbModeSnapshot{0.32, 3.5, 5.5, 30.0, 0.0, /*subMode*/ 1, /*tremRate*/ 4.0},
+    // Plate: brighter default tone, faster modulation, Steel sub-mode default
+    ReverbModeSnapshot{0.30, 1.8, 6.0, 15.0, 0.0, /*subMode*/ 0, /*tremRate*/ 4.0},
+    // Oktaverb: musical-but-not-cranked shimmer (curve retuned)
+    ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.40, /*subMode*/ 0, /*tremRate*/ 4.0},
+    // TremVerb (new): short plate base, photocell trem on wet (shimmer = trem depth)
+    ReverbModeSnapshot{0.32, 1.5, 5.5, 12.0, 0.55, /*subMode*/ 0, /*tremRate*/ 4.0},
+  };
 
   bool delayActive = false;
-  int delayMode = 1;
+  int delayMode = kVoLumDelayModeDigital;
+  // Default snapshots per design guide.
   DelayModeSnapshot delayModes[kVoLumDelayModeCount] = {
-    DelayModeSnapshot{},
-    DelayModeSnapshot{},
-    DelayModeSnapshot{},
-    DelayModeSnapshot{600.0, 0.35, 0.28},
+    // Digital: clean, defaults flat tone, no age
+    DelayModeSnapshot{380.0, 0.35, 0.28, 0.50, 0.00, false, 1},
+    // Analog (Memory Man): warmer, slightly more feedback, age=0.5 for chorus depth
+    DelayModeSnapshot{320.0, 0.42, 0.32, 0.50, 0.50, false, 1},
+    // Tape: vintage default, sub-mode = Vintage, slightly dark tone, age=0.5
+    DelayModeSnapshot{420.0, 0.45, 0.30, 0.45, 0.50, false, 1},
+    // Reverse: half-sine fade default
+    DelayModeSnapshot{600.0, 0.30, 0.40, 0.50, 0.50, false, 1},
   };
 };
 
@@ -176,6 +215,10 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
         {"time", mode.time},
         {"feedback", mode.feedback},
         {"mix", mode.mix},
+        {"tone", mode.tone},
+        {"age", mode.age},
+        {"pingPong", mode.pingPong},
+        {"tapeSubMode", mode.tapeSubMode},
       });
     }
     e["reverbModes"] = nlohmann::json::array();
@@ -187,6 +230,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
         {"tone", mode.tone},
         {"preDelay", mode.preDelay},
         {"shimmer", mode.shimmer},
+        {"subMode", mode.subMode},
+        {"tremRate", mode.tremRate},
       });
     }
     j["effects"] = e;
@@ -364,9 +409,26 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     const auto& e = j["effects"];
     const VoLumEffectSettings defaults;
     loadBool(e, "delayActive", fx->delayActive, defaults.delayActive);
-    loadInt(e, "delayMode", fx->delayMode, 0, kVoLumDelayModeCount - 1, defaults.delayMode);
     loadBool(e, "reverbActive", fx->reverbActive, defaults.reverbActive);
-    loadInt(e, "reverbMode", fx->reverbMode, 0, kVoLumReverbModeCount - 1, defaults.reverbMode);
+
+    // Settings v3 (VoLum 0.9.0) introduces new delay mode order
+    //   {Digital, Analog, Tape, Reverse} (was {Tape, Digital, PingPong, Reverse}).
+    // and a 4-entry reverb mode list (added TremVerb at index 3).
+    const bool legacyDelayLayout = settingsVersion < 3;
+    const bool legacyReverbLayout = settingsVersion < 3;
+
+    int rawDelayMode = defaults.delayMode;
+    loadInt(e, "delayMode", rawDelayMode, 0, kVoLumDelayModeCount - 1, defaults.delayMode);
+    int rawReverbMode = defaults.reverbMode;
+    // Old reverb only had 3 modes; allow up to current count for forward-compat.
+    loadInt(e, "reverbMode", rawReverbMode, 0, kVoLumReverbModeCount - 1, defaults.reverbMode);
+
+    // Parse delay mode snapshots into a temporary array using the layout described in the JSON.
+    // Initialise to current-schema defaults so missing slots (e.g. legacy 3-entry arrays) keep
+    // their iteration-2 defaults instead of zero-initialising to {380, 0.35, 0.28}.
+    DelayModeSnapshot rawDelayModes[kVoLumDelayModeCount];
+    for (int i = 0; i < kVoLumDelayModeCount; ++i)
+      rawDelayModes[i] = defaults.delayModes[i];
 
     if (e.contains("delayModes") && e["delayModes"].is_array())
     {
@@ -374,32 +436,138 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
       for (int i = 0; i < kVoLumDelayModeCount && i < static_cast<int>(modes.size()); ++i)
       {
         const auto& mode = modes[i];
-        loadDouble(mode, "time", fx->delayModes[i].time, 10.0, 2000.0, defaults.delayModes[i].time);
-        loadDouble(mode, "feedback", fx->delayModes[i].feedback, 0.0, 0.99, defaults.delayModes[i].feedback);
-        loadDouble(mode, "mix", fx->delayModes[i].mix, 0.0, 1.0, defaults.delayModes[i].mix);
+        loadDouble(mode, "time", rawDelayModes[i].time, 10.0, 2000.0, defaults.delayModes[i].time);
+        loadDouble(mode, "feedback", rawDelayModes[i].feedback, 0.0, 0.99, defaults.delayModes[i].feedback);
+        loadDouble(mode, "mix", rawDelayModes[i].mix, 0.0, 1.0, defaults.delayModes[i].mix);
+        // v3 fields - default to neutral if absent (legacy rows only).
+        loadDouble(mode, "tone", rawDelayModes[i].tone, 0.0, 1.0, 0.5);
+        loadDouble(mode, "age", rawDelayModes[i].age, 0.0, 1.0, 0.0);
+        loadBool(mode, "pingPong", rawDelayModes[i].pingPong, false);
+        loadInt(mode, "tapeSubMode", rawDelayModes[i].tapeSubMode, 0, 2, 1);
       }
     }
     else
     {
+      // Legacy flat fields: pre-mode-snapshot schema. Fill non-Reverse slots with these values;
+      // Reverse keeps its iteration-2 default.
       DelayModeSnapshot legacy;
       loadDouble(e, "delayTime", legacy.time, 10.0, 2000.0, DelayModeSnapshot{}.time);
       loadDouble(e, "delayFeedback", legacy.feedback, 0.0, 0.99, DelayModeSnapshot{}.feedback);
       loadDouble(e, "delayMix", legacy.mix, 0.0, 1.0, DelayModeSnapshot{}.mix);
       for (int i = 0; i < kVoLumReverseDelayMode; ++i)
-        fx->delayModes[i] = legacy;
+      {
+        rawDelayModes[i].time = legacy.time;
+        rawDelayModes[i].feedback = legacy.feedback;
+        rawDelayModes[i].mix = legacy.mix;
+      }
+      // rawDelayModes[kVoLumReverseDelayMode] keeps defaults.delayModes[Reverse].
     }
 
+    if (legacyDelayLayout)
+    {
+      // Old order: 0=Tape, 1=Digital, 2=PingPong, 3=Reverse.
+      // New order: 0=Digital, 1=Analog, 2=Tape, 3=Reverse.
+      // Map old snapshots to new slots; fold old PingPong snapshot into Digital with pingPong=true.
+      // v2 files only authored {time, feedback, mix}, so we discard the v3 fields from
+      // rawDelayModes (which were just the wrong-slot defaults from the pre-load step) and
+      // re-apply the design-guide defaults for the destination NEW slot. That way the user's
+      // saved time/feedback/mix carry over, but new fields (age, tone, pingPong, tapeSubMode)
+      // pick up the correct iteration-2 defaults for the slot they end up in.
+      auto carryLegacyCore = [](DelayModeSnapshot& dst, const DelayModeSnapshot& src) {
+        dst.time = src.time;
+        dst.feedback = src.feedback;
+        dst.mix = src.mix;
+      };
+
+      const DelayModeSnapshot oldTape = rawDelayModes[0];
+      const DelayModeSnapshot oldDigital = rawDelayModes[1];
+      const DelayModeSnapshot oldPingPong = rawDelayModes[2];
+      const DelayModeSnapshot oldReverse = rawDelayModes[3];
+
+      DelayModeSnapshot newDigital = defaults.delayModes[kVoLumDelayModeDigital];
+      DelayModeSnapshot newAnalog = defaults.delayModes[kVoLumDelayModeAnalog];
+      DelayModeSnapshot newTape = defaults.delayModes[kVoLumDelayModeTape];
+      DelayModeSnapshot newReverse = defaults.delayModes[kVoLumDelayModeReverse];
+      carryLegacyCore(newDigital, oldDigital);
+      carryLegacyCore(newTape, oldTape);
+      carryLegacyCore(newReverse, oldReverse);
+
+      // Only fold the old PingPong snapshot into Digital when the user was actively in
+      // PingPong mode at save time. Otherwise the user's old Digital snapshot wins for new
+      // Digital, and the old PingPong snapshot is discarded (PingPong is no longer a mode).
+      if (rawDelayMode == 2)
+      {
+        carryLegacyCore(newDigital, oldPingPong);
+        newDigital.pingPong = true;
+      }
+
+      fx->delayModes[kVoLumDelayModeDigital] = newDigital;
+      fx->delayModes[kVoLumDelayModeAnalog] = newAnalog;
+      fx->delayModes[kVoLumDelayModeTape] = newTape;
+      fx->delayModes[kVoLumDelayModeReverse] = newReverse;
+
+      // Remap the active mode index.
+      switch (rawDelayMode)
+      {
+        case 0: fx->delayMode = kVoLumDelayModeTape; break;
+        case 1: fx->delayMode = kVoLumDelayModeDigital; break;
+        case 2: fx->delayMode = kVoLumDelayModeDigital; break; // PingPong -> Digital + pingPong=true
+        case 3: fx->delayMode = kVoLumDelayModeReverse; break;
+        default: fx->delayMode = defaults.delayMode; break;
+      }
+
+      healed = true;
+    }
+    else
+    {
+      for (int i = 0; i < kVoLumDelayModeCount; ++i)
+        fx->delayModes[i] = rawDelayModes[i];
+      fx->delayMode = std::clamp(rawDelayMode, 0, kVoLumDelayModeCount - 1);
+
+      // v3 -> v4 heal: an early version of the v2->v3 migration left Analog/Tape ages at 0.0
+      // because the pre-load step seeded each raw slot with the WRONG-slot defaults. Detect
+      // the buggy pattern (Analog.age and Tape.age both exactly 0.0) and reset those two
+      // slots' ages to the per-slot design-guide defaults. v3 files written intentionally
+      // with both ages at 0 are vanishingly unlikely (Analog/Tape sound dry without age).
+      if (settingsVersion < 4)
+      {
+        const double analogAge = fx->delayModes[kVoLumDelayModeAnalog].age;
+        const double tapeAge = fx->delayModes[kVoLumDelayModeTape].age;
+        if (analogAge == 0.0 && tapeAge == 0.0)
+        {
+          fx->delayModes[kVoLumDelayModeAnalog].age = defaults.delayModes[kVoLumDelayModeAnalog].age;
+          fx->delayModes[kVoLumDelayModeTape].age = defaults.delayModes[kVoLumDelayModeTape].age;
+          healed = true;
+        }
+      }
+    }
+
+    // Reverb mode snapshots
     if (e.contains("reverbModes") && e["reverbModes"].is_array())
     {
       const auto& modes = e["reverbModes"];
-      for (int i = 0; i < kVoLumReverbModeCount && i < static_cast<int>(modes.size()); ++i)
+      const int avail = static_cast<int>(modes.size());
+      for (int i = 0; i < kVoLumReverbModeCount; ++i)
       {
-        const auto& mode = modes[i];
-        loadDouble(mode, "mix", fx->reverbModes[i].mix, 0.0, 1.0, defaults.reverbModes[i].mix);
-        loadDouble(mode, "decay", fx->reverbModes[i].decay, 0.1, 10.0, defaults.reverbModes[i].decay);
-        loadDouble(mode, "tone", fx->reverbModes[i].tone, 0.0, 10.0, defaults.reverbModes[i].tone);
-        loadDouble(mode, "preDelay", fx->reverbModes[i].preDelay, 0.0, 80.0, defaults.reverbModes[i].preDelay);
-        loadDouble(mode, "shimmer", fx->reverbModes[i].shimmer, 0.0, 1.0, defaults.reverbModes[i].shimmer);
+        if (i < avail)
+        {
+          const auto& mode = modes[i];
+          loadDouble(mode, "mix", fx->reverbModes[i].mix, 0.0, 1.0, defaults.reverbModes[i].mix);
+          loadDouble(mode, "decay", fx->reverbModes[i].decay, 0.1, 10.0, defaults.reverbModes[i].decay);
+          loadDouble(mode, "tone", fx->reverbModes[i].tone, 0.0, 10.0, defaults.reverbModes[i].tone);
+          loadDouble(mode, "preDelay", fx->reverbModes[i].preDelay, 0.0, 200.0, defaults.reverbModes[i].preDelay);
+          loadDouble(mode, "shimmer", fx->reverbModes[i].shimmer, 0.0, 1.0, defaults.reverbModes[i].shimmer);
+          // v3 fields
+          loadInt(mode, "subMode", fx->reverbModes[i].subMode, 0, 2, defaults.reverbModes[i].subMode);
+          loadDouble(mode, "tremRate", fx->reverbModes[i].tremRate, 0.5, 10.0, defaults.reverbModes[i].tremRate);
+        }
+        else
+        {
+          // Modes beyond what the legacy file held (e.g. TremVerb) start from defaults.
+          fx->reverbModes[i] = defaults.reverbModes[i];
+          if (legacyReverbLayout)
+            healed = true;
+        }
       }
     }
     else
@@ -410,9 +578,11 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
       loadDouble(e, "reverbTone", legacy.tone, 0.0, 10.0, ReverbModeSnapshot{}.tone);
       loadDouble(e, "reverbPreDelay", legacy.preDelay, 0.0, 80.0, ReverbModeSnapshot{}.preDelay);
       loadDouble(e, "reverbShimmer", legacy.shimmer, 0.0, 1.0, ReverbModeSnapshot{}.shimmer);
-      for (auto& mode : fx->reverbModes)
-        mode = legacy;
+      for (int i = 0; i < kVoLumReverbModeCount; ++i)
+        fx->reverbModes[i] = legacy;
     }
+
+    fx->reverbMode = std::clamp(rawReverbMode, 0, kVoLumReverbModeCount - 1);
   }
 
   if (didHeal)

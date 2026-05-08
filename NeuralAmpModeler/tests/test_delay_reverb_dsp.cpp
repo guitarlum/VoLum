@@ -555,3 +555,444 @@ TEST_CASE("Reverb: sample rate change reallocates without crash")
   auto** out = reverb.Process(inputs, 2, frames);
   REQUIRE_FALSE(hasNaN(out[0], frames));
 }
+
+// =====================================================================================
+// VoLum Effects Iteration 2 — new behaviors:
+//   - Delay: tone/age/pingPong/tapeSubMode params, new mode order (Digital/Analog/Tape/Reverse)
+//   - Reverb: subMode/tremRate params, mode 4 (TremVerb), reworked Oktaverb
+// =====================================================================================
+
+TEST_CASE("Delay: 9-arg SetParams accepts new params on every mode without NaN")
+{
+  for (int mode = 0; mode < 4; ++mode)
+  {
+    for (int sub = 0; sub < 3; ++sub)
+    {
+      for (int pp = 0; pp < 2; ++pp)
+      {
+        dsp::effect::Delay delay;
+        // tone=0.5 (neutral), age=0.6 (heavily aged), pingPong=true/false, tapeSubMode=sub
+        delay.SetParams(180.0, 0.45, 0.6, mode, 48000.0, 0.5, 0.6, pp != 0, sub);
+        const size_t frames = 256;
+        std::vector<double> inL(frames, 0.2), inR(frames, -0.2);
+        double* inputs[2] = {inL.data(), inR.data()};
+        for (int block = 0; block < 4; ++block)
+        {
+          auto** out = delay.Process(inputs, 2, frames);
+          REQUIRE_FALSE(hasNaN(out[0], frames));
+          REQUIRE_FALSE(hasNaN(out[1], frames));
+        }
+      }
+    }
+  }
+}
+
+TEST_CASE("Delay: Digital mix=0 + age=0 + pingPong=false passes input through cleanly")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(120.0, 0.4, 0.0, 0 /*Digital*/, 48000.0, 0.5, 0.0, false, 0);
+
+  const size_t frames = 128;
+  std::vector<double> inL(frames, 0.4), inR(frames, 0.4);
+  double* inputs[2] = {inL.data(), inR.data()};
+  auto** out = delay.Process(inputs, 2, frames);
+  for (size_t i = 0; i < frames; i++)
+  {
+    CHECK(out[0][i] == doctest::Approx(0.4).epsilon(0.001));
+    CHECK(out[1][i] == doctest::Approx(0.4).epsilon(0.001));
+  }
+}
+
+TEST_CASE("Delay: ping-pong distributes signal to the silent channel")
+{
+  // Drive ONLY the L channel with an impulse. A non-ping-pong delay leaves R essentially
+  // silent (no cross-feed). A ping-pong delay routes feedback across channels, so the R
+  // channel must accumulate measurable wet energy.
+  dsp::effect::Delay monoDelay;
+  dsp::effect::Delay ppDelay;
+  monoDelay.SetParams(30.0, 0.5, 0.7, 0, 48000.0, 0.5, 0.0, false, 0);
+  ppDelay.SetParams(30.0, 0.5, 0.7, 0, 48000.0, 0.5, 0.0, true, 0);
+
+  const size_t frames = 8192;
+  std::vector<double> imL(frames, 0.0), imR(frames, 0.0);
+  imL[0] = 1.0;
+  double* inputs[2] = {imL.data(), imR.data()};
+
+  double monoEnergyR = 0.0;
+  double ppEnergyR = 0.0;
+  for (int block = 0; block < 4; ++block)
+  {
+    auto** monoOut = monoDelay.Process(inputs, 2, frames);
+    auto** ppOut = ppDelay.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(monoOut[0], frames));
+    REQUIRE_FALSE(hasNaN(ppOut[0], frames));
+    for (size_t i = 0; i < frames; i++)
+    {
+      monoEnergyR += monoOut[1][i] * monoOut[1][i];
+      ppEnergyR += ppOut[1][i] * ppOut[1][i];
+    }
+    std::fill(imL.begin(), imL.end(), 0.0);
+  }
+  // Ping-pong must put real energy on the right channel; non-ping-pong leaves it ~silent.
+  CHECK(ppEnergyR > 0.01);
+  CHECK(ppEnergyR > monoEnergyR * 5.0);
+}
+
+TEST_CASE("Delay: Tape sub-modes audibly differ at the same parameter set")
+{
+  // Drive a fixed input through the three Tape sub-modes and assert the outputs differ.
+  // Studio (0) is brightest/cleanest, Vintage (1) middle, Broken (2) most degraded.
+  // Use a short delay time so taps appear quickly and a steady tone so wow/flutter
+  // and per-repeat damping have time to manifest.
+  std::vector<std::vector<double>> outputs(3);
+  const size_t frames = 2048;
+  std::vector<double> tone(frames);
+  for (size_t i = 0; i < frames; i++)
+    tone[i] = 0.5 * std::sin(2.0 * 3.14159265358979 * 1000.0 * i / 48000.0);
+
+  for (int sub = 0; sub < 3; ++sub)
+  {
+    dsp::effect::Delay delay;
+    delay.SetParams(50.0, 0.5, 0.9, 2 /*Tape*/, 48000.0, 0.5, 0.4, false, sub);
+    std::vector<double> accum;
+    double* inputs[1] = {tone.data()};
+    for (int block = 0; block < 6; ++block)
+    {
+      auto** out = delay.Process(inputs, 1, frames);
+      REQUIRE_FALSE(hasNaN(out[0], frames));
+      if (block == 5)
+        accum.assign(out[0], out[0] + frames);
+    }
+    outputs[sub] = std::move(accum);
+  }
+
+  auto rms_diff = [](const std::vector<double>& a, const std::vector<double>& b) {
+    double s = 0.0;
+    for (size_t i = 0; i < a.size(); i++)
+    {
+      const double d = a[i] - b[i];
+      s += d * d;
+    }
+    return std::sqrt(s / a.size());
+  };
+  CHECK(rms_diff(outputs[0], outputs[1]) > 1e-5);
+  CHECK(rms_diff(outputs[1], outputs[2]) > 1e-5);
+  CHECK(rms_diff(outputs[0], outputs[2]) > 1e-5);
+}
+
+TEST_CASE("Delay: Analog mode produces output without NaN at high feedback")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(380.0, 0.85, 0.6, 1 /*Analog*/, 48000.0, 0.5, 0.5, false, 0);
+  const size_t frames = 512;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[0] = 1.0;
+  double* inputs[1] = {impulse.data()};
+  double maxVal = 0.0;
+  for (int block = 0; block < 30; ++block)
+  {
+    auto** out = delay.Process(inputs, 1, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    for (size_t i = 0; i < frames; i++)
+      maxVal = std::max(maxVal, std::abs(out[0][i]));
+    std::fill(impulse.begin(), impulse.end(), 0.0);
+  }
+  CHECK(maxVal < 10.0);
+}
+
+TEST_CASE("Delay: tone knob shifts spectral balance on Digital mode")
+{
+  // Tone=0 (dark) vs tone=1 (bright) should produce different repeats. Use a short delay
+  // so the wet tap appears within the buffer, then compare outputs after the wet path
+  // has had time to develop.
+  auto runTone = [](double tone, std::vector<double>& last) {
+    dsp::effect::Delay delay;
+    delay.SetParams(50.0, 0.6, 1.0, 0 /*Digital*/, 48000.0, tone, 0.0, false, 0);
+
+    const size_t frames = 2048;
+    std::vector<double> noise(frames);
+    unsigned int seed = 12345u;
+    for (size_t i = 0; i < frames; i++)
+    {
+      seed = seed * 1664525u + 1013904223u;
+      noise[i] = (static_cast<int>(seed >> 8) & 0xFFFF) / 32768.0 - 1.0;
+    }
+    double* inputs[1] = {noise.data()};
+    std::vector<double> out;
+    for (int block = 0; block < 4; ++block)
+    {
+      auto** o = delay.Process(inputs, 1, frames);
+      REQUIRE_FALSE(hasNaN(o[0], frames));
+      if (block == 3)
+        out.assign(o[0], o[0] + frames);
+    }
+    last = std::move(out);
+  };
+  std::vector<double> dark, bright;
+  runTone(0.0, dark);
+  runTone(1.0, bright);
+  double diff = 0.0;
+  for (size_t i = 0; i < dark.size(); i++)
+    diff += std::abs(dark[i] - bright[i]);
+  CHECK(diff > 0.01);
+}
+
+TEST_CASE("Delay: Reverse age=0 vs age=1 changes output character (fade-shape)")
+{
+  // Reverse mode captures mTimeMs windows and plays them backwards through a fade
+  // envelope. Age picks the fade-shape softness (0 = triangle, 1 = sin^2 bloom). Drive
+  // the line with a steady tone so the playback segments contain real signal in every
+  // cycle, then accumulate over many blocks so the fade-shape difference shows up.
+  const size_t frames = 1024;
+  dsp::effect::Delay sharp, soft;
+  sharp.SetParams(20.0, 0.0, 1.0, 3 /*Reverse*/, 48000.0, 0.5, 0.0 /*triangle*/, false, 0);
+  soft.SetParams(20.0, 0.0, 1.0, 3 /*Reverse*/, 48000.0, 0.5, 1.0 /*sin^2 bloom*/, false, 0);
+
+  std::vector<double> tone(frames);
+  for (size_t i = 0; i < frames; i++)
+    tone[i] = 0.5 * std::sin(2.0 * 3.14159265358979 * 800.0 * i / 48000.0);
+  double* inputs[1] = {tone.data()};
+
+  double diff = 0.0;
+  for (int block = 0; block < 6; ++block)
+  {
+    auto** s = sharp.Process(inputs, 1, frames);
+    auto** o = soft.Process(inputs, 1, frames);
+    REQUIRE_FALSE(hasNaN(s[0], frames));
+    REQUIRE_FALSE(hasNaN(o[0], frames));
+    for (size_t i = 0; i < frames; i++)
+      diff += std::abs(s[0][i] - o[0][i]);
+  }
+  CHECK(diff > 1e-3);
+}
+
+TEST_CASE("Reverb: 9-arg SetParams accepts subMode + tremRate on every mode without NaN")
+{
+  for (int mode = 0; mode < 4; ++mode)
+  {
+    for (int sub = 0; sub < 3; ++sub)
+    {
+      dsp::effect::Reverb reverb;
+      reverb.SetParams(0.4, 2.5, 5.0, 20.0, 0.4, mode, 48000.0, sub, 4.0);
+      const size_t frames = 256;
+      std::vector<double> inL(frames, 0.2), inR(frames, -0.2);
+      double* inputs[2] = {inL.data(), inR.data()};
+      for (int block = 0; block < 4; ++block)
+      {
+        auto** out = reverb.Process(inputs, 2, frames);
+        REQUIRE_FALSE(hasNaN(out[0], frames));
+        REQUIRE_FALSE(hasNaN(out[1], frames));
+      }
+    }
+  }
+}
+
+// Helper: drive a reverb instance with an impulse, run several blocks, and accumulate
+// the wet tail energy so sub-mode comparisons see meaningful difference even after the
+// dry-only prefix and pre-delay window.
+static std::vector<double> RunReverbTail(int mode, int subMode, double tremRate)
+{
+  dsp::effect::Reverb reverb;
+  // No pre-delay so the wet response starts immediately. Small mix/decay so the network
+  // builds detectable energy quickly; sub-mode scaling will diverge the tail per mode.
+  reverb.SetParams(0.7, 3.0, 5.5, 0.0, 0.0, mode, 48000.0, subMode, tremRate);
+  const size_t frames = 1024;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[0] = 1.0;
+  double* inputs[2] = {impulse.data(), impulse.data()};
+
+  // Concatenate 6 blocks worth of output for a 6144-sample tail snapshot.
+  std::vector<double> tail;
+  tail.reserve(6 * frames);
+  for (int block = 0; block < 6; ++block)
+  {
+    auto** out = reverb.Process(inputs, 2, frames);
+    for (size_t i = 0; i < frames; i++)
+      tail.push_back(out[0][i]);
+    std::fill(impulse.begin(), impulse.end(), 0.0);
+  }
+  return tail;
+}
+
+TEST_CASE("Reverb: Hall sub-modes produce different responses")
+{
+  std::vector<std::vector<double>> outputs(3);
+  for (int sub = 0; sub < 3; ++sub)
+    outputs[sub] = RunReverbTail(0 /*Hall*/, sub, 4.0);
+  auto diff = [](const std::vector<double>& a, const std::vector<double>& b) {
+    double s = 0.0;
+    for (size_t i = 0; i < a.size(); i++)
+      s += std::abs(a[i] - b[i]);
+    return s;
+  };
+  CHECK(diff(outputs[0], outputs[1]) > 1e-3);
+  CHECK(diff(outputs[1], outputs[2]) > 1e-3);
+  CHECK(diff(outputs[0], outputs[2]) > 1e-3);
+}
+
+TEST_CASE("Reverb: Plate sub-modes produce different responses")
+{
+  std::vector<std::vector<double>> outputs(3);
+  for (int sub = 0; sub < 3; ++sub)
+    outputs[sub] = RunReverbTail(1 /*Plate*/, sub, 4.0);
+  auto diff = [](const std::vector<double>& a, const std::vector<double>& b) {
+    double s = 0.0;
+    for (size_t i = 0; i < a.size(); i++)
+      s += std::abs(a[i] - b[i]);
+    return s;
+  };
+  CHECK(diff(outputs[0], outputs[1]) > 1e-3);
+  CHECK(diff(outputs[1], outputs[2]) > 1e-3);
+  CHECK(diff(outputs[0], outputs[2]) > 1e-3);
+}
+
+TEST_CASE("Reverb: TremVerb (mode 3) produces bounded output without NaN")
+{
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(0.5, 1.6, 5.5, 8.0, 0.7 /*Trem Depth*/, 3 /*TremVerb*/, 48000.0, 0, 5.0 /*Hz*/);
+
+  const size_t frames = 512;
+  std::vector<double> impulse(frames, 0.0);
+  impulse[0] = 1.0;
+  double* inputs[2] = {impulse.data(), impulse.data()};
+  double maxVal = 0.0;
+
+  for (int block = 0; block < 60; ++block)
+  {
+    auto** out = reverb.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    REQUIRE_FALSE(hasNaN(out[1], frames));
+    for (size_t i = 0; i < frames; i++)
+      maxVal = std::max(maxVal, std::max(std::abs(out[0][i]), std::abs(out[1][i])));
+    std::fill(impulse.begin(), impulse.end(), 0.0);
+  }
+  CHECK(maxVal < 10.0);
+  CHECK(maxVal > 0.0001);
+}
+
+TEST_CASE("Reverb: TremVerb mix=0 passes input through")
+{
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(0.0, 1.5, 5.0, 0.0, 0.7, 3 /*TremVerb*/, 48000.0, 0, 5.0);
+  const size_t frames = 64;
+  std::vector<double> in(frames, 0.4);
+  double* inputs[2] = {in.data(), in.data()};
+  auto** out = reverb.Process(inputs, 2, frames);
+  for (size_t i = 0; i < frames; i++)
+  {
+    CHECK(out[0][i] == doctest::Approx(0.4).epsilon(0.005));
+    CHECK(out[1][i] == doctest::Approx(0.4).epsilon(0.005));
+  }
+}
+
+TEST_CASE("Reverb: TremVerb depth=0 yields no audible volume modulation")
+{
+  // Drive a steady tone through TremVerb with depth=0 and verify the wet RMS doesn't pulse.
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(1.0 /*100% wet*/, 1.5, 5.0, 0.0, 0.0 /*depth=0*/, 3 /*TremVerb*/, 48000.0, 0, 5.0);
+
+  const size_t frames = 256;
+  // Run for ~2 seconds; collect block RMS and verify low std-dev (steady).
+  std::vector<double> blockRms;
+  std::vector<double> tone(frames);
+  // Pre-fill reverb tail with a few impulses so the wet path has signal to modulate.
+  for (size_t i = 0; i < frames; i++)
+    tone[i] = std::sin(2.0 * 3.14159265358979 * 440.0 * i / 48000.0);
+  double* inputs[2] = {tone.data(), tone.data()};
+  for (int block = 0; block < 200; ++block)
+  {
+    auto** out = reverb.Process(inputs, 2, frames);
+    if (block > 80)
+    {
+      double sum = 0.0;
+      for (size_t i = 0; i < frames; i++)
+        sum += out[0][i] * out[0][i];
+      blockRms.push_back(std::sqrt(sum / frames));
+    }
+  }
+  REQUIRE(blockRms.size() > 10);
+  double mean = 0.0;
+  for (double r : blockRms) mean += r;
+  mean /= blockRms.size();
+  double variance = 0.0;
+  for (double r : blockRms) variance += (r - mean) * (r - mean);
+  variance /= blockRms.size();
+  const double std_dev = std::sqrt(variance);
+  // depth=0 should not produce visible amplitude swing per block.
+  if (mean > 1e-6)
+    CHECK(std_dev / mean < 0.1);
+}
+
+TEST_CASE("Reverb: TremVerb depth=1 yields audible volume modulation")
+{
+  // Same setup, but depth=1: wet RMS should swing significantly between blocks.
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(1.0, 1.5, 5.0, 0.0, 1.0, 3, 48000.0, 0, 4.0);
+
+  const size_t frames = 512;
+  std::vector<double> blockRms;
+  std::vector<double> tone(frames);
+  for (size_t i = 0; i < frames; i++)
+    tone[i] = std::sin(2.0 * 3.14159265358979 * 440.0 * i / 48000.0);
+  double* inputs[2] = {tone.data(), tone.data()};
+  for (int block = 0; block < 200; ++block)
+  {
+    auto** out = reverb.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    if (block > 80)
+    {
+      double sum = 0.0;
+      for (size_t i = 0; i < frames; i++)
+        sum += out[0][i] * out[0][i];
+      blockRms.push_back(std::sqrt(sum / frames));
+    }
+  }
+  REQUIRE(blockRms.size() > 10);
+  double minR = blockRms[0], maxR = blockRms[0];
+  for (double r : blockRms)
+  {
+    minR = std::min(minR, r);
+    maxR = std::max(maxR, r);
+  }
+  // Photocell trem swings the wet level meaningfully. Block RMS averages partly over the
+  // tremolo cycle (period ~250ms at 4 Hz, block ~10.6ms at 48k/512), so we expect a
+  // noticeable but not extreme ratio between the loudest and quietest blocks.
+  if (maxR > 1e-6)
+    CHECK(maxR / std::max(minR, 1e-9) > 1.2);
+}
+
+TEST_CASE("Reverb: Oktaverb sub-modes produce different responses")
+{
+  // Oktaverb's pitched feedback line modulates over multiple blocks, so we accumulate a
+  // multi-block tail (RunReverbTail uses pre-delay=0 + mix=0.7 so the wet path is loud
+  // and visible quickly).
+  std::vector<std::vector<double>> outputs(3);
+  for (int sub = 0; sub < 3; ++sub)
+  {
+    dsp::effect::Reverb reverb;
+    reverb.SetParams(0.7, 4.0, 5.0, 0.0, 0.7, 2 /*Oktaverb*/, 48000.0, sub, 4.0);
+    const size_t frames = 1024;
+    std::vector<double> impulse(frames, 0.0);
+    impulse[0] = 1.0;
+    double* inputs[2] = {impulse.data(), impulse.data()};
+    std::vector<double> tail;
+    tail.reserve(8 * frames);
+    for (int block = 0; block < 8; ++block)
+    {
+      auto** out = reverb.Process(inputs, 2, frames);
+      for (size_t i = 0; i < frames; i++)
+        tail.push_back(out[0][i]);
+      std::fill(impulse.begin(), impulse.end(), 0.0);
+    }
+    outputs[sub] = std::move(tail);
+  }
+  auto diff = [](const std::vector<double>& a, const std::vector<double>& b) {
+    double s = 0.0;
+    for (size_t i = 0; i < a.size(); i++)
+      s += std::abs(a[i] - b[i]);
+    return s;
+  };
+  CHECK(diff(outputs[0], outputs[1]) > 1e-3);
+  CHECK(diff(outputs[1], outputs[2]) > 1e-3);
+  CHECK(diff(outputs[0], outputs[2]) > 1e-3);
+}
