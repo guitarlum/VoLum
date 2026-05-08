@@ -6,7 +6,9 @@ enum EParams {
   kInputLevel = 0, kNoiseGateThreshold, kToneBass, kToneMid, kToneTreble, kOutputLevel,
   kNoiseGateActive, kEQActive, kIRToggle,
   kDelayActive, kDelayTime, kDelayFeedback, kDelayMix, kDelayMode,
+  kDelayTone, kDelayAge, kDelayPingPong,
   kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode,
+  kReverbSubMode,
   kBoostActive, kBoostDrive, kBoostTone, kBoostLevel,
   kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
   kPreNam1Active, kPreNam1Capture, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
@@ -48,6 +50,8 @@ static double ExpectedStep(int paramIdx, bool fine)
       return fine ? 1.0 : 5.0;
     case kDelayFeedback:
     case kDelayMix:
+    case kDelayTone:
+    case kDelayAge:
     case kReverbMix:
     case kReverbDecay:
     case kReverbShimmer:
@@ -119,3 +123,12 @@ TEST_CASE("Keyboard step: input/output = 1.0 normal, 0.1 fine")
     CHECK(ExpectedStep(gainParams[i], true) == 0.1);
   }
 }
+
+TEST_CASE("Keyboard step: delay tone/age = 0.05 normal, 0.01 fine")
+{
+  CHECK(ExpectedStep(kDelayTone, false) == 0.05);
+  CHECK(ExpectedStep(kDelayTone, true) == 0.01);
+  CHECK(ExpectedStep(kDelayAge, false) == 0.05);
+  CHECK(ExpectedStep(kDelayAge, true) == 0.01);
+}
+

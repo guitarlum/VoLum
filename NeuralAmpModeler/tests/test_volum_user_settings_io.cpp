@@ -303,6 +303,123 @@ TEST_CASE("Dual-amp sidecar overlays current-only support settings")
   CHECK(loaded[0].supportPolarityInvert == true);
 }
 
+TEST_CASE("effect-staging effect snapshot fields round-trip through user settings JSON")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.delayActive = true;
+  fx.delayMode = volum::kVoLumDelayModeAnalog;
+  fx.reverbActive = true;
+  fx.reverbMode = volum::kVoLumReverbModeOktaverb;
+
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    fx.delayModes[i].time = 250.0 + 50.0 * i;
+    fx.delayModes[i].feedback = 0.20 + 0.05 * i;
+    fx.delayModes[i].mix = 0.15 + 0.05 * i;
+    fx.delayModes[i].tone = 0.30 + 0.10 * i;
+    fx.delayModes[i].age = 0.10 + 0.10 * i;
+    fx.delayModes[i].pingPong = (i == volum::kVoLumDelayModeDigital);
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    fx.reverbModes[i].mix = 0.30 + 0.05 * i;
+    fx.reverbModes[i].decay = 2.0 + i;
+    fx.reverbModes[i].tone = 4.0 + i;
+    fx.reverbModes[i].preDelay = 10.0 + 5.0 * i;
+    fx.reverbModes[i].shimmer = 0.10 + 0.10 * i;
+    fx.reverbModes[i].subMode = i % 3;
+  }
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  CHECK(loaded.delayActive == true);
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeAnalog);
+  CHECK(loaded.reverbActive == true);
+  CHECK(loaded.reverbMode == volum::kVoLumReverbModeOktaverb);
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    CHECK(loaded.delayModes[i].time == doctest::Approx(250.0 + 50.0 * i));
+    CHECK(loaded.delayModes[i].feedback == doctest::Approx(0.20 + 0.05 * i));
+    CHECK(loaded.delayModes[i].mix == doctest::Approx(0.15 + 0.05 * i));
+    CHECK(loaded.delayModes[i].tone == doctest::Approx(0.30 + 0.10 * i));
+    CHECK(loaded.delayModes[i].age == doctest::Approx(0.10 + 0.10 * i));
+    CHECK(loaded.delayModes[i].pingPong == (i == volum::kVoLumDelayModeDigital));
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    CHECK(loaded.reverbModes[i].mix == doctest::Approx(0.30 + 0.05 * i));
+    CHECK(loaded.reverbModes[i].decay == doctest::Approx(2.0 + i));
+    CHECK(loaded.reverbModes[i].tone == doctest::Approx(4.0 + i));
+    CHECK(loaded.reverbModes[i].preDelay == doctest::Approx(10.0 + 5.0 * i));
+    CHECK(loaded.reverbModes[i].shimmer == doctest::Approx(0.10 + 0.10 * i));
+    CHECK(loaded.reverbModes[i].subMode == i % 3);
+  }
+}
+
+TEST_CASE("legacy v2 delayModes migrate to effect-staging mode order")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 2;
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayMode", 0}, // old Tape, removed in staging
+    {"delayModes", nlohmann::json::array({
+                     {{"time", 480.0}, {"feedback", 0.55}, {"mix", 0.40}}, // old Tape
+                     {{"time", 250.0}, {"feedback", 0.30}, {"mix", 0.20}}, // old Digital
+                     {{"time", 333.0}, {"feedback", 0.66}, {"mix", 0.55}}, // old PingPong
+                     {{"time", 700.0}, {"feedback", 0.25}, {"mix", 0.60}}, // old Reverse
+                   })},
+    {"reverbActive", false},
+    {"reverbMode", 0},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded, &healed);
+
+  CHECK(healed);
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeDigital);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].time == doctest::Approx(480.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].feedback == doctest::Approx(0.55));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].mix == doctest::Approx(0.40));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].time == doctest::Approx(320.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeAnalog].age == doctest::Approx(0.5));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].time == doctest::Approx(700.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].age == doctest::Approx(0.0));
+}
+
+TEST_CASE("legacy v2 PingPong mode folds into Digital ping-pong toggle")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 2;
+  j["effects"] = {
+    {"delayActive", true},
+    {"delayMode", 2},
+    {"delayModes", nlohmann::json::array({
+                     {{"time", 480.0}, {"feedback", 0.55}, {"mix", 0.40}},
+                     {{"time", 250.0}, {"feedback", 0.30}, {"mix", 0.20}},
+                     {{"time", 333.0}, {"feedback", 0.66}, {"mix", 0.55}},
+                     {{"time", 700.0}, {"feedback", 0.25}, {"mix", 0.60}},
+                   })},
+    {"reverbActive", false},
+    {"reverbMode", 0},
+  };
+
+  volum::VoLumEffectSettings loaded;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
+
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeDigital);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].pingPong == true);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].time == doctest::Approx(333.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].feedback == doctest::Approx(0.66));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeDigital].mix == doctest::Approx(0.55));
+}
+
 TEST_CASE("Legacy dual-amp settings default support polarity invert on")
 {
   CHECK(volum::VoLumAmpSettings{}.supportPolarityInvert == true);
@@ -332,10 +449,10 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   volum::VoLumEffectSettings fx;
   fx.delayActive = true;
-  fx.delayMode = 3;
-  fx.delayModes[3].time = 650.0;
-  fx.delayModes[3].feedback = 0.6;
-  fx.delayModes[3].mix = 0.4;
+  fx.delayMode = volum::kVoLumDelayModeReverse;
+  fx.delayModes[volum::kVoLumDelayModeReverse].time = 650.0;
+  fx.delayModes[volum::kVoLumDelayModeReverse].feedback = 0.6;
+  fx.delayModes[volum::kVoLumDelayModeReverse].mix = 0.4;
   fx.reverbActive = true;
   fx.reverbMode = 1;
   fx.reverbModes[1].mix = 0.7;
@@ -350,10 +467,10 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
 
   CHECK(loaded.delayActive == true);
-  CHECK(loaded.delayMode == 3);
-  CHECK(loaded.delayModes[3].time == doctest::Approx(650.0));
-  CHECK(loaded.delayModes[3].feedback == doctest::Approx(0.6));
-  CHECK(loaded.delayModes[3].mix == doctest::Approx(0.4));
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeReverse);
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].time == doctest::Approx(650.0));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].feedback == doctest::Approx(0.6));
+  CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].mix == doctest::Approx(0.4));
   CHECK(loaded.reverbActive == true);
   CHECK(loaded.reverbMode == 1);
   CHECK(loaded.reverbModes[1].mix == doctest::Approx(0.7));
@@ -422,17 +539,17 @@ TEST_CASE("Corrupt effect settings heal to defaults")
 
   REQUIRE(healed == true);
   CHECK(loaded.delayActive == false);
-  CHECK(loaded.delayMode == 1);
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeDigital);
   CHECK(loaded.reverbActive == false);
   CHECK(loaded.reverbMode == 0);
   CHECK(loaded.delayModes[0].time == doctest::Approx(380.0));
   CHECK(loaded.delayModes[0].feedback == doctest::Approx(0.35));
   CHECK(loaded.delayModes[0].mix == doctest::Approx(0.28));
-  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.3));
-  CHECK(loaded.reverbModes[0].decay == doctest::Approx(3.0));
-  CHECK(loaded.reverbModes[0].tone == doctest::Approx(4.5));
-  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(20.0));
-  CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.5));
+  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.32));
+  CHECK(loaded.reverbModes[0].decay == doctest::Approx(3.5));
+  CHECK(loaded.reverbModes[0].tone == doctest::Approx(5.5));
+  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(30.0));
+  CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.0));
 }
 
 TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
@@ -462,8 +579,8 @@ TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
     CHECK(loaded.delayModes[i].mix == doctest::Approx(0.33));
   }
   CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].time == doctest::Approx(600.0));
-  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].feedback == doctest::Approx(0.35));
-  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].mix == doctest::Approx(0.28));
+  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].feedback == doctest::Approx(0.30));
+  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].mix == doctest::Approx(0.40));
 
   for (int i = 0; i < 3; ++i)
   {
@@ -475,12 +592,12 @@ TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
   }
 }
 
-TEST_CASE("Three-entry delay mode settings leave reverse delay defaults")
+TEST_CASE("Three-entry delay mode settings load staging slots")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
   j["effects"] = {
-    {"delayMode", 3},
+    {"delayMode", volum::kVoLumDelayModeReverse},
     {"delayModes", nlohmann::json::array({
       {{"time", 400.0}, {"feedback", 0.2}, {"mix", 0.1}},
       {{"time", 500.0}, {"feedback", 0.3}, {"mix", 0.2}},
@@ -491,11 +608,8 @@ TEST_CASE("Three-entry delay mode settings leave reverse delay defaults")
   volum::VoLumEffectSettings loaded;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, &loaded);
 
-  CHECK(loaded.delayMode == 3);
+  CHECK(loaded.delayMode == volum::kVoLumDelayModeReverse);
   CHECK(loaded.delayModes[0].time == doctest::Approx(400.0));
   CHECK(loaded.delayModes[1].time == doctest::Approx(500.0));
   CHECK(loaded.delayModes[2].time == doctest::Approx(700.0));
-  CHECK(loaded.delayModes[3].time == doctest::Approx(600.0));
-  CHECK(loaded.delayModes[3].feedback == doctest::Approx(0.35));
-  CHECK(loaded.delayModes[3].mix == doctest::Approx(0.28));
 }
