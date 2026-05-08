@@ -235,3 +235,42 @@ TEST_CASE("VoLum JSON migration does not synthesize null params for missing lega
   REQUIRE(config.contains("RigFileMigrated"));
   CHECK(config["RigFileMigrated"].get<double>() == doctest::Approx(2.0));
 }
+
+TEST_CASE("effect-staging migration: old Tape and PingPong modes fold into Digital")
+{
+  {
+    nlohmann::json config = {{"DelayMode", 0.0}};
+    volum::MigrateDelayReverbToV0_9_0(config);
+    CHECK(config["DelayMode"].get<double>() == doctest::Approx(0.0));
+    CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+  }
+  {
+    nlohmann::json config = {{"DelayMode", 2.0}};
+    volum::MigrateDelayReverbToV0_9_0(config);
+    CHECK(config["DelayMode"].get<double>() == doctest::Approx(0.0));
+    CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(1.0));
+  }
+  {
+    nlohmann::json config = {{"DelayMode", 3.0}};
+    volum::MigrateDelayReverbToV0_9_0(config);
+    CHECK(config["DelayMode"].get<double>() == doctest::Approx(2.0));
+    CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+  }
+}
+
+TEST_CASE("effect-staging migration: adds only live staging params")
+{
+  nlohmann::json config = nlohmann::json::object();
+  volum::MigrateDelayReverbToV0_9_0(config);
+
+  REQUIRE(config.contains("DelayTone"));
+  REQUIRE(config.contains("DelayAge"));
+  REQUIRE(config.contains("DelayPingPong"));
+  REQUIRE(config.contains("ReverbSubMode"));
+  CHECK_FALSE(config.contains("DelayTapeSubMode"));
+  CHECK_FALSE(config.contains("ReverbTremRate"));
+  CHECK(config["DelayTone"].get<double>() == doctest::Approx(0.5));
+  CHECK(config["DelayAge"].get<double>() == doctest::Approx(0.0));
+  CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
+  CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(0.0));
+}
