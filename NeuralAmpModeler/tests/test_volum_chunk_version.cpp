@@ -152,6 +152,13 @@ TEST_CASE("VoLum 0.7.0 does not use 0.6.0 branch")
   REQUIRE_FALSE(volum::ChunkUses0600SerializedConfig(volum::ChunkVersion("0.7.0")));
 }
 
+TEST_CASE("Oktaverb sub-mode remap applies before 0.9.1 only")
+{
+  CHECK(volum::ShouldRemapOktaverbSubModeForChunkVersion(volum::ChunkVersion("0.9.0")));
+  CHECK_FALSE(volum::ShouldRemapOktaverbSubModeForChunkVersion(volum::ChunkVersion("0.9.1")));
+  CHECK_FALSE(volum::ShouldRemapOktaverbSubModeForChunkVersion(volum::ChunkVersion("0.10.0")));
+}
+
 TEST_CASE("VoLum legacy per-amp chunk byte count is stable")
 {
   std::vector<unsigned char> bytes;

@@ -367,6 +367,8 @@ public:
   void _VolumRestoreDelayModeSnapshot(int mode);
   void _VolumSaveReverbModeSnapshot(int mode);
   void _VolumRestoreReverbModeSnapshot(int mode);
+  void _VolumSaveOktaverbSubModeSnapshot(int subMode);
+  void _VolumRestoreOktaverbSubModeSnapshot(int subMode);
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
   void _ClearVoLumKnobSelection();
@@ -437,6 +439,11 @@ private:
   std::atomic<bool> mVolumPreIsLoading[2]{{false}, {false}};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
+  // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
+  // OnParamChange / OnParamChangeUI handlers triggered by setParam (which calls
+  // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /
+  // restore logic and corrupt the Oktaverb sub-mode storage.
+  bool mVolumReverbRestoreInProgress = false;
   std::atomic<bool> mVolumSupportNeedsLoad{false};
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};

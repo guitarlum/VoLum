@@ -1,3 +1,9 @@
+05/08/2026 - VoLum: Switching Reverb between Hall, Plate, and Oktaverb now remembers the last-selected Oktaverb sub-mode (Halo/Shimmer/Bloom) and its knobs, instead of resetting them. Reverb knob handlers and the sub-mode pill no longer overwrite snapshots while a mode restoration is mid-flight.
+05/08/2026 - VoLum: Bloom now uses plain additive Mix with no saturators (preserves the slow-swell character) but caps the Mix knob internally at 65 percent of full level. The 65 percent cap was tuned by ear and prevents the speaker-clipping that 100 percent Mix could trigger while keeping the same audible Mix range users actually use.
+05/08/2026 - VoLum: Fixed Halo and Shimmer clipping the speakers at high Mix. Those two pitch-feedback Oktaverb sub-modes now run the wet bus and final output through a soft saturator and internally cap Mix at 50 percent, guaranteeing they stay inside 0 dBFS for any setting. Hall, Plate, and Oktaverb Bloom are untouched and keep their original additive Mix behavior.
+05/08/2026 - VoLum: Replaced Oktaverb Dark with Halo (dual +-12 in feedback, Valhalla-style). Halo keeps the sub-octave weight Dark was reaching for but stays audible at moderate Mix because the +12 voice carries the body. Slot 0 stays stable so existing presets continue to load.
+05/08/2026 - VoLum: Fixed Oktaverb sub-mode knob snapshots not actually persisting across sub-mode switches (previous build silently overwrote the destination slot with the source slot's knobs).
+05/08/2026 - VoLum: Rebalanced Oktaverb wet level and Intensity curve so Shimmer reads at default Mix and the lower half of the Intensity knob now does real work.
 05/04/2026 - Docs: Restored bilingual user guide image embeds so GitHub renders screenshots inline.
 05/04/2026 - Docs: Restored English user guide image embeds so GitHub renders the screenshots inline.
 05/04/2026 - Docs: Updated the README hero screenshot to show a configured Soldano SLO100 preset with V30, channel 3, TS/Klon PRE slots, and active Reverb.
@@ -168,3 +174,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/04/2026 - VoLum: Renamed the PRE compressor card's bottom art label to "Compressor".
 05/05/2026 - VoLum: Polished Dual Amp SUPPORT UI: centered amp label, glyph-only Ø polarity control defaulting on for new/legacy setups, clearer PAN hover/tooltips, and support-channel keyboard refresh.
 05/08/2026 - VoLum: Effect staging branch trims POST effects to Digital/Analog/Reverse delay and Hall/Plate/Oktaverb reverb, keeps the repaired sub-mode UI for Oktaverb, calibrates the new 1176 PRE compressor output by -5 dB internally at displayed 0 dB, removes Tape/TremVerb WIP modes, and adds focused migration/DSP tests.
+05/08/2026 - VoLum: Rebuilt Oktaverb with Dark/Shimmer/Bloom sub-modes, pitch-in-feedback octave voicing, randomized multi-grain pitch shifting, multi-LFO decorrelation, and deterministic legacy sub-mode remapping.
+05/08/2026 - VoLum: Oktaverb now remembers separate Mix/Decay/Tone/Pre-Delay/Intensity snapshots for Dark, Shimmer, and Bloom, with placeholder defaults ready for final voicing values.

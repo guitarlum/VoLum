@@ -236,15 +236,16 @@ int _GetConfigFrom_0_8_3(const iplug::IByteChunk& chunk, int startPos, nlohmann:
 
 // v0.9.0 (effect-staging: DelayTone/Age/PingPong + ReverbSubMode;
 // new delay mode order Digital/Analog/Reverse).
+// v0.9.1 reuses this byte layout and remaps ReverbSubMode meaning after load.
 
 void _UpdateConfigFrom_0_9_0(nlohmann::json& /*config*/)
 {
-  // No-op: 0.9.0 is the current schema, so chunks saved here need no field changes.
+  // No-op: 0.9.0+ share the current param byte layout, so chunks saved here need no field changes.
 }
 
 int _GetConfigFrom_0_9_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
-  // Param order matches the EParams enum at v0.9.0.
+  // Param order matches the EParams enum at v0.9.0+.
   std::vector<std::string> paramNames{
     "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
     "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
@@ -514,6 +515,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // brings the loaded config up to current schema (delay mode reorder + new EParams).
   if (!(version >= volum::ChunkVersion(0, 9, 0)))
     volum::MigrateDelayReverbToV0_9_0(config);
+  if (volum::ShouldRemapOktaverbSubModeForChunkVersion(version))
+    volum::MigrateOktaverbSubModeToV0_9_1(config);
   _UnserializeApplyConfig(config);
 
 #if VOLUM_AMPETE_PRODUCT

@@ -22,9 +22,10 @@ namespace volum
 
 inline constexpr int kVoLumDelayModeCount = 3;
 inline constexpr int kVoLumReverbModeCount = 3;
-// v3 is the effect-staging schema: Delay {Digital, Analog, Reverse} with Tone/Age/PingPong,
-// and Reverb {Hall, Plate, Oktaverb} with an Oktaverb-only sub-mode.
-inline constexpr int kVoLumUserSettingsVersion = 3;
+// v5 stores independent Oktaverb knob snapshots per Halo / Shimmer / Bloom sub-mode.
+// Slot 0 was originally "Dark" in 0.9.1 and became "Halo" (dual +-12 in feedback) in
+// 0.9.2; the index stays stable so existing presets / settings keep loading.
+inline constexpr int kVoLumUserSettingsVersion = 5;
 
 // Effect-staging delay-mode order: 0=Digital, 1=Analog, 2=Reverse
 inline constexpr int kVoLumDelayModeDigital = 0;
@@ -37,6 +38,23 @@ inline constexpr int kVoLumReverseDelayMode = kVoLumDelayModeReverse;
 inline constexpr int kVoLumReverbModeHall = 0;
 inline constexpr int kVoLumReverbModePlate = 1;
 inline constexpr int kVoLumReverbModeOktaverb = 2;
+inline constexpr int kVoLumOktaverbSubModeHalo = 0;
+inline constexpr int kVoLumOktaverbSubModeShimmer = 1;
+inline constexpr int kVoLumOktaverbSubModeBloom = 2;
+// Backward-compat alias: old "Dark" name kept so any external callers still build. Slot 0
+// is now Halo (dual +-12 in feedback); see Reverb.cpp GetOktaverbSubMode.
+inline constexpr int kVoLumOktaverbSubModeDark = kVoLumOktaverbSubModeHalo;
+
+inline int RemapLegacyOktaverbSubModeToV4Settings(int oldSubMode)
+{
+  switch (oldSubMode)
+  {
+    case 2: return kVoLumOktaverbSubModeHalo; // old Oct+Sub -> slot 0 (now Halo)
+    case 0:
+    case 1:
+    default: return kVoLumOktaverbSubModeShimmer; // old Oct / Oct+5th -> Shimmer
+  }
+}
 
 struct DelayModeSnapshot {
   double time = 380.0;
@@ -54,7 +72,15 @@ struct ReverbModeSnapshot {
   double tone = 4.5;
   double preDelay = 20.0;
   double shimmer = 0.5;
-  int subMode = 0; // Oktaverb only: 0=Oct, 1=Oct+5th, 2=Oct+Sub
+  int subMode = kVoLumOktaverbSubModeShimmer; // Oktaverb only: 0=Halo, 1=Shimmer, 2=Bloom
+};
+
+struct OktaverbSubModeSnapshot {
+  double mix = 0.40;
+  double decay = 5.0;
+  double tone = 5.5;
+  double preDelay = 30.0;
+  double shimmer = 0.65;
 };
 
 struct VoLumEffectSettings {
@@ -65,8 +91,20 @@ struct VoLumEffectSettings {
     ReverbModeSnapshot{0.32, 3.5, 5.5, 30.0, 0.0, /*subMode*/ 0},
     // Plate: restored dev/original plate behaviour and defaults.
     ReverbModeSnapshot{0.30, 3.0, 4.5, 20.0, 0.0, /*subMode*/ 0},
-    // Oktaverb: repaired octave-up shimmer with optional fifth/sub-octave voices.
-    ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.65, /*subMode*/ 0},
+    // Oktaverb: high-quality pitch-reverb with Halo / Shimmer / Bloom voices.
+    ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.65, /*subMode*/ kVoLumOktaverbSubModeShimmer},
+  };
+
+  // Defaults are placeholders until final voicing values are chosen by ear.
+  // Per-mode default knob snapshots. Halo wants a brighter tone than the old Dark
+  // since the +12 voice carries the body; Shimmer / Bloom unchanged.
+  OktaverbSubModeSnapshot oktaverbSubModes[3] = {
+    // Halo (was Dark in 0.9.1): bright tone, moderate decay, midway intensity.
+    OktaverbSubModeSnapshot{0.40, 5.5, 6.0, 25.0, 0.55},
+    // Shimmer
+    OktaverbSubModeSnapshot{0.40, 6.0, 6.0, 30.0, 0.65},
+    // Bloom
+    OktaverbSubModeSnapshot{0.42, 5.5, 5.5, 20.0, 0.60},
   };
 
   bool delayActive = false;
@@ -221,6 +259,17 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
         {"subMode", mode.subMode},
       });
     }
+    e["oktaverbSubModes"] = nlohmann::json::array();
+    for (const auto& sub : fx->oktaverbSubModes)
+    {
+      e["oktaverbSubModes"].push_back({
+        {"mix", sub.mix},
+        {"decay", sub.decay},
+        {"tone", sub.tone},
+        {"preDelay", sub.preDelay},
+        {"shimmer", sub.shimmer},
+      });
+    }
     j["effects"] = e;
   }
 
@@ -286,7 +335,7 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
   int settingsVersion = 1;
   if (j.contains("version"))
     loadInt(j, "version", settingsVersion, 1, kVoLumUserSettingsVersion, 1);
-  const bool resetLegacyPreCaptureSelections = settingsVersion < kVoLumUserSettingsVersion;
+  const bool resetLegacyPreCaptureSelections = settingsVersion < 3;
 
   if (lastAmpIdx && j.contains("lastAmpIdx"))
   {
@@ -401,6 +450,7 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     // Settings v3 (effect-staging) introduces the smaller delay mode order
     //   {Digital, Analog, Reverse} (was {Tape, Digital, PingPong, Reverse}).
     const bool legacyDelayLayout = settingsVersion < 3;
+    const bool legacyOktaverbSubModes = settingsVersion < 4;
 
     int rawDelayMode = defaults.delayMode;
     // Legacy settings may contain the old Reverse index (3), so allow that until we remap.
@@ -526,6 +576,11 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           loadDouble(mode, "preDelay", fx->reverbModes[i].preDelay, 0.0, 200.0, defaults.reverbModes[i].preDelay);
           loadDouble(mode, "shimmer", fx->reverbModes[i].shimmer, 0.0, 1.0, defaults.reverbModes[i].shimmer);
           loadInt(mode, "subMode", fx->reverbModes[i].subMode, 0, 2, defaults.reverbModes[i].subMode);
+          if (legacyOktaverbSubModes && i == kVoLumReverbModeOktaverb)
+          {
+            fx->reverbModes[i].subMode = RemapLegacyOktaverbSubModeToV4Settings(fx->reverbModes[i].subMode);
+            healed = true;
+          }
         }
         else
         {
@@ -543,6 +598,43 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
       loadDouble(e, "reverbShimmer", legacy.shimmer, 0.0, 1.0, ReverbModeSnapshot{}.shimmer);
       for (int i = 0; i < kVoLumReverbModeCount; ++i)
         fx->reverbModes[i] = legacy;
+    }
+
+    bool loadedOktaverbSubModes = false;
+    if (e.contains("oktaverbSubModes") && e["oktaverbSubModes"].is_array())
+    {
+      const auto& modes = e["oktaverbSubModes"];
+      const int avail = static_cast<int>(modes.size());
+      for (int i = 0; i < 3; ++i)
+      {
+        if (i < avail)
+        {
+          const auto& mode = modes[i];
+          loadDouble(mode, "mix", fx->oktaverbSubModes[i].mix, 0.0, 1.0, defaults.oktaverbSubModes[i].mix);
+          loadDouble(mode, "decay", fx->oktaverbSubModes[i].decay, 0.1, 10.0, defaults.oktaverbSubModes[i].decay);
+          loadDouble(mode, "tone", fx->oktaverbSubModes[i].tone, 0.0, 10.0, defaults.oktaverbSubModes[i].tone);
+          loadDouble(mode, "preDelay", fx->oktaverbSubModes[i].preDelay, 0.0, 200.0, defaults.oktaverbSubModes[i].preDelay);
+          loadDouble(mode, "shimmer", fx->oktaverbSubModes[i].shimmer, 0.0, 1.0, defaults.oktaverbSubModes[i].shimmer);
+        }
+        else
+        {
+          fx->oktaverbSubModes[i] = defaults.oktaverbSubModes[i];
+        }
+      }
+      loadedOktaverbSubModes = true;
+    }
+
+    if (!loadedOktaverbSubModes)
+    {
+      const auto& okt = fx->reverbModes[kVoLumReverbModeOktaverb];
+      for (auto& sub : fx->oktaverbSubModes)
+      {
+        sub.mix = okt.mix;
+        sub.decay = okt.decay;
+        sub.tone = okt.tone;
+        sub.preDelay = okt.preDelay;
+        sub.shimmer = okt.shimmer;
+      }
     }
 
     fx->reverbMode = std::clamp(rawReverbMode, 0, kVoLumReverbModeCount - 1);
