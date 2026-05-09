@@ -90,9 +90,13 @@ inline DualAmpPanGains MakeDualAmpPanGains(DualAmpRoute route, double mainPan, d
 }
 
 template<typename Sample>
+// Merge dual-amp main/support lanes to stereo. Identical behavior in standalone and DAW:
+// no clamp here. Final-bus bounding is the master safety stage at the end of ProcessBlock
+// (see VoLumMasterSafety.h); clamping mid-chain before Delay/Reverb would have been
+// ineffective and asymmetric.
 inline void MergeDualAmpToStereo(const Sample* mainMono, const Sample* supportMono, Sample* const* outputs,
                                  std::size_t nFrames, std::size_t nChansOut, double mainLevel, double supportLevel,
-                                 const DualAmpPanGains& panGains, bool appApi)
+                                 const DualAmpPanGains& panGains, bool /*appApi*/)
 {
   if (nChansOut == 0)
     return;
@@ -106,9 +110,7 @@ inline void MergeDualAmpToStereo(const Sample* mainMono, const Sample* supportMo
 
     for (std::size_t c = 0; c < nChansOut; ++c)
     {
-      double y = (c == 0) ? left : right;
-      if (appApi)
-        y = std::clamp(y, -1.0, 1.0);
+      const double y = (c == 0) ? left : right;
       outputs[c][s] = static_cast<Sample>(y);
     }
   }
