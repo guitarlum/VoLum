@@ -599,6 +599,94 @@ TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
   CHECK(rightRepeatEnergy > leftRepeatEnergy * 2.0);
 }
 
+TEST_CASE("Delay: Digital PingPong mono-duplicated input first repeat on right")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
+                  0.5, 0.0, true);
+
+  const size_t frames = 32;
+  std::vector<double> mono(frames, 0.0);
+  mono[0] = 1.0;
+  double* inputs[2] = {mono.data(), mono.data()};
+
+  auto** out = delay.Process(inputs, 2, frames);
+  REQUIRE_FALSE(hasNaN(out[0], frames));
+  REQUIRE_FALSE(hasNaN(out[1], frames));
+  CHECK(std::abs(out[1][10]) > 0.75);
+  CHECK(std::abs(out[0][10]) < 0.05);
+}
+
+TEST_CASE("Delay: Analog PingPong mono-duplicated input favors right on first repeats")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0,
+                  0.5, 0.5, true);
+
+  const size_t frames = 48;
+  std::vector<double> mono(frames, 0.0);
+  mono[0] = 1.0;
+  double* inputs[2] = {mono.data(), mono.data()};
+
+  auto** out = delay.Process(inputs, 2, frames);
+  double leftRepeatEnergy = 0.0;
+  double rightRepeatEnergy = 0.0;
+  for (size_t i = 10; i < 22; ++i)
+  {
+    leftRepeatEnergy += std::abs(out[0][i]);
+    rightRepeatEnergy += std::abs(out[1][i]);
+  }
+  CHECK(rightRepeatEnergy > leftRepeatEnergy * 2.0);
+}
+
+TEST_CASE("Delay: SetParams mode change clears delay ring buffers")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
+                  0.5, 0.0, false);
+
+  const size_t frames = 32;
+  std::vector<double> left(frames, 0.0), right(frames, 0.0);
+  left[0] = 1.0;
+  double* inputs[2] = {left.data(), right.data()};
+  delay.Process(inputs, 2, frames);
+
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0,
+                  0.5, 0.0, false);
+
+  std::fill(left.begin(), left.end(), 0.0);
+  std::fill(right.begin(), right.end(), 0.0);
+  auto** out = delay.Process(inputs, 2, frames);
+  double sumAbs = 0.0;
+  for (size_t i = 0; i < frames; ++i)
+    sumAbs += std::abs(out[0][i]) + std::abs(out[1][i]);
+  CHECK(sumAbs < 1.0e-9);
+}
+
+TEST_CASE("Delay: SetParams ping-pong toggle clears delay ring buffers")
+{
+  dsp::effect::Delay delay;
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
+                  0.5, 0.0, false);
+
+  const size_t frames = 32;
+  std::vector<double> left(frames, 0.0), right(frames, 0.0);
+  left[0] = 1.0;
+  double* inputs[2] = {left.data(), right.data()};
+  delay.Process(inputs, 2, frames);
+
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
+                  0.5, 0.0, true);
+
+  std::fill(left.begin(), left.end(), 0.0);
+  std::fill(right.begin(), right.end(), 0.0);
+  auto** out = delay.Process(inputs, 2, frames);
+  double sumAbs = 0.0;
+  for (size_t i = 0; i < frames; ++i)
+    sumAbs += std::abs(out[0][i]) + std::abs(out[1][i]);
+  CHECK(sumAbs < 1.0e-9);
+}
+
 static std::vector<double> RunOktaverbSubMode(int subMode)
 {
   dsp::effect::Reverb reverb;
