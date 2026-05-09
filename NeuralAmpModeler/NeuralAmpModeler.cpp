@@ -20,6 +20,7 @@
 
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumMasterSafety.h"
 #include "VoLumPaths.h"
 #include "VoLumPrePedalCaptures.h"
 #include "VoLumProcessIO.h"
@@ -1504,6 +1505,25 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   }
 #endif
 
+  // Master safety stage: stateless soft clipper at the very end of the chain. Inert below
+  // ~+2.9 dBFS knee so musical material is bit-identical; smooth tanh shoulder to ~+6 dBFS
+  // ceiling above. Catches user-stacked runaway (hot model + Output gain + heavy POST mix)
+  // without coloring normal use. See VoLumMasterSafety.h and design plan.
+  bool safetyEngagedThisBlock = false;
+  for (size_t c = 0; c < numChannelsExternalOut; ++c)
+  {
+    iplug::sample* ch = outputs[c];
+    for (size_t s = 0; s < numFrames; ++s)
+    {
+      const double x = static_cast<double>(ch[s]);
+      const double y = volum::SoftSafetyClip(x);
+      if (!safetyEngagedThisBlock && std::fabs(x) >= 1.4)
+        safetyEngagedThisBlock = true;
+      ch[s] = static_cast<iplug::sample>(y);
+    }
+  }
+  mMasterSafetyEngaged.store(safetyEngagedThisBlock);
+
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
   _UpdateMeters(mInputPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
@@ -1636,7 +1656,13 @@ void NeuralAmpModeler::OnIdle()
     if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
     {
       const bool dualActive = GetParam(kDualAmpActive)->Bool();
-      if (dualActive && mVolumDualAmpOutputHot.load())
+      if (mMasterSafetyEngaged.load())
+      {
+        // Master safety took priority because it indicates the actual final-bus is being
+        // shaped, which is the louder problem regardless of dual-amp state.
+        footer->As<VoLumFooterControl>()->SetText("Output safety active - lower output or wet mix");
+      }
+      else if (dualActive && mVolumDualAmpOutputHot.load())
       {
         footer->As<VoLumFooterControl>()->SetText("Dual Amp output hot - lower lane or output levels");
       }

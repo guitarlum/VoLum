@@ -1,6 +1,7 @@
 ﻿#include "third_party/doctest.h"
 #include "../../AudioDSPTools/dsp/Delay.h"
 #include "../../AudioDSPTools/dsp/Reverb.h"
+#include "../VoLumMasterSafety.h"
 #include <cmath>
 #include <vector>
 
@@ -862,5 +863,76 @@ TEST_CASE("Reverb: Oktaverb Bloom honours the 65 percent Mix cap")
     auto** out = extreme.Process(inputs, 2, frames);
     REQUIRE_FALSE(hasNaN(out[0], frames));
     REQUIRE_FALSE(hasNaN(out[1], frames));
+  }
+}
+
+// Master safety contract: stacking the worst realistic POST chain (Delay at high feedback
+// + a non-saturating reverb mode like Hall/Plate/Bloom) on top of a hot pre-output signal
+// can produce raw post-FX peaks above 0 dBFS. The master safety stage at the end of
+// ProcessBlock applies SoftSafetyClip per-sample, which must bound the final-bus peak to
+// the soft-clip ceiling (~+6 dBFS / linear ~2.0) regardless of what the wet stack did.
+// Modeled here against the same Delay + Reverb objects ProcessBlock uses, with a hot
+// 0 dBFS input simulating the post-amp + post-OutputLevel signal.
+TEST_CASE("MasterSafety: Delay + Reverb stack stays bounded by ceiling after SoftSafetyClip")
+{
+  const size_t frames = 512;
+  const int blocks = 240;
+  const double sampleRate = 48000.0;
+
+  // Hot input: 0 dBFS sine sustained, far hotter than any musical guitar bus.
+  std::vector<double> hotL(frames, 0.0), hotR(frames, 0.0);
+
+  // Worst-case stack: Delay at near-max feedback feeding into a non-saturating reverb.
+  // Bloom (subMode=2) and Hall/Plate (kModeHall/kModePlate) skip the Oktaverb tanh shoulder,
+  // so only the master safety stage stands between this stack and the speakers.
+  for (int reverbMode : {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate})
+  {
+    INFO("reverbMode=" << reverbMode);
+    dsp::effect::Delay delay;
+    delay.SetParams(380.0, 0.92, 0.85, 1, sampleRate);
+
+    dsp::effect::Reverb reverb;
+    reverb.SetParams(0.85, 8.0, 6.0, 20.0, 0.5, reverbMode, sampleRate);
+
+    double rawPeak = 0.0;
+    double safePeak = 0.0;
+    bool sawAboveKnee = false;
+
+    for (int block = 0; block < blocks; ++block)
+    {
+      for (size_t i = 0; i < frames; ++i)
+      {
+        const double phase = static_cast<double>(block * frames + i) * 0.05;
+        hotL[i] = std::sin(phase);
+        hotR[i] = std::sin(phase + 0.3);
+      }
+      double* delIn[2] = {hotL.data(), hotR.data()};
+      auto** afterDelay = delay.Process(delIn, 2, frames);
+      auto** afterReverb = reverb.Process(afterDelay, 2, frames);
+
+      REQUIRE_FALSE(hasNaN(afterReverb[0], frames));
+      REQUIRE_FALSE(hasNaN(afterReverb[1], frames));
+
+      for (size_t c = 0; c < 2; ++c)
+      {
+        for (size_t i = 0; i < frames; ++i)
+        {
+          const double x = afterReverb[c][i];
+          rawPeak = std::max(rawPeak, std::fabs(x));
+          if (std::fabs(x) >= 1.4)
+            sawAboveKnee = true;
+
+          const double y = volum::SoftSafetyClip(x);
+          safePeak = std::max(safePeak, std::fabs(y));
+          CHECK(std::isfinite(y));
+        }
+      }
+    }
+
+    // Stack must actually be hot enough to exercise the safety stage; if this fails the
+    // input/feedback/decay was not aggressive enough and the test no longer protects us.
+    CHECK(sawAboveKnee);
+    INFO("rawPeak=" << rawPeak << " safePeak=" << safePeak);
+    CHECK(safePeak <= 2.0 + 1e-6);
   }
 }

@@ -448,6 +448,10 @@ private:
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
   std::atomic<bool> mSupportPolarityInvert{false};
+  // Master safety stage telemetry: set when any sample on the final post-FX bus crossed
+  // the soft-clip knee (~+2.9 dBFS) during the most recent ProcessBlock. Read by OnIdle
+  // to surface a footer warning. See VoLumMasterSafety.h and ProcessBlock end.
+  std::atomic<bool> mMasterSafetyEngaged{false};
 
   enum class VoLumLoadKind { Main, MainPrefetch, Support, Pre };
   struct VoLumLoadRequest

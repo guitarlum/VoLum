@@ -21,27 +21,30 @@ TEST_CASE("DAW path averages stereo before gain")
   DOCTEST_CHECK(mono[0] == doctest::Approx(1.f));
 }
 
-TEST_CASE("APP_API clamps output")
+// ApplyOutputGainBroadcast no longer clamps in either build: final-bus bounding is the
+// master safety stage at the end of ProcessBlock (see VoLumMasterSafety.h). The two paths
+// must produce identical output now that the standalone-only clamp is gone.
+TEST_CASE("ApplyOutputGainBroadcast: APP_API and DAW paths produce identical unclamped output")
 {
   std::vector<float> monoIn(1, 10.f);
-  std::vector<float> out0(1, 0.f), out1(1, 0.f);
-  float* outputs[2] = {out0.data(), out1.data()};
-  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 2, 1.0, true);
-  DOCTEST_CHECK(out0[0] == doctest::Approx(1.f));
-  DOCTEST_CHECK(out1[0] == doctest::Approx(1.f));
+  std::vector<float> appOut0(1, 0.f), appOut1(1, 0.f);
+  std::vector<float> dawOut0(1, 0.f), dawOut1(1, 0.f);
+  float* appOutputs[2] = {appOut0.data(), appOut1.data()};
+  float* dawOutputs[2] = {dawOut0.data(), dawOut1.data()};
+
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), appOutputs, 1, 2, 1.0, true);
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), dawOutputs, 1, 2, 1.0, false);
+
+  DOCTEST_CHECK(appOut0[0] == doctest::Approx(10.f));
+  DOCTEST_CHECK(appOut1[0] == doctest::Approx(10.f));
+  DOCTEST_CHECK(dawOut0[0] == doctest::Approx(10.f));
+  DOCTEST_CHECK(dawOut1[0] == doctest::Approx(10.f));
 
   monoIn[0] = -10.f;
-  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 2, 1.0, true);
-  DOCTEST_CHECK(out0[0] == doctest::Approx(-1.f));
-}
-
-TEST_CASE("DAW path does not clamp output in plugin")
-{
-  std::vector<float> monoIn(1, 10.f);
-  std::vector<float> out0(1, 0.f);
-  float* outputs[1] = {out0.data()};
-  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), outputs, 1, 1, 1.0, false);
-  DOCTEST_CHECK(out0[0] == doctest::Approx(10.f));
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), appOutputs, 1, 2, 1.0, true);
+  volum::process_io::ApplyOutputGainBroadcast(monoIn.data(), dawOutputs, 1, 2, 1.0, false);
+  DOCTEST_CHECK(appOut0[0] == doctest::Approx(-10.f));
+  DOCTEST_CHECK(dawOut0[0] == doctest::Approx(-10.f));
 }
 
 TEST_CASE("ClearBuffers silences every output channel")

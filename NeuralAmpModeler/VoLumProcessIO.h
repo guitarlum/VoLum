@@ -1,6 +1,5 @@
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 
 namespace volum::process_io
@@ -29,20 +28,20 @@ inline void MixExternalInputsToMono(Sample* const* inputs, std::size_t nFrames, 
   }
 }
 
-// Broadcast internal mono to all output channels with output gain. Standalone clamps to [-1, 1].
+// Broadcast internal mono to all output channels with output gain. Identical behavior in
+// standalone and DAW: no clamp here. Final-bus bounding is the master safety stage at the
+// end of ProcessBlock (see VoLumMasterSafety.h); clamping mid-chain before Delay/Reverb
+// would have been ineffective and asymmetric.
 template<typename Sample>
 inline void ApplyOutputGainBroadcast(const Sample* monoIn, Sample* const* outputs, std::size_t nFrames,
-                                     std::size_t nChansOut, double outGain, bool appApi)
+                                     std::size_t nChansOut, double outGain, bool /*appApi*/)
 {
   for (std::size_t cout = 0; cout < nChansOut; ++cout)
   {
     for (std::size_t s = 0; s < nFrames; ++s)
     {
       const double y = outGain * static_cast<double>(monoIn[s]);
-      if (appApi)
-        outputs[cout][s] = static_cast<Sample>(std::clamp(y, -1.0, 1.0));
-      else
-        outputs[cout][s] = static_cast<Sample>(y);
+      outputs[cout][s] = static_cast<Sample>(y);
     }
   }
 }
