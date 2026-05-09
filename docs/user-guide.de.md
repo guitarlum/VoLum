@@ -86,6 +86,10 @@ Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Kli
 
 Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Effekte sind geteilt/global statt pro Amp gespeichert, also wie finale Effekte hinter der Amp-Sektion.
 
+## Ausgangs-Schutz
+
+VoLum besitzt am Ende der Signalkette (hinter Delay und Reverb) eine permanent aktive Ausgangs-Schutzstufe. Bei normalem Material macht sie nichts, aber wenn du ein heißes Rig mit dichten POST-Effekten und stark aufgedrehtem Output-Regler kombinierst, werden Spitzen oberhalb von etwa +3 dBFS sanft in Richtung einer +6-dBFS-Decke gerollt - so kommt kein durchgegangenes Signal versehentlich an deine Lautsprecher. Solange die Schutzstufe formt, zeigt der Footer unten im Plug-in `Output safety active - lower output or wet mix`. Siehst du diese Meldung häufig, dreh Output, Reverb Mix oder Delay Mix zurück - die Schutzstufe ist ein Sicherheitsnetz, kein kreativer Limiter, und sollte beim normalen Spiel selten ansprechen. Für die absolute Lautstärkesicherheit sind weiterhin dein Audiointerface-Gain und dein Monitor-Pegel verantwortlich.
+
 ## Tastatur
 
 - Ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.

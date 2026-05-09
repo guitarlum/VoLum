@@ -27,6 +27,7 @@ add_executable(NeuralAmpModeler-Tests
   test_tone_stack.cpp
   test_volum_pre_pedal_captures.cpp
   test_volum_processing_plan.cpp
+  test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"

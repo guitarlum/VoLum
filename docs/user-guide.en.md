@@ -86,6 +86,10 @@ The POST section runs after the amp. It contains Delay and Reverb cards. Click P
 
 The small LED on each card shows whether the effect is active. The bottom label shows the current mode or preset summary. POST effects are shared/global rather than per-amp, so they behave like the final effects placed after the amp section.
 
+## Output Safety
+
+VoLum runs an always-on output safety stage at the very end of the chain (after Delay and Reverb). It does nothing on normal material, but if you stack a hot rig with heavy POST effects and crank the Output knob, peaks above roughly +3 dBFS are smoothly rolled toward a +6 dBFS ceiling so you cannot accidentally send a runaway signal to your speakers. While the stage is shaping, the footer at the bottom of the plugin shows `Output safety active - lower output or wet mix`. If you see that message often, lower Output, Reverb Mix, or Delay Mix - the safety stage is a backstop, not a creative limiter, and it should rarely engage during normal play. The plugin still relies on your audio interface gain and monitor level for absolute SPL safety.
+
 ## Keyboard Controls
 
 - With no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
