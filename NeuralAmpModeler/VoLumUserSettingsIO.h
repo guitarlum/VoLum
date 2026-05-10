@@ -27,9 +27,8 @@ inline constexpr int kVoLumReverbModeCount = 3;
 // 0.9.2; the index stays stable so existing presets / settings keep loading.
 // v6 adds per-main-amp POST live values (delay + reverb knob positions, modes, and
 // active toggles) under each amps[<folderName>] entry. Legacy v<6 settings are
-// reset to factory POST defaults per amp on first load (postValid flipped to true
-// at end of load) so brand-new amps don't inherit stale tweaks from a single global
-// POST scene.
+// restored to factory POST defaults per amp on first load so brand-new amps don't
+// inherit stale tweaks from a single global POST scene.
 inline constexpr int kVoLumUserSettingsVersion = 6;
 
 // Effect-staging delay-mode order: 0=Digital, 1=Analog, 2=Reverse
@@ -233,9 +232,9 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     if (includeDualAmp)
       WriteDualAmpUserSettings(a, s);
 
-    // POST per-amp live values (v6+). postValid distinguishes "real per-amp scene"
-    // from "legacy slot defaulted at load time" so the loader can no-op restore on
-    // postValid=false (currently always true after a save round-trip).
+    // POST per-amp live values (v6+). postValid distinguishes a real per-amp scene
+    // from a legacy / never-saved slot; restore initializes postValid=false slots to
+    // factory POST defaults instead of inheriting the previously selected amp.
     a["postValid"] = s.postValid;
     a["postDelayActive"] = s.postDelayActive;
     a["postDelayTime"] = s.postDelayTime;
@@ -467,10 +466,9 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadBool(a, "supportPolarityInvert", s.supportPolarityInvert, defaults.supportPolarityInvert);
 
         // v6+ per-amp POST live values. On legacy (v<6) settings the keys are absent
-        // and the struct defaults remain in place; postValid stays false so the
-        // loader does not clobber the active EParams. Once written to disk by a
-        // post-v6 build, these round-trip with postValid=true and the loader
-        // restores them on amp switch.
+        // and the struct defaults remain in place; postValid stays false so amp restore
+        // can initialize a fresh factory POST scene instead of copying the previously
+        // selected amp's POST settings.
         loadBool(a, "postValid", s.postValid, defaults.postValid);
         loadBool(a, "postDelayActive", s.postDelayActive, defaults.postDelayActive);
         loadDouble(a, "postDelayTime", s.postDelayTime, 10.0, 2000.0, defaults.postDelayTime);

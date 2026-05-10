@@ -725,11 +725,12 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   CHECK(loaded[3].postReverbMode == volum::kVoLumReverbModeOktaverb);
   CHECK(loaded[3].postReverbSubMode == volum::kVoLumOktaverbSubModeShimmer);
 
-  // Untouched amps remain at struct defaults (postValid=false).
+  // Untouched amps remain pending initialization (postValid=false) until selected; amp
+  // restore turns that into an explicit factory POST scene.
   CHECK_FALSE(loaded[7].postValid);
 }
 
-TEST_CASE("VolumUserSettings legacy JSON without per-amp POST yields postValid=false")
+TEST_CASE("VolumUserSettings legacy JSON without per-amp POST keeps factory POST defaults pending init")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   // Pre-build a v5 JSON (no per-amp post* keys). Simulate an upgrade load.

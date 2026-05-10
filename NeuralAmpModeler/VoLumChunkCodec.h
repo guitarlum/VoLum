@@ -107,8 +107,8 @@ void PutCurrentPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
   chunk.Put(&supportPolarityInvert);
 
   // POST per-amp tail. Always written by current builds; gated on read by
-  // ChunkHasPostPerAmpSettings so legacy chunks load with default POST values
-  // (postValid=false → loader leaves active EParams alone).
+  // ChunkHasPostPerAmpSettings so legacy chunks restore factory POST defaults
+  // instead of inheriting the previously selected amp.
   PutPostPerAmpSettings(chunk, s);
 }
 
