@@ -20,8 +20,6 @@
 namespace volum
 {
 
-inline constexpr int kVoLumDelayModeCount = 3;
-inline constexpr int kVoLumReverbModeCount = 3;
 // v5 stores independent Oktaverb knob snapshots per Halo / Shimmer / Bloom sub-mode.
 // Slot 0 was originally "Dark" in 0.9.1 and became "Halo" (dual +-12 in feedback) in
 // 0.9.2; the index stays stable so existing presets / settings keep loading.
@@ -31,23 +29,7 @@ inline constexpr int kVoLumReverbModeCount = 3;
 // inherit stale tweaks from a single global POST scene.
 inline constexpr int kVoLumUserSettingsVersion = 6;
 
-// Effect-staging delay-mode order: 0=Digital, 1=Analog, 2=Reverse
-inline constexpr int kVoLumDelayModeDigital = 0;
-inline constexpr int kVoLumDelayModeAnalog = 1;
-inline constexpr int kVoLumDelayModeReverse = 2;
-// Back-compat alias: pre-v0.9.0 code referenced kVoLumReverseDelayMode by name.
-inline constexpr int kVoLumReverseDelayMode = kVoLumDelayModeReverse;
-
-// Reverb-mode order remains: 0=Hall, 1=Plate, 2=Oktaverb
-inline constexpr int kVoLumReverbModeHall = 0;
-inline constexpr int kVoLumReverbModePlate = 1;
-inline constexpr int kVoLumReverbModeOktaverb = 2;
-inline constexpr int kVoLumOktaverbSubModeHalo = 0;
-inline constexpr int kVoLumOktaverbSubModeShimmer = 1;
-inline constexpr int kVoLumOktaverbSubModeBloom = 2;
-// Backward-compat alias: old "Dark" name kept so any external callers still build. Slot 0
-// is now Halo (dual +-12 in feedback); see Reverb.cpp GetOktaverbSubMode.
-inline constexpr int kVoLumOktaverbSubModeDark = kVoLumOktaverbSubModeHalo;
+// See VoLumAmpeteCatalog.h for delay/reverb mode constants and snapshot structs.
 
 inline int RemapLegacyOktaverbSubModeToV4Settings(int oldSubMode)
 {
@@ -59,33 +41,6 @@ inline int RemapLegacyOktaverbSubModeToV4Settings(int oldSubMode)
     default: return kVoLumOktaverbSubModeShimmer; // old Oct / Oct+5th -> Shimmer
   }
 }
-
-struct DelayModeSnapshot {
-  double time = 380.0;
-  double feedback = 0.35;
-  double mix = 0.28;
-  // Iteration 2 additions (v0.9.0):
-  double tone = 0.5;       // 0..1, per-mode DSP curve
-  double age = 0.0;        // 0..1, per-mode DSP meaning
-  bool pingPong = false;   // ignored when mode == Reverse
-};
-
-struct ReverbModeSnapshot {
-  double mix = 0.3;
-  double decay = 3.0;
-  double tone = 4.5;
-  double preDelay = 20.0;
-  double shimmer = 0.5;
-  int subMode = kVoLumOktaverbSubModeShimmer; // Oktaverb only: 0=Halo, 1=Shimmer, 2=Bloom
-};
-
-struct OktaverbSubModeSnapshot {
-  double mix = 0.40;
-  double decay = 5.0;
-  double tone = 5.5;
-  double preDelay = 30.0;
-  double shimmer = 0.65;
-};
 
 struct VoLumEffectSettings {
   bool reverbActive = false;
@@ -184,6 +139,56 @@ inline nlohmann::json VolumDualAmpUserSettingsToJson(const VoLumAmpSettings* amp
   return j;
 }
 
+inline nlohmann::json DelayModeSnapshotsToJson(const DelayModeSnapshot* modes, int modeCount)
+{
+  nlohmann::json out = nlohmann::json::array();
+  for (int i = 0; i < modeCount; ++i)
+  {
+    out.push_back({
+      {"time", modes[i].time},
+      {"feedback", modes[i].feedback},
+      {"mix", modes[i].mix},
+      {"tone", modes[i].tone},
+      {"age", modes[i].age},
+      {"pingPong", modes[i].pingPong},
+    });
+  }
+  return out;
+}
+
+inline nlohmann::json ReverbModeSnapshotsToJson(const ReverbModeSnapshot* modes, int modeCount)
+{
+  nlohmann::json out = nlohmann::json::array();
+  for (int i = 0; i < modeCount; ++i)
+  {
+    out.push_back({
+      {"mix", modes[i].mix},
+      {"decay", modes[i].decay},
+      {"tone", modes[i].tone},
+      {"preDelay", modes[i].preDelay},
+      {"shimmer", modes[i].shimmer},
+      {"subMode", modes[i].subMode},
+    });
+  }
+  return out;
+}
+
+inline nlohmann::json OktaverbSubModeSnapshotsToJson(const OktaverbSubModeSnapshot* subModes, int subModeCount)
+{
+  nlohmann::json out = nlohmann::json::array();
+  for (int i = 0; i < subModeCount; ++i)
+  {
+    out.push_back({
+      {"mix", subModes[i].mix},
+      {"decay", subModes[i].decay},
+      {"tone", subModes[i].tone},
+      {"preDelay", subModes[i].preDelay},
+      {"shimmer", subModes[i].shimmer},
+    });
+  }
+  return out;
+}
+
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
                                                const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true)
 {
@@ -252,6 +257,9 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["postReverbShimmer"] = s.postReverbShimmer;
     a["postReverbMode"] = s.postReverbMode;
     a["postReverbSubMode"] = s.postReverbSubMode;
+    a["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
+    a["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
+    a["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
 
     amps[kAmps[i].folderName] = a;
   }
@@ -263,41 +271,9 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     e["delayMode"] = fx->delayMode;
     e["reverbActive"] = fx->reverbActive;
     e["reverbMode"] = fx->reverbMode;
-    e["delayModes"] = nlohmann::json::array();
-    for (const auto& mode : fx->delayModes)
-    {
-      e["delayModes"].push_back({
-        {"time", mode.time},
-        {"feedback", mode.feedback},
-        {"mix", mode.mix},
-        {"tone", mode.tone},
-        {"age", mode.age},
-        {"pingPong", mode.pingPong},
-      });
-    }
-    e["reverbModes"] = nlohmann::json::array();
-    for (const auto& mode : fx->reverbModes)
-    {
-      e["reverbModes"].push_back({
-        {"mix", mode.mix},
-        {"decay", mode.decay},
-        {"tone", mode.tone},
-        {"preDelay", mode.preDelay},
-        {"shimmer", mode.shimmer},
-        {"subMode", mode.subMode},
-      });
-    }
-    e["oktaverbSubModes"] = nlohmann::json::array();
-    for (const auto& sub : fx->oktaverbSubModes)
-    {
-      e["oktaverbSubModes"].push_back({
-        {"mix", sub.mix},
-        {"decay", sub.decay},
-        {"tone", sub.tone},
-        {"preDelay", sub.preDelay},
-        {"shimmer", sub.shimmer},
-      });
-    }
+    e["delayModes"] = DelayModeSnapshotsToJson(fx->delayModes, kVoLumDelayModeCount);
+    e["reverbModes"] = ReverbModeSnapshotsToJson(fx->reverbModes, kVoLumReverbModeCount);
+    e["oktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(fx->oktaverbSubModes, 3);
     j["effects"] = e;
   }
 
@@ -486,6 +462,65 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "postReverbShimmer", s.postReverbShimmer, 0.0, 1.0, defaults.postReverbShimmer);
         loadInt(a, "postReverbMode", s.postReverbMode, 0, kVoLumReverbModeCount - 1, defaults.postReverbMode);
         loadInt(a, "postReverbSubMode", s.postReverbSubMode, 0, 2, defaults.postReverbSubMode);
+        if (a.contains("postDelayModes") && a["postDelayModes"].is_array())
+        {
+          const auto& modes = a["postDelayModes"];
+          for (int modeIdx = 0; modeIdx < kVoLumDelayModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
+          {
+            const auto& mode = modes[modeIdx];
+            auto& dst = s.postDelayModes[modeIdx];
+            const auto& def = defaults.postDelayModes[modeIdx];
+            loadDouble(mode, "time", dst.time, 10.0, 2000.0, def.time);
+            loadDouble(mode, "feedback", dst.feedback, 0.0, 0.99, def.feedback);
+            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
+            loadDouble(mode, "tone", dst.tone, 0.0, 1.0, def.tone);
+            loadDouble(mode, "age", dst.age, 0.0, 1.0, def.age);
+            loadBool(mode, "pingPong", dst.pingPong, def.pingPong);
+          }
+        }
+        else if (a.contains("postDelayModes"))
+        {
+          healed = true;
+        }
+        if (a.contains("postReverbModes") && a["postReverbModes"].is_array())
+        {
+          const auto& modes = a["postReverbModes"];
+          for (int modeIdx = 0; modeIdx < kVoLumReverbModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
+          {
+            const auto& mode = modes[modeIdx];
+            auto& dst = s.postReverbModes[modeIdx];
+            const auto& def = defaults.postReverbModes[modeIdx];
+            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
+            loadDouble(mode, "decay", dst.decay, 0.1, 10.0, def.decay);
+            loadDouble(mode, "tone", dst.tone, 0.0, 10.0, def.tone);
+            loadDouble(mode, "preDelay", dst.preDelay, 0.0, 200.0, def.preDelay);
+            loadDouble(mode, "shimmer", dst.shimmer, 0.0, 1.0, def.shimmer);
+            loadInt(mode, "subMode", dst.subMode, 0, 2, def.subMode);
+          }
+        }
+        else if (a.contains("postReverbModes"))
+        {
+          healed = true;
+        }
+        if (a.contains("postOktaverbSubModes") && a["postOktaverbSubModes"].is_array())
+        {
+          const auto& subModes = a["postOktaverbSubModes"];
+          for (int subIdx = 0; subIdx < 3 && subIdx < static_cast<int>(subModes.size()); ++subIdx)
+          {
+            const auto& sub = subModes[subIdx];
+            auto& dst = s.postOktaverbSubModes[subIdx];
+            const auto& def = defaults.postOktaverbSubModes[subIdx];
+            loadDouble(sub, "mix", dst.mix, 0.0, 1.0, def.mix);
+            loadDouble(sub, "decay", dst.decay, 0.1, 10.0, def.decay);
+            loadDouble(sub, "tone", dst.tone, 0.0, 10.0, def.tone);
+            loadDouble(sub, "preDelay", dst.preDelay, 0.0, 200.0, def.preDelay);
+            loadDouble(sub, "shimmer", dst.shimmer, 0.0, 1.0, def.shimmer);
+          }
+        }
+        else if (a.contains("postOktaverbSubModes"))
+        {
+          healed = true;
+        }
       }
     }
   }
