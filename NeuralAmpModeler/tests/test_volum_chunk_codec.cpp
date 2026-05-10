@@ -1,6 +1,7 @@
 #include "third_party/doctest.h"
 #include "../VoLumChunkCodec.h"
 #include "../VoLumJsonMigration.h"
+#include "../VoLumUserSettingsIO.h"
 
 #include <cstring>
 #include <vector>
@@ -273,6 +274,65 @@ TEST_CASE("effect-staging migration: adds only live staging params")
   CHECK(config["DelayAge"].get<double>() == doctest::Approx(0.0));
   CHECK(config["DelayPingPong"].get<double>() == doctest::Approx(0.0));
   CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(0.0));
+}
+
+TEST_CASE("VoLum chunk codec round-trips POST per-amp settings")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[2].postValid = true;
+  amps[2].postDelayActive = true;
+  amps[2].postDelayMode = volum::kVoLumDelayModeReverse;
+  amps[2].postDelayMix = 0.42;
+  amps[2].postDelayTime = 555.0;
+  amps[2].postDelayFeedback = 0.55;
+  amps[2].postDelayTone = 0.7;
+  amps[2].postDelayAge = 0.4;
+  amps[2].postDelayPingPong = false;
+  amps[2].postReverbActive = true;
+  amps[2].postReverbMix = 0.37;
+  amps[2].postReverbDecay = 5.5;
+  amps[2].postReverbTone = 6.5;
+  amps[2].postReverbPreDelay = 45.0;
+  amps[2].postReverbShimmer = 0.65;
+  amps[2].postReverbMode = volum::kVoLumReverbModeOktaverb;
+  amps[2].postReverbSubMode = volum::kVoLumOktaverbSubModeBloom;
+
+  MemoryChunk chunk;
+  volum::VoLumChunkSelection selection{2, 1, 0};
+  volum::PutCurrentVoLumChunkState(chunk, selection, amps, volum::kAmpCount);
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VoLumChunkSelection loadedSel{};
+  int pos = volum::GetVoLumChunkSelection(chunk, 0, loadedSel);
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded[i]);
+    pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded[i], true);
+    pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded[i], true);
+    pos = volum::GetPostPerAmpSettings(chunk, pos, loaded[i]);
+  }
+
+  CHECK(loaded[2].postValid);
+  CHECK(loaded[2].postDelayActive);
+  CHECK(loaded[2].postDelayMode == volum::kVoLumDelayModeReverse);
+  CHECK(loaded[2].postDelayMix == doctest::Approx(0.42));
+  CHECK(loaded[2].postDelayTime == doctest::Approx(555.0));
+  CHECK(loaded[2].postDelayFeedback == doctest::Approx(0.55));
+  CHECK(loaded[2].postDelayTone == doctest::Approx(0.7));
+  CHECK(loaded[2].postDelayAge == doctest::Approx(0.4));
+  CHECK_FALSE(loaded[2].postDelayPingPong);
+  CHECK(loaded[2].postReverbActive);
+  CHECK(loaded[2].postReverbMix == doctest::Approx(0.37));
+  CHECK(loaded[2].postReverbDecay == doctest::Approx(5.5));
+  CHECK(loaded[2].postReverbTone == doctest::Approx(6.5));
+  CHECK(loaded[2].postReverbPreDelay == doctest::Approx(45.0));
+  CHECK(loaded[2].postReverbShimmer == doctest::Approx(0.65));
+  CHECK(loaded[2].postReverbMode == volum::kVoLumReverbModeOktaverb);
+  CHECK(loaded[2].postReverbSubMode == volum::kVoLumOktaverbSubModeBloom);
+
+  // Untouched amp slots round-trip with postValid==false (the struct default), so the
+  // restore path leaves the active EParams alone for those amps.
+  CHECK_FALSE(loaded[5].postValid);
 }
 
 TEST_CASE("Oktaverb v0.9.1 migration remaps legacy sub-modes")

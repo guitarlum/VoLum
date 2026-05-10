@@ -114,6 +114,32 @@ struct VoLumAmpSettings
   bool supportEqActive = true;
   double supportAmpPan = 0.0;
   bool supportPolarityInvert = true;
+
+  // Per-amp POST live values (delay + reverb). Mirror PRE per-amp persistence: each
+  // main amp keeps its own delay / reverb knob positions, mode selections, and
+  // active-toggles, so switching amps swaps the POST scene the same way it swaps PRE.
+  // These are the LIVE EParam values; the per-mode-snapshot map (DelayModeSnapshot /
+  // ReverbModeSnapshot etc.) remains global to the session and only kicks in on a
+  // mode change within the current amp.
+  // Defaults match the pre-per-amp EParam defaults so brand-new amps behave the same
+  // as the prior global POST defaults.
+  bool postValid = false; // false = legacy / never-saved; restore should leave EParams alone.
+  bool postDelayActive = false;
+  double postDelayTime = 380.0;
+  double postDelayFeedback = 0.35;
+  double postDelayMix = 0.28;
+  int postDelayMode = 0; // 0=Digital, 1=Analog, 2=Reverse
+  double postDelayTone = 0.5;
+  double postDelayAge = 0.0;
+  bool postDelayPingPong = false;
+  bool postReverbActive = false;
+  double postReverbMix = 0.32;
+  double postReverbDecay = 3.5;
+  double postReverbTone = 5.5;
+  double postReverbPreDelay = 30.0;
+  double postReverbShimmer = 0.0;
+  int postReverbMode = 0; // 0=Hall, 1=Plate, 2=Oktaverb
+  int postReverbSubMode = 1; // Oktaverb sub-mode (0=Halo, 1=Shimmer, 2=Bloom)
 };
 #endif
 } // namespace volum

@@ -105,6 +105,11 @@ void PutCurrentPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
   chunk.Put(&supportEq);
   chunk.Put(&s.supportAmpPan);
   chunk.Put(&supportPolarityInvert);
+
+  // POST per-amp tail. Always written by current builds; gated on read by
+  // ChunkHasPostPerAmpSettings so legacy chunks load with default POST values
+  // (postValid=false → loader leaves active EParams alone).
+  PutPostPerAmpSettings(chunk, s);
 }
 
 template<typename Chunk>
@@ -222,6 +227,77 @@ int GetDualAmpPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s, b
   s.supportAmpPan = std::clamp(s.supportAmpPan, -1.0, 1.0);
   if (hasSupportPolarityInvert)
     s.supportPolarityInvert = (supportPolarityInvert != 0);
+  return pos;
+}
+
+template<typename Chunk>
+void PutPostPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
+{
+  int valid = s.postValid ? 1 : 0;
+  int delAct = s.postDelayActive ? 1 : 0;
+  int delPP = s.postDelayPingPong ? 1 : 0;
+  int revAct = s.postReverbActive ? 1 : 0;
+  chunk.Put(&valid);
+  chunk.Put(&delAct);
+  chunk.Put(&s.postDelayMode);
+  chunk.Put(&delPP);
+  chunk.Put(&revAct);
+  chunk.Put(&s.postReverbMode);
+  chunk.Put(&s.postReverbSubMode);
+  chunk.Put(&s.postDelayTime);
+  chunk.Put(&s.postDelayFeedback);
+  chunk.Put(&s.postDelayMix);
+  chunk.Put(&s.postDelayTone);
+  chunk.Put(&s.postDelayAge);
+  chunk.Put(&s.postReverbMix);
+  chunk.Put(&s.postReverbDecay);
+  chunk.Put(&s.postReverbTone);
+  chunk.Put(&s.postReverbPreDelay);
+  chunk.Put(&s.postReverbShimmer);
+}
+
+template<typename Chunk>
+int GetPostPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
+{
+  int valid = 0;
+  int delAct = 0;
+  int delPP = 0;
+  int revAct = 0;
+  pos = chunk.Get(&valid, pos);
+  pos = chunk.Get(&delAct, pos);
+  pos = chunk.Get(&s.postDelayMode, pos);
+  pos = chunk.Get(&delPP, pos);
+  pos = chunk.Get(&revAct, pos);
+  pos = chunk.Get(&s.postReverbMode, pos);
+  pos = chunk.Get(&s.postReverbSubMode, pos);
+  pos = chunk.Get(&s.postDelayTime, pos);
+  pos = chunk.Get(&s.postDelayFeedback, pos);
+  pos = chunk.Get(&s.postDelayMix, pos);
+  pos = chunk.Get(&s.postDelayTone, pos);
+  pos = chunk.Get(&s.postDelayAge, pos);
+  pos = chunk.Get(&s.postReverbMix, pos);
+  pos = chunk.Get(&s.postReverbDecay, pos);
+  pos = chunk.Get(&s.postReverbTone, pos);
+  pos = chunk.Get(&s.postReverbPreDelay, pos);
+  pos = chunk.Get(&s.postReverbShimmer, pos);
+
+  s.postValid = (valid != 0);
+  s.postDelayActive = (delAct != 0);
+  s.postDelayPingPong = (delPP != 0);
+  s.postReverbActive = (revAct != 0);
+  s.postDelayMode = std::clamp(s.postDelayMode, 0, 2);
+  s.postReverbMode = std::clamp(s.postReverbMode, 0, 2);
+  s.postReverbSubMode = std::clamp(s.postReverbSubMode, 0, 2);
+  s.postDelayTime = std::clamp(s.postDelayTime, 10.0, 2000.0);
+  s.postDelayFeedback = std::clamp(s.postDelayFeedback, 0.0, 0.99);
+  s.postDelayMix = std::clamp(s.postDelayMix, 0.0, 1.0);
+  s.postDelayTone = std::clamp(s.postDelayTone, 0.0, 1.0);
+  s.postDelayAge = std::clamp(s.postDelayAge, 0.0, 1.0);
+  s.postReverbMix = std::clamp(s.postReverbMix, 0.0, 1.0);
+  s.postReverbDecay = std::clamp(s.postReverbDecay, 0.1, 10.0);
+  s.postReverbTone = std::clamp(s.postReverbTone, 0.0, 10.0);
+  s.postReverbPreDelay = std::clamp(s.postReverbPreDelay, 0.0, 200.0);
+  s.postReverbShimmer = std::clamp(s.postReverbShimmer, 0.0, 1.0);
   return pos;
 }
 

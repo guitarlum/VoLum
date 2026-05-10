@@ -647,7 +647,10 @@ TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
   }
   CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].time == doctest::Approx(600.0));
   CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].feedback == doctest::Approx(0.30));
-  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].mix == doctest::Approx(0.40));
+  // Reverse default Mix dropped from 0.40 to 0.32 alongside the reverse-blend-law fix
+  // (additive instead of crossfade), so a fresh Reverse patch sits at the same level as
+  // Digital / Analog at the same Mix.
+  CHECK(loaded.delayModes[volum::kVoLumReverseDelayMode].mix == doctest::Approx(0.32));
 
   for (int i = 0; i < 3; ++i)
   {
@@ -679,4 +682,77 @@ TEST_CASE("Three-entry delay mode settings load staging slots")
   CHECK(loaded.delayModes[0].time == doctest::Approx(400.0));
   CHECK(loaded.delayModes[1].time == doctest::Approx(500.0));
   CHECK(loaded.delayModes[2].time == doctest::Approx(700.0));
+}
+
+TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[3].postValid = true;
+  amps[3].postDelayActive = true;
+  amps[3].postDelayMode = volum::kVoLumDelayModeAnalog;
+  amps[3].postDelayMix = 0.41;
+  amps[3].postDelayTime = 320.0;
+  amps[3].postDelayFeedback = 0.45;
+  amps[3].postDelayTone = 0.62;
+  amps[3].postDelayAge = 0.5;
+  amps[3].postDelayPingPong = true;
+  amps[3].postReverbActive = true;
+  amps[3].postReverbMix = 0.33;
+  amps[3].postReverbDecay = 4.5;
+  amps[3].postReverbTone = 5.0;
+  amps[3].postReverbPreDelay = 22.0;
+  amps[3].postReverbShimmer = 0.4;
+  amps[3].postReverbMode = volum::kVoLumReverbModeOktaverb;
+  amps[3].postReverbSubMode = volum::kVoLumOktaverbSubModeShimmer;
+
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr);
+
+  CHECK(loaded[3].postValid);
+  CHECK(loaded[3].postDelayActive);
+  CHECK(loaded[3].postDelayMode == volum::kVoLumDelayModeAnalog);
+  CHECK(loaded[3].postDelayMix == doctest::Approx(0.41));
+  CHECK(loaded[3].postDelayTime == doctest::Approx(320.0));
+  CHECK(loaded[3].postDelayFeedback == doctest::Approx(0.45));
+  CHECK(loaded[3].postDelayTone == doctest::Approx(0.62));
+  CHECK(loaded[3].postDelayAge == doctest::Approx(0.5));
+  CHECK(loaded[3].postDelayPingPong);
+  CHECK(loaded[3].postReverbActive);
+  CHECK(loaded[3].postReverbMix == doctest::Approx(0.33));
+  CHECK(loaded[3].postReverbDecay == doctest::Approx(4.5));
+  CHECK(loaded[3].postReverbMode == volum::kVoLumReverbModeOktaverb);
+  CHECK(loaded[3].postReverbSubMode == volum::kVoLumOktaverbSubModeShimmer);
+
+  // Untouched amps remain at struct defaults (postValid=false).
+  CHECK_FALSE(loaded[7].postValid);
+}
+
+TEST_CASE("VolumUserSettings legacy JSON without per-amp POST yields postValid=false")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  // Pre-build a v5 JSON (no per-amp post* keys). Simulate an upgrade load.
+  nlohmann::json j;
+  j["version"] = 5;
+  j["lastAmpIdx"] = 0;
+  j["amps"] = nlohmann::json::object();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    nlohmann::json a;
+    a["speaker"] = 3;
+    a["channel"] = 0;
+    j["amps"][volum::kAmps[i].folderName] = a;
+  }
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr);
+
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    INFO("amp " << i);
+    CHECK_FALSE(loaded[i].postValid);
+    CHECK(loaded[i].postDelayMix == doctest::Approx(0.28));
+    CHECK(loaded[i].postReverbMix == doctest::Approx(0.32));
+  }
 }

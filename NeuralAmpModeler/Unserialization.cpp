@@ -517,6 +517,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     volum::MigrateDelayReverbToV0_9_0(config);
   if (volum::ShouldRemapOktaverbSubModeForChunkVersion(version))
     volum::MigrateOktaverbSubModeToV0_9_1(config);
+  if (volum::ShouldRemapReverbMixForChunkVersion(version))
+    volum::MigrateReverbMixToEqualPowerV0_9_3(config);
   _UnserializeApplyConfig(config);
 
 #if VOLUM_AMPETE_PRODUCT
@@ -536,6 +538,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     const bool hasDualAmpSettings = volum::ChunkHasDualAmpPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasSupportPolaritySettings =
       volum::ChunkHasSupportPolarityPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasPostPerAmpSettings = volum::ChunkHasPostPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -549,6 +552,13 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       }
       if (hasDualAmpSettings)
         pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s, hasSupportPolaritySettings);
+      if (hasPostPerAmpSettings)
+        pos = volum::GetPostPerAmpSettings(chunk, pos, s);
+      // hasPostPerAmpSettings == false: legacy chunk pre-dating per-amp POST. Per
+      // user policy "we don't have to migrate, we can reset", postValid stays at the
+      // struct default (false), so _VolumRestoreFromSettings will not clobber the
+      // active POST EParams on amp switch — they will be saved into this slot the
+      // first time the user edits POST while this amp is selected.
     }
 
     mVolumInitComplete = false;

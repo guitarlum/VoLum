@@ -86,4 +86,12 @@ inline bool ShouldRemapOktaverbSubModeForChunkVersion(const ChunkVersion& versio
   return !(version >= ChunkVersion(0, 9, 1));
 }
 
+// 0.9.3: reverb Mix law switched from additive to equal-power crossfade and Hall /
+// Plate gained a wet-bus trim. Stored ReverbMix on pre-0.9.3 chunks must be remapped
+// through RemapReverbMixToEqualPowerV0_9_3 to preserve perceived wet level.
+inline bool ShouldRemapReverbMixForChunkVersion(const ChunkVersion& version)
+{
+  return !(version >= ChunkVersion(0, 9, 3));
+}
+
 } // namespace volum
