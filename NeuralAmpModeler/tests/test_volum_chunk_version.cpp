@@ -116,9 +116,9 @@ void AppendCurrentPerAmpBlock(std::vector<unsigned char>& bytes)
   const double delayMix = 0.28;
   const double delayTone = 0.5;
   const double delayAge = 0.0;
-  const double reverbMix = 0.32;
-  const double reverbDecay = 3.5;
-  const double reverbTone = 5.5;
+  const double reverbMix = 0.20;
+  const double reverbDecay = 2.5;
+  const double reverbTone = 5.0;
   const double reverbPreDelay = 30.0;
   const double reverbShimmer = 0.0;
   AppendBytes(bytes, postValid);

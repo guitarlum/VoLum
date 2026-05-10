@@ -227,9 +227,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
   // Reverb (effect-staging order: Hall, Plate, Oktaverb)
   GetParam(kReverbActive)->InitBool("ReverbActive", false);
-  GetParam(kReverbMix)->InitDouble("ReverbMix", 0.32, 0.0, 1.0, 0.01);
-  GetParam(kReverbDecay)->InitDouble("ReverbDecay", 3.5, 0.1, 10.0, 0.1, "s");
-  GetParam(kReverbTone)->InitDouble("ReverbTone", 5.5, 0.0, 10.0, 0.1);
+  GetParam(kReverbMix)->InitDouble("ReverbMix", 0.20, 0.0, 1.0, 0.01);
+  GetParam(kReverbDecay)->InitDouble("ReverbDecay", 2.5, 0.1, 10.0, 0.1, "s");
+  GetParam(kReverbTone)->InitDouble("ReverbTone", 5.0, 0.0, 10.0, 0.1);
   GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 30.0, 0.0, 200.0, 1.0, "ms");
   GetParam(kReverbShimmer)->InitDouble("ReverbShimmer", 0.0, 0.0, 1.0, 0.01);
   GetParam(kReverbMode)->InitEnum("ReverbMode", volum::kVoLumReverbModeHall,
