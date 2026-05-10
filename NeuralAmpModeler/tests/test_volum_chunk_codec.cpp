@@ -296,6 +296,12 @@ TEST_CASE("VoLum chunk codec round-trips POST per-amp settings")
   amps[2].postReverbShimmer = 0.65;
   amps[2].postReverbMode = volum::kVoLumReverbModeOktaverb;
   amps[2].postReverbSubMode = volum::kVoLumOktaverbSubModeBloom;
+  amps[2].postDelayModes[volum::kVoLumDelayModeDigital].time = 444.0;
+  amps[2].postDelayModes[volum::kVoLumDelayModeAnalog].age = 0.72;
+  amps[2].postDelayModes[volum::kVoLumDelayModeReverse].mix = 0.37;
+  amps[2].postReverbModes[volum::kVoLumReverbModePlate].decay = 6.7;
+  amps[2].postReverbModes[volum::kVoLumReverbModeOktaverb].subMode = volum::kVoLumOktaverbSubModeBloom;
+  amps[2].postOktaverbSubModes[volum::kVoLumOktaverbSubModeBloom].shimmer = 0.81;
 
   MemoryChunk chunk;
   volum::VoLumChunkSelection selection{2, 1, 0};
@@ -329,6 +335,12 @@ TEST_CASE("VoLum chunk codec round-trips POST per-amp settings")
   CHECK(loaded[2].postReverbShimmer == doctest::Approx(0.65));
   CHECK(loaded[2].postReverbMode == volum::kVoLumReverbModeOktaverb);
   CHECK(loaded[2].postReverbSubMode == volum::kVoLumOktaverbSubModeBloom);
+  CHECK(loaded[2].postDelayModes[volum::kVoLumDelayModeDigital].time == doctest::Approx(444.0));
+  CHECK(loaded[2].postDelayModes[volum::kVoLumDelayModeAnalog].age == doctest::Approx(0.72));
+  CHECK(loaded[2].postDelayModes[volum::kVoLumDelayModeReverse].mix == doctest::Approx(0.37));
+  CHECK(loaded[2].postReverbModes[volum::kVoLumReverbModePlate].decay == doctest::Approx(6.7));
+  CHECK(loaded[2].postReverbModes[volum::kVoLumReverbModeOktaverb].subMode == volum::kVoLumOktaverbSubModeBloom);
+  CHECK(loaded[2].postOktaverbSubModes[volum::kVoLumOktaverbSubModeBloom].shimmer == doctest::Approx(0.81));
 
   // Untouched amp slots round-trip with postValid==false (the struct default), so the
   // restore path leaves the active EParams alone for those amps.

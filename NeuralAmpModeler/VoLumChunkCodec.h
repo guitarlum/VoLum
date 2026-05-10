@@ -254,10 +254,37 @@ void PutPostPerAmpSettings(Chunk& chunk, const VoLumAmpSettings& s)
   chunk.Put(&s.postReverbTone);
   chunk.Put(&s.postReverbPreDelay);
   chunk.Put(&s.postReverbShimmer);
+  for (int i = 0; i < kVoLumDelayModeCount; ++i)
+  {
+    int pingPong = s.postDelayModes[i].pingPong ? 1 : 0;
+    chunk.Put(&s.postDelayModes[i].time);
+    chunk.Put(&s.postDelayModes[i].feedback);
+    chunk.Put(&s.postDelayModes[i].mix);
+    chunk.Put(&s.postDelayModes[i].tone);
+    chunk.Put(&s.postDelayModes[i].age);
+    chunk.Put(&pingPong);
+  }
+  for (int i = 0; i < kVoLumReverbModeCount; ++i)
+  {
+    chunk.Put(&s.postReverbModes[i].mix);
+    chunk.Put(&s.postReverbModes[i].decay);
+    chunk.Put(&s.postReverbModes[i].tone);
+    chunk.Put(&s.postReverbModes[i].preDelay);
+    chunk.Put(&s.postReverbModes[i].shimmer);
+    chunk.Put(&s.postReverbModes[i].subMode);
+  }
+  for (int i = 0; i < 3; ++i)
+  {
+    chunk.Put(&s.postOktaverbSubModes[i].mix);
+    chunk.Put(&s.postOktaverbSubModes[i].decay);
+    chunk.Put(&s.postOktaverbSubModes[i].tone);
+    chunk.Put(&s.postOktaverbSubModes[i].preDelay);
+    chunk.Put(&s.postOktaverbSubModes[i].shimmer);
+  }
 }
 
 template<typename Chunk>
-int GetPostPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
+int GetPostPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s, bool hasPostSnapshots = true)
 {
   int valid = 0;
   int delAct = 0;
@@ -298,6 +325,53 @@ int GetPostPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
   s.postReverbTone = std::clamp(s.postReverbTone, 0.0, 10.0);
   s.postReverbPreDelay = std::clamp(s.postReverbPreDelay, 0.0, 200.0);
   s.postReverbShimmer = std::clamp(s.postReverbShimmer, 0.0, 1.0);
+  if (hasPostSnapshots)
+  {
+    for (int i = 0; i < kVoLumDelayModeCount; ++i)
+    {
+      int pingPong = 0;
+      pos = chunk.Get(&s.postDelayModes[i].time, pos);
+      pos = chunk.Get(&s.postDelayModes[i].feedback, pos);
+      pos = chunk.Get(&s.postDelayModes[i].mix, pos);
+      pos = chunk.Get(&s.postDelayModes[i].tone, pos);
+      pos = chunk.Get(&s.postDelayModes[i].age, pos);
+      pos = chunk.Get(&pingPong, pos);
+      s.postDelayModes[i].time = std::clamp(s.postDelayModes[i].time, 10.0, 2000.0);
+      s.postDelayModes[i].feedback = std::clamp(s.postDelayModes[i].feedback, 0.0, 0.99);
+      s.postDelayModes[i].mix = std::clamp(s.postDelayModes[i].mix, 0.0, 1.0);
+      s.postDelayModes[i].tone = std::clamp(s.postDelayModes[i].tone, 0.0, 1.0);
+      s.postDelayModes[i].age = std::clamp(s.postDelayModes[i].age, 0.0, 1.0);
+      s.postDelayModes[i].pingPong = (pingPong != 0);
+    }
+    for (int i = 0; i < kVoLumReverbModeCount; ++i)
+    {
+      pos = chunk.Get(&s.postReverbModes[i].mix, pos);
+      pos = chunk.Get(&s.postReverbModes[i].decay, pos);
+      pos = chunk.Get(&s.postReverbModes[i].tone, pos);
+      pos = chunk.Get(&s.postReverbModes[i].preDelay, pos);
+      pos = chunk.Get(&s.postReverbModes[i].shimmer, pos);
+      pos = chunk.Get(&s.postReverbModes[i].subMode, pos);
+      s.postReverbModes[i].mix = std::clamp(s.postReverbModes[i].mix, 0.0, 1.0);
+      s.postReverbModes[i].decay = std::clamp(s.postReverbModes[i].decay, 0.1, 10.0);
+      s.postReverbModes[i].tone = std::clamp(s.postReverbModes[i].tone, 0.0, 10.0);
+      s.postReverbModes[i].preDelay = std::clamp(s.postReverbModes[i].preDelay, 0.0, 200.0);
+      s.postReverbModes[i].shimmer = std::clamp(s.postReverbModes[i].shimmer, 0.0, 1.0);
+      s.postReverbModes[i].subMode = std::clamp(s.postReverbModes[i].subMode, 0, 2);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+      pos = chunk.Get(&s.postOktaverbSubModes[i].mix, pos);
+      pos = chunk.Get(&s.postOktaverbSubModes[i].decay, pos);
+      pos = chunk.Get(&s.postOktaverbSubModes[i].tone, pos);
+      pos = chunk.Get(&s.postOktaverbSubModes[i].preDelay, pos);
+      pos = chunk.Get(&s.postOktaverbSubModes[i].shimmer, pos);
+      s.postOktaverbSubModes[i].mix = std::clamp(s.postOktaverbSubModes[i].mix, 0.0, 1.0);
+      s.postOktaverbSubModes[i].decay = std::clamp(s.postOktaverbSubModes[i].decay, 0.1, 10.0);
+      s.postOktaverbSubModes[i].tone = std::clamp(s.postOktaverbSubModes[i].tone, 0.0, 10.0);
+      s.postOktaverbSubModes[i].preDelay = std::clamp(s.postOktaverbSubModes[i].preDelay, 0.0, 200.0);
+      s.postOktaverbSubModes[i].shimmer = std::clamp(s.postOktaverbSubModes[i].shimmer, 0.0, 1.0);
+    }
+  }
   return pos;
 }
 

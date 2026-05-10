@@ -3811,9 +3811,15 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.supportAmpPan = GetParam(kSupportAmpPan)->Value();
   s.supportPolarityInvert = mSupportPolarityInvert.load();
 
+  mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
+  mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
+  mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
+  mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
+  _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
+  _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
+
   // POST per-amp persistence: mirror the live POST EParam values into the current
-  // amp's slot so switching amps preserves delay / reverb knob positions and mode
-  // selections the same way it preserves PRE state.
+  // amp's slot so switching amps preserves both visible values and hidden mode snapshots.
   s.postValid = true;
   s.postDelayActive = GetParam(kDelayActive)->Bool();
   s.postDelayTime = GetParam(kDelayTime)->Value();
@@ -3831,6 +3837,12 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
   s.postReverbMode = GetParam(kReverbMode)->Int();
   s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
+  for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
+    s.postDelayModes[mode] = mVolumEffectSettings.delayModes[mode];
+  for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
+    s.postReverbModes[mode] = mVolumEffectSettings.reverbModes[mode];
+  for (int subMode = 0; subMode < 3; ++subMode)
+    s.postOktaverbSubModes[subMode] = mVolumEffectSettings.oktaverbSubModes[subMode];
 }
 
 void NeuralAmpModeler::_VolumSaveEffectSettings()
@@ -4111,7 +4123,20 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
     s.postReverbShimmer = defaults.postReverbShimmer;
     s.postReverbMode = defaults.postReverbMode;
     s.postReverbSubMode = defaults.postReverbSubMode;
+    for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
+      s.postDelayModes[mode] = defaults.postDelayModes[mode];
+    for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
+      s.postReverbModes[mode] = defaults.postReverbModes[mode];
+    for (int subMode = 0; subMode < 3; ++subMode)
+      s.postOktaverbSubModes[subMode] = defaults.postOktaverbSubModes[subMode];
   }
+
+  for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
+    mVolumEffectSettings.delayModes[mode] = s.postDelayModes[mode];
+  for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
+    mVolumEffectSettings.reverbModes[mode] = s.postReverbModes[mode];
+  for (int subMode = 0; subMode < 3; ++subMode)
+    mVolumEffectSettings.oktaverbSubModes[subMode] = s.postOktaverbSubModes[subMode];
 
   struct PostRestoreGuard {
     bool& flag;
