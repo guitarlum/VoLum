@@ -26,7 +26,7 @@ static double energy(double* buf, size_t n)
 TEST_CASE("Delay: no NaN on first block after SetParams")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(380.0, 0.5, 0.5, 1, 44100.0);
+  delay.SetParams(320.0, 0.5, 0.5, 1, 44100.0);
 
   const size_t frames = 128;
   std::vector<double> inL(frames, 0.5), inR(frames, 0.5);
@@ -832,7 +832,7 @@ TEST_CASE("Reverb: Oktaverb Bloom uses Halo/Shimmer output safety at default set
   // Stock Bloom defaults with a hot sustained signal must remain below 0 dBFS.
   {
     dsp::effect::Reverb reverb;
-    reverb.SetParams(0.42, 5.5, 5.5, 20.0, 0.60, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
+    reverb.SetParams(0.32, 5.5, 5.5, 20.0, 0.75, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
     double maxVal = 0.0;
     for (int block = 0; block < 200; ++block)
     {
@@ -888,7 +888,7 @@ TEST_CASE("MasterSafety: Delay + Reverb stack stays bounded by ceiling after Sof
   {
     INFO("reverbMode=" << reverbMode);
     dsp::effect::Delay delay;
-    delay.SetParams(380.0, 0.92, 0.85, 1, sampleRate);
+    delay.SetParams(320.0, 0.92, 0.85, 1, sampleRate);
 
     dsp::effect::Reverb reverb;
     reverb.SetParams(0.85, 8.0, 6.0, 20.0, 0.5, reverbMode, sampleRate);

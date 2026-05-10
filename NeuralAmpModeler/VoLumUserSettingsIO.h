@@ -51,7 +51,7 @@ struct VoLumEffectSettings {
     // Plate: restored dev/original plate behaviour and defaults.
     ReverbModeSnapshot{0.25, 2.5, 4.5, 20.0, 0.0, /*subMode*/ 0},
     // Oktaverb: high-quality pitch-reverb with Halo / Shimmer / Bloom voices.
-    ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.75, /*subMode*/ kVoLumOktaverbSubModeShimmer},
+    ReverbModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70, /*subMode*/ kVoLumOktaverbSubModeShimmer},
   };
 
   // Defaults are placeholders until final voicing values are chosen by ear.
@@ -59,11 +59,11 @@ struct VoLumEffectSettings {
   // since the +12 voice carries the body; Shimmer / Bloom unchanged.
   OktaverbSubModeSnapshot oktaverbSubModes[3] = {
     // Halo (was Dark in 0.9.1): bright tone, moderate decay, midway intensity.
-    OktaverbSubModeSnapshot{0.40, 5.5, 6.0, 25.0, 0.55},
+    OktaverbSubModeSnapshot{0.32, 5.5, 6.0, 25.0, 0.65},
     // Shimmer
-    OktaverbSubModeSnapshot{0.40, 6.0, 6.0, 30.0, 0.75},
+    OktaverbSubModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70},
     // Bloom
-    OktaverbSubModeSnapshot{0.42, 5.5, 5.5, 20.0, 0.60},
+    OktaverbSubModeSnapshot{0.32, 5.5, 5.5, 20.0, 0.75},
   };
 
   bool delayActive = false;
@@ -71,7 +71,7 @@ struct VoLumEffectSettings {
   // Default snapshots per design guide.
   DelayModeSnapshot delayModes[kVoLumDelayModeCount] = {
     // Digital: clean, defaults flat tone, no age
-    DelayModeSnapshot{380.0, 0.35, 0.28, 0.50, 0.00, false},
+    DelayModeSnapshot{320.0, 0.35, 0.28, 0.50, 0.00, false},
     // Analog (Memory Man): warmer, slightly more feedback, age=0.5 for chorus depth
     DelayModeSnapshot{320.0, 0.42, 0.32, 0.50, 0.50, false},
     // Reverse: restored dev core; Bloom defaults to 0 so the old edge fade remains the

@@ -85,7 +85,7 @@ inline constexpr int kVoLumOktaverbSubModeBloom = 2;
 inline constexpr int kVoLumOktaverbSubModeDark = kVoLumOktaverbSubModeHalo;
 
 struct DelayModeSnapshot {
-  double time = 380.0;
+  double time = 320.0;
   double feedback = 0.35;
   double mix = 0.28;
   double tone = 0.5;
@@ -169,7 +169,7 @@ struct VoLumAmpSettings
   // as the prior global POST defaults.
   bool postValid = false; // false = legacy / never-saved; restore initializes factory POST defaults.
   bool postDelayActive = false;
-  double postDelayTime = 380.0;
+  double postDelayTime = 320.0;
   double postDelayFeedback = 0.35;
   double postDelayMix = 0.28;
   int postDelayMode = 0; // 0=Digital, 1=Analog, 2=Reverse
@@ -185,19 +185,19 @@ struct VoLumAmpSettings
   int postReverbMode = 0; // 0=Hall, 1=Plate, 2=Oktaverb
   int postReverbSubMode = 1; // Oktaverb sub-mode (0=Halo, 1=Shimmer, 2=Bloom)
   DelayModeSnapshot postDelayModes[kVoLumDelayModeCount] = {
-    DelayModeSnapshot{380.0, 0.35, 0.28, 0.50, 0.00, false},
+    DelayModeSnapshot{320.0, 0.35, 0.28, 0.50, 0.00, false},
     DelayModeSnapshot{320.0, 0.42, 0.32, 0.50, 0.50, false},
     DelayModeSnapshot{600.0, 0.30, 0.32, 0.50, 0.00, false},
   };
   ReverbModeSnapshot postReverbModes[kVoLumReverbModeCount] = {
     ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, 0},
     ReverbModeSnapshot{0.25, 2.5, 4.5, 20.0, 0.0, 0},
-    ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.75, kVoLumOktaverbSubModeShimmer},
+    ReverbModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70, kVoLumOktaverbSubModeShimmer},
   };
   OktaverbSubModeSnapshot postOktaverbSubModes[3] = {
-    OktaverbSubModeSnapshot{0.40, 5.5, 6.0, 25.0, 0.55},
-    OktaverbSubModeSnapshot{0.40, 6.0, 6.0, 30.0, 0.75},
-    OktaverbSubModeSnapshot{0.42, 5.5, 5.5, 20.0, 0.60},
+    OktaverbSubModeSnapshot{0.32, 5.5, 6.0, 25.0, 0.65},
+    OktaverbSubModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70},
+    OktaverbSubModeSnapshot{0.32, 5.5, 5.5, 20.0, 0.75},
   };
 };
 #endif

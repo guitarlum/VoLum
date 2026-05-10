@@ -216,7 +216,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
   // Delay (effect-staging order: Digital, Analog, Reverse)
   GetParam(kDelayActive)->InitBool("DelayActive", false);
-  GetParam(kDelayTime)->InitDouble("DelayTime", 380.0, 10.0, 2000.0, 1.0, "ms");
+  GetParam(kDelayTime)->InitDouble("DelayTime", 320.0, 10.0, 2000.0, 1.0, "ms");
   GetParam(kDelayFeedback)->InitDouble("DelayFeedback", 0.35, 0.0, 0.99, 0.01);
   GetParam(kDelayMix)->InitDouble("DelayMix", 0.28, 0.0, 1.0, 0.01);
   GetParam(kDelayMode)->InitEnum("DelayMode", volum::kVoLumDelayModeDigital,
