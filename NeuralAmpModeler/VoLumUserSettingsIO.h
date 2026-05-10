@@ -95,7 +95,7 @@ struct VoLumEffectSettings {
     // Hall: the good Cathedral-ish recipe from iteration 2, exposed simply as Hall.
     ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, /*subMode*/ 0},
     // Plate: restored dev/original plate behaviour and defaults.
-    ReverbModeSnapshot{0.35, 3.0, 4.5, 20.0, 0.0, /*subMode*/ 0},
+    ReverbModeSnapshot{0.25, 2.5, 4.5, 20.0, 0.0, /*subMode*/ 0},
     // Oktaverb: high-quality pitch-reverb with Halo / Shimmer / Bloom voices.
     ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.75, /*subMode*/ kVoLumOktaverbSubModeShimmer},
   };
