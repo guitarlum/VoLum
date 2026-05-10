@@ -18,7 +18,14 @@ static constexpr int kDualAmpPerAmpSettingsBytes = static_cast<int>(sizeof(int) 
 //               postReverbActive, postReverbMode, postReverbSubMode
 //   doubles(10): postDelayTime, postDelayFeedback, postDelayMix, postDelayTone, postDelayAge,
 //               postReverbMix, postReverbDecay, postReverbTone, postReverbPreDelay, postReverbShimmer
-static constexpr int kPostPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 7 + sizeof(double) * 10);
+static constexpr int kPostPerAmpLiveSettingsBytes = static_cast<int>(sizeof(int) * 7 + sizeof(double) * 10);
+// POST per-mode snapshots appended after the live POST values:
+//   delay modes: 3 * (time, feedback, mix, tone, age, pingPong)
+//   reverb modes: 3 * (mix, decay, tone, preDelay, shimmer, subMode)
+//   Oktaverb sub-modes: 3 * (mix, decay, tone, preDelay, shimmer)
+static constexpr int kPostPerAmpSnapshotSettingsBytes = static_cast<int>(sizeof(int) * 6 + sizeof(double) * 45);
+static constexpr int kPostPerAmpSettingsBytes = kPostPerAmpLiveSettingsBytes + kPostPerAmpSnapshotSettingsBytes;
+static constexpr int kDualAmpPlusPostLivePerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpLiveSettingsBytes;
 static constexpr int kDualAmpPlusPostPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpSettingsBytes;
 static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPlusPostPerAmpSettingsBytes;
 
@@ -48,6 +55,11 @@ inline bool ChunkHasSupportPolarityPerAmpSettings(int remainingBytes, int ampCou
 }
 
 inline bool ChunkHasPostPerAmpSettings(int remainingBytes, int ampCount)
+{
+  return remainingBytes >= kDualAmpPlusPostLivePerAmpSettingsBytes * ampCount;
+}
+
+inline bool ChunkHasPostSnapshotPerAmpSettings(int remainingBytes, int ampCount)
 {
   return remainingBytes >= kDualAmpPlusPostPerAmpSettingsBytes * ampCount;
 }

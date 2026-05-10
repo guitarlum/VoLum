@@ -539,6 +539,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     const bool hasSupportPolaritySettings =
       volum::ChunkHasSupportPolarityPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasPostPerAmpSettings = volum::ChunkHasPostPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasPostSnapshotPerAmpSettings =
+      volum::ChunkHasPostSnapshotPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -553,7 +555,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       if (hasDualAmpSettings)
         pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s, hasSupportPolaritySettings);
       if (hasPostPerAmpSettings)
-        pos = volum::GetPostPerAmpSettings(chunk, pos, s);
+        pos = volum::GetPostPerAmpSettings(chunk, pos, s, hasPostSnapshotPerAmpSettings);
       // hasPostPerAmpSettings == false: legacy chunk pre-dating per-amp POST. Per
       // user policy "we don't have to migrate, we can reset", postValid stays at the
       // struct default (false), so _VolumRestoreFromSettings initializes a meaningful

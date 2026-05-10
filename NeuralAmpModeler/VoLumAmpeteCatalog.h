@@ -63,6 +63,53 @@ inline constexpr const char* kAmpeteLabels[kAmpeteRigCount] = {"AMP 1", "AMP 2",
   "G12 3", "G12 4", "G65 1", "G65 2", "G65 3", "G65 4", "V30 1", "V30 2", "V30 3", "V30 4"};
 
 #if VOLUM_AMPETE_PRODUCT
+inline constexpr int kVoLumDelayModeCount = 3;
+inline constexpr int kVoLumReverbModeCount = 3;
+
+// Effect-staging delay-mode order: 0=Digital, 1=Analog, 2=Reverse
+inline constexpr int kVoLumDelayModeDigital = 0;
+inline constexpr int kVoLumDelayModeAnalog = 1;
+inline constexpr int kVoLumDelayModeReverse = 2;
+// Back-compat alias: pre-v0.9.0 code referenced kVoLumReverseDelayMode by name.
+inline constexpr int kVoLumReverseDelayMode = kVoLumDelayModeReverse;
+
+// Reverb-mode order remains: 0=Hall, 1=Plate, 2=Oktaverb
+inline constexpr int kVoLumReverbModeHall = 0;
+inline constexpr int kVoLumReverbModePlate = 1;
+inline constexpr int kVoLumReverbModeOktaverb = 2;
+inline constexpr int kVoLumOktaverbSubModeHalo = 0;
+inline constexpr int kVoLumOktaverbSubModeShimmer = 1;
+inline constexpr int kVoLumOktaverbSubModeBloom = 2;
+// Backward-compat alias: old "Dark" name kept so any external callers still build. Slot 0
+// is now Halo (dual +-12 in feedback).
+inline constexpr int kVoLumOktaverbSubModeDark = kVoLumOktaverbSubModeHalo;
+
+struct DelayModeSnapshot {
+  double time = 380.0;
+  double feedback = 0.35;
+  double mix = 0.28;
+  double tone = 0.5;
+  double age = 0.0;
+  bool pingPong = false;
+};
+
+struct ReverbModeSnapshot {
+  double mix = 0.3;
+  double decay = 3.0;
+  double tone = 4.5;
+  double preDelay = 20.0;
+  double shimmer = 0.5;
+  int subMode = kVoLumOktaverbSubModeShimmer;
+};
+
+struct OktaverbSubModeSnapshot {
+  double mix = 0.40;
+  double decay = 5.0;
+  double tone = 5.5;
+  double preDelay = 30.0;
+  double shimmer = 0.65;
+};
+
 struct VoLumAmpSettings
 {
   int speakerIdx = 3;
@@ -115,12 +162,9 @@ struct VoLumAmpSettings
   double supportAmpPan = 0.0;
   bool supportPolarityInvert = true;
 
-  // Per-amp POST live values (delay + reverb). Mirror PRE per-amp persistence: each
-  // main amp keeps its own delay / reverb knob positions, mode selections, and
-  // active-toggles, so switching amps swaps the POST scene the same way it swaps PRE.
-  // These are the LIVE EParam values; the per-mode-snapshot map (DelayModeSnapshot /
-  // ReverbModeSnapshot etc.) remains global to the session and only kicks in on a
-  // mode change within the current amp.
+  // Per-amp POST values (delay + reverb). Mirror PRE per-amp persistence: each
+  // main amp keeps both live EParam values and hidden per-mode snapshots, so mode
+  // changes made inside POST survive amp switches too.
   // Defaults match the pre-per-amp EParam defaults so brand-new amps behave the same
   // as the prior global POST defaults.
   bool postValid = false; // false = legacy / never-saved; restore initializes factory POST defaults.
@@ -140,6 +184,21 @@ struct VoLumAmpSettings
   double postReverbShimmer = 0.0;
   int postReverbMode = 0; // 0=Hall, 1=Plate, 2=Oktaverb
   int postReverbSubMode = 1; // Oktaverb sub-mode (0=Halo, 1=Shimmer, 2=Bloom)
+  DelayModeSnapshot postDelayModes[kVoLumDelayModeCount] = {
+    DelayModeSnapshot{380.0, 0.35, 0.28, 0.50, 0.00, false},
+    DelayModeSnapshot{320.0, 0.42, 0.32, 0.50, 0.50, false},
+    DelayModeSnapshot{600.0, 0.30, 0.32, 0.50, 0.00, false},
+  };
+  ReverbModeSnapshot postReverbModes[kVoLumReverbModeCount] = {
+    ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, 0},
+    ReverbModeSnapshot{0.25, 2.5, 4.5, 20.0, 0.0, 0},
+    ReverbModeSnapshot{0.40, 5.0, 5.5, 30.0, 0.75, kVoLumOktaverbSubModeShimmer},
+  };
+  OktaverbSubModeSnapshot postOktaverbSubModes[3] = {
+    OktaverbSubModeSnapshot{0.40, 5.5, 6.0, 25.0, 0.55},
+    OktaverbSubModeSnapshot{0.40, 6.0, 6.0, 30.0, 0.75},
+    OktaverbSubModeSnapshot{0.42, 5.5, 5.5, 20.0, 0.60},
+  };
 };
 #endif
 } // namespace volum

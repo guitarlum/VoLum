@@ -704,6 +704,12 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   amps[3].postReverbShimmer = 0.4;
   amps[3].postReverbMode = volum::kVoLumReverbModeOktaverb;
   amps[3].postReverbSubMode = volum::kVoLumOktaverbSubModeShimmer;
+  amps[3].postDelayModes[volum::kVoLumDelayModeDigital].time = 444.0;
+  amps[3].postDelayModes[volum::kVoLumDelayModeAnalog].age = 0.72;
+  amps[3].postDelayModes[volum::kVoLumDelayModeReverse].mix = 0.37;
+  amps[3].postReverbModes[volum::kVoLumReverbModePlate].decay = 6.7;
+  amps[3].postReverbModes[volum::kVoLumReverbModeOktaverb].subMode = volum::kVoLumOktaverbSubModeBloom;
+  amps[3].postOktaverbSubModes[volum::kVoLumOktaverbSubModeBloom].shimmer = 0.81;
 
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
 
@@ -724,6 +730,12 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   CHECK(loaded[3].postReverbDecay == doctest::Approx(4.5));
   CHECK(loaded[3].postReverbMode == volum::kVoLumReverbModeOktaverb);
   CHECK(loaded[3].postReverbSubMode == volum::kVoLumOktaverbSubModeShimmer);
+  CHECK(loaded[3].postDelayModes[volum::kVoLumDelayModeDigital].time == doctest::Approx(444.0));
+  CHECK(loaded[3].postDelayModes[volum::kVoLumDelayModeAnalog].age == doctest::Approx(0.72));
+  CHECK(loaded[3].postDelayModes[volum::kVoLumDelayModeReverse].mix == doctest::Approx(0.37));
+  CHECK(loaded[3].postReverbModes[volum::kVoLumReverbModePlate].decay == doctest::Approx(6.7));
+  CHECK(loaded[3].postReverbModes[volum::kVoLumReverbModeOktaverb].subMode == volum::kVoLumOktaverbSubModeBloom);
+  CHECK(loaded[3].postOktaverbSubModes[volum::kVoLumOktaverbSubModeBloom].shimmer == doctest::Approx(0.81));
 
   // Untouched amps remain pending initialization (postValid=false) until selected; amp
   // restore turns that into an explicit factory POST scene.
