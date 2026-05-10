@@ -1522,7 +1522,16 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
       ch[s] = static_cast<iplug::sample>(y);
     }
   }
-  mMasterSafetyEngaged.store(safetyEngagedThisBlock);
+  if (safetyEngagedThisBlock)
+  {
+    constexpr double kMasterSafetyUiHoldSeconds = 2.5;
+    mMasterSafetyHoldSamples = static_cast<int>(std::max(1.0, sampleRate * kMasterSafetyUiHoldSeconds));
+  }
+  else if (mMasterSafetyHoldSamples > 0)
+  {
+    mMasterSafetyHoldSamples = std::max(0, mMasterSafetyHoldSamples - static_cast<int>(numFrames));
+  }
+  mMasterSafetyEngaged.store(mMasterSafetyHoldSamples > 0);
 
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
@@ -1542,6 +1551,8 @@ void NeuralAmpModeler::OnReset()
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
   mOutputSenderR.Reset(sampleRate);
+  mMasterSafetyHoldSamples = 0;
+  mMasterSafetyEngaged.store(false);
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -1653,10 +1664,16 @@ void NeuralAmpModeler::OnIdle()
 
   if (auto* pGfx = GetUI())
   {
+    const bool masterSafetyActive = mMasterSafetyEngaged.load();
+    if (auto* meter = pGfx->GetControlWithTag(kCtrlTagOutputMeter))
+      meter->As<NAMMeterControl>()->SetSafetyActive(masterSafetyActive);
+    if (auto* meterR = pGfx->GetControlWithTag(kCtrlTagOutputMeterR))
+      meterR->As<NAMMeterControl>()->SetSafetyActive(masterSafetyActive);
+
     if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
     {
       const bool dualActive = GetParam(kDualAmpActive)->Bool();
-      if (mMasterSafetyEngaged.load())
+      if (masterSafetyActive)
       {
         // Master safety took priority because it indicates the actual final-bus is being
         // shaped, which is the louder problem regardless of dual-amp state.
