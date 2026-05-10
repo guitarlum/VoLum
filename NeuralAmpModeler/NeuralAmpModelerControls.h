@@ -677,6 +677,14 @@ public:
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
 
+  void SetSafetyActive(bool active)
+  {
+    if (mSafetyActive == active)
+      return;
+    mSafetyActive = active;
+    SetDirty(false);
+  }
+
   virtual void OnResize() override
   {
     SetTargetRECT(MakeRects(mRECT));
@@ -691,14 +699,17 @@ public:
   void DrawTrackHandle(IGraphics& g, const IRECT& r, int chIdx, bool aboveBaseValue) override
   {
     if (r.H() > 2)
-      g.FillRect(GetColor(kX1), r, &mBlend);
+      g.FillRect(mSafetyActive ? GetColor(kX2) : GetColor(kX1), r, &mBlend);
   }
 
   void DrawPeak(IGraphics& g, const IRECT& r, int chIdx, bool aboveBaseValue) override
   {
     g.DrawGrid(COLOR_BLACK, mTrackBounds.Get()[chIdx], 10, 2);
-    g.FillRect(GetColor(kX3), r, &mBlend);
+    g.FillRect(mSafetyActive ? GetColor(kX2) : GetColor(kX3), r, &mBlend);
   }
+
+private:
+  bool mSafetyActive = false;
 };
 
 // Container where we can refer to children by names instead of indices
