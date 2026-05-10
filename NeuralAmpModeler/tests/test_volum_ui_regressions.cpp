@@ -116,6 +116,8 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "mVolumInitComplete && !mVolumPostRestoreInProgress");
   RequireContains(source, "_VolumSaveDelayModeSnapshot(std::clamp(s.postDelayMode");
   RequireContains(source, "_VolumSaveReverbModeSnapshot(std::clamp(s.postReverbMode");
+  RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);");
+  RequireContains(source, "_UpdateVoLumLayout(pGfx);");
 }
 
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")

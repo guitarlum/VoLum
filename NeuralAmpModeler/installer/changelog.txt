@@ -185,3 +185,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/08/2026 - VoLum: Rebuilt Oktaverb with Dark/Shimmer/Bloom sub-modes, pitch-in-feedback octave voicing, randomized multi-grain pitch shifting, multi-LFO decorrelation, and deterministic legacy sub-mode remapping.
 05/08/2026 - VoLum: Oktaverb now remembers separate Mix/Decay/Tone/Pre-Delay/Intensity snapshots for Dark, Shimmer, and Bloom, with placeholder defaults ready for final voicing values.
 05/10/2026 - VoLum: POST Delay/Reverb mode snapshots now persist per amp, so hidden mode and Oktaverb sub-mode tweaks survive amp switches.
+05/10/2026 - VoLum: Amp switching now refreshes POST Reverb mode UI after guarded restores, and Bloom uses the same output safety as Halo/Shimmer to avoid default-level clipping.
