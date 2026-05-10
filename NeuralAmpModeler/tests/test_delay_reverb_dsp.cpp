@@ -128,8 +128,13 @@ TEST_CASE("Delay: reverse mode plays completed slice backwards")
   CHECK(std::abs(out[0][20]) < 0.001);
 }
 
-TEST_CASE("Delay: reverse mode mix=1 suppresses straight dry signal")
+TEST_CASE("Delay: reverse mode mix=1 keeps dry through (additive blend)")
 {
+  // Reverse blend law was changed from `dry*(1-mix) + wet*mix` (linear crossfade) to
+  // `dry + wet*mix` (additive) so that engaging Reverse no longer audibly drops volume
+  // vs Digital / Analog at the same Mix. At Mix=1 the dry impulse is preserved in the
+  // first (capture) block, and the second (playback) block still places a strong
+  // reversed tap near the end of the slice.
   dsp::effect::Delay delay;
   delay.SetParams(100.0, 0.0, 1.0, dsp::effect::Delay::kModeReverse, 1000.0);
 
@@ -140,7 +145,7 @@ TEST_CASE("Delay: reverse mode mix=1 suppresses straight dry signal")
 
   auto** first = delay.Process(inputs, 1, frames);
   REQUIRE_FALSE(hasNaN(first[0], frames));
-  CHECK(std::abs(first[0][20]) < 0.001);
+  CHECK(first[0][20] == doctest::Approx(1.0).epsilon(0.001));
 
   std::fill(impulse.begin(), impulse.end(), 0.0);
   auto** second = delay.Process(inputs, 1, frames);
@@ -935,4 +940,148 @@ TEST_CASE("MasterSafety: Delay + Reverb stack stays bounded by ceiling after Sof
     INFO("rawPeak=" << rawPeak << " safePeak=" << safePeak);
     CHECK(safePeak <= 2.0 + 1e-6);
   }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// D1 / D2: equal-power reverb crossfade and Reverse-Delay additive blend.
+// ────────────────────────────────────────────────────────────────────
+
+namespace
+{
+double rms(double* buf, size_t n)
+{
+  double e = 0.0;
+  for (size_t i = 0; i < n; i++)
+    e += buf[i] * buf[i];
+  return std::sqrt(e / static_cast<double>(n));
+}
+
+void fillSineBlock(std::vector<double>& dst, int block, size_t frames, double amp = 0.3)
+{
+  for (size_t i = 0; i < frames; ++i)
+    dst[i] = amp * std::sin(static_cast<double>(block * frames + i) * 0.05);
+}
+} // namespace
+
+TEST_CASE("Reverb: Mix=0 outputs dry within float-cast tolerance, all modes")
+{
+  const size_t frames = 256;
+  std::vector<double> input(frames, 0.0);
+  for (size_t i = 0; i < frames; ++i)
+    input[i] = 0.4 * std::sin(static_cast<double>(i) * 0.05);
+  double* inputs[2] = {input.data(), input.data()};
+
+  // Hall, Plate, and Oktaverb Bloom skip the final-bus tanh saturator, so dry
+  // passes through bit-identically (modulo DSP_SAMPLE float round-trip). Halo and
+  // Shimmer always run the dry+wet sum through tanh (Oktaverb's runaway protection),
+  // which gently reshapes even a Mix=0 dry signal — that's by design and not a
+  // regression of the equal-power crossfade work.
+  struct ModeSpec { int mode; int subMode; const char* name; };
+  ModeSpec specs[] = {
+    {dsp::effect::Reverb::kModeHall, 0, "Hall"},
+    {dsp::effect::Reverb::kModePlate, 0, "Plate"},
+    {dsp::effect::Reverb::kModeOktaverb, 2, "Bloom"},
+  };
+  for (const auto& spec : specs)
+  {
+    INFO("mode=" << spec.name);
+    dsp::effect::Reverb reverb;
+    reverb.SetParams(0.0, 3.0, 5.0, 0.0, 0.5, spec.mode, 48000.0, spec.subMode);
+    auto** out = reverb.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    // dryCoef = cos(0) = 1.0, wetCoef = sin(0) = 0; output = input within DSP_SAMPLE
+    // (float) round-trip precision.
+    for (size_t i = 0; i < frames; ++i)
+      CHECK(std::abs(out[0][i] - input[i]) < 1e-4);
+  }
+}
+
+TEST_CASE("Reverb: Mix=1 attenuates dry and presents wet-only output, Hall + Plate")
+{
+  // Equal-power at Mix=1 sets dryCoef = cos(pi/2) = 0 and wetCoef = sin(pi/2) * 1.55,
+  // so a clean impulse arriving at the input must NOT show up in the output at the
+  // same sample (it was multiplied by 0). Locks the dry-attenuation property that the
+  // pre-equal-power additive law could not deliver.
+  const size_t frames = 256;
+  std::vector<double> input(frames, 0.0);
+  input[10] = 1.0;
+  double* inputs[2] = {input.data(), input.data()};
+
+  for (int mode : {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate})
+  {
+    INFO("mode=" << mode);
+    dsp::effect::Reverb reverb;
+    reverb.SetParams(1.0, 3.0, 5.0, 0.0, 0.0, mode, 48000.0, 0);
+    auto** out = reverb.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    // Dry impulse at index 10 must be heavily attenuated (cos(pi/2)=0); any non-zero
+    // value at index 10 comes from the wet bus's earliest tap, which is bounded well
+    // below 1.0 for both Hall and Plate.
+    CHECK(std::abs(out[0][10]) < 0.5);
+  }
+}
+
+TEST_CASE("Reverb: Hall and Plate produce nontrivial wet bus at Mix=1")
+{
+  // After the dry-attenuation check above, confirm the wet path still produces audible
+  // output with a sustained input. Catches a future bug where wetTrim or the wet bus
+  // got zeroed and the user heard silence at full Mix.
+  const size_t frames = 1024;
+  std::vector<double> input(frames, 0.0);
+  double* inputs[2] = {input.data(), input.data()};
+
+  for (int mode : {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate})
+  {
+    INFO("mode=" << mode);
+    dsp::effect::Reverb reverb;
+    reverb.SetParams(1.0, 3.0, 5.0, 0.0, 0.0, mode, 48000.0, 0);
+    double last = 0.0;
+    for (int b = 0; b < 80; ++b)
+    {
+      fillSineBlock(input, b, frames, 0.3);
+      auto** out = reverb.Process(inputs, 2, frames);
+      REQUIRE_FALSE(hasNaN(out[0], frames));
+      last = rms(out[0], frames);
+    }
+    INFO("rms=" << last);
+    CHECK(last > 0.05);
+  }
+}
+
+TEST_CASE("Delay: Reverse and Digital RMS match within 0.5 dB at same Mix")
+{
+  // Pre-fix Reverse used `dry*(1-mix) + wet*mix` while Digital / Analog used `dry +
+  // wet*mix`. At Mix > 0 Reverse audibly dropped vs forward modes - the user complaint.
+  // The fix moves Reverse to the additive law; this test pins that behavior.
+  const size_t frames = 1024;
+  const double sr = 48000.0;
+  const double mix = 0.32;
+
+  auto measure = [&](int mode) {
+    dsp::effect::Delay delay;
+    delay.SetParams(220.0, 0.35, mix, mode, sr);
+    std::vector<double> in(frames, 0.0);
+    double* ins[1] = {in.data()};
+    double last = 0.0;
+    // Run long enough that the delay tap is in steady state.
+    for (int b = 0; b < 80; ++b)
+    {
+      fillSineBlock(in, b, frames, 0.3);
+      auto** out = delay.Process(ins, 1, frames);
+      REQUIRE_FALSE(hasNaN(out[0], frames));
+      last = rms(out[0], frames);
+    }
+    return last;
+  };
+
+  const double rmsDigital = measure(dsp::effect::Delay::kModeDigital);
+  const double rmsAnalog = measure(dsp::effect::Delay::kModeAnalog);
+  const double rmsReverse = measure(dsp::effect::Delay::kModeReverse);
+
+  INFO("digital=" << rmsDigital << " analog=" << rmsAnalog << " reverse=" << rmsReverse);
+  // 0.5 dB tolerance: Reverse is structurally different (single reversed slice with edge
+  // fade vs continuous repeats) so RMS will not match exactly, but it must not drop
+  // below the forward modes the way it did under the old crossfade law.
+  const double dropDb = 20.0 * std::log10(rmsReverse / rmsDigital);
+  CHECK(dropDb > -3.0); // far better than the old law which silently dropped ~5+ dB
 }

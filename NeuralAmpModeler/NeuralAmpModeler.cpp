@@ -3806,6 +3806,27 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.supportEqActive = GetParam(kSupportEQActive)->Bool();
   s.supportAmpPan = GetParam(kSupportAmpPan)->Value();
   s.supportPolarityInvert = mSupportPolarityInvert.load();
+
+  // POST per-amp persistence: mirror the live POST EParam values into the current
+  // amp's slot so switching amps preserves delay / reverb knob positions and mode
+  // selections the same way it preserves PRE state.
+  s.postValid = true;
+  s.postDelayActive = GetParam(kDelayActive)->Bool();
+  s.postDelayTime = GetParam(kDelayTime)->Value();
+  s.postDelayFeedback = GetParam(kDelayFeedback)->Value();
+  s.postDelayMix = GetParam(kDelayMix)->Value();
+  s.postDelayMode = GetParam(kDelayMode)->Int();
+  s.postDelayTone = GetParam(kDelayTone)->Value();
+  s.postDelayAge = GetParam(kDelayAge)->Value();
+  s.postDelayPingPong = GetParam(kDelayPingPong)->Bool();
+  s.postReverbActive = GetParam(kReverbActive)->Bool();
+  s.postReverbMix = GetParam(kReverbMix)->Value();
+  s.postReverbDecay = GetParam(kReverbDecay)->Value();
+  s.postReverbTone = GetParam(kReverbTone)->Value();
+  s.postReverbPreDelay = GetParam(kReverbPreDelay)->Value();
+  s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
+  s.postReverbMode = GetParam(kReverbMode)->Int();
+  s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
 }
 
 void NeuralAmpModeler::_VolumSaveEffectSettings()
@@ -4061,6 +4082,36 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   mShouldRemovePreModel[0].store(!shouldLoadPreNam1);
   mShouldRemovePreModel[1].store(!shouldLoadPreNam2);
   mVolumSupportNeedsLoad.store(true);
+
+  // POST per-amp restore. postValid==false means this slot was loaded from a legacy
+  // chunk / settings that pre-dated POST per-amp persistence; in that case leave the
+  // current EParam values alone (factory defaults on first run, otherwise whatever
+  // was last set). postValid==true means a real per-amp snapshot — apply it, then
+  // mirror into mVolumEffectSettings so OnParamChange / mode-snapshot logic stays
+  // consistent.
+  if (s.postValid)
+  {
+    setParam(kDelayActive, s.postDelayActive ? 1.0 : 0.0);
+    setParam(kDelayTime, s.postDelayTime);
+    setParam(kDelayFeedback, s.postDelayFeedback);
+    setParam(kDelayMix, s.postDelayMix);
+    setParam(kDelayMode, s.postDelayMode);
+    setParam(kDelayTone, s.postDelayTone);
+    setParam(kDelayAge, s.postDelayAge);
+    setParam(kDelayPingPong, s.postDelayPingPong ? 1.0 : 0.0);
+    setParam(kReverbActive, s.postReverbActive ? 1.0 : 0.0);
+    setParam(kReverbMix, s.postReverbMix);
+    setParam(kReverbDecay, s.postReverbDecay);
+    setParam(kReverbTone, s.postReverbTone);
+    setParam(kReverbPreDelay, s.postReverbPreDelay);
+    setParam(kReverbShimmer, s.postReverbShimmer);
+    setParam(kReverbMode, s.postReverbMode);
+    setParam(kReverbSubMode, s.postReverbSubMode);
+    mVolumEffectSettings.delayActive = s.postDelayActive;
+    mVolumEffectSettings.delayMode = s.postDelayMode;
+    mVolumEffectSettings.reverbActive = s.postReverbActive;
+    mVolumEffectSettings.reverbMode = s.postReverbMode;
+  }
 
   // Update speaker row UI if available
   if (auto* pGfx = GetUI())

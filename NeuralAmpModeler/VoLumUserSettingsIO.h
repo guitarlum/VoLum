@@ -25,7 +25,12 @@ inline constexpr int kVoLumReverbModeCount = 3;
 // v5 stores independent Oktaverb knob snapshots per Halo / Shimmer / Bloom sub-mode.
 // Slot 0 was originally "Dark" in 0.9.1 and became "Halo" (dual +-12 in feedback) in
 // 0.9.2; the index stays stable so existing presets / settings keep loading.
-inline constexpr int kVoLumUserSettingsVersion = 5;
+// v6 adds per-main-amp POST live values (delay + reverb knob positions, modes, and
+// active toggles) under each amps[<folderName>] entry. Legacy v<6 settings are
+// reset to factory POST defaults per amp on first load (postValid flipped to true
+// at end of load) so brand-new amps don't inherit stale tweaks from a single global
+// POST scene.
+inline constexpr int kVoLumUserSettingsVersion = 6;
 
 // Effect-staging delay-mode order: 0=Digital, 1=Analog, 2=Reverse
 inline constexpr int kVoLumDelayModeDigital = 0;
@@ -115,8 +120,10 @@ struct VoLumEffectSettings {
     DelayModeSnapshot{380.0, 0.35, 0.28, 0.50, 0.00, false},
     // Analog (Memory Man): warmer, slightly more feedback, age=0.5 for chorus depth
     DelayModeSnapshot{320.0, 0.42, 0.32, 0.50, 0.50, false},
-    // Reverse: restored dev core; Bloom defaults to 0 so the old edge fade remains the baseline.
-    DelayModeSnapshot{600.0, 0.30, 0.40, 0.50, 0.00, false},
+    // Reverse: restored dev core; Bloom defaults to 0 so the old edge fade remains the
+    // baseline. Mix lowered from 0.40 to 0.32 alongside the reverse blend-law fix so a
+    // fresh patch sits at the same level as Digital / Analog at the same Mix.
+    DelayModeSnapshot{600.0, 0.30, 0.32, 0.50, 0.00, false},
   };
 };
 
@@ -225,6 +232,28 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["preNam2Level"] = s.preNam2Level;
     if (includeDualAmp)
       WriteDualAmpUserSettings(a, s);
+
+    // POST per-amp live values (v6+). postValid distinguishes "real per-amp scene"
+    // from "legacy slot defaulted at load time" so the loader can no-op restore on
+    // postValid=false (currently always true after a save round-trip).
+    a["postValid"] = s.postValid;
+    a["postDelayActive"] = s.postDelayActive;
+    a["postDelayTime"] = s.postDelayTime;
+    a["postDelayFeedback"] = s.postDelayFeedback;
+    a["postDelayMix"] = s.postDelayMix;
+    a["postDelayMode"] = s.postDelayMode;
+    a["postDelayTone"] = s.postDelayTone;
+    a["postDelayAge"] = s.postDelayAge;
+    a["postDelayPingPong"] = s.postDelayPingPong;
+    a["postReverbActive"] = s.postReverbActive;
+    a["postReverbMix"] = s.postReverbMix;
+    a["postReverbDecay"] = s.postReverbDecay;
+    a["postReverbTone"] = s.postReverbTone;
+    a["postReverbPreDelay"] = s.postReverbPreDelay;
+    a["postReverbShimmer"] = s.postReverbShimmer;
+    a["postReverbMode"] = s.postReverbMode;
+    a["postReverbSubMode"] = s.postReverbSubMode;
+
     amps[kAmps[i].folderName] = a;
   }
   j["amps"] = amps;
@@ -436,6 +465,29 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadBool(a, "supportEq", s.supportEqActive, defaults.supportEqActive);
         loadDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0, defaults.supportAmpPan);
         loadBool(a, "supportPolarityInvert", s.supportPolarityInvert, defaults.supportPolarityInvert);
+
+        // v6+ per-amp POST live values. On legacy (v<6) settings the keys are absent
+        // and the struct defaults remain in place; postValid stays false so the
+        // loader does not clobber the active EParams. Once written to disk by a
+        // post-v6 build, these round-trip with postValid=true and the loader
+        // restores them on amp switch.
+        loadBool(a, "postValid", s.postValid, defaults.postValid);
+        loadBool(a, "postDelayActive", s.postDelayActive, defaults.postDelayActive);
+        loadDouble(a, "postDelayTime", s.postDelayTime, 10.0, 2000.0, defaults.postDelayTime);
+        loadDouble(a, "postDelayFeedback", s.postDelayFeedback, 0.0, 0.99, defaults.postDelayFeedback);
+        loadDouble(a, "postDelayMix", s.postDelayMix, 0.0, 1.0, defaults.postDelayMix);
+        loadInt(a, "postDelayMode", s.postDelayMode, 0, kVoLumDelayModeCount - 1, defaults.postDelayMode);
+        loadDouble(a, "postDelayTone", s.postDelayTone, 0.0, 1.0, defaults.postDelayTone);
+        loadDouble(a, "postDelayAge", s.postDelayAge, 0.0, 1.0, defaults.postDelayAge);
+        loadBool(a, "postDelayPingPong", s.postDelayPingPong, defaults.postDelayPingPong);
+        loadBool(a, "postReverbActive", s.postReverbActive, defaults.postReverbActive);
+        loadDouble(a, "postReverbMix", s.postReverbMix, 0.0, 1.0, defaults.postReverbMix);
+        loadDouble(a, "postReverbDecay", s.postReverbDecay, 0.1, 10.0, defaults.postReverbDecay);
+        loadDouble(a, "postReverbTone", s.postReverbTone, 0.0, 10.0, defaults.postReverbTone);
+        loadDouble(a, "postReverbPreDelay", s.postReverbPreDelay, 0.0, 200.0, defaults.postReverbPreDelay);
+        loadDouble(a, "postReverbShimmer", s.postReverbShimmer, 0.0, 1.0, defaults.postReverbShimmer);
+        loadInt(a, "postReverbMode", s.postReverbMode, 0, kVoLumReverbModeCount - 1, defaults.postReverbMode);
+        loadInt(a, "postReverbSubMode", s.postReverbSubMode, 0, 2, defaults.postReverbSubMode);
       }
     }
   }
