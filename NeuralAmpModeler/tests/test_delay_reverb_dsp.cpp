@@ -3,6 +3,7 @@
 #include "../../AudioDSPTools/dsp/Reverb.h"
 #include "../VoLumMasterSafety.h"
 #include <cmath>
+#include <limits>
 #include <vector>
 
 static bool hasNaN(double* buf, size_t n)
@@ -173,6 +174,81 @@ TEST_CASE("Delay: reverse mode high feedback stays bounded")
   }
 
   CHECK(maxVal < 10.0);
+}
+
+TEST_CASE("Delay: reverse mode constant input has no slice-boundary amplitude dip")
+{
+  // Overlap-add (two voices, length/2 stagger, triangle/sin^2 windows that sum to
+  // unity) replaced the old single-slice swap. Old impl dipped the wet bus to ~0
+  // for ~64 samples at every slice boundary; the OLA design must keep the wet bus
+  // ~constant, so a DC input (mix=1, fb=0) reaches a steady state with very small
+  // sample-to-sample amplitude variation across slice boundaries.
+  dsp::effect::Delay delay;
+  const double sr = 1000.0;
+  const double timeMs = 50.0; // 50 samples / slice
+  delay.SetParams(timeMs, 0.0, 1.0, dsp::effect::Delay::kModeReverse, sr);
+
+  const size_t frames = 1000;
+  std::vector<double> in(frames, 0.5);
+  double* inputs[1] = {in.data()};
+
+  // Run until wet bus is fully primed (multiple slice cycles).
+  for (int b = 0; b < 4; ++b)
+    delay.Process(inputs, 1, frames);
+
+  auto** out = delay.Process(inputs, 1, frames);
+  REQUIRE_FALSE(hasNaN(out[0], frames));
+
+  // Steady-state: dry(0.5) + wet(~0.5 from OLA sum) ~= 1.0. The min over the last
+  // 800 samples must stay close to the max - i.e. no dip back toward dry-only.
+  double minOut = std::numeric_limits<double>::infinity();
+  double maxOut = -std::numeric_limits<double>::infinity();
+  for (size_t i = 200; i < frames; i++)
+  {
+    minOut = std::min(minOut, out[0][i]);
+    maxOut = std::max(maxOut, out[0][i]);
+  }
+  INFO("min=" << minOut << " max=" << maxOut);
+  // Old impl: minOut would dip to ~0.5 (dry only) at slice edges. OLA: ripple stays small.
+  CHECK(minOut > 0.85);
+  CHECK((maxOut - minOut) < 0.15);
+}
+
+TEST_CASE("Delay: reverse mode time change does not glitch wet bus to silence")
+{
+  // The old impl called _ResetReverseState() whenever the segment frame count
+  // changed, wiping both buffers and producing ~2 segments of silence on every
+  // delay-time tweak. The OLA impl keeps in-flight voices on their original
+  // length; only newly launched voices use the new length, so the wet bus stays
+  // continuous across time-knob changes.
+  dsp::effect::Delay delay;
+  const double sr = 1000.0;
+  delay.SetParams(80.0, 0.0, 1.0, dsp::effect::Delay::kModeReverse, sr);
+
+  const size_t frames = 500;
+  std::vector<double> in(frames, 0.4);
+  double* inputs[1] = {in.data()};
+
+  // Prime the wet bus.
+  for (int b = 0; b < 4; ++b)
+    delay.Process(inputs, 1, frames);
+
+  // Sweep the delay time across multiple values mid-stream and confirm the wet
+  // bus never collapses to dry-only for any sustained stretch.
+  const double newTimes[] = {120.0, 60.0, 200.0, 95.0};
+  for (double t : newTimes)
+  {
+    delay.SetParams(t, 0.0, 1.0, dsp::effect::Delay::kModeReverse, sr);
+    auto** out = delay.Process(inputs, 1, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    // Skip the first 200 samples (any cross-fade on launch) and require the rest
+    // to clear dry-only by a healthy margin.
+    double minOut = std::numeric_limits<double>::infinity();
+    for (size_t i = 200; i < frames; i++)
+      minOut = std::min(minOut, out[0][i]);
+    INFO("t=" << t << " minOut=" << minOut);
+    CHECK(minOut > 0.55); // dry alone would be 0.4; OLA keeps wet contributing.
+  }
 }
 
 TEST_CASE("Delay: Prepare keeps output storage stable across parameter updates")
