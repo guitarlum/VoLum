@@ -103,6 +103,21 @@ TEST_CASE("Amp settings restore refreshes support channel list")
   CHECK(refreshPos < source.find("mVolumSupportNeedsLoad.store(true);", restorePos));
 }
 
+TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(header, "bool mVolumPostRestoreInProgress = false;");
+  RequireContains(source, "postGuard(mVolumPostRestoreInProgress);");
+  RequireContains(source, "if (!s.postValid)");
+  RequireContains(source, "const volum::VoLumAmpSettings defaults;");
+  RequireContains(source, "if (mVolumPostRestoreInProgress)");
+  RequireContains(source, "mVolumInitComplete && !mVolumPostRestoreInProgress");
+  RequireContains(source, "_VolumSaveDelayModeSnapshot(std::clamp(s.postDelayMode");
+  RequireContains(source, "_VolumSaveReverbModeSnapshot(std::clamp(s.postReverbMode");
+}
+
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");

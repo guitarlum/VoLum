@@ -556,9 +556,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         pos = volum::GetPostPerAmpSettings(chunk, pos, s);
       // hasPostPerAmpSettings == false: legacy chunk pre-dating per-amp POST. Per
       // user policy "we don't have to migrate, we can reset", postValid stays at the
-      // struct default (false), so _VolumRestoreFromSettings will not clobber the
-      // active POST EParams on amp switch — they will be saved into this slot the
-      // first time the user edits POST while this amp is selected.
+      // struct default (false), so _VolumRestoreFromSettings initializes a meaningful
+      // factory POST scene instead of inheriting the previously selected amp.
     }
 
     mVolumInitComplete = false;

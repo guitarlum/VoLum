@@ -444,6 +444,10 @@ private:
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /
   // restore logic and corrupt the Oktaverb sub-mode storage.
   bool mVolumReverbRestoreInProgress = false;
+  // Set true while restoring per-amp POST values. Amp restore sets live POST params,
+  // including mode params; without this guard, those mode changes re-enter the
+  // global mode-snapshot restore path and overwrite the per-amp values being loaded.
+  bool mVolumPostRestoreInProgress = false;
   std::atomic<bool> mVolumSupportNeedsLoad{false};
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
