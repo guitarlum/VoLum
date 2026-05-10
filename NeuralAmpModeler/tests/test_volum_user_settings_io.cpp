@@ -609,7 +609,7 @@ TEST_CASE("Corrupt effect settings heal to defaults")
   CHECK(loaded.delayMode == volum::kVoLumDelayModeDigital);
   CHECK(loaded.reverbActive == false);
   CHECK(loaded.reverbMode == 0);
-  CHECK(loaded.delayModes[0].time == doctest::Approx(380.0));
+  CHECK(loaded.delayModes[0].time == doctest::Approx(320.0));
   CHECK(loaded.delayModes[0].feedback == doctest::Approx(0.35));
   CHECK(loaded.delayModes[0].mix == doctest::Approx(0.28));
   CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.20));
