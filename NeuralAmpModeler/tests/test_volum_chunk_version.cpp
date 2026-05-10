@@ -2,6 +2,9 @@
 #include "../VoLumAmpeteCatalog.h"
 #include "../VoLumChunkLayout.h"
 #include "../VoLumChunkVersion.h"
+#include "../VoLumJsonMigration.h"
+
+#include <cmath>
 
 #include <vector>
 
@@ -100,6 +103,41 @@ void AppendCurrentPerAmpBlock(std::vector<unsigned char>& bytes)
   AppendBytes(bytes, active);
   AppendBytes(bytes, zero);
   AppendBytes(bytes, supportPolarityInvert);
+
+  // POST per-amp tail (v0.9.3+): 7 ints (postValid, postDelayActive, postDelayMode,
+  // postDelayPingPong, postReverbActive, postReverbMode, postReverbSubMode) +
+  // 10 doubles (delayTime/feedback/mix/tone/age, reverbMix/decay/tone/preDelay/shimmer).
+  const int postValid = 0;
+  const int delayMode = 0;
+  const int reverbMode = 0;
+  const int reverbSubMode = 1;
+  const double delayTime = 380.0;
+  const double delayFeedback = 0.35;
+  const double delayMix = 0.28;
+  const double delayTone = 0.5;
+  const double delayAge = 0.0;
+  const double reverbMix = 0.32;
+  const double reverbDecay = 3.5;
+  const double reverbTone = 5.5;
+  const double reverbPreDelay = 30.0;
+  const double reverbShimmer = 0.0;
+  AppendBytes(bytes, postValid);
+  AppendBytes(bytes, inactive);     // postDelayActive
+  AppendBytes(bytes, delayMode);
+  AppendBytes(bytes, inactive);     // postDelayPingPong
+  AppendBytes(bytes, inactive);     // postReverbActive
+  AppendBytes(bytes, reverbMode);
+  AppendBytes(bytes, reverbSubMode);
+  AppendBytes(bytes, delayTime);
+  AppendBytes(bytes, delayFeedback);
+  AppendBytes(bytes, delayMix);
+  AppendBytes(bytes, delayTone);
+  AppendBytes(bytes, delayAge);
+  AppendBytes(bytes, reverbMix);
+  AppendBytes(bytes, reverbDecay);
+  AppendBytes(bytes, reverbTone);
+  AppendBytes(bytes, reverbPreDelay);
+  AppendBytes(bytes, reverbShimmer);
 }
 } // namespace
 
@@ -178,4 +216,44 @@ TEST_CASE("VoLum current per-amp chunk byte count is stable")
   REQUIRE(bytes.size() == static_cast<size_t>(volum::CurrentPerAmpSettingsPayloadBytes(volum::kAmpCount)));
   CHECK(volum::ChunkHasExtendedPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
   CHECK(volum::ChunkHasDualAmpPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
+  CHECK(volum::ChunkHasPostPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
+}
+
+TEST_CASE("Reverb mix equal-power remap matches expected values per mode")
+{
+  // Locks the v0.9.3 chunk migration: stored ReverbMix on pre-0.9.3 chunks must be
+  // remapped through arcsin(...) so the new equal-power blend produces the same wet
+  // contribution as the old additive blend at the same playing scene. Hall and Plate
+  // also pick up kReverbWetTrim=1.55 in the wet bus, so their remap divides by 1.55
+  // before the arcsin.
+  constexpr double kHallPlateTrim = 1.55;
+  constexpr double kHalfPi = 1.57079632679489661923;
+  auto hallPlate = [&](double oldMix) {
+    return std::asin(oldMix / kHallPlateTrim) / kHalfPi;
+  };
+  auto oktaverbCap = [&](double oldMix, double cap) {
+    return std::asin(oldMix * cap) / (cap * kHalfPi);
+  };
+
+  // Hall (mode 0)
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.32, 0, 0) == doctest::Approx(hallPlate(0.32)));
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(1.0, 0, 0) == doctest::Approx(hallPlate(1.0)));
+  // Plate (mode 1)
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.5, 1, 0) == doctest::Approx(hallPlate(0.5)));
+  // Oktaverb Halo / Shimmer (mode 2, sub 0/1) - cap 0.5
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.4, 2, 0) == doctest::Approx(oktaverbCap(0.4, 0.5)));
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(1.0, 2, 1) == doctest::Approx(oktaverbCap(1.0, 0.5)));
+  // Oktaverb Bloom (mode 2, sub 2) - cap 0.65
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.42, 2, 2) == doctest::Approx(oktaverbCap(0.42, 0.65)));
+  // Edge cases
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.0, 0, 0) == doctest::Approx(0.0));
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.0, 2, 1) == doctest::Approx(0.0));
+}
+
+TEST_CASE("Reverb mix equal-power remap predicate")
+{
+  CHECK(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.9.0")));
+  CHECK(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.9.2")));
+  CHECK_FALSE(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.9.3")));
+  CHECK_FALSE(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.10.0")));
 }

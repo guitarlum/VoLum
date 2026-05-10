@@ -13,7 +13,14 @@ static constexpr int kLegacyPerAmpSettingsBytes = static_cast<int>(sizeof(int) *
 static constexpr int kPrePedalPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 9 + sizeof(double) * 24);
 static constexpr int kDualAmpPerAmpSettingsBytesV1 = static_cast<int>(sizeof(int) * 16 + sizeof(double) * 32);
 static constexpr int kDualAmpPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 17 + sizeof(double) * 32);
-static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes;
+// POST per-amp live values appended after the dual-amp tail. Layout:
+//   ints (7):   postValid, postDelayActive, postDelayMode, postDelayPingPong,
+//               postReverbActive, postReverbMode, postReverbSubMode
+//   doubles(10): postDelayTime, postDelayFeedback, postDelayMix, postDelayTone, postDelayAge,
+//               postReverbMix, postReverbDecay, postReverbTone, postReverbPreDelay, postReverbShimmer
+static constexpr int kPostPerAmpSettingsBytes = static_cast<int>(sizeof(int) * 7 + sizeof(double) * 10);
+static constexpr int kDualAmpPlusPostPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpSettingsBytes;
+static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPlusPostPerAmpSettingsBytes;
 
 inline int LegacyPerAmpSettingsPayloadBytes(int ampCount)
 {
@@ -38,6 +45,11 @@ inline bool ChunkHasDualAmpPerAmpSettings(int remainingBytes, int ampCount)
 inline bool ChunkHasSupportPolarityPerAmpSettings(int remainingBytes, int ampCount)
 {
   return remainingBytes >= kDualAmpPerAmpSettingsBytes * ampCount;
+}
+
+inline bool ChunkHasPostPerAmpSettings(int remainingBytes, int ampCount)
+{
+  return remainingBytes >= kDualAmpPlusPostPerAmpSettingsBytes * ampCount;
 }
 
 } // namespace volum

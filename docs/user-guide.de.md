@@ -84,7 +84,9 @@ Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Kli
 - **Delay:** Digital-, Analog- und Reverse-Modus mit Time, Feedback, Mix, Tone und einem modusspezifischen fünften Regler (`Grit`, `Wear` oder `Bloom`). Ping-Pong verteilt die Delay-Wiederholungen zwischen links und rechts (funktioniert auch bei Mono); im Reverse-Modus ausgeblendet.
 - **Reverb:** Hall-, Plate- und Oktaverb-Modus mit Mix, Decay, Tone und Pre-Delay. Oktaverb ergänzt Intensity und einen `HALO / SHIMMER / BLOOM`-Submode-Schalter. Halo speist gleichzeitig Oktave-aufwärts- und Oktave-abwärts-Stimmen ins Feedback und liefert so eine dichte Dual-Pitch-Wand mit echtem Körper, Shimmer baut reines Oktave-aufwärts-Feedback für einen üppigen, kletternden Tail auf, und Bloom blendet den Wet-Tail langsam für Pad-artige Swells ein. Jeder Oktaverb-Submode merkt sich eigene Werte für Mix/Decay/Tone/Pre-Delay/Intensity.
 
-Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Effekte sind geteilt/global statt pro Amp gespeichert, also wie finale Effekte hinter der Amp-Sektion.
+Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen (Delay- und Reverb-Knöpfe, Modi, Aktiv-Schalter) werden pro Haupt-Amp gespeichert - beim Amp-Wechsel wechselt die POST-Szene wie auch die PRE-Szene.
+
+Der Reverb-Mix-Knopf ist ein echter Wet/Dry-Crossfade mit Equal-Power-Kurve: bei 30-40 % ist das Reverb musikalisch präsent ohne zu dominieren, bei 100 % wird das Dry-Signal deutlich abgesenkt. Der Delay-Mix-Knopf ist additiv (Repeats sitzen auf dem Dry-Signal), und Reverse-Delay verhält sich nun wie Digital/Analog - der Lautstärkesprung beim Aktivieren von Reverse ist Geschichte.
 
 ## Ausgangs-Schutz
 
