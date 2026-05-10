@@ -123,7 +123,7 @@ struct VoLumAmpSettings
   // mode change within the current amp.
   // Defaults match the pre-per-amp EParam defaults so brand-new amps behave the same
   // as the prior global POST defaults.
-  bool postValid = false; // false = legacy / never-saved; restore should leave EParams alone.
+  bool postValid = false; // false = legacy / never-saved; restore initializes factory POST defaults.
   bool postDelayActive = false;
   double postDelayTime = 380.0;
   double postDelayFeedback = 0.35;

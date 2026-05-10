@@ -1896,7 +1896,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kDelayTone:
     case kDelayAge:
     case kDelayPingPong:
-      if (mVolumInitComplete)
+      if (mVolumInitComplete && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
         mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
@@ -1911,7 +1911,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kReverbShimmer:
       // Skip while restoring a snapshot: the setParam cascade would otherwise re-save
       // the partially-restored knob values back into the very snapshot we are loading.
-      if (mVolumInitComplete && !mVolumReverbRestoreInProgress)
+      if (mVolumInitComplete && !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
         mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
@@ -2003,6 +2003,8 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 #else
       case kDelayMode:
       {
+        if (mVolumPostRestoreInProgress)
+          break;
         const int oldMode = std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1);
         _VolumSaveDelayModeSnapshot(oldMode);
         const int newMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
@@ -2013,6 +2015,8 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       }
       case kReverbMode:
       {
+        if (mVolumPostRestoreInProgress)
+          break;
         const int oldMode = std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1);
         _VolumSaveReverbModeSnapshot(oldMode);
         const int newMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
@@ -2029,7 +2033,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         // Also skip when the current reverb mode is not Oktaverb, since the sub-mode
         // pill is irrelevant outside Oktaverb and any apparent change there is just
         // the cascade from a Hall / Plate restoration.
-        if (mVolumReverbRestoreInProgress)
+        if (mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress)
           break;
         if (GetParam(kReverbMode)->Int() != volum::kVoLumReverbModeOktaverb)
           break;
@@ -4018,7 +4022,7 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 {
-  const auto& s = mVolumAmpSettings[ampIdx];
+  auto& s = mVolumAmpSettings[ampIdx];
   mVolumSpeakerIdx = s.speakerIdx;
   mVolumChannelIdx = s.channelIdx;
 
@@ -4083,35 +4087,61 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   mShouldRemovePreModel[1].store(!shouldLoadPreNam2);
   mVolumSupportNeedsLoad.store(true);
 
-  // POST per-amp restore. postValid==false means this slot was loaded from a legacy
-  // chunk / settings that pre-dated POST per-amp persistence; in that case leave the
-  // current EParam values alone (factory defaults on first run, otherwise whatever
-  // was last set). postValid==true means a real per-amp snapshot — apply it, then
-  // mirror into mVolumEffectSettings so OnParamChange / mode-snapshot logic stays
-  // consistent.
-  if (s.postValid)
+  // POST per-amp restore. postValid==false means this slot is new / legacy and has no
+  // saved POST scene yet. Initialize it to the meaningful factory POST defaults instead
+  // of inheriting whatever amp was previously selected; after this point every amp has
+  // an explicit POST scene.
+  if (!s.postValid)
   {
-    setParam(kDelayActive, s.postDelayActive ? 1.0 : 0.0);
-    setParam(kDelayTime, s.postDelayTime);
-    setParam(kDelayFeedback, s.postDelayFeedback);
-    setParam(kDelayMix, s.postDelayMix);
-    setParam(kDelayMode, s.postDelayMode);
-    setParam(kDelayTone, s.postDelayTone);
-    setParam(kDelayAge, s.postDelayAge);
-    setParam(kDelayPingPong, s.postDelayPingPong ? 1.0 : 0.0);
-    setParam(kReverbActive, s.postReverbActive ? 1.0 : 0.0);
-    setParam(kReverbMix, s.postReverbMix);
-    setParam(kReverbDecay, s.postReverbDecay);
-    setParam(kReverbTone, s.postReverbTone);
-    setParam(kReverbPreDelay, s.postReverbPreDelay);
-    setParam(kReverbShimmer, s.postReverbShimmer);
-    setParam(kReverbMode, s.postReverbMode);
-    setParam(kReverbSubMode, s.postReverbSubMode);
-    mVolumEffectSettings.delayActive = s.postDelayActive;
-    mVolumEffectSettings.delayMode = s.postDelayMode;
-    mVolumEffectSettings.reverbActive = s.postReverbActive;
-    mVolumEffectSettings.reverbMode = s.postReverbMode;
+    const volum::VoLumAmpSettings defaults;
+    s.postValid = true;
+    s.postDelayActive = defaults.postDelayActive;
+    s.postDelayTime = defaults.postDelayTime;
+    s.postDelayFeedback = defaults.postDelayFeedback;
+    s.postDelayMix = defaults.postDelayMix;
+    s.postDelayMode = defaults.postDelayMode;
+    s.postDelayTone = defaults.postDelayTone;
+    s.postDelayAge = defaults.postDelayAge;
+    s.postDelayPingPong = defaults.postDelayPingPong;
+    s.postReverbActive = defaults.postReverbActive;
+    s.postReverbMix = defaults.postReverbMix;
+    s.postReverbDecay = defaults.postReverbDecay;
+    s.postReverbTone = defaults.postReverbTone;
+    s.postReverbPreDelay = defaults.postReverbPreDelay;
+    s.postReverbShimmer = defaults.postReverbShimmer;
+    s.postReverbMode = defaults.postReverbMode;
+    s.postReverbSubMode = defaults.postReverbSubMode;
   }
+
+  struct PostRestoreGuard {
+    bool& flag;
+    bool prev;
+    explicit PostRestoreGuard(bool& f) : flag(f), prev(f) { flag = true; }
+    ~PostRestoreGuard() { flag = prev; }
+  } postGuard(mVolumPostRestoreInProgress);
+
+  setParam(kDelayActive, s.postDelayActive ? 1.0 : 0.0);
+  setParam(kDelayTime, s.postDelayTime);
+  setParam(kDelayFeedback, s.postDelayFeedback);
+  setParam(kDelayMix, s.postDelayMix);
+  setParam(kDelayMode, s.postDelayMode);
+  setParam(kDelayTone, s.postDelayTone);
+  setParam(kDelayAge, s.postDelayAge);
+  setParam(kDelayPingPong, s.postDelayPingPong ? 1.0 : 0.0);
+  setParam(kReverbActive, s.postReverbActive ? 1.0 : 0.0);
+  setParam(kReverbMix, s.postReverbMix);
+  setParam(kReverbDecay, s.postReverbDecay);
+  setParam(kReverbTone, s.postReverbTone);
+  setParam(kReverbPreDelay, s.postReverbPreDelay);
+  setParam(kReverbShimmer, s.postReverbShimmer);
+  setParam(kReverbMode, s.postReverbMode);
+  setParam(kReverbSubMode, s.postReverbSubMode);
+  mVolumEffectSettings.delayActive = s.postDelayActive;
+  mVolumEffectSettings.delayMode = s.postDelayMode;
+  mVolumEffectSettings.reverbActive = s.postReverbActive;
+  mVolumEffectSettings.reverbMode = s.postReverbMode;
+  _VolumSaveDelayModeSnapshot(std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1));
+  _VolumSaveReverbModeSnapshot(std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1));
 
   // Update speaker row UI if available
   if (auto* pGfx = GetUI())
