@@ -269,8 +269,8 @@ TEST_CASE("Reverb mix equal-power remap matches expected values per mode")
   // Oktaverb Halo / Shimmer (mode 2, sub 0/1) - cap 0.5
   CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.4, 2, 0) == doctest::Approx(oktaverbCap(0.4, 0.5)));
   CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(1.0, 2, 1) == doctest::Approx(oktaverbCap(1.0, 0.5)));
-  // Oktaverb Bloom (mode 2, sub 2) - cap 0.65
-  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.42, 2, 2) == doctest::Approx(oktaverbCap(0.42, 0.65)));
+  // Oktaverb Bloom (mode 2, sub 2) now shares the 0.5 cap with Halo/Shimmer
+  CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.42, 2, 2) == doctest::Approx(oktaverbCap(0.42, 0.5)));
   // Edge cases
   CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.0, 0, 0) == doctest::Approx(0.0));
   CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.0, 2, 1) == doctest::Approx(0.0));

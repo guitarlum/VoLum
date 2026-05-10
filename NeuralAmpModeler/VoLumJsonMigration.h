@@ -93,8 +93,7 @@ inline void MigrateOktaverbSubModeToV0_9_1(nlohmann::json& config)
 //
 // Math (oldWet = newWet at the wet bus):
 //   Hall / Plate    : oldMix         = sin(newMix * pi/2)         * 1.55
-//   Oktaverb non-Bloom: oldMix * 0.5 = sin(newMix * 0.5  * pi/2)
-//   Oktaverb Bloom  : oldMix * 0.65 = sin(newMix * 0.65 * pi/2)
+//   Oktaverb        : oldMix * 0.5 = sin(newMix * 0.5  * pi/2)
 //
 // In each case the right-hand side has Oktaverb's wet baked-in sm.wetGain (1.40 / 1.55)
 // already, and the left-hand side preserves the old per-sub-mode cap (mMix * cap) that
@@ -112,7 +111,7 @@ inline double RemapReverbMixToEqualPowerV0_9_3(double oldMix, int reverbMode, in
   double wetTrim = 1.0;
   if (reverbMode == 2 /* Oktaverb */)
   {
-    cap = (reverbSubMode == 2 /* Bloom */) ? 0.65 : 0.5;
+    cap = 0.5;
     wetTrim = 1.0; // Oktaverb wet already bakes sm.wetGain in.
   }
   else

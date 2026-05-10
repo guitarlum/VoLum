@@ -4173,6 +4173,7 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   {
     if (auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
       spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);
+    _UpdateVoLumLayout(pGfx);
   }
 }
 

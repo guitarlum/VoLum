@@ -791,18 +791,15 @@ TEST_CASE("Reverb: Oktaverb all new sub-modes remain bounded at max intensity")
 // User-reported regression: Shimmer / Bloom at 100 percent Mix could clip the speakers
 // because the dual-pitch / bloom-envelope DSP piles up faster than the additive Mix
 // can accommodate. The fix scopes a 50 percent internal Mix cap to all three Oktaverb
-// sub-modes plus tanh saturators on the wet bus and final output for the pitch-feedback
-// modes (Halo, Shimmer). Bloom intentionally skips the saturators because the double-tanh
-// was flattening its slow-swell character and Bloom has no pitch-feedback runaway risk;
-// the 50 percent Mix cap keeps Bloom safely bounded under realistic guitar input. Hall
-// and Plate keep their original additive Mix and are explicitly preserved per user.
-TEST_CASE("Reverb: Halo and Shimmer stay under 0 dBFS at max Mix and max Intensity")
+// sub-modes plus final-output tanh safety. Halo/Shimmer also use wet-bus tanh for their
+// pitch-feedback path; Bloom skips only that wet-bus tanh so the slow swell stays open.
+TEST_CASE("Reverb: Oktaverb sub-modes stay under 0 dBFS at max Mix and max Intensity")
 {
   const size_t frames = 512;
   std::vector<double> hotInput(frames, 0.0);
   double* inputs[2] = {hotInput.data(), hotInput.data()};
 
-  for (int subMode : {0, 1})
+  for (int subMode : {0, 1, 2})
   {
     INFO("subMode=" << subMode);
     dsp::effect::Reverb reverb;
@@ -818,34 +815,29 @@ TEST_CASE("Reverb: Halo and Shimmer stay under 0 dBFS at max Mix and max Intensi
       for (size_t i = 0; i < frames; ++i)
         maxVal = std::max(maxVal, std::max(std::abs(out[0][i]), std::abs(out[1][i])));
     }
-    // Halo/Shimmer pass through the final tanh saturator; output is bounded in (-1, +1).
+    // All Oktaverb sub-modes pass through final tanh safety when Mix is above zero.
     CHECK(maxVal < 1.0);
   }
 }
 
-TEST_CASE("Reverb: Oktaverb Bloom honours the 65 percent Mix cap")
+TEST_CASE("Reverb: Oktaverb Bloom uses Halo/Shimmer output safety at default settings")
 {
-  // Bloom skips the wet-bus and final saturators (their tanh compression flattens
-  // the slow-swell character) but caps the user's Mix knob internally at 65 percent
-  // of full level so 100 percent on the knob no longer clips the speakers in normal
-  // playing. Validated by ear: 65 percent is the sweet spot for the user. This test
-  // pins (a) typical playing (transient strums averaging well below sustained sine)
-  // stays under 0 dBFS at default knob positions, and (b) finiteness at the extreme
-  // sustained-input scene where Bloom can technically clip just like Hall / Plate.
+  // Bloom used to be the only Oktaverb sub-mode without final output safety, which let
+  // dry+wet alignment clip even at the stock Bloom scene. It now keeps Mix=0 dry-pass
+  // but uses the same final tanh shoulder as Halo/Shimmer once Mix is above zero.
   const size_t frames = 512;
   std::vector<double> input(frames, 0.0);
   double* inputs[2] = {input.data(), input.data()};
 
-  // Realistic typical use: default knob positions (Mix 40 percent, Decay 5.5s) with
-  // a 0.35 sine. This must stay under 0 dBFS to reflect normal playing.
+  // Stock Bloom defaults with a hot sustained signal must remain below 0 dBFS.
   {
     dsp::effect::Reverb reverb;
-    reverb.SetParams(0.4, 5.5, 6.0, 0.0, 1.0, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
+    reverb.SetParams(0.42, 5.5, 5.5, 20.0, 0.60, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
     double maxVal = 0.0;
     for (int block = 0; block < 200; ++block)
     {
       for (size_t i = 0; i < frames; ++i)
-        input[i] = 0.35 * std::sin(static_cast<double>(block * frames + i) * 0.05);
+        input[i] = 0.7 * std::sin(static_cast<double>(block * frames + i) * 0.05);
       auto** out = reverb.Process(inputs, 2, frames);
       REQUIRE_FALSE(hasNaN(out[0], frames));
       REQUIRE_FALSE(hasNaN(out[1], frames));
@@ -855,12 +847,11 @@ TEST_CASE("Reverb: Oktaverb Bloom honours the 65 percent Mix cap")
     CHECK(maxVal < 1.0);
   }
 
-  // Worst case: max Mix (capped to 65 percent) at max Decay with hot sustained
-  // input. Bloom can technically clip here just like Hall / Plate, but it must
-  // never NaN or rail to infinity. The 65 percent cap is what keeps real guitar
-  // playing (which is far less sustained than a 5-second sine wave) safely bounded.
+  // Worst case: max Mix and max Decay with hot sustained input also stays finite and
+  // below the final safety ceiling.
   dsp::effect::Reverb extreme;
   extreme.SetParams(1.0, 10.0, 6.0, 0.0, 1.0, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
+  double maxExtreme = 0.0;
   for (int block = 0; block < 200; ++block)
   {
     for (size_t i = 0; i < frames; ++i)
@@ -868,11 +859,14 @@ TEST_CASE("Reverb: Oktaverb Bloom honours the 65 percent Mix cap")
     auto** out = extreme.Process(inputs, 2, frames);
     REQUIRE_FALSE(hasNaN(out[0], frames));
     REQUIRE_FALSE(hasNaN(out[1], frames));
+    for (size_t i = 0; i < frames; ++i)
+      maxExtreme = std::max(maxExtreme, std::max(std::abs(out[0][i]), std::abs(out[1][i])));
   }
+  CHECK(maxExtreme < 1.0);
 }
 
 // Master safety contract: stacking the worst realistic POST chain (Delay at high feedback
-// + a non-saturating reverb mode like Hall/Plate/Bloom) on top of a hot pre-output signal
+// + a non-saturating reverb mode like Hall/Plate) on top of a hot pre-output signal
 // can produce raw post-FX peaks above 0 dBFS. The master safety stage at the end of
 // ProcessBlock applies SoftSafetyClip per-sample, which must bound the final-bus peak to
 // the soft-clip ceiling (~+6 dBFS / linear ~2.0) regardless of what the wet stack did.
@@ -888,8 +882,8 @@ TEST_CASE("MasterSafety: Delay + Reverb stack stays bounded by ceiling after Sof
   std::vector<double> hotL(frames, 0.0), hotR(frames, 0.0);
 
   // Worst-case stack: Delay at near-max feedback feeding into a non-saturating reverb.
-  // Bloom (subMode=2) and Hall/Plate (kModeHall/kModePlate) skip the Oktaverb tanh shoulder,
-  // so only the master safety stage stands between this stack and the speakers.
+  // Hall/Plate skip the Oktaverb tanh shoulder, so only the master safety stage stands
+  // between this stack and the speakers.
   for (int reverbMode : {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate})
   {
     INFO("reverbMode=" << reverbMode);
@@ -971,8 +965,8 @@ TEST_CASE("Reverb: Mix=0 outputs dry within float-cast tolerance, all modes")
     input[i] = 0.4 * std::sin(static_cast<double>(i) * 0.05);
   double* inputs[2] = {input.data(), input.data()};
 
-  // Hall, Plate, and Oktaverb Bloom skip the final-bus tanh saturator, so dry
-  // passes through bit-identically (modulo DSP_SAMPLE float round-trip). Halo and
+  // Hall, Plate, and Oktaverb Bloom at Mix=0 pass dry through bit-identically
+  // (modulo DSP_SAMPLE float round-trip). Halo and
   // Shimmer always run the dry+wet sum through tanh (Oktaverb's runaway protection),
   // which gently reshapes even a Mix=0 dry signal — that's by design and not a
   // regression of the equal-power crossfade work.
