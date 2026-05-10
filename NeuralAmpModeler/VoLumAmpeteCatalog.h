@@ -133,9 +133,9 @@ struct VoLumAmpSettings
   double postDelayAge = 0.0;
   bool postDelayPingPong = false;
   bool postReverbActive = false;
-  double postReverbMix = 0.32;
-  double postReverbDecay = 3.5;
-  double postReverbTone = 5.5;
+  double postReverbMix = 0.20;
+  double postReverbDecay = 2.5;
+  double postReverbTone = 5.0;
   double postReverbPreDelay = 30.0;
   double postReverbShimmer = 0.0;
   int postReverbMode = 0; // 0=Hall, 1=Plate, 2=Oktaverb

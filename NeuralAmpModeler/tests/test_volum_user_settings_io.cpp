@@ -612,9 +612,9 @@ TEST_CASE("Corrupt effect settings heal to defaults")
   CHECK(loaded.delayModes[0].time == doctest::Approx(380.0));
   CHECK(loaded.delayModes[0].feedback == doctest::Approx(0.35));
   CHECK(loaded.delayModes[0].mix == doctest::Approx(0.28));
-  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.32));
-  CHECK(loaded.reverbModes[0].decay == doctest::Approx(3.5));
-  CHECK(loaded.reverbModes[0].tone == doctest::Approx(5.5));
+  CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.20));
+  CHECK(loaded.reverbModes[0].decay == doctest::Approx(2.5));
+  CHECK(loaded.reverbModes[0].tone == doctest::Approx(5.0));
   CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(30.0));
   CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.0));
 }
@@ -753,6 +753,6 @@ TEST_CASE("VolumUserSettings legacy JSON without per-amp POST yields postValid=f
     INFO("amp " << i);
     CHECK_FALSE(loaded[i].postValid);
     CHECK(loaded[i].postDelayMix == doctest::Approx(0.28));
-    CHECK(loaded[i].postReverbMix == doctest::Approx(0.32));
+    CHECK(loaded[i].postReverbMix == doctest::Approx(0.20));
   }
 }
