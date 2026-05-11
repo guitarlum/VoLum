@@ -1,6 +1,7 @@
 #include "third_party/doctest.h"
 #include "../VoLumMasterSafety.h"
 #include <cmath>
+#include <limits>
 
 TEST_CASE("MasterSafety: passthrough below knee")
 {
@@ -77,6 +78,21 @@ TEST_CASE("MasterSafety: no NaN/Inf for finite input")
   {
     CHECK(std::isfinite(volum::SoftSafetyClip(x)));
   }
+}
+
+TEST_CASE("MasterSafety: non-finite input maps to 0 (no NaN/Inf leaks past safety)")
+{
+  // 1.0 contract: a single poisoned sample from a broken NAM model or runaway IIR
+  // must not leave the final bus. SoftSafetyClip is the last stage before the host;
+  // it converts NaN/+Inf/-Inf to 0 so loudspeakers and downstream meters stay safe.
+  const double quiet = std::numeric_limits<double>::quiet_NaN();
+  const double signaling = std::numeric_limits<double>::signaling_NaN();
+  CHECK(volum::SoftSafetyClip(quiet) == 0.0);
+  CHECK(volum::SoftSafetyClip(signaling) == 0.0);
+  CHECK(volum::SoftSafetyClip(std::numeric_limits<double>::infinity()) == 0.0);
+  CHECK(volum::SoftSafetyClip(-std::numeric_limits<double>::infinity()) == 0.0);
+  CHECK(std::isfinite(volum::SoftSafetyClip(quiet)));
+  CHECK(std::isfinite(volum::SoftSafetyClip(std::numeric_limits<double>::infinity())));
 }
 
 TEST_CASE("MasterSafety: idempotent above ceiling")

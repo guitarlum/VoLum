@@ -1118,6 +1118,139 @@ TEST_CASE("Reverb: Hall and Plate produce nontrivial wet bus at Mix=1")
   }
 }
 
+// P1: switching reverb mode with a live decay tail used to let the previous mode's energy
+// leak through the new mode (Plate's input AP buffers still held Hall samples, Oktaverb's
+// pitch grain buffers held bloom energy, etc). Match Delay's mode-toggle Reset.
+TEST_CASE("Reverb: SetParams mode change clears tail (Hall -> Plate)")
+{
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(1.0, 8.0, 5.0, 0.0, 0.5, dsp::effect::Reverb::kModeHall, 44100.0);
+
+  const size_t frames = 256;
+  std::vector<double> loud(frames, 1.0);
+  double* loudIn[2] = {loud.data(), loud.data()};
+  for (int b = 0; b < 4; ++b)
+    reverb.Process(loudIn, 2, frames);
+
+  reverb.SetParams(1.0, 8.0, 5.0, 0.0, 0.5, dsp::effect::Reverb::kModePlate, 44100.0);
+
+  std::vector<double> silence(frames, 0.0);
+  double* silIn[2] = {silence.data(), silence.data()};
+  auto** out = reverb.Process(silIn, 2, frames);
+  REQUIRE_FALSE(hasNaN(out[0], frames));
+  double maxVal = 0.0;
+  for (size_t i = 0; i < frames; ++i)
+    maxVal = std::max(maxVal, std::max(std::abs(out[0][i]), std::abs(out[1][i])));
+  // Stale Hall energy would be well above 0.05 here; mode change must Reset() the tail.
+  CHECK(maxVal < 0.05);
+}
+
+TEST_CASE("Reverb: SetParams Oktaverb sub-mode change clears tail (Halo -> Bloom)")
+{
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(1.0, 8.0, 5.0, 0.0, 1.0, dsp::effect::Reverb::kModeOktaverb, 48000.0, /*subMode=Halo*/ 0);
+
+  const size_t frames = 256;
+  std::vector<double> loud(frames, 0.5);
+  double* loudIn[2] = {loud.data(), loud.data()};
+  for (int b = 0; b < 6; ++b)
+    reverb.Process(loudIn, 2, frames);
+
+  reverb.SetParams(1.0, 8.0, 5.0, 0.0, 1.0, dsp::effect::Reverb::kModeOktaverb, 48000.0, /*subMode=Bloom*/ 2);
+
+  std::vector<double> silence(frames, 0.0);
+  double* silIn[2] = {silence.data(), silence.data()};
+  auto** out = reverb.Process(silIn, 2, frames);
+  REQUIRE_FALSE(hasNaN(out[0], frames));
+  double maxVal = 0.0;
+  for (size_t i = 0; i < frames; ++i)
+    maxVal = std::max(maxVal, std::max(std::abs(out[0][i]), std::abs(out[1][i])));
+  // Halo feedback-pitch buffers must be cleared on sub-mode change.
+  CHECK(maxVal < 0.05);
+}
+
+// P2: automating the Mix knob in a DAW would step at every block boundary because the
+// equal-power dry/wet coefficients were recomputed per block from mMix without smoothing.
+// The fix is a one-pole on mMix; this test confirms the per-sample derivative stays small
+// (no audible step) immediately after a large Mix change. We feed DC so that the only
+// source of inter-block change is the parameter step itself; with the input held flat,
+// pre-fix the dry coefficient flipped from cos(0)=1 to cos(pi/2)=0 between blocks, so
+// the boundary step jumped by ~|input|. Post-fix the coefficient moves ~kSmoothCoef
+// (~0.0014 at 48 kHz) per sample, so the boundary step at the block edge is tiny.
+TEST_CASE("Reverb: Mix automation does not zipper at block boundary (DC input)")
+{
+  const size_t frames = 256;
+  const double sr = 48000.0;
+  const double dc = 0.4;
+  dsp::effect::Reverb reverb;
+  reverb.SetParams(0.0, 3.0, 5.0, 0.0, 0.5, dsp::effect::Reverb::kModeHall, sr);
+
+  std::vector<double> in(frames, dc);
+  double* inputs[2] = {in.data(), in.data()};
+
+  // Prime: Mix=0 dry-only. At Mix=0 the reverb passes dry through, so we settle at
+  // a flat block of value dc.
+  for (int b = 0; b < 6; ++b)
+    reverb.Process(inputs, 2, frames);
+
+  auto** dryOut = reverb.Process(inputs, 2, frames);
+  const double lastDry = dryOut[0][frames - 1];
+
+  // Flip to Mix=1. Pre-fix: dryCoef immediately = 0 so the first sample of the next
+  // block drops to ~wet*1.55 with wet basically 0 (no wet bus accumulated), so the
+  // boundary step is ~dc (the full DC drop). Post-fix: dryCoef glides at ~10 Hz so
+  // the first sample's dry contribution is still ~dc, and the step is small.
+  reverb.SetParams(1.0, 3.0, 5.0, 0.0, 0.5, dsp::effect::Reverb::kModeHall, sr);
+  auto** wetOut = reverb.Process(inputs, 2, frames);
+  const double firstWet = wetOut[0][0];
+  const double boundaryStep = std::abs(firstWet - lastDry);
+
+  // Pre-fix this would be ~dc = 0.4. Post-fix this is ~|kSmoothCoef * dc| ~= 0.0006.
+  // 0.05 leaves comfortable headroom while still proving the zipper was killed.
+  CHECK(boundaryStep < 0.05);
+}
+
+// P1: SR/block matrix sweep. The full POST chain (Delay -> Reverb at all modes)
+// must produce finite, bounded output regardless of sample rate or block size.
+TEST_CASE("Delay+Reverb: SR x block-size matrix produces finite bounded output")
+{
+  const double sampleRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
+  const size_t blockSizes[] = {16, 64, 256, 1024};
+
+  for (double sr : sampleRates)
+  {
+    for (size_t bs : blockSizes)
+    {
+      for (int reverbMode : {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate,
+                             dsp::effect::Reverb::kModeOktaverb})
+      {
+        INFO("sr=" << sr << " bs=" << bs << " reverbMode=" << reverbMode);
+        dsp::effect::Delay delay;
+        dsp::effect::Reverb reverb;
+        delay.SetParams(120.0, 0.4, 0.5, 1, sr);
+        reverb.SetParams(0.5, 3.0, 5.0, 20.0, 0.5, reverbMode, sr);
+
+        std::vector<double> in(bs, 0.0);
+        double* inputs[2] = {in.data(), in.data()};
+
+        double maxVal = 0.0;
+        for (int b = 0; b < 8; ++b)
+        {
+          for (size_t i = 0; i < bs; ++i)
+            in[i] = 0.3 * std::sin(static_cast<double>(b * bs + i) * 0.05);
+          auto** afterDelay = delay.Process(inputs, 2, bs);
+          auto** afterReverb = reverb.Process(afterDelay, 2, bs);
+          REQUIRE_FALSE(hasNaN(afterReverb[0], bs));
+          REQUIRE_FALSE(hasNaN(afterReverb[1], bs));
+          for (size_t i = 0; i < bs; ++i)
+            maxVal = std::max(maxVal, std::max(std::abs(afterReverb[0][i]), std::abs(afterReverb[1][i])));
+        }
+        CHECK(maxVal < 5.0);
+      }
+    }
+  }
+}
+
 TEST_CASE("Delay: Reverse and Digital RMS match within 0.5 dB at same Mix")
 {
   // Pre-fix Reverse used `dry*(1-mix) + wet*mix` while Digital / Analog used `dry +

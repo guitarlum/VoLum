@@ -84,7 +84,7 @@ enum EParams
   kReverbMode,
   // Effect staging (reverb - Oktaverb sub-mode only)
   kReverbSubMode,
-  // Boost (PRE - stub for future)
+  // Reserved legacy boost params. Keep serialized indices stable; PRE captures replaced this planned DSP block.
   kBoostActive,
   kBoostDrive,
   kBoostTone,
@@ -594,6 +594,16 @@ private:
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;
   bool mPostEffectsClearedForMissingModel = false;
+  // Previous-block POST plan flags. Used to detect a true -> false edge for Delay or
+  // Reverb and call Reset() on that edge so re-enabling the effect later does not
+  // replay stale tails. Reset to false in OnReset.
+  bool mPostDelayWasActive = false;
+  bool mPostReverbWasActive = false;
+  // Serializes writes from non-audio threads (UnserializeState path -> _StageModel /
+  // _StageIR) against the audio-thread read/move in _ApplyDSPStaging. The VoLum
+  // worker-queue path drains on the audio thread already, so it does not need this
+  // mutex; it is for the legacy NAM staging entry points only.
+  mutable std::mutex mStagingMutex;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;

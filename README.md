@@ -1,10 +1,10 @@
 **Languages:** English | [Deutsch](README.de.md)
 
-# VoLum -- NAM Player
+# VoLum
 
 ![VoLum standalone UI](docs/user-guide-main.png)
 
-A guitar amp collection player built on [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerPlugin). Ships 15 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
+An open-source guitar amp collection plugin and standalone app built on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core. Ships 15 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
 
 For a walkthrough of the interface, Dual Amp, PRE pedals, POST effects, tuner, and metronome, see the [VoLum user guide](docs/user-guide.en.md).
 
