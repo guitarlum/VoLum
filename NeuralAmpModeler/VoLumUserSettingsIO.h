@@ -49,9 +49,9 @@ struct VoLumEffectSettings {
     // Hall: the good Cathedral-ish recipe from iteration 2, exposed simply as Hall.
     ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, /*subMode*/ 0},
     // Plate: restored dev/original plate behaviour and defaults.
-    ReverbModeSnapshot{0.25, 2.5, 4.5, 20.0, 0.0, /*subMode*/ 0},
+    ReverbModeSnapshot{0.20, 2.5, 4.5, 20.0, 0.0, /*subMode*/ 0},
     // Oktaverb: high-quality pitch-reverb with Halo / Shimmer / Bloom voices.
-    ReverbModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70, /*subMode*/ kVoLumOktaverbSubModeShimmer},
+    ReverbModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70, /*subMode*/ kVoLumOktaverbSubModeShimmer},
   };
 
   // Defaults are placeholders until final voicing values are chosen by ear.
@@ -59,11 +59,11 @@ struct VoLumEffectSettings {
   // since the +12 voice carries the body; Shimmer / Bloom unchanged.
   OktaverbSubModeSnapshot oktaverbSubModes[3] = {
     // Halo (was Dark in 0.9.1): bright tone, moderate decay, midway intensity.
-    OktaverbSubModeSnapshot{0.32, 5.5, 6.0, 25.0, 0.65},
+    OktaverbSubModeSnapshot{0.30, 5.5, 6.0, 25.0, 0.65},
     // Shimmer
-    OktaverbSubModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70},
+    OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70},
     // Bloom
-    OktaverbSubModeSnapshot{0.32, 5.5, 5.5, 20.0, 0.75},
+    OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
   };
 
   bool delayActive = false;
