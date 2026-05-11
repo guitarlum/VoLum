@@ -3,7 +3,9 @@
 #include "../VoLumJsonMigration.h"
 #include "../VoLumUserSettingsIO.h"
 
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace
@@ -345,6 +347,91 @@ TEST_CASE("VoLum chunk codec round-trips POST per-amp settings")
   // Untouched amp slots round-trip with postValid==false (the struct default), so the
   // restore path leaves the active EParams alone for those amps.
   CHECK_FALSE(loaded[5].postValid);
+}
+
+// 1.0 contract: the chunk codec must survive any payload (corrupt session, hand-edited
+// preset, partial write, version skew) without crashing, and the dedicated Clamp helpers
+// (ClampChunkSelection / ClampPreCaptureSlots / GetDualAmpPerAmpSettings dual-amp range
+// clamp) must produce safe runtime state for the fields they own. Other fields are
+// clamped by iPlug2's IParam ranges when written back into the live plugin; the codec
+// itself is allowed to pass them through verbatim. This fuzz pass confirms (a) no crash
+// or hang on extreme / non-finite input and (b) the clamped fields always land in range.
+TEST_CASE("VoLum chunk codec round-trip fuzz: extreme / non-finite values stay bounded")
+{
+  const double bigPos = 1e100;
+  const double bigNeg = -1e100;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+
+  struct Poison { double value; const char* label; };
+  const Poison poisonValues[] = {
+    {0.0, "zero"},     {-0.0, "neg zero"},
+    {bigPos, "bigpos"}, {bigNeg, "bigneg"},
+    {nan, "nan"},      {inf, "+inf"},        {-inf, "-inf"},
+    {1e-300, "subnorm"},
+  };
+
+  for (const auto& poison : poisonValues)
+  {
+    CAPTURE(poison.label);
+    volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+    amps[0].speakerIdx = 99999;
+    amps[0].channelIdx = -50;
+    amps[0].inputLevel = poison.value;
+    amps[0].preCompAmount = poison.value;
+    amps[0].preCompRatio = poison.value;
+    amps[0].preCompMix = poison.value;
+    amps[0].mainAmpPan = poison.value;
+    amps[0].supportInputLevel = poison.value;
+    amps[0].supportToneBass = poison.value;
+    amps[0].supportToneMid = poison.value;
+    amps[0].supportToneTreble = poison.value;
+    amps[0].supportOutputLevel = poison.value;
+    amps[0].supportGateThreshold = poison.value;
+    amps[0].supportAmpPan = poison.value;
+    amps[0].preNam1Capture = -42;
+    amps[0].preNam2Capture = 99999;
+
+    // Serializing must not crash on any input.
+    MemoryChunk chunk;
+    volum::PutCurrentVoLumChunkState(chunk, {99, 99, -7}, amps, volum::kAmpCount);
+    CHECK(chunk.bytes.size() > 0);
+
+    // The selection clamp helper must always produce in-range values.
+    volum::VoLumChunkSelection selection;
+    int pos = volum::GetVoLumChunkSelection(chunk, 0, selection);
+    selection = volum::ClampChunkSelection(selection);
+    CHECK(selection.ampIdx >= 0);
+    CHECK(selection.ampIdx < volum::kAmpCount);
+    CHECK(selection.speakerIdx >= 0);
+    CHECK(selection.speakerIdx <= 3);
+    CHECK(selection.channelIdx >= 0);
+
+    // Decoding must not crash; we don't assert per-field clamps that the codec
+    // doesn't own (iPlug2 IParam ranges do that on the write-back path).
+    volum::VoLumAmpSettings loaded;
+    pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded);
+    pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded, true);
+    pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded);
+
+    // PRE capture clamp helper must always produce in-range indices.
+    volum::ClampPreCaptureSlots(loaded, 200);
+    CHECK(loaded.preNam1Capture >= 0);
+    CHECK(loaded.preNam1Capture <= volum::kPreCaptureMaxParamIndex);
+    CHECK(loaded.preNam2Capture >= 0);
+    CHECK(loaded.preNam2Capture <= volum::kPreCaptureMaxParamIndex);
+
+    // Dual-amp clamp built into GetDualAmpPerAmpSettings: route and pan stay in range.
+    CHECK(loaded.dualAmpRoute >= 0);
+    CHECK(loaded.dualAmpRoute <= 2);
+    auto inFinitePanRange = [](double v) {
+      // Caller (plugin restore path) zeroes any non-finite value via the IParam clamp;
+      // codec's documented invariant here is: any FINITE pan is in [-1, 1].
+      return !std::isfinite(v) || (v >= -1.0 && v <= 1.0);
+    };
+    CHECK(inFinitePanRange(loaded.mainAmpPan));
+    CHECK(inFinitePanRange(loaded.supportAmpPan));
+  }
 }
 
 TEST_CASE("Oktaverb v0.9.1 migration remaps legacy sub-modes")

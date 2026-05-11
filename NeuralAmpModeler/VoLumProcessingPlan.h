@@ -17,7 +17,6 @@ struct ProcessingPlan
   bool runIR = false;
   bool runDelay = false;
   bool runReverb = false;
-  bool mixMetronome = true;
   bool silenceForTuner = false;
 };
 
