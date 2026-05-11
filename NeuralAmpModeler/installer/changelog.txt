@@ -192,3 +192,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/08/2026 - VoLum: Oktaverb now remembers separate Mix/Decay/Tone/Pre-Delay/Intensity snapshots for Dark, Shimmer, and Bloom, with placeholder defaults ready for final voicing values.
 05/10/2026 - VoLum: POST Delay/Reverb mode snapshots now persist per amp, so hidden mode and Oktaverb sub-mode tweaks survive amp switches.
 05/10/2026 - VoLum: Amp switching now refreshes POST Reverb mode UI after guarded restores, and Bloom uses the same output safety as Halo/Shimmer to avoid default-level clipping.
+05/11/2026 - VoLum (internal): Continued 1.0 hygiene split -- 5 more UI groups moved out of VoLumCoreControls.h (AmpList / SpeakerRow / KeyboardNav / ExactEntry / SettingsOverlay), CoreControls.h dropped from 1409 to 514 lines.
+05/11/2026 - VoLum (internal): Dual-amp scratch buffers now assert capacity-stable in ProcessBlock; documented upstream-sync workflow in AGENTS.md so NAM core / NAM Player improvements stay cherry-pickable.
