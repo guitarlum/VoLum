@@ -9,11 +9,13 @@
 namespace volum
 {
 
-// Stateless, RT-safe: no heap, no locks, no statics. NaN in propagates; finite in stays finite (no Inf).
+// Stateless, RT-safe: no heap, no locks, no statics. NaN/Inf are mapped to 0 so a single
+// poison sample from a broken NAM model or runaway feedback path cannot leave the final
+// bus; finite in stays finite (no Inf).
 inline double SoftSafetyClip(double x)
 {
-  if (std::isnan(x))
-    return x;
+  if (!std::isfinite(x))
+    return 0.0;
 
   constexpr double knee = 1.4;
   constexpr double ceil = 2.0;

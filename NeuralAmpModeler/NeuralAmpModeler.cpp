@@ -21,6 +21,7 @@
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumMasterSafety.h"
+#include "VoLumNanGuard.h"
 #include "VoLumPaths.h"
 #include "VoLumPrePedalCaptures.h"
 #include "VoLumProcessIO.h"
@@ -237,7 +238,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   // Oktaverb-only sub-toggle.
   GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 1, {"Halo", "Shimmer", "Bloom"});
 
-  // Boost (stub)
+  // Reserved legacy boost params. Keep them initialized for old chunks even though PRE captures replaced this block.
   GetParam(kBoostActive)->InitBool("BoostActive", false);
   GetParam(kBoostDrive)->InitDouble("BoostDrive", 4.5, 0.0, 10.0, 0.1);
   GetParam(kBoostTone)->InitDouble("BoostTone", 6.0, 0.0, 10.0, 0.1);
@@ -1315,6 +1316,17 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   if (processingPlan.runMainModel)
   {
     mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
+    // NaN/Inf scrub: a single bad NAM capture or a numerically unstable model can
+    // emit non-finite samples that would otherwise poison the noise gate, tone
+    // stack, IR convolver, delay ring, and reverb FDN tank for the rest of the
+    // session. Clean the model output in place and, if anything was non-finite,
+    // also reset the POST effects so their internal state has no chance to latch
+    // a NaN-tainted sample that already made it past prior blocks.
+    if (volum::ScrubNonFiniteInPlace(mOutputPointers[0], static_cast<std::size_t>(nFrames)))
+    {
+      mDelay.Reset();
+      mReverb.Reset();
+    }
   }
   else
   {
@@ -1387,6 +1399,12 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     }
 
     mSupportModel->process(supportTriggerOutput[0], supportOutputPtr, nFrames);
+    // NaN/Inf scrub the support lane the same way as the main lane.
+    if (volum::ScrubNonFiniteInPlace(supportOutputPtr, static_cast<std::size_t>(nFrames)))
+    {
+      mDelay.Reset();
+      mReverb.Reset();
+    }
     sample* supportModelPointers[1] = {supportOutputPtr};
     sample** supportPostPointers = supportModelPointers;
     if (GetParam(kSupportNoiseGateActive)->Bool())
@@ -1455,6 +1473,18 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   // Apply POST effects (Delay -> Reverb) in stereo
   iplug::sample** postPointers = outputs;
+
+  // POST bypass-edge clear: when the user bypasses Delay or Reverb (active -> inactive
+  // for any reason: explicit toggle, preset switch, missing model), the effect's
+  // internal lines still hold the previous tail. Without this, re-enabling the effect
+  // later replays a "ghost" of whatever was playing before bypass. Mirrors how
+  // _FallbackDSP already clears POST when the main model goes missing.
+  if (mPostDelayWasActive && !processingPlan.runDelay)
+    mDelay.Reset();
+  if (mPostReverbWasActive && !processingPlan.runReverb)
+    mReverb.Reset();
+  mPostDelayWasActive = processingPlan.runDelay;
+  mPostReverbWasActive = processingPlan.runReverb;
 
   if (processingPlan.runDelay)
   {
@@ -1570,6 +1600,18 @@ void NeuralAmpModeler::OnReset()
   mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mDelay.Reset();
   mReverb.Reset();
+  mPostDelayWasActive = false;
+  mPostReverbWasActive = false;
+  mPostEffectsClearedForMissingModel = false;
+#if VOLUM_AMPETE_PRODUCT
+  // Pre-reserve dual-amp scratch buffers so ProcessBlock never has to grow them on
+  // the audio thread when block size or dual-amp activation changes mid-session.
+  const size_t maxBlockSizeT = static_cast<size_t>(std::max(0, maxBlockSize));
+  mDualMainLaneBuffer.assign(maxBlockSizeT, 0.0);
+  mDualSupportLaneBuffer.assign(maxBlockSizeT, 0.0);
+  mDualMainAlignedBuffer.assign(maxBlockSizeT, 0.0);
+  mDualSupportAlignedBuffer.assign(maxBlockSizeT, 0.0);
+#endif
 #if VOLUM_AMPETE_PRODUCT
   mTunerDSP.Reset(sampleRate);
   mMetronomeDSP.Reset(sampleRate);
@@ -2145,38 +2187,45 @@ void NeuralAmpModeler::_ApplyDSPStaging()
       _UpdateLatency();
     }
   }
-  // Move things from staged to live
-  if (mStagedModel != nullptr)
+  // Move things from staged to live. Take the staging mutex to serialize against
+  // _StageModel / _StageIR from non-audio threads (UnserializeState path, legacy
+  // file-browser completion handlers). VoLum's worker-queue drain populated
+  // mStagedModel etc. on this same audio thread above, so the mutex is contended
+  // only when host serialization races with audio.
   {
-    mModel = std::move(mStagedModel);
-    mStagedModel = nullptr;
-    mNewModelLoadedInDSP = true;
-    _UpdateLatency();
-    _SetInputGain();
-    _SetOutputGain();
-  }
-#if VOLUM_AMPETE_PRODUCT
-  if (mStagedSupportModel != nullptr)
-  {
-    mSupportModel = std::move(mStagedSupportModel);
-    mStagedSupportModel = nullptr;
-    _UpdateLatency();
-    _SetSupportOutputGain();
-  }
-#endif
-  for (int i = 0; i < 2; ++i)
-  {
-    if (mStagedPreModel[i] != nullptr)
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    if (mStagedModel != nullptr)
     {
-      mPreModel[i] = std::move(mStagedPreModel[i]);
-      mStagedPreModel[i] = nullptr;
+      mModel = std::move(mStagedModel);
+      mStagedModel = nullptr;
+      mNewModelLoadedInDSP = true;
       _UpdateLatency();
+      _SetInputGain();
+      _SetOutputGain();
     }
-  }
-  if (mStagedIR != nullptr)
-  {
-    mIR = std::move(mStagedIR);
-    mStagedIR = nullptr;
+#if VOLUM_AMPETE_PRODUCT
+    if (mStagedSupportModel != nullptr)
+    {
+      mSupportModel = std::move(mStagedSupportModel);
+      mStagedSupportModel = nullptr;
+      _UpdateLatency();
+      _SetSupportOutputGain();
+    }
+#endif
+    for (int i = 0; i < 2; ++i)
+    {
+      if (mStagedPreModel[i] != nullptr)
+      {
+        mPreModel[i] = std::move(mStagedPreModel[i]);
+        mStagedPreModel[i] = nullptr;
+        _UpdateLatency();
+      }
+    }
+    if (mStagedIR != nullptr)
+    {
+      mIR = std::move(mStagedIR);
+      mStagedIR = nullptr;
+    }
   }
 }
 
@@ -2207,6 +2256,10 @@ void NeuralAmpModeler::_FallbackDSP(iplug::sample** inputs, iplug::sample** outp
 
 void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBlockSize)
 {
+  // Inspecting staged pointers needs the staging mutex because _StageModel /
+  // _StageIR can write them from a non-audio thread (UnserializeState path).
+  std::lock_guard<std::mutex> lock(mStagingMutex);
+
   // Model
   if (mStagedModel != nullptr)
   {
@@ -2344,7 +2397,14 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath);
     std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
     temp->Reset(GetSampleRate(), GetBlockSize());
-    mStagedModel = std::move(temp);
+    {
+      // Serialize the staging assignment against the audio thread's read/move in
+      // _ApplyDSPStaging. _StageModel is called from the host's UnserializeState
+      // path and (in non-VoLum builds) from the file-browser completion handler,
+      // both off the audio thread.
+      std::lock_guard<std::mutex> lock(mStagingMutex);
+      mStagedModel = std::move(temp);
+    }
     mNAMPath = modelPath;
 #if !VOLUM_AMPETE_PRODUCT
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
@@ -2356,9 +2416,12 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
 #endif
 
-    if (mStagedModel != nullptr)
     {
-      mStagedModel = nullptr;
+      std::lock_guard<std::mutex> lock(mStagingMutex);
+      if (mStagedModel != nullptr)
+      {
+        mStagedModel = nullptr;
+      }
     }
     mNAMPath = previousNAMPath;
     std::cerr << "Failed to read DSP module" << std::endl;
@@ -4292,17 +4355,25 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   WDL_String previousIRPath = mIRPath;
   const double sampleRate = GetSampleRate();
   dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
+  std::unique_ptr<dsp::ImpulseResponse> stagedIR;
   try
   {
     auto irPathU8 = std::filesystem::u8path(irPath.Get());
-    mStagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
-    wavState = mStagedIR->GetWavState();
+    stagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
+    wavState = stagedIR->GetWavState();
   }
   catch (std::runtime_error& e)
   {
     wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
     std::cerr << "Caught unhandled exception while attempting to load IR:" << std::endl;
     std::cerr << e.what() << std::endl;
+  }
+
+  {
+    // Publish the staged IR (or drop the failed one) under the staging mutex so the
+    // audio thread sees a fully-constructed object or none at all.
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    mStagedIR = std::move(stagedIR);
   }
 
   if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
@@ -4314,9 +4385,12 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   }
   else
   {
-    if (mStagedIR != nullptr)
     {
-      mStagedIR = nullptr;
+      std::lock_guard<std::mutex> lock(mStagingMutex);
+      if (mStagedIR != nullptr)
+      {
+        mStagedIR = nullptr;
+      }
     }
     mIRPath = previousIRPath;
 #if !VOLUM_AMPETE_PRODUCT
