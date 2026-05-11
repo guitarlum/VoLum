@@ -215,13 +215,17 @@ TEST_CASE("VoLum layer caches use the !g.CheckLayer idiom (re-render only when i
   // hero now draws directly. This test no longer pins that specific cache.
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
   const std::string pedalCard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
+  // mIconLayers lives in VoLumAmpListControl which moved to VoLumAmpList.h on
+  // the 1.0 hygiene split.
+  const std::string ampList = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpList.h");
   const std::string coreControls = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
 
   RequireContains(triptych, "if (!g.CheckLayer(motifLayer)");
   RequireContains(pedalCard, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed)");
-  RequireContains(coreControls, "if (!g.CheckLayer(mIconLayers[i]))");
+  RequireContains(ampList, "if (!g.CheckLayer(mIconLayers[i]))");
   RequireDoesNotContain(triptych, "|| g.CheckLayer(");
   RequireDoesNotContain(pedalCard, "|| g.CheckLayer(");
+  RequireDoesNotContain(ampList, "|| g.CheckLayer(");
   RequireDoesNotContain(coreControls, "|| g.CheckLayer(");
 }
 
