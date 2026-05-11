@@ -86,7 +86,9 @@ The POST section runs after the amp. It contains Delay and Reverb cards. Click P
 
 The small LED on each card shows whether the effect is active. The bottom label shows the current mode or preset summary. POST settings (delay + reverb knob positions, modes, and active toggles) persist per main amp - switching amps swaps the POST scene the same way it swaps PRE. When you first visit an amp with no saved POST scene yet, it starts from the factory POST defaults; from then on, that amp remembers its own POST settings. Double-click any POST knob to restore that knob's default.
 
-The Reverb Mix knob is a true wet/dry equal-power crossfade: at 30-40% the reverb is musically present without dominating, at 100% the dry signal is meaningfully reduced. The Delay Mix knob is an additive blend (delay repeats sit on top of the dry signal), and Reverse Delay matches Digital and Analog so engaging Reverse no longer drops perceived volume.
+Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb sub-mode clears the effect's internal tail so repeats and ambience from the previous mode do not leak into the new one.
+
+The Reverb Mix knob is a true wet/dry equal-power crossfade: at 30-40% the reverb is musically present without dominating, at 100% the dry signal is meaningfully reduced. Mix changes are smoothed, so fast edits or automation stay clean instead of zippering. The Delay Mix knob is an additive blend (delay repeats sit on top of the dry signal), and Reverse Delay matches Digital and Analog so engaging Reverse no longer drops perceived volume.
 
 ## Output Safety
 

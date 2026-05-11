@@ -21,4 +21,4 @@ This folder documents the effect-staging surface only. The branch deliberately k
 - `[delay-reverse.md](delay-reverse.md)` - restored reverse delay core with Bloom.
 - `[reverb-hall.md](reverb-hall.md)` - Hall using the selected Cathedral-ish recipe.
 - `[reverb-plate.md](reverb-plate.md)` - restored Dattorro-style plate.
-- `[reverb-oktaverb.md](reverb-oktaverb.md)` - repaired `OCT / OCT+5TH / OCT+SUB` voices.
+- `[reverb-oktaverb.md](reverb-oktaverb.md)` - shipped `HALO / SHIMMER / BLOOM` pitch-bloom voices.
