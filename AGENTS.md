@@ -41,6 +41,77 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 - Bypass identity: `test_volum_bypass_identity.cpp` asserts the chain is identity when every optional stage is in its bypass configuration.
 - Packaging/installers/plugin validation: `verify-packaging-win.ps1`, `verify-packaging-mac.sh`, `verify-installer-win.ps1`, `validate-vst3-win.ps1`, `validate-vst3-mac.sh`, and `.github/workflows/ci.yml`.
 
+## Upstream Sync (Tracking NAM Player + NAM Core)
+
+VoLum is an independent project but deliberately stays close enough to its two
+upstream sources that future fixes and features can be cherry-picked rather
+than reinvented. Two upstreams, two cadences:
+
+1. **NeuralAmpModelerCore** (`NeuralAmpModelerCore/`, MIT) - the NAM model
+   runtime (wavenet / lstm / convnet / ResamplingContainer). Submodule. New
+   upstream tags should be pulled and tested.
+   - Sync: `git submodule update --remote NeuralAmpModelerCore`, then run
+     `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` + `test_nam_rigs.cpp`
+     (it loads every bundled `.nam` and runs one process block). If any rig
+     fails to load or emits non-finite samples, pin the submodule back and
+     open an issue upstream.
+   - The bundled main amps live in `rigs/` and PRE captures in
+     `rigs/PrePedals/`; both must keep loading across submodule upgrades.
+
+2. **NeuralAmpModelerPlugin** (the iPlug2 plugin shell we forked from).
+   Available as the `upstream` remote pointing at
+   `https://github.com/sdatkinson/NeuralAmpModelerPlugin.git` (push disabled).
+   - Sync: `git fetch upstream main`, then
+     `git log --oneline VoLum-last-upstream-merge..upstream/main -- NeuralAmpModeler` to
+     see new upstream commits. Cherry-pick or merge selectively into a
+     `chore/upstream-sync-YYYY-MM-DD` branch; never blanket-merge.
+   - Tag the merge point in changelog so the next sync knows where to start.
+
+### Forked-from-upstream vs VoLum-only files
+
+Future syncs should focus diffs on the upstream-equivalent files; VoLum-only
+files almost never need upstream input.
+
+- **Upstream-equivalent** (still tracks `NeuralAmpModelerPlugin` shape):
+  - `NeuralAmpModeler.cpp` (kept at this path on purpose; the four heavy VoLum
+    sub-systems were extracted into `VoLumLoader.inc.cpp` /
+    `VoLumSettings.inc.cpp` / `Unserialization.cpp` precisely so this file
+    shrinks toward upstream-equivalent content).
+  - `NeuralAmpModeler.h`
+  - `NeuralAmpModelerControls.h`
+  - `ToneStack.cpp`, `ToneStack.h`
+  - `config.h`
+  - `Colors.h`
+  - `choc_DisableAllWarnings.h`, `choc_ReenableAllWarnings.h`
+  - `Unserialization.cpp` (file path matches upstream; VoLum-only fields are
+    additive inside it)
+  - `projects/*.vcxproj*`, `projects/NeuralAmpModeler-macOS.xcodeproj/`,
+    `projects/NeuralAmpModeler-iOS.xcodeproj/` (touch these only when adding
+    new source files; if upstream changes its project layout, mirror).
+
+- **VoLum-only** (never expect upstream changes here):
+  - Every `VoLum*.h` and `VoLum*.cpp` / `VoLum*.inc.cpp` in `NeuralAmpModeler/`.
+  - `rigs/`, `docs/`, `format.bash`, `.cursor/`, `AGENTS.md`,
+    `THIRD_PARTY_LICENSES.md`, `installer/changelog.txt`,
+    `installer/license.rtf`.
+  - Everything under `AudioDSPTools/` lives on the `guitarlum/AudioDSPTools`
+    fork (branch: `effect-staging`); upstream there is
+    `sdatkinson/AudioDSPTools` and follows the same selective-cherry-pick
+    rule.
+
+### Rules when extracting / refactoring
+
+- **Do not move** `NeuralAmpModeler.cpp`, `NeuralAmpModeler.h`,
+  `Unserialization.cpp`, `ToneStack.{h,cpp}`, `NeuralAmpModelerControls.h`,
+  or `config.h` out of `NeuralAmpModeler/`. Their paths must match upstream so
+  cherry-picks apply without manual fixup.
+- **VoLum-only code added to upstream-equivalent files** must be visually
+  separable (clear `// VoLum:` comment fence, `#if VOLUM_AMPETE_PRODUCT`
+  guard, or extraction into a `VoLum*.inc.cpp` tail-include). The
+  `#if VOLUM_AMPETE_PRODUCT` block in `NeuralAmpModeler.cpp` is the canonical
+  pattern.
+- **New VoLum source files always** start with the `VoLum` prefix.
+
 ## UI / Source File Map
 
 After the 1.0 hygiene split, the plugin source is sliced as follows. New code

@@ -1,4 +1,5 @@
 #include <algorithm> // std::clamp, std::min
+#include <cassert> // RT capacity invariants
 #include <cmath> // pow
 #include <filesystem>
 #include <fstream>
@@ -1292,6 +1293,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 #if VOLUM_AMPETE_PRODUCT
   if (processingPlan.runDualAmp)
   {
+    // Capacity invariant: OnReset() pre-allocates these scratch buffers to
+    // maxBlockSize, so .resize() here must NEVER reallocate on the audio
+    // thread. assert() is a no-op in NDEBUG release builds and fires in
+    // debug + CI sanitizer builds if the invariant ever regresses.
+    assert(mDualMainLaneBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp main scratch not pre-reserved");
     mDualMainLaneBuffer.resize(numFrames);
     std::memcpy(mDualMainLaneBuffer.data(), preAmpPointers[0], numFrames * sizeof(sample));
   }
@@ -1373,6 +1379,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   sample* supportLane = nullptr;
   if (processingPlan.runDualAmp)
   {
+    assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp support scratch not pre-reserved");
     mDualSupportLaneBuffer.resize(numFrames);
 
     const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
@@ -1449,6 +1456,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     if (mSupportModel)
       supportLatency = mSupportModel->GetLatency();
     const auto latencyComp = volum::MakeDualAmpLatencyCompensation(mainLatency, supportLatency);
+    assert(mDualMainAlignedBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp main-aligned scratch not pre-reserved");
+    assert(mDualSupportAlignedBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp support-aligned scratch not pre-reserved");
     mDualMainAlignedBuffer.resize(numFrames);
     mDualSupportAlignedBuffer.resize(numFrames);
     const sample* mainLane =
