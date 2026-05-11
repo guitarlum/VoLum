@@ -4,6 +4,13 @@
 
 // Unserialization
 //
+// Tail-included from NeuralAmpModeler.cpp; this is NOT a standalone translation
+// unit. iPlug2 project files only list NeuralAmpModeler.cpp; by tail-including
+// this file plus VoLumLoader.inc.cpp / VoLumSettings.inc.cpp we keep the per-
+// platform project files unchanged while splitting the 4.5k-line plugin .cpp
+// into navigable chunks. Adding this file to vcxproj / pbxproj as a real TU is
+// tracked as a 1.1 hygiene follow-up.
+//
 // This plugin is used in important places, so we need to be considerate when
 // attempting to unserialize. If the project was last saved with a legacy
 // version, then we need it to "update" to the current version is as

@@ -22,6 +22,25 @@ std::string ReadText(const std::filesystem::path& path)
   return ss.str();
 }
 
+// Read NeuralAmpModeler.cpp plus its tail-included siblings. They are
+// all part of the same plugin translation unit; we treat them as one
+// logical source blob for source-string regression locks so a hygiene
+// extract of a function into a *.inc.cpp file does not require updating
+// every test that pinned a string in that function.
+std::string ReadPluginSource()
+{
+  const auto root = RepoRoot() / "NeuralAmpModeler";
+  std::string blob;
+  blob += ReadText(root / "NeuralAmpModeler.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumLoader.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumSettings.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "Unserialization.cpp");
+  return blob;
+}
+
 void RequireContains(const std::string& haystack, const char* needle)
 {
   INFO(needle);
@@ -79,21 +98,25 @@ TEST_CASE("Support amp keyboard channel navigation refreshes support stepper")
 
 TEST_CASE("Support hero label remains centered with polarity glyph")
 {
-  const std::string core = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
+  // VoLumHeroImageControl + VoLumSupportPolarityControl moved to VoLumHero.h
+  // on the 1.0 hygiene split.
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
 
-  RequireContains(core, "Filled DAW-style polarity glyph");
-  RequireContains(core, "const float right = lane.R - 8.f;");
-  RequireContains(core, "const float top = lane.T + 8.f;");
-  RequireContains(core, "Flip polarity");
-  RequireContains(core, "Switch to Single Amp");
-  RequireContains(core, "Switch to Dual Amp");
-  RequireContains(core, "name, titleStrip);");
-  RequireDoesNotContain(core, "titleStrip.R - 34.f");
+  RequireContains(hero, "Filled DAW-style polarity glyph");
+  RequireContains(hero, "const float right = lane.R - 8.f;");
+  RequireContains(hero, "const float top = lane.T + 8.f;");
+  RequireContains(hero, "Flip polarity");
+  RequireContains(hero, "Switch to Single Amp");
+  RequireContains(hero, "Switch to Dual Amp");
+  RequireContains(hero, "name, titleStrip);");
+  RequireDoesNotContain(hero, "titleStrip.R - 34.f");
 }
 
 TEST_CASE("Amp settings restore refreshes support channel list")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  // _VolumRestoreFromSettings now lives in VoLumSettings.inc.cpp (still part of
+  // the NeuralAmpModeler.cpp translation unit).
+  const std::string source = ReadPluginSource();
   const auto restorePos = source.find("void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)");
   REQUIRE(restorePos != std::string::npos);
   const auto refreshPos = source.find("_VolumRefreshSupportChannels();", restorePos);
@@ -105,7 +128,7 @@ TEST_CASE("Amp settings restore refreshes support channel list")
 
 TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource();
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
 
   RequireContains(header, "bool mVolumPostRestoreInProgress = false;");
@@ -123,9 +146,11 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
-  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+  // VoLumPreCaptureMenuControl moved to its own header on the 1.0 hygiene
+  // split (see VoLumTriptych.h umbrella include).
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMenus.h");
 
-  RequireContains(triptych, "int GetSlot() const { return mSlot; }");
+  RequireContains(menus, "int GetSlot() const { return mSlot; }");
   RequireContains(source, "if (!rawCtrl->IsHidden() && menu && menu->GetSlot() == slot)");
   RequireContains(source, "_VolumHidePreCaptureMenu();");
 }
@@ -189,12 +214,14 @@ TEST_CASE("VoLum layer caches use the !g.CheckLayer idiom (re-render only when i
   // and the procedural fractal is cheap enough to redraw each frame, so the
   // hero now draws directly. This test no longer pins that specific cache.
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+  const std::string pedalCard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
   const std::string coreControls = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
 
   RequireContains(triptych, "if (!g.CheckLayer(motifLayer)");
-  RequireContains(triptych, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed)");
+  RequireContains(pedalCard, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed)");
   RequireContains(coreControls, "if (!g.CheckLayer(mIconLayers[i]))");
   RequireDoesNotContain(triptych, "|| g.CheckLayer(");
+  RequireDoesNotContain(pedalCard, "|| g.CheckLayer(");
   RequireDoesNotContain(coreControls, "|| g.CheckLayer(");
 }
 
@@ -289,7 +316,9 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
 
 TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  // The loader thread + queue helpers moved to VoLumLoader.inc.cpp on the 1.0
+  // hygiene split. ReadPluginSource() aggregates the whole TU.
+  const std::string source = ReadPluginSource();
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
 
   RequireDoesNotContain(source, ".detach()");
@@ -301,7 +330,7 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
 
 TEST_CASE("VoLum NAM cache copies dspData before Core consumes weights")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource();
 
   RequireContains(source, "nam::dspData cachedConfig = cacheIt->second;");
   RequireContains(source, "return nam::get_dsp(cachedConfig);");

@@ -41,6 +41,59 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 - Bypass identity: `test_volum_bypass_identity.cpp` asserts the chain is identity when every optional stage is in its bypass configuration.
 - Packaging/installers/plugin validation: `verify-packaging-win.ps1`, `verify-packaging-mac.sh`, `verify-installer-win.ps1`, `validate-vst3-win.ps1`, `validate-vst3-mac.sh`, and `.github/workflows/ci.yml`.
 
+## UI / Source File Map
+
+After the 1.0 hygiene split, the plugin source is sliced as follows. New code
+goes into the most specific file; do not dump everything back into the big
+umbrellas.
+
+Plugin .cpp translation unit (compiled as `NeuralAmpModeler.cpp` on every
+platform - the four `inc.cpp` files are tail-included; not separate TUs):
+
+- `NeuralAmpModeler.cpp` - constructor, UI attachment, `ProcessBlock`,
+  `OnReset`, `OnIdle`, `OnParamChange` / `OnParamChangeUI`, `OnMessage`, IO
+  helpers, knob selection / keyboard / layout, tuner & metronome toggles,
+  PRE-capture refresh, dual-amp focus, DSP helpers.
+- `VoLumLoader.inc.cpp` - async loader thread + queueing
+  (`_VolumStartLoader`, `_VolumStopLoader`, `_VolumQueueMainModelLoad`,
+  `_VolumDrainLoaderResults`, `_VolumLoaderThreadMain`, request dispatch).
+- `VoLumSettings.inc.cpp` - per-amp settings persistence
+  (`_VolumSaveCurrentToSettings`, `_VolumRestoreFromSettings`,
+  delay/reverb/Oktaverb mode snapshots,
+  `_VolumSaveSettingsToFile`/`_VolumLoadSettingsFromFile`).
+- `Unserialization.cpp` - chunk-version migration / state restore.
+
+UI control headers (per-section split; `VoLumTriptych.h` and
+`VoLumCoreControls.h` are umbrellas that `#include` the pieces):
+
+- `VoLumTriptych.h` - `VoLumTriptychControl` (PRE/AMP/POST triptych) +
+  `VoLumChainConnectorControl`. Umbrella for the rest.
+- `VoLumTriptychMotifs.h` - `DrawEffectMotif` (COMP / PRE-NAM / DELAY / REVERB
+  fractal motifs used by pedal cards and Quiet slots).
+- `VoLumTriptychMenus.h` - `VoLumPreCaptureMenuControl`,
+  `VoLumSupportAmpMenuControl`, and the `VoLumPreCaptureMenuItem` row struct.
+- `VoLumPedalCardControl.h` - focused pedal-card control with cached art
+  layer + preset-name footer.
+- `VoLumCoreControls.h` - sidebar (background, logo, amp list), speaker row,
+  knob row, meters, dividers/footers, channel stepper, keyboard hints, exact
+  entry, param-value display, settings overlay frame.
+- `VoLumHero.h` - `VoLumHeroImageControl` (procedural fractal hero +
+  AMP title strip + Dual Amp chip + lane PAN dots) and
+  `VoLumSupportPolarityControl`.
+- `VoLumTunerMetronomeOverlay.h` - `VoLumTunerControl`,
+  `VoLumMetronomeButtonControl`, `VoLumMetronomeControl`.
+
+Source-string regression locks in `test_volum_ui_regressions.cpp` use a
+`ReadPluginSource()` helper that reads `NeuralAmpModeler.cpp` plus the three
+tail-included `inc.cpp` siblings - moving a function between those files
+does not break a lock unless the string itself changes.
+
+Promoting the `.inc.cpp` siblings to real separate translation units (real
+`<ClCompile>` entries in every `.vcxproj` and matching `PBXFileReference` /
+`PBXBuildFile` entries in the macOS / iOS Xcode projects) is tracked as a 1.1
+hygiene follow-up; it requires verification on macOS which we cannot run from
+this environment.
+
 ## DSP / RT Invariants
 
 These are locked by doctest; when changing the audio chain, keep them green or update the test and changelog together.
