@@ -86,7 +86,9 @@ Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Kli
 
 Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen (Delay- und Reverb-Knöpfe, Modi, Aktiv-Schalter) werden pro Haupt-Amp gespeichert - beim Amp-Wechsel wechselt die POST-Szene wie auch die PRE-Szene. Wenn du erstmals zu einem Amp ohne gespeicherte POST-Szene wechselst, startet er mit den POST-Werkseinstellungen; danach merkt sich dieser Amp seine eigenen POST-Einstellungen. Per Doppelklick auf einen POST-Regler stellst du dessen Default wieder her.
 
-Der Reverb-Mix-Knopf ist ein echter Wet/Dry-Crossfade mit Equal-Power-Kurve: bei 30-40 % ist das Reverb musikalisch präsent ohne zu dominieren, bei 100 % wird das Dry-Signal deutlich abgesenkt. Der Delay-Mix-Knopf ist additiv (Repeats sitzen auf dem Dry-Signal), und Reverse-Delay verhält sich nun wie Digital/Analog - der Lautstärkesprung beim Aktivieren von Reverse ist Geschichte.
+Beim Wechsel von Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Submode wird der interne Tail des Effekts gelöscht, damit Wiederholungen und Ambience aus dem vorherigen Modus nicht in den neuen Modus bluten.
+
+Der Reverb-Mix-Knopf ist ein echter Wet/Dry-Crossfade mit Equal-Power-Kurve: bei 30-40 % ist das Reverb musikalisch präsent ohne zu dominieren, bei 100 % wird das Dry-Signal deutlich abgesenkt. Mix-Änderungen werden geglättet, damit schnelle Bewegungen oder Automation sauber bleiben und nicht zippern. Der Delay-Mix-Knopf ist additiv (Repeats sitzen auf dem Dry-Signal), und Reverse-Delay verhält sich nun wie Digital/Analog - der Lautstärkesprung beim Aktivieren von Reverse ist Geschichte.
 
 ## Ausgangs-Schutz
 
