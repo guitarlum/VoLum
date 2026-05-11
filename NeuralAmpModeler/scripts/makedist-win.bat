@@ -110,7 +110,7 @@ REM echo Building 32 bit binaries...
 REM msbuild NeuralAmpModeler.sln /p:configuration=release /p:platform=win32 /nologo /verbosity:minimal /fileLogger /m /flp:logfile=build-win.log;errorsonly 
 
 REM echo Building 64 bit binaries...
-REM add projects with /t to build VST2 and AAX
+REM add projects with /t to build AAX
 REM NOTE: In cmd.exe, semicolons split commands unless quoted — targets and file logger must be quoted.
 if not defined MSBUILD_MAX_CPU_COUNT set "MSBUILD_MAX_CPU_COUNT=/m:2"
 "%MSBUILD_EXE%" NeuralAmpModeler.sln /t:"NeuralAmpModeler-app;NeuralAmpModeler-vst3" /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger %MSBUILD_MAX_CPU_COUNT% /flp:"logfile=build-win.log;errorsonly;append"
