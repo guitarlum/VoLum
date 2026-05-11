@@ -908,7 +908,7 @@ TEST_CASE("Reverb: Oktaverb Bloom uses Halo/Shimmer output safety at default set
   // Stock Bloom defaults with a hot sustained signal must remain below 0 dBFS.
   {
     dsp::effect::Reverb reverb;
-    reverb.SetParams(0.32, 5.5, 5.5, 20.0, 0.75, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
+    reverb.SetParams(0.30, 5.5, 5.5, 20.0, 0.75, dsp::effect::Reverb::kModeOktaverb, 48000.0, 2);
     double maxVal = 0.0;
     for (int block = 0; block < 200; ++block)
     {

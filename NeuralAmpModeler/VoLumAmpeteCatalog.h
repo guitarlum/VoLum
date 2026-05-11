@@ -191,13 +191,13 @@ struct VoLumAmpSettings
   };
   ReverbModeSnapshot postReverbModes[kVoLumReverbModeCount] = {
     ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, 0},
-    ReverbModeSnapshot{0.25, 2.5, 4.5, 20.0, 0.0, 0},
-    ReverbModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70, kVoLumOktaverbSubModeShimmer},
+    ReverbModeSnapshot{0.20, 2.5, 4.5, 20.0, 0.0, 0},
+    ReverbModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70, kVoLumOktaverbSubModeShimmer},
   };
   OktaverbSubModeSnapshot postOktaverbSubModes[3] = {
-    OktaverbSubModeSnapshot{0.32, 5.5, 6.0, 25.0, 0.65},
-    OktaverbSubModeSnapshot{0.32, 6.0, 6.0, 30.0, 0.70},
-    OktaverbSubModeSnapshot{0.32, 5.5, 5.5, 20.0, 0.75},
+    OktaverbSubModeSnapshot{0.30, 5.5, 6.0, 25.0, 0.65},
+    OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70},
+    OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
   };
 };
 #endif
