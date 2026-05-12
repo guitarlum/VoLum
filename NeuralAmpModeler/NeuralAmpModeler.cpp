@@ -394,7 +394,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           _VolumRestoreFromSettings(ampIdx);
           _VolumRefreshChannels();
           mVolumNeedsLoad.store(true);
+#ifdef APP_API
           _VolumSaveSettingsToFile();
+#endif
 
           auto* pGfx = GetUI();
           if (!pGfx) return;
@@ -1006,7 +1008,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         _VolumRestoreFromSettings(newIdx);
         _VolumRefreshChannels();
         mVolumNeedsLoad.store(true);
+#ifdef APP_API
         _VolumSaveSettingsToFile();
+#endif
         if (auto* pGfx = GetUI())
         {
           if (auto* ampList = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
@@ -1234,7 +1238,9 @@ NeuralAmpModeler::~NeuralAmpModeler()
 #if VOLUM_AMPETE_PRODUCT
   _VolumStopLoader();
   _VolumSaveCurrentToSettings();
+#ifdef APP_API
   _VolumSaveSettingsToFile();
+#endif
 #endif
   _DeallocateIOPointers();
 }
@@ -1737,11 +1743,13 @@ void NeuralAmpModeler::OnIdle()
     _VolumSaveCurrentToSettings();
 
   // Write settings file when dirty (knob/speaker/channel changed)
+#ifdef APP_API
   if (mVolumSettingsDirty)
   {
     mVolumSettingsDirty = false;
     _VolumSaveSettingsToFile();
   }
+#endif
 
   if (auto* pGfx = GetUI())
   {
@@ -1874,7 +1882,9 @@ void NeuralAmpModeler::OnUIClose()
 #if VOLUM_AMPETE_PRODUCT
   // Save while params are still valid (destructor may run after teardown)
   _VolumSaveCurrentToSettings();
+#ifdef APP_API
   _VolumSaveSettingsToFile();
+#endif
 #endif
 }
 
