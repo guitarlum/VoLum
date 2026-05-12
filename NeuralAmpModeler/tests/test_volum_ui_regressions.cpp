@@ -176,6 +176,30 @@ TEST_CASE("Amp settings restore refreshes support channel list")
   CHECK(refreshPos < source.find("mVolumSupportNeedsLoad.store(true);", restorePos));
 }
 
+TEST_CASE("Global VoLum settings writes are standalone-only")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string needle = "_VolumSaveSettingsToFile();";
+  size_t count = 0;
+  size_t pos = source.find(needle);
+  while (pos != std::string::npos)
+  {
+    const auto appGuard = source.rfind("#ifdef APP_API", pos);
+    const auto previousEndif = source.rfind("#endif", pos);
+    const auto nextEndif = source.find("#endif", pos);
+
+    INFO("write call at offset " << pos);
+    REQUIRE(appGuard != std::string::npos);
+    REQUIRE(appGuard > previousEndif);
+    REQUIRE(nextEndif != std::string::npos);
+
+    ++count;
+    pos = source.find(needle, pos + needle.size());
+  }
+
+  CHECK(count == 5);
+}
+
 TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
 {
   const std::string source = ReadPluginSource();

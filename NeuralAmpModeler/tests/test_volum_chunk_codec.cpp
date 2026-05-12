@@ -114,6 +114,218 @@ TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
   CHECK(loaded.supportPolarityInvert);
 }
 
+TEST_CASE("VoLum chunk codec round-trips every current per-amp field")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  auto& s = amps[4];
+  s.speakerIdx = 2;
+  s.channelIdx = 5;
+  s.inputLevel = -3.25;
+  s.gateThreshold = -72.5;
+  s.toneBass = 2.5;
+  s.toneMid = 6.5;
+  s.toneTreble = 8.0;
+  s.outputLevel = -4.5;
+  s.noiseGateActive = false;
+  s.eqActive = false;
+  s.preCompActive = true;
+  s.preCompAmount = 7.5;
+  s.preCompRatio = 10.0;
+  s.preCompAttack = 12.0;
+  s.preCompRelease = 260.0;
+  s.preCompMix = 0.58;
+  s.preCompLevel = -2.25;
+  s.preNam1Active = true;
+  s.preNam1Capture = 9;
+  s.preNam1Gain = 1.5;
+  s.preNam1Bass = 2.0;
+  s.preNam1Mid = 3.0;
+  s.preNam1MidFreq = 950.0;
+  s.preNam1Treble = 4.0;
+  s.preNam1Level = -1.5;
+  s.preNam2Active = true;
+  s.preNam2Capture = 10;
+  s.preNam2Gain = -2.5;
+  s.preNam2Bass = 6.0;
+  s.preNam2Mid = 7.0;
+  s.preNam2MidFreq = 1400.0;
+  s.preNam2Treble = 8.0;
+  s.preNam2Level = 2.0;
+  s.dualAmpActive = true;
+  s.dualAmpRoute = 2;
+  s.mainAmpPan = -0.33;
+  s.supportAmpIdx = 6;
+  s.supportSpeakerIdx = 1;
+  s.supportChannelIdx = 3;
+  s.supportInputLevel = -1.0;
+  s.supportGateThreshold = -68.0;
+  s.supportToneBass = 4.5;
+  s.supportToneMid = 5.5;
+  s.supportToneTreble = 6.5;
+  s.supportOutputLevel = -7.5;
+  s.supportNoiseGateActive = false;
+  s.supportEqActive = false;
+  s.supportAmpPan = 0.66;
+  s.supportPolarityInvert = false;
+  s.postValid = true;
+  s.postDelayActive = true;
+  s.postDelayTime = 777.0;
+  s.postDelayFeedback = 0.61;
+  s.postDelayMix = 0.43;
+  s.postDelayMode = volum::kVoLumDelayModeReverse;
+  s.postDelayTone = 0.73;
+  s.postDelayAge = 0.44;
+  s.postDelayPingPong = true;
+  s.postReverbActive = true;
+  s.postReverbMix = 0.36;
+  s.postReverbDecay = 6.2;
+  s.postReverbTone = 4.2;
+  s.postReverbPreDelay = 55.0;
+  s.postReverbShimmer = 0.77;
+  s.postReverbMode = volum::kVoLumReverbModeOktaverb;
+  s.postReverbSubMode = volum::kVoLumOktaverbSubModeHalo;
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    s.postDelayModes[i].time = 240.0 + 100.0 * i;
+    s.postDelayModes[i].feedback = 0.20 + 0.10 * i;
+    s.postDelayModes[i].mix = 0.15 + 0.08 * i;
+    s.postDelayModes[i].tone = 0.30 + 0.10 * i;
+    s.postDelayModes[i].age = 0.10 + 0.20 * i;
+    s.postDelayModes[i].pingPong = (i == 1);
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    s.postReverbModes[i].mix = 0.20 + 0.05 * i;
+    s.postReverbModes[i].decay = 2.0 + i;
+    s.postReverbModes[i].tone = 3.0 + i;
+    s.postReverbModes[i].preDelay = 15.0 + 10.0 * i;
+    s.postReverbModes[i].shimmer = 0.10 + 0.20 * i;
+    s.postReverbModes[i].subMode = i % 3;
+  }
+  for (int i = 0; i < 3; ++i)
+  {
+    s.postOktaverbSubModes[i].mix = 0.25 + 0.05 * i;
+    s.postOktaverbSubModes[i].decay = 4.0 + i;
+    s.postOktaverbSubModes[i].tone = 5.0 + i;
+    s.postOktaverbSubModes[i].preDelay = 20.0 + 8.0 * i;
+    s.postOktaverbSubModes[i].shimmer = 0.40 + 0.10 * i;
+  }
+
+  MemoryChunk chunk;
+  volum::PutCurrentVoLumChunkState(chunk, {4, 2, 5}, amps, volum::kAmpCount);
+
+  volum::VoLumChunkSelection selection;
+  int pos = volum::GetVoLumChunkSelection(chunk, 0, selection);
+  CHECK(selection.ampIdx == 4);
+  CHECK(selection.speakerIdx == 2);
+  CHECK(selection.channelIdx == 5);
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded[i]);
+    pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded[i], true);
+    pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded[i], true);
+    pos = volum::GetPostPerAmpSettings(chunk, pos, loaded[i]);
+  }
+
+  const auto& out = loaded[4];
+  CHECK(out.speakerIdx == s.speakerIdx);
+  CHECK(out.channelIdx == s.channelIdx);
+  CHECK(out.inputLevel == doctest::Approx(s.inputLevel));
+  CHECK(out.gateThreshold == doctest::Approx(s.gateThreshold));
+  CHECK(out.toneBass == doctest::Approx(s.toneBass));
+  CHECK(out.toneMid == doctest::Approx(s.toneMid));
+  CHECK(out.toneTreble == doctest::Approx(s.toneTreble));
+  CHECK(out.outputLevel == doctest::Approx(s.outputLevel));
+  CHECK(out.noiseGateActive == s.noiseGateActive);
+  CHECK(out.eqActive == s.eqActive);
+  CHECK(out.preCompActive == s.preCompActive);
+  CHECK(out.preCompAmount == doctest::Approx(s.preCompAmount));
+  CHECK(out.preCompRatio == doctest::Approx(s.preCompRatio));
+  CHECK(out.preCompAttack == doctest::Approx(s.preCompAttack));
+  CHECK(out.preCompRelease == doctest::Approx(s.preCompRelease));
+  CHECK(out.preCompMix == doctest::Approx(s.preCompMix));
+  CHECK(out.preCompLevel == doctest::Approx(s.preCompLevel));
+  CHECK(out.preNam1Active == s.preNam1Active);
+  CHECK(out.preNam1Capture == s.preNam1Capture);
+  CHECK(out.preNam1Gain == doctest::Approx(s.preNam1Gain));
+  CHECK(out.preNam1Bass == doctest::Approx(s.preNam1Bass));
+  CHECK(out.preNam1Mid == doctest::Approx(s.preNam1Mid));
+  CHECK(out.preNam1MidFreq == doctest::Approx(s.preNam1MidFreq));
+  CHECK(out.preNam1Treble == doctest::Approx(s.preNam1Treble));
+  CHECK(out.preNam1Level == doctest::Approx(s.preNam1Level));
+  CHECK(out.preNam2Active == s.preNam2Active);
+  CHECK(out.preNam2Capture == s.preNam2Capture);
+  CHECK(out.preNam2Gain == doctest::Approx(s.preNam2Gain));
+  CHECK(out.preNam2Bass == doctest::Approx(s.preNam2Bass));
+  CHECK(out.preNam2Mid == doctest::Approx(s.preNam2Mid));
+  CHECK(out.preNam2MidFreq == doctest::Approx(s.preNam2MidFreq));
+  CHECK(out.preNam2Treble == doctest::Approx(s.preNam2Treble));
+  CHECK(out.preNam2Level == doctest::Approx(s.preNam2Level));
+  CHECK(out.dualAmpActive == s.dualAmpActive);
+  CHECK(out.dualAmpRoute == s.dualAmpRoute);
+  CHECK(out.mainAmpPan == doctest::Approx(s.mainAmpPan));
+  CHECK(out.supportAmpIdx == s.supportAmpIdx);
+  CHECK(out.supportSpeakerIdx == s.supportSpeakerIdx);
+  CHECK(out.supportChannelIdx == s.supportChannelIdx);
+  CHECK(out.supportInputLevel == doctest::Approx(s.supportInputLevel));
+  CHECK(out.supportGateThreshold == doctest::Approx(s.supportGateThreshold));
+  CHECK(out.supportToneBass == doctest::Approx(s.supportToneBass));
+  CHECK(out.supportToneMid == doctest::Approx(s.supportToneMid));
+  CHECK(out.supportToneTreble == doctest::Approx(s.supportToneTreble));
+  CHECK(out.supportOutputLevel == doctest::Approx(s.supportOutputLevel));
+  CHECK(out.supportNoiseGateActive == s.supportNoiseGateActive);
+  CHECK(out.supportEqActive == s.supportEqActive);
+  CHECK(out.supportAmpPan == doctest::Approx(s.supportAmpPan));
+  CHECK(out.supportPolarityInvert == s.supportPolarityInvert);
+  CHECK(out.postValid == s.postValid);
+  CHECK(out.postDelayActive == s.postDelayActive);
+  CHECK(out.postDelayTime == doctest::Approx(s.postDelayTime));
+  CHECK(out.postDelayFeedback == doctest::Approx(s.postDelayFeedback));
+  CHECK(out.postDelayMix == doctest::Approx(s.postDelayMix));
+  CHECK(out.postDelayMode == s.postDelayMode);
+  CHECK(out.postDelayTone == doctest::Approx(s.postDelayTone));
+  CHECK(out.postDelayAge == doctest::Approx(s.postDelayAge));
+  CHECK(out.postDelayPingPong == s.postDelayPingPong);
+  CHECK(out.postReverbActive == s.postReverbActive);
+  CHECK(out.postReverbMix == doctest::Approx(s.postReverbMix));
+  CHECK(out.postReverbDecay == doctest::Approx(s.postReverbDecay));
+  CHECK(out.postReverbTone == doctest::Approx(s.postReverbTone));
+  CHECK(out.postReverbPreDelay == doctest::Approx(s.postReverbPreDelay));
+  CHECK(out.postReverbShimmer == doctest::Approx(s.postReverbShimmer));
+  CHECK(out.postReverbMode == s.postReverbMode);
+  CHECK(out.postReverbSubMode == s.postReverbSubMode);
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    CHECK(out.postDelayModes[i].time == doctest::Approx(s.postDelayModes[i].time));
+    CHECK(out.postDelayModes[i].feedback == doctest::Approx(s.postDelayModes[i].feedback));
+    CHECK(out.postDelayModes[i].mix == doctest::Approx(s.postDelayModes[i].mix));
+    CHECK(out.postDelayModes[i].tone == doctest::Approx(s.postDelayModes[i].tone));
+    CHECK(out.postDelayModes[i].age == doctest::Approx(s.postDelayModes[i].age));
+    CHECK(out.postDelayModes[i].pingPong == s.postDelayModes[i].pingPong);
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    CHECK(out.postReverbModes[i].mix == doctest::Approx(s.postReverbModes[i].mix));
+    CHECK(out.postReverbModes[i].decay == doctest::Approx(s.postReverbModes[i].decay));
+    CHECK(out.postReverbModes[i].tone == doctest::Approx(s.postReverbModes[i].tone));
+    CHECK(out.postReverbModes[i].preDelay == doctest::Approx(s.postReverbModes[i].preDelay));
+    CHECK(out.postReverbModes[i].shimmer == doctest::Approx(s.postReverbModes[i].shimmer));
+    CHECK(out.postReverbModes[i].subMode == s.postReverbModes[i].subMode);
+  }
+  for (int i = 0; i < 3; ++i)
+  {
+    CHECK(out.postOktaverbSubModes[i].mix == doctest::Approx(s.postOktaverbSubModes[i].mix));
+    CHECK(out.postOktaverbSubModes[i].decay == doctest::Approx(s.postOktaverbSubModes[i].decay));
+    CHECK(out.postOktaverbSubModes[i].tone == doctest::Approx(s.postOktaverbSubModes[i].tone));
+    CHECK(out.postOktaverbSubModes[i].preDelay == doctest::Approx(s.postOktaverbSubModes[i].preDelay));
+    CHECK(out.postOktaverbSubModes[i].shimmer == doctest::Approx(s.postOktaverbSubModes[i].shimmer));
+  }
+
+  CHECK(static_cast<size_t>(pos) == chunk.bytes.size());
+}
+
 TEST_CASE("VoLum chunk codec clamps legacy out-of-range dualAmpRoute and supportOutputLevel")
 {
   // Synthesize a chunk whose dual-amp block carries values outside the new accepted ranges.

@@ -445,29 +445,19 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   }
 
   std::error_code ec;
-  const fs::path parent = settingsPath.parent_path();
-  if (!parent.empty())
-    fs::create_directories(parent, ec);
-
-  std::ofstream out(settingsPath, std::ios::out | std::ios::trunc);
-  if (!out)
+  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
   {
-    std::cerr << "VoLum: cannot open settings file for write: " << settingsPath.string() << std::endl;
+    std::cerr << "VoLum: write failed for settings file: " << settingsPath.string()
+              << " (" << ec.message() << ")" << std::endl;
     return;
   }
-  out << j.dump(2);
-  if (!out.good())
-    std::cerr << "VoLum: write failed for settings file: " << settingsPath.string() << std::endl;
 
-  std::ofstream dualOut(dualAmpSettingsPath, std::ios::out | std::ios::trunc);
-  if (!dualOut)
+  if (!volum::WriteJsonAtomically(dualAmpSettingsPath, dualAmpJson, ec))
   {
-    std::cerr << "VoLum: cannot open dual-amp settings file for write: " << dualAmpSettingsPath.string() << std::endl;
+    std::cerr << "VoLum: write failed for dual-amp settings file: " << dualAmpSettingsPath.string()
+              << " (" << ec.message() << ")" << std::endl;
     return;
   }
-  dualOut << dualAmpJson.dump(2);
-  if (!dualOut.good())
-    std::cerr << "VoLum: write failed for dual-amp settings file: " << dualAmpSettingsPath.string() << std::endl;
 }
 
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
