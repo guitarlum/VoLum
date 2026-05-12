@@ -16,9 +16,14 @@ PROJECT_ROOT = REPO_ROOT / "NeuralAmpModeler"
 PROJECT_SCRIPTS = PROJECT_ROOT / "scripts"
 CONFIG_PATH = PROJECT_ROOT / "config.h"
 CHANGELOG_PATH = PROJECT_ROOT / "installer" / "changelog.txt"
+MAIN_RC_PATH = PROJECT_ROOT / "resources" / "main.rc"
 
 CONFIG_VERSION_RE = re.compile(r'(#define PLUG_VERSION_STR ")([^"]+)(")')
 CONFIG_HEX_RE = re.compile(r'(#define PLUG_VERSION_HEX )(0x[0-9A-Fa-f]+)')
+RC_FILEVERSION_RE = re.compile(r'( FILEVERSION )\d+,\d+,\d+,0')
+RC_PRODUCTVERSION_RE = re.compile(r'( PRODUCTVERSION )\d+,\d+,\d+,0')
+RC_FILEVERSION_STR_RE = re.compile(r'(VALUE "FileVersion", ")([^"]+)(")')
+RC_PRODUCTVERSION_STR_RE = re.compile(r'(VALUE "ProductVersion", ")([^"]+)(")')
 SEMVER_RE = re.compile(r'^(?:v)?(\d+)\.(\d+)(?:\.(\d+))?$')
 
 
@@ -113,9 +118,18 @@ def update_config(version: Version) -> None:
     replace_once(CONFIG_PATH, CONFIG_HEX_RE, rf'\g<1>{version.hex_value()}')
 
 
+def update_windows_resource_metadata(version: Version) -> None:
+    rc_version = f"{version.major},{version.minor},{version.patch},0"
+    replace_once(MAIN_RC_PATH, RC_FILEVERSION_RE, rf'\g<1>{rc_version}')
+    replace_once(MAIN_RC_PATH, RC_PRODUCTVERSION_RE, rf'\g<1>{rc_version}')
+    replace_once(MAIN_RC_PATH, RC_FILEVERSION_STR_RE, rf'\g<1>{version}\g<3>')
+    replace_once(MAIN_RC_PATH, RC_PRODUCTVERSION_STR_RE, rf'\g<1>{version}\g<3>')
+
+
 def update_generated_metadata() -> None:
     python = sys.executable
     run([python, "update_version-mac.py"], cwd=PROJECT_SCRIPTS)
+    run([python, "update_version-ios.py"], cwd=PROJECT_SCRIPTS)
     run([python, "update_installer-win.py", "0"], cwd=PROJECT_SCRIPTS)
 
 
@@ -160,6 +174,7 @@ def main() -> int:
         return 0
 
     update_config(target_version)
+    update_windows_resource_metadata(target_version)
     update_generated_metadata()
     release_line = append_changelog(target_version)
 

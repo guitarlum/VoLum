@@ -5,23 +5,23 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>NeuralAmpModelerAppExtension</string>
+	<string>VoLumAppExtension</string>
 	<key>CFBundleExecutable</key>
-	<string>NeuralAmpModelerAppExtension</string>
+	<string>VoLumAppExtension</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NeuralAmpModelerAppExtension</string>
+	<string>VoLumAppExtension</string>
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>
@@ -30,17 +30,17 @@
 			<array>
 				<dict>
 					<key>description</key>
-					<string>NeuralAmpModeler</string>
+					<string>VoLum</string>
 					<key>factoryFunction</key>
 					<string>IPlugAUViewController_vNeuralAmpModeler</string>
 					<key>manufacturer</key>
-					<string>SDAa</string>
+					<string>Lum0</string>
 					<key>name</key>
-					<string>Steven Atkinson: NeuralAmpModeler</string>
+					<string>Lum: VoLum</string>
 					<key>sandboxSafe</key>
 					<true/>
 					<key>subtype</key>
-					<string>1YEo</string>
+					<string>VoLm</string>
 					<key>tags</key>
 					<array>
 						<string>Effects</string>
@@ -49,7 +49,7 @@
 					<key>type</key>
 					<string>aufx</string>
 					<key>version</key>
-					<integer>256</integer>
+					<integer>65536</integer>
 				</dict>
 			</array>
 		</dict>
