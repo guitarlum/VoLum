@@ -2867,7 +2867,10 @@ bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
           const bool handled = pKnob->HandleKeyboardInput(key);
 
           if (handled && key.VK == kVK_ESCAPE)
+          {
             mVolumSelectedKnobParamIdx = kNoParameter;
+            _UpdateVoLumKeyboardFocusHint();
+          }
 
           if (handled)
             _SyncVoLumExactEntry();
