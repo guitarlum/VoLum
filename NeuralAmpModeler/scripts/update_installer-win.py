@@ -42,6 +42,8 @@ def main():
     ):
         if "AppVersion" in line:
             line = "AppVersion=" + config["FULL_VER_STR"] + "\n"
+        if "VersionInfoVersion" in line:
+            line = "VersionInfoVersion=" + config["FULL_VER_STR"] + "\n"
         if "OutputBaseFilename" in line:
             if demo:
                 line = "OutputBaseFilename=VoLum-Demo-Setup\n"

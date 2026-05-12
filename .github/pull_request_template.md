@@ -16,5 +16,5 @@ Include [Closing words](https://docs.github.com/en/issues/tracking-your-work-wit
   - [ ] Have you ensured that the plug-in unserializes correctly?
   - [ ] Have you updated `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, or `test_volum_chunk_codec.cpp`?
   - [ ] Have you ensured that _older_ versions of the plug-in load correctly? (See `NeuralAmpModeler/Unserialization.cpp`.)
-- [ ] Does your PR add or remove any graphical assets? If yes, are they defined in [config.h](https://github.com/olilarkin/NeuralAmpModelerPlugin/blob/main/NeuralAmpModeler/config.h) and added in the two required locations in [main.rc](https://github.com/olilarkin/NeuralAmpModelerPlugin/blob/main/NeuralAmpModeler/resources/main.rc)?
+- [ ] Does your PR add or remove any graphical assets? If yes, are they defined in `NeuralAmpModeler/config.h` and added in the two required locations in `NeuralAmpModeler/resources/main.rc`?
   

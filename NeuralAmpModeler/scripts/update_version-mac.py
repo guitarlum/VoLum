@@ -70,10 +70,19 @@ def main():
 
     print("Processing Info.plist files...")
 
-    # VoLum currently ships standalone + VST3 on macOS. Keep the other plist
-    # templates untouched until those formats are wired back into the default
-    # mac build so routine APP/VST3 builds don't dirty unrelated files.
-    active_formats = {"APP", "VST3"}
+    if config["PLUG_TYPE"] == 0:
+        if config["PLUG_DOES_MIDI_IN"]:
+            COMPONENT_TYPE = kAudioUnitType_MusicEffect
+        else:
+            COMPONENT_TYPE = kAudioUnitType_Effect
+    elif config["PLUG_TYPE"] == 1:
+        COMPONENT_TYPE = kAudioUnitType_MusicDevice
+    elif config["PLUG_TYPE"] == 2:
+        COMPONENT_TYPE = kAudioUnitType_MIDIProcessor
+
+    # Refresh every plist template so inactive formats don't keep stale NAM
+    # vendor identifiers that could resurface in a future package.
+    active_formats = {"APP", "VST3", "AUV2", "AUV3", "AAX"}
 
     # VST3
 
@@ -208,7 +217,10 @@ def main():
             auv3["CFBundlePackageType"] = "XPC!"
             auv3["NSExtension"] = dict(
                 NSExtensionAttributes=dict(
-                    AudioComponentBundle="com.StevenAtkinson.app."
+                    AudioComponentBundle=config["BUNDLE_DOMAIN"]
+                    + "."
+                    + config["BUNDLE_MFR"]
+                    + ".app."
                     + config["BUNDLE_NAME"]
                     + ".AUv3Framework",
                     AudioComponents=[{}],
@@ -254,6 +266,23 @@ def main():
 
             with open(plistpath, "wb") as f2:
                 plistlib.dump(auv3, f2)
+
+        framework_plistpath = resource_plist_path("-macOS-AUv3Framework-Info.plist")
+        with open(framework_plistpath, "rb") as f:
+            auv3_framework = plistlib.load(f)
+            auv3_framework["CFBundleIdentifier"] = (
+                config["BUNDLE_DOMAIN"]
+                + "."
+                + config["BUNDLE_MFR"]
+                + ".app."
+                + config["BUNDLE_NAME"]
+                + ".AUv3Framework"
+            )
+            auv3_framework["CFBundleVersion"] = CFBundleVersion
+            auv3_framework["CFBundleShortVersionString"] = CFBundleVersion
+
+            with open(framework_plistpath, "wb") as f2:
+                plistlib.dump(auv3_framework, f2)
 
     # AAX
 
