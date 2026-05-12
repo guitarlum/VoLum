@@ -478,6 +478,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         mVolumExpandedSection = sec;
         mVolumFocusedEffect = focus;
         _UpdateVoLumLayout();
+        _UpdateVoLumKeyboardFocusHint();
     });
     pGraphics->AttachControl(triptych, kCtrlTagVoLumTriptych);
 
@@ -492,6 +493,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         mVolumDualAmpFocusedSupport = supportFocused;
         mVolumFocusedEffect = EVoLumEffectFocus::AMP;
         _UpdateVoLumLayout();
+        _UpdateVoLumKeyboardFocusHint();
       },
       [this](const IRECT& anchor) {
         // Only allow the picker when Dual Amp is on; mono mode shouldn't surface a Support amp menu.
@@ -504,6 +506,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         GetParam(kDualAmpActive)->Set(current ? 0.0 : 1.0);
         SendParameterValueFromDelegate(kDualAmpActive, GetParam(kDualAmpActive)->GetNormalized(), true);
         OnParamChange(kDualAmpActive);
+        _UpdateVoLumKeyboardFocusHint();
       },
       // Dismiss the support-amp dropdown when the user clicks elsewhere on the hero (e.g. on
       // the MAIN panel) so the menu doesn't stay floating after a focus change.
@@ -550,6 +553,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         (void) isBypassClick;
         mVolumFocusedEffect = card->GetEffect();
         _UpdateVoLumLayout();
+        _UpdateVoLumKeyboardFocusHint();
     };
 
     auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
@@ -948,7 +952,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     _SyncVoLumExactEntry();
 
-    // Keyboard: Up/Down = switch amps, Left/Right = switch channels
+    // Keyboard: keep the original arrows, add a shallow PRE/AMP/POST focus layer.
     pGraphics->SetKeyHandlerFunc([this](const IKeyPress& key, bool isUp) {
       if (isUp) return false;
 
@@ -960,9 +964,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
         {
           if (!settings->IsHidden())
+          {
+            if (key.VK == kVK_ESCAPE)
+            {
+              settings->As<NAMSettingsPageControl>()->HideAnimated(true);
+              return true;
+            }
             return false;
+          }
         }
       }
+
+      if (_HandleVoLumKeyboardFocusKey(key))
+        return true;
 
       if (_HandleVoLumSelectedKnobKey(key))
         return true;
@@ -1008,6 +1022,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       {
         if (mVolumSelectedKnobParamIdx != kNoParameter)
           return false;
+
+        if (mVolumExpandedSection == EVoLumSection::PRE || mVolumExpandedSection == EVoLumSection::POST)
+          return _CycleVoLumKeyboardTarget(key.VK == kVK_LEFT ? -1 : 1);
 
         if (mVolumExpandedSection == EVoLumSection::AMP)
         {
@@ -2442,97 +2459,6 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 
 #if VOLUM_AMPETE_PRODUCT
 namespace {
-constexpr std::array<int, 6> kVoLumAmpKeyboardKnobParams = {
-  kInputLevel,
-  kNoiseGateThreshold,
-  kToneBass,
-  kToneMid,
-  kToneTreble,
-  kOutputLevel,
-};
-constexpr std::array<int, 10> kVoLumSupportAmpKeyboardKnobParams = {
-  kSupportAmpIdx,
-  kSupportSpeakerIdx,
-  kSupportChannelIdx,
-  kSupportInputLevel,
-  kSupportNoiseGateThreshold,
-  kSupportToneBass,
-  kSupportToneMid,
-  kSupportToneTreble,
-  kSupportOutputLevel,
-  kSupportAmpPan,
-};
-constexpr std::array<int, 5> kVoLumDelayKeyboardKnobParams = {
-  kDelayTime,
-  kDelayFeedback,
-  kDelayMix,
-  kDelayTone,
-  kDelayAge,
-};
-constexpr std::array<int, 4> kVoLumReverbKeyboardKnobParams = {
-  kReverbMix,
-  kReverbDecay,
-  kReverbTone,
-  kReverbPreDelay,
-};
-constexpr std::array<int, 5> kVoLumOktaverbKeyboardKnobParams = {
-  kReverbMix,
-  kReverbDecay,
-  kReverbTone,
-  kReverbPreDelay,
-  kReverbShimmer,
-};
-constexpr std::array<int, 6> kVoLumPreNam1KeyboardKnobParams = {
-  kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
-};
-constexpr std::array<int, 6> kVoLumPreNam2KeyboardKnobParams = {
-  kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble, kPreNam2Level,
-};
-constexpr std::array<int, 4> kVoLumCompKeyboardKnobParams = {
-  kPreCompAmount, kPreCompAttack, kPreCompRelease, kPreCompLevel,
-};
-
-double GetVoLumKeyboardStepForParam(int paramIdx, bool fine)
-{
-  switch (paramIdx)
-  {
-    case kToneBass:
-    case kToneMid:
-    case kToneTreble:
-    case kReverbTone:
-    case kBoostTone:
-    case kBoostDrive:
-    case kPreNam1Bass:
-    case kPreNam1Mid:
-    case kPreNam1Treble:
-    case kPreNam2Bass:
-    case kPreNam2Mid:
-    case kPreNam2Treble:
-    case kSupportToneBass:
-    case kSupportToneMid:
-    case kSupportToneTreble:
-      return fine ? 0.1 : 0.5;
-    case kDelayTime:
-    case kReverbPreDelay:
-    case kPreNam1MidFreq:
-    case kPreNam2MidFreq:
-    case kPreCompAttack:
-    case kPreCompRelease:
-      return fine ? 1.0 : 5.0;
-    case kDelayFeedback:
-    case kDelayMix:
-    case kDelayTone:
-    case kDelayAge:
-    case kReverbMix:
-    case kReverbDecay:
-    case kReverbShimmer:
-    case kPreCompMix:
-      return fine ? 0.01 : 0.05;
-    default:
-      return fine ? 0.1 : 1.0;
-  }
-}
-
 template <size_t N>
 bool SelectAdjacentFromList(NeuralAmpModeler* plugin, const std::array<int, N>& params, int currentParamIdx, int direction)
 {
@@ -2547,6 +2473,12 @@ bool SelectAdjacentFromList(NeuralAmpModeler* plugin, const std::array<int, N>& 
   return true;
 }
 
+template <size_t N>
+int RememberedOrFirst(const std::array<int, N>& params, int remembered)
+{
+  return volum::keyboard::Contains(params, remembered) ? remembered : params.front();
+}
+
 }
 
 std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
@@ -2556,34 +2488,309 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
     return {};
 
   WDL_String line;
-  line.SetFormatted(512, "%s  |  Up/Down adjust  |  Left/Right select  |  Enter exact  |  Delete reset  |  Shift fine",
+  line.SetFormatted(512, "%s  |  Up/Down adjust  |  Left/Right knob  |  Tab target  |  Enter exact  |  Del reset  |  Esc clear",
                     pParam->GetName());
   return line.Get();
 }
 
-bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int direction)
+bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
+{
+  constexpr int kTabKey = '\t';
+  constexpr int kSpaceKey = ' ';
+  if (key.VK == '1')
+    return _SwitchVoLumKeyboardSection(EVoLumSection::PRE);
+  if (key.VK == '2')
+    return _SwitchVoLumKeyboardSection(EVoLumSection::AMP);
+  if (key.VK == '3')
+    return _SwitchVoLumKeyboardSection(EVoLumSection::POST);
+  if (key.VK == 't' || key.VK == 'T')
+  {
+    _ToggleVoLumTuner();
+    return true;
+  }
+  if (key.VK == 'm' || key.VK == 'M')
+  {
+    _ToggleVoLumMetronomePanel();
+    return true;
+  }
+  if (key.VK == 'h' || key.VK == 'H')
+  {
+    if (auto* pGfx = GetUI())
+      if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+        settings->As<NAMSettingsPageControl>()->HideAnimated(false);
+    return true;
+  }
+  if (key.VK == 's' || key.VK == 'S')
+    return _CycleVoLumKeyboardSpeaker(key.S ? -1 : 1);
+
+  if (key.VK == kTabKey)
+    return _CycleVoLumKeyboardTarget(key.S ? -1 : 1);
+
+  if (mVolumSelectedKnobParamIdx != kNoParameter)
+    return false;
+
+  if (key.VK == kVK_RETURN)
+    return _ActivateVoLumKeyboardTarget();
+  if (key.VK == kSpaceKey)
+    return _ToggleVoLumKeyboardTarget();
+
+  return false;
+}
+
+bool NeuralAmpModeler::_SwitchVoLumKeyboardSection(EVoLumSection section)
+{
+  _ClearVoLumKnobSelection();
+  mVolumExpandedSection = section;
+
+  switch (section)
+  {
+    case EVoLumSection::PRE:
+      mVolumFocusedEffect = EVoLumEffectFocus::COMP;
+      mVolumDualAmpFocusedSupport = false;
+      break;
+    case EVoLumSection::AMP:
+      mVolumFocusedEffect = EVoLumEffectFocus::AMP;
+      mVolumDualAmpFocusedSupport = false;
+      break;
+    case EVoLumSection::POST:
+      mVolumFocusedEffect = EVoLumEffectFocus::DELAY;
+      mVolumDualAmpFocusedSupport = false;
+      break;
+  }
+
+  _UpdateVoLumLayout();
+  _UpdateVoLumKeyboardFocusHint();
+  return true;
+}
+
+bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
+{
+  _ClearVoLumKnobSelection();
+
+  auto wrap = [](int value, int count) {
+    return (value + count) % count;
+  };
+
+  switch (mVolumExpandedSection)
+  {
+    case EVoLumSection::PRE:
+    {
+      constexpr EVoLumEffectFocus targets[3] = {
+        EVoLumEffectFocus::COMP, EVoLumEffectFocus::PRE_NAM1, EVoLumEffectFocus::PRE_NAM2,
+      };
+      int current = 0;
+      for (int i = 0; i < 3; ++i)
+        if (targets[i] == mVolumFocusedEffect)
+          current = i;
+      mVolumFocusedEffect = targets[wrap(current + direction, 3)];
+      mVolumDualAmpFocusedSupport = false;
+      break;
+    }
+    case EVoLumSection::AMP:
+    {
+      mVolumFocusedEffect = EVoLumEffectFocus::AMP;
+      mVolumDualAmpFocusedSupport = GetParam(kDualAmpActive)->Bool()
+        ? !mVolumDualAmpFocusedSupport
+        : false;
+      break;
+    }
+    case EVoLumSection::POST:
+    {
+      const bool delayFocus = mVolumFocusedEffect == EVoLumEffectFocus::DELAY;
+      mVolumFocusedEffect = delayFocus ? EVoLumEffectFocus::REVERB : EVoLumEffectFocus::DELAY;
+      mVolumDualAmpFocusedSupport = false;
+      break;
+    }
+  }
+
+  _UpdateVoLumLayout();
+  _UpdateVoLumKeyboardFocusHint();
+  return true;
+}
+
+bool NeuralAmpModeler::_ActivateVoLumKeyboardTarget()
+{
+  const int paramIdx = _RememberedVoLumKeyboardKnobForFocus();
+  if (paramIdx == kNoParameter)
+    return false;
+
+  _SelectVoLumKnob(paramIdx);
+  return true;
+}
+
+bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
+{
+  int paramIdx = kNoParameter;
+  switch (mVolumFocusedEffect)
+  {
+    case EVoLumEffectFocus::AMP:
+      if (mVolumExpandedSection == EVoLumSection::AMP)
+        paramIdx = kDualAmpActive;
+      break;
+    case EVoLumEffectFocus::COMP: paramIdx = kPreCompActive; break;
+    case EVoLumEffectFocus::PRE_NAM1: paramIdx = kPreNam1Active; break;
+    case EVoLumEffectFocus::PRE_NAM2: paramIdx = kPreNam2Active; break;
+    case EVoLumEffectFocus::DELAY: paramIdx = kDelayActive; break;
+    case EVoLumEffectFocus::REVERB: paramIdx = kReverbActive; break;
+  }
+
+  if (paramIdx == kNoParameter)
+    return false;
+
+  const bool next = !GetParam(paramIdx)->Bool();
+  GetParam(paramIdx)->Set(next ? 1.0 : 0.0);
+  SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
+  OnParamChange(paramIdx);
+
+  if (paramIdx == kDualAmpActive)
+    mVolumDualAmpFocusedSupport = next;
+
+  _UpdateVoLumLayout();
+  _UpdateVoLumKeyboardFocusHint();
+  return true;
+}
+
+bool NeuralAmpModeler::_CycleVoLumKeyboardSpeaker(int direction)
+{
+  if (mVolumExpandedSection != EVoLumSection::AMP)
+    return false;
+
+  constexpr int kSpeakerCount = 4;
+  if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
+  {
+    const int current = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, kSpeakerCount - 1);
+    const int next = (current + direction + kSpeakerCount) % kSpeakerCount;
+    GetParam(kSupportSpeakerIdx)->Set(next);
+    SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
+    mVolumSettingsDirty = true;
+    _VolumRefreshSupportChannels();
+    mVolumSupportNeedsLoad.store(true);
+  }
+  else
+  {
+    const int current = std::clamp(mVolumSpeakerIdx, 0, kSpeakerCount - 1);
+    const int next = (current + direction + kSpeakerCount) % kSpeakerCount;
+    mVolumSpeakerIdx = next;
+    mVolumAmpSettings[mVolumAmpIdx].speakerIdx = next;
+    mVolumSettingsDirty = true;
+    _VolumRefreshChannels();
+    mVolumNeedsLoad.store(true);
+  }
+
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+      spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport
+                                                           ? GetParam(kSupportSpeakerIdx)->Int()
+                                                           : mVolumSpeakerIdx);
+    _UpdateVoLumLayout(pGfx);
+  }
+  _UpdateVoLumKeyboardFocusHint();
+  return true;
+}
+
+void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
+{
+  if (mVolumSelectedKnobParamIdx != kNoParameter)
+    return;
+
+  const char* target = "Main amp";
+  const char* action = "Space dual amp";
+  const char* nav = "Up/Down amp  |  Left/Right channel  |  Tab target";
+  switch (mVolumFocusedEffect)
+  {
+    case EVoLumEffectFocus::AMP:
+      target = (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport) ? "Support amp" : "Main amp";
+      action = "Space dual amp";
+      nav = "Up/Down amp  |  Left/Right channel  |  S cab  |  Tab target";
+      break;
+    case EVoLumEffectFocus::COMP: target = "Compressor"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
+    case EVoLumEffectFocus::PRE_NAM1: target = "NAM 1"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
+    case EVoLumEffectFocus::PRE_NAM2: target = "NAM 2"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
+    case EVoLumEffectFocus::DELAY: target = "Delay"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
+    case EVoLumEffectFocus::REVERB: target = "Reverb"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
+  }
+
+  WDL_String line;
+  line.SetFormatted(512, "%s  |  %s  |  Enter edit  |  %s", target, nav, action);
+
+  if (auto* pGfx = GetUI())
+    if (auto* hint = pGfx->GetControlWithTag(kCtrlTagVoLumKeyboardHint))
+      hint->As<VoLumKeyboardHintControl>()->SetHintText(line.Get());
+}
+
+int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
 {
   switch (mVolumFocusedEffect)
   {
+    case EVoLumEffectFocus::AMP:
+      return (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport) ? kSupportInputLevel : kInputLevel;
+    case EVoLumEffectFocus::COMP: return kPreCompAmount;
+    case EVoLumEffectFocus::PRE_NAM1: return kPreNam1Gain;
+    case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
+    case EVoLumEffectFocus::DELAY: return kDelayTime;
+    case EVoLumEffectFocus::REVERB: return kReverbMix;
+  }
+  return kNoParameter;
+}
+
+int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
+{
+  using namespace volum::keyboard;
+  const int remembered = mVolumLastKeyboardKnobByTarget[TargetIndex(mVolumFocusedEffect, mVolumDualAmpFocusedSupport)];
+  switch (mVolumFocusedEffect)
+  {
+    case EVoLumEffectFocus::AMP:
+      return GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport
+        ? RememberedOrFirst(kSupportAmpParams, remembered)
+        : (GetParam(kDualAmpActive)->Bool()
+          ? RememberedOrFirst(kMainAmpDualParams, remembered)
+          : RememberedOrFirst(kMainAmpMonoParams, remembered));
+    case EVoLumEffectFocus::COMP: return RememberedOrFirst(kCompParams, remembered);
+    case EVoLumEffectFocus::PRE_NAM1: return RememberedOrFirst(kPreNam1Params, remembered);
+    case EVoLumEffectFocus::PRE_NAM2: return RememberedOrFirst(kPreNam2Params, remembered);
+    case EVoLumEffectFocus::DELAY: return RememberedOrFirst(kDelayParams, remembered);
+    case EVoLumEffectFocus::REVERB:
+      return GetParam(kReverbMode)->Int() == volum::kVoLumReverbModeOktaverb
+        ? RememberedOrFirst(kOktaverbParams, remembered)
+        : RememberedOrFirst(kReverbParams, remembered);
+  }
+  return _DefaultVoLumKeyboardKnobForFocus();
+}
+
+void NeuralAmpModeler::_RememberVoLumKeyboardKnob(int paramIdx)
+{
+  const int target = volum::keyboard::TargetIndex(mVolumFocusedEffect, mVolumDualAmpFocusedSupport);
+  if (target >= 0 && target < static_cast<int>(mVolumLastKeyboardKnobByTarget.size()))
+    mVolumLastKeyboardKnobByTarget[target] = paramIdx;
+}
+
+bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int direction)
+{
+  using namespace volum::keyboard;
+  switch (mVolumFocusedEffect)
+  {
     case EVoLumEffectFocus::DELAY:
-      return SelectAdjacentFromList(this, kVoLumDelayKeyboardKnobParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kDelayParams, currentParamIdx, direction);
     case EVoLumEffectFocus::REVERB:
     {
       const int reverbMode = GetParam(kReverbMode)->Int();
       if (reverbMode == volum::kVoLumReverbModeOktaverb)
-        return SelectAdjacentFromList(this, kVoLumOktaverbKeyboardKnobParams, currentParamIdx, direction);
-      return SelectAdjacentFromList(this, kVoLumReverbKeyboardKnobParams, currentParamIdx, direction);
+        return SelectAdjacentFromList(this, kOktaverbParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kReverbParams, currentParamIdx, direction);
     }
     case EVoLumEffectFocus::AMP:
       if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
-        return SelectAdjacentFromList(this, kVoLumSupportAmpKeyboardKnobParams, currentParamIdx, direction);
-      return SelectAdjacentFromList(this, kVoLumAmpKeyboardKnobParams, currentParamIdx, direction);
+        return SelectAdjacentFromList(this, kSupportAmpParams, currentParamIdx, direction);
+      if (GetParam(kDualAmpActive)->Bool())
+        return SelectAdjacentFromList(this, kMainAmpDualParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kMainAmpMonoParams, currentParamIdx, direction);
     case EVoLumEffectFocus::COMP:
-      return SelectAdjacentFromList(this, kVoLumCompKeyboardKnobParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kCompParams, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM1:
-      return SelectAdjacentFromList(this, kVoLumPreNam1KeyboardKnobParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM2:
-      return SelectAdjacentFromList(this, kVoLumPreNam2KeyboardKnobParams, currentParamIdx, direction);
+      return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
   }
   return false;
 }
@@ -2592,6 +2799,7 @@ void NeuralAmpModeler::_SelectVoLumKnob(int paramIdx)
 {
   mVolumSelectedKnobParamIdx = paramIdx;
   mVolumSelectedKnobHintText.clear();
+  _RememberVoLumKeyboardKnob(paramIdx);
 
   if (auto* pGfx = GetUI())
   {

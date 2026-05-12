@@ -183,12 +183,16 @@ Settings persist across sessions for both standalone and VST3.
 ## Keyboard controls
 
 - With no knob selected: `Up/Down` switches amp, `Left/Right` switches channel (AMP view only)
-- Click a knob to select it for keyboard control
-- Selected knob: `Up/Down` adjusts, `Left/Right` selects the next knob
-- Step sizes adapt per parameter: delay time 5ms (1ms with Shift), mix/feedback 5% (1% with Shift), tone knobs 0.5 (0.1 with Shift)
-- Press `Enter` for exact numeric entry
-- Press `Delete` or `Backspace` to reset the selected knob to its default value
-- Press `Esc` to leave knob keyboard mode and return arrows to amp/channel navigation
+- `1` / `2` / `3` switches PRE / AMP / POST
+- `Tab` / `Shift+Tab` moves keyboard focus inside the current section; `Left/Right` also moves focus in PRE/POST
+- `Enter` edits the focused target; `Space` toggles it when it has an on/off state
+- `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward
+- `T` opens the tuner; `M` opens the metronome; `H` opens Settings
+- Selected knob: `Up/Down` adjusts, `Left/Right` selects another knob, `Shift` makes smaller steps
+- `Enter` exact value, `Delete` / `Backspace` reset, `Esc` leaves knob edit
+- Settings shows a short shortcut guide
+
+This is keyboard access for the main playing/editing workflow, not full screen-reader support.
 
 ## Tuner and metronome
 

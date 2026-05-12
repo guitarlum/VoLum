@@ -97,12 +97,16 @@ VoLum runs an always-on output safety stage at the very end of the chain (after 
 ## Keyboard Controls
 
 - With no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
-- Click a knob to select it for keyboard control.
-- Selected knob: `Up` / `Down` adjusts the value, `Left` / `Right` selects another knob.
-- Hold `Shift` for finer changes.
-- Press `Enter` for exact numeric entry.
-- Press `Delete` or `Backspace` to reset the selected knob.
-- Press `Esc` to leave knob keyboard mode.
+- `1` / `2` / `3` switches PRE / AMP / POST.
+- `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
+- `Enter` edits the focused target; `Space` toggles it when it has an on/off state.
+- `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.
+- `T` opens the tuner; `M` opens the metronome; `H` opens Settings.
+- Selected knob: `Up` / `Down` adjusts, `Left` / `Right` selects another knob, `Shift` makes smaller steps.
+- `Enter` exact value, `Delete` / `Backspace` reset, `Esc` leaves knob edit.
+- Settings shows a short shortcut guide.
+
+This covers the main playing/editing workflow. Full screen-reader support is not implemented yet.
 
 ## Settings
 
