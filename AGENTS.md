@@ -58,7 +58,7 @@ than reinvented. Two upstreams, two cadences:
    - The bundled main amps live in `rigs/` and PRE captures in
      `rigs/PrePedals/`; both must keep loading across submodule upgrades.
 
-2. **NeuralAmpModelerPlugin** (the iPlug2 plugin shell we forked from).
+2. **NeuralAmpModelerPlugin** (the upstream iPlug2 plugin shell VoLum started from).
    Available as the `upstream` remote pointing at
    `https://github.com/sdatkinson/NeuralAmpModelerPlugin.git` (push disabled).
    - Sync: `git fetch upstream main`, then
@@ -67,7 +67,7 @@ than reinvented. Two upstreams, two cadences:
      `chore/upstream-sync-YYYY-MM-DD` branch; never blanket-merge.
    - Tag the merge point in changelog so the next sync knows where to start.
 
-### Forked-from-upstream vs VoLum-only files
+### Upstream-Equivalent vs VoLum-Only Files
 
 Future syncs should focus diffs on the upstream-equivalent files; VoLum-only
 files almost never need upstream input.
