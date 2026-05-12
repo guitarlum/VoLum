@@ -2,113 +2,113 @@
 
 **Languages:** English | [Deutsch](user-guide.de.md)
 
-This guide explains the VoLum interface after installation. For download and setup steps, see the [main README](../README.md).
+This guide explains the VoLum 1.0 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
 
 ## Main View
 
-VoLum main view
+![VoLum main view](user-guide-main.png)
 
-1. **Amp browser:** choose one of the bundled amp models from the left sidebar.
-2. **Amp panel:** shows the currently selected amp. In Dual Amp mode it splits into MAIN and SUPPORT lanes.
-3. **Speaker and channel controls:** choose the cab/speaker flavor and the gain-stage/channel for the focused amp.
-4. **Knob row:** edit the currently focused amp, PRE pedal, or POST effect.
-5. **PRE | AMP | POST strip:** click a section to expand it. Only one section is expanded at a time.
-6. **Toolbar:** tuner, metronome, and settings live in the top-right area.
+1. **Amp browser:** choose one of the bundled amps.
+2. **Amp panel:** see the focused amp. In Dual Amp mode it splits into MAIN and SUPPORT.
+3. **Speaker and channel controls:** choose `AMP`, `G12`, `G65`, or `V30`, then pick the gain-stage channel.
+4. **Knob row:** edit the focused amp, PRE pedal, or POST effect.
+5. **PRE | AMP | POST strip:** open one section at a time.
+6. **Toolbar:** tuner, metronome, and settings live in the top-right corner.
 
-Most amp controls are saved per amp. When you return to an amp, VoLum restores its speaker, channel, knobs, PRE pedals, and Dual Amp setup.
+VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
-## Amp Notes
+## Choose An Amp
 
-VoLum includes a mix of vintage, modern, and boutique amp captures. These notes are short orientation hints, not strict rules.
+Use the left sidebar for the 15 bundled amps. Each amp has four speaker modes and its own number of gain-stage channels. VoLum loads models in the background, so returning to a previously loaded amp is quick.
 
-- **Orange ORS100 1972:** old picture-panel Orange voice with no master volume. Expect big, clean-to-loud power-amp character rather than modern preamp gain.
-- **Orange OD120 1975:** the Overdrive branch of the classic Orange circuit. It adds a master-volume gain structure, so it can push into more gain than the earlier picture-panel ORS100.
-- **Marshall JMP 2203 1976:** early master-volume Marshall and a transition-era ancestor of the JCM800 2203 sound.
-- **Marshall 2204 1982:** vertical-input 50W JCM800-era Marshall voice.
-- **Marshall JVM 210H:** modded to include the OD1 voice from the JVM 410.
-- **Lichtlaerm Prometheus:** KT88/EL34 power section with lots of headroom.
-- **Diezel Herbert Mk1:** late Mk1-era Herbert, close to the Mk2 feature set but with the older Mk1 sound.
-- **Soldano SLO100:** 2021-style SLO with the Deep/Depth control version.
-- **Sebago Texas Flood:** high-end 100W Steel String Singer-style amp with premium build options and transformer choices.
-- **THC Sunset:** boutique German Trainwreck-inspired amp.
+Short orientation:
 
-## Tuner And Metronome
+- **Vintage:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
+- **Modern/high gain:** Diezel Herbert, Soldano SLO100, Marshall JVM, H&K TriAmp.
+- **Boutique/character:** Ampete One, Bad Cat Mini Cat, Brunetti XL 2, Lichtlaerm Prometheus, Sebago Texas Flood, THC Sunset, Fryette Deliverance.
 
-VoLum tuner overlay
-
-Open the tuner from the top-right toolbar. While the tuner is open, VoLum mutes the output so you can tune silently. Click outside the tuner or press `Esc` to close it.
-
-VoLum metronome controls
-
-Open the metronome from the top-right toolbar. You can enable or disable it, set BPM with the `+` and `-` controls or by typing a value, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
-
-## Dual Amp
-
-VoLum Dual Amp view
-
-Dual Amp lets you combine the main amp with a support amp.
-
-1. Click the split-panel Dual Amp button in the amp panel.
-2. Click the SUPPORT side to choose a second amp.
-3. Click MAIN or SUPPORT to focus that lane. The speaker, channel, and knob row follow the focused lane.
-4. Use the lane pan knobs to place the two amps in the stereo field.
-
-When Dual Amp is active, the output meter shows separate left and right bars. MAIN and SUPPORT settings are stored with the current main amp, so each amp can have its own paired setup.
-
-VoLum compensates different NAM resampler latencies between MAIN and SUPPORT before the lanes are panned and summed. The `Ø` symbol in the upper-right of the SUPPORT amp flips its polarity against MAIN and is on by default for new Dual Amp setups; this can improve centered mono stacks for some capture pairs. If a centered dual-amp stack still sounds phasey, check that both lanes use the intended speaker/channel file and compare gate, EQ, IR, and output settings.
+Amp EQ and pedal EQ are extra tone-shaping controls. They do not need to match the physical knob positions used during profiling.
 
 ## PRE Section
 
-VoLum PRE section
+![VoLum PRE section](user-guide-pre.png)
 
-The PRE section runs before the amp. It contains a compressor and two assignable NAM pedal slots. Click PRE in the triptych strip to expand it, then click a card to focus its controls in the knob row.
+PRE runs before the amp. It contains a compressor and two assignable NAM pedal slots.
 
-Click a NAM pedal card while it is focused to open the capture chooser. Pedal captures are grouped by pedal type and sorted by gain inside each group.
+1. Click **PRE**.
+2. Click **COMP**, **NAM 1**, or **NAM 2** to focus a card.
+3. Use the knob row for that card.
+4. Click a focused NAM card again to choose a capture.
 
-Recommended starting points:
+Pedal captures are grouped by type and sorted from lower to higher gain. Good starting points:
 
-- **Clean or low-gain amps:** Nuke, Bender, Myth, and Mash.
-- **Clean to low-gain amps:** Revival Drive.
-- **Mid- to high-gain amps:** Minotaur Klon, TS, and Fatbee.
+- Clean or low-gain amps: Nuke, Bender, Myth, Mash.
+- Edge-of-breakup amps: Revival Drive.
+- Mid/high-gain amps: Klon, TS, TS+, Fatbee.
 
-The EQ controls in VoLum are not a display of the physical amp or pedal settings used during profiling. For the intended captured sound, you do not need to touch the amp EQ or pedal EQ. Use those EQ controls only when you want extra tone shaping after the profile.
+PRE settings are saved per amp.
 
-PRE settings are local to the current amp. This makes it possible to keep different compressor, pedal, and pedal-EQ choices per amp.
+## Dual Amp
+
+![VoLum Dual Amp view](user-guide-dual-amp.png)
+
+Dual Amp combines the main amp with a support amp.
+
+1. Open the AMP view.
+2. Click the split-panel **Dual Amp** button.
+3. Click the SUPPORT side to choose the second amp.
+4. Click MAIN or SUPPORT to focus a lane.
+5. Set speaker, channel, knobs, and pan for the focused lane.
+
+The support lane has a `Ø` polarity button. It is on by default for new Dual Amp setups because some centered amp stacks sum better that way. If a stack sounds thin or phasey, try toggling `Ø`, then check both lanes use the intended speaker and channel.
+
+VoLum aligns MAIN and SUPPORT NAM latency before panning and summing.
 
 ## POST Section
 
-VoLum POST section
+![VoLum POST section](user-guide-post.png)
 
-The POST section runs after the amp. It contains Delay and Reverb cards. Click POST in the triptych strip to expand it, then click a card to focus its controls in the knob row.
+POST runs after the amp. It contains Delay and Reverb cards.
 
-- **Delay:** Digital, Analog, and Reverse modes with Time, Feedback, Mix, Tone, and a mode-specific fifth knob (`Grit`, `Wear`, or `Bloom`). Ping-Pong alternates delay repeats between left and right (works from mono too); unavailable in Reverse. Factory defaults use **320 ms** Time for **Digital** and **Analog** (Reverse stays on its own longer default).
-- **Reverb:** Hall, Plate, and Oktaverb modes with Mix, Decay, Tone, and Pre-Delay. Oktaverb adds Intensity and a `HALO / SHIMMER / BLOOM` selector. Factory snapshots use **20%** Mix for Hall and Plate; each Oktaverb sub-mode starts at **30%** Mix with Intensity at **65%** (Halo), **70%** (Shimmer), and **75%** (Bloom); Decay/Tone/Pre-Delay stay at their per-voice defaults. Halo runs both octave-up and octave-down voices in the feedback loop at once for a dual pitch-vector wash that keeps real body, Shimmer builds pure octave-up feedback for a lush climbing tail, and Bloom fades the wet signal in slowly for pad-like swells. Each Oktaverb sub-mode remembers its own Mix/Decay/Tone/Pre-Delay/Intensity values and is level-managed to avoid clipping at its defaults.
+1. Click **POST**.
+2. Click **DELAY** or **REVERB**.
+3. Use the card button or spacebar to enable it.
+4. Edit the focused card in the knob row.
 
-The small LED on each card shows whether the effect is active. The bottom label shows the current mode or preset summary. POST settings (delay + reverb knob positions, modes, and active toggles) persist per main amp - switching amps swaps the POST scene the same way it swaps PRE. When you first visit an amp with no saved POST scene yet, it starts from the factory POST defaults; from then on, that amp remembers its own POST settings. Double-click any POST knob to restore that knob's default.
+**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog.
 
-Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb sub-mode clears the effect's internal tail so repeats and ambience from the previous mode do not leak into the new one.
+**Reverb** offers Hall, Plate, and Oktaverb. Hall and Plate cover classic ambience. Oktaverb adds `HALO`, `SHIMMER`, and `BLOOM` pitch-wash voices with an Intensity knob.
 
-The Reverb Mix knob is a true wet/dry equal-power crossfade: at 30-40% the reverb is musically present without dominating, at 100% the dry signal is meaningfully reduced. Mix changes are smoothed, so fast edits or automation stay clean instead of zippering. The Delay Mix knob is an additive blend (delay repeats sit on top of the dry signal), and Reverse Delay matches Digital and Analog so engaging Reverse no longer drops perceived volume.
+The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Double-click a POST knob to restore that knob's default.
 
-## Output Safety
+Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one.
 
-VoLum runs an always-on output safety stage at the very end of the chain (after Delay and Reverb). It does nothing on normal material, but if you stack a hot rig with heavy POST effects and crank the Output knob, peaks above roughly +3 dBFS are smoothly rolled toward a +6 dBFS ceiling so you cannot accidentally send a runaway signal to your speakers. When the stage catches a peak, the OUT meter turns red and the footer shows `Output safety active - lower output or wet mix` for a few seconds. If you see that warning often, lower Output, Reverb Mix, or Delay Mix - the safety stage is a backstop, not a creative limiter, and it should rarely engage during normal play. The plugin still relies on your audio interface gain and monitor level for absolute SPL safety.
+## Tuner And Metronome
+
+![VoLum tuner overlay](user-guide-tuner.png)
+
+Open the tuner from the toolbar. While it is open, VoLum mutes the output so you can tune silently. Click outside it or press `Esc` to close.
+
+![VoLum metronome controls](user-guide-metronome.png)
+
+Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` or direct entry, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
 
 ## Keyboard Controls
 
-- With no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
+- No knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
 - `Enter` edits the focused target; `Space` toggles it when it has an on/off state.
 - `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.
 - `T` opens the tuner; `M` opens the metronome; `H` opens Settings.
 - Selected knob: `Up` / `Down` adjusts, `Left` / `Right` selects another knob, `Shift` makes smaller steps.
-- `Enter` exact value, `Delete` / `Backspace` reset, `Esc` leaves knob edit.
-- Settings shows a short shortcut guide.
+- `Enter` enters an exact value, `Delete` / `Backspace` resets, `Esc` leaves knob edit.
 
-This covers the main playing/editing workflow. Full screen-reader support is not implemented yet.
+This covers the main playing and editing workflow. Full screen-reader support is not implemented yet.
 
-## Settings
+## Settings And Safety
+
+Open Settings with the top-right gear or `H`. The overlay includes the shortcut guide and global settings.
 
 VoLum stores user settings automatically:
 
@@ -116,3 +116,5 @@ VoLum stores user settings automatically:
 - **macOS:** `~/Library/Application Support/VoLum/volum-settings.json`
 
 The standalone app and VST3 plugin use the same VoLum settings location on each system.
+
+VoLum also runs an always-on final output safety stage after Delay and Reverb. Normal playing is unchanged. If a hot rig and heavy POST effects create runaway peaks, the OUT meter turns red and the footer shows `Output safety active - lower output or wet mix`. Lower Output, Delay Mix, or Reverb Mix if you see that often.

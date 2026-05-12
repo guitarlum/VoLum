@@ -9,7 +9,7 @@ This file is an attribution index. The authoritative license text for each compo
 - Upstream: https://github.com/sdatkinson/NeuralAmpModelerPlugin
 - License: MIT
 - Copyright: Steven Atkinson and contributors
-- Use in VoLum: original plugin codebase that VoLum forked and substantially extends.
+- Use in VoLum: original plugin shell that VoLum started from and substantially extends.
 
 ## NeuralAmpModelerCore
 

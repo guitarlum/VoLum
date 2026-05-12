@@ -4,218 +4,124 @@
 
 ![VoLum standalone UI](docs/user-guide-main.png)
 
-An open-source guitar amp collection plugin and standalone app built on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core. Ships 15 amp profiles with a custom UI for instant browsing and switching -- standalone app and VST3 plugin.
+VoLum is an open-source guitar amp collection for the stage, studio, and practice desk. It uses the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, but ships as its own focused app: 15 curated amps, built-in PRE pedals, Dual Amp, POST effects, tuner, metronome, and a fast dark UI for standalone use or VST3 hosts.
 
-For a walkthrough of the interface, Dual Amp, PRE pedals, POST effects, tuner, and metronome, see the [VoLum user guide](docs/user-guide.en.md).
+[Download VoLum](https://github.com/guitarlum/VoLum/releases) or jump to the [user guide](docs/user-guide.en.md).
 
-## Features
+## Why It Stands Out
 
-- **15 bundled amps** with 4 speaker modes and multiple gain stages each (~240 profiles total)
-- **Dark-theme UI** with sidebar amp browser, speaker buttons, channel stepper, and grouped knobs
-- **Delay effect** -- Digital, Analog, and Reverse modes with Time, Feedback, Mix, Tone, a mode-specific character knob, and Ping-Pong for Digital/Analog
-- **Reverb effect** -- Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, Pre-Delay, and Oktaverb Halo/Shimmer/Bloom sub-modes
-- **POST pedalboard view** -- click the POST strip to expand Delay and Reverb cards with procedural fractal art, live preset summaries, and bypass LEDs
-- **Built-in tuner** -- chromatic tuner overlay with stable cents display; mutes output while tuning
-- **Built-in metronome** -- configurable BPM, volume, and 1/4, 2/4, 3/4, 4/4, 6/8 modes
-- **Per-amp settings** -- knobs, toggles, speaker mode, and channel are saved per amp and restored on next launch
-- **Fast amp switching** -- models load on a background thread; switching back to a previously loaded amp is instant
-- **Keyboard shortcuts** -- Up/Down: switch amp; Left/Right: switch channel; click a knob for keyboard fine-tuning
-- **Standalone + VST3** -- same UI and features in both formats
+- **15 bundled amps, ready to play:** vintage, modern, and boutique captures with 4 speaker modes and multiple gain-stage channels each.
+- **Full rig workflow:** PRE compressor and NAM pedal slots, AMP controls, and POST Delay/Reverb live in one `PRE | AMP | POST` layout.
+- **Dual Amp:** blend a main amp with a support amp, pan both lanes, and flip support polarity when a stack needs it.
+- **POST effects with character:** Digital, Analog, and Reverse Delay plus Hall, Plate, and Oktaverb Reverb with Halo, Shimmer, and Bloom voices.
+- **Practice tools built in:** silent tuner and configurable metronome work in both standalone and VST3.
+- **Fast switching and recall:** amp models load in the background, and each amp remembers its speaker, channel, knobs, PRE, POST, and Dual Amp setup.
+- **Better keyboard control:** switch sections, move focus, edit knobs, toggle cards, open tools, and type exact values without reaching for the mouse.
+- **Output safety:** a final safety stage catches runaway peaks and non-finite samples before they leave the plugin.
 
 ## Download
 
 [![Build status](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)
 
-Get VoLum from **[Releases](https://github.com/guitarlum/VoLum/releases)**, or **[Actions → CI](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)** for the latest workflow artifacts.
+Use **[Releases](https://github.com/guitarlum/VoLum/releases)** for stable packages. Use **[Actions -> CI](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)** only for preview builds from the latest development state.
 
-Windows release signing is being set up through SignPath Foundation; see the [code signing policy](CODE_SIGNING.md).
+| Platform | Recommended asset | When to choose it |
+| --- | --- | --- |
+| Windows | `VoLum-vX.Y.Z-windows-setup.exe` | Easiest install: standalone app, VST3, and bundled rigs. |
+| Windows | `VoLum-vX.Y.Z-windows-portable.zip` | Portable or scripted setup. Keep `VoLum.vst3` and `VoLumRigs` together. |
+| macOS | `VoLum-vX.Y.Z-macos-installer.dmg` | Easiest install when available. Contains `VoLum Installer.pkg`. |
+| macOS | `VoLum-vX.Y.Z-macos-standalone.dmg` | Standalone app only. |
+| macOS | `VoLum-vX.Y.Z-macos-vst3.zip` | Manual VST3 install. VoLum is VST3, so it does not appear in Logic Pro. |
 
-**Windows**
+Releases may not include every asset type. Open the release page and pick the package that matches your system.
 
-- **`VoLum-vX.Y.Z-windows-setup.exe`** — **recommended:** one installer for standalone, VST3, and bundled rigs.
-- **`VoLum-vX.Y.Z-windows-portable.zip`** — **optional:** unpack anywhere; for portable or scripted setups.
+## Important Security Notice
 
-**macOS**
+VoLum release signing is still being set up. See the [code signing policy](CODE_SIGNING.md).
 
-- **`VoLum-vX.Y.Z-macos-installer.dmg`** (contains **`VoLum Installer.pkg`**) — **recommended** when this asset is listed: a normal step-by-step installer; pick **standalone app**, **VST3 plug-in**, or **both**; bundled rigs go to the right places without hand-copying folders (you may be asked for an administrator password for system-wide locations).
-- **`VoLum-vX.Y.Z-macos-standalone.dmg`** — **standalone app only:** drag `VoLum.app` into Applications — use this if you do not need the DAW plug-in.
-- **`VoLum-vX.Y.Z-macos-vst3.zip`** — **optional / advanced:** VST3 bundle plus `VoLumRigs` for **manual** install under your user `~/Library/Audio/Plug-Ins/VST3/`; choose this if you already know how plug-in folders work or you are automating installs.
-
-Releases do not always attach every file type; open the release and use the assets that match what you need.
-
-## Install
-
-### Windows (recommended)
-
-Run `VoLum-vX.Y.Z-windows-setup.exe`.
-
-It installs:
-
-- `VoLum.exe` in `C:\Program Files\VoLum`
-- `VoLum.vst3` in `C:\Program Files\Common Files\VST3`
-- `VoLumRigs` in the VoLum install folder
-
-The VST3 plugin finds the bundled rigs automatically through the installer registry entry, so no manual copying is needed.
-
-### Windows (portable)
-
-Use `VoLum-vX.Y.Z-windows-portable.zip` from a release, or the Windows artifact from **CI** (Actions).
-
-1. Unzip the portable package.
-2. You should see this layout:
-
-```
-VoLum_x64.exe                    (standalone app)
-VoLum.vst3/                      (VST3 plugin bundle)
-  Contents/x86_64-win/VoLum.vst3
-VoLumRigs/                       (amp profiles -- required!)
-  Ampete One/
-  Marshall JMP 2203 1976/
-  ...
-```
-
-3. **Standalone** — run `VoLum_x64.exe`. It finds `VoLumRigs` next to itself.
-4. **VST3 in a DAW** — copy the `VoLum.vst3` **folder** and the `VoLumRigs` **folder** into your VST3 scan path so they sit side by side:
-
-```
-C:\Program Files\Common Files\VST3\
-  VoLum.vst3/                    <-- the whole folder, not just the inner file
-  VoLumRigs/                     <-- amp profiles, right next to it
-```
-
-### macOS — installer `.pkg` (recommended)
-
-Open the **installer DMG** and double-click **`VoLum Installer.pkg`**. Follow the steps; you can enable **standalone app**, **VST3 plug-in**, and **bundled amp rigs** as separate options. This is the simplest path: no manual copying into hidden folders.
-
-Installed locations (system-wide; macOS may ask for an **administrator password**):
-
-- **`VoLum.vst3`** → `/Library/Audio/Plug-Ins/VST3/`
-- **Bundled amps** → `/Library/Application Support/VoLum/VoLumRigs/` (normal macOS **Application Support** layout — VoLum finds rigs here automatically)
-
-Unsigned builds: you may need **right-click → Open** on the `.pkg`, or **System Settings → Privacy & Security → Open Anyway**, the first time.
-
-### macOS — standalone app only
-
-Use this if you **do not** need the DAW plug-in.
-
-1. Download `VoLum-vX.Y.Z-macos-standalone.dmg`.
-2. Open it and drag `VoLum.app` into **Applications**.
-3. Launch `VoLum.app`.
-
-The app already contains the bundled rigs inside the bundle. If the build is unsigned, use **right-click → Open** the first time if macOS blocks it.
-
-### macOS — VST3 zip (advanced / manual)
-
-Use **`VoLum-vX.Y.Z-macos-vst3.zip`** when you are **not** using the installer `.pkg` — for example if no installer DMG is attached to the release, or you prefer to place files yourself.
-
-VoLum is a **VST3** plug-in. It does **not** appear in **Logic Pro** (Logic uses Audio Units, not VST3). Use a DAW that supports VST3 on Mac, such as **REAPER**, **Ableton Live**, **Cubase**, **Studio One**, or **Bitwig**.
-
-**You need two things in the same folder:** the plug-in bundle (`VoLum.vst3`) **and** the amp profiles folder (`VoLumRigs`). If you copy only `VoLum.vst3`, the plug-in may open but the bundled amps will not load correctly.
-
-1. Download `VoLum-vX.Y.Z-macos-vst3.zip` and double-click it to unzip. You should see **`VoLum.vst3`** (a package/bundle) and **`VoLumRigs`** (a folder of amp names).
-2. Open your Mac’s user plug-in folder in Finder:
-   - In the menu bar: **Go → Go to Folder…** (shortcut: **⇧⌘G** — hold **Shift**, **Command**, and **G**)
-   - Paste: `~/Library/Audio/Plug-Ins/VST3`
-   - Press **Return**.  
-   **Why not browse there by hand?** The **Library** folder inside your home folder is **hidden** in Finder by default, so you usually will not see it next to Desktop or Documents. You don’t need to: **Go to Folder** jumps straight to the path above. (On some macOS versions, **Go** shows **Library** while you hold **Option (⌥)** — the key left of Command, not Command. If **Library** doesn’t appear, **Go to Folder** above still works.)  
-   If that folder does not exist yet, create it: **File → New Folder** and name the nested folders `Audio`, `Plug-Ins`, `VST3` as needed, or let your DAW create the path once.
-3. Drag **both** `VoLum.vst3` and `VoLumRigs` into that `VST3` folder so they sit **next to each other** (same level, not nested inside one another):
-
-```
-~/Library/Audio/Plug-Ins/VST3/
-  VoLum.vst3/          ← the whole bundle (icon may look like a single file)
-  VoLumRigs/           ← folder with amp subfolders and .nam files
-```
-
-4. Open your DAW, open its **plug-in preferences**, and run **Rescan** (or restart the DAW). Then add VoLum on a track like any other effect (often **FX** or **Insert**).
-
-**First run / security:** macOS builds may be unsigned. If the plug-in does not show up after a rescan, remove quarantine in Terminal (copy-paste, then press Return):
+- **Windows:** SmartScreen may warn that the app is from an unknown publisher. If you trust the build source, choose **More info -> Run anyway**.
+- **macOS:** Gatekeeper may block unsigned or non-notarized builds. Use **right-click -> Open** on the app or installer, or **System Settings -> Privacy & Security -> Open Anyway**.
+- **macOS VST3 zip:** if your DAW still hides the plugin after a rescan, remove quarantine:
 
 ```bash
 xattr -cr ~/Library/Audio/Plug-Ins/VST3/VoLum.vst3
 ```
 
-Then rescan plug-ins again.
+Preview builds from CI are development artifacts and should be treated as unsigned test builds.
 
-**Example (REAPER):** **REAPER → Settings/Preferences → Plug-ins → VST** → confirm the VST3 path includes `~/Library/Audio/Plug-Ins/VST3` → **Re-scan**. Insert **FX** on a track and search for **VoLum** under VST3.
+## Quick Install
 
-### macOS preview builds
+### Windows Installer
 
-If you are installing from **CI** artifacts instead of a tagged release:
+Run `VoLum-vX.Y.Z-windows-setup.exe`. It installs:
 
-1. Open **Actions → CI**, pick the latest green run, and download **VoLum-mac** (and **VoLum-win** on Windows if needed).
-2. Prefer **`*-macos-installer.dmg`** (**`VoLum Installer.pkg`**) when it is included; otherwise use **`*-macos-standalone.dmg`** for the app and **`*-macos-vst3.zip`** for the manual plug-in install.
-3. Follow the matching sections above (**installer**, **standalone only**, or **VST3 zip**).
+- `VoLum.exe` to `C:\Program Files\VoLum`
+- `VoLum.vst3` to `C:\Program Files\Common Files\VST3`
+- `VoLumRigs` to the VoLum install folder
 
-## Bundled amps
+The VST3 finds the bundled rigs automatically.
 
+### Windows Portable
 
-| Amp                     | Channels |
-| ----------------------- | -------- |
-| Ampete One              | 4        |
-| Bad Cat mini Cat        | 3        |
-| Brunetti XL 2           | 3        |
-| Diezel Herbert Mk1      | 4        |
-| Fryette Deliverance 120 | 2        |
-| H&K TriAmp Mk2          | 6        |
-| Lichtlaerm Prometheus   | 3        |
-| Marshall 2204 1982      | 6        |
-| Marshall JMP 2203 1976  | 6        |
-| Marshall JVM 210H OD1   | 6        |
-| Orange OD120 1975       | 5        |
-| Orange ORS100 1972      | 2        |
-| Sebago Texas Flood      | 2        |
-| Soldano SLO100          | 3        |
-| THC Sunset              | 5        |
+Unzip `VoLum-vX.Y.Z-windows-portable.zip`. For standalone, run `VoLum_x64.exe`. For VST3, copy both folders into your VST3 scan path:
 
+```text
+C:\Program Files\Common Files\VST3\
+  VoLum.vst3\
+  VoLumRigs\
+```
 
-Each amp has 4 speaker modes (AMP direct, G12, G65, V30) and a number of gain-stage channels.
+### macOS Installer
 
-## Settings
+Open `VoLum-vX.Y.Z-macos-installer.dmg`, then run `VoLum Installer.pkg`. The installer can place the standalone app, VST3, and bundled rigs for you.
 
-Your per-amp knob, toggle, speaker, and channel settings are stored automatically:
+### macOS Standalone
 
-- **Windows:** `%LOCALAPPDATA%\VoLum\volum-settings.json`
-- **macOS:** `~/Library/Application Support/VoLum/volum-settings.json`
+Open `VoLum-vX.Y.Z-macos-standalone.dmg`, drag `VoLum.app` to **Applications**, then launch it. The app includes the bundled rigs.
 
-Settings persist across sessions for both standalone and VST3.
+### macOS VST3 Zip
 
-## Keyboard controls
+Unzip `VoLum-vX.Y.Z-macos-vst3.zip`, then place both `VoLum.vst3` and `VoLumRigs` in your VST3 folder:
 
-- With no knob selected: `Up/Down` switches amp, `Left/Right` switches channel (AMP view only)
-- `1` / `2` / `3` switches PRE / AMP / POST
-- `Tab` / `Shift+Tab` moves keyboard focus inside the current section; `Left/Right` also moves focus in PRE/POST
-- `Enter` edits the focused target; `Space` toggles it when it has an on/off state
-- `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward
-- `T` opens the tuner; `M` opens the metronome; `H` opens Settings
-- Selected knob: `Up/Down` adjusts, `Left/Right` selects another knob, `Shift` makes smaller steps
-- `Enter` exact value, `Delete` / `Backspace` reset, `Esc` leaves knob edit
-- Settings shows a short shortcut guide
+```text
+~/Library/Audio/Plug-Ins/VST3/
+  VoLum.vst3/
+  VoLumRigs/
+```
 
-This is keyboard access for the main playing/editing workflow, not full screen-reader support.
+Rescan plugins in your DAW. Use a VST3-capable host such as REAPER, Ableton Live, Cubase, Studio One, or Bitwig.
 
-## Tuner and metronome
+## Bundled Amps
 
-Use the tuner and metronome icons in the top-right toolbar, left of Settings.
+| Amp | Channels |
+| --- | --- |
+| Ampete One | 4 |
+| Bad Cat Mini Cat | 3 |
+| Brunetti XL 2 | 3 |
+| Diezel Herbert Mk1 | 4 |
+| Fryette Deliverance 120 | 2 |
+| H&K TriAmp Mk2 | 6 |
+| Lichtlaerm Prometheus | 3 |
+| Marshall 2204 1982 | 6 |
+| Marshall JMP 2203 1976 | 6 |
+| Marshall JVM 210H OD1 | 6 |
+| Orange OD120 1975 | 5 |
+| Orange ORS100 1972 | 2 |
+| Sebago Texas Flood | 2 |
+| Soldano SLO100 | 3 |
+| THC Sunset | 5 |
 
-- **Tuner:** opens a chromatic tuner. While it is open, VoLum mutes outgoing audio so you can tune silently. Click outside the tuner or press `Esc` to close it.
-- **Metronome:** click the metronome icon to open its controls. Enable/disable it, set BPM with the `+`/`-` buttons or by clicking the BPM value and typing, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
+Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
 
-## Delay and Reverb
+## Learn More
 
-Click the **POST** strip to expand VoLum's pedalboard-style post effects.
-
-- **Delay:** Digital, Analog, and Reverse modes with Time, Feedback, Mix, Tone, and `Grit` / `Wear` / `Bloom`. Ping-Pong is a stereo toggle for Digital and Analog; switching modes clears old delay tails so they do not bleed into the next mode.
-- **Reverb:** Hall, Plate, and Oktaverb modes with Decay, Tone, Mix, and Pre-Delay. Oktaverb adds Intensity plus `HALO`, `SHIMMER`, and `BLOOM` sub-modes. Reverb mode and Oktaverb sub-mode switches reset the tail, and Mix changes are smoothed to avoid zipper noise during fast edits.
-
-## Build from source
-
-See the [developer guide](NeuralAmpModeler/README.md).
+- [User guide](docs/user-guide.en.md): interface, Dual Amp, PRE pedals, POST effects, tuner, metronome, keyboard controls, and settings.
+- [Developer guide](NeuralAmpModeler/README.md): build, test, packaging, and architecture notes.
+- Settings are stored locally at `%LOCALAPPDATA%\VoLum\volum-settings.json` on Windows and `~/Library/Application Support/VoLum/volum-settings.json` on macOS.
 
 ## Credits
 
 - [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) by Steven Atkinson
-- [NAM Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) -- upstream fork base
-- [iPlug2](https://iplug2.github.io) -- plugin framework
+- [NeuralAmpModelerPlugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin), the original plugin shell VoLum grew from
+- [iPlug2](https://iplug2.github.io), the plugin framework
 - Amp profiles by Lum
-

@@ -2,45 +2,51 @@
 
 **Sprachen:** [English](user-guide.en.md) | Deutsch
 
-Dieses Handbuch erklärt die VoLum-Oberfläche nach der Installation. Download und Einrichtung stehen in der [Haupt-README](../README.de.md).
+Dieses Handbuch erklärt die VoLum-1.0-Oberfläche nach der Installation. Downloads, Hinweise zu unsignierten Builds und Installationspfade stehen in der [Haupt-README](../README.de.md).
 
 ## Hauptansicht
 
 ![VoLum Hauptansicht](user-guide-main.png)
 
-1. **Amp-Browser:** wähle einen der mitgelieferten Amp-Modelle in der linken Seitenleiste.
-2. **Amp-Panel:** zeigt den aktuell gewählten Amp. Im Dual-Amp-Modus teilt es sich in MAIN- und SUPPORT-Spur.
-3. **Speaker- und Channel-Steuerung:** wähle Cab/Speaker-Variante und Gain-Stufe/Kanal für den fokussierten Amp.
-4. **Reglerzeile:** bearbeitet den aktuell fokussierten Amp, das PRE-Pedal oder den POST-Effekt.
-5. **PRE | AMP | POST-Leiste:** klick auf einen Bereich, um ihn auszuklappen. Es ist immer nur ein Bereich geöffnet.
+1. **Amp-Browser:** wähle einen der mitgelieferten Amps.
+2. **Amp-Panel:** zeigt den fokussierten Amp. Im Dual-Amp-Modus teilt es sich in MAIN und SUPPORT.
+3. **Speaker- und Channel-Steuerung:** wähle `AMP`, `G12`, `G65` oder `V30`, dann den Gain-Stage-Kanal.
+4. **Reglerzeile:** bearbeitet den fokussierten Amp, das PRE-Pedal oder den POST-Effekt.
+5. **PRE | AMP | POST-Leiste:** öffnet immer genau einen Bereich.
 6. **Toolbar:** Tuner, Metronom und Einstellungen sitzen oben rechts.
 
-Die meisten Amp-Regler werden pro Amp gespeichert. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale und Dual-Amp-Setup wieder her.
+VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual Amp wieder her.
 
-## Amp-Notizen
+## Amp Wählen
 
-VoLum enthält eine Mischung aus Vintage-, modernen und Boutique-Amp-Captures. Diese Notizen sind kurze Orientierungshilfen, keine festen Regeln.
+Die linke Seitenleiste enthält die 15 mitgelieferten Amps. Jeder Amp hat vier Speaker-Modi und eine eigene Anzahl an Gain-Stage-Kanälen. VoLum lädt Modelle im Hintergrund, deshalb ist das Zurückwechseln zu einem bereits geladenen Amp schnell.
 
-- **Orange ORS100 1972:** alter Picture-Panel-Orange-Sound ohne Master Volume. Erwarte großen, clean-bis-lauten Power-Amp-Charakter statt moderner Preamp-Zerre.
-- **Orange OD120 1975:** die Overdrive-Linie der klassischen Orange-Schaltung. Sie ergänzt eine Master-Volume-Gain-Struktur und kann dadurch mehr Gain liefern als der frühere Picture-Panel-ORS100.
-- **Marshall JMP 2203 1976:** früher Master-Volume-Marshall und Übergangsmodell in Richtung JCM800-2203-Sound.
-- **Marshall 2204 1982:** Vertical-Input-50W-Marshall aus der JCM800-Ära.
-- **Marshall JVM 210H:** modifiziert mit der OD1-Voice aus dem JVM 410.
-- **Lichtlaerm Prometheus:** KT88/EL34-Endstufe mit viel Headroom.
-- **Diezel Herbert Mk1:** später Mk1-Herbert, nahe am Mk2-Feature-Set, aber mit älterem Mk1-Sound.
-- **Soldano SLO100:** SLO im 2021-Stil mit Deep/Depth-Control-Version.
-- **Sebago Texas Flood:** High-End-100W-Steel-String-Singer-inspirierter Amp mit Premium-Optionen und Transformer-Auswahl.
-- **THC Sunset:** deutscher Boutique-Amp mit Trainwreck-inspirierter Richtung.
+Kurze Orientierung:
 
-## Tuner Und Metronom
+- **Vintage:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
+- **Modern/High Gain:** Diezel Herbert, Soldano SLO100, Marshall JVM, H&K TriAmp.
+- **Boutique/Charakter:** Ampete One, Bad Cat Mini Cat, Brunetti XL 2, Lichtlaerm Prometheus, Sebago Texas Flood, THC Sunset, Fryette Deliverance.
 
-![VoLum Tuner-Overlay](user-guide-tuner.png)
+Amp-EQ und Pedal-EQ sind zusätzliche Klangregler. Sie müssen nicht den physischen Reglerstellungen entsprechen, mit denen das Profil aufgenommen wurde.
 
-Öffne den Tuner über die Toolbar oben rechts. Solange der Tuner geöffnet ist, schaltet VoLum den Ausgang stumm, damit du lautlos stimmen kannst. Klick außerhalb des Tuners oder drücke `Esc`, um ihn zu schließen.
+## PRE-Bereich
 
-![VoLum Metronom-Steuerung](user-guide-metronome.png)
+![VoLum PRE-Bereich](user-guide-pre.png)
 
-Öffne das Metronom über die Toolbar oben rechts. Du kannst es ein- oder ausschalten, BPM mit `+` und `-` oder per direkter Eingabe setzen, die Lautstärke ändern und `1/4`, `2/4`, `3/4`, `4/4` oder `6/8` wählen.
+PRE liegt vor dem Amp. Der Bereich enthält einen Kompressor und zwei frei belegbare NAM-Pedal-Slots.
+
+1. Klick auf **PRE**.
+2. Klick auf **COMP**, **NAM 1** oder **NAM 2**, um eine Karte zu fokussieren.
+3. Nutze die Reglerzeile für diese Karte.
+4. Klick eine fokussierte NAM-Karte erneut an, um ein Capture zu wählen.
+
+Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Gute Startpunkte:
+
+- Clean- oder Low-Gain-Amps: Nuke, Bender, Myth, Mash.
+- Edge-of-Breakup-Amps: Revival Drive.
+- Mid-/High-Gain-Amps: Klon, TS, TS+, Fatbee.
+
+PRE-Einstellungen werden pro Amp gespeichert.
 
 ## Dual Amp
 
@@ -48,51 +54,44 @@ VoLum enthält eine Mischung aus Vintage-, modernen und Boutique-Amp-Captures. D
 
 Dual Amp kombiniert den Haupt-Amp mit einem Support-Amp.
 
-1. Klick auf die geteilte Dual-Amp-Schaltfläche im Amp-Panel.
-2. Klick auf die SUPPORT-Seite, um einen zweiten Amp zu wählen.
-3. Klick auf MAIN oder SUPPORT, um diese Spur zu fokussieren. Speaker, Channel und Reglerzeile folgen der fokussierten Spur.
-4. Nutze die Pan-Regler der Spuren, um die beiden Amps im Stereobild zu platzieren.
+1. Öffne die AMP-Ansicht.
+2. Klick auf die geteilte **Dual Amp**-Schaltfläche.
+3. Klick auf die SUPPORT-Seite, um den zweiten Amp zu wählen.
+4. Klick MAIN oder SUPPORT, um eine Spur zu fokussieren.
+5. Stelle Speaker, Kanal, Regler und Pan für die fokussierte Spur ein.
 
-Wenn Dual Amp aktiv ist, zeigt die OUT-Anzeige getrennte linke und rechte Balken. MAIN- und SUPPORT-Einstellungen werden mit dem aktuellen Haupt-Amp gespeichert, sodass jeder Amp sein eigenes Pairing haben kann.
+Die Support-Spur hat einen `Ø`-Polaritätsschalter. Er ist bei neuen Dual-Amp-Setups standardmäßig aktiv, weil manche mittigen Amp-Stacks so besser summieren. Wenn ein Stack dünn oder phasig klingt, schalte `Ø` um und prüfe danach Speaker und Kanal beider Spuren.
 
-VoLum gleicht unterschiedliche NAM-Resampler-Latenzen zwischen MAIN und SUPPORT aus, bevor die Spuren gepannt und summiert werden. Das `Ø`-Symbol oben rechts am SUPPORT-Amp invertiert dessen Polarität gegenüber MAIN und ist bei neuen Dual-Amp-Setups standardmäßig aktiv; das kann mittige Mono-Stacks bei manchen Capture-Paaren verbessern. Wenn ein mittig gestackter Dual-Amp-Sound trotzdem phasig klingt, prüfe, ob beide Spuren die gewünschte Speaker-/Channel-Datei nutzen, und vergleiche Gate-, EQ-, IR- und Output-Einstellungen.
-
-## PRE-Bereich
-
-![VoLum PRE-Bereich](user-guide-pre.png)
-
-Der PRE-Bereich liegt vor dem Amp. Er enthält einen Kompressor und zwei frei belegbare NAM-Pedal-Slots. Klick auf PRE in der Triptych-Leiste, um den Bereich auszuklappen, und dann auf eine Karte, um ihre Regler in der Reglerzeile zu fokussieren.
-
-Klick auf eine NAM-Pedalkarte, während sie fokussiert ist, um die Capture-Auswahl zu öffnen. Pedal-Captures sind nach Pedaltyp gruppiert und innerhalb jeder Gruppe nach Gain sortiert.
-
-Empfohlene Startpunkte:
-
-- **Clean- oder Low-Gain-Amps:** Nuke, Bender, Myth und Mash.
-- **Clean- bis Low-Gain-Amps:** Revival Drive.
-- **Mid- bis High-Gain-Amps:** Minotaur Klon, TS und Fatbee.
-
-Die EQ-Regler in VoLum zeigen nicht die echten Amp- oder Pedal-Einstellungen an, mit denen das Profil aufgenommen wurde. Für den beabsichtigten Capture-Sound musst du Amp-EQ und Pedal-EQ nicht anfassen. Nutze diese EQs nur, wenn du nach dem Profil zusätzlich formen möchtest.
-
-PRE-Einstellungen sind lokal für den aktuellen Amp. So kann jeder Amp eigene Compressor-, Pedal- und Pedal-EQ-Einstellungen behalten.
+VoLum gleicht MAIN- und SUPPORT-NAM-Latenzen aus, bevor die Spuren gepannt und summiert werden.
 
 ## POST-Bereich
 
 ![VoLum POST-Bereich](user-guide-post.png)
 
-Der POST-Bereich liegt hinter dem Amp. Er enthält Delay- und Reverb-Karten. Klick auf POST in der Triptych-Leiste, um den Bereich auszuklappen, und dann auf eine Karte, um ihre Regler in der Reglerzeile zu fokussieren.
+POST liegt hinter dem Amp. Der Bereich enthält Delay- und Reverb-Karten.
 
-- **Delay:** Digital-, Analog- und Reverse-Modus mit Time, Feedback, Mix, Tone und einem modusspezifischen fünften Regler (`Grit`, `Wear` oder `Bloom`). Ping-Pong verteilt die Delay-Wiederholungen zwischen links und rechts (funktioniert auch bei Mono); im Reverse-Modus ausgeblendet. Werkseinstellungen: **320 ms** Time für **Digital** und **Analog** (Reverse behält seinen längeren eigenen Default).
-- **Reverb:** Hall-, Plate- und Oktaverb-Modus mit Mix, Decay, Tone und Pre-Delay. Oktaverb ergänzt Intensity und einen `HALO / SHIMMER / BLOOM`-Submode-Schalter. Werk-Snapshots: **20 %** Mix für Hall und Plate; jeder Oktaverb-Submode startet bei **30 %** Mix mit Intensity **65 %** (Halo), **70 %** (Shimmer), **75 %** (Bloom); Decay/Tone/Pre-Delay bleiben je Stimme wie zuvor. Halo speist gleichzeitig Oktave-aufwärts- und Oktave-abwärts-Stimmen ins Feedback und liefert so eine dichte Dual-Pitch-Wand mit echtem Körper, Shimmer baut reines Oktave-aufwärts-Feedback für einen üppigen, kletternden Tail auf, und Bloom blendet den Wet-Tail langsam für Pad-artige Swells ein. Jeder Oktaverb-Submode merkt sich eigene Werte für Mix/Decay/Tone/Pre-Delay/Intensity und wird im Pegel so geführt, dass die Defaults nicht clippen.
+1. Klick auf **POST**.
+2. Klick auf **DELAY** oder **REVERB**.
+3. Nutze den Karten-Button oder die Leertaste zum Ein- und Ausschalten.
+4. Bearbeite die fokussierte Karte in der Reglerzeile.
 
-Die kleine LED auf jeder Karte zeigt, ob der Effekt aktiv ist. Das Label unten zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen (Delay- und Reverb-Knöpfe, Modi, Aktiv-Schalter) werden pro Haupt-Amp gespeichert - beim Amp-Wechsel wechselt die POST-Szene wie auch die PRE-Szene. Wenn du erstmals zu einem Amp ohne gespeicherte POST-Szene wechselst, startet er mit den POST-Werkseinstellungen; danach merkt sich dieser Amp seine eigenen POST-Einstellungen. Per Doppelklick auf einen POST-Regler stellst du dessen Default wieder her.
+**Delay** bietet Digital, Analog und Reverse. Die Regler sind Time, Feedback, Mix, Tone und ein modusspezifischer Charakterregler: `Grit`, `Wear` oder `Bloom`. Ping-Pong gibt es für Digital und Analog.
 
-Beim Wechsel von Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Submode wird der interne Tail des Effekts gelöscht, damit Wiederholungen und Ambience aus dem vorherigen Modus nicht in den neuen Modus bluten.
+**Reverb** bietet Hall, Plate und Oktaverb. Hall und Plate liefern klassische Räume. Oktaverb ergänzt die Pitch-Wash-Stimmen `HALO`, `SHIMMER` und `BLOOM` mit Intensity-Regler.
 
-Der Reverb-Mix-Knopf ist ein echter Wet/Dry-Crossfade mit Equal-Power-Kurve: bei 30-40 % ist das Reverb musikalisch präsent ohne zu dominieren, bei 100 % wird das Dry-Signal deutlich abgesenkt. Mix-Änderungen werden geglättet, damit schnelle Bewegungen oder Automation sauber bleiben und nicht zippern. Der Delay-Mix-Knopf ist additiv (Repeats sitzen auf dem Dry-Signal), und Reverse-Delay verhält sich nun wie Digital/Analog - der Lautstärkesprung beim Aktivieren von Reverse ist Geschichte.
+Die LED auf jeder Karte zeigt, ob sie aktiv ist. Das Label zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen werden pro Amp gespeichert, genau wie PRE. Ein Doppelklick auf einen POST-Regler stellt dessen Default wieder her.
 
-## Ausgangs-Schutz
+Beim Wechsel von Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Stimme wird der alte Tail gelöscht, damit Wiederholungen und Raum aus dem vorherigen Modus nicht in den neuen Modus bluten.
 
-VoLum besitzt am Ende der Signalkette (hinter Delay und Reverb) eine permanent aktive Ausgangs-Schutzstufe. Bei normalem Material macht sie nichts, aber wenn du ein heißes Rig mit dichten POST-Effekten und stark aufgedrehtem Output-Regler kombinierst, werden Spitzen oberhalb von etwa +3 dBFS sanft in Richtung einer +6-dBFS-Decke gerollt - so kommt kein durchgegangenes Signal versehentlich an deine Lautsprecher. Wenn die Schutzstufe eine Spitze abfängt, wird das OUT-Meter rot und der Footer zeigt einige Sekunden lang `Output safety active - lower output or wet mix`. Siehst du diese Warnung häufig, dreh Output, Reverb Mix oder Delay Mix zurück - die Schutzstufe ist ein Sicherheitsnetz, kein kreativer Limiter, und sollte beim normalen Spiel selten ansprechen. Für die absolute Lautstärkesicherheit sind weiterhin dein Audiointerface-Gain und dein Monitor-Pegel verantwortlich.
+## Tuner Und Metronom
+
+![VoLum Tuner-Overlay](user-guide-tuner.png)
+
+Öffne den Tuner über die Toolbar. Solange er geöffnet ist, schaltet VoLum den Ausgang stumm, damit du lautlos stimmen kannst. Klick außerhalb des Fensters oder drücke `Esc`, um ihn zu schließen.
+
+![VoLum Metronom-Steuerung](user-guide-metronome.png)
+
+Öffne das Metronom über die Toolbar. Du kannst es einschalten, BPM mit `+` / `-` oder direkter Eingabe setzen, die Lautstärke ändern und `1/4`, `2/4`, `3/4`, `4/4` oder `6/8` wählen.
 
 ## Tastatur
 
@@ -103,12 +102,13 @@ VoLum besitzt am Ende der Signalkette (hinter Delay und Reverb) eine permanent a
 - `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts.
 - `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet Einstellungen.
 - Gewählter Regler: `Hoch` / `Runter` ändert den Wert, `Links` / `Rechts` wählt einen anderen Regler, `Umschalt` macht kleinere Schritte.
-- `Enter` direkte Eingabe, `Entf` / `Rücktaste` Reset, `Esc` beendet Reglerbearbeitung.
-- In den Einstellungen steht eine kurze Tastaturübersicht.
+- `Enter` gibt einen exakten Wert ein, `Entf` / `Rücktaste` setzt zurück, `Esc` beendet die Reglerbearbeitung.
 
 Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screenreader-Unterstützung gibt es noch nicht.
 
-## Einstellungen
+## Einstellungen Und Sicherheit
+
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`. Das Overlay enthält auch die Tastaturübersicht und globale Einstellungen.
 
 VoLum speichert Benutzereinstellungen automatisch:
 
@@ -116,3 +116,5 @@ VoLum speichert Benutzereinstellungen automatisch:
 - **macOS:** `~/Library/Application Support/VoLum/volum-settings.json`
 
 Standalone-App und VST3-Plugin verwenden auf jedem System denselben VoLum-Einstellungsort.
+
+VoLum besitzt außerdem eine immer aktive Ausgangs-Schutzstufe nach Delay und Reverb. Normales Spielen bleibt unverändert. Wenn ein heißes Rig und starke POST-Effekte durchgehende Peaks erzeugen, wird das OUT-Meter rot und der Footer zeigt `Output safety active - lower output or wet mix`. Drehe Output, Delay Mix oder Reverb Mix zurück, wenn du das oft siehst.
