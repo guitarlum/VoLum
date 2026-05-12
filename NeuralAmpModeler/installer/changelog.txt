@@ -199,3 +199,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/11/2026 - VoLum (internal): Dual-amp scratch buffers now assert capacity-stable in ProcessBlock; documented upstream-sync workflow in AGENTS.md so NAM core / NAM Player improvements stay cherry-pickable.
 05/11/2026 - VoLum (internal): Dropped orphaned VST2 build targets (Windows vcxproj+filters+user, macOS VST2 scheme, VST2-Info.plist) -- VoLum has never shipped VST2 and Steinberg deprecated the SDK; partial cherry-pick of upstream NAM Player commit bfc04e9. macOS .xcodeproj VST2 target entries deferred to 1.1 (need a macOS verification pass).
 05/12/2026 - VoLum: Keyboard access now has PRE/AMP/POST section shortcuts, Tab target focus, Enter-to-edit, Space toggles, cab cycling, Tuner/Metronome/Settings keys, and a compact Settings shortcut guide.
+
+05/12/2026 - v1.0.0 VoLum release. See GitHub release notes for included changes.
