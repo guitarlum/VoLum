@@ -1,6 +1,6 @@
-# Contributing to the Neural Amp Modeler Plugin
+# Contributing to VoLum
 
-> **VoLum fork** ([guitarlum/VoLum](https://github.com/guitarlum/VoLum)): this document still describes **upstream NAM** (tests, AU, issue links). For VoLum-specific behavior (curated rigs, per-amp JSON persistence, Windows-focused build), use the root [README.md](README.md) and [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md). VoLum ships Windows **standalone + VST3** with `scripts/run-tests-win.ps1` for Release **x64** tests.
+> **VoLum** ([guitarlum/VoLum](https://github.com/guitarlum/VoLum)): some older guidance below still comes from the upstream NAM plugin shell. For current VoLum behavior (curated rigs, PRE/POST effects, per-amp JSON persistence, and packaging), use the root [README.md](README.md) and [NeuralAmpModeler/README.md](NeuralAmpModeler/README.md). VoLum ships Windows/macOS **standalone + VST3** builds and uses `NeuralAmpModeler/scripts/run-tests-win.ps1` for Release **x64** Windows tests.
 
 Thanks for your interest in the project! Here are a few quick tips to make sure that your PR will go smoothly:
 
@@ -18,7 +18,7 @@ If you'd like to work on an [existing Issue](https://github.com/sdatkinson/Neura
 I would like to ask that you please try to give me a timeline for your work--I'd hate to have you duplicate work if I know that I'm going to e.g. get to it today and beat you to the punch.
 
 ## Testing
-The **VoLum fork** includes a **doctest** suite (`NeuralAmpModeler-Tests`) that runs on Windows and macOS CI. Run `NeuralAmpModeler/scripts/run-tests-win.ps1` on Windows, or `NeuralAmpModeler/scripts/run-tests-mac.sh` on macOS, before landing C++/DSP/UI changes.
+VoLum includes a **doctest** suite (`NeuralAmpModeler-Tests`) that runs on Windows and macOS CI. Run `NeuralAmpModeler/scripts/run-tests-win.ps1` on Windows, or `NeuralAmpModeler/scripts/run-tests-mac.sh` on macOS, before landing C++/DSP/UI changes.
 
 Use the test map in `NeuralAmpModeler/README.md` when deciding what to update. In short: DSP changes need focused doctests, parameter/state changes need `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, or `test_volum_chunk_codec.cpp`, main amp `.nam` changes need `test_nam_rigs.cpp`, and PRE capture `.nam` changes under `rigs/PrePedals/` need discovery, load, and package coverage.
 

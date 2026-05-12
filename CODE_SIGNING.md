@@ -10,9 +10,9 @@ This policy describes how VoLum release artifacts are built and approved for cod
 - Maintainer: Steffen Dangmann
 - Contact: steffen.dangmann@gmail.com
 
-VoLum is an open-source NAM player for guitar amp profiles. It is a public fork of
-`sdatkinson/NeuralAmpModelerPlugin` with its own release line, custom UI, bundled amp
-profiles, and Windows standalone/VST3 packaging.
+VoLum is an independent open-source NAM player for guitar amp profiles. It started from
+`sdatkinson/NeuralAmpModelerPlugin`, but has its own release line, custom UI, bundled amp
+profiles, and standalone/VST3 packaging.
 
 ## Signing Scope
 
