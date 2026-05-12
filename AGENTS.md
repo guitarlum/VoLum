@@ -151,6 +151,8 @@ UI control headers (per-section split; `VoLumTriptych.h` and
 - `VoLumHero.h` - `VoLumHeroImageControl` (procedural fractal hero +
   AMP title strip + Dual Amp chip + lane PAN dots) and
   `VoLumSupportPolarityControl`.
+- `VoLumKeyboardModel.h` - shared keyboard target rings and per-parameter
+ step sizes used by runtime controls and tests.
 - `VoLumTunerMetronomeOverlay.h` - `VoLumTunerControl`,
   `VoLumMetronomeButtonControl`, `VoLumMetronomeControl`.
 

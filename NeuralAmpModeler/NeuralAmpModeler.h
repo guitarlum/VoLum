@@ -375,6 +375,16 @@ public:
   void _PromptVoLumKnobExactEntry(int paramIdx, const char* label);
   bool _HandleVoLumSelectedKnobKey(const iplug::IKeyPress& key);
   std::string _GetVoLumKnobHintText(int paramIdx) const;
+  bool _HandleVoLumKeyboardFocusKey(const iplug::IKeyPress& key);
+  bool _SwitchVoLumKeyboardSection(EVoLumSection section);
+  bool _CycleVoLumKeyboardTarget(int direction);
+  bool _ActivateVoLumKeyboardTarget();
+  bool _ToggleVoLumKeyboardTarget();
+  bool _CycleVoLumKeyboardSpeaker(int direction);
+  void _UpdateVoLumKeyboardFocusHint();
+  int _DefaultVoLumKeyboardKnobForFocus() const;
+  int _RememberedVoLumKeyboardKnobForFocus() const;
+  void _RememberVoLumKeyboardKnob(int paramIdx);
   void _SyncVoLumExactEntry();
   void _HideVoLumExactEntry();
   void _HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide);
@@ -413,6 +423,10 @@ private:
   int mVolumChannelIdx = 0;
   int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
   std::string mVolumSelectedKnobHintText;
+  std::array<int, 7> mVolumLastKeyboardKnobByTarget = {
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter
+  };
   // Reverb sub-mode pill is currently shown for Oktaverb only.
   // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
   // pick up a per-mode tooltip explaining what the knob actually does in that mode.

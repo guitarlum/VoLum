@@ -8,6 +8,7 @@
 #include "IControls.h"
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumControls.h"
+#include "VoLumKeyboardModel.h"
 #endif
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
@@ -208,6 +209,9 @@ public:
 private:
   double GetKeyboardStep(bool fine) const
   {
+#if VOLUM_AMPETE_PRODUCT
+    return volum::keyboard::StepForParam(GetParamIdx(), fine);
+#else
     switch (GetParamIdx())
     {
       case kToneBass:
@@ -240,6 +244,7 @@ private:
       default:
         return fine ? 0.1 : 1.0;
     }
+#endif
   }
 
   bool mKeyboardSelected = false;
@@ -1046,7 +1051,7 @@ public:
 #endif
 
 #if VOLUM_AMPETE_PRODUCT
-    const float bottomH = 118.0f;
+    const float bottomH = 168.0f;
 #else
     const float bottomH = 88.0f;
 #endif
@@ -1065,8 +1070,13 @@ public:
 #if VOLUM_AMPETE_PRODUCT
     const float footerGapBelowRule = 18.f;
     const IRECT footerBody(bottomStrip.L, bottomStrip.T + footerGapBelowRule, bottomStrip.R, bottomStrip.B);
-    const auto modelInfoArea = footerBody.GetFromLeft(modelColW);
-    const auto aboutArea = footerBody.GetFromRight(footerBody.W() - modelColW);
+    const float shortcutTopGap = 0.f;
+    const float shortcutH = 92.f;
+    const IRECT shortcutArea(footerBody.L + 12.f, footerBody.T + shortcutTopGap,
+                             footerBody.R - 12.f, footerBody.T + shortcutTopGap + shortcutH);
+    const IRECT footerTextBody(footerBody.L, shortcutArea.B + 12.f, footerBody.R, footerBody.B);
+    const auto modelInfoArea = footerTextBody.GetFromLeft(modelColW);
+    const auto aboutArea = footerTextBody.GetFromRight(footerTextBody.W() - modelColW);
 #else
     const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
     const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(6 * lineHeight);
@@ -1075,22 +1085,23 @@ public:
     // Input calibration + output mode: VoLum fills mid band; balanced columns + rule (see ui-mockup/settings-overlay-mockup.html)
     {
 #if VOLUM_AMPETE_PRODUCT
-      const IRECT calRow = inner.GetPadded(10.f, 14.f, 10.f, 14.f);
+      const IRECT workArea = inner.GetPadded(10.f, 10.f, 10.f, 10.f);
+      const IRECT calRow = workArea;
       const float gutter = 6.f;
       const float ruleW = 1.f;
       const float colW = (calRow.W() - (2.f * gutter + ruleW)) * 0.5f;
       const IRECT inputArea(calRow.L, calRow.T, calRow.L + colW, calRow.B);
-      const IRECT ruleArea(calRow.L + colW + gutter, calRow.T + 10.f, calRow.L + colW + gutter + ruleW, calRow.B - 10.f);
+      const IRECT ruleArea(calRow.L + colW + gutter, calRow.T + 16.f, calRow.L + colW + gutter + ruleW, calRow.B - 22.f);
       const IRECT outputArea(calRow.L + colW + 2.f * gutter + ruleW, calRow.T, calRow.R, calRow.B);
       AddNamedChildControl(new VoLumSettingsVertRuleControl(ruleArea), mControlNames.midRule);
 
-      const float secH = 28.f;
-      const float secGap = 26.f;
+      const float secH = 22.f;
+      const float secGap = 8.f;
       const IVStyle sectionCapStyle =
         mStyle.WithDrawFrame(false)
           .WithShowValue(false)
           .WithValueText(
-            IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
+            IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
 
       const auto inputTitleR = inputArea.GetFromTop(secH);
       const auto inputBody = inputArea.GetReducedFromTop(secH);
@@ -1099,21 +1110,22 @@ public:
       const auto inputCardBody = inputBody.GetReducedFromTop(secGap);
       const auto outputCardBody = outputBody.GetReducedFromTop(secGap);
 
-      const float outCardMaxW = 280.f;
+      const float outCardMaxW = 260.f;
       const float bodyMinH = std::min(inputCardBody.H(), outputCardBody.H());
-      const float cardH = std::min(158.f, std::max(128.f, bodyMinH - 6.f));
+      const float cardH = std::min(124.f, std::max(110.f, bodyMinH - 4.f));
       const float cardW = std::min(outCardMaxW, std::min(inputCardBody.W(), outputCardBody.W()));
 
       const auto inputBlock = inputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputBlock.GetPadded(12.f)),
                            mControlNames.inputGroupFrame);
-      const auto inputInner = inputBlock.GetPadded(18.f);
-      const float knobWidth = 92.0f;
-      const float stackH = 40.f + 12.f + NAM_SWTICH_HEIGHT;
+      const auto inputInner = inputBlock.GetPadded(14.f);
+      const float knobWidth = 84.0f;
+      const float switchH = NAM_SWTICH_HEIGHT;
+      const float stackH = 30.f + 8.f + switchH;
       auto inputStack = inputInner.GetCentredInside(inputInner.W(), static_cast<int>(stackH));
-      const auto inputLevelArea = inputStack.ReduceFromTop(40.f).GetMidHPadded(0.5f * knobWidth);
-      (void) inputStack.ReduceFromTop(12.f);
-      const auto inputSwitchArea = inputStack.ReduceFromTop(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
+      const auto inputLevelArea = inputStack.ReduceFromTop(30.f).GetMidHPadded(0.5f * knobWidth);
+      (void) inputStack.ReduceFromTop(8.f);
+      const auto inputSwitchArea = inputStack.ReduceFromTop(switchH).GetMidHPadded(0.5f * knobWidth);
 
       auto* inputLevelControl = AddNamedChildControl(
         new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
@@ -1129,8 +1141,8 @@ public:
       // Match input column: full card frame, then inner padding (radios only in a short band — not a tall rect).
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputBlock.GetPadded(12.f)),
                            mControlNames.outputGroupFrame);
-      const auto outputInner = outputBlock.GetPadded(18.f);
-      const float radioBandH = 54.f;
+      const auto outputInner = outputBlock.GetPadded(14.f);
+      const float radioBandH = 46.f;
       const IRECT outputRadioArea =
         outputInner.GetCentredInside(static_cast<int>(outputInner.W()), static_cast<int>(radioBandH));
       const float buttonSize = 11.0f;
@@ -1174,6 +1186,7 @@ public:
     }
 #if VOLUM_AMPETE_PRODUCT
     const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
+    AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutArea), mControlNames.shortcutInfo);
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, modelInfoStyle), mControlNames.modelInfo);
 #else
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
@@ -1231,6 +1244,7 @@ private:
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
     const std::string modelInfo = "ModelInfo";
     const std::string outputMode = "OutputMode";
+    const std::string shortcutInfo = "ShortcutInfo";
     const std::string outputGroupFrame = "OutputGroupFrame";
     const std::string inputGroupFrame = "InputGroupFrame";
     const std::string title = "Title";
