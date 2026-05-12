@@ -127,10 +127,17 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(settings, "\"Esc\", \"close\"");
   RequireContains(header, "constexpr std::array<int, 6> kMainAmpMonoParams");
   RequireContains(header, "constexpr std::array<int, 7> kMainAmpDualParams");
+  RequireContains(header, "constexpr std::array<int, 7> kSupportAmpParams");
+  RequireContains(header, "kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass");
+  RequireDoesNotContain(header, "kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx");
   RequireContains(source, "SelectAdjacentFromList(this, kMainAmpMonoParams");
   RequireContains(source, "SelectAdjacentFromList(this, kMainAmpDualParams");
+  RequireContains(source, "SelectAdjacentFromList(this, kSupportAmpParams");
   RequireContains(header, "kMainAmpPan");
+  RequireContains(header, "kSupportAmpPan");
   RequireContains(controls, "volum::keyboard::StepForParam(GetParamIdx(), fine)");
+  RequireContains(controls, "if (!mKeyboardSelected)");
+  RequireContains(source, "_UpdateVoLumKeyboardFocusHint();");
 }
 
 TEST_CASE("Support hero label remains centered with polarity glyph")

@@ -32,9 +32,9 @@ constexpr std::array<int, 7> kMainAmpDualParams = {
   kInputLevel, kNoiseGateThreshold, kToneBass, kToneMid, kToneTreble, kOutputLevel, kMainAmpPan,
 };
 
-constexpr std::array<int, 10> kSupportAmpParams = {
-  kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx, kSupportInputLevel, kSupportNoiseGateThreshold,
-  kSupportToneBass, kSupportToneMid, kSupportToneTreble, kSupportOutputLevel, kSupportAmpPan,
+constexpr std::array<int, 7> kSupportAmpParams = {
+  kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid,
+  kSupportToneTreble, kSupportOutputLevel, kSupportAmpPan,
 };
 
 constexpr std::array<int, 5> kDelayParams = {
