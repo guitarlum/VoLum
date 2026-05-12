@@ -5,21 +5,21 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>NeuralAmpModeler</string>
+	<string>VoLum</string>
 	<key>CFBundleGetInfoString</key>
-	<string>VoLum v0.1.0 Copyright 2026 Lum</string>
+	<string>VoLum v1.0.0 Copyright 2024-2026 Steffen Dangmann and VoLum contributors</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.StevenAtkinson.app.NeuralAmpModeler.AUv3</string>
+	<string>com.Lum.app.VoLum.AUv3</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NeuralAmpModeler</string>
+	<string>VoLum</string>
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.12.0</string>
 	<key>NSExtension</key>
@@ -27,20 +27,20 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>AudioComponentBundle</key>
-			<string>com.StevenAtkinson.app.NeuralAmpModeler.AUv3Framework</string>
+			<string>com.Lum.app.VoLum.AUv3Framework</string>
 			<key>AudioComponents</key>
 			<array>
 				<dict>
 					<key>description</key>
-					<string>NeuralAmpModeler</string>
+					<string>VoLum</string>
 					<key>manufacturer</key>
-					<string>SDAa</string>
+					<string>Lum0</string>
 					<key>name</key>
-					<string>Steven Atkinson: NeuralAmpModeler</string>
+					<string>Lum: VoLum</string>
 					<key>sandboxSafe</key>
 					<true/>
 					<key>subtype</key>
-					<string>1YEo</string>
+					<string>VoLm</string>
 					<key>tags</key>
 					<array>
 						<string>Effects</string>
@@ -48,7 +48,7 @@
 					<key>type</key>
 					<string>aufx</string>
 					<key>version</key>
-					<integer>256</integer>
+					<integer>65536</integer>
 				</dict>
 			</array>
 		</dict>

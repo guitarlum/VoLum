@@ -2,7 +2,7 @@
 //  Colors.h
 //  NeuralAmpModeler-macOS
 //
-//  Created by Steven Atkinson on 12/27/22.
+//  Legacy upstream NAM color palette definitions.
 //
 // Store the defined colors for the plugin in one place
 

@@ -3446,7 +3446,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DSTROOT = "$(VST2_PATH)";
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -3457,8 +3457,8 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST2-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst.${BINARY_NAME}";
 				SKIP_INSTALL = NO;
 				WARNING_CFLAGS = "-Wno-main";
 				WRAPPER_EXTENSION = vst;
@@ -3470,7 +3470,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 77BKRC84G3;
 				DSTROOT = "$(VST2_PATH)";
@@ -3482,8 +3482,8 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST2-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WARNING_CFLAGS = "-Wno-main";
@@ -3495,7 +3495,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DSTROOT = "$(VST2_PATH)";
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -3506,8 +3506,8 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST2-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst.${BINARY_NAME}";
 				SKIP_INSTALL = NO;
 				WARNING_CFLAGS = "-Wno-main";
 				WRAPPER_EXTENSION = vst;
@@ -3531,7 +3531,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = "NeuralAmpModeler-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -3548,10 +3548,10 @@
 					"@executable_path/../../iPlug2/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				OTHER_LDFLAGS = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.app.NeuralAmpModeler.AUv3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Lum.app.VoLum.AUv3;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -3578,7 +3578,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 77BKRC84G3;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -3596,10 +3596,10 @@
 					"@executable_path/../../iPlug2/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_LDFLAGS = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.app.NeuralAmpModeler.AUv3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Lum.app.VoLum.AUv3;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -3625,7 +3625,7 @@
 				CODE_SIGN_ENTITLEMENTS = "NeuralAmpModeler-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -3642,10 +3642,10 @@
 					"@executable_path/../../iPlug2/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_LDFLAGS = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.app.NeuralAmpModeler.AUv3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Lum.app.VoLum.AUv3;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -3658,7 +3658,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 686EDA2T8T;
 				DSTROOT = "$(AU_PATH)";
@@ -3670,13 +3670,13 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-AU-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(AU_FRAMEWORKS)",
 					"$(inherited)",
 				);
 				OTHER_REZFLAGS = "-d ppc_$ppc -d i386_$i386 -I /System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers -I $CA_SDK/AudioUnits/AUPublic/AUBase";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.audiounit.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.audiounit.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REZ_SEARCH_PATHS = (
 					/System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers,
@@ -3692,7 +3692,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 77BKRC84G3;
 				DSTROOT = "$(AU_PATH)";
@@ -3704,13 +3704,13 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-AU-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(AU_FRAMEWORKS)",
 					"$(inherited)",
 				);
 				OTHER_REZFLAGS = "-d ppc_$ppc -d i386_$i386 -I /System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers -I $CA_SDK/AudioUnits/AUPublic/AUBase";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.audiounit.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.audiounit.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REZ_SEARCH_PATHS = (
 					/System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers,
@@ -3726,7 +3726,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 686EDA2T8T;
 				DSTROOT = "$(AU_PATH)";
@@ -3738,13 +3738,13 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-AU-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(AU_FRAMEWORKS)",
 					"$(inherited)",
 				);
 				OTHER_REZFLAGS = "-d ppc_$ppc -d i386_$i386 -I /System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers -I $CA_SDK/AudioUnits/AUPublic/AUBase";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.audiounit.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.audiounit.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REZ_SEARCH_PATHS = (
 					/System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers,
@@ -3780,7 +3780,7 @@
 					"$(APP_FRAMEWORKS)",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.app.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.app.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = app;
@@ -3814,7 +3814,7 @@
 					"$(APP_FRAMEWORKS)",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.app.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.app.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = app;
@@ -3846,7 +3846,7 @@
 					"$(APP_FRAMEWORKS)",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.app.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.app.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = app;
@@ -3902,7 +3902,7 @@
 					"$(EXTRA_LNK_FLAGS)",
 					"$(ALL_FRAMEWORKS)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.app.NeuralAmpModeler.AUv3Framework;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Lum.app.VoLum.AUv3Framework;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
@@ -3964,7 +3964,7 @@
 					"$(EXTRA_LNK_FLAGS)",
 					"$(ALL_FRAMEWORKS)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.app.NeuralAmpModeler.AUv3Framework;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Lum.app.VoLum.AUv3Framework;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
@@ -4026,7 +4026,7 @@
 					"$(EXTRA_LNK_FLAGS)",
 					"$(ALL_FRAMEWORKS)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.StevenAtkinson.app.NeuralAmpModeler.AUv3Framework;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Lum.app.VoLum.AUv3Framework;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
@@ -4071,7 +4071,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = 77BKRC84G3;
 				DSTROOT = "$(VST3_PATH)";
@@ -4087,8 +4087,8 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST3-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst3.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst3.${BINARY_NAME}";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = vst3;
 			};
@@ -4099,7 +4099,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 77BKRC84G3;
 				DSTROOT = "$(VST3_PATH)";
@@ -4115,8 +4115,8 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST3-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst3.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst3.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = vst3;
@@ -4127,7 +4127,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DSTROOT = "$(VST3_PATH)";
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -4142,8 +4142,8 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST3-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst3.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst3.${BINARY_NAME}";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = vst3;
 			};
@@ -4159,7 +4159,7 @@
 				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
 				CLANG_WARN__EXIT_TIME_DESTRUCTORS = NO;
 				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEPLOYMENT_LOCATION = YES;
 				DSTROOT = "$(AAX_PATH)";
@@ -4200,8 +4200,8 @@
 					"$(AAX_SDK)/Libs/Debug",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.aax.${BINARY_NAME}";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.aax.${BINARY_NAME}";
 				SDKROOT = "$(BASE_SDK_MAC)";
 				SKIP_INSTALL = NO;
 				SYMROOT = "../build-mac";
@@ -4225,7 +4225,7 @@
 				CLANG_WARN__EXIT_TIME_DESTRUCTORS = NO;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEPLOYMENT_LOCATION = YES;
@@ -4269,7 +4269,7 @@
 					"$(AAX_SDK)/Libs/Release",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(EXTRA_LNK_FLAGS)",
 					"$(ALL_FRAMEWORKS)",
@@ -4278,7 +4278,7 @@
 					"-Xlinker",
 					1500,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.aax.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.aax.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = "$(BASE_SDK_MAC)";
 				SKIP_INSTALL = NO;
@@ -4302,7 +4302,7 @@
 				CLANG_WARN_SUSPICIOUS_IMPLICIT_CONVERSION = NO;
 				CLANG_WARN__EXIT_TIME_DESTRUCTORS = NO;
 				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 0.5.7;
+				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEPLOYMENT_LOCATION = YES;
@@ -4345,7 +4345,7 @@
 					"$(AAX_SDK)/Libs/Release",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 0.5.7;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(EXTRA_LNK_FLAGS)",
 					"$(EXTRA_ALL_FRAMEWORKS)",
@@ -4354,7 +4354,7 @@
 					"-Xlinker",
 					1500,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.aax.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.aax.${BINARY_NAME}";
 				SDKROOT = "$(BASE_SDK_MAC)";
 				SKIP_INSTALL = NO;
 				SYMROOT = "../build-mac";
@@ -4498,7 +4498,7 @@
 					"$(APP_FRAMEWORKS)",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.app.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.app.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = app;
@@ -4533,7 +4533,7 @@
 					"$(APP_FRAMEWORKS)",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.app.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.app.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = app;
@@ -4568,7 +4568,7 @@
 					"$(APP_FRAMEWORKS)",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.app.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.app.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = app;
@@ -4593,7 +4593,7 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST3-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst3.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst3.${BINARY_NAME}";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = vst3;
 			};
@@ -4619,7 +4619,7 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST3-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst3.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst3.${BINARY_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = vst3;
@@ -4644,7 +4644,7 @@
 				);
 				INFOPLIST_FILE = "../resources/NeuralAmpModeler-VST3-Info.plist";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.StevenAtkinson.vst3.${BINARY_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Lum.vst3.${BINARY_NAME}";
 				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = vst3;
 			};

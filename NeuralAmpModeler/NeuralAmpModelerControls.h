@@ -1330,7 +1330,7 @@ private:
           new IVLabelControl(lineR.ReduceFromTop(rowH), buildInfoStr.Get(), mStyle.WithValueText(rowText)));
         const IColor urlMo = VoLumColors::GOLD_DIM;
         const IColor urlClk = VoLumColors::GOLD;
-        AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "Based on Neural Amp Modeler by Steve Atkinson",
+        AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "Built on the Neural Amp Modeler ecosystem",
                                         "https://github.com/guitarlum/VoLum", mText,
                                         COLOR_TRANSPARENT, urlMo, urlClk));
         AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "github.com/guitarlum/VoLum",
@@ -1344,7 +1344,7 @@ private:
       const IColor urlMo = PluginColors::HELP_TEXT_MO;
       const IColor urlClk = PluginColors::HELP_TEXT_CLICKED;
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 3),
-                                      "Based on Neural Amp Modeler by Steve Atkinson",
+                                      "Built on the Neural Amp Modeler ecosystem",
                                       "https://github.com/guitarlum/VoLum", mText,
                                       COLOR_TRANSPARENT, urlMo, urlClk));
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 4), "github.com/guitarlum/VoLum",

@@ -25,6 +25,16 @@ def main():
         os.path.join(os.getcwd(), IPLUG2_ROOT + "/../common-ios.xcconfig")
     )
 
+    def resource_plist_path(name_suffix: str) -> str:
+        base = os.path.join(projectpath, "resources")
+        primary = os.path.join(base, config["BUNDLE_NAME"] + name_suffix)
+        if os.path.isfile(primary):
+            return primary
+        fallback = os.path.join(base, "NeuralAmpModeler" + name_suffix)
+        if os.path.isfile(fallback):
+            return fallback
+        return primary
+
     CFBundleGetInfoString = (
         config["BUNDLE_NAME"]
         + " v"
@@ -56,9 +66,7 @@ def main():
     else:
         NSEXTENSIONPOINTIDENTIFIER = "com.apple.AudioUnit"
 
-    plistpath = (
-        projectpath + "/resources/" + config["BUNDLE_NAME"] + "-iOS-AUv3-Info.plist"
-    )
+    plistpath = resource_plist_path("-iOS-AUv3-Info.plist")
 
     NSEXTENSIONATTRDICT = dict(
         NSExtensionAttributes=dict(AudioComponents=[{}]),
@@ -124,9 +132,7 @@ def main():
             auv3["NSExtension"]["NSExtensionAttributes"]["AudioComponents"][0][
                 "factoryFunction"
             ] = "IPlugAUViewController_vNeuralAmpModeler"
-            auv3["NSExtension"]["NSExtensionMainStoryboard"] = (
-                config["BUNDLE_NAME"] + "-iOS-MainInterface"
-            )
+            auv3["NSExtension"]["NSExtensionMainStoryboard"] = "NeuralAmpModeler-iOS-MainInterface"
         else:
             auv3["NSExtension"][
                 "NSExtensionPrincipalClass"
@@ -137,7 +143,7 @@ def main():
 
     # Standalone APP
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-iOS-Info.plist"
+    plistpath = resource_plist_path("-iOS-Info.plist")
     with open(plistpath, "rb") as f:
         iOSapp = plistlib.load(f)
         iOSapp["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -150,6 +156,16 @@ def main():
 
         with open(plistpath, "wb") as f2:
             plistlib.dump(iOSapp, f2)
+
+    framework_plistpath = resource_plist_path("-iOS-AUv3Framework-Info.plist")
+    if os.path.isfile(framework_plistpath):
+        with open(framework_plistpath, "rb") as f:
+            auv3_framework = plistlib.load(f)
+            auv3_framework["CFBundleVersion"] = CFBundleVersion
+            auv3_framework["CFBundleShortVersionString"] = CFBundleVersion
+
+            with open(framework_plistpath, "wb") as f2:
+                plistlib.dump(auv3_framework, f2)
 
 
 if __name__ == "__main__":

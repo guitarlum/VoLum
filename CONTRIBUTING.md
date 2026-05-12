@@ -10,19 +10,19 @@ Things might change--quickly--including these guidelines.
 If you're not sure about something or have a suggestion, reach out!
 
 ## Have an idea?
-If you have an idea that you'd like to see in the plugin, start by [raising an Issue](https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D) and describe what you'd like to see. 
+If you have an idea that you'd like to see in VoLum, start by [raising an Issue](https://github.com/guitarlum/VoLum/issues/new) and describe what you'd like to see.
 This way, we can be sure that it's something that will fit in nicely with the plan before you start working.
 
 ## Working on Issues
-If you'd like to work on an [existing Issue](https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues), then speak up in the issue's discussion thread.
-I would like to ask that you please try to give me a timeline for your work--I'd hate to have you duplicate work if I know that I'm going to e.g. get to it today and beat you to the punch.
+If you'd like to work on an [existing Issue](https://github.com/guitarlum/VoLum/issues), then speak up in the issue's discussion thread.
+Please share the scope you plan to take so parallel work stays easy to coordinate.
 
 ## Testing
 VoLum includes a **doctest** suite (`NeuralAmpModeler-Tests`) that runs on Windows and macOS CI. Run `NeuralAmpModeler/scripts/run-tests-win.ps1` on Windows, or `NeuralAmpModeler/scripts/run-tests-mac.sh` on macOS, before landing C++/DSP/UI changes.
 
 Use the test map in `NeuralAmpModeler/README.md` when deciding what to update. In short: DSP changes need focused doctests, parameter/state changes need `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, or `test_volum_chunk_codec.cpp`, main amp `.nam` changes need `test_nam_rigs.cpp`, and PRE capture `.nam` changes under `rigs/PrePedals/` need discovery, load, and package coverage.
 
-The **historical upstream** NAM plugin did not ship unit tests in-tree. If you are contributing to upstream NAM and want to help by proposing a framework, please [raise an Issue](https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D).
+The **historical upstream** NAM plugin did not ship unit tests in-tree. VoLum keeps its own focused doctest suite and release packaging checks in this repository.
 
 CI also builds and verifies Windows/macOS packages, runs VST3 validation through pluginval, uses the Steinberg validator when available, and smoke-tests the Windows installer. Manual standalone/DAW checks are still useful for audio feel and visual review, but they should not be the only regression coverage for a shipped behavior.
 

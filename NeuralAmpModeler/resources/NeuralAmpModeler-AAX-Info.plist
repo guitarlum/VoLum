@@ -5,23 +5,23 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>NeuralAmpModeler</string>
+	<string>VoLum</string>
 	<key>CFBundleGetInfoString</key>
-	<string>VoLum v0.1.0 Copyright 2026 Lum</string>
+	<string>VoLum v1.0.0 Copyright 2024-2026 Steffen Dangmann and VoLum contributors</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.StevenAtkinson.aax.NeuralAmpModeler</string>
+	<string>com.Lum.aax.VoLum</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NeuralAmpModeler</string>
+	<string>VoLum</string>
 	<key>CFBundlePackageType</key>
 	<string>TDMw</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleSignature</key>
 	<string>PTul</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>

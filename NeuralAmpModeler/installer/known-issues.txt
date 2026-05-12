@@ -1,1 +1,1 @@
-For known issues, see https://github.com/sdatkinson/NeuralAmpModelerPlugin/issues.
+For known issues, see https://github.com/guitarlum/VoLum/issues.
