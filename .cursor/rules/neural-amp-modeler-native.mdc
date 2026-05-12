@@ -1,5 +1,5 @@
 ---
-description: NeuralAmpModeler (iPlug2 / NAM) C++ conventions and VoLum forks
+description: NeuralAmpModeler (iPlug2 / NAM) C++ conventions for VoLum
 globs:
   - NeuralAmpModeler/**/*.cpp
   - NeuralAmpModeler/**/*.h
