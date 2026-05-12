@@ -2,20 +2,19 @@
 
 This is the build and architecture reference for contributors. For download and install instructions, see the [root README](../README.md).
 
-## What's different from NAM
+## Product shape
 
+VoLum is an independent NAM-based amp collection app. It still keeps selected upstream-compatible files and paths so future NAM Plugin fixes can be cherry-picked, but the shipped product is the curated VoLum workflow.
 
-|                         | NAM Plugin                                | VoLum                                                                                                           |
-| ----------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Purpose**             | General-purpose NAM model loader          | Curated amp collection player                                                                                   |
-| **Model selection**     | File browser (find your own `.nam` files) | Sidebar amp gallery with 15 bundled amps                                                                        |
-| **Speaker / cab**       | Separate IR loader                        | Built-in speaker modes (AMP / G12 / G65 / V30) per amp                                                          |
-| **Channel switching**   | N/A                                       | Discrete gain-stage stepper per amp+speaker combo                                                               |
-| **Per-amp settings**    | N/A                                       | All knobs, toggles, speaker & channel remembered per amp                                                        |
-| **Session persistence** | DAW project only                          | Settings saved to user profile JSON, restored on next launch; VST3 also serializes per-amp bank in plugin state |
-| **Practice tools**      | N/A                                       | Built-in chromatic tuner and metronome in standalone and VST3                                                   |
-| **Model loading**       | Blocks UI                                 | Background thread + per-amp DSP cache                                                                           |
-| **UI**                  | 600x400, file-browser focused             | 900x600 dark theme, amp gallery sidebar, procedural hero art, grouped knobs                                     |
+| Area | VoLum 1.0 behavior |
+| --- | --- |
+| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. |
+| **Rig building** | PRE compressor + two NAM pedal slots, AMP controls, Dual Amp, and POST Delay/Reverb in the triptych UI. |
+| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, and Dual Amp settings stored in user profile JSON; VST3 also serializes state. |
+| **Practice tools** | Chromatic tuner and metronome in standalone and VST3. |
+| **Keyboard workflow** | Section switching, focus movement, knob edit mode, exact entry, toggles, tuner/metronome/settings shortcuts. |
+| **Runtime behavior** | Background model loading, per-amp DSP cache, NAM output NaN scrub, and final-bus output safety. |
+| **UI** | 900x600 dark UI with amp gallery, procedural art, grouped knobs, pedal cards, and settings overlay. |
 
 
 ## Quick start
@@ -50,7 +49,7 @@ This is the build and architecture reference for contributors. For download and 
 | `scripts/validate-vst3-mac.sh`            | Validate the built macOS VST3 with pluginval and the Steinberg validator when available                                                                                           |
 
 
-**CI** (`.github/workflows/ci.yml`) runs on **pull requests to `dev` or `main`**, on **pushes to `dev` or `main`**, and manually (**Actions → CI → Run workflow**). It runs formatting checks, NAMCore regression tests, Windows doctests, Windows installer smoke verification, Windows portable packaging verification, macOS doctests, macOS sanitizer doctests, macOS release-equivalent packaging (`full all`: installer DMG with `.pkg`, standalone DMG, VST3 zip; no dSYM zip), and VST3 validation with pluginval plus the Steinberg validator when the SDK build provides it. Artifacts: **VoLum-mac** (`build-mac/out/`, including **`VoLum-v*-mac.dmg`** for **`VoLum Installer.pkg`**) and **VoLum-win** (`build-win/out/`). **Release Native** (`.github/workflows/release-native.yml`) is the one-button draft release flow: it defaults to the next minor version, accepts `minor`/`patch`/`major`/`manual` input, creates the tag and draft release, then uploads the user-facing assets only.
+**CI** (`.github/workflows/ci.yml`) runs on pull requests and pushes to `dev` or `main`, and can also run manually. It covers formatting, NAMCore regression tests, Windows doctests, Windows installer/portable verification, macOS doctests, macOS sanitizer doctests, release-equivalent macOS packaging, and VST3 validation with pluginval plus the Steinberg validator when available. Artifacts are **VoLum-mac** and **VoLum-win**. **Release Native** (`.github/workflows/release-native.yml`) creates the tagged draft release and uploads the user-facing assets.
 
 ## Test suite map
 
@@ -132,27 +131,32 @@ Each amp x 4 speaker modes x channels = ~240 `.nam` files total.
 ## Key source files
 
 
-| File                     | Role                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------- |
-| `config.h`               | `VOLUM_AMPETE_PRODUCT`, window size, version                                            |
-| `installer/VoLum.iss`    | Windows installer (Inno): standalone + VST3 + `VoLumRigs`; sets `VoLumRigsRoot` in HKLM |
-| `VoLumAmpeteCatalog.h`   | Amp metadata (folder names, display names, speaker prefixes)                            |
-| `VoLumPaths.h`           | Rig directory discovery, channel file scanning, settings path                           |
-| `VoLumControls.h`        | Custom iPlug2 UI controls (sidebar, knobs, speaker buttons, channel stepper)            |
-| `VoLumTunerDSP.h`        | Chromatic tuner pitch detection and smoothing                                            |
-| `VoLumMetronomeDSP.h`    | Sample-accurate metronome click generator and accent patterns                           |
-| `NeuralAmpModeler.h/cpp` | Plugin class with VoLum state, layout, model loading, per-amp settings                  |
-| `Unserialization.cpp`    | Version-aware state deserialization (per-amp settings bank)                             |
+| File | Role |
+| --- | --- |
+| `config.h` | `VOLUM_AMPETE_PRODUCT`, window size, version |
+| `installer/VoLum.iss` | Windows installer: standalone + VST3 + `VoLumRigs`; sets `VoLumRigsRoot` in HKLM |
+| `VoLumAmpeteCatalog.h` | Amp metadata, default amp settings, POST snapshots |
+| `VoLumPrePedalCaptures.h` | PRE NAM capture metadata, grouping, discovery |
+| `VoLumPaths.h` | Rig discovery, channel file scanning, settings path |
+| `VoLumCoreControls.h` | Sidebar, speaker row, knob row, meters, settings overlay frame |
+| `VoLumTriptych.h` | PRE/AMP/POST strip, cards, chain connector umbrella |
+| `VoLumKeyboardModel.h` | Keyboard focus rings and parameter step sizes |
+| `VoLumTunerDSP.h` | Chromatic tuner pitch detection and smoothing |
+| `VoLumMetronomeDSP.h` | Sample-accurate metronome click generator and accent patterns |
+| `NeuralAmpModeler.h/cpp` | Plugin class with VoLum state, layout, model loading, processing |
+| `VoLumLoader.inc.cpp` | Async model-loader thread and result draining |
+| `VoLumSettings.inc.cpp` | Per-amp settings persistence |
+| `Unserialization.cpp` | Version-aware state deserialization |
 
 
-## Building the original NAM plugin
+## NAM compatibility build
 
-Set `VOLUM_AMPETE_PRODUCT 0` in `config.h` to build the stock NAM plugin UI (600x400, file browser).
+Set `VOLUM_AMPETE_PRODUCT 0` in `config.h` only when you need to compare against the stock NAM plugin shell during upstream sync work. Normal VoLum development keeps `VOLUM_AMPETE_PRODUCT 1`.
 
 ## Credits
 
 - [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) by Steven Atkinson
-- [NAM Plugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) -- upstream fork base
+- [NeuralAmpModelerPlugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin) -- original plugin shell and upstream reference
 - [iPlug2](https://iplug2.github.io) -- plugin framework
 - Amp profiles created by Lum
 
