@@ -31,6 +31,7 @@
 #if VOLUM_AMPETE_PRODUCT
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumPrePedalCaptures.h"
+#include "VoLumSettingsFileIO.h"
 #include "VoLumTriptychState.h"
 #include "VoLumUserSettingsIO.h"
 #include "VoLumTunerDSP.h"

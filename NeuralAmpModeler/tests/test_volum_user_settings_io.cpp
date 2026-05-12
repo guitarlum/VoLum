@@ -1,6 +1,9 @@
 #include "third_party/doctest.h"
 #include "../VoLumUserSettingsIO.h"
 
+#include <filesystem>
+#include <fstream>
+
 TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
@@ -86,6 +89,49 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
     REQUIRE(loaded[i].speakerIdx == 3);
     REQUIRE(loaded[i].noiseGateActive == true);
     REQUIRE(loaded[i].preNam1Active == false);
+  }
+}
+
+TEST_CASE("Broken user settings JSON leaves defaults in place")
+{
+  const auto root = std::filesystem::temp_directory_path() / "volum-user-settings-broken-json-test";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  REQUIRE_FALSE(ec);
+  const auto path = root / "volum-settings.json";
+
+  {
+    std::ofstream out(path, std::ios::binary);
+    REQUIRE(out.good());
+    out << "{ this is not valid json";
+  }
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  int lastAmp = 9;
+  bool parseFailed = false;
+  try
+  {
+    std::ifstream in(path, std::ios::binary);
+    nlohmann::json j;
+    in >> j;
+    volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, &lastAmp);
+  }
+  catch (...)
+  {
+    parseFailed = true; // Mirrors _VolumLoadSettingsFromFile: parse failures are swallowed.
+  }
+
+  CHECK(parseFailed);
+  CHECK(lastAmp == 9);
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    INFO("amp " << i);
+    CHECK(loaded[i].speakerIdx == volum::VoLumAmpSettings{}.speakerIdx);
+    CHECK(loaded[i].channelIdx == volum::VoLumAmpSettings{}.channelIdx);
+    CHECK(loaded[i].inputLevel == doctest::Approx(volum::VoLumAmpSettings{}.inputLevel));
+    CHECK(loaded[i].noiseGateActive == volum::VoLumAmpSettings{}.noiseGateActive);
+    CHECK_FALSE(loaded[i].postValid);
   }
 }
 
