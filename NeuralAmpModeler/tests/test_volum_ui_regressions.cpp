@@ -100,6 +100,7 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardModel.h");
+  const std::string exactEntry = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumExactEntry.h");
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string settings = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
 
@@ -137,7 +138,12 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(header, "kSupportAmpPan");
   RequireContains(controls, "volum::keyboard::StepForParam(GetParamIdx(), fine)");
   RequireContains(controls, "if (!mKeyboardSelected)");
+  RequireContains(controls, "return Nudge(false, key.S);");
+  RequireContains(controls, "PromptExactValueEntry();");
   RequireContains(source, "_UpdateVoLumKeyboardFocusHint();");
+  RequireContains(source, "exact->CancelEntry();");
+  RequireContains(exactEntry, "void CancelEntry()");
+  RequireContains(exactEntry, "textEntry->DismissEdit();");
 }
 
 TEST_CASE("Support hero label remains centered with polarity glyph")

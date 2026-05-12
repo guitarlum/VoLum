@@ -136,6 +136,20 @@ public:
 
   bool IsEditing() const { return mEditing; }
 
+  void CancelEntry()
+  {
+    if (auto* ui = GetUI())
+    {
+      if (ui->GetControlInTextEntry() == this)
+        if (auto* textEntry = ui->GetTextEntryControl())
+          textEntry->DismissEdit();
+    }
+
+    mEditing = false;
+    Hide(true);
+    SetDirty(false);
+  }
+
   void SyncTextEntryState()
   {
     auto* ui = GetUI();
