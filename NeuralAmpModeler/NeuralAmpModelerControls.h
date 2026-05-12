@@ -120,22 +120,14 @@ public:
           return pPlugin->_SelectAdjacentVoLumKnob(GetParamIdx(), 1);
         return false;
       case kVK_DOWN:
-        if (IsDisabled())
-          return true;
         return Nudge(false, key.S);
       case kVK_UP:
-        if (IsDisabled())
-          return true;
         return Nudge(true, key.S);
       case kVK_RETURN:
-        if (IsDisabled())
-          return true;
         PromptExactValueEntry();
         return true;
       case kVK_DELETE:
       case kVK_BACK:
-        if (IsDisabled())
-          return true;
         SetValueToDefault();
         return true;
       case kVK_ESCAPE:
@@ -148,9 +140,6 @@ public:
 
   bool Nudge(bool increase, bool fine)
   {
-    if (IsDisabled())
-      return false;
-
     const IParam* pParam = GetParam();
     if (!pParam)
       return false;

@@ -958,6 +958,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       if (auto* pGfx = GetUI())
       {
+        if (key.VK == kVK_ESCAPE)
+        {
+          if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
+          {
+            auto* exact = entry->As<VoLumExactEntryControl>();
+            if (!exact->IsHidden())
+            {
+              exact->CancelEntry();
+              return true;
+            }
+          }
+        }
+
         if (pGfx->GetControlInTextEntry())
           return false;
 
