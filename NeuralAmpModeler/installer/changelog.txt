@@ -34,7 +34,7 @@
 05/04/2026 - VoLum: Improved amp-switch responsiveness by prioritizing MAIN loads, moving channel prefetch off the critical path, adding a small NAM config cache, and showing current latency in Settings under Model information.
 05/03/2026 - VoLum: Added real PRE pedal NAM captures with type-grouped labels, grouped dropdown UI, and safe legacy PRE selection reset for 0.8.4 updates.
 04/29/2026 - VoLum: PRE pedalboard groundwork. Added compressor plus two assignable PRE NAM slots with per-amp settings, placeholder PrePedals asset folder, packaging hooks, and native PRE triptych UI wiring.
-Historical upstream NeuralAmpModelerPlugin changelog before the VoLum fork:
+Historical upstream NeuralAmpModelerPlugin changelog before VoLum diverged:
 https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 00/00/0000 - v0.5.5 Tweak UI
