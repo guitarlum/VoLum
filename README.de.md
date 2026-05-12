@@ -180,12 +180,16 @@ Die Einstellungen bleiben für Standalone und VST3 über Sitzungen hinweg erhalt
 ## Tastatur
 
 - Kein Regler gewählt: `Hoch/Runter` wechselt den Amp, `Links/Rechts` den Kanal
-- Regler anklicken, um ihn für die Tastatursteuerung zu wählen
-- Gewählter Regler: `Hoch/Runter` Wert ändern, `Links/Rechts` nächster Regler
-- `Umschalt` halten für feinere Schritte (`0,1`)
-- `Enter` für direkte Zahleingabe
-- `Entf` oder `Rücktaste` setzt den gewählten Regler auf den Standardwert
-- `Esc` beendet den Regler-Tastaturmodus; Pfeiltasten steuern wieder Amp/Kanal
+- `1` / `2` / `3` wechselt PRE / AMP / POST
+- `Tab` / `Umschalt+Tab` bewegt den Tastaturfokus im aktuellen Bereich; `Links/Rechts` auch in PRE/POST
+- `Enter` bearbeitet das fokussierte Ziel; `Leertaste` schaltet es ein/aus, wenn möglich
+- `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts
+- `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet Einstellungen
+- Gewählter Regler: `Hoch/Runter` ändert den Wert, `Links/Rechts` wählt einen anderen Regler, `Umschalt` macht kleinere Schritte
+- `Enter` direkte Eingabe, `Entf` / `Rücktaste` Reset, `Esc` beendet Reglerbearbeitung
+- In den Einstellungen steht eine kurze Tastaturübersicht
+
+Das deckt den wichtigsten Spiel- und Bearbeitungsablauf per Tastatur ab, aber noch keine vollständige Screenreader-Unterstützung.
 
 ## Tuner und Metronom
 

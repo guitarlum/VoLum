@@ -97,12 +97,16 @@ VoLum besitzt am Ende der Signalkette (hinter Delay und Reverb) eine permanent a
 ## Tastatur
 
 - Ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
-- Klick einen Regler an, um ihn per Tastatur zu steuern.
-- Gewählter Regler: `Hoch` / `Runter` ändert den Wert, `Links` / `Rechts` wählt einen anderen Regler.
-- Halte `Shift` für feinere Änderungen.
-- `Enter` öffnet die direkte Zahleneingabe.
-- `Entf` oder `Rücktaste` setzt den gewählten Regler zurück.
-- `Esc` beendet den Regler-Tastaturmodus.
+- `1` / `2` / `3` wechselt PRE / AMP / POST.
+- `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
+- `Enter` bearbeitet das fokussierte Ziel; `Leertaste` schaltet es ein/aus, wenn möglich.
+- `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts.
+- `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet Einstellungen.
+- Gewählter Regler: `Hoch` / `Runter` ändert den Wert, `Links` / `Rechts` wählt einen anderen Regler, `Umschalt` macht kleinere Schritte.
+- `Enter` direkte Eingabe, `Entf` / `Rücktaste` Reset, `Esc` beendet Reglerbearbeitung.
+- In den Einstellungen steht eine kurze Tastaturübersicht.
+
+Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screenreader-Unterstützung gibt es noch nicht.
 
 ## Einstellungen
 

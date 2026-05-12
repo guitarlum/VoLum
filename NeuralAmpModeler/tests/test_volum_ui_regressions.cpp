@@ -96,6 +96,43 @@ TEST_CASE("Support amp keyboard channel navigation refreshes support stepper")
   RequireContains(source, "mVolumSettingsDirty = true;");
 }
 
+TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardModel.h");
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const std::string settings = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+
+  RequireContains(source, "_HandleVoLumKeyboardFocusKey(key)");
+  RequireContains(source, "key.VK == '1'");
+  RequireContains(source, "key.VK == '2'");
+  RequireContains(source, "key.VK == '3'");
+  RequireContains(source, "key.VK == 's' || key.VK == 'S'");
+  RequireContains(source, "_CycleVoLumKeyboardSpeaker(key.S ? -1 : 1)");
+  RequireContains(source, "key.VK == 't' || key.VK == 'T'");
+  RequireContains(source, "key.VK == 'm' || key.VK == 'M'");
+  RequireContains(source, "key.VK == 'h' || key.VK == 'H'");
+  RequireContains(source, "settings->As<NAMSettingsPageControl>()->HideAnimated(false);");
+  RequireContains(source, "key.VK == kTabKey");
+  RequireContains(source, "return _CycleVoLumKeyboardTarget(key.VK == kVK_LEFT ? -1 : 1)");
+  RequireContains(source, "Left/Right channel  |  S cab  |  Tab target");
+  RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected");
+  RequireContains(source, "Left/Right or Tab target");
+  RequireContains(settings, "Shortcut info");
+  RequireContains(settings, "\"1/2/3\", \"PRE / AMP / POST\"");
+  RequireContains(settings, "\"S\", \"cab\"");
+  RequireContains(settings, "\"T\", \"tuner\"");
+  RequireContains(settings, "\"M\", \"metronome\"");
+  RequireContains(settings, "\"H\", \"settings\"");
+  RequireContains(settings, "\"Esc\", \"close\"");
+  RequireContains(header, "constexpr std::array<int, 6> kMainAmpMonoParams");
+  RequireContains(header, "constexpr std::array<int, 7> kMainAmpDualParams");
+  RequireContains(source, "SelectAdjacentFromList(this, kMainAmpMonoParams");
+  RequireContains(source, "SelectAdjacentFromList(this, kMainAmpDualParams");
+  RequireContains(header, "kMainAmpPan");
+  RequireContains(controls, "volum::keyboard::StepForParam(GetParamIdx(), fine)");
+}
+
 TEST_CASE("Support hero label remains centered with polarity glyph")
 {
   // VoLumHeroImageControl + VoLumSupportPolarityControl moved to VoLumHero.h
