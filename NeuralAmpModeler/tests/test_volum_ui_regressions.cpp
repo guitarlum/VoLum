@@ -211,8 +211,10 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "const volum::VoLumAmpSettings defaults;");
   RequireContains(source, "if (mVolumPostRestoreInProgress)");
   RequireContains(source, "mVolumInitComplete && !mVolumPostRestoreInProgress");
-  RequireContains(source, "_VolumSaveDelayModeSnapshot(std::clamp(s.postDelayMode");
-  RequireContains(source, "_VolumSaveReverbModeSnapshot(std::clamp(s.postReverbMode");
+  RequireContains(source, "const int restoredDelayMode = std::clamp(s.postDelayMode");
+  RequireContains(source, "const int restoredReverbMode = std::clamp(s.postReverbMode");
+  RequireContains(source, "_VolumRestoreDelayModeSnapshot(restoredDelayMode);");
+  RequireContains(source, "_VolumRestoreReverbModeSnapshot(restoredReverbMode);");
   RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);");
   RequireContains(source, "_UpdateVoLumLayout(pGfx);");
 }
