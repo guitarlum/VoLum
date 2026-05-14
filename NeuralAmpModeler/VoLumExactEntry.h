@@ -12,6 +12,8 @@
 #include "VoLumColorHelpers.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <functional>
 
@@ -225,11 +227,22 @@ public:
     const auto* pParam = GetParam();
     if (pParam)
     {
-      pParam->GetDisplay(str);
-      if (mSuffix[0])
+      if (std::strcmp(mSuffix, "%") == 0)
       {
-        str.Append(" ");
-        str.Append(mSuffix);
+        const double percent = pParam->Value() * 100.0;
+        if (std::fabs(percent - std::round(percent)) < 0.005)
+          str.SetFormatted(16, "%.0f%%", percent);
+        else
+          str.SetFormatted(16, "%.1f%%", percent);
+      }
+      else
+      {
+        pParam->GetDisplay(str);
+        if (mSuffix[0])
+        {
+          str.Append(" ");
+          str.Append(mSuffix);
+        }
       }
     }
 
