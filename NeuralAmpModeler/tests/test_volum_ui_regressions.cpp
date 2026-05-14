@@ -146,6 +146,20 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(exactEntry, "textEntry->DismissEdit();");
 }
 
+TEST_CASE("Percent value labels render natural percent text")
+{
+  const std::string exactEntry = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumExactEntry.h");
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+
+  RequireContains(exactEntry, "std::strcmp(mSuffix, \"%\") == 0");
+  RequireContains(exactEntry, "const double percent = pParam->Value() * 100.0;");
+  RequireContains(exactEntry, "str.SetFormatted(16, \"%.0f%%\", percent);");
+  RequireContains(source, "\"FEEDBACK\", kDelayFeedback, \"%\"");
+  RequireContains(source, "\"MIX\", kDelayMix, \"%\"");
+  RequireContains(source, "\"MIX\", kReverbMix, \"%\"");
+  RequireContains(source, "\"INTENSITY\", kReverbShimmer, \"%\"");
+}
+
 TEST_CASE("Support hero label remains centered with polarity glyph")
 {
   // VoLumHeroImageControl + VoLumSupportPolarityControl moved to VoLumHero.h
