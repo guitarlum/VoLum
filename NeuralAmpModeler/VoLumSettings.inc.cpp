@@ -411,8 +411,12 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   mVolumEffectSettings.delayMode = s.postDelayMode;
   mVolumEffectSettings.reverbActive = s.postReverbActive;
   mVolumEffectSettings.reverbMode = s.postReverbMode;
-  _VolumSaveDelayModeSnapshot(std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1));
-  _VolumSaveReverbModeSnapshot(std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1));
+  const int restoredDelayMode = std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1);
+  const int restoredReverbMode = std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1);
+  _VolumSaveDelayModeSnapshot(restoredDelayMode);
+  _VolumSaveReverbModeSnapshot(restoredReverbMode);
+  _VolumRestoreDelayModeSnapshot(restoredDelayMode);
+  _VolumRestoreReverbModeSnapshot(restoredReverbMode);
 
   // Update speaker row UI if available
   if (auto* pGfx = GetUI())
