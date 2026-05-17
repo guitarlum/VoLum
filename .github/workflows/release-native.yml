@@ -188,6 +188,13 @@ jobs:
         hdiutil detach "$VERIFY_DIR/installer-dmg"
       shell: bash
 
+    - name: Verify macOS package metadata
+      if: matrix.os == 'macos-latest'
+      env:
+        VERIFY_MAC_REQUIRE_INSTALLER: "1"
+      run: NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
+      shell: bash
+
     - name: Upload macOS release assets
       if: matrix.os == 'macos-latest'
       env:
