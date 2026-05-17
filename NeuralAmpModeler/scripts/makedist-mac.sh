@@ -130,6 +130,7 @@ AAX_FINAL="/Library/Application Support/Avid/Audio/Plug-Ins/$PLUGIN_NAME.aaxplug
 PKG="build-mac/installer/$PLUGIN_NAME Installer.pkg"
 PKG_US="build-mac/installer/$PLUGIN_NAME Installer.unsigned.pkg"
 RIGS_SRC="$(pwd)/../rigs"
+APP_ENTITLEMENTS="projects/$PROJECT_PREFIX-macOS.entitlements"
 
 CERT_ID=`echo | grep CERTIFICATE_ID $XCCONFIG`
 CERT_ID=${CERT_ID//\CERTIFICATE_ID = }
@@ -361,13 +362,22 @@ if [ $CODESIGN == 1 ]; then
   echo "code-sign binaries"
   echo ""
 
-  codesign --force -s "${DEV_ID_APP_STR}" -v $APP --deep --strict --options=runtime #hardened runtime for app
-  xattr -cr $AU 
-  codesign --force -s "${DEV_ID_APP_STR}" -v $AU --deep --strict
-  # xattr -cr $VST2 
-  # codesign --force -s "${DEV_ID_APP_STR}" -v $VST2 --deep --strict
-  xattr -cr $VST3 
-  codesign --force -s "${DEV_ID_APP_STR}" -v $VST3 --deep --strict
+  if [ -d "$APP" ]; then
+    xattr -cr "$APP"
+    codesign --force -s "${DEV_ID_APP_STR}" -v "$APP" --deep --strict --options=runtime --timestamp --entitlements "$APP_ENTITLEMENTS"
+  fi
+  if [ -d "$AU" ]; then
+    xattr -cr "$AU"
+    codesign --force -s "${DEV_ID_APP_STR}" -v "$AU" --deep --strict --timestamp
+  fi
+  # if [ -d "$VST2" ]; then
+  #   xattr -cr "$VST2"
+  #   codesign --force -s "${DEV_ID_APP_STR}" -v "$VST2" --deep --strict --timestamp
+  # fi
+  if [ -d "$VST3" ]; then
+    xattr -cr "$VST3"
+    codesign --force -s "${DEV_ID_APP_STR}" -v "$VST3" --deep --strict --timestamp
+  fi
   #---------------------------------------------------------------------------------------------------------
 fi
 
@@ -441,9 +451,9 @@ if [ $BUILD_INSTALLER == 1 ]; then
     PWD=`pwd`
 
     if [ $DEMO == 1 ]; then
-      ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" $NOTARIZE_BUNDLE_ID $APP_SPECIFIC_ID $APP_SPECIFIC_PWD
-    else
       ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" $NOTARIZE_BUNDLE_ID_DEMO $APP_SPECIFIC_ID $APP_SPECIFIC_PWD
+    else
+      ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" $NOTARIZE_BUNDLE_ID $APP_SPECIFIC_ID $APP_SPECIFIC_PWD
     fi
 
     if [ "${PIPESTATUS[0]}" -ne "0" ]; then
