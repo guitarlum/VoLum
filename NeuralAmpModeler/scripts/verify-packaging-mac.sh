@@ -13,6 +13,66 @@ VERIFY_DIR="${REPO_ROOT}/NeuralAmpModeler/build-mac/verify-packaging-ci"
 
 INSTALLER_DMG=""
 
+plist_value() {
+  /usr/libexec/PlistBuddy -c "Print :$2" "$1" 2>/dev/null
+}
+
+require_plist_value() {
+  local plist="$1"
+  local key="$2"
+  local expected="$3"
+  local actual
+  actual="$(plist_value "$plist" "$key")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "ERROR: $plist $key is '$actual', expected '$expected'" >&2
+    exit 1
+  fi
+}
+
+require_nonempty_plist_value() {
+  local plist="$1"
+  local key="$2"
+  local actual
+  actual="$(plist_value "$plist" "$key")"
+  if [[ -z "$actual" ]]; then
+    echo "ERROR: $plist $key is missing or empty" >&2
+    exit 1
+  fi
+}
+
+verify_standalone_app_identity() {
+  local app="$1"
+  local plist="$app/Contents/Info.plist"
+  local entitlements
+  local has_mic_entitlement=0
+
+  test -d "$app"
+  test -f "$plist"
+  require_plist_value "$plist" CFBundleExecutable VoLum
+  require_plist_value "$plist" CFBundleIdentifier com.Lum.app.VoLum
+  require_plist_value "$plist" CFBundlePackageType APPL
+  require_nonempty_plist_value "$plist" NSMicrophoneUsageDescription
+
+  entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null || true)"
+  if [[ "$entitlements" == *"com.apple.security.device.microphone"* && "$entitlements" == *"<true/>"* ]]; then
+    has_mic_entitlement=1
+  fi
+
+  if [[ "$has_mic_entitlement" == "1" ]]; then
+    echo "APP microphone entitlement: present"
+  else
+    echo "APP microphone entitlement: not present (expected for unsigned/non-sandbox CI builds)"
+    if [[ "${VERIFY_MAC_REQUIRE_MIC_ENTITLEMENT:-}" == "1" ]]; then
+      echo "ERROR: signed release verification requires com.apple.security.device.microphone" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ "${VERIFY_MAC_REQUIRE_SIGNED_APP:-}" == "1" ]]; then
+    codesign --verify --deep --strict --verbose=2 "$app"
+  fi
+}
+
 if [[ "${1:-}" == "auto" ]]; then
   ARCHIVE_NAME="$(python3 "${REPO_ROOT}/iPlug2/Scripts/get_archive_name.py" NeuralAmpModeler mac full)"
   APP_DMG="${REPO_ROOT}/NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}-app.dmg"
@@ -45,6 +105,7 @@ trap cleanup EXIT
 hdiutil attach "$APP_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/dmg"
 
 test -d "$VERIFY_DIR/dmg/VoLum.app"
+verify_standalone_app_identity "$VERIFY_DIR/dmg/VoLum.app"
 test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
 test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/PrePedals"
 test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
