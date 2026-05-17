@@ -330,7 +330,7 @@ def main():
             macOSapp["CFBundleVersion"] = CFBundleVersion
             macOSapp["CFBundleShortVersionString"] = CFBundleVersion
             macOSapp["LSMinimumSystemVersion"] = LSMinimumSystemVersion
-            macOSapp["CFBundlePackageType"] = CFBundlePackageType
+            macOSapp["CFBundlePackageType"] = "APPL"
             macOSapp["CFBundleSignature"] = config["PLUG_UNIQUE_ID"]
             macOSapp["CSResourcesFileMapped"] = CSResourcesFileMapped
             macOSapp["NSPrincipalClass"] = "SWELLApplication"
