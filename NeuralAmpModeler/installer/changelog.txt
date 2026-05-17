@@ -205,3 +205,5 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 05/12/2026 - v1.0.0 VoLum release. See GitHub release notes for included changes.
 05/14/2026 - VoLum: Amp switching now refreshes POST Delay/Reverb double-click defaults, so Oktaverb Bloom Intensity resets to 75% after restoring a saved amp scene.
+
+05/17/2026 - v1.0.1 VoLum release. See GitHub release notes for included changes.
