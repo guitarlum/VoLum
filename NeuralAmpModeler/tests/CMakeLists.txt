@@ -32,6 +32,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_codec.cpp
   test_volum_nan_guard.cpp
   test_volum_bypass_identity.cpp
+  test_iplug_app_vector_accumulator.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
@@ -55,6 +56,7 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${CMAKE_CURRENT_LIST_DIR}/third_party"
   "${REPO_ROOT}/eigen"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM"
+  "${REPO_ROOT}/iPlug2/IPlug/APP"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras/nlohmann"
 )
