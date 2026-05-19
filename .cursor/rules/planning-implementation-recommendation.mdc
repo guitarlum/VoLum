@@ -1,0 +1,23 @@
+---
+description: Require implementation-phase model and skill recommendations in plans
+alwaysApply: true
+---
+
+# Planning Hand-Off Recommendation
+
+When creating or updating an implementation plan, end the plan with a short
+`Implementation Recommendation` section.
+
+Include:
+
+- **Model:** Recommend the model to use for the implementation chat. Default to
+  GPT-5.5 unless the task clearly benefits from a different available model or
+  the user asks for one.
+- **Skills:** Recommend any relevant installed skills to attach for the
+  implementation phase. If none fit, say so explicitly.
+- **Why:** Give a one-sentence reason tied to the task shape, such as docs,
+  UI, native build debugging, parameter/state migration, release packaging, or
+  code review.
+
+Keep this section concise. It should help the user start the next chat with the
+right context, not reopen the design discussion.

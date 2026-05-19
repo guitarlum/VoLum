@@ -117,6 +117,7 @@ Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
 
 - [User guide](docs/user-guide.en.md): interface, Dual Amp, PRE pedals, POST effects, tuner, metronome, keyboard controls, and settings.
 - [Developer guide](NeuralAmpModeler/README.md): build, test, packaging, and architecture notes.
+- [Report a bug or request a feature](https://github.com/guitarlum/VoLum/issues/new/choose): use the **Bug report** template for crashes or wrong behavior, and **Feature request** for ideas.
 - Settings are stored locally at `%LOCALAPPDATA%\VoLum\volum-settings.json` on Windows and `~/Library/Application Support/VoLum/volum-settings.json` on macOS.
 
 ## Credits
