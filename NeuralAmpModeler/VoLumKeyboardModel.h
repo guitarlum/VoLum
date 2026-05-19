@@ -65,6 +65,16 @@ inline double StepForParam(int paramIdx, bool fine)
 {
   switch (paramIdx)
   {
+    case kInputLevel:
+    case kOutputLevel:
+    case kPreCompLevel:
+    case kPreNam1Gain:
+    case kPreNam1Level:
+    case kPreNam2Gain:
+    case kPreNam2Level:
+    case kSupportInputLevel:
+    case kSupportOutputLevel:
+      return fine ? 0.1 : 0.5;
     case kToneBass:
     case kToneMid:
     case kToneTreble:
@@ -101,6 +111,36 @@ inline double StepForParam(int paramIdx, bool fine)
       return fine ? 0.1 : 1.0;
   }
 }
+
+struct WheelAccumulator
+{
+  int OnDelta(double delta)
+  {
+    if (delta == 0.0)
+      return 0;
+
+    if (mAccum != 0.0 && ((delta > 0.0) != (mAccum > 0.0)))
+      mAccum = 0.0;
+
+    mAccum += delta;
+
+    if (mAccum >= 1.0 || mAccum <= -1.0)
+    {
+      const int steps = static_cast<int>(mAccum);
+      mAccum -= static_cast<double>(steps);
+      return steps;
+    }
+
+    return 0;
+  }
+
+  void Reset() { mAccum = 0.0; }
+
+  double ResidualForTests() const { return mAccum; }
+
+private:
+  double mAccum = 0.0;
+};
 
 template <size_t N>
 inline bool Contains(const std::array<int, N>& params, int paramIdx)
