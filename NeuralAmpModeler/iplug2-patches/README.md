@@ -36,10 +36,14 @@ dirty, inspect it before committing:
 git -C iPlug2 status --short
 ```
 
-## Current mirror patch
+## Current mirror patches
 
 - `ad391b96b APP: route selected standalone audio channels` — Makes the
   standalone audio host honor the Audio Settings input/output channel selection
   on Windows ASIO and other RtAudio backends. Without it, multi-channel
   interfaces like the RME Babyface Pro FS effectively ignore the channel
   pickers and always use device input 1 / outputs 1+2.
+- `3d93e147f APP: normalize macOS scroll-wheel direction` — Converts Cocoa
+  scroll-wheel deltas back to device-relative direction when macOS natural
+  scrolling has already inverted them, so trackpad knob gestures match the rest
+  of the system.
