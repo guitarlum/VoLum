@@ -489,6 +489,8 @@ private:
     int slot = -1;
     std::string path;
     std::string error;
+    double sampleRate = 0.0;
+    int blockSize = 0;
     std::unique_ptr<ResamplingNAM> model;
   };
 
