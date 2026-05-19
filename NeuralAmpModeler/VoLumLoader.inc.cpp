@@ -143,6 +143,13 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
   for (auto& result : results)
   {
+    if (result.model != nullptr && (result.sampleRate != GetSampleRate() || result.blockSize != GetBlockSize()))
+    {
+      result.model->Reset(GetSampleRate(), GetBlockSize());
+      result.sampleRate = GetSampleRate();
+      result.blockSize = GetBlockSize();
+    }
+
     if (result.kind == VoLumLoadKind::Main)
     {
       {
@@ -265,6 +272,8 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
     result.kind = request.kind;
     result.slot = request.slot;
     result.path = request.fileToLoad;
+    result.sampleRate = request.sampleRate;
+    result.blockSize = request.blockSize;
 
     try
     {

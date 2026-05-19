@@ -119,6 +119,12 @@ Nutze die Standalone-App als Editor für deine Klangbibliothek. Sie schreibt die
 
 Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben die globale VoLum-Einstellungsdatei nicht, deshalb können zwei Spuren einander die Defaults nicht überschreiben.
 
+### Standalone-Audioeinstellungen
+
+In der Standalone-App öffnest du **Preferences**, um Audiotreiber, Gerät, Samplerate, Kanalrouting und Buffergröße zu wählen. VoLum unterstützt jede aufgelistete Buffergröße, auch 32 und 96 Samples. Intern verarbeitet VoLum weiter feste 64-Sample-Blöcke; Buffergrößen, die kein Vielfaches von 64 sind, fügen bis zu einen kleinen internen Block Latenz hinzu.
+
+Wenn du einen Treiber ohne nutzbares Gerät auswählst, zum Beispiel ASIO auf einem Laptop ohne ASIO-Interface, zeigt VoLum eine Fehlermeldung und stellt die vorher funktionierende Audiokonfiguration wieder her, statt sich zu schließen.
+
 VoLum besitzt außerdem eine immer aktive Ausgangs-Schutzstufe nach Delay und Reverb. Normales Spielen bleibt unverändert. Wenn ein heißes Rig und starke POST-Effekte durchgehende Peaks erzeugen, wird das OUT-Meter rot und der Footer zeigt `Output safety active - lower output or wet mix`. Drehe Output, Delay Mix oder Reverb Mix zurück, wenn du das oft siehst.
 
 ## Fehler Melden Oder Feature Vorschlagen
