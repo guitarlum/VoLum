@@ -345,6 +345,21 @@ elif [ -d "$VST3" ] && [ ! -d "$RIGS_SRC" ]; then
   echo "WARNING: rigs directory not found: $RIGS_SRC (VST3 install has no VoLumRigs copy)"
 fi
 
+if [ "$CODESIGN" != "1" ]; then
+  echo "re-signing bundles ad-hoc after strip/resource updates"
+  echo ""
+
+  for bundle in "$APP" "$AU" "$VST3"; do
+    if [ -d "$bundle" ]; then
+      codesign --force --sign - --deep --timestamp=none "$bundle"
+      codesign --verify --deep --strict --verbose=2 "$bundle" || {
+        echo "ERROR: ad-hoc re-sign verification failed for $bundle"
+        exit 1
+      }
+    fi
+  done
+fi
+
 if [ $CODESIGN == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # code sign AAX binary with wraptool

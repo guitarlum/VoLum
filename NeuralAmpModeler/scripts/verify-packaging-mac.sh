@@ -40,6 +40,11 @@ require_nonempty_plist_value() {
   fi
 }
 
+verify_bundle_signature() {
+  local bundle="$1"
+  codesign --verify --deep --strict --verbose=2 "$bundle"
+}
+
 verify_standalone_app_identity() {
   local app="$1"
   local plist="$app/Contents/Info.plist"
@@ -69,7 +74,7 @@ verify_standalone_app_identity() {
   fi
 
   if [[ "${VERIFY_MAC_REQUIRE_SIGNED_APP:-}" == "1" ]]; then
-    codesign --verify --deep --strict --verbose=2 "$app"
+    verify_bundle_signature "$app"
   fi
 }
 
@@ -106,6 +111,7 @@ hdiutil attach "$APP_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/dmg"
 
 test -d "$VERIFY_DIR/dmg/VoLum.app"
 verify_standalone_app_identity "$VERIFY_DIR/dmg/VoLum.app"
+verify_bundle_signature "$VERIFY_DIR/dmg/VoLum.app"
 test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
 test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/PrePedals"
 test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
@@ -119,6 +125,7 @@ hdiutil detach "$VERIFY_DIR/dmg"
 
 unzip -q "$VST3_ZIP" -d "$VERIFY_DIR/vst3"
 test -d "$VERIFY_DIR/vst3/VoLum.vst3"
+verify_bundle_signature "$VERIFY_DIR/vst3/VoLum.vst3"
 test -d "$VERIFY_DIR/vst3/VoLumRigs"
 test -d "$VERIFY_DIR/vst3/VoLumRigs/PrePedals"
 test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
