@@ -156,6 +156,20 @@ TEST_CASE("VoLumCompressor 1176: Output 0 dB uses hidden unity calibration")
   CHECK(rmsUnity / rmsPlusFive == doctest::Approx(std::pow(10.0, -5.0 / 20.0)).epsilon(1e-3));
 }
 
+TEST_CASE("VoLumCompressor 1176: Output minimum mutes")
+{
+  const size_t frames = 128;
+  std::vector<DSP_SAMPLE> samples(frames, 0.35);
+  DSP_SAMPLE* ptrs[] = {samples.data()};
+
+  dsp::effect::VoLumCompressor comp;
+  comp.SetParams(3.0, 4.0, 0.4, 250.0, 1.0, -20.0, 48000.0);
+  auto** out = comp.Process(ptrs, 1, frames);
+
+  for (size_t i = 0; i < frames; ++i)
+    CHECK(out[0][i] == doctest::Approx(0.0));
+}
+
 TEST_CASE("VoLumCompressor 1176: FET pre-detector saturation present at high drive")
 {
   // Feed a clean sine at high amplitude and cranked Input. Output should contain

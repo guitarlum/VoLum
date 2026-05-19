@@ -133,6 +133,8 @@ platform - the four `inc.cpp` files are tail-included; not separate TUs):
   delay/reverb/Oktaverb mode snapshots,
   `_VolumSaveSettingsToFile`/`_VolumLoadSettingsFromFile`).
 - `Unserialization.cpp` - chunk-version migration / state restore.
+- `VoLumLevelMute.h` - shared output-style level helper where a knob's
+  literal minimum maps to silence while all other dB values keep normal gain.
 
 UI control headers (per-section split; `VoLumTriptych.h` and
 `VoLumCoreControls.h` are umbrellas that `#include` the pieces):

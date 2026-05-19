@@ -2,6 +2,7 @@
 
 #include "../AudioDSPTools/dsp/RecursiveLinearFilter.h"
 #include "../AudioDSPTools/dsp/dsp.h"
+#include "VoLumLevelMute.h"
 
 #include <algorithm>
 #include <cmath>
@@ -94,7 +95,10 @@ public:
     mMix = std::clamp(mix, 0.0, 1.0);
     // Output=0 dB should feel like a calibrated compressor unity point, not the raw
     // 1176-style make-up gain. The user-facing knob remains centered at 0 dB.
-    mLevel = std::pow(10.0, (std::clamp(levelDb, -20.0, 20.0) + kUnityOutputCalibrationDb) / 20.0);
+    const double clampedLevelDb = std::clamp(levelDb, -20.0, 20.0);
+    mLevel = volum::IsLevelMuteValue(clampedLevelDb, -20.0) ?
+               0.0 :
+               std::pow(10.0, (clampedLevelDb + kUnityOutputCalibrationDb) / 20.0);
     if (mSampleRate != sampleRate)
     {
       mSampleRate = sampleRate;

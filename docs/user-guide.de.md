@@ -29,6 +29,8 @@ Kurze Orientierung:
 
 Amp-EQ und Pedal-EQ sind zusätzliche Klangregler. Sie müssen nicht den physischen Reglerstellungen entsprechen, mit denen das Profil aufgenommen wurde.
 
+Der Amp-Regler **OUTPUT** bleibt bei `0.0 dB` auf Unity-Gain. Ganz gegen den Uhrzeigersinn zeigt er `-∞ dB` und schaltet den Amp-Ausgang vollständig stumm.
+
 ## PRE-Bereich
 
 ![VoLum PRE-Bereich](user-guide-pre.png)
@@ -48,6 +50,8 @@ Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Gu
 
 PRE-Einstellungen werden pro Amp gespeichert.
 
+Der Kompressor-Regler **OUTPUT** und beide NAM-Pedal-Regler **LEVEL** schalten ihre jeweilige Stufe bei der ganz linken Einstellung `-∞ dB` vollständig stumm.
+
 ## Dual Amp
 
 ![VoLum Dual-Amp-Ansicht](user-guide-dual-amp.png)
@@ -63,6 +67,8 @@ Dual Amp kombiniert den Haupt-Amp mit einem Support-Amp.
 Die Support-Spur hat einen `Ø`-Polaritätsschalter. Er ist bei neuen Dual-Amp-Setups standardmäßig aktiv, weil manche mittigen Amp-Stacks so besser summieren. Wenn ein Stack dünn oder phasig klingt, schalte `Ø` um und prüfe danach Speaker und Kanal beider Spuren.
 
 VoLum gleicht MAIN- und SUPPORT-NAM-Latenzen aus, bevor die Spuren gepannt und summiert werden.
+
+Der **OUTPUT**-Regler der SUPPORT-Spur schaltet diese Spur bei der ganz linken Einstellung `-∞ dB` ebenfalls vollständig stumm.
 
 ## POST-Bereich
 
