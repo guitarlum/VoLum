@@ -1,0 +1,264 @@
+# Smoke-test VoLum standalone audio configuration on Windows.
+# Exercises the real APP executable by restarting it with persisted edge-case
+# audio settings. This catches startup/reconfiguration crashes that doctests
+# cannot cover because RtAudio owns the driver callback.
+
+param(
+  [switch] $SkipBuild,
+  [switch] $RequireAsioFallback,
+  [int[]] $Buffers = @(32, 96, 8192, 192),
+  [int] $StartupSeconds = 5
+)
+
+$ErrorActionPreference = "Stop"
+
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$slnDir = (Resolve-Path (Join-Path $here "..")).Path
+$exe = Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe"
+$settingsDir = Join-Path $env:LOCALAPPDATA "VoLum"
+$settingsPath = Join-Path $settingsDir "settings.ini"
+
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class VoLumSmokeWin32
+{
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern IntPtr FindWindow(string className, string windowName);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern IntPtr GetDlgItem(IntPtr hDlg, int nIDDlgItem);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto, EntryPoint="SendMessage")]
+  public static extern IntPtr SendMessageInt(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, System.Text.StringBuilder lParam);
+}
+'@
+
+function Get-MSBuild {
+  if ($env:GITHUB_ACTIONS -eq "true") {
+    $cmd = Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cmd) { return $cmd.Source }
+  }
+
+  $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+  if (-not (Test-Path $vswhere)) {
+    Write-Error "vswhere.exe not found. Install Visual Studio Build Tools."
+  }
+
+  $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+  if (-not $msbuild) {
+    Write-Error "MSBuild.exe not found."
+  }
+  return $msbuild
+}
+
+function Close-VoLum {
+  $pref = [VoLumSmokeWin32]::FindWindow("#32770", "Preferences")
+  if ($pref -ne [IntPtr]::Zero) {
+    [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # WM_COMMAND / IDCANCEL
+    Start-Sleep -Milliseconds 300
+  }
+
+  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+  if ($main -ne [IntPtr]::Zero) {
+    [VoLumSmokeWin32]::PostMessage($main, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null # WM_CLOSE
+    Start-Sleep -Seconds 2
+  }
+
+  Get-Process VoLum -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+function Close-AudioErrorDialogs {
+  foreach ($title in @("Audio Error", "Error")) {
+    $dialog = [VoLumSmokeWin32]::FindWindow("#32770", $title)
+    if ($dialog -ne [IntPtr]::Zero) {
+      [VoLumSmokeWin32]::PostMessage($dialog, 0x0111, [IntPtr]1, [IntPtr]::Zero) | Out-Null # WM_COMMAND / IDOK
+      Start-Sleep -Milliseconds 300
+    }
+  }
+}
+
+function Wait-VoLumAlive {
+  param([string] $CaseName)
+
+  $process = $null
+  for ($i = 0; $i -lt ($StartupSeconds * 4); ++$i) {
+    Close-AudioErrorDialogs
+
+    $process = Get-Process VoLum -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $process) {
+      Start-Sleep -Milliseconds 250
+      continue
+    }
+
+    $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+    if ($main -ne [IntPtr]::Zero) {
+      return $process
+    }
+
+    Start-Sleep -Milliseconds 250
+  }
+
+  if (-not $process) {
+    throw "$CaseName failed: VoLum.exe exited during startup."
+  }
+  throw "$CaseName failed: VoLum window was not found."
+}
+
+function Set-IniValue {
+  param(
+    [string] $Content,
+    [string] $Key,
+    [string] $Value
+  )
+
+  $pattern = "(?m)^$([regex]::Escape($Key))=.*$"
+  $replacement = "$Key=$Value"
+  if ($Content -match $pattern) {
+    return $Content -replace $pattern, $replacement
+  }
+
+  return $Content.TrimEnd() + "`r`n$replacement`r`n"
+}
+
+function Get-IniValue {
+  param(
+    [string] $Path,
+    [string] $Key
+  )
+
+  $match = Select-String -Path $Path -Pattern "^$([regex]::Escape($Key))=" -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $match) { return $null }
+  return ($match.Line -split "=", 2)[1]
+}
+
+function Open-Preferences {
+  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+  if ($main -eq [IntPtr]::Zero) {
+    throw "Cannot open Preferences: VoLum window was not found."
+  }
+
+  [VoLumSmokeWin32]::PostMessage($main, 0x0111, [IntPtr]40006, [IntPtr]::Zero) | Out-Null # WM_COMMAND / ID_PREFERENCES
+  for ($i = 0; $i -lt 20; ++$i) {
+    Start-Sleep -Milliseconds 250
+    $pref = [VoLumSmokeWin32]::FindWindow("#32770", "Preferences")
+    if ($pref -ne [IntPtr]::Zero) {
+      return $pref
+    }
+  }
+
+  throw "Preferences dialog did not open."
+}
+
+function Get-ComboText {
+  param(
+    [IntPtr] $Dialog,
+    [int] $ControlId
+  )
+
+  $combo = [VoLumSmokeWin32]::GetDlgItem($Dialog, $ControlId)
+  if ($combo -eq [IntPtr]::Zero) {
+    throw "Combo control $ControlId not found."
+  }
+
+  $sel = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0147, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCURSEL
+  if ($sel -lt 0) {
+    return ""
+  }
+
+  $len = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0149, [IntPtr]$sel, [IntPtr]::Zero).ToInt64() # CB_GETLBTEXTLEN
+  $sb = New-Object Text.StringBuilder ($len + 1)
+  [VoLumSmokeWin32]::SendMessage($combo, 0x0148, [IntPtr]$sel, $sb) | Out-Null # CB_GETLBTEXT
+  return $sb.ToString()
+}
+
+if (-not $SkipBuild) {
+  Set-Location $slnDir
+  & (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
+  $msbuild = Get-MSBuild
+  & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-app /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+if (-not (Test-Path $exe)) {
+  Write-Error "Standalone executable not found: $exe"
+}
+
+New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+$hadOriginalSettings = Test-Path $settingsPath
+if ($hadOriginalSettings) {
+  $originalSettings = Get-Content $settingsPath -Raw
+}
+else {
+  $originalSettings = @"
+[audio]
+driver=0
+indev=Default Device
+outdev=Default Device
+in1=1
+in2=2
+out1=1
+out2=2
+buffer=192
+sr=44100
+[midi]
+indev=off
+outdev=off
+inchan=0
+outchan=0
+"@
+}
+
+try {
+  foreach ($buffer in $Buffers) {
+    Close-VoLum
+    $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
+    $settings = Set-IniValue -Content $settings -Key "buffer" -Value "$buffer"
+    Set-Content -Path $settingsPath -Value $settings -NoNewline
+
+    Start-Process $exe
+    $process = Wait-VoLumAlive -CaseName "buffer=$buffer"
+    Write-Host "OK: startup buffer=$buffer pid=$($process.Id)"
+  }
+
+  Close-VoLum
+  $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
+  Set-Content -Path $settingsPath -Value $asioSettings -NoNewline
+  Start-Process $exe
+  $process = Wait-VoLumAlive -CaseName "ASIO fallback"
+  $driver = Get-IniValue -Path $settingsPath -Key "driver"
+
+  if ($driver -eq "0") {
+    $pref = Open-Preferences
+    $driverText = Get-ComboText -Dialog $pref -ControlId 40009
+    if ($driverText -ne "DirectSound") {
+      throw "ASIO fallback failed: Preferences driver combo shows '$driverText', expected 'DirectSound'."
+    }
+    [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
+    Write-Host "OK: ASIO unavailable fallback reverted to DirectSound pid=$($process.Id)"
+  }
+  elseif ($RequireAsioFallback) {
+    throw "ASIO fallback was required, but settings.ini still has driver=$driver."
+  }
+  else {
+    Write-Host "SKIP: ASIO fallback was not exercised; settings.ini has driver=$driver."
+  }
+}
+finally {
+  Close-VoLum
+  if ($hadOriginalSettings) {
+    Set-Content -Path $settingsPath -Value $originalSettings -NoNewline
+  }
+  else {
+    Remove-Item -Path $settingsPath -Force -ErrorAction SilentlyContinue
+  }
+  Start-Process $exe
+  Start-Sleep -Seconds 2
+}
