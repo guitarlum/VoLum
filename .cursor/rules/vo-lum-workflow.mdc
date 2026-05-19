@@ -49,6 +49,7 @@ alwaysApply: true
 - **You run** builds/tests in this environment; do not only tell the user what to run.
 - After failures: diagnose, fix, retry—do not stop after one error.
 - Kill stale `VoLum.exe` processes before rebuilding if the linker reports a locked file.
+- Shell is **Windows PowerShell 5.x**: chain commands with `;` plus `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`. Do not use `&&` / `||` — PowerShell 5.x rejects them as invalid statement separators.
 
 ## Scope discipline
 
