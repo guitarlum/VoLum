@@ -122,6 +122,7 @@
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />
+    <ClCompile Include="..\tests\test_volum_knob_wheel.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\convnet.cpp" />
