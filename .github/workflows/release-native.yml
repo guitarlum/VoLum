@@ -160,6 +160,8 @@ jobs:
         echo "VST3 architectures: $vst3_archs"
         echo "APP main nib: $main_nib"
 
+        codesign --verify --deep --strict --verbose=2 "$HOME/Applications/VoLum.app"
+        codesign --verify --deep --strict --verbose=2 "$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
         [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
         [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
         test -f "$HOME/Applications/VoLum.app/Contents/Resources/${main_nib}.nib"
