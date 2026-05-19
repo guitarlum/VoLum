@@ -21,6 +21,7 @@
 
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumLevelMute.h"
 #include "VoLumMasterSafety.h"
 #include "VoLumNanGuard.h"
 #include "VoLumPaths.h"
@@ -73,6 +74,17 @@ const IVStyle radioButtonStyle =
     .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
     .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
     .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
+
+void _SetMuteFloorDbDisplay(IParam* pParam)
+{
+  const double minimumDb = pParam->GetMin();
+  pParam->SetDisplayFunc([minimumDb](double value, WDL_String& display) {
+    if (volum::IsLevelMuteValue(value, minimumDb))
+      display.Set("-\xE2\x88\x9E");
+    else
+      display.SetFormatted(32, "%.1f", value);
+  });
+}
 
 #if VOLUM_AMPETE_PRODUCT
 const IColor kGold(255, 200, 162, 78);
@@ -206,6 +218,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kToneMid)->InitDouble("Middle", 5.0, 0.0, 10.0, 0.1);
   GetParam(kToneTreble)->InitDouble("Treble", 5.0, 0.0, 10.0, 0.1);
   GetParam(kOutputLevel)->InitGain("Output", 0.0, -40.0, 10.0, 0.1);
+  _SetMuteFloorDbDisplay(GetParam(kOutputLevel));
   GetParam(kNoiseGateThreshold)->InitGain("Threshold", -80.0, -100.0, 0.0, 0.1);
   GetParam(kNoiseGateActive)->InitBool("NoiseGateActive", true);
   GetParam(kEQActive)->InitBool("ToneStack", true);
@@ -253,6 +266,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPreCompRelease)->InitDouble("PreCompRelease", 120.0, 20.0, 800.0, 1.0, "ms");
   GetParam(kPreCompMix)->InitDouble("PreCompMix", 1.0, 0.0, 1.0, 0.01);
   GetParam(kPreCompLevel)->InitDouble("PreCompLevel", 0.0, -20.0, 20.0, 0.1, "dB");
+  _SetMuteFloorDbDisplay(GetParam(kPreCompLevel));
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -261,6 +275,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPreNam1MidFreq)->InitDouble("PreNam1MidFreq", 650.0, 150.0, 2500.0, 10.0, "Hz");
   GetParam(kPreNam1Treble)->InitDouble("PreNam1Treble", 5.0, 0.0, 10.0, 0.1);
   GetParam(kPreNam1Level)->InitDouble("PreNam1Level", 0.0, -20.0, 20.0, 0.1, "dB");
+  _SetMuteFloorDbDisplay(GetParam(kPreNam1Level));
   GetParam(kPreNam2Active)->InitBool("PreNam2Active", false);
   GetParam(kPreNam2Capture)->InitDouble("PreNam2Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam2Gain)->InitDouble("PreNam2Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -269,6 +284,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPreNam2MidFreq)->InitDouble("PreNam2MidFreq", 650.0, 150.0, 2500.0, 10.0, "Hz");
   GetParam(kPreNam2Treble)->InitDouble("PreNam2Treble", 5.0, 0.0, 10.0, 0.1);
   GetParam(kPreNam2Level)->InitDouble("PreNam2Level", 0.0, -20.0, 20.0, 0.1, "dB");
+  _SetMuteFloorDbDisplay(GetParam(kPreNam2Level));
 
   GetParam(kVoLumAmpeteRig)
     ->InitEnum("RigFile", 0,
@@ -290,6 +306,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kSupportToneMid)->InitDouble("SupportMiddle", 5.0, 0.0, 10.0, 0.1);
   GetParam(kSupportToneTreble)->InitDouble("SupportTreble", 5.0, 0.0, 10.0, 0.1);
   GetParam(kSupportOutputLevel)->InitGain("SupportOutput", volum::kDualAmpDefaultLaneLevelDb, -40.0, 10.0, 0.1);
+  _SetMuteFloorDbDisplay(GetParam(kSupportOutputLevel));
   GetParam(kSupportNoiseGateActive)->InitBool("SupportNoiseGateActive", true);
   GetParam(kSupportEQActive)->InitBool("SupportToneStack", true);
   GetParam(kSupportAmpPan)->InitDouble("SupportAmpPan", 0.0, -1.0, 1.0, 0.01);
@@ -1308,7 +1325,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
                            GetParam(midFreqParam)->Value(), GetParam(trebleParam)->Value());
     preAmpPointers = mPreEq[slot].Process(preAmpPointers, numChannelsInternal, numFrames);
 
-    const double outGain = std::pow(10.0, GetParam(levelParam)->Value() / 20.0);
+    const double outGain = volum::DbToAmpWithMuteFloor(GetParam(levelParam)->Value(), GetParam(levelParam)->GetMin());
     mPreOutputGain[slot].SetParams(recursive_linear_filter::LevelParams(outGain));
     preAmpPointers = mPreOutputGain[slot].Process(preAmpPointers, numChannelsInternal, numFrames);
   };
@@ -2372,7 +2389,13 @@ void NeuralAmpModeler::_SetInputGain()
 
 void NeuralAmpModeler::_SetOutputGain()
 {
-  double gainDB = GetParam(kOutputLevel)->Value();
+  auto* outputParam = GetParam(kOutputLevel);
+  double gainDB = outputParam->Value();
+  if (volum::IsLevelMuteValue(gainDB, outputParam->GetMin()))
+  {
+    mOutputGain = 0.0;
+    return;
+  }
   if (mModel != nullptr)
   {
     const int outputMode = GetParam(kOutputMode)->Int();
@@ -2403,7 +2426,13 @@ void NeuralAmpModeler::_SetOutputGain()
 
 void NeuralAmpModeler::_SetSupportOutputGain()
 {
-  double gainDB = GetParam(kSupportOutputLevel)->Value();
+  auto* outputParam = GetParam(kSupportOutputLevel);
+  double gainDB = outputParam->Value();
+  if (volum::IsLevelMuteValue(gainDB, outputParam->GetMin()))
+  {
+    mSupportOutputGain = 0.0;
+    return;
+  }
 #if VOLUM_AMPETE_PRODUCT
   if (mSupportModel != nullptr)
   {

@@ -29,6 +29,8 @@ Short orientation:
 
 Amp EQ and pedal EQ are extra tone-shaping controls. They do not need to match the physical knob positions used during profiling.
 
+The amp **OUTPUT** knob keeps unity at `0.0 dB`. Turn it fully counter-clockwise to `-∞ dB` to mute the amp output completely.
+
 ## PRE Section
 
 ![VoLum PRE section](user-guide-pre.png)
@@ -48,6 +50,8 @@ Pedal captures are grouped by type and sorted from lower to higher gain. Good st
 
 PRE settings are saved per amp.
 
+The compressor **OUTPUT** knob and both NAM pedal **LEVEL** knobs mute their stage completely at the fully counter-clockwise `-∞ dB` setting.
+
 ## Dual Amp
 
 ![VoLum Dual Amp view](user-guide-dual-amp.png)
@@ -63,6 +67,8 @@ Dual Amp combines the main amp with a support amp.
 The support lane has a `Ø` polarity button. It is on by default for new Dual Amp setups because some centered amp stacks sum better that way. If a stack sounds thin or phasey, try toggling `Ø`, then check both lanes use the intended speaker and channel.
 
 VoLum aligns MAIN and SUPPORT NAM latency before panning and summing.
+
+The SUPPORT lane **OUTPUT** knob also mutes that lane completely at the fully counter-clockwise `-∞ dB` setting.
 
 ## POST Section
 
