@@ -15,6 +15,7 @@
 #include "third_party/doctest.h"
 #include "../../AudioDSPTools/dsp/Delay.h"
 #include "../../AudioDSPTools/dsp/Reverb.h"
+#include "../VoLumLevelMute.h"
 #include "../VoLumMasterSafety.h"
 #include "../VoLumNanGuard.h"
 
@@ -113,4 +114,11 @@ TEST_CASE("BypassIdentity: NanGuard is identity for finite samples")
   const auto before = buf;
   CHECK_FALSE(volum::ScrubNonFiniteInPlace(buf.data(), buf.size()));
   CHECK(BuffersEqual(buf, before, 0.0));
+}
+
+TEST_CASE("BypassIdentity: output-style level minimum is silence")
+{
+  CHECK(volum::DbToAmpWithMuteFloor(-20.0, -20.0) == doctest::Approx(0.0));
+  CHECK(volum::DbToAmpWithMuteFloor(-40.0, -40.0) == doctest::Approx(0.0));
+  CHECK(volum::DbToAmpWithMuteFloor(0.0, -40.0) == doctest::Approx(1.0));
 }

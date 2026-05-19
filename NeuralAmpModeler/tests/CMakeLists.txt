@@ -32,6 +32,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_codec.cpp
   test_volum_nan_guard.cpp
   test_volum_bypass_identity.cpp
+  test_volum_level_mute.cpp
   test_iplug_app_vector_accumulator.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
