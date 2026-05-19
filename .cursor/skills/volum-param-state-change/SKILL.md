@@ -21,6 +21,8 @@ description: Safely change VoLum parameters, preset migration, user settings, or
    - `test_keyboard_steps.cpp`
    - `test_volum_chunk_version.cpp`
    - settings/DSP-specific tests as needed.
+5. If a post-plan fix would change user-facing display wording or symbols,
+   ask before changing the planned wording (for example `-∞ dB` vs `OFF`).
 
 ## Invariants
 
