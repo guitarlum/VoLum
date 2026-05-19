@@ -127,7 +127,9 @@ Fresh VST3 instances read those defaults when you add VoLum to a track. After th
 
 ### Standalone Audio Settings
 
-In the standalone app, open **Preferences** to choose the audio driver, device, sample rate, channel routing, and buffer size. VoLum supports every listed buffer size, including 32 and 96 samples. Internally it still processes fixed 64-sample blocks; buffer sizes that are not a multiple of 64 add up to one small internal block of latency.
+In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, audio device, sample rate, channel routing, and buffer size. In the VST3, use your DAW's audio settings instead.
+
+VoLum uses one audio device for both input and output. The input is mono, so you choose one input channel; output remains stereo, so you can still choose left and right output channels separately. VoLum supports every listed buffer size, including 32 and 96 samples. Internally it still processes fixed 64-sample blocks; buffer sizes that are not a multiple of 64 add up to one small internal block of latency.
 
 If you select a driver that has no usable device, such as ASIO on a laptop without an ASIO interface, VoLum shows an error and reverts to the previous working audio settings instead of closing.
 

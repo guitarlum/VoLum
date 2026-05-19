@@ -127,7 +127,9 @@ Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Da
 
 ### Standalone-Audioeinstellungen
 
-In der Standalone-App öffnest du **Preferences**, um Audiotreiber, Gerät, Samplerate, Kanalrouting und Buffergröße zu wählen. VoLum unterstützt jede aufgelistete Buffergröße, auch 32 und 96 Samples. Intern verarbeitet VoLum weiter feste 64-Sample-Blöcke; Buffergrößen, die kein Vielfaches von 64 sind, fügen bis zu einen kleinen internen Block Latenz hinzu.
+In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`, um Audiotreiber, Audiogerät, Samplerate, Kanalrouting und Buffergröße zu wählen. In der VST3-Version nutzt du stattdessen die Audioeinstellungen deiner DAW.
+
+VoLum nutzt ein Audiogerät für Eingang und Ausgang. Der Eingang ist mono, deshalb wählst du einen Eingangskanal; der Ausgang bleibt stereo, deshalb kannst du linken und rechten Ausgangskanal weiterhin getrennt wählen. VoLum unterstützt jede aufgelistete Buffergröße, auch 32 und 96 Samples. Intern verarbeitet VoLum weiter feste 64-Sample-Blöcke; Buffergrößen, die kein Vielfaches von 64 sind, fügen bis zu einen kleinen internen Block Latenz hinzu.
 
 Wenn du einen Treiber ohne nutzbares Gerät auswählst, zum Beispiel ASIO auf einem Laptop ohne ASIO-Interface, zeigt VoLum eine Fehlermeldung und stellt die vorher funktionierende Audiokonfiguration wieder her, statt sich zu schließen.
 

@@ -31,6 +31,12 @@ public static class VoLumSmokeWin32
   public static extern IntPtr GetDlgItem(IntPtr hDlg, int nIDDlgItem);
 
   [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern bool IsWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern bool IsWindowVisible(IntPtr hWnd);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
   public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
 
   [DllImport("user32.dll", CharSet=CharSet.Auto, EntryPoint="SendMessage")]
@@ -179,6 +185,83 @@ function Get-ComboText {
   return $sb.ToString()
 }
 
+function Test-ControlVisible {
+  param(
+    [IntPtr] $Dialog,
+    [int] $ControlId
+  )
+
+  $control = [VoLumSmokeWin32]::GetDlgItem($Dialog, $ControlId)
+  return ($control -ne [IntPtr]::Zero) -and
+    [VoLumSmokeWin32]::IsWindow($control) -and
+    [VoLumSmokeWin32]::IsWindowVisible($control)
+}
+
+function Get-ComboCount {
+  param(
+    [IntPtr] $Dialog,
+    [int] $ControlId
+  )
+
+  $combo = [VoLumSmokeWin32]::GetDlgItem($Dialog, $ControlId)
+  if ($combo -eq [IntPtr]::Zero) {
+    throw "Combo control $ControlId not found."
+  }
+
+  return [VoLumSmokeWin32]::SendMessageInt($combo, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCOUNT
+}
+
+function Assert-StandaloneAudioLayout {
+  param([IntPtr] $Dialog)
+
+  $audioDeviceId = 40010 # IDC_COMBO_AUDIO_DEV
+  $oldOutputDeviceId = 40011
+  $audioInputId = 40014 # IDC_COMBO_AUDIO_IN
+  $oldInputRId = 40015
+  $outputRId = 40016
+  $outputLId = 40017
+
+  foreach ($controlId in @($audioDeviceId, $audioInputId, $outputLId, $outputRId)) {
+    if (-not (Test-ControlVisible -Dialog $Dialog -ControlId $controlId)) {
+      throw "Expected Preferences control $controlId to be visible."
+    }
+  }
+
+  foreach ($controlId in @($oldOutputDeviceId, $oldInputRId)) {
+    if (Test-ControlVisible -Dialog $Dialog -ControlId $controlId) {
+      throw "Old Preferences control $controlId is still visible."
+    }
+  }
+
+  if ((Get-ComboCount -Dialog $Dialog -ControlId $audioDeviceId) -lt 1) {
+    throw "Audio device combo has no selectable devices."
+  }
+  if ((Get-ComboCount -Dialog $Dialog -ControlId $audioInputId) -lt 1) {
+    throw "Input channel combo has no selectable channels."
+  }
+}
+
+function Assert-IniAudioDevicePair {
+  param(
+    [string] $ExpectedDevice,
+    [string] $CaseName
+  )
+
+  $inDev = Get-IniValue -Path $settingsPath -Key "indev"
+  $outDev = Get-IniValue -Path $settingsPath -Key "outdev"
+  $in2 = Get-IniValue -Path $settingsPath -Key "in2"
+
+  if ($inDev -ne $outDev) {
+    throw "$CaseName failed: indev='$inDev' outdev='$outDev', expected one shared audio device."
+  }
+  if ($ExpectedDevice -and $outDev -ne $ExpectedDevice) {
+    throw "$CaseName failed: shared audio device is '$outDev', expected '$ExpectedDevice'."
+  }
+  if ($in2 -ne (Get-IniValue -Path $settingsPath -Key "in1")) {
+    throw "$CaseName failed: in1/in2 did not migrate to the same mono input channel."
+  }
+}
+
 if (-not $SkipBuild) {
   Set-Location $slnDir
   & (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
@@ -227,6 +310,51 @@ try {
     $process = Wait-VoLumAlive -CaseName "buffer=$buffer"
     Write-Host "OK: startup buffer=$buffer pid=$($process.Id)"
   }
+
+  $pref = Open-Preferences
+  Assert-StandaloneAudioLayout -Dialog $pref
+  $selectedAudioDevice = Get-ComboText -Dialog $pref -ControlId 40010
+  if (-not $selectedAudioDevice) {
+    throw "Preferences audio device combo has an empty selection."
+  }
+  [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
+  Write-Host "OK: Preferences exposes one audio device combo and one mono input combo ('$selectedAudioDevice')"
+
+  Close-VoLum
+  $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
+  $settings = Set-IniValue -Content $settings -Key "indev" -Value "__VoLumMissingInputDevice__"
+  $settings = Set-IniValue -Content $settings -Key "outdev" -Value $selectedAudioDevice
+  $settings = Set-IniValue -Content $settings -Key "in1" -Value "1"
+  $settings = Set-IniValue -Content $settings -Key "in2" -Value "2"
+  Set-Content -Path $settingsPath -Value $settings -NoNewline
+  Start-Process $exe
+  $process = Wait-VoLumAlive -CaseName "migration prefers output device"
+  Assert-IniAudioDevicePair -ExpectedDevice $selectedAudioDevice -CaseName "migration prefers output device"
+  Write-Host "OK: mismatched .ini migrated to previous output device pid=$($process.Id)"
+
+  Close-VoLum
+  $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
+  $settings = Set-IniValue -Content $settings -Key "indev" -Value $selectedAudioDevice
+  $settings = Set-IniValue -Content $settings -Key "outdev" -Value "__VoLumMissingOutputDevice__"
+  $settings = Set-IniValue -Content $settings -Key "in1" -Value "1"
+  $settings = Set-IniValue -Content $settings -Key "in2" -Value "2"
+  Set-Content -Path $settingsPath -Value $settings -NoNewline
+  Start-Process $exe
+  $process = Wait-VoLumAlive -CaseName "migration falls back to input device"
+  Assert-IniAudioDevicePair -ExpectedDevice $selectedAudioDevice -CaseName "migration falls back to input device"
+  Write-Host "OK: missing output device migrated to previous input device pid=$($process.Id)"
+
+  Close-VoLum
+  $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
+  $settings = Set-IniValue -Content $settings -Key "indev" -Value "__VoLumMissingInputDevice__"
+  $settings = Set-IniValue -Content $settings -Key "outdev" -Value "__VoLumMissingOutputDevice__"
+  $settings = Set-IniValue -Content $settings -Key "in1" -Value "1"
+  $settings = Set-IniValue -Content $settings -Key "in2" -Value "2"
+  Set-Content -Path $settingsPath -Value $settings -NoNewline
+  Start-Process $exe
+  $process = Wait-VoLumAlive -CaseName "migration falls back to available shared device"
+  Assert-IniAudioDevicePair -ExpectedDevice "" -CaseName "migration falls back to available shared device"
+  Write-Host "OK: missing mismatched devices fell back to a shared audio device pid=$($process.Id)"
 
   Close-VoLum
   $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
