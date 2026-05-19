@@ -1,0 +1,40 @@
+---
+description: Prefer HTTPS URLs for GitHub remote operations on this machine (SSH port 22 times out)
+alwaysApply: true
+---
+
+# Git Remote: Prefer HTTPS On This Machine
+
+On this machine, GitHub SSH (`git@github.com`, port 22) is unreachable and
+`git fetch` / `git pull` / `git push` against `origin` time out after ~20s
+before HTTPS retry is needed.
+
+## Rule
+
+For `guitarlum/VoLum`, run remote operations against the explicit HTTPS URL:
+
+```powershell
+git fetch https://github.com/guitarlum/VoLum.git <ref>
+git push  https://github.com/guitarlum/VoLum.git <branch>
+```
+
+After pushing, refresh the local tracking ref so `git status` shows
+`up to date`:
+
+```powershell
+git fetch https://github.com/guitarlum/VoLum.git <branch>:refs/remotes/origin/<branch>
+```
+
+## Why not just change `origin`?
+
+The `vo-lum-workflow.mdc` safety rules (and the global git safety protocol)
+say **never modify git config from the agent**. The user can run
+`git remote set-url origin https://github.com/guitarlum/VoLum.git` once on
+this machine to make HTTPS permanent; until then, use the explicit URL in
+every remote command.
+
+## When to skip this rule
+
+- On a different machine where SSH to GitHub works (don't assume).
+- For repos other than `guitarlum/VoLum` (check with `git remote -v` first).
+- If the user explicitly asks to use SSH.
