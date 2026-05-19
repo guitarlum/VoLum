@@ -211,10 +211,34 @@ function Get-ComboCount {
   return [VoLumSmokeWin32]::SendMessageInt($combo, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCOUNT
 }
 
+function Get-ComboItems {
+  param(
+    [IntPtr] $Dialog,
+    [int] $ControlId
+  )
+
+  $combo = [VoLumSmokeWin32]::GetDlgItem($Dialog, $ControlId)
+  if ($combo -eq [IntPtr]::Zero) {
+    throw "Combo control $ControlId not found."
+  }
+
+  $items = @()
+  $count = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCOUNT
+  for ($i = 0; $i -lt $count; ++$i) {
+    $len = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0149, [IntPtr]$i, [IntPtr]::Zero).ToInt64() # CB_GETLBTEXTLEN
+    $sb = New-Object Text.StringBuilder ($len + 1)
+    [VoLumSmokeWin32]::SendMessage($combo, 0x0148, [IntPtr]$i, $sb) | Out-Null # CB_GETLBTEXT
+    $items += $sb.ToString()
+  }
+
+  return $items
+}
+
 function Assert-StandaloneAudioLayout {
   param([IntPtr] $Dialog)
 
   $audioDeviceId = 40010 # IDC_COMBO_AUDIO_DEV
+  $bufferSizeId = 40012 # IDC_COMBO_AUDIO_BUF_SIZE
   $oldOutputDeviceId = 40011
   $audioInputId = 40014 # IDC_COMBO_AUDIO_IN
   $oldInputRId = 40015
@@ -239,6 +263,12 @@ function Assert-StandaloneAudioLayout {
   if ((Get-ComboCount -Dialog $Dialog -ControlId $audioInputId) -lt 1) {
     throw "Input channel combo has no selectable channels."
   }
+
+  $expectedBuffers = @("48", "64", "96", "128", "256", "512", "1024", "2048", "4096", "8192")
+  $actualBuffers = @(Get-ComboItems -Dialog $Dialog -ControlId $bufferSizeId)
+  if (($actualBuffers -join ",") -ne ($expectedBuffers -join ",")) {
+    throw "Buffer size combo order/content is '$($actualBuffers -join ",")', expected '$($expectedBuffers -join ",")'."
+  }
 }
 
 function Assert-IniAudioDevicePair {
@@ -260,6 +290,17 @@ function Assert-IniAudioDevicePair {
   if ($in2 -ne (Get-IniValue -Path $settingsPath -Key "in1")) {
     throw "$CaseName failed: in1/in2 did not migrate to the same mono input channel."
   }
+}
+
+function Get-ExpectedVisibleBufferSize {
+  param([int] $Buffer)
+
+  foreach ($option in @(48, 64, 96, 128, 256, 512, 1024, 2048, 4096, 8192)) {
+    if ($Buffer -le $option) {
+      return $option
+    }
+  }
+  return 8192
 }
 
 if (-not $SkipBuild) {
@@ -289,7 +330,7 @@ in1=1
 in2=2
 out1=1
 out2=2
-buffer=192
+buffer=256
 sr=44100
 [midi]
 indev=off
@@ -308,7 +349,12 @@ try {
 
     Start-Process $exe
     $process = Wait-VoLumAlive -CaseName "buffer=$buffer"
-    Write-Host "OK: startup buffer=$buffer pid=$($process.Id)"
+    $expectedBuffer = Get-ExpectedVisibleBufferSize -Buffer $buffer
+    $actualBuffer = Get-IniValue -Path $settingsPath -Key "buffer"
+    if ($actualBuffer -ne "$expectedBuffer") {
+      throw "buffer=$buffer failed: settings.ini has buffer=$actualBuffer, expected normalized buffer=$expectedBuffer."
+    }
+    Write-Host "OK: startup buffer=$buffer normalized=$expectedBuffer pid=$($process.Id)"
   }
 
   $pref = Open-Preferences
