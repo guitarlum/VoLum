@@ -87,6 +87,9 @@ public:
     if (mKeyboardSelected != selected)
     {
       mKeyboardSelected = selected;
+#if VOLUM_AMPETE_PRODUCT
+      mWheelAccum.Reset();
+#endif
       SetDirty(false);
     }
   }
@@ -176,6 +179,26 @@ public:
     return HandleKeyboardInput(key);
   }
 
+#if VOLUM_AMPETE_PRODUCT
+  void OnMouseWheel(float x, float y, const IMouseMod& mod, float d) override
+  {
+    (void) x;
+    (void) y;
+
+    if (IsDisabled())
+      return;
+
+    const int steps = mWheelAccum.OnDelta(d);
+    if (steps == 0)
+      return;
+
+    const bool increase = steps > 0;
+    const int count = increase ? steps : -steps;
+    for (int i = 0; i < count; ++i)
+      Nudge(increase, mod.S);
+  }
+#endif
+
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
 
   void DrawWidget(IGraphics& g) override
@@ -245,6 +268,9 @@ private:
   }
 
   bool mKeyboardSelected = false;
+#if VOLUM_AMPETE_PRODUCT
+  volum::keyboard::WheelAccumulator mWheelAccum;
+#endif
   std::string mKeyboardLabel;
 };
 

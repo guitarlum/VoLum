@@ -73,13 +73,24 @@ TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")
   }
 }
 
-TEST_CASE("Keyboard step: input/output = 1.0 normal, 0.1 fine")
+TEST_CASE("Keyboard step: level knobs = 0.5 normal, 0.1 fine")
 {
-  int gainParams[] = {kInputLevel, kOutputLevel, kNoiseGateThreshold, kSupportInputLevel, kSupportOutputLevel, kSupportNoiseGateThreshold};
-  for (int i = 0; i < 6; i++)
+  int levelParams[] = {kInputLevel, kOutputLevel, kSupportInputLevel, kSupportOutputLevel,
+                       kPreNam1Gain, kPreNam1Level, kPreNam2Gain, kPreNam2Level, kPreCompLevel};
+  for (int i = 0; i < 9; i++)
   {
-    CHECK(volum::keyboard::StepForParam(gainParams[i], false) == 1.0);
-    CHECK(volum::keyboard::StepForParam(gainParams[i], true) == 0.1);
+    CHECK(volum::keyboard::StepForParam(levelParams[i], false) == 0.5);
+    CHECK(volum::keyboard::StepForParam(levelParams[i], true) == 0.1);
+  }
+}
+
+TEST_CASE("Keyboard step: noise gate thresholds = 1.0 normal, 0.1 fine")
+{
+  int thresholdParams[] = {kNoiseGateThreshold, kSupportNoiseGateThreshold};
+  for (int i = 0; i < 2; i++)
+  {
+    CHECK(volum::keyboard::StepForParam(thresholdParams[i], false) == 1.0);
+    CHECK(volum::keyboard::StepForParam(thresholdParams[i], true) == 0.1);
   }
 }
 
