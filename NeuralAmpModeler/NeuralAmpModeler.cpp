@@ -80,7 +80,7 @@ void _SetMuteFloorDbDisplay(IParam* pParam)
   const double minimumDb = pParam->GetMin();
   pParam->SetDisplayFunc([minimumDb](double value, WDL_String& display) {
     if (volum::IsLevelMuteValue(value, minimumDb))
-      display.Set("-\xE2\x88\x9E");
+      display.Set("\xE2\x88\x92\xE2\x88\x9E");
     else
       display.SetFormatted(32, "%.1f", value);
   });
