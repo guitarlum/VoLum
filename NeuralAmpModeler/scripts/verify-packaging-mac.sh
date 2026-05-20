@@ -89,6 +89,84 @@ verify_standalone_app_identity() {
   fi
 }
 
+verify_installer_package_metadata() {
+  local installer_pkg="$1"
+  local expanded="$VERIFY_DIR/installer-expanded"
+  local app_expanded="$VERIFY_DIR/installer-app-pkg"
+
+  rm -rf "$expanded" "$app_expanded"
+  pkgutil --expand "$installer_pkg" "$expanded"
+
+  test -f "$expanded/Distribution"
+  test -f "$expanded/VoLum_APP.pkg"
+  test -f "$expanded/VoLum_VST3.pkg"
+  test -f "$expanded/VoLum_RIGS.pkg"
+
+  python3 - "$expanded/Distribution" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+distribution_path = sys.argv[1]
+root = ET.parse(distribution_path).getroot()
+required = {
+    "com.Lum.app.pkg.VoLum": "Stand-alone App",
+    "com.Lum.vst3.pkg.VoLum": "VST3 Plug-in",
+    "com.Lum.rigs.pkg.VoLum": "Bundled Amp Rigs",
+}
+
+choices = {choice.get("id"): choice for choice in root.findall("choice")}
+errors = []
+for choice_id, label in required.items():
+    choice = choices.get(choice_id)
+    if choice is None:
+        errors.append(f"missing installer choice {choice_id} ({label})")
+        continue
+    if choice.get("start_selected") != "true":
+        errors.append(f"installer choice {choice_id} is not start_selected=true")
+    if choice.find(f"./pkg-ref[@id='{choice_id}']") is None:
+        errors.append(f"installer choice {choice_id} does not reference its package")
+
+if errors:
+    for error in errors:
+        print(f"ERROR: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+
+  pkgutil --expand "$expanded/VoLum_APP.pkg" "$app_expanded"
+  test -f "$app_expanded/PackageInfo"
+  python3 - "$app_expanded/PackageInfo" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+package_info_path = sys.argv[1]
+root = ET.parse(package_info_path).getroot()
+install_location = root.get("install-location")
+if install_location != "/Applications":
+    print(
+        f"ERROR: VoLum_APP.pkg install-location is {install_location!r}, expected '/Applications'",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+for bundle in root.findall(".//bundle"):
+    path = bundle.get("path") or ""
+    if path in ("VoLum.app", "./VoLum.app") or path.endswith("/VoLum.app") or bundle.get("id") == "com.Lum.app.VoLum":
+        relocatable = bundle.get("relocatable")
+        if relocatable != "false":
+            print(
+                f"ERROR: VoLum.app package bundle relocatable={relocatable!r}, expected 'false'",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        break
+else:
+    print("ERROR: VoLum_APP.pkg PackageInfo does not describe VoLum.app", file=sys.stderr)
+    sys.exit(1)
+PY
+
+  rm -rf "$expanded" "$app_expanded"
+}
+
 if [[ "${1:-}" == "auto" ]]; then
   ARCHIVE_NAME="$(python3 "${REPO_ROOT}/iPlug2/Scripts/get_archive_name.py" NeuralAmpModeler mac full)"
   APP_DMG="${REPO_ROOT}/NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}-app.dmg"
@@ -151,6 +229,7 @@ if [[ -n "$INSTALLER_DMG" ]] && [[ -f "$INSTALLER_DMG" ]]; then
   mkdir -p "$VERIFY_DIR/installer-dmg"
   hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
   test -f "$VERIFY_DIR/installer-dmg/VoLum Installer.pkg"
+  verify_installer_package_metadata "$VERIFY_DIR/installer-dmg/VoLum Installer.pkg"
   hdiutil detach "$VERIFY_DIR/installer-dmg"
 elif [[ -n "$INSTALLER_DMG" ]]; then
   if [[ "${VERIFY_MAC_REQUIRE_INSTALLER:-}" == "1" ]]; then
