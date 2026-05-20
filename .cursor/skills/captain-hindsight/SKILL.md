@@ -1,15 +1,16 @@
 ---
-name: postmortem
-description: Opt-in implementation retro that turns observed friction into concrete tracked artifacts (new/edited rules, skills, scripts, docs) or local backlog items. Use only when the user invokes it ("retro this", "postmortem", "/postmortem"). Not for trivial tasks.
+name: captain-hindsight
+description: Opt-in implementation retro that turns observed friction into concrete tracked artifacts (new/edited rules, skills, scripts, docs) or local backlog items. Use only when the user invokes it ("captain hindsight" or "/captain-hindsight"). Not for trivial tasks.
+disable-model-invocation: true
 ---
 
-# Post-Mortem (opt-in retro)
+# Captain Hindsight (opt-in retro)
 
 Goal: cheap, action-shaped reflection that pays for itself by lowering token use or raising quality next time. Avoid agent theater — everything must end as a concrete artifact or be discarded.
 
 ## When to run
 
-Only when the user explicitly asks (`retro this`, `postmortem`, `/postmortem`, etc.).
+Only when the user explicitly asks (`captain hindsight`, `/captain-hindsight`, etc.).
 
 Skip and tell the user "nothing worth a retro" if all of these are true:
 
@@ -36,7 +37,17 @@ Skip and tell the user "nothing worth a retro" if all of these are true:
 3. Output exactly:
    - A numbered list. Each entry: `friction (one line)` -> `classification` -> `concrete proposal (one line, name the file path)` -> `expected payoff (one line, e.g. "saves ~N file reads next time" / "would have caught bug X")`.
    - No narrative, no preamble, no "great job."
-4. Stop after the list. Do NOT implement the proposals unless the user explicitly says "go" / "implement N" / similar.
+4. Stop after the list and the closing recommendation. Do NOT implement the proposals unless the user explicitly says "go" / "implement N" / similar.
+
+## Closing recommendation
+
+After the numbered list, append one short block:
+
+`Recommended to implement now: #X, #Y. Defer: #Z. Discard the rest.`
+
+Add one line per pick explaining why it is highest leverage (token savings, bug class avoided, repeat task shortened). Keep it terse: no narrative, no victory lap, just pick the winners.
+
+If every entry is **Discard**, skip this block.
 
 ## Constraints
 
