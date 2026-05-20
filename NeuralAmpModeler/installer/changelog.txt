@@ -221,3 +221,4 @@ https://github.com/sdatkinson/NeuralAmpModelerPlugin
 05/17/2026 - v1.0.1 VoLum release. See GitHub release notes for included changes.
 05/19/2026 - VoLum: README and user guides now link to GitHub Issues for bug reports and feature requests.
 05/19/2026 - VoLum: PRE NAM Level, compressor Output, amp Output, and support-amp Output now fully mute at their lowest setting (shown as -∞ dB) instead of leaving residual signal.
+05/20/2026 - VoLum: Cached hero fractal artwork redraws, optimized active tuner analysis, and stopped rebuilding fixed DC-blocker coefficients every audio block to lower CPU without changing audio behavior.
