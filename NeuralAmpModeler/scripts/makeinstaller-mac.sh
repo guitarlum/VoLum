@@ -96,13 +96,36 @@ if [[ -d $PRODUCTS/$AAX ]]; then
   build_flavor "AAX" $AAX "com.Lum.aax.pkg.${PRODUCT_NAME}" "/Library/Application Support/Avid/Audio/Plug-Ins"
 fi
 
-# Stand-alone .app: use pkgbuild --component (Apple-recommended for bundles). A flat --root tree
-# around VoLum.app can produce a subpackage that does not reliably install into /Applications while
-# plug-in bundles (VST3 etc.) still work — see VoLum issue: VST3 installs, app missing from /Applications.
+# Stand-alone .app: use pkgbuild --component (Apple-recommended for bundles), but make it
+# non-relocatable. CI keeps build-mac/VoLum.app around while smoke-installing the PKG; if the
+# component is relocatable, installer may "update" that build copy instead of placing VoLum.app
+# in /Applications.
 if [[ -d $PRODUCTS/$APP ]]; then
   echo "--- BUILDING ${PRODUCT_NAME}_APP.pkg (component bundle) ---"
   mkdir -p "$PKG_DIR"
+  APP_COMPONENT_PLIST="${TARGET_DIR}/${PRODUCT_NAME}_APP-component.plist"
+  cat > "$APP_COMPONENT_PLIST" << XMLEND
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>BundleHasStrictIdentifier</key>
+    <true/>
+    <key>BundleIsRelocatable</key>
+    <false/>
+    <key>BundleIsVersionChecked</key>
+    <true/>
+    <key>BundleOverwriteAction</key>
+    <string>upgrade</string>
+    <key>RootRelativeBundlePath</key>
+    <string>${APP}</string>
+  </dict>
+</array>
+</plist>
+XMLEND
   pkgbuild --component "$PRODUCTS/$APP" \
+    --component-plist "$APP_COMPONENT_PLIST" \
     --identifier "com.Lum.app.pkg.${PRODUCT_NAME}" \
     --version "$VERSION" \
     --install-location "/Applications" \
