@@ -37,6 +37,12 @@ Packaging layout:
 - Portable packages keep `VoLum.vst3` and sibling `VoLumRigs/` together.
 - macOS standalone embeds `VoLumRigs` in `VoLum.app/Contents/Resources`.
 - macOS VST3 zip keeps `VoLumRigs` beside `VoLum.vst3`.
+- macOS installer app packages must use `pkgbuild --analyze` metadata with
+  `BundleIsRelocatable=false` for `VoLum.app`; otherwise `installer` may update
+  a build-staged app instead of writing `/Applications/VoLum.app`.
+- macOS installer smoke tests should run through
+  `NeuralAmpModeler/scripts/smoke-installer-mac.sh` so local and CI behavior stay
+  identical.
 - PRE NAM captures live in `rigs/PrePedals/` during development and ship as `VoLumRigs/PrePedals/`; package verification must check any `.nam` files in that folder, not only the directory.
 - Never apply Finder custom icons to signed VST3 bundles. Finder icons create root `Icon?` metadata files that break strict code-signature verification after zip/unzip.
 - Before signing or zipping macOS bundles, scrub `Icon?`, `._*`, `.DS_Store`, and extended attributes; verify the staged VST3 before creating the portable zip.
