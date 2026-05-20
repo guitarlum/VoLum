@@ -286,6 +286,7 @@ jobs:
           ARCHIVE_NAME="$(python3 iPlug2/Scripts/get_archive_name.py NeuralAmpModeler mac full)"
           INSTALLER_DMG="NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}.dmg"
           MOUNT_DIR="NeuralAmpModeler/build-mac/installer-install-ci"
+          CHOICES_XML="NeuralAmpModeler/build-mac/installer-choices-ci.xml"
           VST3_PATH="/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
           RIGS_PATH="/Library/Application Support/VoLum/VoLumRigs"
 
@@ -298,7 +299,40 @@ jobs:
 
           hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$MOUNT_DIR"
           sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app" "$VST3_PATH" "$RIGS_PATH"
-          sudo installer -pkg "$MOUNT_DIR/VoLum Installer.pkg" -target /
+          cat > "$CHOICES_XML" <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <array>
+            <dict>
+              <key>choiceIdentifier</key>
+              <string>com.Lum.app.pkg.VoLum</string>
+              <key>choiceAttribute</key>
+              <string>selected</string>
+              <key>attributeSetting</key>
+              <integer>1</integer>
+            </dict>
+            <dict>
+              <key>choiceIdentifier</key>
+              <string>com.Lum.vst3.pkg.VoLum</string>
+              <key>choiceAttribute</key>
+              <string>selected</string>
+              <key>attributeSetting</key>
+              <integer>1</integer>
+            </dict>
+            <dict>
+              <key>choiceIdentifier</key>
+              <string>com.Lum.rigs.pkg.VoLum</string>
+              <key>choiceAttribute</key>
+              <string>selected</string>
+              <key>attributeSetting</key>
+              <integer>1</integer>
+            </dict>
+          </array>
+          </plist>
+          XML
+          installer -showChoicesXML -pkg "$MOUNT_DIR/VoLum Installer.pkg"
+          sudo installer -pkg "$MOUNT_DIR/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$CHOICES_XML"
 
           APP_PATH=""
           for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
