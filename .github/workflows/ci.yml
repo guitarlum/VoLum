@@ -286,6 +286,8 @@ jobs:
           ARCHIVE_NAME="$(python3 iPlug2/Scripts/get_archive_name.py NeuralAmpModeler mac full)"
           INSTALLER_DMG="NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}.dmg"
           MOUNT_DIR="NeuralAmpModeler/build-mac/installer-install-ci"
+          VST3_PATH="/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
+          RIGS_PATH="/Library/Application Support/VoLum/VoLumRigs"
 
           rm -rf "$MOUNT_DIR"
           mkdir -p "$MOUNT_DIR"
@@ -295,16 +297,40 @@ jobs:
           trap cleanup EXIT
 
           hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$MOUNT_DIR"
+          sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app" "$VST3_PATH" "$RIGS_PATH"
           sudo installer -pkg "$MOUNT_DIR/VoLum Installer.pkg" -target /
 
-          test -d "/Applications/VoLum.app"
-          test -d "/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
-          test -d "/Library/Application Support/VoLum/VoLumRigs"
-          codesign --verify --deep --strict --verbose=2 "/Applications/VoLum.app"
-          codesign --verify --deep --strict --verbose=2 "/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
+          APP_PATH=""
+          for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
+            if [[ -d "$candidate" ]]; then
+              APP_PATH="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$APP_PATH" ]]; then
+            echo "VoLum.app was not installed. /Applications:" >&2
+            ls -la /Applications >&2 || true
+            echo "$HOME/Applications:" >&2
+            ls -la "$HOME/Applications" >&2 || true
+            exit 1
+          fi
+          for required in "$VST3_PATH" "$RIGS_PATH"; do
+            if [[ ! -d "$required" ]]; then
+              echo "Expected installed directory missing: $required" >&2
+              ls -la "$(dirname "$required")" >&2 || true
+              exit 1
+            fi
+          done
+
+          pkgutil --pkg-info com.Lum.app.pkg.VoLum
+          pkgutil --pkg-info com.Lum.vst3.pkg.VoLum
+          pkgutil --pkg-info com.Lum.rigs.pkg.VoLum
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$VST3_PATH"
+          echo "VOLUM_INSTALLED_APP=$APP_PATH" >> "$GITHUB_ENV"
 
       - name: macOS standalone launch smoke
-        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh
+        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "$VOLUM_INSTALLED_APP"
 
       - name: Upload macOS launch smoke artifacts
         if: always()
