@@ -93,6 +93,8 @@ verify_installer_package_metadata() {
   local installer_pkg="$1"
   local expanded="$VERIFY_DIR/installer-expanded"
   local app_expanded="$VERIFY_DIR/installer-app-pkg"
+  local app_pkg="$expanded/VoLum_APP.pkg"
+  local app_package_info=""
 
   rm -rf "$expanded" "$app_expanded"
   pkgutil --expand "$installer_pkg" "$expanded"
@@ -140,17 +142,18 @@ if errors:
     sys.exit(1)
 PY
 
-  if [[ -f "$expanded/VoLum_APP.pkg/PackageInfo" ]]; then
-    app_expanded="$expanded/VoLum_APP.pkg"
+  if [[ -d "$app_pkg" ]]; then
+    app_package_info="$(find "$app_pkg" -maxdepth 4 -type f -name PackageInfo -print -quit)"
   else
-    pkgutil --expand "$expanded/VoLum_APP.pkg" "$app_expanded"
+    pkgutil --expand "$app_pkg" "$app_expanded"
+    app_package_info="$app_expanded/PackageInfo"
   fi
-  if [[ ! -f "$app_expanded/PackageInfo" ]]; then
+  if [[ -z "$app_package_info" ]] || [[ ! -f "$app_package_info" ]]; then
     echo "ERROR: expanded VoLum_APP.pkg is missing PackageInfo" >&2
-    find "$app_expanded" -maxdepth 2 -print | sort >&2 || true
+    find "$app_pkg" "$app_expanded" -maxdepth 4 -print | sort >&2 || true
     exit 1
   fi
-  python3 - "$app_expanded/PackageInfo" <<'PY'
+  python3 - "$app_package_info" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
