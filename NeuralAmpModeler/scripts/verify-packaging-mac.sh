@@ -140,7 +140,11 @@ if errors:
     sys.exit(1)
 PY
 
-  pkgutil --expand "$expanded/VoLum_APP.pkg" "$app_expanded"
+  if [[ -f "$expanded/VoLum_APP.pkg/PackageInfo" ]]; then
+    app_expanded="$expanded/VoLum_APP.pkg"
+  else
+    pkgutil --expand "$expanded/VoLum_APP.pkg" "$app_expanded"
+  fi
   if [[ ! -f "$app_expanded/PackageInfo" ]]; then
     echo "ERROR: expanded VoLum_APP.pkg is missing PackageInfo" >&2
     find "$app_expanded" -maxdepth 2 -print | sort >&2 || true
