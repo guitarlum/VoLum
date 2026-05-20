@@ -281,6 +281,41 @@ jobs:
           chmod +x NeuralAmpModeler/scripts/verify-packaging-mac.sh
           NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
 
+      - name: Install macOS PKG via installer CLI
+        run: |
+          ARCHIVE_NAME="$(python3 iPlug2/Scripts/get_archive_name.py NeuralAmpModeler mac full)"
+          INSTALLER_DMG="NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}.dmg"
+          MOUNT_DIR="NeuralAmpModeler/build-mac/installer-install-ci"
+
+          rm -rf "$MOUNT_DIR"
+          mkdir -p "$MOUNT_DIR"
+          cleanup() {
+            hdiutil detach "$MOUNT_DIR" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$MOUNT_DIR"
+          sudo installer -pkg "$MOUNT_DIR/VoLum Installer.pkg" -target /
+
+          test -d "/Applications/VoLum.app"
+          test -d "/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
+          test -d "/Library/Application Support/VoLum/VoLumRigs"
+          codesign --verify --deep --strict --verbose=2 "/Applications/VoLum.app"
+          codesign --verify --deep --strict --verbose=2 "/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
+
+      - name: macOS standalone launch smoke
+        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh
+
+      - name: Upload macOS launch smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-launch-smoke
+          path: |
+            /tmp/volum-mac-launch.png
+            /tmp/volum-mac-launch.log
+          if-no-files-found: warn
+
       - name: Upload macOS artifacts (VoLum-mac)
         uses: actions/upload-artifact@v4
         with:

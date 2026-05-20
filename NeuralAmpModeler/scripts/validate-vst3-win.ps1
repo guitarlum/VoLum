@@ -32,7 +32,7 @@ if (-not $pluginval) {
 }
 
 Write-Host "Validating VST3 with pluginval: $Vst3Path"
-& $pluginval.FullName --validate-in-process --strictness-level 5 --output-dir $outputDir $Vst3Path
+& $pluginval.FullName --validate-in-process --strictness-level 10 --output-dir $outputDir $Vst3Path
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $sdkRoot = Join-Path $RepoRoot "iPlug2\Dependencies\IPlug\VST3_SDK"
