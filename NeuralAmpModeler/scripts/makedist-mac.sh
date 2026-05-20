@@ -283,10 +283,6 @@ if [ -d $VST2 ]; then
   ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $VST2
 fi
 
-if [ -d $VST3 ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $VST3
-fi
-
 if [ -d "${AAX}" ]; then
   ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file "${AAX}"
 fi
@@ -311,6 +307,7 @@ fi
 
 if [ -d $VST3 ]; then
   strip -x $VST3/Contents/MacOS/$PLUGIN_NAME
+  find "$VST3" -maxdepth 1 -type f -name 'Icon?' -delete
 fi
 
 if [ -d "${AAX}" ]; then
