@@ -25,6 +25,10 @@ description: Diagnose VoLum Windows/macOS native build, package, artifact, and C
 - Release-equivalent build: `bash NeuralAmpModeler/scripts/makedist-mac.sh full all`
 - CI currently ships APP and VST3; AU is opt-in via `MACOS_BUILD_ALL_TARGETS=1`.
 - Keep plist filenames as `NeuralAmpModeler-*` even though product name is VoLum.
+- For VST3 signing/package failures, use `bash NeuralAmpModeler/scripts/debug-mac-vst3-signature.sh <VoLum.vst3> [VoLum-v*-mac-vst3.zip]`.
+- `resource fork, Finder information, or similar detritus not allowed` usually means extended attributes or AppleDouble metadata; run `xattr -cr`, remove `._*` / `.DS_Store`, then re-sign.
+- `unsealed contents present in the bundle root` usually means an unexpected root file such as Finder custom-icon `Icon?`; inspect `find "$bundle" -maxdepth 1 -print` and remove the root metadata before signing/zipping.
+- Do not apply Finder custom icons to signed VST3 bundles. They are cosmetic and can invalidate the bundle after zip/unzip.
 
 ## Packaging Invariants
 

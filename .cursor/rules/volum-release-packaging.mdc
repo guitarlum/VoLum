@@ -27,6 +27,7 @@ Branch policy (use this whenever starting new work):
 - When a feature is verified, merge it back into `dev` (PR or fast-forward). Do not merge feature branches directly into `main`.
 - Promote `dev` to `main` only as part of a release (use `release-manager` skill for the PR; see `Release Native` workflow above).
 - Keep unrelated local dirt (especially `iPlug2` ASIO patch dirt) out of any of these merges.
+- Packaging CI fixes should run on a fix branch first. Merge to `dev` only after branch CI is green, unless the user explicitly asks to iterate directly on `dev`.
 
 Packaging layout:
 
@@ -37,6 +38,9 @@ Packaging layout:
 - macOS standalone embeds `VoLumRigs` in `VoLum.app/Contents/Resources`.
 - macOS VST3 zip keeps `VoLumRigs` beside `VoLum.vst3`.
 - PRE NAM captures live in `rigs/PrePedals/` during development and ship as `VoLumRigs/PrePedals/`; package verification must check any `.nam` files in that folder, not only the directory.
+- Never apply Finder custom icons to signed VST3 bundles. Finder icons create root `Icon?` metadata files that break strict code-signature verification after zip/unzip.
+- Before signing or zipping macOS bundles, scrub `Icon?`, `._*`, `.DS_Store`, and extended attributes; verify the staged VST3 before creating the portable zip.
+- When macOS packaging CI fails with `resource fork, Finder information, or similar detritus not allowed` or `unsealed contents present in the bundle root`, inspect root files and xattrs with `NeuralAmpModeler/scripts/debug-mac-vst3-signature.sh`.
 
 Version metadata:
 
