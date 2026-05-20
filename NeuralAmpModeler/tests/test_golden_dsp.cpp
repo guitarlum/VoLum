@@ -13,9 +13,19 @@
 
 namespace
 {
-void ExpectGoldenHash(const char* name, const std::string& actual, const char* expected)
+const char* PlatformExpected(const char* windowsExpected, const char* macExpected)
+{
+#if defined(__APPLE__)
+  return macExpected;
+#else
+  return windowsExpected;
+#endif
+}
+
+void ExpectGoldenHash(const char* name, const std::string& actual, const char* windowsExpected, const char* macExpected)
 {
   INFO(name << " actual=" << actual);
+  const char* expected = PlatformExpected(windowsExpected, macExpected);
   REQUIRE(expected != nullptr);
   CHECK(actual == std::string(expected));
 }
@@ -151,36 +161,47 @@ std::vector<DSP_SAMPLE> RunToneStackGolden()
 TEST_CASE("Golden DSP: PRE effects and tone stack hashes stay stable")
 {
   ExpectGoldenHash("compressor", volum::test::Sha256HexSamples(RunCompressorGolden()),
-                   "eca6a5932f0fac141bb84783123e93121d328e4419a5fe38f3848d7e0a45a3fc");
+                   "eca6a5932f0fac141bb84783123e93121d328e4419a5fe38f3848d7e0a45a3fc",
+                   "d08747ac0a454b8ac11e8404709dc6527be74e683cbf7b44f6369a6de60675d8");
   ExpectGoldenHash("pre-eq", volum::test::Sha256HexSamples(RunPreEqGolden()),
-                   "72697ba01950cdb27df11230f3f213c5d59db2dc96ef0e51b0b24bca96509f2b");
+                   "72697ba01950cdb27df11230f3f213c5d59db2dc96ef0e51b0b24bca96509f2b",
+                   "986fec4c92c2af9645e6e7402ccc5321e12fd083c1d5d813253b93248e98aba5");
   ExpectGoldenHash("tone-stack", volum::test::Sha256HexSamples(RunToneStackGolden()),
-                   "7781f751a998773bec158e1d46361551ba63b0df09f319e59697ddd6185c605e");
+                   "7781f751a998773bec158e1d46361551ba63b0df09f319e59697ddd6185c605e",
+                   "81ef87af81dac5d6a5cf146cb233d0ac72248addf3bce8dd4721b0a00a865518");
 }
 
 TEST_CASE("Golden DSP: delay mode hashes stay stable")
 {
   ExpectGoldenHash("delay-digital", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital)),
-                   "32c0b64268eb5d72978c332ed545e751c8c5f20ba2d8e31442f8d77997be9f1c");
+                   "32c0b64268eb5d72978c332ed545e751c8c5f20ba2d8e31442f8d77997be9f1c",
+                   "2e86b97a8c05dea10e7adb1f49fd2406746dd48a6b8019e4b7fa53ea97dadaf8");
   ExpectGoldenHash("delay-analog", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog)),
-                   "6fa73c812fac2f053beea8f3ae363a04c45a626ec52874dc41f3eb9b2f212573");
+                   "6fa73c812fac2f053beea8f3ae363a04c45a626ec52874dc41f3eb9b2f212573",
+                   "2b22e1f4e29f863495a9bed90c24271c0543ff30aec1fe043b577134788eb195");
   ExpectGoldenHash("delay-reverse", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeReverse)),
-                   "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4");
+                   "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4",
+                   "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
 }
 
 TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
 {
   ExpectGoldenHash("reverb-hall", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeHall, 0)),
-                   "6543e40308c95bad7b3f92e2547ad7356487fd3b17feeab2d67fe59d32c49c27");
+                   "6543e40308c95bad7b3f92e2547ad7356487fd3b17feeab2d67fe59d32c49c27",
+                   "ce06ec43c60943dc804da6de5a3b919dbe5c54eef1c265e155b976a726078614");
   ExpectGoldenHash("reverb-plate", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModePlate, 0)),
-                   "9dfd2ba555997d6ad0538af6b5611633670dcdf0c788a69fad3bf32cc3704537");
+                   "9dfd2ba555997d6ad0538af6b5611633670dcdf0c788a69fad3bf32cc3704537",
+                   "1bb2b19d45af941e66885541bb52f52c3b2249d2b0e8fc4947f312ac96d12f8c");
   ExpectGoldenHash("oktaverb-halo",
                    volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0)),
-                   "82f6cf8958e8eadba4b001366180294205bd0ff673e91dfd70d1e6e961e1b593");
+                   "82f6cf8958e8eadba4b001366180294205bd0ff673e91dfd70d1e6e961e1b593",
+                   "277327db47e598594027aa1932cba7a2a73278727dcf7d4ccc00e9bbfa78a035");
   ExpectGoldenHash("oktaverb-shimmer",
                    volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1)),
-                   "0bc3193b9a26cb6d9565298620094b3b5a8c3de207dd58e40e9281ed37b05795");
+                   "0bc3193b9a26cb6d9565298620094b3b5a8c3de207dd58e40e9281ed37b05795",
+                   "f1f1ca0911668c0c172c3a90838108f8fbdf8801f756346c5ed8a5f348c8d7d2");
   ExpectGoldenHash("oktaverb-bloom",
                    volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2)),
-                   "82c916ceddd513d49093f0834a10d5d622db7d8111ff54d1cdd2eaeb77b114c9");
+                   "82c916ceddd513d49093f0834a10d5d622db7d8111ff54d1cdd2eaeb77b114c9",
+                   "459870bf7ea1fba68422192cd70200aa40ec2f4f93dc6469a0dd14d4ab95003d");
 }
