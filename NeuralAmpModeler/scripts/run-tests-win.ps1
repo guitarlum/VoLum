@@ -1,6 +1,10 @@
 # Run after building NeuralAmpModeler-Tests (Release|x64 recommended).
 # From repo: VoLum\NeuralAmpModeler\scripts
 
+param(
+  [string]$Filter
+)
+
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = (Resolve-Path (Join-Path $here "..")).Path
@@ -31,5 +35,10 @@ $exe = Join-Path $slnDir "build-win\tests\x64\Release\NeuralAmpModeler-Tests.exe
 if (-not (Test-Path $exe)) {
   Write-Error "Test binary not found: $exe"
 }
-& $exe
+
+if ($Filter) {
+  & $exe "--test-case=*$Filter*"
+} else {
+  & $exe
+}
 exit $LASTEXITCODE
