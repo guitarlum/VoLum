@@ -57,7 +57,7 @@ run_pluginval() {
   local log_file="$OUTPUT_DIR/pluginval-${label}.log"
 
   set +e
-  "$PLUGINVAL" "$@" --strictness-level 5 --output-dir "$OUTPUT_DIR" "$VST3_PATH" 2>&1 | tee "$log_file"
+  "$PLUGINVAL" "$@" --strictness-level 10 --output-dir "$OUTPUT_DIR" "$VST3_PATH" 2>&1 | tee "$log_file"
   local pluginval_ec=${PIPESTATUS[0]}
 
   if [[ "$pluginval_ec" -ne 0 ]]; then
