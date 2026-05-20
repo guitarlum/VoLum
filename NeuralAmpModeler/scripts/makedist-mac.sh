@@ -525,8 +525,10 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
   rm -R build-mac/dmg
 
   if [ "$FAST_DEV" != "1" ]; then
-    cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
+    COPYFILE_DISABLE=1 cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
     xattr -cr "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
+    find "build-mac/vst3-zip/$PLUGIN_NAME.vst3" \( -name '._*' -o -name '.DS_Store' \) -delete
+    codesign --verify --deep --strict --verbose=2 "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
 
     # Portable VST3 packaging keeps rigs as a sibling folder so the plugin can
     # resolve them from the extracted archive or the user's VST3 directory.
