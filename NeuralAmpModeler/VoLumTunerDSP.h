@@ -110,13 +110,18 @@ private:
     float d[kBufferSize / 2];
     float cumNorm[kBufferSize / 2];
 
+    const int tail = kBufferSize - mWritePos;
+    std::memcpy(mAnalysisBuffer, mBuffer + mWritePos, static_cast<size_t>(tail) * sizeof(float));
+    if (mWritePos > 0)
+      std::memcpy(mAnalysisBuffer + tail, mBuffer, static_cast<size_t>(mWritePos) * sizeof(float));
+
     d[0] = 0.f;
     cumNorm[0] = 1.f;
 
     float runningSum = 0.f;
     float energy = 0.f;
     for (int j = 0; j < kBufferSize; ++j)
-      energy += mBuffer[j] * mBuffer[j];
+      energy += mAnalysisBuffer[j] * mAnalysisBuffer[j];
     const float rms = std::sqrt(energy / static_cast<float>(kBufferSize));
     if (rms < 0.0005f)
     {
@@ -129,9 +134,7 @@ private:
       float sum = 0.f;
       for (int j = 0; j < halfBuf; ++j)
       {
-        int idx1 = (mWritePos + j) % kBufferSize;
-        int idx2 = (mWritePos + j + tau) % kBufferSize;
-        float diff = mBuffer[idx1] - mBuffer[idx2];
+        const float diff = mAnalysisBuffer[j] - mAnalysisBuffer[j + tau];
         sum += diff * diff;
       }
       d[tau] = sum;
@@ -250,6 +253,7 @@ private:
   }
 
   float mBuffer[kBufferSize] = {};
+  float mAnalysisBuffer[kBufferSize] = {};
   int mWritePos = 0;
   int mSamplesCollected = 0;
   float mSampleRate = 48000.f;

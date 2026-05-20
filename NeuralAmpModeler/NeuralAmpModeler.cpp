@@ -1418,12 +1418,6 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
       irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
 
     // And the HPF for DC offset (Issue 271)
-    const double highPassCutoffFreq = kDCBlockerFrequency;
-    // const double lowPassCutoffFreq = 20000.0;
-    const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
-    // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
-    mHighPass.SetParams(highPassParams);
-    // mLowPass.SetParams(lowPassParams);
     hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
     // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
   }
@@ -1473,9 +1467,6 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     if (processingPlan.runSupportToneStack && mSupportToneStack != nullptr)
       supportPostPointers = mSupportToneStack->Process(supportPostPointers, numChannelsInternal, nFrames);
 
-    const double highPassCutoffFreq = kDCBlockerFrequency;
-    const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
-    mSupportHighPass.SetParams(highPassParams);
     supportPostPointers = mSupportHighPass.Process(supportPostPointers, numChannelsInternal, numFrames);
     supportLane = supportPostPointers[0];
   }
@@ -1643,6 +1634,11 @@ void NeuralAmpModeler::OnReset()
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
   mOutputSenderR.Reset(sampleRate);
+  const recursive_linear_filter::HighPassParams highPassParams(sampleRate, kDCBlockerFrequency);
+  mHighPass.SetParams(highPassParams);
+#if VOLUM_AMPETE_PRODUCT
+  mSupportHighPass.SetParams(highPassParams);
+#endif
   mMasterSafetyHoldSamples = 0;
   mMasterSafetyEngaged.store(false);
   // If there is a model or IR loaded, they need to be checked for resampling.
