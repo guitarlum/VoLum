@@ -15,6 +15,8 @@ Dieses Handbuch erklärt die VoLum-1.0-Oberfläche nach der Installation. Downlo
 5. **PRE | AMP | POST-Leiste:** öffnet immer genau einen Bereich.
 6. **Toolbar:** Tuner, Metronom und Einstellungen sitzen oben rechts.
 
+Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen.
+
 VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual Amp wieder her.
 
 ## Amp Wählen

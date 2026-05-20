@@ -91,6 +91,10 @@ Unzip `VoLum-vX.Y.Z-macos-vst3.zip`, then place both `VoLum.vst3` and `VoLumRigs
 
 Rescan plugins in your DAW. Use a VST3-capable host such as REAPER, Ableton Live, Cubase, Studio One, or Bitwig.
 
+### Linux
+
+VoLum does not currently provide a native Linux build. Some users have reported that the Windows VST3 works well on Linux through [yabridge](https://github.com/robbert-vdh/yabridge), but that path is not officially tested by VoLum.
+
 ## Bundled Amps
 
 | Amp | Channels |
