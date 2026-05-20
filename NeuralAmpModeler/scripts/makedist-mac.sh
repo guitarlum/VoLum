@@ -547,7 +547,8 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
 
     echo "zipping VST3 package..."
     echo ""
-    ditto --norsrc --noextattr -c -k build-mac/vst3-zip "$VST3_ZIP"
+    VST3_ZIP_ABS="$(pwd)/$VST3_ZIP"
+    (cd build-mac/vst3-zip && COPYFILE_DISABLE=1 zip -qry -X "$VST3_ZIP_ABS" .)
     rm -R build-mac/vst3-zip
   fi
 fi
