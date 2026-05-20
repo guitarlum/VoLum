@@ -1,3 +1,4 @@
+05/20/2026 - VoLum: Windows binary resource metadata now reports version 1.0.1 consistently with the plugin config, installer, and macOS/iOS plist metadata.
 05/20/2026 - VoLum: README now notes that native Linux builds are not currently provided while users have reported the Windows VST3 working well through yabridge, and the user guide now documents the +4 dBu interface input level used when capturing the bundled NAM profiles.
 05/20/2026 - VoLum: macOS packaging no longer applies Finder custom-icon metadata to the VST3 bundle, avoiding an `Icon` root file that can make zipped VST3 bundles fail strict code-signature verification after extraction.
 05/20/2026 - VoLum: macOS portable VST3 archives now use standard `zip -X` from a scrubbed staging directory so standard unzip extraction does not add unsealed bundle-root metadata.
