@@ -171,9 +171,9 @@ for bundle in root.findall(".//bundle"):
     path = bundle.get("path") or ""
     if path in ("VoLum.app", "./VoLum.app") or path.endswith("/VoLum.app") or bundle.get("id") == "com.Lum.app.VoLum":
         relocatable = bundle.get("relocatable")
-        if relocatable != "false":
+        if relocatable == "true":
             print(
-                f"ERROR: VoLum.app package bundle relocatable={relocatable!r}, expected 'false'",
+                f"ERROR: VoLum.app package bundle is explicitly relocatable: {relocatable!r}",
                 file=sys.stderr,
             )
             sys.exit(1)
