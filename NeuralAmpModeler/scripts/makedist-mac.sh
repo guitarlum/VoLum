@@ -526,6 +526,7 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
 
   if [ "$FAST_DEV" != "1" ]; then
     cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
+    xattr -cr "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
 
     # Portable VST3 packaging keeps rigs as a sibling folder so the plugin can
     # resolve them from the extracted archive or the user's VST3 directory.
@@ -544,7 +545,7 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
 
     echo "zipping VST3 package..."
     echo ""
-    ditto -c -k build-mac/vst3-zip "$VST3_ZIP"
+    ditto --norsrc --noextattr -c -k build-mac/vst3-zip "$VST3_ZIP"
     rm -R build-mac/vst3-zip
   fi
 fi
