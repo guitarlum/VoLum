@@ -351,6 +351,7 @@ if [ "$CODESIGN" != "1" ]; then
 
   for bundle in "$APP" "$AU" "$VST3"; do
     if [ -d "$bundle" ]; then
+      xattr -cr "$bundle"
       codesign --force --sign - --deep --timestamp=none "$bundle"
       codesign --verify --deep --strict --verbose=2 "$bundle" || {
         echo "ERROR: ad-hoc re-sign verification failed for $bundle"
