@@ -10,9 +10,11 @@ When creating or updating an implementation plan, end the plan with a short
 
 Include:
 
-- **Model:** Recommend the model to use for the implementation chat. Default to
-  GPT-5.5 unless the task clearly benefits from a different available model or
-  the user asks for one.
+- **Model:** Recommend the model to use for the implementation chat based on
+  task shape. For small rule/docs/script edits, recommend Composer 2.5 if
+  available. For high-risk native/C++ debugging, architecture-heavy work, or
+  unclear trade-offs, let the planning model explicitly choose the strongest
+  appropriate implementation model. Do not hardcode a universal default.
 - **Skills:** Recommend any relevant installed skills to attach for the
   implementation phase. If none fit, say so explicitly. Split these into:
   - **Attach/load before coding:** skills that should shape implementation.
