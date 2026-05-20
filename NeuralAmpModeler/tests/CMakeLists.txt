@@ -21,6 +21,9 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_amp_catalog.cpp
   test_delay_reverb_dsp.cpp
   test_volum_pre_effects.cpp
+  test_golden_dsp.cpp
+  test_golden_rigs.cpp
+  test_golden_presets.cpp
   test_keyboard_steps.cpp
   test_eparam_order.cpp
   test_tuner_dsp.cpp
