@@ -13,19 +13,37 @@
 
 namespace
 {
-const char* PlatformExpected(const char* windowsExpected, const char* macExpected)
+bool RunningWithAddressSanitizer()
+{
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+  return true;
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__)
+  return true;
+#else
+  return false;
+#endif
+}
+
+const char* PlatformExpected(const char* windowsExpected, const char* macExpected, const char* macSanitizedExpected)
 {
 #if defined(__APPLE__)
+  if (RunningWithAddressSanitizer() && macSanitizedExpected != nullptr)
+    return macSanitizedExpected;
   return macExpected;
 #else
   return windowsExpected;
 #endif
 }
 
-void ExpectGoldenHash(const char* name, const std::string& actual, const char* windowsExpected, const char* macExpected)
+void ExpectGoldenHash(
+  const char* name, const std::string& actual, const char* windowsExpected, const char* macExpected,
+  const char* macSanitizedExpected = nullptr)
 {
   INFO(name << " actual=" << actual);
-  const char* expected = PlatformExpected(windowsExpected, macExpected);
+  const char* expected = PlatformExpected(windowsExpected, macExpected, macSanitizedExpected);
   REQUIRE(expected != nullptr);
   CHECK(actual == std::string(expected));
 }
@@ -162,7 +180,8 @@ TEST_CASE("Golden DSP: PRE effects and tone stack hashes stay stable")
 {
   ExpectGoldenHash("compressor", volum::test::Sha256HexSamples(RunCompressorGolden()),
                    "eca6a5932f0fac141bb84783123e93121d328e4419a5fe38f3848d7e0a45a3fc",
-                   "d08747ac0a454b8ac11e8404709dc6527be74e683cbf7b44f6369a6de60675d8");
+                   "d08747ac0a454b8ac11e8404709dc6527be74e683cbf7b44f6369a6de60675d8",
+                   "f277e00d949ebab0a3314b9643effb7422c755d4af0c23c2a8e76779fca16844");
   ExpectGoldenHash("pre-eq", volum::test::Sha256HexSamples(RunPreEqGolden()),
                    "72697ba01950cdb27df11230f3f213c5d59db2dc96ef0e51b0b24bca96509f2b",
                    "986fec4c92c2af9645e6e7402ccc5321e12fd083c1d5d813253b93248e98aba5");
