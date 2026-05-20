@@ -22,5 +22,5 @@ Include:
 Keep this section concise. It should help the user start the next chat with the
 right context, not reopen the design discussion.
 
-After implementation, the user may opt in to a retro via the `postmortem`
+After implementation, the user may opt in to a retro via the `captain-hindsight`
 skill. Do not run a retro automatically.
