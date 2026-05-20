@@ -15,6 +15,8 @@ This guide explains the VoLum 1.0 interface after installation. For downloads, u
 5. **PRE | AMP | POST strip:** open one section at a time.
 6. **Toolbar:** tuner, metronome, and settings live in the top-right corner.
 
+The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones.
+
 VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
 ## Choose An Amp

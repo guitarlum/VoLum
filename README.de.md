@@ -91,6 +91,10 @@ C:\Program Files\Common Files\VST3\
 
 Danach Plugins in der DAW neu scannen. Nutze einen VST3-fähigen Host wie REAPER, Ableton Live, Cubase, Studio One oder Bitwig.
 
+### Linux
+
+VoLum bietet derzeit keinen nativen Linux-Build an. Einige Nutzer haben berichtet, dass das Windows-VST3 unter Linux mit [yabridge](https://github.com/robbert-vdh/yabridge) gut läuft; dieser Weg wird von VoLum aber nicht offiziell getestet.
+
 ## Mitgelieferte Amps
 
 | Amp | Kanäle |
