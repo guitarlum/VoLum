@@ -96,17 +96,20 @@ if [[ -d $PRODUCTS/$AAX ]]; then
   build_flavor "AAX" $AAX "com.Lum.aax.pkg.${PRODUCT_NAME}" "/Library/Application Support/Avid/Audio/Plug-Ins"
 fi
 
-# Stand-alone .app: stage VoLum.app into a root package so installer places the bundle
-# directly under /Applications. A component package is relocatable by default and can update
-# the build-staged app instead of creating the installed app during CI smoke installs.
+# Stand-alone .app: stage VoLum.app into a root package and mark the inferred bundle
+# non-relocatable. Otherwise installer may update build-mac/VoLum.app instead of placing the
+# installed app under /Applications during CI smoke installs.
 if [[ -d $PRODUCTS/$APP ]]; then
   echo "--- BUILDING ${PRODUCT_NAME}_APP.pkg (root-staged bundle) ---"
   APP_TMPDIR=${TARGET_DIR}/tmp-app
+  APP_COMPONENT_PLIST="${TARGET_DIR}/${PRODUCT_NAME}_APP-component.plist"
   mkdir -p "$PKG_DIR"
   rm -rf "$APP_TMPDIR"
   mkdir -p "$APP_TMPDIR"
   cp -R -L "$PRODUCTS/$APP" "$APP_TMPDIR"
-  pkgbuild --root "$APP_TMPDIR" --identifier "com.Lum.app.pkg.${PRODUCT_NAME}" --version "$VERSION" --install-location "/Applications" "${PKG_DIR}/${PRODUCT_NAME}_APP.pkg"
+  pkgbuild --analyze --root "$APP_TMPDIR" "$APP_COMPONENT_PLIST"
+  /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$APP_COMPONENT_PLIST"
+  pkgbuild --root "$APP_TMPDIR" --component-plist "$APP_COMPONENT_PLIST" --identifier "com.Lum.app.pkg.${PRODUCT_NAME}" --version "$VERSION" --install-location "/Applications" "${PKG_DIR}/${PRODUCT_NAME}_APP.pkg"
   rm -rf "$APP_TMPDIR"
 fi
 
