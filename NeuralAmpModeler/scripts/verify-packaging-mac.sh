@@ -97,10 +97,18 @@ verify_installer_package_metadata() {
   rm -rf "$expanded" "$app_expanded"
   pkgutil --expand "$installer_pkg" "$expanded"
 
-  test -f "$expanded/Distribution"
-  test -f "$expanded/VoLum_APP.pkg"
-  test -f "$expanded/VoLum_VST3.pkg"
-  test -f "$expanded/VoLum_RIGS.pkg"
+  if [[ ! -f "$expanded/Distribution" ]]; then
+    echo "ERROR: expanded installer is missing Distribution" >&2
+    find "$expanded" -maxdepth 2 -print | sort >&2 || true
+    exit 1
+  fi
+  for package_name in VoLum_APP.pkg VoLum_VST3.pkg VoLum_RIGS.pkg; do
+    if [[ ! -e "$expanded/$package_name" ]]; then
+      echo "ERROR: expanded installer is missing $package_name" >&2
+      find "$expanded" -maxdepth 2 -print | sort >&2 || true
+      exit 1
+    fi
+  done
 
   python3 - "$expanded/Distribution" <<'PY'
 import sys
@@ -133,7 +141,11 @@ if errors:
 PY
 
   pkgutil --expand "$expanded/VoLum_APP.pkg" "$app_expanded"
-  test -f "$app_expanded/PackageInfo"
+  if [[ ! -f "$app_expanded/PackageInfo" ]]; then
+    echo "ERROR: expanded VoLum_APP.pkg is missing PackageInfo" >&2
+    find "$app_expanded" -maxdepth 2 -print | sort >&2 || true
+    exit 1
+  fi
   python3 - "$app_expanded/PackageInfo" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
