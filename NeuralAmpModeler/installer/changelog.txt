@@ -1,3 +1,4 @@
+05/20/2026 - VoLum: macOS packaging no longer applies Finder custom-icon metadata to the VST3 bundle, avoiding an `Icon` root file that can make zipped VST3 bundles fail strict code-signature verification after extraction.
 05/20/2026 - VoLum: macOS portable VST3 archives now use standard `zip -X` from a scrubbed staging directory so standard unzip extraction does not add unsealed bundle-root metadata.
 05/20/2026 - VoLum: macOS packaging now verifies the staged portable VST3 bundle before zipping and strips AppleDouble metadata files from the staging tree, catching invalid archive contents before CI artifact verification.
 05/20/2026 - VoLum: macOS VST3 zip creation now omits resource forks and extended attributes so extracting the portable VST3 archive preserves a valid signed bundle.
