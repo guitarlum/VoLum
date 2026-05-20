@@ -12,8 +12,14 @@ alwaysApply: false
 Read the smallest owner first:
 
 - `VoLumControls.h`: umbrella only. Do not edit unless adding/removing includes.
-- `VoLumCoreControls.h`: base controls, sidebar, speaker row, hero, knobs, exact entry, tuner/metronome overlays, settings backdrop.
-- `VoLumTriptych.h`: PRE/AMP/POST strip, Delay/Reverb pedal cards, chain connector, effect artwork.
+- `VoLumTriptych.h`: `VoLumTriptychControl` (PRE/AMP/POST strip) and `VoLumChainConnectorControl`; umbrella for triptych pieces.
+- `VoLumTriptychMotifs.h`: COMP / PRE-NAM / DELAY / REVERB fractal motifs used by pedal cards and Quiet slots.
+- `VoLumTriptychMenus.h`: PRE capture and support-amp menus.
+- `VoLumPedalCardControl.h`: focused pedal cards with cached art layer and preset-name footer.
+- `VoLumCoreControls.h`: sidebar, speaker row, knob row, meters, dividers/footers, channel stepper, keyboard hints, exact entry, param-value display, settings overlay frame.
+- `VoLumHero.h`: procedural hero, AMP title strip, Dual Amp chip, lane PAN dots, support polarity control.
+- `VoLumKeyboardModel.h`: shared keyboard target rings and per-parameter step sizes.
+- `VoLumTunerMetronomeOverlay.h`: tuner and metronome controls.
 - `VoLumTriptychState.h`: tiny shared enums.
 - `VoLumColorHelpers.h`: shared colors and small drawing helpers.
 - `VoLumFractalArt.h`: large procedural art. Read only when changing fractals or hero/sidebar art.
@@ -25,6 +31,9 @@ Architecture:
 - Triptych has one expanded section at a time: PRE, AMP, or POST.
 - Bottom knob row uses replace mode: section/pedal selection hides previous focused controls and shows new controls.
 - PRE strip background is diagonal crosshatch; collapsed AMP strip is circuit-board grid.
+- `NeuralAmpModeler.cpp` is the compiled translation unit; `VoLumLoader.inc.cpp`, `VoLumSettings.inc.cpp`, and `Unserialization.cpp` are tail-included or path-preserved siblings, not independent build targets.
+- Source-string regression locks in `test_volum_ui_regressions.cpp` use `ReadPluginSource()` over `NeuralAmpModeler.cpp` plus the tail-included `.inc.cpp` siblings. Moving a function between those files does not break a lock unless the string itself changes.
+- Promoting `.inc.cpp` siblings to real separate translation units is a 1.1 hygiene follow-up that needs macOS verification.
 
 Verification:
 
@@ -34,3 +43,4 @@ Verification:
   - Triptych geometry belongs in `VoLumTriptychLayout.h` / `test_volum_ui_regressions.cpp`.
   - PRE capture discovery belongs in `VoLumPrePedalCaptures.h` / `test_volum_pre_pedal_captures.cpp`.
   - Signal-chain visibility/enablement decisions belong in `VoLumProcessingPlan.h` / `test_volum_processing_plan.cpp`.
+- Keep `docs/user-guide.en.md` and `docs/user-guide.de.md` in sync for user-facing UI changes, and refresh stable `docs/user-guide-*.png` screenshots when the visible UI changes.

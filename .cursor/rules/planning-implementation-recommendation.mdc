@@ -14,13 +14,20 @@ Include:
   GPT-5.5 unless the task clearly benefits from a different available model or
   the user asks for one.
 - **Skills:** Recommend any relevant installed skills to attach for the
-  implementation phase. If none fit, say so explicitly.
+  implementation phase. If none fit, say so explicitly. Split these into:
+  - **Attach/load before coding:** skills that should shape implementation.
+  - **Run after only if requested:** opt-in retro/review skills such as
+    `captain-hindsight`.
 - **Why:** Give a one-sentence reason tied to the task shape, such as docs,
   UI, native build debugging, parameter/state migration, release packaging, or
   code review.
 
 Keep this section concise. It should help the user start the next chat with the
 right context, not reopen the design discussion.
+
+If a plan recommends any **Attach/load before coding** skills, make the first
+implementation todo: `Load recommended implementation skills/rules and confirm
+scope`. Do not add opt-in retro skills to startup todos.
 
 After implementation, the user may opt in to a retro via the `captain-hindsight`
 skill. Do not run a retro automatically.

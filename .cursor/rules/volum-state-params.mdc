@@ -39,3 +39,5 @@ Verification:
 - Run `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`.
 - Add focused doctests for new DSP/state behavior before calling work done.
 - Register new test files in both `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj` and `NeuralAmpModeler/tests/CMakeLists.txt`.
+- Params/keyboard/state tests: `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, `test_volum_chunk_codec.cpp`.
+- User settings JSON: `test_volum_user_settings_io.cpp`.
