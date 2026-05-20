@@ -96,40 +96,18 @@ if [[ -d $PRODUCTS/$AAX ]]; then
   build_flavor "AAX" $AAX "com.Lum.aax.pkg.${PRODUCT_NAME}" "/Library/Application Support/Avid/Audio/Plug-Ins"
 fi
 
-# Stand-alone .app: use pkgbuild --component (Apple-recommended for bundles), but make it
-# non-relocatable. CI keeps build-mac/VoLum.app around while smoke-installing the PKG; if the
-# component is relocatable, installer may "update" that build copy instead of placing VoLum.app
-# in /Applications.
+# Stand-alone .app: stage VoLum.app into a root package so installer places the bundle
+# directly under /Applications. A component package is relocatable by default and can update
+# the build-staged app instead of creating the installed app during CI smoke installs.
 if [[ -d $PRODUCTS/$APP ]]; then
-  echo "--- BUILDING ${PRODUCT_NAME}_APP.pkg (component bundle) ---"
+  echo "--- BUILDING ${PRODUCT_NAME}_APP.pkg (root-staged bundle) ---"
+  APP_TMPDIR=${TARGET_DIR}/tmp-app
   mkdir -p "$PKG_DIR"
-  APP_COMPONENT_PLIST="${TARGET_DIR}/${PRODUCT_NAME}_APP-component.plist"
-  cat > "$APP_COMPONENT_PLIST" << XMLEND
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<array>
-  <dict>
-    <key>BundleHasStrictIdentifier</key>
-    <true/>
-    <key>BundleIsRelocatable</key>
-    <false/>
-    <key>BundleIsVersionChecked</key>
-    <true/>
-    <key>BundleOverwriteAction</key>
-    <string>upgrade</string>
-    <key>RootRelativeBundlePath</key>
-    <string>${APP}</string>
-  </dict>
-</array>
-</plist>
-XMLEND
-  pkgbuild --component "$PRODUCTS/$APP" \
-    --component-plist "$APP_COMPONENT_PLIST" \
-    --identifier "com.Lum.app.pkg.${PRODUCT_NAME}" \
-    --version "$VERSION" \
-    --install-location "/Applications" \
-    "${PKG_DIR}/${PRODUCT_NAME}_APP.pkg"
+  rm -rf "$APP_TMPDIR"
+  mkdir -p "$APP_TMPDIR"
+  cp -R -L "$PRODUCTS/$APP" "$APP_TMPDIR"
+  pkgbuild --root "$APP_TMPDIR" --identifier "com.Lum.app.pkg.${PRODUCT_NAME}" --version "$VERSION" --install-location "/Applications" "${PKG_DIR}/${PRODUCT_NAME}_APP.pkg"
+  rm -rf "$APP_TMPDIR"
 fi
 
 # build bundled rigs package — standard system-wide app support path (VoLumPaths checks here on macOS)
