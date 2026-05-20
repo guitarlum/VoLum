@@ -42,7 +42,18 @@ require_nonempty_plist_value() {
 
 verify_bundle_signature() {
   local bundle="$1"
-  codesign --verify --deep --strict --verbose=2 "$bundle"
+  if ! codesign --verify --deep --strict --verbose=2 "$bundle"; then
+    echo "ERROR: signature verification failed for $bundle" >&2
+    echo "Bundle root contents:" >&2
+    find "$bundle" -maxdepth 1 -print | sort >&2
+    echo "Suspicious metadata files:" >&2
+    find "$bundle" \( -name 'Icon?' -o -name '._*' -o -name '.DS_Store' \) -print | sort >&2
+    if command -v xattr >/dev/null 2>&1; then
+      echo "Extended attributes:" >&2
+      xattr -lr "$bundle" 2>&1 | sed 's/^/  /' >&2 || true
+    fi
+    return 1
+  fi
 }
 
 verify_standalone_app_identity() {
