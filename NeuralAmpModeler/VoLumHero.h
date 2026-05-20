@@ -17,6 +17,7 @@
 #include "VoLumFractalArt.h"
 
 #include <algorithm>
+#include <cstring>
 #include <cstdlib>
 #include <functional>
 
@@ -72,7 +73,12 @@ public:
   void SetPlaceholder(const char* text, int ampIdx = 0)
   {
     mPlaceholder = text;
-    mAmpIdx = ampIdx;
+    if (mAmpIdx != ampIdx)
+    {
+      mAmpIdx = ampIdx;
+      mMonoArtLayer = nullptr;
+      mMainArtLayer = nullptr;
+    }
     mHasBitmap = false;
     SetDirty(false);
   }
@@ -85,6 +91,8 @@ public:
 
   void SetDualAmpState(bool active, bool supportFocused, int supportAmpIdx)
   {
+    if (mSupportAmpIdx != supportAmpIdx)
+      mSupportArtLayer = nullptr;
     mDualAmpActive = active;
     mSupportFocused = supportFocused;
     mSupportAmpIdx = supportAmpIdx;
@@ -95,6 +103,7 @@ public:
   {
     mBitmap = bitmap;
     mHasBitmap = true;
+    mMonoArtLayer = nullptr;
     SetDirty(false);
   }
 
@@ -306,9 +315,14 @@ private:
     DrawCornerAccent(g, mRECT.R - m, mRECT.B - m, cs, true, true, VoLumColors::HERO_CORNER);
 
     const IRECT artRect = mRECT.GetPadded(-6.f, -6.f, -6.f, -6.f);
-    g.PathClipRegion(artRect);
-    DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
-    g.PathClipRegion(IRECT());
+    if (!g.CheckLayer(mMonoArtLayer) || mCachedMonoAmpIdx != mAmpIdx)
+    {
+      g.StartLayer(this, artRect);
+      DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
+      mMonoArtLayer = g.EndLayer();
+      mCachedMonoAmpIdx = mAmpIdx;
+    }
+    g.DrawLayer(mMonoArtLayer);
 
     DrawDualChip(g, VoLumColors::AMBER);
   }
@@ -326,12 +340,23 @@ private:
 
     // Fractal (or empty-state placeholder) clipped above the title strip.
     const IRECT artRect = r.GetPadded(-10.f, -28.f, -10.f, -38.f);
-    g.PathClipRegion(artRect);
-    if (empty)
-      DrawEmptySupportArt(g, artRect);
-    else
-      DrawHeroFractalArt(g, artRect, FractalCaseForAmp(std::clamp(ampIdx, 0, volum::kAmpCount - 1)));
-    g.PathClipRegion(IRECT());
+    const bool mainLane = std::strcmp(role, "MAIN") == 0;
+    ILayerPtr& layer = mainLane ? mMainArtLayer : mSupportArtLayer;
+    int& cachedAmpIdx = mainLane ? mCachedMainAmpIdx : mCachedSupportAmpIdx;
+    bool& cachedEmpty = mainLane ? mCachedMainEmpty : mCachedSupportEmpty;
+    const int clampedAmpIdx = std::clamp(ampIdx, 0, volum::kAmpCount - 1);
+    if (!g.CheckLayer(layer) || cachedAmpIdx != clampedAmpIdx || cachedEmpty != empty)
+    {
+      g.StartLayer(this, artRect);
+      if (empty)
+        DrawEmptySupportArt(g, artRect);
+      else
+        DrawHeroFractalArt(g, artRect, FractalCaseForAmp(clampedAmpIdx));
+      layer = g.EndLayer();
+      cachedAmpIdx = clampedAmpIdx;
+      cachedEmpty = empty;
+    }
+    g.DrawLayer(layer);
 
     // Title strip with amp name
     const IRECT titleStrip(r.L + 8.f, r.B - 30.f, r.R - 8.f, r.B - 8.f);
@@ -361,6 +386,14 @@ private:
 
   bool mHasBitmap = false;
   IBitmap mBitmap;
+  ILayerPtr mMonoArtLayer;
+  ILayerPtr mMainArtLayer;
+  ILayerPtr mSupportArtLayer;
+  int mCachedMonoAmpIdx = -1;
+  int mCachedMainAmpIdx = -1;
+  int mCachedSupportAmpIdx = -1;
+  bool mCachedMainEmpty = false;
+  bool mCachedSupportEmpty = false;
   std::string mPlaceholder = "A1";
   std::string mName = "Ampete One";
   int mAmpIdx = 0;
