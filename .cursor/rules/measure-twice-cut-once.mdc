@@ -1,0 +1,55 @@
+---
+description: "Measure twice, cut once - plan-lifecycle guidance: how to create a plan and how to hand it off cleanly to implementation."
+alwaysApply: true
+---
+
+# Measure Twice, Cut Once
+
+Plan deliberately before implementation, then hand off the work with the right
+model, skills, and first step.
+
+## Measure Twice: Plan Before Drafting
+
+For non-trivial plans or ambiguous work, prefer `/grill-me` if that skill is
+installed. If it is not installed, use the same interaction pattern directly:
+ask one question at a time, include your recommended answer, and inspect the
+codebase instead of asking when the answer is discoverable.
+
+Skip grilling for obvious single-step changes.
+
+## Cut Once: Implementation Handoff
+
+When creating or updating an implementation plan, end the plan with a short
+`Implementation Recommendation` section.
+
+Include:
+
+- **Model:** Recommend a specific model that fits this task. Pick by task
+  shape, not by habit:
+  - Small, well-scoped wording/docs/script/config edits: name a fast
+    implementation-tier model currently available in this environment.
+  - Complex debugging, architecture-heavy work, refactors with unclear
+    trade-offs, or anything safety-critical: name a strong reasoning model
+    currently available in this environment.
+  - If the task does not clearly favor a tier, say so explicitly and let the
+    user choose.
+  - Never hardcode a single model as a universal default. Never invent a model
+    name that is not currently available; if available models are unknown,
+    describe the desired tier instead.
+- **Skills:** Recommend any relevant installed skills to attach for the
+  implementation phase. If none fit, say so explicitly. Split these into:
+  - **Attach/load before coding:** skills that should shape implementation.
+  - **Run after only if requested:** opt-in retro/review skills the user may
+    invoke on demand.
+- **Why:** Give a one-sentence reason tied to the task shape, such as docs,
+  UI, debugging, refactor, migration, packaging, or code review.
+
+Keep this section concise. It should help the user start the next chat with the
+right context, not reopen the design discussion.
+
+If a plan recommends any **Attach/load before coding** skills, make the first
+implementation todo: `Load recommended implementation skills/rules and confirm
+scope`. Do not add opt-in retro skills to startup todos.
+
+After implementation, the user may opt in to a retro on demand. Do not run a
+retro automatically.
