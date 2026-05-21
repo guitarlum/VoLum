@@ -548,6 +548,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     const bool hasPostPerAmpSettings = volum::ChunkHasPostPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasPostSnapshotPerAmpSettings =
       volum::ChunkHasPostSnapshotPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasPrePostLockFlags =
+      volum::ChunkHasPrePostLockFlags(remainingPerAmpBytes, volum::kAmpCount);
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -567,6 +569,14 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // user policy "we don't have to migrate, we can reset", postValid stays at the
       // struct default (false), so _VolumRestoreFromSettings initializes a meaningful
       // factory POST scene instead of inheriting the previously selected amp.
+    }
+
+    if (hasPrePostLockFlags)
+      pos = volum::GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked);
+    else
+    {
+      mVolumPreLocked = false;
+      mVolumPostLocked = false;
     }
 
     mVolumInitComplete = false;

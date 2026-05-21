@@ -359,6 +359,19 @@ public:
   void _VolumHideSupportAmpMenu();
   void _VolumSetSupportAmp(int ampIdx);
   void _VolumSaveCurrentToSettings();
+  void _VolumSavePreToSlot(volum::VoLumAmpSettings& s);
+  void _VolumSavePostToSlot(volum::VoLumAmpSettings& s);
+  void _VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s);
+  void _VolumRestorePostFromSlot(volum::VoLumAmpSettings& s);
+  void _VolumSetPreLocked(bool locked);
+  void _VolumSetPostLocked(bool locked);
+  bool _VolumIsPreLocked() const { return mVolumPreLocked; }
+  bool _VolumIsPostLocked() const { return mVolumPostLocked; }
+  bool _VolumIsPreDirty() const;
+  bool _VolumIsPostDirty() const;
+  void _VolumStorePreToCurrentAmp();
+  void _VolumStorePostToCurrentAmp();
+  void _VolumRefreshPrePostLockChrome(int paramIdx);
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
@@ -512,6 +525,10 @@ private:
   // Per-amp settings: remembered across amp switches and sessions
   std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
   volum::VoLumEffectSettings mVolumEffectSettings;
+  bool mVolumPreLocked = false;
+  bool mVolumPostLocked = false;
+  bool mVolumPreLockUiDirty = false;
+  bool mVolumPostLockUiDirty = false;
 
   // Tuner & Metronome DSP
   volum::TunerDSP mTunerDSP;

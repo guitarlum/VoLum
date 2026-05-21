@@ -124,6 +124,7 @@
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />
+    <ClCompile Include="..\tests\test_volum_pre_post_lock.cpp" />
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />
     <ClCompile Include="..\tests\test_volum_knob_wheel.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
