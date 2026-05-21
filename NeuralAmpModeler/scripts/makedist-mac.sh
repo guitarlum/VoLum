@@ -233,9 +233,8 @@ if [ "$CODESIGN" != "1" ]; then
   )
 fi
 
-# Default to the deliverables we actually ship and test. AU still uses legacy
-# Carbon Resources/Rez and is currently best treated as opt-in work.
-XCODE_TARGETS=( -target "VST3" -target "APP" )
+# Default to the deliverables we actually ship and test.
+XCODE_TARGETS=( -target "VST3" -target "APP" -target "AU" )
 if [ "$FAST_DEV" == "1" ]; then
   XCODE_TARGETS=( -target "APP" )
 fi
@@ -404,9 +403,9 @@ if [ $BUILD_INSTALLER == 1 ]; then
   echo "building installer"
   echo ""
 
-  # makeinstaller-mac.sh packages from build-mac/<name>.{app,vst3}; Xcode installs to DSTROOT (~).
-  echo "staging ${PLUGIN_NAME}.app and ${PLUGIN_NAME}.vst3 into build-mac/ for pkgbuild..."
-  rm -rf "build-mac/${PLUGIN_NAME}.app" "build-mac/${PLUGIN_NAME}.vst3"
+  # makeinstaller-mac.sh packages from build-mac/<name>.{app,vst3,component}; Xcode installs to DSTROOT (~).
+  echo "staging ${PLUGIN_NAME}.app, ${PLUGIN_NAME}.vst3 and ${PLUGIN_NAME}.component into build-mac/ for pkgbuild..."
+  rm -rf "build-mac/${PLUGIN_NAME}.app" "build-mac/${PLUGIN_NAME}.vst3" "build-mac/${PLUGIN_NAME}.component"
   if [ -d "$APP" ]; then
     cp -R "$APP" "build-mac/${PLUGIN_NAME}.app"
   else
@@ -416,6 +415,11 @@ if [ $BUILD_INSTALLER == 1 ]; then
     cp -R "$VST3" "build-mac/${PLUGIN_NAME}.vst3"
   else
     echo "WARNING: missing $VST3 — installer will omit VST3"
+  fi
+  if [ -d "$AU" ]; then
+    cp -R "$AU" "build-mac/${PLUGIN_NAME}.component"
+  else
+    echo "WARNING: missing $AU — installer will omit AU"
   fi
 
   ./scripts/makeinstaller-mac.sh $FULL_VERSION
@@ -490,6 +494,7 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
   else
     APP_DMG="build-mac/${ARCHIVE_NAME}-app.dmg"
     VST3_ZIP="build-mac/${ARCHIVE_NAME}-vst3.zip"
+    AU_ZIP="build-mac/${ARCHIVE_NAME}-component.zip"
   fi
 
   if [ ! -d "$APP" ]; then
@@ -506,8 +511,8 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
     rm -R -f build-mac/dmg "$APP_DMG"
     mkdir -p build-mac/dmg
   else
-    rm -R -f build-mac/dmg build-mac/vst3-zip "$APP_DMG" "$VST3_ZIP"
-    mkdir -p build-mac/dmg build-mac/vst3-zip
+    rm -R -f build-mac/dmg build-mac/vst3-zip build-mac/au-zip "$APP_DMG" "$VST3_ZIP" "$AU_ZIP"
+    mkdir -p build-mac/dmg build-mac/vst3-zip build-mac/au-zip
   fi
 
   if [ "$FAST_DEV" == "1" ]; then
@@ -547,6 +552,36 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
     VST3_ZIP_ABS="$(pwd)/$VST3_ZIP"
     (cd build-mac/vst3-zip && COPYFILE_DISABLE=1 zip -qry -X "$VST3_ZIP_ABS" .)
     rm -R build-mac/vst3-zip
+
+    # AU ZIP
+    if [ -d "$AU" ]; then
+      echo "building standalone component (AU) zip..."
+      rm -rf build-mac/au-zip
+      mkdir -p build-mac/au-zip
+      COPYFILE_DISABLE=1 cp -R "$AU" "build-mac/au-zip/$PLUGIN_NAME.component"
+      xattr -cr "build-mac/au-zip/$PLUGIN_NAME.component"
+      find "build-mac/au-zip/$PLUGIN_NAME.component" \( -name '._*' -o -name '.DS_Store' \) -delete
+      codesign --verify --deep --strict --verbose=2 "build-mac/au-zip/$PLUGIN_NAME.component"
+
+      if [ -d "$RIGS_SRC" ]; then
+        echo "bundling VoLumRigs for AU..."
+        mkdir -p build-mac/au-zip/VoLumRigs
+        for amp_dir in "$RIGS_SRC"/*/; do
+          [ -d "$amp_dir" ] || continue
+          amp_name=$(basename "$amp_dir")
+          mkdir -p "build-mac/au-zip/VoLumRigs/$amp_name"
+          cp "$amp_dir"*.nam "build-mac/au-zip/VoLumRigs/$amp_name/" 2>/dev/null || true
+        done
+      fi
+
+      echo "zipping AU package..."
+      echo ""
+      AU_ZIP_ABS="$(pwd)/$AU_ZIP"
+      (cd build-mac/au-zip && COPYFILE_DISABLE=1 zip -qry -X "$AU_ZIP_ABS" .)
+      rm -R build-mac/au-zip
+    else
+      echo "WARNING: missing AU bundle: $AU — standalone component ZIP will be skipped"
+    fi
   fi
 fi
 
