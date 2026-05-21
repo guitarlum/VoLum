@@ -125,6 +125,15 @@ void PutCurrentVoLumChunkState(Chunk& chunk, VoLumChunkSelection selection, cons
 }
 
 template<typename Chunk>
+void PutPrePostLockFlags(Chunk& chunk, bool preLocked, bool postLocked)
+{
+  int pre = preLocked ? 1 : 0;
+  int post = postLocked ? 1 : 0;
+  chunk.Put(&pre);
+  chunk.Put(&post);
+}
+
+template<typename Chunk>
 int GetLegacyPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
 {
   pos = chunk.Get(&s.speakerIdx, pos);
@@ -382,6 +391,18 @@ int GetVoLumChunkSelection(const Chunk& chunk, int pos, VoLumChunkSelection& sel
   pos = chunk.Get(&selection.speakerIdx, pos);
   pos = chunk.Get(&selection.channelIdx, pos);
   selection = ClampChunkSelection(selection);
+  return pos;
+}
+
+template<typename Chunk>
+int GetPrePostLockFlags(const Chunk& chunk, int pos, bool& preLocked, bool& postLocked)
+{
+  int pre = 0;
+  int post = 0;
+  pos = chunk.Get(&pre, pos);
+  pos = chunk.Get(&post, pos);
+  preLocked = (pre != 0);
+  postLocked = (post != 0);
   return pos;
 }
 

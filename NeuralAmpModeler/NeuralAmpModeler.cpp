@@ -435,6 +435,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                            volum::kAmps[ampIdx].displayName,
                            _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
                            _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
+            mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
+            mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
+            trip->SetDirty(false);
           }
         }),
       kCtrlTagVoLumAmpList);
@@ -1042,12 +1045,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (mVolumExpandedSection == EVoLumSection::AMP)
               nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[newIdx].displayName, true);
           if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych)) {
+             auto* trip = tripCtrl->As<VoLumTriptychControl>();
              const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-             tripCtrl->As<VoLumTriptychControl>()->SetState(
+             trip->SetState(
                preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), newIdx,
                volum::kAmps[newIdx].displayName,
                _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
                _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
+            mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
+            mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
+            trip->SetDirty(false);
           }
         }
         return true;
@@ -1755,6 +1762,25 @@ void NeuralAmpModeler::OnIdle()
   if (mVolumInitComplete)
     _VolumSaveCurrentToSettings();
 
+  if (mVolumInitComplete && (mVolumPreLocked || mVolumPostLocked))
+  {
+    const bool preDirty = mVolumPreLocked && _VolumIsPreDirty();
+    const bool postDirty = mVolumPostLocked && _VolumIsPostDirty();
+    if (preDirty != mVolumPreLockUiDirty || postDirty != mVolumPostLockUiDirty)
+    {
+      mVolumPreLockUiDirty = preDirty;
+      mVolumPostLockUiDirty = postDirty;
+      if (auto* pGfx = GetUI())
+        if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
+          tripCtrl->SetDirty(false);
+    }
+  }
+  else
+  {
+    mVolumPreLockUiDirty = false;
+    mVolumPostLockUiDirty = false;
+  }
+
   // Write settings file when dirty (knob/speaker/channel changed)
 #ifdef APP_API
   if (mVolumSettingsDirty)
@@ -1836,6 +1862,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // VoLum: append per-amp settings after params (see Unserialization.cpp)
   volum::PutCurrentVoLumChunkState(
     chunk, {mVolumAmpIdx, mVolumSpeakerIdx, mVolumChannelIdx}, mVolumAmpSettings.data(), volum::kAmpCount);
+  volum::PutPrePostLockFlags(chunk, mVolumPreLocked, mVolumPostLocked);
 #endif
 
   return ok;
@@ -2057,6 +2084,90 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 #endif
 }
 
+#if VOLUM_AMPETE_PRODUCT
+namespace
+{
+bool IsPreBlockParam(int paramIdx)
+{
+  switch (paramIdx)
+  {
+    case kPreCompActive:
+    case kPreCompAmount:
+    case kPreCompRatio:
+    case kPreCompAttack:
+    case kPreCompRelease:
+    case kPreCompMix:
+    case kPreCompLevel:
+    case kPreNam1Active:
+    case kPreNam1Capture:
+    case kPreNam1Gain:
+    case kPreNam1Bass:
+    case kPreNam1Mid:
+    case kPreNam1MidFreq:
+    case kPreNam1Treble:
+    case kPreNam1Level:
+    case kPreNam2Active:
+    case kPreNam2Capture:
+    case kPreNam2Gain:
+    case kPreNam2Bass:
+    case kPreNam2Mid:
+    case kPreNam2MidFreq:
+    case kPreNam2Treble:
+    case kPreNam2Level:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool IsPostBlockParam(int paramIdx)
+{
+  switch (paramIdx)
+  {
+    case kDelayActive:
+    case kDelayTime:
+    case kDelayFeedback:
+    case kDelayMix:
+    case kDelayMode:
+    case kDelayTone:
+    case kDelayAge:
+    case kDelayPingPong:
+    case kReverbActive:
+    case kReverbMix:
+    case kReverbDecay:
+    case kReverbTone:
+    case kReverbPreDelay:
+    case kReverbShimmer:
+    case kReverbMode:
+    case kReverbSubMode:
+      return true;
+    default:
+      return false;
+  }
+}
+} // namespace
+
+void NeuralAmpModeler::_VolumRefreshPrePostLockChrome(int paramIdx)
+{
+  if (!mVolumInitComplete)
+    return;
+
+  const bool affectsPre = mVolumPreLocked && IsPreBlockParam(paramIdx);
+  const bool affectsPost = mVolumPostLocked && IsPostBlockParam(paramIdx);
+  if (!affectsPre && !affectsPost)
+    return;
+
+  if (affectsPre)
+    mVolumPreLockUiDirty = _VolumIsPreDirty();
+  if (affectsPost)
+    mVolumPostLockUiDirty = _VolumIsPostDirty();
+
+  if (auto* pGfx = GetUI())
+    if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
+      tripCtrl->SetDirty(false);
+}
+#endif
+
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
   if (auto pGraphics = GetUI())
@@ -2157,6 +2268,10 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 #endif
       default: break;
     }
+
+#if VOLUM_AMPETE_PRODUCT
+    _VolumRefreshPrePostLockChrome(paramIdx);
+#endif
   }
 }
 
