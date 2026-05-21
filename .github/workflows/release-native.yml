@@ -146,34 +146,42 @@ jobs:
       run: |
         APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
         VST3_BIN="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/MacOS/VoLum"
+        AU_BIN="$HOME/Library/Audio/Plug-Ins/Components/VoLum.component/Contents/MacOS/VoLum"
         APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
         APP_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg"
         VST3_ZIP="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip"
+        AU_ZIP="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-component.zip"
         INSTALLER_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg"
         VERIFY_DIR="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/verify-mac"
 
         app_archs=$(lipo -archs "$APP_BIN")
         vst3_archs=$(lipo -archs "$VST3_BIN")
+        au_archs=$(lipo -archs "$AU_BIN")
         main_nib=$(/usr/libexec/PlistBuddy -c 'Print :NSMainNibFile' "$APP_PLIST")
 
         echo "APP architectures: $app_archs"
         echo "VST3 architectures: $vst3_archs"
+        echo "AU architectures: $au_archs"
         echo "APP main nib: $main_nib"
 
         codesign --verify --deep --strict --verbose=2 "$HOME/Applications/VoLum.app"
         codesign --verify --deep --strict --verbose=2 "$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
+        codesign --verify --deep --strict --verbose=2 "$HOME/Library/Audio/Plug-Ins/Components/VoLum.component"
         [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
         [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
+        [[ "$au_archs" == *arm64* && "$au_archs" == *x86_64* ]]
         test -f "$HOME/Applications/VoLum.app/Contents/Resources/${main_nib}.nib"
         test -d "$HOME/Applications/VoLum.app/Contents/Resources/VoLumRigs"
         test -f "$APP_DMG"
         test -f "$VST3_ZIP"
+        test -f "$AU_ZIP"
         test -f "$INSTALLER_DMG"
 
         rm -rf "$VERIFY_DIR"
         mkdir -p "$VERIFY_DIR"
         hdiutil attach "$APP_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/dmg"
         unzip -q "$VST3_ZIP" -d "$VERIFY_DIR/vst3"
+        unzip -q "$AU_ZIP" -d "$VERIFY_DIR/au"
 
         test -d "$VERIFY_DIR/dmg/VoLum.app"
         test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
@@ -183,6 +191,10 @@ jobs:
         test -d "$VERIFY_DIR/vst3/VoLumRigs"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -d "$VERIFY_DIR/au/VoLum.component"
+        test -d "$VERIFY_DIR/au/VoLumRigs"
+        test -f "$VERIFY_DIR/au/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+        test -f "$VERIFY_DIR/au/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
         hdiutil detach "$VERIFY_DIR/dmg"
 
         hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
@@ -209,11 +221,13 @@ jobs:
 
         cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg"
         cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip"
+        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-component.zip" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-component.zip"
         cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-installer.dmg"
 
         gh release upload "${{ needs.prepare_release.outputs.release_tag }}" \
           "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg" \
           "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip" \
+          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-component.zip" \
           "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-installer.dmg" \
           --clobber
       shell: bash
