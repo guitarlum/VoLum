@@ -528,8 +528,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     volum::MigrateReverbMixToEqualPowerV0_9_3(config);
   _UnserializeApplyConfig(config);
 
-#if VOLUM_AMPETE_PRODUCT
-  // v0.7.15+ and VoLum 0.1.x: read per-amp settings after the params
+  // VoLum: per-amp settings tail after serialized params (v0.7.15+ and VoLum 0.1.x)
   if (volum::ChunkUses0700SerializedConfig(version) || volum::ChunkUses0600SerializedConfig(version) ||
       volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
@@ -585,7 +584,6 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     mVolumNeedsLoad.store(true);
     mVolumInitComplete = true;
   }
-#endif
 
   return pos;
 }
