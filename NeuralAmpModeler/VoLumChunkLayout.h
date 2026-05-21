@@ -28,6 +28,8 @@ static constexpr int kPostPerAmpSettingsBytes = kPostPerAmpLiveSettingsBytes + k
 static constexpr int kDualAmpPlusPostLivePerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpLiveSettingsBytes;
 static constexpr int kDualAmpPlusPostPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpSettingsBytes;
 static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPlusPostPerAmpSettingsBytes;
+// Global PRE/POST lock flags appended after the per-amp array (VoLum 1.0.2+).
+static constexpr int kPrePostLockFlagsBytes = static_cast<int>(sizeof(int) * 2);
 
 inline int LegacyPerAmpSettingsPayloadBytes(int ampCount)
 {
@@ -62,6 +64,11 @@ inline bool ChunkHasPostPerAmpSettings(int remainingBytes, int ampCount)
 inline bool ChunkHasPostSnapshotPerAmpSettings(int remainingBytes, int ampCount)
 {
   return remainingBytes >= kDualAmpPlusPostPerAmpSettingsBytes * ampCount;
+}
+
+inline bool ChunkHasPrePostLockFlags(int remainingBytes, int ampCount)
+{
+  return remainingBytes >= CurrentPerAmpSettingsPayloadBytes(ampCount) + kPrePostLockFlagsBytes;
 }
 
 } // namespace volum

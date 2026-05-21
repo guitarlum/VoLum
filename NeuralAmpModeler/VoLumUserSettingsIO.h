@@ -27,7 +27,8 @@ namespace volum
 // active toggles) under each amps[<folderName>] entry. Legacy v<6 settings are
 // restored to factory POST defaults per amp on first load so brand-new amps don't
 // inherit stale tweaks from a single global POST scene.
-inline constexpr int kVoLumUserSettingsVersion = 6;
+// v7 adds global preLocked / postLocked flags (PRE/POST block pin across amp switches).
+inline constexpr int kVoLumUserSettingsVersion = 7;
 
 // See VoLumAmpeteCatalog.h for delay/reverb mode constants and snapshot structs.
 
@@ -190,11 +191,14 @@ inline nlohmann::json OktaverbSubModeSnapshotsToJson(const OktaverbSubModeSnapsh
 }
 
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
-                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true)
+                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
+                                               bool preLocked = false, bool postLocked = false)
 {
   nlohmann::json j;
   j["version"] = kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = lastAmpIdx;
+  j["preLocked"] = preLocked;
+  j["postLocked"] = postLocked;
 
   nlohmann::json amps = nlohmann::json::object();
   for (int i = 0; i < ampCount; ++i)
@@ -281,7 +285,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
 }
 
 inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings* ampSettings, int ampCount,
-                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr, bool* didHeal = nullptr)
+                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr, bool* didHeal = nullptr,
+                                      bool* preLocked = nullptr, bool* postLocked = nullptr)
 {
   bool healed = false;
   auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue, int defaultValue) {
@@ -345,6 +350,21 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
   {
     const int defaultLastAmpIdx = 0;
     loadInt(j, "lastAmpIdx", *lastAmpIdx, 0, ampCount - 1, defaultLastAmpIdx);
+  }
+
+  if (settingsVersion >= 7)
+  {
+    if (preLocked)
+      loadBool(j, "preLocked", *preLocked, false);
+    if (postLocked)
+      loadBool(j, "postLocked", *postLocked, false);
+  }
+  else
+  {
+    if (preLocked)
+      *preLocked = false;
+    if (postLocked)
+      *postLocked = false;
   }
 
   if (j.contains("amps") && j["amps"].is_object())
