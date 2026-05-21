@@ -14,9 +14,6 @@
 
 #define SHARED_RESOURCES_SUBPATH "VoLum"
 
-// VoLum: curated amp catalog for standalone and VST3; bundled rigs ship with installer/VoLum.iss (HKLM VoLumRigsRoot).
-#define VOLUM_AMPETE_PRODUCT 1
-
 #ifdef APP_API
   #define PLUG_CHANNEL_IO "1-2"
 #else
@@ -30,13 +27,8 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
-#if VOLUM_AMPETE_PRODUCT
 #define PLUG_WIDTH 900
 #define PLUG_HEIGHT 600
-#else
-#define PLUG_WIDTH 600
-#define PLUG_HEIGHT 400
-#endif
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0
@@ -82,6 +74,9 @@
 #define IR_ICON_ON_FN "IRIconOn.svg"
 #define IR_ICON_OFF_FN "IRIconOff.svg"
 #define GLOBE_ICON_FN "Globe.svg"
+#define PADLOCK_LOCKED_FN "PadlockLocked.svg"
+#define PADLOCK_UNLOCKED_FN "PadlockUnlocked.svg"
+#define STORE_TO_AMP_FN "StoreToAmp.svg"
 
 #define BACKGROUND_FN "Background.jpg"
 #define BACKGROUND2X_FN "Background@2x.jpg"

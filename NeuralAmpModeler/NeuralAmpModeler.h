@@ -28,7 +28,7 @@
 #include <unordered_map>
 #include <vector>
 
-#if VOLUM_AMPETE_PRODUCT
+// VoLum: catalog, settings, tuner/metronome (upstream-equivalent file fence)
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumPrePedalCaptures.h"
 #include "VoLumSettingsFileIO.h"
@@ -36,7 +36,6 @@
 #include "VoLumUserSettingsIO.h"
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
-#endif
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -119,7 +118,7 @@ enum EParams
   kInputCalibrationLevel,
   kOutputMode,
   kVoLumAmpeteRig,
-#if VOLUM_AMPETE_PRODUCT
+  // VoLum: dual-amp and support-lane parameters
   kDualAmpActive,
   kDualAmpRoute,
   kMainAmpPan,
@@ -135,7 +134,6 @@ enum EParams
   kSupportNoiseGateActive,
   kSupportEQActive,
   kSupportAmpPan,
-#endif
   kNumParams
 };
 
@@ -152,7 +150,6 @@ enum ECtrlTags
   kCtrlTagOutputMode,
   kCtrlTagCalibrateInput,
   kCtrlTagInputCalibrationLevel,
-#if VOLUM_AMPETE_PRODUCT
   kCtrlTagVoLumAmpList,
   kCtrlTagVoLumSpeakerRow,
   kCtrlTagVoLumHeroImage,
@@ -181,7 +178,6 @@ enum ECtrlTags
   kCtrlTagVoLumTuner,
   kCtrlTagVoLumMetronome,
   kCtrlTagVoLumMetronomeButton,
-#endif
   kNumCtrlTags
 };
 
@@ -350,7 +346,6 @@ private:
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
-#if VOLUM_AMPETE_PRODUCT
 public:
   void _VolumRefreshChannels();
   void _VolumRefreshSupportChannels();
@@ -533,7 +528,6 @@ private:
   // Tuner & Metronome DSP
   volum::TunerDSP mTunerDSP;
   volum::MetronomeDSP mMetronomeDSP;
-#endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
   // it wasn't successful.
@@ -648,7 +642,6 @@ private:
   recursive_linear_filter::HighPass mSupportHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
 
-#if VOLUM_AMPETE_PRODUCT
   dsp::noise_gate::Trigger mSupportNoiseGateTrigger;
   dsp::noise_gate::Gain mSupportNoiseGateGain;
   std::vector<iplug::sample> mDualMainLaneBuffer;
@@ -657,7 +650,6 @@ private:
   std::vector<iplug::sample> mDualSupportAlignedBuffer;
   volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
   volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
-#endif
 
   // Path to model's config.json or model.nam
   WDL_String mNAMPath;
