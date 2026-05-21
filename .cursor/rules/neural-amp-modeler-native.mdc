@@ -8,10 +8,9 @@ alwaysApply: false
 
 # NeuralAmpModeler C++ (VoLum)
 
-## Legacy VoLum fence
+## VoLum upstream fence
 
-- **`VOLUM_AMPETE_PRODUCT`** is always `1` in `config.h`. Treat it as a legacy upstream-cherry-pick fence, not as a real product toggle.
-- VoLum-only code added to upstream-equivalent files should stay visually separable with a `// VoLum:` comment, a `#if VOLUM_AMPETE_PRODUCT` guard, or extraction into a `VoLum*.inc.cpp` tail-include.
+- VoLum-only code added to upstream-equivalent files should stay visually separable with a `// VoLum:` comment or extraction into a `VoLum*.inc.cpp` tail-include.
 - IR file browser behavior is still VST3-only unless you intentionally change that block.
 
 ## DSP / RT invariants

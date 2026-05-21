@@ -62,7 +62,6 @@ inline constexpr const char* kAmpeteFiles[kAmpeteRigCount] = {"AMP-Ampt-1.nam", 
 inline constexpr const char* kAmpeteLabels[kAmpeteRigCount] = {"AMP 1", "AMP 2", "AMP 3", "AMP 4", "G12 1", "G12 2",
   "G12 3", "G12 4", "G65 1", "G65 2", "G65 3", "G65 4", "V30 1", "V30 2", "V30 3", "V30 4"};
 
-#if VOLUM_AMPETE_PRODUCT
 inline constexpr int kVoLumDelayModeCount = 3;
 inline constexpr int kVoLumReverbModeCount = 3;
 
@@ -200,5 +199,4 @@ struct VoLumAmpSettings
     OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
   };
 };
-#endif
 } // namespace volum

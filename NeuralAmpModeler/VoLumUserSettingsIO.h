@@ -13,9 +13,6 @@
 #error "nlohmann json header not found (expected iPlug Dependencies/Extras layout)"
 #endif
 
-#if !VOLUM_AMPETE_PRODUCT
-#error VoLumUserSettingsIO is only used when VOLUM_AMPETE_PRODUCT is enabled
-#endif
 
 namespace volum
 {
