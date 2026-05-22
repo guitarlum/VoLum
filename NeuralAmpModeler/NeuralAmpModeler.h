@@ -37,6 +37,7 @@
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
 #include "VoLumProcessingPlan.h"
+#include "VoLumDspStagingWdl.h"
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -413,6 +414,11 @@ public:
   // VoLum: ProcessBlock helpers (tail-included in VoLumProcessBlock.inc.cpp)
   iplug::sample** _VolumProcessPreChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
                                         const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+  iplug::sample** _VolumProcessMainAmpChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
+                                            const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+  iplug::sample* _VolumProcessDualAmpSupportLane(const volum::ProcessingPlan& processingPlan,
+                                                 const size_t numChannelsInternal, const int nFrames,
+                                                 const double sampleRate);
   void _VolumProcessPostChain(iplug::sample** outputs, const volum::ProcessingPlan& processingPlan,
                               const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
@@ -657,14 +663,9 @@ private:
   volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
   volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
 
-  // Path to model's config.json or model.nam
-  WDL_String mNAMPath;
-  // VoLum: staged NAM path commits with mStagedModel in _ApplyDSPStaging (see _StageModel / loader drain).
-  WDL_String mStagedNAMPath;
-  // Path to IR (.wav file)
-  WDL_String mIRPath;
-  // VoLum: staged IR path commits with mStagedIR in _ApplyDSPStaging (see _StageIR).
-  WDL_String mStagedIRPath;
+  // VoLum: live/staged path pairs commit with staged models/IR in _ApplyDSPStaging (see VoLumDspStagingWdl.h).
+  volum::dsp_staging::WdlStagedPathPair mNAMPaths;
+  volum::dsp_staging::WdlStagedPathPair mIRPaths;
 
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 
