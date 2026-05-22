@@ -104,6 +104,11 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
     if (mVolumLoadingSupportPath == fileToLoad)
       return;
     mVolumLoadingSupportPath = fileToLoad;
+    mVolumLoadRequests.erase(
+      std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), [](const VoLumLoadRequest& queued) {
+        return queued.kind == VoLumLoadKind::Support;
+      }),
+      mVolumLoadRequests.end());
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -126,6 +131,11 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
     if (mVolumLoadingPrePath[slot] == fileToLoad)
       return;
     mVolumLoadingPrePath[slot] = fileToLoad;
+    mVolumLoadRequests.erase(
+      std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), [&](const VoLumLoadRequest& queued) {
+        return queued.kind == VoLumLoadKind::Pre && queued.slot == slot;
+      }),
+      mVolumLoadRequests.end());
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
