@@ -1,3 +1,4 @@
+05/22/2026 - VoLum: Wired VoLumDspStaging path helpers into plugin staging, consolidated _ApplyDSPStaging under one mutex scope, and extracted main/dual-amp ProcessBlock lanes.
 05/22/2026 - VoLum: NAM paths now commit with staged models in _ApplyDSPStaging; loader drain publishes staged assets under mStagingMutex.
 05/22/2026 - VoLum: Shared OutputMode gain helper and OnReset I/O buffer pre-reserve to avoid RT reallocations.
 05/22/2026 - VoLum: Fix ProcessBlock helper declarations to use iplug::sample in the header (macOS/CI app build).
