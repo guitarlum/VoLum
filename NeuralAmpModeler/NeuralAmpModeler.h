@@ -661,6 +661,8 @@ private:
   WDL_String mNAMPath;
   // Path to IR (.wav file)
   WDL_String mIRPath;
+  // VoLum: staged IR path commits with mStagedIR in _ApplyDSPStaging (see _StageIR).
+  WDL_String mStagedIRPath;
 
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 
