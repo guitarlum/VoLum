@@ -405,6 +405,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           mVolumNeedsLoad.store(true);
 #ifdef APP_API
           _VolumSaveSettingsToFile();
+#endif
 
           auto* pGfx = GetUI();
           if (!pGfx) return;
@@ -1706,9 +1707,6 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
 void NeuralAmpModeler::OnUIOpen()
 {
   Plugin::OnUIOpen();
-
-
-#endif
 
   if (mModel != nullptr)
   {
