@@ -1434,6 +1434,7 @@ void NeuralAmpModeler::OnReset()
   mDualSupportLaneBuffer.assign(maxBlockSizeT, 0.0);
   mDualMainAlignedBuffer.assign(maxBlockSizeT, 0.0);
   mDualSupportAlignedBuffer.assign(maxBlockSizeT, 0.0);
+  _PrepareBuffers(kNumChannelsInternal, maxBlockSizeT);
   mTunerDSP.Reset(sampleRate);
   mMetronomeDSP.Reset(sampleRate);
   _UpdateLatency();
@@ -2039,6 +2040,11 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mModel = nullptr;
     mNAMPath.Set("");
+    {
+      std::lock_guard<std::mutex> lock(mStagingMutex);
+      mStagedModel = nullptr;
+      mStagedNAMPath.Set("");
+    }
     mShouldRemoveModel = false;
     mModelCleared = true;
     _UpdateLatency();
@@ -2083,6 +2089,9 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     {
       mModel = std::move(mStagedModel);
       mStagedModel = nullptr;
+      if (mStagedNAMPath.GetLength())
+        mNAMPath = mStagedNAMPath;
+      mStagedNAMPath.Set("");
       mNewModelLoadedInDSP = true;
       _UpdateLatency();
       _SetInputGain();
@@ -2216,28 +2225,15 @@ void NeuralAmpModeler::_SetOutputGain()
   }
   if (mModel != nullptr)
   {
-    const int outputMode = GetParam(kOutputMode)->Int();
-    switch (outputMode)
-    {
-      case 1: // Normalized
-        if (mModel->HasLoudness())
-        {
-          const double loudness = mModel->GetLoudness();
-          const double targetLoudness = -18.0;
-          gainDB += (targetLoudness - loudness);
-        }
-        break;
-      case 2: // Calibrated
-        if (mModel->HasOutputLevel())
-        {
-          const double inputLevel = GetParam(kInputCalibrationLevel)->Value();
-          const double outputLevel = mModel->GetOutputLevel();
-          gainDB += (outputLevel - inputLevel);
-        }
-        break;
-      case 0: // Raw
-      default: break;
-    }
+    volum::OutputModeModelInfo modelInfo;
+    modelInfo.hasLoudness = mModel->HasLoudness();
+    if (modelInfo.hasLoudness)
+      modelInfo.loudness = mModel->GetLoudness();
+    modelInfo.hasOutputLevel = mModel->HasOutputLevel();
+    if (modelInfo.hasOutputLevel)
+      modelInfo.outputLevel = mModel->GetOutputLevel();
+    gainDB = volum::ComputeOutputModeGainDb(gainDB, GetParam(kOutputMode)->Int(), modelInfo,
+                                            GetParam(kInputCalibrationLevel)->Value());
   }
   mOutputGain = DBToAmp(gainDB);
 }
@@ -2253,38 +2249,21 @@ void NeuralAmpModeler::_SetSupportOutputGain()
   }
   if (mSupportModel != nullptr)
   {
-    // Use the same OutputMode as main so the two lanes share the loudness-target / calibration
-    // model. Without this, main lane gets the +N dB normalization boost while support stays at
-    // raw knob value, making support consistently quieter at identical knob settings.
-    const int outputMode = GetParam(kOutputMode)->Int();
-    switch (outputMode)
-    {
-      case 1: // Normalized
-        if (mSupportModel->HasLoudness())
-        {
-          const double loudness = mSupportModel->GetLoudness();
-          const double targetLoudness = -18.0;
-          gainDB += (targetLoudness - loudness);
-        }
-        break;
-      case 2: // Calibrated
-        if (mSupportModel->HasOutputLevel())
-        {
-          const double inputLevel = GetParam(kInputCalibrationLevel)->Value();
-          const double outputLevel = mSupportModel->GetOutputLevel();
-          gainDB += (outputLevel - inputLevel);
-        }
-        break;
-      case 0: // Raw
-      default: break;
-    }
+    volum::OutputModeModelInfo modelInfo;
+    modelInfo.hasLoudness = mSupportModel->HasLoudness();
+    if (modelInfo.hasLoudness)
+      modelInfo.loudness = mSupportModel->GetLoudness();
+    modelInfo.hasOutputLevel = mSupportModel->HasOutputLevel();
+    if (modelInfo.hasOutputLevel)
+      modelInfo.outputLevel = mSupportModel->GetOutputLevel();
+    gainDB = volum::ComputeOutputModeGainDb(gainDB, GetParam(kOutputMode)->Int(), modelInfo,
+                                            GetParam(kInputCalibrationLevel)->Value());
   }
   mSupportOutputGain = DBToAmp(gainDB);
 }
 
 std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 {
-  WDL_String previousNAMPath = mNAMPath;
   try
   {
     auto dspPath = std::filesystem::u8path(modelPath.Get());
@@ -2295,23 +2274,19 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       // Serialize the staging assignment against the audio thread's read/move in
       // _ApplyDSPStaging. _StageModel is called from the host's UnserializeState
       // path and (in non-VoLum builds) from the file-browser completion handler,
-      // both off the audio thread.
+      // both off the audio thread. mNAMPath commits in _ApplyDSPStaging.
       std::lock_guard<std::mutex> lock(mStagingMutex);
       mStagedModel = std::move(temp);
+      mStagedNAMPath = modelPath;
     }
-    mNAMPath = modelPath;
   }
   catch (std::runtime_error& e)
   {
-
     {
       std::lock_guard<std::mutex> lock(mStagingMutex);
-      if (mStagedModel != nullptr)
-      {
-        mStagedModel = nullptr;
-      }
+      mStagedModel = nullptr;
+      mStagedNAMPath.Set("");
     }
-    mNAMPath = previousNAMPath;
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
     return e.what();

@@ -659,6 +659,8 @@ private:
 
   // Path to model's config.json or model.nam
   WDL_String mNAMPath;
+  // VoLum: staged NAM path commits with mStagedModel in _ApplyDSPStaging (see _StageModel / loader drain).
+  WDL_String mStagedNAMPath;
   // Path to IR (.wav file)
   WDL_String mIRPath;
   // VoLum: staged IR path commits with mStagedIR in _ApplyDSPStaging (see _StageIR).

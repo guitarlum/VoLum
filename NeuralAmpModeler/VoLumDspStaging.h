@@ -2,10 +2,10 @@
 
 #include <string>
 
-namespace volum::ir_staging
+namespace volum::dsp_staging
 {
 
-// Models how IR file paths are published relative to staged impulse responses.
+// Models how live file paths are published relative to staged DSP assets.
 struct LiveStagedPaths
 {
   std::string live;
@@ -29,12 +29,13 @@ inline void ClearStagedOnFailure(LiveStagedPaths& paths)
   paths.staged.clear();
 }
 
-// While a staged IR is pending apply, the live path must not jump ahead of the impulse.
-inline bool LivePathMatchesStagedIr(const std::string& livePath, const std::string& stagedPath, const bool hasStagedIr)
+// While a staged asset is pending apply, the live path must not jump ahead of the object.
+inline bool LivePathMatchesStagedAsset(const std::string& livePath, const std::string& stagedPath,
+                                       const bool hasStagedAsset)
 {
-  if (!hasStagedIr)
+  if (!hasStagedAsset)
     return true;
   return livePath == stagedPath;
 }
 
-} // namespace volum::ir_staging
+} // namespace volum::dsp_staging
