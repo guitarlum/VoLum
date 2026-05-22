@@ -1173,117 +1173,9 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     std::memcpy(mDualMainLaneBuffer.data(), preAmpPointers[0], numFrames * sizeof(sample));
   }
 
-  // Noise gate trigger
-  sample** triggerOutput = preAmpPointers;
-  if (processingPlan.runNoiseGate)
-  {
-    const double time = 0.01;
-    const double threshold = GetParam(kNoiseGateThreshold)->Value(); // GetParam...
-    const double ratio = 0.1; // Quadratic...
-    const double openTime = 0.005;
-    const double holdTime = 0.01;
-    const double closeTime = 0.05;
-    const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
-    mNoiseGateTrigger.SetParams(triggerParams);
-    mNoiseGateTrigger.SetSampleRate(sampleRate);
-    triggerOutput = mNoiseGateTrigger.Process(preAmpPointers, numChannelsInternal, numFrames);
-  }
-
-  if (processingPlan.runMainModel)
-  {
-    mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
-    // NaN/Inf scrub: a single bad NAM capture or a numerically unstable model can
-    // emit non-finite samples that would otherwise poison the noise gate, tone
-    // stack, IR convolver, delay ring, and reverb FDN tank for the rest of the
-    // session. Clean the model output in place and, if anything was non-finite,
-    // also reset the POST effects so their internal state has no chance to latch
-    // a NaN-tainted sample that already made it past prior blocks.
-    if (volum::ScrubNonFiniteInPlace(mOutputPointers[0], static_cast<std::size_t>(nFrames)))
-    {
-      mDelay.Reset();
-      mReverb.Reset();
-    }
-  }
-  else
-  {
-    _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, numFrames);
-    if (!mPostEffectsClearedForMissingModel)
-    {
-      mDelay.Reset();
-      mReverb.Reset();
-      mPostEffectsClearedForMissingModel = true;
-    }
-  }
-  if (processingPlan.runMainModel)
-    mPostEffectsClearedForMissingModel = false;
-
-  sample** hpfPointers = mOutputPointers;
-  if (processingPlan.runMainModel)
-  {
-    // Apply the noise gate after the NAM
-    sample** gateGainOutput =
-      processingPlan.runNoiseGate ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
-
-    sample** toneStackOutPointers = (processingPlan.runToneStack && mToneStack != nullptr)
-                                      ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
-                                      : gateGainOutput;
-
-    sample** irPointers = toneStackOutPointers;
-    if (processingPlan.runIR)
-      irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
-
-    // And the HPF for DC offset (Issue 271)
-    hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
-    // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
-  }
-
-  sample* supportLane = nullptr;
-  if (processingPlan.runDualAmp)
-  {
-    assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp support scratch not pre-reserved");
-    mDualSupportLaneBuffer.resize(numFrames);
-
-    const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
-    for (size_t i = 0; i < numFrames; ++i)
-      mDualMainLaneBuffer[i] = static_cast<sample>(static_cast<double>(mDualMainLaneBuffer[i]) * supportInputGain);
-
-    sample* supportInputPtr = mDualMainLaneBuffer.data();
-    sample* supportOutputPtr = mDualSupportLaneBuffer.data();
-    sample* supportInputPointers[1] = {supportInputPtr};
-    sample** supportTriggerOutput = supportInputPointers;
-
-    if (GetParam(kSupportNoiseGateActive)->Bool())
-    {
-      const double time = 0.01;
-      const double threshold = GetParam(kSupportNoiseGateThreshold)->Value();
-      const double ratio = 0.1;
-      const double openTime = 0.005;
-      const double holdTime = 0.01;
-      const double closeTime = 0.05;
-      const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
-      mSupportNoiseGateTrigger.SetParams(triggerParams);
-      mSupportNoiseGateTrigger.SetSampleRate(sampleRate);
-      supportTriggerOutput = mSupportNoiseGateTrigger.Process(supportInputPointers, numChannelsInternal, numFrames);
-    }
-
-    mSupportModel->process(supportTriggerOutput[0], supportOutputPtr, nFrames);
-    // NaN/Inf scrub the support lane the same way as the main lane.
-    if (volum::ScrubNonFiniteInPlace(supportOutputPtr, static_cast<std::size_t>(nFrames)))
-    {
-      mDelay.Reset();
-      mReverb.Reset();
-    }
-    sample* supportModelPointers[1] = {supportOutputPtr};
-    sample** supportPostPointers = supportModelPointers;
-    if (GetParam(kSupportNoiseGateActive)->Bool())
-      supportPostPointers = mSupportNoiseGateGain.Process(supportPostPointers, numChannelsInternal, numFrames);
-
-    if (processingPlan.runSupportToneStack && mSupportToneStack != nullptr)
-      supportPostPointers = mSupportToneStack->Process(supportPostPointers, numChannelsInternal, nFrames);
-
-    supportPostPointers = mSupportHighPass.Process(supportPostPointers, numChannelsInternal, numFrames);
-    supportLane = supportPostPointers[0];
-  }
+  sample** hpfPointers =
+    _VolumProcessMainAmpChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
+  sample* supportLane = _VolumProcessDualAmpSupportLane(processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   // restore previous floating point state
   std::feupdateenv(&fe_state);
@@ -1482,7 +1374,7 @@ void NeuralAmpModeler::OnIdle()
 
       const int ampIdx = mVolumAmpIdx;
       const std::string rigsRoot = mVolumRigsRoot;
-      if (fileToLoad == mNAMPath.Get())
+      if (fileToLoad == mNAMPaths.live.Get())
       {
         mVolumIsLoading.store(false);
       }
@@ -1608,8 +1500,8 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   chunk.PutStr(header.Get());
   WDL_String version(PLUG_VERSION_STR);
   chunk.PutStr(version.Get());
-  chunk.PutStr(mNAMPath.Get());
-  chunk.PutStr(mIRPath.Get());
+  chunk.PutStr(mNAMPaths.live.Get());
+  chunk.PutStr(mIRPaths.live.Get());
   bool ok = SerializeParams(chunk);
 
   // VoLum: append per-amp settings after params (see Unserialization.cpp)
@@ -2035,74 +1927,61 @@ void NeuralAmpModeler::_ApplyDSPStaging()
 {
   _VolumDrainLoaderResults();
 
-  // Remove marked modules
-  if (mShouldRemoveModel)
-  {
-    mModel = nullptr;
-    mNAMPath.Set("");
-    {
-      std::lock_guard<std::mutex> lock(mStagingMutex);
-      mStagedModel = nullptr;
-      mStagedNAMPath.Set("");
-    }
-    mShouldRemoveModel = false;
-    mModelCleared = true;
-    _UpdateLatency();
-    _SetInputGain();
-    _SetOutputGain();
-  }
-  if (mShouldRemoveSupportModel)
-  {
-    mSupportModel = nullptr;
-    mShouldRemoveSupportModel = false;
-    _UpdateLatency();
-    _SetSupportOutputGain();
-  }
-  if (mShouldRemoveIR)
-  {
-    mIR = nullptr;
-    mIRPath.Set("");
-    {
-      std::lock_guard<std::mutex> lock(mStagingMutex);
-      mStagedIR = nullptr;
-      mStagedIRPath.Set("");
-    }
-    mShouldRemoveIR = false;
-  }
-  for (int i = 0; i < 2; ++i)
-  {
-    if (mShouldRemovePreModel[i])
-    {
-      mPreModel[i] = nullptr;
-      mShouldRemovePreModel[i] = false;
-      _UpdateLatency();
-    }
-  }
-  // Move things from staged to live. Take the staging mutex to serialize against
-  // _StageModel / _StageIR from non-audio threads (UnserializeState path, legacy
-  // file-browser completion handlers). VoLum's worker-queue drain populated
-  // mStagedModel etc. on this same audio thread above, so the mutex is contended
-  // only when host serialization races with audio.
+  bool removedMainModel = false;
+  bool removedSupportModel = false;
+  bool removedPreModel[2] = {false, false};
+  bool appliedMainModel = false;
+  bool appliedSupportModel = false;
+  bool appliedPreModel[2] = {false, false};
+
   {
     std::lock_guard<std::mutex> lock(mStagingMutex);
+
+    if (mShouldRemoveModel)
+    {
+      mModel = nullptr;
+      mStagedModel = nullptr;
+      volum::dsp_staging::ClearLiveAndStagedPath(mNAMPaths);
+      mShouldRemoveModel = false;
+      mModelCleared = true;
+      removedMainModel = true;
+    }
+    if (mShouldRemoveSupportModel)
+    {
+      mSupportModel = nullptr;
+      mShouldRemoveSupportModel = false;
+      removedSupportModel = true;
+    }
+    if (mShouldRemoveIR)
+    {
+      mIR = nullptr;
+      mStagedIR = nullptr;
+      volum::dsp_staging::ClearLiveAndStagedPath(mIRPaths);
+      mShouldRemoveIR = false;
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+      if (mShouldRemovePreModel[i])
+      {
+        mPreModel[i] = nullptr;
+        mShouldRemovePreModel[i] = false;
+        removedPreModel[i] = true;
+      }
+    }
+
     if (mStagedModel != nullptr)
     {
       mModel = std::move(mStagedModel);
       mStagedModel = nullptr;
-      if (mStagedNAMPath.GetLength())
-        mNAMPath = mStagedNAMPath;
-      mStagedNAMPath.Set("");
+      volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);
       mNewModelLoadedInDSP = true;
-      _UpdateLatency();
-      _SetInputGain();
-      _SetOutputGain();
+      appliedMainModel = true;
     }
     if (mStagedSupportModel != nullptr)
     {
       mSupportModel = std::move(mStagedSupportModel);
       mStagedSupportModel = nullptr;
-      _UpdateLatency();
-      _SetSupportOutputGain();
+      appliedSupportModel = true;
     }
     for (int i = 0; i < 2; ++i)
     {
@@ -2110,17 +1989,32 @@ void NeuralAmpModeler::_ApplyDSPStaging()
       {
         mPreModel[i] = std::move(mStagedPreModel[i]);
         mStagedPreModel[i] = nullptr;
-        _UpdateLatency();
+        appliedPreModel[i] = true;
       }
     }
     if (mStagedIR != nullptr)
     {
       mIR = std::move(mStagedIR);
       mStagedIR = nullptr;
-      if (mStagedIRPath.GetLength())
-        mIRPath = mStagedIRPath;
-      mStagedIRPath.Set("");
+      volum::dsp_staging::CommitStagedPathOnApply(mIRPaths);
     }
+  }
+
+  if (removedMainModel || appliedMainModel)
+  {
+    _UpdateLatency();
+    _SetInputGain();
+    _SetOutputGain();
+  }
+  if (removedSupportModel || appliedSupportModel)
+  {
+    _UpdateLatency();
+    _SetSupportOutputGain();
+  }
+  for (int i = 0; i < 2; ++i)
+  {
+    if (removedPreModel[i] || appliedPreModel[i])
+      _UpdateLatency();
   }
 }
 
@@ -2274,10 +2168,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       // Serialize the staging assignment against the audio thread's read/move in
       // _ApplyDSPStaging. _StageModel is called from the host's UnserializeState
       // path and (in non-VoLum builds) from the file-browser completion handler,
-      // both off the audio thread. mNAMPath commits in _ApplyDSPStaging.
+      // both off the audio thread. mNAMPaths.live commits in _ApplyDSPStaging.
       std::lock_guard<std::mutex> lock(mStagingMutex);
       mStagedModel = std::move(temp);
-      mStagedNAMPath = modelPath;
+      volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);
     }
   }
   catch (std::runtime_error& e)
@@ -2285,7 +2179,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     {
       std::lock_guard<std::mutex> lock(mStagingMutex);
       mStagedModel = nullptr;
-      mStagedNAMPath.Set("");
+      volum::dsp_staging::ClearStagedPath(mNAMPaths);
     }
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
@@ -3497,17 +3391,17 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 
   {
     // Publish the staged IR (and its path) under the staging mutex so the audio thread
-    // sees a fully-constructed object or none at all. mIRPath commits in _ApplyDSPStaging.
+    // sees a fully-constructed object or none at all. mIRPaths.live commits in _ApplyDSPStaging.
     std::lock_guard<std::mutex> lock(mStagingMutex);
     if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
     {
       mStagedIR = std::move(stagedIR);
-      mStagedIRPath = irPath;
+      volum::dsp_staging::StagePathOnSuccess(mIRPaths, irPath);
     }
     else
     {
       mStagedIR = nullptr;
-      mStagedIRPath.Set("");
+      volum::dsp_staging::ClearStagedPath(mIRPaths);
     }
   }
 

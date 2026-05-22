@@ -5,7 +5,10 @@ namespace volum
 
 inline constexpr const char* kOutputModeLabels[] = {"Raw", "Normalized", "Calibrated"};
 inline constexpr int kOutputModeCount = 3;
-inline constexpr int kOutputModeDefault = 1; // Normalized
+inline constexpr int kOutputModeRaw = 0;
+inline constexpr int kOutputModeNormalized = 1;
+inline constexpr int kOutputModeCalibrated = 2;
+inline constexpr int kOutputModeDefault = kOutputModeNormalized;
 inline constexpr double kOutputModeTargetLoudnessDb = -18.0;
 
 struct OutputModeModelInfo
@@ -21,15 +24,15 @@ inline double ComputeOutputModeGainDb(double knobDb, int outputMode, const Outpu
 {
   switch (outputMode)
   {
-    case 1: // Normalized
+    case kOutputModeNormalized:
       if (model.hasLoudness)
         return knobDb + (kOutputModeTargetLoudnessDb - model.loudness);
       break;
-    case 2: // Calibrated
+    case kOutputModeCalibrated:
       if (model.hasOutputLevel)
         return knobDb + (model.outputLevel - inputCalibrationLevel);
       break;
-    case 0: // Raw
+    case kOutputModeRaw:
     default: break;
   }
   return knobDb;

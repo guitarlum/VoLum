@@ -6,7 +6,7 @@
 TEST_CASE("Output mode labels stay aligned with param enum")
 {
   CHECK(volum::kOutputModeCount == 3);
-  CHECK(volum::kOutputModeDefault == 1);
+  CHECK(volum::kOutputModeDefault == volum::kOutputModeNormalized);
   CHECK(std::strcmp(volum::kOutputModeLabels[0], "Raw") == 0);
   CHECK(std::strcmp(volum::kOutputModeLabels[1], "Normalized") == 0);
   CHECK(std::strcmp(volum::kOutputModeLabels[2], "Calibrated") == 0);
@@ -18,7 +18,7 @@ TEST_CASE("Output mode gain helper normalizes loudness to target")
   modelInfo.hasLoudness = true;
   modelInfo.loudness = -24.0;
 
-  const double gainDb = volum::ComputeOutputModeGainDb(0.0, 1, modelInfo, 0.0);
+  const double gainDb = volum::ComputeOutputModeGainDb(0.0, volum::kOutputModeNormalized, modelInfo, 0.0);
   CHECK(gainDb == doctest::Approx(6.0));
 }
 
@@ -28,7 +28,7 @@ TEST_CASE("Output mode gain helper applies calibrated offset")
   modelInfo.hasOutputLevel = true;
   modelInfo.outputLevel = -12.0;
 
-  const double gainDb = volum::ComputeOutputModeGainDb(0.0, 2, modelInfo, -18.0);
+  const double gainDb = volum::ComputeOutputModeGainDb(0.0, volum::kOutputModeCalibrated, modelInfo, -18.0);
   CHECK(gainDb == doctest::Approx(6.0));
 }
 
@@ -40,5 +40,5 @@ TEST_CASE("Output mode gain helper leaves raw mode unchanged")
   modelInfo.hasOutputLevel = true;
   modelInfo.outputLevel = -12.0;
 
-  CHECK(volum::ComputeOutputModeGainDb(3.5, 0, modelInfo, -18.0) == doctest::Approx(3.5));
+  CHECK(volum::ComputeOutputModeGainDb(3.5, volum::kOutputModeRaw, modelInfo, -18.0) == doctest::Approx(3.5));
 }
