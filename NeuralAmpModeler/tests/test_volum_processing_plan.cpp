@@ -85,3 +85,66 @@ TEST_CASE("Processing plan keeps dual amp disabled until support model loads")
   CHECK(plan.runDelay);
   CHECK(plan.runReverb);
 }
+
+TEST_CASE("Processing plan sets silenceForTuner without disabling other stages")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  const auto plan = volum::MakeProcessingPlan(true, true, true, true, true, false, preNamActive, havePreNam, true, true,
+                                             true);
+
+  CHECK(plan.silenceForTuner);
+  CHECK(plan.runMainModel);
+  CHECK(plan.runNoiseGate);
+  CHECK(plan.runToneStack);
+  CHECK(plan.runIR);
+  CHECK(plan.runDelay);
+  CHECK(plan.runReverb);
+}
+
+TEST_CASE("Processing plan enables PRE NAM slots only when capture is loaded")
+{
+  const bool preNamActive[2] = {true, true};
+  const bool havePreNam[2] = {true, false};
+
+  const auto plan = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam, false,
+                                             false, false);
+
+  CHECK(plan.runPreNam[0]);
+  CHECK_FALSE(plan.runPreNam[1]);
+  CHECK_FALSE(plan.runMainModel);
+  CHECK(plan.runFallback);
+  CHECK_FALSE(plan.runDelay);
+  CHECK_FALSE(plan.runReverb);
+}
+
+TEST_CASE("Processing plan enables POST delay and reverb with support model but no main model")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  const auto plan = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam, true,
+                                             true, false, true, true, false);
+
+  CHECK_FALSE(plan.runMainModel);
+  CHECK(plan.runSupportModel);
+  CHECK_FALSE(plan.runDualAmp);
+  CHECK(plan.runDelay);
+  CHECK(plan.runReverb);
+  CHECK_FALSE(plan.runToneStack);
+  CHECK_FALSE(plan.runIR);
+}
+
+TEST_CASE("Processing plan disables support tone stack without a support model")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  const auto plan = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam, false,
+                                             false, false, true, false, true);
+
+  CHECK(plan.runMainModel);
+  CHECK_FALSE(plan.runSupportModel);
+  CHECK_FALSE(plan.runSupportToneStack);
+}

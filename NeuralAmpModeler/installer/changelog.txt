@@ -1,3 +1,4 @@
+05/22/2026 - VoLum: Expanded processing-plan doctests for tuner silence, PRE-NAM-only paths, support-only POST FX, and support tone-stack gating.
 05/20/2026 - VoLum: PRE and POST lock now carries the current scene as a global overlay while switching amps; a Store arrow commits the overlay to the current amp when it differs from that amp's saved block, and unlock silently restores the active amp's saved PRE/POST scene without writing to other amps.
 05/20/2026 - VoLum: Windows test helper now accepts `-Filter <pattern>` to run matching doctest cases without rebuilding or running the full suite.
 05/20/2026 - VoLum: Windows app smoke helper now stops any running VoLum standalone before rebuilding, avoiding locked-exe postbuild failures during UI review.
