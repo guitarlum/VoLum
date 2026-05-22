@@ -8,15 +8,6 @@
 // Owned class members (mVolum*Queue, mVolumLoaderThread, atomic flags) are
 // declared in NeuralAmpModeler.h and accessed normally.
 
-namespace
-{
-template<typename Pred>
-void VolumDropQueuedLoadRequests(std::deque<VoLumLoadRequest>& requests, Pred pred)
-{
-  requests.erase(std::remove_if(requests.begin(), requests.end(), pred), requests.end());
-}
-} // namespace
-
 void NeuralAmpModeler::_VolumStartLoader()
 {
   if (mVolumLoaderThread.joinable())
@@ -62,7 +53,7 @@ void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampI
       return;
 
     mVolumLoadingMainPath = fileToLoad;
-    VolumDropQueuedLoadRequests(mVolumLoadRequests, [](const VoLumLoadRequest& queued) {
+    _VolumDropQueuedLoadRequests([](const VoLumLoadRequest& queued) {
       return queued.kind == VoLumLoadKind::Main || queued.kind == VoLumLoadKind::MainPrefetch;
     });
     mVolumLoadRequests.push_front(std::move(request));
@@ -111,7 +102,7 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
     if (mVolumLoadingSupportPath == fileToLoad)
       return;
     mVolumLoadingSupportPath = fileToLoad;
-    VolumDropQueuedLoadRequests(mVolumLoadRequests, [](const VoLumLoadRequest& queued) {
+    _VolumDropQueuedLoadRequests([](const VoLumLoadRequest& queued) {
       return queued.kind == VoLumLoadKind::Support;
     });
     mVolumLoadRequests.push_back(std::move(request));
@@ -136,7 +127,7 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
     if (mVolumLoadingPrePath[slot] == fileToLoad)
       return;
     mVolumLoadingPrePath[slot] = fileToLoad;
-    VolumDropQueuedLoadRequests(mVolumLoadRequests, [&](const VoLumLoadRequest& queued) {
+    _VolumDropQueuedLoadRequests([&](const VoLumLoadRequest& queued) {
       return queued.kind == VoLumLoadKind::Pre && queued.slot == slot;
     });
     mVolumLoadRequests.push_back(std::move(request));

@@ -519,6 +519,14 @@ private:
   std::condition_variable mVolumLoaderCv;
   std::deque<VoLumLoadRequest> mVolumLoadRequests;
   std::deque<VoLumLoadResult> mVolumLoadResults;
+
+  template<typename Pred>
+  void _VolumDropQueuedLoadRequests(Pred pred)
+  {
+    mVolumLoadRequests.erase(std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), pred),
+                              mVolumLoadRequests.end());
+  }
+
   std::atomic<bool> mVolumLoaderStop{false};
 
   // Parsed NAM configs keyed by full path. Small LRU keeps switch-back fast without retaining every rig.
