@@ -486,9 +486,14 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   // hygiene split. ReadPluginSource() aggregates the whole TU.
   const std::string source = ReadPluginSource();
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
 
   RequireContains(source, "mStagedIRPath = irPath;");
   RequireContains(source, "if (mStagedIRPath.GetLength())");
+  RequireContains(source, "mStagedNAMPath = modelPath;");
+  RequireContains(source, "if (mStagedNAMPath.GetLength())");
+  RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
+  RequireContains(loader, "mStagedNAMPath.Set(result.path.c_str());");
   RequireDoesNotContain(source, ".detach()");
   RequireContains(header, "std::thread mVolumLoaderThread;");
   RequireContains(source, "_VolumStopLoader();");
