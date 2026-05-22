@@ -411,8 +411,8 @@ public:
   void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
   void _VolumDrainLoaderResults();
   // VoLum: ProcessBlock helpers (tail-included in VoLumProcessBlock.inc.cpp)
-  sample** _VolumProcessPreChain(sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
-                                 const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+  iplug::sample** _VolumProcessPreChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
+                                        const size_t numChannelsInternal, const int nFrames, const double sampleRate);
   void _VolumProcessPostChain(iplug::sample** outputs, const volum::ProcessingPlan& processingPlan,
                               const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
