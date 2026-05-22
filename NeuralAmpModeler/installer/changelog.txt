@@ -1,3 +1,5 @@
+05/22/2026 - VoLum: NAM paths now commit with staged models in _ApplyDSPStaging; loader drain publishes staged assets under mStagingMutex.
+05/22/2026 - VoLum: Shared OutputMode gain helper and OnReset I/O buffer pre-reserve to avoid RT reallocations.
 05/22/2026 - VoLum: Fix ProcessBlock helper declarations to use iplug::sample in the header (macOS/CI app build).
 05/22/2026 - VoLum: Loader queue now drops stale support and PRE requests when a newer load for the same target is queued.
 05/22/2026 - VoLum: Centralized OutputMode enum labels in VoLumOutputMode.h for param init DRY.
