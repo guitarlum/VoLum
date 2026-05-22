@@ -2,9 +2,10 @@
 //
 // Tail-included from NeuralAmpModeler.cpp for file-size hygiene (not a separate TU).
 
-sample** NeuralAmpModeler::_VolumProcessPreChain(sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
-                                                 const size_t numChannelsInternal, const int nFrames,
-                                                 const double sampleRate)
+iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPointers,
+                                                        const volum::ProcessingPlan& processingPlan,
+                                                        const size_t numChannelsInternal, const int nFrames,
+                                                        const double sampleRate)
 {
   if (processingPlan.runPreComp)
   {

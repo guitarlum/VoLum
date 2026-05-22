@@ -1,3 +1,4 @@
+05/22/2026 - VoLum: Fix ProcessBlock helper declarations to use iplug::sample in the header (macOS/CI app build).
 05/22/2026 - VoLum: Loader queue now drops stale support and PRE requests when a newer load for the same target is queued.
 05/22/2026 - VoLum: Centralized OutputMode enum labels in VoLumOutputMode.h for param init DRY.
 05/22/2026 - VoLum: IR file paths now commit with staged impulse responses in _ApplyDSPStaging so live path and IR cannot diverge across the audio fence.
