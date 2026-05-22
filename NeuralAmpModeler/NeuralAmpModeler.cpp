@@ -2056,6 +2056,11 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mIR = nullptr;
     mIRPath.Set("");
+    {
+      std::lock_guard<std::mutex> lock(mStagingMutex);
+      mStagedIR = nullptr;
+      mStagedIRPath.Set("");
+    }
     mShouldRemoveIR = false;
   }
   for (int i = 0; i < 2; ++i)
@@ -2103,6 +2108,9 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     {
       mIR = std::move(mStagedIR);
       mStagedIR = nullptr;
+      if (mStagedIRPath.GetLength())
+        mIRPath = mStagedIRPath;
+      mStagedIRPath.Set("");
     }
   }
 }
@@ -3496,9 +3504,6 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
 
 dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 {
-  // FIXME it'd be better for the path to be "staged" as well. Just in case the
-  // path and the model got caught on opposite sides of the fence...
-  WDL_String previousIRPath = mIRPath;
   const double sampleRate = GetSampleRate();
   dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
   std::unique_ptr<dsp::ImpulseResponse> stagedIR;
@@ -3516,26 +3521,19 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   }
 
   {
-    // Publish the staged IR (or drop the failed one) under the staging mutex so the
-    // audio thread sees a fully-constructed object or none at all.
+    // Publish the staged IR (and its path) under the staging mutex so the audio thread
+    // sees a fully-constructed object or none at all. mIRPath commits in _ApplyDSPStaging.
     std::lock_guard<std::mutex> lock(mStagingMutex);
-    mStagedIR = std::move(stagedIR);
-  }
-
-  if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
-  {
-    mIRPath = irPath;
-  }
-  else
-  {
+    if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
     {
-      std::lock_guard<std::mutex> lock(mStagingMutex);
-      if (mStagedIR != nullptr)
-      {
-        mStagedIR = nullptr;
-      }
+      mStagedIR = std::move(stagedIR);
+      mStagedIRPath = irPath;
     }
-    mIRPath = previousIRPath;
+    else
+    {
+      mStagedIR = nullptr;
+      mStagedIRPath.Set("");
+    }
   }
 
   return wavState;

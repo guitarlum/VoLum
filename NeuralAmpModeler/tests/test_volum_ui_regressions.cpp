@@ -479,6 +479,8 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   const std::string source = ReadPluginSource();
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
 
+  RequireContains(source, "mStagedIRPath = irPath;");
+  RequireContains(source, "if (mStagedIRPath.GetLength())");
   RequireDoesNotContain(source, ".detach()");
   RequireContains(header, "std::thread mVolumLoaderThread;");
   RequireContains(source, "_VolumStopLoader();");
