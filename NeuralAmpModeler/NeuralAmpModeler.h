@@ -36,6 +36,7 @@
 #include "VoLumUserSettingsIO.h"
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
+#include "VoLumProcessingPlan.h"
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -409,6 +410,11 @@ public:
   void _VolumQueueSupportModelLoad(std::string fileToLoad, int ampIdx);
   void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
   void _VolumDrainLoaderResults();
+  // VoLum: ProcessBlock helpers (tail-included in VoLumProcessBlock.inc.cpp)
+  sample** _VolumProcessPreChain(sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
+                                 const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+  void _VolumProcessPostChain(iplug::sample** outputs, const volum::ProcessingPlan& processingPlan,
+                              const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
   void _VolumRequestSupportModelLoad();
   void _VolumCyclePreNamCapture(int slot, int direction);
