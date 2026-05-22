@@ -27,6 +27,7 @@
 #include "VoLumPaths.h"
 #include "VoLumPrePedalCaptures.h"
 #include "VoLumProcessIO.h"
+#include "VoLumOutputMode.h"
 #include "VoLumProcessingPlan.h"
 // VoLum: chunk codec, settings I/O, and custom controls (upstream-equivalent file fence)
 #include "VoLumChunkCodec.h"
@@ -219,7 +220,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kNoiseGateThreshold)->InitGain("Threshold", -80.0, -100.0, 0.0, 0.1);
   GetParam(kNoiseGateActive)->InitBool("NoiseGateActive", true);
   GetParam(kEQActive)->InitBool("ToneStack", true);
-  GetParam(kOutputMode)->InitEnum("OutputMode", 1, {"Raw", "Normalized", "Calibrated"}); // TODO DRY w/ control
+  GetParam(kOutputMode)->InitEnum("OutputMode", volum::kOutputModeDefault,
+                                  {volum::kOutputModeLabels[0], volum::kOutputModeLabels[1], volum::kOutputModeLabels[2]});
 #ifdef APP_API
   GetParam(kIRToggle)->InitBool("IRToggle", false);
 #else
