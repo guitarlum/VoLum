@@ -1156,40 +1156,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
                               mIR != nullptr, GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam,
                               GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(),
                               dualAmpActive, haveSupportModel, supportToneStackActive);
-  if (processingPlan.runPreComp)
-  {
-    mPreCompressor.SetParams(GetParam(kPreCompAmount)->Value(), GetParam(kPreCompRatio)->Value(),
-                             GetParam(kPreCompAttack)->Value(), GetParam(kPreCompRelease)->Value(),
-                             1.0, GetParam(kPreCompLevel)->Value(), sampleRate);
-    preAmpPointers = mPreCompressor.Process(preAmpPointers, numChannelsInternal, numFrames);
-  }
-
-  auto processPreSlot = [&](int slot, int activeParam, int gainParam, int bassParam, int midParam, int midFreqParam,
-                            int trebleParam, int levelParam) {
-    (void)activeParam;
-    if (!processingPlan.runPreNam[slot])
-      return;
-
-    const double inGain = std::pow(10.0, GetParam(gainParam)->Value() / 20.0);
-    mPreInputGain[slot].SetParams(recursive_linear_filter::LevelParams(inGain));
-    preAmpPointers = mPreInputGain[slot].Process(preAmpPointers, numChannelsInternal, numFrames);
-
-    mPreModel[slot]->process(preAmpPointers[0], mOutputPointers[0], nFrames);
-    preAmpPointers = mOutputPointers;
-
-    mPreEq[slot].SetParams(GetParam(bassParam)->Value(), GetParam(midParam)->Value(),
-                           GetParam(midFreqParam)->Value(), GetParam(trebleParam)->Value());
-    preAmpPointers = mPreEq[slot].Process(preAmpPointers, numChannelsInternal, numFrames);
-
-    const double outGain = volum::DbToAmpWithMuteFloor(GetParam(levelParam)->Value(), GetParam(levelParam)->GetMin());
-    mPreOutputGain[slot].SetParams(recursive_linear_filter::LevelParams(outGain));
-    preAmpPointers = mPreOutputGain[slot].Process(preAmpPointers, numChannelsInternal, numFrames);
-  };
-
-  processPreSlot(0, kPreNam1Active, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble,
-                 kPreNam1Level);
-  processPreSlot(1, kPreNam2Active, kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble,
-                 kPreNam2Level);
+  preAmpPointers =
+    _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
   {
@@ -1362,44 +1330,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     _ProcessOutput(hpfPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
   }
 
-  // Apply POST effects (Delay -> Reverb) in stereo
-  iplug::sample** postPointers = outputs;
-
-  // POST bypass-edge clear: when the user bypasses Delay or Reverb (active -> inactive
-  // for any reason: explicit toggle, preset switch, missing model), the effect's
-  // internal lines still hold the previous tail. Without this, re-enabling the effect
-  // later replays a "ghost" of whatever was playing before bypass. Mirrors how
-  // _FallbackDSP already clears POST when the main model goes missing.
-  if (mPostDelayWasActive && !processingPlan.runDelay)
-    mDelay.Reset();
-  if (mPostReverbWasActive && !processingPlan.runReverb)
-    mReverb.Reset();
-  mPostDelayWasActive = processingPlan.runDelay;
-  mPostReverbWasActive = processingPlan.runReverb;
-
-  if (processingPlan.runDelay)
-  {
-    mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
-                     GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate,
-                     GetParam(kDelayTone)->Value(), GetParam(kDelayAge)->Value(),
-                     GetParam(kDelayPingPong)->Bool());
-    postPointers = mDelay.Process(postPointers, numChannelsExternalOut, numFrames);
-  }
-
-  if (processingPlan.runReverb)
-  {
-    mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
-                      GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
-                      GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate,
-                      GetParam(kReverbSubMode)->Int());
-    postPointers = mReverb.Process(postPointers, numChannelsExternalOut, numFrames);
-  }
-
-  if (postPointers != outputs)
-  {
-    for (size_t c = 0; c < numChannelsExternalOut; c++)
-      std::memcpy(outputs[c], postPointers[c], numFrames * sizeof(iplug::sample));
-  }
+  _VolumProcessPostChain(outputs, processingPlan, numChannelsExternalOut, nFrames, sampleRate);
 
   // Metronome: sum click into output
   mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
@@ -3556,8 +3487,9 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   }
 }
 
-// VoLum async-loader thread + per-amp settings persistence.
-// Tail-included for file-size hygiene; both files are part of this TU.
+// VoLum ProcessBlock helpers + async-loader + per-amp settings persistence.
+// Tail-included for file-size hygiene; all are part of this TU.
+#include "VoLumProcessBlock.inc.cpp"
 #include "VoLumLoader.inc.cpp"
 
 #include "VoLumSettings.inc.cpp"

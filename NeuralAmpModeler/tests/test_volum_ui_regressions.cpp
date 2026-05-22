@@ -33,6 +33,8 @@ std::string ReadPluginSource()
   std::string blob;
   blob += ReadText(root / "NeuralAmpModeler.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumProcessBlock.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumLoader.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumSettings.inc.cpp");
