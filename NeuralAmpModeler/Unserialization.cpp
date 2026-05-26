@@ -549,6 +549,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       volum::ChunkHasPostSnapshotPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasPrePostLockFlags =
       volum::ChunkHasPrePostLockFlags(remainingPerAmpBytes, volum::kAmpCount);
+    // hasPrePostLockSnapshots is computed AFTER the lock flags are read so we
+    // know exactly how many extra bytes to expect. Done below.
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -578,8 +580,19 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       mVolumPostLocked = false;
     }
 
+    // Live lock snapshots are appended after the flags iff the corresponding
+    // lock is engaged. Older 1.0.1-dev chunks may have flags without snapshots;
+    // detect that case and skip the snapshot read (live PRE/POST then come up
+    // empty exactly like before — pre-existing limitation, not a new regression).
+    if (volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, mVolumPreLocked, mVolumPostLocked))
+    {
+      pos = volum::GetPrePostLockSnapshots(
+        chunk, pos, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre, mVolumLiveLockedPost);
+    }
+
     mVolumInitComplete = false;
     _VolumRestoreFromSettings(mVolumAmpIdx);
+    _VolumApplyLiveLockSnapshots();
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
     mVolumInitComplete = true;

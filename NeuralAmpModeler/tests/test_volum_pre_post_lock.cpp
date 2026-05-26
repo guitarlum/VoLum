@@ -180,12 +180,12 @@ struct PrePostLockSim
 };
 } // namespace
 
-TEST_CASE("User settings v7 round-trips PRE/POST lock flags")
+TEST_CASE("User settings round-trips PRE/POST lock flags at current version")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, true);
 
-  REQUIRE(j["version"] == 7);
+  REQUIRE(j["version"] == volum::kVoLumUserSettingsVersion);
   REQUIRE(j["preLocked"] == true);
   REQUIRE(j["postLocked"] == true);
 
@@ -196,7 +196,7 @@ TEST_CASE("User settings v7 round-trips PRE/POST lock flags")
   REQUIRE(postLocked);
 }
 
-TEST_CASE("User settings v7 preserves independent PRE and POST lock combinations")
+TEST_CASE("User settings preserves independent PRE and POST lock combinations")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, false);
@@ -208,7 +208,7 @@ TEST_CASE("User settings v7 preserves independent PRE and POST lock combinations
   REQUIRE_FALSE(postLocked);
 }
 
-TEST_CASE("User settings v6 defaults lock flags to false")
+TEST_CASE("User settings v6 with lock flags is read as locked (no version gate)")
 {
   nlohmann::json j;
   j["version"] = 6;
@@ -218,17 +218,17 @@ TEST_CASE("User settings v6 defaults lock flags to false")
   j["postLocked"] = true;
 
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
-  bool preLocked = true;
-  bool postLocked = true;
+  bool preLocked = false;
+  bool postLocked = false;
   volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, nullptr, &preLocked, &postLocked);
-  REQUIRE_FALSE(preLocked);
-  REQUIRE_FALSE(postLocked);
+  REQUIRE(preLocked);
+  REQUIRE(postLocked);
 }
 
-TEST_CASE("User settings v7 missing lock keys leave caller defaults untouched")
+TEST_CASE("User settings missing lock keys leave caller defaults untouched")
 {
   nlohmann::json j;
-  j["version"] = 7;
+  j["version"] = volum::kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = 0;
   j["amps"] = nlohmann::json::object();
 
@@ -240,10 +240,10 @@ TEST_CASE("User settings v7 missing lock keys leave caller defaults untouched")
   REQUIRE_FALSE(postLocked);
 }
 
-TEST_CASE("User settings v7 invalid lock types heal to unlocked")
+TEST_CASE("User settings invalid lock types heal to unlocked")
 {
   nlohmann::json j;
-  j["version"] = 7;
+  j["version"] = volum::kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = 0;
   j["amps"] = nlohmann::json::object();
   j["preLocked"] = "yes";
@@ -605,4 +605,363 @@ TEST_CASE("PRE dirty compare detects NAM capture changes")
   b.preNam2Capture = 3;
 
   REQUIRE_FALSE(volum::PreBlockEquals(a, b));
+}
+
+// -------------------------------------------------------------------------
+// Live lock snapshot: persistence + restore lifecycle (B-Lock-1 regression)
+// -------------------------------------------------------------------------
+//
+// Bug: locking PRE/POST, switching amp, then closing the app would lose the
+// locked live values. Root cause: `_VolumSaveCurrentToSettings` skips writing
+// PRE/POST into the per-amp slot when the corresponding lock is engaged, but
+// nothing else persisted the live values. Fix: persist live PRE/POST in a
+// dedicated `liveLockedPre` / `liveLockedPost` JSON snapshot and restore from
+// it on load, WITHOUT touching any per-amp slot.
+
+TEST_CASE("Live PRE lock snapshot round-trips through JSON without touching slots")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0] = MakePreSlot(1.0); // ampIdx 0 stored PRE comp amount = 1.0
+  amps[1] = MakePreSlot(9.0); // ampIdx 1 stored PRE comp amount = 9.0
+  // Snapshot of the live (locked) PRE the user was hearing on amp 1.
+  // Note: comp amount = 4.2 is DIFFERENT from either stored slot - this is
+  // exactly the "dirty locked PRE while on amp 1" state that the bug lost.
+  volum::VoLumAmpSettings live{};
+  live.preCompAmount = 4.2;
+  live.preCompMix = 0.6;
+  live.preNam1Active = true;
+  live.preNam1Gain = -3.0;
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/1,
+                                                          /*fx=*/nullptr, /*includeDualAmp=*/true,
+                                                          /*preLocked=*/true, /*postLocked=*/false,
+                                                          /*liveLockedPre=*/&live, /*liveLockedPost=*/nullptr);
+  REQUIRE(j.contains("liveLockedPre"));
+  REQUIRE_FALSE(j.contains("liveLockedPost"));
+
+  // Per-amp slots must remain at their stored values - locked save must NOT
+  // mutate either amp's PRE.
+  REQUIRE(j["amps"][volum::kAmps[0].folderName]["preCompAmount"].get<double>()
+          == doctest::Approx(amps[0].preCompAmount));
+  REQUIRE(j["amps"][volum::kAmps[1].folderName]["preCompAmount"].get<double>()
+          == doctest::Approx(amps[1].preCompAmount));
+
+  // Read it back.
+  volum::VoLumAmpSettings loadedAmps[volum::kAmpCount]{};
+  volum::VoLumAmpSettings loadedLivePre{};
+  volum::VoLumAmpSettings loadedLivePost{};
+  bool preLocked = false;
+  bool postLocked = false;
+  bool haveLivePre = false;
+  bool haveLivePost = false;
+  int lastAmp = -1;
+  volum::VolumUserSettingsFromJson(j, loadedAmps, volum::kAmpCount, &lastAmp, nullptr, nullptr, &preLocked, &postLocked,
+                                   &loadedLivePre, &loadedLivePost, &haveLivePre, &haveLivePost);
+
+  REQUIRE(preLocked);
+  REQUIRE_FALSE(postLocked);
+  REQUIRE(haveLivePre);
+  REQUIRE_FALSE(haveLivePost);
+  REQUIRE(loadedLivePre.preCompAmount == doctest::Approx(4.2));
+  REQUIRE(loadedLivePre.preCompMix == doctest::Approx(0.6));
+  REQUIRE(loadedLivePre.preNam1Active);
+  REQUIRE(loadedLivePre.preNam1Gain == doctest::Approx(-3.0));
+  // Round-trip preserves per-amp slots unchanged.
+  REQUIRE(loadedAmps[0].preCompAmount == doctest::Approx(1.0));
+  REQUIRE(loadedAmps[1].preCompAmount == doctest::Approx(9.0));
+}
+
+TEST_CASE("Live POST lock snapshot round-trips through JSON without touching slots")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0] = MakePostSlot(0.10);
+  amps[1] = MakePostSlot(0.90);
+  volum::VoLumAmpSettings live{};
+  live.postValid = true;
+  live.postDelayActive = true;
+  live.postDelayMix = 0.42;
+  live.postReverbActive = true;
+  live.postReverbDecay = 5.5;
+  live.postReverbMode = 1;
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/1,
+                                                          /*fx=*/nullptr, /*includeDualAmp=*/true,
+                                                          /*preLocked=*/false, /*postLocked=*/true,
+                                                          /*liveLockedPre=*/nullptr, /*liveLockedPost=*/&live);
+  REQUIRE_FALSE(j.contains("liveLockedPre"));
+  REQUIRE(j.contains("liveLockedPost"));
+  REQUIRE(j["amps"][volum::kAmps[0].folderName]["postDelayMix"].get<double>() == doctest::Approx(0.10));
+  REQUIRE(j["amps"][volum::kAmps[1].folderName]["postDelayMix"].get<double>() == doctest::Approx(0.90));
+
+  volum::VoLumAmpSettings loadedAmps[volum::kAmpCount]{};
+  volum::VoLumAmpSettings loadedLivePre{};
+  volum::VoLumAmpSettings loadedLivePost{};
+  bool preLocked = false;
+  bool postLocked = false;
+  bool haveLivePre = false;
+  bool haveLivePost = false;
+  volum::VolumUserSettingsFromJson(j, loadedAmps, volum::kAmpCount, nullptr, nullptr, nullptr, &preLocked, &postLocked,
+                                   &loadedLivePre, &loadedLivePost, &haveLivePre, &haveLivePost);
+
+  REQUIRE_FALSE(preLocked);
+  REQUIRE(postLocked);
+  REQUIRE_FALSE(haveLivePre);
+  REQUIRE(haveLivePost);
+  REQUIRE(loadedLivePost.postDelayActive);
+  REQUIRE(loadedLivePost.postDelayMix == doctest::Approx(0.42));
+  REQUIRE(loadedLivePost.postReverbActive);
+  REQUIRE(loadedLivePost.postReverbDecay == doctest::Approx(5.5));
+  REQUIRE(loadedLivePost.postReverbMode == 1);
+  REQUIRE(loadedAmps[0].postDelayMix == doctest::Approx(0.10));
+  REQUIRE(loadedAmps[1].postDelayMix == doctest::Approx(0.90));
+}
+
+TEST_CASE("Unlocked settings save omits live lock snapshot keys")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumAmpSettings live{};
+  live.preCompAmount = 5.5;
+  // Lock flags off -> snapshots are stale and must not be written.
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true,
+                                                          /*preLocked=*/false, /*postLocked=*/false, &live, &live);
+  REQUIRE_FALSE(j.contains("liveLockedPre"));
+  REQUIRE_FALSE(j.contains("liveLockedPost"));
+}
+
+// -------------------------------------------------------------------------
+// Chunk-path lock lifecycle (B-Lock-1, chunk variant)
+// -------------------------------------------------------------------------
+
+TEST_CASE("Chunk live lock snapshot round-trips and preserves per-amp slots")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0] = MakePreSlot(2.0);
+  amps[1] = MakePreSlot(7.0);
+  volum::VoLumAmpSettings livePre{};
+  livePre.preCompAmount = 3.3;
+  livePre.preCompMix = 0.75;
+  livePre.preNam1Active = true;
+  livePre.preNam1Capture = 2;
+  livePre.preNam1Gain = -1.5;
+  volum::VoLumAmpSettings livePost{};
+  livePost.postValid = true;
+  livePost.postDelayActive = true;
+  livePost.postDelayMix = 0.55;
+
+  MemoryChunk chunk;
+  volum::PutCurrentVoLumChunkState(chunk, {1, 0, 0}, amps, volum::kAmpCount);
+  volum::PutPrePostLockFlags(chunk, true, true);
+  volum::PutPrePostLockSnapshots(chunk, true, true, livePre, livePost);
+
+  const int payloadBytes = volum::CurrentPerAmpSettingsPayloadBytes(volum::kAmpCount);
+  // Detector recognizes flags+snapshots tail and rejects shorter tails.
+  REQUIRE(volum::ChunkHasPrePostLockSnapshots(chunk.Size(), volum::kAmpCount, true, true));
+  REQUIRE_FALSE(volum::ChunkHasPrePostLockSnapshots(payloadBytes + volum::kPrePostLockFlagsBytes, volum::kAmpCount, true,
+                                                     true));
+
+  // Read it back.
+  volum::VoLumAmpSettings loadedAmps[volum::kAmpCount]{};
+  volum::VoLumChunkSelection selection;
+  int pos = volum::GetVoLumChunkSelection(chunk, 0, selection);
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    auto& s = loadedAmps[i];
+    pos = volum::GetLegacyPerAmpSettings(chunk, pos, s);
+    pos = volum::GetExtendedPerAmpSettings(chunk, pos, s, true);
+    pos = volum::GetDualAmpPerAmpSettings(chunk, pos, s, true);
+    pos = volum::GetPostPerAmpSettings(chunk, pos, s);
+  }
+  bool preLocked = false;
+  bool postLocked = false;
+  pos = volum::GetPrePostLockFlags(chunk, pos, preLocked, postLocked);
+  REQUIRE(preLocked);
+  REQUIRE(postLocked);
+
+  volum::VoLumAmpSettings loadedLivePre{};
+  volum::VoLumAmpSettings loadedLivePost{};
+  pos = volum::GetPrePostLockSnapshots(chunk, pos, preLocked, postLocked, loadedLivePre, loadedLivePost);
+  REQUIRE(pos == chunk.Size());
+
+  // Per-amp slots preserved.
+  REQUIRE(loadedAmps[0].preCompAmount == doctest::Approx(2.0));
+  REQUIRE(loadedAmps[1].preCompAmount == doctest::Approx(7.0));
+  // Snapshot exactly restored.
+  REQUIRE(loadedLivePre.preCompAmount == doctest::Approx(3.3));
+  REQUIRE(loadedLivePre.preCompMix == doctest::Approx(0.75));
+  REQUIRE(loadedLivePre.preNam1Active);
+  REQUIRE(loadedLivePre.preNam1Capture == 2);
+  REQUIRE(loadedLivePre.preNam1Gain == doctest::Approx(-1.5));
+  REQUIRE(loadedLivePost.postDelayActive);
+  REQUIRE(loadedLivePost.postDelayMix == doctest::Approx(0.55));
+}
+
+TEST_CASE("Chunk lock snapshot is omitted for blocks whose lock is off")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumAmpSettings livePre{};
+  livePre.preCompAmount = 1.1;
+  volum::VoLumAmpSettings livePost{};
+  livePost.postValid = true;
+  livePost.postDelayMix = 0.22;
+
+  MemoryChunk chunk;
+  volum::PutCurrentVoLumChunkState(chunk, {0, 0, 0}, amps, volum::kAmpCount);
+  // PRE locked only.
+  volum::PutPrePostLockFlags(chunk, true, false);
+  volum::PutPrePostLockSnapshots(chunk, true, false, livePre, livePost);
+
+  // Chunk layout: 3-int selection header + per-amp payload + lock flags + snapshot(s).
+  const int basePlusFlags = volum::kPerAmpSettingsHeaderBytes
+                            + volum::CurrentPerAmpSettingsPayloadBytes(volum::kAmpCount)
+                            + volum::kPrePostLockFlagsBytes;
+  REQUIRE(chunk.Size() == basePlusFlags + volum::kPreLockSnapshotBytes);
+  // POST snapshot must be absent: chunk size MUST NOT include kPostLockSnapshotBytes.
+  REQUIRE_FALSE(chunk.Size() == basePlusFlags + volum::kPreLockSnapshotBytes + volum::kPostLockSnapshotBytes);
+}
+
+TEST_CASE("Chunk without lock snapshots is detected as old format (back-compat)")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  MemoryChunk chunk;
+  volum::PutCurrentVoLumChunkState(chunk, {0, 0, 0}, amps, volum::kAmpCount);
+  // Lock flags only, no snapshots (old 1.0.1-rc format).
+  volum::PutPrePostLockFlags(chunk, true, true);
+
+  REQUIRE(volum::ChunkHasPrePostLockFlags(chunk.Size(), volum::kAmpCount));
+  // Detector says snapshots are NOT present even though flags claim both locked.
+  REQUIRE_FALSE(volum::ChunkHasPrePostLockSnapshots(chunk.Size(), volum::kAmpCount, true, true));
+}
+
+// -------------------------------------------------------------------------
+// Settings version forward-compat (B-Compat-1)
+// -------------------------------------------------------------------------
+
+TEST_CASE("Settings reader is forward-tolerant: future version does not nuke data")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].toneBass = 7.5;
+  amps[0].toneTreble = 8.5;
+  amps[0].outputLevel = -4.0;
+
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  // Pretend a newer build wrote the file with a higher version + an unknown key.
+  j["version"] = 999;
+  j["someFutureField"] = "ignore me";
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  int lastAmp = -1;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, &lastAmp, nullptr, &healed);
+
+  REQUIRE_FALSE(healed); // Future version must NOT mark healed (no destructive migration).
+  REQUIRE(loaded[0].toneBass == doctest::Approx(7.5));
+  REQUIRE(loaded[0].toneTreble == doctest::Approx(8.5));
+  REQUIRE(loaded[0].outputLevel == doctest::Approx(-4.0));
+}
+
+TEST_CASE("Settings v6 with additive lock keys loads cleanly without healing")
+{
+  // Simulates VoLum 1.0.0 reading a 1.0.1 settings file: version stayed at 6
+  // because lock fields are purely additive.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].inputLevel = 2.5;
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["preLocked"] = true;
+  j["postLocked"] = false;
+  j["liveLockedPre"] = volum::PreBlockToJson(MakePreSlot(3.7));
+
+  REQUIRE(j["version"] == 6); // Confirms we did not silently bump it.
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  bool preLocked = false;
+  bool postLocked = true;
+  int lastAmp = 0;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, &lastAmp, nullptr, &healed, &preLocked, &postLocked);
+  REQUIRE_FALSE(healed);
+  REQUIRE(preLocked);
+  REQUIRE_FALSE(postLocked);
+  REQUIRE(loaded[0].inputLevel == doctest::Approx(2.5));
+}
+
+TEST_CASE("Settings reader heals when version is non-integer garbage")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = "garbage";
+
+  bool healed = false;
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE(healed);
+}
+
+TEST_CASE("Settings reader heals when version is below 1")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["version"] = 0;
+
+  bool healed = false;
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE(healed);
+}
+
+// -------------------------------------------------------------------------
+// Slot-non-mutation invariant
+// -------------------------------------------------------------------------
+
+TEST_CASE("Live lock snapshot save/load never modifies per-amp slot bytes")
+{
+  // Build initial per-amp state with distinct PRE/POST values per amp so any
+  // accidental cross-pollination from the lock snapshot logic shows up.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    amps[i].toneBass = 1.0 + i * 0.1;
+    amps[i].toneMid = 2.0 + i * 0.1;
+    amps[i].toneTreble = 3.0 + i * 0.1;
+    amps[i].preCompAmount = 4.0 + i * 0.1;
+    amps[i].preNam1Gain = -1.0 - i * 0.1;
+    amps[i].postValid = true;
+    amps[i].postDelayMix = 0.10 + i * 0.05;
+    amps[i].postReverbDecay = 1.5 + i * 0.25;
+  }
+
+  // Compare snapshots before/after a full save+load roundtrip with the lock on
+  // and a clearly different live snapshot.
+  volum::VoLumAmpSettings expected[volum::kAmpCount];
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    expected[i] = amps[i];
+
+  volum::VoLumAmpSettings livePre = MakePreSlot(8.8);
+  volum::VoLumAmpSettings livePost = MakePostSlot(0.99);
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, true, &livePre,
+                                                          &livePost);
+  // Reload into a fresh array.
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  volum::VoLumAmpSettings loadedLivePre{};
+  volum::VoLumAmpSettings loadedLivePost{};
+  bool preLocked = false;
+  bool postLocked = false;
+  bool haveLivePre = false;
+  bool haveLivePost = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, nullptr, &preLocked, &postLocked,
+                                   &loadedLivePre, &loadedLivePost, &haveLivePre, &haveLivePost);
+
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    REQUIRE(loaded[i].toneBass == doctest::Approx(expected[i].toneBass));
+    REQUIRE(loaded[i].toneMid == doctest::Approx(expected[i].toneMid));
+    REQUIRE(loaded[i].toneTreble == doctest::Approx(expected[i].toneTreble));
+    REQUIRE(loaded[i].preCompAmount == doctest::Approx(expected[i].preCompAmount));
+    REQUIRE(loaded[i].preNam1Gain == doctest::Approx(expected[i].preNam1Gain));
+    REQUIRE(loaded[i].postDelayMix == doctest::Approx(expected[i].postDelayMix));
+    REQUIRE(loaded[i].postReverbDecay == doctest::Approx(expected[i].postReverbDecay));
+  }
+  REQUIRE(haveLivePre);
+  REQUIRE(haveLivePost);
+  REQUIRE(loadedLivePre.preCompAmount == doctest::Approx(8.8));
+  REQUIRE(loadedLivePost.postDelayMix == doctest::Approx(0.99));
 }
