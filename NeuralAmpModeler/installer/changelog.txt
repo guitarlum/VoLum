@@ -1,3 +1,12 @@
+05/22/2026 - VoLum: Wired VoLumDspStaging path helpers into plugin staging, consolidated _ApplyDSPStaging under one mutex scope, and extracted main/dual-amp ProcessBlock lanes.
+05/22/2026 - VoLum: NAM paths now commit with staged models in _ApplyDSPStaging; loader drain publishes staged assets under mStagingMutex.
+05/22/2026 - VoLum: Shared OutputMode gain helper and OnReset I/O buffer pre-reserve to avoid RT reallocations.
+05/22/2026 - VoLum: Fix ProcessBlock helper declarations to use iplug::sample in the header (macOS/CI app build).
+05/22/2026 - VoLum: Loader queue now drops stale support and PRE requests when a newer load for the same target is queued.
+05/22/2026 - VoLum: Centralized OutputMode enum labels in VoLumOutputMode.h for param init DRY.
+05/22/2026 - VoLum: IR file paths now commit with staged impulse responses in _ApplyDSPStaging so live path and IR cannot diverge across the audio fence.
+05/22/2026 - VoLum: Extracted PRE chain and POST delay/reverb helpers into VoLumProcessBlock.inc.cpp (no behavior change).
+05/22/2026 - VoLum: Expanded processing-plan doctests for tuner silence, PRE-NAM-only paths, support-only POST FX, and support tone-stack gating.
 05/20/2026 - VoLum: PRE and POST lock now carries the current scene as a global overlay while switching amps; a Store arrow commits the overlay to the current amp when it differs from that amp's saved block, and unlock silently restores the active amp's saved PRE/POST scene without writing to other amps.
 05/20/2026 - VoLum: Windows test helper now accepts `-Filter <pattern>` to run matching doctest cases without rebuilding or running the full suite.
 05/20/2026 - VoLum: Windows app smoke helper now stops any running VoLum standalone before rebuilding, avoiding locked-exe postbuild failures during UI review.
