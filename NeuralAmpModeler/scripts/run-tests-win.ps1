@@ -13,6 +13,12 @@ Set-Location $slnDir
 # Apply our local iPlug2 patches (idempotent). See NeuralAmpModeler/iplug2-patches/README.md.
 & (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
 
+# Fail early if a test source is registered in only one of the two build
+# descriptors (Windows vcxproj vs. CMakeLists). Skipping this would silently
+# let new tests miss either the Windows or macOS test run.
+& (Join-Path $here "check-test-source-parity.ps1")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source
