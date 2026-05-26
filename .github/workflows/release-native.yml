@@ -6,11 +6,11 @@ on:
       release_type:
         description: "How to choose the release version."
         required: true
-        default: minor
+        default: patch
         type: choice
         options:
-          - minor
           - patch
+          - minor
           - major
           - manual
       manual_version:
@@ -96,7 +96,9 @@ jobs:
     needs: prepare_release
     runs-on: ${{matrix.os}}
     strategy:
-      fail-fast: false
+      # A release is shipped as a single multi-platform unit. Aborting the other
+      # leg on the first failure avoids uploading a half-broken release.
+      fail-fast: true
       matrix:
         os: [macos-latest, windows-latest]
         include:
@@ -195,6 +197,35 @@ jobs:
       env:
         VERIFY_MAC_REQUIRE_INSTALLER: "1"
       run: NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
+      shell: bash
+
+    # Mirror the smoke coverage that ci.yml runs so a broken PKG can never ship.
+    - name: Smoke macOS installer
+      if: matrix.os == 'macos-latest'
+      run: bash NeuralAmpModeler/scripts/smoke-installer-mac.sh
+      shell: bash
+
+    - name: Smoke macOS standalone launch
+      if: matrix.os == 'macos-latest'
+      run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh
+      shell: bash
+
+    - name: Assert macOS bundle versions match release tag
+      if: matrix.os == 'macos-latest'
+      run: |
+        set -euo pipefail
+        RELEASE_VERSION="${{ needs.prepare_release.outputs.release_version }}"
+        APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
+        VST3_PLIST="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/Info.plist"
+        APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PLIST")
+        VST3_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$VST3_PLIST")
+        echo "Release tag version : $RELEASE_VERSION"
+        echo "Standalone app      : $APP_VERSION"
+        echo "VST3 plug-in        : $VST3_VERSION"
+        if [ "$APP_VERSION" != "$RELEASE_VERSION" ] || [ "$VST3_VERSION" != "$RELEASE_VERSION" ]; then
+          echo "ERROR: built bundle versions do not match the release tag." >&2
+          exit 1
+        fi
       shell: bash
 
     - name: Upload macOS release assets
