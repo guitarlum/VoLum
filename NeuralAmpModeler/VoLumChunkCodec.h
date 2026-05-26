@@ -125,6 +125,110 @@ void PutCurrentVoLumChunkState(Chunk& chunk, VoLumChunkSelection selection, cons
 }
 
 template<typename Chunk>
+void PutPrePostLockFlags(Chunk& chunk, bool preLocked, bool postLocked)
+{
+  int pre = preLocked ? 1 : 0;
+  int post = postLocked ? 1 : 0;
+  chunk.Put(&pre);
+  chunk.Put(&post);
+}
+
+// PRE block snapshot used by the live-lock persistence path. Layout MUST match
+// kPreLockSnapshotBytes in VoLumChunkLayout.h. Order intentionally mirrors the
+// PRE portion of PutCurrentPerAmpSettings for symmetry.
+template<typename Chunk>
+void PutPreLockSnapshot(Chunk& chunk, const VoLumAmpSettings& s)
+{
+  int pc = s.preCompActive ? 1 : 0;
+  int p1 = s.preNam1Active ? 1 : 0;
+  int p2 = s.preNam2Active ? 1 : 0;
+  chunk.Put(&pc);
+  chunk.Put(&s.preCompAmount);
+  chunk.Put(&s.preCompRatio);
+  chunk.Put(&s.preCompAttack);
+  chunk.Put(&s.preCompRelease);
+  chunk.Put(&s.preCompMix);
+  chunk.Put(&s.preCompLevel);
+  chunk.Put(&p1);
+  chunk.Put(&s.preNam1Capture);
+  chunk.Put(&s.preNam1Gain);
+  chunk.Put(&s.preNam1Bass);
+  chunk.Put(&s.preNam1Mid);
+  chunk.Put(&s.preNam1MidFreq);
+  chunk.Put(&s.preNam1Treble);
+  chunk.Put(&s.preNam1Level);
+  chunk.Put(&p2);
+  chunk.Put(&s.preNam2Capture);
+  chunk.Put(&s.preNam2Gain);
+  chunk.Put(&s.preNam2Bass);
+  chunk.Put(&s.preNam2Mid);
+  chunk.Put(&s.preNam2MidFreq);
+  chunk.Put(&s.preNam2Treble);
+  chunk.Put(&s.preNam2Level);
+}
+
+template<typename Chunk>
+int GetPreLockSnapshot(const Chunk& chunk, int pos, VoLumAmpSettings& s)
+{
+  int pc = 0;
+  int p1 = 0;
+  int p2 = 0;
+  pos = chunk.Get(&pc, pos);
+  pos = chunk.Get(&s.preCompAmount, pos);
+  pos = chunk.Get(&s.preCompRatio, pos);
+  pos = chunk.Get(&s.preCompAttack, pos);
+  pos = chunk.Get(&s.preCompRelease, pos);
+  pos = chunk.Get(&s.preCompMix, pos);
+  pos = chunk.Get(&s.preCompLevel, pos);
+  pos = chunk.Get(&p1, pos);
+  pos = chunk.Get(&s.preNam1Capture, pos);
+  pos = chunk.Get(&s.preNam1Gain, pos);
+  pos = chunk.Get(&s.preNam1Bass, pos);
+  pos = chunk.Get(&s.preNam1Mid, pos);
+  pos = chunk.Get(&s.preNam1MidFreq, pos);
+  pos = chunk.Get(&s.preNam1Treble, pos);
+  pos = chunk.Get(&s.preNam1Level, pos);
+  pos = chunk.Get(&p2, pos);
+  pos = chunk.Get(&s.preNam2Capture, pos);
+  pos = chunk.Get(&s.preNam2Gain, pos);
+  pos = chunk.Get(&s.preNam2Bass, pos);
+  pos = chunk.Get(&s.preNam2Mid, pos);
+  pos = chunk.Get(&s.preNam2MidFreq, pos);
+  pos = chunk.Get(&s.preNam2Treble, pos);
+  pos = chunk.Get(&s.preNam2Level, pos);
+  s.preCompActive = (pc != 0);
+  s.preNam1Active = (p1 != 0);
+  s.preNam2Active = (p2 != 0);
+  ClampPreCaptureSlots(s);
+  return pos;
+}
+
+// Writes the active live-lock snapshots after the lock flags. The layout is
+// driven by the lock flags themselves: a PRE snapshot is present iff preLocked,
+// and a POST snapshot is present iff postLocked. This keeps the serialized form
+// compact and detectable from the flags alone.
+template<typename Chunk>
+void PutPrePostLockSnapshots(Chunk& chunk, bool preLocked, bool postLocked, const VoLumAmpSettings& preSnapshot,
+                             const VoLumAmpSettings& postSnapshot)
+{
+  if (preLocked)
+    PutPreLockSnapshot(chunk, preSnapshot);
+  if (postLocked)
+    PutPostPerAmpSettings(chunk, postSnapshot);
+}
+
+template<typename Chunk>
+int GetPrePostLockSnapshots(const Chunk& chunk, int pos, bool preLocked, bool postLocked,
+                            VoLumAmpSettings& preSnapshot, VoLumAmpSettings& postSnapshot)
+{
+  if (preLocked)
+    pos = GetPreLockSnapshot(chunk, pos, preSnapshot);
+  if (postLocked)
+    pos = GetPostPerAmpSettings(chunk, pos, postSnapshot, /*hasPostSnapshots=*/true);
+  return pos;
+}
+
+template<typename Chunk>
 int GetLegacyPerAmpSettings(const Chunk& chunk, int pos, VoLumAmpSettings& s)
 {
   pos = chunk.Get(&s.speakerIdx, pos);
@@ -382,6 +486,18 @@ int GetVoLumChunkSelection(const Chunk& chunk, int pos, VoLumChunkSelection& sel
   pos = chunk.Get(&selection.speakerIdx, pos);
   pos = chunk.Get(&selection.channelIdx, pos);
   selection = ClampChunkSelection(selection);
+  return pos;
+}
+
+template<typename Chunk>
+int GetPrePostLockFlags(const Chunk& chunk, int pos, bool& preLocked, bool& postLocked)
+{
+  int pre = 0;
+  int post = 0;
+  pos = chunk.Get(&pre, pos);
+  pos = chunk.Get(&post, pos);
+  preLocked = (pre != 0);
+  postLocked = (post != 0);
   return pos;
 }
 

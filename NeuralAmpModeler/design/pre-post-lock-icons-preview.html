@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PRE/POST header icon preview</title>
+<style>
+  body { background:#0a0c10; color:#eee; font:14px/1.4 Segoe UI,sans-serif; padding:24px; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; }
+  .panel { width:72px; background:#0d1016; border:1px solid rgba(252,210,145,.45); }
+  .header { height:22px; position:relative; margin:2px 4px 0; border-bottom:1px solid rgba(91,196,196,.35); }
+  .label { position:absolute; left:2px; top:0; bottom:0; display:flex; align-items:center; font:bold 10px Josefin Sans,serif; color:#fcd291; }
+  .icons { position:absolute; top:50%; transform:translateY(calc(-50% - 1px)); display:flex; gap:3px; align-items:center; }
+  .chev { position:absolute; right:0; top:50%; transform:translateY(-50%); color:#fcd291; font-size:10px; }
+  canvas { display:block; image-rendering:pixelated; }
+  h3 { margin:0 0 12px; font-size:12px; color:#aaa; }
+  .big canvas { width:120px; height:120px; }
+</style>
+</head>
+<body>
+<h3>Header strip — right-aligned controls, amp-facing store arrow</h3>
+<div class="row" id="mount"></div>
+<h3>20×20 at 6× — closed / open / store hover</h3>
+<div class="row big" id="zoom"></div>
+<script>
+function drawLock(ctx, size, locked) {
+  const cx = size/2, cy = size/2;
+  const bodyW = size * 0.58, bodyH = size * 0.38;
+  const stroke = Math.max(2.6, size * 0.13);
+  const shackleRise = size * 0.34;
+  const totalH = bodyH + shackleRise;
+  const bboxTop = cy - totalH/2;
+  const bodyTop = bboxTop + shackleRise;
+  const bodyL = cx - bodyW/2, bodyR = cx + bodyW/2;
+  const gold = locked ? '#fcd291' : '#888';
+  ctx.fillStyle = gold;
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = stroke;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  roundRect(ctx, bodyL, bodyTop, bodyW, bodyH, Math.min(2, bodyW*0.12));
+  ctx.fill();
+  ctx.beginPath();
+  if (locked) {
+    const leftFoot = bodyL + bodyW*0.18;
+    const rightFoot = bodyR - bodyW*0.18;
+    const ctrlY = bodyTop - shackleRise*1.12;
+    ctx.moveTo(leftFoot, bodyTop + 0.4);
+    ctx.lineTo(leftFoot, bodyTop - shackleRise*0.40);
+    ctx.bezierCurveTo(leftFoot, ctrlY, rightFoot, ctrlY, rightFoot, bodyTop - shackleRise*0.40);
+    ctx.lineTo(rightFoot, bodyTop + 0.4);
+  } else {
+    const hingeX = bodyR - bodyW*0.18;
+    const looseX = bodyL + bodyW*0.10;
+    const topY = bodyTop - shackleRise*1.16;
+    const looseY = bodyTop - shackleRise*0.54;
+    ctx.moveTo(hingeX, bodyTop + 0.4);
+    ctx.lineTo(hingeX, bodyTop - shackleRise*0.45);
+    ctx.bezierCurveTo(hingeX - bodyW*0.04, topY, looseX + bodyW*0.34, topY, looseX, looseY);
+  }
+  ctx.stroke();
+}
+function drawStore(ctx, size, hovered) {
+  const cx = size/2, cy = size/2;
+  if (hovered) {
+    ctx.fillStyle = 'rgba(91,196,196,.18)';
+    ctx.beginPath(); ctx.arc(cx, cy, size*0.46, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.strokeStyle = hovered ? '#5bc4c4' : 'rgba(75,162,162,.48)';
+  ctx.lineWidth = hovered ? 2.7 : 2.25;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const stemTop = cy - size*0.30, tipY = cy + size*0.28;
+  const wingY = cy - size*0.02, wingX = size*0.23;
+  ctx.beginPath();
+  ctx.moveTo(cx, stemTop); ctx.lineTo(cx, tipY);
+  ctx.moveTo(cx-wingX, wingY); ctx.lineTo(cx, tipY); ctx.lineTo(cx+wingX, wingY);
+  ctx.stroke();
+}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function render(label, locked, dirty) {
+  const panel = document.createElement('div'); panel.className='panel';
+  const header = document.createElement('div'); header.className='header';
+  const lab = document.createElement('div'); lab.className='label'; lab.textContent=label;
+  const icons = document.createElement('div'); icons.className='icons';
+  icons.style.right = '10px';
+  const cLock = document.createElement('canvas'); cLock.width=20; cLock.height=20;
+  drawLock(cLock.getContext('2d'), 20, locked);
+  if (dirty && label === 'POST') {
+    const c = document.createElement('canvas'); c.width=20; c.height=20;
+    drawStore(c.getContext('2d'), 20, true);
+    icons.appendChild(c);
+  }
+  icons.appendChild(cLock);
+  if (dirty && label === 'PRE') {
+    const c = document.createElement('canvas'); c.width=20; c.height=20;
+    drawStore(c.getContext('2d'), 20, true);
+    icons.appendChild(c);
+  }
+  const chev = document.createElement('div'); chev.className='chev'; chev.textContent='›';
+  header.append(lab, icons, chev); panel.appendChild(header);
+  document.getElementById('mount').appendChild(panel);
+
+  const z = document.createElement('div');
+  [['closed',true],['open',false],['store',null]].forEach(([k,v])=>{
+    const zc = document.createElement('canvas'); zc.width=20; zc.height=20;
+    if (k==='store') drawStore(zc.getContext('2d'), 20, true);
+    else drawLock(zc.getContext('2d'), 20, v);
+    z.appendChild(zc);
+  });
+  document.getElementById('zoom').appendChild(z);
+}
+render('POST', true, true);
+render('PRE', true, false);
+render('POST', false, false);
+</script>
+</body>
+</html>

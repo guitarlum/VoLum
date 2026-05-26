@@ -13,9 +13,6 @@
 #error "nlohmann json header not found (expected iPlug Dependencies/Extras layout)"
 #endif
 
-#if !VOLUM_AMPETE_PRODUCT
-#error VoLumUserSettingsIO is only used when VOLUM_AMPETE_PRODUCT is enabled
-#endif
 
 namespace volum
 {
@@ -27,6 +24,14 @@ namespace volum
 // active toggles) under each amps[<folderName>] entry. Legacy v<6 settings are
 // restored to factory POST defaults per amp on first load so brand-new amps don't
 // inherit stale tweaks from a single global POST scene.
+//
+// PRE/POST lock fields (`preLocked`, `postLocked`, `liveLockedPre`, `liveLockedPost`)
+// were introduced in VoLum 1.0.1. They are purely additive optional keys: older
+// readers ignore unknown fields, and the version reader (`VolumUserSettingsFromJson`)
+// is forward-tolerant, so a settings file written by a newer build with `version > 6`
+// is still loaded by this reader without triggering a destructive legacy migration.
+// Bumping `kVoLumUserSettingsVersion` is therefore reserved for changes that
+// fundamentally alter how existing keys are interpreted, NOT for additive fields.
 inline constexpr int kVoLumUserSettingsVersion = 6;
 
 // See VoLumAmpeteCatalog.h for delay/reverb mode constants and snapshot structs.
@@ -189,12 +194,218 @@ inline nlohmann::json OktaverbSubModeSnapshotsToJson(const OktaverbSubModeSnapsh
   return out;
 }
 
+// Serialize just the PRE block of a VoLumAmpSettings (compressor + two PRE NAM
+// pedals). Used for the standalone live-lock snapshot so we can persist the live
+// PRE state independently of any per-amp slot when the user has PRE locked.
+namespace detail
+{
+inline bool JsonGetClampedInt(const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue)
+{
+  if (!obj.contains(key) || !obj[key].is_number_integer())
+    return false;
+  const long long v = obj[key].get<long long>();
+  if (v < minValue || v > maxValue)
+    return false;
+  target = static_cast<int>(v);
+  return true;
+}
+inline bool JsonGetClampedDouble(const nlohmann::json& obj, const char* key, double& target, double minValue, double maxValue)
+{
+  if (!obj.contains(key) || !obj[key].is_number())
+    return false;
+  const double v = obj[key].get<double>();
+  if (!std::isfinite(v) || v < minValue || v > maxValue)
+    return false;
+  target = v;
+  return true;
+}
+inline bool JsonGetBool(const nlohmann::json& obj, const char* key, bool& target)
+{
+  if (!obj.contains(key) || !obj[key].is_boolean())
+    return false;
+  target = obj[key].get<bool>();
+  return true;
+}
+} // namespace detail
+
+// Read a PRE block snapshot from JSON. Out-of-range / missing fields fall back
+// to the defaults already in `out`. Returns true if the object had at least one
+// recognized PRE key (so callers can tell a snapshot was present vs absent).
+inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
+{
+  const VoLumAmpSettings defaults;
+  bool any = false;
+  any |= detail::JsonGetBool(o, "preCompActive", out.preCompActive);
+  any |= detail::JsonGetClampedDouble(o, "preCompAmount", out.preCompAmount, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preCompRatio", out.preCompRatio, 1.0, 20.0);
+  any |= detail::JsonGetClampedDouble(o, "preCompAttack", out.preCompAttack, 0.1, 30.0);
+  any |= detail::JsonGetClampedDouble(o, "preCompRelease", out.preCompRelease, 20.0, 800.0);
+  any |= detail::JsonGetClampedDouble(o, "preCompMix", out.preCompMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "preCompLevel", out.preCompLevel, -20.0, 20.0);
+  any |= detail::JsonGetBool(o, "preNam1Active", out.preNam1Active);
+  any |= detail::JsonGetClampedInt(o, "preNam1Capture", out.preNam1Capture, 0, 127);
+  any |= detail::JsonGetClampedDouble(o, "preNam1Gain", out.preNam1Gain, -20.0, 20.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam1Bass", out.preNam1Bass, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam1Mid", out.preNam1Mid, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam1MidFreq", out.preNam1MidFreq, 150.0, 2500.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam1Treble", out.preNam1Treble, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam1Level", out.preNam1Level, -20.0, 20.0);
+  any |= detail::JsonGetBool(o, "preNam2Active", out.preNam2Active);
+  any |= detail::JsonGetClampedInt(o, "preNam2Capture", out.preNam2Capture, 0, 127);
+  any |= detail::JsonGetClampedDouble(o, "preNam2Gain", out.preNam2Gain, -20.0, 20.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam2Bass", out.preNam2Bass, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam2Mid", out.preNam2Mid, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam2MidFreq", out.preNam2MidFreq, 150.0, 2500.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam2Treble", out.preNam2Treble, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "preNam2Level", out.preNam2Level, -20.0, 20.0);
+  return any;
+}
+
+inline bool PostBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
+{
+  const VoLumAmpSettings defaults;
+  bool any = false;
+  any |= detail::JsonGetBool(o, "postValid", out.postValid);
+  any |= detail::JsonGetBool(o, "postDelayActive", out.postDelayActive);
+  any |= detail::JsonGetClampedDouble(o, "postDelayTime", out.postDelayTime, 10.0, 2000.0);
+  any |= detail::JsonGetClampedDouble(o, "postDelayFeedback", out.postDelayFeedback, 0.0, 0.99);
+  any |= detail::JsonGetClampedDouble(o, "postDelayMix", out.postDelayMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedInt(o, "postDelayMode", out.postDelayMode, 0, kVoLumDelayModeCount - 1);
+  any |= detail::JsonGetClampedDouble(o, "postDelayTone", out.postDelayTone, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postDelayAge", out.postDelayAge, 0.0, 1.0);
+  any |= detail::JsonGetBool(o, "postDelayPingPong", out.postDelayPingPong);
+  any |= detail::JsonGetBool(o, "postReverbActive", out.postReverbActive);
+  any |= detail::JsonGetClampedDouble(o, "postReverbMix", out.postReverbMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postReverbDecay", out.postReverbDecay, 0.1, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "postReverbTone", out.postReverbTone, 0.0, 10.0);
+  any |= detail::JsonGetClampedDouble(o, "postReverbPreDelay", out.postReverbPreDelay, 0.0, 200.0);
+  any |= detail::JsonGetClampedDouble(o, "postReverbShimmer", out.postReverbShimmer, 0.0, 1.0);
+  any |= detail::JsonGetClampedInt(o, "postReverbMode", out.postReverbMode, 0, kVoLumReverbModeCount - 1);
+  any |= detail::JsonGetClampedInt(o, "postReverbSubMode", out.postReverbSubMode, 0, 2);
+  if (o.contains("postDelayModes") && o["postDelayModes"].is_array())
+  {
+    const auto& modes = o["postDelayModes"];
+    for (int i = 0; i < kVoLumDelayModeCount && i < static_cast<int>(modes.size()); ++i)
+    {
+      const auto& m = modes[i];
+      auto& dst = out.postDelayModes[i];
+      detail::JsonGetClampedDouble(m, "time", dst.time, 10.0, 2000.0);
+      detail::JsonGetClampedDouble(m, "feedback", dst.feedback, 0.0, 0.99);
+      detail::JsonGetClampedDouble(m, "mix", dst.mix, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "tone", dst.tone, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "age", dst.age, 0.0, 1.0);
+      detail::JsonGetBool(m, "pingPong", dst.pingPong);
+    }
+    any = true;
+  }
+  if (o.contains("postReverbModes") && o["postReverbModes"].is_array())
+  {
+    const auto& modes = o["postReverbModes"];
+    for (int i = 0; i < kVoLumReverbModeCount && i < static_cast<int>(modes.size()); ++i)
+    {
+      const auto& m = modes[i];
+      auto& dst = out.postReverbModes[i];
+      detail::JsonGetClampedDouble(m, "mix", dst.mix, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "decay", dst.decay, 0.1, 10.0);
+      detail::JsonGetClampedDouble(m, "tone", dst.tone, 0.0, 10.0);
+      detail::JsonGetClampedDouble(m, "preDelay", dst.preDelay, 0.0, 200.0);
+      detail::JsonGetClampedDouble(m, "shimmer", dst.shimmer, 0.0, 1.0);
+      detail::JsonGetClampedInt(m, "subMode", dst.subMode, 0, 2);
+    }
+    any = true;
+  }
+  if (o.contains("postOktaverbSubModes") && o["postOktaverbSubModes"].is_array())
+  {
+    const auto& subs = o["postOktaverbSubModes"];
+    for (int i = 0; i < 3 && i < static_cast<int>(subs.size()); ++i)
+    {
+      const auto& m = subs[i];
+      auto& dst = out.postOktaverbSubModes[i];
+      detail::JsonGetClampedDouble(m, "mix", dst.mix, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "decay", dst.decay, 0.1, 10.0);
+      detail::JsonGetClampedDouble(m, "tone", dst.tone, 0.0, 10.0);
+      detail::JsonGetClampedDouble(m, "preDelay", dst.preDelay, 0.0, 200.0);
+      detail::JsonGetClampedDouble(m, "shimmer", dst.shimmer, 0.0, 1.0);
+    }
+    any = true;
+  }
+  (void) defaults;
+  return any;
+}
+
+inline nlohmann::json PreBlockToJson(const VoLumAmpSettings& s)
+{
+  nlohmann::json o;
+  o["preCompActive"] = s.preCompActive;
+  o["preCompAmount"] = s.preCompAmount;
+  o["preCompRatio"] = s.preCompRatio;
+  o["preCompAttack"] = s.preCompAttack;
+  o["preCompRelease"] = s.preCompRelease;
+  o["preCompMix"] = s.preCompMix;
+  o["preCompLevel"] = s.preCompLevel;
+  o["preNam1Active"] = s.preNam1Active;
+  o["preNam1Capture"] = s.preNam1Capture;
+  o["preNam1Gain"] = s.preNam1Gain;
+  o["preNam1Bass"] = s.preNam1Bass;
+  o["preNam1Mid"] = s.preNam1Mid;
+  o["preNam1MidFreq"] = s.preNam1MidFreq;
+  o["preNam1Treble"] = s.preNam1Treble;
+  o["preNam1Level"] = s.preNam1Level;
+  o["preNam2Active"] = s.preNam2Active;
+  o["preNam2Capture"] = s.preNam2Capture;
+  o["preNam2Gain"] = s.preNam2Gain;
+  o["preNam2Bass"] = s.preNam2Bass;
+  o["preNam2Mid"] = s.preNam2Mid;
+  o["preNam2MidFreq"] = s.preNam2MidFreq;
+  o["preNam2Treble"] = s.preNam2Treble;
+  o["preNam2Level"] = s.preNam2Level;
+  return o;
+}
+
+inline nlohmann::json PostBlockToJson(const VoLumAmpSettings& s)
+{
+  nlohmann::json o;
+  o["postValid"] = s.postValid;
+  o["postDelayActive"] = s.postDelayActive;
+  o["postDelayTime"] = s.postDelayTime;
+  o["postDelayFeedback"] = s.postDelayFeedback;
+  o["postDelayMix"] = s.postDelayMix;
+  o["postDelayMode"] = s.postDelayMode;
+  o["postDelayTone"] = s.postDelayTone;
+  o["postDelayAge"] = s.postDelayAge;
+  o["postDelayPingPong"] = s.postDelayPingPong;
+  o["postReverbActive"] = s.postReverbActive;
+  o["postReverbMix"] = s.postReverbMix;
+  o["postReverbDecay"] = s.postReverbDecay;
+  o["postReverbTone"] = s.postReverbTone;
+  o["postReverbPreDelay"] = s.postReverbPreDelay;
+  o["postReverbShimmer"] = s.postReverbShimmer;
+  o["postReverbMode"] = s.postReverbMode;
+  o["postReverbSubMode"] = s.postReverbSubMode;
+  o["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
+  o["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
+  o["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
+  return o;
+}
+
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
-                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true)
+                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
+                                               bool preLocked = false, bool postLocked = false,
+                                               const VoLumAmpSettings* liveLockedPre = nullptr,
+                                               const VoLumAmpSettings* liveLockedPost = nullptr)
 {
   nlohmann::json j;
   j["version"] = kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = lastAmpIdx;
+  j["preLocked"] = preLocked;
+  j["postLocked"] = postLocked;
+  // Live lock snapshots: persisted independently of per-amp slots so that
+  // reopening the app with a lock still on restores the exact live PRE/POST
+  // the user was hearing, without ever mutating any amp's stored scene.
+  if (preLocked && liveLockedPre)
+    j["liveLockedPre"] = PreBlockToJson(*liveLockedPre);
+  if (postLocked && liveLockedPost)
+    j["liveLockedPost"] = PostBlockToJson(*liveLockedPost);
 
   nlohmann::json amps = nlohmann::json::object();
   for (int i = 0; i < ampCount; ++i)
@@ -281,7 +492,12 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
 }
 
 inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings* ampSettings, int ampCount,
-                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr, bool* didHeal = nullptr)
+                                      int* lastAmpIdx, VoLumEffectSettings* fx = nullptr, bool* didHeal = nullptr,
+                                      bool* preLocked = nullptr, bool* postLocked = nullptr,
+                                      VoLumAmpSettings* liveLockedPre = nullptr,
+                                      VoLumAmpSettings* liveLockedPost = nullptr,
+                                      bool* haveLiveLockedPre = nullptr,
+                                      bool* haveLiveLockedPost = nullptr)
 {
   bool healed = false;
   auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue, int defaultValue) {
@@ -337,14 +553,67 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
   };
 
   int settingsVersion = 1;
-  if (j.contains("version"))
-    loadInt(j, "version", settingsVersion, 1, kVoLumUserSettingsVersion, 1);
+  if (j.contains("version") && j["version"].is_number_integer())
+  {
+    // Forward-tolerant: a settings file written by a newer build can contain
+    // version > kVoLumUserSettingsVersion. Treat it as "current schema, ignore
+    // unknown fields" rather than as a corrupt v1 file that needs migration.
+    // This prevents A/B downgrades from blowing away the user's tweaks.
+    const long long rawVersion = j["version"].get<long long>();
+    if (rawVersion >= kVoLumUserSettingsVersion)
+      settingsVersion = kVoLumUserSettingsVersion;
+    else if (rawVersion >= 1)
+      settingsVersion = static_cast<int>(rawVersion);
+    else
+    {
+      settingsVersion = 1;
+      healed = true;
+    }
+  }
+  else if (j.contains("version"))
+  {
+    settingsVersion = 1;
+    healed = true;
+  }
   const bool resetLegacyPreCaptureSelections = settingsVersion < 3;
 
   if (lastAmpIdx && j.contains("lastAmpIdx"))
   {
     const int defaultLastAmpIdx = 0;
     loadInt(j, "lastAmpIdx", *lastAmpIdx, 0, ampCount - 1, defaultLastAmpIdx);
+  }
+
+  // PRE/POST lock flags: optional, no version gate (older files omit them, older
+  // readers ignore them).
+  if (preLocked)
+  {
+    *preLocked = false;
+    loadBool(j, "preLocked", *preLocked, false);
+  }
+  if (postLocked)
+  {
+    *postLocked = false;
+    loadBool(j, "postLocked", *postLocked, false);
+  }
+
+  // Live lock snapshots: stored independently of per-amp slots so that the
+  // exact PRE/POST live state at shutdown comes back at startup without ever
+  // mutating any amp's stored scene. Optional; absent on older files.
+  if (haveLiveLockedPre)
+    *haveLiveLockedPre = false;
+  if (haveLiveLockedPost)
+    *haveLiveLockedPost = false;
+  if (liveLockedPre && j.contains("liveLockedPre") && j["liveLockedPre"].is_object())
+  {
+    const bool any = PreBlockFromJson(j["liveLockedPre"], *liveLockedPre);
+    if (haveLiveLockedPre)
+      *haveLiveLockedPre = any;
+  }
+  if (liveLockedPost && j.contains("liveLockedPost") && j["liveLockedPost"].is_object())
+  {
+    const bool any = PostBlockFromJson(j["liveLockedPost"], *liveLockedPost);
+    if (haveLiveLockedPost)
+      *haveLiveLockedPost = any;
   }
 
   if (j.contains("amps") && j["amps"].is_object())

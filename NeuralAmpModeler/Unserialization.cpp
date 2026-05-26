@@ -70,16 +70,16 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   OnParamReset(iplug::EParamSource::kPresetRecall);
   LEAVE_PARAMS_MUTEX
 
-  mNAMPath.Set(config.value("NAMPath", "").c_str());
-  mIRPath.Set(config.value("IRPath", "").c_str());
+  mNAMPaths.live.Set(config.value("NAMPath", "").c_str());
+  mIRPaths.live.Set(config.value("IRPath", "").c_str());
 
-  if (mNAMPath.GetLength())
+  if (mNAMPaths.live.GetLength())
   {
-    _StageModel(mNAMPath);
+    _StageModel(mNAMPaths.live);
   }
-  if (mIRPath.GetLength())
+  if (mIRPaths.live.GetLength())
   {
-    _StageIR(mIRPath);
+    _StageIR(mIRPaths.live);
   }
 }
 
@@ -528,8 +528,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     volum::MigrateReverbMixToEqualPowerV0_9_3(config);
   _UnserializeApplyConfig(config);
 
-#if VOLUM_AMPETE_PRODUCT
-  // v0.7.15+ and VoLum 0.1.x: read per-amp settings after the params
+  // VoLum: per-amp settings tail after serialized params (v0.7.15+ and VoLum 0.1.x)
   if (volum::ChunkUses0700SerializedConfig(version) || volum::ChunkUses0600SerializedConfig(version) ||
       volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
@@ -548,6 +547,10 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     const bool hasPostPerAmpSettings = volum::ChunkHasPostPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasPostSnapshotPerAmpSettings =
       volum::ChunkHasPostSnapshotPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasPrePostLockFlags =
+      volum::ChunkHasPrePostLockFlags(remainingPerAmpBytes, volum::kAmpCount);
+    // hasPrePostLockSnapshots is computed AFTER the lock flags are read so we
+    // know exactly how many extra bytes to expect. Done below.
 
     for (int i = 0; i < volum::kAmpCount; i++)
     {
@@ -569,13 +572,31 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // factory POST scene instead of inheriting the previously selected amp.
     }
 
+    if (hasPrePostLockFlags)
+      pos = volum::GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked);
+    else
+    {
+      mVolumPreLocked = false;
+      mVolumPostLocked = false;
+    }
+
+    // Live lock snapshots are appended after the flags iff the corresponding
+    // lock is engaged. Older 1.0.1-dev chunks may have flags without snapshots;
+    // detect that case and skip the snapshot read (live PRE/POST then come up
+    // empty exactly like before — pre-existing limitation, not a new regression).
+    if (volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, mVolumPreLocked, mVolumPostLocked))
+    {
+      pos = volum::GetPrePostLockSnapshots(
+        chunk, pos, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre, mVolumLiveLockedPost);
+    }
+
     mVolumInitComplete = false;
     _VolumRestoreFromSettings(mVolumAmpIdx);
+    _VolumApplyLiveLockSnapshots();
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
     mVolumInitComplete = true;
   }
-#endif
 
   return pos;
 }

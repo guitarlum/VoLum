@@ -28,6 +28,18 @@ static constexpr int kPostPerAmpSettingsBytes = kPostPerAmpLiveSettingsBytes + k
 static constexpr int kDualAmpPlusPostLivePerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpLiveSettingsBytes;
 static constexpr int kDualAmpPlusPostPerAmpSettingsBytes = kDualAmpPerAmpSettingsBytes + kPostPerAmpSettingsBytes;
 static constexpr int kCurrentPerAmpSettingsBytes = kDualAmpPlusPostPerAmpSettingsBytes;
+// Global PRE/POST lock flags appended after the per-amp array (VoLum 1.0.1+).
+static constexpr int kPrePostLockFlagsBytes = static_cast<int>(sizeof(int) * 2);
+// Live PRE/POST lock snapshots written immediately after the lock flags when the
+// corresponding lock is engaged (VoLum 1.0.1+ revision shipped as the lock bug
+// fix). They let the plugin restore the exact live PRE/POST state on session
+// reload without ever mutating any amp's stored slot.
+//   PRE block ints:    preCompActive, preNam1Active, preNam1Capture,
+//                      preNam2Active, preNam2Capture
+//   PRE block doubles: 6 comp doubles + 6 preNam1 doubles + 6 preNam2 doubles
+static constexpr int kPreLockSnapshotBytes = static_cast<int>(sizeof(int) * 5 + sizeof(double) * 18);
+// POST snapshot reuses the same byte layout as the per-amp POST tail.
+static constexpr int kPostLockSnapshotBytes = kPostPerAmpSettingsBytes;
 
 inline int LegacyPerAmpSettingsPayloadBytes(int ampCount)
 {
@@ -62,6 +74,22 @@ inline bool ChunkHasPostPerAmpSettings(int remainingBytes, int ampCount)
 inline bool ChunkHasPostSnapshotPerAmpSettings(int remainingBytes, int ampCount)
 {
   return remainingBytes >= kDualAmpPlusPostPerAmpSettingsBytes * ampCount;
+}
+
+inline bool ChunkHasPrePostLockFlags(int remainingBytes, int ampCount)
+{
+  return remainingBytes >= CurrentPerAmpSettingsPayloadBytes(ampCount) + kPrePostLockFlagsBytes;
+}
+
+inline int ExpectedLockSnapshotBytes(bool preLocked, bool postLocked)
+{
+  return (preLocked ? kPreLockSnapshotBytes : 0) + (postLocked ? kPostLockSnapshotBytes : 0);
+}
+
+inline bool ChunkHasPrePostLockSnapshots(int remainingBytes, int ampCount, bool preLocked, bool postLocked)
+{
+  const int expectedTail = kPrePostLockFlagsBytes + ExpectedLockSnapshotBytes(preLocked, postLocked);
+  return remainingBytes >= CurrentPerAmpSettingsPayloadBytes(ampCount) + expectedTail;
 }
 
 } // namespace volum
