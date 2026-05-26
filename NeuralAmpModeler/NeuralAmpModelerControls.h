@@ -6,10 +6,9 @@
 #include <unordered_map> // std::unordered_map
 #include "config.h"
 #include "IControls.h"
-#if VOLUM_AMPETE_PRODUCT
+// VoLum: custom controls and keyboard stepping (upstream-equivalent file fence)
 #include "VoLumControls.h"
 #include "VoLumKeyboardModel.h"
-#endif
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
 #define NAM_KNOB_HEIGHT 120.0f
@@ -87,9 +86,7 @@ public:
     if (mKeyboardSelected != selected)
     {
       mKeyboardSelected = selected;
-#if VOLUM_AMPETE_PRODUCT
       mWheelAccum.Reset();
-#endif
       SetDirty(false);
     }
   }
@@ -179,7 +176,6 @@ public:
     return HandleKeyboardInput(key);
   }
 
-#if VOLUM_AMPETE_PRODUCT
   void OnMouseWheel(float x, float y, const IMouseMod& mod, float d) override
   {
     (void) x;
@@ -197,7 +193,6 @@ public:
     for (int i = 0; i < count; ++i)
       Nudge(increase, mod.S);
   }
-#endif
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
 
@@ -229,48 +224,11 @@ public:
 private:
   double GetKeyboardStep(bool fine) const
   {
-#if VOLUM_AMPETE_PRODUCT
     return volum::keyboard::StepForParam(GetParamIdx(), fine);
-#else
-    switch (GetParamIdx())
-    {
-      case kToneBass:
-      case kToneMid:
-      case kToneTreble:
-      case kReverbTone:
-      case kBoostTone:
-      case kBoostDrive:
-      case kPreNam1Bass:
-      case kPreNam1Mid:
-      case kPreNam1Treble:
-      case kPreNam2Bass:
-      case kPreNam2Mid:
-      case kPreNam2Treble:
-        return fine ? 0.1 : 0.5;
-      case kDelayTime:
-      case kReverbPreDelay:
-      case kPreNam1MidFreq:
-      case kPreNam2MidFreq:
-      case kPreCompAttack:
-      case kPreCompRelease:
-        return fine ? 1.0 : 5.0;
-      case kDelayFeedback:
-      case kDelayMix:
-      case kReverbMix:
-      case kReverbDecay:
-      case kReverbShimmer:
-      case kPreCompMix:
-        return fine ? 0.01 : 0.05;
-      default:
-        return fine ? 0.1 : 1.0;
-    }
-#endif
   }
 
   bool mKeyboardSelected = false;
-#if VOLUM_AMPETE_PRODUCT
   volum::keyboard::WheelAccumulator mWheelAccum;
-#endif
   std::string mKeyboardLabel;
 };
 
@@ -360,7 +318,6 @@ public:
   }
 };
 
-#if VOLUM_AMPETE_PRODUCT
 class VoLumPowerSwitchControl : public IControl
 {
 public:
@@ -397,7 +354,6 @@ public:
     SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
   }
 };
-#endif
 
 class NAMFileNameControl : public IVButtonControl
 {
@@ -805,18 +761,12 @@ public:
 
   void Hide(bool hide) override
   {
-#if VOLUM_AMPETE_PRODUCT
     // Keep heading visible in settings footer; only the sample line populates when a model loads.
     IContainerBase::Hide(hide);
-#else
-    // Don't show me unless I have info to show!
-    IContainerBase::Hide(hide || (!mHasInfo));
-#endif
   };
 
   void OnAttached() override
   {
-#if VOLUM_AMPETE_PRODUCT
     IRECT r(GetRECT());
     const float footerCapH = 20.f;
     const IVStyle headingStyle =
@@ -827,11 +777,6 @@ public:
     const float rowH = 14.f;
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.sampleRate);
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.currentLatency);
-#else
-    AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 0), "Model information:", mStyle));
-    AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "", mStyle), mControlNames.sampleRate);
-    AddNamedChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 2), "", mStyle), mControlNames.currentLatency);
-#endif
   };
 
   void SetModelInfo(const ModelInfo& modelInfo)
@@ -872,15 +817,10 @@ class OutputModeControl : public IVRadioButtonControl
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
   : IVRadioButtonControl(bounds, paramIdx, {},
-#if VOLUM_AMPETE_PRODUCT
                          "",
-#else
-                         "Output Mode",
-#endif
                          style, EVShape::Ellipse, EDirection::Vertical,
                          buttonSize) {};
 
-#if VOLUM_AMPETE_PRODUCT
   void DrawWidget(IGraphics& g) override
   {
     const int hit = GetSelectedIdx();
@@ -915,7 +855,6 @@ public:
       }
     }
   }
-#endif
 
   void SetNormalizedDisable(const bool disable)
   {
@@ -924,11 +863,7 @@ public:
     ss << "Normalized";
     if (disable)
     {
-#if VOLUM_AMPETE_PRODUCT
       ss << " (n/a)";
-#else
-      ss << " [Not supported by model]";
-#endif
     }
     mTabLabels.Get(1)->Set(ss.str().c_str());
   };
@@ -939,11 +874,7 @@ public:
     ss << "Calibrated";
     if (disable)
     {
-#if VOLUM_AMPETE_PRODUCT
       ss << " (n/a)";
-#else
-      ss << " [Not supported by model]";
-#endif
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
   };
@@ -1024,7 +955,6 @@ public:
 
   void OnAttached() override
   {
-#if VOLUM_AMPETE_PRODUCT
     const float pad = 22.0f;
     const IRECT rootB = GetRECT();
     const float panelW = rootB.W() * 0.84f;
@@ -1038,23 +968,10 @@ public:
     const auto text = IText(15.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText =
       text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
-#else
-    const float pad = 20.0f;
-    const IRECT panel = GetRECT();
-    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
-                                 .WithDrawFrame(false)
-                                 .WithShadowOffset(2.f);
-    const auto text = IText(DEFAULT_TEXT_SIZE, EAlign::Center, PluginColors::HELP_TEXT);
-    const auto leftText = text.WithAlign(EAlign::Near);
-#endif
     const auto style = mStyle.WithDrawFrame(false).WithValueText(text);
     const IVStyle leftStyle = style.WithValueText(leftText);
 
-#if VOLUM_AMPETE_PRODUCT
     AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panel), mControlNames.bitmap);
-#else
-    AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
-#endif
 
     IRECT inner = panel.GetPadded(-pad);
 
@@ -1065,32 +982,18 @@ public:
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
     };
-#if VOLUM_AMPETE_PRODUCT
     const IRECT closeR(headerRow.R - 36.f, headerRow.T + 4.f, headerRow.R - 6.f, headerRow.T + 32.f);
     AddNamedChildControl(new VoLumSettingsCloseControl(closeR, closeAction), mControlNames.close);
-#else
-    const IRECT closeR = CornerButtonArea(GetRECT());
-    AddNamedChildControl(new NAMSquareButtonControl(closeR, closeAction, mCloseSVG), mControlNames.close);
-#endif
 
-#if VOLUM_AMPETE_PRODUCT
     const float bottomH = 168.0f;
-#else
-    const float bottomH = 88.0f;
-#endif
     auto bottomStrip = inner.ReduceFromBottom(bottomH);
     bottomStrip = bottomStrip.GetPadded(10.f);
-#if VOLUM_AMPETE_PRODUCT
     AddNamedChildControl(
       new VoLumSettingsFooterSepControl(IRECT(bottomStrip.L, bottomStrip.T, bottomStrip.R, bottomStrip.T + 1.f)),
       mControlNames.footerSep);
     const float modelColFrac = 0.42f;
-#else
-    const float modelColFrac = 0.50f;
-#endif
     const float modelColW = bottomStrip.W() * modelColFrac;
     const float lineHeight = 20.0f;
-#if VOLUM_AMPETE_PRODUCT
     const float footerGapBelowRule = 18.f;
     const IRECT footerBody(bottomStrip.L, bottomStrip.T + footerGapBelowRule, bottomStrip.R, bottomStrip.B);
     const float shortcutTopGap = 0.f;
@@ -1100,14 +1003,9 @@ public:
     const IRECT footerTextBody(footerBody.L, shortcutArea.B + 12.f, footerBody.R, footerBody.B);
     const auto modelInfoArea = footerTextBody.GetFromLeft(modelColW);
     const auto aboutArea = footerTextBody.GetFromRight(footerTextBody.W() - modelColW);
-#else
-    const auto modelInfoArea = bottomStrip.GetFromLeft(modelColW).GetFromTop(5 * lineHeight);
-    const auto aboutArea = bottomStrip.GetFromRight(bottomStrip.W() - modelColW).GetFromTop(6 * lineHeight);
-#endif
 
     // Input calibration + output mode: VoLum fills mid band; balanced columns + rule (see ui-mockup/settings-overlay-mockup.html)
     {
-#if VOLUM_AMPETE_PRODUCT
       const IRECT workArea = inner.GetPadded(10.f, 10.f, 10.f, 10.f);
       const IRECT calRow = workArea;
       const float gutter = 6.f;
@@ -1169,61 +1067,26 @@ public:
       const IRECT outputRadioArea =
         outputInner.GetCentredInside(static_cast<int>(outputInner.W()), static_cast<int>(radioBandH));
       const float buttonSize = 11.0f;
-#else
-      const float inputLevelH = NAM_KNOB_HEIGHT;
-      const float calBlockH = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 20.0f;
-      auto calRow = inner.ReduceFromTop(calBlockH);
-      const float rowW = calRow.W();
-      const float leftCol = rowW * 0.50f;
-      const auto inputArea = calRow.GetFromLeft(leftCol);
-      const auto outputArea = calRow.GetFromRight(rowW - leftCol);
-
-      const float knobWidth = 87.0f;
-      const auto inputLevelArea =
-        inputArea.GetFromTop(inputLevelH).GetFromBottom(28.0f).GetMidHPadded(0.5f * knobWidth);
-      const auto inputSwitchArea = inputArea.GetFromBottom(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);
-      auto* inputLevelControl = AddNamedChildControl(
-        new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
-        mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
-      inputLevelControl->SetTooltip(
-        "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
-        "enters this plugin.");
-      AddNamedChildControl(
-        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
-        mControlNames.calibrateInput, kCtrlTagCalibrateInput);
-      const auto outputRadioArea = outputArea.GetPadded(6.f);
-      const float buttonSize = 10.0f;
-#endif
       auto* outputModeControl =
         AddNamedChildControl(new OutputModeControl(outputRadioArea, kOutputMode, mRadioButtonStyle, buttonSize),
                              mControlNames.outputMode, kCtrlTagOutputMode);
       outputModeControl->SetTooltip(
         "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
-#if VOLUM_AMPETE_PRODUCT
       AddNamedChildControl(new IVLabelControl(inputTitleR, "Input calibration", sectionCapStyle),
                            mControlNames.inputSection);
       AddNamedChildControl(new IVLabelControl(outputTitleR, "Output mode", sectionCapStyle),
                            mControlNames.outputSection);
-#endif
     }
-#if VOLUM_AMPETE_PRODUCT
     const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
     AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutArea), mControlNames.shortcutInfo);
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, modelInfoStyle), mControlNames.modelInfo);
-#else
-    AddNamedChildControl(new ModelInfoControl(modelInfoArea, leftStyle), mControlNames.modelInfo);
-#endif
-#if VOLUM_AMPETE_PRODUCT
     {
       const auto aboutLineText = leftText.WithAlign(EAlign::Far).WithVAlign(EVAlign::Top);
       const IVStyle aboutStyle = leftStyle.WithValueText(aboutLineText);
       const auto urlText = aboutLineText;
       AddNamedChildControl(new AboutControl(aboutArea, aboutStyle, urlText), mControlNames.about);
     }
-#else
-    AddNamedChildControl(new AboutControl(aboutArea, leftStyle, leftText), mControlNames.about);
-#endif
 
     OnResize();
   }
@@ -1286,13 +1149,9 @@ private:
 
     void Draw(IGraphics& g) override
     {
-#if VOLUM_AMPETE_PRODUCT
       g.FillRect(VoLumColors::HERO_BG, mRECT);
       g.DrawRect(VoLumColors::FRAME, mRECT);
       g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f));
-#else
-      g.DrawFittedBitmap(mBitmap, mRECT);
-#endif
       ITextControl::Draw(g);
     };
 
@@ -1340,7 +1199,6 @@ private:
 
       buildInfoStr.SetFormatted(100, "Version %s %s %s", verStr.Get(), PLUG()->GetArchStr(), PLUG()->GetAPIStr());
 
-#if VOLUM_AMPETE_PRODUCT
       {
         IRECT lineR(GetRECT());
         const float capH = 20.f;
@@ -1360,20 +1218,6 @@ private:
                                         "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
                                         urlClk));
       }
-#else
-      AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 0), "VOLUM", mStyle));
-      AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "By Lum", mStyle));
-      AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 2), buildInfoStr.Get(), mStyle));
-      const IColor urlMo = PluginColors::HELP_TEXT_MO;
-      const IColor urlClk = PluginColors::HELP_TEXT_CLICKED;
-      AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 3),
-                                      "Built on the Neural Amp Modeler ecosystem",
-                                      "https://github.com/guitarlum/VoLum", mText,
-                                      COLOR_TRANSPARENT, urlMo, urlClk));
-      AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 4), "github.com/guitarlum/VoLum",
-                                      "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
-                                      urlClk));
-#endif
     };
 
   private:

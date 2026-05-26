@@ -31,8 +31,11 @@ add_executable(NeuralAmpModeler-Tests
   test_tone_stack.cpp
   test_volum_pre_pedal_captures.cpp
   test_volum_processing_plan.cpp
+  test_volum_dsp_staging.cpp
+  test_volum_output_mode.cpp
   test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp
+  test_volum_pre_post_lock.cpp
   test_volum_nan_guard.cpp
   test_volum_bypass_identity.cpp
   test_volum_level_mute.cpp
@@ -67,7 +70,6 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
 )
 
 target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
-  VOLUM_AMPETE_PRODUCT=1
   _CRT_SECURE_NO_DEPRECATE
   _CRT_NONSTDC_NO_DEPRECATE
 )

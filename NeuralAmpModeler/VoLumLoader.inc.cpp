@@ -53,11 +53,9 @@ void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampI
       return;
 
     mVolumLoadingMainPath = fileToLoad;
-    mVolumLoadRequests.erase(
-      std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), [](const VoLumLoadRequest& queued) {
-        return queued.kind == VoLumLoadKind::Main || queued.kind == VoLumLoadKind::MainPrefetch;
-      }),
-      mVolumLoadRequests.end());
+    _VolumDropQueuedLoadRequests([](const VoLumLoadRequest& queued) {
+      return queued.kind == VoLumLoadKind::Main || queued.kind == VoLumLoadKind::MainPrefetch;
+    });
     mVolumLoadRequests.push_front(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -104,6 +102,9 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
     if (mVolumLoadingSupportPath == fileToLoad)
       return;
     mVolumLoadingSupportPath = fileToLoad;
+    _VolumDropQueuedLoadRequests([](const VoLumLoadRequest& queued) {
+      return queued.kind == VoLumLoadKind::Support;
+    });
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -126,6 +127,9 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
     if (mVolumLoadingPrePath[slot] == fileToLoad)
       return;
     mVolumLoadingPrePath[slot] = fileToLoad;
+    _VolumDropQueuedLoadRequests([&](const VoLumLoadRequest& queued) {
+      return queued.kind == VoLumLoadKind::Pre && queued.slot == slot;
+    });
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -166,8 +170,9 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
       if (result.model != nullptr)
       {
+        std::lock_guard<std::mutex> lock(mStagingMutex);
         mStagedModel = std::move(result.model);
-        mNAMPath.Set(result.path.c_str());
+        volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());
       }
       continue;
     }
@@ -190,7 +195,10 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       }
 
       if (result.model != nullptr)
+      {
+        std::lock_guard<std::mutex> lock(mStagingMutex);
         mStagedSupportModel = std::move(result.model);
+      }
       continue;
     }
 
@@ -214,7 +222,10 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
     }
 
     if (result.model != nullptr)
+    {
+      std::lock_guard<std::mutex> lock(mStagingMutex);
       mStagedPreModel[slot] = std::move(result.model);
+    }
   }
 }
 

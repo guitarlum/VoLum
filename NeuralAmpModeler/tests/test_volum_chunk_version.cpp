@@ -243,6 +243,17 @@ TEST_CASE("VoLum current per-amp chunk byte count is stable")
   CHECK(volum::ChunkHasDualAmpPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
   CHECK(volum::ChunkHasPostPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
   CHECK(volum::ChunkHasPostSnapshotPerAmpSettings(static_cast<int>(bytes.size()), volum::kAmpCount));
+  CHECK_FALSE(volum::ChunkHasPrePostLockFlags(static_cast<int>(bytes.size()), volum::kAmpCount));
+}
+
+TEST_CASE("VoLum per-amp chunk plus lock flags byte count is stable")
+{
+  std::vector<unsigned char> bytes;
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    AppendCurrentPerAmpBlock(bytes);
+
+  const int withLocks = static_cast<int>(bytes.size()) + volum::kPrePostLockFlagsBytes;
+  CHECK(volum::ChunkHasPrePostLockFlags(withLocks, volum::kAmpCount));
 }
 
 TEST_CASE("Reverb mix equal-power remap matches expected values per mode")
