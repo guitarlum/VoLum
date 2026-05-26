@@ -163,13 +163,13 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 - **Left / Right** — decrement / increment the channel stepper (wraps within the current amp + speaker’s channel list).
 - Implemented in `NeuralAmpModeler.cpp` via `IGraphics::SetKeyHandlerFunc` (VK 0x26–0x28). VST3 users may need click focus; some hosts consume arrow keys globally.
 
-### 7. Conditional compilation via `VOLUM_AMPETE_PRODUCT`
+### 7. VoLum code fences in upstream-equivalent files
 
-**Decision:** All VoLum-specific code is gated behind `#if VOLUM_AMPETE_PRODUCT` (defined in `config.h`).
+**Decision:** VoLum-specific code in shared plugin files is marked with `// VoLum:` comments or extracted into `VoLum*.h` / `VoLum*.inc.cpp`.
 
 **Rationale:**
-- The same codebase can still build the original NAM plugin by setting `VOLUM_AMPETE_PRODUCT 0`.
-- Keeps the diff clean: VoLum additions don't touch the original NAM code paths.
+- Keeps cherry-picks from NeuralAmpModelerPlugin readable without a compile-time product toggle.
+- VoLum additions stay visually separable from upstream NAM paths.
 
 ---
 
@@ -177,7 +177,7 @@ Each amp has the same 4 speaker modes. Total ~224 `.nam` files.
 
 | File | Purpose |
 |------|---------|
-| `NeuralAmpModeler/config.h` | `VOLUM_AMPETE_PRODUCT 1`, window size 900x600 |
+| `NeuralAmpModeler/config.h` | Window size 900x600, plugin identity |
 | `NeuralAmpModeler/VoLumAmpeteCatalog.h` | Amp names, folder names, speaker prefixes, legacy rig arrays |
 | `NeuralAmpModeler/VoLumPaths.h` | Rig directory discovery, channel file scanning |
 | `NeuralAmpModeler/VoLumControls.h` | All custom iPlug2 controls (sidebar, speaker row, channel stepper, hero image, footer, etc.) |

@@ -33,6 +33,8 @@ std::string ReadPluginSource()
   std::string blob;
   blob += ReadText(root / "NeuralAmpModeler.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumProcessBlock.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumLoader.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumSettings.inc.cpp");
@@ -408,13 +410,94 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
   CHECK(postCards.connector.R == doctest::Approx(postCards.reverb.L));
 }
 
+TEST_CASE("PRE/POST lock UI and settings helpers are wired")
+{
+  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+  const std::string settings = ReadPluginSource();
+
+  RequireContains(triptych, "_DrawLockIcon");
+  RequireContains(triptych, "_DrawStoreToAmpIcon");
+  RequireContains(triptych, "arrowStroke");
+  RequireContains(triptych, "PathStroke");
+  RequireContains(triptych, "PathCubicBezierTo");
+  RequireContains(triptych, "_MeasureHeaderLabelWidth");
+  RequireContains(triptych, "mHeaderTooltip");
+  RequireContains(triptych, "_VolumSetPreLocked");
+  RequireContains(triptych, "mPreLockRect");
+  RequireContains(triptych, "mPreStoreRect");
+  RequireContains(settings, "_VolumSavePreToSlot");
+  RequireContains(settings, "_VolumSavePostToSlot");
+  RequireContains(settings, "_VolumRestorePreFromSlot");
+  RequireContains(settings, "_VolumStorePreToCurrentAmp");
+  RequireContains(settings, "_VolumIsPreDirty");
+  RequireContains(settings, "mVolumPreLocked");
+}
+
+TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
+{
+  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+
+  RequireContains(triptych, "const float storeW = (locked && dirty) ? iconSize : 0.f;");
+  RequireContains(triptych, "const float groupRight = showChevron ? outChevron.L - 3.f : header.R - 2.f;");
+  RequireContains(triptych, "float x = groupRight - groupW;");
+  RequireContains(triptych, "if (!isPre && storeW > 0.f)");
+  RequireContains(triptych, "if (isPre && storeW > 0.f)");
+  RequireContains(triptych, "Unlock PRE (restore this amp's saved scene)");
+  RequireContains(triptych, "Unlock POST (restore this amp's saved scene)");
+  RequireContains(triptych, "Store PRE to ");
+  RequireContains(triptych, "Store POST to ");
+}
+
+TEST_CASE("PRE/POST lock unlock restores local slot instead of flushing overlay")
+{
+  const std::string settings = ReadPluginSource();
+
+  RequireContains(settings, "_VolumRestorePreFromSlot(mVolumAmpSettings[mVolumAmpIdx]);");
+  RequireContains(settings, "_VolumRestorePostFromSlot(mVolumAmpSettings[mVolumAmpIdx]);");
+  RequireContains(settings, "if (!mVolumPreLocked)");
+  RequireContains(settings, "if (!mVolumPostLocked)");
+  RequireContains(settings, "_VolumStorePreToCurrentAmp()");
+  RequireContains(settings, "_VolumStorePostToCurrentAmp()");
+  RequireDoesNotContain(settings, "_VolumSavePreToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPreLocked = false;");
+  RequireDoesNotContain(settings, "_VolumSavePostToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPostLocked = false;");
+}
+
+TEST_CASE("Legacy chunks without lock tail default to unlocked on deserialize")
+{
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "if (hasPrePostLockFlags)");
+  RequireContains(source, "pos = volum::GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked);");
+  RequireContains(source, "mVolumPreLocked = false;");
+  RequireContains(source, "mVolumPostLocked = false;");
+}
+
+TEST_CASE("VoLum loader queue coalesces duplicate support and PRE requests")
+{
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+
+  RequireContains(loader, "_VolumDropQueuedLoadRequests");
+  RequireContains(loader, "return queued.kind == VoLumLoadKind::Support;");
+  RequireContains(loader, "return queued.kind == VoLumLoadKind::Pre && queued.slot == slot;");
+}
+
 TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
 {
   // The loader thread + queue helpers moved to VoLumLoader.inc.cpp on the 1.0
   // hygiene split. ReadPluginSource() aggregates the whole TU.
   const std::string source = ReadPluginSource();
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
 
+  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mIRPaths, irPath);");
+  RequireContains(source, "volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);");
+  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);");
+  RequireContains(source, "_VolumProcessMainAmpChain");
+  RequireContains(source, "_VolumProcessDualAmpSupportLane");
+  RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
+  RequireContains(loader, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());");
+  RequireContains(header, "volum::dsp_staging::WdlStagedPathPair mNAMPaths;");
+  RequireContains(header, "void _VolumDropQueuedLoadRequests(Pred pred)");
   RequireDoesNotContain(source, ".detach()");
   RequireContains(header, "std::thread mVolumLoaderThread;");
   RequireContains(source, "_VolumStopLoader();");

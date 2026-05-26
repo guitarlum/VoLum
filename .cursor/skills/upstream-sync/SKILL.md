@@ -47,6 +47,5 @@ VoLum-only files almost never need upstream input:
 ## Refactor Rules
 
 - Do not move `NeuralAmpModeler.cpp`, `NeuralAmpModeler.h`, `Unserialization.cpp`, `ToneStack.{h,cpp}`, `NeuralAmpModelerControls.h`, or `config.h` out of `NeuralAmpModeler/`. Their paths must match upstream so cherry-picks apply without manual fixup.
-- VoLum-only code added to upstream-equivalent files must stay visually separable with a `// VoLum:` comment fence, `#if VOLUM_AMPETE_PRODUCT` guard, or extraction into a `VoLum*.inc.cpp` tail-include.
-- `VOLUM_AMPETE_PRODUCT` is a legacy always-on upstream-cherry-pick fence, not a real product toggle.
+- VoLum-only code added to upstream-equivalent files must stay visually separable with a `// VoLum:` comment fence or extraction into a `VoLum*.inc.cpp` tail-include.
 - New VoLum source files always start with the `VoLum` prefix.

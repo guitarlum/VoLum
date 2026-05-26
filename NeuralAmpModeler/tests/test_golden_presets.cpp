@@ -130,6 +130,18 @@ std::vector<unsigned char> MakeCurrentVoLumChunk()
 
   MemoryChunk chunk;
   volum::PutCurrentVoLumChunkState(chunk, {2, 1, 3}, amps, volum::kAmpCount);
+  // Include the PRE/POST lock tail so the golden fixture exercises the full
+  // current chunk layout (lock flags + optional live snapshot tail). PRE
+  // locked + POST unlocked so both code paths get one cycle.
+  volum::PutPrePostLockFlags(chunk, /*preLocked=*/true, /*postLocked=*/false);
+  volum::VoLumAmpSettings livePre{};
+  livePre.preCompActive = true;
+  livePre.preCompAmount = 6.6;
+  livePre.preNam1Active = true;
+  livePre.preNam1Capture = 4;
+  livePre.preNam1Gain = -2.0;
+  volum::VoLumAmpSettings livePost{};
+  volum::PutPrePostLockSnapshots(chunk, true, false, livePre, livePost);
   return chunk.bytes;
 }
 
@@ -233,6 +245,21 @@ void AssertCurrentChunkDecodes(const std::vector<unsigned char>& bytes)
                            s.outputLevel, s.preCompAmount, s.postDelayTime, s.postReverbMix};
   for (double value : values)
     CHECK(std::isfinite(value));
+
+  bool preLocked = false;
+  bool postLocked = true;
+  pos = volum::GetPrePostLockFlags(chunk, pos, preLocked, postLocked);
+  CHECK(preLocked);
+  CHECK_FALSE(postLocked);
+  volum::VoLumAmpSettings loadedLivePre{};
+  volum::VoLumAmpSettings loadedLivePost{};
+  pos = volum::GetPrePostLockSnapshots(chunk, pos, preLocked, postLocked, loadedLivePre, loadedLivePost);
+  CHECK(loadedLivePre.preCompActive);
+  CHECK(loadedLivePre.preCompAmount == doctest::Approx(6.6));
+  CHECK(loadedLivePre.preNam1Active);
+  CHECK(loadedLivePre.preNam1Capture == 4);
+  CHECK(loadedLivePre.preNam1Gain == doctest::Approx(-2.0));
+  CHECK(pos == static_cast<int>(bytes.size()));
 }
 } // namespace
 

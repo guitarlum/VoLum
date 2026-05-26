@@ -4,19 +4,10 @@
 // hygiene split. Contains save/restore of mVolumAmpSettings, the delay/reverb
 // mode snapshots, and the legacy + dual-amp JSON settings file I/O.
 
-void NeuralAmpModeler::_VolumSaveCurrentToSettings()
+#include "VoLumPrePostLock.h"
+
+void NeuralAmpModeler::_VolumSavePreToSlot(volum::VoLumAmpSettings& s)
 {
-  auto& s = mVolumAmpSettings[mVolumAmpIdx];
-  s.speakerIdx = mVolumSpeakerIdx;
-  s.channelIdx = mVolumChannelIdx;
-  s.inputLevel = GetParam(kInputLevel)->Value();
-  s.gateThreshold = GetParam(kNoiseGateThreshold)->Value();
-  s.toneBass = GetParam(kToneBass)->Value();
-  s.toneMid = GetParam(kToneMid)->Value();
-  s.toneTreble = GetParam(kToneTreble)->Value();
-  s.outputLevel = GetParam(kOutputLevel)->Value();
-  s.noiseGateActive = GetParam(kNoiseGateActive)->Bool();
-  s.eqActive = GetParam(kEQActive)->Bool();
   s.preCompActive = GetParam(kPreCompActive)->Bool();
   s.preCompAmount = GetParam(kPreCompAmount)->Value();
   s.preCompRatio = GetParam(kPreCompRatio)->Value();
@@ -40,6 +31,50 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.preNam2MidFreq = GetParam(kPreNam2MidFreq)->Value();
   s.preNam2Treble = GetParam(kPreNam2Treble)->Value();
   s.preNam2Level = GetParam(kPreNam2Level)->Value();
+}
+
+void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
+{
+  s.postValid = true;
+  s.postDelayActive = GetParam(kDelayActive)->Bool();
+  s.postDelayTime = GetParam(kDelayTime)->Value();
+  s.postDelayFeedback = GetParam(kDelayFeedback)->Value();
+  s.postDelayMix = GetParam(kDelayMix)->Value();
+  s.postDelayMode = GetParam(kDelayMode)->Int();
+  s.postDelayTone = GetParam(kDelayTone)->Value();
+  s.postDelayAge = GetParam(kDelayAge)->Value();
+  s.postDelayPingPong = GetParam(kDelayPingPong)->Bool();
+  s.postReverbActive = GetParam(kReverbActive)->Bool();
+  s.postReverbMix = GetParam(kReverbMix)->Value();
+  s.postReverbDecay = GetParam(kReverbDecay)->Value();
+  s.postReverbTone = GetParam(kReverbTone)->Value();
+  s.postReverbPreDelay = GetParam(kReverbPreDelay)->Value();
+  s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
+  s.postReverbMode = GetParam(kReverbMode)->Int();
+  s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
+  for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
+    s.postDelayModes[mode] = mVolumEffectSettings.delayModes[mode];
+  for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
+    s.postReverbModes[mode] = mVolumEffectSettings.reverbModes[mode];
+  for (int subMode = 0; subMode < 3; ++subMode)
+    s.postOktaverbSubModes[subMode] = mVolumEffectSettings.oktaverbSubModes[subMode];
+}
+
+void NeuralAmpModeler::_VolumSaveCurrentToSettings()
+{
+  auto& s = mVolumAmpSettings[mVolumAmpIdx];
+  s.speakerIdx = mVolumSpeakerIdx;
+  s.channelIdx = mVolumChannelIdx;
+  s.inputLevel = GetParam(kInputLevel)->Value();
+  s.gateThreshold = GetParam(kNoiseGateThreshold)->Value();
+  s.toneBass = GetParam(kToneBass)->Value();
+  s.toneMid = GetParam(kToneMid)->Value();
+  s.toneTreble = GetParam(kToneTreble)->Value();
+  s.outputLevel = GetParam(kOutputLevel)->Value();
+  s.noiseGateActive = GetParam(kNoiseGateActive)->Bool();
+  s.eqActive = GetParam(kEQActive)->Bool();
+  if (!mVolumPreLocked)
+    _VolumSavePreToSlot(s);
   s.dualAmpActive = GetParam(kDualAmpActive)->Bool();
   s.dualAmpRoute = GetParam(kDualAmpRoute)->Int();
   s.mainAmpPan = GetParam(kMainAmpPan)->Value();
@@ -64,31 +99,116 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
 
-  // POST per-amp persistence: mirror the live POST EParam values into the current
-  // amp's slot so switching amps preserves both visible values and hidden mode snapshots.
-  s.postValid = true;
-  s.postDelayActive = GetParam(kDelayActive)->Bool();
-  s.postDelayTime = GetParam(kDelayTime)->Value();
-  s.postDelayFeedback = GetParam(kDelayFeedback)->Value();
-  s.postDelayMix = GetParam(kDelayMix)->Value();
-  s.postDelayMode = GetParam(kDelayMode)->Int();
-  s.postDelayTone = GetParam(kDelayTone)->Value();
-  s.postDelayAge = GetParam(kDelayAge)->Value();
-  s.postDelayPingPong = GetParam(kDelayPingPong)->Bool();
-  s.postReverbActive = GetParam(kReverbActive)->Bool();
-  s.postReverbMix = GetParam(kReverbMix)->Value();
-  s.postReverbDecay = GetParam(kReverbDecay)->Value();
-  s.postReverbTone = GetParam(kReverbTone)->Value();
-  s.postReverbPreDelay = GetParam(kReverbPreDelay)->Value();
-  s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
-  s.postReverbMode = GetParam(kReverbMode)->Int();
-  s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
-  for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
-    s.postDelayModes[mode] = mVolumEffectSettings.delayModes[mode];
-  for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
-    s.postReverbModes[mode] = mVolumEffectSettings.reverbModes[mode];
-  for (int subMode = 0; subMode < 3; ++subMode)
-    s.postOktaverbSubModes[subMode] = mVolumEffectSettings.oktaverbSubModes[subMode];
+  if (!mVolumPostLocked)
+    _VolumSavePostToSlot(s);
+
+  // Always mirror live PRE/POST into the dedicated live-lock snapshots when the
+  // corresponding lock is engaged. These live OUTSIDE the per-amp settings array
+  // so persisting them never mutates any amp slot. When unlocked the snapshot is
+  // stale; we ignore it because unlock falls back to the per-amp slot.
+  if (mVolumPreLocked)
+    _VolumSavePreToSlot(mVolumLiveLockedPre);
+  if (mVolumPostLocked)
+    _VolumSavePostToSlot(mVolumLiveLockedPost);
+}
+
+void NeuralAmpModeler::_VolumSetPreLocked(bool locked)
+{
+  if (mVolumPreLocked == locked)
+    return;
+  if (locked)
+  {
+    // Capture the current live PRE into the dedicated lock snapshot so the
+    // shutdown/reload path can persist exactly what the user is hearing.
+    _VolumSavePreToSlot(mVolumLiveLockedPre);
+  }
+  else
+  {
+    _VolumRestorePreFromSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  }
+  mVolumPreLocked = locked;
+  mVolumPreLockUiDirty = locked && _VolumIsPreDirty();
+  mVolumSettingsDirty = true;
+  if (auto* pGfx = GetUI())
+    _UpdateVoLumLayout(pGfx);
+}
+
+void NeuralAmpModeler::_VolumSetPostLocked(bool locked)
+{
+  if (mVolumPostLocked == locked)
+    return;
+  if (locked)
+  {
+    _VolumSavePostToSlot(mVolumLiveLockedPost);
+  }
+  else
+  {
+    _VolumRestorePostFromSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  }
+  mVolumPostLocked = locked;
+  mVolumPostLockUiDirty = locked && _VolumIsPostDirty();
+  mVolumSettingsDirty = true;
+  if (auto* pGfx = GetUI())
+    _UpdateVoLumLayout(pGfx);
+}
+
+bool NeuralAmpModeler::_VolumIsPreDirty() const
+{
+  volum::VoLumAmpSettings live;
+  const_cast<NeuralAmpModeler*>(this)->_VolumSavePreToSlot(live);
+  return !volum::PreBlockEquals(live, mVolumAmpSettings[mVolumAmpIdx]);
+}
+
+bool NeuralAmpModeler::_VolumIsPostDirty() const
+{
+  auto* self = const_cast<NeuralAmpModeler*>(this);
+  const int delayMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
+  const int reverbMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
+  self->_VolumSaveDelayModeSnapshot(delayMode);
+  self->_VolumSaveReverbModeSnapshot(reverbMode);
+  volum::VoLumAmpSettings live;
+  self->_VolumSavePostToSlot(live);
+  return !volum::PostBlockEquals(live, mVolumAmpSettings[mVolumAmpIdx]);
+}
+
+void NeuralAmpModeler::_VolumApplyLiveLockSnapshots()
+{
+  // Apply at init only: restore the live PRE/POST that the user was hearing
+  // before shutdown without touching `mVolumAmpSettings[*]`. The lock guards in
+  // `_VolumRestoreFromSettings` mean an init pass with the lock engaged leaves
+  // live PRE/POST at their struct defaults; this call patches that gap. Once
+  // applied the snapshots stay in sync via `_VolumSaveCurrentToSettings()`.
+  if (mVolumPreLocked)
+    _VolumRestorePreFromSlot(mVolumLiveLockedPre);
+  if (mVolumPostLocked)
+    _VolumRestorePostFromSlot(mVolumLiveLockedPost);
+}
+
+void NeuralAmpModeler::_VolumStorePreToCurrentAmp()
+{
+  _VolumSavePreToSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  const auto& s = mVolumAmpSettings[mVolumAmpIdx];
+  const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
+  const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);
+  mVolumPreNeedsLoad[0].store(shouldLoadPreNam1);
+  mVolumPreNeedsLoad[1].store(shouldLoadPreNam2);
+  mShouldRemovePreModel[0].store(!shouldLoadPreNam1);
+  mShouldRemovePreModel[1].store(!shouldLoadPreNam2);
+  mVolumSettingsDirty = true;
+  mVolumPreLockUiDirty = false;
+  if (auto* pGfx = GetUI())
+    _UpdateVoLumLayout(pGfx);
+}
+
+void NeuralAmpModeler::_VolumStorePostToCurrentAmp()
+{
+  _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
+  _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
+  _VolumSavePostToSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  mVolumSettingsDirty = true;
+  mVolumPostLockUiDirty = false;
+  if (auto* pGfx = GetUI())
+    _UpdateVoLumLayout(pGfx);
 }
 
 void NeuralAmpModeler::_VolumSaveEffectSettings()
@@ -278,25 +398,13 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
   setParam(kReverbShimmer, s.shimmer);
 }
 
-void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
+void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s)
 {
-  auto& s = mVolumAmpSettings[ampIdx];
-  mVolumSpeakerIdx = s.speakerIdx;
-  mVolumChannelIdx = s.channelIdx;
-
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
 
-  setParam(kInputLevel, s.inputLevel);
-  setParam(kNoiseGateThreshold, s.gateThreshold);
-  setParam(kToneBass, s.toneBass);
-  setParam(kToneMid, s.toneMid);
-  setParam(kToneTreble, s.toneTreble);
-  setParam(kOutputLevel, s.outputLevel);
-  setParam(kNoiseGateActive, s.noiseGateActive ? 1.0 : 0.0);
-  setParam(kEQActive, s.eqActive ? 1.0 : 0.0);
   setParam(kPreCompActive, s.preCompActive ? 1.0 : 0.0);
   setParam(kPreCompAmount, s.preCompAmount);
   setParam(kPreCompRatio, s.preCompRatio);
@@ -320,35 +428,17 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   setParam(kPreNam2MidFreq, s.preNam2MidFreq);
   setParam(kPreNam2Treble, s.preNam2Treble);
   setParam(kPreNam2Level, s.preNam2Level);
-  setParam(kDualAmpActive, s.dualAmpActive ? 1.0 : 0.0);
-  setParam(kDualAmpRoute, s.dualAmpRoute);
-  setParam(kMainAmpPan, s.mainAmpPan);
-  setParam(kSupportAmpIdx, s.supportAmpIdx);
-  setParam(kSupportSpeakerIdx, s.supportSpeakerIdx);
-  setParam(kSupportChannelIdx, s.supportChannelIdx);
-  setParam(kSupportInputLevel, s.supportInputLevel);
-  setParam(kSupportNoiseGateThreshold, s.supportGateThreshold);
-  setParam(kSupportToneBass, s.supportToneBass);
-  setParam(kSupportToneMid, s.supportToneMid);
-  setParam(kSupportToneTreble, s.supportToneTreble);
-  setParam(kSupportOutputLevel, s.supportOutputLevel);
-  setParam(kSupportNoiseGateActive, s.supportNoiseGateActive ? 1.0 : 0.0);
-  setParam(kSupportEQActive, s.supportEqActive ? 1.0 : 0.0);
-  setParam(kSupportAmpPan, s.supportAmpPan);
-  mSupportPolarityInvert.store(s.supportPolarityInvert);
-  _VolumRefreshSupportChannels();
+
   const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
   const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);
   mVolumPreNeedsLoad[0].store(shouldLoadPreNam1);
   mVolumPreNeedsLoad[1].store(shouldLoadPreNam2);
   mShouldRemovePreModel[0].store(!shouldLoadPreNam1);
   mShouldRemovePreModel[1].store(!shouldLoadPreNam2);
-  mVolumSupportNeedsLoad.store(true);
+}
 
-  // POST per-amp restore. postValid==false means this slot is new / legacy and has no
-  // saved POST scene yet. Initialize it to the meaningful factory POST defaults instead
-  // of inheriting whatever amp was previously selected; after this point every amp has
-  // an explicit POST scene.
+void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
+{
   if (!s.postValid)
   {
     const volum::VoLumAmpSettings defaults;
@@ -391,6 +481,11 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
     ~PostRestoreGuard() { flag = prev; }
   } postGuard(mVolumPostRestoreInProgress);
 
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+
   setParam(kDelayActive, s.postDelayActive ? 1.0 : 0.0);
   setParam(kDelayTime, s.postDelayTime);
   setParam(kDelayFeedback, s.postDelayFeedback);
@@ -417,6 +512,50 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   _VolumSaveReverbModeSnapshot(restoredReverbMode);
   _VolumRestoreDelayModeSnapshot(restoredDelayMode);
   _VolumRestoreReverbModeSnapshot(restoredReverbMode);
+}
+
+void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
+{
+  auto& s = mVolumAmpSettings[ampIdx];
+  mVolumSpeakerIdx = s.speakerIdx;
+  mVolumChannelIdx = s.channelIdx;
+
+  auto setParam = [this](int idx, double val) {
+    GetParam(idx)->Set(val);
+    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+  };
+
+  setParam(kInputLevel, s.inputLevel);
+  setParam(kNoiseGateThreshold, s.gateThreshold);
+  setParam(kToneBass, s.toneBass);
+  setParam(kToneMid, s.toneMid);
+  setParam(kToneTreble, s.toneTreble);
+  setParam(kOutputLevel, s.outputLevel);
+  setParam(kNoiseGateActive, s.noiseGateActive ? 1.0 : 0.0);
+  setParam(kEQActive, s.eqActive ? 1.0 : 0.0);
+  if (!mVolumPreLocked)
+    _VolumRestorePreFromSlot(s);
+  setParam(kDualAmpActive, s.dualAmpActive ? 1.0 : 0.0);
+  setParam(kDualAmpRoute, s.dualAmpRoute);
+  setParam(kMainAmpPan, s.mainAmpPan);
+  setParam(kSupportAmpIdx, s.supportAmpIdx);
+  setParam(kSupportSpeakerIdx, s.supportSpeakerIdx);
+  setParam(kSupportChannelIdx, s.supportChannelIdx);
+  setParam(kSupportInputLevel, s.supportInputLevel);
+  setParam(kSupportNoiseGateThreshold, s.supportGateThreshold);
+  setParam(kSupportToneBass, s.supportToneBass);
+  setParam(kSupportToneMid, s.supportToneMid);
+  setParam(kSupportToneTreble, s.supportToneTreble);
+  setParam(kSupportOutputLevel, s.supportOutputLevel);
+  setParam(kSupportNoiseGateActive, s.supportNoiseGateActive ? 1.0 : 0.0);
+  setParam(kSupportEQActive, s.supportEqActive ? 1.0 : 0.0);
+  setParam(kSupportAmpPan, s.supportAmpPan);
+  mSupportPolarityInvert.store(s.supportPolarityInvert);
+  _VolumRefreshSupportChannels();
+  mVolumSupportNeedsLoad.store(true);
+
+  if (!mVolumPostLocked)
+    _VolumRestorePostFromSlot(s);
 
   // Update speaker row UI if available
   if (auto* pGfx = GetUI())
@@ -433,8 +572,10 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // Keep the shared legacy file readable by already-installed older VoLum builds. New dual-amp
   // fields live in a sidecar that older builds do not know about, avoiding crashes when users
   // run a newer standalone and then open an older VST3 in a DAW.
-  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx,
-                                                    &mVolumEffectSettings, /*includeDualAmp=*/false);
+  nlohmann::json j = volum::VolumUserSettingsToJson(
+    mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
+    /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked,
+    mVolumPreLocked ? &mVolumLiveLockedPre : nullptr, mVolumPostLocked ? &mVolumLiveLockedPost : nullptr);
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   namespace fs = std::filesystem;
@@ -492,8 +633,17 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     in >> j;
 
     bool settingsHealed = false;
-    volum::VolumUserSettingsFromJson(
-      j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx, &mVolumEffectSettings, &settingsHealed);
+    bool haveLivePreSnapshot = false;
+    bool haveLivePostSnapshot = false;
+    volum::VoLumAmpSettings parsedLivePre;
+    volum::VoLumAmpSettings parsedLivePost;
+    volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
+                                     &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
+                                     &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot);
+    if (haveLivePreSnapshot)
+      mVolumLiveLockedPre = parsedLivePre;
+    if (haveLivePostSnapshot)
+      mVolumLiveLockedPost = parsedLivePost;
     if (volum::HasDualAmpUserSettings(j))
       settingsHealed = true; // Rewrite shared settings without new-only dual-amp fields.
 

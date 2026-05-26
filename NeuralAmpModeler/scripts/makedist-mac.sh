@@ -525,7 +525,12 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
     COPYFILE_DISABLE=1 cp -R "$VST3" "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
     xattr -cr "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
     find "build-mac/vst3-zip/$PLUGIN_NAME.vst3" \( -name '._*' -o -name '.DS_Store' \) -delete
-    codesign --verify --deep --strict --verbose=2 "build-mac/vst3-zip/$PLUGIN_NAME.vst3"
+    # Fail loudly if the staged portable VST3 won't verify - producing a zipped
+    # bundle that gatekeeper later rejects is worse than failing the build.
+    codesign --verify --deep --strict --verbose=2 "build-mac/vst3-zip/$PLUGIN_NAME.vst3" || {
+      echo "ERROR: staged portable VST3 failed codesign --verify; aborting packaging" >&2
+      exit 1
+    }
 
     # Portable VST3 packaging keeps rigs as a sibling folder so the plugin can
     # resolve them from the extracted archive or the user's VST3 directory.

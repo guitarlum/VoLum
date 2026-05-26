@@ -28,7 +28,7 @@
 #include <unordered_map>
 #include <vector>
 
-#if VOLUM_AMPETE_PRODUCT
+// VoLum: catalog, settings, tuner/metronome (upstream-equivalent file fence)
 #include "VoLumAmpeteCatalog.h"
 #include "VoLumPrePedalCaptures.h"
 #include "VoLumSettingsFileIO.h"
@@ -36,7 +36,8 @@
 #include "VoLumUserSettingsIO.h"
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
-#endif
+#include "VoLumProcessingPlan.h"
+#include "VoLumDspStagingWdl.h"
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -119,7 +120,7 @@ enum EParams
   kInputCalibrationLevel,
   kOutputMode,
   kVoLumAmpeteRig,
-#if VOLUM_AMPETE_PRODUCT
+  // VoLum: dual-amp and support-lane parameters
   kDualAmpActive,
   kDualAmpRoute,
   kMainAmpPan,
@@ -135,7 +136,6 @@ enum EParams
   kSupportNoiseGateActive,
   kSupportEQActive,
   kSupportAmpPan,
-#endif
   kNumParams
 };
 
@@ -152,7 +152,6 @@ enum ECtrlTags
   kCtrlTagOutputMode,
   kCtrlTagCalibrateInput,
   kCtrlTagInputCalibrationLevel,
-#if VOLUM_AMPETE_PRODUCT
   kCtrlTagVoLumAmpList,
   kCtrlTagVoLumSpeakerRow,
   kCtrlTagVoLumHeroImage,
@@ -181,7 +180,6 @@ enum ECtrlTags
   kCtrlTagVoLumTuner,
   kCtrlTagVoLumMetronome,
   kCtrlTagVoLumMetronomeButton,
-#endif
   kNumCtrlTags
 };
 
@@ -350,7 +348,6 @@ private:
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
-#if VOLUM_AMPETE_PRODUCT
 public:
   void _VolumRefreshChannels();
   void _VolumRefreshSupportChannels();
@@ -359,6 +356,23 @@ public:
   void _VolumHideSupportAmpMenu();
   void _VolumSetSupportAmp(int ampIdx);
   void _VolumSaveCurrentToSettings();
+  void _VolumSavePreToSlot(volum::VoLumAmpSettings& s);
+  void _VolumSavePostToSlot(volum::VoLumAmpSettings& s);
+  void _VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s);
+  void _VolumRestorePostFromSlot(volum::VoLumAmpSettings& s);
+  void _VolumSetPreLocked(bool locked);
+  void _VolumSetPostLocked(bool locked);
+  bool _VolumIsPreLocked() const { return mVolumPreLocked; }
+  bool _VolumIsPostLocked() const { return mVolumPostLocked; }
+  bool _VolumIsPreDirty() const;
+  bool _VolumIsPostDirty() const;
+  void _VolumStorePreToCurrentAmp();
+  void _VolumStorePostToCurrentAmp();
+  void _VolumRefreshPrePostLockChrome(int paramIdx);
+  // Applies the persisted live PRE/POST lock snapshots to the live params when
+  // the corresponding lock is engaged. Intended for one-shot use on init paths
+  // (settings load + chunk unserialize); does NOT touch per-amp slots.
+  void _VolumApplyLiveLockSnapshots();
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
@@ -401,6 +415,16 @@ public:
   void _VolumQueueSupportModelLoad(std::string fileToLoad, int ampIdx);
   void _VolumQueuePreNamLoad(int slot, std::string fileToLoad);
   void _VolumDrainLoaderResults();
+  // VoLum: ProcessBlock helpers (tail-included in VoLumProcessBlock.inc.cpp)
+  iplug::sample** _VolumProcessPreChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
+                                        const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+  iplug::sample** _VolumProcessMainAmpChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
+                                            const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+  iplug::sample* _VolumProcessDualAmpSupportLane(const volum::ProcessingPlan& processingPlan,
+                                                 const size_t numChannelsInternal, const int nFrames,
+                                                 const double sampleRate);
+  void _VolumProcessPostChain(iplug::sample** outputs, const volum::ProcessingPlan& processingPlan,
+                              const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
   void _VolumRequestSupportModelLoad();
   void _VolumCyclePreNamCapture(int slot, int direction);
@@ -499,6 +523,14 @@ private:
   std::condition_variable mVolumLoaderCv;
   std::deque<VoLumLoadRequest> mVolumLoadRequests;
   std::deque<VoLumLoadResult> mVolumLoadResults;
+
+  template<typename Pred>
+  void _VolumDropQueuedLoadRequests(Pred pred)
+  {
+    mVolumLoadRequests.erase(std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), pred),
+                              mVolumLoadRequests.end());
+  }
+
   std::atomic<bool> mVolumLoaderStop{false};
 
   // Parsed NAM configs keyed by full path. Small LRU keeps switch-back fast without retaining every rig.
@@ -512,11 +544,19 @@ private:
   // Per-amp settings: remembered across amp switches and sessions
   std::array<volum::VoLumAmpSettings, volum::kAmpCount> mVolumAmpSettings;
   volum::VoLumEffectSettings mVolumEffectSettings;
+  bool mVolumPreLocked = false;
+  bool mVolumPostLocked = false;
+  bool mVolumPreLockUiDirty = false;
+  bool mVolumPostLockUiDirty = false;
+  // Live PRE/POST snapshots while a lock is engaged. These mirror the live
+  // params but live OUTSIDE the per-amp `mVolumAmpSettings` array so amp slot
+  // contents are never silently mutated by lock-driven amp switching.
+  volum::VoLumAmpSettings mVolumLiveLockedPre;
+  volum::VoLumAmpSettings mVolumLiveLockedPost;
 
   // Tuner & Metronome DSP
   volum::TunerDSP mTunerDSP;
   volum::MetronomeDSP mMetronomeDSP;
-#endif
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
   // it wasn't successful.
@@ -631,7 +671,6 @@ private:
   recursive_linear_filter::HighPass mSupportHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
 
-#if VOLUM_AMPETE_PRODUCT
   dsp::noise_gate::Trigger mSupportNoiseGateTrigger;
   dsp::noise_gate::Gain mSupportNoiseGateGain;
   std::vector<iplug::sample> mDualMainLaneBuffer;
@@ -640,12 +679,10 @@ private:
   std::vector<iplug::sample> mDualSupportAlignedBuffer;
   volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
   volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
-#endif
 
-  // Path to model's config.json or model.nam
-  WDL_String mNAMPath;
-  // Path to IR (.wav file)
-  WDL_String mIRPath;
+  // VoLum: live/staged path pairs commit with staged models/IR in _ApplyDSPStaging (see VoLumDspStagingWdl.h).
+  volum::dsp_staging::WdlStagedPathPair mNAMPaths;
+  volum::dsp_staging::WdlStagedPathPair mIRPaths;
 
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 

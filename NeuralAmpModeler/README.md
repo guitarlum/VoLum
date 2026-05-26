@@ -133,7 +133,7 @@ Each amp x 4 speaker modes x channels = ~240 `.nam` files total.
 
 | File | Role |
 | --- | --- |
-| `config.h` | `VOLUM_AMPETE_PRODUCT`, window size, version |
+| `config.h` | Window size, version, plugin identity |
 | `installer/VoLum.iss` | Windows installer: standalone + VST3 + `VoLumRigs`; sets `VoLumRigsRoot` in HKLM |
 | `VoLumAmpeteCatalog.h` | Amp metadata, default amp settings, POST snapshots |
 | `VoLumPrePedalCaptures.h` | PRE NAM capture metadata, grouping, discovery |
@@ -149,9 +149,9 @@ Each amp x 4 speaker modes x channels = ~240 `.nam` files total.
 | `Unserialization.cpp` | Version-aware state deserialization |
 
 
-## NAM compatibility build
+## Upstream sync
 
-Set `VOLUM_AMPETE_PRODUCT 0` in `config.h` only when you need to compare against the stock NAM plugin shell during upstream sync work. Normal VoLum development keeps `VOLUM_AMPETE_PRODUCT 1`.
+VoLum-only code in upstream-equivalent files (`NeuralAmpModeler.cpp`, `.h`, `NeuralAmpModelerControls.h`, `Unserialization.cpp`, `config.h`) is marked with `// VoLum:` comments or lives in `VoLum*.h` / `VoLum*.inc.cpp` tail-includes. See `.cursor/skills/upstream-sync/SKILL.md`.
 
 ## Credits
 

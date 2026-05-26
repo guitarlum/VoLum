@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 # Smoke-test the macOS installer DMG by installing the product PKG and verifying installed payloads.
+#
+# DESTRUCTIVE: this script deletes any existing /Applications/VoLum.app,
+# system VST3 bundle, and shared VoLumRigs folder before installing. It is
+# intended to run on CI runners or scratch VMs; running it on a dev machine
+# with a real VoLum install will wipe that install.
+#
+# To opt in on a dev machine, export VOLUM_SMOKE_ALLOW_DESTRUCTIVE=1. Without
+# that variable the script aborts on non-CI hosts.
 set -euo pipefail
+
+if [[ -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" && "${VOLUM_SMOKE_ALLOW_DESTRUCTIVE:-0}" != "1" ]]; then
+  echo "ERROR: smoke-installer-mac.sh is destructive and refuses to run outside CI." >&2
+  echo "       Set VOLUM_SMOKE_ALLOW_DESTRUCTIVE=1 to opt in (your existing VoLum install will be wiped)." >&2
+  exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
