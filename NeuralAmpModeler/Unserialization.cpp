@@ -70,16 +70,16 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   OnParamReset(iplug::EParamSource::kPresetRecall);
   LEAVE_PARAMS_MUTEX
 
-  mNAMPath.Set(config.value("NAMPath", "").c_str());
-  mIRPath.Set(config.value("IRPath", "").c_str());
+  mNAMPaths.live.Set(config.value("NAMPath", "").c_str());
+  mIRPaths.live.Set(config.value("IRPath", "").c_str());
 
-  if (mNAMPath.GetLength())
+  if (mNAMPaths.live.GetLength())
   {
-    _StageModel(mNAMPath);
+    _StageModel(mNAMPaths.live);
   }
-  if (mIRPath.GetLength())
+  if (mIRPaths.live.GetLength())
   {
-    _StageIR(mIRPath);
+    _StageIR(mIRPaths.live);
   }
 }
 

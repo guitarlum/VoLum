@@ -33,6 +33,8 @@ std::string ReadPluginSource()
   std::string blob;
   blob += ReadText(root / "NeuralAmpModeler.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumProcessBlock.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumLoader.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumSettings.inc.cpp");
@@ -470,13 +472,32 @@ TEST_CASE("Legacy chunks without lock tail default to unlocked on deserialize")
   RequireContains(source, "mVolumPostLocked = false;");
 }
 
+TEST_CASE("VoLum loader queue coalesces duplicate support and PRE requests")
+{
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+
+  RequireContains(loader, "_VolumDropQueuedLoadRequests");
+  RequireContains(loader, "return queued.kind == VoLumLoadKind::Support;");
+  RequireContains(loader, "return queued.kind == VoLumLoadKind::Pre && queued.slot == slot;");
+}
+
 TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
 {
   // The loader thread + queue helpers moved to VoLumLoader.inc.cpp on the 1.0
   // hygiene split. ReadPluginSource() aggregates the whole TU.
   const std::string source = ReadPluginSource();
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
 
+  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mIRPaths, irPath);");
+  RequireContains(source, "volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);");
+  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);");
+  RequireContains(source, "_VolumProcessMainAmpChain");
+  RequireContains(source, "_VolumProcessDualAmpSupportLane");
+  RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
+  RequireContains(loader, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());");
+  RequireContains(header, "volum::dsp_staging::WdlStagedPathPair mNAMPaths;");
+  RequireContains(header, "void _VolumDropQueuedLoadRequests(Pred pred)");
   RequireDoesNotContain(source, ".detach()");
   RequireContains(header, "std::thread mVolumLoaderThread;");
   RequireContains(source, "_VolumStopLoader();");
