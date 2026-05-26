@@ -369,6 +369,10 @@ public:
   void _VolumStorePreToCurrentAmp();
   void _VolumStorePostToCurrentAmp();
   void _VolumRefreshPrePostLockChrome(int paramIdx);
+  // Applies the persisted live PRE/POST lock snapshots to the live params when
+  // the corresponding lock is engaged. Intended for one-shot use on init paths
+  // (settings load + chunk unserialize); does NOT touch per-amp slots.
+  void _VolumApplyLiveLockSnapshots();
   void _VolumRestoreFromSettings(int ampIdx);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
@@ -544,6 +548,11 @@ private:
   bool mVolumPostLocked = false;
   bool mVolumPreLockUiDirty = false;
   bool mVolumPostLockUiDirty = false;
+  // Live PRE/POST snapshots while a lock is engaged. These mirror the live
+  // params but live OUTSIDE the per-amp `mVolumAmpSettings` array so amp slot
+  // contents are never silently mutated by lock-driven amp switching.
+  volum::VoLumAmpSettings mVolumLiveLockedPre;
+  volum::VoLumAmpSettings mVolumLiveLockedPost;
 
   // Tuner & Metronome DSP
   volum::TunerDSP mTunerDSP;

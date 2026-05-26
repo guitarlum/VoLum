@@ -101,14 +101,31 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 
   if (!mVolumPostLocked)
     _VolumSavePostToSlot(s);
+
+  // Always mirror live PRE/POST into the dedicated live-lock snapshots when the
+  // corresponding lock is engaged. These live OUTSIDE the per-amp settings array
+  // so persisting them never mutates any amp slot. When unlocked the snapshot is
+  // stale; we ignore it because unlock falls back to the per-amp slot.
+  if (mVolumPreLocked)
+    _VolumSavePreToSlot(mVolumLiveLockedPre);
+  if (mVolumPostLocked)
+    _VolumSavePostToSlot(mVolumLiveLockedPost);
 }
 
 void NeuralAmpModeler::_VolumSetPreLocked(bool locked)
 {
   if (mVolumPreLocked == locked)
     return;
-  if (!locked)
+  if (locked)
+  {
+    // Capture the current live PRE into the dedicated lock snapshot so the
+    // shutdown/reload path can persist exactly what the user is hearing.
+    _VolumSavePreToSlot(mVolumLiveLockedPre);
+  }
+  else
+  {
     _VolumRestorePreFromSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  }
   mVolumPreLocked = locked;
   mVolumPreLockUiDirty = locked && _VolumIsPreDirty();
   mVolumSettingsDirty = true;
@@ -120,8 +137,14 @@ void NeuralAmpModeler::_VolumSetPostLocked(bool locked)
 {
   if (mVolumPostLocked == locked)
     return;
-  if (!locked)
+  if (locked)
+  {
+    _VolumSavePostToSlot(mVolumLiveLockedPost);
+  }
+  else
+  {
     _VolumRestorePostFromSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  }
   mVolumPostLocked = locked;
   mVolumPostLockUiDirty = locked && _VolumIsPostDirty();
   mVolumSettingsDirty = true;
@@ -146,6 +169,19 @@ bool NeuralAmpModeler::_VolumIsPostDirty() const
   volum::VoLumAmpSettings live;
   self->_VolumSavePostToSlot(live);
   return !volum::PostBlockEquals(live, mVolumAmpSettings[mVolumAmpIdx]);
+}
+
+void NeuralAmpModeler::_VolumApplyLiveLockSnapshots()
+{
+  // Apply at init only: restore the live PRE/POST that the user was hearing
+  // before shutdown without touching `mVolumAmpSettings[*]`. The lock guards in
+  // `_VolumRestoreFromSettings` mean an init pass with the lock engaged leaves
+  // live PRE/POST at their struct defaults; this call patches that gap. Once
+  // applied the snapshots stay in sync via `_VolumSaveCurrentToSettings()`.
+  if (mVolumPreLocked)
+    _VolumRestorePreFromSlot(mVolumLiveLockedPre);
+  if (mVolumPostLocked)
+    _VolumRestorePostFromSlot(mVolumLiveLockedPost);
 }
 
 void NeuralAmpModeler::_VolumStorePreToCurrentAmp()
@@ -536,9 +572,10 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // Keep the shared legacy file readable by already-installed older VoLum builds. New dual-amp
   // fields live in a sidecar that older builds do not know about, avoiding crashes when users
   // run a newer standalone and then open an older VST3 in a DAW.
-  nlohmann::json j = volum::VolumUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx,
-                                                    &mVolumEffectSettings, /*includeDualAmp=*/false, mVolumPreLocked,
-                                                    mVolumPostLocked);
+  nlohmann::json j = volum::VolumUserSettingsToJson(
+    mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
+    /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked,
+    mVolumPreLocked ? &mVolumLiveLockedPre : nullptr, mVolumPostLocked ? &mVolumLiveLockedPost : nullptr);
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   namespace fs = std::filesystem;
@@ -596,8 +633,17 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     in >> j;
 
     bool settingsHealed = false;
+    bool haveLivePreSnapshot = false;
+    bool haveLivePostSnapshot = false;
+    volum::VoLumAmpSettings parsedLivePre;
+    volum::VoLumAmpSettings parsedLivePost;
     volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
-                                     &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked);
+                                     &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
+                                     &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot);
+    if (haveLivePreSnapshot)
+      mVolumLiveLockedPre = parsedLivePre;
+    if (haveLivePostSnapshot)
+      mVolumLiveLockedPost = parsedLivePost;
     if (volum::HasDualAmpUserSettings(j))
       settingsHealed = true; // Rewrite shared settings without new-only dual-amp fields.
 
