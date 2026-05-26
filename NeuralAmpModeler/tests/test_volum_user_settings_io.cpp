@@ -815,3 +815,29 @@ TEST_CASE("VolumUserSettings legacy JSON without per-amp POST keeps factory POST
     CHECK(loaded[i].postReverbMix == doctest::Approx(0.20));
   }
 }
+
+// Owner-of-settings test: this file owns the canonical user-settings I/O
+// contract, so it must also cover PRE/POST lock flag round-trips even though
+// the lock-feature-specific tests live in test_volum_pre_post_lock.cpp. This
+// guards against either file silently dropping its lock coverage.
+TEST_CASE("User settings IO round-trips PRE/POST lock flags")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].toneBass = 5.5;
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/0,
+                                                          /*fx=*/nullptr, /*includeDualAmp=*/true,
+                                                          /*preLocked=*/true, /*postLocked=*/false);
+  REQUIRE(j["preLocked"] == true);
+  REQUIRE(j["postLocked"] == false);
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool preLocked = false;
+  bool postLocked = true;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed, &preLocked, &postLocked);
+  REQUIRE_FALSE(healed);
+  REQUIRE(preLocked);
+  REQUIRE_FALSE(postLocked);
+  REQUIRE(loaded[0].toneBass == doctest::Approx(5.5));
+}
