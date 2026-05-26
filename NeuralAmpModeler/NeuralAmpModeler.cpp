@@ -322,6 +322,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       mVolumRigsRoot = root.string();
     _VolumLoadSettingsFromFile();
     _VolumRestoreFromSettings(mVolumAmpIdx);
+    _VolumApplyLiveLockSnapshots();
     _VolumRefreshPrePedalCaptures();
     _VolumRefreshChannels();
     _VolumRefreshSupportChannels();
@@ -1508,6 +1509,10 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   volum::PutCurrentVoLumChunkState(
     chunk, {mVolumAmpIdx, mVolumSpeakerIdx, mVolumChannelIdx}, mVolumAmpSettings.data(), volum::kAmpCount);
   volum::PutPrePostLockFlags(chunk, mVolumPreLocked, mVolumPostLocked);
+  // Live PRE/POST lock snapshots: present iff the corresponding lock is on.
+  // The detector in Unserialization.cpp uses the lock flags to compute the
+  // expected tail size, so older chunks (no snapshots) remain readable.
+  volum::PutPrePostLockSnapshots(chunk, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre, mVolumLiveLockedPost);
 
   return ok;
 }
