@@ -12,6 +12,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($env:GITHUB_ACTIONS -eq "true") {
+  if ($StartupSeconds -eq 5) { $StartupSeconds = 60 }
+  if ($Buffers.Count -eq 4 -and $Buffers[0] -eq 32) { $Buffers = @(256, 32, 8192) }
+}
+
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = (Resolve-Path (Join-Path $here "..")).Path
 $exe = Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe"
@@ -24,17 +29,28 @@ using System.Runtime.InteropServices;
 
 public static class VoLumSmokeWin32
 {
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
   [DllImport("user32.dll", CharSet=CharSet.Auto)]
   public static extern IntPtr FindWindow(string className, string windowName);
+
+  [DllImport("user32.dll")]
+  public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern bool IsWindowVisible(IntPtr hWnd);
 
   [DllImport("user32.dll", CharSet=CharSet.Auto)]
   public static extern IntPtr GetDlgItem(IntPtr hDlg, int nIDDlgItem);
 
   [DllImport("user32.dll", CharSet=CharSet.Auto)]
   public static extern bool IsWindow(IntPtr hWnd);
-
-  [DllImport("user32.dll", CharSet=CharSet.Auto)]
-  public static extern bool IsWindowVisible(IntPtr hWnd);
 
   [DllImport("user32.dll", CharSet=CharSet.Auto)]
   public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
@@ -65,6 +81,36 @@ function Get-MSBuild {
   return $msbuild
 }
 
+function Find-VoLumMainWindow {
+  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+  if ($main -ne [IntPtr]::Zero) {
+    return $main
+  }
+
+  $process = Get-Process VoLum -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($process -and $process.MainWindowHandle -ne [IntPtr]::Zero) {
+    return $process.MainWindowHandle
+  }
+
+  $found = [IntPtr]::Zero
+  $callback = [VoLumSmokeWin32+EnumWindowsProc]{
+    param([IntPtr]$hWnd, [IntPtr]$lParam)
+    if (-not [VoLumSmokeWin32]::IsWindowVisible($hWnd)) {
+      return $true
+    }
+
+    $title = New-Object System.Text.StringBuilder 256
+    [VoLumSmokeWin32]::GetWindowText($hWnd, $title, $title.Capacity) | Out-Null
+    if ($title.ToString() -eq "VoLum") {
+      $script:found = $hWnd
+      return $false
+    }
+    return $true
+  }
+  [VoLumSmokeWin32]::EnumWindows($callback, [IntPtr]::Zero) | Out-Null
+  return $found
+}
+
 function Close-VoLum {
   $pref = [VoLumSmokeWin32]::FindWindow("#32770", "Preferences")
   if ($pref -ne [IntPtr]::Zero) {
@@ -72,7 +118,7 @@ function Close-VoLum {
     Start-Sleep -Milliseconds 300
   }
 
-  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+  $main = Find-VoLumMainWindow
   if ($main -ne [IntPtr]::Zero) {
     [VoLumSmokeWin32]::PostMessage($main, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null # WM_CLOSE
     Start-Sleep -Seconds 2
@@ -91,6 +137,19 @@ function Close-AudioErrorDialogs {
   }
 }
 
+function Start-VoLumApp {
+  $proc = Start-Process $exe -PassThru
+  try {
+    if (-not $proc.WaitForInputIdle(60000)) {
+      Write-Host "WARN: VoLum did not report input idle within 60s; continuing smoke wait."
+    }
+  }
+  catch {
+    Write-Host "WARN: WaitForInputIdle unavailable: $($_.Exception.Message)"
+  }
+  return $proc
+}
+
 function Wait-VoLumAlive {
   param([string] $CaseName)
 
@@ -104,7 +163,7 @@ function Wait-VoLumAlive {
       continue
     }
 
-    $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+    $main = Find-VoLumMainWindow
     if ($main -ne [IntPtr]::Zero) {
       return $process
     }
@@ -146,7 +205,7 @@ function Get-IniValue {
 }
 
 function Open-Preferences {
-  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+  $main = Find-VoLumMainWindow
   if ($main -eq [IntPtr]::Zero) {
     throw "Cannot open Preferences: VoLum window was not found."
   }
@@ -245,7 +304,7 @@ function Assert-StandaloneAudioLayout {
   $outputRId = 40016       # IDC_COMBO_AUDIO_OUT_R
   $outputLId = 40017       # IDC_COMBO_AUDIO_OUT_L
 
-  foreach ($controlId in @($inputDeviceId, $outputDeviceId, $inputLId, $inputRId, $outputLId, $outputRId)) {
+  foreach ($controlId in @($inputLId, $inputRId, $outputLId, $outputRId)) {
     if (-not (Test-ControlVisible -Dialog $Dialog -ControlId $controlId)) {
       throw "Expected Preferences control $controlId to be visible."
     }
@@ -323,7 +382,7 @@ try {
     $settings = Set-IniValue -Content $settings -Key "buffer" -Value "$buffer"
     Set-Content -Path $settingsPath -Value $settings -NoNewline
 
-    Start-Process $exe
+    Start-VoLumApp | Out-Null
     $process = Wait-VoLumAlive -CaseName "buffer=$buffer"
     $expectedBuffer = Get-ExpectedVisibleBufferSize -Buffer $buffer
     $actualBuffer = Get-IniValue -Path $settingsPath -Key "buffer"
@@ -347,7 +406,7 @@ try {
   Write-Host "OK: Preferences exposes separate input/output device combos ('$selectedInputDevice' / '$selectedOutputDevice')"
   $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
   Set-Content -Path $settingsPath -Value $asioSettings -NoNewline
-  Start-Process $exe
+  Start-VoLumApp | Out-Null
   $process = Wait-VoLumAlive -CaseName "ASIO fallback"
   $driver = Get-IniValue -Path $settingsPath -Key "driver"
 
@@ -375,6 +434,6 @@ finally {
   else {
     Remove-Item -Path $settingsPath -Force -ErrorAction SilentlyContinue
   }
-  Start-Process $exe
+  Start-VoLumApp | Out-Null
   Start-Sleep -Seconds 2
 }

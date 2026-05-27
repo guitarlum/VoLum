@@ -19,11 +19,16 @@ $sentinelAmp = "Ampete One"
 
 if (-not $FromTag) {
   $FromTag = gh release list --repo guitarlum/VoLum --limit 20 --json tagName,isDraft `
-    --jq '.[] | select(.isDraft == false) | .tagName' | Select-Object -First 1
+    --jq '.[] | select(.isDraft == false) | .tagName' 2>$null | Select-Object -First 1
 }
 
 if (-not $FromTag) {
-  Write-Host "SKIP: no published prior release found for Windows upgrade smoke."
+  $FromTag = "v1.0.0"
+}
+
+gh release view $FromTag --repo guitarlum/VoLum *> $null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "SKIP: prior release tag not found: $FromTag"
   exit 0
 }
 

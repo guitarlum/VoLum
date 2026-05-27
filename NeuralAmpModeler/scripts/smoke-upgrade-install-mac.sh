@@ -16,11 +16,15 @@ SENTINEL_AMP="Ampete One"
 
 if [[ -z "$FROM_TAG" ]]; then
   FROM_TAG="$(gh release list --repo guitarlum/VoLum --limit 20 --json tagName,isDraft \
-    --jq '.[] | select(.isDraft == false) | .tagName' | head -n 1 || true)"
+    --jq '.[] | select(.isDraft == false) | .tagName' 2>/dev/null | head -n 1 || true)"
 fi
 
 if [[ -z "$FROM_TAG" ]]; then
-  echo "SKIP: no published prior release found for macOS upgrade smoke."
+  FROM_TAG="v1.0.0"
+fi
+
+if ! gh release view "$FROM_TAG" --repo guitarlum/VoLum >/dev/null 2>&1; then
+  echo "SKIP: prior release tag not found: $FROM_TAG"
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     echo "VOLUM_UPGRADE_SMOKE_SKIPPED=1" >> "$GITHUB_ENV"
   fi
