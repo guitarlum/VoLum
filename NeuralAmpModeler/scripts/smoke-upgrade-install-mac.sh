@@ -54,7 +54,12 @@ gh release download "$FROM_TAG" --repo guitarlum/VoLum \
 
 PRIOR_DMG="$(find "$WORK_DIR/prior-download" -name '*macos-installer.dmg' -print -quit)"
 if [[ -z "$PRIOR_DMG" ]]; then
-  echo "SKIP: prior release $FROM_TAG has no macos-installer.dmg asset."
+  message="Prior release $FROM_TAG has no macos-installer.dmg asset."
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "ERROR: $message" >&2
+    exit 1
+  fi
+  echo "SKIP: $message"
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     echo "VOLUM_UPGRADE_SMOKE_SKIPPED=1" >> "$GITHUB_ENV"
   fi
@@ -124,6 +129,11 @@ for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
 done
 if [[ -z "$APP_PATH" ]]; then
   echo "ERROR: prior release install did not place VoLum.app" >&2
+  echo "/Applications:" >&2
+  ls -la /Applications >&2 || true
+  echo "$HOME/Applications:" >&2
+  ls -la "$HOME/Applications" >&2 || true
+  pkgutil --pkgs | grep -i lum >&2 || true
   exit 1
 fi
 
