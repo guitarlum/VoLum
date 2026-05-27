@@ -274,9 +274,9 @@ fi
 echo "setting icons"
 echo ""
 
-if [ -d $AU ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $AU
-fi
+# VST3 and AU portable zips are verified with codesign --strict after extraction;
+# SetFileIcon leaves an Icon file at the bundle root that breaks that check.
+# App DMG / installer bundles keep custom icons.
 
 if [ -d $VST2 ]; then
   ./$SCRIPTS/SetFileIcon -image resources/$ICON_NAME.icns -file $VST2
@@ -298,6 +298,7 @@ fi
 
 if [ -d $AU ]; then
   strip -x $AU/Contents/MacOS/$PLUGIN_NAME
+  find "$AU" -maxdepth 1 -type f -name 'Icon?' -delete
 fi
 
 if [ -d $VST2 ]; then
@@ -565,8 +566,11 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
       mkdir -p build-mac/au-zip
       COPYFILE_DISABLE=1 cp -R "$AU" "build-mac/au-zip/$PLUGIN_NAME.component"
       xattr -cr "build-mac/au-zip/$PLUGIN_NAME.component"
-      find "build-mac/au-zip/$PLUGIN_NAME.component" \( -name '._*' -o -name '.DS_Store' \) -delete
-      codesign --verify --deep --strict --verbose=2 "build-mac/au-zip/$PLUGIN_NAME.component"
+      find "build-mac/au-zip/$PLUGIN_NAME.component" \( -name 'Icon?' -o -name '._*' -o -name '.DS_Store' \) -delete
+      codesign --verify --deep --strict --verbose=2 "build-mac/au-zip/$PLUGIN_NAME.component" || {
+        echo "ERROR: staged portable AU failed codesign --verify; aborting packaging" >&2
+        exit 1
+      }
 
       if [ -d "$RIGS_SRC" ]; then
         echo "bundling VoLumRigs for AU..."
