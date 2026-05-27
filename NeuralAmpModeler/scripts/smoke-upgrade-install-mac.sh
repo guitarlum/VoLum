@@ -117,16 +117,21 @@ XML
 
 mkdir -p "$WORK_DIR/prior-dmg" "$WORK_DIR/new-dmg"
 hdiutil attach "$PRIOR_DMG" -nobrowse -readonly -mountpoint "$WORK_DIR/prior-dmg"
-sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$CHOICES_XML"
+echo "Installing prior release $FROM_TAG (default PKG choices; older PKGs may not expose AU choices)."
+sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target /
 hdiutil detach "$WORK_DIR/prior-dmg"
 
-APP_PATH=""
-for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
-  if [[ -d "$candidate" ]]; then
-    APP_PATH="$candidate"
-    break
-  fi
-done
+find_volum_app() {
+  for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
+    if [[ -d "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+APP_PATH="$(find_volum_app || true)"
 if [[ -z "$APP_PATH" ]]; then
   echo "ERROR: prior release install did not place VoLum.app" >&2
   echo "/Applications:" >&2
@@ -154,13 +159,7 @@ hdiutil attach "$NEW_INSTALLER_DMG" -nobrowse -readonly -mountpoint "$WORK_DIR/n
 sudo installer -pkg "$WORK_DIR/new-dmg/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$CHOICES_XML"
 hdiutil detach "$WORK_DIR/new-dmg"
 
-APP_PATH=""
-for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
-  if [[ -d "$candidate" ]]; then
-    APP_PATH="$candidate"
-    break
-  fi
-done
+APP_PATH="$(find_volum_app || true)"
 if [[ -z "$APP_PATH" ]]; then
   echo "ERROR: upgrade install did not place VoLum.app" >&2
   exit 1
