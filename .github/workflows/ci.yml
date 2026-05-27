@@ -264,7 +264,7 @@ jobs:
         run: |
           APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
           VST3_BIN="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/MacOS/VoLum"
-          AU_BIN="/Library/Audio/Plug-Ins/Components/VoLum.component/Contents/MacOS/VoLum"
+          AU_BIN="$HOME/Library/Audio/Plug-Ins/Components/VoLum.component/Contents/MacOS/VoLum"
           app_archs=$(lipo -archs "$APP_BIN")
           vst3_archs=$(lipo -archs "$VST3_BIN")
           au_archs=$(lipo -archs "$AU_BIN")
