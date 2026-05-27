@@ -264,12 +264,16 @@ jobs:
         run: |
           APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
           VST3_BIN="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/MacOS/VoLum"
+          AU_BIN="/Library/Audio/Plug-Ins/Components/VoLum.component/Contents/MacOS/VoLum"
           app_archs=$(lipo -archs "$APP_BIN")
           vst3_archs=$(lipo -archs "$VST3_BIN")
+          au_archs=$(lipo -archs "$AU_BIN")
           echo "APP architectures: $app_archs"
           echo "VST3 architectures: $vst3_archs"
+          echo "AU architectures: $au_archs"
           [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
           [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
+          [[ "$au_archs" == *arm64* && "$au_archs" == *x86_64* ]]
 
       - name: Validate macOS VST3 with pluginval
         run: bash NeuralAmpModeler/scripts/validate-vst3-mac.sh
