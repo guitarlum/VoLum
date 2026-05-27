@@ -156,6 +156,9 @@ try {
   $priorVersion = (Get-Item $priorExe).VersionInfo.ProductVersion
   Write-Host "Prior installed version: $priorVersion at $installDir"
 
+  $newSetupVersion = (Get-Item $NewSetupPath).VersionInfo.ProductVersion
+  Write-Host "New setup ProductVersion: $newSetupVersion"
+
   New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
   @{
     version = 6
