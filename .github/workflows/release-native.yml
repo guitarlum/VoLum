@@ -214,7 +214,9 @@ jobs:
     # Mirror the smoke coverage that ci.yml runs so a broken PKG can never ship.
     - name: Smoke macOS upgrade install
       if: matrix.os == 'macos-latest'
-      run: bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
+      run: |
+        chmod +x NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
+        bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
       shell: bash
 
     - name: Smoke macOS installer
@@ -229,7 +231,9 @@ jobs:
 
     - name: Smoke macOS standalone audio config
       if: matrix.os == 'macos-latest'
-      run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
+      run: |
+        chmod +x NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh
+        bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
       shell: bash
 
     - name: Assert macOS bundle versions match release tag

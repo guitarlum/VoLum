@@ -294,7 +294,9 @@ jobs:
           NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
 
       - name: Smoke macOS upgrade install
-        run: bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
+        run: |
+          chmod +x NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
+          bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
         shell: bash
 
       - name: Install macOS PKG via installer CLI
@@ -307,7 +309,9 @@ jobs:
         shell: bash
 
       - name: macOS standalone audio config smoke
-        run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
+        run: |
+          chmod +x NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh
+          bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
         shell: bash
 
       - name: Upload macOS launch smoke artifacts
