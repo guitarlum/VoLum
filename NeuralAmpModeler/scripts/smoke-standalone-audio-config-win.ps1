@@ -237,30 +237,27 @@ function Get-ComboItems {
 function Assert-StandaloneAudioLayout {
   param([IntPtr] $Dialog)
 
-  $audioDeviceId = 40010 # IDC_COMBO_AUDIO_DEV
-  $bufferSizeId = 40012 # IDC_COMBO_AUDIO_BUF_SIZE
-  $oldOutputDeviceId = 40011
-  $audioInputId = 40014 # IDC_COMBO_AUDIO_IN
-  $oldInputRId = 40015
-  $outputRId = 40016
-  $outputLId = 40017
+  $inputDeviceId = 40010   # IDC_COMBO_AUDIO_IN_DEV
+  $outputDeviceId = 40011  # IDC_COMBO_AUDIO_OUT_DEV
+  $bufferSizeId = 40012    # IDC_COMBO_AUDIO_BUF_SIZE
+  $inputLId = 40014        # IDC_COMBO_AUDIO_IN_L
+  $inputRId = 40015        # IDC_COMBO_AUDIO_IN_R
+  $outputRId = 40016       # IDC_COMBO_AUDIO_OUT_R
+  $outputLId = 40017       # IDC_COMBO_AUDIO_OUT_L
 
-  foreach ($controlId in @($audioDeviceId, $audioInputId, $outputLId, $outputRId)) {
+  foreach ($controlId in @($inputDeviceId, $outputDeviceId, $inputLId, $inputRId, $outputLId, $outputRId)) {
     if (-not (Test-ControlVisible -Dialog $Dialog -ControlId $controlId)) {
       throw "Expected Preferences control $controlId to be visible."
     }
   }
 
-  foreach ($controlId in @($oldOutputDeviceId, $oldInputRId)) {
-    if (Test-ControlVisible -Dialog $Dialog -ControlId $controlId) {
-      throw "Old Preferences control $controlId is still visible."
-    }
+  if ((Get-ComboCount -Dialog $Dialog -ControlId $inputDeviceId) -lt 1) {
+    throw "Input device combo has no selectable devices."
   }
-
-  if ((Get-ComboCount -Dialog $Dialog -ControlId $audioDeviceId) -lt 1) {
-    throw "Audio device combo has no selectable devices."
+  if ((Get-ComboCount -Dialog $Dialog -ControlId $outputDeviceId) -lt 1) {
+    throw "Output device combo has no selectable devices."
   }
-  if ((Get-ComboCount -Dialog $Dialog -ControlId $audioInputId) -lt 1) {
+  if ((Get-ComboCount -Dialog $Dialog -ControlId $inputLId) -lt 1) {
     throw "Input channel combo has no selectable channels."
   }
 
@@ -268,27 +265,6 @@ function Assert-StandaloneAudioLayout {
   $actualBuffers = @(Get-ComboItems -Dialog $Dialog -ControlId $bufferSizeId)
   if (($actualBuffers -join ",") -ne ($expectedBuffers -join ",")) {
     throw "Buffer size combo order/content is '$($actualBuffers -join ",")', expected '$($expectedBuffers -join ",")'."
-  }
-}
-
-function Assert-IniAudioDevicePair {
-  param(
-    [string] $ExpectedDevice,
-    [string] $CaseName
-  )
-
-  $inDev = Get-IniValue -Path $settingsPath -Key "indev"
-  $outDev = Get-IniValue -Path $settingsPath -Key "outdev"
-  $in2 = Get-IniValue -Path $settingsPath -Key "in2"
-
-  if ($inDev -ne $outDev) {
-    throw "$CaseName failed: indev='$inDev' outdev='$outDev', expected one shared audio device."
-  }
-  if ($ExpectedDevice -and $outDev -ne $ExpectedDevice) {
-    throw "$CaseName failed: shared audio device is '$outDev', expected '$ExpectedDevice'."
-  }
-  if ($in2 -ne (Get-IniValue -Path $settingsPath -Key "in1")) {
-    throw "$CaseName failed: in1/in2 did not migrate to the same mono input channel."
   }
 }
 
@@ -359,50 +335,16 @@ try {
 
   $pref = Open-Preferences
   Assert-StandaloneAudioLayout -Dialog $pref
-  $selectedAudioDevice = Get-ComboText -Dialog $pref -ControlId 40010
-  if (-not $selectedAudioDevice) {
-    throw "Preferences audio device combo has an empty selection."
+  $selectedInputDevice = Get-ComboText -Dialog $pref -ControlId 40010
+  $selectedOutputDevice = Get-ComboText -Dialog $pref -ControlId 40011
+  if (-not $selectedInputDevice) {
+    throw "Preferences input device combo has an empty selection."
+  }
+  if (-not $selectedOutputDevice) {
+    throw "Preferences output device combo has an empty selection."
   }
   [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
-  Write-Host "OK: Preferences exposes one audio device combo and one mono input combo ('$selectedAudioDevice')"
-
-  Close-VoLum
-  $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
-  $settings = Set-IniValue -Content $settings -Key "indev" -Value "__VoLumMissingInputDevice__"
-  $settings = Set-IniValue -Content $settings -Key "outdev" -Value $selectedAudioDevice
-  $settings = Set-IniValue -Content $settings -Key "in1" -Value "1"
-  $settings = Set-IniValue -Content $settings -Key "in2" -Value "2"
-  Set-Content -Path $settingsPath -Value $settings -NoNewline
-  Start-Process $exe
-  $process = Wait-VoLumAlive -CaseName "migration prefers output device"
-  Assert-IniAudioDevicePair -ExpectedDevice $selectedAudioDevice -CaseName "migration prefers output device"
-  Write-Host "OK: mismatched .ini migrated to previous output device pid=$($process.Id)"
-
-  Close-VoLum
-  $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
-  $settings = Set-IniValue -Content $settings -Key "indev" -Value $selectedAudioDevice
-  $settings = Set-IniValue -Content $settings -Key "outdev" -Value "__VoLumMissingOutputDevice__"
-  $settings = Set-IniValue -Content $settings -Key "in1" -Value "1"
-  $settings = Set-IniValue -Content $settings -Key "in2" -Value "2"
-  Set-Content -Path $settingsPath -Value $settings -NoNewline
-  Start-Process $exe
-  $process = Wait-VoLumAlive -CaseName "migration falls back to input device"
-  Assert-IniAudioDevicePair -ExpectedDevice $selectedAudioDevice -CaseName "migration falls back to input device"
-  Write-Host "OK: missing output device migrated to previous input device pid=$($process.Id)"
-
-  Close-VoLum
-  $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
-  $settings = Set-IniValue -Content $settings -Key "indev" -Value "__VoLumMissingInputDevice__"
-  $settings = Set-IniValue -Content $settings -Key "outdev" -Value "__VoLumMissingOutputDevice__"
-  $settings = Set-IniValue -Content $settings -Key "in1" -Value "1"
-  $settings = Set-IniValue -Content $settings -Key "in2" -Value "2"
-  Set-Content -Path $settingsPath -Value $settings -NoNewline
-  Start-Process $exe
-  $process = Wait-VoLumAlive -CaseName "migration falls back to available shared device"
-  Assert-IniAudioDevicePair -ExpectedDevice "" -CaseName "migration falls back to available shared device"
-  Write-Host "OK: missing mismatched devices fell back to a shared audio device pid=$($process.Id)"
-
-  Close-VoLum
+  Write-Host "OK: Preferences exposes separate input/output device combos ('$selectedInputDevice' / '$selectedOutputDevice')"
   $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
   Set-Content -Path $settingsPath -Value $asioSettings -NoNewline
   Start-Process $exe
