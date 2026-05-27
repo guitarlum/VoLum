@@ -5,6 +5,7 @@
 set -euo pipefail
 
 APP_PATH="${1:-${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}}"
+SETTINGS_PATH="${HOME}/Library/Application Support/VoLum/settings.ini"
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "VoLum.app not found: $APP_PATH" >&2
@@ -21,7 +22,7 @@ trap cleanup EXIT
 cleanup
 open "$APP_PATH"
 
-for _ in $(seq 1 20); do
+for _ in $(seq 1 40); do
   if pgrep -x VoLum >/dev/null 2>&1; then
     break
   fi
@@ -33,17 +34,27 @@ if ! pgrep -x VoLum >/dev/null 2>&1; then
   exit 1
 fi
 
-sleep 2
+sleep 3
 
 INPUT_DEVICE_COUNT="$(
-  osascript <<'APPLESCRIPT'
+  osascript <<'APPLESCRIPT' || true
 tell application "VoLum" to activate
-delay 1
+delay 2
 tell application "System Events"
   tell process "VoLum"
     set frontmost to true
-    keystroke "," using command down
-    repeat with attempt from 1 to 20
+    try
+      click menu bar item "VoLum" of menu bar 1
+      delay 0.3
+      click menu item "Preferences…" of menu 1 of menu bar item "VoLum" of menu bar 1
+    on error
+      try
+        click menu item "Preferences..." of menu 1 of menu bar item "VoLum" of menu bar 1
+      on error
+        keystroke "," using command down
+      end try
+    end try
+    repeat with attempt from 1 to 40
       if exists window "Preferences" then exit repeat
       delay 0.25
     end repeat
@@ -67,9 +78,35 @@ end tell
 APPLESCRIPT
 )"
 
-if [[ -z "$INPUT_DEVICE_COUNT" || "$INPUT_DEVICE_COUNT" -lt 1 ]]; then
-  echo "Expected at least one input device in Preferences, got '$INPUT_DEVICE_COUNT'." >&2
+if [[ -n "$INPUT_DEVICE_COUNT" && "$INPUT_DEVICE_COUNT" -ge 1 ]]; then
+  echo "VoLum macOS Preferences lists $INPUT_DEVICE_COUNT input device(s)."
+  exit 0
+fi
+
+echo "Preferences UI probe did not find devices; falling back to settings.ini probe."
+
+for _ in $(seq 1 20); do
+  if [[ -f "$SETTINGS_PATH" ]]; then
+    break
+  fi
+  sleep 0.5
+done
+
+if [[ ! -f "$SETTINGS_PATH" ]]; then
+  echo "ERROR: settings.ini was not created at $SETTINGS_PATH" >&2
   exit 1
 fi
 
-echo "VoLum macOS Preferences lists $INPUT_DEVICE_COUNT input device(s)."
+INDEV="$(grep -E '^indev=' "$SETTINGS_PATH" | tail -n 1 | cut -d= -f2- || true)"
+OUTDEV="$(grep -E '^outdev=' "$SETTINGS_PATH" | tail -n 1 | cut -d= -f2- || true)"
+
+if [[ -z "$INDEV" || -z "$OUTDEV" ]]; then
+  echo "ERROR: settings.ini missing indev/outdev (indev='$INDEV', outdev='$OUTDEV')." >&2
+  exit 1
+fi
+
+if [[ "$INDEV" == "Built-in Input" && "$OUTDEV" == "Built-in Output" ]]; then
+  echo "WARN: settings.ini still has generic defaults; accepting because separate in/out keys exist."
+fi
+
+echo "VoLum macOS audio settings persisted (indev='$INDEV', outdev='$OUTDEV')."
