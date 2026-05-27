@@ -24,10 +24,30 @@ function Fail-UpgradeSmoke {
   param([string] $Message)
 
   if ($env:GITHUB_ACTIONS -eq "true") {
-    throw $message
+    throw $Message
   }
   Write-Host "SKIP: $Message"
   exit 0
+}
+
+function Get-VoLumInstallDir {
+  param([string] $FallbackDir)
+
+  $keys = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+  )
+  foreach ($keyPath in $keys) {
+    $match = Get-ChildItem $keyPath -ErrorAction SilentlyContinue |
+      ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } |
+      Where-Object { $_.DisplayName -eq "VoLum" -and $_.InstallLocation } |
+      Select-Object -First 1
+    if ($match) {
+      return $match.InstallLocation.TrimEnd('\')
+    }
+  }
+
+  return $FallbackDir
 }
 
 if (-not $FromTag) {
@@ -78,8 +98,8 @@ $tempRoot = $env:RUNNER_TEMP
 if (-not $tempRoot) {
   $tempRoot = [System.IO.Path]::GetTempPath()
 }
-$installDir = Join-Path $tempRoot "VoLumUpgradeSmoke"
-if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+$requestedInstallDir = Join-Path $tempRoot "VoLumUpgradeSmoke"
+if (Test-Path $requestedInstallDir) { Remove-Item $requestedInstallDir -Recurse -Force }
 
 $settingsBackup = $null
 $hadSettings = Test-Path $settingsPath
@@ -90,8 +110,9 @@ if ($hadSettings) {
 function Install-VoLumSetup {
   param(
     [string] $SetupExe,
-    [string] $TargetDir,
-    [string] $Label
+    [string] $Label,
+    [string] $TargetDir = "",
+    [switch] $UpgradeExisting
   )
 
   $logPath = Join-Path $tempRoot "VoLumUpgradeSmoke-$Label-$([Guid]::NewGuid().ToString('N')).log"
@@ -100,10 +121,19 @@ function Install-VoLumSetup {
     "/SUPPRESSMSGBOXES",
     "/NORESTART",
     "/NOICONS",
-    "/DIR=$TargetDir",
     "/LOG=$logPath"
   )
-  Write-Host "Installing $Label into $TargetDir"
+  if ($TargetDir) {
+    $args += "/DIR=$TargetDir"
+    Write-Host "Installing $Label into $TargetDir"
+  }
+  else {
+    Write-Host "Installing $Label over existing VoLum registration"
+  }
+  if ($UpgradeExisting) {
+    $args += @("/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS")
+  }
+
   $proc = Start-Process -FilePath $SetupExe -ArgumentList $args -Wait -PassThru
   if ($proc.ExitCode -ne 0) {
     if (Test-Path $logPath) {
@@ -115,12 +145,16 @@ function Install-VoLumSetup {
 }
 
 try {
-  Install-VoLumSetup -SetupExe $priorSetup.FullName -TargetDir $installDir -Label "prior-$FromTag"
+  Install-VoLumSetup -SetupExe $priorSetup.FullName -TargetDir $requestedInstallDir -Label "prior-$FromTag"
 
+  $installDir = Get-VoLumInstallDir -FallbackDir $requestedInstallDir
   $priorExe = Join-Path $installDir "VoLum.exe"
   if (-not (Test-Path $priorExe)) {
     throw "Prior release install did not create VoLum.exe at $priorExe"
   }
+
+  $priorVersion = (Get-Item $priorExe).VersionInfo.ProductVersion
+  Write-Host "Prior installed version: $priorVersion at $installDir"
 
   New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
   @{
@@ -133,8 +167,9 @@ try {
     }
   } | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsPath -Encoding UTF8
 
-  Install-VoLumSetup -SetupExe $NewSetupPath -TargetDir $installDir -Label "upgrade"
+  Install-VoLumSetup -SetupExe $NewSetupPath -Label "upgrade" -UpgradeExisting
 
+  $installDir = Get-VoLumInstallDir -FallbackDir $installDir
   $newExe = Join-Path $installDir "VoLum.exe"
   if (-not (Test-Path $newExe)) {
     throw "Upgrade install did not create VoLum.exe at $newExe"
@@ -160,12 +195,13 @@ try {
   Write-Host "Windows upgrade smoke OK ($FromTag -> $expectedVersion)."
 }
 finally {
+  $installDir = Get-VoLumInstallDir -FallbackDir $requestedInstallDir
   $uninstaller = Join-Path $installDir "unins000.exe"
   if (Test-Path $uninstaller) {
     Start-Process -FilePath $uninstaller -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -ErrorAction SilentlyContinue | Out-Null
   }
-  if (Test-Path $installDir) {
-    Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+  if (Test-Path $requestedInstallDir) {
+    Remove-Item $requestedInstallDir -Recurse -Force -ErrorAction SilentlyContinue
   }
   if ($hadSettings -and $null -ne $settingsBackup) {
     Set-Content -Path $settingsPath -Value $settingsBackup -Encoding UTF8 -NoNewline
