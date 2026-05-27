@@ -28,6 +28,7 @@ fi
 MOUNT_DIR="$REPO_ROOT/NeuralAmpModeler/build-mac/installer-install-ci"
 CHOICES_XML="$REPO_ROOT/NeuralAmpModeler/build-mac/installer-choices-ci.xml"
 VST3_PATH="/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
+AU_PATH="/Library/Audio/Plug-Ins/Components/VoLum.component"
 RIGS_PATH="/Library/Application Support/VoLum/VoLumRigs"
 
 rm -rf "$MOUNT_DIR"
@@ -39,7 +40,7 @@ cleanup() {
 trap cleanup EXIT
 
 hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$MOUNT_DIR"
-sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app" "$VST3_PATH" "$RIGS_PATH"
+sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app" "$VST3_PATH" "$AU_PATH" "$RIGS_PATH"
 
 cat > "$CHOICES_XML" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -57,6 +58,14 @@ cat > "$CHOICES_XML" <<'XML'
   <dict>
     <key>choiceIdentifier</key>
     <string>com.Lum.vst3.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.au.pkg.VoLum</string>
     <key>choiceAttribute</key>
     <string>selected</string>
     <key>attributeSetting</key>
@@ -93,7 +102,7 @@ if [[ -z "$APP_PATH" ]]; then
   exit 1
 fi
 
-for required in "$VST3_PATH" "$RIGS_PATH"; do
+for required in "$VST3_PATH" "$AU_PATH" "$RIGS_PATH"; do
   if [[ ! -d "$required" ]]; then
     echo "Expected installed directory missing: $required" >&2
     ls -la "$(dirname "$required")" >&2 || true
@@ -103,9 +112,11 @@ done
 
 pkgutil --pkg-info com.Lum.app.pkg.VoLum
 pkgutil --pkg-info com.Lum.vst3.pkg.VoLum
+pkgutil --pkg-info com.Lum.au.pkg.VoLum
 pkgutil --pkg-info com.Lum.rigs.pkg.VoLum
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$VST3_PATH"
+codesign --verify --deep --strict --verbose=2 "$AU_PATH"
 
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   echo "VOLUM_INSTALLED_APP=$APP_PATH" >> "$GITHUB_ENV"

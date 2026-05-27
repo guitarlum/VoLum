@@ -104,7 +104,7 @@ verify_installer_package_metadata() {
     find "$expanded" -maxdepth 2 -print | sort >&2 || true
     exit 1
   fi
-  for package_name in VoLum_APP.pkg VoLum_VST3.pkg VoLum_RIGS.pkg; do
+  for package_name in VoLum_APP.pkg VoLum_VST3.pkg VoLum_AU.pkg VoLum_RIGS.pkg; do
     if [[ ! -e "$expanded/$package_name" ]]; then
       echo "ERROR: expanded installer is missing $package_name" >&2
       find "$expanded" -maxdepth 2 -print | sort >&2 || true
@@ -121,6 +121,7 @@ root = ET.parse(distribution_path).getroot()
 required = {
     "com.Lum.app.pkg.VoLum": "Stand-alone App",
     "com.Lum.vst3.pkg.VoLum": "VST3 Plug-in",
+    "com.Lum.au.pkg.VoLum": "Audio Unit (v2) Plug-in",
     "com.Lum.rigs.pkg.VoLum": "Bundled Amp Rigs",
 }
 
@@ -190,21 +191,25 @@ if [[ "${1:-}" == "auto" ]]; then
   ARCHIVE_NAME="$(python3 "${REPO_ROOT}/iPlug2/Scripts/get_archive_name.py" NeuralAmpModeler mac full)"
   APP_DMG="${REPO_ROOT}/NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}-app.dmg"
   VST3_ZIP="${REPO_ROOT}/NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}-vst3.zip"
+  AU_ZIP="${REPO_ROOT}/NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}-component.zip"
   INSTALLER_DMG="${REPO_ROOT}/NeuralAmpModeler/build-mac/out/${ARCHIVE_NAME}.dmg"
 else
-  if [[ $# -ne 2 ]]; then
-    echo "Usage: $0 <app.dmg> <vst3.zip>   OR $0 auto" >&2
+  if [[ $# -ne 3 ]]; then
+    echo "Usage: $0 <app.dmg> <vst3.zip> <component.zip>   OR $0 auto" >&2
     exit 1
   fi
   APP_DMG="$1"
   VST3_ZIP="$2"
+  AU_ZIP="$3"
 fi
 
 echo "Verifying macOS DMG: $APP_DMG"
 echo "Verifying macOS VST3 zip: $VST3_ZIP"
+echo "Verifying macOS AU zip: $AU_ZIP"
 
 test -f "$APP_DMG"
 test -f "$VST3_ZIP"
+test -f "$AU_ZIP"
 
 rm -rf "$VERIFY_DIR"
 mkdir -p "$VERIFY_DIR"
@@ -241,6 +246,18 @@ test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
 while IFS= read -r pre_capture; do
   pre_name="$(basename "$pre_capture")"
   test -f "$VERIFY_DIR/vst3/VoLumRigs/PrePedals/$pre_name"
+done < <(find "$REPO_ROOT/rigs/PrePedals" -maxdepth 1 -type f -name '*.nam' | sort)
+
+unzip -q "$AU_ZIP" -d "$VERIFY_DIR/au"
+test -d "$VERIFY_DIR/au/VoLum.component"
+verify_bundle_signature "$VERIFY_DIR/au/VoLum.component"
+test -d "$VERIFY_DIR/au/VoLumRigs"
+test -d "$VERIFY_DIR/au/VoLumRigs/PrePedals"
+test -f "$VERIFY_DIR/au/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
+test -f "$VERIFY_DIR/au/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+while IFS= read -r pre_capture; do
+  pre_name="$(basename "$pre_capture")"
+  test -f "$VERIFY_DIR/au/VoLumRigs/PrePedals/$pre_name"
 done < <(find "$REPO_ROOT/rigs/PrePedals" -maxdepth 1 -type f -name '*.nam' | sort)
 
 if [[ -n "$INSTALLER_DMG" ]] && [[ -f "$INSTALLER_DMG" ]]; then
