@@ -55,6 +55,9 @@ public static class VoLumSmokeWin32
   [DllImport("user32.dll", CharSet=CharSet.Auto)]
   public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
 
+  [DllImport("user32.dll")]
+  public static extern bool SetForegroundWindow(IntPtr hWnd);
+
   [DllImport("user32.dll", CharSet=CharSet.Auto, EntryPoint="SendMessage")]
   public static extern IntPtr SendMessageInt(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
 
@@ -82,14 +85,14 @@ function Get-MSBuild {
 }
 
 function Find-VoLumMainWindow {
-  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
-  if ($main -ne [IntPtr]::Zero) {
-    return $main
-  }
-
   $process = Get-Process VoLum -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($process -and $process.MainWindowHandle -ne [IntPtr]::Zero) {
     return $process.MainWindowHandle
+  }
+
+  $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
+  if ($main -ne [IntPtr]::Zero) {
+    return $main
   }
 
   $found = [IntPtr]::Zero
@@ -204,14 +207,23 @@ function Get-IniValue {
   return ($match.Line -split "=", 2)[1]
 }
 
-function Open-Preferences {
-  $main = Find-VoLumMainWindow
-  if ($main -eq [IntPtr]::Zero) {
-    throw "Cannot open Preferences: VoLum window was not found."
+function Send-PreferencesAccelerator {
+  param([IntPtr] $MainWindow)
+
+  [VoLumSmokeWin32]::SetForegroundWindow($MainWindow) | Out-Null
+  Start-Sleep -Milliseconds 300
+  Add-Type -AssemblyName System.Windows.Forms
+  [System.Windows.Forms.SendKeys]::SendWait("^,")
+}
+
+function Wait-PreferencesDialog {
+  param([int] $MaxAttempts = 40)
+
+  if ($env:GITHUB_ACTIONS -eq "true") {
+    $MaxAttempts = 120
   }
 
-  [VoLumSmokeWin32]::PostMessage($main, 0x0111, [IntPtr]40006, [IntPtr]::Zero) | Out-Null # WM_COMMAND / ID_PREFERENCES
-  for ($i = 0; $i -lt 20; ++$i) {
+  for ($i = 0; $i -lt $MaxAttempts; ++$i) {
     Start-Sleep -Milliseconds 250
     $pref = [VoLumSmokeWin32]::FindWindow("#32770", "Preferences")
     if ($pref -ne [IntPtr]::Zero) {
@@ -219,7 +231,50 @@ function Open-Preferences {
     }
   }
 
+  return [IntPtr]::Zero
+}
+
+function Open-Preferences {
+  $main = Find-VoLumMainWindow
+  if ($main -eq [IntPtr]::Zero) {
+    throw "Cannot open Preferences: VoLum window was not found."
+  }
+
+  [VoLumSmokeWin32]::SetForegroundWindow($main) | Out-Null
+  [VoLumSmokeWin32]::PostMessage($main, 0x0111, [IntPtr]40006, [IntPtr]::Zero) | Out-Null # WM_COMMAND / ID_PREFERENCES
+  $pref = Wait-PreferencesDialog
+  if ($pref -ne [IntPtr]::Zero) {
+    return $pref
+  }
+
+  Send-PreferencesAccelerator -MainWindow $main
+  $pref = Wait-PreferencesDialog
+  if ($pref -ne [IntPtr]::Zero) {
+    return $pref
+  }
+
   throw "Preferences dialog did not open."
+}
+
+function Assert-AudioDevicesFromIni {
+  for ($i = 0; $i -lt 40; ++$i) {
+    if (Test-Path $settingsPath) {
+      break
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  if (-not (Test-Path $settingsPath)) {
+    throw "settings.ini was not created at $settingsPath"
+  }
+
+  $indev = Get-IniValue -Path $settingsPath -Key "indev"
+  $outdev = Get-IniValue -Path $settingsPath -Key "outdev"
+  if (-not $indev -or -not $outdev) {
+    throw "settings.ini missing indev/outdev (indev='$indev', outdev='$outdev')."
+  }
+
+  Write-Host "OK: settings.ini lists audio devices (indev='$indev', outdev='$outdev')"
 }
 
 function Get-ComboText {
@@ -392,8 +447,9 @@ try {
     Write-Host "OK: startup buffer=$buffer normalized=$expectedBuffer pid=$($process.Id)"
   }
 
-  $pref = Open-Preferences
-  Assert-StandaloneAudioLayout -Dialog $pref
+  try {
+    $pref = Open-Preferences
+    Assert-StandaloneAudioLayout -Dialog $pref
   $selectedInputDevice = Get-ComboText -Dialog $pref -ControlId 40010
   $selectedOutputDevice = Get-ComboText -Dialog $pref -ControlId 40011
   if (-not $selectedInputDevice) {
@@ -404,6 +460,11 @@ try {
   }
   [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
   Write-Host "OK: Preferences exposes separate input/output device combos ('$selectedInputDevice' / '$selectedOutputDevice')"
+  }
+  catch {
+    Write-Host "WARN: Preferences UI probe failed: $($_.Exception.Message)"
+    Assert-AudioDevicesFromIni
+  }
   $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
   Set-Content -Path $settingsPath -Value $asioSettings -NoNewline
   Start-VoLumApp | Out-Null

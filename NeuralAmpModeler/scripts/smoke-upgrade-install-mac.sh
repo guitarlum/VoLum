@@ -67,9 +67,52 @@ sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app" \
   "/Library/Application Support/VoLum/VoLumRigs"
 rm -rf "$SETTINGS_DIR"
 
+
+CHOICES_XML="$WORK_DIR/installer-choices-ci.xml"
+cat > "$CHOICES_XML" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.app.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.vst3.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.au.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.rigs.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+</array>
+</plist>
+XML
+
 mkdir -p "$WORK_DIR/prior-dmg" "$WORK_DIR/new-dmg"
 hdiutil attach "$PRIOR_DMG" -nobrowse -readonly -mountpoint "$WORK_DIR/prior-dmg"
-sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target /
+sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$CHOICES_XML"
 hdiutil detach "$WORK_DIR/prior-dmg"
 
 APP_PATH=""
@@ -98,7 +141,7 @@ cat > "$SETTINGS_PATH" <<JSON
 JSON
 
 hdiutil attach "$NEW_INSTALLER_DMG" -nobrowse -readonly -mountpoint "$WORK_DIR/new-dmg"
-sudo installer -pkg "$WORK_DIR/new-dmg/VoLum Installer.pkg" -target /
+sudo installer -pkg "$WORK_DIR/new-dmg/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$CHOICES_XML"
 hdiutil detach "$WORK_DIR/new-dmg"
 
 APP_PATH=""
