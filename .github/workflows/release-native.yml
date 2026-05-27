@@ -214,6 +214,8 @@ jobs:
     # Mirror the smoke coverage that ci.yml runs so a broken PKG can never ship.
     - name: Smoke macOS upgrade install
       if: matrix.os == 'macos-latest'
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         chmod +x NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
         bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
