@@ -74,6 +74,7 @@ rm -rf "$SETTINGS_DIR"
 
 
 CHOICES_XML="$WORK_DIR/installer-choices-ci.xml"
+PRIOR_CHOICES_XML="$WORK_DIR/installer-choices-prior.xml"
 cat > "$CHOICES_XML" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -115,10 +116,46 @@ cat > "$CHOICES_XML" <<'XML'
 </plist>
 XML
 
+</plist>
+XML
+
+cat > "$PRIOR_CHOICES_XML" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.app.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.vst3.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+  <dict>
+    <key>choiceIdentifier</key>
+    <string>com.Lum.rigs.pkg.VoLum</string>
+    <key>choiceAttribute</key>
+    <string>selected</string>
+    <key>attributeSetting</key>
+    <integer>1</integer>
+  </dict>
+</array>
+</plist>
+XML
+
 mkdir -p "$WORK_DIR/prior-dmg" "$WORK_DIR/new-dmg"
 hdiutil attach "$PRIOR_DMG" -nobrowse -readonly -mountpoint "$WORK_DIR/prior-dmg"
-echo "Installing prior release $FROM_TAG (default PKG choices; older PKGs may not expose AU choices)."
-sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target /
+echo "Installing prior release $FROM_TAG with PKG choices compatible with that release."
+sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$PRIOR_CHOICES_XML"
 hdiutil detach "$WORK_DIR/prior-dmg"
 
 find_volum_app() {
