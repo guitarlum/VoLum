@@ -4,13 +4,24 @@
 
 set -euo pipefail
 
-APP_PATH="${1:-${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}}"
+APP_PATH="${1:-${VOLUM_INSTALLED_APP:-}}"
+if [[ -z "$APP_PATH" ]]; then
+  for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
+    if [[ -d "$candidate" ]]; then
+      APP_PATH="$candidate"
+      break
+    fi
+  done
+fi
+
 SETTINGS_PATH="${HOME}/Library/Application Support/VoLum/settings.ini"
 
-if [[ ! -d "$APP_PATH" ]]; then
-  echo "VoLum.app not found: $APP_PATH" >&2
+if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
+  echo "VoLum.app not found (checked /Applications and $HOME/Applications)." >&2
   exit 1
 fi
+
+echo "Using installed app: $APP_PATH"
 
 cleanup() {
   osascript -e 'tell application "VoLum" to quit' >/dev/null 2>&1 || true

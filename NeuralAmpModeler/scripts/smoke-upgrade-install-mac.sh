@@ -116,9 +116,6 @@ cat > "$CHOICES_XML" <<'XML'
 </plist>
 XML
 
-</plist>
-XML
-
 cat > "$PRIOR_CHOICES_XML" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
