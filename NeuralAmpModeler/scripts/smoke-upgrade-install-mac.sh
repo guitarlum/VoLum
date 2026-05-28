@@ -66,6 +66,38 @@ if [[ -z "$PRIOR_DMG" ]]; then
   exit 0
 fi
 
+find_volum_app() {
+  for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
+    if [[ -d "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_prior_standalone_fallback() {
+  echo "Prior PKG did not place VoLum.app; falling back to published standalone DMG."
+  gh release download "$FROM_TAG" --repo guitarlum/VoLum \
+    --pattern '*macos-standalone.dmg' --dir "$WORK_DIR/prior-standalone-download"
+  local standalone_dmg
+  standalone_dmg="$(find "$WORK_DIR/prior-standalone-download" -name '*macos-standalone.dmg' -print -quit)"
+  if [[ -z "$standalone_dmg" ]]; then
+    echo "ERROR: prior release $FROM_TAG has no macos-standalone.dmg fallback asset." >&2
+    exit 1
+  fi
+
+  mkdir -p "$WORK_DIR/prior-standalone-dmg"
+  hdiutil attach "$standalone_dmg" -nobrowse -readonly -mountpoint "$WORK_DIR/prior-standalone-dmg"
+  if [[ ! -d "$WORK_DIR/prior-standalone-dmg/VoLum.app" ]]; then
+    echo "ERROR: prior standalone DMG did not contain VoLum.app" >&2
+    exit 1
+  fi
+  sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"
+  sudo ditto "$WORK_DIR/prior-standalone-dmg/VoLum.app" "/Applications/VoLum.app"
+  hdiutil detach "$WORK_DIR/prior-standalone-dmg"
+}
+
 sudo rm -rf "/Applications/VoLum.app" "$HOME/Applications/VoLum.app" \
   "/Library/Audio/Plug-Ins/VST3/VoLum.vst3" \
   "/Library/Audio/Plug-Ins/Components/VoLum.component" \
@@ -155,17 +187,11 @@ echo "Installing prior release $FROM_TAG with PKG choices compatible with that r
 sudo installer -pkg "$WORK_DIR/prior-dmg/VoLum Installer.pkg" -target / -applyChoiceChangesXML "$PRIOR_CHOICES_XML"
 hdiutil detach "$WORK_DIR/prior-dmg"
 
-find_volum_app() {
-  for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
-    if [[ -d "$candidate" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-  return 1
-}
-
 APP_PATH="$(find_volum_app || true)"
+if [[ -z "$APP_PATH" ]]; then
+  install_prior_standalone_fallback
+  APP_PATH="$(find_volum_app || true)"
+fi
 if [[ -z "$APP_PATH" ]]; then
   echo "ERROR: prior release install did not place VoLum.app" >&2
   echo "/Applications:" >&2
