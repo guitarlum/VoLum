@@ -163,7 +163,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VoLum-win
-          path: NeuralAmpModeler/build-win/out/
+          path: |
+            NeuralAmpModeler/build-win/out/
+            NeuralAmpModeler/build-win/installer/VoLum-Setup.exe
           if-no-files-found: error
 
   macos:
