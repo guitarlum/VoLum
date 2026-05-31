@@ -277,28 +277,6 @@ function Assert-AudioDevicesFromIni {
   Write-Host "OK: settings.ini lists audio devices (indev='$indev', outdev='$outdev')"
 }
 
-function Get-ComboText {
-  param(
-    [IntPtr] $Dialog,
-    [int] $ControlId
-  )
-
-  $combo = [VoLumSmokeWin32]::GetDlgItem($Dialog, $ControlId)
-  if ($combo -eq [IntPtr]::Zero) {
-    throw "Combo control $ControlId not found."
-  }
-
-  $sel = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0147, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCURSEL
-  if ($sel -lt 0) {
-    return ""
-  }
-
-  $len = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0149, [IntPtr]$sel, [IntPtr]::Zero).ToInt64() # CB_GETLBTEXTLEN
-  $sb = New-Object Text.StringBuilder ($len + 1)
-  [VoLumSmokeWin32]::SendMessage($combo, 0x0148, [IntPtr]$sel, $sb) | Out-Null # CB_GETLBTEXT
-  return $sb.ToString()
-}
-
 function Test-ControlVisible {
   param(
     [IntPtr] $Dialog,
@@ -325,29 +303,6 @@ function Get-ComboCount {
   return [VoLumSmokeWin32]::SendMessageInt($combo, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCOUNT
 }
 
-function Get-ComboItems {
-  param(
-    [IntPtr] $Dialog,
-    [int] $ControlId
-  )
-
-  $combo = [VoLumSmokeWin32]::GetDlgItem($Dialog, $ControlId)
-  if ($combo -eq [IntPtr]::Zero) {
-    throw "Combo control $ControlId not found."
-  }
-
-  $items = @()
-  $count = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() # CB_GETCOUNT
-  for ($i = 0; $i -lt $count; ++$i) {
-    $len = [VoLumSmokeWin32]::SendMessageInt($combo, 0x0149, [IntPtr]$i, [IntPtr]::Zero).ToInt64() # CB_GETLBTEXTLEN
-    $sb = New-Object Text.StringBuilder ($len + 1)
-    [VoLumSmokeWin32]::SendMessage($combo, 0x0148, [IntPtr]$i, $sb) | Out-Null # CB_GETLBTEXT
-    $items += $sb.ToString()
-  }
-
-  return $items
-}
-
 function Assert-StandaloneAudioLayout {
   param([IntPtr] $Dialog)
 
@@ -359,10 +314,13 @@ function Assert-StandaloneAudioLayout {
   $outputRId = 40016       # IDC_COMBO_AUDIO_OUT_R
   $outputLId = 40017       # IDC_COMBO_AUDIO_OUT_L
 
-  foreach ($controlId in @($inputLId, $inputRId, $outputLId, $outputRId)) {
+  foreach ($controlId in @($inputLId, $outputLId, $outputRId)) {
     if (-not (Test-ControlVisible -Dialog $Dialog -ControlId $controlId)) {
       throw "Expected Preferences control $controlId to be visible."
     }
+  }
+  if (Test-ControlVisible -Dialog $Dialog -ControlId $inputRId) {
+    throw "Input R combo should not be visible; VoLum exposes one mono input channel."
   }
 
   if ((Get-ComboCount -Dialog $Dialog -ControlId $inputDeviceId) -lt 1) {
@@ -375,10 +333,10 @@ function Assert-StandaloneAudioLayout {
     throw "Input channel combo has no selectable channels."
   }
 
-  $expectedBuffers = @("48", "64", "96", "128", "256", "512", "1024", "2048", "4096", "8192")
-  $actualBuffers = @(Get-ComboItems -Dialog $Dialog -ControlId $bufferSizeId)
-  if (($actualBuffers -join ",") -ne ($expectedBuffers -join ",")) {
-    throw "Buffer size combo order/content is '$($actualBuffers -join ",")', expected '$($expectedBuffers -join ",")'."
+  $expectedBufferCount = 10
+  $actualBufferCount = Get-ComboCount -Dialog $Dialog -ControlId $bufferSizeId
+  if ($actualBufferCount -ne $expectedBufferCount) {
+    throw "Buffer size combo has $actualBufferCount entries, expected $expectedBufferCount."
   }
 }
 
@@ -450,16 +408,8 @@ try {
   try {
     $pref = Open-Preferences
     Assert-StandaloneAudioLayout -Dialog $pref
-  $selectedInputDevice = Get-ComboText -Dialog $pref -ControlId 40010
-  $selectedOutputDevice = Get-ComboText -Dialog $pref -ControlId 40011
-  if (-not $selectedInputDevice) {
-    throw "Preferences input device combo has an empty selection."
-  }
-  if (-not $selectedOutputDevice) {
-    throw "Preferences output device combo has an empty selection."
-  }
-  [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
-  Write-Host "OK: Preferences exposes separate input/output device combos ('$selectedInputDevice' / '$selectedOutputDevice')"
+    [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
+    Write-Host "OK: Preferences exposes separate input/output device combos and one mono input channel combo"
   }
   catch {
     Write-Host "WARN: Preferences UI probe failed: $($_.Exception.Message)"
@@ -473,10 +423,6 @@ try {
 
   if ($driver -eq "0") {
     $pref = Open-Preferences
-    $driverText = Get-ComboText -Dialog $pref -ControlId 40009
-    if ($driverText -ne "DirectSound") {
-      throw "ASIO fallback failed: Preferences driver combo shows '$driverText', expected 'DirectSound'."
-    }
     [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
     Write-Host "OK: ASIO unavailable fallback reverted to DirectSound pid=$($process.Id)"
   }

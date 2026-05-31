@@ -134,7 +134,7 @@ Fresh VST3 instances read those defaults when you add VoLum to a track. After th
 
 In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, and channel routing. In the VST3, use your DAW's audio settings instead.
 
-Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Route input L/R and output L/R as needed; both input channels are available again in 1.0.1 (a planned single-device / mono-input shortcut was dropped because it broke macOS device lists). The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size.
+Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Choose one mono input channel for the guitar signal and route output L/R as needed. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size.
 
 If you select a driver that has no usable device, such as ASIO on a laptop without an ASIO interface, VoLum shows an error and reverts to the previous working audio settings instead of closing.
 
