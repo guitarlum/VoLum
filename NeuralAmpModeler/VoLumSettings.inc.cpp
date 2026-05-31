@@ -154,6 +154,13 @@ void NeuralAmpModeler::_VolumSetPostLocked(bool locked)
 
 bool NeuralAmpModeler::_VolumIsPreDirty() const
 {
+  // While locked, compare the persisted overlay snapshot against the active amp
+  // slot. Re-reading live params can drift from the slot after reload (param
+  // normalization / effect-restore ordering), which left the store arrow stuck
+  // on the origin amp even when its saved scene matched the carried overlay.
+  if (mVolumPreLocked)
+    return !volum::PreBlockEquals(mVolumLiveLockedPre, mVolumAmpSettings[mVolumAmpIdx]);
+
   volum::VoLumAmpSettings live;
   const_cast<NeuralAmpModeler*>(this)->_VolumSavePreToSlot(live);
   return !volum::PreBlockEquals(live, mVolumAmpSettings[mVolumAmpIdx]);
@@ -161,6 +168,9 @@ bool NeuralAmpModeler::_VolumIsPreDirty() const
 
 bool NeuralAmpModeler::_VolumIsPostDirty() const
 {
+  if (mVolumPostLocked)
+    return !volum::PostBlockEquals(mVolumLiveLockedPost, mVolumAmpSettings[mVolumAmpIdx]);
+
   auto* self = const_cast<NeuralAmpModeler*>(this);
   const int delayMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
   const int reverbMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
@@ -666,7 +676,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 
     if (settingsHealed)
       mVolumSettingsDirty = true;
-    _VolumRestoreEffectSettings();
+    // Global effect defaults must not clobber POST params when a lock snapshot will
+    // restore the carried scene immediately after _VolumRestoreFromSettings().
+    if (!mVolumPostLocked)
+      _VolumRestoreEffectSettings();
   }
   catch (...)
   {
