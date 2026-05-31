@@ -109,6 +109,7 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 - `1` / `2` / `3` switches PRE / AMP / POST.
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
 - `Enter` edits the focused target; `Space` toggles it when it has an on/off state.
+- In some DAWs (notably REAPER), transport keys like `Space` reach the host first. Right-click the plugin FX header and enable **Send all keyboard input to plug-in** to route shortcuts to VoLum.
 - `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.
 - `T` opens the tuner; `M` opens the metronome; `H` opens Settings.
 - Selected knob: `Up` / `Down` adjusts, `Left` / `Right` selects another knob, `Shift` makes smaller steps.
@@ -131,9 +132,9 @@ Fresh VST3 instances read those defaults when you add VoLum to a track. After th
 
 ### Standalone Audio Settings
 
-In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, audio device, sample rate, channel routing, and buffer size. In the VST3, use your DAW's audio settings instead.
+In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, and channel routing. In the VST3, use your DAW's audio settings instead.
 
-VoLum uses one audio device for both input and output. The input is mono, so you choose one input channel; output remains stereo, so you can still choose left and right output channels separately. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size.
+Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Route input L/R and output L/R as needed; both input channels are available again in 1.0.1 (a planned single-device / mono-input shortcut was dropped because it broke macOS device lists). The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size.
 
 If you select a driver that has no usable device, such as ASIO on a laptop without an ASIO interface, VoLum shows an error and reverts to the previous working audio settings instead of closing.
 

@@ -148,11 +148,24 @@ jobs:
         run: ./NeuralAmpModeler/scripts/validate-vst3-win.ps1
         shell: pwsh
 
+      - name: Smoke Windows standalone audio config
+        run: ./NeuralAmpModeler/scripts/smoke-standalone-audio-config-win.ps1
+        shell: pwsh
+
+      - name: Smoke Windows upgrade install
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VOLUM_UPGRADE_SMOKE_FROM_TAG: v1.0.0
+        run: ./NeuralAmpModeler/scripts/smoke-upgrade-install-win.ps1
+        shell: pwsh
+
       - name: Upload Windows artifacts (VoLum-win)
         uses: actions/upload-artifact@v4
         with:
           name: VoLum-win
-          path: NeuralAmpModeler/build-win/out/
+          path: |
+            NeuralAmpModeler/build-win/out/
+            NeuralAmpModeler/build-win/installer/VoLum-Setup.exe
           if-no-files-found: error
 
   macos:
@@ -285,11 +298,29 @@ jobs:
           chmod +x NeuralAmpModeler/scripts/verify-packaging-mac.sh
           NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
 
+      - name: Smoke macOS upgrade install
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VOLUM_UPGRADE_SMOKE_FROM_TAG: v1.0.0
+        run: |
+          chmod +x NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
+          bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
+        shell: bash
+
       - name: Install macOS PKG via installer CLI
+        if: env.VOLUM_UPGRADE_SMOKE_SKIPPED == '1'
         run: bash NeuralAmpModeler/scripts/smoke-installer-mac.sh
+        shell: bash
 
       - name: macOS standalone launch smoke
-        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "$VOLUM_INSTALLED_APP"
+        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
+        shell: bash
+
+      - name: macOS standalone audio config smoke
+        run: |
+          chmod +x NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh
+          bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
+        shell: bash
 
       - name: Upload macOS launch smoke artifacts
         if: always()
