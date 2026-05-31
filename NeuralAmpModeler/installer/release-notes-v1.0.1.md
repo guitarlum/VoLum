@@ -30,6 +30,7 @@ VoLum now ships as **AUv2** (`VoLum.component`) for Logic Pro, GarageBand, REAPE
 - PRE/POST lock: store arrow no longer sticks on the **origin** amp after reload when its saved scene matches the overlay.
 - Settings file forward/backward compatibility between 1.0.0 and 1.0.1 (additive lock fields, version stays at 6).
 - macOS: restore populated Input/Output device lists in standalone Preferences (reverted experimental single-device picker that emptied lists on Mac).
+- macOS installer: Bundled Amp Rigs stay selected in Customize because the standalone app, VST3, and AU require VoLumRigs.
 - macOS: mic permission persistence, VST3/AU zip signing verification, AU bundle sealing.
 - Windows: standalone exe version resource matches 1.0.1 for upgrade installs.
 - Standalone audio: robust buffer sizes, failed driver probe reverts to last working config.
