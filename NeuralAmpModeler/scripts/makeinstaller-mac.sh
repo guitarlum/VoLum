@@ -174,7 +174,7 @@ fi
 if [[ -f ${PKG_DIR}/${PRODUCT_NAME}_RIGS.pkg ]]; then
 	RIGS_PKG_REF="<pkg-ref id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\"/>"
 	RIGS_CHOICE="<line choice=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\"/>"
-	RIGS_CHOICE_DEF="<choice id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\" visible=\"true\" start_selected=\"true\" title=\"Bundled Amp Rigs\"><pkg-ref id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\"/></choice><pkg-ref id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCT_NAME}_RIGS.pkg</pkg-ref>"
+	RIGS_CHOICE_DEF="<choice id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\" visible=\"true\" enabled=\"false\" start_selected=\"true\" title=\"Bundled Amp Rigs\"><pkg-ref id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\"/></choice><pkg-ref id=\"com.Lum.rigs.pkg.${PRODUCT_NAME}\" version=\"${VERSION}\" onConclusion=\"none\">${PRODUCT_NAME}_RIGS.pkg</pkg-ref>"
 fi
 
 # if [[ -d $PRODUCTS/$RES ]]; then
