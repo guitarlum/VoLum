@@ -109,6 +109,7 @@ Beim Wechsel von Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Stimme wird 
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
 - `Enter` bearbeitet das fokussierte Ziel; `Leertaste` schaltet es ein/aus, wenn möglich.
+- In manchen DAWs (unter anderem REAPER) kommt die Leertaste zuerst beim Host an. Rechtsklick auf den FX-Header des Plugins und **Send all keyboard input to plug-in** aktivieren, damit Shortcuts VoLum erreichen.
 - `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts.
 - `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet Einstellungen.
 - Gewählter Regler: `Hoch` / `Runter` ändert den Wert, `Links` / `Rechts` wählt einen anderen Regler, `Umschalt` macht kleinere Schritte.
@@ -131,9 +132,9 @@ Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Da
 
 ### Standalone-Audioeinstellungen
 
-In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`, um Audiotreiber, Audiogerät, Samplerate, Kanalrouting und Buffergröße zu wählen. In der VST3-Version nutzt du stattdessen die Audioeinstellungen deiner DAW.
+In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`, um Audiotreiber, getrennte Ein- und Ausgabegeräte, Samplerate und Kanalrouting zu wählen. In der VST3-Version nutzt du stattdessen die Audioeinstellungen deiner DAW.
 
-VoLum nutzt ein Audiogerät für Eingang und Ausgang. Der Eingang ist mono, deshalb wählst du einen Eingangskanal; der Ausgang bleibt stereo, deshalb kannst du linken und rechten Ausgangskanal weiterhin getrennt wählen. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben.
+Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Route Input L/R und Output L/R nach Bedarf; beide Eingangskanäle sind in 1.0.1 wieder verfügbar (ein geplanter Single-Device-/Mono-Input-Shortcut wurde verworfen, weil er die macOS-Gerätelisten leer ließ). Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben.
 
 Wenn du einen Treiber ohne nutzbares Gerät auswählst, zum Beispiel ASIO auf einem Laptop ohne ASIO-Interface, zeigt VoLum eine Fehlermeldung und stellt die vorher funktionierende Audiokonfiguration wieder her, statt sich zu schließen.
 
