@@ -3,14 +3,24 @@
 
 set -euo pipefail
 
-APP_PATH="${1:-/Applications/VoLum.app}"
-SCREENSHOT_PATH="${VOLUM_MAC_SMOKE_SCREENSHOT:-/tmp/volum-mac-launch.png}"
-LOG_PATH="${VOLUM_MAC_SMOKE_LOG:-/tmp/volum-mac-launch.log}"
+APP_PATH="${1:-}"
+if [[ -z "$APP_PATH" ]]; then
+  for candidate in "/Applications/VoLum.app" "$HOME/Applications/VoLum.app"; do
+    if [[ -d "$candidate" ]]; then
+      APP_PATH="$candidate"
+      break
+    fi
+  done
+fi
 
-if [[ ! -d "$APP_PATH" ]]; then
-  echo "VoLum.app not found: $APP_PATH" >&2
+if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
+  echo "VoLum.app not found (checked /Applications and $HOME/Applications)." >&2
   exit 1
 fi
+
+echo "Using installed app: $APP_PATH"
+SCREENSHOT_PATH="${VOLUM_MAC_SMOKE_SCREENSHOT:-/tmp/volum-mac-launch.png}"
+LOG_PATH="${VOLUM_MAC_SMOKE_LOG:-/tmp/volum-mac-launch.log}"
 
 cleanup() {
   osascript -e 'quit app "VoLum"' >/dev/null 2>&1 || true
