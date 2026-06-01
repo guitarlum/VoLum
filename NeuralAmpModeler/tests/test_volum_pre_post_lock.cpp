@@ -177,6 +177,28 @@ struct PrePostLockSim
     preUiDirty = preLocked && IsPreDirty();
     postUiDirty = postLocked && IsPostDirty();
   }
+
+  // Mirrors plugin dirty compare while locked: overlay snapshot vs active slot.
+  volum::VoLumAmpSettings liveLockedPre{};
+  volum::VoLumAmpSettings liveLockedPost{};
+
+  bool IsPreDirtyLocked() const
+  {
+    return preLocked && !volum::PreBlockEquals(liveLockedPre, stored[ampIdx]);
+  }
+
+  bool IsPostDirtyLocked() const
+  {
+    return postLocked && !volum::PostBlockEquals(liveLockedPost, stored[ampIdx]);
+  }
+
+  void SyncLockedSnapshotsFromLive()
+  {
+    if (preLocked)
+      CopyPreBlock(live, liveLockedPre);
+    if (postLocked)
+      CopyPostBlock(live, liveLockedPost);
+  }
 };
 } // namespace
 
@@ -466,6 +488,65 @@ TEST_CASE("Switching amps while PRE locked is clean when target slot already mat
 
   REQUIRE_FALSE(sim.IsPreDirty());
   REQUIRE_FALSE(sim.preUiDirty);
+}
+
+TEST_CASE("PRE lock reload on B then switch back to origin A clears locked dirty")
+{
+  PrePostLockSim sim;
+  sim.stored[0] = MakePreSlot(1.0);
+  sim.stored[1] = MakePreSlot(9.0);
+  sim.live = MakePreSlot(1.0);
+  sim.SetPreLocked(true);
+  sim.SyncLockedSnapshotsFromLive();
+  sim.SwitchAmp(1);
+  REQUIRE(sim.IsPreDirtyLocked());
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(sim.stored, volum::kAmpCount, sim.ampIdx, nullptr, true,
+                                                          sim.preLocked, sim.postLocked, &sim.liveLockedPre, nullptr);
+
+  PrePostLockSim reloaded;
+  bool preLocked = false;
+  bool haveLivePre = false;
+  volum::VolumUserSettingsFromJson(j, reloaded.stored, volum::kAmpCount, &reloaded.ampIdx, nullptr, nullptr, &preLocked,
+                                   nullptr, &reloaded.liveLockedPre, nullptr, &haveLivePre, nullptr);
+  reloaded.preLocked = preLocked;
+  reloaded.live = reloaded.liveLockedPre;
+  REQUIRE(haveLivePre);
+  REQUIRE(reloaded.ampIdx == 1);
+  REQUIRE(reloaded.IsPreDirtyLocked());
+
+  reloaded.SwitchAmp(0);
+  REQUIRE_FALSE(reloaded.IsPreDirtyLocked());
+}
+
+TEST_CASE("POST lock reload on B then switch back to origin A clears locked dirty")
+{
+  PrePostLockSim sim;
+  sim.stored[0] = MakePostSlot(0.20);
+  sim.stored[1] = MakePostSlot(0.90);
+  sim.live = MakePostSlot(0.20);
+  sim.SetPostLocked(true);
+  sim.SyncLockedSnapshotsFromLive();
+  sim.SwitchAmp(1);
+  REQUIRE(sim.IsPostDirtyLocked());
+
+  const nlohmann::json j =
+    volum::VolumUserSettingsToJson(sim.stored, volum::kAmpCount, sim.ampIdx, nullptr, true, sim.preLocked,
+                                   sim.postLocked, nullptr, &sim.liveLockedPost);
+
+  PrePostLockSim reloaded;
+  bool postLocked = false;
+  bool haveLivePost = false;
+  volum::VolumUserSettingsFromJson(j, reloaded.stored, volum::kAmpCount, &reloaded.ampIdx, nullptr, nullptr, nullptr,
+                                   &postLocked, nullptr, &reloaded.liveLockedPost, nullptr, &haveLivePost);
+  reloaded.postLocked = postLocked;
+  reloaded.live = reloaded.liveLockedPost;
+  REQUIRE(haveLivePost);
+  REQUIRE(reloaded.ampIdx == 1);
+  REQUIRE(reloaded.IsPostDirtyLocked());
+
+  reloaded.SwitchAmp(0);
+  REQUIRE_FALSE(reloaded.IsPostDirtyLocked());
 }
 
 TEST_CASE("Switching amps while unlocked restores PRE from the target slot")

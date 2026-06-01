@@ -431,6 +431,10 @@ TEST_CASE("PRE/POST lock UI and settings helpers are wired")
   RequireContains(settings, "_VolumStorePreToCurrentAmp");
   RequireContains(settings, "_VolumIsPreDirty");
   RequireContains(settings, "mVolumPreLocked");
+  RequireContains(settings, "PreBlockEquals(mVolumLiveLockedPre, mVolumAmpSettings[mVolumAmpIdx])");
+  RequireContains(settings, "PostBlockEquals(mVolumLiveLockedPost, mVolumAmpSettings[mVolumAmpIdx])");
+  RequireContains(settings, "if (!mVolumPostLocked)");
+  RequireContains(settings, "_VolumRestoreEffectSettings()");
 }
 
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
