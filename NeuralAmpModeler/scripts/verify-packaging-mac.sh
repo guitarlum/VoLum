@@ -134,6 +134,8 @@ for choice_id, label in required.items():
         continue
     if choice.get("start_selected") != "true":
         errors.append(f"installer choice {choice_id} is not start_selected=true")
+    if choice_id == "com.Lum.rigs.pkg.VoLum" and choice.get("enabled") != "false":
+        errors.append("Bundled Amp Rigs must be locked on because app/plugin installs require VoLumRigs")
     if choice.find(f"./pkg-ref[@id='{choice_id}']") is None:
         errors.append(f"installer choice {choice_id} does not reference its package")
 
