@@ -58,4 +58,6 @@ Version metadata:
 Release notes:
 
 - Inspect actual assets with `gh release view` before writing notes.
+- Describe only user-facing changes since the previous published release. Do not include manual test plans, internal RC-only bugs, or fixes for behavior that never shipped publicly.
+- Mention concrete asset names and install path choices when they affect what users download or install.
 - Do not remove README screenshots or CI badges unless explicitly asked.

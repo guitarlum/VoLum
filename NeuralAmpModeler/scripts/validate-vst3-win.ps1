@@ -23,7 +23,39 @@ if (Test-Path $toolDir) { Remove-Item $toolDir -Recurse -Force }
 New-Item -ItemType Directory -Path $toolDir | Out-Null
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
-Invoke-WebRequest "https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip" -OutFile $zipPath
+function Test-ZipHeader {
+  param([string] $Path)
+
+  if (-not (Test-Path $Path)) { return $false }
+  $bytes = [System.IO.File]::ReadAllBytes($Path)
+  return $bytes.Length -ge 4 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4b
+}
+
+function Invoke-DownloadWithRetry {
+  param(
+    [string] $Uri,
+    [string] $OutFile,
+    [int] $Attempts = 4
+  )
+
+  for ($attempt = 1; $attempt -le $Attempts; ++$attempt) {
+    if (Test-Path $OutFile) { Remove-Item $OutFile -Force }
+    try {
+      Write-Host "Downloading pluginval (attempt $attempt/$Attempts)..."
+      Invoke-WebRequest $Uri -OutFile $OutFile -Headers @{ "Accept" = "application/octet-stream" } -UserAgent "VoLum-CI"
+      if (Test-ZipHeader $OutFile) { return }
+      throw "Downloaded file is not a zip archive. GitHub may have returned an HTML error page."
+    }
+    catch {
+      if ($attempt -eq $Attempts) { throw }
+      $delay = [Math]::Min(30, 2 * $attempt * $attempt)
+      Write-Host "WARN: pluginval download failed: $($_.Exception.Message). Retrying in $delay seconds..."
+      Start-Sleep -Seconds $delay
+    }
+  }
+}
+
+Invoke-DownloadWithRetry "https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip" $zipPath
 Expand-Archive $zipPath -DestinationPath $toolDir -Force
 
 $pluginval = Get-ChildItem $toolDir -Recurse -Filter "pluginval.exe" | Select-Object -First 1
