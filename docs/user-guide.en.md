@@ -2,7 +2,7 @@
 
 **Languages:** English | [Deutsch](user-guide.de.md)
 
-This guide explains the VoLum 1.0 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
+This guide explains the VoLum 1.1 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
 
 ## Main View
 
@@ -15,7 +15,7 @@ This guide explains the VoLum 1.0 interface after installation. For downloads, u
 5. **PRE | AMP | POST strip:** open one section at a time.
 6. **Toolbar:** tuner, metronome, and settings live in the top-right corner.
 
-The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones.
+The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. VoLum 1.1 ships the full A2 profile library: all bundled amp, cab, and PRE NAM captures were retrained with the VoLum 700-1200 epoch escalation workflow.
 
 VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 

@@ -2,7 +2,7 @@
 
 **Sprachen:** [English](user-guide.en.md) | Deutsch
 
-Dieses Handbuch erklärt die VoLum-1.0-Oberfläche nach der Installation. Downloads, Hinweise zu unsignierten Builds und Installationspfade stehen in der [Haupt-README](../README.de.md).
+Dieses Handbuch erklärt die VoLum-1.1-Oberfläche nach der Installation. Downloads, Hinweise zu unsignierten Builds und Installationspfade stehen in der [Haupt-README](../README.de.md).
 
 ## Hauptansicht
 
@@ -15,7 +15,7 @@ Dieses Handbuch erklärt die VoLum-1.0-Oberfläche nach der Installation. Downlo
 5. **PRE | AMP | POST-Leiste:** öffnet immer genau einen Bereich.
 6. **Toolbar:** Tuner, Metronom und Einstellungen sitzen oben rechts.
 
-Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen.
+Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen. VoLum 1.1 liefert die komplette A2-Profilbibliothek: alle mitgelieferten Amp-, Cab- und PRE-NAM-Captures wurden mit dem VoLum-Training samt 700-1200-Epochen-Eskalation neu trainiert.
 
 VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual Amp wieder her.
 

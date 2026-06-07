@@ -13,6 +13,7 @@ SETTINGS_DIR="$HOME/Library/Application Support/VoLum"
 SETTINGS_PATH="$SETTINGS_DIR/volum-settings.json"
 SENTINEL_VALUE="0.777777"
 SENTINEL_AMP="Ampete One"
+RIG_HASH_SUBPATH="Ampete One/AMP-Ampt-1.nam"
 
 if [[ -z "$FROM_TAG" ]]; then
   FROM_TAG="$(gh release list --repo guitarlum/VoLum --limit 20 --json tagName,isDraft \
@@ -202,6 +203,18 @@ if [[ -z "$APP_PATH" ]]; then
   exit 1
 fi
 
+SOURCE_RIG_PATH="$REPO_ROOT/rigs/$RIG_HASH_SUBPATH"
+INSTALLED_RIG_PATH="/Library/Application Support/VoLum/VoLumRigs/$RIG_HASH_SUBPATH"
+if [[ ! -f "$SOURCE_RIG_PATH" ]]; then
+  echo "ERROR: source rig for overwrite assertion missing: $SOURCE_RIG_PATH" >&2
+  exit 1
+fi
+if [[ ! -f "$INSTALLED_RIG_PATH" ]]; then
+  echo "ERROR: prior release install did not create rig for overwrite assertion: $INSTALLED_RIG_PATH" >&2
+  exit 1
+fi
+printf "stale-a1-sentinel" | sudo tee "$INSTALLED_RIG_PATH" >/dev/null
+
 mkdir -p "$SETTINGS_DIR"
 cat > "$SETTINGS_PATH" <<JSON
 {
@@ -240,6 +253,17 @@ fi
 if ! grep -q "\"postDelayMix\": $SENTINEL_VALUE" "$SETTINGS_PATH"; then
   echo "ERROR: upgrade did not preserve seeded volum-settings.json sentinel." >&2
   cat "$SETTINGS_PATH" >&2 || true
+  exit 1
+fi
+
+if [[ ! -f "$INSTALLED_RIG_PATH" ]]; then
+  echo "ERROR: upgrade install did not restore rig for overwrite assertion: $INSTALLED_RIG_PATH" >&2
+  exit 1
+fi
+SOURCE_RIG_HASH="$(shasum -a 256 "$SOURCE_RIG_PATH" | awk '{print $1}')"
+INSTALLED_RIG_HASH="$(shasum -a 256 "$INSTALLED_RIG_PATH" | awk '{print $1}')"
+if [[ "$INSTALLED_RIG_HASH" != "$SOURCE_RIG_HASH" ]]; then
+  echo "ERROR: upgrade did not overwrite $RIG_HASH_SUBPATH with the bundled rig. Installed SHA256=$INSTALLED_RIG_HASH expected=$SOURCE_RIG_HASH" >&2
   exit 1
 fi
 
