@@ -6,14 +6,24 @@
 
 #include "activations.h"
 #include "get_dsp.h"
+#include "json.hpp"
+#include "slimmable.h"
+#include "wavenet/a2_fast.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
+
+#if !defined(NAM_ENABLE_A2_FAST)
+  #error "Golden rig tests must exercise the same NAM_ENABLE_A2_FAST path as product builds."
+#endif
 
 namespace
 {
@@ -36,6 +46,15 @@ std::filesystem::path RepoRoot()
 std::filesystem::path GoldenDir()
 {
   return std::filesystem::path(__FILE__).parent_path() / "golden_rigs";
+}
+
+nlohmann::json ReadJson(const std::filesystem::path& path)
+{
+  std::ifstream input(path);
+  REQUIRE(input.good());
+  nlohmann::json json;
+  input >> json;
+  return json;
 }
 
 bool UpdateGoldens()
@@ -172,4 +191,56 @@ TEST_CASE("Golden rigs: reference NAM renders stay within tolerance")
     REQUIRE(std::filesystem::exists(rigPath));
     CompareToGolden(testCase, RenderRig(rigPath, input));
   }
+}
+
+TEST_CASE("A2 rigs activate the specialized fast WaveNet path")
+{
+  const auto rigPath = RepoRoot() / "rigs/Ampete One/AMP-Ampt-1.nam";
+  const auto json = ReadJson(rigPath);
+  REQUIRE(json.at("architecture").get<std::string>() == "SlimmableContainer");
+
+  const auto& submodels = json.at("config").at("submodels");
+  REQUIRE(submodels.size() == 2);
+
+  int channels = 0;
+  CHECK(nam::wavenet::a2_fast::is_a2_shape(submodels.at(0).at("model").at("config"), &channels));
+  CHECK(channels == 3);
+
+  channels = 0;
+  CHECK(nam::wavenet::a2_fast::is_a2_shape(submodels.at(1).at("model").at("config"), &channels));
+  CHECK(channels == 8);
+}
+
+TEST_CASE("A2 core load and prewarm timing is visible in test logs")
+{
+  const auto rigPath = RepoRoot() / "rigs/Ampete One/AMP-Ampt-1.nam";
+  const auto start = std::chrono::steady_clock::now();
+  auto model = nam::get_dsp(rigPath);
+  REQUIRE(model != nullptr);
+  model->Reset(static_cast<double>(kSampleRate), kBlockSize);
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+
+  std::cout << "A2 load+prewarm " << rigPath.filename().string() << ": " << elapsed.count() << " ms" << std::endl;
+  CHECK(elapsed < std::chrono::seconds(5));
+}
+
+TEST_CASE("A2 container can lazily activate the Lite submodel after load")
+{
+  const auto rigPath = RepoRoot() / "rigs/Ampete One/AMP-Ampt-1.nam";
+  auto model = nam::get_dsp(rigPath);
+  REQUIRE(model != nullptr);
+  model->Reset(static_cast<double>(kSampleRate), kBlockSize);
+
+  auto* slimmable = dynamic_cast<nam::SlimmableModel*>(model.get());
+  REQUIRE(slimmable != nullptr);
+  slimmable->SetSlimmableSize(0.0);
+
+  std::vector<NAM_SAMPLE> input(kBlockSize, static_cast<NAM_SAMPLE>(0.05));
+  std::vector<NAM_SAMPLE> output(kBlockSize, static_cast<NAM_SAMPLE>(0.0));
+  NAM_SAMPLE* inputPtr = input.data();
+  NAM_SAMPLE* outputPtr = output.data();
+  model->process(&inputPtr, &outputPtr, kBlockSize);
+
+  for (const auto sample : output)
+    CHECK(std::isfinite(static_cast<double>(sample)));
 }
