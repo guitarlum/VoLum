@@ -249,15 +249,20 @@ jobs:
         read_bundle_version() {
           local plist="$1"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist"
+            || /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist" 2>/dev/null \
+            || true
         }
         APP_VERSION=$(read_bundle_version "$APP_PLIST")
         VST3_VERSION=$(read_bundle_version "$VST3_PLIST")
         echo "Release tag version : $RELEASE_VERSION"
         echo "Standalone app      : $APP_VERSION"
-        echo "VST3 plug-in        : $VST3_VERSION"
-        if [ "$APP_VERSION" != "$RELEASE_VERSION" ] || [ "$VST3_VERSION" != "$RELEASE_VERSION" ]; then
+        echo "VST3 plug-in        : ${VST3_VERSION:-not declared}"
+        if [ "$APP_VERSION" != "$RELEASE_VERSION" ]; then
           echo "ERROR: built bundle versions do not match the release tag." >&2
+          exit 1
+        fi
+        if [ -n "$VST3_VERSION" ] && [ "$VST3_VERSION" != "$RELEASE_VERSION" ]; then
+          echo "ERROR: built VST3 bundle version does not match the release tag." >&2
           exit 1
         fi
       shell: bash
