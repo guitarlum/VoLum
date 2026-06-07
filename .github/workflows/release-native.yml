@@ -246,8 +246,13 @@ jobs:
         RELEASE_VERSION="${{ needs.prepare_release.outputs.release_version }}"
         APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
         VST3_PLIST="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/Info.plist"
-        APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PLIST")
-        VST3_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$VST3_PLIST")
+        read_bundle_version() {
+          local plist="$1"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist"
+        }
+        APP_VERSION=$(read_bundle_version "$APP_PLIST")
+        VST3_VERSION=$(read_bundle_version "$VST3_PLIST")
         echo "Release tag version : $RELEASE_VERSION"
         echo "Standalone app      : $APP_VERSION"
         echo "VST3 plug-in        : $VST3_VERSION"
