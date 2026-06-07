@@ -11,6 +11,7 @@ VoLum ist eine Open-Source-Gitarren-Amp-Sammlung für Bühne, Studio und Übungs
 ## Was VoLum Besonders Macht
 
 - **15 Amps sofort spielbereit:** Vintage-, moderne und Boutique-Captures mit 4 Speaker-Modi und mehreren Gain-Stufen pro Amp.
+- **Komplette A2-Profilbibliothek:** jedes mitgelieferte Amp-, Cab- und PRE-NAM-Capture ist mit VoLums 700-1200-Epochen-Eskalationsworkflow trainiert.
 - **Kompletter Rig-Workflow:** PRE-Kompressor und NAM-Pedal-Slots, AMP-Regler und POST Delay/Reverb in einer `PRE | AMP | POST`-Oberfläche.
 - **Dual Amp:** Haupt-Amp mit Support-Amp mischen, beide Spuren pannen und bei Bedarf die Support-Polarität drehen.
 - **POST-Effekte mit Charakter:** Digital, Analog und Reverse Delay plus Hall, Plate und Oktaverb Reverb mit Halo, Shimmer und Bloom.

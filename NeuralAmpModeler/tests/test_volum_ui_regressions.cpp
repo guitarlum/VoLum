@@ -509,7 +509,7 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   RequireContains(source, "mVolumLoadResults.push_back(std::move(result));");
 }
 
-TEST_CASE("VoLum NAM cache copies dspData before Core consumes weights")
+TEST_CASE("VoLum NAM cache copies dspData before Core consumes cached fields")
 {
   const std::string source = ReadPluginSource();
 

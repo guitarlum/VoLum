@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>VoLum</string>
 	<key>CFBundleGetInfoString</key>
-	<string>VoLum v1.0.1 Copyright 2024-2026 Steffen Dangmann and VoLum contributors</string>
+	<string>VoLum v1.1.0 Copyright 2024-2026 Steffen Dangmann and VoLum contributors</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.Lum.app.VoLum.AUv3</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.1</string>
+	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.1</string>
+	<string>1.1.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.12.0</string>
 	<key>NSExtension</key>
@@ -48,7 +48,7 @@
 					<key>type</key>
 					<string>aufx</string>
 					<key>version</key>
-					<integer>65537</integer>
+					<integer>65792</integer>
 				</dict>
 			</array>
 		</dict>

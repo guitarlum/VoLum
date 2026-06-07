@@ -11,6 +11,7 @@ VoLum is an open-source guitar amp collection for the stage, studio, and practic
 ## Why It Stands Out
 
 - **15 bundled amps, ready to play:** vintage, modern, and boutique captures with 4 speaker modes and multiple gain-stage channels each.
+- **Full A2 profile library:** every bundled amp, cab, and PRE NAM capture is trained with VoLum's 700-1200 epoch escalation workflow.
 - **Full rig workflow:** PRE compressor and NAM pedal slots, AMP controls, and POST Delay/Reverb live in one `PRE | AMP | POST` layout.
 - **Dual Amp:** blend a main amp with a support amp, pan both lanes, and flip support polarity when a stack needs it.
 - **POST effects with character:** Digital, Analog, and Reverse Delay plus Hall, Plate, and Oktaverb Reverb with Halo, Shimmer, and Bloom voices.

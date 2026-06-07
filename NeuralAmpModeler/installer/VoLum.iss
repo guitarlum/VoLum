@@ -5,8 +5,8 @@ AppCopyright=Copyright (C) 2026 Lum
 AppPublisher=Lum
 AppPublisherURL=https://github.com/guitarlum/VoLum
 AppSupportURL=https://github.com/guitarlum/VoLum
-AppVersion=1.0.1
-VersionInfoVersion=1.0.1
+AppVersion=1.1.0
+VersionInfoVersion=1.1.0
 DefaultDirName={autopf}\VoLum
 DefaultGroupName=VoLum
 Compression=lzma2
@@ -34,6 +34,10 @@ Name: "vst3_64"; Description: "64-bit VST3 Plugin (.vst3)"; Types: full custom; 
 [Dirs]
 Name: "{cf64}\VST3\VoLum.vst3\"; Attribs: readonly; Check: Is64BitInstallMode; Components:vst3_64;
 Name: "{app}\VoLumRigs\PrePedals";
+
+[InstallDelete]
+; Keep upgrades asset-exact: rig files are app-managed and must not retain stale captures.
+Type: filesandordirs; Name: "{app}\VoLumRigs"
 
 [Files]
 ; Standalone exe

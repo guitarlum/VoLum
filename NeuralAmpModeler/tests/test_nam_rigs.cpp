@@ -59,18 +59,24 @@ TEST_CASE("Cached NAM dspData can construct multiple models when copied")
   nam::dspData cachedConfig;
   auto loadedModel = nam::get_dsp(path, cachedConfig);
   REQUIRE(loadedModel != nullptr);
-  REQUIRE(!cachedConfig.weights.empty());
 
   nam::dspData firstCopy = cachedConfig;
   auto firstCachedModel = nam::get_dsp(firstCopy);
   REQUIRE(firstCachedModel != nullptr);
   firstCachedModel->Reset(48000.0, 512);
-  REQUIRE(!cachedConfig.weights.empty());
 
   nam::dspData secondCopy = cachedConfig;
   auto secondCachedModel = nam::get_dsp(secondCopy);
   REQUIRE(secondCachedModel != nullptr);
   secondCachedModel->Reset(48000.0, 512);
+
+  std::vector<NAM_SAMPLE> input(64, static_cast<NAM_SAMPLE>(0.05));
+  std::vector<NAM_SAMPLE> output(64, static_cast<NAM_SAMPLE>(0.0));
+  NAM_SAMPLE* inPtr = input.data();
+  NAM_SAMPLE* outPtr = output.data();
+  secondCachedModel->process(&inPtr, &outPtr, static_cast<int>(output.size()));
+  for (const auto sample : output)
+    CHECK(std::isfinite(static_cast<double>(sample)));
 }
 
 TEST_CASE("Core slimmable NAM example loads and processes")
