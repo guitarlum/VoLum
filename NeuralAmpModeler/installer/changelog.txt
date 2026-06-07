@@ -42,3 +42,4 @@
 05/17/2026 - VoLum: Fixed macOS standalone app identity for microphone privacy persistence. The standalone bundle now declares itself as a real macOS application, release signing uses the microphone entitlement file when enabled, and macOS package verification checks the app bundle ID, package type, and microphone privacy metadata so VoLum should not ask for mic permission on every launch.
 
 06/07/2026 - VoLum v1.1.0: Replaced the bundled rig library with the full A2 profile set. All 249 amp, cab, and PRE NAM captures were retrained with the VoLum 700-1200 epoch escalation workflow, improving mean ESR from 0.00651 to 0.00388 (237/249 profiles improved).
+06/07/2026 - VoLum v1.1.0: Enabled the A2 fast WaveNet path and reduced SlimmableContainer load prewarming to the active submodel, improving amp/channel and PRE NAM switching latency while preserving future Lite mode support.

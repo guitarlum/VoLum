@@ -70,6 +70,7 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
 )
 
 target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
+  NAM_ENABLE_A2_FAST
   _CRT_SECURE_NO_DEPRECATE
   _CRT_NONSTDC_NO_DEPRECATE
 )
