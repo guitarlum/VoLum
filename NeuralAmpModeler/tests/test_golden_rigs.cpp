@@ -221,7 +221,11 @@ TEST_CASE("A2 core load and prewarm timing is visible in test logs")
   const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
 
   std::cout << "A2 load+prewarm " << rigPath.filename().string() << ": " << elapsed.count() << " ms" << std::endl;
+#if defined(VOLUM_TEST_SANITIZERS)
+  CHECK(elapsed < std::chrono::seconds(15));
+#else
   CHECK(elapsed < std::chrono::seconds(5));
+#endif
 }
 
 TEST_CASE("A2 container can lazily activate the Lite submodel after load")
