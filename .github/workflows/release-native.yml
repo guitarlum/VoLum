@@ -244,10 +244,14 @@ jobs:
       run: |
         set -euo pipefail
         RELEASE_VERSION="${{ needs.prepare_release.outputs.release_version }}"
-        APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
+        APP_PLIST="${VOLUM_INSTALLED_APP:-$HOME/Applications/VoLum.app}/Contents/Info.plist"
         VST3_PLIST="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/Info.plist"
         read_bundle_version() {
           local plist="$1"
+          if [ ! -f "$plist" ]; then
+            echo "ERROR: plist not found: $plist" >&2
+            return 1
+          fi
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null \
             || /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist" 2>/dev/null \
             || true
