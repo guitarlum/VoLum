@@ -19,6 +19,7 @@ $settingsDir = Join-Path $env:LOCALAPPDATA "VoLum"
 $settingsPath = Join-Path $settingsDir "volum-settings.json"
 $sentinelValue = "0.777777"
 $sentinelAmp = "Ampete One"
+$rigHashRelativePath = "Ampete One\AMP-Ampt-1.nam"
 
 function Fail-UpgradeSmoke {
   param([string] $Message)
@@ -156,6 +157,16 @@ try {
   $priorVersion = (Get-Item $priorExe).VersionInfo.ProductVersion
   Write-Host "Prior installed version: $priorVersion at $installDir"
 
+  $sourceRigPath = Join-Path (Join-Path $repoRoot "rigs") $rigHashRelativePath
+  $installedRigPath = Join-Path (Join-Path $installDir "VoLumRigs") $rigHashRelativePath
+  if (-not (Test-Path $sourceRigPath)) {
+    throw "Source rig for overwrite assertion missing: $sourceRigPath"
+  }
+  if (-not (Test-Path $installedRigPath)) {
+    throw "Prior release install did not create rig for overwrite assertion: $installedRigPath"
+  }
+  Set-Content -Path $installedRigPath -Value "stale-a1-sentinel" -Encoding ASCII -NoNewline
+
   $newSetupVersion = (Get-Item $NewSetupPath).VersionInfo.ProductVersion
   Write-Host "New setup ProductVersion: $newSetupVersion"
 
@@ -193,6 +204,15 @@ try {
   $settingsText = Get-Content $settingsPath -Raw
   if ($settingsText -notmatch [regex]::Escape($sentinelValue)) {
     throw "Upgrade did not preserve seeded volum-settings.json sentinel."
+  }
+
+  if (-not (Test-Path $installedRigPath)) {
+    throw "Upgrade install did not restore rig for overwrite assertion: $installedRigPath"
+  }
+  $sourceRigHash = (Get-FileHash -Algorithm SHA256 -Path $sourceRigPath).Hash
+  $installedRigHash = (Get-FileHash -Algorithm SHA256 -Path $installedRigPath).Hash
+  if ($installedRigHash -ne $sourceRigHash) {
+    throw "Upgrade did not overwrite $rigHashRelativePath with the bundled rig. Installed SHA256=$installedRigHash expected=$sourceRigHash"
   }
 
   Write-Host "Windows upgrade smoke OK ($FromTag -> $expectedVersion)."

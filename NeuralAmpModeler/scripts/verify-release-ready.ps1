@@ -1,6 +1,6 @@
 # Verify that a draft release is ready to publish.
 param(
-  [string] $Tag = "v1.0.1",
+  [string] $Tag = "v1.1.0",
   [string] $Branch = "main",
   [string] $Repo = "guitarlum/VoLum",
   [string] $RemoteUrl = "https://github.com/guitarlum/VoLum.git",

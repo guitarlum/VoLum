@@ -2,7 +2,7 @@
 param(
   [Parameter(Mandatory = $true)]
   [long] $RunId,
-  [string] $ReleaseTag = "v1.0.1",
+  [string] $ReleaseTag = "v1.1.0",
   [string] $Repo = "guitarlum/VoLum",
   [string] $WorkDir = "",
   [switch] $IncludePdbs

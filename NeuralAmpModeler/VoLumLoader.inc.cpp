@@ -254,7 +254,7 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
     if (cacheIt != mVolumDspCache.end())
     {
       touchCache(path);
-      // Core consumes dspData::weights during construction, so keep the cached copy immutable.
+      // Core may consume/move fields during construction, so keep the cached copy immutable.
       nam::dspData cachedConfig = cacheIt->second;
       return nam::get_dsp(cachedConfig);
     }
