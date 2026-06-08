@@ -34,4 +34,11 @@ cmake -S "$PROJECT_DIR/tests" -B "$BUILD_DIR" \
 cmake --build "$BUILD_DIR" --config "$BUILD_TYPE" -j"$(sysctl -n hw.ncpu)"
 
 cd "$REPO_ROOT"
-"$BUILD_DIR/NeuralAmpModeler-Tests"
+if [[ "$SANITIZE" == "1" ]]; then
+  "$BUILD_DIR/NeuralAmpModeler-Tests" \
+    --test-case-exclude="Golden *" \
+    --test-case-exclude="A2 core load and prewarm timing is visible in test logs" \
+    --test-case-exclude="A2 container can lazily activate the Lite submodel after load"
+else
+  "$BUILD_DIR/NeuralAmpModeler-Tests"
+fi
