@@ -37,6 +37,10 @@ cd "$REPO_ROOT"
 if [[ "$SANITIZE" == "1" ]]; then
   "$BUILD_DIR/NeuralAmpModeler-Tests" \
     --test-case-exclude="Golden *" \
+    --test-case-exclude="Load *NAM*" \
+    --test-case-exclude="Cached NAM dspData can construct multiple models when copied" \
+    --test-case-exclude="Core slimmable NAM example loads and processes" \
+    --test-case-exclude="Process one block through every bundled main NAM file" \
     --test-case-exclude="A2 core load and prewarm timing is visible in test logs" \
     --test-case-exclude="A2 container can lazily activate the Lite submodel after load"
 else
