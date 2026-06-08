@@ -81,6 +81,7 @@ endif()
 
 if(VOLUM_ENABLE_SANITIZERS)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_definitions(NeuralAmpModeler-Tests PRIVATE VOLUM_TEST_SANITIZERS)
     target_compile_options(NeuralAmpModeler-Tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(NeuralAmpModeler-Tests PRIVATE -fsanitize=address,undefined)
   else()
