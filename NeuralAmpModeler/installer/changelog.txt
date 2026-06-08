@@ -44,4 +44,3 @@
 06/07/2026 - VoLum v1.1.0: Replaced the bundled rig library with the full A2 profile set. All 249 amp, cab, and PRE NAM captures were retrained with the VoLum 700-1200 epoch escalation workflow, improving mean ESR from 0.00651 to 0.00388 (237/249 profiles improved).
 06/07/2026 - VoLum v1.1.0: Enabled the A2 fast WaveNet path and reduced SlimmableContainer load prewarming to the active submodel, improving amp/channel and PRE NAM switching latency while preserving future Lite mode support.
 
-06/08/2026 - v1.1.0 VoLum release. See GitHub release notes for included changes.
