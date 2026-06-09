@@ -1,0 +1,5 @@
+# O1 — Linux support investigation
+
+Plan a spike for Linux support of VoLum. One user requested it. Goal is decision and scope, not implementation. Investigate: iPlug2 Linux backend status (VST3 host + standalone via JACK/ALSA/PulseAudio/Pipewire), build toolchain (CMake/Make, GCC/Clang versions), packaging (AppImage, .deb, plain tarball), code signing equivalents, NAM core portability, AudioDSPTools portability, dependencies in `THIRD_PARTY_LICENSES.md`, and CI implications (adding a Linux job to `.github/workflows/ci.yml`). Produce: feasibility report, estimated effort tiers (VST3-only vs VST3+standalone), risks (audio backends, packaging, GUI font/asset paths), test/CI plan, and a go/no-go recommendation. Do not implement.
+
+Work must happen on a dedicated feature branch off the latest `dev`, named `feature/linux-support-spike`. Do not commit to `dev` or `main` directly. The branch is merged back into `dev` only after the ticket's acceptance criteria are met and tests/docs/changelog are in place (for a spike: report committed, no production code shipped). Never promote to `main` outside of a release.
