@@ -1,6 +1,6 @@
 ---
-name: rules-skills-audit
-description: Periodic redundancy and overhead review of this repo's Cursor rules, skills, and AGENTS.md. Use when the user asks to audit, prune, or trim rules/skills, reduce agent overhead or entropy, or invokes /rules-skills-audit. Opt-in; not for routine tasks.
+name: occams-razor
+description: Periodic redundancy and overhead review of this repo's Cursor rules, skills, and AGENTS.md. Use when the user asks to audit, prune, or trim rules/skills, reduce agent overhead or entropy, or invokes /occams-razor. Opt-in; not for routine tasks.
 disable-model-invocation: true
 ---
 
