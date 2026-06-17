@@ -11,7 +11,7 @@ VoLum is independent, but stays close enough to two upstream sources that fixes 
 
 - `NeuralAmpModelerCore/` is the NAM model runtime submodule (wavenet / lstm / convnet / ResamplingContainer).
 - Sync with `git submodule update --remote NeuralAmpModelerCore`.
-- Then run `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`; make sure `test_nam_rigs.cpp` loads every bundled `.nam` and runs one finite, bounded `process()` block.
+- Then run the Windows tests (`AGENTS.md` "Fast Commands"); make sure `test_nam_rigs.cpp` loads every bundled `.nam` and runs one finite, bounded `process()` block.
 - Bundled main amps live in `rigs/`; PRE captures live in `rigs/PrePedals/`. Both must keep loading across submodule upgrades.
 - If any rig fails to load or emits non-finite samples, pin the submodule back and open an upstream issue.
 
