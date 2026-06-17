@@ -8,19 +8,9 @@ description: Safely change VoLum parameters, preset migration, user settings, or
 ## Checklist
 
 1. Read `.cursor/rules/volum-state-params.mdc`.
-2. Identify every affected contract:
-   - `EParams` order
-   - stable `GetName()` strings
-   - `Unserialization.cpp`
-   - `VoLumChunkVersion.h`
-   - keyboard step sizes
-   - per-amp JSON settings
+2. Identify every affected contract listed there (param order, stable names, serialization, chunk version, keyboard steps, settings).
 3. Add migration instead of modifying old readers.
-4. Update tests before calling work done:
-   - `test_eparam_order.cpp`
-   - `test_keyboard_steps.cpp`
-   - `test_volum_chunk_version.cpp`
-   - settings/DSP-specific tests as needed.
+4. Update the param/state tests listed in that rule before calling work done, plus settings/DSP-specific tests as needed.
 5. If a post-plan fix would change user-facing display wording or symbols,
    ask before changing the planned wording (for example `-∞ dB` vs `OFF`).
 

@@ -29,7 +29,7 @@ alwaysApply: false
 
 ## Verification
 
-- After DSP/UI/state changes: **`run-tests-win.ps1`** and a **targeted MSBuild** of the configuration you touched (e.g. `NeuralAmpModeler-app` or `NeuralAmpModeler-vst3`).
+- After DSP/UI/state changes: run the Windows tests (`AGENTS.md` "Fast Commands") and a **targeted MSBuild** of the configuration you touched (e.g. `NeuralAmpModeler-app` or `NeuralAmpModeler-vst3`).
 - Cross-platform test additions must be registered in both `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj` and `NeuralAmpModeler/tests/CMakeLists.txt`.
 - DSP helpers/effects: doctests in `NeuralAmpModeler/tests/` (`test_process_io.cpp`, `test_delay_reverb_dsp.cpp`, `test_volum_pre_effects.cpp`, `test_tone_stack.cpp`, tuner/metronome tests).
 - Main signal-chain decisions: `VoLumProcessingPlan.h` plus `test_volum_processing_plan.cpp`.
