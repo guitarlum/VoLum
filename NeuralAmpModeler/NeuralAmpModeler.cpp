@@ -207,6 +207,10 @@ const bool kDefaultCalibrateInput = false;
 const std::string kInputCalibrationLevelParamName = "InputCalibrationLevel";
 const double kDefaultInputCalibrationLevel = 12.0;
 
+// Support-amp dropdown row codes: factory amps use their 0-based index; custom
+// amps are offset by this base so the select callback can tell them apart.
+constexpr int kVolumCustomSupportBase = 10000;
+
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 : Plugin(info, MakeConfig(kNumParams, kNumPresets))
@@ -556,12 +560,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new VoLumSpeakerRowControl(speakerArea,
         [this](int speakerIdx) {
-          // Custom MAIN amp focused: the cab row is display-only. Switching cabs
-          // just retargets the channel stepper to that slot (no model load).
-          if (mVolumCustomMainIdx >= 0 && !(GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport))
+          // Custom amp focused (main or support): the cab row is display-only.
+          // Switching cabs just retargets that lane's channel stepper (no load).
+          const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
+          const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
+          if (customLane >= 0)
           {
             const int slot = (speakerIdx == 0) ? volum::custom::kDirectSlot : (speakerIdx - 1);
-            _VolumSetCustomChannelStepper(mVolumCustomMainIdx, slot);
+            _VolumSetCustomChannelStepper(customLane, slot, supportFocus);
             _VolumMarkPresetDirty();
             return;
           }
@@ -657,6 +663,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       [this](bool supportFocused) {
         mVolumDualAmpFocusedSupport = supportFocused;
         mVolumFocusedEffect = EVoLumEffectFocus::AMP;
+        _VolumApplyFocusedLaneCabs();
         _UpdateVoLumLayout();
         _UpdateVoLumKeyboardFocusHint();
       },
@@ -1019,8 +1026,21 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new VoLumExactEntryControl(b, kInputLevel, "INPUT"), kCtrlTagVoLumExactEntry)->Hide(true);
     pGraphics->AttachControl(new VoLumPreCaptureMenuControl(IRECT(mainL, knobRowTop, mainL + 220.f, knobRowTop + 160.f)),
                              kCtrlTagVoLumPreCaptureMenu)->Hide(true);
-    pGraphics->AttachControl(new VoLumSupportAmpMenuControl(IRECT(mainL, knobRowTop, mainL + 220.f, knobRowTop + 160.f)),
-                             kCtrlTagVoLumSupportAmpMenu)->Hide(true);
+    // Dual-amp SUPPORT picker: scrollable list with "(none)" + factory amps + a
+    // "CUSTOM" group (shown only when custom amps exist). Picking a custom amp
+    // makes it the support partner (display + session only).
+    {
+      auto* supMenu = new VoLumListMenuControl(b);
+      supMenu->SetCallback([this](int code) {
+        if (code == VoLumListMenuControl::kNone)
+          _VolumSetSupportAmp(-1);
+        else if (code >= kVolumCustomSupportBase)
+          _VolumSetSupportCustom(code - kVolumCustomSupportBase);
+        else if (code >= 0 && code < volum::kAmpCount)
+          _VolumSetSupportAmp(code);
+      });
+      pGraphics->AttachControl(supMenu, kCtrlTagVoLumSupportAmpMenu)->Hide(true);
+    }
 
     // Lane belonging on the SUPPORT amp-row knobs is conveyed solely by the teal knob pointer
     // dot. Labels and value text stay bright/neutral so the row reads cleanly. Set once at attach
@@ -3143,6 +3163,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       auto* heroImage = hero->As<VoLumHeroImageControl>();
       heroImage->SetDualAmpState(GetParam(kDualAmpActive)->Bool(), mVolumDualAmpFocusedSupport,
                                  GetParam(kSupportAmpIdx)->Int());
+      const auto& customAmps = volum::custom::MockCustomAmps();
+      if (mVolumCustomSupportIdx >= 0 && mVolumCustomSupportIdx < static_cast<int>(customAmps.size()))
+        heroImage->SetSupportCustom(true, volum::custom::CustomAmpArt(mVolumCustomSupportIdx),
+                                    customAmps[(size_t)mVolumCustomSupportIdx].c_str());
+      else
+        heroImage->SetSupportCustom(false, 0, "");
       hero->Hide(!ampExpanded);
     }
 
@@ -3154,11 +3180,15 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       {
         if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
         {
+          const auto& customAmps = volum::custom::MockCustomAmps();
           const int supportAmpIdx = GetParam(kSupportAmpIdx)->Int();
-          subText->SetName(supportAmpIdx >= 0 && supportAmpIdx < volum::kAmpCount
-                            ? volum::kAmps[supportAmpIdx].displayName
-                            : "Choose support amp",
-                           true);
+          if (mVolumCustomSupportIdx >= 0 && mVolumCustomSupportIdx < static_cast<int>(customAmps.size()))
+            subText->SetName(customAmps[(size_t)mVolumCustomSupportIdx].c_str(), true);
+          else
+            subText->SetName(supportAmpIdx >= 0 && supportAmpIdx < volum::kAmpCount
+                              ? volum::kAmps[supportAmpIdx].displayName
+                              : "Choose support amp",
+                             true);
         }
         else
           subText->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
@@ -3579,7 +3609,7 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   _VolumApplyCustomMainCabs(customIdx);
 }
 
-void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx)
+void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx, bool supportLane)
 {
   auto* pGfx = GetUI();
   if (!pGfx)
@@ -3604,10 +3634,10 @@ void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx)
     sel = (selSlot == volum::custom::kDirectSlot) ? 0 : selSlot + 1;
   }
   row->SetSelected(sel);
-  _VolumSetCustomChannelStepper(customIdx, selSlot);
+  _VolumSetCustomChannelStepper(customIdx, selSlot, supportLane);
 }
 
-void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, int slot)
+void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane)
 {
   const auto amp = volum::custom::CustomAmpAt(customIdx);
   std::vector<std::string> labels;
@@ -3615,8 +3645,11 @@ void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, int slot)
     labels.push_back(std::to_string(c));
   if (labels.empty())
     labels.push_back("1"); // DIRECT amp-only fallback
+  // The MAIN and SUPPORT lanes have separate channel steppers; drive whichever
+  // belongs to the focused lane.
+  const int tag = supportLane ? kCtrlTagVoLumSupportChannelStep : kCtrlTagVoLumChannelStep;
   if (auto* pGfx = GetUI())
-    if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
+    if (auto* stepper = pGfx->GetControlWithTag(tag))
       stepper->As<VoLumChannelStepControl>()->SetChannels(labels, 0);
 }
 
@@ -3701,7 +3734,7 @@ void NeuralAmpModeler::_VolumShowSupportAmpMenu(const IRECT& anchorRect)
   if (!rawCtrl)
     return;
 
-  auto* menu = rawCtrl->As<VoLumSupportAmpMenuControl>();
+  auto* menu = rawCtrl->As<VoLumListMenuControl>();
   if (!menu)
     return;
 
@@ -3711,42 +3744,68 @@ void NeuralAmpModeler::_VolumShowSupportAmpMenu(const IRECT& anchorRect)
     return;
   }
 
-  // Item 0 = "(none)" so the user can clear the support amp without disabling Dual Amp mode.
-  std::vector<std::string> labels;
-  labels.reserve(static_cast<size_t>(volum::kAmpCount + 1));
-  labels.emplace_back("(none)");
+  // Row 0 = "(none)" so the user can clear the support amp without disabling Dual Amp mode.
+  // Then the factory amps, then a "CUSTOM" group (header + custom amps) when any exist.
+  std::vector<VoLumListMenuControl::Row> rows;
+  rows.push_back({"(none)", VoLumListMenuControl::kNone, false, false});
   for (int i = 0; i < volum::kAmpCount; ++i)
-    labels.emplace_back(volum::kAmps[i].displayName);
+    rows.push_back({volum::kAmps[i].displayName, i, false, false});
+  const auto& customAmps = volum::custom::MockCustomAmps();
+  if (!customAmps.empty())
+  {
+    rows.push_back({"CUSTOM", 0, false, /*dim=*/true});
+    for (int c = 0; c < static_cast<int>(customAmps.size()); ++c)
+      rows.push_back({customAmps[(size_t)c], kVolumCustomSupportBase + c, false, false});
+  }
 
-  const int currentSupportIdx = GetParam(kSupportAmpIdx)->Int();
-  const int selected = std::clamp(currentSupportIdx + 1, 0, static_cast<int>(labels.size() - 1));
+  int selected = VoLumListMenuControl::kNone;
+  if (mVolumCustomSupportIdx >= 0 && mVolumCustomSupportIdx < static_cast<int>(customAmps.size()))
+    selected = kVolumCustomSupportBase + mVolumCustomSupportIdx;
+  else
+  {
+    const int currentSupportIdx = GetParam(kSupportAmpIdx)->Int();
+    if (currentSupportIdx >= 0 && currentSupportIdx < volum::kAmpCount)
+      selected = currentSupportIdx;
+  }
 
   const float menuW = std::max(anchorRect.W() * 0.96f, 200.f);
-  const float menuH = VoLumSupportAmpMenuControl::ItemHeight() * static_cast<float>(labels.size()) + 12.f;
+  const float menuH = VoLumListMenuControl::MenuHeight(rows.size());
   const float panelW = static_cast<float>(pGfx->Width());
   const float panelH = static_cast<float>(pGfx->Height());
   const float anchorL = std::min(anchorRect.L, panelW - menuW - 8.f);
 
   // Prefer to drop the menu BELOW the support hero so the support panel stays clickable to
-  // dismiss the dropdown. If it doesn't fit (host shrinks the canvas, smaller standalone window,
-  // etc.), pop it ABOVE the hero instead — never clip the rect, otherwise the bottom amps
-  // become unreachable.
+  // dismiss the dropdown. The list scrolls internally, so cap the visible height to whichever
+  // gap (below / above) is larger and let the user scroll the rest.
   const float spaceBelow = panelH - (anchorRect.B + 6.f) - 8.f;
   const float spaceAbove = anchorRect.T - 6.f - 8.f;
   float menuT;
+  float visH;
   if (menuH <= spaceBelow)
+  {
     menuT = anchorRect.B + 6.f;
+    visH = menuH;
+  }
   else if (menuH <= spaceAbove)
+  {
     menuT = anchorRect.T - 6.f - menuH;
+    visH = menuH;
+  }
+  else if (spaceBelow >= spaceAbove)
+  {
+    menuT = anchorRect.B + 6.f;
+    visH = spaceBelow;
+  }
   else
-    // Last-resort: pin to the panel top with full natural height. Some items may extend past
-    // the visible canvas, but at this point the host window is just too short for the list.
-    menuT = std::max(8.f, panelH - menuH - 8.f);
+  {
+    visH = spaceAbove;
+    menuT = anchorRect.T - 6.f - visH;
+  }
 
-  const IRECT menuRect(anchorL, menuT, anchorL + menuW, menuT + menuH);
+  const IRECT menuRect(anchorL, menuT, anchorL + menuW, menuT + visH);
 
-  menu->SetTargetAndDrawRECTs(menuRect);
-  menu->SetItems(labels, selected);
+  menu->SetMenuRect(menuRect);
+  menu->SetRows(rows, selected);
   menu->Hide(false);
 }
 
@@ -3762,7 +3821,10 @@ void NeuralAmpModeler::_VolumHideSupportAmpMenu()
 void NeuralAmpModeler::_VolumSetSupportAmp(int ampIdx)
 {
   const int clamped = std::clamp(ampIdx, -1, volum::kAmpCount - 1);
-  if (GetParam(kSupportAmpIdx)->Int() == clamped)
+  // Picking a factory support amp (or "(none)") always clears a custom support partner.
+  const bool hadCustom = mVolumCustomSupportIdx >= 0;
+  mVolumCustomSupportIdx = -1;
+  if (!hadCustom && GetParam(kSupportAmpIdx)->Int() == clamped)
     return;
 
   GetParam(kSupportAmpIdx)->Set(clamped);
@@ -3771,13 +3833,80 @@ void NeuralAmpModeler::_VolumSetSupportAmp(int ampIdx)
   mVolumSettingsDirty = true;
   _VolumMarkPresetDirty();
   _VolumRefreshSupportChannels();
+  _VolumApplyFocusedLaneCabs();
   _UpdateVoLumLayout();
+}
+
+void NeuralAmpModeler::_VolumSetSupportCustom(int customIdx)
+{
+  const auto& names = volum::custom::MockCustomAmps();
+  if (customIdx < 0 || customIdx >= static_cast<int>(names.size()))
+    return;
+
+  mVolumCustomSupportIdx = customIdx;
+  // Custom support is display + session only: clear the factory reference so the
+  // SUPPORT lane renders the custom amp's art/cabs (not a factory amp).
+  if (GetParam(kSupportAmpIdx)->Int() != -1)
+  {
+    GetParam(kSupportAmpIdx)->Set(-1.0);
+    SendParameterValueFromDelegate(kSupportAmpIdx, GetParam(kSupportAmpIdx)->GetNormalized(), true);
+  }
+  mVolumSettingsDirty = true;
+  _VolumMarkPresetDirty();
+  _VolumApplyFocusedLaneCabs();
+  _UpdateVoLumLayout();
+}
+
+void NeuralAmpModeler::_VolumApplyFocusedLaneCabs()
+{
+  // Reconcile the shared cabinet row + channel stepper with the focused lane.
+  // Custom lanes show their own named cabs (Slice 3 plumbing); factory lanes
+  // restore the stock G12/G65/V30 labels and that lane's channels.
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
+  if (!spkCtrl)
+    return;
+
+  const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
+  const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
+  if (customLane >= 0)
+  {
+    _VolumApplyCustomMainCabs(customLane, supportFocus);
+    return;
+  }
+
+  auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
+  row->SetFactoryCabs();
+  if (supportFocus)
+  {
+    row->SetSelected(std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3));
+    _VolumRefreshSupportChannels();
+  }
+  else
+  {
+    row->SetSelected(mVolumSpeakerIdx);
+    _VolumRefreshChannels();
+  }
 }
 
 void NeuralAmpModeler::_VolumRefreshSupportChannels()
 {
   mVolumSupportChannelFiles.clear();
   mVolumSupportChannelLabels.clear();
+
+  // Custom support amp: channels come from the custom amp's cab slots (mock),
+  // not the factory rig folders. Drive the support stepper from its first
+  // populated slot and skip the factory discovery below.
+  if (mVolumCustomSupportIdx >= 0)
+  {
+    const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
+    const auto slots = volum::custom::AmpSlots(amp);
+    const int slot = slots.empty() ? volum::custom::kDirectSlot : slots.front();
+    _VolumSetCustomChannelStepper(mVolumCustomSupportIdx, slot, /*supportLane=*/true);
+    return;
+  }
 
   const int supportAmpIdx = GetParam(kSupportAmpIdx)->Int();
   if (supportAmpIdx >= 0 && supportAmpIdx < volum::kAmpCount && !mVolumRigsRoot.empty())
@@ -3827,11 +3956,17 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
-    auto* row = spkRow->As<VoLumSpeakerRowControl>();
-    const int focusedSpeakerIdx = supportFocus
-      ? std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3)
-      : mVolumSpeakerIdx;
-    row->SetSelected(focusedSpeakerIdx);
+    // Custom lanes manage their own cab selection in _VolumApplyFocusedLaneCabs;
+    // don't fight it here. Factory lanes track their per-amp speaker index.
+    const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
+    if (customLane < 0)
+    {
+      auto* row = spkRow->As<VoLumSpeakerRowControl>();
+      const int focusedSpeakerIdx = supportFocus
+        ? std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3)
+        : mVolumSpeakerIdx;
+      row->SetSelected(focusedSpeakerIdx);
+    }
   }
 
   // PAN knobs follow Dual Amp: shown only in dual mode, and their slot tracks the hero geometry.
