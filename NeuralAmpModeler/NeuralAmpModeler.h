@@ -183,6 +183,7 @@ enum ECtrlTags
   // 1.2.0 BYO + presets (UI shells)
   kCtrlTagVoLumPresetBar,
   kCtrlTagVoLumIrMenu,
+  kCtrlTagVoLumPresetMenu,
   kCtrlTagVoLumCustomOverlay,
   kNumCtrlTags
 };
@@ -434,7 +435,8 @@ public:
   void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
-  void _VolumImportPreCapturePedal(int slot);
+  void _VolumShowManageCustomPedals();
+  void _VolumShowPresetMenu();
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;

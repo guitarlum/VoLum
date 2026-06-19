@@ -24,12 +24,11 @@
 using namespace iplug;
 using namespace igraphics;
 
-// Action rows let the PRE dropdown host the F8 custom-pedal import/manage entry
-// points inline (no separate library hub).
+// The PRE dropdown hosts a single "Manage custom pedals..." entry that opens the
+// shared Manage panel (CRUD + import via file dialog). No inline import row.
 enum class PreMenuAction
 {
   None = 0,
-  Import,
   Manage
 };
 
@@ -39,8 +38,8 @@ struct VoLumPreCaptureMenuItem
   int captureIdx = 0;
   bool isHeader = false;
   volum::PrePedalCaptureGroup group = volum::PrePedalCaptureGroup::None;
-  PreMenuAction action = PreMenuAction::None; // Import/Manage rows (stub in shell)
-  bool custom = false; // imported capture -> show a marker
+  PreMenuAction action = PreMenuAction::None; // Manage row (opens the Manage panel)
+  bool custom = false; // imported capture row (dismiss-only in the shell)
 };
 
 class VoLumPreCaptureMenuControl : public IControl
@@ -107,9 +106,6 @@ public:
       if (selected)
         g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
       g.DrawText(selected ? text : dimText, item.label.c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
-      if (item.custom)
-        g.DrawText(IText(8.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Far, EVAlign::Middle), "IMPORTED",
-                   IRECT(row.L, row.T, row.R - 4.f, row.B));
     }
   }
 
@@ -126,14 +122,15 @@ public:
       return;
 
     const auto& item = mItems[static_cast<size_t>(idx)];
-    // F8: Import adds a mock capture and reopens; Manage + imported rows are
-    // UI-shell stubs that just dismiss.
-    if (item.action == PreMenuAction::Import)
+    // "Manage custom pedals..." opens the shared Manage panel; imported pedal
+    // rows are dismiss-only in the shell (selecting/applying lands with backend).
+    if (item.action == PreMenuAction::Manage)
     {
-      plugin->_VolumImportPreCapturePedal(mSlot);
+      plugin->_VolumHidePreCaptureMenu();
+      plugin->_VolumShowManageCustomPedals();
       return;
     }
-    if (item.action != PreMenuAction::None || item.custom)
+    if (item.custom)
     {
       plugin->_VolumHidePreCaptureMenu();
       return;

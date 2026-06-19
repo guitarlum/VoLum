@@ -224,6 +224,20 @@ inline int AddPedal(const std::string& name)
   return (int)v.size() - 1;
 }
 
+inline void RenamePedal(int idx, const std::string& name)
+{
+  auto& v = MockCustomPedals();
+  if (idx >= 0 && idx < (int)v.size() && !name.empty())
+    v[(size_t)idx] = name;
+}
+
+inline void DeletePedal(int idx)
+{
+  auto& v = MockCustomPedals();
+  if (idx >= 0 && idx < (int)v.size())
+    v.erase(v.begin() + idx);
+}
+
 // Per-amp named presets (F5), session-mutable so save/rename/delete persist in
 // the running shell (no disk). Index-keyed for the shell; the real backend keys
 // by amp identity.
@@ -276,6 +290,20 @@ inline int AddIR(const std::string& name)
   auto& v = MockIRLibrary();
   v.push_back(name.empty() ? "Imported IR" : name);
   return (int)v.size() - 1;
+}
+
+inline void RenameIR(int idx, const std::string& name)
+{
+  auto& v = MockIRLibrary();
+  if (idx >= 0 && idx < (int)v.size() && !name.empty())
+    v[(size_t)idx] = name;
+}
+
+inline void DeleteIR(int idx)
+{
+  auto& v = MockIRLibrary();
+  if (idx >= 0 && idx < (int)v.size())
+    v.erase(v.begin() + idx);
 }
 
 } // namespace custom

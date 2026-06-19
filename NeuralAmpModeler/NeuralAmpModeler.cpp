@@ -384,8 +384,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         _VolumHidePreCaptureMenu();
         _VolumHideSupportAmpMenu();
         if (auto* pGfx = GetUI())
+        {
           if (auto* ir = pGfx->GetControlWithTag(kCtrlTagVoLumIrMenu))
             ir->Hide(true);
+          if (auto* pm = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
+            pm->Hide(true);
+        }
       }));
 
     // Sidebar: logo
@@ -558,17 +562,24 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           raw->Hide(true);
           return;
         }
-        auto* menu = raw->As<VoLumIrMenuControl>();
+        auto* menu = raw->As<VoLumListMenuControl>();
         const auto& irs = volum::custom::MockIRLibrary();
+        // Rows: "No custom IR" + each IR + a single "Manage custom IRs..." entry.
+        std::vector<VoLumListMenuControl::Row> rows;
+        rows.push_back({"No custom IR (use baked cab)", VoLumListMenuControl::kNone, false, false});
+        for (int i = 0; i < (int)irs.size(); i++)
+          rows.push_back({irs[(size_t)i], i, false, false});
+        rows.push_back({"Manage custom IRs...", VoLumListMenuControl::kManage, true, false});
+
         const float w = 230.f;
-        const float h = VoLumIrMenuControl::MenuHeight(irs.size());
+        const float h = VoLumListMenuControl::MenuHeight(rows.size());
         const auto bounds = pGfx->GetBounds();
         float l = anchor.L;
         if (l + w > bounds.R - 4.f)
           l = bounds.R - 4.f - w;
         menu->SetTargetAndDrawRECTs(IRECT(l, anchor.B + 4.f, l + w, anchor.B + 4.f + h));
-        // Reflect the speaker row's currently active IR (or "No custom IR" = -3).
-        int selectedIr = -3;
+        // Reflect the speaker row's currently active IR (or "No custom IR").
+        int selectedIr = VoLumListMenuControl::kNone;
         if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
         {
           auto* row = spk->As<VoLumSpeakerRowControl>();
@@ -577,7 +588,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               if (irs[(size_t)i] == row->IrName())
                 selectedIr = i;
         }
-        menu->SetItems(irs, selectedIr);
+        menu->SetRows(rows, selectedIr);
         menu->Hide(false);
       });
 
@@ -1025,31 +1036,57 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
       }
 
-      // F5 preset bar — top header strip, grouped with the tuner/metronome/gear
-      // toolbar at the right (sits just left of the tuner button, same band).
+      // F5 preset bar — centred in the top header band, above the AMP/triptych
+      // column. Clicking opens the anchored preset dropdown; < > cycle presets.
       {
-        const float presetBarR = mainR - 116.f - 12.f; // 12 px gap before the tuner button
-        const IRECT presetBarArea(presetBarR - 230.f, b.T + 12.f, presetBarR, b.T + 40.f);
+        const float presetBarW = 240.f;
+        const IRECT presetBarArea(mainCX - presetBarW * 0.5f, b.T + 12.f, mainCX + presetBarW * 0.5f, b.T + 40.f);
         pGraphics->AttachControl(
           new VoLumPresetBarControl(
             presetBarArea,
-            [pPlugin]() {
-              if (auto* ov = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
-                ov->As<VoLumCustomOverlayControl>()->ShowPresets(pPlugin->mVolumAmpIdx,
-                                                                 volum::kAmps[pPlugin->mVolumAmpIdx].displayName);
-            }),
+            [pPlugin]() { pPlugin->_VolumShowPresetMenu(); }),
           kCtrlTagVoLumPresetBar);
         if (auto* pb = pGraphics->GetControlWithTag(kCtrlTagVoLumPresetBar))
           pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx));
       }
 
+      // F5: preset dropdown (anchored under the preset bar). Picking recalls;
+      // "Manage presets..." opens the shared Manage panel.
+      {
+        auto* presetMenu = new VoLumListMenuControl(b);
+        presetMenu->SetCallback([pPlugin](int code) {
+          auto* pGfx = pPlugin->GetUI();
+          if (!pGfx)
+            return;
+          if (code == VoLumListMenuControl::kManage)
+          {
+            if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
+              ov->As<VoLumCustomOverlayControl>()->ShowManage(
+                VoLumCustomOverlayControl::ManageKind::Presets, pPlugin->mVolumAmpIdx,
+                volum::kAmps[pPlugin->mVolumAmpIdx].displayName);
+            return;
+          }
+          const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
+          if (code >= 0 && code < (int)presets.size())
+            if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+              pb->As<VoLumPresetBarControl>()->SelectName(presets[(size_t)code].c_str()); // mock recall
+        });
+        pGraphics->AttachControl(presetMenu, kCtrlTagVoLumPresetMenu)->Hide(true);
+      }
+
       // F7: Custom IR cab dropdown (anchored under the speaker-row IR button).
       {
-        auto* irMenu = new VoLumIrMenuControl(b);
+        auto* irMenu = new VoLumListMenuControl(b);
         irMenu->SetCallback([pPlugin](int code) {
           auto* pGfx = pPlugin->GetUI();
           if (!pGfx)
             return;
+          if (code == VoLumListMenuControl::kManage)
+          {
+            if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
+              ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::IR);
+            return;
+          }
           auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
           if (!spk)
             return;
@@ -1057,32 +1094,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           const auto& irs = volum::custom::MockIRLibrary();
           if (code >= 0 && code < (int)irs.size())
             row->SetIrCab(true, irs[(size_t)code].c_str()); // DIRECT capture + this IR (mock)
-          else if (code == -3)
+          else if (code == VoLumListMenuControl::kNone)
             row->SetIrCab(false, ""); // back to baked cab
-          else if (code == -1)
-          {
-            // Import: add a mock IR to the library and select it immediately so
-            // the round-trip is visible (real file picker lands with the backend).
-            char nm[32];
-            std::snprintf(nm, sizeof(nm), "Imported IR %d", (int)irs.size() + 1);
-            const int idx = volum::custom::AddIR(nm);
-            if (idx >= 0)
-              row->SetIrCab(true, volum::custom::MockIRLibrary()[(size_t)idx].c_str());
-          }
-          // code -2 (Manage) is a UI-shell stub.
         });
         pGraphics->AttachControl(irMenu, kCtrlTagVoLumIrMenu)->Hide(true);
       }
 
-      // Presets + Builder overlay (on top of everything; hidden until invoked).
+      // Manage + Builder overlay (on top of everything; hidden until invoked).
       {
         auto* overlay = new VoLumCustomOverlayControl(b);
         overlay->SetCallbacks(
-          // preset recalled -> reflect on the header strip (mock recall)
-          [pPlugin](const char* name) {
-            if (auto* pb = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumPresetBar))
-              pb->As<VoLumPresetBarControl>()->SelectName(name);
-          },
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
           [pPlugin](const char* name) {
@@ -3366,15 +3387,14 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
     items.push_back({_VolumGetPreCaptureLabel(i), i, false, group});
   }
 
-  // F8: inline CUSTOM group + import/manage entry points (UI-shell stubs; no
-  // separate library hub). Imported captures show with an IMPORTED marker.
+  // F8: CUSTOM group lists imported pedals; a single "Manage custom pedals..."
+  // row opens the shared Manage panel (CRUD + import via file dialog).
   // captureIdx -1 keeps these rows from ever matching a real selected capture
   // (which is always >= 0), so they never render with a false selection dot.
   items.push_back({"CUSTOM", -1, true, volum::PrePedalCaptureGroup::None});
   for (const auto& name : volum::custom::MockCustomPedals())
     items.push_back({name, -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::None, true});
-  items.push_back({"+ Import pedal capture...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Import, false});
-  items.push_back({"Manage captures...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Manage, false});
+  items.push_back({"Manage custom pedals...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Manage, false});
 
   const int captureParam = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
   const int selected = std::clamp(GetParam(captureParam)->Int(), 0, captureCount - 1);
@@ -3393,24 +3413,48 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   menu->Hide(false);
 }
 
-void NeuralAmpModeler::_VolumImportPreCapturePedal(int slot)
+void NeuralAmpModeler::_VolumShowManageCustomPedals()
 {
-  // F8 import stub: add a mock imported capture to the session library and
-  // reopen the menu so the new IMPORTED row is visible (real file picker lands
-  // with the backend).
-  char nm[40];
-  std::snprintf(nm, sizeof(nm), "Imported pedal %d", static_cast<int>(volum::custom::MockCustomPedals().size()) + 1);
-  volum::custom::AddPedal(nm);
+  if (auto* pGfx = GetUI())
+    if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
+      ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Pedals);
+}
 
+void NeuralAmpModeler::_VolumShowPresetMenu()
+{
   auto* pGfx = GetUI();
   if (!pGfx)
     return;
-  const int tag = slot == 0 ? kCtrlTagVoLumPreNam1Card : kCtrlTagVoLumPreNam2Card;
-  IRECT anchor;
-  if (auto* card = pGfx->GetControlWithTag(tag))
-    anchor = card->GetRECT();
-  _VolumHidePreCaptureMenu();
-  _VolumShowPreCaptureMenu(slot, anchor);
+  auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu);
+  auto* bar = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar);
+  if (!raw || !bar)
+    return;
+  if (!raw->IsHidden())
+  {
+    raw->Hide(true);
+    return;
+  }
+
+  const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
+  std::vector<VoLumListMenuControl::Row> rows;
+  if (presets.empty())
+    rows.push_back({"No presets yet", -99, false, true}); // dim hint
+  for (int i = 0; i < (int)presets.size(); i++)
+    rows.push_back({presets[(size_t)i], i, false, false});
+  rows.push_back({"Manage presets...", VoLumListMenuControl::kManage, true, false});
+
+  auto* menu = raw->As<VoLumListMenuControl>();
+  const IRECT anchor = bar->GetRECT();
+  const float w = std::max(anchor.W(), 220.f);
+  const float h = VoLumListMenuControl::MenuHeight(rows.size());
+  const auto bounds = pGfx->GetBounds();
+  float l = anchor.L;
+  if (l + w > bounds.R - 4.f)
+    l = bounds.R - 4.f - w;
+  menu->SetTargetAndDrawRECTs(IRECT(l, anchor.B + 4.f, l + w, anchor.B + 4.f + h));
+  const int selected = bar->As<VoLumPresetBarControl>()->ActiveIndex();
+  menu->SetRows(rows, selected);
+  menu->Hide(false);
 }
 
 void NeuralAmpModeler::_VolumHidePreCaptureMenu()
