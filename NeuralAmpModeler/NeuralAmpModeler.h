@@ -180,6 +180,10 @@ enum ECtrlTags
   kCtrlTagVoLumTuner,
   kCtrlTagVoLumMetronome,
   kCtrlTagVoLumMetronomeButton,
+  // 1.2.0 BYO + presets (UI shells)
+  kCtrlTagVoLumPresetBar,
+  kCtrlTagVoLumIrMenu,
+  kCtrlTagVoLumCustomOverlay,
   kNumCtrlTags
 };
 

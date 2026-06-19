@@ -121,6 +121,7 @@
     <ClCompile Include="..\tests\test_metronome_dsp.cpp" />
     <ClCompile Include="..\tests\test_tone_stack.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_pedal_captures.cpp" />
+    <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_staging.cpp" />
     <ClCompile Include="..\tests\test_volum_output_mode.cpp" />
