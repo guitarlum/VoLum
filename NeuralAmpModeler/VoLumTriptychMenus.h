@@ -127,7 +127,7 @@ public:
     if (item.action == PreMenuAction::Manage)
     {
       plugin->_VolumHidePreCaptureMenu();
-      plugin->_VolumShowManageCustomPedals();
+      plugin->_VolumShowManageCustomPedals(mSlot);
       return;
     }
     if (item.custom)

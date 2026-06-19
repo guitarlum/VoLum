@@ -438,7 +438,7 @@ public:
   void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
-  void _VolumShowManageCustomPedals();
+  void _VolumShowManageCustomPedals(int preSlot = -1);
   void _VolumShowPresetMenu();
   void _VolumSelectCustomAmp(int customIdx);
   // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,

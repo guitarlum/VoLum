@@ -1209,6 +1209,38 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
               dlg->As<VoLumConfirmDialogControl>()->Show("Delete?", msg, std::move(onConfirm));
         });
+        // Double-clicking a Manage row performs its primary action (mock):
+        //   preset -> recall onto the header bar; IR -> use on the focused cab;
+        //   pedal  -> load into the originating PRE NAM slot (backend wires DSP).
+        overlay->SetPrimaryActionCallback(
+          [pPlugin](VoLumCustomOverlayControl::ManageKind kind, int ampIdx, int pedalSlot, int index) {
+            auto* pGfx = pPlugin->GetUI();
+            if (!pGfx)
+              return;
+            using MK = VoLumCustomOverlayControl::ManageKind;
+            if (kind == MK::Presets)
+            {
+              const auto presets = volum::custom::MockPresetsForAmp(ampIdx);
+              if (index >= 0 && index < (int)presets.size())
+                if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+                  pb->As<VoLumPresetBarControl>()->SelectName(presets[(size_t)index].c_str());
+            }
+            else if (kind == MK::IR)
+            {
+              const auto& irs = volum::custom::MockIRLibrary();
+              if (index >= 0 && index < (int)irs.size())
+                if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+                {
+                  spk->As<VoLumSpeakerRowControl>()->SetIrCab(true, irs[(size_t)index].c_str());
+                  pPlugin->_VolumMarkPresetDirty();
+                }
+            }
+            else // Pedals: select the imported capture into its originating slot
+            {
+              if (pedalSlot >= 0)
+                pPlugin->_VolumMarkPresetDirty(); // DSP load lands with the backend
+            }
+          });
         pGraphics->AttachControl(overlay, kCtrlTagVoLumCustomOverlay)->Hide(true);
 
         // Shared "Are you sure?" modal, attached above the overlay.
@@ -3566,11 +3598,12 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   menu->Hide(false);
 }
 
-void NeuralAmpModeler::_VolumShowManageCustomPedals()
+void NeuralAmpModeler::_VolumShowManageCustomPedals(int preSlot)
 {
   if (auto* pGfx = GetUI())
     if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
-      ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Pedals);
+      ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Pedals, 0, nullptr,
+                                                      preSlot);
 }
 
 void NeuralAmpModeler::_VolumMarkPresetDirty()
