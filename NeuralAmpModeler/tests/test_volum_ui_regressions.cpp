@@ -213,7 +213,26 @@ TEST_CASE("Global VoLum settings writes are standalone-only")
     pos = source.find(needle, pos + needle.size());
   }
 
-  CHECK(count == 5);
+  // Selection/arrow-key paths now defer the write via mVolumSettingsDirty
+  // (flushed in OnIdle) to keep disk I/O off the selection hot path; only
+  // OnIdle's flush and the two teardown paths still write synchronously.
+  CHECK(count == 3);
+}
+
+TEST_CASE("OnIdle coalesces the deferred settings write")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  // Selections defer the two-file disk write by setting mVolumSettingsDirty;
+  // OnIdle must keep draining it (clear the flag, then write) so deferred
+  // selections still persist without stalling the selection hot path.
+  const auto idlePos = source.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idlePos != std::string::npos);
+  const auto clearPos = source.find("mVolumSettingsDirty = false;", idlePos);
+  REQUIRE(clearPos != std::string::npos);
+  const auto writePos = source.find("_VolumSaveSettingsToFile();", clearPos);
+  REQUIRE(writePos != std::string::npos);
+  // The drain (clear + write) must come close together inside OnIdle.
+  CHECK(writePos - clearPos < 120);
 }
 
 TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")

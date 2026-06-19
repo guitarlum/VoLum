@@ -231,13 +231,25 @@ public:
     if (contentH <= mRECT.H())
       return;
 
-    // Animate toward a target so the list glides instead of snapping. d is
-    // wheel-delta/120: one trackpad/mouse detent is ~1.0, precision-touchpad
-    // events are fractional. ~2 rows per unit keeps a single gesture meaningful
-    // while the easing keeps it smooth.
+    // d is wheel-delta/120. Two input shapes need different handling:
+    //  - Precision touchpads stream many fractional events (|d| < 1) as the
+    //    finger moves. Map those 1:1 to pixels with NO animation so the list
+    //    tracks the gesture exactly - any easing on top just feels laggy.
+    //  - A classic mouse wheel / coarse-detent trackpad sends |d| >= 1 per
+    //    notch. Glide toward a target so a single notch travels ~2 rows
+    //    smoothly instead of snapping.
     const float maxScroll = std::max(0.f, contentH - mRECT.H());
-    mScrollTarget = std::clamp(mScrollTarget - d * ItemHeight() * 2.0f, 0.f, maxScroll);
-    StartScrollAnim();
+    if (std::abs(d) < 1.f)
+    {
+      mScrollTarget = std::clamp(mScrollTarget - d * ItemHeight(), 0.f, maxScroll);
+      mScrollOffset = mScrollTarget; // 1:1, no easing
+      SetDirty(false);
+    }
+    else
+    {
+      mScrollTarget = std::clamp(mScrollTarget - d * ItemHeight() * 2.0f, 0.f, maxScroll);
+      StartScrollAnim();
+    }
 
     OnMouseOver(x, y, mod);
   }
@@ -293,9 +305,11 @@ private:
   // Ease the rendered offset toward mScrollTarget each frame for fluent scrolling.
   void StartScrollAnim()
   {
+    // Snappy catch-up: ~0.45/frame settles a notch in ~6-7 frames (~110ms),
+    // smooth but without the perceived lag of a long, slow glide.
     SetAnimation(
       [this](IControl* pCaller) {
-        mScrollOffset += (mScrollTarget - mScrollOffset) * 0.25f;
+        mScrollOffset += (mScrollTarget - mScrollOffset) * 0.45f;
         if (std::abs(mScrollTarget - mScrollOffset) < 0.4f)
         {
           mScrollOffset = mScrollTarget;
@@ -303,7 +317,7 @@ private:
         }
         SetDirty(false);
       },
-      800);
+      350);
   }
 
   void ScrollToRevealCustom(int customIdx)

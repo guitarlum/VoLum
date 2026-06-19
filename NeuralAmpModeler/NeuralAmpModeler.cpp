@@ -1,6 +1,7 @@
 #include <algorithm> // std::clamp, std::min
 #include <cassert> // RT capacity invariants
 #include <cmath> // pow
+#include <cstdlib> // std::getenv (opt-in perf overlay)
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -350,6 +351,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->EnableTooltips(true);
     pGraphics->EnableMultiTouch(true);
 
+    // Opt-in perf overlay (frame time / FPS) for profiling UI smoothness.
+    // Launch the standalone with VOLUM_SHOW_FPS=1 to enable; off by default.
+    if (const char* fps = std::getenv("VOLUM_SHOW_FPS"); fps && fps[0] && fps[0] != '0')
+      pGraphics->ShowFPSDisplay(true);
+
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
     pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
     pGraphics->LoadFont("Poiret-One", POIRETONE_FN);
@@ -415,7 +421,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           _VolumRefreshChannels();
           mVolumNeedsLoad.store(true);
 #ifdef APP_API
-          _VolumSaveSettingsToFile();
+          // Coalesce the disk write: OnIdle() flushes mVolumSettingsDirty.
+          // Writing synchronously here serialized all amps + dual-amp state
+          // and atomically wrote two JSON files on every selection, which
+          // stalled the UI thread (very visible on held arrow-key repeats).
+          mVolumSettingsDirty = true;
 #endif
 
           auto* pGfx = GetUI();
@@ -1234,7 +1244,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         _VolumRefreshChannels();
         mVolumNeedsLoad.store(true);
 #ifdef APP_API
-        _VolumSaveSettingsToFile();
+        // Coalesced; flushed by OnIdle() (see selection callback note above).
+        mVolumSettingsDirty = true;
 #endif
         if (pGfx)
         {
