@@ -227,11 +227,13 @@ public:
     if (contentH <= mRECT.H())
       return;
 
-    mScrollOffset -= d * ItemHeight();
-    ClampScroll();
+    // Animate toward a target so the list glides instead of snapping a whole row
+    // per notch. ~0.6 of a row per detent keeps it responsive but smooth.
+    const float maxScroll = std::max(0.f, contentH - mRECT.H());
+    mScrollTarget = std::clamp(mScrollTarget - d * ItemHeight() * 0.6f, 0.f, maxScroll);
+    StartScrollAnim();
 
     OnMouseOver(x, y, mod);
-    SetDirty(false);
   }
 
   void SetSelected(int idx)
@@ -279,6 +281,23 @@ private:
   {
     const float maxScroll = std::max(0.f, ContentHeight() - mRECT.H());
     mScrollOffset = std::clamp(mScrollOffset, 0.f, maxScroll);
+    mScrollTarget = std::clamp(mScrollTarget, 0.f, maxScroll);
+  }
+
+  // Ease the rendered offset toward mScrollTarget each frame for fluent scrolling.
+  void StartScrollAnim()
+  {
+    SetAnimation(
+      [this](IControl* pCaller) {
+        mScrollOffset += (mScrollTarget - mScrollOffset) * 0.35f;
+        if (std::abs(mScrollTarget - mScrollOffset) < 0.5f)
+        {
+          mScrollOffset = mScrollTarget;
+          pCaller->OnEndAnimation();
+        }
+        SetDirty(false);
+      },
+      700);
   }
 
   void ScrollToRevealFactory(int idx)
@@ -292,6 +311,7 @@ private:
       mScrollOffset = itemTop;
     else if (itemBot > mScrollOffset + mRECT.H())
       mScrollOffset = itemBot - mRECT.H();
+    mScrollTarget = mScrollOffset; // keep the eased target in sync with jumps
     ClampScroll();
   }
 
@@ -453,6 +473,7 @@ private:
   int mHovered = -1;
   EDomain mHoveredDomain = EDomain::None;
   float mScrollOffset = 0.f;
+  float mScrollTarget = 0.f;
   std::vector<std::string> mAmpNames;
   std::vector<std::string> mAmpAbbrs;
   SelectionCallback mCallback;

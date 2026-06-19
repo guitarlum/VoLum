@@ -154,3 +154,38 @@ TEST_CASE("AddIR and AddPedal append to their session libraries")
   REQUIRE(volum::custom::MockCustomPedals().size() == p0 + 1);
   REQUIRE(volum::custom::MockCustomPedals()[(size_t)pi] == "Imported pedal"); // empty -> default
 }
+
+TEST_CASE("RenameIR and DeleteIR edit the shared IR library in place")
+{
+  const int idx = volum::custom::AddIR("ToRename");
+  volum::custom::RenameIR(idx, "Renamed IR");
+  REQUIRE(volum::custom::MockIRLibrary()[(size_t)idx] == "Renamed IR");
+
+  // empty rename + out-of-range are ignored
+  volum::custom::RenameIR(idx, "");
+  volum::custom::RenameIR(99999, "X");
+  REQUIRE(volum::custom::MockIRLibrary()[(size_t)idx] == "Renamed IR");
+
+  const size_t before = volum::custom::MockIRLibrary().size();
+  volum::custom::DeleteIR(idx);
+  REQUIRE(volum::custom::MockIRLibrary().size() == before - 1);
+  volum::custom::DeleteIR(99999); // out of range no-op
+  REQUIRE(volum::custom::MockIRLibrary().size() == before - 1);
+}
+
+TEST_CASE("RenamePedal and DeletePedal edit the custom-pedal library in place")
+{
+  const int idx = volum::custom::AddPedal("PedalToRename");
+  volum::custom::RenamePedal(idx, "Renamed pedal");
+  REQUIRE(volum::custom::MockCustomPedals()[(size_t)idx] == "Renamed pedal");
+
+  volum::custom::RenamePedal(idx, ""); // ignored
+  volum::custom::RenamePedal(99999, "X"); // ignored
+  REQUIRE(volum::custom::MockCustomPedals()[(size_t)idx] == "Renamed pedal");
+
+  const size_t before = volum::custom::MockCustomPedals().size();
+  volum::custom::DeletePedal(idx);
+  REQUIRE(volum::custom::MockCustomPedals().size() == before - 1);
+  volum::custom::DeletePedal(99999); // out of range no-op
+  REQUIRE(volum::custom::MockCustomPedals().size() == before - 1);
+}
