@@ -459,7 +459,7 @@ public:
     Pedals
   };
 
-  using BuilderSavedCallback = std::function<void(const char* name, int art)>;
+  using BuilderSavedCallback = std::function<void(const volum::custom::CustomAmp& amp)>;
   using ChangedCallback = std::function<void()>; // a managed list was mutated
 
   explicit VoLumCustomOverlayControl(const IRECT& fullBounds)
@@ -594,11 +594,20 @@ public:
         if (!s.empty())
           mBuilderAmp.name = s;
         break;
+      case TextTarget::CabName:
+        if (mTextCabSlot >= 0 && mTextCabSlot < kNumCabSlots)
+        {
+          const std::string norm = NormalizeCabName(s);
+          if (!norm.empty())
+            mBuilderAmp.cabNames[(size_t)mTextCabSlot] = norm;
+        }
+        break;
       default:
         break;
     }
     mTextTarget = TextTarget::None;
     mTextFileIdx = -1;
+    mTextCabSlot = -1;
     SetDirty(false);
   }
 
@@ -620,6 +629,7 @@ private:
     kAddFile,
     kBuilderSave,
     kEditName,
+    kCabNameBase = 70, // [kCabNameBase, +kNumCabSlots) cab-slot rename chips
     kArtBase = 80, // [kArtBase, kArtBase + kNumCustomArts) art swatch picks
     kRowBase = 100,
     kFileSpeakerBase = 200,
@@ -633,7 +643,8 @@ private:
     None,
     NewItem,
     RenameItem,
-    ProfileName
+    ProfileName,
+    CabName
   };
 
   enum class PopupKind
@@ -849,8 +860,8 @@ private:
       char fname[24];
       std::snprintf(fname, sizeof(fname), "capture-%d.nam", (int)mBuilderAmp.files.size() + 1);
       // Auto-assign to DIRECT / Ch 1 so a file is never in a broken state; the
-      // user re-points speaker/channel via the chips.
-      mBuilderAmp.files.push_back({fname, kDirectSpeaker, 1});
+      // user re-points slot/channel via the chips.
+      mBuilderAmp.files.push_back({fname, kDirectSlot, 1});
       SetDirty(false);
       return;
     }
@@ -862,12 +873,18 @@ private:
     }
     if (action == kBuilderSave)
     {
-      if (!mBuilderAmp.files.empty())
+      if (SaveDisabledReason(mBuilderAmp).empty())
       {
         if (mBuilderSaved)
-          mBuilderSaved(mBuilderAmp.name.c_str(), mBuilderAmp.art);
+          mBuilderSaved(mBuilderAmp);
         Hide(true);
       }
+      return;
+    }
+    if (action >= kCabNameBase && action < kCabNameBase + kNumCabSlots)
+    {
+      mTextCabSlot = action - kCabNameBase;
+      StartTextEntry(TextTarget::CabName, rect.GetPadded(-1.f), mBuilderAmp.cabNames[(size_t)mTextCabSlot]);
       return;
     }
     // Per-file action ranges are 100 apart, so each span must stay < 100 to
@@ -901,10 +918,10 @@ private:
     mPopupKind = PopupKind::Speaker;
     mPopupFileIdx = fileIdx;
     mPopupItems.clear();
-    // Fixed set: DIRECT (amp-only) + the 3 stock cabs. No free-form cab names.
+    // DIRECT (amp-only) + this amp's three renameable cab slots.
     mPopupItems.push_back("DIRECT");
-    for (const char* p : {"G12", "G65", "V30"})
-      mPopupItems.push_back(p);
+    for (int s = 0; s < volum::custom::kNumCabSlots; s++)
+      mPopupItems.push_back(mBuilderAmp.cabNames[(size_t)s]);
     LayoutPopup(anchor);
   }
 
@@ -915,7 +932,7 @@ private:
     mPopupKind = PopupKind::Channel;
     mPopupFileIdx = fileIdx;
     mPopupItems.clear();
-    for (int c = 1; c <= 6; c++)
+    for (int c = 1; c <= volum::custom::kMaxChannels; c++)
       mPopupItems.push_back("Ch " + std::to_string(c));
     LayoutPopup(anchor);
   }
@@ -954,16 +971,16 @@ private:
     auto& f = mBuilderAmp.files[(size_t)mPopupFileIdx];
     if (mPopupKind == PopupKind::Speaker)
     {
-      const std::string& label = mPopupItems[(size_t)j];
-      f.speaker = (label == "DIRECT") ? kDirectSpeaker : label;
+      // Popup row 0 == DIRECT; rows 1..N map to cab slots 0..N-1.
+      f.slot = (j == 0) ? kDirectSlot : (j - 1);
       if (f.channel < 1)
         f.channel = 1;
     }
     else // Channel
     {
       f.channel = j + 1;
-      if (f.speaker.empty())
-        f.speaker = kDirectSpeaker; // a channel implies at least a DIRECT capture
+      if (!SlotAssigned(f.slot))
+        f.slot = kDirectSlot; // a channel implies at least a DIRECT capture
     }
     mPopupOpen = false;
     SetDirty(false);
@@ -1160,33 +1177,37 @@ private:
     for (int i = 0; i < (int)mBuilderAmp.files.size(); i++)
     {
       auto& f = mBuilderAmp.files[(size_t)i];
-      const bool bad = !FileAssigned(f);
+      const bool unassigned = !FileAssigned(f);
+      const bool dup = FileIsDuplicate(mBuilderAmp, (size_t)i);
       const IRECT row(left.L, y, left.R, y + rowH);
-      g.FillRect(bad ? IColor(28, 232, 168, 92) : VoLumColors::BTN_OFF_BG, row);
-      g.DrawRect(bad ? VoLumColors::AMBER : VoLumColors::FRAME, row);
+      // Duplicate (slot,channel) -> red; unassigned -> amber; else neutral.
+      const IColor rowFill = dup ? IColor(34, 235, 70, 70) : (unassigned ? IColor(28, 232, 168, 92) : VoLumColors::BTN_OFF_BG);
+      const IColor rowBorder = dup ? IColor(220, 235, 90, 90) : (unassigned ? VoLumColors::AMBER : VoLumColors::FRAME);
+      g.FillRect(rowFill, row);
+      g.DrawRect(rowBorder, row);
 
       const IRECT rem(row.R - 22.f, row.T + 3.f, row.R - 4.f, row.B - 3.f);
-      const IRECT ch(rem.L - 56.f, row.T + 3.f, rem.L - 4.f, row.B - 3.f);
-      const IRECT spk(ch.L - 116.f, row.T + 3.f, ch.L - 6.f, row.B - 3.f);
+      const IRECT ch(rem.L - 52.f, row.T + 3.f, rem.L - 4.f, row.B - 3.f);
+      const IRECT spk(ch.L - 64.f, row.T + 3.f, ch.L - 6.f, row.B - 3.f);
 
       g.DrawText(IText(10.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Middle), f.file.c_str(),
                  IRECT(row.L + 8.f, row.T, spk.L - 6.f, row.B));
 
-      // speaker chip
-      const char* spkLabel = f.speaker.empty() ? "speaker v" : (IsDirectSpeaker(f.speaker) ? "DIRECT v" : f.speaker.c_str());
+      // slot (cab) chip
+      const bool slotOk = SlotAssigned(f.slot);
+      const std::string spkLabel = slotOk ? SlotLabel(mBuilderAmp, f.slot) : "cab";
       g.FillRect(VoLumColors::HERO_BG, spk);
-      g.DrawRect(f.speaker.empty() ? VoLumColors::AMBER : VoLumColors::TEAL_DIM, spk);
-      g.DrawText(IText(10.f, f.speaker.empty() ? VoLumColors::AMBER : VoLumColors::GOLD, "Josefin-Bold", EAlign::Center,
-                       EVAlign::Middle),
-                 spkLabel, spk);
+      g.DrawRect(slotOk ? VoLumColors::TEAL_DIM : VoLumColors::AMBER, spk);
+      g.DrawText(IText(10.f, slotOk ? VoLumColors::GOLD : VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+                 spkLabel.c_str(), spk);
       AddHotspot(spk, kFileSpeakerBase + i);
 
       // channel chip
       char chLabel[12];
       if (f.channel >= 1)
-        std::snprintf(chLabel, sizeof(chLabel), "Ch %d v", f.channel);
+        std::snprintf(chLabel, sizeof(chLabel), "Ch %d", f.channel);
       else
-        std::snprintf(chLabel, sizeof(chLabel), "Ch v");
+        std::snprintf(chLabel, sizeof(chLabel), "Ch -");
       g.FillRect(VoLumColors::HERO_BG, ch);
       g.DrawRect(VoLumColors::TEAL_DIM, ch);
       g.DrawText(IText(10.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle), chLabel, ch);
@@ -1242,48 +1263,100 @@ private:
       AddHotspot(t, kArtBase + a);
     }
 
-    // ---- RIGHT (bottom): live coverage grid derived from the manifest -----
+    // ---- RIGHT (bottom): fixed 4-row coverage grid (DIRECT + 3 cab slots) ---
     const float covTop = gTop + artGridH + 16.f;
     {
       const IRECT covHdr(right.L, covTop, right.R, covTop + 13.f);
       g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "COVERAGE", covHdr);
       g.DrawLine(IColor(70, 198, 162, 90), right.L + 64.f, covHdr.MH(), right.R, covHdr.MH(), nullptr, 1.f);
-    }
-    const auto speakers = AmpSpeakers(mBuilderAmp);
-    float gy = covTop + 22.f;
-    if (speakers.empty())
-    {
-      g.DrawText(IText(11.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
-                 "Assign files to see the\nspeaker x channel grid fill in.", IRECT(right.L, gy, right.R, gy + 40.f));
-    }
-    int maxCh = 4;
-    for (const auto& s : speakers)
-      for (int c : AmpSpeakerChannels(mBuilderAmp, s))
-        maxCh = std::max(maxCh, c);
-    for (const auto& s : speakers)
-    {
-      const auto chans = AmpSpeakerChannels(mBuilderAmp, s);
-      const IRECT srow(right.L, gy, right.R, gy + 24.f);
-      g.DrawText(IText(10.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
-                 IsDirectSpeaker(s) ? "DIRECT" : s.c_str(), IRECT(srow.L, srow.T, srow.L + 76.f, srow.B));
-      for (int c = 1; c <= maxCh; c++)
-      {
-        const float cw = 24.f;
-        const IRECT cell(srow.L + 80.f + (c - 1) * cw, srow.T + 2.f, srow.L + 80.f + (c - 1) * cw + cw - 4.f, srow.B - 2.f);
-        if (cell.R > right.R)
-          break;
-        const bool on = std::find(chans.begin(), chans.end(), c) != chans.end();
-        g.FillRect(on ? VoLumColors::ITEM_SEL_BG : IColor(0, 0, 0, 0), cell);
-        g.DrawRect(on ? VoLumColors::ITEM_SEL_BORDER : VoLumColors::FRAME, cell);
-        if (on)
-          g.FillCircle(VoLumColors::GOLD, cell.MW(), cell.MH(), 2.5f);
-      }
-      gy += 28.f;
+      g.DrawText(IText(8.5f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Far, EVAlign::Middle),
+                 "tap a cab name to rename", covHdr);
     }
 
-    const char* saveLabel = mBuilderAmp.files.empty() ? "Add a file first" : "Save amp";
-    DrawButton(g, IRECT(right.L, right.B - 32.f, right.R, right.B - 4.f), saveLabel, kBuilderSave, true, false,
-               mBuilderAmp.files.empty());
+    // Columns: at least 4, grow to the highest assigned channel, hard cap 8.
+    const int maxCh = std::min(volum::custom::kMaxChannels, std::max(4, MaxAssignedChannel(mBuilderAmp)));
+    const float labelW = 64.f;
+    const float gridL = right.L + labelW;
+    const float cw = std::min(26.f, (right.R - gridL) / (float) maxCh);
+
+    // channel header numbers
+    float gy = covTop + 20.f;
+    {
+      const IRECT hrow(right.L, gy, right.R, gy + 14.f);
+      for (int c = 1; c <= maxCh; c++)
+      {
+        const IRECT cell(gridL + (c - 1) * cw, hrow.T, gridL + (c - 1) * cw + cw, hrow.B);
+        g.DrawText(IText(8.5f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+                   std::to_string(c).c_str(), cell);
+      }
+      gy += 16.f;
+    }
+
+    const int slots[1 + volum::custom::kNumCabSlots] = {volum::custom::kDirectSlot, 0, 1, 2};
+    const float covRowH = 26.f;
+    for (int row = 0; row < (int)(sizeof(slots) / sizeof(slots[0])); row++)
+    {
+      const int slot = slots[row];
+      const IRECT srow(right.L, gy, right.R, gy + covRowH);
+      if (slot == volum::custom::kDirectSlot)
+      {
+        g.DrawText(IText(10.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "DIRECT",
+                   IRECT(srow.L, srow.T, srow.L + labelW, srow.B));
+      }
+      else
+      {
+        // Editable cab-name chip with a pen glyph.
+        const IRECT chip(srow.L, srow.MH() - 10.f, srow.L + labelW - 6.f, srow.MH() + 10.f);
+        g.FillRoundRect(VoLumColors::HERO_BG, chip, 3.f);
+        g.DrawRoundRect(VoLumColors::TEAL_DIM, chip, 3.f);
+        g.DrawText(IText(10.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
+                   mBuilderAmp.cabNames[(size_t)slot].c_str(), chip.GetPadded(-7.f, 0.f, -16.f, 0.f));
+        DrawPenGlyph(g, IRECT(chip.R - 15.f, chip.T, chip.R - 1.f, chip.B), VoLumColors::CREAM_DIM);
+        AddHotspot(chip, kCabNameBase + slot);
+      }
+      for (int c = 1; c <= maxCh; c++)
+      {
+        const IRECT cell(gridL + (c - 1) * cw + 1.f, srow.T + 3.f, gridL + (c - 1) * cw + cw - 1.f, srow.B - 3.f);
+        const int n = CellFileCount(mBuilderAmp, slot, c);
+        if (n >= 2)
+        {
+          g.FillRect(IColor(40, 235, 70, 70), cell);
+          g.DrawRect(IColor(230, 235, 90, 90), cell);
+          char badge[6];
+          std::snprintf(badge, sizeof(badge), "x%d", n);
+          g.DrawText(IText(9.f, IColor(255, 255, 150, 150), "Josefin-Bold", EAlign::Center, EVAlign::Middle), badge, cell);
+        }
+        else if (n == 1)
+        {
+          g.FillRect(VoLumColors::ITEM_SEL_BG, cell);
+          g.DrawRect(VoLumColors::ITEM_SEL_BORDER, cell);
+          g.FillCircle(VoLumColors::GOLD, cell.MW(), cell.MH(), 2.5f);
+        }
+        else
+        {
+          g.DrawRect(VoLumColors::FRAME, cell);
+        }
+      }
+      gy += covRowH + 2.f;
+    }
+
+    const std::string reason = SaveDisabledReason(mBuilderAmp);
+    const std::string saveLabel = reason.empty() ? "Save amp" : reason;
+    DrawButton(g, IRECT(right.L, right.B - 32.f, right.R, right.B - 4.f), saveLabel.c_str(), kBuilderSave, true, false,
+               !reason.empty());
+  }
+
+  // Diagonal pencil glyph (mirrors VoLumAmpListControl::DrawPenGlyph) for the
+  // editable cab-name chips.
+  static void DrawPenGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float cx = r.MW(), cy = r.MH();
+    const float t = 1.3f;
+    g.DrawLine(col, cx - 4.f, cy + 3.f, cx + 3.f, cy - 4.f, nullptr, t);
+    g.DrawLine(col, cx - 1.f, cy + 5.f, cx + 5.f, cy - 1.f, nullptr, t);
+    g.DrawLine(col, cx + 3.f, cy - 4.f, cx + 5.f, cy - 1.f, nullptr, t);
+    g.DrawLine(col, cx - 4.f, cy + 3.f, cx - 5.f, cy + 6.f, nullptr, t);
+    g.DrawLine(col, cx - 1.f, cy + 5.f, cx - 5.f, cy + 6.f, nullptr, t);
   }
 
   volum::custom::Screen mScreen = volum::custom::Screen::Presets;
@@ -1306,6 +1379,7 @@ private:
   // pending text entry target
   TextTarget mTextTarget = TextTarget::None;
   int mTextFileIdx = -1;
+  int mTextCabSlot = -1; // cab slot being renamed (TextTarget::CabName)
   IText mEntryText;
 
   BuilderSavedCallback mBuilderSaved;
