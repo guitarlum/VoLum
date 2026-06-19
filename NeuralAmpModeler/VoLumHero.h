@@ -114,6 +114,22 @@ public:
     SetDirty(false);
   }
 
+  // Render the SUPPORT lane as a custom amp (fractal art + name) rather than a
+  // factory amp. Used when a custom amp is chosen as the dual-amp support
+  // partner (display-only in 1.2.0). Pass isCustom=false to return to factory.
+  void SetSupportCustom(bool isCustom, int artId, const char* name)
+  {
+    const std::string n = name ? name : "";
+    if (mSupportCustomMode != isCustom || mSupportCustomArt != artId || mSupportCustomName != n)
+    {
+      mSupportArtLayer = nullptr; // force support art layer rebuild
+      mSupportCustomMode = isCustom;
+      mSupportCustomArt = artId;
+      mSupportCustomName = n;
+    }
+    SetDirty(false);
+  }
+
   void SetBitmap(const IBitmap& bitmap)
   {
     mBitmap = bitmap;
@@ -374,6 +390,8 @@ private:
       g.StartLayer(this, artRect);
       if (empty)
         DrawEmptySupportArt(g, artRect);
+      else if (!mainLane && mSupportCustomMode)
+        DrawCustomAmpArt(g, artRect, mSupportCustomArt, IColor(170, 120, 210, 220), IColor(70, 100, 180, 200));
       else
         DrawHeroFractalArt(g, artRect, FractalCaseForAmp(clampedAmpIdx));
       layer = g.EndLayer();
@@ -399,9 +417,11 @@ private:
     const IRECT right(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
     DrawLane(g, left, mAmpIdx, "MAIN", mName.c_str(), !mSupportFocused, VoLumColors::AMBER,
              /*drawChip=*/true, /*empty=*/false);
-    const bool hasSupport = mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount;
-    DrawLane(g, right, hasSupport ? mSupportAmpIdx : 0, "SUPPORT",
-             hasSupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp",
+    const bool hasFactorySupport = mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount;
+    const bool hasSupport = mSupportCustomMode || hasFactorySupport;
+    const char* supportName = mSupportCustomMode ? mSupportCustomName.c_str()
+                              : (hasFactorySupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp");
+    DrawLane(g, right, hasFactorySupport ? mSupportAmpIdx : 0, "SUPPORT", supportName,
              mSupportFocused, VoLumColors::TEAL,
              /*drawChip=*/false, /*empty=*/!hasSupport);
     g.FillRect(VoLumColors::BG, IRECT(mid - 1.f, mRECT.T, mid + 1.f, mRECT.B));
@@ -427,6 +447,9 @@ private:
   bool mDualChipHovered = false;
   bool mCustomMode = false;
   int mCustomArt = 0;
+  bool mSupportCustomMode = false;
+  int mSupportCustomArt = 0;
+  std::string mSupportCustomName;
   FocusCallback mFocusCallback;
   PickerCallback mPickerCallback;
   DualToggleCallback mDualToggleCallback;

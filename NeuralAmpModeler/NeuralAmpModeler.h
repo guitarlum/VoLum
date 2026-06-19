@@ -361,6 +361,8 @@ public:
   void _VolumShowSupportAmpMenu(const iplug::igraphics::IRECT& anchorRect);
   void _VolumHideSupportAmpMenu();
   void _VolumSetSupportAmp(int ampIdx);
+  void _VolumSetSupportCustom(int customIdx);
+  void _VolumApplyFocusedLaneCabs();
   void _VolumSaveCurrentToSettings();
   void _VolumSavePreToSlot(volum::VoLumAmpSettings& s);
   void _VolumSavePostToSlot(volum::VoLumAmpSettings& s);
@@ -443,8 +445,8 @@ public:
   // and channel labels into the shared speaker row + channel stepper (display
   // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
   // (-1 = a factory amp is active).
-  void _VolumApplyCustomMainCabs(int customIdx);
-  void _VolumSetCustomChannelStepper(int customIdx, int slot);
+  void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
+  void _VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane = false);
   // Flags the header preset strip "(unsaved)" for rig edits that bypass the
   // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
   void _VolumMarkPresetDirty();
@@ -466,6 +468,10 @@ private:
   // Index of the focused custom MAIN amp (display-only), or -1 when a factory
   // amp is active. Drives the custom-aware cabinet row / channel stepper.
   int mVolumCustomMainIdx = -1;
+  // Index of the custom amp chosen as the dual-amp SUPPORT partner (display +
+  // session only), or -1 when the support lane is a factory amp / empty. When
+  // >= 0 the factory kSupportAmpIdx param is forced to -1.
+  int mVolumCustomSupportIdx = -1;
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
