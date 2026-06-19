@@ -434,6 +434,7 @@ public:
   void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
+  void _VolumImportPreCapturePedal(int slot);
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;
