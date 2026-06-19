@@ -53,10 +53,14 @@ struct CustomNamFile
   int channel = 0; // gain stage (>= 1); 0 means unassigned
 };
 
+// Number of selectable custom-amp fractal-art styles (see DrawCustomAmpArt).
+inline constexpr int kNumCustomArts = 6;
+
 struct CustomAmp
 {
   std::string name;
   std::vector<CustomNamFile> files;
+  int art = 0; // assigned fractal-art style [0..kNumCustomArts)
 };
 
 // A DIRECT (amp-only) speaker is the empty string or the literal "DIRECT".
@@ -163,6 +167,7 @@ inline CustomAmp MockDemoCustomAmp()
 {
   CustomAmp a;
   a.name = "My Plexi A/B";
+  a.art = 0;
   a.files = {
     {"AMP-Plexi-direct-1.nam", kDirectSpeaker, 1},
     {"AMP-Plexi-direct-2.nam", kDirectSpeaker, 2},
@@ -182,8 +187,23 @@ inline std::vector<std::string>& MockCustomAmps()
   return v;
 }
 
+// Per-custom-amp fractal-art id, kept in lockstep (same index) with
+// MockCustomAmps(). Seeded so the demo amps look distinct.
+inline std::vector<int>& MockCustomAmpArts()
+{
+  static std::vector<int> v = {0, 1, 2};
+  return v;
+}
+
+// Assigned art for a custom amp index (0 when out of range).
+inline int CustomAmpArt(int idx)
+{
+  auto& a = MockCustomAmpArts();
+  return (idx >= 0 && idx < (int)a.size()) ? a[(size_t)idx] : 0;
+}
+
 // Add a custom amp, de-duplicating the display name. Returns its index.
-inline int AddCustomAmp(const std::string& name)
+inline int AddCustomAmp(const std::string& name, int art = 0)
 {
   auto& amps = MockCustomAmps();
   std::string unique = name.empty() ? "New custom amp" : name;
@@ -191,14 +211,18 @@ inline int AddCustomAmp(const std::string& name)
   while (std::find(amps.begin(), amps.end(), unique) != amps.end())
     unique = (name.empty() ? "New custom amp" : name) + " " + std::to_string(suffix++);
   amps.push_back(unique);
+  MockCustomAmpArts().push_back(((art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts);
   return (int)amps.size() - 1;
 }
 
 inline void RemoveCustomAmp(int idx)
 {
   auto& amps = MockCustomAmps();
+  auto& arts = MockCustomAmpArts();
   if (idx >= 0 && idx < (int)amps.size())
     amps.erase(amps.begin() + idx);
+  if (idx >= 0 && idx < (int)arts.size())
+    arts.erase(arts.begin() + idx);
 }
 
 // Global IR library (F7) - usable as a cab on any amp via the speaker row.

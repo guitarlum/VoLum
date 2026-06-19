@@ -464,7 +464,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     if (auto* ampListCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpList))
     {
       auto* ampList = ampListCtrl->As<VoLumAmpListControl>();
-      ampList->SetCustomAmps(volum::custom::MockCustomAmps());
+      ampList->SetCustomAmps(volum::custom::MockCustomAmps(), volum::custom::MockCustomAmpArts());
       ampList->SetCustomCallbacks(
         // select a custom amp (mock): drive the hero/preset strip only
         [this](int customIdx) { _VolumSelectCustomAmp(customIdx); },
@@ -482,16 +482,45 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
               ov->As<VoLumCustomOverlayControl>()->ShowBuilder(true, nm);
         },
-        // bin: delete the custom amp from the live session list + refresh sidebar
+        // bin: confirm, then delete the custom amp from the live session list.
         [this](int customIdx) {
-          volum::custom::RemoveCustomAmp(customIdx);
-          if (auto* pGfx = GetUI())
-            if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+          auto* pGfx = GetUI();
+          if (!pGfx)
+            return;
+          const auto& names = volum::custom::MockCustomAmps();
+          const std::string nm =
+            (customIdx >= 0 && customIdx < (int)names.size()) ? names[(size_t)customIdx] : std::string();
+          auto doDelete = [this, customIdx]() {
+            volum::custom::RemoveCustomAmp(customIdx);
+            auto* pGfx2 = GetUI();
+            if (!pGfx2)
+              return;
+            if (auto* al = pGfx2->GetControlWithTag(kCtrlTagVoLumAmpList))
             {
               auto* list = al->As<VoLumAmpListControl>();
-              list->SetCustomAmps(volum::custom::MockCustomAmps());
+              list->SetCustomAmps(volum::custom::MockCustomAmps(), volum::custom::MockCustomAmpArts());
               list->SetCustomSelected(-1);
             }
+            // Selection cleared -> revert the hero/name from the (now-deleted)
+            // custom amp back to the active factory amp.
+            if (auto* heroCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumHeroImage))
+            {
+              auto* h = heroCtrl->As<VoLumHeroImageControl>();
+              char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
+              h->SetPlaceholder(ph, mVolumAmpIdx);
+              h->SetName(volum::kAmps[mVolumAmpIdx].displayName);
+            }
+            if (auto* nameCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumSubRowText))
+              if (mVolumExpandedSection == EVoLumSection::AMP)
+                nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
+            if (auto* pb = pGfx2->GetControlWithTag(kCtrlTagVoLumPresetBar))
+              pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx));
+          };
+          if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
+            dlg->As<VoLumConfirmDialogControl>()->Show(
+              "Delete?", "Delete custom amp \"" + nm + "\"? This cannot be undone.", doDelete);
+          else
+            doDelete();
         });
     }
 
@@ -541,6 +570,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             _VolumRefreshChannels();
             mVolumNeedsLoad.store(true);
           }
+          _VolumMarkPresetDirty();
         }),
       kCtrlTagVoLumSpeakerRow);
 
@@ -560,20 +590,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         }
         auto* menu = raw->As<VoLumListMenuControl>();
         const auto& irs = volum::custom::MockIRLibrary();
-        // Rows: "No custom IR" + each IR + a single "Manage custom IRs..." entry.
+        // Rows: each custom IR + a single "Manage custom IRs..." entry. Switching
+        // back to a baked cab/DIRECT in the speaker row clears any custom IR, so
+        // there is no explicit "no IR" row.
         std::vector<VoLumListMenuControl::Row> rows;
-        rows.push_back({"No custom IR (use baked cab)", VoLumListMenuControl::kNone, false, false});
         for (int i = 0; i < (int)irs.size(); i++)
           rows.push_back({irs[(size_t)i], i, false, false});
         rows.push_back({"Manage custom IRs...", VoLumListMenuControl::kManage, true, false});
 
         const float w = 230.f;
-        const float h = VoLumListMenuControl::MenuHeight(rows.size());
         const auto bounds = pGfx->GetBounds();
+        const float top = anchor.B + 4.f;
+        const float h = std::min(VoLumListMenuControl::MenuHeight(rows.size()), std::max(110.f, bounds.B - top - 8.f));
         float l = anchor.L;
         if (l + w > bounds.R - 4.f)
           l = bounds.R - 4.f - w;
-        menu->SetTargetAndDrawRECTs(IRECT(l, anchor.B + 4.f, l + w, anchor.B + 4.f + h));
+        menu->SetMenuRect(IRECT(l, top, l + w, top + h));
         // Reflect the speaker row's currently active IR (or "No custom IR").
         int selectedIr = VoLumListMenuControl::kNone;
         if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
@@ -626,6 +658,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         GetParam(kDualAmpActive)->Set(current ? 0.0 : 1.0);
         SendParameterValueFromDelegate(kDualAmpActive, GetParam(kDualAmpActive)->GetNormalized(), true);
         OnParamChange(kDualAmpActive);
+        _VolumMarkPresetDirty();
         _UpdateVoLumKeyboardFocusHint();
       },
       // Dismiss the support-amp dropdown when the user clicks elsewhere on the hero (e.g. on
@@ -659,6 +692,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           mSupportPolarityInvert.store(next);
           mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = next;
           mVolumSettingsDirty = true;
+          _VolumMarkPresetDirty();
           if (auto* pGfx = GetUI())
             pGfx->SetAllControlsDirty();
         }),
@@ -750,6 +784,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           mVolumAmpSettings[mVolumAmpIdx].channelIdx = newIdx;
           mVolumSettingsDirty = true;
           mVolumNeedsLoad.store(true);
+          _VolumMarkPresetDirty();
         });
       channelStep->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
       pGraphics->AttachControl(channelStep, kCtrlTagVoLumChannelStep, "AMP_KNOBS");
@@ -776,6 +811,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
           mVolumSupportNeedsLoad.store(true);
           mVolumSettingsDirty = true;
+          _VolumMarkPresetDirty();
         });
       supChannelStep->SetChannels(mVolumSupportChannelLabels, GetParam(kSupportChannelIdx)->Int());
       pGraphics->AttachControl(supChannelStep, kCtrlTagVoLumSupportChannelStep, "SUPPORT_AMP_KNOBS");
@@ -1062,6 +1098,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                 volum::kAmps[pPlugin->mVolumAmpIdx].displayName);
             return;
           }
+          if (code == VoLumListMenuControl::kDefault)
+          {
+            pPlugin->_VolumResetAmpToFactory();
+            return;
+          }
           const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
           if (code >= 0 && code < (int)presets.size())
             if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
@@ -1092,6 +1133,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             row->SetIrCab(true, irs[(size_t)code].c_str()); // DIRECT capture + this IR (mock)
           else if (code == VoLumListMenuControl::kNone)
             row->SetIrCab(false, ""); // back to baked cab
+          pPlugin->_VolumMarkPresetDirty();
         });
         pGraphics->AttachControl(irMenu, kCtrlTagVoLumIrMenu)->Hide(true);
       }
@@ -1102,8 +1144,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         overlay->SetCallbacks(
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
-          [pPlugin](const char* name) {
-            const int idx = volum::custom::AddCustomAmp(name ? name : "");
+          [pPlugin](const char* name, int art) {
+            const int idx = volum::custom::AddCustomAmp(name ? name : "", art);
             auto* pGfx = pPlugin->GetUI();
             if (!pGfx)
               return;
@@ -1111,12 +1153,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
             {
               auto* list = al->As<VoLumAmpListControl>();
-              list->SetCustomAmps(amps);
+              list->SetCustomAmps(amps, volum::custom::MockCustomAmpArts());
               list->SetCustomSelected(idx);
             }
             if (idx >= 0 && idx < (int)amps.size())
               if (auto* hero = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
-                hero->As<VoLumHeroImageControl>()->SetName(amps[idx].c_str());
+              {
+                auto* h = hero->As<VoLumHeroImageControl>();
+                h->SetCustomArt(true, volum::custom::CustomAmpArt(idx));
+                h->SetName(amps[idx].c_str());
+              }
           },
           // preset bank mutated (save/rename/delete) -> re-sync the header strip
           // for the currently focused factory amp.
@@ -1124,7 +1170,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (auto* pb = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumPresetBar))
               pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx));
           });
+        // Manage-panel deletes go through the shared confirm modal.
+        overlay->SetConfirmDeleteCallback([pPlugin](const std::string& msg, std::function<void()> onConfirm) {
+          if (auto* pGfx = pPlugin->GetUI())
+            if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
+              dlg->As<VoLumConfirmDialogControl>()->Show("Delete?", msg, std::move(onConfirm));
+        });
         pGraphics->AttachControl(overlay, kCtrlTagVoLumCustomOverlay)->Hide(true);
+
+        // Shared "Are you sure?" modal, attached above the overlay.
+        pGraphics->AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)->Hide(true);
       }
 
       // Metronome config overlay
@@ -1188,6 +1243,26 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
         if (pGfx->GetControlInTextEntry())
           return false;
+
+        // ESC closes the topmost open transient surface (overlay first, then any
+        // anchored dropdown) for consistent dismissal across the UI.
+        if (key.VK == kVK_ESCAPE)
+        {
+          const int kDismissTags[] = {kCtrlTagVoLumConfirm,    kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumPresetMenu,
+                                      kCtrlTagVoLumIrMenu,     kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+          for (int tag : kDismissTags)
+          {
+            if (auto* c = pGfx->GetControlWithTag(tag))
+            {
+              if (!c->IsHidden())
+              {
+                c->Hide(true);
+                pGfx->SetAllControlsDirty();
+                return true;
+              }
+            }
+          }
+        }
 
         if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
         {
@@ -1303,6 +1378,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                 stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumSupportChannelLabels, next);
             mVolumSupportNeedsLoad.store(true);
             mVolumSettingsDirty = true;
+            _VolumMarkPresetDirty();
             return true;
           }
           if (auto* pGfx = GetUI())
@@ -1318,6 +1394,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                 s->SetChannels(mVolumChannelLabels, newCh);
                 mVolumChannelIdx = newCh;
                 mVolumNeedsLoad.store(true);
+                mVolumSettingsDirty = true;
+                _VolumMarkPresetDirty();
               }
             }
           return true;
@@ -2013,6 +2091,13 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
   if (auto pGraphics = GetUI())
   {
+    // A user-driven param edit diverges the live chain from any recalled preset
+    // snapshot -> flag the header strip "(unsaved)". Programmatic restores (amp
+    // switch, preset recall) arrive via kDelegate/kReset and stay clean.
+    if (source == EParamSource::kUI)
+      if (auto* pb = pGraphics->GetControlWithTag(kCtrlTagVoLumPresetBar))
+        pb->As<VoLumPresetBarControl>()->SetDirtyState(true);
+
     bool active = GetParam(paramIdx)->Bool();
 
     switch (paramIdx)
@@ -2635,6 +2720,7 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardSpeaker(int direction)
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
   }
+  _VolumMarkPresetDirty();
 
   if (auto* pGfx = GetUI())
   {
@@ -3350,6 +3436,7 @@ void NeuralAmpModeler::_VolumCyclePreNamCapture(int slot, int direction)
   SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
   mVolumPreNeedsLoad[slot].store(true);
   mVolumSettingsDirty = true;
+  _VolumMarkPresetDirty();
   _UpdateVoLumLayout();
 }
 
@@ -3368,6 +3455,7 @@ void NeuralAmpModeler::_VolumSetPreNamCapture(int slot, int captureIdx)
   SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
   mVolumPreNeedsLoad[slot].store(true);
   mVolumSettingsDirty = true;
+  _VolumMarkPresetDirty();
   _UpdateVoLumLayout();
 }
 
@@ -3442,6 +3530,13 @@ void NeuralAmpModeler::_VolumShowManageCustomPedals()
       ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Pedals);
 }
 
+void NeuralAmpModeler::_VolumMarkPresetDirty()
+{
+  if (auto* pGfx = GetUI())
+    if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+      pb->As<VoLumPresetBarControl>()->SetDirtyState(true);
+}
+
 void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
 {
   // Mock selection: custom amps are display-only in the UI shell, so this just
@@ -3454,7 +3549,11 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   if (!pGfx)
     return;
   if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
-    heroCtrl->As<VoLumHeroImageControl>()->SetName(names[(size_t)customIdx].c_str());
+  {
+    auto* hero = heroCtrl->As<VoLumHeroImageControl>();
+    hero->SetCustomArt(true, volum::custom::CustomAmpArt(customIdx));
+    hero->SetName(names[(size_t)customIdx].c_str());
+  }
   if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
     if (mVolumExpandedSection == EVoLumSection::AMP)
       nameCtrl->As<VoLumSubRowTextControl>()->SetName(names[(size_t)customIdx].c_str(), true);
@@ -3462,6 +3561,28 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
     pb->As<VoLumPresetBarControl>()->SetList({}); // custom-amp presets land with the backend
   if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
     al->As<VoLumAmpListControl>()->SetCustomSelected(customIdx);
+}
+
+void NeuralAmpModeler::_VolumResetAmpToFactory()
+{
+  // Factory baseline == a default-constructed per-amp settings slot. Apply it to
+  // the live params, rediscover channels, and clear any custom IR / recalled preset.
+  mVolumAmpSettings[mVolumAmpIdx] = volum::VoLumAmpSettings{};
+  _VolumRestoreFromSettings(mVolumAmpIdx);
+  _VolumRefreshChannels();
+  mVolumNeedsLoad.store(true);
+  mVolumSettingsDirty = true;
+  if (auto* pGfx = GetUI())
+  {
+    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+    {
+      auto* row = spk->As<VoLumSpeakerRowControl>();
+      row->SetIrCab(false, "");
+      row->SetFactoryCabs();
+    }
+    if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+      pb->As<VoLumPresetBarControl>()->SelectName(""); // -> "No Preset", clean
+  }
 }
 
 void NeuralAmpModeler::_VolumShowPresetMenu()
@@ -3481,6 +3602,8 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
 
   const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
   std::vector<VoLumListMenuControl::Row> rows;
+  // Pinned reset-to-factory row at the top, separated by a divider.
+  rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
   if (presets.empty())
     rows.push_back({"No presets yet", -99, false, true}); // dim hint
   for (int i = 0; i < (int)presets.size(); i++)
@@ -3490,12 +3613,13 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* menu = raw->As<VoLumListMenuControl>();
   const IRECT anchor = bar->GetRECT();
   const float w = std::max(anchor.W(), 220.f);
-  const float h = VoLumListMenuControl::MenuHeight(rows.size());
   const auto bounds = pGfx->GetBounds();
+  const float top = anchor.B + 4.f;
+  const float h = std::min(VoLumListMenuControl::MenuHeight(rows.size()), std::max(110.f, bounds.B - top - 8.f));
   float l = anchor.L;
   if (l + w > bounds.R - 4.f)
     l = bounds.R - 4.f - w;
-  menu->SetTargetAndDrawRECTs(IRECT(l, anchor.B + 4.f, l + w, anchor.B + 4.f + h));
+  menu->SetMenuRect(IRECT(l, top, l + w, top + h));
   const int selected = bar->As<VoLumPresetBarControl>()->ActiveIndex();
   menu->SetRows(rows, selected);
   menu->Hide(false);
@@ -3588,6 +3712,7 @@ void NeuralAmpModeler::_VolumSetSupportAmp(int ampIdx)
   SendParameterValueFromDelegate(kSupportAmpIdx, GetParam(kSupportAmpIdx)->GetNormalized(), true);
   mVolumSupportNeedsLoad.store(true);
   mVolumSettingsDirty = true;
+  _VolumMarkPresetDirty();
   _VolumRefreshSupportChannels();
   _UpdateVoLumLayout();
 }

@@ -13,8 +13,11 @@
 // lives in test_volum_ui_regressions.cpp and reads this file.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumCustomContentMock.h"
+#include "VoLumFractalArt.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <functional>
 #include <string>
@@ -41,9 +44,11 @@ public:
     }
   }
 
-  void SetCustomAmps(const std::vector<std::string>& names)
+  void SetCustomAmps(const std::vector<std::string>& names, const std::vector<int>& arts = {})
   {
     mCustomNames = names;
+    mCustomArts = arts;
+    mCustomArts.resize(mCustomNames.size(), 0); // keep lockstep even if arts omitted
     SetDirty(false);
   }
 
@@ -104,6 +109,20 @@ public:
         DrawMiniFractal(g, iconArea, i, thmBright, thmDim);
         mIconLayers[i] = g.EndLayer();
       }
+    }
+
+    // Build the 4 custom-amp art thumbnails once (cached, blitted per custom row)
+    // while the clip region is still full, like the factory icons above.
+    if (!mCustomNames.empty())
+    {
+      const IRECT artBuildR(mRECT.L, mRECT.T, mRECT.L + 22.f, mRECT.T + 22.f);
+      for (int a = 0; a < (int)mCustomArtLayers.size(); a++)
+        if (!g.CheckLayer(mCustomArtLayers[a]))
+        {
+          g.StartLayer(this, artBuildR);
+          DrawCustomAmpArt(g, artBuildR, a, IColor(200, 120, 210, 220), IColor(100, 100, 180, 200));
+          mCustomArtLayers[a] = g.EndLayer();
+        }
     }
 
     g.PathClipRegion(mRECT);
@@ -441,13 +460,20 @@ private:
         g.DrawRect(IColor(20, 200, 162, 78), paddedRow);
       }
 
-      // small diamond marker instead of a fractal icon
-      DrawDiamond(g, paddedRow.L + 19.f, paddedRow.MH(), 7.f, selected ? VoLumColors::GOLD : VoLumColors::TEAL);
+      // Assigned procedural art thumbnail (cached), matching the factory rows.
+      const float isz = 20.f;
+      const IRECT iconArea(paddedRow.L + 7.f, paddedRow.MH() - isz / 2.f, paddedRow.L + 7.f + isz, paddedRow.MH() + isz / 2.f);
+      const int art = (c < (int)mCustomArts.size()) ? (mCustomArts[c] % volum::custom::kNumCustomArts) : 0;
+      if (mCustomArtLayers[art] && g.CheckLayer(mCustomArtLayers[art]))
+        g.DrawFittedBitmap(mCustomArtLayers[art]->GetBitmap(), iconArea);
 
+      // Clip the name so a long custom-amp name can never reach the pen/trash.
       IRECT nameArea = paddedRow.GetReducedFromLeft(38.f).GetReducedFromRight(hovered || selected ? 48.f : 6.f);
+      g.PathClipRegion(nameArea);
       g.DrawText(IText(13.f, selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Near,
                        EVAlign::Middle),
                  mCustomNames[c].c_str(), nameArea);
+      g.PathClipRegion(mRECT); // restore the list clip for the next rows/scrollbar
 
       if (hovered || selected)
       {
@@ -480,12 +506,20 @@ private:
     g.DrawLine(col, cx, cy - s, cx, cy + s, nullptr, 1.6f);
   }
 
+  // A diagonal pencil: two parallel body lines, an end cap, and a converging
+  // nib at the bottom-left so it reads as a pencil even at ~14px.
   static void DrawPenGlyph(IGraphics& g, const IRECT& r, const IColor& col)
   {
-    const float x0 = r.MW() - 5.f, y0 = r.MH() + 5.f, x1 = r.MW() + 5.f, y1 = r.MH() - 5.f;
-    g.DrawLine(col, x0, y0, x1, y1, nullptr, 1.4f); // pen body
-    g.DrawLine(col, x0, y0, x0 + 3.f, y0 - 1.f, nullptr, 1.4f); // nib
-    g.DrawLine(col, x0, y0, x0 + 1.f, y0 - 3.f, nullptr, 1.4f);
+    const float cx = r.MW(), cy = r.MH();
+    const float t = 1.4f;
+    // body (two parallels, bottom-left -> top-right)
+    g.DrawLine(col, cx - 5.f, cy + 4.f, cx + 3.f, cy - 4.f, nullptr, t);
+    g.DrawLine(col, cx - 2.f, cy + 6.f, cx + 5.f, cy - 1.f, nullptr, t);
+    // eraser end cap (top-right)
+    g.DrawLine(col, cx + 3.f, cy - 4.f, cx + 5.f, cy - 1.f, nullptr, t);
+    // nib converging to a point (bottom-left)
+    g.DrawLine(col, cx - 5.f, cy + 4.f, cx - 6.f, cy + 7.f, nullptr, t);
+    g.DrawLine(col, cx - 2.f, cy + 6.f, cx - 6.f, cy + 7.f, nullptr, t);
   }
 
   static void DrawBinGlyph(IGraphics& g, const IRECT& r, const IColor& col)
@@ -515,6 +549,8 @@ private:
 
   // Custom section (1.2.0)
   std::vector<std::string> mCustomNames;
+  std::vector<int> mCustomArts; // assigned fractal-art id per custom amp
+  std::array<ILayerPtr, volum::custom::kNumCustomArts> mCustomArtLayers; // cached art thumbnails
   int mCustomSelected = -1;
   CustomSelectCallback mCustomSelectCb;
   AddCallback mCustomAddCb;

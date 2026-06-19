@@ -189,3 +189,45 @@ TEST_CASE("RenamePedal and DeletePedal edit the custom-pedal library in place")
   volum::custom::DeletePedal(99999); // out of range no-op
   REQUIRE(volum::custom::MockCustomPedals().size() == before - 1);
 }
+
+TEST_CASE("AddCustomAmp stores the assigned art in lockstep with the name list")
+{
+  const size_t before = volum::custom::MockCustomAmps().size();
+  REQUIRE(volum::custom::MockCustomAmpArts().size() == before); // arrays stay aligned
+
+  const int idx = volum::custom::AddCustomAmp("Art amp", 2);
+  REQUIRE(volum::custom::MockCustomAmps().size() == before + 1);
+  REQUIRE(volum::custom::MockCustomAmpArts().size() == before + 1);
+  REQUIRE(volum::custom::CustomAmpArt(idx) == 2);
+
+  // Out-of-range art ids wrap into [0, kNumCustomArts).
+  const int idx2 = volum::custom::AddCustomAmp("Wrap amp", volum::custom::kNumCustomArts + 1);
+  REQUIRE(volum::custom::CustomAmpArt(idx2) == 1);
+
+  // CustomAmpArt is safe for out-of-range indices.
+  REQUIRE(volum::custom::CustomAmpArt(-1) == 0);
+  REQUIRE(volum::custom::CustomAmpArt(99999) == 0);
+}
+
+TEST_CASE("kNumCustomArts exposes six selectable styles")
+{
+  REQUIRE(volum::custom::kNumCustomArts == 6);
+  const int idx = volum::custom::AddCustomAmp("Star amp", 5);
+  REQUIRE(volum::custom::CustomAmpArt(idx) == 5);
+}
+
+TEST_CASE("RemoveCustomAmp keeps names and art ids aligned")
+{
+  const size_t before = volum::custom::MockCustomAmps().size();
+  const int a = volum::custom::AddCustomAmp("Keep", 0);
+  const int b = volum::custom::AddCustomAmp("Drop", 3);
+  REQUIRE(volum::custom::CustomAmpArt(b) == 3);
+
+  volum::custom::RemoveCustomAmp(b);
+  REQUIRE(volum::custom::MockCustomAmps().size() == before + 1);
+  REQUIRE(volum::custom::MockCustomAmpArts().size() == before + 1);
+  REQUIRE(volum::custom::CustomAmpArt(a) == 0); // surviving entry's art intact
+
+  volum::custom::RemoveCustomAmp(99999); // out of range no-op
+  REQUIRE(volum::custom::MockCustomAmpArts().size() == volum::custom::MockCustomAmps().size());
+}

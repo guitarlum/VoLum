@@ -321,6 +321,131 @@ inline void DrawSidebarMiniFractal(IGraphics& g, const IRECT& r, int idx, const 
     }
 }
 
+// Custom-amp art: 4 distinct, instantly-recognizable procedural styles the user
+// assigns in the builder. Scales to the rect, so one generator serves the hero,
+// the sidebar thumbnail, and the builder swatch. artId is taken mod 4.
+inline void DrawCustomAmpArt(IGraphics& g, const IRECT& rect, int artId, const IColor& bright, const IColor& dim)
+{
+  const float cx = rect.MW(), cy = rect.MH();
+  const float scale = std::min(rect.W(), rect.H());
+  const bool big = scale > 40.f;
+  const float tk = big ? 2.f : 1.f;
+  const float R = scale * 0.42f;
+  switch (((artId % 6) + 6) % 6)
+  {
+    case 0: // concentric hexagon rings
+    {
+      const int rings = big ? 6 : 3;
+      for (int k = 1; k <= rings; k++)
+      {
+        const float rr = R * (float)k / rings;
+        float px = 0.f, py = 0.f;
+        for (int i = 0; i <= 6; i++)
+        {
+          const float a = (i * 60.f - 90.f) * 3.14159265f / 180.f;
+          const float nx = cx + rr * cosf(a), ny = cy + rr * sinf(a);
+          if (i > 0)
+            g.DrawLine((k % 2) ? bright : dim, px, py, nx, ny, nullptr, tk);
+          px = nx;
+          py = ny;
+        }
+      }
+      break;
+    }
+    case 1: // radial sunburst spokes
+    {
+      const int spokes = big ? 36 : 16;
+      for (int i = 0; i < spokes; i++)
+      {
+        const float a = i * 6.28318531f / spokes;
+        const float r0 = R * 0.16f, r1 = R * ((i % 3 == 0) ? 1.f : 0.68f);
+        g.DrawLine((i % 2) ? bright : dim, cx + r0 * cosf(a), cy + r0 * sinf(a), cx + r1 * cosf(a), cy + r1 * sinf(a),
+                   nullptr, tk);
+      }
+      g.DrawCircle(dim, cx, cy, R * 0.16f, nullptr, tk);
+      break;
+    }
+    case 2: // phyllotaxis sunflower dots
+    {
+      const int n = big ? 460 : 90;
+      const float golden = 2.39996323f;
+      const float dotR = big ? 1.8f : 1.f;
+      for (int i = 0; i < n; i++)
+      {
+        const float rr = R * sqrtf((float)i / n);
+        const float a = i * golden;
+        g.FillCircle((i & 3) ? bright : dim, cx + rr * cosf(a), cy + rr * sinf(a), dotR);
+      }
+      break;
+    }
+    case 3: // rotating nested squares (pinwheel)
+    {
+      const int layers = big ? 9 : 5;
+      for (int k = 0; k < layers; k++)
+      {
+        const float rr = R * (1.f - (float)k / (layers + 1));
+        const float rot = k * 14.f * 3.14159265f / 180.f;
+        float px = 0.f, py = 0.f;
+        for (int i = 0; i <= 4; i++)
+        {
+          const float a = rot + (i * 90.f + 45.f) * 3.14159265f / 180.f;
+          const float nx = cx + rr * cosf(a), ny = cy + rr * sinf(a);
+          if (i > 0)
+            g.DrawLine((k % 2) ? bright : dim, px, py, nx, ny, nullptr, tk);
+          px = nx;
+          py = ny;
+        }
+      }
+      break;
+    }
+    case 4: // spirograph rosette (hypotrochoid)
+    {
+      const float Rr = R;
+      const float rr = R * 0.4f;
+      const float d = R * 0.5f;
+      const float kk = (Rr - rr) / rr;
+      const int steps = big ? 260 : 110;
+      const float turns = big ? 6.2832f * 5.f : 6.2832f * 3.f;
+      float px = 0.f, py = 0.f;
+      for (int i = 0; i <= steps; i++)
+      {
+        const float t = turns * (float)i / steps;
+        const float nx = cx + (Rr - rr) * cosf(t) + d * cosf(kk * t);
+        const float ny = cy + (Rr - rr) * sinf(t) - d * sinf(kk * t);
+        if (i > 0)
+          g.DrawLine(((i / 14) % 2) ? bright : dim, px, py, nx, ny, nullptr, tk * 0.85f);
+        px = nx;
+        py = ny;
+      }
+      break;
+    }
+    case 5: // concentric hexagram / star mandala (overlapping triangles)
+    {
+      const int layers = big ? 4 : 2;
+      for (int k = 1; k <= layers; k++)
+      {
+        const float rr = R * (float)k / layers;
+        for (int tri = 0; tri < 2; tri++)
+        {
+          const float baseRot = (tri == 0 ? -90.f : 30.f) * 3.14159265f / 180.f;
+          float px = 0.f, py = 0.f;
+          for (int i = 0; i <= 3; i++)
+          {
+            const float a = baseRot + (i * 120.f) * 3.14159265f / 180.f;
+            const float nx = cx + rr * cosf(a), ny = cy + rr * sinf(a);
+            if (i > 0)
+              g.DrawLine(tri ? dim : bright, px, py, nx, ny, nullptr, tk);
+            px = nx;
+            py = ny;
+          }
+        }
+      }
+      break;
+    }
+    default: break;
+  }
+}
+
 inline void DrawHeroFractalArt(IGraphics& g, const IRECT& rect, int ampIdx)
 {
     float cx = rect.MW();

@@ -49,7 +49,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    if (mDualAmpActive)
+    if (mDualAmpActive && !mCustomMode)
     {
       DrawDualHero(g);
     }
@@ -73,12 +73,13 @@ public:
   void SetPlaceholder(const char* text, int ampIdx = 0)
   {
     mPlaceholder = text;
-    if (mAmpIdx != ampIdx)
+    if (mAmpIdx != ampIdx || mCustomMode)
     {
       mAmpIdx = ampIdx;
       mMonoArtLayer = nullptr;
       mMainArtLayer = nullptr;
     }
+    mCustomMode = false; // SetPlaceholder is the factory-amp entry point
     mHasBitmap = false;
     SetDirty(false);
   }
@@ -86,6 +87,20 @@ public:
   void SetName(const char* name)
   {
     mName = name;
+    SetDirty(false);
+  }
+
+  // Custom amps render an assigned procedural art instead of the factory amp
+  // fractal, and hide the dual/stereo affordance (not supported for custom amps
+  // in 1.2.0). Pass isCustom=false to return to the factory amp art.
+  void SetCustomArt(bool isCustom, int artId)
+  {
+    if (mCustomMode != isCustom || mCustomArt != artId)
+    {
+      mCustomMode = isCustom;
+      mCustomArt = artId;
+      mMonoArtLayer = nullptr; // force art layer rebuild
+    }
     SetDirty(false);
   }
 
@@ -110,6 +125,10 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void) mod;
+
+    // Custom amps have no dual/stereo affordance in 1.2.0 — swallow clicks.
+    if (mCustomMode)
+      return;
 
     // 1. DUAL toggle chip — top-right of mono, top-right of MAIN panel in dual.
     if (mDualToggleCallback && DualChipRect().Contains(x, y))
@@ -318,13 +337,18 @@ private:
     if (!g.CheckLayer(mMonoArtLayer) || mCachedMonoAmpIdx != mAmpIdx)
     {
       g.StartLayer(this, artRect);
-      DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
+      if (mCustomMode)
+        DrawCustomAmpArt(g, artRect, mCustomArt, IColor(170, 120, 210, 220), IColor(70, 100, 180, 200));
+      else
+        DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
       mMonoArtLayer = g.EndLayer();
       mCachedMonoAmpIdx = mAmpIdx;
     }
     g.DrawLayer(mMonoArtLayer);
 
-    DrawDualChip(g, VoLumColors::AMBER);
+    // No dual/stereo affordance for custom amps in 1.2.0.
+    if (!mCustomMode)
+      DrawDualChip(g, VoLumColors::AMBER);
   }
 
   void DrawLane(IGraphics& g, const IRECT& r, int ampIdx, const char* role, const char* name, bool focused,
@@ -401,6 +425,8 @@ private:
   bool mDualAmpActive = false;
   bool mSupportFocused = false;
   bool mDualChipHovered = false;
+  bool mCustomMode = false;
+  int mCustomArt = 0;
   FocusCallback mFocusCallback;
   PickerCallback mPickerCallback;
   DualToggleCallback mDualToggleCallback;
