@@ -24,12 +24,23 @@
 using namespace iplug;
 using namespace igraphics;
 
+// Action rows let the PRE dropdown host the F8 custom-pedal import/manage entry
+// points inline (no separate library hub).
+enum class PreMenuAction
+{
+  None = 0,
+  Import,
+  Manage
+};
+
 struct VoLumPreCaptureMenuItem
 {
   std::string label;
   int captureIdx = 0;
   bool isHeader = false;
   volum::PrePedalCaptureGroup group = volum::PrePedalCaptureGroup::None;
+  PreMenuAction action = PreMenuAction::None; // Import/Manage rows (stub in shell)
+  bool custom = false; // imported capture -> show a marker
 };
 
 class VoLumPreCaptureMenuControl : public IControl
@@ -84,11 +95,21 @@ public:
         g.FillRoundRect(VoLumColors::ITEM_HOVER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
         g.DrawRoundRect(IColor(20, 200, 162, 78), row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
       }
+      if (item.action != PreMenuAction::None)
+      {
+        // Import/Manage affordance: teal, left-aligned, no selection dot.
+        g.DrawText(IText(12.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Near, EVAlign::Middle), item.label.c_str(),
+                   IRECT(row.L + 14.f, row.T, row.R, row.B));
+        continue;
+      }
       if (item.group != volum::PrePedalCaptureGroup::None)
         g.FillRoundRect(GroupColor(item.group).WithOpacity(0.32f), IRECT(row.L, row.T + 4.f, row.L + 4.f, row.B - 4.f), 2.f);
       if (selected)
         g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
       g.DrawText(selected ? text : dimText, item.label.c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
+      if (item.custom)
+        g.DrawText(IText(8.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Far, EVAlign::Middle), "IMPORTED",
+                   IRECT(row.L, row.T, row.R - 4.f, row.B));
     }
   }
 
@@ -100,11 +121,19 @@ public:
     if (idx < 0 || idx >= static_cast<int>(mItems.size()) || mItems[static_cast<size_t>(idx)].isHeader)
       return;
 
-    if (auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    if (!plugin)
+      return;
+
+    const auto& item = mItems[static_cast<size_t>(idx)];
+    // Import/Manage and imported-capture rows are UI-shell stubs: dismiss only.
+    if (item.action != PreMenuAction::None || item.custom)
     {
-      plugin->_VolumSetPreNamCapture(mSlot, mItems[static_cast<size_t>(idx)].captureIdx);
       plugin->_VolumHidePreCaptureMenu();
+      return;
     }
+    plugin->_VolumSetPreNamCapture(mSlot, item.captureIdx);
+    plugin->_VolumHidePreCaptureMenu();
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
