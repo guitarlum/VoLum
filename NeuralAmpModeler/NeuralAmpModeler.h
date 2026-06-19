@@ -185,6 +185,7 @@ enum ECtrlTags
   kCtrlTagVoLumIrMenu,
   kCtrlTagVoLumPresetMenu,
   kCtrlTagVoLumCustomOverlay,
+  kCtrlTagVoLumConfirm,
   kNumCtrlTags
 };
 
@@ -438,6 +439,12 @@ public:
   void _VolumShowManageCustomPedals();
   void _VolumShowPresetMenu();
   void _VolumSelectCustomAmp(int customIdx);
+  // Flags the header preset strip "(unsaved)" for rig edits that bypass the
+  // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
+  void _VolumMarkPresetDirty();
+  // Resets the active amp's params to shipped factory defaults and clears any
+  // recalled preset (preset dropdown "Default" row).
+  void _VolumResetAmpToFactory();
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;

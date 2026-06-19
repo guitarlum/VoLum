@@ -9,9 +9,11 @@
 #include "VoLumColorHelpers.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <string>
+#include <vector>
 
 class VoLumSpeakerRowControl : public IControl
 {
@@ -41,43 +43,54 @@ public:
     SetDirty(false);
   }
 
+  // Override the three cab-button labels (slots 1-3). Used when a custom amp is
+  // active so the row shows that amp's named cabs instead of G12/G65/V30. An
+  // empty name marks the slot as having no capture (rendered disabled).
+  void SetCabNames(const std::string& a, const std::string& b, const std::string& c)
+  {
+    mCabNames[0] = a;
+    mCabNames[1] = b;
+    mCabNames[2] = c;
+    SetDirty(false);
+  }
+
+  void SetFactoryCabs()
+  {
+    mCabNames[0] = "G12";
+    mCabNames[1] = "G65";
+    mCabNames[2] = "V30";
+    SetDirty(false);
+  }
+
   void Draw(IGraphics& g) override
   {
-    const char* labels[] = {"AMP", "G12", "G65", "V30"};
+    const std::string labels[] = {"No Cab", mCabNames[0], mCabNames[1], mCabNames[2]};
+    const float noCabW = 64.f;
     const float btnW = 52.f;
-    const float irBtnW = 78.f;
+    const float irBtnW = 104.f;
     const float btnH = 26.f;
     const float gap = 6.f;
     const float divGap = 12.f;
-    const float labelGap = 6.f;
 
-    // Single line: DIRECT [AMP] | CABINET [G12] [G65] [V30] | [IR v]
-    IText sectionText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    const float directLblW = 50.f;
-    const float cabLblW = 66.f;
-
-    float totalW = directLblW + labelGap + btnW + divGap + cabLblW + labelGap + 3 * btnW + 2 * gap + divGap + irBtnW;
+    // Single row, no section captions: [No Cab] | [cab1] [cab2] [cab3] | [~ Custom IR]
+    const float cabsW = 3.f * btnW + 2.f * gap;
+    const float totalW = noCabW + divGap + cabsW + divGap + irBtnW;
     float x = mRECT.MW() - totalW / 2.f;
-    float btnY = mRECT.MH() - btnH / 2.f;
-    // IV/Josefin bold caps sit visually high in short rects â€” nudge text area down for optical centering
+    const float btnY = mRECT.MH() - btnH / 2.f;
+    // IV/Josefin bold caps sit visually high in short rects - nudge text area down for optical centering
     const float btnTextNudgeY = 3.f;
 
-    // "DIRECT" label
-    IRECT directLabel(x, btnY + btnTextNudgeY, x + directLblW, btnY + btnH);
-    g.DrawText(sectionText, "DIRECT", directLabel);
-    x += directLblW + labelGap;
-
-    // AMP button (index 0) -- teal/cyan accent when active
+    // "No Cab" button (index 0) -- teal/cyan accent when active (was "AMP")
     {
-      IRECT btn(x, btnY, x + btnW, btnY + btnH);
+      IRECT btn(x, btnY, x + noCabW, btnY + btnH);
       bool isOn = (0 == mSelected) && !mIrCabActive;
       bool isHovered = (0 == mHovered);
       g.FillRoundRect(ButtonFill(isOn, isHovered, true), btn, 3.f);
       g.DrawRoundRect(ButtonBorder(isOn, isHovered, true), btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
-      IText btnText(14.f, ButtonText(isOn, isHovered), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-      g.DrawText(btnText, labels[0], IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      IText btnText(13.f, ButtonText(isOn, isHovered), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      g.DrawText(btnText, labels[0].c_str(), IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
       mBtnRects[0] = btn;
-      x += btnW;
+      x += noCabW;
     }
 
     // Divider
@@ -85,47 +98,52 @@ public:
     g.DrawLine(IColor(60, 200, 162, 78), divX, btnY + 4.f, divX, btnY + btnH - 4.f);
     x += divGap;
 
-    // "CABINET" label
-    IRECT cabLabel(x, btnY + btnTextNudgeY, x + cabLblW, btnY + btnH);
-    g.DrawText(sectionText, "CABINET", cabLabel);
-    x += cabLblW + labelGap;
-
-    // G12, G65, V30 buttons (indices 1-3) — always gold; lane belonging is communicated by the
-    // LED dot on amp-row knob labels, not by tinting the cab buttons.
+    // Cab buttons (indices 1-3) — factory G12/G65/V30, or a custom amp's named
+    // cabs. An empty label means the slot has no capture and is disabled.
     for (int i = 1; i < 4; i++)
     {
       IRECT btn(x, btnY, x + btnW, btnY + btnH);
+      const bool empty = labels[i].empty();
       bool isOn = (i == mSelected) && !mIrCabActive;
-      bool isHovered = (i == mHovered);
-      g.FillRoundRect(isOn ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
-      g.DrawRoundRect(isOn ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false),
-                      btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
-      IColor cabTextCol = ButtonText(isOn, isHovered);
-      IText btnTextCab(14.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-      g.DrawText(btnTextCab, labels[i], IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      bool isHovered = (i == mHovered) && !empty;
+      if (empty)
+      {
+        g.FillRoundRect(VoLumColors::BTN_OFF_BG, btn, 3.f);
+        g.DrawRoundRect(IColor(50, 200, 162, 70), btn, 3.f, nullptr, 1.f);
+        g.DrawText(IText(13.f, IColor(70, 235, 220, 200), "Josefin-Bold", EAlign::Center, EVAlign::Middle), "--",
+                   IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      }
+      else
+      {
+        g.FillRoundRect(isOn ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
+        g.DrawRoundRect(isOn ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false),
+                        btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
+        IColor cabTextCol = ButtonText(isOn, isHovered);
+        IText btnTextCab(14.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+        g.DrawText(btnTextCab, labels[i].c_str(), IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      }
       mBtnRects[i] = btn;
       x += btnW + gap;
     }
 
-    // Divider before the custom IR cab dropdown
+    // Divider before the Custom IR cab dropdown
     float divX2 = (x - gap) + divGap / 2.f;
     g.DrawLine(IColor(60, 200, 162, 78), divX2, btnY + 4.f, divX2, btnY + btnH - 4.f);
     x += divGap - gap;
 
-    // Custom IR cab dropdown button (F7). When active it is the selected cab and
-    // shows the IR name; otherwise a quiet "IR v" affordance.
+    // Custom IR cab dropdown button (F7) with an impulse-response glyph. When
+    // active it is the selected cab and shows the IR name.
     {
       IRECT btn(x, btnY, x + irBtnW, btnY + btnH);
       const bool isHovered = (4 == mHovered);
       g.FillRoundRect(mIrCabActive ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
       g.DrawRoundRect(mIrCabActive ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false), btn,
                       3.f, nullptr, isHovered ? 1.35f : 1.f);
-      std::string label = mIrCabActive && !mIrName.empty() ? TruncatedIr() : "IR";
       const IColor txt = ButtonText(mIrCabActive, isHovered);
-      g.DrawText(IText(mIrCabActive ? 11.f : 14.f, txt, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label.c_str(),
-                 IRECT(btn.L, btn.T + btnTextNudgeY, btn.R - 12.f, btn.B));
-      g.DrawText(IText(10.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "v",
-                 IRECT(btn.R - 14.f, btn.T, btn.R - 2.f, btn.B));
+      DrawIrGlyph(g, IRECT(btn.L + 9.f, btn.T + 5.f, btn.L + 22.f, btn.B - 5.f), txt);
+      std::string label = mIrCabActive && !mIrName.empty() ? TruncatedIr() : "Custom IR";
+      g.DrawText(IText(mIrCabActive ? 11.f : 12.f, txt, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label.c_str(),
+                 IRECT(btn.L + 22.f, btn.T + btnTextNudgeY, btn.R - 4.f, btn.B));
       mIrBtnRect = btn;
     }
   }
@@ -166,7 +184,9 @@ public:
 
     for (int i = 0; i < 4; i++)
     {
-      if (mBtnRects[i].Contains(x, y) && (i != mSelected || mIrCabActive))
+      // Cab slots 1-3 with an empty label have no capture and are not selectable.
+      const bool emptySlot = (i >= 1) && mCabNames[i - 1].empty();
+      if (mBtnRects[i].Contains(x, y) && !emptySlot && (i != mSelected || mIrCabActive))
       {
         // Choosing a baked cab clears any active custom IR cab.
         mIrCabActive = false;
@@ -192,11 +212,27 @@ public:
   void SetSupportAccent(bool /*support*/) {}
 
 private:
+  // Tiny impulse-response icon: a spike that decays to the right over a baseline.
+  static void DrawIrGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float base = r.B;
+    const float x0 = r.L;
+    const float w = r.W();
+    g.DrawLine(IColor(col.A / 2, col.R, col.G, col.B), r.L, base, r.R, base, nullptr, 1.f);
+    const int n = 5;
+    for (int i = 0; i < n; i++)
+    {
+      const float bx = x0 + (w * i) / (float) n;
+      const float h = r.H() * std::pow(0.55f, (float) i);
+      g.DrawLine(col, bx, base, bx, base - h, nullptr, i == 0 ? 1.7f : 1.f);
+    }
+  }
+
   std::string TruncatedIr() const
   {
-    if (mIrName.size() <= 9)
+    if (mIrName.size() <= 12)
       return mIrName;
-    return mIrName.substr(0, 8) + "\u2026";
+    return mIrName.substr(0, 11) + "\u2026";
   }
 
   int HitTestButton(float x, float y) const
@@ -232,6 +268,9 @@ private:
 
   int mSelected = 3;
   int mHovered = -1;
+  // Labels for cab slots 1-3 (index 0 is always "No Cab"). Factory default; a
+  // custom amp overrides these via SetCabNames.
+  std::string mCabNames[3] = {"G12", "G65", "V30"};
   IRECT mBtnRects[4];
   IRECT mIrBtnRect;
   bool mIrCabActive = false;

@@ -20,6 +20,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentMock.h"
+#include "VoLumFractalArt.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -49,14 +50,17 @@ public:
     mIdx = -1;
     mName.clear();
     mEmpty = true;
+    mDirtyEdit = false;
     SetDirty(false);
   }
 
-  // Mark a preset (by name) as the active one, e.g. after a recall from the browser.
+  // Mark a preset (by name) as the active one, e.g. after a recall from the
+  // browser. A fresh recall is clean (matches the stored snapshot).
   void SelectName(const char* name)
   {
     mName = name ? name : "";
     mEmpty = mName.empty();
+    mDirtyEdit = false;
     mIdx = -1;
     for (int i = 0; i < (int)mList.size(); i++)
       if (mList[(size_t)i] == mName)
@@ -75,6 +79,17 @@ public:
     SetDirty(false);
   }
 
+  // The live signal chain diverged from (or matches) the recalled snapshot.
+  // Drives the "(unsaved)" suffix. Cleared on recall / save.
+  void SetDirtyState(bool dirty)
+  {
+    if (mDirtyEdit != dirty)
+    {
+      mDirtyEdit = dirty;
+      SetDirty(false);
+    }
+  }
+
   // Active preset index in the current bank, or -1 when none is selected.
   int ActiveIndex() const { return mIdx; }
 
@@ -88,20 +103,31 @@ public:
     g.DrawText(arrow, "<", PrevRect());
     g.DrawText(arrow, ">", NextRect());
 
-    const IRECT mid = mRECT.GetReducedFromLeft(22.f).GetReducedFromRight(40.f);
-    g.DrawText(IText(8.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Top), "PRESET",
-               mid.GetFromTop(11.f));
-    const char* label = mEmpty ? "(unsaved)" : (mName.empty() ? "(unsaved)" : mName.c_str());
-    // Clip the name to the centre area so a long preset name can never spill over
-    // the arrows / caret.
-    const IRECT nameR = mid.GetReducedFromTop(9.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
+    // No caret / no "PRESET" caption: only the two cycle arrows reserve side
+    // space. Empty -> "No Preset". Clean -> name. Dirty -> "<name> (unsaved)".
+    const IRECT mid = mRECT.GetReducedFromLeft(22.f).GetReducedFromRight(22.f);
+    std::string label;
+    IColor col;
+    if (mEmpty || mName.empty())
+    {
+      label = "No Preset";
+      col = VoLumColors::CREAM_DIM;
+    }
+    else if (mDirtyEdit)
+    {
+      label = mName + "  (unsaved)";
+      col = VoLumColors::AMBER;
+    }
+    else
+    {
+      label = mName;
+      col = VoLumColors::TEXT_BRIGHT;
+    }
+    // Clip to the centre area so a long name can never spill over the arrows.
+    const IRECT nameR = mid.GetPadded(-2.f, 0.f, -2.f, 0.f);
     g.PathClipRegion(nameR);
-    g.DrawText(IText(12.f, mEmpty ? VoLumColors::CREAM_DIM : VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center,
-                     EVAlign::Bottom),
-               label, nameR);
+    g.DrawText(IText(13.f, col, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label.c_str(), nameR);
     g.PathClipRegion();
-
-    g.DrawText(IText(11.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "v", CaretRect());
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -140,15 +166,16 @@ private:
     mIdx = ((mIdx < 0 ? 0 : mIdx) + dir % n + n) % n;
     mName = mList[(size_t)mIdx];
     mEmpty = false;
+    mDirtyEdit = false; // cycling to a stored preset is a clean recall
     SetDirty(false);
   }
 
   IRECT PrevRect() const { return mRECT.GetFromLeft(22.f); }
   IRECT NextRect() const { return mRECT.GetFromRight(22.f); }
-  IRECT CaretRect() const { return mRECT.GetFromRight(40.f).GetFromLeft(18.f); }
 
   std::string mName;
   bool mEmpty = true;
+  bool mDirtyEdit = false;
   std::vector<std::string> mList;
   int mIdx = -1;
   OpenCallback mOpen;
@@ -168,17 +195,22 @@ class VoLumListMenuControl : public IControl
 public:
   static constexpr int kNone = -3;
   static constexpr int kManage = -2;
+  static constexpr int kDefault = -4; // reset amp to factory defaults (preset menu)
 
   struct Row
   {
     std::string label;
     int code = 0;
-    bool action = false; // teal action row (Manage)
+    bool action = false; // teal action row (Manage / Default)
     bool dim = false; // non-interactive hint row
+    bool dividerBelow = false; // draw a separator under this row (e.g. pinned Default)
   };
 
   using SelectCallback = std::function<void(int code)>;
 
+  // Attached at full-window bounds so a click anywhere outside the menu can
+  // dismiss it (the menu paints only into mMenuRect). Position the visible menu
+  // with SetMenuRect before un-hiding.
   explicit VoLumListMenuControl(const IRECT& bounds)
   : IControl(bounds)
   {
@@ -192,7 +224,15 @@ public:
     mRows = rows;
     mSelectedCode = selectedCode;
     mHovered = -1;
+    mScroll = 0.f;
     SetDirty(false);
+  }
+
+  // Anchor the visible menu panel. Caller caps the height to the screen.
+  void SetMenuRect(const IRECT& r)
+  {
+    mMenuRect = r;
+    mScroll = 0.f;
   }
 
   static constexpr float kRowH = 22.f;
@@ -200,17 +240,24 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRoundRect(VoLumColors::HERO_BG, mRECT, 4.f);
-    g.DrawRoundRect(VoLumColors::TEAL_DIM, mRECT, 4.f, nullptr, 1.5f);
-    DrawCornerAccent(g, mRECT.L + 5.f, mRECT.T + 5.f, 8.f, false, false, VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, mRECT.R - 5.f, mRECT.B - 5.f, 8.f, true, true, VoLumColors::TEAL_DIM);
+    g.FillRoundRect(VoLumColors::HERO_BG, mMenuRect, 4.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, mMenuRect, 4.f, nullptr, 1.5f);
+    DrawCornerAccent(g, mMenuRect.L + 5.f, mMenuRect.T + 5.f, 8.f, false, false, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, mMenuRect.R - 5.f, mMenuRect.B - 5.f, 8.f, true, true, VoLumColors::TEAL_DIM);
 
-    float rowT = mRECT.T + 6.f;
+    const bool scrollable = ContentH() > mMenuRect.H() + 0.5f;
+    const float sbW = scrollable ? 5.f : 0.f;
+    ClampScroll();
+
+    g.PathClipRegion(mMenuRect);
+    float rowT = mMenuRect.T + 6.f - mScroll;
     for (int i = 0; i < (int)mRows.size(); i++)
     {
       const auto& r = mRows[(size_t)i];
-      const IRECT row(mRECT.L + 8.f, rowT, mRECT.R - 8.f, rowT + kRowH);
+      const IRECT row(mMenuRect.L + 8.f, rowT, mMenuRect.R - 8.f - sbW, rowT + kRowH);
       rowT += kRowH;
+      if (row.B < mMenuRect.T || row.T > mMenuRect.B)
+        continue;
 
       // Visual divider above an action (Manage) row.
       if (r.action && i > 0)
@@ -232,20 +279,40 @@ public:
                                : (r.action ? VoLumColors::TEAL : (selected ? VoLumColors::CREAM : VoLumColors::CREAM_DIM));
       g.DrawText(IText(12.f, col, "Josefin-Bold", EAlign::Near, EVAlign::Middle), r.label.c_str(),
                  IRECT(row.L + (selected ? 18.f : 12.f), row.T, row.R, row.B));
+      if (r.dividerBelow)
+        g.DrawLine(VoLumColors::FRAME, row.L, row.B, row.R, row.B, nullptr, 1.f);
+    }
+    g.PathClipRegion();
+
+    if (scrollable)
+    {
+      const float trackX = mMenuRect.R - sbW - 1.f;
+      IRECT track(trackX, mMenuRect.T + 4.f, mMenuRect.R - 2.f, mMenuRect.B - 4.f);
+      g.FillRect(IColor(40, 200, 162, 78), track);
+      const float maxScroll = ContentH() - mMenuRect.H();
+      const float thumbH = std::max(18.f, track.H() * (mMenuRect.H() / ContentH()));
+      const float t = (maxScroll > 0.f) ? (mScroll / maxScroll) : 0.f;
+      const float thumbY = track.T + (track.H() - thumbH) * t;
+      g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, thumbY, track.R, thumbY + thumbH));
     }
   }
 
-  void OnMouseDown(float, float y, const IMouseMod&) override
+  void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    if (!mMenuRect.Contains(x, y))
+    {
+      Hide(true); // click-outside dismisses
+      return;
+    }
     const int idx = RowAtY(y);
     if (idx >= 0 && idx < (int)mRows.size() && !mRows[(size_t)idx].dim && mCb)
       mCb(mRows[(size_t)idx].code);
     Hide(true);
   }
 
-  void OnMouseOver(float, float y, const IMouseMod&) override
+  void OnMouseOver(float x, float y, const IMouseMod&) override
   {
-    const int idx = RowAtY(y);
+    const int idx = mMenuRect.Contains(x, y) ? RowAtY(y) : -1;
     if (idx != mHovered)
     {
       mHovered = idx;
@@ -258,17 +325,124 @@ public:
     SetDirty(false);
   }
 
+  void OnMouseWheel(float, float, const IMouseMod&, float d) override
+  {
+    if (ContentH() <= mMenuRect.H() + 0.5f)
+      return;
+    mScroll -= d * kRowH * 1.5f;
+    ClampScroll();
+    SetDirty(false);
+  }
+
 private:
+  float ContentH() const { return 12.f + (float)mRows.size() * kRowH; }
+
+  void ClampScroll()
+  {
+    const float maxScroll = std::max(0.f, ContentH() - mMenuRect.H());
+    mScroll = std::clamp(mScroll, 0.f, maxScroll);
+  }
+
   int RowAtY(float y) const
   {
-    const int idx = (int)((y - (mRECT.T + 6.f)) / kRowH);
+    const int idx = (int)((y - (mMenuRect.T + 6.f) + mScroll) / kRowH);
     return (idx >= 0 && idx < (int)mRows.size()) ? idx : -1;
   }
 
+  IRECT mMenuRect;
   std::vector<Row> mRows;
   int mSelectedCode = kNone;
   int mHovered = -1;
+  float mScroll = 0.f;
   SelectCallback mCb;
+};
+
+// ---------------------------------------------------------------------------
+// Shared "Are you sure?" confirmation modal, used for every destructive delete
+// (Manage panel + sidebar trash). Attached full-window above other surfaces;
+// click-outside or Cancel dismisses, Delete runs the stored callback.
+// ---------------------------------------------------------------------------
+class VoLumConfirmDialogControl : public IControl
+{
+public:
+  explicit VoLumConfirmDialogControl(const IRECT& fullBounds)
+  : IControl(fullBounds)
+  {
+    mIgnoreMouse = false;
+  }
+
+  void Show(const std::string& title, const std::string& message, std::function<void()> onConfirm)
+  {
+    mTitle = title;
+    mMessage = message;
+    mOnConfirm = std::move(onConfirm);
+    Hide(false);
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRect(IColor(190, 8, 10, 14), mRECT); // dimming scrim
+    const IRECT box = BoxRect();
+    g.FillRoundRect(IColor(255, 26, 26, 34), box, 6.f);
+    g.DrawRoundRect(VoLumColors::AMBER, box, 6.f, nullptr, 1.6f);
+
+    g.DrawText(IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top), mTitle.c_str(),
+               box.GetPadded(-16.f).GetFromTop(22.f));
+    const IRECT msgR = box.GetPadded(-16.f, -38.f, -16.f, -52.f);
+    g.PathClipRegion(msgR);
+    g.DrawText(IText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), mMessage.c_str(), msgR);
+    g.PathClipRegion();
+
+    DrawBtn(g, CancelRect(), "Cancel", false);
+    DrawBtn(g, DeleteRect(), "Delete", true);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod&) override
+  {
+    if (DeleteRect().Contains(x, y))
+    {
+      auto cb = mOnConfirm;
+      Hide(true);
+      if (cb)
+        cb();
+      return;
+    }
+    // Cancel button or any click outside the box dismisses without acting.
+    if (CancelRect().Contains(x, y) || !BoxRect().Contains(x, y))
+    {
+      Hide(true);
+      return;
+    }
+  }
+
+private:
+  IRECT BoxRect() const
+  {
+    const float w = 444.f, h = 150.f;
+    return IRECT(mRECT.MW() - w / 2.f, mRECT.MH() - h / 2.f, mRECT.MW() + w / 2.f, mRECT.MH() + h / 2.f);
+  }
+  IRECT CancelRect() const
+  {
+    const IRECT box = BoxRect();
+    return IRECT(box.L + 18.f, box.B - 42.f, box.MW() - 6.f, box.B - 14.f);
+  }
+  IRECT DeleteRect() const
+  {
+    const IRECT box = BoxRect();
+    return IRECT(box.MW() + 6.f, box.B - 42.f, box.R - 18.f, box.B - 14.f);
+  }
+  void DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool danger)
+  {
+    g.FillRect(danger ? IColor(70, 232, 130, 92) : VoLumColors::BTN_OFF_BG, r);
+    g.DrawRect(danger ? VoLumColors::AMBER : VoLumColors::FRAME, r);
+    g.DrawText(IText(12.f, danger ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
+                     EVAlign::Middle),
+               label, r);
+  }
+
+  std::string mTitle, mMessage;
+  std::function<void()> mOnConfirm;
 };
 
 // ---------------------------------------------------------------------------
@@ -285,7 +459,7 @@ public:
     Pedals
   };
 
-  using BuilderSavedCallback = std::function<void(const char* name)>;
+  using BuilderSavedCallback = std::function<void(const char* name, int art)>;
   using ChangedCallback = std::function<void()>; // a managed list was mutated
 
   explicit VoLumCustomOverlayControl(const IRECT& fullBounds)
@@ -298,11 +472,18 @@ public:
 
   // changedCb fires whenever a managed list is mutated so the host can re-sync
   // dependent UI (e.g. the preset header bar).
+  // Routes a destructive delete through the shared confirm modal:
+  //   confirmCb(message, onConfirm) -> shows "Are you sure?"; onConfirm runs the
+  //   actual delete if the user accepts.
+  using ConfirmDeleteCallback = std::function<void(const std::string& message, std::function<void()> onConfirm)>;
+
   void SetCallbacks(BuilderSavedCallback builderCb, ChangedCallback changedCb = nullptr)
   {
     mBuilderSaved = std::move(builderCb);
     mChanged = std::move(changedCb);
   }
+
+  void SetConfirmDeleteCallback(ConfirmDeleteCallback cb) { mConfirmDelete = std::move(cb); }
 
   // ampIdx/ampName only matter for Presets; ignored for IR/Pedals.
   void ShowManage(ManageKind kind, int ampIdx = 0, const char* ampName = nullptr)
@@ -439,6 +620,7 @@ private:
     kAddFile,
     kBuilderSave,
     kEditName,
+    kArtBase = 80, // [kArtBase, kArtBase + kNumCustomArts) art swatch picks
     kRowBase = 100,
     kFileSpeakerBase = 200,
     kFileChannelBase = 300,
@@ -634,11 +816,19 @@ private:
       case kDelete:
         if (mSel >= 0 && mSel < (int)mItems.size())
         {
-          ApplyDelete(mSel);
-          ReloadList();
-          mSel = -1;
-          NotifyChanged();
-          SetDirty(false);
+          const int idx = mSel;
+          const std::string nm = mItems[(size_t)idx];
+          auto doDelete = [this, idx]() {
+            ApplyDelete(idx);
+            ReloadList();
+            mSel = -1;
+            NotifyChanged();
+            SetDirty(false);
+          };
+          if (mConfirmDelete)
+            mConfirmDelete("Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.", doDelete);
+          else
+            doDelete();
         }
         break;
       default:
@@ -664,12 +854,18 @@ private:
       SetDirty(false);
       return;
     }
+    if (action >= kArtBase && action < kArtBase + kNumCustomArts)
+    {
+      mBuilderAmp.art = action - kArtBase;
+      SetDirty(false);
+      return;
+    }
     if (action == kBuilderSave)
     {
       if (!mBuilderAmp.files.empty())
       {
         if (mBuilderSaved)
-          mBuilderSaved(mBuilderAmp.name.c_str());
+          mBuilderSaved(mBuilderAmp.name.c_str(), mBuilderAmp.art);
         Hide(true);
       }
       return;
@@ -838,7 +1034,7 @@ private:
   {
     switch (mManageKind)
     {
-      case ManageKind::IR: return "custom IR";
+      case ManageKind::IR: return "Custom IR";
       case ManageKind::Pedals: return "custom pedal";
       default: return "preset";
     }
@@ -932,19 +1128,27 @@ private:
   void DrawBuilder(IGraphics& g, const IRECT& body)
   {
     using namespace volum::custom;
-    const IRECT left(body.L, body.T, body.L + body.W() * 0.56f, body.B);
-    const IRECT right(left.R + 18.f, body.T, body.R, body.B);
+    const IRECT left(body.L, body.T, body.L + body.W() * 0.53f, body.B);
+    const IRECT right(left.R + 22.f, body.T, body.R, body.B);
 
+    // Hairline column divider for an editorial two-pane structure.
+    const float divX = left.R + 11.f;
+    g.DrawLine(IColor(60, 200, 180, 110), divX, body.T + 2.f, divX, body.B - 2.f, nullptr, 1.f);
+
+    // ---- LEFT: profile name + file manifest -------------------------------
     g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top), "PROFILE NAME",
                left.GetFromTop(12.f));
     const IRECT nameBox(left.L, left.T + 16.f, left.R, left.T + 42.f);
-    g.FillRect(VoLumColors::BTN_OFF_BG, nameBox);
-    g.DrawRect(VoLumColors::TEAL_DIM, nameBox); // looks like an editable input
+    g.FillRoundRect(VoLumColors::BTN_OFF_BG, nameBox, 4.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, nameBox, 4.f); // looks like an editable input
+    const IRECT nameTextR = nameBox.GetPadded(-10.f, 0.f, -10.f, 0.f);
+    g.PathClipRegion(nameTextR);
     g.DrawText(IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Near, EVAlign::Middle), mBuilderAmp.name.c_str(),
-               nameBox.GetPadded(-10.f, 0.f, -10.f, 0.f));
+               nameTextR);
+    g.PathClipRegion();
     AddHotspot(nameBox, kEditName);
 
-    const IRECT drop(left.L, nameBox.B + 10.f, left.R, nameBox.B + 38.f);
+    const IRECT drop(left.L, nameBox.B + 12.f, left.R, nameBox.B + 40.f);
     g.DrawDottedRect(VoLumColors::TEAL_DIM, drop, nullptr, 1.f, 4.f);
     g.DrawText(IText(11.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                "+ Add .nam file", drop);
@@ -1003,11 +1207,50 @@ private:
                "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
                "Sparse coverage is fine. Stored as a per-amp manifest - your files are never renamed.");
 
-    // right: live coverage grid derived from the manifest
-    g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top), "COVERAGE (speaker x channel)",
-               right.GetFromTop(12.f));
+    // ---- RIGHT (top): art picker as a 3x2 gallery -------------------------
+    {
+      const IRECT artHdr(right.L, right.T, right.R, right.T + 13.f);
+      g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "ART", artHdr);
+      g.DrawLine(IColor(70, 198, 162, 90), right.L + 30.f, artHdr.MH(), right.R, artHdr.MH(), nullptr, 1.f);
+    }
+    const float gTop = right.T + 20.f;
+    const float gGap = 8.f;
+    const int artCols = 3;
+    const float tileW = (right.W() - gGap * (artCols - 1)) / (float) artCols;
+    const float artGridH = 150.f;
+    const float tileH = (artGridH - gGap) / 2.f;
+    for (int a = 0; a < kNumCustomArts; a++)
+    {
+      const int col = a % artCols, rowN = a / artCols;
+      const IRECT t(right.L + col * (tileW + gGap), gTop + rowN * (tileH + gGap),
+                    right.L + col * (tileW + gGap) + tileW, gTop + rowN * (tileH + gGap) + tileH);
+      const bool selArt = (mBuilderAmp.art == a);
+      if (selArt)
+        g.FillRoundRect(IColor(60, 232, 196, 96), t.GetPadded(2.5f), 8.f); // soft gold glow
+      g.FillRoundRect(VoLumColors::HERO_BG, t, 6.f);
+      const IColor bright = selArt ? IColor(235, 196, 142, 226) : IColor(150, 120, 168, 150);
+      const IColor dim = selArt ? IColor(210, 110, 150, 205) : IColor(130, 70, 110, 130);
+      DrawCustomAmpArt(g, t.GetPadded(-7.f), a, bright, dim);
+      g.DrawRoundRect(selArt ? VoLumColors::GOLD : VoLumColors::TEAL_DIM, t, 6.f, nullptr, selArt ? 1.8f : 1.f);
+      if (selArt)
+      {
+        const float bx = t.R - 9.f, by = t.T + 9.f;
+        g.FillCircle(VoLumColors::GOLD, bx, by, 6.f);
+        g.DrawLine(IColor(255, 22, 22, 30), bx - 2.6f, by + 0.2f, bx - 0.7f, by + 2.4f, nullptr, 1.6f);
+        g.DrawLine(IColor(255, 22, 22, 30), bx - 0.7f, by + 2.4f, bx + 3.f, by - 2.4f, nullptr, 1.6f);
+      }
+      AddHotspot(t, kArtBase + a);
+    }
+
+    // ---- RIGHT (bottom): live coverage grid derived from the manifest -----
+    const float covTop = gTop + artGridH + 16.f;
+    {
+      const IRECT covHdr(right.L, covTop, right.R, covTop + 13.f);
+      g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "COVERAGE", covHdr);
+      g.DrawLine(IColor(70, 198, 162, 90), right.L + 64.f, covHdr.MH(), right.R, covHdr.MH(), nullptr, 1.f);
+    }
     const auto speakers = AmpSpeakers(mBuilderAmp);
-    float gy = right.T + 22.f;
+    float gy = covTop + 22.f;
     if (speakers.empty())
     {
       g.DrawText(IText(11.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
@@ -1067,4 +1310,5 @@ private:
 
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
+  ConfirmDeleteCallback mConfirmDelete;
 };
