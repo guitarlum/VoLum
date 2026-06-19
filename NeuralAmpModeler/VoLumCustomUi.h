@@ -477,6 +477,11 @@ public:
   //   actual delete if the user accepts.
   using ConfirmDeleteCallback = std::function<void(const std::string& message, std::function<void()> onConfirm)>;
 
+  // Primary action for a double-clicked Manage row (recall preset / select IR /
+  // load pedal). pedalSlot is the originating PRE NAM slot for Pedals (else -1).
+  using PrimaryActionCallback =
+    std::function<void(ManageKind kind, int ampIdx, int pedalSlot, int index)>;
+
   void SetCallbacks(BuilderSavedCallback builderCb, ChangedCallback changedCb = nullptr)
   {
     mBuilderSaved = std::move(builderCb);
@@ -484,16 +489,19 @@ public:
   }
 
   void SetConfirmDeleteCallback(ConfirmDeleteCallback cb) { mConfirmDelete = std::move(cb); }
+  void SetPrimaryActionCallback(PrimaryActionCallback cb) { mPrimaryAction = std::move(cb); }
 
-  // ampIdx/ampName only matter for Presets; ignored for IR/Pedals.
-  void ShowManage(ManageKind kind, int ampIdx = 0, const char* ampName = nullptr)
+  // ampIdx/ampName only matter for Presets; pedalSlot only for Pedals.
+  void ShowManage(ManageKind kind, int ampIdx = 0, const char* ampName = nullptr, int pedalSlot = -1)
   {
     mScreen = volum::custom::Screen::Presets; // "Presets" enum == the Manage list screen
     mManageKind = kind;
     mAmpIdx = ampIdx;
     mAmpName = ampName ? ampName : "";
+    mPedalSlot = pedalSlot;
     ReloadList();
     mSel = -1;
+    mManageScroll = 0.f;
     ResetTransient();
     Hide(false);
     SetDirty(false);
@@ -567,6 +575,46 @@ public:
       }
   }
 
+  void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
+  {
+    // Scroll the Manage list. Builder has no scroll; popups consume their own wheel.
+    if (mScreen == volum::custom::Screen::Builder || mPopupOpen || !PanelRect().Contains(x, y))
+      return;
+    mManageScroll = std::max(0.f, mManageScroll - d * 38.f);
+    SetDirty(false);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    // Double-clicking a Manage row runs its primary action (recall preset /
+    // select IR / load pedal) and closes. Icons behave like a single click.
+    if (mPopupOpen || mScreen == volum::custom::Screen::Builder)
+    {
+      OnMouseDown(x, y, mod);
+      return;
+    }
+    if (!PanelRect().Contains(x, y))
+    {
+      Hide(true);
+      return;
+    }
+    for (const auto& hs : mHotspots)
+      if (hs.first.Contains(x, y))
+      {
+        const int code = hs.second;
+        if (code >= kRowBase && code < kRowBase + 256)
+        {
+          const int idx = code - kRowBase;
+          if (mPrimaryAction && idx >= 0 && idx < (int)mItems.size())
+            mPrimaryAction(mManageKind, mAmpIdx, mPedalSlot, idx);
+          Hide(true);
+          return;
+        }
+        HandleAction(code, hs.first);
+        return;
+      }
+  }
+
   void OnTextEntryCompletion(const char* str, int) override
   {
     using namespace volum::custom;
@@ -631,10 +679,13 @@ private:
     kEditName,
     kCabNameBase = 70, // [kCabNameBase, +kNumCabSlots) cab-slot rename chips
     kArtBase = 80, // [kArtBase, kArtBase + kNumCustomArts) art swatch picks
-    kRowBase = 100,
+    kRowBase = 100, // Manage row body (select / double-click primary action)
     kFileSpeakerBase = 200,
     kFileChannelBase = 300,
     kFileRemoveBase = 400,
+    kRowOverwriteBase = 500, // Manage inline [overwrite] icon (presets only)
+    kRowRenameBase = 600, // Manage inline [pen] icon
+    kRowDeleteBase = 700, // Manage inline [trash] icon
     kPopupBase = 1000
   };
 
@@ -655,7 +706,11 @@ private:
 
   IRECT PanelRect() const
   {
-    const float w = 780.f, h = 524.f;
+    // The Manage list is a compact dedicated panel; the builder keeps its larger
+    // two-pane size.
+    const bool builder = (mScreen == volum::custom::Screen::Builder);
+    const float w = builder ? 780.f : 560.f;
+    const float h = builder ? 524.f : 430.f;
     return IRECT(mRECT.MW() - w / 2.f, mRECT.MH() - h / 2.f, mRECT.MW() + w / 2.f, mRECT.MH() + h / 2.f);
   }
 
@@ -795,6 +850,25 @@ private:
 
   void HandleManageAction(int action, const IRECT& rect)
   {
+    // Inline per-row icons select that row, then run overwrite / rename / delete.
+    if (action >= kRowOverwriteBase && action < kRowOverwriteBase + 100)
+    {
+      mSel = action - kRowOverwriteBase;
+      HandleManageAction(kUpdate, rect);
+      return;
+    }
+    if (action >= kRowRenameBase && action < kRowRenameBase + 100)
+    {
+      mSel = action - kRowRenameBase;
+      HandleManageAction(kRename, rect);
+      return;
+    }
+    if (action >= kRowDeleteBase && action < kRowDeleteBase + 100)
+    {
+      mSel = action - kRowDeleteBase;
+      HandleManageAction(kDelete, rect);
+      return;
+    }
     if (action >= kRowBase && action < kRowBase + 256)
     {
       mSel = action - kRowBase;
@@ -1059,17 +1133,25 @@ private:
 
   void DrawManage(IGraphics& g, const IRECT& body)
   {
-    char sub[120];
-    if (mManageKind == ManageKind::Presets)
-      std::snprintf(sub, sizeof(sub), "for  %s   -   pick from the header dropdown to recall", mAmpName.c_str());
+    const bool presets = (mManageKind == ManageKind::Presets);
+
+    char sub[160];
+    if (presets)
+      std::snprintf(sub, sizeof(sub), "for  %s   -   double-click a row to recall", mAmpName.c_str());
     else if (mManageKind == ManageKind::IR)
-      std::snprintf(sub, sizeof(sub), "shared across amps   -   choose one from the cab dropdown to use");
+      std::snprintf(sub, sizeof(sub), "shared across amps   -   double-click to use on the focused cab");
     else
       std::snprintf(sub, sizeof(sub), "shown under CUSTOM in the PRE pedal menu");
     g.DrawText(IText(11.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Near, EVAlign::Top), sub, body.GetFromTop(14.f));
 
-    const IRECT content(body.L, body.T + 22.f, body.R, body.B - 40.f);
-    const IRECT listArea(content.L, content.T, content.L + content.W() * 0.6f, content.B);
+    // Single top action button: save-as-new (presets) or import (IR / pedals).
+    const char* addLabel =
+      presets ? "+  Save current as new" : (mManageKind == ManageKind::IR ? "+  Import IR (.wav)" : "+  Import pedal (.nam)");
+    const IRECT addBtn(body.L, body.T + 20.f, body.R, body.T + 48.f);
+    DrawButton(g, addBtn, addLabel, kAdd, true);
+
+    // Scrollable list filling the rest of the panel; per-row inline icons.
+    const IRECT listArea(body.L, addBtn.B + 10.f, body.R, body.B - 26.f);
     g.FillRect(IColor(235, 20, 20, 26), listArea);
     g.DrawRect(IColor(89, 200, 162, 78), listArea);
 
@@ -1081,55 +1163,87 @@ private:
     }
     else
     {
-      float y = listArea.T + 6.f;
+      const float rowH = 32.f;
+      const float contentH = (float)mItems.size() * rowH + 8.f;
+      const bool scrollable = contentH > listArea.H();
+      const float sbW = scrollable ? 6.f : 0.f;
+      ClampManageScroll(contentH, listArea.H());
+
+      g.PathClipRegion(listArea);
+      const float iconW = 24.f;
+      const int nIcons = presets ? 3 : 2;
+      float y = listArea.T + 4.f - mManageScroll;
       for (int i = 0; i < (int)mItems.size(); i++)
       {
-        const IRECT row(listArea.L + 6.f, y, listArea.R - 6.f, y + 30.f);
+        const IRECT row(listArea.L + 4.f, y, listArea.R - 4.f - sbW, y + rowH - 4.f);
+        y += rowH;
+        if (row.B < listArea.T || row.T > listArea.B)
+          continue;
+
         const bool sel = (i == mSel);
         if (sel)
         {
           g.FillRect(VoLumColors::ITEM_SEL_BG, row);
           g.DrawRect(VoLumColors::ITEM_SEL_BORDER, row);
+          g.FillCircle(VoLumColors::GOLD, row.L + 10.f, row.MH(), 3.f);
         }
-        if (sel)
-          g.FillCircle(VoLumColors::GOLD, row.L + 12.f, row.MH(), 3.f);
+
+        // Inline icons, right-aligned: [overwrite?] [pen] [trash]. Added to the
+        // hotspot list BEFORE the row body so an icon click wins over "select".
+        float ix = row.R - iconW;
+        const IRECT trash(ix, row.T, ix + iconW, row.B);
+        DrawBinGlyph(g, trash, VoLumColors::CREAM_DIM);
+        AddHotspot(trash, kRowDeleteBase + i);
+        ix -= iconW;
+        const IRECT pen(ix, row.T, ix + iconW, row.B);
+        DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
+        AddHotspot(pen, kRowRenameBase + i);
+        ix -= iconW;
+        if (presets)
+        {
+          const IRECT ovr(ix, row.T, ix + iconW, row.B);
+          DrawOverwriteGlyph(g, ovr, VoLumColors::CREAM_DIM);
+          AddHotspot(ovr, kRowOverwriteBase + i);
+          ix -= iconW;
+        }
+
+        const IRECT nameR(row.L + (sel ? 20.f : 12.f), row.T, ix - 6.f, row.B);
+        g.PathClipRegion(nameR);
         g.DrawText(IText(13.f, sel ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Near,
                          EVAlign::Middle),
-                   mItems[(size_t)i].c_str(), row.GetPadded(-24.f, 0.f, -8.f, 0.f));
+                   mItems[(size_t)i].c_str(), nameR);
+        g.PathClipRegion(listArea);
+
         AddHotspot(row, kRowBase + i);
-        y += 34.f;
+      }
+      g.PathClipRegion();
+
+      if (scrollable)
+      {
+        const float trackX = listArea.R - sbW - 1.f;
+        IRECT track(trackX, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
+        g.FillRect(IColor(40, 200, 162, 78), track);
+        const float maxScroll = contentH - listArea.H();
+        const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
+        const float t = (maxScroll > 0.f) ? (mManageScroll / maxScroll) : 0.f;
+        g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, track.T + (track.H() - thumbH) * t, track.R,
+                                                track.T + (track.H() - thumbH) * t + thumbH));
       }
     }
 
-    // action column
-    const IRECT actions(listArea.R + 16.f, content.T, body.R, content.B);
-    const bool none = mSel < 0;
-    const bool presets = (mManageKind == ManageKind::Presets);
-    const char* addLabel = presets ? "Save current as new" : (mManageKind == ManageKind::IR ? "Import IR (.wav)" : "Import pedal (.nam)");
-    DrawButton(g, RowAt(actions, 0), addLabel, kAdd, true);
+    const char* hint = presets
+      ? "A preset snapshots this amp (cab/IR, channel, AMP, PRE, POST). Double-click recalls; icons overwrite / rename / delete."
+      : (mManageKind == ManageKind::IR
+           ? "Import a .wav, then double-click to convolve it with the focused DIRECT capture. Shared across amps."
+           : "Import a .nam capture of your own pre-amp gear. They appear under CUSTOM in the PRE pedal menu.");
+    g.DrawText(IText(9.5f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle), hint,
+               IRECT(body.L, body.B - 22.f, body.R, body.B));
+  }
 
-    char selHdr[48];
-    std::snprintf(selHdr, sizeof(selHdr), none ? "SELECT A %s:" : "SELECTED %s:", presets ? "PRESET" : (mManageKind == ManageKind::IR ? "IR" : "PEDAL"));
-    int row = 1;
-    g.DrawText(IText(9.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top), selHdr,
-               IRECT(actions.L, actions.T + 40.f, actions.R, actions.T + 52.f));
-    if (presets)
-      DrawButton(g, RowAt(actions, row++, 52.f), "Update with current", kUpdate, false, false, none);
-    DrawButton(g, RowAt(actions, row++, 52.f), "Rename", kRename, false, false, none);
-    DrawButton(g, RowAt(actions, row++, 52.f), "Delete", kDelete, false, false, none);
-
-    if (presets)
-      DrawFooter(g, IRECT(body.L, body.B - 34.f, body.R, body.B),
-                 "A preset is a full snapshot of THIS amp: cab / IR, channel, AMP knobs, PRE pedals and POST FX.",
-                 "Recall from the header dropdown or cycle with < > - no need to open this window.");
-    else if (mManageKind == ManageKind::IR)
-      DrawFooter(g, IRECT(body.L, body.B - 34.f, body.R, body.B),
-                 "Custom IRs convolve a DIRECT (amp-only) capture. Import a .wav, then pick it in the cab dropdown.",
-                 "Imported IRs are shared across every amp.");
-    else
-      DrawFooter(g, IRECT(body.L, body.B - 34.f, body.R, body.B),
-                 "Custom pedals are .nam captures of your own pre-amp gear. Import a .nam to add one.",
-                 "They appear under CUSTOM in the PRE pedal menu.");
+  void ClampManageScroll(float contentH, float viewH)
+  {
+    const float maxScroll = std::max(0.f, contentH - viewH);
+    mManageScroll = std::clamp(mManageScroll, 0.f, maxScroll);
   }
 
   // Stacked action button rows in the right-hand column.
@@ -1359,6 +1473,29 @@ private:
     g.DrawLine(col, cx - 1.f, cy + 5.f, cx - 5.f, cy + 6.f, nullptr, t);
   }
 
+  // Trash bin (mirrors VoLumAmpListControl::DrawBinGlyph).
+  static void DrawBinGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float cx = r.MW(), cy = r.MH();
+    const IRECT body(cx - 5.f, cy - 3.f, cx + 5.f, cy + 6.f);
+    g.DrawRect(col, body, nullptr, 1.3f);
+    g.DrawLine(col, cx - 7.f, cy - 3.f, cx + 7.f, cy - 3.f, nullptr, 1.3f); // lid
+    g.DrawLine(col, cx - 2.f, cy - 6.f, cx + 2.f, cy - 6.f, nullptr, 1.3f); // handle
+  }
+
+  // "Overwrite with current": a down arrow dropping into an open tray.
+  static void DrawOverwriteGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float cx = r.MW(), cy = r.MH();
+    const float t = 1.3f;
+    g.DrawLine(col, cx, cy - 6.f, cx, cy + 1.f, nullptr, t); // shaft
+    g.DrawLine(col, cx - 3.f, cy - 2.f, cx, cy + 1.f, nullptr, t); // arrow head
+    g.DrawLine(col, cx + 3.f, cy - 2.f, cx, cy + 1.f, nullptr, t);
+    g.DrawLine(col, cx - 6.f, cy + 3.f, cx - 6.f, cy + 6.f, nullptr, t); // tray
+    g.DrawLine(col, cx + 6.f, cy + 3.f, cx + 6.f, cy + 6.f, nullptr, t);
+    g.DrawLine(col, cx - 6.f, cy + 6.f, cx + 6.f, cy + 6.f, nullptr, t);
+  }
+
   volum::custom::Screen mScreen = volum::custom::Screen::Presets;
   ManageKind mManageKind = ManageKind::Presets;
   int mAmpIdx = 0;
@@ -1382,7 +1519,11 @@ private:
   int mTextCabSlot = -1; // cab slot being renamed (TextTarget::CabName)
   IText mEntryText;
 
+  int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals
+  float mManageScroll = 0.f; // Manage list scroll offset (px)
+
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
   ConfirmDeleteCallback mConfirmDelete;
+  PrimaryActionCallback mPrimaryAction;
 };
