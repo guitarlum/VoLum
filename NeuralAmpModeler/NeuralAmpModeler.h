@@ -437,6 +437,7 @@ public:
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
   void _VolumShowManageCustomPedals();
   void _VolumShowPresetMenu();
+  void _VolumSelectCustomAmp(int customIdx);
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;

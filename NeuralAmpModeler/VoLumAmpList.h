@@ -60,8 +60,12 @@ public:
   void SetCustomSelected(int idx)
   {
     mCustomSelected = idx;
+    ScrollToRevealCustom(idx);
     SetDirty(false);
   }
+
+  int GetCustomSelected() const { return mCustomSelected; }
+  int GetCustomCount() const { return (int)mCustomNames.size(); }
 
   void Draw(IGraphics& g) override
   {
@@ -227,10 +231,12 @@ public:
     if (contentH <= mRECT.H())
       return;
 
-    // Animate toward a target so the list glides instead of snapping a whole row
-    // per notch. ~0.6 of a row per detent keeps it responsive but smooth.
+    // Animate toward a target so the list glides instead of snapping. d is
+    // wheel-delta/120: one trackpad/mouse detent is ~1.0, precision-touchpad
+    // events are fractional. ~2 rows per unit keeps a single gesture meaningful
+    // while the easing keeps it smooth.
     const float maxScroll = std::max(0.f, contentH - mRECT.H());
-    mScrollTarget = std::clamp(mScrollTarget - d * ItemHeight() * 0.6f, 0.f, maxScroll);
+    mScrollTarget = std::clamp(mScrollTarget - d * ItemHeight() * 2.0f, 0.f, maxScroll);
     StartScrollAnim();
 
     OnMouseOver(x, y, mod);
@@ -289,15 +295,29 @@ private:
   {
     SetAnimation(
       [this](IControl* pCaller) {
-        mScrollOffset += (mScrollTarget - mScrollOffset) * 0.35f;
-        if (std::abs(mScrollTarget - mScrollOffset) < 0.5f)
+        mScrollOffset += (mScrollTarget - mScrollOffset) * 0.25f;
+        if (std::abs(mScrollTarget - mScrollOffset) < 0.4f)
         {
           mScrollOffset = mScrollTarget;
           pCaller->OnEndAnimation();
         }
         SetDirty(false);
       },
-      700);
+      800);
+  }
+
+  void ScrollToRevealCustom(int customIdx)
+  {
+    if (customIdx < 0 || customIdx >= (int)mCustomNames.size())
+      return;
+    const float itemTop = CustomRowsTopContent() + customIdx * ItemHeight();
+    const float itemBot = itemTop + ItemHeight();
+    if (itemTop < mScrollOffset)
+      mScrollOffset = itemTop;
+    else if (itemBot > mScrollOffset + mRECT.H())
+      mScrollOffset = itemBot - mRECT.H();
+    mScrollTarget = mScrollOffset;
+    ClampScroll();
   }
 
   void ScrollToRevealFactory(int idx)

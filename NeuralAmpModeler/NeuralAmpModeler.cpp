@@ -457,21 +457,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       ampList->SetCustomAmps(volum::custom::MockCustomAmps());
       ampList->SetCustomCallbacks(
         // select a custom amp (mock): drive the hero/preset strip only
-        [this](int customIdx) {
-          const auto& names = volum::custom::MockCustomAmps();
-          if (customIdx < 0 || customIdx >= (int)names.size())
-            return;
-          auto* pGfx = GetUI();
-          if (!pGfx)
-            return;
-          if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
-            heroCtrl->As<VoLumHeroImageControl>()->SetName(names[customIdx].c_str());
-          if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
-            if (mVolumExpandedSection == EVoLumSection::AMP)
-              nameCtrl->As<VoLumSubRowTextControl>()->SetName(names[customIdx].c_str(), true);
-          if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-            pb->As<VoLumPresetBarControl>()->SetList({}); // custom-amp presets land with the backend
-        },
+        [this](int customIdx) { _VolumSelectCustomAmp(customIdx); },
         // + add a custom amp -> open the free-form builder
         [this]() {
           if (auto* pGfx = GetUI())
@@ -1215,12 +1201,34 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       if (key.VK == kVK_UP || key.VK == kVK_DOWN)
       {
-        int newIdx = (key.VK == kVK_UP)
-          ? (mVolumAmpIdx - 1 + volum::kAmpCount) % volum::kAmpCount
-          : (mVolumAmpIdx + 1) % volum::kAmpCount;
-        // Simulate sidebar click via the same path
+        // Navigate one combined list: factory amps [0..N-1] then custom amps
+        // [N..N+C-1], wrapping across the whole thing so arrows reach CUSTOM.
+        auto* pGfx = GetUI();
+        VoLumAmpListControl* ampList = nullptr;
+        if (pGfx)
+          if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+            ampList = al->As<VoLumAmpListControl>();
+
+        const int N = volum::kAmpCount;
+        const int C = ampList ? ampList->GetCustomCount() : 0;
+        const int total = N + C;
+        int cur = mVolumAmpIdx;
+        if (ampList && ampList->GetCustomSelected() >= 0)
+          cur = N + ampList->GetCustomSelected();
+        const int dir = (key.VK == kVK_UP) ? -1 : 1;
+        const int newPos = ((cur + dir) % total + total) % total;
+
         _ClearVoLumKnobSelection();
         _VolumSaveCurrentToSettings();
+
+        if (newPos >= N)
+        {
+          // Custom amp (mock: display-only; underlying factory DSP unchanged).
+          _VolumSelectCustomAmp(newPos - N);
+          return true;
+        }
+
+        const int newIdx = newPos;
         mVolumAmpIdx = newIdx;
         _VolumRestoreFromSettings(newIdx);
         _VolumRefreshChannels();
@@ -1228,10 +1236,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 #ifdef APP_API
         _VolumSaveSettingsToFile();
 #endif
-        if (auto* pGfx = GetUI())
+        if (pGfx)
         {
-          if (auto* ampList = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
-            ampList->As<VoLumAmpListControl>()->SetSelected(newIdx);
+          if (ampList)
+            ampList->SetSelected(newIdx); // also clears any custom selection
           if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
           {
             char ph[4] = {volum::kAmps[newIdx].displayName[0], (char)('0' + (newIdx % 10)), 0, 0};
@@ -1241,6 +1249,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
             if (mVolumExpandedSection == EVoLumSection::AMP)
               nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[newIdx].displayName, true);
+          // F5: refresh the header preset strip to this amp's bank (mock).
+          if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+            pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(newIdx));
           if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych)) {
              auto* trip = tripCtrl->As<VoLumTriptychControl>();
              const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
@@ -3418,6 +3429,28 @@ void NeuralAmpModeler::_VolumShowManageCustomPedals()
   if (auto* pGfx = GetUI())
     if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
       ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Pedals);
+}
+
+void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
+{
+  // Mock selection: custom amps are display-only in the UI shell, so this just
+  // drives the hero art, AMP name, header preset strip, and the sidebar's custom
+  // highlight (which also scrolls the row into view). No DSP/settings change.
+  const auto& names = volum::custom::MockCustomAmps();
+  if (customIdx < 0 || customIdx >= (int)names.size())
+    return;
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
+    heroCtrl->As<VoLumHeroImageControl>()->SetName(names[(size_t)customIdx].c_str());
+  if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
+    if (mVolumExpandedSection == EVoLumSection::AMP)
+      nameCtrl->As<VoLumSubRowTextControl>()->SetName(names[(size_t)customIdx].c_str(), true);
+  if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+    pb->As<VoLumPresetBarControl>()->SetList({}); // custom-amp presets land with the backend
+  if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+    al->As<VoLumAmpListControl>()->SetCustomSelected(customIdx);
 }
 
 void NeuralAmpModeler::_VolumShowPresetMenu()
