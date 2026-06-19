@@ -417,6 +417,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         [this](int ampIdx) {
           _VolumSaveCurrentToSettings();
           mVolumAmpIdx = ampIdx;
+          mVolumCustomMainIdx = -1; // back on a factory amp
           _VolumRestoreFromSettings(ampIdx);
           _VolumRefreshChannels();
           mVolumNeedsLoad.store(true);
@@ -440,6 +441,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             heroCtrl->SetPlaceholder(ph, ampIdx);
             heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
           }
+          // Restore the factory cab labels (a custom amp may have overridden them).
+          if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+            spk->As<VoLumSpeakerRowControl>()->SetFactoryCabs();
 
           // F5: refresh the header preset strip to this amp's preset bank (mock).
           if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
@@ -552,6 +556,15 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new VoLumSpeakerRowControl(speakerArea,
         [this](int speakerIdx) {
+          // Custom MAIN amp focused: the cab row is display-only. Switching cabs
+          // just retargets the channel stepper to that slot (no model load).
+          if (mVolumCustomMainIdx >= 0 && !(GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport))
+          {
+            const int slot = (speakerIdx == 0) ? volum::custom::kDirectSlot : (speakerIdx - 1);
+            _VolumSetCustomChannelStepper(mVolumCustomMainIdx, slot);
+            _VolumMarkPresetDirty();
+            return;
+          }
           // Per-amp cab: when SUPPORT lane is focused while Dual Amp is on, the speaker
           // row drives the support lane's cab; otherwise it drives the MAIN lane.
           if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
@@ -3561,6 +3574,50 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
     pb->As<VoLumPresetBarControl>()->SetList({}); // custom-amp presets land with the backend
   if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
     al->As<VoLumAmpListControl>()->SetCustomSelected(customIdx);
+  // Make the shared cabinet row + channel stepper reflect this custom amp.
+  mVolumCustomMainIdx = customIdx;
+  _VolumApplyCustomMainCabs(customIdx);
+}
+
+void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx)
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
+  if (!spkCtrl)
+    return;
+  auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
+  const auto amp = volum::custom::CustomAmpAt(customIdx);
+  // Blank the label of any cab slot with no coverage so the row disables it.
+  std::string cab[volum::custom::kNumCabSlots];
+  for (int s = 0; s < volum::custom::kNumCabSlots; s++)
+    cab[s] = volum::custom::AmpSlotChannels(amp, s).empty() ? std::string() : amp.cabNames[(size_t)s];
+  row->SetCabNames(cab[0], cab[1], cab[2]);
+  row->SetIrCab(false, "");
+  // Select the first populated slot (DIRECT -> No Cab index 0; cab slot s -> s+1).
+  const auto slots = volum::custom::AmpSlots(amp);
+  int sel = 0, selSlot = volum::custom::kDirectSlot;
+  if (!slots.empty())
+  {
+    selSlot = slots.front();
+    sel = (selSlot == volum::custom::kDirectSlot) ? 0 : selSlot + 1;
+  }
+  row->SetSelected(sel);
+  _VolumSetCustomChannelStepper(customIdx, selSlot);
+}
+
+void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, int slot)
+{
+  const auto amp = volum::custom::CustomAmpAt(customIdx);
+  std::vector<std::string> labels;
+  for (int c : volum::custom::AmpSlotChannels(amp, slot))
+    labels.push_back(std::to_string(c));
+  if (labels.empty())
+    labels.push_back("1"); // DIRECT amp-only fallback
+  if (auto* pGfx = GetUI())
+    if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
+      stepper->As<VoLumChannelStepControl>()->SetChannels(labels, 0);
 }
 
 void NeuralAmpModeler::_VolumResetAmpToFactory()

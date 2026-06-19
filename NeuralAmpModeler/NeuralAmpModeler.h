@@ -439,6 +439,12 @@ public:
   void _VolumShowManageCustomPedals();
   void _VolumShowPresetMenu();
   void _VolumSelectCustomAmp(int customIdx);
+  // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,
+  // and channel labels into the shared speaker row + channel stepper (display
+  // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
+  // (-1 = a factory amp is active).
+  void _VolumApplyCustomMainCabs(int customIdx);
+  void _VolumSetCustomChannelStepper(int customIdx, int slot);
   // Flags the header preset strip "(unsaved)" for rig edits that bypass the
   // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
   void _VolumMarkPresetDirty();
@@ -457,6 +463,9 @@ private:
   EVoLumSection mVolumExpandedSection = EVoLumSection::AMP;
   EVoLumEffectFocus mVolumFocusedEffect = EVoLumEffectFocus::AMP;
   bool mVolumDualAmpFocusedSupport = false;
+  // Index of the focused custom MAIN amp (display-only), or -1 when a factory
+  // amp is active. Drives the custom-aware cabinet row / channel stepper.
+  int mVolumCustomMainIdx = -1;
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
