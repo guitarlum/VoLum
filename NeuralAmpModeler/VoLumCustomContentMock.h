@@ -16,6 +16,7 @@
 // display data.
 
 #include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -201,30 +202,80 @@ inline void RemoveCustomAmp(int idx)
 }
 
 // Global IR library (F7) - usable as a cab on any amp via the speaker row.
-inline const std::vector<std::string>& MockIRLibrary()
+// Session-mutable so Import adds entries live.
+inline std::vector<std::string>& MockIRLibrary()
 {
-  static const std::vector<std::string> v = {"Mesa 4x12 sm57", "Greenback room", "DI blend 50/50", "Marshall 1960 r121"};
+  static std::vector<std::string> v = {"Mesa 4x12 sm57", "Greenback room", "DI blend 50/50", "Marshall 1960 r121"};
   return v;
 }
 
 // Imported pedal captures (F8) - shown in the PRE capture dropdown CUSTOM group.
-inline const std::vector<std::string>& MockCustomPedals()
+// Session-mutable so Import adds entries live.
+inline std::vector<std::string>& MockCustomPedals()
 {
-  static const std::vector<std::string> v = {"My Klon clone", "Rat (LM308)", "Tweed boost"};
+  static std::vector<std::string> v = {"My Klon clone", "Rat (LM308)", "Tweed boost"};
   return v;
 }
 
-// Per-amp named presets (F5). Some amps have a few, some none. Index-keyed for
-// the shell; the real backend keys by amp identity.
+inline int AddPedal(const std::string& name)
+{
+  auto& v = MockCustomPedals();
+  v.push_back(name.empty() ? "Imported pedal" : name);
+  return (int)v.size() - 1;
+}
+
+// Per-amp named presets (F5), session-mutable so save/rename/delete persist in
+// the running shell (no disk). Index-keyed for the shell; the real backend keys
+// by amp identity.
+inline std::map<int, std::vector<std::string>>& SessionPresets()
+{
+  static std::map<int, std::vector<std::string>> m = {
+    {0, {"Sat night gig", "Bedroom crunch", "Ambient clean"}},
+    {3, {"Doom wall", "Lead boost"}},
+    {7, {"Church clean"}},
+  };
+  return m;
+}
+
 inline std::vector<std::string> MockPresetsForAmp(int ampIdx)
 {
-  switch (ampIdx)
-  {
-    case 0: return {"Sat night gig", "Bedroom crunch", "Ambient clean"};
-    case 3: return {"Doom wall", "Lead boost"};
-    case 7: return {"Church clean"};
-    default: return {};
-  }
+  auto& m = SessionPresets();
+  auto it = m.find(ampIdx);
+  return it == m.end() ? std::vector<std::string>{} : it->second;
+}
+
+// Add a preset, de-duplicating the display name. Returns its index.
+inline int AddPreset(int ampIdx, const std::string& name)
+{
+  auto& list = SessionPresets()[ampIdx];
+  std::string unique = name.empty() ? "Preset" : name;
+  int suffix = 2;
+  while (std::find(list.begin(), list.end(), unique) != list.end())
+    unique = (name.empty() ? "Preset" : name) + " " + std::to_string(suffix++);
+  list.push_back(unique);
+  return (int)list.size() - 1;
+}
+
+inline void RenamePreset(int ampIdx, int idx, const std::string& name)
+{
+  auto& list = SessionPresets()[ampIdx];
+  if (idx >= 0 && idx < (int)list.size() && !name.empty())
+    list[(size_t)idx] = name;
+}
+
+inline void DeletePreset(int ampIdx, int idx)
+{
+  auto& list = SessionPresets()[ampIdx];
+  if (idx >= 0 && idx < (int)list.size())
+    list.erase(list.begin() + idx);
+}
+
+// Append a custom IR to the global library (F7 import stub). Returns its index.
+inline int AddIR(const std::string& name)
+{
+  auto& v = MockIRLibrary();
+  v.push_back(name.empty() ? "Imported IR" : name);
+  return (int)v.size() - 1;
 }
 
 } // namespace custom

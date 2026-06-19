@@ -567,7 +567,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         if (l + w > bounds.R - 4.f)
           l = bounds.R - 4.f - w;
         menu->SetTargetAndDrawRECTs(IRECT(l, anchor.B + 4.f, l + w, anchor.B + 4.f + h));
-        menu->SetItems(irs, -3);
+        // Reflect the speaker row's currently active IR (or "No custom IR" = -3).
+        int selectedIr = -3;
+        if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+        {
+          auto* row = spk->As<VoLumSpeakerRowControl>();
+          if (row->IsIrCabActive())
+            for (int i = 0; i < (int)irs.size(); i++)
+              if (irs[(size_t)i] == row->IrName())
+                selectedIr = i;
+        }
+        menu->SetItems(irs, selectedIr);
         menu->Hide(false);
       });
 
@@ -1049,7 +1059,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             row->SetIrCab(true, irs[(size_t)code].c_str()); // DIRECT capture + this IR (mock)
           else if (code == -3)
             row->SetIrCab(false, ""); // back to baked cab
-          // code -1 (Import) / -2 (Manage) are UI-shell stubs.
+          else if (code == -1)
+          {
+            // Import: add a mock IR to the library and select it immediately so
+            // the round-trip is visible (real file picker lands with the backend).
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "Imported IR %d", (int)irs.size() + 1);
+            const int idx = volum::custom::AddIR(nm);
+            if (idx >= 0)
+              row->SetIrCab(true, volum::custom::MockIRLibrary()[(size_t)idx].c_str());
+          }
+          // code -2 (Manage) is a UI-shell stub.
         });
         pGraphics->AttachControl(irMenu, kCtrlTagVoLumIrMenu)->Hide(true);
       }
@@ -1080,6 +1100,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (idx >= 0 && idx < (int)amps.size())
               if (auto* hero = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
                 hero->As<VoLumHeroImageControl>()->SetName(amps[idx].c_str());
+          },
+          // preset bank mutated (save/rename/delete) -> re-sync the header strip
+          // for the currently focused factory amp.
+          [pPlugin]() {
+            if (auto* pb = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumPresetBar))
+              pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx));
           });
         pGraphics->AttachControl(overlay, kCtrlTagVoLumCustomOverlay)->Hide(true);
       }
@@ -3342,21 +3368,49 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
 
   // F8: inline CUSTOM group + import/manage entry points (UI-shell stubs; no
   // separate library hub). Imported captures show with an IMPORTED marker.
-  items.push_back({"CUSTOM", 0, true, volum::PrePedalCaptureGroup::None});
+  // captureIdx -1 keeps these rows from ever matching a real selected capture
+  // (which is always >= 0), so they never render with a false selection dot.
+  items.push_back({"CUSTOM", -1, true, volum::PrePedalCaptureGroup::None});
   for (const auto& name : volum::custom::MockCustomPedals())
-    items.push_back({name, 0, false, volum::PrePedalCaptureGroup::None, PreMenuAction::None, true});
-  items.push_back({"+ Import pedal capture...", 0, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Import, false});
-  items.push_back({"Manage captures...", 0, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Manage, false});
+    items.push_back({name, -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::None, true});
+  items.push_back({"+ Import pedal capture...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Import, false});
+  items.push_back({"Manage captures...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Manage, false});
 
   const int captureParam = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
   const int selected = std::clamp(GetParam(captureParam)->Int(), 0, captureCount - 1);
   const float menuW = std::max(anchorRect.W() * 0.88f, 180.f);
   const float menuH = VoLumPreCaptureMenuControl::MenuHeight(items);
-  const IRECT menuRect(anchorRect.L, anchorRect.B + 6.f, anchorRect.L + menuW, anchorRect.B + 6.f + menuH);
+  // Clamp vertically so the (now taller, with CUSTOM) menu never spills past the
+  // window bottom; shift it up when it would, keeping it on-screen.
+  const IRECT uiBounds = GetUI()->GetBounds();
+  float menuT = anchorRect.B + 6.f;
+  if (menuT + menuH > uiBounds.B - 6.f)
+    menuT = std::max(uiBounds.T + 6.f, uiBounds.B - 6.f - menuH);
+  const IRECT menuRect(anchorRect.L, menuT, anchorRect.L + menuW, menuT + menuH);
 
   menu->SetTargetAndDrawRECTs(menuRect);
   menu->SetItems(slot, items, selected);
   menu->Hide(false);
+}
+
+void NeuralAmpModeler::_VolumImportPreCapturePedal(int slot)
+{
+  // F8 import stub: add a mock imported capture to the session library and
+  // reopen the menu so the new IMPORTED row is visible (real file picker lands
+  // with the backend).
+  char nm[40];
+  std::snprintf(nm, sizeof(nm), "Imported pedal %d", static_cast<int>(volum::custom::MockCustomPedals().size()) + 1);
+  volum::custom::AddPedal(nm);
+
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  const int tag = slot == 0 ? kCtrlTagVoLumPreNam1Card : kCtrlTagVoLumPreNam2Card;
+  IRECT anchor;
+  if (auto* card = pGfx->GetControlWithTag(tag))
+    anchor = card->GetRECT();
+  _VolumHidePreCaptureMenu();
+  _VolumShowPreCaptureMenu(slot, anchor);
 }
 
 void NeuralAmpModeler::_VolumHidePreCaptureMenu()

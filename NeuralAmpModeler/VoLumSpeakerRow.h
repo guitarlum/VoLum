@@ -31,6 +31,9 @@ public:
 
   // Reflects whether a custom IR is the active cab (sourced from the DIRECT
   // capture). When active, the baked-cab buttons read as unselected.
+  bool IsIrCabActive() const { return mIrCabActive; }
+  const std::string& IrName() const { return mIrName; }
+
   void SetIrCab(bool active, const char* name)
   {
     mIrCabActive = active;

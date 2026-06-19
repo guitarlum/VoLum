@@ -126,7 +126,13 @@ public:
       return;
 
     const auto& item = mItems[static_cast<size_t>(idx)];
-    // Import/Manage and imported-capture rows are UI-shell stubs: dismiss only.
+    // F8: Import adds a mock capture and reopens; Manage + imported rows are
+    // UI-shell stubs that just dismiss.
+    if (item.action == PreMenuAction::Import)
+    {
+      plugin->_VolumImportPreCapturePedal(mSlot);
+      return;
+    }
     if (item.action != PreMenuAction::None || item.custom)
     {
       plugin->_VolumHidePreCaptureMenu();

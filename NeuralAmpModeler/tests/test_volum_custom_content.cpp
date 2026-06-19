@@ -94,3 +94,63 @@ TEST_CASE("Manifest-derived channels feed SnapChannel consistently")
   // An unpopulated speaker yields -1 (UI blocks the switch).
   REQUIRE(SnapChannel(AmpSpeakerChannels(amp, "missing"), 1) == -1);
 }
+
+// ---- session-mutable preset bank (F5 shell persistence) --------------------
+
+TEST_CASE("AddPreset appends and de-duplicates the display name")
+{
+  const int amp = 9001; // a fresh, otherwise-unused bank
+  REQUIRE(volum::custom::MockPresetsForAmp(amp).empty());
+
+  const int i0 = volum::custom::AddPreset(amp, "Crunch");
+  const int i1 = volum::custom::AddPreset(amp, "Crunch"); // duplicate name
+  REQUIRE(i0 == 0);
+  REQUIRE(i1 == 1);
+
+  const auto list = volum::custom::MockPresetsForAmp(amp);
+  REQUIRE(list.size() == 2);
+  REQUIRE(list[0] == "Crunch");
+  REQUIRE(list[1] == "Crunch 2"); // disambiguated
+
+  // empty name falls back to a default label
+  volum::custom::AddPreset(amp, "");
+  REQUIRE(volum::custom::MockPresetsForAmp(amp)[2] == "Preset");
+}
+
+TEST_CASE("RenamePreset and DeletePreset edit the bank in place")
+{
+  const int amp = 9002;
+  volum::custom::AddPreset(amp, "A");
+  volum::custom::AddPreset(amp, "B");
+  volum::custom::AddPreset(amp, "C");
+
+  volum::custom::RenamePreset(amp, 1, "B2");
+  REQUIRE(volum::custom::MockPresetsForAmp(amp)[1] == "B2");
+
+  // empty rename and out-of-range index are ignored
+  volum::custom::RenamePreset(amp, 1, "");
+  volum::custom::RenamePreset(amp, 99, "X");
+  REQUIRE(volum::custom::MockPresetsForAmp(amp)[1] == "B2");
+
+  volum::custom::DeletePreset(amp, 0);
+  const auto list = volum::custom::MockPresetsForAmp(amp);
+  REQUIRE(list.size() == 2);
+  REQUIRE(list[0] == "B2");
+  REQUIRE(list[1] == "C");
+
+  volum::custom::DeletePreset(amp, 99); // out of range no-op
+  REQUIRE(volum::custom::MockPresetsForAmp(amp).size() == 2);
+}
+
+TEST_CASE("AddIR and AddPedal append to their session libraries")
+{
+  const size_t ir0 = volum::custom::MockIRLibrary().size();
+  const int iri = volum::custom::AddIR("Custom 412");
+  REQUIRE(volum::custom::MockIRLibrary().size() == ir0 + 1);
+  REQUIRE(volum::custom::MockIRLibrary()[(size_t)iri] == "Custom 412");
+
+  const size_t p0 = volum::custom::MockCustomPedals().size();
+  const int pi = volum::custom::AddPedal("");
+  REQUIRE(volum::custom::MockCustomPedals().size() == p0 + 1);
+  REQUIRE(volum::custom::MockCustomPedals()[(size_t)pi] == "Imported pedal"); // empty -> default
+}
