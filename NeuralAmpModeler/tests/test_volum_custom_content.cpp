@@ -38,61 +38,128 @@ TEST_CASE("SnapChannel returns -1 for an empty/disabled speaker slot")
   REQUIRE(SnapChannel(std::vector<int>{}, 0) == -1);
 }
 
-using volum::custom::AmpSpeakerChannels;
-using volum::custom::AmpSpeakers;
+using volum::custom::AmpSlotChannels;
+using volum::custom::AmpSlots;
+using volum::custom::CellFileCount;
 using volum::custom::CustomAmp;
 using volum::custom::FileAssigned;
-using volum::custom::IsDirectSpeaker;
-using volum::custom::kDirectSpeaker;
+using volum::custom::FileIsDuplicate;
+using volum::custom::HasDuplicate;
+using volum::custom::IsDirectSlot;
+using volum::custom::kDirectSlot;
+using volum::custom::kUnassignedSlot;
+using volum::custom::MaxAssignedChannel;
+using volum::custom::NormalizeCabName;
+using volum::custom::SaveDisabledReason;
+using volum::custom::SlotLabel;
 using volum::custom::UnassignedCount;
 
-TEST_CASE("IsDirectSpeaker treats empty and DIRECT as the amp-only speaker")
+TEST_CASE("IsDirectSlot recognises the amp-only DIRECT slot")
 {
-  REQUIRE(IsDirectSpeaker("") == true);
-  REQUIRE(IsDirectSpeaker(kDirectSpeaker) == true);
-  REQUIRE(IsDirectSpeaker("G65 4x12") == false);
+  REQUIRE(IsDirectSlot(kDirectSlot) == true);
+  REQUIRE(IsDirectSlot(0) == false);
+  REQUIRE(IsDirectSlot(kUnassignedSlot) == false);
 }
 
-TEST_CASE("FileAssigned requires both a speaker and a real channel")
+TEST_CASE("FileAssigned requires both a real slot and a real channel")
 {
-  REQUIRE(FileAssigned({"a.nam", kDirectSpeaker, 1}) == true);
-  REQUIRE(FileAssigned({"b.nam", "G65 4x12", 2}) == true);
-  REQUIRE(FileAssigned({"c.nam", "", 0}) == false); // no speaker, no channel
-  REQUIRE(FileAssigned({"d.nam", "G65 4x12", 0}) == false); // missing channel
+  REQUIRE(FileAssigned({"a.nam", kDirectSlot, 1}) == true);
+  REQUIRE(FileAssigned({"b.nam", 0, 2}) == true);
+  REQUIRE(FileAssigned({"c.nam", kUnassignedSlot, 0}) == false); // no slot, no channel
+  REQUIRE(FileAssigned({"d.nam", 0, 0}) == false); // missing channel
+  REQUIRE(FileAssigned({"e.nam", kUnassignedSlot, 2}) == false); // missing slot
 }
 
-TEST_CASE("AmpSpeakers lists DIRECT first then first-seen cabs, ignoring unassigned")
-{
-  const CustomAmp amp = volum::custom::MockDemoCustomAmp();
-  const auto speakers = AmpSpeakers(amp);
-  REQUIRE(speakers.size() == 3);
-  REQUIRE(speakers[0] == kDirectSpeaker); // DIRECT normalized + sorted first
-  REQUIRE(speakers[1] == "G65 4x12");
-  REQUIRE(speakers[2] == "V30 2x12");
-}
-
-TEST_CASE("AmpSpeakerChannels derives the sparse per-speaker channel set")
+TEST_CASE("AmpSlots lists DIRECT first then populated cab slots in order")
 {
   const CustomAmp amp = volum::custom::MockDemoCustomAmp();
-  REQUIRE(AmpSpeakerChannels(amp, kDirectSpeaker) == std::vector<int>{1, 2});
-  REQUIRE(AmpSpeakerChannels(amp, "G65 4x12") == std::vector<int>{1});
-  REQUIRE(AmpSpeakerChannels(amp, "V30 2x12") == std::vector<int>{3});
-  REQUIRE(AmpSpeakerChannels(amp, "missing").empty());
+  const auto slots = AmpSlots(amp);
+  REQUIRE(slots == std::vector<int>{kDirectSlot, 0, 1}); // slot 2 (CB3) has no captures
 }
 
-TEST_CASE("UnassignedCount counts files still needing a speaker/channel")
+TEST_CASE("AmpSlotChannels derives the sparse per-slot channel set")
+{
+  const CustomAmp amp = volum::custom::MockDemoCustomAmp();
+  REQUIRE(AmpSlotChannels(amp, kDirectSlot) == std::vector<int>{1, 2});
+  REQUIRE(AmpSlotChannels(amp, 0) == std::vector<int>{1});
+  REQUIRE(AmpSlotChannels(amp, 1) == std::vector<int>{3});
+  REQUIRE(AmpSlotChannels(amp, 2).empty());
+}
+
+TEST_CASE("SlotLabel maps DIRECT and cab slots to display names")
+{
+  const CustomAmp amp = volum::custom::MockDemoCustomAmp();
+  REQUIRE(SlotLabel(amp, kDirectSlot) == "DIRECT");
+  REQUIRE(SlotLabel(amp, 0) == "G65");
+  REQUIRE(SlotLabel(amp, 1) == "V30");
+}
+
+TEST_CASE("UnassignedCount counts files still needing a slot/channel")
 {
   const CustomAmp amp = volum::custom::MockDemoCustomAmp();
   REQUIRE(UnassignedCount(amp) == 1);
+}
+
+TEST_CASE("Cab rename keeps file links intact (files reference slots, not names)")
+{
+  CustomAmp amp = volum::custom::MockDemoCustomAmp();
+  REQUIRE(AmpSlotChannels(amp, 0) == std::vector<int>{1});
+  amp.cabNames[0] = "XYZ"; // rename slot 0
+  REQUIRE(SlotLabel(amp, 0) == "XYZ");
+  REQUIRE(AmpSlotChannels(amp, 0) == std::vector<int>{1}); // link survives the rename
+}
+
+TEST_CASE("NormalizeCabName uppercases, strips spaces, caps at 3 chars")
+{
+  REQUIRE(NormalizeCabName("g65") == "G65");
+  REQUIRE(NormalizeCabName("  v 30 ") == "V30");
+  REQUIRE(NormalizeCabName("greenback") == "GRE");
+  REQUIRE(NormalizeCabName("   ").empty());
+}
+
+TEST_CASE("Duplicate (slot,channel) detection flags both colliding files")
+{
+  CustomAmp amp;
+  amp.files = {{"a.nam", 0, 1}, {"b.nam", 0, 1}, {"c.nam", 0, 2}};
+  REQUIRE(CellFileCount(amp, 0, 1) == 2);
+  REQUIRE(FileIsDuplicate(amp, 0) == true);
+  REQUIRE(FileIsDuplicate(amp, 1) == true);
+  REQUIRE(FileIsDuplicate(amp, 2) == false);
+  REQUIRE(HasDuplicate(amp) == true);
+}
+
+TEST_CASE("MaxAssignedChannel ignores unassigned files")
+{
+  CustomAmp amp;
+  amp.files = {{"a.nam", kDirectSlot, 2}, {"b.nam", 0, 5}, {"c.nam", kUnassignedSlot, 0}};
+  REQUIRE(MaxAssignedChannel(amp) == 5);
+}
+
+TEST_CASE("SaveDisabledReason gates empty, unassigned, and duplicate states")
+{
+  CustomAmp empty;
+  REQUIRE(SaveDisabledReason(empty) == "Add a .nam file");
+
+  CustomAmp unassigned;
+  unassigned.files = {{"a.nam", kUnassignedSlot, 0}};
+  REQUIRE(SaveDisabledReason(unassigned) == "Assign every file a cab + channel");
+
+  CustomAmp dup;
+  dup.files = {{"a.nam", 0, 1}, {"b.nam", 0, 1}};
+  REQUIRE(SaveDisabledReason(dup) == "Two files share a cab + channel");
+
+  CustomAmp ok;
+  ok.files = {{"a.nam", kDirectSlot, 1}, {"b.nam", 0, 1}};
+  REQUIRE(SaveDisabledReason(ok).empty());
 }
 
 TEST_CASE("Manifest-derived channels feed SnapChannel consistently")
 {
   const CustomAmp amp = volum::custom::MockDemoCustomAmp();
   // DIRECT has {1,2}; coming from ch3 snaps down to the first available (1).
-  REQUIRE(SnapChannel(AmpSpeakerChannels(amp, kDirectSpeaker), 3) == 1);
-  // An unpopulated speaker yields -1 (UI blocks the switch).
-  REQUIRE(SnapChannel(AmpSpeakerChannels(amp, "missing"), 1) == -1);
+  REQUIRE(SnapChannel(AmpSlotChannels(amp, kDirectSlot), 3) == 1);
+  // An unpopulated slot yields -1 (UI blocks the switch).
+  REQUIRE(SnapChannel(AmpSlotChannels(amp, 2), 1) == -1);
 }
 
 // ---- session-mutable preset bank (F5 shell persistence) --------------------

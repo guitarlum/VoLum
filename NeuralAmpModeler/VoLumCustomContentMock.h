@@ -16,6 +16,8 @@
 // display data.
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <map>
 #include <string>
 #include <vector>
@@ -37,19 +39,24 @@ enum class Screen
 // Free-form custom amp manifest (F6)
 // ---------------------------------------------------------------------------
 //
-// A custom amp is a name plus a set of .nam files, each assigned to a
-// (speaker, channel). Speakers are arbitrary cab names; the special DIRECT
-// speaker means an amp-only / no-cab capture that can be paired with any
-// custom IR to act as a cab across all of its channels. Channels are gain
-// stages (numbered); the matrix is sparse - not every (speaker, channel) need
-// exist.
+// A custom amp is a name plus three renameable cab slots (DIRECT is fixed and
+// implicit) and a set of .nam files, each assigned to a (slot, channel). The
+// special DIRECT slot means an amp-only / no-cab capture that can be paired
+// with any custom IR. Cab slots 0..2 carry a short user-chosen label. Channels
+// are gain stages (numbered 1..kMaxChannels); the matrix is sparse - not every
+// (slot, channel) need exist.
 
-inline const char* kDirectSpeaker = "DIRECT";
+inline const char* kDirectSpeaker = "DIRECT"; // DIRECT row display label
+
+inline constexpr int kDirectSlot = -1; // amp-only DIRECT capture
+inline constexpr int kUnassignedSlot = -2; // file not yet assigned to a slot
+inline constexpr int kNumCabSlots = 3; // renameable cab slots per custom amp
+inline constexpr int kMaxChannels = 8; // hard channel cap
 
 struct CustomNamFile
 {
   std::string file; // display filename, e.g. "G65-Plexi-Ch2.nam"
-  std::string speaker; // cab name, or kDirectSpeaker / "" for amp-only direct
+  int slot = kUnassignedSlot; // kDirectSlot, 0..kNumCabSlots-1, or kUnassignedSlot
   int channel = 0; // gain stage (>= 1); 0 means unassigned
 };
 
@@ -58,24 +65,57 @@ inline constexpr int kNumCustomArts = 6;
 
 struct CustomAmp
 {
+  std::string id; // stable opaque id (backend referencing); empty in builder draft
   std::string name;
+  std::array<std::string, kNumCabSlots> cabNames = {"CB1", "CB2", "CB3"};
   std::vector<CustomNamFile> files;
   int art = 0; // assigned fractal-art style [0..kNumCustomArts)
 };
 
-// A DIRECT (amp-only) speaker is the empty string or the literal "DIRECT".
-inline bool IsDirectSpeaker(const std::string& speaker)
+inline bool IsDirectSlot(int slot)
 {
-  return speaker.empty() || speaker == kDirectSpeaker;
+  return slot == kDirectSlot;
 }
 
-// True once a file has both a speaker and a real channel assigned.
+// True when `slot` is a real assigned slot (DIRECT or a cab slot).
+inline bool SlotAssigned(int slot)
+{
+  return slot == kDirectSlot || (slot >= 0 && slot < kNumCabSlots);
+}
+
+// True once a file has both a slot and a real channel assigned.
 inline bool FileAssigned(const CustomNamFile& f)
 {
-  return f.channel >= 1 && (f.speaker == kDirectSpeaker || !f.speaker.empty());
+  return f.channel >= 1 && SlotAssigned(f.slot);
 }
 
-// Number of files still missing a speaker/channel assignment.
+// Display label for a slot within an amp ("DIRECT" or the cab-slot name).
+inline std::string SlotLabel(const CustomAmp& amp, int slot)
+{
+  if (slot == kDirectSlot)
+    return kDirectSpeaker;
+  if (slot >= 0 && slot < kNumCabSlots)
+    return amp.cabNames[(size_t)slot];
+  return std::string();
+}
+
+// Normalize a cab name: drop whitespace, uppercase, cap at 3 chars. Empty input
+// returns "" so callers can fall back to the slot default.
+inline std::string NormalizeCabName(const std::string& in)
+{
+  std::string s;
+  for (char c : in)
+  {
+    if (std::isspace((unsigned char)c))
+      continue;
+    s.push_back((char)std::toupper((unsigned char)c));
+    if (s.size() >= 3)
+      break;
+  }
+  return s;
+}
+
+// Number of files still missing a slot/channel assignment.
 inline int UnassignedCount(const CustomAmp& amp)
 {
   int n = 0;
@@ -85,50 +125,90 @@ inline int UnassignedCount(const CustomAmp& amp)
   return n;
 }
 
-// Ordered, de-duplicated list of speakers present in the amp. DIRECT (if any)
-// is sorted first (normalized to the kDirectSpeaker label), the rest follow in
-// first-seen order. Unassigned files are ignored.
-inline std::vector<std::string> AmpSpeakers(const CustomAmp& amp)
+// Present slots in canonical order: DIRECT first (if populated), then cab slots
+// 0..2 that carry at least one assigned capture. Unassigned files are ignored.
+inline std::vector<int> AmpSlots(const CustomAmp& amp)
 {
-  std::vector<std::string> out;
-  bool hasDirect = false;
-  for (const auto& f : amp.files)
-  {
-    if (!FileAssigned(f))
-      continue;
-    if (IsDirectSpeaker(f.speaker))
-    {
-      hasDirect = true;
-      continue;
-    }
-    if (std::find(out.begin(), out.end(), f.speaker) == out.end())
-      out.push_back(f.speaker);
-  }
-  if (hasDirect)
-    out.insert(out.begin(), kDirectSpeaker);
+  std::vector<int> out;
+  auto populated = [&](int slot) {
+    for (const auto& f : amp.files)
+      if (FileAssigned(f) && f.slot == slot)
+        return true;
+    return false;
+  };
+  if (populated(kDirectSlot))
+    out.push_back(kDirectSlot);
+  for (int s = 0; s < kNumCabSlots; s++)
+    if (populated(s))
+      out.push_back(s);
   return out;
 }
 
-// Sorted, de-duplicated channels available for a given speaker within the amp.
-// `speaker` is matched case-sensitively; pass kDirectSpeaker (or "") for direct.
-inline std::vector<int> AmpSpeakerChannels(const CustomAmp& amp, const std::string& speaker)
+// Sorted, de-duplicated channels available for a given slot within the amp.
+inline std::vector<int> AmpSlotChannels(const CustomAmp& amp, int slot)
 {
-  const bool wantDirect = IsDirectSpeaker(speaker);
   std::vector<int> out;
   for (const auto& f : amp.files)
   {
-    if (!FileAssigned(f))
-      continue;
-    const bool isDirect = IsDirectSpeaker(f.speaker);
-    if (isDirect != wantDirect)
-      continue;
-    if (!wantDirect && f.speaker != speaker)
+    if (!FileAssigned(f) || f.slot != slot)
       continue;
     if (std::find(out.begin(), out.end(), f.channel) == out.end())
       out.push_back(f.channel);
   }
   std::sort(out.begin(), out.end());
   return out;
+}
+
+// Files assigned to a (slot, channel) cell (a count >= 2 is a collision).
+inline int CellFileCount(const CustomAmp& amp, int slot, int channel)
+{
+  int n = 0;
+  for (const auto& f : amp.files)
+    if (FileAssigned(f) && f.slot == slot && f.channel == channel)
+      ++n;
+  return n;
+}
+
+// True when this file shares its (slot, channel) with another assigned file.
+inline bool FileIsDuplicate(const CustomAmp& amp, size_t fileIdx)
+{
+  if (fileIdx >= amp.files.size())
+    return false;
+  const auto& f = amp.files[fileIdx];
+  if (!FileAssigned(f))
+    return false;
+  return CellFileCount(amp, f.slot, f.channel) >= 2;
+}
+
+inline bool HasDuplicate(const CustomAmp& amp)
+{
+  for (size_t i = 0; i < amp.files.size(); i++)
+    if (FileIsDuplicate(amp, i))
+      return true;
+  return false;
+}
+
+// Highest assigned channel across all files (0 when none).
+inline int MaxAssignedChannel(const CustomAmp& amp)
+{
+  int m = 0;
+  for (const auto& f : amp.files)
+    if (FileAssigned(f))
+      m = std::max(m, f.channel);
+  return m;
+}
+
+// "" when the amp is saveable; otherwise the reason the Save button is blocked.
+// Order: no files, then unassigned files, then duplicate (slot,channel) cells.
+inline std::string SaveDisabledReason(const CustomAmp& amp)
+{
+  if (amp.files.empty())
+    return "Add a .nam file";
+  if (UnassignedCount(amp) > 0)
+    return "Assign every file a cab + channel";
+  if (HasDuplicate(amp))
+    return "Two files share a cab + channel";
+  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -162,18 +242,20 @@ inline int SnapChannel(const std::vector<int>& availableChannels, int currentCha
 // ---------------------------------------------------------------------------
 
 // A demo custom amp used by the builder/sidebar shells: a partial-rig NAM with
-// DIRECT + one named cab, sparse channel coverage, and one unassigned file.
+// DIRECT + two named cabs, sparse channel coverage, and one unassigned file.
 inline CustomAmp MockDemoCustomAmp()
 {
   CustomAmp a;
+  a.id = "demo-plexi";
   a.name = "My Plexi A/B";
   a.art = 0;
+  a.cabNames = {"G65", "V30", "CB3"};
   a.files = {
-    {"AMP-Plexi-direct-1.nam", kDirectSpeaker, 1},
-    {"AMP-Plexi-direct-2.nam", kDirectSpeaker, 2},
-    {"G65-Plexi-Ch1.nam", "G65 4x12", 1},
-    {"V30-Plexi-Ch3.nam", "V30 2x12", 3},
-    {"dump-take7.nam", "", 0}, // needs assignment
+    {"AMP-Plexi-direct-1.nam", kDirectSlot, 1},
+    {"AMP-Plexi-direct-2.nam", kDirectSlot, 2},
+    {"G65-Plexi-Ch1.nam", 0, 1},
+    {"V30-Plexi-Ch3.nam", 1, 3},
+    {"dump-take7.nam", kUnassignedSlot, 0}, // needs assignment
   };
   return a;
 }
@@ -195,6 +277,30 @@ inline std::vector<int>& MockCustomAmpArts()
   return v;
 }
 
+// Per-custom-amp cab-slot names, kept in lockstep with MockCustomAmps(). Drives
+// the custom-aware cabinet row (slice 3) and the builder coverage chips.
+inline std::vector<std::array<std::string, kNumCabSlots>>& MockCustomAmpCabs()
+{
+  static std::vector<std::array<std::string, kNumCabSlots>> v = {
+    {"G65", "V30", "CB3"},
+    {"4X1", "2X1", "CB3"},
+    {"TWD", "CB2", "CB3"},
+  };
+  return v;
+}
+
+// Per-custom-amp file manifest, kept in lockstep with MockCustomAmps(). Drives
+// which cab slots/channels a custom amp exposes when focused.
+inline std::vector<std::vector<CustomNamFile>>& MockCustomAmpFiles()
+{
+  static std::vector<std::vector<CustomNamFile>> v = {
+    {{"direct-1.nam", kDirectSlot, 1}, {"direct-2.nam", kDirectSlot, 2}, {"g65-1.nam", 0, 1}, {"v30-3.nam", 1, 3}},
+    {{"jcm-1.nam", kDirectSlot, 1}, {"4x1-1.nam", 0, 1}, {"4x1-2.nam", 0, 2}},
+    {{"twd-1.nam", 0, 1}},
+  };
+  return v;
+}
+
 // Assigned art for a custom amp index (0 when out of range).
 inline int CustomAmpArt(int idx)
 {
@@ -202,27 +308,60 @@ inline int CustomAmpArt(int idx)
   return (idx >= 0 && idx < (int)a.size()) ? a[(size_t)idx] : 0;
 }
 
-// Add a custom amp, de-duplicating the display name. Returns its index.
-inline int AddCustomAmp(const std::string& name, int art = 0)
+// Reconstruct a full CustomAmp for a stored index (display use in slices 3/4).
+inline CustomAmp CustomAmpAt(int idx)
+{
+  CustomAmp a;
+  auto& names = MockCustomAmps();
+  if (idx < 0 || idx >= (int)names.size())
+    return a;
+  a.name = names[(size_t)idx];
+  a.id = "amp-" + std::to_string(idx);
+  if (idx < (int)MockCustomAmpArts().size())
+    a.art = MockCustomAmpArts()[(size_t)idx];
+  if (idx < (int)MockCustomAmpCabs().size())
+    a.cabNames = MockCustomAmpCabs()[(size_t)idx];
+  if (idx < (int)MockCustomAmpFiles().size())
+    a.files = MockCustomAmpFiles()[(size_t)idx];
+  return a;
+}
+
+// Add a custom amp from a full builder draft, de-duplicating the display name.
+// Returns its index. Keeps the four parallel session stores aligned.
+inline int AddCustomAmp(const CustomAmp& amp)
 {
   auto& amps = MockCustomAmps();
-  std::string unique = name.empty() ? "New custom amp" : name;
+  const std::string base = amp.name.empty() ? "New custom amp" : amp.name;
+  std::string unique = base;
   int suffix = 2;
   while (std::find(amps.begin(), amps.end(), unique) != amps.end())
-    unique = (name.empty() ? "New custom amp" : name) + " " + std::to_string(suffix++);
+    unique = base + " " + std::to_string(suffix++);
   amps.push_back(unique);
-  MockCustomAmpArts().push_back(((art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts);
+  MockCustomAmpArts().push_back(((amp.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts);
+  MockCustomAmpCabs().push_back(amp.cabNames);
+  MockCustomAmpFiles().push_back(amp.files);
   return (int)amps.size() - 1;
+}
+
+// Convenience overload (name + art only) used by light callers/tests.
+inline int AddCustomAmp(const std::string& name, int art = 0)
+{
+  CustomAmp a;
+  a.name = name;
+  a.art = art;
+  return AddCustomAmp(a);
 }
 
 inline void RemoveCustomAmp(int idx)
 {
-  auto& amps = MockCustomAmps();
-  auto& arts = MockCustomAmpArts();
-  if (idx >= 0 && idx < (int)amps.size())
-    amps.erase(amps.begin() + idx);
-  if (idx >= 0 && idx < (int)arts.size())
-    arts.erase(arts.begin() + idx);
+  auto eraseAt = [idx](auto& v) {
+    if (idx >= 0 && idx < (int)v.size())
+      v.erase(v.begin() + idx);
+  };
+  eraseAt(MockCustomAmps());
+  eraseAt(MockCustomAmpArts());
+  eraseAt(MockCustomAmpCabs());
+  eraseAt(MockCustomAmpFiles());
 }
 
 // Global IR library (F7) - usable as a cab on any amp via the speaker row.

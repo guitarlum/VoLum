@@ -1144,8 +1144,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         overlay->SetCallbacks(
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
-          [pPlugin](const char* name, int art) {
-            const int idx = volum::custom::AddCustomAmp(name ? name : "", art);
+          [pPlugin](const volum::custom::CustomAmp& amp) {
+            const int idx = volum::custom::AddCustomAmp(amp);
             auto* pGfx = pPlugin->GetUI();
             if (!pGfx)
               return;
