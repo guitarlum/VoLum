@@ -6,17 +6,18 @@
 //   pick (label + capture index + optional group header).
 // - VoLumPreCaptureMenuControl: drop-down picker for the PRE-NAM-1 and
 //   PRE-NAM-2 pedal-card slots.
-// - VoLumSupportAmpMenuControl: drop-down picker for the Dual Amp
-//   support-amp slot. Item 0 is "(none)" and maps to support index -1.
 //
-// Both controls render themselves with VoLumColors and DrawCornerAccent and
-// route selection back to the plugin via PLUG_CLASS_NAME helpers. Extracted
-// from VoLumTriptych.h on the 1.0-bugs-hygiene branch.
+// The control renders itself with VoLumColors and DrawCornerAccent and routes
+// selection back to the plugin via PLUG_CLASS_NAME helpers. Extracted from
+// VoLumTriptych.h on the 1.0-bugs-hygiene branch. (The Dual Amp support-amp
+// picker now uses the shared VoLumListMenuControl, so the old bespoke
+// VoLumSupportAmpMenuControl was removed.)
 
 #include "VoLumColorHelpers.h"
 #include "VoLumTriptychState.h"
 #include "NeuralAmpModeler.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -53,6 +54,7 @@ public:
     mItems = items;
     mSelectedIdx = selectedIdx;
     mHovered = -1;
+    mScroll = 0.f;
     SetDirty(false);
   }
 
@@ -68,13 +70,25 @@ public:
     const IText text(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     const IText dimText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     const IText headerText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
-    float rowT = mRECT.T + 6.f;
+
+    // The pedal list grows with imported (CUSTOM) captures, so clip + scroll
+    // when it's taller than the (screen-capped) menu rect - otherwise rows would
+    // spill past the window with no way to reach "Manage custom pedals...".
+    const float contentH = MenuHeight(mItems);
+    const bool scrollable = contentH > mRECT.H() + 0.5f;
+    const float sbW = scrollable ? 5.f : 0.f;
+    ClampScroll();
+
+    g.PathClipRegion(mRECT);
+    float rowT = mRECT.T + 6.f - mScroll;
     for (int i = 0; i < static_cast<int>(mItems.size()); ++i)
     {
       const auto& item = mItems[static_cast<size_t>(i)];
       const float rowH = RowHeight(item);
-      const IRECT row(mRECT.L + 8.f, rowT, mRECT.R - 8.f, rowT + rowH);
+      const IRECT row(mRECT.L + 8.f, rowT, mRECT.R - 8.f - sbW, rowT + rowH);
       rowT += rowH;
+      if (row.B < mRECT.T || row.T > mRECT.B)
+        continue;
       if (item.isHeader)
       {
         const IRECT line(row.L, row.MH(), row.L + 10.f, row.MH() + 1.f);
@@ -107,6 +121,27 @@ public:
         g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
       g.DrawText(selected ? text : dimText, item.label.c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
     }
+    g.PathClipRegion();
+
+    if (scrollable)
+    {
+      IRECT track(mRECT.R - sbW - 1.f, mRECT.T + 4.f, mRECT.R - 2.f, mRECT.B - 4.f);
+      g.FillRect(IColor(40, 200, 162, 78), track);
+      const float maxScroll = contentH - mRECT.H();
+      const float thumbH = std::max(18.f, track.H() * (mRECT.H() / contentH));
+      const float t = (maxScroll > 0.f) ? (mScroll / maxScroll) : 0.f;
+      const float thumbY = track.T + (track.H() - thumbH) * t;
+      g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, thumbY, track.R, thumbY + thumbH));
+    }
+  }
+
+  void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
+  {
+    if (MenuHeight(mItems) <= mRECT.H() + 0.5f)
+      return;
+    mScroll -= d * ItemHeight() * 1.5f;
+    ClampScroll();
+    SetDirty(false);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -181,7 +216,9 @@ private:
 
   int ItemIndexAtY(float y) const
   {
-    float rowT = mRECT.T + 6.f;
+    if (y < mRECT.T || y > mRECT.B)
+      return -1;
+    float rowT = mRECT.T + 6.f - mScroll;
     for (int i = 0; i < static_cast<int>(mItems.size()); ++i)
     {
       const float rowB = rowT + RowHeight(mItems[static_cast<size_t>(i)]);
@@ -190,6 +227,12 @@ private:
       rowT = rowB;
     }
     return -1;
+  }
+
+  void ClampScroll()
+  {
+    const float maxScroll = std::max(0.f, MenuHeight(mItems) - mRECT.H());
+    mScroll = std::clamp(mScroll, 0.f, maxScroll);
   }
 
   static IColor GroupColor(volum::PrePedalCaptureGroup group)
@@ -212,104 +255,6 @@ private:
   int mSlot = 0;
   int mSelectedIdx = 0;
   int mHovered = -1;
+  float mScroll = 0.f; // vertical scroll offset (px) for long pedal lists
   std::vector<VoLumPreCaptureMenuItem> mItems;
-};
-
-// Dual Amp support-amp dropdown picker. Visually matches VoLumPreCaptureMenuControl but
-// operates on the support-amp index. Item 0 represents "(none)" so the user can clear the
-// support amp without disabling Dual Amp.
-class VoLumSupportAmpMenuControl : public IControl
-{
-public:
-  VoLumSupportAmpMenuControl(const IRECT& bounds) : IControl(bounds) { mIgnoreMouse = false; }
-
-  void SetItems(const std::vector<std::string>& labels, int selectedIdx)
-  {
-    mLabels = labels;
-    mSelectedIdx = selectedIdx;
-    mHovered = -1;
-    SetDirty(false);
-  }
-
-  void Draw(IGraphics& g) override
-  {
-    g.FillRoundRect(VoLumColors::HERO_BG, mRECT, 4.f);
-    g.DrawRoundRect(VoLumColors::TEAL_DIM, mRECT, 4.f, nullptr, 1.5f);
-    DrawCornerAccent(g, mRECT.L + 5.f, mRECT.T + 5.f, 8.f, false, false, VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, mRECT.R - 5.f, mRECT.B - 5.f, 8.f, true, true, VoLumColors::TEAL_DIM);
-
-    const IText text(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
-    const IText dimText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
-    for (int i = 0; i < static_cast<int>(mLabels.size()); ++i)
-    {
-      const IRECT row(mRECT.L + 8.f, mRECT.T + 6.f + i * mItemH, mRECT.R - 8.f, mRECT.T + 6.f + (i + 1) * mItemH);
-      const bool selected = i == mSelectedIdx;
-      if (selected)
-      {
-        g.FillRoundRect(VoLumColors::ITEM_SEL_BG, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
-        g.DrawRoundRect(VoLumColors::ITEM_SEL_BORDER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
-      }
-      else if (i == mHovered)
-      {
-        g.FillRoundRect(VoLumColors::ITEM_HOVER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
-        g.DrawRoundRect(IColor(20, 200, 162, 78), row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
-      }
-      if (selected)
-        g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
-      g.DrawText(selected ? text : dimText, mLabels[static_cast<size_t>(i)].c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
-    }
-  }
-
-  void OnMouseDown(float x, float y, const IMouseMod& mod) override
-  {
-    (void) x; (void) mod;
-    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
-    if (!plugin) return;
-
-    const int idx = static_cast<int>((y - (mRECT.T + 6.f)) / mItemH);
-    if (idx < 0 || idx >= static_cast<int>(mLabels.size()))
-    {
-      // Click on the menu's padding (top/bottom border or below the last item) - dismiss without
-      // changing the selection, same as clicking outside the menu rect.
-      plugin->_VolumHideSupportAmpMenu();
-      return;
-    }
-
-    // Item 0 is "(none)" -> map to support-amp index -1; subsequent items map to amp index 0..N-1.
-    plugin->_VolumSetSupportAmp(idx - 1);
-    plugin->_VolumHideSupportAmpMenu();
-  }
-
-  void OnMouseOver(float x, float y, const IMouseMod& mod) override
-  {
-    (void) x;
-    (void) mod;
-    const int idx = static_cast<int>((y - (mRECT.T + 6.f)) / mItemH);
-    const int next = (idx >= 0 && idx < static_cast<int>(mLabels.size())) ? idx : -1;
-    if (next != mHovered)
-    {
-      mHovered = next;
-      SetDirty(false);
-    }
-  }
-
-  void OnMouseOut() override
-  {
-    if (mHovered != -1)
-    {
-      mHovered = -1;
-      SetDirty(false);
-    }
-  }
-
-  // 17px keeps the full 16-amp list (15 amps + "(none)") inside the standalone window without
-  // bottom clipping. Combined with the 6+6 px padding handled in Draw, total menu height stays
-  // under ~290 px, leaving headroom even when the standalone toolbar shrinks the canvas.
-  static constexpr float ItemHeight() { return 17.f; }
-
-private:
-  int mSelectedIdx = 0;
-  int mHovered = -1;
-  float mItemH = ItemHeight();
-  std::vector<std::string> mLabels;
 };

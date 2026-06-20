@@ -14,7 +14,7 @@ Read the smallest owner first:
 - `VoLumControls.h`: umbrella only. Do not edit unless adding/removing includes.
 - `VoLumTriptych.h`: `VoLumTriptychControl` (PRE/AMP/POST strip) and `VoLumChainConnectorControl`; umbrella for triptych pieces.
 - `VoLumTriptychMotifs.h`: COMP / PRE-NAM / DELAY / REVERB fractal motifs used by pedal cards and Quiet slots.
-- `VoLumTriptychMenus.h`: PRE capture and support-amp menus.
+- `VoLumTriptychMenus.h`: PRE capture menu (support-amp + custom pickers now use the shared `VoLumListMenuControl` in `VoLumCustomUi.h`).
 - `VoLumPedalCardControl.h`: focused pedal cards with cached art layer and preset-name footer.
 - `VoLumCoreControls.h`: sidebar, speaker row, knob row, meters, dividers/footers, channel stepper, keyboard hints, exact entry, param-value display, settings overlay frame.
 - `VoLumHero.h`: procedural hero, AMP title strip, Dual Amp chip, lane PAN dots, support polarity control.
@@ -34,6 +34,7 @@ Architecture:
 - `NeuralAmpModeler.cpp` is the compiled translation unit; `VoLumLoader.inc.cpp`, `VoLumSettings.inc.cpp`, and `Unserialization.cpp` are tail-included or path-preserved siblings, not independent build targets.
 - Source-string regression locks in `test_volum_ui_regressions.cpp` use `ReadPluginSource()` over `NeuralAmpModeler.cpp` plus the tail-included `.inc.cpp` siblings. Moving a function between those files does not break a lock unless the string itself changes.
 - Promoting `.inc.cpp` siblings to real separate translation units is a 1.1 hygiene follow-up that needs macOS verification.
+- Any list/menu that can grow at runtime (presets, IRs, pedals, custom amps, custom-amp file manifest, support-amp picker) MUST clip drawing to its rect, cap its height to the window, and provide a scrollbar + mouse-wheel/trackpad scrolling. See `VoLumListMenuControl`, `VoLumPreCaptureMenuControl`, and the builder file list in `VoLumCustomUi.h` for the pattern. Do not add an unbounded list that draws past its rect.
 
 Verification:
 
