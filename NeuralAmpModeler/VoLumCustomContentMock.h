@@ -1,343 +1,50 @@
 #pragma once
 
-// VoLum 1.2.0 custom-content mock model (UI-shell phase).
+// VoLum 1.2.0 custom-content session API (F5-F8).
 //
-// Pure, in-memory stand-in for the future user-content backend behind the
-// 1.2.0 features:
-//   F5 per-amp presets, F6 bring-your-own amp (free-form speaker x channel
-//   manifest), F7 custom IR cabs (DIRECT capture + IR), F8 imported pedal
-//   captures. No disk IO, no serialization, no DSP - the C++ UI shells render
-//   and navigate against this fake data so the refined D8 information
-//   architecture can be evaluated before the backend lands.
+// Historically this header held an in-memory mock. It is now a thin *projection
+// bridge* over the real backend (VoLumContentStore.h): the UI keeps calling the
+// same index-based volum::custom::* functions, but reads now project the live
+// registry and writes mutate it (id-backed) and persist via the process-global
+// ContentStore.
 //
-// The free-form manifest model and the (speaker x channel) snap/derive helpers
-// ARE the intended production logic and are covered by doctests
-// (test_volum_custom_content.cpp). Everything prefixed Mock* is throwaway
-// display data.
+//   - Getters (MockCustomAmps, MockIRLibrary, ...) rebuild a cached projection
+//     of the registry each call and return a reference to it. Callers read them
+//     immediately (never hold across a mutation), so the rebuild-per-call cache
+//     is safe.
+//   - Mutators (Add*/Update*/Remove*/Rename*/Delete*/*Preset) edit the registry
+//     through stable opaque ids and call Save(). In unit tests the global store
+//     has an empty base dir, so Save() is a no-op and the real user content
+//     directory is never touched.
+//
+// The pure manifest model + (speaker x channel) helpers live in
+// VoLumCustomModel.h (included here and by the store). Preset banks are keyed by
+// FactoryOwnerKey(ampIdx) so the int-keyed shell API maps onto the registry's
+// string-keyed banks.
 
 #include <algorithm>
 #include <array>
-#include <cctype>
-#include <map>
+#include <functional>
 #include <string>
 #include <vector>
+
+#include "VoLumContentStore.h"
+#include "VoLumCustomModel.h"
 
 namespace volum
 {
 namespace custom
 {
 
-// Which screen the header/sidebar overlays are showing.
-enum class Screen
+// Convenience accessor for the process-global content store.
+inline content::ContentStore& Store()
 {
-  None = 0,
-  Presets, // F5 preset browser (header)
-  Builder // F6 custom amp create/edit
-};
-
-// ---------------------------------------------------------------------------
-// Free-form custom amp manifest (F6)
-// ---------------------------------------------------------------------------
-//
-// A custom amp is a name plus three renameable cab slots (DIRECT is fixed and
-// implicit) and a set of .nam files, each assigned to a (slot, channel). The
-// special DIRECT slot means an amp-only / no-cab capture that can be paired
-// with any custom IR. Cab slots 0..2 carry a short user-chosen label. Channels
-// are gain stages (numbered 1..kMaxChannels); the matrix is sparse - not every
-// (slot, channel) need exist.
-
-inline const char* kDirectSpeaker = "DIRECT"; // DIRECT row display label
-
-inline constexpr int kDirectSlot = -1; // amp-only DIRECT capture
-inline constexpr int kUnassignedSlot = -2; // file not yet assigned to a slot
-inline constexpr int kNumCabSlots = 3; // renameable cab slots per custom amp
-inline constexpr int kMaxChannels = 8; // hard channel cap
-
-struct CustomNamFile
-{
-  std::string file; // display filename, e.g. "G65-Plexi-Ch2.nam"
-  int slot = kUnassignedSlot; // kDirectSlot, 0..kNumCabSlots-1, or kUnassignedSlot
-  int channel = 0; // gain stage (>= 1); 0 means unassigned
-};
-
-// Number of selectable custom-amp fractal-art styles (see DrawCustomAmpArt).
-inline constexpr int kNumCustomArts = 6;
-
-struct CustomAmp
-{
-  std::string id; // stable opaque id (backend referencing); empty in builder draft
-  std::string name;
-  std::array<std::string, kNumCabSlots> cabNames = {"CB1", "CB2", "CB3"};
-  std::vector<CustomNamFile> files;
-  int art = 0; // assigned fractal-art style [0..kNumCustomArts)
-};
-
-inline bool IsDirectSlot(int slot)
-{
-  return slot == kDirectSlot;
+  return content::GlobalContentStore();
 }
-
-// True when `slot` is a real assigned slot (DIRECT or a cab slot).
-inline bool SlotAssigned(int slot)
-{
-  return slot == kDirectSlot || (slot >= 0 && slot < kNumCabSlots);
-}
-
-// True once a file has both a slot and a real channel assigned.
-inline bool FileAssigned(const CustomNamFile& f)
-{
-  return f.channel >= 1 && SlotAssigned(f.slot);
-}
-
-// Display label for a slot within an amp ("DIRECT" or the cab-slot name).
-inline std::string SlotLabel(const CustomAmp& amp, int slot)
-{
-  if (slot == kDirectSlot)
-    return kDirectSpeaker;
-  if (slot >= 0 && slot < kNumCabSlots)
-    return amp.cabNames[(size_t)slot];
-  return std::string();
-}
-
-// Normalize a cab name: drop whitespace, uppercase, cap at 3 chars. Empty input
-// returns "" so callers can fall back to the slot default.
-inline std::string NormalizeCabName(const std::string& in)
-{
-  std::string s;
-  for (char c : in)
-  {
-    if (std::isspace((unsigned char)c))
-      continue;
-    s.push_back((char)std::toupper((unsigned char)c));
-    if (s.size() >= 3)
-      break;
-  }
-  return s;
-}
-
-// Number of files still missing a slot/channel assignment.
-inline int UnassignedCount(const CustomAmp& amp)
-{
-  int n = 0;
-  for (const auto& f : amp.files)
-    if (!FileAssigned(f))
-      ++n;
-  return n;
-}
-
-// Present slots in canonical order: DIRECT first (if populated), then cab slots
-// 0..2 that carry at least one assigned capture. Unassigned files are ignored.
-inline std::vector<int> AmpSlots(const CustomAmp& amp)
-{
-  std::vector<int> out;
-  auto populated = [&](int slot) {
-    for (const auto& f : amp.files)
-      if (FileAssigned(f) && f.slot == slot)
-        return true;
-    return false;
-  };
-  if (populated(kDirectSlot))
-    out.push_back(kDirectSlot);
-  for (int s = 0; s < kNumCabSlots; s++)
-    if (populated(s))
-      out.push_back(s);
-  return out;
-}
-
-// Sorted, de-duplicated channels available for a given slot within the amp.
-inline std::vector<int> AmpSlotChannels(const CustomAmp& amp, int slot)
-{
-  std::vector<int> out;
-  for (const auto& f : amp.files)
-  {
-    if (!FileAssigned(f) || f.slot != slot)
-      continue;
-    if (std::find(out.begin(), out.end(), f.channel) == out.end())
-      out.push_back(f.channel);
-  }
-  std::sort(out.begin(), out.end());
-  return out;
-}
-
-// Files assigned to a (slot, channel) cell (a count >= 2 is a collision).
-inline int CellFileCount(const CustomAmp& amp, int slot, int channel)
-{
-  int n = 0;
-  for (const auto& f : amp.files)
-    if (FileAssigned(f) && f.slot == slot && f.channel == channel)
-      ++n;
-  return n;
-}
-
-// True when this file shares its (slot, channel) with another assigned file.
-inline bool FileIsDuplicate(const CustomAmp& amp, size_t fileIdx)
-{
-  if (fileIdx >= amp.files.size())
-    return false;
-  const auto& f = amp.files[fileIdx];
-  if (!FileAssigned(f))
-    return false;
-  return CellFileCount(amp, f.slot, f.channel) >= 2;
-}
-
-inline bool HasDuplicate(const CustomAmp& amp)
-{
-  for (size_t i = 0; i < amp.files.size(); i++)
-    if (FileIsDuplicate(amp, i))
-      return true;
-  return false;
-}
-
-// Highest assigned channel across all files (0 when none).
-inline int MaxAssignedChannel(const CustomAmp& amp)
-{
-  int m = 0;
-  for (const auto& f : amp.files)
-    if (FileAssigned(f))
-      m = std::max(m, f.channel);
-  return m;
-}
-
-// A custom amp needs a user-supplied name: the original .nam files are often
-// opaque codes (e.g. "2204"), so the builder default is treated as "unnamed".
-inline bool IsUnnamed(const std::string& name)
-{
-  return name.empty() || name == "New custom amp";
-}
-
-// "" when the amp is saveable; otherwise the reason the Save button is blocked.
-// Order: name, then no files, then unassigned files, then duplicate cells.
-inline std::string SaveDisabledReason(const CustomAmp& amp)
-{
-  if (IsUnnamed(amp.name))
-    return "Name your amp";
-  if (amp.files.empty())
-    return "Add a .nam file";
-  if (UnassignedCount(amp) > 0)
-    return "Assign every file a cab + channel";
-  if (HasDuplicate(amp))
-    return "Two files share a cab + channel";
-  return "";
-}
-
-// Parsed result of a factory-convention .nam filename: PREFIX-CODE-CHANNEL.nam,
-// where PREFIX is one of AMP/G12/G65/V30 (AMP/DI/DIRECT -> the DIRECT slot) and
-// the trailing token is the channel number. Used to auto-fill the builder's
-// cab slot + channel + cab name on import. matched=false leaves the file
-// unassigned for manual mapping.
-struct ParsedNam
-{
-  int slot = kUnassignedSlot;
-  int channel = 0;
-  std::string cabName; // suggested cab-slot name (empty for DIRECT / unmatched)
-  bool matched = false;
-};
-
-inline ParsedNam ParseNamFileName(const std::string& filename)
-{
-  ParsedNam r;
-  std::string s = filename;
-  const size_t slash = s.find_last_of("/\\");
-  if (slash != std::string::npos)
-    s = s.substr(slash + 1);
-  const size_t dot = s.find_last_of('.');
-  if (dot != std::string::npos && dot > 0)
-    s = s.substr(0, dot);
-
-  std::vector<std::string> tok;
-  std::string cur;
-  for (char c : s)
-  {
-    if (c == '-')
-    {
-      tok.push_back(cur);
-      cur.clear();
-    }
-    else
-      cur.push_back(c);
-  }
-  tok.push_back(cur);
-  if (tok.size() < 2 || tok.front().empty())
-    return r;
-
-  std::string pre;
-  for (char c : tok.front())
-    pre.push_back((char)std::toupper((unsigned char)c));
-
-  if (pre == "AMP" || pre == "DI" || pre == "DIRECT")
-    r.slot = kDirectSlot;
-  else if (pre == "G12")
-  {
-    r.slot = 0;
-    r.cabName = "G12";
-  }
-  else if (pre == "G65")
-  {
-    r.slot = 1;
-    r.cabName = "G65";
-  }
-  else if (pre == "V30")
-  {
-    r.slot = 2;
-    r.cabName = "V30";
-  }
-  else
-    return r; // unrecognized prefix -> leave unassigned
-
-  r.matched = true;
-
-  const std::string& last = tok.back();
-  bool numeric = !last.empty();
-  for (char c : last)
-    if (!std::isdigit((unsigned char)c))
-    {
-      numeric = false;
-      break;
-    }
-  if (numeric)
-  {
-    int ch = 0;
-    for (char c : last)
-      ch = ch * 10 + (c - '0');
-    r.channel = ch;
-  }
-  return r;
-}
-
-// ---------------------------------------------------------------------------
-// (speaker x channel) snap helpers (production logic, doctested)
-// ---------------------------------------------------------------------------
-
-// True when a speaker slot has at least one assigned capture.
-inline bool SpeakerEnabled(const std::vector<int>& availableChannels)
-{
-  return !availableChannels.empty();
-}
-
-// Channel to snap to when the focused speaker changes to one whose available
-// gain-stage channels are `availableChannels`, given the previously selected
-// `currentChannel`:
-//   - keep the current channel if it is still available;
-//   - otherwise snap to the first available channel;
-//   - return -1 when the speaker has no captures (an empty/disabled slot).
-inline int SnapChannel(const std::vector<int>& availableChannels, int currentChannel)
-{
-  if (availableChannels.empty())
-    return -1;
-  for (int c : availableChannels)
-    if (c == currentChannel)
-      return currentChannel;
-  return availableChannels.front();
-}
-
-// ---------------------------------------------------------------------------
-// display-only mock data (throwaway)
-// ---------------------------------------------------------------------------
 
 // A demo custom amp used as a test fixture for the validation/coverage helpers
 // (SaveDisabledReason, AmpSlots, etc.): a partial-rig NAM with DIRECT + two named
-// cabs, sparse channel coverage, and one deliberately unassigned file. The
-// builder no longer loads this - it edits the real amp via CustomAmpAt(idx).
+// cabs, sparse channel coverage, and one deliberately unassigned file.
 inline CustomAmp MockDemoCustomAmp()
 {
   CustomAmp a;
@@ -355,116 +62,130 @@ inline CustomAmp MockDemoCustomAmp()
   return a;
 }
 
-// Session-mutable list of custom amp names. The shell mutates this in place so
-// adding/editing/deleting from the builder + sidebar reflects live in the UI
-// (no disk). Seeded with a few demo entries.
+// ---------------------------------------------------------------------------
+// Custom amps (F6) - projected from the registry
+// ---------------------------------------------------------------------------
+
 inline std::vector<std::string>& MockCustomAmps()
 {
-  static std::vector<std::string> v = {"My Plexi A/B", "Studio JCM800", "DIY Tweed"};
+  static std::vector<std::string> v;
+  v.clear();
+  for (const auto& a : Store().reg().amps)
+    v.push_back(a.name);
   return v;
 }
 
-// Per-custom-amp fractal-art id, kept in lockstep (same index) with
-// MockCustomAmps(). Seeded so the demo amps look distinct.
 inline std::vector<int>& MockCustomAmpArts()
 {
-  static std::vector<int> v = {0, 1, 2};
+  static std::vector<int> v;
+  v.clear();
+  for (const auto& a : Store().reg().amps)
+    v.push_back(a.art);
   return v;
 }
 
-// Per-custom-amp cab-slot names, kept in lockstep with MockCustomAmps(). Drives
-// the custom-aware cabinet row (slice 3) and the builder coverage chips.
 inline std::vector<std::array<std::string, kNumCabSlots>>& MockCustomAmpCabs()
 {
-  static std::vector<std::array<std::string, kNumCabSlots>> v = {
-    {"G65", "V30", "CB3"},
-    {"4X1", "2X1", "CB3"},
-    {"TWD", "CB2", "CB3"},
-  };
+  static std::vector<std::array<std::string, kNumCabSlots>> v;
+  v.clear();
+  for (const auto& a : Store().reg().amps)
+    v.push_back(a.cabNames);
   return v;
 }
 
-// Per-custom-amp file manifest, kept in lockstep with MockCustomAmps(). Drives
-// which cab slots/channels a custom amp exposes when focused.
 inline std::vector<std::vector<CustomNamFile>>& MockCustomAmpFiles()
 {
-  static std::vector<std::vector<CustomNamFile>> v = {
-    {{"direct-1.nam", kDirectSlot, 1}, {"direct-2.nam", kDirectSlot, 2}, {"g65-1.nam", 0, 1}, {"v30-3.nam", 1, 3}},
-    {{"jcm-1.nam", kDirectSlot, 1}, {"4x1-1.nam", 0, 1}, {"4x1-2.nam", 0, 2}},
-    {{"twd-1.nam", 0, 1}},
-  };
+  static std::vector<std::vector<CustomNamFile>> v;
+  v.clear();
+  for (const auto& a : Store().reg().amps)
+    v.push_back(a.files);
   return v;
 }
 
-// Assigned art for a custom amp index (0 when out of range).
 inline int CustomAmpArt(int idx)
 {
-  auto& a = MockCustomAmpArts();
-  return (idx >= 0 && idx < (int)a.size()) ? a[(size_t)idx] : 0;
+  const auto& amps = Store().reg().amps;
+  return (idx >= 0 && idx < (int)amps.size()) ? amps[(size_t)idx].art : 0;
 }
 
-// Reconstruct a full CustomAmp for a stored index (display use in slices 3/4).
+// Stable opaque id for a custom amp index ("" when out of range). Used to bridge
+// the index-based UI to the id-keyed registry (scenes, support refs, presets).
+inline std::string CustomAmpIdAt(int idx)
+{
+  const auto& amps = Store().reg().amps;
+  return (idx >= 0 && idx < (int)amps.size()) ? amps[(size_t)idx].id : std::string();
+}
+
+// Index of a custom amp by id (-1 when not found).
+inline int CustomAmpIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& amps = Store().reg().amps;
+  for (int i = 0; i < (int)amps.size(); ++i)
+    if (amps[(size_t)i].id == id)
+      return i;
+  return -1;
+}
+
 inline CustomAmp CustomAmpAt(int idx)
 {
-  CustomAmp a;
-  auto& names = MockCustomAmps();
-  if (idx < 0 || idx >= (int)names.size())
-    return a;
-  a.name = names[(size_t)idx];
-  a.id = "amp-" + std::to_string(idx);
-  if (idx < (int)MockCustomAmpArts().size())
-    a.art = MockCustomAmpArts()[(size_t)idx];
-  if (idx < (int)MockCustomAmpCabs().size())
-    a.cabNames = MockCustomAmpCabs()[(size_t)idx];
-  if (idx < (int)MockCustomAmpFiles().size())
-    a.files = MockCustomAmpFiles()[(size_t)idx];
-  return a;
+  const auto& amps = Store().reg().amps;
+  if (idx < 0 || idx >= (int)amps.size())
+    return CustomAmp{};
+  return amps[(size_t)idx];
 }
 
-// Add a custom amp from a full builder draft, de-duplicating the display name.
-// Returns its index. Keeps the four parallel session stores aligned.
+// Add a custom amp from a full builder draft, de-duplicating the display name and
+// minting a stable id. Returns its index.
 inline int AddCustomAmp(const CustomAmp& amp)
 {
-  auto& amps = MockCustomAmps();
-  const std::string base = amp.name.empty() ? "New custom amp" : amp.name;
+  auto& reg = Store().reg();
+  CustomAmp a = amp;
+  const std::string base = a.name.empty() ? "New custom amp" : a.name;
   std::string unique = base;
   int suffix = 2;
-  while (std::find(amps.begin(), amps.end(), unique) != amps.end())
+  auto clashes = [&](const std::string& n) {
+    for (const auto& e : reg.amps)
+      if (e.name == n)
+        return true;
+    return false;
+  };
+  while (clashes(unique))
     unique = base + " " + std::to_string(suffix++);
-  amps.push_back(unique);
-  MockCustomAmpArts().push_back(((amp.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts);
-  MockCustomAmpCabs().push_back(amp.cabNames);
-  MockCustomAmpFiles().push_back(amp.files);
-  return (int)amps.size() - 1;
+  a.name = unique;
+  a.art = ((a.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
+  if (a.id.empty())
+    a.id = content::MintId(reg, "amp");
+  reg.amps.push_back(std::move(a));
+  Store().Save();
+  return (int)reg.amps.size() - 1;
 }
 
-// Update an existing custom amp in place from a builder draft. Editing must
-// mutate the entry the user opened - not append a new one. The display name is
-// kept unique against the *other* amps (an amp may keep its own name). Returns
-// the (possibly unchanged) index, or -1 if out of range.
+// Update an existing custom amp in place (preserving its id), keeping the display
+// name unique against the *other* amps. Returns the index, or -1 if out of range.
 inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
 {
-  auto& amps = MockCustomAmps();
-  if (idx < 0 || idx >= (int)amps.size())
+  auto& reg = Store().reg();
+  if (idx < 0 || idx >= (int)reg.amps.size())
     return -1;
-  const std::string base = amp.name.empty() ? "New custom amp" : amp.name;
+  CustomAmp a = amp;
+  a.id = reg.amps[(size_t)idx].id; // identity is immutable across edits
+  const std::string base = a.name.empty() ? "New custom amp" : a.name;
   std::string unique = base;
   int suffix = 2;
   auto clashesWithOther = [&](const std::string& n) {
-    for (int i = 0; i < (int)amps.size(); ++i)
-      if (i != idx && amps[(size_t)i] == n)
+    for (int i = 0; i < (int)reg.amps.size(); ++i)
+      if (i != idx && reg.amps[(size_t)i].name == n)
         return true;
     return false;
   };
   while (clashesWithOther(unique))
     unique = base + " " + std::to_string(suffix++);
-  amps[(size_t)idx] = unique;
-  if (idx < (int)MockCustomAmpArts().size())
-    MockCustomAmpArts()[(size_t)idx] = ((amp.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
-  if (idx < (int)MockCustomAmpCabs().size())
-    MockCustomAmpCabs()[(size_t)idx] = amp.cabNames;
-  if (idx < (int)MockCustomAmpFiles().size())
-    MockCustomAmpFiles()[(size_t)idx] = amp.files;
+  a.name = unique;
+  a.art = ((a.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
+  reg.amps[(size_t)idx] = std::move(a);
+  Store().Save();
   return idx;
 }
 
@@ -479,163 +200,327 @@ inline int AddCustomAmp(const std::string& name, int art = 0)
 
 inline void RemoveCustomAmp(int idx)
 {
-  auto eraseAt = [idx](auto& v) {
-    if (idx >= 0 && idx < (int)v.size())
-      v.erase(v.begin() + idx);
-  };
-  eraseAt(MockCustomAmps());
-  eraseAt(MockCustomAmpArts());
-  eraseAt(MockCustomAmpCabs());
-  eraseAt(MockCustomAmpFiles());
+  auto& reg = Store().reg();
+  if (idx < 0 || idx >= (int)reg.amps.size())
+    return;
+  Store().RemoveCustomAmp(reg.amps[(size_t)idx].id);
+  Store().Save();
 }
 
-// Global IR library (F7) - usable as a cab on any amp via the speaker row.
-// Session-mutable so Import adds entries live.
+// ---------------------------------------------------------------------------
+// IR library (F7) - projected from the registry
+// ---------------------------------------------------------------------------
+
 inline std::vector<std::string>& MockIRLibrary()
 {
-  static std::vector<std::string> v = {"Mesa 4x12 sm57", "Greenback room", "DI blend 50/50", "Marshall 1960 r121"};
+  static std::vector<std::string> v;
+  v.clear();
+  for (const auto& ir : Store().reg().irs)
+    v.push_back(ir.name);
   return v;
 }
 
-// Original source filename for each IR (parallel to MockIRLibrary). Kept so the
-// manage list can show where each entry was imported from; renaming the display
-// name never changes the filename. The backend stores the real stored path here.
 inline std::vector<std::string>& MockIRFiles()
 {
-  static std::vector<std::string> v = {"Mesa_4x12_sm57.wav", "Greenback_room.wav", "DI_blend_50-50.wav",
-                                       "Marshall_1960_r121.wav"};
+  static std::vector<std::string> v;
+  v.clear();
+  for (const auto& ir : Store().reg().irs)
+    v.push_back(ir.file);
   return v;
 }
 
 inline std::string IRFileAt(int idx)
 {
-  auto& v = MockIRFiles();
-  return (idx >= 0 && idx < (int)v.size()) ? v[(size_t)idx] : std::string();
+  const auto& irs = Store().reg().irs;
+  return (idx >= 0 && idx < (int)irs.size()) ? irs[(size_t)idx].file : std::string();
 }
 
-// Imported pedal captures (F8) - shown in the PRE capture dropdown CUSTOM group.
-// Session-mutable so Import adds entries live.
+inline std::string IRIdAt(int idx)
+{
+  const auto& irs = Store().reg().irs;
+  return (idx >= 0 && idx < (int)irs.size()) ? irs[(size_t)idx].id : std::string();
+}
+
+inline int IRIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& irs = Store().reg().irs;
+  for (int i = 0; i < (int)irs.size(); ++i)
+    if (irs[(size_t)i].id == id)
+      return i;
+  return -1;
+}
+
+// Append a custom IR to the global library. `file` is the stored registry-
+// relative path (the plugin copies the source in first); in tests it is just a
+// filename. Returns its index.
+inline int AddIR(const std::string& name, const std::string& file = "")
+{
+  auto& reg = Store().reg();
+  content::IRItem it;
+  it.id = content::MintId(reg, "ir");
+  it.name = name.empty() ? "Imported IR" : name;
+  it.file = file;
+  reg.irs.push_back(std::move(it));
+  Store().Save();
+  return (int)reg.irs.size() - 1;
+}
+
+inline void RenameIR(int idx, const std::string& name)
+{
+  auto& irs = Store().reg().irs;
+  if (idx >= 0 && idx < (int)irs.size() && !name.empty())
+  {
+    irs[(size_t)idx].name = name;
+    Store().Save();
+  }
+}
+
+inline void DeleteIR(int idx)
+{
+  auto& irs = Store().reg().irs;
+  if (idx >= 0 && idx < (int)irs.size())
+  {
+    Store().RemoveIR(irs[(size_t)idx].id);
+    Store().Save();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Imported pedal captures (F8) - projected from the registry
+// ---------------------------------------------------------------------------
+
 inline std::vector<std::string>& MockCustomPedals()
 {
-  static std::vector<std::string> v = {"My Klon clone", "Rat (LM308)", "Tweed boost"};
+  static std::vector<std::string> v;
+  v.clear();
+  for (const auto& p : Store().reg().pedals)
+    v.push_back(p.name);
   return v;
 }
 
-// Original source filename for each pedal capture (parallel to MockCustomPedals).
 inline std::vector<std::string>& MockPedalFiles()
 {
-  static std::vector<std::string> v = {"klon_clone_clean.nam", "rat_lm308.nam", "tweed_boost_5e3.nam"};
+  static std::vector<std::string> v;
+  v.clear();
+  for (const auto& p : Store().reg().pedals)
+    v.push_back(p.file);
   return v;
 }
 
 inline std::string PedalFileAt(int idx)
 {
-  auto& v = MockPedalFiles();
-  return (idx >= 0 && idx < (int)v.size()) ? v[(size_t)idx] : std::string();
+  const auto& peds = Store().reg().pedals;
+  return (idx >= 0 && idx < (int)peds.size()) ? peds[(size_t)idx].file : std::string();
 }
 
-inline int AddPedal(const std::string& name, const std::string& file = "")
+// Stable PRE-capture index assigned to an imported pedal (0 when out of range).
+inline int PedalLegacyIndexAt(int idx)
 {
-  auto& v = MockCustomPedals();
-  v.push_back(name.empty() ? "Imported pedal" : name);
-  MockPedalFiles().push_back(file);
-  return (int)v.size() - 1;
+  const auto& peds = Store().reg().pedals;
+  return (idx >= 0 && idx < (int)peds.size()) ? peds[(size_t)idx].legacyIndex : 0;
+}
+
+inline std::string PedalIdAt(int idx)
+{
+  const auto& peds = Store().reg().pedals;
+  return (idx >= 0 && idx < (int)peds.size()) ? peds[(size_t)idx].id : std::string();
+}
+
+// Resolve an imported pedal by its stable PRE-capture legacy index (the value a
+// scene/preset/param stores). Returns "" when no pedal owns that index.
+inline std::string PedalNameByLegacy(int legacyIndex)
+{
+  for (const auto& p : Store().reg().pedals)
+    if (p.legacyIndex == legacyIndex)
+      return p.name;
+  return {};
+}
+
+inline std::string PedalStoredPathByLegacy(int legacyIndex)
+{
+  for (const auto& p : Store().reg().pedals)
+    if (p.legacyIndex == legacyIndex)
+      return p.file;
+  return {};
+}
+
+inline int AddPedal(const std::string& name, const std::string& file = "", const std::string& group = "")
+{
+  auto& reg = Store().reg();
+  content::PedalItem it;
+  it.id = content::MintId(reg, "pedal");
+  it.name = name.empty() ? "Imported pedal" : name;
+  it.group = group;
+  it.file = file;
+  it.legacyIndex = std::min(reg.nextPedalIndex, content::kCustomPedalIndexMax);
+  reg.nextPedalIndex = std::max(reg.nextPedalIndex, it.legacyIndex + 1);
+  reg.pedals.push_back(std::move(it));
+  Store().Save();
+  return (int)reg.pedals.size() - 1;
 }
 
 inline void RenamePedal(int idx, const std::string& name)
 {
-  auto& v = MockCustomPedals();
-  if (idx >= 0 && idx < (int)v.size() && !name.empty())
-    v[(size_t)idx] = name;
+  auto& peds = Store().reg().pedals;
+  if (idx >= 0 && idx < (int)peds.size() && !name.empty())
+  {
+    peds[(size_t)idx].name = name;
+    Store().Save();
+  }
 }
 
 inline void DeletePedal(int idx)
 {
-  auto& v = MockCustomPedals();
-  if (idx >= 0 && idx < (int)v.size())
-    v.erase(v.begin() + idx);
-  auto& f = MockPedalFiles();
-  if (idx >= 0 && idx < (int)f.size())
-    f.erase(f.begin() + idx);
+  auto& peds = Store().reg().pedals;
+  if (idx >= 0 && idx < (int)peds.size())
+  {
+    Store().RemovePedal(peds[(size_t)idx].id);
+    Store().Save();
+  }
 }
 
-// Per-amp named presets (F5), session-mutable so save/rename/delete persist in
-// the running shell (no disk). Index-keyed for the shell; the real backend keys
-// by amp identity.
-inline std::map<int, std::vector<std::string>>& SessionPresets()
+// ---------------------------------------------------------------------------
+// Per-amp named presets (F5) - projected from the registry's preset banks
+// ---------------------------------------------------------------------------
+//
+// A preset bank is keyed by the *owning amp* (factory:<idx> or a custom amp id),
+// not by the factory index the index-based UI passes around. Since every preset
+// surface (header bar + Manage panel) only ever acts on the currently focused
+// amp, the plugin publishes that amp's owner key here on each switch; the bridge
+// reads it instead of deriving a factory key from the ampIdx argument (which is
+// always the underlying factory slot, even while a custom amp is focused).
+inline std::string& ActivePresetOwnerKey()
 {
-  static std::map<int, std::vector<std::string>> m = {
-    {0, {"Sat night gig", "Bedroom crunch", "Ambient clean"}},
-    {3, {"Doom wall", "Lead boost"}},
-    {7, {"Church clean"}},
-  };
-  return m;
+  static std::string key = content::FactoryOwnerKey(0);
+  return key;
+}
+inline void SetActivePresetOwner(const std::string& key)
+{
+  ActivePresetOwnerKey() = key;
 }
 
-inline std::vector<std::string> MockPresetsForAmp(int ampIdx)
+// The plugin installs these so registry preset ops capture/apply the *real* live
+// VoLumAmpSettings (the bridge has no access to live params). Unset in unit tests
+// (presets then carry default settings, which the round-trip tests still cover).
+using PresetSettingsCapture = std::function<VoLumAmpSettings()>;
+using PresetSettingsApply = std::function<void(const VoLumAmpSettings&)>;
+inline PresetSettingsCapture& PresetCaptureHook()
 {
-  auto& m = SessionPresets();
-  auto it = m.find(ampIdx);
-  return it == m.end() ? std::vector<std::string>{} : it->second;
+  static PresetSettingsCapture h;
+  return h;
+}
+inline PresetSettingsApply& PresetApplyHook()
+{
+  static PresetSettingsApply h;
+  return h;
 }
 
-// Add a preset, de-duplicating the display name. Returns its index.
-inline int AddPreset(int ampIdx, const std::string& name)
+inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
 {
-  auto& list = SessionPresets()[ampIdx];
-  std::string unique = name.empty() ? "Preset" : name;
+  const auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  std::vector<std::string> names;
+  if (it != banks.end())
+    for (const auto& pr : it->second)
+      names.push_back(pr.name);
+  return names;
+}
+
+// Capture the current live settings (via the plugin hook) into a new named
+// preset, de-duplicating the display name. Returns its index in the bank.
+inline int AddPreset(int /*ampIdx*/, const std::string& name)
+{
+  auto& reg = Store().reg();
+  auto& bank = reg.presetBanks[ActivePresetOwnerKey()];
+  const std::string fallback = name.empty() ? "Preset" : name;
+  std::string unique = fallback;
   int suffix = 2;
-  while (std::find(list.begin(), list.end(), unique) != list.end())
-    unique = (name.empty() ? "Preset" : name) + " " + std::to_string(suffix++);
-  list.push_back(unique);
-  return (int)list.size() - 1;
-}
-
-inline void RenamePreset(int ampIdx, int idx, const std::string& name)
-{
-  auto& list = SessionPresets()[ampIdx];
-  if (idx >= 0 && idx < (int)list.size() && !name.empty())
-    list[(size_t)idx] = name;
-}
-
-inline void DeletePreset(int ampIdx, int idx)
-{
-  auto& list = SessionPresets()[ampIdx];
-  if (idx >= 0 && idx < (int)list.size())
-    list.erase(list.begin() + idx);
-}
-
-// Case-insensitive name comparison + within-list uniqueness check. Names must be
-// unique within each content type (IRs among IRs, pedals among pedals, presets
-// among an amp's presets); cross-type duplicates are allowed.
-inline bool NameMatchesCI(const std::string& a, const std::string& b)
-{
-  if (a.size() != b.size())
+  auto clashes = [&](const std::string& n) {
+    for (const auto& pr : bank)
+      if (pr.name == n)
+        return true;
     return false;
-  for (size_t i = 0; i < a.size(); ++i)
-    if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i]))
-      return false;
-  return true;
+  };
+  while (clashes(unique))
+    unique = fallback + " " + std::to_string(suffix++);
+  content::Preset pr;
+  pr.id = content::MintId(reg, "preset");
+  pr.name = unique;
+  if (PresetCaptureHook())
+    pr.settings = PresetCaptureHook()();
+  bank.push_back(std::move(pr));
+  Store().Save();
+  return (int)bank.size() - 1;
 }
 
-// True if the amp's file manifest already contains a capture with this filename
-// (case-insensitive). Used to make re-importing the same .nam a no-op instead of
-// stacking duplicate rows.
-inline bool ManifestHasFile(const CustomAmp& amp, const std::string& file)
+// Overwrite an existing preset's snapshot with the current live settings.
+inline void OverwritePreset(int /*ampIdx*/, int idx)
 {
-  for (const auto& f : amp.files)
-    if (NameMatchesCI(f.file, file))
-      return true;
-  return false;
+  auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
+    return;
+  if (PresetCaptureHook())
+    it->second[(size_t)idx].settings = PresetCaptureHook()();
+  Store().Save();
 }
 
-inline bool NameExistsCI(const std::vector<std::string>& list, const std::string& name, int exceptIdx = -1)
+// Recall a preset: apply its stored snapshot to the live chain (via the plugin
+// hook). No-op (other than selection) in unit tests where no hook is installed.
+inline void RecallPreset(int /*ampIdx*/, int idx)
 {
-  for (int i = 0; i < (int)list.size(); ++i)
-    if (i != exceptIdx && NameMatchesCI(list[(size_t)i], name))
-      return true;
-  return false;
+  auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
+    return;
+  if (PresetApplyHook())
+    PresetApplyHook()(it->second[(size_t)idx].settings);
 }
+
+inline std::string PresetIdAt(int idx)
+{
+  const auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
+    return {};
+  return it->second[(size_t)idx].id;
+}
+
+inline void RenamePreset(int /*ampIdx*/, int idx, const std::string& name)
+{
+  auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end())
+    return;
+  auto& bank = it->second;
+  if (idx >= 0 && idx < (int)bank.size() && !name.empty())
+  {
+    bank[(size_t)idx].name = name;
+    Store().Save();
+  }
+}
+
+inline void DeletePreset(int /*ampIdx*/, int idx)
+{
+  auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end())
+    return;
+  auto& bank = it->second;
+  if (idx >= 0 && idx < (int)bank.size())
+  {
+    bank.erase(bank.begin() + idx);
+    if (bank.empty())
+      banks.erase(it);
+    Store().Save();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Name-uniqueness helpers (delegate to the pure NameExistsCI over projections)
+// ---------------------------------------------------------------------------
 
 inline bool IRNameExists(const std::string& name, int exceptIdx = -1)
 {
@@ -650,32 +535,6 @@ inline bool PedalNameExists(const std::string& name, int exceptIdx = -1)
 inline bool PresetNameExists(int ampIdx, const std::string& name, int exceptIdx = -1)
 {
   return NameExistsCI(MockPresetsForAmp(ampIdx), name, exceptIdx);
-}
-
-// Append a custom IR to the global library (F7 import stub). Returns its index.
-inline int AddIR(const std::string& name, const std::string& file = "")
-{
-  auto& v = MockIRLibrary();
-  v.push_back(name.empty() ? "Imported IR" : name);
-  MockIRFiles().push_back(file);
-  return (int)v.size() - 1;
-}
-
-inline void RenameIR(int idx, const std::string& name)
-{
-  auto& v = MockIRLibrary();
-  if (idx >= 0 && idx < (int)v.size() && !name.empty())
-    v[(size_t)idx] = name;
-}
-
-inline void DeleteIR(int idx)
-{
-  auto& v = MockIRLibrary();
-  if (idx >= 0 && idx < (int)v.size())
-    v.erase(v.begin() + idx);
-  auto& f = MockIRFiles();
-  if (idx >= 0 && idx < (int)f.size())
-    f.erase(f.begin() + idx);
 }
 
 } // namespace custom

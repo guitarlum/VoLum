@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../VoLumChunkCodec.h"
+#include "../VoLumChunkIdTail.h"
 #include "../VoLumJsonMigration.h"
 #include "../VoLumUserSettingsIO.h"
 
@@ -14,14 +15,14 @@ struct MemoryChunk
 {
   std::vector<unsigned char> bytes;
 
-  template<typename T>
+  template <typename T>
   void Put(const T* value)
   {
     const auto* first = reinterpret_cast<const unsigned char*>(value);
     bytes.insert(bytes.end(), first, first + sizeof(T));
   }
 
-  template<typename T>
+  template <typename T>
   int Get(T* value, int pos) const
   {
     REQUIRE(pos >= 0);
@@ -575,12 +576,14 @@ TEST_CASE("VoLum chunk codec round-trip fuzz: extreme / non-finite values stay b
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
 
-  struct Poison { double value; const char* label; };
+  struct Poison
+  {
+    double value;
+    const char* label;
+  };
   const Poison poisonValues[] = {
-    {0.0, "zero"},     {-0.0, "neg zero"},
-    {bigPos, "bigpos"}, {bigNeg, "bigneg"},
-    {nan, "nan"},      {inf, "+inf"},        {-inf, "-inf"},
-    {1e-300, "subnorm"},
+    {0.0, "zero"}, {-0.0, "neg zero"}, {bigPos, "bigpos"}, {bigNeg, "bigneg"},
+    {nan, "nan"},  {inf, "+inf"},      {-inf, "-inf"},     {1e-300, "subnorm"},
   };
 
   for (const auto& poison : poisonValues)
@@ -662,5 +665,130 @@ TEST_CASE("Oktaverb v0.9.1 migration remaps legacy sub-modes")
     nlohmann::json config = {{"ReverbSubMode", 2.0}};
     volum::MigrateOktaverbSubModeToV0_9_1(config);
     CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(0.0));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// VoLum 1.2.0 DAW-chunk id tail (BYO/preset references).
+// ---------------------------------------------------------------------------
+
+TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
+{
+  volum::ChunkIdTail in;
+  in.customMainId = "amp_main_abc";
+  in.customSupportId = "amp_sup_def";
+  in.activePresetId = "preset_xyz";
+  in.perAmpIrId[0] = "ir_one";
+  in.perAmpIrId[volum::kAmpCount - 1] = "ir_last";
+  in.perAmpSupportId[1] = "amp_sup_ghi";
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  int posOut = -1;
+  const bool ok = volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out, &posOut);
+  REQUIRE(ok);
+  CHECK(posOut == static_cast<int>(chunk.bytes.size()));
+  CHECK(out.customMainId == in.customMainId);
+  CHECK(out.customSupportId == in.customSupportId);
+  CHECK(out.activePresetId == in.activePresetId);
+  CHECK(out.perAmpIrId[0] == "ir_one");
+  CHECK(out.perAmpIrId[volum::kAmpCount - 1] == "ir_last");
+  CHECK(out.perAmpSupportId[1] == "amp_sup_ghi");
+  // Untouched slots stay empty.
+  CHECK(out.perAmpIrId[1].empty());
+  CHECK(out.perAmpSupportId[0].empty());
+}
+
+TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")
+{
+  // Simulate the real layout: arbitrary fixed-tail bytes, then the id tail.
+  MemoryChunk chunk;
+  for (int i = 0; i < 37; ++i)
+  {
+    unsigned char b = static_cast<unsigned char>(i * 7 + 3);
+    chunk.Put(&b);
+  }
+  const int tailStart = static_cast<int>(chunk.bytes.size());
+
+  volum::ChunkIdTail in;
+  in.customMainId = "main";
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  CHECK(volum::TryGetChunkIdTail(chunk, tailStart, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.customMainId == "main");
+  // Probing at the wrong offset (no sentinel there) must fail cleanly.
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+}
+
+TEST_CASE("Pre-1.2.0 chunk (no id tail) probes empty, never throws")
+{
+  // 1.0.0/1.0.1/1.1.0 chunks end right after the fixed binary tail. A 1.2.0
+  // reader probing for the id tail must report 'absent' and leave refs empty.
+  MemoryChunk chunk;
+  for (int i = 0; i < 24; ++i)
+  {
+    double d = i * 0.5;
+    chunk.Put(&d);
+  }
+  volum::ChunkIdTail out;
+  out.customMainId = "should_be_overwritten_only_on_success";
+  const int sz = static_cast<int>(chunk.bytes.size());
+
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, sz, sz, out)); // pos at EOF
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, sz - 4, sz, out)); // not enough room
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, sz, out)); // no sentinel
+  // Empty chunk.
+  MemoryChunk empty;
+  CHECK_FALSE(volum::TryGetChunkIdTail(empty, 0, 0, out));
+}
+
+TEST_CASE("Id tail with malformed JSON body is rejected (lenient)")
+{
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  const std::string bad = "{not valid json";
+  int len = static_cast<int>(bad.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : bad)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+}
+
+TEST_CASE("Id tail with length running past the chunk is rejected")
+{
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = 9999; // claims far more than is present
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  const char c = 'x';
+  chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+}
+
+TEST_CASE("Empty id tail round-trips (all refs blank)")
+{
+  volum::ChunkIdTail in; // all empty
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  out.customMainId = "dirty";
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.customMainId.empty());
+  CHECK(out.customSupportId.empty());
+  CHECK(out.activePresetId.empty());
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    CHECK(out.perAmpIrId[i].empty());
+    CHECK(out.perAmpSupportId[i].empty());
   }
 }

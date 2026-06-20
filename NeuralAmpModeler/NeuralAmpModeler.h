@@ -38,6 +38,7 @@
 #include "VoLumMetronomeDSP.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumDspStagingWdl.h"
+#include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -354,6 +355,7 @@ private:
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
+
 public:
   void _VolumRefreshChannels();
   void _VolumRefreshSupportChannels();
@@ -382,6 +384,10 @@ public:
   // (settings load + chunk unserialize); does NOT touch per-amp slots.
   void _VolumApplyLiveLockSnapshots();
   void _VolumRestoreFromSettings(int ampIdx);
+  // Apply an arbitrary settings snapshot to the live params (factory slot, custom
+  // amp scene, or recalled preset). Mutable because POST restore normalizes the
+  // mode snapshots back into the struct (see _VolumRestorePostFromSlot).
+  void _VolumApplyAmpSettings(volum::VoLumAmpSettings& s);
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
   void _VolumSaveEffectSettings();
@@ -427,7 +433,8 @@ public:
   iplug::sample** _VolumProcessPreChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
                                         const size_t numChannelsInternal, const int nFrames, const double sampleRate);
   iplug::sample** _VolumProcessMainAmpChain(iplug::sample** preAmpPointers, const volum::ProcessingPlan& processingPlan,
-                                            const size_t numChannelsInternal, const int nFrames, const double sampleRate);
+                                            const size_t numChannelsInternal, const int nFrames,
+                                            const double sampleRate);
   iplug::sample* _VolumProcessDualAmpSupportLane(const volum::ProcessingPlan& processingPlan,
                                                  const size_t numChannelsInternal, const int nFrames,
                                                  const double sampleRate);
@@ -447,17 +454,66 @@ public:
   // (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
   void _VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane = false);
+  // F7 custom IR: the mutable settings of the currently active lane (factory amp
+  // slot, or the focused custom amp's scene). activeIrId/supportCustomId live here.
+  volum::VoLumAmpSettings& _VolumActiveScene();
+  // Stage the custom IR at library index irIdx into the convolver, enable the IR
+  // toggle, record activeIrId on the active scene, and reflect it in the cab row.
+  void _VolumSelectIR(int irIdx);
+  // Drop the custom IR (back to the baked cab) and clear activeIrId.
+  void _VolumClearIR();
+  // Re-resolve a scene/preset's activeIrId on recall: stage it, or fall back to
+  // the baked cab when the id is empty/orphaned (the referenced IR was deleted).
+  void _VolumApplyActiveIr(const std::string& irId);
   // Flags the header preset strip "(unsaved)" for rig edits that bypass the
   // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
   void _VolumMarkPresetDirty();
   // Resets the active amp's params to shipped factory defaults and clears any
   // recalled preset (preset dropdown "Default" row).
   void _VolumResetAmpToFactory();
+
+  // --- F5 presets (per-amp bank, owner-keyed in the content registry) --------
+  // Owner key for the currently focused amp: "factory:<idx>" or a custom amp id.
+  std::string _VolumActiveOwnerKey() const;
+  // Publish the active owner key to the bridge + install the capture/apply hooks
+  // (once, at init) so registry preset ops act on the focused amp's bank with the
+  // real live settings.
+  void _VolumInstallPresetHooks();
+  void _VolumSyncPresetOwner();
+  // Refresh the header bar's list/selection/dirty state for the active amp.
+  void _VolumRefreshPresetBar();
+  // Save the live scene as a new named preset; returns its bank index (-1 fail).
+  int _VolumSavePresetAs(const std::string& name);
+  // Overwrite preset `index` in the active bank with the live scene.
+  void _VolumOverwritePreset(int index);
+  // Recall preset `index`: apply its snapshot to the live chain, retain it as the
+  // recalled snapshot (drives the equality-based "(unsaved)" flag), update the bar.
+  void _VolumRecallPreset(int index);
+  // Apply a recalled snapshot to the live chain and retain it (called by the
+  // bridge apply hook so Manage/menu/bar recalls share one path).
+  void _VolumApplyRecalledPreset(const volum::VoLumAmpSettings& s);
+  // Re-evaluate the "(unsaved)" flag from a live-vs-snapshot equality test.
+  void _VolumRecomputePresetDirty();
+  // The snapshot of the last recalled/saved preset for the active amp, and
+  // whether one is active. Cleared on amp switch / factory reset.
+  volum::VoLumAmpSettings mVolumRecalledSnapshot;
+  bool mVolumHasRecalledSnapshot = false;
+  std::string mVolumActivePresetId;
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;
   const char* _VolumGetPreCaptureShortLabel(int captureIdx, const char* fallback) const;
   std::string _VolumGetPreCaptureFilename(int captureIdx) const;
+  // Absolute path to stage for a PRE-capture index: factory captures resolve under
+  // rigs/PrePedals; custom-pedal indices (>= kCustomPedalIndexBase) resolve from
+  // the content library. Returns "" when nothing maps to the index.
+  std::string _VolumGetPreCaptureLoadPath(int captureIdx) const;
+  // Ordered, selectable PRE-capture indices for cycling: 0 (EMPTY), factory
+  // 1..N, then each imported pedal's stable legacy index.
+  std::vector<int> _VolumPreCaptureOrder() const;
+  // Stable scratch buffer so _VolumGetPreCaptureLabel can return a const char*
+  // for custom pedal names (which are not in the factory label vector).
+  mutable std::string mVolumPreCaptureLabelScratch;
 
 private:
   friend class NAMKnobControl;
@@ -468,19 +524,24 @@ private:
   // Index of the focused custom MAIN amp (display-only), or -1 when a factory
   // amp is active. Drives the custom-aware cabinet row / channel stepper.
   int mVolumCustomMainIdx = -1;
+  // Selected (slot, channel) within the focused custom MAIN amp, used to resolve
+  // which manifest .nam to stage. Only meaningful when mVolumCustomMainIdx >= 0.
+  int mVolumCustomMainSlot = volum::custom::kDirectSlot;
+  int mVolumCustomMainChannel = 1;
   // Index of the custom SUPPORT amp (dual-amp partner), or -1 when the support
-  // partner is a factory amp / none. Display + session only in 1.2.0.
+  // partner is a factory amp / none.
   int mVolumCustomSupportIdx = -1;
+  int mVolumCustomSupportSlot = volum::custom::kDirectSlot;
+  int mVolumCustomSupportChannel = 1;
 
   int mVolumAmpIdx = 0;
   int mVolumSpeakerIdx = 3; // V30 default
   int mVolumChannelIdx = 0;
   int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
   std::string mVolumSelectedKnobHintText;
-  std::array<int, 7> mVolumLastKeyboardKnobByTarget = {
-    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter
-  };
+  std::array<int, 7> mVolumLastKeyboardKnobByTarget = {iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+                                                       iplug::kNoParameter};
   // Reverb sub-mode pill is currently shown for Oktaverb only.
   // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
   // pick up a per-mode tooltip explaining what the knob actually does in that mode.
@@ -525,7 +586,13 @@ private:
   std::atomic<bool> mMasterSafetyEngaged{false};
   int mMasterSafetyHoldSamples = 0;
 
-  enum class VoLumLoadKind { Main, MainPrefetch, Support, Pre };
+  enum class VoLumLoadKind
+  {
+    Main,
+    MainPrefetch,
+    Support,
+    Pre
+  };
   struct VoLumLoadRequest
   {
     VoLumLoadKind kind = VoLumLoadKind::Main;
@@ -553,11 +620,11 @@ private:
   std::deque<VoLumLoadRequest> mVolumLoadRequests;
   std::deque<VoLumLoadResult> mVolumLoadResults;
 
-  template<typename Pred>
+  template <typename Pred>
   void _VolumDropQueuedLoadRequests(Pred pred)
   {
-    mVolumLoadRequests.erase(std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), pred),
-                              mVolumLoadRequests.end());
+    mVolumLoadRequests.erase(
+      std::remove_if(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), pred), mVolumLoadRequests.end());
   }
 
   std::atomic<bool> mVolumLoaderStop{false};

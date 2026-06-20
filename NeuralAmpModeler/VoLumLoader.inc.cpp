@@ -102,9 +102,7 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
     if (mVolumLoadingSupportPath == fileToLoad)
       return;
     mVolumLoadingSupportPath = fileToLoad;
-    _VolumDropQueuedLoadRequests([](const VoLumLoadRequest& queued) {
-      return queued.kind == VoLumLoadKind::Support;
-    });
+    _VolumDropQueuedLoadRequests([](const VoLumLoadRequest& queued) { return queued.kind == VoLumLoadKind::Support; });
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -127,9 +125,8 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
     if (mVolumLoadingPrePath[slot] == fileToLoad)
       return;
     mVolumLoadingPrePath[slot] = fileToLoad;
-    _VolumDropQueuedLoadRequests([&](const VoLumLoadRequest& queued) {
-      return queued.kind == VoLumLoadKind::Pre && queued.slot == slot;
-    });
+    _VolumDropQueuedLoadRequests(
+      [&](const VoLumLoadRequest& queued) { return queued.kind == VoLumLoadKind::Pre && queued.slot == slot; });
     mVolumLoadRequests.push_back(std::move(request));
   }
   mVolumLoaderCv.notify_one();
@@ -234,8 +231,8 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
   namespace fs = std::filesystem;
 
   auto touchCache = [&](const std::string& key) {
-    mVolumDspCacheOrder.erase(std::remove(mVolumDspCacheOrder.begin(), mVolumDspCacheOrder.end(), key),
-                              mVolumDspCacheOrder.end());
+    mVolumDspCacheOrder.erase(
+      std::remove(mVolumDspCacheOrder.begin(), mVolumDspCacheOrder.end(), key), mVolumDspCacheOrder.end());
     mVolumDspCacheOrder.push_front(key);
   };
 
@@ -294,7 +291,9 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
         result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
         result.model->Reset(request.sampleRate, request.blockSize);
 
-        if (!mVolumNeedsLoad.load())
+        // ampIdx < 0 marks a custom-amp load (files live in the content library,
+        // not the factory rig tree), so skip the factory sibling-prefetch scan.
+        if (!mVolumNeedsLoad.load() && request.ampIdx >= 0 && !request.rigsRoot.empty())
         {
           const fs::path ampDir = fs::path(request.rigsRoot) / volum::kAmps[request.ampIdx].folderName;
           std::error_code ec;
@@ -324,7 +323,8 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
       }
       else if (request.kind == VoLumLoadKind::MainPrefetch)
       {
-        if (!mVolumNeedsLoad.load() && !mVolumLoaderStop.load() && mVolumDspCache.find(request.fileToLoad) == mVolumDspCache.end())
+        if (!mVolumNeedsLoad.load() && !mVolumLoaderStop.load()
+            && mVolumDspCache.find(request.fileToLoad) == mVolumDspCache.end())
         {
           nam::dspData conf;
           nam::get_dsp(fs::u8path(request.fileToLoad), conf);
@@ -375,8 +375,10 @@ void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
     return;
   }
 
-  const std::string filename = _VolumGetPreCaptureFilename(GetParam(captureParam)->Int());
-  if (filename.empty() || mVolumRigsRoot.empty())
+  // Resolve to an absolute path: factory captures under rigs/PrePedals, custom
+  // imported pedals (index >= kCustomPedalIndexBase) from the content library.
+  const std::string fileToLoad = _VolumGetPreCaptureLoadPath(GetParam(captureParam)->Int());
+  if (fileToLoad.empty())
   {
     mShouldRemovePreModel[slot].store(true);
     mVolumPreIsLoading[slot].store(false);
@@ -384,13 +386,48 @@ void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
   }
 
   mVolumPreIsLoading[slot].store(true);
-  const std::string fileToLoad = (std::filesystem::path(mVolumRigsRoot) / "PrePedals" / filename).string();
   _VolumQueuePreNamLoad(slot, fileToLoad);
 }
 
 void NeuralAmpModeler::_VolumRequestSupportModelLoad()
 {
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
+
+  // Custom SUPPORT partner (F6 dual amp): resolve the .nam from the custom amp's
+  // manifest (content library) for the focused (slot, channel) rather than the
+  // factory rig tree. supportAmpIdx is -1 while a custom partner is active.
+  if (mVolumCustomSupportIdx >= 0)
+  {
+    if (!dualActive)
+    {
+      mShouldRemoveSupportModel.store(true);
+      mVolumSupportIsLoading.store(false);
+      mVolumLastLoadedSupportFile.clear();
+      return;
+    }
+    const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
+    std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomSupportSlot, mVolumCustomSupportChannel);
+    if (rel.empty())
+    {
+      int s = volum::custom::kDirectSlot, c = 1;
+      if (volum::content::DefaultCaptureSelection(amp, s, c))
+        rel = volum::content::CaptureFileFor(amp, s, c);
+    }
+    const std::string fileToLoad =
+      rel.empty() ? std::string() : volum::content::GlobalContentStore().ResolveStored(rel).string();
+    if (fileToLoad.empty())
+    {
+      mShouldRemoveSupportModel.store(true);
+      mVolumSupportIsLoading.store(false);
+      mVolumLastLoadedSupportFile.clear();
+      return;
+    }
+    mVolumSupportIsLoading.store(true);
+    mVolumLastLoadedSupportFile = std::filesystem::path(fileToLoad).filename().string();
+    _VolumQueueSupportModelLoad(fileToLoad, -1); // -1 = custom: skip factory prefetch
+    return;
+  }
+
   const int supportAmpIdx = GetParam(kSupportAmpIdx)->Int();
   if (!dualActive || supportAmpIdx < 0 || supportAmpIdx >= volum::kAmpCount || mVolumRigsRoot.empty())
   {
@@ -419,7 +456,8 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
     SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
   }
 
-  const auto rigPath = fs::path(mVolumRigsRoot) / volum::kAmps[supportAmpIdx].folderName / channels[channelIdx].filename;
+  const auto rigPath =
+    fs::path(mVolumRigsRoot) / volum::kAmps[supportAmpIdx].folderName / channels[channelIdx].filename;
   std::error_code ec;
   const std::string fileToLoad = fs::weakly_canonical(rigPath, ec).string();
   if (fileToLoad.empty())

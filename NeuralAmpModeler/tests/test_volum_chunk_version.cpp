@@ -10,7 +10,7 @@
 
 namespace
 {
-template<typename T>
+template <typename T>
 void AppendBytes(std::vector<unsigned char>& bytes, const T& value)
 {
   const auto* first = reinterpret_cast<const unsigned char*>(&value);
@@ -120,10 +120,10 @@ void AppendCurrentPerAmpBlock(std::vector<unsigned char>& bytes)
   const double reverbPreDelay = 30.0;
   const double reverbShimmer = 0.0;
   AppendBytes(bytes, postValid);
-  AppendBytes(bytes, inactive);     // postDelayActive
+  AppendBytes(bytes, inactive); // postDelayActive
   AppendBytes(bytes, delayMode);
-  AppendBytes(bytes, inactive);     // postDelayPingPong
-  AppendBytes(bytes, inactive);     // postReverbActive
+  AppendBytes(bytes, inactive); // postDelayPingPong
+  AppendBytes(bytes, inactive); // postReverbActive
   AppendBytes(bytes, reverbMode);
   AppendBytes(bytes, reverbSubMode);
   AppendBytes(bytes, delayTime);
@@ -265,12 +265,8 @@ TEST_CASE("Reverb mix equal-power remap matches expected values per mode")
   // before the arcsin.
   constexpr double kHallPlateTrim = 1.55;
   constexpr double kHalfPi = 1.57079632679489661923;
-  auto hallPlate = [&](double oldMix) {
-    return std::asin(oldMix / kHallPlateTrim) / kHalfPi;
-  };
-  auto oktaverbCap = [&](double oldMix, double cap) {
-    return std::asin(oldMix * cap) / (cap * kHalfPi);
-  };
+  auto hallPlate = [&](double oldMix) { return std::asin(oldMix / kHallPlateTrim) / kHalfPi; };
+  auto oktaverbCap = [&](double oldMix, double cap) { return std::asin(oldMix * cap) / (cap * kHalfPi); };
 
   // Hall (mode 0)
   CHECK(volum::RemapReverbMixToEqualPowerV0_9_3(0.32, 0, 0) == doctest::Approx(hallPlate(0.32)));
@@ -293,4 +289,29 @@ TEST_CASE("Reverb mix equal-power remap predicate")
   CHECK(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.9.2")));
   CHECK_FALSE(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.9.3")));
   CHECK_FALSE(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion("0.10.0")));
+}
+
+TEST_CASE("VoLum 1.x chunks use the 0.7.15 serialized config + extended per-amp tail")
+{
+  // Contract for the 1.2.0 BYO/preset id tail: the id tail is appended AFTER the
+  // 0.7.15 extended per-amp tail and is version-agnostic, so 1.0.0 / 1.0.1 /
+  // 1.1.0 / 1.2.0 chunks all flow through the same config + per-amp branches.
+  for (const char* v : {"1.0.0", "1.0.1", "1.1.0", "1.2.0"})
+  {
+    CHECK(volum::ChunkUses0715SerializedConfig(volum::ChunkVersion(v)));
+    CHECK_FALSE(volum::ShouldRemapReverbMixForChunkVersion(volum::ChunkVersion(v)));
+    CHECK_FALSE(volum::ShouldRemapOktaverbSubModeForChunkVersion(volum::ChunkVersion(v)));
+  }
+
+  // The extended/dual/post detectors are byte-count based and monotonic, so a
+  // trailing id tail (extra bytes after the fixed tail) keeps every block that
+  // SHOULD be present detected as present.
+  std::vector<unsigned char> bytes;
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    AppendCurrentPerAmpBlock(bytes);
+  const int withIdTail = static_cast<int>(bytes.size()) + 64; // arbitrary id-tail bytes
+  CHECK(volum::ChunkHasExtendedPerAmpSettings(withIdTail, volum::kAmpCount));
+  CHECK(volum::ChunkHasDualAmpPerAmpSettings(withIdTail, volum::kAmpCount));
+  CHECK(volum::ChunkHasPostPerAmpSettings(withIdTail, volum::kAmpCount));
+  CHECK(volum::ChunkHasPostSnapshotPerAmpSettings(withIdTail, volum::kAmpCount));
 }

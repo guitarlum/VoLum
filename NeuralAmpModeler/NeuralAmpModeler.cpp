@@ -32,6 +32,7 @@
 #include "VoLumProcessingPlan.h"
 // VoLum: chunk codec, settings I/O, and custom controls (upstream-equivalent file fence)
 #include "VoLumChunkCodec.h"
+#include "VoLumChunkIdTail.h"
 #include "VoLumUserSettingsIO.h"
 #include "VoLumControls.h"
 #include "VoLumCustomUi.h"
@@ -95,23 +96,31 @@ const IColor kGoldDim(255, 138, 112, 48);
 const IColor kTeal(255, 91, 196, 196);
 const IColor kTealBright(255, 156, 224, 224);
 const IVColorSpec volumColorSpec{
-  IColor(255, 17, 17, 24),        // Background
-  kGold,                           // Foreground
-  kGold.WithOpacity(0.3f),         // Pressed
-  kGold.WithOpacity(0.25f),        // Frame
-  kGold.WithOpacity(0.5f),         // Highlight (hover)
-  DEFAULT_SHCOLOR,                 // Shadow
-  kGold,                           // Extra 1
-  COLOR_RED,                       // Extra 2 (clipping)
-  kGold.WithContrast(0.1f),        // Extra 3
+  IColor(255, 17, 17, 24), // Background
+  kGold, // Foreground
+  kGold.WithOpacity(0.3f), // Pressed
+  kGold.WithOpacity(0.25f), // Frame
+  kGold.WithOpacity(0.5f), // Highlight (hover)
+  DEFAULT_SHCOLOR, // Shadow
+  kGold, // Extra 1
+  COLOR_RED, // Extra 2 (clipping)
+  kGold.WithContrast(0.1f), // Extra 3
 };
 const IColor kGoldBright(255, 252, 235, 218);
-const IVStyle volumStyle =
-  IVStyle{true, true, volumColorSpec,
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, kGoldBright},
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, kGoldBright},
-          DEFAULT_HIDE_CURSOR, DEFAULT_DRAW_FRAME, false, DEFAULT_EMBOSS,
-          0.2f, 2.f, DEFAULT_SHADOW_OFFSET, DEFAULT_WIDGET_FRAC, DEFAULT_WIDGET_ANGLE};
+const IVStyle volumStyle = IVStyle{true,
+                                   true,
+                                   volumColorSpec,
+                                   {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, kGoldBright},
+                                   {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, kGoldBright},
+                                   DEFAULT_HIDE_CURSOR,
+                                   DEFAULT_DRAW_FRAME,
+                                   false,
+                                   DEFAULT_EMBOSS,
+                                   0.2f,
+                                   2.f,
+                                   DEFAULT_SHADOW_OFFSET,
+                                   DEFAULT_WIDGET_FRAC,
+                                   DEFAULT_WIDGET_ANGLE};
 const IVStyle volumKnobStyle =
   volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.75f);
 // Same vector-knob style, but with the X1/X3 colours retuned to teal so the rotating pointer
@@ -120,12 +129,9 @@ const IVStyle volumKnobStyleSupport =
   volumKnobStyle.WithColor(EVColor::kX1, kTeal).WithColor(EVColor::kX3, kTealBright);
 // Pan knob style: transparent background and no frame so it sits flush on the hero art rather
 // than punching a square dark patch through the lane fill.
-const IVStyle volumPanKnobStyle = volumKnobStyle
-  .WithColor(EVColor::kBG, COLOR_TRANSPARENT)
-  .WithDrawShadows(false);
-const IVStyle volumPanKnobStyleSupport = volumKnobStyleSupport
-  .WithColor(EVColor::kBG, COLOR_TRANSPARENT)
-  .WithDrawShadows(false);
+const IVStyle volumPanKnobStyle = volumKnobStyle.WithColor(EVColor::kBG, COLOR_TRANSPARENT).WithDrawShadows(false);
+const IVStyle volumPanKnobStyleSupport =
+  volumKnobStyleSupport.WithColor(EVColor::kBG, COLOR_TRANSPARENT).WithDrawShadows(false);
 
 // Hero-friendly knob: identical interaction to NAMKnobControl (keyboard nudge, value entry,
 // selection ring) but skips the square knob bitmap. Lets the dial sit flush on the hero art.
@@ -154,15 +160,15 @@ public:
       g.FillCircle(accent.WithOpacity(0.15f), cx, cy, widgetRadius + 3.f);
 
     // Subtle outer ring matches the lane accent without a heavy disc fill.
-    g.DrawCircle(accent.WithOpacity(mMouseIsOver ? 0.85f : 0.35f), cx, cy, widgetRadius - 0.5f,
-                 nullptr, mMouseIsOver ? 1.75f : 1.f);
+    g.DrawCircle(accent.WithOpacity(mMouseIsOver ? 0.85f : 0.35f), cx, cy, widgetRadius - 0.5f, nullptr,
+                 mMouseIsOver ? 1.75f : 1.f);
     DrawIndicatorTrack(g, angle, cx + 0.5f, cy, widgetRadius);
 
     float data[2][2];
     RadialPoints(angle, cx, cy, mInnerPointerFrac * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
     g.PathCircle(data[1][0], data[1][1], 3.f);
-    g.PathFill(IPattern::CreateRadialGradient(data[1][0], data[1][1], 4.0f,
-                                              {{accent, 0.f}, {accent, 0.8f}, {COLOR_TRANSPARENT, 1.0f}}),
+    g.PathFill(IPattern::CreateRadialGradient(
+                 data[1][0], data[1][1], 4.0f, {{accent, 0.f}, {accent, 0.8f}, {COLOR_TRANSPARENT, 1.0f}}),
                {}, &mBlend);
     g.DrawCircle(COLOR_BLACK.WithOpacity(0.4f), data[1][0], data[1][1], 3.f, &mBlend);
 
@@ -217,10 +223,9 @@ public:
     // (3) Metallic body cap: drop shadow, top-lit radial gradient, accent rim + inner sheen.
     g.FillCircle(IColor(150, 0, 0, 0), cx, cy + 1.5f, bodyR);
     g.PathCircle(cx, cy, bodyR);
-    g.PathFill(IPattern::CreateRadialGradient(cx, cy - bodyR * 0.45f, bodyR * 1.55f,
-                                              {{IColor(255, 60, 60, 73), 0.f},
-                                               {IColor(255, 31, 31, 41), 0.55f},
-                                               {IColor(255, 15, 15, 21), 1.f}}));
+    g.PathFill(IPattern::CreateRadialGradient(
+      cx, cy - bodyR * 0.45f, bodyR * 1.55f,
+      {{IColor(255, 60, 60, 73), 0.f}, {IColor(255, 31, 31, 41), 0.55f}, {IColor(255, 15, 15, 21), 1.f}}));
     g.DrawCircle(accent.WithOpacity(active ? 0.7f : 0.4f), cx, cy, bodyR, &mBlend, 1.2f);
     g.DrawCircle(IColor(34, 255, 255, 255), cx, cy, bodyR - 1.5f, &mBlend, 1.f);
 
@@ -238,16 +243,13 @@ public:
 };
 
 const IVStyle volumToggleStyle =
-  volumStyle.WithShowLabel(false)
-    .WithShowValue(false)
-    .WithDrawFrame(false)
-    .WithWidgetFrac(1.0f);
+  volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(1.0f);
 /** Settings overlay: flat controls on top of VoLumSettingsBackdropControl (no “patch” panels). */
 const IVStyle volumSettingsStyle = volumStyle.WithDrawFrame(false)
-                                    .WithDrawShadows(false)
-                                    .WithColor(EVColor::kBG, COLOR_TRANSPARENT)
-                                    .WithColor(EVColor::kFR, kGold.WithOpacity(0.22f))
-                                    .WithColor(EVColor::kHL, kGold.WithOpacity(0.12f));
+                                     .WithDrawShadows(false)
+                                     .WithColor(EVColor::kBG, COLOR_TRANSPARENT)
+                                     .WithColor(EVColor::kFR, kGold.WithOpacity(0.22f))
+                                     .WithColor(EVColor::kHL, kGold.WithOpacity(0.12f));
 const IVStyle volumSettingsRadioStyle =
   volumSettingsStyle.WithShowLabel(false)
     .WithColor(EVColor::kON, kGold)
@@ -293,8 +295,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kNoiseGateThreshold)->InitGain("Threshold", -80.0, -100.0, 0.0, 0.1);
   GetParam(kNoiseGateActive)->InitBool("NoiseGateActive", true);
   GetParam(kEQActive)->InitBool("ToneStack", true);
-  GetParam(kOutputMode)->InitEnum("OutputMode", volum::kOutputModeDefault,
-                                  {volum::kOutputModeLabels[0], volum::kOutputModeLabels[1], volum::kOutputModeLabels[2]});
+  GetParam(kOutputMode)
+    ->InitEnum("OutputMode", volum::kOutputModeDefault,
+               {volum::kOutputModeLabels[0], volum::kOutputModeLabels[1], volum::kOutputModeLabels[2]});
 #ifdef APP_API
   GetParam(kIRToggle)->InitBool("IRToggle", false);
 #else
@@ -306,8 +309,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kDelayTime)->InitDouble("DelayTime", 320.0, 10.0, 2000.0, 1.0, "ms");
   GetParam(kDelayFeedback)->InitDouble("DelayFeedback", 0.35, 0.0, 0.99, 0.01);
   GetParam(kDelayMix)->InitDouble("DelayMix", 0.28, 0.0, 1.0, 0.01);
-  GetParam(kDelayMode)->InitEnum("DelayMode", volum::kVoLumDelayModeDigital,
-                                  {"Digital", "Analog", "Reverse"});
+  GetParam(kDelayMode)->InitEnum("DelayMode", volum::kVoLumDelayModeDigital, {"Digital", "Analog", "Reverse"});
   GetParam(kDelayTone)->InitDouble("DelayTone", 0.5, 0.0, 1.0, 0.01);
   GetParam(kDelayAge)->InitDouble("DelayAge", 0.0, 0.0, 1.0, 0.01);
   GetParam(kDelayPingPong)->InitBool("DelayPingPong", false);
@@ -319,8 +321,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kReverbTone)->InitDouble("ReverbTone", 5.0, 0.0, 10.0, 0.1);
   GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 30.0, 0.0, 200.0, 1.0, "ms");
   GetParam(kReverbShimmer)->InitDouble("ReverbShimmer", 0.0, 0.0, 1.0, 0.01);
-  GetParam(kReverbMode)->InitEnum("ReverbMode", volum::kVoLumReverbModeHall,
-                                  {"Hall", "Plate", "Oktaverb"});
+  GetParam(kReverbMode)->InitEnum("ReverbMode", volum::kVoLumReverbModeHall, {"Hall", "Plate", "Oktaverb"});
   // Oktaverb-only sub-toggle.
   GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 1, {"Halo", "Shimmer", "Bloom"});
 
@@ -360,10 +361,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
   GetParam(kVoLumAmpeteRig)
     ->InitEnum("RigFile", 0,
-      {volum::kAmpeteFiles[0], volum::kAmpeteFiles[1], volum::kAmpeteFiles[2], volum::kAmpeteFiles[3],
-       volum::kAmpeteFiles[4], volum::kAmpeteFiles[5], volum::kAmpeteFiles[6], volum::kAmpeteFiles[7],
-       volum::kAmpeteFiles[8], volum::kAmpeteFiles[9], volum::kAmpeteFiles[10], volum::kAmpeteFiles[11],
-       volum::kAmpeteFiles[12], volum::kAmpeteFiles[13], volum::kAmpeteFiles[14], volum::kAmpeteFiles[15]});
+               {volum::kAmpeteFiles[0], volum::kAmpeteFiles[1], volum::kAmpeteFiles[2], volum::kAmpeteFiles[3],
+                volum::kAmpeteFiles[4], volum::kAmpeteFiles[5], volum::kAmpeteFiles[6], volum::kAmpeteFiles[7],
+                volum::kAmpeteFiles[8], volum::kAmpeteFiles[9], volum::kAmpeteFiles[10], volum::kAmpeteFiles[11],
+                volum::kAmpeteFiles[12], volum::kAmpeteFiles[13], volum::kAmpeteFiles[14], volum::kAmpeteFiles[15]});
   GetParam(kDualAmpActive)->InitBool("DualAmpActive", false);
   // Default to Custom (per-lane PAN) since the UI no longer surfaces STACK / L-R presets.
   // The enum + values are retained so existing chunks deserialise without migration.
@@ -393,6 +394,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
       mVolumRigsRoot = root.string();
+    // 1.2.0: bind + load the all-format custom-content library (F5-F8). The base
+    // dir is VoLum-owned and writable from standalone/VST3/AU; fall back to a
+    // content/ folder beside the rigs tree if the OS path cannot be resolved.
+    {
+      auto contentDir = volum::VolumContentDir();
+      if (contentDir.empty() && !mVolumRigsRoot.empty())
+        contentDir = std::filesystem::path(mVolumRigsRoot) / "content";
+      if (!contentDir.empty())
+      {
+        volum::content::GlobalContentStore().SetBaseDir(contentDir);
+        volum::content::GlobalContentStore().Load();
+      }
+    }
+    // F5: let the preset bridge capture/apply real live settings and act on the
+    // focused amp's bank.
+    _VolumInstallPresetHooks();
+    _VolumSyncPresetOwner();
     _VolumLoadSettingsFromFile();
     _VolumRestoreFromSettings(mVolumAmpIdx);
     _VolumApplyLiveLockSnapshots();
@@ -430,15 +448,15 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
     pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
     pGraphics->LoadFont("Poiret-One", POIRETONE_FN);
-  #ifdef OS_WIN
+#ifdef OS_WIN
     // NanoVG/GL2 on Windows renders these small Josefin caps thinner than macOS/Metal,
     // so load one weight heavier there to match the macOS readability.
     pGraphics->LoadFont("Josefin-Sans", JOSEFINSANS_BOLD_FN);
     pGraphics->LoadFont("Josefin-Bold", JOSEFINSANS_BOLD_HEAVY_FN);
-  #else
+#else
     pGraphics->LoadFont("Josefin-Sans", JOSEFINSANS_FN);
     pGraphics->LoadFont("Josefin-Bold", JOSEFINSANS_BOLD_FN);
-  #endif
+#endif
 
     const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
@@ -454,20 +472,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float mainCX = mainL + mainW / 2.f;
 
     pGraphics->AttachControl(new VoLumBackgroundControl(b, sidebarW));
-    pGraphics->AttachControl(new VoLumKnobSelectionClearControl(
-      IRECT(mainL, b.T, mainR, b.B),
-      [this]() {
-        _ClearVoLumKnobSelection();
-        _VolumHidePreCaptureMenu();
-        _VolumHideSupportAmpMenu();
-        if (auto* pGfx = GetUI())
-        {
-          if (auto* ir = pGfx->GetControlWithTag(kCtrlTagVoLumIrMenu))
-            ir->Hide(true);
-          if (auto* pm = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
-            pm->Hide(true);
-        }
-      }));
+    pGraphics->AttachControl(new VoLumKnobSelectionClearControl(IRECT(mainL, b.T, mainR, b.B), [this]() {
+      _ClearVoLumKnobSelection();
+      _VolumHidePreCaptureMenu();
+      _VolumHideSupportAmpMenu();
+      if (auto* pGfx = GetUI())
+      {
+        if (auto* ir = pGfx->GetControlWithTag(kCtrlTagVoLumIrMenu))
+          ir->Hide(true);
+        if (auto* pm = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
+          pm->Hide(true);
+      }
+    }));
 
     // Sidebar: logo
     const IRECT logoArea(b.L, b.T + 8.f, b.L + sidebarW, b.T + 48.f);
@@ -476,8 +492,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Sidebar: amp list (names + abbreviations from catalog)
     static const char* ampNames[volum::kAmpCount];
     static const char* ampAbbrs[volum::kAmpCount] = {
-      "A1", "BC", "BX", "DH", "FD", "HK", "LP", "M4", "MJ", "MV", "O1", "O2", "ST", "SL", "TC"
-    };
+      "A1", "BC", "BX", "DH", "FD", "HK", "LP", "M4", "MJ", "MV", "O1", "O2", "ST", "SL", "TC"};
     for (int i = 0; i < volum::kAmpCount; i++)
       ampNames[i] = volum::kAmps[i].displayName;
 
@@ -501,7 +516,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 #endif
 
           auto* pGfx = GetUI();
-          if (!pGfx) return;
+          if (!pGfx)
+            return;
           auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
           auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
           if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
@@ -516,13 +532,15 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
             spk->As<VoLumSpeakerRowControl>()->SetFactoryCabs();
 
-          // F5: refresh the header preset strip to this amp's preset bank (mock).
-          if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-            pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(ampIdx));
-          
-          if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych)) {
-             auto* trip = tripCtrl->As<VoLumTriptychControl>();
-             const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
+          // F5: refresh the header preset strip to this amp's preset bank.
+          _VolumSyncPresetOwner();
+          _VolumRefreshPresetBar();
+
+          if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
+          {
+            auto* trip = tripCtrl->As<VoLumTriptychControl>();
+            const bool preActive =
+              GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
             trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx,
                            volum::kAmps[ampIdx].displayName,
                            _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
@@ -588,8 +606,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (auto* nameCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumSubRowText))
               if (mVolumExpandedSection == EVoLumSection::AMP)
                 nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
-            if (auto* pb = pGfx2->GetControlWithTag(kCtrlTagVoLumPresetBar))
-              pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx));
+            // The deleted custom amp may have been the focused main; fall back to
+            // the active factory amp so the preset bar shows the right bank.
+            if (mVolumCustomMainIdx == customIdx)
+              mVolumCustomMainIdx = -1;
+            else if (mVolumCustomMainIdx > customIdx)
+              --mVolumCustomMainIdx;
+            _VolumSyncPresetOwner();
+            _VolumRefreshPresetBar();
           };
           if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
             dlg->As<VoLumConfirmDialogControl>()->Show(
@@ -616,16 +640,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float hintGap = 10.f;
     const float footerH = 18.f;
 
-    const float contentH = speakerH + 6.f + heroH + 4.f + nameH
-                          + gapAfterAmpName + ampToKnobHairlineH + gapAfterHairline
-                          + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + hintGap + hintH + 6.f + footerH;
+    const float contentH = speakerH + 6.f + heroH + 4.f + nameH + gapAfterAmpName + ampToKnobHairlineH
+                           + gapAfterHairline + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + hintGap + hintH
+                           + 6.f + footerH;
     const float contentTop = b.T + (b.H() - contentH) / 2.f;
 
     // Speaker mode row
     float yPos = contentTop;
     const IRECT speakerArea(mainL, yPos, mainR, yPos + speakerH);
     pGraphics->AttachControl(
-      new VoLumSpeakerRowControl(speakerArea,
+      new VoLumSpeakerRowControl(
+        speakerArea,
         [this](int speakerIdx) {
           // Custom amp focused (MAIN or the custom SUPPORT partner): the cab row
           // is display-only. Switching cabs just retargets that lane's channel
@@ -636,6 +661,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           {
             const int slot = (speakerIdx == 0) ? volum::custom::kDirectSlot : (speakerIdx - 1);
             _VolumSetCustomChannelStepper(customLane, slot, supportFocus);
+            // Switching cab retargets the captured .nam for this lane: pick the
+            // slot's first channel and stage it (F6 audible custom amps).
+            const auto amp = volum::custom::CustomAmpAt(customLane);
+            const auto chs = volum::custom::AmpSlotChannels(amp, slot);
+            const int ch = chs.empty() ? 1 : chs.front();
+            if (supportFocus)
+            {
+              mVolumCustomSupportSlot = slot;
+              mVolumCustomSupportChannel = ch;
+              mVolumSupportNeedsLoad.store(true);
+            }
+            else
+            {
+              mVolumCustomMainSlot = slot;
+              mVolumCustomMainChannel = ch;
+              mVolumNeedsLoad.store(true);
+            }
             _VolumMarkPresetDirty();
             return;
           }
@@ -712,12 +754,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Triptych (PRE | AMP | POST)
     const auto triptychBounds = volum::triptych_layout::BoundsForCenter(mainCX, yPos);
     const IRECT triptychArea = triptychBounds.As<IRECT>();
-    
+
     auto* triptych = new VoLumTriptychControl(triptychArea, [this](EVoLumSection sec, EVoLumEffectFocus focus) {
-        mVolumExpandedSection = sec;
-        mVolumFocusedEffect = focus;
-        _UpdateVoLumLayout();
-        _UpdateVoLumKeyboardFocusHint();
+      mVolumExpandedSection = sec;
+      mVolumFocusedEffect = focus;
+      _UpdateVoLumLayout();
+      _UpdateVoLumKeyboardFocusHint();
     });
     pGraphics->AttachControl(triptych, kCtrlTagVoLumTriptych);
 
@@ -727,7 +769,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // When AMP is expanded, the center of the expanded section is exactly at `mainCX`
     const float newHeroW = volum::triptych_layout::kAmpExpandedW;
     const IRECT heroArea(mainCX - newHeroW / 2.f, yPos, mainCX + newHeroW / 2.f, triptychArea.B);
-    auto* hero = new VoLumHeroImageControl(heroArea,
+    auto* hero = new VoLumHeroImageControl(
+      heroArea,
       [this](bool supportFocused) {
         mVolumDualAmpFocusedSupport = supportFocused;
         mVolumFocusedEffect = EVoLumEffectFocus::AMP;
@@ -767,24 +810,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // transparent background so the knob blends into the hero art instead of punching a square
     // dark patch through it.
     pGraphics->AttachControl(
-      new VoLumPanKnobControl(hero->GetMainPanKnobSlot(), kMainAmpPan, volumPanKnobStyle),
-      -1, "MAIN_PAN_KNOB");
+      new VoLumPanKnobControl(hero->GetMainPanKnobSlot(), kMainAmpPan, volumPanKnobStyle), -1, "MAIN_PAN_KNOB");
     pGraphics->AttachControl(
-      new VoLumPanKnobControl(hero->GetSupportPanKnobSlot(), kSupportAmpPan, volumPanKnobStyleSupport),
-      -1, "SUPPORT_PAN_KNOB");
-    pGraphics->AttachControl(
-      new VoLumSupportPolarityControl(hero->GetSupportPolarityToggleSlot(),
-        [this]() { return mSupportPolarityInvert.load(); },
-        [this]() {
-          const bool next = !mSupportPolarityInvert.load();
-          mSupportPolarityInvert.store(next);
-          mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = next;
-          mVolumSettingsDirty = true;
-          _VolumMarkPresetDirty();
-          if (auto* pGfx = GetUI())
-            pGfx->SetAllControlsDirty();
-        }),
-      -1, "SUPPORT_POLARITY_TOGGLE");
+      new VoLumPanKnobControl(hero->GetSupportPanKnobSlot(), kSupportAmpPan, volumPanKnobStyleSupport), -1,
+      "SUPPORT_PAN_KNOB");
+    pGraphics->AttachControl(new VoLumSupportPolarityControl(
+                               hero->GetSupportPolarityToggleSlot(), [this]() { return mSupportPolarityInvert.load(); },
+                               [this]() {
+                                 const bool next = !mSupportPolarityInvert.load();
+                                 mSupportPolarityInvert.store(next);
+                                 mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = next;
+                                 mVolumSettingsDirty = true;
+                                 _VolumMarkPresetDirty();
+                                 if (auto* pGfx = GetUI())
+                                   pGfx->SetAllControlsDirty();
+                               }),
+                             -1, "SUPPORT_POLARITY_TOGGLE");
 
     const auto preCards = volum::triptych_layout::ComputePreCards(
       volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::PRE).pre);
@@ -792,10 +833,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::POST).post);
 
     auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
-        (void) isBypassClick;
-        mVolumFocusedEffect = card->GetEffect();
-        _UpdateVoLumLayout();
-        _UpdateVoLumKeyboardFocusHint();
+      (void)isBypassClick;
+      mVolumFocusedEffect = card->GetEffect();
+      _UpdateVoLumLayout();
+      _UpdateVoLumKeyboardFocusHint();
     };
 
     auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
@@ -806,7 +847,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto* preNam2Card = new VoLumPedalCardControl(preCards.nam2.As<IRECT>(), EVoLumEffectFocus::PRE_NAM2, onPedalClick);
     auto* preChainLink1 = new VoLumChainConnectorControl(preCards.connector1.As<IRECT>());
     auto* preChainLink2 = new VoLumChainConnectorControl(preCards.connector2.As<IRECT>());
-    
+
     pGraphics->AttachControl(compCard, kCtrlTagVoLumCompCard)->Hide(true);
     pGraphics->AttachControl(preChainLink1, kCtrlTagVoLumPreChainConnector1)->Hide(true);
     pGraphics->AttachControl(preNam1Card, kCtrlTagVoLumPreNam1Card)->Hide(true);
@@ -834,9 +875,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto knobX = [&](int slot) -> float {
       float x = rowLeft;
       int dividers = 0;
-      if (slot > 0) dividers++;
-      if (slot > 2) dividers++;
-      if (slot > 5) dividers++;
+      if (slot > 0)
+        dividers++;
+      if (slot > 2)
+        dividers++;
+      if (slot > 5)
+        dividers++;
       return x + slot * colW + dividers * divW;
     };
 
@@ -850,24 +894,47 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                            bool center_offset = false, int centerSlots = 3, int centerStart = 2,
                            float centerOffset = 0.f, float centerColW = 80.f) {
       float customColW = center_offset ? centerColW : colW;
-      float cx = center_offset ? (mainCX + centerOffset - (centerSlots * customColW) / 2.f + (slot - centerStart) * customColW + (customColW / 2.f)) : knobX(slot) + (colW / 2.f);
+      float cx = center_offset ? (mainCX + centerOffset - (centerSlots * customColW) / 2.f
+                                  + (slot - centerStart) * customColW + (customColW / 2.f))
+                               : knobX(slot) + (colW / 2.f);
       float kL = cx - (knobDiam / 2.f);
 
       // Use a wider label rect (-40.f to +40.f = 80px wide) to prevent "FEEDBACK" clipping
-      pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), label), -1, group);
-      auto* knob = new VoLumDialKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), label), -1, group);
+      auto* knob = new VoLumDialKnobControl(
+        IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(knob, -1, group);
       knob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == paramId);
-      pGraphics->AttachControl(new VoLumParamValueControl(IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), paramId, suffix), -1, group);
+      pGraphics->AttachControl(
+        new VoLumParamValueControl(
+          IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), paramId, suffix),
+        -1, group);
     };
 
     // AMP KNOBS
     {
       float cx = knobX(0);
-      pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(cx, knobRowTop, cx + colW, knobRowTop + 20.f), "CHANNEL", true), -1, "AMP_KNOBS");
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(IRECT(cx, knobRowTop, cx + colW, knobRowTop + 20.f), "CHANNEL", true), -1,
+        "AMP_KNOBS");
       float stepH = 28.f;
       float stepTop = knobT + (knobDiam - stepH) / 2.f;
-      auto* channelStep = new VoLumChannelStepControl(IRECT(cx, stepTop, cx + colW, stepTop + stepH), [this](int newIdx) {
+      auto* channelStep =
+        new VoLumChannelStepControl(IRECT(cx, stepTop, cx + colW, stepTop + stepH), [this](int newIdx) {
+          // When a custom MAIN amp is focused, the stepper lists that amp's slot
+          // channels; map the selected row to a channel number and stage its .nam.
+          const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
+          if (mVolumCustomMainIdx >= 0 && !supportFocus)
+          {
+            const auto amp = volum::custom::CustomAmpAt(mVolumCustomMainIdx);
+            const auto chs = volum::custom::AmpSlotChannels(amp, mVolumCustomMainSlot);
+            if (newIdx >= 0 && newIdx < (int)chs.size())
+              mVolumCustomMainChannel = chs[(size_t)newIdx];
+            mVolumNeedsLoad.store(true);
+            _VolumMarkPresetDirty();
+            return;
+          }
           mVolumChannelIdx = newIdx;
           mVolumAmpSettings[mVolumAmpIdx].channelIdx = newIdx;
           mVolumSettingsDirty = true;
@@ -891,10 +958,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Visibility is toggled on lane focus so the user sees one row at a time in the same slots.
     {
       float cx = knobX(0);
-      pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(cx, knobRowTop, cx + colW, knobRowTop + 20.f), "CHANNEL", true), -1, "SUPPORT_AMP_KNOBS");
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(IRECT(cx, knobRowTop, cx + colW, knobRowTop + 20.f), "CHANNEL", true), -1,
+        "SUPPORT_AMP_KNOBS");
       float stepH = 28.f;
       float stepTop = knobT + (knobDiam - stepH) / 2.f;
-      auto* supChannelStep = new VoLumChannelStepControl(IRECT(cx, stepTop, cx + colW, stepTop + stepH), [this](int newIdx) {
+      auto* supChannelStep =
+        new VoLumChannelStepControl(IRECT(cx, stepTop, cx + colW, stepTop + stepH), [this](int newIdx) {
           GetParam(kSupportChannelIdx)->Set(newIdx);
           SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
           mVolumSupportNeedsLoad.store(true);
@@ -923,7 +993,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(4, "PRE-DLY", kReverbPreDelay, "ms", "REVERB_PREDELAY", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(5, "INTENSITY", kReverbShimmer, "%", "REVERB_SHIMMER", true, 5, 1, effectKnobOffset, effectColW);
     IRECT reverbPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE", "OKTAVERB"}), -1, "REVERB_KNOBS");
+    pGraphics->AttachControl(
+      new VoLumModePickerControl(reverbPickerRect, kReverbMode, {"HALL", "PLATE", "OKTAVERB"}), -1, "REVERB_KNOBS");
 
     // Reverb sub-mode pill is currently used by Oktaverb only. Keep the reusable pill UI,
     // including the slimmer row and hover feedback, but do not expose placeholder modes.
@@ -933,13 +1004,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float subPillH = 28.f;
     const float subPillY = knobT + knobDiam + valueH + 18.f;
     IRECT reverbSubPillRect(mainCX - subPillW / 2.f, subPillY, mainCX + subPillW / 2.f, subPillY + subPillH);
-    auto* reverbSubPill = new VoLumSubModePillControl(reverbSubPillRect, kReverbSubMode,
-                                                     {"HALO", "SHIMMER", "BLOOM"});
+    auto* reverbSubPill = new VoLumSubModePillControl(reverbSubPillRect, kReverbSubMode, {"HALO", "SHIMMER", "BLOOM"});
     pGraphics->AttachControl(reverbSubPill, -1, "REVERB_SUBTOGGLE");
     mVolumReverbSubModePill = reverbSubPill;
 
     float revSwX = mainCX - 242.f;
-    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(revSwX - 14.f, knobT - 4.f, revSwX + 14.f, knobT + knobDiam + 2.f), kReverbActive), -1, "REVERB_POWER");
+    pGraphics->AttachControl(new VoLumPowerSwitchControl(
+                               IRECT(revSwX - 14.f, knobT - 4.f, revSwX + 14.f, knobT + knobDiam + 2.f), kReverbActive),
+                             -1, "REVERB_POWER");
 
     // DELAY KNOBS (Centered) - 5 slots: TIME, FEEDBACK, MIX, TONE, AGE
     drawKnobCol(1, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
@@ -953,21 +1025,25 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     {
       const int slot = 5;
       const float customColW = effectColW;
-      const float cx = mainCX + effectKnobOffset - (5 * customColW) / 2.f + (slot - 1) * customColW + (customColW / 2.f);
+      const float cx =
+        mainCX + effectKnobOffset - (5 * customColW) / 2.f + (slot - 1) * customColW + (customColW / 2.f);
       const float kL = cx - (knobDiam / 2.f);
       auto* ageLabel = new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), "AGE");
       pGraphics->AttachControl(ageLabel, -1, "DELAY_KNOBS");
-      auto* ageKnob = new VoLumDialKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), kDelayAge, "", volumKnobStyle, knobBackgroundBitmap);
+      auto* ageKnob = new VoLumDialKnobControl(
+        IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), kDelayAge, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(ageKnob, -1, "DELAY_KNOBS");
       ageKnob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == kDelayAge);
-      auto* ageValue = new VoLumParamValueControl(IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), kDelayAge, "");
+      auto* ageValue = new VoLumParamValueControl(
+        IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), kDelayAge, "");
       pGraphics->AttachControl(ageValue, -1, "DELAY_KNOBS");
       mVolumDelayAgeLabel = ageLabel;
       mVolumDelayAgeKnob = ageKnob;
       mVolumDelayAgeValue = ageValue;
     }
     IRECT delayPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(new VoLumModePickerControl(delayPickerRect, kDelayMode, {"DIGITAL", "ANALOG", "REVERSE"}), -1, "DELAY_KNOBS");
+    pGraphics->AttachControl(
+      new VoLumModePickerControl(delayPickerRect, kDelayMode, {"DIGITAL", "ANALOG", "REVERSE"}), -1, "DELAY_KNOBS");
 
     // Delay PingPong toggle sits below the knob block.
     // Layout: [toggle][PING-PONG label]
@@ -983,17 +1059,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float ppSwitchX = mainCX - 220.f;
     const float ppLabelW = 90.f;
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(ppSwitchX, ppSwitchY, ppSwitchX + ppSwitchW, ppSwitchY + ppSwitchH),
-                           kDelayPingPong, "", volumToggleStyle, switchHandleBitmap),
+      new NAMSwitchControl(IRECT(ppSwitchX, ppSwitchY, ppSwitchX + ppSwitchW, ppSwitchY + ppSwitchH), kDelayPingPong,
+                           "", volumToggleStyle, switchHandleBitmap),
       -1, "DELAY_PINGPONG");
     pGraphics->AttachControl(
-      new VoLumKnobLabelControl(IRECT(ppSwitchX + ppSwitchW + 4.f, ppSwitchY,
-                                       ppSwitchX + ppSwitchW + 4.f + ppLabelW, ppSwitchY + ppSwitchH),
-                                "PING-PONG"),
+      new VoLumKnobLabelControl(
+        IRECT(ppSwitchX + ppSwitchW + 4.f, ppSwitchY, ppSwitchX + ppSwitchW + 4.f + ppLabelW, ppSwitchY + ppSwitchH),
+        "PING-PONG"),
       -1, "DELAY_PINGPONG");
 
     float dlySwX = mainCX - 242.f;
-    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(dlySwX - 14.f, knobT - 4.f, dlySwX + 14.f, knobT + knobDiam + 2.f), kDelayActive), -1, "DELAY_POWER");
+    pGraphics->AttachControl(new VoLumPowerSwitchControl(
+                               IRECT(dlySwX - 14.f, knobT - 4.f, dlySwX + 14.f, knobT + knobDiam + 2.f), kDelayActive),
+                             -1, "DELAY_POWER");
 
     // PRE KNOBS
     drawKnobCol(1, "GAIN", kPreNam1Gain, "dB", "PRE_NAM1_KNOBS", true, 6, 1, 0.f, 66.f);
@@ -1018,9 +1096,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(5, "OUTPUT", kPreCompLevel, "dB", "COMP_KNOBS", true, 6, 1, 0.f, 66.f);
 
     const float preSwX = mainCX - 242.f;
-    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreCompActive), -1, "COMP_POWER");
-    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreNam1Active), -1, "PRE_NAM1_POWER");
-    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreNam2Active), -1, "PRE_NAM2_POWER");
+    pGraphics->AttachControl(
+      new VoLumPowerSwitchControl(
+        IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreCompActive),
+      -1, "COMP_POWER");
+    pGraphics->AttachControl(
+      new VoLumPowerSwitchControl(
+        IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreNam1Active),
+      -1, "PRE_NAM1_POWER");
+    pGraphics->AttachControl(
+      new VoLumPowerSwitchControl(
+        IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreNam2Active),
+      -1, "PRE_NAM2_POWER");
 
     // I/O meters
     const float meterW = 8.f;
@@ -1035,8 +1122,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float inLabelR = inMeterL - gapLabelToMeter;
     const float inLabelL = inLabelR - meterLabelStripW;
 
-    pGraphics->AttachControl(new VoLumVerticalLabelControl(IRECT(inLabelL, meterTop, inLabelR, meterTop + meterH), "IN"));
-    pGraphics->AttachControl(new NAMMeterControl(IRECT(inMeterL, meterTop, inMeterR, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagInputMeter);
+    pGraphics->AttachControl(
+      new VoLumVerticalLabelControl(IRECT(inLabelL, meterTop, inLabelR, meterTop + meterH), "IN"));
+    pGraphics->AttachControl(
+      new NAMMeterControl(IRECT(inMeterL, meterTop, inMeterR, meterTop + meterH), meterBackgroundBitmap, volumStyle),
+      kCtrlTagInputMeter);
 
     const float rowRight = knobX(6) + colW;
     const float outMeterL = rowRight + gapMeterToKnob;
@@ -1049,9 +1139,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const float outLabelL = outMeter2R + gapLabelToMeter;
     const float outLabelR = outLabelL + meterLabelStripW;
 
-    pGraphics->AttachControl(new NAMMeterControl(IRECT(outMeterL, meterTop, outMeterR, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagOutputMeter);
-    pGraphics->AttachControl(new NAMMeterControl(IRECT(outMeter2L, meterTop, outMeter2R, meterTop + meterH), meterBackgroundBitmap, volumStyle), kCtrlTagOutputMeterR);
-    pGraphics->AttachControl(new VoLumVerticalLabelControl(IRECT(outLabelL, meterTop, outLabelR, meterTop + meterH), "OUT"));
+    pGraphics->AttachControl(
+      new NAMMeterControl(IRECT(outMeterL, meterTop, outMeterR, meterTop + meterH), meterBackgroundBitmap, volumStyle),
+      kCtrlTagOutputMeter);
+    pGraphics->AttachControl(new NAMMeterControl(IRECT(outMeter2L, meterTop, outMeter2R, meterTop + meterH),
+                                                 meterBackgroundBitmap, volumStyle),
+                             kCtrlTagOutputMeterR);
+    pGraphics->AttachControl(
+      new VoLumVerticalLabelControl(IRECT(outLabelL, meterTop, outLabelR, meterTop + meterH), "OUT"));
 
     // Toggles: slide switch + label side by side
     const float toggleY = knobT + knobDiam + valueH + 2.f + 10.f;
@@ -1067,20 +1162,34 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     float eqX = mainCX + 30.f;
 
     // MAIN lane toggles (NOISE GATE / EQ bound to MAIN params)
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH),
+                                                  kNoiseGateActive, "", volumToggleStyle, switchHandleBitmap),
+                             kCtrlTagVoLumNoiseGate, "MAIN_LANE_TOGGLES");
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH), kNoiseGateActive, "", volumToggleStyle, switchHandleBitmap), kCtrlTagVoLumNoiseGate, "MAIN_LANE_TOGGLES");
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"), -1, "MAIN_LANE_TOGGLES");
+      new VoLumKnobLabelControl(
+        IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"),
+      -1, "MAIN_LANE_TOGGLES");
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH), kEQActive, "",
+                                                  volumToggleStyle, switchHandleBitmap),
+                             kCtrlTagVoLumEQ, "MAIN_LANE_TOGGLES");
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH), kEQActive, "", volumToggleStyle, switchHandleBitmap), kCtrlTagVoLumEQ, "MAIN_LANE_TOGGLES");
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), -1, "MAIN_LANE_TOGGLES");
+      new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), -1,
+      "MAIN_LANE_TOGGLES");
 
     // SUPPORT lane toggles (identical positions, bound to SUPPORT params).
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH),
+                                                  kSupportNoiseGateActive, "", volumToggleStyle, switchHandleBitmap),
+                             -1, "SUPPORT_LANE_TOGGLES");
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(ngX, toggleY, ngX + switchW, toggleY + switchH), kSupportNoiseGateActive, "", volumToggleStyle, switchHandleBitmap), -1, "SUPPORT_LANE_TOGGLES");
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"), -1, "SUPPORT_LANE_TOGGLES");
+      new VoLumKnobLabelControl(
+        IRECT(ngX + switchW + 4.f, toggleY, ngX + switchW + 90.f, toggleY + switchH), "NOISE GATE"),
+      -1, "SUPPORT_LANE_TOGGLES");
+    pGraphics->AttachControl(new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH),
+                                                  kSupportEQActive, "", volumToggleStyle, switchHandleBitmap),
+                             -1, "SUPPORT_LANE_TOGGLES");
     pGraphics->AttachControl(
-      new NAMSwitchControl(IRECT(eqX, toggleY, eqX + switchW, toggleY + switchH), kSupportEQActive, "", volumToggleStyle, switchHandleBitmap), -1, "SUPPORT_LANE_TOGGLES");
-    pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), -1, "SUPPORT_LANE_TOGGLES");
+      new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), -1,
+      "SUPPORT_LANE_TOGGLES");
 
     const IRECT hintArea(mainCX - 270.f, toggleY + toggleH + 10.f, mainCX + 270.f, toggleY + toggleH + 10.f + 44.f);
     pGraphics->AttachControl(new VoLumKeyboardHintControl(hintArea), kCtrlTagVoLumKeyboardHint);
@@ -1089,11 +1198,15 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const IRECT footerArea(mainL, hintArea.B + 6.f, mainR, hintArea.B + 6.f + 18.f);
     pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
     if (!mVolumLastLoadedFile.empty())
-      pGraphics->GetControlWithTag(kCtrlTagVoLumFooter)->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
+      pGraphics->GetControlWithTag(kCtrlTagVoLumFooter)
+        ->As<VoLumFooterControl>()
+        ->SetText(mVolumLastLoadedFile.c_str());
 
     pGraphics->AttachControl(new VoLumExactEntryControl(b, kInputLevel, "INPUT"), kCtrlTagVoLumExactEntry)->Hide(true);
-    pGraphics->AttachControl(new VoLumPreCaptureMenuControl(IRECT(mainL, knobRowTop, mainL + 220.f, knobRowTop + 160.f)),
-                             kCtrlTagVoLumPreCaptureMenu)->Hide(true);
+    pGraphics
+      ->AttachControl(new VoLumPreCaptureMenuControl(IRECT(mainL, knobRowTop, mainL + 220.f, knobRowTop + 160.f)),
+                      kCtrlTagVoLumPreCaptureMenu)
+      ->Hide(true);
     // Dual-amp SUPPORT picker: scrollable list with "(none)" + factory amps.
     // Dual-amp SUPPORT picker: scrollable list with "(none)" + factory amps + a
     // "CUSTOM" group (shown only when custom amps exist). Picking a custom amp
@@ -1117,7 +1230,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // — SUPPORT_AMP_KNOBS is only ever visible while support is focused, so no retoggling.
     pGraphics->ForAllControlsFunc([](iplug::igraphics::IControl* c) {
       const char* g = c->GetGroup();
-      if (!g || std::strcmp(g, "SUPPORT_AMP_KNOBS") != 0) return;
+      if (!g || std::strcmp(g, "SUPPORT_AMP_KNOBS") != 0)
+        return;
       if (auto* knob = dynamic_cast<NAMKnobControl*>(c))
         knob->SetStyle(volumKnobStyleSupport);
     });
@@ -1139,16 +1253,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       // Tuner button
       auto* pPlugin = this;
-      pGraphics->AttachControl(new NAMCircleButtonControl(
-        tunerArea,
-        [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); },
-        tunerSVG));
+      pGraphics->AttachControl(
+        new NAMCircleButtonControl(tunerArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); }, tunerSVG));
 
       // Metronome button
-      pGraphics->AttachControl(new VoLumMetronomeButtonControl(
-        metronomeArea,
-        [pPlugin](IControl*) { pPlugin->_ToggleVoLumMetronomePanel(); },
-        metronomeSVG), kCtrlTagVoLumMetronomeButton);
+      pGraphics->AttachControl(
+        new VoLumMetronomeButtonControl(
+          metronomeArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumMetronomePanel(); }, metronomeSVG),
+        kCtrlTagVoLumMetronomeButton);
 
       // Gear button
       pGraphics->AttachControl(new NAMCircleButtonControl(
@@ -1177,12 +1289,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         const float presetBarW = 240.f;
         const IRECT presetBarArea(mainCX - presetBarW * 0.5f, b.T + 12.f, mainCX + presetBarW * 0.5f, b.T + 40.f);
         pGraphics->AttachControl(
-          new VoLumPresetBarControl(
-            presetBarArea,
-            [pPlugin]() { pPlugin->_VolumShowPresetMenu(); }),
+          new VoLumPresetBarControl(presetBarArea, [pPlugin]() { pPlugin->_VolumShowPresetMenu(); }),
           kCtrlTagVoLumPresetBar);
         if (auto* pb = pGraphics->GetControlWithTag(kCtrlTagVoLumPresetBar))
-          pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx));
+        {
+          auto* bar = pb->As<VoLumPresetBarControl>();
+          bar->SetRecallCallback([pPlugin](int index) { pPlugin->_VolumRecallPreset(index); });
+          pPlugin->_VolumRefreshPresetBar();
+        }
       }
 
       // F5: preset dropdown (anchored under the preset bar). Picking recalls;
@@ -1196,9 +1310,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (code == VoLumListMenuControl::kManage)
           {
             if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
-              ov->As<VoLumCustomOverlayControl>()->ShowManage(
-                VoLumCustomOverlayControl::ManageKind::Presets, pPlugin->mVolumAmpIdx,
-                volum::kAmps[pPlugin->mVolumAmpIdx].displayName);
+              ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Presets,
+                                                              pPlugin->mVolumAmpIdx,
+                                                              volum::kAmps[pPlugin->mVolumAmpIdx].displayName);
             return;
           }
           if (code == VoLumListMenuControl::kDefault)
@@ -1208,8 +1322,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           }
           const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
           if (code >= 0 && code < (int)presets.size())
-            if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-              pb->As<VoLumPresetBarControl>()->SelectName(presets[(size_t)code].c_str()); // mock recall
+            pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
         });
         pGraphics->AttachControl(presetMenu, kCtrlTagVoLumPresetMenu)->Hide(true);
       }
@@ -1227,16 +1340,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::IR);
             return;
           }
-          auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
-          if (!spk)
-            return;
-          auto* row = spk->As<VoLumSpeakerRowControl>();
           const auto& irs = volum::custom::MockIRLibrary();
           if (code >= 0 && code < (int)irs.size())
-            row->SetIrCab(true, irs[(size_t)code].c_str()); // DIRECT capture + this IR (mock)
+            pPlugin->_VolumSelectIR(code); // stage the IR + enable + persist activeIrId
           else if (code == VoLumListMenuControl::kNone)
-            row->SetIrCab(false, ""); // back to baked cab
-          pPlugin->_VolumMarkPresetDirty();
+            pPlugin->_VolumClearIR(); // back to baked cab
         });
         pGraphics->AttachControl(irMenu, kCtrlTagVoLumIrMenu)->Hide(true);
       }
@@ -1247,9 +1355,31 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         overlay->SetCallbacks(
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
-          [pPlugin](const volum::custom::CustomAmp& amp, int editIdx) {
+          [pPlugin](const volum::custom::CustomAmp& ampIn, int editIdx) {
             // editIdx >= 0 -> the user edited an existing amp: mutate that entry
             // in place so we don't spawn a duplicate. Otherwise append a new one.
+            auto& store = volum::content::GlobalContentStore();
+            volum::custom::CustomAmp amp = ampIn;
+            // F6 import: copy any newly-added captures (those carrying an absolute
+            // sourcePath) into the VoLum-owned amps/ dir and record the resolvable
+            // storedPath. Already-stored files (edit re-save) keep their storedPath.
+            std::string idPrefix = (editIdx >= 0) ? volum::custom::CustomAmpIdAt(editIdx) : std::string();
+            if (idPrefix.empty())
+            {
+              amp.id = volum::content::MintId(store.reg(), "amp");
+              idPrefix = amp.id;
+            }
+            for (size_t i = 0; i < amp.files.size(); ++i)
+            {
+              auto& f = amp.files[i];
+              if (f.sourcePath.empty())
+                continue;
+              const std::string rel =
+                store.ImportFileCopy(std::filesystem::path(f.sourcePath), "amps", idPrefix + "_" + std::to_string(i));
+              if (!rel.empty())
+                f.storedPath = rel;
+              f.sourcePath.clear();
+            }
             const int idx =
               (editIdx >= 0) ? volum::custom::UpdateCustomAmp(editIdx, amp) : volum::custom::AddCustomAmp(amp);
             auto* pGfx = pPlugin->GetUI();
@@ -1265,11 +1395,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               pPlugin->_VolumSelectCustomAmp(idx);
           },
           // preset bank mutated (save/rename/delete) -> re-sync the header strip
-          // for the currently focused factory amp.
-          [pPlugin]() {
-            if (auto* pb = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumPresetBar))
-              pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx));
-          });
+          // for the currently focused amp (factory or custom).
+          [pPlugin]() { pPlugin->_VolumRefreshPresetBar(); });
+        // F5 preset capture: save-as / overwrite snapshot the live scene.
+        overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name); },
+                                    [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); });
         // Manage-panel destructive actions (delete / overwrite) go through the
         // shared confirm modal.
         overlay->SetConfirmCallback(
@@ -1291,8 +1421,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             {
               const auto presets = volum::custom::MockPresetsForAmp(ampIdx);
               if (index >= 0 && index < (int)presets.size())
-                if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-                  pb->As<VoLumPresetBarControl>()->SelectName(presets[(size_t)index].c_str());
+                pPlugin->_VolumRecallPreset(index); // apply settings + drive the bar
             }
             else if (kind == MK::IR)
             {
@@ -1343,9 +1472,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       auto* heroCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
       auto* nameCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
 
-      if (ampList) ampList->SetSelected(mVolumAmpIdx);
-      if (spkRow) spkRow->SetSelected(mVolumSpeakerIdx);
-      if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP) nameCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
+      if (ampList)
+        ampList->SetSelected(mVolumAmpIdx);
+      if (spkRow)
+        spkRow->SetSelected(mVolumSpeakerIdx);
+      if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
+        nameCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
       if (heroCtrl)
       {
         char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
@@ -1358,7 +1490,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // Keyboard: keep the original arrows, add a shallow PRE/AMP/POST focus layer.
     pGraphics->SetKeyHandlerFunc([this](const IKeyPress& key, bool isUp) {
-      if (isUp) return false;
+      if (isUp)
+        return false;
 
       if (auto* pGfx = GetUI())
       {
@@ -1382,8 +1515,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         // anchored dropdown) for consistent dismissal across the UI.
         if (key.VK == kVK_ESCAPE)
         {
-          const int kDismissTags[] = {kCtrlTagVoLumConfirm,    kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumPresetMenu,
-                                      kCtrlTagVoLumIrMenu,     kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+          const int kDismissTags[] = {kCtrlTagVoLumConfirm, kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,
+                                      kCtrlTagVoLumIrMenu,  kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
           for (int tag : kDismissTags)
           {
             if (auto* c = pGfx->GetControlWithTag(tag))
@@ -1417,16 +1550,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         // list / knobs don't move. Non-nav keys fall through to the focused
         // control (text entry etc.).
         {
-          const int kModalTags[] = {kCtrlTagVoLumConfirm,      kCtrlTagVoLumCustomOverlay,
-                                    kCtrlTagVoLumPresetMenu,    kCtrlTagVoLumIrMenu,
-                                    kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+          const int kModalTags[] = {kCtrlTagVoLumConfirm, kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,
+                                    kCtrlTagVoLumIrMenu,  kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
           for (int tag : kModalTags)
           {
             auto* c = pGfx->GetControlWithTag(tag);
             if (!c || c->IsHidden())
               continue;
-            const bool isNav =
-              key.VK == kVK_UP || key.VK == kVK_DOWN || key.VK == kVK_LEFT || key.VK == kVK_RIGHT;
+            const bool isNav = key.VK == kVK_UP || key.VK == kVK_DOWN || key.VK == kVK_LEFT || key.VK == kVK_RIGHT;
             if (tag == kCtrlTagVoLumCustomOverlay && isNav)
             {
               if (c->As<VoLumCustomOverlayControl>()->OnArrowKey(key.VK))
@@ -1474,6 +1605,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
         const int newIdx = newPos;
         mVolumAmpIdx = newIdx;
+        mVolumCustomMainIdx = -1; // keyboard-nav landed on a factory amp
         _VolumRestoreFromSettings(newIdx);
         _VolumRefreshChannels();
         mVolumNeedsLoad.store(true);
@@ -1494,17 +1626,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
             if (mVolumExpandedSection == EVoLumSection::AMP)
               nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[newIdx].displayName, true);
-          // F5: refresh the header preset strip to this amp's bank (mock).
-          if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-            pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(newIdx));
-          if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych)) {
-             auto* trip = tripCtrl->As<VoLumTriptychControl>();
-             const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-             trip->SetState(
-               preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), newIdx,
-               volum::kAmps[newIdx].displayName,
-               _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
-               _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
+          // F5: refresh the header preset strip to this amp's bank.
+          _VolumSyncPresetOwner();
+          _VolumRefreshPresetBar();
+          if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
+          {
+            auto* trip = tripCtrl->As<VoLumTriptychControl>();
+            const bool preActive =
+              GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
+            trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), newIdx,
+                           volum::kAmps[newIdx].displayName,
+                           _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+                           _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
             mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
             mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
             trip->SetDirty(false);
@@ -1525,9 +1658,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
           {
             const int delta = key.VK == kVK_LEFT ? -1 : 1;
-            const int channelCount = !mVolumSupportChannelLabels.empty()
-              ? static_cast<int>(mVolumSupportChannelLabels.size())
-              : 128;
+            const int channelCount =
+              !mVolumSupportChannelLabels.empty() ? static_cast<int>(mVolumSupportChannelLabels.size()) : 128;
             const int current = std::clamp(GetParam(kSupportChannelIdx)->Int(), 0, channelCount - 1);
             const int next = (current + delta + channelCount) % channelCount;
             GetParam(kSupportChannelIdx)->Set(next);
@@ -1547,9 +1679,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               int n = s->GetNumChannels();
               if (n > 0)
               {
-                int newCh = (key.VK == kVK_LEFT)
-                  ? (s->GetSelected() - 1 + n) % n
-                  : (s->GetSelected() + 1) % n;
+                int newCh = (key.VK == kVK_LEFT) ? (s->GetSelected() - 1 + n) % n : (s->GetSelected() + 1) % n;
                 s->SetChannels(mVolumChannelLabels, newCh);
                 mVolumChannelIdx = newCh;
                 mVolumNeedsLoad.store(true);
@@ -1616,13 +1746,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   const bool supportToneStackActive = GetParam(kSupportEQActive)->Bool();
   const bool preNamActive[2] = {GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam2Active)->Bool()};
   const bool havePreNam[2] = {mPreModel[0] != nullptr, mPreModel[1] != nullptr};
-  const auto processingPlan =
-    volum::MakeProcessingPlan(haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(),
-                              mIR != nullptr, GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam,
-                              GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(),
-                              dualAmpActive, haveSupportModel, supportToneStackActive);
-  preAmpPointers =
-    _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
+  const auto processingPlan = volum::MakeProcessingPlan(
+    haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(), mIR != nullptr,
+    GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
+    GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive);
+  preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
   {
@@ -1630,7 +1758,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     // maxBlockSize, so .resize() here must NEVER reallocate on the audio
     // thread. assert() is a no-op in NDEBUG release builds and fires in
     // debug + CI sanitizer builds if the invariant ever regresses.
-    assert(mDualMainLaneBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp main scratch not pre-reserved");
+    assert(mDualMainLaneBuffer.capacity() >= static_cast<size_t>(numFrames)
+           && "Dual-amp main scratch not pre-reserved");
     mDualMainLaneBuffer.resize(numFrames);
     std::memcpy(mDualMainLaneBuffer.data(), preAmpPointers[0], numFrames * sizeof(sample));
   }
@@ -1656,9 +1785,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     // route=STACK (0) as the historical default, which would force constant-power-center for
     // both lanes and ignore PAN — hard-coding CUSTOM here makes the panning behave as the
     // visible knobs imply for every existing state file.
-    const auto panGains = volum::MakeDualAmpPanGains(volum::DualAmpRoute::Custom,
-                                                     GetParam(kMainAmpPan)->Value(),
-                                                     GetParam(kSupportAmpPan)->Value());
+    const auto panGains = volum::MakeDualAmpPanGains(
+      volum::DualAmpRoute::Custom, GetParam(kMainAmpPan)->Value(), GetParam(kSupportAmpPan)->Value());
     int mainLatency = 0;
     int supportLatency = 0;
     if (mModel)
@@ -1666,16 +1794,16 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     if (mSupportModel)
       supportLatency = mSupportModel->GetLatency();
     const auto latencyComp = volum::MakeDualAmpLatencyCompensation(mainLatency, supportLatency);
-    assert(mDualMainAlignedBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp main-aligned scratch not pre-reserved");
-    assert(mDualSupportAlignedBuffer.capacity() >= static_cast<size_t>(numFrames) && "Dual-amp support-aligned scratch not pre-reserved");
+    assert(mDualMainAlignedBuffer.capacity() >= static_cast<size_t>(numFrames)
+           && "Dual-amp main-aligned scratch not pre-reserved");
+    assert(mDualSupportAlignedBuffer.capacity() >= static_cast<size_t>(numFrames)
+           && "Dual-amp support-aligned scratch not pre-reserved");
     mDualMainAlignedBuffer.resize(numFrames);
     mDualSupportAlignedBuffer.resize(numFrames);
-    const sample* mainLane =
-      mDualMainLatencyDelay.Process(hpfPointers[0], mDualMainAlignedBuffer.data(), numFrames,
-                                    latencyComp.mainDelaySamples);
-    const sample* compensatedSupportLane =
-      mDualSupportLatencyDelay.Process(supportLane, mDualSupportAlignedBuffer.data(), numFrames,
-                                       latencyComp.supportDelaySamples);
+    const sample* mainLane = mDualMainLatencyDelay.Process(
+      hpfPointers[0], mDualMainAlignedBuffer.data(), numFrames, latencyComp.mainDelaySamples);
+    const sample* compensatedSupportLane = mDualSupportLatencyDelay.Process(
+      supportLane, mDualSupportAlignedBuffer.data(), numFrames, latencyComp.supportDelaySamples);
     const double supportOutputGain = mSupportPolarityInvert.load() ? -mSupportOutputGain : mSupportOutputGain;
     volum::MergeDualAmpToStereo(mainLane, compensatedSupportLane, outputs, numFrames, numChannelsExternalOut,
                                 mOutputGain, supportOutputGain, panGains, kAppApi);
@@ -1816,12 +1944,24 @@ void NeuralAmpModeler::OnIdle()
 
     // Capture path on main thread to avoid races with _VolumRefreshChannels
     std::string fileToLoad;
-    if (mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
+    bool customMainLoad = false;
+    if (mVolumCustomMainIdx >= 0)
+    {
+      // F6: a custom MAIN amp is focused - resolve the manifest .nam for the
+      // selected (slot, channel) and stage it from the content library.
+      const auto amp = volum::custom::CustomAmpAt(mVolumCustomMainIdx);
+      const std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomMainSlot, mVolumCustomMainChannel);
+      if (!rel.empty())
+      {
+        fileToLoad = volum::content::GlobalContentStore().ResolveStored(rel).string();
+        customMainLoad = true;
+      }
+    }
+    else if (mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
     {
       namespace fs = std::filesystem;
-      auto rigPath = fs::path(mVolumRigsRoot)
-        / volum::kAmps[mVolumAmpIdx].folderName
-        / mVolumChannelFiles[mVolumChannelIdx];
+      auto rigPath =
+        fs::path(mVolumRigsRoot) / volum::kAmps[mVolumAmpIdx].folderName / mVolumChannelFiles[mVolumChannelIdx];
       fileToLoad = fs::weakly_canonical(rigPath).string();
     }
 
@@ -1834,8 +1974,10 @@ void NeuralAmpModeler::OnIdle()
           footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
       }
 
-      const int ampIdx = mVolumAmpIdx;
-      const std::string rigsRoot = mVolumRigsRoot;
+      // Custom amps live outside the factory rig tree, so disable the factory
+      // sibling-prefetch by passing ampIdx = -1 (the loader skips its scan).
+      const int ampIdx = customMainLoad ? -1 : mVolumAmpIdx;
+      const std::string rigsRoot = customMainLoad ? std::string() : mVolumRigsRoot;
       if (fileToLoad == mNAMPaths.live.Get())
       {
         mVolumIsLoading.store(false);
@@ -1975,6 +2117,21 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // expected tail size, so older chunks (no snapshots) remain readable.
   volum::PutPrePostLockSnapshots(chunk, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre, mVolumLiveLockedPost);
 
+  // VoLum 1.2.0 id tail: project references into the shared content library
+  // (custom MAIN/SUPPORT binding, active preset, per-amp custom IR / support
+  // ids). Sentinel-guarded + appended last so older builds ignore it (see
+  // VoLumChunkIdTail.h).
+  volum::ChunkIdTail idTail;
+  idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+  idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
+  idTail.activePresetId = mVolumActivePresetId;
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    idTail.perAmpIrId[i] = mVolumAmpSettings[i].activeIrId;
+    idTail.perAmpSupportId[i] = mVolumAmpSettings[i].supportCustomId;
+  }
+  volum::PutChunkIdTail(chunk, idTail);
+
   return ok;
 }
 
@@ -2054,8 +2211,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         // First-time-on heuristic: support not yet picked AND both pans still at 0
         // (i.e. user hasn't customised this dual rig). Apply hard L/R + mirror MAIN cab.
         // If the user already configured a Dual setup, those values are restored from per-amp memory.
-        if (nowOn && GetParam(kSupportAmpIdx)->Int() < 0
-            && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3
+        if (nowOn && GetParam(kSupportAmpIdx)->Int() < 0 && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3
             && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
         {
           mSupportPolarityInvert.store(true);
@@ -2192,10 +2348,8 @@ bool IsPreBlockParam(int paramIdx)
     case kPreNam2Mid:
     case kPreNam2MidFreq:
     case kPreNam2Treble:
-    case kPreNam2Level:
-      return true;
-    default:
-      return false;
+    case kPreNam2Level: return true;
+    default: return false;
   }
 }
 
@@ -2218,10 +2372,8 @@ bool IsPostBlockParam(int paramIdx)
     case kReverbPreDelay:
     case kReverbShimmer:
     case kReverbMode:
-    case kReverbSubMode:
-      return true;
-    default:
-      return false;
+    case kReverbSubMode: return true;
+    default: return false;
   }
 }
 } // namespace
@@ -2250,12 +2402,12 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
   if (auto pGraphics = GetUI())
   {
-    // A user-driven param edit diverges the live chain from any recalled preset
-    // snapshot -> flag the header strip "(unsaved)". Programmatic restores (amp
-    // switch, preset recall) arrive via kDelegate/kReset and stay clean.
+    // A user-driven param edit may diverge the live chain from the recalled
+    // preset snapshot -> re-evaluate the "(unsaved)" flag with an equality test
+    // (so nudging a knob back to the preset value clears it again). Programmatic
+    // restores (amp switch, preset recall) arrive via kDelegate/kReset, not kUI.
     if (source == EParamSource::kUI)
-      if (auto* pb = pGraphics->GetControlWithTag(kCtrlTagVoLumPresetBar))
-        pb->As<VoLumPresetBarControl>()->SetDirtyState(true);
+      _VolumRecomputePresetDirty();
 
     bool active = GetParam(paramIdx)->Bool();
 
@@ -2272,25 +2424,29 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kDualAmpActive:
       case kSupportAmpIdx:
       case kSupportSpeakerIdx:
-      case kSupportChannelIdx:
-        _UpdateVoLumLayout(pGraphics);
-        break;
+      case kSupportChannelIdx: _UpdateVoLumLayout(pGraphics); break;
       case kMainAmpPan:
-      case kSupportAmpPan:
-        break;
+      case kSupportAmpPan: break;
       case kSupportNoiseGateActive:
-        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportNoiseGateThreshold)) c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportNoiseGateThreshold))
+          c->SetDisabled(!active);
         break;
       case kSupportEQActive:
-        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportToneBass)) c->SetDisabled(!active);
-        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportToneMid)) c->SetDisabled(!active);
-        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportToneTreble)) c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportToneBass))
+          c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportToneMid))
+          c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kSupportToneTreble))
+          c->SetDisabled(!active);
         break;
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
-        if (auto* c = pGraphics->GetControlWithParamIdx(kToneBass)) c->SetDisabled(!active);
-        if (auto* c = pGraphics->GetControlWithParamIdx(kToneMid)) c->SetDisabled(!active);
-        if (auto* c = pGraphics->GetControlWithParamIdx(kToneTreble)) c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kToneBass))
+          c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kToneMid))
+          c->SetDisabled(!active);
+        if (auto* c = pGraphics->GetControlWithParamIdx(kToneTreble))
+          c->SetDisabled(!active);
         break;
       case kDelayMode:
       {
@@ -2328,8 +2484,8 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           break;
         if (GetParam(kReverbMode)->Int() != volum::kVoLumReverbModeOktaverb)
           break;
-        const int oldSubMode = std::clamp(
-          mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode, 0, 2);
+        const int oldSubMode =
+          std::clamp(mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode, 0, 2);
         const int newSubMode = std::clamp(GetParam(kReverbSubMode)->Int(), 0, 2);
         // No-op if the user re-clicked the same sub-mode pill: avoids unnecessary
         // snapshot churn that has no observable effect anyway.
@@ -2512,7 +2668,7 @@ void NeuralAmpModeler::_DeallocateIOPointers()
 void NeuralAmpModeler::_FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels,
                                     const size_t numFrames)
 {
-  (void) inputs;
+  (void)inputs;
   volum::process_io::ClearBuffers(outputs, numFrames, numChannels);
 }
 
@@ -2599,8 +2755,8 @@ void NeuralAmpModeler::_SetOutputGain()
     modelInfo.hasOutputLevel = mModel->HasOutputLevel();
     if (modelInfo.hasOutputLevel)
       modelInfo.outputLevel = mModel->GetOutputLevel();
-    gainDB = volum::ComputeOutputModeGainDb(gainDB, GetParam(kOutputMode)->Int(), modelInfo,
-                                            GetParam(kInputCalibrationLevel)->Value());
+    gainDB = volum::ComputeOutputModeGainDb(
+      gainDB, GetParam(kOutputMode)->Int(), modelInfo, GetParam(kInputCalibrationLevel)->Value());
   }
   mOutputGain = DBToAmp(gainDB);
 }
@@ -2623,8 +2779,8 @@ void NeuralAmpModeler::_SetSupportOutputGain()
     modelInfo.hasOutputLevel = mSupportModel->HasOutputLevel();
     if (modelInfo.hasOutputLevel)
       modelInfo.outputLevel = mSupportModel->GetOutputLevel();
-    gainDB = volum::ComputeOutputModeGainDb(gainDB, GetParam(kOutputMode)->Int(), modelInfo,
-                                            GetParam(kInputCalibrationLevel)->Value());
+    gainDB = volum::ComputeOutputModeGainDb(
+      gainDB, GetParam(kOutputMode)->Int(), modelInfo, GetParam(kInputCalibrationLevel)->Value());
   }
   mSupportOutputGain = DBToAmp(gainDB);
 }
@@ -2661,9 +2817,11 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
   return "";
 }
 
-namespace {
+namespace
+{
 template <size_t N>
-bool SelectAdjacentFromList(NeuralAmpModeler* plugin, const std::array<int, N>& params, int currentParamIdx, int direction)
+bool SelectAdjacentFromList(NeuralAmpModeler* plugin, const std::array<int, N>& params, int currentParamIdx,
+                            int direction)
 {
   const auto it = std::find(params.begin(), params.end(), currentParamIdx);
   if (it == params.end())
@@ -2682,7 +2840,7 @@ int RememberedOrFirst(const std::array<int, N>& params, int remembered)
   return volum::keyboard::Contains(params, remembered) ? remembered : params.front();
 }
 
-}
+} // namespace
 
 std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
 {
@@ -2691,8 +2849,9 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
     return {};
 
   WDL_String line;
-  line.SetFormatted(512, "%s  |  Up/Down adjust  |  Left/Right knob  |  Tab target  |  Enter exact  |  Del reset  |  Esc clear",
-                    pParam->GetName());
+  line.SetFormatted(
+    512, "%s  |  Up/Down adjust  |  Left/Right knob  |  Tab target  |  Enter exact  |  Del reset  |  Esc clear",
+    pParam->GetName());
   return line.Get();
 }
 
@@ -2770,16 +2929,16 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
 {
   _ClearVoLumKnobSelection();
 
-  auto wrap = [](int value, int count) {
-    return (value + count) % count;
-  };
+  auto wrap = [](int value, int count) { return (value + count) % count; };
 
   switch (mVolumExpandedSection)
   {
     case EVoLumSection::PRE:
     {
       constexpr EVoLumEffectFocus targets[3] = {
-        EVoLumEffectFocus::COMP, EVoLumEffectFocus::PRE_NAM1, EVoLumEffectFocus::PRE_NAM2,
+        EVoLumEffectFocus::COMP,
+        EVoLumEffectFocus::PRE_NAM1,
+        EVoLumEffectFocus::PRE_NAM2,
       };
       int current = 0;
       for (int i = 0; i < 3; ++i)
@@ -2792,9 +2951,7 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
     case EVoLumSection::AMP:
     {
       mVolumFocusedEffect = EVoLumEffectFocus::AMP;
-      mVolumDualAmpFocusedSupport = GetParam(kDualAmpActive)->Bool()
-        ? !mVolumDualAmpFocusedSupport
-        : false;
+      mVolumDualAmpFocusedSupport = GetParam(kDualAmpActive)->Bool() ? !mVolumDualAmpFocusedSupport : false;
       break;
     }
     case EVoLumSection::POST:
@@ -2908,11 +3065,31 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
       action = "Space dual amp";
       nav = "Up/Down amp  |  Left/Right channel  |  S cab  |  Tab target";
       break;
-    case EVoLumEffectFocus::COMP: target = "Compressor"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
-    case EVoLumEffectFocus::PRE_NAM1: target = "NAM 1"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
-    case EVoLumEffectFocus::PRE_NAM2: target = "NAM 2"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
-    case EVoLumEffectFocus::DELAY: target = "Delay"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
-    case EVoLumEffectFocus::REVERB: target = "Reverb"; action = "Space on/off"; nav = "Left/Right or Tab target"; break;
+    case EVoLumEffectFocus::COMP:
+      target = "Compressor";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
+    case EVoLumEffectFocus::PRE_NAM1:
+      target = "NAM 1";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
+    case EVoLumEffectFocus::PRE_NAM2:
+      target = "NAM 2";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
+    case EVoLumEffectFocus::DELAY:
+      target = "Delay";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
+    case EVoLumEffectFocus::REVERB:
+      target = "Reverb";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
   }
 
   WDL_String line;
@@ -2946,18 +3123,17 @@ int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
   {
     case EVoLumEffectFocus::AMP:
       return GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport
-        ? RememberedOrFirst(kSupportAmpParams, remembered)
-        : (GetParam(kDualAmpActive)->Bool()
-          ? RememberedOrFirst(kMainAmpDualParams, remembered)
-          : RememberedOrFirst(kMainAmpMonoParams, remembered));
+               ? RememberedOrFirst(kSupportAmpParams, remembered)
+               : (GetParam(kDualAmpActive)->Bool() ? RememberedOrFirst(kMainAmpDualParams, remembered)
+                                                   : RememberedOrFirst(kMainAmpMonoParams, remembered));
     case EVoLumEffectFocus::COMP: return RememberedOrFirst(kCompParams, remembered);
     case EVoLumEffectFocus::PRE_NAM1: return RememberedOrFirst(kPreNam1Params, remembered);
     case EVoLumEffectFocus::PRE_NAM2: return RememberedOrFirst(kPreNam2Params, remembered);
     case EVoLumEffectFocus::DELAY: return RememberedOrFirst(kDelayParams, remembered);
     case EVoLumEffectFocus::REVERB:
       return GetParam(kReverbMode)->Int() == volum::kVoLumReverbModeOktaverb
-        ? RememberedOrFirst(kOktaverbParams, remembered)
-        : RememberedOrFirst(kReverbParams, remembered);
+               ? RememberedOrFirst(kOktaverbParams, remembered)
+               : RememberedOrFirst(kReverbParams, remembered);
   }
   return _DefaultVoLumKeyboardKnobForFocus();
 }
@@ -2974,8 +3150,7 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
   using namespace volum::keyboard;
   switch (mVolumFocusedEffect)
   {
-    case EVoLumEffectFocus::DELAY:
-      return SelectAdjacentFromList(this, kDelayParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::DELAY: return SelectAdjacentFromList(this, kDelayParams, currentParamIdx, direction);
     case EVoLumEffectFocus::REVERB:
     {
       const int reverbMode = GetParam(kReverbMode)->Int();
@@ -2989,12 +3164,9 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
       if (GetParam(kDualAmpActive)->Bool())
         return SelectAdjacentFromList(this, kMainAmpDualParams, currentParamIdx, direction);
       return SelectAdjacentFromList(this, kMainAmpMonoParams, currentParamIdx, direction);
-    case EVoLumEffectFocus::COMP:
-      return SelectAdjacentFromList(this, kCompParams, currentParamIdx, direction);
-    case EVoLumEffectFocus::PRE_NAM1:
-      return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
-    case EVoLumEffectFocus::PRE_NAM2:
-      return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
+    case EVoLumEffectFocus::COMP: return SelectAdjacentFromList(this, kCompParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::PRE_NAM1: return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
+    case EVoLumEffectFocus::PRE_NAM2: return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
   }
   return false;
 }
@@ -3066,23 +3238,23 @@ bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
   {
     if (auto* pControl = pGfx->GetControlWithParamIdx(mVolumSelectedKnobParamIdx))
     {
-        if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
+      if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
+      {
+        const bool handled = pKnob->HandleKeyboardInput(key);
+
+        if (handled && key.VK == kVK_ESCAPE)
         {
-          const bool handled = pKnob->HandleKeyboardInput(key);
-
-          if (handled && key.VK == kVK_ESCAPE)
-          {
-            mVolumSelectedKnobParamIdx = kNoParameter;
-            _UpdateVoLumKeyboardFocusHint();
-          }
-
-          if (handled)
-            _SyncVoLumExactEntry();
-
-          return handled;
+          mVolumSelectedKnobParamIdx = kNoParameter;
+          _UpdateVoLumKeyboardFocusHint();
         }
+
+        if (handled)
+          _SyncVoLumExactEntry();
+
+        return handled;
       }
     }
+  }
 
   mVolumSelectedKnobParamIdx = kNoParameter;
   return false;
@@ -3132,9 +3304,11 @@ void NeuralAmpModeler::_HideVoLumExactEntry()
 
 void NeuralAmpModeler::_HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide)
 {
-  if (pGfx) {
+  if (pGfx)
+  {
     pGfx->ForAllControlsFunc([group, hide](iplug::igraphics::IControl* c) {
-      if (c->GetGroup() && std::strcmp(c->GetGroup(), group) == 0) {
+      if (c->GetGroup() && std::strcmp(c->GetGroup(), group) == 0)
+      {
         c->Hide(hide);
       }
     });
@@ -3143,7 +3317,8 @@ void NeuralAmpModeler::_HideControlGroup(iplug::igraphics::IGraphics* pGfx, cons
 
 void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 {
-  if (!pGfx) pGfx = GetUI();
+  if (!pGfx)
+    pGfx = GetUI();
   if (pGfx)
   {
     auto disableGroup = [pGfx](const char* group, bool disable) {
@@ -3175,7 +3350,7 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       menu->Hide(true);
     if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumSupportAmpMenu))
       menu->Hide(true);
-    
+
     // Hide/show the correct group based on focused effect
     switch (mVolumFocusedEffect)
     {
@@ -3205,8 +3380,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           if (isOktaverb)
             mVolumReverbSubModePill->SetLabels({"HALO", "SHIMMER", "BLOOM"});
         }
-        (void) isHall;
-        (void) isPlate;
+        (void)isHall;
+        (void)isPlate;
         disableGroup("REVERB_KNOBS", !GetParam(kReverbActive)->Bool());
         disableGroup("REVERB_PREDELAY", !GetParam(kReverbActive)->Bool());
         disableGroup("REVERB_SHIMMER", !GetParam(kReverbActive)->Bool());
@@ -3225,24 +3400,26 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         // visible label and the knob/value tooltip so the user can read what the knob does
         // without having to consult the design guide.
         const char* ageLabel = "AGE";
-        const char* ageTip =
-          "Adds character to the delay tail (effect varies by mode).";
+        const char* ageTip = "Adds character to the delay tail (effect varies by mode).";
         switch (delayMode)
         {
           case volum::kVoLumDelayModeDigital:
             ageLabel = "GRIT";
-            ageTip = "Digital mode: adds bit-crush quantisation and a tape-machine noise "
-                     "floor on top of the repeats. At 0 the wet signal is bit-perfect.";
+            ageTip =
+              "Digital mode: adds bit-crush quantisation and a tape-machine noise "
+              "floor on top of the repeats. At 0 the wet signal is bit-perfect.";
             break;
           case volum::kVoLumDelayModeAnalog:
             ageLabel = "WEAR";
-            ageTip = "Analog mode: increases BBD chorus depth, HF darkness and compander "
-                     "softness. 0.5 is classic Memory Man, 1.0 is heavy chorused wear.";
+            ageTip =
+              "Analog mode: increases BBD chorus depth, HF darkness and compander "
+              "softness. 0.5 is classic Memory Man, 1.0 is heavy chorused wear.";
             break;
           case volum::kVoLumDelayModeReverse:
             ageLabel = "BLOOM";
-            ageTip = "Reverse mode: softens the old edge-faded reverse slice toward a "
-                     "smooth sin^2 swell. Higher = more pad-like bloom.";
+            ageTip =
+              "Reverse mode: softens the old edge-faded reverse slice toward a "
+              "smooth sin^2 swell. Higher = more pad-like bloom.";
             break;
           default: break;
         }
@@ -3283,12 +3460,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     if (auto* meterR = pGfx->GetControlWithTag(kCtrlTagOutputMeterR))
       meterR->Hide(!dualActiveNow);
     _VolumApplyDualAmpFocus();
-    
+
     if (auto* hero = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
     {
       auto* heroImage = hero->As<VoLumHeroImageControl>();
-      heroImage->SetDualAmpState(GetParam(kDualAmpActive)->Bool(), mVolumDualAmpFocusedSupport,
-                                 GetParam(kSupportAmpIdx)->Int());
+      heroImage->SetDualAmpState(
+        GetParam(kDualAmpActive)->Bool(), mVolumDualAmpFocusedSupport, GetParam(kSupportAmpIdx)->Int());
       const auto& customAmps = volum::custom::MockCustomAmps();
       if (mVolumCustomSupportIdx >= 0 && mVolumCustomSupportIdx < static_cast<int>(customAmps.size()))
         heroImage->SetSupportCustom(true, volum::custom::CustomAmpArt(mVolumCustomSupportIdx),
@@ -3312,8 +3489,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
             subText->SetName(customAmps[(size_t)mVolumCustomSupportIdx].c_str(), true);
           else
             subText->SetName(supportAmpIdx >= 0 && supportAmpIdx < volum::kAmpCount
-                              ? volum::kAmps[supportAmpIdx].displayName
-                              : "Choose support amp",
+                               ? volum::kAmps[supportAmpIdx].displayName
+                               : "Choose support amp",
                              true);
         }
         else if (mVolumCustomMainIdx >= 0)
@@ -3336,25 +3513,28 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       else if (mVolumFocusedEffect == EVoLumEffectFocus::DELAY)
         subText->SetName("Delay", false);
     }
-    
+
     // Inform the Triptych of the current states
     if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
     {
       auto* trip = tripCtrl->As<VoLumTriptychControl>();
-      const bool preActive = GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
+      const bool preActive =
+        GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
       trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), mVolumAmpIdx,
                      volum::kAmps[mVolumAmpIdx].displayName,
                      _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
                      _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
       trip->SetExpandedSection(mVolumExpandedSection);
-      
+
       // Update Pedal Cards visibility, layout, and state based on whether POST is expanded
       bool preExpanded = (mVolumExpandedSection == EVoLumSection::PRE);
       bool postExpanded = (mVolumExpandedSection == EVoLumSection::POST);
 
-      if (preExpanded) {
+      if (preExpanded)
+      {
         const IRECT tripBounds = trip->GetRECT();
-        const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::PRE);
+        const auto frames =
+          volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::PRE);
         const auto cards = volum::triptych_layout::ComputePreCards(frames.pre);
 
         if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard))
@@ -3368,10 +3548,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector2))
           link->SetTargetAndDrawRECTs(cards.connector2.As<IRECT>());
       }
-      
-      if (postExpanded) {
+
+      if (postExpanded)
+      {
         const IRECT tripBounds = trip->GetRECT();
-        const auto frames = volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::POST);
+        const auto frames =
+          volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::POST);
         const auto cards = volum::triptych_layout::ComputePostCards(frames.post);
 
         if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
@@ -3382,44 +3564,55 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           linkCard->SetTargetAndDrawRECTs(cards.connector.As<IRECT>());
       }
 
-      if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard)) {
+      if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
+      {
         delayCard->Hide(!postExpanded);
-        if (postExpanded) {
+        if (postExpanded)
+        {
           auto* card = delayCard->As<VoLumPedalCardControl>();
           card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::DELAY);
           card->SetActiveState(GetParam(kDelayActive)->Bool());
         }
       }
-      if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard)) {
+      if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard))
+      {
         reverbCard->Hide(!postExpanded);
-        if (postExpanded) {
+        if (postExpanded)
+        {
           auto* card = reverbCard->As<VoLumPedalCardControl>();
           card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::REVERB);
           card->SetActiveState(GetParam(kReverbActive)->Bool());
         }
       }
-      if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector)) {
+      if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector))
+      {
         chain->Hide(!postExpanded);
       }
-      if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard)) {
+      if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard))
+      {
         compCard->Hide(!preExpanded);
-        if (preExpanded) {
+        if (preExpanded)
+        {
           auto* card = compCard->As<VoLumPedalCardControl>();
           card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::COMP);
           card->SetActiveState(GetParam(kPreCompActive)->Bool());
         }
       }
-      if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam1Card)) {
+      if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam1Card))
+      {
         preCard->Hide(!preExpanded);
-        if (preExpanded) {
+        if (preExpanded)
+        {
           auto* card = preCard->As<VoLumPedalCardControl>();
           card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::PRE_NAM1);
           card->SetActiveState(GetParam(kPreNam1Active)->Bool());
         }
       }
-      if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam2Card)) {
+      if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam2Card))
+      {
         preCard->Hide(!preExpanded);
-        if (preExpanded) {
+        if (preExpanded)
+        {
           auto* card = preCard->As<VoLumPedalCardControl>();
           card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::PRE_NAM2);
           card->SetActiveState(GetParam(kPreNam2Active)->Bool());
@@ -3459,10 +3652,7 @@ void NeuralAmpModeler::_ToggleVoLumMetronomePanel()
     if (panel->IsHidden())
     {
       panel->Show(
-        mMetronomeDSP.IsActive(),
-        mMetronomeDSP.GetBPM(),
-        mMetronomeDSP.GetVolume(),
-        mMetronomeDSP.GetTimeSig());
+        mMetronomeDSP.IsActive(), mMetronomeDSP.GetBPM(), mMetronomeDSP.GetVolume(), mMetronomeDSP.GetTimeSig());
     }
     else
     {
@@ -3483,10 +3673,8 @@ void NeuralAmpModeler::_VolumRefreshChannels()
     mVolumSettingsDirty = true;
   }
 
-  auto channels = volum::DiscoverChannels(
-    std::filesystem::path(mVolumRigsRoot),
-    volum::kAmps[mVolumAmpIdx].folderName,
-    volum::kSpeakerPrefixes[mVolumSpeakerIdx]);
+  auto channels = volum::DiscoverChannels(std::filesystem::path(mVolumRigsRoot), volum::kAmps[mVolumAmpIdx].folderName,
+                                          volum::kSpeakerPrefixes[mVolumSpeakerIdx]);
 
   mVolumChannelFiles.clear();
   mVolumChannelLabels.clear();
@@ -3513,7 +3701,8 @@ void NeuralAmpModeler::_VolumRefreshChannels()
     if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
       stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
     if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
-      footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.empty() ? "(no rig loaded)" : mVolumLastLoadedFile.c_str());
+      footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.empty() ? "(no rig loaded)"
+                                                                             : mVolumLastLoadedFile.c_str());
   }
 }
 
@@ -3568,6 +3757,14 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
 
 const char* NeuralAmpModeler::_VolumGetPreCaptureLabel(int captureIdx) const
 {
+  // Custom imported pedals (F8) live at stable indices >= kCustomPedalIndexBase,
+  // outside the contiguous factory label vector. Resolve their name via a stable
+  // scratch buffer so we can hand back a const char*.
+  if (captureIdx >= volum::content::kCustomPedalIndexBase)
+  {
+    mVolumPreCaptureLabelScratch = volum::custom::PedalNameByLegacy(captureIdx);
+    return mVolumPreCaptureLabelScratch.empty() ? "Click to change" : mVolumPreCaptureLabelScratch.c_str();
+  }
   if (captureIdx <= 0 || captureIdx > static_cast<int>(mVolumPreCaptureLabels.size()))
     return "Click to change";
   return mVolumPreCaptureLabels[static_cast<size_t>(captureIdx - 1)].c_str();
@@ -3575,6 +3772,11 @@ const char* NeuralAmpModeler::_VolumGetPreCaptureLabel(int captureIdx) const
 
 const char* NeuralAmpModeler::_VolumGetPreCaptureShortLabel(int captureIdx, const char* fallback) const
 {
+  if (captureIdx >= volum::content::kCustomPedalIndexBase)
+  {
+    mVolumPreCaptureLabelScratch = volum::custom::PedalNameByLegacy(captureIdx);
+    return mVolumPreCaptureLabelScratch.empty() ? fallback : mVolumPreCaptureLabelScratch.c_str();
+  }
   if (captureIdx <= 0 || captureIdx > static_cast<int>(mVolumPreCaptureShortLabels.size()))
     return fallback;
   return mVolumPreCaptureShortLabels[static_cast<size_t>(captureIdx - 1)].c_str();
@@ -3592,20 +3794,55 @@ std::string NeuralAmpModeler::_VolumGetPreCaptureFilename(int captureIdx) const
   return mVolumPreCaptureFiles[static_cast<size_t>(captureIdx - 1)];
 }
 
+std::string NeuralAmpModeler::_VolumGetPreCaptureLoadPath(int captureIdx) const
+{
+  if (captureIdx >= volum::content::kCustomPedalIndexBase)
+  {
+    const std::string rel = volum::custom::PedalStoredPathByLegacy(captureIdx);
+    if (rel.empty())
+      return {};
+    return volum::content::GlobalContentStore().ResolveStored(rel).string();
+  }
+  const std::string fn = _VolumGetPreCaptureFilename(captureIdx);
+  if (fn.empty() || mVolumRigsRoot.empty())
+    return {};
+  return (std::filesystem::path(mVolumRigsRoot) / "PrePedals" / fn).string();
+}
+
+std::vector<int> NeuralAmpModeler::_VolumPreCaptureOrder() const
+{
+  std::vector<int> order;
+  order.push_back(0); // EMPTY
+  for (int i = 1; i < _VolumGetPreCaptureCount(); ++i)
+    order.push_back(i);
+  for (const auto& p : volum::content::GlobalContentStore().reg().pedals)
+    order.push_back(p.legacyIndex);
+  return order;
+}
+
 void NeuralAmpModeler::_VolumCyclePreNamCapture(int slot, int direction)
 {
   if (slot < 0 || slot >= 2)
     return;
 
   const int paramIdx = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
-  const int total = static_cast<int>(mVolumPreCaptureFiles.size()) + 1; // zero is EMPTY
-  if (total <= 0)
+  // Cycle through the ordered index list (EMPTY, factory 1..N, then customs) so
+  // imported pedals are reachable by the keyboard/footswitch step too.
+  const std::vector<int> order = _VolumPreCaptureOrder();
+  if (order.empty())
     return;
-
-  int next = GetParam(paramIdx)->Int() + direction;
-  while (next < 0)
-    next += total;
-  next %= total;
+  const int cur = GetParam(paramIdx)->Int();
+  int pos = 0;
+  for (int i = 0; i < (int)order.size(); ++i)
+    if (order[(size_t)i] == cur)
+    {
+      pos = i;
+      break;
+    }
+  int nextPos = (pos + direction) % (int)order.size();
+  while (nextPos < 0)
+    nextPos += (int)order.size();
+  const int next = order[(size_t)nextPos];
 
   GetParam(paramIdx)->Set(next);
   SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
@@ -3621,8 +3858,9 @@ void NeuralAmpModeler::_VolumSetPreNamCapture(int slot, int captureIdx)
     return;
 
   const int paramIdx = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
-  const int maxIdx = std::max(0, _VolumGetPreCaptureCount() - 1);
-  const int next = std::clamp(captureIdx, 0, maxIdx);
+  // Custom imported pedals use stable indices up to the param max (127), so clamp
+  // to the full param range rather than the factory count.
+  const int next = std::clamp(captureIdx, 0, volum::kPreCaptureMaxParamIndex);
   if (GetParam(paramIdx)->Int() == next)
     return;
 
@@ -3677,12 +3915,18 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   // captureIdx -1 keeps these rows from ever matching a real selected capture
   // (which is always >= 0), so they never render with a false selection dot.
   items.push_back({"CUSTOM", -1, true, volum::PrePedalCaptureGroup::None});
-  for (const auto& name : volum::custom::MockCustomPedals())
-    items.push_back({name, -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::None, true});
-  items.push_back({"Manage custom pedals...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Manage, false});
+  {
+    const auto& peds = volum::content::GlobalContentStore().reg().pedals;
+    for (const auto& p : peds)
+      items.push_back({p.name, p.legacyIndex, false, volum::PrePedalCaptureGroup::None, PreMenuAction::None, true});
+  }
+  items.push_back(
+    {"Manage custom pedals...", -1, false, volum::PrePedalCaptureGroup::None, PreMenuAction::Manage, false});
 
   const int captureParam = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
-  const int selected = std::clamp(GetParam(captureParam)->Int(), 0, captureCount - 1);
+  // Unclamped so a custom-pedal selection (index >= kCustomPedalIndexBase) marks
+  // the right row instead of a factory row.
+  const int selected = GetParam(captureParam)->Int();
   const float menuW = std::max(anchorRect.W() * 0.88f, 180.f);
   const float fullH = VoLumPreCaptureMenuControl::MenuHeight(items);
   // Cap the menu to the window: drop below the anchor when it fits, otherwise
@@ -3714,28 +3958,44 @@ void NeuralAmpModeler::_VolumShowManageCustomPedals(int preSlot)
 {
   if (auto* pGfx = GetUI())
     if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
-      ov->As<VoLumCustomOverlayControl>()->ShowManage(VoLumCustomOverlayControl::ManageKind::Pedals, 0, nullptr,
-                                                      preSlot);
+      ov->As<VoLumCustomOverlayControl>()->ShowManage(
+        VoLumCustomOverlayControl::ManageKind::Pedals, 0, nullptr, preSlot);
 }
 
 void NeuralAmpModeler::_VolumMarkPresetDirty()
 {
-  if (auto* pGfx = GetUI())
-    if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-      pb->As<VoLumPresetBarControl>()->SetDirtyState(true);
+  // Rig edits that bypass the kUI param hook (cab/channel/IR/polarity changes set
+  // members or send kDelegate) funnel here. The "(unsaved)" flag is an equality
+  // test against the recalled snapshot, so an A/B edit back to the preset clears
+  // it; with no recalled preset there is nothing to diverge from.
+  _VolumRecomputePresetDirty();
 }
 
 void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
 {
-  // Mock selection: custom amps are display-only in the UI shell, so this just
-  // drives the hero art, AMP name, header preset strip, and the sidebar's custom
-  // highlight (which also scrolls the row into view). No DSP/settings change.
   const auto& names = volum::custom::MockCustomAmps();
   if (customIdx < 0 || customIdx >= (int)names.size())
     return;
+
+  // Scene isolation (F6): snapshot the outgoing lane (factory slot or the prior
+  // custom scene, via the redirect in _VolumSaveCurrentToSettings), then make the
+  // new custom amp active and apply its own scene (defaults on first focus).
+  if (mVolumInitComplete)
+    _VolumSaveCurrentToSettings();
+  mVolumCustomMainIdx = customIdx;
+  // Point the preset bank at this custom amp's owner key and drop any recalled
+  // preset carried over from the previous amp.
+  _VolumSyncPresetOwner();
+  const std::string ampId = volum::custom::CustomAmpIdAt(customIdx);
+  if (!ampId.empty())
+    _VolumApplyAmpSettings(volum::content::GlobalContentStore().reg().customScenes[ampId]);
+
   auto* pGfx = GetUI();
   if (!pGfx)
+  {
+    _VolumApplyCustomMainCabs(customIdx);
     return;
+  }
   if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
   {
     auto* hero = heroCtrl->As<VoLumHeroImageControl>();
@@ -3745,12 +4005,10 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
     if (mVolumExpandedSection == EVoLumSection::AMP)
       nameCtrl->As<VoLumSubRowTextControl>()->SetName(names[(size_t)customIdx].c_str(), true);
-  if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-    pb->As<VoLumPresetBarControl>()->SetList({}); // custom-amp presets land with the backend
+  _VolumRefreshPresetBar(); // this custom amp's preset bank
   if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
     al->As<VoLumAmpListControl>()->SetCustomSelected(customIdx);
   // Make the shared cabinet row + channel stepper reflect this custom amp.
-  mVolumCustomMainIdx = customIdx;
   _VolumApplyCustomMainCabs(customIdx);
 }
 
@@ -3780,6 +4038,22 @@ void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx, bool supportLane
   }
   row->SetSelected(sel);
   _VolumSetCustomChannelStepper(customIdx, selSlot, supportLane);
+
+  // Record the resolved (slot, channel) for the focused lane and stage its .nam.
+  const auto selChans = volum::custom::AmpSlotChannels(amp, selSlot);
+  const int selChan = selChans.empty() ? 1 : selChans.front();
+  if (supportLane)
+  {
+    mVolumCustomSupportSlot = selSlot;
+    mVolumCustomSupportChannel = selChan;
+    mVolumSupportNeedsLoad.store(true);
+  }
+  else
+  {
+    mVolumCustomMainSlot = selSlot;
+    mVolumCustomMainChannel = selChan;
+    mVolumNeedsLoad.store(true);
+  }
 }
 
 void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane)
@@ -3798,6 +4072,70 @@ void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, int slot, bo
       stepper->As<VoLumChannelStepControl>()->SetChannels(labels, 0);
 }
 
+volum::VoLumAmpSettings& NeuralAmpModeler::_VolumActiveScene()
+{
+  if (mVolumCustomMainIdx >= 0)
+  {
+    const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+    if (!id.empty())
+      return volum::content::GlobalContentStore().reg().customScenes[id];
+  }
+  return mVolumAmpSettings[mVolumAmpIdx];
+}
+
+void NeuralAmpModeler::_VolumSelectIR(int irIdx)
+{
+  const std::string id = volum::custom::IRIdAt(irIdx);
+  const std::string rel = volum::custom::IRFileAt(irIdx);
+  if (id.empty() || rel.empty())
+    return;
+  const auto abs = volum::content::GlobalContentStore().ResolveStored(rel);
+  WDL_String p(abs.string().c_str());
+  if (_StageIR(p) != dsp::wav::LoadReturnCode::SUCCESS)
+    return;
+  _VolumActiveScene().activeIrId = id;
+  GetParam(kIRToggle)->Set(1.0);
+  SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+  if (auto* pGfx = GetUI())
+    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+    {
+      const auto& names = volum::custom::MockIRLibrary();
+      if (irIdx >= 0 && irIdx < (int)names.size())
+        spk->As<VoLumSpeakerRowControl>()->SetIrCab(true, names[(size_t)irIdx].c_str());
+    }
+  mVolumSettingsDirty = true;
+  _VolumMarkPresetDirty();
+}
+
+void NeuralAmpModeler::_VolumClearIR()
+{
+  mShouldRemoveIR = true; // audio thread drops mIR in _ApplyDSPStaging
+  _VolumActiveScene().activeIrId.clear();
+  GetParam(kIRToggle)->Set(0.0);
+  SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+  if (auto* pGfx = GetUI())
+    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+      spk->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
+  mVolumSettingsDirty = true;
+  _VolumMarkPresetDirty();
+}
+
+void NeuralAmpModeler::_VolumApplyActiveIr(const std::string& irId)
+{
+  const int idx = volum::custom::IRIndexById(irId);
+  if (idx < 0)
+  {
+    // Empty or orphaned id (the IR was deleted / is missing on this machine):
+    // drop the convolver so the baked cab takes over. No UI when headless.
+    mShouldRemoveIR = true;
+    if (auto* pGfx = GetUI())
+      if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+        spk->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
+    return;
+  }
+  _VolumSelectIR(idx);
+}
+
 void NeuralAmpModeler::_VolumResetAmpToFactory()
 {
   // Factory baseline == a default-constructed per-amp settings slot. Apply it to
@@ -3807,6 +4145,9 @@ void NeuralAmpModeler::_VolumResetAmpToFactory()
   _VolumRefreshChannels();
   mVolumNeedsLoad.store(true);
   mVolumSettingsDirty = true;
+  // Drop any recalled preset: the bar reads "No Preset" and edits no longer diff.
+  mVolumHasRecalledSnapshot = false;
+  mVolumActivePresetId.clear();
   if (auto* pGfx = GetUI())
   {
     if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
@@ -3980,6 +4321,7 @@ void NeuralAmpModeler::_VolumSetSupportAmp(int ampIdx)
 
   GetParam(kSupportAmpIdx)->Set(clamped);
   SendParameterValueFromDelegate(kSupportAmpIdx, GetParam(kSupportAmpIdx)->GetNormalized(), true);
+  _VolumActiveScene().supportCustomId.clear(); // factory partner: drop any custom ref
   mVolumSupportNeedsLoad.store(true);
   mVolumSettingsDirty = true;
   _VolumMarkPresetDirty();
@@ -3995,13 +4337,26 @@ void NeuralAmpModeler::_VolumSetSupportCustom(int customIdx)
     return;
 
   mVolumCustomSupportIdx = customIdx;
-  // Custom support is display + session only: clear the factory reference so the
-  // SUPPORT lane renders the custom amp's art/cabs (not a factory amp).
+  // Clear the factory reference so the SUPPORT lane renders the custom amp's
+  // art/cabs (not a factory amp).
   if (GetParam(kSupportAmpIdx)->Int() != -1)
   {
     GetParam(kSupportAmpIdx)->Set(-1.0);
     SendParameterValueFromDelegate(kSupportAmpIdx, GetParam(kSupportAmpIdx)->GetNormalized(), true);
   }
+  // Persist the custom partner by stable id and resolve a default (slot, channel)
+  // so the SUPPORT lane produces sound immediately (F6 dual amp DSP).
+  _VolumActiveScene().supportCustomId = volum::custom::CustomAmpIdAt(customIdx);
+  {
+    const auto amp = volum::custom::CustomAmpAt(customIdx);
+    int s = volum::custom::kDirectSlot, c = 1;
+    if (volum::content::DefaultCaptureSelection(amp, s, c))
+    {
+      mVolumCustomSupportSlot = s;
+      mVolumCustomSupportChannel = c;
+    }
+  }
+  mVolumSupportNeedsLoad.store(true);
   mVolumSettingsDirty = true;
   _VolumMarkPresetDirty();
   _VolumApplyFocusedLaneCabs();
@@ -4063,18 +4418,17 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
   if (supportAmpIdx >= 0 && supportAmpIdx < volum::kAmpCount && !mVolumRigsRoot.empty())
   {
     const int speakerIdx = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3);
-    auto channels = volum::DiscoverChannels(
-      std::filesystem::path(mVolumRigsRoot),
-      volum::kAmps[supportAmpIdx].folderName,
-      volum::kSpeakerPrefixes[speakerIdx]);
+    auto channels =
+      volum::DiscoverChannels(std::filesystem::path(mVolumRigsRoot), volum::kAmps[supportAmpIdx].folderName,
+                              volum::kSpeakerPrefixes[speakerIdx]);
     for (auto& ch : channels)
     {
       mVolumSupportChannelFiles.push_back(std::move(ch.filename));
       mVolumSupportChannelLabels.push_back(std::move(ch.label));
     }
 
-    int channelIdx = std::clamp(GetParam(kSupportChannelIdx)->Int(), 0,
-                                std::max(0, static_cast<int>(mVolumSupportChannelFiles.size()) - 1));
+    int channelIdx = std::clamp(
+      GetParam(kSupportChannelIdx)->Int(), 0, std::max(0, static_cast<int>(mVolumSupportChannelFiles.size()) - 1));
     if (channelIdx != GetParam(kSupportChannelIdx)->Int())
     {
       GetParam(kSupportChannelIdx)->Set(channelIdx);
@@ -4105,8 +4459,8 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   // Polarity belongs to the SUPPORT lane whenever it has an amp - a factory amp
   // or a custom support partner.
   const bool hasSupportAmp =
-    (GetParam(kSupportAmpIdx)->Int() >= 0 && GetParam(kSupportAmpIdx)->Int() < volum::kAmpCount) ||
-    mVolumCustomSupportIdx >= 0;
+    (GetParam(kSupportAmpIdx)->Int() >= 0 && GetParam(kSupportAmpIdx)->Int() < volum::kAmpCount)
+    || mVolumCustomSupportIdx >= 0;
   const bool showSupportPolarity = showPanKnobs && hasSupportAmp;
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
@@ -4118,9 +4472,8 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
     if (customLane < 0)
     {
       auto* row = spkRow->As<VoLumSpeakerRowControl>();
-      const int focusedSpeakerIdx = supportFocus
-        ? std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3)
-        : mVolumSpeakerIdx;
+      const int focusedSpeakerIdx =
+        supportFocus ? std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3) : mVolumSpeakerIdx;
       row->SetSelected(focusedSpeakerIdx);
     }
   }
