@@ -146,14 +146,21 @@ public:
       mOpen();
   }
 
-  void OnMouseOver(float, float, const IMouseMod&) override
+  void OnMouseOver(float x, float y, const IMouseMod&) override
   {
     mMouseIsOver = true;
+    const char* tip = "Open presets";
+    if (!mList.empty() && PrevRect().Contains(x, y))
+      tip = "Previous preset";
+    else if (!mList.empty() && NextRect().Contains(x, y))
+      tip = "Next preset";
+    SetTooltip(tip);
     SetDirty(false);
   }
   void OnMouseOut() override
   {
     mMouseIsOver = false;
+    SetTooltip("");
     SetDirty(false);
   }
 
@@ -202,8 +209,10 @@ public:
     std::string label;
     int code = 0;
     bool action = false; // teal action row (Manage / Default)
-    bool dim = false; // non-interactive hint row
+    bool dim = false; // non-interactive plain hint row (e.g. "No presets yet")
     bool dividerBelow = false; // draw a separator under this row (e.g. pinned Default)
+    bool group = false; // item belongs to a group (e.g. CUSTOM) -> left accent bar + indent
+    bool header = false; // group header row (amber tick + label, PRE-pedal style)
   };
 
   using SelectCallback = std::function<void(int code)>;
@@ -259,6 +268,19 @@ public:
       if (row.B < mMenuRect.T || row.T > mMenuRect.B)
         continue;
 
+      // Group header (e.g. "CUSTOM"): styled like the PRE-pedal menu - a short
+      // amber accent tick + small amber label, no selection affordance.
+      if (r.header)
+      {
+        const IRECT tick(row.L, row.MH(), row.L + 10.f, row.MH() + 1.f);
+        g.FillRect(VoLumColors::AMBER.WithOpacity(0.75f), tick);
+        g.DrawText(IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), r.label.c_str(),
+                   IRECT(row.L + 14.f, row.T, row.R, row.B));
+        if (r.dividerBelow)
+          g.DrawLine(VoLumColors::FRAME, row.L, row.B, row.R, row.B, nullptr, 1.f);
+        continue;
+      }
+
       // Visual divider above an action (Manage) row.
       if (r.action && i > 0)
         g.DrawLine(VoLumColors::FRAME, row.L, row.T, row.R, row.T, nullptr, 1.f);
@@ -273,12 +295,17 @@ public:
       {
         g.FillRoundRect(VoLumColors::ITEM_HOVER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
       }
+      // Grouped items (CUSTOM) get a teal left accent bar, mirroring the PRE-pedal
+      // dropdown so factory vs custom read the same in both menus.
+      if (r.group && !r.dim)
+        g.FillRoundRect(VoLumColors::TEAL.WithOpacity(0.55f), IRECT(row.L, row.T + 4.f, row.L + 4.f, row.B - 4.f), 2.f);
       if (selected)
         g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
       const IColor col = r.dim ? VoLumColors::CREAM_DIM
                                : (r.action ? VoLumColors::TEAL : (selected ? VoLumColors::CREAM : VoLumColors::CREAM_DIM));
+      const float textL = row.L + (selected ? 18.f : (r.group ? 14.f : 12.f));
       g.DrawText(IText(12.f, col, "Josefin-Bold", EAlign::Near, EVAlign::Middle), r.label.c_str(),
-                 IRECT(row.L + (selected ? 18.f : 12.f), row.T, row.R, row.B));
+                 IRECT(textL, row.T, row.R, row.B));
       if (r.dividerBelow)
         g.DrawLine(VoLumColors::FRAME, row.L, row.B, row.R, row.B, nullptr, 1.f);
     }
@@ -305,7 +332,7 @@ public:
       return;
     }
     const int idx = RowAtY(y);
-    if (idx >= 0 && idx < (int)mRows.size() && !mRows[(size_t)idx].dim && mCb)
+    if (idx >= 0 && idx < (int)mRows.size() && !mRows[(size_t)idx].dim && !mRows[(size_t)idx].header && mCb)
       mCb(mRows[(size_t)idx].code);
     Hide(true);
   }
@@ -371,10 +398,12 @@ public:
     mIgnoreMouse = false;
   }
 
-  void Show(const std::string& title, const std::string& message, std::function<void()> onConfirm)
+  void Show(const std::string& title, const std::string& message, std::function<void()> onConfirm,
+            const std::string& confirmLabel = "Delete")
   {
     mTitle = title;
     mMessage = message;
+    mConfirmLabel = confirmLabel;
     mOnConfirm = std::move(onConfirm);
     Hide(false);
     SetDirty(false);
@@ -395,7 +424,7 @@ public:
     g.PathClipRegion();
 
     DrawBtn(g, CancelRect(), "Cancel", false);
-    DrawBtn(g, DeleteRect(), "Delete", true);
+    DrawBtn(g, DeleteRect(), mConfirmLabel.c_str(), true);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -441,7 +470,7 @@ private:
                label, r);
   }
 
-  std::string mTitle, mMessage;
+  std::string mTitle, mMessage, mConfirmLabel = "Delete";
   std::function<void()> mOnConfirm;
 };
 
@@ -459,7 +488,9 @@ public:
     Pedals
   };
 
-  using BuilderSavedCallback = std::function<void(const volum::custom::CustomAmp& amp)>;
+  // editIdx is the custom-amp index being edited, or -1 for a brand-new amp.
+  // The host updates that entry in place (no duplicate) when editIdx >= 0.
+  using BuilderSavedCallback = std::function<void(const volum::custom::CustomAmp& amp, int editIdx)>;
   using ChangedCallback = std::function<void()>; // a managed list was mutated
 
   explicit VoLumCustomOverlayControl(const IRECT& fullBounds)
@@ -475,7 +506,8 @@ public:
   // Routes a destructive delete through the shared confirm modal:
   //   confirmCb(message, onConfirm) -> shows "Are you sure?"; onConfirm runs the
   //   actual delete if the user accepts.
-  using ConfirmDeleteCallback = std::function<void(const std::string& message, std::function<void()> onConfirm)>;
+  using ConfirmCallback =
+    std::function<void(const std::string& message, std::function<void()> onConfirm, const std::string& confirmLabel)>;
 
   // Primary action for a double-clicked Manage row (recall preset / select IR /
   // load pedal). pedalSlot is the originating PRE NAM slot for Pedals (else -1).
@@ -488,7 +520,7 @@ public:
     mChanged = std::move(changedCb);
   }
 
-  void SetConfirmDeleteCallback(ConfirmDeleteCallback cb) { mConfirmDelete = std::move(cb); }
+  void SetConfirmCallback(ConfirmCallback cb) { mConfirm = std::move(cb); }
   void SetPrimaryActionCallback(PrimaryActionCallback cb) { mPrimaryAction = std::move(cb); }
 
   // ampIdx/ampName only matter for Presets; pedalSlot only for Pedals.
@@ -507,18 +539,49 @@ public:
     SetDirty(false);
   }
 
-  void ShowBuilder(bool editExisting, const char* ampName)
+  // editIdx >= 0 edits an existing custom amp (loads its real manifest so the
+  // coverage grid shows that amp's actual files/cabs - not a fixed demo); -1
+  // starts a fresh draft. ampName seeds the name field for a new amp.
+  void ShowBuilder(bool editExisting, const char* ampName, int editIdx = -1)
   {
     mScreen = volum::custom::Screen::Builder;
-    mBuilderAmp = editExisting ? volum::custom::MockDemoCustomAmp() : NewBuilderAmp(ampName);
+    mBuilderEditIdx = editExisting ? editIdx : -1;
+    mBuilderAmp = (editExisting && editIdx >= 0) ? volum::custom::CustomAmpAt(editIdx) : NewBuilderAmp(ampName);
     ResetTransient();
     Hide(false);
     SetDirty(false);
   }
 
+  // Keyboard nav for the builder art picker (3-column grid). Called by the
+  // global key handler while this overlay is the focused surface so arrows move
+  // the art selection here instead of the amp list behind the overlay. Returns
+  // true when it consumed the key.
+  bool OnArrowKey(int vk)
+  {
+    if (mScreen != volum::custom::Screen::Builder)
+      return false;
+    const int cols = 3;
+    const int n = volum::custom::kNumCustomArts;
+    int a = std::clamp(mBuilderAmp.art, 0, n - 1);
+    if (vk == kVK_LEFT)
+      a = (a - 1 + n) % n;
+    else if (vk == kVK_RIGHT)
+      a = (a + 1) % n;
+    else if (vk == kVK_UP)
+      a = (a - cols + n) % n;
+    else if (vk == kVK_DOWN)
+      a = (a + cols) % n;
+    else
+      return false;
+    mBuilderAmp.art = a;
+    SetDirty(false);
+    return true;
+  }
+
   void Draw(IGraphics& g) override
   {
     mHotspots.clear();
+    mHotspotTips.clear();
     mPopupHotspots.clear();
     g.FillRect(IColor(185, 8, 10, 14), mRECT);
 
@@ -536,7 +599,7 @@ public:
     g.DrawText(IText(18.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), TitleForScreen(), head);
     const IRECT closeR(panel.R - 36.f, panel.T + 12.f, panel.R - 12.f, panel.T + 36.f);
     DrawClose(g, closeR);
-    AddHotspot(closeR, kClose);
+    AddHotspot(closeR, kClose, "Close");
 
     const IRECT body = panel.GetPadded(-22.f, -56.f, -22.f, -18.f);
     if (mScreen == volum::custom::Screen::Presets)
@@ -584,6 +647,35 @@ public:
     SetDirty(false);
   }
 
+  void OnMouseOver(float x, float y, const IMouseMod&) override
+  {
+    // Per-hotspot tooltips: find the hovered hotspot and surface its hint.
+    const char* tip = "";
+    if (!mPopupOpen && PanelRect().Contains(x, y))
+      for (size_t i = 0; i < mHotspots.size() && i < mHotspotTips.size(); ++i)
+        if (mHotspots[i].first.Contains(x, y))
+        {
+          tip = mHotspotTips[i].c_str();
+          break;
+        }
+    if (mCurTip != tip)
+    {
+      mCurTip = tip;
+      SetTooltip(tip);
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (!mCurTip.empty())
+    {
+      mCurTip.clear();
+      SetTooltip("");
+      SetDirty(false);
+    }
+  }
+
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
     // Double-clicking a Manage row runs its primary action (recall preset /
@@ -624,18 +716,30 @@ public:
       case TextTarget::NewItem: // presets only (IR/pedals add via file dialog)
         if (!s.empty() && mManageKind == ManageKind::Presets)
         {
-          const int i = AddPreset(mAmpIdx, s);
-          ReloadList();
-          mSel = i;
-          NotifyChanged();
+          if (NameTaken(s, -1))
+            SetNameError(s);
+          else
+          {
+            mError.clear();
+            const int i = AddPreset(mAmpIdx, s);
+            ReloadList();
+            mSel = i;
+            NotifyChanged();
+          }
         }
         break;
       case TextTarget::RenameItem:
         if (mSel >= 0)
         {
-          ApplyRename(mSel, s);
-          ReloadList();
-          NotifyChanged();
+          if (!s.empty() && NameTaken(s, mSel))
+            SetNameError(s);
+          else
+          {
+            mError.clear();
+            ApplyRename(mSel, s);
+            ReloadList();
+            NotifyChanged();
+          }
         }
         break;
       case TextTarget::ProfileName:
@@ -726,13 +830,18 @@ private:
     }
   }
 
-  void AddHotspot(const IRECT& r, int action) { mHotspots.emplace_back(r, action); }
+  void AddHotspot(const IRECT& r, int action, const char* tip = "")
+  {
+    mHotspots.emplace_back(r, action);
+    mHotspotTips.emplace_back(tip ? tip : "");
+  }
 
   void ResetTransient()
   {
     mPopupOpen = false;
     mTextTarget = TextTarget::None;
     mTextFileIdx = -1;
+    mError.clear();
   }
 
   void ReloadList()
@@ -787,6 +896,16 @@ private:
     return s;
   }
 
+  // Leaf filename WITH extension (e.g. "Mesa_4x12_sm57.wav").
+  static std::string LeafName(const char* full)
+  {
+    std::string s = full ? full : "";
+    const size_t slash = s.find_last_of("/\\");
+    if (slash != std::string::npos)
+      s = s.substr(slash + 1);
+    return s;
+  }
+
   // IR/pedal "add" = OS file picker (.wav / .nam). The chosen filename seeds the
   // mock entry name; real loading lands with the backend.
   void StartImport()
@@ -794,22 +913,51 @@ private:
     auto* ui = GetUI();
     if (!ui)
       return;
-    WDL_String fileName, path;
     const char* ext = (mManageKind == ManageKind::IR) ? "wav" : "nam";
-    ui->PromptForFile(fileName, path, EFileAction::Open, ext,
-                      [this](const WDL_String& fn, const WDL_String&) {
-                        if (!fn.GetLength())
-                          return;
-                        const std::string base = BaseName(fn.Get());
-                        if (mManageKind == ManageKind::IR)
-                          volum::custom::AddIR(base);
-                        else
-                          volum::custom::AddPedal(base);
-                        ReloadList();
-                        mSel = (int)mItems.size() - 1;
-                        NotifyChanged();
-                        SetDirty(false);
-                      });
+    WDL_String path;
+    std::vector<WDL_String> files;
+    ui->PromptForFiles(path, files, ext); // multi-select; each entry is a full path
+    if (files.empty())
+      return;
+
+    // Each file's display name defaults to its filename (minus extension); the
+    // exact filename is stored alongside. Duplicate names (case-insensitive) are
+    // skipped - including duplicates within the same batch, since the library
+    // grows as we add - and reported together.
+    std::vector<std::string> skipped;
+    int added = 0;
+    for (const auto& fn : files)
+    {
+      if (!fn.GetLength())
+        continue;
+      const std::string base = BaseName(fn.Get());
+      if (base.empty())
+        continue;
+      if (NameTaken(base, -1))
+      {
+        skipped.push_back(base);
+        continue;
+      }
+      const std::string leaf = LeafName(fn.Get());
+      if (mManageKind == ManageKind::IR)
+        volum::custom::AddIR(base, leaf);
+      else
+        volum::custom::AddPedal(base, leaf);
+      ++added;
+    }
+
+    ReloadList();
+    if (added > 0)
+    {
+      mSel = (int)mItems.size() - 1;
+      NotifyChanged();
+    }
+    if (!skipped.empty())
+      mError = skipped.size() == 1 ? ("\"" + skipped.front() + "\" already exists - skipped.")
+                                   : (std::to_string(skipped.size()) + " names already existed - skipped.");
+    else
+      mError.clear();
+    SetDirty(false);
   }
 
   volum::custom::CustomAmp NewBuilderAmp(const char* name)
@@ -890,9 +1038,20 @@ private:
         }
         break;
       case kUpdate:
-        // presets: overwrite snapshot with live state (no-op in shell).
-        NotifyChanged();
-        SetDirty(false);
+        // presets: overwrite snapshot with live state (no-op in shell), gated by
+        // an "are you sure" confirm so a stray click can't clobber a saved preset.
+        if (mSel >= 0 && mSel < (int)mItems.size())
+        {
+          const std::string nm = mItems[(size_t)mSel];
+          auto doOverwrite = [this]() {
+            NotifyChanged();
+            SetDirty(false);
+          };
+          if (mConfirm)
+            mConfirm("Overwrite preset \"" + nm + "\" with the current settings?", doOverwrite, "Overwrite");
+          else
+            doOverwrite();
+        }
         break;
       case kRename:
         if (mSel >= 0 && mSel < (int)mItems.size())
@@ -910,8 +1069,8 @@ private:
             NotifyChanged();
             SetDirty(false);
           };
-          if (mConfirmDelete)
-            mConfirmDelete("Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.", doDelete);
+          if (mConfirm)
+            mConfirm("Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.", doDelete, "Delete");
           else
             doDelete();
         }
@@ -931,11 +1090,30 @@ private:
     }
     if (action == kAddFile)
     {
-      char fname[24];
-      std::snprintf(fname, sizeof(fname), "capture-%d.nam", (int)mBuilderAmp.files.size() + 1);
-      // Auto-assign to DIRECT / Ch 1 so a file is never in a broken state; the
-      // user re-points slot/channel via the chips.
-      mBuilderAmp.files.push_back({fname, kDirectSlot, 1});
+      auto* ui = GetUI();
+      if (!ui)
+        return;
+      WDL_String path;
+      std::vector<WDL_String> files;
+      ui->PromptForFiles(path, files, "nam"); // multi-select .nam captures
+      for (const auto& fn : files)
+      {
+        if (!fn.GetLength())
+          continue;
+        std::string base = fn.Get();
+        const size_t slash = base.find_last_of("/\\");
+        if (slash != std::string::npos)
+          base = base.substr(slash + 1);
+        // Factory naming convention (PREFIX-CODE-CHANNEL.nam) auto-fills the cab
+        // slot, channel, and cab name; other names are added unassigned for
+        // manual mapping.
+        const auto parsed = volum::custom::ParseNamFileName(base);
+        const int slot = parsed.matched ? parsed.slot : volum::custom::kUnassignedSlot;
+        const int channel = parsed.matched ? parsed.channel : 0;
+        mBuilderAmp.files.push_back({base, slot, channel});
+        if (parsed.matched && slot >= 0 && slot < volum::custom::kNumCabSlots && !parsed.cabName.empty())
+          mBuilderAmp.cabNames[(size_t)slot] = volum::custom::NormalizeCabName(parsed.cabName);
+      }
       SetDirty(false);
       return;
     }
@@ -950,7 +1128,7 @@ private:
       if (SaveDisabledReason(mBuilderAmp).empty())
       {
         if (mBuilderSaved)
-          mBuilderSaved(mBuilderAmp);
+          mBuilderSaved(mBuilderAmp, mBuilderEditIdx);
         Hide(true);
       }
       return;
@@ -1096,7 +1274,7 @@ private:
   }
 
   void DrawButton(IGraphics& g, const IRECT& r, const char* label, int action, bool primary = false, bool on = false,
-                  bool disabled = false)
+                  bool disabled = false, const char* tip = "")
   {
     const IColor bg = disabled ? IColor(8, 200, 162, 78)
                                : (primary ? IColor(70, 232, 168, 92) : (on ? VoLumColors::ITEM_SEL_BG : VoLumColors::BTN_OFF_BG));
@@ -1106,7 +1284,7 @@ private:
     const IColor txt = disabled ? VoLumColors::CREAM_DIM : ((on || primary) ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM);
     g.DrawText(IText(11.f, txt, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label, r);
     if (action >= 0 && !disabled)
-      AddHotspot(r, action);
+      AddHotspot(r, action, tip);
   }
 
   // Footer hint clipped to the panel so long copy can never bleed past the frame.
@@ -1131,9 +1309,33 @@ private:
     }
   }
 
+  // Within-list name uniqueness (case-insensitive). exceptIdx skips the row being
+  // renamed so re-confirming its own name is allowed.
+  bool NameTaken(const std::string& name, int exceptIdx) const
+  {
+    using namespace volum::custom;
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return IRNameExists(name, exceptIdx);
+      case ManageKind::Pedals: return PedalNameExists(name, exceptIdx);
+      default: return PresetNameExists(mAmpIdx, name, exceptIdx);
+    }
+  }
+
+  void SetNameError(const std::string& name)
+  {
+    mError = "\"" + name + "\" already exists - names must be unique.";
+    SetDirty(false);
+  }
+
   void DrawManage(IGraphics& g, const IRECT& body)
   {
     const bool presets = (mManageKind == ManageKind::Presets);
+    const std::string deleteTip = std::string("Delete ") + ItemNoun();
+    const std::string renameTip = std::string("Rename ") + ItemNoun();
+    const char* rowTip = presets ? "Double-click to recall this preset"
+                                  : (mManageKind == ManageKind::IR ? "Double-click to use on the focused cab"
+                                                                    : "Double-click to load this pedal");
 
     char sub[160];
     if (presets)
@@ -1148,7 +1350,10 @@ private:
     const char* addLabel =
       presets ? "+  Save current as new" : (mManageKind == ManageKind::IR ? "+  Import IR (.wav)" : "+  Import pedal (.nam)");
     const IRECT addBtn(body.L, body.T + 20.f, body.R, body.T + 48.f);
-    DrawButton(g, addBtn, addLabel, kAdd, true);
+    const char* addTip = presets ? "Save the current settings as a new preset"
+                                  : (mManageKind == ManageKind::IR ? "Import a .wav impulse response"
+                                                                    : "Import a .nam pedal capture");
+    DrawButton(g, addBtn, addLabel, kAdd, true, false, false, addTip);
 
     // Scrollable list filling the rest of the panel; per-row inline icons.
     const IRECT listArea(body.L, addBtn.B + 10.f, body.R, body.B - 26.f);
@@ -1193,28 +1398,46 @@ private:
         float ix = row.R - iconW;
         const IRECT trash(ix, row.T, ix + iconW, row.B);
         DrawBinGlyph(g, trash, VoLumColors::CREAM_DIM);
-        AddHotspot(trash, kRowDeleteBase + i);
+        AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
         ix -= iconW;
         const IRECT pen(ix, row.T, ix + iconW, row.B);
         DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
-        AddHotspot(pen, kRowRenameBase + i);
+        AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
         ix -= iconW;
         if (presets)
         {
           const IRECT ovr(ix, row.T, ix + iconW, row.B);
           DrawOverwriteGlyph(g, ovr, VoLumColors::CREAM_DIM);
-          AddHotspot(ovr, kRowOverwriteBase + i);
+          AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
           ix -= iconW;
         }
 
         const IRECT nameR(row.L + (sel ? 20.f : 12.f), row.T, ix - 6.f, row.B);
         g.PathClipRegion(nameR);
-        g.DrawText(IText(13.f, sel ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Near,
-                         EVAlign::Middle),
-                   mItems[(size_t)i].c_str(), nameR);
+        // IR / pedal rows show the exact source filename as a dim subtitle so
+        // people can see where the entry was imported from (rename never touches
+        // it). Presets have no source file, so the name stays vertically centred.
+        std::string fileSub;
+        if (mManageKind == ManageKind::IR)
+          fileSub = volum::custom::IRFileAt(i);
+        else if (mManageKind == ManageKind::Pedals)
+          fileSub = volum::custom::PedalFileAt(i);
+        const IColor nameCol = sel ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED;
+        if (!fileSub.empty())
+        {
+          g.DrawText(IText(12.5f, nameCol, "Josefin-Bold", EAlign::Near, EVAlign::Bottom), mItems[(size_t)i].c_str(),
+                     nameR.GetFromTop(nameR.H() * 0.56f));
+          g.DrawText(IText(9.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top), fileSub.c_str(),
+                     nameR.GetFromBottom(nameR.H() * 0.44f));
+        }
+        else
+        {
+          g.DrawText(IText(13.f, nameCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mItems[(size_t)i].c_str(),
+                     nameR);
+        }
         g.PathClipRegion(listArea);
 
-        AddHotspot(row, kRowBase + i);
+        AddHotspot(row, kRowBase + i, rowTip);
       }
       g.PathClipRegion();
 
@@ -1231,13 +1454,20 @@ private:
       }
     }
 
-    const char* hint = presets
-      ? "A preset snapshots this amp (cab/IR, channel, AMP, PRE, POST). Double-click recalls; icons overwrite / rename / delete."
-      : (mManageKind == ManageKind::IR
-           ? "Import a .wav, then double-click to convolve it with the focused DIRECT capture. Shared across amps."
-           : "Import a .nam capture of your own pre-amp gear. They appear under CUSTOM in the PRE pedal menu.");
-    g.DrawText(IText(9.5f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle), hint,
-               IRECT(body.L, body.B - 22.f, body.R, body.B));
+    const IRECT hintR(body.L, body.B - 22.f, body.R, body.B);
+    if (!mError.empty())
+    {
+      g.DrawText(IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mError.c_str(), hintR);
+    }
+    else
+    {
+      const char* hint = presets
+        ? "A preset snapshots this amp (cab/IR, channel, AMP, PRE, POST). Double-click recalls; icons overwrite / rename / delete."
+        : (mManageKind == ManageKind::IR
+             ? "Import a .wav, then double-click to convolve it with the focused DIRECT capture. Shared across amps."
+             : "Import a .nam capture of your own pre-amp gear. They appear under CUSTOM in the PRE pedal menu.");
+      g.DrawText(IText(9.5f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle), hint, hintR);
+    }
   }
 
   void ClampManageScroll(float contentH, float viewH)
@@ -1277,13 +1507,13 @@ private:
     g.DrawText(IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Near, EVAlign::Middle), mBuilderAmp.name.c_str(),
                nameTextR);
     g.PathClipRegion();
-    AddHotspot(nameBox, kEditName);
+    AddHotspot(nameBox, kEditName, "Edit profile name");
 
     const IRECT drop(left.L, nameBox.B + 12.f, left.R, nameBox.B + 40.f);
     g.DrawDottedRect(VoLumColors::TEAL_DIM, drop, nullptr, 1.f, 4.f);
     g.DrawText(IText(11.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               "+ Add .nam file", drop);
-    AddHotspot(drop, kAddFile);
+               "+ Add .nam files", drop);
+    AddHotspot(drop, kAddFile, "Add .nam captures - PREFIX-CODE-CHANNEL names auto-fill cab + channel");
 
     // file rows: filename | speaker | channel | remove
     float y = drop.B + 10.f;
@@ -1294,11 +1524,15 @@ private:
       const bool unassigned = !FileAssigned(f);
       const bool dup = FileIsDuplicate(mBuilderAmp, (size_t)i);
       const IRECT row(left.L, y, left.R, y + rowH);
-      // Duplicate (slot,channel) -> red; unassigned -> amber; else neutral.
-      const IColor rowFill = dup ? IColor(34, 235, 70, 70) : (unassigned ? IColor(28, 232, 168, 92) : VoLumColors::BTN_OFF_BG);
-      const IColor rowBorder = dup ? IColor(220, 235, 90, 90) : (unassigned ? VoLumColors::AMBER : VoLumColors::FRAME);
-      g.FillRect(rowFill, row);
-      g.DrawRect(rowBorder, row);
+      // The manifest rows are not selectable, so a normal row stays flat (no
+      // button-like fill/border). Only the validation states paint: duplicate
+      // (slot,channel) -> red, unassigned -> amber.
+      const bool flagged = dup || unassigned;
+      if (flagged)
+      {
+        g.FillRect(dup ? IColor(34, 235, 70, 70) : IColor(28, 232, 168, 92), row);
+        g.DrawRect(dup ? IColor(220, 235, 90, 90) : VoLumColors::AMBER, row);
+      }
 
       const IRECT rem(row.R - 22.f, row.T + 3.f, row.R - 4.f, row.B - 3.f);
       const IRECT ch(rem.L - 52.f, row.T + 3.f, rem.L - 4.f, row.B - 3.f);
@@ -1314,7 +1548,7 @@ private:
       g.DrawRect(slotOk ? VoLumColors::TEAL_DIM : VoLumColors::AMBER, spk);
       g.DrawText(IText(10.f, slotOk ? VoLumColors::GOLD : VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                  spkLabel.c_str(), spk);
-      AddHotspot(spk, kFileSpeakerBase + i);
+      AddHotspot(spk, kFileSpeakerBase + i, "Assign this capture to a cabinet (or DIRECT)");
 
       // channel chip
       char chLabel[12];
@@ -1325,11 +1559,11 @@ private:
       g.FillRect(VoLumColors::HERO_BG, ch);
       g.DrawRect(VoLumColors::TEAL_DIM, ch);
       g.DrawText(IText(10.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle), chLabel, ch);
-      AddHotspot(ch, kFileChannelBase + i);
+      AddHotspot(ch, kFileChannelBase + i, "Assign this capture to a channel");
 
       // remove
       g.DrawText(IText(13.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "x", rem);
-      AddHotspot(rem, kFileRemoveBase + i);
+      AddHotspot(rem, kFileRemoveBase + i, "Remove this file");
 
       y += rowH + 4.f;
     }
@@ -1363,8 +1597,15 @@ private:
       if (selArt)
         g.FillRoundRect(IColor(60, 232, 196, 96), t.GetPadded(2.5f), 8.f); // soft gold glow
       g.FillRoundRect(VoLumColors::HERO_BG, t, 6.f);
-      const IColor bright = selArt ? IColor(235, 196, 142, 226) : IColor(150, 120, 168, 150);
-      const IColor dim = selArt ? IColor(210, 110, 150, 205) : IColor(130, 70, 110, 130);
+      // Same cyan identity as the hero/sidebar; selection is just a brighter
+      // (more opaque) version of the SAME hue - the gold border + badge below
+      // mark the active swatch. No hue shift on select.
+      const IColor bright = selArt ? VoLumColors::CUSTOM_ART_BRIGHT
+                                    : IColor(150, VoLumColors::CUSTOM_ART_BRIGHT.R, VoLumColors::CUSTOM_ART_BRIGHT.G,
+                                             VoLumColors::CUSTOM_ART_BRIGHT.B);
+      const IColor dim = selArt ? VoLumColors::CUSTOM_ART_DIM
+                                 : IColor(120, VoLumColors::CUSTOM_ART_DIM.R, VoLumColors::CUSTOM_ART_DIM.G,
+                                          VoLumColors::CUSTOM_ART_DIM.B);
       DrawCustomAmpArt(g, t.GetPadded(-7.f), a, bright, dim);
       g.DrawRoundRect(selArt ? VoLumColors::GOLD : VoLumColors::TEAL_DIM, t, 6.f, nullptr, selArt ? 1.8f : 1.f);
       if (selArt)
@@ -1374,7 +1615,7 @@ private:
         g.DrawLine(IColor(255, 22, 22, 30), bx - 2.6f, by + 0.2f, bx - 0.7f, by + 2.4f, nullptr, 1.6f);
         g.DrawLine(IColor(255, 22, 22, 30), bx - 0.7f, by + 2.4f, bx + 3.f, by - 2.4f, nullptr, 1.6f);
       }
-      AddHotspot(t, kArtBase + a);
+      AddHotspot(t, kArtBase + a, "Use this art for the amp");
     }
 
     // ---- RIGHT (bottom): fixed 4-row coverage grid (DIRECT + 3 cab slots) ---
@@ -1426,7 +1667,7 @@ private:
         g.DrawText(IText(10.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
                    mBuilderAmp.cabNames[(size_t)slot].c_str(), chip.GetPadded(-7.f, 0.f, -16.f, 0.f));
         DrawPenGlyph(g, IRECT(chip.R - 15.f, chip.T, chip.R - 1.f, chip.B), VoLumColors::CREAM_DIM);
-        AddHotspot(chip, kCabNameBase + slot);
+        AddHotspot(chip, kCabNameBase + slot, "Rename this cab (max 3 chars)");
       }
       for (int c = 1; c <= maxCh; c++)
       {
@@ -1457,7 +1698,7 @@ private:
     const std::string reason = SaveDisabledReason(mBuilderAmp);
     const std::string saveLabel = reason.empty() ? "Save amp" : reason;
     DrawButton(g, IRECT(right.L, right.B - 32.f, right.R, right.B - 4.f), saveLabel.c_str(), kBuilderSave, true, false,
-               !reason.empty());
+               !reason.empty(), "Save this custom amp");
   }
 
   // Diagonal pencil glyph (mirrors VoLumAmpListControl::DrawPenGlyph) for the
@@ -1502,8 +1743,11 @@ private:
   std::string mAmpName;
   std::vector<std::string> mItems;
   int mSel = -1;
+  std::string mError; // transient "name already exists" banner (Manage screen)
   volum::custom::CustomAmp mBuilderAmp;
   std::vector<std::pair<IRECT, int>> mHotspots;
+  std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text
+  std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
 
   // in-overlay popup (builder speaker/channel pickers)
   bool mPopupOpen = false;
@@ -1520,10 +1764,11 @@ private:
   IText mEntryText;
 
   int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals
+  int mBuilderEditIdx = -1; // custom-amp index being edited (-1 = new draft)
   float mManageScroll = 0.f; // Manage list scroll offset (px)
 
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
-  ConfirmDeleteCallback mConfirmDelete;
+  ConfirmCallback mConfirm;
   PrimaryActionCallback mPrimaryAction;
 };

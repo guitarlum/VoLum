@@ -120,7 +120,7 @@ public:
         if (!g.CheckLayer(mCustomArtLayers[a]))
         {
           g.StartLayer(this, artBuildR);
-          DrawCustomAmpArt(g, artBuildR, a, IColor(200, 120, 210, 220), IColor(100, 100, 180, 200));
+          DrawCustomAmpArt(g, artBuildR, a, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
           mCustomArtLayers[a] = g.EndLayer();
         }
     }
@@ -228,6 +228,18 @@ public:
       idx = hit.idx;
       dom = EDomain::Custom;
     }
+    const char* tip = "";
+    if (hit.zone == EZone::CustomEdit)
+      tip = "Edit custom amp";
+    else if (hit.zone == EZone::CustomDelete)
+      tip = "Delete custom amp";
+    else if (hit.zone == EZone::CustomAdd)
+      tip = "Create a custom amp";
+    if (mCurTip != tip)
+    {
+      mCurTip = tip;
+      SetTooltip(tip);
+    }
     if (idx != mHovered || dom != mHoveredDomain)
     {
       mHovered = idx;
@@ -240,6 +252,11 @@ public:
   {
     mHovered = -1;
     mHoveredDomain = EDomain::None;
+    if (!mCurTip.empty())
+    {
+      mCurTip.clear();
+      SetTooltip("");
+    }
     SetDirty(false);
   }
 
@@ -540,6 +557,7 @@ private:
   int mSelected = 0;
   int mHovered = -1;
   EDomain mHoveredDomain = EDomain::None;
+  std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
   float mScrollOffset = 0.f;
   float mScrollTarget = 0.f;
   std::vector<std::string> mAmpNames;

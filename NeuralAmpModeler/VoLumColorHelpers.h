@@ -58,6 +58,20 @@ const IColor TEAL_DIM(255, 75, 162, 162);
 const IColor AMBER(255, 232, 168, 92);
 const IColor CREAM(255, 237, 227, 208);
 const IColor CREAM_DIM(255, 166, 149, 124);
+
+// Custom-amp procedural art palette: the cyan/turquoise identity used for the
+// hero, sidebar thumbnails, and builder art picker alike. Selection is conveyed
+// by a brighter version of THIS hue (plus the gold border/badge), never a hue
+// shift - the old picker mixed gold + periwinkle on select and read as "off".
+const IColor CUSTOM_ART_BRIGHT(220, 120, 210, 220);
+const IColor CUSTOM_ART_DIM(205, 100, 178, 208);
+
+// Custom IR active cab highlight: a warm copper accent, distinct from the teal
+// "No Cab" (BTN_AMP_ON) and the gold stock cabs (BTN_CAB_ON) while staying in
+// the warm half of the palette.
+const IColor BTN_IR_ON_BG(82, 196, 122, 80);
+const IColor BTN_IR_ON_BORDER(235, 226, 156, 112);
+const IColor BTN_IR_ON_TEXT(255, 255, 236, 214);
 } // namespace VoLumColors
 
 // Helper: draw L-shaped corner accent (2 lines)

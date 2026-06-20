@@ -49,7 +49,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    if (mDualAmpActive && !mCustomMode)
+    if (mDualAmpActive)
     {
       DrawDualHero(g);
     }
@@ -91,15 +91,16 @@ public:
   }
 
   // Custom amps render an assigned procedural art instead of the factory amp
-  // fractal, and hide the dual/stereo affordance (not supported for custom amps
-  // in 1.2.0). Pass isCustom=false to return to the factory amp art.
+  // fractal. Dual amp behaves exactly like a factory main amp (the support
+  // partner is always a factory amp). Pass isCustom=false for factory art.
   void SetCustomArt(bool isCustom, int artId)
   {
     if (mCustomMode != isCustom || mCustomArt != artId)
     {
       mCustomMode = isCustom;
       mCustomArt = artId;
-      mMonoArtLayer = nullptr; // force art layer rebuild
+      mMonoArtLayer = nullptr; // force art layer rebuild (mono + dual MAIN lane)
+      mMainArtLayer = nullptr;
     }
     SetDirty(false);
   }
@@ -114,9 +115,9 @@ public:
     SetDirty(false);
   }
 
-  // Render the SUPPORT lane as a custom amp (fractal art + name) rather than a
-  // factory amp. Used when a custom amp is chosen as the dual-amp support
-  // partner (display-only in 1.2.0). Pass isCustom=false to return to factory.
+  // Render the SUPPORT lane as a custom amp (its procedural art + name) instead
+  // of a factory amp, for when a custom amp is the dual-amp support partner.
+  // Pass isCustom=false to return the lane to factory rendering.
   void SetSupportCustom(bool isCustom, int artId, const char* name)
   {
     const std::string n = name ? name : "";
@@ -141,10 +142,6 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void) mod;
-
-    // Custom amps have no dual/stereo affordance in 1.2.0 — swallow clicks.
-    if (mCustomMode)
-      return;
 
     // 1. DUAL toggle chip — top-right of mono, top-right of MAIN panel in dual.
     if (mDualToggleCallback && DualChipRect().Contains(x, y))
@@ -354,7 +351,7 @@ private:
     {
       g.StartLayer(this, artRect);
       if (mCustomMode)
-        DrawCustomAmpArt(g, artRect, mCustomArt, IColor(170, 120, 210, 220), IColor(70, 100, 180, 200));
+        DrawCustomAmpArt(g, artRect, mCustomArt, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
       else
         DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
       mMonoArtLayer = g.EndLayer();
@@ -362,9 +359,7 @@ private:
     }
     g.DrawLayer(mMonoArtLayer);
 
-    // No dual/stereo affordance for custom amps in 1.2.0.
-    if (!mCustomMode)
-      DrawDualChip(g, VoLumColors::AMBER);
+    DrawDualChip(g, VoLumColors::AMBER);
   }
 
   void DrawLane(IGraphics& g, const IRECT& r, int ampIdx, const char* role, const char* name, bool focused,
@@ -390,8 +385,10 @@ private:
       g.StartLayer(this, artRect);
       if (empty)
         DrawEmptySupportArt(g, artRect);
+      else if (mainLane && mCustomMode)
+        DrawCustomAmpArt(g, artRect, mCustomArt, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
       else if (!mainLane && mSupportCustomMode)
-        DrawCustomAmpArt(g, artRect, mSupportCustomArt, IColor(170, 120, 210, 220), IColor(70, 100, 180, 200));
+        DrawCustomAmpArt(g, artRect, mSupportCustomArt, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
       else
         DrawHeroFractalArt(g, artRect, FractalCaseForAmp(clampedAmpIdx));
       layer = g.EndLayer();

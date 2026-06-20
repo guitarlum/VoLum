@@ -135,22 +135,82 @@ TEST_CASE("MaxAssignedChannel ignores unassigned files")
   REQUIRE(MaxAssignedChannel(amp) == 5);
 }
 
-TEST_CASE("SaveDisabledReason gates empty, unassigned, and duplicate states")
+TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate states")
 {
+  // Name gate first: empty and the builder default both read as unnamed.
+  CustomAmp unnamed;
+  unnamed.files = {{"a.nam", kDirectSlot, 1}};
+  REQUIRE(SaveDisabledReason(unnamed) == "Name your amp");
+  CustomAmp defName;
+  defName.name = "New custom amp";
+  defName.files = {{"a.nam", kDirectSlot, 1}};
+  REQUIRE(SaveDisabledReason(defName) == "Name your amp");
+
   CustomAmp empty;
+  empty.name = "My amp";
   REQUIRE(SaveDisabledReason(empty) == "Add a .nam file");
 
   CustomAmp unassigned;
+  unassigned.name = "My amp";
   unassigned.files = {{"a.nam", kUnassignedSlot, 0}};
   REQUIRE(SaveDisabledReason(unassigned) == "Assign every file a cab + channel");
 
   CustomAmp dup;
+  dup.name = "My amp";
   dup.files = {{"a.nam", 0, 1}, {"b.nam", 0, 1}};
   REQUIRE(SaveDisabledReason(dup) == "Two files share a cab + channel");
 
   CustomAmp ok;
+  ok.name = "My amp";
   ok.files = {{"a.nam", kDirectSlot, 1}, {"b.nam", 0, 1}};
   REQUIRE(SaveDisabledReason(ok).empty());
+}
+
+TEST_CASE("ParseNamFileName auto-fills slot/channel/cab from the factory convention")
+{
+  using volum::custom::ParseNamFileName;
+  using volum::custom::kDirectSlot;
+
+  auto g65 = ParseNamFileName("G65-2204-3.nam");
+  REQUIRE(g65.matched);
+  REQUIRE(g65.slot == 1);
+  REQUIRE(g65.channel == 3);
+  REQUIRE(g65.cabName == "G65");
+
+  auto v30 = ParseNamFileName("/some/dir/V30-JCM800-2.nam");
+  REQUIRE(v30.matched);
+  REQUIRE(v30.slot == 2);
+  REQUIRE(v30.channel == 2);
+
+  auto g12 = ParseNamFileName("G12-Plexi-1.nam");
+  REQUIRE(g12.matched);
+  REQUIRE(g12.slot == 0);
+
+  auto direct = ParseNamFileName("AMP-Ampt-1.nam");
+  REQUIRE(direct.matched);
+  REQUIRE(direct.slot == kDirectSlot);
+  REQUIRE(direct.cabName.empty()); // DIRECT slot keeps its fixed label
+
+  // Unrecognized prefix -> unmatched (left for manual assignment).
+  auto weird = ParseNamFileName("MyCapture.nam");
+  REQUIRE_FALSE(weird.matched);
+
+  // Recognized prefix but non-numeric channel -> matched slot, channel stays 0.
+  auto noCh = ParseNamFileName("G65-foo-bar.nam");
+  REQUIRE(noCh.matched);
+  REQUIRE(noCh.channel == 0);
+}
+
+TEST_CASE("Name uniqueness is case-insensitive within a content type")
+{
+  using namespace volum::custom;
+  std::vector<std::string> list = {"Greenback", "Mesa 4x12"};
+  REQUIRE(NameExistsCI(list, "greenback"));
+  REQUIRE(NameExistsCI(list, "GREENBACK"));
+  REQUIRE_FALSE(NameExistsCI(list, "Greenbac"));
+  // exceptIdx lets a row keep its own name on rename.
+  REQUIRE_FALSE(NameExistsCI(list, "Greenback", 0));
+  REQUIRE(NameExistsCI(list, "Mesa 4x12", 0));
 }
 
 TEST_CASE("Manifest-derived channels feed SnapChannel consistently")
@@ -222,6 +282,26 @@ TEST_CASE("AddIR and AddPedal append to their session libraries")
   REQUIRE(volum::custom::MockCustomPedals()[(size_t)pi] == "Imported pedal"); // empty -> default
 }
 
+TEST_CASE("Imported IR/pedal keep the exact source filename alongside the display name")
+{
+  // The display name defaults to the filename minus extension; the exact
+  // filename is stored separately so renaming never loses provenance.
+  const int iri = volum::custom::AddIR("Mesa OS", "Mesa_OS_4x12.wav");
+  REQUIRE(volum::custom::IRFileAt(iri) == "Mesa_OS_4x12.wav");
+  volum::custom::RenameIR(iri, "Renamed cab");
+  REQUIRE(volum::custom::MockIRLibrary()[(size_t)iri] == "Renamed cab");
+  REQUIRE(volum::custom::IRFileAt(iri) == "Mesa_OS_4x12.wav"); // filename unchanged by rename
+
+  const int pi = volum::custom::AddPedal("Klon", "klon_clone.nam");
+  REQUIRE(volum::custom::PedalFileAt(pi) == "klon_clone.nam");
+
+  // Delete keeps the parallel filename store aligned (no off-by-one).
+  REQUIRE(volum::custom::MockIRLibrary().size() == volum::custom::MockIRFiles().size());
+  volum::custom::DeleteIR(iri);
+  REQUIRE(volum::custom::MockIRLibrary().size() == volum::custom::MockIRFiles().size());
+  REQUIRE(volum::custom::MockCustomPedals().size() == volum::custom::MockPedalFiles().size());
+}
+
 TEST_CASE("RenameIR and DeleteIR edit the shared IR library in place")
 {
   const int idx = volum::custom::AddIR("ToRename");
@@ -274,6 +354,40 @@ TEST_CASE("AddCustomAmp stores the assigned art in lockstep with the name list")
   // CustomAmpArt is safe for out-of-range indices.
   REQUIRE(volum::custom::CustomAmpArt(-1) == 0);
   REQUIRE(volum::custom::CustomAmpArt(99999) == 0);
+}
+
+TEST_CASE("UpdateCustomAmp edits an entry in place instead of appending a duplicate")
+{
+  using namespace volum::custom;
+  const int idx = AddCustomAmp("Edit me", 1);
+  const size_t before = MockCustomAmps().size();
+
+  CustomAmp draft = CustomAmpAt(idx);
+  draft.name = "Edited name";
+  draft.art = 3;
+  draft.cabNames = {"AA", "BB", "CC"};
+  draft.files = {{"x.nam", kDirectSlot, 1}, {"y.nam", 0, 2}};
+
+  const int outIdx = UpdateCustomAmp(idx, draft);
+  REQUIRE(outIdx == idx); // same slot, no new row
+  REQUIRE(MockCustomAmps().size() == before); // list did not grow
+  REQUIRE(MockCustomAmps()[(size_t)idx] == "Edited name");
+  REQUIRE(CustomAmpArt(idx) == 3);
+  REQUIRE(MockCustomAmpCabs()[(size_t)idx][0] == "AA");
+  REQUIRE(MockCustomAmpFiles()[(size_t)idx].size() == 2);
+
+  // An amp may keep its own name (self-collision is allowed)...
+  REQUIRE(UpdateCustomAmp(idx, draft) == idx);
+  REQUIRE(MockCustomAmps()[(size_t)idx] == "Edited name");
+
+  // ...but renaming onto *another* amp's name is de-duplicated.
+  const int other = AddCustomAmp("Sibling", 0);
+  CustomAmp clash = CustomAmpAt(idx);
+  clash.name = "Sibling";
+  UpdateCustomAmp(idx, clash);
+  REQUIRE(MockCustomAmps()[(size_t)idx] != MockCustomAmps()[(size_t)other]);
+
+  REQUIRE(UpdateCustomAmp(-1, draft) == -1); // out of range is a no-op
 }
 
 TEST_CASE("kNumCustomArts exposes six selectable styles")

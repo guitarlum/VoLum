@@ -468,9 +468,8 @@ private:
   // Index of the focused custom MAIN amp (display-only), or -1 when a factory
   // amp is active. Drives the custom-aware cabinet row / channel stepper.
   int mVolumCustomMainIdx = -1;
-  // Index of the custom amp chosen as the dual-amp SUPPORT partner (display +
-  // session only), or -1 when the support lane is a factory amp / empty. When
-  // >= 0 the factory kSupportAmpIdx param is forced to -1.
+  // Index of the custom SUPPORT amp (dual-amp partner), or -1 when the support
+  // partner is a factory amp / none. Display + session only in 1.2.0.
   int mVolumCustomSupportIdx = -1;
 
   int mVolumAmpIdx = 0;
