@@ -44,7 +44,7 @@ public:
     const IRECT panel = _PanelRect();
     const IRECT frame = panel.GetPadded(10.f);
 
-    g.FillRoundRect(IColor(255, 22, 22, 30), panel, 10.f);
+    DrawPanelDepth(g, panel, 10.f);
     g.DrawRoundRect(VoLumColors::FRAME, panel, 10.f, nullptr, 1.2f);
     g.DrawRoundRect(IColor(90, 200, 180, 100), frame, 8.f, nullptr, 1.f);
 
@@ -219,7 +219,7 @@ public:
     const IRECT panel = _PanelRect();
     const IRECT frame = panel.GetPadded(10.f);
 
-    g.FillRoundRect(IColor(255, 22, 22, 30), panel, 10.f);
+    DrawPanelDepth(g, panel, 10.f);
     g.DrawRoundRect(VoLumColors::FRAME, panel, 10.f, nullptr, 1.2f);
     g.DrawRoundRect(IColor(90, 200, 180, 100), frame, 8.f, nullptr, 1.f);
 
@@ -315,12 +315,14 @@ public:
     {
       IRECT btn(tsX, tsY, tsX + tsBtnW, tsY + 22.f);
       bool selected = (i == static_cast<int>(mTimeSig));
-      IColor bg = selected ? IColor(150, 190, 150, 82) : IColor(180, 30, 30, 40);
-      IColor txt = selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_DIM;
+      IColor bg = selected ? VoLumColors::SEL_BG : IColor(180, 30, 30, 40);
+      IColor txt = selected ? VoLumColors::SEL_TEXT : VoLumColors::TEXT_DIM;
 
+      if (selected)
+        g.FillRoundRect(VoLumColors::SEL_GLOW, btn.GetPadded(2.f), 5.f);
       g.FillRoundRect(bg, btn, 4.f);
       if (selected)
-        g.DrawRoundRect(VoLumColors::GOLD_DIM, btn, 4.f, nullptr, 1.f);
+        g.DrawRoundRect(VoLumColors::SEL_BORDER, btn, 4.f, nullptr, 1.f);
       g.DrawText(IText(11.f, txt, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                  volum::MetronomeTimeSigName(static_cast<volum::MetronomeTimeSig>(i)), btn);
 

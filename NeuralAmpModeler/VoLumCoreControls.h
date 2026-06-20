@@ -28,11 +28,14 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(VoLumColors::BG, mRECT);
+    // Main canvas: gentle top-lit vertical gradient + soft edge vignette so the
+    // large dark field reads as a lit panel instead of a flat fill.
+    FillVGradient(g, mRECT, IColor(255, 21, 21, 29), IColor(255, 12, 12, 18));
+    DrawVignette(g, mRECT, 72);
 
-    // Sidebar
+    // Sidebar (recedes via a slightly darker vertical gradient).
     IRECT sidebar(mRECT.L, mRECT.T, mRECT.L + mSidebarWidth, mRECT.B);
-    g.FillRect(VoLumColors::SIDEBAR_BG, sidebar);
+    FillVGradient(g, sidebar, VoLumColors::SIDEBAR_BG, VoLumColors::SIDEBAR_BG2);
     g.DrawLine(VoLumColors::SIDEBAR_BORDER, sidebar.R, sidebar.T, sidebar.R, sidebar.B);
 
     // Outer gold frame
@@ -195,9 +198,7 @@ public:
     if (mName.empty()) return;
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
 
-    IColor col = VoLumColors::GOLD;
-    g.DrawText(IText(21.f, col, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               mName.c_str(), nameArea);
+    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
     float cy = nameArea.B + 8.f;
@@ -231,8 +232,7 @@ public:
   void Draw(IGraphics& g) override
   {
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
-    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               mName.c_str(), nameArea);
+    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
     float cy = nameArea.B + 8.f;
@@ -263,14 +263,13 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(IColor(255, 10, 10, 16), mRECT);
-    g.DrawRect(IColor(20, 200, 162, 78), mRECT);
+    DrawInsetWell(g, mRECT, 2.f);
 
     float fillH = mRECT.H() * mLevel;
     if (fillH > 1.f)
     {
       IRECT fill(mRECT.L + 1.f, mRECT.B - fillH, mRECT.R - 1.f, mRECT.B - 1.f);
-      g.FillRect(VoLumColors::METER_GREEN, fill);
+      FillVGradient(g, fill, IColor(255, 96, 200, 120), VoLumColors::METER_GREEN);
     }
   }
 
