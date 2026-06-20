@@ -93,4 +93,136 @@ inline void DrawDiamond(IGraphics& g, float cx, float cy, float halfSize, const 
   g.DrawLine(col, cx - halfSize, cy, cx, cy - halfSize);
 }
 
+// ===========================================================================
+// VoLum 1.2.0 UI modernization design tokens
+// ---------------------------------------------------------------------------
+// Codified spacing/type scale, a single selection-state language, and reusable
+// depth-drawing helpers so views stop hand-rolling sizes/colours and large dark
+// regions gain tactile depth. Identity hues (TEAL = SUPPORT lane, copper =
+// BYO/custom content) stay as secondary tints; selection is ALWAYS the brass
+// treatment below.
+// ===========================================================================
+namespace VoLumColors
+{
+// One selection treatment marks the active item in any mutually-exclusive group
+// (cab row, sidebar, art picker, mode lists, steppers).
+const IColor SEL_BG(40, 200, 162, 78);        // brass wash behind the active item
+const IColor SEL_BG_SOFT(20, 200, 162, 78);   // hover wash (telegraph the target)
+const IColor SEL_BORDER(235, 226, 156, 112);  // bright brass outline
+const IColor SEL_GLOW(64, 252, 222, 145);     // soft brass glow under selection
+const IColor SEL_TEXT(255, 255, 244, 224);    // cream text on selected
+
+// Destructive-action accent (delete/remove) - distinct from amber caution.
+const IColor DANGER(255, 228, 92, 80);      // red outline / label
+const IColor DANGER_FILL(78, 228, 92, 80);  // red button wash
+const IColor DANGER_GLOW(54, 228, 92, 80);  // red modal glow
+
+// Panel / well depth.
+const IColor PANEL_TOP(255, 23, 23, 31);   // panel gradient top (slightly lifted)
+const IColor PANEL_BOT(255, 13, 13, 19);   // panel gradient bottom
+const IColor WELL_DARK(255, 9, 9, 14);     // recessed well base
+const IColor INNER_SHADOW(120, 0, 0, 0);   // inset top shadow
+const IColor RIM_LIGHT(26, 255, 248, 238); // faint top inner highlight
+} // namespace VoLumColors
+
+namespace VoLumMetrics
+{
+// Spacing scale (px in the design's logical units).
+constexpr float kXs = 4.f;
+constexpr float kSm = 8.f;
+constexpr float kMd = 12.f;
+constexpr float kLg = 18.f;
+constexpr float kXl = 28.f;
+// Corner radii.
+constexpr float kRadius = 4.f;
+constexpr float kRadiusLg = 8.f;
+} // namespace VoLumMetrics
+
+// Type scale: one display face for hero/brand, a bold caption/label face, a wide
+// techy face for numeric readouts, and a calm body face. Use these instead of
+// constructing IText inline so weight/face hierarchy stays consistent.
+namespace VoLumType
+{
+inline IText Display(float size, const IColor& c, EAlign a = EAlign::Center)
+{
+  return IText(size, c, "Poiret-One", a, EVAlign::Middle);
+}
+inline IText Caption(float size, const IColor& c, EAlign a = EAlign::Center)
+{
+  return IText(size, c, "Josefin-Bold", a, EVAlign::Middle);
+}
+inline IText Label(float size, const IColor& c, EAlign a = EAlign::Center)
+{
+  return IText(size, c, "Josefin-Bold", a, EVAlign::Middle);
+}
+inline IText Value(float size, const IColor& c, EAlign a = EAlign::Center)
+{
+  return IText(size, c, "Michroma-Regular", a, EVAlign::Middle);
+}
+inline IText Body(float size, const IColor& c, EAlign a = EAlign::Center)
+{
+  return IText(size, c, "Josefin-Sans", a, EVAlign::Middle);
+}
+} // namespace VoLumType
+
+// Fill a rect with a vertical gradient.
+inline void FillVGradient(IGraphics& g, const IRECT& r, const IColor& top, const IColor& bot)
+{
+  g.PathRect(r);
+  g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, r.B, {{top, 0.f}, {bot, 1.f}}));
+}
+
+// Panel: subtle top-lit vertical gradient + 1px top inner highlight + bottom shadow line.
+inline void DrawPanelDepth(IGraphics& g, const IRECT& r, float roundness = 0.f)
+{
+  if (roundness > 0.f)
+    g.PathRoundRect(r, roundness);
+  else
+    g.PathRect(r);
+  g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, r.B,
+                                            {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
+  g.DrawLine(VoLumColors::RIM_LIGHT, r.L + 1.5f, r.T + 1.f, r.R - 1.5f, r.T + 1.f);
+  g.DrawLine(IColor(64, 0, 0, 0), r.L + 1.5f, r.B - 1.f, r.R - 1.5f, r.B - 1.f);
+}
+
+// Recessed rectangular well (inputs, list backgrounds, readouts).
+inline void DrawInsetWell(IGraphics& g, const IRECT& r, float roundness = 3.f)
+{
+  g.FillRoundRect(VoLumColors::WELL_DARK, r, roundness);
+  const IRECT top = IRECT(r.L, r.T, r.R, r.T + r.H() * 0.5f);
+  g.PathRoundRect(top, roundness, roundness, 0.f, 0.f);
+  g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, top.B,
+                                            {{VoLumColors::INNER_SHADOW, 0.f}, {COLOR_TRANSPARENT, 1.f}}));
+  g.DrawLine(IColor(20, 255, 248, 238), r.L + 1.f, r.B - 1.f, r.R - 1.f, r.B - 1.f);
+}
+
+// Circular recessed well behind a knob body (top-shadowed, gently lifted centre).
+inline void DrawKnobWell(IGraphics& g, float cx, float cy, float radius)
+{
+  g.FillCircle(IColor(120, 0, 0, 0), cx, cy + 1.5f, radius + 2.5f);
+  g.PathCircle(cx, cy, radius);
+  g.PathFill(IPattern::CreateRadialGradient(cx, cy - radius * 0.35f, radius * 1.25f,
+                                            {{IColor(255, 24, 24, 32), 0.f}, {IColor(255, 9, 9, 14), 1.f}}));
+  g.PathCircle(cx, cy, radius);
+  g.PathFill(IPattern::CreateLinearGradient(cx, cy - radius, cx, cy + radius * 0.2f,
+                                            {{IColor(110, 0, 0, 0), 0.f}, {COLOR_TRANSPARENT, 1.f}}));
+}
+
+// Soft radial glow disc (selection underlays, hero frame breathing room).
+inline void DrawSoftGlowCircle(IGraphics& g, float cx, float cy, float radius, const IColor& col)
+{
+  g.PathCircle(cx, cy, radius);
+  g.PathFill(IPattern::CreateRadialGradient(cx, cy, radius, {{col, 0.f}, {COLOR_TRANSPARENT, 1.f}}));
+}
+
+// Edge vignette over a large dark region: transparent centre darkening to the corners.
+inline void DrawVignette(IGraphics& g, const IRECT& r, int strength = 64)
+{
+  const float rad = std::max(r.W(), r.H()) * 0.72f;
+  g.PathRect(r);
+  g.PathFill(IPattern::CreateRadialGradient(
+    r.MW(), r.MH(), rad,
+    {{COLOR_TRANSPARENT, 0.f}, {COLOR_TRANSPARENT, 0.62f}, {IColor(strength, 0, 0, 0), 1.f}}));
+}
+
 #include "VoLumFractalArt.h"

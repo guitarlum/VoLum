@@ -337,7 +337,7 @@ private:
 
   void DrawMonoHero(IGraphics& g)
   {
-    g.FillRect(VoLumColors::HERO_BG, mRECT);
+    DrawPanelDepth(g, mRECT);
     g.DrawRect(VoLumColors::HERO_BORDER, mRECT);
     const float cs = 16.f;
     const float m = 6.f;
@@ -365,7 +365,7 @@ private:
   void DrawLane(IGraphics& g, const IRECT& r, int ampIdx, const char* role, const char* name, bool focused,
                 const IColor& accent, bool drawChip, bool empty)
   {
-    g.FillRect(VoLumColors::HERO_BG, r);
+    DrawPanelDepth(g, r);
     g.DrawRect(focused ? accent : VoLumColors::HERO_BORDER, r);
     DrawCornerAccent(g, r.L + 6.f, r.T + 6.f, 12.f, false, false, focused ? accent : VoLumColors::HERO_CORNER);
     if (!drawChip)

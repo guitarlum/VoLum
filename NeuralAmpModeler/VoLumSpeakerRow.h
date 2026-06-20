@@ -85,6 +85,8 @@ public:
       IRECT btn(x, btnY, x + noCabW, btnY + btnH);
       bool isOn = (0 == mSelected) && !mIrCabActive;
       bool isHovered = (0 == mHovered);
+      if (isOn)
+        g.FillRoundRect(VoLumColors::SEL_GLOW, btn.GetPadded(2.5f), 5.f);
       g.FillRoundRect(ButtonFill(isOn, isHovered, true), btn, 3.f);
       g.DrawRoundRect(ButtonBorder(isOn, isHovered, true), btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
       IText btnText(13.f, ButtonText(isOn, isHovered), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
@@ -115,6 +117,8 @@ public:
       }
       else
       {
+        if (isOn)
+          g.FillRoundRect(VoLumColors::SEL_GLOW, btn.GetPadded(2.5f), 5.f);
         g.FillRoundRect(isOn ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
         g.DrawRoundRect(isOn ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false),
                         btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
@@ -141,6 +145,8 @@ public:
       const IColor fill = mIrCabActive ? VoLumColors::BTN_IR_ON_BG : ButtonFill(false, isHovered, false);
       const IColor border = mIrCabActive ? VoLumColors::BTN_IR_ON_BORDER
                                          : ButtonBorder(false, isHovered, false);
+      if (mIrCabActive)
+        g.FillRoundRect(IColor(70, 196, 122, 80), btn.GetPadded(2.5f), 5.f);
       g.FillRoundRect(fill, btn, 3.f);
       g.DrawRoundRect(border, btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
       const IColor txt = mIrCabActive ? VoLumColors::BTN_IR_ON_TEXT : ButtonText(false, isHovered);
@@ -255,27 +261,34 @@ private:
     return -1;
   }
 
-  static IColor ButtonFill(bool active, bool hovered, bool ampButton)
+  // Codified selection language: one brass treatment marks the active cab in the
+  // row (No Cab + the three cabs alike). Custom IR keeps its copper BYO identity
+  // (handled inline). The ampButton flag is retained for call-site parity only.
+  static IColor ButtonFill(bool active, bool hovered, bool /*ampButton*/)
   {
     if (active)
-      return ampButton ? VoLumColors::BTN_AMP_ON_BG : VoLumColors::BTN_CAB_ON_BG;
+      return VoLumColors::SEL_BG;
     if (hovered)
-      return IColor(58, 33, 46, 50);
+      return VoLumColors::SEL_BG_SOFT;
     return VoLumColors::BTN_OFF_BG;
   }
 
-  static IColor ButtonBorder(bool active, bool hovered, bool ampButton)
+  static IColor ButtonBorder(bool active, bool hovered, bool /*ampButton*/)
   {
-    if (hovered)
-      return ampButton ? VoLumColors::TEAL : VoLumColors::GOLD_DIM;
     if (active)
-      return ampButton ? VoLumColors::BTN_AMP_ON_BORDER : VoLumColors::BTN_CAB_ON_BORDER;
+      return VoLumColors::SEL_BORDER;
+    if (hovered)
+      return VoLumColors::GOLD_DIM;
     return VoLumColors::BTN_OFF_BORDER;
   }
 
   static IColor ButtonText(bool active, bool hovered)
   {
-    return (active || hovered) ? VoLumColors::BTN_AMP_ON_TEXT : VoLumColors::BTN_OFF_TEXT;
+    if (active)
+      return VoLumColors::SEL_TEXT;
+    if (hovered)
+      return VoLumColors::TEXT_BRIGHT;
+    return VoLumColors::BTN_OFF_TEXT;
   }
 
   int mSelected = 3;
