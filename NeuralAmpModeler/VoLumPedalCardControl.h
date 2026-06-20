@@ -41,7 +41,9 @@ public:
     bool focused = mIsFocused;
     bool bypassed = (GetValue() < 0.5);
 
-    g.FillRect(VoLumColors::HERO_BG, mRECT);
+    if (focused)
+      g.FillRoundRect(IColor(44, 232, 168, 92), mRECT.GetPadded(2.5f), 6.f);
+    DrawPanelDepth(g, mRECT, 4.f);
     if (mHovered)
     {
       g.FillRect(IColor(18, 80, 140, 160), mRECT);

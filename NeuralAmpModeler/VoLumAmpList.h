@@ -141,13 +141,13 @@ public:
       const bool selected = (i == mSelected) && (mCustomSelected < 0);
       if (selected)
       {
-        g.FillRect(VoLumColors::ITEM_SEL_BG, paddedRow);
-        g.DrawRect(VoLumColors::ITEM_SEL_BORDER, paddedRow);
+        g.FillRoundRect(VoLumColors::ITEM_SEL_BG, paddedRow, 4.f);
+        g.DrawRoundRect(VoLumColors::ITEM_SEL_BORDER, paddedRow, 4.f);
+        g.FillRect(VoLumColors::GOLD, IRECT(paddedRow.L, paddedRow.T + 3.f, paddedRow.L + 2.5f, paddedRow.B - 3.f));
       }
       else if (i == mHovered && mHoveredDomain == EDomain::Factory)
       {
-        g.FillRect(VoLumColors::ITEM_HOVER, paddedRow);
-        g.DrawRect(IColor(20, 200, 162, 78), paddedRow);
+        g.FillRoundRect(VoLumColors::ITEM_HOVER, paddedRow, 4.f);
       }
 
       IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f,
@@ -468,13 +468,13 @@ private:
       const bool hovered = (mHoveredDomain == EDomain::Custom && c == mHovered);
       if (selected)
       {
-        g.FillRect(VoLumColors::ITEM_SEL_BG, paddedRow);
-        g.DrawRect(VoLumColors::ITEM_SEL_BORDER, paddedRow);
+        g.FillRoundRect(VoLumColors::ITEM_SEL_BG, paddedRow, 4.f);
+        g.DrawRoundRect(VoLumColors::ITEM_SEL_BORDER, paddedRow, 4.f);
+        g.FillRect(VoLumColors::GOLD, IRECT(paddedRow.L, paddedRow.T + 3.f, paddedRow.L + 2.5f, paddedRow.B - 3.f));
       }
       else if (hovered)
       {
-        g.FillRect(VoLumColors::ITEM_HOVER, paddedRow);
-        g.DrawRect(IColor(20, 200, 162, 78), paddedRow);
+        g.FillRoundRect(VoLumColors::ITEM_HOVER, paddedRow, 4.f);
       }
 
       // Assigned procedural art thumbnail (cached), matching the factory rows.

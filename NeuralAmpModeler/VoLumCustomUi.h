@@ -413,18 +413,48 @@ public:
   {
     g.FillRect(IColor(190, 8, 10, 14), mRECT); // dimming scrim
     const IRECT box = BoxRect();
-    g.FillRoundRect(IColor(255, 26, 26, 34), box, 6.f);
-    g.DrawRoundRect(VoLumColors::AMBER, box, 6.f, nullptr, 1.6f);
+    const bool destructive = _IsDestructive();
+    const IColor accent = destructive ? VoLumColors::DANGER : VoLumColors::AMBER;
 
-    g.DrawText(IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top), mTitle.c_str(),
+    g.FillRoundRect(destructive ? VoLumColors::DANGER_GLOW : VoLumColors::SEL_GLOW, box.GetPadded(3.5f), 9.f);
+    DrawPanelDepth(g, box, 6.f);
+    g.DrawRoundRect(accent, box, 6.f, nullptr, 1.6f);
+
+    // Caution glyph (triangle + bang) left of the title.
+    _DrawWarnGlyph(g, IRECT(box.L + 18.f, box.T + 12.f, box.L + 40.f, box.T + 34.f), accent);
+
+    g.DrawText(IText(15.f, accent, "Josefin-Bold", EAlign::Center, EVAlign::Top), mTitle.c_str(),
                box.GetPadded(-16.f).GetFromTop(22.f));
-    const IRECT msgR = box.GetPadded(-16.f, -38.f, -16.f, -52.f);
+    const IRECT msgR = box.GetPadded(-16.f, -38.f, -16.f, -64.f);
     g.PathClipRegion(msgR);
     g.DrawText(IText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), mMessage.c_str(), msgR);
     g.PathClipRegion();
 
-    DrawBtn(g, CancelRect(), "Cancel", false);
-    DrawBtn(g, DeleteRect(), mConfirmLabel.c_str(), true);
+    DrawBtn(g, CancelRect(), "Cancel", false, accent);
+    DrawBtn(g, DeleteRect(), mConfirmLabel.c_str(), true, accent);
+
+    g.DrawText(IText(9.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+               "Enter to confirm  \u00B7  Esc to cancel", box.GetPadded(-12.f).GetFromBottom(11.f));
+  }
+
+  bool OnKeyDown(float, float, const IKeyPress& key) override
+  {
+    if (IsHidden())
+      return false;
+    if (key.VK == kVK_RETURN)
+    {
+      auto cb = mOnConfirm;
+      Hide(true);
+      if (cb)
+        cb();
+      return true;
+    }
+    if (key.VK == kVK_ESCAPE)
+    {
+      Hide(true);
+      return true;
+    }
+    return false;
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -448,24 +478,56 @@ public:
 private:
   IRECT BoxRect() const
   {
-    const float w = 444.f, h = 150.f;
+    const float w = 444.f, h = 168.f;
     return IRECT(mRECT.MW() - w / 2.f, mRECT.MH() - h / 2.f, mRECT.MW() + w / 2.f, mRECT.MH() + h / 2.f);
   }
   IRECT CancelRect() const
   {
     const IRECT box = BoxRect();
-    return IRECT(box.L + 18.f, box.B - 42.f, box.MW() - 6.f, box.B - 14.f);
+    return IRECT(box.L + 18.f, box.B - 56.f, box.MW() - 6.f, box.B - 30.f);
   }
   IRECT DeleteRect() const
   {
     const IRECT box = BoxRect();
-    return IRECT(box.MW() + 6.f, box.B - 42.f, box.R - 18.f, box.B - 14.f);
+    return IRECT(box.MW() + 6.f, box.B - 56.f, box.R - 18.f, box.B - 30.f);
   }
-  void DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool danger)
+  bool _IsDestructive() const
   {
-    g.FillRect(danger ? IColor(70, 232, 130, 92) : VoLumColors::BTN_OFF_BG, r);
-    g.DrawRect(danger ? VoLumColors::AMBER : VoLumColors::FRAME, r);
-    g.DrawText(IText(12.f, danger ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
+    // Delete/Remove read as destructive (red); Save/Overwrite/Replace are caution (amber).
+    return mConfirmLabel.find("Delete") != std::string::npos || mConfirmLabel.find("Remove") != std::string::npos;
+  }
+
+  // Caution triangle with an exclamation, tinted to the modal accent.
+  static void _DrawWarnGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float cx = r.MW();
+    const float top = r.T + 1.f;
+    const float bot = r.B - 1.f;
+    IStrokeOptions so;
+    so.mJoinOption = ELineJoin::Round;
+    g.PathClear();
+    g.PathMoveTo(cx, top);
+    g.PathLineTo(r.R - 1.f, bot);
+    g.PathLineTo(r.L + 1.f, bot);
+    g.PathClose();
+    g.PathStroke(col, 1.6f, so, nullptr);
+    g.DrawLine(col, cx, top + 6.f, cx, bot - 5.f, nullptr, 1.6f);
+    g.FillCircle(col, cx, bot - 3.f, 1.0f);
+  }
+
+  void DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool primary, const IColor& accent)
+  {
+    if (primary)
+    {
+      g.FillRoundRect(_IsDestructive() ? VoLumColors::DANGER_FILL : IColor(70, 232, 168, 92), r, 3.f);
+      g.DrawRoundRect(accent, r, 3.f, nullptr, 1.2f);
+    }
+    else
+    {
+      g.FillRoundRect(VoLumColors::BTN_OFF_BG, r, 3.f);
+      g.DrawRoundRect(VoLumColors::FRAME, r, 3.f, nullptr, 1.f);
+    }
+    g.DrawText(IText(12.f, primary ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
                      EVAlign::Middle),
                label, r);
   }
@@ -587,7 +649,7 @@ public:
     g.FillRect(IColor(185, 8, 10, 14), mRECT);
 
     const IRECT panel = PanelRect();
-    g.FillRect(IColor(255, 22, 22, 30), panel);
+    DrawPanelDepth(g, panel);
     g.DrawRect(VoLumColors::FRAME, panel);
     g.DrawRect(IColor(90, 200, 180, 100), panel.GetPadded(2.f));
     const float cs = 18.f, m = 8.f;
@@ -1371,7 +1433,7 @@ private:
 
     // Scrollable list filling the rest of the panel; per-row inline icons.
     const IRECT listArea(body.L, addBtn.B + 10.f, body.R, body.B - 26.f);
-    g.FillRect(IColor(235, 20, 20, 26), listArea);
+    DrawInsetWell(g, listArea, 2.f);
     g.DrawRect(IColor(89, 200, 162, 78), listArea);
 
     if (mItems.empty())
@@ -1469,6 +1531,7 @@ private:
     }
 
     const IRECT hintR(body.L, body.B - 22.f, body.R, body.B);
+    g.PathClipRegion(hintR); // safety net: long copy can never bleed past the panel
     if (!mError.empty())
     {
       g.DrawText(IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mError.c_str(), hintR);
@@ -1476,12 +1539,13 @@ private:
     else
     {
       const char* hint = presets
-        ? "A preset snapshots this amp (cab/IR, channel, AMP, PRE, POST). Double-click recalls; icons overwrite / rename / delete."
+        ? "Double-click a row to recall. Icons: overwrite / rename / delete."
         : (mManageKind == ManageKind::IR
-             ? "Import a .wav, then double-click to convolve it with the focused DIRECT capture. Shared across amps."
-             : "Import a .nam capture of your own pre-amp gear. They appear under CUSTOM in the PRE pedal menu.");
+             ? "Import a .wav, then double-click to convolve it with the focused DIRECT capture."
+             : "Import a .nam capture of your pre-amp gear. Appears under CUSTOM in the PRE menu.");
       g.DrawText(IText(9.5f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle), hint, hintR);
     }
+    g.PathClipRegion();
   }
 
   void ClampManageScroll(float contentH, float viewH)

@@ -170,6 +170,73 @@ public:
       g.DrawCircle(accent.WithOpacity(0.8f), cx, cy, widgetRadius + 5.f, nullptr, 1.5f);
   }
 };
+// Layered "modern amp-sim" dial: drop shadow, metallic top-lit body, a hugging
+// value-arc ring with an active-lane glow, tick nubs, and an accent pointer.
+// Drop-in for NAMKnobControl - same interaction, keyboard nudge, exact entry and
+// selection ring; only the widget rendering changes. Lane identity rides on the
+// style's kX1/kX3 colours (gold = MAIN, teal = SUPPORT).
+class VoLumDialKnobControl : public NAMKnobControl
+{
+public:
+  VoLumDialKnobControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style, IBitmap bitmap)
+  : NAMKnobControl(bounds, paramIdx, label, style, bitmap)
+  {
+  }
+
+  void DrawWidget(IGraphics& g) override
+  {
+    const auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W(), mWidgetBounds.W());
+    const float cx = knobRect.MW(), cy = knobRect.MH();
+    const float R = knobRect.W() * 0.5f;
+    const float bodyR = R - 5.f;
+    const float arcR = R - 2.f;
+    const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
+    const bool active = mMouseIsOver || IsSelectedForKeyboard();
+    const IColor accent = GetColor(kX1);
+    const IColor accentHi = GetColor(kX3);
+
+    // (1) Tick nubs around the travel range (longer/brighter at the cardinal marks).
+    const int kTicks = 11;
+    for (int i = 0; i < kTicks; ++i)
+    {
+      const float t = mAngle1 + (mAngle2 - mAngle1) * (static_cast<float>(i) / (kTicks - 1));
+      const bool major = (i % 5 == 0);
+      const bool passed = t <= angle + 0.5f;
+      float pts[2][2];
+      RadialPoints(t, cx, cy, R - (major ? 1.5f : 0.5f), R + (major ? 2.0f : 1.0f), 2, pts);
+      g.DrawLine(passed ? accent.WithOpacity(0.9f) : IColor(70, 200, 162, 78), pts[0][0], pts[0][1], pts[1][0],
+                 pts[1][1], &mBlend, major ? 1.4f : 1.0f);
+    }
+
+    // (2) Value-arc track + filled arc (soft glow behind it when the dial is active).
+    g.DrawArc(IColor(46, 200, 162, 78), cx, cy, arcR, mAngle1, mAngle2, &mBlend, 2.0f);
+    if (active)
+      g.DrawArc(accentHi.WithOpacity(0.28f), cx, cy, arcR, mAngle1, angle, &mBlend, 6.0f);
+    g.DrawArc(active ? accentHi : accent, cx, cy, arcR, mAngle1, angle, &mBlend, 2.6f);
+
+    // (3) Metallic body cap: drop shadow, top-lit radial gradient, accent rim + inner sheen.
+    g.FillCircle(IColor(150, 0, 0, 0), cx, cy + 1.5f, bodyR);
+    g.PathCircle(cx, cy, bodyR);
+    g.PathFill(IPattern::CreateRadialGradient(cx, cy - bodyR * 0.45f, bodyR * 1.55f,
+                                              {{IColor(255, 60, 60, 73), 0.f},
+                                               {IColor(255, 31, 31, 41), 0.55f},
+                                               {IColor(255, 15, 15, 21), 1.f}}));
+    g.DrawCircle(accent.WithOpacity(active ? 0.7f : 0.4f), cx, cy, bodyR, &mBlend, 1.2f);
+    g.DrawCircle(IColor(34, 255, 255, 255), cx, cy, bodyR - 1.5f, &mBlend, 1.f);
+
+    // (4) Pointer: accent line from the cap centre out to a bright dot.
+    float pdot[2][2];
+    RadialPoints(angle, cx, cy, bodyR * 0.26f, bodyR * 0.86f, 2, pdot);
+    g.DrawLine(active ? accentHi : accent, pdot[0][0], pdot[0][1], pdot[1][0], pdot[1][1], &mBlend, 2.4f);
+    g.FillCircle(active ? accentHi : accent, pdot[1][0], pdot[1][1], 2.6f);
+    g.DrawCircle(COLOR_BLACK.WithOpacity(0.4f), pdot[1][0], pdot[1][1], 2.6f, &mBlend);
+
+    // (5) Keyboard selection ring.
+    if (IsSelectedForKeyboard())
+      g.DrawCircle(accent.WithOpacity(0.85f), cx, cy, R + 3.f, nullptr, 1.5f);
+  }
+};
+
 const IVStyle volumToggleStyle =
   volumStyle.WithShowLabel(false)
     .WithShowValue(false)
@@ -788,7 +855,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       // Use a wider label rect (-40.f to +40.f = 80px wide) to prevent "FEEDBACK" clipping
       pGraphics->AttachControl(new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), label), -1, group);
-      auto* knob = new NAMKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
+      auto* knob = new VoLumDialKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(knob, -1, group);
       knob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == paramId);
       pGraphics->AttachControl(new VoLumParamValueControl(IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), paramId, suffix), -1, group);
@@ -890,7 +957,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       const float kL = cx - (knobDiam / 2.f);
       auto* ageLabel = new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), "AGE");
       pGraphics->AttachControl(ageLabel, -1, "DELAY_KNOBS");
-      auto* ageKnob = new NAMKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), kDelayAge, "", volumKnobStyle, knobBackgroundBitmap);
+      auto* ageKnob = new VoLumDialKnobControl(IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), kDelayAge, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(ageKnob, -1, "DELAY_KNOBS");
       ageKnob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == kDelayAge);
       auto* ageValue = new VoLumParamValueControl(IRECT(cx - 30.f, knobT + knobDiam + 2.f, cx + 30.f, knobT + knobDiam + 2.f + valueH), kDelayAge, "");

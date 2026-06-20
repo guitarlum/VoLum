@@ -42,7 +42,7 @@ public:
     g.FillRect(IColor(185, 8, 10, 14), mRECT);
     const IRECT& p = mPanel;
     // Slightly lifted panel so it reads clearly over the dim layer
-    g.FillRect(IColor(255, 22, 22, 30), p);
+    DrawPanelDepth(g, p);
     g.DrawRect(VoLumColors::FRAME, p);
     g.DrawRect(IColor(90, 200, 180, 100), p.GetPadded(2.f));
     const float cs = 18.f;
@@ -69,8 +69,8 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    // Match ui-mockup/settings-overlay-mockup.html output card (group-fill + gold border + inner hairline).
-    g.FillRect(IColor(235, 20, 20, 26), mRECT);
+    // Group card: lifted panel depth + gold border + inner hairline.
+    DrawPanelDepth(g, mRECT);
     g.DrawRect(IColor(89, 200, 162, 78), mRECT);
     g.DrawRect(IColor(31, 200, 162, 78), mRECT.GetPadded(3.f));
   }
