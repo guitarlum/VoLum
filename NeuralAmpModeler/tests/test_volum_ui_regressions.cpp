@@ -450,8 +450,12 @@ TEST_CASE("PRE/POST lock UI and settings helpers are wired")
   RequireContains(settings, "_VolumStorePreToCurrentAmp");
   RequireContains(settings, "_VolumIsPreDirty");
   RequireContains(settings, "mVolumPreLocked");
-  RequireContains(settings, "PreBlockEquals(mVolumLiveLockedPre, mVolumAmpSettings[mVolumAmpIdx])");
-  RequireContains(settings, "PostBlockEquals(mVolumLiveLockedPost, mVolumAmpSettings[mVolumAmpIdx])");
+  // Dirty checks compare the live locked block against the *active* scene, which is
+  // the focused custom amp's scene when a custom amp is focused (factory amps map
+  // back to mVolumAmpSettings[...] via _VolumActiveScene()). This is what makes
+  // lock/unlock work on custom amps, not just factory ones.
+  RequireContains(settings, "PreBlockEquals(mVolumLiveLockedPre, scene)");
+  RequireContains(settings, "PostBlockEquals(mVolumLiveLockedPost, scene)");
   RequireContains(settings, "if (!mVolumPostLocked)");
   RequireContains(settings, "_VolumRestoreEffectSettings()");
 }
@@ -475,14 +479,18 @@ TEST_CASE("PRE/POST lock unlock restores local slot instead of flushing overlay"
 {
   const std::string settings = ReadPluginSource();
 
-  RequireContains(settings, "_VolumRestorePreFromSlot(mVolumAmpSettings[mVolumAmpIdx]);");
-  RequireContains(settings, "_VolumRestorePostFromSlot(mVolumAmpSettings[mVolumAmpIdx]);");
+  // Unlock restores from the active scene (focused custom amp scene, or the factory
+  // amp slot via _VolumActiveScene()) instead of flushing the live overlay.
+  RequireContains(settings, "_VolumRestorePreFromSlot(_VolumActiveScene());");
+  RequireContains(settings, "_VolumRestorePostFromSlot(_VolumActiveScene());");
   RequireContains(settings, "if (!mVolumPreLocked)");
   RequireContains(settings, "if (!mVolumPostLocked)");
   RequireContains(settings, "_VolumStorePreToCurrentAmp()");
   RequireContains(settings, "_VolumStorePostToCurrentAmp()");
-  RequireDoesNotContain(settings, "_VolumSavePreToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPreLocked = false;");
-  RequireDoesNotContain(settings, "_VolumSavePostToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPostLocked = false;");
+  RequireDoesNotContain(
+    settings, "_VolumSavePreToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPreLocked = false;");
+  RequireDoesNotContain(
+    settings, "_VolumSavePostToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPostLocked = false;");
 }
 
 TEST_CASE("Legacy chunks without lock tail default to unlocked on deserialize")

@@ -46,7 +46,11 @@ struct VoLumPreCaptureMenuItem
 class VoLumPreCaptureMenuControl : public IControl
 {
 public:
-  VoLumPreCaptureMenuControl(const IRECT& bounds) : IControl(bounds) { mIgnoreMouse = false; }
+  VoLumPreCaptureMenuControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = false;
+  }
 
   void SetItems(int slot, const std::vector<VoLumPreCaptureMenuItem>& items, int selectedIdx)
   {
@@ -116,7 +120,8 @@ public:
         continue;
       }
       if (item.group != volum::PrePedalCaptureGroup::None)
-        g.FillRoundRect(GroupColor(item.group).WithOpacity(0.32f), IRECT(row.L, row.T + 4.f, row.L + 4.f, row.B - 4.f), 2.f);
+        g.FillRoundRect(
+          GroupColor(item.group).WithOpacity(0.32f), IRECT(row.L, row.T + 4.f, row.L + 4.f, row.B - 4.f), 2.f);
       if (selected)
         g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
       g.DrawText(selected ? text : dimText, item.label.c_str(), IRECT(row.L + 20.f, row.T, row.R, row.B));
@@ -146,8 +151,8 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
-    (void) x;
+    (void)mod;
+    (void)x;
     const int idx = ItemIndexAtY(y);
     if (idx < 0 || idx >= static_cast<int>(mItems.size()) || mItems[static_cast<size_t>(idx)].isHeader)
       return;
@@ -165,19 +170,17 @@ public:
       plugin->_VolumShowManageCustomPedals(mSlot);
       return;
     }
-    if (item.custom)
-    {
-      plugin->_VolumHidePreCaptureMenu();
-      return;
-    }
+    // Factory and custom (F8 imported) pedal rows both select by captureIdx -
+    // custom rows carry the pedal's stable legacy index (>= kCustomPedalIndexBase),
+    // which the loader resolves to the imported .nam in the content library.
     plugin->_VolumSetPreNamCapture(mSlot, item.captureIdx);
     plugin->_VolumHidePreCaptureMenu();
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) mod;
+    (void)x;
+    (void)mod;
     const int idx = ItemIndexAtY(y);
     const int next =
       (idx >= 0 && idx < static_cast<int>(mItems.size()) && !mItems[static_cast<size_t>(idx)].isHeader) ? idx : -1;
@@ -209,10 +212,7 @@ public:
   }
 
 private:
-  static float RowHeight(const VoLumPreCaptureMenuItem& item)
-  {
-    return item.isHeader ? HeaderHeight() : ItemHeight();
-  }
+  static float RowHeight(const VoLumPreCaptureMenuItem& item) { return item.isHeader ? HeaderHeight() : ItemHeight(); }
 
   int ItemIndexAtY(float y) const
   {
@@ -239,16 +239,11 @@ private:
   {
     switch (group)
     {
-      case volum::PrePedalCaptureGroup::Klon:
-        return IColor(255, 235, 181, 78);
-      case volum::PrePedalCaptureGroup::TsBoost:
-        return IColor(255, 80, 210, 150);
-      case volum::PrePedalCaptureGroup::Distortion:
-        return IColor(255, 230, 120, 72);
-      case volum::PrePedalCaptureGroup::Fuzz:
-        return IColor(255, 190, 100, 230);
-      default:
-        return VoLumColors::TEAL_DIM;
+      case volum::PrePedalCaptureGroup::Klon: return IColor(255, 235, 181, 78);
+      case volum::PrePedalCaptureGroup::TsBoost: return IColor(255, 80, 210, 150);
+      case volum::PrePedalCaptureGroup::Distortion: return IColor(255, 230, 120, 72);
+      case volum::PrePedalCaptureGroup::Fuzz: return IColor(255, 190, 100, 230);
+      default: return VoLumColors::TEAL_DIM;
     }
   }
 

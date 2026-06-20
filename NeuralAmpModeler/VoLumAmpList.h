@@ -98,8 +98,8 @@ public:
 
       IRECT row(mRECT.L, top, rowR, bot);
       IRECT paddedRow = row.GetPadded(-2.f, -0.5f, -2.f, -0.5f);
-      IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f,
-                     paddedRow.L + pad + iconSize, paddedRow.MH() + iconSize / 2.f);
+      IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f, paddedRow.L + pad + iconSize,
+                     paddedRow.MH() + iconSize / 2.f);
 
       if (!g.CheckLayer(mIconLayers[i]))
       {
@@ -150,8 +150,8 @@ public:
         g.FillRoundRect(VoLumColors::ITEM_HOVER, paddedRow, 4.f);
       }
 
-      IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f,
-                     paddedRow.L + pad + iconSize, paddedRow.MH() + iconSize / 2.f);
+      IRECT iconArea(paddedRow.L + pad, paddedRow.MH() - iconSize / 2.f, paddedRow.L + pad + iconSize,
+                     paddedRow.MH() + iconSize / 2.f);
 
       g.DrawRect(IColor(selected ? 80 : 58, 120, 195, 210), iconArea);
       // Blit the cached thumbnail at the row's CURRENT position. DrawLayer would
@@ -176,7 +176,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     ClearVoLumKnobSelection(this);
 
     const Hit hit = HitTest(x, y);
@@ -214,7 +214,7 @@ public:
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     const Hit hit = HitTest(x, y);
     int idx = -1;
     EDomain dom = EDomain::None;
@@ -260,9 +260,21 @@ public:
     SetDirty(false);
   }
 
+  void OnRescale() override
+  {
+    // The backing pixel scale changed (window resize / DPI). Drop the cached
+    // thumbnail layers so they re-render crisp at the new scale on the next Draw
+    // instead of being blitted at the old resolution (looked like they "didn't
+    // scale" with the rest of the UI).
+    for (auto& l : mIconLayers)
+      l = nullptr;
+    for (auto& l : mCustomArtLayers)
+      l = nullptr;
+  }
+
   void OnMouseWheel(float x, float y, const IMouseMod& mod, float d) override
   {
-    (void) mod;
+    (void)mod;
     const float contentH = ContentHeight();
     if (contentH <= mRECT.H())
       return;
@@ -304,8 +316,22 @@ private:
   static constexpr float kMinItemH = 30.f;
   static constexpr float kHeaderH = 26.f;
 
-  enum class EDomain { None, Factory, Custom };
-  enum class EZone { None, Factory, CustomHeader, CustomAdd, CustomRow, CustomEdit, CustomDelete };
+  enum class EDomain
+  {
+    None,
+    Factory,
+    Custom
+  };
+  enum class EZone
+  {
+    None,
+    Factory,
+    CustomHeader,
+    CustomAdd,
+    CustomRow,
+    CustomEdit,
+    CustomDelete
+  };
 
   struct Hit
   {
@@ -479,7 +505,8 @@ private:
 
       // Assigned procedural art thumbnail (cached), matching the factory rows.
       const float isz = 20.f;
-      const IRECT iconArea(paddedRow.L + 7.f, paddedRow.MH() - isz / 2.f, paddedRow.L + 7.f + isz, paddedRow.MH() + isz / 2.f);
+      const IRECT iconArea(
+        paddedRow.L + 7.f, paddedRow.MH() - isz / 2.f, paddedRow.L + 7.f + isz, paddedRow.MH() + isz / 2.f);
       const int art = (c < (int)mCustomArts.size()) ? (mCustomArts[c] % volum::custom::kNumCustomArts) : 0;
       if (mCustomArtLayers[art] && g.CheckLayer(mCustomArtLayers[art]))
         g.DrawFittedBitmap(mCustomArtLayers[art]->GetBitmap(), iconArea);

@@ -453,7 +453,7 @@ public:
   // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
   // (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
-  void _VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane = false);
+  void _VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane = false, int selected = 0);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp
   // slot, or the focused custom amp's scene). activeIrId/supportCustomId live here.
   volum::VoLumAmpSettings& _VolumActiveScene();
@@ -465,6 +465,18 @@ public:
   // Re-resolve a scene/preset's activeIrId on recall: stage it, or fall back to
   // the baked cab when the id is empty/orphaned (the referenced IR was deleted).
   void _VolumApplyActiveIr(const std::string& irId);
+  // Force the focused MAIN amp onto its DIRECT / No-Cab capture so a custom IR
+  // convolves the raw amp instead of an already-cabbed signal.
+  void _VolumForceMainDirectCapture();
+  // Standalone session restore (custom MAIN focus + active preset), run once when
+  // the UI opens so the cab controls exist for a custom-amp re-focus.
+  void _VolumRestoreSessionSelection();
+  // After a Manage-panel mutation, drop the live custom IR + recover to a real
+  // cab if the active IR was deleted (or otherwise orphaned). No-op otherwise.
+  void _VolumReconcileActiveIr();
+  // Drop the custom IR convolver and select the first available real cab (one of
+  // the baked cabs); only land on DIRECT / No-Cab when no real cab exists.
+  void _VolumFallbackToAvailableCab();
   // Flags the header preset strip "(unsaved)" for rig edits that bypass the
   // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
   void _VolumMarkPresetDirty();
@@ -499,6 +511,11 @@ public:
   volum::VoLumAmpSettings mVolumRecalledSnapshot;
   bool mVolumHasRecalledSnapshot = false;
   std::string mVolumActivePresetId;
+  // Standalone (volum-settings.json) restore: the focused custom MAIN amp id and
+  // active preset id from the last session, re-applied once when the UI opens.
+  std::string mVolumRestoreCustomMainId;
+  std::string mVolumRestorePresetId;
+  bool mVolumDidRestorePresetSelection = false;
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;
