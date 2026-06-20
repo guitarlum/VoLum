@@ -3617,13 +3617,25 @@ void NeuralAmpModeler::_VolumShowPreCaptureMenu(int slot, const IRECT& anchorRec
   const int captureParam = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
   const int selected = std::clamp(GetParam(captureParam)->Int(), 0, captureCount - 1);
   const float menuW = std::max(anchorRect.W() * 0.88f, 180.f);
-  const float menuH = VoLumPreCaptureMenuControl::MenuHeight(items);
-  // Clamp vertically so the (now taller, with CUSTOM) menu never spills past the
-  // window bottom; shift it up when it would, keeping it on-screen.
+  const float fullH = VoLumPreCaptureMenuControl::MenuHeight(items);
+  // Cap the menu to the window: drop below the anchor when it fits, otherwise
+  // grow upward, and finally cap to the usable window height so a long imported
+  // pedal list never spills off-screen - the menu scrolls internally instead.
   const IRECT uiBounds = GetUI()->GetBounds();
-  float menuT = anchorRect.B + 6.f;
-  if (menuT + menuH > uiBounds.B - 6.f)
+  const float top = anchorRect.B + 6.f;
+  const float spaceBelow = uiBounds.B - 6.f - top;
+  const float maxOnScreen = uiBounds.H() - 12.f;
+  float menuT, menuH;
+  if (fullH <= spaceBelow)
+  {
+    menuT = top;
+    menuH = fullH;
+  }
+  else
+  {
+    menuH = std::min(fullH, maxOnScreen);
     menuT = std::max(uiBounds.T + 6.f, uiBounds.B - 6.f - menuH);
+  }
   const IRECT menuRect(anchorRect.L, menuT, anchorRect.L + menuW, menuT + menuH);
 
   menu->SetTargetAndDrawRECTs(menuRect);

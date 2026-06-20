@@ -547,6 +547,7 @@ public:
     mScreen = volum::custom::Screen::Builder;
     mBuilderEditIdx = editExisting ? editIdx : -1;
     mBuilderAmp = (editExisting && editIdx >= 0) ? volum::custom::CustomAmpAt(editIdx) : NewBuilderAmp(ampName);
+    mBuilderFileScroll = 0.f;
     ResetTransient();
     Hide(false);
     SetDirty(false);
@@ -640,10 +641,14 @@ public:
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
   {
-    // Scroll the Manage list. Builder has no scroll; popups consume their own wheel.
-    if (mScreen == volum::custom::Screen::Builder || mPopupOpen || !PanelRect().Contains(x, y))
+    // Popups consume their own wheel; otherwise scroll the active list (the
+    // Builder's file manifest or the Manage list). Upper bound is clamped in Draw.
+    if (mPopupOpen || !PanelRect().Contains(x, y))
       return;
-    mManageScroll = std::max(0.f, mManageScroll - d * 38.f);
+    if (mScreen == volum::custom::Screen::Builder)
+      mBuilderFileScroll = std::max(0.f, mBuilderFileScroll - d * 38.f);
+    else
+      mManageScroll = std::max(0.f, mManageScroll - d * 38.f);
     SetDirty(false);
   }
 
@@ -1096,6 +1101,7 @@ private:
       WDL_String path;
       std::vector<WDL_String> files;
       ui->PromptForFiles(path, files, "nam"); // multi-select .nam captures
+      int added = 0;
       for (const auto& fn : files)
       {
         if (!fn.GetLength())
@@ -1104,6 +1110,11 @@ private:
         const size_t slash = base.find_last_of("/\\");
         if (slash != std::string::npos)
           base = base.substr(slash + 1);
+        // Re-importing a file already in this amp's manifest is a no-op (matched
+        // by filename, case-insensitive) so the same capture never stacks up as
+        // duplicate rows - whether re-picked alone or within a multi-select batch.
+        if (volum::custom::ManifestHasFile(mBuilderAmp, base))
+          continue;
         // Factory naming convention (PREFIX-CODE-CHANNEL.nam) auto-fills the cab
         // slot, channel, and cab name; other names are added unassigned for
         // manual mapping.
@@ -1113,7 +1124,10 @@ private:
         mBuilderAmp.files.push_back({base, slot, channel});
         if (parsed.matched && slot >= 0 && slot < volum::custom::kNumCabSlots && !parsed.cabName.empty())
           mBuilderAmp.cabNames[(size_t)slot] = volum::custom::NormalizeCabName(parsed.cabName);
+        ++added;
       }
+      if (added > 0)
+        mBuilderFileScroll = 1e9f; // jump to the newly appended rows (clamped in Draw)
       SetDirty(false);
       return;
     }
@@ -1515,15 +1529,32 @@ private:
                "+ Add .nam files", drop);
     AddHotspot(drop, kAddFile, "Add .nam captures - PREFIX-CODE-CHANNEL names auto-fill cab + channel");
 
-    // file rows: filename | speaker | channel | remove
-    float y = drop.B + 10.f;
+    // file rows: filename | speaker | channel | remove (scrollable - a long
+    // import must not spill past the panel onto the footer/help text).
     const float rowH = 26.f;
+    const float rowStride = rowH + 4.f;
+    const IRECT listArea(left.L, drop.B + 10.f, left.R, left.B - 36.f);
+    const float contentH = (float)mBuilderAmp.files.size() * rowStride;
+    const bool scrollable = contentH > listArea.H() + 0.5f;
+    const float sbW = scrollable ? 6.f : 0.f;
+    const float maxScroll = std::max(0.f, contentH - listArea.H());
+    mBuilderFileScroll = std::clamp(mBuilderFileScroll, 0.f, maxScroll);
+
+    g.PathClipRegion(listArea);
+    float y = listArea.T - mBuilderFileScroll;
     for (int i = 0; i < (int)mBuilderAmp.files.size(); i++)
     {
+      const IRECT row(left.L, y, left.R - sbW, y + rowH);
+      y += rowStride;
+      // Cull rows fully outside the viewport. Only fully-visible rows register
+      // hotspots, so a partially clipped row can't be clicked through the footer.
+      if (row.B < listArea.T || row.T > listArea.B)
+        continue;
+      const bool rowVisible = (row.T >= listArea.T - 0.5f && row.B <= listArea.B + 0.5f);
+
       auto& f = mBuilderAmp.files[(size_t)i];
       const bool unassigned = !FileAssigned(f);
       const bool dup = FileIsDuplicate(mBuilderAmp, (size_t)i);
-      const IRECT row(left.L, y, left.R, y + rowH);
       // The manifest rows are not selectable, so a normal row stays flat (no
       // button-like fill/border). Only the validation states paint: duplicate
       // (slot,channel) -> red, unassigned -> amber.
@@ -1548,7 +1579,8 @@ private:
       g.DrawRect(slotOk ? VoLumColors::TEAL_DIM : VoLumColors::AMBER, spk);
       g.DrawText(IText(10.f, slotOk ? VoLumColors::GOLD : VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                  spkLabel.c_str(), spk);
-      AddHotspot(spk, kFileSpeakerBase + i, "Assign this capture to a cabinet (or DIRECT)");
+      if (rowVisible)
+        AddHotspot(spk, kFileSpeakerBase + i, "Assign this capture to a cabinet (or DIRECT)");
 
       // channel chip
       char chLabel[12];
@@ -1559,18 +1591,31 @@ private:
       g.FillRect(VoLumColors::HERO_BG, ch);
       g.DrawRect(VoLumColors::TEAL_DIM, ch);
       g.DrawText(IText(10.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle), chLabel, ch);
-      AddHotspot(ch, kFileChannelBase + i, "Assign this capture to a channel");
+      if (rowVisible)
+        AddHotspot(ch, kFileChannelBase + i, "Assign this capture to a channel");
 
       // remove
       g.DrawText(IText(13.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "x", rem);
-      AddHotspot(rem, kFileRemoveBase + i, "Remove this file");
-
-      y += rowH + 4.f;
+      if (rowVisible)
+        AddHotspot(rem, kFileRemoveBase + i, "Remove this file");
     }
+    g.PathClipRegion();
 
     if (mBuilderAmp.files.empty())
       g.DrawText(IText(11.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
-                 "No files yet. Add a .nam, then pick its speaker + channel.", IRECT(left.L, y, left.R, y + 18.f));
+                 "No files yet. Add a .nam, then pick its speaker + channel.",
+                 IRECT(left.L, listArea.T, left.R, listArea.T + 18.f));
+
+    // Scrollbar for the file manifest (matches the Manage list styling).
+    if (scrollable)
+    {
+      IRECT track(listArea.R - sbW + 1.f, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
+      g.FillRect(IColor(40, 200, 162, 78), track);
+      const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
+      const float t = (maxScroll > 0.f) ? (mBuilderFileScroll / maxScroll) : 0.f;
+      const float thumbY = track.T + (track.H() - thumbH) * t;
+      g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, thumbY, track.R, thumbY + thumbH));
+    }
 
     DrawFooter(g, IRECT(left.L, left.B - 30.f, left.R, left.B),
                "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
@@ -1766,6 +1811,7 @@ private:
   int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals
   int mBuilderEditIdx = -1; // custom-amp index being edited (-1 = new draft)
   float mManageScroll = 0.f; // Manage list scroll offset (px)
+  float mBuilderFileScroll = 0.f; // builder file-manifest scroll offset (px)
 
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;

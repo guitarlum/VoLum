@@ -618,6 +618,17 @@ inline bool NameMatchesCI(const std::string& a, const std::string& b)
   return true;
 }
 
+// True if the amp's file manifest already contains a capture with this filename
+// (case-insensitive). Used to make re-importing the same .nam a no-op instead of
+// stacking duplicate rows.
+inline bool ManifestHasFile(const CustomAmp& amp, const std::string& file)
+{
+  for (const auto& f : amp.files)
+    if (NameMatchesCI(f.file, file))
+      return true;
+  return false;
+}
+
 inline bool NameExistsCI(const std::vector<std::string>& list, const std::string& name, int exceptIdx = -1)
 {
   for (int i = 0; i < (int)list.size(); ++i)

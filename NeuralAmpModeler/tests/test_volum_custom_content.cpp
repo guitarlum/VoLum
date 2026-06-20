@@ -356,6 +356,18 @@ TEST_CASE("AddCustomAmp stores the assigned art in lockstep with the name list")
   REQUIRE(volum::custom::CustomAmpArt(99999) == 0);
 }
 
+TEST_CASE("ManifestHasFile makes re-importing the same .nam a no-op (case-insensitive)")
+{
+  using namespace volum::custom;
+  CustomAmp amp;
+  amp.files = {{"AMP-OD12-1.nam", kDirectSlot, 1}, {"G12-OD12-2.nam", 0, 2}};
+
+  REQUIRE(ManifestHasFile(amp, "AMP-OD12-1.nam"));
+  REQUIRE(ManifestHasFile(amp, "amp-od12-1.NAM")); // case-insensitive
+  REQUIRE_FALSE(ManifestHasFile(amp, "AMP-OD12-9.nam")); // not present yet
+  REQUIRE_FALSE(ManifestHasFile(CustomAmp{}, "anything.nam")); // empty manifest
+}
+
 TEST_CASE("UpdateCustomAmp edits an entry in place instead of appending a duplicate")
 {
   using namespace volum::custom;
