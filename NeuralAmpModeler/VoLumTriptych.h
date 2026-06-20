@@ -346,7 +346,7 @@ private:
 
   void _DrawExpandedFrame(IGraphics& g, const IRECT& r, const char* label)
   {
-    g.FillRect(VoLumColors::HERO_BG, r);
+    DrawPanelDepth(g, r);
     const bool isLocked = (strcmp(label, "PRE") == 0) ? _IsPreLocked() : _IsPostLocked();
     g.DrawRect(isLocked ? VoLumColors::GOLD.WithOpacity(0.45f) : VoLumColors::FRAME, r, nullptr, isLocked ? 1.2f : 1.0f);
     const float cs = 8.f;
@@ -412,7 +412,7 @@ private:
 
     const bool isLocked = (section == EVoLumSection::PRE) ? _IsPreLocked() : _IsPostLocked();
 
-    g.FillRect(VoLumColors::HERO_BG, block);
+    DrawPanelDepth(g, block);
     g.DrawRect(isLocked ? VoLumColors::GOLD.WithOpacity(0.45f) : VoLumColors::FRAME, block, nullptr, isLocked ? 1.2f : 1.0f);
     const float cs = 6.f;
     DrawCornerAccent(g, block.L + 3.f, block.T + 3.f, cs, false, false, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
@@ -574,7 +574,7 @@ private:
     const IRECT block(r.L, blockTop, r.R, blockTop + blockH);
     mAmpBlockRect = block;
 
-    g.FillRect(VoLumColors::HERO_BG, block);
+    DrawPanelDepth(g, block);
     if (mAmpHovered)
     {
       g.FillRect(IColor(20, 80, 140, 160), block);
