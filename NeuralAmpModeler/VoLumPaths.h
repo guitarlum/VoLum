@@ -160,10 +160,8 @@ struct ChannelFile
 
 // Scan an amp folder for .nam files matching a speaker prefix (e.g. "V30"),
 // returning sorted list of {filename, channelLabel} pairs.
-inline std::vector<ChannelFile> DiscoverChannels(
-  const std::filesystem::path& rigsRoot,
-  const char* ampFolder,
-  const char* speakerPrefix)
+inline std::vector<ChannelFile> DiscoverChannels(const std::filesystem::path& rigsRoot, const char* ampFolder,
+                                                 const char* speakerPrefix)
 {
   namespace fs = std::filesystem;
   std::vector<ChannelFile> result;
@@ -180,23 +178,20 @@ inline std::vector<ChannelFile> DiscoverChannels(
     if (!entry.is_regular_file(ec))
       continue;
     std::string name = entry.path().filename().string();
-    if (name.size() > 4
-        && name.compare(name.size() - 4, 4, ".nam") == 0
-        && name.compare(0, prefix.size(), prefix) == 0)
+    if (name.size() > 4 && name.compare(name.size() - 4, 4, ".nam") == 0 && name.compare(0, prefix.size(), prefix) == 0)
     {
       auto lastDash = name.rfind('-');
       if (lastDash != std::string::npos && lastDash + 1 < name.size() - 4)
       {
         std::string label = name.substr(lastDash + 1, name.size() - 4 - lastDash - 1);
-        for (auto& c : label) c = (char)std::toupper((unsigned char)c);
+        for (auto& c : label)
+          c = (char)std::toupper((unsigned char)c);
         result.push_back({name, label});
       }
     }
   }
 
-  std::sort(result.begin(), result.end(), [](const ChannelFile& a, const ChannelFile& b) {
-    return a.label < b.label;
-  });
+  std::sort(result.begin(), result.end(), [](const ChannelFile& a, const ChannelFile& b) { return a.label < b.label; });
 
   return result;
 }
@@ -216,6 +211,31 @@ inline std::filesystem::path VolumUserSettingsFilePath()
   if (!home || !*home)
     return {};
   return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-settings.json";
+#else
+  (void)0;
+  return {};
+#endif
+}
+
+// VoLum-owned content store directory (1.2.0 BYO + presets). Sibling of
+// volum-settings.json, but unlike that file the content store is read AND
+// written by ALL formats (standalone + VST3 + AU) so a plugin instance can
+// resolve a preset/project's references to custom amps / IRs / pedals by their
+// stable opaque ids. VoLum copies every imported .nam/.wav in here so it never
+// depends on the user's original file staying put.
+inline std::filesystem::path VolumContentDir()
+{
+  namespace fs = std::filesystem;
+#ifdef _WIN32
+  const char* la = std::getenv("LOCALAPPDATA");
+  if (!la || !*la)
+    return {};
+  return fs::path(la) / "VoLum" / "content";
+#elif defined(__APPLE__)
+  const char* home = std::getenv("HOME");
+  if (!home || !*home)
+    return {};
+  return fs::path(home) / "Library" / "Application Support" / "VoLum" / "content";
 #else
   (void)0;
   return {};

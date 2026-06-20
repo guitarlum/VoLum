@@ -62,7 +62,17 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
 
 void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 {
-  auto& s = mVolumAmpSettings[mVolumAmpIdx];
+  // A focused custom amp (F6) keeps its own scene in the content library, keyed
+  // by its stable id. Redirect the live snapshot there so we never clobber the
+  // underlying factory amp slot (mVolumAmpIdx) while a custom amp is active.
+  volum::VoLumAmpSettings* target = &mVolumAmpSettings[mVolumAmpIdx];
+  if (mVolumCustomMainIdx >= 0)
+  {
+    const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+    if (!id.empty())
+      target = &volum::content::GlobalContentStore().reg().customScenes[id];
+  }
+  auto& s = *target;
   s.speakerIdx = mVolumSpeakerIdx;
   s.channelIdx = mVolumChannelIdx;
   s.inputLevel = GetParam(kInputLevel)->Value();
@@ -310,10 +320,16 @@ void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
   // / kReverbSubMode etc. mid-restore, which writes the partially-restored state back
   // into the snapshot we are loading from. RAII saves and restores the previous value
   // so nested calls (this -> _VolumRestoreOktaverbSubModeSnapshot) keep the guard set.
-  struct RestoreGuard {
+  struct RestoreGuard
+  {
     bool& flag;
     bool prev;
-    explicit RestoreGuard(bool& f) : flag(f), prev(f) { flag = true; }
+    explicit RestoreGuard(bool& f)
+    : flag(f)
+    , prev(f)
+    {
+      flag = true;
+    }
     ~RestoreGuard() { flag = prev; }
   } guard(mVolumReverbRestoreInProgress);
 
@@ -380,10 +396,16 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
   // Same RAII guard as _VolumRestoreReverbModeSnapshot: the setParam calls below send
   // values via SendParameterValueFromDelegate, which triggers OnParamChangeUI for the
   // reverb knobs and would otherwise overwrite the snapshot we are restoring from.
-  struct RestoreGuard {
+  struct RestoreGuard
+  {
     bool& flag;
     bool prev;
-    explicit RestoreGuard(bool& f) : flag(f), prev(f) { flag = true; }
+    explicit RestoreGuard(bool& f)
+    : flag(f)
+    , prev(f)
+    {
+      flag = true;
+    }
     ~RestoreGuard() { flag = prev; }
   } guard(mVolumReverbRestoreInProgress);
 
@@ -484,10 +506,16 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   for (int subMode = 0; subMode < 3; ++subMode)
     mVolumEffectSettings.oktaverbSubModes[subMode] = s.postOktaverbSubModes[subMode];
 
-  struct PostRestoreGuard {
+  struct PostRestoreGuard
+  {
     bool& flag;
     bool prev;
-    explicit PostRestoreGuard(bool& f) : flag(f), prev(f) { flag = true; }
+    explicit PostRestoreGuard(bool& f)
+    : flag(f)
+    , prev(f)
+    {
+      flag = true;
+    }
     ~PostRestoreGuard() { flag = prev; }
   } postGuard(mVolumPostRestoreInProgress);
 
@@ -526,7 +554,14 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
 {
-  auto& s = mVolumAmpSettings[ampIdx];
+  _VolumApplyAmpSettings(mVolumAmpSettings[ampIdx]);
+}
+
+// Apply an arbitrary settings snapshot to the live params/members. Factory amps
+// pass mVolumAmpSettings[ampIdx]; custom amps (F6) and preset recall (F5) pass a
+// scene/preset struct that lives outside the factory array.
+void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
+{
   mVolumSpeakerIdx = s.speakerIdx;
   mVolumChannelIdx = s.channelIdx;
 
@@ -561,6 +596,34 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
   setParam(kSupportEQActive, s.supportEqActive ? 1.0 : 0.0);
   setParam(kSupportAmpPan, s.supportAmpPan);
   mSupportPolarityInvert.store(s.supportPolarityInvert);
+
+  // F6 dual amp: resolve a custom SUPPORT partner by stable id. An orphaned id
+  // (the amp was deleted / is missing on this machine) falls back to "(none)"
+  // per the removal matrix; clearing it on the scene heals the ref on next save.
+  if (!s.supportCustomId.empty())
+  {
+    const int sidx = volum::custom::CustomAmpIndexById(s.supportCustomId);
+    mVolumCustomSupportIdx = sidx;
+    if (sidx >= 0)
+    {
+      const auto amp = volum::custom::CustomAmpAt(sidx);
+      int sl = volum::custom::kDirectSlot, ch = 1;
+      if (volum::content::DefaultCaptureSelection(amp, sl, ch))
+      {
+        mVolumCustomSupportSlot = sl;
+        mVolumCustomSupportChannel = ch;
+      }
+    }
+    else
+    {
+      s.supportCustomId.clear();
+    }
+  }
+  else
+  {
+    mVolumCustomSupportIdx = -1;
+  }
+
   _VolumRefreshSupportChannels();
   mVolumSupportNeedsLoad.store(true);
 
@@ -574,6 +637,9 @@ void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)
       spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);
     _UpdateVoLumLayout(pGfx);
   }
+
+  // F7: re-resolve the scene's custom IR cab (orphaned id -> baked cab fallback).
+  _VolumApplyActiveIr(s.activeIrId);
 }
 
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
@@ -584,8 +650,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // run a newer standalone and then open an older VST3 in a DAW.
   nlohmann::json j = volum::VolumUserSettingsToJson(
     mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
-    /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked,
-    mVolumPreLocked ? &mVolumLiveLockedPre : nullptr, mVolumPostLocked ? &mVolumLiveLockedPost : nullptr);
+    /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
+    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr);
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   namespace fs = std::filesystem;
@@ -602,17 +668,21 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   std::error_code ec;
   if (!volum::WriteJsonAtomically(settingsPath, j, ec))
   {
-    std::cerr << "VoLum: write failed for settings file: " << settingsPath.string()
-              << " (" << ec.message() << ")" << std::endl;
+    std::cerr << "VoLum: write failed for settings file: " << settingsPath.string() << " (" << ec.message() << ")"
+              << std::endl;
     return;
   }
 
   if (!volum::WriteJsonAtomically(dualAmpSettingsPath, dualAmpJson, ec))
   {
-    std::cerr << "VoLum: write failed for dual-amp settings file: " << dualAmpSettingsPath.string()
-              << " (" << ec.message() << ")" << std::endl;
+    std::cerr << "VoLum: write failed for dual-amp settings file: " << dualAmpSettingsPath.string() << " ("
+              << ec.message() << ")" << std::endl;
     return;
   }
+
+  // Persist the shared content library too (custom-amp scenes accumulate live
+  // knob edits via _VolumSaveCurrentToSettings). No-op when no base dir is set.
+  volum::content::GlobalContentStore().Save();
 }
 
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
@@ -685,4 +755,141 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   {
     std::cerr << "Failed to read volum-settings.json" << std::endl;
   }
+}
+
+// ---------------------------------------------------------------------------
+// F5 presets: per-amp named snapshots in the content registry, owner-keyed by
+// the focused amp (factory:<idx> or a custom amp id). Save/overwrite capture the
+// live scene; recall applies a stored snapshot and retains it so the header bar
+// "(unsaved)" flag is a live-vs-snapshot equality test (returning to the preset
+// exactly clears the flag).
+// ---------------------------------------------------------------------------
+
+std::string NeuralAmpModeler::_VolumActiveOwnerKey() const
+{
+  if (mVolumCustomMainIdx >= 0)
+  {
+    const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+    if (!id.empty())
+      return id;
+  }
+  return volum::content::FactoryOwnerKey(mVolumAmpIdx);
+}
+
+void NeuralAmpModeler::_VolumInstallPresetHooks()
+{
+  // Capture: sync live params into the active scene, then hand back a copy so a
+  // preset records the complete current rig (incl. the id-based custom refs that
+  // live on the scene, not on params).
+  volum::custom::PresetCaptureHook() = [this]() -> volum::VoLumAmpSettings {
+    _VolumSaveCurrentToSettings();
+    return _VolumActiveScene();
+  };
+  volum::custom::PresetApplyHook() = [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); };
+}
+
+void NeuralAmpModeler::_VolumSyncPresetOwner()
+{
+  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  // Switching amps drops the recalled preset: the bar shows the new amp's bank
+  // with nothing selected until the user recalls one.
+  mVolumHasRecalledSnapshot = false;
+  mVolumActivePresetId.clear();
+}
+
+void NeuralAmpModeler::_VolumRefreshPresetBar()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar);
+  if (!pb)
+    return;
+  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  auto* bar = pb->As<VoLumPresetBarControl>();
+  bar->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx)); // clears selection + dirty
+
+  if (mVolumHasRecalledSnapshot && !mVolumActivePresetId.empty())
+  {
+    const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+    auto it = banks.find(_VolumActiveOwnerKey());
+    if (it != banks.end())
+      for (const auto& pr : it->second)
+        if (pr.id == mVolumActivePresetId)
+        {
+          bar->SelectName(pr.name.c_str());
+          break;
+        }
+    _VolumRecomputePresetDirty();
+  }
+}
+
+int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
+{
+  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  const int idx = volum::custom::AddPreset(mVolumAmpIdx, name); // captures live via hook
+  if (idx < 0)
+    return idx;
+  // The freshly saved preset becomes the active, clean recalled snapshot.
+  mVolumActivePresetId = volum::custom::PresetIdAt(idx);
+  mVolumRecalledSnapshot = _VolumActiveScene(); // hook already synced live -> scene
+  mVolumHasRecalledSnapshot = true;
+  mVolumSettingsDirty = true;
+  _VolumRefreshPresetBar();
+  return idx;
+}
+
+void NeuralAmpModeler::_VolumOverwritePreset(int index)
+{
+  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  volum::custom::OverwritePreset(mVolumAmpIdx, index); // captures live via hook
+  mVolumActivePresetId = volum::custom::PresetIdAt(index);
+  mVolumRecalledSnapshot = _VolumActiveScene();
+  mVolumHasRecalledSnapshot = true;
+  mVolumSettingsDirty = true;
+  _VolumRefreshPresetBar();
+}
+
+void NeuralAmpModeler::_VolumRecallPreset(int index)
+{
+  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  mVolumActivePresetId = volum::custom::PresetIdAt(index);
+  volum::custom::RecallPreset(mVolumAmpIdx, index); // -> apply hook -> _VolumApplyRecalledPreset
+  _VolumRefreshPresetBar();
+}
+
+void NeuralAmpModeler::_VolumApplyRecalledPreset(const volum::VoLumAmpSettings& s)
+{
+  _VolumActiveScene() = s; // make the live scene equal the preset
+  _VolumApplyAmpSettings(_VolumActiveScene());
+  _VolumRefreshChannels();
+  // Re-derive the scene from the now-live params so the retained baseline matches
+  // exactly what _VolumRecomputePresetDirty() will read back (avoids a spurious
+  // "(unsaved)" right after recall from param normalization).
+  _VolumSaveCurrentToSettings();
+  mVolumRecalledSnapshot = _VolumActiveScene();
+  mVolumHasRecalledSnapshot = true;
+  mVolumNeedsLoad.store(true);
+  mVolumSettingsDirty = true;
+}
+
+void NeuralAmpModeler::_VolumRecomputePresetDirty()
+{
+  if (!mVolumInitComplete)
+    return;
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar);
+  if (!pb)
+    return;
+  auto* bar = pb->As<VoLumPresetBarControl>();
+  if (!mVolumHasRecalledSnapshot)
+  {
+    bar->SetDirtyState(false);
+    return;
+  }
+  _VolumSaveCurrentToSettings();
+  const bool dirty = !volum::AmpSettingsEqual(_VolumActiveScene(), mVolumRecalledSnapshot);
+  bar->SetDirtyState(dirty);
 }

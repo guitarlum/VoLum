@@ -193,14 +193,17 @@ void _UpdateConfigFrom_0_8_1(nlohmann::json& config)
 int _GetConfigFrom_0_8_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   std::vector<std::string> paramNames{
-    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
-    "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
-    "ReverbActive", "ReverbMix", "ReverbDecay", "ReverbTone", "ReverbPreDelay", "ReverbShimmer", "ReverbMode",
-    "BoostActive", "BoostDrive", "BoostTone", "BoostLevel",
-    "PreCompActive", "PreCompAmount", "PreCompRatio", "PreCompAttack", "PreCompRelease", "PreCompMix", "PreCompLevel",
-    "PreNam1Active", "PreNam1Capture", "PreNam1Gain", "PreNam1Bass", "PreNam1Mid", "PreNam1MidFreq", "PreNam1Treble", "PreNam1Level",
-    "PreNam2Active", "PreNam2Capture", "PreNam2Gain", "PreNam2Bass", "PreNam2Mid", "PreNam2MidFreq", "PreNam2Treble", "PreNam2Level",
-    "CalibrateInput", "InputCalibrationLevel", "OutputMode", "RigFile"};
+    "Input",          "Threshold",       "Bass",           "Middle",         "Treble",
+    "Output",         "NoiseGateActive", "ToneStack",      "IRToggle",       "DelayActive",
+    "DelayTime",      "DelayFeedback",   "DelayMix",       "DelayMode",      "ReverbActive",
+    "ReverbMix",      "ReverbDecay",     "ReverbTone",     "ReverbPreDelay", "ReverbShimmer",
+    "ReverbMode",     "BoostActive",     "BoostDrive",     "BoostTone",      "BoostLevel",
+    "PreCompActive",  "PreCompAmount",   "PreCompRatio",   "PreCompAttack",  "PreCompRelease",
+    "PreCompMix",     "PreCompLevel",    "PreNam1Active",  "PreNam1Capture", "PreNam1Gain",
+    "PreNam1Bass",    "PreNam1Mid",      "PreNam1MidFreq", "PreNam1Treble",  "PreNam1Level",
+    "PreNam2Active",  "PreNam2Capture",  "PreNam2Gain",    "PreNam2Bass",    "PreNam2Mid",
+    "PreNam2MidFreq", "PreNam2Treble",   "PreNam2Level",   "CalibrateInput", "InputCalibrationLevel",
+    "OutputMode",     "RigFile"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_8_1(config);
@@ -223,18 +226,73 @@ void _UpdateConfigFrom_0_8_3(nlohmann::json& config)
 
 int _GetConfigFrom_0_8_3(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
-  std::vector<std::string> paramNames{
-    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
-    "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
-    "ReverbActive", "ReverbMix", "ReverbDecay", "ReverbTone", "ReverbPreDelay", "ReverbShimmer", "ReverbMode",
-    "BoostActive", "BoostDrive", "BoostTone", "BoostLevel",
-    "PreCompActive", "PreCompAmount", "PreCompRatio", "PreCompAttack", "PreCompRelease", "PreCompMix", "PreCompLevel",
-    "PreNam1Active", "PreNam1Capture", "PreNam1Gain", "PreNam1Bass", "PreNam1Mid", "PreNam1MidFreq", "PreNam1Treble", "PreNam1Level",
-    "PreNam2Active", "PreNam2Capture", "PreNam2Gain", "PreNam2Bass", "PreNam2Mid", "PreNam2MidFreq", "PreNam2Treble", "PreNam2Level",
-    "CalibrateInput", "InputCalibrationLevel", "OutputMode", "RigFile",
-    "DualAmpActive", "DualAmpRoute", "MainAmpPan", "SupportAmp", "SupportSpeaker", "SupportChannel",
-    "SupportInput", "SupportThreshold", "SupportBass", "SupportMiddle", "SupportTreble", "SupportOutput",
-    "SupportNoiseGateActive", "SupportToneStack", "SupportAmpPan"};
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "DelayActive",
+                                      "DelayTime",
+                                      "DelayFeedback",
+                                      "DelayMix",
+                                      "DelayMode",
+                                      "ReverbActive",
+                                      "ReverbMix",
+                                      "ReverbDecay",
+                                      "ReverbTone",
+                                      "ReverbPreDelay",
+                                      "ReverbShimmer",
+                                      "ReverbMode",
+                                      "BoostActive",
+                                      "BoostDrive",
+                                      "BoostTone",
+                                      "BoostLevel",
+                                      "PreCompActive",
+                                      "PreCompAmount",
+                                      "PreCompRatio",
+                                      "PreCompAttack",
+                                      "PreCompRelease",
+                                      "PreCompMix",
+                                      "PreCompLevel",
+                                      "PreNam1Active",
+                                      "PreNam1Capture",
+                                      "PreNam1Gain",
+                                      "PreNam1Bass",
+                                      "PreNam1Mid",
+                                      "PreNam1MidFreq",
+                                      "PreNam1Treble",
+                                      "PreNam1Level",
+                                      "PreNam2Active",
+                                      "PreNam2Capture",
+                                      "PreNam2Gain",
+                                      "PreNam2Bass",
+                                      "PreNam2Mid",
+                                      "PreNam2MidFreq",
+                                      "PreNam2Treble",
+                                      "PreNam2Level",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "RigFile",
+                                      "DualAmpActive",
+                                      "DualAmpRoute",
+                                      "MainAmpPan",
+                                      "SupportAmp",
+                                      "SupportSpeaker",
+                                      "SupportChannel",
+                                      "SupportInput",
+                                      "SupportThreshold",
+                                      "SupportBass",
+                                      "SupportMiddle",
+                                      "SupportTreble",
+                                      "SupportOutput",
+                                      "SupportNoiseGateActive",
+                                      "SupportToneStack",
+                                      "SupportAmpPan"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_8_3(config);
@@ -253,20 +311,77 @@ void _UpdateConfigFrom_0_9_0(nlohmann::json& /*config*/)
 int _GetConfigFrom_0_9_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   // Param order matches the EParams enum at v0.9.0+.
-  std::vector<std::string> paramNames{
-    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "IRToggle",
-    "DelayActive", "DelayTime", "DelayFeedback", "DelayMix", "DelayMode",
-    "DelayTone", "DelayAge", "DelayPingPong",
-    "ReverbActive", "ReverbMix", "ReverbDecay", "ReverbTone", "ReverbPreDelay", "ReverbShimmer", "ReverbMode",
-    "ReverbSubMode",
-    "BoostActive", "BoostDrive", "BoostTone", "BoostLevel",
-    "PreCompActive", "PreCompAmount", "PreCompRatio", "PreCompAttack", "PreCompRelease", "PreCompMix", "PreCompLevel",
-    "PreNam1Active", "PreNam1Capture", "PreNam1Gain", "PreNam1Bass", "PreNam1Mid", "PreNam1MidFreq", "PreNam1Treble", "PreNam1Level",
-    "PreNam2Active", "PreNam2Capture", "PreNam2Gain", "PreNam2Bass", "PreNam2Mid", "PreNam2MidFreq", "PreNam2Treble", "PreNam2Level",
-    "CalibrateInput", "InputCalibrationLevel", "OutputMode", "RigFile",
-    "DualAmpActive", "DualAmpRoute", "MainAmpPan", "SupportAmp", "SupportSpeaker", "SupportChannel",
-    "SupportInput", "SupportThreshold", "SupportBass", "SupportMiddle", "SupportTreble", "SupportOutput",
-    "SupportNoiseGateActive", "SupportToneStack", "SupportAmpPan"};
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "DelayActive",
+                                      "DelayTime",
+                                      "DelayFeedback",
+                                      "DelayMix",
+                                      "DelayMode",
+                                      "DelayTone",
+                                      "DelayAge",
+                                      "DelayPingPong",
+                                      "ReverbActive",
+                                      "ReverbMix",
+                                      "ReverbDecay",
+                                      "ReverbTone",
+                                      "ReverbPreDelay",
+                                      "ReverbShimmer",
+                                      "ReverbMode",
+                                      "ReverbSubMode",
+                                      "BoostActive",
+                                      "BoostDrive",
+                                      "BoostTone",
+                                      "BoostLevel",
+                                      "PreCompActive",
+                                      "PreCompAmount",
+                                      "PreCompRatio",
+                                      "PreCompAttack",
+                                      "PreCompRelease",
+                                      "PreCompMix",
+                                      "PreCompLevel",
+                                      "PreNam1Active",
+                                      "PreNam1Capture",
+                                      "PreNam1Gain",
+                                      "PreNam1Bass",
+                                      "PreNam1Mid",
+                                      "PreNam1MidFreq",
+                                      "PreNam1Treble",
+                                      "PreNam1Level",
+                                      "PreNam2Active",
+                                      "PreNam2Capture",
+                                      "PreNam2Gain",
+                                      "PreNam2Bass",
+                                      "PreNam2Mid",
+                                      "PreNam2MidFreq",
+                                      "PreNam2Treble",
+                                      "PreNam2Level",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "RigFile",
+                                      "DualAmpActive",
+                                      "DualAmpRoute",
+                                      "MainAmpPan",
+                                      "SupportAmp",
+                                      "SupportSpeaker",
+                                      "SupportChannel",
+                                      "SupportInput",
+                                      "SupportThreshold",
+                                      "SupportBass",
+                                      "SupportMiddle",
+                                      "SupportTreble",
+                                      "SupportOutput",
+                                      "SupportNoiseGateActive",
+                                      "SupportToneStack",
+                                      "SupportAmpPan"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_9_0(config);
@@ -285,33 +400,12 @@ void _UpdateConfigFrom_0_5_0(nlohmann::json& config)
 int _GetConfigFrom_0_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   std::vector<std::string> paramNames{
-    "Input",
-    "Threshold",
-    "Bass",
-    "Middle",
-    "Treble",
-    "Output",
-    "NoiseGateActive",
-    "ToneStack",
-    "IRToggle",
-    "DelayActive",
-    "DelayTime",
-    "DelayFeedback",
-    "DelayMix",
-    "DelayMode",
-    "ReverbActive",
-    "ReverbMix",
-    "ReverbDecay",
-    "ReverbTone",
-    "ReverbMode",
-    "BoostActive",
-    "BoostDrive",
-    "BoostTone",
-    "BoostLevel",
-    "CalibrateInput",
-    "InputCalibrationLevel",
-    "OutputMode",
-    "AmpeteRig"};
+    "Input",      "Threshold",       "Bass",       "Middle",         "Treble",
+    "Output",     "NoiseGateActive", "ToneStack",  "IRToggle",       "DelayActive",
+    "DelayTime",  "DelayFeedback",   "DelayMix",   "DelayMode",      "ReverbActive",
+    "ReverbMix",  "ReverbDecay",     "ReverbTone", "ReverbMode",     "BoostActive",
+    "BoostDrive", "BoostTone",       "BoostLevel", "CalibrateInput", "InputCalibrationLevel",
+    "OutputMode", "AmpeteRig"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_5_0(config);
@@ -327,36 +421,16 @@ void _UpdateConfigFrom_0_6_0(nlohmann::json& config)
 
 int _GetConfigFrom_0_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
-  std::vector<std::string> paramNames{
-    "Input",
-    "Threshold",
-    "Bass",
-    "Middle",
-    "Treble",
-    "Output",
-    "NoiseGateActive",
-    "ToneStack",
-    "IRToggle",
-    "DelayActive",
-    "DelayTime",
-    "DelayFeedback",
-    "DelayMix",
-    "DelayMode",
-    "ReverbActive",
-    "ReverbMix",
-    "ReverbDecay",
-    "ReverbTone",
-    "ReverbPreDelay",
-    "ReverbShimmer",
-    "ReverbMode",
-    "BoostActive",
-    "BoostDrive",
-    "BoostTone",
-    "BoostLevel",
-    "CalibrateInput",
-    "InputCalibrationLevel",
-    "OutputMode",
-    "AmpeteRig"};
+  std::vector<std::string> paramNames{"Input",           "Threshold",      "Bass",
+                                      "Middle",          "Treble",         "Output",
+                                      "NoiseGateActive", "ToneStack",      "IRToggle",
+                                      "DelayActive",     "DelayTime",      "DelayFeedback",
+                                      "DelayMix",        "DelayMode",      "ReverbActive",
+                                      "ReverbMix",       "ReverbDecay",    "ReverbTone",
+                                      "ReverbPreDelay",  "ReverbShimmer",  "ReverbMode",
+                                      "BoostActive",     "BoostDrive",     "BoostTone",
+                                      "BoostLevel",      "CalibrateInput", "InputCalibrationLevel",
+                                      "OutputMode",      "AmpeteRig"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_6_0(config);
@@ -372,36 +446,16 @@ void _UpdateConfigFrom_0_7_0(nlohmann::json& config)
 
 int _GetConfigFrom_0_7_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
-  std::vector<std::string> paramNames{
-    "Input",
-    "Threshold",
-    "Bass",
-    "Middle",
-    "Treble",
-    "Output",
-    "NoiseGateActive",
-    "ToneStack",
-    "IRToggle",
-    "DelayActive",
-    "DelayTime",
-    "DelayFeedback",
-    "DelayMix",
-    "DelayMode",
-    "ReverbActive",
-    "ReverbMix",
-    "ReverbDecay",
-    "ReverbTone",
-    "ReverbPreDelay",
-    "ReverbShimmer",
-    "ReverbMode",
-    "BoostActive",
-    "BoostDrive",
-    "BoostTone",
-    "BoostLevel",
-    "CalibrateInput",
-    "InputCalibrationLevel",
-    "OutputMode",
-    "RigFile"};
+  std::vector<std::string> paramNames{"Input",           "Threshold",      "Bass",
+                                      "Middle",          "Treble",         "Output",
+                                      "NoiseGateActive", "ToneStack",      "IRToggle",
+                                      "DelayActive",     "DelayTime",      "DelayFeedback",
+                                      "DelayMix",        "DelayMode",      "ReverbActive",
+                                      "ReverbMix",       "ReverbDecay",    "ReverbTone",
+                                      "ReverbPreDelay",  "ReverbShimmer",  "ReverbMode",
+                                      "BoostActive",     "BoostDrive",     "BoostTone",
+                                      "BoostLevel",      "CalibrateInput", "InputCalibrationLevel",
+                                      "OutputMode",      "RigFile"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_0_7_0(config);
@@ -529,8 +583,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _UnserializeApplyConfig(config);
 
   // VoLum: per-amp settings tail after serialized params (v0.7.15+ and VoLum 0.1.x)
-  if (volum::ChunkUses0700SerializedConfig(version) || volum::ChunkUses0600SerializedConfig(version) ||
-      volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
+  if (volum::ChunkUses0700SerializedConfig(version) || volum::ChunkUses0600SerializedConfig(version)
+      || volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
     // SerializeParams wrote kNumParams doubles; now read the per-amp block
     volum::VoLumChunkSelection selection;
@@ -547,8 +601,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     const bool hasPostPerAmpSettings = volum::ChunkHasPostPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasPostSnapshotPerAmpSettings =
       volum::ChunkHasPostSnapshotPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
-    const bool hasPrePostLockFlags =
-      volum::ChunkHasPrePostLockFlags(remainingPerAmpBytes, volum::kAmpCount);
+    const bool hasPrePostLockFlags = volum::ChunkHasPrePostLockFlags(remainingPerAmpBytes, volum::kAmpCount);
     // hasPrePostLockSnapshots is computed AFTER the lock flags are read so we
     // know exactly how many extra bytes to expect. Done below.
 
@@ -590,12 +643,58 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         chunk, pos, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre, mVolumLiveLockedPost);
     }
 
+    // VoLum 1.2.0 id tail (sentinel-probed; absent on <=1.1.0 chunks). Restores
+    // the per-amp custom IR cab + custom support refs into the scenes BEFORE
+    // _VolumRestoreFromSettings so the active amp's IR/support resolve on load.
+    volum::ChunkIdTail idTail;
+    int idTailPos = pos;
+    const bool haveIdTail = volum::TryGetChunkIdTail(chunk, pos, chunk.Size(), idTail, &idTailPos);
+    if (haveIdTail)
+    {
+      pos = idTailPos;
+      for (int i = 0; i < volum::kAmpCount; ++i)
+      {
+        mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
+        mVolumAmpSettings[i].supportCustomId = idTail.perAmpSupportId[i];
+      }
+      mVolumActivePresetId = idTail.activePresetId;
+    }
+
     mVolumInitComplete = false;
     _VolumRestoreFromSettings(mVolumAmpIdx);
     _VolumApplyLiveLockSnapshots();
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);
     mVolumInitComplete = true;
+
+    // After base restore, re-focus a custom MAIN amp recorded in the id tail so
+    // its scene + cabs + .nam load (the binary per-amp array only covers factory
+    // amps). Custom support is resolved by _VolumApplyAmpSettings from the
+    // restored scene's supportCustomId.
+    if (haveIdTail)
+    {
+      const int cmi = volum::custom::CustomAmpIndexById(idTail.customMainId);
+      if (cmi >= 0)
+        _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs + .nam load
+      _VolumSyncPresetOwner(); // publish the focused amp's owner key (also clears preset)
+      // Restore the active-preset label if it still exists in this amp's bank
+      // (clean: the recalled snapshot is the just-restored live scene).
+      if (!idTail.activePresetId.empty())
+      {
+        const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+        auto it = banks.find(_VolumActiveOwnerKey());
+        if (it != banks.end())
+          for (const auto& pr : it->second)
+            if (pr.id == idTail.activePresetId)
+            {
+              mVolumActivePresetId = pr.id;
+              mVolumRecalledSnapshot = _VolumActiveScene();
+              mVolumHasRecalledSnapshot = true;
+              break;
+            }
+      }
+      _VolumRefreshPresetBar();
+    }
   }
 
   return pos;

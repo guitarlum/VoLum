@@ -2,7 +2,7 @@
 
 **Languages:** English | [Deutsch](user-guide.de.md)
 
-This guide explains the VoLum 1.1 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
+This guide explains the VoLum 1.2 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
 
 ## Main View
 
@@ -92,6 +92,32 @@ POST runs after the amp. It contains Delay and Reverb cards.
 The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one delay/reverb scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
 
 Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one.
+
+## Presets
+
+A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, channel, all knobs, PRE pedals, POST effects, and the Dual Amp setup.
+
+1. Dial in a tone, then open the preset bar in the AMP header.
+2. Use **Save current as new** to store it under a name.
+3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
+4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
+
+Presets are per amp: each amp (factory or custom) keeps its own preset list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults.
+
+## Custom Content (Bring Your Own)
+
+VoLum can load your own NAM amp captures, impulse responses, and pedal captures. Imported files are copied into a VoLum-owned content library, so they keep working after you move or delete the originals, and every format sees the same library:
+
+- **Windows:** `%LOCALAPPDATA%\VoLum\content`
+- **macOS:** `~/Library/Application Support/VoLum/content`
+
+**Custom amps.** Open the **+** in the CUSTOM section of the amp browser to open the builder. Name the amp, add one or more `.nam` files, and assign each to a cab slot and channel (files named `PREFIX-CODE-CHANNEL.nam` auto-fill). Saved custom amps appear in the CUSTOM list and load and play exactly like factory amps — including as the dual-amp SUPPORT partner. Use the pen/bin icons to edit or delete one.
+
+**Custom IRs.** In the speaker row, choose the **Custom IR** cab, then import a `.wav` impulse response from its dropdown. The IR convolves on the focused cab.
+
+**Custom pedals.** In the PRE NAM-capture dropdown, the **CUSTOM** group lets you import and manage your own `.nam` pedal captures; an imported capture loads into its PRE slot like a factory one.
+
+The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library.
 
 ## Tuner And Metronome
 

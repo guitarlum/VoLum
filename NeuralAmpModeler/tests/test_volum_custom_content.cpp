@@ -168,8 +168,8 @@ TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate state
 
 TEST_CASE("ParseNamFileName auto-fills slot/channel/cab from the factory convention")
 {
-  using volum::custom::ParseNamFileName;
   using volum::custom::kDirectSlot;
+  using volum::custom::ParseNamFileName;
 
   auto g65 = ParseNamFileName("G65-2204-3.nam");
   REQUIRE(g65.matched);
@@ -226,6 +226,9 @@ TEST_CASE("Manifest-derived channels feed SnapChannel consistently")
 
 TEST_CASE("AddPreset appends and de-duplicates the display name")
 {
+  // Preset banks are keyed by the active owner key (not the ampIdx arg), so pin a
+  // fresh owner for test isolation.
+  volum::custom::SetActivePresetOwner("test:add-dedup");
   const int amp = 9001; // a fresh, otherwise-unused bank
   REQUIRE(volum::custom::MockPresetsForAmp(amp).empty());
 
@@ -246,6 +249,7 @@ TEST_CASE("AddPreset appends and de-duplicates the display name")
 
 TEST_CASE("RenamePreset and DeletePreset edit the bank in place")
 {
+  volum::custom::SetActivePresetOwner("test:rename-delete");
   const int amp = 9002;
   volum::custom::AddPreset(amp, "A");
   volum::custom::AddPreset(amp, "B");
@@ -302,6 +306,19 @@ TEST_CASE("Imported IR/pedal keep the exact source filename alongside the displa
   REQUIRE(volum::custom::MockCustomPedals().size() == volum::custom::MockPedalFiles().size());
 }
 
+TEST_CASE("IRIdAt / IRIndexById round-trip and orphan-fallback to -1")
+{
+  using namespace volum::custom;
+  const int idx = AddIR("Resolve me", "ir/ir_x__Resolve.wav");
+  const std::string id = IRIdAt(idx);
+  REQUIRE_FALSE(id.empty());
+  CHECK(id.rfind("ir_", 0) == 0);
+  CHECK(IRIndexById(id) == idx); // round-trips back to the same index
+  CHECK(IRIndexById("ir_missing") == -1); // orphaned id -> -1 (baked-cab fallback)
+  CHECK(IRIndexById("") == -1);
+  CHECK(IRIdAt(99999).empty()); // out of range
+}
+
 TEST_CASE("RenameIR and DeleteIR edit the shared IR library in place")
 {
   const int idx = volum::custom::AddIR("ToRename");
@@ -318,6 +335,31 @@ TEST_CASE("RenameIR and DeleteIR edit the shared IR library in place")
   REQUIRE(volum::custom::MockIRLibrary().size() == before - 1);
   volum::custom::DeleteIR(99999); // out of range no-op
   REQUIRE(volum::custom::MockIRLibrary().size() == before - 1);
+}
+
+TEST_CASE("Imported pedals get stable, monotonic, non-reused PRE-capture indices")
+{
+  using namespace volum::custom;
+  const int base = volum::content::kCustomPedalIndexBase;
+
+  const int i0 = AddPedal("Ped A", "pedals/a.nam");
+  const int idxA = PedalLegacyIndexAt(i0);
+  CHECK(idxA >= base);
+
+  const int i1 = AddPedal("Ped B", "pedals/b.nam");
+  const int idxB = PedalLegacyIndexAt(i1);
+  CHECK(idxB == idxA + 1); // monotonic
+
+  // Resolution by stable index round-trips name + stored path.
+  CHECK(PedalNameByLegacy(idxA) == "Ped A");
+  CHECK(PedalStoredPathByLegacy(idxB) == "pedals/b.nam");
+
+  // Deleting A leaves B's index intact and never reuses A's index.
+  DeletePedal(i0);
+  CHECK(PedalNameByLegacy(idxB) == "Ped B");
+  CHECK(PedalNameByLegacy(idxA).empty()); // A's index is now orphaned
+  const int i2 = AddPedal("Ped C", "pedals/c.nam");
+  CHECK(PedalLegacyIndexAt(i2) == idxB + 1); // monotonic, skips A's freed index
 }
 
 TEST_CASE("RenamePedal and DeletePedal edit the custom-pedal library in place")
@@ -407,6 +449,105 @@ TEST_CASE("kNumCustomArts exposes six selectable styles")
   REQUIRE(volum::custom::kNumCustomArts == 6);
   const int idx = volum::custom::AddCustomAmp("Star amp", 5);
   REQUIRE(volum::custom::CustomAmpArt(idx) == 5);
+}
+
+// ---- F5 preset capture/recall hooks + owner routing -------------------------
+
+TEST_CASE("AddPreset captures live settings via the plugin hook")
+{
+  using namespace volum::custom;
+  SetActivePresetOwner("test:f5-capture");
+
+  // The plugin installs a capture hook returning the current live scene; emulate
+  // it here so the bridge stores a real snapshot rather than defaults.
+  volum::VoLumAmpSettings live;
+  live.toneBass = 8.25;
+  live.activeIrId = "ir_live";
+  live.preNam1Capture = 70;
+  PresetCaptureHook() = [&live]() { return live; };
+
+  const int i = AddPreset(0, "Snapshot");
+  REQUIRE(i == 0);
+  const std::string id = PresetIdAt(i);
+  REQUIRE_FALSE(id.empty());
+
+  const auto& bank = volum::content::GlobalContentStore().reg().presetBanks.at("test:f5-capture");
+  REQUIRE(bank.size() == 1);
+  CHECK(volum::AmpSettingsEqual(bank[0].settings, live));
+
+  PresetCaptureHook() = nullptr; // don't leak the hook into other cases
+}
+
+TEST_CASE("OverwritePreset replaces the stored snapshot with the live capture")
+{
+  using namespace volum::custom;
+  SetActivePresetOwner("test:f5-overwrite");
+
+  volum::VoLumAmpSettings first;
+  first.toneMid = 3.0;
+  PresetCaptureHook() = [&first]() { return first; };
+  const int i = AddPreset(0, "P");
+  REQUIRE(i == 0);
+
+  volum::VoLumAmpSettings second;
+  second.toneMid = 9.0;
+  PresetCaptureHook() = [&second]() { return second; };
+  OverwritePreset(0, i);
+
+  const auto& bank = volum::content::GlobalContentStore().reg().presetBanks.at("test:f5-overwrite");
+  CHECK(volum::AmpSettingsEqual(bank[0].settings, second));
+
+  PresetCaptureHook() = nullptr;
+}
+
+TEST_CASE("RecallPreset feeds the stored snapshot to the apply hook")
+{
+  using namespace volum::custom;
+  SetActivePresetOwner("test:f5-recall");
+
+  volum::VoLumAmpSettings stored;
+  stored.toneTreble = 6.5;
+  stored.supportCustomId = "amp_partner";
+  PresetCaptureHook() = [&stored]() { return stored; };
+  const int i = AddPreset(0, "Recall me");
+
+  volum::VoLumAmpSettings applied;
+  bool called = false;
+  PresetApplyHook() = [&](const volum::VoLumAmpSettings& s) {
+    applied = s;
+    called = true;
+  };
+  RecallPreset(0, i);
+  REQUIRE(called);
+  CHECK(volum::AmpSettingsEqual(applied, stored));
+
+  // Out-of-range recall is a safe no-op (hook not re-invoked).
+  called = false;
+  RecallPreset(0, 99);
+  CHECK_FALSE(called);
+
+  PresetCaptureHook() = nullptr;
+  PresetApplyHook() = nullptr;
+}
+
+TEST_CASE("Preset banks are isolated by active owner key (factory vs custom amp)")
+{
+  using namespace volum::custom;
+  SetActivePresetOwner("test:f5-ownerA");
+  AddPreset(0, "OnlyA");
+  SetActivePresetOwner("test:f5-ownerB");
+  CHECK(MockPresetsForAmp(0).empty()); // a different owner sees an empty bank
+  AddPreset(0, "OnlyB");
+
+  SetActivePresetOwner("test:f5-ownerA");
+  const auto a = MockPresetsForAmp(0);
+  REQUIRE(a.size() == 1);
+  CHECK(a[0] == "OnlyA");
+
+  SetActivePresetOwner("test:f5-ownerB");
+  const auto b = MockPresetsForAmp(0);
+  REQUIRE(b.size() == 1);
+  CHECK(b[0] == "OnlyB");
 }
 
 TEST_CASE("RemoveCustomAmp keeps names and art ids aligned")
