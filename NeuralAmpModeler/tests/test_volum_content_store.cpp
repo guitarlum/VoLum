@@ -248,6 +248,66 @@ TEST_CASE("Removal matrix: deleting a custom amp cascades bank/scene and clears 
   CHECK(store.reg().presetBanks.at("factory:2")[0].settings.supportCustomId.empty());
 }
 
+// Regression (ASan): the Remove* methods are commonly called with a reference to
+// the id string OWNED by the element being erased (e.g. the UI bridge does
+// RemoveIR(reg.irs[idx].id)). They must copy the id before erasing, or the
+// subsequent scene/preset/support sweep dereferences freed memory. Passing the
+// element-owned id here reproduces the exact dangling path under AddressSanitizer.
+TEST_CASE("Removal matrix: deleting via the element-owned id does not dangle (ASan)")
+{
+  SUBCASE("IR")
+  {
+    ContentStore store;
+    store.reg().irs.push_back({"ir_keep", "Keep", ""});
+    store.reg().irs.push_back({"ir_drop", "Drop", ""});
+    VoLumAmpSettings scene;
+    scene.activeIrId = "ir_drop";
+    store.reg().customScenes["amp_a"] = scene;
+    Preset pr;
+    pr.id = "preset_1";
+    pr.settings.activeIrId = "ir_drop";
+    store.reg().presetBanks["factory:0"] = {pr};
+
+    store.RemoveIR(store.reg().irs[1].id); // reference into the erased element
+    CHECK(store.reg().irs.size() == 1);
+    CHECK(store.reg().irs[0].id == "ir_keep");
+    CHECK(store.reg().customScenes["amp_a"].activeIrId.empty());
+    CHECK(store.reg().presetBanks["factory:0"][0].settings.activeIrId.empty());
+  }
+
+  SUBCASE("pedal")
+  {
+    ContentStore store;
+    store.reg().pedals.push_back({"pedal_drop", "Klon", "klon", "", 64});
+    VoLumAmpSettings scene;
+    scene.preNam1Capture = 64;
+    store.reg().customScenes["amp_a"] = scene;
+
+    store.RemovePedal(store.reg().pedals[0].id); // reference into the erased element
+    CHECK(store.reg().pedals.empty());
+    CHECK(store.reg().customScenes["amp_a"].preNam1Capture == 0);
+  }
+
+  SUBCASE("custom amp")
+  {
+    ContentStore store;
+    volum::custom::CustomAmp amp;
+    amp.id = "amp_drop";
+    store.reg().amps.push_back(amp);
+    store.reg().presetBanks["amp_drop"] = {Preset{"preset_1", "P", {}}};
+    store.reg().customScenes["amp_drop"] = VoLumAmpSettings{};
+    VoLumAmpSettings other;
+    other.supportCustomId = "amp_drop";
+    store.reg().customScenes["amp_other"] = other;
+
+    store.RemoveCustomAmp(store.reg().amps[0].id); // reference into the erased element
+    CHECK(store.reg().amps.empty());
+    CHECK(store.reg().presetBanks.count("amp_drop") == 0);
+    CHECK(store.reg().customScenes.count("amp_drop") == 0);
+    CHECK(store.reg().customScenes["amp_other"].supportCustomId.empty());
+  }
+}
+
 TEST_CASE("AmpSettings JSON codec round-trips a full scene")
 {
   VoLumAmpSettings s;

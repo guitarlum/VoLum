@@ -497,7 +497,9 @@ public:
 
   // Delete a custom pedal: drop the library entry + file, and clear every PRE
   // slot (in scenes/presets) that pointed at its legacy index back to EMPTY (0).
-  void RemovePedal(const std::string& id)
+  // `id` is taken by value: callers commonly pass a reference to the string owned
+  // by the element we erase below, which would otherwise dangle.
+  void RemovePedal(std::string id)
   {
     int legacyIndex = -1;
     for (auto it = mReg.pedals.begin(); it != mReg.pedals.end(); ++it)
@@ -527,7 +529,9 @@ public:
 
   // Delete a custom IR: drop the library entry + file, and clear activeIrId on
   // every scene/preset that referenced it (falls back to the baked cab).
-  void RemoveIR(const std::string& id)
+  // `id` is by value: it is used after we erase the owning IRItem below, so a
+  // reference (e.g. DeleteIR passing irs[idx].id) would dangle (use-after-free).
+  void RemoveIR(std::string id)
   {
     for (auto it = mReg.irs.begin(); it != mReg.irs.end(); ++it)
     {
@@ -551,7 +555,9 @@ public:
 
   // Delete a custom amp: drop the manifest + copied files, its preset bank, its
   // scene, and reset any support ref pointing at it to "(none)".
-  void RemoveCustomAmp(const std::string& id)
+  // `id` is by value: it is used (presetBanks/customScenes erase, clearSupport)
+  // after we erase the owning amp below, so a reference would dangle.
+  void RemoveCustomAmp(std::string id)
   {
     for (auto it = mReg.amps.begin(); it != mReg.amps.end(); ++it)
     {
