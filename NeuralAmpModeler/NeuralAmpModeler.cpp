@@ -488,7 +488,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           const char* nm = (customIdx >= 0 && customIdx < (int)names.size()) ? names[customIdx].c_str() : nullptr;
           if (auto* pGfx = GetUI())
             if (auto* ov = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
-              ov->As<VoLumCustomOverlayControl>()->ShowBuilder(true, nm);
+              ov->As<VoLumCustomOverlayControl>()->ShowBuilder(true, nm, customIdx);
         },
         // bin: confirm, then delete the custom amp from the live session list.
         [this](int customIdx) {
@@ -560,8 +560,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new VoLumSpeakerRowControl(speakerArea,
         [this](int speakerIdx) {
-          // Custom amp focused (main or support): the cab row is display-only.
-          // Switching cabs just retargets that lane's channel stepper (no load).
+          // Custom amp focused (MAIN or the custom SUPPORT partner): the cab row
+          // is display-only. Switching cabs just retargets that lane's channel
+          // stepper (no model load).
           const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
           const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
           if (customLane >= 0)
@@ -1026,9 +1027,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new VoLumExactEntryControl(b, kInputLevel, "INPUT"), kCtrlTagVoLumExactEntry)->Hide(true);
     pGraphics->AttachControl(new VoLumPreCaptureMenuControl(IRECT(mainL, knobRowTop, mainL + 220.f, knobRowTop + 160.f)),
                              kCtrlTagVoLumPreCaptureMenu)->Hide(true);
+    // Dual-amp SUPPORT picker: scrollable list with "(none)" + factory amps.
     // Dual-amp SUPPORT picker: scrollable list with "(none)" + factory amps + a
     // "CUSTOM" group (shown only when custom amps exist). Picking a custom amp
-    // makes it the support partner (display + session only).
+    // makes it the support partner (display + session only). Custom rows are
+    // offset by kVolumCustomSupportBase so the callback can tell them apart.
     {
       auto* supMenu = new VoLumListMenuControl(b);
       supMenu->SetCallback([this](int code) {
@@ -1177,25 +1180,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         overlay->SetCallbacks(
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
-          [pPlugin](const volum::custom::CustomAmp& amp) {
-            const int idx = volum::custom::AddCustomAmp(amp);
+          [pPlugin](const volum::custom::CustomAmp& amp, int editIdx) {
+            // editIdx >= 0 -> the user edited an existing amp: mutate that entry
+            // in place so we don't spawn a duplicate. Otherwise append a new one.
+            const int idx =
+              (editIdx >= 0) ? volum::custom::UpdateCustomAmp(editIdx, amp) : volum::custom::AddCustomAmp(amp);
             auto* pGfx = pPlugin->GetUI();
             if (!pGfx)
               return;
             const auto& amps = volum::custom::MockCustomAmps();
             if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
-            {
-              auto* list = al->As<VoLumAmpListControl>();
-              list->SetCustomAmps(amps, volum::custom::MockCustomAmpArts());
-              list->SetCustomSelected(idx);
-            }
+              al->As<VoLumAmpListControl>()->SetCustomAmps(amps, volum::custom::MockCustomAmpArts());
+            // Full refresh (hero art/name + cabinet row + sidebar highlight) so a
+            // renamed amp / re-mapped cabs show immediately - and an edit lands on
+            // the same entry instead of a stray duplicate.
             if (idx >= 0 && idx < (int)amps.size())
-              if (auto* hero = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
-              {
-                auto* h = hero->As<VoLumHeroImageControl>();
-                h->SetCustomArt(true, volum::custom::CustomAmpArt(idx));
-                h->SetName(amps[idx].c_str());
-              }
+              pPlugin->_VolumSelectCustomAmp(idx);
           },
           // preset bank mutated (save/rename/delete) -> re-sync the header strip
           // for the currently focused factory amp.
@@ -1203,12 +1203,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             if (auto* pb = pPlugin->GetUI()->GetControlWithTag(kCtrlTagVoLumPresetBar))
               pb->As<VoLumPresetBarControl>()->SetList(volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx));
           });
-        // Manage-panel deletes go through the shared confirm modal.
-        overlay->SetConfirmDeleteCallback([pPlugin](const std::string& msg, std::function<void()> onConfirm) {
-          if (auto* pGfx = pPlugin->GetUI())
-            if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
-              dlg->As<VoLumConfirmDialogControl>()->Show("Delete?", msg, std::move(onConfirm));
-        });
+        // Manage-panel destructive actions (delete / overwrite) go through the
+        // shared confirm modal.
+        overlay->SetConfirmCallback(
+          [pPlugin](const std::string& msg, std::function<void()> onConfirm, const std::string& confirmLabel) {
+            if (auto* pGfx = pPlugin->GetUI())
+              if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
+                dlg->As<VoLumConfirmDialogControl>()->Show("Are you sure?", msg, std::move(onConfirm), confirmLabel);
+          });
         // Double-clicking a Manage row performs its primary action (mock):
         //   preset -> recall onto the header bar; IR -> use on the focused cab;
         //   pedal  -> load into the originating PRE NAM slot (backend wires DSP).
@@ -1339,6 +1341,31 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               return true;
             }
             return false;
+          }
+        }
+
+        // While a modal overlay or any anchored dropdown is open, the keyboard
+        // belongs to it - not the main view behind it. Route arrows into the
+        // builder art picker; otherwise swallow nav keys so the background amp
+        // list / knobs don't move. Non-nav keys fall through to the focused
+        // control (text entry etc.).
+        {
+          const int kModalTags[] = {kCtrlTagVoLumConfirm,      kCtrlTagVoLumCustomOverlay,
+                                    kCtrlTagVoLumPresetMenu,    kCtrlTagVoLumIrMenu,
+                                    kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+          for (int tag : kModalTags)
+          {
+            auto* c = pGfx->GetControlWithTag(tag);
+            if (!c || c->IsHidden())
+              continue;
+            const bool isNav =
+              key.VK == kVK_UP || key.VK == kVK_DOWN || key.VK == kVK_LEFT || key.VK == kVK_RIGHT;
+            if (tag == kCtrlTagVoLumCustomOverlay && isNav)
+            {
+              if (c->As<VoLumCustomOverlayControl>()->OnArrowKey(key.VK))
+                return true;
+            }
+            return isNav; // swallow background navigation; let other keys pass
           }
         }
       }
@@ -3222,6 +3249,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
                               : "Choose support amp",
                              true);
         }
+        else if (mVolumCustomMainIdx >= 0)
+        {
+          const auto& customAmps = volum::custom::MockCustomAmps();
+          if (mVolumCustomMainIdx < static_cast<int>(customAmps.size()))
+            subText->SetName(customAmps[(size_t)mVolumCustomMainIdx].c_str(), true);
+        }
         else
           subText->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
       }
@@ -3725,12 +3758,18 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
 
   const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
   std::vector<VoLumListMenuControl::Row> rows;
-  // Pinned reset-to-factory row at the top, separated by a divider.
-  rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
   if (presets.empty())
+  {
+    // No presets to come back from, so the reset-to-factory row is pointless.
     rows.push_back({"No presets yet", -99, false, true}); // dim hint
-  for (int i = 0; i < (int)presets.size(); i++)
-    rows.push_back({presets[(size_t)i], i, false, false});
+  }
+  else
+  {
+    // Pinned reset-to-factory row at the top, separated by a divider.
+    rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
+    for (int i = 0; i < (int)presets.size(); i++)
+      rows.push_back({presets[(size_t)i], i, false, false});
+  }
   rows.push_back({"Manage presets...", VoLumListMenuControl::kManage, true, false});
 
   auto* menu = raw->As<VoLumListMenuControl>();
@@ -3786,9 +3825,9 @@ void NeuralAmpModeler::_VolumShowSupportAmpMenu(const IRECT& anchorRect)
   const auto& customAmps = volum::custom::MockCustomAmps();
   if (!customAmps.empty())
   {
-    rows.push_back({"CUSTOM", 0, false, /*dim=*/true});
+    rows.push_back({"CUSTOM", 0, false, false, false, false, /*header=*/true});
     for (int c = 0; c < static_cast<int>(customAmps.size()); ++c)
-      rows.push_back({customAmps[(size_t)c], kVolumCustomSupportBase + c, false, false});
+      rows.push_back({customAmps[(size_t)c], kVolumCustomSupportBase + c, false, false, false, /*group=*/true});
   }
 
   int selected = VoLumListMenuControl::kNone;
@@ -3893,8 +3932,8 @@ void NeuralAmpModeler::_VolumSetSupportCustom(int customIdx)
 void NeuralAmpModeler::_VolumApplyFocusedLaneCabs()
 {
   // Reconcile the shared cabinet row + channel stepper with the focused lane.
-  // Custom lanes show their own named cabs (Slice 3 plumbing); factory lanes
-  // restore the stock G12/G65/V30 labels and that lane's channels.
+  // Custom lanes (MAIN or the custom SUPPORT partner) show their own named cabs;
+  // factory lanes restore the stock G12/G65/V30 labels and that lane's channels.
   auto* pGfx = GetUI();
   if (!pGfx)
     return;
@@ -3984,13 +4023,18 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
   const bool supportFocus = dualActive && mVolumDualAmpFocusedSupport;
   const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;
-  const bool showSupportPolarity =
-    showPanKnobs && GetParam(kSupportAmpIdx)->Int() >= 0 && GetParam(kSupportAmpIdx)->Int() < volum::kAmpCount;
+  // Polarity belongs to the SUPPORT lane whenever it has an amp - a factory amp
+  // or a custom support partner.
+  const bool hasSupportAmp =
+    (GetParam(kSupportAmpIdx)->Int() >= 0 && GetParam(kSupportAmpIdx)->Int() < volum::kAmpCount) ||
+    mVolumCustomSupportIdx >= 0;
+  const bool showSupportPolarity = showPanKnobs && hasSupportAmp;
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
-    // Custom lanes manage their own cab selection in _VolumApplyFocusedLaneCabs;
-    // don't fight it here. Factory lanes track their per-amp speaker index.
+    // A focused custom lane (MAIN or custom SUPPORT) manages its own cab
+    // selection in _VolumApplyFocusedLaneCabs; don't fight it here. Factory
+    // lanes track their per-amp speaker index.
     const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
     if (customLane < 0)
     {

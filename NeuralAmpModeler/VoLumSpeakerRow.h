@@ -136,10 +136,14 @@ public:
     {
       IRECT btn(x, btnY, x + irBtnW, btnY + btnH);
       const bool isHovered = (4 == mHovered);
-      g.FillRoundRect(mIrCabActive ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
-      g.DrawRoundRect(mIrCabActive ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false), btn,
-                      3.f, nullptr, isHovered ? 1.35f : 1.f);
-      const IColor txt = ButtonText(mIrCabActive, isHovered);
+      // Custom IR gets its own copper accent when active, distinct from the teal
+      // "No Cab" and the gold stock cabs.
+      const IColor fill = mIrCabActive ? VoLumColors::BTN_IR_ON_BG : ButtonFill(false, isHovered, false);
+      const IColor border = mIrCabActive ? VoLumColors::BTN_IR_ON_BORDER
+                                         : ButtonBorder(false, isHovered, false);
+      g.FillRoundRect(fill, btn, 3.f);
+      g.DrawRoundRect(border, btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
+      const IColor txt = mIrCabActive ? VoLumColors::BTN_IR_ON_TEXT : ButtonText(false, isHovered);
       DrawIrGlyph(g, IRECT(btn.L + 9.f, btn.T + 5.f, btn.L + 22.f, btn.B - 5.f), txt);
       std::string label = mIrCabActive && !mIrName.empty() ? TruncatedIr() : "Custom IR";
       g.DrawText(IText(mIrCabActive ? 11.f : 12.f, txt, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label.c_str(),
@@ -157,6 +161,14 @@ public:
     if (next != mHovered)
     {
       mHovered = next;
+      const char* tip = "";
+      if (next == 0)
+        tip = "No cab - raw amp, no speaker";
+      else if (next >= 1 && next <= 3)
+        tip = mCabNames[next - 1].empty() ? "" : "Cabinet";
+      else if (next == 4)
+        tip = "Custom IR - use your own impulse response";
+      SetTooltip(tip);
       SetDirty(false);
     }
   }

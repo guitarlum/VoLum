@@ -198,10 +198,19 @@ inline int MaxAssignedChannel(const CustomAmp& amp)
   return m;
 }
 
+// A custom amp needs a user-supplied name: the original .nam files are often
+// opaque codes (e.g. "2204"), so the builder default is treated as "unnamed".
+inline bool IsUnnamed(const std::string& name)
+{
+  return name.empty() || name == "New custom amp";
+}
+
 // "" when the amp is saveable; otherwise the reason the Save button is blocked.
-// Order: no files, then unassigned files, then duplicate (slot,channel) cells.
+// Order: name, then no files, then unassigned files, then duplicate cells.
 inline std::string SaveDisabledReason(const CustomAmp& amp)
 {
+  if (IsUnnamed(amp.name))
+    return "Name your amp";
   if (amp.files.empty())
     return "Add a .nam file";
   if (UnassignedCount(amp) > 0)
@@ -209,6 +218,90 @@ inline std::string SaveDisabledReason(const CustomAmp& amp)
   if (HasDuplicate(amp))
     return "Two files share a cab + channel";
   return "";
+}
+
+// Parsed result of a factory-convention .nam filename: PREFIX-CODE-CHANNEL.nam,
+// where PREFIX is one of AMP/G12/G65/V30 (AMP/DI/DIRECT -> the DIRECT slot) and
+// the trailing token is the channel number. Used to auto-fill the builder's
+// cab slot + channel + cab name on import. matched=false leaves the file
+// unassigned for manual mapping.
+struct ParsedNam
+{
+  int slot = kUnassignedSlot;
+  int channel = 0;
+  std::string cabName; // suggested cab-slot name (empty for DIRECT / unmatched)
+  bool matched = false;
+};
+
+inline ParsedNam ParseNamFileName(const std::string& filename)
+{
+  ParsedNam r;
+  std::string s = filename;
+  const size_t slash = s.find_last_of("/\\");
+  if (slash != std::string::npos)
+    s = s.substr(slash + 1);
+  const size_t dot = s.find_last_of('.');
+  if (dot != std::string::npos && dot > 0)
+    s = s.substr(0, dot);
+
+  std::vector<std::string> tok;
+  std::string cur;
+  for (char c : s)
+  {
+    if (c == '-')
+    {
+      tok.push_back(cur);
+      cur.clear();
+    }
+    else
+      cur.push_back(c);
+  }
+  tok.push_back(cur);
+  if (tok.size() < 2 || tok.front().empty())
+    return r;
+
+  std::string pre;
+  for (char c : tok.front())
+    pre.push_back((char)std::toupper((unsigned char)c));
+
+  if (pre == "AMP" || pre == "DI" || pre == "DIRECT")
+    r.slot = kDirectSlot;
+  else if (pre == "G12")
+  {
+    r.slot = 0;
+    r.cabName = "G12";
+  }
+  else if (pre == "G65")
+  {
+    r.slot = 1;
+    r.cabName = "G65";
+  }
+  else if (pre == "V30")
+  {
+    r.slot = 2;
+    r.cabName = "V30";
+  }
+  else
+    return r; // unrecognized prefix -> leave unassigned
+
+  r.matched = true;
+
+  const std::string& last = tok.back();
+  bool numeric = !last.empty();
+  for (char c : last)
+    if (!std::isdigit((unsigned char)c))
+    {
+      numeric = false;
+      break;
+    }
+  if (numeric)
+  {
+    int ch = 0;
+    for (char c : last)
+      ch = ch * 10 + (c - '0');
+    r.channel = ch;
+  }
+  return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,8 +334,10 @@ inline int SnapChannel(const std::vector<int>& availableChannels, int currentCha
 // display-only mock data (throwaway)
 // ---------------------------------------------------------------------------
 
-// A demo custom amp used by the builder/sidebar shells: a partial-rig NAM with
-// DIRECT + two named cabs, sparse channel coverage, and one unassigned file.
+// A demo custom amp used as a test fixture for the validation/coverage helpers
+// (SaveDisabledReason, AmpSlots, etc.): a partial-rig NAM with DIRECT + two named
+// cabs, sparse channel coverage, and one deliberately unassigned file. The
+// builder no longer loads this - it edits the real amp via CustomAmpAt(idx).
 inline CustomAmp MockDemoCustomAmp()
 {
   CustomAmp a;
@@ -343,6 +438,36 @@ inline int AddCustomAmp(const CustomAmp& amp)
   return (int)amps.size() - 1;
 }
 
+// Update an existing custom amp in place from a builder draft. Editing must
+// mutate the entry the user opened - not append a new one. The display name is
+// kept unique against the *other* amps (an amp may keep its own name). Returns
+// the (possibly unchanged) index, or -1 if out of range.
+inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
+{
+  auto& amps = MockCustomAmps();
+  if (idx < 0 || idx >= (int)amps.size())
+    return -1;
+  const std::string base = amp.name.empty() ? "New custom amp" : amp.name;
+  std::string unique = base;
+  int suffix = 2;
+  auto clashesWithOther = [&](const std::string& n) {
+    for (int i = 0; i < (int)amps.size(); ++i)
+      if (i != idx && amps[(size_t)i] == n)
+        return true;
+    return false;
+  };
+  while (clashesWithOther(unique))
+    unique = base + " " + std::to_string(suffix++);
+  amps[(size_t)idx] = unique;
+  if (idx < (int)MockCustomAmpArts().size())
+    MockCustomAmpArts()[(size_t)idx] = ((amp.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
+  if (idx < (int)MockCustomAmpCabs().size())
+    MockCustomAmpCabs()[(size_t)idx] = amp.cabNames;
+  if (idx < (int)MockCustomAmpFiles().size())
+    MockCustomAmpFiles()[(size_t)idx] = amp.files;
+  return idx;
+}
+
 // Convenience overload (name + art only) used by light callers/tests.
 inline int AddCustomAmp(const std::string& name, int art = 0)
 {
@@ -372,6 +497,22 @@ inline std::vector<std::string>& MockIRLibrary()
   return v;
 }
 
+// Original source filename for each IR (parallel to MockIRLibrary). Kept so the
+// manage list can show where each entry was imported from; renaming the display
+// name never changes the filename. The backend stores the real stored path here.
+inline std::vector<std::string>& MockIRFiles()
+{
+  static std::vector<std::string> v = {"Mesa_4x12_sm57.wav", "Greenback_room.wav", "DI_blend_50-50.wav",
+                                       "Marshall_1960_r121.wav"};
+  return v;
+}
+
+inline std::string IRFileAt(int idx)
+{
+  auto& v = MockIRFiles();
+  return (idx >= 0 && idx < (int)v.size()) ? v[(size_t)idx] : std::string();
+}
+
 // Imported pedal captures (F8) - shown in the PRE capture dropdown CUSTOM group.
 // Session-mutable so Import adds entries live.
 inline std::vector<std::string>& MockCustomPedals()
@@ -380,10 +521,24 @@ inline std::vector<std::string>& MockCustomPedals()
   return v;
 }
 
-inline int AddPedal(const std::string& name)
+// Original source filename for each pedal capture (parallel to MockCustomPedals).
+inline std::vector<std::string>& MockPedalFiles()
+{
+  static std::vector<std::string> v = {"klon_clone_clean.nam", "rat_lm308.nam", "tweed_boost_5e3.nam"};
+  return v;
+}
+
+inline std::string PedalFileAt(int idx)
+{
+  auto& v = MockPedalFiles();
+  return (idx >= 0 && idx < (int)v.size()) ? v[(size_t)idx] : std::string();
+}
+
+inline int AddPedal(const std::string& name, const std::string& file = "")
 {
   auto& v = MockCustomPedals();
   v.push_back(name.empty() ? "Imported pedal" : name);
+  MockPedalFiles().push_back(file);
   return (int)v.size() - 1;
 }
 
@@ -399,6 +554,9 @@ inline void DeletePedal(int idx)
   auto& v = MockCustomPedals();
   if (idx >= 0 && idx < (int)v.size())
     v.erase(v.begin() + idx);
+  auto& f = MockPedalFiles();
+  if (idx >= 0 && idx < (int)f.size())
+    f.erase(f.begin() + idx);
 }
 
 // Per-amp named presets (F5), session-mutable so save/rename/delete persist in
@@ -447,11 +605,48 @@ inline void DeletePreset(int ampIdx, int idx)
     list.erase(list.begin() + idx);
 }
 
+// Case-insensitive name comparison + within-list uniqueness check. Names must be
+// unique within each content type (IRs among IRs, pedals among pedals, presets
+// among an amp's presets); cross-type duplicates are allowed.
+inline bool NameMatchesCI(const std::string& a, const std::string& b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (size_t i = 0; i < a.size(); ++i)
+    if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i]))
+      return false;
+  return true;
+}
+
+inline bool NameExistsCI(const std::vector<std::string>& list, const std::string& name, int exceptIdx = -1)
+{
+  for (int i = 0; i < (int)list.size(); ++i)
+    if (i != exceptIdx && NameMatchesCI(list[(size_t)i], name))
+      return true;
+  return false;
+}
+
+inline bool IRNameExists(const std::string& name, int exceptIdx = -1)
+{
+  return NameExistsCI(MockIRLibrary(), name, exceptIdx);
+}
+
+inline bool PedalNameExists(const std::string& name, int exceptIdx = -1)
+{
+  return NameExistsCI(MockCustomPedals(), name, exceptIdx);
+}
+
+inline bool PresetNameExists(int ampIdx, const std::string& name, int exceptIdx = -1)
+{
+  return NameExistsCI(MockPresetsForAmp(ampIdx), name, exceptIdx);
+}
+
 // Append a custom IR to the global library (F7 import stub). Returns its index.
-inline int AddIR(const std::string& name)
+inline int AddIR(const std::string& name, const std::string& file = "")
 {
   auto& v = MockIRLibrary();
   v.push_back(name.empty() ? "Imported IR" : name);
+  MockIRFiles().push_back(file);
   return (int)v.size() - 1;
 }
 
@@ -467,6 +662,9 @@ inline void DeleteIR(int idx)
   auto& v = MockIRLibrary();
   if (idx >= 0 && idx < (int)v.size())
     v.erase(v.begin() + idx);
+  auto& f = MockIRFiles();
+  if (idx >= 0 && idx < (int)f.size())
+    f.erase(f.begin() + idx);
 }
 
 } // namespace custom
