@@ -134,7 +134,9 @@ void NeuralAmpModeler::_VolumSetPreLocked(bool locked)
   }
   else
   {
-    _VolumRestorePreFromSlot(mVolumAmpSettings[mVolumAmpIdx]);
+    // Unlock restores the focused amp's scene (custom amps keep their own scene
+    // in the content library, factory amps use mVolumAmpSettings[mVolumAmpIdx]).
+    _VolumRestorePreFromSlot(_VolumActiveScene());
   }
   mVolumPreLocked = locked;
   mVolumPreLockUiDirty = locked && _VolumIsPreDirty();
@@ -153,7 +155,7 @@ void NeuralAmpModeler::_VolumSetPostLocked(bool locked)
   }
   else
   {
-    _VolumRestorePostFromSlot(mVolumAmpSettings[mVolumAmpIdx]);
+    _VolumRestorePostFromSlot(_VolumActiveScene());
   }
   mVolumPostLocked = locked;
   mVolumPostLockUiDirty = locked && _VolumIsPostDirty();
@@ -168,27 +170,29 @@ bool NeuralAmpModeler::_VolumIsPreDirty() const
   // slot. Re-reading live params can drift from the slot after reload (param
   // normalization / effect-restore ordering), which left the store arrow stuck
   // on the origin amp even when its saved scene matched the carried overlay.
+  auto& scene = const_cast<NeuralAmpModeler*>(this)->_VolumActiveScene();
   if (mVolumPreLocked)
-    return !volum::PreBlockEquals(mVolumLiveLockedPre, mVolumAmpSettings[mVolumAmpIdx]);
+    return !volum::PreBlockEquals(mVolumLiveLockedPre, scene);
 
   volum::VoLumAmpSettings live;
   const_cast<NeuralAmpModeler*>(this)->_VolumSavePreToSlot(live);
-  return !volum::PreBlockEquals(live, mVolumAmpSettings[mVolumAmpIdx]);
+  return !volum::PreBlockEquals(live, scene);
 }
 
 bool NeuralAmpModeler::_VolumIsPostDirty() const
 {
-  if (mVolumPostLocked)
-    return !volum::PostBlockEquals(mVolumLiveLockedPost, mVolumAmpSettings[mVolumAmpIdx]);
-
   auto* self = const_cast<NeuralAmpModeler*>(this);
+  auto& scene = self->_VolumActiveScene();
+  if (mVolumPostLocked)
+    return !volum::PostBlockEquals(mVolumLiveLockedPost, scene);
+
   const int delayMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
   const int reverbMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
   self->_VolumSaveDelayModeSnapshot(delayMode);
   self->_VolumSaveReverbModeSnapshot(reverbMode);
   volum::VoLumAmpSettings live;
   self->_VolumSavePostToSlot(live);
-  return !volum::PostBlockEquals(live, mVolumAmpSettings[mVolumAmpIdx]);
+  return !volum::PostBlockEquals(live, scene);
 }
 
 void NeuralAmpModeler::_VolumApplyLiveLockSnapshots()
@@ -206,8 +210,9 @@ void NeuralAmpModeler::_VolumApplyLiveLockSnapshots()
 
 void NeuralAmpModeler::_VolumStorePreToCurrentAmp()
 {
-  _VolumSavePreToSlot(mVolumAmpSettings[mVolumAmpIdx]);
-  const auto& s = mVolumAmpSettings[mVolumAmpIdx];
+  auto& scene = _VolumActiveScene();
+  _VolumSavePreToSlot(scene);
+  const auto& s = scene;
   const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
   const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);
   mVolumPreNeedsLoad[0].store(shouldLoadPreNam1);
@@ -224,7 +229,7 @@ void NeuralAmpModeler::_VolumStorePostToCurrentAmp()
 {
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
-  _VolumSavePostToSlot(mVolumAmpSettings[mVolumAmpIdx]);
+  _VolumSavePostToSlot(_VolumActiveScene());
   mVolumSettingsDirty = true;
   mVolumPostLockUiDirty = false;
   if (auto* pGfx = GetUI())
@@ -597,6 +602,16 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
   setParam(kSupportAmpPan, s.supportAmpPan);
   mSupportPolarityInvert.store(s.supportPolarityInvert);
 
+  // Migrate degenerate dual rigs (both lanes centered + support polarity inverted)
+  // that phase-cancel to near silence: split them hard L/R like the dual toggle
+  // would. setParam bypasses OnParamChange, so do it explicitly here on restore /
+  // preset recall too. (Heals "custom amp makes no sound in dual mode".)
+  if (s.dualAmpActive && s.supportPolarityInvert && std::abs(s.mainAmpPan) < 1e-3 && std::abs(s.supportAmpPan) < 1e-3)
+  {
+    setParam(kMainAmpPan, -1.0);
+    setParam(kSupportAmpPan, 1.0);
+  }
+
   // F6 dual amp: resolve a custom SUPPORT partner by stable id. An orphaned id
   // (the amp was deleted / is missing on this machine) falls back to "(none)"
   // per the removal matrix; clearing it on the scene heals the ref on next save.
@@ -653,6 +668,12 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
     /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
     mVolumPostLocked ? &mVolumLiveLockedPost : nullptr);
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
+
+  // 1.2.0 additive session refs (ignored by older builds): the focused custom
+  // MAIN amp + active preset so the next launch re-selects them. Per-amp IR /
+  // custom-support refs already round-trip inside each scene's JSON.
+  j["volumCustomMainId"] = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+  j["volumActivePresetId"] = mVolumActivePresetId;
 
   namespace fs = std::filesystem;
   fs::path settingsPath = volum::VolumUserSettingsFilePath();
@@ -724,6 +745,12 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
       mVolumLiveLockedPre = parsedLivePre;
     if (haveLivePostSnapshot)
       mVolumLiveLockedPost = parsedLivePost;
+    // 1.2.0 session refs: stash the focused custom MAIN amp + active preset for
+    // re-selection once the UI opens (see OnUIOpen). Absent on older files.
+    if (j.contains("volumCustomMainId") && j["volumCustomMainId"].is_string())
+      mVolumRestoreCustomMainId = j["volumCustomMainId"].get<std::string>();
+    if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
+      mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
     if (volum::HasDualAmpUserSettings(j))
       settingsHealed = true; // Rewrite shared settings without new-only dual-amp fields.
 

@@ -30,11 +30,8 @@ public:
   using DismissPickerCallback = std::function<void()>;
   using IsPickerOpenCallback = std::function<bool()>;
 
-  VoLumHeroImageControl(const IRECT& bounds,
-                        FocusCallback focusCb = nullptr,
-                        PickerCallback pickerCb = nullptr,
-                        DualToggleCallback dualToggleCb = nullptr,
-                        DismissPickerCallback dismissPickerCb = nullptr,
+  VoLumHeroImageControl(const IRECT& bounds, FocusCallback focusCb = nullptr, PickerCallback pickerCb = nullptr,
+                        DualToggleCallback dualToggleCb = nullptr, DismissPickerCallback dismissPickerCb = nullptr,
                         IsPickerOpenCallback isPickerOpenCb = nullptr)
   : IControl(bounds)
   , mFocusCallback(std::move(focusCb))
@@ -43,8 +40,8 @@ public:
   , mDismissPickerCallback(std::move(dismissPickerCb))
   , mIsPickerOpenCallback(std::move(isPickerOpenCb))
   {
-    mIgnoreMouse = (mFocusCallback == nullptr && mPickerCallback == nullptr
-                    && mDualToggleCallback == nullptr && mDismissPickerCallback == nullptr);
+    mIgnoreMouse = (mFocusCallback == nullptr && mPickerCallback == nullptr && mDualToggleCallback == nullptr
+                    && mDismissPickerCallback == nullptr);
   }
 
   void Draw(IGraphics& g) override
@@ -60,8 +57,8 @@ public:
       const float scale = std::min(mRECT.W() / imgW, mRECT.H() / imgH);
       const float drawW = imgW * scale;
       const float drawH = imgH * scale;
-      const IRECT centered(mRECT.MW() - drawW / 2.f, mRECT.MH() - drawH / 2.f,
-                           mRECT.MW() + drawW / 2.f, mRECT.MH() + drawH / 2.f);
+      const IRECT centered(
+        mRECT.MW() - drawW / 2.f, mRECT.MH() - drawH / 2.f, mRECT.MW() + drawW / 2.f, mRECT.MH() + drawH / 2.f);
       g.DrawFittedBitmap(mBitmap, centered);
     }
     else
@@ -141,7 +138,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
 
     // 1. DUAL toggle chip — top-right of mono, top-right of MAIN panel in dual.
     if (mDualToggleCallback && DualChipRect().Contains(x, y))
@@ -179,7 +176,8 @@ public:
     {
       if (pickerOpen)
       {
-        if (mDismissPickerCallback) mDismissPickerCallback();
+        if (mDismissPickerCallback)
+          mDismissPickerCallback();
       }
       else if (mPickerCallback)
       {
@@ -205,7 +203,7 @@ public:
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     const bool chipHovered = mDualToggleCallback && DualChipRect().Contains(x, y);
     if (chipHovered != mDualChipHovered)
     {
@@ -223,6 +221,19 @@ public:
       SetTooltip("");
       SetDirty(false);
     }
+  }
+
+  void OnRescale() override
+  {
+    // Backing pixel scale changed (resize / DPI). The hero art is cached in layers
+    // keyed only by amp index, so a pure scale change would otherwise keep blitting
+    // the stale low-res layer. Drop them so they re-render at the new scale, and
+    // rescale the amp photo bitmap to match.
+    mMonoArtLayer = nullptr;
+    mMainArtLayer = nullptr;
+    mSupportArtLayer = nullptr;
+    if (mHasBitmap)
+      mBitmap = GetUI()->GetScaledBitmap(mBitmap);
   }
 
   // Reserve a square slot in the bottom-right of each lane for a PAN knob attached at the IGraphics
@@ -304,8 +315,7 @@ private:
     const bool active = mDualAmpActive;
     const IColor border = (active || mDualChipHovered) ? accent : VoLumColors::GOLD_DIM;
     const IColor fill = active ? IColor(mDualChipHovered ? 95 : 70, accent.R, accent.G, accent.B)
-                               : (mDualChipHovered ? IColor(34, accent.R, accent.G, accent.B)
-                                                   : IColor(0, 0, 0, 0));
+                               : (mDualChipHovered ? IColor(34, accent.R, accent.G, accent.B) : IColor(0, 0, 0, 0));
     g.FillRect(fill, chip);
     g.DrawRect(border, chip, nullptr, mDualChipHovered ? 1.4f : 1.f);
     const float cy = chip.MH();
@@ -331,8 +341,8 @@ private:
     g.FillRect(dim, IRECT(cx - arm, cy - thick, cx + arm, cy + thick));
     g.FillRect(dim, IRECT(cx - thick, cy - arm, cx + thick, cy + arm));
 
-    g.DrawText(IText(10.f, dim, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               "ADD AMP", IRECT(artRect.L, cy + r1 + 4.f, artRect.R, cy + r1 + 18.f));
+    g.DrawText(IText(10.f, dim, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "ADD AMP",
+               IRECT(artRect.L, cy + r1 + 4.f, artRect.R, cy + r1 + 18.f));
   }
 
   void DrawMonoHero(IGraphics& g)
@@ -400,10 +410,10 @@ private:
     // Title strip with amp name
     const IRECT titleStrip(r.L + 8.f, r.B - 30.f, r.R - 8.f, r.B - 8.f);
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
-    g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
-               role, IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
-    g.DrawText(IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               name, titleStrip);
+    g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle), role,
+               IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
+    g.DrawText(
+      IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle), name, titleStrip);
   }
 
   void DrawDualHero(IGraphics& g)
@@ -416,10 +426,11 @@ private:
              /*drawChip=*/true, /*empty=*/false);
     const bool hasFactorySupport = mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount;
     const bool hasSupport = mSupportCustomMode || hasFactorySupport;
-    const char* supportName = mSupportCustomMode ? mSupportCustomName.c_str()
-                              : (hasFactorySupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp");
-    DrawLane(g, right, hasFactorySupport ? mSupportAmpIdx : 0, "SUPPORT", supportName,
-             mSupportFocused, VoLumColors::TEAL,
+    const char* supportName = mSupportCustomMode
+                                ? mSupportCustomName.c_str()
+                                : (hasFactorySupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp");
+    DrawLane(g, right, hasFactorySupport ? mSupportAmpIdx : 0, "SUPPORT", supportName, mSupportFocused,
+             VoLumColors::TEAL,
              /*drawChip=*/false, /*empty=*/!hasSupport);
     g.FillRect(VoLumColors::BG, IRECT(mid - 1.f, mRECT.T, mid + 1.f, mRECT.B));
     DrawDualChip(g, VoLumColors::AMBER);
@@ -489,9 +500,9 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
     if (mToggleCallback)
       mToggleCallback();
     SetDirty(false);

@@ -696,6 +696,19 @@ public:
     else if (mScreen == volum::custom::Screen::Builder)
       DrawBuilder(g, body);
 
+    // Hover affordance: subtle highlight on whichever interactive hotspot the
+    // cursor is over (Manage overwrite/rename/trash icons, rows, and every
+    // builder component). Drawn last so it reads as a button-hover glow.
+    if (!mPopupOpen && mHoverAction >= 0)
+      for (const auto& hs : mHotspots)
+        if (hs.second == mHoverAction)
+        {
+          const IRECT hr = hs.first.GetPadded(-1.f);
+          g.FillRoundRect(IColor(30, 230, 202, 120), hr, 3.f);
+          g.DrawRoundRect(IColor(150, 230, 202, 120), hr, 3.f);
+          break;
+        }
+
     if (mPopupOpen)
       DrawPopup(g);
   }
@@ -742,18 +755,23 @@ public:
 
   void OnMouseOver(float x, float y, const IMouseMod&) override
   {
-    // Per-hotspot tooltips: find the hovered hotspot and surface its hint.
+    // Per-hotspot tooltips + hover highlight: find the hovered hotspot once and
+    // surface both its hint and its action code (for the Draw hover glow).
     const char* tip = "";
+    int hoverAction = -1;
     if (!mPopupOpen && PanelRect().Contains(x, y))
-      for (size_t i = 0; i < mHotspots.size() && i < mHotspotTips.size(); ++i)
+      for (size_t i = 0; i < mHotspots.size(); ++i)
         if (mHotspots[i].first.Contains(x, y))
         {
-          tip = mHotspotTips[i].c_str();
+          hoverAction = mHotspots[i].second;
+          if (i < mHotspotTips.size())
+            tip = mHotspotTips[i].c_str();
           break;
         }
-    if (mCurTip != tip)
+    if (mCurTip != tip || hoverAction != mHoverAction)
     {
       mCurTip = tip;
+      mHoverAction = hoverAction;
       SetTooltip(tip);
       SetDirty(false);
     }
@@ -761,9 +779,10 @@ public:
 
   void OnMouseOut() override
   {
-    if (!mCurTip.empty())
+    if (!mCurTip.empty() || mHoverAction >= 0)
     {
       mCurTip.clear();
+      mHoverAction = -1;
       SetTooltip("");
       SetDirty(false);
     }
@@ -1914,6 +1933,7 @@ private:
   volum::custom::CustomAmp mBuilderAmp;
   std::vector<std::pair<IRECT, int>> mHotspots;
   std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text
+  int mHoverAction = -1; // hotspot action under the cursor (-1 = none)
   std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
 
   // in-overlay popup (builder speaker/channel pickers)
