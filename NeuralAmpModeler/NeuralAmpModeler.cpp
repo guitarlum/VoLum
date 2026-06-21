@@ -442,7 +442,15 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   };
 
   mLayoutFunc = [&](IGraphics* pGraphics) {
+#ifndef APP_API
+    // DAW/plugin only. PLUG_HOST_RESIZE is 0, so the in-canvas corner grip is how
+    // users resize the embedded plugin view. In the standalone we resize via the
+    // native OS window border instead (see OnParentWindowResize); keeping the grip
+    // there stacked a second resize widget on top of the window's bottom-right
+    // resize border, and dragging the overlap drove both Win32's modal resize loop
+    // and the iPlug scale path at once - which could hang the app.
     pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
+#endif
     pGraphics->AttachTextEntryControl();
     pGraphics->EnableMouseOver(true);
     pGraphics->EnableTooltips(true);
@@ -2231,6 +2239,35 @@ void NeuralAmpModeler::OnUIClose()
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
   _VolumSaveSettingsToFile();
+#endif
+}
+
+void NeuralAmpModeler::OnParentWindowResize(int width, int height)
+{
+#ifdef APP_API
+  // Standalone: the user dragged the native OS window border. Map that to a UI
+  // rescale (aspect-locked) so the UI fills the new window instead of leaving a
+  // white frame. width/height arrive as the new client size in logical (DPI-
+  // divided) px - the same space as IGraphics::Width()/Height() - so the scale
+  // is just the ratio, clamped to the scale constraints by Resize().
+  //
+  // CRITICAL: pass needsPlatformResize=false. IPlugAPIBase::EditorResizeFromUI
+  // returns true in that case, which makes IGraphicsWin::PlatformResize skip
+  // resizing the *parent* (the native window we are reacting to) and only resize
+  // the IGraphics child to fill it. Passing true would re-resize the native
+  // window from inside its own WM_SIZE handler - a feedback loop that hangs the
+  // app. (The standalone has no corner-resizer grip; this is the only UI resize
+  // path there - see mLayoutFunc.)
+  IGraphics* pGraphics = GetUI();
+  if (!pGraphics || width <= 0 || height <= 0)
+    return;
+  const float scale =
+    std::min(static_cast<float>(width) / static_cast<float>(pGraphics->Width()),
+             static_cast<float>(height) / static_cast<float>(pGraphics->Height()));
+  pGraphics->Resize(pGraphics->Width(), pGraphics->Height(), scale, /*needsPlatformResize=*/false);
+#else
+  (void)width;
+  (void)height;
 #endif
 }
 

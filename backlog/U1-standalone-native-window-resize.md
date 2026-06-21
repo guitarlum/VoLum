@@ -2,6 +2,20 @@
 
 **Reported:** 1.2.0 standalone test feedback (Windows). **Priority:** medium (UX papercut; a working resize path already exists).
 
+## Status: RESOLVED (core) on `feature/1.2.0`
+
+Implemented Option 1 (forward native resize to IGraphics) **without** an iPlug2
+submodule change: `NeuralAmpModeler::OnParentWindowResize` (APP-only) maps the
+native `WM_SIZE` to an aspect-locked `IGraphics::Resize(..., needsPlatformResize=false)`,
+and the standalone corner grip was removed (`AttachCornerResizer` is now
+`#ifndef APP_API`) to eliminate the grip/native-border overlap that could hang
+the app. Verified: native resize scales the UI to fill, responsive, no hang.
+
+**Remaining (optional):** dragging off the UI aspect ratio leaves a thin
+letterbox strip. Eliminating it entirely requires constraining the drag to the
+UI aspect via `WM_SIZING` in `IPlugAPP_dialog.cpp` (the submodule change below).
+Only pursue if the letterbox is judged worth a mirror-branch + submodule bump.
+
 ## Problem
 
 In the standalone app there are effectively two resize edges:
