@@ -165,13 +165,13 @@ public:
     if (mFocusCallback)
       mFocusCallback(mSupportFocused);
 
-    // Picker behaviour on the SUPPORT panel:
+    // Picker behaviour on the SUPPORT panel (consistent two-click, incl. empty state):
     //   - If the picker is already open: any click on the support panel dismisses it
-    //     (regardless of focus state) so a second click is always "close".
-    //   - Empty state (no support amp picked): the panel is the "ADD AMP" CTA — open immediately.
-    //   - Support already focused (and picker closed): clicks open the picker.
-    //   - First click that shifts focus from MAIN to support (with a support amp already picked):
-    //     focus only, no picker. The user has to click again to open the dropdown.
+    //     so a second click is always "close".
+    //   - First click that shifts focus from MAIN to support: focus only, no picker.
+    //   - Support already focused (and picker closed): the click opens the picker.
+    // The empty "no support amp yet" lane behaves the same — the first click just
+    // focuses it (shows the "Choose support amp" CTA), the second opens the dropdown.
     if (clickedSupport)
     {
       if (pickerOpen)
@@ -179,16 +179,12 @@ public:
         if (mDismissPickerCallback)
           mDismissPickerCallback();
       }
-      else if (mPickerCallback)
+      else if (mPickerCallback && wasSupportFocused)
       {
-        const bool empty = (mSupportAmpIdx < 0 || mSupportAmpIdx >= volum::kAmpCount);
-        if (wasSupportFocused || empty)
-        {
-          const float gap = 8.f;
-          const float mid = mRECT.MW();
-          const IRECT supportPanel(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
-          mPickerCallback(supportPanel);
-        }
+        const float gap = 8.f;
+        const float mid = mRECT.MW();
+        const IRECT supportPanel(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
+        mPickerCallback(supportPanel);
       }
     }
     else if (mDismissPickerCallback)

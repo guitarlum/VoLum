@@ -511,6 +511,15 @@ public:
   volum::VoLumAmpSettings mVolumRecalledSnapshot;
   bool mVolumHasRecalledSnapshot = false;
   std::string mVolumActivePresetId;
+  // Per-owner memory of the active preset + its recalled snapshot so switching
+  // back to an amp re-shows the preset it had selected (keyed by owner key:
+  // "factory:<idx>" or a custom amp id). Populated on recall/save/overwrite and
+  // restored in _VolumSyncPresetOwner; pruned when a preset is deleted/missing.
+  std::unordered_map<std::string, std::string> mVolumActivePresetIdByOwner;
+  std::unordered_map<std::string, volum::VoLumAmpSettings> mVolumRecalledSnapshotByOwner;
+  // Record/forget the active preset for the current owner key.
+  void _VolumRememberActivePreset();
+  void _VolumForgetActivePreset();
   // Standalone (volum-settings.json) restore: the focused custom MAIN amp id and
   // active preset id from the last session, re-applied once when the UI opens.
   std::string mVolumRestoreCustomMainId;

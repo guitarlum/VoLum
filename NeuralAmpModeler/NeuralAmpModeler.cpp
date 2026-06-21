@@ -121,8 +121,14 @@ const IVStyle volumStyle = IVStyle{true,
                                    DEFAULT_SHADOW_OFFSET,
                                    DEFAULT_WIDGET_FRAC,
                                    DEFAULT_WIDGET_ANGLE};
-const IVStyle volumKnobStyle =
-  volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.75f);
+// kBG is transparent so the IVKnobControl's square control-background isn't filled:
+// the procedural dial (VoLumDialKnobControl) sits directly on the panel gradient
+// instead of punching a lighter (17,17,24) square through it.
+const IVStyle volumKnobStyle = volumStyle.WithShowLabel(false)
+                                 .WithShowValue(false)
+                                 .WithDrawFrame(false)
+                                 .WithWidgetFrac(0.75f)
+                                 .WithColor(EVColor::kBG, COLOR_TRANSPARENT);
 // Same vector-knob style, but with the X1/X3 colours retuned to teal so the rotating pointer
 // dot on SUPPORT-lane knobs reads as "support" without changing any other knob geometry.
 const IVStyle volumKnobStyleSupport =
@@ -221,6 +227,7 @@ public:
     g.DrawArc(active ? accentHi : accent, cx, cy, arcR, mAngle1, angle, &mBlend, 2.6f);
 
     // (3) Metallic body cap: drop shadow, top-lit radial gradient, accent rim + inner sheen.
+    // (The control's square kBG is transparent so this cap sits directly on the panel.)
     g.FillCircle(IColor(150, 0, 0, 0), cx, cy + 1.5f, bodyR);
     g.PathCircle(cx, cy, bodyR);
     g.PathFill(IPattern::CreateRadialGradient(
@@ -242,8 +249,13 @@ public:
   }
 };
 
-const IVStyle volumToggleStyle =
-  volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(1.0f);
+// kBG transparent (same reason as volumKnobStyle): the slide-switch pill sits on the
+// panel gradient instead of on a lighter (17,17,24) control-background square.
+const IVStyle volumToggleStyle = volumStyle.WithShowLabel(false)
+                                   .WithShowValue(false)
+                                   .WithDrawFrame(false)
+                                   .WithWidgetFrac(1.0f)
+                                   .WithColor(EVColor::kBG, COLOR_TRANSPARENT);
 /** Settings overlay: flat controls on top of VoLumSettingsBackdropControl (no “patch” panels). */
 const IVStyle volumSettingsStyle = volumStyle.WithDrawFrame(false)
                                      .WithDrawShadows(false)
@@ -657,6 +669,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           // stepper (no model load).
           const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
           const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
+          // Picking any baked cab on the MAIN lane retires an active Custom IR: the
+          // two cab sources are mutually exclusive. Without this the IR keeps forcing
+          // the amp to DIRECT/No-Cab on the next reconcile, so the chosen cab looked
+          // like it was never remembered (item: custom amp forgets its speaker).
+          if (!supportFocus && !_VolumActiveScene().activeIrId.empty())
+            _VolumClearIR();
           if (customLane >= 0)
           {
             const int slot = (speakerIdx == 0) ? volum::custom::kDirectSlot : (speakerIdx - 1);
@@ -2204,6 +2222,7 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
         mVolumActivePresetId = pr.id;
         mVolumRecalledSnapshot = _VolumActiveScene();
         mVolumHasRecalledSnapshot = true;
+        _VolumRememberActivePreset();
         break;
       }
   mVolumRestorePresetId.clear();
@@ -4329,8 +4348,7 @@ void NeuralAmpModeler::_VolumResetAmpToFactory()
   mVolumNeedsLoad.store(true);
   mVolumSettingsDirty = true;
   // Drop any recalled preset: the bar reads "No Preset" and edits no longer diff.
-  mVolumHasRecalledSnapshot = false;
-  mVolumActivePresetId.clear();
+  _VolumForgetActivePreset();
   if (auto* pGfx = GetUI())
   {
     if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
