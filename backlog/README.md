@@ -28,12 +28,19 @@ fresh Cursor planning chat.
 ### OS Support
 - `O1-linux-support-spike.md`
 
+### Quality / Testing
+- `Q1-regression-pin-safety-net.md` — fast in-CI doctest pins locking 1.2.0 UI/state behavior (thumbnail scaling, hover highlight, standalone preset restore) so a later perf/refactor pass can't silently regress them. Low-to-medium; pull the scaling pin in alongside the performance-optimization ticket.
+- `Q2-volum-1.2.0-structure-decompose.md` — decompose the 1964-line `VoLumCustomUi.h`, dedup scrollbar/glyph/PRE-menu primitives, and make the builder popup list-disciplined. Pure hygiene, phased low->high risk.
+- `Q3-volum-1.2.0-custom-content-correctness.md` — verified 1.2.0 BYO/presets correctness gaps from the quality review: preset settings (not just label) restored on load, `customSupportId` applied on load, `_VolumActiveScene()` read/write split, pedal index-cap collision. From `docs/design/1.2.0-quality-review.md`.
+- `P2-volum-1.2.0-rt-and-perf-hardening.md` — lock-free staging drain (no audio-thread mutex/alloc), main I/O buffer capacity assert, async IR load, field-wise dirty compare, throttled settings save.
+
 ### Docs
 - `D1-docs-input-level-and-polish.md`
 
 ### Project / Repo
 - `R2-volum-ampete-product-flag-removal.md`
 - `R3-upstream-nam-player-sync-review.md` — periodic sweep of upstream NAM Player repo + submodules for bug fixes / A2 / perf changes worth cherry-picking. Use the `upstream-sync` skill.
+- `R4-volum-1.2.0-content-bridge-collapse.md` — rename + partially collapse the mis-named `VoLumCustomContentMock.h` production bridge (move preset hooks/owner-key onto the instance, delete projection getters, fold mutations into the store). From `docs/design/1.2.0-quality-review.md`.
 
 ### Reference (not a prompt)
 - `1.0.1-review-findings.md` — engineering review notes captured during the 1.0.1 cycle.
@@ -50,6 +57,7 @@ The "bring your own / presets" cluster is the current focus:
 6. O1 — Linux spike (can run in parallel).
 7. R2, R3 — repo hygiene and upstream sync sweeps.
 8. D1 — docs, folded in continuously as items land.
+9. Q1 — regression pins; ideally folded into the next perf/refactor pass rather than run standalone.
 
 ## Done (archive)
 

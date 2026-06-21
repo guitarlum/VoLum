@@ -563,8 +563,11 @@ public:
     {
       if (it->id == id)
       {
+        // RemoveStoredFile resolves a registry-relative path; for amp manifests that
+        // is `storedPath` (e.g. "amps/amp_x__G65.nam"). `file` is only the display
+        // leaf, so deleting by it would miss the copied file and orphan it on disk.
         for (const auto& f : it->files)
-          RemoveStoredFile(f.file);
+          RemoveStoredFile(f.storedPath);
         mReg.amps.erase(it);
         break;
       }
