@@ -248,6 +248,33 @@ TEST_CASE("Removal matrix: deleting a custom amp cascades bank/scene and clears 
   CHECK(store.reg().presetBanks.at("factory:2")[0].settings.supportCustomId.empty());
 }
 
+// Regression: RemoveCustomAmp must delete the copied .nam by its resolvable
+// `storedPath`, not the display-leaf `file`. Deleting by leaf silently resolves
+// to the wrong path and orphans the imported file on disk.
+TEST_CASE("Removal matrix: deleting a custom amp removes its copied files by storedPath")
+{
+  const auto base = TestBase("amp-remove-files");
+  const auto src = WriteSrc(base / "incoming", "G65-Plexi.nam", "NAMfake");
+  ContentStore store(base);
+  const std::string rel = store.ImportFileCopy(src, "amps", "amp_x_0");
+  REQUIRE_FALSE(rel.empty());
+  REQUIRE(std::filesystem::exists(store.ResolveStored(rel)));
+
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_main";
+  volum::custom::CustomNamFile f;
+  f.file = "G65-Plexi.nam"; // display leaf only - not resolvable
+  f.storedPath = rel; // registry-relative resolvable path
+  f.slot = volum::custom::kDirectSlot;
+  f.channel = 1;
+  amp.files.push_back(f);
+  store.reg().amps.push_back(amp);
+
+  store.RemoveCustomAmp("amp_main");
+  CHECK(store.reg().amps.empty());
+  CHECK_FALSE(std::filesystem::exists(store.ResolveStored(rel)));
+}
+
 // Regression (ASan): the Remove* methods are commonly called with a reference to
 // the id string OWNED by the element being erased (e.g. the UI bridge does
 // RemoveIR(reg.irs[idx].id)). They must copy the id before erasing, or the
