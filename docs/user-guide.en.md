@@ -15,7 +15,7 @@ This guide explains the VoLum 1.2 interface after installation. For downloads, u
 5. **PRE | AMP | POST strip:** open one section at a time.
 6. **Toolbar:** tuner, metronome, and settings live in the top-right corner.
 
-The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. VoLum 1.1 ships the full A2 profile library: all bundled amp, cab, and PRE NAM captures were retrained with the VoLum 700-1200 epoch escalation workflow.
+The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. Every bundled amp, cab, and PRE NAM capture is a NAM Architecture 2 (A2) profile, trained to its best fit between 700 and 1200 epochs. A2 captures always play at full size; VoLum never drops to the lite slice.
 
 VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
@@ -25,9 +25,10 @@ Use the left sidebar for the 15 bundled amps. Each amp has four speaker modes an
 
 Short orientation:
 
-- **Vintage:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
-- **Modern/high gain:** Diezel Herbert, Soldano SLO100, Marshall JVM, H&K TriAmp.
-- **Boutique/character:** Ampete One, Bad Cat Mini Cat, Brunetti XL 2, Lichtlaerm Prometheus, Sebago Texas Flood, THC Sunset, Fryette Deliverance.
+- **Cleans, blues, and dynamic boutique:** Sebago Texas Flood (a Dumble Steel String Singer-style pedal platform), THC Sunset, Bad Cat Mini Cat.
+- **Vintage and classic-rock crunch:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
+- **Modern and high gain:** Soldano SLO100, Diezel Herbert, Marshall JVM, H&K TriAmp, Fryette Deliverance, Lichtlaerm Prometheus, Brunetti XL 2.
+- **Do-it-all:** Ampete One pairs an American and a British voice in one amp.
 
 Amp EQ and pedal EQ are extra tone-shaping controls. They do not need to match the physical knob positions used during profiling.
 
@@ -95,6 +96,8 @@ Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old t
 
 ## Presets
 
+![VoLum preset manager](user-guide-presets.png)
+
 A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, channel, all knobs, PRE pedals, POST effects, and the Dual Amp setup.
 
 1. Dial in a tone, then open the preset bar in the AMP header.
@@ -111,11 +114,17 @@ VoLum can load your own NAM amp captures, impulse responses, and pedal captures.
 - **Windows:** `%LOCALAPPDATA%\VoLum\content`
 - **macOS:** `~/Library/Application Support/VoLum/content`
 
-**Custom amps.** Open the **+** in the CUSTOM section of the amp browser to open the builder. Name the amp, add one or more `.nam` files, and assign each to a cab slot and channel (files named `PREFIX-CODE-CHANNEL.nam` auto-fill). Saved custom amps appear in the CUSTOM list and load and play exactly like factory amps — including as the dual-amp SUPPORT partner. Use the pen/bin icons to edit or delete one.
+**Custom amps.** Click the **+** in the CUSTOM section of the amp browser to open the builder. Name the amp, add one or more `.nam` files, and assign each to a cab slot and channel (files named `PREFIX-CODE-CHANNEL.nam` auto-fill). Both NAM Architecture 1 (A1) and Architecture 2 (A2) captures load, and A2 containers play at full size like the bundled profiles. Saved custom amps appear in the CUSTOM list and load and play exactly like factory amps — including as the dual-amp SUPPORT partner. Use the pen/bin icons to edit or delete one.
 
-**Custom IRs.** In the speaker row, choose the **Custom IR** cab, then import a `.wav` impulse response from its dropdown. The IR convolves on the focused cab.
+![VoLum custom amp builder](user-guide-custom-amp.png)
+
+**Custom IRs.** A custom IR convolves the amp's **DIRECT** (amp-only) capture — the raw amp with no speaker baked in. It is meant for a custom amp that includes a DIRECT capture; selecting the **Custom IR** cab switches the amp to its DIRECT/No Cab capture first. A custom amp built only from full amp-plus-cab captures has no raw signal for an IR to shape. In the speaker row, choose the **Custom IR** cab, then import a `.wav` impulse response from its dropdown.
+
+![VoLum custom IR manager](user-guide-custom-ir.png)
 
 **Custom pedals.** In the PRE NAM-capture dropdown, the **CUSTOM** group lets you import and manage your own `.nam` pedal captures; an imported capture loads into its PRE slot like a factory one.
+
+![VoLum custom pedal manager](user-guide-custom-pedal.png)
 
 The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library.
 

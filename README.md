@@ -2,18 +2,22 @@
 
 # VoLum
 
-![VoLum standalone UI](docs/user-guide-main.png)
+<p align="center">
+  <img src="docs/user-guide-main.png" alt="VoLum standalone UI" width="820">
+</p>
 
-VoLum is an open-source guitar amp collection for the stage, studio, and practice desk. It uses the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, but ships as its own focused app: 15 curated amps, built-in PRE pedals, Dual Amp, POST effects, tuner, metronome, and a fast dark UI for standalone use or VST3 hosts.
+VoLum is an open-source guitar amp collection for the stage, studio, and practice desk. It uses the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, but ships as its own focused app: 15 curated amps, built-in PRE pedals, Dual Amp, POST effects, your own amp/IR/pedal imports, per-amp presets, a tuner, a metronome, and a fast dark UI for standalone use or VST3 hosts.
 
 [Download VoLum](https://github.com/guitarlum/VoLum/releases) or jump to the [user guide](docs/user-guide.en.md).
 
 ## Why It Stands Out
 
 - **15 bundled amps, ready to play:** vintage, modern, and boutique captures with 4 speaker modes and multiple gain-stage channels each.
-- **Full A2 profile library:** every bundled amp, cab, and PRE NAM capture is trained with VoLum's 700-1200 epoch escalation workflow.
+- **NAM Architecture 2 (A2) profiles:** every bundled amp, cab, and PRE NAM capture is an A2 model, trained to its best fit between 700 and 1200 epochs and always played at full size (never the lite slice).
 - **Full rig workflow:** PRE compressor and NAM pedal slots, AMP controls, and POST Delay/Reverb live in one `PRE | AMP | POST` layout.
 - **Dual Amp:** blend a main amp with a support amp, pan both lanes, and flip support polarity when a stack needs it.
+- **Bring your own:** import your NAM amp captures (A1 or A2), impulse responses, and pedal captures into a managed library that keeps working after you move the originals.
+- **Per-amp presets:** save named rig snapshots for each amp and cycle them in place with `‹` / `›`.
 - **POST effects with character:** Digital, Analog, and Reverse Delay plus Hall, Plate, and Oktaverb Reverb with Halo, Shimmer, and Bloom voices.
 - **Practice tools built in:** silent tuner and configurable metronome work in both standalone and VST3.
 - **Fast switching and recall:** amp models load in the background, and each amp remembers its speaker, channel, knobs, PRE, POST, and Dual Amp setup.
@@ -120,7 +124,7 @@ Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
 
 ## Learn More
 
-- [User guide](docs/user-guide.en.md): interface, Dual Amp, PRE pedals, POST effects, tuner, metronome, keyboard controls, and settings.
+- [User guide](docs/user-guide.en.md): interface, Dual Amp, PRE pedals, POST effects, custom content, presets, tuner, metronome, keyboard controls, and settings.
 - [Developer guide](NeuralAmpModeler/README.md): build, test, packaging, and architecture notes.
 - [Report a bug or request a feature](https://github.com/guitarlum/VoLum/issues/new/choose): use the **Bug report** template for crashes or wrong behavior, and **Feature request** for ideas.
 - Settings are stored locally at `%LOCALAPPDATA%\VoLum\volum-settings.json` on Windows and `~/Library/Application Support/VoLum/volum-settings.json` on macOS.

@@ -208,6 +208,9 @@ inline bool CustomAmpFromJson(const nlohmann::json& j, custom::CustomAmp& out)
       if (cn[i].is_string())
         out.cabNames[(size_t)i] = cn[i].get<std::string>();
   }
+  // Lenient-read clamp: enforce the 3-char cab-name rule on load so a
+  // hand-edited or migrated registry can never overflow the cabinet row.
+  custom::NormalizeAmpCabNames(out);
   if (j.contains("files") && j["files"].is_array())
   {
     for (const auto& f : j["files"])

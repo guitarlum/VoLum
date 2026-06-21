@@ -48,6 +48,37 @@ TEST_CASE("MintId returns prefixed, unique opaque ids")
   CHECK(MintId(r, "amp") != a);
 }
 
+TEST_CASE("Cab names are clamped to the 3-char rule at the load boundary")
+{
+  // Direct model helper: whitespace dropped, uppercased, capped at 3; an empty
+  // (or whitespace-only) slot falls back to its CBn default.
+  volum::custom::CustomAmp a;
+  a.cabNames = {"Bogner 4x12", "Marshall 1960", "   "};
+  volum::custom::NormalizeAmpCabNames(a);
+  CHECK(a.cabNames[0] == "BOG");
+  CHECK(a.cabNames[1] == "MAR");
+  CHECK(a.cabNames[2] == "CB3");
+
+  // Load path: a hand-edited / migrated registry carrying over-long names must
+  // not survive into the live model (otherwise the cabinet row overflows).
+  nlohmann::json amp;
+  amp["id"] = "amp_clamp";
+  amp["name"] = "Monomyth Skeleton Key";
+  amp["cabNames"] = nlohmann::json::array({"Bogner 4x12", "Marshall 1960", "Orange PPC"});
+  nlohmann::json amps = nlohmann::json::array();
+  amps.push_back(amp);
+  nlohmann::json j;
+  j["schemaVersion"] = kContentSchemaVersion;
+  j["customAmps"] = amps;
+
+  bool healed = false;
+  Registry r = RegistryFromJson(j, &healed);
+  REQUIRE(r.amps.size() == 1);
+  CHECK(r.amps[0].cabNames[0] == "BOG");
+  CHECK(r.amps[0].cabNames[1] == "MAR");
+  CHECK(r.amps[0].cabNames[2] == "ORA");
+}
+
 TEST_CASE("Registry round-trips amps, IRs, pedals, presets, and scenes")
 {
   Registry r;
