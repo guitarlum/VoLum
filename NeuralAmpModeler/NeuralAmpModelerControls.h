@@ -192,11 +192,6 @@ public:
     const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
     DrawIndicatorTrack(g, angle, cx + 0.5, cy, widgetRadius);
     g.DrawFittedBitmap(mBitmap, knobRect);
-    // Darken the metallic knob face so it recedes into the dark gradient panel
-    // instead of standing out as a lighter grey disc. Pan knobs use a transparent
-    // kBG (they sit on the hero art) and are intentionally left untouched.
-    if (GetColor(kBG).A > 0)
-      g.FillCircle(IColor(120, 14, 14, 20), cx, cy, widgetRadius, &mBlend);
     float data[2][2];
     RadialPoints(angle, cx, cy, mInnerPointerFrac * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
     g.PathCircle(data[1][0], data[1][1], 3);

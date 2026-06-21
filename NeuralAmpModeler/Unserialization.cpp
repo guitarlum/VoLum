@@ -690,6 +690,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
               mVolumActivePresetId = pr.id;
               mVolumRecalledSnapshot = _VolumActiveScene();
               mVolumHasRecalledSnapshot = true;
+              _VolumRememberActivePreset();
               break;
             }
       }

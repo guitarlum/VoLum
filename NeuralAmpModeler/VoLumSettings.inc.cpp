@@ -815,13 +815,51 @@ void NeuralAmpModeler::_VolumInstallPresetHooks()
   volum::custom::PresetApplyHook() = [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); };
 }
 
-void NeuralAmpModeler::_VolumSyncPresetOwner()
+void NeuralAmpModeler::_VolumRememberActivePreset()
 {
-  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
-  // Switching amps drops the recalled preset: the bar shows the new amp's bank
-  // with nothing selected until the user recalls one.
+  const std::string key = _VolumActiveOwnerKey();
+  if (mVolumHasRecalledSnapshot && !mVolumActivePresetId.empty())
+  {
+    mVolumActivePresetIdByOwner[key] = mVolumActivePresetId;
+    mVolumRecalledSnapshotByOwner[key] = mVolumRecalledSnapshot;
+  }
+  else
+  {
+    mVolumActivePresetIdByOwner.erase(key);
+    mVolumRecalledSnapshotByOwner.erase(key);
+  }
+}
+
+void NeuralAmpModeler::_VolumForgetActivePreset()
+{
   mVolumHasRecalledSnapshot = false;
   mVolumActivePresetId.clear();
+  mVolumActivePresetIdByOwner.erase(_VolumActiveOwnerKey());
+  mVolumRecalledSnapshotByOwner.erase(_VolumActiveOwnerKey());
+}
+
+void NeuralAmpModeler::_VolumSyncPresetOwner()
+{
+  const std::string key = _VolumActiveOwnerKey();
+  volum::custom::SetActivePresetOwner(key);
+  // Restore the preset this amp last had selected (if any) so switching back to
+  // an amp re-shows its active preset instead of blanking the bar. The id is
+  // validated against the live bank in _VolumRefreshPresetBar, so a since-deleted
+  // preset simply shows nothing selected.
+  auto itId = mVolumActivePresetIdByOwner.find(key);
+  auto itSnap = mVolumRecalledSnapshotByOwner.find(key);
+  if (itId != mVolumActivePresetIdByOwner.end() && !itId->second.empty()
+      && itSnap != mVolumRecalledSnapshotByOwner.end())
+  {
+    mVolumActivePresetId = itId->second;
+    mVolumRecalledSnapshot = itSnap->second;
+    mVolumHasRecalledSnapshot = true;
+  }
+  else
+  {
+    mVolumHasRecalledSnapshot = false;
+    mVolumActivePresetId.clear();
+  }
 }
 
 void NeuralAmpModeler::_VolumRefreshPresetBar()
@@ -840,14 +878,19 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
   {
     const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
     auto it = banks.find(_VolumActiveOwnerKey());
+    bool found = false;
     if (it != banks.end())
       for (const auto& pr : it->second)
         if (pr.id == mVolumActivePresetId)
         {
           bar->SelectName(pr.name.c_str());
+          found = true;
           break;
         }
-    _VolumRecomputePresetDirty();
+    if (found)
+      _VolumRecomputePresetDirty();
+    else
+      _VolumForgetActivePreset(); // preset was deleted out from under us
   }
 }
 
@@ -862,6 +905,7 @@ int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
   mVolumRecalledSnapshot = _VolumActiveScene(); // hook already synced live -> scene
   mVolumHasRecalledSnapshot = true;
   mVolumSettingsDirty = true;
+  _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
   return idx;
 }
@@ -874,6 +918,7 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index)
   mVolumRecalledSnapshot = _VolumActiveScene();
   mVolumHasRecalledSnapshot = true;
   mVolumSettingsDirty = true;
+  _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
 }
 
@@ -898,6 +943,7 @@ void NeuralAmpModeler::_VolumApplyRecalledPreset(const volum::VoLumAmpSettings& 
   mVolumHasRecalledSnapshot = true;
   mVolumNeedsLoad.store(true);
   mVolumSettingsDirty = true;
+  _VolumRememberActivePreset();
 }
 
 void NeuralAmpModeler::_VolumRecomputePresetDirty()
