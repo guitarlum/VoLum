@@ -154,11 +154,16 @@ public:
                      paddedRow.MH() + iconSize / 2.f);
 
       g.DrawRect(IColor(selected ? 80 : 58, 120, 195, 210), iconArea);
-      // Blit the cached thumbnail at the row's CURRENT position. DrawLayer would
-      // paint at the bounds the layer was first built with, which freezes
-      // thumbnails in place once the list scrolls.
+      // Blit the cached thumbnail at the row's CURRENT position. Use
+      // DrawFittedLayer (not DrawFittedBitmap): it translates to iconArea.L/T so
+      // the thumbnail still tracks the scroll, AND it scales by the layer's
+      // LOGICAL bounds rather than the cached bitmap's pixel width. The pixel
+      // width changes when the layer is rebuilt at a new draw scale on window
+      // resize, which made DrawFittedBitmap render the icon at its original
+      // (small) size while the rest of the UI scaled up. (item: thumbnails
+      // don't scale on resize.)
       if (mIconLayers[i] && g.CheckLayer(mIconLayers[i]))
-        g.DrawFittedBitmap(mIconLayers[i]->GetBitmap(), iconArea);
+        g.DrawFittedLayer(mIconLayers[i], iconArea, nullptr);
 
       IRECT nameArea = paddedRow.GetReducedFromLeft(pad + iconSize + 8.f);
       IColor nameCol = selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED;
@@ -508,8 +513,10 @@ private:
       const IRECT iconArea(
         paddedRow.L + 7.f, paddedRow.MH() - isz / 2.f, paddedRow.L + 7.f + isz, paddedRow.MH() + isz / 2.f);
       const int art = (c < (int)mCustomArts.size()) ? (mCustomArts[c] % volum::custom::kNumCustomArts) : 0;
+      // DrawFittedLayer (not DrawFittedBitmap) so the art scales with the UI on
+      // window resize - see the factory-row note above.
       if (mCustomArtLayers[art] && g.CheckLayer(mCustomArtLayers[art]))
-        g.DrawFittedBitmap(mCustomArtLayers[art]->GetBitmap(), iconArea);
+        g.DrawFittedLayer(mCustomArtLayers[art], iconArea, nullptr);
 
       // Clip the name so a long custom-amp name can never reach the pen/trash.
       IRECT nameArea = paddedRow.GetReducedFromLeft(38.f).GetReducedFromRight(hovered || selected ? 48.f : 6.f);
