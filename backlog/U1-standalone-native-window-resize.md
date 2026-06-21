@@ -2,19 +2,23 @@
 
 **Reported:** 1.2.0 standalone test feedback (Windows). **Priority:** medium (UX papercut; a working resize path already exists).
 
-## Status: RESOLVED (core) on `feature/1.2.0`
+## Status: WON'T DO — reverted to 1.1.0 diagonal-grip resize
 
-Implemented Option 1 (forward native resize to IGraphics) **without** an iPlug2
-submodule change: `NeuralAmpModeler::OnParentWindowResize` (APP-only) maps the
-native `WM_SIZE` to an aspect-locked `IGraphics::Resize(..., needsPlatformResize=false)`,
-and the standalone corner grip was removed (`AttachCornerResizer` is now
-`#ifndef APP_API`) to eliminate the grip/native-border overlap that could hang
-the app. Verified: native resize scales the UI to fill, responsive, no hang.
+A native-border resize was implemented (override `OnParentWindowResize` +
+`WS_THICKFRAME`/`WS_MAXIMIZEBOX` on `IDD_DIALOG_MAIN` + remove the corner grip)
+and verified to scale the UI. **It was then reverted at the user's request:**
+allowing all-edge native resize means off-aspect drags leave a letterbox/white
+strip, which the user explicitly does not want.
 
-**Remaining (optional):** dragging off the UI aspect ratio leaves a thin
-letterbox strip. Eliminating it entirely requires constraining the drag to the
-UI aspect via `WM_SIZING` in `IPlugAPP_dialog.cpp` (the submodule change below).
-Only pursue if the letterbox is judged worth a mirror-branch + submodule bump.
+**Final/desired behavior = 1.1.0:** the standalone window is a fixed,
+non-sizable frame and the only resizer is the bottom-right corner grip
+(`AttachCornerResizer(EUIResizerMode::Scale)`), which is inherently diagonal and
+aspect-locked, so the UI always fills the window with no white frame. This is
+the intended UX; native edge-resize is intentionally not offered.
+
+Do not reopen unless the product decision changes (e.g. a future request for
+free-axis resize with an aspect-lock via `WM_SIZING`, which would be an iPlug2
+submodule change).
 
 ## Problem
 
