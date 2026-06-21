@@ -101,6 +101,23 @@ inline std::string NormalizeCabName(const std::string& in)
   return s;
 }
 
+// Clamp every cab-slot name to the 3-char rule (see NormalizeCabName). A slot
+// whose stored name normalizes to empty falls back to its "CBn" default. Apply
+// this at every persistence boundary (registry load + add/update) so a
+// hand-edited or migrated registry can never carry an over-long cab name that
+// overflows the cabinet row. The builder text-entry path already normalizes per
+// field; this is the matching backend guarantee.
+inline void NormalizeAmpCabNames(CustomAmp& amp)
+{
+  for (int i = 0; i < kNumCabSlots; ++i)
+  {
+    std::string norm = NormalizeCabName(amp.cabNames[(size_t)i]);
+    if (norm.empty())
+      norm = "CB" + std::to_string(i + 1);
+    amp.cabNames[(size_t)i] = norm;
+  }
+}
+
 // Number of files still missing a slot/channel assignment.
 inline int UnassignedCount(const CustomAmp& amp)
 {

@@ -142,6 +142,7 @@ inline int AddCustomAmp(const CustomAmp& amp)
 {
   auto& reg = Store().reg();
   CustomAmp a = amp;
+  NormalizeAmpCabNames(a);
   const std::string base = a.name.empty() ? "New custom amp" : a.name;
   std::string unique = base;
   int suffix = 2;
@@ -171,6 +172,7 @@ inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
     return -1;
   CustomAmp a = amp;
   a.id = reg.amps[(size_t)idx].id; // identity is immutable across edits
+  NormalizeAmpCabNames(a);
   const std::string base = a.name.empty() ? "New custom amp" : a.name;
   std::string unique = base;
   int suffix = 2;

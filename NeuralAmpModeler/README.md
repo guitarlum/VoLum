@@ -6,11 +6,13 @@ This is the build and architecture reference for contributors. For download and 
 
 VoLum is an independent NAM-based amp collection app. It still keeps selected upstream-compatible files and paths so future NAM Plugin fixes can be cherry-picked, but the shipped product is the curated VoLum workflow.
 
-| Area | VoLum 1.0 behavior |
+| Area | VoLum 1.2 behavior |
 | --- | --- |
-| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. |
+| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. All captures are NAM Architecture 2 (A2) packed containers, played at full size (A2-Lite opt-in is backlog `F4`). |
 | **Rig building** | PRE compressor + two NAM pedal slots, AMP controls, Dual Amp, and POST Delay/Reverb in the triptych UI. |
-| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, and Dual Amp settings stored in user profile JSON; VST3 also serializes state. |
+| **Custom content (BYO)** | Import your own NAM amp captures (A1 or A2), IRs, and pedal captures into a VoLum-owned content library (`volum-content.json`); referenced from DAW projects by stable opaque ids. |
+| **Presets** | Per-amp named snapshots of the full rig (capture/recall/overwrite/rename/delete) with an exact-compare "(unsaved)" indicator. |
+| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, Dual Amp, custom-IR/support ids, and the active preset stored in user profile JSON; VST3 also serializes state (chunk 1.2.0 with an append-only id tail). |
 | **Practice tools** | Chromatic tuner and metronome in standalone and VST3. |
 | **Keyboard workflow** | Section switching, focus movement, knob edit mode, exact entry, toggles, tuner/metronome/settings shortcuts. |
 | **Runtime behavior** | Background model loading, per-amp DSP cache, NAM output NaN scrub, and final-bus output safety. |
