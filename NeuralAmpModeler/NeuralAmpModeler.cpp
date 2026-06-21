@@ -124,11 +124,9 @@ const IVStyle volumStyle = IVStyle{true,
 // kBG is transparent so the IVKnobControl's square control-background isn't filled:
 // the procedural dial (VoLumDialKnobControl) sits directly on the panel gradient
 // instead of punching a lighter (17,17,24) square through it.
-const IVStyle volumKnobStyle = volumStyle.WithShowLabel(false)
-                                 .WithShowValue(false)
-                                 .WithDrawFrame(false)
-                                 .WithWidgetFrac(0.75f)
-                                 .WithColor(EVColor::kBG, COLOR_TRANSPARENT);
+const IVStyle volumKnobStyle =
+  volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.75f).WithColor(
+    EVColor::kBG, COLOR_TRANSPARENT);
 // Same vector-knob style, but with the X1/X3 colours retuned to teal so the rotating pointer
 // dot on SUPPORT-lane knobs reads as "support" without changing any other knob geometry.
 const IVStyle volumKnobStyleSupport =
@@ -251,11 +249,9 @@ public:
 
 // kBG transparent (same reason as volumKnobStyle): the slide-switch pill sits on the
 // panel gradient instead of on a lighter (17,17,24) control-background square.
-const IVStyle volumToggleStyle = volumStyle.WithShowLabel(false)
-                                   .WithShowValue(false)
-                                   .WithDrawFrame(false)
-                                   .WithWidgetFrac(1.0f)
-                                   .WithColor(EVColor::kBG, COLOR_TRANSPARENT);
+const IVStyle volumToggleStyle =
+  volumStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(1.0f).WithColor(
+    EVColor::kBG, COLOR_TRANSPARENT);
 /** Settings overlay: flat controls on top of VoLumSettingsBackdropControl (no “patch” panels). */
 const IVStyle volumSettingsStyle = volumStyle.WithDrawFrame(false)
                                      .WithDrawShadows(false)
