@@ -4,6 +4,20 @@
 
 This guide explains the VoLum 1.2 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
 
+## Contents
+
+- [Main View](#main-view)
+- [Choose An Amp](#choose-an-amp)
+- [PRE Section](#pre-section)
+- [Dual Amp](#dual-amp)
+- [POST Section](#post-section)
+- [Presets](#presets)
+- [Custom Content (Bring Your Own)](#custom-content-bring-your-own)
+- [Tuner And Metronome](#tuner-and-metronome)
+- [Keyboard Controls](#keyboard-controls)
+- [Settings And Safety](#settings-and-safety)
+- [Report A Bug Or Request A Feature](#report-a-bug-or-request-a-feature)
+
 ## Main View
 
 ![VoLum main view](user-guide-main.png)

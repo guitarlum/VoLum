@@ -245,10 +245,11 @@ public:
       mCurTip = tip;
       SetTooltip(tip);
     }
-    if (idx != mHovered || dom != mHoveredDomain)
+    if (idx != mHovered || dom != mHoveredDomain || hit.zone != mHoveredZone)
     {
       mHovered = idx;
       mHoveredDomain = dom;
+      mHoveredZone = hit.zone;
       SetDirty(false);
     }
   }
@@ -257,6 +258,7 @@ public:
   {
     mHovered = -1;
     mHoveredDomain = EDomain::None;
+    mHoveredZone = EZone::None;
     if (!mCurTip.empty())
     {
       mCurTip.clear();
@@ -469,19 +471,24 @@ private:
     if (header.B >= mRECT.T - 1.f && header.T <= mRECT.B + 1.f)
     {
       g.DrawLine(VoLumColors::FRAME, header.L + 4.f, header.T, header.R - 4.f, header.T, nullptr, 1.f);
-      if (mCustomNames.empty())
+      // Same affordance whether or not the list has entries: a dim "CUSTOM"
+      // label plus a teal + glyph on the right. Previously the empty state used
+      // bare "+ CUSTOM" text, which read as pale/unfinished next to a populated
+      // list. (Empty still adds on a whole-row click via HitTest.)
+      const bool addHovered = (mHoveredZone == EZone::CustomAdd);
+      const IRECT plus(header.R - 26.f, header.T, header.R - 6.f, header.B);
+      if (addHovered)
       {
-        g.DrawText(IText(11.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "+ CUSTOM",
-                   header.GetPadded(-8.f, 0.f, -8.f, 0.f));
+        // Empty -> the whole header row is the add target; populated -> only the
+        // + button. Match the row hover-fill so every clickable zone reacts.
+        const IRECT hoverR = mCustomNames.empty() ? header.GetPadded(-2.f, -1.f, -2.f, -1.f)
+                                                   : plus.GetPadded(-2.f, -3.f, -1.f, -3.f);
+        g.FillRoundRect(VoLumColors::ITEM_HOVER, hoverR, 4.f);
       }
-      else
-      {
-        g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "CUSTOM",
-                   header.GetPadded(-8.f, 0.f, -8.f, 0.f));
-        // + button at the right
-        const IRECT plus(header.R - 26.f, header.T, header.R - 6.f, header.B);
-        DrawPlusGlyph(g, plus, VoLumColors::TEAL);
-      }
+      g.DrawText(IText(10.f, addHovered ? VoLumColors::CREAM : VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near,
+                       EVAlign::Middle),
+                 "CUSTOM", header.GetPadded(-8.f, 0.f, -8.f, 0.f));
+      DrawPlusGlyph(g, plus, addHovered ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEAL);
     }
 
     // Custom rows
@@ -530,8 +537,12 @@ private:
       {
         const IRECT bin(paddedRow.R - 22.f, paddedRow.T, paddedRow.R - 2.f, paddedRow.B);
         const IRECT pen(bin.L - 22.f, paddedRow.T, bin.L - 2.f, paddedRow.B);
-        DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
-        DrawBinGlyph(g, bin, VoLumColors::CREAM_DIM);
+        // Brighten the specific icon the cursor is over so the hover target is
+        // obvious (tooltip alone was too subtle).
+        const bool penHot = hovered && mHoveredZone == EZone::CustomEdit;
+        const bool binHot = hovered && mHoveredZone == EZone::CustomDelete;
+        DrawPenGlyph(g, pen, penHot ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM_DIM);
+        DrawBinGlyph(g, bin, binHot ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM_DIM);
       }
     }
   }
@@ -591,6 +602,7 @@ private:
   int mSelected = 0;
   int mHovered = -1;
   EDomain mHoveredDomain = EDomain::None;
+  EZone mHoveredZone = EZone::None; // exact zone under the cursor (for pen/trash icon highlight)
   std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
   float mScrollOffset = 0.f;
   float mScrollTarget = 0.f;

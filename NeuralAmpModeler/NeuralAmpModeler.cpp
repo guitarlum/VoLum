@@ -1322,6 +1322,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         {
           auto* bar = pb->As<VoLumPresetBarControl>();
           bar->SetRecallCallback([pPlugin](int index) { pPlugin->_VolumRecallPreset(index); });
+          bar->SetSaveAsCallback([pPlugin](const std::string& name) { pPlugin->_VolumSavePresetAs(name); });
           pPlugin->_VolumRefreshPresetBar();
         }
       }
@@ -1345,6 +1346,31 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           if (code == VoLumListMenuControl::kDefault)
           {
             pPlugin->_VolumResetAmpToFactory();
+            return;
+          }
+          if (code == VoLumListMenuControl::kOverwrite)
+          {
+            auto* bar = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar);
+            if (!bar)
+              return;
+            auto* presetBar = bar->As<VoLumPresetBarControl>();
+            const int idx = presetBar->ActiveIndex();
+            if (idx < 0)
+              return;
+            const std::string name = presetBar->ActiveName();
+            auto doOverwrite = [pPlugin, idx]() { pPlugin->_VolumOverwritePreset(idx); };
+            if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
+              dlg->As<VoLumConfirmDialogControl>()->Show(
+                "Are you sure?", "Overwrite preset \"" + name + "\" with the current settings?", doOverwrite,
+                "Overwrite");
+            else
+              doOverwrite();
+            return;
+          }
+          if (code == VoLumListMenuControl::kSaveAsNew)
+          {
+            if (auto* bar = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+              bar->As<VoLumPresetBarControl>()->PromptSaveAs();
             return;
           }
           const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
@@ -4182,8 +4208,17 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx)
     return;
   const auto abs = volum::content::GlobalContentStore().ResolveStored(rel);
   WDL_String p(abs.string().c_str());
-  if (_StageIR(p) != dsp::wav::LoadReturnCode::SUCCESS)
+  const dsp::wav::LoadReturnCode loadRc = _StageIR(p);
+  if (loadRc != dsp::wav::LoadReturnCode::SUCCESS)
+  {
+    // VoLum: surface why the IR did not activate instead of failing silently.
+    if (auto* pGfx = GetUI())
+    {
+      const std::string msg = "VoLum could not load this impulse response.\n\n" + dsp::wav::GetMsgForLoadReturnCode(loadRc);
+      _ShowMessageBox(pGfx, msg.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
+    }
     return;
+  }
   // A custom IR replaces the baked cab: force the MAIN amp onto its DIRECT /
   // No-Cab capture so the IR convolves the raw amp (not amp + baked cab).
   _VolumForceMainDirectCapture();
@@ -4378,6 +4413,9 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   }
 
   const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
+  auto* presetBar = bar->As<VoLumPresetBarControl>();
+  const bool dirty = presetBar->IsEditDirty();
+  const int activePresetIdx = presetBar->ActiveIndex();
   std::vector<VoLumListMenuControl::Row> rows;
   if (presets.empty())
   {
@@ -4390,6 +4428,17 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
     rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
     for (int i = 0; i < (int)presets.size(); i++)
       rows.push_back({presets[(size_t)i], i, false, false});
+  }
+  // When the rig is dirty, offer a one-click save path right in the dropdown:
+  // overwrite the active named preset, or (no named preset / on Default) save a
+  // new one. Saves opening the Manage panel just to commit a tweak.
+  if (dirty)
+  {
+    if (activePresetIdx >= 0 && activePresetIdx < (int)presets.size())
+      rows.push_back(
+        {"Overwrite \"" + presets[(size_t)activePresetIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});
+    else
+      rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
   }
   rows.push_back({"Manage presets...", VoLumListMenuControl::kManage, true, false});
 

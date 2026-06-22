@@ -4,6 +4,20 @@
 
 Dieses Handbuch erklärt die VoLum-1.2-Oberfläche nach der Installation. Downloads, Hinweise zu unsignierten Builds und Installationspfade stehen in der [Haupt-README](../README.de.md).
 
+## Inhalt
+
+- [Hauptansicht](#hauptansicht)
+- [Amp Wählen](#amp-wählen)
+- [PRE-Bereich](#pre-bereich)
+- [Dual Amp](#dual-amp)
+- [POST-Bereich](#post-bereich)
+- [Presets](#presets)
+- [Eigene Inhalte (Bring Your Own)](#eigene-inhalte-bring-your-own)
+- [Tuner Und Metronom](#tuner-und-metronom)
+- [Tastatur](#tastatur)
+- [Einstellungen Und Sicherheit](#einstellungen-und-sicherheit)
+- [Fehler Melden Oder Feature Vorschlagen](#fehler-melden-oder-feature-vorschlagen)
+
 ## Hauptansicht
 
 ![VoLum Hauptansicht](user-guide-main.png)

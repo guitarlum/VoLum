@@ -422,6 +422,10 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["output"] = s.outputLevel;
     a["noiseGate"] = s.noiseGateActive;
     a["eq"] = s.eqActive;
+    // VoLum 1.2.0: persist the per-amp custom IR selection (opaque content-store
+    // id; empty == baked cab) so a factory amp's chosen IR survives a standalone
+    // restart. Additive optional key; older readers ignore it.
+    a["activeIrId"] = s.activeIrId;
     a["preCompActive"] = s.preCompActive;
     a["preCompAmount"] = s.preCompAmount;
     a["preCompRatio"] = s.preCompRatio;
@@ -660,6 +664,10 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "output", s.outputLevel, -40.0, 10.0, defaults.outputLevel);
         loadBool(a, "noiseGate", s.noiseGateActive, defaults.noiseGateActive);
         loadBool(a, "eq", s.eqActive, defaults.eqActive);
+        // VoLum 1.2.0: per-amp custom IR id (additive; absent on older files ->
+        // keep the default empty id == baked cab).
+        if (a.contains("activeIrId") && a["activeIrId"].is_string())
+          s.activeIrId = a["activeIrId"].get<std::string>();
         loadBool(a, "preCompActive", s.preCompActive, defaults.preCompActive);
         loadDouble(a, "preCompAmount", s.preCompAmount, 0.0, 10.0, defaults.preCompAmount);
         loadDouble(a, "preCompRatio", s.preCompRatio, 1.0, 20.0, defaults.preCompRatio);

@@ -23,6 +23,7 @@
 #include "VoLumFractalArt.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <functional>
 #include <string>
@@ -39,6 +40,9 @@ public:
   // Fired when the user steps presets with the < / > arrows; the host applies
   // that preset (settings recall) and drives the bar back via SelectName.
   using RecallCallback = std::function<void(int index)>;
+  // Fired when the user picks "Save current as new..." from the dropdown and
+  // types a name; the host snapshots the live rig under that name.
+  using SaveAsCallback = std::function<void(const std::string&)>;
 
   VoLumPresetBarControl(const IRECT& bounds, OpenCallback openCb)
   : IControl(bounds)
@@ -47,6 +51,7 @@ public:
   }
 
   void SetRecallCallback(RecallCallback cb) { mRecall = std::move(cb); }
+  void SetSaveAsCallback(SaveAsCallback cb) { mSaveAs = std::move(cb); }
 
   // Set the active amp's preset bank (mock). Empty list => "(unsaved)" + inert arrows.
   void SetList(const std::vector<std::string>& names)
@@ -97,6 +102,33 @@ public:
 
   // Active preset index in the current bank, or -1 when none is selected.
   int ActiveIndex() const { return mIdx; }
+  // Active preset name (empty when none selected).
+  const std::string& ActiveName() const { return mName; }
+  // Whether the live rig has diverged from the recalled snapshot.
+  bool IsEditDirty() const { return mDirtyEdit; }
+
+  // Open an inline text entry to name a new preset; on completion fires the
+  // save-as callback. Used by the dropdown's "Save current as new..." row.
+  void PromptSaveAs()
+  {
+    if (auto* ui = GetUI())
+    {
+      const IRECT mid = mRECT.GetReducedFromLeft(22.f).GetReducedFromRight(22.f);
+      ui->CreateTextEntry(*this, IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+                          mid, "");
+    }
+  }
+
+  void OnTextEntryCompletion(const char* str, int) override
+  {
+    std::string name = str ? str : "";
+    // Trim surrounding whitespace; ignore an empty name.
+    const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+    name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
+    name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
+    if (!name.empty() && mSaveAs)
+      mSaveAs(name);
+  }
 
   void Draw(IGraphics& g) override
   {
@@ -200,6 +232,7 @@ private:
   int mIdx = -1;
   OpenCallback mOpen;
   RecallCallback mRecall;
+  SaveAsCallback mSaveAs;
 };
 
 // ---------------------------------------------------------------------------
@@ -217,6 +250,8 @@ public:
   static constexpr int kNone = -3;
   static constexpr int kManage = -2;
   static constexpr int kDefault = -4; // reset amp to factory defaults (preset menu)
+  static constexpr int kOverwrite = -5; // overwrite the active dirty preset (preset menu)
+  static constexpr int kSaveAsNew = -6; // save the current dirty rig as a new preset (preset menu)
 
   struct Row
   {
@@ -1741,9 +1776,17 @@ private:
     g.PathClipRegion();
 
     if (mBuilderAmp.files.empty())
+    {
       g.DrawText(IText(11.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
                  "No files yet. Add a .nam, then pick its speaker + channel.",
                  IRECT(left.L, listArea.T, left.R, listArea.T + 18.f));
+      // Explain the auto-fill convention so users can name files to skip manual
+      // mapping. PREFIX = G12 / G65 / V30 / AMP (DI / DIRECT), last number = channel.
+      g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
+                 "Tip: name files CAB-NAME-CHANNEL (e.g. G65-Plexi-3.nam) and the cab + channel auto-fill. "
+                 "Use AMP- or DI- for a DIRECT capture.",
+                 IRECT(left.L, listArea.T + 20.f, left.R, listArea.T + 52.f));
+    }
 
     // Scrollbar for the file manifest (matches the Manage list styling).
     if (scrollable)
@@ -1813,21 +1856,26 @@ private:
                  "tap a cab name to rename", covHdr);
     }
 
-    // Columns: at least 4, grow to the highest assigned channel, hard cap 8.
-    const int maxCh = std::min(volum::custom::kMaxChannels, std::max(4, MaxAssignedChannel(mBuilderAmp)));
+    // Columns: only the channels (gain stages) actually present, labeled with
+    // their real numbers. A brand-new amp with nothing assigned shows a single
+    // "1" placeholder so the grid never collapses to zero width.
+    std::vector<int> channels = volum::custom::AssignedChannels(mBuilderAmp);
+    if (channels.empty())
+      channels.push_back(1);
+    const int nCols = (int)channels.size();
     const float labelW = 64.f;
     const float gridL = right.L + labelW;
-    const float cw = std::min(26.f, (right.R - gridL) / (float)maxCh);
+    const float cw = std::min(26.f, (right.R - gridL) / (float)nCols);
 
     // channel header numbers
     float gy = covTop + 20.f;
     {
       const IRECT hrow(right.L, gy, right.R, gy + 14.f);
-      for (int c = 1; c <= maxCh; c++)
+      for (int ci = 0; ci < nCols; ci++)
       {
-        const IRECT cell(gridL + (c - 1) * cw, hrow.T, gridL + (c - 1) * cw + cw, hrow.B);
+        const IRECT cell(gridL + ci * cw, hrow.T, gridL + ci * cw + cw, hrow.B);
         g.DrawText(IText(8.5f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-                   std::to_string(c).c_str(), cell);
+                   std::to_string(channels[(size_t)ci]).c_str(), cell);
       }
       gy += 16.f;
     }
@@ -1854,9 +1902,10 @@ private:
         DrawPenGlyph(g, IRECT(chip.R - 15.f, chip.T, chip.R - 1.f, chip.B), VoLumColors::CREAM_DIM);
         AddHotspot(chip, kCabNameBase + slot, "Rename this cab (max 3 chars)");
       }
-      for (int c = 1; c <= maxCh; c++)
+      for (int ci = 0; ci < nCols; ci++)
       {
-        const IRECT cell(gridL + (c - 1) * cw + 1.f, srow.T + 3.f, gridL + (c - 1) * cw + cw - 1.f, srow.B - 3.f);
+        const int c = channels[(size_t)ci];
+        const IRECT cell(gridL + ci * cw + 1.f, srow.T + 3.f, gridL + ci * cw + cw - 1.f, srow.B - 3.f);
         const int n = CellFileCount(mBuilderAmp, slot, c);
         if (n >= 2)
         {

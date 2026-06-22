@@ -841,3 +841,39 @@ TEST_CASE("User settings IO round-trips PRE/POST lock flags")
   REQUIRE_FALSE(postLocked);
   REQUIRE(loaded[0].toneBass == doctest::Approx(5.5));
 }
+
+// VoLum 1.2.0: a factory amp's selected custom IR must survive a restart.
+TEST_CASE("User settings IO round-trips per-amp activeIrId")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].activeIrId = "ir_abc123";
+  amps[1].activeIrId = ""; // baked cab
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE(j["amps"][volum::kAmps[0].folderName]["activeIrId"] == "ir_abc123");
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(loaded[0].activeIrId == "ir_abc123");
+  CHECK(loaded[1].activeIrId.empty());
+}
+
+// An older settings file (no activeIrId key) must still load cleanly with the
+// default empty id and no heal flag (additive forward tolerance).
+TEST_CASE("User settings IO tolerates settings without activeIrId")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].activeIrId = "ir_will_be_stripped";
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  // Simulate an older writer that never emitted the key.
+  for (auto& item : j["amps"].items())
+    item.value().erase("activeIrId");
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(loaded[0].activeIrId.empty());
+}
