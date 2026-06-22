@@ -43,10 +43,12 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_level_mute.cpp
   test_volum_knob_wheel.cpp
   test_iplug_app_vector_accumulator.cpp
+  test_volum_wav_downmix.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/activations.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/convnet.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/conv1d.cpp"

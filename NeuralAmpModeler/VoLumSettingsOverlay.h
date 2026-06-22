@@ -190,20 +190,28 @@ public:
       g.DrawText(descText, desc, IRECT(col.L + keyW + 5.f, y, col.R, y + 12.f));
     };
 
+    // One key-column width per section (widest key in that column) so every
+    // description in a column starts at the same x. Previously each row used its
+    // own keyW, so Navigate/Edit descriptions stair-stepped while Tools (all 16)
+    // happened to line up.
+    const float navKeyW = 42.f; // "Arrows"
+    const float editKeyW = 34.f; // "Enter" / "Space"
+    const float toolKeyW = 16.f; // single letters
+
     g.DrawText(capText, "Navigate", IRECT(navCol.L, navCol.T, navCol.R, navCol.T + 12.f));
-    drawPair(navCol, 0, 36.f, "1/2/3", "PRE / AMP / POST");
-    drawPair(navCol, 1, 24.f, "Tab", "target focus");
-    drawPair(navCol, 2, 42.f, "Arrows", "amp / channel");
+    drawPair(navCol, 0, navKeyW, "1/2/3", "PRE / AMP / POST");
+    drawPair(navCol, 1, navKeyW, "Tab", "target focus");
+    drawPair(navCol, 2, navKeyW, "Arrows", "amp / channel");
 
     g.DrawText(capText, "Edit", IRECT(editCol.L, editCol.T, editCol.R, editCol.T + 12.f));
-    drawPair(editCol, 0, 34.f, "Enter", "edit");
-    drawPair(editCol, 1, 34.f, "Space", "toggle");
-    drawPair(editCol, 2, 16.f, "S", "cab");
-    drawPair(editCol, 3, 24.f, "Esc", "close");
+    drawPair(editCol, 0, editKeyW, "Enter", "edit");
+    drawPair(editCol, 1, editKeyW, "Space", "toggle");
+    drawPair(editCol, 2, editKeyW, "S", "cab");
+    drawPair(editCol, 3, editKeyW, "Esc", "close");
 
     g.DrawText(capText, "Tools", IRECT(toolCol.L, toolCol.T, toolCol.R, toolCol.T + 12.f));
-    drawPair(toolCol, 0, 16.f, "T", "tuner");
-    drawPair(toolCol, 1, 16.f, "M", "metronome");
-    drawPair(toolCol, 2, 16.f, "H", "settings");
+    drawPair(toolCol, 0, toolKeyW, "T", "tuner");
+    drawPair(toolCol, 1, toolKeyW, "M", "metronome");
+    drawPair(toolCol, 2, toolKeyW, "H", "settings");
   }
 };

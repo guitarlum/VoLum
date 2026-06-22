@@ -48,6 +48,7 @@ using volum::custom::HasDuplicate;
 using volum::custom::IsDirectSlot;
 using volum::custom::kDirectSlot;
 using volum::custom::kUnassignedSlot;
+using volum::custom::AssignedChannels;
 using volum::custom::MaxAssignedChannel;
 using volum::custom::NormalizeCabName;
 using volum::custom::SaveDisabledReason;
@@ -133,6 +134,24 @@ TEST_CASE("MaxAssignedChannel ignores unassigned files")
   CustomAmp amp;
   amp.files = {{"a.nam", kDirectSlot, 2}, {"b.nam", 0, 5}, {"c.nam", kUnassignedSlot, 0}};
   REQUIRE(MaxAssignedChannel(amp) == 5);
+}
+
+TEST_CASE("AssignedChannels returns only the present channels, sorted and deduped")
+{
+  // A Fryette-style amp with only gain stages 3 and 4 (across two cab slots).
+  CustomAmp amp;
+  amp.files = {{"a.nam", 0, 4}, {"b.nam", 1, 3}, {"c.nam", kDirectSlot, 3}, {"d.nam", kUnassignedSlot, 0}};
+  const std::vector<int> chs = AssignedChannels(amp);
+  REQUIRE(chs.size() == 2);
+  CHECK(chs[0] == 3);
+  CHECK(chs[1] == 4);
+}
+
+TEST_CASE("AssignedChannels is empty when nothing is assigned")
+{
+  CustomAmp amp;
+  amp.files = {{"a.nam", kUnassignedSlot, 0}};
+  CHECK(AssignedChannels(amp).empty());
 }
 
 TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate states")

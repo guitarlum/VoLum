@@ -201,6 +201,25 @@ inline int MaxAssignedChannel(const CustomAmp& amp)
   return m;
 }
 
+// Sorted, de-duplicated gain-stage channels that carry at least one assigned
+// file anywhere in the amp. Used so the coverage grid shows only the channels
+// actually present (e.g. a Fryette with only channels 3 & 4 shows just "3"/"4"
+// instead of an empty 1..4 range that looks like missing content). Capped at
+// kMaxChannels; empty when no file is assigned yet.
+inline std::vector<int> AssignedChannels(const CustomAmp& amp)
+{
+  std::vector<int> out;
+  for (const auto& f : amp.files)
+  {
+    if (!FileAssigned(f) || f.channel < 1 || f.channel > kMaxChannels)
+      continue;
+    if (std::find(out.begin(), out.end(), f.channel) == out.end())
+      out.push_back(f.channel);
+  }
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
 // A custom amp needs a user-supplied name: the original .nam files are often
 // opaque codes (e.g. "2204"), so the builder default is treated as "unnamed".
 inline bool IsUnnamed(const std::string& name)
