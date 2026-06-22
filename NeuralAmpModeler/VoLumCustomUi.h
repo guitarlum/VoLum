@@ -21,12 +21,15 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentMock.h"
 #include "VoLumFractalArt.h"
+#include "VoLumIrFileGuard.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -1071,6 +1074,7 @@ private:
     // skipped - including duplicates within the same batch, since the library
     // grows as we add - and reported together.
     std::vector<std::string> skipped;
+    std::vector<std::string> tooLarge;
     int added = 0;
     for (const auto& fn : files)
     {
@@ -1083,6 +1087,18 @@ private:
       {
         skipped.push_back(base);
         continue;
+      }
+      // Reject oversized IR captures at import (only the first ~8192 samples are
+      // ever convolved, so a huge WAV is almost always a wrong-file pick).
+      if (mManageKind == ManageKind::IR)
+      {
+        std::error_code ec;
+        const std::uintmax_t bytes = std::filesystem::file_size(std::filesystem::path(fn.Get()), ec);
+        if (!ec && !volum::IrFileBytesAcceptable(bytes))
+        {
+          tooLarge.push_back(base);
+          continue;
+        }
       }
       const std::string leaf = LeafName(fn.Get());
       // Copy the picked file into the VoLum-owned content library and store the
@@ -1114,7 +1130,11 @@ private:
       mSel = (int)mItems.size() - 1;
       NotifyChanged();
     }
-    if (!skipped.empty())
+    if (!tooLarge.empty())
+      mError = tooLarge.size() == 1
+                 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
+                 : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");
+    else if (!skipped.empty())
       mError = skipped.size() == 1 ? ("\"" + skipped.front() + "\" already exists - skipped.")
                                    : (std::to_string(skipped.size()) + " names already existed - skipped.");
     else

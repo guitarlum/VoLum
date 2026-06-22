@@ -653,8 +653,10 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
     _UpdateVoLumLayout(pGfx);
   }
 
-  // F7: re-resolve the scene's custom IR cab (orphaned id -> baked cab fallback).
-  _VolumApplyActiveIr(s.activeIrId);
+  // F7: re-resolve each lane's custom IR cab (orphaned id -> baked cab fallback).
+  // The SUPPORT lane owns its own convolver, so restore it independently.
+  _VolumApplyActiveIr(s.activeIrId, false);
+  _VolumApplyActiveIr(s.supportActiveIrId, true);
 }
 
 void NeuralAmpModeler::_VolumSaveSettingsToFile()

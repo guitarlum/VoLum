@@ -17,7 +17,8 @@ enum EParams {
   kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig,
   kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
   kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
-  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan, kNumParams
+  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
+  kSupportIRToggle, kNumParams
 };
 
 TEST_CASE("EParam: core amp params at expected indices")
@@ -114,11 +115,14 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
   CHECK(kSupportNoiseGateActive == kSupportOutputLevel + 1);
   CHECK(kSupportEQActive == kSupportNoiseGateActive + 1);
   CHECK(kSupportAmpPan == kSupportEQActive + 1);
-  CHECK(kNumParams == kSupportAmpPan + 1);
+  // 1.2.0: per-lane support custom IR toggle appended at the very end.
+  CHECK(kSupportIRToggle == kSupportAmpPan + 1);
+  CHECK(kNumParams == kSupportIRToggle + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
 {
   // v0.9.0/effect-staging added 4 new params: DelayTone, DelayAge, DelayPingPong, ReverbSubMode.
-  CHECK(kNumParams == 71);
+  // 1.2.0 appended kSupportIRToggle (per-lane support custom IR): 71 -> 72.
+  CHECK(kNumParams == 72);
 }

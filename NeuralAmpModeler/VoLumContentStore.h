@@ -548,6 +548,8 @@ public:
     auto clearIr = [&id](VoLumAmpSettings& s) {
       if (s.activeIrId == id)
         s.activeIrId.clear();
+      if (s.supportActiveIrId == id)
+        s.supportActiveIrId.clear();
     };
     for (auto& sc : mReg.customScenes)
       clearIr(sc.second);

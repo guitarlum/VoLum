@@ -148,3 +148,50 @@ TEST_CASE("Processing plan disables support tone stack without a support model")
   CHECK_FALSE(plan.runSupportModel);
   CHECK_FALSE(plan.runSupportToneStack);
 }
+
+TEST_CASE("Processing plan runs the support IR only with a support model + IR present + toggle on")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+  // dual active + main + support models present, support IR toggle on, support IR loaded.
+  const auto plan = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam, false,
+                                             false, false, /*dualAmpActive=*/true, /*haveSupportModel=*/true,
+                                             /*supportToneStackActive=*/false, /*supportIrActive=*/true,
+                                             /*haveSupportIR=*/true);
+  CHECK(plan.runSupportModel);
+  CHECK(plan.runSupportIR);
+  // The MAIN convolver is independent (no main IR loaded here).
+  CHECK_FALSE(plan.runIR);
+}
+
+TEST_CASE("Processing plan refuses the support IR when its toggle is off or the IR is unavailable")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  // Toggle off.
+  const auto toggleOff = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam,
+                                                  false, false, false, true, true, false, /*supportIrActive=*/false,
+                                                  /*haveSupportIR=*/true);
+  CHECK(toggleOff.runSupportModel);
+  CHECK_FALSE(toggleOff.runSupportIR);
+
+  // Toggle on but no IR loaded.
+  const auto noIr = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam, false,
+                                             false, false, true, true, false, /*supportIrActive=*/true,
+                                             /*haveSupportIR=*/false);
+  CHECK(noIr.runSupportModel);
+  CHECK_FALSE(noIr.runSupportIR);
+}
+
+TEST_CASE("Processing plan never runs the support IR while the support model is silent")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+  // Support IR toggle on + IR present, but dual amp off -> no support model -> no support IR.
+  const auto plan = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam, false,
+                                             false, false, /*dualAmpActive=*/false, /*haveSupportModel=*/true, false,
+                                             /*supportIrActive=*/true, /*haveSupportIR=*/true);
+  CHECK_FALSE(plan.runSupportModel);
+  CHECK_FALSE(plan.runSupportIR);
+}

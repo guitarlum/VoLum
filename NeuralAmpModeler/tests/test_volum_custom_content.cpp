@@ -38,6 +38,41 @@ TEST_CASE("SnapChannel returns -1 for an empty/disabled speaker slot")
   REQUIRE(SnapChannel(std::vector<int>{}, 0) == -1);
 }
 
+TEST_CASE("ChannelStepIndex maps a channel number to its stepper position")
+{
+  using volum::custom::ChannelStepIndex;
+  // A Fryette-style amp that only ships channels {3,4}: channel 3 -> row 0, 4 -> row 1.
+  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 3) == 0);
+  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 4) == 1);
+  REQUIRE(ChannelStepIndex(std::vector<int>{1, 2, 3}, 3) == 2);
+}
+
+TEST_CASE("ChannelStepIndex defaults to row 0 when the channel is absent/empty")
+{
+  using volum::custom::ChannelStepIndex;
+  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 1) == 0); // not present -> 0
+  REQUIRE(ChannelStepIndex(std::vector<int>{}, 2) == 0); // empty slot -> 0
+}
+
+TEST_CASE("SnapChannel + ChannelStepIndex preserve a higher gain stage across a cab switch")
+{
+  using volum::custom::ChannelStepIndex;
+  // On channel 4, switch to a cab slot that also covers {3,4}: keep 4 (row 1),
+  // do NOT snap back to channel 3 / row 0 (item: cab/IR switch must keep channel).
+  const std::vector<int> newSlot{3, 4};
+  const int snapped = SnapChannel(newSlot, 4);
+  REQUIRE(snapped == 4);
+  REQUIRE(ChannelStepIndex(newSlot, snapped) == 1);
+}
+
+TEST_CASE("ShortCaptureLabel truncates long custom names to 5 chars + ellipsis")
+{
+  using volum::custom::ShortCaptureLabel;
+  REQUIRE(ShortCaptureLabel("OD") == "OD"); // short names pass through
+  REQUIRE(ShortCaptureLabel("BOOST") == "BOOST"); // exactly 5 -> unchanged
+  REQUIRE(ShortCaptureLabel("Klon Centaur") == std::string("Klon ") + "\u2026"); // > 5 -> clipped
+}
+
 using volum::custom::AmpSlotChannels;
 using volum::custom::AmpSlots;
 using volum::custom::CellFileCount;

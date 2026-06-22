@@ -537,7 +537,12 @@ private:
                    [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
     IText labelText(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM,
                     "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    // Clip to the label region so a long capture name (e.g. a custom PRE-NAM
+    // pedal) can never bleed into the pill to its right. The label is already
+    // truncated upstream; this is a belt-and-suspenders guard.
+    g.PathClipRegion(labelR);
     g.DrawText(labelText, slotLabel.c_str(), labelR);
+    g.PathClipRegion();
 
     _DrawMiniPill(g, pillR, active, bypassed && !active);
 

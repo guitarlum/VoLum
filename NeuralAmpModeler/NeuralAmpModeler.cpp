@@ -22,6 +22,7 @@
 
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumIrFileGuard.h"
 #include "VoLumLevelMute.h"
 #include "VoLumMasterSafety.h"
 #include "VoLumNanGuard.h"
@@ -391,6 +392,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kSupportNoiseGateActive)->InitBool("SupportNoiseGateActive", true);
   GetParam(kSupportEQActive)->InitBool("SupportToneStack", true);
   GetParam(kSupportAmpPan)->InitDouble("SupportAmpPan", 0.0, -1.0, 1.0, 0.01);
+#ifdef APP_API
+  GetParam(kSupportIRToggle)->InitBool("SupportIRToggle", false);
+#else
+  GetParam(kSupportIRToggle)->InitBool("SupportIRToggle", true);
+#endif
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
@@ -669,21 +675,27 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           // stepper (no model load).
           const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
           const int customLane = supportFocus ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
-          // Picking any baked cab on the MAIN lane retires an active Custom IR: the
+          // Picking any baked cab retires the focused lane's active Custom IR: the
           // two cab sources are mutually exclusive. Without this the IR keeps forcing
           // the amp to DIRECT/No-Cab on the next reconcile, so the chosen cab looked
           // like it was never remembered (item: custom amp forgets its speaker).
-          if (!supportFocus && !_VolumActiveScene().activeIrId.empty())
-            _VolumClearIR();
+          const std::string& laneIrId =
+            supportFocus ? _VolumActiveScene().supportActiveIrId : _VolumActiveScene().activeIrId;
+          if (!laneIrId.empty())
+            _VolumClearIR(supportFocus);
           if (customLane >= 0)
           {
             const int slot = (speakerIdx == 0) ? volum::custom::kDirectSlot : (speakerIdx - 1);
-            _VolumSetCustomChannelStepper(customLane, slot, supportFocus);
-            // Switching cab retargets the captured .nam for this lane: pick the
-            // slot's first channel and stage it (F6 audible custom amps).
+            // Switching cab retargets the captured .nam for this lane. Preserve
+            // the current gain stage when the new slot also covers it (item:
+            // cab/IR switch must not snap the channel back to 1); only fall back
+            // to the slot's first channel when the current stage is unavailable.
             const auto amp = volum::custom::CustomAmpAt(customLane);
             const auto chs = volum::custom::AmpSlotChannels(amp, slot);
-            const int ch = chs.empty() ? 1 : chs.front();
+            const int curCh = supportFocus ? mVolumCustomSupportChannel : mVolumCustomMainChannel;
+            const int ch = chs.empty() ? 1 : volum::custom::SnapChannel(chs, curCh);
+            const int chanPos = volum::custom::ChannelStepIndex(chs, ch);
+            _VolumSetCustomChannelStepper(customLane, slot, supportFocus, chanPos);
             if (supportFocus)
             {
               mVolumCustomSupportSlot = slot;
@@ -696,9 +708,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
               mVolumCustomMainChannel = ch;
               // Persist the pick into the focused custom scene (item: custom amps
               // must remember their last cab/channel). speakerIdx is the UI cab
-              // index; channelIdx is the stepper position (reset to 0 on cab switch).
+              // index; channelIdx is the stepper position.
               mVolumSpeakerIdx = speakerIdx;
-              mVolumChannelIdx = 0;
+              mVolumChannelIdx = chanPos;
               mVolumSettingsDirty = true;
               mVolumNeedsLoad.store(true);
             }
@@ -992,6 +1004,21 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       float stepTop = knobT + (knobDiam - stepH) / 2.f;
       auto* supChannelStep =
         new VoLumChannelStepControl(IRECT(cx, stepTop, cx + colW, stepTop + stepH), [this](int newIdx) {
+          // Custom SUPPORT partner: the stepper lists that amp's slot channels;
+          // map the selected row to a channel number and stage its .nam. The
+          // custom support loader resolves from mVolumCustomSupportChannel (not
+          // kSupportChannelIdx), so this must be set or the model never switches.
+          if (mVolumCustomSupportIdx >= 0)
+          {
+            const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
+            const auto chs = volum::custom::AmpSlotChannels(amp, mVolumCustomSupportSlot);
+            if (newIdx >= 0 && newIdx < (int)chs.size())
+              mVolumCustomSupportChannel = chs[(size_t)newIdx];
+            mVolumSupportNeedsLoad.store(true);
+            mVolumSettingsDirty = true;
+            _VolumMarkPresetDirty();
+            return;
+          }
           GetParam(kSupportChannelIdx)->Set(newIdx);
           SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
           mVolumSupportNeedsLoad.store(true);
@@ -1394,10 +1421,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             return;
           }
           const auto& irs = volum::custom::MockIRLibrary();
+          const bool support = pPlugin->_VolumSupportFocused();
           if (code >= 0 && code < (int)irs.size())
-            pPlugin->_VolumSelectIR(code); // stage the IR + enable + persist activeIrId
+            pPlugin->_VolumSelectIR(code, support); // stage IR into the focused lane + enable + persist
           else if (code == VoLumListMenuControl::kNone)
-            pPlugin->_VolumClearIR(); // back to baked cab
+            pPlugin->_VolumClearIR(support); // back to baked cab
         });
         pGraphics->AttachControl(irMenu, kCtrlTagVoLumIrMenu)->Hide(true);
       }
@@ -1484,7 +1512,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             {
               const auto& irs = volum::custom::MockIRLibrary();
               if (index >= 0 && index < (int)irs.size())
-                pPlugin->_VolumSelectIR(index); // switch to DIRECT capture + convolve + persist + dirty
+                pPlugin->_VolumSelectIR(index, pPlugin->_VolumSupportFocused()); // DIRECT + convolve + persist + dirty
             }
             else // Pedals: load the imported capture into its originating PRE slot
             {
@@ -1709,38 +1737,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
         if (mVolumExpandedSection == EVoLumSection::AMP)
         {
-          if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
-          {
-            const int delta = key.VK == kVK_LEFT ? -1 : 1;
-            const int channelCount =
-              !mVolumSupportChannelLabels.empty() ? static_cast<int>(mVolumSupportChannelLabels.size()) : 128;
-            const int current = std::clamp(GetParam(kSupportChannelIdx)->Int(), 0, channelCount - 1);
-            const int next = (current + delta + channelCount) % channelCount;
-            GetParam(kSupportChannelIdx)->Set(next);
-            SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
-            if (auto* pGfx = GetUI())
-              if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumSupportChannelStep))
-                stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumSupportChannelLabels, next);
-            mVolumSupportNeedsLoad.store(true);
-            mVolumSettingsDirty = true;
-            _VolumMarkPresetDirty();
-            return true;
-          }
+          // Drive the focused lane's stepper through the SAME callback a click
+          // uses (StepKeyboard). This keeps the keyboard and mouse paths in sync
+          // for both factory and custom amps - previously the keyboard updated
+          // only the index/label and never staged the new channel's .nam.
+          const int delta = (key.VK == kVK_LEFT) ? -1 : 1;
+          const bool supportFocus = GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport;
+          const int tag = supportFocus ? kCtrlTagVoLumSupportChannelStep : kCtrlTagVoLumChannelStep;
           if (auto* pGfx = GetUI())
-            if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
-            {
-              auto* s = stepper->As<VoLumChannelStepControl>();
-              int n = s->GetNumChannels();
-              if (n > 0)
-              {
-                int newCh = (key.VK == kVK_LEFT) ? (s->GetSelected() - 1 + n) % n : (s->GetSelected() + 1) % n;
-                s->SetChannels(mVolumChannelLabels, newCh);
-                mVolumChannelIdx = newCh;
-                mVolumNeedsLoad.store(true);
-                mVolumSettingsDirty = true;
-                _VolumMarkPresetDirty();
-              }
-            }
+            if (auto* stepper = pGfx->GetControlWithTag(tag))
+              stepper->As<VoLumChannelStepControl>()->StepKeyboard(delta);
           return true;
         }
         return false;
@@ -1803,7 +1809,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   const auto processingPlan = volum::MakeProcessingPlan(
     haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(), mIR != nullptr,
     GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
-    GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive);
+    GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive,
+    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr);
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
@@ -2182,6 +2189,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
     idTail.perAmpIrId[i] = mVolumAmpSettings[i].activeIrId;
+    idTail.perAmpSupportIrId[i] = mVolumAmpSettings[i].supportActiveIrId;
     idTail.perAmpSupportId[i] = mVolumAmpSettings[i].supportCustomId;
   }
   volum::PutChunkIdTail(chunk, idTail);
@@ -2685,6 +2693,13 @@ void NeuralAmpModeler::_ApplyDSPStaging()
       volum::dsp_staging::ClearLiveAndStagedPath(mIRPaths);
       mShouldRemoveIR = false;
     }
+    if (mShouldRemoveSupportIR)
+    {
+      mSupportIR = nullptr;
+      mStagedSupportIR = nullptr;
+      volum::dsp_staging::ClearLiveAndStagedPath(mSupportIRPaths);
+      mShouldRemoveSupportIR = false;
+    }
     for (int i = 0; i < 2; ++i)
     {
       if (mShouldRemovePreModel[i])
@@ -2723,6 +2738,12 @@ void NeuralAmpModeler::_ApplyDSPStaging()
       mIR = std::move(mStagedIR);
       mStagedIR = nullptr;
       volum::dsp_staging::CommitStagedPathOnApply(mIRPaths);
+    }
+    if (mStagedSupportIR != nullptr)
+    {
+      mSupportIR = std::move(mStagedSupportIR);
+      mStagedSupportIR = nullptr;
+      volum::dsp_staging::CommitStagedPathOnApply(mSupportIRPaths);
     }
   }
 
@@ -3871,8 +3892,14 @@ const char* NeuralAmpModeler::_VolumGetPreCaptureShortLabel(int captureIdx, cons
 {
   if (captureIdx >= volum::content::kCustomPedalIndexBase)
   {
-    mVolumPreCaptureLabelScratch = volum::custom::PedalNameByLegacy(captureIdx);
-    return mVolumPreCaptureLabelScratch.empty() ? fallback : mVolumPreCaptureLabelScratch.c_str();
+    // Custom pedal captures carry the user's full import name; the Amp-view quiet
+    // slot pill is tiny, so cap it like the factory short labels (curated 3-5
+    // chars) instead of letting a long name overflow into the next pill.
+    const std::string full = volum::custom::PedalNameByLegacy(captureIdx);
+    if (full.empty())
+      return fallback;
+    mVolumPreCaptureLabelScratch = volum::custom::ShortCaptureLabel(full);
+    return mVolumPreCaptureLabelScratch.c_str();
   }
   if (captureIdx <= 0 || captureIdx > static_cast<int>(mVolumPreCaptureShortLabels.size()))
     return fallback;
@@ -4124,7 +4151,8 @@ void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx, bool supportLane
   for (int s = 0; s < volum::custom::kNumCabSlots; s++)
     cab[s] = volum::custom::AmpSlotChannels(amp, s).empty() ? std::string() : amp.cabNames[(size_t)s];
   row->SetCabNames(cab[0], cab[1], cab[2]);
-  row->SetIrCab(false, "");
+  // Reflect this lane's own custom IR (per-lane IR), not a blanket clear.
+  _VolumReflectLaneIrChip(supportLane);
   // Default to the first populated slot (DIRECT -> No Cab index 0; cab slot s -> s+1).
   const auto slots = volum::custom::AmpSlots(amp);
   int sel = 0, selSlot = volum::custom::kDirectSlot;
@@ -4133,21 +4161,23 @@ void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx, bool supportLane
     selSlot = slots.front();
     sel = (selSlot == volum::custom::kDirectSlot) ? 0 : selSlot + 1;
   }
-  // MAIN lane: restore the cab/channel the amp last used (item: custom amps must
-  // remember their speaker). The preceding _VolumApplyAmpSettings already loaded
-  // mVolumSpeakerIdx (UI cab index) / mVolumChannelIdx (stepper position) from the
-  // focused scene. Honor them when the saved slot is still populated.
+  // Restore the cab/channel the focused lane last used (item: custom amps must
+  // remember their speaker, and refocusing a lane must not reset the other
+  // lane's channel). MAIN sources the slot from mVolumSpeakerIdx (UI cab index);
+  // SUPPORT sources it from mVolumCustomSupportSlot. Both derive the stepper
+  // position from the resolved gain stage so the row stays aligned.
   int chanPos = 0;
-  if (!supportLane)
   {
-    const int savedSel = mVolumSpeakerIdx;
-    const int candSlot = (savedSel == 0) ? volum::custom::kDirectSlot : (savedSel - 1);
-    if (savedSel >= 0 && !volum::custom::AmpSlotChannels(amp, candSlot).empty())
+    const int curSlot = supportLane
+                          ? mVolumCustomSupportSlot
+                          : ((mVolumSpeakerIdx == 0) ? volum::custom::kDirectSlot : (mVolumSpeakerIdx - 1));
+    const int curCh = supportLane ? mVolumCustomSupportChannel : mVolumCustomMainChannel;
+    const auto candChans = volum::custom::AmpSlotChannels(amp, curSlot);
+    if (!candChans.empty())
     {
-      selSlot = candSlot;
-      sel = savedSel;
-      const int nChans = (int)volum::custom::AmpSlotChannels(amp, candSlot).size();
-      chanPos = std::clamp(mVolumChannelIdx, 0, std::max(0, nChans - 1));
+      selSlot = curSlot;
+      sel = (curSlot == volum::custom::kDirectSlot) ? 0 : curSlot + 1;
+      chanPos = volum::custom::ChannelStepIndex(candChans, volum::custom::SnapChannel(candChans, curCh));
     }
   }
   row->SetSelected(sel);
@@ -4200,15 +4230,25 @@ volum::VoLumAmpSettings& NeuralAmpModeler::_VolumActiveScene()
   return mVolumAmpSettings[mVolumAmpIdx];
 }
 
-void NeuralAmpModeler::_VolumSelectIR(int irIdx)
+void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support)
 {
   const std::string id = volum::custom::IRIdAt(irIdx);
   const std::string rel = volum::custom::IRFileAt(irIdx);
   if (id.empty() || rel.empty())
     return;
   const auto abs = volum::content::GlobalContentStore().ResolveStored(rel);
+  // VoLum: reject unreasonably large IRs before decoding the whole file (the
+  // convolver only uses the first ~8192 samples). Interactive guard with a clear
+  // message; the restore path validated size at import time.
+  std::string sizeWhy;
+  if (!volum::IrFileSizeAcceptable(abs.string(), sizeWhy))
+  {
+    if (auto* pGfx = GetUI())
+      _ShowMessageBox(pGfx, sizeWhy.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
+    return;
+  }
   WDL_String p(abs.string().c_str());
-  const dsp::wav::LoadReturnCode loadRc = _StageIR(p);
+  const dsp::wav::LoadReturnCode loadRc = _StageIR(p, support);
   if (loadRc != dsp::wav::LoadReturnCode::SUCCESS)
   {
     // VoLum: surface why the IR did not activate instead of failing silently.
@@ -4219,46 +4259,86 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx)
     }
     return;
   }
-  // A custom IR replaces the baked cab: force the MAIN amp onto its DIRECT /
+  // A custom IR replaces the baked cab: force this lane's amp onto its DIRECT /
   // No-Cab capture so the IR convolves the raw amp (not amp + baked cab).
-  _VolumForceMainDirectCapture();
-  _VolumActiveScene().activeIrId = id;
-  GetParam(kIRToggle)->Set(1.0);
-  SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
-  if (auto* pGfx = GetUI())
-    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-    {
-      const auto& names = volum::custom::MockIRLibrary();
-      if (irIdx >= 0 && irIdx < (int)names.size())
-        spk->As<VoLumSpeakerRowControl>()->SetIrCab(true, names[(size_t)irIdx].c_str());
-    }
+  _VolumForceDirectCapture(support);
+  const int toggle = support ? kSupportIRToggle : kIRToggle;
+  if (support)
+    _VolumActiveScene().supportActiveIrId = id;
+  else
+    _VolumActiveScene().activeIrId = id;
+  GetParam(toggle)->Set(1.0);
+  SendParameterValueFromDelegate(toggle, GetParam(toggle)->GetNormalized(), true);
+  // The shared speaker row shows the focused lane's IR; only update it when this
+  // lane is the one on screen (a background restore of the other lane must not
+  // overwrite the visible chip).
+  if (support == _VolumSupportFocused())
+    if (auto* pGfx = GetUI())
+      if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+      {
+        const auto& names = volum::custom::MockIRLibrary();
+        if (irIdx >= 0 && irIdx < (int)names.size())
+          spk->As<VoLumSpeakerRowControl>()->SetIrCab(true, names[(size_t)irIdx].c_str());
+      }
   mVolumSettingsDirty = true;
   _VolumMarkPresetDirty();
 }
 
-// Switch the focused MAIN amp onto its DIRECT (No-Cab) capture so a custom IR
+// Switch the given lane's amp onto its DIRECT (No-Cab) capture so a custom IR
 // convolves the raw amp. Custom amps without a DIRECT capture keep their current
 // cab (best effort - there is no raw signal to convolve).
-void NeuralAmpModeler::_VolumForceMainDirectCapture()
+void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
 {
-  auto selectRow0 = [this]() {
+  const bool laneFocused = (support == _VolumSupportFocused());
+  auto selectRow0 = [this, laneFocused]() {
+    if (!laneFocused)
+      return; // the shared row shows the other lane; don't disturb it
     if (auto* pGfx = GetUI())
       if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
         spk->As<VoLumSpeakerRowControl>()->SetSelected(0);
   };
-  if (mVolumCustomMainIdx >= 0)
+  const int customLane = support ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
+  if (customLane >= 0)
   {
-    const auto amp = volum::custom::CustomAmpAt(mVolumCustomMainIdx);
+    const auto amp = volum::custom::CustomAmpAt(customLane);
     const auto chs = volum::custom::AmpSlotChannels(amp, volum::custom::kDirectSlot);
     if (chs.empty())
       return; // no raw capture to convolve; leave the current cab in place
-    mVolumCustomMainSlot = volum::custom::kDirectSlot;
-    mVolumCustomMainChannel = chs.front();
-    mVolumSpeakerIdx = 0;
-    mVolumChannelIdx = 0;
-    _VolumSetCustomChannelStepper(mVolumCustomMainIdx, volum::custom::kDirectSlot, false);
+    // Keep the current gain stage if DIRECT also covers it (item: selecting a
+    // custom IR while already on a DIRECT channel must not snap back to 1).
+    const int curCh = support ? mVolumCustomSupportChannel : mVolumCustomMainChannel;
+    const int snapped = volum::custom::SnapChannel(chs, curCh);
+    const int chanPos = volum::custom::ChannelStepIndex(chs, snapped);
+    if (support)
+    {
+      mVolumCustomSupportSlot = volum::custom::kDirectSlot;
+      mVolumCustomSupportChannel = snapped;
+      if (laneFocused)
+        _VolumSetCustomChannelStepper(customLane, volum::custom::kDirectSlot, true, chanPos);
+      mVolumSupportNeedsLoad.store(true);
+    }
+    else
+    {
+      mVolumCustomMainSlot = volum::custom::kDirectSlot;
+      mVolumCustomMainChannel = snapped;
+      mVolumSpeakerIdx = 0;
+      mVolumChannelIdx = chanPos;
+      _VolumSetCustomChannelStepper(customLane, volum::custom::kDirectSlot, false, chanPos);
+      mVolumNeedsLoad.store(true);
+    }
     selectRow0();
-    mVolumNeedsLoad.store(true);
+    return;
+  }
+  if (support)
+  {
+    if (GetParam(kSupportSpeakerIdx)->Int() != 0)
+    {
+      GetParam(kSupportSpeakerIdx)->Set(0.0);
+      SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
+      _VolumRefreshSupportChannels();
+      selectRow0();
+      mVolumSupportNeedsLoad.store(true);
+    }
     return;
   }
   if (mVolumSpeakerIdx != 0)
@@ -4271,42 +4351,58 @@ void NeuralAmpModeler::_VolumForceMainDirectCapture()
   }
 }
 
-void NeuralAmpModeler::_VolumClearIR()
+void NeuralAmpModeler::_VolumClearIR(bool support)
 {
-  mShouldRemoveIR = true; // audio thread drops mIR in _ApplyDSPStaging
-  _VolumActiveScene().activeIrId.clear();
-  GetParam(kIRToggle)->Set(0.0);
-  SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
-  if (auto* pGfx = GetUI())
-    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-      spk->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
+  // audio thread drops the lane's convolver in _ApplyDSPStaging
+  (support ? mShouldRemoveSupportIR : mShouldRemoveIR) = true;
+  if (support)
+    _VolumActiveScene().supportActiveIrId.clear();
+  else
+    _VolumActiveScene().activeIrId.clear();
+  const int toggle = support ? kSupportIRToggle : kIRToggle;
+  GetParam(toggle)->Set(0.0);
+  SendParameterValueFromDelegate(toggle, GetParam(toggle)->GetNormalized(), true);
+  if (support == _VolumSupportFocused())
+    if (auto* pGfx = GetUI())
+      if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+        spk->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
   mVolumSettingsDirty = true;
   _VolumMarkPresetDirty();
 }
 
-void NeuralAmpModeler::_VolumApplyActiveIr(const std::string& irId)
+void NeuralAmpModeler::_VolumApplyActiveIr(const std::string& irId, bool support)
 {
   const int idx = volum::custom::IRIndexById(irId);
   if (idx < 0)
   {
     // Empty or orphaned id (the IR was deleted / is missing on this machine):
     // drop the convolver so the baked cab takes over. No UI when headless.
-    mShouldRemoveIR = true;
-    if (auto* pGfx = GetUI())
-      if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-        spk->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
+    (support ? mShouldRemoveSupportIR : mShouldRemoveIR) = true;
+    if (support == _VolumSupportFocused())
+      if (auto* pGfx = GetUI())
+        if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+          spk->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
     return;
   }
-  _VolumSelectIR(idx);
+  _VolumSelectIR(idx, support);
 }
 
 void NeuralAmpModeler::_VolumReconcileActiveIr()
 {
-  const std::string id = _VolumActiveScene().activeIrId;
+  auto& scene = _VolumActiveScene();
+  // SUPPORT lane: an orphaned id just drops the support convolver (the baked
+  // cab / DIRECT capture takes over). Reconcile it independently of the row.
+  if (!scene.supportActiveIrId.empty() && volum::custom::IRIndexById(scene.supportActiveIrId) < 0)
+    _VolumClearIR(true);
+
+  const std::string id = scene.activeIrId;
+  // Only trust the visible IR chip as a signal for the MAIN lane when MAIN is
+  // the focused lane (the shared row otherwise shows the support lane).
   bool uiActive = false;
-  if (auto* pGfx = GetUI())
-    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-      uiActive = spk->As<VoLumSpeakerRowControl>()->IsIrCabActive();
+  if (!_VolumSupportFocused())
+    if (auto* pGfx = GetUI())
+      if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
+        uiActive = spk->As<VoLumSpeakerRowControl>()->IsIrCabActive();
   // Nothing was using a custom IR.
   if (id.empty() && !uiActive)
     return;
@@ -4645,6 +4741,26 @@ void NeuralAmpModeler::_VolumApplyFocusedLaneCabs()
     row->SetSelected(mVolumSpeakerIdx);
     _VolumRefreshChannels();
   }
+  // Factory amps can also carry a per-lane custom IR; reflect the focused lane's.
+  _VolumReflectLaneIrChip(supportFocus);
+}
+
+void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
+  if (!spkCtrl)
+    return;
+  auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
+  const std::string irId = support ? _VolumActiveScene().supportActiveIrId : _VolumActiveScene().activeIrId;
+  const int irIdx = irId.empty() ? -1 : volum::custom::IRIndexById(irId);
+  const auto& irNames = volum::custom::MockIRLibrary();
+  if (irIdx >= 0 && irIdx < static_cast<int>(irNames.size()))
+    row->SetIrCab(true, irNames[static_cast<size_t>(irIdx)].c_str());
+  else
+    row->SetIrCab(false, "");
 }
 
 void NeuralAmpModeler::_VolumRefreshSupportChannels()
@@ -4757,7 +4873,7 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
 
 #include "VoLumSettings.inc.cpp"
 
-dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
+dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bool support)
 {
   const double sampleRate = GetSampleRate();
   dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
@@ -4777,17 +4893,20 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 
   {
     // Publish the staged IR (and its path) under the staging mutex so the audio thread
-    // sees a fully-constructed object or none at all. mIRPaths.live commits in _ApplyDSPStaging.
+    // sees a fully-constructed object or none at all. Live path commits in _ApplyDSPStaging.
+    // The MAIN amp and the dual-amp SUPPORT lane stage into separate convolvers.
     std::lock_guard<std::mutex> lock(mStagingMutex);
+    auto& stagedSlot = support ? mStagedSupportIR : mStagedIR;
+    auto& pathPair = support ? mSupportIRPaths : mIRPaths;
     if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
     {
-      mStagedIR = std::move(stagedIR);
-      volum::dsp_staging::StagePathOnSuccess(mIRPaths, irPath);
+      stagedSlot = std::move(stagedIR);
+      volum::dsp_staging::StagePathOnSuccess(pathPair, irPath);
     }
     else
     {
-      mStagedIR = nullptr;
-      volum::dsp_staging::ClearStagedPath(mIRPaths);
+      stagedSlot = nullptr;
+      volum::dsp_staging::ClearStagedPath(pathPair);
     }
   }
 

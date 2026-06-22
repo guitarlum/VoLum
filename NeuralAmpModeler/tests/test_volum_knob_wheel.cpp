@@ -16,7 +16,8 @@ enum EParams {
   kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig,
   kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
   kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
-  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan, kNumParams
+  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
+  kSupportIRToggle, kNumParams
 };
 
 #include "../VoLumKeyboardModel.h"

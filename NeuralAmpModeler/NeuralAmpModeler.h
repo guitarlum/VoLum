@@ -137,6 +137,9 @@ enum EParams
   kSupportNoiseGateActive,
   kSupportEQActive,
   kSupportAmpPan,
+  // Per-lane custom IR for the dual-amp SUPPORT lane (mirrors kIRToggle for the
+  // MAIN amp). Appended at the end to keep all prior serialized indices stable.
+  kSupportIRToggle,
   kNumParams
 };
 
@@ -365,6 +368,9 @@ public:
   void _VolumSetSupportAmp(int ampIdx);
   void _VolumSetSupportCustom(int customIdx);
   void _VolumApplyFocusedLaneCabs();
+  // Push the given lane's active custom IR onto the shared speaker row's IR chip
+  // (empty/orphaned id -> chip off). Per-lane custom IR display.
+  void _VolumReflectLaneIrChip(bool support);
   void _VolumSaveCurrentToSettings();
   void _VolumSavePreToSlot(volum::VoLumAmpSettings& s);
   void _VolumSavePostToSlot(volum::VoLumAmpSettings& s);
@@ -455,19 +461,23 @@ public:
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
   void _VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane = false, int selected = 0);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp
-  // slot, or the focused custom amp's scene). activeIrId/supportCustomId live here.
+  // slot, or the focused custom amp's scene). activeIrId/supportActiveIrId/
+  // supportCustomId all live here (support fields belong to the MAIN scene).
   volum::VoLumAmpSettings& _VolumActiveScene();
-  // Stage the custom IR at library index irIdx into the convolver, enable the IR
-  // toggle, record activeIrId on the active scene, and reflect it in the cab row.
-  void _VolumSelectIR(int irIdx);
-  // Drop the custom IR (back to the baked cab) and clear activeIrId.
-  void _VolumClearIR();
-  // Re-resolve a scene/preset's activeIrId on recall: stage it, or fall back to
-  // the baked cab when the id is empty/orphaned (the referenced IR was deleted).
-  void _VolumApplyActiveIr(const std::string& irId);
-  // Force the focused MAIN amp onto its DIRECT / No-Cab capture so a custom IR
+  // True when the dual-amp SUPPORT lane currently owns the shared cab/IR controls.
+  bool _VolumSupportFocused() { return GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport; }
+  // Stage the custom IR at library index irIdx into the given lane's convolver,
+  // enable that lane's IR toggle, record its IR id on the active scene, and
+  // reflect it in the cab row when that lane is the one displayed.
+  void _VolumSelectIR(int irIdx, bool support);
+  // Drop the given lane's custom IR (back to the baked cab) and clear its IR id.
+  void _VolumClearIR(bool support);
+  // Re-resolve a scene/preset's IR id for a lane on recall: stage it, or fall back
+  // to the baked cab when the id is empty/orphaned (the referenced IR was deleted).
+  void _VolumApplyActiveIr(const std::string& irId, bool support);
+  // Force the given lane's amp onto its DIRECT / No-Cab capture so a custom IR
   // convolves the raw amp instead of an already-cabbed signal.
-  void _VolumForceMainDirectCapture();
+  void _VolumForceDirectCapture(bool support);
   // Standalone session restore (custom MAIN focus + active preset), run once when
   // the UI opens so the cab controls exist for a custom-amp re-focus.
   void _VolumRestoreSessionSelection();
@@ -682,7 +692,9 @@ private:
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
   // it wasn't successful.
-  dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath);
+  // support=true stages into the dual-amp SUPPORT lane's convolver (mSupportIR);
+  // false targets the MAIN amp's convolver (mIR). Per-lane custom IR (spec 3.2).
+  dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath, bool support = false);
 
   bool _HaveModel() const { return this->mModel != nullptr; };
   // Prepare the input & output buffers
@@ -757,18 +769,22 @@ private:
   std::unique_ptr<ResamplingNAM> mModel;
   std::unique_ptr<ResamplingNAM> mSupportModel;
   std::unique_ptr<ResamplingNAM> mPreModel[2];
-  // And the IR
+  // And the IR. The MAIN amp and the dual-amp SUPPORT lane each get their own
+  // convolver so a custom IR is local to one lane (per-lane custom IR, spec 3.2).
   std::unique_ptr<dsp::ImpulseResponse> mIR;
+  std::unique_ptr<dsp::ImpulseResponse> mSupportIR;
   // Manages switching what DSP is being used.
   std::unique_ptr<ResamplingNAM> mStagedModel;
   std::unique_ptr<ResamplingNAM> mStagedSupportModel;
   std::unique_ptr<ResamplingNAM> mStagedPreModel[2];
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
+  std::unique_ptr<dsp::ImpulseResponse> mStagedSupportIR;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
   std::atomic<bool> mShouldRemoveSupportModel = false;
   std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
+  std::atomic<bool> mShouldRemoveSupportIR = false;
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;
@@ -805,6 +821,7 @@ private:
   // VoLum: live/staged path pairs commit with staged models/IR in _ApplyDSPStaging (see VoLumDspStagingWdl.h).
   volum::dsp_staging::WdlStagedPathPair mNAMPaths;
   volum::dsp_staging::WdlStagedPathPair mIRPaths;
+  volum::dsp_staging::WdlStagedPathPair mSupportIRPaths;
 
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 

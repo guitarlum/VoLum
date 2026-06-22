@@ -426,6 +426,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     // id; empty == baked cab) so a factory amp's chosen IR survives a standalone
     // restart. Additive optional key; older readers ignore it.
     a["activeIrId"] = s.activeIrId;
+    // VoLum 1.2.0: per-lane support-amp custom IR (additive; empty == baked cab).
+    a["supportActiveIrId"] = s.supportActiveIrId;
     a["preCompActive"] = s.preCompActive;
     a["preCompAmount"] = s.preCompAmount;
     a["preCompRatio"] = s.preCompRatio;
@@ -668,6 +670,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         // keep the default empty id == baked cab).
         if (a.contains("activeIrId") && a["activeIrId"].is_string())
           s.activeIrId = a["activeIrId"].get<std::string>();
+        if (a.contains("supportActiveIrId") && a["supportActiveIrId"].is_string())
+          s.supportActiveIrId = a["supportActiveIrId"].get<std::string>();
         loadBool(a, "preCompActive", s.preCompActive, defaults.preCompActive);
         loadDouble(a, "preCompAmount", s.preCompAmount, 0.0, 10.0, defaults.preCompAmount);
         loadDouble(a, "preCompRatio", s.preCompRatio, 1.0, 20.0, defaults.preCompRatio);

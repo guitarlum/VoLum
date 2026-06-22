@@ -151,6 +151,12 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   if (processingPlan.runSupportToneStack && mSupportToneStack != nullptr)
     supportPostPointers = mSupportToneStack->Process(supportPostPointers, numChannelsInternal, nFrames);
 
+  // Per-lane custom IR: convolve the SUPPORT amp's own cab (DIRECT capture) here,
+  // mirroring the MAIN lane (tone stack -> IR -> high-pass). Independent of the
+  // MAIN convolver so a custom IR is local to one lane (spec 3.2).
+  if (processingPlan.runSupportIR)
+    supportPostPointers = mSupportIR->Process(supportPostPointers, numChannelsInternal, nFrames);
+
   supportPostPointers = mSupportHighPass.Process(supportPostPointers, numChannelsInternal, nFrames);
   return supportPostPointers[0];
 }
