@@ -44,7 +44,10 @@ namespace volum
 
 // 'V''L''I''D' - distinctive enough that a stray trailing int won't collide.
 inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
-inline constexpr int kVoLumIdTailSchema = 1;
+// Schema 2 (1.2.0): added per-amp support-lane custom IR id ("supIr"). The tail
+// is a self-describing JSON object, so the bump is informational - both old and
+// new readers tolerate missing/extra keys; nothing branches on the version.
+inline constexpr int kVoLumIdTailSchema = 2;
 
 struct ChunkIdTail
 {
@@ -52,6 +55,7 @@ struct ChunkIdTail
   std::string customSupportId; // custom dual SUPPORT partner id ("" = factory/none)
   std::string activePresetId; // recalled preset id for the focused amp ("" = none)
   std::string perAmpIrId[kAmpCount]; // factory amp -> active custom IR cab id
+  std::string perAmpSupportIrId[kAmpCount]; // factory amp -> SUPPORT lane custom IR id
   std::string perAmpSupportId[kAmpCount]; // factory amp -> custom support partner id
 };
 
@@ -64,7 +68,7 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
   j["activePresetId"] = t.activePresetId;
   nlohmann::json perAmp = nlohmann::json::array();
   for (int i = 0; i < kAmpCount; ++i)
-    perAmp.push_back({{"ir", t.perAmpIrId[i]}, {"sup", t.perAmpSupportId[i]}});
+    perAmp.push_back({{"ir", t.perAmpIrId[i]}, {"supIr", t.perAmpSupportIrId[i]}, {"sup", t.perAmpSupportId[i]}});
   j["perAmp"] = perAmp;
   return j;
 }
@@ -92,6 +96,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         continue;
       if (arr[i].contains("ir"))
         t.perAmpIrId[i] = str(arr[i]["ir"]);
+      if (arr[i].contains("supIr"))
+        t.perAmpSupportIrId[i] = str(arr[i]["supIr"]);
       if (arr[i].contains("sup"))
         t.perAmpSupportId[i] = str(arr[i]["sup"]);
     }

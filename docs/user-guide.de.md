@@ -85,6 +85,8 @@ Dual Amp kombiniert den Haupt-Amp mit einem Support-Amp.
 
 Die Support-Spur hat einen `Ø`-Polaritätsschalter. Er ist bei neuen Dual-Amp-Setups standardmäßig aktiv, weil manche mittigen Amp-Stacks so besser summieren. Wenn ein Stack dünn oder phasig klingt, schalte `Ø` um und prüfe danach Speaker und Kanal beider Spuren.
 
+Jede Spur behält ihren eigenen Speaker/Cab, Kanal und ihre eigene Custom IR. Fokussiere eine Spur und stelle dann deren Cab oder Custom IR ein; die andere Spur bleibt unverändert.
+
 VoLum gleicht MAIN- und SUPPORT-NAM-Latenzen aus, bevor die Spuren gepannt und summiert werden.
 
 Der **OUTPUT**-Regler der SUPPORT-Spur schaltet diese Spur bei der ganz linken Einstellung `-∞ dB` ebenfalls vollständig stumm.
@@ -132,7 +134,7 @@ VoLum kann eigene NAM-Amp-Captures, Impulsantworten und Pedal-Captures laden. Im
 
 ![VoLum Builder für eigene Amps](user-guide-custom-amp.png)
 
-**Eigene IRs.** Eine Custom IR faltet das **DIRECT**-Capture (nur Amp) des Amps — den rohen Amp ohne eingebackenen Speaker. Sie ist für einen eigenen Amp gedacht, der ein DIRECT-Capture enthält; die Auswahl des Cabs **Custom IR** schaltet den Amp zuerst auf sein DIRECT/No-Cab-Capture. Ein eigener Amp, der nur aus vollen Amp-plus-Cab-Captures gebaut ist, hat kein rohes Signal, das eine IR formen könnte. Wähle in der Speaker-Reihe das Cab **Custom IR** und importiere dann über dessen Dropdown eine `.wav`-Impulsantwort.
+**Eigene IRs.** Eine Custom IR faltet das **DIRECT**-Capture (nur Amp) des Amps — den rohen Amp ohne eingebackenen Speaker. Sie ist für einen eigenen Amp gedacht, der ein DIRECT-Capture enthält; die Auswahl des Cabs **Custom IR** schaltet den Amp zuerst auf sein DIRECT/No-Cab-Capture. Ein eigener Amp, der nur aus vollen Amp-plus-Cab-Captures gebaut ist, hat kein rohes Signal, das eine IR formen könnte. Wähle in der Speaker-Reihe das Cab **Custom IR** und importiere dann über dessen Dropdown eine `.wav`-Impulsantwort. Die Custom IR gehört zur **fokussierten Spur**: im Dual-Amp-Modus haben die MAIN- und die SUPPORT-Spur jeweils ihre eigene Custom IR, das Ändern der einen wirkt sich nie auf die andere aus. Impulsantworten sind kurze Box-Captures — nur der erste Sekundenbruchteil wird genutzt — daher lehnt VoLum sehr große WAV-Dateien (z. B. ein versehentlich gewählter ganzer Song) mit einer Meldung ab, statt sie zu laden.
 
 ![VoLum Verwaltung eigener IRs](user-guide-custom-ir.png)
 

@@ -655,6 +655,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
         mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
+        mVolumAmpSettings[i].supportActiveIrId = idTail.perAmpSupportIrId[i];
         mVolumAmpSettings[i].supportCustomId = idTail.perAmpSupportId[i];
       }
       mVolumActivePresetId = idTail.activePresetId;

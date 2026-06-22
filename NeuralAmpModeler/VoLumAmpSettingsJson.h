@@ -136,6 +136,7 @@ inline nlohmann::json AmpSettingsToJson(const VoLumAmpSettings& s)
   WriteDualAmpUserSettings(a, s);
   a.update(PostBlockToJson(s));
   a["activeIrId"] = s.activeIrId;
+  a["supportActiveIrId"] = s.supportActiveIrId;
   a["supportCustomId"] = s.supportCustomId;
   return a;
 }
@@ -152,6 +153,8 @@ inline bool AmpSettingsFromJson(const nlohmann::json& a, VoLumAmpSettings& s)
   PostBlockFromJson(a, s);
   if (a.contains("activeIrId") && a["activeIrId"].is_string())
     s.activeIrId = a["activeIrId"].get<std::string>();
+  if (a.contains("supportActiveIrId") && a["supportActiveIrId"].is_string())
+    s.supportActiveIrId = a["supportActiveIrId"].get<std::string>();
   if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
     s.supportCustomId = a["supportCustomId"].get<std::string>();
   return healed;

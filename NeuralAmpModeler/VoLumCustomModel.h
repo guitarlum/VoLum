@@ -341,6 +341,29 @@ inline int SnapChannel(const std::vector<int>& availableChannels, int currentCha
   return availableChannels.front();
 }
 
+// Stepper position (0-based index) of `channel` within availableChannels, or 0
+// when it is not present / the list is empty. Pairs with SnapChannel so a cab or
+// IR switch keeps the channel stepper row aligned with the resolved gain stage
+// instead of snapping back to position 0.
+inline int ChannelStepIndex(const std::vector<int>& availableChannels, int channel)
+{
+  for (int i = 0; i < static_cast<int>(availableChannels.size()); ++i)
+    if (availableChannels[static_cast<size_t>(i)] == channel)
+      return i;
+  return 0;
+}
+
+// Short pill label for a custom capture name. Names longer than maxChars bytes
+// are clipped to maxChars + a single-glyph ellipsis so they fit the tiny Amp-view
+// quiet-slot pill instead of overflowing into the neighbouring pill. Curated
+// factory short labels are already <=5 chars, so this only ever trims custom ones.
+inline std::string ShortCaptureLabel(const std::string& name, std::size_t maxChars = 5)
+{
+  if (name.size() <= maxChars)
+    return name;
+  return name.substr(0, maxChars) + "\u2026";
+}
+
 // Case-insensitive name comparison + within-list uniqueness check. Names must be
 // unique within each content type (IRs among IRs, pedals among pedals, presets
 // among an amp's presets); cross-type duplicates are allowed.

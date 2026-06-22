@@ -680,6 +680,7 @@ TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
   in.activePresetId = "preset_xyz";
   in.perAmpIrId[0] = "ir_one";
   in.perAmpIrId[volum::kAmpCount - 1] = "ir_last";
+  in.perAmpSupportIrId[0] = "ir_sup_one";
   in.perAmpSupportId[1] = "amp_sup_ghi";
 
   MemoryChunk chunk;
@@ -695,9 +696,11 @@ TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
   CHECK(out.activePresetId == in.activePresetId);
   CHECK(out.perAmpIrId[0] == "ir_one");
   CHECK(out.perAmpIrId[volum::kAmpCount - 1] == "ir_last");
+  CHECK(out.perAmpSupportIrId[0] == "ir_sup_one");
   CHECK(out.perAmpSupportId[1] == "amp_sup_ghi");
   // Untouched slots stay empty.
   CHECK(out.perAmpIrId[1].empty());
+  CHECK(out.perAmpSupportIrId[1].empty());
   CHECK(out.perAmpSupportId[0].empty());
 }
 
@@ -789,6 +792,38 @@ TEST_CASE("Empty id tail round-trips (all refs blank)")
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
     CHECK(out.perAmpIrId[i].empty());
+    CHECK(out.perAmpSupportIrId[i].empty());
     CHECK(out.perAmpSupportId[i].empty());
   }
+}
+
+// A schema-1 id tail (1.2.0 pre-support-IR) has no "supIr" per-amp key. A current
+// reader must load it cleanly, leaving every supportActiveIrId empty.
+TEST_CASE("Id tail without supIr keys (older schema) reads support IR ids empty")
+{
+  // Hand-build a schema-1 perAmp entry (only ir + sup, no supIr).
+  nlohmann::json j;
+  j["v"] = 1;
+  j["customMainId"] = "";
+  j["customSupportId"] = "";
+  j["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    perAmp.push_back({{"ir", i == 0 ? "ir_legacy" : ""}, {"sup", ""}});
+  j["perAmp"] = perAmp;
+  const std::string body = j.dump();
+
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.perAmpIrId[0] == "ir_legacy");
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    CHECK(out.perAmpSupportIrId[i].empty());
 }

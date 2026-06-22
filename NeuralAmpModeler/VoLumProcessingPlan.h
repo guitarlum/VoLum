@@ -15,6 +15,7 @@ struct ProcessingPlan
   bool runToneStack = false;
   bool runSupportToneStack = false;
   bool runIR = false;
+  bool runSupportIR = false;
   bool runDelay = false;
   bool runReverb = false;
   bool silenceForTuner = false;
@@ -24,7 +25,8 @@ inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActiv
                                          bool haveIR, bool preCompActive, const bool preNamActive[2],
                                          const bool havePreNam[2], bool delayActive, bool reverbActive,
                                          bool tunerActive, bool dualAmpActive = false,
-                                         bool haveSupportModel = false, bool supportToneStackActive = false)
+                                         bool haveSupportModel = false, bool supportToneStackActive = false,
+                                         bool supportIrActive = false, bool haveSupportIR = false)
 {
   ProcessingPlan plan;
   plan.runPreComp = preCompActive;
@@ -38,6 +40,7 @@ inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActiv
   plan.runToneStack = haveMainModel && toneStackActive;
   plan.runSupportToneStack = plan.runSupportModel && supportToneStackActive;
   plan.runIR = haveMainModel && irActive && haveIR;
+  plan.runSupportIR = plan.runSupportModel && supportIrActive && haveSupportIR;
   plan.runDelay = (haveMainModel || plan.runSupportModel) && delayActive;
   plan.runReverb = (haveMainModel || plan.runSupportModel) && reverbActive;
   plan.silenceForTuner = tunerActive;

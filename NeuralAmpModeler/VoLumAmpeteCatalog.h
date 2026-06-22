@@ -212,6 +212,11 @@ struct VoLumAmpSettings
   // activeIrId: when non-empty, the amp's DIRECT capture is run through this
   // custom IR cab instead of a baked cab (see VoLumProcessingPlan / spec 3.2).
   std::string activeIrId;
+  // supportActiveIrId: the same, for the dual-amp SUPPORT lane. The SUPPORT lane
+  // owns its own convolver (mSupportIR), so its custom IR is independent of the
+  // MAIN lane's activeIrId (per-lane custom IR). Lives on the focused MAIN scene
+  // alongside the other dual-amp partner fields (supportCustomId, etc.).
+  std::string supportActiveIrId;
   // supportCustomId: when non-empty, the dual-amp SUPPORT partner is the custom
   // amp with this id (takes precedence over the factory supportAmpIdx).
   std::string supportCustomId;

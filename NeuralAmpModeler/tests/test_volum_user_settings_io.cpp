@@ -877,3 +877,41 @@ TEST_CASE("User settings IO tolerates settings without activeIrId")
   REQUIRE_FALSE(healed);
   CHECK(loaded[0].activeIrId.empty());
 }
+
+// VoLum 1.2.0: the dual-amp SUPPORT lane owns its own custom IR; that id must
+// round-trip independently of the MAIN lane's activeIrId.
+TEST_CASE("User settings IO round-trips per-amp supportActiveIrId")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].activeIrId = "ir_main";
+  amps[0].supportActiveIrId = "ir_support";
+  amps[1].supportActiveIrId = ""; // support baked cab
+
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE(j["amps"][volum::kAmps[0].folderName]["supportActiveIrId"] == "ir_support");
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(loaded[0].activeIrId == "ir_main");
+  CHECK(loaded[0].supportActiveIrId == "ir_support");
+  CHECK(loaded[1].supportActiveIrId.empty());
+}
+
+// An older settings file (no supportActiveIrId key) loads cleanly with the
+// default empty id and no heal flag (additive forward tolerance).
+TEST_CASE("User settings IO tolerates settings without supportActiveIrId")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].supportActiveIrId = "ir_will_be_stripped";
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  for (auto& item : j["amps"].items())
+    item.value().erase("supportActiveIrId");
+
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(loaded[0].supportActiveIrId.empty());
+}

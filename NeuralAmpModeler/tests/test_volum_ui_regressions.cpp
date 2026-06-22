@@ -79,6 +79,17 @@ TEST_CASE("Collapsed PRE slots show selected pedal short labels")
   RequireContains(triptych, "IText labelText(10.f");
 }
 
+TEST_CASE("Long custom prepedal names are truncated and clipped in the quiet slot")
+{
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+
+  // Custom prepedal short label is capped (item: long names overflowed the pill).
+  RequireContains(source, "volum::custom::ShortCaptureLabel(full);");
+  // Belt-and-suspenders: the quiet-slot label draw is clipped to its own rect.
+  RequireContains(triptych, "g.PathClipRegion(labelR);");
+}
+
 TEST_CASE("Dual amp pan knobs only show in AMP view")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
@@ -89,13 +100,22 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
   RequireContains(source, "Pan the MAIN amp lane.");
 }
 
-TEST_CASE("Support amp keyboard channel navigation refreshes support stepper")
+TEST_CASE("Keyboard channel navigation routes through the focused lane's stepper callback")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string keyboardNav = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardNav.h");
 
-  RequireContains(source, "GetControlWithTag(kCtrlTagVoLumSupportChannelStep)");
-  RequireContains(source, "SetChannels(mVolumSupportChannelLabels, next)");
-  RequireContains(source, "mVolumSettingsDirty = true;");
+  // Left/Right pick the focused lane's stepper and drive StepKeyboard, which
+  // fires the SAME callback a click would (so keyboard + mouse cannot diverge,
+  // and both stage the new channel's .nam). Regression: the old keyboard path
+  // only relabelled the stepper and never loaded the custom channel.
+  RequireContains(source, "supportFocus ? kCtrlTagVoLumSupportChannelStep : kCtrlTagVoLumChannelStep;");
+  RequireContains(source, "stepper->As<VoLumChannelStepControl>()->StepKeyboard(delta);");
+  RequireContains(keyboardNav, "void StepKeyboard(int delta)");
+  RequireContains(keyboardNav, "if (mCallback)");
+  // The custom SUPPORT stepper callback must update the custom support channel
+  // (the loader resolves the .nam from mVolumCustomSupportChannel, not the param).
+  RequireContains(source, "mVolumCustomSupportChannel = chs[(size_t)newIdx];");
 }
 
 TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
@@ -520,7 +540,7 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
   const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
 
-  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mIRPaths, irPath);");
+  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(pathPair, irPath);");
   RequireContains(source, "volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);");
   RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);");
   RequireContains(source, "_VolumProcessMainAmpChain");
