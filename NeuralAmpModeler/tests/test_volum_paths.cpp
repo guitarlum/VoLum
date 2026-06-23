@@ -57,6 +57,45 @@ TEST_CASE("Diezel Herbert Mk1 rig files expose 4 channels for every speaker mode
   }
 }
 
+TEST_CASE("Every factory amp has a uniform channel set across all speaker cabs")
+{
+  // INVARIANT that underpins the 1.2.0 channel-first redesign: because every
+  // bundled amp exposes the same gain stages for AMP/G12/G65/V30, the persisted
+  // factory channelIdx (a per-speaker index) is identical to an amp-wide index --
+  // so switching the UI to channel-first navigation needs NO serialization
+  // migration and old 1.0/1.1 projects load unchanged. If a future amp ships a
+  // non-uniform channel set, this test fails and forces a speaker-snap + a
+  // migration decision before release.
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(__FILE__).parent_path().parent_path().parent_path() / "rigs";
+  REQUIRE(fs::is_directory(root));
+
+  for (const auto& amp : volum::kAmps)
+  {
+    REQUIRE(fs::is_directory(root / amp.folderName));
+    std::vector<std::string> reference;
+    bool haveReference = false;
+    for (const char* prefix : volum::kSpeakerPrefixes)
+    {
+      const auto channels = volum::DiscoverChannels(root, amp.folderName, prefix);
+      std::vector<std::string> labels;
+      for (const auto& c : channels)
+        labels.push_back(c.label);
+      INFO(amp.folderName << " / " << prefix);
+      REQUIRE_FALSE(labels.empty()); // every cab has at least one gain stage
+      if (!haveReference)
+      {
+        reference = labels;
+        haveReference = true;
+      }
+      else
+      {
+        CHECK(labels == reference); // same gain stages for every cab
+      }
+    }
+  }
+}
+
 #ifdef _WIN32
 TEST_CASE("VolumUserSettingsFilePath uses LOCALAPPDATA")
 {

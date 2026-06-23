@@ -220,6 +220,63 @@ inline std::vector<int> AssignedChannels(const CustomAmp& amp)
   return out;
 }
 
+// Channel-first navigation helpers (1.2.0 redesign). The amp is the entry point;
+// the gain-stage channel is the primary sub-axis; the speaker/cab row only offers
+// what actually exists for the selected channel. These invert AmpSlotChannels:
+// given a channel, which slots carry it. For factory amps the channel set is
+// uniform across cabs (verified by test_volum_paths), so this concern is custom-
+// amp specific -- a user can assign, say, DIRECT only on channel 1 and a cab only
+// on channel 2.
+
+// Slots (DIRECT first, then cab slots 0..2) that carry an assigned capture for
+// `channel`, in canonical row order. Empty when the channel is unassigned.
+inline std::vector<int> SlotsForChannel(const CustomAmp& amp, int channel)
+{
+  std::vector<int> out;
+  auto has = [&](int slot) {
+    for (const auto& f : amp.files)
+      if (FileAssigned(f) && f.slot == slot && f.channel == channel)
+        return true;
+    return false;
+  };
+  if (has(kDirectSlot))
+    out.push_back(kDirectSlot);
+  for (int s = 0; s < kNumCabSlots; s++)
+    if (has(s))
+      out.push_back(s);
+  return out;
+}
+
+// True when the amp has a DIRECT (cab-less) capture FOR THIS CHANNEL. The Custom
+// IR cab convolves the DIRECT signal and the "No Cab" row plays it raw, so both
+// are only reachable on channels that actually own a DIRECT capture. (Amp-wide
+// HasDirectCapture is too coarse: an amp can have DIRECT on channel 1 only.)
+inline bool ChannelHasDirect(const CustomAmp& amp, int channel)
+{
+  for (const auto& f : amp.files)
+    if (FileAssigned(f) && f.slot == kDirectSlot && f.channel == channel)
+      return true;
+  return false;
+}
+
+// Slot to settle on when the channel changes. Keep the current slot if it still
+// carries the new channel; otherwise snap to the first available real CAB slot;
+// otherwise DIRECT ("No Cab") as the last resort; otherwise -2 (kUnassignedSlot)
+// when the channel has no captures at all (caller should treat as "no change").
+inline int SnapSlotForChannel(const CustomAmp& amp, int channel, int currentSlot)
+{
+  const std::vector<int> slots = SlotsForChannel(amp, channel);
+  if (slots.empty())
+    return kUnassignedSlot;
+  for (int s : slots)
+    if (s == currentSlot)
+      return currentSlot; // current cab still valid for this channel
+  for (int s : slots)
+    if (s != kDirectSlot)
+      return s; // prefer a real cab
+  return kDirectSlot; // No Cab is the last resort
+}
+
 // A custom amp needs a user-supplied name: the original .nam files are often
 // opaque codes (e.g. "2204"), so the builder default is treated as "unnamed".
 inline bool IsUnnamed(const std::string& name)
@@ -359,6 +416,57 @@ inline int ChannelStepIndex(const std::vector<int>& availableChannels, int chann
     if (availableChannels[static_cast<size_t>(i)] == channel)
       return i;
   return 0;
+}
+
+// The resolved channel-first view for a focused custom lane. Pure output of
+// ResolveLaneCabs so the whole navigation policy is unit-testable headlessly and
+// the UI wiring stays thin.
+struct LaneCabView
+{
+  std::vector<int> channels; // amp-wide gain stages -> channel stepper labels
+  int channelPos = 0; // selected position within `channels`
+  int channel = 1; // resolved gain stage
+  int slot = kDirectSlot; // resolved slot (kDirectSlot or 0..kNumCabSlots-1)
+  int selUiIndex = 0; // speaker-row selection (0 = No Cab, 1..3 = cab slot+1)
+  bool noCabEnabled = false; // channel owns a DIRECT capture
+  bool irEnabled = false; // == noCabEnabled (custom IR convolves DIRECT)
+  std::array<bool, kNumCabSlots> cabEnabled = {false, false, false};
+};
+
+// Resolve the channel-first cab view for a focused custom lane from the lane's
+// current (slot, channel). Channel is the primary axis: the stepper lists the
+// amp-wide channel set; the speaker row only offers cabs that carry the selected
+// channel; No Cab / Custom IR require a DIRECT capture ON that channel. The
+// current channel is kept when still present (else first available); the slot is
+// snapped via SnapSlotForChannel (current kept if valid, else first real cab,
+// else No Cab).
+inline LaneCabView ResolveLaneCabs(const CustomAmp& amp, int curSlot, int curChannel)
+{
+  LaneCabView v;
+  v.channels = AssignedChannels(amp);
+
+  int channel = curChannel;
+  if (!v.channels.empty() && std::find(v.channels.begin(), v.channels.end(), channel) == v.channels.end())
+    channel = v.channels.front();
+  if (channel < 1)
+    channel = v.channels.empty() ? 1 : v.channels.front();
+  v.channel = channel;
+  v.channelPos = ChannelStepIndex(v.channels, channel);
+
+  int slot = SnapSlotForChannel(amp, channel, curSlot);
+  if (slot == kUnassignedSlot)
+    slot = curSlot; // channel has nothing assigned (degenerate); leave as-is
+  v.slot = slot;
+  v.selUiIndex = (slot == kDirectSlot) ? 0 : slot + 1;
+
+  v.noCabEnabled = ChannelHasDirect(amp, channel);
+  v.irEnabled = v.noCabEnabled;
+  for (int s = 0; s < kNumCabSlots; ++s)
+  {
+    const auto chs = AmpSlotChannels(amp, s);
+    v.cabEnabled[(size_t)s] = std::find(chs.begin(), chs.end(), channel) != chs.end();
+  }
+  return v;
 }
 
 // Max characters for user-entered custom names. Caps stop long names from

@@ -92,6 +92,139 @@ TEST_CASE("HasDirectCapture is true only when a DIRECT (cab-less) capture exists
   REQUIRE(HasDirectCapture(unassigned) == false);
 }
 
+TEST_CASE("SlotsForChannel inverts the per-slot channel map (channel-first nav)")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::kDirectSlot;
+  using volum::custom::SlotsForChannel;
+  // DIRECT carries ch1 only; cab slot 0 carries ch1+ch2; cab slot 1 carries ch2.
+  CustomAmp amp;
+  amp.files = {{"d.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2}, {"c.nam", 1, 2}};
+  // Channel 1: DIRECT first, then cab slot 0.
+  REQUIRE(SlotsForChannel(amp, 1) == std::vector<int>{kDirectSlot, 0});
+  // Channel 2: cab slots 0 and 1 (no DIRECT on ch2).
+  REQUIRE(SlotsForChannel(amp, 2) == std::vector<int>{0, 1});
+  // Channel with no captures.
+  REQUIRE(SlotsForChannel(amp, 3).empty());
+}
+
+TEST_CASE("ChannelHasDirect is per-channel, not amp-wide")
+{
+  using volum::custom::ChannelHasDirect;
+  using volum::custom::CustomAmp;
+  using volum::custom::HasDirectCapture;
+  using volum::custom::kDirectSlot;
+  // DIRECT exists only on channel 1; channel 2 is a cab-only stage.
+  CustomAmp amp;
+  amp.files = {{"d.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2}};
+  REQUIRE(HasDirectCapture(amp) == true); // amp-wide: yes
+  REQUIRE(ChannelHasDirect(amp, 1) == true); // ch1 has DIRECT -> No Cab / Custom IR ok
+  REQUIRE(ChannelHasDirect(amp, 2) == false); // ch2 has no DIRECT -> gate them
+  REQUIRE(ChannelHasDirect(amp, 9) == false);
+}
+
+TEST_CASE("SnapSlotForChannel keeps current, prefers a real cab, No Cab last")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::kDirectSlot;
+  using volum::custom::kUnassignedSlot;
+  using volum::custom::SnapSlotForChannel;
+  CustomAmp amp;
+  // ch1: DIRECT + cab0 ; ch2: cab0 + cab1 ; ch3: DIRECT only.
+  amp.files = {{"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2},
+               {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
+
+  // Current slot still valid for the new channel -> keep it.
+  REQUIRE(SnapSlotForChannel(amp, 1, 0) == 0);
+  REQUIRE(SnapSlotForChannel(amp, 1, kDirectSlot) == kDirectSlot);
+
+  // Current cab (slot 0) is gone on ch... it stays on ch2 (cab0 valid) -> keep.
+  REQUIRE(SnapSlotForChannel(amp, 2, 0) == 0);
+  // Coming from DIRECT into ch2 (no DIRECT) -> snap to the first real cab.
+  REQUIRE(SnapSlotForChannel(amp, 2, kDirectSlot) == 0);
+
+  // ch3 only has DIRECT -> No Cab is the last resort even from a cab.
+  REQUIRE(SnapSlotForChannel(amp, 3, 0) == kDirectSlot);
+
+  // Channel with nothing assigned -> no change sentinel.
+  REQUIRE(SnapSlotForChannel(amp, 7, 0) == kUnassignedSlot);
+}
+
+TEST_CASE("ResolveLaneCabs drives the channel-first cab view")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::kDirectSlot;
+  using volum::custom::ResolveLaneCabs;
+  // ch1: DIRECT + cab0 ; ch2: cab0 + cab1 (no DIRECT) ; ch3: DIRECT only.
+  CustomAmp amp;
+  amp.files = {{"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2},
+               {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
+
+  // Stepper lists the amp-wide channel set regardless of the current slot.
+  {
+    const auto v = ResolveLaneCabs(amp, 0 /*cab0*/, 1 /*ch1*/);
+    REQUIRE(v.channels == std::vector<int>{1, 2, 3});
+    CHECK(v.channel == 1);
+    CHECK(v.channelPos == 0);
+    CHECK(v.slot == 0); // current cab0 carries ch1 -> kept
+    CHECK(v.selUiIndex == 1);
+    CHECK(v.noCabEnabled == true); // ch1 has DIRECT
+    CHECK(v.irEnabled == true);
+    CHECK(v.cabEnabled[0] == true); // cab0 on ch1
+    CHECK(v.cabEnabled[1] == false); // cab1 not on ch1
+    CHECK(v.cabEnabled[2] == false);
+  }
+
+  // Channel 2 has no DIRECT: No Cab + Custom IR gated off; only cab0/cab1 enabled.
+  {
+    const auto v = ResolveLaneCabs(amp, 0 /*cab0*/, 2 /*ch2*/);
+    CHECK(v.channel == 2);
+    CHECK(v.noCabEnabled == false);
+    CHECK(v.irEnabled == false);
+    CHECK(v.cabEnabled[0] == true);
+    CHECK(v.cabEnabled[1] == true);
+    CHECK(v.slot == 0); // cab0 carries ch2 -> kept
+  }
+
+  // Coming from DIRECT into ch2 (no DIRECT) snaps to the first real cab.
+  {
+    const auto v = ResolveLaneCabs(amp, kDirectSlot, 2);
+    CHECK(v.slot == 0);
+    CHECK(v.selUiIndex == 1);
+    CHECK(v.noCabEnabled == false);
+  }
+
+  // Channel 3 has only DIRECT: a cab slot must snap to No Cab (last resort).
+  {
+    const auto v = ResolveLaneCabs(amp, 0 /*cab0*/, 3);
+    CHECK(v.channel == 3);
+    CHECK(v.slot == kDirectSlot);
+    CHECK(v.selUiIndex == 0);
+    CHECK(v.noCabEnabled == true);
+    CHECK(v.cabEnabled[0] == false);
+  }
+
+  // A channel that no longer exists snaps to the first available channel.
+  {
+    const auto v = ResolveLaneCabs(amp, 0, 9 /*gone*/);
+    CHECK(v.channel == 1);
+    CHECK(v.channelPos == 0);
+  }
+}
+
+TEST_CASE("ResolveLaneCabs on an amp with no assigned files is inert")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::ResolveLaneCabs;
+  CustomAmp amp; // no files
+  const auto v = ResolveLaneCabs(amp, volum::custom::kDirectSlot, 1);
+  CHECK(v.channels.empty());
+  CHECK(v.channel == 1);
+  CHECK(v.noCabEnabled == false);
+  CHECK(v.irEnabled == false);
+  CHECK(v.cabEnabled[0] == false);
+}
+
 TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
 {
   using volum::custom::ClampName;
