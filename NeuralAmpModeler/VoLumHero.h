@@ -403,13 +403,41 @@ private:
     }
     g.DrawLayer(layer);
 
-    // Title strip with amp name
+    // Title strip with amp name. Custom amp names are free-form and can be long;
+    // ellipsize to the strip width so a long name never bleeds past its lane.
     const IRECT titleStrip(r.L + 8.f, r.B - 30.f, r.R - 8.f, r.B - 8.f);
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
     g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle), role,
                IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
-    g.DrawText(
-      IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle), name, titleStrip);
+    const IText nameText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const std::string fitted = FitTextToWidth(g, nameText, name, titleStrip.W() - 6.f);
+    g.DrawText(nameText, fitted.c_str(), titleStrip);
+  }
+
+  // Trim `s` (appending an ellipsis) until it fits within maxW for the given
+  // text style. Returns the original string when it already fits.
+  static std::string FitTextToWidth(IGraphics& g, const IText& text, const char* s, float maxW)
+  {
+    if (!s || !*s)
+      return "";
+    std::string str = s;
+    IRECT m;
+    g.MeasureText(text, str.c_str(), m);
+    if (m.W() <= maxW)
+      return str;
+    while (str.size() > 1)
+    {
+      str.pop_back();
+      // Avoid leaving a dangling UTF-8 lead/continuation byte.
+      while (!str.empty() && (static_cast<unsigned char>(str.back()) & 0xC0) == 0x80)
+        str.pop_back();
+      const std::string cand = str + "\u2026";
+      IRECT mr;
+      g.MeasureText(text, cand.c_str(), mr);
+      if (mr.W() <= maxW)
+        return cand;
+    }
+    return str + "\u2026";
   }
 
   void DrawDualHero(IGraphics& g)

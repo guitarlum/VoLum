@@ -73,6 +73,36 @@ TEST_CASE("ShortCaptureLabel truncates long custom names to 5 chars + ellipsis")
   REQUIRE(ShortCaptureLabel("Klon Centaur") == std::string("Klon ") + "\u2026"); // > 5 -> clipped
 }
 
+TEST_CASE("HasDirectCapture is true only when a DIRECT (cab-less) capture exists")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::HasDirectCapture;
+  using volum::custom::kDirectSlot;
+  // Cab-only amp: no DIRECT capture, so a custom IR has nothing to convolve.
+  CustomAmp cabOnly;
+  cabOnly.files = {{"a.nam", 0, 1}, {"b.nam", 1, 2}};
+  REQUIRE(HasDirectCapture(cabOnly) == false);
+  // Amp with a DIRECT capture is IR-eligible.
+  CustomAmp withDirect;
+  withDirect.files = {{"d.nam", kDirectSlot, 1}, {"b.nam", 0, 1}};
+  REQUIRE(HasDirectCapture(withDirect) == true);
+  // An unassigned would-be DIRECT file does not count.
+  CustomAmp unassigned;
+  unassigned.files = {{"d.nam", volum::custom::kUnassignedSlot, 0}};
+  REQUIRE(HasDirectCapture(unassigned) == false);
+}
+
+TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
+{
+  using volum::custom::ClampName;
+  REQUIRE(ClampName("short", 24) == "short"); // already fits
+  REQUIRE(ClampName("0123456789abcdef", 8) == "01234567"); // hard byte cap
+  // A 3-byte euro sign straddling the cap is dropped whole, not split.
+  const std::string withEuro = std::string("abc") + "\xE2\x82\xAC" + "xyz"; // "abc<euro>xyz"
+  REQUIRE(ClampName(withEuro, 4) == "abc"); // cap at 4 lands mid-euro -> back off to "abc"
+  REQUIRE(ClampName(withEuro, 6) == std::string("abc") + "\xE2\x82\xAC"); // cap includes whole euro
+}
+
 using volum::custom::AmpSlotChannels;
 using volum::custom::AmpSlots;
 using volum::custom::CellFileCount;

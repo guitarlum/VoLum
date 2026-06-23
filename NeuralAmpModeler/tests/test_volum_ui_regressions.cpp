@@ -194,7 +194,10 @@ TEST_CASE("Support hero label remains centered with polarity glyph")
   RequireContains(hero, "Flip polarity");
   RequireContains(hero, "Switch to Single Amp");
   RequireContains(hero, "Switch to Dual Amp");
-  RequireContains(hero, "name, titleStrip);");
+  // The lane title is ellipsized to the strip width before drawing (long custom
+  // amp names must not bleed past their lane).
+  RequireContains(hero, "FitTextToWidth(g, nameText, name, titleStrip.W()");
+  RequireContains(hero, "g.DrawText(nameText, fitted.c_str(), titleStrip);");
   RequireDoesNotContain(hero, "titleStrip.R - 34.f");
 }
 
@@ -574,4 +577,28 @@ TEST_CASE("VoLum settings panel shows current latency under model information")
   RequireContains(controls, "SetCurrentLatency(int samples, double sampleRate)");
   RequireContains(source, "SetCurrentLatency(GetLatency(), GetSampleRate())");
   RequireDoesNotContain(source, " |  Latency:");
+}
+
+TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wired")
+{
+  const std::string source = ReadPluginSource();
+  const std::string catalog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpeteCatalog.h");
+  const std::string speakerRow = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSpeakerRow.h");
+
+  // A: custom SUPPORT cab/channel persist onto the active scene.
+  RequireContains(catalog, "int supportCustomSlot");
+  RequireContains(source, "_VolumActiveScene().supportCustomSlot = mVolumCustomSupportSlot;");
+  RequireContains(source, "s.supportCustomSlot = mVolumCustomSupportSlot;");
+
+  // B/C: a single helper names the MAIN amp (custom or factory) for the spine,
+  // sub-row, and preset-manage subtitle.
+  RequireContains(source, "const char* NeuralAmpModeler::_VolumMainAmpDisplayName() const");
+  RequireContains(source, "_VolumMainAmpDisplayName(),"); // triptych SetState
+  RequireContains(source, "pPlugin->_VolumMainAmpDisplayName());"); // manage-presets subtitle
+
+  // D: a custom IR needs a DIRECT capture; the row greys out and selection is
+  // hard-blocked otherwise.
+  RequireContains(speakerRow, "void SetIrEnabled(bool enabled");
+  RequireContains(source, "row->SetIrEnabled(volum::custom::HasDirectCapture(amp)");
+  RequireContains(source, "!volum::custom::HasDirectCapture(volum::custom::CustomAmpAt(customLane))");
 }

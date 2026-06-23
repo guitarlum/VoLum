@@ -320,6 +320,9 @@ TEST_CASE("Dual-amp sidecar overlays current-only support settings")
   amps[0].supportEqActive = false;
   amps[0].supportAmpPan = 1.0;
   amps[0].supportPolarityInvert = true;
+  amps[0].supportCustomId = "amp_custom_support";
+  amps[0].supportCustomSlot = 1;
+  amps[0].supportCustomChannel = 4;
 
   const nlohmann::json legacy =
     volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, /*includeDualAmp=*/false);
@@ -347,6 +350,11 @@ TEST_CASE("Dual-amp sidecar overlays current-only support settings")
   CHECK(loaded[0].supportEqActive == false);
   CHECK(loaded[0].supportAmpPan == doctest::Approx(1.0));
   CHECK(loaded[0].supportPolarityInvert == true);
+  // 1.2.0: the custom SUPPORT partner id + its cab/channel ride the sidecar so a
+  // factory-main + custom-support rig restores fully across a standalone restart.
+  CHECK(loaded[0].supportCustomId == "amp_custom_support");
+  CHECK(loaded[0].supportCustomSlot == 1);
+  CHECK(loaded[0].supportCustomChannel == 4);
 }
 
 TEST_CASE("effect-staging effect snapshot fields round-trip through user settings JSON")

@@ -682,6 +682,8 @@ TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
   in.perAmpIrId[volum::kAmpCount - 1] = "ir_last";
   in.perAmpSupportIrId[0] = "ir_sup_one";
   in.perAmpSupportId[1] = "amp_sup_ghi";
+  in.perAmpSupportSlot[1] = 1;
+  in.perAmpSupportChannel[1] = 4;
 
   MemoryChunk chunk;
   volum::PutChunkIdTail(chunk, in);
@@ -698,10 +700,14 @@ TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
   CHECK(out.perAmpIrId[volum::kAmpCount - 1] == "ir_last");
   CHECK(out.perAmpSupportIrId[0] == "ir_sup_one");
   CHECK(out.perAmpSupportId[1] == "amp_sup_ghi");
-  // Untouched slots stay empty.
+  CHECK(out.perAmpSupportSlot[1] == 1);
+  CHECK(out.perAmpSupportChannel[1] == 4);
+  // Untouched slots stay empty / at the unset sentinels.
   CHECK(out.perAmpIrId[1].empty());
   CHECK(out.perAmpSupportIrId[1].empty());
   CHECK(out.perAmpSupportId[0].empty());
+  CHECK(out.perAmpSupportSlot[0] == -2);
+  CHECK(out.perAmpSupportChannel[0] == 0);
 }
 
 TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")

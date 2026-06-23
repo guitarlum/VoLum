@@ -384,6 +384,9 @@ TEST_CASE("AmpSettings JSON codec round-trips a full scene")
   s.postReverbMix = 0.42;
   s.activeIrId = "ir_77";
   s.supportCustomId = "amp_55";
+  s.supportActiveIrId = "ir_88";
+  s.supportCustomSlot = 1;
+  s.supportCustomChannel = 4;
 
   const auto j = volum::AmpSettingsToJson(s);
   VoLumAmpSettings out;
@@ -404,6 +407,9 @@ TEST_CASE("AmpSettings JSON codec round-trips a full scene")
   CHECK(out.postReverbMix == doctest::Approx(0.42));
   CHECK(out.activeIrId == "ir_77");
   CHECK(out.supportCustomId == "amp_55");
+  CHECK(out.supportActiveIrId == "ir_88");
+  CHECK(out.supportCustomSlot == 1);
+  CHECK(out.supportCustomChannel == 4);
 }
 
 TEST_CASE("CaptureFileFor resolves the storedPath for a (slot, channel) cell")
@@ -492,6 +498,15 @@ TEST_CASE("AmpSettingsEqual is a full value-equality over the settings codec")
   b.supportCustomId = "amp_def";
   CHECK_FALSE(volum::AmpSettingsEqual(a, b));
   b.supportCustomId.clear();
+  CHECK(volum::AmpSettingsEqual(a, b));
+
+  // Custom SUPPORT cab/channel participate in equality (drives recall + dirty).
+  b.supportCustomSlot = 1;
+  CHECK_FALSE(volum::AmpSettingsEqual(a, b));
+  b.supportCustomSlot = a.supportCustomSlot;
+  b.supportCustomChannel = 4;
+  CHECK_FALSE(volum::AmpSettingsEqual(a, b));
+  b.supportCustomChannel = a.supportCustomChannel;
   CHECK(volum::AmpSettingsEqual(a, b));
 
   // A PRE-capture selection (custom pedal legacy index) diverges and restores.

@@ -117,6 +117,7 @@ public:
     if (auto* ui = GetUI())
     {
       const IRECT mid = mRECT.GetReducedFromLeft(22.f).GetReducedFromRight(22.f);
+      SetTextEntryLength((int)volum::custom::kMaxPresetNameLen);
       ui->CreateTextEntry(*this, IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                           mid, "");
     }
@@ -129,6 +130,7 @@ public:
     const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
     name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
     name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
+    name = volum::custom::ClampName(name, volum::custom::kMaxPresetNameLen);
     if (!name.empty() && mSaveAs)
       mSaveAs(name);
   }
@@ -860,7 +862,7 @@ public:
   void OnTextEntryCompletion(const char* str, int) override
   {
     using namespace volum::custom;
-    const std::string s = str ? str : "";
+    const std::string s = ClampName(str ? str : "", (std::size_t)NameEntryCap(mTextTarget));
     switch (mTextTarget)
     {
       case TextTarget::NewItem: // presets only (IR/pedals add via file dialog)
@@ -1080,7 +1082,9 @@ private:
     {
       if (!fn.GetLength())
         continue;
-      const std::string base = BaseName(fn.Get());
+      // Cap the imported display name (the filename base) so a very long file
+      // name does not overflow the IR/pedal list and chip labels.
+      const std::string base = volum::custom::ClampName(BaseName(fn.Get()), volum::custom::kMaxCustomNameLen);
       if (base.empty())
         continue;
       if (NameTaken(base, -1))
@@ -1150,6 +1154,23 @@ private:
     return a;
   }
 
+  // Max characters for a custom name, by what is being named. Caps keep long
+  // names from overflowing the hero/sub-row/list labels (cab names are already
+  // capped to 3 by NormalizeCabName).
+  int NameEntryCap(TextTarget target) const
+  {
+    switch (target)
+    {
+      case TextTarget::CabName: return 3;
+      case TextTarget::ProfileName: return (int)volum::custom::kMaxCustomNameLen; // amp name
+      case TextTarget::NewItem: return (int)volum::custom::kMaxPresetNameLen; // new preset
+      case TextTarget::RenameItem:
+        return (int)(mManageKind == ManageKind::Presets ? volum::custom::kMaxPresetNameLen
+                                                         : volum::custom::kMaxCustomNameLen);
+      default: return (int)volum::custom::kMaxCustomNameLen;
+    }
+  }
+
   void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, int fileIdx = -1)
   {
     auto* ui = GetUI();
@@ -1157,6 +1178,7 @@ private:
       return;
     mTextTarget = target;
     mTextFileIdx = fileIdx;
+    SetTextEntryLength(NameEntryCap(target));
     ui->CreateTextEntry(*this, mEntryText, bounds, current.c_str());
   }
 
@@ -1802,10 +1824,13 @@ private:
                  IRECT(left.L, listArea.T, left.R, listArea.T + 18.f));
       // Explain the auto-fill convention so users can name files to skip manual
       // mapping. PREFIX = G12 / G65 / V30 / AMP (DI / DIRECT), last number = channel.
-      g.DrawText(IText(10.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
-                 "Tip: name files CAB-NAME-CHANNEL (e.g. G65-Plexi-3.nam) and the cab + channel auto-fill. "
-                 "Use AMP- or DI- for a DIRECT capture.",
-                 IRECT(left.L, listArea.T + 20.f, left.R, listArea.T + 52.f));
+      // Split across two lines (break after "and") so it never overflows the
+      // ~53%-width left pane into the art gallery on the right.
+      const IText tipText(10.f, VoLumColors::CREAM_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top);
+      g.DrawText(tipText, "Tip: name files CAB-NAME-CHANNEL (e.g. G65-Plexi-3.nam) and",
+                 IRECT(left.L, listArea.T + 20.f, left.R, listArea.T + 34.f));
+      g.DrawText(tipText, "the cab + channel auto-fill. Use AMP- or DI- for a DIRECT capture.",
+                 IRECT(left.L, listArea.T + 34.f, left.R, listArea.T + 50.f));
     }
 
     // Scrollbar for the file manifest (matches the Manage list styling).

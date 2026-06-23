@@ -125,6 +125,11 @@ inline void ReadDualAmpBlock(const nlohmann::json& a, VoLumAmpSettings& s)
   detail::JsonGetBool(a, "supportEq", s.supportEqActive);
   detail::JsonGetClampedDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0);
   detail::JsonGetBool(a, "supportPolarityInvert", s.supportPolarityInvert);
+  // 1.2.0: custom SUPPORT partner binding + its own cab/channel.
+  if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
+    s.supportCustomId = a["supportCustomId"].get<std::string>();
+  detail::JsonGetClampedInt(a, "supportCustomSlot", s.supportCustomSlot, -2, 2);
+  detail::JsonGetClampedInt(a, "supportCustomChannel", s.supportCustomChannel, 0, 8);
   (void)d;
 }
 
@@ -137,7 +142,8 @@ inline nlohmann::json AmpSettingsToJson(const VoLumAmpSettings& s)
   a.update(PostBlockToJson(s));
   a["activeIrId"] = s.activeIrId;
   a["supportActiveIrId"] = s.supportActiveIrId;
-  a["supportCustomId"] = s.supportCustomId;
+  // supportCustomId + custom support cab/channel are written by
+  // WriteDualAmpUserSettings above (single source of truth).
   return a;
 }
 
@@ -155,8 +161,7 @@ inline bool AmpSettingsFromJson(const nlohmann::json& a, VoLumAmpSettings& s)
     s.activeIrId = a["activeIrId"].get<std::string>();
   if (a.contains("supportActiveIrId") && a["supportActiveIrId"].is_string())
     s.supportActiveIrId = a["supportActiveIrId"].get<std::string>();
-  if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
-    s.supportCustomId = a["supportCustomId"].get<std::string>();
+  // supportCustomId + custom support cab/channel are read by ReadDualAmpBlock.
   return healed;
 }
 

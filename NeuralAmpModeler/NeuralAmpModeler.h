@@ -464,12 +464,18 @@ public:
   // slot, or the focused custom amp's scene). activeIrId/supportActiveIrId/
   // supportCustomId all live here (support fields belong to the MAIN scene).
   volum::VoLumAmpSettings& _VolumActiveScene();
+  // Display name of the MAIN amp lane: the focused custom amp when one is active,
+  // otherwise the factory catalog name. Single source for every place that labels
+  // the AMP box (hero, sub-row, triptych spine, preset manage subtitle).
+  const char* _VolumMainAmpDisplayName() const;
   // True when the dual-amp SUPPORT lane currently owns the shared cab/IR controls.
   bool _VolumSupportFocused() { return GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport; }
   // Stage the custom IR at library index irIdx into the given lane's convolver,
   // enable that lane's IR toggle, record its IR id on the active scene, and
   // reflect it in the cab row when that lane is the one displayed.
-  void _VolumSelectIR(int irIdx, bool support);
+  // interactive=true surfaces a message box when the lane's custom amp has no
+  // DIRECT capture to convolve; the restore path passes false (silent skip).
+  void _VolumSelectIR(int irIdx, bool support, bool interactive = true);
   // Drop the given lane's custom IR (back to the baked cab) and clear its IR id.
   void _VolumClearIR(bool support);
   // Re-resolve a scene/preset's IR id for a lane on recall: stage it, or fall back
