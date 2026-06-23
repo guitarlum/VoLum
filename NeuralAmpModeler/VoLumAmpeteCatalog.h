@@ -220,5 +220,13 @@ struct VoLumAmpSettings
   // supportCustomId: when non-empty, the dual-amp SUPPORT partner is the custom
   // amp with this id (takes precedence over the factory supportAmpIdx).
   std::string supportCustomId;
+  // Custom SUPPORT partner cab + gain stage. The MAIN custom lane reuses
+  // speakerIdx/channelIdx; the SUPPORT lane needs its own so a custom support
+  // amp's chosen cab + channel survive preset save and session/DAW recall.
+  // supportCustomSlot: kDirectSlot(-1) / 0..2 cab slot, or kUnassignedSlot(-2)
+  // == "never saved" (restore then falls back to the default capture). Only
+  // meaningful while supportCustomId is non-empty.
+  int supportCustomSlot = -2;
+  int supportCustomChannel = 0; // gain stage (>= 1); 0 == not saved
 };
 } // namespace volum

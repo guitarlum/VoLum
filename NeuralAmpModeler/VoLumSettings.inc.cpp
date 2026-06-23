@@ -101,6 +101,15 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.supportEqActive = GetParam(kSupportEQActive)->Bool();
   s.supportAmpPan = GetParam(kSupportAmpPan)->Value();
   s.supportPolarityInvert = mSupportPolarityInvert.load();
+  // Custom SUPPORT partner cab/channel live on the (MAIN) scene next to
+  // supportCustomId so they survive preset save + recall. The factory
+  // supportSpeakerIdx/supportChannelIdx params are meaningless for a custom
+  // support amp, so mirror the live runtime selection here instead.
+  if (mVolumCustomSupportIdx >= 0)
+  {
+    s.supportCustomSlot = mVolumCustomSupportSlot;
+    s.supportCustomChannel = mVolumCustomSupportChannel;
+  }
 
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
   mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
@@ -623,11 +632,27 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
     {
       const auto amp = volum::custom::CustomAmpAt(sidx);
       int sl = volum::custom::kDirectSlot, ch = 1;
-      if (volum::content::DefaultCaptureSelection(amp, sl, ch))
+      // Prefer the saved custom support cab/channel when it still resolves on
+      // this amp; only fall back to the default capture for legacy scenes (no
+      // saved selection) or an orphaned slot/channel.
+      bool restored = false;
+      if (s.supportCustomChannel >= 1 && volum::custom::SlotAssigned(s.supportCustomSlot))
       {
-        mVolumCustomSupportSlot = sl;
-        mVolumCustomSupportChannel = ch;
+        const auto chs = volum::custom::AmpSlotChannels(amp, s.supportCustomSlot);
+        if (std::find(chs.begin(), chs.end(), s.supportCustomChannel) != chs.end())
+        {
+          sl = s.supportCustomSlot;
+          ch = s.supportCustomChannel;
+          restored = true;
+        }
       }
+      if (!restored)
+        volum::content::DefaultCaptureSelection(amp, sl, ch);
+      mVolumCustomSupportSlot = sl;
+      mVolumCustomSupportChannel = ch;
+      // Keep the scene in lock-step so the next save/equality check matches.
+      s.supportCustomSlot = sl;
+      s.supportCustomChannel = ch;
     }
     else
     {

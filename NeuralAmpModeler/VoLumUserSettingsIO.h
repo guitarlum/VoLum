@@ -104,6 +104,12 @@ inline void WriteDualAmpUserSettings(nlohmann::json& a, const VoLumAmpSettings& 
   a["supportEq"] = s.supportEqActive;
   a["supportPan"] = s.supportAmpPan;
   a["supportPolarityInvert"] = s.supportPolarityInvert;
+  // 1.2.0: custom SUPPORT partner binding + its own cab/channel (additive; older
+  // readers ignore). Lets a custom support amp's cab + gain stage round-trip
+  // through presets, the dual-amp settings sidecar, and DAW scenes.
+  a["supportCustomId"] = s.supportCustomId;
+  a["supportCustomSlot"] = s.supportCustomSlot;
+  a["supportCustomChannel"] = s.supportCustomChannel;
 }
 
 inline bool HasDualAmpUserSettings(const nlohmann::json& j)
@@ -721,6 +727,12 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadBool(a, "supportEq", s.supportEqActive, defaults.supportEqActive);
         loadDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0, defaults.supportAmpPan);
         loadBool(a, "supportPolarityInvert", s.supportPolarityInvert, defaults.supportPolarityInvert);
+        // 1.2.0: custom SUPPORT partner id + its own cab/channel (additive; absent
+        // on older files -> keep defaults == no custom support partner).
+        if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
+          s.supportCustomId = a["supportCustomId"].get<std::string>();
+        loadInt(a, "supportCustomSlot", s.supportCustomSlot, -2, 2, defaults.supportCustomSlot);
+        loadInt(a, "supportCustomChannel", s.supportCustomChannel, 0, 8, defaults.supportCustomChannel);
 
         // v6+ per-amp POST live values. On legacy (v<6) settings the keys are absent
         // and the struct defaults remain in place; postValid stays false so amp restore

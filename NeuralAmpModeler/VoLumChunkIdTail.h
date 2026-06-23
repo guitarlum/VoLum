@@ -44,10 +44,11 @@ namespace volum
 
 // 'V''L''I''D' - distinctive enough that a stray trailing int won't collide.
 inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
-// Schema 2 (1.2.0): added per-amp support-lane custom IR id ("supIr"). The tail
-// is a self-describing JSON object, so the bump is informational - both old and
-// new readers tolerate missing/extra keys; nothing branches on the version.
-inline constexpr int kVoLumIdTailSchema = 2;
+// Schema 3 (1.2.0): added per-amp support-lane custom IR id ("supIr", schema 2)
+// and the custom SUPPORT partner cab/channel ("supCab"/"supCh", schema 3). The
+// tail is a self-describing JSON object, so the bump is informational - both old
+// and new readers tolerate missing/extra keys; nothing branches on the version.
+inline constexpr int kVoLumIdTailSchema = 3;
 
 struct ChunkIdTail
 {
@@ -57,6 +58,17 @@ struct ChunkIdTail
   std::string perAmpIrId[kAmpCount]; // factory amp -> active custom IR cab id
   std::string perAmpSupportIrId[kAmpCount]; // factory amp -> SUPPORT lane custom IR id
   std::string perAmpSupportId[kAmpCount]; // factory amp -> custom support partner id
+  int perAmpSupportSlot[kAmpCount]; // factory amp -> custom support cab slot (-2 = unset)
+  int perAmpSupportChannel[kAmpCount]; // factory amp -> custom support gain stage (0 = unset)
+
+  ChunkIdTail()
+  {
+    for (int i = 0; i < kAmpCount; ++i)
+    {
+      perAmpSupportSlot[i] = -2;
+      perAmpSupportChannel[i] = 0;
+    }
+  }
 };
 
 inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
@@ -68,7 +80,11 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
   j["activePresetId"] = t.activePresetId;
   nlohmann::json perAmp = nlohmann::json::array();
   for (int i = 0; i < kAmpCount; ++i)
-    perAmp.push_back({{"ir", t.perAmpIrId[i]}, {"supIr", t.perAmpSupportIrId[i]}, {"sup", t.perAmpSupportId[i]}});
+    perAmp.push_back({{"ir", t.perAmpIrId[i]},
+                      {"supIr", t.perAmpSupportIrId[i]},
+                      {"sup", t.perAmpSupportId[i]},
+                      {"supCab", t.perAmpSupportSlot[i]},
+                      {"supCh", t.perAmpSupportChannel[i]}});
   j["perAmp"] = perAmp;
   return j;
 }
@@ -100,6 +116,10 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         t.perAmpSupportIrId[i] = str(arr[i]["supIr"]);
       if (arr[i].contains("sup"))
         t.perAmpSupportId[i] = str(arr[i]["sup"]);
+      if (arr[i].contains("supCab") && arr[i]["supCab"].is_number_integer())
+        t.perAmpSupportSlot[i] = arr[i]["supCab"].get<int>();
+      if (arr[i].contains("supCh") && arr[i]["supCh"].is_number_integer())
+        t.perAmpSupportChannel[i] = arr[i]["supCh"].get<int>();
     }
   }
   return t;

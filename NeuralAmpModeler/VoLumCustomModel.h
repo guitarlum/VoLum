@@ -328,6 +328,14 @@ inline bool SpeakerEnabled(const std::vector<int>& availableChannels)
   return !availableChannels.empty();
 }
 
+// True when the amp has a DIRECT (raw, cab-less) capture. A custom IR convolves
+// the DIRECT signal, so without one the Custom IR cab has nothing to run and is
+// disabled in the UI.
+inline bool HasDirectCapture(const CustomAmp& amp)
+{
+  return !AmpSlotChannels(amp, kDirectSlot).empty();
+}
+
 // Channel to snap to when the focused speaker changes (see VoLumCustomContentMock
 // history): keep the current channel if still available, else first available,
 // else -1 (empty/disabled slot).
@@ -351,6 +359,25 @@ inline int ChannelStepIndex(const std::vector<int>& availableChannels, int chann
     if (availableChannels[static_cast<size_t>(i)] == channel)
       return i;
   return 0;
+}
+
+// Max characters for user-entered custom names. Caps stop long names from
+// overflowing the hero / sub-row / list labels. Cab-slot names are separately
+// capped to 3 by NormalizeCabName.
+inline constexpr std::size_t kMaxCustomNameLen = 24; // amp / IR / pedal name
+inline constexpr std::size_t kMaxPresetNameLen = 28; // preset name
+
+// Clamp a free-form name to maxChars, dropping any dangling trailing UTF-8
+// continuation bytes so a multibyte glyph is never split. The text-entry length
+// cap is the primary guard; this is defense-in-depth at the persistence edge.
+inline std::string ClampName(const std::string& s, std::size_t maxChars)
+{
+  if (s.size() <= maxChars)
+    return s;
+  std::size_t cut = maxChars;
+  while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80)
+    --cut; // back up over UTF-8 continuation bytes
+  return s.substr(0, cut);
 }
 
 // Short pill label for a custom capture name. Names longer than maxChars bytes
