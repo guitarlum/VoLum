@@ -46,12 +46,13 @@ VoLum is an independent NAM-based amp collection app. It still keeps selected up
 | `scripts/run-tests-win.ps1`               | Build and run the doctest suite                                                                                                                                                   |
 | `scripts/run-tests-mac.sh`                | Build and run the same doctest suite with CMake/clang on macOS                                                                                                                    |
 | `scripts/run-tests-mac.sh --sanitize`     | Run the macOS doctest suite with ASan/UBSan                                                                                                                                        |
+| `scripts/run-coverage-mac.sh`             | Measure Clang source-based line/region coverage of the doctest suite (VoLum + AudioDSPTools); prints a summary and writes an HTML report to `build-tests-mac/coverage-html/`        |
 | `scripts/run-app-win.ps1`                 | Build and launch the standalone (for UI iteration)                                                                                                                                |
 | `scripts/validate-vst3-win.ps1`           | Validate the built Windows VST3 with pluginval and the Steinberg validator when available                                                                                         |
 | `scripts/validate-vst3-mac.sh`            | Validate the built macOS VST3 with pluginval and the Steinberg validator when available                                                                                           |
 
 
-**CI** (`.github/workflows/ci.yml`) runs on pull requests and pushes to `dev` or `main`, and can also run manually. It covers formatting, NAMCore regression tests, Windows doctests, Windows installer/portable verification, macOS doctests, macOS sanitizer doctests, release-equivalent macOS packaging, and VST3 validation with pluginval plus the Steinberg validator when available. Artifacts are **VoLum-mac** and **VoLum-win**. **Release Native** (`.github/workflows/release-native.yml`) creates the tagged draft release and uploads the user-facing assets.
+**CI** (`.github/workflows/ci.yml`) runs on pull requests and pushes to `dev` or `main`, and can also run manually. It covers formatting, NAMCore regression tests, Windows doctests, Windows installer/portable verification, macOS doctests, macOS sanitizer doctests, release-equivalent macOS packaging, and VST3 validation with pluginval plus the Steinberg validator when available. A separate non-blocking **coverage** job runs Clang source-based coverage on the doctest suite and uploads the HTML report as the **VoLum-coverage** artifact. Artifacts are **VoLum-mac** and **VoLum-win**. **Release Native** (`.github/workflows/release-native.yml`) creates the tagged draft release and uploads the user-facing assets.
 
 ## Test suite map
 
