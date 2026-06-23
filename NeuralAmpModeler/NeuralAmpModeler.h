@@ -394,6 +394,13 @@ public:
   // amp scene, or recalled preset). Mutable because POST restore normalizes the
   // mode snapshots back into the struct (see _VolumRestorePostFromSlot).
   void _VolumApplyAmpSettings(volum::VoLumAmpSettings& s);
+  // Re-applies every DSP value that is cached in a plugin member and therefore
+  // only refreshed inside OnParamChange. Programmatic restores (preset recall,
+  // amp switch, session/DAW restore) push params via SendParameterValueFromDelegate
+  // which bypasses OnParamChange, so the cached gains/tone coefficients would
+  // otherwise stay stale (e.g. output stuck at silence until a manual knob nudge).
+  // See volum::dsp_cache::kRestoreReappliedCaches for the locked param set.
+  void _VolumApplyDspCaches();
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
   void _VolumSaveEffectSettings();
@@ -415,6 +422,11 @@ public:
   bool _CycleVoLumKeyboardTarget(int direction);
   bool _ActivateVoLumKeyboardTarget();
   bool _ToggleVoLumKeyboardTarget();
+  // Single funnel for a user-initiated boolean param toggle, shared by the mouse
+  // (hero DUAL chip, pedal pills) and keyboard paths so both notify the host,
+  // run OnParamChange side effects, AND mark the preset dirty. Returns the new
+  // value. Callers append any path-specific UI/focus updates.
+  bool _VolumUserToggleParam(int paramIdx);
   bool _CycleVoLumKeyboardSpeaker(int direction);
   void _UpdateVoLumKeyboardFocusHint();
   int _DefaultVoLumKeyboardKnobForFocus() const;
@@ -448,7 +460,6 @@ public:
                               const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
   void _VolumRequestSupportModelLoad();
-  void _VolumCyclePreNamCapture(int slot, int direction);
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
   void _VolumShowManageCustomPedals(int preSlot = -1);
@@ -552,7 +563,6 @@ public:
   std::string _VolumGetPreCaptureLoadPath(int captureIdx) const;
   // Ordered, selectable PRE-capture indices for cycling: 0 (EMPTY), factory
   // 1..N, then each imported pedal's stable legacy index.
-  std::vector<int> _VolumPreCaptureOrder() const;
   // Stable scratch buffer so _VolumGetPreCaptureLabel can return a const char*
   // for custom pedal names (which are not in the factory label vector).
   mutable std::string mVolumPreCaptureLabelScratch;

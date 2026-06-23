@@ -833,13 +833,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         if (GetParam(kDualAmpActive)->Bool())
           _VolumShowSupportAmpMenu(anchor);
       },
-      // DUAL chip — toggle the global Dual Amp parameter.
+      // DUAL chip — toggle the global Dual Amp parameter through the shared funnel
+      // (host notify + OnParamChange + mark dirty), then refresh the focus hint.
       [this]() {
-        const bool current = GetParam(kDualAmpActive)->Bool();
-        GetParam(kDualAmpActive)->Set(current ? 0.0 : 1.0);
-        SendParameterValueFromDelegate(kDualAmpActive, GetParam(kDualAmpActive)->GetNormalized(), true);
-        OnParamChange(kDualAmpActive);
-        _VolumMarkPresetDirty();
+        _VolumUserToggleParam(kDualAmpActive);
         _UpdateVoLumKeyboardFocusHint();
       },
       // Dismiss the support-amp dropdown when the user clicks elsewhere on the hero (e.g. on
@@ -2248,7 +2245,9 @@ void NeuralAmpModeler::OnUIOpen()
 
 // Standalone: re-focus the last custom MAIN amp and re-select the active preset
 // once the UI exists (custom-amp focus needs the speaker row / cab controls). The
-// restored live scene already equals the preset, so the bar reads clean.
+// dirty baseline must come from the PRESET BANK content, not the restored live
+// scene -- the live scene may carry unsaved edits that were flushed to settings
+// on the previous close, which would otherwise read as falsely clean.
 void NeuralAmpModeler::_VolumRestoreSessionSelection()
 {
   if (mVolumDidRestorePresetSelection)
@@ -2273,7 +2272,9 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
       if (pr.id == mVolumRestorePresetId)
       {
         mVolumActivePresetId = pr.id;
-        mVolumRecalledSnapshot = _VolumActiveScene();
+        // Baseline = the preset's stored content, so a reopen with unsaved edits
+        // correctly reads dirty (see _VolumRefreshPresetBar -> _VolumRecomputePresetDirty).
+        mVolumRecalledSnapshot = pr.settings;
         mVolumHasRecalledSnapshot = true;
         _VolumRememberActivePreset();
         break;
@@ -3134,10 +3135,10 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
   if (paramIdx == kNoParameter)
     return false;
 
-  const bool next = !GetParam(paramIdx)->Bool();
-  GetParam(paramIdx)->Set(next ? 1.0 : 0.0);
-  SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
-  OnParamChange(paramIdx);
+  // Route through the shared funnel so the keyboard marks the preset dirty
+  // exactly like the mouse chip/pill does (parity), then apply the keyboard's
+  // own focus + layout updates.
+  const bool next = _VolumUserToggleParam(paramIdx);
 
   if (paramIdx == kDualAmpActive)
     mVolumDualAmpFocusedSupport = next;
@@ -3145,6 +3146,19 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
   _UpdateVoLumLayout();
   _UpdateVoLumKeyboardFocusHint();
   return true;
+}
+
+bool NeuralAmpModeler::_VolumUserToggleParam(int paramIdx)
+{
+  const bool next = !GetParam(paramIdx)->Bool();
+  GetParam(paramIdx)->Set(next ? 1.0 : 0.0);
+  SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
+  OnParamChange(paramIdx);
+  // The mouse paths historically called this; the keyboard path skipped it,
+  // which is exactly the dual/COMP/DELAY/REVERB "keyboard toggle doesn't mark
+  // dirty" bug. Centralising it here keeps both inputs in lock-step.
+  _VolumMarkPresetDirty();
+  return next;
 }
 
 bool NeuralAmpModeler::_CycleVoLumKeyboardSpeaker(int direction)
@@ -3950,49 +3964,6 @@ std::string NeuralAmpModeler::_VolumGetPreCaptureLoadPath(int captureIdx) const
   if (fn.empty() || mVolumRigsRoot.empty())
     return {};
   return (std::filesystem::path(mVolumRigsRoot) / "PrePedals" / fn).string();
-}
-
-std::vector<int> NeuralAmpModeler::_VolumPreCaptureOrder() const
-{
-  std::vector<int> order;
-  order.push_back(0); // EMPTY
-  for (int i = 1; i < _VolumGetPreCaptureCount(); ++i)
-    order.push_back(i);
-  for (const auto& p : volum::content::GlobalContentStore().reg().pedals)
-    order.push_back(p.legacyIndex);
-  return order;
-}
-
-void NeuralAmpModeler::_VolumCyclePreNamCapture(int slot, int direction)
-{
-  if (slot < 0 || slot >= 2)
-    return;
-
-  const int paramIdx = slot == 0 ? kPreNam1Capture : kPreNam2Capture;
-  // Cycle through the ordered index list (EMPTY, factory 1..N, then customs) so
-  // imported pedals are reachable by the keyboard/footswitch step too.
-  const std::vector<int> order = _VolumPreCaptureOrder();
-  if (order.empty())
-    return;
-  const int cur = GetParam(paramIdx)->Int();
-  int pos = 0;
-  for (int i = 0; i < (int)order.size(); ++i)
-    if (order[(size_t)i] == cur)
-    {
-      pos = i;
-      break;
-    }
-  int nextPos = (pos + direction) % (int)order.size();
-  while (nextPos < 0)
-    nextPos += (int)order.size();
-  const int next = order[(size_t)nextPos];
-
-  GetParam(paramIdx)->Set(next);
-  SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
-  mVolumPreNeedsLoad[slot].store(true);
-  mVolumSettingsDirty = true;
-  _VolumMarkPresetDirty();
-  _UpdateVoLumLayout();
 }
 
 void NeuralAmpModeler::_VolumSetPreNamCapture(int slot, int captureIdx)

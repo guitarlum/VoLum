@@ -535,3 +535,36 @@ TEST_CASE("A recalled preset snapshot round-trips through the registry equal")
   REQUIRE(back.presetBanks.at("factory:3").size() == 1);
   CHECK(volum::AmpSettingsEqual(back.presetBanks.at("factory:3")[0].settings, pr.settings));
 }
+
+TEST_CASE("Reopen dirty baseline derives from preset content, not the live scene")
+{
+  // Funnel C: on session / DAW restore the recalled-snapshot baseline must be
+  // the preset's STORED settings. If the project was closed with unsaved edits
+  // (flushed into the live scene), reopen must read dirty; a clean reopen must
+  // read clean. Here we model the equality check _VolumRecomputePresetDirty runs.
+  Registry r;
+  Preset pr;
+  pr.id = "preset_dirty";
+  pr.name = "Crunch";
+  pr.settings.outputLevel = -6.0;
+  pr.settings.toneMid = 6.0;
+  r.presetBanks["factory:3"] = {pr};
+
+  // Simulate reopen: baseline comes from the bank entry's stored settings.
+  const Registry back = RegistryFromJson(RegistryToJson(r));
+  const volum::VoLumAmpSettings baseline = back.presetBanks.at("factory:3")[0].settings;
+
+  // Clean reopen: live scene == preset content -> not dirty.
+  volum::VoLumAmpSettings cleanLive = baseline;
+  CHECK(volum::AmpSettingsEqual(cleanLive, baseline));
+
+  // Dirty reopen: an unsaved edit (e.g. dual amp toggled, output nudged) that
+  // was flushed to settings on close must differ from the preset baseline.
+  volum::VoLumAmpSettings editedLive = baseline;
+  editedLive.dualAmpActive = !baseline.dualAmpActive;
+  CHECK_FALSE(volum::AmpSettingsEqual(editedLive, baseline));
+
+  volum::VoLumAmpSettings editedOutput = baseline;
+  editedOutput.outputLevel = 0.0;
+  CHECK_FALSE(volum::AmpSettingsEqual(editedOutput, baseline));
+}

@@ -124,6 +124,7 @@
     <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_content_store.cpp" />
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
+    <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_staging.cpp" />
     <ClCompile Include="..\tests\test_volum_output_mode.cpp" />
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
