@@ -682,6 +682,33 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
   // The SUPPORT lane owns its own convolver, so restore it independently.
   _VolumApplyActiveIr(s.activeIrId, false);
   _VolumApplyActiveIr(s.supportActiveIrId, true);
+
+  // setParam above bypasses OnParamChange, so the cached DSP gains and tone-stack
+  // coefficients would stay stale (e.g. OUTPUT recalled from -inf shows 0 dB but
+  // stays silent until a manual knob nudge). Re-apply them explicitly.
+  _VolumApplyDspCaches();
+}
+
+// Re-apply every DSP value cached in a plugin member that OnParamChange would
+// normally refresh. Mirrors the cached cases in OnParamChange and the locked set
+// in volum::dsp_cache::kRestoreReappliedCaches. Cheap, non-audio-thread.
+void NeuralAmpModeler::_VolumApplyDspCaches()
+{
+  _SetInputGain();
+  _SetOutputGain();
+  _SetSupportOutputGain();
+  if (mToneStack)
+  {
+    mToneStack->SetParam("bass", GetParam(kToneBass)->Value());
+    mToneStack->SetParam("middle", GetParam(kToneMid)->Value());
+    mToneStack->SetParam("treble", GetParam(kToneTreble)->Value());
+  }
+  if (mSupportToneStack)
+  {
+    mSupportToneStack->SetParam("bass", GetParam(kSupportToneBass)->Value());
+    mSupportToneStack->SetParam("middle", GetParam(kSupportToneMid)->Value());
+    mSupportToneStack->SetParam("treble", GetParam(kSupportToneTreble)->Value());
+  }
 }
 
 void NeuralAmpModeler::_VolumSaveSettingsToFile()

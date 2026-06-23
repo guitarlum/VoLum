@@ -680,8 +680,10 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       if (cmi >= 0)
         _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs + .nam load
       _VolumSyncPresetOwner(); // publish the focused amp's owner key (also clears preset)
-      // Restore the active-preset label if it still exists in this amp's bank
-      // (clean: the recalled snapshot is the just-restored live scene).
+      // Restore the active-preset label if it still exists in this amp's bank.
+      // The dirty baseline must be the preset's STORED content, not the restored
+      // live scene: a project saved with unsaved edits on top of a preset must
+      // reopen as dirty (mirrors the standalone session-restore fix).
       if (!idTail.activePresetId.empty())
       {
         const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
@@ -691,7 +693,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
             if (pr.id == idTail.activePresetId)
             {
               mVolumActivePresetId = pr.id;
-              mVolumRecalledSnapshot = _VolumActiveScene();
+              mVolumRecalledSnapshot = pr.settings;
               mVolumHasRecalledSnapshot = true;
               _VolumRememberActivePreset();
               break;

@@ -602,3 +602,73 @@ TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wir
   RequireContains(source, "row->SetIrEnabled(volum::custom::HasDirectCapture(amp)");
   RequireContains(source, "!volum::custom::HasDirectCapture(volum::custom::CustomAmpAt(customLane))");
 }
+
+TEST_CASE("Reopen restores the dirty baseline from preset content")
+{
+  // Funnel C: both the standalone session-restore and the DAW chunk-restore
+  // paths must seed the recalled snapshot from the preset bank entry's stored
+  // settings (pr.settings), not from the just-restored live scene.
+  const std::string source = ReadPluginSource();
+  size_t count = 0;
+  size_t pos = source.find("mVolumRecalledSnapshot = pr.settings;");
+  while (pos != std::string::npos)
+  {
+    ++count;
+    pos = source.find("mVolumRecalledSnapshot = pr.settings;", pos + 1);
+  }
+  INFO("expected the preset-content baseline in both restore paths");
+  CHECK(count >= 2);
+}
+
+TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")
+{
+  // Funnel B: the keyboard Space toggle historically skipped _VolumMarkPresetDirty
+  // while the mouse chip called it. Both must now route through _VolumUserToggleParam.
+  const std::string source = ReadPluginSource();
+
+  // The shared funnel exists and marks the preset dirty.
+  RequireContains(source, "bool NeuralAmpModeler::_VolumUserToggleParam(int paramIdx)");
+  {
+    const auto funnelPos = source.find("bool NeuralAmpModeler::_VolumUserToggleParam(int paramIdx)");
+    REQUIRE(funnelPos != std::string::npos);
+    const auto dirtyPos = source.find("_VolumMarkPresetDirty();", funnelPos);
+    const auto endPos = source.find("\n}", funnelPos);
+    REQUIRE(dirtyPos != std::string::npos);
+    REQUIRE(endPos != std::string::npos);
+    CHECK(dirtyPos < endPos); // dirty marked inside the funnel body
+  }
+
+  // Keyboard toggle routes through the funnel (so every keyboard-actionable
+  // toggle: dual amp, COMP, PRE_NAM1/2, DELAY, REVERB now marks dirty).
+  RequireContains(source, "const bool next = _VolumUserToggleParam(paramIdx);");
+  // Mouse DUAL chip routes through the same funnel.
+  RequireContains(source, "_VolumUserToggleParam(kDualAmpActive);");
+
+  // The dead, unreachable PRE-capture keyboard cycler was removed (it had no
+  // callers and wiring it needs a key-binding decision).
+  RequireDoesNotContain(source, "_VolumCyclePreNamCapture");
+}
+
+TEST_CASE("Restore re-applies cached DSP gains and tone coefficients")
+{
+  // Funnel A: programmatic restore (preset recall / amp switch / session / DAW)
+  // pushes params via SendParameterValueFromDelegate, which skips OnParamChange.
+  // _VolumApplyAmpSettings must therefore re-apply every cached DSP value, or
+  // OUTPUT recalled from -inf shows 0 dB on the knob but stays silent.
+  const std::string source = ReadPluginSource();
+
+  // _VolumApplyAmpSettings ends by re-applying the caches.
+  RequireContains(source, "_VolumApplyDspCaches();");
+
+  // The funnel re-applies exactly the cached set: 3 gains + 6 tone coefficients.
+  RequireContains(source, "void NeuralAmpModeler::_VolumApplyDspCaches()");
+  RequireContains(source, "_SetInputGain();");
+  RequireContains(source, "_SetOutputGain();");
+  RequireContains(source, "_SetSupportOutputGain();");
+  RequireContains(source, "mToneStack->SetParam(\"bass\", GetParam(kToneBass)->Value());");
+  RequireContains(source, "mToneStack->SetParam(\"middle\", GetParam(kToneMid)->Value());");
+  RequireContains(source, "mToneStack->SetParam(\"treble\", GetParam(kToneTreble)->Value());");
+  RequireContains(source, "mSupportToneStack->SetParam(\"bass\", GetParam(kSupportToneBass)->Value());");
+  RequireContains(source, "mSupportToneStack->SetParam(\"middle\", GetParam(kSupportToneMid)->Value());");
+  RequireContains(source, "mSupportToneStack->SetParam(\"treble\", GetParam(kSupportToneTreble)->Value());");
+}
