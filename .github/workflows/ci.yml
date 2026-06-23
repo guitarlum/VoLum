@@ -338,3 +338,23 @@ jobs:
           name: VoLum-mac
           path: NeuralAmpModeler/build-mac/out/
           if-no-files-found: error
+
+  coverage:
+    name: Coverage report (VoLum + AudioDSPTools, non-blocking)
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Measure doctest coverage (Clang source-based)
+        run: bash NeuralAmpModeler/scripts/run-coverage-mac.sh
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-coverage
+          path: NeuralAmpModeler/build-tests-mac/coverage-html/
+          if-no-files-found: warn

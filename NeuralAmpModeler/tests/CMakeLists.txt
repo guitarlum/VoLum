@@ -93,3 +93,15 @@ if(VOLUM_ENABLE_SANITIZERS)
     message(FATAL_ERROR "VOLUM_ENABLE_SANITIZERS requires Clang")
   endif()
 endif()
+
+# Clang source-based coverage (off by default). Driven by run-coverage-mac.sh,
+# which configures a dedicated build dir so it never collides with the normal or
+# sanitizer builds. Independent of VOLUM_ENABLE_SANITIZERS.
+if(VOLUM_ENABLE_COVERAGE)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(NeuralAmpModeler-Tests PRIVATE -fprofile-instr-generate -fcoverage-mapping -O0 -g)
+    target_link_options(NeuralAmpModeler-Tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+  else()
+    message(FATAL_ERROR "VOLUM_ENABLE_COVERAGE requires Clang")
+  endif()
+endif()
