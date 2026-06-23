@@ -115,7 +115,8 @@ TEST_CASE("Keyboard channel navigation routes through the focused lane's stepper
   RequireContains(keyboardNav, "if (mCallback)");
   // The custom SUPPORT stepper callback must update the custom support channel
   // (the loader resolves the .nam from mVolumCustomSupportChannel, not the param).
-  RequireContains(source, "mVolumCustomSupportChannel = chs[(size_t)newIdx];");
+  // Channel-first: the picked row maps to an amp-wide gain stage.
+  RequireContains(source, "mVolumCustomSupportChannel = chosen;");
 }
 
 TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
@@ -597,10 +598,30 @@ TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wir
   RequireContains(source, "pPlugin->_VolumMainAmpDisplayName());"); // manage-presets subtitle
 
   // D: a custom IR needs a DIRECT capture; the row greys out and selection is
-  // hard-blocked otherwise.
+  // hard-blocked otherwise. Channel-first: the gate is now per-channel (the IR
+  // enable comes from the resolver; selection checks ChannelHasDirect).
   RequireContains(speakerRow, "void SetIrEnabled(bool enabled");
-  RequireContains(source, "row->SetIrEnabled(volum::custom::HasDirectCapture(amp)");
-  RequireContains(source, "!volum::custom::HasDirectCapture(volum::custom::CustomAmpAt(customLane))");
+  RequireContains(source, "row->SetIrEnabled(v.irEnabled");
+  RequireContains(source, "!volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
+}
+
+TEST_CASE("Custom cab navigation is channel-first")
+{
+  const std::string source = ReadPluginSource();
+  const std::string speakerRow = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSpeakerRow.h");
+
+  // The speaker row can gate the No Cab button (per-channel DIRECT availability).
+  RequireContains(speakerRow, "void SetNoCabEnabled(bool enabled");
+  // Custom lane cab refresh runs through the pure channel-first resolver.
+  RequireContains(source, "volum::custom::ResolveLaneCabs(amp, curSlot, curCh)");
+  RequireContains(source, "row->SetNoCabEnabled(v.noCabEnabled");
+  RequireContains(source, "row->SetIrEnabled(v.irEnabled");
+  // The custom channel stepper lists the amp-WIDE gain stages.
+  RequireContains(source, "const auto channels = volum::custom::AssignedChannels(amp);");
+  // Factory amps always re-enable No Cab (DIRECT on every channel).
+  RequireContains(source, "row->SetNoCabEnabled(true);");
+  // Custom IR selection is gated per-channel, not amp-wide.
+  RequireContains(source, "volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
 }
 
 TEST_CASE("Reopen restores the dirty baseline from preset content")

@@ -470,7 +470,7 @@ public:
   // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
   // (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
-  void _VolumSetCustomChannelStepper(int customIdx, int slot, bool supportLane = false, int selected = 0);
+  void _VolumSetCustomChannelStepper(int customIdx, bool supportLane, int channel);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp
   // slot, or the focused custom amp's scene). activeIrId/supportActiveIrId/
   // supportCustomId all live here (support fields belong to the MAIN scene).

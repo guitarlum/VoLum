@@ -55,6 +55,18 @@ public:
   }
   bool IsIrEnabled() const { return mIrEnabled; }
 
+  // Enable/disable the "No Cab" (raw DIRECT) button. In the channel-first model a
+  // custom amp's selected channel may not own a DIRECT capture, in which case No
+  // Cab has nothing to play and is greyed out / ignores clicks. Factory amps and
+  // any channel that owns a DIRECT capture keep it enabled.
+  void SetNoCabEnabled(bool enabled, const char* hint = "")
+  {
+    mNoCabEnabled = enabled;
+    mNoCabDisabledHint = hint ? hint : "";
+    SetDirty(false);
+  }
+  bool IsNoCabEnabled() const { return mNoCabEnabled; }
+
   // Override the three cab-button labels (slots 1-3). Used when a custom amp is
   // active so the row shows that amp's named cabs instead of G12/G65/V30. An
   // empty name marks the slot as having no capture (rendered disabled).
@@ -92,17 +104,28 @@ public:
     // IV/Josefin bold caps sit visually high in short rects - nudge text area down for optical centering
     const float btnTextNudgeY = 3.f;
 
-    // "No Cab" button (index 0) -- teal/cyan accent when active (was "AMP")
+    // "No Cab" button (index 0) -- teal/cyan accent when active (was "AMP"). When
+    // the selected channel owns no DIRECT capture it greys out like an empty cab.
     {
       IRECT btn(x, btnY, x + noCabW, btnY + btnH);
-      bool isOn = (0 == mSelected) && !mIrCabActive;
-      bool isHovered = (0 == mHovered);
-      if (isOn)
-        g.FillRoundRect(VoLumColors::SEL_GLOW, btn.GetPadded(2.5f), 5.f);
-      g.FillRoundRect(ButtonFill(isOn, isHovered, true), btn, 3.f);
-      g.DrawRoundRect(ButtonBorder(isOn, isHovered, true), btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
-      IText btnText(13.f, ButtonText(isOn, isHovered), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-      g.DrawText(btnText, labels[0].c_str(), IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      if (!mNoCabEnabled)
+      {
+        g.FillRoundRect(VoLumColors::BTN_OFF_BG, btn, 3.f);
+        g.DrawRoundRect(IColor(50, 200, 162, 70), btn, 3.f, nullptr, 1.f);
+        g.DrawText(IText(13.f, IColor(70, 235, 220, 200), "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+                   labels[0].c_str(), IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      }
+      else
+      {
+        bool isOn = (0 == mSelected) && !mIrCabActive;
+        bool isHovered = (0 == mHovered);
+        if (isOn)
+          g.FillRoundRect(VoLumColors::SEL_GLOW, btn.GetPadded(2.5f), 5.f);
+        g.FillRoundRect(ButtonFill(isOn, isHovered, true), btn, 3.f);
+        g.DrawRoundRect(ButtonBorder(isOn, isHovered, true), btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
+        IText btnText(13.f, ButtonText(isOn, isHovered), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+        g.DrawText(btnText, labels[0].c_str(), IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
+      }
       mBtnRects[0] = btn;
       x += noCabW;
     }
@@ -196,7 +219,9 @@ public:
       mHovered = next;
       const char* tip = "";
       if (next == 0)
-        tip = "No cab - raw amp, no speaker";
+        tip = mNoCabEnabled ? "No cab - raw amp, no speaker"
+                            : (mNoCabDisabledHint.empty() ? "No DIRECT capture on this channel"
+                                                          : mNoCabDisabledHint.c_str());
       else if (next >= 1 && next <= 3)
         tip = mCabNames[next - 1].empty() ? "" : "Cabinet";
       else if (next == 4)
@@ -231,8 +256,9 @@ public:
 
     for (int i = 0; i < 4; i++)
     {
-      // Cab slots 1-3 with an empty label have no capture and are not selectable.
-      const bool emptySlot = (i >= 1) && mCabNames[i - 1].empty();
+      // No Cab (index 0) is gated by DIRECT availability; cab slots 1-3 with an
+      // empty label have no capture. Either way the slot is not selectable.
+      const bool emptySlot = (i == 0) ? !mNoCabEnabled : mCabNames[i - 1].empty();
       if (mBtnRects[i].Contains(x, y) && !emptySlot && (i != mSelected || mIrCabActive))
       {
         // Choosing a baked cab clears any active custom IR cab.
@@ -331,6 +357,8 @@ private:
   std::string mIrName;
   bool mIrEnabled = true;
   std::string mIrDisabledHint;
+  bool mNoCabEnabled = true;
+  std::string mNoCabDisabledHint;
   ChangeCallback mCallback;
   IrMenuCallback mIrMenuCb;
 };
