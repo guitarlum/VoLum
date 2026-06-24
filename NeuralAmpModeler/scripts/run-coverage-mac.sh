@@ -39,7 +39,19 @@ echo "==> Running suite (instrumented)"
 rm -f "$PROFRAW" "$PROFDATA"
 # Run from the repo root so golden / NAM-load tests resolve rigs/ correctly.
 cd "$REPO_ROOT"
-LLVM_PROFILE_FILE="$PROFRAW" "$BINARY"
+# Coverage is a measurement tool, not a test gate: the blocking unit + ASan/UBSan
+# jobs already gate correctness. The instrumented binary is built at -O0 without
+# fast-math, so the bit-exact golden-DSP comparisons can differ from the
+# optimized build by a few ULPs and report a "failure"; that must not abort the
+# coverage run (which would also skip the report below). doctest still executes
+# every case and writes the profile, so swallow its exit code and keep going.
+TEST_EXIT=0
+LLVM_PROFILE_FILE="$PROFRAW" "$BINARY" || TEST_EXIT=$?
+if [[ "$TEST_EXIT" -ne 0 ]]; then
+  echo "==> NOTE: doctest returned $TEST_EXIT under the -O0 coverage build (expected for"
+  echo "    bit-exact golden comparisons); coverage was still measured. See the blocking"
+  echo "    unit + sanitizer jobs for the authoritative pass/fail."
+fi
 
 echo "==> Merging profile data"
 xcrun llvm-profdata merge -sparse "$PROFRAW" -o "$PROFDATA"
