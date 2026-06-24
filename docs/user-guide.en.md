@@ -183,6 +183,12 @@ Use the standalone app as your tone library editor. It writes the global per-amp
 
 Fresh VST3 instances read those defaults when you add VoLum to a track. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write the global VoLum settings file, so two tracks cannot overwrite each other's defaults.
 
+### A2 Lite Mode (Performance)
+
+The **Lite mode** switch in the Performance row of Settings trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. By default VoLum always plays the full-size version (best quality). Turn Lite mode on and VoLum runs the smaller version on every NAM lane: both PRE pedals, the main amp, and the dual-amp support lane.
+
+Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
+
 ### Standalone Audio Settings
 
 In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, and channel routing. In the VST3, use your DAW's audio settings instead.

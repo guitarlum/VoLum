@@ -1996,6 +1996,9 @@ void NeuralAmpModeler::OnIdle()
   if (mVolumNeedsLoad.load() && !mVolumIsLoading.load())
   {
     mVolumNeedsLoad.store(false);
+    // Consume any pending lite-mode force-reload request: a same-path reload is
+    // normally skipped, but a Lite/Full switch must re-stage the main model.
+    const bool forceMainReload = mVolumForceMainReload.exchange(false);
 
     // Capture path on main thread to avoid races with _VolumRefreshChannels
     std::string fileToLoad;
@@ -2033,7 +2036,7 @@ void NeuralAmpModeler::OnIdle()
       // sibling-prefetch by passing ampIdx = -1 (the loader skips its scan).
       const int ampIdx = customMainLoad ? -1 : mVolumAmpIdx;
       const std::string rigsRoot = customMainLoad ? std::string() : mVolumRigsRoot;
-      if (fileToLoad == mNAMPaths.live.Get())
+      if (fileToLoad == mNAMPaths.live.Get() && !forceMainReload)
       {
         mVolumIsLoading.store(false);
       }
@@ -2910,6 +2913,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     auto dspPath = std::filesystem::u8path(modelPath.Get());
     std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath);
     std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
+    // VoLum: honor the machine-global A2 Lite/Full choice on the legacy sync
+    // load path too (no-op on non-slimmable models). Selected before Reset so
+    // only the chosen slice is prewarmed.
+    temp->SetSlimmableSize(mVolumLiteMode.load() ? 0.0 : 1.0);
     temp->Reset(GetSampleRate(), GetBlockSize());
     {
       // Serialize the staging assignment against the audio thread's read/move in

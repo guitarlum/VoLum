@@ -248,3 +248,72 @@ TEST_CASE("A2 container can lazily activate the Lite submodel after load")
   for (const auto sample : output)
     CHECK(std::isfinite(static_cast<double>(sample)));
 }
+
+// Demonstrates that Lite mode does real work: the Lite slice (channels_3) and the
+// Full slice (channels_8) of the SAME A2 container produce different audio and the
+// Lite slice is measurably cheaper to run. The timings are printed so the CPU win
+// is visible in the test log (same spirit as the load+prewarm timing case above).
+TEST_CASE("A2 Lite slice differs from Full and is cheaper to run")
+{
+  nam::activations::Activation::enable_fast_tanh();
+  const auto rigPath = RepoRoot() / "rigs/Ampete One/AMP-Ampt-1.nam";
+  auto model = nam::get_dsp(rigPath);
+  REQUIRE(model != nullptr);
+  auto* slimmable = dynamic_cast<nam::SlimmableModel*>(model.get());
+  REQUIRE(slimmable != nullptr);
+
+  // A repeatable, non-trivial guitar-like input (cheap deterministic waveform).
+  std::vector<NAM_SAMPLE> input(kBlockSize);
+  for (int i = 0; i < kBlockSize; ++i)
+    input[i] = static_cast<NAM_SAMPLE>(0.2 * std::sin(0.05 * i));
+  std::vector<NAM_SAMPLE> output(kBlockSize, static_cast<NAM_SAMPLE>(0.0));
+  NAM_SAMPLE* inPtr = input.data();
+  NAM_SAMPLE* outPtr = output.data();
+
+  // Render one block on each slice and snapshot the output to prove the slice
+  // actually changed which network is computing.
+  auto renderOnce = [&](double size) {
+    slimmable->SetSlimmableSize(size);
+    model->Reset(static_cast<double>(kSampleRate), kBlockSize);
+    std::fill(output.begin(), output.end(), static_cast<NAM_SAMPLE>(0.0));
+    model->process(&inPtr, &outPtr, kBlockSize);
+    return output; // copy
+  };
+
+  const auto liteOut = renderOnce(0.0); // Lite (channels_3)
+  const auto fullOut = renderOnce(1.0); // Full (channels_8)
+
+  bool anyDifferent = false;
+  for (int i = 0; i < kBlockSize; ++i)
+  {
+    CHECK(std::isfinite(static_cast<double>(liteOut[i])));
+    CHECK(std::isfinite(static_cast<double>(fullOut[i])));
+    if (std::abs(static_cast<double>(liteOut[i]) - static_cast<double>(fullOut[i])) > 1e-6)
+      anyDifferent = true;
+  }
+  CHECK(anyDifferent); // different slice => different audio
+
+  // Throughput: process ~2 s of audio per slice and time it. channels_3 vs
+  // channels_8 is a large gap, so Lite should be clearly faster.
+  auto benchmark = [&](double size) {
+    slimmable->SetSlimmableSize(size);
+    model->Reset(static_cast<double>(kSampleRate), kBlockSize);
+    const int blocks = static_cast<int>(kFrames / kBlockSize);
+    const auto start = std::chrono::steady_clock::now();
+    for (int b = 0; b < blocks; ++b)
+      model->process(&inPtr, &outPtr, kBlockSize);
+    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+  };
+
+  benchmark(1.0); // warm caches
+  const auto fullUs = benchmark(1.0);
+  benchmark(0.0); // warm caches
+  const auto liteUs = benchmark(0.0);
+
+  const double fullMs = fullUs.count() / 1000.0;
+  const double liteMs = liteUs.count() / 1000.0;
+  std::cout << "A2 throughput (" << (kFrames) << " frames): Full(channels_8)=" << fullMs << " ms, Lite(channels_3)="
+            << liteMs << " ms, speedup=" << (fullMs / std::max(liteMs, 1e-6)) << "x" << std::endl;
+
+  CHECK(liteMs < fullMs); // Lite is cheaper
+}

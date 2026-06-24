@@ -289,6 +289,9 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
       {
         auto model = makeModel(request.fileToLoad);
         result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
+        // VoLum: select the A2 Lite/Full slice (no-op on non-slimmable models)
+        // before Reset so only the chosen slice is prewarmed.
+        result.model->SetSlimmableSize(mVolumLiteMode.load() ? 0.0 : 1.0);
         result.model->Reset(request.sampleRate, request.blockSize);
 
         // ampIdx < 0 marks a custom-amp load (files live in the content library,
@@ -335,6 +338,10 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
       {
         auto model = makeModel(request.fileToLoad);
         result.model = std::make_unique<ResamplingNAM>(std::move(model), request.sampleRate);
+        // VoLum: select the A2 Lite/Full slice (no-op on non-slimmable models)
+        // before Reset so only the chosen slice is prewarmed. Covers the SUPPORT
+        // amp and both PRE NAM pedal slots.
+        result.model->SetSlimmableSize(mVolumLiteMode.load() ? 0.0 : 1.0);
         result.model->Reset(request.sampleRate, request.blockSize);
       }
     }

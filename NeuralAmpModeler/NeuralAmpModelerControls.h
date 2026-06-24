@@ -860,6 +860,60 @@ public:
   };
 };
 
+// VoLum: non-parameter A2 Lite-mode toggle for the Settings overlay. Reads and
+// writes the machine-global Lite/Full choice on the plugin (persisted to
+// volum-settings.json, NOT the plugin chunk). Off = Full (best quality,
+// default); On = Lite (smaller A2 slice, lower CPU). No effect on rigs that are
+// not slimmable containers.
+class VoLumLiteModeSwitchControl : public IControl
+{
+public:
+  VoLumLiteModeSwitchControl(const IRECT& bounds, const IText& labelText)
+  : IControl(bounds)
+  , mLabelText(labelText.WithAlign(EAlign::Near).WithVAlign(EVAlign::Middle))
+  {
+    SetTooltip("Lite mode runs the smaller A2-Lite slice of A2 amp/pedal captures to lower CPU.\n"
+               "Off = full quality (default). Applies to all NAM lanes; no effect on non-A2 rigs.");
+  }
+
+  bool IsLite() const
+  {
+    if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(const_cast<VoLumLiteModeSwitchControl*>(this)->GetDelegate()))
+      return plugin->_VolumIsLiteMode();
+    return false;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const bool lite = IsLite();
+    const float pillW = 46.f;
+    const float pillH = 22.f;
+    const IRECT pill = mRECT.GetFromRight(pillW).GetCentredInside(pillW, pillH);
+    const IRECT labelR(mRECT.L, mRECT.T, pill.L - 12.f, mRECT.B);
+    g.DrawText(mLabelText, "Lite mode (lower CPU)", labelR);
+
+    const float cr = pillH * 0.5f;
+    g.FillRoundRect(lite ? VoLumColors::GOLD.WithOpacity(0.32f) : VoLumColors::FRAME.WithOpacity(0.45f), pill, cr);
+    g.DrawRoundRect(lite ? VoLumColors::GOLD : VoLumColors::FRAME, pill, cr, &mBlend, 1.f);
+    const float knobD = pillH - 6.f;
+    const float kx = lite ? (pill.R - knobD - 3.f) : (pill.L + 3.f);
+    const IRECT knob(kx, pill.MH() - knobD * 0.5f, kx + knobD, pill.MH() + knobD * 0.5f);
+    g.FillEllipse(lite ? VoLumColors::GOLD : VoLumColors::TEXT_BRIGHT, knob);
+    if (mMouseIsOver)
+      g.FillRoundRect(PluginColors::MOUSEOVER, pill, cr);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+      plugin->_VolumSetLiteMode(!plugin->_VolumIsLiteMode());
+    SetDirty(false);
+  }
+
+private:
+  IText mLabelText;
+};
+
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren
 {
 public:
@@ -981,6 +1035,12 @@ public:
     const auto modelInfoArea = footerTextBody.GetFromLeft(modelColW);
     const auto aboutArea = footerTextBody.GetFromRight(footerTextBody.W() - modelColW);
 
+    // VoLum: A2 Lite-mode preference row, reserved between the calibration/output
+    // cards and the footer rule. Reduce the work area from the bottom first so the
+    // two-column cards lay out in the remaining space and never overlap this row.
+    const float perfRowH = 40.0f;
+    IRECT perfRow = inner.ReduceFromBottom(perfRowH).GetPadded(10.f, 0.f, 10.f, 0.f);
+
     // Input calibration + output mode: VoLum fills mid band; balanced columns + rule (see
     // ui-mockup/settings-overlay-mockup.html)
     {
@@ -1053,6 +1113,18 @@ public:
         new IVLabelControl(inputTitleR, "Input calibration", sectionCapStyle), mControlNames.inputSection);
       AddNamedChildControl(
         new IVLabelControl(outputTitleR, "Output mode", sectionCapStyle), mControlNames.outputSection);
+
+      // A2 Lite mode lives in its own full-width row under the two cards: a left
+      // section cap and a centred non-param toggle, matching the panel's type
+      // and spacing.
+      const auto perfCapR = perfRow.GetFromLeft(perfRow.W()).GetFromTop(14.f);
+      AddNamedChildControl(new IVLabelControl(perfCapR.GetFromLeft(140.f), "Performance",
+                                              sectionCapStyle.WithValueText(sectionCapStyle.valueText.WithAlign(
+                                                EAlign::Near))),
+                           mControlNames.perfSection);
+      const float liteCtrlW = std::min(300.f, perfRow.W());
+      const IRECT liteArea = perfRow.GetReducedFromTop(14.f).GetCentredInside(liteCtrlW, 24.f);
+      AddNamedChildControl(new VoLumLiteModeSwitchControl(liteArea, leftText), mControlNames.liteMode);
     }
     const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
     AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutArea), mControlNames.shortcutInfo);
@@ -1110,6 +1182,8 @@ private:
     const std::string outputGroupFrame = "OutputGroupFrame";
     const std::string inputGroupFrame = "InputGroupFrame";
     const std::string title = "Title";
+    const std::string liteMode = "LiteMode";
+    const std::string perfSection = "PerfSection";
   } mControlNames;
 
   class InputLevelControl : public IEditableTextControl
