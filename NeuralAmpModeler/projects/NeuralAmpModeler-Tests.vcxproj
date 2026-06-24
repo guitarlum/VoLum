@@ -123,6 +123,7 @@
     <ClCompile Include="..\tests\test_volum_pre_pedal_captures.cpp" />
     <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_content_store.cpp" />
+    <ClCompile Include="..\tests\test_volum_content_crud_edge.cpp" />
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_staging.cpp" />
