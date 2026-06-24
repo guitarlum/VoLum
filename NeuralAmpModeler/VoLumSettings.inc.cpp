@@ -720,7 +720,7 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   nlohmann::json j = volum::VolumUserSettingsToJson(
     mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
     /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
-    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr);
+    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load());
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   // 1.2.0 additive session refs (ignored by older builds): the focused custom
@@ -792,9 +792,12 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     bool haveLivePostSnapshot = false;
     volum::VoLumAmpSettings parsedLivePre;
     volum::VoLumAmpSettings parsedLivePost;
+    bool parsedLiteMode = false;
     volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
                                      &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
-                                     &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot);
+                                     &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
+                                     &parsedLiteMode);
+    mVolumLiteMode.store(parsedLiteMode);
     if (haveLivePreSnapshot)
       mVolumLiveLockedPre = parsedLivePre;
     if (haveLivePostSnapshot)
@@ -836,6 +839,24 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   {
     std::cerr << "Failed to read volum-settings.json" << std::endl;
   }
+}
+
+void NeuralAmpModeler::_VolumSetLiteMode(bool lite)
+{
+  if (mVolumLiteMode.load() == lite)
+    return;
+  mVolumLiteMode.store(lite);
+  // Persist the machine-global choice immediately (JSON, not the plugin chunk).
+  _VolumSaveSettingsToFile();
+  // Re-apply the new slice to every lane by requesting a reload through the
+  // proven async staging path; the loader picks up mVolumLiteMode and calls
+  // SetSlimmableSize before Reset. Non-slimmable lanes simply reload unchanged.
+  // The main lane normally skips a same-path reload, so force it here.
+  mVolumForceMainReload.store(true);
+  mVolumNeedsLoad.store(true);
+  mVolumSupportNeedsLoad.store(true);
+  mVolumPreNeedsLoad[0].store(true);
+  mVolumPreNeedsLoad[1].store(true);
 }
 
 // ---------------------------------------------------------------------------

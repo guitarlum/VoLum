@@ -8,6 +8,7 @@
 #include "../AudioDSPTools/dsp/wav.h"
 #include "../AudioDSPTools/dsp/ResamplingContainer/ResamplingContainer.h"
 #include "../NeuralAmpModelerCore/NAM/dsp.h"
+#include "../NeuralAmpModelerCore/NAM/slimmable.h"
 
 #include "Colors.h"
 #include "ToneStack.h"
@@ -304,6 +305,17 @@ public:
   // So that we can let the world know if we're resampling (useful for debugging)
   double GetEncapsulatedSampleRate() const { return GetNAMSampleRate(mEncapsulated); };
 
+  // VoLum: if the encapsulated model is a slimmable container (A2), select its
+  // Lite (val < 0.5) or Full (val >= 0.5) slice. Plain (non-slimmable) models
+  // no-op gracefully. The container prepares the inactive slice under its own
+  // mutex; call this off the audio thread (loader thread / staging), not in
+  // ProcessBlock.
+  void SetSlimmableSize(const double val)
+  {
+    if (auto* slim = dynamic_cast<nam::SlimmableModel*>(mEncapsulated.get()))
+      slim->SetSlimmableSize(val);
+  };
+
 private:
   bool NeedToResample() const { return GetExpectedSampleRate() != GetEncapsulatedSampleRate(); };
   // The encapsulated NAM
@@ -403,6 +415,10 @@ public:
   void _VolumApplyDspCaches();
   void _VolumSaveSettingsToFile();
   void _VolumLoadSettingsFromFile();
+  // VoLum: set the machine-global A2 Lite/Full mode, persist it, and reload all
+  // four NAM lanes so the new slice is applied through the async staging path.
+  void _VolumSetLiteMode(bool lite);
+  bool _VolumIsLiteMode() const { return mVolumLiteMode.load(); }
   void _VolumSaveEffectSettings();
   void _VolumRestoreEffectSettings();
   void _VolumSaveDelayModeSnapshot(int mode);
@@ -616,8 +632,17 @@ private:
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
+  // VoLum: when set, the next main-lane load in OnIdle bypasses the
+  // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
+  // even though its file path is unchanged.
+  std::atomic<bool> mVolumForceMainReload{false};
   std::atomic<bool> mVolumPreNeedsLoad[2]{{false}, {false}};
   std::atomic<bool> mVolumPreIsLoading[2]{{false}, {false}};
+  // VoLum: machine-global A2 Lite mode. false = Full (best quality, default),
+  // true = Lite (smaller slice, lower CPU). Persisted in volum-settings.json
+  // (NOT the plugin chunk), applied to every lane at model load time. Read on
+  // the loader thread, written on the main thread -> atomic.
+  std::atomic<bool> mVolumLiteMode{false};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading

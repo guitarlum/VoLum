@@ -923,3 +923,47 @@ TEST_CASE("User settings IO tolerates settings without supportActiveIrId")
   REQUIRE_FALSE(healed);
   CHECK(loaded[0].supportActiveIrId.empty());
 }
+
+// VoLum 1.2.0: machine-global A2 Lite mode (Full/Lite). Persisted in the user
+// settings JSON, not the plugin chunk, so it round-trips here.
+TEST_CASE("User settings IO round-trips machine-global liteMode")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+
+  const nlohmann::json jLite =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/0, /*fx=*/nullptr, /*includeDualAmp=*/true,
+                                   /*preLocked=*/false, /*postLocked=*/false, /*liveLockedPre=*/nullptr,
+                                   /*liveLockedPost=*/nullptr, /*liteMode=*/true);
+  REQUIRE(jLite["liteMode"] == true);
+
+  bool lite = false;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(jLite, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, &lite);
+  REQUIRE_FALSE(healed);
+  CHECK(lite == true);
+
+  // Default (Full) must also round-trip as false.
+  const nlohmann::json jFull = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE(jFull["liteMode"] == false);
+  lite = true;
+  volum::VolumUserSettingsFromJson(jFull, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, &lite);
+  CHECK(lite == false);
+}
+
+// An older settings file (no liteMode key) must load cleanly defaulting to Full
+// with no heal flag (additive forward tolerance, no version bump).
+TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Full)")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j.erase("liteMode"); // simulate a pre-1.2.0 writer
+
+  bool lite = true; // sentinel: prove the loader sets it back to default false
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, &lite);
+  REQUIRE_FALSE(healed);
+  CHECK(lite == false);
+}

@@ -398,13 +398,17 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
                                                const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
                                                bool preLocked = false, bool postLocked = false,
                                                const VoLumAmpSettings* liveLockedPre = nullptr,
-                                               const VoLumAmpSettings* liveLockedPost = nullptr)
+                                               const VoLumAmpSettings* liveLockedPost = nullptr,
+                                               bool liteMode = false)
 {
   nlohmann::json j;
   j["version"] = kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = lastAmpIdx;
   j["preLocked"] = preLocked;
   j["postLocked"] = postLocked;
+  // VoLum 1.2.0: machine-global A2 Lite mode (false = Full, default). Additive
+  // optional key; older readers ignore it, so no version bump.
+  j["liteMode"] = liteMode;
   // Live lock snapshots: persisted independently of per-amp slots so that
   // reopening the app with a lock still on restores the exact live PRE/POST
   // the user was hearing, without ever mutating any amp's stored scene.
@@ -509,7 +513,7 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
                                       VoLumAmpSettings* liveLockedPre = nullptr,
                                       VoLumAmpSettings* liveLockedPost = nullptr,
                                       bool* haveLiveLockedPre = nullptr,
-                                      bool* haveLiveLockedPost = nullptr)
+                                      bool* haveLiveLockedPost = nullptr, bool* liteMode = nullptr)
 {
   bool healed = false;
   auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue, int defaultValue) {
@@ -606,6 +610,14 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
   {
     *postLocked = false;
     loadBool(j, "postLocked", *postLocked, false);
+  }
+
+  // VoLum 1.2.0: machine-global A2 Lite mode. Optional, no version gate; default
+  // Full (false) when the key is absent (older files / fresh installs).
+  if (liteMode)
+  {
+    *liteMode = false;
+    loadBool(j, "liteMode", *liteMode, false);
   }
 
   // Live lock snapshots: stored independently of per-amp slots so that the
