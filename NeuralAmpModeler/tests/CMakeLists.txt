@@ -32,6 +32,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_pre_pedal_captures.cpp
   test_volum_custom_content.cpp
   test_volum_content_store.cpp
+  test_volum_content_crud_edge.cpp
   test_volum_processing_plan.cpp
   test_volum_dsp_cache_params.cpp
   test_volum_dsp_staging.cpp
