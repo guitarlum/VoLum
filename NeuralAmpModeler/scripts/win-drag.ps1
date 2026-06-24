@@ -1,19 +1,34 @@
-# win-drag.ps1 - inject a left-button drag (down -> stepped move -> up) at
-# window-relative pixel coords into a process's main window. Built to drive the
-# VoLum standalone corner-resizer grip for repeatable resize profiling alongside
-# win-screenshot.ps1 (darkClientPct) and the VOLUM_SHOW_FPS overlay.
+# win-drag.ps1 - inject a left-button drag (down -> stepped move -> up) into a
+# process's main window. Built to drive the VoLum standalone corner-resizer grip
+# for repeatable resize profiling alongside win-screenshot.ps1 (darkClientPct) and
+# the VOLUM_SHOW_FPS overlay.
 #
-#   pwsh -File win-drag.ps1 -X1 900 -Y1 700 -X2 1180 -Y2 900 -Steps 24 -StepMs 16
+# Two modes:
 #
-# X1/Y1 = drag start (window-relative), X2/Y2 = drag end (window-relative).
+# 1) Explicit window-relative coords:
+#    pwsh -File win-drag.ps1 -X1 900 -Y1 700 -X2 1180 -Y2 900 -Steps 24 -StepMs 16
+#
+# 2) -Grip (recommended): auto-start from the LIVE bottom-right corner so the
+#    coordinates can never go stale after a previous resize. Give a target size
+#    or a corner delta:
+#    pwsh -File win-drag.ps1 -Grip -TargetW 1400 -TargetH 980 -Steps 24 -StepMs 8
+#    pwsh -File win-drag.ps1 -Grip -DeltaX 300 -DeltaY 220
+#
 # Steps  = number of intermediate SetCursorPos moves (simulates drag speed).
 # StepMs = delay between moves in ms (16 ~ one 60Hz frame; lower = faster drag).
+# GripMargin = inset (px) from the window corner to land on the resizer grip.
 param(
   [string]$ProcessName = "VoLum",
-  [Parameter(Mandatory=$true)][int]$X1,
-  [Parameter(Mandatory=$true)][int]$Y1,
-  [Parameter(Mandatory=$true)][int]$X2,
-  [Parameter(Mandatory=$true)][int]$Y2,
+  [int]$X1 = -1,
+  [int]$Y1 = -1,
+  [int]$X2 = -1,
+  [int]$Y2 = -1,
+  [switch]$Grip,
+  [int]$GripMargin = 12,
+  [int]$TargetW = 0,
+  [int]$TargetH = 0,
+  [int]$DeltaX = 0,
+  [int]$DeltaY = 0,
   [int]$Steps = 24,
   [int]$StepMs = 16,
   [int]$SettleMs = 400
@@ -42,6 +57,29 @@ if ([WinDrag]::IsIconic($hwnd)) { [WinDrag]::ShowWindow($hwnd, [WinDrag]::SW_RES
 Start-Sleep -Milliseconds 200
 $rect = New-Object WinDrag+RECT
 [WinDrag]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+$w = $rect.Right - $rect.Left
+$h = $rect.Bottom - $rect.Top
+
+if ($Grip) {
+  # Start on the live corner grip; never trust a hardcoded coordinate.
+  $X1 = $w - $GripMargin
+  $Y1 = $h - $GripMargin
+  if ($TargetW -gt 0 -or $TargetH -gt 0) {
+    if ($TargetW -le 0) { $TargetW = $w }
+    if ($TargetH -le 0) { $TargetH = $h }
+    $X2 = $X1 + ($TargetW - $w)
+    $Y2 = $Y1 + ($TargetH - $h)
+  }
+  else {
+    $X2 = $X1 + $DeltaX
+    $Y2 = $Y1 + $DeltaY
+  }
+}
+elseif ($X1 -lt 0 -or $Y1 -lt 0 -or $X2 -lt 0 -or $Y2 -lt 0) {
+  Write-Output "NEED_COORDS: pass -Grip (+ -TargetW/-TargetH or -DeltaX/-DeltaY) or explicit -X1 -Y1 -X2 -Y2"
+  exit 3
+}
+
 $sx = $rect.Left + $X1
 $sy = $rect.Top + $Y1
 [WinDrag]::SetCursorPos($sx, $sy) | Out-Null
@@ -59,4 +97,7 @@ for ($i = 1; $i -le $Steps; $i++) {
 Start-Sleep -Milliseconds 40
 [WinDrag]::mouse_event([WinDrag]::LEFTUP, 0, 0, 0, [UIntPtr]::Zero)
 Start-Sleep -Milliseconds $SettleMs
-Write-Output "DRAG ($($rect.Left + $X1),$($rect.Top + $Y1)) -> ($($rect.Left + $X2),$($rect.Top + $Y2)) steps=$Steps stepMs=$StepMs in $ProcessName"
+[WinDrag]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+$nw = $rect.Right - $rect.Left
+$nh = $rect.Bottom - $rect.Top
+Write-Output "DRAG win-rel ($X1,$Y1)->($X2,$Y2) steps=$Steps stepMs=$StepMs : size ${w}x${h} -> ${nw}x${nh}"

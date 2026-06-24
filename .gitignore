@@ -38,6 +38,14 @@ rigs/volum-settings.json
 training/a2-out/
 training/a2-r2-out/
 training/a2-final/
+# Training input/reference binaries: large + re-downloadable (NAM standard v3
+# input sweep, Tone3000 reference models). Keep the cloud toolkit, not the blobs.
+training/*.wav
+training/*.nam
+
+# CI scratch logs (local watch/triage output, not tracked)
+/ci-watch.log
+/ci-failed-log.txt
 
 NeuralAmpModeler/ui-mockup/
 rigs/*/amp-pic-*
