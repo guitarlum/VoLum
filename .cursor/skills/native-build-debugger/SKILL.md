@@ -13,6 +13,17 @@ description: Diagnose VoLum Windows/macOS native build, package, artifact, and C
 
 Commands for tests, app smoke, and packaging are in `AGENTS.md` "Fast Commands".
 
+## CI timing (don't mistake "slow" for "hung")
+
+A full green CI run on `dev`/PRs takes ~70-82 min total. macOS is the long pole;
+within it the "Sanitized unit tests (ASan/UBSan)" step alone runs ~40-50 min
+(instrumented rebuild + 1.4M+ doctest assertions). Windows finishes much earlier.
+So a macOS job sitting on the sanitizer step for ~45 min is normal, not stuck - a
+real problem shows as a FAILED step, not a long-running one. The in-progress job
+log blob 404s until the job completes; gauge progress from step status
+(`gh run view <id> --json jobs`) instead, and only suspect a hang if total run
+time exceeds ~90 min.
+
 ## Windows
 
 - If postbuild copy/link fails, close stale `VoLum.exe` and rerun.

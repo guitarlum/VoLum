@@ -1,30 +1,36 @@
 # Q3: VoLum 1.2.0 custom-content correctness fixes
 
 Seeded from the 1.2.0 thermo-nuclear review (`docs/design/1.2.0-quality-review.md`,
-section 2). These are verified correctness gaps in the BYO/presets backend that
-were left to backlog because each changes load/restore behavior and needs a
-focused test, unlike the contained `RemoveCustomAmp` fix already landed.
+section 2). NOTE: re-verified after the review — **none of these are urgent
+user-facing bugs** (the one real bug in this cluster, `RemoveCustomAmp` orphaning
+files, was already fixed and tested). These are niche/latent hardening items kept
+here for a future quality pass. Each changes load/restore behavior, so each needs
+a focused test.
 
 ## Problem
 
-1. **Preset settings not restored on load.** On chunk/session restore, a matched
-   `activePresetId` sets the preset label + "clean" bar and snapshots
-   `_VolumActiveScene()`, but never applies `pr.settings`. The user sees the
-   preset name while the knobs reflect the per-amp scene, not the saved preset.
-   See `NeuralAmpModeler/Unserialization.cpp` (~682) and
-   `_VolumRestoreSessionSelection` (`NeuralAmpModeler.cpp` ~2220).
-2. **`customSupportId` serialized but never applied.** The id-tail writes
-   `customSupportId` (`NeuralAmpModeler.cpp` ~2153) but unserialize only applies
-   `perAmpSupportId` / `customMainId`. A custom-main + custom-support project can
-   lose its support partner on reload.
-3. **`_VolumActiveScene()` inserts empty scenes on read.** It returns
+1. **Preset values relabel a drifted custom-amp scene (niche).** Restore
+   re-applies the live *saved* scene and relabels the matched preset
+   (`Unserialization.cpp` ~682, `_VolumRestoreSessionSelection`
+   `NeuralAmpModeler.cpp` ~2220). In the normal case the knobs are correct. It
+   only diverges for a **custom** amp whose shared-library scene was changed by
+   another project between saves (custom scenes are library-global, not stored in
+   the DAW chunk), so the chunk relabels the drifted library scene as the preset.
+   Applying `pr.settings` on the matched-preset path would harden this.
+2. **`customSupportId` id-tail field is dead (cleanup, not a bug).** The id-tail
+   writes `customSupportId` (`NeuralAmpModeler.cpp` ~2153) but unserialize never
+   reads it. Support is correctly restored from the scene's `supportCustomId`
+   (`_VolumApplyAmpSettings`, `VoLumSettings.inc.cpp` ~618) and from
+   `perAmpSupportId` for factory slots. The unused field can simply be removed.
+3. **`_VolumActiveScene()` inserts empty scenes on read (latent).** It returns
    `customScenes[id]` via `operator[]` (`NeuralAmpModeler.cpp` ~4172). Any read
-   path with a stale/erased id silently persists a default scene. It is used in
-   many write paths too, so the fix needs a read/write split.
-4. **Pedal legacy-index cap collides at 127.** Once `nextPedalIndex > 127`,
+   path with a stale/erased id silently persists a default scene. The scene is
+   created at selection so it doesn't bite in practice, but it is a footgun. Used
+   in many write paths too, so the fix needs a read/write split.
+4. **Pedal legacy-index cap collides at 127 (edge).** Once `nextPedalIndex > 127`,
    `AddPedal` (`VoLumCustomContentMock.h` ~357) clamps every new pedal to 127 ->
-   colliding PRE-capture indices, silently. `PedalLegacyIndexAt` (~319) returns
-   `0` (== EMPTY) for out-of-range.
+   colliding PRE-capture indices, silently (needs 64 imported pedals to hit).
+   `PedalLegacyIndexAt` (~319) returns `0` (== EMPTY) for out-of-range.
 
 ## Scope
 

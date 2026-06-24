@@ -18,7 +18,7 @@ fresh Cursor planning chat.
 
 ### Features
 - `F1-transpose-octaver-pedal.md` — combined Transpose + Octaver PRE pedal before the compressor.
-- `F4-a2-lite-mode-support.md` — optional opt-in A2-Lite execution; default stays A2-Full. Seeded from the A2 retraining work (see `docs/a2-training-runbook.md`).
+- `F4-a2-lite-mode-support.md` — optional opt-in A2-Lite execution; default stays A2-Full. **Implemented on `feature/a2-lite-mode` (in test / pending merge to `dev`)**; archive + prune the prompt once merged. Seeded from the A2 retraining work (see `docs/a2-training-runbook.md`).
 - `F5-presets-full-rig.md` — save / load / recall a full rig (amp(s) + PRE + POST) as a named preset, with factory presets and export/import.
 - `F6-bring-your-own-amp.md` — custom-amp builder + the shared "Base / Custom" area and user-content storage (foundation for F7 / F8).
 - `F7-bring-your-own-ir.md` — surface the existing hidden NAM IR convolver as a first-class `.wav` cabinet-IR feature in the Custom area.
@@ -31,7 +31,7 @@ fresh Cursor planning chat.
 ### Quality / Testing
 - `Q1-regression-pin-safety-net.md` — fast in-CI doctest pins locking 1.2.0 UI/state behavior (thumbnail scaling, hover highlight, standalone preset restore) so a later perf/refactor pass can't silently regress them. Low-to-medium; pull the scaling pin in alongside the performance-optimization ticket.
 - `Q2-volum-1.2.0-structure-decompose.md` — decompose the 1964-line `VoLumCustomUi.h`, dedup scrollbar/glyph/PRE-menu primitives, and make the builder popup list-disciplined. Pure hygiene, phased low->high risk.
-- `Q3-volum-1.2.0-custom-content-correctness.md` — verified 1.2.0 BYO/presets correctness gaps from the quality review: preset settings (not just label) restored on load, `customSupportId` applied on load, `_VolumActiveScene()` read/write split, pedal index-cap collision. From `docs/design/1.2.0-quality-review.md`.
+- `Q3-volum-1.2.0-custom-content-correctness.md` — 1.2.0 BYO/presets hardening, re-verified down from the quality review: **none are urgent user-facing bugs** (the one real bug, `RemoveCustomAmp` orphaning, already landed). Remaining items are niche/latent: preset values relabelling a drifted custom-amp scene (niche), `_VolumActiveScene()` read/write split (latent), pedal index-cap collision at 127 (edge); `customSupportId` id-tail field is dead-code cleanup, not a bug. From `docs/design/1.2.0-quality-review.md`.
 - `P2-volum-1.2.0-rt-and-perf-hardening.md` — lock-free staging drain (no audio-thread mutex/alloc), main I/O buffer capacity assert, async IR load, field-wise dirty compare, throttled settings save.
 
 ### Docs
