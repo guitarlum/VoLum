@@ -652,6 +652,20 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     if (haveIdTail)
     {
       pos = idTailPos;
+      auto applyPitchTail = [](const volum::PitchTail& p, volum::VoLumAmpSettings& s) {
+        if (!p.present)
+          return;
+        s.prePitchActive = p.active;
+        s.prePitchMode = std::clamp(p.mode, 0, volum::kVoLumPitchModeCount - 1);
+        s.prePitchSemitones = std::clamp(p.semitones, -12.0, 12.0);
+        s.prePitchMix = std::clamp(p.mix, 0.0, 1.0);
+        s.prePitchOctDown = std::clamp(p.octDown, 0.0, 1.0);
+        s.prePitchOctUp = std::clamp(p.octUp, 0.0, 1.0);
+        s.prePitchDry = std::clamp(p.dry, 0.0, 1.0);
+        s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
+        s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
+        s.prePitchQuality = std::clamp(p.quality, 0.0, 1.0);
+      };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
         mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
@@ -659,7 +673,9 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         mVolumAmpSettings[i].supportCustomId = idTail.perAmpSupportId[i];
         mVolumAmpSettings[i].supportCustomSlot = idTail.perAmpSupportSlot[i];
         mVolumAmpSettings[i].supportCustomChannel = idTail.perAmpSupportChannel[i];
+        applyPitchTail(idTail.perAmpPitch[i], mVolumAmpSettings[i]);
       }
+      applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
       mVolumActivePresetId = idTail.activePresetId;
     }
 

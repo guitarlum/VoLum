@@ -39,6 +39,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_output_mode.cpp
   test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp
+  test_volum_pitch.cpp
   test_volum_ir_file_guard.cpp
   test_volum_pre_post_lock.cpp
   test_volum_nan_guard.cpp
@@ -69,6 +70,7 @@ add_executable(NeuralAmpModeler-Tests
 target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${PROJECT_DIR}"
   "${CMAKE_CURRENT_LIST_DIR}/third_party"
+  "${PROJECT_DIR}/third_party/signalsmith"
   "${REPO_ROOT}/eigen"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM"
   "${REPO_ROOT}/iPlug2/IPlug/APP"

@@ -50,6 +50,25 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // and new readers tolerate missing/extra keys; nothing branches on the version.
 inline constexpr int kVoLumIdTailSchema = 3;
 
+// PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
+// per-amp block) so the byte-counted size detectors stay untouched. `present`
+// distinguishes "written by a pitch-aware build" from "absent" (older chunk ->
+// pitch defaults = bypassed).
+struct PitchTail
+{
+  bool present = false;
+  bool active = false;
+  int mode = 0; // 0=Transpose, 1=Octaver
+  double semitones = 0.0;
+  double mix = 1.0;
+  double octDown = 0.0;
+  double octUp = 0.0;
+  double dry = 1.0;
+  int voicing = 1; // 0=Vintage, 1=Modern
+  double level = 0.0;
+  double quality = 0.5;
+};
+
 struct ChunkIdTail
 {
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
@@ -60,6 +79,8 @@ struct ChunkIdTail
   std::string perAmpSupportId[kAmpCount]; // factory amp -> custom support partner id
   int perAmpSupportSlot[kAmpCount]; // factory amp -> custom support cab slot (-2 = unset)
   int perAmpSupportChannel[kAmpCount]; // factory amp -> custom support gain stage (0 = unset)
+  PitchTail perAmpPitch[kAmpCount]; // factory amp -> PRE Pitch pedal settings
+  PitchTail lockedPrePitch; // live-locked PRE pitch snapshot (present iff PRE locked + written)
 
   ChunkIdTail()
   {
@@ -71,6 +92,46 @@ struct ChunkIdTail
   }
 };
 
+inline nlohmann::json PitchTailToJson(const PitchTail& p)
+{
+  return nlohmann::json{{"active", p.active},   {"mode", p.mode},   {"semi", p.semitones},
+                        {"mix", p.mix},         {"octDn", p.octDown}, {"octUp", p.octUp},
+                        {"dry", p.dry},         {"voice", p.voicing}, {"level", p.level},
+                        {"qual", p.quality}};
+}
+
+inline PitchTail PitchTailFromJson(const nlohmann::json& j)
+{
+  PitchTail p;
+  if (!j.is_object())
+    return p;
+  auto num = [](const nlohmann::json& v, double d) { return v.is_number() ? v.get<double>() : d; };
+  auto integer = [](const nlohmann::json& v, int d) { return v.is_number_integer() ? v.get<int>() : d; };
+  auto boolean = [](const nlohmann::json& v, bool d) { return v.is_boolean() ? v.get<bool>() : d; };
+  if (j.contains("active"))
+    p.active = boolean(j["active"], false);
+  if (j.contains("mode"))
+    p.mode = integer(j["mode"], 0);
+  if (j.contains("semi"))
+    p.semitones = num(j["semi"], 0.0);
+  if (j.contains("mix"))
+    p.mix = num(j["mix"], 1.0);
+  if (j.contains("octDn"))
+    p.octDown = num(j["octDn"], 0.0);
+  if (j.contains("octUp"))
+    p.octUp = num(j["octUp"], 0.0);
+  if (j.contains("dry"))
+    p.dry = num(j["dry"], 1.0);
+  if (j.contains("voice"))
+    p.voicing = integer(j["voice"], 1);
+  if (j.contains("level"))
+    p.level = num(j["level"], 0.0);
+  if (j.contains("qual"))
+    p.quality = num(j["qual"], 0.5);
+  p.present = true;
+  return p;
+}
+
 inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
 {
   nlohmann::json j;
@@ -80,12 +141,19 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
   j["activePresetId"] = t.activePresetId;
   nlohmann::json perAmp = nlohmann::json::array();
   for (int i = 0; i < kAmpCount; ++i)
-    perAmp.push_back({{"ir", t.perAmpIrId[i]},
-                      {"supIr", t.perAmpSupportIrId[i]},
-                      {"sup", t.perAmpSupportId[i]},
-                      {"supCab", t.perAmpSupportSlot[i]},
-                      {"supCh", t.perAmpSupportChannel[i]}});
+  {
+    nlohmann::json entry = {{"ir", t.perAmpIrId[i]},
+                            {"supIr", t.perAmpSupportIrId[i]},
+                            {"sup", t.perAmpSupportId[i]},
+                            {"supCab", t.perAmpSupportSlot[i]},
+                            {"supCh", t.perAmpSupportChannel[i]}};
+    if (t.perAmpPitch[i].present)
+      entry["pitch"] = PitchTailToJson(t.perAmpPitch[i]);
+    perAmp.push_back(entry);
+  }
   j["perAmp"] = perAmp;
+  if (t.lockedPrePitch.present)
+    j["lockedPrePitch"] = PitchTailToJson(t.lockedPrePitch);
   return j;
 }
 
@@ -120,8 +188,12 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         t.perAmpSupportSlot[i] = arr[i]["supCab"].get<int>();
       if (arr[i].contains("supCh") && arr[i]["supCh"].is_number_integer())
         t.perAmpSupportChannel[i] = arr[i]["supCh"].get<int>();
+      if (arr[i].contains("pitch"))
+        t.perAmpPitch[i] = PitchTailFromJson(arr[i]["pitch"]);
     }
   }
+  if (j.contains("lockedPrePitch"))
+    t.lockedPrePitch = PitchTailFromJson(j["lockedPrePitch"]);
   return t;
 }
 

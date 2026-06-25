@@ -5,6 +5,7 @@ namespace volum
 
 struct ProcessingPlan
 {
+  bool runPrePitch = false;
   bool runPreComp = false;
   bool runPreNam[2]{false, false};
   bool runNoiseGate = false;
@@ -26,9 +27,11 @@ inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActiv
                                          const bool havePreNam[2], bool delayActive, bool reverbActive,
                                          bool tunerActive, bool dualAmpActive = false,
                                          bool haveSupportModel = false, bool supportToneStackActive = false,
-                                         bool supportIrActive = false, bool haveSupportIR = false)
+                                         bool supportIrActive = false, bool haveSupportIR = false,
+                                         bool prePitchActive = false)
 {
   ProcessingPlan plan;
+  plan.runPrePitch = prePitchActive;
   plan.runPreComp = preCompActive;
   plan.runPreNam[0] = preNamActive[0] && havePreNam[0];
   plan.runPreNam[1] = preNamActive[1] && havePreNam[1];

@@ -30,7 +30,40 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
   IColor mid(dimmed ? 40 : 80, 100, 180, 200);
   IColor dim(dimmed ? 20 : 45, 80, 150, 170);
 
-  if (effect == EVoLumEffectFocus::COMP)
+  if (effect == EVoLumEffectFocus::PITCH)
+  {
+    // Double helix: two phase-shifted sine strands with cross "rungs", evoking
+    // an octave/interval shift. Scales from PRE thumbnail to focused card.
+    const float activeMul = dimmed ? 0.25f : 1.0f;
+    const IColor teal((int)(135.f * activeMul), 90, 205, 220);
+    const IColor blue((int)(145.f * activeMul), 150, 200, 245);
+    const float amp = r.H() * 0.28f;
+    const float turns = 2.2f;
+    const int segs = 64;
+    const float x0 = r.L + r.W() * 0.12f;
+    const float x1 = r.R - r.W() * 0.12f;
+    float pAx = 0.f, pAy = 0.f, pBx = 0.f, pBy = 0.f;
+    for (int s = 0; s <= segs; ++s)
+    {
+      const float t = (float)s / (float)segs;
+      const float x = x0 + (x1 - x0) * t;
+      const float ph = t * turns * 6.28318f;
+      const float ay = cy + sinf(ph) * amp;
+      const float by = cy + sinf(ph + 3.14159f) * amp;
+      if (s > 0)
+      {
+        g.DrawLine(teal, pAx, pAy, x, ay, nullptr, 1.6f);
+        g.DrawLine(blue, pBx, pBy, x, by, nullptr, 1.6f);
+        if (s % 6 == 0)
+          g.DrawLine(blue.WithOpacity(0.5f), x, ay, x, by, nullptr, 1.0f);
+      }
+      pAx = x;
+      pAy = ay;
+      pBx = x;
+      pBy = by;
+    }
+  }
+  else if (effect == EVoLumEffectFocus::COMP)
   {
     const float activeMul = dimmed ? 0.25f : 1.0f;
     const IColor teal((int)(125.f * activeMul), 90, 205, 220);

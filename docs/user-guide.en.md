@@ -52,12 +52,25 @@ The amp **OUTPUT** knob keeps unity at `0.0 dB`. Turn it fully counter-clockwise
 
 ![VoLum PRE section](user-guide-pre.png)
 
-PRE runs before the amp. It contains a compressor and two assignable NAM pedal slots.
+PRE runs before the amp. It contains a pitch pedal, a compressor, and two assignable NAM pedal slots.
 
 1. Click **PRE**.
-2. Click **COMP**, **NAM 1**, or **NAM 2** to focus a card.
+2. Click **PITCH**, **COMP**, **NAM 1**, or **NAM 2** to focus a card.
 3. Use the knob row for that card.
 4. Click a focused NAM card again to choose a capture.
+
+### Pitch (Transpose + Octaver)
+
+![VoLum Pitch pedal — Transpose mode](user-guide-pitch-transpose.png)
+
+The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
+
+- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +12), **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output.
+- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean.
+
+![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
+
+Both modes share a **QUALITY** knob. Higher quality tracks chords more smoothly but adds latency; lower quality tightens latency for live playing at a slightly grainier cost. VoLum reports the pitch latency to your host for plugin delay compensation (about 11 ms at the lowest setting, ~21 ms at the default, up to ~43 ms at maximum). Hover the QUALITY knob to see this trade-off.
 
 Pedal captures are grouped by type and sorted from lower to higher gain. Good starting points:
 

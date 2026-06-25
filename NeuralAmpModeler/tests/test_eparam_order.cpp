@@ -18,7 +18,10 @@ enum EParams {
   kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
   kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
   kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
-  kSupportIRToggle, kNumParams
+  kSupportIRToggle,
+  kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
+  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality,
+  kNumParams
 };
 
 TEST_CASE("EParam: core amp params at expected indices")
@@ -117,12 +120,28 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
   CHECK(kSupportAmpPan == kSupportEQActive + 1);
   // 1.2.0: per-lane support custom IR toggle appended at the very end.
   CHECK(kSupportIRToggle == kSupportAmpPan + 1);
-  CHECK(kNumParams == kSupportIRToggle + 1);
+}
+
+TEST_CASE("EParam: PRE Pitch pedal params appended after SupportIRToggle")
+{
+  CHECK(kPrePitchActive == kSupportIRToggle + 1);
+  CHECK(kPrePitchMode == kPrePitchActive + 1);
+  CHECK(kPrePitchSemitones == kPrePitchMode + 1);
+  CHECK(kPrePitchMix == kPrePitchSemitones + 1);
+  CHECK(kPrePitchOctDown == kPrePitchMix + 1);
+  CHECK(kPrePitchOctUp == kPrePitchOctDown + 1);
+  CHECK(kPrePitchDry == kPrePitchOctUp + 1);
+  CHECK(kPrePitchVoicing == kPrePitchDry + 1);
+  CHECK(kPrePitchLevel == kPrePitchVoicing + 1);
+  CHECK(kPrePitchQuality == kPrePitchLevel + 1);
+  CHECK(kNumParams == kPrePitchQuality + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
 {
   // v0.9.0/effect-staging added 4 new params: DelayTone, DelayAge, DelayPingPong, ReverbSubMode.
   // 1.2.0 appended kSupportIRToggle (per-lane support custom IR): 71 -> 72.
-  CHECK(kNumParams == 72);
+  // 1.2.0 PRE Pitch pedal appended 10 params (Active, Mode, Semitones, Mix, OctDown,
+  // OctUp, Dry, Voicing, Level, Quality): 72 -> 82.
+  CHECK(kNumParams == 82);
 }

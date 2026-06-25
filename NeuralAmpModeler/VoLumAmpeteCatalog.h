@@ -86,6 +86,14 @@ inline constexpr int kVoLumOktaverbSubModeBloom = 2;
 // is now Halo (dual +-12 in feedback).
 inline constexpr int kVoLumOktaverbSubModeDark = kVoLumOktaverbSubModeHalo;
 
+// PRE Pitch pedal mode order: 0=Transpose, 1=Octaver
+inline constexpr int kVoLumPitchModeCount = 2;
+inline constexpr int kVoLumPitchModeTranspose = 0;
+inline constexpr int kVoLumPitchModeOctaver = 1;
+// PRE Pitch octaver voicing: 0=Vintage (gritty/filtered), 1=Modern (clean)
+inline constexpr int kVoLumPitchVoicingVintage = 0;
+inline constexpr int kVoLumPitchVoicingModern = 1;
+
 struct DelayModeSnapshot
 {
   double time = 320.0;
@@ -150,6 +158,17 @@ struct VoLumAmpSettings
   double preNam2MidFreq = 650.0;
   double preNam2Treble = 5.0;
   double preNam2Level = 0.0;
+  // PRE Pitch pedal (Transpose / Octaver), stored per amp like the rest of PRE.
+  bool prePitchActive = false;
+  int prePitchMode = 0; // 0=Transpose, 1=Octaver
+  double prePitchSemitones = 0.0;
+  double prePitchMix = 1.0;
+  double prePitchOctDown = 0.0;
+  double prePitchOctUp = 0.0;
+  double prePitchDry = 1.0;
+  int prePitchVoicing = 1; // 0=Vintage, 1=Modern
+  double prePitchLevel = 0.0;
+  double prePitchQuality = 0.5;
   bool dualAmpActive = false;
   int dualAmpRoute = 2; // 0=STACK, 1=L/R, 2=CUSTOM. UI no longer exposes the picker — Custom honours per-lane PAN.
   double mainAmpPan = 0.0;

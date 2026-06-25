@@ -49,6 +49,22 @@ This file is an attribution index. The authoritative license text for each compo
 - Local path: `NeuralAmpModeler/tests/third_party/doctest.h`
 - Use in VoLum: C++ unit test framework.
 
+## Signalsmith Stretch
+
+- Upstream: https://github.com/Signalsmith-Audio/signalsmith-stretch
+- License: MIT
+- Copyright: Signalsmith Audio Ltd.
+- Local path: `NeuralAmpModeler/third_party/signalsmith/signalsmith-stretch/`
+- Use in VoLum: polyphonic pitch-shifting engine for the PRE Pitch pedal (Transpose / Octaver).
+
+## Signalsmith Linear
+
+- Upstream: https://github.com/Signalsmith-Audio/linear (v0.3.1)
+- License: MIT
+- Copyright: Signalsmith Audio Ltd.
+- Local path: `NeuralAmpModeler/third_party/signalsmith/signalsmith-linear/`
+- Use in VoLum: FFT / linear-algebra backend required by Signalsmith Stretch.
+
 ## Steinberg VST3 SDK
 
 - Upstream: https://github.com/steinbergmedia/vst3sdk
