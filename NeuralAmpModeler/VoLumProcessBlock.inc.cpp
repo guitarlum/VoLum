@@ -20,6 +20,24 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
                                                         const size_t numChannelsInternal, const int nFrames,
                                                         const double sampleRate)
 {
+  if (processingPlan.runPrePitch)
+  {
+    // Reconfigure (block-size/quality change) happens off the audio thread in
+    // OnIdle. Here we only try-lock; if a reconfigure is mid-flight we pass the
+    // dry signal through for this block rather than allocate or block.
+    std::unique_lock<std::mutex> lock(mPrePitchMutex, std::try_to_lock);
+    if (lock.owns_lock() && mPitch.Configured())
+    {
+      const int mode = std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1);
+      const int voicing = GetParam(kPrePitchVoicing)->Int();
+      mPitch.SetParams(static_cast<dsp::effect::VoLumPitch::Mode>(mode), GetParam(kPrePitchSemitones)->Value(),
+                       GetParam(kPrePitchMix)->Value(), GetParam(kPrePitchOctDown)->Value(),
+                       GetParam(kPrePitchOctUp)->Value(), GetParam(kPrePitchDry)->Value(),
+                       static_cast<dsp::effect::VoLumPitch::Voicing>(voicing), GetParam(kPrePitchLevel)->Value());
+      preAmpPointers = mPitch.Process(preAmpPointers, numChannelsInternal, nFrames);
+    }
+  }
+
   if (processingPlan.runPreComp)
   {
     mPreCompressor.SetParams(GetParam(kPreCompAmount)->Value(), GetParam(kPreCompRatio)->Value(),

@@ -13,7 +13,7 @@ Read the smallest owner first:
 
 - `VoLumControls.h`: umbrella only. Do not edit unless adding/removing includes.
 - `VoLumTriptych.h`: `VoLumTriptychControl` (PRE/AMP/POST strip) and `VoLumChainConnectorControl`; umbrella for triptych pieces.
-- `VoLumTriptychMotifs.h`: COMP / PRE-NAM / DELAY / REVERB fractal motifs used by pedal cards and Quiet slots.
+- `VoLumTriptychMotifs.h`: PITCH (double-helix) / COMP / PRE-NAM / DELAY / REVERB motifs used by pedal cards and Quiet slots.
 - `VoLumTriptychMenus.h`: PRE capture menu (support-amp + custom pickers now use the shared `VoLumListMenuControl` in `VoLumCustomUi.h`).
 - `VoLumPedalCardControl.h`: focused pedal cards with cached art layer and preset-name footer.
 - `VoLumCoreControls.h`: sidebar, speaker row, knob row, meters, dividers/footers, channel stepper, keyboard hints, exact entry, param-value display, settings overlay frame.

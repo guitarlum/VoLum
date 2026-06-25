@@ -167,6 +167,13 @@ private:
         plugin->GetParam(kReverbMode)->GetDisplay(modeText);
         summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kReverbMix)->Value() * 100.0);
         return summary.Get();
+      case EVoLumEffectFocus::PITCH:
+        plugin->GetParam(kPrePitchMode)->GetDisplay(modeText);
+        if (plugin->GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose)
+          summary.SetFormatted(64, "%s . %+d st", modeText.Get(), plugin->GetParam(kPrePitchSemitones)->Int());
+        else
+          summary.SetFormatted(64, "%s", modeText.Get());
+        return summary.Get();
       case EVoLumEffectFocus::COMP:
         return "Compressor";
       case EVoLumEffectFocus::PRE_NAM1:

@@ -31,6 +31,16 @@ void NeuralAmpModeler::_VolumSavePreToSlot(volum::VoLumAmpSettings& s)
   s.preNam2MidFreq = GetParam(kPreNam2MidFreq)->Value();
   s.preNam2Treble = GetParam(kPreNam2Treble)->Value();
   s.preNam2Level = GetParam(kPreNam2Level)->Value();
+  s.prePitchActive = GetParam(kPrePitchActive)->Bool();
+  s.prePitchMode = GetParam(kPrePitchMode)->Int();
+  s.prePitchSemitones = GetParam(kPrePitchSemitones)->Value();
+  s.prePitchMix = GetParam(kPrePitchMix)->Value();
+  s.prePitchOctDown = GetParam(kPrePitchOctDown)->Value();
+  s.prePitchOctUp = GetParam(kPrePitchOctUp)->Value();
+  s.prePitchDry = GetParam(kPrePitchDry)->Value();
+  s.prePitchVoicing = GetParam(kPrePitchVoicing)->Int();
+  s.prePitchLevel = GetParam(kPrePitchLevel)->Value();
+  s.prePitchQuality = GetParam(kPrePitchQuality)->Value();
 }
 
 void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
@@ -474,6 +484,16 @@ void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s
   setParam(kPreNam2MidFreq, s.preNam2MidFreq);
   setParam(kPreNam2Treble, s.preNam2Treble);
   setParam(kPreNam2Level, s.preNam2Level);
+  setParam(kPrePitchActive, s.prePitchActive ? 1.0 : 0.0);
+  setParam(kPrePitchMode, s.prePitchMode);
+  setParam(kPrePitchSemitones, s.prePitchSemitones);
+  setParam(kPrePitchMix, s.prePitchMix);
+  setParam(kPrePitchOctDown, s.prePitchOctDown);
+  setParam(kPrePitchOctUp, s.prePitchOctUp);
+  setParam(kPrePitchDry, s.prePitchDry);
+  setParam(kPrePitchVoicing, s.prePitchVoicing);
+  setParam(kPrePitchLevel, s.prePitchLevel);
+  setParam(kPrePitchQuality, s.prePitchQuality);
 
   const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
   const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);

@@ -184,6 +184,34 @@ TEST_CASE("Processing plan refuses the support IR when its toggle is off or the 
   CHECK_FALSE(noIr.runSupportIR);
 }
 
+TEST_CASE("Processing plan runs the PRE pitch pedal independently of the main model")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  // Pitch flag is the final argument. Default (omitted) keeps it off.
+  const auto offByDefault = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam,
+                                                     false, false, false);
+  CHECK_FALSE(offByDefault.runPrePitch);
+
+  // Pitch active even without a main model (fallback path) — it sits at the very
+  // front of the PRE chain and is gated only by its own active flag.
+  const auto pitchNoMain = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam,
+                                                    false, false, false, false, false, false, false, false,
+                                                    /*prePitchActive=*/true);
+  CHECK(pitchNoMain.runPrePitch);
+  CHECK_FALSE(pitchNoMain.runMainModel);
+  CHECK(pitchNoMain.runFallback);
+
+  // Pitch active alongside a full main chain.
+  const auto pitchWithMain = volum::MakeProcessingPlan(true, false, true, false, false, true, preNamActive, havePreNam,
+                                                      false, false, false, false, false, false, false, false,
+                                                      /*prePitchActive=*/true);
+  CHECK(pitchWithMain.runPrePitch);
+  CHECK(pitchWithMain.runPreComp);
+  CHECK(pitchWithMain.runMainModel);
+}
+
 TEST_CASE("Processing plan never runs the support IR while the support model is silent")
 {
   const bool preNamActive[2] = {false, false};

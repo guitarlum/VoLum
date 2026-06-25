@@ -17,7 +17,10 @@ enum EParams {
   kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
   kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
   kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
-  kSupportIRToggle, kNumParams
+  kSupportIRToggle,
+  kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
+  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality,
+  kNumParams
 };
 
 #include "../VoLumKeyboardModel.h"
@@ -101,5 +104,27 @@ TEST_CASE("Keyboard step: delay tone/age = 0.05 normal, 0.01 fine")
   CHECK(volum::keyboard::StepForParam(kDelayTone, true) == 0.01);
   CHECK(volum::keyboard::StepForParam(kDelayAge, false) == 0.05);
   CHECK(volum::keyboard::StepForParam(kDelayAge, true) == 0.01);
+}
+
+TEST_CASE("Keyboard step: pitch semitones = whole steps (integer transpose)")
+{
+  CHECK(volum::keyboard::StepForParam(kPrePitchSemitones, false) == 1.0);
+  CHECK(volum::keyboard::StepForParam(kPrePitchSemitones, true) == 1.0);
+}
+
+TEST_CASE("Keyboard step: pitch normalized knobs = 0.05 normal, 0.01 fine")
+{
+  int normParams[] = {kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp, kPrePitchDry, kPrePitchQuality};
+  for (int p : normParams)
+  {
+    CHECK(volum::keyboard::StepForParam(p, false) == 0.05);
+    CHECK(volum::keyboard::StepForParam(p, true) == 0.01);
+  }
+}
+
+TEST_CASE("Keyboard step: pitch level = 0.5 normal, 0.1 fine (dB)")
+{
+  CHECK(volum::keyboard::StepForParam(kPrePitchLevel, false) == 0.5);
+  CHECK(volum::keyboard::StepForParam(kPrePitchLevel, true) == 0.1);
 }
 

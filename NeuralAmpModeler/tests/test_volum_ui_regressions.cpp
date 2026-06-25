@@ -72,7 +72,7 @@ TEST_CASE("Collapsed PRE slots show selected pedal short labels")
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
 
   RequireContains(triptych, "mPreNam1Label = (preNam1Label && preNam1Label[0] != '\\0') ? preNam1Label : \"NAM 1\";");
-  RequireContains(triptych, "preSlots[1].label = mPreNam1Label.c_str();");
+  RequireContains(triptych, "preSlots[2].label = mPreNam1Label.c_str();");
   RequireContains(source, "_VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), \"NAM 1\")");
   RequireContains(source, "_VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), \"NAM 2\")");
   RequireContains(triptych, "std::toupper(c)");
@@ -436,12 +436,18 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
   const auto preFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::PRE);
   const auto preCards = volum::triptych_layout::ComputePreCards(preFrames.pre);
 
-  CHECK(preCards.comp.L == doctest::Approx(154.f));
-  CHECK(preCards.comp.R == doctest::Approx(282.6667f));
-  CHECK(preCards.nam1.L == doctest::Approx(290.6667f));
+  CHECK(preCards.pitch.L == doctest::Approx(154.f));
+  CHECK(preCards.pitch.R == doctest::Approx(231.49f));
+  CHECK(preCards.comp.L == doctest::Approx(239.49f));
+  CHECK(preCards.comp.R == doctest::Approx(316.98f));
+  CHECK(preCards.nam1.L == doctest::Approx(324.98f));
   CHECK(preCards.nam2.R == doctest::Approx(556.f));
-  CHECK(preCards.connector1.L == doctest::Approx(preCards.comp.R));
-  CHECK(preCards.connector1.R == doctest::Approx(preCards.nam1.L));
+  CHECK(preCards.connector1.L == doctest::Approx(preCards.pitch.R));
+  CHECK(preCards.connector1.R == doctest::Approx(preCards.comp.L));
+  CHECK(preCards.connector2.L == doctest::Approx(preCards.comp.R));
+  CHECK(preCards.connector2.R == doctest::Approx(preCards.nam1.L));
+  CHECK(preCards.connector3.L == doctest::Approx(preCards.nam1.R));
+  CHECK(preCards.connector3.R == doctest::Approx(preCards.nam2.L));
 
   const auto postFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::POST);
   const auto postCards = volum::triptych_layout::ComputePostCards(postFrames.post);

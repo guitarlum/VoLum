@@ -25,7 +25,12 @@ inline bool PreBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
          && a.preNam2Capture == b.preNam2Capture && NearlyEqual(a.preNam2Gain, b.preNam2Gain)
          && NearlyEqual(a.preNam2Bass, b.preNam2Bass) && NearlyEqual(a.preNam2Mid, b.preNam2Mid)
          && NearlyEqual(a.preNam2MidFreq, b.preNam2MidFreq) && NearlyEqual(a.preNam2Treble, b.preNam2Treble)
-         && NearlyEqual(a.preNam2Level, b.preNam2Level);
+         && NearlyEqual(a.preNam2Level, b.preNam2Level) && a.prePitchActive == b.prePitchActive
+         && a.prePitchMode == b.prePitchMode && NearlyEqual(a.prePitchSemitones, b.prePitchSemitones)
+         && NearlyEqual(a.prePitchMix, b.prePitchMix) && NearlyEqual(a.prePitchOctDown, b.prePitchOctDown)
+         && NearlyEqual(a.prePitchOctUp, b.prePitchOctUp) && NearlyEqual(a.prePitchDry, b.prePitchDry)
+         && a.prePitchVoicing == b.prePitchVoicing && NearlyEqual(a.prePitchLevel, b.prePitchLevel)
+         && NearlyEqual(a.prePitchQuality, b.prePitchQuality);
 }
 
 inline bool DelayModeSnapshotEquals(const DelayModeSnapshot& a, const DelayModeSnapshot& b)

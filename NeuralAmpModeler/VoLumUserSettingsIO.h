@@ -264,6 +264,16 @@ inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "preNam2MidFreq", out.preNam2MidFreq, 150.0, 2500.0);
   any |= detail::JsonGetClampedDouble(o, "preNam2Treble", out.preNam2Treble, 0.0, 10.0);
   any |= detail::JsonGetClampedDouble(o, "preNam2Level", out.preNam2Level, -20.0, 20.0);
+  any |= detail::JsonGetBool(o, "prePitchActive", out.prePitchActive);
+  any |= detail::JsonGetClampedInt(o, "prePitchMode", out.prePitchMode, 0, 1);
+  any |= detail::JsonGetClampedDouble(o, "prePitchSemitones", out.prePitchSemitones, -12.0, 12.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchMix", out.prePitchMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchOctDown", out.prePitchOctDown, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchOctUp", out.prePitchOctUp, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchDry", out.prePitchDry, 0.0, 1.0);
+  any |= detail::JsonGetClampedInt(o, "prePitchVoicing", out.prePitchVoicing, 0, 1);
+  any |= detail::JsonGetClampedDouble(o, "prePitchLevel", out.prePitchLevel, -20.0, 20.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchQuality", out.prePitchQuality, 0.0, 1.0);
   return any;
 }
 
@@ -365,6 +375,16 @@ inline nlohmann::json PreBlockToJson(const VoLumAmpSettings& s)
   o["preNam2MidFreq"] = s.preNam2MidFreq;
   o["preNam2Treble"] = s.preNam2Treble;
   o["preNam2Level"] = s.preNam2Level;
+  o["prePitchActive"] = s.prePitchActive;
+  o["prePitchMode"] = s.prePitchMode;
+  o["prePitchSemitones"] = s.prePitchSemitones;
+  o["prePitchMix"] = s.prePitchMix;
+  o["prePitchOctDown"] = s.prePitchOctDown;
+  o["prePitchOctUp"] = s.prePitchOctUp;
+  o["prePitchDry"] = s.prePitchDry;
+  o["prePitchVoicing"] = s.prePitchVoicing;
+  o["prePitchLevel"] = s.prePitchLevel;
+  o["prePitchQuality"] = s.prePitchQuality;
   return o;
 }
 
@@ -461,6 +481,16 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["preNam2MidFreq"] = s.preNam2MidFreq;
     a["preNam2Treble"] = s.preNam2Treble;
     a["preNam2Level"] = s.preNam2Level;
+    a["prePitchActive"] = s.prePitchActive;
+    a["prePitchMode"] = s.prePitchMode;
+    a["prePitchSemitones"] = s.prePitchSemitones;
+    a["prePitchMix"] = s.prePitchMix;
+    a["prePitchOctDown"] = s.prePitchOctDown;
+    a["prePitchOctUp"] = s.prePitchOctUp;
+    a["prePitchDry"] = s.prePitchDry;
+    a["prePitchVoicing"] = s.prePitchVoicing;
+    a["prePitchLevel"] = s.prePitchLevel;
+    a["prePitchQuality"] = s.prePitchQuality;
     if (includeDualAmp)
       WriteDualAmpUserSettings(a, s);
 
@@ -723,6 +753,16 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preNam2MidFreq", s.preNam2MidFreq, 150.0, 2500.0, defaults.preNam2MidFreq);
         loadDouble(a, "preNam2Treble", s.preNam2Treble, 0.0, 10.0, defaults.preNam2Treble);
         loadDouble(a, "preNam2Level", s.preNam2Level, -20.0, 20.0, defaults.preNam2Level);
+        loadBool(a, "prePitchActive", s.prePitchActive, defaults.prePitchActive);
+        loadInt(a, "prePitchMode", s.prePitchMode, 0, 1, defaults.prePitchMode);
+        loadDouble(a, "prePitchSemitones", s.prePitchSemitones, -12.0, 12.0, defaults.prePitchSemitones);
+        loadDouble(a, "prePitchMix", s.prePitchMix, 0.0, 1.0, defaults.prePitchMix);
+        loadDouble(a, "prePitchOctDown", s.prePitchOctDown, 0.0, 1.0, defaults.prePitchOctDown);
+        loadDouble(a, "prePitchOctUp", s.prePitchOctUp, 0.0, 1.0, defaults.prePitchOctUp);
+        loadDouble(a, "prePitchDry", s.prePitchDry, 0.0, 1.0, defaults.prePitchDry);
+        loadInt(a, "prePitchVoicing", s.prePitchVoicing, 0, 1, defaults.prePitchVoicing);
+        loadDouble(a, "prePitchLevel", s.prePitchLevel, -20.0, 20.0, defaults.prePitchLevel);
+        loadDouble(a, "prePitchQuality", s.prePitchQuality, 0.0, 1.0, defaults.prePitchQuality);
         loadBool(a, "dualAmpActive", s.dualAmpActive, defaults.dualAmpActive);
         loadInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2, defaults.dualAmpRoute);
         loadDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0, defaults.mainAmpPan);

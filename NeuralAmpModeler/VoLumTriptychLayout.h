@@ -47,11 +47,13 @@ struct Frames
 
 struct PreCards
 {
+  Rect pitch;
   Rect comp;
   Rect nam1;
   Rect nam2;
   Rect connector1;
   Rect connector2;
+  Rect connector3;
 };
 
 struct PostCards
@@ -112,16 +114,24 @@ inline PreCards ComputePreCards(const Rect& preRect)
   const float cardTop = preRect.T + kCardTopInset;
   const float cardBot = preRect.B - kCardBottomInset;
   const float cardH = cardBot - cardTop;
-  const float cardW = (preRect.W() - kCardPad * 2.f - kPreCardGap * 2.f) / 3.f;
   const float cardL = preRect.L + kCardPad;
 
-  const Rect comp(cardL, cardTop, cardL + cardW, cardTop + cardH);
-  const Rect nam1(comp.R + kPreCardGap, cardTop, comp.R + kPreCardGap + cardW, cardTop + cardH);
-  const Rect nam2(nam1.R + kPreCardGap, cardTop, nam1.R + kPreCardGap + cardW, cardTop + cardH);
-  const Rect connector1(comp.R, preRect.MH() - kConnectorHalfH, nam1.L, preRect.MH() + kConnectorHalfH);
-  const Rect connector2(nam1.R, preRect.MH() - kConnectorHalfH, nam2.L, preRect.MH() + kConnectorHalfH);
+  // Mixed-width 4-card PRE strip: slim PITCH + slim COMP utility pedals, wider NAM 1 / NAM 2
+  // amp blocks (they carry the focus art and longer names). Widths sum to the inner span minus
+  // the three inter-card gaps. Slim cards take ~41% combined, wide cards ~59%.
+  const float innerCards = preRect.W() - kCardPad * 2.f - kPreCardGap * 3.f;
+  const float slimW = innerCards * 0.205f;
+  const float wideW = innerCards * 0.295f;
 
-  return {comp, nam1, nam2, connector1, connector2};
+  const Rect pitch(cardL, cardTop, cardL + slimW, cardTop + cardH);
+  const Rect comp(pitch.R + kPreCardGap, cardTop, pitch.R + kPreCardGap + slimW, cardTop + cardH);
+  const Rect nam1(comp.R + kPreCardGap, cardTop, comp.R + kPreCardGap + wideW, cardTop + cardH);
+  const Rect nam2(nam1.R + kPreCardGap, cardTop, nam1.R + kPreCardGap + wideW, cardTop + cardH);
+  const Rect connector1(pitch.R, preRect.MH() - kConnectorHalfH, comp.L, preRect.MH() + kConnectorHalfH);
+  const Rect connector2(comp.R, preRect.MH() - kConnectorHalfH, nam1.L, preRect.MH() + kConnectorHalfH);
+  const Rect connector3(nam1.R, preRect.MH() - kConnectorHalfH, nam2.L, preRect.MH() + kConnectorHalfH);
+
+  return {pitch, comp, nam1, nam2, connector1, connector2, connector3};
 }
 
 inline PostCards ComputePostCards(const Rect& postRect)

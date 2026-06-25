@@ -52,12 +52,25 @@ Der Amp-Regler **OUTPUT** bleibt bei `0.0 dB` auf Unity-Gain. Ganz gegen den Uhr
 
 ![VoLum PRE-Bereich](user-guide-pre.png)
 
-PRE liegt vor dem Amp. Der Bereich enthält einen Kompressor und zwei frei belegbare NAM-Pedal-Slots.
+PRE liegt vor dem Amp. Der Bereich enthält ein Pitch-Pedal, einen Kompressor und zwei frei belegbare NAM-Pedal-Slots.
 
 1. Klick auf **PRE**.
-2. Klick auf **COMP**, **NAM 1** oder **NAM 2**, um eine Karte zu fokussieren.
+2. Klick auf **PITCH**, **COMP**, **NAM 1** oder **NAM 2**, um eine Karte zu fokussieren.
 3. Nutze die Reglerzeile für diese Karte.
 4. Klick eine fokussierte NAM-Karte erneut an, um ein Capture zu wählen.
+
+### Pitch (Transpose + Octaver)
+
+![VoLum Pitch-Pedal — Transpose-Modus](user-guide-pitch-transpose.png)
+
+Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus:
+
+- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +12), **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang.
+- **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean.
+
+![VoLum Pitch-Pedal — Octaver-Modus](user-guide-pitch-octaver.png)
+
+Beide Modi teilen sich einen **QUALITY**-Regler. Höhere Qualität verfolgt Akkorde sauberer, erhöht aber die Latenz; niedrigere Qualität strafft die Latenz fürs Live-Spiel bei etwas körnigerem Klang. VoLum meldet die Pitch-Latenz an deinen Host zur Plugin-Latenzkompensation (ca. 11 ms bei der niedrigsten Einstellung, ~21 ms im Standard, bis zu ~43 ms im Maximum). Bewege den Mauszeiger über den QUALITY-Regler, um diesen Kompromiss zu sehen.
 
 Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Gute Startpunkte:
 

@@ -8,7 +8,7 @@
 
 namespace volum::keyboard
 {
-constexpr int kTargetCount = 7;
+constexpr int kTargetCount = 8;
 
 constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
 {
@@ -20,6 +20,7 @@ constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
     case EVoLumEffectFocus::PRE_NAM2: return 4;
     case EVoLumEffectFocus::DELAY: return 5;
     case EVoLumEffectFocus::REVERB: return 6;
+    case EVoLumEffectFocus::PITCH: return 7;
   }
   return 0;
 }
@@ -61,6 +62,14 @@ constexpr std::array<int, 4> kCompParams = {
   kPreCompAmount, kPreCompAttack, kPreCompRelease, kPreCompLevel,
 };
 
+constexpr std::array<int, 4> kPitchTransposeParams = {
+  kPrePitchSemitones, kPrePitchMix, kPrePitchLevel, kPrePitchQuality,
+};
+
+constexpr std::array<int, 5> kPitchOctaverParams = {
+  kPrePitchOctDown, kPrePitchOctUp, kPrePitchDry, kPrePitchLevel, kPrePitchQuality,
+};
+
 inline double StepForParam(int paramIdx, bool fine)
 {
   switch (paramIdx)
@@ -98,6 +107,16 @@ inline double StepForParam(int paramIdx, bool fine)
     case kPreCompAttack:
     case kPreCompRelease:
       return fine ? 1.0 : 5.0;
+    case kPrePitchSemitones:
+      return 1.0;
+    case kPrePitchMix:
+    case kPrePitchOctDown:
+    case kPrePitchOctUp:
+    case kPrePitchDry:
+    case kPrePitchQuality:
+      return fine ? 0.01 : 0.05;
+    case kPrePitchLevel:
+      return fine ? 0.1 : 0.5;
     case kDelayFeedback:
     case kDelayMix:
     case kDelayTone:

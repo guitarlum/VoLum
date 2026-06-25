@@ -55,42 +55,42 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|x64'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
@@ -130,6 +130,7 @@
     <ClCompile Include="..\tests\test_volum_output_mode.cpp" />
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />
+    <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_post_lock.cpp" />
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />

@@ -124,7 +124,8 @@ public:
   IRECT GetPreExpandedRect() const { return mPreRect; }
 
 private:
-  static constexpr QuietSlot kPreSlots[3] = {
+  static constexpr QuietSlot kPreSlots[4] = {
+    { EVoLumEffectFocus::PITCH,    "PITCH", kPrePitchActive },
     { EVoLumEffectFocus::COMP,     "COMP",  kPreCompActive },
     { EVoLumEffectFocus::PRE_NAM1, "NAM 1", kPreNam1Active },
     { EVoLumEffectFocus::PRE_NAM2, "NAM 2", kPreNam2Active },
@@ -456,11 +457,11 @@ private:
       mPostHeaderRect = IRECT(block.L, block.T, headerClickRight, header.B + 2.f);
 
     // Slot iteration.
-    std::array<QuietSlot, 3> preSlots = {kPreSlots[0], kPreSlots[1], kPreSlots[2]};
-    preSlots[1].label = mPreNam1Label.c_str();
-    preSlots[2].label = mPreNam2Label.c_str();
+    std::array<QuietSlot, 4> preSlots = {kPreSlots[0], kPreSlots[1], kPreSlots[2], kPreSlots[3]};
+    preSlots[2].label = mPreNam1Label.c_str();
+    preSlots[3].label = mPreNam2Label.c_str();
     const QuietSlot* slots = (section == EVoLumSection::PRE) ? preSlots.data() : kPostSlots;
-    const int slotCount = (section == EVoLumSection::PRE) ? 3 : 2;
+    const int slotCount = (section == EVoLumSection::PRE) ? 4 : 2;
     const float innerTop = underlineY + 2.f;
     const float innerBot = block.B - 4.f;
     const float slotH = (innerBot - innerTop) / (float)slotCount;

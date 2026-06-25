@@ -349,6 +349,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPreCompMix)->InitDouble("PreCompMix", 1.0, 0.0, 1.0, 0.01);
   GetParam(kPreCompLevel)->InitDouble("PreCompLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPreCompLevel));
+  // PRE Pitch pedal (Transpose / Octaver), inserted at the very front of the PRE chain.
+  GetParam(kPrePitchActive)->InitBool("PrePitchActive", false);
+  GetParam(kPrePitchMode)->InitEnum("PrePitchMode", volum::kVoLumPitchModeTranspose, {"Transpose", "Octaver"});
+  GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -12.0, 12.0, 1.0, "st");
+  GetParam(kPrePitchMix)->InitDouble("PrePitchMix", 1.0, 0.0, 1.0, 0.01);
+  GetParam(kPrePitchOctDown)->InitDouble("PrePitchOctDown", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kPrePitchOctUp)->InitDouble("PrePitchOctUp", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kPrePitchDry)->InitDouble("PrePitchDry", 1.0, 0.0, 1.0, 0.01);
+  GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
+  GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
+  _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
+  GetParam(kPrePitchQuality)->InitDouble("PrePitchQuality", 0.5, 0.0, 1.0, 0.01);
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -864,16 +876,20 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
     auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
     auto* chainLink = new VoLumChainConnectorControl(postCards.connector.As<IRECT>());
+    auto* pitchCard = new VoLumPedalCardControl(preCards.pitch.As<IRECT>(), EVoLumEffectFocus::PITCH, onPedalClick);
     auto* compCard = new VoLumPedalCardControl(preCards.comp.As<IRECT>(), EVoLumEffectFocus::COMP, onPedalClick);
     auto* preNam1Card = new VoLumPedalCardControl(preCards.nam1.As<IRECT>(), EVoLumEffectFocus::PRE_NAM1, onPedalClick);
     auto* preNam2Card = new VoLumPedalCardControl(preCards.nam2.As<IRECT>(), EVoLumEffectFocus::PRE_NAM2, onPedalClick);
     auto* preChainLink1 = new VoLumChainConnectorControl(preCards.connector1.As<IRECT>());
     auto* preChainLink2 = new VoLumChainConnectorControl(preCards.connector2.As<IRECT>());
+    auto* preChainLink3 = new VoLumChainConnectorControl(preCards.connector3.As<IRECT>());
 
-    pGraphics->AttachControl(compCard, kCtrlTagVoLumCompCard)->Hide(true);
+    pGraphics->AttachControl(pitchCard, kCtrlTagVoLumPitchCard)->Hide(true);
     pGraphics->AttachControl(preChainLink1, kCtrlTagVoLumPreChainConnector1)->Hide(true);
-    pGraphics->AttachControl(preNam1Card, kCtrlTagVoLumPreNam1Card)->Hide(true);
+    pGraphics->AttachControl(compCard, kCtrlTagVoLumCompCard)->Hide(true);
     pGraphics->AttachControl(preChainLink2, kCtrlTagVoLumPreChainConnector2)->Hide(true);
+    pGraphics->AttachControl(preNam1Card, kCtrlTagVoLumPreNam1Card)->Hide(true);
+    pGraphics->AttachControl(preChainLink3, kCtrlTagVoLumPreChainConnector3)->Hide(true);
     pGraphics->AttachControl(preNam2Card, kCtrlTagVoLumPreNam2Card)->Hide(true);
     pGraphics->AttachControl(delayCard, kCtrlTagVoLumDelayCard)->Hide(true);
     pGraphics->AttachControl(chainLink, kCtrlTagVoLumChainConnector)->Hide(true);
@@ -914,7 +930,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix, const char* group,
                            bool center_offset = false, int centerSlots = 3, int centerStart = 2,
-                           float centerOffset = 0.f, float centerColW = 80.f) {
+                           float centerOffset = 0.f, float centerColW = 80.f, const char* tooltip = nullptr) {
       float customColW = center_offset ? centerColW : colW;
       float cx = center_offset ? (mainCX + centerOffset - (centerSlots * customColW) / 2.f
                                   + (slot - centerStart) * customColW + (customColW / 2.f))
@@ -927,6 +943,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       auto* knob = new VoLumDialKnobControl(
         IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(knob, -1, group);
+      if (tooltip)
+        knob->SetTooltip(tooltip);
       knob->SetSelectedForKeyboard(mVolumSelectedKnobParamIdx == paramId);
       pGraphics->AttachControl(
         new VoLumParamValueControl(
@@ -1157,6 +1175,46 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPreNam2Active),
       -1, "PRE_NAM2_POWER");
 
+    // PITCH KNOBS (Transpose + Octaver). Mirrors the centered REVERB effect layout: a
+    // right-hand mode picker (TRANSPOSE / OCTAVER) swaps between two knob groups; the
+    // Octaver group adds a VINTAGE / MODERN voicing pill. QUALITY trades pitch-engine
+    // smoothness for latency, surfaced via a hover tooltip and host PDC.
+    const char* kPitchQualityTip =
+      "Higher = smoother, more natural pitch (better for chords) but more latency. "
+      "Lower = tighter latency for live playing, slightly grainier. Reported to the "
+      "host for delay compensation. ~11 ms at min, ~21 ms at default, up to ~43 ms at max.";
+
+    pGraphics->AttachControl(
+      new VoLumPowerSwitchControl(
+        IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPrePitchActive),
+      -1, "PITCH_POWER");
+
+    // Transpose: SEMI, MIX, LEVEL, QUALITY (4 knobs centered).
+    drawKnobCol(1, "SEMI", kPrePitchSemitones, "st", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW);
+    drawKnobCol(2, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW);
+    drawKnobCol(3, "LEVEL", kPrePitchLevel, "dB", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW);
+    drawKnobCol(4, "QUALITY", kPrePitchQuality, "%", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW,
+                kPitchQualityTip);
+
+    // Octaver: OCT DN, OCT UP, DRY, LEVEL, QUALITY (5 knobs centered).
+    drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(4, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(5, "QUALITY", kPrePitchQuality, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+                kPitchQualityTip);
+
+    IRECT pitchPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
+    pGraphics->AttachControl(
+      new VoLumModePickerControl(pitchPickerRect, kPrePitchMode, {"TRANSPOSE", "OCTAVER"}), -1, "PITCH_MODE_PICKER");
+
+    const float pitchPillW = 200.f;
+    const float pitchPillH = 28.f;
+    const float pitchPillY = knobT + knobDiam + valueH + 18.f;
+    IRECT pitchVoicingRect(mainCX - pitchPillW / 2.f, pitchPillY, mainCX + pitchPillW / 2.f, pitchPillY + pitchPillH);
+    pGraphics->AttachControl(
+      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchVoicing, {"VINTAGE", "MODERN"}), -1, "PITCH_VOICING");
+
     // I/O meters
     const float meterW = 8.f;
     const float meterH = knobDiam + 10.f;
@@ -1301,8 +1359,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       // Tuner button
       auto* pPlugin = this;
-      pGraphics->AttachControl(
-        new NAMCircleButtonControl(tunerArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); }, tunerSVG));
+      pGraphics->AttachControl(new NAMCircleButtonControl(
+        tunerArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); }, tunerSVG));
 
       // Metronome button
       pGraphics->AttachControl(
@@ -1381,9 +1439,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             const std::string name = presetBar->ActiveName();
             auto doOverwrite = [pPlugin, idx]() { pPlugin->_VolumOverwritePreset(idx); };
             if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
-              dlg->As<VoLumConfirmDialogControl>()->Show(
-                "Are you sure?", "Overwrite preset \"" + name + "\" with the current settings?", doOverwrite,
-                "Overwrite");
+              dlg->As<VoLumConfirmDialogControl>()->Show("Are you sure?",
+                                                         "Overwrite preset \"" + name + "\" with the current settings?",
+                                                         doOverwrite, "Overwrite");
             else
               doOverwrite();
             return;
@@ -1804,7 +1862,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(), mIR != nullptr,
     GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
     GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive,
-    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr);
+    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr, GetParam(kPrePitchActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
@@ -1956,6 +2014,12 @@ void NeuralAmpModeler::OnReset()
   for (int i = 0; i < 2; ++i)
     mPreEq[i].Reset(sampleRate, maxBlockSize);
   mPreCompressor.Reset();
+  {
+    std::lock_guard<std::mutex> lock(mPrePitchMutex);
+    mPitch.Configure(sampleRate, GetParam(kPrePitchQuality)->Value(), maxBlockSize);
+    mPitch.Reset();
+  }
+  mPrePitchConfigureRequested.store(false);
   const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
   mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
@@ -1982,6 +2046,18 @@ void NeuralAmpModeler::OnIdle()
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
   mOutputSenderR.TransmitData(*this);
+
+  // PRE Pitch quality (block-size) change: reconfigure off the audio thread, then
+  // refresh reported latency. Allocation is safe here on the main thread.
+  if (mPrePitchConfigureRequested.exchange(false))
+  {
+    {
+      std::lock_guard<std::mutex> lock(mPrePitchMutex);
+      mPitch.Configure(GetSampleRate(), GetParam(kPrePitchQuality)->Value(), GetBlockSize());
+      mPitch.Reset();
+    }
+    _UpdateLatency();
+  }
 
   // Push tuner result to UI
   if (mTunerDSP.IsActive())
@@ -2183,6 +2259,21 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;
+  auto pitchTailFromSettings = [](const volum::VoLumAmpSettings& s) {
+    volum::PitchTail p;
+    p.present = true;
+    p.active = s.prePitchActive;
+    p.mode = s.prePitchMode;
+    p.semitones = s.prePitchSemitones;
+    p.mix = s.prePitchMix;
+    p.octDown = s.prePitchOctDown;
+    p.octUp = s.prePitchOctUp;
+    p.dry = s.prePitchDry;
+    p.voicing = s.prePitchVoicing;
+    p.level = s.prePitchLevel;
+    p.quality = s.prePitchQuality;
+    return p;
+  };
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
     idTail.perAmpIrId[i] = mVolumAmpSettings[i].activeIrId;
@@ -2190,7 +2281,10 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     idTail.perAmpSupportId[i] = mVolumAmpSettings[i].supportCustomId;
     idTail.perAmpSupportSlot[i] = mVolumAmpSettings[i].supportCustomSlot;
     idTail.perAmpSupportChannel[i] = mVolumAmpSettings[i].supportCustomChannel;
+    idTail.perAmpPitch[i] = pitchTailFromSettings(mVolumAmpSettings[i]);
   }
+  if (mVolumPreLocked)
+    idTail.lockedPrePitch = pitchTailFromSettings(mVolumLiveLockedPre);
   volum::PutChunkIdTail(chunk, idTail);
 
   return ok;
@@ -2420,6 +2514,16 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         _UpdateLatency();
       }
       break;
+    case kPrePitchActive:
+      // Toggling the pitch engine changes reported (PDC) latency.
+      if (mVolumInitComplete)
+        _UpdateLatency();
+      break;
+    case kPrePitchQuality:
+      // Quality maps to FFT block size: reconfigure allocates, so defer to OnIdle
+      // (main thread), which reconfigures and refreshes latency.
+      mPrePitchConfigureRequested.store(true);
+      break;
     case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
     default: break;
   }
@@ -2456,7 +2560,17 @@ bool IsPreBlockParam(int paramIdx)
     case kPreNam2Mid:
     case kPreNam2MidFreq:
     case kPreNam2Treble:
-    case kPreNam2Level: return true;
+    case kPreNam2Level:
+    case kPrePitchActive:
+    case kPrePitchMode:
+    case kPrePitchSemitones:
+    case kPrePitchMix:
+    case kPrePitchOctDown:
+    case kPrePitchOctUp:
+    case kPrePitchDry:
+    case kPrePitchVoicing:
+    case kPrePitchLevel:
+    case kPrePitchQuality: return true;
     default: return false;
   }
 }
@@ -2529,6 +2643,9 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kPreNam2Active:
       case kPreNam1Capture:
       case kPreNam2Capture:
+      case kPrePitchActive:
+      case kPrePitchMode:
+      case kPrePitchVoicing:
       case kDualAmpActive:
       case kSupportAmpIdx:
       case kSupportSpeakerIdx:
@@ -3060,16 +3177,17 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
   {
     case EVoLumSection::PRE:
     {
-      constexpr EVoLumEffectFocus targets[3] = {
+      constexpr EVoLumEffectFocus targets[4] = {
+        EVoLumEffectFocus::PITCH,
         EVoLumEffectFocus::COMP,
         EVoLumEffectFocus::PRE_NAM1,
         EVoLumEffectFocus::PRE_NAM2,
       };
       int current = 0;
-      for (int i = 0; i < 3; ++i)
+      for (int i = 0; i < 4; ++i)
         if (targets[i] == mVolumFocusedEffect)
           current = i;
-      mVolumFocusedEffect = targets[wrap(current + direction, 3)];
+      mVolumFocusedEffect = targets[wrap(current + direction, 4)];
       mVolumDualAmpFocusedSupport = false;
       break;
     }
@@ -3112,6 +3230,7 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
       if (mVolumExpandedSection == EVoLumSection::AMP)
         paramIdx = kDualAmpActive;
       break;
+    case EVoLumEffectFocus::PITCH: paramIdx = kPrePitchActive; break;
     case EVoLumEffectFocus::COMP: paramIdx = kPreCompActive; break;
     case EVoLumEffectFocus::PRE_NAM1: paramIdx = kPreNam1Active; break;
     case EVoLumEffectFocus::PRE_NAM2: paramIdx = kPreNam2Active; break;
@@ -3203,6 +3322,11 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
       action = "Space dual amp";
       nav = "Up/Down amp  |  Left/Right channel  |  S cab  |  Tab target";
       break;
+    case EVoLumEffectFocus::PITCH:
+      target = "Pitch";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
     case EVoLumEffectFocus::COMP:
       target = "Compressor";
       action = "Space on/off";
@@ -3244,6 +3368,8 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
   {
     case EVoLumEffectFocus::AMP:
       return (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport) ? kSupportInputLevel : kInputLevel;
+    case EVoLumEffectFocus::PITCH:
+      return GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose ? kPrePitchSemitones : kPrePitchOctDown;
     case EVoLumEffectFocus::COMP: return kPreCompAmount;
     case EVoLumEffectFocus::PRE_NAM1: return kPreNam1Gain;
     case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
@@ -3264,6 +3390,10 @@ int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
                ? RememberedOrFirst(kSupportAmpParams, remembered)
                : (GetParam(kDualAmpActive)->Bool() ? RememberedOrFirst(kMainAmpDualParams, remembered)
                                                    : RememberedOrFirst(kMainAmpMonoParams, remembered));
+    case EVoLumEffectFocus::PITCH:
+      return GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose
+               ? RememberedOrFirst(kPitchTransposeParams, remembered)
+               : RememberedOrFirst(kPitchOctaverParams, remembered);
     case EVoLumEffectFocus::COMP: return RememberedOrFirst(kCompParams, remembered);
     case EVoLumEffectFocus::PRE_NAM1: return RememberedOrFirst(kPreNam1Params, remembered);
     case EVoLumEffectFocus::PRE_NAM2: return RememberedOrFirst(kPreNam2Params, remembered);
@@ -3302,6 +3432,10 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
       if (GetParam(kDualAmpActive)->Bool())
         return SelectAdjacentFromList(this, kMainAmpDualParams, currentParamIdx, direction);
       return SelectAdjacentFromList(this, kMainAmpMonoParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::PITCH:
+      return GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose
+               ? SelectAdjacentFromList(this, kPitchTransposeParams, currentParamIdx, direction)
+               : SelectAdjacentFromList(this, kPitchOctaverParams, currentParamIdx, direction);
     case EVoLumEffectFocus::COMP: return SelectAdjacentFromList(this, kCompParams, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM1: return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM2: return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
@@ -3482,6 +3616,11 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     _HideControlGroup(pGfx, "PRE_NAM1_POWER", true);
     _HideControlGroup(pGfx, "PRE_NAM2_KNOBS", true);
     _HideControlGroup(pGfx, "PRE_NAM2_POWER", true);
+    _HideControlGroup(pGfx, "PITCH_POWER", true);
+    _HideControlGroup(pGfx, "PITCH_MODE_PICKER", true);
+    _HideControlGroup(pGfx, "PITCH_TRANSPOSE_KNOBS", true);
+    _HideControlGroup(pGfx, "PITCH_OCTAVER_KNOBS", true);
+    _HideControlGroup(pGfx, "PITCH_VOICING", true);
     _HideControlGroup(pGfx, "MAIN_LANE_TOGGLES", true);
     _HideControlGroup(pGfx, "SUPPORT_LANE_TOGGLES", true);
     if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumPreCaptureMenu))
@@ -3571,6 +3710,22 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         disableGroup("DELAY_PINGPONG", !GetParam(kDelayActive)->Bool());
         break;
       }
+      case EVoLumEffectFocus::PITCH:
+      {
+        const bool active = GetParam(kPrePitchActive)->Bool();
+        const bool isTranspose = GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose;
+        _HideControlGroup(pGfx, "PITCH_POWER", false);
+        _HideControlGroup(pGfx, "PITCH_MODE_PICKER", false);
+        _HideControlGroup(pGfx, "PITCH_TRANSPOSE_KNOBS", !isTranspose);
+        _HideControlGroup(pGfx, "PITCH_OCTAVER_KNOBS", isTranspose);
+        // Vintage/Modern voicing only applies to the Octaver engine.
+        _HideControlGroup(pGfx, "PITCH_VOICING", isTranspose);
+        disableGroup("PITCH_MODE_PICKER", !active);
+        disableGroup("PITCH_TRANSPOSE_KNOBS", !active);
+        disableGroup("PITCH_OCTAVER_KNOBS", !active);
+        disableGroup("PITCH_VOICING", !active);
+        break;
+      }
       case EVoLumEffectFocus::COMP:
         _HideControlGroup(pGfx, "COMP_POWER", false);
         _HideControlGroup(pGfx, "COMP_KNOBS", false);
@@ -3640,6 +3795,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         else
           subText->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
       }
+      else if (mVolumFocusedEffect == EVoLumEffectFocus::PITCH)
+        subText->SetName("Pitch", false);
       else if (mVolumFocusedEffect == EVoLumEffectFocus::COMP)
         subText->SetName("Compressor", false);
       else if (mVolumFocusedEffect == EVoLumEffectFocus::PRE_NAM1)
@@ -3656,8 +3813,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
     {
       auto* trip = tripCtrl->As<VoLumTriptychControl>();
-      const bool preActive =
-        GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
+      const bool preActive = GetParam(kPrePitchActive)->Bool() || GetParam(kPreCompActive)->Bool()
+                             || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
       trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), mVolumAmpIdx,
                      _VolumMainAmpDisplayName(),
                      _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
@@ -3675,6 +3832,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::PRE);
         const auto cards = volum::triptych_layout::ComputePreCards(frames.pre);
 
+        if (auto* pitchCard = pGfx->GetControlWithTag(kCtrlTagVoLumPitchCard))
+          pitchCard->SetTargetAndDrawRECTs(cards.pitch.As<IRECT>());
         if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard))
           compCard->SetTargetAndDrawRECTs(cards.comp.As<IRECT>());
         if (auto* preCard = pGfx->GetControlWithTag(kCtrlTagVoLumPreNam1Card))
@@ -3685,6 +3844,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           link->SetTargetAndDrawRECTs(cards.connector1.As<IRECT>());
         if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector2))
           link->SetTargetAndDrawRECTs(cards.connector2.As<IRECT>());
+        if (auto* link = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector3))
+          link->SetTargetAndDrawRECTs(cards.connector3.As<IRECT>());
       }
 
       if (postExpanded)
@@ -3726,6 +3887,16 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       {
         chain->Hide(!postExpanded);
       }
+      if (auto* pitchCard = pGfx->GetControlWithTag(kCtrlTagVoLumPitchCard))
+      {
+        pitchCard->Hide(!preExpanded);
+        if (preExpanded)
+        {
+          auto* card = pitchCard->As<VoLumPedalCardControl>();
+          card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::PITCH);
+          card->SetActiveState(GetParam(kPrePitchActive)->Bool());
+        }
+      }
       if (auto* compCard = pGfx->GetControlWithTag(kCtrlTagVoLumCompCard))
       {
         compCard->Hide(!preExpanded);
@@ -3759,6 +3930,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector1))
         chain->Hide(!preExpanded);
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector2))
+        chain->Hide(!preExpanded);
+      if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumPreChainConnector3))
         chain->Hide(!preExpanded);
     }
   }
@@ -4271,7 +4444,8 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
     // VoLum: surface why the IR did not activate instead of failing silently.
     if (auto* pGfx = GetUI())
     {
-      const std::string msg = "VoLum could not load this impulse response.\n\n" + dsp::wav::GetMsgForLoadReturnCode(loadRc);
+      const std::string msg =
+        "VoLum could not load this impulse response.\n\n" + dsp::wav::GetMsgForLoadReturnCode(loadRc);
       _ShowMessageBox(pGfx, msg.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
     }
     return;
@@ -4591,8 +4765,8 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   if (dirty)
   {
     if (activePresetIdx >= 0 && activePresetIdx < (int)presets.size())
-      rows.push_back(
-        {"Overwrite \"" + presets[(size_t)activePresetIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});
+      rows.push_back({"Overwrite \"" + presets[(size_t)activePresetIdx] + "\"", VoLumListMenuControl::kOverwrite, true,
+                      false, true});
     else
       rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
   }
@@ -5116,6 +5290,10 @@ void NeuralAmpModeler::_UpdateLatency()
     preLatency += mPreModel[0]->GetLatency();
   if (preNam2ShouldLoad && mPreModel[1])
     preLatency += mPreModel[1]->GetLatency();
+  // PRE Pitch pedal reports the spectral engine latency (dry is delayed to match)
+  // so the host can compensate via PDC.
+  if (GetParam(kPrePitchActive)->Bool())
+    preLatency += mPitch.Latency();
 
   int ampLatency = 0;
   if (mModel)

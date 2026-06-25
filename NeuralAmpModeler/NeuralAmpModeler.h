@@ -14,6 +14,7 @@
 #include "ToneStack.h"
 #include "VoLumDualAmpPlan.h"
 #include "VoLumPreEffects.h"
+#include "VoLumPitchShifter.h"
 
 #include "config.h"
 #include "IPlug_include_in_plug_hdr.h"
@@ -141,6 +142,18 @@ enum EParams
   // Per-lane custom IR for the dual-amp SUPPORT lane (mirrors kIRToggle for the
   // MAIN amp). Appended at the end to keep all prior serialized indices stable.
   kSupportIRToggle,
+  // PRE Pitch pedal (Transpose / Octaver), at the very front of the PRE chain.
+  // Appended at the end to keep all prior serialized indices stable.
+  kPrePitchActive,
+  kPrePitchMode,
+  kPrePitchSemitones,
+  kPrePitchMix,
+  kPrePitchOctDown,
+  kPrePitchOctUp,
+  kPrePitchDry,
+  kPrePitchVoicing,
+  kPrePitchLevel,
+  kPrePitchQuality,
   kNumParams
 };
 
@@ -170,12 +183,14 @@ enum ECtrlTags
   kCtrlTagVoLumDualAmpRoute,
   kCtrlTagVoLumTriptych,
   kCtrlTagVoLumBoostCard,
+  kCtrlTagVoLumPitchCard,
   kCtrlTagVoLumCompCard,
   kCtrlTagVoLumPreNam1Card,
   kCtrlTagVoLumPreNam2Card,
   kCtrlTagVoLumPreCaptureMenu,
   kCtrlTagVoLumPreChainConnector1,
   kCtrlTagVoLumPreChainConnector2,
+  kCtrlTagVoLumPreChainConnector3,
   kCtrlTagVoLumDelayCard,
   kCtrlTagVoLumReverbCard,
   kCtrlTagVoLumChainConnector,
@@ -801,6 +816,12 @@ private:
   dsp::noise_gate::Trigger mNoiseGateTrigger;
   dsp::noise_gate::Gain mNoiseGateGain;
   dsp::effect::VoLumCompressor mPreCompressor;
+  // PRE Pitch pedal engine. Reconfigured off the audio thread (OnReset / OnIdle)
+  // because Signalsmith configure() allocates; the audio thread try-locks
+  // mPrePitchMutex and passes dry through if a reconfigure is in progress.
+  dsp::effect::VoLumPitch mPitch;
+  mutable std::mutex mPrePitchMutex;
+  std::atomic<bool> mPrePitchConfigureRequested{false};
   dsp::effect::VoLumPreEq mPreEq[2];
   recursive_linear_filter::Level mPreInputGain[2];
   recursive_linear_filter::Level mPreOutputGain[2];
