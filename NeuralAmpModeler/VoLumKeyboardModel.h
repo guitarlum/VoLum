@@ -21,6 +21,7 @@ constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
     case EVoLumEffectFocus::DELAY: return 5;
     case EVoLumEffectFocus::REVERB: return 6;
     case EVoLumEffectFocus::PITCH: return 7;
+    case EVoLumEffectFocus::TREMOLO: return 0; // no-DSP placeholder, never focused
   }
   return 0;
 }

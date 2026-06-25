@@ -36,10 +36,19 @@ public:
   {
   }
 
+  // Non-interactive "coming soon" tile (e.g. the Tremolo POST scaffold): drawn
+  // dimmed with a SOON badge, ignores clicks, never focuses. No param/DSP yet.
+  void SetPlaceholder(bool placeholder, const char* title)
+  {
+    mPlaceholder = placeholder;
+    mPlaceholderTitle = title ? title : "";
+    SetDirty(false);
+  }
+
   void Draw(IGraphics& g) override
   {
-    bool focused = mIsFocused;
-    bool bypassed = (GetValue() < 0.5);
+    bool focused = mIsFocused && !mPlaceholder;
+    bool bypassed = mPlaceholder ? true : (GetValue() < 0.5);
 
     if (focused)
       g.FillRoundRect(IColor(44, 232, 168, 92), mRECT.GetPadded(2.5f), 6.f);
@@ -72,17 +81,46 @@ public:
     if (bypassed)
       g.FillRect(VoLumColors::HERO_BG.WithOpacity(0.68f), artRect);
 
-    IText presetTxt(11.5f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
-    const std::string presetName = _GetPresetName();
-    const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 22.f, mRECT.B - 4.f);
+    // Footer label. Slim PITCH/COMP cards have little width, so shrink the font
+    // to fit the reserved label box (and hard-clip as a final guard) instead of
+    // letting the text bleed under the status LED to its right.
+    const std::string presetName = mPlaceholder ? mPlaceholderTitle : _GetPresetName();
+    const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 18.f, mRECT.B - 4.f);
+    float fontSize = 11.5f;
+    for (; fontSize > 8.0f; fontSize -= 0.5f)
+    {
+      IText measureTxt(fontSize, COLOR_WHITE, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+      IRECT measured;
+      g.MeasureText(measureTxt, presetName.c_str(), measured);
+      if (measured.W() <= presetRect.W())
+        break;
+    }
+    const IColor labelCol = (bypassed || mPlaceholder) ? VoLumColors::CREAM_DIM : VoLumColors::CREAM;
+    IText presetTxt(fontSize, labelCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    g.PathClipRegion(presetRect);
     g.DrawText(presetTxt, presetName.c_str(), presetRect);
+    g.PathClipRegion();
 
-    const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
-    g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.5f);
+    if (mPlaceholder)
+    {
+      // Small amber "SOON" badge in place of the status LED.
+      const IRECT badge(mRECT.R - 40.f, mRECT.B - 21.f, mRECT.R - 6.f, mRECT.B - 6.f);
+      g.FillRoundRect(VoLumColors::AMBER.WithOpacity(0.16f), badge, 3.f);
+      g.DrawRoundRect(VoLumColors::AMBER.WithOpacity(0.5f), badge, 3.f);
+      IText soonTxt(8.5f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      g.DrawText(soonTxt, "SOON", badge);
+    }
+    else
+    {
+      const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
+      g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.5f);
+    }
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    if (mPlaceholder)
+      return;
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
     if (mIsFocused)
     {
@@ -106,6 +144,8 @@ public:
     (void) x;
     (void) y;
     (void) mod;
+    if (mPlaceholder)
+      return;
     if (!mHovered)
     {
       mHovered = true;
@@ -168,11 +208,12 @@ private:
         summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kReverbMix)->Value() * 100.0);
         return summary.Get();
       case EVoLumEffectFocus::PITCH:
-        plugin->GetParam(kPrePitchMode)->GetDisplay(modeText);
+        // Slim card: keep the footer compact (the card art + collapsed slot already
+        // say "PITCH"). Transpose shows the interval, Octaver just the mode.
         if (plugin->GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose)
-          summary.SetFormatted(64, "%s . %+d st", modeText.Get(), plugin->GetParam(kPrePitchSemitones)->Int());
+          summary.SetFormatted(64, "%+d st", plugin->GetParam(kPrePitchSemitones)->Int());
         else
-          summary.SetFormatted(64, "%s", modeText.Get());
+          summary.SetFormatted(64, "OCT");
         return summary.Get();
       case EVoLumEffectFocus::COMP:
         return "Compressor";
@@ -180,6 +221,8 @@ private:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam1Capture)->Int());
       case EVoLumEffectFocus::PRE_NAM2:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam2Capture)->Int());
+      case EVoLumEffectFocus::TREMOLO:
+        return "Tremolo";
       default:
         return "BYPASS";
     }
@@ -188,6 +231,8 @@ private:
   EVoLumEffectFocus mEffect;
   bool mIsFocused = false;
   bool mHovered = false;
+  bool mPlaceholder = false;
+  std::string mPlaceholderTitle;
   ILayerPtr mArtLayer;
   bool mCachedBypassed = false;
   ClickCallback mCallback;

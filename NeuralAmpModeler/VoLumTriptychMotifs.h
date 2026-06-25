@@ -182,6 +182,39 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
     }
     g.DrawLine(IColor((int)(35.f * activeMul), 100, 190, 210), r.L, cy, r.R, cy, nullptr, 0.5f);
   }
+  else if (effect == EVoLumEffectFocus::TREMOLO)
+  {
+    // Amplitude modulation: a fast carrier whose envelope swells and dips under
+    // a slow LFO, plus the dashed LFO envelope outline. The classic tremolo look.
+    const float activeMul = dimmed ? 0.28f : 1.0f;
+    const IColor teal((int)(135.f * activeMul), 90, 205, 220);
+    const IColor blue((int)(140.f * activeMul), 150, 205, 245);
+    const float x0 = r.L + r.W() * 0.08f;
+    const float x1 = r.R - r.W() * 0.08f;
+    const float maxAmp = r.H() * 0.34f;
+    const int segs = 96;
+    float pcx = 0.f, pTop = 0.f, pBot = 0.f, pcy = 0.f;
+    for (int s = 0; s <= segs; ++s)
+    {
+      const float t = (float)s / (float)segs;
+      const float x = x0 + (x1 - x0) * t;
+      const float env = 0.28f + 0.72f * (0.5f + 0.5f * sinf(t * 6.28318f * 1.5f - 1.5708f));
+      const float amp = maxAmp * env;
+      const float carrier = cy + sinf(t * 6.28318f * 9.f) * amp;
+      const float top = cy - amp;
+      const float bot = cy + amp;
+      if (s > 0)
+      {
+        g.DrawLine(teal, pcx, pcy, x, carrier, nullptr, 1.5f);
+        g.DrawLine(blue.WithOpacity(0.45f), pcx, pTop, x, top, nullptr, 1.0f);
+        g.DrawLine(blue.WithOpacity(0.45f), pcx, pBot, x, bot, nullptr, 1.0f);
+      }
+      pcx = x;
+      pcy = carrier;
+      pTop = top;
+      pBot = bot;
+    }
+  }
   else
   {
     // Reverb (default): DLA-style branching dust grown from baseline + mid
