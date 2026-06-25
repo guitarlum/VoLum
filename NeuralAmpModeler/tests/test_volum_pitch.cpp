@@ -149,6 +149,80 @@ TEST_CASE("VoLumPitch transpose up an octave doubles frequency")
   CHECK(f == doctest::Approx(440.0).epsilon(0.12));
 }
 
+TEST_CASE("VoLumPitch transpose +24 semitones quadruples frequency")
+{
+  VoLumPitch pitch;
+  pitch.Configure(kSR, 1.0, kBlock);
+  pitch.Reset();
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 24.0, 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0);
+
+  auto in = makeSine(110.0, 1 << 16);
+  auto out = runStream(pitch, in);
+
+  const size_t from = static_cast<size_t>(pitch.Latency()) + 16384;
+  const double f = estimateFreq(out, from, 8192, 40, 600);
+  CHECK(f == doctest::Approx(440.0).epsilon(0.12)); // 110 * 4 = two octaves up
+}
+
+TEST_CASE("VoLumPitch detune nudges pitch up in cents (Transpose)")
+{
+  auto freqFor = [](double detuneCents) {
+    VoLumPitch pitch;
+    pitch.Configure(kSR, 1.0, kBlock);
+    pitch.Reset();
+    pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0, detuneCents,
+                    0.0);
+    auto in = makeSine(220.0, 1 << 16);
+    auto out = runStream(pitch, in);
+    const size_t from = static_cast<size_t>(pitch.Latency()) + 16384;
+    return estimateFreq(out, from, 8192, 80, 400);
+  };
+
+  const double base = freqFor(0.0);
+  const double up = freqFor(50.0); // +50 cents -> *2^(50/1200) ~ 1.0293
+
+  CHECK(up > base + 1.0);
+  CHECK(up == doctest::Approx(220.0 * std::pow(2.0, 50.0 / 1200.0)).epsilon(0.03));
+}
+
+TEST_CASE("VoLumPitch timbre is a no-op at 0 and tilts tone otherwise")
+{
+  // Two-tone (low + high) so the tilt has both bands to push around.
+  std::vector<DSP_SAMPLE> in(1 << 15);
+  for (size_t i = 0; i < in.size(); ++i)
+  {
+    const double t = static_cast<double>(i) / kSR;
+    in[i] = static_cast<DSP_SAMPLE>(0.35 * std::sin(2.0 * M_PI * 120.0 * t) + 0.35 * std::sin(2.0 * M_PI * 4000.0 * t));
+  }
+
+  auto runTimbre = [&](double timbre) {
+    VoLumPitch pitch;
+    pitch.Configure(kSR, 0.5, kBlock);
+    pitch.Reset();
+    pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0, 0.0, timbre);
+    return runStream(pitch, in);
+  };
+
+  // High-frequency content proxy: mean absolute first difference grows with treble.
+  auto hfEnergy = [](const std::vector<DSP_SAMPLE>& x) {
+    double acc = 0.0;
+    for (size_t i = 1; i < x.size(); ++i)
+      acc += std::abs(static_cast<double>(x[i]) - static_cast<double>(x[i - 1]));
+    return acc;
+  };
+
+  const auto flat = runTimbre(0.0);
+  const auto bright = runTimbre(1.0);
+  const auto dark = runTimbre(-1.0);
+
+  for (double v : bright)
+    CHECK(std::isfinite(v));
+
+  // Positive tilt brightens (more HF), negative darkens (less HF) vs neutral.
+  CHECK(hfEnergy(bright) > hfEnergy(flat));
+  CHECK(hfEnergy(dark) < hfEnergy(flat));
+}
+
 TEST_CASE("VoLumPitch octaver down an octave halves frequency")
 {
   VoLumPitch pitch;

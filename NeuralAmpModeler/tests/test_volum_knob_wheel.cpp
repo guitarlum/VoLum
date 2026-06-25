@@ -19,7 +19,7 @@ enum EParams {
   kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
-  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality,
+  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
   kNumParams
 };
 

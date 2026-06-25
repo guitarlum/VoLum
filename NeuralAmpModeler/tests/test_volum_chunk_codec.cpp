@@ -726,12 +726,14 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   in.perAmpPitch[0].voicing = 0; // Vintage
   in.perAmpPitch[0].level = -3.5;
   in.perAmpPitch[0].quality = 0.75;
+  in.perAmpPitch[0].detune = -22.0;
+  in.perAmpPitch[0].timbre = 40.0;
 
   // Last amp: Transpose up an octave.
   in.perAmpPitch[volum::kAmpCount - 1].present = true;
   in.perAmpPitch[volum::kAmpCount - 1].active = true;
   in.perAmpPitch[volum::kAmpCount - 1].mode = 0;
-  in.perAmpPitch[volum::kAmpCount - 1].semitones = 12.0;
+  in.perAmpPitch[volum::kAmpCount - 1].semitones = 24.0;
 
   // Locked PRE snapshot present.
   in.lockedPrePitch.present = true;
@@ -757,9 +759,13 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.perAmpPitch[0].voicing == 0);
   CHECK(out.perAmpPitch[0].level == doctest::Approx(-3.5));
   CHECK(out.perAmpPitch[0].quality == doctest::Approx(0.75));
+  CHECK(out.perAmpPitch[0].detune == doctest::Approx(-22.0));
+  CHECK(out.perAmpPitch[0].timbre == doctest::Approx(40.0));
 
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(12.0));
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(24.0));
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].detune == doctest::Approx(0.0));
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].timbre == doctest::Approx(0.0));
 
   // Untouched amp stays absent -> pitch defaults to bypassed downstream.
   CHECK_FALSE(out.perAmpPitch[1].present);

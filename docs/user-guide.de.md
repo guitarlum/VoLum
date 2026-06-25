@@ -65,12 +65,12 @@ PRE liegt vor dem Amp. Der Bereich enthält ein Pitch-Pedal, einen Kompressor un
 
 Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus:
 
-- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +12), **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang.
+- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−24 bis +24, also je zwei Oktaven), **DETUNE** fügt darüber eine Feinstimmung in Cent hinzu (−50 bis +50) für centgenaues Stimmen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang.
 - **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean.
 
 ![VoLum Pitch-Pedal — Octaver-Modus](user-guide-pitch-octaver.png)
 
-Beide Modi teilen sich einen **QUALITY**-Regler. Höhere Qualität verfolgt Akkorde sauberer, erhöht aber die Latenz; niedrigere Qualität strafft die Latenz fürs Live-Spiel bei etwas körnigerem Klang. VoLum meldet die Pitch-Latenz an deinen Host zur Plugin-Latenzkompensation (ca. 11 ms bei der niedrigsten Einstellung, ~21 ms im Standard, bis zu ~43 ms im Maximum). Bewege den Mauszeiger über den QUALITY-Regler, um diesen Kompromiss zu sehen.
+Beide Modi teilen sich einen **TIMBRE**- und einen **QUALITY**-Regler. **TIMBRE** ist ein Tilt-EQ, der nur auf das verschobene (Wet-)Signal wirkt — nach oben heller, nach unten dunkler — während dein Dry-Anteil seinen Originalklang behält. **QUALITY** tauscht Sauberkeit gegen Latenz: höhere Qualität verfolgt Akkorde sauberer, erhöht aber die Latenz; niedrigere Qualität strafft die Latenz fürs Live-Spiel bei etwas körnigerem Klang. VoLum meldet die Pitch-Latenz an deinen Host zur Plugin-Latenzkompensation (ca. 11 ms bei der niedrigsten Einstellung, ~21 ms im Standard, bis zu ~43 ms im Maximum). Bewege den Mauszeiger über den QUALITY-Regler, um diesen Kompromiss zu sehen.
 
 Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Gute Startpunkte:
 

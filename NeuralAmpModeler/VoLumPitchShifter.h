@@ -3,10 +3,15 @@
 // VoLum Pitch pedal engine (PRE, before compressor).
 //
 // Two modes share one polyphonic pitch engine (Signalsmith Stretch, MIT):
-//   Transpose: shift the whole signal by N semitones, dry/wet mix (doubles as a
-//              fixed harmonizer when blended).
+//   Transpose: shift the whole signal by N semitones (+-24) plus a fine DETUNE
+//              offset in cents (+-50), with dry/wet mix (doubles as a fixed
+//              harmonizer when blended).
 //   Octaver:   dry + (-1 octave voice * octDown) + (+1 octave voice * octUp),
 //              with a Vintage (gritty/filtered) vs Modern (clean) voicing.
+//
+// Both modes share a TIMBRE tilt (one-pole pivot ~800 Hz) applied to the *wet*
+// (shifted) signal only, so the dry blend keeps its original tone. Positive
+// timbre brightens (treble tilt), negative darkens (bass tilt).
 //
 // Mono in/out (numChannels == 1; VoLum is mono internally). The engine block
 // size is exposed as "quality": larger block = smoother but more latency
@@ -79,6 +84,10 @@ public:
     // Vintage voicing lowpass coefficient (~3.2 kHz one-pole).
     const double fc = 3200.0;
     mVintageLpCoeff = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * fc / mSampleRate);
+    // TIMBRE tilt pivot (~800 Hz one-pole): everything below is the "low" band,
+    // everything above the "high" band; tilt cross-fades their gains.
+    const double timbreFc = 800.0;
+    mTimbreLpCoeff = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * timbreFc / mSampleRate);
     _AllocateScratch();
   }
 
@@ -92,13 +101,14 @@ public:
     std::fill(mDryRing.begin(), mDryRing.end(), static_cast<DSP_SAMPLE>(0));
     mDryWrite = 0;
     mVintageLpState = {0.0, 0.0};
+    mTimbreLpState = 0.0;
   }
 
   void SetParams(Mode mode, double semitones, double mix01, double octDown01, double octUp01, double dry01,
-                 Voicing voicing, double levelDb)
+                 Voicing voicing, double levelDb, double detuneCents = 0.0, double timbre = 0.0)
   {
     mMode = mode;
-    mSemitones = std::clamp(semitones, -12.0, 12.0);
+    mSemitones = std::clamp(semitones, -24.0, 24.0);
     mMix = std::clamp(mix01, 0.0, 1.0);
     mOctDown = std::clamp(octDown01, 0.0, 1.0);
     mOctUp = std::clamp(octUp01, 0.0, 1.0);
@@ -106,6 +116,8 @@ public:
     mVoicing = voicing;
     const double clampedDb = std::clamp(levelDb, -20.0, 20.0);
     mLevel = std::pow(10.0, clampedDb / 20.0);
+    mDetuneSemis = std::clamp(detuneCents, -50.0, 50.0) / 100.0;
+    mTimbre = std::clamp(timbre, -1.0, 1.0);
   }
 
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
@@ -135,12 +147,14 @@ public:
 
     if (mMode == Mode::Transpose)
     {
-      mVoices[0].setTransposeSemitones(static_cast<float>(mSemitones));
+      // DETUNE only meaningful in Transpose: add the cents offset to the shift.
+      mVoices[0].setTransposeSemitones(static_cast<float>(mSemitones + mDetuneSemis));
       DSP_SAMPLE* wetPtr[1] = {mWet0.data()};
       mVoices[0].process(inPtr, static_cast<int>(numFrames), wetPtr, static_cast<int>(numFrames));
       for (size_t i = 0; i < numFrames; ++i)
       {
-        const double y = mDryScratch[i] * (1.0 - mMix) + static_cast<double>(mWet0[i]) * mMix;
+        const double wet = _TimbreShape(static_cast<double>(mWet0[i]));
+        const double y = mDryScratch[i] * (1.0 - mMix) + wet * mMix;
         mOut[0][i] = static_cast<DSP_SAMPLE>(y * mLevel);
       }
     }
@@ -161,7 +175,8 @@ public:
           down = _VintageShape(down, 0);
           up = _VintageShape(up, 1);
         }
-        const double y = mDryScratch[i] * mDry + down * mOctDown + up * mOctUp;
+        const double wet = _TimbreShape(down * mOctDown + up * mOctUp);
+        const double y = mDryScratch[i] * mDry + wet;
         mOut[0][i] = static_cast<DSP_SAMPLE>(y * mLevel);
       }
     }
@@ -181,6 +196,18 @@ private:
     const double driven = std::tanh(x * 1.8);
     mVintageLpState[idx] = mVintageLpCoeff * driven + (1.0 - mVintageLpCoeff) * mVintageLpState[idx];
     return mVintageLpState[idx];
+  }
+
+  // Tilt EQ on the wet signal: split at ~800 Hz, cross-fade low/high gains by the
+  // tilt amount. t=0 is a no-op (gains both 1.0); t>0 brightens, t<0 darkens.
+  double _TimbreShape(double x)
+  {
+    if (mTimbre == 0.0)
+      return x;
+    mTimbreLpState = mTimbreLpCoeff * x + (1.0 - mTimbreLpCoeff) * mTimbreLpState;
+    const double low = mTimbreLpState;
+    const double high = x - low;
+    return low * (1.0 - mTimbre) + high * (1.0 + mTimbre);
   }
 
   void _AllocateScratch()
@@ -234,14 +261,18 @@ private:
   Mode mMode = Mode::Transpose;
   Voicing mVoicing = Voicing::Modern;
   double mSemitones = 0.0;
+  double mDetuneSemis = 0.0;
   double mMix = 1.0;
   double mOctDown = 0.0;
   double mOctUp = 0.0;
   double mDry = 1.0;
   double mLevel = 1.0;
+  double mTimbre = 0.0;
 
   double mVintageLpCoeff = 0.3;
   std::array<double, kNumVoices> mVintageLpState{0.0, 0.0};
+  double mTimbreLpCoeff = 0.3;
+  double mTimbreLpState = 0.0;
 
   std::vector<DSP_SAMPLE> mWet0, mWet1, mDryScratch, mDryRing;
   size_t mDryWrite = 0;

@@ -352,7 +352,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   // PRE Pitch pedal (Transpose / Octaver), inserted at the very front of the PRE chain.
   GetParam(kPrePitchActive)->InitBool("PrePitchActive", false);
   GetParam(kPrePitchMode)->InitEnum("PrePitchMode", volum::kVoLumPitchModeTranspose, {"Transpose", "Octaver"});
-  GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -12.0, 12.0, 1.0, "st");
+  GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -24.0, 24.0, 1.0, "st");
   GetParam(kPrePitchMix)->InitDouble("PrePitchMix", 1.0, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctDown)->InitDouble("PrePitchOctDown", 0.0, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctUp)->InitDouble("PrePitchOctUp", 0.0, 0.0, 1.0, 0.01);
@@ -361,6 +361,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
   GetParam(kPrePitchQuality)->InitDouble("PrePitchQuality", 0.5, 0.0, 1.0, 0.01);
+  GetParam(kPrePitchDetune)->InitDouble("PrePitchDetune", 0.0, -50.0, 50.0, 1.0, "ct");
+  GetParam(kPrePitchTimbre)->InitDouble("PrePitchTimbre", 0.0, -100.0, 100.0, 1.0, "%");
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -930,18 +932,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     auto drawKnobCol = [&](int slot, const char* label, int paramId, const char* suffix, const char* group,
                            bool center_offset = false, int centerSlots = 3, int centerStart = 2,
-                           float centerOffset = 0.f, float centerColW = 80.f, const char* tooltip = nullptr) {
+                           float centerOffset = 0.f, float centerColW = 80.f, const char* tooltip = nullptr,
+                           float knobDiamOverride = 0.f) {
       float customColW = center_offset ? centerColW : colW;
       float cx = center_offset ? (mainCX + centerOffset - (centerSlots * customColW) / 2.f
                                   + (slot - centerStart) * customColW + (customColW / 2.f))
                                : knobX(slot) + (colW / 2.f);
-      float kL = cx - (knobDiam / 2.f);
+      // Optional smaller knob (e.g. dense 6-knob pitch rows); vertically centered
+      // against the standard knob band so the value baseline stays aligned.
+      const float effDiam = knobDiamOverride > 0.f ? knobDiamOverride : knobDiam;
+      float kL = cx - (effDiam / 2.f);
+      float kT = knobT + (knobDiam - effDiam) / 2.f;
 
       // Use a wider label rect (-40.f to +40.f = 80px wide) to prevent "FEEDBACK" clipping
       pGraphics->AttachControl(
         new VoLumKnobLabelControl(IRECT(cx - 40.f, knobRowTop, cx + 40.f, knobRowTop + 20.f), label), -1, group);
       auto* knob = new VoLumDialKnobControl(
-        IRECT(kL, knobT, kL + knobDiam, knobT + knobDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
+        IRECT(kL, kT, kL + effDiam, kT + effDiam), paramId, "", volumKnobStyle, knobBackgroundBitmap);
       pGraphics->AttachControl(knob, -1, group);
       if (tooltip)
         knob->SetTooltip(tooltip);
@@ -1189,20 +1196,41 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPrePitchActive),
       -1, "PITCH_POWER");
 
-    // Transpose: SEMI, MIX, LEVEL, QUALITY (4 knobs centered).
-    drawKnobCol(1, "SEMI", kPrePitchSemitones, "st", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW);
-    drawKnobCol(2, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW);
-    drawKnobCol(3, "LEVEL", kPrePitchLevel, "dB", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW);
-    drawKnobCol(4, "QUALITY", kPrePitchQuality, "%", "PITCH_TRANSPOSE_KNOBS", true, 4, 1, effectKnobOffset, effectColW,
-                kPitchQualityTip);
+    // Pitch rows pack 6 knobs into the centered zone (left of the mode picker), so
+    // they use a narrower column + smaller knob than the 5-wide delay/reverb rows.
+    const float pitchColW = 60.f;
+    const float pitchKnobDiam = 52.f;
+    const float pitchKnobOffset = -42.f;
+    const char* kPitchDetuneTip = "Fine micro-tune in cents (+-50), added on top of SEMI. Transpose only.";
+    const char* kPitchTimbreTip = "Tilt EQ on the shifted (wet) signal only: + brightens, - darkens. Dry stays untouched.";
 
-    // Octaver: OCT DN, OCT UP, DRY, LEVEL, QUALITY (5 knobs centered).
-    drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(4, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(5, "QUALITY", kPrePitchQuality, "%", "PITCH_OCTAVER_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
-                kPitchQualityTip);
+    // Transpose: SEMI, DETUNE, MIX, TIMBRE, LEVEL, QUALITY (6 knobs centered).
+    drawKnobCol(1, "SEMI", kPrePitchSemitones, "st", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                nullptr, pitchKnobDiam);
+    drawKnobCol(2, "DETUNE", kPrePitchDetune, "ct", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                kPitchDetuneTip, pitchKnobDiam);
+    drawKnobCol(3, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+                pitchKnobDiam);
+    drawKnobCol(4, "TIMBRE", kPrePitchTimbre, "%", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                kPitchTimbreTip, pitchKnobDiam);
+    drawKnobCol(5, "LEVEL", kPrePitchLevel, "dB", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                nullptr, pitchKnobDiam);
+    drawKnobCol(6, "QUALITY", kPrePitchQuality, "%", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                kPitchQualityTip, pitchKnobDiam);
+
+    // Octaver: OCT DN, OCT UP, DRY, TIMBRE, LEVEL, QUALITY (6 knobs centered).
+    drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                nullptr, pitchKnobDiam);
+    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+                pitchKnobDiam);
+    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+                pitchKnobDiam);
+    drawKnobCol(4, "TIMBRE", kPrePitchTimbre, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                kPitchTimbreTip, pitchKnobDiam);
+    drawKnobCol(5, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+                pitchKnobDiam);
+    drawKnobCol(6, "QUALITY", kPrePitchQuality, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+                kPitchQualityTip, pitchKnobDiam);
 
     IRECT pitchPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
     pGraphics->AttachControl(
@@ -2272,6 +2300,8 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     p.voicing = s.prePitchVoicing;
     p.level = s.prePitchLevel;
     p.quality = s.prePitchQuality;
+    p.detune = s.prePitchDetune;
+    p.timbre = s.prePitchTimbre;
     return p;
   };
   for (int i = 0; i < volum::kAmpCount; ++i)
@@ -2570,7 +2600,9 @@ bool IsPreBlockParam(int paramIdx)
     case kPrePitchDry:
     case kPrePitchVoicing:
     case kPrePitchLevel:
-    case kPrePitchQuality: return true;
+    case kPrePitchQuality:
+    case kPrePitchDetune:
+    case kPrePitchTimbre: return true;
     default: return false;
   }
 }

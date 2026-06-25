@@ -657,7 +657,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
           return;
         s.prePitchActive = p.active;
         s.prePitchMode = std::clamp(p.mode, 0, volum::kVoLumPitchModeCount - 1);
-        s.prePitchSemitones = std::clamp(p.semitones, -12.0, 12.0);
+        s.prePitchSemitones = std::clamp(p.semitones, -24.0, 24.0);
         s.prePitchMix = std::clamp(p.mix, 0.0, 1.0);
         s.prePitchOctDown = std::clamp(p.octDown, 0.0, 1.0);
         s.prePitchOctUp = std::clamp(p.octUp, 0.0, 1.0);
@@ -665,6 +665,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
         s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
         s.prePitchQuality = std::clamp(p.quality, 0.0, 1.0);
+        s.prePitchDetune = std::clamp(p.detune, -50.0, 50.0);
+        s.prePitchTimbre = std::clamp(p.timbre, -100.0, 100.0);
       };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {

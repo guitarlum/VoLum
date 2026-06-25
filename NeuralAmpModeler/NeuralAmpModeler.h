@@ -154,6 +154,10 @@ enum EParams
   kPrePitchVoicing,
   kPrePitchLevel,
   kPrePitchQuality,
+  // 1.2.0 follow-up: fine micro-tune (cents) + wet-signal tilt EQ. Appended last
+  // to keep all prior serialized indices stable.
+  kPrePitchDetune,
+  kPrePitchTimbre,
   kNumParams
 };
 
