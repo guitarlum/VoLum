@@ -130,9 +130,13 @@ private:
     { EVoLumEffectFocus::PRE_NAM1, "NAM 1", kPreNam1Active },
     { EVoLumEffectFocus::PRE_NAM2, "NAM 2", kPreNam2Active },
   };
-  static constexpr QuietSlot kPostSlots[2] = {
+  // TREMOLO is a no-DSP scaffold tile: paramIdx -1 marks it non-interactive
+  // (drawn dimmed with a SOON badge, no toggle pill).
+  static constexpr int kSlotPlaceholderParam = -1;
+  static constexpr QuietSlot kPostSlots[3] = {
     { EVoLumEffectFocus::DELAY,  "DELAY",  kDelayActive },
     { EVoLumEffectFocus::REVERB, "REVRB", kReverbActive },
+    { EVoLumEffectFocus::TREMOLO, "TREM", kSlotPlaceholderParam },
   };
 
   bool _IsPreLocked() const
@@ -374,6 +378,8 @@ private:
 
   bool _GetParamBool(int paramIdx) const
   {
+    if (paramIdx < 0)
+      return false;
     auto* del = const_cast<VoLumTriptychControl*>(this)->GetDelegate();
     if (auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(del))
       return plugin->GetParam(paramIdx)->Bool();
@@ -461,9 +467,10 @@ private:
     preSlots[2].label = mPreNam1Label.c_str();
     preSlots[3].label = mPreNam2Label.c_str();
     const QuietSlot* slots = (section == EVoLumSection::PRE) ? preSlots.data() : kPostSlots;
-    const int slotCount = (section == EVoLumSection::PRE) ? 4 : 2;
+    const int slotCount = (section == EVoLumSection::PRE) ? 4 : 3;
     const float innerTop = underlineY + 2.f;
     const float innerBot = block.B - 4.f;
+    // Each section fills its own box: POST's 3 slots are taller than PRE's 4.
     const float slotH = (innerBot - innerTop) / (float)slotCount;
 
     for (int i = 0; i < slotCount; ++i)
@@ -477,10 +484,11 @@ private:
   void _DrawQuietSlot(IGraphics& g, const IRECT& slotR, const QuietSlot& slot,
                       EVoLumSection section, int slotIdx, bool drawDivider)
   {
+    const bool placeholder = (slot.paramIdx < 0);
     const bool active = _GetParamBool(slot.paramIdx);
     const bool bypassed = !active;
     const int globalIdx = (int)mSlotNavRects.size();
-    const bool hovered = (mHoveredSlot == globalIdx);
+    const bool hovered = (mHoveredSlot == globalIdx) && !placeholder;
 
     if (hovered)
     {
@@ -545,7 +553,17 @@ private:
     g.DrawText(labelText, slotLabel.c_str(), labelR);
     g.PathClipRegion();
 
-    _DrawMiniPill(g, pillR, active, bypassed && !active);
+    if (placeholder)
+    {
+      // SOON badge instead of a toggle pill for the no-DSP scaffold tile.
+      IText soonTxt(8.f, VoLumColors::AMBER.WithOpacity(0.85f), "Josefin-Bold", EAlign::Far, EVAlign::Middle);
+      const IRECT soonR(pillR.L - 8.f, pillR.T, pillR.R, pillR.B);
+      g.DrawText(soonTxt, "SOON", soonR);
+    }
+    else
+    {
+      _DrawMiniPill(g, pillR, active, bypassed && !active);
+    }
 
     // Hairline divider between slots (skip after the last).
     if (drawDivider)
@@ -556,10 +574,12 @@ private:
 
     // Track interactive zones. Toggle hit-rect is padded a few px beyond the
     // visible pill for forgiving hit-testing; nav zone covers everything to
-    // the left of that toggle hit-rect.
-    const IRECT toggleHitR = pillR.GetPadded(4.f, 3.f, 4.f, 3.f);
+    // the left of that toggle hit-rect. Placeholder slots get no toggle (empty
+    // hit-rect) and a full-width nav zone that just expands the section.
+    const IRECT toggleHitR = placeholder ? IRECT() : pillR.GetPadded(4.f, 3.f, 4.f, 3.f);
     IRECT navR = slotR;
-    navR.R = toggleHitR.L - 1.f;
+    if (!placeholder)
+      navR.R = toggleHitR.L - 1.f;
     mSlotNavRects.push_back(navR);
     mSlotToggleRects.push_back(toggleHitR);
     mSlotParams.push_back(slot.paramIdx);
@@ -669,7 +689,7 @@ private:
   EVoLumEffectFocus _FirstActiveOrFirst(EVoLumSection section) const
   {
     const QuietSlot* slots = (section == EVoLumSection::PRE) ? kPreSlots : kPostSlots;
-    const int count = (section == EVoLumSection::PRE) ? 3 : 2;
+    const int count = (section == EVoLumSection::PRE) ? 4 : 3;
     for (int i = 0; i < count; ++i)
       if (_GetParamBool(slots[i].paramIdx))
         return slots[i].focus;
@@ -678,6 +698,8 @@ private:
 
   void _ToggleParam(int paramIdx)
   {
+    if (paramIdx < 0)
+      return;
     auto* del = GetDelegate();
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(del);
     if (!plugin) return;
@@ -891,7 +913,7 @@ private:
   // DrawEffectMotif is the most expensive op in this control (recursive
   // fractal art); caching the rendered output to a layer means hover
   // transitions only redraw cheap overlays + frames on top.
-  static constexpr size_t kEffectFocusCount = static_cast<size_t>(EVoLumEffectFocus::REVERB) + 1;
+  static constexpr size_t kEffectFocusCount = static_cast<size_t>(EVoLumEffectFocus::TREMOLO) + 1;
   std::array<ILayerPtr, kEffectFocusCount> mSlotMotifLayers;
   std::array<bool, kEffectFocusCount> mSlotMotifCachedBypass{};
   IRECT mPostRect;

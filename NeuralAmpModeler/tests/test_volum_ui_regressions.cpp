@@ -410,24 +410,24 @@ TEST_CASE("Collapsed AMP strip hover is gated on the visible block, not the stri
 TEST_CASE("Triptych shared layout keeps PRE AMP POST geometry aligned")
 {
   const auto triptych = volum::triptych_layout::BoundsForCenter(450.f, 100.f);
-  CHECK(triptych.L == doctest::Approx(140.f));
-  CHECK(triptych.R == doctest::Approx(760.f));
+  CHECK(triptych.L == doctest::Approx(107.f));
+  CHECK(triptych.R == doctest::Approx(793.f));
   CHECK(triptych.H() == doctest::Approx(volum::triptych_layout::kTriptychH));
 
   const auto ampFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::AMP);
-  CHECK(ampFrames.pre.L == doctest::Approx(140.f));
-  CHECK(ampFrames.pre.R == doctest::Approx(240.f));
-  CHECK(ampFrames.amp.L == doctest::Approx(250.f));
-  CHECK(ampFrames.amp.R == doctest::Approx(650.f));
-  CHECK(ampFrames.post.L == doctest::Approx(660.f));
-  CHECK(ampFrames.post.R == doctest::Approx(760.f));
+  CHECK(ampFrames.pre.L == doctest::Approx(107.f));
+  CHECK(ampFrames.pre.R == doctest::Approx(223.f));
+  CHECK(ampFrames.amp.L == doctest::Approx(233.f));
+  CHECK(ampFrames.amp.R == doctest::Approx(667.f));
+  CHECK(ampFrames.post.L == doctest::Approx(677.f));
+  CHECK(ampFrames.post.R == doctest::Approx(793.f));
 
   const auto postFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::POST);
-  CHECK(postFrames.pre.L == doctest::Approx(140.f));
-  CHECK(postFrames.amp.L == doctest::Approx(250.f));
-  CHECK(postFrames.amp.R == doctest::Approx(320.f));
-  CHECK(postFrames.post.L == doctest::Approx(330.f));
-  CHECK(postFrames.post.R == doctest::Approx(760.f));
+  CHECK(postFrames.pre.L == doctest::Approx(107.f));
+  CHECK(postFrames.amp.L == doctest::Approx(233.f));
+  CHECK(postFrames.amp.R == doctest::Approx(303.f));
+  CHECK(postFrames.post.L == doctest::Approx(313.f));
+  CHECK(postFrames.post.R == doctest::Approx(793.f));
 }
 
 TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
@@ -436,12 +436,12 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
   const auto preFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::PRE);
   const auto preCards = volum::triptych_layout::ComputePreCards(preFrames.pre);
 
-  CHECK(preCards.pitch.L == doctest::Approx(154.f));
-  CHECK(preCards.pitch.R == doctest::Approx(231.49f));
-  CHECK(preCards.comp.L == doctest::Approx(239.49f));
-  CHECK(preCards.comp.R == doctest::Approx(316.98f));
-  CHECK(preCards.nam1.L == doctest::Approx(324.98f));
-  CHECK(preCards.nam2.R == doctest::Approx(556.f));
+  CHECK(preCards.pitch.L == doctest::Approx(121.f));
+  CHECK(preCards.pitch.R == doctest::Approx(208.74f));
+  CHECK(preCards.comp.L == doctest::Approx(216.74f));
+  CHECK(preCards.comp.R == doctest::Approx(304.48f));
+  CHECK(preCards.nam1.L == doctest::Approx(312.48f));
+  CHECK(preCards.nam2.R == doctest::Approx(573.f));
   CHECK(preCards.connector1.L == doctest::Approx(preCards.pitch.R));
   CHECK(preCards.connector1.R == doctest::Approx(preCards.comp.L));
   CHECK(preCards.connector2.L == doctest::Approx(preCards.comp.R));
@@ -451,12 +451,16 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
 
   const auto postFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::POST);
   const auto postCards = volum::triptych_layout::ComputePostCards(postFrames.post);
-  CHECK(postCards.delay.L == doctest::Approx(344.f));
-  CHECK(postCards.delay.R == doctest::Approx(540.f));
-  CHECK(postCards.reverb.L == doctest::Approx(550.f));
-  CHECK(postCards.reverb.R == doctest::Approx(746.f));
-  CHECK(postCards.connector.L == doctest::Approx(postCards.delay.R));
-  CHECK(postCards.connector.R == doctest::Approx(postCards.reverb.L));
+  CHECK(postCards.delay.L == doctest::Approx(327.f));
+  CHECK(postCards.delay.R == doctest::Approx(471.f));
+  CHECK(postCards.reverb.L == doctest::Approx(481.f));
+  CHECK(postCards.reverb.R == doctest::Approx(625.f));
+  CHECK(postCards.tremolo.L == doctest::Approx(635.f));
+  CHECK(postCards.tremolo.R == doctest::Approx(779.f));
+  CHECK(postCards.connector1.L == doctest::Approx(postCards.delay.R));
+  CHECK(postCards.connector1.R == doctest::Approx(postCards.reverb.L));
+  CHECK(postCards.connector2.L == doctest::Approx(postCards.reverb.R));
+  CHECK(postCards.connector2.R == doctest::Approx(postCards.tremolo.L));
 }
 
 TEST_CASE("PRE/POST lock UI and settings helpers are wired")

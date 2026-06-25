@@ -497,7 +497,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto b = pGraphics->GetBounds();
 
     // VoLum: Variant F UI layout (sidebar, triptych, hero, knob row)
-    const float sidebarW = 200.f;
+    // Sidebar trimmed (amp-list names never used the full width); the reclaimed
+    // space becomes margin so the widened triptych is not cramped against it.
+    const float sidebarW = 178.f;
     const float mainL = b.L + sidebarW;
     const float mainR = b.R;
     const float mainW = mainR - mainL;
@@ -796,7 +798,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     auto* triptych = new VoLumTriptychControl(triptychArea, [this](EVoLumSection sec, EVoLumEffectFocus focus) {
       mVolumExpandedSection = sec;
-      mVolumFocusedEffect = focus;
+      // TREMOLO is a no-DSP placeholder; never make it the focused effect (it has
+      // no knob group). Route focus to DELAY instead.
+      mVolumFocusedEffect = (focus == EVoLumEffectFocus::TREMOLO) ? EVoLumEffectFocus::DELAY : focus;
       _UpdateVoLumLayout();
       _UpdateVoLumKeyboardFocusHint();
     });
@@ -870,14 +874,20 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
       (void)isBypassClick;
-      mVolumFocusedEffect = card->GetEffect();
+      const EVoLumEffectFocus eff = card->GetEffect();
+      if (eff == EVoLumEffectFocus::TREMOLO)
+        return; // placeholder tile: not focusable yet
+      mVolumFocusedEffect = eff;
       _UpdateVoLumLayout();
       _UpdateVoLumKeyboardFocusHint();
     };
 
     auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
     auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
-    auto* chainLink = new VoLumChainConnectorControl(postCards.connector.As<IRECT>());
+    auto* tremoloCard = new VoLumPedalCardControl(postCards.tremolo.As<IRECT>(), EVoLumEffectFocus::TREMOLO, onPedalClick);
+    tremoloCard->SetPlaceholder(true, "Tremolo");
+    auto* chainLink = new VoLumChainConnectorControl(postCards.connector1.As<IRECT>());
+    auto* chainLink2 = new VoLumChainConnectorControl(postCards.connector2.As<IRECT>());
     auto* pitchCard = new VoLumPedalCardControl(preCards.pitch.As<IRECT>(), EVoLumEffectFocus::PITCH, onPedalClick);
     auto* compCard = new VoLumPedalCardControl(preCards.comp.As<IRECT>(), EVoLumEffectFocus::COMP, onPedalClick);
     auto* preNam1Card = new VoLumPedalCardControl(preCards.nam1.As<IRECT>(), EVoLumEffectFocus::PRE_NAM1, onPedalClick);
@@ -896,6 +906,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(delayCard, kCtrlTagVoLumDelayCard)->Hide(true);
     pGraphics->AttachControl(chainLink, kCtrlTagVoLumChainConnector)->Hide(true);
     pGraphics->AttachControl(reverbCard, kCtrlTagVoLumReverbCard)->Hide(true);
+    pGraphics->AttachControl(chainLink2, kCtrlTagVoLumChainConnector2)->Hide(true);
+    pGraphics->AttachControl(tremoloCard, kCtrlTagVoLumTremoloCard)->Hide(true);
 
     yPos += volum::triptych_layout::kTriptychH + 4.f;
 
@@ -3268,6 +3280,7 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
     case EVoLumEffectFocus::PRE_NAM2: paramIdx = kPreNam2Active; break;
     case EVoLumEffectFocus::DELAY: paramIdx = kDelayActive; break;
     case EVoLumEffectFocus::REVERB: paramIdx = kReverbActive; break;
+    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
   }
 
   if (paramIdx == kNoParameter)
@@ -3384,6 +3397,8 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
       action = "Space on/off";
       nav = "Left/Right or Tab target";
       break;
+    case EVoLumEffectFocus::TREMOLO:
+      break; // no-DSP placeholder, never focused
   }
 
   WDL_String line;
@@ -3407,6 +3422,7 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
     case EVoLumEffectFocus::DELAY: return kDelayTime;
     case EVoLumEffectFocus::REVERB: return kReverbMix;
+    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
   }
   return kNoParameter;
 }
@@ -3434,6 +3450,7 @@ int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
       return GetParam(kReverbMode)->Int() == volum::kVoLumReverbModeOktaverb
                ? RememberedOrFirst(kOktaverbParams, remembered)
                : RememberedOrFirst(kReverbParams, remembered);
+    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
   }
   return _DefaultVoLumKeyboardKnobForFocus();
 }
@@ -3471,6 +3488,7 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
     case EVoLumEffectFocus::COMP: return SelectAdjacentFromList(this, kCompParams, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM1: return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM2: return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
+    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
   }
   return false;
 }
@@ -3773,6 +3791,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         _HideControlGroup(pGfx, "PRE_NAM2_KNOBS", false);
         disableGroup("PRE_NAM2_KNOBS", !GetParam(kPreNam2Active)->Bool());
         break;
+      case EVoLumEffectFocus::TREMOLO:
+        break; // no-DSP placeholder, never focused
     }
 
     bool ampExpanded = (mVolumExpandedSection == EVoLumSection::AMP);
@@ -3891,8 +3911,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           delayCard->SetTargetAndDrawRECTs(cards.delay.As<IRECT>());
         if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard))
           reverbCard->SetTargetAndDrawRECTs(cards.reverb.As<IRECT>());
+        if (auto* tremoloCard = pGfx->GetControlWithTag(kCtrlTagVoLumTremoloCard))
+          tremoloCard->SetTargetAndDrawRECTs(cards.tremolo.As<IRECT>());
         if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector))
-          linkCard->SetTargetAndDrawRECTs(cards.connector.As<IRECT>());
+          linkCard->SetTargetAndDrawRECTs(cards.connector1.As<IRECT>());
+        if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector2))
+          linkCard->SetTargetAndDrawRECTs(cards.connector2.As<IRECT>());
       }
 
       if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
@@ -3915,7 +3939,15 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           card->SetActiveState(GetParam(kReverbActive)->Bool());
         }
       }
+      if (auto* tremoloCard = pGfx->GetControlWithTag(kCtrlTagVoLumTremoloCard))
+      {
+        tremoloCard->Hide(!postExpanded);
+      }
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector))
+      {
+        chain->Hide(!postExpanded);
+      }
+      if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector2))
       {
         chain->Hide(!postExpanded);
       }
