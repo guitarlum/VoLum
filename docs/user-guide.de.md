@@ -185,7 +185,7 @@ Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Da
 
 ### A2 Lite-Modus (Performance)
 
-Der Schalter **Lite mode** in der Performance-Zeile der Einstellungen tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Standardmäßig spielt VoLum immer die volle Version (beste Qualität). Schaltest du den Lite-Modus ein, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur.
+Die **Performance**-Karte der Einstellungen hat einen **FULL / LITE**-Schalter; der aktive Modus ist hervorgehoben (FULL ist die Voreinstellung), du siehst also stets, welcher Qualitätsmodus läuft. Lite tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Standardmäßig spielt VoLum immer die volle Version (beste Qualität). Schaltest du auf Lite, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur.
 
 Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json` gespeichert, nicht im Projekt. Er bleibt also für jedes Projekt und jede DAW-Sitzung auf diesem Rechner aktiv, und ein auf einem schnellen Rechner gespeichertes Projekt spielt auf einem langsamen weiterhin Lite. Captures, die keine A2-Container sind (ältere Modelle mit nur einer Größe und die meisten eigenen Importe), bleiben unberührt — der Schalter hat dort einfach keine Wirkung. Standard ist Full.
 

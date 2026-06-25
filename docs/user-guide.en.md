@@ -185,7 +185,7 @@ Fresh VST3 instances read those defaults when you add VoLum to a track. After th
 
 ### A2 Lite Mode (Performance)
 
-The **Lite mode** switch in the Performance row of Settings trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. By default VoLum always plays the full-size version (best quality). Turn Lite mode on and VoLum runs the smaller version on every NAM lane: both PRE pedals, the main amp, and the dual-amp support lane.
+The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. By default VoLum always plays the full-size version (best quality). Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE pedals, the main amp, and the dual-amp support lane.
 
 Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
 
