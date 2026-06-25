@@ -33,7 +33,8 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
       mPitch.SetParams(static_cast<dsp::effect::VoLumPitch::Mode>(mode), GetParam(kPrePitchSemitones)->Value(),
                        GetParam(kPrePitchMix)->Value(), GetParam(kPrePitchOctDown)->Value(),
                        GetParam(kPrePitchOctUp)->Value(), GetParam(kPrePitchDry)->Value(),
-                       static_cast<dsp::effect::VoLumPitch::Voicing>(voicing), GetParam(kPrePitchLevel)->Value());
+                       static_cast<dsp::effect::VoLumPitch::Voicing>(voicing), GetParam(kPrePitchLevel)->Value(),
+                       GetParam(kPrePitchDetune)->Value(), GetParam(kPrePitchTimbre)->Value() / 100.0);
       preAmpPointers = mPitch.Process(preAmpPointers, numChannelsInternal, nFrames);
     }
   }

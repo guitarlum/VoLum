@@ -19,7 +19,7 @@ enum EParams {
   kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
-  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality,
+  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
   kNumParams
 };
 
@@ -126,5 +126,13 @@ TEST_CASE("Keyboard step: pitch level = 0.5 normal, 0.1 fine (dB)")
 {
   CHECK(volum::keyboard::StepForParam(kPrePitchLevel, false) == 0.5);
   CHECK(volum::keyboard::StepForParam(kPrePitchLevel, true) == 0.1);
+}
+
+TEST_CASE("Keyboard step: pitch detune/timbre = 5 normal, 1 fine")
+{
+  CHECK(volum::keyboard::StepForParam(kPrePitchDetune, false) == 5.0);
+  CHECK(volum::keyboard::StepForParam(kPrePitchDetune, true) == 1.0);
+  CHECK(volum::keyboard::StepForParam(kPrePitchTimbre, false) == 5.0);
+  CHECK(volum::keyboard::StepForParam(kPrePitchTimbre, true) == 1.0);
 }
 

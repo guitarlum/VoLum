@@ -67,6 +67,8 @@ struct PitchTail
   int voicing = 1; // 0=Vintage, 1=Modern
   double level = 0.0;
   double quality = 0.5;
+  double detune = 0.0; // micro-tune cents (-50..50)
+  double timbre = 0.0; // wet tilt EQ (-100..100 %)
 };
 
 struct ChunkIdTail
@@ -94,10 +96,9 @@ struct ChunkIdTail
 
 inline nlohmann::json PitchTailToJson(const PitchTail& p)
 {
-  return nlohmann::json{{"active", p.active},   {"mode", p.mode},   {"semi", p.semitones},
-                        {"mix", p.mix},         {"octDn", p.octDown}, {"octUp", p.octUp},
-                        {"dry", p.dry},         {"voice", p.voicing}, {"level", p.level},
-                        {"qual", p.quality}};
+  return nlohmann::json{{"active", p.active}, {"mode", p.mode},     {"semi", p.semitones}, {"mix", p.mix},
+                        {"octDn", p.octDown}, {"octUp", p.octUp},   {"dry", p.dry},        {"voice", p.voicing},
+                        {"level", p.level},   {"qual", p.quality},  {"det", p.detune},     {"tmb", p.timbre}};
 }
 
 inline PitchTail PitchTailFromJson(const nlohmann::json& j)
@@ -128,6 +129,10 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
     p.level = num(j["level"], 0.0);
   if (j.contains("qual"))
     p.quality = num(j["qual"], 0.5);
+  if (j.contains("det"))
+    p.detune = num(j["det"], 0.0);
+  if (j.contains("tmb"))
+    p.timbre = num(j["tmb"], 0.0);
   p.present = true;
   return p;
 }

@@ -20,7 +20,7 @@ enum EParams {
   kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
-  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality,
+  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
   kNumParams
 };
 
@@ -134,7 +134,9 @@ TEST_CASE("EParam: PRE Pitch pedal params appended after SupportIRToggle")
   CHECK(kPrePitchVoicing == kPrePitchDry + 1);
   CHECK(kPrePitchLevel == kPrePitchVoicing + 1);
   CHECK(kPrePitchQuality == kPrePitchLevel + 1);
-  CHECK(kNumParams == kPrePitchQuality + 1);
+  CHECK(kPrePitchDetune == kPrePitchQuality + 1);
+  CHECK(kPrePitchTimbre == kPrePitchDetune + 1);
+  CHECK(kNumParams == kPrePitchTimbre + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
@@ -143,5 +145,6 @@ TEST_CASE("EParam: total count is stable")
   // 1.2.0 appended kSupportIRToggle (per-lane support custom IR): 71 -> 72.
   // 1.2.0 PRE Pitch pedal appended 10 params (Active, Mode, Semitones, Mix, OctDown,
   // OctUp, Dry, Voicing, Level, Quality): 72 -> 82.
-  CHECK(kNumParams == 82);
+  // 1.2.0 follow-up appended Detune + Timbre: 82 -> 84.
+  CHECK(kNumParams == 84);
 }
