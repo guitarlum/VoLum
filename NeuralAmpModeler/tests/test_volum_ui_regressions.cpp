@@ -364,6 +364,18 @@ TEST_CASE("VoLum layer caches use the !g.CheckLayer idiom (re-render only when i
   RequireDoesNotContain(coreControls, "|| g.CheckLayer(");
 }
 
+TEST_CASE("Amp-list scrollbar is draggable and keeps a gutter from the labels")
+{
+  // Regression: the sidebar scrollbar used to be draw-only (no OnMouseDown
+  // scrollbar zone, no OnMouseDrag), so it could not be grabbed, and rows ran
+  // right up to the bar. Pin the drag handler + the gutter so neither silently
+  // regresses.
+  const std::string ampList = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpList.h");
+  RequireContains(ampList, "void OnMouseDrag(");
+  RequireContains(ampList, "mDraggingScrollbar = true;");
+  RequireContains(ampList, "kScrollGutter");
+}
+
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
 {
   // Wrapping the rotated DrawText in StartLayer/EndLayer/DrawLayer caused
