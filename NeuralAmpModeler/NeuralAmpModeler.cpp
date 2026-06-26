@@ -368,7 +368,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchMode)->InitEnum("PrePitchMode", volum::kVoLumPitchModeTranspose, {"Transpose", "Octaver"});
   GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -24.0, 24.0, 1.0, "st");
   GetParam(kPrePitchMix)->InitDouble("PrePitchMix", 1.0, 0.0, 1.0, 0.01);
-  GetParam(kPrePitchOctDown)->InitDouble("PrePitchOctDown", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kPrePitchOctDown)->InitDouble("PrePitchOctDown", 0.8, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctUp)->InitDouble("PrePitchOctUp", 0.0, 0.0, 1.0, 0.01);
   GetParam(kPrePitchDry)->InitDouble("PrePitchDry", 1.0, 0.0, 1.0, 0.01);
   GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
