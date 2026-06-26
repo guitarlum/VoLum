@@ -64,6 +64,15 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
   s.postReverbMode = GetParam(kReverbMode)->Int();
   s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
+  s.postTremoloActive = GetParam(kTremoloActive)->Bool();
+  s.postTremoloMode = GetParam(kTremoloMode)->Int();
+  s.postTremoloRate = GetParam(kTremoloRate)->Value();
+  s.postTremoloDepth = GetParam(kTremoloDepth)->Value();
+  s.postTremoloShape = GetParam(kTremoloShape)->Value();
+  s.postTremoloMix = GetParam(kTremoloMix)->Value();
+  s.postTremoloCrossover = GetParam(kTremoloCrossover)->Value();
+  s.postTremoloSync = GetParam(kTremoloSync)->Bool();
+  s.postTremoloDivision = GetParam(kTremoloDivision)->Int();
   for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
     s.postDelayModes[mode] = mVolumEffectSettings.delayModes[mode];
   for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
@@ -529,6 +538,15 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
     s.postReverbShimmer = defaults.postReverbShimmer;
     s.postReverbMode = defaults.postReverbMode;
     s.postReverbSubMode = defaults.postReverbSubMode;
+    s.postTremoloActive = defaults.postTremoloActive;
+    s.postTremoloMode = defaults.postTremoloMode;
+    s.postTremoloRate = defaults.postTremoloRate;
+    s.postTremoloDepth = defaults.postTremoloDepth;
+    s.postTremoloShape = defaults.postTremoloShape;
+    s.postTremoloMix = defaults.postTremoloMix;
+    s.postTremoloCrossover = defaults.postTremoloCrossover;
+    s.postTremoloSync = defaults.postTremoloSync;
+    s.postTremoloDivision = defaults.postTremoloDivision;
     for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
       s.postDelayModes[mode] = defaults.postDelayModes[mode];
     for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
@@ -578,6 +596,15 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   setParam(kReverbShimmer, s.postReverbShimmer);
   setParam(kReverbMode, s.postReverbMode);
   setParam(kReverbSubMode, s.postReverbSubMode);
+  setParam(kTremoloActive, s.postTremoloActive ? 1.0 : 0.0);
+  setParam(kTremoloMode, s.postTremoloMode);
+  setParam(kTremoloRate, s.postTremoloRate);
+  setParam(kTremoloDepth, s.postTremoloDepth);
+  setParam(kTremoloShape, s.postTremoloShape);
+  setParam(kTremoloMix, s.postTremoloMix);
+  setParam(kTremoloCrossover, s.postTremoloCrossover);
+  setParam(kTremoloSync, s.postTremoloSync ? 1.0 : 0.0);
+  setParam(kTremoloDivision, s.postTremoloDivision);
   mVolumEffectSettings.delayActive = s.postDelayActive;
   mVolumEffectSettings.delayMode = s.postDelayMode;
   mVolumEffectSettings.reverbActive = s.postReverbActive;

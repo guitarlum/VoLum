@@ -8,7 +8,7 @@
 
 namespace volum::keyboard
 {
-constexpr int kTargetCount = 8;
+constexpr int kTargetCount = 9;
 
 constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
 {
@@ -21,7 +21,7 @@ constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
     case EVoLumEffectFocus::DELAY: return 5;
     case EVoLumEffectFocus::REVERB: return 6;
     case EVoLumEffectFocus::PITCH: return 7;
-    case EVoLumEffectFocus::TREMOLO: return 0; // no-DSP placeholder, never focused
+    case EVoLumEffectFocus::TREMOLO: return 8;
   }
   return 0;
 }
@@ -61,6 +61,15 @@ constexpr std::array<int, 6> kPreNam2Params = {
 
 constexpr std::array<int, 4> kCompParams = {
   kPreCompAmount, kPreCompAttack, kPreCompRelease, kPreCompLevel,
+};
+
+constexpr std::array<int, 4> kTremoloParams = {
+  kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix,
+};
+
+// Harmonic mode exposes the band-split CROSSOVER knob too.
+constexpr std::array<int, 5> kTremoloHarmonicParams = {
+  kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover,
 };
 
 constexpr std::array<int, 6> kPitchTransposeParams = {
@@ -107,7 +116,10 @@ inline double StepForParam(int paramIdx, bool fine)
     case kPreNam2MidFreq:
     case kPreCompAttack:
     case kPreCompRelease:
+    case kTremoloCrossover:
       return fine ? 1.0 : 5.0;
+    case kTremoloRate:
+      return fine ? 0.1 : 0.5;
     case kPrePitchSemitones:
       return 1.0;
     case kPrePitchDetune:
@@ -129,6 +141,9 @@ inline double StepForParam(int paramIdx, bool fine)
     case kReverbDecay:
     case kReverbShimmer:
     case kPreCompMix:
+    case kTremoloDepth:
+    case kTremoloShape:
+    case kTremoloMix:
       return fine ? 0.01 : 0.05;
     default:
       return fine ? 0.1 : 1.0;

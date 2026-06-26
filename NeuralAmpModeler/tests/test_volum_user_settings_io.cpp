@@ -764,6 +764,15 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   amps[3].postReverbModes[volum::kVoLumReverbModePlate].decay = 6.7;
   amps[3].postReverbModes[volum::kVoLumReverbModeOktaverb].subMode = volum::kVoLumOktaverbSubModeBloom;
   amps[3].postOktaverbSubModes[volum::kVoLumOktaverbSubModeBloom].shimmer = 0.81;
+  amps[3].postTremoloActive = true;
+  amps[3].postTremoloMode = volum::kVoLumTremoloModeHarmonic;
+  amps[3].postTremoloRate = 6.5;
+  amps[3].postTremoloDepth = 0.72;
+  amps[3].postTremoloShape = 0.4;
+  amps[3].postTremoloMix = 0.9;
+  amps[3].postTremoloCrossover = 1200.0;
+  amps[3].postTremoloSync = true;
+  amps[3].postTremoloDivision = 6;
 
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
 
@@ -790,6 +799,15 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   CHECK(loaded[3].postReverbModes[volum::kVoLumReverbModePlate].decay == doctest::Approx(6.7));
   CHECK(loaded[3].postReverbModes[volum::kVoLumReverbModeOktaverb].subMode == volum::kVoLumOktaverbSubModeBloom);
   CHECK(loaded[3].postOktaverbSubModes[volum::kVoLumOktaverbSubModeBloom].shimmer == doctest::Approx(0.81));
+  CHECK(loaded[3].postTremoloActive);
+  CHECK(loaded[3].postTremoloMode == volum::kVoLumTremoloModeHarmonic);
+  CHECK(loaded[3].postTremoloRate == doctest::Approx(6.5));
+  CHECK(loaded[3].postTremoloDepth == doctest::Approx(0.72));
+  CHECK(loaded[3].postTremoloShape == doctest::Approx(0.4));
+  CHECK(loaded[3].postTremoloMix == doctest::Approx(0.9));
+  CHECK(loaded[3].postTremoloCrossover == doctest::Approx(1200.0));
+  CHECK(loaded[3].postTremoloSync);
+  CHECK(loaded[3].postTremoloDivision == 6);
 
   // Untouched amps remain pending initialization (postValid=false) until selected; amp
   // restore turns that into an explicit factory POST scene.

@@ -776,6 +776,64 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.lockedPrePitch.quality == doctest::Approx(0.25));
 }
 
+TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
+{
+  volum::ChunkIdTail in;
+
+  // Amp 0: Harmonic, synced, fully populated.
+  in.perAmpTremolo[0].present = true;
+  in.perAmpTremolo[0].active = true;
+  in.perAmpTremolo[0].mode = volum::kVoLumTremoloModeHarmonic;
+  in.perAmpTremolo[0].rate = 6.5;
+  in.perAmpTremolo[0].depth = 0.72;
+  in.perAmpTremolo[0].shape = 0.4;
+  in.perAmpTremolo[0].mix = 0.9;
+  in.perAmpTremolo[0].crossover = 1200.0;
+  in.perAmpTremolo[0].sync = true;
+  in.perAmpTremolo[0].division = 6; // 1/8T
+
+  // Last amp: Optical, free-running.
+  in.perAmpTremolo[volum::kAmpCount - 1].present = true;
+  in.perAmpTremolo[volum::kAmpCount - 1].active = true;
+  in.perAmpTremolo[volum::kAmpCount - 1].mode = volum::kVoLumTremoloModeOptical;
+  in.perAmpTremolo[volum::kAmpCount - 1].rate = 11.0;
+
+  // Locked POST snapshot present.
+  in.lockedPostTremolo.present = true;
+  in.lockedPostTremolo.active = true;
+  in.lockedPostTremolo.mode = volum::kVoLumTremoloModeBias;
+  in.lockedPostTremolo.depth = 0.95;
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpTremolo[0].present);
+  CHECK(out.perAmpTremolo[0].active);
+  CHECK(out.perAmpTremolo[0].mode == volum::kVoLumTremoloModeHarmonic);
+  CHECK(out.perAmpTremolo[0].rate == doctest::Approx(6.5));
+  CHECK(out.perAmpTremolo[0].depth == doctest::Approx(0.72));
+  CHECK(out.perAmpTremolo[0].shape == doctest::Approx(0.4));
+  CHECK(out.perAmpTremolo[0].mix == doctest::Approx(0.9));
+  CHECK(out.perAmpTremolo[0].crossover == doctest::Approx(1200.0));
+  CHECK(out.perAmpTremolo[0].sync);
+  CHECK(out.perAmpTremolo[0].division == 6);
+
+  CHECK(out.perAmpTremolo[volum::kAmpCount - 1].present);
+  CHECK(out.perAmpTremolo[volum::kAmpCount - 1].mode == volum::kVoLumTremoloModeOptical);
+  CHECK(out.perAmpTremolo[volum::kAmpCount - 1].rate == doctest::Approx(11.0));
+
+  // Untouched amp stays absent -> tremolo defaults to bypassed downstream.
+  CHECK_FALSE(out.perAmpTremolo[1].present);
+
+  CHECK(out.lockedPostTremolo.present);
+  CHECK(out.lockedPostTremolo.active);
+  CHECK(out.lockedPostTremolo.mode == volum::kVoLumTremoloModeBias);
+  CHECK(out.lockedPostTremolo.depth == doctest::Approx(0.95));
+}
+
 TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")
 {
   // Simulate the real layout: arbitrary fixed-tail bytes, then the id tail.

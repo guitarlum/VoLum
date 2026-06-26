@@ -20,6 +20,8 @@ enum EParams {
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
   kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
+  kTremoloActive, kTremoloMode, kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix,
+  kTremoloCrossover, kTremoloSync, kTremoloDivision,
   kNumParams
 };
 

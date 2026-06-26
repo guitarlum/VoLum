@@ -20,6 +20,8 @@ enum EParams {
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
   kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
+  kTremoloActive, kTremoloMode, kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix,
+  kTremoloCrossover, kTremoloSync, kTremoloDivision,
   kNumParams
 };
 
@@ -29,6 +31,26 @@ TEST_CASE("Keyboard step: delay time = 5ms normal, 1ms fine")
 {
   CHECK(volum::keyboard::StepForParam(kDelayTime, false) == 5.0);
   CHECK(volum::keyboard::StepForParam(kDelayTime, true) == 1.0);
+}
+
+TEST_CASE("Keyboard step: tremolo rate = 0.5Hz normal, 0.1Hz fine")
+{
+  CHECK(volum::keyboard::StepForParam(kTremoloRate, false) == 0.5);
+  CHECK(volum::keyboard::StepForParam(kTremoloRate, true) == 0.1);
+}
+
+TEST_CASE("Keyboard step: tremolo crossover = 5Hz normal, 1Hz fine")
+{
+  CHECK(volum::keyboard::StepForParam(kTremoloCrossover, false) == 5.0);
+  CHECK(volum::keyboard::StepForParam(kTremoloCrossover, true) == 1.0);
+}
+
+TEST_CASE("Keyboard step: tremolo depth/shape/mix = 0.05 normal, 0.01 fine")
+{
+  CHECK(volum::keyboard::StepForParam(kTremoloDepth, false) == 0.05);
+  CHECK(volum::keyboard::StepForParam(kTremoloDepth, true) == 0.01);
+  CHECK(volum::keyboard::StepForParam(kTremoloShape, false) == 0.05);
+  CHECK(volum::keyboard::StepForParam(kTremoloMix, true) == 0.01);
 }
 
 TEST_CASE("Keyboard step: delay mix = 0.05 normal, 0.01 fine")

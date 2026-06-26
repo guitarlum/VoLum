@@ -668,6 +668,19 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         s.prePitchDetune = std::clamp(p.detune, -50.0, 50.0);
         s.prePitchTimbre = std::clamp(p.timbre, -100.0, 100.0);
       };
+      auto applyTremoloTail = [](const volum::TremoloTail& t, volum::VoLumAmpSettings& s) {
+        if (!t.present)
+          return;
+        s.postTremoloActive = t.active;
+        s.postTremoloMode = std::clamp(t.mode, 0, volum::kVoLumTremoloModeCount - 1);
+        s.postTremoloRate = std::clamp(t.rate, 0.1, 20.0);
+        s.postTremoloDepth = std::clamp(t.depth, 0.0, 1.0);
+        s.postTremoloShape = std::clamp(t.shape, 0.0, 1.0);
+        s.postTremoloMix = std::clamp(t.mix, 0.0, 1.0);
+        s.postTremoloCrossover = std::clamp(t.crossover, 200.0, 2000.0);
+        s.postTremoloSync = t.sync;
+        s.postTremoloDivision = std::clamp(t.division, 0, volum::kVoLumTremoloDivisionCount - 1);
+      };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
         mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
@@ -676,8 +689,10 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         mVolumAmpSettings[i].supportCustomSlot = idTail.perAmpSupportSlot[i];
         mVolumAmpSettings[i].supportCustomChannel = idTail.perAmpSupportChannel[i];
         applyPitchTail(idTail.perAmpPitch[i], mVolumAmpSettings[i]);
+        applyTremoloTail(idTail.perAmpTremolo[i], mVolumAmpSettings[i]);
       }
       applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
+      applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
     }
 

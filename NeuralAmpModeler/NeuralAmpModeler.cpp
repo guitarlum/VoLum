@@ -334,6 +334,20 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   // Oktaverb-only sub-toggle.
   GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 1, {"Halo", "Shimmer", "Bloom"});
 
+  // Tremolo (POST) - third POST pedal, runs last after Reverb. Defaults voice the
+  // classic "Bang Bang (My Baby Shot Me Down)" tone: smooth Bias sine, deep, slow.
+  GetParam(kTremoloActive)->InitBool("TremoloActive", false);
+  GetParam(kTremoloMode)->InitEnum("TremoloMode", volum::kVoLumTremoloModeBias, {"Optical", "Bias", "Harmonic"});
+  GetParam(kTremoloRate)->InitDouble("TremoloRate", 5.0, 0.1, 20.0, 0.1, "Hz");
+  GetParam(kTremoloDepth)->InitDouble("TremoloDepth", 0.85, 0.0, 1.0, 0.01);
+  GetParam(kTremoloShape)->InitDouble("TremoloShape", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kTremoloMix)->InitDouble("TremoloMix", 1.0, 0.0, 1.0, 0.01);
+  GetParam(kTremoloCrossover)->InitDouble("TremoloCrossover", 800.0, 200.0, 2000.0, 10.0, "Hz");
+  GetParam(kTremoloSync)->InitBool("TremoloSync", false);
+  GetParam(kTremoloDivision)
+    ->InitEnum("TremoloDivision", volum::kVoLumTremoloDivisionDefault,
+               {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"});
+
   // Reserved legacy boost params. Keep them initialized for old chunks even though PRE captures replaced this block.
   GetParam(kBoostActive)->InitBool("BoostActive", false);
   GetParam(kBoostDrive)->InitDouble("BoostDrive", 4.5, 0.0, 10.0, 0.1);
@@ -798,9 +812,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     auto* triptych = new VoLumTriptychControl(triptychArea, [this](EVoLumSection sec, EVoLumEffectFocus focus) {
       mVolumExpandedSection = sec;
-      // TREMOLO is a no-DSP placeholder; never make it the focused effect (it has
-      // no knob group). Route focus to DELAY instead.
-      mVolumFocusedEffect = (focus == EVoLumEffectFocus::TREMOLO) ? EVoLumEffectFocus::DELAY : focus;
+      mVolumFocusedEffect = focus;
       _UpdateVoLumLayout();
       _UpdateVoLumKeyboardFocusHint();
     });
@@ -875,8 +887,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
       (void)isBypassClick;
       const EVoLumEffectFocus eff = card->GetEffect();
-      if (eff == EVoLumEffectFocus::TREMOLO)
-        return; // placeholder tile: not focusable yet
       mVolumFocusedEffect = eff;
       _UpdateVoLumLayout();
       _UpdateVoLumKeyboardFocusHint();
@@ -885,7 +895,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
     auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
     auto* tremoloCard = new VoLumPedalCardControl(postCards.tremolo.As<IRECT>(), EVoLumEffectFocus::TREMOLO, onPedalClick);
-    tremoloCard->SetPlaceholder(true, "Tremolo");
     auto* chainLink = new VoLumChainConnectorControl(postCards.connector1.As<IRECT>());
     auto* chainLink2 = new VoLumChainConnectorControl(postCards.connector2.As<IRECT>());
     auto* pitchCard = new VoLumPedalCardControl(preCards.pitch.As<IRECT>(), EVoLumEffectFocus::PITCH, onPedalClick);
@@ -1157,6 +1166,58 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new VoLumPowerSwitchControl(
                                IRECT(dlySwX - 14.f, knobT - 4.f, dlySwX + 14.f, knobT + knobDiam + 2.f), kDelayActive),
                              -1, "DELAY_POWER");
+
+    // TREMOLO KNOBS (Centered) - RATE / DEPTH / SHAPE / MIX (+ X-OVER in Harmonic).
+    // RATE (slot 1) swaps to a tempo DIVISION stepper when Sync is engaged.
+    drawKnobCol(1, "RATE", kTremoloRate, "Hz", "TREMOLO_RATE", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(2, "DEPTH", kTremoloDepth, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(3, "SHAPE", kTremoloShape, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(4, "MIX", kTremoloMix, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(5, "X-OVER", kTremoloCrossover, "Hz", "TREMOLO_XOVER", true, 5, 1, effectKnobOffset, effectColW);
+    IRECT tremoloPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
+    pGraphics->AttachControl(
+      new VoLumModePickerControl(tremoloPickerRect, kTremoloMode, {"OPTICAL", "BIAS", "HARMONIC"}), -1, "TREMOLO_KNOBS");
+
+    // DIVISION stepper occupies the RATE slot (slot 1) when Sync is engaged.
+    {
+      const float divCx = mainCX + effectKnobOffset - (5 * effectColW) / 2.f + (1 - 1) * effectColW + (effectColW / 2.f);
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(IRECT(divCx - 40.f, knobRowTop, divCx + 40.f, knobRowTop + 20.f), "DIVISION"), -1,
+        "TREMOLO_DIV");
+      const float divStepH = 28.f;
+      const float divStepTop = knobT + (knobDiam - divStepH) / 2.f;
+      auto* divStep =
+        new VoLumChannelStepControl(IRECT(divCx - 34.f, divStepTop, divCx + 34.f, divStepTop + divStepH), [this](int newIdx) {
+          GetParam(kTremoloDivision)->Set(static_cast<double>(newIdx));
+          SendParameterValueFromDelegate(kTremoloDivision, GetParam(kTremoloDivision)->GetNormalized(), true);
+          OnParamChange(kTremoloDivision);
+          _VolumMarkPresetDirty();
+        });
+      divStep->SetChannels({"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kTremoloDivision)->Int());
+      pGraphics->AttachControl(divStep, -1, "TREMOLO_DIV");
+      mVolumTremoloDivStep = divStep;
+    }
+
+    // TEMPO SYNC toggle below the knob block (mirrors the delay ping-pong row).
+    {
+      const float tSwitchX = mainCX - 220.f;
+      const float tSwitchY = pillRowY - (ppSwitchH - pillRowH) * 0.5f;
+      pGraphics->AttachControl(
+        new NAMSwitchControl(IRECT(tSwitchX, tSwitchY, tSwitchX + ppSwitchW, tSwitchY + ppSwitchH), kTremoloSync, "",
+                             volumToggleStyle, switchHandleBitmap),
+        -1, "TREMOLO_SYNC");
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(
+          IRECT(tSwitchX + ppSwitchW + 4.f, tSwitchY, tSwitchX + ppSwitchW + 4.f + ppLabelW, tSwitchY + ppSwitchH),
+          "TEMPO SYNC"),
+        -1, "TREMOLO_SYNC");
+    }
+
+    float tremSwX = mainCX - 242.f;
+    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(tremSwX - 14.f, knobT - 4.f, tremSwX + 14.f,
+                                                               knobT + knobDiam + 2.f),
+                                                         kTremoloActive),
+                             -1, "TREMOLO_POWER");
 
     // PRE KNOBS
     drawKnobCol(1, "GAIN", kPreNam1Gain, "dB", "PRE_NAM1_KNOBS", true, 6, 1, 0.f, 66.f);
@@ -1902,7 +1963,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(), mIR != nullptr,
     GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
     GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive,
-    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr, GetParam(kPrePitchActive)->Bool());
+    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr, GetParam(kPrePitchActive)->Bool(),
+    GetParam(kTremoloActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
@@ -2063,10 +2125,13 @@ void NeuralAmpModeler::OnReset()
   const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
   mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+  mTremolo.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
   mDelay.Reset();
   mReverb.Reset();
+  mTremolo.Reset();
   mPostDelayWasActive = false;
   mPostReverbWasActive = false;
+  mPostTremoloWasActive = false;
   mPostEffectsClearedForMissingModel = false;
   // Pre-reserve dual-amp scratch buffers so ProcessBlock never has to grow them on
   // the audio thread when block size or dual-amp activation changes mid-session.
@@ -2316,6 +2381,20 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     p.timbre = s.prePitchTimbre;
     return p;
   };
+  auto tremoloTailFromSettings = [](const volum::VoLumAmpSettings& s) {
+    volum::TremoloTail t;
+    t.present = true;
+    t.active = s.postTremoloActive;
+    t.mode = s.postTremoloMode;
+    t.rate = s.postTremoloRate;
+    t.depth = s.postTremoloDepth;
+    t.shape = s.postTremoloShape;
+    t.mix = s.postTremoloMix;
+    t.crossover = s.postTremoloCrossover;
+    t.sync = s.postTremoloSync;
+    t.division = s.postTremoloDivision;
+    return t;
+  };
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
     idTail.perAmpIrId[i] = mVolumAmpSettings[i].activeIrId;
@@ -2324,9 +2403,12 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     idTail.perAmpSupportSlot[i] = mVolumAmpSettings[i].supportCustomSlot;
     idTail.perAmpSupportChannel[i] = mVolumAmpSettings[i].supportCustomChannel;
     idTail.perAmpPitch[i] = pitchTailFromSettings(mVolumAmpSettings[i]);
+    idTail.perAmpTremolo[i] = tremoloTailFromSettings(mVolumAmpSettings[i]);
   }
   if (mVolumPreLocked)
     idTail.lockedPrePitch = pitchTailFromSettings(mVolumLiveLockedPre);
+  if (mVolumPostLocked)
+    idTail.lockedPostTremolo = tremoloTailFromSettings(mVolumLiveLockedPost);
   volum::PutChunkIdTail(chunk, idTail);
 
   return ok;
@@ -2766,6 +2848,12 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         _UpdateVoLumLayout(pGraphics);
         break;
       }
+      case kTremoloMode:
+      case kTremoloSync:
+        // Mode picker toggles the Harmonic-only X-OVER knob; Sync swaps the RATE
+        // knob for the tempo DIVISION stepper. Both need a layout refresh.
+        _UpdateVoLumLayout(pGraphics);
+        break;
       default: break;
     }
 
@@ -3280,7 +3368,7 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
     case EVoLumEffectFocus::PRE_NAM2: paramIdx = kPreNam2Active; break;
     case EVoLumEffectFocus::DELAY: paramIdx = kDelayActive; break;
     case EVoLumEffectFocus::REVERB: paramIdx = kReverbActive; break;
-    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
+    case EVoLumEffectFocus::TREMOLO: paramIdx = kTremoloActive; break;
   }
 
   if (paramIdx == kNoParameter)
@@ -3398,7 +3486,10 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::TREMOLO:
-      break; // no-DSP placeholder, never focused
+      target = "Tremolo";
+      action = "Space on/off";
+      nav = "Left/Right or Tab target";
+      break;
   }
 
   WDL_String line;
@@ -3422,7 +3513,8 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
     case EVoLumEffectFocus::DELAY: return kDelayTime;
     case EVoLumEffectFocus::REVERB: return kReverbMix;
-    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
+    case EVoLumEffectFocus::TREMOLO:
+      return GetParam(kTremoloSync)->Bool() ? kTremoloDepth : kTremoloRate;
   }
   return kNoParameter;
 }
@@ -3450,7 +3542,10 @@ int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
       return GetParam(kReverbMode)->Int() == volum::kVoLumReverbModeOktaverb
                ? RememberedOrFirst(kOktaverbParams, remembered)
                : RememberedOrFirst(kReverbParams, remembered);
-    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
+    case EVoLumEffectFocus::TREMOLO:
+      return GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic
+               ? RememberedOrFirst(kTremoloHarmonicParams, remembered)
+               : RememberedOrFirst(kTremoloParams, remembered);
   }
   return _DefaultVoLumKeyboardKnobForFocus();
 }
@@ -3488,7 +3583,10 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
     case EVoLumEffectFocus::COMP: return SelectAdjacentFromList(this, kCompParams, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM1: return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM2: return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
-    case EVoLumEffectFocus::TREMOLO: break; // no-DSP placeholder
+    case EVoLumEffectFocus::TREMOLO:
+      return GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic
+               ? SelectAdjacentFromList(this, kTremoloHarmonicParams, currentParamIdx, direction)
+               : SelectAdjacentFromList(this, kTremoloParams, currentParamIdx, direction);
   }
   return false;
 }
@@ -3660,6 +3758,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     _HideControlGroup(pGfx, "DELAY_KNOBS", true);
     _HideControlGroup(pGfx, "DELAY_PINGPONG", true);
     _HideControlGroup(pGfx, "DELAY_POWER", true);
+    _HideControlGroup(pGfx, "TREMOLO_KNOBS", true);
+    _HideControlGroup(pGfx, "TREMOLO_RATE", true);
+    _HideControlGroup(pGfx, "TREMOLO_DIV", true);
+    _HideControlGroup(pGfx, "TREMOLO_XOVER", true);
+    _HideControlGroup(pGfx, "TREMOLO_SYNC", true);
+    _HideControlGroup(pGfx, "TREMOLO_POWER", true);
     _HideControlGroup(pGfx, "COMP_KNOBS", true);
     _HideControlGroup(pGfx, "COMP_POWER", true);
     _HideControlGroup(pGfx, "PRE_NAM1_KNOBS", true);
@@ -3792,7 +3896,27 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         disableGroup("PRE_NAM2_KNOBS", !GetParam(kPreNam2Active)->Bool());
         break;
       case EVoLumEffectFocus::TREMOLO:
-        break; // no-DSP placeholder, never focused
+      {
+        const bool active = GetParam(kTremoloActive)->Bool();
+        const bool sync = GetParam(kTremoloSync)->Bool();
+        const bool harmonic = GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic;
+        _HideControlGroup(pGfx, "TREMOLO_POWER", false);
+        _HideControlGroup(pGfx, "TREMOLO_KNOBS", false);
+        _HideControlGroup(pGfx, "TREMOLO_SYNC", false);
+        // RATE knob and the DIVISION stepper share slot 1: one shows at a time.
+        _HideControlGroup(pGfx, "TREMOLO_RATE", sync);
+        _HideControlGroup(pGfx, "TREMOLO_DIV", !sync);
+        // Band-split CROSSOVER knob only matters in Harmonic mode.
+        _HideControlGroup(pGfx, "TREMOLO_XOVER", !harmonic);
+        if (mVolumTremoloDivStep)
+          mVolumTremoloDivStep->SetChannels(
+            {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kTremoloDivision)->Int());
+        disableGroup("TREMOLO_KNOBS", !active);
+        disableGroup("TREMOLO_RATE", !active);
+        disableGroup("TREMOLO_DIV", !active);
+        disableGroup("TREMOLO_XOVER", !active);
+        break;
+      }
     }
 
     bool ampExpanded = (mVolumExpandedSection == EVoLumSection::AMP);
@@ -3859,6 +3983,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         subText->SetName("Reverb", false);
       else if (mVolumFocusedEffect == EVoLumEffectFocus::DELAY)
         subText->SetName("Delay", false);
+      else if (mVolumFocusedEffect == EVoLumEffectFocus::TREMOLO)
+        subText->SetName("Tremolo", false);
     }
 
     // Inform the Triptych of the current states
@@ -3942,6 +4068,12 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       if (auto* tremoloCard = pGfx->GetControlWithTag(kCtrlTagVoLumTremoloCard))
       {
         tremoloCard->Hide(!postExpanded);
+        if (postExpanded)
+        {
+          auto* card = tremoloCard->As<VoLumPedalCardControl>();
+          card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::TREMOLO);
+          card->SetActiveState(GetParam(kTremoloActive)->Bool());
+        }
       }
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector))
       {

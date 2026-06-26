@@ -222,7 +222,16 @@ private:
       case EVoLumEffectFocus::PRE_NAM2:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam2Capture)->Int());
       case EVoLumEffectFocus::TREMOLO:
-        return "Tremolo";
+        plugin->GetParam(kTremoloMode)->GetDisplay(modeText);
+        if (plugin->GetParam(kTremoloSync)->Bool())
+        {
+          WDL_String div;
+          plugin->GetParam(kTremoloDivision)->GetDisplay(div);
+          summary.SetFormatted(64, "%s . %s", modeText.Get(), div.Get());
+        }
+        else
+          summary.SetFormatted(64, "%s . %.1f Hz", modeText.Get(), plugin->GetParam(kTremoloRate)->Value());
+        return summary.Get();
       default:
         return "BYPASS";
     }

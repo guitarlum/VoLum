@@ -21,6 +21,8 @@ enum EParams {
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
   kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
+  kTremoloActive, kTremoloMode, kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix,
+  kTremoloCrossover, kTremoloSync, kTremoloDivision,
   kNumParams
 };
 
@@ -136,7 +138,20 @@ TEST_CASE("EParam: PRE Pitch pedal params appended after SupportIRToggle")
   CHECK(kPrePitchQuality == kPrePitchLevel + 1);
   CHECK(kPrePitchDetune == kPrePitchQuality + 1);
   CHECK(kPrePitchTimbre == kPrePitchDetune + 1);
-  CHECK(kNumParams == kPrePitchTimbre + 1);
+}
+
+TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchTimbre")
+{
+  CHECK(kTremoloActive == kPrePitchTimbre + 1);
+  CHECK(kTremoloMode == kTremoloActive + 1);
+  CHECK(kTremoloRate == kTremoloMode + 1);
+  CHECK(kTremoloDepth == kTremoloRate + 1);
+  CHECK(kTremoloShape == kTremoloDepth + 1);
+  CHECK(kTremoloMix == kTremoloShape + 1);
+  CHECK(kTremoloCrossover == kTremoloMix + 1);
+  CHECK(kTremoloSync == kTremoloCrossover + 1);
+  CHECK(kTremoloDivision == kTremoloSync + 1);
+  CHECK(kNumParams == kTremoloDivision + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
@@ -146,5 +161,7 @@ TEST_CASE("EParam: total count is stable")
   // 1.2.0 PRE Pitch pedal appended 10 params (Active, Mode, Semitones, Mix, OctDown,
   // OctUp, Dry, Voicing, Level, Quality): 72 -> 82.
   // 1.2.0 follow-up appended Detune + Timbre: 82 -> 84.
-  CHECK(kNumParams == 84);
+  // POST Tremolo pedal appended 9 params (Active, Mode, Rate, Depth, Shape, Mix,
+  // Crossover, Sync, Division): 84 -> 93.
+  CHECK(kNumParams == 93);
 }

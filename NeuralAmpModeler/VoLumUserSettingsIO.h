@@ -300,6 +300,15 @@ inline bool PostBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "postReverbShimmer", out.postReverbShimmer, 0.0, 1.0);
   any |= detail::JsonGetClampedInt(o, "postReverbMode", out.postReverbMode, 0, kVoLumReverbModeCount - 1);
   any |= detail::JsonGetClampedInt(o, "postReverbSubMode", out.postReverbSubMode, 0, 2);
+  any |= detail::JsonGetBool(o, "postTremoloActive", out.postTremoloActive);
+  any |= detail::JsonGetClampedInt(o, "postTremoloMode", out.postTremoloMode, 0, kVoLumTremoloModeCount - 1);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloRate", out.postTremoloRate, 0.1, 20.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloDepth", out.postTremoloDepth, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloShape", out.postTremoloShape, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloMix", out.postTremoloMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloCrossover", out.postTremoloCrossover, 200.0, 2000.0);
+  any |= detail::JsonGetBool(o, "postTremoloSync", out.postTremoloSync);
+  any |= detail::JsonGetClampedInt(o, "postTremoloDivision", out.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1);
   if (o.contains("postDelayModes") && o["postDelayModes"].is_array())
   {
     const auto& modes = o["postDelayModes"];
@@ -412,6 +421,15 @@ inline nlohmann::json PostBlockToJson(const VoLumAmpSettings& s)
   o["postReverbShimmer"] = s.postReverbShimmer;
   o["postReverbMode"] = s.postReverbMode;
   o["postReverbSubMode"] = s.postReverbSubMode;
+  o["postTremoloActive"] = s.postTremoloActive;
+  o["postTremoloMode"] = s.postTremoloMode;
+  o["postTremoloRate"] = s.postTremoloRate;
+  o["postTremoloDepth"] = s.postTremoloDepth;
+  o["postTremoloShape"] = s.postTremoloShape;
+  o["postTremoloMix"] = s.postTremoloMix;
+  o["postTremoloCrossover"] = s.postTremoloCrossover;
+  o["postTremoloSync"] = s.postTremoloSync;
+  o["postTremoloDivision"] = s.postTremoloDivision;
   o["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
   o["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
   o["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
@@ -520,6 +538,15 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     a["postReverbShimmer"] = s.postReverbShimmer;
     a["postReverbMode"] = s.postReverbMode;
     a["postReverbSubMode"] = s.postReverbSubMode;
+    a["postTremoloActive"] = s.postTremoloActive;
+    a["postTremoloMode"] = s.postTremoloMode;
+    a["postTremoloRate"] = s.postTremoloRate;
+    a["postTremoloDepth"] = s.postTremoloDepth;
+    a["postTremoloShape"] = s.postTremoloShape;
+    a["postTremoloMix"] = s.postTremoloMix;
+    a["postTremoloCrossover"] = s.postTremoloCrossover;
+    a["postTremoloSync"] = s.postTremoloSync;
+    a["postTremoloDivision"] = s.postTremoloDivision;
     a["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
     a["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
     a["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
@@ -815,6 +842,15 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "postReverbShimmer", s.postReverbShimmer, 0.0, 1.0, defaults.postReverbShimmer);
         loadInt(a, "postReverbMode", s.postReverbMode, 0, kVoLumReverbModeCount - 1, defaults.postReverbMode);
         loadInt(a, "postReverbSubMode", s.postReverbSubMode, 0, 2, defaults.postReverbSubMode);
+        loadBool(a, "postTremoloActive", s.postTremoloActive, defaults.postTremoloActive);
+        loadInt(a, "postTremoloMode", s.postTremoloMode, 0, kVoLumTremoloModeCount - 1, defaults.postTremoloMode);
+        loadDouble(a, "postTremoloRate", s.postTremoloRate, 0.1, 20.0, defaults.postTremoloRate);
+        loadDouble(a, "postTremoloDepth", s.postTremoloDepth, 0.0, 1.0, defaults.postTremoloDepth);
+        loadDouble(a, "postTremoloShape", s.postTremoloShape, 0.0, 1.0, defaults.postTremoloShape);
+        loadDouble(a, "postTremoloMix", s.postTremoloMix, 0.0, 1.0, defaults.postTremoloMix);
+        loadDouble(a, "postTremoloCrossover", s.postTremoloCrossover, 200.0, 2000.0, defaults.postTremoloCrossover);
+        loadBool(a, "postTremoloSync", s.postTremoloSync, defaults.postTremoloSync);
+        loadInt(a, "postTremoloDivision", s.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1, defaults.postTremoloDivision);
         if (a.contains("postDelayModes") && a["postDelayModes"].is_array())
         {
           const auto& modes = a["postDelayModes"];
