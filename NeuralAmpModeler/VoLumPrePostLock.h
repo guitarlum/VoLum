@@ -56,7 +56,9 @@ inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b
 {
   if (a.postDelayActive != b.postDelayActive || a.postReverbActive != b.postReverbActive
       || a.postDelayMode != b.postDelayMode || a.postDelayPingPong != b.postDelayPingPong
-      || a.postReverbMode != b.postReverbMode || a.postReverbSubMode != b.postReverbSubMode)
+      || a.postReverbMode != b.postReverbMode || a.postReverbSubMode != b.postReverbSubMode
+      || a.postTremoloActive != b.postTremoloActive || a.postTremoloMode != b.postTremoloMode
+      || a.postTremoloSync != b.postTremoloSync || a.postTremoloDivision != b.postTremoloDivision)
     return false;
 
   if (!NearlyEqual(a.postDelayTime, b.postDelayTime) || !NearlyEqual(a.postDelayFeedback, b.postDelayFeedback)
@@ -64,7 +66,10 @@ inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b
       || !NearlyEqual(a.postDelayAge, b.postDelayAge) || !NearlyEqual(a.postReverbMix, b.postReverbMix)
       || !NearlyEqual(a.postReverbDecay, b.postReverbDecay) || !NearlyEqual(a.postReverbTone, b.postReverbTone)
       || !NearlyEqual(a.postReverbPreDelay, b.postReverbPreDelay)
-      || !NearlyEqual(a.postReverbShimmer, b.postReverbShimmer))
+      || !NearlyEqual(a.postReverbShimmer, b.postReverbShimmer)
+      || !NearlyEqual(a.postTremoloRate, b.postTremoloRate) || !NearlyEqual(a.postTremoloDepth, b.postTremoloDepth)
+      || !NearlyEqual(a.postTremoloShape, b.postTremoloShape) || !NearlyEqual(a.postTremoloMix, b.postTremoloMix)
+      || !NearlyEqual(a.postTremoloCrossover, b.postTremoloCrossover))
     return false;
 
   for (int mode = 0; mode < kVoLumDelayModeCount; ++mode)

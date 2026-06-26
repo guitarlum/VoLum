@@ -130,13 +130,10 @@ private:
     { EVoLumEffectFocus::PRE_NAM1, "NAM 1", kPreNam1Active },
     { EVoLumEffectFocus::PRE_NAM2, "NAM 2", kPreNam2Active },
   };
-  // TREMOLO is a no-DSP scaffold tile: paramIdx -1 marks it non-interactive
-  // (drawn dimmed with a SOON badge, no toggle pill).
-  static constexpr int kSlotPlaceholderParam = -1;
   static constexpr QuietSlot kPostSlots[3] = {
     { EVoLumEffectFocus::DELAY,  "DELAY",  kDelayActive },
     { EVoLumEffectFocus::REVERB, "REVRB", kReverbActive },
-    { EVoLumEffectFocus::TREMOLO, "TREM", kSlotPlaceholderParam },
+    { EVoLumEffectFocus::TREMOLO, "TREM", kTremoloActive },
   };
 
   bool _IsPreLocked() const

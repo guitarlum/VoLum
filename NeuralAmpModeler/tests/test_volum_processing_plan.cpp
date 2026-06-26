@@ -212,6 +212,37 @@ TEST_CASE("Processing plan runs the PRE pitch pedal independently of the main mo
   CHECK(pitchWithMain.runMainModel);
 }
 
+TEST_CASE("Processing plan gates the POST tremolo behind a model and its active flag")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  // Tremolo flag is the final argument. Default (omitted) keeps it off.
+  const auto offByDefault = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam,
+                                                     false, false, false);
+  CHECK_FALSE(offByDefault.runTremolo);
+
+  // Active with a main model -> runs.
+  const auto withMain = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam,
+                                                 false, false, false, false, false, false, false, false,
+                                                 /*prePitchActive=*/false, /*tremoloActive=*/true);
+  CHECK(withMain.runTremolo);
+
+  // Active but no model at all -> stays off (POST chain has nothing to modulate).
+  const auto noModel = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam,
+                                                false, false, false, false, false, false, false, false,
+                                                /*prePitchActive=*/false, /*tremoloActive=*/true);
+  CHECK_FALSE(noModel.runTremolo);
+
+  // Active with only a support model (no main) -> still runs on the POST bus.
+  const auto supportOnly = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam,
+                                                    false, false, false, /*dualAmpActive=*/true,
+                                                    /*haveSupportModel=*/true, false, false, false,
+                                                    /*prePitchActive=*/false, /*tremoloActive=*/true);
+  CHECK(supportOnly.runSupportModel);
+  CHECK(supportOnly.runTremolo);
+}
+
 TEST_CASE("Processing plan never runs the support IR while the support model is silent")
 {
   const bool preNamActive[2] = {false, false};

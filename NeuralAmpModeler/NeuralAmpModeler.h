@@ -38,6 +38,7 @@
 #include "VoLumUserSettingsIO.h"
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
+#include "VoLumTremolo.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
@@ -158,6 +159,17 @@ enum EParams
   // to keep all prior serialized indices stable.
   kPrePitchDetune,
   kPrePitchTimbre,
+  // Tremolo (POST) - third POST pedal, runs last after Reverb. Appended at the
+  // end to keep all prior serialized indices stable.
+  kTremoloActive,
+  kTremoloMode,
+  kTremoloRate,
+  kTremoloDepth,
+  kTremoloShape,
+  kTremoloMix,
+  kTremoloCrossover,
+  kTremoloSync,
+  kTremoloDivision,
   kNumParams
 };
 
@@ -628,9 +640,11 @@ private:
   int mVolumChannelIdx = 0;
   int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
   std::string mVolumSelectedKnobHintText;
-  std::array<int, 7> mVolumLastKeyboardKnobByTarget = {iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-                                                       iplug::kNoParameter};
+  // Size must match volum::keyboard::kTargetCount (9). Literal here to avoid
+  // pulling VoLumKeyboardModel.h into this header before EParams is declared.
+  std::array<int, 9> mVolumLastKeyboardKnobByTarget = {
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
   // Reverb sub-mode pill is currently shown for Oktaverb only.
   // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
   // pick up a per-mode tooltip explaining what the knob actually does in that mode.
@@ -639,6 +653,9 @@ private:
   class VoLumKnobLabelControl* mVolumDelayAgeLabel = nullptr;
   iplug::igraphics::IControl* mVolumDelayAgeKnob = nullptr;
   iplug::igraphics::IControl* mVolumDelayAgeValue = nullptr;
+  // Tremolo tempo-sync DIVISION stepper (shown in the RATE slot when Sync is on).
+  // Non-owning view; refreshed from kTremoloDivision in _UpdateVoLumLayout.
+  class VoLumChannelStepControl* mVolumTremoloDivStep = nullptr;
   std::vector<std::string> mVolumChannelFiles;
   std::vector<std::string> mVolumChannelLabels;
   std::vector<std::string> mVolumSupportChannelFiles;
@@ -833,6 +850,7 @@ private:
   recursive_linear_filter::Level mPreOutputGain[2];
   dsp::effect::Delay mDelay;
   dsp::effect::Reverb mReverb;
+  volum::TremoloDSP mTremolo;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
   std::unique_ptr<ResamplingNAM> mSupportModel;
@@ -862,6 +880,7 @@ private:
   // replay stale tails. Reset to false in OnReset.
   bool mPostDelayWasActive = false;
   bool mPostReverbWasActive = false;
+  bool mPostTremoloWasActive = false;
   // Serializes writes from non-audio threads (UnserializeState path -> _StageModel /
   // _StageIR) against the audio-thread read/move in _ApplyDSPStaging. The VoLum
   // worker-queue path drains on the audio thread already, so it does not need this

@@ -96,6 +96,15 @@ void CopyPostBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& 
   dst.postReverbShimmer = src.postReverbShimmer;
   dst.postReverbMode = src.postReverbMode;
   dst.postReverbSubMode = src.postReverbSubMode;
+  dst.postTremoloActive = src.postTremoloActive;
+  dst.postTremoloMode = src.postTremoloMode;
+  dst.postTremoloRate = src.postTremoloRate;
+  dst.postTremoloDepth = src.postTremoloDepth;
+  dst.postTremoloShape = src.postTremoloShape;
+  dst.postTremoloMix = src.postTremoloMix;
+  dst.postTremoloCrossover = src.postTremoloCrossover;
+  dst.postTremoloSync = src.postTremoloSync;
+  dst.postTremoloDivision = src.postTremoloDivision;
   for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
     dst.postDelayModes[mode] = src.postDelayModes[mode];
   for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
@@ -677,6 +686,48 @@ TEST_CASE("POST dirty compare includes oktaverb sub-mode snapshots")
   b.postOktaverbSubModes[1].decay = 2.5;
 
   REQUIRE(volum::PostBlockEquals(a, b) == false);
+}
+
+TEST_CASE("POST dirty compare includes tremolo params")
+{
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postTremoloActive = !a.postTremoloActive;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postTremoloMode = a.postTremoloMode == volum::kVoLumTremoloModeBias
+                          ? volum::kVoLumTremoloModeHarmonic
+                          : volum::kVoLumTremoloModeBias;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postTremoloDepth = a.postTremoloDepth - 0.2;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postTremoloSync = !a.postTremoloSync;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postTremoloDivision = a.postTremoloDivision == 4 ? 5 : 4;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  // Identical tremolo (factory Bang Bang default) compares equal.
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    REQUIRE(volum::PostBlockEquals(a, b));
+  }
 }
 
 TEST_CASE("PRE dirty compare detects NAM capture changes")

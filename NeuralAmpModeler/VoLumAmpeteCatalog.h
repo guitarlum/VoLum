@@ -3,6 +3,7 @@
 #include <string>
 
 #include "config.h"
+#include "VoLumTremolo.h" // tremolo mode/division constants used in per-amp defaults
 
 namespace volum
 {
@@ -225,6 +226,18 @@ struct VoLumAmpSettings
     OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70},
     OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
   };
+
+  // Per-amp POST Tremolo (third POST pedal). Modes share knobs, so no per-mode
+  // snapshots are needed. Defaults voice the "Bang Bang" tone (deep Bias sine).
+  bool postTremoloActive = false;
+  int postTremoloMode = kVoLumTremoloModeBias;
+  double postTremoloRate = 5.0;       // Hz (free-running rate)
+  double postTremoloDepth = 0.85;     // 0..1
+  double postTremoloShape = 0.0;      // 0..1 (sine -> square)
+  double postTremoloMix = 1.0;        // 0..1
+  double postTremoloCrossover = 800.0; // Hz (Harmonic band split)
+  bool postTremoloSync = false;
+  int postTremoloDivision = kVoLumTremoloDivisionDefault; // 1/8
 
   // 1.2.0 BYO custom-content references (additive, id-based). Both default to
   // empty = "no custom content". They are NOT written into the fixed per-amp

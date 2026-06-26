@@ -48,7 +48,10 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // and the custom SUPPORT partner cab/channel ("supCab"/"supCh", schema 3). The
 // tail is a self-describing JSON object, so the bump is informational - both old
 // and new readers tolerate missing/extra keys; nothing branches on the version.
-inline constexpr int kVoLumIdTailSchema = 3;
+// Schema 4 (post-tremolo): added per-amp POST Tremolo ("trem") and the
+// live-locked POST tremolo snapshot ("lockedPostTremolo"). Informational only;
+// readers tolerate missing/extra keys and never branch on the version.
+inline constexpr int kVoLumIdTailSchema = 4;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -71,6 +74,23 @@ struct PitchTail
   double timbre = 0.0; // wet tilt EQ (-100..100 %)
 };
 
+// POST Tremolo pedal per-amp settings. Carried in the JSON id tail alongside the
+// pitch tail. `present` distinguishes "written by a tremolo-aware build" from
+// "absent" (older chunk -> tremolo defaults = bypassed).
+struct TremoloTail
+{
+  bool present = false;
+  bool active = false;
+  int mode = kVoLumTremoloModeBias;
+  double rate = 5.0;
+  double depth = 0.85;
+  double shape = 0.0;
+  double mix = 1.0;
+  double crossover = 800.0;
+  bool sync = false;
+  int division = kVoLumTremoloDivisionDefault;
+};
+
 struct ChunkIdTail
 {
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
@@ -83,6 +103,8 @@ struct ChunkIdTail
   int perAmpSupportChannel[kAmpCount]; // factory amp -> custom support gain stage (0 = unset)
   PitchTail perAmpPitch[kAmpCount]; // factory amp -> PRE Pitch pedal settings
   PitchTail lockedPrePitch; // live-locked PRE pitch snapshot (present iff PRE locked + written)
+  TremoloTail perAmpTremolo[kAmpCount]; // factory amp -> POST Tremolo pedal settings
+  TremoloTail lockedPostTremolo; // live-locked POST tremolo snapshot (present iff POST locked + written)
 
   ChunkIdTail()
   {
@@ -137,6 +159,43 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
   return p;
 }
 
+inline nlohmann::json TremoloTailToJson(const TremoloTail& t)
+{
+  return nlohmann::json{{"active", t.active}, {"mode", t.mode},   {"rate", t.rate},   {"depth", t.depth},
+                        {"shape", t.shape},   {"mix", t.mix},     {"xover", t.crossover},
+                        {"sync", t.sync},     {"div", t.division}};
+}
+
+inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
+{
+  TremoloTail t;
+  if (!j.is_object())
+    return t;
+  auto num = [](const nlohmann::json& v, double d) { return v.is_number() ? v.get<double>() : d; };
+  auto integer = [](const nlohmann::json& v, int d) { return v.is_number_integer() ? v.get<int>() : d; };
+  auto boolean = [](const nlohmann::json& v, bool d) { return v.is_boolean() ? v.get<bool>() : d; };
+  if (j.contains("active"))
+    t.active = boolean(j["active"], false);
+  if (j.contains("mode"))
+    t.mode = integer(j["mode"], kVoLumTremoloModeBias);
+  if (j.contains("rate"))
+    t.rate = num(j["rate"], 5.0);
+  if (j.contains("depth"))
+    t.depth = num(j["depth"], 0.85);
+  if (j.contains("shape"))
+    t.shape = num(j["shape"], 0.0);
+  if (j.contains("mix"))
+    t.mix = num(j["mix"], 1.0);
+  if (j.contains("xover"))
+    t.crossover = num(j["xover"], 800.0);
+  if (j.contains("sync"))
+    t.sync = boolean(j["sync"], false);
+  if (j.contains("div"))
+    t.division = integer(j["div"], kVoLumTremoloDivisionDefault);
+  t.present = true;
+  return t;
+}
+
 inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
 {
   nlohmann::json j;
@@ -154,11 +213,15 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
                             {"supCh", t.perAmpSupportChannel[i]}};
     if (t.perAmpPitch[i].present)
       entry["pitch"] = PitchTailToJson(t.perAmpPitch[i]);
+    if (t.perAmpTremolo[i].present)
+      entry["trem"] = TremoloTailToJson(t.perAmpTremolo[i]);
     perAmp.push_back(entry);
   }
   j["perAmp"] = perAmp;
   if (t.lockedPrePitch.present)
     j["lockedPrePitch"] = PitchTailToJson(t.lockedPrePitch);
+  if (t.lockedPostTremolo.present)
+    j["lockedPostTremolo"] = TremoloTailToJson(t.lockedPostTremolo);
   return j;
 }
 
@@ -195,10 +258,14 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         t.perAmpSupportChannel[i] = arr[i]["supCh"].get<int>();
       if (arr[i].contains("pitch"))
         t.perAmpPitch[i] = PitchTailFromJson(arr[i]["pitch"]);
+      if (arr[i].contains("trem"))
+        t.perAmpTremolo[i] = TremoloTailFromJson(arr[i]["trem"]);
     }
   }
   if (j.contains("lockedPrePitch"))
     t.lockedPrePitch = PitchTailFromJson(j["lockedPrePitch"]);
+  if (j.contains("lockedPostTremolo"))
+    t.lockedPostTremolo = TremoloTailFromJson(j["lockedPostTremolo"]);
   return t;
 }
 

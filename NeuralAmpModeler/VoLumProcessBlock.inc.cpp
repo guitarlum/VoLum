@@ -94,6 +94,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     {
       mDelay.Reset();
       mReverb.Reset();
+      mTremolo.Reset();
     }
   }
   else
@@ -103,6 +104,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     {
       mDelay.Reset();
       mReverb.Reset();
+      mTremolo.Reset();
       mPostEffectsClearedForMissingModel = true;
     }
   }
@@ -160,6 +162,7 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   {
     mDelay.Reset();
     mReverb.Reset();
+    mTremolo.Reset();
   }
 
   sample* supportModelPointers[1] = {supportOutputPtr};
@@ -195,8 +198,11 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
     mDelay.Reset();
   if (mPostReverbWasActive && !processingPlan.runReverb)
     mReverb.Reset();
+  if (mPostTremoloWasActive && !processingPlan.runTremolo)
+    mTremolo.Reset();
   mPostDelayWasActive = processingPlan.runDelay;
   mPostReverbWasActive = processingPlan.runReverb;
+  mPostTremoloWasActive = processingPlan.runTremolo;
 
   if (processingPlan.runDelay)
   {
@@ -214,6 +220,31 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
                       GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate,
                       GetParam(kReverbSubMode)->Int());
     postPointers = mReverb.Process(postPointers, numChannelsExternalOut, nFrames);
+  }
+
+  // Tremolo runs LAST (after Reverb): the reverberated signal pulses too, matching
+  // a vintage amp where the trem stage sits after the reverb tank. Processes in
+  // place on the current POST bus, so no pointer-chain swap is needed.
+  if (processingPlan.runTremolo)
+  {
+    // Tempo source: host transport for plugins, the app metronome for standalone
+    // (where no DAW transport exists). Sync converts BPM + division to an LFO Hz.
+    double tremoloBpm;
+#ifdef APP_API
+    tremoloBpm = static_cast<double>(mMetronomeDSP.GetBPM());
+#else
+    tremoloBpm = GetTempo();
+#endif
+    if (!(tremoloBpm > 0.0))
+      tremoloBpm = 120.0;
+    const bool tremoloSync = GetParam(kTremoloSync)->Bool();
+    const double tremoloRateHz = tremoloSync
+                                   ? volum::VoLumTremoloSyncRateHz(tremoloBpm, GetParam(kTremoloDivision)->Int())
+                                   : GetParam(kTremoloRate)->Value();
+    mTremolo.SetParams(tremoloRateHz, GetParam(kTremoloDepth)->Value(), GetParam(kTremoloShape)->Value(),
+                       GetParam(kTremoloMix)->Value(), GetParam(kTremoloCrossover)->Value(),
+                       GetParam(kTremoloMode)->Int(), sampleRate);
+    mTremolo.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 
   if (postPointers != outputs)
