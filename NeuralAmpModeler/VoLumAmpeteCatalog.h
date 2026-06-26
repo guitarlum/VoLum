@@ -164,7 +164,7 @@ struct VoLumAmpSettings
   int prePitchMode = 0; // 0=Transpose, 1=Octaver
   double prePitchSemitones = 0.0;
   double prePitchMix = 1.0;
-  double prePitchOctDown = 0.0;
+  double prePitchOctDown = 0.8; // ship audible: a sub-octave blend so enabling the octaver does something
   double prePitchOctUp = 0.0;
   double prePitchDry = 1.0;
   int prePitchVoicing = 1; // 0=Vintage, 1=Modern

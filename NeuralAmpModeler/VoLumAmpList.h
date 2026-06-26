@@ -169,7 +169,11 @@ public:
       // the scrollbar gutter. The sidebar is narrow, so auto-shrink long names
       // a point or two (down to a floor) instead of hard-clipping mid-word;
       // clip is only a final guard.
-      IRECT nameArea = paddedRow.GetReducedFromLeft(pad + iconSize + 8.f).GetReducedFromRight(6.f);
+      // Josefin-Bold reserves a tall descender slot, so EVAlign::Middle parks
+      // the (mostly descenderless) amp names ~1px high of the icon's optical
+      // center. Nudge the label box down to line the text up with the art.
+      IRECT nameArea =
+        paddedRow.GetReducedFromLeft(pad + iconSize + 8.f).GetReducedFromRight(6.f).GetVShifted(kLabelVNudge);
       IColor nameCol = selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED;
       float nameFont = 13.f;
       for (; nameFont > 10.5f; nameFont -= 0.5f)
@@ -378,6 +382,8 @@ public:
 private:
   static constexpr float kMinItemH = 30.f;
   static constexpr float kHeaderH = 26.f;
+  static constexpr float kLabelVNudge = 1.f; // px down so Josefin-Bold labels optically center on the art
+
   static constexpr float kScrollbarW = 6.f;  // visible bar width when scrollable
   static constexpr float kScrollGutter = 7.f; // empty gap between labels and bar
 
@@ -616,7 +622,9 @@ private:
         g.DrawFittedLayer(mCustomArtLayers[art], iconArea, nullptr);
 
       // Clip the name so a long custom-amp name can never reach the pen/trash.
-      IRECT nameArea = paddedRow.GetReducedFromLeft(38.f).GetReducedFromRight(hovered || selected ? 48.f : 6.f);
+      // Same optical-center nudge as the factory rows (see kLabelVNudge).
+      IRECT nameArea =
+        paddedRow.GetReducedFromLeft(38.f).GetReducedFromRight(hovered || selected ? 48.f : 6.f).GetVShifted(kLabelVNudge);
       g.PathClipRegion(nameArea);
       g.DrawText(IText(13.f, selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Near,
                        EVAlign::Middle),
