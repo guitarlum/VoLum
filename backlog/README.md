@@ -33,6 +33,7 @@ fresh Cursor planning chat.
 - `Q2-volum-1.2.0-structure-decompose.md` — decompose the 1964-line `VoLumCustomUi.h`, dedup scrollbar/glyph/PRE-menu primitives, and make the builder popup list-disciplined. Pure hygiene, phased low->high risk.
 - `Q3-volum-1.2.0-custom-content-correctness.md` — 1.2.0 BYO/presets hardening, re-verified down from the quality review: **none are urgent user-facing bugs** (the one real bug, `RemoveCustomAmp` orphaning, already landed). Remaining items are niche/latent: preset values relabelling a drifted custom-amp scene (niche), `_VolumActiveScene()` read/write split (latent), pedal index-cap collision at 127 (edge); `customSupportId` id-tail field is dead-code cleanup, not a bug. From `docs/design/1.2.0-quality-review.md`.
 - `P2-volum-1.2.0-rt-and-perf-hardening.md` — lock-free staging drain (no audio-thread mutex/alloc), main I/O buffer capacity assert, async IR load, field-wise dirty compare, throttled settings save.
+- `Q4-screenshot-harness-custom-amp-seed.md` — deterministic custom-amp seeding so the local `win-screenshot`/`win-click` harness can capture states behind runtime-grown lists (the amp-library scrollbar), plus a real scrollbar/gutter geometry doctest and an AGENTS.md/`volum-ui.mdc` review for screenshot guidance. Found while fixing the sidebar scrollbar (the `+` builder overlay isn't scriptable, so the scrollbar couldn't be screenshotted).
 
 ### Docs
 - `D1-docs-input-level-and-polish.md`
