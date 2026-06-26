@@ -78,9 +78,9 @@ public:
     const float iconSize = 22.f;
     const float pad = 8.f;
     const float contentH = ContentHeight();
-    const bool scrollable = contentH > mRECT.H() + 0.5f;
-    const float scrollbarW = scrollable ? 5.f : 0.f;
-    const float rowR = mRECT.R - scrollbarW;
+    const bool scrollable = Scrollable();
+    const float scrollbarW = scrollable ? kScrollbarW : 0.f;
+    const float rowR = RowRight();
 
     ClampScroll();
 
@@ -165,10 +165,25 @@ public:
       if (mIconLayers[i] && g.CheckLayer(mIconLayers[i]))
         g.DrawFittedLayer(mIconLayers[i], iconArea, nullptr);
 
-      IRECT nameArea = paddedRow.GetReducedFromLeft(pad + iconSize + 8.f);
+      // Keep the name inside the selection highlight (paddedRow) and clear of
+      // the scrollbar gutter. The sidebar is narrow, so auto-shrink long names
+      // a point or two (down to a floor) instead of hard-clipping mid-word;
+      // clip is only a final guard.
+      IRECT nameArea = paddedRow.GetReducedFromLeft(pad + iconSize + 8.f).GetReducedFromRight(6.f);
       IColor nameCol = selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED;
-      IText nameText(13.f, nameCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+      float nameFont = 13.f;
+      for (; nameFont > 10.5f; nameFont -= 0.5f)
+      {
+        IText measureTxt(nameFont, nameCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+        IRECT measured;
+        g.MeasureText(measureTxt, mAmpNames[i].c_str(), measured);
+        if (measured.W() <= nameArea.W())
+          break;
+      }
+      IText nameText(nameFont, nameCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+      g.PathClipRegion(nameArea);
       g.DrawText(nameText, mAmpNames[i].c_str(), nameArea);
+      g.PathClipRegion(mRECT); // restore the list clip for following rows
     }
 
     DrawCustomSection(g, itemH, rowR);
@@ -183,6 +198,24 @@ public:
   {
     (void)mod;
     ClearVoLumKnobSelection(this);
+
+    // Scrollbar first: a forgiving grab zone covers the gutter + visible bar so
+    // the thin bar is easy to hit. Dragging the thumb scrolls; clicking the
+    // track jumps the thumb to the cursor.
+    const float contentH = ContentHeight();
+    if (Scrollable() && x >= RowRight())
+    {
+      IRECT track, thumb;
+      ScrollbarGeometry(contentH, track, thumb);
+      if (y >= thumb.T && y <= thumb.B)
+        mDragGrabDY = y - thumb.T; // grab the thumb where clicked
+      else
+        mDragGrabDY = thumb.H() * 0.5f; // track click -> center thumb on cursor
+      mDraggingScrollbar = true;
+      ScrollThumbTo(y, track, thumb.H(), contentH);
+      SetDirty(false);
+      return;
+    }
 
     const Hit hit = HitTest(x, y);
     switch (hit.zone)
@@ -215,6 +248,29 @@ public:
         break;
       default: break;
     }
+  }
+
+  void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
+  {
+    (void)x;
+    (void)dX;
+    (void)dY;
+    (void)mod;
+    if (!mDraggingScrollbar)
+      return;
+    const float contentH = ContentHeight();
+    IRECT track, thumb;
+    ScrollbarGeometry(contentH, track, thumb);
+    ScrollThumbTo(y, track, thumb.H(), contentH);
+    SetDirty(false);
+  }
+
+  void OnMouseUp(float x, float y, const IMouseMod& mod) override
+  {
+    (void)x;
+    (void)y;
+    (void)mod;
+    mDraggingScrollbar = false;
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -322,6 +378,42 @@ public:
 private:
   static constexpr float kMinItemH = 30.f;
   static constexpr float kHeaderH = 26.f;
+  static constexpr float kScrollbarW = 6.f;  // visible bar width when scrollable
+  static constexpr float kScrollGutter = 7.f; // empty gap between labels and bar
+
+  bool Scrollable() const { return ContentHeight() > mRECT.H() + 0.5f; }
+
+  // Right edge of the row content (labels/icons stop here). Leaves a gutter
+  // before the scrollbar so labels never crowd the bar.
+  float RowRight() const
+  {
+    return Scrollable() ? (mRECT.R - kScrollbarW - kScrollGutter) : mRECT.R;
+  }
+
+  // Visible scrollbar track + thumb, shared by drawing and drag hit-testing so
+  // they can never disagree.
+  void ScrollbarGeometry(float contentH, IRECT& track, IRECT& thumb) const
+  {
+    const float trackX = mRECT.R - kScrollbarW + 1.f;
+    track = IRECT(trackX, mRECT.T + 2.f, mRECT.R - 1.f, mRECT.B - 2.f);
+    const float thumbH = std::max(18.f, track.H() * (mRECT.H() / std::max(contentH, 1.f)));
+    const float maxScroll = std::max(0.f, contentH - mRECT.H());
+    const float t = (maxScroll > 0.f) ? (mScrollOffset / maxScroll) : 0.f;
+    const float thumbY = track.T + (track.H() - thumbH) * t;
+    thumb = IRECT(track.L, thumbY, track.R, thumbY + thumbH);
+  }
+
+  // Map a cursor y (minus the grab offset within the thumb) to a scroll offset.
+  void ScrollThumbTo(float y, const IRECT& track, float thumbH, float contentH)
+  {
+    const float maxScroll = std::max(0.f, contentH - mRECT.H());
+    const float usable = track.H() - thumbH;
+    float t = (usable > 0.f) ? ((y - mDragGrabDY - track.T) / usable) : 0.f;
+    t = std::clamp(t, 0.f, 1.f);
+    mScrollOffset = t * maxScroll;
+    mScrollTarget = mScrollOffset;
+    ClampScroll();
+  }
 
   enum class EDomain
   {
@@ -441,8 +533,7 @@ private:
       // Header row. Empty => whole row adds. Non-empty => only the + button adds.
       if (mCustomNames.empty())
         return {EZone::CustomAdd, -1};
-      const float scrollbarW = (ContentHeight() > mRECT.H() + 0.5f) ? 5.f : 0.f;
-      const float plusL = mRECT.R - scrollbarW - 26.f;
+      const float plusL = RowRight() - 26.f;
       if (x >= plusL)
         return {EZone::CustomAdd, -1};
       return {EZone::CustomHeader, -1};
@@ -451,8 +542,7 @@ private:
     const int cidx = (int)((rel - CustomRowsTopContent()) / itemH);
     if (cidx >= 0 && cidx < (int)mCustomNames.size())
     {
-      const float scrollbarW = (ContentHeight() > mRECT.H() + 0.5f) ? 5.f : 0.f;
-      const float binL = mRECT.R - scrollbarW - 24.f;
+      const float binL = RowRight() - 24.f;
       const float penL = binL - 22.f;
       if (x >= binL)
         return {EZone::CustomDelete, cidx};
@@ -549,16 +639,11 @@ private:
 
   void DrawScrollbar(IGraphics& g, float contentH, float scrollbarW)
   {
-    const float trackX = mRECT.R - scrollbarW + 1.f;
-    IRECT track(trackX, mRECT.T + 2.f, mRECT.R - 1.f, mRECT.B - 2.f);
+    (void)scrollbarW;
+    IRECT track, thumb;
+    ScrollbarGeometry(contentH, track, thumb);
     g.FillRect(IColor(40, 200, 162, 78), track);
-
-    const float maxScroll = contentH - mRECT.H();
-    const float thumbH = std::max(18.f, track.H() * (mRECT.H() / contentH));
-    const float t = (maxScroll > 0.f) ? (mScrollOffset / maxScroll) : 0.f;
-    const float thumbY = track.T + (track.H() - thumbH) * t;
-    IRECT thumb(track.L, thumbY, track.R, thumbY + thumbH);
-    g.FillRect(VoLumColors::GOLD_DIM, thumb);
+    g.FillRect(mDraggingScrollbar ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, thumb);
   }
 
   static void DrawPlusGlyph(IGraphics& g, const IRECT& r, const IColor& col)
@@ -606,6 +691,8 @@ private:
   std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
   float mScrollOffset = 0.f;
   float mScrollTarget = 0.f;
+  bool mDraggingScrollbar = false; // thumb drag in progress
+  float mDragGrabDY = 0.f;         // cursor offset within thumb at grab time
   std::vector<std::string> mAmpNames;
   std::vector<std::string> mAmpAbbrs;
   SelectionCallback mCallback;
