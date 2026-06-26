@@ -2339,6 +2339,17 @@ void NeuralAmpModeler::OnIdle()
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
 {
+  // Flush current live params into the active per-amp scene before serializing.
+  // The scene is otherwise only synced from OnIdle (line ~2253), which needs an
+  // editor / idle pump. A host that sets parameters and immediately saves state
+  // without idling - e.g. pluginval's "Plugin state restoration" test - would
+  // otherwise persist a stale scene; on reload _VolumRestoreFromSettings then
+  // clobbers the freshly-restored live params with that stale scene (seen as
+  // "PrePitchDry/Semitones not restored"). const_cast mirrors the existing
+  // pattern in this file's const dirty-checks (_VolumIsPreDirty/_VolumIsPostDirty).
+  if (mVolumInitComplete)
+    const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();
+
   WDL_String header("###NeuralAmpModeler###"); // Don't change this!
   chunk.PutStr(header.Get());
   WDL_String version(PLUG_VERSION_STR);
