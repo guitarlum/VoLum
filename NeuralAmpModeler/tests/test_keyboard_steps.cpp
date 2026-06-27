@@ -2,26 +2,98 @@
 #include "../config.h"
 
 // EParams enum only — avoid pulling IGraphics via NeuralAmpModeler.h
-enum EParams {
-  kInputLevel = 0, kNoiseGateThreshold, kToneBass, kToneMid, kToneTreble, kOutputLevel,
-  kNoiseGateActive, kEQActive, kIRToggle,
-  kDelayActive, kDelayTime, kDelayFeedback, kDelayMix, kDelayMode,
-  kDelayTone, kDelayAge, kDelayPingPong,
-  kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode,
+enum EParams
+{
+  kInputLevel = 0,
+  kNoiseGateThreshold,
+  kToneBass,
+  kToneMid,
+  kToneTreble,
+  kOutputLevel,
+  kNoiseGateActive,
+  kEQActive,
+  kIRToggle,
+  kDelayActive,
+  kDelayTime,
+  kDelayFeedback,
+  kDelayMix,
+  kDelayMode,
+  kDelayTone,
+  kDelayAge,
+  kDelayPingPong,
+  kReverbActive,
+  kReverbMix,
+  kReverbDecay,
+  kReverbTone,
+  kReverbPreDelay,
+  kReverbShimmer,
+  kReverbMode,
   kReverbSubMode,
-  kBoostActive, kBoostDrive, kBoostTone, kBoostLevel,
-  kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel,
-  kPreNam1Active, kPreNam1Capture, kPreNam1Gain, kPreNam1Bass, kPreNam1Mid, kPreNam1MidFreq, kPreNam1Treble, kPreNam1Level,
-  kPreNam2Active, kPreNam2Capture, kPreNam2Gain, kPreNam2Bass, kPreNam2Mid, kPreNam2MidFreq, kPreNam2Treble, kPreNam2Level,
-  kCalibrateInput, kInputCalibrationLevel, kOutputMode, kVoLumAmpeteRig,
-  kDualAmpActive, kDualAmpRoute, kMainAmpPan, kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx,
-  kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid, kSupportToneTreble,
-  kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
+  kBoostActive,
+  kBoostDrive,
+  kBoostTone,
+  kBoostLevel,
+  kPreCompActive,
+  kPreCompAmount,
+  kPreCompRatio,
+  kPreCompAttack,
+  kPreCompRelease,
+  kPreCompMix,
+  kPreCompLevel,
+  kPreNam1Active,
+  kPreNam1Capture,
+  kPreNam1Gain,
+  kPreNam1Bass,
+  kPreNam1Mid,
+  kPreNam1MidFreq,
+  kPreNam1Treble,
+  kPreNam1Level,
+  kPreNam2Active,
+  kPreNam2Capture,
+  kPreNam2Gain,
+  kPreNam2Bass,
+  kPreNam2Mid,
+  kPreNam2MidFreq,
+  kPreNam2Treble,
+  kPreNam2Level,
+  kCalibrateInput,
+  kInputCalibrationLevel,
+  kOutputMode,
+  kVoLumAmpeteRig,
+  kDualAmpActive,
+  kDualAmpRoute,
+  kMainAmpPan,
+  kSupportAmpIdx,
+  kSupportSpeakerIdx,
+  kSupportChannelIdx,
+  kSupportInputLevel,
+  kSupportNoiseGateThreshold,
+  kSupportToneBass,
+  kSupportToneMid,
+  kSupportToneTreble,
+  kSupportOutputLevel,
+  kSupportNoiseGateActive,
+  kSupportEQActive,
+  kSupportAmpPan,
   kSupportIRToggle,
-  kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
-  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel,
-  kTremoloActive, kTremoloMode, kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix,
-  kTremoloCrossover, kTremoloSync, kTremoloDivision,
+  kPrePitchActive,
+  kPrePitchMode,
+  kPrePitchSemitones,
+  kPrePitchMix,
+  kPrePitchOctDown,
+  kPrePitchOctUp,
+  kPrePitchDry,
+  kPrePitchVoicing,
+  kPrePitchLevel,
+  kTremoloActive,
+  kTremoloMode,
+  kTremoloRate,
+  kTremoloDepth,
+  kTremoloShape,
+  kTremoloMix,
+  kTremoloCrossover,
+  kTremoloSync,
+  kTremoloDivision,
   kNumParams
 };
 
@@ -91,7 +163,8 @@ TEST_CASE("Keyboard step: reverb shimmer = 0.05 normal, 0.01 fine")
 
 TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")
 {
-  int toneParams[] = {kToneBass, kToneMid, kToneTreble, kReverbTone, kSupportToneBass, kSupportToneMid, kSupportToneTreble};
+  int toneParams[] = {
+    kToneBass, kToneMid, kToneTreble, kReverbTone, kSupportToneBass, kSupportToneMid, kSupportToneTreble};
   for (int i = 0; i < 7; i++)
   {
     CHECK(volum::keyboard::StepForParam(toneParams[i], false) == 0.5);
@@ -101,8 +174,8 @@ TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")
 
 TEST_CASE("Keyboard step: level knobs = 0.5 normal, 0.1 fine")
 {
-  int levelParams[] = {kInputLevel, kOutputLevel, kSupportInputLevel, kSupportOutputLevel,
-                       kPreNam1Gain, kPreNam1Level, kPreNam2Gain, kPreNam2Level, kPreCompLevel};
+  int levelParams[] = {kInputLevel,   kOutputLevel, kSupportInputLevel, kSupportOutputLevel, kPreNam1Gain,
+                       kPreNam1Level, kPreNam2Gain, kPreNam2Level,      kPreCompLevel};
   for (int i = 0; i < 9; i++)
   {
     CHECK(volum::keyboard::StepForParam(levelParams[i], false) == 0.5);
@@ -149,4 +222,3 @@ TEST_CASE("Keyboard step: pitch level = 0.5 normal, 0.1 fine (dB)")
   CHECK(volum::keyboard::StepForParam(kPrePitchLevel, false) == 0.5);
   CHECK(volum::keyboard::StepForParam(kPrePitchLevel, true) == 0.1);
 }
-

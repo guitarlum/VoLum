@@ -891,7 +891,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
     auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
-    auto* tremoloCard = new VoLumPedalCardControl(postCards.tremolo.As<IRECT>(), EVoLumEffectFocus::TREMOLO, onPedalClick);
+    auto* tremoloCard =
+      new VoLumPedalCardControl(postCards.tremolo.As<IRECT>(), EVoLumEffectFocus::TREMOLO, onPedalClick);
     auto* chainLink = new VoLumChainConnectorControl(postCards.connector1.As<IRECT>());
     auto* chainLink2 = new VoLumChainConnectorControl(postCards.connector2.As<IRECT>());
     auto* pitchCard = new VoLumPedalCardControl(preCards.pitch.As<IRECT>(), EVoLumEffectFocus::PITCH, onPedalClick);
@@ -1173,24 +1174,27 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(5, "X-OVER", kTremoloCrossover, "Hz", "TREMOLO_XOVER", true, 5, 1, effectKnobOffset, effectColW);
     IRECT tremoloPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
     pGraphics->AttachControl(
-      new VoLumModePickerControl(tremoloPickerRect, kTremoloMode, {"OPTICAL", "BIAS", "HARMONIC"}), -1, "TREMOLO_KNOBS");
+      new VoLumModePickerControl(tremoloPickerRect, kTremoloMode, {"OPTICAL", "BIAS", "HARMONIC"}), -1,
+      "TREMOLO_KNOBS");
 
     // DIVISION stepper occupies the RATE slot (slot 1) when Sync is engaged.
     {
-      const float divCx = mainCX + effectKnobOffset - (5 * effectColW) / 2.f + (1 - 1) * effectColW + (effectColW / 2.f);
+      const float divCx =
+        mainCX + effectKnobOffset - (5 * effectColW) / 2.f + (1 - 1) * effectColW + (effectColW / 2.f);
       pGraphics->AttachControl(
         new VoLumKnobLabelControl(IRECT(divCx - 40.f, knobRowTop, divCx + 40.f, knobRowTop + 20.f), "DIVISION"), -1,
         "TREMOLO_DIV");
       const float divStepH = 28.f;
       const float divStepTop = knobT + (knobDiam - divStepH) / 2.f;
-      auto* divStep =
-        new VoLumChannelStepControl(IRECT(divCx - 34.f, divStepTop, divCx + 34.f, divStepTop + divStepH), [this](int newIdx) {
+      auto* divStep = new VoLumChannelStepControl(
+        IRECT(divCx - 34.f, divStepTop, divCx + 34.f, divStepTop + divStepH), [this](int newIdx) {
           GetParam(kTremoloDivision)->Set(static_cast<double>(newIdx));
           SendParameterValueFromDelegate(kTremoloDivision, GetParam(kTremoloDivision)->GetNormalized(), true);
           OnParamChange(kTremoloDivision);
           _VolumMarkPresetDirty();
         });
-      divStep->SetChannels({"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kTremoloDivision)->Int());
+      divStep->SetChannels(
+        {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kTremoloDivision)->Int());
       pGraphics->AttachControl(divStep, -1, "TREMOLO_DIV");
       mVolumTremoloDivStep = divStep;
     }
@@ -1211,10 +1215,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     }
 
     float tremSwX = mainCX - 242.f;
-    pGraphics->AttachControl(new VoLumPowerSwitchControl(IRECT(tremSwX - 14.f, knobT - 4.f, tremSwX + 14.f,
-                                                               knobT + knobDiam + 2.f),
-                                                         kTremoloActive),
-                             -1, "TREMOLO_POWER");
+    pGraphics->AttachControl(
+      new VoLumPowerSwitchControl(
+        IRECT(tremSwX - 14.f, knobT - 4.f, tremSwX + 14.f, knobT + knobDiam + 2.f), kTremoloActive),
+      -1, "TREMOLO_POWER");
 
     // PRE KNOBS
     drawKnobCol(1, "GAIN", kPreNam1Gain, "dB", "PRE_NAM1_KNOBS", true, 6, 1, 0.f, 66.f);
@@ -1278,12 +1282,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Octaver: OCT DN, OCT UP, DRY, LEVEL (4 knobs centered).
     drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
                 nullptr, pitchKnobDiam);
-    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
-                pitchKnobDiam);
+    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
+                nullptr, pitchKnobDiam);
     drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
                 pitchKnobDiam);
-    drawKnobCol(4, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
-                pitchKnobDiam);
+    drawKnobCol(4, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
+                nullptr, pitchKnobDiam);
 
     IRECT pitchPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
     pGraphics->AttachControl(
@@ -1440,8 +1444,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
       // Tuner button
       auto* pPlugin = this;
-      pGraphics->AttachControl(new NAMCircleButtonControl(
-        tunerArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); }, tunerSVG));
+      pGraphics->AttachControl(
+        new NAMCircleButtonControl(tunerArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumTuner(); }, tunerSVG));
 
       // Metronome button
       pGraphics->AttachControl(
@@ -3493,8 +3497,7 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
     case EVoLumEffectFocus::DELAY: return kDelayTime;
     case EVoLumEffectFocus::REVERB: return kReverbMix;
-    case EVoLumEffectFocus::TREMOLO:
-      return GetParam(kTremoloSync)->Bool() ? kTremoloDepth : kTremoloRate;
+    case EVoLumEffectFocus::TREMOLO: return GetParam(kTremoloSync)->Bool() ? kTremoloDepth : kTremoloRate;
   }
   return kNoParameter;
 }

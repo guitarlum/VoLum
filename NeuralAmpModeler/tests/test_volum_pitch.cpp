@@ -81,7 +81,8 @@ double estimateFreq(const std::vector<DSP_SAMPLE>& x, size_t from, size_t len, i
         && r[static_cast<size_t>(lag)] >= r[static_cast<size_t>(lag) + 1])
     {
       // Parabolic interpolation for sub-lag accuracy.
-      const double a = r[static_cast<size_t>(lag) - 1], b = r[static_cast<size_t>(lag)], c = r[static_cast<size_t>(lag) + 1];
+      const double a = r[static_cast<size_t>(lag) - 1], b = r[static_cast<size_t>(lag)],
+                   c = r[static_cast<size_t>(lag) + 1];
       const double denom = a - 2.0 * b + c;
       double delta = 0.0;
       if (std::fabs(denom) > 1e-12)
@@ -92,7 +93,10 @@ double estimateFreq(const std::vector<DSP_SAMPLE>& x, size_t from, size_t len, i
   return kSR / static_cast<double>(minLag);
 }
 
-double cents(double f, double ref) { return 1200.0 * std::log2(f / ref); }
+double cents(double f, double ref)
+{
+  return 1200.0 * std::log2(f / ref);
+}
 } // namespace
 
 TEST_CASE("VoLumPitch passthrough when unconfigured")
@@ -159,8 +163,8 @@ TEST_CASE("VoLumPitch transpose tracks the whole -12..+7 range accurately")
     VoLumPitch pitch;
     pitch.Configure(kSR, kBlock);
     pitch.Reset();
-    pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
-                    VoLumPitch::Voicing::Modern, 0.0);
+    pitch.SetParams(
+      VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0);
     auto in = makeSine(base, 1 << 16);
     auto out = runStream(pitch, in);
     const double target = base * std::pow(2.0, semi / 12.0);
@@ -186,8 +190,8 @@ TEST_CASE("VoLumPitch transpose holds pitch across a long sustain (no ringing de
     VoLumPitch pitch;
     pitch.Configure(kSR, kBlock);
     pitch.Reset();
-    pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
-                    VoLumPitch::Voicing::Modern, 0.0);
+    pitch.SetParams(
+      VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0);
     auto in = makeSine(110.0, 1 << 17); // A2, low string, ~2.7 s
     auto out = runStream(pitch, in);
     const double target = 110.0 * std::pow(2.0, semi / 12.0);

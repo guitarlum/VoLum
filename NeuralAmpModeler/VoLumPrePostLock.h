@@ -64,9 +64,9 @@ inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b
       || !NearlyEqual(a.postDelayAge, b.postDelayAge) || !NearlyEqual(a.postReverbMix, b.postReverbMix)
       || !NearlyEqual(a.postReverbDecay, b.postReverbDecay) || !NearlyEqual(a.postReverbTone, b.postReverbTone)
       || !NearlyEqual(a.postReverbPreDelay, b.postReverbPreDelay)
-      || !NearlyEqual(a.postReverbShimmer, b.postReverbShimmer)
-      || !NearlyEqual(a.postTremoloRate, b.postTremoloRate) || !NearlyEqual(a.postTremoloDepth, b.postTremoloDepth)
-      || !NearlyEqual(a.postTremoloShape, b.postTremoloShape) || !NearlyEqual(a.postTremoloMix, b.postTremoloMix)
+      || !NearlyEqual(a.postReverbShimmer, b.postReverbShimmer) || !NearlyEqual(a.postTremoloRate, b.postTremoloRate)
+      || !NearlyEqual(a.postTremoloDepth, b.postTremoloDepth) || !NearlyEqual(a.postTremoloShape, b.postTremoloShape)
+      || !NearlyEqual(a.postTremoloMix, b.postTremoloMix)
       || !NearlyEqual(a.postTremoloCrossover, b.postTremoloCrossover))
     return false;
 
