@@ -25,6 +25,9 @@ TemplateProject/
 .tmp/
 skills-lock.json
 
+# Local-only research/reverse-engineering spike + reference docs (never to GitLab)
+_spike/
+
 # Secrets / local env (API keys, never commit)
 .env
 .env.*

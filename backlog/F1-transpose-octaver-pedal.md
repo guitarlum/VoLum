@@ -1,5 +1,15 @@
 # F1 — Pitch pedal: Transpose + Octaver (PRE, before compressor)
 
+> **STALE (2026-06-27).** Shipped and superseded. The pedal was built, but the
+> DSP decision in this doc (Signalsmith Stretch phase-vocoder) was reversed: it
+> tracked slowly and drifted off-pitch on low notes at playable latency. The
+> transpose path is now a low-latency time-domain WSOLA period-synchronous
+> granular shifter with a DROP / FAST character pill (delivered on
+> `feature/transpose-engine`; see changelog 06/27/2026). Octaver still rides the
+> same granular voices. Keep this file only as the original UI/state design
+> reference; do **not** implement the Signalsmith DSP section below. Octaver
+> quality follow-up now lives in `F11-octaver-deep-research.md`.
+
 Status: design locked, ready to implement. Branch: `feature/transpose-octaver-pedal` (off `feature/1.2.0`).
 Do not commit to `dev`/`main`. Merge to `dev` only after acceptance criteria + tests/docs/changelog.
 

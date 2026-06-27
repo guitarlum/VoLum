@@ -165,6 +165,9 @@ enum EParams
   kTremoloCrossover,
   kTremoloSync,
   kTremoloDivision,
+  // PRE Pitch Transpose CHARACTER (Drop / Fast). Appended at the very end to keep
+  // all prior serialized indices stable.
+  kPrePitchTransChar,
   kNumParams
 };
 

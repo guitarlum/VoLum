@@ -17,7 +17,9 @@ fresh Cursor planning chat.
 ## Open items
 
 ### Features
-- `F1-transpose-octaver-pedal.md` — combined Transpose + Octaver PRE pedal before the compressor.
+- `F1-transpose-octaver-pedal.md` — **STALE / shipped + superseded.** Pedal built; the Signalsmith phase-vocoder DSP in the doc was reversed for a low-latency WSOLA period-sync granular shifter with a DROP/FAST character (changelog 06/27/2026). Kept only as the original UI/state design reference. Octaver follow-up is now `F11`.
+- `F11-octaver-deep-research.md` — give the Octaver mode the same measured-reference deep-research treatment the transpose engine got (uses the local `deep-reverse-engineering` skill; NDSP Rabea X Chaos Bed as black-box reference). Ship the best octaver defensible with numbers; no gratuitous knobs.
+- `F12-tremolo-deep-research.md` — validate/sharpen the three POST Tremolo voices (Optical/Bias/Harmonic) against measured real-tremolo references (uses the local `deep-reverse-engineering` skill). Fix any voice that isn't an honest emulation; only add controls the research proves.
 - `F4-a2-lite-mode-support.md` — optional opt-in A2-Lite execution; default stays A2-Full. **Implemented on `feature/a2-lite-mode` (in test / pending merge to `dev`)**; archive + prune the prompt once merged. Seeded from the A2 retraining work (see `docs/a2-training-runbook.md`).
 - `F5-presets-full-rig.md` — save / load / recall a full rig (amp(s) + PRE + POST) as a named preset, with factory presets and export/import.
 - `F6-bring-your-own-amp.md` — custom-amp builder + the shared "Base / Custom" area and user-content storage (foundation for F7 / F8).
@@ -54,7 +56,7 @@ The "bring your own / presets" cluster is the current focus:
 2. F5 — Presets (can reference custom amps from F6).
 3. F7, F8 — BYO IR and custom pedals (build on the F6 foundation).
 4. F9 — MIDI (depends on F5 for Program Change → preset).
-5. F1 — Transpose + Octaver pedal.
+5. F11 / F12 — Octaver + Tremolo deep-research passes (F1 transpose+octaver pedal already shipped).
 6. O1 — Linux spike (can run in parallel).
 7. R2, R3 — repo hygiene and upstream sync sweeps.
 8. D1 — docs, folded in continuously as items land.

@@ -94,6 +94,7 @@ enum EParams
   kTremoloCrossover,
   kTremoloSync,
   kTremoloDivision,
+  kPrePitchTransChar,
   kNumParams
 };
 

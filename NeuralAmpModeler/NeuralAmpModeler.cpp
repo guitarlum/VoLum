@@ -374,6 +374,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
+  GetParam(kPrePitchTransChar)->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterDrop, {"Drop", "Fast"});
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -1299,6 +1300,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     IRECT pitchVoicingRect(mainCX - pitchPillW / 2.f, pitchPillY, mainCX + pitchPillW / 2.f, pitchPillY + pitchPillH);
     pGraphics->AttachControl(
       new VoLumSubModePillControl(pitchVoicingRect, kPrePitchVoicing, {"VINTAGE", "MODERN"}), -1, "PITCH_VOICING");
+    // Transpose engine character (shares the voicing pill's slot; mode picks which).
+    pGraphics->AttachControl(
+      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "FAST"}), -1, "PITCH_TRANSCHAR");
 
     // I/O meters
     const float meterW = 8.f;
@@ -2371,6 +2375,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     p.dry = s.prePitchDry;
     p.voicing = s.prePitchVoicing;
     p.level = s.prePitchLevel;
+    p.transChar = s.prePitchTransChar;
     return p;
   };
   auto tremoloTailFromSettings = [](const volum::VoLumAmpSettings& s) {
@@ -2631,7 +2636,11 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       }
       break;
     case kPrePitchActive:
-      // Toggling the pitch engine changes reported (PDC) latency.
+    case kPrePitchMode:
+    case kPrePitchTransChar:
+      // Toggling the pitch engine, switching Transpose/Octaver, or changing the
+      // transpose CHARACTER (Drop ~17 ms vs Fast ~12 ms) all change reported
+      // (PDC) latency, so re-report it to the host.
       if (mVolumInitComplete)
         _UpdateLatency();
       break;
@@ -2680,7 +2689,8 @@ bool IsPreBlockParam(int paramIdx)
     case kPrePitchOctUp:
     case kPrePitchDry:
     case kPrePitchVoicing:
-    case kPrePitchLevel: return true;
+    case kPrePitchLevel:
+    case kPrePitchTransChar: return true;
     default: return false;
   }
 }
@@ -2756,6 +2766,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kPrePitchActive:
       case kPrePitchMode:
       case kPrePitchVoicing:
+      case kPrePitchTransChar:
       case kDualAmpActive:
       case kSupportAmpIdx:
       case kSupportSpeakerIdx:
@@ -3758,6 +3769,7 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     _HideControlGroup(pGfx, "PITCH_TRANSPOSE_KNOBS", true);
     _HideControlGroup(pGfx, "PITCH_OCTAVER_KNOBS", true);
     _HideControlGroup(pGfx, "PITCH_VOICING", true);
+    _HideControlGroup(pGfx, "PITCH_TRANSCHAR", true);
     _HideControlGroup(pGfx, "MAIN_LANE_TOGGLES", true);
     _HideControlGroup(pGfx, "SUPPORT_LANE_TOGGLES", true);
     if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumPreCaptureMenu))
@@ -3855,12 +3867,15 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         _HideControlGroup(pGfx, "PITCH_MODE_PICKER", false);
         _HideControlGroup(pGfx, "PITCH_TRANSPOSE_KNOBS", !isTranspose);
         _HideControlGroup(pGfx, "PITCH_OCTAVER_KNOBS", isTranspose);
-        // Vintage/Modern voicing only applies to the Octaver engine.
+        // Vintage/Modern voicing only applies to the Octaver engine; Drop/Fast
+        // character only applies to Transpose (they share the same slot).
         _HideControlGroup(pGfx, "PITCH_VOICING", isTranspose);
+        _HideControlGroup(pGfx, "PITCH_TRANSCHAR", !isTranspose);
         disableGroup("PITCH_MODE_PICKER", !active);
         disableGroup("PITCH_TRANSPOSE_KNOBS", !active);
         disableGroup("PITCH_OCTAVER_KNOBS", !active);
         disableGroup("PITCH_VOICING", !active);
+        disableGroup("PITCH_TRANSCHAR", !active);
         break;
       }
       case EVoLumEffectFocus::COMP:
