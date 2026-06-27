@@ -637,9 +637,9 @@ private:
   std::string mVolumSelectedKnobHintText;
   // Size must match volum::keyboard::kTargetCount (9). Literal here to avoid
   // pulling VoLumKeyboardModel.h into this header before EParams is declared.
-  std::array<int, 9> mVolumLastKeyboardKnobByTarget = {
-    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
+  std::array<int, 9> mVolumLastKeyboardKnobByTarget = {iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
   // Reverb sub-mode pill is currently shown for Oktaverb only.
   // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
   // pick up a per-mode tooltip explaining what the knob actually does in that mode.

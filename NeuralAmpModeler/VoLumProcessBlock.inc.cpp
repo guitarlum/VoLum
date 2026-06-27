@@ -41,8 +41,8 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
   if (processingPlan.runPreComp)
   {
     mPreCompressor.SetParams(GetParam(kPreCompAmount)->Value(), GetParam(kPreCompRatio)->Value(),
-                             GetParam(kPreCompAttack)->Value(), GetParam(kPreCompRelease)->Value(),
-                             1.0, GetParam(kPreCompLevel)->Value(), sampleRate);
+                             GetParam(kPreCompAttack)->Value(), GetParam(kPreCompRelease)->Value(), 1.0,
+                             GetParam(kPreCompLevel)->Value(), sampleRate);
     preAmpPointers = mPreCompressor.Process(preAmpPointers, numChannelsInternal, nFrames);
   }
 
@@ -58,8 +58,8 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
     mPreModel[slot]->process(preAmpPointers[0], mOutputPointers[0], nFrames);
     preAmpPointers = mOutputPointers;
 
-    mPreEq[slot].SetParams(GetParam(bassParam)->Value(), GetParam(midParam)->Value(),
-                           GetParam(midFreqParam)->Value(), GetParam(trebleParam)->Value());
+    mPreEq[slot].SetParams(GetParam(bassParam)->Value(), GetParam(midParam)->Value(), GetParam(midFreqParam)->Value(),
+                           GetParam(trebleParam)->Value());
     preAmpPointers = mPreEq[slot].Process(preAmpPointers, numChannelsInternal, nFrames);
 
     const double outGain = volum::DbToAmpWithMuteFloor(GetParam(levelParam)->Value(), GetParam(levelParam)->GetMin());
@@ -73,9 +73,9 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
 }
 
 iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preAmpPointers,
-                                                             const volum::ProcessingPlan& processingPlan,
-                                                             const size_t numChannelsInternal, const int nFrames,
-                                                             const double sampleRate)
+                                                            const volum::ProcessingPlan& processingPlan,
+                                                            const size_t numChannelsInternal, const int nFrames,
+                                                            const double sampleRate)
 {
   sample** triggerOutput = preAmpPointers;
   if (processingPlan.runNoiseGate)
@@ -113,8 +113,9 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
   sample** hpfPointers = mOutputPointers;
   if (processingPlan.runMainModel)
   {
-    sample** gateGainOutput =
-      processingPlan.runNoiseGate ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, nFrames) : mOutputPointers;
+    sample** gateGainOutput = processingPlan.runNoiseGate
+                                ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, nFrames)
+                                : mOutputPointers;
 
     sample** toneStackOutPointers = (processingPlan.runToneStack && mToneStack != nullptr)
                                       ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
@@ -136,7 +137,8 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   if (!processingPlan.runDualAmp)
     return nullptr;
 
-  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames) && "Dual-amp support scratch not pre-reserved");
+  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames)
+         && "Dual-amp support scratch not pre-reserved");
   mDualSupportLaneBuffer.resize(nFrames);
 
   const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
@@ -205,19 +207,17 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
 
   if (processingPlan.runDelay)
   {
-    mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
-                     GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate,
-                     GetParam(kDelayTone)->Value(), GetParam(kDelayAge)->Value(),
-                     GetParam(kDelayPingPong)->Bool());
+    mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(), GetParam(kDelayMix)->Value(),
+                     GetParam(kDelayMode)->Int(), sampleRate, GetParam(kDelayTone)->Value(),
+                     GetParam(kDelayAge)->Value(), GetParam(kDelayPingPong)->Bool());
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 
   if (processingPlan.runReverb)
   {
-    mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
-                      GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
-                      GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate,
-                      GetParam(kReverbSubMode)->Int());
+    mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(), GetParam(kReverbTone)->Value(),
+                      GetParam(kReverbPreDelay)->Value(), GetParam(kReverbShimmer)->Value(),
+                      GetParam(kReverbMode)->Int(), sampleRate, GetParam(kReverbSubMode)->Int());
     postPointers = mReverb.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 

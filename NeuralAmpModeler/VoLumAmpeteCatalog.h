@@ -228,10 +228,10 @@ struct VoLumAmpSettings
   // snapshots are needed. Defaults voice the "Bang Bang" tone (deep Bias sine).
   bool postTremoloActive = false;
   int postTremoloMode = kVoLumTremoloModeBias;
-  double postTremoloRate = 5.0;       // Hz (free-running rate)
-  double postTremoloDepth = 0.85;     // 0..1
-  double postTremoloShape = 0.0;      // 0..1 (sine -> square)
-  double postTremoloMix = 1.0;        // 0..1
+  double postTremoloRate = 5.0; // Hz (free-running rate)
+  double postTremoloDepth = 0.85; // 0..1
+  double postTremoloShape = 0.0; // 0..1 (sine -> square)
+  double postTremoloMix = 1.0; // 0..1
   double postTremoloCrossover = 800.0; // Hz (Harmonic band split)
   bool postTremoloSync = false;
   int postTremoloDivision = kVoLumTremoloDivisionDefault; // 1/8

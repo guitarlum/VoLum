@@ -115,9 +115,9 @@ struct ChunkIdTail
 
 inline nlohmann::json PitchTailToJson(const PitchTail& p)
 {
-  return nlohmann::json{{"active", p.active}, {"mode", p.mode},   {"semi", p.semitones}, {"mix", p.mix},
-                        {"octDn", p.octDown}, {"octUp", p.octUp}, {"dry", p.dry},        {"voice", p.voicing},
-                        {"level", p.level}};
+  return nlohmann::json{{"active", p.active}, {"mode", p.mode},     {"semi", p.semitones},
+                        {"mix", p.mix},       {"octDn", p.octDown}, {"octUp", p.octUp},
+                        {"dry", p.dry},       {"voice", p.voicing}, {"level", p.level}};
 }
 
 inline PitchTail PitchTailFromJson(const nlohmann::json& j)
@@ -152,9 +152,9 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
 
 inline nlohmann::json TremoloTailToJson(const TremoloTail& t)
 {
-  return nlohmann::json{{"active", t.active}, {"mode", t.mode},   {"rate", t.rate},   {"depth", t.depth},
-                        {"shape", t.shape},   {"mix", t.mix},     {"xover", t.crossover},
-                        {"sync", t.sync},     {"div", t.division}};
+  return nlohmann::json{{"active", t.active},   {"mode", t.mode},   {"rate", t.rate},
+                        {"depth", t.depth},     {"shape", t.shape}, {"mix", t.mix},
+                        {"xover", t.crossover}, {"sync", t.sync},   {"div", t.division}};
 }
 
 inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
