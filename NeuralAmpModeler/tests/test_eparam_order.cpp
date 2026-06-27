@@ -20,7 +20,7 @@ enum EParams {
   kSupportOutputLevel, kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan,
   kSupportIRToggle,
   kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp,
-  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchQuality, kPrePitchDetune, kPrePitchTimbre,
+  kPrePitchDry, kPrePitchVoicing, kPrePitchLevel,
   kTremoloActive, kTremoloMode, kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix,
   kTremoloCrossover, kTremoloSync, kTremoloDivision,
   kNumParams
@@ -135,14 +135,11 @@ TEST_CASE("EParam: PRE Pitch pedal params appended after SupportIRToggle")
   CHECK(kPrePitchDry == kPrePitchOctUp + 1);
   CHECK(kPrePitchVoicing == kPrePitchDry + 1);
   CHECK(kPrePitchLevel == kPrePitchVoicing + 1);
-  CHECK(kPrePitchQuality == kPrePitchLevel + 1);
-  CHECK(kPrePitchDetune == kPrePitchQuality + 1);
-  CHECK(kPrePitchTimbre == kPrePitchDetune + 1);
 }
 
-TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchTimbre")
+TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchLevel")
 {
-  CHECK(kTremoloActive == kPrePitchTimbre + 1);
+  CHECK(kTremoloActive == kPrePitchLevel + 1);
   CHECK(kTremoloMode == kTremoloActive + 1);
   CHECK(kTremoloRate == kTremoloMode + 1);
   CHECK(kTremoloDepth == kTremoloRate + 1);
@@ -158,10 +155,10 @@ TEST_CASE("EParam: total count is stable")
 {
   // v0.9.0/effect-staging added 4 new params: DelayTone, DelayAge, DelayPingPong, ReverbSubMode.
   // 1.2.0 appended kSupportIRToggle (per-lane support custom IR): 71 -> 72.
-  // 1.2.0 PRE Pitch pedal appended 10 params (Active, Mode, Semitones, Mix, OctDown,
-  // OctUp, Dry, Voicing, Level, Quality): 72 -> 82.
-  // 1.2.0 follow-up appended Detune + Timbre: 82 -> 84.
+  // 1.2.0 PRE Pitch pedal appended 9 params (Active, Mode, Semitones, Mix, OctDown,
+  // OctUp, Dry, Voicing, Level): 72 -> 81. (Granular-engine rework dropped the
+  // earlier Quality/Detune/Timbre knobs; feature was unreleased.)
   // POST Tremolo pedal appended 9 params (Active, Mode, Rate, Depth, Shape, Mix,
-  // Crossover, Sync, Division): 84 -> 93.
-  CHECK(kNumParams == 93);
+  // Crossover, Sync, Division): 81 -> 90.
+  CHECK(kNumParams == 90);
 }

@@ -169,9 +169,6 @@ struct VoLumAmpSettings
   double prePitchDry = 1.0;
   int prePitchVoicing = 1; // 0=Vintage, 1=Modern
   double prePitchLevel = 0.0;
-  double prePitchQuality = 0.5;
-  double prePitchDetune = 0.0; // fine micro-tune in cents (-50..50), Transpose only
-  double prePitchTimbre = 0.0; // wet-signal tilt EQ (-100..100 %)
   bool dualAmpActive = false;
   int dualAmpRoute = 2; // 0=STACK, 1=L/R, 2=CUSTOM. UI no longer exposes the picker — Custom honours per-lane PAN.
   double mainAmpPan = 0.0;

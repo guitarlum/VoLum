@@ -366,7 +366,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   // PRE Pitch pedal (Transpose / Octaver), inserted at the very front of the PRE chain.
   GetParam(kPrePitchActive)->InitBool("PrePitchActive", false);
   GetParam(kPrePitchMode)->InitEnum("PrePitchMode", volum::kVoLumPitchModeTranspose, {"Transpose", "Octaver"});
-  GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -24.0, 24.0, 1.0, "st");
+  GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -12.0, 7.0, 1.0, "st");
   GetParam(kPrePitchMix)->InitDouble("PrePitchMix", 1.0, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctDown)->InitDouble("PrePitchOctDown", 0.8, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctUp)->InitDouble("PrePitchOctUp", 0.0, 0.0, 1.0, 0.01);
@@ -374,9 +374,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
-  GetParam(kPrePitchQuality)->InitDouble("PrePitchQuality", 0.5, 0.0, 1.0, 0.01);
-  GetParam(kPrePitchDetune)->InitDouble("PrePitchDetune", 0.0, -50.0, 50.0, 1.0, "ct");
-  GetParam(kPrePitchTimbre)->InitDouble("PrePitchTimbre", 0.0, -100.0, 100.0, 1.0, "%");
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -1257,53 +1254,36 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // PITCH KNOBS (Transpose + Octaver). Mirrors the centered REVERB effect layout: a
     // right-hand mode picker (TRANSPOSE / OCTAVER) swaps between two knob groups; the
-    // Octaver group adds a VINTAGE / MODERN voicing pill. QUALITY trades pitch-engine
-    // smoothness for latency, surfaced via a hover tooltip and host PDC.
-    const char* kPitchQualityTip =
-      "Higher = smoother, more natural pitch (better for chords) but more latency. "
-      "Lower = tighter latency for live playing, slightly grainier. Reported to the "
-      "host for delay compensation. ~11 ms at min, ~21 ms at default, up to ~43 ms at max.";
-
+    // Octaver group adds a VINTAGE / MODERN voicing pill. The granular engine runs at a
+    // fixed ~21 ms latency (reported to the host for PDC), so there is no QUALITY knob.
     pGraphics->AttachControl(
       new VoLumPowerSwitchControl(
         IRECT(preSwX - 14.f, knobT - 4.f, preSwX + 14.f, knobT + knobDiam + 2.f), kPrePitchActive),
       -1, "PITCH_POWER");
 
-    // Pitch rows pack 6 knobs into the centered zone (left of the mode picker), so
-    // they use a narrower column + smaller knob than the 5-wide delay/reverb rows.
-    const float pitchColW = 60.f;
-    const float pitchKnobDiam = 52.f;
+    // Sparse pitch rows (3-4 knobs) sit in the centered zone left of the mode picker.
+    const float pitchColW = 78.f;
+    const float pitchKnobDiam = 60.f;
     const float pitchKnobOffset = -42.f;
-    const char* kPitchDetuneTip = "Fine micro-tune in cents (+-50), added on top of SEMI. Transpose only.";
-    const char* kPitchTimbreTip = "Tilt EQ on the shifted (wet) signal only: + brightens, - darkens. Dry stays untouched.";
 
-    // Transpose: SEMI, DETUNE, MIX, TIMBRE, LEVEL, QUALITY (6 knobs centered).
-    drawKnobCol(1, "SEMI", kPrePitchSemitones, "st", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
-                nullptr, pitchKnobDiam);
-    drawKnobCol(2, "DETUNE", kPrePitchDetune, "ct", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
-                kPitchDetuneTip, pitchKnobDiam);
-    drawKnobCol(3, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+    // Transpose: SEMI, MIX, LEVEL (3 knobs centered).
+    drawKnobCol(1, "SEMI", kPrePitchSemitones, "st", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
+                "Transpose the whole signal in half-steps (-12..+7). Polyphonic; tuned tightest for drop tuning.",
                 pitchKnobDiam);
-    drawKnobCol(4, "TIMBRE", kPrePitchTimbre, "%", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
-                kPitchTimbreTip, pitchKnobDiam);
-    drawKnobCol(5, "LEVEL", kPrePitchLevel, "dB", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+    drawKnobCol(2, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
+                "Blend between dry and the shifted signal. 100% = fully retuned.", pitchKnobDiam);
+    drawKnobCol(3, "LEVEL", kPrePitchLevel, "dB", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
                 nullptr, pitchKnobDiam);
-    drawKnobCol(6, "QUALITY", kPrePitchQuality, "%", "PITCH_TRANSPOSE_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
-                kPitchQualityTip, pitchKnobDiam);
 
-    // Octaver: OCT DN, OCT UP, DRY, TIMBRE, LEVEL, QUALITY (6 knobs centered).
-    drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
+    // Octaver: OCT DN, OCT UP, DRY, LEVEL (4 knobs centered).
+    drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
                 nullptr, pitchKnobDiam);
-    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+    drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
                 pitchKnobDiam);
-    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
                 pitchKnobDiam);
-    drawKnobCol(4, "TIMBRE", kPrePitchTimbre, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
-                kPitchTimbreTip, pitchKnobDiam);
-    drawKnobCol(5, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW, nullptr,
+    drawKnobCol(4, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
                 pitchKnobDiam);
-    drawKnobCol(6, "QUALITY", kPrePitchQuality, "%", "PITCH_OCTAVER_KNOBS", true, 6, 1, pitchKnobOffset, pitchColW,
-                kPitchQualityTip, pitchKnobDiam);
 
     IRECT pitchPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
     pGraphics->AttachControl(
@@ -2118,7 +2098,7 @@ void NeuralAmpModeler::OnReset()
   mPreCompressor.Reset();
   {
     std::lock_guard<std::mutex> lock(mPrePitchMutex);
-    mPitch.Configure(sampleRate, GetParam(kPrePitchQuality)->Value(), maxBlockSize);
+    mPitch.Configure(sampleRate, maxBlockSize);
     mPitch.Reset();
   }
   mPrePitchConfigureRequested.store(false);
@@ -2152,13 +2132,13 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
   mOutputSenderR.TransmitData(*this);
 
-  // PRE Pitch quality (block-size) change: reconfigure off the audio thread, then
-  // refresh reported latency. Allocation is safe here on the main thread.
+  // PRE Pitch reconfigure off the audio thread (only needed if the grain/sample
+  // rate ever changes outside OnReset), then refresh reported latency.
   if (mPrePitchConfigureRequested.exchange(false))
   {
     {
       std::lock_guard<std::mutex> lock(mPrePitchMutex);
-      mPitch.Configure(GetSampleRate(), GetParam(kPrePitchQuality)->Value(), GetBlockSize());
+      mPitch.Configure(GetSampleRate(), GetBlockSize());
       mPitch.Reset();
     }
     _UpdateLatency();
@@ -2387,9 +2367,6 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     p.dry = s.prePitchDry;
     p.voicing = s.prePitchVoicing;
     p.level = s.prePitchLevel;
-    p.quality = s.prePitchQuality;
-    p.detune = s.prePitchDetune;
-    p.timbre = s.prePitchTimbre;
     return p;
   };
   auto tremoloTailFromSettings = [](const volum::VoLumAmpSettings& s) {
@@ -2654,11 +2631,6 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       if (mVolumInitComplete)
         _UpdateLatency();
       break;
-    case kPrePitchQuality:
-      // Quality maps to FFT block size: reconfigure allocates, so defer to OnIdle
-      // (main thread), which reconfigures and refreshes latency.
-      mPrePitchConfigureRequested.store(true);
-      break;
     case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
     default: break;
   }
@@ -2704,10 +2676,7 @@ bool IsPreBlockParam(int paramIdx)
     case kPrePitchOctUp:
     case kPrePitchDry:
     case kPrePitchVoicing:
-    case kPrePitchLevel:
-    case kPrePitchQuality:
-    case kPrePitchDetune:
-    case kPrePitchTimbre: return true;
+    case kPrePitchLevel: return true;
     default: return false;
   }
 }

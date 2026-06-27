@@ -154,11 +154,6 @@ enum EParams
   kPrePitchDry,
   kPrePitchVoicing,
   kPrePitchLevel,
-  kPrePitchQuality,
-  // 1.2.0 follow-up: fine micro-tune (cents) + wet-signal tilt EQ. Appended last
-  // to keep all prior serialized indices stable.
-  kPrePitchDetune,
-  kPrePitchTimbre,
   // Tremolo (POST) - third POST pedal, runs last after Reverb. Appended at the
   // end to keep all prior serialized indices stable.
   kTremoloActive,

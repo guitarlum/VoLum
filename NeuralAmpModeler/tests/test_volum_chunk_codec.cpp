@@ -725,22 +725,18 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   in.perAmpPitch[0].dry = 0.9;
   in.perAmpPitch[0].voicing = 0; // Vintage
   in.perAmpPitch[0].level = -3.5;
-  in.perAmpPitch[0].quality = 0.75;
-  in.perAmpPitch[0].detune = -22.0;
-  in.perAmpPitch[0].timbre = 40.0;
 
-  // Last amp: Transpose up an octave.
+  // Last amp: Transpose down a fifth.
   in.perAmpPitch[volum::kAmpCount - 1].present = true;
   in.perAmpPitch[volum::kAmpCount - 1].active = true;
   in.perAmpPitch[volum::kAmpCount - 1].mode = 0;
-  in.perAmpPitch[volum::kAmpCount - 1].semitones = 24.0;
+  in.perAmpPitch[volum::kAmpCount - 1].semitones = -7.0;
 
   // Locked PRE snapshot present.
   in.lockedPrePitch.present = true;
   in.lockedPrePitch.active = true;
   in.lockedPrePitch.mode = 0;
   in.lockedPrePitch.semitones = 7.0;
-  in.lockedPrePitch.quality = 0.25;
 
   MemoryChunk chunk;
   volum::PutChunkIdTail(chunk, in);
@@ -758,14 +754,9 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.perAmpPitch[0].dry == doctest::Approx(0.9));
   CHECK(out.perAmpPitch[0].voicing == 0);
   CHECK(out.perAmpPitch[0].level == doctest::Approx(-3.5));
-  CHECK(out.perAmpPitch[0].quality == doctest::Approx(0.75));
-  CHECK(out.perAmpPitch[0].detune == doctest::Approx(-22.0));
-  CHECK(out.perAmpPitch[0].timbre == doctest::Approx(40.0));
 
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(24.0));
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].detune == doctest::Approx(0.0));
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].timbre == doctest::Approx(0.0));
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(-7.0));
 
   // Untouched amp stays absent -> pitch defaults to bypassed downstream.
   CHECK_FALSE(out.perAmpPitch[1].present);
@@ -773,7 +764,6 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.lockedPrePitch.present);
   CHECK(out.lockedPrePitch.active);
   CHECK(out.lockedPrePitch.semitones == doctest::Approx(7.0));
-  CHECK(out.lockedPrePitch.quality == doctest::Approx(0.25));
 }
 
 TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
