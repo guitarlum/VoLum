@@ -72,12 +72,12 @@ constexpr std::array<int, 5> kTremoloHarmonicParams = {
   kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover,
 };
 
-constexpr std::array<int, 6> kPitchTransposeParams = {
-  kPrePitchSemitones, kPrePitchDetune, kPrePitchMix, kPrePitchTimbre, kPrePitchLevel, kPrePitchQuality,
+constexpr std::array<int, 3> kPitchTransposeParams = {
+  kPrePitchSemitones, kPrePitchMix, kPrePitchLevel,
 };
 
-constexpr std::array<int, 6> kPitchOctaverParams = {
-  kPrePitchOctDown, kPrePitchOctUp, kPrePitchDry, kPrePitchTimbre, kPrePitchLevel, kPrePitchQuality,
+constexpr std::array<int, 4> kPitchOctaverParams = {
+  kPrePitchOctDown, kPrePitchOctUp, kPrePitchDry, kPrePitchLevel,
 };
 
 inline double StepForParam(int paramIdx, bool fine)
@@ -122,14 +122,10 @@ inline double StepForParam(int paramIdx, bool fine)
       return fine ? 0.1 : 0.5;
     case kPrePitchSemitones:
       return 1.0;
-    case kPrePitchDetune:
-    case kPrePitchTimbre:
-      return fine ? 1.0 : 5.0;
     case kPrePitchMix:
     case kPrePitchOctDown:
     case kPrePitchOctUp:
     case kPrePitchDry:
-    case kPrePitchQuality:
       return fine ? 0.01 : 0.05;
     case kPrePitchLevel:
       return fine ? 0.1 : 0.5;

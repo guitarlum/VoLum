@@ -65,12 +65,12 @@ PRE runs before the amp. It contains a pitch pedal, a compressor, and two assign
 
 The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
 
-- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−24 to +24, i.e. two octaves each way), **DETUNE** adds a fine micro-tune in cents (−50 to +50) on top of SEMI for cents-accurate tuning, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output.
-- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean.
+- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output.
+- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean.
 
 ![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
 
-Both modes share a **TIMBRE** knob and a **QUALITY** knob. **TIMBRE** is a tilt EQ applied to the shifted (wet) signal only — turn it up to brighten, down to darken — while your dry blend keeps its original tone. **QUALITY** trades smoothness for latency: higher quality tracks chords more smoothly but adds latency; lower quality tightens latency for live playing at a slightly grainier cost. VoLum reports the pitch latency to your host for plugin delay compensation (about 11 ms at the lowest setting, ~21 ms at the default, up to ~43 ms at maximum). Hover the QUALITY knob to see this trade-off.
+The pitch engine is a low-latency time-domain shifter built for guitar: it tracks fast and holds its tuning steady through a long sustain instead of drifting off-pitch as the note rings. VoLum reports a fixed pitch latency of about 21 ms to your host for plugin delay compensation, so the shifted signal stays time-aligned with the rest of your mix.
 
 Pedal captures are grouped by type and sorted from lower to higher gain. Good starting points:
 

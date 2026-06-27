@@ -2,24 +2,32 @@
 
 // VoLum Pitch pedal engine (PRE, before compressor).
 //
-// Two modes share one polyphonic pitch engine (Signalsmith Stretch, MIT):
-//   Transpose: shift the whole signal by N semitones (+-24) plus a fine DETUNE
-//              offset in cents (+-50), with dry/wet mix (doubles as a fixed
-//              harmonizer when blended).
+// Time-domain GRANULAR pitch shifter (dual-tap delay line with Hann crossfade).
+// Chosen over an STFT phase vocoder because, for low guitar strings at low
+// latency, a phase vocoder either drifts ("detunes while it rings") or needs
+// ~64-85 ms of latency to stay stable. The granular shifter resamples a delay
+// line so the pitch is exact (no drift) at ~21 ms latency, which matches how
+// drop-tune pedals (DigiTech The Drop, Ola Chug Capo) behave. The tradeoff is
+// some amplitude "warble" instead of detuning.
+//
+// How it works (per voice):
+//   - A ring buffer holds recent input.
+//   - Two read taps sit grain/2 apart, each Hann-windowed; the windows sum to 1
+//     (perfect reconstruction), so there is no amplitude modulation from the
+//     windowing itself.
+//   - Each output sample, the read pointer advances at the pitch RATIO relative
+//     to the write pointer (that is the exact resampling that shifts pitch), and
+//     the tap phase increments by (1 - ratio), wrapping over [0, grain). When a
+//     tap wraps, its window is ~0 there and the other tap covers the seam.
+//   - Latency = grain/2 (group delay). The dry path is delayed by the same so
+//     dry/wet stay time-aligned; the host compensates the total via PDC.
+//
+// Two modes share the engine:
+//   Transpose: one voice at 2^(semitones/12), with dry/wet MIX and LEVEL.
 //   Octaver:   dry + (-1 octave voice * octDown) + (+1 octave voice * octUp),
 //              with a Vintage (gritty/filtered) vs Modern (clean) voicing.
 //
-// Both modes share a TIMBRE tilt (one-pole pivot ~800 Hz) applied to the *wet*
-// (shifted) signal only, so the dry blend keeps its original tone. Positive
-// timbre brightens (treble tilt), negative darkens (bass tilt).
-//
-// Mono in/out (numChannels == 1; VoLum is mono internally). The engine block
-// size is exposed as "quality": larger block = smoother but more latency
-// (see VoLumPitch::BlockSamplesForQuality). The dry path is delayed by the
-// engine latency so dry/wet stay phase-aligned; the host compensates the total
-// via PDC (NeuralAmpModeler::_UpdateLatency).
-
-#include "signalsmith-stretch/signalsmith-stretch.h"
+// Mono in/out (numChannels == 1; VoLum is mono internally).
 
 #include "../AudioDSPTools/dsp/dsp.h"
 
@@ -32,6 +40,82 @@ namespace dsp
 {
 namespace effect
 {
+
+// Single-voice granular pitch shifter over a ring buffer. Exact-pitch (the read
+// pointer resamples the delay line); the dual Hann taps overlap-add seamlessly.
+class GranularVoice
+{
+public:
+  void Configure(int grainSamples, int maxBlockSize)
+  {
+    mGrain = std::max(grainSamples, 64);
+    const size_t need = static_cast<size_t>(mGrain) + static_cast<size_t>(std::max(maxBlockSize, 64)) + 8;
+    if (mBuf.size() < need)
+      mBuf.assign(need, 0.0);
+    Reset();
+  }
+
+  void Reset()
+  {
+    std::fill(mBuf.begin(), mBuf.end(), 0.0);
+    mWrite = 0;
+    mPhase = 0.0;
+  }
+
+  // ratio = output_freq / input_freq (2^(semitones/12)).
+  void SetRatio(double ratio) { mInc = 1.0 - std::clamp(ratio, 0.25, 4.0); }
+
+  int Latency() const { return mGrain / 2; }
+
+  void Process(const DSP_SAMPLE* in, DSP_SAMPLE* out, size_t numFrames)
+  {
+    if (mBuf.empty())
+    {
+      std::copy(in, in + numFrames, out);
+      return;
+    }
+    const size_t sz = mBuf.size();
+    const double g = static_cast<double>(mGrain);
+    const double twoPiOverG = 2.0 * 3.14159265358979323846 / g;
+    for (size_t i = 0; i < numFrames; ++i)
+    {
+      mBuf[mWrite] = static_cast<double>(in[i]);
+      const double p1 = mPhase;
+      double p2 = mPhase + g * 0.5;
+      if (p2 >= g)
+        p2 -= g;
+      const double w1 = 0.5 * (1.0 - std::cos(twoPiOverG * p1));
+      const double w2 = 0.5 * (1.0 - std::cos(twoPiOverG * p2));
+      out[i] = static_cast<DSP_SAMPLE>(_ReadAt(p1) * w1 + _ReadAt(p2) * w2);
+      mPhase += mInc;
+      while (mPhase >= g)
+        mPhase -= g;
+      while (mPhase < 0.0)
+        mPhase += g;
+      mWrite = (mWrite + 1) % sz;
+    }
+  }
+
+private:
+  double _ReadAt(double delay) const
+  {
+    const double bufLen = static_cast<double>(mBuf.size());
+    double rp = static_cast<double>(mWrite) - delay;
+    while (rp < 0.0)
+      rp += bufLen;
+    const double fl = std::floor(rp);
+    const size_t i0 = static_cast<size_t>(fl) % mBuf.size();
+    const size_t i1 = (i0 + 1) % mBuf.size();
+    const double frac = rp - fl;
+    return mBuf[i0] * (1.0 - frac) + mBuf[i1] * frac;
+  }
+
+  int mGrain = 0;
+  std::vector<double> mBuf;
+  size_t mWrite = 0;
+  double mPhase = 0.0;
+  double mInc = 0.0; // 1 - ratio
+};
 
 class VoLumPitch
 {
@@ -49,45 +133,35 @@ public:
 
   static constexpr int kNumVoices = 2; // octaver uses both (down/up); transpose uses voice 0.
 
-  // Quality (0..1) -> FFT block size. Larger = smoother low-string tracking but
-  // more latency. Discrete so latency only changes in deliberate steps.
-  // At 48 kHz the totals are roughly: 512=~11ms, 768=~16ms, 1024=~21ms,
-  // 1536=~32ms, 2048=~43ms. Default index 2 (1024, ~21ms).
-  static int BlockSamplesForQuality(double quality01)
+  // Grain length as a fraction of the sample rate. grain/2 is the reported
+  // latency (~21 ms at 48 kHz), matching the fast end of real drop-tune pedals
+  // while giving enough overlap to keep low strings stable.
+  static int GrainSamplesFor(double sampleRate)
   {
-    static const int kBlocks[] = {512, 768, 1024, 1536, 2048};
-    constexpr int n = 5;
-    const int idx = static_cast<int>(std::lround(std::clamp(quality01, 0.0, 1.0) * (n - 1)));
-    return kBlocks[std::clamp(idx, 0, n - 1)];
+    int g = static_cast<int>(std::lround(sampleRate * 0.045));
+    if (g % 2 != 0)
+      ++g;
+    return std::max(g, 256);
   }
 
-  // Reconfigure the engine. Allocates - call OFF the audio thread (OnReset / a
-  // guarded reconfigure path), never from ProcessBlock.
-  void Configure(double sampleRate, double quality01, int maxBlockSize)
+  // Allocates - call OFF the audio thread (OnReset), never from ProcessBlock.
+  void Configure(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     mMaxBlock = std::max(maxBlockSize, 64);
-    const int block = BlockSamplesForQuality(quality01);
-    const bool sameConfig = mConfigured && block == mConfiguredBlock && mSampleRate == mConfiguredSampleRate;
+    const int grain = GrainSamplesFor(mSampleRate);
+    const bool sameConfig = mConfigured && grain == mConfiguredGrain && mSampleRate == mConfiguredSampleRate;
     if (!sameConfig)
     {
       for (auto& voice : mVoices)
-      {
-        voice.configure(1, block, block / 4);
-        voice.reset();
-      }
-      mConfiguredBlock = block;
+        voice.Configure(grain, mMaxBlock);
+      mConfiguredGrain = grain;
       mConfiguredSampleRate = mSampleRate;
       mConfigured = true;
-      mLatency = mVoices[0].inputLatency() + mVoices[0].outputLatency();
+      mLatency = mVoices[0].Latency();
     }
-    // Vintage voicing lowpass coefficient (~3.2 kHz one-pole).
     const double fc = 3200.0;
     mVintageLpCoeff = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * fc / mSampleRate);
-    // TIMBRE tilt pivot (~800 Hz one-pole): everything below is the "low" band,
-    // everything above the "high" band; tilt cross-fades their gains.
-    const double timbreFc = 800.0;
-    mTimbreLpCoeff = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * timbreFc / mSampleRate);
     _AllocateScratch();
   }
 
@@ -97,15 +171,14 @@ public:
   void Reset()
   {
     for (auto& voice : mVoices)
-      voice.reset();
+      voice.Reset();
     std::fill(mDryRing.begin(), mDryRing.end(), static_cast<DSP_SAMPLE>(0));
     mDryWrite = 0;
     mVintageLpState = {0.0, 0.0};
-    mTimbreLpState = 0.0;
   }
 
   void SetParams(Mode mode, double semitones, double mix01, double octDown01, double octUp01, double dry01,
-                 Voicing voicing, double levelDb, double detuneCents = 0.0, double timbre = 0.0)
+                 Voicing voicing, double levelDb)
   {
     mMode = mode;
     mSemitones = std::clamp(semitones, -24.0, 24.0);
@@ -116,8 +189,6 @@ public:
     mVoicing = voicing;
     const double clampedDb = std::clamp(levelDb, -20.0, 20.0);
     mLevel = std::pow(10.0, clampedDb / 20.0);
-    mDetuneSemis = std::clamp(detuneCents, -50.0, 50.0) / 100.0;
-    mTimbre = std::clamp(timbre, -1.0, 1.0);
   }
 
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
@@ -133,7 +204,7 @@ public:
 
     DSP_SAMPLE* in = inputs[0];
 
-    // Delay dry by engine latency so it stays phase-aligned with the wet voices.
+    // Delay dry by engine latency so it stays time-aligned with the wet voices.
     const size_t ringLen = mDryRing.size();
     const size_t lat = static_cast<size_t>(mLatency);
     for (size_t i = 0; i < numFrames; ++i)
@@ -143,29 +214,22 @@ public:
       mDryWrite = (mDryWrite + 1) % ringLen;
     }
 
-    DSP_SAMPLE* inPtr[1] = {in};
-
     if (mMode == Mode::Transpose)
     {
-      // DETUNE only meaningful in Transpose: add the cents offset to the shift.
-      mVoices[0].setTransposeSemitones(static_cast<float>(mSemitones + mDetuneSemis));
-      DSP_SAMPLE* wetPtr[1] = {mWet0.data()};
-      mVoices[0].process(inPtr, static_cast<int>(numFrames), wetPtr, static_cast<int>(numFrames));
+      mVoices[0].SetRatio(std::pow(2.0, mSemitones / 12.0));
+      mVoices[0].Process(in, mWet0.data(), numFrames);
       for (size_t i = 0; i < numFrames; ++i)
       {
-        const double wet = _TimbreShape(static_cast<double>(mWet0[i]));
-        const double y = mDryScratch[i] * (1.0 - mMix) + wet * mMix;
+        const double y = mDryScratch[i] * (1.0 - mMix) + static_cast<double>(mWet0[i]) * mMix;
         mOut[0][i] = static_cast<DSP_SAMPLE>(y * mLevel);
       }
     }
     else // Octaver
     {
-      mVoices[0].setTransposeSemitones(-12.0f);
-      mVoices[1].setTransposeSemitones(12.0f);
-      DSP_SAMPLE* downPtr[1] = {mWet0.data()};
-      DSP_SAMPLE* upPtr[1] = {mWet1.data()};
-      mVoices[0].process(inPtr, static_cast<int>(numFrames), downPtr, static_cast<int>(numFrames));
-      mVoices[1].process(inPtr, static_cast<int>(numFrames), upPtr, static_cast<int>(numFrames));
+      mVoices[0].SetRatio(0.5);
+      mVoices[1].SetRatio(2.0);
+      mVoices[0].Process(in, mWet0.data(), numFrames);
+      mVoices[1].Process(in, mWet1.data(), numFrames);
       for (size_t i = 0; i < numFrames; ++i)
       {
         double down = static_cast<double>(mWet0[i]);
@@ -175,7 +239,7 @@ public:
           down = _VintageShape(down, 0);
           up = _VintageShape(up, 1);
         }
-        const double wet = _TimbreShape(down * mOctDown + up * mOctUp);
+        const double wet = down * mOctDown + up * mOctUp;
         const double y = mDryScratch[i] * mDry + wet;
         mOut[0][i] = static_cast<DSP_SAMPLE>(y * mLevel);
       }
@@ -196,18 +260,6 @@ private:
     const double driven = std::tanh(x * 1.8);
     mVintageLpState[idx] = mVintageLpCoeff * driven + (1.0 - mVintageLpCoeff) * mVintageLpState[idx];
     return mVintageLpState[idx];
-  }
-
-  // Tilt EQ on the wet signal: split at ~800 Hz, cross-fade low/high gains by the
-  // tilt amount. t=0 is a no-op (gains both 1.0); t>0 brightens, t<0 darkens.
-  double _TimbreShape(double x)
-  {
-    if (mTimbre == 0.0)
-      return x;
-    mTimbreLpState = mTimbreLpCoeff * x + (1.0 - mTimbreLpCoeff) * mTimbreLpState;
-    const double low = mTimbreLpState;
-    const double high = x - low;
-    return low * (1.0 - mTimbre) + high * (1.0 + mTimbre);
   }
 
   void _AllocateScratch()
@@ -235,6 +287,8 @@ private:
     if (static_cast<int>(numFrames) > mMaxBlock || mWet0.size() < numFrames)
     {
       mMaxBlock = std::max(mMaxBlock, static_cast<int>(numFrames));
+      for (auto& voice : mVoices)
+        voice.Configure(mConfiguredGrain > 0 ? mConfiguredGrain : GrainSamplesFor(mSampleRate), mMaxBlock);
       _AllocateScratch();
     }
     (void)numChannels;
@@ -249,11 +303,11 @@ private:
 
   static constexpr size_t kMaxChannels = 2;
 
-  std::array<signalsmith::stretch::SignalsmithStretch<float>, kNumVoices> mVoices;
+  std::array<GranularVoice, kNumVoices> mVoices;
 
   double mSampleRate = 0.0;
   double mConfiguredSampleRate = 0.0;
-  int mConfiguredBlock = 0;
+  int mConfiguredGrain = 0;
   int mMaxBlock = 0;
   int mLatency = 0;
   bool mConfigured = false;
@@ -261,18 +315,14 @@ private:
   Mode mMode = Mode::Transpose;
   Voicing mVoicing = Voicing::Modern;
   double mSemitones = 0.0;
-  double mDetuneSemis = 0.0;
   double mMix = 1.0;
   double mOctDown = 0.0;
   double mOctUp = 0.0;
   double mDry = 1.0;
   double mLevel = 1.0;
-  double mTimbre = 0.0;
 
   double mVintageLpCoeff = 0.3;
   std::array<double, kNumVoices> mVintageLpState{0.0, 0.0};
-  double mTimbreLpCoeff = 0.3;
-  double mTimbreLpState = 0.0;
 
   std::vector<DSP_SAMPLE> mWet0, mWet1, mDryScratch, mDryRing;
   size_t mDryWrite = 0;
