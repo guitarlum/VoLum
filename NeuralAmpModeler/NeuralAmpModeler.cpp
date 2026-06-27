@@ -374,7 +374,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
-  GetParam(kPrePitchTransChar)->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterDrop, {"Drop", "Fast"});
+  GetParam(kPrePitchTransChar)
+    ->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterDrop, {"Drop", "Fast", "Instant"});
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -1302,7 +1303,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new VoLumSubModePillControl(pitchVoicingRect, kPrePitchVoicing, {"VINTAGE", "MODERN"}), -1, "PITCH_VOICING");
     // Transpose engine character (shares the voicing pill's slot; mode picks which).
     pGraphics->AttachControl(
-      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "FAST"}), -1, "PITCH_TRANSCHAR");
+      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "FAST", "INSTANT"}), -1,
+      "PITCH_TRANSCHAR");
 
     // I/O meters
     const float meterW = 8.f;
@@ -2639,8 +2641,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kPrePitchMode:
     case kPrePitchTransChar:
       // Toggling the pitch engine, switching Transpose/Octaver, or changing the
-      // transpose CHARACTER (Drop ~17 ms vs Fast ~12 ms) all change reported
-      // (PDC) latency, so re-report it to the host.
+      // transpose CHARACTER (Drop ~17 ms / Fast ~12 ms / Instant ~8.6 ms) all
+      // change reported (PDC) latency, so re-report it to the host.
       if (mVolumInitComplete)
         _UpdateLatency();
       break;

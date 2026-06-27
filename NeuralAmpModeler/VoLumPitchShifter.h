@@ -55,7 +55,8 @@ public:
   enum class Character
   {
     Drop = 0, // WSOLA splice search: exact pitch on big shifts, ~17 ms.
-    Fast = 1 // period-sync only: ~12 ms, snappier, slightly sharp on extremes.
+    Fast = 1, // period-sync only, 6 ms crossfade: ~12 ms, smooth splices.
+    Instant = 2 // period-sync, 2.5 ms crossfade: ~8.6 ms, tightest feel, grainier splices.
   };
 
   // Lowest note we design the delay band around (low E standard, 82.41 Hz). Notes
@@ -225,7 +226,14 @@ private:
   {
     const double pDesign = sr / kDesignFmin;
     Timing t;
-    const double xfadeMs = (c == Character::Drop) ? 5.0 : 6.0;
+    // Crossfade length per character: DROP 5 ms (WSOLA aligns the splice anyway),
+    // FAST 6 ms (smoothest phase-coherent join), INSTANT 2.5 ms (shortest join ->
+    // lowest latency; splices are grainier but period-sync keeps pitch exact).
+    double xfadeMs = 6.0;
+    if (c == Character::Drop)
+      xfadeMs = 5.0;
+    else if (c == Character::Instant)
+      xfadeMs = 2.5;
     t.xfade = std::max(8, static_cast<int>(std::lround(sr * xfadeMs / 1000.0)));
     if (c == Character::Drop)
     {

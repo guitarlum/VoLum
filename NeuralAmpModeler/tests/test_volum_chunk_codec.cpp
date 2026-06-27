@@ -726,12 +726,12 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   in.perAmpPitch[0].voicing = 0; // Vintage
   in.perAmpPitch[0].level = -3.5;
 
-  // Last amp: Transpose down a fifth, Fast character.
+  // Last amp: Transpose down a fifth, Instant character (exercises the max enum value).
   in.perAmpPitch[volum::kAmpCount - 1].present = true;
   in.perAmpPitch[volum::kAmpCount - 1].active = true;
   in.perAmpPitch[volum::kAmpCount - 1].mode = 0;
   in.perAmpPitch[volum::kAmpCount - 1].semitones = -7.0;
-  in.perAmpPitch[volum::kAmpCount - 1].transChar = 1; // Fast
+  in.perAmpPitch[volum::kAmpCount - 1].transChar = 2; // Instant
 
   // Locked PRE snapshot present.
   in.lockedPrePitch.present = true;
@@ -759,7 +759,7 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
 
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(-7.0));
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 1); // Fast round-trips
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 2); // Instant round-trips
 
   // Untouched amp stays absent -> pitch defaults to bypassed downstream.
   CHECK_FALSE(out.perAmpPitch[1].present);

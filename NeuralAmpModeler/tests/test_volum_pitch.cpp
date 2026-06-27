@@ -110,7 +110,7 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
-TEST_CASE("VoLumPitch latency is per-character (Drop > Fast) and reasonably low")
+TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Fast > Instant) and reasonably low")
 {
   VoLumPitch pitch;
   pitch.Configure(kSR, kBlock);
@@ -127,11 +127,19 @@ TEST_CASE("VoLumPitch latency is per-character (Drop > Fast) and reasonably low"
                   VoLumPitch::Character::Fast);
   const int fastLat = pitch.Latency();
   CHECK(fastLat > 0);
-  CHECK(fastLat < dropLat); // Fast trades accuracy on big shifts for lower latency.
+  CHECK(fastLat < dropLat); // Fast drops the WSOLA search for lower latency.
+
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Instant);
+  const int instantLat = pitch.Latency();
+  CHECK(instantLat > 0);
+  CHECK(instantLat < fastLat); // Instant shortens the crossfade for the lowest latency.
+  // Instant ~8.6 ms; still above a hard floor (period-sync read-ahead).
+  CHECK(instantLat > static_cast<int>(kSR * 0.004));
 
   // Octaver uses Drop-grade voices regardless of the transpose character.
-  pitch.SetParams(
-    VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0, VoLumPitch::Character::Fast);
+  pitch.SetParams(VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Instant);
   CHECK(pitch.Latency() == dropLat);
 }
 
@@ -139,9 +147,11 @@ TEST_CASE("VoLumPitch transpose is pitch-accurate downshifting in both character
 {
   // Core claim: exact-ratio read pointer + period-sync splices => no octave error
   // and tight pitch on low-string downtuning (the primary use case). DROP (WSOLA)
-  // is tighter; FAST is looser but still well within an eighth-tone.
+  // is tighter; FAST and INSTANT are period-sync only (looser on big shifts) but
+  // still well within an eighth-tone. INSTANT only differs by crossfade length, so
+  // its pitch tracks as accurately as FAST.
   const double base = 110.0; // A2, low string
-  for (int chI = 0; chI < 2; ++chI)
+  for (int chI = 0; chI < 3; ++chI)
   {
     const auto ch = static_cast<VoLumPitch::Character>(chI);
     for (int semi : {-12, -7, -5, -3, -2})

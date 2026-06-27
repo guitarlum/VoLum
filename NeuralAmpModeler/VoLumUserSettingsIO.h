@@ -276,7 +276,8 @@ inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "prePitchDry", out.prePitchDry, 0.0, 1.0);
   any |= detail::JsonGetClampedInt(o, "prePitchVoicing", out.prePitchVoicing, 0, 1);
   any |= detail::JsonGetClampedDouble(o, "prePitchLevel", out.prePitchLevel, -20.0, 20.0);
-  any |= detail::JsonGetClampedInt(o, "prePitchTransChar", out.prePitchTransChar, 0, 1);
+  any |=
+    detail::JsonGetClampedInt(o, "prePitchTransChar", out.prePitchTransChar, 0, volum::kVoLumPitchCharacterCount - 1);
   return any;
 }
 
@@ -795,7 +796,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "prePitchDry", s.prePitchDry, 0.0, 1.0, defaults.prePitchDry);
         loadInt(a, "prePitchVoicing", s.prePitchVoicing, 0, 1, defaults.prePitchVoicing);
         loadDouble(a, "prePitchLevel", s.prePitchLevel, -20.0, 20.0, defaults.prePitchLevel);
-        loadInt(a, "prePitchTransChar", s.prePitchTransChar, 0, 1, defaults.prePitchTransChar);
+        loadInt(a, "prePitchTransChar", s.prePitchTransChar, 0, volum::kVoLumPitchCharacterCount - 1,
+                defaults.prePitchTransChar);
         loadBool(a, "dualAmpActive", s.dualAmpActive, defaults.dualAmpActive);
         loadInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2, defaults.dualAmpRoute);
         loadDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0, defaults.mainAmpPan);
