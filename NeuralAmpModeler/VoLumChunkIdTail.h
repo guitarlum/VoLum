@@ -69,6 +69,7 @@ struct PitchTail
   double dry = 1.0;
   int voicing = 1; // 0=Vintage, 1=Modern
   double level = 0.0;
+  int transChar = 0; // 0=Drop, 1=Fast (transpose engine character)
 };
 
 // POST Tremolo pedal per-amp settings. Carried in the JSON id tail alongside the
@@ -115,9 +116,9 @@ struct ChunkIdTail
 
 inline nlohmann::json PitchTailToJson(const PitchTail& p)
 {
-  return nlohmann::json{{"active", p.active}, {"mode", p.mode},     {"semi", p.semitones},
-                        {"mix", p.mix},       {"octDn", p.octDown}, {"octUp", p.octUp},
-                        {"dry", p.dry},       {"voice", p.voicing}, {"level", p.level}};
+  return nlohmann::json{{"active", p.active}, {"mode", p.mode},      {"semi", p.semitones}, {"mix", p.mix},
+                        {"octDn", p.octDown}, {"octUp", p.octUp},    {"dry", p.dry},        {"voice", p.voicing},
+                        {"level", p.level},   {"tchar", p.transChar}};
 }
 
 inline PitchTail PitchTailFromJson(const nlohmann::json& j)
@@ -146,6 +147,8 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
     p.voicing = integer(j["voice"], 1);
   if (j.contains("level"))
     p.level = num(j["level"], 0.0);
+  if (j.contains("tchar"))
+    p.transChar = integer(j["tchar"], 0);
   p.present = true;
   return p;
 }

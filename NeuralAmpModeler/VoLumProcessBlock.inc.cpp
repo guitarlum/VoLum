@@ -30,10 +30,12 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
     {
       const int mode = std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1);
       const int voicing = GetParam(kPrePitchVoicing)->Int();
+      const int transChar = std::clamp(GetParam(kPrePitchTransChar)->Int(), 0, 1);
       mPitch.SetParams(static_cast<dsp::effect::VoLumPitch::Mode>(mode), GetParam(kPrePitchSemitones)->Value(),
                        GetParam(kPrePitchMix)->Value(), GetParam(kPrePitchOctDown)->Value(),
                        GetParam(kPrePitchOctUp)->Value(), GetParam(kPrePitchDry)->Value(),
-                       static_cast<dsp::effect::VoLumPitch::Voicing>(voicing), GetParam(kPrePitchLevel)->Value());
+                       static_cast<dsp::effect::VoLumPitch::Voicing>(voicing), GetParam(kPrePitchLevel)->Value(),
+                       static_cast<dsp::effect::VoLumPitch::Character>(transChar));
       preAmpPointers = mPitch.Process(preAmpPointers, numChannelsInternal, nFrames);
     }
   }

@@ -95,6 +95,7 @@ enum EParams
   kTremoloCrossover,
   kTremoloSync,
   kTremoloDivision,
+  kPrePitchTransChar,
   kNumParams
 };
 
@@ -220,7 +221,13 @@ TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchLevel")
   CHECK(kTremoloCrossover == kTremoloMix + 1);
   CHECK(kTremoloSync == kTremoloCrossover + 1);
   CHECK(kTremoloDivision == kTremoloSync + 1);
-  CHECK(kNumParams == kTremoloDivision + 1);
+}
+
+TEST_CASE("EParam: PRE Pitch transpose character appended at the very end")
+{
+  // Drop/Fast transpose engine character; appended last to keep prior indices stable.
+  CHECK(kPrePitchTransChar == kTremoloDivision + 1);
+  CHECK(kNumParams == kPrePitchTransChar + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
@@ -232,5 +239,6 @@ TEST_CASE("EParam: total count is stable")
   // earlier Quality/Detune/Timbre knobs; feature was unreleased.)
   // POST Tremolo pedal appended 9 params (Active, Mode, Rate, Depth, Shape, Mix,
   // Crossover, Sync, Division): 81 -> 90.
-  CHECK(kNumParams == 90);
+  // Transpose-engine rework appended kPrePitchTransChar (Drop/Fast): 90 -> 91.
+  CHECK(kNumParams == 91);
 }

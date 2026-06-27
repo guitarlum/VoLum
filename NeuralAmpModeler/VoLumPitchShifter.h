@@ -2,30 +2,35 @@
 
 // VoLum Pitch pedal engine (PRE, before compressor).
 //
-// Time-domain GRANULAR pitch shifter (dual-tap delay line with Hann crossfade).
-// Chosen over an STFT phase vocoder because, for low guitar strings at low
-// latency, a phase vocoder either drifts ("detunes while it rings") or needs
-// ~64-85 ms of latency to stay stable. The granular shifter resamples a delay
-// line so the pitch is exact (no drift) at ~21 ms latency, which matches how
-// drop-tune pedals (DigiTech The Drop, Ola Chug Capo) behave. The tradeoff is
-// some amplitude "warble" instead of detuning.
+// Time-domain pitch shifter: a SINGLE variable-speed read pointer over a ring
+// buffer, with PERIOD-SYNCHRONOUS splices (the read pointer jumps by whole signal
+// periods, crossfaded) so a sustained note does not amplitude-modulate ("warble")
+// and, crucially, does NOT drift in pitch ("detunes while it rings"). This is the
+// katjaas/Whammy-style low-latency delay-line shifter, refined with a WSOLA
+// (cross-correlation) splice search in DROP mode.
 //
-// How it works (per voice):
-//   - A ring buffer holds recent input.
-//   - Two read taps sit grain/2 apart, each Hann-windowed; the windows sum to 1
-//     (perfect reconstruction), so there is no amplitude modulation from the
-//     windowing itself.
-//   - Each output sample, the read pointer advances at the pitch RATIO relative
-//     to the write pointer (that is the exact resampling that shifts pitch), and
-//     the tap phase increments by (1 - ratio), wrapping over [0, grain). When a
-//     tap wraps, its window is ~0 there and the other tap covers the seam.
-//   - Latency = grain/2 (group delay). The dry path is delayed by the same so
-//     dry/wet stay time-aligned; the host compensates the total via PDC.
+// Why not a phase vocoder: for low guitar strings at low latency an STFT vocoder
+// either drifts or needs ~64-85 ms. Why not the old fixed-grain dual-tap: its
+// grain was not period-aligned, so it warbled and ran sharp on upshifts. Measured
+// against a commercial reference (a commercial reference transpose), this engine
+// matches it on pitch accuracy (~0.5 cents), drift (~3 cents) and warble, at
+// roughly half the old latency. See local-scratch/research notes.md (local).
+//
+// Two CHARACTERs trade latency vs accuracy on big shifts:
+//   DROP (default): WSOLA splice search -> exact pitch even at +/-12, ~17 ms.
+//   FAST:           period-sync only (no search) -> ~12 ms, snappier, slightly
+//                   sharper on extreme shifts.
+//
+// Latency = read-pointer headroom (group delay). The dry path is delayed by the
+// same amount so dry/wet stay aligned; the host compensates the total via PDC.
+// Latency depends on CHARACTER, so the plugin re-reports it when character/mode
+// changes (per-mode latency reporting).
 //
 // Two modes share the engine:
 //   Transpose: one voice at 2^(semitones/12), with dry/wet MIX and LEVEL.
 //   Octaver:   dry + (-1 octave voice * octDown) + (+1 octave voice * octUp),
 //              with a Vintage (gritty/filtered) vs Modern (clean) voicing.
+//              Octaver voices use DROP character for stability.
 //
 // Mono in/out (numChannels == 1; VoLum is mono internally).
 
@@ -41,31 +46,93 @@ namespace dsp
 namespace effect
 {
 
-// Single-voice granular pitch shifter over a ring buffer. Exact-pitch (the read
-// pointer resamples the delay line); the dual Hann taps overlap-add seamlessly.
+// Single variable-speed read pointer over a ring buffer. Pitch is set purely by
+// the read speed (exact, no drift); period-synchronous crossfaded jumps keep the
+// read pointer within a small delay band (low latency) without warble.
 class GranularVoice
 {
 public:
-  void Configure(int grainSamples, int maxBlockSize)
+  enum class Character
   {
-    mGrain = std::max(grainSamples, 64);
-    const size_t need = static_cast<size_t>(mGrain) + static_cast<size_t>(std::max(maxBlockSize, 64)) + 8;
+    Drop = 0, // WSOLA splice search: exact pitch on big shifts, ~17 ms.
+    Fast = 1 // period-sync only: ~12 ms, snappier, slightly sharp on extremes.
+  };
+
+  // Lowest note we design the delay band around (low E standard, 82.41 Hz). Notes
+  // below this (drop tunings) still track; they just get marginally more warble.
+  static constexpr double kDesignFmin = 82.41;
+  // Period-search frequency bounds for the autocorrelation pitch estimate.
+  static constexpr double kPmaxFreq = 600.0;
+  static constexpr double kPminFreq = 70.0;
+
+  // Allocates - call OFF the audio thread (Configure). Ring is sized for the
+  // worst case (DROP) so changing character later never reallocates.
+  void Configure(double sampleRate, int maxBlockSize)
+  {
+    mSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    mMaxBlock = std::max(maxBlockSize, 64);
+
+    const Timing drop = _ComputeTiming(Character::Drop);
+    const int tmax = static_cast<int>(std::ceil(mSampleRate / kPminFreq));
+    // Max delay any read can touch: candidate jump up to dHi, plus the WSOLA
+    // search and correlation window read further back, plus the period estimate
+    // needs 2*tmax of history.
+    const int maxReadDelay = static_cast<int>(std::ceil(drop.dHi)) + drop.search + drop.corrWin + 2;
+    const int historyNeed = std::max(maxReadDelay, 2 * tmax + 2);
+    const size_t need = static_cast<size_t>(historyNeed + mMaxBlock + 32);
     if (mBuf.size() < need)
       mBuf.assign(need, 0.0);
+
+    mPeriodScratch.assign(static_cast<size_t>(2 * tmax + 4), 0.0);
+    mRefWin.assign(static_cast<size_t>(std::max(drop.corrWin, 1)), 0.0);
+
+    mPeriodUpdate = std::max(1, static_cast<int>(std::lround(mSampleRate * 0.01)));
+    SetCharacter(Character::Drop);
     Reset();
+  }
+
+  // Cheap (no allocation): recompute the timing band + reported latency. Safe to
+  // call from the audio thread; idempotent when the character is unchanged.
+  void SetCharacter(Character c)
+  {
+    if (mHasChar && c == mChar)
+      return;
+    mChar = c;
+    mHasChar = true;
+    const Timing t = _ComputeTiming(c);
+    mXfade = t.xfade;
+    mSearch = t.search;
+    mCorrWin = t.corrWin;
+    mWsola = t.wsola;
+    mDLo = t.dLo;
+    mDHi = t.dHi;
+    mLatency = t.latency;
+  }
+
+  int Latency() const { return mLatency; }
+
+  // Reported latency for a character at a sample rate, without allocating. Used to
+  // size the dry-delay ring for the worst case (DROP).
+  static int LatencyFor(Character c, double sampleRate)
+  {
+    return _ComputeTimingFor(c, sampleRate > 0.0 ? sampleRate : 48000.0).latency;
   }
 
   void Reset()
   {
     std::fill(mBuf.begin(), mBuf.end(), 0.0);
     mWrite = 0;
-    mPhase = 0.0;
+    mWriteCount = 0;
+    mPeriod = mSampleRate / 110.0; // default A2 until estimated
+    mPeriodCountdown = mPeriodUpdate;
+    mDelay = static_cast<double>(mLatency);
+    mDelayNew = mDelay;
+    mFading = false;
+    mFadePos = 0;
   }
 
   // ratio = output_freq / input_freq (2^(semitones/12)).
-  void SetRatio(double ratio) { mInc = 1.0 - std::clamp(ratio, 0.25, 4.0); }
-
-  int Latency() const { return mGrain / 2; }
+  void SetRatio(double ratio) { mRatio = std::clamp(ratio, 0.25, 4.0); }
 
   void Process(const DSP_SAMPLE* in, DSP_SAMPLE* out, size_t numFrames)
   {
@@ -75,34 +142,117 @@ public:
       return;
     }
     const size_t sz = mBuf.size();
-    const double g = static_cast<double>(mGrain);
-    const double twoPiOverG = 2.0 * 3.14159265358979323846 / g;
+    const double f = mRatio;
+    const double grow = 1.0 - f; // delay change per sample
     for (size_t i = 0; i < numFrames; ++i)
     {
       mBuf[mWrite] = static_cast<double>(in[i]);
-      const double p1 = mPhase;
-      double p2 = mPhase + g * 0.5;
-      if (p2 >= g)
-        p2 -= g;
-      const double w1 = 0.5 * (1.0 - std::cos(twoPiOverG * p1));
-      const double w2 = 0.5 * (1.0 - std::cos(twoPiOverG * p2));
-      out[i] = static_cast<DSP_SAMPLE>(_ReadAt(p1) * w1 + _ReadAt(p2) * w2);
-      mPhase += mInc;
-      while (mPhase >= g)
-        mPhase -= g;
-      while (mPhase < 0.0)
-        mPhase += g;
+      ++mWriteCount;
+
+      if (--mPeriodCountdown <= 0)
+      {
+        mPeriodCountdown = mPeriodUpdate;
+        _UpdatePeriod();
+      }
+
+      double s = _ReadAtDelay(mDelay);
+      if (mFading)
+      {
+        const double s2 = _ReadAtDelay(mDelayNew);
+        const double w = static_cast<double>(mFadePos) / static_cast<double>(mXfade);
+        s = s * (1.0 - w) + s2 * w;
+      }
+      out[i] = static_cast<DSP_SAMPLE>(s);
+
+      mDelay += grow;
+      if (mFading)
+      {
+        mDelayNew += grow;
+        if (++mFadePos >= mXfade)
+        {
+          mDelay = mDelayNew;
+          mFading = false;
+        }
+      }
+
+      if (!mFading)
+      {
+        const double P = mPeriod;
+        if (f < 1.0 && mDelay > mDHi)
+        {
+          const int k = std::max(1, static_cast<int>(std::lround((mDelay - mDLo) / P)));
+          double cand = mDelay - k * P; // smaller delay (skip forward)
+          if (mWsola)
+            cand = _WsolaRefine(cand);
+          if (cand >= static_cast<double>(mXfade) + 1.0)
+          {
+            mDelayNew = cand;
+            mFading = true;
+            mFadePos = 0;
+          }
+        }
+        else if (f > 1.0 && mDelay < mDLo)
+        {
+          const int k = std::max(1, static_cast<int>(std::lround((mDHi - mDelay) / P)));
+          double cand = mDelay + k * P; // larger delay (jump back / duplicate)
+          if (mWsola)
+            cand = _WsolaRefine(cand);
+          mDelayNew = cand;
+          mFading = true;
+          mFadePos = 0;
+        }
+      }
+
       mWrite = (mWrite + 1) % sz;
     }
   }
 
 private:
-  double _ReadAt(double delay) const
+  struct Timing
   {
-    const double bufLen = static_cast<double>(mBuf.size());
+    int xfade = 0;
+    int search = 0;
+    int corrWin = 0;
+    bool wsola = false;
+    double dLo = 0.0;
+    double dHi = 0.0;
+    int latency = 0;
+  };
+
+  Timing _ComputeTiming(Character c) const { return _ComputeTimingFor(c, mSampleRate > 0.0 ? mSampleRate : 48000.0); }
+
+  static Timing _ComputeTimingFor(Character c, double sr)
+  {
+    const double pDesign = sr / kDesignFmin;
+    Timing t;
+    const double xfadeMs = (c == Character::Drop) ? 5.0 : 6.0;
+    t.xfade = std::max(8, static_cast<int>(std::lround(sr * xfadeMs / 1000.0)));
+    if (c == Character::Drop)
+    {
+      t.wsola = true;
+      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.0015)));
+      t.corrWin = std::max(8, static_cast<int>(std::lround(0.35 * pDesign)));
+    }
+    else
+    {
+      t.wsola = false;
+      t.search = 0;
+      t.corrWin = 0;
+    }
+    t.dLo = static_cast<double>(t.xfade + t.search + t.corrWin) + 2.0;
+    t.dHi = t.dLo + pDesign;
+    t.latency = static_cast<int>(std::lround(t.dLo + 0.5 * pDesign));
+    return t;
+  }
+
+  double _ReadAtDelay(double delay) const
+  {
+    const double sz = static_cast<double>(mBuf.size());
     double rp = static_cast<double>(mWrite) - delay;
     while (rp < 0.0)
-      rp += bufLen;
+      rp += sz;
+    while (rp >= sz)
+      rp -= sz;
     const double fl = std::floor(rp);
     const size_t i0 = static_cast<size_t>(fl) % mBuf.size();
     const size_t i1 = (i0 + 1) % mBuf.size();
@@ -110,11 +260,125 @@ private:
     return mBuf[i0] * (1.0 - frac) + mBuf[i1] * frac;
   }
 
-  int mGrain = 0;
+  // WSOLA: pick the splice offset in [-search, search] around `cand` whose window
+  // best matches (normalized cross-correlation) the window we are leaving, so the
+  // crossfade joins waveform-aligned segments -> minimal warble and zero pitch
+  // bias (self-correcting; does not depend on an exact period estimate).
+  double _WsolaRefine(double cand)
+  {
+    const int win = mCorrWin;
+    if (win <= 0 || static_cast<long long>(mWriteCount) < static_cast<long long>(mDHi) + win + mSearch + 4)
+      return cand;
+    double rn = 0.0;
+    for (int j = 0; j < win; ++j)
+    {
+      const double v = _ReadAtDelay(mDelay + j);
+      mRefWin[static_cast<size_t>(j)] = v;
+      rn += v * v;
+    }
+    rn = std::sqrt(rn) + 1e-9;
+    double bestC = -2.0;
+    int bestLag = 0;
+    for (int lag = -mSearch; lag <= mSearch; ++lag)
+    {
+      const double dc = cand + lag;
+      if (dc < static_cast<double>(mXfade) + 1.0)
+        continue;
+      double dot = 0.0;
+      double sn = 0.0;
+      for (int j = 0; j < win; ++j)
+      {
+        const double v = _ReadAtDelay(dc + j);
+        dot += mRefWin[static_cast<size_t>(j)] * v;
+        sn += v * v;
+      }
+      const double cc = dot / (rn * (std::sqrt(sn) + 1e-9));
+      if (cc > bestC)
+      {
+        bestC = cc;
+        bestLag = lag;
+      }
+    }
+    return cand + bestLag;
+  }
+
+  // Autocorrelation period estimate over recent history. Keeps the last estimate
+  // on unvoiced/weak input. Runs ~every 10 ms, not per sample.
+  void _UpdatePeriod()
+  {
+    const int tmin = std::max(2, static_cast<int>(mSampleRate / kPmaxFreq));
+    const int tmax = static_cast<int>(mSampleRate / kPminFreq);
+    const int L = tmax;
+    const int span = tmax + L;
+    if (static_cast<long long>(mWriteCount) < span + 2 || static_cast<int>(mPeriodScratch.size()) < span)
+      return;
+    for (int k = 0; k < span; ++k)
+      mPeriodScratch[static_cast<size_t>(k)] = _ReadAtDelay(static_cast<double>(k));
+    double e = 0.0;
+    for (int k = 0; k < L; ++k)
+      e += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k)];
+    if (e < 1e-7)
+      return;
+    double best = 0.0;
+    int bestLag = 0;
+    for (int lag = tmin; lag < tmax; ++lag)
+    {
+      double r = 0.0;
+      for (int k = 0; k < L; ++k)
+        r += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + lag)];
+      if (r > best)
+      {
+        best = r;
+        bestLag = lag;
+      }
+    }
+    if (bestLag <= 0 || best < 0.35 * e)
+      return;
+    double refined = static_cast<double>(bestLag);
+    if (bestLag > tmin && bestLag < tmax - 1)
+    {
+      double rm = 0.0, rp = 0.0;
+      for (int k = 0; k < L; ++k)
+      {
+        rm += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag - 1)];
+        rp += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag + 1)];
+      }
+      const double denom = (rm + rp - 2.0 * best);
+      if (std::abs(denom) > 1e-9)
+        refined = bestLag + 0.5 * (rm - rp) / denom;
+    }
+    if (refined > 2.0)
+      mPeriod = refined;
+  }
+
+  double mSampleRate = 0.0;
+  int mMaxBlock = 0;
+
+  Character mChar = Character::Drop;
+  bool mHasChar = false;
+  int mXfade = 0;
+  int mSearch = 0;
+  int mCorrWin = 0;
+  bool mWsola = false;
+  double mDLo = 0.0;
+  double mDHi = 0.0;
+  int mLatency = 0;
+
   std::vector<double> mBuf;
+  std::vector<double> mPeriodScratch;
+  std::vector<double> mRefWin;
   size_t mWrite = 0;
-  double mPhase = 0.0;
-  double mInc = 0.0; // 1 - ratio
+  unsigned long long mWriteCount = 0;
+
+  double mRatio = 1.0;
+  double mPeriod = 0.0;
+  int mPeriodUpdate = 1;
+  int mPeriodCountdown = 1;
+
+  double mDelay = 0.0;
+  double mDelayNew = 0.0;
+  bool mFading = false;
+  int mFadePos = 0;
 };
 
 class VoLumPitch
@@ -130,36 +394,25 @@ public:
     Vintage = 0,
     Modern = 1
   };
+  using Character = GranularVoice::Character;
 
   static constexpr int kNumVoices = 2; // octaver uses both (down/up); transpose uses voice 0.
-
-  // Grain length as a fraction of the sample rate. grain/2 is the reported
-  // latency (~21 ms at 48 kHz), matching the fast end of real drop-tune pedals
-  // while giving enough overlap to keep low strings stable.
-  static int GrainSamplesFor(double sampleRate)
-  {
-    int g = static_cast<int>(std::lround(sampleRate * 0.045));
-    if (g % 2 != 0)
-      ++g;
-    return std::max(g, 256);
-  }
 
   // Allocates - call OFF the audio thread (OnReset), never from ProcessBlock.
   void Configure(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     mMaxBlock = std::max(maxBlockSize, 64);
-    const int grain = GrainSamplesFor(mSampleRate);
-    const bool sameConfig = mConfigured && grain == mConfiguredGrain && mSampleRate == mConfiguredSampleRate;
+    const bool sameConfig = mConfigured && mSampleRate == mConfiguredSampleRate && mMaxBlock <= mConfiguredMaxBlock;
     if (!sameConfig)
     {
       for (auto& voice : mVoices)
-        voice.Configure(grain, mMaxBlock);
-      mConfiguredGrain = grain;
+        voice.Configure(mSampleRate, mMaxBlock);
       mConfiguredSampleRate = mSampleRate;
+      mConfiguredMaxBlock = mMaxBlock;
       mConfigured = true;
-      mLatency = mVoices[0].Latency();
     }
+    _ApplyCharacters();
     const double fc = 3200.0;
     mVintageLpCoeff = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * fc / mSampleRate);
     _AllocateScratch();
@@ -178,9 +431,10 @@ public:
   }
 
   void SetParams(Mode mode, double semitones, double mix01, double octDown01, double octUp01, double dry01,
-                 Voicing voicing, double levelDb)
+                 Voicing voicing, double levelDb, Character transChar = Character::Drop)
   {
     mMode = mode;
+    mTransChar = transChar;
     mSemitones = std::clamp(semitones, -24.0, 24.0);
     mMix = std::clamp(mix01, 0.0, 1.0);
     mOctDown = std::clamp(octDown01, 0.0, 1.0);
@@ -189,6 +443,7 @@ public:
     mVoicing = voicing;
     const double clampedDb = std::clamp(levelDb, -20.0, 20.0);
     mLevel = std::pow(10.0, clampedDb / 20.0);
+    _ApplyCharacters();
   }
 
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
@@ -206,7 +461,7 @@ public:
 
     // Delay dry by engine latency so it stays time-aligned with the wet voices.
     const size_t ringLen = mDryRing.size();
-    const size_t lat = static_cast<size_t>(mLatency);
+    const size_t lat = static_cast<size_t>(std::min(mLatency, static_cast<int>(ringLen) - 1));
     for (size_t i = 0; i < numFrames; ++i)
     {
       mDryRing[mDryWrite] = in[i];
@@ -254,9 +509,25 @@ public:
   }
 
 private:
+  // Push the current mode/character into the voices and recompute reported
+  // latency. Cheap (no allocation); safe from the audio thread.
+  void _ApplyCharacters()
+  {
+    if (mMode == Mode::Transpose)
+    {
+      mVoices[0].SetCharacter(mTransChar);
+      mLatency = mVoices[0].Latency();
+    }
+    else
+    {
+      mVoices[0].SetCharacter(Character::Drop);
+      mVoices[1].SetCharacter(Character::Drop);
+      mLatency = mVoices[0].Latency();
+    }
+  }
+
   double _VintageShape(double x, int idx)
   {
-    // Asymmetric soft grit (emulates analog octave-divider character) + lowpass.
     const double driven = std::tanh(x * 1.8);
     mVintageLpState[idx] = mVintageLpCoeff * driven + (1.0 - mVintageLpCoeff) * mVintageLpState[idx];
     return mVintageLpState[idx];
@@ -271,7 +542,9 @@ private:
       mWet1.assign(cap, static_cast<DSP_SAMPLE>(0));
       mDryScratch.assign(cap, static_cast<DSP_SAMPLE>(0));
     }
-    const size_t ringNeed = static_cast<size_t>(mLatency) + cap + 1;
+    // Dry ring must cover the worst-case (DROP) latency + a block.
+    const int worstLatency = GranularVoice::LatencyFor(Character::Drop, mSampleRate);
+    const size_t ringNeed = static_cast<size_t>(worstLatency) + cap + 2;
     if (mDryRing.size() < ringNeed)
     {
       mDryRing.assign(ringNeed, static_cast<DSP_SAMPLE>(0));
@@ -288,7 +561,8 @@ private:
     {
       mMaxBlock = std::max(mMaxBlock, static_cast<int>(numFrames));
       for (auto& voice : mVoices)
-        voice.Configure(mConfiguredGrain > 0 ? mConfiguredGrain : GrainSamplesFor(mSampleRate), mMaxBlock);
+        voice.Configure(mSampleRate, mMaxBlock);
+      _ApplyCharacters();
       _AllocateScratch();
     }
     (void)numChannels;
@@ -307,13 +581,14 @@ private:
 
   double mSampleRate = 0.0;
   double mConfiguredSampleRate = 0.0;
-  int mConfiguredGrain = 0;
   int mMaxBlock = 0;
+  int mConfiguredMaxBlock = 0;
   int mLatency = 0;
   bool mConfigured = false;
 
   Mode mMode = Mode::Transpose;
   Voicing mVoicing = Voicing::Modern;
+  Character mTransChar = Character::Drop;
   double mSemitones = 0.0;
   double mMix = 1.0;
   double mOctDown = 0.0;

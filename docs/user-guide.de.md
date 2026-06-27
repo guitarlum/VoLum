@@ -65,12 +65,12 @@ PRE liegt vor dem Amp. Der Bereich enthält ein Pitch-Pedal, einen Kompressor un
 
 Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus:
 
-- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +7) — abgestimmt auf Drop-Tunings und Capo-artige Verschiebungen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang.
+- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +7) — abgestimmt auf Drop-Tunings und Capo-artige Verschiebungen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang. Die **DROP / FAST**-Pille wählt den Charakter: **DROP** führt eine zusätzliche Wellenform-Ausrichtungssuche für die genaueste Tonhöhe und das stabilste Sustain selbst an den Extremen (±12) durch, bei etwas höherer Latenz; **FAST** überspringt diese Suche für ein direkteres Spielgefühl und geringere Latenz, ideal für kleine Verschiebungen.
 - **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, **LEVEL** trimmt den Ausgang, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean.
 
 ![VoLum Pitch-Pedal — Octaver-Modus](user-guide-pitch-octaver.png)
 
-Die Pitch-Engine ist ein latenzarmer Zeitbereichs-Shifter, der für Gitarre gebaut ist: Er folgt schnell und hält seine Stimmung über ein langes Sustain stabil, statt beim Ausklingen der Note tonal wegzudriften. VoLum meldet eine feste Pitch-Latenz von etwa 21 ms an deinen Host zur Plugin-Latenzkompensation, sodass das verschobene Signal zeitlich zum restlichen Mix ausgerichtet bleibt.
+Die Pitch-Engine ist ein latenzarmer Zeitbereichs-Shifter, der für Gitarre gebaut ist: Er folgt schnell und hält seine Stimmung über ein langes Sustain stabil, statt beim Ausklingen der Note tonal wegzudriften. VoLum meldet seine Pitch-Latenz an deinen Host zur Plugin-Latenzkompensation, sodass das verschobene Signal zeitlich zum restlichen Mix ausgerichtet bleibt; der Wert hängt vom Transpose-Charakter ab (etwa 17 ms bei DROP, etwa 12 ms bei FAST) und wird beim Wechsel von Charakter oder Modus neu gemeldet.
 
 Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Gute Startpunkte:
 

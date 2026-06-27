@@ -110,15 +110,58 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
-TEST_CASE("VoLumPitch latency is positive and fixed at grain/2")
+TEST_CASE("VoLumPitch latency is per-character (Drop > Fast) and reasonably low")
 {
   VoLumPitch pitch;
   pitch.Configure(kSR, kBlock);
-  CHECK(pitch.Latency() > 0);
-  CHECK(pitch.Latency() == VoLumPitch::GrainSamplesFor(kSR) / 2);
-  // Latency is engine-fixed: it does not depend on mode.
-  pitch.SetParams(VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0);
-  CHECK(pitch.Latency() == VoLumPitch::GrainSamplesFor(kSR) / 2);
+  // Default transpose character is Drop.
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Drop);
+  const int dropLat = pitch.Latency();
+  CHECK(dropLat > 0);
+  // Drop ~17 ms; well under the old 22.5 ms fixed grain and bounded above.
+  CHECK(dropLat < static_cast<int>(kSR * 0.030));
+  CHECK(dropLat > static_cast<int>(kSR * 0.008));
+
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Fast);
+  const int fastLat = pitch.Latency();
+  CHECK(fastLat > 0);
+  CHECK(fastLat < dropLat); // Fast trades accuracy on big shifts for lower latency.
+
+  // Octaver uses Drop-grade voices regardless of the transpose character.
+  pitch.SetParams(
+    VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0, VoLumPitch::Character::Fast);
+  CHECK(pitch.Latency() == dropLat);
+}
+
+TEST_CASE("VoLumPitch transpose is pitch-accurate downshifting in both characters")
+{
+  // Core claim: exact-ratio read pointer + period-sync splices => no octave error
+  // and tight pitch on low-string downtuning (the primary use case). DROP (WSOLA)
+  // is tighter; FAST is looser but still well within an eighth-tone.
+  const double base = 110.0; // A2, low string
+  for (int chI = 0; chI < 2; ++chI)
+  {
+    const auto ch = static_cast<VoLumPitch::Character>(chI);
+    for (int semi : {-12, -7, -5, -3, -2})
+    {
+      VoLumPitch pitch;
+      pitch.Configure(kSR, kBlock);
+      pitch.Reset();
+      pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
+                      VoLumPitch::Voicing::Modern, 0.0, ch);
+      auto in = makeSine(base, 1 << 16);
+      auto out = runStream(pitch, in);
+      const double target = base * std::pow(2.0, semi / 12.0);
+      const int minLag = std::max(8, static_cast<int>(kSR / (target * 2.0)));
+      const int maxLag = static_cast<int>(kSR / (target * 0.5));
+      const double f = estimateFreq(out, static_cast<size_t>(pitch.Latency()) + 24000, 8192, minLag, maxLag);
+      INFO("char=", chI, " semi=", semi, " target=", target, " measured=", f);
+      const double tolCents = (ch == VoLumPitch::Character::Drop) ? 25.0 : 55.0;
+      CHECK(std::abs(cents(f, target)) < tolCents);
+    }
+  }
 }
 
 TEST_CASE("VoLumPitch transpose Mix=0 equals latency-delayed dry")

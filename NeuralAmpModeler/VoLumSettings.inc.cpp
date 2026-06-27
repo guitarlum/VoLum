@@ -40,6 +40,7 @@ void NeuralAmpModeler::_VolumSavePreToSlot(volum::VoLumAmpSettings& s)
   s.prePitchDry = GetParam(kPrePitchDry)->Value();
   s.prePitchVoicing = GetParam(kPrePitchVoicing)->Int();
   s.prePitchLevel = GetParam(kPrePitchLevel)->Value();
+  s.prePitchTransChar = GetParam(kPrePitchTransChar)->Int();
 }
 
 void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
@@ -501,6 +502,7 @@ void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s
   setParam(kPrePitchDry, s.prePitchDry);
   setParam(kPrePitchVoicing, s.prePitchVoicing);
   setParam(kPrePitchLevel, s.prePitchLevel);
+  setParam(kPrePitchTransChar, s.prePitchTransChar);
 
   const bool shouldLoadPreNam1 = volum::ShouldLoadPrePedalCapture(s.preNam1Active, s.preNam1Capture);
   const bool shouldLoadPreNam2 = volum::ShouldLoadPrePedalCapture(s.preNam2Active, s.preNam2Capture);

@@ -29,7 +29,8 @@ inline bool PreBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
          && a.prePitchMode == b.prePitchMode && NearlyEqual(a.prePitchSemitones, b.prePitchSemitones)
          && NearlyEqual(a.prePitchMix, b.prePitchMix) && NearlyEqual(a.prePitchOctDown, b.prePitchOctDown)
          && NearlyEqual(a.prePitchOctUp, b.prePitchOctUp) && NearlyEqual(a.prePitchDry, b.prePitchDry)
-         && a.prePitchVoicing == b.prePitchVoicing && NearlyEqual(a.prePitchLevel, b.prePitchLevel);
+         && a.prePitchVoicing == b.prePitchVoicing && NearlyEqual(a.prePitchLevel, b.prePitchLevel)
+         && a.prePitchTransChar == b.prePitchTransChar;
 }
 
 inline bool DelayModeSnapshotEquals(const DelayModeSnapshot& a, const DelayModeSnapshot& b)

@@ -664,6 +664,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         s.prePitchDry = std::clamp(p.dry, 0.0, 1.0);
         s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
         s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
+        s.prePitchTransChar = std::clamp(p.transChar, 0, 1);
       };
       auto applyTremoloTail = [](const volum::TremoloTail& t, volum::VoLumAmpSettings& s) {
         if (!t.present)
