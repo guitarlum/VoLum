@@ -482,6 +482,9 @@ public:
   void _SyncVoLumExactEntry();
   void _HideVoLumExactEntry();
   void _HideControlGroup(iplug::igraphics::IGraphics* pGfx, const char* group, bool hide);
+  // Full one-time UI build/attach pass (the body of the constructor's layout
+  // lambda); defined in VoLumLayoutBuild.inc.cpp.
+  void _BuildVoLumLayout(iplug::igraphics::IGraphics* pGraphics);
   void _UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx = nullptr);
   void _ToggleVoLumTuner();
   void _ToggleVoLumMetronomePanel();

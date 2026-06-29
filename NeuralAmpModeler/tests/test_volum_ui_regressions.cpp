@@ -33,6 +33,8 @@ std::string ReadPluginSource()
   std::string blob;
   blob += ReadText(root / "NeuralAmpModeler.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumLayoutBuild.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumKeyboard.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumLayoutRuntime.inc.cpp");
@@ -82,7 +84,7 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
 
 TEST_CASE("Collapsed PRE slots show selected pedal short labels")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
 
   RequireContains(triptych, "mPreNam1Label = (preNam1Label && preNam1Label[0] != '\\0') ? preNam1Label : \"NAM 1\";");
@@ -116,7 +118,7 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
 
 TEST_CASE("Keyboard channel navigation routes through the focused lane's stepper callback")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp
   const std::string keyboardNav = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardNav.h");
 
   // Left/Right pick the focused lane's stepper and drive StepKeyboard, which
@@ -186,7 +188,7 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
 TEST_CASE("Percent value labels render natural percent text")
 {
   const std::string exactEntry = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumExactEntry.h");
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp
 
   RequireContains(exactEntry, "std::strcmp(mSuffix, \"%\") == 0");
   RequireContains(exactEntry, "const double percent = pParam->Value() * 100.0;");
@@ -306,7 +308,7 @@ TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 
 TEST_CASE("PRE pedal capture menu closes from main-area outside click")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp
 
   RequireContains(source, "_ClearVoLumKnobSelection();");
   RequireContains(source, "_VolumHidePreCaptureMenu();");
