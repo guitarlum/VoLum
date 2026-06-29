@@ -377,6 +377,60 @@ TEST_CASE("Amp-list scrollbar is draggable and keeps a gutter from the labels")
   RequireContains(ampList, "kScrollGutter");
 }
 
+TEST_CASE("Cached thumbnails blit scale-invariant and invalidate on rescale (Q1)")
+{
+  // Regression B3: cached row/hero art layers must blit through DrawFittedLayer
+  // (logical bounds, scale-invariant) NOT DrawFittedBitmap (pixel-width
+  // denominator -> art rendered at the old resolution after a window resize),
+  // and OnRescale() must null the cached layers so they re-render crisp at the
+  // new backing scale. This exact invariant regressed once during 1.2.0, so it
+  // is pinned with teeth before any refactor pass.
+  const std::string ampList = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpList.h");
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+
+  // Scale-invariant blits for the cached sidebar thumbnails + custom art.
+  RequireContains(ampList, "g.DrawFittedLayer(mIconLayers[i], iconArea, nullptr);");
+  RequireContains(ampList, "g.DrawFittedLayer(mCustomArtLayers[art], iconArea, nullptr);");
+  // The cached row thumbnails must never be blitted with DrawFittedBitmap.
+  RequireDoesNotContain(ampList, "DrawFittedBitmap(mIconLayers");
+  RequireDoesNotContain(ampList, "DrawFittedBitmap(mCustomArtLayers");
+
+  // OnRescale invalidation in the sidebar list...
+  RequireContains(ampList, "void OnRescale() override");
+  RequireContains(ampList, "for (auto& l : mIconLayers)");
+  RequireContains(ampList, "for (auto& l : mCustomArtLayers)");
+  // ...and in the hero (mono + dual MAIN/SUPPORT art layers).
+  RequireContains(hero, "void OnRescale() override");
+  RequireContains(hero, "mMonoArtLayer = nullptr;");
+  RequireContains(hero, "mMainArtLayer = nullptr;");
+  RequireContains(hero, "mSupportArtLayer = nullptr;");
+}
+
+TEST_CASE("Custom overlay hover highlight is wired through mHoverAction (Q1/B12)")
+{
+  // Regression B12: the custom overlay's per-hotspot hover glow is driven by
+  // mHoverAction. OnMouseOver sets it from the hovered hotspot, OnMouseOut
+  // resets it to -1, and Draw gates the glow on mHoverAction >= 0. If any of
+  // these three is dropped the hover affordance silently dies (a "missed
+  // highlighting" class of bug). Pinned so the Phase 3 overlay decomposition
+  // keeps the wiring intact.
+  const std::string customUi = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomUi.h");
+  RequireContains(customUi, "if (!mPopupOpen && mHoverAction >= 0)"); // Draw gate
+  RequireContains(customUi, "mHoverAction = hoverAction;"); // OnMouseOver set
+  RequireContains(customUi, "mHoverAction = -1;"); // OnMouseOut reset
+}
+
+TEST_CASE("Standalone settings persist the active preset id (Q1/B5)")
+{
+  // The active preset id round-trips through the standalone settings file:
+  // written in _VolumSaveSettingsToFile and read back into mVolumRestorePresetId,
+  // which OnUIOpen consumes via _VolumRestoreSessionSelection. Pin the write +
+  // read sides so a settings refactor cannot silently drop preset restore.
+  const std::string plugin = ReadPluginSource();
+  RequireContains(plugin, "j[\"volumActivePresetId\"] = mVolumActivePresetId;");
+  RequireContains(plugin, "mVolumRestorePresetId = j[\"volumActivePresetId\"].get<std::string>();");
+}
+
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
 {
   // Wrapping the rotated DrawText in StartLayer/EndLayer/DrawLayer caused

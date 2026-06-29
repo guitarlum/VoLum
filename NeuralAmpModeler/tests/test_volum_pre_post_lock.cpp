@@ -75,6 +75,19 @@ void CopyPreBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& d
   dst.preNam2MidFreq = src.preNam2MidFreq;
   dst.preNam2Treble = src.preNam2Treble;
   dst.preNam2Level = src.preNam2Level;
+  // PRE Pitch is part of the PRE block too; PreBlockEquals compares it, so the
+  // sim's copy must include it or save/restore drifts (the prePitch* fields were
+  // originally omitted here while PreBlockEquals checked them).
+  dst.prePitchActive = src.prePitchActive;
+  dst.prePitchMode = src.prePitchMode;
+  dst.prePitchSemitones = src.prePitchSemitones;
+  dst.prePitchMix = src.prePitchMix;
+  dst.prePitchOctDown = src.prePitchOctDown;
+  dst.prePitchOctUp = src.prePitchOctUp;
+  dst.prePitchDry = src.prePitchDry;
+  dst.prePitchVoicing = src.prePitchVoicing;
+  dst.prePitchLevel = src.prePitchLevel;
+  dst.prePitchTransChar = src.prePitchTransChar;
 }
 
 void CopyPostBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& dst)
