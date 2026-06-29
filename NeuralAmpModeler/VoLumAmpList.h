@@ -643,8 +643,7 @@ private:
     (void)scrollbarW;
     IRECT track, thumb;
     ScrollbarGeometry(contentH, track, thumb);
-    g.FillRect(IColor(40, 200, 162, 78), track);
-    g.FillRect(mDraggingScrollbar ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, thumb);
+    DrawVoLumScrollbar(g, track, thumb, mDraggingScrollbar);
   }
 
   static void DrawPlusGlyph(IGraphics& g, const IRECT& r, const IColor& col)

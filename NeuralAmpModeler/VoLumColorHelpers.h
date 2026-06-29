@@ -287,6 +287,16 @@ inline void DrawVoLumSelection(IGraphics& g, const IRECT& item, bool active, boo
   }
 }
 
+// Shared list scrollbar visual: faint brass track + gold thumb (brighter while
+// dragging). Geometry is the caller's (each list owns its scroll state); this
+// only standardizes the look so every scrollable list reads identically. See
+// VoLumAmpListScroll.h for the matching pure geometry helpers.
+inline void DrawVoLumScrollbar(IGraphics& g, const IRECT& track, const IRECT& thumb, bool dragging = false)
+{
+  g.FillRect(IColor(40, 200, 162, 78), track);
+  g.FillRect(dragging ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, thumb);
+}
+
 // On-selection text colour matching DrawVoLumSelection's fill per style.
 inline IColor SelectionInkColor(VoLumSelectionStyle style, bool active)
 {
