@@ -1121,7 +1121,11 @@ private:
         std::string rel = store.ImportFileCopy(std::filesystem::path(fn.Get()), "pedals", idp);
         if (rel.empty())
           rel = leaf;
-        volum::custom::AddPedal(base, rel);
+        if (volum::custom::AddPedal(base, rel) < 0)
+        {
+          mError = "Custom pedal slots are full - delete a pedal first.";
+          continue;
+        }
       }
       ++added;
     }
