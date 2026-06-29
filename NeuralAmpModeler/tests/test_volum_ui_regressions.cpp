@@ -356,7 +356,8 @@ TEST_CASE("VoLum layer caches use the !g.CheckLayer idiom (re-render only when i
   const std::string coreControls = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
 
   RequireContains(triptych, "if (!g.CheckLayer(motifLayer)");
-  RequireContains(pedalCard, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed)");
+  RequireContains(
+    pedalCard, "if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed || mCachedVariant != variant)");
   RequireContains(ampList, "if (!g.CheckLayer(mIconLayers[i]))");
   RequireDoesNotContain(triptych, "|| g.CheckLayer(");
   RequireDoesNotContain(pedalCard, "|| g.CheckLayer(");

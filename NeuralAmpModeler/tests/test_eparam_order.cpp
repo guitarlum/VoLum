@@ -239,6 +239,6 @@ TEST_CASE("EParam: total count is stable")
   // earlier Quality/Detune/Timbre knobs; feature was unreleased.)
   // POST Tremolo pedal appended 9 params (Active, Mode, Rate, Depth, Shape, Mix,
   // Crossover, Sync, Division): 81 -> 90.
-  // Transpose-engine rework appended kPrePitchTransChar (Drop/Fast): 90 -> 91.
+  // Transpose-engine rework appended kPrePitchTransChar (Drop/Instant): 90 -> 91.
   CHECK(kNumParams == 91);
 }

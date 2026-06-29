@@ -29,7 +29,11 @@ using namespace igraphics;
 class VoLumChainConnectorControl : public IControl
 {
 public:
-  VoLumChainConnectorControl(const IRECT& bounds) : IControl(bounds) { mIgnoreMouse = true; }
+  VoLumChainConnectorControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
   void Draw(IGraphics& g) override
   {
     g.DrawLine(VoLumColors::TEAL.WithOpacity(0.55f), mRECT.L, mRECT.MH(), mRECT.R, mRECT.MH(), nullptr, 1.f);
@@ -42,7 +46,12 @@ class VoLumTriptychControl : public IControl
 public:
   using StateCallback = std::function<void(EVoLumSection, EVoLumEffectFocus)>;
 
-  struct QuietSlot { EVoLumEffectFocus focus; const char* label; int paramIdx; };
+  struct QuietSlot
+  {
+    EVoLumEffectFocus focus;
+    const char* label;
+    int paramIdx;
+  };
 
   VoLumTriptychControl(const IRECT& bounds, StateCallback cb)
   : IControl(bounds)
@@ -82,9 +91,12 @@ public:
     else
       _DrawQuietBlock(g, preRect, EVoLumSection::PRE);
 
-    if (displaySection == EVoLumSection::AMP) {
+    if (displaySection == EVoLumSection::AMP)
+    {
       // VoLumHeroImageControl draws the AMP frame on top.
-    } else {
+    }
+    else
+    {
       _DrawAmpStrip(g, ampRect);
     }
 
@@ -97,8 +109,8 @@ public:
   void SetState(bool preActive, bool postActive, int ampIdx, const char* ampName, const char* preNam1Label = "NAM 1",
                 const char* preNam2Label = "NAM 2")
   {
-    (void) preActive;
-    (void) postActive;
+    (void)preActive;
+    (void)postActive;
     mAmpIdx = ampIdx;
     if (mAmpName != ampName)
     {
@@ -125,15 +137,15 @@ public:
 
 private:
   static constexpr QuietSlot kPreSlots[4] = {
-    { EVoLumEffectFocus::PITCH,    "PITCH", kPrePitchActive },
-    { EVoLumEffectFocus::COMP,     "COMP",  kPreCompActive },
-    { EVoLumEffectFocus::PRE_NAM1, "NAM 1", kPreNam1Active },
-    { EVoLumEffectFocus::PRE_NAM2, "NAM 2", kPreNam2Active },
+    {EVoLumEffectFocus::PITCH, "PITCH", kPrePitchActive},
+    {EVoLumEffectFocus::COMP, "COMP", kPreCompActive},
+    {EVoLumEffectFocus::PRE_NAM1, "NAM 1", kPreNam1Active},
+    {EVoLumEffectFocus::PRE_NAM2, "NAM 2", kPreNam2Active},
   };
   static constexpr QuietSlot kPostSlots[3] = {
-    { EVoLumEffectFocus::DELAY,  "DELAY",  kDelayActive },
-    { EVoLumEffectFocus::REVERB, "REVRB", kReverbActive },
-    { EVoLumEffectFocus::TREMOLO, "TREM", kTremoloActive },
+    {EVoLumEffectFocus::DELAY, "DELAY", kDelayActive},
+    {EVoLumEffectFocus::REVERB, "REVRB", kReverbActive},
+    {EVoLumEffectFocus::TREMOLO, "TREM", kTremoloActive},
   };
 
   bool _IsPreLocked() const
@@ -175,8 +187,8 @@ private:
 
   float _MeasureHeaderLabelWidth(IGraphics& g, const char* label, bool locked) const
   {
-    IText labelStyle(10.f, locked ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center,
-                     EVAlign::Middle);
+    IText labelStyle(
+      10.f, locked ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     IRECT measured;
     g.MeasureText(labelStyle, label, measured);
     return std::max(measured.W(), 18.f);
@@ -188,9 +200,8 @@ private:
     const float cy = r.MH();
     // Keep the unlocked rest state opaque so shackle/body overlaps do not double-composite into speckles.
     const IColor unlockedRest(255, 118, 110, 100);
-    const IColor col =
-      locked ? (hovered ? VoLumColors::GOLD : VoLumColors::GOLD.WithOpacity(0.72f))
-             : (hovered ? VoLumColors::TEXT_BRIGHT : unlockedRest);
+    const IColor col = locked ? (hovered ? VoLumColors::GOLD : VoLumColors::GOLD.WithOpacity(0.72f))
+                              : (hovered ? VoLumColors::TEXT_BRIGHT : unlockedRest);
 
     // Small padlock silhouette: compact body plus an explicit shackle path.
     const float bodyW = r.W() * 0.58f;
@@ -281,8 +292,8 @@ private:
   }
 
   void _LayoutHeaderControls(IGraphics& g, const IRECT& header, const char* label, bool leftAlignedLabel,
-                               bool showChevron, bool locked, bool dirty, bool isPre, IRECT& outStore,
-                               IRECT& outLock, IRECT& outChevron, float& outHeaderClickRight)
+                             bool showChevron, bool locked, bool dirty, bool isPre, IRECT& outStore, IRECT& outLock,
+                             IRECT& outChevron, float& outHeaderClickRight)
   {
     const float iconSize = 16.f;
     const float iconGap = 2.f;
@@ -338,11 +349,11 @@ private:
     else if (postStoreHov)
       mHeaderTooltip = "Store POST to " + mAmpName;
     else if (preLockHov)
-      mHeaderTooltip = _IsPreLocked() ? "Unlock PRE (restore this amp's saved scene)"
-                                        : "Lock PRE (carry scene across amp switches)";
+      mHeaderTooltip =
+        _IsPreLocked() ? "Unlock PRE (restore this amp's saved scene)" : "Lock PRE (carry scene across amp switches)";
     else if (postLockHov)
       mHeaderTooltip = _IsPostLocked() ? "Unlock POST (restore this amp's saved scene)"
-                                         : "Lock POST (carry scene across amp switches)";
+                                       : "Lock POST (carry scene across amp switches)";
     SetTooltip(mHeaderTooltip.c_str());
   }
 
@@ -350,13 +361,19 @@ private:
   {
     DrawPanelDepth(g, r);
     const bool isLocked = (strcmp(label, "PRE") == 0) ? _IsPreLocked() : _IsPostLocked();
-    g.DrawRect(isLocked ? VoLumColors::GOLD.WithOpacity(0.45f) : VoLumColors::FRAME, r, nullptr, isLocked ? 1.2f : 1.0f);
+    g.DrawRect(
+      isLocked ? VoLumColors::GOLD.WithOpacity(0.45f) : VoLumColors::FRAME, r, nullptr, isLocked ? 1.2f : 1.0f);
     const float cs = 8.f;
-    DrawCornerAccent(g, r.L + 4.f, r.T + 4.f, cs, false, false, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, r.R - 4.f, r.T + 4.f, cs, true, false, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, r.L + 4.f, r.B - 4.f, cs, false, true, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, r.R - 4.f, r.B - 4.f, cs, true, true, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    IText txt(10.f, isLocked ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    DrawCornerAccent(g, r.L + 4.f, r.T + 4.f, cs, false, false,
+                     isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(
+      g, r.R - 4.f, r.T + 4.f, cs, true, false, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(
+      g, r.L + 4.f, r.B - 4.f, cs, false, true, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(
+      g, r.R - 4.f, r.B - 4.f, cs, true, true, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    IText txt(
+      10.f, isLocked ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     g.DrawText(txt, label, IRECT(r.L + 10.f, r.T + 4.f, r.L + 80.f, r.T + 22.f));
 
     const bool isPre = (strcmp(label, "PRE") == 0);
@@ -366,11 +383,21 @@ private:
     IRECT lockRect;
     IRECT chevronRect;
     float headerClickRight = header.R;
-    _LayoutHeaderControls(g, header, label, true, false, isLocked, dirty, isPre, storeRect, lockRect, chevronRect,
-                          headerClickRight);
+    _LayoutHeaderControls(
+      g, header, label, true, false, isLocked, dirty, isPre, storeRect, lockRect, chevronRect, headerClickRight);
     _DrawLockIcon(g, lockRect, isLocked, isPre ? mPreLockHovered : mPostLockHovered);
     if (storeRect.W() > 0)
       _DrawStoreToAmpIcon(g, storeRect, isPre ? mPreStoreHovered : mPostStoreHovered);
+  }
+
+  int _GetParamInt(int paramIdx) const
+  {
+    if (paramIdx < 0)
+      return 0;
+    auto* del = const_cast<VoLumTriptychControl*>(this)->GetDelegate();
+    if (auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(del))
+      return plugin->GetParam(paramIdx)->Int();
+    return 0;
   }
 
   bool _GetParamBool(int paramIdx) const
@@ -388,8 +415,7 @@ private:
     // 24x11 horizontal pill. Uses the same gold-track / teal-LED idiom as
     // VoLumPowerSwitchControl + the toggles below the amp panel.
     const float radius = r.H() * 0.5f;
-    const IColor track = on ? VoLumColors::GOLD.WithOpacity(dimmed ? 0.18f : 0.35f)
-                            : VoLumColors::FRAME;
+    const IColor track = on ? VoLumColors::GOLD.WithOpacity(dimmed ? 0.18f : 0.35f) : VoLumColors::FRAME;
     const IColor knob = on ? VoLumColors::GOLD : VoLumColors::TEXT_DIM;
 
     g.FillRoundRect(IColor(255, 8, 10, 14), r, radius);
@@ -417,28 +443,33 @@ private:
     const bool isLocked = (section == EVoLumSection::PRE) ? _IsPreLocked() : _IsPostLocked();
 
     DrawPanelDepth(g, block);
-    g.DrawRect(isLocked ? VoLumColors::GOLD.WithOpacity(0.45f) : VoLumColors::FRAME, block, nullptr, isLocked ? 1.2f : 1.0f);
+    g.DrawRect(
+      isLocked ? VoLumColors::GOLD.WithOpacity(0.45f) : VoLumColors::FRAME, block, nullptr, isLocked ? 1.2f : 1.0f);
     const float cs = 6.f;
-    DrawCornerAccent(g, block.L + 3.f, block.T + 3.f, cs, false, false, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, block.R - 3.f, block.T + 3.f, cs, true,  false, isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, block.L + 3.f, block.B - 3.f, cs, false, true,  isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, block.R - 3.f, block.B - 3.f, cs, true,  true,  isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.L + 3.f, block.T + 3.f, cs, false, false,
+                     isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.R - 3.f, block.T + 3.f, cs, true, false,
+                     isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.L + 3.f, block.B - 3.f, cs, false, true,
+                     isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.R - 3.f, block.B - 3.f, cs, true, true,
+                     isLocked ? VoLumColors::GOLD.WithOpacity(0.6f) : VoLumColors::TEAL_DIM);
 
     // Header: label + chevron + 1px teal underline.
     const float headerH = 22.f;
     const IRECT header(block.L + 4.f, block.T + 2.f, block.R - 4.f, block.T + 2.f + headerH);
     const char* hdrLabel = (section == EVoLumSection::PRE) ? "PRE" : "POST";
 
-    IText hdrText(10.f, isLocked ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near,
-                  EVAlign::Middle);
+    IText hdrText(
+      10.f, isLocked ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     const bool dirty = (section == EVoLumSection::PRE) ? _IsPreDirty() : _IsPostDirty();
     const bool isPre = (section == EVoLumSection::PRE);
     IRECT storeRect;
     IRECT lockRect;
     IRECT chevronRect;
     float headerClickRight = header.R;
-    _LayoutHeaderControls(g, header, hdrLabel, true, true, isLocked, dirty, isPre, storeRect, lockRect, chevronRect,
-                          headerClickRight);
+    _LayoutHeaderControls(
+      g, header, hdrLabel, true, true, isLocked, dirty, isPre, storeRect, lockRect, chevronRect, headerClickRight);
 
     const IRECT hdrTextRect(header.L + 2.f, header.T, headerClickRight, header.B);
     g.DrawText(hdrText, hdrLabel, hdrTextRect);
@@ -472,14 +503,13 @@ private:
 
     for (int i = 0; i < slotCount; ++i)
     {
-      const IRECT slotR(block.L + 2.f, innerTop + i * slotH,
-                        block.R - 2.f, innerTop + (i + 1) * slotH);
+      const IRECT slotR(block.L + 2.f, innerTop + i * slotH, block.R - 2.f, innerTop + (i + 1) * slotH);
       _DrawQuietSlot(g, slotR, slots[i], section, i, i < slotCount - 1);
     }
   }
 
-  void _DrawQuietSlot(IGraphics& g, const IRECT& slotR, const QuietSlot& slot,
-                      EVoLumSection section, int slotIdx, bool drawDivider)
+  void _DrawQuietSlot(IGraphics& g, const IRECT& slotR, const QuietSlot& slot, EVoLumSection section, int slotIdx,
+                      bool drawDivider)
   {
     const bool placeholder = (slot.paramIdx < 0);
     const bool active = _GetParamBool(slot.paramIdx);
@@ -491,8 +521,7 @@ private:
     {
       // Subtle hover lift (~5% brighter background) + faint teal inner edge.
       g.FillRect(IColor(20, 80, 140, 160), slotR);
-      g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.35f),
-                 slotR.GetPadded(-1.f, -1.f, -1.f, -1.f));
+      g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.35f), slotR.GetPadded(-1.f, -1.f, -1.f, -1.f));
     }
 
     // Active indicator: 3 px teal edge bar pinned to the left of the slot.
@@ -514,12 +543,10 @@ private:
     // while still leaving label space for "REVERB".
     const float pillW = 22.f;
     const float pillH = 14.f;
-    const IRECT pillR(slotR.R - pillW - 6.f, slotR.MH() - pillH / 2.f,
-                      slotR.R - 6.f, slotR.MH() + pillH / 2.f);
+    const IRECT pillR(slotR.R - pillW - 6.f, slotR.MH() - pillH / 2.f, slotR.R - 6.f, slotR.MH() + pillH / 2.f);
 
     // Label region between motif and pill.
-    const IRECT labelR(motifR.R + 4.f, slotR.T + 2.f,
-                       pillR.L - 4.f, slotR.B - 2.f);
+    const IRECT labelR(motifR.R + 4.f, slotR.T + 2.f, pillR.L - 4.f, slotR.B - 2.f);
 
     // Motif drawing is the single most expensive operation in this control
     // (recursive fractal art). Cache it to a layer keyed by (focus, bypass)
@@ -527,22 +554,29 @@ private:
     // the layer whenever CheckLayer reports it is no longer valid (scale or
     // owner-RECT change), and we additionally rebuild on a bypass flip
     // because that changes the colour ramp inside DrawEffectMotif.
+    // PITCH slot reflects the current sub-mode: motif + label switch between
+    // Transpose (helix / "PITCH") and Octaver (octave chevrons / "OCT").
+    const bool isPitchSlot = (slot.focus == EVoLumEffectFocus::PITCH);
+    const bool pitchOctaver = isPitchSlot && (_GetParamInt(kPrePitchMode) != volum::kVoLumPitchModeTranspose);
+    const int variant = pitchOctaver ? 1 : 0;
     const size_t focusIdx = static_cast<size_t>(slot.focus);
     auto& motifLayer = mSlotMotifLayers[focusIdx];
     auto& cachedBypass = mSlotMotifCachedBypass[focusIdx];
-    if (!g.CheckLayer(motifLayer) || cachedBypass != bypassed)
+    auto& cachedVariant = mSlotMotifCachedVariant[focusIdx];
+    if (!g.CheckLayer(motifLayer) || cachedBypass != bypassed || cachedVariant != variant)
     {
       g.StartLayer(this, motifR);
-      DrawEffectMotif(g, motifR, slot.focus, bypassed);
+      DrawEffectMotif(g, motifR, slot.focus, bypassed, variant);
       motifLayer = g.EndLayer();
       cachedBypass = bypassed;
+      cachedVariant = variant;
     }
     g.DrawLayer(motifLayer);
-    std::string slotLabel = slot.label;
+    std::string slotLabel = pitchOctaver ? "OCT" : slot.label;
     std::transform(slotLabel.begin(), slotLabel.end(), slotLabel.begin(),
                    [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-    IText labelText(10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM,
-                    "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    IText labelText(
+      10.f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
     // Clip to the label region so a long capture name (e.g. a custom PRE-NAM
     // pedal) can never bleed into the pill to its right. The label is already
     // truncated upstream; this is a belt-and-suspenders guard.
@@ -565,8 +599,7 @@ private:
     // Hairline divider between slots (skip after the last).
     if (drawDivider)
     {
-      g.DrawLine(VoLumColors::FRAME.WithOpacity(0.5f),
-                 slotR.L + 6.f, slotR.B, slotR.R - 6.f, slotR.B, nullptr, 1.f);
+      g.DrawLine(VoLumColors::FRAME.WithOpacity(0.5f), slotR.L + 6.f, slotR.B, slotR.R - 6.f, slotR.B, nullptr, 1.f);
     }
 
     // Track interactive zones. Toggle hit-rect is padded a few px beyond the
@@ -601,15 +634,14 @@ private:
     if (mAmpHovered)
     {
       g.FillRect(IColor(20, 80, 140, 160), block);
-      g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.55f),
-                 block.GetPadded(-1.f, -1.f, -1.f, -1.f));
+      g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.55f), block.GetPadded(-1.f, -1.f, -1.f, -1.f));
     }
     g.DrawRect(VoLumColors::FRAME, block);
     const float cs = 6.f;
     DrawCornerAccent(g, block.L + 3.f, block.T + 3.f, cs, false, false, VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, block.R - 3.f, block.T + 3.f, cs, true,  false, VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, block.L + 3.f, block.B - 3.f, cs, false, true,  VoLumColors::TEAL_DIM);
-    DrawCornerAccent(g, block.R - 3.f, block.B - 3.f, cs, true,  true,  VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.R - 3.f, block.T + 3.f, cs, true, false, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.L + 3.f, block.B - 3.f, cs, false, true, VoLumColors::TEAL_DIM);
+    DrawCornerAccent(g, block.R - 3.f, block.B - 3.f, cs, true, true, VoLumColors::TEAL_DIM);
 
     // Header: "AMP" + chevron + 1px teal hairline (mirrors PRE/POST exactly).
     const float headerH = 22.f;
@@ -627,19 +659,17 @@ private:
     g.DrawLine(chevronCol, cxC + chs, cyC, cxC, cyC + chs, nullptr, 1.2f);
 
     const float underlineY = header.B + 1.f;
-    g.DrawLine(VoLumColors::TEAL_DIM.WithOpacity(0.55f),
-               block.L + 6.f, underlineY, block.R - 6.f, underlineY, nullptr, 1.f);
+    g.DrawLine(
+      VoLumColors::TEAL_DIM.WithOpacity(0.55f), block.L + 6.f, underlineY, block.R - 6.f, underlineY, nullptr, 1.f);
 
     // Rotated spine fills the rest of the block. With ~150 px of vertical
     // budget the auto-shrink picks ~14pt for "Diezel Herbert Mk1" and ~16pt
     // for short names like "AMP" or "Marshall JMP", floor at 8pt.
-    const IRECT spineR(block.L + 4.f, underlineY + 4.f,
-                       block.R - 4.f, block.B - 6.f);
+    const IRECT spineR(block.L + 4.f, underlineY + 4.f, block.R - 4.f, block.B - 6.f);
     const char* name = mAmpName.empty() ? "AMP" : mAmpName.c_str();
     const float maxLen = spineR.H() - 2.f;
     const float chosenSize = _ResolveSpineFontSize(g, name, maxLen);
-    IText spineText(chosenSize, VoLumColors::CREAM, "Josefin-Bold",
-                    EAlign::Center, EVAlign::Middle);
+    IText spineText(chosenSize, VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     spineText.mAngle = -90.f; // bottom-to-top: head tilts left to read.
 
     // Drawn directly (no layer cache). Wrapping rotated DrawText in
@@ -657,9 +687,7 @@ private:
   // changes and is also implicitly refreshed if the layout changes maxLen.
   float _ResolveSpineFontSize(IGraphics& g, const char* name, float maxLen)
   {
-    if (mCachedSpineSize > 0.f
-        && mCachedSpineMaxLen == maxLen
-        && mCachedSpineName == name)
+    if (mCachedSpineSize > 0.f && mCachedSpineMaxLen == maxLen && mCachedSpineName == name)
       return mCachedSpineSize;
 
     static const float kSpineSizes[] = {16.f, 14.f, 12.f, 11.f, 10.f, 9.f, 8.f};
@@ -699,9 +727,11 @@ private:
       return;
     auto* del = GetDelegate();
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(del);
-    if (!plugin) return;
+    if (!plugin)
+      return;
     auto* param = plugin->GetParam(paramIdx);
-    if (!param) return;
+    if (!param)
+      return;
     const double cur = param->Value();
     const double next = (cur > 0.5) ? 0.0 : 1.0;
     del->BeginInformHostOfParamChangeFromUI(paramIdx);
@@ -719,8 +749,7 @@ private:
     if (auto* gfx = GetUI())
     {
       const double normalized = param->ToNormalized(next);
-      gfx->ForControlWithParam(paramIdx, [normalized, paramIdx](IControl* pControl)
-      {
+      gfx->ForControlWithParam(paramIdx, [normalized, paramIdx](IControl* pControl) {
         const int nVals = pControl->NVals();
         for (int v = 0; v < nVals; ++v)
         {
@@ -735,7 +764,7 @@ private:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
 
     // 1) Toggle pills first (highest precedence so users can flip bypass
     // without leaving the AMP view).
@@ -756,7 +785,8 @@ private:
         const EVoLumSection sec = mSlotSection[i];
         const EVoLumEffectFocus focus = mSlotFocuses[i];
         mExpandedSection = sec;
-        if (mCallback) mCallback(sec, focus);
+        if (mCallback)
+          mCallback(sec, focus);
         SetDirty(false);
         return;
       }
@@ -796,14 +826,16 @@ private:
     if (mPreHeaderRect.W() > 0 && mPreHeaderRect.Contains(x, y))
     {
       mExpandedSection = EVoLumSection::PRE;
-      if (mCallback) mCallback(EVoLumSection::PRE, _FirstActiveOrFirst(EVoLumSection::PRE));
+      if (mCallback)
+        mCallback(EVoLumSection::PRE, _FirstActiveOrFirst(EVoLumSection::PRE));
       SetDirty(false);
       return;
     }
     if (mPostHeaderRect.W() > 0 && mPostHeaderRect.Contains(x, y))
     {
       mExpandedSection = EVoLumSection::POST;
-      if (mCallback) mCallback(EVoLumSection::POST, _FirstActiveOrFirst(EVoLumSection::POST));
+      if (mCallback)
+        mCallback(EVoLumSection::POST, _FirstActiveOrFirst(EVoLumSection::POST));
       SetDirty(false);
       return;
     }
@@ -813,21 +845,24 @@ private:
     if (mPreRect.Contains(x, y) && mExpandedSection != EVoLumSection::PRE)
     {
       mExpandedSection = EVoLumSection::PRE;
-      if (mCallback) mCallback(EVoLumSection::PRE, _FirstActiveOrFirst(EVoLumSection::PRE));
+      if (mCallback)
+        mCallback(EVoLumSection::PRE, _FirstActiveOrFirst(EVoLumSection::PRE));
       SetDirty(false);
       return;
     }
     if (mAmpRect.Contains(x, y) && mExpandedSection != EVoLumSection::AMP)
     {
       mExpandedSection = EVoLumSection::AMP;
-      if (mCallback) mCallback(EVoLumSection::AMP, EVoLumEffectFocus::AMP);
+      if (mCallback)
+        mCallback(EVoLumSection::AMP, EVoLumEffectFocus::AMP);
       SetDirty(false);
       return;
     }
     if (mPostRect.Contains(x, y) && mExpandedSection != EVoLumSection::POST)
     {
       mExpandedSection = EVoLumSection::POST;
-      if (mCallback) mCallback(EVoLumSection::POST, _FirstActiveOrFirst(EVoLumSection::POST));
+      if (mCallback)
+        mCallback(EVoLumSection::POST, _FirstActiveOrFirst(EVoLumSection::POST));
       SetDirty(false);
       return;
     }
@@ -835,7 +870,7 @@ private:
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     int next = -1;
     for (size_t i = 0; i < mSlotNavRects.size(); ++i)
     {
@@ -849,37 +884,86 @@ private:
     // expanded), so a subtle hover invites a click back to AMP view. Hover is
     // gated on the visible block rect so the empty whitespace around it does
     // not light up.
-    const bool ampHov = (mExpandedSection != EVoLumSection::AMP)
-                        && mAmpBlockRect.W() > 0
-                        && mAmpBlockRect.Contains(x, y);
+    const bool ampHov =
+      (mExpandedSection != EVoLumSection::AMP) && mAmpBlockRect.W() > 0 && mAmpBlockRect.Contains(x, y);
     const bool preStoreHov = _HitContains(mPreStoreRect, x, y);
     const bool postStoreHov = _HitContains(mPostStoreRect, x, y);
     const bool preLockHov = _HitContains(mPreLockRect, x, y);
     const bool postLockHov = _HitContains(mPostLockRect, x, y);
     bool dirty = false;
-    if (next != mHoveredSlot) { mHoveredSlot = next; dirty = true; }
-    if (ampHov != mAmpHovered) { mAmpHovered = ampHov; dirty = true; }
-    if (preStoreHov != mPreStoreHovered) { mPreStoreHovered = preStoreHov; dirty = true; }
-    if (postStoreHov != mPostStoreHovered) { mPostStoreHovered = postStoreHov; dirty = true; }
-    if (preLockHov != mPreLockHovered) { mPreLockHovered = preLockHov; dirty = true; }
-    if (postLockHov != mPostLockHovered) { mPostLockHovered = postLockHov; dirty = true; }
+    if (next != mHoveredSlot)
+    {
+      mHoveredSlot = next;
+      dirty = true;
+    }
+    if (ampHov != mAmpHovered)
+    {
+      mAmpHovered = ampHov;
+      dirty = true;
+    }
+    if (preStoreHov != mPreStoreHovered)
+    {
+      mPreStoreHovered = preStoreHov;
+      dirty = true;
+    }
+    if (postStoreHov != mPostStoreHovered)
+    {
+      mPostStoreHovered = postStoreHov;
+      dirty = true;
+    }
+    if (preLockHov != mPreLockHovered)
+    {
+      mPreLockHovered = preLockHov;
+      dirty = true;
+    }
+    if (postLockHov != mPostLockHovered)
+    {
+      mPostLockHovered = postLockHov;
+      dirty = true;
+    }
 
     _UpdateHeaderTooltip(preStoreHov, postStoreHov, preLockHov, postLockHov);
 
-    if (dirty) SetDirty(false);
+    if (dirty)
+      SetDirty(false);
   }
 
   void OnMouseOut() override
   {
     bool dirty = false;
-    if (mHoveredSlot != -1) { mHoveredSlot = -1; dirty = true; }
-    if (mAmpHovered)        { mAmpHovered = false; dirty = true; }
-    if (mPreLockHovered)    { mPreLockHovered = false; dirty = true; }
-    if (mPostLockHovered)   { mPostLockHovered = false; dirty = true; }
-    if (mPreStoreHovered)   { mPreStoreHovered = false; dirty = true; }
-    if (mPostStoreHovered)  { mPostStoreHovered = false; dirty = true; }
+    if (mHoveredSlot != -1)
+    {
+      mHoveredSlot = -1;
+      dirty = true;
+    }
+    if (mAmpHovered)
+    {
+      mAmpHovered = false;
+      dirty = true;
+    }
+    if (mPreLockHovered)
+    {
+      mPreLockHovered = false;
+      dirty = true;
+    }
+    if (mPostLockHovered)
+    {
+      mPostLockHovered = false;
+      dirty = true;
+    }
+    if (mPreStoreHovered)
+    {
+      mPreStoreHovered = false;
+      dirty = true;
+    }
+    if (mPostStoreHovered)
+    {
+      mPostStoreHovered = false;
+      dirty = true;
+    }
     SetTooltip("");
-    if (dirty) SetDirty(false);
+    if (dirty)
+      SetDirty(false);
   }
 
   StateCallback mCallback;
@@ -913,6 +997,7 @@ private:
   static constexpr size_t kEffectFocusCount = static_cast<size_t>(EVoLumEffectFocus::TREMOLO) + 1;
   std::array<ILayerPtr, kEffectFocusCount> mSlotMotifLayers;
   std::array<bool, kEffectFocusCount> mSlotMotifCachedBypass{};
+  std::array<int, kEffectFocusCount> mSlotMotifCachedVariant{}; // PITCH sub-mode the cached layer used.
   IRECT mPostRect;
 
   // Quiet block hit-zones, repopulated each Draw().
@@ -934,4 +1019,3 @@ private:
   bool mPreStoreHovered = false;
   bool mPostStoreHovered = false;
 };
-

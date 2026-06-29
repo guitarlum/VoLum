@@ -374,8 +374,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
-  GetParam(kPrePitchTransChar)
-    ->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterDrop, {"Drop", "Fast", "Instant"});
+  GetParam(kPrePitchTransChar)->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterInstant, {"Drop", "Instant"});
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -1303,8 +1302,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new VoLumSubModePillControl(pitchVoicingRect, kPrePitchVoicing, {"VINTAGE", "MODERN"}), -1, "PITCH_VOICING");
     // Transpose engine character (shares the voicing pill's slot; mode picks which).
     pGraphics->AttachControl(
-      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "FAST", "INSTANT"}), -1,
-      "PITCH_TRANSCHAR");
+      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "INSTANT"}), -1, "PITCH_TRANSCHAR");
 
     // I/O meters
     const float meterW = 8.f;
@@ -2641,8 +2639,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kPrePitchMode:
     case kPrePitchTransChar:
       // Toggling the pitch engine, switching Transpose/Octaver, or changing the
-      // transpose CHARACTER (Drop ~17 ms / Fast ~12 ms / Instant ~8.6 ms) all
-      // change reported (PDC) latency, so re-report it to the host.
+      // transpose CHARACTER (Drop ~17 ms / Instant ~8.6 ms) all change reported
+      // (PDC) latency, so re-report it to the host.
       if (mVolumInitComplete)
         _UpdateLatency();
       break;
@@ -2769,6 +2767,10 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kPrePitchMode:
       case kPrePitchVoicing:
       case kPrePitchTransChar:
+      // kTremoloActive belongs here too: toggling it must re-run the layout pass so
+      // the collapsed POST strip motif + focused card art refresh their active/dim
+      // state immediately (previously they only updated on the next focus/card flip).
+      case kTremoloActive:
       case kDualAmpActive:
       case kSupportAmpIdx:
       case kSupportSpeakerIdx:
@@ -3869,7 +3871,7 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         _HideControlGroup(pGfx, "PITCH_MODE_PICKER", false);
         _HideControlGroup(pGfx, "PITCH_TRANSPOSE_KNOBS", !isTranspose);
         _HideControlGroup(pGfx, "PITCH_OCTAVER_KNOBS", isTranspose);
-        // Vintage/Modern voicing only applies to the Octaver engine; Drop/Fast
+        // Vintage/Modern voicing only applies to the Octaver engine; Drop/Instant
         // character only applies to Transpose (they share the same slot).
         _HideControlGroup(pGfx, "PITCH_VOICING", isTranspose);
         _HideControlGroup(pGfx, "PITCH_TRANSCHAR", !isTranspose);
@@ -5486,10 +5488,20 @@ void NeuralAmpModeler::_UpdateLatency()
     preLatency += mPreModel[0]->GetLatency();
   if (preNam2ShouldLoad && mPreModel[1])
     preLatency += mPreModel[1]->GetLatency();
-  // PRE Pitch pedal reports the spectral engine latency (dry is delayed to match)
-  // so the host can compensate via PDC.
+  // PRE Pitch pedal reports the granular engine latency (dry is delayed to match)
+  // so the host can compensate via PDC. Compute from the CURRENT params (mode +
+  // character) rather than mPitch.Latency(): the live member is only refreshed on
+  // the audio thread inside SetParams, so reading it here (main thread, right after
+  // a param change) would lag by one change and could report the previous
+  // character's latency (e.g. show FAST's value while INSTANT is selected).
   if (GetParam(kPrePitchActive)->Bool())
-    preLatency += mPitch.Latency();
+  {
+    const auto pitchMode = static_cast<dsp::effect::VoLumPitch::Mode>(
+      std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1));
+    const auto pitchChar = static_cast<dsp::effect::VoLumPitch::Character>(
+      std::clamp(GetParam(kPrePitchTransChar)->Int(), 0, volum::kVoLumPitchCharacterCount - 1));
+    preLatency += dsp::effect::VoLumPitch::LatencyFor(pitchMode, pitchChar, GetSampleRate());
+  }
 
   int ampLatency = 0;
   if (mModel)
