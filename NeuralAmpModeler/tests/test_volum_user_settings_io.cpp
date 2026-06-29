@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../VoLumAmpSettingsJson.h"
 #include "../VoLumUserSettingsIO.h"
 
 #include <filesystem>
@@ -984,4 +985,186 @@ TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Ful
                                    nullptr, nullptr, nullptr, &lite);
   REQUIRE_FALSE(healed);
   CHECK(lite == false);
+}
+
+// --- Exhaustive settings round-trip pin (Phase 1 enforcement) ----------------
+//
+// The per-amp serializer in VolumUserSettingsToJson/FromJson hand-lists every
+// VoLumAmpSettings field. Historically that list was duplicated (PreBlock/Post
+// helpers AND the inline amps loop), so a new param could be added to one path
+// and silently dropped from settings persistence with the suite still green.
+//
+// This pin sets *every* persisted field to a non-default, in-range value and
+// asserts a full round-trip through the real settings JSON path. Equality uses
+// the canonical composed codec (AmpSettingsEqual), so any field the settings
+// path drops shows up as inequality. It also asserts the per-amp JSON object
+// contains every top-level key the canonical codec emits, catching a dropped
+// field structurally even if its value happened to match the default.
+//
+// When adding a persisted VoLumAmpSettings field you MUST also perturb it here.
+
+namespace
+{
+volum::VoLumAmpSettings MakeFullyPopulatedAmpSettings()
+{
+  volum::VoLumAmpSettings s;
+  // Core (note: settings reader clamps speaker to 0..3).
+  s.speakerIdx = 1;
+  s.channelIdx = 5;
+  s.inputLevel = 1.5;
+  s.gateThreshold = -40.0;
+  s.toneBass = 3.0;
+  s.toneMid = 4.0;
+  s.toneTreble = 6.0;
+  s.outputLevel = -2.0;
+  s.noiseGateActive = false;
+  s.eqActive = false;
+  // PRE comp
+  s.preCompActive = true;
+  s.preCompAmount = 6.5;
+  s.preCompRatio = 8.0;
+  s.preCompAttack = 2.5;
+  s.preCompRelease = 180.0;
+  s.preCompMix = 0.65;
+  s.preCompLevel = 1.5;
+  // PRE NAM 1/2
+  s.preNam1Active = true;
+  s.preNam1Capture = 2;
+  s.preNam1Gain = -3.0;
+  s.preNam1Bass = 4.0;
+  s.preNam1Mid = 6.0;
+  s.preNam1MidFreq = 750.0;
+  s.preNam1Treble = 7.0;
+  s.preNam1Level = -1.0;
+  s.preNam2Active = true;
+  s.preNam2Capture = 4;
+  s.preNam2Gain = 2.0;
+  s.preNam2Bass = 3.0;
+  s.preNam2Mid = 5.5;
+  s.preNam2MidFreq = 1200.0;
+  s.preNam2Treble = 8.0;
+  s.preNam2Level = 0.5;
+  // PRE Pitch
+  s.prePitchActive = true;
+  s.prePitchMode = 1;
+  s.prePitchSemitones = -5.0;
+  s.prePitchMix = 0.5;
+  s.prePitchOctDown = 0.3;
+  s.prePitchOctUp = 0.4;
+  s.prePitchDry = 0.6;
+  s.prePitchVoicing = 0;
+  s.prePitchLevel = 2.0;
+  s.prePitchTransChar = 0;
+  // Dual-amp / SUPPORT lane
+  s.dualAmpActive = true;
+  s.dualAmpRoute = 1;
+  s.mainAmpPan = -0.5;
+  s.supportAmpIdx = 2;
+  s.supportSpeakerIdx = 1;
+  s.supportChannelIdx = 7;
+  s.supportInputLevel = 1.0;
+  s.supportGateThreshold = -30.0;
+  s.supportToneBass = 2.0;
+  s.supportToneMid = 3.0;
+  s.supportToneTreble = 4.0;
+  s.supportOutputLevel = -1.0;
+  s.supportNoiseGateActive = false;
+  s.supportEqActive = false;
+  s.supportAmpPan = 0.4;
+  s.supportPolarityInvert = false;
+  // POST delay/reverb live
+  s.postValid = true;
+  s.postDelayActive = true;
+  s.postDelayTime = 500.0;
+  s.postDelayFeedback = 0.5;
+  s.postDelayMix = 0.4;
+  s.postDelayMode = 2;
+  s.postDelayTone = 0.7;
+  s.postDelayAge = 0.3;
+  s.postDelayPingPong = true;
+  s.postReverbActive = true;
+  s.postReverbMix = 0.5;
+  s.postReverbDecay = 4.0;
+  s.postReverbTone = 7.0;
+  s.postReverbPreDelay = 50.0;
+  s.postReverbShimmer = 0.6;
+  s.postReverbMode = 2;
+  s.postReverbSubMode = 0;
+  // POST tremolo
+  s.postTremoloActive = true;
+  s.postTremoloMode = 0;
+  s.postTremoloRate = 8.0;
+  s.postTremoloDepth = 0.5;
+  s.postTremoloShape = 0.7;
+  s.postTremoloMix = 0.6;
+  s.postTremoloCrossover = 1200.0;
+  s.postTremoloSync = true;
+  s.postTremoloDivision = 0;
+  // POST per-mode snapshots: perturb every element/field.
+  for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
+  {
+    s.postDelayModes[i].time = 100.0 + 10.0 * i;
+    s.postDelayModes[i].feedback = 0.1 + 0.05 * i;
+    s.postDelayModes[i].mix = 0.2 + 0.05 * i;
+    s.postDelayModes[i].tone = 0.3 + 0.05 * i;
+    s.postDelayModes[i].age = 0.4 + 0.05 * i;
+    s.postDelayModes[i].pingPong = (i % 2 == 0);
+  }
+  for (int i = 0; i < volum::kVoLumReverbModeCount; ++i)
+  {
+    s.postReverbModes[i].mix = 0.11 + 0.05 * i;
+    s.postReverbModes[i].decay = 1.0 + 0.5 * i;
+    s.postReverbModes[i].tone = 2.0 + 0.5 * i;
+    s.postReverbModes[i].preDelay = 10.0 + 5.0 * i;
+    s.postReverbModes[i].shimmer = 0.12 + 0.05 * i;
+    s.postReverbModes[i].subMode = i % 3;
+  }
+  for (int i = 0; i < 3; ++i)
+  {
+    s.postOktaverbSubModes[i].mix = 0.13 + 0.05 * i;
+    s.postOktaverbSubModes[i].decay = 1.5 + 0.5 * i;
+    s.postOktaverbSubModes[i].tone = 2.5 + 0.5 * i;
+    s.postOktaverbSubModes[i].preDelay = 12.0 + 5.0 * i;
+    s.postOktaverbSubModes[i].shimmer = 0.14 + 0.05 * i;
+  }
+  // BYO id-based custom-content refs
+  s.activeIrId = "ir_main_xyz";
+  s.supportActiveIrId = "ir_support_xyz";
+  s.supportCustomId = "amp_custom_xyz";
+  s.supportCustomSlot = 1;
+  s.supportCustomChannel = 3;
+  return s;
+}
+} // namespace
+
+TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive pin)")
+{
+  const volum::VoLumAmpSettings full = MakeFullyPopulatedAmpSettings();
+  // Sanity: the fixture must actually differ from defaults, otherwise the pin
+  // would pass vacuously.
+  REQUIRE_FALSE(volum::AmpSettingsEqual(full, volum::VoLumAmpSettings{}));
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0] = full;
+
+  const nlohmann::json j =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/0, /*fx=*/nullptr, /*includeDualAmp=*/true);
+
+  // Structural: the per-amp object must emit every top-level key the canonical
+  // composed codec emits. Catches a field dropped from the settings writer even
+  // if its value coincidentally equals the default.
+  const nlohmann::json canonical = volum::AmpSettingsToJson(full);
+  const nlohmann::json& ampEntry = j["amps"][volum::kAmps[0].folderName];
+  for (auto it = canonical.begin(); it != canonical.end(); ++it)
+  {
+    INFO("settings writer is missing canonical key: " << it.key());
+    REQUIRE(ampEntry.contains(it.key()));
+  }
+
+  // Value: every field survives the real settings round-trip.
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(volum::AmpSettingsEqual(loaded[0], full));
 }

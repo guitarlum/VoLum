@@ -12,6 +12,7 @@
 // Source-string lock for the layer-cache idiom (`if (!g.CheckLayer(mIconLayers[i]))`)
 // lives in test_volum_ui_regressions.cpp and reads this file.
 
+#include "VoLumAmpListScroll.h"
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentMock.h"
 #include "VoLumFractalArt.h"
@@ -384,39 +385,31 @@ private:
   static constexpr float kHeaderH = 26.f;
   static constexpr float kLabelVNudge = 1.f; // px down so Josefin-Bold labels optically center on the art
 
-  static constexpr float kScrollbarW = 6.f;  // visible bar width when scrollable
-  static constexpr float kScrollGutter = 7.f; // empty gap between labels and bar
+  static constexpr float kScrollbarW = volum::amplist::kScrollbarW;  // visible bar width when scrollable
+  static constexpr float kScrollGutter = volum::amplist::kScrollGutter; // empty gap between labels and bar
 
-  bool Scrollable() const { return ContentHeight() > mRECT.H() + 0.5f; }
+  bool Scrollable() const { return volum::amplist::Scrollable(ContentHeight(), mRECT.H()); }
 
   // Right edge of the row content (labels/icons stop here). Leaves a gutter
   // before the scrollbar so labels never crowd the bar.
-  float RowRight() const
-  {
-    return Scrollable() ? (mRECT.R - kScrollbarW - kScrollGutter) : mRECT.R;
-  }
+  float RowRight() const { return volum::amplist::RowRightX(mRECT.R, ContentHeight(), mRECT.H()); }
 
   // Visible scrollbar track + thumb, shared by drawing and drag hit-testing so
-  // they can never disagree.
+  // they can never disagree. Vertical math lives in the pure helper; the control
+  // only assembles the horizontal extents.
   void ScrollbarGeometry(float contentH, IRECT& track, IRECT& thumb) const
   {
     const float trackX = mRECT.R - kScrollbarW + 1.f;
-    track = IRECT(trackX, mRECT.T + 2.f, mRECT.R - 1.f, mRECT.B - 2.f);
-    const float thumbH = std::max(18.f, track.H() * (mRECT.H() / std::max(contentH, 1.f)));
-    const float maxScroll = std::max(0.f, contentH - mRECT.H());
-    const float t = (maxScroll > 0.f) ? (mScrollOffset / maxScroll) : 0.f;
-    const float thumbY = track.T + (track.H() - thumbH) * t;
-    thumb = IRECT(track.L, thumbY, track.R, thumbY + thumbH);
+    const auto m = volum::amplist::ComputeScroll(mRECT.T, mRECT.B, mRECT.H(), contentH, mScrollOffset);
+    track = IRECT(trackX, m.trackTop, mRECT.R - 1.f, m.trackTop + m.trackH);
+    thumb = IRECT(track.L, m.thumbY, track.R, m.thumbY + m.thumbH);
   }
 
   // Map a cursor y (minus the grab offset within the thumb) to a scroll offset.
   void ScrollThumbTo(float y, const IRECT& track, float thumbH, float contentH)
   {
     const float maxScroll = std::max(0.f, contentH - mRECT.H());
-    const float usable = track.H() - thumbH;
-    float t = (usable > 0.f) ? ((y - mDragGrabDY - track.T) / usable) : 0.f;
-    t = std::clamp(t, 0.f, 1.f);
-    mScrollOffset = t * maxScroll;
+    mScrollOffset = volum::amplist::ThumbYToScroll(y - mDragGrabDY, track.T, track.H(), thumbH, maxScroll);
     mScrollTarget = mScrollOffset;
     ClampScroll();
   }

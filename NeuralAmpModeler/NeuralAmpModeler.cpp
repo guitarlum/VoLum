@@ -1,6 +1,7 @@
 #include <algorithm> // std::clamp, std::min
 #include <cassert> // RT capacity invariants
 #include <cmath> // pow
+#include <chrono> // debug-only custom-amp seeding sandbox naming
 #include <cstdlib> // std::getenv (opt-in perf overlay)
 #include <filesystem>
 #include <fstream>
@@ -441,11 +442,39 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       auto contentDir = volum::VolumContentDir();
       if (contentDir.empty() && !mVolumRigsRoot.empty())
         contentDir = std::filesystem::path(mVolumRigsRoot) / "content";
+#ifndef NDEBUG
+      // Debug-only, opt-in screenshot/test seeding: VOLUM_SEED_CUSTOM_AMPS=N
+      // sandboxes the content store in a fresh temp dir and seeds N custom amps
+      // so the local screenshot harness (win-screenshot.ps1) can reach states
+      // that only appear once the amp library overflows (custom rows + sidebar
+      // scrollbar). It NEVER touches the user's real content store and is
+      // compiled out of release builds. See backlog/Q4-screenshot-harness-*.
+      int volumSeedCustomAmps = 0;
+      if (const char* seed = std::getenv("VOLUM_SEED_CUSTOM_AMPS"); seed && seed[0])
+        volumSeedCustomAmps = std::atoi(seed);
+      if (volumSeedCustomAmps > 0)
+      {
+        std::error_code seedEc;
+        const auto sandbox = std::filesystem::temp_directory_path(seedEc)
+                             / ("volum-seed-" + std::to_string(static_cast<unsigned long long>(
+                                                  std::chrono::steady_clock::now().time_since_epoch().count())));
+        if (!seedEc)
+        {
+          std::filesystem::create_directories(sandbox, seedEc);
+          contentDir = sandbox; // redirect the whole session to the sandbox
+        }
+      }
+#endif
       if (!contentDir.empty())
       {
         volum::content::GlobalContentStore().SetBaseDir(contentDir);
         volum::content::GlobalContentStore().Load();
       }
+#ifndef NDEBUG
+      if (volumSeedCustomAmps > 0)
+        for (int i = 0; i < volumSeedCustomAmps; ++i)
+          volum::custom::AddCustomAmp("Seed Amp " + std::to_string(i + 1), i);
+#endif
     }
     // F5: let the preset bridge capture/apply real live settings and act on the
     // focused amp's bank.
