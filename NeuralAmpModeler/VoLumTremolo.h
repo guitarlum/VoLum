@@ -9,8 +9,10 @@
 // AudioDSPTools submodule. Operates in place on the stereo POST bus.
 //
 // Three reverse-engineered amp/pedal tremolo voices:
-//   - Optical   : LFO-driven gain with asymmetric photocell-style attack/release;
-//                 choppy at depth. (Reverb.com "6 Types of Tremolo", Schaller TR-68.)
+//   - Optical   : LFO-driven gain through an asymmetric photocell envelope (fast
+//                 attack, lazy release) so the throb sags down and snaps back -
+//                 a clearly non-sine pulse even at slow rates. (Reverb.com "6
+//                 Types of Tremolo", Schaller TR-68.)
 //   - Bias      : smoothest, symmetric sine amplitude modulation - the
 //                 "Bang Bang (My Baby Shot Me Down)" voice. (Strymon Flint paper.)
 //   - Harmonic  : dual-band crossover, low/high modulated pi out of phase and
@@ -24,7 +26,7 @@
 #include <cmath>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
 
 namespace volum
@@ -61,14 +63,14 @@ inline const char* VoLumTremoloDivisionName(int division)
 inline double VoLumTremoloSyncRateHz(double bpm, int division)
 {
   static const double kQuarterMultiplier[kVoLumTremoloDivisionCount] = {
-    0.5,         // 1/2
-    1.0,         // 1/4
-    1.0 / 1.5,   // 1/4. (dotted quarter)
-    1.5,         // 1/4T (quarter triplet)
-    2.0,         // 1/8
-    2.0 / 1.5,   // 1/8. (dotted eighth)
-    3.0,         // 1/8T (eighth triplet)
-    4.0,         // 1/16
+    0.5, // 1/2
+    1.0, // 1/4
+    1.0 / 1.5, // 1/4. (dotted quarter)
+    1.5, // 1/4T (quarter triplet)
+    2.0, // 1/8
+    2.0 / 1.5, // 1/8. (dotted eighth)
+    3.0, // 1/8T (eighth triplet)
+    4.0, // 1/16
   };
   if (division < 0 || division >= kVoLumTremoloDivisionCount)
     division = kVoLumTremoloDivisionDefault;
@@ -175,13 +177,9 @@ public:
             wet = low * gPrimary + high * gAnti;
             break;
           }
-          case kOptical:
-            wet = x * mOptGainState[c];
-            break;
+          case kOptical: wet = x * mOptGainState[c]; break;
           case kBias:
-          default:
-            wet = x * gPrimary;
-            break;
+          default: wet = x * gPrimary; break;
         }
 
         io[c][s] = x * (1.0 - mMix) + wet * mMix;
@@ -204,9 +202,14 @@ private:
   {
     // ~15 ms parameter smoothing to kill zipper on depth/mix automation.
     mSmoothCoef = 1.0 - std::exp(-1.0 / (0.015 * mSampleRate));
-    // Photocell-style asymmetry: quick brighten, slower fade.
-    mOptAttackCoef = 1.0 - std::exp(-1.0 / (0.0006 * mSampleRate));
-    mOptReleaseCoef = 1.0 - std::exp(-1.0 / (0.0045 * mSampleRate));
+    // Photocell-style asymmetry: fast brighten, lazy fade. The release lag must
+    // be a meaningful fraction of the LFO period (tens of ms) or the optical
+    // throb collapses back onto the symmetric Bias sine at slow rates - i.e.
+    // switching Optical<->Bias becomes inaudible. ~3 ms attack / ~28 ms release
+    // keeps the classic asymmetric "sag down, snap up" pulse at default rates
+    // while naturally shedding depth as the rate climbs (authentic optical).
+    mOptAttackCoef = 1.0 - std::exp(-1.0 / (0.003 * mSampleRate));
+    mOptReleaseCoef = 1.0 - std::exp(-1.0 / (0.028 * mSampleRate));
     mXoverCoef = _OnePoleCoef(mCrossoverHz);
   }
 

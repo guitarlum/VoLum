@@ -6,7 +6,7 @@
 #include <vector>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
 
 using volum::TremoloDSP;
@@ -29,7 +29,10 @@ std::vector<double> runStream(TremoloDSP& trem, const std::vector<double>& in)
   return out;
 }
 
-std::vector<double> makeDC(size_t n, double v = 1.0) { return std::vector<double>(n, v); }
+std::vector<double> makeDC(size_t n, double v = 1.0)
+{
+  return std::vector<double>(n, v);
+}
 
 std::vector<double> makeSine(double freq, size_t n, double amp = 0.5)
 {
@@ -119,9 +122,9 @@ TEST_CASE("Tremolo depth controls trough level (Bias, DC input)")
   auto deep = troughPeakFor(1.0);
 
   CHECK(shallow.second == doctest::Approx(1.0).epsilon(0.02)); // peak ~ unity
-  CHECK(shallow.first == doctest::Approx(0.5).epsilon(0.05));  // trough ~ 1 - depth
-  CHECK(deep.first == doctest::Approx(0.0).epsilon(0.02));     // full depth dips to silence
-  CHECK(deep.first < shallow.first);                           // deeper => lower trough
+  CHECK(shallow.first == doctest::Approx(0.5).epsilon(0.05)); // trough ~ 1 - depth
+  CHECK(deep.first == doctest::Approx(0.0).epsilon(0.02)); // full depth dips to silence
+  CHECK(deep.first < shallow.first); // deeper => lower trough
 }
 
 TEST_CASE("Tremolo LFO rate matches requested Hz (Bias, DC input)")
@@ -176,6 +179,27 @@ TEST_CASE("Tremolo Harmonic differs from Bias (phasey, not plain AM)")
     CHECK(std::isfinite(v));
 }
 
+TEST_CASE("Tremolo Optical differs audibly from Bias at default sine settings")
+{
+  // The two share the same sine LFO target; Optical adds a photocell-style
+  // asymmetric envelope. At the DEFAULT (sine shape, 5 Hz) that asymmetry must
+  // still reshape the throb noticeably, otherwise switching Optical<->Bias is
+  // inaudible (the reported "can't hear the mode" bug).
+  auto runMode = [](int mode) {
+    TremoloDSP trem;
+    trem.Prepare(kSR, kBlock, 1);
+    trem.SetParams(5.0, 0.85, 0.0 /*pure sine*/, 1.0, 800.0, mode, kSR);
+    trem.Reset();
+    return runStream(trem, makeDC(1 << 15, 1.0));
+  };
+  auto bias = runMode(TremoloDSP::kBias);
+  auto opt = runMode(TremoloDSP::kOptical);
+  double diff = 0.0;
+  for (size_t i = 8192; i < bias.size(); ++i)
+    diff = std::max(diff, std::abs(bias[i] - opt[i]));
+  CHECK(diff > 0.08); // gain envelopes must visibly diverge
+}
+
 TEST_CASE("Tremolo stays finite across a live mode switch")
 {
   TremoloDSP trem;
@@ -202,11 +226,11 @@ TEST_CASE("Tremolo stays finite across a live mode switch")
 TEST_CASE("Tremolo sync division to Hz mapping")
 {
   // 120 BPM -> quarter note = 2 Hz.
-  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 1) == doctest::Approx(2.0));  // 1/4
-  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 0) == doctest::Approx(1.0));  // 1/2
-  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 4) == doctest::Approx(4.0));  // 1/8
-  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 7) == doctest::Approx(8.0));  // 1/16
-  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 6) == doctest::Approx(6.0));  // 1/8T
+  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 1) == doctest::Approx(2.0)); // 1/4
+  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 0) == doctest::Approx(1.0)); // 1/2
+  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 4) == doctest::Approx(4.0)); // 1/8
+  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 7) == doctest::Approx(8.0)); // 1/16
+  CHECK(volum::VoLumTremoloSyncRateHz(120.0, 6) == doctest::Approx(6.0)); // 1/8T
   CHECK(volum::VoLumTremoloSyncRateHz(120.0, 2) == doctest::Approx(4.0 / 3.0)); // 1/4.
   // Scales linearly with tempo.
   CHECK(volum::VoLumTremoloSyncRateHz(60.0, 1) == doctest::Approx(1.0));
