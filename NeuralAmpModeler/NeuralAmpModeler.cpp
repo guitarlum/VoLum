@@ -1168,15 +1168,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // TREMOLO KNOBS (Centered) - RATE / DEPTH / SHAPE / MIX (+ X-OVER in Harmonic).
     // RATE (slot 1) swaps to a tempo DIVISION stepper when Sync is engaged.
-    drawKnobCol(1, "RATE", kTremoloRate, "Hz", "TREMOLO_RATE", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(2, "DEPTH", kTremoloDepth, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(3, "SHAPE", kTremoloShape, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(4, "MIX", kTremoloMix, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
-    drawKnobCol(5, "X-OVER", kTremoloCrossover, "Hz", "TREMOLO_XOVER", true, 5, 1, effectKnobOffset, effectColW);
+    drawKnobCol(1, "RATE", kTremoloRate, "Hz", "TREMOLO_RATE", true, 5, 1, effectKnobOffset, effectColW,
+                "Tremolo speed in Hz. With TEMPO SYNC on it becomes a musical DIVISION locked to the song tempo.");
+    drawKnobCol(2, "DEPTH", kTremoloDepth, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+                "How far the volume dips each cycle. 100% = full silence at the trough.");
+    drawKnobCol(3, "SHAPE", kTremoloShape, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+                "Morphs the LFO from a smooth sine (0%) toward a hard square-wave chop (100%).");
+    drawKnobCol(4, "MIX", kTremoloMix, "%", "TREMOLO_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+                "Blend between dry and the tremolo'd signal. 100% = fully modulated.");
+    drawKnobCol(5, "X-OVER", kTremoloCrossover, "Hz", "TREMOLO_XOVER", true, 5, 1, effectKnobOffset, effectColW,
+                "HARMONIC mode only: the split frequency where the low and high bands pulse out of phase.");
     IRECT tremoloPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(
-      new VoLumModePickerControl(tremoloPickerRect, kTremoloMode, {"OPTICAL", "BIAS", "HARMONIC"}), -1,
-      "TREMOLO_KNOBS");
+    auto* tremoloModePicker =
+      new VoLumModePickerControl(tremoloPickerRect, kTremoloMode, {"OPTICAL", "BIAS", "HARMONIC"});
+    tremoloModePicker->SetTooltip(
+      "OPTICAL = asymmetric photocell throb (sag down, snap up) | BIAS = smooth symmetric "
+      "sine | HARMONIC = phasey out-of-phase band split (adds the X-OVER knob).");
+    pGraphics->AttachControl(tremoloModePicker, -1, "TREMOLO_KNOBS");
 
     // DIVISION stepper occupies the RATE slot (slot 1) when Sync is engaged.
     {
@@ -1278,31 +1286,42 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     drawKnobCol(2, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
                 "Blend between dry and the shifted signal. 100% = fully retuned.", pitchKnobDiam);
     drawKnobCol(3, "LEVEL", kPrePitchLevel, "dB", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
-                nullptr, pitchKnobDiam);
+                "Output level of the Pitch pedal (dB). 0 = unity gain.", pitchKnobDiam);
 
     // Octaver: OCT DN, OCT UP, DRY, LEVEL (4 knobs centered).
     drawKnobCol(1, "OCT DN", kPrePitchOctDown, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
-                nullptr, pitchKnobDiam);
+                "Level of the octave-down (sub) voice. Stacks independently with OCT UP and DRY.", pitchKnobDiam);
     drawKnobCol(2, "OCT UP", kPrePitchOctUp, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
-                nullptr, pitchKnobDiam);
-    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW, nullptr,
+                "Level of the octave-up voice. Stacks independently with OCT DN and DRY.", pitchKnobDiam);
+    drawKnobCol(3, "DRY", kPrePitchDry, "%", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
+                "Level of the unshifted (dry) voice. The Octaver blends three independent voices (OCT DN / OCT UP / "
+                "DRY), so there is no single wet/dry MIX like the other effects.",
                 pitchKnobDiam);
     drawKnobCol(4, "LEVEL", kPrePitchLevel, "dB", "PITCH_OCTAVER_KNOBS", true, 4, 1, pitchKnobOffset, pitchColW,
-                nullptr, pitchKnobDiam);
+                "Output level of the Pitch pedal (dB). 0 = unity gain.", pitchKnobDiam);
 
     IRECT pitchPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
-    pGraphics->AttachControl(
-      new VoLumModePickerControl(pitchPickerRect, kPrePitchMode, {"TRANSPOSE", "OCTAVER"}), -1, "PITCH_MODE_PICKER");
+    auto* pitchModePicker = new VoLumModePickerControl(pitchPickerRect, kPrePitchMode, {"TRANSPOSE", "OCTAVER"});
+    pitchModePicker->SetTooltip(
+      "TRANSPOSE = shift the whole signal by semitones (drop tuning / capo) | OCTAVER = "
+      "POG-style blend of independent octave-down / octave-up / dry voices.");
+    pGraphics->AttachControl(pitchModePicker, -1, "PITCH_MODE_PICKER");
 
     const float pitchPillW = 200.f;
     const float pitchPillH = 28.f;
     const float pitchPillY = knobT + knobDiam + valueH + 18.f;
     IRECT pitchVoicingRect(mainCX - pitchPillW / 2.f, pitchPillY, mainCX + pitchPillW / 2.f, pitchPillY + pitchPillH);
-    pGraphics->AttachControl(
-      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchVoicing, {"VINTAGE", "MODERN"}), -1, "PITCH_VOICING");
+    auto* pitchVoicingPill = new VoLumSubModePillControl(pitchVoicingRect, kPrePitchVoicing, {"VINTAGE", "MODERN"});
+    pitchVoicingPill->SetTooltip(
+      "Octaver voice colour. VINTAGE = warmer octave voices (tanh drive + low-pass) | "
+      "MODERN = clean. Shapes the wet voices only, so raise OCT DN/UP to hear it.");
+    pGraphics->AttachControl(pitchVoicingPill, -1, "PITCH_VOICING");
     // Transpose engine character (shares the voicing pill's slot; mode picks which).
-    pGraphics->AttachControl(
-      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "INSTANT"}), -1, "PITCH_TRANSCHAR");
+    auto* pitchTransCharPill = new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "INSTANT"});
+    pitchTransCharPill->SetTooltip(
+      "Transpose engine. INSTANT = lowest latency (~8.6 ms), default | DROP = WSOLA, "
+      "cleanest on big shifts (~17 ms). Same pitch accuracy; pick by feel vs latency.");
+    pGraphics->AttachControl(pitchTransCharPill, -1, "PITCH_TRANSCHAR");
 
     // I/O meters
     const float meterW = 8.f;
