@@ -47,6 +47,12 @@ std::string ReadPluginSource()
   blob += "\n";
   blob += ReadText(root / "VoLumSettings.inc.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumSettingsLocks.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumSettingsScene.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumSettingsPresets.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "Unserialization.cpp");
   return blob;
 }
