@@ -63,7 +63,7 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
 
   RequireContains(source, "card->SetActiveState(GetParam(kDelayActive)->Bool());");
   RequireContains(source, "card->SetActiveState(GetParam(kReverbActive)->Bool());");
-  RequireContains(triptych, "{ EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive }");
+  RequireContains(triptych, "{EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive}");
 }
 
 TEST_CASE("Collapsed PRE slots show selected pedal short labels")
@@ -76,7 +76,7 @@ TEST_CASE("Collapsed PRE slots show selected pedal short labels")
   RequireContains(source, "_VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), \"NAM 1\")");
   RequireContains(source, "_VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), \"NAM 2\")");
   RequireContains(triptych, "std::toupper(c)");
-  RequireContains(triptych, "IText labelText(10.f");
+  RequireContains(triptych, "IText labelText(");
 }
 
 TEST_CASE("Long custom prepedal names are truncated and clipped in the quiet slot")

@@ -276,6 +276,31 @@ TEST_CASE("VoLumPitch transpose 0 semitones Mix=1 is a clean delayed passthrough
   CHECK(maxErr < 1e-3);
 }
 
+TEST_CASE("VoLumPitch octaver Vintage voicing differs audibly from Modern")
+{
+  // VINTAGE shapes the wet octave voices (tanh drive + low-pass); MODERN leaves
+  // them clean. Isolating the down-octave voice (DRY=0), the two voicings must
+  // reshape it enough to actually hear when switching the pill.
+  auto runVoicing = [](VoLumPitch::Voicing v) {
+    VoLumPitch pitch;
+    pitch.Configure(kSR, kBlock);
+    pitch.Reset();
+    pitch.SetParams(VoLumPitch::Mode::Octaver, 0.0, 0.0, 1.0 /*octDown*/, 0.0 /*octUp*/, 0.0 /*dry*/, v, 0.0);
+    return runStream(pitch, makeGuitar(196.0, 1 << 16));
+  };
+  auto vintage = runVoicing(VoLumPitch::Voicing::Vintage);
+  auto modern = runVoicing(VoLumPitch::Voicing::Modern);
+  double diff = 0.0, energy = 0.0;
+  for (size_t i = 24000; i < vintage.size(); ++i)
+  {
+    const double d = static_cast<double>(vintage[i]) - static_cast<double>(modern[i]);
+    diff += d * d;
+    energy += static_cast<double>(modern[i]) * static_cast<double>(modern[i]);
+  }
+  const double rel = std::sqrt(diff / std::max(energy, 1e-9));
+  CHECK(rel > 0.15); // vintage saturation + LPF must reshape the sub voice
+}
+
 TEST_CASE("VoLumPitch octaver down an octave halves frequency")
 {
   VoLumPitch pitch;
