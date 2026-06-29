@@ -133,35 +133,41 @@ Largest VoLum-owned files (lines on disk):
 scene/rig helpers (~1100). The repo already proves a low-risk decomposition
 mechanism — tail-`#include`d `.inc.cpp` siblings sharing the one TU.
 
-**LANDED (Phase 3):** the *low-risk, fully-verifiable* slice — dead-code removal
-(`RowAt()`, write-only `mTextFileIdx`, unused `StartTextEntry` `fileIdx` param in
+**LANDED (Phase 3) — dead-code + dedup:** dead-code removal (`RowAt()`,
+write-only `mTextFileIdx`, unused `StartTextEntry` `fileIdx` param in
 `VoLumCustomUi.h`) and the scrollbar primitive dedup (shared `DrawVoLumScrollbar`
 in `VoLumColorHelpers.h`, routed through the sidebar amp list and the Manage
 overlay list).
 
-**DEFERRED (own pass):** the bulk **tail-`#include` excise** of
-`NeuralAmpModeler.cpp` into `VoLumPluginUiStyles.inc.cpp` /
-`VoLumKeyboard.inc.cpp` / `VoLumLayoutRuntime.inc.cpp` / `VoLumSceneRig.inc.cpp`,
-and the `VoLumCustomOverlayControl` split + `switch(mManageKind)` traits table.
-Rationale: moving 1000+ contiguous lines is a *pure mechanical relocation* that
-the exact-match string-edit tooling cannot do safely in-session (line-ending /
-encoding corruption risk on a 5570-line file, with a broken-build blast radius
-far larger than the traversability benefit). The precise line-range -> target-file
-map below is turnkey for a dedicated pass that uses a line-slice move + a
-byte-level diff of the concatenated TU as its safety check.
+**LANDED (Phase 3) — `NeuralAmpModeler.cpp` tail-`#include` split:**
+**5599 -> 3523 lines on disk (-2076)**, four new tail-`#include`d siblings (the
+compiled TU is byte-identical after preprocessing — `#include` pastes each block
+at its original position):
 
-Decomposition map (disk line ranges, `NeuralAmpModeler.cpp`):
+| New sibling | Lines | Contents |
+|-------------|-------|----------|
+| `VoLumKeyboard.inc.cpp` | 496 | on-screen keyboard navigation + exact-entry handlers |
+| `VoLumLayoutRuntime.inc.cpp` | 419 | `_HideControlGroup` + `_UpdateVoLumLayout` |
+| `VoLumSceneRig.inc.cpp` | 762 | tuner/metronome toggles + channel/PRE-capture/custom-amp/IR rig helpers |
+| `VoLumAmpMenus.inc.cpp` | 420 | factory reset + preset/support-amp menus + `_VolumApplyDualAmpFocus` |
 
-| Target sibling | Source range | Contents |
-|----------------|--------------|----------|
-| `VoLumPluginUiStyles.inc.cpp` | ~L44–282 | styles + `VoLumPanKnobControl` / `VoLumDialKnobControl` |
-| `VoLumKeyboard.inc.cpp` | ~L3250–3740 | on-screen keyboard block |
-| `VoLumLayoutRuntime.inc.cpp` | ~L3755–4155 | `_UpdateVoLumLayout` + `_VolumApplyDualAmpFocus` |
-| `VoLumSceneRig.inc.cpp` | ~L4192–5329 | channel / PRE-capture / custom-amp / IR / menu helpers |
+The move was done with a raw-substring slice anchored on unique function
+signatures (byte-exact for retained text; `git diff` confirmed a single
+2076-line deletion + 4 `#include` insertions), verified by app build + the full
+469-case suite (the source-string locks read the siblings via `ReadPluginSource`;
+five tests that read `NeuralAmpModeler.cpp` directly were repointed to the blob).
 
-The `mLayoutFunc` lambda (~1450 lines) is *not* tail-include-movable (it captures
-locals); it needs a different decomposition (free layout helpers taking explicit
-context), which is its own design step.
+**DEFERRED (own pass):**
+- The `VoLumCustomOverlayControl` split (Q2, ~73% of `VoLumCustomUi.h`'s 1895
+  lines) + the `switch(mManageKind)` traits table. A header has no TU, so the
+  tail-`#include` trick does not apply; it needs per-control sub-headers with
+  their own dependency untangling — a separate careful effort.
+- The preamble control classes (styles, `VoLumPanKnobControl` /
+  `VoLumDialKnobControl`, ~L44–282) sit *before* the class and are used by later
+  code, so they need a *top*-included header, not a tail include.
+- The `mLayoutFunc` lambda (~1450 lines, the single biggest blob) is *not*
+  tail-include-movable (it captures constructor locals); it needs free layout
+  helpers taking explicit context — its own design step.
 
 ### P1 / LANDED (Phase 4, R4) — the "Mock" content bridge is mis-named
 

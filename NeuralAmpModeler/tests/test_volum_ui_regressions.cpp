@@ -33,6 +33,14 @@ std::string ReadPluginSource()
   std::string blob;
   blob += ReadText(root / "NeuralAmpModeler.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumKeyboard.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumLayoutRuntime.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumSceneRig.inc.cpp");
+  blob += "\n";
+  blob += ReadText(root / "VoLumAmpMenus.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumProcessBlock.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumLoader.inc.cpp");
@@ -58,7 +66,7 @@ void RequireDoesNotContain(const std::string& haystack, const char* needle)
 
 TEST_CASE("POST pedal cards refresh active art state from delay and reverb params")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // _UpdateVoLumLayout now in VoLumLayoutRuntime.inc.cpp
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
 
   RequireContains(source, "card->SetActiveState(GetParam(kDelayActive)->Bool());");
@@ -81,7 +89,7 @@ TEST_CASE("Collapsed PRE slots show selected pedal short labels")
 
 TEST_CASE("Long custom prepedal names are truncated and clipped in the quiet slot")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // _UpdateVoLumLayout now in VoLumLayoutRuntime.inc.cpp
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
 
   // Custom prepedal short label is capped (item: long names overflowed the pill).
@@ -92,7 +100,7 @@ TEST_CASE("Long custom prepedal names are truncated and clipped in the quiet slo
 
 TEST_CASE("Dual amp pan knobs only show in AMP view")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // _VolumApplyDualAmpFocus now in VoLumAmpMenus.inc.cpp
 
   RequireContains(source, "const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;");
   RequireContains(source, "c->Hide(!showPanKnobs);");
@@ -121,7 +129,7 @@ TEST_CASE("Keyboard channel navigation routes through the focused lane's stepper
 
 TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // keyboard handlers now in VoLumKeyboard.inc.cpp
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardModel.h");
   const std::string exactEntry = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumExactEntry.h");
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
@@ -280,7 +288,7 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
 
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource(); // _VolumShowPreCaptureMenu now in VoLumSceneRig.inc.cpp
   // VoLumPreCaptureMenuControl moved to its own header on the 1.0 hygiene
   // split (see VoLumTriptych.h umbrella include).
   const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMenus.h");
