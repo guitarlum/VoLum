@@ -32,7 +32,7 @@ Presets / recall + dirty (1.2.0 UI shell vs backend boundary):
 - In the current UI shell, **preset recall is a stub**: picking a preset only
   relabels the header bar (`VoLumPresetBarControl::SelectName`) and clears
   `(unsaved)`. It does **not** load any stored `VoLumAmpSettings` - there are no
-  per-preset snapshots in `VoLumCustomContentMock`. Do not try to "fix" recall to
+  per-preset snapshots in `VoLumCustomContentApi`. Do not try to "fix" recall to
   move knobs in the shell; that is backend work.
 - The `(unsaved)` flag in the shell is a **coarse one-way dirty flag**
   (`_VolumMarkPresetDirty` → `SetDirtyState(true)` on any cab/channel/AMP/PRE/
@@ -50,6 +50,23 @@ Settings persistence:
   - Windows: `%LOCALAPPDATA%\VoLum\volum-settings.json`
   - macOS: `~/Library/Application Support/VoLum/volum-settings.json`
 - `<rigsRoot>/volum-settings.json` remains a legacy read fallback.
+
+Settings SSOT (single source of truth for per-amp `VoLumAmpSettings`):
+
+- The data model is the `VoLumAmpSettings` struct (`VoLumAmpeteCatalog.h`). Every
+  persisted field MUST flow through the composed block codec, not a hand-listed
+  loop. The write path `VolumUserSettingsToJson` (`VoLumUserSettingsIO.h`) composes
+  `WriteAmpCoreBlock` + `PreBlockToJson` + `PostBlockToJson` +
+  `WriteDualAmpUserSettings`. Add a new field to its block helper, never to a
+  second inline list.
+- When you add a persisted field, the exhaustive round-trip pin
+  ("User settings IO round-trips EVERY VoLumAmpSettings field") in
+  `test_volum_user_settings_io.cpp` MUST be extended to set it to a non-default,
+  in-range value. That test is the guard that a field is never silently dropped
+  from `volum-settings.json`; a new field that is not in it is not done.
+- The same field also has to round-trip the DAW chunk path
+  (`Unserialization.cpp` / `test_volum_chunk_codec.cpp`) and, if it participates
+  in PRE/POST lock chrome, `PreBlockEquals`/`PostBlockEquals` (`VoLumPrePostLock.h`).
 
 Verification:
 
