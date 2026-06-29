@@ -115,7 +115,7 @@ control through it; add a source-guard test that each picker calls it.
 
 ## 3. Structure — files too large for cheap AI traversal
 
-### P1 / BACKLOG (Phase 3) — `NeuralAmpModeler.cpp` is ~5570 lines (~8100 in the TU)
+### P1 / PARTIALLY LANDED (Phase 3) — `NeuralAmpModeler.cpp` is ~5570 lines (~8100 in the TU)
 
 Largest VoLum-owned files (lines on disk):
 
@@ -133,42 +133,104 @@ Largest VoLum-owned files (lines on disk):
 scene/rig helpers (~1100). The repo already proves a low-risk decomposition
 mechanism — tail-`#include`d `.inc.cpp` siblings sharing the one TU.
 
-**Fix (Phase 3):** extract `VoLumPluginUiStyles.inc.cpp`, `VoLumKeyboard.inc.cpp`,
-`VoLumLayoutRuntime.inc.cpp`, `VoLumSceneRig.inc.cpp`; decompose `VoLumCustomUi.h`
-(Q2); dedup the triplicated scrollbar/glyph/PRE-menu primitives.
+**LANDED (Phase 3):** the *low-risk, fully-verifiable* slice — dead-code removal
+(`RowAt()`, write-only `mTextFileIdx`, unused `StartTextEntry` `fileIdx` param in
+`VoLumCustomUi.h`) and the scrollbar primitive dedup (shared `DrawVoLumScrollbar`
+in `VoLumColorHelpers.h`, routed through the sidebar amp list and the Manage
+overlay list).
 
-### P1 / BACKLOG (Phase 4, R4) — the "Mock" content bridge is mis-named
+**DEFERRED (own pass):** the bulk **tail-`#include` excise** of
+`NeuralAmpModeler.cpp` into `VoLumPluginUiStyles.inc.cpp` /
+`VoLumKeyboard.inc.cpp` / `VoLumLayoutRuntime.inc.cpp` / `VoLumSceneRig.inc.cpp`,
+and the `VoLumCustomOverlayControl` split + `switch(mManageKind)` traits table.
+Rationale: moving 1000+ contiguous lines is a *pure mechanical relocation* that
+the exact-match string-edit tooling cannot do safely in-session (line-ending /
+encoding corruption risk on a 5570-line file, with a broken-build blast radius
+far larger than the traversability benefit). The precise line-range -> target-file
+map below is turnkey for a dedicated pass that uses a line-slice move + a
+byte-level diff of the concatenated TU as its safety check.
+
+Decomposition map (disk line ranges, `NeuralAmpModeler.cpp`):
+
+| Target sibling | Source range | Contents |
+|----------------|--------------|----------|
+| `VoLumPluginUiStyles.inc.cpp` | ~L44–282 | styles + `VoLumPanKnobControl` / `VoLumDialKnobControl` |
+| `VoLumKeyboard.inc.cpp` | ~L3250–3740 | on-screen keyboard block |
+| `VoLumLayoutRuntime.inc.cpp` | ~L3755–4155 | `_UpdateVoLumLayout` + `_VolumApplyDualAmpFocus` |
+| `VoLumSceneRig.inc.cpp` | ~L4192–5329 | channel / PRE-capture / custom-amp / IR / menu helpers |
+
+The `mLayoutFunc` lambda (~1450 lines) is *not* tail-include-movable (it captures
+locals); it needs a different decomposition (free layout helpers taking explicit
+context), which is its own design step.
+
+### P1 / LANDED (Phase 4, R4) — the "Mock" content bridge is mis-named
 
 `VoLumCustomContentMock.h` is a production bridge over `GlobalContentStore()`,
-half pass-through, with process-global preset hooks. Rename + per-instance hooks
-+ registry-as-canonical-read-path.
+half pass-through, with process-global preset hooks.
+
+**LANDED:** git-tracked rename to `VoLumCustomContentApi.h` + header/comment
+refresh across all referencing files (the "Mock" name made readers and agents
+repeatedly treat production code as throwaway test scaffolding — a direct
+AI-traversability tax). No symbols renamed (`volum::custom::*` unchanged).
+
+**DEFERRED (higher-churn, ~40 sites):** moving `ActivePresetOwnerKey` / preset
+hooks off process-global statics onto the instance; deleting the projection
+getters so the UI reads `GlobalContentStore().reg()` directly; folding mutations
++ name-dedup into the store.
 
 ---
 
 ## 4. Correctness (custom content) — niche/latent (Phase 5, Q3)
 
-- `_VolumActiveScene()` uses `customScenes[id]` (`operator[]`) — read paths can
-  insert phantom default scenes. Needs a const or-default read accessor.
-- `activePresetId` restore relabels the live scene rather than applying the
-  bank preset's `pr.settings` (diverges only for drifted custom scenes).
-- `customSupportId` id-tail field is written but never read (dead; support
-  restores via the scene). Safe to drop.
-- `AddPedal` clamps every pedal past the 64-slot pool to index 127 -> colliding
-  PRE-capture indices; `PedalLegacyIndexAt` returns `0` (== EMPTY) for OOR.
+- **LANDED** — `AddPedal` previously clamped every pedal past the 64-slot pool
+  (indices 64..127) to index 127, aliasing multiple pedals onto one PRE-capture
+  index. It now returns `-1` once the pool is exhausted (within-pool behavior
+  unchanged) and the Manage-pedals importer surfaces a "slots are full" error.
+  Pinned by a boundary doctest in `test_volum_custom_content.cpp`.
+- **DEFERRED (needs plugin-level test infra)** — `_VolumActiveScene()` uses
+  `customScenes[id]` (`operator[]`), so read paths *can* insert phantom default
+  scenes. A const or-default read accessor is the fix, but it is a plugin-member
+  method with ~8 read sites and **no unit harness instantiates the plugin**, so
+  it can only be guarded by source pins + app build. Worth doing in a pass that
+  either adds that harness or accepts source-pin verification.
+- **DEFERRED** — `activePresetId` restore relabels the live scene rather than
+  applying the bank preset's `pr.settings` (diverges only for drifted custom
+  scenes); subtle three-way behavior, defer with the read/write split.
+- **CORRECTION (not dead — do NOT drop)** — the earlier note that
+  `customSupportId` is "written but never read" is **wrong**: it is written at
+  `NeuralAmpModeler.cpp` L2412 and has chunk round-trip tests
+  (`test_volum_chunk_codec.cpp` L679/697/913/931). Dropping it would be a
+  breaking chunk-format change. No action.
 
 ---
 
-## 5. Real-time / performance (Phase 6, P2 — riskiest, audio thread)
+## 5. Real-time / performance (Phase 6, P2 — riskiest, audio thread) — DEFERRED (gated on macOS TSan CI)
 
-- Staging drain takes `mVolumLoaderMutex` + `mStagingMutex` and may `Reset()`
-  (alloc) on the audio thread -> lock-free SPSC queue, `Reset()` on loader thread.
-- `_PrepareBuffers` may `resize` main I/O buffers mid-stream -> pre-reserve in
-  `OnReset` + assert in `ProcessBlock`.
-- `_VolumSelectIR` does a sync WAV load on the UI callback -> async loader path.
-- `AmpSettingsEqual` builds two JSON trees per knob move for the dirty flag ->
-  field-wise/hashed compare.
-- Every param change marks settings dirty + `OnIdle` always saves -> dirty only
-  VoLum-owned params, coalesce saves.
+This phase is **deliberately not implemented in this pass**. The plan gated it on
+"macOS sanitizer CI green, checkpoint first", and this pass ran on a Windows host
+with **no ThreadSanitizer available**. Converting audio-thread locking to
+lock-free without TSan verification risks shipping a subtle data race — the worst
+outcome for a real-time audio plugin — so it is left as a CI-backed follow-up.
+
+Current state of each item:
+
+- **Already done (pre-pass)** — settings save is coalesced: param changes set
+  `mVolumSettingsDirty` and `OnIdle` flushes once (`NeuralAmpModeler.cpp` L2312);
+  the dirty compare already uses the struct `AmpSettingsEqual`, not a per-knob
+  JSON build (`VoLumSettings.inc.cpp` L1088). No work needed.
+- **Incorrect as originally stated** — "pre-reserve I/O buffers + assert no
+  `resize` in `ProcessBlock`": hosts legitimately change the block size, which
+  must `resize` `mInputArray`/`mOutputArray` mid-stream (`_PrepareBuffers`
+  L5439). An unconditional no-resize assert would fire on a normal host buffer
+  change. Any reservation here must allow the resize-on-blocksize-change path.
+- **Gated (the real RT work)** — `_ApplyDSPStaging()` takes
+  `std::lock_guard<std::mutex>(mStagingMutex)` **on the audio thread**
+  (`NeuralAmpModeler.cpp` L2959, called from `ProcessBlock` L1987); `OnReset`
+  also locks `mPrePitchMutex` and calls `Reset()`. Replacing these with a
+  lock-free SPSC hand-off (allocation/`Reset()` on the loader thread only) is the
+  P0 RT-safety fix and **must** land with macOS TSan CI green.
+- **Gated** — `_VolumSelectIR` does a synchronous WAV load on the UI callback;
+  route through the existing async loader.
 
 ---
 
@@ -200,13 +262,15 @@ half pass-through, with process-global preset hooks. Rename + per-instance hooks
 
 | # | Finding | Sev | Phase / Status |
 |---|---------|-----|------|
-| 1.1 | Settings 4-way duplication -> composed codec | P1 | Phase 2 |
-| 1.2 | Exhaustive settings round-trip test | P1 | Phase 1 |
-| 2 | Shared `DrawVoLumSelection` + source guard | P1 | Phase 2 |
-| 3.1 | Decompose `NeuralAmpModeler.cpp` + `VoLumCustomUi.h` | P1 | Phase 3 |
-| 3.2 | Dedup scrollbar/glyph/PRE-menu | P1 | Phase 3 |
-| 3.3 | R4 content-bridge rename/collapse | P1 | Phase 4 |
-| 4 | Q3 custom-content correctness | P1/P2 | Phase 5 |
-| 5 | P2 RT/perf hardening | P0/P1 | Phase 6 |
-| 6 | Q1 pins + Q4 harness | P1 | Phase 1 |
-| 7 | Rules/docs SSOT + selection + checklist + file-map | P1 | Phase 7 |
+| 1.1 | Settings duplication -> composed write codec (SSOT) | P1 | Phase 2 — LANDED |
+| 1.2 | Exhaustive settings round-trip test | P1 | Phase 1 — LANDED |
+| 2 | Shared `DrawVoLumSelection` + source guard | P1 | Phase 2 — LANDED |
+| 3.1 | Decompose `NeuralAmpModeler.cpp` + `VoLumCustomUi.h` | P1 | Phase 3 — dead-code LANDED; bulk excise DEFERRED (map in §3) |
+| 3.2 | Dedup scrollbar primitive (`DrawVoLumScrollbar`) | P1 | Phase 3 — LANDED |
+| 3.3 | R4 content-bridge rename | P1 | Phase 4 — rename LANDED; collapse DEFERRED |
+| 4 | Q3: `AddPedal` pool cap | P1 | Phase 5 — LANDED |
+| 4b | Q3: `_VolumActiveScene` split / preset apply | P2 | DEFERRED (needs plugin test infra) |
+| 4c | Q3: `customSupportId` "dead" | — | NOT a bug (has round-trip tests) |
+| 5 | P2 RT/perf hardening (audio-thread locks) | P0/P1 | Phase 6 — DEFERRED (gated on macOS TSan CI) |
+| 6 | Q1 pins + Q4 harness | P1 | Phase 1 — LANDED |
+| 7 | Rules/docs SSOT + selection + checklist + file-map | P1 | Phase 7 — LANDED |
