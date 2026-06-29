@@ -909,7 +909,6 @@ public:
       default: break;
     }
     mTextTarget = TextTarget::None;
-    mTextFileIdx = -1;
     mTextCabSlot = -1;
     SetDirty(false);
   }
@@ -991,7 +990,6 @@ private:
   {
     mPopupOpen = false;
     mTextTarget = TextTarget::None;
-    mTextFileIdx = -1;
     mError.clear();
   }
 
@@ -1171,13 +1169,12 @@ private:
     }
   }
 
-  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, int fileIdx = -1)
+  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current)
   {
     auto* ui = GetUI();
     if (!ui)
       return;
     mTextTarget = target;
-    mTextFileIdx = fileIdx;
     SetTextEntryLength(NameEntryCap(target));
     ui->CreateTextEntry(*this, mEntryText, bounds, current.c_str());
   }
@@ -1672,12 +1669,12 @@ private:
       {
         const float trackX = listArea.R - sbW - 1.f;
         IRECT track(trackX, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
-        g.FillRect(IColor(40, 200, 162, 78), track);
         const float maxScroll = contentH - listArea.H();
         const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
         const float t = (maxScroll > 0.f) ? (mManageScroll / maxScroll) : 0.f;
-        g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, track.T + (track.H() - thumbH) * t, track.R,
-                                                track.T + (track.H() - thumbH) * t + thumbH));
+        const IRECT thumb(track.L, track.T + (track.H() - thumbH) * t, track.R,
+                          track.T + (track.H() - thumbH) * t + thumbH);
+        DrawVoLumScrollbar(g, track, thumb);
       }
     }
 
@@ -1703,14 +1700,6 @@ private:
   {
     const float maxScroll = std::max(0.f, contentH - viewH);
     mManageScroll = std::clamp(mManageScroll, 0.f, maxScroll);
-  }
-
-  // Stacked action button rows in the right-hand column.
-  IRECT RowAt(const IRECT& col, int idx, float topOffset = 0.f) const
-  {
-    const float h = 28.f, gap = 6.f;
-    const float t = col.T + topOffset + (float)idx * (h + gap);
-    return IRECT(col.L, t, col.R, t + h);
   }
 
   /* ---------------- Builder screen ---------------- */
@@ -2040,7 +2029,6 @@ private:
 
   // pending text entry target
   TextTarget mTextTarget = TextTarget::None;
-  int mTextFileIdx = -1;
   int mTextCabSlot = -1; // cab slot being renamed (TextTarget::CabName)
   IText mEntryText;
 
