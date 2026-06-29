@@ -94,12 +94,13 @@ inline constexpr int kVoLumPitchModeOctaver = 1;
 // PRE Pitch octaver voicing: 0=Vintage (gritty/filtered), 1=Modern (clean)
 inline constexpr int kVoLumPitchVoicingVintage = 0;
 inline constexpr int kVoLumPitchVoicingModern = 1;
-// PRE Pitch transpose character: 0=Drop (WSOLA, exact, ~17 ms), 1=Fast (~12 ms),
-// 2=Instant (period-sync, 2.5 ms crossfade, ~8.6 ms, tightest feel).
+// PRE Pitch transpose character: 0=Drop (WSOLA, exact, ~17 ms), 1=Instant
+// (period-sync, 2.5 ms crossfade, ~8.6 ms, tightest feel). The former Fast
+// character (value 1) was removed; legacy values 1 (Fast) and 2 (Instant) both
+// load as Instant via clamping, which is seamless since Fast == Instant sonically.
 inline constexpr int kVoLumPitchCharacterDrop = 0;
-inline constexpr int kVoLumPitchCharacterFast = 1;
-inline constexpr int kVoLumPitchCharacterInstant = 2;
-inline constexpr int kVoLumPitchCharacterCount = 3;
+inline constexpr int kVoLumPitchCharacterInstant = 1;
+inline constexpr int kVoLumPitchCharacterCount = 2;
 
 struct DelayModeSnapshot
 {
@@ -175,7 +176,7 @@ struct VoLumAmpSettings
   double prePitchDry = 1.0;
   int prePitchVoicing = 1; // 0=Vintage, 1=Modern
   double prePitchLevel = 0.0;
-  int prePitchTransChar = 0; // 0=Drop, 1=Fast, 2=Instant (transpose engine character)
+  int prePitchTransChar = 1; // 0=Drop, 1=Instant (default; transpose engine character)
   bool dualAmpActive = false;
   int dualAmpRoute = 2; // 0=STACK, 1=L/R, 2=CUSTOM. UI no longer exposes the picker — Custom honours per-lane PAN.
   double mainAmpPan = 0.0;

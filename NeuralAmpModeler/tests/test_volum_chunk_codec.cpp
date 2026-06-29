@@ -726,12 +726,12 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   in.perAmpPitch[0].voicing = 0; // Vintage
   in.perAmpPitch[0].level = -3.5;
 
-  // Last amp: Transpose down a fifth, Instant character (exercises the max enum value).
+  // Last amp: Transpose down a fifth, Drop character (non-default value; default is Instant).
   in.perAmpPitch[volum::kAmpCount - 1].present = true;
   in.perAmpPitch[volum::kAmpCount - 1].active = true;
   in.perAmpPitch[volum::kAmpCount - 1].mode = 0;
   in.perAmpPitch[volum::kAmpCount - 1].semitones = -7.0;
-  in.perAmpPitch[volum::kAmpCount - 1].transChar = 2; // Instant
+  in.perAmpPitch[volum::kAmpCount - 1].transChar = 0; // Drop
 
   // Locked PRE snapshot present.
   in.lockedPrePitch.present = true;
@@ -755,11 +755,11 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.perAmpPitch[0].dry == doctest::Approx(0.9));
   CHECK(out.perAmpPitch[0].voicing == 0);
   CHECK(out.perAmpPitch[0].level == doctest::Approx(-3.5));
-  CHECK(out.perAmpPitch[0].transChar == 0); // default Drop preserved
+  CHECK(out.perAmpPitch[0].transChar == 1); // default Instant preserved
 
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(-7.0));
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 2); // Instant round-trips
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 0); // Drop round-trips
 
   // Untouched amp stays absent -> pitch defaults to bypassed downstream.
   CHECK_FALSE(out.perAmpPitch[1].present);

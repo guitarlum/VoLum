@@ -110,11 +110,10 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
-TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Fast > Instant) and reasonably low")
+TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Instant) and reasonably low")
 {
   VoLumPitch pitch;
   pitch.Configure(kSR, kBlock);
-  // Default transpose character is Drop.
   pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
                   VoLumPitch::Character::Drop);
   const int dropLat = pitch.Latency();
@@ -124,16 +123,10 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Fast > Instant) 
   CHECK(dropLat > static_cast<int>(kSR * 0.008));
 
   pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
-                  VoLumPitch::Character::Fast);
-  const int fastLat = pitch.Latency();
-  CHECK(fastLat > 0);
-  CHECK(fastLat < dropLat); // Fast drops the WSOLA search for lower latency.
-
-  pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
                   VoLumPitch::Character::Instant);
   const int instantLat = pitch.Latency();
   CHECK(instantLat > 0);
-  CHECK(instantLat < fastLat); // Instant shortens the crossfade for the lowest latency.
+  CHECK(instantLat < dropLat); // Instant shortens the crossfade + drops WSOLA for the lowest latency.
   // Instant ~8.6 ms; still above a hard floor (period-sync read-ahead).
   CHECK(instantLat > static_cast<int>(kSR * 0.004));
 
@@ -141,17 +134,25 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Fast > Instant) 
   pitch.SetParams(VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
                   VoLumPitch::Character::Instant);
   CHECK(pitch.Latency() == dropLat);
+
+  // The static, param-based helper (used for host PDC + the settings readout on the
+  // main thread) must agree with the live instance latency for every mode/character,
+  // so the reported value never lags the audio thread by one change.
+  CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Transpose, VoLumPitch::Character::Drop, kSR) == dropLat);
+  CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Transpose, VoLumPitch::Character::Instant, kSR) == instantLat);
+  // Octaver ignores the character pill and always reports Drop-grade latency.
+  CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Octaver, VoLumPitch::Character::Instant, kSR) == dropLat);
+  CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Octaver, VoLumPitch::Character::Drop, kSR) == dropLat);
 }
 
 TEST_CASE("VoLumPitch transpose is pitch-accurate downshifting in both characters")
 {
   // Core claim: exact-ratio read pointer + period-sync splices => no octave error
   // and tight pitch on low-string downtuning (the primary use case). DROP (WSOLA)
-  // is tighter; FAST and INSTANT are period-sync only (looser on big shifts) but
-  // still well within an eighth-tone. INSTANT only differs by crossfade length, so
-  // its pitch tracks as accurately as FAST.
+  // is tighter; INSTANT is period-sync only (looser on big shifts) but still well
+  // within an eighth-tone.
   const double base = 110.0; // A2, low string
-  for (int chI = 0; chI < 3; ++chI)
+  for (int chI = 0; chI < 2; ++chI) // Drop, Instant
   {
     const auto ch = static_cast<VoLumPitch::Character>(chI);
     for (int semi : {-12, -7, -5, -3, -2})

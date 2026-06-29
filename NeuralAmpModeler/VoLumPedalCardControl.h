@@ -56,10 +56,9 @@ public:
     if (mHovered)
     {
       g.FillRect(IColor(18, 80, 140, 160), mRECT);
-      g.DrawRoundRect(VoLumColors::TEAL_DIM.WithOpacity(0.48f),
-                      mRECT.GetPadded(-1.f, -1.f, -1.f, -1.f), 4.f);
+      g.DrawRoundRect(VoLumColors::TEAL_DIM.WithOpacity(0.48f), mRECT.GetPadded(-1.f, -1.f, -1.f, -1.f), 4.f);
     }
-    
+
     IColor borderCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::FRAME : VoLumColors::TEAL_DIM);
     if (mHovered && !focused)
       borderCol = bypassed ? VoLumColors::GOLD_DIM : VoLumColors::TEAL;
@@ -71,11 +70,14 @@ public:
     DrawCornerAccent(g, mRECT.R - 4.f, mRECT.B - 4.f, cs, true, true, borderCol);
 
     IRECT artRect = mRECT.GetPadded(-2.f, -2.f, -2.f, -22.f);
-    if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed) {
+    const int variant = _MotifVariant();
+    if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed || mCachedVariant != variant)
+    {
       g.StartLayer(this, artRect);
       _DrawFractalArt(g, artRect, bypassed);
       mArtLayer = g.EndLayer();
       mCachedBypassed = bypassed;
+      mCachedVariant = variant;
     }
     g.DrawLayer(mArtLayer);
     if (bypassed)
@@ -138,12 +140,12 @@ public:
     if (mCallback)
       mCallback(this, false);
   }
-  
+
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
     if (mPlaceholder)
       return;
     if (!mHovered)
@@ -185,7 +187,18 @@ public:
 private:
   void _DrawFractalArt(IGraphics& g, const IRECT& r, bool dimmed)
   {
-    DrawEffectMotif(g, r, mEffect, dimmed);
+    DrawEffectMotif(g, r, mEffect, dimmed, _MotifVariant());
+  }
+
+  // PITCH motif variant: 1 = Octaver, 0 = Transpose (or any other effect).
+  int _MotifVariant()
+  {
+    if (mEffect != EVoLumEffectFocus::PITCH)
+      return 0;
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    if (!plugin)
+      return 0;
+    return (plugin->GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose) ? 0 : 1;
   }
 
 
@@ -215,8 +228,7 @@ private:
         else
           summary.SetFormatted(64, "OCT");
         return summary.Get();
-      case EVoLumEffectFocus::COMP:
-        return "Compressor";
+      case EVoLumEffectFocus::COMP: return "Compressor";
       case EVoLumEffectFocus::PRE_NAM1:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam1Capture)->Int());
       case EVoLumEffectFocus::PRE_NAM2:
@@ -232,8 +244,7 @@ private:
         else
           summary.SetFormatted(64, "%s . %.1f Hz", modeText.Get(), plugin->GetParam(kTremoloRate)->Value());
         return summary.Get();
-      default:
-        return "BYPASS";
+      default: return "BYPASS";
     }
   }
 
@@ -244,5 +255,6 @@ private:
   std::string mPlaceholderTitle;
   ILayerPtr mArtLayer;
   bool mCachedBypassed = false;
+  int mCachedVariant = -1; // PITCH motif sub-mode the cached art layer was drawn for.
   ClickCallback mCallback;
 };

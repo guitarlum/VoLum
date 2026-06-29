@@ -69,7 +69,7 @@ struct PitchTail
   double dry = 1.0;
   int voicing = 1; // 0=Vintage, 1=Modern
   double level = 0.0;
-  int transChar = 0; // 0=Drop, 1=Fast, 2=Instant (transpose engine character)
+  int transChar = 1; // 0=Drop, 1=Instant (default; transpose engine character)
 };
 
 // POST Tremolo pedal per-amp settings. Carried in the JSON id tail alongside the

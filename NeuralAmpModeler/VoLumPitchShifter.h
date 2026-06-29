@@ -55,8 +55,9 @@ public:
   enum class Character
   {
     Drop = 0, // WSOLA splice search: exact pitch on big shifts, ~17 ms.
-    Fast = 1, // period-sync only, 6 ms crossfade: ~12 ms, smooth splices.
-    Instant = 2 // period-sync, 2.5 ms crossfade: ~8.6 ms, tightest feel, grainier splices.
+    Instant = 1 // period-sync, 2.5 ms crossfade: ~8.6 ms, tightest feel, grainier splices.
+    // (The former FAST character was period-sync with a 6 ms crossfade at ~12 ms; it
+    //  was sonically identical to INSTANT with more latency, so it was removed.)
   };
 
   // Lowest note we design the delay band around (low E standard, 82.41 Hz). Notes
@@ -108,6 +109,15 @@ public:
     mDLo = t.dLo;
     mDHi = t.dHi;
     mLatency = t.latency;
+    // The delay band just moved. Re-centre the read pointer on the new latency so a
+    // LIVE character switch keeps wet aligned with the (latency-delayed) dry. This
+    // matters most at ratio 1.0, where the delay never drifts back into the new band
+    // on its own. Abort any in-flight crossfade. (Harmless during Configure: Reset()
+    // re-seeds these immediately afterwards.)
+    mDelay = static_cast<double>(mLatency);
+    mDelayNew = mDelay;
+    mFading = false;
+    mFadePos = 0;
   }
 
   int Latency() const { return mLatency; }
@@ -227,13 +237,9 @@ private:
     const double pDesign = sr / kDesignFmin;
     Timing t;
     // Crossfade length per character: DROP 5 ms (WSOLA aligns the splice anyway),
-    // FAST 6 ms (smoothest phase-coherent join), INSTANT 2.5 ms (shortest join ->
-    // lowest latency; splices are grainier but period-sync keeps pitch exact).
-    double xfadeMs = 6.0;
-    if (c == Character::Drop)
-      xfadeMs = 5.0;
-    else if (c == Character::Instant)
-      xfadeMs = 2.5;
+    // INSTANT 2.5 ms (shortest join -> lowest latency; splices are grainier but
+    // period-sync keeps pitch exact).
+    const double xfadeMs = (c == Character::Drop) ? 5.0 : 2.5;
     t.xfade = std::max(8, static_cast<int>(std::lround(sr * xfadeMs / 1000.0)));
     if (c == Character::Drop)
     {
@@ -429,6 +435,17 @@ public:
   int Latency() const { return mLatency; }
   bool Configured() const { return mConfigured; }
 
+  // Reported latency for a given mode/character at a sample rate, computed without
+  // touching the live (audio-thread-updated) state. Mirrors _ApplyCharacters:
+  // Octaver always runs DROP-grade voices; Transpose follows the character pill.
+  // Use this for host PDC / UI readouts on the main thread so the value reflects the
+  // CURRENT params immediately instead of lagging the audio thread by one block.
+  static int LatencyFor(Mode mode, Character transChar, double sampleRate)
+  {
+    const Character c = (mode == Mode::Transpose) ? transChar : Character::Drop;
+    return GranularVoice::LatencyFor(c, sampleRate);
+  }
+
   void Reset()
   {
     for (auto& voice : mVoices)
@@ -439,7 +456,7 @@ public:
   }
 
   void SetParams(Mode mode, double semitones, double mix01, double octDown01, double octUp01, double dry01,
-                 Voicing voicing, double levelDb, Character transChar = Character::Drop)
+                 Voicing voicing, double levelDb, Character transChar = Character::Instant)
   {
     mMode = mode;
     mTransChar = transChar;
