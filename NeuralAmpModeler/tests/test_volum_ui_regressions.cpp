@@ -430,7 +430,7 @@ TEST_CASE("Custom overlay hover highlight is wired through mHoverAction (Q1/B12)
   // these three is dropped the hover affordance silently dies (a "missed
   // highlighting" class of bug). Pinned so the Phase 3 overlay decomposition
   // keeps the wiring intact.
-  const std::string customUi = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomUi.h");
+  const std::string customUi = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
   RequireContains(customUi, "if (!mPopupOpen && mHoverAction >= 0)"); // Draw gate
   RequireContains(customUi, "mHoverAction = hoverAction;"); // OnMouseOver set
   RequireContains(customUi, "mHoverAction = -1;"); // OnMouseOut reset

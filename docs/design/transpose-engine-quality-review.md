@@ -157,17 +157,36 @@ signatures (byte-exact for retained text; `git diff` confirmed a single
 469-case suite (the source-string locks read the siblings via `ReadPluginSource`;
 five tests that read `NeuralAmpModeler.cpp` directly were repointed to the blob).
 
-**DEFERRED (own pass):**
-- The `VoLumCustomOverlayControl` split (Q2, ~73% of `VoLumCustomUi.h`'s 1895
-  lines) + the `switch(mManageKind)` traits table. A header has no TU, so the
-  tail-`#include` trick does not apply; it needs per-control sub-headers with
-  their own dependency untangling — a separate careful effort.
-- The preamble control classes (styles, `VoLumPanKnobControl` /
-  `VoLumDialKnobControl`, ~L44–282) sit *before* the class and are used by later
-  code, so they need a *top*-included header, not a tail include.
-- The `mLayoutFunc` lambda (~1450 lines, the single biggest blob) is *not*
-  tail-include-movable (it captures constructor locals); it needs free layout
-  helpers taking explicit context — its own design step.
+**LANDED (Phase 3e) — `mLayoutFunc` lambda extracted:** the ~1450-line build
+body became `NeuralAmpModeler::_BuildVoLumLayout(IGraphics*)` in the tail-
+`#include`d `VoLumLayoutBuild.inc.cpp` (the lambda now forwards). The earlier
+"captures constructor locals" worry was disproven *by the compiler*: a stored-
+and-later-called lambda using a constructor local is UB, and converting the body
+to a member makes any such use a hard compile error — it built clean, so there
+were none. **NeuralAmpModeler.cpp: 3523 -> 2075 lines (5599 at pass start).**
+Screenshot-verified the standalone renders an identical layout.
+
+**LANDED (Phase 3d) — `VoLumSettings.inc.cpp` split:** the 1090-line sibling is
+now a thin umbrella over `VoLumSettingsLocks.inc.cpp` / `VoLumSettingsScene.inc.cpp`
+/ `VoLumSettingsPresets.inc.cpp` (all the same TU; byte-identical after
+preprocessing).
+
+**LANDED (Phase 3c/3f) — `VoLumCustomUi.h` decomposed:** the four controls each
+moved to their own header — `VoLumPresetBar.h` (227), `VoLumListMenu.h` (219),
+`VoLumConfirmDialog.h` (173), `VoLumCustomOverlay.h` (1480) — and `VoLumCustomUi.h`
+is now a **40-line umbrella** that just includes them. Consumers needing only the
+preset bar / dropdown no longer drag in the overlay. The preamble-control-class
+concern was moot: the three small controls were self-contained and moved cleanly
+with per-header includes; no top-include shuffle was needed.
+
+**DEFERRED (logic refactor, not decomposition — intentionally not forced):**
+- `VoLumCustomOverlayControl` is now isolated in its own file but still ~1480
+  lines. Carving its *internals* (out-of-lining methods + a `switch(mManageKind)`
+  traits table) is a behavior-changing logic refactor on a multi-state overlay
+  (Manage list for presets/IRs/pedals + Builder grid) that yields **no** file-
+  size/token win (an AI editing the class reads it whole regardless) and cannot
+  be screenshot-verified in every state cheaply. It is the one remaining item
+  whose risk/reward argues for a dedicated, opt-in pass rather than bundling.
 
 ### P1 / LANDED (Phase 4, R4) — the "Mock" content bridge is mis-named
 

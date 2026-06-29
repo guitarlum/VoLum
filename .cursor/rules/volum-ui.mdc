@@ -23,19 +23,29 @@ Read the smallest owner first:
 - `VoLumTriptychState.h`: tiny shared enums.
 - `VoLumColorHelpers.h`: shared colors and small drawing helpers, incl. the selection SSOT (`DrawVoLumSelection` / `SelectionInkColor` + `VoLumSelectionStyle`) and `DrawVoLumScrollbar`.
 - `VoLumAmpList.h`: sidebar amp list control (rows, thumbnails, scrollbar drag). Pure scrollbar geometry lives in `VoLumAmpListScroll.h` (unit-tested in `test_volum_amp_list_scroll.cpp`).
-- `VoLumCustomUi.h`: custom-content overlay — preset bar, `VoLumListMenuControl`, confirm dialog, the Manage/Builder overlay (`VoLumCustomOverlayControl`). Large; the overlay split is a tracked follow-up (see findings doc §3).
+- `VoLumCustomUi.h`: thin umbrella — just `#include`s the four custom-content control headers below. Include this; do not include the parts directly.
+  - `VoLumPresetBar.h`: `VoLumPresetBarControl` (F5 preset strip).
+  - `VoLumListMenu.h`: `VoLumListMenuControl` (reusable anchored dropdown).
+  - `VoLumConfirmDialog.h`: `VoLumConfirmDialogControl` (destructive-delete modal).
+  - `VoLumCustomOverlay.h`: `VoLumCustomOverlayControl` (full-window Manage CRUD + amp Builder). Still ~1480 lines but now self-contained; further internal carve is optional (it is one cohesive class, not a mixed-concern file).
 - `VoLumCustomContentApi.h`: the index-based `volum::custom::*` session API the UI calls; a projection bridge over `GlobalContentStore()` (formerly `VoLumCustomContentMock.h` — production code, not a test mock).
 - `VoLumCustomModel.h` / `VoLumContentStore.h`: pure custom-content manifest model + the registry-backed content store the bridge projects.
 - `VoLumFractalArt.h`: large procedural art. Read only when changing fractals or hero/sidebar art.
 
 Architecture:
 
-- Layout is built in the `mLayoutFunc` lambda in `NeuralAmpModeler.cpp` (set in the constructor next to `mMakeGraphicsFunc`, ~L505). There is no `_AttachVoLumGraphics`; controls are attached inside that lambda.
+- Layout is built in `NeuralAmpModeler::_BuildVoLumLayout(IGraphics*)`, defined in the tail-`#include`d `VoLumLayoutBuild.inc.cpp`. The constructor's `mLayoutFunc` lambda (~L505) just forwards to it. There is no `_AttachVoLumGraphics`; all controls are attached inside `_BuildVoLumLayout`. Because it is a member (not a captured lambda), it may only use members + its `pGraphics` arg, never constructor locals.
 - `APP_API` means standalone; VST3-only behavior stays under `#ifndef APP_API`.
 - Triptych has one expanded section at a time: PRE, AMP, or POST.
 - Bottom knob row uses replace mode: section/pedal selection hides previous focused controls and shows new controls.
 - PRE strip background is diagonal crosshatch; collapsed AMP strip is circuit-board grid.
-- `NeuralAmpModeler.cpp` is the compiled translation unit; `VoLumProcessBlock.inc.cpp`, `VoLumLoader.inc.cpp`, `VoLumSettings.inc.cpp`, `VoLumKeyboard.inc.cpp` (keyboard nav + exact entry), `VoLumLayoutRuntime.inc.cpp` (`_UpdateVoLumLayout`), `VoLumSceneRig.inc.cpp` (channel/PRE-capture/custom-amp/IR rig helpers), `VoLumAmpMenus.inc.cpp` (factory reset + preset/support menus + dual-amp focus), and `Unserialization.cpp` are tail-`#include`d or path-preserved siblings, not independent build targets. A `#include` pastes the sibling at that exact point, so moving a member function into a sibling is behavior-neutral.
+- `NeuralAmpModeler.cpp` is the compiled translation unit; these are tail-`#include`d (or path-preserved) siblings, NOT independent build targets — a `#include` pastes the sibling at that exact point, so moving a member function into a sibling is behavior-neutral:
+  - `VoLumProcessBlock.inc.cpp`, `VoLumLoader.inc.cpp`
+  - `VoLumLayoutBuild.inc.cpp` (`_BuildVoLumLayout`, the full one-time attach pass)
+  - `VoLumKeyboard.inc.cpp` (keyboard nav + exact entry), `VoLumLayoutRuntime.inc.cpp` (`_UpdateVoLumLayout`)
+  - `VoLumSceneRig.inc.cpp` (channel/PRE-capture/custom-amp/IR rig helpers), `VoLumAmpMenus.inc.cpp` (factory reset + preset/support menus + dual-amp focus)
+  - `VoLumSettings.inc.cpp` is itself a thin umbrella that tail-includes `VoLumSettingsLocks.inc.cpp` (save-to-slot/lock/dirty/snapshots), `VoLumSettingsScene.inc.cpp` (restore/apply/DSP caches/file I/O/lite), and `VoLumSettingsPresets.inc.cpp` (preset bank)
+  - `Unserialization.cpp`
 - Source-string regression locks in `test_volum_ui_regressions.cpp` use `ReadPluginSource()` over `NeuralAmpModeler.cpp` plus the tail-included `.inc.cpp` siblings. Moving a function between those files does not break a lock unless the string itself changes.
 - Promoting `.inc.cpp` siblings to real separate translation units is a 1.1 hygiene follow-up that needs macOS verification.
 - Any list/menu that can grow at runtime (presets, IRs, pedals, custom amps, custom-amp file manifest, support-amp picker) MUST clip drawing to its rect, cap its height to the window, and provide a scrollbar + mouse-wheel/trackpad scrolling. See `VoLumListMenuControl`, `VoLumPreCaptureMenuControl`, and the builder file list in `VoLumCustomUi.h` for the pattern. Do not add an unbounded list that draws past its rect. Draw the scrollbar with `DrawVoLumScrollbar` so every list reads identically.
