@@ -130,17 +130,12 @@ public:
       IRECT itemArea = IRECT(mRECT.L + 12.f, mRECT.T + i * itemH, mRECT.R, mRECT.T + (i + 1) * itemH);
       bool isSelected = (i == selected);
 
-      if (isSelected) {
-        g.FillRect(VoLumColors::AMBER, itemArea.GetPadded(-1.f));
-      }
-      else if (static_cast<int>(i) == mHovered)
-      {
-        // Soft amber wash to telegraph the click target without competing with the
-        // current selection's solid amber fill.
-        g.FillRect(IColor(48, 226, 165, 78), itemArea.GetPadded(-1.f));
-      }
+      // Selection chrome via the shared helper (square amber fill / soft amber
+      // hover wash). See VoLumColorHelpers.h DrawVoLumSelection.
+      DrawVoLumSelection(g, itemArea, isSelected, static_cast<int>(i) == mHovered,
+                         VoLumSelectionStyle::AmberPicker, /*roundness=*/0.f, /*inset=*/1.f);
 
-      IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
+      IColor textCol = SelectionInkColor(VoLumSelectionStyle::AmberPicker, isSelected);
       IText text(11.f, textCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
       IRECT textArea = itemArea;
       textArea.L += 6.f; // manually indent instead of GetTranslated which shifts the whole rect
@@ -368,15 +363,15 @@ public:
       const IRECT itemArea(l, mRECT.T, r, mRECT.B);
       const bool isSelected = (i == selected);
 
-      if (isSelected)
-        g.FillRoundRect(VoLumColors::AMBER, itemArea.GetPadded(-1.5f), 3.f);
-      else if (i == mHovered)
-        g.FillRoundRect(IColor(48, 226, 165, 78), itemArea.GetPadded(-1.5f), 3.f);
+      // Selection chrome via the shared helper (rounded amber fill / soft amber
+      // hover wash). See VoLumColorHelpers.h DrawVoLumSelection.
+      DrawVoLumSelection(g, itemArea, isSelected, i == mHovered, VoLumSelectionStyle::AmberPicker,
+                         /*roundness=*/3.f, /*inset=*/1.5f);
 
       if (i > 0)
         g.DrawLine(IColor(96, 200, 162, 78), itemArea.L, mRECT.T + 3.f, itemArea.L, mRECT.B - 3.f, nullptr, 1.f);
 
-      const IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
+      const IColor textCol = SelectionInkColor(VoLumSelectionStyle::AmberPicker, isSelected);
       const IText text(fontSize, textCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       const IRECT textArea = itemArea.GetPadded(-3.f, 0.f, -3.f, 0.f);
       g.DrawText(text, mLabels[i].c_str(), textArea);

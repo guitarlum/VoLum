@@ -437,6 +437,88 @@ inline nlohmann::json PostBlockToJson(const VoLumAmpSettings& s)
   return o;
 }
 
+// Main-amp core block (cab/channel + tone + gates). Lives here with the other
+// block writers/readers so the whole VoLumAmpSettings field list has a single
+// source of truth; VoLumAmpSettingsJson.h composes these for presets/content.
+inline void WriteAmpCoreBlock(nlohmann::json& a, const VoLumAmpSettings& s)
+{
+  a["speaker"] = s.speakerIdx;
+  a["channel"] = s.channelIdx;
+  a["input"] = s.inputLevel;
+  a["gate"] = s.gateThreshold;
+  a["bass"] = s.toneBass;
+  a["mid"] = s.toneMid;
+  a["treble"] = s.toneTreble;
+  a["output"] = s.outputLevel;
+  a["noiseGate"] = s.noiseGateActive;
+  a["eq"] = s.eqActive;
+}
+
+// Returns true if any field was clamped/reset (i.e. the source was malformed).
+inline bool ReadAmpCoreBlock(const nlohmann::json& a, VoLumAmpSettings& s)
+{
+  const VoLumAmpSettings d;
+  bool healed = false;
+  auto i = [&](const char* k, int& t, int lo, int hi, int def) {
+    if (!a.contains(k))
+      return;
+    if (!a[k].is_number_integer())
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    const long long v = a[k].get<long long>();
+    if (v < lo || v > hi)
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    t = static_cast<int>(v);
+  };
+  auto dbl = [&](const char* k, double& t, double lo, double hi, double def) {
+    if (!a.contains(k))
+      return;
+    if (!a[k].is_number())
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    const double v = a[k].get<double>();
+    if (!std::isfinite(v) || v < lo || v > hi)
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    t = v;
+  };
+  auto b = [&](const char* k, bool& t, bool def) {
+    if (!a.contains(k))
+      return;
+    if (!a[k].is_boolean())
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    t = a[k].get<bool>();
+  };
+  i("speaker", s.speakerIdx, 0, 127, d.speakerIdx);
+  i("channel", s.channelIdx, 0, 127, d.channelIdx);
+  dbl("input", s.inputLevel, -20.0, 20.0, d.inputLevel);
+  dbl("gate", s.gateThreshold, -100.0, 0.0, d.gateThreshold);
+  dbl("bass", s.toneBass, 0.0, 10.0, d.toneBass);
+  dbl("mid", s.toneMid, 0.0, 10.0, d.toneMid);
+  dbl("treble", s.toneTreble, 0.0, 10.0, d.toneTreble);
+  dbl("output", s.outputLevel, -40.0, 10.0, d.outputLevel);
+  b("noiseGate", s.noiseGateActive, d.noiseGateActive);
+  b("eq", s.eqActive, d.eqActive);
+  return healed;
+}
+
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
                                               bool preLocked = false, bool postLocked = false,
@@ -463,91 +545,25 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
   for (int i = 0; i < ampCount; ++i)
   {
     const auto& s = ampSettings[i];
+    // Single source of truth: compose the same block writers the rest of the
+    // settings/preset codec uses instead of re-listing every field inline. A
+    // field added to a block writer (WriteAmpCoreBlock / PreBlockToJson /
+    // PostBlockToJson / WriteDualAmpUserSettings) is now automatically persisted
+    // per-amp; previously it had to be added here too or it was silently dropped.
+    // Guarded by the exhaustive round-trip pin in test_volum_user_settings_io.cpp.
     nlohmann::json a;
-    a["speaker"] = s.speakerIdx;
-    a["channel"] = s.channelIdx;
-    a["input"] = s.inputLevel;
-    a["gate"] = s.gateThreshold;
-    a["bass"] = s.toneBass;
-    a["mid"] = s.toneMid;
-    a["treble"] = s.toneTreble;
-    a["output"] = s.outputLevel;
-    a["noiseGate"] = s.noiseGateActive;
-    a["eq"] = s.eqActive;
-    // VoLum 1.2.0: persist the per-amp custom IR selection (opaque content-store
-    // id; empty == baked cab) so a factory amp's chosen IR survives a standalone
-    // restart. Additive optional key; older readers ignore it.
+    WriteAmpCoreBlock(a, s);
+    // VoLum 1.2.0: per-amp + per-lane custom IR ids (opaque content-store ids;
+    // empty == baked cab). Additive optional keys; older readers ignore them.
     a["activeIrId"] = s.activeIrId;
-    // VoLum 1.2.0: per-lane support-amp custom IR (additive; empty == baked cab).
     a["supportActiveIrId"] = s.supportActiveIrId;
-    a["preCompActive"] = s.preCompActive;
-    a["preCompAmount"] = s.preCompAmount;
-    a["preCompRatio"] = s.preCompRatio;
-    a["preCompAttack"] = s.preCompAttack;
-    a["preCompRelease"] = s.preCompRelease;
-    a["preCompMix"] = s.preCompMix;
-    a["preCompLevel"] = s.preCompLevel;
-    a["preNam1Active"] = s.preNam1Active;
-    a["preNam1Capture"] = s.preNam1Capture;
-    a["preNam1Gain"] = s.preNam1Gain;
-    a["preNam1Bass"] = s.preNam1Bass;
-    a["preNam1Mid"] = s.preNam1Mid;
-    a["preNam1MidFreq"] = s.preNam1MidFreq;
-    a["preNam1Treble"] = s.preNam1Treble;
-    a["preNam1Level"] = s.preNam1Level;
-    a["preNam2Active"] = s.preNam2Active;
-    a["preNam2Capture"] = s.preNam2Capture;
-    a["preNam2Gain"] = s.preNam2Gain;
-    a["preNam2Bass"] = s.preNam2Bass;
-    a["preNam2Mid"] = s.preNam2Mid;
-    a["preNam2MidFreq"] = s.preNam2MidFreq;
-    a["preNam2Treble"] = s.preNam2Treble;
-    a["preNam2Level"] = s.preNam2Level;
-    a["prePitchActive"] = s.prePitchActive;
-    a["prePitchMode"] = s.prePitchMode;
-    a["prePitchSemitones"] = s.prePitchSemitones;
-    a["prePitchMix"] = s.prePitchMix;
-    a["prePitchOctDown"] = s.prePitchOctDown;
-    a["prePitchOctUp"] = s.prePitchOctUp;
-    a["prePitchDry"] = s.prePitchDry;
-    a["prePitchVoicing"] = s.prePitchVoicing;
-    a["prePitchLevel"] = s.prePitchLevel;
-    a["prePitchTransChar"] = s.prePitchTransChar;
-    if (includeDualAmp)
-      WriteDualAmpUserSettings(a, s);
-
+    a.update(PreBlockToJson(s));
     // POST per-amp live values (v6+). postValid distinguishes a real per-amp scene
     // from a legacy / never-saved slot; restore initializes postValid=false slots to
     // factory POST defaults instead of inheriting the previously selected amp.
-    a["postValid"] = s.postValid;
-    a["postDelayActive"] = s.postDelayActive;
-    a["postDelayTime"] = s.postDelayTime;
-    a["postDelayFeedback"] = s.postDelayFeedback;
-    a["postDelayMix"] = s.postDelayMix;
-    a["postDelayMode"] = s.postDelayMode;
-    a["postDelayTone"] = s.postDelayTone;
-    a["postDelayAge"] = s.postDelayAge;
-    a["postDelayPingPong"] = s.postDelayPingPong;
-    a["postReverbActive"] = s.postReverbActive;
-    a["postReverbMix"] = s.postReverbMix;
-    a["postReverbDecay"] = s.postReverbDecay;
-    a["postReverbTone"] = s.postReverbTone;
-    a["postReverbPreDelay"] = s.postReverbPreDelay;
-    a["postReverbShimmer"] = s.postReverbShimmer;
-    a["postReverbMode"] = s.postReverbMode;
-    a["postReverbSubMode"] = s.postReverbSubMode;
-    a["postTremoloActive"] = s.postTremoloActive;
-    a["postTremoloMode"] = s.postTremoloMode;
-    a["postTremoloRate"] = s.postTremoloRate;
-    a["postTremoloDepth"] = s.postTremoloDepth;
-    a["postTremoloShape"] = s.postTremoloShape;
-    a["postTremoloMix"] = s.postTremoloMix;
-    a["postTremoloCrossover"] = s.postTremoloCrossover;
-    a["postTremoloSync"] = s.postTremoloSync;
-    a["postTremoloDivision"] = s.postTremoloDivision;
-    a["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
-    a["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
-    a["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
+    a.update(PostBlockToJson(s));
+    if (includeDualAmp)
+      WriteDualAmpUserSettings(a, s);
 
     amps[kAmps[i].folderName] = a;
   }

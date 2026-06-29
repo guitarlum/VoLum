@@ -27,84 +27,9 @@
 namespace volum
 {
 
-inline void WriteAmpCoreBlock(nlohmann::json& a, const VoLumAmpSettings& s)
-{
-  a["speaker"] = s.speakerIdx;
-  a["channel"] = s.channelIdx;
-  a["input"] = s.inputLevel;
-  a["gate"] = s.gateThreshold;
-  a["bass"] = s.toneBass;
-  a["mid"] = s.toneMid;
-  a["treble"] = s.toneTreble;
-  a["output"] = s.outputLevel;
-  a["noiseGate"] = s.noiseGateActive;
-  a["eq"] = s.eqActive;
-}
-
-// Returns true if any field was clamped/reset (i.e. the source was malformed).
-inline bool ReadAmpCoreBlock(const nlohmann::json& a, VoLumAmpSettings& s)
-{
-  const VoLumAmpSettings d;
-  bool healed = false;
-  auto i = [&](const char* k, int& t, int lo, int hi, int def) {
-    if (!a.contains(k))
-      return;
-    if (!a[k].is_number_integer())
-    {
-      t = def;
-      healed = true;
-      return;
-    }
-    const long long v = a[k].get<long long>();
-    if (v < lo || v > hi)
-    {
-      t = def;
-      healed = true;
-      return;
-    }
-    t = static_cast<int>(v);
-  };
-  auto dbl = [&](const char* k, double& t, double lo, double hi, double def) {
-    if (!a.contains(k))
-      return;
-    if (!a[k].is_number())
-    {
-      t = def;
-      healed = true;
-      return;
-    }
-    const double v = a[k].get<double>();
-    if (!std::isfinite(v) || v < lo || v > hi)
-    {
-      t = def;
-      healed = true;
-      return;
-    }
-    t = v;
-  };
-  auto b = [&](const char* k, bool& t, bool def) {
-    if (!a.contains(k))
-      return;
-    if (!a[k].is_boolean())
-    {
-      t = def;
-      healed = true;
-      return;
-    }
-    t = a[k].get<bool>();
-  };
-  i("speaker", s.speakerIdx, 0, 127, d.speakerIdx);
-  i("channel", s.channelIdx, 0, 127, d.channelIdx);
-  dbl("input", s.inputLevel, -20.0, 20.0, d.inputLevel);
-  dbl("gate", s.gateThreshold, -100.0, 0.0, d.gateThreshold);
-  dbl("bass", s.toneBass, 0.0, 10.0, d.toneBass);
-  dbl("mid", s.toneMid, 0.0, 10.0, d.toneMid);
-  dbl("treble", s.toneTreble, 0.0, 10.0, d.toneTreble);
-  dbl("output", s.outputLevel, -40.0, 10.0, d.outputLevel);
-  b("noiseGate", s.noiseGateActive, d.noiseGateActive);
-  b("eq", s.eqActive, d.eqActive);
-  return healed;
-}
+// WriteAmpCoreBlock / ReadAmpCoreBlock now live in VoLumUserSettingsIO.h next to
+// the other block writers/readers (single source of truth for the field list);
+// they are visible here via that include.
 
 inline void ReadDualAmpBlock(const nlohmann::json& a, VoLumAmpSettings& s)
 {
