@@ -215,6 +215,92 @@ inline void DrawSoftGlowCircle(IGraphics& g, float cx, float cy, float radius, c
   g.PathFill(IPattern::CreateRadialGradient(cx, cy, radius, {{col, 0.f}, {COLOR_TRANSPARENT, 1.f}}));
 }
 
+// ===========================================================================
+// Selection language (single source of truth)
+// ---------------------------------------------------------------------------
+// VoLum has three historical selection dialects: brass (SEL_*, cab row /
+// metronome), list-teal (ITEM_SEL_*, sidebar + menus), and amber (mode pickers
+// and sub-mode pills). Each was hand-drawn at every call site, so a new
+// mutually-exclusive control could ship with a missing or mismatched highlight.
+// DrawVoLumSelection draws the active/hover background chrome for ONE item in a
+// group given an explicit style, so the look is defined once. Text colour stays
+// the caller's responsibility (it depends on content); SelectionInkColor()
+// returns the matching on-selection text colour per style.
+// ===========================================================================
+enum class VoLumSelectionStyle
+{
+  Brass,       // SEL_* brass wash + outline (cab row, time-sig grid)
+  ListTeal,    // ITEM_SEL_* teal wash + outline (sidebar list, menus)
+  AmberPicker, // solid amber fill (mode pickers + sub-mode pills)
+};
+
+// Draw the selection/hover background for one item. `roundness <= 0` draws square
+// corners (matches the mode picker); `inset` pads the fill in from the item rect.
+inline void DrawVoLumSelection(IGraphics& g, const IRECT& item, bool active, bool hovered,
+                               VoLumSelectionStyle style, float roundness = 3.f, float inset = 1.f)
+{
+  const IRECT fill = item.GetPadded(-inset);
+  const IColor amberHover(48, 226, 165, 78); // soft amber wash to telegraph the target
+
+  switch (style)
+  {
+    case VoLumSelectionStyle::AmberPicker:
+      if (active)
+      {
+        if (roundness > 0.f)
+          g.FillRoundRect(VoLumColors::AMBER, fill, roundness);
+        else
+          g.FillRect(VoLumColors::AMBER, fill);
+      }
+      else if (hovered)
+      {
+        if (roundness > 0.f)
+          g.FillRoundRect(amberHover, fill, roundness);
+        else
+          g.FillRect(amberHover, fill);
+      }
+      break;
+
+    case VoLumSelectionStyle::ListTeal:
+      if (active)
+      {
+        g.FillRoundRect(VoLumColors::ITEM_SEL_BG, fill, roundness);
+        g.DrawRoundRect(VoLumColors::ITEM_SEL_BORDER, fill, roundness);
+      }
+      else if (hovered)
+      {
+        g.FillRoundRect(VoLumColors::ITEM_HOVER, fill, roundness);
+      }
+      break;
+
+    case VoLumSelectionStyle::Brass:
+      if (active)
+      {
+        g.FillRoundRect(VoLumColors::SEL_BG, fill, roundness);
+        g.DrawRoundRect(VoLumColors::SEL_BORDER, fill, roundness);
+      }
+      else if (hovered)
+      {
+        g.FillRoundRect(VoLumColors::SEL_BG_SOFT, fill, roundness);
+      }
+      break;
+  }
+}
+
+// On-selection text colour matching DrawVoLumSelection's fill per style.
+inline IColor SelectionInkColor(VoLumSelectionStyle style, bool active)
+{
+  if (!active)
+    return VoLumColors::TEXT_BRIGHT;
+  switch (style)
+  {
+    case VoLumSelectionStyle::AmberPicker: return IColor(255, 26, 18, 8); // dark ink on amber
+    case VoLumSelectionStyle::Brass: return VoLumColors::SEL_TEXT;
+    case VoLumSelectionStyle::ListTeal: return VoLumColors::SEL_TEXT;
+  }
+  return VoLumColors::TEXT_BRIGHT;
+}
+
 // Edge vignette over a large dark region: transparent centre darkening to the corners.
 inline void DrawVignette(IGraphics& g, const IRECT& r, int strength = 64)
 {

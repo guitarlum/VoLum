@@ -420,6 +420,29 @@ TEST_CASE("Custom overlay hover highlight is wired through mHoverAction (Q1/B12)
   RequireContains(customUi, "mHoverAction = -1;"); // OnMouseOut reset
 }
 
+TEST_CASE("Mode pickers route selection through the shared DrawVoLumSelection helper (Phase 2)")
+{
+  // Selection language SSOT: every mutually-exclusive mode control must draw its
+  // active/hover chrome through DrawVoLumSelection (VoLumColorHelpers.h) instead
+  // of hand-rolling an amber fill. This is the enforcement guard for the "missed
+  // highlighting on a new mode picker" bug class - a new picker that forgets the
+  // highlight will not call the helper and will fail this pin in review.
+  const std::string colors = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumColorHelpers.h");
+  const std::string core = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
+
+  // The helper exists with an explicit style enum.
+  RequireContains(colors, "enum class VoLumSelectionStyle");
+  RequireContains(colors, "void DrawVoLumSelection(");
+  RequireContains(colors, "AmberPicker");
+
+  // Both amber mode controls route through it (picker = square, pill = rounded).
+  RequireContains(core, "DrawVoLumSelection(g, itemArea, isSelected, static_cast<int>(i) == mHovered,");
+  RequireContains(core, "DrawVoLumSelection(g, itemArea, isSelected, i == mHovered, VoLumSelectionStyle::AmberPicker,");
+  // And neither hand-rolls the amber fill any more.
+  RequireDoesNotContain(core, "g.FillRect(VoLumColors::AMBER, itemArea.GetPadded(-1.f));");
+  RequireDoesNotContain(core, "g.FillRoundRect(VoLumColors::AMBER, itemArea.GetPadded(-1.5f), 3.f);");
+}
+
 TEST_CASE("Standalone settings persist the active preset id (Q1/B5)")
 {
   // The active preset id round-trips through the standalone settings file:
