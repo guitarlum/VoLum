@@ -579,6 +579,30 @@ TEST_CASE("Imported pedals get stable, monotonic, non-reused PRE-capture indices
   CHECK(PedalLegacyIndexAt(i2) == idxB + 1); // monotonic, skips A's freed index
 }
 
+TEST_CASE("AddPedal refuses once the PRE-capture index pool is exhausted")
+{
+  using namespace volum::custom;
+  auto& reg = volum::content::GlobalContentStore().reg();
+  const int savedNext = reg.nextPedalIndex;
+
+  // Last usable slot: minting here must succeed and consume kCustomPedalIndexMax.
+  reg.nextPedalIndex = volum::content::kCustomPedalIndexMax;
+  const size_t before = MockCustomPedals().size();
+  const int last = AddPedal("Last slot", "pedals/last.nam");
+  CHECK(last >= 0);
+  CHECK(PedalLegacyIndexAt(last) == volum::content::kCustomPedalIndexMax);
+  CHECK(MockCustomPedals().size() == before + 1);
+
+  // Pool is now full (nextPedalIndex past max): further adds are rejected with -1
+  // instead of clamping to a colliding legacy index that would alias captures.
+  const size_t afterFull = MockCustomPedals().size();
+  CHECK(AddPedal("Overflow", "pedals/of.nam") == -1);
+  CHECK(MockCustomPedals().size() == afterFull); // nothing appended
+
+  DeletePedal(last); // keep the shared library tidy for later cases
+  reg.nextPedalIndex = savedNext;
+}
+
 TEST_CASE("RenamePedal and DeletePedal edit the custom-pedal library in place")
 {
   const int idx = volum::custom::AddPedal("PedalToRename");

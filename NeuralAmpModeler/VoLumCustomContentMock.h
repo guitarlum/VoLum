@@ -348,16 +348,22 @@ inline std::string PedalStoredPathByLegacy(int legacyIndex)
   return {};
 }
 
+// Appends an imported pedal and returns its list index, or -1 when the finite
+// PRE-capture index pool (kCustomPedalIndexBase..kCustomPedalIndexMax) is
+// exhausted. We refuse rather than clamp to kCustomPedalIndexMax, which would
+// alias the new pedal's captures onto an existing one. Callers must handle -1.
 inline int AddPedal(const std::string& name, const std::string& file = "", const std::string& group = "")
 {
   auto& reg = Store().reg();
+  if (reg.nextPedalIndex > content::kCustomPedalIndexMax)
+    return -1;
   content::PedalItem it;
   it.id = content::MintId(reg, "pedal");
   it.name = name.empty() ? "Imported pedal" : name;
   it.group = group;
   it.file = file;
-  it.legacyIndex = std::min(reg.nextPedalIndex, content::kCustomPedalIndexMax);
-  reg.nextPedalIndex = std::max(reg.nextPedalIndex, it.legacyIndex + 1);
+  it.legacyIndex = reg.nextPedalIndex;
+  reg.nextPedalIndex = it.legacyIndex + 1;
   reg.pedals.push_back(std::move(it));
   Store().Save();
   return (int)reg.pedals.size() - 1;
