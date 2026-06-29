@@ -2,7 +2,7 @@
 
 // VoLum 1.2.0 BYO + presets UI shells (unified dropdown + Manage design).
 //
-// Controls, rendering against the in-memory VoLumCustomContentMock:
+// Controls, rendering against the registry-backed VoLumCustomContentApi:
 //   - VoLumPresetBarControl    : F5 preset strip centred in the top header
 //                                (prev/name/next + opens the preset dropdown).
 //   - VoLumListMenuControl     : reusable anchored dropdown (item list + a single
@@ -19,7 +19,7 @@
 // live coverage are real; load/save/import are stubs.
 
 #include "VoLumColorHelpers.h"
-#include "VoLumCustomContentMock.h"
+#include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
 #include "VoLumIrFileGuard.h"
 

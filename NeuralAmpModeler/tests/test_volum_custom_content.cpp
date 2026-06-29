@@ -2,11 +2,11 @@
 
 #include <vector>
 
-#include "../VoLumCustomContentMock.h"
+#include "../VoLumCustomContentApi.h"
 
 // Covers the production (speaker x channel) snap helpers backing the 1.2.0
-// BYO-amp builder and main-view focus behavior. Everything else in
-// VoLumCustomContentMock.h is throwaway display data.
+// BYO-amp builder and main-view focus behavior, plus the registry-backed
+// projection/mutation API in VoLumCustomContentApi.h.
 
 using volum::custom::SnapChannel;
 using volum::custom::SpeakerEnabled;

@@ -7,7 +7,7 @@
 //
 // This header holds *only* pure logic + POD types. The session-facing API that
 // the UI calls (MockCustomAmps, AddIR, AddPreset, ...) lives in
-// VoLumCustomContentMock.h, which now projects/mutates the real backend store
+// VoLumCustomContentApi.h, which now projects/mutates the real backend store
 // (VoLumContentStore.h). Splitting the types out lets the store include the
 // model without a circular dependency on the session bridge.
 
@@ -393,7 +393,7 @@ inline bool HasDirectCapture(const CustomAmp& amp)
   return !AmpSlotChannels(amp, kDirectSlot).empty();
 }
 
-// Channel to snap to when the focused speaker changes (see VoLumCustomContentMock
+// Channel to snap to when the focused speaker changes (see VoLumCustomContentApi
 // history): keep the current channel if still available, else first available,
 // else -1 (empty/disabled slot).
 inline int SnapChannel(const std::vector<int>& availableChannels, int currentChannel)

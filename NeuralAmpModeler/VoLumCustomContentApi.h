@@ -2,11 +2,12 @@
 
 // VoLum 1.2.0 custom-content session API (F5-F8).
 //
-// Historically this header held an in-memory mock. It is now a thin *projection
-// bridge* over the real backend (VoLumContentStore.h): the UI keeps calling the
-// same index-based volum::custom::* functions, but reads now project the live
-// registry and writes mutate it (id-backed) and persist via the process-global
-// ContentStore.
+// This header is a thin *projection bridge* over the real backend
+// (VoLumContentStore.h): the UI keeps calling the same index-based
+// volum::custom::* functions, but reads project the live registry and writes
+// mutate it (id-backed) and persist via the process-global ContentStore.
+// (It was once named VoLumCustomContentMock.h, from when it held an in-memory
+// mock; it is production code now, not a test mock.)
 //
 //   - Getters (MockCustomAmps, MockIRLibrary, ...) rebuild a cached projection
 //     of the registry each call and return a reference to it. Callers read them

@@ -2,7 +2,7 @@
 
 // VoLum 1.2.0 content store (production backend for F5-F8).
 //
-// Replaces the in-memory VoLumCustomContentMock session stores with a real,
+// Replaces the in-memory VoLumCustomContent* session stores with a real,
 // VoLum-owned, all-format (standalone + VST3 + AU) content library:
 //
 //   <base>/volum-content.json   registry: custom-amp manifests, IR library,
