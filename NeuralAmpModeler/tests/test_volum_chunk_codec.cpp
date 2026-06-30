@@ -1007,3 +1007,115 @@ TEST_CASE("Id tail without supIr keys (older schema) reads support IR ids empty"
   for (int i = 0; i < volum::kAmpCount; ++i)
     CHECK(out.perAmpSupportIrId[i].empty());
 }
+
+// A pre-effects id tail (1.2.0 BYO-only, before the pitch/tremolo/delay-sync
+// blocks existed) has no "pitch"/"trem"/"dly" per-amp keys and no locked-effect
+// snapshots. A current reader must load it cleanly with every effect tail
+// absent (present=false) so the downstream defaults bypass each effect.
+TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effects absent")
+{
+  nlohmann::json j;
+  j["v"] = 3; // pre-tremolo / pre-delay-sync schema
+  j["customMainId"] = "";
+  j["customSupportId"] = "";
+  j["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    perAmp.push_back({{"ir", ""}, {"supIr", ""}, {"sup", ""}});
+  j["perAmp"] = perAmp;
+  const std::string body = j.dump();
+
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    CHECK_FALSE(out.perAmpPitch[i].present);
+    CHECK_FALSE(out.perAmpTremolo[i].present);
+    CHECK_FALSE(out.perAmpDelay[i].present);
+    // Absent tails keep their bypassed-by-default field values.
+    CHECK_FALSE(out.perAmpPitch[i].active);
+    CHECK_FALSE(out.perAmpTremolo[i].active);
+    CHECK_FALSE(out.perAmpDelay[i].sync);
+  }
+  // Locked-effect snapshots are absent on an older tail too.
+  CHECK_FALSE(out.lockedPrePitch.present);
+  CHECK_FALSE(out.lockedPostTremolo.present);
+  CHECK_FALSE(out.lockedPostDelay.present);
+}
+
+// A tremolo/pitch-aware build that predates per-mode memory wrote the effect
+// block WITHOUT a "modes" array (or with a short one). Loading it must seed the
+// missing per-mode snapshots from the ship defaults and never index out of
+// bounds, while still honoring the live (non-mode) values that were present.
+TEST_CASE("Id tail effect blocks with missing/short modes arrays seed ship defaults")
+{
+  const volum::PitchTail defPitch;     // default-constructed = ship defaults
+  const volum::TremoloTail defTremolo; // default-constructed = ship defaults
+
+  nlohmann::json j;
+  j["v"] = 4;
+  j["customMainId"] = "";
+  j["customSupportId"] = "";
+  j["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    nlohmann::json entry = {{"ir", ""}, {"supIr", ""}, {"sup", ""}};
+    if (i == 0)
+    {
+      // Tremolo present, live values set, but NO "modes" key at all.
+      entry["trem"] = {{"active", true}, {"mode", volum::kVoLumTremoloModeHarmonic}, {"rate", 3.5}, {"depth", 0.6}};
+      // Pitch present with a SHORT modes array (only the first mode).
+      nlohmann::json pmodes = nlohmann::json::array();
+      pmodes.push_back({{"mix", 0.4}, {"dry", 0.5}, {"level", -2.0}, {"voice", 0}});
+      entry["pitch"] = {{"active", true}, {"mode", 1}, {"semi", -5.0}, {"modes", pmodes}};
+    }
+    perAmp.push_back(entry);
+  }
+  j["perAmp"] = perAmp;
+  const std::string body = j.dump();
+
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  // Tremolo: live values honored; every per-mode snapshot fell back to defaults.
+  REQUIRE(out.perAmpTremolo[0].present);
+  CHECK(out.perAmpTremolo[0].active);
+  CHECK(out.perAmpTremolo[0].mode == volum::kVoLumTremoloModeHarmonic);
+  CHECK(out.perAmpTremolo[0].rate == doctest::Approx(3.5));
+  for (int m = 0; m < volum::kVoLumTremoloModeCount; ++m)
+  {
+    CHECK(out.perAmpTremolo[0].modes[m].rate == doctest::Approx(defTremolo.modes[m].rate));
+    CHECK(out.perAmpTremolo[0].modes[m].depth == doctest::Approx(defTremolo.modes[m].depth));
+    CHECK(out.perAmpTremolo[0].modes[m].crossover == doctest::Approx(defTremolo.modes[m].crossover));
+  }
+
+  // Pitch: the one provided mode loads; the rest fall back to ship defaults.
+  REQUIRE(out.perAmpPitch[0].present);
+  CHECK(out.perAmpPitch[0].semitones == doctest::Approx(-5.0));
+  CHECK(out.perAmpPitch[0].modes[0].mix == doctest::Approx(0.4));
+  CHECK(out.perAmpPitch[0].modes[0].dry == doctest::Approx(0.5));
+  CHECK(out.perAmpPitch[0].modes[0].voicing == 0);
+  for (int m = 1; m < volum::kVoLumPitchModeCount; ++m)
+  {
+    CHECK(out.perAmpPitch[0].modes[m].mix == doctest::Approx(defPitch.modes[m].mix));
+    CHECK(out.perAmpPitch[0].modes[m].dry == doctest::Approx(defPitch.modes[m].dry));
+    CHECK(out.perAmpPitch[0].modes[m].voicing == defPitch.modes[m].voicing);
+  }
+}

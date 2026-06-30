@@ -211,6 +211,43 @@ TEST_CASE("A2 rigs activate the specialized fast WaveNet path")
   CHECK(channels == 8);
 }
 
+TEST_CASE("A2 detector rejects non-A2 WaveNet configs (strict, no false positives)")
+{
+  // Guard the fast path from hijacking ordinary models. The detector reads the
+  // model "config" sub-object and must reject anything that is not the exact A2
+  // signature, defensively (never throwing on arbitrary JSON). All bundled rigs
+  // are A2 containers, so the negatives are synthesized to mirror the generic
+  // WaveNet shapes the detector must turn down.
+  using nam::wavenet::a2_fast::is_a2_shape;
+  int channels = -1;
+
+  // Empty / unrelated object: no "layers" key at all.
+  CHECK_FALSE(is_a2_shape(nlohmann::json::object(), &channels));
+  CHECK_FALSE(is_a2_shape(nlohmann::json{{"foo", 1}, {"bar", "baz"}}, &channels));
+
+  // Generic WaveNet with the usual TWO layer arrays (A2 has exactly one).
+  nlohmann::json twoArrays;
+  twoArrays["layers"] = nlohmann::json::array();
+  twoArrays["layers"].push_back({{"channels", 16}});
+  twoArrays["layers"].push_back({{"channels", 8}});
+  twoArrays["head_scale"] = 0.02;
+  CHECK_FALSE(is_a2_shape(twoArrays, &channels));
+
+  // One layer array but a post-stack head present (A2 has none).
+  nlohmann::json withHead;
+  withHead["layers"] = nlohmann::json::array();
+  withHead["layers"].push_back({{"channels", 8}});
+  withHead["head"] = {{"channels", 1}};
+  withHead["head_scale"] = 0.01;
+  CHECK_FALSE(is_a2_shape(withHead, &channels));
+
+  // One layer array, no head, but head_scale missing (must be a trained scalar).
+  nlohmann::json noScale;
+  noScale["layers"] = nlohmann::json::array();
+  noScale["layers"].push_back({{"channels", 8}});
+  CHECK_FALSE(is_a2_shape(noScale, &channels));
+}
+
 TEST_CASE("A2 core load and prewarm timing is visible in test logs")
 {
   const auto rigPath = RepoRoot() / "rigs/Ampete One/AMP-Ampt-1.nam";

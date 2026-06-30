@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #ifndef M_PI
@@ -267,6 +268,46 @@ TEST_CASE("Tremolo sync division to ms mapping (delay reuse)")
   CHECK(volum::VoLumTremoloSyncMs(120.0, 0) == doctest::Approx(1000.0)); // 1/2
   CHECK(volum::VoLumTremoloSyncMs(120.0, 7) == doctest::Approx(125.0)); // 1/16
   CHECK(volum::VoLumTremoloSyncMs(60.0, 1) == doctest::Approx(1000.0)); // tempo scales
+}
+
+TEST_CASE("Tremolo sync clamps out-of-range division and degenerate BPM (no OOB)")
+{
+  using volum::kVoLumTremoloDivisionDefault;
+  using volum::VoLumTremoloSyncMs;
+  using volum::VoLumTremoloSyncRateHz;
+  // A corrupt/old project or hostile chunk can hand a division outside [0,8) or a
+  // zero/negative BPM. Both helpers must clamp (default division, BPM->120) and
+  // never index kQuarterMultiplier[] out of bounds.
+  const double defMs120 = VoLumTremoloSyncMs(120.0, kVoLumTremoloDivisionDefault);
+  const double defHz120 = VoLumTremoloSyncRateHz(120.0, kVoLumTremoloDivisionDefault);
+  for (int bad : {-1, -1000, 8, 99, 100000})
+  {
+    CHECK(VoLumTremoloSyncMs(120.0, bad) == doctest::Approx(defMs120));
+    CHECK(VoLumTremoloSyncRateHz(120.0, bad) == doctest::Approx(defHz120));
+  }
+  // Degenerate BPM heals to 120 BPM.
+  CHECK(VoLumTremoloSyncRateHz(0.0, 1) == doctest::Approx(VoLumTremoloSyncRateHz(120.0, 1)));
+  CHECK(VoLumTremoloSyncRateHz(-50.0, 4) == doctest::Approx(VoLumTremoloSyncRateHz(120.0, 4)));
+  CHECK(VoLumTremoloSyncMs(0.0, 4) == doctest::Approx(VoLumTremoloSyncMs(120.0, 4)));
+  // The synced result stays inside the delay's process-time clamp window.
+  for (int div = 0; div < volum::kVoLumTremoloDivisionCount; ++div)
+  {
+    const double ms = VoLumTremoloSyncMs(40.0, div); // slowest sane tempo
+    CHECK(std::isfinite(ms));
+    CHECK(ms > 0.0);
+  }
+}
+
+TEST_CASE("Tremolo division name is defined for every division and defaults safely")
+{
+  for (int div = 0; div < volum::kVoLumTremoloDivisionCount; ++div)
+  {
+    const char* name = volum::VoLumTremoloDivisionName(div);
+    REQUIRE(name != nullptr);
+    CHECK(std::string(name).size() > 0);
+  }
+  CHECK(std::string(volum::VoLumTremoloDivisionName(-1)) == "1/8");
+  CHECK(std::string(volum::VoLumTremoloDivisionName(999)) == "1/8");
 }
 
 TEST_CASE("Tremolo sync division to Hz mapping")
