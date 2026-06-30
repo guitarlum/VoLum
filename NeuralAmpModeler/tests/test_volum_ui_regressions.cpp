@@ -294,6 +294,65 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "_UpdateVoLumLayout(pGfx);");
 }
 
+TEST_CASE("POST Tremolo per-mode switch is guarded from snapshot re-entry")
+{
+  // Mirrors the Reverb/Delay per-mode pattern: switching mode saves the outgoing
+  // mode's knobs and recalls the incoming mode's, wrapped in a re-entrancy guard
+  // so the setParam cascade does not overwrite the snapshot mid-restore. This is
+  // the exact bug class that previously bit Reverb (B-reverb re-entry).
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(header, "bool mVolumTremoloRestoreInProgress = false;");
+  RequireContains(source, "} guard(mVolumTremoloRestoreInProgress);");
+  RequireContains(source, "_VolumSaveTremoloModeSnapshot(oldMode);");
+  RequireContains(source, "_VolumRestoreTremoloModeSnapshot(newMode);");
+  // The mode handler skips the save/restore while a POST restore is in flight.
+  RequireContains(source, "mVolumEffectSettings.tremoloMode = newMode;");
+}
+
+TEST_CASE("PRE Pitch per-mode switch is guarded from snapshot re-entry")
+{
+  // PRE has no POST-style effect-settings struct, so the live per-mode snapshots
+  // live on the plugin (mVolumPrePitchModes) and the mode-switch save/restore is
+  // wrapped in its own re-entrancy guard.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(header, "bool mVolumPreRestoreInProgress = false;");
+  RequireContains(header, "int mVolumPrePitchMode = volum::kVoLumPitchModeTranspose;");
+  RequireContains(source, "} guard(mVolumPreRestoreInProgress);");
+  RequireContains(source, "if (mVolumPreRestoreInProgress)");
+  RequireContains(source, "_VolumSavePrePitchModeSnapshot(oldMode);");
+  RequireContains(source, "_VolumRestorePrePitchModeSnapshot(newMode);");
+}
+
+TEST_CASE("Tremolo depth floor + Delay/Tremolo tempo sync are wired into the audio path")
+{
+  // The audible-depth-floor mapping and the tempo-sync time/rate derivations are
+  // unit-tested as pure helpers; pin that the process block actually routes the
+  // live params through them (and clamps the synced delay time) so the wiring
+  // cannot silently regress to the raw knob value.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value())");
+  RequireContains(source, "std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)");
+  RequireContains(source, "volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())");
+}
+
+TEST_CASE("Delay/Tremolo Sync toggles swap the free-running knob for a division stepper")
+{
+  // Engaging Sync replaces the Time/Rate knob with the tempo DIVISION stepper, so
+  // both toggles must trigger a layout refresh, and the delay division stepper
+  // must exist as a refreshed view.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(header, "class VoLumChannelStepControl* mVolumDelayDivStep = nullptr;");
+  RequireContains(source, "case kDelaySync:");
+  RequireContains(source, "for the tempo DIVISION");
+}
+
 TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 {
   const std::string source = ReadPluginSource(); // _VolumShowPreCaptureMenu now in VoLumSceneRig.inc.cpp
