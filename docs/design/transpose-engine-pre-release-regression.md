@@ -12,7 +12,7 @@ Tags: **VERIFIED** (already covered, re-confirmed), **ADDED** (new test this
 pass), **FALLBACK** (automation blocked — moved to manual smoke, logged).
 
 Baseline before the pass: `run-tests-win.ps1` green — 479 cases /
-1,948,995 assertions. After the pass: **488 cases / 1,951,661 assertions, 0
+1,948,995 assertions. After the pass: **489 cases / 1,951,699 assertions, 0
 failed**; source parity 40 tests.
 
 ---
@@ -41,13 +41,23 @@ duplicates.
 
 ## 1. Coverage by feature area
 
-### Presets — VERIFIED
+### Presets — VERIFIED + ADDED
 `test_volum_custom_content.cpp` / `test_volum_content_store.cpp` /
 `test_volum_content_crud_edge.cpp` already cover capture / recall / overwrite /
 rename / delete, AddPreset de-dup, owner-key isolation (factory vs custom amp),
 case-insensitive name uniqueness, `ClampName` UTF-8 safety, reopen dirty
 baseline from preset content, and recalled-snapshot registry round-trip. The
 id-tail back-compat tests added below protect the chunk presets ride on.
+**ADDED:** a **non-circular** preset/scene persistence pin — the existing
+preset round-trips all assert fidelity via `AmpSettingsEqual`, which is defined
+as `AmpSettingsToJson(a)==AmpSettingsToJson(b)` and therefore cannot detect a
+field dropped from that codec (it vanishes from both sides equally). The new
+test round-trips a fully-populated snapshot through the actual preset path
+(`AmpSettingsToJson`→`AmpSettingsFromJson`) and compares the **decoded struct
+fields directly** for every 1.2.0 effect field (PRE pitch incl. POLY character +
+per-mode snapshots, POST tremolo sync + per-mode, delay sync/division) and the
+BYO id refs (`activeIrId`, `supportActiveIrId`, `supportCustomId`, slot/channel),
+so a preset silently losing new effect/BYO state on save/reload now fails loudly.
 
 ### PRE/POST lock — VERIFIED + ADDED
 `test_volum_pre_post_lock.cpp` covers switch-while-locked dirty, reload-on-B /

@@ -1198,3 +1198,64 @@ TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive
   REQUIRE_FALSE(healed);
   CHECK(volum::AmpSettingsEqual(loaded[0], full));
 }
+
+// The preset/scene persistence path is AmpSettingsToJson/FromJson (see
+// VoLumContentStore RegistryToJson). Every existing preset round-trip asserts
+// fidelity via AmpSettingsEqual, but that comparator is defined as
+// AmpSettingsToJson(a) == AmpSettingsToJson(b) -- circular w.r.t. the codec
+// under test, so a field DROPPED from AmpSettingsToJson would vanish from both
+// sides and the check would pass vacuously. This pin instead compares the
+// DECODED STRUCT FIELDS directly to the non-default input, which fails loudly
+// if a 1.2.0 effect/BYO field stops surviving a preset save/reload.
+TEST_CASE("Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct-direct (non-circular)")
+{
+  volum::VoLumAmpSettings in = MakeFullyPopulatedAmpSettings();
+  in.prePitchTransChar = 2; // POLY: exercise the new transpose character value
+
+  volum::VoLumAmpSettings out{};
+  // Return value is the "healed" flag (true => a field was clamped), not a
+  // success code; a fully-valid snapshot needs no healing.
+  CHECK_FALSE(volum::AmpSettingsFromJson(volum::AmpSettingsToJson(in), out));
+
+  // PRE pitch (incl. POLY character + per-mode snapshots).
+  CHECK(out.prePitchTransChar == in.prePitchTransChar);
+  for (int i = 0; i < volum::kVoLumPitchModeCount; ++i)
+  {
+    INFO("prePitchModes[" << i << "]");
+    CHECK(out.prePitchModes[i].mix == doctest::Approx(in.prePitchModes[i].mix));
+    CHECK(out.prePitchModes[i].dry == doctest::Approx(in.prePitchModes[i].dry));
+    CHECK(out.prePitchModes[i].level == doctest::Approx(in.prePitchModes[i].level));
+    CHECK(out.prePitchModes[i].voicing == in.prePitchModes[i].voicing);
+  }
+
+  // POST tremolo (incl. tempo-sync + per-mode snapshots).
+  CHECK(out.postTremoloSync == in.postTremoloSync);
+  CHECK(out.postTremoloDivision == in.postTremoloDivision);
+  for (int i = 0; i < volum::kVoLumTremoloModeCount; ++i)
+  {
+    INFO("postTremoloModes[" << i << "]");
+    CHECK(out.postTremoloModes[i].rate == doctest::Approx(in.postTremoloModes[i].rate));
+    CHECK(out.postTremoloModes[i].depth == doctest::Approx(in.postTremoloModes[i].depth));
+    CHECK(out.postTremoloModes[i].shape == doctest::Approx(in.postTremoloModes[i].shape));
+    CHECK(out.postTremoloModes[i].mix == doctest::Approx(in.postTremoloModes[i].mix));
+    CHECK(out.postTremoloModes[i].crossover == doctest::Approx(in.postTremoloModes[i].crossover));
+  }
+
+  // POST delay tempo-sync (the two newest EParams).
+  CHECK(out.postDelaySync == in.postDelaySync);
+  CHECK(out.postDelayDivision == in.postDelayDivision);
+
+  // BYO id-based custom-content references must survive a preset save/reload.
+  CHECK(out.activeIrId == in.activeIrId);
+  CHECK(out.supportActiveIrId == in.supportActiveIrId);
+  CHECK(out.supportCustomId == in.supportCustomId);
+  CHECK(out.supportCustomSlot == in.supportCustomSlot);
+  CHECK(out.supportCustomChannel == in.supportCustomChannel);
+
+  // Representative core/dual spread so an accidental block-codec divergence in
+  // the preset path (vs the user-settings path) is caught here too.
+  CHECK(out.toneBass == doctest::Approx(in.toneBass));
+  CHECK(out.outputLevel == doctest::Approx(in.outputLevel));
+  CHECK(out.dualAmpActive == in.dualAmpActive);
+  CHECK(out.supportToneTreble == doctest::Approx(in.supportToneTreble));
+}
