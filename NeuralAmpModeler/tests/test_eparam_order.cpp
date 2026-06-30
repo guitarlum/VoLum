@@ -96,6 +96,8 @@ enum EParams
   kTremoloSync,
   kTremoloDivision,
   kPrePitchTransChar,
+  kDelaySync,
+  kDelayDivision,
   kNumParams
 };
 
@@ -223,11 +225,19 @@ TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchLevel")
   CHECK(kTremoloDivision == kTremoloSync + 1);
 }
 
-TEST_CASE("EParam: PRE Pitch transpose character appended at the very end")
+TEST_CASE("EParam: PRE Pitch transpose character appended after TremoloDivision")
 {
-  // Drop/Fast transpose engine character; appended last to keep prior indices stable.
+  // Drop/Fast transpose engine character; appended to keep prior indices stable.
   CHECK(kPrePitchTransChar == kTremoloDivision + 1);
-  CHECK(kNumParams == kPrePitchTransChar + 1);
+}
+
+TEST_CASE("EParam: Delay tempo sync/division appended at the very end")
+{
+  // Delay tempo sync mirrors the Tremolo Sync/Division pair; appended last to
+  // keep all prior serialized indices stable.
+  CHECK(kDelaySync == kPrePitchTransChar + 1);
+  CHECK(kDelayDivision == kDelaySync + 1);
+  CHECK(kNumParams == kDelayDivision + 1);
 }
 
 TEST_CASE("EParam: total count is stable")
@@ -240,5 +250,6 @@ TEST_CASE("EParam: total count is stable")
   // POST Tremolo pedal appended 9 params (Active, Mode, Rate, Depth, Shape, Mix,
   // Crossover, Sync, Division): 81 -> 90.
   // Transpose-engine rework appended kPrePitchTransChar (Drop/Instant): 90 -> 91.
-  CHECK(kNumParams == 91);
+  // Delay tempo sync appended kDelaySync + kDelayDivision: 91 -> 93.
+  CHECK(kNumParams == 93);
 }

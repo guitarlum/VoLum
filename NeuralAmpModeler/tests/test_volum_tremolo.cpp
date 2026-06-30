@@ -223,6 +223,52 @@ TEST_CASE("Tremolo stays finite across a live mode switch")
   }
 }
 
+TEST_CASE("Tremolo shape morph is gentle (near sine through the first quarter)")
+{
+  // Drive the modulation gain via a DC carrier so out[] traces the LFO gain
+  // directly. The shape knob must stay close to a pure sine early in its travel
+  // and only depart strongly near 1.0 (the "squares too early" fix).
+  auto gainFor = [](double shape) {
+    TremoloDSP trem;
+    trem.Prepare(kSR, kBlock, 1);
+    trem.SetParams(5.0, 1.0, shape, 1.0, 800.0, TremoloDSP::kBias, kSR);
+    trem.Reset();
+    return runStream(trem, makeDC(1 << 14, 1.0));
+  };
+  auto maxDiff = [](const std::vector<double>& a, const std::vector<double>& b) {
+    double d = 0.0;
+    for (size_t i = 4096; i < a.size(); ++i)
+      d = std::max(d, std::abs(a[i] - b[i]));
+    return d;
+  };
+  auto sine = gainFor(0.0);
+  const double dQuarter = maxDiff(sine, gainFor(0.25));
+  const double dFull = maxDiff(sine, gainFor(1.0));
+  CHECK(dQuarter < 0.10); // first quarter stays close to a sine
+  CHECK(dFull > 0.20); // full shape clearly departs toward square
+  CHECK(dQuarter < dFull); // monotonic: more knob => more square
+}
+
+TEST_CASE("Tremolo depth knob maps onto an audible floor")
+{
+  using volum::VoLumTremoloDepthKnobToInternal;
+  CHECK(VoLumTremoloDepthKnobToInternal(0.0) == doctest::Approx(0.40)); // min knob still throbs
+  CHECK(VoLumTremoloDepthKnobToInternal(1.0) == doctest::Approx(1.0)); // max = full chop
+  CHECK(VoLumTremoloDepthKnobToInternal(0.5) == doctest::Approx(0.70));
+  CHECK(VoLumTremoloDepthKnobToInternal(-1.0) == doctest::Approx(0.40)); // clamps
+  CHECK(VoLumTremoloDepthKnobToInternal(2.0) == doctest::Approx(1.0)); // clamps
+}
+
+TEST_CASE("Tremolo sync division to ms mapping (delay reuse)")
+{
+  // ms = period of the division = 1000 / Hz. 120 BPM: 1/4 = 500 ms, 1/8 = 250 ms.
+  CHECK(volum::VoLumTremoloSyncMs(120.0, 1) == doctest::Approx(500.0)); // 1/4
+  CHECK(volum::VoLumTremoloSyncMs(120.0, 4) == doctest::Approx(250.0)); // 1/8
+  CHECK(volum::VoLumTremoloSyncMs(120.0, 0) == doctest::Approx(1000.0)); // 1/2
+  CHECK(volum::VoLumTremoloSyncMs(120.0, 7) == doctest::Approx(125.0)); // 1/16
+  CHECK(volum::VoLumTremoloSyncMs(60.0, 1) == doctest::Approx(1000.0)); // tempo scales
+}
+
 TEST_CASE("Tremolo sync division to Hz mapping")
 {
   // 120 BPM -> quarter note = 2 Hz.

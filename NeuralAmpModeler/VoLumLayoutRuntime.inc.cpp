@@ -36,6 +36,9 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     _HideControlGroup(pGfx, "REVERB_SUBTOGGLE", true);
     _HideControlGroup(pGfx, "REVERB_POWER", true);
     _HideControlGroup(pGfx, "DELAY_KNOBS", true);
+    _HideControlGroup(pGfx, "DELAY_TIME", true);
+    _HideControlGroup(pGfx, "DELAY_DIV", true);
+    _HideControlGroup(pGfx, "DELAY_SYNC", true);
     _HideControlGroup(pGfx, "DELAY_PINGPONG", true);
     _HideControlGroup(pGfx, "DELAY_POWER", true);
     _HideControlGroup(pGfx, "TREMOLO_KNOBS", true);
@@ -104,8 +107,16 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       {
         const int delayMode = GetParam(kDelayMode)->Int();
         const bool isReverse = delayMode == volum::kVoLumDelayModeReverse;
+        const bool delaySync = GetParam(kDelaySync)->Bool();
         _HideControlGroup(pGfx, "DELAY_POWER", false);
         _HideControlGroup(pGfx, "DELAY_KNOBS", false);
+        _HideControlGroup(pGfx, "DELAY_SYNC", false);
+        // TIME knob and the DIVISION stepper share slot 1: one shows at a time.
+        _HideControlGroup(pGfx, "DELAY_TIME", delaySync);
+        _HideControlGroup(pGfx, "DELAY_DIV", !delaySync);
+        if (mVolumDelayDivStep)
+          mVolumDelayDivStep->SetChannels(
+            {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kDelayDivision)->Int());
         // Ping-pong has no meaning for reversed taps; hide that control row when Reverse.
         _HideControlGroup(pGfx, "DELAY_PINGPONG", isReverse);
         // The shared kDelayAge slot does meaningfully different things per mode. Swap the
@@ -142,6 +153,9 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         if (mVolumDelayAgeValue)
           mVolumDelayAgeValue->SetTooltip(ageTip);
         disableGroup("DELAY_KNOBS", !GetParam(kDelayActive)->Bool());
+        disableGroup("DELAY_TIME", !GetParam(kDelayActive)->Bool());
+        disableGroup("DELAY_DIV", !GetParam(kDelayActive)->Bool());
+        disableGroup("DELAY_SYNC", !GetParam(kDelayActive)->Bool());
         disableGroup("DELAY_PINGPONG", !GetParam(kDelayActive)->Bool());
         break;
       }

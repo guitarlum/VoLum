@@ -80,6 +80,27 @@ inline double VoLumTremoloSyncRateHz(double bpm, int division)
   return quartersPerSecond * kQuarterMultiplier[division];
 }
 
+// Delay time (ms) for a tempo division at a given BPM: the duration of one
+// division = the period of the equivalent LFO rate. Reuses the same division
+// table as the tremolo so Delay and Tremolo sync are sample-identical.
+inline double VoLumTremoloSyncMs(double bpm, int division)
+{
+  const double hz = VoLumTremoloSyncRateHz(bpm, division);
+  return (hz > 0.0) ? 1000.0 / hz : 500.0;
+}
+
+// The depth knob's lower range is perceptually "off": a 20% trough (depth 0.2)
+// dips only ~1.9 dB and is barely audible. Map the 0..1 knob onto an audible
+// 0.40..1.0 internal depth so even the minimum knob position throbs. Kept as a
+// pure mapping OUTSIDE TremoloDSP so the engine stays literal (passthrough at
+// internal depth 0) and the DSP unit tests keep their exact semantics.
+inline constexpr double kVoLumTremoloDepthFloor = 0.40;
+inline double VoLumTremoloDepthKnobToInternal(double knob)
+{
+  knob = std::clamp(knob, 0.0, 1.0);
+  return kVoLumTremoloDepthFloor + (1.0 - kVoLumTremoloDepthFloor) * knob;
+}
+
 class TremoloDSP
 {
 public:
@@ -227,8 +248,11 @@ private:
     }
     else
     {
-      // tanh waveshaping pushes the sine toward a square as shape -> 1.
-      const double drive = 1.0 + mShape * mShape * 40.0;
+      // tanh waveshaping pushes the sine toward a square as shape -> 1. A cubic
+      // ramp with a modest max drive keeps the wave sine-ish through the first
+      // half of the knob and only eases into a SOFT square at 1.0, instead of
+      // collapsing to a hard square almost immediately (the old shape^2 * 40).
+      const double drive = 1.0 + mShape * mShape * mShape * 12.0;
       shaped = std::tanh(bipolar * drive) / std::tanh(drive);
     }
     const double unipolar = 0.5 * (shaped + 1.0); // 0..1

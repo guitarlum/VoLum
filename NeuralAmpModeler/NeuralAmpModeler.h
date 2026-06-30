@@ -168,6 +168,11 @@ enum EParams
   // PRE Pitch Transpose CHARACTER (Drop / Fast). Appended at the very end to keep
   // all prior serialized indices stable.
   kPrePitchTransChar,
+  // Delay tempo SYNC + DIVISION. Appended at the very end to keep all prior
+  // serialized indices stable. When synced, the Time knob is replaced by a
+  // tempo-division stepper (mirrors the Tremolo Sync/Division pair).
+  kDelaySync,
+  kDelayDivision,
   kNumParams
 };
 
@@ -458,6 +463,10 @@ public:
   void _VolumRestoreReverbModeSnapshot(int mode);
   void _VolumSaveOktaverbSubModeSnapshot(int subMode);
   void _VolumRestoreOktaverbSubModeSnapshot(int subMode);
+  void _VolumSaveTremoloModeSnapshot(int mode);
+  void _VolumRestoreTremoloModeSnapshot(int mode);
+  void _VolumSavePrePitchModeSnapshot(int mode);
+  void _VolumRestorePrePitchModeSnapshot(int mode);
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
   void _ClearVoLumKnobSelection();
@@ -657,6 +666,8 @@ private:
   // Tremolo tempo-sync DIVISION stepper (shown in the RATE slot when Sync is on).
   // Non-owning view; refreshed from kTremoloDivision in _UpdateVoLumLayout.
   class VoLumChannelStepControl* mVolumTremoloDivStep = nullptr;
+  // Delay tempo-sync DIVISION stepper (shown in the TIME slot when Sync is on).
+  class VoLumChannelStepControl* mVolumDelayDivStep = nullptr;
   std::vector<std::string> mVolumChannelFiles;
   std::vector<std::string> mVolumChannelLabels;
   std::vector<std::string> mVolumSupportChannelFiles;
@@ -689,6 +700,16 @@ private:
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /
   // restore logic and corrupt the Oktaverb sub-mode storage.
   bool mVolumReverbRestoreInProgress = false;
+  // Same re-entrancy guard for the tremolo per-mode snapshot restore cascade.
+  bool mVolumTremoloRestoreInProgress = false;
+  // Live working store for PRE Pitch per-mode knob memory (PRE has no effect-
+  // settings struct like POST, so the live snapshots live here). Synced to/from
+  // each amp's prePitchModes via the PRE save/restore-to-slot helpers.
+  int mVolumPrePitchMode = volum::kVoLumPitchModeTranspose;
+  volum::PitchModeSnapshot mVolumPrePitchModes[volum::kVoLumPitchModeCount];
+  // Set true while a PRE/amp restore is applying live params so the kPrePitchMode
+  // handler does not re-enter the per-mode save/restore mid-restore.
+  bool mVolumPreRestoreInProgress = false;
   // Set true while restoring per-amp POST values. Amp restore sets live POST params,
   // including mode params; without this guard, those mode changes re-enter the
   // global mode-snapshot restore path and overwrite the per-amp values being loaded.

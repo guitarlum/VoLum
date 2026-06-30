@@ -284,7 +284,7 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::COMP: return kPreCompAmount;
     case EVoLumEffectFocus::PRE_NAM1: return kPreNam1Gain;
     case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
-    case EVoLumEffectFocus::DELAY: return kDelayTime;
+    case EVoLumEffectFocus::DELAY: return GetParam(kDelaySync)->Bool() ? kDelayFeedback : kDelayTime;
     case EVoLumEffectFocus::REVERB: return kReverbMix;
     case EVoLumEffectFocus::TREMOLO: return GetParam(kTremoloSync)->Bool() ? kTremoloDepth : kTremoloRate;
   }

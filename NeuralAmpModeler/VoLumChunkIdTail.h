@@ -51,7 +51,11 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // Schema 4 (post-tremolo): added per-amp POST Tremolo ("trem") and the
 // live-locked POST tremolo snapshot ("lockedPostTremolo"). Informational only;
 // readers tolerate missing/extra keys and never branch on the version.
-inline constexpr int kVoLumIdTailSchema = 4;
+// Schema 5 (delay-sync): added per-amp POST Delay tempo sync ("dly": sync +
+// division) and the live-locked POST delay snapshot ("lockedPostDelay"). The
+// delay's other params still travel in the binary per-amp block; only the
+// appended sync/division pair needs the tail. Informational only.
+inline constexpr int kVoLumIdTailSchema = 5;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -70,6 +74,9 @@ struct PitchTail
   int voicing = 1; // 0=Vintage, 1=Modern
   double level = 0.0;
   int transChar = 1; // 0=Drop, 1=Instant (default; transpose engine character)
+  // Per-mode knob memory (Transpose / Octaver). Default-constructed
+  // PitchModeSnapshot already carries the ship defaults.
+  PitchModeSnapshot modes[kVoLumPitchModeCount];
 };
 
 // POST Tremolo pedal per-amp settings. Carried in the JSON id tail alongside the
@@ -85,6 +92,20 @@ struct TremoloTail
   double shape = 0.0;
   double mix = 1.0;
   double crossover = 800.0;
+  bool sync = false;
+  int division = kVoLumTremoloDivisionDefault;
+  // Per-mode knob memory (Optical / Bias / Harmonic). Default-constructed
+  // TremoloModeSnapshot already carries the ship defaults.
+  TremoloModeSnapshot modes[kVoLumTremoloModeCount];
+};
+
+// POST Delay tempo-sync per-amp settings. Only the sync toggle + division are
+// carried here; the rest of the delay state already travels in the binary
+// per-amp block. `present` distinguishes "written by a sync-aware build" from
+// "absent" (older chunk -> sync defaults off).
+struct DelayTail
+{
+  bool present = false;
   bool sync = false;
   int division = kVoLumTremoloDivisionDefault;
 };
@@ -103,6 +124,8 @@ struct ChunkIdTail
   PitchTail lockedPrePitch; // live-locked PRE pitch snapshot (present iff PRE locked + written)
   TremoloTail perAmpTremolo[kAmpCount]; // factory amp -> POST Tremolo pedal settings
   TremoloTail lockedPostTremolo; // live-locked POST tremolo snapshot (present iff POST locked + written)
+  DelayTail perAmpDelay[kAmpCount]; // factory amp -> POST Delay tempo-sync settings
+  DelayTail lockedPostDelay; // live-locked POST delay sync snapshot (present iff POST locked + written)
 
   ChunkIdTail()
   {
@@ -116,9 +139,13 @@ struct ChunkIdTail
 
 inline nlohmann::json PitchTailToJson(const PitchTail& p)
 {
+  nlohmann::json modes = nlohmann::json::array();
+  for (int i = 0; i < kVoLumPitchModeCount; ++i)
+    modes.push_back(
+      {{"mix", p.modes[i].mix}, {"dry", p.modes[i].dry}, {"level", p.modes[i].level}, {"voice", p.modes[i].voicing}});
   return nlohmann::json{{"active", p.active}, {"mode", p.mode},      {"semi", p.semitones}, {"mix", p.mix},
                         {"octDn", p.octDown}, {"octUp", p.octUp},    {"dry", p.dry},        {"voice", p.voicing},
-                        {"level", p.level},   {"tchar", p.transChar}};
+                        {"level", p.level},   {"tchar", p.transChar}, {"modes", modes}};
 }
 
 inline PitchTail PitchTailFromJson(const nlohmann::json& j)
@@ -149,15 +176,41 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
     p.level = num(j["level"], 0.0);
   if (j.contains("tchar"))
     p.transChar = integer(j["tchar"], 0);
+  if (j.contains("modes") && j["modes"].is_array())
+  {
+    const auto& arr = j["modes"];
+    for (int i = 0; i < kVoLumPitchModeCount && i < static_cast<int>(arr.size()); ++i)
+    {
+      const auto& m = arr[i];
+      if (!m.is_object())
+        continue;
+      if (m.contains("mix"))
+        p.modes[i].mix = num(m["mix"], p.modes[i].mix);
+      if (m.contains("dry"))
+        p.modes[i].dry = num(m["dry"], p.modes[i].dry);
+      if (m.contains("level"))
+        p.modes[i].level = num(m["level"], p.modes[i].level);
+      if (m.contains("voice"))
+        p.modes[i].voicing = integer(m["voice"], p.modes[i].voicing);
+    }
+  }
   p.present = true;
   return p;
 }
 
 inline nlohmann::json TremoloTailToJson(const TremoloTail& t)
 {
+  nlohmann::json modes = nlohmann::json::array();
+  for (int i = 0; i < kVoLumTremoloModeCount; ++i)
+    modes.push_back({{"rate", t.modes[i].rate},
+                     {"depth", t.modes[i].depth},
+                     {"shape", t.modes[i].shape},
+                     {"mix", t.modes[i].mix},
+                     {"xover", t.modes[i].crossover}});
   return nlohmann::json{{"active", t.active},   {"mode", t.mode},   {"rate", t.rate},
                         {"depth", t.depth},     {"shape", t.shape}, {"mix", t.mix},
-                        {"xover", t.crossover}, {"sync", t.sync},   {"div", t.division}};
+                        {"xover", t.crossover}, {"sync", t.sync},   {"div", t.division},
+                        {"modes", modes}};
 }
 
 inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
@@ -186,8 +239,46 @@ inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
     t.sync = boolean(j["sync"], false);
   if (j.contains("div"))
     t.division = integer(j["div"], kVoLumTremoloDivisionDefault);
+  if (j.contains("modes") && j["modes"].is_array())
+  {
+    const auto& arr = j["modes"];
+    for (int i = 0; i < kVoLumTremoloModeCount && i < static_cast<int>(arr.size()); ++i)
+    {
+      const auto& m = arr[i];
+      if (!m.is_object())
+        continue;
+      if (m.contains("rate"))
+        t.modes[i].rate = num(m["rate"], t.modes[i].rate);
+      if (m.contains("depth"))
+        t.modes[i].depth = num(m["depth"], t.modes[i].depth);
+      if (m.contains("shape"))
+        t.modes[i].shape = num(m["shape"], t.modes[i].shape);
+      if (m.contains("mix"))
+        t.modes[i].mix = num(m["mix"], t.modes[i].mix);
+      if (m.contains("xover"))
+        t.modes[i].crossover = num(m["xover"], t.modes[i].crossover);
+    }
+  }
   t.present = true;
   return t;
+}
+
+inline nlohmann::json DelayTailToJson(const DelayTail& d)
+{
+  return nlohmann::json{{"sync", d.sync}, {"div", d.division}};
+}
+
+inline DelayTail DelayTailFromJson(const nlohmann::json& j)
+{
+  DelayTail d;
+  if (!j.is_object())
+    return d;
+  if (j.contains("sync") && j["sync"].is_boolean())
+    d.sync = j["sync"].get<bool>();
+  if (j.contains("div") && j["div"].is_number_integer())
+    d.division = j["div"].get<int>();
+  d.present = true;
+  return d;
 }
 
 inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
@@ -209,6 +300,8 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
       entry["pitch"] = PitchTailToJson(t.perAmpPitch[i]);
     if (t.perAmpTremolo[i].present)
       entry["trem"] = TremoloTailToJson(t.perAmpTremolo[i]);
+    if (t.perAmpDelay[i].present)
+      entry["dly"] = DelayTailToJson(t.perAmpDelay[i]);
     perAmp.push_back(entry);
   }
   j["perAmp"] = perAmp;
@@ -216,6 +309,8 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
     j["lockedPrePitch"] = PitchTailToJson(t.lockedPrePitch);
   if (t.lockedPostTremolo.present)
     j["lockedPostTremolo"] = TremoloTailToJson(t.lockedPostTremolo);
+  if (t.lockedPostDelay.present)
+    j["lockedPostDelay"] = DelayTailToJson(t.lockedPostDelay);
   return j;
 }
 
@@ -254,12 +349,16 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         t.perAmpPitch[i] = PitchTailFromJson(arr[i]["pitch"]);
       if (arr[i].contains("trem"))
         t.perAmpTremolo[i] = TremoloTailFromJson(arr[i]["trem"]);
+      if (arr[i].contains("dly"))
+        t.perAmpDelay[i] = DelayTailFromJson(arr[i]["dly"]);
     }
   }
   if (j.contains("lockedPrePitch"))
     t.lockedPrePitch = PitchTailFromJson(j["lockedPrePitch"]);
   if (j.contains("lockedPostTremolo"))
     t.lockedPostTremolo = TremoloTailFromJson(j["lockedPostTremolo"]);
+  if (j.contains("lockedPostDelay"))
+    t.lockedPostDelay = DelayTailFromJson(j["lockedPostDelay"]);
   return t;
 }
 

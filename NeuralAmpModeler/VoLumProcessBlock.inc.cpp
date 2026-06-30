@@ -207,9 +207,26 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   mPostReverbWasActive = processingPlan.runReverb;
   mPostTremoloWasActive = processingPlan.runTremolo;
 
+  // Tempo source for the synced POST pedals (Delay + Tremolo). Standalone uses
+  // the app metronome (no DAW transport); plugins use the host transport.
+  double postBpm;
+#ifdef APP_API
+  postBpm = static_cast<double>(mMetronomeDSP.GetBPM());
+#else
+  postBpm = GetTempo();
+#endif
+  if (!(postBpm > 0.0))
+    postBpm = 120.0;
+
   if (processingPlan.runDelay)
   {
-    mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(), GetParam(kDelayMix)->Value(),
+    // When synced, the Time knob is replaced by a tempo division: clamp the
+    // derived ms into the delay's range so slow divisions at low BPM stay valid.
+    const bool delaySync = GetParam(kDelaySync)->Bool();
+    const double delayTimeMs =
+      delaySync ? std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)
+                : GetParam(kDelayTime)->Value();
+    mDelay.SetParams(delayTimeMs, GetParam(kDelayFeedback)->Value(), GetParam(kDelayMix)->Value(),
                      GetParam(kDelayMode)->Int(), sampleRate, GetParam(kDelayTone)->Value(),
                      GetParam(kDelayAge)->Value(), GetParam(kDelayPingPong)->Bool());
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, nFrames);
@@ -228,23 +245,14 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   // place on the current POST bus, so no pointer-chain swap is needed.
   if (processingPlan.runTremolo)
   {
-    // Tempo source: host transport for plugins, the app metronome for standalone
-    // (where no DAW transport exists). Sync converts BPM + division to an LFO Hz.
-    double tremoloBpm;
-#ifdef APP_API
-    tremoloBpm = static_cast<double>(mMetronomeDSP.GetBPM());
-#else
-    tremoloBpm = GetTempo();
-#endif
-    if (!(tremoloBpm > 0.0))
-      tremoloBpm = 120.0;
+    // Sync converts BPM + division to an LFO Hz (shared postBpm computed above).
     const bool tremoloSync = GetParam(kTremoloSync)->Bool();
     const double tremoloRateHz = tremoloSync
-                                   ? volum::VoLumTremoloSyncRateHz(tremoloBpm, GetParam(kTremoloDivision)->Int())
+                                   ? volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())
                                    : GetParam(kTremoloRate)->Value();
-    mTremolo.SetParams(tremoloRateHz, GetParam(kTremoloDepth)->Value(), GetParam(kTremoloShape)->Value(),
-                       GetParam(kTremoloMix)->Value(), GetParam(kTremoloCrossover)->Value(),
-                       GetParam(kTremoloMode)->Int(), sampleRate);
+    mTremolo.SetParams(tremoloRateHz, volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value()),
+                       GetParam(kTremoloShape)->Value(), GetParam(kTremoloMix)->Value(),
+                       GetParam(kTremoloCrossover)->Value(), GetParam(kTremoloMode)->Int(), sampleRate);
     mTremolo.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 

@@ -725,6 +725,10 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   in.perAmpPitch[0].dry = 0.9;
   in.perAmpPitch[0].voicing = 0; // Vintage
   in.perAmpPitch[0].level = -3.5;
+  in.perAmpPitch[0].modes[volum::kVoLumPitchModeTranspose] =
+    volum::PitchModeSnapshot{0.5, 0.6, -4.0, volum::kVoLumPitchVoicingVintage};
+  in.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver] =
+    volum::PitchModeSnapshot{0.8, 0.9, 2.5, volum::kVoLumPitchVoicingModern};
 
   // Last amp: Transpose down a fifth, Drop character (non-default value; default is Instant).
   in.perAmpPitch[volum::kAmpCount - 1].present = true;
@@ -756,6 +760,10 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.perAmpPitch[0].voicing == 0);
   CHECK(out.perAmpPitch[0].level == doctest::Approx(-3.5));
   CHECK(out.perAmpPitch[0].transChar == 1); // default Instant preserved
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeTranspose].dry == doctest::Approx(0.6));
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeTranspose].voicing == volum::kVoLumPitchVoicingVintage);
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver].level == doctest::Approx(2.5));
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver].mix == doctest::Approx(0.8));
 
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(-7.0));
@@ -784,6 +792,9 @@ TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
   in.perAmpTremolo[0].crossover = 1200.0;
   in.perAmpTremolo[0].sync = true;
   in.perAmpTremolo[0].division = 6; // 1/8T
+  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical] = volum::TremoloModeSnapshot{2.0, 0.55, 0.1, 0.4, 600.0};
+  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic] =
+    volum::TremoloModeSnapshot{7.0, 0.95, 0.5, 1.0, 1500.0};
 
   // Last amp: Optical, free-running.
   in.perAmpTremolo[volum::kAmpCount - 1].present = true;
@@ -813,6 +824,10 @@ TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
   CHECK(out.perAmpTremolo[0].crossover == doctest::Approx(1200.0));
   CHECK(out.perAmpTremolo[0].sync);
   CHECK(out.perAmpTremolo[0].division == 6);
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical].rate == doctest::Approx(2.0));
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical].depth == doctest::Approx(0.55));
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic].crossover == doctest::Approx(1500.0));
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic].mix == doctest::Approx(1.0));
 
   CHECK(out.perAmpTremolo[volum::kAmpCount - 1].present);
   CHECK(out.perAmpTremolo[volum::kAmpCount - 1].mode == volum::kVoLumTremoloModeOptical);
@@ -825,6 +840,47 @@ TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
   CHECK(out.lockedPostTremolo.active);
   CHECK(out.lockedPostTremolo.mode == volum::kVoLumTremoloModeBias);
   CHECK(out.lockedPostTremolo.depth == doctest::Approx(0.95));
+}
+
+TEST_CASE("Id tail round-trips per-amp + locked POST delay tempo-sync settings")
+{
+  volum::ChunkIdTail in;
+
+  // Amp 0: synced to a dotted eighth.
+  in.perAmpDelay[0].present = true;
+  in.perAmpDelay[0].sync = true;
+  in.perAmpDelay[0].division = 5; // 1/8.
+
+  // Last amp: free-running (sync off) but written.
+  in.perAmpDelay[volum::kAmpCount - 1].present = true;
+  in.perAmpDelay[volum::kAmpCount - 1].sync = false;
+  in.perAmpDelay[volum::kAmpCount - 1].division = 1; // 1/4
+
+  // Locked POST snapshot present.
+  in.lockedPostDelay.present = true;
+  in.lockedPostDelay.sync = true;
+  in.lockedPostDelay.division = 7; // 1/16
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpDelay[0].present);
+  CHECK(out.perAmpDelay[0].sync);
+  CHECK(out.perAmpDelay[0].division == 5);
+
+  CHECK(out.perAmpDelay[volum::kAmpCount - 1].present);
+  CHECK_FALSE(out.perAmpDelay[volum::kAmpCount - 1].sync);
+  CHECK(out.perAmpDelay[volum::kAmpCount - 1].division == 1);
+
+  // Untouched amp stays absent -> delay sync defaults to off downstream.
+  CHECK_FALSE(out.perAmpDelay[1].present);
+
+  CHECK(out.lockedPostDelay.present);
+  CHECK(out.lockedPostDelay.sync);
+  CHECK(out.lockedPostDelay.division == 7);
 }
 
 TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")

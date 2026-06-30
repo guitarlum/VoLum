@@ -665,6 +665,19 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
         s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
         s.prePitchTransChar = std::clamp(p.transChar, 0, volum::kVoLumPitchCharacterCount - 1);
+        for (int m = 0; m < volum::kVoLumPitchModeCount; ++m)
+        {
+          s.prePitchModes[m].mix = std::clamp(p.modes[m].mix, 0.0, 1.0);
+          s.prePitchModes[m].dry = std::clamp(p.modes[m].dry, 0.0, 1.0);
+          s.prePitchModes[m].level = std::clamp(p.modes[m].level, -20.0, 20.0);
+          s.prePitchModes[m].voicing = std::clamp(p.modes[m].voicing, 0, 1);
+        }
+      };
+      auto applyDelayTail = [](const volum::DelayTail& d, volum::VoLumAmpSettings& s) {
+        if (!d.present)
+          return;
+        s.postDelaySync = d.sync;
+        s.postDelayDivision = std::clamp(d.division, 0, volum::kVoLumTremoloDivisionCount - 1);
       };
       auto applyTremoloTail = [](const volum::TremoloTail& t, volum::VoLumAmpSettings& s) {
         if (!t.present)
@@ -678,6 +691,14 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         s.postTremoloCrossover = std::clamp(t.crossover, 200.0, 2000.0);
         s.postTremoloSync = t.sync;
         s.postTremoloDivision = std::clamp(t.division, 0, volum::kVoLumTremoloDivisionCount - 1);
+        for (int m = 0; m < volum::kVoLumTremoloModeCount; ++m)
+        {
+          s.postTremoloModes[m].rate = std::clamp(t.modes[m].rate, 0.1, 20.0);
+          s.postTremoloModes[m].depth = std::clamp(t.modes[m].depth, 0.0, 1.0);
+          s.postTremoloModes[m].shape = std::clamp(t.modes[m].shape, 0.0, 1.0);
+          s.postTremoloModes[m].mix = std::clamp(t.modes[m].mix, 0.0, 1.0);
+          s.postTremoloModes[m].crossover = std::clamp(t.modes[m].crossover, 200.0, 2000.0);
+        }
       };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
@@ -688,9 +709,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         mVolumAmpSettings[i].supportCustomChannel = idTail.perAmpSupportChannel[i];
         applyPitchTail(idTail.perAmpPitch[i], mVolumAmpSettings[i]);
         applyTremoloTail(idTail.perAmpTremolo[i], mVolumAmpSettings[i]);
+        applyDelayTail(idTail.perAmpDelay[i], mVolumAmpSettings[i]);
       }
       applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
+      applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
     }
 

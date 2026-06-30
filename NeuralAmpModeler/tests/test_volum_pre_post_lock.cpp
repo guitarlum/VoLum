@@ -87,6 +87,8 @@ void CopyPreBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& d
   dst.prePitchDry = src.prePitchDry;
   dst.prePitchVoicing = src.prePitchVoicing;
   dst.prePitchLevel = src.prePitchLevel;
+  for (int mode = 0; mode < volum::kVoLumPitchModeCount; ++mode)
+    dst.prePitchModes[mode] = src.prePitchModes[mode];
   dst.prePitchTransChar = src.prePitchTransChar;
 }
 
@@ -101,6 +103,8 @@ void CopyPostBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& 
   dst.postDelayTone = src.postDelayTone;
   dst.postDelayAge = src.postDelayAge;
   dst.postDelayPingPong = src.postDelayPingPong;
+  dst.postDelaySync = src.postDelaySync;
+  dst.postDelayDivision = src.postDelayDivision;
   dst.postReverbActive = src.postReverbActive;
   dst.postReverbMix = src.postReverbMix;
   dst.postReverbDecay = src.postReverbDecay;
@@ -124,6 +128,8 @@ void CopyPostBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& 
     dst.postReverbModes[mode] = src.postReverbModes[mode];
   for (int subMode = 0; subMode < 3; ++subMode)
     dst.postOktaverbSubModes[subMode] = src.postOktaverbSubModes[subMode];
+  for (int mode = 0; mode < volum::kVoLumTremoloModeCount; ++mode)
+    dst.postTremoloModes[mode] = src.postTremoloModes[mode];
 }
 
 // Mirrors _VolumSaveCurrentToSettings / _VolumRestoreFromSettings / lock helpers in VoLumSettings.inc.cpp.
@@ -732,7 +738,25 @@ TEST_CASE("POST dirty compare includes tremolo params")
   {
     volum::VoLumAmpSettings a;
     volum::VoLumAmpSettings b;
+    b.postDelaySync = !a.postDelaySync;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postDelayDivision = a.postDelayDivision == 4 ? 5 : 4;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
     b.postTremoloDivision = a.postTremoloDivision == 4 ? 5 : 4;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postTremoloModes[volum::kVoLumTremoloModeHarmonic].crossover += 100.0;
     REQUIRE_FALSE(volum::PostBlockEquals(a, b));
   }
   // Identical tremolo (factory Bang Bang default) compares equal.
@@ -750,6 +774,18 @@ TEST_CASE("PRE dirty compare detects NAM capture changes")
   b.preNam2Capture = 3;
 
   REQUIRE_FALSE(volum::PreBlockEquals(a, b));
+}
+
+TEST_CASE("PRE dirty compare detects per-mode pitch knob changes")
+{
+  volum::VoLumAmpSettings a;
+  volum::VoLumAmpSettings b;
+  b.prePitchModes[volum::kVoLumPitchModeOctaver].dry += 0.2;
+  REQUIRE_FALSE(volum::PreBlockEquals(a, b));
+
+  volum::VoLumAmpSettings c;
+  c.prePitchModes[volum::kVoLumPitchModeTranspose].voicing = volum::kVoLumPitchVoicingVintage;
+  REQUIRE_FALSE(volum::PreBlockEquals(a, c));
 }
 
 // -------------------------------------------------------------------------
