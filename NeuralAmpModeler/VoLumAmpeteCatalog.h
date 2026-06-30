@@ -94,13 +94,16 @@ inline constexpr int kVoLumPitchModeOctaver = 1;
 // PRE Pitch octaver voicing: 0=Vintage (gritty/filtered), 1=Modern (clean)
 inline constexpr int kVoLumPitchVoicingVintage = 0;
 inline constexpr int kVoLumPitchVoicingModern = 1;
-// PRE Pitch transpose character: 0=Drop (WSOLA, exact, ~17 ms), 1=Instant
-// (period-sync, 2.5 ms crossfade, ~8.6 ms, tightest feel). The former Fast
-// character (value 1) was removed; legacy values 1 (Fast) and 2 (Instant) both
-// load as Instant via clamping, which is seamless since Fast == Instant sonically.
+// PRE Pitch transpose character: 0=Drop (WSOLA period-sync, exact mono, ~17 ms),
+// 1=Instant (period-sync, ~8.6 ms, tightest mono feel), 2=Poly (fixed-grain WSOLA,
+// no pitch estimate -> polyphonic/chord-capable, ~49 ms; independent replication of
+// the a commercial reference transpose family). Drop/Instant are monophonic.
+// History: the Pitch feature is unreleased-dev-only, so adding Poly as value 2 has
+// no public migration impact (out-of-range stored values still clamp into range).
 inline constexpr int kVoLumPitchCharacterDrop = 0;
 inline constexpr int kVoLumPitchCharacterInstant = 1;
-inline constexpr int kVoLumPitchCharacterCount = 2;
+inline constexpr int kVoLumPitchCharacterPoly = 2;
+inline constexpr int kVoLumPitchCharacterCount = 3;
 
 struct DelayModeSnapshot
 {

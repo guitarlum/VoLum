@@ -375,7 +375,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchVoicing)->InitEnum("PrePitchVoicing", volum::kVoLumPitchVoicingModern, {"Vintage", "Modern"});
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
-  GetParam(kPrePitchTransChar)->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterInstant, {"Drop", "Instant"});
+  GetParam(kPrePitchTransChar)
+    ->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterInstant, {"Drop", "Instant", "Poly"});
   // Delay tempo sync (reuses the Tremolo division table so both pedals snap to
   // the same musical grid). When off, the free-running Time knob (ms) is used.
   GetParam(kDelaySync)->InitBool("DelaySync", false);
@@ -1258,8 +1259,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kPrePitchMode:
     case kPrePitchTransChar:
       // Toggling the pitch engine, switching Transpose/Octaver, or changing the
-      // transpose CHARACTER (Drop ~17 ms / Instant ~8.6 ms) all change reported
-      // (PDC) latency, so re-report it to the host.
+      // transpose CHARACTER (Drop ~17 ms / Instant ~8.6 ms / Poly ~49 ms) all
+      // change reported (PDC) latency, so re-report it to the host.
       if (mVolumInitComplete)
         _UpdateLatency();
       break;

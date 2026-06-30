@@ -97,6 +97,33 @@ double cents(double f, double ref)
 {
   return 1200.0 * std::log2(f / ref);
 }
+
+// Goertzel magnitude at a single frequency over [from, from+len): lets a
+// polyphony test assert each chord voice's shifted fundamental is actually
+// present in the output (a monophonic shifter collapses chords to one pitch).
+double goertzel(const std::vector<DSP_SAMPLE>& x, size_t from, size_t len, double freq)
+{
+  const double w = 2.0 * M_PI * freq / kSR;
+  const double coeff = 2.0 * std::cos(w);
+  double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+  for (size_t i = 0; i < len; ++i)
+  {
+    s0 = static_cast<double>(x[from + i]) + coeff * s1 - s2;
+    s2 = s1;
+    s1 = s0;
+  }
+  return std::sqrt(std::max(0.0, s1 * s1 + s2 * s2 - coeff * s1 * s2)) / static_cast<double>(len);
+}
+
+std::vector<DSP_SAMPLE> makeChord(const std::vector<double>& freqs, size_t n, double amp = 0.4)
+{
+  std::vector<DSP_SAMPLE> v(n, 0.0);
+  for (double f : freqs)
+    for (size_t i = 0; i < n; ++i)
+      v[i] += static_cast<DSP_SAMPLE>(amp / static_cast<double>(freqs.size())
+                                      * std::sin(2.0 * M_PI * f * static_cast<double>(i) / kSR));
+  return v;
+}
 } // namespace
 
 TEST_CASE("VoLumPitch passthrough when unconfigured")
@@ -110,7 +137,7 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
-TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Instant) and reasonably low")
+TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Drop < Poly) and bounded")
 {
   VoLumPitch pitch;
   pitch.Configure(kSR, kBlock);
@@ -130,6 +157,16 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Instant) and rea
   // Instant ~8.6 ms; still above a hard floor (period-sync read-ahead).
   CHECK(instantLat > static_cast<int>(kSR * 0.004));
 
+  // Poly (fixed-grain WSOLA, chord-capable) is the highest-latency character: its
+  // grain + correlation window must each cover ~2 periods of the lowest note.
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Poly);
+  const int polyLat = pitch.Latency();
+  CHECK(polyLat > dropLat); // poly buys polyphony at the cost of latency
+  // Poly ~49 ms; bounded above so a runaway grain can't blow up PDC.
+  CHECK(polyLat < static_cast<int>(kSR * 0.070));
+  CHECK(polyLat > static_cast<int>(kSR * 0.030));
+
   // Octaver uses Drop-grade voices regardless of the transpose character.
   pitch.SetParams(VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
                   VoLumPitch::Character::Instant);
@@ -140,9 +177,11 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Drop > Instant) and rea
   // so the reported value never lags the audio thread by one change.
   CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Transpose, VoLumPitch::Character::Drop, kSR) == dropLat);
   CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Transpose, VoLumPitch::Character::Instant, kSR) == instantLat);
+  CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Transpose, VoLumPitch::Character::Poly, kSR) == polyLat);
   // Octaver ignores the character pill and always reports Drop-grade latency.
   CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Octaver, VoLumPitch::Character::Instant, kSR) == dropLat);
   CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Octaver, VoLumPitch::Character::Drop, kSR) == dropLat);
+  CHECK(VoLumPitch::LatencyFor(VoLumPitch::Mode::Octaver, VoLumPitch::Character::Poly, kSR) == dropLat);
 }
 
 TEST_CASE("VoLumPitch transpose is pitch-accurate downshifting in both characters")
@@ -373,4 +412,103 @@ TEST_CASE("VoLumPitch handles NaN/Inf input without propagating")
   DSP_SAMPLE** o = pitch.Process(ptr, 1, in.size());
   for (size_t i = 0; i < in.size(); ++i)
     CHECK(std::isfinite(static_cast<double>(o[0][i])));
+}
+
+// --- POLY character (independent replication of reference the reference transpose family) ---
+
+TEST_CASE("VoLumPitch POLY transposes a CHORD keeping every voice (polyphonic)")
+{
+  // THE differentiator vs Drop/Instant: feed a triad and check all three shifted
+  // fundamentals survive. A monophonic period-sync engine collapses/garbles this.
+  const std::vector<double> chord = {110.0, 138.59, 164.81}; // A2 major (A, C#, E)
+  const int semi = 5;
+  VoLumPitch pitch;
+  pitch.Configure(kSR, kBlock);
+  pitch.Reset();
+  pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
+                  VoLumPitch::Voicing::Modern, 0.0, VoLumPitch::Character::Poly);
+  auto in = makeChord(chord, 1 << 16);
+  auto out = runStream(pitch, in);
+  const size_t from = static_cast<size_t>(pitch.Latency()) + 20000;
+  const size_t len = 1 << 14;
+
+  // Reference: broadband energy floor between the voices (anti-presence probe).
+  const double ratio = std::pow(2.0, semi / 12.0);
+  double minVoice = 1e9;
+  for (double f : chord)
+    minVoice = std::min(minVoice, goertzel(out, from, len, f * ratio));
+  // Energy at a clearly non-chord frequency (e.g. a semitone below the lowest voice).
+  const double offTone = goertzel(out, from, len, chord[0] * ratio * std::pow(2.0, -1.0 / 12.0));
+  INFO("minVoice=", minVoice, " offTone=", offTone);
+  // Each shifted voice must be present and clearly stronger than a non-chord bin.
+  CHECK(minVoice > 4.0 * (offTone + 1e-9));
+}
+
+TEST_CASE("VoLumPitch POLY beats DROP at preserving chord voices")
+{
+  // Direct A/B: the weakest surviving voice of a triad should be (much) stronger
+  // under POLY than under the monophonic DROP engine.
+  const std::vector<double> chord = {110.0, 138.59, 164.81};
+  const int semi = 5;
+  const double ratio = std::pow(2.0, semi / 12.0);
+  auto weakestVoice = [&](VoLumPitch::Character ch) {
+    VoLumPitch pitch;
+    pitch.Configure(kSR, kBlock);
+    pitch.Reset();
+    pitch.SetParams(
+      VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0, ch);
+    auto out = runStream(pitch, makeChord(chord, 1 << 16));
+    const size_t from = static_cast<size_t>(pitch.Latency()) + 20000;
+    double mn = 1e9;
+    for (double f : chord)
+      mn = std::min(mn, goertzel(out, from, 1 << 14, f * ratio));
+    return mn;
+  };
+  const double poly = weakestVoice(VoLumPitch::Character::Poly);
+  const double drop = weakestVoice(VoLumPitch::Character::Drop);
+  INFO("poly weakest=", poly, " drop weakest=", drop);
+  CHECK(poly > 1.5 * drop);
+}
+
+TEST_CASE("VoLumPitch POLY single-note pitch is accurate across the range")
+{
+  // Fixed-grain WSOLA must still nail single notes (exact-ratio read pointer).
+  for (double base : {82.41, 110.0, 196.0}) // E2, A2, G3
+  {
+    for (int semi : {-12, -5, 5, 7, 12})
+    {
+      VoLumPitch pitch;
+      pitch.Configure(kSR, kBlock);
+      pitch.Reset();
+      pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
+                      VoLumPitch::Voicing::Modern, 0.0, VoLumPitch::Character::Poly);
+      auto in = makeSine(base, 1 << 16);
+      auto out = runStream(pitch, in);
+      const double target = base * std::pow(2.0, semi / 12.0);
+      const int minLag = std::max(8, static_cast<int>(kSR / (target * 2.0)));
+      const int maxLag = static_cast<int>(kSR / (target * 0.5));
+      const double f = estimateFreq(out, static_cast<size_t>(pitch.Latency()) + 24000, 8192, minLag, maxLag);
+      INFO("base=", base, " semi=", semi, " target=", target, " measured=", f);
+      CHECK(std::abs(cents(f, target)) < 20.0);
+    }
+  }
+}
+
+TEST_CASE("VoLumPitch POLY holds pitch across a long sustain (no drift)")
+{
+  VoLumPitch pitch;
+  pitch.Configure(kSR, kBlock);
+  pitch.Reset();
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 7.0, 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Poly);
+  auto in = makeSine(110.0, 1 << 17); // ~2.7 s
+  auto out = runStream(pitch, in);
+  const double target = 110.0 * std::pow(2.0, 7.0 / 12.0);
+  const int minLag = std::max(8, static_cast<int>(kSR / (target * 2.0)));
+  const int maxLag = static_cast<int>(kSR / (target * 0.5));
+  const size_t lat = static_cast<size_t>(pitch.Latency());
+  const double fEarly = estimateFreq(out, lat + 12000, 8192, minLag, maxLag);
+  const double fLate = estimateFreq(out, lat + 90000, 8192, minLag, maxLag);
+  INFO("early=", fEarly, " late=", fLate);
+  CHECK(std::abs(cents(fLate, fEarly)) < 10.0);
 }
