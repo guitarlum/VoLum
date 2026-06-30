@@ -12,6 +12,17 @@ inline bool NearlyEqual(double a, double b)
   return std::fabs(a - b) < 1e-9;
 }
 
+inline bool PrePitchModesEqual(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
+{
+  for (int mode = 0; mode < kVoLumPitchModeCount; ++mode)
+    if (!NearlyEqual(a.prePitchModes[mode].mix, b.prePitchModes[mode].mix)
+        || !NearlyEqual(a.prePitchModes[mode].dry, b.prePitchModes[mode].dry)
+        || !NearlyEqual(a.prePitchModes[mode].level, b.prePitchModes[mode].level)
+        || a.prePitchModes[mode].voicing != b.prePitchModes[mode].voicing)
+      return false;
+  return true;
+}
+
 inline bool PreBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
 {
   return a.preCompActive == b.preCompActive && NearlyEqual(a.preCompAmount, b.preCompAmount)
@@ -30,7 +41,7 @@ inline bool PreBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
          && NearlyEqual(a.prePitchMix, b.prePitchMix) && NearlyEqual(a.prePitchOctDown, b.prePitchOctDown)
          && NearlyEqual(a.prePitchOctUp, b.prePitchOctUp) && NearlyEqual(a.prePitchDry, b.prePitchDry)
          && a.prePitchVoicing == b.prePitchVoicing && NearlyEqual(a.prePitchLevel, b.prePitchLevel)
-         && a.prePitchTransChar == b.prePitchTransChar;
+         && a.prePitchTransChar == b.prePitchTransChar && PrePitchModesEqual(a, b);
 }
 
 inline bool DelayModeSnapshotEquals(const DelayModeSnapshot& a, const DelayModeSnapshot& b)
@@ -51,10 +62,17 @@ inline bool OktaverbSubModeSnapshotEquals(const OktaverbSubModeSnapshot& a, cons
          && NearlyEqual(a.preDelay, b.preDelay) && NearlyEqual(a.shimmer, b.shimmer);
 }
 
+inline bool TremoloModeSnapshotEquals(const TremoloModeSnapshot& a, const TremoloModeSnapshot& b)
+{
+  return NearlyEqual(a.rate, b.rate) && NearlyEqual(a.depth, b.depth) && NearlyEqual(a.shape, b.shape)
+         && NearlyEqual(a.mix, b.mix) && NearlyEqual(a.crossover, b.crossover);
+}
+
 inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
 {
   if (a.postDelayActive != b.postDelayActive || a.postReverbActive != b.postReverbActive
       || a.postDelayMode != b.postDelayMode || a.postDelayPingPong != b.postDelayPingPong
+      || a.postDelaySync != b.postDelaySync || a.postDelayDivision != b.postDelayDivision
       || a.postReverbMode != b.postReverbMode || a.postReverbSubMode != b.postReverbSubMode
       || a.postTremoloActive != b.postTremoloActive || a.postTremoloMode != b.postTremoloMode
       || a.postTremoloSync != b.postTremoloSync || a.postTremoloDivision != b.postTremoloDivision)
@@ -79,6 +97,9 @@ inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b
       return false;
   for (int subMode = 0; subMode < 3; ++subMode)
     if (!OktaverbSubModeSnapshotEquals(a.postOktaverbSubModes[subMode], b.postOktaverbSubModes[subMode]))
+      return false;
+  for (int mode = 0; mode < kVoLumTremoloModeCount; ++mode)
+    if (!TremoloModeSnapshotEquals(a.postTremoloModes[mode], b.postTremoloModes[mode]))
       return false;
 
   return true;

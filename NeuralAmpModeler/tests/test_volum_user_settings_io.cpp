@@ -751,6 +751,8 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   amps[3].postDelayTone = 0.62;
   amps[3].postDelayAge = 0.5;
   amps[3].postDelayPingPong = true;
+  amps[3].postDelaySync = true;
+  amps[3].postDelayDivision = 3;
   amps[3].postReverbActive = true;
   amps[3].postReverbMix = 0.33;
   amps[3].postReverbDecay = 4.5;
@@ -774,6 +776,10 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   amps[3].postTremoloCrossover = 1200.0;
   amps[3].postTremoloSync = true;
   amps[3].postTremoloDivision = 6;
+  amps[3].postTremoloModes[volum::kVoLumTremoloModeOptical] = volum::TremoloModeSnapshot{2.0, 0.55, 0.10, 0.40, 600.0};
+  amps[3].postTremoloModes[volum::kVoLumTremoloModeBias] = volum::TremoloModeSnapshot{4.5, 0.70, 0.25, 0.80, 900.0};
+  amps[3].postTremoloModes[volum::kVoLumTremoloModeHarmonic] =
+    volum::TremoloModeSnapshot{7.0, 0.95, 0.50, 1.00, 1500.0};
 
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
 
@@ -789,6 +795,8 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   CHECK(loaded[3].postDelayTone == doctest::Approx(0.62));
   CHECK(loaded[3].postDelayAge == doctest::Approx(0.5));
   CHECK(loaded[3].postDelayPingPong);
+  CHECK(loaded[3].postDelaySync);
+  CHECK(loaded[3].postDelayDivision == 3);
   CHECK(loaded[3].postReverbActive);
   CHECK(loaded[3].postReverbMix == doctest::Approx(0.33));
   CHECK(loaded[3].postReverbDecay == doctest::Approx(4.5));
@@ -809,6 +817,11 @@ TEST_CASE("VolumUserSettings JSON roundtrips per-amp POST live values")
   CHECK(loaded[3].postTremoloCrossover == doctest::Approx(1200.0));
   CHECK(loaded[3].postTremoloSync);
   CHECK(loaded[3].postTremoloDivision == 6);
+  CHECK(loaded[3].postTremoloModes[volum::kVoLumTremoloModeOptical].rate == doctest::Approx(2.0));
+  CHECK(loaded[3].postTremoloModes[volum::kVoLumTremoloModeOptical].depth == doctest::Approx(0.55));
+  CHECK(loaded[3].postTremoloModes[volum::kVoLumTremoloModeBias].mix == doctest::Approx(0.80));
+  CHECK(loaded[3].postTremoloModes[volum::kVoLumTremoloModeHarmonic].crossover == doctest::Approx(1500.0));
+  CHECK(loaded[3].postTremoloModes[volum::kVoLumTremoloModeHarmonic].shape == doctest::Approx(0.50));
 
   // Untouched amps remain pending initialization (postValid=false) until selected; amp
   // restore turns that into an explicit factory POST scene.
@@ -1082,6 +1095,8 @@ volum::VoLumAmpSettings MakeFullyPopulatedAmpSettings()
   s.postDelayTone = 0.7;
   s.postDelayAge = 0.3;
   s.postDelayPingPong = true;
+  s.postDelaySync = true;
+  s.postDelayDivision = 2;
   s.postReverbActive = true;
   s.postReverbMix = 0.5;
   s.postReverbDecay = 4.0;
@@ -1126,6 +1141,21 @@ volum::VoLumAmpSettings MakeFullyPopulatedAmpSettings()
     s.postOktaverbSubModes[i].tone = 2.5 + 0.5 * i;
     s.postOktaverbSubModes[i].preDelay = 12.0 + 5.0 * i;
     s.postOktaverbSubModes[i].shimmer = 0.14 + 0.05 * i;
+  }
+  for (int i = 0; i < volum::kVoLumTremoloModeCount; ++i)
+  {
+    s.postTremoloModes[i].rate = 2.0 + 1.0 * i;
+    s.postTremoloModes[i].depth = 0.5 + 0.1 * i;
+    s.postTremoloModes[i].shape = 0.1 + 0.1 * i;
+    s.postTremoloModes[i].mix = 0.4 + 0.1 * i;
+    s.postTremoloModes[i].crossover = 500.0 + 100.0 * i;
+  }
+  for (int i = 0; i < volum::kVoLumPitchModeCount; ++i)
+  {
+    s.prePitchModes[i].mix = 0.3 + 0.1 * i;
+    s.prePitchModes[i].dry = 0.6 + 0.1 * i;
+    s.prePitchModes[i].level = -5.0 + 2.0 * i;
+    s.prePitchModes[i].voicing = i % 2;
   }
   // BYO id-based custom-content refs
   s.activeIrId = "ir_main_xyz";

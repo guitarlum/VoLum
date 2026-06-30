@@ -336,13 +336,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kReverbSubMode)->InitEnum("ReverbSubMode", 1, {"Halo", "Shimmer", "Bloom"});
 
   // Tremolo (POST) - third POST pedal, runs last after Reverb. Defaults voice the
-  // classic "Bang Bang (My Baby Shot Me Down)" tone: smooth Bias sine, deep, slow.
+  // default voice: slow, deep Optical throb at a moderate wet blend.
   GetParam(kTremoloActive)->InitBool("TremoloActive", false);
-  GetParam(kTremoloMode)->InitEnum("TremoloMode", volum::kVoLumTremoloModeBias, {"Optical", "Bias", "Harmonic"});
-  GetParam(kTremoloRate)->InitDouble("TremoloRate", 5.0, 0.1, 20.0, 0.1, "Hz");
+  GetParam(kTremoloMode)->InitEnum("TremoloMode", volum::kVoLumTremoloModeOptical, {"Optical", "Bias", "Harmonic"});
+  GetParam(kTremoloRate)->InitDouble("TremoloRate", 3.0, 0.1, 20.0, 0.1, "Hz");
   GetParam(kTremoloDepth)->InitDouble("TremoloDepth", 0.85, 0.0, 1.0, 0.01);
   GetParam(kTremoloShape)->InitDouble("TremoloShape", 0.0, 0.0, 1.0, 0.01);
-  GetParam(kTremoloMix)->InitDouble("TremoloMix", 1.0, 0.0, 1.0, 0.01);
+  GetParam(kTremoloMix)->InitDouble("TremoloMix", 0.60, 0.0, 1.0, 0.01);
   GetParam(kTremoloCrossover)->InitDouble("TremoloCrossover", 800.0, 200.0, 2000.0, 10.0, "Hz");
   GetParam(kTremoloSync)->InitBool("TremoloSync", false);
   GetParam(kTremoloDivision)
@@ -376,6 +376,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPrePitchLevel)->InitDouble("PrePitchLevel", 0.0, -20.0, 20.0, 0.1, "dB");
   _SetMuteFloorDbDisplay(GetParam(kPrePitchLevel));
   GetParam(kPrePitchTransChar)->InitEnum("PrePitchTransChar", volum::kVoLumPitchCharacterInstant, {"Drop", "Instant"});
+  // Delay tempo sync (reuses the Tremolo division table so both pedals snap to
+  // the same musical grid). When off, the free-running Time knob (ms) is used.
+  GetParam(kDelaySync)->InitBool("DelaySync", false);
+  GetParam(kDelayDivision)
+    ->InitEnum("DelayDivision", volum::kVoLumTremoloDivisionDefault,
+               {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"});
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -974,6 +980,8 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     p.voicing = s.prePitchVoicing;
     p.level = s.prePitchLevel;
     p.transChar = s.prePitchTransChar;
+    for (int m = 0; m < volum::kVoLumPitchModeCount; ++m)
+      p.modes[m] = s.prePitchModes[m];
     return p;
   };
   auto tremoloTailFromSettings = [](const volum::VoLumAmpSettings& s) {
@@ -988,7 +996,16 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     t.crossover = s.postTremoloCrossover;
     t.sync = s.postTremoloSync;
     t.division = s.postTremoloDivision;
+    for (int m = 0; m < volum::kVoLumTremoloModeCount; ++m)
+      t.modes[m] = s.postTremoloModes[m];
     return t;
+  };
+  auto delayTailFromSettings = [](const volum::VoLumAmpSettings& s) {
+    volum::DelayTail d;
+    d.present = true;
+    d.sync = s.postDelaySync;
+    d.division = s.postDelayDivision;
+    return d;
   };
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
@@ -999,11 +1016,15 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     idTail.perAmpSupportChannel[i] = mVolumAmpSettings[i].supportCustomChannel;
     idTail.perAmpPitch[i] = pitchTailFromSettings(mVolumAmpSettings[i]);
     idTail.perAmpTremolo[i] = tremoloTailFromSettings(mVolumAmpSettings[i]);
+    idTail.perAmpDelay[i] = delayTailFromSettings(mVolumAmpSettings[i]);
   }
   if (mVolumPreLocked)
     idTail.lockedPrePitch = pitchTailFromSettings(mVolumLiveLockedPre);
   if (mVolumPostLocked)
+  {
     idTail.lockedPostTremolo = tremoloTailFromSettings(mVolumLiveLockedPost);
+    idTail.lockedPostDelay = delayTailFromSettings(mVolumLiveLockedPost);
+  }
   volum::PutChunkIdTail(chunk, idTail);
 
   return ok;
@@ -1362,7 +1383,6 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kPreNam1Capture:
       case kPreNam2Capture:
       case kPrePitchActive:
-      case kPrePitchMode:
       case kPrePitchVoicing:
       case kPrePitchTransChar:
       // kTremoloActive belongs here too: toggling it must re-run the layout pass so
@@ -1373,6 +1393,24 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kSupportAmpIdx:
       case kSupportSpeakerIdx:
       case kSupportChannelIdx: _UpdateVoLumLayout(pGraphics); break;
+      case kPrePitchMode:
+      {
+        // Switching Transpose<->Octaver saves the outgoing mode's shared knobs and
+        // recalls the incoming mode's last knobs (mirrors the POST Tremolo mode
+        // picker). Layout refresh follows for the Octaver-only knob swap.
+        if (mVolumPreRestoreInProgress)
+        {
+          _UpdateVoLumLayout(pGraphics);
+          break;
+        }
+        const int oldMode = std::clamp(mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1);
+        _VolumSavePrePitchModeSnapshot(oldMode);
+        const int newMode = std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1);
+        mVolumPrePitchMode = newMode;
+        _VolumRestorePrePitchModeSnapshot(newMode);
+        _UpdateVoLumLayout(pGraphics);
+        break;
+      }
       case kMainAmpPan:
       case kSupportAmpPan: break;
       case kSupportNoiseGateActive:
@@ -1446,9 +1484,24 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         break;
       }
       case kTremoloMode:
+      {
+        // Switching tremolo mode saves the outgoing mode's knobs and recalls the
+        // incoming mode's last knobs (mirrors Delay/Reverb). The mode picker also
+        // toggles the Harmonic-only X-OVER knob, so a layout refresh follows.
+        if (mVolumPostRestoreInProgress)
+          break;
+        const int oldMode = std::clamp(mVolumEffectSettings.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1);
+        _VolumSaveTremoloModeSnapshot(oldMode);
+        const int newMode = std::clamp(GetParam(kTremoloMode)->Int(), 0, volum::kVoLumTremoloModeCount - 1);
+        mVolumEffectSettings.tremoloMode = newMode;
+        _VolumRestoreTremoloModeSnapshot(newMode);
+        _UpdateVoLumLayout(pGraphics);
+        break;
+      }
       case kTremoloSync:
-        // Mode picker toggles the Harmonic-only X-OVER knob; Sync swaps the RATE
-        // knob for the tempo DIVISION stepper. Both need a layout refresh.
+      case kDelaySync:
+        // Sync swaps the free-running knob (Rate/Time) for the tempo DIVISION
+        // stepper; layout refresh.
         _UpdateVoLumLayout(pGraphics);
         break;
       default: break;

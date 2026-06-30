@@ -3,6 +3,25 @@
 
 void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s)
 {
+  // Guard so the kPrePitchMode set below cannot re-enter the per-mode save /
+  // restore dance and clobber the per-amp values we are loading.
+  struct PreRestoreGuard
+  {
+    bool& flag;
+    bool prev;
+    explicit PreRestoreGuard(bool& f)
+    : flag(f)
+    , prev(f)
+    {
+      flag = true;
+    }
+    ~PreRestoreGuard() { flag = prev; }
+  } preGuard(mVolumPreRestoreInProgress);
+
+  for (int mode = 0; mode < volum::kVoLumPitchModeCount; ++mode)
+    mVolumPrePitchModes[mode] = s.prePitchModes[mode];
+  mVolumPrePitchMode = std::clamp(s.prePitchMode, 0, volum::kVoLumPitchModeCount - 1);
+
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
@@ -48,6 +67,10 @@ void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s
   mVolumPreNeedsLoad[1].store(shouldLoadPreNam2);
   mShouldRemovePreModel[0].store(!shouldLoadPreNam1);
   mShouldRemovePreModel[1].store(!shouldLoadPreNam2);
+
+  // Recall the current pitch mode's shared knobs from the just-loaded snapshot
+  // (mirrors the tremolo per-mode restore in _VolumRestorePostFromSlot).
+  _VolumRestorePrePitchModeSnapshot(mVolumPrePitchMode);
 }
 
 void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
@@ -64,6 +87,8 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
     s.postDelayTone = defaults.postDelayTone;
     s.postDelayAge = defaults.postDelayAge;
     s.postDelayPingPong = defaults.postDelayPingPong;
+    s.postDelaySync = defaults.postDelaySync;
+    s.postDelayDivision = defaults.postDelayDivision;
     s.postReverbActive = defaults.postReverbActive;
     s.postReverbMix = defaults.postReverbMix;
     s.postReverbDecay = defaults.postReverbDecay;
@@ -87,6 +112,8 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
       s.postReverbModes[mode] = defaults.postReverbModes[mode];
     for (int subMode = 0; subMode < 3; ++subMode)
       s.postOktaverbSubModes[subMode] = defaults.postOktaverbSubModes[subMode];
+    for (int mode = 0; mode < volum::kVoLumTremoloModeCount; ++mode)
+      s.postTremoloModes[mode] = defaults.postTremoloModes[mode];
   }
 
   for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
@@ -95,6 +122,8 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
     mVolumEffectSettings.reverbModes[mode] = s.postReverbModes[mode];
   for (int subMode = 0; subMode < 3; ++subMode)
     mVolumEffectSettings.oktaverbSubModes[subMode] = s.postOktaverbSubModes[subMode];
+  for (int mode = 0; mode < volum::kVoLumTremoloModeCount; ++mode)
+    mVolumEffectSettings.tremoloModes[mode] = s.postTremoloModes[mode];
 
   struct PostRestoreGuard
   {
@@ -122,6 +151,8 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   setParam(kDelayTone, s.postDelayTone);
   setParam(kDelayAge, s.postDelayAge);
   setParam(kDelayPingPong, s.postDelayPingPong ? 1.0 : 0.0);
+  setParam(kDelaySync, s.postDelaySync ? 1.0 : 0.0);
+  setParam(kDelayDivision, s.postDelayDivision);
   setParam(kReverbActive, s.postReverbActive ? 1.0 : 0.0);
   setParam(kReverbMix, s.postReverbMix);
   setParam(kReverbDecay, s.postReverbDecay);
@@ -143,12 +174,16 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   mVolumEffectSettings.delayMode = s.postDelayMode;
   mVolumEffectSettings.reverbActive = s.postReverbActive;
   mVolumEffectSettings.reverbMode = s.postReverbMode;
+  mVolumEffectSettings.tremoloMode = s.postTremoloMode;
   const int restoredDelayMode = std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1);
   const int restoredReverbMode = std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1);
+  const int restoredTremoloMode = std::clamp(s.postTremoloMode, 0, volum::kVoLumTremoloModeCount - 1);
   _VolumSaveDelayModeSnapshot(restoredDelayMode);
   _VolumSaveReverbModeSnapshot(restoredReverbMode);
+  _VolumSaveTremoloModeSnapshot(restoredTremoloMode);
   _VolumRestoreDelayModeSnapshot(restoredDelayMode);
   _VolumRestoreReverbModeSnapshot(restoredReverbMode);
+  _VolumRestoreTremoloModeSnapshot(restoredTremoloMode);
 }
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)

@@ -95,6 +95,8 @@ enum EParams
   kTremoloSync,
   kTremoloDivision,
   kPrePitchTransChar,
+  kDelaySync,
+  kDelayDivision,
   kNumParams
 };
 

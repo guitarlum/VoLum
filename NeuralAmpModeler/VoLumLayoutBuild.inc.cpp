@@ -637,8 +637,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
                                IRECT(revSwX - 14.f, knobT - 4.f, revSwX + 14.f, knobT + knobDiam + 2.f), kReverbActive),
                              -1, "REVERB_POWER");
 
-    // DELAY KNOBS (Centered) - 5 slots: TIME, FEEDBACK, MIX, TONE, AGE
-    drawKnobCol(1, "TIME", kDelayTime, "ms", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
+    // DELAY KNOBS (Centered) - 5 slots: TIME, FEEDBACK, MIX, TONE, AGE.
+    // TIME (slot 1) swaps to a tempo DIVISION stepper when Sync is engaged, so it
+    // lives in its own group like the Tremolo RATE knob.
+    drawKnobCol(1, "TIME", kDelayTime, "ms", "DELAY_TIME", true, 5, 1, effectKnobOffset, effectColW,
+                "Delay time in ms. With TEMPO SYNC on it becomes a musical DIVISION locked to the song tempo.");
     drawKnobCol(2, "FEEDBACK", kDelayFeedback, "%", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(3, "MIX", kDelayMix, "%", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
     drawKnobCol(4, "TONE", kDelayTone, "", "DELAY_KNOBS", true, 5, 1, effectKnobOffset, effectColW);
@@ -691,6 +694,43 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         IRECT(ppSwitchX + ppSwitchW + 4.f, ppSwitchY, ppSwitchX + ppSwitchW + 4.f + ppLabelW, ppSwitchY + ppSwitchH),
         "PING-PONG"),
       -1, "DELAY_PINGPONG");
+
+    // DIVISION stepper occupies the TIME slot (slot 1) when Sync is engaged.
+    {
+      const float divCx =
+        mainCX + effectKnobOffset - (5 * effectColW) / 2.f + (1 - 1) * effectColW + (effectColW / 2.f);
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(IRECT(divCx - 40.f, knobRowTop, divCx + 40.f, knobRowTop + 20.f), "DIVISION"), -1,
+        "DELAY_DIV");
+      const float divStepH = 28.f;
+      const float divStepTop = knobT + (knobDiam - divStepH) / 2.f;
+      auto* divStep = new VoLumChannelStepControl(
+        IRECT(divCx - 34.f, divStepTop, divCx + 34.f, divStepTop + divStepH), [this](int newIdx) {
+          GetParam(kDelayDivision)->Set(static_cast<double>(newIdx));
+          SendParameterValueFromDelegate(kDelayDivision, GetParam(kDelayDivision)->GetNormalized(), true);
+          OnParamChange(kDelayDivision);
+          _VolumMarkPresetDirty();
+        });
+      divStep->SetChannels(
+        {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kDelayDivision)->Int());
+      pGraphics->AttachControl(divStep, -1, "DELAY_DIV");
+      mVolumDelayDivStep = divStep;
+    }
+
+    // TEMPO SYNC toggle on the pill row, right of the PING-PONG toggle (which can
+    // hide on Reverse); sync stays available in every delay mode.
+    {
+      const float dSwitchX = mainCX + 40.f;
+      pGraphics->AttachControl(
+        new NAMSwitchControl(IRECT(dSwitchX, ppSwitchY, dSwitchX + ppSwitchW, ppSwitchY + ppSwitchH), kDelaySync, "",
+                             volumToggleStyle, switchHandleBitmap),
+        -1, "DELAY_SYNC");
+      pGraphics->AttachControl(
+        new VoLumKnobLabelControl(
+          IRECT(dSwitchX + ppSwitchW + 4.f, ppSwitchY, dSwitchX + ppSwitchW + 4.f + ppLabelW, ppSwitchY + ppSwitchH),
+          "TEMPO SYNC"),
+        -1, "DELAY_SYNC");
+    }
 
     float dlySwX = mainCX - 242.f;
     pGraphics->AttachControl(new VoLumPowerSwitchControl(

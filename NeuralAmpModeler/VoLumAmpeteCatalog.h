@@ -131,6 +131,30 @@ struct OktaverbSubModeSnapshot
   double shimmer = 0.65;
 };
 
+// Per-pitch-mode knob memory (Transpose / Octaver). Only the SHARED knobs need
+// memory: semitones (Transpose) and octDown/octUp (Octaver) are already
+// mode-exclusive params and never collide.
+struct PitchModeSnapshot
+{
+  double mix = 1.0; // 0..1 wet/dry
+  double dry = 1.0; // 0..1 dry blend
+  double level = 0.0; // dB output trim
+  int voicing = kVoLumPitchVoicingModern; // 0=Vintage, 1=Modern
+};
+
+// Per-tremolo-mode knob memory (Optical / Bias / Harmonic). Mirrors the
+// reverb/delay snapshots so switching tremolo mode recalls that mode's last
+// knobs. depth is the KNOB value (0..1); the audible floor is applied at the
+// param->DSP boundary, not here.
+struct TremoloModeSnapshot
+{
+  double rate = 3.0; // Hz
+  double depth = 0.85; // 0..1 knob
+  double shape = 0.0; // 0..1 (sine -> square)
+  double mix = 0.60; // 0..1
+  double crossover = 800.0; // Hz (Harmonic band split)
+};
+
 struct VoLumAmpSettings
 {
   int speakerIdx = 3;
@@ -177,6 +201,12 @@ struct VoLumAmpSettings
   int prePitchVoicing = 1; // 0=Vintage, 1=Modern
   double prePitchLevel = 0.0;
   int prePitchTransChar = 1; // 0=Drop, 1=Instant (default; transpose engine character)
+  // Per-mode knob memory for the shared Mix/Dry/Level/Voicing knobs so switching
+  // Transpose<->Octaver recalls that mode's last blend (mirrors postTremoloModes).
+  PitchModeSnapshot prePitchModes[kVoLumPitchModeCount] = {
+    PitchModeSnapshot{1.0, 1.0, 0.0, kVoLumPitchVoicingModern}, // Transpose
+    PitchModeSnapshot{1.0, 1.0, 0.0, kVoLumPitchVoicingModern}, // Octaver
+  };
   bool dualAmpActive = false;
   int dualAmpRoute = 2; // 0=STACK, 1=L/R, 2=CUSTOM. UI no longer exposes the picker — Custom honours per-lane PAN.
   double mainAmpPan = 0.0;
@@ -208,6 +238,10 @@ struct VoLumAmpSettings
   double postDelayTone = 0.5;
   double postDelayAge = 0.0;
   bool postDelayPingPong = false;
+  // Tempo sync: when on, the Time knob is replaced by a musical DIVISION locked
+  // to the host/metronome BPM (mirrors postTremoloSync / postTremoloDivision).
+  bool postDelaySync = false;
+  int postDelayDivision = kVoLumTremoloDivisionDefault; // 1/8
   bool postReverbActive = false;
   double postReverbMix = 0.20;
   double postReverbDecay = 2.5;
@@ -232,17 +266,24 @@ struct VoLumAmpSettings
     OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
   };
 
-  // Per-amp POST Tremolo (third POST pedal). Modes share knobs, so no per-mode
-  // snapshots are needed. Defaults voice the "Bang Bang" tone (deep Bias sine).
+  // Per-amp POST Tremolo (third POST pedal). The scalar fields are the LIVE
+  // selected-mode values; postTremoloModes[] keeps each mode's last knobs so
+  // switching mode recalls that voice (mirrors postReverbModes / postDelayModes).
+  // Defaults: slow deep Optical throb at a moderate wet blend.
   bool postTremoloActive = false;
-  int postTremoloMode = kVoLumTremoloModeBias;
-  double postTremoloRate = 5.0; // Hz (free-running rate)
+  int postTremoloMode = kVoLumTremoloModeOptical;
+  double postTremoloRate = 3.0; // Hz (free-running rate)
   double postTremoloDepth = 0.85; // 0..1
   double postTremoloShape = 0.0; // 0..1 (sine -> square)
-  double postTremoloMix = 1.0; // 0..1
+  double postTremoloMix = 0.60; // 0..1
   double postTremoloCrossover = 800.0; // Hz (Harmonic band split)
   bool postTremoloSync = false;
   int postTremoloDivision = kVoLumTremoloDivisionDefault; // 1/8
+  TremoloModeSnapshot postTremoloModes[kVoLumTremoloModeCount] = {
+    TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Optical
+    TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Bias
+    TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Harmonic
+  };
 
   // 1.2.0 BYO custom-content references (additive, id-based). Both default to
   // empty = "no custom content". They are NOT written into the fixed per-amp

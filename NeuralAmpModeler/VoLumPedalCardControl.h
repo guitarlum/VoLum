@@ -214,7 +214,14 @@ private:
     {
       case EVoLumEffectFocus::DELAY:
         plugin->GetParam(kDelayMode)->GetDisplay(modeText);
-        summary.SetFormatted(64, "%s . %.0f ms", modeText.Get(), plugin->GetParam(kDelayTime)->Value());
+        if (plugin->GetParam(kDelaySync)->Bool())
+        {
+          WDL_String div;
+          plugin->GetParam(kDelayDivision)->GetDisplay(div);
+          summary.SetFormatted(64, "%s . %s", modeText.Get(), div.Get());
+        }
+        else
+          summary.SetFormatted(64, "%s . %.0f ms", modeText.Get(), plugin->GetParam(kDelayTime)->Value());
         return summary.Get();
       case EVoLumEffectFocus::REVERB:
         plugin->GetParam(kReverbMode)->GetDisplay(modeText);
