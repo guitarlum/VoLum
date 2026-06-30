@@ -16,10 +16,18 @@
 // matches it on pitch accuracy (~0.5 cents), drift (~3 cents) and warble, at
 // roughly half the old latency. See _spike/refs/RESEARCH-NOTES.md (local).
 //
-// Two CHARACTERs trade latency vs accuracy on big shifts:
-//   DROP (default): WSOLA splice search -> exact pitch even at +/-12, ~17 ms.
-//   FAST:           period-sync only (no search) -> ~12 ms, snappier, slightly
-//                   sharper on extreme shifts.
+// Three CHARACTERs trade latency vs accuracy / monophonic vs polyphonic:
+//   DROP:    WSOLA splice search, PERIOD-synchronous -> exact mono pitch even at
+//            +/-12, ~17 ms. Monophonic (one period estimate).
+//   INSTANT: period-sync, no search -> tightest ~8.6 ms. Monophonic.
+//   POLY:    FIXED-grain WSOLA splice (no pitch estimate) -> tracks CHORDS, not
+//            just single notes, at the cost of higher latency (~49 ms). This is a
+//            clean-room replication of the NDSP Archetype Rabea X "transpose"
+//            FAMILY (black-box + static RE showed a time-domain, transient-
+//            preserving, polyphonic shifter, not a phase vocoder). Rabea reaches
+//            this at ~1.5 ms via a more refined tuning; we match the behavior
+//            (poly, exact pitch, ~0 drift) and report our higher latency via PDC.
+//            See _spike/refs/RESEARCH-NOTES.md (local, gitignored).
 //
 // Latency = read-pointer headroom (group delay). The dry path is delayed by the
 // same amount so dry/wet stay aligned; the host compensates the total via PDC.
@@ -54,10 +62,11 @@ class GranularVoice
 public:
   enum class Character
   {
-    Drop = 0, // WSOLA splice search: exact pitch on big shifts, ~17 ms.
-    Instant = 1 // period-sync, 2.5 ms crossfade: ~8.6 ms, tightest feel, grainier splices.
+    Drop = 0, // WSOLA splice search, period-sync: exact mono pitch on big shifts, ~17 ms.
+    Instant = 1, // period-sync, 2.5 ms crossfade: ~8.6 ms, tightest feel, grainier splices.
     // (The former FAST character was period-sync with a 6 ms crossfade at ~12 ms; it
     //  was sonically identical to INSTANT with more latency, so it was removed.)
+    Poly = 2 // FIXED-grain WSOLA (no period estimate): polyphonic/chord-capable, ~49 ms.
   };
 
   // Lowest note we design the delay band around (low E standard, 82.41 Hz). Notes
@@ -74,19 +83,23 @@ public:
     mSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     mMaxBlock = std::max(maxBlockSize, 64);
 
+    // Size for the worst case across ALL characters so a live character switch
+    // never reallocates. POLY has the widest band + correlation window.
     const Timing drop = _ComputeTiming(Character::Drop);
+    const Timing poly = _ComputeTiming(Character::Poly);
+    const Timing worst = (poly.dHi + poly.search + poly.corrWin > drop.dHi + drop.search + drop.corrWin) ? poly : drop;
     const int tmax = static_cast<int>(std::ceil(mSampleRate / kPminFreq));
     // Max delay any read can touch: candidate jump up to dHi, plus the WSOLA
     // search and correlation window read further back, plus the period estimate
     // needs 2*tmax of history.
-    const int maxReadDelay = static_cast<int>(std::ceil(drop.dHi)) + drop.search + drop.corrWin + 2;
+    const int maxReadDelay = static_cast<int>(std::ceil(worst.dHi)) + worst.search + worst.corrWin + 2;
     const int historyNeed = std::max(maxReadDelay, 2 * tmax + 2);
     const size_t need = static_cast<size_t>(historyNeed + mMaxBlock + 32);
     if (mBuf.size() < need)
       mBuf.assign(need, 0.0);
 
     mPeriodScratch.assign(static_cast<size_t>(2 * tmax + 4), 0.0);
-    mRefWin.assign(static_cast<size_t>(std::max(drop.corrWin, 1)), 0.0);
+    mRefWin.assign(static_cast<size_t>(std::max(worst.corrWin, 1)), 0.0);
 
     mPeriodUpdate = std::max(1, static_cast<int>(std::lround(mSampleRate * 0.01)));
     SetCharacter(Character::Drop);
@@ -108,6 +121,8 @@ public:
     mWsola = t.wsola;
     mDLo = t.dLo;
     mDHi = t.dHi;
+    mBand = t.band;
+    mFixedGrain = t.fixedGrain;
     mLatency = t.latency;
     // The delay band just moved. Re-centre the read pointer on the new latency so a
     // LIVE character switch keeps wet aligned with the (latency-delayed) dry. This
@@ -188,7 +203,10 @@ public:
 
       if (!mFading)
       {
-        const double P = mPeriod;
+        // POLY splices by a FIXED grain (mBand) so it never needs a pitch estimate
+        // and therefore tracks polyphonic material; DROP/INSTANT splice by the
+        // estimated period (monophonic, but tighter and lower latency).
+        const double P = mFixedGrain ? mBand : mPeriod;
         if (f < 1.0 && mDelay > mDHi)
         {
           const int k = std::max(1, static_cast<int>(std::lround((mDelay - mDLo) / P)));
@@ -227,6 +245,8 @@ private:
     bool wsola = false;
     double dLo = 0.0;
     double dHi = 0.0;
+    double band = 0.0; // delay-band width = splice-jump unit for fixed-grain (POLY)
+    bool fixedGrain = false; // POLY: splice by `band` instead of the pitch period
     int latency = 0;
   };
 
@@ -236,26 +256,44 @@ private:
   {
     const double pDesign = sr / kDesignFmin;
     Timing t;
-    // Crossfade length per character: DROP 5 ms (WSOLA aligns the splice anyway),
-    // INSTANT 2.5 ms (shortest join -> lowest latency; splices are grainier but
-    // period-sync keeps pitch exact).
-    const double xfadeMs = (c == Character::Drop) ? 5.0 : 2.5;
-    t.xfade = std::max(8, static_cast<int>(std::lround(sr * xfadeMs / 1000.0)));
-    if (c == Character::Drop)
+    if (c == Character::Poly)
     {
+      // POLY: fixed-grain WSOLA, no pitch estimate -> works on chords. The grain
+      // (delay band) and correlation window must each cover >= ~2 periods of the
+      // lowest note (low E) to lock cleanly, which is why this character is the
+      // highest latency. Values from the offline spike (RESEARCH-NOTES Phase 5):
+      // grain 36 ms, corr 24 ms, crossfade 5 ms, search 2 ms.
       t.wsola = true;
-      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.0015)));
-      t.corrWin = std::max(8, static_cast<int>(std::lround(0.35 * pDesign)));
+      t.fixedGrain = true;
+      t.xfade = std::max(8, static_cast<int>(std::lround(sr * 0.005)));
+      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.002)));
+      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.024)));
+      t.band = std::lround(sr * 0.036);
     }
     else
     {
-      t.wsola = false;
-      t.search = 0;
-      t.corrWin = 0;
+      // Crossfade length per character: DROP 5 ms (WSOLA aligns the splice anyway),
+      // INSTANT 2.5 ms (shortest join -> lowest latency; splices are grainier but
+      // period-sync keeps pitch exact). Both splice by the estimated pitch period.
+      const double xfadeMs = (c == Character::Drop) ? 5.0 : 2.5;
+      t.xfade = std::max(8, static_cast<int>(std::lround(sr * xfadeMs / 1000.0)));
+      if (c == Character::Drop)
+      {
+        t.wsola = true;
+        t.search = std::max(1, static_cast<int>(std::lround(sr * 0.0015)));
+        t.corrWin = std::max(8, static_cast<int>(std::lround(0.35 * pDesign)));
+      }
+      else
+      {
+        t.wsola = false;
+        t.search = 0;
+        t.corrWin = 0;
+      }
+      t.band = pDesign;
     }
     t.dLo = static_cast<double>(t.xfade + t.search + t.corrWin) + 2.0;
-    t.dHi = t.dLo + pDesign;
-    t.latency = static_cast<int>(std::lround(t.dLo + 0.5 * pDesign));
+    t.dHi = t.dLo + t.band;
+    t.latency = static_cast<int>(std::lround(t.dLo + 0.5 * t.band));
     return t;
   }
 
@@ -376,6 +414,8 @@ private:
   bool mWsola = false;
   double mDLo = 0.0;
   double mDHi = 0.0;
+  double mBand = 0.0; // POLY fixed-grain splice-jump unit (= delay band width)
+  bool mFixedGrain = false; // POLY: splice by mBand instead of the pitch period
   int mLatency = 0;
 
   std::vector<double> mBuf;
@@ -567,8 +607,10 @@ private:
       mWet1.assign(cap, static_cast<DSP_SAMPLE>(0));
       mDryScratch.assign(cap, static_cast<DSP_SAMPLE>(0));
     }
-    // Dry ring must cover the worst-case (DROP) latency + a block.
-    const int worstLatency = GranularVoice::LatencyFor(Character::Drop, mSampleRate);
+    // Dry ring must cover the worst-case latency + a block. POLY (chord-capable)
+    // is the highest-latency character, so size for it.
+    const int worstLatency = std::max(
+      GranularVoice::LatencyFor(Character::Drop, mSampleRate), GranularVoice::LatencyFor(Character::Poly, mSampleRate));
     const size_t ringNeed = static_cast<size_t>(worstLatency) + cap + 2;
     if (mDryRing.size() < ringNeed)
     {

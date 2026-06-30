@@ -730,12 +730,13 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   in.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver] =
     volum::PitchModeSnapshot{0.8, 0.9, 2.5, volum::kVoLumPitchVoicingModern};
 
-  // Last amp: Transpose down a fifth, Drop character (non-default value; default is Instant).
+  // Last amp: Transpose down a fifth, Poly character (non-default value 2; default
+  // is Instant). Exercises round-trip of the additive POLY character value.
   in.perAmpPitch[volum::kAmpCount - 1].present = true;
   in.perAmpPitch[volum::kAmpCount - 1].active = true;
   in.perAmpPitch[volum::kAmpCount - 1].mode = 0;
   in.perAmpPitch[volum::kAmpCount - 1].semitones = -7.0;
-  in.perAmpPitch[volum::kAmpCount - 1].transChar = 0; // Drop
+  in.perAmpPitch[volum::kAmpCount - 1].transChar = 2; // Poly
 
   // Locked PRE snapshot present.
   in.lockedPrePitch.present = true;
@@ -767,7 +768,7 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
 
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
   CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(-7.0));
-  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 0); // Drop round-trips
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 2); // Poly round-trips
 
   // Untouched amp stays absent -> pitch defaults to bypassed downstream.
   CHECK_FALSE(out.perAmpPitch[1].present);

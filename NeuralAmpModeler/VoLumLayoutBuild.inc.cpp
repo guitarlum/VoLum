@@ -888,10 +888,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       "MODERN = clean. Shapes the wet voices only, so raise OCT DN/UP to hear it.");
     pGraphics->AttachControl(pitchVoicingPill, -1, "PITCH_VOICING");
     // Transpose engine character (shares the voicing pill's slot; mode picks which).
-    auto* pitchTransCharPill = new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "INSTANT"});
+    auto* pitchTransCharPill =
+      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "INSTANT", "POLY"});
     pitchTransCharPill->SetTooltip(
       "Transpose engine. INSTANT = lowest latency (~8.6 ms), default | DROP = WSOLA, "
-      "cleanest on big shifts (~17 ms). Same pitch accuracy; pick by feel vs latency.");
+      "cleanest mono on big shifts (~17 ms) | POLY = tracks CHORDS, not just single "
+      "notes (~49 ms latency). DROP/INSTANT are monophonic.");
     pGraphics->AttachControl(pitchTransCharPill, -1, "PITCH_TRANSCHAR");
 
     // I/O meters
