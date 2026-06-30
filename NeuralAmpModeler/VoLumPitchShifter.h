@@ -21,13 +21,17 @@
 //            +/-12, ~17 ms. Monophonic (one period estimate).
 //   INSTANT: period-sync, no search -> tightest ~8.6 ms. Monophonic.
 //   POLY:    FIXED-grain WSOLA splice (no pitch estimate) -> tracks CHORDS, not
-//            just single notes, at the cost of higher latency (~49 ms). This is a
-//            clean-room replication of the NDSP Archetype Rabea X "transpose"
-//            FAMILY (black-box + static RE showed a time-domain, transient-
-//            preserving, polyphonic shifter, not a phase vocoder). Rabea reaches
-//            this at ~1.5 ms via a more refined tuning; we match the behavior
-//            (poly, exact pitch, ~0 drift) and report our higher latency via PDC.
-//            See _spike/refs/RESEARCH-NOTES.md (local, gitignored).
+//            just single notes, at ~14 ms. Clean-room reimplementation of the NDSP
+//            Archetype Rabea X "transpose": DYNAMIC RE (Frida differential coverage
+//            + Stalker on the PACE-encrypted binary) proved it is a time-domain
+//            single-pointer granular shifter (no FFT/IPP, no phase vocoder) whose
+//            TRUE impulse latency is ~2-8 ms (shift-dependent), constant across host
+//            block sizes -> a genuine low-latency algorithm. The key insight ported
+//            here: the read pointer is clamped to >= xfade by the splice, so the
+//            WSOLA search/correlation windows are HISTORY reads that need not inflate
+//            the delay floor (latency = xfade + 0.5*band, not +search+corr). That
+//            collapsed POLY from ~49 ms to ~14 ms while keeping exact pitch and
+//            polyphony. See _spike/refs/RESEARCH-NOTES.md Phase 6 (local, gitignored).
 //
 // Latency = read-pointer headroom (group delay). The dry path is delayed by the
 // same amount so dry/wet stay aligned; the host compensates the total via PDC.
@@ -66,7 +70,7 @@ public:
     Instant = 1, // period-sync, 2.5 ms crossfade: ~8.6 ms, tightest feel, grainier splices.
     // (The former FAST character was period-sync with a 6 ms crossfade at ~12 ms; it
     //  was sonically identical to INSTANT with more latency, so it was removed.)
-    Poly = 2 // FIXED-grain WSOLA (no period estimate): polyphonic/chord-capable, ~49 ms.
+    Poly = 2 // FIXED-grain WSOLA (no period estimate): polyphonic/chord-capable, ~14 ms.
   };
 
   // Lowest note we design the delay band around (low E standard, 82.41 Hz). Notes
@@ -258,17 +262,28 @@ private:
     Timing t;
     if (c == Character::Poly)
     {
-      // POLY: fixed-grain WSOLA, no pitch estimate -> works on chords. The grain
-      // (delay band) and correlation window must each cover >= ~2 periods of the
-      // lowest note (low E) to lock cleanly, which is why this character is the
-      // highest latency. Values from the offline spike (RESEARCH-NOTES Phase 5):
-      // grain 36 ms, corr 24 ms, crossfade 5 ms, search 2 ms.
+      // POLY: fixed-grain WSOLA, no pitch estimate -> works on chords. Pitch is set
+      // purely by the read-pointer rate (exact, no drift); the WSOLA search/corr only
+      // pick a waveform-aligned splice point and the delay BAND sets how often we
+      // splice. Dynamic RE of the NDSP Archetype Rabea X transpose (RESEARCH-NOTES
+      // Phase 6) measured its TRUE impulse latency at ~2-8 ms (shift-dependent, NOT
+      // the 71-sample reported PDC) using a short delay band; constant across host
+      // block sizes => a genuine low-latency algorithm, not in-block lookahead.
+      // Replicating that here: the latency floor is xfade + 0.5*band, NOT
+      // xfade+search+corr+0.5*band - the splice already clamps the read pointer to
+      // >= xfade, so search/corr are history reads that do NOT raise latency (see the
+      // fixed-grain dLo below). That lets us use a GENEROUS search/corr (robust splice
+      // alignment, incl. low-E octave-down) at zero latency cost and a much shorter
+      // band. Band 20 ms is the floor at which WSOLA splices stay rare enough to keep
+      // every chord voice (shorter bands splice so often that WSOLA's per-splice
+      // dominant-period locking cancels inner voices). Net: ~49 ms -> ~14 ms, still
+      // exact pitch (<=3 cents) and polyphonic. (Verified in _spike volum_poly_sim.py.)
       t.wsola = true;
       t.fixedGrain = true;
-      t.xfade = std::max(8, static_cast<int>(std::lround(sr * 0.005)));
-      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.002)));
-      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.024)));
-      t.band = std::lround(sr * 0.036);
+      t.xfade = std::max(8, static_cast<int>(std::lround(sr * 0.004)));
+      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.016)));
+      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.016)));
+      t.band = std::lround(sr * 0.020);
     }
     else
     {
@@ -291,7 +306,13 @@ private:
       }
       t.band = pDesign;
     }
-    t.dLo = static_cast<double>(t.xfade + t.search + t.corrWin) + 2.0;
+    // Latency floor = xfade + 0.5*band. The splice clamps the read pointer to
+    // >= xfade+1, so for fixed-grain (POLY) the search/corr windows only read
+    // further into the PAST (history) and must NOT inflate the minimum delay.
+    // DROP/INSTANT keep the conservative floor (their splice cadence depends on the
+    // live period estimate, so reserve the full search+corr headroom there).
+    const double dLoExtra = t.fixedGrain ? 0.0 : static_cast<double>(t.search + t.corrWin);
+    t.dLo = static_cast<double>(t.xfade) + dLoExtra + 2.0;
     t.dHi = t.dLo + t.band;
     t.latency = static_cast<int>(std::lround(t.dLo + 0.5 * t.band));
     return t;

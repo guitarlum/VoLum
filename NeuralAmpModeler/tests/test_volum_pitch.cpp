@@ -137,7 +137,7 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
-TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Drop < Poly) and bounded")
+TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Poly < Drop) and bounded")
 {
   VoLumPitch pitch;
   pitch.Configure(kSR, kBlock);
@@ -157,15 +157,21 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Drop < Poly) 
   // Instant ~8.6 ms; still above a hard floor (period-sync read-ahead).
   CHECK(instantLat > static_cast<int>(kSR * 0.004));
 
-  // Poly (fixed-grain WSOLA, chord-capable) is the highest-latency character: its
-  // grain + correlation window must each cover ~2 periods of the lowest note.
+  // Poly (fixed-grain WSOLA, chord-capable) is now LOW latency: the dynamic-RE port
+  // (RESEARCH-NOTES Phase 6) proved the read pointer is clamped to >= xfade by the
+  // splice, so the WSOLA search/correlation are history reads that do not inflate the
+  // delay floor (latency = xfade + 0.5*band). Poly therefore sits just above the
+  // tightest mono character (Instant) and BELOW Drop - it buys polyphony at almost no
+  // latency cost, ~14 ms vs the former ~49 ms.
   pitch.SetParams(VoLumPitch::Mode::Transpose, 0.0, 1.0, 0.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
                   VoLumPitch::Character::Poly);
   const int polyLat = pitch.Latency();
-  CHECK(polyLat > dropLat); // poly buys polyphony at the cost of latency
-  // Poly ~49 ms; bounded above so a runaway grain can't blow up PDC.
-  CHECK(polyLat < static_cast<int>(kSR * 0.070));
-  CHECK(polyLat > static_cast<int>(kSR * 0.030));
+  CHECK(polyLat > instantLat); // poly adds polyphony just above the tightest mono character
+  CHECK(polyLat < dropLat);    // ...but is now cheaper than Drop (was ~3x Drop before the RE port)
+  // Poly ~14 ms; locked well under the old ~49 ms so a regression to the WSOLA-floor
+  // tuning is caught, and bounded above so a runaway grain can't blow up PDC.
+  CHECK(polyLat < static_cast<int>(kSR * 0.020));
+  CHECK(polyLat > static_cast<int>(kSR * 0.008));
 
   // Octaver uses Drop-grade voices regardless of the transpose character.
   pitch.SetParams(VoLumPitch::Mode::Octaver, 0.0, 1.0, 1.0, 0.0, 1.0, VoLumPitch::Voicing::Modern, 0.0,
