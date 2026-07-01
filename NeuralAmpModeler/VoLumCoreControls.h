@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <functional>
 
 class VoLumBackgroundControl : public IControl
@@ -339,12 +340,24 @@ public:
     SetDirty(false);
   }
 
+  // Optionally map each pill slot to a specific PARAM integer value, for a pill
+  // that exposes only a SUBSET of an enum param (e.g. show INSTANT+POLY out of a
+  // {Drop,Instant,Poly} enum whose order is serialization-frozen). `denom` is the
+  // param's (enum count - 1) used to normalize. When unset, the pill maps slot i
+  // to normalized i/(n-1) as before.
+  void SetValueMap(const std::vector<int>& values, int denom)
+  {
+    mValues = values;
+    mValueDenom = denom;
+    SetDirty(false);
+  }
+
   void Draw(IGraphics& g) override
   {
     const int n = static_cast<int>(mLabels.size());
     if (n <= 0)
       return;
-    const int selected = std::clamp(static_cast<int>(GetValue() * (n - 1) + 0.5), 0, n - 1);
+    const int selected = SelectedSlot(n);
     const float itemW = mRECT.W() / static_cast<float>(n);
 
     g.FillRoundRect(IColor(160, 14, 16, 22), mRECT, 4.f);
@@ -385,7 +398,10 @@ public:
       return;
     const float itemW = mRECT.W() / static_cast<float>(n);
     const int idx = std::clamp(static_cast<int>((x - mRECT.L) / itemW), 0, n - 1);
-    SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
+    if (!mValues.empty() && mValueDenom > 0)
+      SetValue(static_cast<double>(mValues[static_cast<size_t>(idx)]) / static_cast<double>(mValueDenom));
+    else
+      SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
     SetDirty(true);
   }
 
@@ -413,7 +429,32 @@ public:
   }
 
 private:
+  // Which pill slot is currently selected. With a value-map, pick the slot whose
+  // mapped param value is nearest the live param int (so a legacy value outside
+  // the exposed subset - e.g. a retired Drop=0 - shows the nearest kept option).
+  int SelectedSlot(int n) const
+  {
+    if (!mValues.empty() && mValueDenom > 0)
+    {
+      const int cur = static_cast<int>(GetValue() * mValueDenom + 0.5);
+      int best = 0, bestDist = std::numeric_limits<int>::max();
+      for (int i = 0; i < static_cast<int>(mValues.size()) && i < n; ++i)
+      {
+        const int d = std::abs(mValues[static_cast<size_t>(i)] - cur);
+        if (d < bestDist)
+        {
+          bestDist = d;
+          best = i;
+        }
+      }
+      return best;
+    }
+    return std::clamp(static_cast<int>(GetValue() * (n - 1) + 0.5), 0, n - 1);
+  }
+
   std::vector<std::string> mLabels;
+  std::vector<int> mValues;
+  int mValueDenom = 0;
   int mHovered = -1;
 };
 

@@ -852,7 +852,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
     // Transpose: SEMI, MIX, LEVEL (3 knobs centered).
     drawKnobCol(1, "SEMI", kPrePitchSemitones, "st", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
-                "Transpose the whole signal in half-steps (-12..+7). Polyphonic; tuned tightest for drop tuning.",
+                "Transpose the whole signal in half-steps (-12..+7). Tuned tightest for drop tuning; "
+                "pick INSTANT (mono) or POLY (chords) below.",
                 pitchKnobDiam);
     drawKnobCol(2, "MIX", kPrePitchMix, "%", "PITCH_TRANSPOSE_KNOBS", true, 3, 1, pitchKnobOffset, pitchColW,
                 "Blend between dry and the shifted signal. 100% = fully retuned.", pitchKnobDiam);
@@ -888,12 +889,18 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       "MODERN = clean. Shapes the wet voices only, so raise OCT DN/UP to hear it.");
     pGraphics->AttachControl(pitchVoicingPill, -1, "PITCH_VOICING");
     // Transpose engine character (shares the voicing pill's slot; mode picks which).
-    auto* pitchTransCharPill =
-      new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"DROP", "INSTANT", "POLY"});
+    // Two modes only: INSTANT and POLY. The underlying enum is
+    // {Drop=0, Instant=1, Poly=2} (serialization-frozen; Drop is retired from the
+    // picker and any legacy Drop preset now plays as the improved INSTANT), so the
+    // pill maps its two slots to param values {1, 2} via SetValueMap.
+    auto* pitchTransCharPill = new VoLumSubModePillControl(pitchVoicingRect, kPrePitchTransChar, {"INSTANT", "POLY"});
+    pitchTransCharPill->SetValueMap({volum::kVoLumPitchCharacterInstant, volum::kVoLumPitchCharacterPoly},
+                                    volum::kVoLumPitchCharacterCount - 1);
     pitchTransCharPill->SetTooltip(
-      "Transpose engine. INSTANT = lowest latency (~8.6 ms), default | DROP = WSOLA, "
-      "cleanest mono on big shifts (~17 ms) | POLY = tracks CHORDS, not just single "
-      "notes (~49 ms latency). DROP/INSTANT are monophonic.");
+      "Transpose engine. INSTANT = lowest latency (~8.6 ms), tightest attack, single "
+      "notes / lead lines - use for fast live tracking | POLY = tracks CHORDS, not just "
+      "single notes (~14 ms) - use for riffs, dyads and full chords. Both hold pitch on "
+      "low drop-tuned strings.");
     pGraphics->AttachControl(pitchTransCharPill, -1, "PITCH_TRANSCHAR");
 
     // I/O meters

@@ -1259,8 +1259,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kPrePitchMode:
     case kPrePitchTransChar:
       // Toggling the pitch engine, switching Transpose/Octaver, or changing the
-      // transpose CHARACTER (Drop ~17 ms / Instant ~8.6 ms / Poly ~49 ms) all
-      // change reported (PDC) latency, so re-report it to the host.
+      // transpose CHARACTER (Instant ~8.6 ms / Poly ~14 ms) all change reported
+      // (PDC) latency, so re-report it to the host.
       if (mVolumInitComplete)
         _UpdateLatency();
       break;
@@ -2074,8 +2074,8 @@ void NeuralAmpModeler::_UpdateLatency()
   {
     const auto pitchMode = static_cast<dsp::effect::VoLumPitch::Mode>(
       std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1));
-    const auto pitchChar = static_cast<dsp::effect::VoLumPitch::Character>(
-      std::clamp(GetParam(kPrePitchTransChar)->Int(), 0, volum::kVoLumPitchCharacterCount - 1));
+    const auto pitchChar = static_cast<dsp::effect::VoLumPitch::Character>(volum::VoLumEffectiveTransChar(
+      std::clamp(GetParam(kPrePitchTransChar)->Int(), 0, volum::kVoLumPitchCharacterCount - 1)));
     preLatency += dsp::effect::VoLumPitch::LatencyFor(pitchMode, pitchChar, GetSampleRate());
   }
 

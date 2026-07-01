@@ -778,6 +778,33 @@ TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
   CHECK(out.lockedPrePitch.semitones == doctest::Approx(7.0));
 }
 
+TEST_CASE("Retired DROP transpose character maps to INSTANT (legacy presets play the improved engine)")
+{
+  // DROP was removed from the UI picker but its enum value (0) is frozen for
+  // serialization. A legacy preset that stored DROP must (a) still round-trip its
+  // raw stored value (we never rewrite old readers) and (b) resolve to INSTANT at
+  // the DSP read points via VoLumEffectiveTransChar, so it plays the improved,
+  // lower-latency engine instead of the retired one.
+  CHECK(volum::VoLumEffectiveTransChar(volum::kVoLumPitchCharacterDrop) == volum::kVoLumPitchCharacterInstant);
+  CHECK(volum::VoLumEffectiveTransChar(volum::kVoLumPitchCharacterInstant) == volum::kVoLumPitchCharacterInstant);
+  CHECK(volum::VoLumEffectiveTransChar(volum::kVoLumPitchCharacterPoly) == volum::kVoLumPitchCharacterPoly);
+
+  // A DROP value survives the chunk round-trip unchanged (raw storage is frozen);
+  // the Drop->Instant remap is applied downstream, not by rewriting the chunk.
+  volum::ChunkIdTail in;
+  in.perAmpPitch[0].present = true;
+  in.perAmpPitch[0].active = true;
+  in.perAmpPitch[0].mode = 0;
+  in.perAmpPitch[0].transChar = volum::kVoLumPitchCharacterDrop; // legacy DROP
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.perAmpPitch[0].transChar == volum::kVoLumPitchCharacterDrop);
+  CHECK(volum::VoLumEffectiveTransChar(out.perAmpPitch[0].transChar) == volum::kVoLumPitchCharacterInstant);
+}
+
 TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
 {
   volum::ChunkIdTail in;
