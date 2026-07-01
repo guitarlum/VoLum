@@ -94,16 +94,28 @@ inline constexpr int kVoLumPitchModeOctaver = 1;
 // PRE Pitch octaver voicing: 0=Vintage (gritty/filtered), 1=Modern (clean)
 inline constexpr int kVoLumPitchVoicingVintage = 0;
 inline constexpr int kVoLumPitchVoicingModern = 1;
-// PRE Pitch transpose character: 0=Drop (WSOLA period-sync, exact mono, ~17 ms),
-// 1=Instant (period-sync, ~8.6 ms, tightest mono feel), 2=Poly (fixed-grain WSOLA,
-// no pitch estimate -> polyphonic/chord-capable, ~49 ms; clean-room replication of
-// the NDSP Archetype Rabea X transpose family). Drop/Instant are monophonic.
-// History: the Pitch feature is unreleased-dev-only, so adding Poly as value 2 has
-// no public migration impact (out-of-range stored values still clamp into range).
+// PRE Pitch transpose character: 0=Drop (WSOLA period-sync, exact mono, ~17 ms;
+// RETIRED from the picker - see VoLumEffectiveTransChar below), 1=Instant
+// (period-sync, ~8.6 ms, tightest mono feel), 2=Poly (fixed-grain WSOLA, no pitch
+// estimate -> polyphonic/chord-capable, ~14 ms; clean-room replication of the NDSP
+// Archetype Rabea X transpose family). History: the Pitch feature is unreleased-
+// dev-only, so adding Poly as value 2 has no public migration impact (out-of-range
+// stored values still clamp into range).
 inline constexpr int kVoLumPitchCharacterDrop = 0;
 inline constexpr int kVoLumPitchCharacterInstant = 1;
 inline constexpr int kVoLumPitchCharacterPoly = 2;
 inline constexpr int kVoLumPitchCharacterCount = 3;
+
+// DROP is RETIRED from the UI picker (only INSTANT and POLY are selectable). The
+// enum VALUES stay frozen for serialization, but once the autocorr tracker floor
+// was lowered to 40 Hz, INSTANT is as pitch-accurate as DROP on low strings at
+// lower latency, so DROP has no remaining benefit. Map any stored/legacy DROP to
+// INSTANT at the DSP read points so old presets play the improved engine. (This is
+// the single source of truth for that remap.)
+inline constexpr int VoLumEffectiveTransChar(int stored)
+{
+  return (stored == kVoLumPitchCharacterDrop) ? kVoLumPitchCharacterInstant : stored;
+}
 
 struct DelayModeSnapshot
 {

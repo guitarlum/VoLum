@@ -77,8 +77,17 @@ public:
   // below this (drop tunings) still track; they just get marginally more warble.
   static constexpr double kDesignFmin = 82.41;
   // Period-search frequency bounds for the autocorrelation pitch estimate.
+  // kPminFreq is the crux of low-string stability: the old 70 Hz floor put the
+  // period of every drop-tuned / extended-range low string (drop C C2 65 Hz,
+  // 7-string B1 62 Hz, 8-string F#1 46 Hz) OUT of the search range, so the
+  // estimate locked to a wrong lag -> mid-cycle splices -> the audible "warps and
+  // moves" detune on those strings. Lowering the floor to 40 Hz brings the whole
+  // guitar range in and fixes it at ZERO latency cost (the tracker only widens its
+  // history read; latency = xfade+..., independent of the search range). Measured
+  // in _spike/re/pitch-modes/: drop C / 7-string / 8-string all go from tens/
+  // hundreds of cents of detune to <=6 cents. See RESEARCH-NOTES-pitch-modes.md.
   static constexpr double kPmaxFreq = 600.0;
-  static constexpr double kPminFreq = 70.0;
+  static constexpr double kPminFreq = 40.0;
 
   // Allocates - call OFF the audio thread (Configure). Ring is sized for the
   // worst case (DROP) so changing character later never reallocates.
@@ -281,8 +290,15 @@ private:
       t.wsola = true;
       t.fixedGrain = true;
       t.xfade = std::max(8, static_cast<int>(std::lround(sr * 0.004)));
-      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.016)));
-      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.016)));
+      // 24 ms search + correlation window (was 16 ms). POLY is fixed-grain, so
+      // dLo does NOT include search/corr (they are history reads) -> widening them
+      // is LATENCY-FREE (still 14 ms). The wider window covers one full period of
+      // the deepest strings (8-string F#1 46 Hz = 21.6 ms), so the WSOLA splice
+      // aligns cleanly there instead of mid-cycle: measured F#1 downshift detune
+      // dropped from ~-49 cents to ~-6, AND chord voice separation IMPROVED
+      // (+2 semis 51x -> 163x). See _spike/re/pitch-modes/RESEARCH-NOTES-pitch-modes.md.
+      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.024)));
+      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.024)));
       t.band = std::lround(sr * 0.020);
     }
     else

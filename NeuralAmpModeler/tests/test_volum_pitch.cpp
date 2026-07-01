@@ -220,6 +220,53 @@ TEST_CASE("VoLumPitch transpose is pitch-accurate downshifting in both character
   }
 }
 
+TEST_CASE("VoLumPitch tracks extended-range LOW strings (drop C / 7- / 8-string) without detune")
+{
+  // REGRESSION GUARD for the "low C string warps and moves" bug: the autocorr
+  // pitch tracker floor used to be 70 Hz, ABOVE drop-C C2 (65 Hz), 7-string B1
+  // (62 Hz) and 8-string F#1 (46 Hz). Those strings fell outside the search range,
+  // locked to a wrong period, and detuned by tens/hundreds of cents with audible
+  // warble. The floor is now 40 Hz (kPminFreq), and POLY's correlation/search
+  // windows widened to 24 ms to span one full period of the deepest strings. Both
+  // fixes are latency-free. INSTANT (period-sync) and POLY (fixed-grain WSOLA) must
+  // now hold pitch within a quarter-tone on every low string on a downshift.
+  struct LowString
+  {
+    const char* name;
+    double f0;
+  };
+  for (const LowString s : {LowString{"C2", 65.41}, LowString{"B1", 61.74}, LowString{"F#1", 46.25}})
+  {
+    for (const auto ch : {VoLumPitch::Character::Instant, VoLumPitch::Character::Poly})
+    {
+      for (int semi : {-2, -5})
+      {
+        VoLumPitch pitch;
+        pitch.Configure(kSR, kBlock);
+        pitch.Reset();
+        pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
+                        VoLumPitch::Voicing::Modern, 0.0, ch);
+        auto in = makeSine(s.f0, 1 << 16);
+        auto out = runStream(pitch, in);
+
+        // No NaN/Inf on deep input.
+        for (double v : out)
+          CHECK(std::isfinite(v));
+
+        const double target = s.f0 * std::pow(2.0, semi / 12.0);
+        const int minLag = std::max(8, static_cast<int>(kSR / (target * 2.0)));
+        const int maxLag = static_cast<int>(kSR / (target * 0.5));
+        const double f = estimateFreq(out, static_cast<size_t>(pitch.Latency()) + 24000, 8192, minLag, maxLag);
+        INFO("string=", s.name, " char=", static_cast<int>(ch), " semi=", semi, " target=", target, " measured=", f);
+        // Pre-fix these detuned by 78..584 cents; a quarter-tone (50 c) tolerance
+        // catches any regression to the old out-of-range tracker while staying
+        // robust to the output-side autocorr estimator at these low frequencies.
+        CHECK(std::abs(cents(f, target)) < 50.0);
+      }
+    }
+  }
+}
+
 TEST_CASE("VoLumPitch transpose Mix=0 equals latency-delayed dry")
 {
   VoLumPitch pitch;
