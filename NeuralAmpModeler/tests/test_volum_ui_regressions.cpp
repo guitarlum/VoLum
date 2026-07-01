@@ -155,6 +155,9 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "settings->As<NAMSettingsPageControl>()->HideAnimated(false);");
   RequireContains(source, "key.VK == kTabKey");
   RequireContains(source, "return _CycleVoLumKeyboardTarget(key.VK == kVK_LEFT ? -1 : 1)");
+  // POST Tab/arrow cycling must reach all three cards (Delay/Reverb/Tremolo), not
+  // just toggle Delay<->Reverb (the "can't arrow to Tremolo in POST" bug).
+  RequireContains(source, "mVolumFocusedEffect = targets[wrap(current + direction, 3)];");
   RequireContains(source, "Left/Right channel  |  S cab  |  Tab target");
   RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected");
   RequireContains(source, "Left/Right or Tab target");

@@ -1,0 +1,1407 @@
+ <!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoLum 1.2.0 Art Candidates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0e13; --bg2:#12151b; --panel:#161a21; --panel2:#1b2029;
+    --line:#252b35; --line2:#2f3742;
+    --teal:#78d2dc; --teal-dim:#4ba2a2; --gold:#c8a557; --gold-hi:#fcde91;
+    --ink:#e8e0cd; --ink-dim:#9aa0a8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 78% -8%, rgba(120,210,220,.06), transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, rgba(200,165,87,.05), transparent 55%),
+      linear-gradient(180deg,#0d0f14,#0a0b0f);
+    color:var(--ink); font-family:'Josefin Sans',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header.top{
+    padding:34px 40px 20px; border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:10;
+    background:linear-gradient(180deg,rgba(12,14,19,.96),rgba(12,14,19,.82));
+    backdrop-filter:blur(8px);
+  }
+  header.top h1{
+    margin:0; font-weight:300; font-size:28px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--gold);
+  }
+  header.top h1 b{font-weight:600;color:var(--teal)}
+  header.top p{margin:8px 0 0;max-width:820px;color:var(--ink-dim);font-size:14px;line-height:1.5}
+  nav.jump{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  nav.jump a{
+    font:500 11px/1 'JetBrains Mono',monospace; letter-spacing:.08em; text-decoration:none;
+    color:var(--teal-dim); border:1px solid var(--line2); border-radius:999px;
+    padding:6px 12px; transition:.15s;
+  }
+  nav.jump a:hover{color:var(--gold-hi);border-color:var(--gold);background:rgba(200,165,87,.07)}
+
+  section.item{padding:34px 40px 10px;border-bottom:1px solid var(--line);scroll-margin-top:120px}
+  section.item > h2{
+    margin:0 0 2px; font-weight:400; font-size:20px; letter-spacing:.04em; color:var(--ink);
+    display:flex;align-items:baseline;gap:12px;
+  }
+  section.item > h2 .tag{
+    font:500 10px/1 'JetBrains Mono',monospace; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--gold); border:1px solid var(--gold);border-radius:4px;padding:4px 7px;
+  }
+  section.item > p.note{margin:6px 0 20px;color:var(--ink-dim);font-size:13.5px;max-width:900px;line-height:1.5}
+
+  .grid{display:grid;gap:22px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+  .grid.pedal{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    display:flex;flex-direction:column; transition:.18s;
+  }
+  .card:hover{border-color:var(--line2);transform:translateY(-2px)}
+  .card.current{border-color:var(--gold);border-style:dashed;opacity:.92}
+  .card h3{
+    margin:0;padding:12px 15px 10px;font-weight:600;font-size:14px;letter-spacing:.03em;
+    display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);
+  }
+  .card h3 .pick{
+    font:600 12px/1 'JetBrains Mono',monospace;color:var(--teal);
+    background:rgba(120,210,220,.1);border:1px solid var(--teal-dim);border-radius:5px;padding:4px 8px;
+  }
+  .card.current h3 .pick{color:var(--gold);background:rgba(200,165,87,.1);border-color:var(--gold)}
+  .cvwrap{position:relative}
+  canvas.big{width:100%;height:auto;display:block;background:
+    radial-gradient(120% 120% at 50% 42%, #181b20, #101217 78%);}
+  .thumb{position:absolute;right:8px;bottom:8px;padding:4px 4px 15px;
+    background:rgba(8,10,14,.86);border:1px solid var(--line2);border-radius:6px;
+    box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .thumb canvas{width:44px;height:44px;display:block;border-radius:3px;background:
+    radial-gradient(120% 120% at 50% 42%, #14171c, #0c0e12 80%);}
+  .thumb::after{content:'22px · blue';position:absolute;left:0;right:0;bottom:2px;text-align:center;
+    font:500 8px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--teal-dim)}
+  .card .desc{padding:10px 15px 14px;font-size:12.5px;line-height:1.45;color:var(--ink-dim);min-height:38px}
+  footer{padding:26px 40px 60px;color:var(--ink-dim);font-size:12.5px;line-height:1.6;max-width:900px}
+  footer code{font-family:'JetBrains Mono',monospace;background:var(--panel2);border:1px solid var(--line);
+    padding:1px 6px;border-radius:4px;color:var(--teal)}
+  footer b{color:var(--gold)}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>VoLum <b>1.2.0</b> &nbsp;Art Candidates</h1>
+  <p>Procedural options ported to HTML canvas from the real drawing code in
+  <code>VoLumFractalArt.h</code> / <code>VoLumTriptychMotifs.h</code>, same teal/gold palette.
+  Each row shows the <b>current</b> design (gold dashed) plus new candidates. Judge at this large size;
+  the tiny sidebar thumbnail is derived after you pick. Tell me a letter per item, e.g. "JMP = C".</p>
+  <nav class="jump" id="nav"></nav>
+</header>
+<main id="root"></main>
+<footer>
+  <p><b>Gradients / glow</b> are used in some candidates. These port to iPlug2 <code>IGraphics</code> via
+  <code>IPattern</code> linear/radial gradient fills plus layered-alpha strokes (canvas <code>shadowBlur</code>
+  is emulated in C++ with a few concentric translucent passes). Nothing shown here is un-buildable.</p>
+  <p>Palette: teal <code>rgb(120,210,220)</code>, mid <code>rgb(100,180,200)</code>,
+  dim <code>rgb(80,150,170)</code>, gold <code>rgb(200,165,87)</code>.</p>
+</footer>
+<script>
+// ============================================================================
+//  Shared palette + helpers (mirror of the C++ IColor values)
+// ============================================================================
+const TEAL=[120,210,220], MID=[100,180,200], DIM=[80,150,170],
+      BLUE=[150,205,245], GOLD=[200,165,87], GOLDHI=[252,222,145];
+const rgba=(c,a)=>`rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const PI=Math.PI, TAU=PI*2;
+
+function bg(x){
+  const g=x.createLinearGradient(0,0,0,x.H);
+  g.addColorStop(0,'#181b20'); g.addColorStop(1,'#101217');
+  x.fillStyle=g; x.fillRect(0,0,x.W,x.H);
+}
+function glow(x,color,blur,fn){
+  x.save(); x.shadowColor=color; x.shadowBlur=blur; fn(); x.restore();
+}
+// Gold is a hero/card-size treatment only. In the 22px thumbnail (x.big===false)
+// gold degrades to teal and glow passes are skipped, mirroring the size-gated
+// gold rule enforced in the C++ draw code.
+function gAcc(x){return x.big?GOLD:TEAL;}     // gold accent -> teal in thumb
+function gHiAcc(x){return x.big?GOLDHI:TEAL;}  // gold highlight -> teal in thumb
+function gGlow(x,color,blur,fn){ if(x.big) glow(x,color,blur,fn); else fn(); }
+// --- atmosphere helpers (depth like the Spiral Galaxy: bloom bg, dust, gradients) ---
+function mix(a,b,t){return [lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];}
+function bloom(x,cx,cy,R,c,a){const g=x.createRadialGradient(cx,cy,0,cx,cy,R);g.addColorStop(0,rgba(c,a));g.addColorStop(0.6,rgba(c,a*0.3));g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,x.W,x.H);}
+function vignette(x){const g=x.createRadialGradient(x.W/2,x.H*0.45,0,x.W/2,x.H*0.45,Math.max(x.W,x.H)*0.7);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(3,5,8,0.55)');x.fillStyle=g;x.fillRect(0,0,x.W,x.H);}
+function dust(x,cx,cy,R,n,seed){if(!x.big)return;const rng=mkRng(seed);for(let i=0;i<n;i++){const a=rng()*TAU,rr=R*Math.sqrt(rng());dot(x,rng()>0.75?TEAL:MID,cx+rr*Math.cos(a),cy+rr*Math.sin(a),rng()*1.3+0.3,0.08+0.28*rng());}}
+// gradient stroke along a polyline of [x,y] points, colour c0->c1, with optional glow
+function gradStroke(x,P,c0,c1,lw,glowOn){const draw=()=>{for(let i=1;i<P.length;i++){const t=i/P.length;line(x,mix(c0,c1,t),P[i-1][0],P[i-1][1],P[i][0],P[i][1],lw,0.85);}};if(glowOn)gGlow(x,rgba(c0,0.7),8,draw);else draw();}
+function line(x,c,x1,y1,x2,y2,w,a=1){
+  x.strokeStyle=rgba(c,a); x.lineWidth=w; x.lineCap='round';
+  x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+}
+function dot(x,c,cx,cy,r,a=1){ x.fillStyle=rgba(c,a); x.beginPath(); x.arc(cx,cy,r,0,TAU); x.fill(); }
+function ring(x,c,cx,cy,r,w,a=1){ x.strokeStyle=rgba(c,a); x.lineWidth=w; x.beginPath(); x.arc(cx,cy,r,0,TAU); x.stroke(); }
+function lerp(a,b,t){return a+(b-a)*t;}
+function mkRng(seed){let s=seed>>>0;return ()=>{s=(s*1664525+1013904223)>>>0;return s/0xFFFFFFFF;};}
+
+// ============================================================================
+//  Registry: sections -> items (draw functions defined further below)
+// ============================================================================
+// ============================================================================
+//  WINNING PICKS LEDGER (durable across sessions)
+//  Batch 1: Ampete=Dragon Nebula(A) · Brunetti=Verdant Fern(A) ·
+//           H&K TriAmp=Lissajous Nebula(A) · Marshall 2204=Windswept Glow(A)
+//  Batch 2: JVM=Levy Nebula(A) · OD120=Ember Bulb(C) ·
+//           ORS100=Julia Nebula(C) · Sebago=Clifford Nebula(A)
+//  Batch 3: Herbert=Lichtenberg Glow(A) · Prometheus=Koch Deep(A) ·
+//           Soldano=Beacon Sweep(B, lighthouse double beam) · JMP 2203=Depth Triforce
+//           (Triforce lands on JMP; Soldano KEEPS its Burning Ship + lighthouse light.)
+//  Batch 4: Bad Cat=Eyes in the Dark(C) · NAM 1+2=Fusion Dance(A)
+//           (DBZ fusion homage: stylized teal line-art, gold spark at hero size only.)
+//  Batch 5: PITCH Transpose=Deep Helix(A) · PITCH Octaver=Glow Chevrons(A) ·
+//           Delay=Glow Taps(A) · Reverb=Deep Dust(A)  (all elevated originals)
+// ============================================================================
+const SECTIONS=[];
+function reg(id,title,tag,note,cards,batch){SECTIONS.push({id,title,tag,note,cards,batch:batch||0});}
+
+// ---------------------------------------------------------------- JMP 2203
+function jmpCurrent(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2;
+  const draw=(px,py,half,dep)=>{
+    if(dep<=0||half<2)return;
+    const c=dep>=4?TEAL:(dep>=2?MID:DIM), lw=dep>=3?2:1.5;
+    line(x,c,px-half,py,px+half,py,lw); line(x,c,px-half,py-half,px-half,py+half,lw);
+    line(x,c,px+half,py-half,px+half,py+half,lw);
+    const nh=half*0.5;
+    draw(px-half,py-half,nh,dep-1);draw(px-half,py+half,nh,dep-1);
+    draw(px+half,py-half,nh,dep-1);draw(px+half,py+half,nh,dep-1);
+  };
+  draw(cx,cy,Math.min(w*0.38,h*0.42),6);
+}
+function jmpNeon(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2; const leaves=[];
+  const draw=(px,py,half,dep)=>{
+    if(dep<=0||half<2){leaves.push([px,py]);return;}
+    const c=dep>=4?TEAL:(dep>=2?MID:DIM), lw=dep>=3?2.2:1.4, a=dep>=2?0.95:0.7;
+    line(x,c,px-half,py,px+half,py,lw,a); line(x,c,px-half,py-half,px-half,py+half,lw,a);
+    line(x,c,px+half,py-half,px+half,py+half,lw,a);
+    const nh=half*0.5;
+    draw(px-half,py-half,nh,dep-1);draw(px-half,py+half,nh,dep-1);
+    draw(px+half,py-half,nh,dep-1);draw(px+half,py+half,nh,dep-1);
+  };
+  glow(x,rgba(TEAL,1),9,()=>draw(cx,cy,Math.min(w*0.38,h*0.42),6));
+  for(const[px,py]of leaves) dot(x,GOLDHI,px,py,1.4,0.9);
+  glow(x,rgba(GOLDHI,1),10,()=>dot(x,GOLDHI,cx,cy,2.6));
+}
+function jmpVortex(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w,h)*0.46,N=28;
+  for(let k=0;k<N;k++){
+    const t=k/(N-1), r=R*(1-t*0.95), rot=k*0.19, c=k%2?TEAL:MID, a=0.22+0.62*(1-t);
+    x.strokeStyle=rgba(c,a); x.lineWidth=k<3?2.2:1.1; x.beginPath();
+    for(let i=0;i<=4;i++){const ang=rot+i*PI/2+PI/4,px=cx+r*Math.cos(ang),py=cy+r*Math.sin(ang);i?x.lineTo(px,py):x.moveTo(px,py);}
+    x.stroke();
+  }
+  glow(x,rgba(GOLDHI,1),14,()=>dot(x,GOLDHI,cx,cy,3.4));
+}
+function jmpCircuit(x){
+  const w=x.W,h=x.H,pad=22,L=pad,T=pad,R=w-pad,B=h-pad,cols=7,rows=5;
+  const gx=(R-L)/(cols-1),gy=(B-T)/(rows-1),P=(c,r)=>[L+c*gx,T+r*gy],rng=mkRng(7);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const[px,py]=P(c,r);
+    if(c<cols-1&&rng()>0.22){const[nx]=P(c+1,r);line(x,(r+c)%2?TEAL:MID,px,py,nx,py,1.4,0.7);}
+    if(r<rows-1&&rng()>0.32){const[,ny2]=P(c,r+1),midY=py+gy*0.5;
+      line(x,DIM,px,py,px,midY,1.2,0.55);line(x,DIM,px,midY,px,midY,1,0.5);line(x,DIM,px,midY,px,ny2,1.2,0.55);}
+  }
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const[px,py]=P(c,r),on=(r*cols+c)%3===0;
+    glow(x,rgba(on?TEAL:MID,1),on?8:0,()=>dot(x,on?TEAL:MID,px,py,on?2.8:1.7,on?1:0.7));
+    if(on)dot(x,GOLDHI,px,py,1.1);}
+}
+function jmpGrille(x){
+  const w=x.W,h=x.H,pad=16,L=pad,T=pad,R=w-pad,B=h-pad,gap=13;
+  x.save();x.beginPath();x.rect(L,T,R-L,B-T);x.clip();
+  for(let d=-h;d<w+h;d+=gap)line(x,TEAL,L+d,T,L+d-(B-T),B,1.2,0.42);
+  for(let d=-h;d<w+h;d+=gap)line(x,MID,L+d,B,L+d-(B-T),T,1.2,0.38);
+  x.restore();
+  glow(x,rgba(GOLD,0.7),6,()=>{x.strokeStyle=rgba(GOLDHI,0.95);x.lineWidth=3;x.strokeRect(L,T,R-L,B-T);});
+  for(const p of[[L,T],[R,T],[L,B],[R,B]])dot(x,GOLDHI,p[0],p[1],2.6);
+  glow(x,rgba(GOLD,0.5),4,()=>{x.strokeStyle=rgba(GOLDHI,0.9);x.lineWidth=2;x.strokeRect(w/2-w*0.16,h/2-h*0.06,w*0.32,h*0.12);});
+}
+function jmpTruchet(x){
+  const w=x.W,h=x.H,pad=12,cols=8,rows=6,cw=(w-2*pad)/cols,ch=(h-2*pad)/rows,rng=mkRng(9),rad=Math.min(cw,ch)/2;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const x0=pad+c*cw,y0=pad+r*ch,col=(r+c)%2?TEAL:MID;
+    x.strokeStyle=rgba(col,0.72);x.lineWidth=1.7;
+    if(rng()>0.5){x.beginPath();x.arc(x0,y0,rad,0,PI/2);x.stroke();x.beginPath();x.arc(x0+cw,y0+ch,rad,PI,PI*1.5);x.stroke();}
+    else{x.beginPath();x.arc(x0+cw,y0,rad,PI/2,PI);x.stroke();x.beginPath();x.arc(x0,y0+ch,rad,PI*1.5,TAU);x.stroke();}}
+}
+function hilbertPts(order){const res=[];
+  (function hil(x0,y0,xi,xj,yi,yj,n){
+    if(n<=0){res.push([x0+(xi+yi)/2,y0+(xj+yj)/2]);return;}
+    hil(x0,y0,yi/2,yj/2,xi/2,xj/2,n-1);
+    hil(x0+xi/2,y0+xj/2,xi/2,xj/2,yi/2,yj/2,n-1);
+    hil(x0+xi/2+yi/2,y0+xj/2+yj/2,xi/2,xj/2,yi/2,yj/2,n-1);
+    hil(x0+xi/2+yi,y0+xj/2+yj,-yi/2,-yj/2,-xi/2,-xj/2,n-1);
+  })(0,0,1,0,0,1,order);return res;}
+function jmpHilbert(x){
+  const w=x.W,h=x.H,S=Math.min(w,h)-28,ox=(w-S)/2,oy=(h-S)/2,pts=hilbertPts(4);
+  glow(x,rgba(TEAL,0.6),5,()=>{x.strokeStyle=rgba(TEAL,0.92);x.lineWidth=1.9;x.lineJoin='round';x.lineCap='round';x.beginPath();
+    pts.forEach((p,i)=>{const X=ox+p[0]*S,Y=oy+p[1]*S;i?x.lineTo(X,Y):x.moveTo(X,Y);});x.stroke();});
+  const a=pts[0],b=pts[pts.length-1];
+  glow(x,rgba(GOLDHI,1),8,()=>{dot(x,GOLDHI,ox+a[0]*S,oy+a[1]*S,3);dot(x,GOLDHI,ox+b[0]*S,oy+b[1]*S,3);});
+}
+function jmpMoire(x){
+  const w=x.W,h=x.H,cy=h/2,off=w*0.11,c1=w/2-off,c2=w/2+off,maxR=Math.min(w,h)*0.52;
+  for(let r=5;r<maxR;r+=7)ring(x,TEAL,c1,cy,r,1,0.3);
+  for(let r=5;r<maxR;r+=7)ring(x,MID,c2,cy,r,1,0.28);
+  glow(x,rgba(GOLDHI,1),8,()=>{dot(x,GOLDHI,c1,cy,2.4);dot(x,GOLDHI,c2,cy,2.4);});
+}
+function jmpFlow(x){
+  const w=x.W,h=x.H,rng=mkRng(7);
+  const ang=(px,py)=>Math.sin(px*0.012)*1.3+Math.cos(py*0.014)*1.1+Math.sin((px+py)*0.008)*0.8;
+  for(let k=0;k<95;k++){let px=rng()*w,py=rng()*h;const c=k%3===0?TEAL:(k%3===1?MID:DIM);
+    x.strokeStyle=rgba(c,0.5);x.lineWidth=1;x.lineCap='round';x.beginPath();x.moveTo(px,py);
+    for(let s=0;s<44;s++){const a=ang(px,py);px+=Math.cos(a)*4;py+=Math.sin(a)*4;if(px<0||px>w||py<0||py>h)break;x.lineTo(px,py);}x.stroke();}
+  for(let k=0;k<6;k++){let px=rng()*w,py=rng()*h;glow(x,rgba(GOLD,0.5),3,()=>{x.strokeStyle=rgba(GOLDHI,0.7);x.lineWidth=1.5;x.beginPath();x.moveTo(px,py);
+    for(let s=0;s<54;s++){const a=ang(px,py);px+=Math.cos(a)*4;py+=Math.sin(a)*4;if(px<0||px>w||py<0||py>h)break;x.lineTo(px,py);}x.stroke();});}
+}
+function jmpMaze(x){
+  const w=x.W,h=x.H,pad=12,cols=11,rows=7,cw=(w-2*pad)/cols,ch=(h-2*pad)/rows,rng=mkRng(3);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const x0=pad+c*cw,y0=pad+r*ch,c2=(r+c)%2?TEAL:MID;
+    if(rng()>0.5)line(x,c2,x0,y0,x0+cw,y0+ch,1.7,0.72);else line(x,c2,x0+cw,y0,x0,y0+ch,1.7,0.72);}
+}
+function jmpContour(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,layers=9;
+  for(let L=layers;L>=1;L--){const baseR=Math.min(w,h)*0.5*L/layers,c=L%2?TEAL:MID;
+    x.strokeStyle=rgba(c,0.3+0.4*(1-L/layers));x.lineWidth=1.2;x.beginPath();
+    for(let a=0;a<=64;a++){const th=a/64*TAU,wob=1+0.12*Math.sin(th*3+L)+0.08*Math.cos(th*5-L*0.7),r=baseR*wob,X=cx+r*Math.cos(th),Y=cy+r*Math.sin(th);a?x.lineTo(X,Y):x.moveTo(X,Y);}
+    x.closePath();x.stroke();}
+  glow(x,rgba(GOLDHI,1),8,()=>dot(x,GOLDHI,cx,cy,3));
+}
+function jmpRipple(x){
+  const w=x.W,h=x.H,s1=[w*0.32,h*0.96],s2=[w*0.68,h*0.96],mx=Math.max(w,h)*1.15;
+  for(let r=8;r<mx;r+=12)ring(x,TEAL,s1[0],s1[1],r,1,0.24);
+  for(let r=8;r<mx;r+=12)ring(x,MID,s2[0],s2[1],r,1,0.22);
+  glow(x,rgba(GOLDHI,1),8,()=>{dot(x,GOLDHI,s1[0],s1[1],2.4);dot(x,GOLDHI,s2[0],s2[1],2.4);});
+}
+reg('jmp','Marshall JMP 2203','amp / case 7','Round 2. A = the Truchet you liked; B/C/D/E are new flowing/organic ideas.',[
+  {current:true,name:'H-tree',draw:jmpCurrent,desc:'Existing recursive H-tree.'},
+  {pick:'A',name:'Truchet Arcs',draw:jmpTruchet,desc:'The one you liked: random quarter-arcs forming a flowing maze.'},
+  {pick:'B',name:'Flow Field',draw:jmpFlow,desc:'Streamlines drifting through a smooth vector field, with gold accents. Organic, alive.'},
+  {pick:'C',name:'Truchet Maze',draw:jmpMaze,desc:'Diagonal-tile labyrinth. Sharper, architectural cousin of the arcs.'},
+  {pick:'D',name:'Topo Contours',draw:jmpContour,desc:'Nested wobbling contour rings like a height map. Layered, hypnotic.'},
+  {pick:'E',name:'Ripple Field',draw:jmpRipple,desc:'Interference wavefronts from two sources. Sonic, physical.'},
+]);
+// ---------------------------------------------------------------- Fryette Deliverance
+function fryCurrent(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2; let r=8,ang=0,px=cx,py=cy;
+  for(let i=0;i<200;i++){const a=ang*PI/180,X=cx+r*Math.cos(a),Y=cy+r*Math.sin(a);
+    line(x,TEAL,px,py,X,Y,2,0.18+0.35*(1-i/200));px=X;py=Y;ang+=8;r+=0.45;}
+  x.save();x.translate(cx,cy);x.rotate(PI/4);x.fillStyle=rgba(TEAL,0.86);x.fillRect(-4,-4,8,8);x.restore();
+}
+function fryPhoenix(x){
+  const w=x.W,h=x.H,cx=w/2,baseY=h*0.92,topY=h*0.10,rng=mkRng(9),N=16;
+  const grad=x.createLinearGradient(0,baseY,0,topY);
+  grad.addColorStop(0,rgba(GOLDHI,0.95));grad.addColorStop(0.4,rgba(GOLD,0.8));
+  grad.addColorStop(0.75,rgba(TEAL,0.7));grad.addColorStop(1,rgba(MID,0.32));
+  glow(x,rgba(GOLD,0.9),8,()=>{
+    for(let k=0;k<N;k++){
+      const side=k%2?1:-1,f=(k>>1)/(N/2),reach=w*(0.05+0.42*f)*side;
+      const cX=cx+reach*0.35+(rng()-0.5)*20,cY=lerp(baseY,topY,0.3+0.3*rng());
+      const eX=cx+reach,eY=lerp(topY,baseY,0.05+0.55*f);
+      x.strokeStyle=grad;x.lineWidth=2.4-1.5*f;x.lineCap='round';
+      x.beginPath();x.moveTo(cx+(rng()-0.5)*10,baseY);x.quadraticCurveTo(cX,cY,eX,eY);x.stroke();
+    }
+  });
+  glow(x,rgba(GOLDHI,1),18,()=>dot(x,GOLDHI,cx,baseY-6,5));
+}
+function fryGalaxy(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,rng=mkRng(5),maxR=Math.min(w,h)*0.46;
+  const rg=x.createRadialGradient(cx,cy,0,cx,cy,maxR);
+  rg.addColorStop(0,rgba(TEAL,0.20));rg.addColorStop(1,'rgba(0,0,0,0)');
+  x.fillStyle=rg;x.fillRect(0,0,w,h);
+  for(let a=0;a<2;a++){const off=a*PI;
+    for(let i=0;i<560;i++){const t=i/560,theta=off+t*4.2*PI,r=maxR*Math.pow(t,0.7);
+      const px=cx+r*Math.cos(theta)+(rng()-0.5)*r*0.12,py=cy+r*Math.sin(theta)+(rng()-0.5)*r*0.12;
+      dot(x,t<0.5?TEAL:MID,px,py,t<0.2?1.4:1,0.2+0.6*(1-t));}}
+  glow(x,rgba(GOLDHI,1),16,()=>dot(x,GOLDHI,cx,cy,4));
+}
+function frySunburst(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w,h)*0.46,spokes=48;
+  for(let i=0;i<spokes;i++){const ang=i/spokes*TAU,r1=R*0.18,r2=R*(i%3===0?1:i%3===1?0.75:0.55);
+    line(x,i%2?TEAL:MID,cx+r1*Math.cos(ang),cy+r1*Math.sin(ang),cx+r2*Math.cos(ang),cy+r2*Math.sin(ang),i%3===0?1.6:1,0.3+0.4*(i%3===0?1:0.5));}
+  for(let k=1;k<=5;k++)ring(x,k%2?GOLD:TEAL,cx,cy,R*(0.2+0.16*k),k%2?1.4:1,0.5-0.05*k);
+  glow(x,rgba(GOLDHI,1),12,()=>dot(x,GOLDHI,cx,cy,4));
+}
+reg('fryette','Fryette Deliverance','amp / case 3','Currently a thin golden spiral. "Deliverance" wants something with more fire/energy.',[
+  {current:true,name:'Golden Spiral',draw:fryCurrent,desc:'Existing single-line spiral + center diamond.'},
+  {pick:'A',name:'Phoenix Plume',draw:fryPhoenix,desc:'Gold-to-teal flame tongues rising from a glowing ember. Literal "deliverance from fire".'},
+  {pick:'B',name:'Spiral Galaxy',draw:fryGalaxy,desc:'Two particle arms in a logarithmic spiral over a radial bloom. Deep, atmospheric.'},
+  {pick:'C',name:'Sunburst Mandala',draw:frySunburst,desc:'Radiant spokes + concentric gold/teal rings. Bold and symmetric.'},
+]);
+// ---------------------------------------------------------------- THC Sunset
+function thcCurrent(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2; let ps=[{x:cx,y:cy,r:Math.min(w*0.32,h*0.42)}];
+  for(let d=0;d<3;d++){const nx=[],c=d===0?TEAL:(d===1?MID:DIM);
+    for(const p of ps){for(let i=0;i<5;i++){const a1=(i*72-90)*PI/180,a2=((i+1)*72-90)*PI/180;
+      line(x,c,p.x+p.r*Math.cos(a1),p.y+p.r*Math.sin(a1),p.x+p.r*Math.cos(a2),p.y+p.r*Math.sin(a2),2);}
+      const nr=p.r*0.382;nx.push({x:p.x,y:p.y,r:nr});
+      for(let i=0;i<5;i++){const a=(i*72-90)*PI/180;nx.push({x:p.x+(p.r-nr)*Math.cos(a),y:p.y+(p.r-nr)*Math.sin(a),r:nr});}}
+    ps=nx;}
+}
+function thcSynthwave(x){
+  const w=x.W,h=x.H,cx=w/2,horizon=h*0.58,sunR=Math.min(w,h)*0.30,sunCy=horizon-sunR*0.42;
+  glow(x,rgba(GOLD,0.8),30,()=>{x.save();x.beginPath();x.arc(cx,sunCy,sunR,0,TAU);x.clip();
+    const g=x.createLinearGradient(0,sunCy-sunR,0,sunCy+sunR);
+    g.addColorStop(0,rgba(GOLDHI,1));g.addColorStop(0.55,rgba(GOLD,0.95));g.addColorStop(1,rgba(TEAL,0.8));
+    x.fillStyle=g;x.fillRect(cx-sunR,sunCy-sunR,sunR*2,sunR*2);x.restore();});
+  x.save();x.beginPath();x.arc(cx,sunCy,sunR,0,TAU);x.clip();
+  for(let i=0;i<7;i++){const y=sunCy+sunR*0.12+i*(sunR*0.125);x.fillStyle='rgba(16,18,23,0.92)';x.fillRect(cx-sunR,y,sunR*2,1+i*0.9);}
+  x.restore();
+  glow(x,rgba(GOLD,0.7),8,()=>line(x,GOLDHI,0,horizon,w,horizon,1.6,0.9));
+  for(let i=1;i<=8;i++){const t=i/8,y=horizon+(h-horizon)*t*t;line(x,TEAL,0,y,w,y,1,0.28*(1-t)+0.08);}
+  for(let i=-12;i<=12;i++){const fx=cx+(i/12)*w*0.55;line(x,TEAL,cx+(i/12)*w*0.05,horizon,fx,h,1,0.16);}
+}
+function thcRidges(x){
+  const w=x.W,h=x.H,cx=w/2,sunCy=h*0.42,sunR=Math.min(w,h)*0.22,rng=mkRng(11);
+  glow(x,rgba(GOLD,0.85),26,()=>{const g=x.createRadialGradient(cx,sunCy,0,cx,sunCy,sunR);
+    g.addColorStop(0,rgba(GOLDHI,1));g.addColorStop(1,rgba(GOLD,0.12));x.fillStyle=g;x.beginPath();x.arc(cx,sunCy,sunR,0,TAU);x.fill();});
+  const cols=[[40,70,90],[55,95,115],[72,122,142],[95,155,175]];
+  for(let L=3;L>=0;L--){const baseY=h*(0.52+0.12*L),amp=h*0.07*(1+L*0.3);
+    x.fillStyle=rgba(cols[L],0.92);x.beginPath();x.moveTo(0,h);x.lineTo(0,baseY);
+    for(let px=0;px<=w;px+=w/11)x.lineTo(px,baseY-amp*0.5+rng()*amp);
+    x.lineTo(w,h);x.closePath();x.fill();}
+}
+function thcRadiant(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h*0.5,R=Math.min(w,h)*0.2;
+  const sky=x.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,rgba(MID,0.08));sky.addColorStop(0.6,rgba(GOLD,0.06));sky.addColorStop(1,rgba(TEAL,0.13));
+  x.fillStyle=sky;x.fillRect(0,0,w,h);
+  for(let i=0;i<36;i++){const a=i/36*TAU,r2=R*(1.6+((i%3)?0.4:1.0));
+    line(x,GOLD,cx+R*0.9*Math.cos(a),cy+R*0.9*Math.sin(a),cx+r2*Math.cos(a),cy+r2*Math.sin(a),i%3?0.8:1.4,0.15+(i%3?0:0.25));}
+  glow(x,rgba(GOLDHI,0.9),24,()=>{const g=x.createRadialGradient(cx,cy,0,cx,cy,R);
+    g.addColorStop(0,rgba(GOLDHI,1));g.addColorStop(0.7,rgba(GOLD,0.9));g.addColorStop(1,rgba(GOLD,0));
+    x.fillStyle=g;x.beginPath();x.arc(cx,cy,R,0,TAU);x.fill();});
+  for(let i=0;i<6;i++)line(x,TEAL,0,h*0.72+i*4,w,h*0.72+i*4,1,0.3-0.04*i);
+}
+reg('thc','THC Sunset','amp / case 13','Currently a pentaflake. The name begs for an actual sunset &mdash; gradients welcome.',[
+  {current:true,name:'Pentaflake',draw:thcCurrent,desc:'Existing pentagon fractal.'},
+  {pick:'A',name:'Synthwave Sun',draw:thcSynthwave,desc:'Slit sun over a perspective grid. Retro-futuristic, unmistakable.'},
+  {pick:'B',name:'Ridge Sunset',draw:thcRidges,desc:'Glowing sun behind layered mountain ridges. Cinematic, atmospheric.'},
+  {pick:'C',name:'Radiant Sun',draw:thcRadiant,desc:'Minimal rayed sun disc over a shimmering horizon. Clean and elegant.'},
+]);
+// ---------------------------------------------------------------- Bad Cat Mini Cat (Triforce)
+function mid(a,b){return [(a[0]+b[0])/2,(a[1]+b[1])/2];}
+function triforce(cx,cy,S){
+  const A=[cx,cy-S],B=[cx-S*0.866,cy+S*0.5],C=[cx+S*0.866,cy+S*0.5];
+  const mAB=mid(A,B),mAC=mid(A,C),mBC=mid(B,C);
+  return {top:[A,mAB,mAC],left:[mAB,B,mBC],right:[mAC,mBC,C]};
+}
+function fillTri(x,pts,style){x.fillStyle=style;x.beginPath();x.moveTo(pts[0][0],pts[0][1]);x.lineTo(pts[1][0],pts[1][1]);x.lineTo(pts[2][0],pts[2][1]);x.closePath();x.fill();}
+function strokeTri(x,pts,c,w,a){x.strokeStyle=rgba(c,a);x.lineWidth=w;x.beginPath();x.moveTo(pts[0][0],pts[0][1]);x.lineTo(pts[1][0],pts[1][1]);x.lineTo(pts[2][0],pts[2][1]);x.closePath();x.stroke();}
+function bcCurrent(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,sz=Math.min(w*0.4,h*0.8);
+  let tris=[[cx,cy-sz*0.45,cx-sz*0.5,cy+sz*0.45,cx+sz*0.5,cy+sz*0.45]];
+  for(let d=0;d<5;d++){const nx=[],c=d<2?TEAL:(d<4?MID:DIM);
+    for(const t of tris){const[x1,y1,x2,y2,x3,y3]=t;
+      line(x,c,x1,y1,x2,y2,2);line(x,c,x2,y2,x3,y3,2);line(x,c,x3,y3,x1,y1,2);
+      const a=mid([x1,y1],[x2,y2]),b=mid([x2,y2],[x3,y3]),d2=mid([x3,y3],[x1,y1]);
+      nx.push([x1,y1,a[0],a[1],d2[0],d2[1]]);nx.push([a[0],a[1],x2,y2,b[0],b[1]]);nx.push([d2[0],d2[1],b[0],b[1],x3,y3]);}
+    tris=nx;}
+}
+function bcGlow(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2+h*0.04,S=Math.min(w*0.34,h*0.42),tf=triforce(cx,cy,S);
+  glow(x,rgba(GOLD,0.9),18,()=>{for(const k of['top','left','right']){const p=tf[k];
+    const g=x.createLinearGradient(p[0][0],p[0][1],p[1][0],p[2][1]);
+    g.addColorStop(0,rgba(GOLDHI,0.95));g.addColorStop(1,rgba(GOLD,0.5));fillTri(x,p,g);}});
+  for(const k of['top','left','right']){const p=tf[k],m01=mid(p[0],p[1]),m12=mid(p[1],p[2]),m20=mid(p[2],p[0]);
+    line(x,TEAL,m01[0],m01[1],m12[0],m12[1],1,0.7);line(x,TEAL,m12[0],m12[1],m20[0],m20[1],1,0.7);line(x,TEAL,m20[0],m20[1],m01[0],m01[1],1,0.7);}
+  for(const k of['top','left','right'])strokeTri(x,tf[k],GOLDHI,1.4,0.95);
+}
+function bcRadiant(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2+h*0.03,S=Math.min(w*0.32,h*0.4),rng=mkRng(21);
+  const rg=x.createRadialGradient(cx,cy,0,cx,cy,S*2.2);
+  rg.addColorStop(0,rgba(TEAL,0.24));rg.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=rg;x.fillRect(0,0,w,h);
+  for(let i=0;i<64;i++){const a=rng()*TAU,r=S*(1.1+rng()*1.35);dot(x,rng()>0.5?GOLDHI:TEAL,cx+r*Math.cos(a),cy+r*Math.sin(a),rng()*1.3+0.4,0.25+0.5*rng());}
+  const tf=triforce(cx,cy,S);
+  glow(x,rgba(GOLDHI,1),16,()=>{for(const k of['top','left','right']){fillTri(x,tf[k],rgba(GOLD,0.85));strokeTri(x,tf[k],GOLDHI,1.6,1);}});
+}
+function bcLayered(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2+h*0.04,S=Math.min(w*0.32,h*0.4),layers=6;
+  for(let L=layers-1;L>=0;L--){const off=L*4,t=L/(layers-1),c=t>0.5?DIM:(t>0.2?MID:TEAL),a=0.25+0.6*(1-t),tf=triforce(cx,cy-off,S);
+    for(const k of['top','left','right'])strokeTri(x,tf[k],L===0?GOLDHI:c,L===0?1.9:1,a);}
+}
+reg('badcat','Bad Cat Mini Cat','amp / case 1','Currently a Sierpinski triangle (reads as a Triforce). Keep the Zelda/Triforce DNA &mdash; make it cooler.',[
+  {current:true,name:'Sierpinski',draw:bcCurrent,desc:'Existing recursive triangle.'},
+  {pick:'A',name:'Golden Triforce',draw:bcGlow,desc:'Filled gold Triforce with bloom + inner Sierpinski hairlines. The icon, elevated.'},
+  {pick:'B',name:'Radiant Relic',draw:bcRadiant,desc:'Triforce over a teal backlight with drifting sparkles. Sacred-artifact energy.'},
+  {pick:'C',name:'Depth Triforce',draw:bcLayered,desc:'Stacked offset outlines fading teal-to-gold. Subtle 3D lift.'},
+]);
+// ---------------------------------------------------------------- Lichtlaerm Prometheus (Koch)
+function kochSegs(cx,cy,r,depth){
+  let segs=[];
+  for(let i=0;i<3;i++){const a1=(i*120-90)*PI/180,a2=((i+1)*120-90)*PI/180;
+    segs.push([cx+r*Math.cos(a1),cy+r*Math.sin(a1),cx+r*Math.cos(a2),cy+r*Math.sin(a2)]);}
+  for(let d=0;d<depth;d++){const nx=[];
+    for(const s of segs){const[x1,y1,x2,y2]=s,dx=x2-x1,dy=y2-y1;
+      const ax=x1+dx/3,ay=y1+dy/3,bx=x1+dx*2/3,by=y1+dy*2/3;
+      const px=(x1+x2)/2-dy*0.2887,py=(y1+y2)/2+dx*0.2887;
+      nx.push([x1,y1,ax,ay],[ax,ay,px,py],[px,py,bx,by],[bx,by,x2,y2]);}
+    segs=nx;}
+  return segs;
+}
+function rot60(s,cx,cy){const c=Math.cos(PI/3),sn=Math.sin(PI/3),R=(px,py)=>[cx+(px-cx)*c-(py-cy)*sn,cy+(px-cx)*sn+(py-cy)*c];
+  const a=R(s[0],s[1]),b=R(s[2],s[3]);return [a[0],a[1],b[0],b[1]];}
+function promCurrent(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,segs=kochSegs(cx,cy,Math.min(w*0.35,h*0.42),4);
+  for(const s of segs)line(x,MID,s[0],s[1],s[2],s[3],1.5,0.31);}
+function promBold(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,segs=kochSegs(cx,cy,Math.min(w*0.45,h*0.49),5);
+  glow(x,rgba(TEAL,0.8),9,()=>{for(const s of segs)line(x,TEAL,s[0],s[1],s[2],s[3],1.7,0.92);});}
+function promFill(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w*0.45,h*0.49),segs=kochSegs(cx,cy,R,4);
+  const rg=x.createRadialGradient(cx,cy,0,cx,cy,R);
+  rg.addColorStop(0,rgba(TEAL,0.38));rg.addColorStop(0.7,rgba(MID,0.16));rg.addColorStop(1,rgba(DIM,0.04));
+  x.fillStyle=rg;x.beginPath();x.moveTo(segs[0][0],segs[0][1]);for(const s of segs)x.lineTo(s[2],s[3]);x.closePath();x.fill();
+  glow(x,rgba(GOLD,0.8),8,()=>{for(const s of segs)line(x,GOLDHI,s[0],s[1],s[2],s[3],1.4,0.92);});}
+function promNested(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w*0.46,h*0.49);
+  const outer=kochSegs(cx,cy,R,4);
+  glow(x,rgba(TEAL,0.7),9,()=>{for(const s of outer)line(x,TEAL,s[0],s[1],s[2],s[3],1.7,0.88);});
+  const inner=kochSegs(cx,cy,R*0.52,3).map(s=>rot60(s,cx,cy));
+  for(const s of inner)line(x,GOLD,s[0],s[1],s[2],s[3],1.2,0.7);
+  glow(x,rgba(GOLDHI,1),10,()=>dot(x,GOLDHI,cx,cy,3));}
+reg('prom','Lichtlaerm Prometheus','amp / case 5','Koch snowflake is good but too small. Keep the snowflake &mdash; make it bigger/bolder.',[
+  {current:true,name:'Koch (small)',draw:promCurrent,desc:'Existing: r=min(w*0.35,h*0.42), depth 4, thin dim lines.'},
+  {pick:'A',name:'Koch Bold',draw:promBold,desc:'Bigger radius, depth 5, brighter teal + glow. Same shape, way more presence.'},
+  {pick:'B',name:'Koch Filled',draw:promFill,desc:'Big snowflake with radial teal fill + gold rim. Reads as a solid crystal.'},
+  {pick:'C',name:'Koch Nested',draw:promNested,desc:'Large teal snowflake with a rotated gold inner flake. Detail-rich, fills the frame.'},
+]);
+// ---------------------------------------------------------------- Compressor (pedal motif)
+function compCurrent(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2;
+  const radii=[[w*0.24,h*0.11],[w*0.33,h*0.16],[w*0.42,h*0.21],[w*0.50,h*0.26]];
+  for(let i=0;i<4;i++){const rot=i*23*PI/180;let pX=cx+radii[i][0]*Math.cos(rot),pY=cy+radii[i][0]*Math.sin(rot)*0.28;
+    for(let s=1;s<=72;s++){const a=s/72*TAU;const X=cx+radii[i][0]*Math.cos(a)*Math.cos(rot)-radii[i][1]*Math.sin(a)*Math.sin(rot);
+      const Y=cy+radii[i][0]*Math.cos(a)*Math.sin(rot)+radii[i][1]*Math.sin(a)*Math.cos(rot);
+      line(x,i%2?BLUE:TEAL,pX,pY,X,Y,1.2,0.55);pX=X;pY=Y;}}
+  dot(x,TEAL,cx-w*0.32,cy+h*0.13,3.5);dot(x,BLUE,cx-w*0.12,cy-h*0.10,3);dot(x,TEAL,cx+w*0.15,cy+h*0.12,3.5);dot(x,BLUE,cx+w*0.36,cy-h*0.09,3);
+}
+function compSqueeze(x){
+  const w=x.W,h=x.H,cy=h/2,x0=w*0.14,x1=w*0.86;let pX=x0,pY=cy;
+  for(let s=1;s<=90;s++){const t=s/90,env=0.32+0.68*(1-Math.abs(t-0.5)*2),X=lerp(x0,x1,t),y=cy+Math.sin(t*TAU*6)*h*0.3*env;
+    line(x,TEAL,pX,pY,X,y,1.6,0.9);pX=X;pY=y;}
+  const barY=h*0.16;
+  glow(x,rgba(GOLD,0.7),6,()=>{line(x,GOLDHI,x0,barY,x1,barY,3,0.95);line(x,GOLDHI,x0,h-barY,x1,h-barY,3,0.95);});
+  const ar=(y,d)=>{const cx=w/2;line(x,GOLD,cx,y,cx-7,y+7*d,2,0.9);line(x,GOLD,cx,y,cx+7,y+7*d,2,0.9);};
+  ar(barY+7,1);ar(h-barY-7,-1);
+}
+function compMeter(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h*0.8,R=Math.min(w,h)*0.6,a0=PI*1.15,a1=PI*1.85;
+  x.strokeStyle=rgba(MID,0.5);x.lineWidth=2;x.beginPath();x.arc(cx,cy,R,a0,a1);x.stroke();
+  for(let i=0;i<=10;i++){const t=i/10,a=lerp(a0,a1,t),r1=R-6,r2=R+(i%5===0?8:4);
+    line(x,i>7?GOLD:MID,cx+r1*Math.cos(a),cy+r1*Math.sin(a),cx+r2*Math.cos(a),cy+r2*Math.sin(a),i%5===0?1.6:1,0.8);}
+  const na=lerp(a0,a1,0.68);
+  glow(x,rgba(GOLDHI,0.9),8,()=>line(x,GOLDHI,cx,cy,cx+R*0.92*Math.cos(na),cy+R*0.92*Math.sin(na),2.2,1));
+  dot(x,GOLDHI,cx,cy,3.5);
+}
+function compPump(x){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,maxR=Math.min(w,h)*0.42;
+  for(let k=6;k>=1;k--){const t=k/6;ring(x,k%2?TEAL:BLUE,cx,cy,maxR*t,k===1?2:1.2,0.15+0.55*(1-t));}
+  glow(x,rgba(TEAL,0.9),12,()=>dot(x,TEAL,cx,cy,4));
+  for(let i=0;i<8;i++){const a=i/8*TAU;dot(x,GOLD,cx+maxR*1.05*Math.cos(a),cy+maxR*1.05*Math.sin(a),1.4,0.6);}
+}
+reg('comp','Compressor','pedal motif','Currently tilted toroids. Needs to read as compression and look sharp at ~20px and ~150px.',[
+  {current:true,name:'Toroids',draw:compCurrent,desc:'Existing tilted-ellipse rings.'},
+  {pick:'A',name:'Squeeze',draw:compSqueeze,desc:'Waveform pinched between gold clamp bars with inward arrows. Literal compression.'},
+  {pick:'B',name:'GR Meter',draw:compMeter,desc:'Gain-reduction VU arc with gold needle. Instantly "compressor".'},
+  {pick:'C',name:'Pump Rings',draw:compPump,desc:'Concentric pumping rings + glowing core. Abstract but on-theme.'},
+]);
+SECTIONS[SECTIONS.length-1].pedal=true;
+// ---------------------------------------------------------------- NAM pedal blocks (pair)
+function sub(x,L,T,W2,H2,fn){x.save();x.translate(L,T);const oW=x.W,oH=x.H;x.W=W2;x.H=H2;fn();x.W=oW;x.H=oH;x.restore();}
+function pair(n1,n2){return (x)=>{const w=x.W,h=x.H,gap=12,half=(w-gap)/2;
+  sub(x,0,0,half,h,()=>n1(x)); sub(x,half+gap,0,half,h,()=>n2(x));
+  line(x,DIM,half+gap/2,h*0.12,half+gap/2,h*0.88,1,0.4);
+  x.fillStyle=rgba(MID,0.85);x.font="600 11px 'JetBrains Mono',monospace";x.textAlign='center';
+  x.fillText('1',half/2,h-5);x.fillText('2',half+gap+half/2,h-5);};}
+function namGridCur(x){const w=x.W,h=x.H,cy=h/2,cell=Math.min(w*0.12,h*0.18),gw=cell*6.8,gh=cell*4.3,left=w/2-gw/2,top=cy-gh/2;
+  for(let yy=0;yy<4;yy++)for(let xx=0;xx<6;xx++){const px=left+xx*cell*1.16,py=top+yy*cell*1.10,hole=(xx==2||xx==3)&&(yy==1||yy==2);
+    if(hole){x.fillStyle=rgba([24,42,58],0.5);x.fillRect(px,py,cell,cell);}else{x.strokeStyle=rgba((xx+yy)%2?BLUE:TEAL,0.85);x.lineWidth=1.3;x.strokeRect(px,py,cell,cell);}}
+  x.strokeStyle=rgba(TEAL,0.55);x.lineWidth=1.2;x.strokeRect(left-2,top-2,gw,gh);}
+function namCirclesCur(x){const w=x.W,h=x.H,cy=h/2,cxA=w/2-w*0.11,cxB=w/2+w*0.11;
+  for(let i=0;i<7;i++){const r=h*(0.12+i*0.045);ring(x,TEAL,cxA,cy,r,1,0.28+i*0.06);ring(x,BLUE,cxB,cy,r,1,0.24+i*0.05);}}
+function neuralNet(layers,seed){return (x)=>{const w=x.W,h=x.H,rng=mkRng(seed),L=layers.length;
+  const xs=layers.map((n,i)=>lerp(w*0.2,w*0.8,L>1?i/(L-1):0.5));
+  const pos=layers.map((n,i)=>{const a=[];for(let j=0;j<n;j++)a.push([xs[i],lerp(h*0.22,h*0.78,n>1?j/(n-1):0.5)]);return a;});
+  for(let i=0;i<L-1;i++)for(const a of pos[i])for(const b of pos[i+1])line(x,MID,a[0],a[1],b[0],b[1],0.8,0.16+0.16*rng());
+  for(let i=0;i<L;i++)for(const p of pos[i]){const out=i===L-1;glow(x,rgba(out?GOLDHI:TEAL,1),out?8:4,()=>dot(x,out?GOLDHI:TEAL,p[0],p[1],out?3.2:2.4));}};}
+function namChip(mode){return (x)=>{const w=x.W,h=x.H,cy=h/2,bw=w*0.36,bh=h*0.36,bx=w/2-bw/2,by=cy-bh/2;
+  const wave=(xa,xb,grow)=>{let pX=xa,pY=cy;for(let s=1;s<=40;s++){const t=s/40,X=lerp(xa,xb,t),amp=h*0.22*(grow?(0.35+0.65*t):(1-0.4*t)),y=cy+Math.sin(t*TAU*3)*amp;line(x,TEAL,pX,pY,X,y,1.4,0.85);pX=X;pY=y;}};
+  if(mode==='in')wave(w*0.05,bx-4,false);else wave(bx+bw+4,w*0.95,true);
+  x.strokeStyle=rgba(BLUE,0.9);x.lineWidth=1.6;x.strokeRect(bx,by,bw,bh);
+  for(let i=0;i<3;i++){const yy=by+bh*(i+1)/4;line(x,MID,bx-5,yy,bx,yy,1,0.6);line(x,MID,bx+bw,yy,bx+bw+5,yy,1,0.6);}
+  glow(x,rgba(GOLD,0.7),5,()=>{const p1=[bx+bw*0.32,by+bh*0.38],p2=[bx+bw*0.68,by+bh*0.62];line(x,GOLD,p1[0],p1[1],p2[0],p2[1],1.2,0.9);dot(x,GOLDHI,p1[0],p1[1],2);dot(x,GOLDHI,p2[0],p2[1],2);});};}
+function namTarget(inner){return (x)=>{const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w,h)*0.4;
+  for(let k=4;k>=1;k--)ring(x,k%2?TEAL:MID,cx,cy,R*k/4,k===1?1.6:1,0.25+0.5*(1-k/4));
+  if(inner==='spike')glow(x,rgba(GOLDHI,0.9),7,()=>{line(x,GOLDHI,cx,cy+R*0.5,cx,cy-R*0.55,2,1);line(x,GOLDHI,cx-4,cy-R*0.35,cx,cy-R*0.55,1.6,1);line(x,GOLDHI,cx+4,cy-R*0.35,cx,cy-R*0.55,1.6,1);});
+  else glow(x,rgba(GOLDHI,0.9),7,()=>{let pX=cx-R*0.6,pY=cy;for(let s=1;s<=30;s++){const t=s/30,X=cx+(-0.6+1.2*t)*R,y=cy+Math.sin(t*TAU*2)*R*0.35*Math.sin(t*PI);line(x,GOLDHI,pX,pY,X,y,1.6,1);pX=X;pY=y;}});
+  dot(x,TEAL,cx,cy,2);};}
+reg('nam','NAM Blocks (pair)','pedal motifs','Two PRE-capture slots. Each option is a coherent pair &mdash; 1 &amp; 2 share a family, stay distinguishable.',[
+  {current:true,name:'Grid + Rings',draw:pair(namGridCur,namCirclesCur),desc:'Existing: 1 = circuit grid, 2 = circle stacks (unrelated looks).'},
+  {pick:'A',name:'Neural Net',draw:pair(neuralNet([2,4,3,1],11),neuralNet([3,5,4,2],23)),desc:'Node-layer graphs; 2 is deeper/denser. Reads as "neural" capture.'},
+  {pick:'B',name:'Capture Chip',draw:pair(namChip('in'),namChip('out')),desc:'Signal into a NN chip (1 = capture in) and back out (2 = model out).'},
+  {pick:'C',name:'Impulse Target',draw:pair(namTarget('spike'),namTarget('ripple')),desc:'Concentric capture target; 1 = impulse spike, 2 = captured ripple.'},
+]);
+SECTIONS[SECTIONS.length-1].pedal=true;
+// ---------------------------------------------------------------- Tremolo (pedal motif)
+function delayRef(x){const w=x.W,h=x.H,cy=h/2,taps=5,tapW=w/taps;
+  for(let t=0;t<taps;t++){const decay=1-t/taps*0.7,ampY=h*0.35*decay,a=0.6*decay,baseX=t*tapW;
+    for(let j=0;j<40;j++){const t1=j/40,t2=(j+1)/40,x1=baseX+t1*tapW,x2=baseX+t2*tapW,
+      y1=cy+Math.sin(t1*TAU*3)*ampY*Math.sin(t1*PI),y2=cy+Math.sin(t2*TAU*3)*ampY*Math.sin(t2*PI);
+      line(x,MID,x1,y1,x2,y2,1.5*decay,a);}
+    if(t>0)line(x,MID,baseX,h*0.1,baseX,h*0.9,0.5,a*0.33);}}
+function reverbRef(x){const w=x.W,h=x.H,cy=h/2,rng=mkRng(54321),pts=[];
+  for(let f=0.05;f<=0.95;f+=0.15)pts.push([w*f,h]);
+  for(let f=0.1;f<=0.9;f+=0.2)pts.push([w*f,cy+h*0.15]);
+  for(let f=0.15;f<=0.85;f+=0.25)pts.push([w*f,cy-h*0.15]);
+  for(let f=0.2;f<=0.8;f+=0.3)pts.push([w*f,h*0.1]);
+  const count=1600;
+  for(let i=0;i<count;i++){const idx=Math.floor(rng()*pts.length),ang=rng()*TAU,len=2+rng()*3,
+    nx=pts[idx][0]+len*Math.cos(ang),ny=pts[idx][1]+len*Math.sin(ang);
+    if(nx>=0&&nx<=w&&ny>=0&&ny<=h){const c=i<count*0.025?TEAL:(i<count*0.125?MID:DIM);
+      line(x,c,pts[idx][0],pts[idx][1],nx,ny,i<count*0.02?2:1,0.6);pts.push([nx,ny]);}}}
+function tremCurrent(x){const w=x.W,h=x.H,cy=h/2,x0=w*0.08,x1=w*0.92,maxAmp=h*0.34;let pcx=0,pTop=0,pBot=0,pcy=0;
+  for(let s=0;s<=96;s++){const t=s/96,X=x0+(x1-x0)*t,env=0.28+0.72*(0.5+0.5*Math.sin(t*TAU*1.5-1.5708)),amp=maxAmp*env,carrier=cy+Math.sin(t*TAU*9)*amp,top=cy-amp,bot=cy+amp;
+    if(s>0){line(x,TEAL,pcx,pcy,X,carrier,1.5);line(x,BLUE,pcx,pTop,X,top,1,0.45);line(x,BLUE,pcx,pBot,X,bot,1,0.45);}
+    pcx=X;pcy=carrier;pTop=top;pBot=bot;}}
+function tremBars(x){const w=x.W,h=x.H,cy=h/2,n=17,span=w*0.7,x0=w*0.15,slot=span/n,bw=slot*0.62;
+  for(let i=0;i<n;i++){const t=i/(n-1),lfo=0.2+0.8*(0.5+0.5*Math.sin(t*TAU*2-PI/2)),bh=h*0.4*lfo,bx=x0+i*slot+(slot-bw)/2,c=i%2?TEAL:MID;
+    glow(x,rgba(c,0.5),4,()=>{x.fillStyle=rgba(c,0.85);x.fillRect(bx,cy-bh,bw,bh*2);});}
+  let pX=x0,pY=cy-h*0.4*0.2;glow(x,rgba(GOLD,0.6),4,()=>{for(let s=1;s<=80;s++){const t=s/80,X=x0+t*span,lfo=0.2+0.8*(0.5+0.5*Math.sin(t*TAU*2-PI/2)),y=cy-h*0.4*lfo;line(x,GOLDHI,pX,pY,X,y,1.4,0.8);pX=X;pY=y;}});}
+function tremBand(x){const w=x.W,h=x.H,cy=h/2,x0=w*0.08,x1=w*0.92,maxAmp=h*0.4,N=120,env=t=>0.18+0.82*(0.5+0.5*Math.sin(t*TAU*2.2-PI/2));
+  const top=[],bot=[];for(let s=0;s<=N;s++){const t=s/N,X=lerp(x0,x1,t),amp=maxAmp*env(t);top.push([X,cy-amp]);bot.push([X,cy+amp]);}
+  x.beginPath();x.moveTo(top[0][0],top[0][1]);for(const p of top)x.lineTo(p[0],p[1]);for(let i=bot.length-1;i>=0;i--)x.lineTo(bot[i][0],bot[i][1]);x.closePath();
+  const g=x.createLinearGradient(x0,0,x1,0);g.addColorStop(0,rgba(TEAL,0.28));g.addColorStop(1,rgba(MID,0.12));x.fillStyle=g;x.fill();
+  let pX=x0,pY=cy;glow(x,rgba(TEAL,0.5),4,()=>{for(let s=1;s<=N*2;s++){const t=s/(N*2),X=lerp(x0,x1,t),amp=maxAmp*env(t),y=cy+Math.sin(t*TAU*13)*amp;line(x,GOLDHI,pX,pY,X,y,1.4,0.9);pX=X;pY=y;}});}
+function tremStrobe(x){const w=x.W,h=x.H,cy=h/2,n=7,x0=w*0.14,dx=(w*0.72)/(n-1),maxR=Math.min(dx*0.42,h*0.16);
+  line(x,DIM,x0,cy,x0+(n-1)*dx,cy,0.6,0.4);
+  for(let i=0;i<n;i++){const t=i/(n-1),lfo=0.28+0.72*(0.5+0.5*Math.sin(t*TAU*1.5)),cx2=x0+i*dx,rr=maxR*(0.32+0.68*lfo);
+    ring(x,MID,cx2,cy,maxR*1.05,1,0.28);glow(x,rgba(TEAL,lfo),6*lfo,()=>dot(x,TEAL,cx2,cy,rr,0.55+0.45*lfo));
+    if(i%2===0)dot(x,GOLDHI,cx2,cy,1.3,lfo);}}
+reg('tremolo','Tremolo','pedal motif','Current tremolo reads too much like Delay. Must be clearly distinct from the Delay + Reverb neighbors shown first.',[
+  {name:'Delay (neighbor)',pick:'REF',draw:delayRef,desc:'For contrast only &mdash; do not pick. Decaying tap trains with dividers.'},
+  {name:'Reverb (neighbor)',pick:'REF',draw:reverbRef,desc:'For contrast only &mdash; do not pick. Branching dust cloud.'},
+  {current:true,name:'Tremolo (AM)',draw:tremCurrent,desc:'Existing carrier+envelope. Too close to Delay taps.'},
+  {pick:'A',name:'Throb Bars',draw:tremBars,desc:'Volume bars pulsing under a gold LFO curve. Unmistakably amplitude modulation.'},
+  {pick:'B',name:'Amp Band',draw:tremBand,desc:'Carrier inside a filled swelling volume band. Reads as pumping level.'},
+  {pick:'C',name:'Strobe Pulse',draw:tremStrobe,desc:'Row of throbbing glowing pulses. Rhythmic, nothing like delay/reverb.'},
+]);
+SECTIONS[SECTIONS.length-1].pedal=true;
+
+// ============================================================================
+//  BATCH 1 - untouched amp fractals (Ampete One, Brunetti XL2, H&K TriAmp, Marshall 2204)
+//  Each: CURRENT (reference) + A = elevated current (bigger/bolder/glow, gold @ hero)
+//  + B/C = new alternatives. Thumbnails (right) show the 22px blue-only read.
+// ============================================================================
+
+// ---- shared: normalized point generators ----
+function dragonTurns(n){let t=[];for(let i=0;i<n;i++){const nx=t.slice();nx.push(1);for(let j=t.length-1;j>=0;j--)nx.push(1-t[j]);t=nx;}return t;}
+function dragonPts(n){let px=0,py=0,dir=0;const dx=[1,0,-1,0],dy=[0,-1,0,1],pts=[[0,0]],turns=dragonTurns(n);
+  for(let i=0;i<turns.length;i++){px+=dx[dir];py+=dy[dir];pts.push([px,py]);dir=(dir+(turns[i]?1:3))%4;}
+  let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;for(const p of pts){mnx=Math.min(mnx,p[0]);mny=Math.min(mny,p[1]);mxx=Math.max(mxx,p[0]);mxy=Math.max(mxy,p[1]);}
+  const cx=(mnx+mxx)/2,cy=(mny+mxy)/2,ext=Math.max(mxx-mnx,mxy-mny)||1;
+  return pts.map(p=>[(p[0]-cx)/ext,(p[1]-cy)/ext]);}
+function pathXf(x,pts,S,rot,col,colB,lw,glowOn){
+  const w=x.W,h=x.H,cx=w/2,cy=h/2,c=Math.cos(rot),s=Math.sin(rot);
+  const draw=()=>{for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];
+    const ax=cx+(a[0]*c-a[1]*s)*S,ay=cy+(a[0]*s+a[1]*c)*S,bx=cx+(b[0]*c-b[1]*s)*S,by=cy+(b[0]*s+b[1]*c)*S;
+    const t=i/pts.length,al=0.32+0.55*(1-Math.abs(t-0.5)*2);line(x,t<0.5?col:colB,ax,ay,bx,by,lw,al);}};
+  if(glowOn)gGlow(x,rgba(TEAL,0.7),7,draw);else draw();}
+
+// ---------------------------------------------------------------- Ampete One (Dragon curve)
+function dragonPoly(x,S,rot,n){const p=dragonPts(n),w=x.W,h=x.H,cx=w/2,cy=h/2,c=Math.cos(rot),s=Math.sin(rot);
+  return p.map(q=>[cx+(q[0]*c-q[1]*s)*S,cy+(q[0]*s+q[1]*c)*S]);}
+function ampCurrent(x){const P=dragonPoly(x,Math.min(x.W,x.H)*0.78,0,x.big?13:10);
+  for(let i=1;i<P.length;i++)line(x,DIM,P[i-1][0],P[i-1][1],P[i][0],P[i][1],1.3,0.5);}
+function ampNebula(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);
+  bloom(x,cx,cy,R*0.6,TEAL,0.17);dust(x,cx,cy,R*0.5,80,7);
+  const P=dragonPoly(x,R*0.82,0,x.big?13:10);gradStroke(x,P,MID,x.big?GOLDHI:TEAL,x.big?2:1.3,true);
+  const hd=P[P.length-1];gGlow(x,rgba(GOLD,0.9),14,()=>dot(x,gHiAcc(x),hd[0],hd[1],x.big?4.5:1.6));vignette(x);}
+function ampTwin(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);
+  bloom(x,cx,cy,R*0.6,TEAL,0.15);dust(x,cx,cy,R*0.5,70,11);
+  const P1=dragonPoly(x,R*0.72,0,x.big?13:10),P2=dragonPoly(x,R*0.72,PI,x.big?13:10);
+  gradStroke(x,P1,TEAL,MID,x.big?1.9:1.2,true);gradStroke(x,P2,BLUE,[90,150,200],x.big?1.9:1.2,false);
+  gGlow(x,rgba(GOLD,0.9),14,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.5));vignette(x);}
+function ampMandala(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);
+  bloom(x,cx,cy,R*0.6,TEAL,0.16);dust(x,cx,cy,R*0.55,90,5);
+  for(let k=0;k<4;k++){const P=dragonPoly(x,R*0.6,k*PI/2,x.big?12:9);gradStroke(x,P,k%2?TEAL:MID,k%2?MID:DIM,x.big?1.6:1,k===0);}
+  gGlow(x,rgba(GOLD,0.9),14,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.4));vignette(x);}
+reg('ampete','Ampete One','amp / case 0','Round 2 - depth pass (bloom bg, gradient stroke, glow, dust) instead of just brighter lines. A was your pick, now with atmosphere.',[
+  {current:true,name:'Dragon curve',draw:ampCurrent,desc:'Existing recursive dragon fold, dim single stroke.'},
+  {pick:'A',name:'Dragon Nebula',draw:ampNebula,desc:'Dragon over a teal bloom + drifting dust, stroke graduating mid->gold, glowing head. Your pick, deepened.'},
+  {pick:'B',name:'Twin Dragon',draw:ampTwin,desc:'Teal + mirrored blue dragon over a bloom, gold core, dust field. Symmetric, layered.'},
+  {pick:'C',name:'Dragon Mandala',draw:ampMandala,desc:'Four rotated dragon folds over a bloom, gold core. Kaleidoscopic depth.'},
+],1);
+
+// ---------------------------------------------------------------- Brunetti XL 2 (Barnsley fern)
+function fernPts(count){let px=0,py=0,s=42;const rnd=()=>{s=(s*1103515245+12345)>>>0;return (s%1000)/1000;};const out=[];
+  for(let i=0;i<count;i++){const r=rnd();let nx,ny;
+    if(r<0.01){nx=0;ny=0.16*py;}else if(r<0.86){nx=0.85*px+0.04*py;ny=-0.04*px+0.85*py+1.6;}
+    else if(r<0.93){nx=0.2*px-0.26*py;ny=0.23*px+0.22*py+1.6;}else{nx=-0.15*px+0.28*py;ny=0.26*px+0.24*py+0.44;}
+    px=nx;py=ny;out.push([px,py]);}return out;}
+function fernField(x,cfg){const pts=fernPts(cfg.n),w=x.W,h=x.H;
+  for(let i=1;i<pts.length;i++){const p=pts[i],sx=cfg.bx+p[0]*cfg.fsc,sy=cfg.by-p[1]*cfg.fh;
+    if(sx<-4||sx>w+4||sy<-4||sy>h+4)continue;
+    let c=mix(cfg.base,cfg.tip,Math.min(1,p[1]/9));
+    if(cfg.gold&&x.big&&p[1]>7.6)c=mix(c,GOLDHI,(p[1]-7.6)/2.4);
+    dot(x,c,sx,sy,cfg.r,cfg.a);}}
+function fernCurrent(x){const w=x.W,h=x.H;fernField(x,{n:x.big?9000:1400,fh:(h*0.86)/10.5,fsc:w*0.125,bx:w/2,by:h*0.94,base:DIM,tip:DIM,r:x.big?1:0.6,a:0.5,gold:false});}
+function fernVerdant(x){const w=x.W,h=x.H;bloom(x,w/2,h*0.86,Math.min(w,h)*0.8,TEAL,0.13);
+  fernField(x,{n:x.big?6000:1000,fh:(h*0.78)/10.5,fsc:w*0.09,bx:w*0.55,by:h*0.9,base:[45,90,110],tip:MID,r:x.big?0.9:0.6,a:0.32,gold:false});
+  gGlow(x,rgba(TEAL,0.4),5,()=>fernField(x,{n:x.big?11000:1600,fh:(h*0.86)/10.5,fsc:w*0.128,bx:w/2,by:h*0.94,base:[55,120,140],tip:TEAL,r:x.big?1.1:0.7,a:0.7,gold:false}));
+  if(x.big)gGlow(x,rgba(GOLD,0.7),8,()=>fernField(x,{n:9000,fh:(h*0.86)/10.5,fsc:w*0.128,bx:w/2,by:h*0.94,base:[55,120,140],tip:TEAL,r:1.15,a:0.55,gold:true}));
+  vignette(x);}
+function fernCanopy(x){const w=x.W,h=x.H;bloom(x,w/2,h*0.35,Math.min(w,h)*0.9,MID,0.1);
+  if(x.big)for(let i=0;i<6;i++){const lx=w*(0.15+0.14*i);line(x,TEAL,lx,0,lx-w*0.06,h,x.big?8:2,0.03);}
+  fernField(x,{n:x.big?4500:800,fh:(h*0.6)/10.5,fsc:w*0.06,bx:w*0.68,by:h*0.7,base:[40,80,110],tip:[80,140,170],r:x.big?0.8:0.5,a:0.3,gold:false});
+  fernField(x,{n:x.big?7000:1100,fh:(h*0.72)/10.5,fsc:w*0.085,bx:w*0.34,by:h*0.82,base:[50,105,130],tip:MID,r:x.big?0.95:0.6,a:0.5,gold:false});
+  gGlow(x,rgba(TEAL,0.4),5,()=>fernField(x,{n:x.big?10000:1500,fh:(h*0.88)/10.5,fsc:w*0.125,bx:w/2,by:h*0.96,base:[55,120,140],tip:TEAL,r:x.big?1.1:0.7,a:0.75,gold:true}));
+  vignette(x);}
+function fernTwin(x){const w=x.W,h=x.H;bloom(x,w/2,h*0.7,Math.min(w,h)*0.8,TEAL,0.13);
+  const front=(sign)=>fernField(x,{n:x.big?9000:1400,fh:(h*0.84)/10.5,fsc:sign*w*0.118,bx:w/2,by:h*0.9,base:[55,120,140],tip:TEAL,r:x.big?1.05:0.7,a:0.7,gold:true});
+  gGlow(x,rgba(TEAL,0.4),5,()=>{front(1);front(-1);});
+  gGlow(x,rgba(GOLD,0.8),12,()=>dot(x,gHiAcc(x),w/2,h*0.9-9*(h*0.84)/10.5,x.big?4:1.6));vignette(x);}
+reg('brunetti','Brunetti XL 2','amp / case 2','Round 2 - real botanical depth: ground bloom, back/front parallax layers, gradient base->tip, glow. No token dots.',[
+  {current:true,name:'Barnsley fern',draw:fernCurrent,desc:'Existing scatter fern, flat dim green.'},
+  {pick:'A',name:'Verdant Fern',draw:fernVerdant,desc:'Front fern lit teal->gold at the tips, a dimmer back fern behind it, teal ground bloom. Layered, alive.'},
+  {pick:'B',name:'Fern Canopy',draw:fernCanopy,desc:'Three ferns at receding depth + soft light shafts. Atmospheric perspective, forest-floor feel.'},
+  {pick:'C',name:'Twin Fern',draw:fernTwin,desc:'Mirrored glowing pair with a gold crown bud over a bloom. Symmetric and full.'},
+],1);
+
+// ---------------------------------------------------------------- H&K TriAmp Mk2 (Lissajous / three)
+function hkCurrent(x){const w=x.W,h=x.H,cx=w/2,cy=h/2;let fx=0,fy=0,first=true;
+  for(let i=0;i<=600;i++){const t=i*TAU/600,X=cx+Math.sin(3*t+0.5)*w*0.36,Y=cy+Math.sin(4*t)*h*0.38;
+    if(!first)line(x,TEAL,fx,fy,X,Y,x.big?1.6:1,0.4+0.3*(0.5+0.5*Math.sin(t*2)));fx=X;fy=Y;first=false;}}
+function hkNebula(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w,h);bloom(x,cx,cy,R*0.55,TEAL,0.16);dust(x,cx,cy,R*0.5,70,4);
+  const knot=(sc,c0,c1,lw,gl)=>{const P=[];for(let i=0;i<=720;i++){const t=i*TAU/720;P.push([cx+Math.sin(3*t+0.5)*w*sc,cy+Math.sin(4*t)*h*sc*1.06]);}gradStroke(x,P,c0,c1,lw,gl);};
+  knot(0.34,[60,120,150],MID,x.big?4:2,false);
+  knot(0.4,TEAL,MID,x.big?2.1:1.2,true);
+  gGlow(x,rgba(GOLD,0.9),16,()=>dot(x,gHiAcc(x),cx,cy,x.big?4.5:1.6));vignette(x);}
+function hkVortex(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w,h)*0.46;bloom(x,cx,cy,R*1.15,TEAL,0.2);
+  const rng=mkRng(3),N=x.big?420:120;
+  for(let arm=0;arm<3;arm++){const off=arm*TAU/3;
+    for(let i=0;i<N;i++){const t=i/N,th=off+t*2.5*PI,rr=R*Math.pow(t,0.72),
+      px=cx+rr*Math.cos(th)+(rng()-0.5)*rr*0.14,py=cy+rr*Math.sin(th)+(rng()-0.5)*rr*0.14;
+      if(px<0||px>w||py<0||py>h)continue;const c=t<0.5?TEAL:MID;dot(x,c,px,py,t<0.2?(x.big?1.6:0.9):(x.big?1:0.6),0.2+0.6*(1-t));}}
+  gGlow(x,rgba(GOLD,0.95),18,()=>{dot(x,x.big?GOLD:TEAL,cx,cy,x.big?7:2.4,0.5);dot(x,gHiAcc(x),cx,cy,x.big?4:1.5);});vignette(x);}
+function hkTrefoil(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,S=Math.min(w,h)*0.17;bloom(x,cx,cy,Math.min(w,h)*0.55,TEAL,0.16);dust(x,cx,cy,Math.min(w,h)*0.5,60,8);
+  const P=[];for(let i=0;i<=360;i++){const t=i/360*TAU;P.push([cx+(Math.sin(t)+2*Math.sin(2*t))*S,cy+(Math.cos(t)-2*Math.cos(2*t))*S]);}
+  gradStroke(x,P,[60,120,150],MID,x.big?5:2.4,false);
+  gradStroke(x,P,TEAL,x.big?[150,200,220]:MID,x.big?2.4:1.3,true);
+  gGlow(x,rgba(GOLD,0.9),14,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.5));vignette(x);}
+reg('hktri','H&K TriAmp Mk2','amp / case 4','Round 2 - depth like the galaxy. "TriAmp" = 3 channels, so the 3-arm Tri-Vortex leans into both the name and the look you liked.',[
+  {current:true,name:'Lissajous',draw:hkCurrent,desc:'Existing 3:4 Lissajous knot, flat.'},
+  {pick:'A',name:'Lissajous Nebula',draw:hkNebula,desc:'Knot over a bloom with a faint depth echo, gradient stroke + glowing core. No stray dots.'},
+  {pick:'B',name:'Tri-Vortex',draw:hkVortex,desc:'Three galaxy arms in 3-fold symmetry over a bloom + dust, glowing gold core. Name-linked + the depth you love.'},
+  {pick:'C',name:'Trefoil Nebula',draw:hkTrefoil,desc:'3-fold trefoil knot, gradient stroke with a shadow pass behind for depth, glowing core.'},
+],1);
+
+// ---------------------------------------------------------------- Marshall 2204 (Fractal tree)
+function treeGen(x,lean,depth,cb){const w=x.W,h=x.H,cx=w/2;const stk=[{x:cx,y:h*0.94,a:-90,l:Math.min(w,h)*0.34,d:0}];
+  while(stk.length){const b=stk.pop();if(b.d>depth||b.l<(x.big?2.5:1.2))continue;const rad=b.a*PI/180,ex=b.x+b.l*Math.cos(rad),ey=b.y+b.l*Math.sin(rad);
+    cb(b,ex,ey);const spread=22+b.d*4;stk.push({x:ex,y:ey,a:b.a-spread+lean,l:b.l*0.67,d:b.d+1});stk.push({x:ex,y:ey,a:b.a+spread+lean,l:b.l*0.67,d:b.d+1});}}
+function treeCurrent(x){treeGen(x,0,x.big?8:4,(b,ex,ey)=>{const c=b.d<2?TEAL:(b.d<5?MID:DIM);line(x,c,b.x,b.y,ex,ey,b.d<3?(x.big?2:1.3):1,0.7);});}
+function skyDawn(x){const w=x.W,h=x.H;const g=x.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,rgba(MID,0.06));g.addColorStop(0.62,rgba(TEAL,0.05));g.addColorStop(1,rgba(x.big?GOLD:TEAL,0.11));
+  x.fillStyle=g;x.fillRect(0,0,w,h);bloom(x,w/2,h*0.96,Math.min(w,h)*0.75,x.big?GOLD:TEAL,x.big?0.13:0.1);}
+function treeWind(x){skyDawn(x);const lean=12;
+  gGlow(x,rgba(TEAL,0.4),5,()=>treeGen(x,lean,x.big?9:5,(b,ex,ey)=>{const c=mix(DIM,TEAL,Math.max(0,1-b.d/6));line(x,c,b.x,b.y,ex,ey,b.d<3?(x.big?2.6:1.4):1,0.9);}));
+  treeGen(x,lean,x.big?9:5,(b,ex,ey)=>{if(b.d>=(x.big?7:5)){gGlow(x,rgba(x.big?GOLD:TEAL,0.6),5,()=>dot(x,b.d%2?gHiAcc(x):TEAL,ex,ey,x.big?1.7:0.8,0.85));}});
+  if(x.big){const rng=mkRng(9);for(let i=0;i<26;i++){const px=x.W*(0.55+0.4*rng()),py=x.H*(0.1+0.5*rng());gGlow(x,rgba(GOLD,0.5),4,()=>dot(x,rng()>0.5?gHiAcc(x):TEAL,px,py,rng()*1.6+0.5,0.5*rng()+0.2));}}
+  vignette(x);}
+function treeAutumn(x){skyDawn(x);
+  gGlow(x,rgba(TEAL,0.4),5,()=>treeGen(x,4,x.big?9:5,(b,ex,ey)=>{const c=mix(DIM,TEAL,Math.max(0,1-b.d/6));line(x,c,b.x,b.y,ex,ey,b.d<3?(x.big?2.6:1.4):1,0.9);}));
+  if(x.big){const rng=mkRng(21);for(let i=0;i<60;i++){const t=rng(),px=x.W*(0.5+0.5*t)+rng()*20,py=x.H*(0.1+0.6*rng());
+    const len=6+rng()*10;gGlow(x,rgba(GOLD,0.5),4,()=>{const c=rng()>0.5?gHiAcc(x):TEAL;line(x,c,px,py,px+len,py-len*0.4,1.6,0.5*rng()+0.3);});}}
+  vignette(x);}
+function treeMirror(x){const w=x.W,h=x.H;bloom(x,w/2,h/2,Math.min(w,h)*0.7,TEAL,0.12);
+  const run=(flip,mul)=>{const cx=w/2;const stk=[{x:cx,y:h/2,a:flip?90:-90,l:Math.min(w,h)*0.3,d:0}];
+    while(stk.length){const b=stk.pop();if(b.d>(x.big?8:5)||b.l<(x.big?2.5:1.2))continue;const rad=b.a*PI/180,ex=b.x+b.l*Math.cos(rad),ey=b.y+b.l*Math.sin(rad)+(flip?(rng2()-0.5)*b.l*0.3:0);
+      const c=mix(DIM,TEAL,Math.max(0,1-b.d/6));line(x,[c[0],c[1],c[2]],b.x,b.y,ex,ey,b.d<3?(x.big?2:1.2):1,flip?0.4:0.85);const sp=22+b.d*4;stk.push({x:ex,y:ey,a:b.a-sp,l:b.l*0.67,d:b.d+1});stk.push({x:ex,y:ey,a:b.a+sp,l:b.l*0.67,d:b.d+1});}};
+  const rng2=mkRng(7);gGlow(x,rgba(TEAL,0.4),5,()=>{run(true,0.4);run(false,1);});
+  gGlow(x,rgba(GOLD,0.7),8,()=>line(x,gHiAcc(x),w*0.08,h/2,w*0.92,h/2,x.big?2:1.2,0.8));vignette(x);}
+reg('marshall2204','Marshall 2204','amp / case 6','Round 2 - atmosphere + more swag. Dawn sky, gradient trunk->canopy, glowing embers, drifting leaves.',[
+  {current:true,name:'Fractal tree',draw:treeCurrent,desc:'Existing upward-branching tree, flat.'},
+  {pick:'A',name:'Windswept Glow',draw:treeWind,desc:'Canopy leaned into a gust over a dawn sky, gradient trunk->teal canopy, glowing embers drifting downwind.'},
+  {pick:'B',name:'Autumn Gust',draw:treeAutumn,desc:'Leaves torn off and streaming across the frame. Strong motion + glow. Most swag.'},
+  {pick:'C',name:'Mirror Tree',draw:treeMirror,desc:'Tree above its rippling reflection, gold horizon line, teal bloom. Serene depth.'},
+],1);
+
+// ============================================================================
+//  BATCH 2 - Marshall JVM 210H, Orange OD120, Orange ORS100, Sebago Texas Flood
+//  Same depth bar as batch 1, plus name-links: JVM->vacuum tube, Orange->citrus,
+//  Texas Flood->storm/lightning.
+// ============================================================================
+function normPts(pts){let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;for(const p of pts){mnx=Math.min(mnx,p[0]);mny=Math.min(mny,p[1]);mxx=Math.max(mxx,p[0]);mxy=Math.max(mxy,p[1]);}
+  const cx=(mnx+mxx)/2,cy=(mny+mxy)/2,ext=Math.max(mxx-mnx,mxy-mny)||1;return pts.map(p=>[(p[0]-cx)/ext,(p[1]-cy)/ext]);}
+function place(x,norm,S){const cx=x.W/2,cy=x.H/2;return norm.map(p=>[cx+p[0]*S,cy+p[1]*S]);}
+
+// ---------------------------------------------------------------- Marshall JVM 210H (Levy C)
+function levyNorm(depth){let segs=[[-1,0,1,0]];for(let d=0;d<depth;d++){const n=[];for(const s of segs){const[x1,y1,x2,y2]=s,mx=(x1+x2)/2+(y2-y1)/2,my=(y1+y2)/2-(x2-x1)/2;n.push([x1,y1,mx,my],[mx,my,x2,y2]);}segs=n;}
+  const pts=[[segs[0][0],segs[0][1]]];for(const s of segs)pts.push([s[2],s[3]]);return normPts(pts);}
+function jvmCurrent(x){const P=place(x,levyNorm(x.big?10:6),Math.min(x.W,x.H)*0.72);for(let i=1;i<P.length;i++)line(x,MID,P[i-1][0],P[i-1][1],P[i][0],P[i][1],0.9,0.7);}
+function jvmNebula(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.55,TEAL,0.16);dust(x,cx,cy,R*0.5,70,8);
+  const P=place(x,levyNorm(x.big?11:7),R*0.78);gradStroke(x,P,TEAL,x.big?GOLDHI:MID,x.big?1.6:1,true);vignette(x);}
+function roundRectPath(x,l,t,w,h,r){x.beginPath();x.moveTo(l+r,t);x.arcTo(l+w,t,l+w,t+h,r);x.arcTo(l+w,t+h,l,t+h,r);x.arcTo(l,t+h,l,t,r);x.arcTo(l,t,l+w,t,r);x.closePath();}
+function tubeAt(x,cx,W,H){const cy=x.H/2,t=cy-H/2;
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.6),x.big?20:6,()=>{const g=x.createLinearGradient(0,t,0,t+H);
+    g.addColorStop(0,rgba(x.big?GOLDHI:TEAL,0.42));g.addColorStop(0.5,rgba(x.big?GOLD:MID,0.22));g.addColorStop(1,rgba(TEAL,0.1));
+    x.fillStyle=g;roundRectPath(x,cx-W/2,t,W,H,W*0.42);x.fill();});
+  x.strokeStyle=rgba(TEAL,0.85);x.lineWidth=x.big?2:1.2;roundRectPath(x,cx-W/2,t,W,H,W*0.42);x.stroke();
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.8),x.big?9:0,()=>{for(let i=-1;i<=1;i++)line(x,gHiAcc(x),cx+i*W*0.2,t+H*0.16,cx+i*W*0.2,t+H*0.84,x.big?1.6:1,0.85);
+    let px=cx-W*0.22,py=t+H*0.2;for(let s=0;s<7;s++){const nx=cx+((s%2)?0.22:-0.22)*W,ny=py+H*0.6/7;line(x,gHiAcc(x),px,py,nx,ny,x.big?1.4:0.9,0.9);px=nx;py=ny;}});
+  x.strokeStyle=rgba(DIM,0.8);x.lineWidth=x.big?2:1;line(x,DIM,cx-W*0.3,t+H,cx-W*0.3,t+H+H*0.12,x.big?2:1,0.7);line(x,DIM,cx+W*0.3,t+H,cx+W*0.3,t+H+H*0.12,x.big?2:1,0.7);}
+function jvmTube(x){const w=x.W,h=x.H;bloom(x,w/2,h/2,Math.min(w,h)*0.6,x.big?GOLD:TEAL,0.14);dust(x,w/2,h/2,Math.min(w,h)*0.5,50,3);
+  tubeAt(x,w/2,Math.min(w,h)*0.34,h*0.62);vignette(x);}
+function jvmTrio(x){const w=x.W,h=x.H;bloom(x,w/2,h/2,Math.min(w,h)*0.7,x.big?GOLD:TEAL,0.13);
+  const tw=Math.min(w,h)*0.2,H=h*0.52;tubeAt(x,w*0.3,tw,H);tubeAt(x,w*0.5,tw,H);tubeAt(x,w*0.7,tw,H);vignette(x);}
+reg('jvm','Marshall JVM 210H','amp / case 8','Currently a Levy C curve. JVM is a valve amp, so a glowing vacuum tube is the on-name option.',[
+  {current:true,name:'Levy C curve',draw:jvmCurrent,desc:'Existing Levy C fractal, flat.'},
+  {pick:'A',name:'Levy Nebula',draw:jvmNebula,desc:'Levy C over a bloom + dust, gradient stroke into gold, glow. The fractal, deepened.'},
+  {pick:'B',name:'Vacuum Tube',draw:jvmTube,desc:'Single glowing valve: glass envelope, gold filament + plates, warm bloom. On-name for a tube amp.'},
+  {pick:'C',name:'Valve Trio',draw:jvmTrio,desc:'A row of three glowing power tubes. Gear-forward, reads instantly as a valve amp.'},
+],2);
+
+// ---------------------------------------------------------------- Orange OD120 (Mandelbrot)
+function mandelGrid(x,cr0,ci0,span,maxIt,warm){const w=x.W,h=x.H,step=x.big?2:3,pw=w*0.82,ph=h*0.82,pl=w/2-pw/2,pt=h/2-ph/2;
+  for(let px=0;px<pw;px+=step)for(let py=0;py<ph;py+=step){const cr=cr0+(px/pw-0.5)*span,ci=ci0+(py/ph-0.5)*span;
+    let zr=0,zi=0,it=0;while(zr*zr+zi*zi<4&&it<maxIt){const t=zr*zr-zi*zi+cr;zi=2*zr*zi+ci;zr=t;it++;}
+    if(it<maxIt&&it>2){const f=it/maxIt;const c=warm&&x.big?mix(TEAL,GOLD,f):mix(DIM,TEAL,f);dot(x,c,pl+px,pt+py,step*0.8,0.25+0.6*f);}}}
+function odCurrent(x){mandelGrid(x,-0.745,0.186,0.008,40,false);}
+function odDeep(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.5,TEAL,0.16);
+  mandelGrid(x,-0.745,0.186,0.008,48,true);
+  gGlow(x,rgba(GOLD,0.6),16,()=>ring(x,x.big?GOLD:TEAL,cx,cy,R*0.42,x.big?1.4:1,0.25));vignette(x);}
+function citrusWedge(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w,h)*0.4;bloom(x,cx,cy,R*1.4,x.big?GOLD:TEAL,0.15);
+  const seg=9;for(let i=0;i<seg;i++){const a0=i/seg*TAU-PI/2,a1=(i+1)/seg*TAU-PI/2,am=(a0+a1)/2;
+    const g=x.createRadialGradient(cx,cy,0,cx,cy,R*0.85);g.addColorStop(0,rgba(TEAL,0.28));g.addColorStop(1,rgba(MID,0.06));
+    x.fillStyle=g;x.beginPath();x.moveTo(cx,cy);x.arc(cx,cy,R*0.82,a0+0.04,a1-0.04);x.closePath();x.fill();
+    line(x,TEAL,cx,cy,cx+R*0.82*Math.cos(am),cy+R*0.82*Math.sin(am),x.big?1.4:0.9,0.6);}
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.7),12,()=>{ring(x,x.big?GOLDHI:TEAL,cx,cy,R,x.big?4:2,0.95);ring(x,TEAL,cx,cy,R*0.9,x.big?1.8:1,0.6);});
+  gGlow(x,rgba(GOLD,0.8),8,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.6));vignette(x);}
+function odEmber(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.55,x.big?GOLD:TEAL,0.14);dust(x,cx,cy,R*0.5,90,6);
+  mandelGrid(x,-0.745,0.186,0.01,40,true);
+  if(x.big){const rng=mkRng(4);for(let i=0;i<24;i++){const a=rng()*TAU,rr=R*(0.3+0.2*rng());gGlow(x,rgba(GOLD,0.5),5,()=>dot(x,gHiAcc(x),cx+rr*Math.cos(a),cy+rr*Math.sin(a),rng()*1.6+0.4,0.5));}}
+  vignette(x);}
+reg('od120','Orange OD120','amp / case 9','Currently a Mandelbrot zoom. "Orange" invites a citrus cross-section as the on-name option.',[
+  {current:true,name:'Mandelbrot',draw:odCurrent,desc:'Existing seahorse-valley zoom, flat.'},
+  {pick:'A',name:'Mandelbrot Deep',draw:odDeep,desc:'Same zoom, teal->gold by escape count, bloom + gold halo. Richer, glowing.'},
+  {pick:'B',name:'Citrus Cross',draw:citrusWedge,desc:'Orange half in cross-section: pulp wedges, glowing gold rind. Fully on-name.'},
+  {pick:'C',name:'Ember Bulb',draw:odEmber,desc:'Mandelbrot bulb over a warm bloom with drifting gold embers. Orange heat.'},
+],2);
+
+// ---------------------------------------------------------------- Orange ORS100 (Julia set)
+function juliaGrid(x,cRe,cIm,maxIt,warm){const w=x.W,h=x.H,step=x.big?2:3,pw=w*0.82,ph=h*0.82,pl=w/2-pw/2,pt=h/2-ph/2;
+  for(let px=0;px<pw;px+=step)for(let py=0;py<ph;py+=step){let zr=(px/pw-0.5)*3,zi=(py/ph-0.5)*2.4,it=0;
+    while(zr*zr+zi*zi<4&&it<maxIt){const t=zr*zr-zi*zi+cRe;zi=2*zr*zi+cIm;zr=t;it++;}
+    if(it<maxIt&&it>2){const f=it/maxIt;const c=warm&&x.big?mix(TEAL,GOLD,f):mix(DIM,TEAL,f);dot(x,c,pl+px,pt+py,step*0.8,0.25+0.6*f);}}}
+function orsCurrent(x){juliaGrid(x,-0.7,0.27015,30,false);}
+function orsDeep(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.5,TEAL,0.16);
+  juliaGrid(x,-0.7,0.27015,36,true);gGlow(x,rgba(GOLD,0.55),16,()=>ring(x,x.big?GOLD:TEAL,cx,cy,R*0.44,x.big?1.4:1,0.22));vignette(x);}
+function orangeFruit(x){const w=x.W,h=x.H,cx=w/2,cy=h*0.56,R=Math.min(w,h)*0.34;bloom(x,cx,cy,R*1.8,x.big?GOLD:TEAL,0.15);dust(x,cx,cy,R*1.4,50,9);
+  const g=x.createRadialGradient(cx-R*0.3,cy-R*0.3,0,cx,cy,R);g.addColorStop(0,rgba(x.big?GOLDHI:TEAL,0.4));g.addColorStop(0.7,rgba(TEAL,0.22));g.addColorStop(1,rgba(MID,0.08));
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.6),14,()=>{x.fillStyle=g;x.beginPath();x.arc(cx,cy,R,0,TAU);x.fill();});
+  x.strokeStyle=rgba(TEAL,0.75);x.lineWidth=x.big?2:1.2;x.beginPath();x.arc(cx,cy,R,0,TAU);x.stroke();
+  for(let i=0;i<6;i++){const k=i/6;x.strokeStyle=rgba(MID,0.5);x.lineWidth=x.big?1.2:0.8;x.beginPath();x.ellipse(cx,cy,R*Math.abs(Math.cos(k*PI)),R,0,0,TAU);x.stroke();}
+  gGlow(x,rgba(GOLD,0.8),8,()=>dot(x,gHiAcc(x),cx-R*0.3,cy-R*0.3,x.big?3.5:1.4));
+  if(x.big){line(x,[110,170,120],cx,cy-R,cx+R*0.5,cy-R*1.4,3,0.8);line(x,[130,190,130],cx+R*0.5,cy-R*1.4,cx+R*0.9,cy-R*1.1,2,0.7);}
+  vignette(x);}
+function orsNebula(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.55,x.big?GOLD:TEAL,0.14);dust(x,cx,cy,R*0.5,100,2);
+  juliaGrid(x,-0.7,0.27015,32,true);gGlow(x,rgba(GOLD,0.7),10,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.5));vignette(x);}
+reg('ors100','Orange ORS100','amp / case 10','Currently a Julia set. Second Orange amp - the whole-fruit option keeps it distinct from OD120s cross-section.',[
+  {current:true,name:'Julia set',draw:orsCurrent,desc:'Existing Julia dust, flat.'},
+  {pick:'A',name:'Julia Deep',draw:orsDeep,desc:'Same Julia, teal->gold by escape count, bloom + gold halo. Glowing.'},
+  {pick:'B',name:'Whole Orange',draw:orangeFruit,desc:'A glowing orange with a leaf + longitude lines over a warm bloom. On-name, distinct from OD120.'},
+  {pick:'C',name:'Julia Nebula',draw:orsNebula,desc:'Julia over a bloom + dense dust with a glowing core. Cosmic.'},
+],2);
+
+// ---------------------------------------------------------------- Sebago Texas Flood (Clifford)
+function cliffordPts(n){const a=-1.4,b=1.6,c=1.0,d=0.75;let X=0,Y=0;const out=[];for(let i=0;i<n;i++){const nx=Math.sin(a*Y)+c*Math.cos(a*X),ny=Math.sin(b*X)+d*Math.cos(b*Y);X=nx;Y=ny;if(i>120)out.push([X,Y]);}return out;}
+function cliffordDraw(x,warm,gold){const w=x.W,h=x.H,cx=w/2,cy=h/2,S=Math.min(w,h)*0.28,pts=cliffordPts(x.big?9000:2200);
+  for(let i=0;i<pts.length;i++){const px=cx+pts[i][0]*S,py=cy-pts[i][1]*S;if(px<0||px>w||py<0||py>h)continue;
+    const f=i/pts.length;const c=warm&&x.big?mix(TEAL,GOLD,f):mix(DIM,TEAL,f);dot(x,c,px,py,x.big?0.9:0.6,0.35);}}
+function sebCurrent(x){cliffordDraw(x,false,false);}
+function sebNebula(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.5,TEAL,0.16);dust(x,cx,cy,R*0.5,70,5);
+  cliffordDraw(x,true,true);gGlow(x,rgba(GOLD,0.6),14,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.5));vignette(x);}
+function boltPath(x,x0,y0,x1,y1,rng,jag,segs){const pts=[[x0,y0]];for(let i=1;i<segs;i++){const t=i/segs;pts.push([lerp(x0,x1,t)+(rng()-0.5)*jag,lerp(y0,y1,t)]);}pts.push([x1,y1]);return pts;}
+function storm(x){const w=x.W,h=x.H,rng=mkRng(13);
+  const sky=x.createLinearGradient(0,0,0,h);sky.addColorStop(0,rgba(DIM,0.16));sky.addColorStop(0.6,rgba(MID,0.06));sky.addColorStop(1,rgba(TEAL,0.03));x.fillStyle=sky;x.fillRect(0,0,w,h);
+  if(x.big)for(let i=0;i<70;i++){const rx=rng()*w,ry=rng()*h*0.85;line(x,MID,rx,ry,rx-4,ry+13,1,0.12+0.12*rng());}
+  const flood=h*0.86;const main=boltPath(x,w*0.5,h*0.05,w*0.46,flood,rng,w*0.12,x.big?14:8);
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.9),x.big?16:5,()=>{for(let i=1;i<main.length;i++)line(x,gHiAcc(x),main[i-1][0],main[i-1][1],main[i][0],main[i][1],x.big?2.6:1.5,0.95);});
+  const branchAt=[3,6,9];for(const bi of branchAt){if(bi>=main.length)continue;const p=main[bi];const br=boltPath(x,p[0],p[1],p[0]+(rng()-0.3)*w*0.3,p[1]+h*0.22,rng,w*0.06,5);
+    gGlow(x,rgba(x.big?GOLD:TEAL,0.7),x.big?10:0,()=>{for(let i=1;i<br.length;i++)line(x,gHiAcc(x),br[i-1][0],br[i-1][1],br[i][0],br[i][1],x.big?1.6:1,0.85);});}
+  const fg=x.createLinearGradient(0,flood,0,h);fg.addColorStop(0,rgba(TEAL,0.22));fg.addColorStop(1,rgba(MID,0.06));x.fillStyle=fg;x.fillRect(0,flood,w,h-flood);
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.6),8,()=>line(x,x.big?GOLDHI:TEAL,0,flood,w,flood,x.big?1.6:1,0.7));
+  for(let i=1;i<main.length;i++){const a=[main[i-1][0],2*flood-main[i-1][1]],b=[main[i][0],2*flood-main[i][1]];if(a[1]<h)line(x,TEAL,a[0],a[1],b[0],b[1],x.big?1.6:1,0.2);}
+  vignette(x);}
+function sebBloom(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.6,x.big?GOLD:TEAL,0.18);dust(x,cx,cy,R*0.55,120,7);
+  cliffordDraw(x,true,true);gGlow(x,rgba(GOLD,0.9),18,()=>dot(x,gHiAcc(x),cx,cy,x.big?6:2));vignette(x);}
+reg('sebago','Sebago Texas Flood','amp / case 11','Currently a Clifford attractor. "Texas Flood" (the SRV record) invites a storm/lightning option.',[
+  {current:true,name:'Clifford',draw:sebCurrent,desc:'Existing Clifford attractor, flat.'},
+  {pick:'A',name:'Clifford Nebula',draw:sebNebula,desc:'Attractor over a bloom + dust, teal->gold density, glowing core. The fractal, deepened.'},
+  {pick:'B',name:'Texas Storm',draw:storm,desc:'Forked lightning over rain into a reflecting flood line. Literal "Texas Flood".'},
+  {pick:'C',name:'Clifford Bloom',draw:sebBloom,desc:'Denser attractor over a strong bloom with a bright gold core. Cosmic, lush.'},
+],2);
+
+// ============================================================================
+//  BATCH 3 - Diezel Herbert (Lichtenberg), Lichtlaerm Prometheus (Koch),
+//  Soldano SLO100 (gets the moved glowing Triforce), Marshall JMP 2203 (Flow re-review)
+// ============================================================================
+function flowAng(px,py){return Math.sin(px*0.012)*1.3+Math.cos(py*0.014)*1.1+Math.sin((px+py)*0.008)*0.8;}
+
+// ---------------------------------------------------------------- Diezel Herbert Mk1 (Lichtenberg)
+function lichtenberg(x,warm){const w=x.W,h=x.H,cx=w/2,rng=mkRng(0xBEEF);
+  const pts=[[cx,h-16],[cx,16]],cell=6,grid=new Set(),key=(px,py)=>Math.floor(px/cell)+'_'+Math.floor(py/cell);
+  grid.add(key(cx,h-16));grid.add(key(cx,16));const nT=x.big?300:80,targets=[];
+  for(let i=0;i<nT;i++)targets.push([cx+(rng()-0.5)*w*0.72,18+rng()*(h-36)]);
+  const iters=x.big?1300:320;
+  for(let i=0;i<iters;i++){const tg=targets[Math.floor(rng()*nT)%nT];let bi=0,bd=1e30;const trials=Math.min(48,pts.length);
+    for(let k=0;k<trials;k++){const idx=Math.floor(rng()*pts.length)%pts.length,dx=pts[idx][0]-tg[0],dy=pts[idx][1]-tg[1],d=dx*dx+dy*dy;if(d<bd){bd=d;bi=idx;}}
+    const p=pts[bi],dx=tg[0]-p[0],dy=tg[1]-p[1],dist=Math.hypot(dx,dy);if(dist<0.001)continue;
+    const a=Math.atan2(dy,dx)+(rng()-0.5)*0.6,len=9+rng()*5,nx=p[0]+Math.cos(a)*len,ny=p[1]+Math.sin(a)*len;
+    if(nx<14||nx>w-14||ny<12||ny>h-12)continue;const kk=key(nx,ny);if(grid.has(kk))continue;grid.add(kk);
+    const f=i/iters;const c=warm&&x.big?mix(TEAL,GOLD,Math.max(0,1-f*1.6)):(f<0.07?TEAL:(f<0.27?MID:DIM));const th=f<0.06?(x.big?2.4:1.4):(f<0.27?1.5:1);
+    line(x,c,p[0],p[1],nx,ny,th,0.9);pts.push([nx,ny]);}}
+function herbCurrent(x){lichtenberg(x,false);}
+function herbGlow(x){const w=x.W,h=x.H;bloom(x,w/2,h/2,Math.min(w,h)*0.55,TEAL,0.16);lichtenberg(x,false);
+  gGlow(x,rgba(TEAL,0.7),8,()=>{dot(x,TEAL,w/2,h-16,x.big?4:1.6);dot(x,TEAL,w/2,16,x.big?4:1.6);});
+  if(x.big){dot(x,gHiAcc(x),w/2,h-16,1.5,0.85);dot(x,gHiAcc(x),w/2,16,1.5,0.85);}vignette(x);}
+function tesla(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,rng=mkRng(5);bloom(x,cx,cy,Math.min(w,h)*0.5,TEAL,0.18);
+  const N=x.big?20:11;for(let k=0;k<N;k++){const a0=k/N*TAU+rng()*0.2,R=Math.min(w,h)*0.46*(0.68+0.32*rng()),steps=x.big?11:6;
+    gGlow(x,rgba(TEAL,0.5),x.big?7:0,()=>{let x0=cx,y0=cy,ang=a0;for(let s=1;s<=steps;s++){const t=s/steps,rr=R*t;ang+=(rng()-0.5)*0.6;const nx=cx+rr*Math.cos(ang),ny=cy+rr*Math.sin(ang);const c=t<0.5?TEAL:MID;line(x,c,x0,y0,nx,ny,(x.big?2:1.1)*(1-t)+0.5,0.85);x0=nx;y0=ny;}});}
+  gGlow(x,rgba(TEAL,0.7),12,()=>dot(x,TEAL,cx,cy,x.big?6:2.2));if(x.big)dot(x,gHiAcc(x),cx,cy,2.4,0.9);vignette(x);}
+function arcColumn(x){const w=x.W,h=x.H,cx=w/2,rng=mkRng(9),pT=h*0.14,pB=h*0.86;bloom(x,cx,h/2,Math.min(w,h)*0.5,TEAL,0.16);
+  line(x,MID,cx-w*0.22,pT,cx+w*0.22,pT,x.big?4:2,0.85);line(x,MID,cx-w*0.22,pB,cx+w*0.22,pB,x.big?4:2,0.85);
+  const bolt=(x0,y0,x1,y1,jag,segs,lw)=>{let px=x0,py=y0;for(let s=1;s<=segs;s++){const t=s/segs,nx=lerp(x0,x1,t)+(rng()-0.5)*jag,ny=lerp(y0,y1,t);line(x,t<0.5?TEAL:MID,px,py,nx,ny,lw,0.9);px=nx;py=ny;}};
+  gGlow(x,rgba(TEAL,0.7),x.big?12:4,()=>{bolt(cx,pT,cx+ (rng()-0.5)*w*0.1,pB,w*0.16,x.big?16:9,x.big?2.4:1.4);
+    if(x.big)for(let b=0;b<4;b++){const t=0.25+0.15*b,sy=lerp(pT,pB,t);bolt(cx+(rng()-0.5)*w*0.12,sy,cx+(rng()-0.4)*w*0.35,sy+h*0.14,w*0.06,6,1.4);}});
+  if(x.big){dot(x,gHiAcc(x),cx,pT,1.6,0.85);dot(x,gHiAcc(x),cx,pB,1.6,0.85);}vignette(x);}
+reg('herbert','Diezel Herbert Mk1','amp / case 14','Round 2 - much less yellow (teal-dominant, only a whisper of gold at the electrodes).',[
+  {current:true,name:'Lichtenberg',draw:herbCurrent,desc:'Existing dual-seed DLA discharge, flat.'},
+  {pick:'A',name:'Lichtenberg Glow',draw:herbGlow,desc:'Same discharge over a teal bloom, brighter trunks, glowing terminals. Barely any gold.'},
+  {pick:'B',name:'Tesla Coil',draw:tesla,desc:'Teal bolts radiating from a bright core. Explosive, symmetric.'},
+  {pick:'C',name:'Arc Column',draw:arcColumn,desc:'Teal arc jumping between two plates with side branches. Gear/lab feel.'},
+],3);
+
+// ---------------------------------------------------------------- Lichtlaerm Prometheus (Koch)
+function kochDeep(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w*0.46,h*0.5);bloom(x,cx,cy,R*1.2,TEAL,0.15);dust(x,cx,cy,R*1.1,60,7);
+  const segs=kochSegs(cx,cy,R,5),P=[[segs[0][0],segs[0][1]]];for(const s of segs)P.push([s[2],s[3]]);
+  gradStroke(x,P,TEAL,x.big?GOLDHI:MID,x.big?1.9:1.1,true);
+  gGlow(x,rgba(GOLD,0.8),10,()=>dot(x,gHiAcc(x),cx,cy,x.big?3.5:1.4));vignette(x);}
+function kochFire(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w*0.45,h*0.49);
+  bloom(x,cx,h*0.62,R*1.6,x.big?GOLD:TEAL,0.16);
+  const segs=kochSegs(cx,cy,R,4);
+  const g=x.createRadialGradient(cx,cy,0,cx,cy,R);g.addColorStop(0,rgba(x.big?GOLDHI:TEAL,0.42));g.addColorStop(0.6,rgba(x.big?GOLD:MID,0.2));g.addColorStop(1,rgba(TEAL,0.05));
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.6),14,()=>{x.fillStyle=g;x.beginPath();x.moveTo(segs[0][0],segs[0][1]);for(const s of segs)x.lineTo(s[2],s[3]);x.closePath();x.fill();});
+  for(const s of segs)line(x,x.big?GOLDHI:TEAL,s[0],s[1],s[2],s[3],x.big?1.5:1,0.9);
+  if(x.big){const rng=mkRng(3);for(let i=0;i<28;i++){const px=cx+(rng()-0.5)*R*1.4,py=cy+R*0.4-rng()*R*1.6;gGlow(x,rgba(GOLD,0.5),4,()=>dot(x,rng()>0.5?gHiAcc(x):TEAL,px,py,rng()*1.6+0.4,0.5));}}
+  vignette(x);}
+function kochNebula(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,R=Math.min(w*0.46,h*0.5);bloom(x,cx,cy,R*1.3,TEAL,0.18);dust(x,cx,cy,R*1.2,110,4);
+  const segs=kochSegs(cx,cy,R,4);gGlow(x,rgba(TEAL,0.6),8,()=>{for(const s of segs)line(x,TEAL,s[0],s[1],s[2],s[3],x.big?1.7:1,0.85);});
+  const inner=kochSegs(cx,cy,R*0.5,3);gGlow(x,rgba(GOLD,0.6),8,()=>{for(const s of inner)line(x,gAcc(x),s[0],s[1],s[2],s[3],x.big?1.2:0.8,0.7);});
+  gGlow(x,rgba(GOLD,0.9),14,()=>dot(x,gHiAcc(x),cx,cy,x.big?4:1.5));vignette(x);}
+reg('prom','Lichtlaerm Prometheus','amp / case 5','Round: Koch snowflake (the earlier pick) redone with depth, plus a Prometheus/fire option.',[
+  {current:true,name:'Koch Bold',draw:promBold,desc:'The previously-picked bold snowflake.'},
+  {pick:'A',name:'Koch Deep',draw:kochDeep,desc:'Snowflake over a bloom + dust, gradient stroke into gold, glowing core. The pick, deepened.'},
+  {pick:'B',name:'Koch Fire',draw:kochFire,desc:'Snowflake as a molten crystal: warm gold fill, rising embers. Prometheus = fire.'},
+  {pick:'C',name:'Koch Nebula',draw:kochNebula,desc:'Big teal snowflake + rotated gold inner flake over a dusty bloom, glowing core.'},
+],3);
+
+// ---------------------------------------------------------------- Triforce (moved to JMP, offered below)
+function triforceGlow(x){const w=x.W,h=x.H,cx=w/2,cy=h/2+h*0.02,S=Math.min(w*0.34,h*0.42),tf=triforce(cx,cy,S);
+  bloom(x,cx,cy,Math.min(w,h)*0.55,x.big?GOLD:TEAL,0.16);dust(x,cx,cy,Math.min(w,h)*0.5,50,3);
+  gGlow(x,rgba(GOLD,0.9),16,()=>{for(const k of['top','left','right']){const p=tf[k];const g=x.createLinearGradient(p[0][0],p[0][1],p[1][0],p[2][1]);
+    g.addColorStop(0,rgba(x.big?GOLDHI:TEAL,0.95));g.addColorStop(1,rgba(x.big?GOLD:MID,0.5));fillTri(x,p,g);}});
+  for(const k of['top','left','right']){const p=tf[k],m01=mid(p[0],p[1]),m12=mid(p[1],p[2]),m20=mid(p[2],p[0]);
+    line(x,TEAL,m01[0],m01[1],m12[0],m12[1],x.big?1:0.7,0.6);line(x,TEAL,m12[0],m12[1],m20[0],m20[1],x.big?1:0.7,0.6);line(x,TEAL,m20[0],m20[1],m01[0],m01[1],x.big?1:0.7,0.6);}
+  for(const k of['top','left','right'])strokeTri(x,tf[k],gHiAcc(x),x.big?1.5:1,0.95);vignette(x);}
+
+// ---------------------------------------------------------------- Soldano SLO100 (Burning Ship - keep, glow up)
+function shipGrid(x,warm,maxIt){const w=x.W,h=x.H,cx=w/2,cy=h/2,step=x.big?2:3,pw=w*0.82,ph=h*0.82,pl=cx-pw/2,pt=cy-ph/2;
+  for(let px=0;px<pw;px+=step)for(let py=0;py<ph;py+=step){let zr=0,zi=0,it=0;const cr=-1.75+(px/pw)*0.15,ci=-0.08+(py/ph)*0.12;
+    while(zr*zr+zi*zi<4&&it<maxIt){const t=zr*zr-zi*zi+cr;zi=Math.abs(2*zr*zi)+ci;zr=t;it++;}
+    if(it<maxIt&&it>3){const f=it/maxIt,fc=f*f;const c=warm&&x.big?mix(TEAL,GOLD,f):mix([10,20,28],TEAL,fc);dot(x,c,pl+px,pt+py,step*0.8,warm?0.3+0.6*f:0.32+0.52*fc);}}}
+function shipCurrent(x){shipGrid(x,false,60);}
+function shipDeep(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.55,TEAL,0.16);dust(x,cx,cy,R*0.5,60,8);
+  shipGrid(x,true,80);gGlow(x,rgba(GOLD,0.55),14,()=>ring(x,x.big?GOLD:TEAL,cx,cy,R*0.42,x.big?1.4:1,0.22));vignette(x);}
+function shipMirror(x){const w=x.W,h=x.H,cx=w/2,horizon=h*0.5,step=x.big?2:3,pw=w*0.82,ph=h*0.4,pl=cx-pw/2;
+  bloom(x,cx,horizon,Math.min(w,h)*0.6,x.big?GOLD:TEAL,0.14);
+  const paint=(topY,flip)=>{for(let px=0;px<pw;px+=step)for(let py=0;py<ph;py+=step){let zr=0,zi=0,it=0;const cr=-1.75+(px/pw)*0.15,ci=-0.08+(py/ph)*0.12;
+    while(zr*zr+zi*zi<4&&it<70){const t=zr*zr-zi*zi+cr;zi=Math.abs(2*zr*zi)+ci;zr=t;it++;}
+    if(it<70&&it>3){const f=it/70,yy=flip?horizon+(ph-py):topY+py;const c=x.big?mix(DIM,flip?MID:GOLD,f):mix(DIM,TEAL,f);dot(x,c,pl+px,yy,step*0.8,(flip?0.16:0.5)+0.3*f);}}};
+  paint(horizon-ph,false);paint(horizon,true);
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.6),8,()=>line(x,x.big?GOLDHI:TEAL,0,horizon,w,horizon,x.big?1.6:1,0.7));vignette(x);}
+function shipNebula(x){const cx=x.W/2,cy=x.H/2,R=Math.min(x.W,x.H);bloom(x,cx,cy,R*0.6,TEAL,0.18);dust(x,cx,cy,R*0.55,110,3);
+  shipGrid(x,false,64);gGlow(x,rgba(TEAL,0.8),14,()=>dot(x,TEAL,cx,cy,x.big?5:1.8));if(x.big)dot(x,gHiAcc(x),cx,cy,2,0.85);vignette(x);}
+reg('soldano','Soldano SLO100','amp / case 12','Keep the Burning Ship - glow it up like the others. Model-number name, so pure looks.',[
+  {current:true,name:'Burning Ship',draw:shipCurrent,desc:'Existing Burning Ship fractal, flat.'},
+  {pick:'A',name:'Ship Deep',draw:shipDeep,desc:'Same fractal, dim->teal->gold by escape count, bloom + dust + gold halo. Richer, glowing.'},
+  {pick:'B',name:'Ship Mirror',draw:shipMirror,desc:'The ship over its shimmering reflection with a gold horizon line. Fits the "burning ship at sea" read.'},
+  {pick:'C',name:'Ship Nebula',draw:shipNebula,desc:'Ship over a strong bloom + dense dust with a bright gold core. Cosmic.'},
+],3);
+
+// ---------------------------------------------------------------- Soldano SLO100 REDO (lighthouse light idea)
+// Volumetric light cone from a beacon apex, gold fading to transparent (a lighthouse beam).
+function beamCone(x,ax,ay,ang,spread,len,c,a){
+  const ex=ax+Math.cos(ang)*len, ey=ay+Math.sin(ang)*len;
+  const g=x.createLinearGradient(ax,ay,ex,ey);
+  g.addColorStop(0,rgba(c,a)); g.addColorStop(0.7,rgba(c,a*0.25)); g.addColorStop(1,'rgba(0,0,0,0)');
+  x.fillStyle=g; x.beginPath(); x.moveTo(ax,ay);
+  x.lineTo(ax+Math.cos(ang-spread)*len, ay+Math.sin(ang-spread)*len);
+  x.lineTo(ax+Math.cos(ang+spread)*len, ay+Math.sin(ang+spread)*len);
+  x.closePath(); x.fill();
+}
+// A: beacon high, a fan of gold beams sweeping down over the burning-ship "sea".
+function shipLighthouse(x){const w=x.W,h=x.H,cx=w/2,R=Math.min(w,h),bx=cx,by=h*0.30,c=x.big?GOLD:TEAL;
+  bloom(x,bx,by,R*0.5,c,0.12); shipGrid(x,false,60);
+  if(x.big){for(const [ang,sp,a] of [[PI*0.62,0.10,0.17],[PI*0.80,0.075,0.12],[PI*0.40,0.075,0.12]]) beamCone(x,bx,by,ang,sp,R*0.95,GOLD,a);}
+  else beamCone(x,bx,by,PI*0.6,0.09,R*0.8,TEAL,0.12);
+  gGlow(x,rgba(c,0.95),14,()=>dot(x,x.big?GOLDHI:TEAL,bx,by,x.big?3.5:2)); vignette(x);}
+// B: classic rotating double beam (two opposing narrow cones) from a central beacon.
+function shipSweep(x){const w=x.W,h=x.H,cx=w/2,cy=h*0.44,R=Math.min(w,h),c=x.big?GOLD:TEAL;
+  bloom(x,cx,cy,R*0.5,TEAL,0.12); shipGrid(x,false,60);
+  beamCone(x,cx,cy,PI*0.14,0.055,R*1.0,c,0.085);
+  beamCone(x,cx,cy,PI*0.14+PI,0.055,R*0.9,c,0.038);
+  if(x.big)beamCone(x,cx,cy,PI*0.86,0.05,R*0.85,c,0.048);
+  gGlow(x,rgba(c,0.8),12,()=>dot(x,x.big?GOLDHI:TEAL,cx,cy,x.big?2.5:2)); vignette(x);}
+// C: a single tall light-shaft column rising from the ship, like a lighthouse tower lamp into fog.
+function shipLantern(x){const w=x.W,h=x.H,cx=w/2,R=Math.min(w,h),by=h*0.24,c=x.big?GOLD:TEAL;
+  bloom(x,cx,by,R*0.55,c,0.13); shipGrid(x,false,60);
+  if(x.big){const g=x.createLinearGradient(0,by,0,h*0.95);g.addColorStop(0,rgba(GOLD,0.24));g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g;const bw=R*0.11;x.beginPath();x.moveTo(cx-bw*0.35,by);x.lineTo(cx+bw*0.35,by);x.lineTo(cx+bw,h*0.95);x.lineTo(cx-bw,h*0.95);x.closePath();x.fill();}
+  else beamCone(x,cx,by,PI*0.5,0.05,R*0.8,TEAL,0.12);
+  gGlow(x,rgba(c,0.9),14,()=>dot(x,x.big?GOLDHI:TEAL,cx,by,x.big?3.5:2)); vignette(x);}
+reg('soldano2','Soldano SLO100 (REDO - lighthouse)','amp / case 12','Keep the Burning Ship but treat the light AS a lighthouse. Current + 3 beam ideas. Blue thumbnails, gold only at hero size.',[
+  {current:true,name:'Burning Ship',draw:shipCurrent,desc:'Existing Burning Ship fractal, flat (what it was before we touched it).'},
+  {pick:'A',name:'Lighthouse Beam',draw:shipLighthouse,desc:'Beacon high, a fan of gold light beams sweeping down over the ship. Reads clearly as a lighthouse.'},
+  {pick:'B',name:'Beacon Sweep',draw:shipSweep,desc:'Classic rotating double beam (two opposing narrow cones) from a central beacon. Dynamic sweep.'},
+  {pick:'C',name:'Lantern Column',draw:shipLantern,desc:'A single tall light-shaft rising from the ship into fog, like a lighthouse tower lamp.'},
+],3);
+
+// ---------------------------------------------------------------- Marshall JMP 2203 (Triforce vs Flow)
+function jmpFlowCur(x){const w=x.W,h=x.H,rng=mkRng(7);
+  for(let k=0;k<(x.big?95:36);k++){let px=rng()*w,py=rng()*h;const c=k%3===0?TEAL:(k%3===1?MID:DIM);x.strokeStyle=rgba(c,0.5);x.lineWidth=1;x.lineCap='round';x.beginPath();x.moveTo(px,py);
+    for(let s=0;s<44;s++){const a=flowAng(px,py);px+=Math.cos(a)*4;py+=Math.sin(a)*4;if(px<0||px>w||py<0||py>h)break;x.lineTo(px,py);}x.stroke();}}
+function jmpFlowDeep(x){const w=x.W,h=x.H;bloom(x,w/2,h/2,Math.min(w,h)*0.62,TEAL,0.14);dust(x,w/2,h/2,Math.min(w,h)*0.5,60,17);const rng=mkRng(7);
+  for(let k=0;k<(x.big?115:40);k++){let px=rng()*w,py=rng()*h;const c=k%3===0?TEAL:(k%3===1?MID:DIM);x.strokeStyle=rgba(c,0.55);x.lineWidth=1;x.lineCap='round';x.beginPath();x.moveTo(px,py);
+    for(let s=0;s<48;s++){const a=flowAng(px,py);px+=Math.cos(a)*4;py+=Math.sin(a)*4;if(px<0||px>w||py<0||py>h)break;x.lineTo(px,py);}x.stroke();}
+  if(x.big)for(let k=0;k<9;k++){let px=rng()*w,py=rng()*h;gGlow(x,rgba(GOLD,0.6),7,()=>{x.strokeStyle=rgba(GOLDHI,0.75);x.lineWidth=1.7;x.lineCap='round';x.beginPath();x.moveTo(px,py);
+    for(let s=0;s<58;s++){const a=flowAng(px,py);px+=Math.cos(a)*4;py+=Math.sin(a)*4;if(px<0||px>w||py<0||py>h)break;x.lineTo(px,py);}x.stroke();});}
+  vignette(x);}
+function aurora(x){const w=x.W,h=x.H;bloom(x,w/2,h*0.4,Math.max(w,h)*0.7,TEAL,0.1);const bands=x.big?7:4;
+  for(let b=0;b<bands;b++){const bx=w*(0.12+0.76*b/(bands-1||1)),g=x.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(0.38,rgba(TEAL,0.5));g.addColorStop(0.68,rgba((b%2&&x.big)?GOLD:MID,0.4));g.addColorStop(1,'rgba(0,0,0,0)');
+    gGlow(x,rgba(TEAL,0.4),x.big?10:0,()=>{x.strokeStyle=g;x.lineWidth=x.big?11:4;x.lineCap='round';x.beginPath();
+      for(let s=0;s<=44;s++){const t=s/44,yy=h*0.08+t*h*0.84,xx=bx+Math.sin(t*4+b)*w*0.06;s?x.lineTo(xx,yy):x.moveTo(xx,yy);}x.stroke();});}
+  vignette(x);}
+function vortexFlow(x){const w=x.W,h=x.H,cx=w/2,cy=h/2;bloom(x,cx,cy,Math.min(w,h)*0.58,TEAL,0.16);const rng=mkRng(11);
+  const swirl=(px,py)=>{const dx=px-cx,dy=py-cy;return Math.atan2(dy,dx)+PI*0.5-Math.hypot(dx,dy)*0.006;};
+  for(let k=0;k<(x.big?120:44);k++){let px=rng()*w,py=rng()*h;const c=k%3===0?TEAL:(k%3===1?MID:DIM);x.strokeStyle=rgba(c,0.5);x.lineWidth=1;x.lineCap='round';x.beginPath();x.moveTo(px,py);
+    for(let s=0;s<52;s++){const a=swirl(px,py);px+=Math.cos(a)*4;py+=Math.sin(a)*4;if(px<0||px>w||py<0||py>h)break;x.lineTo(px,py);}x.stroke();}
+  gGlow(x,rgba(GOLD,0.95),16,()=>dot(x,gHiAcc(x),cx,cy,x.big?5.5:2));vignette(x);}
+reg('jmp2','Marshall JMP 2203','amp / case 7','Round 2 - the Triforce lands here (you liked it most). A = Triforce, B = Vortex Flow (you liked it too), C = Flow Nebula.',[
+  {current:true,name:'Flow Field',draw:jmpFlowCur,desc:'The current flow field, flat.'},
+  {pick:'A',name:'Golden Triforce',draw:triforceGlow,desc:'The loved glowing Triforce, now on JMP: gold gradient fill, bloom, inner hairlines.'},
+  {pick:'B',name:'Vortex Flow',draw:vortexFlow,desc:'Streamlines spiralling into a glowing gold eye. Dynamic, hypnotic.'},
+  {pick:'C',name:'Flow Nebula',draw:jmpFlowDeep,desc:'Current flow deepened: bloom + dust, gold streamlines with glow.'},
+],3);
+
+// ============================================================================
+//  BATCH 4 - Bad Cat Mini Cat (new cat-themed design, cool not cute) + NAM thinner
+// ============================================================================
+// ---------------------------------------------------------------- Bad Cat Mini Cat (cat motifs)
+function bcDepthRef(x){const w=x.W,h=x.H,cx=w/2,cy=h/2+h*0.03,S=Math.min(w*0.32,h*0.4),layers=6;
+  for(let L=layers-1;L>=0;L--){const off=L*4,t=L/(layers-1),c=t>0.5?DIM:(t>0.2?MID:TEAL),a=0.25+0.6*(1-t),tf=triforce(cx,cy-off,S);
+    for(const k of['top','left','right'])strokeTri(x,tf[k],L===0?(x.big?GOLDHI:TEAL):c,L===0?(x.big?1.9:1.1):1,a);}}
+function catEye(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,ew=Math.min(w,h)*0.42,eh=ew*0.6;
+  bloom(x,cx,cy,ew*1.7,TEAL,0.16);dust(x,cx,cy,ew*1.5,50,7);
+  const eyePath=()=>{x.beginPath();x.moveTo(cx-ew,cy);x.quadraticCurveTo(cx,cy-eh,cx+ew,cy);x.quadraticCurveTo(cx,cy+eh,cx-ew,cy);x.closePath();};
+  gGlow(x,rgba(TEAL,0.6),14,()=>{const g=x.createRadialGradient(cx,cy,0,cx,cy,ew);g.addColorStop(0,rgba(x.big?[180,235,238]:TEAL,0.5));g.addColorStop(0.6,rgba(TEAL,0.28));g.addColorStop(1,rgba(MID,0.05));x.fillStyle=g;eyePath();x.fill();});
+  x.strokeStyle=rgba(TEAL,0.9);x.lineWidth=x.big?2:1.2;eyePath();x.stroke();
+  const ph=eh*0.94,pw=ew*0.13;
+  if(x.big)gGlow(x,rgba(GOLD,0.85),12,()=>{const g=x.createLinearGradient(cx,cy-ph,cx,cy+ph);g.addColorStop(0,rgba(GOLDHI,0.9));g.addColorStop(0.5,rgba(GOLD,0.98));g.addColorStop(1,rgba(GOLDHI,0.9));x.fillStyle=g;x.beginPath();x.ellipse(cx,cy,pw,ph,0,0,TAU);x.fill();});
+  else{x.fillStyle=rgba(TEAL,0.95);x.beginPath();x.ellipse(cx,cy,pw,ph,0,0,TAU);x.fill();}
+  vignette(x);}
+function catHead(x){const w=x.W,h=x.H,cx=w/2,cy=h/2+h*0.06,R=Math.min(w,h)*0.26;bloom(x,cx,cy,R*2.1,TEAL,0.15);dust(x,cx,cy,R*1.8,40,3);
+  const L=rgba(TEAL,0.9),lw=x.big?2:1.2;
+  gGlow(x,rgba(TEAL,0.5),8,()=>{
+    const ear=(sx)=>{x.strokeStyle=L;x.lineWidth=lw;x.beginPath();x.moveTo(cx+sx*R*0.72,cy-R*0.48);x.lineTo(cx+sx*R*1.02,cy-R*1.32);x.lineTo(cx+sx*R*0.08,cy-R*0.82);x.stroke();};
+    ear(-1);ear(1);
+    x.strokeStyle=L;x.lineWidth=lw;x.beginPath();x.arc(cx,cy,R,-PI*0.78,PI*0.78,false);x.stroke();
+    x.beginPath();x.moveTo(cx-R*0.72,cy+R*0.66);x.quadraticCurveTo(cx,cy+R*1.12,cx+R*0.72,cy+R*0.66);x.stroke();});
+  const eye=(sx)=>{if(x.big)gGlow(x,rgba(GOLD,0.8),10,()=>{x.fillStyle=rgba(GOLDHI,0.95);x.beginPath();x.ellipse(cx+sx*R*0.42,cy-R*0.04,R*0.2,R*0.12,sx*0.35,0,TAU);x.fill();});
+    else{x.fillStyle=rgba(TEAL,0.95);x.beginPath();x.ellipse(cx+sx*R*0.42,cy-R*0.04,R*0.22,R*0.14,0,0,TAU);x.fill();}};
+  eye(-1);eye(1);
+  if(x.big)for(let i=0;i<3;i++){const yy=cy+R*0.34+i*R*0.13;line(x,MID,cx-R*0.28,yy,cx-R*1.28,yy-R*0.1*(i-1),1,0.5);line(x,MID,cx+R*0.28,yy,cx+R*1.28,yy-R*0.1*(i-1),1,0.5);}
+  dot(x,x.big?GOLDHI:TEAL,cx,cy+R*0.26,x.big?2.2:1.2,0.9);vignette(x);}
+function catEyesDark(x){const w=x.W,h=x.H,cy=h*0.5,sep=Math.min(w,h)*0.24,ew=Math.min(w,h)*0.17,eh=ew*0.5;bloom(x,w/2,cy,Math.min(w,h)*0.75,TEAL,0.1);
+  if(x.big){const rng=mkRng(4);for(let i=0;i<44;i++)dot(x,TEAL,rng()*w,rng()*h,rng()*1+0.3,0.06+0.14*rng());}
+  const eye=(cx,tilt)=>{const eyePath=()=>{x.save();x.translate(cx,cy);x.rotate(tilt);x.beginPath();x.moveTo(-ew,0);x.quadraticCurveTo(0,-eh,ew,0);x.quadraticCurveTo(0,eh,-ew,0);x.closePath();x.restore();};
+    gGlow(x,rgba(TEAL,0.7),x.big?16:2,()=>{x.save();x.translate(cx,cy);x.rotate(tilt);const g=x.createRadialGradient(0,0,0,0,0,ew);g.addColorStop(0,rgba(x.big?[190,240,240]:TEAL,0.65));g.addColorStop(1,rgba(TEAL,0.08));x.fillStyle=g;x.beginPath();x.moveTo(-ew,0);x.quadraticCurveTo(0,-eh,ew,0);x.quadraticCurveTo(0,eh,-ew,0);x.closePath();x.fill();x.restore();});
+    x.strokeStyle=rgba(TEAL,0.85);x.lineWidth=x.big?1.6:1;eyePath();x.stroke();
+    x.save();x.translate(cx,cy);x.rotate(tilt);x.fillStyle=rgba(x.big?GOLD:TEAL,0.95);x.beginPath();x.ellipse(0,0,ew*0.13,eh*0.92,0,0,TAU);x.fill();x.restore();};
+  eye(w/2-sep,0.12);eye(w/2+sep,-0.12);vignette(x);}
+reg('badcat','Bad Cat Mini Cat','amp / case 1','New cat-themed design (Triforce left for JMP). Cool, not cute. Blue thumbnails; gold only at hero size.',[
+  {current:true,name:'Depth Triforce',draw:bcDepthRef,desc:'What is there now (moving to JMP).'},
+  {pick:'A',name:'Feline Eye',draw:catEye,desc:'One big glowing cat eye, teal iris + vertical gold slit. Sleek and predatory.'},
+  {pick:'B',name:'Cat Emblem',draw:catHead,desc:'Geometric cat face: sharp ears, glowing eyes, whiskers. Reads instantly as cat.'},
+  {pick:'C',name:'Eyes in the Dark',draw:catEyesDark,desc:'Two glowing eyes emerging from black with a starfield. Menacing "bad cat".'},
+],4);
+
+// ---------------------------------------------------------------- NAM Blocks (thinner rework, pair)
+function neuralThin(layers,seed){return (x)=>{const w=x.W,h=x.H,rng=mkRng(seed),L=layers.length;
+  const xs=layers.map((n,i)=>lerp(w*0.18,w*0.82,L>1?i/(L-1):0.5));
+  const pos=layers.map((n,i)=>{const a=[];for(let j=0;j<n;j++)a.push([xs[i],lerp(h*0.3,h*0.7,n>1?j/(n-1):0.5)]);return a;});
+  for(let i=0;i<L-1;i++)for(const a of pos[i])for(const b of pos[i+1])line(x,MID,a[0],a[1],b[0],b[1],0.5,0.13+0.12*rng());
+  for(let i=0;i<L;i++)for(const p of pos[i]){const out=i===L-1;
+    if(out&&x.big)gGlow(x,rgba(GOLD,0.6),4,()=>dot(x,GOLDHI,p[0],p[1],1.9));
+    else dot(x,out?(x.big?GOLDHI:TEAL):TEAL,p[0],p[1],out?(x.big?1.7:1):(x.big?1.4:0.9));}};}
+function namCurPair(x){const w=x.W,h=x.H,gap=12,half=(w-gap)/2;
+  const net=(layers,seed,off)=>{const rng=mkRng(seed),L=layers.length;const xs=layers.map((n,i)=>off+lerp(half*0.2,half*0.8,L>1?i/(L-1):0.5));
+    const pos=layers.map((n,i)=>{const a=[];for(let j=0;j<n;j++)a.push([xs[i],lerp(h*0.22,h*0.78,n>1?j/(n-1):0.5)]);return a;});
+    for(let i=0;i<L-1;i++)for(const a of pos[i])for(const b of pos[i+1])line(x,MID,a[0],a[1],b[0],b[1],0.8,0.16+0.16*rng());
+    for(let i=0;i<L;i++)for(const p of pos[i]){const out=i===L-1;if(out&&x.big)gGlow(x,rgba(GOLD,0.7),8,()=>dot(x,GOLDHI,p[0],p[1],3.2));else dot(x,out?(x.big?GOLDHI:TEAL):TEAL,p[0],p[1],out?3.2:2.4);}};
+  net([2,4,3,1],11,0);net([3,5,4,2],23,half+gap);
+  line(x,DIM,half+gap/2,h*0.12,half+gap/2,h*0.88,1,0.4);}
+function pairThin(la,lb){return (x)=>{const w=x.W,h=x.H,gap=12,half=(w-gap)/2;
+  sub(x,0,0,half,h,()=>neuralThin(la,11)(x));sub(x,half+gap,0,half,h,()=>neuralThin(lb,23)(x));
+  line(x,DIM,half+gap/2,h*0.14,half+gap/2,h*0.86,1,0.35);
+  x.fillStyle=rgba(MID,0.85);x.font="600 11px 'JetBrains Mono',monospace";x.textAlign='center';x.fillText('1',half/2,h-5);x.fillText('2',half+gap+half/2,h-5);};}
+function signalPath(deeper){return (x)=>{const w=x.W,h=x.H,cy=h/2;
+  let px=w*0.06,py=cy;for(let s=1;s<=28;s++){const t=s/28,X=lerp(w*0.06,w*0.4,t),y=cy+Math.sin(t*TAU*2)*h*0.16;line(x,TEAL,px,py,X,y,1,0.75);px=X;py=y;}
+  const nodes=deeper?3:1;for(let i=0;i<nodes;i++){const nx=lerp(w*0.45,w*0.55,nodes>1?i/(nodes-1):0.5);if(x.big)gGlow(x,rgba(GOLD,0.5),4,()=>dot(x,GOLDHI,nx,cy,x.big?2.4:1.4));else dot(x,TEAL,nx,cy,1.3);}
+  let qx=w*0.6,qy=cy;for(let s=1;s<=28;s++){const t=s/28,X=lerp(w*0.6,w*0.94,t),y=cy+Math.sin(t*TAU*2)*h*0.16*(1-t*0.65);line(x,MID,qx,qy,X,y,1,0.7);qx=X;qy=y;}};}
+function pairSignal(x){const w=x.W,h=x.H,gap=12,half=(w-gap)/2;
+  sub(x,0,0,half,h,()=>signalPath(false)(x));sub(x,half+gap,0,half,h,()=>signalPath(true)(x));
+  line(x,DIM,half+gap/2,h*0.14,half+gap/2,h*0.86,1,0.35);
+  x.fillStyle=rgba(MID,0.85);x.font="600 11px 'JetBrains Mono',monospace";x.textAlign='center';x.fillText('1',half/2,h-5);x.fillText('2',half+gap+half/2,h-5);}
+// Fusion Dance: each block is one figure mirrored, index fingers meeting at the shared
+// edge with a gold fusion spark. NAM1 reaches right, NAM2 reaches left; adjacent => they fuse.
+// Fusion-Dance "HA!" pose (the iconic silhouette): wide crouched A-stance with
+// both feet planted, torso leaning IN, and BOTH arms sweeping up so the two
+// figures' arms form one big rounded ARCH between them - fists meet at the TOP
+// and a second pair meet lower at CENTRE. Half-figure per cell; X(f) mirrors on
+// dir so f=1 is the shared inner edge (arch spine) and f=0 the outer edge.
+function fusionFigure(x,ox,W,H,dir){
+  const X=f=>ox+(dir>0?f:1-f)*W, Y=f=>f*H, gnd=Y(0.90),
+    topC=[X(1.0),Y(0.15)], midC=[X(1.0),Y(0.52)],                          // shared contact points (top + centre fists)
+    hip=[X(0.36),Y(0.60)], sh=[X(0.58),Y(0.38)], headC=[X(0.66),Y(0.29)], headR=H*0.075,
+    oKnee=[X(0.18),Y(0.74)], oFoot=[X(0.05),gnd], iKnee=[X(0.54),Y(0.75)], iFoot=[X(0.58),gnd],
+    inEl=[X(0.82),Y(0.47)], outCtl=[X(0.60),Y(0.05)],                      // inner elbow; outer-arm arch control
+    lw=x.big?2.4:1.3;
+  x.lineCap='round';x.lineJoin='round';
+  gGlow(x,rgba(TEAL,0.5),x.big?6:0,()=>{
+    x.strokeStyle=rgba(TEAL,0.9);x.lineWidth=lw;
+    x.beginPath();x.arc(headC[0],headC[1],headR,0,TAU);x.stroke();          // head
+    if(x.big){
+      const mx=headC[0]+dir*headR*0.42,my=headC[1]+headR*0.35;
+      x.fillStyle=rgba(TEAL,0.85);x.beginPath();x.ellipse(mx,my,headR*0.32,headR*0.28,0,0,TAU);x.fill();} // yell
+    line(x,TEAL,sh[0],sh[1],headC[0]-dir*W*0.01,headC[1]+headR*0.85,lw,0.9); // neck
+    line(x,TEAL,sh[0],sh[1],hip[0],hip[1],lw,0.95);                         // torso (lean-in)
+    // inner arm -> centre fist ; outer arm sweeps up in an arch -> top fist
+    line(x,TEAL,sh[0],sh[1],inEl[0],inEl[1],lw,0.95);
+    line(x,TEAL,inEl[0],inEl[1],midC[0],midC[1],lw,0.95);
+    x.beginPath();x.moveTo(sh[0],sh[1]);x.quadraticCurveTo(outCtl[0],outCtl[1],topC[0],topC[1]);x.stroke();
+    // legs (wide bent-knee A-stance) + planted feet
+    line(x,TEAL,hip[0],hip[1],oKnee[0],oKnee[1],lw,0.9);line(x,TEAL,oKnee[0],oKnee[1],oFoot[0],oFoot[1],lw,0.9);
+    line(x,TEAL,hip[0],hip[1],iKnee[0],iKnee[1],lw,0.9);line(x,TEAL,iKnee[0],iKnee[1],iFoot[0],iFoot[1],lw,0.9);
+    line(x,TEAL,oFoot[0],gnd,oFoot[0]-dir*W*0.06,gnd,lw,0.85);line(x,TEAL,iFoot[0],gnd,iFoot[0]+dir*W*0.06,gnd,lw,0.85);
+    if(x.big){x.fillStyle=rgba(TEAL,0.9);                                   // fists at the meeting points
+      x.beginPath();x.arc(topC[0],topC[1],lw*1.3,0,TAU);x.fill();
+      x.beginPath();x.arc(midC[0],midC[1],lw*1.3,0,TAU);x.fill();}});
+  return topC;}
+function fusionSpark(x,sx,sy,scale){const s=scale||1;if(x.big){bloom(x,sx,sy,Math.min(x.W,x.H)*0.4*s,GOLD,0.14);
+    gGlow(x,rgba(GOLD,0.95),18*s,()=>{dot(x,GOLDHI,sx,sy,4.5*s);for(let i=0;i<10;i++){const a=i/10*TAU;line(x,GOLDHI,sx,sy,sx+Math.cos(a)*(9+(i%2)*5)*s,sy+Math.sin(a)*(9+(i%2)*5)*s,1.6,0.75);}});}
+  else{gGlow(x,rgba(TEAL,0.8),3,()=>dot(x,TEAL,sx,sy,2));}}
+function fusionSingle(dir){return (x)=>{fusionFigure(x,0,x.W,x.H,dir);fusionSpark(x,dir>0?x.W:0,x.H*0.15);fusionSpark(x,dir>0?x.W:0,x.H*0.52,0.7);};}
+function fusionPair(x){const w=x.W,h=x.H,half=w/2;
+  fusionFigure(x,0,half,h,1);fusionFigure(x,half,half,h,-1);
+  fusionSpark(x,half,h*0.15);fusionSpark(x,half,h*0.52,0.7);
+  x.fillStyle=rgba(MID,0.85);x.font="600 11px 'JetBrains Mono',monospace";x.textAlign='center';x.fillText('1',half*0.5,h-5);x.fillText('2',half+half*0.5,h-5);}
+reg('namf','NAM Blocks (pair)','pedal motifs','Redo: the DBZ Fusion Dance - the two captures lean in and fuse (frozen at the fingertip touch). Thin Net kept as the safe option.',[
+  {current:true,name:'Current Net',draw:namCurPair,desc:'Shipped neural net - too bulky.'},
+  {pick:'A',name:'Fusion Dance',draw:fusionPair,desc:'NAM1 + NAM2 mirror the fusion pose, index fingers meeting at a gold fusion spark. Playful, on-theme (two captures fusing).'},
+  {pick:'B',name:'Thin Net',draw:pairThin([2,3,2,1],[3,4,3,2]),desc:'Serious option: hairline neural graph, tiny nodes. Clean and minimal.'},
+  {pick:'C',name:'Signal Path',draw:pairSignal,desc:'Input wave -> node -> cleaned output. Minimal, literal capture.'},
+],4);
+SECTIONS[SECTIONS.length-1].pedal=true;
+
+// ============================================================================
+//  BATCH 5 - remaining pedal motifs (PITCH Transpose, PITCH Octaver, Delay, Reverb)
+//  Each: CURRENT (reference) + A = elevated current (depth/bloom/glow, gold @ hero)
+//  + B/C = new alternatives. Thumbnails stay blue-only (gold gated behind x.big).
+// ============================================================================
+
+// -------- PITCH Transpose (vertical double helix) --------
+function pitchHelixCur(x){const w=x.W,h=x.H,cx=w/2,amp=w*0.28,turns=2.2,segs=64,y0=h*0.12,y1=h*0.88;
+  let pAx=0,pAy=0,pBx=0,pBy=0;
+  for(let s=0;s<=segs;s++){const t=s/segs,y=lerp(y0,y1,t),ph=t*turns*TAU,ax=cx+Math.sin(ph)*amp,bx=cx+Math.sin(ph+PI)*amp;
+    if(s>0){line(x,TEAL,pAx,pAy,ax,y,1.6);line(x,BLUE,pBx,pBy,bx,y,1.6);if(s%6===0)line(x,BLUE,ax,y,bx,y,1,0.5);}
+    pAx=ax;pAy=y;pBx=bx;pBy=y;}}
+function pitchHelixA(x){const w=x.W,h=x.H,cx=w/2,amp=w*0.27,turns=2.4,segs=96,y0=h*0.1,y1=h*0.9;
+  if(x.big)bloom(x,cx,h*0.5,w*0.5,TEAL,0.10);
+  const A=[],B=[];
+  for(let s=0;s<=segs;s++){const t=s/segs,y=lerp(y0,y1,t),ph=t*turns*TAU;
+    A.push([cx+Math.sin(ph)*amp,y,Math.cos(ph)]);B.push([cx+Math.sin(ph+PI)*amp,y,Math.cos(ph+PI)]);}
+  for(let s=0;s<=segs;s+=6)line(x,x.big?gAcc(x):BLUE,A[s][0],A[s][1],B[s][0],B[s][1],1,0.32);   // rungs
+  const strand=(P,c0,c1)=>{for(let i=1;i<P.length;i++){const z=P[i][2]*0.5+0.5,lw=(x.big?2.5:1.6)*(0.55+0.45*z);
+    line(x,mix(c0,c1,i/P.length),P[i-1][0],P[i-1][1],P[i][0],P[i][1],lw,0.5+0.45*z);}};
+  gGlow(x,rgba(TEAL,0.6),8,()=>{strand(A,TEAL,BLUE);strand(B,BLUE,TEAL);});
+  if(x.big)for(let s=0;s<=segs;s++)if(Math.abs(A[s][0]-B[s][0])<amp*0.12)gGlow(x,rgba(GOLD,0.8),6,()=>dot(x,GOLDHI,cx,A[s][1],2.4));}
+function pitchRamp(x){const w=x.W,h=x.H,n=6,x0=w*0.15,x1=w*0.85,yb=h*0.78,yt=h*0.2;
+  if(x.big)bloom(x,w*0.5,h*0.5,w*0.5,TEAL,0.08);
+  line(x,DIM,x0,yb,x1,yb,1,0.4);
+  const P=[];for(let i=0;i<n;i++)P.push([lerp(x0,x1,i/(n-1)),lerp(yb,yt,i/(n-1))]);
+  for(let i=0;i<n;i++){dot(x,MID,P[i][0],yb,x.big?2:1.4,0.4);line(x,x.big?gAcc(x):BLUE,P[i][0],yb-3,P[i][0],P[i][1]+4,1,0.3);}
+  gGlow(x,rgba(TEAL,0.5),6,()=>{for(let i=1;i<n;i++)line(x,mix(TEAL,BLUE,i/n),P[i-1][0],P[i-1][1],P[i][0],P[i][1],x.big?2.3:1.5,0.85);});
+  for(let i=0;i<n;i++){const top=i===n-1;gGlow(x,rgba(top?gAcc(x):TEAL,0.8),(top&&x.big)?7:4,()=>dot(x,top?gHiAcc(x):TEAL,P[i][0],P[i][1],x.big?(top?3.6:2.6):1.9));}}
+function pitchBend(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,root=[cx-w*0.3,cy];
+  if(x.big)bloom(x,cx,cy,w*0.5,TEAL,0.08);
+  const curve=(to,c,up)=>{gGlow(x,rgba(c,0.6),x.big?6:0,()=>{x.strokeStyle=rgba(c,0.88);x.lineWidth=x.big?2.3:1.5;x.lineCap='round';
+      x.beginPath();x.moveTo(root[0],root[1]);x.quadraticCurveTo(cx,cy+(up?-h*0.36:h*0.36),to[0],to[1]);x.stroke();});
+    const ah=up?1:-1;line(x,c,to[0],to[1],to[0]-w*0.03,to[1]+ah*h*0.06,x.big?2:1.4,0.9);line(x,c,to[0],to[1],to[0]-w*0.05,to[1]-ah*h*0.02,x.big?2:1.4,0.9);
+    gGlow(x,rgba(c,0.7),x.big?5:0,()=>dot(x,c,to[0],to[1],x.big?3:2));};
+  curve([cx+w*0.3,cy-h*0.28],x.big?gAcc(x):TEAL,true);
+  curve([cx+w*0.3,cy+h*0.28],BLUE,false);
+  gGlow(x,rgba(TEAL,0.6),x.big?5:0,()=>dot(x,TEAL,root[0],root[1],x.big?3.4:2.2));}
+reg('pitcht','PITCH - Transpose','pedal motif','Vertical double-helix (pitch transpose). Elevated original + 2 alternatives. Blue thumbnails, gold only at card size.',[
+  {current:true,name:'Current Helix',draw:pitchHelixCur,desc:'Shipped double helix - flat, no depth.'},
+  {pick:'A',name:'Deep Helix',draw:pitchHelixA,desc:'Same helix with depth (front/back thickness), bloom, gradient strands, gold crossover nodes at hero.'},
+  {pick:'B',name:'Pitch Ramp',draw:pitchRamp,desc:'Notes stepping up off a baseline - reads literally as "transpose up". Top note glows gold.'},
+  {pick:'C',name:'Bend Arcs',draw:pitchBend,desc:'A root note bending up (gold) and down (blue) - pitch shift in both directions.'},
+],5);
+SECTIONS[SECTIONS.length-1].pedal=true;
+
+// -------- PITCH Octaver (up/down chevrons) --------
+function octCur(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,ww=w*0.3,hh=h*0.22,gap=h*0.2;
+  dot(x,BLUE,cx,cy,Math.max(1.6,h*0.05));
+  line(x,TEAL,cx-ww,cy-gap,cx,cy-gap-hh,1.8);line(x,TEAL,cx+ww,cy-gap,cx,cy-gap-hh,1.8);
+  line(x,TEAL,cx-ww*0.55,cy-gap-hh*0.55,cx,cy-gap-hh*1.15,1.4,0.6);line(x,TEAL,cx+ww*0.55,cy-gap-hh*0.55,cx,cy-gap-hh*1.15,1.4,0.6);
+  line(x,BLUE,cx-ww,cy+gap,cx,cy+gap+hh,1.8);line(x,BLUE,cx+ww,cy+gap,cx,cy+gap+hh,1.8);
+  line(x,BLUE,cx-ww*0.55,cy+gap+hh*0.55,cx,cy+gap+hh*1.15,1.4,0.6);line(x,BLUE,cx+ww*0.55,cy+gap+hh*0.55,cx,cy+gap+hh*1.15,1.4,0.6);}
+function octChevA(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,ww=w*0.26,hh=h*0.13,gap=h*0.13;
+  if(x.big)bloom(x,cx,cy,w*0.45,TEAL,0.08);
+  const chev=(dir,c)=>{for(let k=0;k<2;k++){const off=gap+k*hh*0.95,base=cy+dir*off,tip=cy+dir*(off+hh);
+    gGlow(x,rgba(c,0.5),x.big?5:0,()=>{line(x,c,cx-ww,base,cx,tip,x.big?2.6:1.8,0.92-0.32*k);line(x,c,cx+ww,base,cx,tip,x.big?2.6:1.8,0.92-0.32*k);});}};
+  chev(-1,TEAL);chev(1,BLUE);
+  gGlow(x,rgba(x.big?gAcc(x):TEAL,0.8),x.big?6:0,()=>dot(x,x.big?gHiAcc(x):TEAL,cx,cy,x.big?4:2.6));}
+function octWaves(x){const w=x.W,h=x.H,cy=h/2,x0=w*0.1,x1=w*0.9;
+  if(x.big)bloom(x,w*0.5,cy,w*0.5,TEAL,0.08);
+  const wave=(freq,ampF,c,a,lw)=>{let pX=x0,pY=cy;gGlow(x,rgba(c,0.4),x.big?5:0,()=>{for(let s=1;s<=120;s++){const t=s/120,X=lerp(x0,x1,t),y=cy+Math.sin(t*TAU*freq)*h*ampF;line(x,c,pX,pY,X,y,lw,a);pX=X;pY=y;}});};
+  wave(1.5,0.30,MID,0.5,x.big?1.6:1.2);              // octave down (half freq)
+  wave(3,0.20,TEAL,0.85,x.big?2.1:1.5);              // fundamental
+  wave(6,0.12,x.big?gAcc(x):BLUE,0.7,x.big?1.6:1.2); // octave up (double freq)
+}
+function octStack(x){const w=x.W,h=x.H,cx=w/2,cy=h/2,ys=[cy-h*0.28,cy,cy+h*0.28];
+  if(x.big)bloom(x,cx,cy,w*0.45,TEAL,0.08);
+  line(x,DIM,cx,ys[0],cx,ys[2],1,0.4);
+  ys.forEach((yy,i)=>{const root=i===1;line(x,MID,cx-w*0.17,yy,cx+w*0.17,yy,1,0.3);
+    gGlow(x,rgba(root?(x.big?gAcc(x):TEAL):TEAL,0.7),(x.big&&root)?6:3,()=>dot(x,(root&&x.big)?gHiAcc(x):TEAL,cx,yy,x.big?(root?3.8:2.8):2));});
+  const tag=(yy,t)=>{if(x.big){x.fillStyle=rgba(MID,0.7);x.font="600 11px 'JetBrains Mono',monospace";x.textAlign='left';x.fillText(t,cx+w*0.19,yy+4);}};
+  tag(ys[0],'+8va');tag(ys[1],'root');tag(ys[2],'-8vb');}
+reg('pitcho','PITCH - Octaver','pedal motif','Octave up/down chevrons. Elevated original + 2 alternatives. Blue thumbnails, gold only at card size.',[
+  {current:true,name:'Current Chevrons',draw:octCur,desc:'Shipped up/down chevrons - flat.'},
+  {pick:'A',name:'Glow Chevrons',draw:octChevA,desc:'Doubled up/down chevrons with glow + a gold root note at hero.'},
+  {pick:'B',name:'Octave Waves',draw:octWaves,desc:'Three overlaid sines: half-freq (down), fundamental, double-freq (up). Literally octaves.'},
+  {pick:'C',name:'Octave Stack',draw:octStack,desc:'Root note stacked with its +8va/-8vb partners on a staff. Root glows gold.'},
+],5);
+SECTIONS[SECTIONS.length-1].pedal=true;
+
+// -------- Delay (tap trains) --------
+function delayCur(x){delayRef(x);}
+function delayA(x){const w=x.W,h=x.H,cy=h/2,taps=5,tapW=w/taps;
+  if(x.big)bloom(x,w*0.14,cy,w*0.62,TEAL,0.09);
+  line(x,DIM,0,cy,w,cy,0.5,0.3);
+  for(let t=0;t<taps;t++){const decay=1-t/taps*0.72,ampY=h*0.36*decay,baseX=t*tapW,first=t===0,c=(first&&x.big)?gHiAcc(x):(t%2?MID:TEAL);
+    gGlow(x,rgba((first&&x.big)?GOLD:TEAL,0.4*decay),x.big?5*decay:0,()=>{let pX=baseX,pY=cy;
+      for(let j=1;j<=40;j++){const t1=j/40,X=baseX+t1*tapW,env=Math.sin(t1*PI),y=cy+Math.sin(t1*TAU*3)*ampY*env;line(x,c,pX,pY,X,y,(x.big?1.9:1.4)*decay,0.5+0.4*decay);pX=X;pY=y;}});
+    if(t>0)line(x,DIM,baseX,h*0.16,baseX,h*0.84,0.6,0.3*decay);}}
+function delayImpulse(x){const w=x.W,h=x.H,cy=h/2,n=7,x0=w*0.1,step=(w*0.8)/(n-1);
+  if(x.big)bloom(x,x0,cy,w*0.55,TEAL,0.08);
+  line(x,DIM,0,cy,w,cy,0.6,0.35);
+  for(let i=0;i<n;i++){const decay=Math.pow(0.72,i),X=x0+i*step,bh=h*0.34*decay,first=i===0,c=(first&&x.big)?gHiAcc(x):(i%2?MID:TEAL);
+    gGlow(x,rgba((first&&x.big)?GOLD:TEAL,0.5*decay),x.big?5*decay:0,()=>{line(x,c,X,cy,X,cy-bh,x.big?2.6:1.8,0.5+0.5*decay);dot(x,c,X,cy-bh,x.big?2.6*Math.max(decay,0.4):1.6,0.6+0.4*decay);});}}
+function delayPingpong(x){const w=x.W,h=x.H,cy=h/2,n=6,x0=w*0.1,step=(w*0.82)/n,top=cy-h*0.3,bot=cy+h*0.3;
+  if(x.big)bloom(x,w*0.5,cy,w*0.5,TEAL,0.08);
+  line(x,DIM,x0,top,x0+n*step,top,0.6,0.25);line(x,DIM,x0,bot,x0+n*step,bot,0.6,0.25);
+  let pX=x0,pY=cy;
+  for(let i=0;i<=n;i++){const X=x0+i*step,Y=i%2?bot:top,decay=Math.pow(0.75,i),first=i===0;
+    gGlow(x,rgba(TEAL,0.4*decay),x.big?4*decay:0,()=>line(x,mix(TEAL,BLUE,i/n),pX,pY,X,Y,(x.big?2.2:1.5)*Math.max(decay,0.35),0.4+0.5*decay));
+    gGlow(x,rgba((first&&x.big)?GOLD:TEAL,0.5*decay),(x.big&&first)?6:0,()=>dot(x,(first&&x.big)?gHiAcc(x):TEAL,X,Y,(x.big?3:2)*Math.max(decay,0.4),0.5+0.5*decay));
+    pX=X;pY=Y;}}
+reg('delay','Delay','pedal motif','Decaying tap trains. Elevated original + 2 alternatives. Blue thumbnails, gold only at card size.',[
+  {current:true,name:'Current Taps',draw:delayCur,desc:'Shipped decaying wave-burst taps - flat.'},
+  {pick:'A',name:'Glow Taps',draw:delayA,desc:'Same tap trains with bloom + decay glow; the dry (first) tap glows gold at hero.'},
+  {pick:'B',name:'Impulse Train',draw:delayImpulse,desc:'Classic delay-line diagram: decaying impulse spikes. Instantly reads as discrete echoes.'},
+  {pick:'C',name:'Ping-Pong',draw:delayPingpong,desc:'Echoes bouncing top/bottom with a decaying trail. Reads as ping-pong delay.'},
+],5);
+SECTIONS[SECTIONS.length-1].pedal=true;
+
+// -------- Reverb (dust cloud) --------
+function reverbCur(x){reverbRef(x);}
+function reverbA(x){const w=x.W,h=x.H,cy=h/2,rng=mkRng(54321),pts=[];
+  if(x.big)bloom(x,w*0.5,h*0.6,w*0.6,TEAL,0.10);
+  for(let f=0.05;f<=0.95;f+=0.15)pts.push([w*f,h]);
+  for(let f=0.1;f<=0.9;f+=0.2)pts.push([w*f,cy+h*0.15]);
+  for(let f=0.15;f<=0.85;f+=0.25)pts.push([w*f,cy-h*0.15]);
+  for(let f=0.2;f<=0.8;f+=0.3)pts.push([w*f,h*0.1]);
+  const count=x.big?2600:600;
+  for(let i=0;i<count;i++){const idx=Math.floor(rng()*pts.length),ang=rng()*TAU,len=2+rng()*3,nx=pts[idx][0]+len*Math.cos(ang),ny=pts[idx][1]+len*Math.sin(ang);
+    if(nx>=0&&nx<=w&&ny>=0&&ny<=h){const c=i<count*0.025?TEAL:(i<count*0.14?MID:DIM);line(x,c,pts[idx][0],pts[idx][1],nx,ny,i<count*0.02?2:1,0.55);pts.push([nx,ny]);}}
+  if(x.big){dust(x,w*0.5,h*0.4,w*0.5,40,99);for(let k=0;k<5;k++){const a=rng()*TAU,rr=rng()*w*0.3;gGlow(x,rgba(GOLD,0.7),5,()=>dot(x,GOLDHI,w*0.5+Math.cos(a)*rr,h*0.5+Math.sin(a)*rr,1.4));}}}
+function reverbRings(x){const w=x.W,h=x.H,cx=w/2,cy=h*0.54;
+  if(x.big)bloom(x,cx,cy,w*0.5,TEAL,0.10);
+  const n=7;for(let i=n;i>=1;i--){const rr=(Math.min(w,h)*0.09)*i,a=(1-i/n)*0.55+0.06;
+    gGlow(x,rgba(TEAL,0.3*a),x.big?3:0,()=>ring(x,mix(TEAL,DIM,i/n),cx,cy,rr,x.big?1.8:1.2,a));}
+  if(x.big)dust(x,cx,cy,w*0.42,60,7);
+  gGlow(x,rgba(x.big?gAcc(x):TEAL,0.8),x.big?7:0,()=>dot(x,x.big?gHiAcc(x):TEAL,cx,cy,x.big?3.6:2.3));}
+function reverbTail(x){const w=x.W,h=x.H,cy=h/2,x0=w*0.08,x1=w*0.94,rng=mkRng(321),n=x.big?90:26;
+  if(x.big)bloom(x,x0,cy,w*0.62,TEAL,0.08);
+  line(x,DIM,x0,cy,x1,cy,0.5,0.3);
+  gGlow(x,rgba(x.big?GOLD:TEAL,0.6),x.big?6:0,()=>line(x,x.big?gHiAcc(x):TEAL,x0,cy,x0,cy-h*0.36,x.big?2.6:1.8));
+  for(let i=0;i<n;i++){const t=i/n,X=lerp(x0+w*0.05,x1,t),env=Math.sin(Math.min(t*3,1)*PI*0.5)*Math.pow(1-t,1.2),hgt=h*0.32*env*(0.4+0.6*rng()),up=rng()>0.5?-1:1;
+    line(x,mix(TEAL,DIM,t),X,cy,X,cy+up*hgt,x.big?1.4:1,0.3+0.5*env);}
+  if(x.big)dust(x,w*0.5,cy,w*0.45,40,55);}
+reg('reverb','Reverb','pedal motif','Branching dust cloud. Elevated original + 2 alternatives. Blue thumbnails, gold only at card size.',[
+  {current:true,name:'Current Dust',draw:reverbCur,desc:'Shipped DLA dust cloud - flat, no depth.'},
+  {pick:'A',name:'Deep Dust',draw:reverbA,desc:'Same DLA cloud with bloom + haze depth and a few gold sparkles at hero.'},
+  {pick:'B',name:'Diffusion Rings',draw:reverbRings,desc:'Soft reflections radiating from a source impulse. Reads as room diffusion.'},
+  {pick:'C',name:'Reflection Tail',draw:reverbTail,desc:'Impulse then a long smeared decay tail. Reads as a reverb impulse response.'},
+],5);
+SECTIONS[SECTIONS.length-1].pedal=true;
+
+// -------------------------------------------------- THC Sunset REDO (fractals inside the synthwave sunset)
+const SUN_GOLD=[252,222,145], SUN_ORANGE=[233,138,90], SUN_MAGENTA=[201,74,140];
+function sunsetCol(f){ if(f<0.4)return mix(SUN_GOLD,SUN_ORANGE,f/0.4); if(f<0.72)return mix(SUN_ORANGE,SUN_MAGENTA,(f-0.4)/0.32); return mix(SUN_MAGENTA,TEAL,(f-0.72)/0.28); }
+// Shared synthwave scene: magenta/orange sky, drawSun(), then the glowing horizon + perspective grid on top.
+function sunScene(drawSun){return x=>{const w=x.W,h=x.H,cx=w/2,horizon=h*0.60;
+  const sky=x.createLinearGradient(0,0,0,horizon);sky.addColorStop(0,rgba(TEAL,0.04));sky.addColorStop(0.72,rgba(SUN_MAGENTA,0.09));sky.addColorStop(1,rgba(SUN_ORANGE,0.15));x.fillStyle=sky;x.fillRect(0,0,w,horizon);
+  drawSun(x,cx,horizon);
+  gGlow(x,rgba(x.big?SUN_GOLD:TEAL,0.6),x.big?8:0,()=>line(x,x.big?SUN_GOLD:TEAL,0,horizon,w,horizon,x.big?2:1,0.9));
+  for(let i=1;i<=8;i++){const t=i/8,yy=horizon+(h-horizon)*t*t;line(x,TEAL,0,yy,w,yy,1,0.26*(1-t)+0.08);}
+  for(let i=-12;i<=12;i++){const fx=cx+(i/12)*w*0.55;line(x,TEAL,cx+(i/12)*w*0.05,horizon,fx,h,1,0.15);}
+  vignette(x);};}
+function sunSlits(x,cx,sunCy,sunR){for(let i=0;i<6;i++){const yy=sunCy+sunR*0.14+i*sunR*0.13,dy=yy-sunCy,hc2=sunR*sunR-dy*dy;if(hc2<=0)continue;const hc=Math.sqrt(hc2);x.fillStyle=rgba([14,16,21],0.92);x.fillRect(cx-hc,yy,hc*2,1+i*0.9);}}
+// A - Fractal Sun: a Julia set fills the sun disc, coloured with the sunset gradient.
+function sunJulia(x,cx,horizon){const sunR=Math.min(x.W,x.H)*0.30,sunCy=horizon-sunR*0.42,step=x.big?2:3;
+  if(x.big)bloom(x,cx,sunCy,sunR*2.0,SUN_ORANGE,0.10);
+  for(let py=-sunR;py<=sunR;py+=step)for(let px=-sunR;px<=sunR;px+=step){if(px*px+py*py>sunR*sunR)continue;
+    let zr=(px/sunR)*1.5,zi=(py/sunR)*1.5,it=0;const cr=-0.4,ci=0.6;
+    while(zr*zr+zi*zi<4&&it<48){const t=zr*zr-zi*zi+cr;zi=2*zr*zi+ci;zr=t;it++;}
+    const f=it/48;dot(x,x.big?sunsetCol(f):mix(DIM,TEAL,f),cx+px,sunCy+py,step*0.72,0.35+0.55*f);}
+  sunSlits(x,cx,sunCy,sunR);}
+// B - Sunset Attractor: a de Jong attractor confined to the sun, coloured with the sunset gradient.
+function sunAttractor(x,cx,horizon){const sunR=Math.min(x.W,x.H)*0.32,sunCy=horizon-sunR*0.42;
+  if(x.big)bloom(x,cx,sunCy,sunR*2.0,SUN_MAGENTA,0.10);
+  const a=-2.0,b=-2.0,c=-1.2,d=2.0;let X=0.1,Y=0.1;const N=x.big?9000:2500,S=sunR*0.42;
+  for(let i=0;i<N;i++){const nx=Math.sin(a*Y)-Math.cos(b*X),ny=Math.sin(c*X)-Math.cos(d*Y);X=nx;Y=ny;if(i<50)continue;
+    const px=X*S,py=Y*S;if(px*px+py*py>sunR*sunR)continue;const f=i/N;dot(x,x.big?sunsetCol(f):mix(DIM,TEAL,f),cx+px,sunCy+py,0.9,0.42);}}
+// C - Fractal Mountains: a midpoint-displacement ridge silhouette in front of the gradient sun.
+function sunMountains(x,cx,horizon){const w=x.W,h=x.H,sunR=Math.min(w,h)*0.30,sunCy=horizon-sunR*0.42;
+  if(x.big)bloom(x,cx,sunCy,sunR*2.0,SUN_ORANGE,0.10);
+  for(let yy=sunCy-sunR;yy<=sunCy+sunR;yy++){const dy=yy-sunCy,hc2=sunR*sunR-dy*dy;if(hc2<=0)continue;const hc=Math.sqrt(hc2);const ft=(yy-(sunCy-sunR))/(2*sunR);x.fillStyle=rgba(x.big?sunsetCol(ft):mix(DIM,TEAL,ft),0.92);x.fillRect(cx-hc,yy,hc*2,1.2);}
+  sunSlits(x,cx,sunCy,sunR);
+  const rng=mkRng(77),pts=[];function md(x0,y0,x1,y1,disp,d){if(d<=0)return;const mx=(x0+x1)/2,my=(y0+y1)/2-rng()*disp;md(x0,y0,mx,my,disp*0.5,d-1);pts.push([mx,my]);md(mx,my,x1,y1,disp*0.5,d-1);}
+  pts.push([0,horizon]);md(0,horizon,w,horizon,sunR*0.85,6);pts.push([w,horizon]);pts.sort((p,q)=>p[0]-q[0]);
+  x.fillStyle=rgba([10,12,16],0.96);x.beginPath();x.moveTo(0,horizon);for(const p of pts)x.lineTo(p[0],p[1]);x.lineTo(w,horizon);x.closePath();x.fill();
+  gGlow(x,rgba(x.big?SUN_GOLD:TEAL,0.5),x.big?5:0,()=>{x.strokeStyle=rgba(x.big?SUN_GOLD:TEAL,0.65);x.lineWidth=1;x.beginPath();pts.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1]));x.stroke();});}
+function thcCurrent(x){const w=x.W,h=x.H,cx=w/2,horizon=h*0.58,sunR=Math.min(w,h)*0.30,sunCy=horizon-sunR*0.42;
+  for(let yy=sunCy-sunR;yy<=sunCy+sunR;yy++){const dy=yy-sunCy,hc2=sunR*sunR-dy*dy;if(hc2<=0)continue;const hc=Math.sqrt(hc2);const ft=(yy-(sunCy-sunR))/(2*sunR);const c=ft<0.55?mix(SUN_GOLD,[200,165,87],ft/0.55):mix([200,165,87],TEAL,(ft-0.55)/0.45);x.fillStyle=rgba(c,0.92);x.fillRect(cx-hc,yy,hc*2,1.2);}
+  sunSlits(x,cx,sunCy,sunR);line(x,SUN_GOLD,0,horizon,w,horizon,1.5,0.9);
+  for(let i=1;i<=8;i++){const t=i/8,yy=horizon+(h-horizon)*t*t;line(x,TEAL,0,yy,w,yy,1,0.26*(1-t)+0.08);}
+  for(let i=-12;i<=12;i++){const fx=cx+(i/12)*w*0.55;line(x,TEAL,cx+(i/12)*w*0.05,horizon,fx,h,1,0.15);}}
+// D - Dark Souls "Praise the Sun": a radiant sun disc ringed by wavy flame rays (alternating long/short).
+function dsRays(x,cx,cyS,R0,c){const N=16;
+  for(let i=0;i<N;i++){const a=i/N*TAU,long=(i%2===0),len=R0*(long?2.0:1.35),bw=TAU/N*0.40,curl=(i%2===0?1:-1)*0.14;
+    const bx1=cx+Math.cos(a-bw)*R0*0.98,by1=cyS+Math.sin(a-bw)*R0*0.98;
+    const bx2=cx+Math.cos(a+bw)*R0*0.98,by2=cyS+Math.sin(a+bw)*R0*0.98;
+    const tx=cx+Math.cos(a+curl)*len,ty=cyS+Math.sin(a+curl)*len;
+    const c1x=cx+Math.cos(a-bw*0.5+curl)*R0*1.5,c1y=cyS+Math.sin(a-bw*0.5+curl)*R0*1.5;
+    const c2x=cx+Math.cos(a+bw*0.5+curl)*R0*1.5,c2y=cyS+Math.sin(a+bw*0.5+curl)*R0*1.5;
+    gGlow(x,rgba(c,0.45),x.big?7:0,()=>{x.fillStyle=rgba(c,0.92);x.beginPath();x.moveTo(bx1,by1);x.quadraticCurveTo(c1x,c1y,tx,ty);x.quadraticCurveTo(c2x,c2y,bx2,by2);x.closePath();x.fill();});}}
+function dsSun(x,cx,horizon){const R0=Math.min(x.W,x.H)*0.15,cyS=horizon-R0*1.5,c=x.big?SUN_GOLD:TEAL;
+  if(x.big)bloom(x,cx,cyS,R0*3.4,SUN_ORANGE,0.12);
+  dsRays(x,cx,cyS,R0,c);
+  for(let yy=cyS-R0;yy<=cyS+R0;yy++){const dy=yy-cyS,hc2=R0*R0-dy*dy;if(hc2<=0)continue;const hc=Math.sqrt(hc2);const ft=(yy-(cyS-R0))/(2*R0);x.fillStyle=rgba(x.big?sunsetCol(ft):mix(DIM,TEAL,ft),0.96);x.fillRect(cx-hc,yy,hc*2,1.2);}
+  gGlow(x,rgba(c,0.6),x.big?6:0,()=>ring(x,c,cx,cyS,R0*0.6,x.big?1.6:1,0.8));}
+// E - Dark Souls "Dark Sun" / eclipse: a dark core ringed by a jagged ring-of-fire corona, with a light shaft to the horizon.
+function dsEclipse(x,cx,horizon){const w=x.W,h=x.H,R0=Math.min(w,h)*0.17,cyS=horizon-R0*2.35,c=x.big?SUN_GOLD:TEAL;
+  if(x.big)bloom(x,cx,cyS,R0*3.2,SUN_ORANGE,0.11);
+  // ring-of-fire corona: irregular jagged flame spikes around the rim
+  const rng=mkRng(31),N=x.big?96:40;
+  gGlow(x,rgba(c,0.4),x.big?6:0,()=>{for(let i=0;i<N;i++){const a=i/N*TAU,len=R0*(1.02+rng()*0.16+0.04*Math.sin(a*7));
+    const ix=cx+Math.cos(a)*R0*0.99,iy=cyS+Math.sin(a)*R0*0.99,ox=cx+Math.cos(a)*len,oy=cyS+Math.sin(a)*len;
+    line(x,x.big?(rng()>0.5?SUN_GOLD:SUN_ORANGE):TEAL,ix,iy,ox,oy,x.big?1.4:0.8,0.5+0.45*rng());}});
+  // dark eclipse core: near-black disc with a faint warm inner glow (radial)
+  const core=x.createRadialGradient(cx,cyS,0,cx,cyS,R0);
+  core.addColorStop(0,rgba(x.big?SUN_ORANGE:TEAL,0.16));core.addColorStop(0.45,rgba([12,12,17],0.92));core.addColorStop(1,rgba([7,8,12],0.98));
+  x.fillStyle=core;x.beginPath();x.arc(cx,cyS,R0,0,TAU);x.fill();
+  // bright rim + faint inner ring (annular "darksign" look)
+  gGlow(x,rgba(c,0.7),x.big?7:0,()=>ring(x,c,cx,cyS,R0,x.big?2:1,0.95));
+  ring(x,c,cx,cyS,R0*0.86,1,0.4);
+  // light shaft down to the horizon (gradient beam + dust)
+  const topY=cyS+R0*0.92,wt=R0*0.20,wb=R0*0.05;
+  const beam=x.createLinearGradient(0,topY,0,horizon);beam.addColorStop(0,rgba(c,x.big?0.34:0.18));beam.addColorStop(1,rgba(c,0.0));
+  x.fillStyle=beam;x.beginPath();x.moveTo(cx-wt,topY);x.lineTo(cx+wt,topY);x.lineTo(cx+wb,horizon);x.lineTo(cx-wb,horizon);x.closePath();x.fill();
+  line(x,c,cx-wt*0.7,topY,cx-wb,horizon,1,x.big?0.5:0.3);line(x,c,cx+wt*0.7,topY,cx+wb,horizon,1,x.big?0.5:0.3);
+  if(x.big)dust(x,cx-wt,topY,wt*2,horizon-topY,10,c,0.5);
+  // praise-burst at the base of the shaft on the horizon
+  if(x.big)for(let k=-4;k<=4;k++){const a=-Math.PI/2+k*0.16,l=R0*(0.5-Math.abs(k)*0.05);line(x,SUN_GOLD,cx,horizon,cx+Math.cos(a)*l,horizon+Math.sin(a)*l,1,0.5);}}
+reg('thc2','THC Sunset (REDO - fractal sunset)','amp / case 13','Keep the synthwave sunset, but put a fractal in it so it matches the others. Current + fractal ideas + the Dark Souls sun.',[
+  {current:true,name:'Slit Sun',draw:thcCurrent,desc:'Shipped synthwave sun - gradient scanlines, no fractal (stylistically the odd one out).'},
+  {pick:'A',name:'Fractal Sun',draw:sunScene(sunJulia),desc:'A Julia set fills the sun disc, coloured gold->magenta->teal. Fractal + sunset in one.'},
+  {pick:'B',name:'Sunset Attractor',draw:sunScene(sunAttractor),desc:'A de Jong attractor forms a glowing filament sun on the horizon, sunset-coloured.'},
+  {pick:'C',name:'Fractal Mountains',draw:sunScene(sunMountains),desc:'Midpoint-displacement fractal mountains silhouetted in front of the gradient sun.'},
+  {pick:'D',name:'Praise the Sun',draw:sunScene(dsSun),desc:'The iconic Dark Souls radiant sun - disc ringed by wavy flame rays, over the synthwave grid.'},
+  {pick:'E',name:'Dark Sun (Eclipse)',draw:sunScene(dsEclipse),desc:'Dark Souls dark-sun/eclipse: a dark core ringed by a jagged ring-of-fire corona, with a light shaft to the horizon.'},
+],6);
+
+build();
+
+// ============================================================================
+//  Renderer
+// ============================================================================
+function build(){
+  const root=document.getElementById('root'), nav=document.getElementById('nav');
+  const DPR=Math.max(1,window.devicePixelRatio||1);
+  const params=new URLSearchParams(location.search);
+  const only=params.get('only'), batch=params.get('batch');
+  let list=SECTIONS;
+  if(only)list=list.filter(s=>s.id===only);
+  if(batch)list=list.filter(s=>String(s.batch)===batch);
+  const drawOn=(cv,cssW,h,big,fn)=>{
+    cv.width=cssW*DPR; cv.height=h*DPR;
+    const x=cv.getContext('2d'); x.scale(DPR,DPR); x.W=cssW; x.H=h; x.big=big;
+    try{ bg(x); fn(x); }catch(e){ console.error(e); }
+  };
+  for(const s of list){
+    const a=document.createElement('a'); a.href='#'+s.id; a.textContent=s.title; nav.appendChild(a);
+    const sec=document.createElement('section'); sec.className='item'; sec.id=s.id;
+    sec.innerHTML=`<h2>${s.title}<span class="tag">${s.tag}</span></h2><p class="note">${s.note}</p>`;
+    const grid=document.createElement('div'); grid.className='grid'+(s.pedal?' pedal':'');
+    for(const c of s.cards){
+      const card=document.createElement('div'); card.className='card'+(c.current?' current':'');
+      const h=c.h||(s.pedal?190:300);
+      const showThumb=c.thumb!==false && c.pick!=='REF';
+      card.innerHTML=`<h3>${c.name}<span class="pick">${c.current?'CURRENT':c.pick}</span></h3>`+
+                     `<div class="cvwrap"><canvas class="big"></canvas>`+
+                     (showThumb?`<div class="thumb"><canvas class="tn"></canvas></div>`:'')+
+                     `</div><div class="desc">${c.desc||''}</div>`;
+      const cssW=c.w||(s.pedal?240:420);
+      drawOn(card.querySelector('canvas.big'),cssW,h,true,c.draw);
+      if(showThumb) drawOn(card.querySelector('canvas.tn'),22,22,false,c.draw);
+      grid.appendChild(card);
+    }
+    sec.appendChild(grid); root.appendChild(sec);
+  }
+}
+</script>
+</body>
+</html>

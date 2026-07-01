@@ -425,11 +425,6 @@ private:
     const float knobCY = r.MH();
     const float knobCX = on ? r.R - radius : r.L + radius;
     g.FillEllipse(knob, IRECT(knobCX - knobR, knobCY - knobR, knobCX + knobR, knobCY + knobR));
-    if (on)
-    {
-      const IColor led = VoLumColors::TEAL.WithOpacity(dimmed ? 0.55f : 1.0f);
-      g.FillCircle(led, knobCX, knobCY, 1.4f);
-    }
   }
 
   void _DrawQuietBlock(IGraphics& g, const IRECT& r, EVoLumSection section)
