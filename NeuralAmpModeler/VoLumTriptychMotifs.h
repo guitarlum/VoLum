@@ -9,6 +9,7 @@
 // 1.0-bugs-hygiene branch (file-size hygiene split).
 
 #include "VoLumTriptychState.h"
+#include "VoLumFractalArt.h" // volumart:: atmosphere helpers (bloom/dust/glow/mix) for the 1.2.0 motif glow-up
 
 #include <algorithm>
 #include <cmath>
@@ -17,9 +18,124 @@
 using namespace iplug;
 using namespace igraphics;
 
+// DBZ Fusion-Dance figure for a single NAM capture slot. NAM1 leans right
+// (dir=+1), NAM2 leans left (dir=-1); their raised arms sweep up into one big
+// rounded ARCH that meets at the shared inner edge - fists at the TOP plus a
+// second pair at CENTRE, each on a gold "fusion spark". Wide crouched A-stance,
+// spiky hair + yelling mouth. Gold sparks/fists appear only at card size (blue thumbs).
+inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
+{
+  using namespace volumart;
+  const float activeMul = dimmed ? 0.3f : 1.0f;
+  const bool big = std::min(r.W(), r.H()) > 40.f;
+  const float W = r.W(), H = r.H(), ox = r.L, oy = r.T;
+  auto X = [&](float f) { return ox + (dir > 0 ? f : 1.f - f) * W; }; // f=1 => shared inner edge (arch spine)
+  auto Y = [&](float f) { return oy + f * H; };
+  const float gnd = Y(0.90f);
+  const float topCx = X(1.0f), topCy = Y(0.15f), midCx = X(1.0f), midCy = Y(0.52f); // shared contact points
+  const float hipX = X(0.36f), hipY = Y(0.60f), shX = X(0.58f), shY = Y(0.38f);
+  const float headX = X(0.66f), headY = Y(0.29f), headR = H * 0.075f;
+  const float oKneeX = X(0.18f), oKneeY = Y(0.74f), oFootX = X(0.05f);
+  const float iKneeX = X(0.54f), iKneeY = Y(0.75f), iFootX = X(0.58f);
+  const float inElX = X(0.82f), inElY = Y(0.47f), outCtlX = X(0.60f), outCtlY = Y(0.05f);
+  const float lw = big ? 2.4f : 1.3f;
+  const IColor teal = WithA(kTeal, 0.9f * activeMul);
+  auto L = [&](float x1, float y1, float x2, float y2, float a) {
+    g.DrawLine(WithA(kTeal, a * activeMul), x1, y1, x2, y2, nullptr, lw);
+  };
+  g.DrawCircle(teal, headX, headY, headR, nullptr, lw);
+  if (big)
+    g.FillEllipse(WithA(kTeal, 0.85f * activeMul), headX + dir * headR * 0.42f, headY + headR * 0.35f, headR * 0.32f,
+                  headR * 0.28f); // wide-open yelling mouth
+  L(shX, shY, headX - dir * W * 0.01f, headY + headR * 0.85f, 0.9f); // neck
+  L(shX, shY, hipX, hipY, 0.95f);                                    // torso (lean-in)
+  L(shX, shY, inElX, inElY, 0.95f);                                  // inner upper arm
+  L(inElX, inElY, midCx, midCy, 0.95f);                              // inner forearm -> centre fist
+  for (int i = 0; i < 8; i++) // outer arm arch (quadratic sh -> outCtl -> topC, sampled)
+  {
+    const float t0 = (float)i / 8.f, t1 = (float)(i + 1) / 8.f;
+    auto qx = [&](float t) { return (1 - t) * (1 - t) * shX + 2 * (1 - t) * t * outCtlX + t * t * topCx; };
+    auto qy = [&](float t) { return (1 - t) * (1 - t) * shY + 2 * (1 - t) * t * outCtlY + t * t * topCy; };
+    L(qx(t0), qy(t0), qx(t1), qy(t1), 0.95f);
+  }
+  L(hipX, hipY, oKneeX, oKneeY, 0.9f);
+  L(oKneeX, oKneeY, oFootX, gnd, 0.9f); // outer leg
+  L(hipX, hipY, iKneeX, iKneeY, 0.9f);
+  L(iKneeX, iKneeY, iFootX, gnd, 0.9f); // inner leg
+  L(oFootX, gnd, oFootX - dir * W * 0.06f, gnd, 0.85f);
+  L(iFootX, gnd, iFootX + dir * W * 0.06f, gnd, 0.85f); // feet
+  if (big)
+  {
+    g.FillCircle(teal, topCx, topCy, lw * 1.3f);
+    g.FillCircle(teal, midCx, midCy, lw * 1.3f); // fists at meeting points
+    Bloom(g, topCx, topCy, std::min(W, H) * 0.4f, kGold, 0.14f * activeMul);
+    GlowDot(g, kGold, kGoldHi, topCx, topCy, 4.5f, 10.f);
+    Bloom(g, midCx, midCy, std::min(W, H) * 0.28f, kGold, 0.12f * activeMul);
+    GlowDot(g, kGold, kGoldHi, midCx, midCy, 3.2f, 8.f);
+    for (int i = 0; i < 10; i++)
+    {
+      const float a = (float)i / 10.f * 6.28318f;
+      g.DrawLine(WithA(kGoldHi, 0.75f), topCx, topCy, topCx + cosf(a) * (9.f + (i % 2) * 5.f),
+                 topCy + sinf(a) * (9.f + (i % 2) * 5.f), nullptr, 1.6f);
+    }
+  }
+  else
+  {
+    g.FillCircle(WithA(kTeal, 0.8f * activeMul), topCx, topCy, 2.f);
+    g.FillCircle(WithA(kTeal, 0.8f * activeMul), midCx, midCy, 1.6f);
+  }
+}
+
 //==============================================================================
 // Reverb & Delay Extension Controls (PRE / AMP / POST)
 //==============================================================================
+
+// Neural-network node-graph motif shared by the two NAM capture blocks. Each
+// block passes its own layer shape + seed so PRE_NAM1 and PRE_NAM2 read as a
+// related pair while staying distinguishable (NAM2 is deeper/denser). Scales
+// from the ~20 px collapsed slot to the ~150 px focused card.
+inline void DrawNeuralNetMotif(IGraphics& g, const IRECT& r, const int* layers, int L, unsigned seed, bool dimmed)
+{
+  const float activeMul = dimmed ? 0.25f : 1.0f;
+  // Output-layer nodes glow gold at card size but stay teal in the collapsed
+  // thumbnail so the ~20 px slot reads blue/teal only.
+  const bool big = std::min(r.W(), r.H()) > 40.f;
+  const IColor node((int)(150.f * activeMul), 120, 210, 220);
+  const IColor out = big ? IColor((int)(235.f * activeMul), 252, 222, 145) : IColor((int)(235.f * activeMul), 120, 210, 220);
+  unsigned rng = seed;
+  auto frand = [&]() -> float { rng = rng * 1664525u + 1013904223u; return (float)rng / (float)0xFFFFFFFFu; };
+  struct Node { float x, y; };
+  std::vector<std::vector<Node>> pos(L);
+  for (int i = 0; i < L; i++)
+  {
+    const float x = r.L + r.W() * (L > 1 ? (0.2f + 0.6f * (float)i / (float)(L - 1)) : 0.5f);
+    const int n = layers[i];
+    for (int j = 0; j < n; j++)
+    {
+      const float y = r.T + r.H() * (n > 1 ? (0.22f + 0.56f * (float)j / (float)(n - 1)) : 0.5f);
+      pos[i].push_back({x, y});
+    }
+  }
+  for (int i = 0; i < L - 1; i++)
+    for (auto& a : pos[i])
+      for (auto& b : pos[i + 1])
+      {
+        const int al = (int)(255.f * (0.16f + 0.16f * frand()) * activeMul);
+        g.DrawLine(IColor(al, 100, 180, 200), a.x, a.y, b.x, b.y, nullptr, 0.8f);
+      }
+  const float scale = std::min(r.W(), r.H());
+  const float nodeR = std::max(1.6f, scale * 0.045f);
+  for (int i = 0; i < L; i++)
+  {
+    const bool isOut = (i == L - 1);
+    const IColor& c = isOut ? out : node;
+    for (auto& p : pos[i])
+    {
+      g.FillCircle(IColor((int)(60.f * activeMul), c.R, c.G, c.B), p.x, p.y, nodeR * 1.7f);
+      g.FillCircle(c, p.x, p.y, isOut ? nodeR * 1.15f : nodeR);
+    }
+  }
+}
 
 // Per-effect "motif" drawn in pedal cards and in the Quiet PRE/POST slots.
 // `dimmed` collapses alpha when the effect is bypassed.
@@ -32,228 +148,205 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
   IColor bright(dimmed ? 70 : 150, 120, 210, 220);
   IColor mid(dimmed ? 40 : 80, 100, 180, 200);
   IColor dim(dimmed ? 20 : 45, 80, 150, 170);
+  // Gold/glow accents are a hero/card-size treatment only. Collapsed thumbnails
+  // (~20 px) stay blue/teal, so gate every gold accent behind this size check.
+  const bool big = std::min(r.W(), r.H()) > 40.f;
 
   if (effect == EVoLumEffectFocus::PITCH)
   {
-    const float activeMul = dimmed ? 0.25f : 1.0f;
-    const IColor teal((int)(135.f * activeMul), 90, 205, 220);
-    const IColor blue((int)(145.f * activeMul), 150, 200, 245);
+    using namespace volumart;
+    const float activeMul = dimmed ? 0.28f : 1.0f;
     const float cx = r.MW();
     if (variant == 1)
     {
-      // Octaver: a centre note with an octave-UP chevron above and octave-DOWN
-      // chevron below, reading instantly as "two octaves" vs the helix.
-      const float w = r.W() * 0.30f;
-      const float h = r.H() * 0.22f;
-      const float gap = r.H() * 0.20f;
-      g.FillCircle(blue, cx, cy, std::max(1.6f, r.H() * 0.05f));
-      // Up chevron (octave up).
-      g.DrawLine(teal, cx - w, cy - gap, cx, cy - gap - h, nullptr, 1.8f);
-      g.DrawLine(teal, cx + w, cy - gap, cx, cy - gap - h, nullptr, 1.8f);
-      g.DrawLine(teal.WithOpacity(0.6f), cx - w * 0.55f, cy - gap - h * 0.55f, cx, cy - gap - h * 1.15f, nullptr, 1.4f);
-      g.DrawLine(teal.WithOpacity(0.6f), cx + w * 0.55f, cy - gap - h * 0.55f, cx, cy - gap - h * 1.15f, nullptr, 1.4f);
-      // Down chevron (octave down).
-      g.DrawLine(blue, cx - w, cy + gap, cx, cy + gap + h, nullptr, 1.8f);
-      g.DrawLine(blue, cx + w, cy + gap, cx, cy + gap + h, nullptr, 1.8f);
-      g.DrawLine(blue.WithOpacity(0.6f), cx - w * 0.55f, cy + gap + h * 0.55f, cx, cy + gap + h * 1.15f, nullptr, 1.4f);
-      g.DrawLine(blue.WithOpacity(0.6f), cx + w * 0.55f, cy + gap + h * 0.55f, cx, cy + gap + h * 1.15f, nullptr, 1.4f);
+      // Octaver - Glow Chevrons: doubled up/down chevrons with a glowing root note
+      // (gold only at card size), reading instantly as "octave up + octave down".
+      const float cyy = r.MH(), ww = r.W() * 0.26f, hh = r.H() * 0.13f, gap = r.H() * 0.13f;
+      if (big) Bloom(g, cx, cyy, r.W() * 0.45f, kTeal, 0.08f * activeMul);
+      auto chev = [&](int dir, const IColor& c) {
+        for (int k = 0; k < 2; k++)
+        {
+          const float off = gap + k * hh * 0.95f, base = cyy + dir * off, tip = cyy + dir * (off + hh);
+          const IColor cc = WithA(c, (0.92f - 0.32f * k) * activeMul);
+          if (big)
+          {
+            GlowLine(g, c, cc, cx - ww, base, cx, tip, 2.6f, 4.f);
+            GlowLine(g, c, cc, cx + ww, base, cx, tip, 2.6f, 4.f);
+          }
+          else
+          {
+            g.DrawLine(cc, cx - ww, base, cx, tip, nullptr, 1.8f);
+            g.DrawLine(cc, cx + ww, base, cx, tip, nullptr, 1.8f);
+          }
+        }
+      };
+      chev(-1, kTeal); // octave up
+      chev(1, kBlue);  // octave down
+      if (big) GlowDot(g, kGold, kGoldHi, cx, cyy, 4.f, 6.f);
+      else g.FillCircle(WithA(kTeal, activeMul), cx, cyy, 2.6f);
     }
     else
     {
-      // Transpose: vertical double helix - two phase-shifted sine strands running
-      // top-to-bottom with cross "rungs". Scales from PRE thumbnail to focused card.
-      const float amp = r.W() * 0.28f;
-      const float turns = 2.2f;
-      const int segs = 64;
-      const float y0 = r.T + r.H() * 0.12f;
-      const float y1 = r.B - r.H() * 0.12f;
-      float pAx = 0.f, pAy = 0.f, pBx = 0.f, pBy = 0.f;
+      // Transpose - Deep Helix: two phase-shifted strands with front/back depth
+      // thickness, gradient teal->blue, rungs, and gold crossover nodes at card size.
+      if (big) Bloom(g, cx, r.MH(), r.W() * 0.5f, kTeal, 0.10f * activeMul);
+      const int segs = 96;
+      const float amp = r.W() * 0.27f, y0 = r.T + r.H() * 0.1f, y1 = r.B - r.H() * 0.1f;
+      struct HP { float x, y, z; };
+      std::vector<HP> A(segs + 1), B(segs + 1);
       for (int s = 0; s <= segs; ++s)
       {
-        const float t = (float)s / (float)segs;
-        const float y = y0 + (y1 - y0) * t;
-        const float ph = t * turns * 6.28318f;
-        const float ax = cx + sinf(ph) * amp;
-        const float bx = cx + sinf(ph + 3.14159f) * amp;
-        if (s > 0)
-        {
-          g.DrawLine(teal, pAx, pAy, ax, y, nullptr, 1.6f);
-          g.DrawLine(blue, pBx, pBy, bx, y, nullptr, 1.6f);
-          if (s % 6 == 0)
-            g.DrawLine(blue.WithOpacity(0.5f), ax, y, bx, y, nullptr, 1.0f);
-        }
-        pAx = ax;
-        pAy = y;
-        pBx = bx;
-        pBy = y;
+        const float t = (float)s / (float)segs, y = y0 + (y1 - y0) * t, ph = t * 2.4f * 6.28318f;
+        A[s] = {cx + sinf(ph) * amp, y, cosf(ph)};
+        B[s] = {cx + sinf(ph + 3.14159f) * amp, y, cosf(ph + 3.14159f)};
       }
+      for (int s = 0; s <= segs; s += 6)
+        g.DrawLine(WithA(big ? kGold : kBlue, 0.32f * activeMul), A[s].x, A[s].y, B[s].x, B[s].y, nullptr, 1.f);
+      auto strand = [&](const std::vector<HP>& P, const IColor& c0, const IColor& c1) {
+        for (int i = 1; i <= segs; ++i)
+        {
+          const float z = P[i].z * 0.5f + 0.5f, lw = (big ? 2.5f : 1.6f) * (0.55f + 0.45f * z);
+          g.DrawLine(WithA(Mix(c0, c1, (float)i / (float)(segs + 1)), (0.5f + 0.45f * z) * activeMul), P[i - 1].x,
+                     P[i - 1].y, P[i].x, P[i].y, nullptr, lw);
+        }
+      };
+      strand(A, kTeal, kBlue);
+      strand(B, kBlue, kTeal);
+      if (big)
+        for (int s = 0; s <= segs; ++s)
+          if (std::fabs(A[s].x - B[s].x) < amp * 0.12f) GlowDot(g, kGold, kGoldHi, cx, A[s].y, 2.4f, 6.f);
     }
   }
   else if (effect == EVoLumEffectFocus::COMP)
   {
-    const float activeMul = dimmed ? 0.25f : 1.0f;
-    const IColor teal((int)(125.f * activeMul), 90, 205, 220);
-    const IColor blue((int)(135.f * activeMul), 145, 220, 245);
+    // Gain-reduction VU arc with a gold needle: instantly reads as "compressor".
+    const float activeMul = dimmed ? 0.28f : 1.0f;
+    const IColor arcCol((int)(120.f * activeMul), 100, 180, 200);
+    const IColor tickTeal((int)(150.f * activeMul), 100, 180, 200);
+    const IColor tickGold((int)(200.f * activeMul), 200, 165, 87);
+    const IColor needleGlow((int)(120.f * activeMul), 200, 165, 87);
+    const IColor needleGold((int)(235.f * activeMul), 252, 222, 145);
+    const IColor needleTeal((int)(235.f * activeMul), 120, 210, 220);
+    const IColor needleCol = big ? needleGold : needleTeal;
     const float cx = r.MW();
-    const float radii[][2] = {{r.W() * 0.24f, r.H() * 0.11f},
-                              {r.W() * 0.33f, r.H() * 0.16f},
-                              {r.W() * 0.42f, r.H() * 0.21f},
-                              {r.W() * 0.50f, r.H() * 0.26f}};
-    for (int i = 0; i < 4; ++i)
+    // Size the arc from the slot so the radial ticks (which extend tickOut past R)
+    // never overflow the collapsed PRE slot. Width: 0.9*(R+tickOut) <= W/2 - margin;
+    // height: the band spans +/-(0.5R)+tickOut around the mid line.
+    const float margin = 3.f, tickOut = big ? 8.f : 3.f;
+    const float wLimit = (r.W() * 0.5f - margin) / 0.9f - tickOut;
+    const float hLimit = (r.H() * 0.5f - margin - tickOut) / 0.5f;
+    const float R = std::max(6.f, std::min(wLimit, hLimit));
+    // Anchor so the arc+needle band [cym-R, cym] is vertically centred in the
+    // card instead of hanging low near the bottom edge.
+    const float cym = r.MH() + R * 0.5f;
+    const float a0 = 3.14159f * 1.15f, a1 = 3.14159f * 1.85f;
+    float pax = cx + R * cosf(a0), pay = cym + R * sinf(a0);
+    for (int s = 1; s <= 40; ++s)
     {
-      const float rotation = i * 23.f * 3.14159f / 180.f;
-      float prevX = cx + radii[i][0] * cosf(rotation);
-      float prevY = cy + radii[i][0] * sinf(rotation) * 0.28f;
-      for (int s = 1; s <= 72; ++s)
-      {
-        const float a = (float)s / 72.f * 6.28318f;
-        const float x = cx + radii[i][0] * cosf(a) * cosf(rotation) - radii[i][1] * sinf(a) * sinf(rotation);
-        const float y = cy + radii[i][0] * cosf(a) * sinf(rotation) + radii[i][1] * sinf(a) * cosf(rotation);
-        g.DrawLine((i % 2) ? blue : teal, prevX, prevY, x, y, nullptr, 1.2f);
-        prevX = x;
-        prevY = y;
-      }
+      const float a = a0 + (a1 - a0) * (float)s / 40.f;
+      const float X = cx + R * cosf(a), Y = cym + R * sinf(a);
+      g.DrawLine(arcCol, pax, pay, X, Y, nullptr, 2.f);
+      pax = X;
+      pay = Y;
     }
-    g.FillCircle(teal, cx - r.W() * 0.32f, cy + r.H() * 0.13f, 3.5f);
-    g.FillCircle(blue, cx - r.W() * 0.12f, cy - r.H() * 0.10f, 3.f);
-    g.FillCircle(teal, cx + r.W() * 0.15f, cy + r.H() * 0.12f, 3.5f);
-    g.FillCircle(blue, cx + r.W() * 0.36f, cy - r.H() * 0.09f, 3.f);
+    for (int i = 0; i <= 10; ++i)
+    {
+      const float t = (float)i / 10.f;
+      const float a = a0 + (a1 - a0) * t;
+      const float r1 = R - 6.f, r2 = R + ((i % 5 == 0) ? tickOut : tickOut * 0.5f);
+      const IColor& tc = (i > 7 && big) ? tickGold : tickTeal;
+      g.DrawLine(tc, cx + r1 * cosf(a), cym + r1 * sinf(a), cx + r2 * cosf(a), cym + r2 * sinf(a), nullptr,
+                 (i % 5 == 0) ? 1.6f : 1.f);
+    }
+    const float na = a0 + (a1 - a0) * 0.68f;
+    if (big)
+      g.DrawLine(needleGlow, cx, cym, cx + R * 0.92f * cosf(na), cym + R * 0.92f * sinf(na), nullptr, 3.2f);
+    g.DrawLine(needleCol, cx, cym, cx + R * 0.92f * cosf(na), cym + R * 0.92f * sinf(na), nullptr, 1.8f);
+    g.FillCircle(needleCol, cx, cym, 3.5f);
   }
   else if (effect == EVoLumEffectFocus::PRE_NAM1)
   {
-    const float activeMul = dimmed ? 0.25f : 1.0f;
-    const IColor teal((int)(135.f * activeMul), 90, 205, 220);
-    const IColor blue((int)(145.f * activeMul), 145, 220, 245);
-    const float cell = std::min(r.W() * 0.12f, r.H() * 0.18f);
-    const float gridW = cell * 6.8f;
-    const float gridH = cell * 4.3f;
-    const float left = r.MW() - gridW * 0.5f;
-    const float top = cy - gridH * 0.5f;
-    for (int y = 0; y < 4; ++y)
-    {
-      for (int x = 0; x < 6; ++x)
-      {
-        const float px = left + x * cell * 1.16f;
-        const float py = top + y * cell * 1.10f;
-        const bool hole = (x == 2 || x == 3) && (y == 1 || y == 2);
-        const IColor col = ((x + y) % 2) ? blue.WithOpacity(0.72f) : teal;
-        if (hole)
-          g.FillRect(IColor((int)(28.f * activeMul), 24, 42, 58), IRECT(px, py, px + cell, py + cell));
-        else
-          g.DrawRect(col, IRECT(px, py, px + cell, py + cell), nullptr, 1.3f);
-
-        if (!hole && (x + y) % 3 == 0)
-        {
-          const float sub = cell * 0.32f;
-          g.DrawRect(
-            dim.WithOpacity(0.65f), IRECT(px + sub, py + sub, px + cell - sub, py + cell - sub), nullptr, 0.9f);
-        }
-      }
-    }
-    g.DrawRect(
-      teal.WithOpacity(0.55f), IRECT(left - 2.f, top - 2.f, left + cell * 6.8f, top + cell * 4.3f), nullptr, 1.2f);
+    // NAM capture 1: DBZ Fusion-Dance figure leaning right toward NAM2.
+    DrawFusionFigure(g, r, +1, dimmed);
   }
   else if (effect == EVoLumEffectFocus::PRE_NAM2)
   {
-    const float activeMul = dimmed ? 0.25f : 1.0f;
-    const IColor teal((int)(135.f * activeMul), 90, 205, 220);
-    const IColor blue((int)(145.f * activeMul), 145, 220, 245);
-    const float cxA = r.MW() - r.W() * 0.11f;
-    const float cxB = r.MW() + r.W() * 0.11f;
-    for (int i = 0; i < 7; ++i)
-    {
-      const float radius = r.H() * (0.12f + i * 0.045f);
-      float prevAX = cxA + radius;
-      float prevAY = cy;
-      float prevBX = cxB + radius;
-      float prevBY = cy;
-      for (int s = 1; s <= 48; ++s)
-      {
-        const float a = (float)s / 48.f * 6.28318f;
-        const float ax = cxA + cosf(a) * radius;
-        const float ay = cy + sinf(a) * radius;
-        const float bx = cxB + cosf(a + 0.16f) * radius;
-        const float by = cy + sinf(a + 0.16f) * radius;
-        g.DrawLine(teal.WithOpacity(0.28f + i * 0.06f), prevAX, prevAY, ax, ay, nullptr, 1.0f);
-        g.DrawLine(blue.WithOpacity(0.24f + i * 0.05f), prevBX, prevBY, bx, by, nullptr, 1.0f);
-        prevAX = ax;
-        prevAY = ay;
-        prevBX = bx;
-        prevBY = by;
-      }
-    }
+    // NAM capture 2: mirror figure leaning left; fingers meet NAM1 at the border.
+    DrawFusionFigure(g, r, -1, dimmed);
   }
   else if (effect == EVoLumEffectFocus::DELAY)
   {
+    // Glow Taps: decaying wave-burst taps with bloom + decay glow; the dry (first)
+    // tap glows gold at card size, thumbnails stay teal.
+    using namespace volumart;
     const float activeMul = dimmed ? 0.28f : 1.0f;
-    int taps = 5;
-    float tapW = r.W() / (float)taps;
+    if (big) Bloom(g, r.L + r.W() * 0.14f, cy, r.W() * 0.62f, kTeal, 0.09f * activeMul);
+    g.DrawLine(WithA(kDim, 0.3f * activeMul), r.L, cy, r.R, cy, nullptr, 0.5f);
+    const int taps = 5;
+    const float tapW = r.W() / (float)taps;
     for (int t = 0; t < taps; t++)
     {
-      float decay = 1.f - (float)t / (float)taps * 0.7f;
-      float ampY = r.H() * 0.35f * decay;
-      int alpha = (int)(140.f * decay * activeMul);
-      float baseX = r.L + t * tapW;
-      int segs = 40;
-      for (int j = 0; j < segs; j++)
+      const float decay = 1.f - (float)t / (float)taps * 0.72f, ampY = r.H() * 0.36f * decay, baseX = r.L + t * tapW;
+      const bool first = (t == 0);
+      const IColor core = (first && big) ? kGoldHi : (t % 2 ? kMid : kTeal);
+      float pX = baseX, pY = cy;
+      for (int j = 1; j <= 40; j++)
       {
-        float t1 = (float)j / segs;
-        float t2 = (float)(j + 1) / segs;
-        float x1 = baseX + t1 * tapW;
-        float x2 = baseX + t2 * tapW;
-        float env1 = sinf(t1 * 3.14159f);
-        float env2 = sinf(t2 * 3.14159f);
-        float y1 = cy + sinf(t1 * 6.28318f * 3.f) * ampY * env1;
-        float y2 = cy + sinf(t2 * 6.28318f * 3.f) * ampY * env2;
-        g.DrawLine(IColor(alpha, 100, 190, 210), x1, y1, x2, y2, nullptr, 1.5f * decay);
+        const float t1 = (float)j / 40.f, X = baseX + t1 * tapW, env = sinf(t1 * 3.14159f);
+        const float y = cy + sinf(t1 * 6.28318f * 3.f) * ampY * env;
+        const IColor c = WithA(core, (0.5f + 0.4f * decay) * activeMul);
+        const float lw = (big ? 1.9f : 1.4f) * decay;
+        if (first && big) GlowLine(g, kGold, c, pX, pY, X, y, lw, 3.f * decay);
+        else g.DrawLine(c, pX, pY, X, y, nullptr, lw);
+        pX = X;
+        pY = y;
       }
       if (t > 0)
-      {
-        float tx = baseX;
-        g.DrawLine(IColor(alpha / 3, 100, 190, 210), tx, r.T + 4.f, tx, r.B - 4.f, nullptr, 0.5f);
-      }
+        g.DrawLine(WithA(kDim, 0.3f * decay * activeMul), baseX, r.T + r.H() * 0.16f, baseX, r.B - r.H() * 0.16f,
+                   nullptr, 0.6f);
     }
-    g.DrawLine(IColor((int)(35.f * activeMul), 100, 190, 210), r.L, cy, r.R, cy, nullptr, 0.5f);
   }
   else if (effect == EVoLumEffectFocus::TREMOLO)
   {
-    // Amplitude modulation: a fast carrier whose envelope swells and dips under
-    // a slow LFO, plus the dashed LFO envelope outline. The classic tremolo look.
+    // Throb bars: volume bars pulsing under a gold LFO curve. Reads unmistakably as
+    // amplitude modulation and stays clearly distinct from the Delay tap-trains.
     const float activeMul = dimmed ? 0.28f : 1.0f;
-    const IColor teal((int)(135.f * activeMul), 90, 205, 220);
-    const IColor blue((int)(140.f * activeMul), 150, 205, 245);
-    const float x0 = r.L + r.W() * 0.08f;
-    const float x1 = r.R - r.W() * 0.08f;
-    const float maxAmp = r.H() * 0.34f;
-    const int segs = 96;
-    float pcx = 0.f, pTop = 0.f, pBot = 0.f, pcy = 0.f;
-    for (int s = 0; s <= segs; ++s)
+    const IColor barTeal((int)(215.f * activeMul), 120, 210, 220);
+    const IColor barMid((int)(215.f * activeMul), 100, 180, 200);
+    const int n = 17;
+    const float span = r.W() * 0.7f;
+    const float x0 = r.L + r.W() * 0.15f;
+    const float slot = span / (float)n;
+    const float bw = slot * 0.62f;
+    for (int i = 0; i < n; ++i)
     {
-      const float t = (float)s / (float)segs;
-      const float x = x0 + (x1 - x0) * t;
-      const float env = 0.28f + 0.72f * (0.5f + 0.5f * sinf(t * 6.28318f * 1.5f - 1.5708f));
-      const float amp = maxAmp * env;
-      const float carrier = cy + sinf(t * 6.28318f * 9.f) * amp;
-      const float top = cy - amp;
-      const float bot = cy + amp;
-      if (s > 0)
-      {
-        g.DrawLine(teal, pcx, pcy, x, carrier, nullptr, 1.5f);
-        g.DrawLine(blue.WithOpacity(0.45f), pcx, pTop, x, top, nullptr, 1.0f);
-        g.DrawLine(blue.WithOpacity(0.45f), pcx, pBot, x, bot, nullptr, 1.0f);
-      }
-      pcx = x;
-      pcy = carrier;
-      pTop = top;
-      pBot = bot;
+      const float t = (float)i / (float)(n - 1);
+      const float lfo = 0.2f + 0.8f * (0.5f + 0.5f * sinf(t * 6.28318f * 2.f - 1.5708f));
+      const float bh = r.H() * 0.4f * lfo;
+      const float bx = x0 + i * slot + (slot - bw) * 0.5f;
+      g.FillRect((i % 2) ? barTeal : barMid, IRECT(bx, cy - bh, bx + bw, cy + bh));
+    }
+    float pX = x0, pY = cy - r.H() * 0.4f * 0.2f;
+    for (int s = 1; s <= 80; ++s)
+    {
+      const float t = (float)s / 80.f;
+      const float x = x0 + t * span;
+      const float lfo = 0.2f + 0.8f * (0.5f + 0.5f * sinf(t * 6.28318f * 2.f - 1.5708f));
+      const float y = cy - r.H() * 0.4f * lfo;
+      if (big)
+        g.DrawLine(IColor((int)(70.f * activeMul), 200, 165, 87), pX, pY, x, y, nullptr, 3.2f);
+      g.DrawLine(big ? IColor((int)(210.f * activeMul), 252, 222, 145) : IColor((int)(210.f * activeMul), 120, 210, 220),
+                 pX, pY, x, y, nullptr, 1.4f);
+      pX = x;
+      pY = y;
     }
   }
   else
   {
-    // Reverb (default): DLA-style branching dust grown from baseline + mid
-    // seeds. We scale the iteration count and step length to the rect size so
-    // the same pattern stays lush at pedal-card size and readable at the
-    // PRE/POST thumbnail.
+    // Reverb (default) - Deep Dust: DLA-style branching dust grown from baseline +
+    // mid seeds over a soft teal bloom. Scales from the ~22 px thumbnail to the ~150 px card.
+    const float am = dimmed ? 0.4f : 1.0f;
+    if (big) volumart::Bloom(g, r.MW(), r.MH() + r.H() * 0.1f, std::min(r.W(), r.H()) * 0.6f, volumart::kTeal, 0.10f * am);
     const float scale = std::min(r.W(), r.H()); // ~22 thumb, ~150 card
     const float sizeFactor = std::clamp(scale / 150.f, 0.18f, 1.0f);
     const int count = std::max(450, (int)(12000.f * sizeFactor * sizeFactor));

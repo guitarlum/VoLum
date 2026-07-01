@@ -104,8 +104,16 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
     }
     case EVoLumSection::POST:
     {
-      const bool delayFocus = mVolumFocusedEffect == EVoLumEffectFocus::DELAY;
-      mVolumFocusedEffect = delayFocus ? EVoLumEffectFocus::REVERB : EVoLumEffectFocus::DELAY;
+      constexpr EVoLumEffectFocus targets[3] = {
+        EVoLumEffectFocus::DELAY,
+        EVoLumEffectFocus::REVERB,
+        EVoLumEffectFocus::TREMOLO,
+      };
+      int current = 0;
+      for (int i = 0; i < 3; ++i)
+        if (targets[i] == mVolumFocusedEffect)
+          current = i;
+      mVolumFocusedEffect = targets[wrap(current + direction, 3)];
       mVolumDualAmpFocusedSupport = false;
       break;
     }
