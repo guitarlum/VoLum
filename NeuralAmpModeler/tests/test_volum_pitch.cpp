@@ -226,10 +226,12 @@ TEST_CASE("VoLumPitch tracks extended-range LOW strings (drop C / 7- / 8-string)
   // pitch tracker floor used to be 70 Hz, ABOVE drop-C C2 (65 Hz), 7-string B1
   // (62 Hz) and 8-string F#1 (46 Hz). Those strings fell outside the search range,
   // locked to a wrong period, and detuned by tens/hundreds of cents with audible
-  // warble. The floor is now 40 Hz (kPminFreq), and POLY's correlation/search
-  // windows widened to 24 ms to span one full period of the deepest strings. Both
-  // fixes are latency-free. INSTANT (period-sync) and POLY (fixed-grain WSOLA) must
-  // now hold pitch within a quarter-tone on every low string on a downshift.
+  // warble. The floor is now 40 Hz (kPminFreq), which fixes the period-synchronous
+  // characters (INSTANT here; DROP internally) at ZERO latency cost. POLY is NOT
+  // covered here: it is fixed-grain and never uses the pitch estimate, so this
+  // tracker fix does not apply to it (its accuracy is pinned by the POLY single-note
+  // and sustain tests). INSTANT must now hold pitch within a quarter-tone on every
+  // low string on a downshift.
   struct LowString
   {
     const char* name;
@@ -237,33 +239,54 @@ TEST_CASE("VoLumPitch tracks extended-range LOW strings (drop C / 7- / 8-string)
   };
   for (const LowString s : {LowString{"C2", 65.41}, LowString{"B1", 61.74}, LowString{"F#1", 46.25}})
   {
-    for (const auto ch : {VoLumPitch::Character::Instant, VoLumPitch::Character::Poly})
+    for (int semi : {-2, -5})
     {
-      for (int semi : {-2, -5})
-      {
-        VoLumPitch pitch;
-        pitch.Configure(kSR, kBlock);
-        pitch.Reset();
-        pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
-                        VoLumPitch::Voicing::Modern, 0.0, ch);
-        auto in = makeSine(s.f0, 1 << 16);
-        auto out = runStream(pitch, in);
+      VoLumPitch pitch;
+      pitch.Configure(kSR, kBlock);
+      pitch.Reset();
+      pitch.SetParams(VoLumPitch::Mode::Transpose, static_cast<double>(semi), 1.0, 0.0, 0.0, 0.0,
+                      VoLumPitch::Voicing::Modern, 0.0, VoLumPitch::Character::Instant);
+      auto in = makeSine(s.f0, 1 << 16);
+      auto out = runStream(pitch, in);
 
-        // No NaN/Inf on deep input.
-        for (double v : out)
-          CHECK(std::isfinite(v));
+      // No NaN/Inf on deep input.
+      for (double v : out)
+        CHECK(std::isfinite(v));
 
-        const double target = s.f0 * std::pow(2.0, semi / 12.0);
-        const int minLag = std::max(8, static_cast<int>(kSR / (target * 2.0)));
-        const int maxLag = static_cast<int>(kSR / (target * 0.5));
-        const double f = estimateFreq(out, static_cast<size_t>(pitch.Latency()) + 24000, 8192, minLag, maxLag);
-        INFO("string=", s.name, " char=", static_cast<int>(ch), " semi=", semi, " target=", target, " measured=", f);
-        // Pre-fix these detuned by 78..584 cents; a quarter-tone (50 c) tolerance
-        // catches any regression to the old out-of-range tracker while staying
-        // robust to the output-side autocorr estimator at these low frequencies.
-        CHECK(std::abs(cents(f, target)) < 50.0);
-      }
+      const double target = s.f0 * std::pow(2.0, semi / 12.0);
+      const int minLag = std::max(8, static_cast<int>(kSR / (target * 2.0)));
+      const int maxLag = static_cast<int>(kSR / (target * 0.5));
+      const double f = estimateFreq(out, static_cast<size_t>(pitch.Latency()) + 24000, 8192, minLag, maxLag);
+      INFO("string=", s.name, " semi=", semi, " target=", target, " measured=", f);
+      // Pre-fix these detuned by 78..584 cents; a quarter-tone (50 c) tolerance
+      // catches any regression to the old out-of-range tracker while staying
+      // robust to the output-side autocorr estimator at these low frequencies.
+      CHECK(std::abs(cents(f, target)) < 50.0);
     }
+  }
+}
+
+TEST_CASE("VoLumPitch POLY WSOLA search stays below the grain band (no runaway re-splicing)")
+{
+  // REGRESSION GUARD for the POLY "stutter/crackle at any non-zero shift" bug. POLY
+  // is fixed-grain: it splices by a whole `band` (grain spacing) and _WsolaRefine
+  // nudges the splice target within [-search, +search] for waveform alignment. If
+  // search >= band the correlation can move the target MORE than a whole grain (even
+  // back above dHi), so the next sample retriggers a splice and POLY re-splices every
+  // crossfade -> continuous crackle on real transient playing. A 24 ms search (>= the
+  // 20 ms band) briefly shipped and did exactly that; it slipped through because
+  // steady sine/triad tests can't hear it (every jump lands on similar-looking
+  // periodic waveform). Pin the invariant directly across the supported sample rates
+  // so no future band/search retune can silently reintroduce it.
+  using GV = dsp::effect::GranularVoice;
+  for (double sr : {44100.0, 48000.0, 88200.0, 96000.0})
+  {
+    const GV::SpliceGeometry g = GV::SpliceGeometryFor(GV::Character::Poly, sr);
+    INFO("sr=", sr, " search=", g.search, " band=", g.band);
+    CHECK(g.fixedGrain);
+    CHECK(g.search > 0);
+    CHECK(g.band > 0);
+    CHECK(g.search < g.band); // THE invariant: search >= band => runaway splicing.
   }
 }
 
