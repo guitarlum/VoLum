@@ -10,12 +10,8 @@ model, skills, and first step.
 
 ## Measure Twice: Plan Before Drafting
 
-For non-trivial plans or ambiguous work, prefer `/grill-me` if that skill is
-installed. If it is not installed, use the same interaction pattern directly:
-ask one question at a time, include your recommended answer, and inspect the
-codebase instead of asking when the answer is discoverable.
-
-Skip grilling for obvious single-step changes.
+For non-trivial or ambiguous work, prefer the `/grill-me` skill. Skip grilling
+for obvious single-step changes.
 
 ## Cut Once: Implementation Handoff
 

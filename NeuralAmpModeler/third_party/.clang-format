@@ -1,0 +1,7 @@
+# Vendored third-party sources (Signalsmith Stretch + Signalsmith Linear).
+# Do not reformat upstream code: keep it byte-identical to the imported release
+# so upstream diffs stay reviewable. clang-format honors the nearest config up
+# the tree, so this no-op config shields everything under third_party/ from
+# format.bash and the CI clang-format check.
+DisableFormat: true
+SortIncludes: false

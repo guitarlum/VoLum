@@ -1,5 +1,7 @@
 # Build VoLum standalone app (Release|x64) and start it for visual UI review.
 # Stops an already-running VoLum first so postbuild can replace the exe.
+# Must also stop VoLum_x64: postbuild copies VoLum.exe -> build-win\VoLum_x64.exe,
+# and a running VoLum_x64 locks that file, silently leaving a stale standalone.
 # From repo: VoLum\NeuralAmpModeler\scripts
 
 $ErrorActionPreference = "Stop"
@@ -7,7 +9,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = Resolve-Path (Join-Path $here "..")
 Set-Location $slnDir
 
-Get-Process -Name VoLum -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 200
 
 # Apply our local iPlug2 patches (idempotent). See NeuralAmpModeler/iplug2-patches/README.md.

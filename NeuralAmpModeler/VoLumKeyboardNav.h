@@ -36,6 +36,20 @@ public:
   int GetSelected() const { return mSelected; }
   int GetNumChannels() const { return (int)mLabels.size(); }
 
+  // Keyboard Left/Right: advance the selection (wrapping) and fire the SAME
+  // callback a mouse click would, so the keyboard path can never diverge from
+  // the click path (e.g. forgetting to stage the new channel's .nam).
+  void StepKeyboard(int delta)
+  {
+    const int n = (int)mLabels.size();
+    if (n < 1)
+      return;
+    mSelected = (mSelected + delta + n) % n;
+    if (mCallback)
+      mCallback(mSelected);
+    SetDirty(false);
+  }
+
   void Draw(IGraphics& g) override
   {
     const int n = (int)mLabels.size();

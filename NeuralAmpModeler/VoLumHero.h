@@ -30,11 +30,8 @@ public:
   using DismissPickerCallback = std::function<void()>;
   using IsPickerOpenCallback = std::function<bool()>;
 
-  VoLumHeroImageControl(const IRECT& bounds,
-                        FocusCallback focusCb = nullptr,
-                        PickerCallback pickerCb = nullptr,
-                        DualToggleCallback dualToggleCb = nullptr,
-                        DismissPickerCallback dismissPickerCb = nullptr,
+  VoLumHeroImageControl(const IRECT& bounds, FocusCallback focusCb = nullptr, PickerCallback pickerCb = nullptr,
+                        DualToggleCallback dualToggleCb = nullptr, DismissPickerCallback dismissPickerCb = nullptr,
                         IsPickerOpenCallback isPickerOpenCb = nullptr)
   : IControl(bounds)
   , mFocusCallback(std::move(focusCb))
@@ -43,8 +40,8 @@ public:
   , mDismissPickerCallback(std::move(dismissPickerCb))
   , mIsPickerOpenCallback(std::move(isPickerOpenCb))
   {
-    mIgnoreMouse = (mFocusCallback == nullptr && mPickerCallback == nullptr
-                    && mDualToggleCallback == nullptr && mDismissPickerCallback == nullptr);
+    mIgnoreMouse = (mFocusCallback == nullptr && mPickerCallback == nullptr && mDualToggleCallback == nullptr
+                    && mDismissPickerCallback == nullptr);
   }
 
   void Draw(IGraphics& g) override
@@ -60,8 +57,8 @@ public:
       const float scale = std::min(mRECT.W() / imgW, mRECT.H() / imgH);
       const float drawW = imgW * scale;
       const float drawH = imgH * scale;
-      const IRECT centered(mRECT.MW() - drawW / 2.f, mRECT.MH() - drawH / 2.f,
-                           mRECT.MW() + drawW / 2.f, mRECT.MH() + drawH / 2.f);
+      const IRECT centered(
+        mRECT.MW() - drawW / 2.f, mRECT.MH() - drawH / 2.f, mRECT.MW() + drawW / 2.f, mRECT.MH() + drawH / 2.f);
       g.DrawFittedBitmap(mBitmap, centered);
     }
     else
@@ -73,12 +70,13 @@ public:
   void SetPlaceholder(const char* text, int ampIdx = 0)
   {
     mPlaceholder = text;
-    if (mAmpIdx != ampIdx)
+    if (mAmpIdx != ampIdx || mCustomMode)
     {
       mAmpIdx = ampIdx;
       mMonoArtLayer = nullptr;
       mMainArtLayer = nullptr;
     }
+    mCustomMode = false; // SetPlaceholder is the factory-amp entry point
     mHasBitmap = false;
     SetDirty(false);
   }
@@ -86,6 +84,21 @@ public:
   void SetName(const char* name)
   {
     mName = name;
+    SetDirty(false);
+  }
+
+  // Custom amps render an assigned procedural art instead of the factory amp
+  // fractal. Dual amp behaves exactly like a factory main amp (the support
+  // partner is always a factory amp). Pass isCustom=false for factory art.
+  void SetCustomArt(bool isCustom, int artId)
+  {
+    if (mCustomMode != isCustom || mCustomArt != artId)
+    {
+      mCustomMode = isCustom;
+      mCustomArt = artId;
+      mMonoArtLayer = nullptr; // force art layer rebuild (mono + dual MAIN lane)
+      mMainArtLayer = nullptr;
+    }
     SetDirty(false);
   }
 
@@ -99,6 +112,22 @@ public:
     SetDirty(false);
   }
 
+  // Render the SUPPORT lane as a custom amp (its procedural art + name) instead
+  // of a factory amp, for when a custom amp is the dual-amp support partner.
+  // Pass isCustom=false to return the lane to factory rendering.
+  void SetSupportCustom(bool isCustom, int artId, const char* name)
+  {
+    const std::string n = name ? name : "";
+    if (mSupportCustomMode != isCustom || mSupportCustomArt != artId || mSupportCustomName != n)
+    {
+      mSupportArtLayer = nullptr; // force support art layer rebuild
+      mSupportCustomMode = isCustom;
+      mSupportCustomArt = artId;
+      mSupportCustomName = n;
+    }
+    SetDirty(false);
+  }
+
   void SetBitmap(const IBitmap& bitmap)
   {
     mBitmap = bitmap;
@@ -109,7 +138,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
 
     // 1. DUAL toggle chip — top-right of mono, top-right of MAIN panel in dual.
     if (mDualToggleCallback && DualChipRect().Contains(x, y))
@@ -136,29 +165,26 @@ public:
     if (mFocusCallback)
       mFocusCallback(mSupportFocused);
 
-    // Picker behaviour on the SUPPORT panel:
+    // Picker behaviour on the SUPPORT panel (consistent two-click, incl. empty state):
     //   - If the picker is already open: any click on the support panel dismisses it
-    //     (regardless of focus state) so a second click is always "close".
-    //   - Empty state (no support amp picked): the panel is the "ADD AMP" CTA — open immediately.
-    //   - Support already focused (and picker closed): clicks open the picker.
-    //   - First click that shifts focus from MAIN to support (with a support amp already picked):
-    //     focus only, no picker. The user has to click again to open the dropdown.
+    //     so a second click is always "close".
+    //   - First click that shifts focus from MAIN to support: focus only, no picker.
+    //   - Support already focused (and picker closed): the click opens the picker.
+    // The empty "no support amp yet" lane behaves the same — the first click just
+    // focuses it (shows the "Choose support amp" CTA), the second opens the dropdown.
     if (clickedSupport)
     {
       if (pickerOpen)
       {
-        if (mDismissPickerCallback) mDismissPickerCallback();
+        if (mDismissPickerCallback)
+          mDismissPickerCallback();
       }
-      else if (mPickerCallback)
+      else if (mPickerCallback && wasSupportFocused)
       {
-        const bool empty = (mSupportAmpIdx < 0 || mSupportAmpIdx >= volum::kAmpCount);
-        if (wasSupportFocused || empty)
-        {
-          const float gap = 8.f;
-          const float mid = mRECT.MW();
-          const IRECT supportPanel(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
-          mPickerCallback(supportPanel);
-        }
+        const float gap = 8.f;
+        const float mid = mRECT.MW();
+        const IRECT supportPanel(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
+        mPickerCallback(supportPanel);
       }
     }
     else if (mDismissPickerCallback)
@@ -173,7 +199,7 @@ public:
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     const bool chipHovered = mDualToggleCallback && DualChipRect().Contains(x, y);
     if (chipHovered != mDualChipHovered)
     {
@@ -191,6 +217,19 @@ public:
       SetTooltip("");
       SetDirty(false);
     }
+  }
+
+  void OnRescale() override
+  {
+    // Backing pixel scale changed (resize / DPI). The hero art is cached in layers
+    // keyed only by amp index, so a pure scale change would otherwise keep blitting
+    // the stale low-res layer. Drop them so they re-render at the new scale, and
+    // rescale the amp photo bitmap to match.
+    mMonoArtLayer = nullptr;
+    mMainArtLayer = nullptr;
+    mSupportArtLayer = nullptr;
+    if (mHasBitmap)
+      mBitmap = GetUI()->GetScaledBitmap(mBitmap);
   }
 
   // Reserve a square slot in the bottom-right of each lane for a PAN knob attached at the IGraphics
@@ -272,8 +311,7 @@ private:
     const bool active = mDualAmpActive;
     const IColor border = (active || mDualChipHovered) ? accent : VoLumColors::GOLD_DIM;
     const IColor fill = active ? IColor(mDualChipHovered ? 95 : 70, accent.R, accent.G, accent.B)
-                               : (mDualChipHovered ? IColor(34, accent.R, accent.G, accent.B)
-                                                   : IColor(0, 0, 0, 0));
+                               : (mDualChipHovered ? IColor(34, accent.R, accent.G, accent.B) : IColor(0, 0, 0, 0));
     g.FillRect(fill, chip);
     g.DrawRect(border, chip, nullptr, mDualChipHovered ? 1.4f : 1.f);
     const float cy = chip.MH();
@@ -299,13 +337,13 @@ private:
     g.FillRect(dim, IRECT(cx - arm, cy - thick, cx + arm, cy + thick));
     g.FillRect(dim, IRECT(cx - thick, cy - arm, cx + thick, cy + arm));
 
-    g.DrawText(IText(10.f, dim, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               "ADD AMP", IRECT(artRect.L, cy + r1 + 4.f, artRect.R, cy + r1 + 18.f));
+    g.DrawText(IText(10.f, dim, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "ADD AMP",
+               IRECT(artRect.L, cy + r1 + 4.f, artRect.R, cy + r1 + 18.f));
   }
 
   void DrawMonoHero(IGraphics& g)
   {
-    g.FillRect(VoLumColors::HERO_BG, mRECT);
+    DrawPanelDepth(g, mRECT);
     g.DrawRect(VoLumColors::HERO_BORDER, mRECT);
     const float cs = 16.f;
     const float m = 6.f;
@@ -318,7 +356,10 @@ private:
     if (!g.CheckLayer(mMonoArtLayer) || mCachedMonoAmpIdx != mAmpIdx)
     {
       g.StartLayer(this, artRect);
-      DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
+      if (mCustomMode)
+        DrawCustomAmpArt(g, artRect, mCustomArt, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
+      else
+        DrawHeroFractalArt(g, artRect, FractalCaseForAmp(mAmpIdx));
       mMonoArtLayer = g.EndLayer();
       mCachedMonoAmpIdx = mAmpIdx;
     }
@@ -330,7 +371,7 @@ private:
   void DrawLane(IGraphics& g, const IRECT& r, int ampIdx, const char* role, const char* name, bool focused,
                 const IColor& accent, bool drawChip, bool empty)
   {
-    g.FillRect(VoLumColors::HERO_BG, r);
+    DrawPanelDepth(g, r);
     g.DrawRect(focused ? accent : VoLumColors::HERO_BORDER, r);
     DrawCornerAccent(g, r.L + 6.f, r.T + 6.f, 12.f, false, false, focused ? accent : VoLumColors::HERO_CORNER);
     if (!drawChip)
@@ -350,6 +391,10 @@ private:
       g.StartLayer(this, artRect);
       if (empty)
         DrawEmptySupportArt(g, artRect);
+      else if (mainLane && mCustomMode)
+        DrawCustomAmpArt(g, artRect, mCustomArt, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
+      else if (!mainLane && mSupportCustomMode)
+        DrawCustomAmpArt(g, artRect, mSupportCustomArt, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
       else
         DrawHeroFractalArt(g, artRect, FractalCaseForAmp(clampedAmpIdx));
       layer = g.EndLayer();
@@ -358,13 +403,41 @@ private:
     }
     g.DrawLayer(layer);
 
-    // Title strip with amp name
+    // Title strip with amp name. Custom amp names are free-form and can be long;
+    // ellipsize to the strip width so a long name never bleeds past its lane.
     const IRECT titleStrip(r.L + 8.f, r.B - 30.f, r.R - 8.f, r.B - 8.f);
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
-    g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
-               role, IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
-    g.DrawText(IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               name, titleStrip);
+    g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle), role,
+               IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
+    const IText nameText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const std::string fitted = FitTextToWidth(g, nameText, name, titleStrip.W() - 6.f);
+    g.DrawText(nameText, fitted.c_str(), titleStrip);
+  }
+
+  // Trim `s` (appending an ellipsis) until it fits within maxW for the given
+  // text style. Returns the original string when it already fits.
+  static std::string FitTextToWidth(IGraphics& g, const IText& text, const char* s, float maxW)
+  {
+    if (!s || !*s)
+      return "";
+    std::string str = s;
+    IRECT m;
+    g.MeasureText(text, str.c_str(), m);
+    if (m.W() <= maxW)
+      return str;
+    while (str.size() > 1)
+    {
+      str.pop_back();
+      // Avoid leaving a dangling UTF-8 lead/continuation byte.
+      while (!str.empty() && (static_cast<unsigned char>(str.back()) & 0xC0) == 0x80)
+        str.pop_back();
+      const std::string cand = str + "\u2026";
+      IRECT mr;
+      g.MeasureText(text, cand.c_str(), mr);
+      if (mr.W() <= maxW)
+        return cand;
+    }
+    return str + "\u2026";
   }
 
   void DrawDualHero(IGraphics& g)
@@ -375,10 +448,13 @@ private:
     const IRECT right(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
     DrawLane(g, left, mAmpIdx, "MAIN", mName.c_str(), !mSupportFocused, VoLumColors::AMBER,
              /*drawChip=*/true, /*empty=*/false);
-    const bool hasSupport = mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount;
-    DrawLane(g, right, hasSupport ? mSupportAmpIdx : 0, "SUPPORT",
-             hasSupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp",
-             mSupportFocused, VoLumColors::TEAL,
+    const bool hasFactorySupport = mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount;
+    const bool hasSupport = mSupportCustomMode || hasFactorySupport;
+    const char* supportName = mSupportCustomMode
+                                ? mSupportCustomName.c_str()
+                                : (hasFactorySupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp");
+    DrawLane(g, right, hasFactorySupport ? mSupportAmpIdx : 0, "SUPPORT", supportName, mSupportFocused,
+             VoLumColors::TEAL,
              /*drawChip=*/false, /*empty=*/!hasSupport);
     g.FillRect(VoLumColors::BG, IRECT(mid - 1.f, mRECT.T, mid + 1.f, mRECT.B));
     DrawDualChip(g, VoLumColors::AMBER);
@@ -401,6 +477,11 @@ private:
   bool mDualAmpActive = false;
   bool mSupportFocused = false;
   bool mDualChipHovered = false;
+  bool mCustomMode = false;
+  int mCustomArt = 0;
+  bool mSupportCustomMode = false;
+  int mSupportCustomArt = 0;
+  std::string mSupportCustomName;
   FocusCallback mFocusCallback;
   PickerCallback mPickerCallback;
   DualToggleCallback mDualToggleCallback;
@@ -443,9 +524,9 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
     if (mToggleCallback)
       mToggleCallback();
     SetDirty(false);

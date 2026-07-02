@@ -36,19 +36,29 @@ public:
   {
   }
 
+  // Non-interactive "coming soon" tile (e.g. the Tremolo POST scaffold): drawn
+  // dimmed with a SOON badge, ignores clicks, never focuses. No param/DSP yet.
+  void SetPlaceholder(bool placeholder, const char* title)
+  {
+    mPlaceholder = placeholder;
+    mPlaceholderTitle = title ? title : "";
+    SetDirty(false);
+  }
+
   void Draw(IGraphics& g) override
   {
-    bool focused = mIsFocused;
-    bool bypassed = (GetValue() < 0.5);
+    bool focused = mIsFocused && !mPlaceholder;
+    bool bypassed = mPlaceholder ? true : (GetValue() < 0.5);
 
-    g.FillRect(VoLumColors::HERO_BG, mRECT);
+    if (focused)
+      g.FillRoundRect(IColor(44, 232, 168, 92), mRECT.GetPadded(2.5f), 6.f);
+    DrawPanelDepth(g, mRECT, 4.f);
     if (mHovered)
     {
       g.FillRect(IColor(18, 80, 140, 160), mRECT);
-      g.DrawRoundRect(VoLumColors::TEAL_DIM.WithOpacity(0.48f),
-                      mRECT.GetPadded(-1.f, -1.f, -1.f, -1.f), 4.f);
+      g.DrawRoundRect(VoLumColors::TEAL_DIM.WithOpacity(0.48f), mRECT.GetPadded(-1.f, -1.f, -1.f, -1.f), 4.f);
     }
-    
+
     IColor borderCol = focused ? VoLumColors::AMBER : (bypassed ? VoLumColors::FRAME : VoLumColors::TEAL_DIM);
     if (mHovered && !focused)
       borderCol = bypassed ? VoLumColors::GOLD_DIM : VoLumColors::TEAL;
@@ -60,27 +70,59 @@ public:
     DrawCornerAccent(g, mRECT.R - 4.f, mRECT.B - 4.f, cs, true, true, borderCol);
 
     IRECT artRect = mRECT.GetPadded(-2.f, -2.f, -2.f, -22.f);
-    if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed) {
+    const int variant = _MotifVariant();
+    if (!g.CheckLayer(mArtLayer) || mCachedBypassed != bypassed || mCachedVariant != variant)
+    {
       g.StartLayer(this, artRect);
       _DrawFractalArt(g, artRect, bypassed);
       mArtLayer = g.EndLayer();
       mCachedBypassed = bypassed;
+      mCachedVariant = variant;
     }
     g.DrawLayer(mArtLayer);
     if (bypassed)
       g.FillRect(VoLumColors::HERO_BG.WithOpacity(0.68f), artRect);
 
-    IText presetTxt(11.5f, bypassed ? VoLumColors::CREAM_DIM : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
-    const std::string presetName = _GetPresetName();
-    const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 22.f, mRECT.B - 4.f);
+    // Footer label. Slim PITCH/COMP cards have little width, so shrink the font
+    // to fit the reserved label box (and hard-clip as a final guard) instead of
+    // letting the text bleed under the status LED to its right.
+    const std::string presetName = mPlaceholder ? mPlaceholderTitle : _GetPresetName();
+    const IRECT presetRect(mRECT.L + 10.f, mRECT.B - 22.f, mRECT.R - 18.f, mRECT.B - 4.f);
+    float fontSize = 11.5f;
+    for (; fontSize > 8.0f; fontSize -= 0.5f)
+    {
+      IText measureTxt(fontSize, COLOR_WHITE, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+      IRECT measured;
+      g.MeasureText(measureTxt, presetName.c_str(), measured);
+      if (measured.W() <= presetRect.W())
+        break;
+    }
+    const IColor labelCol = (bypassed || mPlaceholder) ? VoLumColors::CREAM_DIM : VoLumColors::CREAM;
+    IText presetTxt(fontSize, labelCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    g.PathClipRegion(presetRect);
     g.DrawText(presetTxt, presetName.c_str(), presetRect);
+    g.PathClipRegion();
 
-    const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
-    g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.5f);
+    if (mPlaceholder)
+    {
+      // Small amber "SOON" badge in place of the status LED.
+      const IRECT badge(mRECT.R - 40.f, mRECT.B - 21.f, mRECT.R - 6.f, mRECT.B - 6.f);
+      g.FillRoundRect(VoLumColors::AMBER.WithOpacity(0.16f), badge, 3.f);
+      g.DrawRoundRect(VoLumColors::AMBER.WithOpacity(0.5f), badge, 3.f);
+      IText soonTxt(8.5f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+      g.DrawText(soonTxt, "SOON", badge);
+    }
+    else
+    {
+      const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
+      g.FillCircle(bypassed ? IColor(255, 42, 48, 52) : VoLumColors::TEAL, ledRect.MW(), ledRect.MH(), 4.5f);
+    }
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    if (mPlaceholder)
+      return;
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
     if (mIsFocused)
     {
@@ -98,12 +140,14 @@ public:
     if (mCallback)
       mCallback(this, false);
   }
-  
+
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
+    if (mPlaceholder)
+      return;
     if (!mHovered)
     {
       mHovered = true;
@@ -143,7 +187,18 @@ public:
 private:
   void _DrawFractalArt(IGraphics& g, const IRECT& r, bool dimmed)
   {
-    DrawEffectMotif(g, r, mEffect, dimmed);
+    DrawEffectMotif(g, r, mEffect, dimmed, _MotifVariant());
+  }
+
+  // PITCH motif variant: 1 = Octaver, 0 = Transpose (or any other effect).
+  int _MotifVariant()
+  {
+    if (mEffect != EVoLumEffectFocus::PITCH)
+      return 0;
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    if (!plugin)
+      return 0;
+    return (plugin->GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose) ? 0 : 1;
   }
 
 
@@ -159,27 +214,54 @@ private:
     {
       case EVoLumEffectFocus::DELAY:
         plugin->GetParam(kDelayMode)->GetDisplay(modeText);
-        summary.SetFormatted(64, "%s . %.0f ms", modeText.Get(), plugin->GetParam(kDelayTime)->Value());
+        if (plugin->GetParam(kDelaySync)->Bool())
+        {
+          WDL_String div;
+          plugin->GetParam(kDelayDivision)->GetDisplay(div);
+          summary.SetFormatted(64, "%s . %s", modeText.Get(), div.Get());
+        }
+        else
+          summary.SetFormatted(64, "%s . %.0f ms", modeText.Get(), plugin->GetParam(kDelayTime)->Value());
         return summary.Get();
       case EVoLumEffectFocus::REVERB:
         plugin->GetParam(kReverbMode)->GetDisplay(modeText);
         summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kReverbMix)->Value() * 100.0);
         return summary.Get();
-      case EVoLumEffectFocus::COMP:
-        return "Compressor";
+      case EVoLumEffectFocus::PITCH:
+        // Slim card: keep the footer compact (the card art + collapsed slot already
+        // say "PITCH"). Transpose shows the interval, Octaver just the mode.
+        if (plugin->GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose)
+          summary.SetFormatted(64, "%+d st", plugin->GetParam(kPrePitchSemitones)->Int());
+        else
+          summary.SetFormatted(64, "OCT");
+        return summary.Get();
+      case EVoLumEffectFocus::COMP: return "Compressor";
       case EVoLumEffectFocus::PRE_NAM1:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam1Capture)->Int());
       case EVoLumEffectFocus::PRE_NAM2:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam2Capture)->Int());
-      default:
-        return "BYPASS";
+      case EVoLumEffectFocus::TREMOLO:
+        plugin->GetParam(kTremoloMode)->GetDisplay(modeText);
+        if (plugin->GetParam(kTremoloSync)->Bool())
+        {
+          WDL_String div;
+          plugin->GetParam(kTremoloDivision)->GetDisplay(div);
+          summary.SetFormatted(64, "%s . %s", modeText.Get(), div.Get());
+        }
+        else
+          summary.SetFormatted(64, "%s . %.1f Hz", modeText.Get(), plugin->GetParam(kTremoloRate)->Value());
+        return summary.Get();
+      default: return "BYPASS";
     }
   }
 
   EVoLumEffectFocus mEffect;
   bool mIsFocused = false;
   bool mHovered = false;
+  bool mPlaceholder = false;
+  std::string mPlaceholderTitle;
   ILayerPtr mArtLayer;
   bool mCachedBypassed = false;
+  int mCachedVariant = -1; // PITCH motif sub-mode the cached art layer was drawn for.
   ClickCallback mCallback;
 };

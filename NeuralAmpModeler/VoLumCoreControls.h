@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <functional>
 
 class VoLumBackgroundControl : public IControl
@@ -28,11 +29,14 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(VoLumColors::BG, mRECT);
+    // Main canvas: gentle top-lit vertical gradient + soft edge vignette so the
+    // large dark field reads as a lit panel instead of a flat fill.
+    FillVGradient(g, mRECT, IColor(255, 21, 21, 29), IColor(255, 12, 12, 18));
+    DrawVignette(g, mRECT, 72);
 
-    // Sidebar
+    // Sidebar (recedes via a slightly darker vertical gradient).
     IRECT sidebar(mRECT.L, mRECT.T, mRECT.L + mSidebarWidth, mRECT.B);
-    g.FillRect(VoLumColors::SIDEBAR_BG, sidebar);
+    FillVGradient(g, sidebar, VoLumColors::SIDEBAR_BG, VoLumColors::SIDEBAR_BG2);
     g.DrawLine(VoLumColors::SIDEBAR_BORDER, sidebar.R, sidebar.T, sidebar.R, sidebar.B);
 
     // Outer gold frame
@@ -127,17 +131,12 @@ public:
       IRECT itemArea = IRECT(mRECT.L + 12.f, mRECT.T + i * itemH, mRECT.R, mRECT.T + (i + 1) * itemH);
       bool isSelected = (i == selected);
 
-      if (isSelected) {
-        g.FillRect(VoLumColors::AMBER, itemArea.GetPadded(-1.f));
-      }
-      else if (static_cast<int>(i) == mHovered)
-      {
-        // Soft amber wash to telegraph the click target without competing with the
-        // current selection's solid amber fill.
-        g.FillRect(IColor(48, 226, 165, 78), itemArea.GetPadded(-1.f));
-      }
+      // Selection chrome via the shared helper (square amber fill / soft amber
+      // hover wash). See VoLumColorHelpers.h DrawVoLumSelection.
+      DrawVoLumSelection(g, itemArea, isSelected, static_cast<int>(i) == mHovered,
+                         VoLumSelectionStyle::AmberPicker, /*roundness=*/0.f, /*inset=*/1.f);
 
-      IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
+      IColor textCol = SelectionInkColor(VoLumSelectionStyle::AmberPicker, isSelected);
       IText text(11.f, textCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
       IRECT textArea = itemArea;
       textArea.L += 6.f; // manually indent instead of GetTranslated which shifts the whole rect
@@ -195,9 +194,7 @@ public:
     if (mName.empty()) return;
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
 
-    IColor col = VoLumColors::GOLD;
-    g.DrawText(IText(21.f, col, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               mName.c_str(), nameArea);
+    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
     float cy = nameArea.B + 8.f;
@@ -231,8 +228,7 @@ public:
   void Draw(IGraphics& g) override
   {
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
-    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               mName.c_str(), nameArea);
+    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
     float cy = nameArea.B + 8.f;
@@ -263,14 +259,13 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(IColor(255, 10, 10, 16), mRECT);
-    g.DrawRect(IColor(20, 200, 162, 78), mRECT);
+    DrawInsetWell(g, mRECT, 2.f);
 
     float fillH = mRECT.H() * mLevel;
     if (fillH > 1.f)
     {
       IRECT fill(mRECT.L + 1.f, mRECT.B - fillH, mRECT.R - 1.f, mRECT.B - 1.f);
-      g.FillRect(VoLumColors::METER_GREEN, fill);
+      FillVGradient(g, fill, IColor(255, 96, 200, 120), VoLumColors::METER_GREEN);
     }
   }
 
@@ -345,12 +340,24 @@ public:
     SetDirty(false);
   }
 
+  // Optionally map each pill slot to a specific PARAM integer value, for a pill
+  // that exposes only a SUBSET of an enum param (e.g. show INSTANT+POLY out of a
+  // {Drop,Instant,Poly} enum whose order is serialization-frozen). `denom` is the
+  // param's (enum count - 1) used to normalize. When unset, the pill maps slot i
+  // to normalized i/(n-1) as before.
+  void SetValueMap(const std::vector<int>& values, int denom)
+  {
+    mValues = values;
+    mValueDenom = denom;
+    SetDirty(false);
+  }
+
   void Draw(IGraphics& g) override
   {
     const int n = static_cast<int>(mLabels.size());
     if (n <= 0)
       return;
-    const int selected = std::clamp(static_cast<int>(GetValue() * (n - 1) + 0.5), 0, n - 1);
+    const int selected = SelectedSlot(n);
     const float itemW = mRECT.W() / static_cast<float>(n);
 
     g.FillRoundRect(IColor(160, 14, 16, 22), mRECT, 4.f);
@@ -369,15 +376,15 @@ public:
       const IRECT itemArea(l, mRECT.T, r, mRECT.B);
       const bool isSelected = (i == selected);
 
-      if (isSelected)
-        g.FillRoundRect(VoLumColors::AMBER, itemArea.GetPadded(-1.5f), 3.f);
-      else if (i == mHovered)
-        g.FillRoundRect(IColor(48, 226, 165, 78), itemArea.GetPadded(-1.5f), 3.f);
+      // Selection chrome via the shared helper (rounded amber fill / soft amber
+      // hover wash). See VoLumColorHelpers.h DrawVoLumSelection.
+      DrawVoLumSelection(g, itemArea, isSelected, i == mHovered, VoLumSelectionStyle::AmberPicker,
+                         /*roundness=*/3.f, /*inset=*/1.5f);
 
       if (i > 0)
         g.DrawLine(IColor(96, 200, 162, 78), itemArea.L, mRECT.T + 3.f, itemArea.L, mRECT.B - 3.f, nullptr, 1.f);
 
-      const IColor textCol = isSelected ? IColor(255, 26, 18, 8) : VoLumColors::TEXT_BRIGHT;
+      const IColor textCol = SelectionInkColor(VoLumSelectionStyle::AmberPicker, isSelected);
       const IText text(fontSize, textCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
       const IRECT textArea = itemArea.GetPadded(-3.f, 0.f, -3.f, 0.f);
       g.DrawText(text, mLabels[i].c_str(), textArea);
@@ -391,7 +398,10 @@ public:
       return;
     const float itemW = mRECT.W() / static_cast<float>(n);
     const int idx = std::clamp(static_cast<int>((x - mRECT.L) / itemW), 0, n - 1);
-    SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
+    if (!mValues.empty() && mValueDenom > 0)
+      SetValue(static_cast<double>(mValues[static_cast<size_t>(idx)]) / static_cast<double>(mValueDenom));
+    else
+      SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
     SetDirty(true);
   }
 
@@ -419,7 +429,32 @@ public:
   }
 
 private:
+  // Which pill slot is currently selected. With a value-map, pick the slot whose
+  // mapped param value is nearest the live param int (so a legacy value outside
+  // the exposed subset - e.g. a retired Drop=0 - shows the nearest kept option).
+  int SelectedSlot(int n) const
+  {
+    if (!mValues.empty() && mValueDenom > 0)
+    {
+      const int cur = static_cast<int>(GetValue() * mValueDenom + 0.5);
+      int best = 0, bestDist = std::numeric_limits<int>::max();
+      for (int i = 0; i < static_cast<int>(mValues.size()) && i < n; ++i)
+      {
+        const int d = std::abs(mValues[static_cast<size_t>(i)] - cur);
+        if (d < bestDist)
+        {
+          bestDist = d;
+          best = i;
+        }
+      }
+      return best;
+    }
+    return std::clamp(static_cast<int>(GetValue() * (n - 1) + 0.5), 0, n - 1);
+  }
+
   std::vector<std::string> mLabels;
+  std::vector<int> mValues;
+  int mValueDenom = 0;
   int mHovered = -1;
 };
 

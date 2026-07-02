@@ -23,12 +23,17 @@ struct Rect
   TargetRect As() const { return TargetRect(L, T, R, B); }
 };
 
-static constexpr float kTriptychW = 620.f;
-static constexpr float kTriptychH = 196.f;
-static constexpr float kSideStripW = 100.f;
+// Triptych width is grown outward (symmetric about the center) vs the original
+// 620 so the PRE 4-card and POST 3-card rows breathe and the NAM hero blocks
+// gain absolute width rather than losing it. The three expanded states stay the
+// same total width via the invariant:
+//   kSectionExpandedW + kCollapsedAmpW == kAmpExpandedW + kSideStripW
+static constexpr float kTriptychW = 686.f;
+static constexpr float kTriptychH = 208.f;
+static constexpr float kSideStripW = 116.f;
 static constexpr float kGap = 10.f;
-static constexpr float kAmpExpandedW = 400.f;
-static constexpr float kSectionExpandedW = 430.f;
+static constexpr float kAmpExpandedW = 434.f;
+static constexpr float kSectionExpandedW = 480.f;
 static constexpr float kCollapsedAmpW = 70.f;
 
 static constexpr float kCardPad = 14.f;
@@ -47,18 +52,22 @@ struct Frames
 
 struct PreCards
 {
+  Rect pitch;
   Rect comp;
   Rect nam1;
   Rect nam2;
   Rect connector1;
   Rect connector2;
+  Rect connector3;
 };
 
 struct PostCards
 {
   Rect delay;
   Rect reverb;
-  Rect connector;
+  Rect tremolo;
+  Rect connector1;
+  Rect connector2;
 };
 
 inline Rect BoundsForCenter(float centerX, float top)
@@ -112,16 +121,24 @@ inline PreCards ComputePreCards(const Rect& preRect)
   const float cardTop = preRect.T + kCardTopInset;
   const float cardBot = preRect.B - kCardBottomInset;
   const float cardH = cardBot - cardTop;
-  const float cardW = (preRect.W() - kCardPad * 2.f - kPreCardGap * 2.f) / 3.f;
   const float cardL = preRect.L + kCardPad;
 
-  const Rect comp(cardL, cardTop, cardL + cardW, cardTop + cardH);
-  const Rect nam1(comp.R + kPreCardGap, cardTop, comp.R + kPreCardGap + cardW, cardTop + cardH);
-  const Rect nam2(nam1.R + kPreCardGap, cardTop, nam1.R + kPreCardGap + cardW, cardTop + cardH);
-  const Rect connector1(comp.R, preRect.MH() - kConnectorHalfH, nam1.L, preRect.MH() + kConnectorHalfH);
-  const Rect connector2(nam1.R, preRect.MH() - kConnectorHalfH, nam2.L, preRect.MH() + kConnectorHalfH);
+  // Mixed-width 4-card PRE strip: slim PITCH + slim COMP utility pedals, wider NAM 1 / NAM 2
+  // amp blocks (they carry the focus art and longer names). Widths sum to the inner span minus
+  // the three inter-card gaps. Slim cards take ~41% combined, wide cards ~59%.
+  const float innerCards = preRect.W() - kCardPad * 2.f - kPreCardGap * 3.f;
+  const float slimW = innerCards * 0.205f;
+  const float wideW = innerCards * 0.295f;
 
-  return {comp, nam1, nam2, connector1, connector2};
+  const Rect pitch(cardL, cardTop, cardL + slimW, cardTop + cardH);
+  const Rect comp(pitch.R + kPreCardGap, cardTop, pitch.R + kPreCardGap + slimW, cardTop + cardH);
+  const Rect nam1(comp.R + kPreCardGap, cardTop, comp.R + kPreCardGap + wideW, cardTop + cardH);
+  const Rect nam2(nam1.R + kPreCardGap, cardTop, nam1.R + kPreCardGap + wideW, cardTop + cardH);
+  const Rect connector1(pitch.R, preRect.MH() - kConnectorHalfH, comp.L, preRect.MH() + kConnectorHalfH);
+  const Rect connector2(comp.R, preRect.MH() - kConnectorHalfH, nam1.L, preRect.MH() + kConnectorHalfH);
+  const Rect connector3(nam1.R, preRect.MH() - kConnectorHalfH, nam2.L, preRect.MH() + kConnectorHalfH);
+
+  return {pitch, comp, nam1, nam2, connector1, connector2, connector3};
 }
 
 inline PostCards ComputePostCards(const Rect& postRect)
@@ -129,14 +146,18 @@ inline PostCards ComputePostCards(const Rect& postRect)
   const float cardTop = postRect.T + kCardTopInset;
   const float cardBot = postRect.B - kCardBottomInset;
   const float cardH = cardBot - cardTop;
-  const float cardW = (postRect.W() - kCardPad * 2.f - kPostCardGap) / 2.f;
+  // Three equal-width peer cards (DELAY / REVERB / TREMOLO): unlike PRE there is
+  // no hero block here, so even sizing reads cleanest.
+  const float cardW = (postRect.W() - kCardPad * 2.f - kPostCardGap * 2.f) / 3.f;
   const float cardL = postRect.L + kCardPad;
 
   const Rect delay(cardL, cardTop, cardL + cardW, cardTop + cardH);
   const Rect reverb(delay.R + kPostCardGap, cardTop, delay.R + kPostCardGap + cardW, cardTop + cardH);
-  const Rect connector(delay.R, postRect.MH() - kConnectorHalfH, reverb.L, postRect.MH() + kConnectorHalfH);
+  const Rect tremolo(reverb.R + kPostCardGap, cardTop, reverb.R + kPostCardGap + cardW, cardTop + cardH);
+  const Rect connector1(delay.R, postRect.MH() - kConnectorHalfH, reverb.L, postRect.MH() + kConnectorHalfH);
+  const Rect connector2(reverb.R, postRect.MH() - kConnectorHalfH, tremolo.L, postRect.MH() + kConnectorHalfH);
 
-  return {delay, reverb, connector};
+  return {delay, reverb, tremolo, connector1, connector2};
 }
 
 } // namespace volum::triptych_layout

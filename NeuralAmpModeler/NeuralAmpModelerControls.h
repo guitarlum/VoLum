@@ -76,8 +76,8 @@ public:
     if (label)
       mKeyboardLabel = label;
 
-    mText = IText(16.f, COLOR_WHITE, "Josefin-Bold", EAlign::Center, EVAlign::Middle, 0.f,
-                  IColor(235, 18, 20, 28), IColor(255, 255, 248, 238));
+    mText = IText(16.f, COLOR_WHITE, "Josefin-Bold", EAlign::Center, EVAlign::Middle, 0.f, IColor(235, 18, 20, 28),
+                  IColor(255, 255, 248, 238));
     SetTextEntryLength(12);
   }
 
@@ -93,10 +93,7 @@ public:
 
   bool IsSelectedForKeyboard() const { return mKeyboardSelected; }
   const char* GetKeyboardLabel() const { return mKeyboardLabel.c_str(); }
-  IRECT GetKeyboardEntryBounds() const
-  {
-    return mValueBounds.GetCentredInside(132.f, 36.f).GetVShifted(8.f);
-  }
+  IRECT GetKeyboardEntryBounds() const { return mValueBounds.GetCentredInside(132.f, 36.f).GetVShifted(8.f); }
 
   void PromptExactValueEntry()
   {
@@ -119,22 +116,13 @@ public:
         if (auto* pPlugin = PLUG())
           return pPlugin->_SelectAdjacentVoLumKnob(GetParamIdx(), 1);
         return false;
-      case kVK_DOWN:
-        return Nudge(false, key.S);
-      case kVK_UP:
-        return Nudge(true, key.S);
-      case kVK_RETURN:
-        PromptExactValueEntry();
-        return true;
+      case kVK_DOWN: return Nudge(false, key.S);
+      case kVK_UP: return Nudge(true, key.S);
+      case kVK_RETURN: PromptExactValueEntry(); return true;
       case kVK_DELETE:
-      case kVK_BACK:
-        SetValueToDefault();
-        return true;
-      case kVK_ESCAPE:
-        SetSelectedForKeyboard(false);
-        return true;
-      default:
-        return false;
+      case kVK_BACK: SetValueToDefault(); return true;
+      case kVK_ESCAPE: SetSelectedForKeyboard(false); return true;
+      default: return false;
     }
   }
 
@@ -171,15 +159,15 @@ public:
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
   {
-    (void) x;
-    (void) y;
+    (void)x;
+    (void)y;
     return HandleKeyboardInput(key);
   }
 
   void OnMouseWheel(float x, float y, const IMouseMod& mod, float d) override
   {
-    (void) x;
-    (void) y;
+    (void)x;
+    (void)y;
 
     if (IsDisabled())
       return;
@@ -222,10 +210,7 @@ public:
   }
 
 private:
-  double GetKeyboardStep(bool fine) const
-  {
-    return volum::keyboard::StepForParam(GetParamIdx(), fine);
-  }
+  double GetKeyboardStep(bool fine) const { return volum::keyboard::StepForParam(GetParamIdx(), fine); }
 
   bool mKeyboardSelected = false;
   volum::keyboard::WheelAccumulator mWheelAccum;
@@ -348,9 +333,9 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
     SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
   }
 };
@@ -769,10 +754,8 @@ public:
   {
     IRECT r(GetRECT());
     const float footerCapH = 20.f;
-    const IVStyle headingStyle =
-      mStyle.WithDrawFrame(false)
-        .WithValueText(
-          IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top));
+    const IVStyle headingStyle = mStyle.WithDrawFrame(false).WithValueText(
+      IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top));
     AddChildControl(new IVLabelControl(r.ReduceFromTop(footerCapH), "Model information", headingStyle));
     const float rowH = 14.f;
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.sampleRate);
@@ -816,10 +799,7 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(bounds, paramIdx, {},
-                         "",
-                         style, EVShape::Ellipse, EDirection::Vertical,
-                         buttonSize) {};
+  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize) {};
 
   void DrawWidget(IGraphics& g) override
   {
@@ -849,7 +829,12 @@ public:
                  mMouseOverButton == i, IVTabSwitchControl::ETabSegment::Mid, IsDisabled() || GetStateDisabled(i));
       if (s[0] != '\0')
       {
-        const IColor fg = (i == hit) ? GetColor(kON) : GetColor(kX1);
+        // A disabled mode (e.g. Calibrated when the model carries no output-level
+        // calibration) reads as a dimmed "(n/a)" row instead of full-strength text.
+        const bool stateDisabled = IsDisabled() || GetStateDisabled(i);
+        IColor fg = (i == hit) ? GetColor(kON) : GetColor(kX1);
+        if (stateDisabled)
+          fg = VoLumColors::TEXT_DIM.WithOpacity(0.42f);
         IRECT textR(x0 + mButtonAreaWidth + textGap, rowR.T, x0 + maxContentW + 2.f, rowR.B);
         g.DrawText(mStyle.valueText.WithFGColor(fg), s, textR, &mBlend);
       }
@@ -878,6 +863,83 @@ public:
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
   };
+};
+
+// VoLum: non-parameter A2 Lite-mode toggle for the Settings overlay. Reads and
+// writes the machine-global Lite/Full choice on the plugin (persisted to
+// volum-settings.json, NOT the plugin chunk). Off = Full (best quality,
+// default); On = Lite (smaller A2 slice, lower CPU). No effect on rigs that are
+// not slimmable containers.
+class VoLumLiteModeSwitchControl : public IControl
+{
+public:
+  VoLumLiteModeSwitchControl(const IRECT& bounds, const IText& labelText)
+  : IControl(bounds)
+  , mLabelText(labelText.WithAlign(EAlign::Near).WithVAlign(EVAlign::Middle))
+  {
+    SetTooltip(
+      "Lite mode runs the smaller A2-Lite slice of A2 amp/pedal captures to lower CPU.\n"
+      "Off = full quality (default). Applies to all NAM lanes; no effect on non-A2 rigs.");
+  }
+
+  bool IsLite() const
+  {
+    if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(const_cast<VoLumLiteModeSwitchControl*>(this)->GetDelegate()))
+      return plugin->_VolumIsLiteMode();
+    return false;
+  }
+
+  // Geometry of the two-segment FULL | LITE switch within our rect (shared by
+  // Draw and OnMouseDown so the hit-test always matches what is drawn).
+  IRECT SegmentTrack() const
+  {
+    const float segW = std::min(176.f, mRECT.W());
+    const float segH = 26.f;
+    return mRECT.GetFromTop(segH).GetCentredInside(segW, segH);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    // Explicit two-state switch so the active quality mode is unambiguous:
+    // FULL (best quality, default) on the left, LITE (lower CPU) on the right.
+    const bool lite = IsLite();
+    const IRECT seg = SegmentTrack();
+    const float cr = seg.H() * 0.5f;
+    const IRECT leftR = seg.GetFromLeft(seg.W() * 0.5f);
+    const IRECT rightR = seg.GetFromRight(seg.W() * 0.5f);
+    const IRECT activeR = lite ? rightR : leftR;
+
+    // Recessed track, then a brass slug behind the active segment.
+    g.FillRoundRect(IColor(255, 9, 9, 14), seg, cr);
+    g.FillRoundRect(VoLumColors::GOLD.WithOpacity(0.30f), activeR, cr);
+    g.DrawRoundRect(VoLumColors::GOLD, activeR, cr, &mBlend, 1.25f);
+    g.DrawRoundRect(VoLumColors::FRAME, seg, cr, &mBlend, 1.f);
+
+    const IText onText(12.f, VoLumColors::SEL_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const IText offText(
+      12.f, VoLumColors::TEXT_DIM.WithOpacity(0.55f), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    g.DrawText(lite ? offText : onText, "FULL", leftR);
+    g.DrawText(lite ? onText : offText, "LITE", rightR);
+
+    if (mMouseIsOver)
+      g.FillRoundRect(PluginColors::MOUSEOVER, seg, cr);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    (void)y;
+    (void)mod;
+    if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+    {
+      const IRECT seg = SegmentTrack();
+      const bool wantLite = x >= seg.MW();
+      plugin->_VolumSetLiteMode(wantLite);
+    }
+    SetDirty(false);
+  }
+
+private:
+  IText mLabelText;
 };
 
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren
@@ -958,16 +1020,13 @@ public:
     const float pad = 22.0f;
     const IRECT rootB = GetRECT();
     const float panelW = rootB.W() * 0.84f;
-    const float panelH = rootB.H() * 0.80f;
+    const float panelH = rootB.H() * 0.84f;
     const IRECT panel = rootB.GetCentredInside(static_cast<int>(panelW), static_cast<int>(panelH));
     // Poiret reads too light/small for an overlay title; use Josefin-Bold for a clear “panel” headline.
-    const IVStyle titleStyle = mStyle.WithDrawFrame(false)
-                                 .WithShowValue(false)
-                                 .WithValueText(
-                                   IText(44.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
+    const IVStyle titleStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+      IText(44.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
     const auto text = IText(15.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
-    const auto leftText =
-      text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
+    const auto leftText = text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
     const auto style = mStyle.WithDrawFrame(false).WithValueText(text);
     const IVStyle leftStyle = style.WithValueText(leftText);
 
@@ -977,7 +1036,7 @@ public:
 
     auto headerRow = inner.ReduceFromTop(58.0f);
     AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
-    (void) inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
+    (void)inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
 
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
@@ -985,99 +1044,133 @@ public:
     const IRECT closeR(headerRow.R - 36.f, headerRow.T + 4.f, headerRow.R - 6.f, headerRow.T + 32.f);
     AddNamedChildControl(new VoLumSettingsCloseControl(closeR, closeAction), mControlNames.close);
 
-    const float bottomH = 168.0f;
-    auto bottomStrip = inner.ReduceFromBottom(bottomH);
-    bottomStrip = bottomStrip.GetPadded(10.f);
-    AddNamedChildControl(
-      new VoLumSettingsFooterSepControl(IRECT(bottomStrip.L, bottomStrip.T, bottomStrip.R, bottomStrip.T + 1.f)),
-      mControlNames.footerSep);
-    const float modelColFrac = 0.42f;
-    const float modelColW = bottomStrip.W() * modelColFrac;
-    const float lineHeight = 20.0f;
-    const float footerGapBelowRule = 18.f;
-    const IRECT footerBody(bottomStrip.L, bottomStrip.T + footerGapBelowRule, bottomStrip.R, bottomStrip.B);
-    const float shortcutTopGap = 0.f;
-    const float shortcutH = 92.f;
-    const IRECT shortcutArea(footerBody.L + 12.f, footerBody.T + shortcutTopGap,
-                             footerBody.R - 12.f, footerBody.T + shortcutTopGap + shortcutH);
-    const IRECT footerTextBody(footerBody.L, shortcutArea.B + 12.f, footerBody.R, footerBody.B);
-    const auto modelInfoArea = footerTextBody.GetFromLeft(modelColW);
-    const auto aboutArea = footerTextBody.GetFromRight(footerTextBody.W() - modelColW);
+    // Shared section-cap style for the three cards (gold, bold, centred).
+    const IVStyle sectionCapStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+      IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
 
-    // Input calibration + output mode: VoLum fills mid band; balanced columns + rule (see ui-mockup/settings-overlay-mockup.html)
+    // ---- Footer, reserved bottom-up so the card row absorbs any extra slack ----
+    // Bottom: model information (left) + about (right). The About block needs four
+    // lines (brand + version + ecosystem + URL), so keep this row tall enough.
+    const IRECT metaRow = inner.ReduceFromBottom(64.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
+    const float modelColW = metaRow.W() * 0.46f;
+    const auto modelInfoArea = metaRow.GetFromLeft(modelColW);
+    const auto aboutArea = metaRow.GetFromRight(metaRow.W() - modelColW);
+
+    // Above it: the "real audio settings live elsewhere" hint line.
+    (void)inner.ReduceFromBottom(6.f);
+    const IRECT hintRow = inner.ReduceFromBottom(16.f);
+
+    // Above that: the keyboard shortcut cheat-sheet box (tall enough for the
+    // four-row Edit column).
+    (void)inner.ReduceFromBottom(12.f);
+    const IRECT shortcutArea = inner.ReduceFromBottom(94.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
+
+    // Hairline divider separating the interactive cards from the footer block.
+    (void)inner.ReduceFromBottom(12.f);
+    const IRECT sepRow = inner.ReduceFromBottom(1.f);
+    AddNamedChildControl(new VoLumSettingsFooterSepControl(sepRow), mControlNames.footerSep);
+    (void)inner.ReduceFromBottom(14.f);
+
+    // ---- Card row: Input calibration | Output mode | Performance ----
+    // Three equal, framed cards in one balanced row so the Performance / Lite
+    // toggle gets a real home instead of floating on the divider.
     {
-      const IRECT workArea = inner.GetPadded(10.f, 10.f, 10.f, 10.f);
-      const IRECT calRow = workArea;
-      const float gutter = 6.f;
-      const float ruleW = 1.f;
-      const float colW = (calRow.W() - (2.f * gutter + ruleW)) * 0.5f;
-      const IRECT inputArea(calRow.L, calRow.T, calRow.L + colW, calRow.B);
-      const IRECT ruleArea(calRow.L + colW + gutter, calRow.T + 16.f, calRow.L + colW + gutter + ruleW, calRow.B - 22.f);
-      const IRECT outputArea(calRow.L + colW + 2.f * gutter + ruleW, calRow.T, calRow.R, calRow.B);
-      AddNamedChildControl(new VoLumSettingsVertRuleControl(ruleArea), mControlNames.midRule);
+      const IRECT cardsBand = inner.GetPadded(-2.f, 0.f, -2.f, 0.f);
+      const float cardGap = 14.f;
+      const float cardW = (cardsBand.W() - 2.f * cardGap) / 3.f;
+      const float cardH = std::min(cardsBand.H(), 176.f);
+      const IRECT cardsRow = cardsBand.GetCentredInside(cardsBand.W(), cardH);
+      const float x0 = cardsRow.L;
+      const IRECT inputCard(x0, cardsRow.T, x0 + cardW, cardsRow.B);
+      const IRECT outputCard(x0 + cardW + cardGap, cardsRow.T, x0 + 2.f * cardW + cardGap, cardsRow.B);
+      const IRECT perfCard(x0 + 2.f * (cardW + cardGap), cardsRow.T, cardsRow.R, cardsRow.B);
 
-      const float secH = 22.f;
-      const float secGap = 8.f;
-      const IVStyle sectionCapStyle =
-        mStyle.WithDrawFrame(false)
-          .WithShowValue(false)
-          .WithValueText(
-            IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
+      const float capH = 18.f;
+      const float capGap = 8.f;
+      auto cardInnerOf = [](const IRECT& c) { return c.GetPadded(-14.f); };
+      auto capOf = [&](const IRECT& c) { return cardInnerOf(c).GetFromTop(capH); };
+      auto bodyOf = [&](const IRECT& c) { return cardInnerOf(c).GetReducedFromTop(capH + capGap); };
 
-      const auto inputTitleR = inputArea.GetFromTop(secH);
-      const auto inputBody = inputArea.GetReducedFromTop(secH);
-      const auto outputTitleR = outputArea.GetFromTop(secH);
-      const auto outputBody = outputArea.GetReducedFromTop(secH);
-      const auto inputCardBody = inputBody.GetReducedFromTop(secGap);
-      const auto outputCardBody = outputBody.GetReducedFromTop(secGap);
+      // Card frames first so all interactive content paints on top of them.
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputCard), mControlNames.inputGroupFrame);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputCard), mControlNames.outputGroupFrame);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(perfCard), mControlNames.perfGroupFrame);
 
-      const float outCardMaxW = 260.f;
-      const float bodyMinH = std::min(inputCardBody.H(), outputCardBody.H());
-      const float cardH = std::min(124.f, std::max(110.f, bodyMinH - 4.f));
-      const float cardW = std::min(outCardMaxW, std::min(inputCardBody.W(), outputCardBody.W()));
+      // --- Input calibration: dBu field stacked above the Calibrate switch ---
+      {
+        const IRECT body = bodyOf(inputCard);
+        const float fieldH = 30.f;
+        const float fieldW = std::min(120.f, body.W());
+        const float switchH = NAM_SWTICH_HEIGHT;
+        const float gap = 6.f;
+        const float stackH = fieldH + gap + switchH;
+        IRECT stack = body.GetCentredInside(body.W(), std::min(body.H(), stackH));
+        const IRECT fieldR = stack.ReduceFromTop(fieldH).GetCentredInside(fieldW, fieldH);
+        (void)stack.ReduceFromTop(gap);
+        const IRECT switchR = stack.ReduceFromTop(switchH).GetCentredInside(std::min(110.f, body.W()), switchH);
 
-      const auto inputBlock = inputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputBlock.GetPadded(12.f)),
-                           mControlNames.inputGroupFrame);
-      const auto inputInner = inputBlock.GetPadded(14.f);
-      const float knobWidth = 84.0f;
-      const float switchH = NAM_SWTICH_HEIGHT;
-      const float stackH = 30.f + 8.f + switchH;
-      auto inputStack = inputInner.GetCentredInside(inputInner.W(), static_cast<int>(stackH));
-      const auto inputLevelArea = inputStack.ReduceFromTop(30.f).GetMidHPadded(0.5f * knobWidth);
-      (void) inputStack.ReduceFromTop(8.f);
-      const auto inputSwitchArea = inputStack.ReduceFromTop(switchH).GetMidHPadded(0.5f * knobWidth);
+        auto* inputLevelControl =
+          AddNamedChildControl(new InputLevelControl(fieldR, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
+                               mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
+        inputLevelControl->SetTooltip(
+          "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
+          "enters this plugin.");
+        AddNamedChildControl(new NAMSwitchControl(switchR, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
+                             mControlNames.calibrateInput, kCtrlTagCalibrateInput);
+      }
 
-      auto* inputLevelControl = AddNamedChildControl(
-        new InputLevelControl(inputLevelArea, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
-        mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
-      inputLevelControl->SetTooltip(
-        "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
-        "enters this plugin.");
+      // --- Output mode: Raw / Normalized / Calibrated radios ---
+      {
+        const IRECT body = bodyOf(outputCard);
+        const float radioBandH = 56.f;
+        const IRECT radioArea = body.GetCentredInside(body.W(), std::min(body.H(), radioBandH));
+        const float buttonSize = 11.0f;
+        auto* outputModeControl =
+          AddNamedChildControl(new OutputModeControl(radioArea, kOutputMode, mRadioButtonStyle, buttonSize),
+                               mControlNames.outputMode, kCtrlTagOutputMode);
+        outputModeControl->SetTooltip(
+          "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
+          "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration (needs a model with "
+          "output-level data).");
+      }
+
+      // --- Performance: centred Lite-mode toggle + helper line ---
+      {
+        const IRECT body = bodyOf(perfCard);
+        const float liteH = 30.f;
+        const float helpH = 16.f;
+        const float gap = 10.f;
+        const float groupH = liteH + gap + helpH;
+        IRECT group = body.GetCentredInside(body.W(), std::min(body.H(), groupH));
+        const IRECT liteR = group.ReduceFromTop(liteH);
+        (void)group.ReduceFromTop(gap);
+        const IRECT helpR = group.ReduceFromTop(helpH);
+        AddNamedChildControl(new VoLumLiteModeSwitchControl(liteR, leftText), mControlNames.liteMode);
+        const IVStyle helpStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+          IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.7f), "Josefin-Sans", EAlign::Center, EVAlign::Top));
+        AddNamedChildControl(
+          new IVLabelControl(helpR, "Lite: smaller A2 slice, lower CPU", helpStyle), mControlNames.perfHelp);
+      }
+
+      // Section caps on top of each card frame.
       AddNamedChildControl(
-        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
-        mControlNames.calibrateInput, kCtrlTagCalibrateInput);
-
-      const auto outputBlock = outputCardBody.GetFromTop(cardH).GetCentredInside(cardW, cardH);
-      // Match input column: full card frame, then inner padding (radios only in a short band — not a tall rect).
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputBlock.GetPadded(12.f)),
-                           mControlNames.outputGroupFrame);
-      const auto outputInner = outputBlock.GetPadded(14.f);
-      const float radioBandH = 46.f;
-      const IRECT outputRadioArea =
-        outputInner.GetCentredInside(static_cast<int>(outputInner.W()), static_cast<int>(radioBandH));
-      const float buttonSize = 11.0f;
-      auto* outputModeControl =
-        AddNamedChildControl(new OutputModeControl(outputRadioArea, kOutputMode, mRadioButtonStyle, buttonSize),
-                             mControlNames.outputMode, kCtrlTagOutputMode);
-      outputModeControl->SetTooltip(
-        "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
-        "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
-      AddNamedChildControl(new IVLabelControl(inputTitleR, "Input calibration", sectionCapStyle),
-                           mControlNames.inputSection);
-      AddNamedChildControl(new IVLabelControl(outputTitleR, "Output mode", sectionCapStyle),
-                           mControlNames.outputSection);
+        new IVLabelControl(capOf(inputCard), "Input calibration", sectionCapStyle), mControlNames.inputSection);
+      AddNamedChildControl(
+        new IVLabelControl(capOf(outputCard), "Output mode", sectionCapStyle), mControlNames.outputSection);
+      AddNamedChildControl(
+        new IVLabelControl(capOf(perfCard), "Performance", sectionCapStyle), mControlNames.perfSection);
     }
+
+    // Footer block: build-aware audio-settings hint, shortcut box, model info, about.
+#if defined(APP_API)
+    const char* audioHintStr = "Audio device / sample rate / buffer: open File > Preferences";
+#else
+    const char* audioHintStr = "Audio device / sample rate / buffer: use your host's audio settings";
+#endif
+    const IVStyle hintStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+      IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.62f), "Josefin-Sans", EAlign::Center, EVAlign::Middle));
+    AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, hintStyle), mControlNames.audioHint);
+
     const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
     AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutArea), mControlNames.shortcutInfo);
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, modelInfoStyle), mControlNames.modelInfo);
@@ -1123,7 +1216,6 @@ private:
     const std::string bitmap = "Bitmap";
     const std::string inputSection = "InputSection";
     const std::string outputSection = "OutputSection";
-    const std::string midRule = "MidRule";
     const std::string footerSep = "FooterSep";
     const std::string calibrateInput = "CalibrateInput";
     const std::string close = "Close";
@@ -1133,7 +1225,12 @@ private:
     const std::string shortcutInfo = "ShortcutInfo";
     const std::string outputGroupFrame = "OutputGroupFrame";
     const std::string inputGroupFrame = "InputGroupFrame";
+    const std::string perfGroupFrame = "PerfGroupFrame";
     const std::string title = "Title";
+    const std::string liteMode = "LiteMode";
+    const std::string perfSection = "PerfSection";
+    const std::string perfHelp = "PerfHelp";
+    const std::string audioHint = "AudioHint";
   } mControlNames;
 
   class InputLevelControl : public IEditableTextControl
@@ -1205,18 +1302,15 @@ private:
         const float rowH = 14.f;
         const IText capText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Far, EVAlign::Top);
         const IText rowText = mStyle.valueText.WithVAlign(EVAlign::Top);
-        AddChildControl(
-          new IVLabelControl(lineR.ReduceFromTop(capH), "VoLum · By Lum", mStyle.WithValueText(capText)));
+        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(capH), "VoLum · By Lum", mStyle.WithValueText(capText)));
         AddChildControl(
           new IVLabelControl(lineR.ReduceFromTop(rowH), buildInfoStr.Get(), mStyle.WithValueText(rowText)));
         const IColor urlMo = VoLumColors::GOLD_DIM;
         const IColor urlClk = VoLumColors::GOLD;
         AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "Built on the Neural Amp Modeler ecosystem",
-                                        "https://github.com/guitarlum/VoLum", mText,
-                                        COLOR_TRANSPARENT, urlMo, urlClk));
+                                        "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo, urlClk));
         AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "github.com/guitarlum/VoLum",
-                                        "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo,
-                                        urlClk));
+                                        "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo, urlClk));
       }
     };
 
