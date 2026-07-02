@@ -1,31 +1,32 @@
+# win-key.ps1 - send keystrokes to VoLum's main window for self-verification/screenshots.
+# Complements win-click.ps1 / win-screenshot.ps1 / capture-volum-canvas.ps1.
+# Keys use SendKeys syntax: letters/digits verbatim, specials as {UP} {DOWN}
+# {LEFT} {RIGHT} {TAB} {ENTER} {ESC}. Example:
+#   pwsh -File win-key.ps1 -Keys "3"        # switch to POST
+#   pwsh -File win-key.ps1 -Keys "{TAB}{TAB}" -SettleMs 400
 param(
-  [Parameter(Mandatory = $true)][int]$VK,   # virtual-key code, e.g. 0x27 (Right)
   [string]$ProcessName = "VoLum",
-  [int]$SettleMs = 120
+  [Parameter(Mandatory=$true)][string]$Keys,
+  [int]$SettleMs = 300
 )
-
-# Inject a single key press/release into the focused VoLum window. Used to verify
-# keyboard handling (e.g. arrow-key art navigation in the custom-amp builder).
-
-$sig = @'
+$ErrorActionPreference = "Stop"
+Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class Key {
+public static class WinKey {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-  [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  public const int SW_RESTORE = 9;
 }
 '@
-Add-Type -TypeDefinition $sig
-
-$p = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-if (-not $p) { Write-Error "No $ProcessName window found"; exit 1 }
-
-[Key]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
-Start-Sleep -Milliseconds 80
-
-$KEYUP = 0x2
-[Key]::keybd_event([byte]$VK, 0, 0, [UIntPtr]::Zero)        # down
-Start-Sleep -Milliseconds 20
-[Key]::keybd_event([byte]$VK, 0, $KEYUP, [UIntPtr]::Zero)   # up
+$proc = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if (-not $proc) { Write-Output "NO_WINDOW"; exit 2 }
+$hwnd = $proc.MainWindowHandle
+if ([WinKey]::IsIconic($hwnd)) { [WinKey]::ShowWindow($hwnd, [WinKey]::SW_RESTORE) | Out-Null; Start-Sleep -Milliseconds 200 }
+[WinKey]::SetForegroundWindow($hwnd) | Out-Null
+Start-Sleep -Milliseconds 250
+$wsh = New-Object -ComObject WScript.Shell
+$wsh.SendKeys($Keys)
 Start-Sleep -Milliseconds $SettleMs
-Write-Output ("KEY 0x{0:X} -> {1}" -f $VK, $ProcessName)
+Write-Output "KEYS '$Keys' -> $ProcessName"

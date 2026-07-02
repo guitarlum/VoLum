@@ -72,7 +72,9 @@ The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / O
 
 The pitch engine is a low-latency time-domain shifter built for guitar: it tracks fast and holds its tuning steady through a long sustain instead of drifting off-pitch as the note rings. VoLum reports its pitch latency to your host for plugin delay compensation so the shifted signal stays time-aligned with the rest of your mix; the amount depends on the Transpose engine (about 8.6 ms in INSTANT, about 14 ms in POLY) and is re-reported when you switch engine or mode.
 
-Pedal captures are grouped by type and sorted from lower to higher gain. Good starting points:
+![VoLum PRE pedal capture chooser](user-guide-pre-pedal.png)
+
+Pedal captures are grouped by type and sorted from lower to higher gain. Your own imported captures appear under a **CUSTOM** group at the bottom of the same list. Good starting points:
 
 - Clean or low-gain amps: Nuke, Bender, Myth, Mash.
 - Edge-of-breakup amps: Revival Drive.
@@ -115,7 +117,9 @@ POST runs after the amp. It contains Delay, Reverb, and Tremolo cards.
 3. Use the card button or spacebar to enable it.
 4. Edit the focused card in the knob row.
 
-**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog.
+**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
+
+Both tempo-synced POST pedals — Delay and Tremolo — share one tempo source. In a DAW they follow the host tempo; in the standalone app they follow the metronome BPM (set it in the metronome overlay, and it applies even while the metronome click is muted).
 
 **Reverb** offers Hall, Plate, and Oktaverb. Hall and Plate cover classic ambience. Oktaverb adds `HALO`, `SHIMMER`, and `BLOOM` pitch-wash voices with an Intensity knob.
 
@@ -126,6 +130,8 @@ POST runs after the amp. It contains Delay, Reverb, and Tremolo cards.
 - **Harmonic** splits the signal at a crossover frequency and modulates the low and high bands in opposite phase for a phasey sweep.
 
 The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smooth sine toward a hard square), and **MIX**. In Harmonic mode an extra **X-OVER** knob sets the band-split frequency. Turn on **TEMPO SYNC** to lock the rate to the song: in a DAW it follows the host tempo, and in the standalone app it follows the metronome BPM. When sync is on, the RATE knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values). Left and right channels stay phase-linked for a coherent stereo tremolo.
+
+![VoLum POST Tremolo card](user-guide-tremolo.png)
 
 The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
 

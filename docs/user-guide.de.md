@@ -72,7 +72,9 @@ Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANS
 
 Die Pitch-Engine ist ein latenzarmer Zeitbereichs-Shifter, der für Gitarre gebaut ist: Er folgt schnell und hält seine Stimmung über ein langes Sustain stabil, statt beim Ausklingen der Note tonal wegzudriften. VoLum meldet seine Pitch-Latenz an deinen Host zur Plugin-Latenzkompensation, sodass das verschobene Signal zeitlich zum restlichen Mix ausgerichtet bleibt; der Wert hängt von der Transpose-Engine ab (etwa 8,6 ms bei INSTANT, etwa 14 ms bei POLY) und wird beim Wechsel von Engine oder Modus neu gemeldet.
 
-Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Gute Startpunkte:
+![VoLum PRE-Pedal-Auswahl](user-guide-pre-pedal.png)
+
+Pedal-Captures sind nach Typ gruppiert und von weniger zu mehr Gain sortiert. Deine eigenen importierten Captures erscheinen unter einer **CUSTOM**-Gruppe am Ende derselben Liste. Gute Startpunkte:
 
 - Clean- oder Low-Gain-Amps: Nuke, Bender, Myth, Mash.
 - Edge-of-Breakup-Amps: Revival Drive.
@@ -115,7 +117,9 @@ POST liegt hinter dem Amp. Der Bereich enthält Delay-, Reverb- und Tremolo-Kart
 3. Nutze den Karten-Button oder die Leertaste zum Ein- und Ausschalten.
 4. Bearbeite die fokussierte Karte in der Reglerzeile.
 
-**Delay** bietet Digital, Analog und Reverse. Die Regler sind Time, Feedback, Mix, Tone und ein modusspezifischer Charakterregler: `Grit`, `Wear` oder `Bloom`. Ping-Pong gibt es für Digital und Analog.
+**Delay** bietet Digital, Analog und Reverse. Die Regler sind Time, Feedback, Mix, Tone und ein modusspezifischer Charakterregler: `Grit`, `Wear` oder `Bloom`. Ping-Pong gibt es für Digital und Analog. Mit **TEMPO SYNC** koppelst du die Wiederholungen ans Tempo: Der **TIME**-Regler wird zu einem musikalischen **DIVISION**-Stepper (1/2 bis 1/16, inklusive punktierter und Triolen-Werte).
+
+Beide tempo-synchronisierten POST-Pedale — Delay und Tremolo — teilen sich eine Tempoquelle. Im DAW folgen sie dem Host-Tempo, in der Standalone-App dem Metronom-BPM (im Metronom-Overlay einstellbar; es gilt auch, wenn der Metronom-Klick stummgeschaltet ist).
 
 **Reverb** bietet Hall, Plate und Oktaverb. Hall und Plate liefern klassische Räume. Oktaverb ergänzt die Pitch-Wash-Stimmen `HALO`, `SHIMMER` und `BLOOM` mit Intensity-Regler.
 
@@ -126,6 +130,8 @@ POST liegt hinter dem Amp. Der Bereich enthält Delay-, Reverb- und Tremolo-Kart
 - **Harmonic** teilt das Signal an einer Trennfrequenz und moduliert tiefes und hohes Band gegenphasig für einen phasigen Sweep.
 
 Die gemeinsamen Regler sind **RATE**, **DEPTH**, **SHAPE** (formt den LFO von weichem Sinus hin zu hartem Rechteck) und **MIX**. Im Harmonic-Modus erscheint ein zusätzlicher **X-OVER**-Regler für die Trennfrequenz. Mit **TEMPO SYNC** koppelst du die Rate ans Tempo: im DAW folgt sie dem Host-Tempo, in der Standalone-App dem Metronom-BPM. Bei aktivem Sync wird der RATE-Regler zu einem musikalischen **DIVISION**-Stepper (1/2 bis 1/16, inklusive punktierter und Triolen-Werte). Linker und rechter Kanal bleiben phasengekoppelt für ein kohärentes Stereo-Tremolo.
+
+![VoLum POST-Tremolo-Karte](user-guide-tremolo.png)
 
 Die LED auf jeder Karte zeigt, ob sie aktiv ist. Das Label zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen werden pro Amp gespeichert, genau wie PRE. Das **Schloss** im POST-Kopf funktioniert wie bei PRE, damit du eine Delay/Reverb/Tremolo-Szene beim Durchklicken der Amps mitnimmst; der **Store**-Pfeil erscheint, wenn du das Overlay im aktuellen Amp speichern kannst. Entsperren stellt das gespeicherte POST dieses Amps ohne Rückfrage wieder her. Ein Doppelklick auf einen POST-Regler stellt dessen Default wieder her.
 
