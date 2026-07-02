@@ -518,6 +518,14 @@ NeuralAmpModeler::~NeuralAmpModeler()
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
   _VolumSaveSettingsToFile();
+#else
+  // Plugin formats deliberately don't rewrite the shared per-amp
+  // volum-settings.json from every instance (instances would fight over it),
+  // but a focused custom amp's scene lives in the content library, so flush it
+  // on teardown too - covers a host quit that tears down instances without a
+  // preceding SerializeState. No-op when no custom amp is focused / no base dir.
+  if (mVolumCustomMainIdx >= 0)
+    volum::content::GlobalContentStore().Save();
 #endif
   _DeallocateIOPointers();
 }
@@ -941,7 +949,18 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // "PrePitchDry/Semitones not restored"). const_cast mirrors the existing
   // pattern in this file's const dirty-checks (_VolumIsPreDirty/_VolumIsPostDirty).
   if (mVolumInitComplete)
+  {
     const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();
+    // A focused custom amp keeps its scene in the shared content library (only
+    // its id lives in the chunk), so the tweak just written to customScenes[id]
+    // by _VolumSaveCurrentToSettings is in-memory only. In a DAW/plugin the
+    // content store is otherwise flushed to disk only on content CRUD, so live
+    // custom-amp knob edits would be lost on host restart. Flush here (host
+    // state-save) so they survive. Factory scenes are fully in the chunk and
+    // need no flush; guard on the custom focus to avoid disk I/O otherwise.
+    if (mVolumCustomMainIdx >= 0)
+      volum::content::GlobalContentStore().Save();
+  }
 
   WDL_String header("###NeuralAmpModeler###"); // Don't change this!
   chunk.PutStr(header.Get());
