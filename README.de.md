@@ -6,23 +6,20 @@
   <img src="docs/user-guide-main.png" alt="VoLum Standalone-Oberfläche" width="820">
 </p>
 
-VoLum ist eine Open-Source-Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. VoLum nutzt den [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, ist aber ein eigenes fokussiertes Produkt: 15 kuratierte Amps, PRE-Pedale, Dual Amp, POST-Effekte, eigene Amp-/IR-/Pedal-Importe, Presets pro Amp, Tuner, Metronom und eine schnelle dunkle Oberfläche als Standalone-App oder VST3.
+VoLum ist eine Open-Source-Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. VoLum nutzt den [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, ist aber ein eigenes fokussiertes Produkt: 15 kuratierte Amps, PRE-Pedale (inklusive Transpose/Octaver-Pitch-Pedal), Dual Amp, POST Delay/Reverb/Tremolo, eigene Amp-/IR-/Pedal-Importe, Presets pro Amp, Tuner, Metronom und eine schnelle dunkle Oberfläche als Standalone-App oder VST3.
 
 [VoLum herunterladen](https://github.com/guitarlum/VoLum/releases) oder direkt ins [Benutzerhandbuch](docs/user-guide.de.md).
 
 ## Was VoLum Besonders Macht
 
-- **15 Amps sofort spielbereit:** Vintage-, moderne und Boutique-Captures mit 4 Speaker-Modi und mehreren Gain-Stufen pro Amp.
-- **NAM-Architecture-2-(A2)-Profile:** jedes mitgelieferte Amp-, Cab- und PRE-NAM-Capture ist ein A2-Modell, trainiert auf den besten Sitz zwischen 700 und 1200 Epochen, und wird immer in voller Größe gespielt (nie die Lite-Variante).
-- **Kompletter Rig-Workflow:** PRE-Kompressor und NAM-Pedal-Slots, AMP-Regler und POST Delay/Reverb in einer `PRE | AMP | POST`-Oberfläche.
-- **Dual Amp:** Haupt-Amp mit Support-Amp mischen, beide Spuren pannen und bei Bedarf die Support-Polarität drehen.
-- **Bring Your Own:** eigene NAM-Amp-Captures (A1 oder A2), Impulsantworten und Pedal-Captures in eine verwaltete Bibliothek importieren, die auch nach dem Verschieben der Originale weiter funktioniert.
-- **Presets pro Amp:** benannte Rig-Momentaufnahmen je Amp speichern und mit `‹` / `›` direkt durchblättern.
-- **POST-Effekte mit Charakter:** Digital, Analog und Reverse Delay plus Hall, Plate und Oktaverb Reverb mit Halo, Shimmer und Bloom.
-- **Übungswerkzeuge eingebaut:** lautloser Tuner und einstellbares Metronom in Standalone und VST3.
-- **Schnelles Umschalten und Recall:** Amp-Modelle laden im Hintergrund; jeder Amp merkt sich Speaker, Kanal, Regler, PRE, POST und Dual Amp.
-- **Bessere Tastatursteuerung:** Bereiche wechseln, Fokus bewegen, Regler bearbeiten, Karten schalten, Tools öffnen und exakte Werte eintippen.
-- **Ausgangsschutz:** eine letzte Sicherheitsstufe fängt durchgehende Peaks und ungültige Samples ab, bevor sie den Plugin-Ausgang erreichen.
+- **Eine kuratierte Amp-Sammlung statt leerem Blatt:** 15 Profi-Amps — Vintage, modern und Boutique — jeder mit mehreren Gain-Kanälen und vier Speaker-Modi, alle als vollwertige NAM-Architecture-2-(A2)-Profile. Einen auswählen und spielen.
+- **Ein komplettes Rig in einem Fenster:** Pitch, Kompressor und zwei NAM-Drive-Pedal-Slots vorne, Amp und Cab in der Mitte, Delay/Reverb/Tremolo dahinter — die ganze `PRE | AMP | POST`-Kette auf einen Blick.
+- **Ein Pitch-Pedal für Gitarre gebaut:** latenzarmes Transpose (mono oder polyphon) für Drop-Tunings und Capo-Shifts sowie ein polyphoner Octaver, der seine Stimmung sogar auf tief gestimmten Bass-Saiten hält.
+- **Dual Amp:** zwei Amps gleichzeitig fahren, jede Spur pannen und die Support-Polarität drehen — für breite, geschichtete Sounds aus einer einzigen Spur.
+- **POST-Effekte mit echtem Charakter:** Digital-, Analog- und Reverse-Delay sowie Optical-, Bias- und Harmonic-Tremolo — beide tempo-synchronisierbar — plus eine Reverb-Suite, die über Hall und Plate hinausgeht: **Oktaverb** schichtet Halo-, Shimmer- und Bloom-Pitch-Wash-Stimmen für üppige Oktav-Shimmer-Räume.
+- **Bring Your Own:** eigene Amp-Captures, Impulsantworten und Pedal-Captures in eine verwaltete Bibliothek importieren, die auch nach dem Verschieben der Originaldateien weiter funktioniert.
+- **Merkt sich deine Sounds:** jeder Amp behält eigene Regler, Kanal, Cab, PRE/POST und Dual-Amp-Setup, und Presets pro Amp rufen ein ganzes Rig mit einem Klick ab.
+- **Für Bühne und Studio gemacht:** lautloser Tuner und Metronom, volle Tastatursteuerung und eine schnelle dunkle Oberfläche — kostenlos und Open Source, als Standalone oder VST3.
 
 ## Download
 
