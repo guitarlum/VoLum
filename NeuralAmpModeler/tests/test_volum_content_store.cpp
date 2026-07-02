@@ -536,6 +536,161 @@ TEST_CASE("A recalled preset snapshot round-trips through the registry equal")
   CHECK(volum::AmpSettingsEqual(back.presetBanks.at("factory:3")[0].settings, pr.settings));
 }
 
+// Release regression (1.2.0 "bring your own + presets"): a real project mixes a
+// multi-.nam custom amp, a custom IR, a custom PRE pedal, a per-amp scene, and a
+// preset that references all three at once. The codec/store units above each
+// cover one facet; this pins the whole combination surviving a real on-disk
+// Save() -> Load() with the copied capture files still resolvable. Missing this
+// end-to-end pin is how a "presets/BYO lost my stuff on reload" bug would ship.
+TEST_CASE("Combined BYO project (multi-nam amp + IR + pedal + scene + preset) round-trips on disk")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+  using volum::custom::kDirectSlot;
+
+  const auto base = TestBase("byo-combined");
+  const auto directSrc = WriteSrc(base / "incoming", "AMP-Plexi-1.nam", "NAMdirect");
+  const auto cabSrc = WriteSrc(base / "incoming", "G65-Plexi-2.nam", "NAMcab");
+  const auto irSrc = WriteSrc(base / "incoming", "Mesa 4x12.wav", "RIFFir");
+  const auto pedalSrc = WriteSrc(base / "incoming", "Klon.nam", "NAMpedal");
+
+  ContentStore store(base);
+
+  // Custom amp with two captures on different (slot, channel) cells.
+  CustomAmp amp;
+  amp.id = "amp_byo";
+  amp.name = "BYO Plexi";
+  amp.cabNames = {"G65", "CB2", "CB3"};
+  CustomNamFile direct;
+  direct.file = "AMP-Plexi-1.nam";
+  direct.slot = kDirectSlot;
+  direct.channel = 1;
+  direct.storedPath = store.ImportFileCopy(directSrc, "amps", "amp_byo_0");
+  CustomNamFile cab;
+  cab.file = "G65-Plexi-2.nam";
+  cab.slot = 0;
+  cab.channel = 2;
+  cab.storedPath = store.ImportFileCopy(cabSrc, "amps", "amp_byo_1");
+  amp.files = {direct, cab};
+  store.reg().amps.push_back(amp);
+
+  // Custom IR + custom PRE pedal (legacy index in the custom pool).
+  IRItem ir;
+  ir.id = "ir_byo";
+  ir.name = "Mesa OS";
+  ir.file = store.ImportFileCopy(irSrc, "ir", "ir_byo");
+  store.reg().irs.push_back(ir);
+
+  PedalItem pedal;
+  pedal.id = "pedal_byo";
+  pedal.name = "Klon";
+  pedal.group = "klon";
+  pedal.file = store.ImportFileCopy(pedalSrc, "pedals", "pedal_byo");
+  pedal.legacyIndex = kCustomPedalIndexBase;
+  store.reg().pedals.push_back(pedal);
+
+  // Per-amp scene wiring the custom IR + pedal into the live rig.
+  VoLumAmpSettings scene;
+  scene.channelIdx = 2;
+  scene.activeIrId = "ir_byo";
+  scene.preNam1Active = true;
+  scene.preNam1Capture = kCustomPedalIndexBase;
+  store.reg().customScenes["amp_byo"] = scene;
+
+  // A preset in this amp's bank referencing all three custom refs together.
+  Preset pr;
+  pr.id = "preset_byo";
+  pr.name = "Dual lead";
+  pr.settings.activeIrId = "ir_byo";
+  pr.settings.preNam1Active = true;
+  pr.settings.preNam1Capture = kCustomPedalIndexBase;
+  pr.settings.dualAmpActive = true;
+  pr.settings.supportCustomId = "amp_byo";
+  pr.settings.supportCustomSlot = 0;
+  pr.settings.supportCustomChannel = 2;
+  store.reg().presetBanks["amp_byo"] = {pr};
+
+  REQUIRE(store.Save());
+
+  ContentStore reloaded(base);
+  REQUIRE(reloaded.Load());
+  const Registry& r = reloaded.reg();
+
+  // Custom amp + both captures survive, and their copied files resolve on disk.
+  REQUIRE(r.amps.size() == 1);
+  CHECK(r.amps[0].id == "amp_byo");
+  REQUIRE(r.amps[0].files.size() == 2);
+  CHECK(CaptureFileFor(r.amps[0], kDirectSlot, 1) == direct.storedPath);
+  CHECK(CaptureFileFor(r.amps[0], 0, 2) == cab.storedPath);
+  CHECK(std::filesystem::exists(reloaded.ResolveStored(direct.storedPath)));
+  CHECK(std::filesystem::exists(reloaded.ResolveStored(cab.storedPath)));
+
+  // Custom IR + pedal survive with resolvable files.
+  REQUIRE(r.irs.size() == 1);
+  CHECK(r.irs[0].id == "ir_byo");
+  CHECK(std::filesystem::exists(reloaded.ResolveStored(r.irs[0].file)));
+  REQUIRE(r.pedals.size() == 1);
+  CHECK(r.pedals[0].legacyIndex == kCustomPedalIndexBase);
+  CHECK(std::filesystem::exists(reloaded.ResolveStored(r.pedals[0].file)));
+
+  // Per-amp scene keeps its custom IR + pedal wiring.
+  REQUIRE(r.customScenes.count("amp_byo") == 1);
+  CHECK(r.customScenes.at("amp_byo").activeIrId == "ir_byo");
+  CHECK(r.customScenes.at("amp_byo").preNam1Capture == kCustomPedalIndexBase);
+
+  // Preset keeps every custom ref together (the recall payload is intact).
+  REQUIRE(r.presetBanks.count("amp_byo") == 1);
+  REQUIRE(r.presetBanks.at("amp_byo").size() == 1);
+  const auto& got = r.presetBanks.at("amp_byo")[0].settings;
+  CHECK(got.activeIrId == "ir_byo");
+  CHECK(got.preNam1Capture == kCustomPedalIndexBase);
+  CHECK(got.supportCustomId == "amp_byo");
+  CHECK(got.supportCustomSlot == 0);
+  CHECK(got.supportCustomChannel == 2);
+  CHECK(volum::AmpSettingsEqual(r.presetBanks.at("amp_byo")[0].settings, pr.settings));
+}
+
+// Release regression: recalling a preset / focusing a custom amp whose copied
+// capture file was deleted from disk (moved library, partial sync) must not hand
+// the loader a path that "resolves" to a missing file without any signal. This
+// pins the store contract: CaptureFileFor still returns the recorded storedPath
+// (so higher layers can decide), ResolveStored composes it under base, and the
+// caller can detect the file is gone via std::filesystem::exists.
+TEST_CASE("Missing copied capture is detectable via ResolveStored (no silent success)")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+  using volum::custom::kDirectSlot;
+
+  const auto base = TestBase("byo-missing-file");
+  const auto src = WriteSrc(base / "incoming", "AMP-1.nam", "NAMbody");
+  ContentStore store(base);
+
+  CustomNamFile f;
+  f.file = "AMP-1.nam";
+  f.slot = kDirectSlot;
+  f.channel = 1;
+  f.storedPath = store.ImportFileCopy(src, "amps", "amp_gone_0");
+  REQUIRE_FALSE(f.storedPath.empty());
+  CustomAmp amp;
+  amp.id = "amp_gone";
+  amp.files = {f};
+
+  const auto resolved = store.ResolveStored(f.storedPath);
+  REQUIRE(std::filesystem::exists(resolved));
+
+  // Simulate the copied capture disappearing from the content library.
+  std::error_code ec;
+  std::filesystem::remove(resolved, ec);
+  REQUIRE_FALSE(ec);
+
+  // The reference is preserved (not silently blanked)...
+  CHECK(CaptureFileFor(amp, kDirectSlot, 1) == f.storedPath);
+  // ...but the resolved path now reports missing, so the loader can skip/report
+  // instead of trying to load a phantom model.
+  CHECK_FALSE(std::filesystem::exists(store.ResolveStored(f.storedPath)));
+}
+
 TEST_CASE("Reopen dirty baseline derives from preset content, not the live scene")
 {
   // Funnel C: on session / DAW restore the recalled-snapshot baseline must be
