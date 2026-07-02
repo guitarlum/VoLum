@@ -157,6 +157,21 @@ public:
     return _ComputeTimingFor(c, sampleRate > 0.0 ? sampleRate : 48000.0).latency;
   }
 
+  // Introspection for tests: the effective WSOLA splice geometry (post-clamp) for a
+  // character. Exposed so a unit test can pin the fixed-grain (POLY) invariant
+  // search < band, whose violation causes runaway re-splicing (stutter/crackle).
+  struct SpliceGeometry
+  {
+    int search = 0;
+    int band = 0;
+    bool fixedGrain = false;
+  };
+  static SpliceGeometry SpliceGeometryFor(Character c, double sampleRate)
+  {
+    const Timing t = _ComputeTimingFor(c, sampleRate > 0.0 ? sampleRate : 48000.0);
+    return {t.search, static_cast<int>(t.band), t.fixedGrain};
+  }
+
   void Reset()
   {
     std::fill(mBuf.begin(), mBuf.end(), 0.0);
@@ -290,15 +305,17 @@ private:
       t.wsola = true;
       t.fixedGrain = true;
       t.xfade = std::max(8, static_cast<int>(std::lround(sr * 0.004)));
-      // 24 ms search + correlation window (was 16 ms). POLY is fixed-grain, so
-      // dLo does NOT include search/corr (they are history reads) -> widening them
-      // is LATENCY-FREE (still 14 ms). The wider window covers one full period of
-      // the deepest strings (8-string F#1 46 Hz = 21.6 ms), so the WSOLA splice
-      // aligns cleanly there instead of mid-cycle: measured F#1 downshift detune
-      // dropped from ~-49 cents to ~-6, AND chord voice separation IMPROVED
-      // (+2 semis 51x -> 163x). See local-scratch/research notes.
-      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.024)));
-      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.024)));
+      // Search + correlation window = 16 ms. CRITICAL INVARIANT: the WSOLA search
+      // range MUST stay < band (the fixed-grain splice spacing). _WsolaRefine picks
+      // bestLag in [-search, +search]; if search >= band the correlation can move the
+      // splice target by MORE than a whole grain - even back above dHi - so the very
+      // next sample retriggers a splice, and POLY re-splices every crossfade. On real
+      // (transient) playing that is continuous stutter/crackle at any non-zero shift;
+      // on steady sines it is inaudible because every jump lands on similar-looking
+      // periodic waveform (which is why a 24 ms search passed the sine/triad tests but
+      // broke live guitar). The clamp below enforces the invariant defensively.
+      t.search = std::max(1, static_cast<int>(std::lround(sr * 0.016)));
+      t.corrWin = std::max(8, static_cast<int>(std::lround(sr * 0.016)));
       t.band = std::lround(sr * 0.020);
     }
     else
@@ -322,6 +339,12 @@ private:
       }
       t.band = pDesign;
     }
+    // Enforce the fixed-grain invariant (see POLY comment above): the WSOLA search
+    // range must stay strictly below the grain spacing, or splices run away and
+    // POLY stutters/crackles. Clamp defensively so no future band/search retune can
+    // silently re-break it.
+    if (t.fixedGrain && t.band > 1.0)
+      t.search = std::min(t.search, static_cast<int>(t.band) - 1);
     // Latency floor = xfade + 0.5*band. The splice clamps the read pointer to
     // >= xfade+1, so for fixed-grain (POLY) the search/corr windows only read
     // further into the PAST (history) and must NOT inflate the minimum delay.
