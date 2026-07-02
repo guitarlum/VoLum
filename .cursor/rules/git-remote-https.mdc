@@ -27,11 +27,9 @@ git fetch https://github.com/guitarlum/VoLum.git <branch>:refs/remotes/origin/<b
 
 ## Why not just change `origin`?
 
-The `vo-lum-workflow.mdc` safety rules (and the global git safety protocol)
-say **never modify git config from the agent**. The user can run
-`git remote set-url origin https://github.com/guitarlum/VoLum.git` once on
-this machine to make HTTPS permanent; until then, use the explicit URL in
-every remote command.
+Agents must never modify git config. The user can run `git remote set-url origin
+https://github.com/guitarlum/VoLum.git` once to make HTTPS permanent; until then,
+use the explicit URL in every remote command.
 
 ## When to skip this rule
 

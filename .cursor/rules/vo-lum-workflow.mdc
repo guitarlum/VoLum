@@ -9,7 +9,6 @@ alwaysApply: true
 
 - Ship **small vertical slices**: one behavior, one bugfix, or one refactor path per pass—**working build + tests** before the next idea.
 - Spikes are fine; **delete or fold** dead spike code before you call the iteration done.
-- Match **existing** naming, patterns, and file layout. No drive-by cleanups outside the task.
 
 ## Every meaningful iteration (before you stop or hand off)
 

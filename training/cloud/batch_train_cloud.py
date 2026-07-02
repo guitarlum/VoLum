@@ -1,10 +1,10 @@
 """
-Cloud variant of training/scripts/batch_train.py for RunPod.
+RunPod batch trainer for the VoLum A2 retrain (runs on the pod).
 
-Identical LOCKED RECIPE (A2, batch_size=16, epochs=700, best-fit, packed
-SlimmableContainer export, escalation safety net). ONLY difference vs the
-canonical script: capture/base dirs are env-configurable for the pod layout
-(network volume at /workspace), and there is no WSL/conda prelude.
+LOCKED RECIPE (A2, batch_size=16, epochs=700, best-fit, packed
+SlimmableContainer export, escalation safety net). Capture/base dirs are
+env-configurable for the pod layout (network volume at /workspace). See
+docs/a2-training-runbook.md for the why and training/cloud/README.md for how.
 
 Env:
   CAP_DIR   (default /workspace/captures)  dir with capture WAVs + T3K-sweep-v3.wav

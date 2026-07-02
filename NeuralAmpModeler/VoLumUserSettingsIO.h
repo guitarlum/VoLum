@@ -6,11 +6,11 @@
 #include "VoLumAmpeteCatalog.h"
 
 #if __has_include(<nlohmann/json.hpp>)
-#include <nlohmann/json.hpp>
+  #include <nlohmann/json.hpp>
 #elif __has_include(<json.hpp>)
-#include <json.hpp>
+  #include <json.hpp>
 #else
-#error "nlohmann json header not found (expected iPlug Dependencies/Extras layout)"
+  #error "nlohmann json header not found (expected iPlug Dependencies/Extras layout)"
 #endif
 
 
@@ -47,7 +47,8 @@ inline int RemapLegacyOktaverbSubModeToV4Settings(int oldSubMode)
   }
 }
 
-struct VoLumEffectSettings {
+struct VoLumEffectSettings
+{
   bool reverbActive = false;
   int reverbMode = 0;
   ReverbModeSnapshot reverbModes[kVoLumReverbModeCount] = {
@@ -69,6 +70,16 @@ struct VoLumEffectSettings {
     OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70},
     // Bloom
     OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
+  };
+
+  // Tremolo per-mode knob memory (live working copy; synced to/from each amp's
+  // postTremoloModes). tremoloMode tracks the live selected mode so a mode
+  // switch knows which snapshot to save before loading the new one.
+  int tremoloMode = kVoLumTremoloModeOptical;
+  TremoloModeSnapshot tremoloModes[kVoLumTremoloModeCount] = {
+    TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Optical
+    TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Bias
+    TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Harmonic
   };
 
   bool delayActive = false;
@@ -104,6 +115,12 @@ inline void WriteDualAmpUserSettings(nlohmann::json& a, const VoLumAmpSettings& 
   a["supportEq"] = s.supportEqActive;
   a["supportPan"] = s.supportAmpPan;
   a["supportPolarityInvert"] = s.supportPolarityInvert;
+  // 1.2.0: custom SUPPORT partner binding + its own cab/channel (additive; older
+  // readers ignore). Lets a custom support amp's cab + gain stage round-trip
+  // through presets, the dual-amp settings sidecar, and DAW scenes.
+  a["supportCustomId"] = s.supportCustomId;
+  a["supportCustomSlot"] = s.supportCustomSlot;
+  a["supportCustomChannel"] = s.supportCustomChannel;
 }
 
 inline bool HasDualAmpUserSettings(const nlohmann::json& j)
@@ -112,9 +129,10 @@ inline bool HasDualAmpUserSettings(const nlohmann::json& j)
     return false;
 
   static constexpr const char* kDualKeys[] = {
-    "dualAmpActive", "dualAmpRoute", "mainAmpPan", "supportAmp", "supportSpeaker", "supportChannel",
-    "supportInput", "supportGate", "supportBass", "supportMid", "supportTreble", "supportOutput",
-    "supportNoiseGate", "supportEq", "supportPan", "supportPolarityInvert",
+    "dualAmpActive",    "dualAmpRoute",   "mainAmpPan",    "supportAmp",
+    "supportSpeaker",   "supportChannel", "supportInput",  "supportGate",
+    "supportBass",      "supportMid",     "supportTreble", "supportOutput",
+    "supportNoiseGate", "supportEq",      "supportPan",    "supportPolarityInvert",
   };
 
   for (const auto& item : j["amps"].items())
@@ -178,6 +196,37 @@ inline nlohmann::json ReverbModeSnapshotsToJson(const ReverbModeSnapshot* modes,
   return out;
 }
 
+inline nlohmann::json PitchModeSnapshotsToJson(const PitchModeSnapshot* modes, int modeCount)
+{
+  nlohmann::json out = nlohmann::json::array();
+  for (int i = 0; i < modeCount; ++i)
+  {
+    out.push_back({
+      {"mix", modes[i].mix},
+      {"dry", modes[i].dry},
+      {"level", modes[i].level},
+      {"voicing", modes[i].voicing},
+    });
+  }
+  return out;
+}
+
+inline nlohmann::json TremoloModeSnapshotsToJson(const TremoloModeSnapshot* modes, int modeCount)
+{
+  nlohmann::json out = nlohmann::json::array();
+  for (int i = 0; i < modeCount; ++i)
+  {
+    out.push_back({
+      {"rate", modes[i].rate},
+      {"depth", modes[i].depth},
+      {"shape", modes[i].shape},
+      {"mix", modes[i].mix},
+      {"crossover", modes[i].crossover},
+    });
+  }
+  return out;
+}
+
 inline nlohmann::json OktaverbSubModeSnapshotsToJson(const OktaverbSubModeSnapshot* subModes, int subModeCount)
 {
   nlohmann::json out = nlohmann::json::array();
@@ -209,7 +258,8 @@ inline bool JsonGetClampedInt(const nlohmann::json& obj, const char* key, int& t
   target = static_cast<int>(v);
   return true;
 }
-inline bool JsonGetClampedDouble(const nlohmann::json& obj, const char* key, double& target, double minValue, double maxValue)
+inline bool JsonGetClampedDouble(const nlohmann::json& obj, const char* key, double& target, double minValue,
+                                 double maxValue)
 {
   if (!obj.contains(key) || !obj[key].is_number())
     return false;
@@ -258,6 +308,31 @@ inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "preNam2MidFreq", out.preNam2MidFreq, 150.0, 2500.0);
   any |= detail::JsonGetClampedDouble(o, "preNam2Treble", out.preNam2Treble, 0.0, 10.0);
   any |= detail::JsonGetClampedDouble(o, "preNam2Level", out.preNam2Level, -20.0, 20.0);
+  any |= detail::JsonGetBool(o, "prePitchActive", out.prePitchActive);
+  any |= detail::JsonGetClampedInt(o, "prePitchMode", out.prePitchMode, 0, 1);
+  any |= detail::JsonGetClampedDouble(o, "prePitchSemitones", out.prePitchSemitones, -12.0, 7.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchMix", out.prePitchMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchOctDown", out.prePitchOctDown, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchOctUp", out.prePitchOctUp, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "prePitchDry", out.prePitchDry, 0.0, 1.0);
+  any |= detail::JsonGetClampedInt(o, "prePitchVoicing", out.prePitchVoicing, 0, 1);
+  any |= detail::JsonGetClampedDouble(o, "prePitchLevel", out.prePitchLevel, -20.0, 20.0);
+  any |=
+    detail::JsonGetClampedInt(o, "prePitchTransChar", out.prePitchTransChar, 0, volum::kVoLumPitchCharacterCount - 1);
+  if (o.contains("prePitchModes") && o["prePitchModes"].is_array())
+  {
+    const auto& modes = o["prePitchModes"];
+    for (int i = 0; i < kVoLumPitchModeCount && i < static_cast<int>(modes.size()); ++i)
+    {
+      const auto& m = modes[i];
+      auto& dst = out.prePitchModes[i];
+      detail::JsonGetClampedDouble(m, "mix", dst.mix, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "dry", dst.dry, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "level", dst.level, -20.0, 20.0);
+      detail::JsonGetClampedInt(m, "voicing", dst.voicing, 0, 1);
+    }
+    any = true;
+  }
   return any;
 }
 
@@ -274,6 +349,8 @@ inline bool PostBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "postDelayTone", out.postDelayTone, 0.0, 1.0);
   any |= detail::JsonGetClampedDouble(o, "postDelayAge", out.postDelayAge, 0.0, 1.0);
   any |= detail::JsonGetBool(o, "postDelayPingPong", out.postDelayPingPong);
+  any |= detail::JsonGetBool(o, "postDelaySync", out.postDelaySync);
+  any |= detail::JsonGetClampedInt(o, "postDelayDivision", out.postDelayDivision, 0, kVoLumTremoloDivisionCount - 1);
   any |= detail::JsonGetBool(o, "postReverbActive", out.postReverbActive);
   any |= detail::JsonGetClampedDouble(o, "postReverbMix", out.postReverbMix, 0.0, 1.0);
   any |= detail::JsonGetClampedDouble(o, "postReverbDecay", out.postReverbDecay, 0.1, 10.0);
@@ -282,6 +359,16 @@ inline bool PostBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "postReverbShimmer", out.postReverbShimmer, 0.0, 1.0);
   any |= detail::JsonGetClampedInt(o, "postReverbMode", out.postReverbMode, 0, kVoLumReverbModeCount - 1);
   any |= detail::JsonGetClampedInt(o, "postReverbSubMode", out.postReverbSubMode, 0, 2);
+  any |= detail::JsonGetBool(o, "postTremoloActive", out.postTremoloActive);
+  any |= detail::JsonGetClampedInt(o, "postTremoloMode", out.postTremoloMode, 0, kVoLumTremoloModeCount - 1);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloRate", out.postTremoloRate, 0.1, 20.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloDepth", out.postTremoloDepth, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloShape", out.postTremoloShape, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloMix", out.postTremoloMix, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postTremoloCrossover", out.postTremoloCrossover, 200.0, 2000.0);
+  any |= detail::JsonGetBool(o, "postTremoloSync", out.postTremoloSync);
+  any |=
+    detail::JsonGetClampedInt(o, "postTremoloDivision", out.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1);
   if (o.contains("postDelayModes") && o["postDelayModes"].is_array())
   {
     const auto& modes = o["postDelayModes"];
@@ -329,7 +416,22 @@ inline bool PostBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
     }
     any = true;
   }
-  (void) defaults;
+  if (o.contains("postTremoloModes") && o["postTremoloModes"].is_array())
+  {
+    const auto& modes = o["postTremoloModes"];
+    for (int i = 0; i < kVoLumTremoloModeCount && i < static_cast<int>(modes.size()); ++i)
+    {
+      const auto& m = modes[i];
+      auto& dst = out.postTremoloModes[i];
+      detail::JsonGetClampedDouble(m, "rate", dst.rate, 0.1, 20.0);
+      detail::JsonGetClampedDouble(m, "depth", dst.depth, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "shape", dst.shape, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "mix", dst.mix, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "crossover", dst.crossover, 200.0, 2000.0);
+    }
+    any = true;
+  }
+  (void)defaults;
   return any;
 }
 
@@ -359,6 +461,17 @@ inline nlohmann::json PreBlockToJson(const VoLumAmpSettings& s)
   o["preNam2MidFreq"] = s.preNam2MidFreq;
   o["preNam2Treble"] = s.preNam2Treble;
   o["preNam2Level"] = s.preNam2Level;
+  o["prePitchActive"] = s.prePitchActive;
+  o["prePitchMode"] = s.prePitchMode;
+  o["prePitchSemitones"] = s.prePitchSemitones;
+  o["prePitchMix"] = s.prePitchMix;
+  o["prePitchOctDown"] = s.prePitchOctDown;
+  o["prePitchOctUp"] = s.prePitchOctUp;
+  o["prePitchDry"] = s.prePitchDry;
+  o["prePitchVoicing"] = s.prePitchVoicing;
+  o["prePitchLevel"] = s.prePitchLevel;
+  o["prePitchTransChar"] = s.prePitchTransChar;
+  o["prePitchModes"] = PitchModeSnapshotsToJson(s.prePitchModes, kVoLumPitchModeCount);
   return o;
 }
 
@@ -374,6 +487,8 @@ inline nlohmann::json PostBlockToJson(const VoLumAmpSettings& s)
   o["postDelayTone"] = s.postDelayTone;
   o["postDelayAge"] = s.postDelayAge;
   o["postDelayPingPong"] = s.postDelayPingPong;
+  o["postDelaySync"] = s.postDelaySync;
+  o["postDelayDivision"] = s.postDelayDivision;
   o["postReverbActive"] = s.postReverbActive;
   o["postReverbMix"] = s.postReverbMix;
   o["postReverbDecay"] = s.postReverbDecay;
@@ -382,23 +497,118 @@ inline nlohmann::json PostBlockToJson(const VoLumAmpSettings& s)
   o["postReverbShimmer"] = s.postReverbShimmer;
   o["postReverbMode"] = s.postReverbMode;
   o["postReverbSubMode"] = s.postReverbSubMode;
+  o["postTremoloActive"] = s.postTremoloActive;
+  o["postTremoloMode"] = s.postTremoloMode;
+  o["postTremoloRate"] = s.postTremoloRate;
+  o["postTremoloDepth"] = s.postTremoloDepth;
+  o["postTremoloShape"] = s.postTremoloShape;
+  o["postTremoloMix"] = s.postTremoloMix;
+  o["postTremoloCrossover"] = s.postTremoloCrossover;
+  o["postTremoloSync"] = s.postTremoloSync;
+  o["postTremoloDivision"] = s.postTremoloDivision;
   o["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
   o["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
   o["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
+  o["postTremoloModes"] = TremoloModeSnapshotsToJson(s.postTremoloModes, kVoLumTremoloModeCount);
   return o;
 }
 
+// Main-amp core block (cab/channel + tone + gates). Lives here with the other
+// block writers/readers so the whole VoLumAmpSettings field list has a single
+// source of truth; VoLumAmpSettingsJson.h composes these for presets/content.
+inline void WriteAmpCoreBlock(nlohmann::json& a, const VoLumAmpSettings& s)
+{
+  a["speaker"] = s.speakerIdx;
+  a["channel"] = s.channelIdx;
+  a["input"] = s.inputLevel;
+  a["gate"] = s.gateThreshold;
+  a["bass"] = s.toneBass;
+  a["mid"] = s.toneMid;
+  a["treble"] = s.toneTreble;
+  a["output"] = s.outputLevel;
+  a["noiseGate"] = s.noiseGateActive;
+  a["eq"] = s.eqActive;
+}
+
+// Returns true if any field was clamped/reset (i.e. the source was malformed).
+inline bool ReadAmpCoreBlock(const nlohmann::json& a, VoLumAmpSettings& s)
+{
+  const VoLumAmpSettings d;
+  bool healed = false;
+  auto i = [&](const char* k, int& t, int lo, int hi, int def) {
+    if (!a.contains(k))
+      return;
+    if (!a[k].is_number_integer())
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    const long long v = a[k].get<long long>();
+    if (v < lo || v > hi)
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    t = static_cast<int>(v);
+  };
+  auto dbl = [&](const char* k, double& t, double lo, double hi, double def) {
+    if (!a.contains(k))
+      return;
+    if (!a[k].is_number())
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    const double v = a[k].get<double>();
+    if (!std::isfinite(v) || v < lo || v > hi)
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    t = v;
+  };
+  auto b = [&](const char* k, bool& t, bool def) {
+    if (!a.contains(k))
+      return;
+    if (!a[k].is_boolean())
+    {
+      t = def;
+      healed = true;
+      return;
+    }
+    t = a[k].get<bool>();
+  };
+  i("speaker", s.speakerIdx, 0, 127, d.speakerIdx);
+  i("channel", s.channelIdx, 0, 127, d.channelIdx);
+  dbl("input", s.inputLevel, -20.0, 20.0, d.inputLevel);
+  dbl("gate", s.gateThreshold, -100.0, 0.0, d.gateThreshold);
+  dbl("bass", s.toneBass, 0.0, 10.0, d.toneBass);
+  dbl("mid", s.toneMid, 0.0, 10.0, d.toneMid);
+  dbl("treble", s.toneTreble, 0.0, 10.0, d.toneTreble);
+  dbl("output", s.outputLevel, -40.0, 10.0, d.outputLevel);
+  b("noiseGate", s.noiseGateActive, d.noiseGateActive);
+  b("eq", s.eqActive, d.eqActive);
+  return healed;
+}
+
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
-                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
-                                               bool preLocked = false, bool postLocked = false,
-                                               const VoLumAmpSettings* liveLockedPre = nullptr,
-                                               const VoLumAmpSettings* liveLockedPost = nullptr)
+                                              const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
+                                              bool preLocked = false, bool postLocked = false,
+                                              const VoLumAmpSettings* liveLockedPre = nullptr,
+                                              const VoLumAmpSettings* liveLockedPost = nullptr, bool liteMode = false)
 {
   nlohmann::json j;
   j["version"] = kVoLumUserSettingsVersion;
   j["lastAmpIdx"] = lastAmpIdx;
   j["preLocked"] = preLocked;
   j["postLocked"] = postLocked;
+  // VoLum 1.2.0: machine-global A2 Lite mode (false = Full, default). Additive
+  // optional key; older readers ignore it, so no version bump.
+  j["liteMode"] = liteMode;
   // Live lock snapshots: persisted independently of per-amp slots so that
   // reopening the app with a lock still on restores the exact live PRE/POST
   // the user was hearing, without ever mutating any amp's stored scene.
@@ -411,72 +621,32 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
   for (int i = 0; i < ampCount; ++i)
   {
     const auto& s = ampSettings[i];
+    // Single source of truth: compose the same block writers the rest of the
+    // settings/preset codec uses instead of re-listing every field inline. A
+    // field added to a block writer (WriteAmpCoreBlock / PreBlockToJson /
+    // PostBlockToJson / WriteDualAmpUserSettings) is now automatically persisted
+    // per-amp; previously it had to be added here too or it was silently dropped.
+    // Guarded by the exhaustive round-trip pin in test_volum_user_settings_io.cpp.
     nlohmann::json a;
-    a["speaker"] = s.speakerIdx;
-    a["channel"] = s.channelIdx;
-    a["input"] = s.inputLevel;
-    a["gate"] = s.gateThreshold;
-    a["bass"] = s.toneBass;
-    a["mid"] = s.toneMid;
-    a["treble"] = s.toneTreble;
-    a["output"] = s.outputLevel;
-    a["noiseGate"] = s.noiseGateActive;
-    a["eq"] = s.eqActive;
-    a["preCompActive"] = s.preCompActive;
-    a["preCompAmount"] = s.preCompAmount;
-    a["preCompRatio"] = s.preCompRatio;
-    a["preCompAttack"] = s.preCompAttack;
-    a["preCompRelease"] = s.preCompRelease;
-    a["preCompMix"] = s.preCompMix;
-    a["preCompLevel"] = s.preCompLevel;
-    a["preNam1Active"] = s.preNam1Active;
-    a["preNam1Capture"] = s.preNam1Capture;
-    a["preNam1Gain"] = s.preNam1Gain;
-    a["preNam1Bass"] = s.preNam1Bass;
-    a["preNam1Mid"] = s.preNam1Mid;
-    a["preNam1MidFreq"] = s.preNam1MidFreq;
-    a["preNam1Treble"] = s.preNam1Treble;
-    a["preNam1Level"] = s.preNam1Level;
-    a["preNam2Active"] = s.preNam2Active;
-    a["preNam2Capture"] = s.preNam2Capture;
-    a["preNam2Gain"] = s.preNam2Gain;
-    a["preNam2Bass"] = s.preNam2Bass;
-    a["preNam2Mid"] = s.preNam2Mid;
-    a["preNam2MidFreq"] = s.preNam2MidFreq;
-    a["preNam2Treble"] = s.preNam2Treble;
-    a["preNam2Level"] = s.preNam2Level;
-    if (includeDualAmp)
-      WriteDualAmpUserSettings(a, s);
-
+    WriteAmpCoreBlock(a, s);
+    // VoLum 1.2.0: per-amp + per-lane custom IR ids (opaque content-store ids;
+    // empty == baked cab). Additive optional keys; older readers ignore them.
+    a["activeIrId"] = s.activeIrId;
+    a["supportActiveIrId"] = s.supportActiveIrId;
+    a.update(PreBlockToJson(s));
     // POST per-amp live values (v6+). postValid distinguishes a real per-amp scene
     // from a legacy / never-saved slot; restore initializes postValid=false slots to
     // factory POST defaults instead of inheriting the previously selected amp.
-    a["postValid"] = s.postValid;
-    a["postDelayActive"] = s.postDelayActive;
-    a["postDelayTime"] = s.postDelayTime;
-    a["postDelayFeedback"] = s.postDelayFeedback;
-    a["postDelayMix"] = s.postDelayMix;
-    a["postDelayMode"] = s.postDelayMode;
-    a["postDelayTone"] = s.postDelayTone;
-    a["postDelayAge"] = s.postDelayAge;
-    a["postDelayPingPong"] = s.postDelayPingPong;
-    a["postReverbActive"] = s.postReverbActive;
-    a["postReverbMix"] = s.postReverbMix;
-    a["postReverbDecay"] = s.postReverbDecay;
-    a["postReverbTone"] = s.postReverbTone;
-    a["postReverbPreDelay"] = s.postReverbPreDelay;
-    a["postReverbShimmer"] = s.postReverbShimmer;
-    a["postReverbMode"] = s.postReverbMode;
-    a["postReverbSubMode"] = s.postReverbSubMode;
-    a["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
-    a["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
-    a["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
+    a.update(PostBlockToJson(s));
+    if (includeDualAmp)
+      WriteDualAmpUserSettings(a, s);
 
     amps[kAmps[i].folderName] = a;
   }
   j["amps"] = amps;
 
-  if (fx) {
+  if (fx)
+  {
     nlohmann::json e;
     e["delayActive"] = fx->delayActive;
     e["delayMode"] = fx->delayMode;
@@ -485,6 +655,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     e["delayModes"] = DelayModeSnapshotsToJson(fx->delayModes, kVoLumDelayModeCount);
     e["reverbModes"] = ReverbModeSnapshotsToJson(fx->reverbModes, kVoLumReverbModeCount);
     e["oktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(fx->oktaverbSubModes, 3);
+    e["tremoloMode"] = fx->tremoloMode;
+    e["tremoloModes"] = TremoloModeSnapshotsToJson(fx->tremoloModes, kVoLumTremoloModeCount);
     j["effects"] = e;
   }
 
@@ -495,12 +667,12 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
                                       int* lastAmpIdx, VoLumEffectSettings* fx = nullptr, bool* didHeal = nullptr,
                                       bool* preLocked = nullptr, bool* postLocked = nullptr,
                                       VoLumAmpSettings* liveLockedPre = nullptr,
-                                      VoLumAmpSettings* liveLockedPost = nullptr,
-                                      bool* haveLiveLockedPre = nullptr,
-                                      bool* haveLiveLockedPost = nullptr)
+                                      VoLumAmpSettings* liveLockedPost = nullptr, bool* haveLiveLockedPre = nullptr,
+                                      bool* haveLiveLockedPost = nullptr, bool* liteMode = nullptr)
 {
   bool healed = false;
-  auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue, int defaultValue) {
+  auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue,
+                     int defaultValue) {
     if (!obj.contains(key))
       return;
     const auto& field = obj[key];
@@ -596,6 +768,14 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     loadBool(j, "postLocked", *postLocked, false);
   }
 
+  // VoLum 1.2.0: machine-global A2 Lite mode. Optional, no version gate; default
+  // Full (false) when the key is absent (older files / fresh installs).
+  if (liteMode)
+  {
+    *liteMode = false;
+    loadBool(j, "liteMode", *liteMode, false);
+  }
+
   // Live lock snapshots: stored independently of per-amp slots so that the
   // exact PRE/POST live state at shutdown comes back at startup without ever
   // mutating any amp's stored scene. Optional; absent on older files.
@@ -660,6 +840,12 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "output", s.outputLevel, -40.0, 10.0, defaults.outputLevel);
         loadBool(a, "noiseGate", s.noiseGateActive, defaults.noiseGateActive);
         loadBool(a, "eq", s.eqActive, defaults.eqActive);
+        // VoLum 1.2.0: per-amp custom IR id (additive; absent on older files ->
+        // keep the default empty id == baked cab).
+        if (a.contains("activeIrId") && a["activeIrId"].is_string())
+          s.activeIrId = a["activeIrId"].get<std::string>();
+        if (a.contains("supportActiveIrId") && a["supportActiveIrId"].is_string())
+          s.supportActiveIrId = a["supportActiveIrId"].get<std::string>();
         loadBool(a, "preCompActive", s.preCompActive, defaults.preCompActive);
         loadDouble(a, "preCompAmount", s.preCompAmount, 0.0, 10.0, defaults.preCompAmount);
         loadDouble(a, "preCompRatio", s.preCompRatio, 1.0, 20.0, defaults.preCompRatio);
@@ -669,7 +855,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preCompLevel", s.preCompLevel, -20.0, 20.0, defaults.preCompLevel);
         loadBool(a, "preNam1Active", s.preNam1Active, defaults.preNam1Active);
         loadInt(a, "preNam1Capture", s.preNam1Capture, 0, 127, defaults.preNam1Capture);
-        if (resetLegacyPreCaptureSelections && a.contains("preNam1Capture") && s.preNam1Capture != defaults.preNam1Capture)
+        if (resetLegacyPreCaptureSelections && a.contains("preNam1Capture")
+            && s.preNam1Capture != defaults.preNam1Capture)
         {
           s.preNam1Capture = defaults.preNam1Capture;
           healed = true;
@@ -682,7 +869,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preNam1Level", s.preNam1Level, -20.0, 20.0, defaults.preNam1Level);
         loadBool(a, "preNam2Active", s.preNam2Active, defaults.preNam2Active);
         loadInt(a, "preNam2Capture", s.preNam2Capture, 0, 127, defaults.preNam2Capture);
-        if (resetLegacyPreCaptureSelections && a.contains("preNam2Capture") && s.preNam2Capture != defaults.preNam2Capture)
+        if (resetLegacyPreCaptureSelections && a.contains("preNam2Capture")
+            && s.preNam2Capture != defaults.preNam2Capture)
         {
           s.preNam2Capture = defaults.preNam2Capture;
           healed = true;
@@ -693,6 +881,35 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "preNam2MidFreq", s.preNam2MidFreq, 150.0, 2500.0, defaults.preNam2MidFreq);
         loadDouble(a, "preNam2Treble", s.preNam2Treble, 0.0, 10.0, defaults.preNam2Treble);
         loadDouble(a, "preNam2Level", s.preNam2Level, -20.0, 20.0, defaults.preNam2Level);
+        loadBool(a, "prePitchActive", s.prePitchActive, defaults.prePitchActive);
+        loadInt(a, "prePitchMode", s.prePitchMode, 0, 1, defaults.prePitchMode);
+        loadDouble(a, "prePitchSemitones", s.prePitchSemitones, -12.0, 7.0, defaults.prePitchSemitones);
+        loadDouble(a, "prePitchMix", s.prePitchMix, 0.0, 1.0, defaults.prePitchMix);
+        loadDouble(a, "prePitchOctDown", s.prePitchOctDown, 0.0, 1.0, defaults.prePitchOctDown);
+        loadDouble(a, "prePitchOctUp", s.prePitchOctUp, 0.0, 1.0, defaults.prePitchOctUp);
+        loadDouble(a, "prePitchDry", s.prePitchDry, 0.0, 1.0, defaults.prePitchDry);
+        loadInt(a, "prePitchVoicing", s.prePitchVoicing, 0, 1, defaults.prePitchVoicing);
+        loadDouble(a, "prePitchLevel", s.prePitchLevel, -20.0, 20.0, defaults.prePitchLevel);
+        loadInt(a, "prePitchTransChar", s.prePitchTransChar, 0, volum::kVoLumPitchCharacterCount - 1,
+                defaults.prePitchTransChar);
+        if (a.contains("prePitchModes") && a["prePitchModes"].is_array())
+        {
+          const auto& modes = a["prePitchModes"];
+          for (int modeIdx = 0; modeIdx < kVoLumPitchModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
+          {
+            const auto& mode = modes[modeIdx];
+            auto& dst = s.prePitchModes[modeIdx];
+            const auto& def = defaults.prePitchModes[modeIdx];
+            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
+            loadDouble(mode, "dry", dst.dry, 0.0, 1.0, def.dry);
+            loadDouble(mode, "level", dst.level, -20.0, 20.0, def.level);
+            loadInt(mode, "voicing", dst.voicing, 0, 1, def.voicing);
+          }
+        }
+        else if (a.contains("prePitchModes"))
+        {
+          healed = true;
+        }
         loadBool(a, "dualAmpActive", s.dualAmpActive, defaults.dualAmpActive);
         loadInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2, defaults.dualAmpRoute);
         loadDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0, defaults.mainAmpPan);
@@ -709,6 +926,12 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadBool(a, "supportEq", s.supportEqActive, defaults.supportEqActive);
         loadDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0, defaults.supportAmpPan);
         loadBool(a, "supportPolarityInvert", s.supportPolarityInvert, defaults.supportPolarityInvert);
+        // 1.2.0: custom SUPPORT partner id + its own cab/channel (additive; absent
+        // on older files -> keep defaults == no custom support partner).
+        if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
+          s.supportCustomId = a["supportCustomId"].get<std::string>();
+        loadInt(a, "supportCustomSlot", s.supportCustomSlot, -2, 2, defaults.supportCustomSlot);
+        loadInt(a, "supportCustomChannel", s.supportCustomChannel, 0, 8, defaults.supportCustomChannel);
 
         // v6+ per-amp POST live values. On legacy (v<6) settings the keys are absent
         // and the struct defaults remain in place; postValid stays false so amp restore
@@ -723,6 +946,9 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "postDelayTone", s.postDelayTone, 0.0, 1.0, defaults.postDelayTone);
         loadDouble(a, "postDelayAge", s.postDelayAge, 0.0, 1.0, defaults.postDelayAge);
         loadBool(a, "postDelayPingPong", s.postDelayPingPong, defaults.postDelayPingPong);
+        loadBool(a, "postDelaySync", s.postDelaySync, defaults.postDelaySync);
+        loadInt(a, "postDelayDivision", s.postDelayDivision, 0, kVoLumTremoloDivisionCount - 1,
+                defaults.postDelayDivision);
         loadBool(a, "postReverbActive", s.postReverbActive, defaults.postReverbActive);
         loadDouble(a, "postReverbMix", s.postReverbMix, 0.0, 1.0, defaults.postReverbMix);
         loadDouble(a, "postReverbDecay", s.postReverbDecay, 0.1, 10.0, defaults.postReverbDecay);
@@ -731,6 +957,16 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "postReverbShimmer", s.postReverbShimmer, 0.0, 1.0, defaults.postReverbShimmer);
         loadInt(a, "postReverbMode", s.postReverbMode, 0, kVoLumReverbModeCount - 1, defaults.postReverbMode);
         loadInt(a, "postReverbSubMode", s.postReverbSubMode, 0, 2, defaults.postReverbSubMode);
+        loadBool(a, "postTremoloActive", s.postTremoloActive, defaults.postTremoloActive);
+        loadInt(a, "postTremoloMode", s.postTremoloMode, 0, kVoLumTremoloModeCount - 1, defaults.postTremoloMode);
+        loadDouble(a, "postTremoloRate", s.postTremoloRate, 0.1, 20.0, defaults.postTremoloRate);
+        loadDouble(a, "postTremoloDepth", s.postTremoloDepth, 0.0, 1.0, defaults.postTremoloDepth);
+        loadDouble(a, "postTremoloShape", s.postTremoloShape, 0.0, 1.0, defaults.postTremoloShape);
+        loadDouble(a, "postTremoloMix", s.postTremoloMix, 0.0, 1.0, defaults.postTremoloMix);
+        loadDouble(a, "postTremoloCrossover", s.postTremoloCrossover, 200.0, 2000.0, defaults.postTremoloCrossover);
+        loadBool(a, "postTremoloSync", s.postTremoloSync, defaults.postTremoloSync);
+        loadInt(a, "postTremoloDivision", s.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1,
+                defaults.postTremoloDivision);
         if (a.contains("postDelayModes") && a["postDelayModes"].is_array())
         {
           const auto& modes = a["postDelayModes"];
@@ -787,6 +1023,26 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           }
         }
         else if (a.contains("postOktaverbSubModes"))
+        {
+          healed = true;
+        }
+        if (a.contains("postTremoloModes") && a["postTremoloModes"].is_array())
+        {
+          const auto& modes = a["postTremoloModes"];
+          for (int modeIdx = 0; modeIdx < kVoLumTremoloModeCount && modeIdx < static_cast<int>(modes.size());
+               ++modeIdx)
+          {
+            const auto& mode = modes[modeIdx];
+            auto& dst = s.postTremoloModes[modeIdx];
+            const auto& def = defaults.postTremoloModes[modeIdx];
+            loadDouble(mode, "rate", dst.rate, 0.1, 20.0, def.rate);
+            loadDouble(mode, "depth", dst.depth, 0.0, 1.0, def.depth);
+            loadDouble(mode, "shape", dst.shape, 0.0, 1.0, def.shape);
+            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
+            loadDouble(mode, "crossover", dst.crossover, 200.0, 2000.0, def.crossover);
+          }
+        }
+        else if (a.contains("postTremoloModes"))
         {
           healed = true;
         }
@@ -967,7 +1223,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           loadDouble(mode, "mix", fx->oktaverbSubModes[i].mix, 0.0, 1.0, defaults.oktaverbSubModes[i].mix);
           loadDouble(mode, "decay", fx->oktaverbSubModes[i].decay, 0.1, 10.0, defaults.oktaverbSubModes[i].decay);
           loadDouble(mode, "tone", fx->oktaverbSubModes[i].tone, 0.0, 10.0, defaults.oktaverbSubModes[i].tone);
-          loadDouble(mode, "preDelay", fx->oktaverbSubModes[i].preDelay, 0.0, 200.0, defaults.oktaverbSubModes[i].preDelay);
+          loadDouble(
+            mode, "preDelay", fx->oktaverbSubModes[i].preDelay, 0.0, 200.0, defaults.oktaverbSubModes[i].preDelay);
           loadDouble(mode, "shimmer", fx->oktaverbSubModes[i].shimmer, 0.0, 1.0, defaults.oktaverbSubModes[i].shimmer);
         }
         else
@@ -992,6 +1249,32 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     }
 
     fx->reverbMode = std::clamp(rawReverbMode, 0, kVoLumReverbModeCount - 1);
+
+    if (e.contains("tremoloModes") && e["tremoloModes"].is_array())
+    {
+      const auto& modes = e["tremoloModes"];
+      const int avail = static_cast<int>(modes.size());
+      for (int i = 0; i < kVoLumTremoloModeCount; ++i)
+      {
+        if (i < avail)
+        {
+          const auto& mode = modes[i];
+          loadDouble(mode, "rate", fx->tremoloModes[i].rate, 0.1, 20.0, defaults.tremoloModes[i].rate);
+          loadDouble(mode, "depth", fx->tremoloModes[i].depth, 0.0, 1.0, defaults.tremoloModes[i].depth);
+          loadDouble(mode, "shape", fx->tremoloModes[i].shape, 0.0, 1.0, defaults.tremoloModes[i].shape);
+          loadDouble(mode, "mix", fx->tremoloModes[i].mix, 0.0, 1.0, defaults.tremoloModes[i].mix);
+          loadDouble(mode, "crossover", fx->tremoloModes[i].crossover, 200.0, 2000.0,
+                     defaults.tremoloModes[i].crossover);
+        }
+        else
+        {
+          fx->tremoloModes[i] = defaults.tremoloModes[i];
+        }
+      }
+    }
+    int rawTremoloMode = defaults.tremoloMode;
+    loadInt(e, "tremoloMode", rawTremoloMode, 0, kVoLumTremoloModeCount - 1, defaults.tremoloMode);
+    fx->tremoloMode = std::clamp(rawTremoloMode, 0, kVoLumTremoloModeCount - 1);
   }
 
   if (didHeal)

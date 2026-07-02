@@ -8,7 +8,7 @@
 
 namespace volum::keyboard
 {
-constexpr int kTargetCount = 7;
+constexpr int kTargetCount = 9;
 
 constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
 {
@@ -20,6 +20,8 @@ constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
     case EVoLumEffectFocus::PRE_NAM2: return 4;
     case EVoLumEffectFocus::DELAY: return 5;
     case EVoLumEffectFocus::REVERB: return 6;
+    case EVoLumEffectFocus::PITCH: return 7;
+    case EVoLumEffectFocus::TREMOLO: return 8;
   }
   return 0;
 }
@@ -34,7 +36,7 @@ constexpr std::array<int, 7> kMainAmpDualParams = {
 
 constexpr std::array<int, 7> kSupportAmpParams = {
   kSupportInputLevel, kSupportNoiseGateThreshold, kSupportToneBass, kSupportToneMid,
-  kSupportToneTreble, kSupportOutputLevel, kSupportAmpPan,
+  kSupportToneTreble, kSupportOutputLevel,        kSupportAmpPan,
 };
 
 constexpr std::array<int, 5> kDelayParams = {
@@ -42,7 +44,10 @@ constexpr std::array<int, 5> kDelayParams = {
 };
 
 constexpr std::array<int, 4> kReverbParams = {
-  kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay,
+  kReverbMix,
+  kReverbDecay,
+  kReverbTone,
+  kReverbPreDelay,
 };
 
 constexpr std::array<int, 5> kOktaverbParams = {
@@ -58,7 +63,35 @@ constexpr std::array<int, 6> kPreNam2Params = {
 };
 
 constexpr std::array<int, 4> kCompParams = {
-  kPreCompAmount, kPreCompAttack, kPreCompRelease, kPreCompLevel,
+  kPreCompAmount,
+  kPreCompAttack,
+  kPreCompRelease,
+  kPreCompLevel,
+};
+
+constexpr std::array<int, 4> kTremoloParams = {
+  kTremoloRate,
+  kTremoloDepth,
+  kTremoloShape,
+  kTremoloMix,
+};
+
+// Harmonic mode exposes the band-split CROSSOVER knob too.
+constexpr std::array<int, 5> kTremoloHarmonicParams = {
+  kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover,
+};
+
+constexpr std::array<int, 3> kPitchTransposeParams = {
+  kPrePitchSemitones,
+  kPrePitchMix,
+  kPrePitchLevel,
+};
+
+constexpr std::array<int, 4> kPitchOctaverParams = {
+  kPrePitchOctDown,
+  kPrePitchOctUp,
+  kPrePitchDry,
+  kPrePitchLevel,
 };
 
 inline double StepForParam(int paramIdx, bool fine)
@@ -73,8 +106,7 @@ inline double StepForParam(int paramIdx, bool fine)
     case kPreNam2Gain:
     case kPreNam2Level:
     case kSupportInputLevel:
-    case kSupportOutputLevel:
-      return fine ? 0.1 : 0.5;
+    case kSupportOutputLevel: return fine ? 0.1 : 0.5;
     case kToneBass:
     case kToneMid:
     case kToneTreble:
@@ -89,15 +121,21 @@ inline double StepForParam(int paramIdx, bool fine)
     case kPreNam2Treble:
     case kSupportToneBass:
     case kSupportToneMid:
-    case kSupportToneTreble:
-      return fine ? 0.1 : 0.5;
+    case kSupportToneTreble: return fine ? 0.1 : 0.5;
     case kDelayTime:
     case kReverbPreDelay:
     case kPreNam1MidFreq:
     case kPreNam2MidFreq:
     case kPreCompAttack:
     case kPreCompRelease:
-      return fine ? 1.0 : 5.0;
+    case kTremoloCrossover: return fine ? 1.0 : 5.0;
+    case kTremoloRate: return fine ? 0.1 : 0.5;
+    case kPrePitchSemitones: return 1.0;
+    case kPrePitchMix:
+    case kPrePitchOctDown:
+    case kPrePitchOctUp:
+    case kPrePitchDry: return fine ? 0.01 : 0.05;
+    case kPrePitchLevel: return fine ? 0.1 : 0.5;
     case kDelayFeedback:
     case kDelayMix:
     case kDelayTone:
@@ -106,9 +144,10 @@ inline double StepForParam(int paramIdx, bool fine)
     case kReverbDecay:
     case kReverbShimmer:
     case kPreCompMix:
-      return fine ? 0.01 : 0.05;
-    default:
-      return fine ? 0.1 : 1.0;
+    case kTremoloDepth:
+    case kTremoloShape:
+    case kTremoloMix: return fine ? 0.01 : 0.05;
+    default: return fine ? 0.1 : 1.0;
   }
 }
 

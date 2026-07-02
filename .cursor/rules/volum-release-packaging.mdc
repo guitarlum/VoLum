@@ -19,14 +19,10 @@ Branch/workflow facts:
 - `Release Native` is main-only: it checks out `main`, bumps metadata, tags, then builds from that tag.
 - Regular CI now runs Windows/macOS doctests, macOS sanitizer doctests, NAMCore regression tests, Windows installer smoke verification, package layout checks, and VST3 validation through pluginval plus the Steinberg validator when available.
 
-Branch policy (use this whenever starting new work):
+Branch policy:
 
-- Long-lived branches: `main` is the released branch; `dev` is the integration branch.
-- Right after any release lands on `main`, merge `main` into `dev` (`git checkout dev && git merge origin/main`) and push, so `dev` carries the released commits + version metadata.
-- Feature work always branches off the latest `dev`, e.g. `feature/<short-topic>`.
-- When a feature is verified, merge it back into `dev` (PR or fast-forward). Do not merge feature branches directly into `main`.
-- Promote `dev` to `main` only as part of a release (use `release-manager` skill for the PR; see `Release Native` workflow above).
-- Keep unrelated local dirt (especially `iPlug2` ASIO patch dirt) out of any of these merges.
+- Canonical branch flow (`main`/`dev`/`feature`, post-release `main`->`dev` merge) lives in `vo-lum-workflow.mdc` "Branching". Promote `dev`->`main` only as part of a release; the `release-manager` skill drives the PR.
+- Keep unrelated local dirt (especially `iPlug2` ASIO patch dirt) out of any release merge.
 - Packaging CI fixes should run on a fix branch first. Merge to `dev` only after branch CI is green, unless the user explicitly asks to iterate directly on `dev`.
 
 Packaging layout:
@@ -46,7 +42,7 @@ Packaging layout:
 - PRE NAM captures live in `rigs/PrePedals/` during development and ship as `VoLumRigs/PrePedals/`; package verification must check any `.nam` files in that folder, not only the directory.
 - Never apply Finder custom icons to signed VST3 bundles. Finder icons create root `Icon?` metadata files that break strict code-signature verification after zip/unzip.
 - Before signing or zipping macOS bundles, scrub `Icon?`, `._*`, `.DS_Store`, and extended attributes; verify the staged VST3 before creating the portable zip.
-- When macOS packaging CI fails with `resource fork, Finder information, or similar detritus not allowed` or `unsealed contents present in the bundle root`, inspect root files and xattrs with `NeuralAmpModeler/scripts/debug-mac-vst3-signature.sh`.
+- For diagnosing macOS detritus/signature CI failures (`resource fork ... not allowed`, `unsealed contents present in the bundle root`), see the `native-build-debugger` skill.
 
 Version metadata:
 

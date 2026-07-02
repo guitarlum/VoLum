@@ -20,11 +20,32 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
                                                         const size_t numChannelsInternal, const int nFrames,
                                                         const double sampleRate)
 {
+  if (processingPlan.runPrePitch)
+  {
+    // Reconfigure (block-size/quality change) happens off the audio thread in
+    // OnIdle. Here we only try-lock; if a reconfigure is mid-flight we pass the
+    // dry signal through for this block rather than allocate or block.
+    std::unique_lock<std::mutex> lock(mPrePitchMutex, std::try_to_lock);
+    if (lock.owns_lock() && mPitch.Configured())
+    {
+      const int mode = std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1);
+      const int voicing = GetParam(kPrePitchVoicing)->Int();
+      const int transChar = volum::VoLumEffectiveTransChar(
+        std::clamp(GetParam(kPrePitchTransChar)->Int(), 0, volum::kVoLumPitchCharacterCount - 1));
+      mPitch.SetParams(static_cast<dsp::effect::VoLumPitch::Mode>(mode), GetParam(kPrePitchSemitones)->Value(),
+                       GetParam(kPrePitchMix)->Value(), GetParam(kPrePitchOctDown)->Value(),
+                       GetParam(kPrePitchOctUp)->Value(), GetParam(kPrePitchDry)->Value(),
+                       static_cast<dsp::effect::VoLumPitch::Voicing>(voicing), GetParam(kPrePitchLevel)->Value(),
+                       static_cast<dsp::effect::VoLumPitch::Character>(transChar));
+      preAmpPointers = mPitch.Process(preAmpPointers, numChannelsInternal, nFrames);
+    }
+  }
+
   if (processingPlan.runPreComp)
   {
     mPreCompressor.SetParams(GetParam(kPreCompAmount)->Value(), GetParam(kPreCompRatio)->Value(),
-                             GetParam(kPreCompAttack)->Value(), GetParam(kPreCompRelease)->Value(),
-                             1.0, GetParam(kPreCompLevel)->Value(), sampleRate);
+                             GetParam(kPreCompAttack)->Value(), GetParam(kPreCompRelease)->Value(), 1.0,
+                             GetParam(kPreCompLevel)->Value(), sampleRate);
     preAmpPointers = mPreCompressor.Process(preAmpPointers, numChannelsInternal, nFrames);
   }
 
@@ -40,8 +61,8 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
     mPreModel[slot]->process(preAmpPointers[0], mOutputPointers[0], nFrames);
     preAmpPointers = mOutputPointers;
 
-    mPreEq[slot].SetParams(GetParam(bassParam)->Value(), GetParam(midParam)->Value(),
-                           GetParam(midFreqParam)->Value(), GetParam(trebleParam)->Value());
+    mPreEq[slot].SetParams(GetParam(bassParam)->Value(), GetParam(midParam)->Value(), GetParam(midFreqParam)->Value(),
+                           GetParam(trebleParam)->Value());
     preAmpPointers = mPreEq[slot].Process(preAmpPointers, numChannelsInternal, nFrames);
 
     const double outGain = volum::DbToAmpWithMuteFloor(GetParam(levelParam)->Value(), GetParam(levelParam)->GetMin());
@@ -55,9 +76,9 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
 }
 
 iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preAmpPointers,
-                                                             const volum::ProcessingPlan& processingPlan,
-                                                             const size_t numChannelsInternal, const int nFrames,
-                                                             const double sampleRate)
+                                                            const volum::ProcessingPlan& processingPlan,
+                                                            const size_t numChannelsInternal, const int nFrames,
+                                                            const double sampleRate)
 {
   sample** triggerOutput = preAmpPointers;
   if (processingPlan.runNoiseGate)
@@ -75,6 +96,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     {
       mDelay.Reset();
       mReverb.Reset();
+      mTremolo.Reset();
     }
   }
   else
@@ -84,6 +106,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     {
       mDelay.Reset();
       mReverb.Reset();
+      mTremolo.Reset();
       mPostEffectsClearedForMissingModel = true;
     }
   }
@@ -93,8 +116,9 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
   sample** hpfPointers = mOutputPointers;
   if (processingPlan.runMainModel)
   {
-    sample** gateGainOutput =
-      processingPlan.runNoiseGate ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, nFrames) : mOutputPointers;
+    sample** gateGainOutput = processingPlan.runNoiseGate
+                                ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, nFrames)
+                                : mOutputPointers;
 
     sample** toneStackOutPointers = (processingPlan.runToneStack && mToneStack != nullptr)
                                       ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
@@ -116,7 +140,8 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   if (!processingPlan.runDualAmp)
     return nullptr;
 
-  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames) && "Dual-amp support scratch not pre-reserved");
+  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames)
+         && "Dual-amp support scratch not pre-reserved");
   mDualSupportLaneBuffer.resize(nFrames);
 
   const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
@@ -141,6 +166,7 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   {
     mDelay.Reset();
     mReverb.Reset();
+    mTremolo.Reset();
   }
 
   sample* supportModelPointers[1] = {supportOutputPtr};
@@ -150,6 +176,12 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
 
   if (processingPlan.runSupportToneStack && mSupportToneStack != nullptr)
     supportPostPointers = mSupportToneStack->Process(supportPostPointers, numChannelsInternal, nFrames);
+
+  // Per-lane custom IR: convolve the SUPPORT amp's own cab (DIRECT capture) here,
+  // mirroring the MAIN lane (tone stack -> IR -> high-pass). Independent of the
+  // MAIN convolver so a custom IR is local to one lane (spec 3.2).
+  if (processingPlan.runSupportIR)
+    supportPostPointers = mSupportIR->Process(supportPostPointers, numChannelsInternal, nFrames);
 
   supportPostPointers = mSupportHighPass.Process(supportPostPointers, numChannelsInternal, nFrames);
   return supportPostPointers[0];
@@ -170,25 +202,59 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
     mDelay.Reset();
   if (mPostReverbWasActive && !processingPlan.runReverb)
     mReverb.Reset();
+  if (mPostTremoloWasActive && !processingPlan.runTremolo)
+    mTremolo.Reset();
   mPostDelayWasActive = processingPlan.runDelay;
   mPostReverbWasActive = processingPlan.runReverb;
+  mPostTremoloWasActive = processingPlan.runTremolo;
+
+  // Tempo source for the synced POST pedals (Delay + Tremolo). Standalone uses
+  // the app metronome (no DAW transport); plugins use the host transport.
+  double postBpm;
+#ifdef APP_API
+  postBpm = static_cast<double>(mMetronomeDSP.GetBPM());
+#else
+  postBpm = GetTempo();
+#endif
+  if (!(postBpm > 0.0))
+    postBpm = 120.0;
 
   if (processingPlan.runDelay)
   {
-    mDelay.SetParams(GetParam(kDelayTime)->Value(), GetParam(kDelayFeedback)->Value(),
-                     GetParam(kDelayMix)->Value(), GetParam(kDelayMode)->Int(), sampleRate,
-                     GetParam(kDelayTone)->Value(), GetParam(kDelayAge)->Value(),
-                     GetParam(kDelayPingPong)->Bool());
+    // When synced, the Time knob is replaced by a tempo division: clamp the
+    // derived ms into the delay's range so slow divisions at low BPM stay valid.
+    const bool delaySync = GetParam(kDelaySync)->Bool();
+    const double delayTimeMs =
+      delaySync ? std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)
+                : GetParam(kDelayTime)->Value();
+    mDelay.SetParams(delayTimeMs, GetParam(kDelayFeedback)->Value(), GetParam(kDelayMix)->Value(),
+                     GetParam(kDelayMode)->Int(), sampleRate, GetParam(kDelayTone)->Value(),
+                     GetParam(kDelayAge)->Value(), GetParam(kDelayPingPong)->Bool());
     postPointers = mDelay.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 
   if (processingPlan.runReverb)
   {
-    mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(),
-                      GetParam(kReverbTone)->Value(), GetParam(kReverbPreDelay)->Value(),
-                      GetParam(kReverbShimmer)->Value(), GetParam(kReverbMode)->Int(), sampleRate,
-                      GetParam(kReverbSubMode)->Int());
+    mReverb.SetParams(GetParam(kReverbMix)->Value(), GetParam(kReverbDecay)->Value(), GetParam(kReverbTone)->Value(),
+                      GetParam(kReverbPreDelay)->Value(), GetParam(kReverbShimmer)->Value(),
+                      GetParam(kReverbMode)->Int(), sampleRate, GetParam(kReverbSubMode)->Int());
     postPointers = mReverb.Process(postPointers, numChannelsExternalOut, nFrames);
+  }
+
+  // Tremolo runs LAST (after Reverb): the reverberated signal pulses too, matching
+  // a vintage amp where the trem stage sits after the reverb tank. Processes in
+  // place on the current POST bus, so no pointer-chain swap is needed.
+  if (processingPlan.runTremolo)
+  {
+    // Sync converts BPM + division to an LFO Hz (shared postBpm computed above).
+    const bool tremoloSync = GetParam(kTremoloSync)->Bool();
+    const double tremoloRateHz = tremoloSync
+                                   ? volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())
+                                   : GetParam(kTremoloRate)->Value();
+    mTremolo.SetParams(tremoloRateHz, volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value()),
+                       GetParam(kTremoloShape)->Value(), GetParam(kTremoloMix)->Value(),
+                       GetParam(kTremoloCrossover)->Value(), GetParam(kTremoloMode)->Int(), sampleRate);
+    mTremolo.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 
   if (postPointers != outputs)

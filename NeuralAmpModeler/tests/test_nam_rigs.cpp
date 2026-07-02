@@ -20,6 +20,17 @@ std::filesystem::path AmpeteDir()
 {
   return RepoRoot() / "rigs" / "Ampete One";
 }
+
+// Mirrors ResamplingNAM::SetSlimmableSize (NeuralAmpModeler.h): forwards the
+// Lite/Full selection to the encapsulated model only when it implements
+// nam::SlimmableModel, and is a graceful no-op otherwise. ResamplingNAM itself
+// pulls in the full iPlug plugin header, so the forwarding contract is verified
+// here against the same dynamic_cast logic the plugin uses.
+void ForwardSlimmableSize(nam::DSP* model, double val)
+{
+  if (auto* slim = dynamic_cast<nam::SlimmableModel*>(model))
+    slim->SetSlimmableSize(val);
+}
 } // namespace
 
 TEST_CASE("Ampete NAM files exist")
@@ -100,7 +111,9 @@ TEST_CASE("Core slimmable NAM example loads and processes")
 
   for (double size : {0.0, 1.0})
   {
-    slimmable->SetSlimmableSize(size);
+    // Route through the same dynamic_cast forwarding the plugin's ResamplingNAM
+    // wrapper uses, so VoLum's Lite/Full path is covered, not just the raw core.
+    ForwardSlimmableSize(model.get(), size);
     model->Reset(sampleRate, blockSize);
     std::fill(output.begin(), output.end(), static_cast<NAM_SAMPLE>(0.0));
     model->process(&inPtr, &outPtr, blockSize);
@@ -108,6 +121,45 @@ TEST_CASE("Core slimmable NAM example loads and processes")
     CAPTURE(size);
     for (const auto sample : output)
       CHECK(std::isfinite(static_cast<double>(sample)));
+  }
+}
+
+TEST_CASE("Slimmable size forwarding is a safe no-op on non-slimmable models")
+{
+  nam::activations::Activation::enable_fast_tanh();
+  const auto path = RepoRoot() / "NeuralAmpModelerCore" / "example_models" / "wavenet.nam";
+  REQUIRE(std::filesystem::exists(path));
+
+  auto model = nam::get_dsp(path);
+  REQUIRE(model != nullptr);
+  // Plain WaveNet does not implement the slimmable interface; the plugin must
+  // tolerate that (Lite mode simply has no effect on non-A2 rigs).
+  REQUIRE(dynamic_cast<nam::SlimmableModel*>(model.get()) == nullptr);
+
+  constexpr int blockSize = 64;
+  const double sampleRate = model->GetExpectedSampleRate() > 0.0 ? model->GetExpectedSampleRate() : 48000.0;
+  std::vector<NAM_SAMPLE> input(blockSize, static_cast<NAM_SAMPLE>(0.05));
+  NAM_SAMPLE* inPtr = input.data();
+
+  std::vector<NAM_SAMPLE> outputLite(blockSize, static_cast<NAM_SAMPLE>(0.0));
+  std::vector<NAM_SAMPLE> outputFull(blockSize, static_cast<NAM_SAMPLE>(0.0));
+  NAM_SAMPLE* litePtr = outputLite.data();
+  NAM_SAMPLE* fullPtr = outputFull.data();
+
+  ForwardSlimmableSize(model.get(), 0.0); // "Lite": no-op here
+  model->Reset(sampleRate, blockSize);
+  model->process(&inPtr, &litePtr, blockSize);
+
+  ForwardSlimmableSize(model.get(), 1.0); // "Full": no-op here
+  model->Reset(sampleRate, blockSize);
+  model->process(&inPtr, &fullPtr, blockSize);
+
+  for (int i = 0; i < blockSize; ++i)
+  {
+    CHECK(std::isfinite(static_cast<double>(outputLite[i])));
+    CHECK(std::isfinite(static_cast<double>(outputFull[i])));
+    // The forwarding call did nothing, so both passes must be bit-identical.
+    CHECK(outputLite[i] == doctest::Approx(static_cast<double>(outputFull[i])));
   }
 }
 

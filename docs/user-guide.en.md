@@ -2,7 +2,21 @@
 
 **Languages:** English | [Deutsch](user-guide.de.md)
 
-This guide explains the VoLum 1.1 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
+This guide explains the VoLum 1.2 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
+
+## Contents
+
+- [Main View](#main-view)
+- [Choose An Amp](#choose-an-amp)
+- [PRE Section](#pre-section)
+- [Dual Amp](#dual-amp)
+- [POST Section](#post-section)
+- [Presets](#presets)
+- [Custom Content (Bring Your Own)](#custom-content-bring-your-own)
+- [Tuner And Metronome](#tuner-and-metronome)
+- [Keyboard Controls](#keyboard-controls)
+- [Settings And Safety](#settings-and-safety)
+- [Report A Bug Or Request A Feature](#report-a-bug-or-request-a-feature)
 
 ## Main View
 
@@ -10,12 +24,12 @@ This guide explains the VoLum 1.1 interface after installation. For downloads, u
 
 1. **Amp browser:** choose one of the bundled amps.
 2. **Amp panel:** see the focused amp. In Dual Amp mode it splits into MAIN and SUPPORT.
-3. **Speaker and channel controls:** choose `AMP`, `G12`, `G65`, or `V30`, then pick the gain-stage channel.
+3. **Channel and cab controls:** pick the gain-stage channel, then the speaker cab (`AMP`/`No Cab`, `G12`, `G65`, `V30`). For custom amps the channel comes first: the row shows only the cabs that exist for the selected channel, and switching channel keeps your cab when it still fits or snaps to an available one.
 4. **Knob row:** edit the focused amp, PRE pedal, or POST effect.
 5. **PRE | AMP | POST strip:** open one section at a time.
 6. **Toolbar:** tuner, metronome, and settings live in the top-right corner.
 
-The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. VoLum 1.1 ships the full A2 profile library: all bundled amp, cab, and PRE NAM captures were retrained with the VoLum 700-1200 epoch escalation workflow.
+The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. Every bundled amp, cab, and PRE NAM capture is a NAM Architecture 2 (A2) profile, trained to its best fit between 700 and 1200 epochs. A2 captures always play at full size; VoLum never drops to the lite slice.
 
 VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
@@ -25,9 +39,10 @@ Use the left sidebar for the 15 bundled amps. Each amp has four speaker modes an
 
 Short orientation:
 
-- **Vintage:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
-- **Modern/high gain:** Diezel Herbert, Soldano SLO100, Marshall JVM, H&K TriAmp.
-- **Boutique/character:** Ampete One, Bad Cat Mini Cat, Brunetti XL 2, Lichtlaerm Prometheus, Sebago Texas Flood, THC Sunset, Fryette Deliverance.
+- **Cleans, blues, and dynamic boutique:** Sebago Texas Flood (a Dumble Steel String Singer-style pedal platform), THC Sunset, Bad Cat Mini Cat.
+- **Vintage and classic-rock crunch:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
+- **Modern and high gain:** Soldano SLO100, Diezel Herbert, Marshall JVM, H&K TriAmp, Fryette Deliverance, Lichtlaerm Prometheus, Brunetti XL 2.
+- **Do-it-all:** Ampete One pairs an American and a British voice in one amp.
 
 Amp EQ and pedal EQ are extra tone-shaping controls. They do not need to match the physical knob positions used during profiling.
 
@@ -37,14 +52,29 @@ The amp **OUTPUT** knob keeps unity at `0.0 dB`. Turn it fully counter-clockwise
 
 ![VoLum PRE section](user-guide-pre.png)
 
-PRE runs before the amp. It contains a compressor and two assignable NAM pedal slots.
+PRE runs before the amp. It contains a pitch pedal, a compressor, and two assignable NAM pedal slots.
 
 1. Click **PRE**.
-2. Click **COMP**, **NAM 1**, or **NAM 2** to focus a card.
+2. Click **PITCH**, **COMP**, **NAM 1**, or **NAM 2** to focus a card.
 3. Use the knob row for that card.
 4. Click a focused NAM card again to choose a capture.
 
-Pedal captures are grouped by type and sorted from lower to higher gain. Good starting points:
+### Pitch (Transpose + Octaver)
+
+![VoLum Pitch pedal — Transpose mode](user-guide-pitch-transpose.png)
+
+The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
+
+- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
+- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean.
+
+![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
+
+The pitch engine is a low-latency time-domain shifter built for guitar: it tracks fast and holds its tuning steady through a long sustain instead of drifting off-pitch as the note rings. VoLum reports its pitch latency to your host for plugin delay compensation so the shifted signal stays time-aligned with the rest of your mix; the amount depends on the Transpose engine (about 8.6 ms in INSTANT, about 14 ms in POLY) and is re-reported when you switch engine or mode.
+
+![VoLum PRE pedal capture chooser](user-guide-pre-pedal.png)
+
+Pedal captures are grouped by type and sorted from lower to higher gain. Your own imported captures appear under a **CUSTOM** group at the bottom of the same list. Good starting points:
 
 - Clean or low-gain amps: Nuke, Bender, Myth, Mash.
 - Edge-of-breakup amps: Revival Drive.
@@ -70,6 +100,8 @@ Dual Amp combines the main amp with a support amp.
 
 The support lane has a `Ø` polarity button. It is on by default for new Dual Amp setups because some centered amp stacks sum better that way. If a stack sounds thin or phasey, try toggling `Ø`, then check both lanes use the intended speaker and channel.
 
+Each lane keeps its own speaker/cab, channel, and custom IR. Focus a lane, then set its cab or custom IR; the other lane is left untouched. A custom amp used as the SUPPORT partner remembers its cab and channel along with the rest of the rig — across preset recall, app restarts, and DAW projects.
+
 VoLum aligns MAIN and SUPPORT NAM latency before panning and summing.
 
 The SUPPORT lane **OUTPUT** knob also mutes that lane completely at the fully counter-clockwise `-∞ dB` setting.
@@ -78,20 +110,68 @@ The SUPPORT lane **OUTPUT** knob also mutes that lane completely at the fully co
 
 ![VoLum POST section](user-guide-post.png)
 
-POST runs after the amp. It contains Delay and Reverb cards.
+POST runs after the amp. It contains Delay, Reverb, and Tremolo cards.
 
 1. Click **POST**.
-2. Click **DELAY** or **REVERB**.
+2. Click **DELAY**, **REVERB**, or **TREM**.
 3. Use the card button or spacebar to enable it.
 4. Edit the focused card in the knob row.
 
-**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog.
+**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
+
+Both tempo-synced POST pedals — Delay and Tremolo — share one tempo source. In a DAW they follow the host tempo; in the standalone app they follow the metronome BPM (set it in the metronome overlay, and it applies even while the metronome click is muted).
 
 **Reverb** offers Hall, Plate, and Oktaverb. Hall and Plate cover classic ambience. Oktaverb adds `HALO`, `SHIMMER`, and `BLOOM` pitch-wash voices with an Intensity knob.
 
-The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one delay/reverb scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
+**Tremolo** runs last, after Reverb, so it modulates the whole wet wash. The **OPTICAL / BIAS / HARMONIC** picker selects the voice:
+
+- **Optical** is a choppy, photocell-style amplitude gate.
+- **Bias** is a smooth, symmetric sine modulation — the classic "Bang Bang (My Baby Shot Me Down)" tremolo, and the factory default voice.
+- **Harmonic** splits the signal at a crossover frequency and modulates the low and high bands in opposite phase for a phasey sweep.
+
+The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smooth sine toward a hard square), and **MIX**. In Harmonic mode an extra **X-OVER** knob sets the band-split frequency. Turn on **TEMPO SYNC** to lock the rate to the song: in a DAW it follows the host tempo, and in the standalone app it follows the metronome BPM. When sync is on, the RATE knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values). Left and right channels stay phase-linked for a coherent stereo tremolo.
+
+![VoLum POST Tremolo card](user-guide-tremolo.png)
+
+The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
 
 Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one.
+
+## Presets
+
+![VoLum preset manager](user-guide-presets.png)
+
+A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, channel, all knobs, PRE pedals, POST effects, and the Dual Amp setup.
+
+1. Dial in a tone, then open the preset bar in the AMP header.
+2. Use **Save current as new** to store it under a name.
+3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
+4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
+
+Presets are per amp: each amp (factory or custom) keeps its own preset list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults.
+
+## Custom Content (Bring Your Own)
+
+VoLum can load your own NAM amp captures, impulse responses, and pedal captures. Imported files are copied into a VoLum-owned content library, so they keep working after you move or delete the originals, and every format sees the same library:
+
+- **Windows:** `%LOCALAPPDATA%\VoLum\content`
+- **macOS:** `~/Library/Application Support/VoLum/content`
+
+**Custom amps.** Click the **+** in the CUSTOM section of the amp browser to open the builder. Name the amp, add one or more `.nam` files, and assign each to a cab slot and channel (files named `PREFIX-CODE-CHANNEL.nam` auto-fill). Both NAM Architecture 1 (A1) and Architecture 2 (A2) captures load, and A2 containers play at full size like the bundled profiles. Saved custom amps appear in the CUSTOM list and load and play exactly like factory amps — including as the dual-amp SUPPORT partner. Use the pen/bin icons to edit or delete one.
+
+![VoLum custom amp builder](user-guide-custom-amp.png)
+
+**Custom IRs.** A custom IR convolves the amp's **DIRECT** (amp-only) capture — the raw amp with no speaker baked in. It is meant for a custom amp that includes a DIRECT capture; selecting the **Custom IR** cab switches the amp to its DIRECT/No Cab capture first. A custom amp built only from full amp-plus-cab captures has no raw signal for an IR to shape — on a channel with no DIRECT capture the **Custom IR** and **No Cab** buttons are greyed out (hover for the reason) and cannot be selected; switch to a channel that has a DIRECT capture to use them. In the speaker row, choose the **Custom IR** cab, then import a `.wav` impulse response from its dropdown. The custom IR belongs to the **focused lane**: in Dual Amp mode the MAIN and SUPPORT lanes each carry their own custom IR, so changing one never affects the other. Impulse responses are short cabinet captures — only the first fraction of a second is used — so VoLum rejects very large WAV files (a whole song picked by mistake) with a message instead of loading them.
+
+Custom names (amps, IRs, pedals, and presets) have sensible length limits so they always fit their labels — long names are capped as you type.
+
+![VoLum custom IR manager](user-guide-custom-ir.png)
+
+**Custom pedals.** In the PRE NAM-capture dropdown, the **CUSTOM** group lets you import and manage your own `.nam` pedal captures; an imported capture loads into its PRE slot like a factory one.
+
+![VoLum custom pedal manager](user-guide-custom-pedal.png)
+
+The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library.
 
 ## Tuner And Metronome
 
@@ -129,6 +209,12 @@ VoLum stores user settings automatically:
 Use the standalone app as your tone library editor. It writes the global per-amp defaults in this file, including speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
 Fresh VST3 instances read those defaults when you add VoLum to a track. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write the global VoLum settings file, so two tracks cannot overwrite each other's defaults.
+
+### A2 Lite Mode (Performance)
+
+The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. By default VoLum always plays the full-size version (best quality). Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE pedals, the main amp, and the dual-amp support lane.
+
+Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
 
 ### Standalone Audio Settings
 

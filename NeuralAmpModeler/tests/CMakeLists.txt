@@ -18,6 +18,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_settings_atomic_write.cpp
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp
+  test_volum_amp_list_scroll.cpp
   test_volum_amp_catalog.cpp
   test_delay_reverb_dsp.cpp
   test_volum_pre_effects.cpp
@@ -30,21 +31,30 @@ add_executable(NeuralAmpModeler-Tests
   test_metronome_dsp.cpp
   test_tone_stack.cpp
   test_volum_pre_pedal_captures.cpp
+  test_volum_custom_content.cpp
+  test_volum_content_store.cpp
+  test_volum_content_crud_edge.cpp
   test_volum_processing_plan.cpp
+  test_volum_dsp_cache_params.cpp
   test_volum_dsp_staging.cpp
   test_volum_output_mode.cpp
   test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp
+  test_volum_pitch.cpp
+  test_volum_tremolo.cpp
+  test_volum_ir_file_guard.cpp
   test_volum_pre_post_lock.cpp
   test_volum_nan_guard.cpp
   test_volum_bypass_identity.cpp
   test_volum_level_mute.cpp
   test_volum_knob_wheel.cpp
   test_iplug_app_vector_accumulator.cpp
+  test_volum_wav_downmix.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/activations.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/convnet.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/conv1d.cpp"
@@ -62,6 +72,7 @@ add_executable(NeuralAmpModeler-Tests
 target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${PROJECT_DIR}"
   "${CMAKE_CURRENT_LIST_DIR}/third_party"
+  "${PROJECT_DIR}/third_party/signalsmith"
   "${REPO_ROOT}/eigen"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM"
   "${REPO_ROOT}/iPlug2/IPlug/APP"
@@ -86,5 +97,17 @@ if(VOLUM_ENABLE_SANITIZERS)
     target_link_options(NeuralAmpModeler-Tests PRIVATE -fsanitize=address,undefined)
   else()
     message(FATAL_ERROR "VOLUM_ENABLE_SANITIZERS requires Clang")
+  endif()
+endif()
+
+# Clang source-based coverage (off by default). Driven by run-coverage-mac.sh,
+# which configures a dedicated build dir so it never collides with the normal or
+# sanitizer builds. Independent of VOLUM_ENABLE_SANITIZERS.
+if(VOLUM_ENABLE_COVERAGE)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(NeuralAmpModeler-Tests PRIVATE -fprofile-instr-generate -fcoverage-mapping -O0 -g)
+    target_link_options(NeuralAmpModeler-Tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+  else()
+    message(FATAL_ERROR "VOLUM_ENABLE_COVERAGE requires Clang")
   endif()
 endif()

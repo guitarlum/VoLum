@@ -1,0 +1,15 @@
+# Q1 — Regression-pin safety net for 1.2.0 UI/state behavior
+
+Add a thin layer of fast, in-CI doctest pins that lock the 1.2.0 behaviors automation currently misses, so a later performance-optimization or refactor pass cannot silently regress them. Priority: low-to-medium. Nothing here is broken; these are insurance pins. The one with real teeth is the thumbnail-scaling pin (gap 1 below) because that exact invariant already regressed once during 1.2.0 (B3) — prefer to pull gap 1 in at the START of the performance-optimization ticket as that ticket's own guard, rather than as standalone work.
+
+Scope decision already made: fast in-suite doctest pins only (run in the existing Windows/macOS CI). Do NOT add sound-quality tests (the 1.2.0 diff touched zero DSP — `NeuralAmpModelerCore/` and `AudioDSPTools/` unchanged; routing/mix is already covered by `test_process_io.cpp` and the golden DSP/rig tests). Do NOT expand the local `win-*` screenshot/click harness into CI — it stays a local pre-release smoke.
+
+Gaps to pin (everything else from 1.2.0 is already covered — dual-amp pan/level/polarity, lock-across-switches, preset bank owner-isolation, IR `runIR` routing, IR-delete fallback + `activeIrId` persistence, `activePresetId` chunk round-trip):
+
+1. Thumbnail scaling invariant (primary). Source-string pins in `test_volum_ui_regressions.cpp` reading `VoLumAmpList.h`: row/art blits use `g.DrawFittedLayer(` (scale-invariant logical bounds), no `DrawFittedBitmap(` on the cached row thumbnails (the pixel-width-denominator bug), and `OnRescale()` nulls `mIconLayers`/`mCustomArtLayers`. Parallel pin on `VoLumHero.h`: `OnRescale()` nulls `mMonoArtLayer`/`mMainArtLayer`/`mSupportArtLayer`. The existing pin only locks the `!CheckLayer` cache idiom, not the scale-invariant blit or the invalidation.
+2. Hover-highlight wiring (B12). Pin in `VoLumCustomUi.h` (custom overlay control, ~lines 702, 756-786): `OnMouseOver` sets `mHoverAction` from `mHotspots`, `OnMouseOut` resets it to `-1`, and `Draw` gates the hover glow on `mHoverAction >= 0`.
+3. Standalone preset-restore round-trip (cheap half of B5). In `test_volum_user_settings_io.cpp`, a settings write/read round-trip for `volumActivePresetId` (serialized in `VoLumSettings.inc.cpp`, read into `mVolumRestorePresetId`). The live per-owner active-preset memory (`mVolumActivePresetIdByOwner`) is plugin-instance glue and stays a manual check.
+
+Acceptance: the new pins fail if the corresponding source path is reverted to the buggy form; `run-tests-win.ps1` green; source-parity descriptor count updated. Keep pins minimal and well-commented (they are brittle by design so a refactor must consciously update them).
+
+Work must happen on a dedicated feature branch off the latest `dev`, named `feature/regression-pin-safety-net` (or folded into the performance-optimization ticket's branch if gap 1 rides along). Do not commit to `dev` or `main` directly. Merge back into `dev` only after acceptance criteria are met. Never promote to `main` outside of a release.

@@ -31,9 +31,9 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
     // Consume clicks on overlay shell (dim + filler); interactive children sit above in z-order.
   }
 
@@ -42,7 +42,7 @@ public:
     g.FillRect(IColor(185, 8, 10, 14), mRECT);
     const IRECT& p = mPanel;
     // Slightly lifted panel so it reads clearly over the dim layer
-    g.FillRect(IColor(255, 22, 22, 30), p);
+    DrawPanelDepth(g, p);
     g.DrawRect(VoLumColors::FRAME, p);
     g.DrawRect(IColor(90, 200, 180, 100), p.GetPadded(2.f));
     const float cs = 18.f;
@@ -69,8 +69,8 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    // Match ui-mockup/settings-overlay-mockup.html output card (group-fill + gold border + inner hairline).
-    g.FillRect(IColor(235, 20, 20, 26), mRECT);
+    // Group card: lifted panel depth + gold border + inner hairline.
+    DrawPanelDepth(g, mRECT);
     g.DrawRect(IColor(89, 200, 162, 78), mRECT);
     g.DrawRect(IColor(31, 200, 162, 78), mRECT.GetPadded(3.f));
   }
@@ -140,9 +140,9 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) x;
-    (void) y;
-    (void) mod;
+    (void)x;
+    (void)y;
+    (void)mod;
     if (mCloseAction)
       mCloseAction(this);
   }
@@ -162,48 +162,59 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(IColor(210, 20, 20, 26), mRECT);
-    g.DrawRect(IColor(80, 200, 162, 78), mRECT);
+    // Match the three settings cards: lifted panel depth + gold border + inner hairline.
+    DrawPanelDepth(g, mRECT);
+    g.DrawRect(IColor(89, 200, 162, 78), mRECT);
+    g.DrawRect(IColor(31, 200, 162, 78), mRECT.GetPadded(3.f));
 
-    const IRECT inner = mRECT.GetPadded(-14.f, -7.f, -14.f, -7.f);
-    const IText titleText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top);
+    const IRECT inner = mRECT.GetPadded(-16.f, -8.f, -16.f, -8.f);
+    const IText titleText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top);
     const IText keyText(11.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top);
     const IText descText(10.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Top);
     const IText capText(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top);
 
-    g.DrawText(titleText, "Shortcut info", inner.GetFromTop(18.f));
-    const IRECT body = inner.GetReducedFromTop(19.f);
+    g.DrawText(titleText, "Shortcut info", inner.GetFromTop(16.f));
+    const IRECT body = inner.GetReducedFromTop(20.f);
     const float gap = 18.f;
     const float colW = (body.W() - 2.f * gap) / 3.f;
     const IRECT navCol(body.L, body.T, body.L + colW, body.B);
     const IRECT editCol(navCol.R + gap, body.T, navCol.R + gap + colW, body.B);
     const IRECT toolCol(editCol.R + gap, body.T, body.R, body.B);
 
-    g.DrawLine(VoLumColors::FRAME.WithOpacity(0.65f), navCol.R + gap * 0.5f, body.T + 2.f,
-               navCol.R + gap * 0.5f, body.B - 2.f);
-    g.DrawLine(VoLumColors::FRAME.WithOpacity(0.65f), editCol.R + gap * 0.5f, body.T + 2.f,
-               editCol.R + gap * 0.5f, body.B - 2.f);
+    g.DrawLine(
+      VoLumColors::FRAME.WithOpacity(0.55f), navCol.R + gap * 0.5f, body.T + 1.f, navCol.R + gap * 0.5f, body.B - 1.f);
+    g.DrawLine(VoLumColors::FRAME.WithOpacity(0.55f), editCol.R + gap * 0.5f, body.T + 1.f, editCol.R + gap * 0.5f,
+               body.B - 1.f);
 
+    const float rowH = 12.f;
     auto drawPair = [&](const IRECT& col, int row, float keyW, const char* key, const char* desc) {
-      const float y = col.T + 13.f + row * 12.f;
-      g.DrawText(keyText, key, IRECT(col.L, y, col.L + keyW, y + 12.f));
-      g.DrawText(descText, desc, IRECT(col.L + keyW + 5.f, y, col.R, y + 12.f));
+      const float y = col.T + 14.f + row * rowH;
+      g.DrawText(keyText, key, IRECT(col.L, y, col.L + keyW, y + rowH));
+      g.DrawText(descText, desc, IRECT(col.L + keyW + 5.f, y, col.R, y + rowH));
     };
 
+    // One key-column width per section (widest key in that column) so every
+    // description in a column starts at the same x. Previously each row used its
+    // own keyW, so Navigate/Edit descriptions stair-stepped while Tools (all 16)
+    // happened to line up.
+    const float navKeyW = 42.f; // "Arrows"
+    const float editKeyW = 34.f; // "Enter" / "Space"
+    const float toolKeyW = 16.f; // single letters
+
     g.DrawText(capText, "Navigate", IRECT(navCol.L, navCol.T, navCol.R, navCol.T + 12.f));
-    drawPair(navCol, 0, 36.f, "1/2/3", "PRE / AMP / POST");
-    drawPair(navCol, 1, 24.f, "Tab", "target focus");
-    drawPair(navCol, 2, 42.f, "Arrows", "amp / channel");
+    drawPair(navCol, 0, navKeyW, "1/2/3", "PRE / AMP / POST");
+    drawPair(navCol, 1, navKeyW, "Tab", "target focus");
+    drawPair(navCol, 2, navKeyW, "Arrows", "amp / channel");
 
     g.DrawText(capText, "Edit", IRECT(editCol.L, editCol.T, editCol.R, editCol.T + 12.f));
-    drawPair(editCol, 0, 34.f, "Enter", "edit");
-    drawPair(editCol, 1, 34.f, "Space", "toggle");
-    drawPair(editCol, 2, 16.f, "S", "cab");
-    drawPair(editCol, 3, 24.f, "Esc", "close");
+    drawPair(editCol, 0, editKeyW, "Enter", "edit");
+    drawPair(editCol, 1, editKeyW, "Space", "toggle");
+    drawPair(editCol, 2, editKeyW, "S", "cab");
+    drawPair(editCol, 3, editKeyW, "Esc", "close");
 
     g.DrawText(capText, "Tools", IRECT(toolCol.L, toolCol.T, toolCol.R, toolCol.T + 12.f));
-    drawPair(toolCol, 0, 16.f, "T", "tuner");
-    drawPair(toolCol, 1, 16.f, "M", "metronome");
-    drawPair(toolCol, 2, 16.f, "H", "settings");
+    drawPair(toolCol, 0, toolKeyW, "T", "tuner");
+    drawPair(toolCol, 1, toolKeyW, "M", "metronome");
+    drawPair(toolCol, 2, toolKeyW, "H", "settings");
   }
 };

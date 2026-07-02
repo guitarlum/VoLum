@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../VoLumChunkCodec.h"
+#include "../VoLumChunkIdTail.h"
 #include "../VoLumJsonMigration.h"
 #include "../VoLumUserSettingsIO.h"
 
@@ -14,14 +15,14 @@ struct MemoryChunk
 {
   std::vector<unsigned char> bytes;
 
-  template<typename T>
+  template <typename T>
   void Put(const T* value)
   {
     const auto* first = reinterpret_cast<const unsigned char*>(value);
     bytes.insert(bytes.end(), first, first + sizeof(T));
   }
 
-  template<typename T>
+  template <typename T>
   int Get(T* value, int pos) const
   {
     REQUIRE(pos >= 0);
@@ -575,12 +576,14 @@ TEST_CASE("VoLum chunk codec round-trip fuzz: extreme / non-finite values stay b
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
 
-  struct Poison { double value; const char* label; };
+  struct Poison
+  {
+    double value;
+    const char* label;
+  };
   const Poison poisonValues[] = {
-    {0.0, "zero"},     {-0.0, "neg zero"},
-    {bigPos, "bigpos"}, {bigNeg, "bigneg"},
-    {nan, "nan"},      {inf, "+inf"},        {-inf, "-inf"},
-    {1e-300, "subnorm"},
+    {0.0, "zero"}, {-0.0, "neg zero"}, {bigPos, "bigpos"}, {bigNeg, "bigneg"},
+    {nan, "nan"},  {inf, "+inf"},      {-inf, "-inf"},     {1e-300, "subnorm"},
   };
 
   for (const auto& poison : poisonValues)
@@ -662,5 +665,484 @@ TEST_CASE("Oktaverb v0.9.1 migration remaps legacy sub-modes")
     nlohmann::json config = {{"ReverbSubMode", 2.0}};
     volum::MigrateOktaverbSubModeToV0_9_1(config);
     CHECK(config["ReverbSubMode"].get<double>() == doctest::Approx(0.0));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// VoLum 1.2.0 DAW-chunk id tail (BYO/preset references).
+// ---------------------------------------------------------------------------
+
+TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
+{
+  volum::ChunkIdTail in;
+  in.customMainId = "amp_main_abc";
+  in.customSupportId = "amp_sup_def";
+  in.activePresetId = "preset_xyz";
+  in.perAmpIrId[0] = "ir_one";
+  in.perAmpIrId[volum::kAmpCount - 1] = "ir_last";
+  in.perAmpSupportIrId[0] = "ir_sup_one";
+  in.perAmpSupportId[1] = "amp_sup_ghi";
+  in.perAmpSupportSlot[1] = 1;
+  in.perAmpSupportChannel[1] = 4;
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  int posOut = -1;
+  const bool ok = volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out, &posOut);
+  REQUIRE(ok);
+  CHECK(posOut == static_cast<int>(chunk.bytes.size()));
+  CHECK(out.customMainId == in.customMainId);
+  CHECK(out.customSupportId == in.customSupportId);
+  CHECK(out.activePresetId == in.activePresetId);
+  CHECK(out.perAmpIrId[0] == "ir_one");
+  CHECK(out.perAmpIrId[volum::kAmpCount - 1] == "ir_last");
+  CHECK(out.perAmpSupportIrId[0] == "ir_sup_one");
+  CHECK(out.perAmpSupportId[1] == "amp_sup_ghi");
+  CHECK(out.perAmpSupportSlot[1] == 1);
+  CHECK(out.perAmpSupportChannel[1] == 4);
+  // Untouched slots stay empty / at the unset sentinels.
+  CHECK(out.perAmpIrId[1].empty());
+  CHECK(out.perAmpSupportIrId[1].empty());
+  CHECK(out.perAmpSupportId[0].empty());
+  CHECK(out.perAmpSupportSlot[0] == -2);
+  CHECK(out.perAmpSupportChannel[0] == 0);
+}
+
+TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
+{
+  volum::ChunkIdTail in;
+
+  // Amp 0: Octaver, Vintage voicing, fully populated.
+  in.perAmpPitch[0].present = true;
+  in.perAmpPitch[0].active = true;
+  in.perAmpPitch[0].mode = 1; // Octaver
+  in.perAmpPitch[0].semitones = -5.0;
+  in.perAmpPitch[0].mix = 0.8;
+  in.perAmpPitch[0].octDown = 0.6;
+  in.perAmpPitch[0].octUp = 0.3;
+  in.perAmpPitch[0].dry = 0.9;
+  in.perAmpPitch[0].voicing = 0; // Vintage
+  in.perAmpPitch[0].level = -3.5;
+  in.perAmpPitch[0].modes[volum::kVoLumPitchModeTranspose] =
+    volum::PitchModeSnapshot{0.5, 0.6, -4.0, volum::kVoLumPitchVoicingVintage};
+  in.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver] =
+    volum::PitchModeSnapshot{0.8, 0.9, 2.5, volum::kVoLumPitchVoicingModern};
+
+  // Last amp: Transpose down a fifth, Poly character (non-default value 2; default
+  // is Instant). Exercises round-trip of the additive POLY character value.
+  in.perAmpPitch[volum::kAmpCount - 1].present = true;
+  in.perAmpPitch[volum::kAmpCount - 1].active = true;
+  in.perAmpPitch[volum::kAmpCount - 1].mode = 0;
+  in.perAmpPitch[volum::kAmpCount - 1].semitones = -7.0;
+  in.perAmpPitch[volum::kAmpCount - 1].transChar = 2; // Poly
+
+  // Locked PRE snapshot present.
+  in.lockedPrePitch.present = true;
+  in.lockedPrePitch.active = true;
+  in.lockedPrePitch.mode = 0;
+  in.lockedPrePitch.semitones = 7.0;
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpPitch[0].present);
+  CHECK(out.perAmpPitch[0].active);
+  CHECK(out.perAmpPitch[0].mode == 1);
+  CHECK(out.perAmpPitch[0].semitones == doctest::Approx(-5.0));
+  CHECK(out.perAmpPitch[0].mix == doctest::Approx(0.8));
+  CHECK(out.perAmpPitch[0].octDown == doctest::Approx(0.6));
+  CHECK(out.perAmpPitch[0].octUp == doctest::Approx(0.3));
+  CHECK(out.perAmpPitch[0].dry == doctest::Approx(0.9));
+  CHECK(out.perAmpPitch[0].voicing == 0);
+  CHECK(out.perAmpPitch[0].level == doctest::Approx(-3.5));
+  CHECK(out.perAmpPitch[0].transChar == 1); // default Instant preserved
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeTranspose].dry == doctest::Approx(0.6));
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeTranspose].voicing == volum::kVoLumPitchVoicingVintage);
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver].level == doctest::Approx(2.5));
+  CHECK(out.perAmpPitch[0].modes[volum::kVoLumPitchModeOctaver].mix == doctest::Approx(0.8));
+
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].present);
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].semitones == doctest::Approx(-7.0));
+  CHECK(out.perAmpPitch[volum::kAmpCount - 1].transChar == 2); // Poly round-trips
+
+  // Untouched amp stays absent -> pitch defaults to bypassed downstream.
+  CHECK_FALSE(out.perAmpPitch[1].present);
+
+  CHECK(out.lockedPrePitch.present);
+  CHECK(out.lockedPrePitch.active);
+  CHECK(out.lockedPrePitch.semitones == doctest::Approx(7.0));
+}
+
+TEST_CASE("Retired DROP transpose character maps to INSTANT (legacy presets play the improved engine)")
+{
+  // DROP was removed from the UI picker but its enum value (0) is frozen for
+  // serialization. A legacy preset that stored DROP must (a) still round-trip its
+  // raw stored value (we never rewrite old readers) and (b) resolve to INSTANT at
+  // the DSP read points via VoLumEffectiveTransChar, so it plays the improved,
+  // lower-latency engine instead of the retired one.
+  CHECK(volum::VoLumEffectiveTransChar(volum::kVoLumPitchCharacterDrop) == volum::kVoLumPitchCharacterInstant);
+  CHECK(volum::VoLumEffectiveTransChar(volum::kVoLumPitchCharacterInstant) == volum::kVoLumPitchCharacterInstant);
+  CHECK(volum::VoLumEffectiveTransChar(volum::kVoLumPitchCharacterPoly) == volum::kVoLumPitchCharacterPoly);
+
+  // A DROP value survives the chunk round-trip unchanged (raw storage is frozen);
+  // the Drop->Instant remap is applied downstream, not by rewriting the chunk.
+  volum::ChunkIdTail in;
+  in.perAmpPitch[0].present = true;
+  in.perAmpPitch[0].active = true;
+  in.perAmpPitch[0].mode = 0;
+  in.perAmpPitch[0].transChar = volum::kVoLumPitchCharacterDrop; // legacy DROP
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.perAmpPitch[0].transChar == volum::kVoLumPitchCharacterDrop);
+  CHECK(volum::VoLumEffectiveTransChar(out.perAmpPitch[0].transChar) == volum::kVoLumPitchCharacterInstant);
+}
+
+TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
+{
+  volum::ChunkIdTail in;
+
+  // Amp 0: Harmonic, synced, fully populated.
+  in.perAmpTremolo[0].present = true;
+  in.perAmpTremolo[0].active = true;
+  in.perAmpTremolo[0].mode = volum::kVoLumTremoloModeHarmonic;
+  in.perAmpTremolo[0].rate = 6.5;
+  in.perAmpTremolo[0].depth = 0.72;
+  in.perAmpTremolo[0].shape = 0.4;
+  in.perAmpTremolo[0].mix = 0.9;
+  in.perAmpTremolo[0].crossover = 1200.0;
+  in.perAmpTremolo[0].sync = true;
+  in.perAmpTremolo[0].division = 6; // 1/8T
+  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical] = volum::TremoloModeSnapshot{2.0, 0.55, 0.1, 0.4, 600.0};
+  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic] =
+    volum::TremoloModeSnapshot{7.0, 0.95, 0.5, 1.0, 1500.0};
+
+  // Last amp: Optical, free-running.
+  in.perAmpTremolo[volum::kAmpCount - 1].present = true;
+  in.perAmpTremolo[volum::kAmpCount - 1].active = true;
+  in.perAmpTremolo[volum::kAmpCount - 1].mode = volum::kVoLumTremoloModeOptical;
+  in.perAmpTremolo[volum::kAmpCount - 1].rate = 11.0;
+
+  // Locked POST snapshot present.
+  in.lockedPostTremolo.present = true;
+  in.lockedPostTremolo.active = true;
+  in.lockedPostTremolo.mode = volum::kVoLumTremoloModeBias;
+  in.lockedPostTremolo.depth = 0.95;
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpTremolo[0].present);
+  CHECK(out.perAmpTremolo[0].active);
+  CHECK(out.perAmpTremolo[0].mode == volum::kVoLumTremoloModeHarmonic);
+  CHECK(out.perAmpTremolo[0].rate == doctest::Approx(6.5));
+  CHECK(out.perAmpTremolo[0].depth == doctest::Approx(0.72));
+  CHECK(out.perAmpTremolo[0].shape == doctest::Approx(0.4));
+  CHECK(out.perAmpTremolo[0].mix == doctest::Approx(0.9));
+  CHECK(out.perAmpTremolo[0].crossover == doctest::Approx(1200.0));
+  CHECK(out.perAmpTremolo[0].sync);
+  CHECK(out.perAmpTremolo[0].division == 6);
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical].rate == doctest::Approx(2.0));
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical].depth == doctest::Approx(0.55));
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic].crossover == doctest::Approx(1500.0));
+  CHECK(out.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic].mix == doctest::Approx(1.0));
+
+  CHECK(out.perAmpTremolo[volum::kAmpCount - 1].present);
+  CHECK(out.perAmpTremolo[volum::kAmpCount - 1].mode == volum::kVoLumTremoloModeOptical);
+  CHECK(out.perAmpTremolo[volum::kAmpCount - 1].rate == doctest::Approx(11.0));
+
+  // Untouched amp stays absent -> tremolo defaults to bypassed downstream.
+  CHECK_FALSE(out.perAmpTremolo[1].present);
+
+  CHECK(out.lockedPostTremolo.present);
+  CHECK(out.lockedPostTremolo.active);
+  CHECK(out.lockedPostTremolo.mode == volum::kVoLumTremoloModeBias);
+  CHECK(out.lockedPostTremolo.depth == doctest::Approx(0.95));
+}
+
+TEST_CASE("Id tail round-trips per-amp + locked POST delay tempo-sync settings")
+{
+  volum::ChunkIdTail in;
+
+  // Amp 0: synced to a dotted eighth.
+  in.perAmpDelay[0].present = true;
+  in.perAmpDelay[0].sync = true;
+  in.perAmpDelay[0].division = 5; // 1/8.
+
+  // Last amp: free-running (sync off) but written.
+  in.perAmpDelay[volum::kAmpCount - 1].present = true;
+  in.perAmpDelay[volum::kAmpCount - 1].sync = false;
+  in.perAmpDelay[volum::kAmpCount - 1].division = 1; // 1/4
+
+  // Locked POST snapshot present.
+  in.lockedPostDelay.present = true;
+  in.lockedPostDelay.sync = true;
+  in.lockedPostDelay.division = 7; // 1/16
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpDelay[0].present);
+  CHECK(out.perAmpDelay[0].sync);
+  CHECK(out.perAmpDelay[0].division == 5);
+
+  CHECK(out.perAmpDelay[volum::kAmpCount - 1].present);
+  CHECK_FALSE(out.perAmpDelay[volum::kAmpCount - 1].sync);
+  CHECK(out.perAmpDelay[volum::kAmpCount - 1].division == 1);
+
+  // Untouched amp stays absent -> delay sync defaults to off downstream.
+  CHECK_FALSE(out.perAmpDelay[1].present);
+
+  CHECK(out.lockedPostDelay.present);
+  CHECK(out.lockedPostDelay.sync);
+  CHECK(out.lockedPostDelay.division == 7);
+}
+
+TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")
+{
+  // Simulate the real layout: arbitrary fixed-tail bytes, then the id tail.
+  MemoryChunk chunk;
+  for (int i = 0; i < 37; ++i)
+  {
+    unsigned char b = static_cast<unsigned char>(i * 7 + 3);
+    chunk.Put(&b);
+  }
+  const int tailStart = static_cast<int>(chunk.bytes.size());
+
+  volum::ChunkIdTail in;
+  in.customMainId = "main";
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  CHECK(volum::TryGetChunkIdTail(chunk, tailStart, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.customMainId == "main");
+  // Probing at the wrong offset (no sentinel there) must fail cleanly.
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+}
+
+TEST_CASE("Pre-1.2.0 chunk (no id tail) probes empty, never throws")
+{
+  // 1.0.0/1.0.1/1.1.0 chunks end right after the fixed binary tail. A 1.2.0
+  // reader probing for the id tail must report 'absent' and leave refs empty.
+  MemoryChunk chunk;
+  for (int i = 0; i < 24; ++i)
+  {
+    double d = i * 0.5;
+    chunk.Put(&d);
+  }
+  volum::ChunkIdTail out;
+  out.customMainId = "should_be_overwritten_only_on_success";
+  const int sz = static_cast<int>(chunk.bytes.size());
+
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, sz, sz, out)); // pos at EOF
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, sz - 4, sz, out)); // not enough room
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, sz, out)); // no sentinel
+  // Empty chunk.
+  MemoryChunk empty;
+  CHECK_FALSE(volum::TryGetChunkIdTail(empty, 0, 0, out));
+}
+
+TEST_CASE("Id tail with malformed JSON body is rejected (lenient)")
+{
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  const std::string bad = "{not valid json";
+  int len = static_cast<int>(bad.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : bad)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+}
+
+TEST_CASE("Id tail with length running past the chunk is rejected")
+{
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = 9999; // claims far more than is present
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  const char c = 'x';
+  chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  CHECK_FALSE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+}
+
+TEST_CASE("Empty id tail round-trips (all refs blank)")
+{
+  volum::ChunkIdTail in; // all empty
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  out.customMainId = "dirty";
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.customMainId.empty());
+  CHECK(out.customSupportId.empty());
+  CHECK(out.activePresetId.empty());
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    CHECK(out.perAmpIrId[i].empty());
+    CHECK(out.perAmpSupportIrId[i].empty());
+    CHECK(out.perAmpSupportId[i].empty());
+  }
+}
+
+// A schema-1 id tail (1.2.0 pre-support-IR) has no "supIr" per-amp key. A current
+// reader must load it cleanly, leaving every supportActiveIrId empty.
+TEST_CASE("Id tail without supIr keys (older schema) reads support IR ids empty")
+{
+  // Hand-build a schema-1 perAmp entry (only ir + sup, no supIr).
+  nlohmann::json j;
+  j["v"] = 1;
+  j["customMainId"] = "";
+  j["customSupportId"] = "";
+  j["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    perAmp.push_back({{"ir", i == 0 ? "ir_legacy" : ""}, {"sup", ""}});
+  j["perAmp"] = perAmp;
+  const std::string body = j.dump();
+
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.perAmpIrId[0] == "ir_legacy");
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    CHECK(out.perAmpSupportIrId[i].empty());
+}
+
+// A pre-effects id tail (1.2.0 BYO-only, before the pitch/tremolo/delay-sync
+// blocks existed) has no "pitch"/"trem"/"dly" per-amp keys and no locked-effect
+// snapshots. A current reader must load it cleanly with every effect tail
+// absent (present=false) so the downstream defaults bypass each effect.
+TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effects absent")
+{
+  nlohmann::json j;
+  j["v"] = 3; // pre-tremolo / pre-delay-sync schema
+  j["customMainId"] = "";
+  j["customSupportId"] = "";
+  j["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+    perAmp.push_back({{"ir", ""}, {"supIr", ""}, {"sup", ""}});
+  j["perAmp"] = perAmp;
+  const std::string body = j.dump();
+
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    CHECK_FALSE(out.perAmpPitch[i].present);
+    CHECK_FALSE(out.perAmpTremolo[i].present);
+    CHECK_FALSE(out.perAmpDelay[i].present);
+    // Absent tails keep their bypassed-by-default field values.
+    CHECK_FALSE(out.perAmpPitch[i].active);
+    CHECK_FALSE(out.perAmpTremolo[i].active);
+    CHECK_FALSE(out.perAmpDelay[i].sync);
+  }
+  // Locked-effect snapshots are absent on an older tail too.
+  CHECK_FALSE(out.lockedPrePitch.present);
+  CHECK_FALSE(out.lockedPostTremolo.present);
+  CHECK_FALSE(out.lockedPostDelay.present);
+}
+
+// A tremolo/pitch-aware build that predates per-mode memory wrote the effect
+// block WITHOUT a "modes" array (or with a short one). Loading it must seed the
+// missing per-mode snapshots from the ship defaults and never index out of
+// bounds, while still honoring the live (non-mode) values that were present.
+TEST_CASE("Id tail effect blocks with missing/short modes arrays seed ship defaults")
+{
+  const volum::PitchTail defPitch;     // default-constructed = ship defaults
+  const volum::TremoloTail defTremolo; // default-constructed = ship defaults
+
+  nlohmann::json j;
+  j["v"] = 4;
+  j["customMainId"] = "";
+  j["customSupportId"] = "";
+  j["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    nlohmann::json entry = {{"ir", ""}, {"supIr", ""}, {"sup", ""}};
+    if (i == 0)
+    {
+      // Tremolo present, live values set, but NO "modes" key at all.
+      entry["trem"] = {{"active", true}, {"mode", volum::kVoLumTremoloModeHarmonic}, {"rate", 3.5}, {"depth", 0.6}};
+      // Pitch present with a SHORT modes array (only the first mode).
+      nlohmann::json pmodes = nlohmann::json::array();
+      pmodes.push_back({{"mix", 0.4}, {"dry", 0.5}, {"level", -2.0}, {"voice", 0}});
+      entry["pitch"] = {{"active", true}, {"mode", 1}, {"semi", -5.0}, {"modes", pmodes}};
+    }
+    perAmp.push_back(entry);
+  }
+  j["perAmp"] = perAmp;
+  const std::string body = j.dump();
+
+  MemoryChunk chunk;
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  // Tremolo: live values honored; every per-mode snapshot fell back to defaults.
+  REQUIRE(out.perAmpTremolo[0].present);
+  CHECK(out.perAmpTremolo[0].active);
+  CHECK(out.perAmpTremolo[0].mode == volum::kVoLumTremoloModeHarmonic);
+  CHECK(out.perAmpTremolo[0].rate == doctest::Approx(3.5));
+  for (int m = 0; m < volum::kVoLumTremoloModeCount; ++m)
+  {
+    CHECK(out.perAmpTremolo[0].modes[m].rate == doctest::Approx(defTremolo.modes[m].rate));
+    CHECK(out.perAmpTremolo[0].modes[m].depth == doctest::Approx(defTremolo.modes[m].depth));
+    CHECK(out.perAmpTremolo[0].modes[m].crossover == doctest::Approx(defTremolo.modes[m].crossover));
+  }
+
+  // Pitch: the one provided mode loads; the rest fall back to ship defaults.
+  REQUIRE(out.perAmpPitch[0].present);
+  CHECK(out.perAmpPitch[0].semitones == doctest::Approx(-5.0));
+  CHECK(out.perAmpPitch[0].modes[0].mix == doctest::Approx(0.4));
+  CHECK(out.perAmpPitch[0].modes[0].dry == doctest::Approx(0.5));
+  CHECK(out.perAmpPitch[0].modes[0].voicing == 0);
+  for (int m = 1; m < volum::kVoLumPitchModeCount; ++m)
+  {
+    CHECK(out.perAmpPitch[0].modes[m].mix == doctest::Approx(defPitch.modes[m].mix));
+    CHECK(out.perAmpPitch[0].modes[m].dry == doctest::Approx(defPitch.modes[m].dry));
+    CHECK(out.perAmpPitch[0].modes[m].voicing == defPitch.modes[m].voicing);
   }
 }

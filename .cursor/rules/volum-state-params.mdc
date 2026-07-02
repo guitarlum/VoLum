@@ -27,6 +27,23 @@ Preset/session migration:
 - VoLum `0.6.0` adds `ReverbPreDelay` and `ReverbShimmer`; preserve those migration paths.
 - If serialization behavior changes, add/update `test_volum_chunk_version.cpp` and `test_volum_chunk_codec.cpp`.
 
+Presets / recall + dirty (1.2.0 UI shell vs backend boundary):
+
+- In the current UI shell, **preset recall is a stub**: picking a preset only
+  relabels the header bar (`VoLumPresetBarControl::SelectName`) and clears
+  `(unsaved)`. It does **not** load any stored `VoLumAmpSettings` - there are no
+  per-preset snapshots in `VoLumCustomContentApi`. Do not try to "fix" recall to
+  move knobs in the shell; that is backend work.
+- The `(unsaved)` flag in the shell is a **coarse one-way dirty flag**
+  (`_VolumMarkPresetDirty` → `SetDirtyState(true)` on any cab/channel/AMP/PRE/
+  POST/IR edit), cleared only on a fresh recall/save. It cannot clear when the rig
+  returns 1:1 to the preset, because the shell has no recalled snapshot to diff
+  against. True equality-based dirty (`live != recalled snapshot`) is a **backend**
+  responsibility - see `docs/design/1.2.0-byo-presets-spec.md` §2.1 and §4 #6.
+- Custom amps: the shell shares one factory DSP/param state, so per-custom-amp
+  knob memory is also backend (§4 #7). The *manifest* CRUD is already correct in
+  the shell (`UpdateCustomAmp` edits in place; `CustomAmpAt` loads the real amp).
+
 Settings persistence:
 
 - Per-amp settings write to user profile, not rigs:
@@ -34,9 +51,26 @@ Settings persistence:
   - macOS: `~/Library/Application Support/VoLum/volum-settings.json`
 - `<rigsRoot>/volum-settings.json` remains a legacy read fallback.
 
+Settings SSOT (single source of truth for per-amp `VoLumAmpSettings`):
+
+- The data model is the `VoLumAmpSettings` struct (`VoLumAmpeteCatalog.h`). Every
+  persisted field MUST flow through the composed block codec, not a hand-listed
+  loop. The write path `VolumUserSettingsToJson` (`VoLumUserSettingsIO.h`) composes
+  `WriteAmpCoreBlock` + `PreBlockToJson` + `PostBlockToJson` +
+  `WriteDualAmpUserSettings`. Add a new field to its block helper, never to a
+  second inline list.
+- When you add a persisted field, the exhaustive round-trip pin
+  ("User settings IO round-trips EVERY VoLumAmpSettings field") in
+  `test_volum_user_settings_io.cpp` MUST be extended to set it to a non-default,
+  in-range value. That test is the guard that a field is never silently dropped
+  from `volum-settings.json`; a new field that is not in it is not done.
+- The same field also has to round-trip the DAW chunk path
+  (`Unserialization.cpp` / `test_volum_chunk_codec.cpp`) and, if it participates
+  in PRE/POST lock chrome, `PreBlockEquals`/`PostBlockEquals` (`VoLumPrePostLock.h`).
+
 Verification:
 
-- Run `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`.
+- Run the Windows tests (`AGENTS.md` "Fast Commands").
 - Add focused doctests for new DSP/state behavior before calling work done.
 - Register new test files in both `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj` and `NeuralAmpModeler/tests/CMakeLists.txt`.
 - Params/keyboard/state tests: `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, `test_volum_chunk_codec.cpp`.
