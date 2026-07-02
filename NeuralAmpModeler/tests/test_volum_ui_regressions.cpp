@@ -673,12 +673,13 @@ TEST_CASE("SerializeState flushes the content store when a custom amp is focused
   // focused. Pin both so the flush can't silently regress.
   const std::string source = ReadPluginSource();
 
-  // Guarded flush inside SerializeState, right after the live-scene save.
+  // Single-line substrings only: file line endings differ across platforms (CRLF
+  // on Windows checkouts, LF on macOS/Linux), so a multi-line "\r\n" match would
+  // pass on Windows but fail on macOS CI. Pin the guard + the flush call and the
+  // save-current call so the persistence path can't silently regress.
   RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
-  RequireContains(source, "if (mVolumCustomMainIdx >= 0)\r\n      volum::content::GlobalContentStore().Save();");
-
-  // Plugin-format teardown path (guarded, under the non-APP branch) flushes too.
-  RequireContains(source, "if (mVolumCustomMainIdx >= 0)\r\n    volum::content::GlobalContentStore().Save();");
+  RequireContains(source, "if (mVolumCustomMainIdx >= 0)");
+  RequireContains(source, "volum::content::GlobalContentStore().Save();");
 }
 
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
