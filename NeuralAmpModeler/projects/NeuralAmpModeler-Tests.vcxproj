@@ -131,6 +131,7 @@
     <ClCompile Include="..\tests\test_volum_output_mode.cpp" />
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />
+    <ClCompile Include="..\tests\test_volum_state_roundtrip.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />

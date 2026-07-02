@@ -68,6 +68,22 @@ Settings SSOT (single source of truth for per-amp `VoLumAmpSettings`):
   (`Unserialization.cpp` / `test_volum_chunk_codec.cpp`) and, if it participates
   in PRE/POST lock chrome, `PreBlockEquals`/`PostBlockEquals` (`VoLumPrePostLock.h`).
 
+DAW-chunk persistence coverage (do NOT rely on pluginval):
+
+- pluginval (even at `--strictness-level 10`) only inspects iPlug *parameters*.
+  It does NOT see VoLum's custom DAW-chunk state (per-amp selection/scene, custom
+  amp/support/preset refs, id tail). The 1.2.0 "VST3/AU state resets to default on
+  load" bug passed pluginval both before and after the fix. Do not count pluginval
+  as persistence coverage.
+- The real `SerializeState` -> `UnserializeState` seam (params consumed at the
+  true `kNumParams`, then the per-amp block + id tail landing exactly at
+  `size - 4` for the VST3 bypass int) is guarded by
+  `test_volum_state_roundtrip.cpp`, using the shared chunk codec + the real
+  `kNumParams` from `VoLumParams.h`. Extend that test when you add persisted
+  per-amp/id-tail state.
+- `kNumParams` lives in `VoLumParams.h` (dependency-free, included by
+  `NeuralAmpModeler.h`) so tests measure against the real enum, never a copy.
+
 Verification:
 
 - Run the Windows tests (`AGENTS.md` "Fast Commands").
