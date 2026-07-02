@@ -40,6 +40,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_output_mode.cpp
   test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp
+  test_volum_state_roundtrip.cpp
   test_volum_pitch.cpp
   test_volum_tremolo.cpp
   test_volum_ir_file_guard.cpp
