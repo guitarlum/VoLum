@@ -682,6 +682,24 @@ TEST_CASE("SerializeState flushes the content store when a custom amp is focused
   RequireContains(source, "volum::content::GlobalContentStore().Save();");
 }
 
+TEST_CASE("Current-version chunk reader consumes every serialized param (VST/AU state restore)")
+{
+  // Regression (1.2.0 critical): SerializeParams() writes ALL kNumParams param
+  // doubles, but the pre-fix reader used a hand-maintained 71-entry list for every
+  // version >= 0.9.0. When 1.2.0 appended ~22 params (kSupportIRToggle, PRE Pitch,
+  // Tremolo, Delay sync) the reader stopped short, `pos` misaligned, and the
+  // per-amp selection/scene read garbage -> VST3/AU "everything resets to default
+  // on every load" (standalone masked it via volum-settings.json). Pin the
+  // current-version branch that reads params by LIVE name so it can never drift
+  // from the enum again.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "if (version >= volum::ChunkVersion(1, 2, 0))");
+  RequireContains(source, "for (int i = 0; i < kNumParams; ++i)");
+  RequireContains(source, "paramNames.push_back(GetParam(i)->GetName());");
+  RequireContains(source, "pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);");
+}
+
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
 {
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");

@@ -521,7 +521,25 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // Act accordingly
   nlohmann::json config;
 
-  if (version >= volum::ChunkVersion(0, 9, 0))
+  if (version >= volum::ChunkVersion(1, 2, 0))
+  {
+    // Current layout. SerializeParams() writes ALL kNumParams param doubles, so
+    // the reader MUST consume exactly that many to keep `pos` aligned for the
+    // per-amp block that follows. Earlier releases used a hand-maintained name
+    // list (_GetConfigFrom_0_9_0, 71 entries ending at SupportAmpPan). 1.2.0
+    // appended ~22 params (kSupportIRToggle, PRE Pitch, Tremolo, Delay sync/div)
+    // WITHOUT extending that list, so the reader stopped 22 doubles short and the
+    // per-amp selection/scene then read raw param bytes as garbage -> VST3/AU
+    // "state resets to default on every load" (standalone was unaffected: it
+    // restores from volum-settings.json in the ctor, not from the DAW chunk).
+    // Read by LIVE param name so this reader can never drift from the enum again.
+    std::vector<std::string> paramNames;
+    paramNames.reserve(kNumParams);
+    for (int i = 0; i < kNumParams; ++i)
+      paramNames.push_back(GetParam(i)->GetName());
+    pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);
+  }
+  else if (version >= volum::ChunkVersion(0, 9, 0))
   {
     pos = _GetConfigFrom_0_9_0(chunk, pos, config);
   }
