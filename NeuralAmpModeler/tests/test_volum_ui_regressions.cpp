@@ -662,6 +662,25 @@ TEST_CASE("PRE/POST lock UI and settings helpers are wired")
   RequireContains(settings, "_VolumRestoreEffectSettings()");
 }
 
+TEST_CASE("SerializeState flushes the content store when a custom amp is focused")
+{
+  // Regression (1.2.0): a focused custom amp keeps its scene in the shared
+  // content library (only the id is in the DAW chunk). _VolumSaveCurrentToSettings
+  // writes live knob edits into customScenes[id] in memory, but in a DAW/plugin
+  // the store is otherwise only flushed on content CRUD - so live custom-amp
+  // knob tweaks were lost on host restart. SerializeState (host state-save) and
+  // the plugin-format destructor must flush the store when a custom amp is
+  // focused. Pin both so the flush can't silently regress.
+  const std::string source = ReadPluginSource();
+
+  // Guarded flush inside SerializeState, right after the live-scene save.
+  RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
+  RequireContains(source, "if (mVolumCustomMainIdx >= 0)\r\n      volum::content::GlobalContentStore().Save();");
+
+  // Plugin-format teardown path (guarded, under the non-APP branch) flushes too.
+  RequireContains(source, "if (mVolumCustomMainIdx >= 0)\r\n    volum::content::GlobalContentStore().Save();");
+}
+
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
 {
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
