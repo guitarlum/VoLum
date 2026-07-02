@@ -33,6 +33,54 @@ struct MemoryChunk
 };
 } // namespace
 
+TEST_CASE("Per-amp selection misaligns unless the reader consumes every serialized param double")
+{
+  // Byte-accounting proof of the 1.2.0 VST3/AU "state resets to default on every
+  // load" bug. SerializeState writes: [params: kNumParams doubles][selection: 3
+  // ints][per-amp scenes]... . The reader must consume EXACTLY the number of
+  // param doubles that were written before it reads the selection. The shipped
+  // 1.2.0 reader used a frozen 71-name list while SerializeParams wrote 93 params
+  // (kSupportIRToggle + PRE Pitch + Tremolo + Delay sync were appended), so it
+  // read the selection 22 doubles too early -> garbage amp/speaker/channel ->
+  // whole per-amp restore derailed. Standalone masked it (restores from
+  // volum-settings.json). This locks the "reader param count == writer param
+  // count" contract that the fix (read by live param name for the current
+  // version) restores.
+  constexpr int kWrittenParams = 93; // illustrative kNumParams at time of writing
+  constexpr int kStaleShortRead = 71; // the frozen _GetConfigFrom_0_9_0 list length
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+
+  MemoryChunk chunk;
+  for (int i = 0; i < kWrittenParams; ++i)
+  {
+    double v = 1000.0 + i; // never a valid selection triple, so a misread is obvious
+    chunk.Put(&v);
+  }
+  volum::PutCurrentVoLumChunkState(chunk, {3, 2, 1}, amps, volum::kAmpCount);
+
+  // Correct: consume all written params, then the selection is intact.
+  int pos = 0;
+  double scratch = 0.0;
+  for (int i = 0; i < kWrittenParams; ++i)
+    pos = chunk.Get(&scratch, pos);
+  volum::VoLumChunkSelection good;
+  volum::GetVoLumChunkSelection(chunk, pos, good);
+  CHECK(good.ampIdx == 3);
+  CHECK(good.speakerIdx == 2);
+  CHECK(good.channelIdx == 1);
+
+  // Stale short read: stopping early makes the selection read leftover param
+  // bytes, so it cannot equal the written selection.
+  int shortPos = 0;
+  for (int i = 0; i < kStaleShortRead; ++i)
+    shortPos = chunk.Get(&scratch, shortPos);
+  volum::VoLumChunkSelection bad;
+  volum::GetVoLumChunkSelection(chunk, shortPos, bad);
+  const bool badMatchesWrittenSelection = (bad.ampIdx == 3 && bad.speakerIdx == 2 && bad.channelIdx == 1);
+  CHECK_FALSE(badMatchesWrittenSelection);
+}
+
 TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
