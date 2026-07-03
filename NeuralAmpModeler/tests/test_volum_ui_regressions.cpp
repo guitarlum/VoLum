@@ -532,6 +532,21 @@ TEST_CASE("Standalone settings persist the active preset id (Q1/B5)")
   RequireContains(plugin, "mVolumRestorePresetId = j[\"volumActivePresetId\"].get<std::string>();");
 }
 
+TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the deferred restore")
+{
+  // The "VST3/AU reopen drops the focused custom amp" fix: UnserializeState must
+  // seed the SAME deferred-restore members standalone uses (consumed by OnUIOpen
+  // -> _VolumRestoreSessionSelection), sourcing them from the CHUNK id tail and
+  // resetting the one-shot guard so the restore re-runs against the freshly built
+  // UI. Without this the plugin re-applied the machine-global settings pick (or
+  // nothing) and fell back to a factory amp. Pin the wiring so a future refactor
+  // cannot silently drop it back to the immediate-select-only path.
+  const std::string plugin = ReadPluginSource();
+  RequireContains(plugin, "mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(");
+  RequireContains(plugin, "mVolumRestorePresetId = idTail.activePresetId;");
+  RequireContains(plugin, "mVolumDidRestorePresetSelection = false;");
+}
+
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
 {
   // Wrapping the rotated DrawText in StartLayer/EndLayer/DrawLayer caused
@@ -680,6 +695,24 @@ TEST_CASE("SerializeState flushes the content store when a custom amp is focused
   RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
   RequireContains(source, "if (mVolumCustomMainIdx >= 0)");
   RequireContains(source, "volum::content::GlobalContentStore().Save();");
+}
+
+TEST_CASE("Current-version chunk reader consumes every serialized param (VST/AU state restore)")
+{
+  // Regression (1.2.0 critical): SerializeParams() writes ALL kNumParams param
+  // doubles, but the pre-fix reader used a hand-maintained 71-entry list for every
+  // version >= 0.9.0. When 1.2.0 appended ~22 params (kSupportIRToggle, PRE Pitch,
+  // Tremolo, Delay sync) the reader stopped short, `pos` misaligned, and the
+  // per-amp selection/scene read garbage -> VST3/AU "everything resets to default
+  // on every load" (standalone masked it via volum-settings.json). Pin the
+  // current-version branch that reads params by LIVE name so it can never drift
+  // from the enum again.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "if (version >= volum::ChunkVersion(1, 2, 0))");
+  RequireContains(source, "for (int i = 0; i < kNumParams; ++i)");
+  RequireContains(source, "paramNames.push_back(GetParam(i)->GetName());");
+  RequireContains(source, "pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);");
 }
 
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")

@@ -1,4 +1,12 @@
 # Validate the built Windows VST3 bundle with pluginval.
+#
+# COVERAGE NOTE: pluginval only inspects iPlug *parameters* (it toggles them and
+# checks they restore). It does NOT exercise VoLum's custom DAW-chunk state - the
+# per-amp selection/scene, custom amp/support/preset refs, and the id tail that
+# SerializeState appends after the params. Those round-trip fine in pluginval even
+# when the chunk reader is broken, which is exactly why the 1.2.0 "state resets to
+# default on load" bug passed pluginval. Persistence of that custom state is
+# guarded by tests/test_volum_state_roundtrip.cpp, not here.
 
 param(
   [string] $Vst3Path = "",
