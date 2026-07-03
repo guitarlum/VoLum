@@ -1194,3 +1194,29 @@ TEST_CASE("Id tail effect blocks with missing/short modes arrays seed ship defau
     CHECK(out.perAmpPitch[0].modes[m].voicing == defPitch.modes[m].voicing);
   }
 }
+
+// Editor-open restore precedence: which custom MAIN amp id wins between the DAW
+// project chunk and the machine-global volum-settings.json. This is the exact
+// decision the "VST3 reopen drops the custom amp" bug got wrong - the chunk was
+// never allowed to win, so a plugin re-applied the settings pick (or nothing) and
+// fell back to a factory amp.
+TEST_CASE("ResolveRestoreCustomMainId: chunk selection wins for a plugin project")
+{
+  // A project focused on a custom amp overrides whatever the settings remember.
+  CHECK(volum::ResolveRestoreCustomMainId(/*loadedFromChunk=*/true, "amp_project", "amp_settings") == "amp_project");
+}
+
+TEST_CASE("ResolveRestoreCustomMainId: an empty chunk id (factory project) still wins over settings")
+{
+  // The bug direction: a project saved on a FACTORY amp (empty chunk id) must NOT
+  // resurrect the settings' custom amp. Empty is authoritative when it came from a
+  // chunk.
+  CHECK(volum::ResolveRestoreCustomMainId(/*loadedFromChunk=*/true, "", "amp_settings").empty());
+}
+
+TEST_CASE("ResolveRestoreCustomMainId: no chunk (standalone launch) uses the settings pick")
+{
+  // Pure standalone launch: there is no chunk, so the machine-global last
+  // selection is the correct source.
+  CHECK(volum::ResolveRestoreCustomMainId(/*loadedFromChunk=*/false, "ignored", "amp_settings") == "amp_settings");
+}

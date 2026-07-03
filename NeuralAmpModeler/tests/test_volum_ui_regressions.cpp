@@ -532,6 +532,21 @@ TEST_CASE("Standalone settings persist the active preset id (Q1/B5)")
   RequireContains(plugin, "mVolumRestorePresetId = j[\"volumActivePresetId\"].get<std::string>();");
 }
 
+TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the deferred restore")
+{
+  // The "VST3/AU reopen drops the focused custom amp" fix: UnserializeState must
+  // seed the SAME deferred-restore members standalone uses (consumed by OnUIOpen
+  // -> _VolumRestoreSessionSelection), sourcing them from the CHUNK id tail and
+  // resetting the one-shot guard so the restore re-runs against the freshly built
+  // UI. Without this the plugin re-applied the machine-global settings pick (or
+  // nothing) and fell back to a factory amp. Pin the wiring so a future refactor
+  // cannot silently drop it back to the immediate-select-only path.
+  const std::string plugin = ReadPluginSource();
+  RequireContains(plugin, "mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(");
+  RequireContains(plugin, "mVolumRestorePresetId = idTail.activePresetId;");
+  RequireContains(plugin, "mVolumDidRestorePresetSelection = false;");
+}
+
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
 {
   // Wrapping the rotated DrawText in StartLayer/EndLayer/DrawLayer caused

@@ -362,6 +362,23 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   return t;
 }
 
+// Decide which custom MAIN amp id to restore into the UI when the editor opens.
+//
+// Standalone restores its last selection from volum-settings.json (the machine-
+// global pick). A plugin instance ALSO loads that same settings file in its
+// constructor, but a plugin's authoritative selection is the DAW project chunk,
+// not the machine-global one. So when state came from a chunk, the chunk value
+// wins - INCLUDING when it is empty: a project saved on a factory amp must land
+// on that factory amp, never on whatever custom amp the settings file happens to
+// remember. When there is no chunk (pure standalone launch) the settings value
+// is used. This is the exact precedence the 1.2.0 "VST3 reopen drops the custom
+// amp" bug got wrong (the chunk selection was never propagated to editor-open).
+inline std::string ResolveRestoreCustomMainId(bool loadedFromChunk, const std::string& chunkId,
+                                              const std::string& settingsId)
+{
+  return loadedFromChunk ? chunkId : settingsId;
+}
+
 // Append the id tail. Uses only scalar Put<T> so it works against both iPlug's
 // IByteChunk and the unit-test MemoryChunk mock.
 template <typename Chunk>
