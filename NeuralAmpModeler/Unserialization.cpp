@@ -748,6 +748,20 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // restored scene's supportCustomId.
     if (haveIdTail)
     {
+      // Seed the deferred editor-open restore with the CHUNK's selection so
+      // OnUIOpen -> _VolumRestoreSessionSelection re-applies THIS project's custom
+      // amp/preset to the freshly built UI. The constructor already primed these
+      // members from volum-settings.json (the machine-global last pick); for a
+      // plugin that source is wrong, so the chunk wins - even when empty (a
+      // factory-amp project must not resurrect the settings' custom amp). Resetting
+      // the one-shot guard lets the restore run again after this state load. This
+      // fixes "VST3/AU reopen drops the focused custom amp" (the immediate select
+      // below only reaches the UI when an editor already exists at load time).
+      mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(
+        /*loadedFromChunk=*/true, idTail.customMainId, mVolumRestoreCustomMainId);
+      mVolumRestorePresetId = idTail.activePresetId;
+      mVolumDidRestorePresetSelection = false;
+
       const int cmi = volum::custom::CustomAmpIndexById(idTail.customMainId);
       if (cmi >= 0)
         _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs + .nam load
