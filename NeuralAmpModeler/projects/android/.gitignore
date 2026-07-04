@@ -1,0 +1,20 @@
+# Android/Gradle build outputs
+.gradle/
+build/
+app/build/
+app/.cxx/
+.cxx/
+
+# Local machine SDK path (not portable)
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
+
+# Dev-only emulator screenshots
+shots/
+
+# Keep: gradle wrapper jar/properties, gradlew, source, bundled model assets
+!gradle/wrapper/gradle-wrapper.jar
