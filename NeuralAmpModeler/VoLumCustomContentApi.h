@@ -290,6 +290,41 @@ inline void DeleteIR(int idx)
   }
 }
 
+// Per-IR shaping (VoLum 1.2.1): trim + low/high cut that follow the IR in the
+// library (applied on whichever lane loads it).
+struct IRShaping
+{
+  double trimDb = 0.0;
+  double lowCutHz = 0.0; // 0 = off
+  double highCutHz = 0.0; // 0 = off
+  bool calibrated = false;
+};
+
+inline IRShaping IRShapingAt(int idx)
+{
+  const auto& irs = Store().reg().irs;
+  if (idx < 0 || idx >= (int)irs.size())
+    return {};
+  const auto& it = irs[(size_t)idx];
+  return {it.trimDb, it.lowCutHz, it.highCutHz, it.trimCalibrated};
+}
+
+inline IRShaping IRShapingById(const std::string& id) { return IRShapingAt(IRIndexById(id)); }
+
+// Persist edited shaping for the IR at `idx` (clamped to the library ranges). Marks
+// the entry calibrated so the auto-normalize migration never overwrites a user edit.
+inline void SetIRShaping(int idx, double trimDb, double lowCutHz, double highCutHz)
+{
+  auto& irs = Store().reg().irs;
+  if (idx < 0 || idx >= (int)irs.size())
+    return;
+  irs[(size_t)idx].trimDb = content::ClampIrTrimDb(trimDb);
+  irs[(size_t)idx].lowCutHz = content::ClampIrLowCutHz(lowCutHz);
+  irs[(size_t)idx].highCutHz = content::ClampIrHighCutHz(highCutHz);
+  irs[(size_t)idx].trimCalibrated = true;
+  Store().Save();
+}
+
 // ---------------------------------------------------------------------------
 // Imported pedal captures (F8) - projected from the registry
 // ---------------------------------------------------------------------------

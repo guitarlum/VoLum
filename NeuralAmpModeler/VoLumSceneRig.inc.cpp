@@ -523,6 +523,7 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
     _VolumActiveScene().supportActiveIrId = id;
   else
     _VolumActiveScene().activeIrId = id;
+  _VolumPushIrShaping(support); // apply this IR's trim + low/high cut on the lane
   GetParam(toggle)->Set(1.0);
   SendParameterValueFromDelegate(toggle, GetParam(toggle)->GetNormalized(), true);
   // The shared speaker row shows the focused lane's IR; only update it when this
@@ -616,6 +617,7 @@ void NeuralAmpModeler::_VolumClearIR(bool support)
     _VolumActiveScene().supportActiveIrId.clear();
   else
     _VolumActiveScene().activeIrId.clear();
+  _VolumPushIrShaping(support); // no active IR -> reset the lane to unity / no cuts
   const int toggle = support ? kSupportIRToggle : kIRToggle;
   GetParam(toggle)->Set(0.0);
   SendParameterValueFromDelegate(toggle, GetParam(toggle)->GetNormalized(), true);
@@ -642,6 +644,93 @@ void NeuralAmpModeler::_VolumApplyActiveIr(const std::string& irId, bool support
     return;
   }
   _VolumSelectIR(idx, support, /*interactive=*/false);
+}
+
+// VoLum 1.2.1 per-IR shaping ----------------------------------------------------
+
+// Copy the currently-active IR's library settings (trim + low/high cut) into the
+// given lane's audio-thread atomics. With no active IR the lane resets to unity
+// gain and no cuts, so the DSP is inert whenever runIR is false. Off-audio-thread.
+void NeuralAmpModeler::_VolumPushIrShaping(bool support)
+{
+  const std::string irId = support ? _VolumActiveScene().supportActiveIrId : _VolumActiveScene().activeIrId;
+  const volum::custom::IRShaping s = volum::custom::IRShapingById(irId); // defaults when empty/missing
+  const double trimLin = DBToAmp(s.trimDb);
+  if (support)
+  {
+    mSupportIrTrimLin.store(trimLin, std::memory_order_relaxed);
+    mSupportIrLowCutHz.store(s.lowCutHz, std::memory_order_relaxed);
+    mSupportIrHighCutHz.store(s.highCutHz, std::memory_order_relaxed);
+  }
+  else
+  {
+    mIrTrimLin.store(trimLin, std::memory_order_relaxed);
+    mIrLowCutHz.store(s.lowCutHz, std::memory_order_relaxed);
+    mIrHighCutHz.store(s.highCutHz, std::memory_order_relaxed);
+  }
+}
+
+// Audio thread: apply trim (in place) then the optional low-cut (high-pass) and
+// high-cut (low-pass) one-pole filters to one IR lane. SetParams only assigns
+// coefficients (no allocation, no history reset), so per-block reconfig is safe
+// and tracks live edits without zipper noise. A cut Hz of 0 bypasses that stage.
+iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const size_t numChannels, const int nFrames,
+                                                      const double sampleRate, const bool support)
+{
+  const double trim = (support ? mSupportIrTrimLin : mIrTrimLin).load(std::memory_order_relaxed);
+  if (trim != 1.0)
+    for (size_t c = 0; c < numChannels; ++c)
+      for (int i = 0; i < nFrames; ++i)
+        in[c][i] = static_cast<iplug::sample>(static_cast<double>(in[c][i]) * trim);
+
+  iplug::sample** p = in;
+  const double lowHz = (support ? mSupportIrLowCutHz : mIrLowCutHz).load(std::memory_order_relaxed);
+  if (lowHz > 0.0)
+  {
+    auto& f = support ? mSupportIrLowCut : mIrLowCut;
+    f.SetParams(recursive_linear_filter::HighPassParams(sampleRate, lowHz));
+    p = f.Process(p, numChannels, nFrames);
+  }
+  const double highHz = (support ? mSupportIrHighCutHz : mIrHighCutHz).load(std::memory_order_relaxed);
+  if (highHz > 0.0)
+  {
+    auto& f = support ? mSupportIrHighCut : mIrHighCut;
+    f.SetParams(recursive_linear_filter::LowPassParams(sampleRate, highHz));
+    p = f.Process(p, numChannels, nFrames);
+  }
+  return p;
+}
+
+// One-time migration for IRs imported before 1.2.1 (no stored trim): measure the
+// .wav's broadband energy and auto-normalize so they stop landing ~18 dB quieter
+// than the baked stock cabs. Persists so it only runs once. Missing/unreadable
+// files are marked calibrated at unity so we do not retry them every launch.
+void NeuralAmpModeler::_VolumMigrateIrTrims()
+{
+  auto& irs = volum::content::GlobalContentStore().reg().irs;
+  bool changed = false;
+  for (auto& ir : irs)
+  {
+    if (ir.trimCalibrated)
+      continue;
+    double trimDb = 0.0;
+    const auto abs = volum::content::GlobalContentStore().ResolveStored(ir.file);
+    std::vector<float> audio;
+    double fileSr = 0.0;
+    if (!abs.empty()
+        && dsp::wav::Load(abs.string().c_str(), audio, fileSr) == dsp::wav::LoadReturnCode::SUCCESS && !audio.empty())
+    {
+      double sumSq = 0.0;
+      for (float v : audio)
+        sumSq += static_cast<double>(v) * static_cast<double>(v);
+      trimDb = volum::content::AutoNormalizeIrTrimDb(std::sqrt(sumSq));
+    }
+    ir.trimDb = trimDb;
+    ir.trimCalibrated = true;
+    changed = true;
+  }
+  if (changed)
+    volum::content::GlobalContentStore().Save();
 }
 
 void NeuralAmpModeler::_VolumReconcileActiveIr()
