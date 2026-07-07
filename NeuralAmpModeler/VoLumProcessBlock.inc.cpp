@@ -126,7 +126,12 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
 
     sample** irPointers = toneStackOutPointers;
     if (processingPlan.runIR)
+    {
       irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, nFrames);
+      // VoLum 1.2.1: per-IR trim + low/high cut (undoes the convolver's baked
+      // -18 dB and lets a custom IR be shaped without editing the .wav).
+      irPointers = _VolumApplyIrShaping(irPointers, numChannelsInternal, nFrames, sampleRate, /*support=*/false);
+    }
 
     hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, nFrames);
   }
@@ -181,7 +186,11 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   // mirroring the MAIN lane (tone stack -> IR -> high-pass). Independent of the
   // MAIN convolver so a custom IR is local to one lane (spec 3.2).
   if (processingPlan.runSupportIR)
+  {
     supportPostPointers = mSupportIR->Process(supportPostPointers, numChannelsInternal, nFrames);
+    supportPostPointers =
+      _VolumApplyIrShaping(supportPostPointers, numChannelsInternal, nFrames, sampleRate, /*support=*/true);
+  }
 
   supportPostPointers = mSupportHighPass.Process(supportPostPointers, numChannelsInternal, nFrames);
   return supportPostPointers[0];

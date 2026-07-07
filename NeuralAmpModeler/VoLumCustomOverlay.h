@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -370,6 +371,7 @@ private:
     kRowOverwriteBase = 500, // Manage inline [overwrite] icon (presets only)
     kRowRenameBase = 600, // Manage inline [pen] icon
     kRowDeleteBase = 700, // Manage inline [trash] icon
+    kRowIrCfgBase = 800, // Manage inline [gear] icon (IR only): open shaping editor
     kPopupBase = 1000
   };
 
@@ -385,7 +387,19 @@ private:
   enum class PopupKind
   {
     Speaker,
-    Channel
+    Channel,
+    IrSettings // per-IR trim + low/high cut editor (VoLum 1.2.1)
+  };
+
+  // Popup-local action codes for the IR-settings editor (offsets from kPopupBase).
+  enum IrCfgPopupAction
+  {
+    kIrCfgTrimDown = 0,
+    kIrCfgTrimUp,
+    kIrCfgLowDown,
+    kIrCfgLowUp,
+    kIrCfgHighDown,
+    kIrCfgHighUp
   };
 
   IRECT PanelRect() const
@@ -652,6 +666,11 @@ private:
       HandleManageAction(kDelete, rect);
       return;
     }
+    if (action >= kRowIrCfgBase && action < kRowIrCfgBase + 100)
+    {
+      OpenIrSettingsPopup(action - kRowIrCfgBase, rect);
+      return;
+    }
     if (action >= kRowBase && action < kRowBase + 256)
     {
       mSel = action - kRowBase;
@@ -843,6 +862,27 @@ private:
     LayoutPopup(anchor);
   }
 
+  // IR shaping editor: a compact fixed-size popover (trim + low/high cut), anchored
+  // to the row's gear icon. Distinct from the list popups (Speaker/Channel).
+  void OpenIrSettingsPopup(int irIdx, const IRECT& anchor)
+  {
+    if (mManageKind != ManageKind::IR || irIdx < 0 || irIdx >= (int)mItems.size())
+      return;
+    mPopupKind = PopupKind::IrSettings;
+    mPopupIrIdx = irIdx;
+    const float w = 248.f, h = 150.f;
+    const IRECT panel = PanelRect();
+    float left = anchor.R - w; // hang left from the gear so it stays on-panel
+    if (left < panel.L + 6.f)
+      left = panel.L + 6.f;
+    float top = anchor.B + 2.f;
+    if (top + h > panel.B - 6.f)
+      top = std::max(panel.T + 6.f, anchor.T - 2.f - h);
+    mPopupRect = IRECT(left, top, left + w, top + h);
+    mPopupOpen = true;
+    SetDirty(false);
+  }
+
   void LayoutPopup(const IRECT& anchor)
   {
     const float rowH = 20.f;
@@ -863,6 +903,11 @@ private:
   void HandlePopup(int code)
   {
     using namespace volum::custom;
+    if (mPopupKind == PopupKind::IrSettings)
+    {
+      HandleIrSettingsPopup(code - kPopupBase);
+      return;
+    }
     const int j = code - kPopupBase;
     if (j < 0 || j >= (int)mPopupItems.size())
     {
@@ -892,8 +937,40 @@ private:
     SetDirty(false);
   }
 
+  // One +/- click on the IR editor: step the value, persist, and re-push live so the
+  // audible level/tone change is immediate. The popover stays open for further tweaks.
+  void HandleIrSettingsPopup(int act)
+  {
+    using namespace volum::custom;
+    if (mPopupIrIdx < 0 || mPopupIrIdx >= (int)mItems.size())
+    {
+      mPopupOpen = false;
+      SetDirty(false);
+      return;
+    }
+    IRShaping s = IRShapingAt(mPopupIrIdx);
+    switch (act)
+    {
+      case kIrCfgTrimDown: s.trimDb = volum::content::StepIrTrimDb(s.trimDb, -1); break;
+      case kIrCfgTrimUp: s.trimDb = volum::content::StepIrTrimDb(s.trimDb, +1); break;
+      case kIrCfgLowDown: s.lowCutHz = volum::content::StepIrLowCutHz(s.lowCutHz, -1); break;
+      case kIrCfgLowUp: s.lowCutHz = volum::content::StepIrLowCutHz(s.lowCutHz, +1); break;
+      case kIrCfgHighDown: s.highCutHz = volum::content::StepIrHighCutHz(s.highCutHz, -1); break;
+      case kIrCfgHighUp: s.highCutHz = volum::content::StepIrHighCutHz(s.highCutHz, +1); break;
+      default: return; // click on the panel chrome: keep it open
+    }
+    SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
+    NotifyChanged(); // plugin migrates/re-pushes shaping to the live IR lanes
+    SetDirty(false);
+  }
+
   void DrawPopup(IGraphics& g)
   {
+    if (mPopupKind == PopupKind::IrSettings)
+    {
+      DrawIrSettingsPopup(g);
+      return;
+    }
     g.FillRoundRect(VoLumColors::HERO_BG, mPopupRect, 4.f);
     g.DrawRoundRect(VoLumColors::TEAL_DIM, mPopupRect, 4.f, nullptr, 1.5f);
     const float rowH = 20.f;
@@ -906,6 +983,70 @@ private:
                  mPopupItems[(size_t)j].c_str(), row.GetPadded(-8.f, 0.f, -4.f, 0.f));
       mPopupHotspots.emplace_back(row, kPopupBase + j);
     }
+  }
+
+  static std::string FmtIrTrim(double db)
+  {
+    char b[24];
+    std::snprintf(b, sizeof(b), "%+.1f dB", db);
+    return b;
+  }
+  static std::string FmtIrCut(double hz)
+  {
+    if (!(hz > 0.0))
+      return "Off";
+    char b[24];
+    if (hz >= 1000.0)
+      std::snprintf(b, sizeof(b), "%.1f kHz", hz / 1000.0);
+    else
+      std::snprintf(b, sizeof(b), "%.0f Hz", hz);
+    return b;
+  }
+
+  // One label / value / [-] [+] line inside the IR editor. `downAct`/`upAct` are
+  // popup action offsets registered as hotspots for the steppers.
+  void DrawIrStepperRow(IGraphics& g, const IRECT& row, const char* label, const std::string& value, int downAct,
+                        int upAct)
+  {
+    const float btnW = 22.f;
+    g.DrawText(IText(11.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), label,
+               row.GetPadded(0.f, 0.f, 0.f, 0.f));
+    const IRECT plus(row.R - btnW, row.T, row.R, row.B);
+    const IRECT minus(plus.L - 4.f - btnW, row.T, plus.L - 4.f, row.B);
+    const IRECT valueR(row.L + 58.f, row.T, minus.L - 6.f, row.B);
+    g.DrawText(IText(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Far, EVAlign::Middle), value.c_str(), valueR);
+    for (const auto& b : {std::make_pair(minus, false), std::make_pair(plus, true)})
+    {
+      g.FillRoundRect(VoLumColors::BTN_OFF_BG, b.first, 3.f);
+      g.DrawRoundRect(VoLumColors::TEAL_DIM, b.first, 3.f, nullptr, 1.f);
+      const float cx = b.first.MW(), cy = b.first.MH();
+      g.DrawLine(VoLumColors::CREAM, cx - 4.f, cy, cx + 4.f, cy, nullptr, 1.4f);
+      if (b.second)
+        g.DrawLine(VoLumColors::CREAM, cx, cy - 4.f, cx, cy + 4.f, nullptr, 1.4f);
+    }
+    mPopupHotspots.emplace_back(minus, kPopupBase + downAct);
+    mPopupHotspots.emplace_back(plus, kPopupBase + upAct);
+  }
+
+  void DrawIrSettingsPopup(IGraphics& g)
+  {
+    using namespace volum::custom;
+    g.FillRoundRect(VoLumColors::HERO_BG, mPopupRect, 4.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, mPopupRect, 4.f, nullptr, 1.5f);
+    const IRShaping s = IRShapingAt(mPopupIrIdx);
+    const IRECT inner = mPopupRect.GetPadded(-10.f);
+    const IRECT title(inner.L, inner.T, inner.R, inner.T + 20.f);
+    g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "IR SHAPING", title);
+    const float rowH = 30.f;
+    float t = title.B + 4.f;
+    DrawIrStepperRow(g, IRECT(inner.L, t, inner.R, t + rowH), "Level", FmtIrTrim(s.trimDb), kIrCfgTrimDown,
+                     kIrCfgTrimUp);
+    t += rowH;
+    DrawIrStepperRow(g, IRECT(inner.L, t, inner.R, t + rowH), "Low cut", FmtIrCut(s.lowCutHz), kIrCfgLowDown,
+                     kIrCfgLowUp);
+    t += rowH;
+    DrawIrStepperRow(g, IRECT(inner.L, t, inner.R, t + rowH), "High cut", FmtIrCut(s.highCutHz), kIrCfgHighDown,
+                     kIrCfgHighUp);
   }
 
   /* ---------------- shared draw helpers ---------------- */
@@ -1034,7 +1175,6 @@ private:
 
       g.PathClipRegion(listArea);
       const float iconW = 24.f;
-      const int nIcons = presets ? 3 : 2;
       float y = listArea.T + 4.f - mManageScroll;
       for (int i = 0; i < (int)mItems.size(); i++)
       {
@@ -1061,6 +1201,17 @@ private:
         const IRECT pen(ix, row.T, ix + iconW, row.B);
         DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
         AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
+        if (mManageKind == ManageKind::IR)
+        {
+          ix -= iconW;
+          const IRECT gear(ix, row.T, ix + iconW, row.B);
+          // A tinted gear when this IR carries a non-default trim/cut, so a shaped
+          // IR reads as edited at a glance.
+          const volum::custom::IRShaping s = volum::custom::IRShapingAt(i);
+          const bool shaped = (s.trimDb != 0.0) || (s.lowCutHz > 0.0) || (s.highCutHz > 0.0);
+          DrawGearGlyph(g, gear, shaped ? VoLumColors::GOLD : VoLumColors::CREAM_DIM);
+          AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
+        }
         ix -= iconW;
         if (presets)
         {
@@ -1440,6 +1591,21 @@ private:
     g.DrawLine(col, cx - 6.f, cy + 6.f, cx + 6.f, cy + 6.f, nullptr, t);
   }
 
+  // Gear / cog: a ring of short teeth around a hollow hub. Opens the IR shaping editor.
+  static void DrawGearGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float cx = r.MW(), cy = r.MH();
+    const float t = 1.2f;
+    const float rIn = 3.2f, rOut = 6.0f;
+    for (int k = 0; k < 8; ++k)
+    {
+      const float a = (float)k * (3.14159265f / 4.f);
+      const float ca = std::cos(a), sa = std::sin(a);
+      g.DrawLine(col, cx + ca * rIn, cy + sa * rIn, cx + ca * rOut, cy + sa * rOut, nullptr, t);
+    }
+    g.DrawCircle(col, cx, cy, rIn, nullptr, t);
+  }
+
   volum::custom::Screen mScreen = volum::custom::Screen::Presets;
   ManageKind mManageKind = ManageKind::Presets;
   int mAmpIdx = 0;
@@ -1457,6 +1623,7 @@ private:
   bool mPopupOpen = false;
   PopupKind mPopupKind = PopupKind::Speaker;
   int mPopupFileIdx = -1;
+  int mPopupIrIdx = -1; // IR library index for PopupKind::IrSettings
   IRECT mPopupRect;
   std::vector<std::string> mPopupItems;
   std::vector<std::pair<IRECT, int>> mPopupHotspots;

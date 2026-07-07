@@ -41,7 +41,11 @@ namespace volum
 namespace content
 {
 
-inline constexpr int kContentSchemaVersion = 2;
+// v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
+// irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
+// missing keys defaulted), so v2 files load unchanged and v3 files load in older
+// builds; the bump is only a marker of the new capability, not a migration gate.
+inline constexpr int kContentSchemaVersion = 3;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
 // so adding/removing a custom pedal never reshuffles an index a saved chunk or
@@ -52,11 +56,110 @@ inline constexpr int kContentSchemaVersion = 2;
 inline constexpr int kCustomPedalIndexBase = 64;
 inline constexpr int kCustomPedalIndexMax = 127;
 
+// Per-IR shaping (VoLum 1.2.1). Custom IRs are convolved with a fixed -18 dB baked
+// into the convolver (dsp::ImpulseResponse::_SetWeights), so they land much quieter
+// than the baked stock cabs. These VoLum-side controls fix that and let a custom IR
+// be tone-shaped without editing the .wav. Stored per-IR in the library, so the
+// setting follows the IR wherever it is used (MAIN + SUPPORT lanes). Not a DAW
+// parameter, so no EParams/chunk change.
+inline constexpr double kIrTrimDbMin = -24.0;
+inline constexpr double kIrTrimDbMax = 24.0;
+// Cut Hz of 0 means the filter is OFF. When enabled the values are clamped to a
+// musical range (low-cut below the low mids, high-cut across the presence/air band).
+inline constexpr double kIrLowCutHzMax = 800.0;
+inline constexpr double kIrHighCutHzMin = 1000.0;
+inline constexpr double kIrHighCutHzMax = 20000.0;
+// The convolver bakes a fixed -18 dB into every custom IR (see _SetWeights). Auto-
+// normalize on import undoes that bake and equalizes broadband energy across IRs by
+// driving the effective convolution gain toward unity for equal-power input:
+// trimDb = 18 - 20*log10(L2(h)), clamped. Deterministic (unit-tested).
+inline constexpr double kIrBakedReductionDb = 18.0;
+
+inline double ClampIrTrimDb(double db)
+{
+  return std::clamp(db, kIrTrimDbMin, kIrTrimDbMax);
+}
+
+// Clamp a low-cut frequency; 0 (or non-positive) means OFF.
+inline double ClampIrLowCutHz(double hz)
+{
+  if (!(hz > 0.0))
+    return 0.0;
+  return std::clamp(hz, 20.0, kIrLowCutHzMax);
+}
+
+// Clamp a high-cut frequency; 0 (or non-positive) means OFF.
+inline double ClampIrHighCutHz(double hz)
+{
+  if (!(hz > 0.0))
+    return 0.0;
+  return std::clamp(hz, kIrHighCutHzMin, kIrHighCutHzMax);
+}
+
+inline double AutoNormalizeIrTrimDb(double l2Norm)
+{
+  if (!(l2Norm > 0.0))
+    return 0.0;
+  return ClampIrTrimDb(kIrBakedReductionDb - 20.0 * std::log10(l2Norm));
+}
+
+// Discrete UI steps for the IR panel, kept pure + shared so the popover and a unit
+// test agree on one ladder. dir < 0 lowers, dir > 0 raises. The cut ladders include
+// a 0 (= OFF) rung at the "open" end (low-cut off = lowest; high-cut off = highest).
+inline double StepIrTrimDb(double db, int dir)
+{
+  const double stepped = db + (dir >= 0 ? 0.5 : -0.5);
+  return ClampIrTrimDb(std::round(stepped * 2.0) / 2.0); // snap to a 0.5 dB grid
+}
+
+inline double StepIrLadder(const double* ladder, int n, double cur, int dir)
+{
+  int best = 0;
+  double bestD = 1e18;
+  for (int i = 0; i < n; ++i)
+  {
+    const double d = std::fabs(ladder[i] - cur);
+    if (d < bestD)
+    {
+      bestD = d;
+      best = i;
+    }
+  }
+  const int ni = std::clamp(best + (dir >= 0 ? 1 : -1), 0, n - 1);
+  return ladder[ni];
+}
+
+inline double StepIrLowCutHz(double hz, int dir)
+{
+  // OFF at the bottom, then a musical low-cut sweep up to the low mids.
+  static const double kLadder[] = {0.0, 20, 30, 40, 50, 60, 80, 100, 120, 150, 200, 300, 400, 500, 650, 800};
+  const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
+  return ClampIrLowCutHz(StepIrLadder(kLadder, n, ClampIrLowCutHz(hz), dir));
+}
+
+inline double StepIrHighCutHz(double hz, int dir)
+{
+  // Ascending presence/air ladder with OFF (0) as the top "fully open" rung, so
+  // stepping DOWN from OFF engages a 20 kHz cut and keeps darkening.
+  static const double kLadder[] = {1000, 1500,  2000,  3000,  4000,  5000, 6000,
+                                   8000, 10000, 12000, 16000, 20000, 0.0};
+  const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
+  const double in = (hz > 0.0) ? ClampIrHighCutHz(hz) : 0.0;
+  return ClampIrHighCutHz(StepIrLadder(kLadder, n, in, dir));
+}
+
 struct IRItem
 {
   std::string id; // ir_<rand>
   std::string name; // user display name (unique within IR library, CI)
   std::string file; // stored path relative to base, e.g. "ir/ir_x__Mesa.wav"
+  double trimDb = 0.0; // VoLum-side makeup gain, dB (kIrTrimDbMin..Max)
+  double lowCutHz = 0.0; // low-cut (high-pass) freq; 0 = off
+  double highCutHz = 0.0; // high-cut (low-pass) freq; 0 = off
+  // Runtime-only (NOT serialized): false when the entry predates the trim field
+  // (no "trimDb" key on load), so the plugin knows to auto-normalize it once and
+  // persist. New imports set this true when they compute the auto-normalized trim.
+  bool trimCalibrated = false;
 };
 
 struct PedalItem
@@ -244,7 +347,12 @@ inline nlohmann::json RegistryToJson(const Registry& r)
 
   nlohmann::json irs = nlohmann::json::array();
   for (const auto& ir : r.irs)
-    irs.push_back({{"id", ir.id}, {"name", ir.name}, {"path", ir.file}});
+    irs.push_back({{"id", ir.id},
+                   {"name", ir.name},
+                   {"path", ir.file},
+                   {"trimDb", ir.trimDb},
+                   {"lowCutHz", ir.lowCutHz},
+                   {"highCutHz", ir.highCutHz}});
   j["irLibrary"] = irs;
 
   nlohmann::json peds = nlohmann::json::array();
@@ -308,6 +416,18 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
         item.name = ir["name"].get<std::string>();
       if (ir.contains("path") && ir["path"].is_string())
         item.file = ir["path"].get<std::string>();
+      // Per-IR shaping (v3). Presence of "trimDb" marks the entry as calibrated;
+      // a v2 entry without it is left uncalibrated so the plugin auto-normalizes
+      // it once from the .wav (retroactively fixing the "too quiet" complaint).
+      if (ir.contains("trimDb") && ir["trimDb"].is_number())
+      {
+        item.trimDb = ClampIrTrimDb(ir["trimDb"].get<double>());
+        item.trimCalibrated = true;
+      }
+      if (ir.contains("lowCutHz") && ir["lowCutHz"].is_number())
+        item.lowCutHz = ClampIrLowCutHz(ir["lowCutHz"].get<double>());
+      if (ir.contains("highCutHz") && ir["highCutHz"].is_number())
+        item.highCutHz = ClampIrHighCutHz(ir["highCutHz"].get<double>());
       r.irs.push_back(std::move(item));
     }
   }

@@ -476,6 +476,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       {
         volum::content::GlobalContentStore().SetBaseDir(contentDir);
         volum::content::GlobalContentStore().Load();
+        // One-time: auto-normalize the trim of any pre-1.2.1 IR (no stored trim)
+        // so previously-imported custom IRs stop landing ~18 dB below stock cabs.
+        _VolumMigrateIrTrims();
       }
 #ifndef NDEBUG
       if (volumSeedCustomAmps > 0)

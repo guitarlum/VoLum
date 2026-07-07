@@ -1219,7 +1219,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           // the active custom IR was just deleted, then re-sync the header strip
           // for the currently focused amp (factory or custom).
           [pPlugin]() {
+            // Auto-normalize any freshly-imported IR (uncalibrated) so it lands at
+            // stock-cab level immediately, then re-push the active IR's shaping to
+            // both lanes so a live trim/cut edit in the panel is heard at once.
+            pPlugin->_VolumMigrateIrTrims();
             pPlugin->_VolumReconcileActiveIr();
+            pPlugin->_VolumPushIrShaping(false);
+            pPlugin->_VolumPushIrShaping(true);
             pPlugin->_VolumRefreshPresetBar();
           });
         // F5 preset capture: save-as / overwrite snapshot the live scene.

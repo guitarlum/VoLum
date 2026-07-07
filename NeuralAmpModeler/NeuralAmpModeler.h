@@ -682,6 +682,17 @@ private:
   // false targets the MAIN amp's convolver (mIR). Per-lane custom IR (spec 3.2).
   dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath, bool support = false);
 
+  // VoLum 1.2.1 per-IR shaping. _VolumApplyIrShaping runs on the audio thread and
+  // applies the focused IR's trim + low/high cut to one lane after the convolver.
+  // _VolumPushIrShaping copies the active IR's library settings into that lane's
+  // atomics (call after an IR becomes active or its panel is edited).
+  // _VolumMigrateIrTrims auto-normalizes pre-1.2.1 IRs (no stored trim) once by
+  // measuring their .wav energy, then persists - retroactively fixing quiet IRs.
+  iplug::sample** _VolumApplyIrShaping(iplug::sample** in, const size_t numChannels, const int nFrames,
+                                       const double sampleRate, const bool support);
+  void _VolumPushIrShaping(bool support);
+  void _VolumMigrateIrTrims();
+
   bool _HaveModel() const { return this->mModel != nullptr; };
   // Prepare the input & output buffers
   void _PrepareBuffers(const size_t numChannels, const size_t numFrames);
@@ -802,6 +813,22 @@ private:
   recursive_linear_filter::HighPass mHighPass;
   recursive_linear_filter::HighPass mSupportHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
+
+  // Per-IR shaping (VoLum 1.2.1). The focused IR's library settings (trim + low/
+  // high cut) are pushed to the atomics below off the audio thread when an IR is
+  // selected or its panel is edited; the audio thread reads them lock-free and
+  // applies trim + cuts on the IR lane, after the convolver and before the DC
+  // blocker. A cut Hz of 0 bypasses that filter. Not a DAW parameter.
+  recursive_linear_filter::HighPass mIrLowCut; // MAIN low-cut (high-pass)
+  recursive_linear_filter::LowPass mIrHighCut; // MAIN high-cut (low-pass)
+  recursive_linear_filter::HighPass mSupportIrLowCut; // SUPPORT low-cut
+  recursive_linear_filter::LowPass mSupportIrHighCut; // SUPPORT high-cut
+  std::atomic<double> mIrTrimLin{1.0};
+  std::atomic<double> mSupportIrTrimLin{1.0};
+  std::atomic<double> mIrLowCutHz{0.0};
+  std::atomic<double> mIrHighCutHz{0.0};
+  std::atomic<double> mSupportIrLowCutHz{0.0};
+  std::atomic<double> mSupportIrHighCutHz{0.0};
 
   dsp::noise_gate::Trigger mSupportNoiseGateTrigger;
   dsp::noise_gate::Gain mSupportNoiseGateGain;
