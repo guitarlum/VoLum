@@ -183,6 +183,7 @@ public:
     mDelayNew = mDelay;
     mFading = false;
     mFadePos = 0;
+    mSpliceStarts = 0;
   }
 
   // ratio = output_freq / input_freq (2^(semitones/12)).
@@ -246,17 +247,33 @@ public:
             mDelayNew = cand;
             mFading = true;
             mFadePos = 0;
+            ++mSpliceStarts;
           }
         }
         else if (f > 1.0 && mDelay < mDLo)
         {
           const int k = std::max(1, static_cast<int>(std::lround((mDHi - mDelay) / P)));
-          double cand = mDelay + k * P; // larger delay (jump back / duplicate)
+          const double base = mDelay + k * P; // larger delay (jump back / duplicate)
+          double cand = base;
           if (mWsola)
             cand = _WsolaRefine(cand);
+          // UPSHIFT-ONLY grain floor. _WsolaRefine searches [-search, +search] around
+          // the splice target. On DOWNshift the target sits at the LOW delay boundary,
+          // where _WsolaRefine's own `dc >= xfade+1` clamp already blocks the
+          // grain-shortening (negative-lag) half, so downshift can only LENGTHEN a grain
+          // and stays stable. On UPshift the target sits at the HIGH boundary with the
+          // full search free, so a negative lag SHORTENS the effective grain: the next
+          // splice then fires well before `band`, POLY re-splices far more often than
+          // intended, and positive shifts crackle. Mirror the downshift asymmetry by
+          // never letting the refined target fall below the intended one-band jump, so
+          // WSOLA may only push the splice DEEPER into history. Downshift path is
+          // untouched.
+          if (cand < base)
+            cand = base;
           mDelayNew = cand;
           mFading = true;
           mFadePos = 0;
+          ++mSpliceStarts;
         }
       }
 
@@ -493,6 +510,14 @@ private:
   double mDelayNew = 0.0;
   bool mFading = false;
   int mFadePos = 0;
+
+  // Test/introspection only: number of crossfaded splices started since Reset().
+  // Lets a regression test assert POLY's splice cadence stays near the grain band
+  // (a shortened grain => runaway splicing => crackle). Behaviour-neutral counter.
+  unsigned long long mSpliceStarts = 0;
+
+public:
+  unsigned long long SpliceStarts() const { return mSpliceStarts; }
 };
 
 class VoLumPitch

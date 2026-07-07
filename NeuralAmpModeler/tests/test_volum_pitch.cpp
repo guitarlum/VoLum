@@ -290,6 +290,65 @@ TEST_CASE("VoLumPitch POLY WSOLA search stays below the grain band (no runaway r
   }
 }
 
+namespace
+{
+// Run one POLY GranularVoice over rich transient material at a given ratio and
+// return how many crossfaded splices it started. Splice cadence is the direct
+// signal for the positive-semitone crackle: a shortened grain re-splices far more
+// often than the ~20 ms band.
+unsigned long long polySpliceCount(double ratio, size_t n)
+{
+  using GV = dsp::effect::GranularVoice;
+  GV voice;
+  voice.Configure(kSR, kBlock);
+  voice.SetCharacter(GV::Character::Poly);
+  voice.Reset();
+  voice.SetRatio(ratio);
+  auto in = makeGuitar(196.0, n); // G3, decaying harmonics: transient + polyphonic-ish
+  std::vector<DSP_SAMPLE> out(n);
+  for (size_t start = 0; start < n; start += static_cast<size_t>(kBlock))
+  {
+    const size_t m = std::min<size_t>(static_cast<size_t>(kBlock), n - start);
+    voice.Process(in.data() + start, out.data() + start, m);
+  }
+  return voice.SpliceStarts();
+}
+} // namespace
+
+TEST_CASE("POLY upshift keeps its grain cadence (no positive-semitone crackle)")
+{
+  // REGRESSION GUARD for the positive-semitone crackle. POLY splices by a whole
+  // `band` (~20 ms) and _WsolaRefine nudges the target within [-search, +search].
+  // DOWNtuning always sounded great; UPshift crackled because WSOLA's negative lags
+  // shortened the grain, so POLY re-spliced far more often than one grain per band.
+  // The fix floors the upshift splice target at the intended one-band jump, so WSOLA
+  // can only push the splice DEEPER into history (longer grain), never shorten it.
+  // That imposes a hard cadence ceiling: with each grain travelling at least `band`,
+  // the splice count over N samples at ratio f cannot exceed ~ N*(f-1)/band. Steady
+  // sines hide the bug (any offset lands on similar waveform), so drive rich
+  // transient material. Measured on this signal: pre-fix upshift ~93 splices/s,
+  // post-fix ~25 (== the ceiling); the known-good downshift path is ~61 and untouched.
+  const double ratioUp = std::pow(2.0, 7.0 / 12.0);  // +7 semitones (worst allowed upshift)
+  const double ratioDn = std::pow(2.0, -7.0 / 12.0); // -7 semitones (known-good downtuning)
+  const size_t n = static_cast<size_t>(kSR);         // 1 second
+  const double band = 0.020 * kSR;                   // POLY grain spacing in samples
+
+  const auto up = polySpliceCount(ratioUp, n);
+  const auto down = polySpliceCount(ratioDn, n);
+  const double ceiling = static_cast<double>(n) * (ratioUp - 1.0) / band; // ~24.9
+
+  INFO("upshift splices=", up, " downshift splices=", down, " ceiling~", ceiling);
+  // The effect is engaged in both directions.
+  CHECK(up > 3);
+  CHECK(down > 3);
+  // THE guard: post-fix the upshift grain never shortens below `band`, so the splice
+  // count is capped near the one-band-per-grain ceiling. Pre-fix it ran several-fold
+  // higher (WSOLA-shortened grains); the +5 slack covers block/warmup boundary jitter.
+  CHECK(static_cast<double>(up) <= ceiling + 5.0);
+  // The upshift-only fix must not perturb the downshift path into a runaway either.
+  CHECK(static_cast<double>(down) < 4.0 * ceiling);
+}
+
 TEST_CASE("VoLumPitch transpose Mix=0 equals latency-delayed dry")
 {
   VoLumPitch pitch;

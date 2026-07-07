@@ -872,6 +872,32 @@ TEST_CASE("Reopen restores the dirty baseline from preset content")
   CHECK(count >= 2);
 }
 
+TEST_CASE("Preset recall refreshes the focused custom amp's cabs, not the factory rig")
+{
+  // Regression: recalling a preset while a custom amp is focused used to call the
+  // factory _VolumRefreshChannels() unconditionally. That rescans the underlying
+  // factory rig folder, clobbers the custom cab row / channel stepper, and leaves
+  // mVolumCustomMainSlot/Channel stale so the wrong .nam loads - reproduced by
+  // custom preset A -> factory amp -> back to custom -> recall preset B. The recall
+  // path must mirror _VolumSelectCustomAmp: use _VolumApplyCustomMainCabs when a
+  // custom amp is focused.
+  const std::string source = ReadPluginSource();
+
+  const auto fnPos = source.find("void NeuralAmpModeler::_VolumApplyRecalledPreset(");
+  REQUIRE(fnPos != std::string::npos);
+  const auto fnEnd = source.find("\n}", fnPos);
+  REQUIRE(fnEnd != std::string::npos);
+  const std::string body = source.substr(fnPos, fnEnd - fnPos);
+
+  INFO("recall must branch on the focused custom main amp");
+  CHECK(body.find("if (mVolumCustomMainIdx >= 0)") != std::string::npos);
+  CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomMainIdx, false)") != std::string::npos);
+  // The factory refresh must still be the else branch for factory amps.
+  CHECK(body.find("_VolumRefreshChannels();") != std::string::npos);
+  // A focused custom SUPPORT amp is refreshed too so its cab chip tracks the preset.
+  CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true)") != std::string::npos);
+}
+
 TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")
 {
   // Funnel B: the keyboard Space toggle historically skipped _VolumMarkPresetDirty
