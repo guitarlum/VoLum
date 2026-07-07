@@ -132,7 +132,18 @@ void NeuralAmpModeler::_VolumApplyRecalledPreset(const volum::VoLumAmpSettings& 
 {
   _VolumActiveScene() = s; // make the live scene equal the preset
   _VolumApplyAmpSettings(_VolumActiveScene());
-  _VolumRefreshChannels();
+  // Refresh the cab row / channel stepper for the FOCUSED amp. When a custom amp
+  // is focused, the factory _VolumRefreshChannels() would rescan the underlying
+  // factory rig folder and clobber the custom lane's cab names, channel stepper,
+  // and (critically) mVolumCustomMainSlot/Channel that the .nam loader reads -
+  // so recalling a second preset after a factory<->custom round-trip loaded the
+  // wrong capture and desynced the UI. Mirror _VolumSelectCustomAmp instead.
+  if (mVolumCustomMainIdx >= 0)
+    _VolumApplyCustomMainCabs(mVolumCustomMainIdx, false);
+  else
+    _VolumRefreshChannels();
+  if (mVolumCustomSupportIdx >= 0)
+    _VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true);
   // Re-derive the scene from the now-live params so the retained baseline matches
   // exactly what _VolumRecomputePresetDirty() will read back (avoids a spurious
   // "(unsaved)" right after recall from param normalization).
