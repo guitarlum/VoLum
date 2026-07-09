@@ -63,7 +63,7 @@ PRE liegt vor dem Amp. Der Bereich enthält ein Pitch-Pedal, einen Kompressor un
 
 ![VoLum Pitch-Pedal — Transpose-Modus](user-guide-pitch-transpose.png)
 
-Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus:
+Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Modus, Charakter und Regler bleiben auch im Bypass editierbar, sodass du die Einstellungen vor dem Einschalten mit dem Mausrad vorbereiten kannst. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus:
 
 - **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +7) — abgestimmt auf Drop-Tunings und Capo-artige Verschiebungen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang. Die **INSTANT / POLY**-Pille wählt die Engine: **INSTANT** (Standard) ist **monophon** mit der geringsten Latenz (~8,6 ms) und dem direktesten Attack — für Einzelnoten und Lead-Linien. **POLY** ist **polyphon**: Es verfolgt ganze Akkorde (Doppelgriffe, Dreiklänge, Powerchords) mit korrekt verschobener Einzelstimme, bei etwas höherer Latenz (~14 ms) — für Riffs und Akkorde. Beide halten die Tonhöhe auch auf tiefen Drop-Tunings und erweiterten Tonumfängen sauber (bis hinunter zur 8-Saiter-F#).
 - **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, **LEVEL** trimmt den Ausgang, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean.
