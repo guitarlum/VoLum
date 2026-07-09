@@ -1,53 +1,70 @@
 package com.lum.volum
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
-import com.lum.volum.ui.VoLumScreen
+import com.lum.volum.ui.proposals.ProposalLab
+import com.lum.volum.ui.proposals.ProposalOrientation
 import com.lum.volum.ui.theme.VoLumTheme
-import kotlinx.coroutines.delay
 
 /**
- * VoLum Android host. A single Compose screen drives the shared C++ engine
- * (NAM + tone + noise gate + delay/reverb/tremolo) through an Oboe low-latency
- * duplex stream, intended for real-time monitoring via a USB audio interface.
+ * Prototype-only launcher for the Android UI Proposal Lab.
+ *
+ * The existing native engine, USB discovery, and JNI bridge remain untouched,
+ * but every proposal intentionally uses deterministic mock state.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val ctx = LocalContext.current.applicationContext
-            val state = remember { VoLumState(ctx) }
+            var microphoneGranted by remember {
+                mutableStateOf(
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                )
+            }
+            var permissionResultHandler by remember {
+                mutableStateOf<((Boolean) -> Unit)?>(null)
+            }
 
             val permLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission()
-            ) { state.refreshDevices() }
-
-            LaunchedEffect(Unit) {
-                if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO)
-                    != PackageManager.PERMISSION_GRANTED
-                ) {
-                    permLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
+            ) { granted ->
+                microphoneGranted = granted
+                permissionResultHandler?.invoke(granted)
+                permissionResultHandler = null
             }
 
-            // Poll native status ~5 Hz to drive the meter / latency readout.
-            LaunchedEffect(Unit) {
-                while (true) {
-                    state.poll()
-                    delay(200)
-                }
+            VoLumTheme {
+                ProposalLab(
+                    microphoneGranted = microphoneGranted,
+                    requestMicrophonePermission = { onResult ->
+                        permissionResultHandler = onResult
+                        permLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onOrientationChange = { orientation ->
+                        requestedOrientation = when (orientation) {
+                            ProposalOrientation.Portrait -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            ProposalOrientation.Landscape -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            null -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        }
+                    },
+                    startProposal = intent.getStringExtra("proposal"),
+                    startEntry = intent.getStringExtra("entry"),
+                )
             }
-
-            VoLumTheme { VoLumScreen(state) }
         }
     }
 }

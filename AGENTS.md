@@ -9,6 +9,14 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 - `AudioDSPTools/` is a submodule, but VoLum actively depends on DSP there.
 - Top-level `rigs/` is the dev source of bundled amp profiles. Shipped artifacts rename it to `VoLumRigs/`.
 
+## Android Proposal Lab File Map
+
+- `ui/proposals/ProposalLab.kt`: gallery, entry points, orientation, and safe-back routing.
+- `ui/proposals/ProposalModels.kt`: proposal registry and deterministic demo-state reducer.
+- `ui/proposals/BrandConcepts.kt`: Fractal Stage, Blue Focus, Auric Pedalboard, Signal Atlas.
+- `ui/proposals/NewConcepts.kt`: Thumb Deck, Blackout Live, Flight Rack, Orbit Cockpit.
+- `ui/proposals/ProposalShared.kt`, `ProposalJourney.kt`, `ProposalEditors.kt`, `ProposalTheme.kt`, `PreludeBackdrops.kt`: shared visual primitives, onboarding flow, protected editors, palettes, and onboarding art.
+
 ## Start Here
 
 - UI/layout work: `.cursor/rules/volum-ui.mdc` and skill `volum-ui-change`.

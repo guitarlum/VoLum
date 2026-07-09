@@ -141,3 +141,5 @@
 07/02/2026 - v1.2.0 VoLum release. See GitHub release notes for included changes.
 
 07/02/2026 - v1.2.0 VoLum release. See GitHub release notes for included changes.
+
+07/10/2026 - VoLum Android UI Proposal Lab: Replaced the PoC presentation layer with eight interactive, screenshot-reviewed Compose UX concepts using isolated deterministic demo state.
