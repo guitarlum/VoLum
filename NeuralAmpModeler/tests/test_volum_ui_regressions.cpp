@@ -82,6 +82,23 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
   RequireContains(triptych, "{EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive}");
 }
 
+TEST_CASE("PITCH controls remain editable while the pedal is bypassed")
+{
+  const std::string source = ReadPluginSource();
+  const auto layoutPos = source.find("void NeuralAmpModeler::_UpdateVoLumLayout(");
+  REQUIRE(layoutPos != std::string::npos);
+  const auto pitchPos = source.find("case EVoLumEffectFocus::PITCH:", layoutPos);
+  REQUIRE(pitchPos != std::string::npos);
+  const auto compPos = source.find("case EVoLumEffectFocus::COMP:", pitchPos);
+  REQUIRE(compPos != std::string::npos);
+  const std::string pitchCase = source.substr(pitchPos, compPos - pitchPos);
+
+  INFO("PITCH mode, character, and knobs must accept mouse-wheel edits before engagement");
+  CHECK(pitchCase.find("PITCH_TRANSPOSE_KNOBS") != std::string::npos);
+  CHECK(pitchCase.find("PITCH_OCTAVER_KNOBS") != std::string::npos);
+  CHECK(pitchCase.find("disableGroup(") == std::string::npos);
+}
+
 TEST_CASE("Collapsed PRE slots show selected pedal short labels")
 {
   const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp

@@ -161,7 +161,6 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
       }
       case EVoLumEffectFocus::PITCH:
       {
-        const bool active = GetParam(kPrePitchActive)->Bool();
         const bool isTranspose = GetParam(kPrePitchMode)->Int() == volum::kVoLumPitchModeTranspose;
         _HideControlGroup(pGfx, "PITCH_POWER", false);
         _HideControlGroup(pGfx, "PITCH_MODE_PICKER", false);
@@ -171,11 +170,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         // character only applies to Transpose (they share the same slot).
         _HideControlGroup(pGfx, "PITCH_VOICING", isTranspose);
         _HideControlGroup(pGfx, "PITCH_TRANSCHAR", !isTranspose);
-        disableGroup("PITCH_MODE_PICKER", !active);
-        disableGroup("PITCH_TRANSPOSE_KNOBS", !active);
-        disableGroup("PITCH_OCTAVER_KNOBS", !active);
-        disableGroup("PITCH_VOICING", !active);
-        disableGroup("PITCH_TRANSCHAR", !active);
+        // Keep PITCH controls editable while bypassed. In particular, mouse-wheel
+        // users must be able to prepare semitones/mix/mode before engaging the pedal.
         break;
       }
       case EVoLumEffectFocus::COMP:
