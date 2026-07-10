@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../config.h"
 #include "../VoLumTriptychLayout.h"
 
 #include <filesystem>
@@ -97,6 +98,22 @@ TEST_CASE("PITCH controls remain editable while the pedal is bypassed")
   CHECK(pitchCase.find("PITCH_TRANSPOSE_KNOBS") != std::string::npos);
   CHECK(pitchCase.find("PITCH_OCTAVER_KNOBS") != std::string::npos);
   CHECK(pitchCase.find("disableGroup(") == std::string::npos);
+}
+
+TEST_CASE("Windows binary version resource matches config.h")
+{
+  const std::string rc = ReadText(RepoRoot() / "NeuralAmpModeler" / "resources" / "main.rc");
+  const std::string version = PLUG_VERSION_STR;
+  std::string numeric = version;
+  for (char& c : numeric)
+    if (c == '.')
+      c = ',';
+  numeric += ",0";
+
+  RequireContains(rc, ("FILEVERSION " + numeric).c_str());
+  RequireContains(rc, ("PRODUCTVERSION " + numeric).c_str());
+  RequireContains(rc, ("VALUE \"FileVersion\", \"" + version + "\"").c_str());
+  RequireContains(rc, ("VALUE \"ProductVersion\", \"" + version + "\"").c_str());
 }
 
 TEST_CASE("Collapsed PRE slots show selected pedal short labels")
