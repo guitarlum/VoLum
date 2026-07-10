@@ -14,7 +14,7 @@ Compose** UI, targeting a **USB audio interface** on a Samsung S20.
 | **Real-time engine (Oboe)** | ✅ live on emulator | `oboe::FullDuplexStream` duplex (mono in → stereo out) runs `VolumMobileEngine`; the app goes **Live** with `latency`/`xruns`/`peak` reported. |
 | **Full signal chain** | ✅ deterministic test | `nativeEngineSelfTest` = **PASS (9 groups)**: bypass identity, unity passthrough, output-gain law, gate finiteness, model load/finite/non-silent, reverb decay tail, delay repeat, tremolo modulation, A4=440 Hz tuner detection. |
 | **Tuner** | ✅ deterministic test | NSDF pitch detector (`TunerDsp.h`) fed from raw pre-gain input; UI panel shows note name + cents needle. Locks A4 within a few cents in the self-test. |
-| **Native Compose UI** | ✅ screenshot-verified | Boutique dark UI: transport + meter, tuner, device/model pickers, amp knobs, and Gate / Delay / Reverb / Tremolo pedals — drives the engine live. |
+| **Native Compose UI** | ✅ screenshot-verified | Landscape signal-path prototype: fixed PRE/AMP/POST overview, focused block editors, split device/model catalogs, tuner, status, and recovery states. Prototype-only controls use deterministic demo state. |
 | **USB device + model pick** | ✅ | `AudioDevices` lists inputs (USB first); the picker passes the chosen id to `nativeAudioStart`. 6 factory amps bundled + picker. |
 | **IGraphicsAndroid backend** | ⛔ not built | Superseded for the PoC by the native Compose UI (see "UI approach"). |
 
@@ -127,9 +127,11 @@ touch→mouse, timers, DPI, text entry, popups) and is only debuggable with a li
 GL context — not something that can be built **and verified** in an autonomous
 pass.
 
-Per the "iterate the UI via screenshots" directive, the PoC ships a **native
-Jetpack Compose** UI instead: a dark boutique-amp design (VoLum brand fonts —
-Michroma display + Josefin Sans text — a warm-amber/teal/violet/green palette,
-custom Canvas rotary knobs, per-pedal accents). It is fully screenshot-verified
-on the emulator and drives the exact same C++ engine. If/when the IGraphics
-backend is built, it can replace this screen without touching the engine.
+Per the "iterate the UI via screenshots" directive, the PoC uses a **native
+Jetpack Compose** presentation layer. The current UX prototype is
+landscape-only: the full fixed signal path remains visible, selecting a section
+or block replaces the no-scroll detail pane, and only genuine device/model/NAM/
+IR/preset catalogs scroll. It uses VoLum's Michroma/Josefin typography with
+custom touch knobs and deterministic demo state; it intentionally does not add
+backend wiring. If/when the IGraphics backend is built, it can replace this
+screen without touching the engine.

@@ -13,19 +13,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
-import com.lum.volum.ui.proposals.ProposalLab
-import com.lum.volum.ui.proposals.ProposalOrientation
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.lum.volum.ui.prototype.VoLumPrototype
 import com.lum.volum.ui.theme.VoLumTheme
 
 /**
- * Prototype-only launcher for the Android UI Proposal Lab.
+ * Prototype-only launcher for the landscape signal-path UX.
  *
  * The existing native engine, USB discovery, and JNI bridge remain untouched,
- * but every proposal intentionally uses deterministic mock state.
+ * while the UX prototype intentionally uses deterministic mock state.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setContent {
             var microphoneGranted by remember {
                 mutableStateOf(
@@ -48,23 +51,26 @@ class MainActivity : ComponentActivity() {
             }
 
             VoLumTheme {
-                ProposalLab(
+                VoLumPrototype(
                     microphoneGranted = microphoneGranted,
                     requestMicrophonePermission = { onResult ->
                         permissionResultHandler = onResult
                         permLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     },
-                    onOrientationChange = { orientation ->
-                        requestedOrientation = when (orientation) {
-                            ProposalOrientation.Portrait -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                            ProposalOrientation.Landscape -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                            null -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        }
-                    },
-                    startProposal = intent.getStringExtra("proposal"),
                     startEntry = intent.getStringExtra("entry"),
+                    onImmersiveChange = ::setWorkspaceImmersive,
                 )
             }
+        }
+    }
+
+    private fun setWorkspaceImmersive(enabled: Boolean) {
+        WindowCompat.setDecorFitsSystemWindows(window, !enabled)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (enabled) hide(WindowInsetsCompat.Type.systemBars())
+            else show(WindowInsetsCompat.Type.systemBars())
         }
     }
 }
