@@ -273,12 +273,30 @@ fun CatalogBrowser(
                 Text(kind.title.uppercase(), color = PrototypeTheme.text, fontFamily = PrototypeTheme.display, fontSize = 13.sp)
                 if (!largeText) {
                     Text(
-                        "Browse on the left. Nothing changes until Apply.",
+                        if (state.browserManage) "Manage mode · import, edit, or remove selected content."
+                        else "Browse on the left. Nothing changes until Apply.",
                         color = PrototypeTheme.muted,
                         fontFamily = PrototypeTheme.body,
                         fontSize = 9.sp,
                     )
                 }
+            }
+            if (kind != BrowserKind.Device) {
+                PrototypeButton(
+                    if (state.browserManage) "Browse" else "Manage",
+                    {
+                        dispatch(
+                            PrototypeAction.OpenBrowser(
+                                kind,
+                                state.browserApply,
+                                state.browserBack,
+                                manage = !state.browserManage,
+                            ),
+                        )
+                    },
+                    Modifier.width(82.dp),
+                    active = state.browserManage,
+                )
             }
             Text(
                 "${items.size} ITEMS",
@@ -307,7 +325,8 @@ fun CatalogBrowser(
             BrowserPreview(
                 kind = kind,
                 item = selected,
-                onApply = { dispatch(PrototypeAction.ApplyBrowserItem) },
+                state = state,
+                dispatch = dispatch,
                 modifier = Modifier.weight(.52f),
             )
         }
@@ -373,7 +392,8 @@ private fun BrowserRow(
 private fun BrowserPreview(
     kind: BrowserKind,
     item: BrowserItem,
-    onApply: () -> Unit,
+    state: PrototypeState,
+    dispatch: (PrototypeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val largeText = LocalDensity.current.fontScale > 1.15f
@@ -426,13 +446,59 @@ private fun BrowserPreview(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        PrototypeButton(
-            if (kind == BrowserKind.Device) "Use this input" else "Load / apply",
-            onApply,
-            Modifier.fillMaxWidth(),
-            primary = item.id != "broken",
-            danger = item.id == "broken",
-        )
+        state.feedbackMessage?.let {
+            Text(
+                it,
+                color = PrototypeTheme.teal,
+                fontFamily = PrototypeTheme.body,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (state.browserManage) {
+            PrototypeButton(
+                "Import new",
+                { dispatch(PrototypeAction.AddLibraryItem) },
+                Modifier.fillMaxWidth(),
+                primary = true,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PrototypeButton(
+                    "Edit selected",
+                    { dispatch(PrototypeAction.EditLibraryItem) },
+                    Modifier.weight(1f),
+                )
+                PrototypeButton(
+                    "Delete selected",
+                    { dispatch(PrototypeAction.DeleteLibraryItem) },
+                    Modifier.weight(1f),
+                    danger = true,
+                )
+            }
+        } else {
+            if (kind == BrowserKind.Preset) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PrototypeButton(
+                        "Save new",
+                        { dispatch(PrototypeAction.SavePresetAsNew) },
+                        Modifier.weight(1f),
+                    )
+                    PrototypeButton(
+                        "Overwrite",
+                        { dispatch(PrototypeAction.OverwritePreset) },
+                        Modifier.weight(1f),
+                    )
+                }
+            }
+            PrototypeButton(
+                if (kind == BrowserKind.Device) "Use this input" else "Load / apply",
+                { dispatch(PrototypeAction.ApplyBrowserItem) },
+                Modifier.fillMaxWidth(),
+                primary = item.id != "broken",
+                danger = item.id == "broken",
+            )
+        }
     }
 }
 

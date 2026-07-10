@@ -131,7 +131,10 @@ Per the "iterate the UI via screenshots" directive, the PoC uses a **native
 Jetpack Compose** presentation layer. The current UX prototype is
 landscape-only: the full fixed signal path remains visible, selecting a section
 or block replaces the no-scroll detail pane, and only genuine device/model/NAM/
-IR/preset catalogs scroll. It uses VoLum's Michroma/Josefin typography with
-custom touch knobs and deterministic demo state; it intentionally does not add
-backend wiring. If/when the IGraphics backend is built, it can replace this
-screen without touching the engine.
+IR/preset catalogs scroll. The deterministic prototype now represents the
+standalone control surface end to end: named amp channels, dual-lane polarity,
+scene lock/store, mode-conditional PRE/POST controls, tuner/metronome, audio and
+performance settings, presets, and staged custom-content management. It uses
+VoLum's Michroma/Josefin typography with custom touch knobs and intentionally
+does not add backend wiring. If/when the IGraphics backend is built, it can
+replace this screen without touching the engine.

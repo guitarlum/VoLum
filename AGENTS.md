@@ -15,6 +15,7 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 - `ui/prototype/PrototypeModels.kt`: fixed signal-path model, catalogs, deterministic reducer, and controller.
 - `ui/prototype/SignalPathWorkspace.kt`: persistent PRE/AMP/POST path, performance rail, summaries, and block editors.
 - `ui/prototype/PrototypeJourney.kt`: first-launch setup, split catalog browser, loading/recovery, and tuner.
+- `ui/prototype/PrototypeSettings.kt`: audio/performance/library settings, metronome, and staged content editors.
 - `ui/prototype/PrototypeComponents.kt`, `PrototypeTheme.kt`: accessible controls and neutral structural tokens.
 
 ## Start Here

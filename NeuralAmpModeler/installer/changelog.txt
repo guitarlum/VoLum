@@ -143,3 +143,4 @@
 07/02/2026 - v1.2.0 VoLum release. See GitHub release notes for included changes.
 
 07/10/2026 - VoLum Android landscape UX prototype: Replaced the rejected eight-concept lab with one screenshot-reviewed, scroll-free signal-path workspace using fixed PRE/AMP/POST topology, focused block editors, split catalog browsers, and deterministic demo state.
+07/10/2026 - VoLum Android UX parity pass: Added complete standalone control coverage, named amp channels, Support polarity, scene lock/store, conditional effect controls, metronome, dedicated audio/settings surfaces, and staged library management.

@@ -22,7 +22,7 @@ fun VoLumPrototype(
     val dispatch: (PrototypeAction) -> Unit = controller::dispatch
 
     LaunchedEffect(state.route) {
-        onImmersiveChange(state.route in setOf(PrototypeRoute.Workspace, PrototypeRoute.Tuner))
+        onImmersiveChange(state.route in setOf(PrototypeRoute.Workspace, PrototypeRoute.Tuner, PrototypeRoute.Metronome))
     }
 
     BackHandler(
@@ -33,7 +33,10 @@ fun VoLumPrototype(
         when (state.route) {
             PrototypeRoute.Workspace -> dispatch(PrototypeAction.ClearSelection)
             PrototypeRoute.Browser -> dispatch(PrototypeAction.CancelBrowser)
+            PrototypeRoute.ContentEditor -> dispatch(PrototypeAction.CloseContentEditor)
+            PrototypeRoute.Settings -> dispatch(PrototypeAction.CloseSettings)
             PrototypeRoute.Tuner -> dispatch(PrototypeAction.CloseTuner)
+            PrototypeRoute.Metronome -> dispatch(PrototypeAction.CloseMetronome)
             PrototypeRoute.Error -> dispatch(PrototypeAction.RecoverToWorkspace)
             PrototypeRoute.Loading -> Unit
             PrototypeRoute.Setup -> Unit
@@ -46,8 +49,17 @@ fun VoLumPrototype(
             SignalPathWorkspace(state, dispatch)
         }
         PrototypeRoute.Browser -> CatalogBrowser(state, dispatch)
+        PrototypeRoute.ContentEditor -> StageFontScale(maxScale = 1f) {
+            ContentEditorExperience(state, dispatch)
+        }
+        PrototypeRoute.Settings -> StageFontScale(maxScale = 1f) {
+            SettingsExperience(state, dispatch)
+        }
         PrototypeRoute.Tuner -> StageFontScale {
             TunerExperience(state, dispatch)
+        }
+        PrototypeRoute.Metronome -> StageFontScale {
+            MetronomeExperience(state, dispatch)
         }
         PrototypeRoute.Loading -> LoadingExperience(state, dispatch)
         PrototypeRoute.Error -> ErrorExperience(state, dispatch)
@@ -55,10 +67,10 @@ fun VoLumPrototype(
 }
 
 @Composable
-private fun StageFontScale(content: @Composable () -> Unit) {
+private fun StageFontScale(maxScale: Float = 1.1f, content: @Composable () -> Unit) {
     val current = LocalDensity.current
     val stageDensity = remember(current.density, current.fontScale) {
-        Density(current.density, current.fontScale.coerceAtMost(1.1f))
+        Density(current.density, current.fontScale.coerceAtMost(maxScale))
     }
     CompositionLocalProvider(LocalDensity provides stageDensity, content = content)
 }
@@ -87,6 +99,39 @@ private fun initialState(
             powered = true,
             selectedSection = RigSection.Pre,
         )
+        "pitch" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.Octave,
+        )
+        "octaver" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.Octave,
+            modes = base.modes + (RigBlock.Octave to 1),
+        )
+        "compressor" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.Compressor,
+        )
+        "nam" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.NamOne,
+        )
         "amp" -> base.copy(
             route = PrototypeRoute.Workspace,
             microphoneGranted = true,
@@ -111,6 +156,34 @@ private fun initialState(
             powered = true,
             selectedBlock = RigBlock.Delay,
         )
+        "delay-sync" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.Delay,
+            delaySync = true,
+        )
+        "reverb" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.Reverb,
+            modes = base.modes + (RigBlock.Reverb to 2),
+        )
+        "tremolo-sync" -> base.copy(
+            route = PrototypeRoute.Workspace,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            selectedBlock = RigBlock.Tremolo,
+            tremoloSync = true,
+            modes = base.modes + (RigBlock.Tremolo to 2),
+        )
         "support" -> base.copy(
             route = PrototypeRoute.Workspace,
             microphoneGranted = true,
@@ -122,6 +195,7 @@ private fun initialState(
                 (RigBlock.SupportAmp to true) +
                 (RigBlock.SupportIr to true),
             selectedSection = RigSection.Amp,
+            selectedLane = AmpLane.Support,
         )
         "browser" -> base.copy(
             route = PrototypeRoute.Browser,
@@ -140,6 +214,33 @@ private fun initialState(
             usbConnected = true,
             modelLoaded = true,
             powered = true,
+        )
+        "settings" -> base.copy(
+            route = PrototypeRoute.Settings,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+        )
+        "metronome" -> base.copy(
+            route = PrototypeRoute.Metronome,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            metronomeActive = true,
+        )
+        "content" -> base.copy(
+            route = PrototypeRoute.ContentEditor,
+            microphoneGranted = true,
+            usbConnected = true,
+            modelLoaded = true,
+            powered = true,
+            browserKind = BrowserKind.Amp,
+            browserSelectedId = browserCatalogs.getValue(BrowserKind.Amp).first().id,
+            browserManage = true,
+            browserBack = PrototypeRoute.Settings,
+            contentEditorKind = BrowserKind.Amp,
         )
         "error" -> base.copy(
             route = PrototypeRoute.Error,

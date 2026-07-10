@@ -15,6 +15,9 @@ object PrototypeTheme {
     val muted = Color(0xFFABB4BE)
     val teal = Color(0xFF57C9C2)
     val amber = Color(0xFFE8B55D)
+    val pre = Color(0xFF59B9DA)
+    val support = Color(0xFF9A87F4)
+    val post = Color(0xFF66C99A)
     val red = Color(0xFFFF6A62)
     val blue = Color(0xFF68BCEB)
     val display = Michroma

@@ -215,14 +215,15 @@ fun BlockTile(
     onSelect: () -> Unit,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    accent: Color = sectionAccent(block.section),
 ) {
     val border = when {
-        selected -> PrototypeTheme.amber
-        enabled && available -> PrototypeTheme.teal
+        selected -> accent
+        enabled && available -> accent
         else -> PrototypeTheme.line
     }
     val background = when {
-        selected -> PrototypeTheme.amber.copy(alpha = .12f)
+        selected -> accent.copy(alpha = .14f)
         else -> PrototypeTheme.inset
     }
     Box(
@@ -254,7 +255,7 @@ fun BlockTile(
                 if (!available) "LOCKED" else if (enabled) "ON" else "OFF",
                 color = when {
                     !available -> PrototypeTheme.muted.copy(alpha = .6f)
-                    enabled -> PrototypeTheme.teal
+                    enabled -> accent
                     else -> PrototypeTheme.muted
                 },
                 fontFamily = PrototypeTheme.body,
@@ -275,17 +276,17 @@ fun BlockTile(
         ) {
             Canvas(Modifier.size(22.dp)) {
                 drawCircle(
-                    if (enabled && available) PrototypeTheme.teal.copy(.18f) else PrototypeTheme.panelHigh,
+                    if (enabled && available) accent.copy(.18f) else PrototypeTheme.panelHigh,
                 )
                 drawArc(
-                    if (enabled && available) PrototypeTheme.teal else PrototypeTheme.muted,
+                    if (enabled && available) accent else PrototypeTheme.muted,
                     startAngle = -55f,
                     sweepAngle = 290f,
                     useCenter = false,
                     style = Stroke(2.dp.toPx(), cap = StrokeCap.Round),
                 )
                 drawLine(
-                    if (enabled && available) PrototypeTheme.teal else PrototypeTheme.muted,
+                    if (enabled && available) accent else PrototypeTheme.muted,
                     Offset(size.width / 2, 2.dp.toPx()),
                     Offset(size.width / 2, size.height / 2),
                     2.dp.toPx(),
@@ -304,6 +305,8 @@ fun TouchKnob(
     onChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     diameter: Dp = 62.dp,
+    displayLabel: String = parameter.label,
+    displayValue: String? = null,
 ) {
     val latestValue by rememberUpdatedState(value)
     val latestChange by rememberUpdatedState(onChange)
@@ -311,7 +314,7 @@ fun TouchKnob(
     var fine by remember { mutableStateOf(false) }
     Column(
         modifier.semantics {
-            contentDescription = "${parameter.label}, ${(value * 100).toInt()} percent. Drag vertically; hold then drag for fine adjustment."
+            contentDescription = "$displayLabel, ${displayValue ?: "${(value * 100).toInt()} percent"}. Drag vertically; hold then drag for fine adjustment."
             progressBarRangeInfo = ProgressBarRangeInfo(value, 0f..1f)
             setProgress {
                 onBegin()
@@ -376,7 +379,7 @@ fun TouchKnob(
             }
         }
         Text(
-            parameter.label.uppercase(),
+            displayLabel.uppercase(),
             color = PrototypeTheme.muted,
             fontFamily = PrototypeTheme.body,
             fontWeight = FontWeight.Bold,
@@ -384,7 +387,7 @@ fun TouchKnob(
             maxLines = 1,
         )
         Text(
-            if (fine) "FINE ${(value * 100).toInt()}" else "${(value * 100).toInt()}",
+            if (fine) "FINE ${displayValue ?: (value * 100).toInt()}" else displayValue ?: "${(value * 100).toInt()}",
             color = if (fine) PrototypeTheme.blue else PrototypeTheme.text,
             fontFamily = PrototypeTheme.display,
             fontSize = 8.sp,
@@ -400,14 +403,39 @@ fun ModeSelector(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         labels.forEachIndexed { index, label ->
-            PrototypeButton(
-                label = label,
-                onClick = { onSelect(index) },
-                modifier = Modifier.weight(1f),
-                active = selected == index,
-            )
+            val active = selected == index
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (active) PrototypeTheme.teal.copy(.18f) else PrototypeTheme.panelHigh)
+                    .border(
+                        1.dp,
+                        if (active) PrototypeTheme.teal else PrototypeTheme.line,
+                        RoundedCornerShape(9.dp),
+                    )
+                    .clickable(role = Role.Tab) { onSelect(index) }
+                    .semantics {
+                        role = Role.Tab
+                        contentDescription = label
+                    }
+                    .padding(horizontal = 2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label.uppercase(),
+                    color = if (active) PrototypeTheme.teal else PrototypeTheme.text,
+                    fontFamily = PrototypeTheme.body,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (labels.size >= 4) 7.sp else 8.sp,
+                    letterSpacing = 0.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -418,12 +446,14 @@ fun SectionHeading(
     selected: Boolean,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
+    accent: Color = sectionAccent(section),
+    trailing: String = "SECTION",
 ) {
     Row(
         modifier
             .height(48.dp)
             .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-            .background(if (selected) PrototypeTheme.amber.copy(.12f) else PrototypeTheme.panel)
+            .background(if (selected) accent.copy(.18f) else accent.copy(.06f))
             .clickable(role = Role.Tab, onClick = onSelect)
             .semantics {
                 role = Role.Tab
@@ -435,12 +465,12 @@ fun SectionHeading(
     ) {
         Text(
             section.name.uppercase(),
-            color = if (selected) PrototypeTheme.amber else PrototypeTheme.muted,
+            color = if (selected) accent else PrototypeTheme.muted,
             fontFamily = PrototypeTheme.display,
             fontSize = 8.sp,
             letterSpacing = 1.sp,
         )
-        Text("SECTION", color = PrototypeTheme.muted, fontFamily = PrototypeTheme.body, fontSize = 7.sp)
+        Text(trailing, color = accent.copy(alpha = .72f), fontFamily = PrototypeTheme.body, fontSize = 7.sp)
     }
 }
 
@@ -468,6 +498,76 @@ fun ValueBadge(label: String, value: String, modifier: Modifier = Modifier, acce
             fontSize = 9.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+fun sectionAccent(section: RigSection): Color = when (section) {
+    RigSection.Pre -> PrototypeTheme.pre
+    RigSection.Amp -> PrototypeTheme.amber
+    RigSection.Post -> PrototypeTheme.post
+}
+
+@Composable
+fun OptionStepper(
+    label: String,
+    value: String,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+    accent: Color = PrototypeTheme.teal,
+) {
+    Row(
+        modifier
+            .height(48.dp)
+            .background(PrototypeTheme.inset, RoundedCornerShape(9.dp))
+            .border(1.dp, accent.copy(alpha = .6f), RoundedCornerShape(9.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PrototypeButton("‹", onPrevious, Modifier.width(48.dp))
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label.uppercase(), color = PrototypeTheme.muted, fontFamily = PrototypeTheme.body, fontSize = 7.sp)
+            Text(
+                value,
+                color = accent,
+                fontFamily = PrototypeTheme.display,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        PrototypeButton("›", onNext, Modifier.width(48.dp))
+    }
+}
+
+@Composable
+fun FeatureToggle(
+    label: String,
+    active: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    accent: Color = PrototypeTheme.teal,
+) {
+    Box(
+        modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (active) accent.copy(.16f) else PrototypeTheme.panelHigh)
+            .border(1.dp, if (active) accent else PrototypeTheme.line, RoundedCornerShape(9.dp))
+            .clickable(role = Role.Switch, onClick = onToggle)
+            .semantics {
+                role = Role.Switch
+                contentDescription = "$label, ${if (active) "on" else "off"}"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "${label.uppercase()} ${if (active) "ON" else "OFF"}",
+            color = if (active) accent else PrototypeTheme.muted,
+            fontFamily = PrototypeTheme.body,
+            fontWeight = FontWeight.Bold,
+            fontSize = 8.sp,
+            maxLines = 1,
         )
     }
 }
