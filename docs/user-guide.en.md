@@ -53,6 +53,7 @@ The amp **OUTPUT** knob keeps unity at `0.0 dB`. Turn it fully counter-clockwise
 ![VoLum PRE section](user-guide-pre.png)
 
 PRE runs before the amp. It contains a pitch pedal, a compressor, and two assignable NAM pedal slots.
+All PRE and POST pedal controls remain editable while their block is bypassed, including by mouse wheel, so you can prepare settings before engaging the effect.
 
 1. Click **PRE**.
 2. Click **PITCH**, **COMP**, **NAM 1**, or **NAM 2** to focus a card.
@@ -63,7 +64,7 @@ PRE runs before the amp. It contains a pitch pedal, a compressor, and two assign
 
 ![VoLum Pitch pedal — Transpose mode](user-guide-pitch-transpose.png)
 
-The **PITCH** pedal sits at the very front of the chain. Its mode, character, and knobs remain editable while the pedal is bypassed, so you can prepare settings with the mouse wheel before engaging it. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
+The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
 
 - **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
 - **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean.
