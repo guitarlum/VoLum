@@ -185,6 +185,12 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "key.VK == 'h' || key.VK == 'H'");
   RequireContains(source, "settings->As<NAMSettingsPageControl>()->HideAnimated(false);");
   RequireContains(source, "key.VK == kTabKey");
+  // Standalone retains Space; plug-ins use B and leave Space for DAW transport.
+  RequireContains(source, "#ifdef APP_API");
+  RequireContains(source, "if (key.VK == ' ')");
+  RequireContains(source, "if (key.VK == 'b' || key.VK == 'B')");
+  RequireContains(source, "constexpr const char* kToggleOnOffHint = \"Space on/off\";");
+  RequireContains(source, "constexpr const char* kToggleOnOffHint = \"B on/off\";");
   RequireContains(source, "return _CycleVoLumKeyboardTarget(key.VK == kVK_LEFT ? -1 : 1)");
   // POST Tab/arrow cycling must reach all three cards (Delay/Reverb/Tremolo), not
   // just toggle Delay<->Reverb (the "can't arrow to Tremolo in POST" bug).
@@ -194,6 +200,8 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "Left/Right or Tab target");
   RequireContains(settings, "Shortcut info");
   RequireContains(settings, "\"1/2/3\", \"PRE / AMP / POST\"");
+  RequireContains(settings, "\"Space\", \"toggle\"");
+  RequireContains(settings, "\"B\", \"toggle\"");
   RequireContains(settings, "\"S\", \"cab\"");
   RequireContains(settings, "\"T\", \"tuner\"");
   RequireContains(settings, "\"M\", \"metronome\"");
@@ -931,7 +939,7 @@ TEST_CASE("Preset recall refreshes the focused custom amp's cabs, not the factor
 
 TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")
 {
-  // Funnel B: the keyboard Space toggle historically skipped _VolumMarkPresetDirty
+  // Funnel B: the keyboard toggle historically skipped _VolumMarkPresetDirty
   // while the mouse chip called it. Both must now route through _VolumUserToggleParam.
   const std::string source = ReadPluginSource();
 

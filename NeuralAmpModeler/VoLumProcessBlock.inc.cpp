@@ -22,9 +22,9 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
 {
   if (processingPlan.runPrePitch)
   {
-    // Reconfigure (block-size/quality change) happens off the audio thread in
-    // OnIdle. Here we only try-lock; if a reconfigure is mid-flight we pass the
-    // dry signal through for this block rather than allocate or block.
+    // Reconfigure happens off the audio thread in OnReset. Here we only try-lock;
+    // if reset is in flight we pass dry rather than block, and VoLumPitch itself
+    // uses its preallocated reserve (never grows from Process).
     std::unique_lock<std::mutex> lock(mPrePitchMutex, std::try_to_lock);
     if (lock.owns_lock() && mPitch.Configured())
     {

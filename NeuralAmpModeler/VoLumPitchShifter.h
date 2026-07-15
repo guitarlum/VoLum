@@ -536,12 +536,15 @@ public:
   using Character = GranularVoice::Character;
 
   static constexpr int kNumVoices = 2; // octaver uses both (down/up); transpose uses voice 0.
+  // Hosts occasionally grow their callback block without another OnReset. Reserve
+  // a generous block off the audio thread so Process never has to allocate.
+  static constexpr int kRealtimeBlockReserve = 8192;
 
   // Allocates - call OFF the audio thread (OnReset), never from ProcessBlock.
   void Configure(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
-    mMaxBlock = std::max(maxBlockSize, 64);
+    mMaxBlock = std::max({maxBlockSize, 64, kRealtimeBlockReserve});
     const bool sameConfig = mConfigured && mSampleRate == mConfiguredSampleRate && mMaxBlock <= mConfiguredMaxBlock;
     if (!sameConfig)
     {
@@ -559,6 +562,7 @@ public:
 
   int Latency() const { return mLatency; }
   bool Configured() const { return mConfigured; }
+  int PreparedBlockSize() const { return mMaxBlock; }
 
   // Reported latency for a given mode/character at a sample rate, computed without
   // touching the live (audio-thread-updated) state. Mirrors _ApplyCharacters:
@@ -598,7 +602,11 @@ public:
 
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
   {
-    _PrepareIO(numChannels, numFrames);
+    // Never allocate/reconfigure from the audio thread. An unexpectedly huge
+    // callback passes through dry for that block; the normal reserve covers all
+    // practical host sizes.
+    if (!_PrepareIO(numChannels, numFrames))
+      return inputs;
 
     if (!mConfigured || numChannels == 0)
     {
@@ -707,17 +715,9 @@ private:
         mOut[c].assign(cap, static_cast<DSP_SAMPLE>(0));
   }
 
-  void _PrepareIO(size_t numChannels, size_t numFrames)
+  bool _PrepareIO(size_t numChannels, size_t numFrames) const
   {
-    if (static_cast<int>(numFrames) > mMaxBlock || mWet0.size() < numFrames)
-    {
-      mMaxBlock = std::max(mMaxBlock, static_cast<int>(numFrames));
-      for (auto& voice : mVoices)
-        voice.Configure(mSampleRate, mMaxBlock);
-      _ApplyCharacters();
-      _AllocateScratch();
-    }
-    (void)numChannels;
+    return numChannels <= kMaxChannels && static_cast<int>(numFrames) <= mMaxBlock && mWet0.size() >= numFrames;
   }
 
   DSP_SAMPLE** _Pointers(size_t numChannels)

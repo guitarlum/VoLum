@@ -725,7 +725,6 @@ void NeuralAmpModeler::OnReset()
     mPitch.Configure(sampleRate, maxBlockSize);
     mPitch.Reset();
   }
-  mPrePitchConfigureRequested.store(false);
   const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
   mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
@@ -755,18 +754,6 @@ void NeuralAmpModeler::OnIdle()
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
   mOutputSenderR.TransmitData(*this);
-
-  // PRE Pitch reconfigure off the audio thread (only needed if the grain/sample
-  // rate ever changes outside OnReset), then refresh reported latency.
-  if (mPrePitchConfigureRequested.exchange(false))
-  {
-    {
-      std::lock_guard<std::mutex> lock(mPrePitchMutex);
-      mPitch.Configure(GetSampleRate(), GetBlockSize());
-      mPitch.Reset();
-    }
-    _UpdateLatency();
-  }
 
   // Push tuner result to UI
   if (mTunerDSP.IsActive())

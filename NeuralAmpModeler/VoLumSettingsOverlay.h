@@ -198,7 +198,7 @@ public:
     // own keyW, so Navigate/Edit descriptions stair-stepped while Tools (all 16)
     // happened to line up.
     const float navKeyW = 42.f; // "Arrows"
-    const float editKeyW = 34.f; // "Enter" / "Space"
+    const float editKeyW = 34.f; // "Enter" / standalone "Space"
     const float toolKeyW = 16.f; // single letters
 
     g.DrawText(capText, "Navigate", IRECT(navCol.L, navCol.T, navCol.R, navCol.T + 12.f));
@@ -208,7 +208,11 @@ public:
 
     g.DrawText(capText, "Edit", IRECT(editCol.L, editCol.T, editCol.R, editCol.T + 12.f));
     drawPair(editCol, 0, editKeyW, "Enter", "edit");
+#ifdef APP_API
     drawPair(editCol, 1, editKeyW, "Space", "toggle");
+#else
+    drawPair(editCol, 1, editKeyW, "B", "toggle");
+#endif
     drawPair(editCol, 2, editKeyW, "S", "cab");
     drawPair(editCol, 3, editKeyW, "Esc", "close");
 
