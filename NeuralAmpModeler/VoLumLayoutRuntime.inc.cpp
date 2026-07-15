@@ -21,13 +21,6 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     pGfx = GetUI();
   if (pGfx)
   {
-    auto disableGroup = [pGfx](const char* group, bool disable) {
-      pGfx->ForAllControlsFunc([group, disable](iplug::igraphics::IControl* c) {
-        if (c->GetGroup() && std::strcmp(c->GetGroup(), group) == 0)
-          c->SetDisabled(disable);
-      });
-    };
-
     _HideControlGroup(pGfx, "AMP_KNOBS", true);
     _HideControlGroup(pGfx, "SUPPORT_AMP_KNOBS", true);
     _HideControlGroup(pGfx, "REVERB_KNOBS", true);
@@ -66,7 +59,9 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumSupportAmpMenu))
       menu->Hide(true);
 
-    // Hide/show the correct group based on focused effect
+    // Hide/show the correct group based on focused effect. Pedal bypass affects
+    // DSP only: visible controls stay editable so users can prepare settings
+    // (including by mouse wheel) before engaging the block.
     switch (mVolumFocusedEffect)
     {
       case EVoLumEffectFocus::AMP:
@@ -97,10 +92,6 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         }
         (void)isHall;
         (void)isPlate;
-        disableGroup("REVERB_KNOBS", !GetParam(kReverbActive)->Bool());
-        disableGroup("REVERB_PREDELAY", !GetParam(kReverbActive)->Bool());
-        disableGroup("REVERB_SHIMMER", !GetParam(kReverbActive)->Bool());
-        disableGroup("REVERB_SUBTOGGLE", !GetParam(kReverbActive)->Bool());
         break;
       }
       case EVoLumEffectFocus::DELAY:
@@ -152,11 +143,6 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           mVolumDelayAgeKnob->SetTooltip(ageTip);
         if (mVolumDelayAgeValue)
           mVolumDelayAgeValue->SetTooltip(ageTip);
-        disableGroup("DELAY_KNOBS", !GetParam(kDelayActive)->Bool());
-        disableGroup("DELAY_TIME", !GetParam(kDelayActive)->Bool());
-        disableGroup("DELAY_DIV", !GetParam(kDelayActive)->Bool());
-        disableGroup("DELAY_SYNC", !GetParam(kDelayActive)->Bool());
-        disableGroup("DELAY_PINGPONG", !GetParam(kDelayActive)->Bool());
         break;
       }
       case EVoLumEffectFocus::PITCH:
@@ -170,28 +156,22 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         // character only applies to Transpose (they share the same slot).
         _HideControlGroup(pGfx, "PITCH_VOICING", isTranspose);
         _HideControlGroup(pGfx, "PITCH_TRANSCHAR", !isTranspose);
-        // Keep PITCH controls editable while bypassed. In particular, mouse-wheel
-        // users must be able to prepare semitones/mix/mode before engaging the pedal.
         break;
       }
       case EVoLumEffectFocus::COMP:
         _HideControlGroup(pGfx, "COMP_POWER", false);
         _HideControlGroup(pGfx, "COMP_KNOBS", false);
-        disableGroup("COMP_KNOBS", !GetParam(kPreCompActive)->Bool());
         break;
       case EVoLumEffectFocus::PRE_NAM1:
         _HideControlGroup(pGfx, "PRE_NAM1_POWER", false);
         _HideControlGroup(pGfx, "PRE_NAM1_KNOBS", false);
-        disableGroup("PRE_NAM1_KNOBS", !GetParam(kPreNam1Active)->Bool());
         break;
       case EVoLumEffectFocus::PRE_NAM2:
         _HideControlGroup(pGfx, "PRE_NAM2_POWER", false);
         _HideControlGroup(pGfx, "PRE_NAM2_KNOBS", false);
-        disableGroup("PRE_NAM2_KNOBS", !GetParam(kPreNam2Active)->Bool());
         break;
       case EVoLumEffectFocus::TREMOLO:
       {
-        const bool active = GetParam(kTremoloActive)->Bool();
         const bool sync = GetParam(kTremoloSync)->Bool();
         const bool harmonic = GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic;
         _HideControlGroup(pGfx, "TREMOLO_POWER", false);
@@ -205,10 +185,6 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         if (mVolumTremoloDivStep)
           mVolumTremoloDivStep->SetChannels(
             {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"}, GetParam(kTremoloDivision)->Int());
-        disableGroup("TREMOLO_KNOBS", !active);
-        disableGroup("TREMOLO_RATE", !active);
-        disableGroup("TREMOLO_DIV", !active);
-        disableGroup("TREMOLO_XOVER", !active);
         break;
       }
     }

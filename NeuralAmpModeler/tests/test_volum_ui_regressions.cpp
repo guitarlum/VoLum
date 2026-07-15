@@ -83,21 +83,18 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
   RequireContains(triptych, "{EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive}");
 }
 
-TEST_CASE("PITCH controls remain editable while the pedal is bypassed")
+TEST_CASE("All pedal controls remain editable while their block is bypassed")
 {
-  const std::string source = ReadPluginSource();
-  const auto layoutPos = source.find("void NeuralAmpModeler::_UpdateVoLumLayout(");
-  REQUIRE(layoutPos != std::string::npos);
-  const auto pitchPos = source.find("case EVoLumEffectFocus::PITCH:", layoutPos);
-  REQUIRE(pitchPos != std::string::npos);
-  const auto compPos = source.find("case EVoLumEffectFocus::COMP:", pitchPos);
-  REQUIRE(compPos != std::string::npos);
-  const std::string pitchCase = source.substr(pitchPos, compPos - pitchPos);
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
 
-  INFO("PITCH mode, character, and knobs must accept mouse-wheel edits before engagement");
-  CHECK(pitchCase.find("PITCH_TRANSPOSE_KNOBS") != std::string::npos);
-  CHECK(pitchCase.find("PITCH_OCTAVER_KNOBS") != std::string::npos);
-  CHECK(pitchCase.find("disableGroup(") == std::string::npos);
+  // Pin every bypassable PRE/POST block before asserting the shared policy.
+  for (const char* group : {"PITCH_TRANSPOSE_KNOBS", "PITCH_OCTAVER_KNOBS", "COMP_KNOBS", "PRE_NAM1_KNOBS",
+                            "PRE_NAM2_KNOBS", "DELAY_KNOBS", "REVERB_KNOBS", "TREMOLO_KNOBS"})
+    RequireContains(runtime, group);
+
+  INFO("Bypass must affect DSP only; visible controls must keep accepting mouse-wheel and pointer edits");
+  CHECK(runtime.find("disableGroup(") == std::string::npos);
+  CHECK(runtime.find("SetDisabled(") == std::string::npos);
 }
 
 TEST_CASE("Windows binary version resource matches config.h")
