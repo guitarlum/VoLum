@@ -26,6 +26,7 @@ fresh Cursor planning chat.
 - `F7-bring-your-own-ir.md` — surface the existing hidden NAM IR convolver as a first-class `.wav` cabinet-IR feature in the Custom area.
 - `F8-import-your-own-pedals.md` — import custom PRE NAM captures into the PRE pedal slots.
 - `F9-midi-support.md` — minimal MIDI: Program Change recalls presets, CC maps to key params via MIDI-learn. Lowest priority.
+- `F13-custom-amp-artwork-reroll.md` — expand procedural custom-amp art and add deterministic reroll; generated art only, no user image import.
 
 ### OS Support
 - `O1-linux-support-spike.md`

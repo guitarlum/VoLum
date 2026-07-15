@@ -5,7 +5,6 @@
 bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
 {
   constexpr int kTabKey = '\t';
-  constexpr int kSpaceKey = ' ';
   if (key.VK == '1')
     return _SwitchVoLumKeyboardSection(EVoLumSection::PRE);
   if (key.VK == '2')
@@ -40,7 +39,13 @@ bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
 
   if (key.VK == kVK_RETURN)
     return _ActivateVoLumKeyboardTarget();
-  if (key.VK == kSpaceKey)
+#ifdef APP_API
+  // Standalone owns its keyboard, so Space remains the convenient on/off key.
+  if (key.VK == ' ')
+#else
+  // Plug-ins must leave Space unhandled for the DAW transport. B = bypass.
+  if (key.VK == 'b' || key.VK == 'B')
+#endif
     return _ToggleVoLumKeyboardTarget();
 
   return false;
@@ -226,49 +231,57 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
   if (mVolumSelectedKnobParamIdx != kNoParameter)
     return;
 
+#ifdef APP_API
+  constexpr const char* kToggleOnOffHint = "Space on/off";
+  constexpr const char* kToggleDualHint = "Space dual amp";
+#else
+  constexpr const char* kToggleOnOffHint = "B on/off";
+  constexpr const char* kToggleDualHint = "B dual amp";
+#endif
+
   const char* target = "Main amp";
-  const char* action = "Space dual amp";
+  const char* action = kToggleDualHint;
   const char* nav = "Up/Down amp  |  Left/Right channel  |  Tab target";
   switch (mVolumFocusedEffect)
   {
     case EVoLumEffectFocus::AMP:
       target = (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport) ? "Support amp" : "Main amp";
-      action = "Space dual amp";
+      action = kToggleDualHint;
       nav = "Up/Down amp  |  Left/Right channel  |  S cab  |  Tab target";
       break;
     case EVoLumEffectFocus::PITCH:
       target = "Pitch";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::COMP:
       target = "Compressor";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::PRE_NAM1:
       target = "NAM 1";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::PRE_NAM2:
       target = "NAM 2";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::DELAY:
       target = "Delay";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::REVERB:
       target = "Reverb";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::TREMOLO:
       target = "Tremolo";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
   }

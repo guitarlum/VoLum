@@ -757,12 +757,11 @@ private:
   dsp::noise_gate::Trigger mNoiseGateTrigger;
   dsp::noise_gate::Gain mNoiseGateGain;
   dsp::effect::VoLumCompressor mPreCompressor;
-  // PRE Pitch pedal engine. Reconfigured off the audio thread (OnReset / OnIdle)
-  // because Signalsmith configure() allocates; the audio thread try-locks
-  // mPrePitchMutex and passes dry through if a reconfigure is in progress.
+  // PRE Pitch pedal engine. Configured off the audio thread in OnReset because
+  // Configure() allocates; the audio thread try-locks mPrePitchMutex and passes
+  // dry through while a reset/reconfigure is in progress.
   dsp::effect::VoLumPitch mPitch;
   mutable std::mutex mPrePitchMutex;
-  std::atomic<bool> mPrePitchConfigureRequested{false};
   dsp::effect::VoLumPreEq mPreEq[2];
   recursive_linear_filter::Level mPreInputGain[2];
   recursive_linear_filter::Level mPreOutputGain[2];

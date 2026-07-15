@@ -137,6 +137,71 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
+TEST_CASE("VoLumPitch pre-reserves host block growth and never reallocates in Process")
+{
+  VoLumPitch pitch;
+  pitch.Configure(kSR, 64);
+  pitch.Reset();
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 7.0, 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Poly);
+
+  CHECK(pitch.PreparedBlockSize() >= VoLumPitch::kRealtimeBlockReserve);
+  const int latency = pitch.Latency();
+
+  for (size_t block : {size_t{64}, size_t{128}, size_t{256}, size_t{1024}})
+  {
+    auto in = makeSine(196.0, block);
+    DSP_SAMPLE* ptr[1] = {in.data()};
+    DSP_SAMPLE** out = pitch.Process(ptr, 1, block);
+    CHECK(out != ptr); // Processed from the off-thread reserve, not dry fallback.
+    CHECK(pitch.PreparedBlockSize() >= static_cast<int>(block));
+    CHECK(pitch.Latency() == latency);
+    for (size_t i = 0; i < block; ++i)
+      CHECK(std::isfinite(static_cast<double>(out[0][i])));
+  }
+
+  // Beyond the fixed reserve, fail safe to dry for one block. Most importantly,
+  // do not grow/reconfigure the shifter on the real-time thread.
+  const size_t oversized = static_cast<size_t>(pitch.PreparedBlockSize()) + 1;
+  auto in = makeSine(196.0, oversized);
+  DSP_SAMPLE* ptr[1] = {in.data()};
+  CHECK(pitch.Process(ptr, 1, oversized) == ptr);
+  CHECK(pitch.PreparedBlockSize() == VoLumPitch::kRealtimeBlockReserve);
+  CHECK(pitch.Latency() == latency);
+}
+
+TEST_CASE("VoLumPitch stays finite across supported sample rates and small host blocks")
+{
+  for (double sr : {44100.0, 48000.0, 96000.0})
+    for (int block : {64, 128, 256})
+      for (int workload = 0; workload < 3; ++workload)
+      {
+        const auto mode = workload == 2 ? VoLumPitch::Mode::Octaver : VoLumPitch::Mode::Transpose;
+        const auto character =
+          workload == 0 ? VoLumPitch::Character::Instant : VoLumPitch::Character::Poly;
+        VoLumPitch pitch;
+        pitch.Configure(sr, block);
+        pitch.Reset();
+        pitch.SetParams(mode, 7.0, 1.0, 0.8, 0.8, 0.5, VoLumPitch::Voicing::Modern, 0.0, character);
+
+        std::vector<DSP_SAMPLE> in(static_cast<size_t>(block));
+        for (int n = 0; n < block; ++n)
+          in[static_cast<size_t>(n)] =
+            static_cast<DSP_SAMPLE>(0.5 * std::sin(2.0 * M_PI * 196.0 * static_cast<double>(n) / sr));
+        DSP_SAMPLE* ptr[1] = {in.data()};
+
+        for (int pass = 0; pass < 32; ++pass)
+        {
+          DSP_SAMPLE** out = pitch.Process(ptr, 1, in.size());
+          for (size_t i = 0; i < in.size(); ++i)
+          {
+            CHECK(std::isfinite(static_cast<double>(out[0][i])));
+            CHECK(std::abs(static_cast<double>(out[0][i])) < 8.0);
+          }
+        }
+      }
+}
+
 TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Poly < Drop) and bounded")
 {
   VoLumPitch pitch;
