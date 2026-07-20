@@ -49,7 +49,8 @@ void NeuralAmpModeler::_VolumRefreshChannels()
     mVolumSettingsDirty = true;
   }
 
-  auto channels = volum::DiscoverChannels(std::filesystem::path(mVolumRigsRoot), volum::kAmps[mVolumAmpIdx].folderName,
+  auto channels = volum::DiscoverChannels(volum::content::PathFromUtf8(mVolumRigsRoot),
+                                          volum::kAmps[mVolumAmpIdx].folderName,
                                           volum::kSpeakerPrefixes[mVolumSpeakerIdx]);
 
   mVolumChannelFiles.clear();
@@ -110,7 +111,7 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
     return;
   }
 
-  const auto captures = volum::DiscoverPrePedalCaptures(std::filesystem::path(mVolumRigsRoot));
+  const auto captures = volum::DiscoverPrePedalCaptures(volum::content::PathFromUtf8(mVolumRigsRoot));
   for (const auto& capture : captures)
   {
     mVolumPreCaptureFiles.push_back(capture.filename);
@@ -180,7 +181,7 @@ std::string NeuralAmpModeler::_VolumGetPreCaptureLoadPath(int captureIdx) const
   const std::string fn = _VolumGetPreCaptureFilename(captureIdx);
   if (fn.empty() || mVolumRigsRoot.empty())
     return {};
-  return (std::filesystem::path(mVolumRigsRoot) / "PrePedals" / fn).string();
+  return volum::content::PathToUtf8(volum::content::PathFromUtf8(mVolumRigsRoot) / "PrePedals" / fn);
 }
 
 void NeuralAmpModeler::_VolumSetPreNamCapture(int slot, int captureIdx)

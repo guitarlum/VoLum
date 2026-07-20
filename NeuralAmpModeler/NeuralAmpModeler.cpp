@@ -442,14 +442,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   {
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
-      mVolumRigsRoot = root.string();
+      mVolumRigsRoot = volum::content::PathToUtf8(root);
     // 1.2.0: bind + load the all-format custom-content library (F5-F8). The base
     // dir is VoLum-owned and writable from standalone/VST3/AU; fall back to a
     // content/ folder beside the rigs tree if the OS path cannot be resolved.
     {
       auto contentDir = volum::VolumContentDir();
       if (contentDir.empty() && !mVolumRigsRoot.empty())
-        contentDir = std::filesystem::path(mVolumRigsRoot) / "content";
+        contentDir = volum::content::PathFromUtf8(mVolumRigsRoot) / "content";
 #ifndef NDEBUG
       // Debug-only, opt-in screenshot/test seeding: VOLUM_SEED_CUSTOM_AMPS=N
       // sandboxes the content store in a fresh temp dir and seeds N custom amps
@@ -796,18 +796,19 @@ void NeuralAmpModeler::OnIdle()
     else if (mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
     {
       namespace fs = std::filesystem;
-      auto rigPath =
-        fs::path(mVolumRigsRoot) / volum::kAmps[mVolumAmpIdx].folderName / mVolumChannelFiles[mVolumChannelIdx];
-      fileToLoad = fs::weakly_canonical(rigPath).string();
+      const auto rigPath = volum::content::PathFromUtf8(mVolumRigsRoot) / volum::kAmps[mVolumAmpIdx].folderName
+                           / mVolumChannelFiles[mVolumChannelIdx];
+      fileToLoad = volum::content::PathToUtf8(fs::weakly_canonical(rigPath));
     }
 
     if (!fileToLoad.empty())
     {
-      mVolumRequestedMainFile = std::filesystem::path(fileToLoad).filename().string();
+      mVolumRequestedMainFile =
+        volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
       if (customMainLoad)
       {
         std::error_code pathError;
-        if (!std::filesystem::is_regular_file(std::filesystem::path(fileToLoad), pathError) || pathError)
+        if (!std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad), pathError) || pathError)
         {
           mVolumMainLoadError = "LOAD FAILED - copied custom capture is missing";
           mVolumIsLoading.store(false);
@@ -945,7 +946,8 @@ void NeuralAmpModeler::OnIdle()
 
   if (mNewModelLoadedInDSP)
   {
-    mVolumLastLoadedFile = std::filesystem::path(mNAMPaths.live.Get()).filename().string();
+    mVolumLastLoadedFile =
+      volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());
     mVolumMainLoadError.clear();
     if (auto* pGraphics = GetUI())
     {

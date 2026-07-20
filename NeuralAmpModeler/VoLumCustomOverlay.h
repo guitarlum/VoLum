@@ -541,7 +541,8 @@ private:
       if (mManageKind == ManageKind::IR)
       {
         std::error_code ec;
-        const std::uintmax_t bytes = std::filesystem::file_size(std::filesystem::path(fn.Get()), ec);
+        const std::uintmax_t bytes =
+          std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec);
         if (!ec && !volum::IrFileBytesAcceptable(bytes))
         {
           tooLarge.push_back(base);
