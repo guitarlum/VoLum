@@ -225,6 +225,47 @@ TEST_CASE("ResolveLaneCabs on an amp with no assigned files is inert")
   CHECK(v.cabEnabled[0] == false);
 }
 
+TEST_CASE("Custom preset recall keeps channel five DIRECT routing and custom IR")
+{
+  using volum::custom::AssignedChannels;
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+  using volum::custom::ResolveLaneCabs;
+  using volum::custom::kDirectSlot;
+
+  CustomAmp amp;
+  amp.id = "amp_issue_22";
+  amp.name = "Five-channel direct amp";
+  for (int channel = 1; channel <= 5; ++channel)
+  {
+    CustomNamFile file;
+    file.file = "Direct-" + std::to_string(channel) + ".nam";
+    file.slot = kDirectSlot;
+    file.channel = channel;
+    file.storedPath = "amps/direct-" + std::to_string(channel) + ".nam";
+    amp.files.push_back(file);
+  }
+
+  volum::VoLumAmpSettings saved;
+  saved.speakerIdx = 0; // DIRECT / custom-IR row
+  saved.channelIdx = 4; // position of gain-stage channel 5
+  saved.activeIrId = "ir_issue_22";
+
+  volum::VoLumAmpSettings recalled;
+  REQUIRE_FALSE(volum::AmpSettingsFromJson(volum::AmpSettingsToJson(saved), recalled));
+  const auto channels = AssignedChannels(amp);
+  REQUIRE(channels.size() == 5);
+  const int recalledChannel = channels[(size_t)recalled.channelIdx];
+  const auto view = ResolveLaneCabs(amp, kDirectSlot, recalledChannel);
+
+  CHECK(view.channel == 5);
+  CHECK(view.slot == kDirectSlot);
+  CHECK(view.noCabEnabled);
+  CHECK(view.irEnabled);
+  CHECK(recalled.activeIrId == "ir_issue_22");
+  CHECK(volum::content::CaptureFileFor(amp, view.slot, view.channel) == "amps/direct-5.nam");
+}
+
 TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
 {
   using volum::custom::ClampName;

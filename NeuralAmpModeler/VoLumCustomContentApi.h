@@ -160,7 +160,11 @@ inline int AddCustomAmp(const CustomAmp& amp)
   if (a.id.empty())
     a.id = content::MintId(reg, "amp");
   reg.amps.push_back(std::move(a));
-  Store().Save();
+  if (!Store().Save())
+  {
+    reg.amps.pop_back();
+    return -1;
+  }
   return (int)reg.amps.size() - 1;
 }
 
@@ -187,8 +191,13 @@ inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
     unique = base + " " + std::to_string(suffix++);
   a.name = unique;
   a.art = ((a.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
+  CustomAmp previous = reg.amps[(size_t)idx];
   reg.amps[(size_t)idx] = std::move(a);
-  Store().Save();
+  if (!Store().Save())
+  {
+    reg.amps[(size_t)idx] = std::move(previous);
+    return -1;
+  }
   return idx;
 }
 

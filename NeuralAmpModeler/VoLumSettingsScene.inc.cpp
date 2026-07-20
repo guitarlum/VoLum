@@ -340,7 +340,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   nlohmann::json j = volum::VolumUserSettingsToJson(
     mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
     /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
-    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load());
+    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load(), GetParam(kCalibrateInput)->Bool(),
+    GetParam(kInputCalibrationLevel)->Value());
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   // 1.2.0 additive session refs (ignored by older builds): the focused custom
@@ -380,6 +381,44 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   volum::content::GlobalContentStore().Save();
 }
 
+void NeuralAmpModeler::_VolumSaveCalibrationDefaults()
+{
+  namespace fs = std::filesystem;
+  const fs::path settingsPath = volum::VolumUserSettingsFilePath();
+  if (settingsPath.empty())
+    return;
+
+  // Multiple plugin instances in one host may edit this machine-global default.
+  // Only direct UI edits call this function; project/preset restores never do.
+  static std::mutex calibrationSettingsMutex;
+  std::lock_guard<std::mutex> lock(calibrationSettingsMutex);
+
+  nlohmann::json j = nlohmann::json::object();
+  std::error_code ec;
+  if (fs::exists(settingsPath, ec))
+  {
+    try
+    {
+      std::ifstream in(settingsPath);
+      in >> j;
+      if (!j.is_object())
+        return;
+    }
+    catch (...)
+    {
+      std::cerr << "VoLum: calibration defaults not saved because volum-settings.json is unreadable" << std::endl;
+      return;
+    }
+  }
+
+  if (!j.contains("version"))
+    j["version"] = volum::kVoLumUserSettingsVersion;
+  j["CalibrateInput"] = GetParam(kCalibrateInput)->Bool();
+  j["InputCalibrationLevel"] = GetParam(kInputCalibrationLevel)->Value();
+  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+    std::cerr << "VoLum: calibration defaults write failed: " << ec.message() << std::endl;
+}
+
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 {
   namespace fs = std::filesystem;
@@ -413,11 +452,15 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     volum::VoLumAmpSettings parsedLivePre;
     volum::VoLumAmpSettings parsedLivePost;
     bool parsedLiteMode = false;
+    bool parsedCalibrateInput = kDefaultCalibrateInput;
+    double parsedInputCalibrationLevel = kDefaultInputCalibrationLevel;
     volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
                                      &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
                                      &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
-                                     &parsedLiteMode);
+                                     &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel);
     mVolumLiteMode.store(parsedLiteMode);
+    GetParam(kCalibrateInput)->Set(parsedCalibrateInput ? 1.0 : 0.0);
+    GetParam(kInputCalibrationLevel)->Set(parsedInputCalibrationLevel);
     if (haveLivePreSnapshot)
       mVolumLiveLockedPre = parsedLivePre;
     if (haveLivePostSnapshot)

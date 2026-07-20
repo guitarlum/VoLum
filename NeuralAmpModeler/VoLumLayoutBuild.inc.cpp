@@ -1176,36 +1176,48 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         overlay->SetCallbacks(
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
-          [pPlugin](const volum::custom::CustomAmp& ampIn, int editIdx) {
+          [pPlugin](const volum::custom::CustomAmp& ampIn, int editIdx) -> std::string {
             // editIdx >= 0 -> the user edited an existing amp: mutate that entry
             // in place so we don't spawn a duplicate. Otherwise append a new one.
             auto& store = volum::content::GlobalContentStore();
             volum::custom::CustomAmp amp = ampIn;
-            // F6 import: copy any newly-added captures (those carrying an absolute
-            // sourcePath) into the VoLum-owned amps/ dir and record the resolvable
-            // storedPath. Already-stored files (edit re-save) keep their storedPath.
-            std::string idPrefix = (editIdx >= 0) ? volum::custom::CustomAmpIdAt(editIdx) : std::string();
-            if (idPrefix.empty())
+            // F6 import: copy and parse every capture before mutating the registry.
+            // A failed copy/parser check rolls back all files created by this Save
+            // and returns an error to the still-open builder.
+            std::string ampId = (editIdx >= 0) ? volum::custom::CustomAmpIdAt(editIdx) : std::string();
+            if (ampId.empty())
             {
               amp.id = volum::content::MintId(store.reg(), "amp");
-              idPrefix = amp.id;
+              ampId = amp.id;
             }
-            for (size_t i = 0; i < amp.files.size(); ++i)
-            {
-              auto& f = amp.files[i];
-              if (f.sourcePath.empty())
-                continue;
-              const std::string rel =
-                store.ImportFileCopy(std::filesystem::path(f.sourcePath), "amps", idPrefix + "_" + std::to_string(i));
-              if (!rel.empty())
-                f.storedPath = rel;
-              f.sourcePath.clear();
-            }
+            auto prepared = volum::content::PrepareCustomNamImport(
+              store, amp, ampId, [](const std::filesystem::path& path) -> std::string {
+                try
+                {
+                  nam::dspData config;
+                  auto model = nam::get_dsp(path, config);
+                  return model ? std::string() : std::string("NAM parser returned no model");
+                }
+                catch (const std::exception& e)
+                {
+                  return e.what();
+                }
+              });
+            if (!prepared)
+              return "Save failed: " + prepared.error;
+            amp = std::move(prepared.amp);
+
             const int idx =
               (editIdx >= 0) ? volum::custom::UpdateCustomAmp(editIdx, amp) : volum::custom::AddCustomAmp(amp);
+            if (idx < 0)
+            {
+              for (const auto& rel : prepared.copiedPaths)
+                store.RemoveStoredFile(rel);
+              return "Save failed: the custom amp registry could not be updated";
+            }
             auto* pGfx = pPlugin->GetUI();
             if (!pGfx)
-              return;
+              return {};
             const auto& amps = volum::custom::MockCustomAmps();
             if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
               al->As<VoLumAmpListControl>()->SetCustomAmps(amps, volum::custom::MockCustomAmpArts());
@@ -1214,6 +1226,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             // the same entry instead of a stray duplicate.
             if (idx >= 0 && idx < (int)amps.size())
               pPlugin->_VolumSelectCustomAmp(idx);
+            return {};
           },
           // Manage panel mutated (preset/IR/pedal CRUD) -> recover the live cab if
           // the active custom IR was just deleted, then re-sync the header strip

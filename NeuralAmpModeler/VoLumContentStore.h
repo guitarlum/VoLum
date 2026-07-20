@@ -41,6 +41,30 @@ namespace volum
 namespace content
 {
 
+// iPlug file pickers expose UTF-8 paths on every platform. On Windows,
+// filesystem::path(std::string) interprets bytes in the active ANSI code page,
+// so a UTF-8 username/folder resolves to a different, nonexistent path. Keep
+// registry paths UTF-8 and convert explicitly at the filesystem boundary.
+inline std::filesystem::path PathFromUtf8(const std::string& utf8)
+{
+#if defined(__cpp_char8_t)
+  const auto* first = reinterpret_cast<const char8_t*>(utf8.data());
+  return std::filesystem::path(std::u8string(first, first + utf8.size()));
+#else
+  return std::filesystem::u8path(utf8);
+#endif
+}
+
+inline std::string PathToUtf8(const std::filesystem::path& path)
+{
+#if defined(__cpp_char8_t)
+  const std::u8string utf8 = path.u8string();
+  return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+#else
+  return path.u8string();
+#endif
+}
+
 // v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
@@ -534,7 +558,7 @@ public:
   {
     if (relPath.empty())
       return {};
-    return mBase / std::filesystem::path(relPath);
+    return mBase / PathFromUtf8(relPath);
   }
 
   // Load the registry. Missing file -> empty registry. Unparseable / wrong-shape
@@ -581,7 +605,7 @@ public:
   bool Save()
   {
     if (mBase.empty())
-      return false;
+      return true; // intentionally in-memory (unit tests / unconfigured store)
     std::error_code ec;
     std::filesystem::create_directories(mBase, ec);
     return WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec);
@@ -599,9 +623,9 @@ public:
     if (ec)
       return {};
 
-    const std::string leaf = src.filename().string();
+    const std::string leaf = PathToUtf8(src.filename());
     const std::string stored = idPrefix + "__" + leaf;
-    const auto dst = dstDir / stored;
+    const auto dst = dstDir / PathFromUtf8(stored);
     std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
     if (ec)
       return {};

@@ -39,7 +39,9 @@ public:
 
   // editIdx is the custom-amp index being edited, or -1 for a brand-new amp.
   // The host updates that entry in place (no duplicate) when editIdx >= 0.
-  using BuilderSavedCallback = std::function<void(const volum::custom::CustomAmp& amp, int editIdx)>;
+  // Empty return value means success. A non-empty error keeps the builder open
+  // so a failed copy/NAM validation can never look like a successful save.
+  using BuilderSavedCallback = std::function<std::string(const volum::custom::CustomAmp& amp, int editIdx)>;
   using ChangedCallback = std::function<void()>; // a managed list was mutated
 
   explicit VoLumCustomOverlayControl(const IRECT& fullBounds)
@@ -554,7 +556,7 @@ private:
       if (mManageKind == ManageKind::IR)
       {
         const std::string idp = volum::content::MintId(store.reg(), "ir");
-        std::string rel = store.ImportFileCopy(std::filesystem::path(fn.Get()), "ir", idp);
+        std::string rel = store.ImportFileCopy(volum::content::PathFromUtf8(fn.Get()), "ir", idp);
         if (rel.empty())
           rel = leaf;
         volum::custom::AddIR(base, rel);
@@ -562,7 +564,7 @@ private:
       else
       {
         const std::string idp = volum::content::MintId(store.reg(), "pedal");
-        std::string rel = store.ImportFileCopy(std::filesystem::path(fn.Get()), "pedals", idp);
+        std::string rel = store.ImportFileCopy(volum::content::PathFromUtf8(fn.Get()), "pedals", idp);
         if (rel.empty())
           rel = leaf;
         if (volum::custom::AddPedal(base, rel) < 0)
@@ -740,6 +742,8 @@ private:
   void HandleBuilderAction(int action, const IRECT& rect)
   {
     using namespace volum::custom;
+    if (action != kBuilderSave)
+      mError.clear();
     if (action == kEditName)
     {
       StartTextEntry(TextTarget::ProfileName, rect.GetPadded(-2.f), mBuilderAmp.name);
@@ -801,7 +805,14 @@ private:
       if (SaveDisabledReason(mBuilderAmp).empty())
       {
         if (mBuilderSaved)
-          mBuilderSaved(mBuilderAmp, mBuilderEditIdx);
+        {
+          mError = mBuilderSaved(mBuilderAmp, mBuilderEditIdx);
+          if (!mError.empty())
+          {
+            SetDirty(false);
+            return;
+          }
+        }
         Hide(true);
       }
       return;
@@ -1418,9 +1429,20 @@ private:
       g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, thumbY, track.R, thumbY + thumbH));
     }
 
-    DrawFooter(g, IRECT(left.L, left.B - 30.f, left.R, left.B),
-               "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
-               "Sparse coverage is fine. Stored as a per-amp manifest - your files are never renamed.");
+    const IRECT builderFooter(left.L, left.B - 30.f, left.R, left.B);
+    if (!mError.empty())
+    {
+      g.PathClipRegion(builderFooter);
+      g.DrawText(IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mError.c_str(),
+                 builderFooter);
+      g.PathClipRegion();
+    }
+    else
+    {
+      DrawFooter(g, builderFooter,
+                 "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
+                 "Sparse coverage is fine. Stored as a per-amp manifest - your files are never renamed.");
+    }
 
     // ---- RIGHT (top): art picker as a 3x2 gallery -------------------------
     {
@@ -1612,7 +1634,7 @@ private:
   std::string mAmpName;
   std::vector<std::string> mItems;
   int mSel = -1;
-  std::string mError; // transient "name already exists" banner (Manage screen)
+  std::string mError; // transient validation/name banner (Manage + Builder)
   volum::custom::CustomAmp mBuilderAmp;
   std::vector<std::pair<IRECT, int>> mHotspots;
   std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text

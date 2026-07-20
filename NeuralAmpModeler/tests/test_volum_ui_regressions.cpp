@@ -317,6 +317,22 @@ TEST_CASE("OnIdle coalesces the deferred settings write")
   CHECK(writePos - clearPos < 120);
 }
 
+TEST_CASE("Only direct calibration UI edits update machine-global defaults")
+{
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "source == EParamSource::kUI");
+  RequireContains(source, "paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel");
+  RequireContains(source, "mVolumCalibrationDefaultsDirty = true;");
+  RequireContains(source, "if (mVolumCalibrationDefaultsDirty)");
+  RequireContains(source, "_VolumSaveCalibrationDefaults();");
+  // DAW/project restore sets the EParams directly and must not call the writer.
+  const auto loadPos = source.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(loadPos != std::string::npos);
+  const auto loadEnd = source.find("\n}", loadPos);
+  REQUIRE(loadEnd != std::string::npos);
+  CHECK(source.substr(loadPos, loadEnd - loadPos).find("_VolumSaveCalibrationDefaults") == std::string::npos);
+}
+
 TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
 {
   const std::string source = ReadPluginSource();
@@ -935,6 +951,24 @@ TEST_CASE("Preset recall refreshes the focused custom amp's cabs, not the factor
   CHECK(body.find("_VolumRefreshChannels();") != std::string::npos);
   // A focused custom SUPPORT amp is refreshed too so its cab chip tracks the preset.
   CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true)") != std::string::npos);
+}
+
+TEST_CASE("Custom NAM save and async load failures cannot masquerade as success")
+{
+  const std::string source = ReadPluginSource();
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  RequireContains(source, "PrepareCustomNamImport(");
+  RequireContains(overlay, "PathFromUtf8(fn.Get())");
+  RequireContains(source, "PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel))");
+  RequireContains(source, "if (!prepared)");
+  RequireContains(source, "return \"Save failed: \" + prepared.error;");
+  RequireContains(source, "mVolumMainLoadFailed.store(true);");
+  RequireContains(source, "if (superseded)");
+  RequireContains(source, "LOAD FAILED");
+  RequireContains(source, "(still playing ");
+  // The active footer filename is committed from mNAMPaths only after the DSP
+  // staging path reports a successful model swap.
+  RequireContains(source, "mVolumLastLoadedFile = std::filesystem::path(mNAMPaths.live.Get()).filename().string();");
 }
 
 TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")

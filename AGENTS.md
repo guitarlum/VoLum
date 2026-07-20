@@ -12,6 +12,7 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 ## Start Here
 
 - UI/layout work: `.cursor/rules/volum-ui.mdc` and skill `volum-ui-change`.
+- Custom NAM import transactions: `NeuralAmpModeler/VoLumCustomNamImport.h`.
 - Params, presets, state migration: `.cursor/rules/volum-state-params.mdc` and skill `volum-param-state-change`.
 - C++/DSP/audio-chain work: `.cursor/rules/neural-amp-modeler-native.mdc`.
 - CI, installers, releases, artifacts: `.cursor/rules/volum-release-packaging.mdc` and skill `release-manager`.

@@ -153,17 +153,27 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
     if (result.kind == VoLumLoadKind::Main)
     {
+      bool superseded = false;
       {
         std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
         if (mVolumLoadingMainPath == result.path)
           mVolumLoadingMainPath.clear();
+        else if (!mVolumLoadingMainPath.empty())
+          superseded = true;
       }
+      if (superseded)
+        continue;
       mVolumIsLoading.store(false);
       if (mVolumNeedsLoad.load())
         continue;
 
       if (!result.error.empty())
+      {
+        // Keep the last known-good model for uninterrupted audio, but tell the
+        // main/UI thread to make the fallback explicit in the footer.
+        mVolumMainLoadFailed.store(true);
         continue;
+      }
 
       if (result.model != nullptr)
       {
@@ -421,7 +431,9 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
         rel = volum::content::CaptureFileFor(amp, s, c);
     }
     const std::string fileToLoad =
-      rel.empty() ? std::string() : volum::content::GlobalContentStore().ResolveStored(rel).string();
+      rel.empty()
+        ? std::string()
+        : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
     if (fileToLoad.empty())
     {
       mShouldRemoveSupportModel.store(true);

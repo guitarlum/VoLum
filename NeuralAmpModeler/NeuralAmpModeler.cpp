@@ -38,6 +38,7 @@
 #include "VoLumUserSettingsIO.h"
 #include "VoLumControls.h"
 #include "VoLumCustomUi.h"
+#include "VoLumCustomNamImport.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -783,8 +784,13 @@ void NeuralAmpModeler::OnIdle()
       const std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomMainSlot, mVolumCustomMainChannel);
       if (!rel.empty())
       {
-        fileToLoad = volum::content::GlobalContentStore().ResolveStored(rel).string();
+        fileToLoad = volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
         customMainLoad = true;
+      }
+      else
+      {
+        mVolumRequestedMainFile = amp.name;
+        mVolumMainLoadError = "LOAD FAILED - custom capture path is missing";
       }
     }
     else if (mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
@@ -797,25 +803,34 @@ void NeuralAmpModeler::OnIdle()
 
     if (!fileToLoad.empty())
     {
-      mVolumLastLoadedFile = std::filesystem::path(fileToLoad).filename().string();
-      if (auto* pGfx = GetUI())
+      mVolumRequestedMainFile = std::filesystem::path(fileToLoad).filename().string();
+      if (customMainLoad)
       {
-        if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
-          footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
+        std::error_code pathError;
+        if (!std::filesystem::is_regular_file(std::filesystem::path(fileToLoad), pathError) || pathError)
+        {
+          mVolumMainLoadError = "LOAD FAILED - copied custom capture is missing";
+          mVolumIsLoading.store(false);
+          fileToLoad.clear();
+        }
       }
 
-      // Custom amps live outside the factory rig tree, so disable the factory
-      // sibling-prefetch by passing ampIdx = -1 (the loader skips its scan).
-      const int ampIdx = customMainLoad ? -1 : mVolumAmpIdx;
-      const std::string rigsRoot = customMainLoad ? std::string() : mVolumRigsRoot;
-      if (fileToLoad == mNAMPaths.live.Get() && !forceMainReload)
+      if (!fileToLoad.empty())
       {
-        mVolumIsLoading.store(false);
-      }
-      else
-      {
-        mVolumIsLoading.store(true);
-        _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
+        mVolumMainLoadError.clear();
+        // Custom amps live outside the factory rig tree, so disable the factory
+        // sibling-prefetch by passing ampIdx = -1 (the loader skips its scan).
+        const int ampIdx = customMainLoad ? -1 : mVolumAmpIdx;
+        const std::string rigsRoot = customMainLoad ? std::string() : mVolumRigsRoot;
+        if (fileToLoad == mNAMPaths.live.Get() && !forceMainReload)
+        {
+          mVolumIsLoading.store(false);
+        }
+        else
+        {
+          mVolumIsLoading.store(true);
+          _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
+        }
       }
     }
     else
@@ -862,12 +877,27 @@ void NeuralAmpModeler::OnIdle()
     mVolumPostLockUiDirty = false;
   }
 
+  if (mVolumMainLoadFailed.exchange(false))
+  {
+    mVolumMainLoadError = "LOAD FAILED";
+    if (!mVolumRequestedMainFile.empty())
+      mVolumMainLoadError += " - " + mVolumRequestedMainFile;
+    if (!mVolumLastLoadedFile.empty())
+      mVolumMainLoadError += " (still playing " + mVolumLastLoadedFile + ")";
+  }
+
   // Write settings file when dirty (knob/speaker/channel changed)
 #ifdef APP_API
   if (mVolumSettingsDirty)
   {
     mVolumSettingsDirty = false;
     _VolumSaveSettingsToFile();
+  }
+#endif
+  if (mVolumCalibrationDefaultsDirty)
+  {
+    mVolumCalibrationDefaultsDirty = false;
+    _VolumSaveCalibrationDefaults();
   }
 
   if (auto* pGfx = GetUI())
@@ -886,6 +916,10 @@ void NeuralAmpModeler::OnIdle()
         // Master safety took priority because it indicates the actual final-bus is being
         // shaped, which is the louder problem regardless of dual-amp state.
         footer->As<VoLumFooterControl>()->SetText("Output safety active - lower output or wet mix");
+      }
+      else if (!mVolumMainLoadError.empty())
+      {
+        footer->As<VoLumFooterControl>()->SetText(mVolumMainLoadError.c_str());
       }
       else if (dualActive && mVolumDualAmpOutputHot.load())
       {
@@ -908,10 +942,11 @@ void NeuralAmpModeler::OnIdle()
       }
     }
   }
-#endif
 
   if (mNewModelLoadedInDSP)
   {
+    mVolumLastLoadedFile = std::filesystem::path(mNAMPaths.live.Get()).filename().string();
+    mVolumMainLoadError.clear();
     if (auto* pGraphics = GetUI())
     {
       _UpdateControlsFromModel();
@@ -1371,6 +1406,10 @@ void NeuralAmpModeler::_VolumRefreshPrePostLockChrome(int paramIdx)
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
+  if (source == EParamSource::kUI
+      && (paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel))
+    mVolumCalibrationDefaultsDirty = true;
+
   if (auto pGraphics = GetUI())
   {
     // A user-driven param edit may diverge the live chain from the recalled

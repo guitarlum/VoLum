@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "../VoLumContentStore.h"
+#include "../VoLumCustomNamImport.h"
 
 using namespace volum::content;
 using volum::VoLumAmpSettings;
@@ -215,6 +216,131 @@ TEST_CASE("ImportFileCopy copies the source under a unique stored name")
   std::ifstream in(store.ResolveStored(rel), std::ios::binary);
   std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   CHECK(body == "RIFFfake");
+}
+
+TEST_CASE("Custom NAM import validates every copied capture before commit")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+
+  const auto base = TestBase("custom-nam-transaction-success");
+  const auto first = WriteSrc(base / "incoming", "MRSH.nam", "valid-one");
+  const auto second = WriteSrc(base / "incoming", "Fender.nam", "valid-two");
+  ContentStore store(base);
+
+  CustomAmp draft;
+  draft.id = "amp_tx";
+  draft.name = "Two captures";
+  draft.files = {
+    CustomNamFile{"MRSH.nam", 0, 1, "", first.string()},
+    CustomNamFile{"Fender.nam", 1, 2, "", second.string()},
+  };
+
+  int validations = 0;
+  const auto prepared = PrepareCustomNamImport(
+    store, draft, draft.id, [&](const std::filesystem::path& path) {
+      ++validations;
+      std::ifstream in(path, std::ios::binary);
+      std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      return body.rfind("valid-", 0) == 0 ? std::string() : std::string("invalid NAM");
+    });
+
+  REQUIRE(prepared);
+  CHECK(validations == 2);
+  CHECK(prepared.copiedPaths.size() == 2);
+  REQUIRE(prepared.amp.files.size() == 2);
+  for (const auto& file : prepared.amp.files)
+  {
+    CHECK(file.sourcePath.empty());
+    REQUIRE_FALSE(file.storedPath.empty());
+    CHECK(std::filesystem::exists(store.ResolveStored(file.storedPath)));
+  }
+  // Preparing is side-effect-free with respect to the registry; the UI commits
+  // only after this result succeeds.
+  CHECK(store.reg().amps.empty());
+}
+
+TEST_CASE("Custom NAM import accepts an iPlug UTF-8 source path")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+
+  const auto base = TestBase("custom-nam-unicode-source");
+  const std::string unicodeDirUtf8 = "T\xC3\xB6ne_\xE6\x97\xA5\xE6\x9C\xAC_\xCE\x94";
+  const auto src = WriteSrc(base / PathFromUtf8(unicodeDirUtf8), "MRSH SL68.nam", "valid-unicode-source");
+  ContentStore store(base / "content");
+
+  CustomAmp draft;
+  draft.id = "amp_unicode";
+  draft.name = "Unicode source";
+  // PromptForFiles returns UTF-8 even on Windows. This exact boundary used to
+  // feed filesystem::path(std::string), which treated it as ANSI and silently
+  // saved an empty storedPath whenever a parent folder/username was non-ASCII.
+  draft.files = {CustomNamFile{"MRSH SL68.nam", 0, 1, "", PathToUtf8(src)}};
+
+  const auto prepared = PrepareCustomNamImport(
+    store, draft, draft.id, [](const std::filesystem::path& path) {
+      std::ifstream in(path, std::ios::binary);
+      std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      return body == "valid-unicode-source" ? std::string() : std::string("unexpected bytes");
+    });
+
+  REQUIRE(prepared);
+  REQUIRE(prepared.amp.files.size() == 1);
+  CHECK_FALSE(prepared.amp.files[0].storedPath.empty());
+  CHECK(std::filesystem::is_regular_file(store.ResolveStored(prepared.amp.files[0].storedPath)));
+}
+
+TEST_CASE("Custom NAM import failure rolls back the whole multi-file save")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+
+  const auto base = TestBase("custom-nam-transaction-rollback");
+  const auto first = WriteSrc(base / "incoming", "Good.nam", "good");
+  const auto second = WriteSrc(base / "incoming", "Broken.nam", "broken");
+  ContentStore store(base);
+
+  CustomAmp draft;
+  draft.id = "amp_tx";
+  draft.name = "Atomic amp";
+  draft.files = {
+    CustomNamFile{"Good.nam", 0, 1, "", first.string()},
+    CustomNamFile{"Broken.nam", 1, 2, "", second.string()},
+  };
+
+  const auto prepared = PrepareCustomNamImport(
+    store, draft, draft.id, [&](const std::filesystem::path& path) {
+      return path.filename().string().find("Broken") == std::string::npos ? std::string()
+                                                                          : std::string("unsupported NAM");
+    });
+
+  REQUIRE_FALSE(prepared);
+  CHECK(prepared.copiedPaths.empty());
+  CHECK(prepared.error.find("Broken.nam") != std::string::npos);
+  CHECK(prepared.error.find("unsupported NAM") != std::string::npos);
+  CHECK(store.reg().amps.empty());
+  std::error_code ec;
+  const auto ampsDir = store.AmpsDir();
+  CHECK(std::filesystem::is_empty(ampsDir, ec));
+  CHECK_FALSE(ec);
+  // Caller-owned draft remains retryable; only the result copy was modified.
+  CHECK(draft.files[0].sourcePath == first.string());
+  CHECK(draft.files[1].sourcePath == second.string());
+}
+
+TEST_CASE("Custom NAM import rejects an empty persisted capture path")
+{
+  volum::custom::CustomAmp draft;
+  draft.id = "amp_empty";
+  draft.name = "Broken manifest";
+  draft.files.push_back({"Missing.nam", 0, 1, "", ""});
+  ContentStore store(TestBase("custom-nam-empty-path"));
+
+  const auto prepared =
+    PrepareCustomNamImport(store, draft, draft.id, [](const std::filesystem::path&) { return std::string(); });
+  REQUIRE_FALSE(prepared);
+  CHECK(prepared.error.find("saved capture path is empty") != std::string::npos);
 }
 
 TEST_CASE("Removal matrix: deleting a pedal clears referencing PRE slots")

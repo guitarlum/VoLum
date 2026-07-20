@@ -1000,6 +1000,59 @@ TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Ful
   CHECK(lite == false);
 }
 
+TEST_CASE("User settings IO round-trips machine-global input calibration defaults")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json j =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, false, false, nullptr, nullptr,
+                                   /*liteMode=*/false, /*calibrateInput=*/true, /*inputCalibrationLevel=*/-7.5);
+  REQUIRE(j["CalibrateInput"] == true);
+  REQUIRE(j["InputCalibrationLevel"] == doctest::Approx(-7.5));
+
+  bool calibrate = false;
+  double level = 12.0;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, nullptr, &calibrate, &level);
+  REQUIRE_FALSE(healed);
+  CHECK(calibrate);
+  CHECK(level == doctest::Approx(-7.5));
+}
+
+TEST_CASE("Legacy user settings without calibration keys retain defaults")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j.erase("CalibrateInput");
+  j.erase("InputCalibrationLevel");
+
+  bool calibrate = true;
+  double level = -30.0;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, nullptr, &calibrate, &level);
+  REQUIRE_FALSE(healed);
+  CHECK_FALSE(calibrate);
+  CHECK(level == doctest::Approx(12.0));
+}
+
+TEST_CASE("Malformed calibration defaults heal safely")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  j["CalibrateInput"] = "yes";
+  j["InputCalibrationLevel"] = 999.0;
+
+  bool calibrate = true;
+  double level = -30.0;
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, nullptr, &calibrate, &level);
+  REQUIRE(healed);
+  CHECK_FALSE(calibrate);
+  CHECK(level == doctest::Approx(12.0));
+}
+
 // --- Exhaustive settings round-trip pin (Phase 1 enforcement) ----------------
 //
 // The per-amp serializer in VolumUserSettingsToJson/FromJson hand-lists every
