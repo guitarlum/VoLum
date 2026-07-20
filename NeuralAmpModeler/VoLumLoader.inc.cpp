@@ -442,7 +442,8 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
       return;
     }
     mVolumSupportIsLoading.store(true);
-    mVolumLastLoadedSupportFile = std::filesystem::path(fileToLoad).filename().string();
+    mVolumLastLoadedSupportFile =
+      volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
     _VolumQueueSupportModelLoad(fileToLoad, -1); // -1 = custom: skip factory prefetch
     return;
   }
@@ -459,7 +460,9 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   namespace fs = std::filesystem;
   const int speakerIdx = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3);
   auto channels = volum::DiscoverChannels(
-    fs::path(mVolumRigsRoot), volum::kAmps[supportAmpIdx].folderName, volum::kSpeakerPrefixes[speakerIdx]);
+    volum::content::PathFromUtf8(mVolumRigsRoot),
+    volum::kAmps[supportAmpIdx].folderName,
+    volum::kSpeakerPrefixes[speakerIdx]);
   if (channels.empty())
   {
     mShouldRemoveSupportModel.store(true);
@@ -475,10 +478,10 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
     SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
   }
 
-  const auto rigPath =
-    fs::path(mVolumRigsRoot) / volum::kAmps[supportAmpIdx].folderName / channels[channelIdx].filename;
+  const auto rigPath = volum::content::PathFromUtf8(mVolumRigsRoot) / volum::kAmps[supportAmpIdx].folderName
+                       / channels[channelIdx].filename;
   std::error_code ec;
-  const std::string fileToLoad = fs::weakly_canonical(rigPath, ec).string();
+  const std::string fileToLoad = volum::content::PathToUtf8(fs::weakly_canonical(rigPath, ec));
   if (fileToLoad.empty())
   {
     mShouldRemoveSupportModel.store(true);
@@ -488,6 +491,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   }
 
   mVolumSupportIsLoading.store(true);
-  mVolumLastLoadedSupportFile = std::filesystem::path(fileToLoad).filename().string();
+  mVolumLastLoadedSupportFile =
+    volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
   _VolumQueueSupportModelLoad(fileToLoad, supportAmpIdx);
 }

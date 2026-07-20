@@ -336,9 +336,9 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
   if (supportAmpIdx >= 0 && supportAmpIdx < volum::kAmpCount && !mVolumRigsRoot.empty())
   {
     const int speakerIdx = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3);
-    auto channels =
-      volum::DiscoverChannels(std::filesystem::path(mVolumRigsRoot), volum::kAmps[supportAmpIdx].folderName,
-                              volum::kSpeakerPrefixes[speakerIdx]);
+    auto channels = volum::DiscoverChannels(volum::content::PathFromUtf8(mVolumRigsRoot),
+                                            volum::kAmps[supportAmpIdx].folderName,
+                                            volum::kSpeakerPrefixes[speakerIdx]);
     for (auto& ch : channels)
     {
       mVolumSupportChannelFiles.push_back(std::move(ch.filename));

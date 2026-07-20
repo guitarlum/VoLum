@@ -966,9 +966,19 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   RequireContains(source, "if (superseded)");
   RequireContains(source, "LOAD FAILED");
   RequireContains(source, "(still playing ");
+  // Keep every WDL/iPlug path string UTF-8 all the way to the native filesystem
+  // boundary. Reconstructing with path(std::string) invokes the Windows ANSI
+  // code page and can recreate the original failure under a Unicode profile.
+  RequireContains(source, "mVolumRigsRoot = volum::content::PathToUtf8(root);");
+  RequireContains(source, "std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad)");
+  RequireContains(overlay, "std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec)");
+  RequireDoesNotContain(source, "std::filesystem::path(fileToLoad)");
+  RequireDoesNotContain(source, "std::filesystem::path(mVolumRigsRoot)");
+  RequireDoesNotContain(overlay, "std::filesystem::path(fn.Get())");
   // The active footer filename is committed from mNAMPaths only after the DSP
   // staging path reports a successful model swap.
-  RequireContains(source, "mVolumLastLoadedFile = std::filesystem::path(mNAMPaths.live.Get()).filename().string();");
+  RequireContains(
+    source, "volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());");
 }
 
 TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")

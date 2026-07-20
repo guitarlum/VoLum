@@ -357,8 +357,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   {
     if (mVolumRigsRoot.empty())
       return;
-    settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
-    dualAmpSettingsPath = fs::path(mVolumRigsRoot) / "volum-dual-amp-settings.json";
+    settingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-settings.json";
+    dualAmpSettingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
   std::error_code ec;
@@ -428,8 +428,8 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   fs::path dualAmpLegacyPath;
   if (!mVolumRigsRoot.empty())
   {
-    legacyPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
-    dualAmpLegacyPath = fs::path(mVolumRigsRoot) / "volum-dual-amp-settings.json";
+    legacyPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-settings.json";
+    dualAmpLegacyPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
   fs::path settingsPath;

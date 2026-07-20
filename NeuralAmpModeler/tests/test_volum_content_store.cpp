@@ -260,7 +260,7 @@ TEST_CASE("Custom NAM import validates every copied capture before commit")
   CHECK(store.reg().amps.empty());
 }
 
-TEST_CASE("Custom NAM import accepts an iPlug UTF-8 source path")
+TEST_CASE("Custom NAM import and runtime resolution accept UTF-8 source and library paths")
 {
   using volum::custom::CustomAmp;
   using volum::custom::CustomNamFile;
@@ -268,7 +268,7 @@ TEST_CASE("Custom NAM import accepts an iPlug UTF-8 source path")
   const auto base = TestBase("custom-nam-unicode-source");
   const std::string unicodeDirUtf8 = "T\xC3\xB6ne_\xE6\x97\xA5\xE6\x9C\xAC_\xCE\x94";
   const auto src = WriteSrc(base / PathFromUtf8(unicodeDirUtf8), "MRSH SL68.nam", "valid-unicode-source");
-  ContentStore store(base / "content");
+  ContentStore store(base / PathFromUtf8("V\xC3\xB6Lum_\xE6\x97\xA5\xE6\x9C\xAC"));
 
   CustomAmp draft;
   draft.id = "amp_unicode";
@@ -288,7 +288,11 @@ TEST_CASE("Custom NAM import accepts an iPlug UTF-8 source path")
   REQUIRE(prepared);
   REQUIRE(prepared.amp.files.size() == 1);
   CHECK_FALSE(prepared.amp.files[0].storedPath.empty());
-  CHECK(std::filesystem::is_regular_file(store.ResolveStored(prepared.amp.files[0].storedPath)));
+  const auto resolved = store.ResolveStored(prepared.amp.files[0].storedPath);
+  CHECK(std::filesystem::is_regular_file(resolved));
+  // Product runtime queues absolute paths as UTF-8 strings and converts them
+  // back only at filesystem boundaries. Pin that second half too.
+  CHECK(std::filesystem::is_regular_file(PathFromUtf8(PathToUtf8(resolved))));
 }
 
 TEST_CASE("Custom NAM import failure rolls back the whole multi-file save")
