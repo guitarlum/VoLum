@@ -599,7 +599,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
                                               bool preLocked = false, bool postLocked = false,
                                               const VoLumAmpSettings* liveLockedPre = nullptr,
-                                              const VoLumAmpSettings* liveLockedPost = nullptr, bool liteMode = false)
+                                              const VoLumAmpSettings* liveLockedPost = nullptr, bool liteMode = false,
+                                              bool calibrateInput = false, double inputCalibrationLevel = 12.0)
 {
   nlohmann::json j;
   j["version"] = kVoLumUserSettingsVersion;
@@ -609,6 +610,11 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
   // VoLum 1.2.0: machine-global A2 Lite mode (false = Full, default). Additive
   // optional key; older readers ignore it, so no version bump.
   j["liteMode"] = liteMode;
+  // Machine-global input-interface calibration defaults. These are existing
+  // EParams and still round-trip in DAW project chunks; the JSON values only
+  // seed new instances/startup, and a restored project remains authoritative.
+  j["CalibrateInput"] = calibrateInput;
+  j["InputCalibrationLevel"] = inputCalibrationLevel;
   // Live lock snapshots: persisted independently of per-amp slots so that
   // reopening the app with a lock still on restores the exact live PRE/POST
   // the user was hearing, without ever mutating any amp's stored scene.
@@ -668,7 +674,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
                                       bool* preLocked = nullptr, bool* postLocked = nullptr,
                                       VoLumAmpSettings* liveLockedPre = nullptr,
                                       VoLumAmpSettings* liveLockedPost = nullptr, bool* haveLiveLockedPre = nullptr,
-                                      bool* haveLiveLockedPost = nullptr, bool* liteMode = nullptr)
+                                      bool* haveLiveLockedPost = nullptr, bool* liteMode = nullptr,
+                                      bool* calibrateInput = nullptr, double* inputCalibrationLevel = nullptr)
 {
   bool healed = false;
   auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue,
@@ -774,6 +781,19 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
   {
     *liteMode = false;
     loadBool(j, "liteMode", *liteMode, false);
+  }
+
+  // Additive global calibration defaults. Missing keys (pre-1.2.1 settings)
+  // retain the long-standing defaults without requesting a settings migration.
+  if (calibrateInput)
+  {
+    *calibrateInput = false;
+    loadBool(j, "CalibrateInput", *calibrateInput, false);
+  }
+  if (inputCalibrationLevel)
+  {
+    *inputCalibrationLevel = 12.0;
+    loadDouble(j, "InputCalibrationLevel", *inputCalibrationLevel, -60.0, 60.0, 12.0);
   }
 
   // Live lock snapshots: stored independently of per-amp slots so that the

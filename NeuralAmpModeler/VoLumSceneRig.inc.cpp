@@ -67,18 +67,10 @@ void NeuralAmpModeler::_VolumRefreshChannels()
     mVolumSettingsDirty = true;
   }
 
-  if (!mVolumChannelFiles.empty() && mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
-    mVolumLastLoadedFile = std::filesystem::path(mVolumChannelFiles[mVolumChannelIdx]).filename().string();
-  else
-    mVolumLastLoadedFile.clear();
-
   if (auto* pGfx = GetUI())
   {
     if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumChannelStep))
       stepper->As<VoLumChannelStepControl>()->SetChannels(mVolumChannelLabels, mVolumChannelIdx);
-    if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
-      footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.empty() ? "(no rig loaded)"
-                                                                             : mVolumLastLoadedFile.c_str());
   }
 }
 
@@ -183,7 +175,7 @@ std::string NeuralAmpModeler::_VolumGetPreCaptureLoadPath(int captureIdx) const
     const std::string rel = volum::custom::PedalStoredPathByLegacy(captureIdx);
     if (rel.empty())
       return {};
-    return volum::content::GlobalContentStore().ResolveStored(rel).string();
+    return volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
   }
   const std::string fn = _VolumGetPreCaptureFilename(captureIdx);
   if (fn.empty() || mVolumRigsRoot.empty())
@@ -492,17 +484,18 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
     return;
   }
   const auto abs = volum::content::GlobalContentStore().ResolveStored(rel);
+  const std::string absUtf8 = volum::content::PathToUtf8(abs);
   // VoLum: reject unreasonably large IRs before decoding the whole file (the
   // convolver only uses the first ~8192 samples). Interactive guard with a clear
   // message; the restore path validated size at import time.
   std::string sizeWhy;
-  if (!volum::IrFileSizeAcceptable(abs.string(), sizeWhy))
+  if (!volum::IrFileSizeAcceptable(absUtf8, sizeWhy))
   {
     if (auto* pGfx = GetUI())
       _ShowMessageBox(pGfx, sizeWhy.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
     return;
   }
-  WDL_String p(abs.string().c_str());
+  WDL_String p(absUtf8.c_str());
   const dsp::wav::LoadReturnCode loadRc = _StageIR(p, support);
   if (loadRc != dsp::wav::LoadReturnCode::SUCCESS)
   {
@@ -715,10 +708,11 @@ void NeuralAmpModeler::_VolumMigrateIrTrims()
       continue;
     double trimDb = 0.0;
     const auto abs = volum::content::GlobalContentStore().ResolveStored(ir.file);
+    const std::string absUtf8 = volum::content::PathToUtf8(abs);
     std::vector<float> audio;
     double fileSr = 0.0;
     if (!abs.empty()
-        && dsp::wav::Load(abs.string().c_str(), audio, fileSr) == dsp::wav::LoadReturnCode::SUCCESS && !audio.empty())
+        && dsp::wav::Load(absUtf8.c_str(), audio, fileSr) == dsp::wav::LoadReturnCode::SUCCESS && !audio.empty())
     {
       double sumSq = 0.0;
       for (float v : audio)

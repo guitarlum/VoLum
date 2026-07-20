@@ -158,7 +158,7 @@ VoLum kann eigene NAM-Amp-Captures, Impulsantworten und Pedal-Captures laden. Im
 - **Windows:** `%LOCALAPPDATA%\VoLum\content`
 - **macOS:** `~/Library/Application Support/VoLum/content`
 
-**Eigene Amps.** Klicke auf das **+** im CUSTOM-Bereich des Amp-Browsers, um den Builder zu öffnen. Benenne den Amp, füge eine oder mehrere `.nam`-Dateien hinzu und ordne jede einem Cab-Slot und Kanal zu (Dateien im Schema `PREFIX-CODE-CHANNEL.nam` füllen das automatisch aus). Jede Datei ist eine separate Aufnahme einer Gain-Stage/Cab-Kombination; VoLum schaltet zwischen ihnen und leitet aus einem Ordner mit mehreren Captures keinen stufenlosen Gain-Regler ab. Sowohl NAM-Architecture-1-(A1)- als auch Architecture-2-(A2)-Captures laden. Gespeicherte eigene Amps erscheinen in der CUSTOM-Liste und werden genau wie Werk-Amps geladen und gespielt — auch als Dual-Amp-SUPPORT-Partner. Mit den Stift-/Papierkorb-Symbolen bearbeitest oder löschst du einen.
+**Eigene Amps.** Klicke auf das **+** im CUSTOM-Bereich des Amp-Browsers, um den Builder zu öffnen. Benenne den Amp, füge eine oder mehrere `.nam`-Dateien hinzu und ordne jede einem Cab-Slot und Kanal zu (Dateien im Schema `PREFIX-CODE-CHANNEL.nam` füllen das automatisch aus). Jede Datei ist eine separate Aufnahme einer Gain-Stage/Cab-Kombination; VoLum schaltet zwischen ihnen und leitet aus einem Ordner mit mehreren Captures keinen stufenlosen Gain-Regler ab. Sowohl NAM-Architecture-1-(A1)- als auch Architecture-2-(A2)-Captures laden, auch aus Windows-Benutzernamen/Ordnern oder Dateinamen mit Nicht-ASCII-Zeichen. Beim **Save** kopiert und validiert VoLum jedes Capture, bevor der Amp gespeichert wird. Kann eine Datei nicht kopiert oder gelesen werden, wird der gesamte Speichervorgang abgebrochen, der Builder bleibt offen und zeigt den fehlerhaften Dateinamen; gültige Captures werden nie still als Amp gespeichert, der weiterhin das vorherige Werksmodell spielt. Gespeicherte eigene Amps erscheinen in der CUSTOM-Liste und werden genau wie Werk-Amps geladen und gespielt — auch als Dual-Amp-SUPPORT-Partner. Mit den Stift-/Papierkorb-Symbolen bearbeitest oder löschst du einen. Fehlt eine früher importierte Datei später oder ist sie beschädigt, meldet der Footer den Ladefehler und nennt das letzte weiterhin aktive, funktionierende Capture.
 
 ![VoLum Builder für eigene Amps](user-guide-custom-amp.png)
 
@@ -208,7 +208,13 @@ VoLum speichert Benutzereinstellungen automatisch:
 
 Nutze die Standalone-App als Editor für deine Klangbibliothek. Sie schreibt die globalen Defaults pro Amp in diese Datei, inklusive Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual-Amp-Setup.
 
-Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben die globale VoLum-Einstellungsdatei nicht, deshalb können zwei Spuren einander die Defaults nicht überschreiben.
+Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben keine globalen Amp-Szenen, deshalb können zwei Spuren einander ihre Rigs nicht überschreiben. Die unten beschriebene Eingangskalibrierung ist die bewusste Ausnahme: Eine direkt bearbeitete Kalibrierung wird zum Rechner-Default, während der gespeicherte Projektzustand beim Laden weiterhin Vorrang hat.
+
+### Eingangskalibrierung
+
+Die Karte **Input calibration** beschreibt den analogen Pegel deines Audiointerfaces bei digital 0 dBFS. Trage den Interface-Wert in dBu ein und aktiviere **Calibrate input**. Enthält das geladene NAM-Capture einen Eingangskalibrierungswert, gleicht VoLum den AMP-Input-Gain so an, dass das Modell den Pegel seiner Aufnahme erhält; bei Modellen ohne diese Metadaten bleiben die Kalibrierungsfelder nicht verfügbar.
+
+Der Calibrate-Schalter und der dBu-Wert sind rechnerweite Start-Defaults. Eine direkte Änderung in Standalone, VST3 oder AU schreibt diese beiden Werte in `volum-settings.json`, sodass neue Instanzen gleich kalibriert starten. Der im DAW-Projekt gespeicherte Plugin-Zustand hat beim erneuten Öffnen weiterhin Vorrang und darf bewusst andere Kalibrierungswerte verwenden.
 
 ### A2 Lite-Modus (Performance)
 

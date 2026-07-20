@@ -1,9 +1,7 @@
-// File-CRUD edge cases for the 1.2.0 custom-content store. These target the
-// failure modes we cannot reproduce on the Windows dev box but fear on macOS:
-// unicode/long leaf names, missing/absent directories, import name collisions,
-// removing files that are already gone, and registry round-trips that must
-// preserve non-ASCII names byte-for-byte. They run under the macOS CI ASan/UBSan
-// job, which is where we get the real signal for the file layer.
+// File-CRUD edge cases for the custom-content store: UTF-8/long paths,
+// missing/absent directories, import name collisions, removing files that are
+// already gone, and registry round-trips that preserve non-ASCII names
+// byte-for-byte. These run on Windows and under the macOS CI ASan/UBSan job.
 //
 // Non-ASCII strings are written as narrow UTF-8 byte escapes (not u8"" literals,
 // which are char8_t[] under C++20 and will not assign to std::string) so the
@@ -38,7 +36,7 @@ std::filesystem::path WriteSrc(const std::filesystem::path& dir, const std::stri
 {
   std::error_code ec;
   std::filesystem::create_directories(dir, ec);
-  const auto p = dir / leaf;
+  const auto p = dir / PathFromUtf8(leaf);
   std::ofstream out(p, std::ios::binary);
   out << body;
   out.close();
@@ -68,13 +66,7 @@ TEST_CASE("ImportFileCopy preserves a unicode leaf name and copies the bytes")
   CHECK(std::filesystem::exists(dst));
   CHECK(ReadAll(dst) == "RIFFdata");
   CHECK(rel.rfind("ir/ir_uni__", 0) == 0);
-#ifndef _WIN32
-  // On UTF-8-native filesystems (macOS/Linux) the original leaf survives in the
-  // stored path. Windows path::string() round-trips through the ANSI code page,
-  // so the exact unicode substring is not guaranteed there (content + existence
-  // are still asserted above).
   CHECK(rel.find(leaf) != std::string::npos);
-#endif
 }
 
 TEST_CASE("ImportFileCopy handles a very long leaf name without truncating mid-copy")

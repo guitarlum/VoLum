@@ -8,6 +8,8 @@
 #include "get_dsp.h"
 #include "slimmable.h"
 
+#include "../VoLumCustomNamImport.h"
+
 namespace
 {
 std::filesystem::path RepoRoot()
@@ -50,6 +52,40 @@ TEST_CASE("Load Ampete NAM via nam::get_dsp(path)")
   auto model = nam::get_dsp(path);
   REQUIRE(model != nullptr);
   model->Reset(48000.0, 512);
+}
+
+TEST_CASE("Custom NAM transaction accepts a capture through the production parser")
+{
+  namespace fs = std::filesystem;
+  const fs::path base = fs::temp_directory_path() / "volum-custom-nam-parser-test";
+  std::error_code ec;
+  fs::remove_all(base, ec);
+  volum::content::ContentStore store(base);
+
+  volum::custom::CustomAmp draft;
+  draft.id = "amp_parser";
+  draft.name = "Parser integration";
+  draft.files.push_back(
+    {"AMP-Ampt-1.nam", volum::custom::kDirectSlot, 1, "", (AmpeteDir() / "AMP-Ampt-1.nam").string()});
+
+  const auto prepared =
+    volum::content::PrepareCustomNamImport(store, draft, draft.id, [](const fs::path& path) -> std::string {
+      try
+      {
+        nam::dspData config;
+        auto model = nam::get_dsp(path, config);
+        return model ? std::string() : std::string("NAM parser returned no model");
+      }
+      catch (const std::exception& e)
+      {
+        return e.what();
+      }
+    });
+
+  REQUIRE(prepared);
+  REQUIRE(prepared.amp.files.size() == 1);
+  CHECK(prepared.amp.files[0].sourcePath.empty());
+  CHECK(fs::is_regular_file(store.ResolveStored(prepared.amp.files[0].storedPath)));
 }
 
 TEST_CASE("Load second Ampete NAM via path")

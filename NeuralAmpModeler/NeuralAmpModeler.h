@@ -335,6 +335,7 @@ public:
   // See volum::dsp_cache::kRestoreReappliedCaches for the locked param set.
   void _VolumApplyDspCaches();
   void _VolumSaveSettingsToFile();
+  void _VolumSaveCalibrationDefaults();
   void _VolumLoadSettingsFromFile();
   // VoLum: set the machine-global A2 Lite/Full mode, persist it, and reload all
   // four NAM lanes so the new slice is applied through the async staging path.
@@ -564,9 +565,12 @@ private:
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
   std::string mVolumLastLoadedSupportFile;
+  std::string mVolumRequestedMainFile;
+  std::string mVolumMainLoadError;
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
+  std::atomic<bool> mVolumMainLoadFailed{false};
   // VoLum: when set, the next main-lane load in OnIdle bypasses the
   // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
   // even though its file path is unchanged.
@@ -580,6 +584,7 @@ private:
   std::atomic<bool> mVolumLiteMode{false};
   bool mVolumInitComplete = false;
   bool mVolumSettingsDirty = false;
+  bool mVolumCalibrationDefaultsDirty = false;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
   // OnParamChange / OnParamChangeUI handlers triggered by setParam (which calls
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /
