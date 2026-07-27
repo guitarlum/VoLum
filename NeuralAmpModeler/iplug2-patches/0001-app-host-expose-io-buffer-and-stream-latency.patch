@@ -1,0 +1,28 @@
+diff --git a/IPlug/APP/IPlugAPP_host.h b/IPlug/APP/IPlugAPP_host.h
+index 8dcaadac6..5796c97da 100644
+--- a/IPlug/APP/IPlugAPP_host.h
++++ b/IPlug/APP/IPlugAPP_host.h
+@@ -229,6 +229,23 @@ public:
+   static WDL_DLGRET MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+ 
+   IPlugAPP* GetPlug() { return mIPlug.get(); }
++
++  /** VoLum: the active audio stream's I/O block size, in frames. */
++  uint32_t GetIOBufferSize() const { return mBufferSize; }
++
++  /** VoLum: the device-reported input+output latency of the active stream, in frames,
++   * or 0 when the backend does not report one. ASIO drivers report a figure that
++   * already includes their own buffering; DirectSound/WASAPI often report nothing.
++   * Used by the standalone Settings page to show a real round trip instead of only
++   * the plugin's algorithmic delay. */
++  long GetStreamLatencyFrames() const
++  {
++    if (!mDAC || !mDAC->isStreamOpen())
++      return 0;
++    const long l = mDAC->getStreamLatency();
++    return l > 0 ? l : 0;
++  }
++
+ private:
+   std::unique_ptr<IPlugAPP> mIPlug = nullptr;
+   std::unique_ptr<RtAudio> mDAC = nullptr;

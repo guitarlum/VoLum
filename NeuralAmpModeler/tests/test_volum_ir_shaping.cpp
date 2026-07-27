@@ -86,6 +86,85 @@ TEST_CASE("High-cut ladder treats OFF as fully open at the top")
   CHECK(hz == doctest::Approx(kIrHighCutHzMin));
 }
 
+// -----------------------------------------------------------------------------
+// Popover affordances (1.2.1 polish): rail detection for graying out steppers, and
+// free typed entry. Both live next to the ladders so the popover cannot disagree
+// with the model about where a rail is or what a typed number means.
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Stepper availability follows the ladders' rails")
+{
+  CHECK(IrTrimStepAvail(0.0).canDown);
+  CHECK(IrTrimStepAvail(0.0).canUp);
+  CHECK_FALSE(IrTrimStepAvail(kIrTrimDbMax).canUp);
+  CHECK(IrTrimStepAvail(kIrTrimDbMax).canDown);
+  CHECK_FALSE(IrTrimStepAvail(kIrTrimDbMin).canDown);
+
+  // Low cut: OFF is the bottom rung, kIrLowCutHzMax the top.
+  CHECK_FALSE(IrLowCutStepAvail(0.0).canDown);
+  CHECK(IrLowCutStepAvail(0.0).canUp);
+  CHECK_FALSE(IrLowCutStepAvail(kIrLowCutHzMax).canUp);
+  CHECK(IrLowCutStepAvail(kIrLowCutHzMax).canDown);
+
+  // High cut is inverted: OFF is the fully-open TOP rung, so "up" is the dead end.
+  CHECK_FALSE(IrHighCutStepAvail(0.0).canUp);
+  CHECK(IrHighCutStepAvail(0.0).canDown);
+  CHECK_FALSE(IrHighCutStepAvail(kIrHighCutHzMin).canDown);
+  CHECK(IrHighCutStepAvail(kIrHighCutHzMin).canUp);
+}
+
+TEST_CASE("Typed IR values parse the spellings a user actually types")
+{
+  CHECK(ParseIrTypedValue("2500").kind == IrTypedKind::Number);
+  CHECK(ParseIrTypedValue("2500").value == doctest::Approx(2500.0));
+  CHECK(ParseIrTypedValue("2.5k").value == doctest::Approx(2500.0));
+  CHECK(ParseIrTypedValue("2.5 kHz").value == doctest::Approx(2500.0));
+  CHECK(ParseIrTypedValue("800 Hz").value == doctest::Approx(800.0));
+  CHECK(ParseIrTypedValue("-3 dB").value == doctest::Approx(-3.0));
+  CHECK(ParseIrTypedValue("+3").value == doctest::Approx(3.0));
+
+  CHECK(ParseIrTypedValue("off").kind == IrTypedKind::Off);
+  CHECK(ParseIrTypedValue("OFF").kind == IrTypedKind::Off);
+  CHECK(ParseIrTypedValue("").kind == IrTypedKind::Off);
+  CHECK(ParseIrTypedValue("0").kind == IrTypedKind::Off);
+  CHECK(ParseIrTypedValue("0 Hz").kind == IrTypedKind::Off);
+
+  CHECK(ParseIrTypedValue("banana").kind == IrTypedKind::Invalid);
+  CHECK(ParseIrTypedValue("2.5 furlongs").kind == IrTypedKind::Invalid);
+}
+
+TEST_CASE("Typed IR values are continuous within range, not snapped to a ladder rung")
+{
+  // 137 Hz is between the 120 and 150 rungs and must survive as typed.
+  CHECK(ApplyTypedIrLowCutHz("137", 80.0) == doctest::Approx(137.0));
+  CHECK(ApplyTypedIrHighCutHz("7350", 6000.0) == doctest::Approx(7350.0));
+  CHECK(ApplyTypedIrTrimDb("-3.7", 0.0) == doctest::Approx(-3.7));
+
+  // Out of range clamps rather than rejecting - the intent is unambiguous.
+  CHECK(ApplyTypedIrTrimDb("99", 0.0) == doctest::Approx(kIrTrimDbMax));
+  CHECK(ApplyTypedIrLowCutHz("5", 80.0) == doctest::Approx(20.0));
+  CHECK(ApplyTypedIrLowCutHz("5000", 80.0) == doctest::Approx(kIrLowCutHzMax));
+  CHECK(ApplyTypedIrHighCutHz("200", 6000.0) == doctest::Approx(kIrHighCutHzMin));
+
+  // "off" disables the cuts; for a makeup gain it means unity, not silence.
+  CHECK(ApplyTypedIrLowCutHz("off", 80.0) == doctest::Approx(0.0));
+  CHECK(ApplyTypedIrHighCutHz("off", 6000.0) == doctest::Approx(0.0));
+  CHECK(ApplyTypedIrTrimDb("off", -6.0) == doctest::Approx(0.0));
+
+  // Garbage keeps the current value instead of resetting the control.
+  CHECK(ApplyTypedIrTrimDb("banana", -6.0) == doctest::Approx(-6.0));
+  CHECK(ApplyTypedIrLowCutHz("??", 80.0) == doctest::Approx(80.0));
+  CHECK(ApplyTypedIrHighCutHz("nope", 6000.0) == doctest::Approx(6000.0));
+
+  // A typed value the stepper can then keep walking from: it moves to the ADJACENT
+  // rung in each direction rather than rounding to the nearest one first, which
+  // would skip the 150 Hz rung 137 is sitting just below.
+  CHECK(StepIrLowCutHz(ApplyTypedIrLowCutHz("137", 0.0), +1) == doctest::Approx(150.0));
+  CHECK(StepIrLowCutHz(ApplyTypedIrLowCutHz("137", 0.0), -1) == doctest::Approx(120.0));
+  CHECK(StepIrHighCutHz(ApplyTypedIrHighCutHz("7350", 0.0), +1) == doctest::Approx(8000.0));
+  CHECK(StepIrHighCutHz(ApplyTypedIrHighCutHz("7350", 0.0), -1) == doctest::Approx(6000.0));
+}
+
 TEST_CASE("IR shaping round-trips through the registry JSON")
 {
   Registry r;

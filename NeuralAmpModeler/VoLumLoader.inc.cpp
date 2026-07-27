@@ -172,6 +172,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         // Keep the last known-good model for uninterrupted audio, but tell the
         // main/UI thread to make the fallback explicit in the footer.
         mVolumMainLoadFailed.store(true);
+        VOLUM_LOG("model", "MAIN load FAILED " + result.path + " : " + result.error);
         continue;
       }
 
@@ -181,6 +182,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         mStagedModel = std::move(result.model);
         volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());
       }
+      VOLUM_LOG("model", "MAIN loaded " + result.path);
       continue;
     }
 
@@ -198,6 +200,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       if (!result.error.empty())
       {
         mShouldRemoveSupportModel.store(true);
+        VOLUM_LOG("model", "SUPPORT load FAILED " + result.path + " : " + result.error);
         continue;
       }
 
@@ -206,6 +209,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         std::lock_guard<std::mutex> lock(mStagingMutex);
         mStagedSupportModel = std::move(result.model);
       }
+      VOLUM_LOG("model", "SUPPORT loaded " + result.path);
       continue;
     }
 
@@ -225,6 +229,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
     if (!result.error.empty())
     {
       mShouldRemovePreModel[slot].store(true);
+      VOLUM_LOG("model", "PRE slot " + std::to_string(slot) + " load FAILED " + result.path + " : " + result.error);
       continue;
     }
 

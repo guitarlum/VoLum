@@ -105,6 +105,9 @@
     <ClCompile Include="..\tests\test_volum_ui_regressions.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_sync_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_upgrade_migration.cpp" />
+    <ClCompile Include="..\tests\test_volum_input_calibration.cpp" />
+    <ClCompile Include="..\tests\test_volum_diag_log.cpp" />
+    <ClCompile Include="..\tests\test_volum_latency_report.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />

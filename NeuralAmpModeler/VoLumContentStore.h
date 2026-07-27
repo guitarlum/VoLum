@@ -25,8 +25,12 @@
 //   - writes are atomic (temp file + rename), reusing WriteJsonAtomically.
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <random>
 #include <string>
@@ -136,21 +140,42 @@ inline double StepIrTrimDb(double db, int dir)
   return ClampIrTrimDb(std::round(stepped * 2.0) / 2.0); // snap to a 0.5 dB grid
 }
 
-inline double StepIrLadder(const double* ladder, int n, double cur, int dir)
+// Sort key for a ladder entry. OFF is stored as 0 but sits at opposite ends of the
+// two ladders: a disabled low cut is the most open setting at the bottom, a disabled
+// high cut is the most open setting at the top. Mapping it to +inf for the high-cut
+// ladder lets one ordering rule serve both.
+inline double IrLadderKey(double hz, bool offIsHighest)
 {
-  int best = 0;
-  double bestD = 1e18;
+  if (hz > 0.0)
+    return hz;
+  return offIsHighest ? std::numeric_limits<double>::infinity() : 0.0;
+}
+
+// Move to the adjacent rung: strictly the next one above for dir >= 0, strictly the
+// next one below otherwise. Deliberately not "round to nearest, then move by one" -
+// with typed entry a value can sit between rungs, and rounding first would silently
+// skip the rung the user is standing next to (137 Hz stepping up to 200 rather than
+// 150). At a rail there is no adjacent rung and the value is returned unchanged,
+// which is also what the popover reads to gray the button out.
+inline double StepIrLadder(const double* ladder, int n, double cur, int dir, bool offIsHighest)
+{
+  const double k = IrLadderKey(cur, offIsHighest);
+  int bestIdx = -1;
+  double bestKey = 0.0;
   for (int i = 0; i < n; ++i)
   {
-    const double d = std::fabs(ladder[i] - cur);
-    if (d < bestD)
+    const double ki = IrLadderKey(ladder[i], offIsHighest);
+    const bool candidate = (dir >= 0) ? (ki > k) : (ki < k);
+    if (!candidate)
+      continue;
+    const bool better = (bestIdx < 0) || ((dir >= 0) ? (ki < bestKey) : (ki > bestKey));
+    if (better)
     {
-      bestD = d;
-      best = i;
+      bestIdx = i;
+      bestKey = ki;
     }
   }
-  const int ni = std::clamp(best + (dir >= 0 ? 1 : -1), 0, n - 1);
-  return ladder[ni];
+  return bestIdx < 0 ? cur : ladder[bestIdx];
 }
 
 inline double StepIrLowCutHz(double hz, int dir)
@@ -158,7 +183,7 @@ inline double StepIrLowCutHz(double hz, int dir)
   // OFF at the bottom, then a musical low-cut sweep up to the low mids.
   static const double kLadder[] = {0.0, 20, 30, 40, 50, 60, 80, 100, 120, 150, 200, 300, 400, 500, 650, 800};
   const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
-  return ClampIrLowCutHz(StepIrLadder(kLadder, n, ClampIrLowCutHz(hz), dir));
+  return ClampIrLowCutHz(StepIrLadder(kLadder, n, ClampIrLowCutHz(hz), dir, /*offIsHighest=*/false));
 }
 
 inline double StepIrHighCutHz(double hz, int dir)
@@ -169,7 +194,120 @@ inline double StepIrHighCutHz(double hz, int dir)
                                    8000, 10000, 12000, 16000, 20000, 0.0};
   const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
   const double in = (hz > 0.0) ? ClampIrHighCutHz(hz) : 0.0;
-  return ClampIrHighCutHz(StepIrLadder(kLadder, n, in, dir));
+  return ClampIrHighCutHz(StepIrLadder(kLadder, n, in, dir, /*offIsHighest=*/true));
+}
+
+// Whether each stepper direction still has somewhere to go, so the popover can gray
+// out a button at its rail instead of offering a click that does nothing. Defined in
+// terms of the ladders above rather than duplicating the endpoints, so the two can
+// never drift apart.
+struct IrStepAvail
+{
+  bool canDown = true;
+  bool canUp = true;
+};
+
+inline IrStepAvail IrTrimStepAvail(double db)
+{
+  return {StepIrTrimDb(db, -1) != db, StepIrTrimDb(db, +1) != db};
+}
+
+inline IrStepAvail IrLowCutStepAvail(double hz)
+{
+  const double cur = ClampIrLowCutHz(hz);
+  return {StepIrLowCutHz(cur, -1) != cur, StepIrLowCutHz(cur, +1) != cur};
+}
+
+inline IrStepAvail IrHighCutStepAvail(double hz)
+{
+  const double cur = ClampIrHighCutHz(hz);
+  return {StepIrHighCutHz(cur, -1) != cur, StepIrHighCutHz(cur, +1) != cur};
+}
+
+// Typed entry for the IR shaping popover. The steppers walk a musical ladder, but a
+// user who knows the number they want should be able to type it, so typed values are
+// continuous and only clamped to the control's range - they do not snap to a rung.
+enum class IrTypedKind
+{
+  Invalid, // not a number: keep whatever the control already shows
+  Off, // "off", "-", or an explicit zero: disable the filter
+  Number
+};
+
+struct IrTypedValue
+{
+  IrTypedKind kind = IrTypedKind::Invalid;
+  double value = 0.0;
+};
+
+// Accepts what a user actually types: "2.5k", "2500 Hz", "-3 dB", "+3", "off".
+// A trailing k/K multiplies by 1000 so "1.5k" and "1500" mean the same thing.
+inline IrTypedValue ParseIrTypedValue(const std::string& text)
+{
+  std::string s;
+  s.reserve(text.size());
+  for (char c : text)
+    if (!std::isspace(static_cast<unsigned char>(c)))
+      s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+
+  if (s.empty() || s == "off" || s == "-" || s == "none")
+    return {IrTypedKind::Off, 0.0};
+
+  const char* begin = s.c_str();
+  char* end = nullptr;
+  const double raw = std::strtod(begin, &end);
+  if (end == begin || !std::isfinite(raw))
+    return {};
+
+  std::string suffix(end);
+  double scale = 1.0;
+  if (!suffix.empty() && suffix[0] == 'k')
+  {
+    scale = 1000.0;
+    suffix.erase(0, 1);
+  }
+  // Anything left must be a unit we recognize; a stray "2.5 foo" is a typo, not a value.
+  if (!(suffix.empty() || suffix == "hz" || suffix == "db"))
+    return {};
+
+  const double v = raw * scale;
+  if (v == 0.0)
+    return {IrTypedKind::Off, 0.0};
+  return {IrTypedKind::Number, v};
+}
+
+// A typed level of "off" means 0 dB (unity), since a makeup gain cannot be disabled.
+inline double ApplyTypedIrTrimDb(const std::string& text, double current)
+{
+  const IrTypedValue t = ParseIrTypedValue(text);
+  switch (t.kind)
+  {
+    case IrTypedKind::Off: return 0.0;
+    case IrTypedKind::Number: return ClampIrTrimDb(t.value);
+    default: return current;
+  }
+}
+
+inline double ApplyTypedIrLowCutHz(const std::string& text, double current)
+{
+  const IrTypedValue t = ParseIrTypedValue(text);
+  switch (t.kind)
+  {
+    case IrTypedKind::Off: return 0.0;
+    case IrTypedKind::Number: return ClampIrLowCutHz(t.value);
+    default: return current;
+  }
+}
+
+inline double ApplyTypedIrHighCutHz(const std::string& text, double current)
+{
+  const IrTypedValue t = ParseIrTypedValue(text);
+  switch (t.kind)
+  {
+    case IrTypedKind::Off: return 0.0;
+    case IrTypedKind::Number: return ClampIrHighCutHz(t.value);
+    default: return current;
+  }
 }
 
 struct IRItem

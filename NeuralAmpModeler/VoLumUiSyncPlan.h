@@ -127,6 +127,12 @@ inline UiSyncPlan MakeUiSyncPlan(const UiSyncInput& in)
         : std::clamp(in.factoryChannelIdx, 0, static_cast<int>(in.factoryChannelLabels.size()) - 1);
     plan.sidebarFactoryIdx = in.factoryAmpIdx;
     plan.irCabActive = in.irResolved;
+    // An id that no longer names anything in the library is dead weight: it can
+    // never light the chip again, and left in place it gets written back on every
+    // save, so the broken reference outlives the IR by years.
+    plan.clearOrphanedIr = in.irIdPresent && !in.irResolved;
+    if (plan.clearOrphanedIr)
+      plan.irName.clear();
     return plan;
   }
 
@@ -155,9 +161,10 @@ inline UiSyncPlan MakeUiSyncPlan(const UiSyncInput& in)
   plan.customSlot = v.slot;
 
   // A custom IR convolves the DIRECT capture. If the resolved channel has none,
-  // any stored IR is orphaned for this routing and must be dropped - including an
-  // id that no longer resolves, so the dangling reference does not survive.
-  plan.clearOrphanedIr = (in.irIdPresent || in.irResolved) && !v.irEnabled;
+  // any stored IR is orphaned for this routing and must be dropped. An id that no
+  // longer resolves is orphaned either way - the IR it named is gone from the
+  // library, so nothing will ever bring the reference back to life.
+  plan.clearOrphanedIr = ((in.irIdPresent || in.irResolved) && !v.irEnabled) || (in.irIdPresent && !in.irResolved);
   plan.irCabActive = in.irResolved && v.irEnabled;
   if (plan.clearOrphanedIr)
     plan.irName.clear();

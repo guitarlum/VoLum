@@ -859,14 +859,20 @@ TEST_CASE("VoLum NAM cache copies dspData before Core consumes cached fields")
   RequireDoesNotContain(source, "return nam::get_dsp(cacheIt->second);");
 }
 
-TEST_CASE("VoLum settings panel shows current latency under model information")
+TEST_CASE("VoLum settings panel reports round-trip latency, not just plugin PDC")
 {
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
 
-  RequireContains(controls, "Current latency: %.1f ms (%d samples)");
-  RequireContains(controls, "SetCurrentLatency(int samples, double sampleRate)");
-  RequireContains(source, "SetCurrentLatency(GetLatency(), GetSampleRate())");
+  // The wording and arithmetic live in the pure header (test_volum_latency_report);
+  // here we pin that the control renders it and the plugin feeds it real device data.
+  RequireContains(controls, "SetCurrentLatency(const volum::LatencyReport& report)");
+  RequireContains(controls, "volum::FormatLatencyLine(report, kStandalone)");
+  RequireContains(source, "SetCurrentLatency(_VolumLatencyReport())");
+  RequireContains(source, "host->GetStreamLatencyFrames()");
+  RequireContains(source, "host->GetIOBufferSize()");
+  // The old PDC-only line read 0.0 ms while the player heard 21 ms of ASIO.
+  RequireDoesNotContain(controls, "Current latency: %.1f ms (%d samples)");
   RequireDoesNotContain(source, " |  Latency:");
 }
 
