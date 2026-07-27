@@ -26,7 +26,8 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 - macOS tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh`
 - macOS sanitizer tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`
 - Windows app smoke check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`
-- Windows portable package: `cmd /c NeuralAmpModeler\scripts\makedist-win.bat full zip`
-- Windows installer package: `cmd /c NeuralAmpModeler\scripts\makedist-win.bat full installer`
+- Windows portable package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full zip` (the script resolves its helpers relative to the working directory, so it must run from `scripts`)
+- Windows installer package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full installer`
+- Windows standalone end-to-end scenarios: `pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1`
 - macOS release-equivalent package: `bash NeuralAmpModeler/scripts/makedist-mac.sh full all`
 - Format: `bash format.bash`
