@@ -106,8 +106,10 @@ if ($run.conclusion -eq "success")
 {
   Write-Host ""
   Write-Host "CI green. Artifacts:" -ForegroundColor Green
-  & gh run view $RunId --repo $Repo --json artifacts `
-    --jq '.artifacts[]? | "  " + .name' 2>$null
+  # Artifacts are not exposed by `gh run view --json`; they need the REST route.
+  & gh api "repos/$Repo/actions/runs/$RunId/artifacts" `
+    --jq '.artifacts[] | "  \(.name)  (\(.size_in_bytes / 1048576 | floor) MB)"'
+  Write-Host "Download with: gh run download $RunId --repo $Repo -n <name> -D <dir>"
   exit 0
 }
 
