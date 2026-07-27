@@ -24,6 +24,11 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & (Join-Path $here "check-shell-exec-bits.ps1")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# Rules and skills go stale silently when a file is renamed, and wrong guidance
+# is worse than verbose guidance.
+& (Join-Path $here "check-agent-artifact-links.ps1")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source
