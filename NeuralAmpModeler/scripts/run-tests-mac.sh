@@ -9,7 +9,9 @@ REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
 
 # Mirrors run-tests-win.ps1: the tests compile plugin headers that depend on the
 # local iPlug2 patches, so apply them before configuring. Idempotent.
-"$PROJECT_DIR/iplug2-patches/apply-iplug2-patches.sh"
+# Invoked through `bash` rather than directly because the executable bit is not
+# set consistently across the repo's shell scripts.
+bash "$PROJECT_DIR/iplug2-patches/apply-iplug2-patches.sh"
 
 SANITIZE=0
 for arg in "$@"; do
