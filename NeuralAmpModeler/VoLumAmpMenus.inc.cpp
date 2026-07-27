@@ -273,24 +273,59 @@ void NeuralAmpModeler::_VolumApplyFocusedLaneCabs()
     return;
   }
 
-  auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
-  row->SetFactoryCabs();
-  // Factory amps always expose a No-Cab (DIRECT) path on every channel, so both
-  // the No Cab button and a custom IR are always allowed.
-  row->SetNoCabEnabled(true);
-  row->SetIrEnabled(true);
+  // Factory lane: discover this lane's channels first (that also clamps a stale
+  // channel index), then let the shared planner decide what the row shows. Going
+  // through the same planner as custom lanes is what stopped a factory amp with
+  // an active custom IR from coming back as "No Cab" on editor reopen.
   if (supportFocus)
-  {
-    row->SetSelected(std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3));
     _VolumRefreshSupportChannels();
-  }
   else
-  {
-    row->SetSelected(mVolumSpeakerIdx);
     _VolumRefreshChannels();
+
+  const volum::custom::CustomAmp unusedAmp; // factory lane: planner ignores it
+  _VolumApplyUiSyncPlan(volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportFocus, unusedAmp)), supportFocus);
+}
+
+// The one place restored backend state becomes visible control state. Called
+// after every restore path (editor open, DAW chunk load, session re-focus) so a
+// rebuilt editor never shows a constructor default in place of real state.
+void NeuralAmpModeler::_VolumSyncUiFromState()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+
+  // Sidebar + hero follow the MAIN lane's amp identity regardless of which lane
+  // the cab row is showing.
+  if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+  {
+    auto* list = al->As<VoLumAmpListControl>();
+    if (mVolumCustomMainIdx >= 0)
+      list->SetCustomSelected(mVolumCustomMainIdx);
+    else
+      list->SetSelected(mVolumAmpIdx);
   }
-  // Factory amps can also carry a per-lane custom IR; reflect the focused lane's.
-  _VolumReflectLaneIrChip(supportFocus);
+
+  const char* ampName = _VolumMainAmpDisplayName();
+  if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
+  {
+    auto* hero = heroCtrl->As<VoLumHeroImageControl>();
+    if (mVolumCustomMainIdx >= 0)
+      hero->SetCustomArt(true, volum::custom::CustomAmpArt(mVolumCustomMainIdx));
+    else
+    {
+      char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
+      hero->SetCustomArt(false, 0);
+      hero->SetPlaceholder(ph, mVolumAmpIdx);
+    }
+    hero->SetName(ampName);
+  }
+  if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
+    if (mVolumExpandedSection == EVoLumSection::AMP)
+      nameCtrl->As<VoLumSubRowTextControl>()->SetName(ampName, mVolumCustomMainIdx >= 0);
+
+  // Cab row + channel stepper for the focused lane.
+  _VolumApplyFocusedLaneCabs();
 }
 
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)

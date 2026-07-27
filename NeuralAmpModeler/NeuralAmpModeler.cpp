@@ -1105,6 +1105,10 @@ void NeuralAmpModeler::OnUIOpen()
   }
   _UpdateLatency();
   _VolumRestoreSessionSelection();
+  // The editor is rebuilt from constructor defaults on every open, so the last
+  // step is always to re-derive the visible selection from backend state. Without
+  // this a lane whose cab is a custom IR came back showing "No Cab".
+  _VolumSyncUiFromState();
 }
 
 // Standalone: re-focus the last custom MAIN amp and re-select the active preset
@@ -1118,12 +1122,19 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
     return;
   mVolumDidRestorePresetSelection = true;
 
-  if (!mVolumRestoreCustomMainId.empty())
-  {
-    const int cmi = volum::custom::CustomAmpIndexById(mVolumRestoreCustomMainId);
-    if (cmi >= 0)
-      _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs; clears the recalled preset
-  }
+  // Second resolution stage: drop references this machine's content store cannot
+  // resolve. A deleted custom amp also invalidates the preset id, since the bank
+  // belonged to that amp; restoring it would label the header with a preset that
+  // has no owner.
+  const int cmi =
+    mVolumRestoreCustomMainId.empty() ? -1 : volum::custom::CustomAmpIndexById(mVolumRestoreCustomMainId);
+  const volum::RestoreSelection sel = volum::ValidateRestoreSelection(
+    {mVolumRestoreCustomMainId, mVolumRestorePresetId},
+    /*customMainIdKnown=*/cmi >= 0, /*presetIdKnown=*/true);
+  mVolumRestorePresetId = sel.activePresetId;
+
+  if (!sel.customMainId.empty() && cmi >= 0)
+    _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs; clears the recalled preset
   mVolumRestoreCustomMainId.clear();
 
   if (mVolumRestorePresetId.empty())

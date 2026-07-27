@@ -1306,26 +1306,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       settings->As<NAMSettingsPageControl>()->HideAnimated(false);
 #endif
 
-    // Apply loaded settings: select correct amp, speaker, hero image
-    {
-      auto* ampList = pGraphics->GetControlWithTag(kCtrlTagVoLumAmpList)->As<VoLumAmpListControl>();
-      auto* spkRow = pGraphics->GetControlWithTag(kCtrlTagVoLumSpeakerRow)->As<VoLumSpeakerRowControl>();
-      auto* heroCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
-      auto* nameCtrl = pGraphics->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
-
-      if (ampList)
-        ampList->SetSelected(mVolumAmpIdx);
-      if (spkRow)
-        spkRow->SetSelected(mVolumSpeakerIdx);
-      if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
-        nameCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
-      if (heroCtrl)
-      {
-        char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
-        heroCtrl->SetPlaceholder(ph, mVolumAmpIdx);
-        heroCtrl->SetName(volum::kAmps[mVolumAmpIdx].displayName);
-      }
-    }
+    // Selection state (sidebar, cab row, IR chip, channel stepper, hero) is not
+    // applied here. OnUIOpen calls _VolumSyncUiFromState once the whole editor
+    // exists, which re-derives all of it from backend state through the shared
+    // planner. Setting a partial selection here is what used to leave a lane with
+    // an active custom IR reading as "No Cab".
 
     _SyncVoLumExactEntry();
 

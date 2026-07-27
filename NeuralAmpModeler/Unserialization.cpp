@@ -757,9 +757,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // the one-shot guard lets the restore run again after this state load. This
       // fixes "VST3/AU reopen drops the focused custom amp" (the immediate select
       // below only reaches the UI when an editor already exists at load time).
-      mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(
-        /*loadedFromChunk=*/true, idTail.customMainId, mVolumRestoreCustomMainId);
-      mVolumRestorePresetId = idTail.activePresetId;
+      const volum::RestoreSelection restored = volum::ResolveRestoreSelection(
+        /*loadedFromChunk=*/true, {idTail.customMainId, idTail.activePresetId},
+        {mVolumRestoreCustomMainId, mVolumRestorePresetId});
+      mVolumRestoreCustomMainId = restored.customMainId;
+      mVolumRestorePresetId = restored.activePresetId;
       mVolumDidRestorePresetSelection = false;
 
       const int cmi = volum::custom::CustomAmpIndexById(idTail.customMainId);

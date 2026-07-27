@@ -546,6 +546,12 @@ public:
 
   std::filesystem::path RegistryPath() const { return mBase / "volum-content.json"; }
   std::filesystem::path BackupPath() const { return mBase / "volum-content.json.bak"; }
+  // Pre-migration snapshot, kept separate from the corrupt-file .bak so a later
+  // parse failure cannot overwrite the last known-good pre-upgrade copy.
+  std::filesystem::path MigrationBackupPath(const std::string& tag) const
+  {
+    return mBase / ("volum-content.json.pre-" + tag + ".bak");
+  }
   std::filesystem::path AmpsDir() const { return mBase / "amps"; }
   std::filesystem::path IrDir() const { return mBase / "ir"; }
   std::filesystem::path PedalsDir() const { return mBase / "pedals"; }
@@ -609,6 +615,26 @@ public:
     std::error_code ec;
     std::filesystem::create_directories(mBase, ec);
     return WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec);
+  }
+
+  // Snapshot the on-disk registry once, before a migration rewrites it in place.
+  // A one-way migration is the one moment the user cannot get their old file back
+  // by downgrading, so keep a copy. Does nothing if a snapshot for this tag already
+  // exists (so it stays a true pre-upgrade copy) or if there is nothing to copy.
+  // Returns true when a snapshot exists afterwards.
+  bool BackupBeforeMigration(const std::string& tag)
+  {
+    if (mBase.empty())
+      return false;
+    std::error_code ec;
+    const auto src = RegistryPath();
+    if (!std::filesystem::exists(src, ec))
+      return false;
+    const auto dst = MigrationBackupPath(tag);
+    if (std::filesystem::exists(dst, ec))
+      return true; // already snapshotted on an earlier attempt; never overwrite
+    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
+    return !ec;
   }
 
   // Copy `src` into `subDir` (one of amps/ir/pedals) under a unique stored name,

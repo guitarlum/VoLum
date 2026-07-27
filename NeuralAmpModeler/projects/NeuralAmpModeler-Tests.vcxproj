@@ -103,6 +103,8 @@
     <ClCompile Include="..\tests\test_volum_settings_atomic_write.cpp" />
     <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_regressions.cpp" />
+    <ClCompile Include="..\tests\test_volum_ui_sync_plan.cpp" />
+    <ClCompile Include="..\tests\test_volum_upgrade_migration.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
