@@ -250,7 +250,9 @@ fi
 
 # Mirrors makedist-win.bat: the standalone target uses accessors added by the
 # local iPlug2 patches, so apply them before building. Idempotent.
-./iplug2-patches/apply-iplug2-patches.sh
+# Invoked through `bash` rather than directly because the executable bit is not
+# set consistently across the repo's shell scripts.
+bash ./iplug2-patches/apply-iplug2-patches.sh
 
 set -o pipefail
 echo "xcodebuild jobs: ${XCODEBUILD_JOBS}"
