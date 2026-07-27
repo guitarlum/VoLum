@@ -597,9 +597,13 @@ TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the def
   // nothing) and fell back to a factory amp. Pin the wiring so a future refactor
   // cannot silently drop it back to the immediate-select-only path.
   const std::string plugin = ReadPluginSource();
-  RequireContains(plugin, "mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(");
-  RequireContains(plugin, "mVolumRestorePresetId = idTail.activePresetId;");
+  RequireContains(plugin, "const volum::RestoreSelection restored = volum::ResolveRestoreSelection(");
+  RequireContains(plugin, "mVolumRestoreCustomMainId = restored.customMainId;");
+  RequireContains(plugin, "mVolumRestorePresetId = restored.activePresetId;");
   RequireContains(plugin, "mVolumDidRestorePresetSelection = false;");
+  // Second stage: the editor-open consumer drops ids the content store cannot
+  // resolve, so a deleted custom amp cannot leave an ownerless preset label.
+  RequireContains(plugin, "volum::ValidateRestoreSelection(");
 }
 
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
@@ -885,9 +889,9 @@ TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wir
 
   // D: a custom IR needs a DIRECT capture; the row greys out and selection is
   // hard-blocked otherwise. Channel-first: the gate is now per-channel (the IR
-  // enable comes from the resolver; selection checks ChannelHasDirect).
+  // enable comes from the resolved plan; selection checks ChannelHasDirect).
   RequireContains(speakerRow, "void SetIrEnabled(bool enabled");
-  RequireContains(source, "row->SetIrEnabled(v.irEnabled");
+  RequireContains(source, "row->SetIrEnabled(plan.irEnabled");
   RequireContains(source, "!volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
 }
 
@@ -895,19 +899,61 @@ TEST_CASE("Custom cab navigation is channel-first")
 {
   const std::string source = ReadPluginSource();
   const std::string speakerRow = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSpeakerRow.h");
+  const std::string syncPlan = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUiSyncPlan.h");
 
   // The speaker row can gate the No Cab button (per-channel DIRECT availability).
   RequireContains(speakerRow, "void SetNoCabEnabled(bool enabled");
-  // Custom lane cab refresh runs through the pure channel-first resolver.
-  RequireContains(source, "volum::custom::ResolveLaneCabs(amp, curSlot, curCh)");
-  RequireContains(source, "row->SetNoCabEnabled(v.noCabEnabled");
-  RequireContains(source, "row->SetIrEnabled(v.irEnabled");
-  // The custom channel stepper lists the amp-WIDE gain stages.
+  // Cab refresh runs through the pure channel-first resolver, now reached via the
+  // shared UI sync planner rather than open-coded in the plugin.
+  RequireContains(syncPlan, "custom::ResolveLaneCabs(amp, in.customSlot, channel)");
+  RequireContains(source, "row->SetNoCabEnabled(plan.noCabEnabled");
+  RequireContains(source, "row->SetIrEnabled(plan.irEnabled");
+  // The channel stepper lists the amp-WIDE gain stages.
   RequireContains(source, "const auto channels = volum::custom::AssignedChannels(amp);");
-  // Factory amps always re-enable No Cab (DIRECT on every channel).
-  RequireContains(source, "row->SetNoCabEnabled(true);");
   // Custom IR selection is gated per-channel, not amp-wide.
   RequireContains(source, "volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
+}
+
+TEST_CASE("Editor reopen re-derives the whole visible selection from backend state")
+{
+  // Regression (1.2.1): closing and reopening the window with a custom IR active
+  // showed "No Cab". The editor rebuilds every control from constructor defaults,
+  // and the old reopen path only pushed SetSelected(speakerIdx) - which an IR had
+  // forced to 0 - so nothing restored the copper IR chip. Custom amps escaped it
+  // only because their restore happened to run the full cab-resolve path.
+  const std::string source = ReadPluginSource();
+
+  // One entry point, called once the whole editor exists.
+  RequireContains(source, "void NeuralAmpModeler::_VolumSyncUiFromState()");
+  RequireContains(source, "_VolumSyncUiFromState();");
+
+  // The layout build must NOT push a partial selection of its own; that split
+  // between "build" and "apply" is what let the IR chip go missing.
+  RequireDoesNotContain(source, "spkRow->SetSelected(mVolumSpeakerIdx);");
+
+  // Both lanes resolve through the same pure planner.
+  RequireContains(source, "volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportFocus, unusedAmp))");
+  RequireContains(source, "volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportLane, amp))");
+}
+
+TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")
+{
+  // Regression (1.2.1): a custom amp saved on gain stage 5 with an active IR came
+  // back on stage 1 after an app restart. _VolumForceDirectCapture read
+  // mVolumCustomMainChannel, a runtime cache still at its default (1) during a
+  // restore, instead of deriving the stage from the persisted stepper position.
+  const std::string source = ReadPluginSource();
+
+  const auto fnPos = source.find("void NeuralAmpModeler::_VolumForceDirectCapture(");
+  REQUIRE(fnPos != std::string::npos);
+  const auto fnEnd = source.find("\n}", fnPos);
+  REQUIRE(fnEnd != std::string::npos);
+  const std::string body = source.substr(fnPos, fnEnd - fnPos);
+
+  INFO("MAIN must derive its gain stage from the persisted stepper position");
+  CHECK(body.find("volum::CustomChannelAtStep(amp, mVolumChannelIdx)") != std::string::npos);
+  INFO("reading the runtime gain-stage cache for MAIN is the bug being pinned out");
+  CHECK(body.find(": mVolumCustomMainChannel;") == std::string::npos);
 }
 
 TEST_CASE("Reopen restores the dirty baseline from preset content")

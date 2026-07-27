@@ -18,6 +18,8 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_settings_atomic_write.cpp
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp
+  test_volum_ui_sync_plan.cpp
+  test_volum_upgrade_migration.cpp
   test_volum_amp_list_scroll.cpp
   test_volum_amp_catalog.cpp
   test_delay_reverb_dsp.cpp

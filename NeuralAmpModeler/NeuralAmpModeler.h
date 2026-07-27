@@ -40,6 +40,7 @@
 #include "VoLumMetronomeDSP.h"
 #include "VoLumTremolo.h"
 #include "VoLumProcessingPlan.h"
+#include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
 
@@ -301,6 +302,17 @@ public:
   void _VolumSetSupportAmp(int ampIdx);
   void _VolumSetSupportCustom(int customIdx);
   void _VolumApplyFocusedLaneCabs();
+  // Single entry point that pushes restored backend state into the freshly built
+  // controls. The editor rebuilds every control from constructor defaults on each
+  // open, so a reopen must re-derive the whole visible selection rather than
+  // assume a control already holds the right value. Call this after any restore
+  // (editor open, DAW chunk load, session re-focus).
+  void _VolumSyncUiFromState();
+  // Apply one resolved UiSyncPlan to the cab row + channel stepper, and write the
+  // resolved custom routing back into the runtime caches.
+  void _VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool support);
+  // Build the plan input for the given lane from live backend state.
+  volum::UiSyncInput _VolumMakeUiSyncInput(bool support, const volum::custom::CustomAmp& customAmp);
   // Push the given lane's active custom IR onto the shared speaker row's IR chip
   // (empty/orphaned id -> chip off). Per-lane custom IR display.
   void _VolumReflectLaneIrChip(bool support);
