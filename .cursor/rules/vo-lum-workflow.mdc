@@ -28,9 +28,9 @@ alwaysApply: true
 ## Tests are mandatory, not optional
 
 - **Write tests for every confirmed-working feature or bugfix.** Do not wait for the user to ask.
-- **Verify each regression test fails with the fix reverted** (doctests and
-  `e2e-standalone-win.ps1` scenarios alike). One that passes against the broken
-  code is worse than none: it reports coverage that does not exist.
+- **Verify each regression test fails with the fix reverted**, doctests and
+  scripted end-to-end scenarios alike. One that passes against the broken code
+  is worse than none: it reports coverage that does not exist.
 - If a bug was caused by a missing test, add the test that would have caught it.
 - The rule attached to the code you are editing names the test files that own it.
 
