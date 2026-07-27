@@ -28,20 +28,16 @@ alwaysApply: true
 ## Tests are mandatory, not optional
 
 - **Write tests for every confirmed-working feature or bugfix.** Do not wait for the user to ask.
-- New DSP behavior → doctest in `NeuralAmpModeler/tests/`. Cover: no NaN, passthrough at zero mix, bounded output, all modes.
-- Main signal-chain behavior → `VoLumProcessingPlan.h` plus `test_volum_processing_plan.cpp` when it can be expressed as routing/enablement decisions.
-- New parameter → pin its index and step size in `test_eparam_order.cpp` / `test_keyboard_steps.cpp`.
-- New serialization path → version-branch test in `test_volum_chunk_version.cpp` and chunk round-trip/bounds coverage in `test_volum_chunk_codec.cpp`.
-- New main amp `.nam` under `rigs/` → keep `test_nam_rigs.cpp` loading it.
-- New PRE capture `.nam` under `rigs/PrePedals/` → update/keep `test_volum_pre_pedal_captures.cpp`, the PRE capture load-smoke in `test_nam_rigs.cpp`, and packaging verification.
+- **Verify each regression test fails with the fix reverted** (doctests and
+  `e2e-standalone-win.ps1` scenarios alike). One that passes against the broken
+  code is worse than none: it reports coverage that does not exist.
 - If a bug was caused by a missing test, add the test that would have caught it.
+- The rule attached to the code you are editing names the test files that own it.
 
 ## Code hygiene is part of the task
 
 - **Refactor proactively** when a file crosses ~500 lines or a class accumulates unrelated responsibilities. Don't wait to be asked.
-- Follow the existing file split pattern (see AGENTS.md "UI File Map"). New controls go in the correct file, not dumped into a monolith.
-- Keep fractal/art code in `VoLumFractalArt.h`, triptych/POST controls in `VoLumTriptych.h`, core controls in `VoLumCoreControls.h`.
-- If you add a new file, update the file map table in `AGENTS.md`.
+- New controls go in the owner file for that surface, never into a monolith or an umbrella header.
 
 ## Execution
 
@@ -49,7 +45,9 @@ alwaysApply: true
 - After failures: diagnose, fix, retry—do not stop after one error.
 - Kill stale `VoLum.exe` processes before rebuilding if the linker reports a locked file.
 - Shell is **Windows PowerShell 5.x**: chain commands with `;` plus `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`. Do not use `&&` / `||` — PowerShell 5.x rejects them as invalid statement separators.
-- Multi-line `git commit` messages use a PowerShell **here-string**, not a bash heredoc (`<<'EOF'` fails here): `$m = @'` … `'@` on its own line, then `git commit -m $m`.
+- Multi-line `git commit` messages: write the message to a temp file, then
+  `git commit -F <file>`. A bash heredoc is invalid here, and a here-string
+  passed to `-m` loses its line breaks and fails with pathspec errors.
 
 ## Scope discipline
 
