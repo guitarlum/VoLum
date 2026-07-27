@@ -87,13 +87,30 @@ path does not. With both endpoints unmuted and at full volume, input peaked at
 explains that, so it is the interface's front-panel gain, the monitor level, or
 which jack the cable is in. One minute with the box in hand settles it.
 
-Also unresolved: the Swissonic UA-2X2 has no native ASIO driver available — the
-Thomann page offers none for this model, and the current Thomann USB audio
-package targets a newer device. The fallback is FlexASIO, already downloaded to
-`C:\tmp\volum-loopback\FlexASIO-1.10b.exe`. It needs an elevated install, which
-this session could not perform. After installing it, re-run the loopback command
-above with `-Api asio -OutDevice FlexASIO -InDevice FlexASIO` and compare against
-the ASIO4ALL number.
+## Driver comparison — settled, keep ASIO4ALL
+
+The Swissonic UA-2X2 has no native ASIO driver: Thomann offers none for this
+model and the current Thomann USB audio package targets a newer device. FlexASIO
+was installed and measured as the fallback. Driver-reported round trip at 48 kHz
+with a 128-frame buffer:
+
+| Driver                        | Round trip |
+| ----------------------------- | ---------- |
+| ASIO4ALL v2                   | 21.2 ms    |
+| FlexASIO, WASAPI exclusive    | 48.3 ms    |
+| FlexASIO, WASAPI shared       | 49.4 ms    |
+| FlexASIO, MME (its default)   | 60.0 ms    |
+| FlexASIO, WDM-KS              | fails to open |
+
+Exclusive mode does engage — that is the 1 ms between the two WASAPI rows — but
+the ~48 ms floor is the UA-2X2's generic Windows USB-audio class driver, which
+WASAPI must go through and ASIO4ALL buffers more tightly around. So FlexASIO is
+not the win, and 21 ms is this interface's practical floor on this machine. The
+tuned config is kept at `%USERPROFILE%\FlexASIO.toml` so the comparison is
+reproducible; deleting it returns FlexASIO to its 60 ms MME default.
+
+ASIO4ALL's 21.21 ms also matches VoLum's own Settings readout of 21.2 ms
+exactly, which independently confirms the new latency line is honest.
 
 ## Not tested, by decision
 
