@@ -248,7 +248,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           const std::string& laneIrId =
             supportFocus ? _VolumActiveScene().supportActiveIrId : _VolumActiveScene().activeIrId;
           if (!laneIrId.empty())
-            _VolumClearIR(supportFocus);
+            _VolumClearIR(supportFocus, /*deferToCabSwap=*/true); // the picked cab's capture is about to load
           if (customLane >= 0)
           {
             // Channel-first: the row only enables cabs that carry the current gain
@@ -531,7 +531,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             // Clear an orphaned IR before the channel resolves to a non-DIRECT stage.
             if (newIdx >= 0 && newIdx < (int)chans.size() && !_VolumActiveScene().activeIrId.empty()
                 && !volum::custom::ChannelHasDirect(amp, chans[(size_t)newIdx]))
-              _VolumClearIR(false);
+              _VolumClearIR(false, /*deferToCabSwap=*/true); // the new channel's capture is about to load
             mVolumChannelIdx = std::clamp(newIdx, 0, std::max(0, (int)chans.size() - 1));
             _VolumApplyCustomMainCabs(mVolumCustomMainIdx, false);
             mVolumSettingsDirty = true;
@@ -580,7 +580,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             {
               const int chosen = chans[(size_t)newIdx];
               if (!_VolumActiveScene().supportActiveIrId.empty() && !volum::custom::ChannelHasDirect(amp, chosen))
-                _VolumClearIR(true);
+                _VolumClearIR(true, /*deferToCabSwap=*/true); // the new channel's capture is about to load
               mVolumCustomSupportChannel = chosen; // resolver keeps this channel
             }
             _VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true);

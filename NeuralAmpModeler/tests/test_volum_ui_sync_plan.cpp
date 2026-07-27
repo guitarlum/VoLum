@@ -149,6 +149,38 @@ TEST_CASE("Factory lane treats an orphaned IR id as no IR")
   CHECK(plan.cabSelectedIndex == 1);
 }
 
+TEST_CASE("Factory lane clears an IR id that no longer names anything")
+{
+  // Found by the end-to-end harness: hiding the chip was not enough, the dead id
+  // stayed in the scene and was written back on every save.
+  UiSyncInput in;
+  in.factorySpeakerIdx = 2;
+  in.irIdPresent = true;
+  in.irResolved = false;
+  in.irName = "deleted.wav";
+
+  const auto plan = MakeUiSyncPlan(in);
+  CHECK(plan.clearOrphanedIr == true);
+  CHECK(plan.irCabActive == false);
+  CHECK(plan.irName.empty());
+  // Clearing the reference must not disturb the cab the lane is actually on.
+  CHECK(plan.cabSelectedIndex == 2);
+}
+
+TEST_CASE("Factory lane keeps a resolvable IR id")
+{
+  UiSyncInput in;
+  in.factorySpeakerIdx = 0;
+  in.irIdPresent = true;
+  in.irResolved = true;
+  in.irName = "greenback.wav";
+
+  const auto plan = MakeUiSyncPlan(in);
+  CHECK(plan.clearOrphanedIr == false);
+  CHECK(plan.irCabActive == true);
+  CHECK(plan.irName == "greenback.wav");
+}
+
 TEST_CASE("Factory lane clamps a corrupt speaker index and channel position")
 {
   UiSyncInput in;

@@ -39,6 +39,7 @@
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
 #include "VoLumTremolo.h"
+#include "VoLumLatencyReport.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
@@ -281,6 +282,9 @@ private:
   // Exists so that we don't try to use a DSP module that's only
   // partially-instantiated.
   void _ApplyDSPStaging();
+  // VoLum: promote a pending deferred IR removal once its replacement capture is
+  // staged (or the wait deadline expires). Audio thread, mStagingMutex held.
+  void _VolumPromoteDeferredIrRemoval();
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
   // Fallback used when no main NAM model is loaded.
@@ -445,7 +449,9 @@ public:
   // DIRECT capture to convolve; the restore path passes false (silent skip).
   void _VolumSelectIR(int irIdx, bool support, bool interactive = true);
   // Drop the given lane's custom IR (back to the baked cab) and clear its IR id.
-  void _VolumClearIR(bool support);
+  // deferToCabSwap delays the convolver removal until the replacement cab capture
+  // is staged, so the two swap on one block instead of leaving a gap of raw amp.
+  void _VolumClearIR(bool support, bool deferToCabSwap = false);
   // Re-resolve a scene/preset's IR id for a lane on recall: stage it, or fall back
   // to the baked cab when the id is empty/orphaned (the referenced IR was deleted).
   void _VolumApplyActiveIr(const std::string& irId, bool support);
@@ -747,6 +753,9 @@ private:
   // Make sure that the latency is reported correctly.
   void _UpdateLatency();
 
+  // Plugin PDC plus, in the standalone, the audio device's own round trip.
+  volum::LatencyReport _VolumLatencyReport() const;
+
   // Update level meters
   // Called within ProcessBlock().
   // Assume _ProcessInput() and _ProcessOutput() were run immediately before.
@@ -805,6 +814,15 @@ private:
   std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
   std::atomic<bool> mShouldRemoveSupportIR = false;
+  // VoLum: switching from a custom IR to a baked cab drops the convolver only once
+  // the replacement capture is staged, so both swap on the same block instead of
+  // exposing a burst of raw, cab-less amp while the .nam loads asynchronously.
+  // The block counters bound that wait (see StepDeferredIrRemoval).
+  std::atomic<bool> mVolumDeferredRemoveIR = false;
+  std::atomic<bool> mVolumDeferredRemoveSupportIR = false;
+  std::atomic<int> mVolumDeferredRemoveIrBlocks = 0;
+  std::atomic<int> mVolumDeferredRemoveSupportIrBlocks = 0;
+  std::atomic<int> mVolumDeferredIrMaxBlocks = 512;
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;

@@ -248,6 +248,10 @@ if [ "$XCODEBUILD_JOBS" != "0" ]; then
   XCODEBUILD_JOB_ARGS=( -jobs "$XCODEBUILD_JOBS" )
 fi
 
+# Mirrors makedist-win.bat: the standalone target uses accessors added by the
+# local iPlug2 patches, so apply them before building. Idempotent.
+./iplug2-patches/apply-iplug2-patches.sh
+
 set -o pipefail
 echo "xcodebuild jobs: ${XCODEBUILD_JOBS}"
 if command -v xcpretty >/dev/null 2>&1; then

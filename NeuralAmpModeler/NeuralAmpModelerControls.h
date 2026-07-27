@@ -9,6 +9,8 @@
 // VoLum: custom controls and keyboard stepping (upstream-equivalent file fence)
 #include "VoLumControls.h"
 #include "VoLumKeyboardModel.h"
+#include "VoLumLatencyReport.h"
+#include "VoLumOutputMode.h"
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
 #define NAM_KNOB_HEIGHT 120.0f
@@ -736,12 +738,15 @@ public:
     mHasInfo = false;
   };
 
-  void SetCurrentLatency(int samples, double sampleRate)
+  void SetCurrentLatency(const volum::LatencyReport& report)
   {
-    const double ms = sampleRate > 0.0 ? 1000.0 * static_cast<double>(samples) / sampleRate : 0.0;
-    WDL_String text;
-    text.SetFormatted(80, "Current latency: %.1f ms (%d samples)", ms, samples);
-    static_cast<IVLabelControl*>(GetNamedChild(mControlNames.currentLatency))->SetStr(text.Get());
+#if defined(APP_API)
+    constexpr bool kStandalone = true;
+#else
+    constexpr bool kStandalone = false;
+#endif
+    static_cast<IVLabelControl*>(GetNamedChild(mControlNames.currentLatency))
+      ->SetStr(volum::FormatLatencyLine(report, kStandalone).c_str());
   }
 
   void Hide(bool hide) override
@@ -1096,18 +1101,23 @@ public:
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputCard), mControlNames.outputGroupFrame);
       AddNamedChildControl(new VoLumSettingsGroupFrameControl(perfCard), mControlNames.perfGroupFrame);
 
-      // --- Input calibration: dBu field stacked above the Calibrate switch ---
+      // --- Input calibration: dBu field, Calibrate switch, and a status line ---
+      // The status line is what turns a grayed-out card into an explanation; see
+      // volum::InputCalibrationHelpText.
       {
         const IRECT body = bodyOf(inputCard);
         const float fieldH = 30.f;
         const float fieldW = std::min(120.f, body.W());
         const float switchH = NAM_SWTICH_HEIGHT;
         const float gap = 6.f;
-        const float stackH = fieldH + gap + switchH;
+        const float helpH = 16.f;
+        const float stackH = fieldH + gap + switchH + gap + helpH;
         IRECT stack = body.GetCentredInside(body.W(), std::min(body.H(), stackH));
         const IRECT fieldR = stack.ReduceFromTop(fieldH).GetCentredInside(fieldW, fieldH);
         (void)stack.ReduceFromTop(gap);
         const IRECT switchR = stack.ReduceFromTop(switchH).GetCentredInside(std::min(110.f, body.W()), switchH);
+        (void)stack.ReduceFromTop(gap);
+        const IRECT helpR = stack.ReduceFromTop(helpH);
 
         auto* inputLevelControl =
           AddNamedChildControl(new InputLevelControl(fieldR, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
@@ -1117,6 +1127,10 @@ public:
           "enters this plugin.");
         AddNamedChildControl(new NAMSwitchControl(switchR, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
                              mControlNames.calibrateInput, kCtrlTagCalibrateInput);
+        const IVStyle inputHelpStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+          IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.7f), "Josefin-Sans", EAlign::Center, EVAlign::Top));
+        AddNamedChildControl(
+          new IVLabelControl(helpR, volum::InputCalibrationHelpText(false), inputHelpStyle), mControlNames.inputHelp);
       }
 
       // --- Output mode: Raw / Normalized / Calibrated radios ---
@@ -1191,11 +1205,24 @@ public:
     modelInfoControl->SetModelInfo(modelInfo);
   };
 
-  void SetCurrentLatency(int samples, double sampleRate)
+  void SetCurrentLatency(const volum::LatencyReport& report)
   {
     auto* modelInfoControl = static_cast<ModelInfoControl*>(GetNamedChild(mControlNames.modelInfo));
     assert(modelInfoControl != nullptr);
-    modelInfoControl->SetCurrentLatency(samples, sampleRate);
+    modelInfoControl->SetCurrentLatency(report);
+  }
+
+  // Keep the input-calibration card's status line and tooltip in step with whether
+  // the loaded model can actually be calibrated against.
+  void SetInputCalibrationAvailable(bool available)
+  {
+    if (auto* help = GetNamedChild(mControlNames.inputHelp))
+    {
+      static_cast<ITextControl*>(help)->SetStr(volum::InputCalibrationHelpText(available));
+      help->SetDirty(false);
+    }
+    if (auto* sw = GetNamedChild(mControlNames.calibrateInput))
+      sw->SetTooltip(volum::InputCalibrationTooltip(available));
   }
 
 private:
@@ -1230,6 +1257,7 @@ private:
     const std::string liteMode = "LiteMode";
     const std::string perfSection = "PerfSection";
     const std::string perfHelp = "PerfHelp";
+    const std::string inputHelp = "InputHelp";
     const std::string audioHint = "AudioHint";
   } mControlNames;
 

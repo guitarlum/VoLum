@@ -193,10 +193,15 @@ public:
       for (const auto& hs : mPopupHotspots)
         if (hs.first.Contains(x, y))
         {
-          HandlePopup(hs.second);
+          HandlePopup(hs.second, hs.first);
           return;
         }
-      mPopupOpen = false; // click elsewhere closes the popup
+      // Only a click OUTSIDE dismisses. Clicking the popover's own chrome - its
+      // title, the gaps between rows, a grayed-out stepper - used to close it,
+      // which made the IR editor feel like it was fighting the user.
+      if (mPopupRect.Contains(x, y))
+        return;
+      mPopupOpen = false;
       SetDirty(false);
       return;
     }
@@ -295,6 +300,11 @@ public:
   void OnTextEntryCompletion(const char* str, int) override
   {
     using namespace volum::custom;
+    if (IsIrValueTarget(mTextTarget))
+    {
+      ApplyIrValueEntry(str ? str : "");
+      return;
+    }
     const std::string s = ClampName(str ? str : "", (std::size_t)NameEntryCap(mTextTarget));
     switch (mTextTarget)
     {
@@ -383,8 +393,16 @@ private:
     NewItem,
     RenameItem,
     ProfileName,
-    CabName
+    CabName,
+    IrTrim,
+    IrLowCut,
+    IrHighCut
   };
+
+  static bool IsIrValueTarget(TextTarget t)
+  {
+    return t == TextTarget::IrTrim || t == TextTarget::IrLowCut || t == TextTarget::IrHighCut;
+  }
 
   enum class PopupKind
   {
@@ -401,8 +419,34 @@ private:
     kIrCfgLowDown,
     kIrCfgLowUp,
     kIrCfgHighDown,
-    kIrCfgHighUp
+    kIrCfgHighUp,
+    // Clicking a value field types the number directly instead of stepping to it.
+    kIrCfgTrimEdit,
+    kIrCfgLowEdit,
+    kIrCfgHighEdit
   };
+
+  // IR shaping popover geometry. The panel height is derived from these rather than
+  // hardcoded, so rows always fill it exactly - the 1.2.1 build had 16 px of dead
+  // space under the last row because the two numbers were maintained separately.
+  static constexpr float kIrPopupW = 268.f;
+  static constexpr float kIrPopupPad = 12.f;
+  static constexpr float kIrPopupTitleH = 18.f;
+  static constexpr float kIrPopupTitleGap = 10.f;
+  static constexpr float kIrPopupRowH = 26.f;
+  static constexpr float kIrPopupRowGap = 8.f;
+  static constexpr int kIrPopupRows = 3;
+  static constexpr float kIrPopupH = 2.f * kIrPopupPad + kIrPopupTitleH + kIrPopupTitleGap +
+                                     kIrPopupRows * kIrPopupRowH + (kIrPopupRows - 1) * kIrPopupRowGap;
+  static constexpr float kIrRowLabelW = 62.f;
+  static constexpr float kIrRowBtnW = 24.f;
+  static constexpr float kIrRowBtnGap = 5.f;
+
+  static IRECT IrRowRect(const IRECT& inner, int row)
+  {
+    const float t = inner.T + kIrPopupTitleH + kIrPopupTitleGap + row * (kIrPopupRowH + kIrPopupRowGap);
+    return IRECT(inner.L, t, inner.R, t + kIrPopupRowH);
+  }
 
   IRECT PanelRect() const
   {
@@ -610,6 +654,9 @@ private:
   {
     switch (target)
     {
+      case TextTarget::IrTrim:
+      case TextTarget::IrLowCut:
+      case TextTarget::IrHighCut: return 12; // "-12.5 dB", "16.0 kHz", "Off"
       case TextTarget::CabName: return 3;
       case TextTarget::ProfileName: return (int)volum::custom::kMaxCustomNameLen; // amp name
       case TextTarget::NewItem: return (int)volum::custom::kMaxPresetNameLen; // new preset
@@ -620,14 +667,31 @@ private:
     }
   }
 
-  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current)
+  // Typed entry inside the IR popover. The field is grown a little past the value
+  // rect so a caret plus "-12.5 dB" is comfortably readable, and the popover stays
+  // open underneath so the result is visible the moment the entry commits.
+  void StartIrValueEntry(TextTarget target, const IRECT& valueRect, const std::string& current)
+  {
+    IRECT box = valueRect.GetPadded(2.f);
+    if (box.W() < 90.f)
+      box = IRECT(box.R - 90.f, box.T, box.R, box.B);
+    // Centred, unlike the left-aligned name fields: these rows read as values and
+    // the entry sits exactly where the value was, so left-aligning it makes the
+    // text jump sideways the moment the field opens.
+    IText centred = mEntryText;
+    centred.mAlign = EAlign::Center;
+    StartTextEntry(target, box, current, &centred);
+  }
+
+  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current,
+                      const IText* style = nullptr)
   {
     auto* ui = GetUI();
     if (!ui)
       return;
     mTextTarget = target;
     SetTextEntryLength(NameEntryCap(target));
-    ui->CreateTextEntry(*this, mEntryText, bounds, current.c_str());
+    ui->CreateTextEntry(*this, style ? *style : mEntryText, bounds, current.c_str());
   }
 
   /* ---------------- action handling ---------------- */
@@ -882,7 +946,7 @@ private:
       return;
     mPopupKind = PopupKind::IrSettings;
     mPopupIrIdx = irIdx;
-    const float w = 248.f, h = 150.f;
+    const float w = kIrPopupW, h = kIrPopupH;
     const IRECT panel = PanelRect();
     float left = anchor.R - w; // hang left from the gear so it stays on-panel
     if (left < panel.L + 6.f)
@@ -912,12 +976,12 @@ private:
     SetDirty(false);
   }
 
-  void HandlePopup(int code)
+  void HandlePopup(int code, const IRECT& rect)
   {
     using namespace volum::custom;
     if (mPopupKind == PopupKind::IrSettings)
     {
-      HandleIrSettingsPopup(code - kPopupBase);
+      HandleIrSettingsPopup(code - kPopupBase, rect);
       return;
     }
     const int j = code - kPopupBase;
@@ -951,7 +1015,7 @@ private:
 
   // One +/- click on the IR editor: step the value, persist, and re-push live so the
   // audible level/tone change is immediate. The popover stays open for further tweaks.
-  void HandleIrSettingsPopup(int act)
+  void HandleIrSettingsPopup(int act, const IRECT& rect)
   {
     using namespace volum::custom;
     if (mPopupIrIdx < 0 || mPopupIrIdx >= (int)mItems.size())
@@ -963,6 +1027,11 @@ private:
     IRShaping s = IRShapingAt(mPopupIrIdx);
     switch (act)
     {
+      // Prefilled with the formatted value on purpose: it doubles as a hint that
+      // "1.5 kHz", "-3 dB" and "Off" are all accepted spellings.
+      case kIrCfgTrimEdit: StartIrValueEntry(TextTarget::IrTrim, rect, FmtIrTrim(s.trimDb)); return;
+      case kIrCfgLowEdit: StartIrValueEntry(TextTarget::IrLowCut, rect, FmtIrCut(s.lowCutHz)); return;
+      case kIrCfgHighEdit: StartIrValueEntry(TextTarget::IrHighCut, rect, FmtIrCut(s.highCutHz)); return;
       case kIrCfgTrimDown: s.trimDb = volum::content::StepIrTrimDb(s.trimDb, -1); break;
       case kIrCfgTrimUp: s.trimDb = volum::content::StepIrTrimDb(s.trimDb, +1); break;
       case kIrCfgLowDown: s.lowCutHz = volum::content::StepIrLowCutHz(s.lowCutHz, -1); break;
@@ -973,6 +1042,32 @@ private:
     }
     SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
     NotifyChanged(); // plugin migrates/re-pushes shaping to the live IR lanes
+    SetDirty(false);
+  }
+
+  // Commit a typed IR value. Typed numbers are continuous within the control's
+  // range rather than snapped to the stepper ladder - someone who types 137 Hz
+  // means 137 Hz. Unparseable text leaves the value alone instead of resetting it.
+  void ApplyIrValueEntry(const std::string& text)
+  {
+    using namespace volum::custom;
+    const TextTarget target = mTextTarget;
+    mTextTarget = TextTarget::None;
+    if (mPopupIrIdx < 0 || mPopupIrIdx >= (int)mItems.size())
+    {
+      SetDirty(false);
+      return;
+    }
+    IRShaping s = IRShapingAt(mPopupIrIdx);
+    switch (target)
+    {
+      case TextTarget::IrTrim: s.trimDb = volum::content::ApplyTypedIrTrimDb(text, s.trimDb); break;
+      case TextTarget::IrLowCut: s.lowCutHz = volum::content::ApplyTypedIrLowCutHz(text, s.lowCutHz); break;
+      case TextTarget::IrHighCut: s.highCutHz = volum::content::ApplyTypedIrHighCutHz(text, s.highCutHz); break;
+      default: SetDirty(false); return;
+    }
+    SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
+    NotifyChanged();
     SetDirty(false);
   }
 
@@ -1016,28 +1111,43 @@ private:
   }
 
   // One label / value / [-] [+] line inside the IR editor. `downAct`/`upAct` are
-  // popup action offsets registered as hotspots for the steppers.
+  // popup action offsets registered as hotspots for the steppers, `editAct` makes the
+  // value field itself clickable for typed entry. A stepper at its rail is drawn dim
+  // and registers no hotspot, so it neither reacts nor dismisses the popover.
   void DrawIrStepperRow(IGraphics& g, const IRECT& row, const char* label, const std::string& value, int downAct,
-                        int upAct)
+                        int upAct, int editAct, volum::content::IrStepAvail avail)
   {
-    const float btnW = 22.f;
-    g.DrawText(IText(11.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), label,
-               row.GetPadded(0.f, 0.f, 0.f, 0.f));
-    const IRECT plus(row.R - btnW, row.T, row.R, row.B);
-    const IRECT minus(plus.L - 4.f - btnW, row.T, plus.L - 4.f, row.B);
-    const IRECT valueR(row.L + 58.f, row.T, minus.L - 6.f, row.B);
-    g.DrawText(IText(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Far, EVAlign::Middle), value.c_str(), valueR);
-    for (const auto& b : {std::make_pair(minus, false), std::make_pair(plus, true)})
+    g.DrawText(IText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), label,
+               IRECT(row.L, row.T, row.L + kIrRowLabelW, row.B));
+
+    const IRECT plus(row.R - kIrRowBtnW, row.T, row.R, row.B);
+    const IRECT minus(plus.L - kIrRowBtnGap - kIrRowBtnW, row.T, plus.L - kIrRowBtnGap, row.B);
+    const IRECT valueR(row.L + kIrRowLabelW, row.T, minus.L - 8.f, row.B);
+
+    // The value reads as an editable field so the typed-entry affordance is visible
+    // without a hover, matching how the rest of the overlay marks click targets.
+    g.FillRoundRect(VoLumColors::BTN_OFF_BG, valueR, 3.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, valueR, 3.f, nullptr, 1.f);
+    g.DrawText(IText(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), value.c_str(),
+               valueR);
+    mPopupHotspots.emplace_back(valueR, kPopupBase + editAct);
+
+    const std::pair<IRECT, bool> btns[] = {{minus, false}, {plus, true}};
+    const bool enabled[] = {avail.canDown, avail.canUp};
+    for (int i = 0; i < 2; ++i)
     {
-      g.FillRoundRect(VoLumColors::BTN_OFF_BG, b.first, 3.f);
-      g.DrawRoundRect(VoLumColors::TEAL_DIM, b.first, 3.f, nullptr, 1.f);
-      const float cx = b.first.MW(), cy = b.first.MH();
-      g.DrawLine(VoLumColors::CREAM, cx - 4.f, cy, cx + 4.f, cy, nullptr, 1.4f);
-      if (b.second)
-        g.DrawLine(VoLumColors::CREAM, cx, cy - 4.f, cx, cy + 4.f, nullptr, 1.4f);
+      const IRECT& r = btns[i].first;
+      const bool on = enabled[i];
+      g.FillRoundRect(on ? VoLumColors::BTN_OFF_BG : IColor(8, 200, 162, 78), r, 3.f);
+      g.DrawRoundRect(on ? VoLumColors::TEAL_DIM : IColor(60, 120, 140, 120), r, 3.f, nullptr, 1.f);
+      const IColor glyph = on ? VoLumColors::CREAM : IColor(70, 220, 214, 190);
+      const float cx = r.MW(), cy = r.MH();
+      g.DrawLine(glyph, cx - 4.f, cy, cx + 4.f, cy, nullptr, 1.4f);
+      if (btns[i].second)
+        g.DrawLine(glyph, cx, cy - 4.f, cx, cy + 4.f, nullptr, 1.4f);
+      if (on)
+        mPopupHotspots.emplace_back(r, kPopupBase + (btns[i].second ? upAct : downAct));
     }
-    mPopupHotspots.emplace_back(minus, kPopupBase + downAct);
-    mPopupHotspots.emplace_back(plus, kPopupBase + upAct);
   }
 
   void DrawIrSettingsPopup(IGraphics& g)
@@ -1046,19 +1156,18 @@ private:
     g.FillRoundRect(VoLumColors::HERO_BG, mPopupRect, 4.f);
     g.DrawRoundRect(VoLumColors::TEAL_DIM, mPopupRect, 4.f, nullptr, 1.5f);
     const IRShaping s = IRShapingAt(mPopupIrIdx);
-    const IRECT inner = mPopupRect.GetPadded(-10.f);
-    const IRECT title(inner.L, inner.T, inner.R, inner.T + 20.f);
+    const IRECT inner = mPopupRect.GetPadded(-kIrPopupPad);
+    const IRECT title(inner.L, inner.T, inner.R, inner.T + kIrPopupTitleH);
     g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "IR SHAPING", title);
-    const float rowH = 30.f;
-    float t = title.B + 4.f;
-    DrawIrStepperRow(g, IRECT(inner.L, t, inner.R, t + rowH), "Level", FmtIrTrim(s.trimDb), kIrCfgTrimDown,
-                     kIrCfgTrimUp);
-    t += rowH;
-    DrawIrStepperRow(g, IRECT(inner.L, t, inner.R, t + rowH), "Low cut", FmtIrCut(s.lowCutHz), kIrCfgLowDown,
-                     kIrCfgLowUp);
-    t += rowH;
-    DrawIrStepperRow(g, IRECT(inner.L, t, inner.R, t + rowH), "High cut", FmtIrCut(s.highCutHz), kIrCfgHighDown,
-                     kIrCfgHighUp);
+    g.DrawText(IText(9.f, VoLumColors::CREAM_DIM, "Josefin-Regular", EAlign::Far, EVAlign::Middle), "click a value to type",
+               title);
+
+    DrawIrStepperRow(g, IrRowRect(inner, 0), "Level", FmtIrTrim(s.trimDb), kIrCfgTrimDown, kIrCfgTrimUp,
+                     kIrCfgTrimEdit, volum::content::IrTrimStepAvail(s.trimDb));
+    DrawIrStepperRow(g, IrRowRect(inner, 1), "Low cut", FmtIrCut(s.lowCutHz), kIrCfgLowDown, kIrCfgLowUp,
+                     kIrCfgLowEdit, volum::content::IrLowCutStepAvail(s.lowCutHz));
+    DrawIrStepperRow(g, IrRowRect(inner, 2), "High cut", FmtIrCut(s.highCutHz), kIrCfgHighDown, kIrCfgHighUp,
+                     kIrCfgHighEdit, volum::content::IrHighCutStepAvail(s.highCutHz));
   }
 
   /* ---------------- shared draw helpers ---------------- */

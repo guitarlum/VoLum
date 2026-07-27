@@ -20,6 +20,9 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_ui_regressions.cpp
   test_volum_ui_sync_plan.cpp
   test_volum_upgrade_migration.cpp
+  test_volum_input_calibration.cpp
+  test_volum_diag_log.cpp
+  test_volum_latency_report.cpp
   test_volum_amp_list_scroll.cpp
   test_volum_amp_catalog.cpp
   test_delay_reverb_dsp.cpp

@@ -411,9 +411,10 @@ void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool
   row->SetIrEnabled(plan.irEnabled, "Custom IR needs a DIRECT capture");
 
   // The resolved channel cannot host this lane's stored IR; drop it so a real cab
-  // takes over. _VolumClearIR also turns the chip off, hence the ordering.
+  // takes over. _VolumClearIR also turns the chip off, hence the ordering. That
+  // cab's capture is staged below, so the removal rides along with it.
   if (plan.clearOrphanedIr)
-    _VolumClearIR(support);
+    _VolumClearIR(support, /*deferToCabSwap=*/true);
 
   row->SetIrCab(plan.irCabActive, plan.irName.c_str());
   row->SetSelected(plan.cabSelectedIndex);
@@ -646,10 +647,20 @@ void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
   }
 }
 
-void NeuralAmpModeler::_VolumClearIR(bool support)
+void NeuralAmpModeler::_VolumClearIR(bool support, bool deferToCabSwap)
 {
-  // audio thread drops the lane's convolver in _ApplyDSPStaging
-  (support ? mShouldRemoveSupportIR : mShouldRemoveIR) = true;
+  // The audio thread drops the lane's convolver in _ApplyDSPStaging. When a baked
+  // cab is taking over, defer that to the block its capture goes live: the .nam
+  // loads asynchronously, so dropping the IR now would expose a short burst of raw,
+  // cab-less amp. Paths with no replacement coming (the IR menu's "None", which
+  // leaves the lane on the DIRECT capture it already has) clear immediately.
+  if (deferToCabSwap)
+  {
+    (support ? mVolumDeferredRemoveSupportIrBlocks : mVolumDeferredRemoveIrBlocks).store(0);
+    (support ? mVolumDeferredRemoveSupportIR : mVolumDeferredRemoveIR).store(true);
+  }
+  else
+    (support ? mShouldRemoveSupportIR : mShouldRemoveIR) = true;
   if (support)
     _VolumActiveScene().supportActiveIrId.clear();
   else
@@ -766,14 +777,19 @@ void NeuralAmpModeler::_VolumMigrateIrTrims()
     ir.trimDb = trimDb;
     ir.trimCalibrated = true;
     changed = true;
+    VOLUM_LOG("migrate", "IR '" + ir.name + "' auto-normalized to " + std::to_string(trimDb) + " dB");
   }
   if (!changed)
     return;
   // This rewrites the user's library in place and cannot be undone by going back
   // to 1.2.0 (a v2 build that re-saves drops trimDb/lowCutHz/highCutHz), so keep
   // a one-time pre-migration copy alongside it.
-  volum::content::GlobalContentStore().BackupBeforeMigration("1.2.1");
+  const bool backedUp = volum::content::GlobalContentStore().BackupBeforeMigration("1.2.1");
   volum::content::GlobalContentStore().Save();
+  VOLUM_LOG("migrate", std::string("IR trim migration saved; pre-migration backup ")
+                         + (backedUp ? "written to " + volum::content::PathToUtf8(
+                                         volum::content::GlobalContentStore().MigrationBackupPath("1.2.1"))
+                                     : "unavailable"));
 }
 
 void NeuralAmpModeler::_VolumReconcileActiveIr()

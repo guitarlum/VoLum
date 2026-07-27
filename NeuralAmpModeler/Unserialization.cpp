@@ -1,5 +1,6 @@
 #include "VoLumChunkVersion.h"
 #include "VoLumChunkLayout.h"
+#include "VoLumDiagLog.h"
 #include "VoLumJsonMigration.h"
 
 // Unserialization
@@ -588,6 +589,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // You shouldn't be here...
     assert(false);
   }
+  VOLUM_LOG("chunk", "decoded state written by version " + versionStr + " (" + std::to_string(chunk.Size())
+                       + " bytes, this build reads " + std::to_string(kNumParams) + " params)");
   // v0.9.0 migration: applied for ALL pre-0.9.0 chunks regardless of which
   // _GetConfigFrom_X_X_X path produced the dict above. Each pre-0.9.0 loader's per-version
   // _UpdateConfigFrom only chains backwards (predecessor), so this single call is what
@@ -763,6 +766,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       mVolumRestoreCustomMainId = restored.customMainId;
       mVolumRestorePresetId = restored.activePresetId;
       mVolumDidRestorePresetSelection = false;
+      VOLUM_LOG("chunk", "id tail: customMain='" + restored.customMainId + "' preset='" + restored.activePresetId
+                           + "' ampIdx=" + std::to_string(mVolumAmpIdx));
 
       const int cmi = volum::custom::CustomAmpIndexById(idTail.customMainId);
       if (cmi >= 0)

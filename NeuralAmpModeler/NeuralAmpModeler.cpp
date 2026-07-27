@@ -21,8 +21,15 @@
 // clang-format on
 #include "architecture.hpp"
 
+#if defined(APP_API)
+// Standalone only: lets the Settings page report the audio device's real round-trip
+// latency instead of just our algorithmic delay. See _VolumLatencyReport.
+#include "IPlugAPP_host.h"
+#endif
+
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumDiagLog.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumLevelMute.h"
 #include "VoLumMasterSafety.h"
@@ -291,10 +298,24 @@ const double kDefaultInputCalibrationLevel = 12.0;
 // amps are offset by this base so the select callback can tell them apart.
 constexpr int kVolumCustomSupportBase = 10000;
 
+// Which build wrote a diagnostic log line. Standalone and plugin instances share one
+// log file, and "which one was running" is usually the first question.
+#if defined(APP_API)
+constexpr const char* kVolumDiagApiName = "standalone";
+#elif defined(VST3_API)
+constexpr const char* kVolumDiagApiName = "vst3";
+#elif defined(AU_API) || defined(AUv3_API)
+constexpr const char* kVolumDiagApiName = "au";
+#else
+constexpr const char* kVolumDiagApiName = "plugin";
+#endif
+
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 : Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
+  volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
+  VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
   _InitToneStack();
   nam::activations::Activation::enable_fast_tanh();
   GetParam(kInputLevel)->InitGain("Input", 0.0, -20.0, 20.0, 0.1);
@@ -711,6 +732,10 @@ void NeuralAmpModeler::OnReset()
   mSupportHighPass.SetParams(highPassParams);
   mMasterSafetyHoldSamples = 0;
   mMasterSafetyEngaged.store(false);
+  // Cap a deferred IR removal at ~2 seconds of audio, expressed in blocks so the
+  // audio thread only has to count. A capture that never loads must not leave the
+  // IR convolving forever - that would be a worse artifact than the gap it avoids.
+  mVolumDeferredIrMaxBlocks.store(std::max(1, static_cast<int>(std::ceil(2.0 * sampleRate / std::max(1, maxBlockSize)))));
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -748,6 +773,10 @@ void NeuralAmpModeler::OnReset()
   mTunerDSP.Reset(sampleRate);
   mMetronomeDSP.Reset(sampleRate);
   _UpdateLatency();
+  VOLUM_LOG("audio", "reset: " + std::to_string(static_cast<int>(sampleRate)) + " Hz, block " +
+                       std::to_string(maxBlockSize) + ", in " + std::to_string(NInChansConnected()) + " / out " +
+                       std::to_string(NOutChansConnected()) + ", plugin latency " + std::to_string(GetLatency()) +
+                       " samples");
 }
 
 void NeuralAmpModeler::OnIdle()
@@ -791,6 +820,9 @@ void NeuralAmpModeler::OnIdle()
       {
         mVolumRequestedMainFile = amp.name;
         mVolumMainLoadError = "LOAD FAILED - custom capture path is missing";
+        VOLUM_LOG("model", "MAIN load FAILED: no capture in '" + amp.name + "' for slot "
+                             + std::to_string(mVolumCustomMainSlot) + " channel "
+                             + std::to_string(mVolumCustomMainChannel));
       }
     }
     else if (mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
@@ -811,6 +843,9 @@ void NeuralAmpModeler::OnIdle()
         if (!std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad), pathError) || pathError)
         {
           mVolumMainLoadError = "LOAD FAILED - copied custom capture is missing";
+          // The registry still lists this capture, so only the log can say which
+          // file went missing under the content library.
+          VOLUM_LOG("model", "MAIN load FAILED: capture file missing " + fileToLoad);
           mVolumIsLoading.store(false);
           fileToLoad.clear();
         }
@@ -1635,6 +1670,11 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     std::lock_guard<std::mutex> lock(mStagingMutex);
 
+    // VoLum: the staged models below have not been moved yet, so promoting here
+    // lets a deferred IR removal land on the same block as its replacement cab
+    // capture - the swap the user hears as seamless.
+    _VolumPromoteDeferredIrRemoval();
+
     if (mShouldRemoveModel)
     {
       mModel = nullptr;
@@ -1729,6 +1769,25 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   }
 }
 
+void NeuralAmpModeler::_VolumPromoteDeferredIrRemoval()
+{
+  const int maxBlocks = mVolumDeferredIrMaxBlocks.load(std::memory_order_relaxed);
+  auto step = [maxBlocks](std::atomic<bool>& pending, std::atomic<int>& waited, std::atomic<bool>& remove,
+                          bool replacementStaged) {
+    const auto out = volum::dsp_staging::StepDeferredIrRemoval(
+      pending.load(std::memory_order_relaxed), waited.load(std::memory_order_relaxed), replacementStaged, maxBlocks);
+    if (out.fire)
+    {
+      pending.store(false, std::memory_order_relaxed);
+      remove.store(true, std::memory_order_relaxed);
+    }
+    waited.store(out.waitedBlocks, std::memory_order_relaxed);
+  };
+  step(mVolumDeferredRemoveIR, mVolumDeferredRemoveIrBlocks, mShouldRemoveIR, mStagedModel != nullptr);
+  step(mVolumDeferredRemoveSupportIR, mVolumDeferredRemoveSupportIrBlocks, mShouldRemoveSupportIR,
+       mStagedSupportModel != nullptr);
+}
+
 void NeuralAmpModeler::_DeallocateIOPointers()
 {
   if (mInputPointers != nullptr)
@@ -1810,12 +1869,10 @@ void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBl
 
 void NeuralAmpModeler::_SetInputGain()
 {
-  iplug::sample inputGainDB = GetParam(kInputLevel)->Value();
-  // Input calibration
-  if ((mModel != nullptr) && (mModel->HasInputLevel()) && GetParam(kCalibrateInput)->Bool())
-  {
-    inputGainDB += GetParam(kInputCalibrationLevel)->Value() - mModel->GetInputLevel();
-  }
+  const bool hasInputLevel = (mModel != nullptr) && mModel->HasInputLevel();
+  const iplug::sample inputGainDB = volum::ComputeInputGainDb(
+    GetParam(kInputLevel)->Value(), GetParam(kCalibrateInput)->Bool(), hasInputLevel,
+    hasInputLevel ? mModel->GetInputLevel() : 0.0, GetParam(kInputCalibrationLevel)->Value());
   mInputGain = DBToAmp(inputGainDB);
 }
 
@@ -1888,6 +1945,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       mStagedModel = std::move(temp);
       volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);
     }
+    VOLUM_LOG("model", std::string("staged ") + modelPath.Get());
   }
   catch (std::runtime_error& e)
   {
@@ -1898,6 +1956,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     }
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
+    VOLUM_LOG("model", std::string("load FAILED ") + modelPath.Get() + " : " + e.what());
     return e.what();
   }
   return "";
@@ -1990,6 +2049,11 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
     }
   }
 
+  VOLUM_LOG("ir", std::string(wavState == dsp::wav::LoadReturnCode::SUCCESS ? "staged " : "load FAILED ")
+                    + (support ? "[support] " : "[main] ") + irPath.Get()
+                    + (wavState == dsp::wav::LoadReturnCode::SUCCESS
+                         ? ""
+                         : " (code " + std::to_string(static_cast<int>(wavState)) + ")"));
   return wavState;
 }
 
@@ -2101,11 +2165,13 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
     modelInfo.outputCalibrationLevel.known = mModel->HasOutputLevel();
     modelInfo.outputCalibrationLevel.value = mModel->HasOutputLevel() ? mModel->GetOutputLevel() : 0.0;
 
-    static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->SetModelInfo(modelInfo);
+    auto* settings = static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox));
+    settings->SetModelInfo(modelInfo);
 
-    const bool disableInputCalibrationControls = !mModel->HasInputLevel();
-    pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetDisabled(disableInputCalibrationControls);
-    pGraphics->GetControlWithTag(kCtrlTagInputCalibrationLevel)->SetDisabled(disableInputCalibrationControls);
+    const bool canCalibrateInput = mModel->HasInputLevel();
+    pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetDisabled(!canCalibrateInput);
+    pGraphics->GetControlWithTag(kCtrlTagInputCalibrationLevel)->SetDisabled(!canCalibrateInput);
+    settings->SetInputCalibrationAvailable(canCalibrateInput);
     {
       auto* c = static_cast<OutputModeControl*>(pGraphics->GetControlWithTag(kCtrlTagOutputMode));
       c->SetNormalizedDisable(!mModel->HasLoudness());
@@ -2161,8 +2227,28 @@ void NeuralAmpModeler::_UpdateLatency()
   if (auto* pGraphics = GetUI())
   {
     if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
-      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(GetLatency(), GetSampleRate());
+      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(_VolumLatencyReport());
   }
+}
+
+// Gather everything the Settings page needs to talk about latency honestly. In the
+// standalone we own the audio device, so the buffer size and the driver's reported
+// round trip are both reachable through the app host; in a plugin the host owns them
+// and only our PDC is ours to report.
+volum::LatencyReport NeuralAmpModeler::_VolumLatencyReport() const
+{
+  volum::LatencyReport r;
+  r.pluginSamples = GetLatency();
+  r.sampleRate = GetSampleRate();
+  r.bufferFrames = GetBlockSize();
+#if defined(APP_API)
+  if (auto* host = iplug::IPlugAPPHost::sInstance.get())
+  {
+    r.bufferFrames = static_cast<int>(host->GetIOBufferSize());
+    r.driverFrames = static_cast<int>(host->GetStreamLatencyFrames());
+  }
+#endif
+  return r;
 }
 
 void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPointer, const size_t nFrames,
