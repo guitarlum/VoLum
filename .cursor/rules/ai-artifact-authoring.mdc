@@ -3,7 +3,6 @@ description: How to choose between a script, a scoped rule, a skill, an always-a
 globs:
   - .cursor/rules/*.mdc
   - .cursor/skills/**/SKILL.md
-  - .agents/skills/**/SKILL.md
   - AGENTS.md
 alwaysApply: false
 ---
