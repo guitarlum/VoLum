@@ -9,12 +9,21 @@
 // shifting it reads 0.0 ms while the player hears well over 20 ms of ASIO round trip.
 //
 // So in the standalone we report the round trip: our PDC plus the audio interface's
-// input-to-output delay. The driver's own figure is preferred when RtAudio can get
-// one (ASIO drivers report it and it already includes their buffering); otherwise we
-// estimate two buffers, and say so, rather than quietly presenting a guess as fact.
+// input-to-output delay, but only when the driver actually reports that delay (ASIO
+// drivers do, and their figure already includes their own buffering).
+//
+// When the driver reports nothing we state no total at all. The obvious stand-in -
+// two buffers - is not a conservative estimate, it is a flattering one: at 128 frames
+// it claims 5.3 ms, while a hardware loopback on the same machine and buffer measured
+// 63.7 ms through WASAPI and 21.2 ms through ASIO4ALL. A wrong small number reads as
+// authoritative, which is worse than the 0.0 ms it was meant to replace.
 //
 // In a plugin the host owns the I/O buffer and shows its own round trip, so there we
 // keep reporting our PDC and name it as such.
+//
+// Two lines, because one line of this does not fit the Settings box and silently
+// clipped its own closing bracket. The headline carries the number; the detail line
+// carries the caveat.
 //
 // Pure and header-only so the wording and the arithmetic are doctested.
 
@@ -40,51 +49,70 @@ inline double LatencyMs(int samples, double sampleRate)
   return 1000.0 * static_cast<double>(samples) / sampleRate;
 }
 
+inline bool operator==(const LatencyReport& a, const LatencyReport& b)
+{
+  return a.pluginSamples == b.pluginSamples && a.bufferFrames == b.bufferFrames && a.driverFrames == b.driverFrames
+         && a.sampleRate == b.sampleRate;
+}
+
+inline bool operator!=(const LatencyReport& a, const LatencyReport& b)
+{
+  return !(a == b);
+}
+
 inline bool DriverLatencyKnown(const LatencyReport& r)
 {
   return r.driverFrames > 0;
 }
 
-// The I/O half of the round trip: the driver's figure when we have it, otherwise the
-// classic two-buffer estimate (one block being captured while the previous plays).
-inline int IoRoundTripFrames(const LatencyReport& r)
-{
-  return DriverLatencyKnown(r) ? r.driverFrames : 2 * r.bufferFrames;
-}
-
+// Only meaningful when the driver reports its own latency. That figure already
+// includes the driver's buffering, so the buffer size is not added on top.
 inline int RoundTripFrames(const LatencyReport& r)
 {
-  return r.pluginSamples + IoRoundTripFrames(r);
+  return DriverLatencyKnown(r) ? r.pluginSamples + r.driverFrames : 0;
 }
 
-// Standalone: lead with the number the player feels, then break it down so a large
-// value points at its cause (driver vs. our own processing).
-inline std::string FormatStandaloneLatency(const LatencyReport& r)
+// What the Settings page shows: a headline and a smaller qualifying line.
+struct LatencyLines
 {
-  char buf[192];
-  const double total = LatencyMs(RoundTripFrames(r), r.sampleRate);
+  std::string headline;
+  std::string detail;
+};
+
+// Standalone with a driver figure: lead with the round trip the player feels, then
+// break it down so a large value points at its cause (driver vs. our processing).
+// Without one: our own delay only, and an explicit statement that the total is
+// unknown and larger. Never a total built on a guess.
+inline LatencyLines FormatStandaloneLatency(const LatencyReport& r)
+{
+  char headline[128];
+  char detail[128];
   const double plug = LatencyMs(r.pluginSamples, r.sampleRate);
-  const double io = LatencyMs(IoRoundTripFrames(r), r.sampleRate);
   if (DriverLatencyKnown(r))
-    std::snprintf(buf, sizeof(buf), "Round trip: %.1f ms (plugin %.1f + driver %.1f, buffer %d)", total, plug, io,
-                  r.bufferFrames);
+  {
+    std::snprintf(headline, sizeof(headline), "Round trip: %.1f ms", LatencyMs(RoundTripFrames(r), r.sampleRate));
+    std::snprintf(detail, sizeof(detail), "plugin %.1f + driver %.1f ms, buffer %d", plug,
+                  LatencyMs(r.driverFrames, r.sampleRate), r.bufferFrames);
+  }
   else
-    std::snprintf(buf, sizeof(buf), "Round trip: ~%.1f ms est. (plugin %.1f + 2 x buffer %d; driver reports none)",
-                  total, plug, r.bufferFrames);
-  return buf;
+  {
+    std::snprintf(headline, sizeof(headline), "Plugin latency: %.1f ms (%d samples)", plug, r.pluginSamples);
+    std::snprintf(detail, sizeof(detail), "buffer %d; driver reports none, real round trip is higher", r.bufferFrames);
+  }
+  return {headline, detail};
 }
 
 // Plugin: the host compensates our PDC and shows its own I/O figure, so claiming a
 // round trip here would be double counting.
-inline std::string FormatPluginLatency(const LatencyReport& r)
+inline LatencyLines FormatPluginLatency(const LatencyReport& r)
 {
-  char buf[192];
-  std::snprintf(buf, sizeof(buf), "Plugin latency: %.1f ms (%d samples); your host adds its I/O buffer",
+  char headline[128];
+  std::snprintf(headline, sizeof(headline), "Plugin latency: %.1f ms (%d samples)",
                 LatencyMs(r.pluginSamples, r.sampleRate), r.pluginSamples);
-  return buf;
+  return {headline, "your host adds its own I/O buffer on top"};
 }
 
-inline std::string FormatLatencyLine(const LatencyReport& r, bool standalone)
+inline LatencyLines FormatLatencyLines(const LatencyReport& r, bool standalone)
 {
   return standalone ? FormatStandaloneLatency(r) : FormatPluginLatency(r);
 }
