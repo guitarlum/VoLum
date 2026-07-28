@@ -10,24 +10,31 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = (Resolve-Path (Join-Path $here "..")).Path
 Set-Location $slnDir
 
+# A child .ps1 that never runs a native command leaves $LASTEXITCODE unset, and
+# PowerShell evaluates `$null -ne 0` as TRUE. Guarding with `-ne 0` therefore exits
+# `$null`, which is exit code 0: the suite reports success having built and run
+# nothing. Truthiness is false for both $null and 0, so it only exits on a real
+# failure.
+function Invoke-Check([string]$path) {
+  & $path
+  if ($LASTEXITCODE) { exit $LASTEXITCODE }
+}
+
 # Apply our local iPlug2 patches (idempotent). See NeuralAmpModeler/iplug2-patches/README.md.
 & (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
 
 # Fail early if a test source is registered in only one of the two build
 # descriptors (Windows vcxproj vs. CMakeLists). Skipping this would silently
 # let new tests miss either the Windows or macOS test run.
-& (Join-Path $here "check-test-source-parity.ps1")
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Invoke-Check (Join-Path $here "check-test-source-parity.ps1")
 
 # Git on Windows stores new files non-executable, which only fails on the macOS
 # runner. Catch it here rather than an hour into CI.
-& (Join-Path $here "check-shell-exec-bits.ps1")
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Invoke-Check (Join-Path $here "check-shell-exec-bits.ps1")
 
 # Rules and skills go stale silently when a file is renamed, and wrong guidance
 # is worse than verbose guidance.
-& (Join-Path $here "check-agent-artifact-links.ps1")
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Invoke-Check (Join-Path $here "check-agent-artifact-links.ps1")
 
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {

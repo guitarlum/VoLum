@@ -57,6 +57,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_knob_wheel.cpp
   test_iplug_app_vector_accumulator.cpp
   test_volum_wav_downmix.cpp
+  test_volum_loopback_detect.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"

@@ -148,6 +148,7 @@
     <ClCompile Include="..\tests\test_volum_nan_guard.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
     <ClCompile Include="..\tests\test_volum_wav_downmix.cpp" />
+    <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
