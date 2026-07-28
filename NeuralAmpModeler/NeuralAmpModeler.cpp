@@ -785,6 +785,8 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
   mOutputSenderR.TransmitData(*this);
 
+  _VolumRefreshLatencyReport();
+
   // Push tuner result to UI
   if (mTunerDSP.IsActive())
   {
@@ -2224,10 +2226,29 @@ void NeuralAmpModeler::_UpdateLatency()
     SetLatency(latency);
   }
 
+  // Force: our PDC just changed, and the editor may have been rebuilt with empty
+  // labels, so an unchanged device-side report still has to be re-sent.
+  _VolumRefreshLatencyReport(/*force=*/true);
+}
+
+// The standalone's numbers are only real once the audio stream is open. iPlug2's app
+// host calls OnReset() at IPlugAPP_host.cpp:757 and openStream() at :761, so a report
+// taken in OnReset always sees isStreamOpen() == false: no driver latency, and only
+// the *requested* buffer size, since openStream can renegotiate it. Polling here means
+// the readout corrects itself as soon as the stream is live and follows every device,
+// rate or buffer change made in Preferences, instead of showing the pre-open guess
+// until the editor happens to be reopened.
+void NeuralAmpModeler::_VolumRefreshLatencyReport(bool force)
+{
+  const volum::LatencyReport report = _VolumLatencyReport();
+  if (!force && report == mVolumLastLatencyReport)
+    return;
+  mVolumLastLatencyReport = report;
+
   if (auto* pGraphics = GetUI())
   {
     if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
-      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(_VolumLatencyReport());
+      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(report);
   }
 }
 

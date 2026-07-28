@@ -601,6 +601,9 @@ private:
   // the loader thread, written on the main thread -> atomic.
   std::atomic<bool> mVolumLiteMode{false};
   bool mVolumInitComplete = false;
+  // Last report pushed to the Settings page, so the OnIdle poll only touches the UI
+  // when a number actually moved.
+  volum::LatencyReport mVolumLastLatencyReport{};
   bool mVolumSettingsDirty = false;
   bool mVolumCalibrationDefaultsDirty = false;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
@@ -755,6 +758,12 @@ private:
 
   // Plugin PDC plus, in the standalone, the audio device's own round trip.
   volum::LatencyReport _VolumLatencyReport() const;
+
+  // Push the latency report to the Settings page when it has changed. Called from
+  // OnIdle because iPlug2's standalone host runs OnReset() BEFORE openStream(), so
+  // the report taken there can never see the driver's latency (see the definition).
+  // `force` re-sends an unchanged report, for when the editor was just rebuilt.
+  void _VolumRefreshLatencyReport(bool force = false);
 
   // Update level meters
   // Called within ProcessBlock().

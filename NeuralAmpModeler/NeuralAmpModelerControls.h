@@ -745,8 +745,9 @@ public:
 #else
     constexpr bool kStandalone = false;
 #endif
-    static_cast<IVLabelControl*>(GetNamedChild(mControlNames.currentLatency))
-      ->SetStr(volum::FormatLatencyLine(report, kStandalone).c_str());
+    const volum::LatencyLines lines = volum::FormatLatencyLines(report, kStandalone);
+    static_cast<IVLabelControl*>(GetNamedChild(mControlNames.currentLatency))->SetStr(lines.headline.c_str());
+    static_cast<IVLabelControl*>(GetNamedChild(mControlNames.latencyDetail))->SetStr(lines.detail.c_str());
   }
 
   void Hide(bool hide) override
@@ -765,6 +766,11 @@ public:
     const float rowH = 14.f;
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.sampleRate);
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.currentLatency);
+    // The latency caveat needs more characters than the 15 px rows fit - the single
+    // combined line used to run past this box and clip its own closing bracket.
+    const IVStyle detailStyle = mStyle.WithDrawFrame(false).WithValueText(
+      IText(12.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top));
+    AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", detailStyle), mControlNames.latencyDetail);
   };
 
   void SetModelInfo(const ModelInfo& modelInfo)
@@ -795,6 +801,7 @@ private:
   {
     const std::string sampleRate = "sampleRate";
     const std::string currentLatency = "currentLatency";
+    const std::string latencyDetail = "latencyDetail";
   } mControlNames;
   // Do I have info?
   bool mHasInfo = false;

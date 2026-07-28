@@ -867,13 +867,24 @@ TEST_CASE("VoLum settings panel reports round-trip latency, not just plugin PDC"
   // The wording and arithmetic live in the pure header (test_volum_latency_report);
   // here we pin that the control renders it and the plugin feeds it real device data.
   RequireContains(controls, "SetCurrentLatency(const volum::LatencyReport& report)");
-  RequireContains(controls, "volum::FormatLatencyLine(report, kStandalone)");
-  RequireContains(source, "SetCurrentLatency(_VolumLatencyReport())");
+  RequireContains(controls, "volum::FormatLatencyLines(report, kStandalone)");
   RequireContains(source, "host->GetStreamLatencyFrames()");
   RequireContains(source, "host->GetIOBufferSize()");
   // The old PDC-only line read 0.0 ms while the player heard 21 ms of ASIO.
   RequireDoesNotContain(controls, "Current latency: %.1f ms (%d samples)");
   RequireDoesNotContain(source, " |  Latency:");
+
+  // iPlug2's standalone host calls OnReset() before openStream(), so a report taken
+  // only there can never see the driver's latency and the line silently degrades to
+  // "driver reports none" after every audio-settings change. The OnIdle poll is what
+  // makes it correct itself; without it the readout is stale exactly when looked at.
+  RequireContains(source, "void NeuralAmpModeler::_VolumRefreshLatencyReport(bool force)");
+  RequireContains(source, "_VolumRefreshLatencyReport();");
+  RequireContains(source, "_VolumRefreshLatencyReport(/*force=*/true);");
+
+  // Both rows must exist, or the caveat line has nowhere to render and the readout
+  // clips mid-sentence like it did in 1.2.1.
+  RequireContains(controls, "mControlNames.latencyDetail");
 }
 
 TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wired")
