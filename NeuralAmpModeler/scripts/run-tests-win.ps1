@@ -19,6 +19,16 @@ Set-Location $slnDir
 & (Join-Path $here "check-test-source-parity.ps1")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# Git on Windows stores new files non-executable, which only fails on the macOS
+# runner. Catch it here rather than an hour into CI.
+& (Join-Path $here "check-shell-exec-bits.ps1")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# Rules and skills go stale silently when a file is renamed, and wrong guidance
+# is worse than verbose guidance.
+& (Join-Path $here "check-agent-artifact-links.ps1")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source
