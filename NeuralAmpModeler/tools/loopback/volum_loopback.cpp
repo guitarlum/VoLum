@@ -21,6 +21,7 @@
 // Output is a line-oriented report plus optional JSON, so scripts can assert on it.
 
 #include "RtAudio.h"
+#include "VoLumLoopbackDetect.h"
 
 #include <algorithm>
 #include <cmath>
@@ -59,7 +60,11 @@ struct Shared
   std::vector<float> captured;
   size_t capturedWrite = 0;
   size_t framesEmitted = 0;
-  size_t burstAtFrame = 0; // frame index (in stream time) where the burst started
+  // Marked in the capture buffer's own index, not in stream frames: a driver that
+  // drops input blocks (WASAPI overflows) advances the two counters by different
+  // amounts, and a burst timed against the wrong one is searched for in a window it
+  // already passed through.
+  size_t burstAtCapture = 0;
   bool burstDue = false;
   bool burstSent = false;
   size_t burstRemaining = 0;
@@ -75,6 +80,7 @@ struct Shared
   int overflows = 0;
   int underflows = 0;
   double peakIn = 0.0;
+  size_t peakInAt = 0; // capture index of peakIn, so a mis-windowed hit is visible
 };
 
 int Callback(void* outputBuffer, void* inputBuffer, unsigned int nFrames, double, RtAudioStreamStatus status,
@@ -95,7 +101,7 @@ int Callback(void* outputBuffer, void* inputBuffer, unsigned int nFrames, double
   // Start the burst on the first frame of a block, so its emit time is exact.
   if (out && s->burstDue && !s->burstSent)
   {
-    s->burstAtFrame = s->framesEmitted;
+    s->burstAtCapture = s->capturedWrite;
     s->burstRemaining = s->burstLength;
     s->burstPhase = 0;
     s->burstSent = true;
@@ -118,7 +124,12 @@ int Callback(void* outputBuffer, void* inputBuffer, unsigned int nFrames, double
     {
       const float v = in[f * s->inputChannels]; // input channel 1
       s->captured[s->capturedWrite + f] = v;
-      s->peakIn = std::max(s->peakIn, static_cast<double>(std::fabs(v)));
+      const double mag = std::fabs(static_cast<double>(v));
+      if (mag > s->peakIn)
+      {
+        s->peakIn = mag;
+        s->peakInAt = s->capturedWrite + f;
+      }
     }
     s->capturedWrite += nFrames;
   }
@@ -292,10 +303,10 @@ int main(int argc, char** argv)
     shared.capturedWrite = 0;
     shared.burstSent = false;
     shared.peakIn = 0.0;
+    shared.peakInAt = 0;
     std::fill(shared.captured.begin(), shared.captured.end(), 0.0f);
     // Let the stream settle, then arm the burst and listen for half a second.
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    const size_t captureBase = shared.framesEmitted;
     shared.burstDue = true;
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
     shared.burstDue = false;
@@ -306,22 +317,18 @@ int main(int argc, char** argv)
 
     // Where in the capture buffer the burst started, then the first sample after
     // that which crosses the threshold: that gap is the round trip.
-    const size_t emitIdx = shared.burstAtFrame - captureBase;
-    size_t hit = 0;
-    for (size_t i = emitIdx; i < shared.capturedWrite; ++i)
+    const size_t emitIdx = shared.burstAtCapture;
+    const volum::Crossing hit =
+      volum::FindFirstCrossing(shared.captured.data(), shared.capturedWrite, emitIdx, detectThreshold);
+    if (!hit.found)
     {
-      if (std::fabs(shared.captured[i]) >= detectThreshold)
-      {
-        hit = i;
-        break;
-      }
-    }
-    if (hit == 0)
-    {
-      std::printf("  burst %d: NOT DETECTED (peak in = %.5f)\n", p + 1, shared.peakIn);
+      // Report where the loudest sample sat relative to the burst. A peak above the
+      // threshold that lands before it means the timing is off, not the cable.
+      std::printf("  burst %d: NOT DETECTED (peak in = %.5f at %+.1f ms from emit)\n", p + 1, shared.peakIn,
+                  1000.0 * (static_cast<double>(shared.peakInAt) - static_cast<double>(emitIdx)) / opt.sampleRate);
       continue;
     }
-    const double frames = static_cast<double>(hit - emitIdx);
+    const double frames = static_cast<double>(hit.index - emitIdx);
     measurements.push_back(frames);
     std::printf("  burst %d: %.0f frames (%.2f ms), peak in = %.4f\n", p + 1, frames,
                 1000.0 * frames / opt.sampleRate, shared.peakIn);

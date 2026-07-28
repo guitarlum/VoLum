@@ -44,17 +44,25 @@ authoritative.*
 
 ## 3. Hardware round trip
 
-*Why manual: the loopback harness is built and works, but the physical signal
-path on this laptop never passed audio — see "Known gap" below.*
+*Why manual: needs a real interface with a loopback cable. Measured on this
+laptop — see "Measured round trip" below.*
 
-- With a cable from output 1 to input 1 and the interface's input gain up:
+- With a cable from output 1 to input 1, the interface's input gain up, and its
+  **master output knob up** — at zero, the loop is silent and every reading is
+  `no-signal`:
 
 ```pwsh
+pwsh NeuralAmpModeler/scripts/loopback-latency-win.ps1 -Api wasapi -OutDevice "Speakers (UA-2X2)" -InDevice "Line (UA-2X2)" -Buffer 128
 pwsh NeuralAmpModeler/scripts/loopback-latency-win.ps1 -Api asio -OutDevice "ASIO4ALL v2" -InDevice "ASIO4ALL v2" -Buffer 128
 ```
 
   It reports measured round-trip milliseconds, or `no-signal` with the observed
-  peak so a dead path is obvious rather than silently reported as a number.
+  peak so a dead path is obvious rather than silently reported as a number. The
+  ASIO run is the one that matches what VoLum plays through; it needs the ASIO4ALL
+  pin setup described below.
+- Kill any leftover `volum_loopback.exe` first. It holds the ASIO device
+  exclusively, and it also locks its own binary so the rebuild fails with
+  `LNK1104`.
 - Compare that measurement with the **Latency** line in Settings. They should be
   in the same ballpark; a large mismatch means the driver is misreporting.
 
@@ -79,13 +87,48 @@ bundled rig has.*
 - Standalone Settings shows the round-trip latency line.
 - AU and VST3 load in Logic/Live and pass the section 2 checks.
 
-## Known gap — the loopback on this laptop
+## Measured round trip — about 64-68 ms over WASAPI
 
-The harness, the tone-burst detection, and the reporting all work; the physical
-path does not. With both endpoints unmuted and at full volume, input peaked at
-0.00044 (pure noise) while a 0.9-amplitude burst played out. Nothing in software
-explains that, so it is the interface's front-panel gain, the monitor level, or
-which jack the cable is in. One minute with the box in hand settles it.
+The dead path was the interface's own master output knob sitting at zero. With it
+up, the loop passes audio and the harness measures:
+
+```
+out='Speakers (UA-2X2)' in='Line (UA-2X2)' api=wasapi rate=48000 buffer=128
+measured_ms=63.73  spread_frames=0  peak_in=0.0670  overflows=10
+```
+
+Five bursts, identical to the sample within a run; two runs read 63.73 and 67.73
+ms, so WASAPI's shared-mode buffering shifts by a few ms between stream opens.
+That is the WASAPI shared-mode path,
+consistent with the ~48-60 ms measured for FlexASIO below rather than with
+ASIO4ALL's 21.2 ms, so it is not the number a player on ASIO feels. Input peaks
+at 0.067 for a 0.9 burst (about -23 dB), so the interface's input gain has plenty
+of headroom left if a hotter measurement is ever wanted.
+
+Two bugs in the harness had to be fixed before this read out at all, and they
+both reported the failure as a dead cable:
+
+- The burst was timed in stream frames but searched for by capture-buffer index.
+  Those two counters diverge exactly when a driver drops input blocks (the 10
+  overflows above), so the search began past the burst and never saw it. The
+  emit point is now marked in the capture buffer's own index.
+- A hit at index 0 was indistinguishable from "nothing found", which would read a
+  genuinely zero-latency loop as silence.
+
+`test_volum_loopback_detect.cpp` pins both.
+
+## Still open — ASIO4ALL never reaches the interface
+
+On the same cable, `-Api asio` returns literal digital silence (`peak_in` exactly
+0.00000, nothing anywhere in the buffer) while WASAPI measures fine. ASIO4ALL has
+no saved configuration on this machine — no `HKCU\Software\ASIO4ALL v2` key at all
+— so it is running on defaults and exposes one stereo pair (`in=2 out=2`) that is
+not the UA-2X2's.
+
+To finish this: open `C:\Program Files (x86)\ASIO4ALL v2\a4apanel.exe`, enable the
+UA-2X2 input and output pins, disable the built-in Realtek and Intel devices, then
+re-run the ASIO command in section 3. Expect roughly 21 ms if the driver's own
+figure is honest, which is the cross-check VoLum's Settings latency line needs.
 
 ## Driver comparison — settled, keep ASIO4ALL
 
