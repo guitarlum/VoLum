@@ -402,4 +402,3 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     }
   }
 }
-

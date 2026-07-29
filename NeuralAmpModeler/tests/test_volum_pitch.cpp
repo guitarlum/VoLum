@@ -177,8 +177,7 @@ TEST_CASE("VoLumPitch stays finite across supported sample rates and small host 
       for (int workload = 0; workload < 3; ++workload)
       {
         const auto mode = workload == 2 ? VoLumPitch::Mode::Octaver : VoLumPitch::Mode::Transpose;
-        const auto character =
-          workload == 0 ? VoLumPitch::Character::Instant : VoLumPitch::Character::Poly;
+        const auto character = workload == 0 ? VoLumPitch::Character::Instant : VoLumPitch::Character::Poly;
         VoLumPitch pitch;
         pitch.Configure(sr, block);
         pitch.Reset();
@@ -232,7 +231,7 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Poly < Drop) 
                   VoLumPitch::Character::Poly);
   const int polyLat = pitch.Latency();
   CHECK(polyLat > instantLat); // poly adds polyphony just above the tightest mono character
-  CHECK(polyLat < dropLat);    // ...but is now cheaper than Drop (was ~3x Drop before the RE port)
+  CHECK(polyLat < dropLat); // ...but is now cheaper than Drop (was ~3x Drop before the RE port)
   // Poly ~14 ms; locked well under the old ~49 ms so a regression to the WSOLA-floor
   // tuning is caught, and bounded above so a runaway grain can't blow up PDC.
   CHECK(polyLat < static_cast<int>(kSR * 0.020));
@@ -393,10 +392,10 @@ TEST_CASE("POLY upshift keeps its grain cadence (no positive-semitone crackle)")
   // sines hide the bug (any offset lands on similar waveform), so drive rich
   // transient material. Measured on this signal: pre-fix upshift ~93 splices/s,
   // post-fix ~25 (== the ceiling); the known-good downshift path is ~61 and untouched.
-  const double ratioUp = std::pow(2.0, 7.0 / 12.0);  // +7 semitones (worst allowed upshift)
+  const double ratioUp = std::pow(2.0, 7.0 / 12.0); // +7 semitones (worst allowed upshift)
   const double ratioDn = std::pow(2.0, -7.0 / 12.0); // -7 semitones (known-good downtuning)
-  const size_t n = static_cast<size_t>(kSR);         // 1 second
-  const double band = 0.020 * kSR;                   // POLY grain spacing in samples
+  const size_t n = static_cast<size_t>(kSR); // 1 second
+  const double band = 0.020 * kSR; // POLY grain spacing in samples
 
   const auto up = polySpliceCount(ratioUp, n);
   const auto down = polySpliceCount(ratioDn, n);

@@ -49,9 +49,9 @@ void NeuralAmpModeler::_VolumRefreshChannels()
     mVolumSettingsDirty = true;
   }
 
-  auto channels = volum::DiscoverChannels(volum::content::PathFromUtf8(mVolumRigsRoot),
-                                          volum::kAmps[mVolumAmpIdx].folderName,
-                                          volum::kSpeakerPrefixes[mVolumSpeakerIdx]);
+  auto channels =
+    volum::DiscoverChannels(volum::content::PathFromUtf8(mVolumRigsRoot), volum::kAmps[mVolumAmpIdx].folderName,
+                            volum::kSpeakerPrefixes[mVolumSpeakerIdx]);
 
   mVolumChannelFiles.clear();
   mVolumChannelLabels.clear();
@@ -756,7 +756,7 @@ void NeuralAmpModeler::_VolumPushIrShaping(bool support)
 // coefficients (no allocation, no history reset), so per-block reconfig is safe
 // and tracks live edits without zipper noise. A cut Hz of 0 bypasses that stage.
 iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const size_t numChannels, const int nFrames,
-                                                      const double sampleRate, const bool support)
+                                                       const double sampleRate, const bool support)
 {
   const double trim = (support ? mSupportIrTrimLin : mIrTrimLin).load(std::memory_order_relaxed);
   if (trim != 1.0)
@@ -799,8 +799,8 @@ void NeuralAmpModeler::_VolumMigrateIrTrims()
     const std::string absUtf8 = volum::content::PathToUtf8(abs);
     std::vector<float> audio;
     double fileSr = 0.0;
-    if (!abs.empty()
-        && dsp::wav::Load(absUtf8.c_str(), audio, fileSr) == dsp::wav::LoadReturnCode::SUCCESS && !audio.empty())
+    if (!abs.empty() && dsp::wav::Load(absUtf8.c_str(), audio, fileSr) == dsp::wav::LoadReturnCode::SUCCESS
+        && !audio.empty())
     {
       double sumSq = 0.0;
       for (float v : audio)
@@ -819,10 +819,12 @@ void NeuralAmpModeler::_VolumMigrateIrTrims()
   // a one-time pre-migration copy alongside it.
   const bool backedUp = volum::content::GlobalContentStore().BackupBeforeMigration("1.2.1");
   volum::content::GlobalContentStore().Save();
-  VOLUM_LOG("migrate", std::string("IR trim migration saved; pre-migration backup ")
-                         + (backedUp ? "written to " + volum::content::PathToUtf8(
-                                         volum::content::GlobalContentStore().MigrationBackupPath("1.2.1"))
-                                     : "unavailable"));
+  VOLUM_LOG(
+    "migrate",
+    std::string("IR trim migration saved; pre-migration backup ")
+      + (backedUp ? "written to "
+                      + volum::content::PathToUtf8(volum::content::GlobalContentStore().MigrationBackupPath("1.2.1"))
+                  : "unavailable"));
 }
 
 void NeuralAmpModeler::_VolumReconcileActiveIr()
@@ -940,4 +942,3 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
   mVolumSettingsDirty = true;
   _VolumMarkPresetDirty();
 }
-

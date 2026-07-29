@@ -140,19 +140,20 @@ int Callback(void* outputBuffer, void* inputBuffer, unsigned int nFrames, double
 
 void PrintUsage()
 {
-  std::printf("volum_loopback - measure real audio round-trip latency through a physical loopback\n"
-              "  --api asio|ds|wasapi   audio backend (default asio)\n"
-              "  --device <substring>   duplex device name match (ASIO)\n"
-              "  --in-device <substr>   capture device name match (WASAPI / DirectSound)\n"
-              "  --out-device <substr>  render device name match (WASAPI / DirectSound)\n"
-              "  --rate <hz>            sample rate (default 48000)\n"
-              "  --buffer <frames>      buffer size (default 128)\n"
-              "  --pulses <n>           bursts to median over (default 5)\n"
-              "  --burst <frames>       burst length (default 96 = 2 ms at 48 kHz)\n"
-              "  --amplitude <0..1>     burst amplitude (default 0.9)\n"
-              "  --threshold <0..1>     detection threshold (default: 8x noise floor)\n"
-              "  --json <path>          also write a JSON report\n"
-              "  --list                 list devices and exit\n");
+  std::printf(
+    "volum_loopback - measure real audio round-trip latency through a physical loopback\n"
+    "  --api asio|ds|wasapi   audio backend (default asio)\n"
+    "  --device <substring>   duplex device name match (ASIO)\n"
+    "  --in-device <substr>   capture device name match (WASAPI / DirectSound)\n"
+    "  --out-device <substr>  render device name match (WASAPI / DirectSound)\n"
+    "  --rate <hz>            sample rate (default 48000)\n"
+    "  --buffer <frames>      buffer size (default 128)\n"
+    "  --pulses <n>           bursts to median over (default 5)\n"
+    "  --burst <frames>       burst length (default 96 = 2 ms at 48 kHz)\n"
+    "  --amplitude <0..1>     burst amplitude (default 0.9)\n"
+    "  --threshold <0..1>     detection threshold (default: 8x noise floor)\n"
+    "  --json <path>          also write a JSON report\n"
+    "  --list                 list devices and exit\n");
 }
 
 RtAudio::Api ApiFromName(const std::string& name)
@@ -330,8 +331,8 @@ int main(int argc, char** argv)
     }
     const double frames = static_cast<double>(hit.index - emitIdx);
     measurements.push_back(frames);
-    std::printf("  burst %d: %.0f frames (%.2f ms), peak in = %.4f\n", p + 1, frames,
-                1000.0 * frames / opt.sampleRate, shared.peakIn);
+    std::printf("  burst %d: %.0f frames (%.2f ms), peak in = %.4f\n", p + 1, frames, 1000.0 * frames / opt.sampleRate,
+                shared.peakIn);
   }
 
   audio.stopStream();
@@ -342,9 +343,10 @@ int main(int argc, char** argv)
   {
     std::printf("RESULT no-signal out='%s' in='%s' noise_floor=%.5f best_peak=%.5f overflows=%d underflows=%d\n",
                 outInfo.name.c_str(), inInfo.name.c_str(), noiseFloor, bestPeak, shared.overflows, shared.underflows);
-    std::printf("  Nothing came back above %.5f. Check the loopback cable (out 1 -> in 1), the interface's input "
-                "gain and output level knobs, and that the input is not muted.\n",
-                detectThreshold);
+    std::printf(
+      "  Nothing came back above %.5f. Check the loopback cable (out 1 -> in 1), the interface's input "
+      "gain and output level knobs, and that the input is not muted.\n",
+      detectThreshold);
     return 6;
   }
 
@@ -354,10 +356,11 @@ int main(int argc, char** argv)
   const double spreadFrames = measurements.back() - measurements.front();
   const double driverMs = 1000.0 * static_cast<double>(driverLatency) / opt.sampleRate;
 
-  std::printf("RESULT ok out='%s' in='%s' api=%s rate=%u buffer=%u measured_frames=%.0f measured_ms=%.2f "
-              "driver_frames=%ld driver_ms=%.2f spread_frames=%.0f overflows=%d underflows=%d peak_in=%.4f\n",
-              outInfo.name.c_str(), inInfo.name.c_str(), opt.api.c_str(), opt.sampleRate, bufferFrames, medianFrames,
-              medianMs, driverLatency, driverMs, spreadFrames, shared.overflows, shared.underflows, shared.peakIn);
+  std::printf(
+    "RESULT ok out='%s' in='%s' api=%s rate=%u buffer=%u measured_frames=%.0f measured_ms=%.2f "
+    "driver_frames=%ld driver_ms=%.2f spread_frames=%.0f overflows=%d underflows=%d peak_in=%.4f\n",
+    outInfo.name.c_str(), inInfo.name.c_str(), opt.api.c_str(), opt.sampleRate, bufferFrames, medianFrames, medianMs,
+    driverLatency, driverMs, spreadFrames, shared.overflows, shared.underflows, shared.peakIn);
 
   if (!opt.jsonPath.empty())
   {

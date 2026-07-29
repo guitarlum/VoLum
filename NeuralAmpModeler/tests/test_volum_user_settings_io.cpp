@@ -293,8 +293,7 @@ TEST_CASE("Legacy-safe settings omit dual-amp fields")
   amps[0].supportOutputLevel = 3.0;
   amps[0].supportAmpPan = 1.0;
 
-  const nlohmann::json j =
-    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, /*includeDualAmp=*/false);
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, /*includeDualAmp=*/false);
 
   REQUIRE(volum::HasDualAmpUserSettings(j) == false);
   CHECK(j["amps"]["Ampete One"].contains("speaker"));
@@ -639,8 +638,8 @@ TEST_CASE("Corrupt effect settings heal to defaults")
     {"reverbActive", 1},
     {"reverbMode", -1},
     {"delayModes", nlohmann::json::array({{{"time", 99999.0}, {"feedback", -0.1}, {"mix", "wet"}}})},
-    {"reverbModes", nlohmann::json::array({{{"mix", 5.0}, {"decay", -1.0}, {"tone", "dark"},
-                                             {"preDelay", 999.0}, {"shimmer", -0.5}}})},
+    {"reverbModes", nlohmann::json::array(
+                      {{{"mix", 5.0}, {"decay", -1.0}, {"tone", "dark"}, {"preDelay", 999.0}, {"shimmer", -0.5}}})},
   };
 
   volum::VoLumEffectSettings loaded;
@@ -679,16 +678,8 @@ TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
   j["effects"] = {
-    {"delayActive", true},
-    {"delayTime", 625.0},
-    {"delayFeedback", 0.7},
-    {"delayMix", 0.33},
-    {"delayMode", 1},
-    {"reverbActive", true},
-    {"reverbMix", 0.44},
-    {"reverbDecay", 6.0},
-    {"reverbTone", 3.0},
-    {"reverbMode", 2},
+    {"delayActive", true},  {"delayTime", 625.0}, {"delayFeedback", 0.7}, {"delayMix", 0.33},  {"delayMode", 1},
+    {"reverbActive", true}, {"reverbMix", 0.44},  {"reverbDecay", 6.0},   {"reverbTone", 3.0}, {"reverbMode", 2},
   };
 
   volum::VoLumEffectSettings loaded;
@@ -724,10 +715,10 @@ TEST_CASE("Three-entry delay mode settings load staging slots")
   j["effects"] = {
     {"delayMode", volum::kVoLumDelayModeReverse},
     {"delayModes", nlohmann::json::array({
-      {{"time", 400.0}, {"feedback", 0.2}, {"mix", 0.1}},
-      {{"time", 500.0}, {"feedback", 0.3}, {"mix", 0.2}},
-      {{"time", 700.0}, {"feedback", 0.4}, {"mix", 0.3}},
-    })},
+                     {{"time", 400.0}, {"feedback", 0.2}, {"mix", 0.1}},
+                     {{"time", 500.0}, {"feedback", 0.3}, {"mix", 0.2}},
+                     {{"time", 700.0}, {"feedback", 0.4}, {"mix", 0.3}},
+                   })},
   };
 
   volum::VoLumEffectSettings loaded;
@@ -994,8 +985,8 @@ TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Ful
 
   bool lite = true; // sentinel: prove the loader sets it back to default false
   bool healed = false;
-  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
-                                   nullptr, nullptr, nullptr, &lite);
+  volum::VolumUserSettingsFromJson(
+    j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &lite);
   REQUIRE_FALSE(healed);
   CHECK(lite == false);
 }
