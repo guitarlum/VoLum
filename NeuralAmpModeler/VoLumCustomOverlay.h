@@ -517,6 +517,32 @@ private:
       mSel = mItems.empty() ? -1 : (int)mItems.size() - 1;
   }
 
+  // Stable id of the item at a row, and the row an id is at now.
+  //
+  // A confirmation prompt names an item but used to remember only its row. The
+  // library is process-global, so a second plugin editor can delete an earlier row
+  // while the prompt is open; confirming then acted on whatever had shifted into
+  // that position - deleting or overwriting an item the prompt never mentioned.
+  std::string RowIdAt(int idx) const
+  {
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return volum::custom::IRIdAt(idx);
+      case ManageKind::Pedals: return volum::custom::PedalIdAt(idx);
+      default: return volum::custom::PresetIdAt(idx);
+    }
+  }
+
+  int RowIndexById(const std::string& id) const
+  {
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return volum::custom::IRIndexById(id);
+      case ManageKind::Pedals: return volum::custom::PedalIndexById(id);
+      default: return volum::custom::PresetIndexById(id);
+    }
+  }
+
   void ApplyRename(int idx, const std::string& name)
   {
     using namespace volum::custom;
@@ -804,9 +830,22 @@ private:
         {
           const int idx = mSel;
           const std::string nm = mItems[(size_t)idx];
-          auto doOverwrite = [this, idx]() {
+          // Remembered by id, not by row: see RowIdAt. A registry entry with no id
+          // at all (only possible for a library written before ids existed) keeps
+          // the old positional behaviour rather than becoming unusable.
+          const std::string id = RowIdAt(idx);
+          auto doOverwrite = [this, id, idx, nm]() {
+            const int now = id.empty() ? idx : RowIndexById(id);
+            if (now < 0)
+            {
+              mError = "\"" + nm + "\" is no longer in your library.";
+              ReloadList();
+              mSel = -1;
+              SetDirty(false);
+              return;
+            }
             if (mOverwritePreset)
-              mOverwritePreset(idx);
+              mOverwritePreset(now);
             NotifyChanged();
             SetDirty(false);
           };
@@ -825,8 +864,21 @@ private:
         {
           const int idx = mSel;
           const std::string nm = mItems[(size_t)idx];
-          auto doDelete = [this, idx]() {
-            ApplyDelete(idx);
+          // Remembered by id, not by row: see RowIdAt. Deleting the wrong item here
+          // is unrecoverable, which is exactly what the prompt promises it is not.
+          // An entry with no id keeps the old positional behaviour.
+          const std::string id = RowIdAt(idx);
+          auto doDelete = [this, id, idx, nm]() {
+            const int now = id.empty() ? idx : RowIndexById(id);
+            if (now < 0)
+            {
+              mError = "\"" + nm + "\" is no longer in your library.";
+              ReloadList();
+              mSel = -1;
+              SetDirty(false);
+              return;
+            }
+            ApplyDelete(now);
             ReloadList();
             mSel = -1;
             NotifyChanged();

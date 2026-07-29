@@ -1079,6 +1079,67 @@ TEST_CASE("Preset recall refreshes the focused custom amp's cabs, not the factor
   CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true)") != std::string::npos);
 }
 
+TEST_CASE("Destructive confirmations act on the item they named, not on a row number")
+{
+  // The prompt captured the row and re-applied it when the user confirmed. Another
+  // editor removing an earlier row in the meantime made that row belong to a
+  // different item, so "Delete Foo" deleted Bar - irreversibly, and against exactly
+  // the promise the prompt makes.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+
+  RequireContains(overlay, "std::string RowIdAt(int idx) const");
+  RequireContains(overlay, "int RowIndexById(const std::string& id) const");
+  // Both destructive confirmations resolve at confirm time and bail out by name.
+  RequireContains(overlay, "const int now = id.empty() ? idx : RowIndexById(id);");
+  RequireContains(overlay, "is no longer in your library.");
+  RequireContains(overlay, "ApplyDelete(now);");
+  RequireContains(overlay, "mOverwritePreset(now);");
+  // And the stale-index calls are gone.
+  RequireDoesNotContain(overlay, "ApplyDelete(idx);");
+  RequireDoesNotContain(overlay, "mOverwritePreset(idx);");
+
+  // Saving an open amp builder re-resolves its target the same way: a deletion
+  // before that index would otherwise make UpdateCustomAmp adopt another amp's id
+  // and overwrite its record with this draft.
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "editIdx = volum::custom::CustomAmpIndexById(ampIn.id);");
+  RequireContains(source, "return \"Save failed: this amp is no longer in your library\";");
+}
+
+TEST_CASE("Every preset operation claims the shared bridge before using it")
+{
+  // The capture/apply hooks and the active owner key are process-global, so the
+  // instance that last installed them decides whose rig a preset records and whose
+  // rig a recall changes. Installing at construction handed that to whichever
+  // instance the host created last.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "void NeuralAmpModeler::_VolumClaimPresetOps()");
+  RequireContains(source, "volum::custom::PresetHookOwner() = this;");
+  RequireContains(source, "volum::custom::ClearPresetHooksIfOwnedBy(this);");
+
+  // Save, overwrite and recall: three operations, three claims, and each bridge
+  // call still present.
+  auto count = [&source](const char* needle) {
+    const std::string n(needle);
+    std::size_t total = 0;
+    for (std::size_t pos = source.find(n); pos != std::string::npos; pos = source.find(n, pos + n.size()))
+      ++total;
+    return total;
+  };
+
+  CHECK(count("_VolumClaimPresetOps();") == 3);
+  RequireContains(source, "volum::custom::AddPreset(mVolumAmpIdx");
+  RequireContains(source, "volum::custom::OverwritePreset(mVolumAmpIdx");
+  RequireContains(source, "volum::custom::RecallPreset(mVolumAmpIdx");
+
+  // Three owner-key publishes: one inside the claim helper, plus the two read-only
+  // sites that use no hook (the preset-bar refresh and the amp-switch sync). A
+  // fourth appearing inside an operation would look like a claim while leaving the
+  // hooks pointing at another instance.
+  CHECK(count("volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());") == 3);
+}
+
 TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
 {
   // Windows delivers down, up, dblclick, up. The confirmation modal acts and hides

@@ -384,6 +384,17 @@ inline std::string PedalIdAt(int idx)
   return (idx >= 0 && idx < (int)peds.size()) ? peds[(size_t)idx].id : std::string();
 }
 
+inline int PedalIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& peds = Store().reg().pedals;
+  for (int i = 0; i < (int)peds.size(); ++i)
+    if (peds[(size_t)i].id == id)
+      return i;
+  return -1;
+}
+
 // Resolve an imported pedal by its stable PRE-capture legacy index (the value a
 // scene/preset/param stores). Returns "" when no pedal owns that index.
 inline std::string PedalNameByLegacy(int legacyIndex)
@@ -479,6 +490,27 @@ inline PresetSettingsApply& PresetApplyHook()
   return h;
 }
 
+// Address of the instance whose hooks are currently installed. The hooks are one
+// process-global pair shared by every plugin instance in the host, so this records
+// who last claimed them; a departing instance uses it to find out whether the
+// globals still point at itself. Treated purely as an opaque token.
+inline const void*& PresetHookOwner()
+{
+  static const void* owner = nullptr;
+  return owner;
+}
+
+// Drops the hooks if owner installed them, so a closing instance cannot leave a
+// destroyed object behind them. A no-op when another instance has since claimed.
+inline void ClearPresetHooksIfOwnedBy(const void* owner)
+{
+  if (PresetHookOwner() != owner)
+    return;
+  PresetCaptureHook() = nullptr;
+  PresetApplyHook() = nullptr;
+  PresetHookOwner() = nullptr;
+}
+
 inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
 {
   const auto& banks = Store().reg().presetBanks;
@@ -548,6 +580,20 @@ inline std::string PresetIdAt(int idx)
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
     return {};
   return it->second[(size_t)idx].id;
+}
+
+inline int PresetIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end())
+    return -1;
+  for (int i = 0; i < (int)it->second.size(); ++i)
+    if (it->second[(size_t)i].id == id)
+      return i;
+  return -1;
 }
 
 inline void RenamePreset(int /*ampIdx*/, int idx, const std::string& name)

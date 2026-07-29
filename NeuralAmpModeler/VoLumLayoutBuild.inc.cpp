@@ -1189,11 +1189,25 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         overlay->SetCallbacks(
           // custom amp saved from the builder -> add to the live session list,
           // refresh the sidebar, and select the new amp (mock; no disk).
-          [pPlugin](const volum::custom::CustomAmp& ampIn, int editIdx) -> std::string {
+          [pPlugin](const volum::custom::CustomAmp& ampIn, int editIdxIn) -> std::string {
             // editIdx >= 0 -> the user edited an existing amp: mutate that entry
             // in place so we don't spawn a duplicate. Otherwise append a new one.
             auto& store = volum::content::GlobalContentStore();
             volum::custom::CustomAmp amp = ampIn;
+
+            // Re-resolve the target by identity rather than trusting the list
+            // position captured when the builder opened. The library is
+            // process-global: a second plugin editor can delete an amp that sits
+            // before this one while the builder is still up, after which the stale
+            // index names a *different* amp - and UpdateCustomAmp adopts the id at
+            // that index, so the draft would silently replace someone else's amp.
+            int editIdx = editIdxIn;
+            if (editIdx >= 0 && !ampIn.id.empty())
+            {
+              editIdx = volum::custom::CustomAmpIndexById(ampIn.id);
+              if (editIdx < 0)
+                return "Save failed: this amp is no longer in your library";
+            }
             // F6 import: copy and parse every capture before mutating the registry.
             // A failed copy/parser check rolls back all files created by this Save
             // and returns an error to the still-open builder.
