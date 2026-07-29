@@ -548,6 +548,11 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
     }
     return;
   }
+  // Picking an IR again while a cab swap is still waiting cancels that swap. The
+  // removal drops the staged IR as well as the live one, so letting it fire now
+  // would silently throw away the IR just chosen.
+  (support ? mVolumDeferredRemoveSupportIR : mVolumDeferredRemoveIR).store(false);
+  mVolumIrShapingResetPending[support ? 1 : 0] = false;
   // A custom IR replaces the baked cab: force this lane's amp onto its DIRECT /
   // No-Cab capture so the IR convolves the raw amp (not amp + baked cab).
   _VolumForceDirectCapture(support);
@@ -654,6 +659,7 @@ void NeuralAmpModeler::_VolumClearIR(bool support, bool deferToCabSwap)
   // loads asynchronously, so dropping the IR now would expose a short burst of raw,
   // cab-less amp. Paths with no replacement coming (the IR menu's "None", which
   // leaves the lane on the DIRECT capture it already has) clear immediately.
+  const int lane = support ? 1 : 0;
   if (deferToCabSwap)
   {
     (support ? mVolumDeferredRemoveSupportIrBlocks : mVolumDeferredRemoveIrBlocks).store(0);
@@ -665,7 +671,13 @@ void NeuralAmpModeler::_VolumClearIR(bool support, bool deferToCabSwap)
     _VolumActiveScene().supportActiveIrId.clear();
   else
     _VolumActiveScene().activeIrId.clear();
-  _VolumPushIrShaping(support); // no active IR -> reset the lane to unity / no cuts
+  // The deferred lane goes on convolving until the swap block, so its trim and cuts
+  // have to stay with it; resetting them now would drop a shaped IR to unity
+  // mid-note, trading the cab-less gap for a level jump. _VolumFlushDeferredIrShaping
+  // pushes the reset once the removal has fired.
+  mVolumIrShapingResetPending[lane] = deferToCabSwap;
+  if (!deferToCabSwap)
+    _VolumPushIrShaping(support); // no active IR -> reset the lane to unity / no cuts
   const int toggle = support ? kSupportIRToggle : kIRToggle;
   GetParam(toggle)->Set(0.0);
   SendParameterValueFromDelegate(toggle, GetParam(toggle)->GetNormalized(), true);

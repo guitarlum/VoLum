@@ -585,12 +585,17 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   const bool supportToneStackActive = GetParam(kSupportEQActive)->Bool();
   const bool preNamActive[2] = {GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam2Active)->Bool()};
   const bool havePreNam[2] = {mPreModel[0] != nullptr, mPreModel[1] != nullptr};
+  // A lane whose IR removal is deferred keeps convolving until the replacement cab
+  // capture goes live, even though its toggle is already off in the UI.
+  const bool irActive = volum::dsp_staging::IrConvolutionActive(
+    GetParam(kIRToggle)->Bool(), mVolumDeferredRemoveIR.load(std::memory_order_relaxed));
+  const bool supportIrActive = volum::dsp_staging::IrConvolutionActive(
+    GetParam(kSupportIRToggle)->Bool(), mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed));
   const auto processingPlan = volum::MakeProcessingPlan(
-    haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(), mIR != nullptr,
-    GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
-    GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive,
-    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr, GetParam(kPrePitchActive)->Bool(),
-    GetParam(kTremoloActive)->Bool());
+    haveMainModel, noiseGateActive, toneStackActive, irActive, mIR != nullptr, GetParam(kPreCompActive)->Bool(),
+    preNamActive, havePreNam, GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(),
+    dualAmpActive, haveSupportModel, supportToneStackActive, supportIrActive, mSupportIR != nullptr,
+    GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
@@ -786,6 +791,7 @@ void NeuralAmpModeler::OnIdle()
   mOutputSenderR.TransmitData(*this);
 
   _VolumRefreshLatencyReport();
+  _VolumFlushDeferredIrShaping();
 
   // Push tuner result to UI
   if (mTunerDSP.IsActive())
@@ -1768,6 +1774,22 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     if (removedPreModel[i] || appliedPreModel[i])
       _UpdateLatency();
+  }
+}
+
+// Main thread: land the shaping reset that _VolumClearIR held back, once the audio
+// thread has actually dropped the convolver. Until then the lane is still convolving
+// the outgoing IR and needs the shaping that goes with it.
+void NeuralAmpModeler::_VolumFlushDeferredIrShaping()
+{
+  const bool pending[2] = {mVolumDeferredRemoveIR.load(std::memory_order_relaxed),
+                           mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed)};
+  for (int lane = 0; lane < 2; ++lane)
+  {
+    if (!mVolumIrShapingResetPending[lane] || pending[lane])
+      continue;
+    mVolumIrShapingResetPending[lane] = false;
+    _VolumPushIrShaping(lane == 1);
   }
 }
 
