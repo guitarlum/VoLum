@@ -923,10 +923,14 @@ TEST_CASE("A library that exists but cannot be read is never overwritten")
 {
   const auto base = TestBase("registry-unreadable");
 
-  // A directory where the registry file belongs: exists() succeeds, opening it for
-  // reading does not. This stands in for the real causes - antivirus, a backup or
-  // cloud-sync agent, another VoLum, a permissions change - without needing any of
-  // them, and behaves the same on Windows and POSIX.
+  // A directory where the registry file belongs: it exists, and it is not a file we
+  // can read. This stands in for the real causes - antivirus, a backup or cloud-sync
+  // agent, another VoLum, a permissions change - without needing any of them.
+  //
+  // It has to be recognised before opening: Windows refuses to open a directory, but
+  // libc++ opens it happily and fails on the first read, which looks exactly like an
+  // empty file. That sent macOS down the "corrupt, back it up, rewrite" path and let
+  // the save through - caught by CI on this very test, not by the Windows run.
   std::error_code ec;
   std::filesystem::create_directories(base / "volum-content.json", ec);
   REQUIRE_FALSE(ec);
@@ -944,6 +948,10 @@ TEST_CASE("A library that exists but cannot be read is never overwritten")
   ir.name = "Imported during the outage";
   store.reg().irs.push_back(ir);
   CHECK_FALSE(store.Save());
+
+  // And nothing was filed away as a corrupt copy, which would have implied the
+  // contents were readable and rewritable.
+  CHECK_FALSE(std::filesystem::exists(base / "volum-content.json.bak"));
 
   // Once the library can be read again, writing is allowed again.
   std::filesystem::remove_all(base / "volum-content.json", ec);

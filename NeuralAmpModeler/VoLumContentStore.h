@@ -752,6 +752,18 @@ public:
     if (mBase.empty() || !std::filesystem::exists(path, ec))
       return true;
 
+    // Something exists at the library's path that is not a file: a directory, a
+    // device, a broken sync artefact. Checked before opening because it is not
+    // portable to detect afterwards - Windows refuses to open a directory, while
+    // libc++ opens it and only fails on the first read, which is indistinguishable
+    // from an empty file and so went down the "corrupt, back it up and rewrite"
+    // path. Whatever it is, it is not ours to replace.
+    if (!std::filesystem::is_regular_file(path, ec))
+    {
+      mRegistryUnreadable = true;
+      return false;
+    }
+
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
     {
