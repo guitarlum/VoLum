@@ -267,6 +267,8 @@ inline int IRIndexById(const std::string& id)
 // Append a custom IR to the global library. `file` is the stored registry-
 // relative path (the plugin copies the source in first); in tests it is just a
 // filename. Returns its index.
+// Returns -1 when the library could not be written, matching AddCustomAmp: an
+// entry that exists only in memory would look imported until the next restart.
 inline int AddIR(const std::string& name, const std::string& file = "")
 {
   auto& reg = Store().reg();
@@ -275,7 +277,11 @@ inline int AddIR(const std::string& name, const std::string& file = "")
   it.name = name.empty() ? "Imported IR" : name;
   it.file = file;
   reg.irs.push_back(std::move(it));
-  Store().Save();
+  if (!Store().Save())
+  {
+    reg.irs.pop_back();
+    return -1;
+  }
   return (int)reg.irs.size() - 1;
 }
 
@@ -318,7 +324,10 @@ inline IRShaping IRShapingAt(int idx)
   return {it.trimDb, it.lowCutHz, it.highCutHz, it.trimCalibrated};
 }
 
-inline IRShaping IRShapingById(const std::string& id) { return IRShapingAt(IRIndexById(id)); }
+inline IRShaping IRShapingById(const std::string& id)
+{
+  return IRShapingAt(IRIndexById(id));
+}
 
 // Persist edited shaping for the IR at `idx` (clamped to the library ranges). Marks
 // the entry calibrated so the auto-normalize migration never overwrites a user edit.

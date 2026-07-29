@@ -69,6 +69,35 @@ inline std::string PathToUtf8(const std::filesystem::path& path)
 #endif
 }
 
+// True when relPath is a registry-relative path that stays inside the content
+// directory ("ir/ir_x__cab.wav", "amps/amp_y__G65.nam").
+//
+// Registry paths are only as trustworthy as volum-content.json, which users do
+// sync, restore from backups and hand-edit. `mBase / relPath` is not a safe
+// composition: an absolute relPath replaces the base outright, a drive-relative
+// "C:x" does the same on Windows, and ".." walks out of the library. Resolved
+// paths are handed to std::filesystem::remove on delete, so an escaping entry
+// meant VoLum could delete a file that was never its to touch.
+inline bool IsSafeStoredRelPath(const std::string& relPath)
+{
+  if (relPath.empty())
+    return false;
+
+  const auto path = PathFromUtf8(relPath);
+  // has_root_name covers "C:x" and "\\\\server\\share"; has_root_directory covers
+  // "/x". Checking both is wider than is_absolute(), which on Windows requires a
+  // root name *and* a root directory and so accepts each half on its own.
+  if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
+    return false;
+
+  for (const auto& part : path)
+  {
+    if (part == "..")
+      return false;
+  }
+  return true;
+}
+
 // v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
@@ -190,8 +219,7 @@ inline double StepIrHighCutHz(double hz, int dir)
 {
   // Ascending presence/air ladder with OFF (0) as the top "fully open" rung, so
   // stepping DOWN from OFF engages a 20 kHz cut and keeps darkening.
-  static const double kLadder[] = {1000, 1500,  2000,  3000,  4000,  5000, 6000,
-                                   8000, 10000, 12000, 16000, 20000, 0.0};
+  static const double kLadder[] = {1000, 1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 16000, 20000, 0.0};
   const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
   const double in = (hz > 0.0) ? ClampIrHighCutHz(hz) : 0.0;
   return ClampIrHighCutHz(StepIrLadder(kLadder, n, in, dir, /*offIsHighest=*/true));
@@ -697,10 +725,17 @@ public:
   Registry& reg() { return mReg; }
   const Registry& reg() const { return mReg; }
 
-  // Absolute path for a registry-relative stored file ("ir/ir_x.wav").
+  // False only for an unconfigured store (unit tests), where imports have nowhere
+  // to copy to and callers legitimately fall back to bare filenames.
+  bool HasBaseDir() const { return !mBase.empty(); }
+
+  // Absolute path for a registry-relative stored file ("ir/ir_x.wav"). Empty when
+  // relPath would resolve outside the content directory, which makes every caller
+  // - loads and deletes alike - treat it as missing rather than as a file to act
+  // on. See IsSafeStoredRelPath.
   std::filesystem::path ResolveStored(const std::string& relPath) const
   {
-    if (relPath.empty())
+    if (!IsSafeStoredRelPath(relPath))
       return {};
     return mBase / PathFromUtf8(relPath);
   }
@@ -711,6 +746,7 @@ public:
   bool Load()
   {
     mReg = Registry{};
+    mRegistryUnreadable = false;
     const auto path = RegistryPath();
     std::error_code ec;
     if (mBase.empty() || !std::filesystem::exists(path, ec))
@@ -718,7 +754,16 @@ public:
 
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
-      return true;
+    {
+      // The library exists but something else is holding it: antivirus, a backup
+      // or cloud-sync agent, another VoLum, or a permissions change. Reporting a
+      // clean empty registry here was the worst possible answer, because the next
+      // save serialized that emptiness over a perfectly good file and took every
+      // custom amp, IR, pedal and preset bank with it. Refuse to write until a
+      // load succeeds instead; the user loses the session's edits, not the library.
+      mRegistryUnreadable = true;
+      return false;
+    }
 
     nlohmann::json j;
     try
@@ -746,13 +791,29 @@ public:
     return !healed;
   }
 
+  // True when a library file exists on disk that we were unable to read, so what
+  // is in memory is not what is on disk and must not be written over it.
+  bool RegistryUnreadable() const { return mRegistryUnreadable; }
+
   bool Save()
   {
     if (mBase.empty())
       return true; // intentionally in-memory (unit tests / unconfigured store)
+    if (mRegistryUnreadable)
+      return false; // see Load(): never overwrite a library we could not read
     std::error_code ec;
     std::filesystem::create_directories(mBase, ec);
-    return WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec);
+    if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec))
+      return false;
+
+    // Payload files are destroyed only once the registry that no longer mentions
+    // them is durable. Doing it the other way round meant a failed registry write
+    // left the on-disk library pointing at files VoLum had already deleted: the
+    // item came back on restart and could never load again. If this write fails
+    // the deletions stay pending, and both the entry and its file survive - which
+    // is the state the on-disk registry still describes.
+    FlushPendingFileDeletes();
+    return true;
   }
 
   // Snapshot the on-disk registry once, before a migration rewrites it in place.
@@ -796,12 +857,19 @@ public:
     return subDir + "/" + stored;
   }
 
+  // Delete a file a transaction copied in but never committed to the registry.
+  // Nothing on disk refers to it, so there is no ordering to respect, and waiting
+  // for a Save that a failed import will never perform would only orphan it.
+  //
+  // Payloads the committed registry *does* reference are a different problem and
+  // go through QueueStoredFileDelete instead.
   void RemoveStoredFile(const std::string& relPath)
   {
-    if (relPath.empty())
+    const auto resolved = ResolveStored(relPath);
+    if (resolved.empty())
       return;
     std::error_code ec;
-    std::filesystem::remove(ResolveStored(relPath), ec);
+    std::filesystem::remove(resolved, ec);
   }
 
   // -- Removal matrix (spec 3.7) ------------------------------------------------
@@ -818,7 +886,7 @@ public:
       if (it->id == id)
       {
         legacyIndex = it->legacyIndex;
-        RemoveStoredFile(it->file);
+        QueueStoredFileDelete(it->file);
         mReg.pedals.erase(it);
         break;
       }
@@ -848,7 +916,7 @@ public:
     {
       if (it->id == id)
       {
-        RemoveStoredFile(it->file);
+        QueueStoredFileDelete(it->file);
         mReg.irs.erase(it);
         break;
       }
@@ -876,11 +944,11 @@ public:
     {
       if (it->id == id)
       {
-        // RemoveStoredFile resolves a registry-relative path; for amp manifests that
-        // is `storedPath` (e.g. "amps/amp_x__G65.nam"). `file` is only the display
-        // leaf, so deleting by it would miss the copied file and orphan it on disk.
+        // Delete by `storedPath` (e.g. "amps/amp_x__G65.nam"), the registry-relative
+        // path. `file` is only the display leaf, so deleting by it would resolve to
+        // the wrong place and orphan the copied file on disk.
         for (const auto& f : it->files)
-          RemoveStoredFile(f.storedPath);
+          QueueStoredFileDelete(f.storedPath);
         mReg.amps.erase(it);
         break;
       }
@@ -899,6 +967,28 @@ public:
   }
 
 private:
+  // Queue a payload the committed registry still references. It is deleted by the
+  // next successful Save(), never before: see the comment there.
+  void QueueStoredFileDelete(const std::string& relPath)
+  {
+    if (relPath.empty())
+      return;
+    mPendingFileDeletes.push_back(relPath);
+  }
+
+  void FlushPendingFileDeletes()
+  {
+    for (const auto& relPath : mPendingFileDeletes)
+    {
+      const auto resolved = ResolveStored(relPath);
+      if (resolved.empty())
+        continue; // outside the content directory; not ours to delete
+      std::error_code ec;
+      std::filesystem::remove(resolved, ec);
+    }
+    mPendingFileDeletes.clear();
+  }
+
   void BackupCorrupt()
   {
     std::error_code ec;
@@ -912,6 +1002,8 @@ private:
 
   std::filesystem::path mBase;
   Registry mReg;
+  bool mRegistryUnreadable = false;
+  std::vector<std::string> mPendingFileDeletes;
 };
 
 // Process-wide content store. The custom-content library (amps / IRs / pedals /

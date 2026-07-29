@@ -9,21 +9,21 @@
 #include <thread>
 
 #if __has_include(<nlohmann/json.hpp>)
-#include <nlohmann/json.hpp>
+  #include <nlohmann/json.hpp>
 #elif __has_include(<json.hpp>)
-#include <json.hpp>
+  #include <json.hpp>
 #else
-#error "nlohmann json header not found (expected iPlug Dependencies/Extras layout)"
+  #error "nlohmann json header not found (expected iPlug Dependencies/Extras layout)"
 #endif
 
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #ifndef NOMINMAX
+    #define NOMINMAX
+  #endif
+  #include <windows.h>
 #endif
 
 namespace volum
@@ -69,8 +69,7 @@ inline bool ReplaceFileAtomically(const std::filesystem::path& tmp, const std::f
 #endif
 }
 
-inline bool WriteJsonAtomically(const std::filesystem::path& target, const nlohmann::json& json,
-                                std::error_code& ec)
+inline bool WriteJsonAtomically(const std::filesystem::path& target, const nlohmann::json& json, std::error_code& ec)
 {
   ec.clear();
   if (target.empty())
@@ -87,6 +86,22 @@ inline bool WriteJsonAtomically(const std::filesystem::path& target, const nlohm
       return false;
   }
 
+  // dump() throws nlohmann::type_error on invalid UTF-8 anywhere in the document,
+  // and every user-entered name reaches this function. The individual name cuts are
+  // code-point aware (see Utf8Prefix), but this is the single choke point through
+  // which all of them pass, so serialize before touching the filesystem and report
+  // a failure rather than letting an exception escape into UI or host code.
+  std::string serialized;
+  try
+  {
+    serialized = json.dump(2);
+  }
+  catch (const std::exception&)
+  {
+    ec = std::make_error_code(std::errc::invalid_argument);
+    return false;
+  }
+
   const auto tmp = MakeAtomicJsonTempPath(target);
   {
     std::ofstream out(tmp, std::ios::out | std::ios::trunc);
@@ -95,7 +110,7 @@ inline bool WriteJsonAtomically(const std::filesystem::path& target, const nlohm
       ec = std::make_error_code(std::errc::io_error);
       return false;
     }
-    out << json.dump(2);
+    out << serialized;
     out.close();
     if (!out.good())
     {
