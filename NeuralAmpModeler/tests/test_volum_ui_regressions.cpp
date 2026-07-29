@@ -875,8 +875,8 @@ TEST_CASE("Switching from a custom IR to a baked cab keeps convolving until the 
   // The raw param must not reach the plan again; that is exactly the regression.
   RequireDoesNotContain(source, "toneStackActive, GetParam(kIRToggle)->Value()");
 
-  RequireContains(header, "bool mVolumIrShapingResetPending[2]{false, false};");
-  RequireContains(source, "mVolumIrShapingResetPending[lane] = deferToCabSwap;");
+  RequireContains(header, "bool mVolumIrShapingPushPending[2]{false, false};");
+  RequireContains(source, "mVolumIrShapingPushPending[lane] = deferToCabSwap;");
   RequireContains(source, "void NeuralAmpModeler::_VolumFlushDeferredIrShaping()");
   RequireContains(source, "_VolumFlushDeferredIrShaping();");
 
@@ -887,6 +887,38 @@ TEST_CASE("Switching from a custom IR to a baked cab keeps convolving until the 
   const auto cancelPos = source.find("mVolumDeferredRemoveIR).store(false);", selectPos);
   REQUIRE(cancelPos != std::string::npos);
   CHECK(cancelPos < source.find("_VolumForceDirectCapture(support);", selectPos));
+}
+
+TEST_CASE("Switching from a baked cab to a custom IR waits for the DIRECT capture")
+{
+  // The mirror image of the gap above, reported as a volume jump: the IR applied on
+  // the next block while the baked-cab capture it replaces was still live, so the
+  // lane briefly ran cab plus IR. The staged IR is held until its capture is staged.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(header, "std::atomic<bool> mVolumDeferredApplyIR = false;");
+  RequireContains(header, "std::atomic<bool> mVolumDeferredApplySupportIR = false;");
+  RequireContains(source, "const bool captureLoading = _VolumForceDirectCapture(support);");
+  RequireContains(source, "mVolumDeferredApplySupportIR : mVolumDeferredApplyIR).store(captureLoading);");
+  // The hold is what keeps the staged IR parked for those blocks.
+  RequireContains(source, "if (mStagedIR != nullptr && !holdMainIr)");
+  RequireContains(source, "if (mStagedSupportIR != nullptr && !holdSupportIr)");
+  RequireContains(source, "_VolumStepDeferredIrSwaps(holdMainIr, holdSupportIr);");
+  // Only wait when a capture is actually on its way; _VolumForceDirectCapture says so.
+  RequireContains(source, "bool NeuralAmpModeler::_VolumForceDirectCapture(bool support)");
+  RequireContains(source, "return !alreadyDirect;");
+}
+
+TEST_CASE("Picking No Cab while an IR is active switches at once instead of waiting")
+{
+  // An active IR already holds the lane on DIRECT, so No Cab reuses the live capture
+  // and nothing is staged. Deferring there held the IR for the whole bounded wait,
+  // reported as "from custom IR to no cab takes forever".
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "const bool captureChanges =");
+  RequireContains(source, "_VolumClearIR(supportFocus, /*deferToCabSwap=*/captureChanges);");
 }
 
 TEST_CASE("VoLum settings panel reports round-trip latency, not just plugin PDC")
@@ -991,7 +1023,7 @@ TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, 
   // restore, instead of deriving the stage from the persisted stepper position.
   const std::string source = ReadPluginSource();
 
-  const auto fnPos = source.find("void NeuralAmpModeler::_VolumForceDirectCapture(");
+  const auto fnPos = source.find("bool NeuralAmpModeler::_VolumForceDirectCapture(");
   REQUIRE(fnPos != std::string::npos);
   const auto fnEnd = source.find("\n}", fnPos);
   REQUIRE(fnEnd != std::string::npos);

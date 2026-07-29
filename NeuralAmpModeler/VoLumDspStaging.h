@@ -38,28 +38,30 @@ inline bool LivePathMatchesStagedAsset(const std::string& livePath, const std::s
   return livePath == stagedPath;
 }
 
-// Outcome of one block's worth of waiting for a deferred IR removal.
-struct DeferredIrRemovalStep
+// Outcome of one block's worth of waiting for a deferred IR swap.
+struct DeferredIrSwapStep
 {
-  bool fire = false; // drop the convolver on this block
+  bool fire = false; // add or drop the convolver on this block
   bool stillPending = false; // keep waiting
   int waitedBlocks = 0; // updated wait counter
 };
 
-// Decide when to drop a lane's IR convolver after the user switched from a custom
-// IR to a baked cab.
+// Decide when a lane's IR may change, in either direction, after the user switched
+// cab sources.
 //
-// Dropping it the moment the user clicks leaves a short burst of raw, cab-less amp,
-// because the replacement cab capture loads asynchronously. Waiting for that
-// capture to be staged lets both swap on the same block, so the switch is seamless.
+// Both directions pair an IR change with a capture change that loads asynchronously,
+// and acting on the IR before its capture arrives is audible either way: dropping
+// the IR early exposes a burst of raw, cab-less amp, and adding it early stacks a
+// custom IR on top of a baked cab that is still live. Waiting for the replacement
+// capture to be staged lets both land on one block, so the lane moves from one
+// coherent sound straight to the next.
 //
 // `maxWaitBlocks` bounds the wait: a capture that fails to load (or never arrives)
-// must not leave the IR convolving indefinitely, which would be a worse artifact
-// than the gap this avoids. Zero or negative disables deferral entirely.
-inline DeferredIrRemovalStep StepDeferredIrRemoval(bool pending, int waitedBlocks, bool replacementStaged,
-                                                   int maxWaitBlocks)
+// must not strand the lane mid-switch, which would be a worse artifact than the
+// seam this avoids. Zero or negative disables deferral entirely.
+inline DeferredIrSwapStep StepDeferredIrSwap(bool pending, int waitedBlocks, bool replacementStaged, int maxWaitBlocks)
 {
-  DeferredIrRemovalStep out;
+  DeferredIrSwapStep out;
   if (!pending)
     return out;
   const int waited = waitedBlocks + 1;
@@ -81,7 +83,7 @@ inline DeferredIrRemovalStep StepDeferredIrRemoval(bool pending, int waitedBlock
 // gates convolution on that toggle, so it stops on the very next block while the
 // replacement capture is still loading - the exact burst of cab-less amp the
 // deferral exists to prevent. So a pending removal keeps the IR running until
-// StepDeferredIrRemoval fires, which is the block the replacement goes live.
+// StepDeferredIrSwap fires, which is the block the replacement goes live.
 inline bool IrConvolutionActive(bool toggleOn, bool deferredRemovalPending)
 {
   return toggleOn || deferredRemovalPending;
