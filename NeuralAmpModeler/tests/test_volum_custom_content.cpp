@@ -890,6 +890,127 @@ TEST_CASE("Preset banks are isolated by active owner key (factory vs custom amp)
   CHECK(b[0] == "OnlyB");
 }
 
+// Two plugin instances in one host share this bridge, and its capture/apply hooks
+// each hold a raw `this`. They used to be installed once per instance at
+// construction, so the newest instance owned preset capture and recall for every
+// other one: saving a preset in the first instance stored the second instance's rig,
+// recalling in the first changed the second, and closing that instance left the
+// globals pointing at a destroyed object. Every operation now claims the bridge
+// first, and a departing instance clears the hooks if they are still its own.
+TEST_CASE("The newest claim owns the preset hooks, and a departing owner clears them")
+{
+  using namespace volum::custom;
+
+  // Stand-ins for two plugin instances. Only their addresses matter.
+  int instanceA = 0;
+  int instanceB = 0;
+
+  volum::VoLumAmpSettings sceneA;
+  sceneA.toneBass = 1.5;
+  volum::VoLumAmpSettings sceneB;
+  sceneB.toneBass = 9.5;
+
+  auto claim = [](const void* owner, const volum::VoLumAmpSettings& scene) {
+    PresetCaptureHook() = [&scene]() { return scene; };
+    PresetApplyHook() = [](const volum::VoLumAmpSettings&) {};
+    PresetHookOwner() = owner;
+  };
+
+  SetActivePresetOwner("test:f5-two-instances");
+
+  // B was created last, but A is the one operating, so A claims and A's scene is
+  // what gets stored. Before the fix this stored B's.
+  claim(&instanceB, sceneB);
+  claim(&instanceA, sceneA);
+  const int i = AddPreset(0, "From A");
+  REQUIRE(i >= 0);
+  const auto& bank = volum::content::GlobalContentStore().reg().presetBanks.at("test:f5-two-instances");
+  CHECK(bank[(size_t)i].settings.toneBass == doctest::Approx(1.5));
+
+  // B closing must not disturb hooks A owns.
+  ClearPresetHooksIfOwnedBy(&instanceB);
+  CHECK(PresetHookOwner() == &instanceA);
+  REQUIRE(static_cast<bool>(PresetCaptureHook()));
+  CHECK(PresetCaptureHook()().toneBass == doctest::Approx(1.5));
+
+  // A closing does clear them, so nothing is left pointing at a dead instance.
+  ClearPresetHooksIfOwnedBy(&instanceA);
+  CHECK(PresetHookOwner() == nullptr);
+  CHECK_FALSE(static_cast<bool>(PresetCaptureHook()));
+  CHECK_FALSE(static_cast<bool>(PresetApplyHook()));
+
+  // And a bridge with no hooks stores defaults rather than dereferencing anything.
+  const int j = AddPreset(0, "No hooks");
+  REQUIRE(j >= 0);
+  CHECK(volum::AmpSettingsEqual(bank[(size_t)j].settings, volum::VoLumAmpSettings{}));
+}
+
+// Destructive confirmations name an item but used to remember only its row. The
+// library is process-global, so a second plugin editor can remove an earlier row
+// while a prompt is open, after which the remembered position belongs to a
+// different item. These are the lookups the overlay and the builder now use instead;
+// with them, "delete Foo" can only ever delete Foo.
+TEST_CASE("An item's identity survives rows shifting underneath it")
+{
+  using namespace volum::custom;
+
+  SetActivePresetOwner("test:stale-index");
+  AddPreset(0, "First");
+  AddPreset(0, "Second");
+  AddPreset(0, "Third");
+
+  const std::string secondId = PresetIdAt(1);
+  const std::string thirdId = PresetIdAt(2);
+  REQUIRE_FALSE(secondId.empty());
+  REQUIRE(PresetIndexById(thirdId) == 2);
+
+  // The row the prompt was opened on now holds a different preset.
+  DeletePreset(0, 0);
+  CHECK(PresetIdAt(1) == thirdId);
+
+  // Resolving by id follows the item; resolving by the remembered row would have
+  // hit "Third".
+  CHECK(PresetIndexById(secondId) == 0);
+  CHECK(PresetIndexById(thirdId) == 1);
+
+  // An id that is gone resolves to nothing, so the caller can say so instead of
+  // acting on a neighbour.
+  CHECK(PresetIndexById("preset_does_not_exist") == -1);
+  CHECK(PresetIndexById("") == -1);
+}
+
+TEST_CASE("IRs, pedals and custom amps resolve by id the same way")
+{
+  using namespace volum::custom;
+
+  const int irA = AddIR("StaleA.wav", "ir/a.wav");
+  const int irB = AddIR("StaleB.wav", "ir/b.wav");
+  REQUIRE(irB == irA + 1);
+  const std::string irBId = IRIdAt(irB);
+  REQUIRE_FALSE(irBId.empty());
+  DeleteIR(irA);
+  CHECK(IRIndexById(irBId) == irA); // shifted down by one, still the same IR
+  CHECK(IRIndexById("ir_gone") == -1);
+
+  const int pedA = AddPedal("PedA.nam", "pedals/a.nam");
+  const int pedB = AddPedal("PedB.nam", "pedals/b.nam");
+  REQUIRE(pedA >= 0);
+  REQUIRE(pedB >= 0);
+  const std::string pedBId = PedalIdAt(pedB);
+  REQUIRE_FALSE(pedBId.empty());
+  DeletePedal(pedA);
+  CHECK(PedalIndexById(pedBId) == pedB - 1);
+  CHECK(PedalIndexById("pedal_gone") == -1);
+
+  const int ampA = AddCustomAmp("StaleAmpA", 0);
+  const int ampB = AddCustomAmp("StaleAmpB", 1);
+  const std::string ampBId = CustomAmpIdAt(ampB);
+  REQUIRE_FALSE(ampBId.empty());
+  RemoveCustomAmp(ampA);
+  CHECK(CustomAmpIndexById(ampBId) == ampB - 1);
+  CHECK(CustomAmpIndexById("amp_gone") == -1);
+}
+
 TEST_CASE("RemoveCustomAmp keeps names and art ids aligned")
 {
   const size_t before = volum::custom::MockCustomAmps().size();

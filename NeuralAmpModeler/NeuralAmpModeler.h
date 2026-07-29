@@ -481,10 +481,13 @@ public:
   // --- F5 presets (per-amp bank, owner-keyed in the content registry) --------
   // Owner key for the currently focused amp: "factory:<idx>" or a custom amp id.
   std::string _VolumActiveOwnerKey() const;
-  // Publish the active owner key to the bridge + install the capture/apply hooks
-  // (once, at init) so registry preset ops act on the focused amp's bank with the
-  // real live settings.
+  // Install the capture/apply hooks so registry preset ops read and write the real
+  // live settings, and record this instance as their owner.
   void _VolumInstallPresetHooks();
+  // Claim the process-global preset bridge (hooks + active owner key) for this
+  // instance. Called by every preset operation, because the bridge is shared by all
+  // instances in the host and the last one to claim it wins.
+  void _VolumClaimPresetOps();
   void _VolumSyncPresetOwner();
   // Refresh the header bar's list/selection/dirty state for the active amp.
   void _VolumRefreshPresetBar();

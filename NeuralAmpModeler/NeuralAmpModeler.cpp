@@ -542,6 +542,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 NeuralAmpModeler::~NeuralAmpModeler()
 {
   _VolumStopLoader();
+
+  // The preset bridge's capture/apply hooks are process-global and hold a raw
+  // `this`. Every preset operation re-claims them (see _VolumClaimPresetOps), so a
+  // live instance can never be routed through a dead one - but leaving a destroyed
+  // object behind them is still a loaded gun for any future call site that forgets
+  // to claim. A no-op if another instance has claimed them since.
+  volum::custom::ClearPresetHooksIfOwnedBy(this);
+
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
   _VolumSaveSettingsToFile();
