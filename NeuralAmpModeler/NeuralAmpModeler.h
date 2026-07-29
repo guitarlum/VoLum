@@ -717,6 +717,9 @@ private:
   iplug::sample** _VolumApplyIrShaping(iplug::sample** in, const size_t numChannels, const int nFrames,
                                        const double sampleRate, const bool support);
   void _VolumPushIrShaping(bool support);
+  // Main thread: apply a shaping reset that _VolumClearIR deferred, once the lane's
+  // deferred IR removal has fired and the convolver is actually gone.
+  void _VolumFlushDeferredIrShaping();
   void _VolumMigrateIrTrims();
 
   bool _HaveModel() const { return this->mModel != nullptr; };
@@ -832,6 +835,9 @@ private:
   std::atomic<int> mVolumDeferredRemoveIrBlocks = 0;
   std::atomic<int> mVolumDeferredRemoveSupportIrBlocks = 0;
   std::atomic<int> mVolumDeferredIrMaxBlocks = 512;
+  // Main thread only: a lane whose shaping reset is waiting for its deferred IR
+  // removal to fire. [0] = MAIN, [1] = SUPPORT.
+  bool mVolumIrShapingResetPending[2]{false, false};
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;

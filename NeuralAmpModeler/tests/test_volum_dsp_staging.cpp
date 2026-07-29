@@ -82,6 +82,48 @@ TEST_CASE("Nothing happens when no IR removal is pending")
   CHECK(step.waitedBlocks == 0);
 }
 
+TEST_CASE("A pending removal keeps the IR convolving even though its toggle is off")
+{
+  // The 1.2.1 fix deferred the convolver teardown but not the toggle, and the audio
+  // thread gates convolution on the toggle - so the cab-less burst survived the fix
+  // untouched. Reported again after 1.2.1: "still the no cab noise when switching
+  // from custom cab to stock cab".
+  using volum::dsp_staging::IrConvolutionActive;
+
+  // The instant the user picks a baked cab: toggle off, removal pending, capture
+  // still loading. The lane must keep convolving.
+  CHECK(IrConvolutionActive(/*toggleOn=*/false, /*deferredRemovalPending=*/true));
+
+  // Once the removal fires the convolver is gone; nothing keeps it alive.
+  CHECK_FALSE(IrConvolutionActive(false, false));
+
+  // A normally active IR is unaffected either way.
+  CHECK(IrConvolutionActive(true, false));
+  CHECK(IrConvolutionActive(true, true));
+}
+
+TEST_CASE("The deferral holds the IR for exactly the blocks the replacement needs")
+{
+  // End to end over the two helpers: convolution must stay on for every block of the
+  // wait and stop on the block the replacement is staged - no gap, no overlap.
+  using volum::dsp_staging::IrConvolutionActive;
+  using volum::dsp_staging::StepDeferredIrRemoval;
+
+  bool pending = true; // user just picked a baked cab
+  int waited = 0;
+  for (int block = 0; block < 5; ++block)
+  {
+    const auto step = StepDeferredIrRemoval(pending, waited, /*replacementStaged=*/false, /*maxWaitBlocks=*/750);
+    pending = step.stillPending;
+    waited = step.waitedBlocks;
+    CHECK(IrConvolutionActive(/*toggleOn=*/false, pending)); // still cabbed
+  }
+
+  const auto swap = StepDeferredIrRemoval(pending, waited, /*replacementStaged=*/true, /*maxWaitBlocks=*/750);
+  CHECK(swap.fire); // convolver dropped on the same block the capture goes live
+  CHECK_FALSE(IrConvolutionActive(false, swap.stillPending));
+}
+
 TEST_CASE("A non-positive deadline disables deferral so the removal is immediate")
 {
   // Degenerate configuration guard: never leave a pending removal that can only be

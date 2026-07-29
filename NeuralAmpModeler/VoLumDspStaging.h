@@ -74,4 +74,17 @@ inline DeferredIrRemovalStep StepDeferredIrRemoval(bool pending, int waitedBlock
   return out;
 }
 
+// Whether a lane should still convolve its IR this block.
+//
+// Deferring the convolver teardown alone does not close the gap: the UI turns the
+// lane's IR toggle off the instant the user picks a baked cab, and the audio thread
+// gates convolution on that toggle, so it stops on the very next block while the
+// replacement capture is still loading - the exact burst of cab-less amp the
+// deferral exists to prevent. So a pending removal keeps the IR running until
+// StepDeferredIrRemoval fires, which is the block the replacement goes live.
+inline bool IrConvolutionActive(bool toggleOn, bool deferredRemovalPending)
+{
+  return toggleOn || deferredRemovalPending;
+}
+
 } // namespace volum::dsp_staging

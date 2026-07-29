@@ -859,6 +859,36 @@ TEST_CASE("VoLum NAM cache copies dspData before Core consumes cached fields")
   RequireDoesNotContain(source, "return nam::get_dsp(cacheIt->second);");
 }
 
+TEST_CASE("Switching from a custom IR to a baked cab keeps convolving until the swap")
+{
+  // 1.2.1 deferred the convolver teardown but left _VolumClearIR turning the IR
+  // toggle off immediately, and the audio thread gates convolution on that toggle -
+  // so the cab-less burst survived the fix and was reported again. The gate must
+  // read the deferral, and the shaping reset must wait with it or a shaped IR drops
+  // to unity mid-note. The timing itself is unit-tested in test_volum_dsp_staging.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(source, "volum::dsp_staging::IrConvolutionActive(");
+  RequireContains(source, "mVolumDeferredRemoveIR.load(std::memory_order_relaxed))");
+  RequireContains(source, "mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed))");
+  // The raw param must not reach the plan again; that is exactly the regression.
+  RequireDoesNotContain(source, "toneStackActive, GetParam(kIRToggle)->Value()");
+
+  RequireContains(header, "bool mVolumIrShapingResetPending[2]{false, false};");
+  RequireContains(source, "mVolumIrShapingResetPending[lane] = deferToCabSwap;");
+  RequireContains(source, "void NeuralAmpModeler::_VolumFlushDeferredIrShaping()");
+  RequireContains(source, "_VolumFlushDeferredIrShaping();");
+
+  // Choosing an IR again during the wait cancels the swap: the pending removal
+  // clears mStagedIR too, so firing it afterwards would discard the new IR.
+  const auto selectPos = source.find("void NeuralAmpModeler::_VolumSelectIR(int irIdx");
+  REQUIRE(selectPos != std::string::npos);
+  const auto cancelPos = source.find("mVolumDeferredRemoveIR).store(false);", selectPos);
+  REQUIRE(cancelPos != std::string::npos);
+  CHECK(cancelPos < source.find("_VolumForceDirectCapture(support);", selectPos));
+}
+
 TEST_CASE("VoLum settings panel reports round-trip latency, not just plugin PDC")
 {
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
