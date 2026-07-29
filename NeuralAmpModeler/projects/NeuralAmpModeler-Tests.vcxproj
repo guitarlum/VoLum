@@ -152,6 +152,7 @@
     <ClCompile Include="..\tests\test_volum_chunk_safe_read.cpp" />
     <ClCompile Include="..\tests\test_volum_overlay_action_codes.cpp" />
     <ClCompile Include="..\tests\test_volum_numeric_entry.cpp" />
+    <ClCompile Include="..\tests\test_volum_cab_step.cpp" />
     <ClCompile Include="..\tests\test_volum_wav_downmix.cpp" />
     <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />

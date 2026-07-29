@@ -161,6 +161,12 @@ void NeuralAmpModeler::_VolumApplyRecalledPreset(const volum::VoLumAmpSettings& 
     _VolumRefreshChannels();
   if (mVolumCustomSupportIdx >= 0)
     _VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true);
+  // Both lanes have now staged their own capture; the shared cab row must end up
+  // describing the focused one. Without this, whichever lane was reconciled last won
+  // the row - and the SUPPORT branch above runs last whenever a custom partner is
+  // loaded. The mirror gap was a factory support amp, which is not reconciled here at
+  // all, leaving MAIN's cab on screen while SUPPORT was focused.
+  _VolumApplyFocusedLaneCabs();
   // Re-derive the scene from the now-live params so the retained baseline matches
   // exactly what _VolumRecomputePresetDirty() will read back (avoids a spurious
   // "(unsaved)" right after recall from param normalization).

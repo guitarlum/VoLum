@@ -403,21 +403,39 @@ void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool
     return;
   auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
 
-  if (plan.useFactoryCabNames)
-    row->SetFactoryCabs();
-  else
-    row->SetCabNames(plan.cabNames[0], plan.cabNames[1], plan.cabNames[2]);
-  row->SetNoCabEnabled(plan.noCabEnabled, "No DIRECT capture on this channel");
-  row->SetIrEnabled(plan.irEnabled, "Custom IR needs a DIRECT capture");
+  // The cab row is one control shared by both lanes, showing whichever is focused.
+  // Every other function that writes it checks that first (_VolumSelectIR,
+  // _VolumClearIR, _VolumForceDirectCapture, _VolumReconcileActiveIr); this one did
+  // not. Reconciling the background lane therefore left the row describing that lane
+  // - recalling a preset on a custom MAIN amp with a custom SUPPORT partner ended
+  // with SUPPORT's cab names, enables, selection and IR chip on screen while MAIN was
+  // focused, and a click on a cab then edited MAIN with an index belonging to the
+  // support amp's layout. The routing caches and scene writes below stay
+  // unconditional: the background lane still has to stage its own .nam.
+  const bool laneFocused = (support == _VolumSupportFocused());
+
+  if (laneFocused)
+  {
+    if (plan.useFactoryCabNames)
+      row->SetFactoryCabs();
+    else
+      row->SetCabNames(plan.cabNames[0], plan.cabNames[1], plan.cabNames[2]);
+    row->SetNoCabEnabled(plan.noCabEnabled, "No DIRECT capture on this channel");
+    row->SetIrEnabled(plan.irEnabled, "Custom IR needs a DIRECT capture");
+  }
 
   // The resolved channel cannot host this lane's stored IR; drop it so a real cab
-  // takes over. _VolumClearIR also turns the chip off, hence the ordering. That
-  // cab's capture is staged below, so the removal rides along with it.
+  // takes over. Unconditional, because it repairs state and not just the display -
+  // and _VolumClearIR guards its own row writes on focus. That cab's capture is
+  // staged below, so the removal rides along with it.
   if (plan.clearOrphanedIr)
     _VolumClearIR(support, /*deferToCabSwap=*/true);
 
-  row->SetIrCab(plan.irCabActive, plan.irName.c_str());
-  row->SetSelected(plan.cabSelectedIndex);
+  if (laneFocused)
+  {
+    row->SetIrCab(plan.irCabActive, plan.irName.c_str());
+    row->SetSelected(plan.cabSelectedIndex);
+  }
 
   const int stepperTag = support ? kCtrlTagVoLumSupportChannelStep : kCtrlTagVoLumChannelStep;
   if (auto* stepper = pGfx->GetControlWithTag(stepperTag))
@@ -505,23 +523,36 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
   // DIRECT capture has nothing to feed the IR, so refuse the selection (the cab
   // row already greys the button out; this guards the menu/dialog/restore paths).
   const int customLane = support ? mVolumCustomSupportIdx : mVolumCustomMainIdx;
-  // Channel-first: a custom IR needs a DIRECT capture ON THE CURRENT channel (the
-  // raw signal it convolves). An amp may have DIRECT on one channel but not the
-  // one in focus, so this is a per-channel gate, not the amp-wide HasDirectCapture.
-  const int laneChannel = support ? mVolumCustomSupportChannel : mVolumCustomMainChannel;
-  if (customLane >= 0 && !volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel))
+  if (customLane >= 0)
   {
-    if (support)
-      _VolumActiveScene().supportActiveIrId.clear();
-    else
-      _VolumActiveScene().activeIrId.clear();
-    if (interactive)
-      if (auto* pGfx = GetUI())
-        _ShowMessageBox(pGfx,
-                        "This channel has no DIRECT capture, so a custom IR has no raw signal to "
-                        "convolve.\n\nSwitch to a channel with a DIRECT (AMP-/DI-) capture to use a custom IR.",
-                        "Impulse Response", EMsgBoxType::kMB_OK);
-    return;
+    // Channel-first: a custom IR needs a DIRECT capture ON THE CURRENT channel (the
+    // raw signal it convolves). An amp may have DIRECT on one channel but not the
+    // one in focus, so this is a per-channel gate, not the amp-wide HasDirectCapture.
+    //
+    // MAIN's channel comes from the persisted stepper POSITION, for the same reason
+    // _VolumForceDirectCapture below does it: mVolumCustomMainChannel is a runtime
+    // cache still holding the *previous* amp's stage while a restore is in flight,
+    // and every restore path reaches this gate before anything refreshes it. Reading
+    // it here cleared the scene's IR id whenever that stale stage happened to lack a
+    // DIRECT capture - and because the cleared id is written straight back out on the
+    // next save, the user's IR reference was destroyed, not merely ignored for the
+    // session. SUPPORT persists its gain stage directly, so it can be read as-is.
+    const auto amp = volum::custom::CustomAmpAt(customLane);
+    const int laneChannel = support ? mVolumCustomSupportChannel : volum::CustomChannelAtStep(amp, mVolumChannelIdx);
+    if (!volum::custom::ChannelHasDirect(amp, laneChannel))
+    {
+      if (support)
+        _VolumActiveScene().supportActiveIrId.clear();
+      else
+        _VolumActiveScene().activeIrId.clear();
+      if (interactive)
+        if (auto* pGfx = GetUI())
+          _ShowMessageBox(pGfx,
+                          "This channel has no DIRECT capture, so a custom IR has no raw signal to "
+                          "convolve.\n\nSwitch to a channel with a DIRECT (AMP-/DI-) capture to use a custom IR.",
+                          "Impulse Response", EMsgBoxType::kMB_OK);
+      return;
+    }
   }
   const auto abs = volum::content::GlobalContentStore().ResolveStored(rel);
   const std::string absUtf8 = volum::content::PathToUtf8(abs);

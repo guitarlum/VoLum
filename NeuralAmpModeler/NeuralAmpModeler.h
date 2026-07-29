@@ -445,6 +445,14 @@ public:
   const char* _VolumMainAmpDisplayName() const;
   // True when the dual-amp SUPPORT lane currently owns the shared cab/IR controls.
   bool _VolumSupportFocused() { return GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport; }
+  // True when the SUPPORT lane actually has an amp: a factory amp or a custom
+  // partner. Its default is "(none)".
+  bool _VolumHasSupportAmp();
+  // Drops SUPPORT focus when that lane has no amp. Focusing an empty lane pointed
+  // the shared cab row, the channel stepper and the S shortcut at something that
+  // does not exist: the row jumped to a phantom cab, the stepper read "---", and S
+  // edited a parameter nothing was listening to.
+  void _VolumClampSupportFocus();
   // Stage the custom IR at library index irIdx into the given lane's convolver,
   // enable that lane's IR toggle, record its IR id on the active scene, and
   // reflect it in the cab row when that lane is the one displayed.

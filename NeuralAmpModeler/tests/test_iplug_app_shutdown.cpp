@@ -262,8 +262,17 @@ TEST_CASE("Preferences describes the ASIO driver it will actually open, and prob
   const std::string src = ReadForkAppDialogSource();
 
   // Input selection is resolved by device id, not by reusing the output list index.
+  // The two lists are filtered independently and need not agree on order or length,
+  // so under ASIO - one driver serving both directions - the shared position could
+  // name a third device, or nothing at all when the input list is shorter.
   CHECK(src.find("if (mAudioInputDevs[i] == mAudioOutputDevs[outdevidx])") != std::string::npos);
-  CHECK(src.find("CB_SETCURSEL, outdevidx, 0);\n\n  RtAudio::DeviceInfo") == std::string::npos);
+  CHECK(src.find("if (driverType == kDeviceASIO && mAudioOutputDevs.size())") != std::string::npos);
+
+  // The input channel list describes the input device, never the output list's
+  // position applied to the input list - that is the mismatch this fixes, and it is
+  // wrong under every driver type, not just ASIO.
+  CHECK(src.find("mDAC->getDeviceInfo(mAudioInputDevs[indevidx])") != std::string::npos);
+  CHECK(src.find("mAudioInputDevs[outdevidx]") == std::string::npos);
 
   // One probe per device: when both directions name the same device the second
   // getDeviceInfo is the double-init this fork blames for heap corruption.

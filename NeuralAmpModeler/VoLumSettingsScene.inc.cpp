@@ -290,13 +290,14 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
   if (!mVolumPostLocked)
     _VolumRestorePostFromSlot(s);
 
-  // Update speaker row UI if available
+  // Deliberately no SetSelected here. This is a restore path, and mVolumSpeakerIdx
+  // is a raw persisted index: for a custom lane the resolver still has to snap it to
+  // a slot the channel actually carries, and when SUPPORT is focused it belongs to
+  // the other lane entirely - the row is shared. Every caller of this function ends
+  // in _VolumApplyFocusedLaneCabs, which writes names, enables, IR chip and
+  // selection together for the lane that is actually on screen.
   if (auto* pGfx = GetUI())
-  {
-    if (auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-      spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);
     _UpdateVoLumLayout(pGfx);
-  }
 
   // F7: re-resolve each lane's custom IR cab (orphaned id -> baked cab fallback).
   // The SUPPORT lane owns its own convolver, so restore it independently.
