@@ -20,12 +20,13 @@ fresh Cursor planning chat.
 - `F1-transpose-octaver-pedal.md` — **STALE / shipped + superseded.** Pedal built; the Signalsmith phase-vocoder DSP in the doc was reversed for a low-latency WSOLA period-sync granular shifter with a DROP/FAST character (changelog 06/27/2026). Kept only as the original UI/state design reference. Octaver follow-up is now `F11`.
 - `F11-octaver-deep-research.md` — give the Octaver mode the same measured-reference deep-research treatment the transpose engine got (uses the local `deep-research` skill; reference the reference Chaos Bed as black-box reference). Ship the best octaver defensible with numbers; no gratuitous knobs.
 - `F12-tremolo-deep-research.md` — validate/sharpen the three POST Tremolo voices (Optical/Bias/Harmonic) against measured real-tremolo references (uses the local `deep-research` skill). Fix any voice that isn't an honest emulation; only add controls the research proves.
-- `F4-a2-lite-mode-support.md` — optional opt-in A2-Lite execution; default stays A2-Full. **Implemented on `feature/a2-lite-mode` (in test / pending merge to `dev`)**; archive + prune the prompt once merged. Seeded from the A2 retraining work (see `docs/a2-training-runbook.md`).
+- `F4-a2-lite-mode-support.md` — optional opt-in A2-Lite execution; default stays A2-Full. **`feature/a2-lite-mode` is merged into `dev`** (verified 07/29/2026); confirm it shipped as intended, then move to the Done archive and prune the prompt. Seeded from the A2 retraining work (see `docs/a2-training-runbook.md`).
 - `F5-presets-full-rig.md` — save / load / recall a full rig (amp(s) + PRE + POST) as a named preset, with factory presets and export/import.
 - `F6-bring-your-own-amp.md` — custom-amp builder + the shared "Base / Custom" area and user-content storage (foundation for F7 / F8).
 - `F7-bring-your-own-ir.md` — surface the existing hidden NAM IR convolver as a first-class `.wav` cabinet-IR feature in the Custom area.
 - `F8-import-your-own-pedals.md` — import custom PRE NAM captures into the PRE pedal slots.
 - `F9-midi-support.md` — minimal MIDI: Program Change recalls presets, CC maps to key params via MIDI-learn. Lowest priority.
+- `F14-update-notifier.md` — subtle in-app "a new version exists" notice in standalone and plugin, fed by a static `appcast.json` published on `release: published`. Notify-only; auto-update is explicitly out of scope and blocked on code signing. Design is settled, ~2-3 days. Ships value one release *after* the one that introduces it, so it wants to be early.
 
 ### OS Support
 - `O1-linux-support-spike.md`
