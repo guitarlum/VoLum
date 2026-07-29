@@ -1678,10 +1678,12 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     std::lock_guard<std::mutex> lock(mStagingMutex);
 
-    // VoLum: the staged models below have not been moved yet, so promoting here
-    // lets a deferred IR removal land on the same block as its replacement cab
-    // capture - the swap the user hears as seamless.
-    _VolumPromoteDeferredIrRemoval();
+    // VoLum: the staged models below have not been moved yet, so stepping the
+    // deferred swaps here lets a lane's IR change land on the same block as its
+    // replacement cab capture - the switch the user hears as one clean move.
+    bool holdMainIr = false;
+    bool holdSupportIr = false;
+    _VolumStepDeferredIrSwaps(holdMainIr, holdSupportIr);
 
     if (mShouldRemoveModel)
     {
@@ -1745,13 +1747,13 @@ void NeuralAmpModeler::_ApplyDSPStaging()
         appliedPreModel[i] = true;
       }
     }
-    if (mStagedIR != nullptr)
+    if (mStagedIR != nullptr && !holdMainIr)
     {
       mIR = std::move(mStagedIR);
       mStagedIR = nullptr;
       volum::dsp_staging::CommitStagedPathOnApply(mIRPaths);
     }
-    if (mStagedSupportIR != nullptr)
+    if (mStagedSupportIR != nullptr && !holdSupportIr)
     {
       mSupportIR = std::move(mStagedSupportIR);
       mStagedSupportIR = nullptr;
@@ -1777,39 +1779,48 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   }
 }
 
-// Main thread: land the shaping reset that _VolumClearIR held back, once the audio
-// thread has actually dropped the convolver. Until then the lane is still convolving
-// the outgoing IR and needs the shaping that goes with it.
+// Main thread: land the shaping push a deferred cab switch held back, once the audio
+// thread has landed that switch. Until then the lane is still playing the sound it is
+// leaving and needs the shaping that belongs to it.
 void NeuralAmpModeler::_VolumFlushDeferredIrShaping()
 {
-  const bool pending[2] = {mVolumDeferredRemoveIR.load(std::memory_order_relaxed),
-                           mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed)};
+  const bool pending[2] = {
+    mVolumDeferredRemoveIR.load(std::memory_order_relaxed) || mVolumDeferredApplyIR.load(std::memory_order_relaxed),
+    mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed)
+      || mVolumDeferredApplySupportIR.load(std::memory_order_relaxed)};
   for (int lane = 0; lane < 2; ++lane)
   {
-    if (!mVolumIrShapingResetPending[lane] || pending[lane])
+    if (!mVolumIrShapingPushPending[lane] || pending[lane])
       continue;
-    mVolumIrShapingResetPending[lane] = false;
+    mVolumIrShapingPushPending[lane] = false;
     _VolumPushIrShaping(lane == 1);
   }
 }
 
-void NeuralAmpModeler::_VolumPromoteDeferredIrRemoval()
+void NeuralAmpModeler::_VolumStepDeferredIrSwaps(bool& holdMainIr, bool& holdSupportIr)
 {
   const int maxBlocks = mVolumDeferredIrMaxBlocks.load(std::memory_order_relaxed);
-  auto step = [maxBlocks](std::atomic<bool>& pending, std::atomic<int>& waited, std::atomic<bool>& remove,
-                          bool replacementStaged) {
-    const auto out = volum::dsp_staging::StepDeferredIrRemoval(
+  auto step = [maxBlocks](std::atomic<bool>& pending, std::atomic<int>& waited, bool replacementStaged) {
+    const auto out = volum::dsp_staging::StepDeferredIrSwap(
       pending.load(std::memory_order_relaxed), waited.load(std::memory_order_relaxed), replacementStaged, maxBlocks);
     if (out.fire)
-    {
       pending.store(false, std::memory_order_relaxed);
-      remove.store(true, std::memory_order_relaxed);
-    }
     waited.store(out.waitedBlocks, std::memory_order_relaxed);
+    return out;
   };
-  step(mVolumDeferredRemoveIR, mVolumDeferredRemoveIrBlocks, mShouldRemoveIR, mStagedModel != nullptr);
-  step(mVolumDeferredRemoveSupportIR, mVolumDeferredRemoveSupportIrBlocks, mShouldRemoveSupportIR,
-       mStagedSupportModel != nullptr);
+
+  const bool mainStaged = mStagedModel != nullptr;
+  const bool supportStaged = mStagedSupportModel != nullptr;
+
+  if (step(mVolumDeferredRemoveIR, mVolumDeferredRemoveIrBlocks, mainStaged).fire)
+    mShouldRemoveIR.store(true, std::memory_order_relaxed);
+  if (step(mVolumDeferredRemoveSupportIR, mVolumDeferredRemoveSupportIrBlocks, supportStaged).fire)
+    mShouldRemoveSupportIR.store(true, std::memory_order_relaxed);
+
+  // The addition waits the other way round: the staged IR stays parked until this
+  // block, so the caller must leave it where it is.
+  holdMainIr = step(mVolumDeferredApplyIR, mVolumDeferredApplyIrBlocks, mainStaged).stillPending;
+  holdSupportIr = step(mVolumDeferredApplySupportIR, mVolumDeferredApplySupportIrBlocks, supportStaged).stillPending;
 }
 
 void NeuralAmpModeler::_DeallocateIOPointers()

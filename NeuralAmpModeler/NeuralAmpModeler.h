@@ -282,9 +282,12 @@ private:
   // Exists so that we don't try to use a DSP module that's only
   // partially-instantiated.
   void _ApplyDSPStaging();
-  // VoLum: promote a pending deferred IR removal once its replacement capture is
-  // staged (or the wait deadline expires). Audio thread, mStagingMutex held.
-  void _VolumPromoteDeferredIrRemoval();
+  // VoLum: advance both lanes' deferred IR swaps once their replacement capture is
+  // staged (or the wait deadline expires). A removal fires by flagging the convolver
+  // for deletion; an addition is held back instead, so the out params tell the
+  // caller which lanes must not promote their staged IR this block.
+  // Audio thread, mStagingMutex held.
+  void _VolumStepDeferredIrSwaps(bool& holdMainIr, bool& holdSupportIr);
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
   // Fallback used when no main NAM model is loaded.
@@ -456,8 +459,9 @@ public:
   // to the baked cab when the id is empty/orphaned (the referenced IR was deleted).
   void _VolumApplyActiveIr(const std::string& irId, bool support);
   // Force the given lane's amp onto its DIRECT / No-Cab capture so a custom IR
-  // convolves the raw amp instead of an already-cabbed signal.
-  void _VolumForceDirectCapture(bool support);
+  // convolves the raw amp instead of an already-cabbed signal. Returns true when
+  // that queued a capture load, which the IR must wait for before it convolves.
+  bool _VolumForceDirectCapture(bool support);
   // Standalone session restore (custom MAIN focus + active preset), run once when
   // the UI opens so the cab controls exist for a custom-amp re-focus.
   void _VolumRestoreSessionSelection();
@@ -717,8 +721,8 @@ private:
   iplug::sample** _VolumApplyIrShaping(iplug::sample** in, const size_t numChannels, const int nFrames,
                                        const double sampleRate, const bool support);
   void _VolumPushIrShaping(bool support);
-  // Main thread: apply a shaping reset that _VolumClearIR deferred, once the lane's
-  // deferred IR removal has fired and the convolver is actually gone.
+  // Main thread: apply a shaping push that a deferred cab switch held back, once
+  // that switch has landed and the lane's convolver matches the shaping again.
   void _VolumFlushDeferredIrShaping();
   void _VolumMigrateIrTrims();
 
@@ -826,18 +830,24 @@ private:
   std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
   std::atomic<bool> mShouldRemoveSupportIR = false;
-  // VoLum: switching from a custom IR to a baked cab drops the convolver only once
-  // the replacement capture is staged, so both swap on the same block instead of
-  // exposing a burst of raw, cab-less amp while the .nam loads asynchronously.
-  // The block counters bound that wait (see StepDeferredIrRemoval).
+  // VoLum: a cab-source switch changes the lane's capture and its IR together, but
+  // the capture loads asynchronously, so whichever side is ready first waits for the
+  // other and both land on one block. Dropping the IR early exposes raw, cab-less
+  // amp; adding it early stacks it on a baked cab that is still live. Set only when
+  // a capture load is actually coming - a pick that reuses the live capture switches
+  // at once. The block counters bound each wait (see StepDeferredIrSwap).
   std::atomic<bool> mVolumDeferredRemoveIR = false;
   std::atomic<bool> mVolumDeferredRemoveSupportIR = false;
   std::atomic<int> mVolumDeferredRemoveIrBlocks = 0;
   std::atomic<int> mVolumDeferredRemoveSupportIrBlocks = 0;
+  std::atomic<bool> mVolumDeferredApplyIR = false;
+  std::atomic<bool> mVolumDeferredApplySupportIR = false;
+  std::atomic<int> mVolumDeferredApplyIrBlocks = 0;
+  std::atomic<int> mVolumDeferredApplySupportIrBlocks = 0;
   std::atomic<int> mVolumDeferredIrMaxBlocks = 512;
-  // Main thread only: a lane whose shaping reset is waiting for its deferred IR
-  // removal to fire. [0] = MAIN, [1] = SUPPORT.
-  bool mVolumIrShapingResetPending[2]{false, false};
+  // Main thread only: a lane whose IR trim and cuts are waiting for its deferred
+  // swap to land, in either direction. [0] = MAIN, [1] = SUPPORT.
+  bool mVolumIrShapingPushPending[2]{false, false};
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;

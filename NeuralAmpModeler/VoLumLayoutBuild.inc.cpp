@@ -248,7 +248,20 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           const std::string& laneIrId =
             supportFocus ? _VolumActiveScene().supportActiveIrId : _VolumActiveScene().activeIrId;
           if (!laneIrId.empty())
-            _VolumClearIR(supportFocus, /*deferToCabSwap=*/true); // the picked cab's capture is about to load
+          {
+            // Only wait for a capture that is actually coming. An active IR already
+            // holds the lane on DIRECT, so picking No Cab reuses the live capture and
+            // nothing gets staged - deferring there would hold the IR for the whole
+            // bounded wait and make the switch feel stuck.
+            const int newSlot = (speakerIdx == 0) ? volum::custom::kDirectSlot : (speakerIdx - 1);
+            const bool captureChanges =
+              customLane >= 0
+                ? newSlot
+                    != (supportFocus ? mVolumCustomSupportSlot
+                                     : ((mVolumSpeakerIdx == 0) ? volum::custom::kDirectSlot : (mVolumSpeakerIdx - 1)))
+                : speakerIdx != (supportFocus ? GetParam(kSupportSpeakerIdx)->Int() : mVolumSpeakerIdx);
+            _VolumClearIR(supportFocus, /*deferToCabSwap=*/captureChanges);
+          }
           if (customLane >= 0)
           {
             // Channel-first: the row only enables cabs that carry the current gain

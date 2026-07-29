@@ -551,17 +551,25 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
   // Picking an IR again while a cab swap is still waiting cancels that swap. The
   // removal drops the staged IR as well as the live one, so letting it fire now
   // would silently throw away the IR just chosen.
+  const int lane = support ? 1 : 0;
   (support ? mVolumDeferredRemoveSupportIR : mVolumDeferredRemoveIR).store(false);
-  mVolumIrShapingResetPending[support ? 1 : 0] = false;
   // A custom IR replaces the baked cab: force this lane's amp onto its DIRECT /
   // No-Cab capture so the IR convolves the raw amp (not amp + baked cab).
-  _VolumForceDirectCapture(support);
+  const bool captureLoading = _VolumForceDirectCapture(support);
+  // That capture loads asynchronously. Convolving the IR before it arrives would
+  // stack the IR on the baked cab the lane is still playing - an audible jump on
+  // the way in, mirroring the cab-less gap on the way out - so the staged IR waits
+  // for it, and its trim and cuts wait with it.
+  (support ? mVolumDeferredApplySupportIrBlocks : mVolumDeferredApplyIrBlocks).store(0);
+  (support ? mVolumDeferredApplySupportIR : mVolumDeferredApplyIR).store(captureLoading);
+  mVolumIrShapingPushPending[lane] = captureLoading;
   const int toggle = support ? kSupportIRToggle : kIRToggle;
   if (support)
     _VolumActiveScene().supportActiveIrId = id;
   else
     _VolumActiveScene().activeIrId = id;
-  _VolumPushIrShaping(support); // apply this IR's trim + low/high cut on the lane
+  if (!captureLoading)
+    _VolumPushIrShaping(support); // apply this IR's trim + low/high cut on the lane
   GetParam(toggle)->Set(1.0);
   SendParameterValueFromDelegate(toggle, GetParam(toggle)->GetNormalized(), true);
   // The shared speaker row shows the focused lane's IR; only update it when this
@@ -581,8 +589,10 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
 
 // Switch the given lane's amp onto its DIRECT (No-Cab) capture so a custom IR
 // convolves the raw amp. Custom amps without a DIRECT capture keep their current
-// cab (best effort - there is no raw signal to convolve).
-void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
+// cab (best effort - there is no raw signal to convolve). Returns true when a
+// capture load was queued: the caller holds the IR back until it lands, so the
+// lane never convolves a custom IR over the baked cab it is leaving.
+bool NeuralAmpModeler::_VolumForceDirectCapture(bool support)
 {
   const bool laneFocused = (support == _VolumSupportFocused());
   auto selectRow0 = [this, laneFocused]() {
@@ -607,7 +617,12 @@ void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
     const int curCh = support ? mVolumCustomSupportChannel : volum::CustomChannelAtStep(amp, mVolumChannelIdx);
     const int snapped = volum::DirectChannelForIr(amp, curCh);
     if (snapped < 0)
-      return; // no raw capture to convolve; leave the current cab in place
+      return false; // no raw capture to convolve; leave the current cab in place
+    // Already on the DIRECT capture this IR needs (switching between two custom IRs,
+    // or an IR picked while the lane is on No Cab): nothing loads, so nothing waits.
+    const bool alreadyDirect =
+      support ? (mVolumCustomSupportSlot == volum::custom::kDirectSlot && mVolumCustomSupportChannel == snapped)
+              : (mVolumCustomMainSlot == volum::custom::kDirectSlot && mVolumCustomMainChannel == snapped);
     if (support)
     {
       mVolumCustomSupportSlot = volum::custom::kDirectSlot;
@@ -628,7 +643,7 @@ void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
       mVolumNeedsLoad.store(true);
     }
     selectRow0();
-    return;
+    return !alreadyDirect;
   }
   if (support)
   {
@@ -639,8 +654,9 @@ void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
       _VolumRefreshSupportChannels();
       selectRow0();
       mVolumSupportNeedsLoad.store(true);
+      return true;
     }
-    return;
+    return false;
   }
   if (mVolumSpeakerIdx != 0)
   {
@@ -649,7 +665,9 @@ void NeuralAmpModeler::_VolumForceDirectCapture(bool support)
     _VolumRefreshChannels();
     selectRow0();
     mVolumNeedsLoad.store(true);
+    return true;
   }
+  return false;
 }
 
 void NeuralAmpModeler::_VolumClearIR(bool support, bool deferToCabSwap)
@@ -660,6 +678,9 @@ void NeuralAmpModeler::_VolumClearIR(bool support, bool deferToCabSwap)
   // cab-less amp. Paths with no replacement coming (the IR menu's "None", which
   // leaves the lane on the DIRECT capture it already has) clear immediately.
   const int lane = support ? 1 : 0;
+  // An IR that was itself still waiting for its capture is being retired before it
+  // ever convolved; that wait is moot now.
+  (support ? mVolumDeferredApplySupportIR : mVolumDeferredApplyIR).store(false);
   if (deferToCabSwap)
   {
     (support ? mVolumDeferredRemoveSupportIrBlocks : mVolumDeferredRemoveIrBlocks).store(0);
@@ -675,7 +696,7 @@ void NeuralAmpModeler::_VolumClearIR(bool support, bool deferToCabSwap)
   // have to stay with it; resetting them now would drop a shaped IR to unity
   // mid-note, trading the cab-less gap for a level jump. _VolumFlushDeferredIrShaping
   // pushes the reset once the removal has fired.
-  mVolumIrShapingResetPending[lane] = deferToCabSwap;
+  mVolumIrShapingPushPending[lane] = deferToCabSwap;
   if (!deferToCabSwap)
     _VolumPushIrShaping(support); // no active IR -> reset the lane to unity / no cuts
   const int toggle = support ? kSupportIRToggle : kIRToggle;
