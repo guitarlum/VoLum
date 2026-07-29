@@ -818,6 +818,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     }
   }
 
+  // Hosts also load state into an editor that is already open - project load with the
+  // window up, undo, host preset switching - and that path never reached the applier,
+  // so the cab row kept describing the state the chunk just replaced. A no-op when no
+  // editor exists; OnUIOpen runs the same call once the controls are built.
+  _VolumSyncUiFromState();
+
   return pos;
 }
 

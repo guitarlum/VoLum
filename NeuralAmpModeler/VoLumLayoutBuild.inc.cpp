@@ -105,9 +105,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           heroCtrl->SetPlaceholder(ph, ampIdx);
           heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
         }
-        // Restore the factory cab labels (a custom amp may have overridden them).
-        if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-          spk->As<VoLumSpeakerRowControl>()->SetFactoryCabs();
+        // Re-derive the whole cab row for this factory amp, rather than only
+        // restoring its labels. A custom amp leaves behind more than names: on a
+        // gain stage with no DIRECT capture it greys out No Cab and Custom IR, and
+        // those two flags are written nowhere else. Coming back to a factory amp -
+        // which always ships a raw DIRECT capture - left both buttons disabled and
+        // swallowing clicks until the window was closed and reopened.
+        _VolumApplyFocusedLaneCabs();
 
         // F5: refresh the header preset strip to this amp's preset bank.
         _VolumSyncPresetOwner();
@@ -369,6 +373,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     heroArea,
     [this](bool supportFocused) {
       mVolumDualAmpFocusedSupport = supportFocused;
+      // Before the cab row is reconciled, not after: focusing a SUPPORT lane with no
+      // amp would otherwise point the row at a lane that does not exist.
+      _VolumClampSupportFocus();
       mVolumFocusedEffect = EVoLumEffectFocus::AMP;
       _VolumApplyFocusedLaneCabs();
       _UpdateVoLumLayout();
@@ -1372,7 +1379,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       {
         if (!settings->IsHidden())
         {
-          if (key.VK == kVK_ESCAPE)
+          // H is advertised as the settings key and is what opened this page, so it
+          // has to close it too - reaching for it again and having nothing happen
+          // reads as a stuck window. Everything else stays unhandled: the rig
+          // shortcuts must not edit the amp behind a full-window overlay.
+          if (key.VK == kVK_ESCAPE || key.VK == 'h' || key.VK == 'H')
           {
             settings->As<NAMSettingsPageControl>()->HideAnimated(true);
             return true;
@@ -1454,6 +1465,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       {
         if (ampList)
           ampList->SetSelected(newIdx); // also clears any custom selection
+        // Same reason as the sidebar-click path: arriving from a custom amp leaves
+        // its cab names on the row and, on a stage without a DIRECT capture, No Cab
+        // and Custom IR disabled. This path did not even restore the names.
+        _VolumApplyFocusedLaneCabs();
         if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
         {
           char ph[4] = {volum::kAmps[newIdx].displayName[0], (char)('0' + (newIdx % 10)), 0, 0};

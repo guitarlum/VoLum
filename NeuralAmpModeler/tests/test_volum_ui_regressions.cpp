@@ -196,7 +196,10 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   // just toggle Delay<->Reverb (the "can't arrow to Tremolo in POST" bug).
   RequireContains(source, "mVolumFocusedEffect = targets[wrap(current + direction, 3)];");
   RequireContains(source, "Left/Right channel  |  S cab  |  Tab target");
-  RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected");
+  // S runs the cab row's own step, which fires the callback a click fires. Covered
+  // properly in test_volum_cab_step.cpp; pinned here so the shortcut layer keeps
+  // routing through it rather than growing a second copy of the cab logic again.
+  RequireContains(source, "StepKeyboard(direction)");
   RequireContains(source, "Left/Right or Tab target");
   RequireContains(settings, "Shortcut info");
   RequireContains(settings, "\"1/2/3\", \"PRE / AMP / POST\"");
@@ -348,8 +351,15 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "const int restoredReverbMode = std::clamp(s.postReverbMode");
   RequireContains(source, "_VolumRestoreDelayModeSnapshot(restoredDelayMode);");
   RequireContains(source, "_VolumRestoreReverbModeSnapshot(restoredReverbMode);");
-  RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);");
   RequireContains(source, "_UpdateVoLumLayout(pGfx);");
+
+  // No lane's cab selection is pushed from a restore path any more. mVolumSpeakerIdx
+  // is a raw persisted index there: for a custom lane the resolver still has to snap
+  // it to a slot the channel carries, and when SUPPORT is focused it belongs to the
+  // other lane - the row is shared. The pin that was meant to prevent this matched on
+  // the receiver name `spkRow->` and so missed the `spkCtrl->` spelling in
+  // _VolumApplyAmpSettings; matched on the call instead, it catches either.
+  RequireDoesNotContain(source, "SetSelected(mVolumSpeakerIdx);");
 }
 
 TEST_CASE("POST Tremolo per-mode switch is guarded from snapshot re-entry")
@@ -972,7 +982,7 @@ TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wir
   // enable comes from the resolved plan; selection checks ChannelHasDirect).
   RequireContains(speakerRow, "void SetIrEnabled(bool enabled");
   RequireContains(source, "row->SetIrEnabled(plan.irEnabled");
-  RequireContains(source, "!volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
+  RequireContains(source, "if (!volum::custom::ChannelHasDirect(amp, laneChannel))");
 }
 
 TEST_CASE("Custom cab navigation is channel-first")
@@ -991,7 +1001,7 @@ TEST_CASE("Custom cab navigation is channel-first")
   // The channel stepper lists the amp-WIDE gain stages.
   RequireContains(source, "const auto channels = volum::custom::AssignedChannels(amp);");
   // Custom IR selection is gated per-channel, not amp-wide.
-  RequireContains(source, "volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
+  RequireContains(source, "volum::custom::ChannelHasDirect(amp, laneChannel)");
 }
 
 TEST_CASE("Editor reopen re-derives the whole visible selection from backend state")
@@ -1008,12 +1018,34 @@ TEST_CASE("Editor reopen re-derives the whole visible selection from backend sta
   RequireContains(source, "_VolumSyncUiFromState();");
 
   // The layout build must NOT push a partial selection of its own; that split
-  // between "build" and "apply" is what let the IR chip go missing.
-  RequireDoesNotContain(source, "spkRow->SetSelected(mVolumSpeakerIdx);");
+  // between "build" and "apply" is what let the IR chip go missing. Matched without
+  // the receiver name: as written with `spkRow->` this pin sat next to a live
+  // `spkCtrl->` copy in _VolumApplyAmpSettings and never saw it.
+  RequireDoesNotContain(source, "SetSelected(mVolumSpeakerIdx);");
 
   // Both lanes resolve through the same pure planner.
   RequireContains(source, "volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportFocus, unusedAmp))");
   RequireContains(source, "volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportLane, amp))");
+}
+
+TEST_CASE("Loading DAW state into an open editor re-derives the visible selection")
+{
+  // Regression (1.2.1): the chunk reader only pushed individual params, on the
+  // assumption that the editor is built after state arrives. Hosts also load state
+  // into a window that is already open - reopening a project with the plug-in window
+  // up, undo, switching host presets - and that left the cab row, IR chip and amp
+  // list describing the rig the chunk had just replaced. Clicking any of them then
+  // committed the stale reading back over the restored state.
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+
+  const auto fnPos = unserialize.find("int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  REQUIRE(fnPos != std::string::npos);
+  const auto fnEnd = unserialize.find("\n}", fnPos);
+  REQUIRE(fnEnd != std::string::npos);
+  const std::string body = unserialize.substr(fnPos, fnEnd - fnPos);
+
+  INFO("chunk restore must end by re-deriving the whole visible selection");
+  CHECK(body.find("_VolumSyncUiFromState();") != std::string::npos);
 }
 
 TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")
@@ -1024,16 +1056,27 @@ TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, 
   // restore, instead of deriving the stage from the persisted stepper position.
   const std::string source = ReadPluginSource();
 
-  const auto fnPos = source.find("bool NeuralAmpModeler::_VolumForceDirectCapture(");
-  REQUIRE(fnPos != std::string::npos);
-  const auto fnEnd = source.find("\n}", fnPos);
-  REQUIRE(fnEnd != std::string::npos);
-  const std::string body = source.substr(fnPos, fnEnd - fnPos);
+  // The same stale read survived one function up, in _VolumSelectIR's DIRECT gate,
+  // which every restore path reaches first - and that one does not merely pick the
+  // wrong stage, it clears the scene's IR id and lets the next save write the
+  // clearing out. So the pin covers both functions, not just the one that was fixed.
+  auto bodyOf = [&source](const char* signature) {
+    const auto fnPos = source.find(signature);
+    REQUIRE(fnPos != std::string::npos);
+    const auto fnEnd = source.find("\n}", fnPos);
+    REQUIRE(fnEnd != std::string::npos);
+    return source.substr(fnPos, fnEnd - fnPos);
+  };
 
-  INFO("MAIN must derive its gain stage from the persisted stepper position");
-  CHECK(body.find("volum::CustomChannelAtStep(amp, mVolumChannelIdx)") != std::string::npos);
-  INFO("reading the runtime gain-stage cache for MAIN is the bug being pinned out");
-  CHECK(body.find(": mVolumCustomMainChannel;") == std::string::npos);
+  for (const char* fn : {"bool NeuralAmpModeler::_VolumForceDirectCapture(",
+                         "void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)"})
+  {
+    const std::string body = bodyOf(fn);
+    INFO("MAIN must derive its gain stage from the persisted stepper position: " << fn);
+    CHECK(body.find("volum::CustomChannelAtStep(amp, mVolumChannelIdx)") != std::string::npos);
+    INFO("reading the runtime gain-stage cache for MAIN is the bug being pinned out: " << fn);
+    CHECK(body.find(": mVolumCustomMainChannel;") == std::string::npos);
+  }
 }
 
 TEST_CASE("Reopen restores the dirty baseline from preset content")
