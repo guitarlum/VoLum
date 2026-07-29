@@ -1079,6 +1079,32 @@ TEST_CASE("Preset recall refreshes the focused custom amp's cabs, not the factor
   CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true)") != std::string::npos);
 }
 
+TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
+{
+  // Windows delivers down, up, dblclick, up. The confirmation modal acts and hides
+  // on the down, so the dblclick that follows was hit-tested again and landed on the
+  // Manage overlay underneath - at the default window size, on row five. Confirming
+  // a delete with a double-click therefore also recalled an unrelated preset (or
+  // selected an unrelated IR, or loaded an unrelated pedal) and closed Manage.
+  //
+  // The overlay needs a real graphics host to instantiate, so this pins the wiring:
+  // the gesture flag is set on mouse-down and required by the double-click handler
+  // before it does anything.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+
+  RequireContains(overlay, "mOwnsGesture = true;");
+  RequireContains(overlay, "const bool ownsGesture = mOwnsGesture;");
+  RequireContains(overlay, "mOwnsGesture = false;");
+  RequireContains(overlay, "if (!ownsGesture)");
+
+  // The guard has to come before the row dispatch, or it guards nothing.
+  const auto guard = overlay.find("if (!ownsGesture)");
+  const auto rowDispatch = overlay.find("mPrimaryAction(mManageKind, mAmpIdx, mPedalSlot, idx);");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(rowDispatch != std::string::npos);
+  CHECK(guard < rowDispatch);
+}
+
 TEST_CASE("Custom NAM save and async load failures cannot masquerade as success")
 {
   const std::string source = ReadPluginSource();

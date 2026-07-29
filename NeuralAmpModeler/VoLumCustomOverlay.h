@@ -8,6 +8,7 @@
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
 #include "VoLumIrFileGuard.h"
+#include "VoLumOverlayActionCodes.h"
 #include "VoLumPresetBar.h"
 #include "VoLumListMenu.h"
 #include "VoLumConfirmDialog.h"
@@ -188,6 +189,9 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    // Records that this overlay owns the gesture in progress. See OnMouseDblClick.
+    mOwnsGesture = true;
+
     if (mPopupOpen)
     {
       for (const auto& hs : mPopupHotspots)
@@ -268,6 +272,20 @@ public:
 
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
+    // A double-click only counts if this overlay also received the mouse-down that
+    // began it. Windows delivers down, up, dblclick, up - so when a confirmation
+    // modal sits on top, takes the down and hides itself, the dblclick that follows
+    // is hit-tested afresh and lands here, on whatever row happens to be under the
+    // now-gone Delete button. At the default window size that is row five, so
+    // double-clicking Delete both deleted the chosen item and recalled an unrelated
+    // preset (or selected an unrelated IR, or loaded an unrelated pedal) before
+    // closing Manage. Requiring the matching down makes a gesture that did not
+    // start here inert.
+    const bool ownsGesture = mOwnsGesture;
+    mOwnsGesture = false;
+    if (!ownsGesture)
+      return;
+
     // Double-clicking a Manage row runs its primary action (recall preset /
     // select IR / load pedal) and closes. Icons behave like a single click.
     if (mPopupOpen || mScreen == volum::custom::Screen::Builder)
@@ -284,7 +302,7 @@ public:
       if (hs.first.Contains(x, y))
       {
         const int code = hs.second;
-        if (code >= kRowBase && code < kRowBase + 256)
+        if (code >= kRowBase && code < kRowBase + volum::custom::kActionStride)
         {
           const int idx = code - kRowBase;
           if (mPrimaryAction && idx >= 0 && idx < (int)mItems.size())
@@ -376,15 +394,19 @@ private:
     kEditName,
     kCabNameBase = 70, // [kCabNameBase, +kNumCabSlots) cab-slot rename chips
     kArtBase = 80, // [kArtBase, kArtBase + kNumCustomArts) art swatch picks
-    kRowBase = 100, // Manage row body (select / double-click primary action)
-    kFileSpeakerBase = 200,
-    kFileChannelBase = 300,
-    kFileRemoveBase = 400,
-    kRowOverwriteBase = 500, // Manage inline [overwrite] icon (presets only)
-    kRowRenameBase = 600, // Manage inline [pen] icon
-    kRowDeleteBase = 700, // Manage inline [trash] icon
-    kRowIrCfgBase = 800, // Manage inline [gear] icon (IR only): open shaping editor
-    kPopupBase = 1000
+    // Row-indexed families, each "base + row index". Spaced by kActionStride
+    // rather than by 100: a library has as many rows as the user made, and at 100
+    // apart the families overlapped from the 101st row on, so an icon click ran a
+    // different row's action. See VoLumOverlayActionCodes.h.
+    kRowBase = volum::custom::ActionBase(volum::custom::ActionFamily::Row),
+    kFileSpeakerBase = volum::custom::ActionBase(volum::custom::ActionFamily::FileSpeaker),
+    kFileChannelBase = volum::custom::ActionBase(volum::custom::ActionFamily::FileChannel),
+    kFileRemoveBase = volum::custom::ActionBase(volum::custom::ActionFamily::FileRemove),
+    kRowOverwriteBase = volum::custom::ActionBase(volum::custom::ActionFamily::Overwrite),
+    kRowRenameBase = volum::custom::ActionBase(volum::custom::ActionFamily::Rename),
+    kRowDeleteBase = volum::custom::ActionBase(volum::custom::ActionFamily::Delete),
+    kRowIrCfgBase = volum::custom::ActionBase(volum::custom::ActionFamily::IrCfg),
+    kPopupBase = volum::custom::ActionBase(volum::custom::ActionFamily::Popup)
   };
 
   enum class TextTarget
@@ -732,30 +754,30 @@ private:
   void HandleManageAction(int action, const IRECT& rect)
   {
     // Inline per-row icons select that row, then run overwrite / rename / delete.
-    if (action >= kRowOverwriteBase && action < kRowOverwriteBase + 100)
+    if (action >= kRowOverwriteBase && action < kRowOverwriteBase + volum::custom::kActionStride)
     {
       mSel = action - kRowOverwriteBase;
       HandleManageAction(kUpdate, rect);
       return;
     }
-    if (action >= kRowRenameBase && action < kRowRenameBase + 100)
+    if (action >= kRowRenameBase && action < kRowRenameBase + volum::custom::kActionStride)
     {
       mSel = action - kRowRenameBase;
       HandleManageAction(kRename, rect);
       return;
     }
-    if (action >= kRowDeleteBase && action < kRowDeleteBase + 100)
+    if (action >= kRowDeleteBase && action < kRowDeleteBase + volum::custom::kActionStride)
     {
       mSel = action - kRowDeleteBase;
       HandleManageAction(kDelete, rect);
       return;
     }
-    if (action >= kRowIrCfgBase && action < kRowIrCfgBase + 100)
+    if (action >= kRowIrCfgBase && action < kRowIrCfgBase + volum::custom::kActionStride)
     {
       OpenIrSettingsPopup(action - kRowIrCfgBase, rect);
       return;
     }
-    if (action >= kRowBase && action < kRowBase + 256)
+    if (action >= kRowBase && action < kRowBase + volum::custom::kActionStride)
     {
       mSel = action - kRowBase;
       SetDirty(false);
@@ -907,7 +929,7 @@ private:
     }
     // Per-file action ranges are 100 apart, so each span must stay < 100 to
     // avoid one branch swallowing another's codes.
-    if (action >= kFileRemoveBase && action < kFileRemoveBase + 100)
+    if (action >= kFileRemoveBase && action < kFileRemoveBase + volum::custom::kActionStride)
     {
       const int i = action - kFileRemoveBase;
       if (i >= 0 && i < (int)mBuilderAmp.files.size())
@@ -915,12 +937,12 @@ private:
       SetDirty(false);
       return;
     }
-    if (action >= kFileChannelBase && action < kFileChannelBase + 100)
+    if (action >= kFileChannelBase && action < kFileChannelBase + volum::custom::kActionStride)
     {
       OpenChannelPopup(action - kFileChannelBase, rect);
       return;
     }
-    if (action >= kFileSpeakerBase && action < kFileSpeakerBase + 100)
+    if (action >= kFileSpeakerBase && action < kFileSpeakerBase + volum::custom::kActionStride)
     {
       OpenSpeakerPopup(action - kFileSpeakerBase, rect);
       return;
@@ -1764,6 +1786,7 @@ private:
   std::vector<std::pair<IRECT, int>> mHotspots;
   std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text
   int mHoverAction = -1; // hotspot action under the cursor (-1 = none)
+  bool mOwnsGesture = false; // this overlay received the mouse-down of the current click
   std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
 
   // in-overlay popup (builder speaker/channel pickers)
