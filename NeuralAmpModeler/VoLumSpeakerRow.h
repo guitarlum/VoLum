@@ -7,6 +7,7 @@
 // VoLumCoreControls.h on the 1.0 hygiene split.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumCustomModel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -155,8 +156,8 @@ public:
         if (isOn)
           g.FillRoundRect(VoLumColors::SEL_GLOW, btn.GetPadded(2.5f), 5.f);
         g.FillRoundRect(isOn ? ButtonFill(true, isHovered, false) : ButtonFill(false, isHovered, false), btn, 3.f);
-        g.DrawRoundRect(isOn ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false),
-                        btn, 3.f, nullptr, isHovered ? 1.35f : 1.f);
+        g.DrawRoundRect(isOn ? ButtonBorder(true, isHovered, false) : ButtonBorder(false, isHovered, false), btn, 3.f,
+                        nullptr, isHovered ? 1.35f : 1.f);
         IColor cabTextCol = ButtonText(isOn, isHovered);
         IText btnTextCab(14.f, cabTextCol, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
         g.DrawText(btnTextCab, labels[i].c_str(), IRECT(btn.L, btn.T + btnTextNudgeY, btn.R, btn.B));
@@ -192,8 +193,7 @@ public:
         // Custom IR gets its own copper accent when active, distinct from the teal
         // "No Cab" and the gold stock cabs.
         const IColor fill = mIrCabActive ? VoLumColors::BTN_IR_ON_BG : ButtonFill(false, isHovered, false);
-        const IColor border = mIrCabActive ? VoLumColors::BTN_IR_ON_BORDER
-                                           : ButtonBorder(false, isHovered, false);
+        const IColor border = mIrCabActive ? VoLumColors::BTN_IR_ON_BORDER : ButtonBorder(false, isHovered, false);
         if (mIrCabActive)
           g.FillRoundRect(IColor(70, 196, 122, 80), btn.GetPadded(2.5f), 5.f);
         g.FillRoundRect(fill, btn, 3.f);
@@ -210,7 +210,7 @@ public:
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     int next = HitTestButton(x, y);
     if (next < 0 && mIrBtnRect.Contains(x, y))
       next = 4;
@@ -219,9 +219,9 @@ public:
       mHovered = next;
       const char* tip = "";
       if (next == 0)
-        tip = mNoCabEnabled ? "No cab - raw amp, no speaker"
-                            : (mNoCabDisabledHint.empty() ? "No DIRECT capture on this channel"
-                                                          : mNoCabDisabledHint.c_str());
+        tip = mNoCabEnabled
+                ? "No cab - raw amp, no speaker"
+                : (mNoCabDisabledHint.empty() ? "No DIRECT capture on this channel" : mNoCabDisabledHint.c_str());
       else if (next >= 1 && next <= 3)
         tip = mCabNames[next - 1].empty() ? "" : "Cabinet";
       else if (next == 4)
@@ -243,7 +243,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void) mod;
+    (void)mod;
     ClearVoLumKnobSelection(this);
 
     if (mIrBtnRect.Contains(x, y))
@@ -295,8 +295,8 @@ private:
     const int n = 5;
     for (int i = 0; i < n; i++)
     {
-      const float bx = x0 + (w * i) / (float) n;
-      const float h = r.H() * std::pow(0.55f, (float) i);
+      const float bx = x0 + (w * i) / (float)n;
+      const float h = r.H() * std::pow(0.55f, (float)i);
       g.DrawLine(col, bx, base, bx, base - h, nullptr, i == 0 ? 1.7f : 1.f);
     }
   }
@@ -305,7 +305,10 @@ private:
   {
     if (mIrName.size() <= 12)
       return mIrName;
-    return mIrName.substr(0, 11) + "\u2026";
+    // Utf8Prefix, not substr: an IR named with non-ASCII characters would otherwise
+    // be cut mid-sequence, and the label is drawn from the same string that gets
+    // persisted.
+    return volum::custom::Utf8Prefix(mIrName, 11) + "\u2026";
   }
 
   int HitTestButton(float x, float y) const

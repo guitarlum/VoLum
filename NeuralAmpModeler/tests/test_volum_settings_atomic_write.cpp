@@ -118,3 +118,33 @@ TEST_CASE("WriteJsonAtomically concurrent writers leave a complete parseable fil
     CHECK_FALSE(HasAtomicTempFile(root));
   }
 }
+
+TEST_CASE("A document containing invalid UTF-8 fails the write instead of throwing")
+{
+  // Every user-entered name - amp, IR, pedal, preset, cabinet - is serialized
+  // through here, and nlohmann::json::dump() throws type_error on invalid UTF-8
+  // anywhere in the document. The individual name cuts are character-aware, but
+  // this is the one place all of them pass through, so it has to be the backstop:
+  // an exception here would escape into UI or host code during a save.
+  const auto root = TestRoot("invalid-utf8");
+  const auto path = root / "settings.json";
+
+  nlohmann::json good;
+  good["name"] = "fine";
+  std::error_code ec;
+  REQUIRE(volum::WriteJsonAtomically(path, good, ec));
+  REQUIRE_FALSE(ec);
+
+  nlohmann::json bad;
+  bad["name"] = std::string("half a glyph: ") + "\xF0\x9F\x98"; // truncated U+1F600
+
+  bool ok = true;
+  CHECK_NOTHROW(ok = volum::WriteJsonAtomically(path, bad, ec));
+  CHECK_FALSE(ok);
+  CHECK(ec == std::errc::invalid_argument);
+
+  // The previous good file survives untouched, and no temp file is left behind.
+  const nlohmann::json loaded = ReadJsonFile(path);
+  CHECK(loaded == good);
+  CHECK_FALSE(HasAtomicTempFile(root));
+}

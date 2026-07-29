@@ -436,8 +436,8 @@ private:
   static constexpr float kIrPopupRowH = 26.f;
   static constexpr float kIrPopupRowGap = 8.f;
   static constexpr int kIrPopupRows = 3;
-  static constexpr float kIrPopupH = 2.f * kIrPopupPad + kIrPopupTitleH + kIrPopupTitleGap +
-                                     kIrPopupRows * kIrPopupRowH + (kIrPopupRows - 1) * kIrPopupRowGap;
+  static constexpr float kIrPopupH = 2.f * kIrPopupPad + kIrPopupTitleH + kIrPopupTitleGap + kIrPopupRows * kIrPopupRowH
+                                     + (kIrPopupRows - 1) * kIrPopupRowGap;
   static constexpr float kIrRowLabelW = 62.f;
   static constexpr float kIrRowBtnW = 24.f;
   static constexpr float kIrRowBtnGap = 5.f;
@@ -565,6 +565,7 @@ private:
     // grows as we add - and reported together.
     std::vector<std::string> skipped;
     std::vector<std::string> tooLarge;
+    std::vector<std::string> failed;
     int added = 0;
     for (const auto& fn : files)
     {
@@ -585,8 +586,7 @@ private:
       if (mManageKind == ManageKind::IR)
       {
         std::error_code ec;
-        const std::uintmax_t bytes =
-          std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec);
+        const std::uintmax_t bytes = std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec);
         if (!ec && !volum::IrFileBytesAcceptable(bytes))
         {
           tooLarge.push_back(base);
@@ -598,22 +598,38 @@ private:
       // resolvable registry-relative path. When no base dir is set (unit tests),
       // ImportFileCopy returns "" and we fall back to the bare filename.
       auto& store = volum::content::GlobalContentStore();
+      const char* const subDir = (mManageKind == ManageKind::IR) ? "ir" : "pedals";
+      const char* const idPrefix = (mManageKind == ManageKind::IR) ? "ir" : "pedal";
+      const std::string idp = volum::content::MintId(store.reg(), idPrefix);
+      std::string rel = store.ImportFileCopy(volum::content::PathFromUtf8(fn.Get()), subDir, idp);
+      if (rel.empty())
+      {
+        // With a base dir configured, an empty result means the copy itself failed
+        // - unreadable source, full or read-only disk. Recording the bare filename
+        // instead used to make that look like a successful import and left an entry
+        // in the library that could never load.
+        if (store.HasBaseDir())
+        {
+          failed.push_back(base);
+          continue;
+        }
+        rel = leaf; // unconfigured store (unit tests): nothing was copied anywhere
+      }
+
       if (mManageKind == ManageKind::IR)
       {
-        const std::string idp = volum::content::MintId(store.reg(), "ir");
-        std::string rel = store.ImportFileCopy(volum::content::PathFromUtf8(fn.Get()), "ir", idp);
-        if (rel.empty())
-          rel = leaf;
-        volum::custom::AddIR(base, rel);
+        if (volum::custom::AddIR(base, rel) < 0)
+        {
+          store.RemoveStoredFile(rel);
+          failed.push_back(base);
+          continue;
+        }
       }
       else
       {
-        const std::string idp = volum::content::MintId(store.reg(), "pedal");
-        std::string rel = store.ImportFileCopy(volum::content::PathFromUtf8(fn.Get()), "pedals", idp);
-        if (rel.empty())
-          rel = leaf;
         if (volum::custom::AddPedal(base, rel) < 0)
         {
+          store.RemoveStoredFile(rel);
           mError = "Custom pedal slots are full - delete a pedal first.";
           continue;
         }
@@ -627,10 +643,12 @@ private:
       mSel = (int)mItems.size() - 1;
       NotifyChanged();
     }
-    if (!tooLarge.empty())
-      mError = tooLarge.size() == 1
-                 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
-                 : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");
+    if (!failed.empty())
+      mError = failed.size() == 1 ? ("\"" + failed.front() + "\" could not be added to your library.")
+                                  : (std::to_string(failed.size()) + " files could not be added to your library.");
+    else if (!tooLarge.empty())
+      mError = tooLarge.size() == 1 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
+                                    : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");
     else if (!skipped.empty())
       mError = skipped.size() == 1 ? ("\"" + skipped.front() + "\" already exists - skipped.")
                                    : (std::to_string(skipped.size()) + " names already existed - skipped.");
@@ -662,7 +680,7 @@ private:
       case TextTarget::NewItem: return (int)volum::custom::kMaxPresetNameLen; // new preset
       case TextTarget::RenameItem:
         return (int)(mManageKind == ManageKind::Presets ? volum::custom::kMaxPresetNameLen
-                                                         : volum::custom::kMaxCustomNameLen);
+                                                        : volum::custom::kMaxCustomNameLen);
       default: return (int)volum::custom::kMaxCustomNameLen;
     }
   }
@@ -683,8 +701,7 @@ private:
     StartTextEntry(target, box, current, &centred);
   }
 
-  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current,
-                      const IText* style = nullptr)
+  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, const IText* style = nullptr)
   {
     auto* ui = GetUI();
     if (!ui)
@@ -1128,8 +1145,7 @@ private:
     // without a hover, matching how the rest of the overlay marks click targets.
     g.FillRoundRect(VoLumColors::BTN_OFF_BG, valueR, 3.f);
     g.DrawRoundRect(VoLumColors::TEAL_DIM, valueR, 3.f, nullptr, 1.f);
-    g.DrawText(IText(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), value.c_str(),
-               valueR);
+    g.DrawText(IText(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), value.c_str(), valueR);
     mPopupHotspots.emplace_back(valueR, kPopupBase + editAct);
 
     const std::pair<IRECT, bool> btns[] = {{minus, false}, {plus, true}};
@@ -1159,13 +1175,13 @@ private:
     const IRECT inner = mPopupRect.GetPadded(-kIrPopupPad);
     const IRECT title(inner.L, inner.T, inner.R, inner.T + kIrPopupTitleH);
     g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "IR SHAPING", title);
-    g.DrawText(IText(9.f, VoLumColors::CREAM_DIM, "Josefin-Regular", EAlign::Far, EVAlign::Middle), "click a value to type",
-               title);
+    g.DrawText(IText(9.f, VoLumColors::CREAM_DIM, "Josefin-Regular", EAlign::Far, EVAlign::Middle),
+               "click a value to type", title);
 
-    DrawIrStepperRow(g, IrRowRect(inner, 0), "Level", FmtIrTrim(s.trimDb), kIrCfgTrimDown, kIrCfgTrimUp,
-                     kIrCfgTrimEdit, volum::content::IrTrimStepAvail(s.trimDb));
-    DrawIrStepperRow(g, IrRowRect(inner, 1), "Low cut", FmtIrCut(s.lowCutHz), kIrCfgLowDown, kIrCfgLowUp,
-                     kIrCfgLowEdit, volum::content::IrLowCutStepAvail(s.lowCutHz));
+    DrawIrStepperRow(g, IrRowRect(inner, 0), "Level", FmtIrTrim(s.trimDb), kIrCfgTrimDown, kIrCfgTrimUp, kIrCfgTrimEdit,
+                     volum::content::IrTrimStepAvail(s.trimDb));
+    DrawIrStepperRow(g, IrRowRect(inner, 1), "Low cut", FmtIrCut(s.lowCutHz), kIrCfgLowDown, kIrCfgLowUp, kIrCfgLowEdit,
+                     volum::content::IrLowCutStepAvail(s.lowCutHz));
     DrawIrStepperRow(g, IrRowRect(inner, 2), "High cut", FmtIrCut(s.highCutHz), kIrCfgHighDown, kIrCfgHighUp,
                      kIrCfgHighEdit, volum::content::IrHighCutStepAvail(s.highCutHz));
   }
@@ -1378,8 +1394,8 @@ private:
         const float maxScroll = contentH - listArea.H();
         const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
         const float t = (maxScroll > 0.f) ? (mManageScroll / maxScroll) : 0.f;
-        const IRECT thumb(track.L, track.T + (track.H() - thumbH) * t, track.R,
-                          track.T + (track.H() - thumbH) * t + thumbH);
+        const IRECT thumb(
+          track.L, track.T + (track.H() - thumbH) * t, track.R, track.T + (track.H() - thumbH) * t + thumbH);
         DrawVoLumScrollbar(g, track, thumb);
       }
     }
@@ -1543,14 +1559,13 @@ private:
     if (!mError.empty())
     {
       g.PathClipRegion(builderFooter);
-      g.DrawText(IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mError.c_str(),
-                 builderFooter);
+      g.DrawText(
+        IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mError.c_str(), builderFooter);
       g.PathClipRegion();
     }
     else
     {
-      DrawFooter(g, builderFooter,
-                 "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
+      DrawFooter(g, builderFooter, "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
                  "Sparse coverage is fine. Stored as a per-amp manifest - your files are never renamed.");
     }
 

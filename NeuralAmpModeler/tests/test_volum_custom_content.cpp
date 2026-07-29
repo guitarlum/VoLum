@@ -131,8 +131,8 @@ TEST_CASE("SnapSlotForChannel keeps current, prefers a real cab, No Cab last")
   using volum::custom::SnapSlotForChannel;
   CustomAmp amp;
   // ch1: DIRECT + cab0 ; ch2: cab0 + cab1 ; ch3: DIRECT only.
-  amp.files = {{"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2},
-               {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
+  amp.files = {
+    {"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2}, {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
 
   // Current slot still valid for the new channel -> keep it.
   REQUIRE(SnapSlotForChannel(amp, 1, 0) == 0);
@@ -157,8 +157,8 @@ TEST_CASE("ResolveLaneCabs drives the channel-first cab view")
   using volum::custom::ResolveLaneCabs;
   // ch1: DIRECT + cab0 ; ch2: cab0 + cab1 (no DIRECT) ; ch3: DIRECT only.
   CustomAmp amp;
-  amp.files = {{"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2},
-               {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
+  amp.files = {
+    {"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2}, {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
 
   // Stepper lists the amp-wide channel set regardless of the current slot.
   {
@@ -230,8 +230,8 @@ TEST_CASE("Custom preset recall keeps channel five DIRECT routing and custom IR"
   using volum::custom::AssignedChannels;
   using volum::custom::CustomAmp;
   using volum::custom::CustomNamFile;
-  using volum::custom::ResolveLaneCabs;
   using volum::custom::kDirectSlot;
+  using volum::custom::ResolveLaneCabs;
 
   CustomAmp amp;
   amp.id = "amp_issue_22";
@@ -279,6 +279,7 @@ TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
 
 using volum::custom::AmpSlotChannels;
 using volum::custom::AmpSlots;
+using volum::custom::AssignedChannels;
 using volum::custom::CellFileCount;
 using volum::custom::CustomAmp;
 using volum::custom::FileAssigned;
@@ -287,7 +288,6 @@ using volum::custom::HasDuplicate;
 using volum::custom::IsDirectSlot;
 using volum::custom::kDirectSlot;
 using volum::custom::kUnassignedSlot;
-using volum::custom::AssignedChannels;
 using volum::custom::MaxAssignedChannel;
 using volum::custom::NormalizeCabName;
 using volum::custom::SaveDisabledReason;
@@ -355,6 +355,64 @@ TEST_CASE("NormalizeCabName uppercases, strips spaces, caps at 3 chars")
   REQUIRE(NormalizeCabName("  v 30 ") == "V30");
   REQUIRE(NormalizeCabName("greenback") == "GRE");
   REQUIRE(NormalizeCabName("   ").empty());
+}
+
+TEST_CASE("A cab name capped mid-glyph never yields invalid UTF-8")
+{
+  // Regression: the cap counted bytes, so a four-byte glyph was cut after three
+  // and the fragment went into the builder draft and then into
+  // volum-content.json, where nlohmann::json::dump() throws on invalid UTF-8 -
+  // taking the plug-in down while saving the amp rather than rejecting the name.
+  const std::string grinning = "\xF0\x9F\x98\x80"; // U+1F600, four bytes
+  const std::string euro = "\xE2\x82\xAC"; // U+20AC, three bytes
+
+  // The whole glyph survives, or none of it does; never three of its four bytes.
+  const std::string oneEmoji = NormalizeCabName(grinning);
+  CHECK(oneEmoji == grinning);
+  CHECK(volum::custom::Utf8Prefix(oneEmoji, oneEmoji.size()) == oneEmoji);
+
+  // Three characters means three characters, not three bytes.
+  CHECK(NormalizeCabName(grinning + grinning + grinning + grinning) == grinning + grinning + grinning);
+  CHECK(NormalizeCabName(euro + euro + euro + euro) == euro + euro + euro);
+
+  // Mixed input still counts characters, and ASCII is still uppercased.
+  CHECK(NormalizeCabName("a" + euro + "b" + "c") == "A" + euro + "B");
+
+  // Input that is already malformed stops the scan instead of copying a fragment.
+  CHECK(NormalizeCabName(std::string("AB") + "\xF0\x9F\x98") == "AB");
+  CHECK(NormalizeCabName("\x80\x80\x80").empty());
+}
+
+TEST_CASE("Utf8Prefix cuts only on character boundaries")
+{
+  using volum::custom::Utf8Prefix;
+  const std::string euro = "\xE2\x82\xAC";
+
+  CHECK(Utf8Prefix("abcdef", 3) == "abc");
+  CHECK(Utf8Prefix("abcdef", 99) == "abcdef");
+  CHECK(Utf8Prefix("abcdef", 0).empty());
+
+  // A budget that lands inside the euro sign excludes it entirely.
+  CHECK(Utf8Prefix("ab" + euro, 3) == "ab");
+  CHECK(Utf8Prefix("ab" + euro, 4) == "ab");
+  CHECK(Utf8Prefix("ab" + euro, 5) == "ab" + euro);
+
+  // A truncated sequence at the end of the input is never emitted.
+  CHECK(Utf8Prefix(std::string("ab") + "\xE2\x82", 99) == "ab");
+}
+
+TEST_CASE("A pill label truncated mid-glyph never yields invalid UTF-8")
+{
+  using volum::custom::ShortCaptureLabel;
+  const std::string euro = "\xE2\x82\xAC";
+  const std::string ellipsis = "\u2026";
+
+  // Cap 5 lands inside the second euro sign; it is dropped rather than split.
+  CHECK(ShortCaptureLabel(euro + euro + euro) == euro + ellipsis);
+  // "abc" is 3 bytes and the euro needs 3 more, so the euro does not fit at all.
+  CHECK(ShortCaptureLabel("abc" + euro) == "abc" + ellipsis);
+  // Here it fits exactly, so it is kept whole.
+  CHECK(ShortCaptureLabel("ab" + euro + "cd") == "ab" + euro + ellipsis);
 }
 
 TEST_CASE("Duplicate (slot,channel) detection flags both colliding files")
