@@ -54,8 +54,8 @@ PreparedCustomNamImport PrepareCustomNamImport(ContentStore& store, const custom
     auto& file = result.amp.files[i];
     if (!file.sourcePath.empty())
     {
-      const std::string rel = store.ImportFileCopy(
-        PathFromUtf8(file.sourcePath), "amps", transactionPrefix + "_" + std::to_string(i));
+      const std::string rel =
+        store.ImportFileCopy(PathFromUtf8(file.sourcePath), "amps", transactionPrefix + "_" + std::to_string(i));
       if (rel.empty())
         return fail(file, "could not copy the capture into the VoLum content library");
       file.storedPath = rel;

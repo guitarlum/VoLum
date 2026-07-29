@@ -257,9 +257,8 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   {
     // Sync converts BPM + division to an LFO Hz (shared postBpm computed above).
     const bool tremoloSync = GetParam(kTremoloSync)->Bool();
-    const double tremoloRateHz = tremoloSync
-                                   ? volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())
-                                   : GetParam(kTremoloRate)->Value();
+    const double tremoloRateHz = tremoloSync ? volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())
+                                             : GetParam(kTremoloRate)->Value();
     mTremolo.SetParams(tremoloRateHz, volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value()),
                        GetParam(kTremoloShape)->Value(), GetParam(kTremoloMix)->Value(),
                        GetParam(kTremoloCrossover)->Value(), GetParam(kTremoloMode)->Int(), sampleRate);

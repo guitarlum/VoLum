@@ -540,4 +540,3 @@ std::string NeuralAmpModeler::_VolumActiveOwnerKey() const
   }
   return volum::content::FactoryOwnerKey(mVolumAmpIdx);
 }
-

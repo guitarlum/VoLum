@@ -101,7 +101,8 @@
 #define METERBACKGROUND2X_FN "MeterBackground@2x.png"
 #define METERBACKGROUND3X_FN "MeterBackground@3x.png"
 
-// Standalone only: if 1, settings overlay opens on launch (for scripts/ui-mockup capture — see scripts/capture-volum-settings-ui.ps1).
+// Standalone only: if 1, settings overlay opens on launch (for scripts/ui-mockup capture — see
+// scripts/capture-volum-settings-ui.ps1).
 #if defined(APP_API)
   #ifndef VOLUM_OPEN_SETTINGS_AT_LAUNCH
     #define VOLUM_OPEN_SETTINGS_AT_LAUNCH 0

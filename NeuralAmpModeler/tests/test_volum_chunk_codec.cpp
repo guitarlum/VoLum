@@ -869,8 +869,7 @@ TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
   in.perAmpTremolo[0].sync = true;
   in.perAmpTremolo[0].division = 6; // 1/8T
   in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical] = volum::TremoloModeSnapshot{2.0, 0.55, 0.1, 0.4, 600.0};
-  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic] =
-    volum::TremoloModeSnapshot{7.0, 0.95, 0.5, 1.0, 1500.0};
+  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic] = volum::TremoloModeSnapshot{7.0, 0.95, 0.5, 1.0, 1500.0};
 
   // Last amp: Optical, free-running.
   in.perAmpTremolo[volum::kAmpCount - 1].present = true;
@@ -1132,7 +1131,7 @@ TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effect
 // bounds, while still honoring the live (non-mode) values that were present.
 TEST_CASE("Id tail effect blocks with missing/short modes arrays seed ship defaults")
 {
-  const volum::PitchTail defPitch;     // default-constructed = ship defaults
+  const volum::PitchTail defPitch; // default-constructed = ship defaults
   const volum::TremoloTail defTremolo; // default-constructed = ship defaults
 
   nlohmann::json j;

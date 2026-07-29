@@ -967,8 +967,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadDouble(a, "postDelayAge", s.postDelayAge, 0.0, 1.0, defaults.postDelayAge);
         loadBool(a, "postDelayPingPong", s.postDelayPingPong, defaults.postDelayPingPong);
         loadBool(a, "postDelaySync", s.postDelaySync, defaults.postDelaySync);
-        loadInt(a, "postDelayDivision", s.postDelayDivision, 0, kVoLumTremoloDivisionCount - 1,
-                defaults.postDelayDivision);
+        loadInt(
+          a, "postDelayDivision", s.postDelayDivision, 0, kVoLumTremoloDivisionCount - 1, defaults.postDelayDivision);
         loadBool(a, "postReverbActive", s.postReverbActive, defaults.postReverbActive);
         loadDouble(a, "postReverbMix", s.postReverbMix, 0.0, 1.0, defaults.postReverbMix);
         loadDouble(a, "postReverbDecay", s.postReverbDecay, 0.1, 10.0, defaults.postReverbDecay);
@@ -1049,8 +1049,7 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         if (a.contains("postTremoloModes") && a["postTremoloModes"].is_array())
         {
           const auto& modes = a["postTremoloModes"];
-          for (int modeIdx = 0; modeIdx < kVoLumTremoloModeCount && modeIdx < static_cast<int>(modes.size());
-               ++modeIdx)
+          for (int modeIdx = 0; modeIdx < kVoLumTremoloModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
           {
             const auto& mode = modes[modeIdx];
             auto& dst = s.postTremoloModes[modeIdx];
@@ -1283,8 +1282,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           loadDouble(mode, "depth", fx->tremoloModes[i].depth, 0.0, 1.0, defaults.tremoloModes[i].depth);
           loadDouble(mode, "shape", fx->tremoloModes[i].shape, 0.0, 1.0, defaults.tremoloModes[i].shape);
           loadDouble(mode, "mix", fx->tremoloModes[i].mix, 0.0, 1.0, defaults.tremoloModes[i].mix);
-          loadDouble(mode, "crossover", fx->tremoloModes[i].crossover, 200.0, 2000.0,
-                     defaults.tremoloModes[i].crossover);
+          loadDouble(
+            mode, "crossover", fx->tremoloModes[i].crossover, 200.0, 2000.0, defaults.tremoloModes[i].crossover);
         }
         else
         {

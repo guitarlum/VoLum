@@ -56,7 +56,10 @@ TEST_CASE("ImportFileCopy preserves a unicode leaf name and copies the bytes")
   // "Mesa Rec'tifier <astral>.wav": e-acute, right-quote, i-diaeresis, and a
   // 4-byte astral glyph (U+1D11E musical G-clef) in the leaf.
   const std::string leaf =
-    "M\xC3\xA9" "sa Rec\xE2\x80\x99" "t\xC3\xAF" "fier \xF0\x9D\x84\x9E.wav";
+    "M\xC3\xA9"
+    "sa Rec\xE2\x80\x99"
+    "t\xC3\xAF"
+    "fier \xF0\x9D\x84\x9E.wav";
   const auto src = WriteSrc(base / "incoming", leaf, "RIFFdata");
   ContentStore store(base);
 
@@ -146,7 +149,9 @@ TEST_CASE("Save creates a missing base dir and Load round-trips from it")
   ContentStore store(base);
   volum::custom::CustomAmp amp;
   amp.id = "amp_rt";
-  amp.name = "\xC3\x9C" "bercaster"; // leading U-umlaut
+  amp.name =
+    "\xC3\x9C"
+    "bercaster"; // leading U-umlaut
   store.reg().amps.push_back(amp);
   REQUIRE(store.Save());
   CHECK(std::filesystem::exists(base));
@@ -167,9 +172,13 @@ TEST_CASE("Corrupt registry is backed up even when a stale .bak already exists")
   std::filesystem::create_directories(base, ec);
 
   // Stale leftover backup from a prior recovery.
-  { std::ofstream(store.BackupPath(), std::ios::binary) << "OLD-BAK"; }
+  {
+    std::ofstream(store.BackupPath(), std::ios::binary) << "OLD-BAK";
+  }
   // Current registry is unparseable JSON.
-  { std::ofstream(store.RegistryPath(), std::ios::binary) << "{ this is not json "; }
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary) << "{ this is not json ";
+  }
 
   CHECK_FALSE(store.Load()); // recovered, not clean
   CHECK(store.reg().amps.empty());
@@ -184,13 +193,17 @@ TEST_CASE("Registry round-trips unicode preset and IR names byte-for-byte")
   Registry r;
   IRItem ir;
   ir.id = "ir_u";
-  ir.name = "Gr\xC3\xB6\xC3\x9F" "e \xE4\xB8\xAD\xE6\x96\x87"; // umlaut + CJK
+  ir.name =
+    "Gr\xC3\xB6\xC3\x9F"
+    "e \xE4\xB8\xAD\xE6\x96\x87"; // umlaut + CJK
   ir.file = "ir/ir_u__x.wav";
   r.irs.push_back(ir);
 
   Preset pr;
   pr.id = "preset_u";
-  pr.name = "Pr\xC3\xA9" "set \xF0\x9F\x8E\xB8"; // accent + emoji guitar
+  pr.name =
+    "Pr\xC3\xA9"
+    "set \xF0\x9F\x8E\xB8"; // accent + emoji guitar
   r.presetBanks["amp_x"] = {pr};
 
   bool healed = false;

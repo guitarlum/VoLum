@@ -143,8 +143,8 @@ inline nlohmann::json PitchTailToJson(const PitchTail& p)
   for (int i = 0; i < kVoLumPitchModeCount; ++i)
     modes.push_back(
       {{"mix", p.modes[i].mix}, {"dry", p.modes[i].dry}, {"level", p.modes[i].level}, {"voice", p.modes[i].voicing}});
-  return nlohmann::json{{"active", p.active}, {"mode", p.mode},      {"semi", p.semitones}, {"mix", p.mix},
-                        {"octDn", p.octDown}, {"octUp", p.octUp},    {"dry", p.dry},        {"voice", p.voicing},
+  return nlohmann::json{{"active", p.active}, {"mode", p.mode},       {"semi", p.semitones}, {"mix", p.mix},
+                        {"octDn", p.octDown}, {"octUp", p.octUp},     {"dry", p.dry},        {"voice", p.voicing},
                         {"level", p.level},   {"tchar", p.transChar}, {"modes", modes}};
 }
 
@@ -207,10 +207,9 @@ inline nlohmann::json TremoloTailToJson(const TremoloTail& t)
                      {"shape", t.modes[i].shape},
                      {"mix", t.modes[i].mix},
                      {"xover", t.modes[i].crossover}});
-  return nlohmann::json{{"active", t.active},   {"mode", t.mode},   {"rate", t.rate},
-                        {"depth", t.depth},     {"shape", t.shape}, {"mix", t.mix},
-                        {"xover", t.crossover}, {"sync", t.sync},   {"div", t.division},
-                        {"modes", modes}};
+  return nlohmann::json{{"active", t.active}, {"mode", t.mode}, {"rate", t.rate},       {"depth", t.depth},
+                        {"shape", t.shape},   {"mix", t.mix},   {"xover", t.crossover}, {"sync", t.sync},
+                        {"div", t.division},  {"modes", modes}};
 }
 
 inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
@@ -392,8 +391,7 @@ inline RestoreSelection ResolveRestoreSelection(bool loadedFromChunk, const Rest
 // The caller owns the store and reports what it found. A custom amp that no longer
 // exists also invalidates the preset id, because the bank belonged to that amp -
 // keeping it would restore a preset label with no owner.
-inline RestoreSelection ValidateRestoreSelection(const RestoreSelection& in, bool customMainIdKnown,
-                                                 bool presetIdKnown)
+inline RestoreSelection ValidateRestoreSelection(const RestoreSelection& in, bool customMainIdKnown, bool presetIdKnown)
 {
   RestoreSelection out = in;
   if (!out.customMainId.empty() && !customMainIdKnown)

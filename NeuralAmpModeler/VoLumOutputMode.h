@@ -44,8 +44,7 @@ inline double ComputeInputGainDb(double knobDb, bool calibrateEnabled, bool mode
 // the pairing is missing.
 inline const char* InputCalibrationHelpText(bool modelHasInputLevel)
 {
-  return modelHasInputLevel ? "Aligns your interface level to the capture"
-                            : "This model has no capture level";
+  return modelHasInputLevel ? "Aligns your interface level to the capture" : "This model has no capture level";
 }
 
 inline const char* InputCalibrationTooltip(bool modelHasInputLevel)

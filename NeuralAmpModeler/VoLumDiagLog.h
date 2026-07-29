@@ -58,7 +58,7 @@ inline std::string TimestampNow()
   const auto secs = clock::to_time_t(now);
   const auto ms =
     std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % std::chrono::seconds(1);
-  std::tm tm {};
+  std::tm tm{};
 #ifdef _WIN32
   localtime_s(&tm, &secs);
 #else

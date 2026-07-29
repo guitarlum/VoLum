@@ -514,4 +514,3 @@ void NeuralAmpModeler::_HideVoLumExactEntry()
     }
   }
 }
-
