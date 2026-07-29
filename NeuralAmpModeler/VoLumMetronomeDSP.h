@@ -5,7 +5,7 @@
 #include <cmath>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
 
 namespace volum
@@ -14,10 +14,10 @@ namespace volum
 enum class MetronomeTimeSig : int
 {
   Quarter_1_4 = 0, // 1/4 - single click per beat
-  Quarter_2_4,     // 2/4
-  Quarter_3_4,     // 3/4
-  Quarter_4_4,     // 4/4
-  Eighth_6_8,      // 6/8
+  Quarter_2_4, // 2/4
+  Quarter_3_4, // 3/4
+  Quarter_4_4, // 4/4
+  Eighth_6_8, // 6/8
   kCount
 };
 
@@ -118,8 +118,8 @@ public:
         float t = static_cast<float>(mClickSamplePos) / mSampleRate;
         float envelope = 1.f - (static_cast<float>(mClickSamplePos) / static_cast<float>(mClickLenSamples));
         envelope *= envelope; // quadratic decay
-        float raw = std::sin(2.f * static_cast<float>(M_PI) * freq * t) +
-                    0.35f * std::sin(2.f * static_cast<float>(M_PI) * freq * 2.37f * t);
+        float raw = std::sin(2.f * static_cast<float>(M_PI) * freq * t)
+                    + 0.35f * std::sin(2.f * static_cast<float>(M_PI) * freq * 2.37f * t);
         clickSample = std::tanh(raw * 1.7f) * kClickPeak * envelope * gain * vol;
         ++mClickSamplePos;
       }
@@ -144,7 +144,13 @@ public:
 
   bool IsActive() const { return mActive.load(std::memory_order_relaxed); }
 
-  void SetBPM(float bpm) { mBPM.store(std::clamp(bpm, kMinBPM, kMaxBPM), std::memory_order_relaxed); }
+  // The isfinite guard is not redundant with the clamp: std::clamp(NaN, lo, hi)
+  // returns NaN, because both of its comparisons are false. A NaN tempo divides
+  // into samplesPerBeat below and its conversion to int is undefined.
+  void SetBPM(float bpm)
+  {
+    mBPM.store(std::isfinite(bpm) ? std::clamp(bpm, kMinBPM, kMaxBPM) : kDefaultBPM, std::memory_order_relaxed);
+  }
   float GetBPM() const { return mBPM.load(std::memory_order_relaxed); }
 
   void SetVolume(float vol) { mVolume.store(std::clamp(vol, 0.f, 1.f), std::memory_order_relaxed); }
@@ -170,7 +176,9 @@ private:
   void _RecalcSamplesPerBeat()
   {
     float bpm = mCachedBPM;
-    if (bpm < kMinBPM)
+    // Negated comparison so a NaN that ever reaches here is also floored, rather
+    // than sailing through to the division below.
+    if (!(bpm >= kMinBPM))
       bpm = kMinBPM;
     bool compound = MetronomeIsCompound(mCachedTimeSig);
     // For 6/8, each "beat" is an eighth note; BPM refers to dotted-quarter = 3 eighth notes
@@ -184,17 +192,12 @@ private:
   {
     switch (sig)
     {
-      case MetronomeTimeSig::Quarter_1_4:
-        return 0; // plain click, no bar accent
+      case MetronomeTimeSig::Quarter_1_4: return 0; // plain click, no bar accent
       case MetronomeTimeSig::Quarter_2_4:
-      case MetronomeTimeSig::Quarter_3_4:
-        return beatIndex == 0 ? 2 : 0;
-      case MetronomeTimeSig::Quarter_4_4:
-        return beatIndex == 0 ? 2 : (beatIndex == 2 ? 1 : 0);
-      case MetronomeTimeSig::Eighth_6_8:
-        return beatIndex == 0 ? 2 : (beatIndex == 3 ? 1 : 0);
-      default:
-        return beatIndex == 0 ? 2 : 0;
+      case MetronomeTimeSig::Quarter_3_4: return beatIndex == 0 ? 2 : 0;
+      case MetronomeTimeSig::Quarter_4_4: return beatIndex == 0 ? 2 : (beatIndex == 2 ? 1 : 0);
+      case MetronomeTimeSig::Eighth_6_8: return beatIndex == 0 ? 2 : (beatIndex == 3 ? 1 : 0);
+      default: return beatIndex == 0 ? 2 : 0;
     }
   }
 

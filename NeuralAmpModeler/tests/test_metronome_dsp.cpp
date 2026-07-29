@@ -3,14 +3,13 @@
 
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
+#include <limits>
 #include <string>
 #include <vector>
 
-static std::vector<int> DetectClickStarts(
-  volum::MetronomeDSP& met,
-  double sampleRate,
-  int totalSamples,
-  const std::vector<int>& blockSizes)
+static std::vector<int> DetectClickStarts(volum::MetronomeDSP& met, double sampleRate, int totalSamples,
+                                          const std::vector<int>& blockSizes)
 {
   std::vector<int> starts;
   std::vector<double> buffer(4096, 0.0);
@@ -32,8 +31,7 @@ static std::vector<int> DetectClickStarts(
     for (int i = 0; i < blockSize; ++i)
     {
       bool above = std::fabs(buffer[i]) > threshold;
-      if (above && !wasAbove &&
-          (starts.empty() || (absoluteSample + i - starts.back()) > minGapSamples))
+      if (above && !wasAbove && (starts.empty() || (absoluteSample + i - starts.back()) > minGapSamples))
         starts.push_back(absoluteSample + i);
       wasAbove = above;
     }
@@ -250,4 +248,52 @@ TEST_CASE("MetronomeTimeSig: beats per measure")
   CHECK(volum::MetronomeBeatsPerMeasure(volum::MetronomeTimeSig::Quarter_1_4) == 1);
   CHECK(volum::MetronomeBeatsPerMeasure(volum::MetronomeTimeSig::Quarter_4_4) == 4);
   CHECK(volum::MetronomeBeatsPerMeasure(volum::MetronomeTimeSig::Eighth_6_8) == 6);
+}
+
+TEST_CASE("A non-finite tempo is never stored")
+{
+  // The BPM field is typed into, and strtof happily returns NaN for "nan" and
+  // infinity for "inf". std::clamp does not filter either out: both of its
+  // comparisons are false for NaN, so it returns the NaN unchanged. That value
+  // then divided into samplesPerBeat, whose conversion to int is undefined, and
+  // never compared equal to itself so the recalculation ran on every block.
+  volum::MetronomeDSP m;
+  m.Reset(48000.0);
+
+  m.SetBPM(90.f);
+  REQUIRE(m.GetBPM() == doctest::Approx(90.f));
+
+  for (const float bad : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+                          -std::numeric_limits<float>::infinity()})
+  {
+    m.SetBPM(bad);
+    const float stored = m.GetBPM();
+    CAPTURE(bad);
+    CHECK(std::isfinite(stored));
+    CHECK(stored >= volum::MetronomeDSP::kMinBPM);
+    CHECK(stored <= volum::MetronomeDSP::kMaxBPM);
+  }
+
+  // Ordinary out-of-range values still clamp rather than being rejected.
+  m.SetBPM(5.f);
+  CHECK(m.GetBPM() == doctest::Approx(volum::MetronomeDSP::kMinBPM));
+  m.SetBPM(10000.f);
+  CHECK(m.GetBPM() == doctest::Approx(volum::MetronomeDSP::kMaxBPM));
+}
+
+TEST_CASE("A non-finite tempo cannot produce a pathological beat interval")
+{
+  // Guards the audio-thread half: even if a NaN ever reached the cached tempo, the
+  // beat interval has to stay a usable number of samples.
+  volum::MetronomeDSP m;
+  m.Reset(48000.0);
+  m.SetBPM(std::numeric_limits<float>::quiet_NaN());
+  m.SetActive(true);
+
+  std::vector<double> buf(512, 0.0);
+  double* io[1] = {buf.data()};
+  CHECK_NOTHROW(m.Process(io, 512, 1));
+
+  for (const double s : buf)
+    CHECK(std::isfinite(s));
 }
