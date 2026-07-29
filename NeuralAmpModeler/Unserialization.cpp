@@ -1,5 +1,6 @@
 #include "VoLumChunkVersion.h"
 #include "VoLumChunkLayout.h"
+#include "VoLumChunkSafeRead.h"
 #include "VoLumDiagLog.h"
 #include "VoLumJsonMigration.h"
 
@@ -90,15 +91,24 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
 {
   int pos = startPos;
   WDL_String path;
-  pos = chunk.GetStr(path, pos);
+  pos = volum::SafeGetStr(chunk, pos, path);
+  if (pos < 0)
+    return -1;
   config["NAMPath"] = std::string(path.Get());
-  pos = chunk.GetStr(path, pos);
+  pos = volum::SafeGetStr(chunk, pos, path);
+  if (pos < 0)
+    return -1;
   config["IRPath"] = std::string(path.Get());
 
   for (auto it = paramNames.begin(); it != paramNames.end(); ++it)
   {
     double v = 0.0;
     pos = chunk.Get(&v, pos);
+    // A truncated chunk used to leave every remaining name at 0.0 in `config`,
+    // which the caller then applied to live params as if the project had asked
+    // for it. Failing here keeps a short read from silently rewriting the rig.
+    if (pos < 0)
+      return -1;
     config[*it] = v;
   }
   return pos;
@@ -514,11 +524,23 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // We already got through the header before calling this.
   int pos = startPos;
 
-  // Get the version
+  // Get the version. A chunk that carries our header but no parsable version is
+  // corrupt, not old: rejecting it here leaves the instance exactly as it was,
+  // whereas the previous ChunkVersion(std::string) construction threw
+  // std::invalid_argument out through the host's state callback.
   WDL_String wVersion;
-  pos = chunk.GetStr(wVersion, pos);
-  std::string versionStr(wVersion.Get());
-  volum::ChunkVersion version(versionStr);
+  pos = volum::SafeGetStr(chunk, pos, wVersion);
+  if (pos < 0)
+    return -1;
+
+  const std::string versionStr(wVersion.Get());
+  volum::ChunkVersion version(0, 0, 0);
+  if (!volum::TryParseChunkVersion(versionStr, version))
+  {
+    VOLUM_LOG("state", "rejecting chunk with unparsable version \"" + versionStr + "\"");
+    return -1;
+  }
+
   // Act accordingly
   nlohmann::json config;
 

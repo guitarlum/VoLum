@@ -147,6 +147,9 @@
     <ClCompile Include="..\tests\test_volum_bypass_identity.cpp" />
     <ClCompile Include="..\tests\test_volum_nan_guard.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
+    <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
+    <ClCompile Include="..\tests\test_volum_preset_bar.cpp" />
+    <ClCompile Include="..\tests\test_volum_chunk_safe_read.cpp" />
     <ClCompile Include="..\tests\test_volum_wav_downmix.cpp" />
     <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />

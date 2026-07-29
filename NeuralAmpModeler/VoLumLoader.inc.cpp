@@ -132,6 +132,9 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
   mVolumLoaderCv.notify_one();
 }
 
+// Runs on the audio thread, from _ApplyDSPStaging inside ProcessBlock. Nothing
+// here may do file I/O - load outcomes are logged by _VolumLoaderThreadMain
+// instead. See the note at the log call there.
 void NeuralAmpModeler::_VolumDrainLoaderResults()
 {
   std::deque<VoLumLoadResult> results;
@@ -172,7 +175,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         // Keep the last known-good model for uninterrupted audio, but tell the
         // main/UI thread to make the fallback explicit in the footer.
         mVolumMainLoadFailed.store(true);
-        VOLUM_LOG("model", "MAIN load FAILED " + result.path + " : " + result.error);
         continue;
       }
 
@@ -182,7 +184,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         mStagedModel = std::move(result.model);
         volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());
       }
-      VOLUM_LOG("model", "MAIN loaded " + result.path);
       continue;
     }
 
@@ -200,7 +201,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       if (!result.error.empty())
       {
         mShouldRemoveSupportModel.store(true);
-        VOLUM_LOG("model", "SUPPORT load FAILED " + result.path + " : " + result.error);
         continue;
       }
 
@@ -209,7 +209,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         std::lock_guard<std::mutex> lock(mStagingMutex);
         mStagedSupportModel = std::move(result.model);
       }
-      VOLUM_LOG("model", "SUPPORT loaded " + result.path);
       continue;
     }
 
@@ -229,7 +228,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
     if (!result.error.empty())
     {
       mShouldRemovePreModel[slot].store(true);
-      VOLUM_LOG("model", "PRE slot " + std::to_string(slot) + " load FAILED " + result.path + " : " + result.error);
       continue;
     }
 
@@ -376,6 +374,27 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
     if (request.kind == VoLumLoadKind::MainPrefetch)
       continue;
 
+    // Load outcomes are logged here, on the loader thread, and never from
+    // _VolumDrainLoaderResults: the drain runs inside ProcessBlock, and every log
+    // entry stats a file, may rename it, and opens an ofstream under a mutex.
+    // Doing that from the audio thread meant every model load - so every amp,
+    // channel or cab switch - did blocking file I/O in the realtime callback.
+    // This also reports loads the drain later discards as superseded, which is
+    // the more honest record of what was actually read from disk.
+    {
+      std::string kindLabel;
+      switch (request.kind)
+      {
+        case VoLumLoadKind::Main: kindLabel = "MAIN"; break;
+        case VoLumLoadKind::Support: kindLabel = "SUPPORT"; break;
+        default: kindLabel = "PRE slot " + std::to_string(request.slot); break;
+      }
+      if (!result.error.empty())
+        VOLUM_LOG("model", kindLabel + " load FAILED " + result.path + " : " + result.error);
+      else
+        VOLUM_LOG("model", kindLabel + " loaded " + result.path);
+    }
+
     {
       std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
       mVolumLoadResults.push_back(std::move(result));
@@ -422,6 +441,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   {
     if (!dualActive)
     {
+      mVolumSupportSelected.store(false);
       mShouldRemoveSupportModel.store(true);
       mVolumSupportIsLoading.store(false);
       mVolumLastLoadedSupportFile.clear();
@@ -436,19 +456,18 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
         rel = volum::content::CaptureFileFor(amp, s, c);
     }
     const std::string fileToLoad =
-      rel.empty()
-        ? std::string()
-        : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
+      rel.empty() ? std::string() : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
     if (fileToLoad.empty())
     {
+      mVolumSupportSelected.store(false);
       mShouldRemoveSupportModel.store(true);
       mVolumSupportIsLoading.store(false);
       mVolumLastLoadedSupportFile.clear();
       return;
     }
+    mVolumSupportSelected.store(true);
     mVolumSupportIsLoading.store(true);
-    mVolumLastLoadedSupportFile =
-      volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
+    mVolumLastLoadedSupportFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
     _VolumQueueSupportModelLoad(fileToLoad, -1); // -1 = custom: skip factory prefetch
     return;
   }
@@ -456,6 +475,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   const int supportAmpIdx = GetParam(kSupportAmpIdx)->Int();
   if (!dualActive || supportAmpIdx < 0 || supportAmpIdx >= volum::kAmpCount || mVolumRigsRoot.empty())
   {
+    mVolumSupportSelected.store(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
@@ -464,12 +484,11 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
 
   namespace fs = std::filesystem;
   const int speakerIdx = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3);
-  auto channels = volum::DiscoverChannels(
-    volum::content::PathFromUtf8(mVolumRigsRoot),
-    volum::kAmps[supportAmpIdx].folderName,
-    volum::kSpeakerPrefixes[speakerIdx]);
+  auto channels = volum::DiscoverChannels(volum::content::PathFromUtf8(mVolumRigsRoot),
+                                          volum::kAmps[supportAmpIdx].folderName, volum::kSpeakerPrefixes[speakerIdx]);
   if (channels.empty())
   {
+    mVolumSupportSelected.store(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
@@ -489,14 +508,15 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   const std::string fileToLoad = volum::content::PathToUtf8(fs::weakly_canonical(rigPath, ec));
   if (fileToLoad.empty())
   {
+    mVolumSupportSelected.store(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
     return;
   }
 
+  mVolumSupportSelected.store(true);
   mVolumSupportIsLoading.store(true);
-  mVolumLastLoadedSupportFile =
-    volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
+  mVolumLastLoadedSupportFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
   _VolumQueueSupportModelLoad(fileToLoad, supportAmpIdx);
 }

@@ -830,6 +830,12 @@ private:
   std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
   std::atomic<bool> mShouldRemoveSupportIR = false;
+  // VoLum: whether a SUPPORT amp is selected at all, owned solely by
+  // _VolumRequestSupportModelLoad - the one place that decides whether a support
+  // model should exist. ProcessBlock cannot answer this from kSupportAmpIdx,
+  // because a custom (library) partner has no factory index and parks that param
+  // at -1; testing the param alone silenced the entire custom dual-amp lane.
+  std::atomic<bool> mVolumSupportSelected = false;
   // VoLum: a cab-source switch changes the lane's capture and its IR together, but
   // the capture loads asynchronously, so whichever side is ready first waits for the
   // other and both land on one block. Dropping the IR early exposes raw, cab-less

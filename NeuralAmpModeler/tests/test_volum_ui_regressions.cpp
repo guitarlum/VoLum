@@ -394,7 +394,8 @@ TEST_CASE("Tremolo depth floor + Delay/Tremolo tempo sync are wired into the aud
   const std::string source = ReadPluginSource();
 
   RequireContains(source, "volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value())");
-  RequireContains(source, "std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)");
+  RequireContains(
+    source, "std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)");
   RequireContains(source, "volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())");
 }
 
@@ -1102,8 +1103,7 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   RequireDoesNotContain(overlay, "std::filesystem::path(fn.Get())");
   // The active footer filename is committed from mNAMPaths only after the DSP
   // staging path reports a successful model swap.
-  RequireContains(
-    source, "volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());");
+  RequireContains(source, "volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());");
 }
 
 TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")
@@ -1157,4 +1157,91 @@ TEST_CASE("Restore re-applies cached DSP gains and tone coefficients")
   RequireContains(source, "mSupportToneStack->SetParam(\"bass\", GetParam(kSupportToneBass)->Value());");
   RequireContains(source, "mSupportToneStack->SetParam(\"middle\", GetParam(kSupportToneMid)->Value());");
   RequireContains(source, "mSupportToneStack->SetParam(\"treble\", GetParam(kSupportToneTreble)->Value());");
+}
+
+TEST_CASE("A custom SUPPORT partner is admitted to the audio graph")
+{
+  // A custom (library) SUPPORT amp has no factory index, so the selection path
+  // parks kSupportAmpIdx at -1. ProcessBlock used to derive "a support amp is
+  // selected" from that param alone, so runSupportModel/runDualAmp stayed false
+  // and the custom dual-amp lane was silent while the UI showed it loaded.
+  const std::string source = ReadPluginSource();
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+
+  const auto processBlock = source.find("void NeuralAmpModeler::ProcessBlock(");
+  REQUIRE(processBlock != std::string::npos);
+  const std::string processBody = source.substr(processBlock, 2500);
+
+  RequireContains(processBody, "mVolumSupportSelected.load(std::memory_order_relaxed)");
+  RequireDoesNotContain(processBody, "GetParam(kSupportAmpIdx)->Int() >= 0");
+
+  // The flag is only trustworthy if the one function that owns it maintains it on
+  // every path. Two load paths (custom partner, factory amp) arm it; every exit
+  // that asks the audio thread to drop the model clears it. Counting them is what
+  // makes a newly added exit that forgets the flag fail here.
+  auto countOf = [](const std::string& haystack, const std::string& needle) {
+    size_t n = 0;
+    for (size_t at = haystack.find(needle); at != std::string::npos; at = haystack.find(needle, at + 1))
+      ++n;
+    return n;
+  };
+  const auto request = loader.find("void NeuralAmpModeler::_VolumRequestSupportModelLoad()");
+  REQUIRE(request != std::string::npos);
+  const std::string requestBody = loader.substr(request);
+
+  CHECK(countOf(requestBody, "mVolumSupportSelected.store(true)") == 2);
+  CHECK(countOf(requestBody, "mVolumSupportSelected.store(false)") == 5);
+  CHECK(countOf(requestBody, "mShouldRemoveSupportModel.store(true)")
+        == countOf(requestBody, "mVolumSupportSelected.store(false)"));
+}
+
+TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
+{
+  // _VolumDrainLoaderResults runs on the audio thread: ProcessBlock ->
+  // _ApplyDSPStaging -> _VolumDrainLoaderResults. Every VOLUM_LOG entry takes a
+  // mutex, stats the log file, may rename it, and opens an ofstream. Logging load
+  // outcomes from the drain therefore put blocking file I/O in the realtime
+  // callback on every amp, channel or cab switch - and VoLumDiagLog.h's own
+  // contract says never to call it from the audio thread.
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+
+  const auto drain = loader.find("void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  REQUIRE(drain != std::string::npos);
+  const auto loaderMain = loader.find("void NeuralAmpModeler::_VolumLoaderThreadMain()");
+  REQUIRE(loaderMain != std::string::npos);
+  REQUIRE(drain < loaderMain); // the drain body is bounded by the next function
+
+  const std::string drainBody = loader.substr(drain, loaderMain - drain);
+  RequireDoesNotContain(drainBody, "VOLUM_LOG");
+
+  // The outcomes are still logged, just from the worker thread that produced them.
+  const std::string loaderBody = loader.substr(loaderMain);
+  RequireContains(loaderBody, "VOLUM_LOG(\"model\"");
+  RequireContains(loaderBody, "\" loaded \"");
+  RequireContains(loaderBody, "\" load FAILED \"");
+}
+
+TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay muted")
+{
+  // An active tuner memsets every output channel (silenceForTuner in
+  // ProcessBlock). mTunerDSP is a plugin member, so it outlives the editor, and
+  // the only two places that can clear it -- the tuner toggle and the tuner
+  // control's dismiss action -- both require an editor. Closing the plugin window
+  // with the tuner open therefore silenced the instance for good, invisibly: the
+  // editor is rebuilt with the tuner hidden, so reopening showed a normal UI over
+  // a dead signal path.
+  const std::string source = ReadPluginSource();
+
+  const auto onUIClose = source.find("void NeuralAmpModeler::OnUIClose()");
+  REQUIRE(onUIClose != std::string::npos);
+  const auto body = source.substr(onUIClose, 700);
+
+  // The deactivation has to live in OnUIClose itself, not merely somewhere in the
+  // translation unit.
+  RequireContains(body, "mTunerDSP.SetActive(false);");
+
+  // Pin the two facts that make the above load-bearing, so this test keeps
+  // failing for the right reason if either moves.
+  RequireContains(source, "processingPlan.silenceForTuner");
+  RequireContains(source, "mTunerDSP.IsActive()");
 }
