@@ -598,6 +598,33 @@ TEST_CASE("Standalone settings persist the active preset id (Q1/B5)")
   RequireContains(plugin, "mVolumRestorePresetId = j[\"volumActivePresetId\"].get<std::string>();");
 }
 
+TEST_CASE("Standalone settings persist every amp's preset selection, not just the focused amp's")
+{
+  // Reported from 1.2.1 testing: "only the last active amp remembers the selected
+  // preset". The key pinned above is a single string describing whichever amp was
+  // focused when the file was written, so every other amp reopened reading
+  // "No Preset" - and an exit from an amp with nothing recalled wrote an empty id,
+  // taking the focused one with it.
+  const std::string plugin = ReadPluginSource();
+  RequireContains(plugin, "j[\"volumActivePresetIdByOwner\"] = volum::VolumActivePresetIdsToJson(");
+  RequireContains(
+    plugin, "mVolumActivePresetIdByOwner = volum::VolumActivePresetIdsFromJson(j[\"volumActivePresetIdByOwner\"]);");
+
+  // The live pair is folded into what gets written, so a save landing between a
+  // recall and the next amp switch still records that recall.
+  RequireContains(plugin, "activePresetIdsByOwner[_VolumActiveOwnerKey()] = mVolumActivePresetId;");
+
+  // And the read side has to accept an id with no snapshot beside it, because the
+  // file stores ids only. Requiring both - which is what shipped - meant every
+  // selection restored from the file was discarded on the amp switch that should
+  // have shown it, so persisting them would have changed nothing.
+  RequireContains(plugin, "mVolumRecalledSnapshotByOwner[key] = pr.settings;");
+  // Written as the conjunction rather than the whole statement: the old code made the
+  // snapshot a precondition of using the id, so no persisted id could ever apply.
+  // One line, so this does not depend on wrapping or line endings.
+  RequireDoesNotContain(plugin, "&& itSnap != mVolumRecalledSnapshotByOwner.end())");
+}
+
 TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the deferred restore")
 {
   // The "VST3/AU reopen drops the focused custom amp" fix: UnserializeState must
