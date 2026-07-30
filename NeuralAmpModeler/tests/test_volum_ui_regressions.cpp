@@ -822,10 +822,44 @@ TEST_CASE("Legacy chunks without lock tail default to unlocked on deserialize")
 {
   const std::string source = ReadPluginSource();
 
-  RequireContains(source, "if (hasPrePostLockFlags)");
-  RequireContains(source, "pos = volum::GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked);");
-  RequireContains(source, "mVolumPreLocked = false;");
-  RequireContains(source, "mVolumPostLocked = false;");
+  RequireContains(source, "hasPrePostLockFlags");
+  RequireContains(source, "volum::GetPrePostLockFlags(chunk, pos, pendingPreLocked, pendingPostLocked)");
+  // The pending copies start unlocked, so a chunk with no lock tail still restores
+  // unlocked - without the decoders being handed the live members.
+  RequireContains(source, "bool pendingPreLocked = false;");
+  RequireContains(source, "bool pendingPostLocked = false;");
+}
+
+TEST_CASE("A chunk truncated inside the per-amp tail leaves every scene alone")
+{
+  // The tail is fifteen scenes, the lock flags and the lock snapshots. A failed read
+  // spares the numbers but still writes every boolean from a local carrying the
+  // decoder's default (see the codec test), so one truncation used to reset the
+  // toggles of all fifteen amps, and the instance then saved them. Rejecting the
+  // load instead is not available here: the same version predicate matches upstream
+  // NAM projects, which have no VoLum tail at all.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "auto pendingAmpSettings = mVolumAmpSettings;");
+  RequireContains(source, "auto& s = pendingAmpSettings[i];");
+  RequireContains(source, "const bool perAmpTailComplete = haveSelection && pos >= 0;");
+  RequireContains(source, "mVolumAmpSettings = pendingAmpSettings;");
+  // The decoders must never see the live members again.
+  RequireDoesNotContain(source, "auto& s = mVolumAmpSettings[i];");
+  RequireDoesNotContain(source, "GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked)");
+  RequireDoesNotContain(source, "chunk, pos, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre");
+
+  // The selection is part of the same commit: it used to be assigned straight out
+  // of a read that may have failed.
+  RequireContains(source, "const int selectionEnd = volum::GetVoLumChunkSelection(chunk, pos, selection);");
+  RequireContains(source, "const bool haveSelection = selectionEnd >= 0;");
+  RequireDoesNotContain(source, "pos = volum::GetVoLumChunkSelection(chunk, pos, selection);");
+
+  // And there is no id tail behind a tail that did not read.
+  RequireContains(source, "perAmpTailComplete && volum::TryGetChunkIdTail(");
+
+  // The headerless legacy path applied its config even when the read failed.
+  RequireContains(source, "rejecting truncated headerless chunk");
 }
 
 TEST_CASE("VoLum loader queue coalesces duplicate support and PRE requests")
@@ -1044,8 +1078,31 @@ TEST_CASE("Loading DAW state into an open editor re-derives the visible selectio
   REQUIRE(fnEnd != std::string::npos);
   const std::string body = unserialize.substr(fnPos, fnEnd - fnPos);
 
-  INFO("chunk restore must end by re-deriving the whole visible selection");
-  CHECK(body.find("_VolumSyncUiFromState();") != std::string::npos);
+  INFO("chunk restore must end by requesting a re-derive of the whole visible selection");
+  CHECK(body.find("mVolumUiSyncPending.store(true);") != std::string::npos);
+
+  // But it must not run the applier itself. UnserializeState is called on the host's
+  // thread; the applier writes IGraphics controls and can rescan a rig directory into
+  // shared channel vectors, so running it there races the editor's own drawing and
+  // input. The request crosses to OnIdle, which is the UI-thread pump.
+  CHECK(body.find("_VolumSyncUiFromState();") == std::string::npos);
+
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "if (GetUI() && mVolumUiSyncPending.exchange(false))");
+  const auto idlePos = source.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idlePos != std::string::npos);
+  const auto consume = source.find("mVolumUiSyncPending.exchange(false)", idlePos);
+  REQUIRE(consume != std::string::npos);
+  CHECK(consume - idlePos < 400);
+
+  // A request that arrives with the window shut is satisfied by the open path, which
+  // runs the same applier - so the flag is cleared there rather than left to fire a
+  // second, redundant sync on the first idle.
+  const auto openPos = source.find("void NeuralAmpModeler::OnUIOpen()");
+  REQUIRE(openPos != std::string::npos);
+  const auto clear = source.find("mVolumUiSyncPending.store(false);", openPos);
+  REQUIRE(clear != std::string::npos);
+  CHECK(clear < source.find("\n}", openPos));
 }
 
 TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")
@@ -1172,10 +1229,13 @@ TEST_CASE("Every preset operation claims the shared bridge before using it")
   RequireContains(source, "volum::custom::PresetHookOwner() = this;");
   RequireContains(source, "volum::custom::ClearPresetHooksIfOwnedBy(this);");
 
-  // Save, overwrite and recall: three operations, three claims, and each bridge
-  // call still present. The fourth claim is the callback the layout hands the
-  // Manage overlay, so its rename and delete - which go straight to the bridge
-  // rather than through the plugin - claim the bank too.
+  // Seven claims. Save, overwrite and recall are the three operations. The fourth is
+  // the callback the layout hands the Manage overlay, so its rename and delete -
+  // which go straight to the bridge rather than through the plugin - claim the bank
+  // too. The last three are the READ sites: opening the preset menu, and the two
+  // callbacks that bounds-check a chosen row. MockPresetsForAmp ignores its ampIdx
+  // and resolves the bank through the global key, so listing without claiming shows
+  // another instance's presets and hands their row numbers to this instance's bank.
   auto count = [&source](const char* needle) {
     const std::string n(needle);
     std::size_t total = 0;
@@ -1184,7 +1244,22 @@ TEST_CASE("Every preset operation claims the shared bridge before using it")
     return total;
   };
 
-  CHECK(count("_VolumClaimPresetOps();") == 4);
+  CHECK(count("_VolumClaimPresetOps();") == 7);
+  // Each read of the bank is preceded by a claim rather than following one.
+  for (const char* readSite : {"const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);",
+                               "const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);",
+                               "const auto presets = volum::custom::MockPresetsForAmp(ampIdx);"})
+  {
+    const auto read = source.find(readSite);
+    REQUIRE(read != std::string::npos);
+    const auto claim = source.rfind("_VolumClaimPresetOps();", read);
+    REQUIRE(claim != std::string::npos);
+    // The first bank read after that claim is this one, so nothing reads the bank
+    // between the two.
+    const auto firstReadAfterClaim = source.find("MockPresetsForAmp", claim);
+    CHECK(firstReadAfterClaim > read);
+    CHECK(firstReadAfterClaim < read + std::string(readSite).size());
+  }
   RequireContains(source, "[pPlugin]() { pPlugin->_VolumClaimPresetOps(); }");
   RequireContains(source, "volum::custom::AddPreset(mVolumAmpIdx");
   RequireContains(source, "volum::custom::OverwritePreset(mVolumAmpIdx");

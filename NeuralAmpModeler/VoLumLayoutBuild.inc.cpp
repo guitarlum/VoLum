@@ -1144,6 +1144,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             bar->As<VoLumPresetBarControl>()->PromptSaveAs();
           return;
         }
+        // Claim before the bounds check, not only inside _VolumRecallPreset: the
+        // check reads the owner-keyed bank, and validating a row against one
+        // instance's bank while recalling it from another's is how a stale index
+        // recalls the wrong preset.
+        pPlugin->_VolumClaimPresetOps();
         const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
         if (code >= 0 && code < (int)presets.size())
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
@@ -1282,6 +1287,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           using MK = VoLumCustomOverlayControl::ManageKind;
           if (kind == MK::Presets)
           {
+            pPlugin->_VolumClaimPresetOps(); // the bounds check below reads the owner-keyed bank
             const auto presets = volum::custom::MockPresetsForAmp(ampIdx);
             if (index >= 0 && index < (int)presets.size())
               pPlugin->_VolumRecallPreset(index); // apply settings + drive the bar

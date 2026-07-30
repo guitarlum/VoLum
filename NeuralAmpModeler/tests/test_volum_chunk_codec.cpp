@@ -31,7 +31,68 @@ struct MemoryChunk
     return pos + static_cast<int>(sizeof(T));
   }
 };
+
+// Reproduces iPlug2's IByteChunk::Get behaviour on a chunk that ran out: it
+// returns -1 and leaves the destination alone, rather than asserting. MemoryChunk
+// above cannot model that, because its REQUIRE aborts the test instead.
+struct TruncatableChunk
+{
+  std::vector<unsigned char> bytes;
+
+  template <typename T>
+  void Put(const T* value)
+  {
+    const auto* first = reinterpret_cast<const unsigned char*>(value);
+    bytes.insert(bytes.end(), first, first + sizeof(T));
+  }
+
+  template <typename T>
+  int Get(T* value, int pos) const
+  {
+    if (pos < 0 || static_cast<size_t>(pos) + sizeof(T) > bytes.size())
+      return -1;
+    std::memcpy(value, bytes.data() + pos, sizeof(T));
+    return pos + static_cast<int>(sizeof(T));
+  }
+
+  int Size() const { return static_cast<int>(bytes.size()); }
+};
 } // namespace
+
+TEST_CASE("A per-amp decoder that runs out still rewrites the toggles it was handed")
+{
+  // The premise behind reading the per-amp tail into copies and committing only on
+  // success. A failed `Get` leaves its destination alone, so the numeric fields
+  // survive - but every boolean is read into a local with the decoder's own default
+  // and assigned afterwards, unconditionally. A decoder handed a position past the
+  // end, or the negative position a previous failure returned, therefore reports
+  // failure through its return value while still flipping the scene's switches.
+  // Fifteen of these run in a row, so one truncation inside the tail reset the noise
+  // gate, EQ, pre-comp, PRE-capture and POST toggles of every amp - and the instance
+  // kept running with them and saved them back out.
+  volum::VoLumAmpSettings mine{};
+  mine.noiseGateActive = false;
+  mine.eqActive = false;
+  mine.gateThreshold = -37.5;
+
+  TruncatableChunk empty;
+  volum::VoLumAmpSettings target = mine;
+  const int pos = volum::GetLegacyPerAmpSettings(empty, 0, target);
+
+  CHECK(pos < 0);                                        // the read failed
+  CHECK(target.gateThreshold == doctest::Approx(-37.5)); // numbers survive it
+  CHECK(target.noiseGateActive);                         // switches do not
+  CHECK(target.eqActive);
+
+  // Same from a position that is already negative, which is what every amp after
+  // the first failure is decoded from.
+  TruncatableChunk full;
+  volum::VoLumAmpSettings written{};
+  volum::PutCurrentVoLumChunkState(full, {0, 0, 0}, &written, 1);
+  volum::VoLumAmpSettings afterFailure = mine;
+  CHECK(volum::GetLegacyPerAmpSettings(full, -1, afterFailure) < 0);
+  CHECK(afterFailure.noiseGateActive);
+}
 
 TEST_CASE("Per-amp selection misaligns unless the reader consumes every serialized param double")
 {

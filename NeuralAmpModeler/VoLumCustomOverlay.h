@@ -537,6 +537,10 @@ private:
 
   void ReloadList()
   {
+    // The preset bank is resolved from a process-global key, so listing it needs the
+    // same claim its rename and delete make. Without one this panel can show another
+    // instance's presets, and then rename or delete the row the user clicked in it.
+    ClaimPresetOpsIfNeeded();
     switch (mManageKind)
     {
       case ManageKind::IR: mItems = volum::custom::MockIRLibrary(); break;

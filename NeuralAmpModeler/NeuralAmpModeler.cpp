@@ -806,6 +806,12 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
   mOutputSenderR.TransmitData(*this);
 
+  // Host state restored into an open editor. Only consumed while an editor exists, so
+  // a request that arrives with the window closed is still waiting for the OnUIOpen
+  // that will run the same applier.
+  if (GetUI() && mVolumUiSyncPending.exchange(false))
+    _VolumSyncUiFromState();
+
   _VolumRefreshLatencyReport();
   _VolumFlushDeferredIrShaping();
 
@@ -1190,7 +1196,9 @@ void NeuralAmpModeler::OnUIOpen()
   _VolumRestoreSessionSelection();
   // The editor is rebuilt from constructor defaults on every open, so the last
   // step is always to re-derive the visible selection from backend state. Without
-  // this a lane whose cab is a custom IR came back showing "No Cab".
+  // this a lane whose cab is a custom IR came back showing "No Cab". This also
+  // satisfies any sync a state restore requested while the window was closed.
+  mVolumUiSyncPending.store(false);
   _VolumSyncUiFromState();
 }
 
