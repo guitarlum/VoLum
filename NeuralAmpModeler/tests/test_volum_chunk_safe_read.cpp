@@ -61,18 +61,13 @@ struct UnsafeChunk
         {
           if (len > largestCopyRequest)
             largestCopyRequest = len;
-          // The real WDL_String::Set would read `len` bytes from the chunk here.
-          // Copying only what actually exists keeps the test from segfaulting
-          // while still recording the size the reader asked for.
+          // The real WDL_String::Set(ptr, len) would read exactly `len` bytes here.
+          // Copying only what actually exists keeps the test from segfaulting while
+          // still recording the size the reader asked for.
           const int available = Size() - strStartPos;
           const int safe = len < available ? len : available;
           const char* first = reinterpret_cast<const char*>(bytes.data() + strStartPos);
-          // WDL_String holds a C string, and the serialized length counts the
-          // terminating NUL, so stop there.
-          size_t used = 0;
-          while (used < static_cast<size_t>(safe) && first[used] != '\0')
-            ++used;
-          str.assign(first, used);
+          str.assign(first, static_cast<size_t>(safe));
         }
         else
         {
@@ -90,11 +85,14 @@ struct UnsafeChunk
     bytes.insert(bytes.end(), first, first + sizeof(value));
   }
 
+  // Matches IByteChunk::PutStr: the length prefix is strlen, with no terminator
+  // written and none counted. Adding a NUL here would have had a later reader
+  // conclude the real prefix is off by one and go hunting for a bug that is not
+  // there.
   void PutStr(const std::string& s)
   {
-    PutInt(static_cast<int>(s.size()) + 1); // iPlug2 writes the NUL too
+    PutInt(static_cast<int>(s.size()));
     bytes.insert(bytes.end(), s.begin(), s.end());
-    bytes.push_back('\0');
   }
 
   // A length prefix that lies about how much string follows.
