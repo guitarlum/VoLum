@@ -391,7 +391,13 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
 bool NeuralAmpModeler::_VolumHasSupportAmp()
 {
   const int factory = GetParam(kSupportAmpIdx)->Int();
-  return (factory >= 0 && factory < volum::kAmpCount) || mVolumCustomSupportIdx >= 0;
+  if (factory >= 0 && factory < volum::kAmpCount)
+    return true;
+  // An index the library no longer contains is not a lane: a custom support amp
+  // deleted from another instance leaves this one holding a stale index, and
+  // treating it as present focuses a lane with no amp behind it.
+  return mVolumCustomSupportIdx >= 0
+         && mVolumCustomSupportIdx < static_cast<int>(volum::custom::MockCustomAmps().size());
 }
 
 void NeuralAmpModeler::_VolumClampSupportFocus()

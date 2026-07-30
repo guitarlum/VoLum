@@ -623,6 +623,19 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     volum::MigrateOktaverbSubModeToV0_9_1(config);
   if (volum::ShouldRemapReverbMixForChunkVersion(version))
     volum::MigrateReverbMixToEqualPowerV0_9_3(config);
+
+  // Every reader above returns a negative position when the chunk ran out mid-way.
+  // Applying a config built from a short read means pushing a half-read project
+  // onto the live rig - and a negative `pos` then makes `chunk.Size() - pos` one
+  // byte larger than the chunk, so the per-amp section detectors report sections
+  // that are not there. Reject before anything is applied, which is what the
+  // version-parse failure above already promises: the instance is left as it was.
+  if (pos < 0)
+  {
+    VOLUM_LOG("state", "rejecting truncated chunk written by version " + versionStr);
+    return -1;
+  }
+
   _UnserializeApplyConfig(config);
 
   // VoLum: per-amp settings tail after serialized params (v0.7.15+ and VoLum 0.1.x)
@@ -760,12 +773,27 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       mVolumActivePresetId = idTail.activePresetId;
     }
 
-    mVolumInitComplete = false;
-    _VolumRestoreFromSettings(mVolumAmpIdx);
-    _VolumApplyLiveLockSnapshots();
-    _VolumRefreshChannels();
-    mVolumNeedsLoad.store(true);
-    mVolumInitComplete = true;
+    // Scoped rather than assigned: UnserializeState now catches exceptions instead
+    // of letting them reach the host, and a throw between these two points used to
+    // leave the flag false for the life of the instance. That silently switches off
+    // SUPPORT/PRE model loading, latency reporting, settings persistence and
+    // preset-dirty tracking - a quieter failure than the crash it replaced.
+    {
+      struct InitCompleteScope
+      {
+        bool& flag;
+        explicit InitCompleteScope(bool& f)
+        : flag(f)
+        {
+          flag = false;
+        }
+        ~InitCompleteScope() { flag = true; }
+      } initScope(mVolumInitComplete);
+      _VolumRestoreFromSettings(mVolumAmpIdx);
+      _VolumApplyLiveLockSnapshots();
+      _VolumRefreshChannels();
+      mVolumNeedsLoad.store(true);
+    }
 
     // After base restore, re-focus a custom MAIN amp recorded in the id tail so
     // its scene + cabs + .nam load (the binary per-amp array only covers factory

@@ -139,7 +139,54 @@ TEST_CASE("The shipped fade budget stays in its usable window")
   // hang this fix exists to remove.
   const int budgetMs = kVoLumMaxFadeWaits * kVoLumFadeWaitMs;
   CHECK(budgetMs == 2000);
-  CHECK(iplug::kVoLumShutdownWatchdogMs > budgetMs);
+
+  // The watchdog has to outlast the fade *plus* the driver calls that follow it
+  // (ASIOStop, ASIODisposeBuffers, removeCurrentDriver) on a healthy driver.
+  // Comparing against the fade alone let the two constants drift into a window
+  // where a slow-but-working teardown gets killed.
+  const int driverAllowanceMs = 1000;
+  CHECK(iplug::kVoLumShutdownWatchdogMs >= budgetMs + driverAllowanceMs);
+}
+
+TEST_CASE("A watchdog kill is distinguishable from a clean exit and can be stood down")
+{
+  // _Exit(0) made a wedged shutdown look successful to e2e-standalone-win.ps1 and
+  // to anything else that waits on the process.
+  CHECK(iplug::kVoLumShutdownWatchdogExitCode != 0);
+
+  // Disarming makes the timer a no-op, which is what keeps the untimed work after
+  // the audio teardown (the loader join, the settings write) out of its reach.
+  iplug::VoLumArmShutdownWatchdog(/*timeoutMs*/ 60000);
+  CHECK(iplug::VoLumShutdownWatchdogArmed().load());
+  iplug::VoLumDisarmShutdownWatchdog();
+  CHECK_FALSE(iplug::VoLumShutdownWatchdogArmed().load());
+}
+
+TEST_CASE("The watchdog is armed around the audio teardown only")
+{
+  const std::string src = [] {
+    const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IPlug"
+                      / "APP" / "IPlugAPP_host.cpp";
+    std::ifstream in(path, std::ios::binary);
+    REQUIRE(in.good());
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+  }();
+
+  const auto arm = src.find("VoLumArmShutdownWatchdog();");
+  const auto close = src.find("CloseAudio();");
+  const auto disarm = src.find("VoLumDisarmShutdownWatchdog();");
+  REQUIRE(arm != std::string::npos);
+  REQUIRE(close != std::string::npos);
+  REQUIRE(disarm != std::string::npos);
+
+  // mIPlug is declared before mDAC, so the plugin destructor - which joins the
+  // model loader and writes the settings file, neither of them bounded - runs
+  // after this destructor body. Leaving the timer armed put that work under a 5 s
+  // kill; the disarm has to happen before the body ends.
+  CHECK(arm < close);
+  CHECK(close < disarm);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,10 +240,21 @@ TEST_CASE("Every MIDI port open in the app host is guarded against throwing")
 {
   const std::string src = ReadForkAppHostSource();
 
-  // The fallback exists and turns the failing direction off, persisting it.
+  // The fallback exists and turns the failing direction off for this session.
   CHECK(src.find("auto openOrTurnOff") != std::string::npos);
   CHECK(src.find("mState.mMidiInDev.Set(OFF_TEXT)") != std::string::npos);
   CHECK(src.find("mState.mMidiOutDev.Set(OFF_TEXT)") != std::string::npos);
+
+  // And does NOT write that to settings.ini. The usual cause is transient - a DAW
+  // still quitting, a vendor control panel, a second VoLum - and persisting "off"
+  // on the first failure turned a few seconds of contention into permanent loss of
+  // the user's MIDI configuration, with nothing on screen to explain it. The
+  // catch block must contain no UpdateINI() call.
+  const auto catchStart = src.find("catch (RtMidiError& e)");
+  REQUIRE(catchStart != std::string::npos);
+  const auto catchEnd = src.find("};", catchStart);
+  REQUIRE(catchEnd != std::string::npos);
+  CHECK(src.find("UpdateINI()", catchStart) > catchEnd);
 
   // The forms that shipped unguarded are now all inside the guard, on both
   // platforms' branches. Written as the guarded spelling because the bare call is
@@ -221,23 +279,38 @@ TEST_CASE("Every MIDI port open in the app host is guarded against throwing")
 // A saved ASIO pair naming two different drivers
 //
 // Only one ASIO driver can serve both directions, and TryToChangeAudio has always
-// resolved the input from mAudioOutDev - but nothing wrote that back, so
-// settings.ini could keep claiming a pair that is never opened. The shipped 1.2.1
-// configuration was exactly that ("indev=ASIO4ALL v2", "outdev=FlexASIO"), and
-// Preferences trusted it: it showed the output driver in the input combo while
-// probing input channels and sample rates from the stale one. These paths need a
-// live driver to exercise, so source guards are what is available.
+// resolved the input from mAudioOutDev - but the shipped 1.2.1 configuration was
+// exactly such a pair ("indev=ASIO4ALL v2", "outdev=FlexASIO"), and Preferences
+// trusted it: it showed the output driver in the input combo while probing input
+// channels and sample rates from the stale one. The fix belongs in the dialog
+// (below), not in the stored state. These paths need a live driver to exercise, so
+// source guards are what is available.
 // ---------------------------------------------------------------------------
 
-TEST_CASE("A mismatched saved ASIO pair is corrected and persisted")
+TEST_CASE("The ASIO input resolution never rewrites the saved input device")
 {
   const std::string src = ReadForkAppHostSource();
 
-  CHECK(src.find("correctedMismatchedAsioPair") != std::string::npos);
-  // The corrected name is the device actually resolved for input, and it reaches
-  // settings.ini rather than only living in memory for this session.
-  CHECK(src.find("mState.mAudioInDev.Set(openedInputName.c_str())") != std::string::npos);
-  CHECK(src.find("else if (correctedMismatchedAsioPair)") != std::string::npos);
+  // mAudioInDev holds the DirectSound/CoreAudio input choice too. Copying the ASIO
+  // driver name over it - which is what resolving input from mAudioOutDev produces
+  // - destroyed that choice the moment the user switched back, because the ASIO
+  // name is not in the DirectSound device list and the existing fallback then reset
+  // it to the OS default. The dialog resolves by output device id instead, so
+  // nothing needs this writeback.
+  CHECK(src.find("mState.mAudioInDev.Set(openedInputName") == std::string::npos);
+  CHECK(src.find("correctedMismatchedAsioPair") == std::string::npos);
+
+  // The one INI write left in TryToChangeAudio is the pre-existing
+  // device-disappeared reset, which genuinely has new state to record.
+  const auto tryToChange = src.find("bool IPlugAPPHost::TryToChangeAudio()");
+  REQUIRE(tryToChange != std::string::npos);
+  const auto selectMidi = src.find("bool IPlugAPPHost::SelectMIDIDevice", tryToChange);
+  REQUIRE(selectMidi != std::string::npos);
+  std::size_t iniWrites = 0;
+  for (auto pos = src.find("UpdateINI()", tryToChange); pos != std::string::npos && pos < selectMidi;
+       pos = src.find("UpdateINI()", pos + 1))
+    ++iniWrites;
+  CHECK(iniWrites == 1);
 }
 
 TEST_CASE("A driver-renegotiated buffer size is adopted only when the UI can represent it")

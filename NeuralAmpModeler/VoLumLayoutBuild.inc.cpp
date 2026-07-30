@@ -1261,7 +1261,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         });
       // F5 preset capture: save-as / overwrite snapshot the live scene.
       overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name); },
-                                  [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); });
+                                  [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); },
+                                  [pPlugin]() { pPlugin->_VolumClaimPresetOps(); });
       // Manage-panel destructive actions (delete / overwrite) go through the
       // shared confirm modal.
       overlay->SetConfirmCallback(

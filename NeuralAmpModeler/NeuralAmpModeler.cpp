@@ -1163,11 +1163,16 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
   }
   catch (const std::exception& e)
   {
+    // Belt to the scope guard in _UnserializeStateWithKnownVersion: whatever the
+    // reader was in the middle of, an instance that keeps running must not keep
+    // this flag false, or it stops loading models and saving settings in silence.
+    mVolumInitComplete = true;
     VOLUM_LOG("state", std::string("UnserializeState failed: ") + e.what());
     return -1;
   }
   catch (...)
   {
+    mVolumInitComplete = true;
     VOLUM_LOG("state", "UnserializeState failed with a non-standard exception");
     return -1;
   }

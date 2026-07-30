@@ -887,6 +887,17 @@ TEST_CASE("A stored path that escapes the content directory resolves to nothing"
   CHECK(store.ResolveStored("/etc/passwd").empty());
   CHECK(store.ResolveStored("").empty());
 
+  // Every payload lives in a subdirectory of the library, so an entry that names a
+  // directory instead of a file is not a payload. It matters because remove()
+  // succeeds on an empty directory: "." and "ir" resolved to the library root and
+  // to its ir/ folder, and a delete would have taken the folder rather than a
+  // capture.
+  CHECK(store.ResolveStored(".").empty());
+  CHECK(store.ResolveStored("./").empty());
+  CHECK(store.ResolveStored("ir").empty());
+  CHECK(store.ResolveStored("ir/").empty());
+  CHECK(store.ResolveStored("./ir/ir_x__cab.wav").empty());
+
   // Genuine library-relative paths still resolve, under the base.
   const auto ok = store.ResolveStored("ir/ir_x__cab.wav");
   REQUIRE_FALSE(ok.empty());

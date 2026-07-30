@@ -392,7 +392,12 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
       if (!result.error.empty())
         VOLUM_LOG("model", kindLabel + " load FAILED " + result.path + " : " + result.error);
       else
-        VOLUM_LOG("model", kindLabel + " loaded " + result.path);
+        // "read", not "loaded": this runs on the worker as soon as the file is
+        // parsed. Whether the model reaches the audio graph is decided later, when
+        // the audio thread drains the queue and may discard it as superseded. The
+        // logging moved here to keep file I/O off that thread, and a line claiming
+        // a model was in use when it never was made the log misleading.
+        VOLUM_LOG("model", kindLabel + " read " + result.path);
     }
 
     {

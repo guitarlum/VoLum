@@ -147,9 +147,14 @@ public:
   // The isfinite guard is not redundant with the clamp: std::clamp(NaN, lo, hi)
   // returns NaN, because both of its comparisons are false. A NaN tempo divides
   // into samplesPerBeat below and its conversion to int is undefined.
+  // A non-finite tempo is discarded, not substituted: replacing it with the factory
+  // default would silently throw away a tempo the user set and leave the overlay's
+  // readout disagreeing with what is clicking.
   void SetBPM(float bpm)
   {
-    mBPM.store(std::isfinite(bpm) ? std::clamp(bpm, kMinBPM, kMaxBPM) : kDefaultBPM, std::memory_order_relaxed);
+    if (!std::isfinite(bpm))
+      return;
+    mBPM.store(std::clamp(bpm, kMinBPM, kMaxBPM), std::memory_order_relaxed);
   }
   float GetBPM() const { return mBPM.load(std::memory_order_relaxed); }
 

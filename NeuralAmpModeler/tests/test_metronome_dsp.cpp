@@ -272,6 +272,10 @@ TEST_CASE("A non-finite tempo is never stored")
     CHECK(std::isfinite(stored));
     CHECK(stored >= volum::MetronomeDSP::kMinBPM);
     CHECK(stored <= volum::MetronomeDSP::kMaxBPM);
+    // Rejected, not replaced: substituting the factory default would discard the
+    // tempo the user actually set and leave the overlay's readout lying about
+    // what is clicking.
+    CHECK(stored == doctest::Approx(90.f));
   }
 
   // Ordinary out-of-range values still clamp rather than being rejected.
