@@ -21,7 +21,13 @@ description: Prepare VoLum PRs and GitHub releases. Use when creating release PR
 4. User-facing text:
    - Preserve README images/badges unless user explicitly asks to change them.
    - Release notes should mention concrete asset names and install path choices.
-5. Before finish:
+5. CI on a release branch:
+   - Pushing `release/*` triggers nothing; CI auto-runs only on `dev`/`main`.
+   - `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref release/x.y.z -Dispatch`
+     starts a run and follows it to green, naming the failing step if it is not.
+   - Artifacts for manual testing: `VoLum-win` (installer + portable zip + pdbs)
+     and `VoLum-mac`; fetch with `gh run download <id> -n VoLum-win -D <dir>`.
+6. Before finish:
    - Report PR/release URL.
    - Report CI state if available.
    - Mention any skipped local tests.

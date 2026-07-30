@@ -183,6 +183,7 @@ public:
     mDelayNew = mDelay;
     mFading = false;
     mFadePos = 0;
+    mSpliceStarts = 0;
   }
 
   // ratio = output_freq / input_freq (2^(semitones/12)).
@@ -246,17 +247,33 @@ public:
             mDelayNew = cand;
             mFading = true;
             mFadePos = 0;
+            ++mSpliceStarts;
           }
         }
         else if (f > 1.0 && mDelay < mDLo)
         {
           const int k = std::max(1, static_cast<int>(std::lround((mDHi - mDelay) / P)));
-          double cand = mDelay + k * P; // larger delay (jump back / duplicate)
+          const double base = mDelay + k * P; // larger delay (jump back / duplicate)
+          double cand = base;
           if (mWsola)
             cand = _WsolaRefine(cand);
+          // UPSHIFT-ONLY grain floor. _WsolaRefine searches [-search, +search] around
+          // the splice target. On DOWNshift the target sits at the LOW delay boundary,
+          // where _WsolaRefine's own `dc >= xfade+1` clamp already blocks the
+          // grain-shortening (negative-lag) half, so downshift can only LENGTHEN a grain
+          // and stays stable. On UPshift the target sits at the HIGH boundary with the
+          // full search free, so a negative lag SHORTENS the effective grain: the next
+          // splice then fires well before `band`, POLY re-splices far more often than
+          // intended, and positive shifts crackle. Mirror the downshift asymmetry by
+          // never letting the refined target fall below the intended one-band jump, so
+          // WSOLA may only push the splice DEEPER into history. Downshift path is
+          // untouched.
+          if (cand < base)
+            cand = base;
           mDelayNew = cand;
           mFading = true;
           mFadePos = 0;
+          ++mSpliceStarts;
         }
       }
 
@@ -493,6 +510,14 @@ private:
   double mDelayNew = 0.0;
   bool mFading = false;
   int mFadePos = 0;
+
+  // Test/introspection only: number of crossfaded splices started since Reset().
+  // Lets a regression test assert POLY's splice cadence stays near the grain band
+  // (a shortened grain => runaway splicing => crackle). Behaviour-neutral counter.
+  unsigned long long mSpliceStarts = 0;
+
+public:
+  unsigned long long SpliceStarts() const { return mSpliceStarts; }
 };
 
 class VoLumPitch
@@ -511,12 +536,15 @@ public:
   using Character = GranularVoice::Character;
 
   static constexpr int kNumVoices = 2; // octaver uses both (down/up); transpose uses voice 0.
+  // Hosts occasionally grow their callback block without another OnReset. Reserve
+  // a generous block off the audio thread so Process never has to allocate.
+  static constexpr int kRealtimeBlockReserve = 8192;
 
   // Allocates - call OFF the audio thread (OnReset), never from ProcessBlock.
   void Configure(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
-    mMaxBlock = std::max(maxBlockSize, 64);
+    mMaxBlock = std::max({maxBlockSize, 64, kRealtimeBlockReserve});
     const bool sameConfig = mConfigured && mSampleRate == mConfiguredSampleRate && mMaxBlock <= mConfiguredMaxBlock;
     if (!sameConfig)
     {
@@ -534,6 +562,7 @@ public:
 
   int Latency() const { return mLatency; }
   bool Configured() const { return mConfigured; }
+  int PreparedBlockSize() const { return mMaxBlock; }
 
   // Reported latency for a given mode/character at a sample rate, computed without
   // touching the live (audio-thread-updated) state. Mirrors _ApplyCharacters:
@@ -573,7 +602,11 @@ public:
 
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
   {
-    _PrepareIO(numChannels, numFrames);
+    // Never allocate/reconfigure from the audio thread. An unexpectedly huge
+    // callback passes through dry for that block; the normal reserve covers all
+    // practical host sizes.
+    if (!_PrepareIO(numChannels, numFrames))
+      return inputs;
 
     if (!mConfigured || numChannels == 0)
     {
@@ -682,17 +715,9 @@ private:
         mOut[c].assign(cap, static_cast<DSP_SAMPLE>(0));
   }
 
-  void _PrepareIO(size_t numChannels, size_t numFrames)
+  bool _PrepareIO(size_t numChannels, size_t numFrames) const
   {
-    if (static_cast<int>(numFrames) > mMaxBlock || mWet0.size() < numFrames)
-    {
-      mMaxBlock = std::max(mMaxBlock, static_cast<int>(numFrames));
-      for (auto& voice : mVoices)
-        voice.Configure(mSampleRate, mMaxBlock);
-      _ApplyCharacters();
-      _AllocateScratch();
-    }
-    (void)numChannels;
+    return numChannels <= kMaxChannels && static_cast<int>(numFrames) <= mMaxBlock && mWet0.size() >= numFrames;
   }
 
   DSP_SAMPLE** _Pointers(size_t numChannels)

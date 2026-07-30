@@ -29,7 +29,7 @@ Dieses Handbuch erklärt die VoLum-1.2-Oberfläche nach der Installation. Downlo
 5. **PRE | AMP | POST-Leiste:** öffnet immer genau einen Bereich.
 6. **Toolbar:** Tuner, Metronom und Einstellungen sitzen oben rechts.
 
-Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen. Jedes mitgelieferte Amp-, Cab- und PRE-NAM-Capture ist ein NAM-Architecture-2-(A2)-Profil, trainiert auf den besten Sitz zwischen 700 und 1200 Epochen. A2-Captures werden immer in voller Größe gespielt; VoLum fällt nie auf die Lite-Variante zurück.
+Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen. Jedes mitgelieferte Amp-, Cab- und PRE-NAM-Capture ist ein NAM-Architecture-2-(A2)-Profil, trainiert auf den besten Sitz zwischen 700 und 1200 Epochen. Standardmäßig spielt VoLum die volle A2-Variante; der optionale Lite-Modus wird unter Einstellungen beschrieben.
 
 VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual Amp wieder her.
 
@@ -53,6 +53,7 @@ Der Amp-Regler **OUTPUT** bleibt bei `0.0 dB` auf Unity-Gain. Ganz gegen den Uhr
 ![VoLum PRE-Bereich](user-guide-pre.png)
 
 PRE liegt vor dem Amp. Der Bereich enthält ein Pitch-Pedal, einen Kompressor und zwei frei belegbare NAM-Pedal-Slots.
+Alle PRE- und POST-Pedalregler bleiben auch im Bypass editierbar, einschließlich per Mausrad, sodass du Einstellungen vor dem Einschalten des Effekts vorbereiten kannst.
 
 1. Klick auf **PRE**.
 2. Klick auf **PITCH**, **COMP**, **NAM 1** oder **NAM 2**, um eine Karte zu fokussieren.
@@ -157,11 +158,11 @@ VoLum kann eigene NAM-Amp-Captures, Impulsantworten und Pedal-Captures laden. Im
 - **Windows:** `%LOCALAPPDATA%\VoLum\content`
 - **macOS:** `~/Library/Application Support/VoLum/content`
 
-**Eigene Amps.** Klicke auf das **+** im CUSTOM-Bereich des Amp-Browsers, um den Builder zu öffnen. Benenne den Amp, füge eine oder mehrere `.nam`-Dateien hinzu und ordne jede einem Cab-Slot und Kanal zu (Dateien im Schema `PREFIX-CODE-CHANNEL.nam` füllen das automatisch aus). Sowohl NAM-Architecture-1-(A1)- als auch Architecture-2-(A2)-Captures laden, und A2-Container werden in voller Größe gespielt wie die mitgelieferten Profile. Gespeicherte eigene Amps erscheinen in der CUSTOM-Liste und werden genau wie Werk-Amps geladen und gespielt — auch als Dual-Amp-SUPPORT-Partner. Mit den Stift-/Papierkorb-Symbolen bearbeitest oder löschst du einen.
+**Eigene Amps.** Klicke auf das **+** im CUSTOM-Bereich des Amp-Browsers, um den Builder zu öffnen. Benenne den Amp, füge eine oder mehrere `.nam`-Dateien hinzu und ordne jede einem Cab-Slot und Kanal zu (Dateien im Schema `PREFIX-CODE-CHANNEL.nam` füllen das automatisch aus). Jede Datei ist eine separate Aufnahme einer Gain-Stage/Cab-Kombination; VoLum schaltet zwischen ihnen und leitet aus einem Ordner mit mehreren Captures keinen stufenlosen Gain-Regler ab. Sowohl NAM-Architecture-1-(A1)- als auch Architecture-2-(A2)-Captures laden, auch aus Windows-Benutzernamen/Ordnern oder Dateinamen mit Nicht-ASCII-Zeichen. Beim **Save** kopiert und validiert VoLum jedes Capture, bevor der Amp gespeichert wird. Kann eine Datei nicht kopiert oder gelesen werden, wird der gesamte Speichervorgang abgebrochen, der Builder bleibt offen und zeigt den fehlerhaften Dateinamen; gültige Captures werden nie still als Amp gespeichert, der weiterhin das vorherige Werksmodell spielt. Gespeicherte eigene Amps erscheinen in der CUSTOM-Liste und werden genau wie Werk-Amps geladen und gespielt — auch als Dual-Amp-SUPPORT-Partner. Mit den Stift-/Papierkorb-Symbolen bearbeitest oder löschst du einen. Fehlt eine früher importierte Datei später oder ist sie beschädigt, meldet der Footer den Ladefehler und nennt das letzte weiterhin aktive, funktionierende Capture.
 
 ![VoLum Builder für eigene Amps](user-guide-custom-amp.png)
 
-**Eigene IRs.** Eine Custom IR faltet das **DIRECT**-Capture (nur Amp) des Amps — den rohen Amp ohne eingebackenen Speaker. Sie ist für einen eigenen Amp gedacht, der ein DIRECT-Capture enthält; die Auswahl des Cabs **Custom IR** schaltet den Amp zuerst auf sein DIRECT/No-Cab-Capture. Ein eigener Amp, der nur aus vollen Amp-plus-Cab-Captures gebaut ist, hat kein rohes Signal, das eine IR formen könnte — auf einem Kanal ohne DIRECT-Capture sind die Schaltflächen **Custom IR** und **No Cab** ausgegraut (fahre mit der Maus darüber für den Grund) und lassen sich nicht auswählen; wechsle auf einen Kanal mit DIRECT-Capture, um sie zu nutzen. Wähle in der Speaker-Reihe das Cab **Custom IR** und importiere dann über dessen Dropdown eine `.wav`-Impulsantwort. Die Custom IR gehört zur **fokussierten Spur**: im Dual-Amp-Modus haben die MAIN- und die SUPPORT-Spur jeweils ihre eigene Custom IR, das Ändern der einen wirkt sich nie auf die andere aus. Impulsantworten sind kurze Box-Captures — nur der erste Sekundenbruchteil wird genutzt — daher lehnt VoLum sehr große WAV-Dateien (z. B. ein versehentlich gewählter ganzer Song) mit einer Meldung ab, statt sie zu laden.
+**Eigene IRs.** Eine Custom IR faltet das **DIRECT**-Capture (nur Amp) des Amps — den rohen Amp ohne eingebackenen Speaker. Sie wird nie zusätzlich auf den bereits in CB1/CB2/CB3-Captures eingebackenen Speaker angewendet. Sie ist für einen eigenen Amp gedacht, der ein DIRECT-Capture enthält; die Auswahl des Cabs **Custom IR** schaltet den Amp zuerst auf sein DIRECT/No-Cab-Capture. Ein eigener Amp, der nur aus vollen Amp-plus-Cab-Captures gebaut ist, hat kein rohes Signal, das eine IR formen könnte — auf einem Kanal ohne DIRECT-Capture sind die Schaltflächen **Custom IR** und **No Cab** ausgegraut (fahre mit der Maus darüber für den Grund) und lassen sich nicht auswählen; wechsle auf einen Kanal mit DIRECT-Capture, um sie zu nutzen. Wähle in der Speaker-Reihe das Cab **Custom IR** und importiere dann über dessen Dropdown eine `.wav`-Impulsantwort. Die Custom IR gehört zur **fokussierten Spur**: im Dual-Amp-Modus haben die MAIN- und die SUPPORT-Spur jeweils ihre eigene Custom IR, das Ändern der einen wirkt sich nie auf die andere aus. Impulsantworten sind kurze Box-Captures — nur der erste Sekundenbruchteil wird genutzt — daher lehnt VoLum sehr große WAV-Dateien (z. B. ein versehentlich gewählter ganzer Song) mit einer Meldung ab, statt sie zu laden. Custom IRs werden beim Import automatisch pegelangepasst, sodass sie in etwa auf Lautstärke der Werks-Cabs liegen, statt viel leiser anzukommen. Zum Feinjustieren öffne **Manage custom IRs** und klicke auf das **Zahnrad** in der jeweiligen Zeile: ein kleines Panel bietet **Level** (±24 dB), einen **Low cut** und einen **High cut**. Mit den **+/−**-Schaltflächen springst du durch die üblichen Werte — eine Schaltfläche wird ausgegraut, sobald der Wert am Ende seines Bereichs angekommen ist — oder du klickst auf die Zahl und tippst einen exakten Wert ein. Getippte Werte sind frei und nicht an die Schritte der Stepper gebunden, `2.5k`, `-3 dB` und `137` funktionieren also alle, und `0` oder `off` schaltet den jeweiligen Cut ab. Das Panel bleibt offen, bis du außerhalb davon klickst. Diese Einstellungen werden mit der IR in deiner Bibliothek gespeichert, folgen ihr also überall, wo sie verwendet wird (beide Spuren); ein golden dargestelltes Zahnrad markiert eine bearbeitete IR.
 
 Namen für eigene Inhalte (Amps, IRs, Pedale und Presets) haben sinnvolle Längenbegrenzungen, damit sie immer in ihre Beschriftungen passen — lange Namen werden bereits bei der Eingabe gekürzt.
 
@@ -188,18 +189,18 @@ Die Inhaltsbibliothek wird von allen geöffneten Instanzen und Spuren geteilt. I
 - Ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
-- `Enter` bearbeitet das fokussierte Ziel; `Leertaste` schaltet es ein/aus, wenn möglich.
-- In manchen DAWs (unter anderem REAPER) kommt die Leertaste zuerst beim Host an. Rechtsklick auf den FX-Header des Plugins und **Send all keyboard input to plug-in** aktivieren, damit Shortcuts VoLum erreichen.
+- `Enter` bearbeitet das fokussierte Ziel. In der Standalone-App schaltet `Leertaste` es ein/aus. Im Plugin übernimmt `B` diese Funktion, damit `Leertaste` für Start/Stopp der DAW frei bleibt.
 - `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts.
-- `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet Einstellungen.
+- `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet die Einstellungen und schließt sie wieder.
 - Gewählter Regler: `Hoch` / `Runter` ändert den Wert, `Links` / `Rechts` wählt einen anderen Regler, `Umschalt` macht kleinere Schritte.
 - `Enter` gibt einen exakten Wert ein, `Entf` / `Rücktaste` setzt zurück, `Esc` beendet die Reglerbearbeitung.
+- Im Eingabefeld für den exakten Wert gilt ein Komma als Dezimaltrennzeichen, und die angezeigte Einheit (`dB`, `%`, `ms`, `Hz`, `s`, `st`) darf hinter der Zahl mitgetippt werden. Was sich nicht als Zahl lesen lässt, lässt den Regler unverändert; eine Zahl außerhalb des Bereichs rastet am nächstliegenden Ende ein.
 
 Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screenreader-Unterstützung gibt es noch nicht.
 
 ## Einstellungen Und Sicherheit
 
-Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`. Das Overlay enthält auch die Tastaturübersicht und globale Einstellungen.
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`. Das Overlay enthält auch die Tastaturübersicht und globale Einstellungen.
 
 VoLum speichert Benutzereinstellungen automatisch:
 
@@ -208,11 +209,17 @@ VoLum speichert Benutzereinstellungen automatisch:
 
 Nutze die Standalone-App als Editor für deine Klangbibliothek. Sie schreibt die globalen Defaults pro Amp in diese Datei, inklusive Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual-Amp-Setup.
 
-Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben die globale VoLum-Einstellungsdatei nicht, deshalb können zwei Spuren einander die Defaults nicht überschreiben.
+Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben keine globalen Amp-Szenen, deshalb können zwei Spuren einander ihre Rigs nicht überschreiben. Die unten beschriebene Eingangskalibrierung ist die bewusste Ausnahme: Eine direkt bearbeitete Kalibrierung wird zum Rechner-Default, während der gespeicherte Projektzustand beim Laden weiterhin Vorrang hat.
+
+### Eingangskalibrierung
+
+Die Karte **Input calibration** beschreibt den analogen Pegel deines Audiointerfaces bei digital 0 dBFS. Trage den Interface-Wert in dBu ein und aktiviere **Calibrate input**. Enthält das geladene NAM-Capture einen Eingangskalibrierungswert, gleicht VoLum den AMP-Input-Gain so an, dass das Modell den Pegel seiner Aufnahme erhält; bei Modellen ohne diese Metadaten bleiben die Kalibrierungsfelder nicht verfügbar.
+
+Der Calibrate-Schalter und der dBu-Wert sind rechnerweite Start-Defaults. Eine direkte Änderung in Standalone, VST3 oder AU schreibt diese beiden Werte in `volum-settings.json`, sodass neue Instanzen gleich kalibriert starten. Der im DAW-Projekt gespeicherte Plugin-Zustand hat beim erneuten Öffnen weiterhin Vorrang und darf bewusst andere Kalibrierungswerte verwenden.
 
 ### A2 Lite-Modus (Performance)
 
-Die **Performance**-Karte der Einstellungen hat einen **FULL / LITE**-Schalter; der aktive Modus ist hervorgehoben (FULL ist die Voreinstellung), du siehst also stets, welcher Qualitätsmodus läuft. Lite tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Standardmäßig spielt VoLum immer die volle Version (beste Qualität). Schaltest du auf Lite, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur.
+Die **Performance**-Karte der Einstellungen hat einen **FULL / LITE**-Schalter; der aktive Modus ist hervorgehoben (FULL ist die Voreinstellung), du siehst also stets, welcher Qualitätsmodus läuft. Lite tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Schaltest du auf Lite, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-NAM-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur. Der separate Pitch/Octaver-DSP wird dadurch nicht verändert; umgehe Pitch/Octaver oder nutze einen größeren Audiopuffer, wenn dieser Effekt die CPU-Grenze verursacht.
 
 Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json` gespeichert, nicht im Projekt. Er bleibt also für jedes Projekt und jede DAW-Sitzung auf diesem Rechner aktiv, und ein auf einem schnellen Rechner gespeichertes Projekt spielt auf einem langsamen weiterhin Lite. Captures, die keine A2-Container sind (ältere Modelle mit nur einer Größe und die meisten eigenen Importe), bleiben unberührt — der Schalter hat dort einfach keine Wirkung. Standard ist Full.
 
@@ -220,12 +227,23 @@ Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json
 
 In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`, um Audiotreiber, getrennte Ein- und Ausgabegeräte, Samplerate und Kanalrouting zu wählen. In der VST3-Version nutzt du stattdessen die Audioeinstellungen deiner DAW.
 
-Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Wähle einen Mono-Eingangskanal für das Gitarrensignal und route Output L/R nach Bedarf. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben.
+Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Wähle einen Mono-Eingangskanal für das Gitarrensignal und route Output L/R nach Bedarf. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben. Manche Treiber lehnen die gewählte Größe ab und geben eine andere zurück; VoLum behält dann die vom Treiber vergebene Größe, sodass Liste und gespeicherter Wert das beschreiben, was tatsächlich läuft.
 
 Wenn du einen Treiber ohne nutzbares Gerät auswählst, zum Beispiel ASIO auf einem Laptop ohne ASIO-Interface, zeigt VoLum eine Fehlermeldung und stellt die vorher funktionierende Audiokonfiguration wieder her, statt sich zu schließen.
+
+Die Zeile **Latency** zeigt in der Standalone-App die tatsächlich hörbare Gesamtlatenz — die eigene Verarbeitungszeit von VoLum plus die vom Treiber gemeldete Latenz — sofern der Treiber eine meldet. ASIO-Treiber tun das. WASAPI und DirectSound meist nicht; in diesem Fall zeigt VoLum nur die eigene Verzögerung samt Puffergröße und weist darauf hin, dass die echte Gesamtlatenz höher liegt, anstatt eine Schätzung als Zahl auszugeben: der Unterschied ist erheblich, und ein plausibel aussehender Wert wäre schlechter als gar keiner. Der größte Teil der Gesamtlatenz entfällt auf Treiber und Puffergröße — ein kleinerer Puffer oder ein besserer Treiber bewegt den Wert also deutlich mehr als jede VoLum-Einstellung.
+
+Die eigene Verzögerung von VoLum beträgt völlig zu Recht **0,0 ms**, wenn deine Captures mit der Samplerate des Hosts laufen und kein Pitch-Shifting aktiv ist — unabhängig davon, wie viele NAM-Blöcke aktiv sind: Amp- und Pedal-Captures brauchen keinen Vorlauf und fügen daher keine Verzögerung hinzu. Sie wird nur dann größer als null, wenn die Samplerate eines Captures von der des Hosts abweicht (Resampling, etwa 1,4 ms bei 44,1 kHz) oder wenn das PITCH-Pedal aktiv ist (etwa 8,6 ms in INSTANT, 14 ms in POLY). Im Plugin gehört das Audiogerät der DAW, deshalb zeigt dieselbe Zeile dort nur die Verzögerung von VoLum selbst, die deine DAW automatisch kompensiert.
 
 VoLum besitzt außerdem eine immer aktive Ausgangs-Schutzstufe nach Delay und Reverb. Normales Spielen bleibt unverändert. Wenn ein heißes Rig und starke POST-Effekte durchgehende Peaks erzeugen, wird das OUT-Meter rot und der Footer zeigt `Output safety active - lower output or wet mix`. Drehe Output, Delay Mix oder Reverb Mix zurück, wenn du das oft siehst.
 
 ## Fehler Melden Oder Feature Vorschlagen
 
 Erstelle ein [Issue auf GitHub](https://github.com/guitarlum/VoLum/issues/new/choose). Nutze die Vorlage **Bug report** für Abstürze oder Fehlverhalten und **Feature request** für Ideen.
+
+VoLum schreibt ein kleines Diagnoseprotokoll, das sich gut anhängen lässt:
+
+- **Windows:** `%LOCALAPPDATA%\VoLum\volum.log`
+- **macOS:** `~/Library/Application Support/VoLum/volum.log`
+
+Es enthält Start und Version, die verwendete Samplerate und Puffergröße, jeden geladenen Amp und jede geladene IR mit Dateipfad und dem Grund eventueller Fehlschläge sowie Aktualisierungen der Bibliothek. Es hat eine Größenbegrenzung und kürzt sich selbst — du musst also nichts einschalten und nichts aufräumen.

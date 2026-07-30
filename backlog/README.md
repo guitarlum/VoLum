@@ -16,6 +16,18 @@ fresh Cursor planning chat.
 
 ## Open items
 
+### Bugfix
+- `B6-multi-instance-content-library.md` — two VoLum instances, or a DAW instance
+  plus the standalone, silently overwrite each other's custom library. Highest
+  deferred severity from the 1.2.1 audit: it loses user content.
+- `B7-audio-thread-rt-violations.md` — the audio callback allocates, frees
+  megabytes, constructs and destroys models, calls host/UI APIs, takes blocking
+  mutexes and can throw. One ticket because they share one root cause: the model
+  handoff is done *by* the audio thread. Supersedes the RT half of `P2`.
+- `B8-pdb-symbol-mismatch.md` — the shipped installer's binaries and the CI PDB
+  artifact come from two different link steps, so symbols do not resolve for the
+  build most users run. Debuggability only.
+
 ### Features
 - `F1-transpose-octaver-pedal.md` — **STALE / shipped + superseded.** Pedal built; the Signalsmith phase-vocoder DSP in the doc was reversed for a low-latency WSOLA period-sync granular shifter with a DROP/FAST character (changelog 06/27/2026). Kept only as the original UI/state design reference. Octaver follow-up is now `F11`.
 - `F11-octaver-deep-research.md` — give the Octaver mode the same measured-reference deep-research treatment the transpose engine got (uses the local `deep-research` skill; reference the reference Chaos Bed as black-box reference). Ship the best octaver defensible with numbers; no gratuitous knobs.
@@ -26,6 +38,7 @@ fresh Cursor planning chat.
 - `F7-bring-your-own-ir.md` — surface the existing hidden NAM IR convolver as a first-class `.wav` cabinet-IR feature in the Custom area.
 - `F8-import-your-own-pedals.md` — import custom PRE NAM captures into the PRE pedal slots.
 - `F9-midi-support.md` — minimal MIDI: Program Change recalls presets, CC maps to key params via MIDI-learn. Lowest priority.
+- `F13-custom-amp-artwork-reroll.md` — expand procedural custom-amp art and add deterministic reroll; generated art only, no user image import.
 
 ### OS Support
 - `O1-linux-support-spike.md`
@@ -47,10 +60,19 @@ fresh Cursor planning chat.
 
 ### Reference (not a prompt)
 - `1.0.1-review-findings.md` — engineering review notes captured during the 1.0.1 cycle.
+- `1.2.1-audit-deferred.md` — triage ledger over the 19-pass pre-release audit of
+  1.2.1: every finding, its severity, and whether it was fixed or deferred. The
+  evidence itself lives in `audit-notes/opus5/` and `audit-notes/gpt56/`.
 
 ## Suggested order
 
-The "bring your own / presets" cluster is the current focus:
+The 1.2.1 audit put two bugfix items ahead of the feature queue:
+
+0. B6 — multi-instance library safety, then the sibling "deleting content that is
+   currently playing" cluster named in `1.2.1-audit-deferred.md`. B7 wants its own
+   deliberate RT/perf pass rather than a slot between features.
+
+The "bring your own / presets" cluster is otherwise the current focus:
 
 1. F6 — Bring Your Own Amp + the Custom-area foundation (unblocks F7 and F8).
 2. F5 — Presets (can reference custom amps from F6).

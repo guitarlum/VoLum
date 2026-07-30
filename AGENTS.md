@@ -11,13 +11,17 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 
 ## Start Here
 
-- UI/layout work: `.cursor/rules/volum-ui.mdc` and skill `volum-ui-change`.
-- Params, presets, state migration: `.cursor/rules/volum-state-params.mdc` and skill `volum-param-state-change`.
+Rules below auto-attach on the files they own; you do not need to open them by hand.
+
+- UI/layout work: `.cursor/rules/volum-ui.mdc`.
+- Custom NAM import transactions: `NeuralAmpModeler/VoLumCustomNamImport.h`.
+- Params, presets, state migration: `.cursor/rules/volum-state-params.mdc`.
 - C++/DSP/audio-chain work: `.cursor/rules/neural-amp-modeler-native.mdc`.
 - CI, installers, releases, artifacts: `.cursor/rules/volum-release-packaging.mdc` and skill `release-manager`.
 - Build/CI failures: skill `native-build-debugger`.
 - Submodule or vendored code questions: `.cursor/rules/volum-submodules.mdc`.
 - Upstream sync with NAMCore or NeuralAmpModelerPlugin: skill `upstream-sync`.
+- Writing or trimming rules/skills/`AGENTS.md`: `.cursor/rules/ai-artifact-authoring.mdc`.
 
 ## Fast Commands
 
@@ -25,7 +29,9 @@ Keep this file as a small routing index. Detailed guidance lives in scoped Curso
 - macOS tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh`
 - macOS sanitizer tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`
 - Windows app smoke check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`
-- Windows portable package: `cmd /c NeuralAmpModeler\scripts\makedist-win.bat full zip`
-- Windows installer package: `cmd /c NeuralAmpModeler\scripts\makedist-win.bat full installer`
+- Windows portable package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full zip` (the script resolves its helpers relative to the working directory, so it must run from `scripts`)
+- Windows installer package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full installer`
+- Windows standalone end-to-end scenarios: `pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1`
 - macOS release-equivalent package: `bash NeuralAmpModeler/scripts/makedist-mac.sh full all`
+- Watch/dispatch CI: `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref <branch> [-Dispatch] [-NoWait]`
 - Format: `bash format.bash`

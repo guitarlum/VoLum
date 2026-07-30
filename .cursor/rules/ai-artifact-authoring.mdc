@@ -1,0 +1,43 @@
+---
+description: How to choose between a script, a scoped rule, a skill, an always-applied rule, and AGENTS.md when capturing agent guidance
+globs:
+  - .cursor/rules/*.mdc
+  - .cursor/skills/**/SKILL.md
+  - AGENTS.md
+alwaysApply: false
+---
+
+# Choosing The Right Agent Artifact
+
+Rank by delivery reliability per token spent, not by what is easiest to write.
+
+1. **Script** (`NeuralAmpModeler/scripts/*.ps1|*.sh`) - anything mechanically
+   checkable. Costs zero context until it runs and cannot be forgotten. Wire it
+   into `run-tests-win.ps1` or CI so it runs unasked, then **delete the prose it
+   replaces** instead of keeping both.
+2. **Glob-scoped rule** (`.cursor/rules/*.mdc`, `alwaysApply: false`) - knowledge
+   bound to specific files. Arrives automatically when those files are opened.
+3. **Skill** (`.cursor/skills/*/SKILL.md`) - a task with no file signature
+   (release flow, upstream sync, build debugging) or a procedure the user invokes
+   by name.
+4. **Always-applied rule** (`alwaysApply: true`) - only overrides that must be
+   known *before* any file is touched: shell syntax, git remote, branch flow,
+   "you run the builds". Every line here is paid in every session.
+5. **`AGENTS.md`** - routing index and command list. No detailed guidance.
+
+## Anti-patterns
+
+- **A skill that wraps a glob rule.** The rule already fires on those files,
+  earlier and without depending on the model choosing to invoke the skill. Put
+  the knowledge in the rule and drop the skill. `volum-ui-change` and
+  `volum-param-state-change` were deleted for exactly this.
+- **Prose restating what a script enforces.** Name the script instead.
+- **Detail in an always-applied rule that only matters for one file set.** Move
+  it to that file set's glob rule.
+
+## Pointer discipline
+
+Point only at sources that are guaranteed loaded where the pointer is read:
+always-applied rules and `AGENTS.md`. Never replace a fact in one glob rule with
+a pointer to another glob rule - the target may not be attached. A skill may
+point to a rule that auto-attaches on the files that skill edits.

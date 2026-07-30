@@ -8,30 +8,21 @@ void NeuralAmpModeler::_VolumResetAmpToFactory()
   // amp's scene (a custom amp keeps its own scene in the content library, so
   // resetting the factory slot would target the wrong owner), apply it to the
   // live params, rediscover channels, and clear any custom IR / recalled preset.
-  const bool customMain = mVolumCustomMainIdx >= 0;
   auto& scene = _VolumActiveScene();
   scene = volum::VoLumAmpSettings{};
   _VolumApplyAmpSettings(scene);
-  if (customMain)
-    _VolumApplyCustomMainCabs(mVolumCustomMainIdx); // re-show this amp's named cabs
-  else
-    _VolumRefreshChannels();
   mVolumNeedsLoad.store(true);
   mVolumSettingsDirty = true;
   // Drop any recalled preset: the bar reads "No Preset" and edits no longer diff.
   _VolumForgetActivePreset();
+  // One applier for the whole row - names, enables, IR chip, selection and the
+  // channel stepper - instead of re-showing the names and hand-clearing the chip. The
+  // hand-written version left No Cab and Custom IR in whatever enable state the
+  // pre-reset channel had produced.
+  _VolumApplyFocusedLaneCabs();
   if (auto* pGfx = GetUI())
-  {
-    if (auto* spk = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-    {
-      auto* row = spk->As<VoLumSpeakerRowControl>();
-      row->SetIrCab(false, "");
-      if (!customMain)
-        row->SetFactoryCabs(); // custom amps keep their named cabs (set above)
-    }
     if (auto* pb = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
       pb->As<VoLumPresetBarControl>()->SelectName(""); // -> "No Preset", clean
-  }
 }
 
 void NeuralAmpModeler::_VolumShowPresetMenu()
@@ -49,6 +40,11 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
     return;
   }
 
+  // Reading the bank is an owner-keyed operation too: MockPresetsForAmp ignores its
+  // ampIdx and indexes through the process-global key, so without a claim this menu
+  // can list another instance's presets - and the row the user then picks is applied
+  // as a bare index into this instance's bank.
+  _VolumClaimPresetOps();
   const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
@@ -273,24 +269,59 @@ void NeuralAmpModeler::_VolumApplyFocusedLaneCabs()
     return;
   }
 
-  auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
-  row->SetFactoryCabs();
-  // Factory amps always expose a No-Cab (DIRECT) path on every channel, so both
-  // the No Cab button and a custom IR are always allowed.
-  row->SetNoCabEnabled(true);
-  row->SetIrEnabled(true);
+  // Factory lane: discover this lane's channels first (that also clamps a stale
+  // channel index), then let the shared planner decide what the row shows. Going
+  // through the same planner as custom lanes is what stopped a factory amp with
+  // an active custom IR from coming back as "No Cab" on editor reopen.
   if (supportFocus)
-  {
-    row->SetSelected(std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3));
     _VolumRefreshSupportChannels();
-  }
   else
-  {
-    row->SetSelected(mVolumSpeakerIdx);
     _VolumRefreshChannels();
+
+  const volum::custom::CustomAmp unusedAmp; // factory lane: planner ignores it
+  _VolumApplyUiSyncPlan(volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportFocus, unusedAmp)), supportFocus);
+}
+
+// The one place restored backend state becomes visible control state. Called
+// after every restore path (editor open, DAW chunk load, session re-focus) so a
+// rebuilt editor never shows a constructor default in place of real state.
+void NeuralAmpModeler::_VolumSyncUiFromState()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+
+  // Sidebar + hero follow the MAIN lane's amp identity regardless of which lane
+  // the cab row is showing.
+  if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+  {
+    auto* list = al->As<VoLumAmpListControl>();
+    if (mVolumCustomMainIdx >= 0)
+      list->SetCustomSelected(mVolumCustomMainIdx);
+    else
+      list->SetSelected(mVolumAmpIdx);
   }
-  // Factory amps can also carry a per-lane custom IR; reflect the focused lane's.
-  _VolumReflectLaneIrChip(supportFocus);
+
+  const char* ampName = _VolumMainAmpDisplayName();
+  if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
+  {
+    auto* hero = heroCtrl->As<VoLumHeroImageControl>();
+    if (mVolumCustomMainIdx >= 0)
+      hero->SetCustomArt(true, volum::custom::CustomAmpArt(mVolumCustomMainIdx));
+    else
+    {
+      char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
+      hero->SetCustomArt(false, 0);
+      hero->SetPlaceholder(ph, mVolumAmpIdx);
+    }
+    hero->SetName(ampName);
+  }
+  if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
+    if (mVolumExpandedSection == EVoLumSection::AMP)
+      nameCtrl->As<VoLumSubRowTextControl>()->SetName(ampName, mVolumCustomMainIdx >= 0);
+
+  // Cab row + channel stepper for the focused lane.
+  _VolumApplyFocusedLaneCabs();
 }
 
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)
@@ -337,7 +368,7 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
   {
     const int speakerIdx = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, 3);
     auto channels =
-      volum::DiscoverChannels(std::filesystem::path(mVolumRigsRoot), volum::kAmps[supportAmpIdx].folderName,
+      volum::DiscoverChannels(volum::content::PathFromUtf8(mVolumRigsRoot), volum::kAmps[supportAmpIdx].folderName,
                               volum::kSpeakerPrefixes[speakerIdx]);
     for (auto& ch : channels)
     {
@@ -362,8 +393,43 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
   }
 }
 
+bool NeuralAmpModeler::_VolumHasSupportAmp()
+{
+  const int factory = GetParam(kSupportAmpIdx)->Int();
+  if (factory >= 0 && factory < volum::kAmpCount)
+    return true;
+  // An index the library no longer contains is not a lane: a custom support amp
+  // deleted from another instance leaves this one holding a stale index, and
+  // treating it as present focuses a lane with no amp behind it.
+  return mVolumCustomSupportIdx >= 0
+         && mVolumCustomSupportIdx < static_cast<int>(volum::custom::MockCustomAmps().size());
+}
+
+void NeuralAmpModeler::_VolumClampSupportFocus()
+{
+  if (!mVolumDualAmpFocusedSupport || _VolumHasSupportAmp())
+    return;
+
+  mVolumDualAmpFocusedSupport = false;
+
+  // Moving focus is only half the job. The cab row is shared by both lanes and every
+  // write to it is now conditioned on which lane is focused, so a clamp that only
+  // flipped the flag left the row still describing SUPPORT while MAIN was focused -
+  // the exact state that guard exists to prevent, and a click on a cab then edited
+  // MAIN with an index from the support amp's layout. Re-derive here so no caller
+  // has to remember: _VolumApplyFocusedLaneCabs does not call _UpdateVoLumLayout,
+  // so there is no re-entrancy back into this.
+  _VolumApplyFocusedLaneCabs();
+}
+
 void NeuralAmpModeler::_VolumApplyDualAmpFocus()
 {
+  // Focus can go stale rather than only being set wrongly: switching MAIN to an amp
+  // whose scene carries no support partner drops the partner while SUPPORT is still
+  // focused. Repaired here because this runs from _UpdateVoLumLayout, i.e. after
+  // every interaction, and before the early-out below so it also holds headless.
+  _VolumClampSupportFocus();
+
   // Sync the speaker row to the focused lane (cab selection is per-amp). Lane belonging on the
   // SUPPORT amp-row knobs is conveyed by their teal pointer dot + teal value text — set once at
   // attach time, no per-frame retoggling needed here.
@@ -376,10 +442,7 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;
   // Polarity belongs to the SUPPORT lane whenever it has an amp - a factory amp
   // or a custom support partner.
-  const bool hasSupportAmp =
-    (GetParam(kSupportAmpIdx)->Int() >= 0 && GetParam(kSupportAmpIdx)->Int() < volum::kAmpCount)
-    || mVolumCustomSupportIdx >= 0;
-  const bool showSupportPolarity = showPanKnobs && hasSupportAmp;
+  const bool showSupportPolarity = showPanKnobs && _VolumHasSupportAmp();
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
@@ -417,4 +480,3 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
     }
   }
 }
-

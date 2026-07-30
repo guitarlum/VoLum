@@ -290,13 +290,14 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
   if (!mVolumPostLocked)
     _VolumRestorePostFromSlot(s);
 
-  // Update speaker row UI if available
+  // Deliberately no SetSelected here. This is a restore path, and mVolumSpeakerIdx
+  // is a raw persisted index: for a custom lane the resolver still has to snap it to
+  // a slot the channel actually carries, and when SUPPORT is focused it belongs to
+  // the other lane entirely - the row is shared. Every caller of this function ends
+  // in _VolumApplyFocusedLaneCabs, which writes names, enables, IR chip and
+  // selection together for the lane that is actually on screen.
   if (auto* pGfx = GetUI())
-  {
-    if (auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-      spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);
     _UpdateVoLumLayout(pGfx);
-  }
 
   // F7: re-resolve each lane's custom IR cab (orphaned id -> baked cab fallback).
   // The SUPPORT lane owns its own convolver, so restore it independently.
@@ -340,7 +341,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   nlohmann::json j = volum::VolumUserSettingsToJson(
     mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
     /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
-    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load());
+    mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load(), GetParam(kCalibrateInput)->Bool(),
+    GetParam(kInputCalibrationLevel)->Value());
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   // 1.2.0 additive session refs (ignored by older builds): the focused custom
@@ -356,8 +358,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   {
     if (mVolumRigsRoot.empty())
       return;
-    settingsPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
-    dualAmpSettingsPath = fs::path(mVolumRigsRoot) / "volum-dual-amp-settings.json";
+    settingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-settings.json";
+    dualAmpSettingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
   std::error_code ec;
@@ -380,6 +382,44 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   volum::content::GlobalContentStore().Save();
 }
 
+void NeuralAmpModeler::_VolumSaveCalibrationDefaults()
+{
+  namespace fs = std::filesystem;
+  const fs::path settingsPath = volum::VolumUserSettingsFilePath();
+  if (settingsPath.empty())
+    return;
+
+  // Multiple plugin instances in one host may edit this machine-global default.
+  // Only direct UI edits call this function; project/preset restores never do.
+  static std::mutex calibrationSettingsMutex;
+  std::lock_guard<std::mutex> lock(calibrationSettingsMutex);
+
+  nlohmann::json j = nlohmann::json::object();
+  std::error_code ec;
+  if (fs::exists(settingsPath, ec))
+  {
+    try
+    {
+      std::ifstream in(settingsPath);
+      in >> j;
+      if (!j.is_object())
+        return;
+    }
+    catch (...)
+    {
+      std::cerr << "VoLum: calibration defaults not saved because volum-settings.json is unreadable" << std::endl;
+      return;
+    }
+  }
+
+  if (!j.contains("version"))
+    j["version"] = volum::kVoLumUserSettingsVersion;
+  j["CalibrateInput"] = GetParam(kCalibrateInput)->Bool();
+  j["InputCalibrationLevel"] = GetParam(kInputCalibrationLevel)->Value();
+  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+    std::cerr << "VoLum: calibration defaults write failed: " << ec.message() << std::endl;
+}
+
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 {
   namespace fs = std::filesystem;
@@ -389,8 +429,8 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   fs::path dualAmpLegacyPath;
   if (!mVolumRigsRoot.empty())
   {
-    legacyPath = fs::path(mVolumRigsRoot) / "volum-settings.json";
-    dualAmpLegacyPath = fs::path(mVolumRigsRoot) / "volum-dual-amp-settings.json";
+    legacyPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-settings.json";
+    dualAmpLegacyPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
   fs::path settingsPath;
@@ -413,11 +453,15 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     volum::VoLumAmpSettings parsedLivePre;
     volum::VoLumAmpSettings parsedLivePost;
     bool parsedLiteMode = false;
+    bool parsedCalibrateInput = kDefaultCalibrateInput;
+    double parsedInputCalibrationLevel = kDefaultInputCalibrationLevel;
     volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
                                      &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
                                      &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
-                                     &parsedLiteMode);
+                                     &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel);
     mVolumLiteMode.store(parsedLiteMode);
+    GetParam(kCalibrateInput)->Set(parsedCalibrateInput ? 1.0 : 0.0);
+    GetParam(kInputCalibrationLevel)->Set(parsedInputCalibrationLevel);
     if (haveLivePreSnapshot)
       mVolumLiveLockedPre = parsedLivePre;
     if (haveLivePostSnapshot)
@@ -497,4 +541,3 @@ std::string NeuralAmpModeler::_VolumActiveOwnerKey() const
   }
   return volum::content::FactoryOwnerKey(mVolumAmpIdx);
 }
-

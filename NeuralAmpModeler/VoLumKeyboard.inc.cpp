@@ -5,7 +5,6 @@
 bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
 {
   constexpr int kTabKey = '\t';
-  constexpr int kSpaceKey = ' ';
   if (key.VK == '1')
     return _SwitchVoLumKeyboardSection(EVoLumSection::PRE);
   if (key.VK == '2')
@@ -40,7 +39,13 @@ bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
 
   if (key.VK == kVK_RETURN)
     return _ActivateVoLumKeyboardTarget();
-  if (key.VK == kSpaceKey)
+#ifdef APP_API
+  // Standalone owns its keyboard, so Space remains the convenient on/off key.
+  if (key.VK == ' ')
+#else
+  // Plug-ins must leave Space unhandled for the DAW transport. B = bypass.
+  if (key.VK == 'b' || key.VK == 'B')
+#endif
     return _ToggleVoLumKeyboardTarget();
 
   return false;
@@ -161,7 +166,14 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
   const bool next = _VolumUserToggleParam(paramIdx);
 
   if (paramIdx == kDualAmpActive)
+  {
+    // Only follow Dual Amp into the SUPPORT lane when that lane has an amp. The
+    // default partner is "(none)", so pressing 2 then the toggle key focused an
+    // empty lane: the cab row jumped to a phantom cab, the channel stepper read
+    // "---", and S edited a parameter nothing was listening to.
     mVolumDualAmpFocusedSupport = next;
+    _VolumClampSupportFocus();
+  }
 
   _UpdateVoLumLayout();
   _UpdateVoLumKeyboardFocusHint();
@@ -186,37 +198,25 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardSpeaker(int direction)
   if (mVolumExpandedSection != EVoLumSection::AMP)
     return false;
 
-  constexpr int kSpeakerCount = 4;
-  if (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport)
-  {
-    const int current = std::clamp(GetParam(kSupportSpeakerIdx)->Int(), 0, kSpeakerCount - 1);
-    const int next = (current + direction + kSpeakerCount) % kSpeakerCount;
-    GetParam(kSupportSpeakerIdx)->Set(next);
-    SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
-    mVolumSettingsDirty = true;
-    _VolumRefreshSupportChannels();
-    mVolumSupportNeedsLoad.store(true);
-  }
-  else
-  {
-    const int current = std::clamp(mVolumSpeakerIdx, 0, kSpeakerCount - 1);
-    const int next = (current + direction + kSpeakerCount) % kSpeakerCount;
-    mVolumSpeakerIdx = next;
-    mVolumAmpSettings[mVolumAmpIdx].speakerIdx = next;
-    mVolumSettingsDirty = true;
-    _VolumRefreshChannels();
-    mVolumNeedsLoad.store(true);
-  }
-  _VolumMarkPresetDirty();
+  // Drive the cab row's own step, which fires the SAME callback a click fires. The
+  // keyboard used to carry a second copy of the cab logic, and that copy had no
+  // custom-amp branch: pressing S with a custom amp focused wrote the *underlying
+  // factory* amp's saved cab, rescanned the factory rig folder for channel labels,
+  // and left the custom lane's routing untouched - so the stepper relabelled itself
+  // under the custom amp's name, the row could highlight a slot with no capture, the
+  // audio did not change, and the custom amp's persisted gain stage was corrupted for
+  // the next open. Clearing an active custom IR, skipping unavailable slots and
+  // retiring the IR all come for free from the shared path.
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return false;
+  auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
+  if (!spkCtrl)
+    return false;
+  if (!spkCtrl->As<VoLumSpeakerRowControl>()->StepKeyboard(direction))
+    return false;
 
-  if (auto* pGfx = GetUI())
-  {
-    if (auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
-      spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport
-                                                           ? GetParam(kSupportSpeakerIdx)->Int()
-                                                           : mVolumSpeakerIdx);
-    _UpdateVoLumLayout(pGfx);
-  }
+  _UpdateVoLumLayout(pGfx);
   _UpdateVoLumKeyboardFocusHint();
   return true;
 }
@@ -226,49 +226,57 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
   if (mVolumSelectedKnobParamIdx != kNoParameter)
     return;
 
+#ifdef APP_API
+  constexpr const char* kToggleOnOffHint = "Space on/off";
+  constexpr const char* kToggleDualHint = "Space dual amp";
+#else
+  constexpr const char* kToggleOnOffHint = "B on/off";
+  constexpr const char* kToggleDualHint = "B dual amp";
+#endif
+
   const char* target = "Main amp";
-  const char* action = "Space dual amp";
+  const char* action = kToggleDualHint;
   const char* nav = "Up/Down amp  |  Left/Right channel  |  Tab target";
   switch (mVolumFocusedEffect)
   {
     case EVoLumEffectFocus::AMP:
       target = (GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport) ? "Support amp" : "Main amp";
-      action = "Space dual amp";
+      action = kToggleDualHint;
       nav = "Up/Down amp  |  Left/Right channel  |  S cab  |  Tab target";
       break;
     case EVoLumEffectFocus::PITCH:
       target = "Pitch";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::COMP:
       target = "Compressor";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::PRE_NAM1:
       target = "NAM 1";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::PRE_NAM2:
       target = "NAM 2";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::DELAY:
       target = "Delay";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::REVERB:
       target = "Reverb";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
     case EVoLumEffectFocus::TREMOLO:
       target = "Tremolo";
-      action = "Space on/off";
+      action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
   }
@@ -438,6 +446,41 @@ bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
   {
     if (auto* pControl = pGfx->GetControlWithParamIdx(mVolumSelectedKnobParamIdx))
     {
+      // A mode switch can hide the selected knob out from under the selection - the
+      // Tremolo CROSSOVER knob exists only in Harmonic, DELAY TIME is swapped for the
+      // DIVISION stepper under Sync, and the pitch modes each own their own knobs.
+      // The mode pills do not clear the selection the way the sidebar and the cab row
+      // do, so arrows kept editing a parameter that was no longer on screen while the
+      // hint bar named it. Drop the selection instead - and report the key as handled,
+      // because the handlers below this one take Up/Down to mean "switch amp" and
+      // Left/Right to mean "step channel". Both stage a model load and are instantly
+      // audible, so letting the key through would trade a silent edit for a loud one.
+      if (pControl->IsHidden())
+      {
+        // The whole selection, not just the index: hand-clearing two fields left the
+        // knob wearing its keyboard ring (so it came back looking selected but no
+        // longer answering arrows the next time its mode was chosen) and left an open
+        // exact-value box with nothing driving it.
+        _ClearVoLumKnobSelection();
+        _UpdateVoLumKeyboardFocusHint();
+
+        // _HandleVoLumKeyboardFocusKey already ran and declined these two, because it
+        // suppresses them whenever a knob is selected. The selection it deferred to
+        // was the stale one just dropped, so swallowing them here as well would cost
+        // the user a press: Enter would not open the knob that replaced the hidden
+        // one, and the on/off key would not toggle the focused block.
+        if (key.VK == kVK_RETURN)
+          return _ActivateVoLumKeyboardTarget();
+#ifdef APP_API
+        if (key.VK == ' ')
+#else
+        if (key.VK == 'b' || key.VK == 'B')
+#endif
+          return _ToggleVoLumKeyboardTarget();
+
+        return true;
+      }
+
       if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))
       {
         const bool handled = pKnob->HandleKeyboardInput(key);
@@ -501,4 +544,3 @@ void NeuralAmpModeler::_HideVoLumExactEntry()
     }
   }
 }
-

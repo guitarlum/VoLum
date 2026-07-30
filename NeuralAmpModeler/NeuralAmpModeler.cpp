@@ -21,8 +21,16 @@
 // clang-format on
 #include "architecture.hpp"
 
+#if defined(APP_API)
+  // Standalone only: lets the Settings page report the audio device's real round-trip
+  // latency instead of just our algorithmic delay. See _VolumLatencyReport.
+  #include "IPlugAPP_host.h"
+#endif
+
 #include "NeuralAmpModelerControls.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumChunkSafeRead.h"
+#include "VoLumDiagLog.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumLevelMute.h"
 #include "VoLumMasterSafety.h"
@@ -38,6 +46,7 @@
 #include "VoLumUserSettingsIO.h"
 #include "VoLumControls.h"
 #include "VoLumCustomUi.h"
+#include "VoLumCustomNamImport.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -290,10 +299,24 @@ const double kDefaultInputCalibrationLevel = 12.0;
 // amps are offset by this base so the select callback can tell them apart.
 constexpr int kVolumCustomSupportBase = 10000;
 
+// Which build wrote a diagnostic log line. Standalone and plugin instances share one
+// log file, and "which one was running" is usually the first question.
+#if defined(APP_API)
+constexpr const char* kVolumDiagApiName = "standalone";
+#elif defined(VST3_API)
+constexpr const char* kVolumDiagApiName = "vst3";
+#elif defined(AU_API) || defined(AUv3_API)
+constexpr const char* kVolumDiagApiName = "au";
+#else
+constexpr const char* kVolumDiagApiName = "plugin";
+#endif
+
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 : Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
+  volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
+  VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
   _InitToneStack();
   nam::activations::Activation::enable_fast_tanh();
   GetParam(kInputLevel)->InitGain("Input", 0.0, -20.0, 20.0, 0.1);
@@ -441,14 +464,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   {
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
-      mVolumRigsRoot = root.string();
+      mVolumRigsRoot = volum::content::PathToUtf8(root);
     // 1.2.0: bind + load the all-format custom-content library (F5-F8). The base
     // dir is VoLum-owned and writable from standalone/VST3/AU; fall back to a
     // content/ folder beside the rigs tree if the OS path cannot be resolved.
     {
       auto contentDir = volum::VolumContentDir();
       if (contentDir.empty() && !mVolumRigsRoot.empty())
-        contentDir = std::filesystem::path(mVolumRigsRoot) / "content";
+        contentDir = volum::content::PathFromUtf8(mVolumRigsRoot) / "content";
 #ifndef NDEBUG
       // Debug-only, opt-in screenshot/test seeding: VOLUM_SEED_CUSTOM_AMPS=N
       // sandboxes the content store in a fresh temp dir and seeds N custom amps
@@ -463,8 +486,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       {
         std::error_code seedEc;
         const auto sandbox = std::filesystem::temp_directory_path(seedEc)
-                             / ("volum-seed-" + std::to_string(static_cast<unsigned long long>(
-                                                  std::chrono::steady_clock::now().time_since_epoch().count())));
+                             / ("volum-seed-"
+                                + std::to_string(static_cast<unsigned long long>(
+                                  std::chrono::steady_clock::now().time_since_epoch().count())));
         if (!seedEc)
         {
           std::filesystem::create_directories(sandbox, seedEc);
@@ -476,6 +500,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       {
         volum::content::GlobalContentStore().SetBaseDir(contentDir);
         volum::content::GlobalContentStore().Load();
+        // One-time: auto-normalize the trim of any pre-1.2.1 IR (no stored trim)
+        // so previously-imported custom IRs stop landing ~18 dB below stock cabs.
+        _VolumMigrateIrTrims();
       }
 #ifndef NDEBUG
       if (volumSeedCustomAmps > 0)
@@ -515,6 +542,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 NeuralAmpModeler::~NeuralAmpModeler()
 {
   _VolumStopLoader();
+
+  // The preset bridge's capture/apply hooks are process-global and hold a raw
+  // `this`. Every preset operation re-claims them (see _VolumClaimPresetOps), so a
+  // live instance can never be routed through a dead one - but leaving a destroyed
+  // object behind them is still a loaded gun for any future call site that forgets
+  // to claim. A no-op if another instance has claimed them since.
+  volum::custom::ClearPresetHooksIfOwnedBy(this);
+
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
   _VolumSaveSettingsToFile();
@@ -555,17 +590,27 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
   const bool toneStackActive = GetParam(kEQActive)->Value();
   const bool dualAmpActive = GetParam(kDualAmpActive)->Bool();
-  const bool supportAmpSelected = GetParam(kSupportAmpIdx)->Int() >= 0;
+  // Not GetParam(kSupportAmpIdx) >= 0: a custom (library) SUPPORT partner has no
+  // factory index and deliberately parks that param at -1, so testing it here made
+  // the whole custom dual-amp lane silent - the model loaded and the UI showed it
+  // while the plan refused to run it. mVolumSupportSelected is maintained by
+  // _VolumRequestSupportModelLoad, which owns that decision for both lanes.
+  const bool supportAmpSelected = mVolumSupportSelected.load(std::memory_order_relaxed);
   const bool haveSupportModel = supportAmpSelected && (mSupportModel != nullptr);
   const bool supportToneStackActive = GetParam(kSupportEQActive)->Bool();
   const bool preNamActive[2] = {GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam2Active)->Bool()};
   const bool havePreNam[2] = {mPreModel[0] != nullptr, mPreModel[1] != nullptr};
+  // A lane whose IR removal is deferred keeps convolving until the replacement cab
+  // capture goes live, even though its toggle is already off in the UI.
+  const bool irActive = volum::dsp_staging::IrConvolutionActive(
+    GetParam(kIRToggle)->Bool(), mVolumDeferredRemoveIR.load(std::memory_order_relaxed));
+  const bool supportIrActive = volum::dsp_staging::IrConvolutionActive(
+    GetParam(kSupportIRToggle)->Bool(), mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed));
   const auto processingPlan = volum::MakeProcessingPlan(
-    haveMainModel, noiseGateActive, toneStackActive, GetParam(kIRToggle)->Value(), mIR != nullptr,
-    GetParam(kPreCompActive)->Bool(), preNamActive, havePreNam, GetParam(kDelayActive)->Bool(),
-    GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(), dualAmpActive, haveSupportModel, supportToneStackActive,
-    GetParam(kSupportIRToggle)->Value(), mSupportIR != nullptr, GetParam(kPrePitchActive)->Bool(),
-    GetParam(kTremoloActive)->Bool());
+    haveMainModel, noiseGateActive, toneStackActive, irActive, mIR != nullptr, GetParam(kPreCompActive)->Bool(),
+    preNamActive, havePreNam, GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(),
+    dualAmpActive, haveSupportModel, supportToneStackActive, supportIrActive, mSupportIR != nullptr,
+    GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
@@ -707,6 +752,11 @@ void NeuralAmpModeler::OnReset()
   mSupportHighPass.SetParams(highPassParams);
   mMasterSafetyHoldSamples = 0;
   mMasterSafetyEngaged.store(false);
+  // Cap a deferred IR removal at ~2 seconds of audio, expressed in blocks so the
+  // audio thread only has to count. A capture that never loads must not leave the
+  // IR convolving forever - that would be a worse artifact than the gap it avoids.
+  mVolumDeferredIrMaxBlocks.store(
+    std::max(1, static_cast<int>(std::ceil(2.0 * sampleRate / std::max(1, maxBlockSize)))));
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -722,7 +772,6 @@ void NeuralAmpModeler::OnReset()
     mPitch.Configure(sampleRate, maxBlockSize);
     mPitch.Reset();
   }
-  mPrePitchConfigureRequested.store(false);
   const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
   mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
@@ -745,6 +794,10 @@ void NeuralAmpModeler::OnReset()
   mTunerDSP.Reset(sampleRate);
   mMetronomeDSP.Reset(sampleRate);
   _UpdateLatency();
+  VOLUM_LOG("audio", "reset: " + std::to_string(static_cast<int>(sampleRate)) + " Hz, block "
+                       + std::to_string(maxBlockSize) + ", in " + std::to_string(NInChansConnected()) + " / out "
+                       + std::to_string(NOutChansConnected()) + ", plugin latency " + std::to_string(GetLatency())
+                       + " samples");
 }
 
 void NeuralAmpModeler::OnIdle()
@@ -753,17 +806,14 @@ void NeuralAmpModeler::OnIdle()
   mOutputSender.TransmitData(*this);
   mOutputSenderR.TransmitData(*this);
 
-  // PRE Pitch reconfigure off the audio thread (only needed if the grain/sample
-  // rate ever changes outside OnReset), then refresh reported latency.
-  if (mPrePitchConfigureRequested.exchange(false))
-  {
-    {
-      std::lock_guard<std::mutex> lock(mPrePitchMutex);
-      mPitch.Configure(GetSampleRate(), GetBlockSize());
-      mPitch.Reset();
-    }
-    _UpdateLatency();
-  }
+  // Host state restored into an open editor. Only consumed while an editor exists, so
+  // a request that arrives with the window closed is still waiting for the OnUIOpen
+  // that will run the same applier.
+  if (GetUI() && mVolumUiSyncPending.exchange(false))
+    _VolumSyncUiFromState();
+
+  _VolumRefreshLatencyReport();
+  _VolumFlushDeferredIrShaping();
 
   // Push tuner result to UI
   if (mTunerDSP.IsActive())
@@ -793,39 +843,59 @@ void NeuralAmpModeler::OnIdle()
       const std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomMainSlot, mVolumCustomMainChannel);
       if (!rel.empty())
       {
-        fileToLoad = volum::content::GlobalContentStore().ResolveStored(rel).string();
+        fileToLoad = volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
         customMainLoad = true;
+      }
+      else
+      {
+        mVolumRequestedMainFile = amp.name;
+        mVolumMainLoadError = "LOAD FAILED - custom capture path is missing";
+        VOLUM_LOG("model", "MAIN load FAILED: no capture in '" + amp.name + "' for slot "
+                             + std::to_string(mVolumCustomMainSlot) + " channel "
+                             + std::to_string(mVolumCustomMainChannel));
       }
     }
     else if (mVolumChannelIdx >= 0 && mVolumChannelIdx < (int)mVolumChannelFiles.size())
     {
       namespace fs = std::filesystem;
-      auto rigPath =
-        fs::path(mVolumRigsRoot) / volum::kAmps[mVolumAmpIdx].folderName / mVolumChannelFiles[mVolumChannelIdx];
-      fileToLoad = fs::weakly_canonical(rigPath).string();
+      const auto rigPath = volum::content::PathFromUtf8(mVolumRigsRoot) / volum::kAmps[mVolumAmpIdx].folderName
+                           / mVolumChannelFiles[mVolumChannelIdx];
+      fileToLoad = volum::content::PathToUtf8(fs::weakly_canonical(rigPath));
     }
 
     if (!fileToLoad.empty())
     {
-      mVolumLastLoadedFile = std::filesystem::path(fileToLoad).filename().string();
-      if (auto* pGfx = GetUI())
+      mVolumRequestedMainFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
+      if (customMainLoad)
       {
-        if (auto* footer = pGfx->GetControlWithTag(kCtrlTagVoLumFooter))
-          footer->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
+        std::error_code pathError;
+        if (!std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad), pathError) || pathError)
+        {
+          mVolumMainLoadError = "LOAD FAILED - copied custom capture is missing";
+          // The registry still lists this capture, so only the log can say which
+          // file went missing under the content library.
+          VOLUM_LOG("model", "MAIN load FAILED: capture file missing " + fileToLoad);
+          mVolumIsLoading.store(false);
+          fileToLoad.clear();
+        }
       }
 
-      // Custom amps live outside the factory rig tree, so disable the factory
-      // sibling-prefetch by passing ampIdx = -1 (the loader skips its scan).
-      const int ampIdx = customMainLoad ? -1 : mVolumAmpIdx;
-      const std::string rigsRoot = customMainLoad ? std::string() : mVolumRigsRoot;
-      if (fileToLoad == mNAMPaths.live.Get() && !forceMainReload)
+      if (!fileToLoad.empty())
       {
-        mVolumIsLoading.store(false);
-      }
-      else
-      {
-        mVolumIsLoading.store(true);
-        _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
+        mVolumMainLoadError.clear();
+        // Custom amps live outside the factory rig tree, so disable the factory
+        // sibling-prefetch by passing ampIdx = -1 (the loader skips its scan).
+        const int ampIdx = customMainLoad ? -1 : mVolumAmpIdx;
+        const std::string rigsRoot = customMainLoad ? std::string() : mVolumRigsRoot;
+        if (fileToLoad == mNAMPaths.live.Get() && !forceMainReload)
+        {
+          mVolumIsLoading.store(false);
+        }
+        else
+        {
+          mVolumIsLoading.store(true);
+          _VolumQueueMainModelLoad(fileToLoad, ampIdx, rigsRoot);
+        }
       }
     }
     else
@@ -872,12 +942,27 @@ void NeuralAmpModeler::OnIdle()
     mVolumPostLockUiDirty = false;
   }
 
+  if (mVolumMainLoadFailed.exchange(false))
+  {
+    mVolumMainLoadError = "LOAD FAILED";
+    if (!mVolumRequestedMainFile.empty())
+      mVolumMainLoadError += " - " + mVolumRequestedMainFile;
+    if (!mVolumLastLoadedFile.empty())
+      mVolumMainLoadError += " (still playing " + mVolumLastLoadedFile + ")";
+  }
+
   // Write settings file when dirty (knob/speaker/channel changed)
 #ifdef APP_API
   if (mVolumSettingsDirty)
   {
     mVolumSettingsDirty = false;
     _VolumSaveSettingsToFile();
+  }
+#endif
+  if (mVolumCalibrationDefaultsDirty)
+  {
+    mVolumCalibrationDefaultsDirty = false;
+    _VolumSaveCalibrationDefaults();
   }
 
   if (auto* pGfx = GetUI())
@@ -896,6 +981,10 @@ void NeuralAmpModeler::OnIdle()
         // Master safety took priority because it indicates the actual final-bus is being
         // shaped, which is the louder problem regardless of dual-amp state.
         footer->As<VoLumFooterControl>()->SetText("Output safety active - lower output or wet mix");
+      }
+      else if (!mVolumMainLoadError.empty())
+      {
+        footer->As<VoLumFooterControl>()->SetText(mVolumMainLoadError.c_str());
       }
       else if (dualActive && mVolumDualAmpOutputHot.load())
       {
@@ -918,10 +1007,11 @@ void NeuralAmpModeler::OnIdle()
       }
     }
   }
-#endif
 
   if (mNewModelLoadedInDSP)
   {
+    mVolumLastLoadedFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());
+    mVolumMainLoadError.clear();
     if (auto* pGraphics = GetUI())
     {
       _UpdateControlsFromModel();
@@ -1052,19 +1142,45 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
 
 int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
 {
-  // Look for the expected header. If it's there, then we'll know what to do.
-  WDL_String header;
-  int pos = startPos;
-  pos = chunk.GetStr(header, pos);
+  // Hosts call this across a C++ ABI boundary (see IPlugVST3_Common.h) with no
+  // exception barrier of their own, so anything that escapes here takes the DAW
+  // down while opening a project. The readers below are being made
+  // non-throwing, but state parsing touches std::string, nlohmann::json and the
+  // content registry, and a corrupt chunk is exactly the input most likely to
+  // reach a path nobody predicted. Returning a parse failure lets the host
+  // report a bad state; letting the exception out cannot be recovered from.
+  try
+  {
+    // Look for the expected header. If it's there, then we'll know what to do.
+    WDL_String header;
+    int pos = volum::SafeGetStr(chunk, startPos, header);
+    if (pos < 0)
+      return -1;
 
-  const char* kExpectedHeader = "###NeuralAmpModeler###";
-  if (strcmp(header.Get(), kExpectedHeader) == 0)
-  {
-    return _UnserializeStateWithKnownVersion(chunk, pos);
+    const char* kExpectedHeader = "###NeuralAmpModeler###";
+    if (strcmp(header.Get(), kExpectedHeader) == 0)
+    {
+      return _UnserializeStateWithKnownVersion(chunk, pos);
+    }
+    else
+    {
+      return _UnserializeStateWithUnknownVersion(chunk, startPos);
+    }
   }
-  else
+  catch (const std::exception& e)
   {
-    return _UnserializeStateWithUnknownVersion(chunk, startPos);
+    // Belt to the scope guard in _UnserializeStateWithKnownVersion: whatever the
+    // reader was in the middle of, an instance that keeps running must not keep
+    // this flag false, or it stops loading models and saving settings in silence.
+    mVolumInitComplete = true;
+    VOLUM_LOG("state", std::string("UnserializeState failed: ") + e.what());
+    return -1;
+  }
+  catch (...)
+  {
+    mVolumInitComplete = true;
+    VOLUM_LOG("state", "UnserializeState failed with a non-standard exception");
+    return -1;
   }
 }
 
@@ -1078,6 +1194,12 @@ void NeuralAmpModeler::OnUIOpen()
   }
   _UpdateLatency();
   _VolumRestoreSessionSelection();
+  // The editor is rebuilt from constructor defaults on every open, so the last
+  // step is always to re-derive the visible selection from backend state. Without
+  // this a lane whose cab is a custom IR came back showing "No Cab". This also
+  // satisfies any sync a state restore requested while the window was closed.
+  mVolumUiSyncPending.store(false);
+  _VolumSyncUiFromState();
 }
 
 // Standalone: re-focus the last custom MAIN amp and re-select the active preset
@@ -1091,12 +1213,18 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
     return;
   mVolumDidRestorePresetSelection = true;
 
-  if (!mVolumRestoreCustomMainId.empty())
-  {
-    const int cmi = volum::custom::CustomAmpIndexById(mVolumRestoreCustomMainId);
-    if (cmi >= 0)
-      _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs; clears the recalled preset
-  }
+  // Second resolution stage: drop references this machine's content store cannot
+  // resolve. A deleted custom amp also invalidates the preset id, since the bank
+  // belonged to that amp; restoring it would label the header with a preset that
+  // has no owner.
+  const int cmi = mVolumRestoreCustomMainId.empty() ? -1 : volum::custom::CustomAmpIndexById(mVolumRestoreCustomMainId);
+  const volum::RestoreSelection sel =
+    volum::ValidateRestoreSelection({mVolumRestoreCustomMainId, mVolumRestorePresetId},
+                                    /*customMainIdKnown=*/cmi >= 0, /*presetIdKnown=*/true);
+  mVolumRestorePresetId = sel.activePresetId;
+
+  if (!sel.customMainId.empty() && cmi >= 0)
+    _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs; clears the recalled preset
   mVolumRestoreCustomMainId.clear();
 
   if (mVolumRestorePresetId.empty())
@@ -1122,6 +1250,13 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
 
 void NeuralAmpModeler::OnUIClose()
 {
+  // An active tuner silences the entire output (see silenceForTuner in
+  // ProcessBlock), and mTunerDSP outlives the editor while the only thing that
+  // can clear it is a control that no longer exists. Closing the window with the
+  // tuner up therefore muted the instance permanently, and the editor is rebuilt
+  // with the tuner hidden, so nothing on screen explained the silence.
+  mTunerDSP.SetActive(false);
+
   // Save while params are still valid (destructor may run after teardown)
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
@@ -1381,6 +1516,9 @@ void NeuralAmpModeler::_VolumRefreshPrePostLockChrome(int paramIdx)
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
+  if (source == EParamSource::kUI && (paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel))
+    mVolumCalibrationDefaultsDirty = true;
+
   if (auto pGraphics = GetUI())
   {
     // A user-driven param edit may diverge the live chain from the recalled
@@ -1593,6 +1731,13 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     std::lock_guard<std::mutex> lock(mStagingMutex);
 
+    // VoLum: the staged models below have not been moved yet, so stepping the
+    // deferred swaps here lets a lane's IR change land on the same block as its
+    // replacement cab capture - the switch the user hears as one clean move.
+    bool holdMainIr = false;
+    bool holdSupportIr = false;
+    _VolumStepDeferredIrSwaps(holdMainIr, holdSupportIr);
+
     if (mShouldRemoveModel)
     {
       mModel = nullptr;
@@ -1655,13 +1800,13 @@ void NeuralAmpModeler::_ApplyDSPStaging()
         appliedPreModel[i] = true;
       }
     }
-    if (mStagedIR != nullptr)
+    if (mStagedIR != nullptr && !holdMainIr)
     {
       mIR = std::move(mStagedIR);
       mStagedIR = nullptr;
       volum::dsp_staging::CommitStagedPathOnApply(mIRPaths);
     }
-    if (mStagedSupportIR != nullptr)
+    if (mStagedSupportIR != nullptr && !holdSupportIr)
     {
       mSupportIR = std::move(mStagedSupportIR);
       mStagedSupportIR = nullptr;
@@ -1685,6 +1830,50 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     if (removedPreModel[i] || appliedPreModel[i])
       _UpdateLatency();
   }
+}
+
+// Main thread: land the shaping push a deferred cab switch held back, once the audio
+// thread has landed that switch. Until then the lane is still playing the sound it is
+// leaving and needs the shaping that belongs to it.
+void NeuralAmpModeler::_VolumFlushDeferredIrShaping()
+{
+  const bool pending[2] = {
+    mVolumDeferredRemoveIR.load(std::memory_order_relaxed) || mVolumDeferredApplyIR.load(std::memory_order_relaxed),
+    mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed)
+      || mVolumDeferredApplySupportIR.load(std::memory_order_relaxed)};
+  for (int lane = 0; lane < 2; ++lane)
+  {
+    if (!mVolumIrShapingPushPending[lane] || pending[lane])
+      continue;
+    mVolumIrShapingPushPending[lane] = false;
+    _VolumPushIrShaping(lane == 1);
+  }
+}
+
+void NeuralAmpModeler::_VolumStepDeferredIrSwaps(bool& holdMainIr, bool& holdSupportIr)
+{
+  const int maxBlocks = mVolumDeferredIrMaxBlocks.load(std::memory_order_relaxed);
+  auto step = [maxBlocks](std::atomic<bool>& pending, std::atomic<int>& waited, bool replacementStaged) {
+    const auto out = volum::dsp_staging::StepDeferredIrSwap(
+      pending.load(std::memory_order_relaxed), waited.load(std::memory_order_relaxed), replacementStaged, maxBlocks);
+    if (out.fire)
+      pending.store(false, std::memory_order_relaxed);
+    waited.store(out.waitedBlocks, std::memory_order_relaxed);
+    return out;
+  };
+
+  const bool mainStaged = mStagedModel != nullptr;
+  const bool supportStaged = mStagedSupportModel != nullptr;
+
+  if (step(mVolumDeferredRemoveIR, mVolumDeferredRemoveIrBlocks, mainStaged).fire)
+    mShouldRemoveIR.store(true, std::memory_order_relaxed);
+  if (step(mVolumDeferredRemoveSupportIR, mVolumDeferredRemoveSupportIrBlocks, supportStaged).fire)
+    mShouldRemoveSupportIR.store(true, std::memory_order_relaxed);
+
+  // The addition waits the other way round: the staged IR stays parked until this
+  // block, so the caller must leave it where it is.
+  holdMainIr = step(mVolumDeferredApplyIR, mVolumDeferredApplyIrBlocks, mainStaged).stillPending;
+  holdSupportIr = step(mVolumDeferredApplySupportIR, mVolumDeferredApplySupportIrBlocks, supportStaged).stillPending;
 }
 
 void NeuralAmpModeler::_DeallocateIOPointers()
@@ -1768,12 +1957,10 @@ void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBl
 
 void NeuralAmpModeler::_SetInputGain()
 {
-  iplug::sample inputGainDB = GetParam(kInputLevel)->Value();
-  // Input calibration
-  if ((mModel != nullptr) && (mModel->HasInputLevel()) && GetParam(kCalibrateInput)->Bool())
-  {
-    inputGainDB += GetParam(kInputCalibrationLevel)->Value() - mModel->GetInputLevel();
-  }
+  const bool hasInputLevel = (mModel != nullptr) && mModel->HasInputLevel();
+  const iplug::sample inputGainDB =
+    volum::ComputeInputGainDb(GetParam(kInputLevel)->Value(), GetParam(kCalibrateInput)->Bool(), hasInputLevel,
+                              hasInputLevel ? mModel->GetInputLevel() : 0.0, GetParam(kInputCalibrationLevel)->Value());
   mInputGain = DBToAmp(inputGainDB);
 }
 
@@ -1846,6 +2033,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       mStagedModel = std::move(temp);
       volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);
     }
+    VOLUM_LOG("model", std::string("staged ") + modelPath.Get());
   }
   catch (std::runtime_error& e)
   {
@@ -1856,6 +2044,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     }
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
+    VOLUM_LOG("model", std::string("load FAILED ") + modelPath.Get() + " : " + e.what());
     return e.what();
   }
   return "";
@@ -1948,6 +2137,11 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
     }
   }
 
+  VOLUM_LOG("ir", std::string(wavState == dsp::wav::LoadReturnCode::SUCCESS ? "staged " : "load FAILED ")
+                    + (support ? "[support] " : "[main] ") + irPath.Get()
+                    + (wavState == dsp::wav::LoadReturnCode::SUCCESS
+                         ? ""
+                         : " (code " + std::to_string(static_cast<int>(wavState)) + ")"));
   return wavState;
 }
 
@@ -2059,11 +2253,13 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
     modelInfo.outputCalibrationLevel.known = mModel->HasOutputLevel();
     modelInfo.outputCalibrationLevel.value = mModel->HasOutputLevel() ? mModel->GetOutputLevel() : 0.0;
 
-    static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->SetModelInfo(modelInfo);
+    auto* settings = static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox));
+    settings->SetModelInfo(modelInfo);
 
-    const bool disableInputCalibrationControls = !mModel->HasInputLevel();
-    pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetDisabled(disableInputCalibrationControls);
-    pGraphics->GetControlWithTag(kCtrlTagInputCalibrationLevel)->SetDisabled(disableInputCalibrationControls);
+    const bool canCalibrateInput = mModel->HasInputLevel();
+    pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetDisabled(!canCalibrateInput);
+    pGraphics->GetControlWithTag(kCtrlTagInputCalibrationLevel)->SetDisabled(!canCalibrateInput);
+    settings->SetInputCalibrationAvailable(canCalibrateInput);
     {
       auto* c = static_cast<OutputModeControl*>(pGraphics->GetControlWithTag(kCtrlTagOutputMode));
       c->SetNormalizedDisable(!mModel->HasLoudness());
@@ -2116,11 +2312,50 @@ void NeuralAmpModeler::_UpdateLatency()
     SetLatency(latency);
   }
 
+  // Force: our PDC just changed, and the editor may have been rebuilt with empty
+  // labels, so an unchanged device-side report still has to be re-sent.
+  _VolumRefreshLatencyReport(/*force=*/true);
+}
+
+// The standalone's numbers are only real once the audio stream is open. iPlug2's app
+// host calls OnReset() at IPlugAPP_host.cpp:757 and openStream() at :761, so a report
+// taken in OnReset always sees isStreamOpen() == false: no driver latency, and only
+// the *requested* buffer size, since openStream can renegotiate it. Polling here means
+// the readout corrects itself as soon as the stream is live and follows every device,
+// rate or buffer change made in Preferences, instead of showing the pre-open guess
+// until the editor happens to be reopened.
+void NeuralAmpModeler::_VolumRefreshLatencyReport(bool force)
+{
+  const volum::LatencyReport report = _VolumLatencyReport();
+  if (!force && report == mVolumLastLatencyReport)
+    return;
+  mVolumLastLatencyReport = report;
+
   if (auto* pGraphics = GetUI())
   {
     if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
-      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(GetLatency(), GetSampleRate());
+      settings->As<NAMSettingsPageControl>()->SetCurrentLatency(report);
   }
+}
+
+// Gather everything the Settings page needs to talk about latency honestly. In the
+// standalone we own the audio device, so the buffer size and the driver's reported
+// round trip are both reachable through the app host; in a plugin the host owns them
+// and only our PDC is ours to report.
+volum::LatencyReport NeuralAmpModeler::_VolumLatencyReport() const
+{
+  volum::LatencyReport r;
+  r.pluginSamples = GetLatency();
+  r.sampleRate = GetSampleRate();
+  r.bufferFrames = GetBlockSize();
+#if defined(APP_API)
+  if (auto* host = iplug::IPlugAPPHost::sInstance.get())
+  {
+    r.bufferFrames = static_cast<int>(host->GetIOBufferSize());
+    r.driverFrames = static_cast<int>(host->GetStreamLatencyFrames());
+  }
+#endif
+  return r;
 }
 
 void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPointer, const size_t nFrames,

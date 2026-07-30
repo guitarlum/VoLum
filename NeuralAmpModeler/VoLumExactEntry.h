@@ -10,12 +10,14 @@
 // Extracted from VoLumCoreControls.h on the 1.0 hygiene split.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumNumericEntry.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <functional>
+#include <string>
 
 class VoLumExactEntryControl : public IControl
 {
@@ -55,8 +57,8 @@ public:
 
     g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                mLabel.empty() ? "EXACT VALUE" : mLabel.c_str(), titleRect);
-    g.DrawText(IText(11.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-               mRangeText.c_str(), rangeRect);
+    g.DrawText(IText(11.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle), mRangeText.c_str(),
+               rangeRect);
 
     g.FillRoundRect(IColor(235, 14, 16, 22), entry, 6.f);
     g.DrawRoundRect(IColor(72, 200, 162, 78), entry, 6.f, nullptr, 1.f);
@@ -87,11 +89,39 @@ public:
       StartEntry();
   }
 
-  void OnTextEntryCompletion(const char* str, int valIdx) override
+  void OnTextEntryCompletion(const char* str, int /*valIdx*/) override
   {
     mEditing = false;
     Hide(true);
-    IControl::OnTextEntryCompletion(str, valIdx);
+
+    // Reached because StartEntry opens the box with kNoValIdx, which keeps iPlug2
+    // from converting the text itself. Its conversion ends in atof(), so "abc", ""
+    // and "-" all arrived as 0 and were applied: a typo moved the knob instead of
+    // cancelling. Parse here and leave the parameter alone when the text is not a
+    // number. See VoLumNumericEntry.h.
+    const auto* pParam = GetParam();
+    if (!pParam)
+      return;
+
+    // Enum and bool params map names, not numbers ("Off", "Poly"). Only knobs reach
+    // this control today, but a list-valued one arriving later should not silently
+    // stop accepting its own display text. Matched against the param's own display
+    // texts rather than handed to StringToValue, which returns 0 for anything it does
+    // not recognise - which would move the parameter to its minimum on a typo, the
+    // one behaviour the numeric path below exists to stop.
+    if (pParam->Type() == IParam::kTypeEnum || pParam->Type() == IParam::kTypeBool)
+    {
+      double mapped = 0.0;
+      if (pParam->MapDisplayText(str ? str : "", &mapped))
+        SetValueFromUserInput(pParam->ToNormalized(mapped), 0);
+      return; // no match: cancel, exactly like an unparseable number below
+    }
+
+    double typed = 0.0;
+    if (!volum::ParseNumericEntry(str ? str : "", typed))
+      return;
+
+    SetValueFromUserInput(pParam->ToNormalized(pParam->Constrain(typed)), 0);
   }
 
   void SetValueFromUserInput(double value, int valIdx) override
@@ -132,7 +162,10 @@ public:
 
     mEditing = true;
     BuildRangeText();
-    ui->CreateTextEntry(*this, mText, GetEntryRect(), currentText.Get());
+    // kNoValIdx so completion comes back as raw text (see OnTextEntryCompletion)
+    // rather than as a value iPlug2 has already turned into a number - by then an
+    // unparseable entry is indistinguishable from a deliberate zero.
+    ui->CreateTextEntry(*this, mText, GetEntryRect(), currentText.Get(), kNoValIdx);
     SetDirty(false);
   }
 
@@ -174,10 +207,7 @@ public:
   }
 
 private:
-  IRECT GetPanelRect() const
-  {
-    return mRECT.GetCentredInside(340.f, 156.f);
-  }
+  IRECT GetPanelRect() const { return mRECT.GetCentredInside(340.f, 156.f); }
 
   IRECT GetEntryRect() const
   {

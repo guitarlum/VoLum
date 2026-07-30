@@ -85,18 +85,109 @@ inline std::string SlotLabel(const CustomAmp& amp, int slot)
   return std::string();
 }
 
-// Normalize a cab name: drop whitespace, uppercase, cap at 3 chars. Empty input
-// returns "" so callers can fall back to the slot default.
+// Byte length of the UTF-8 sequence a lead byte starts, or 0 if it is not a valid
+// lead byte. Used everywhere a name is cut to a length: every one of those cuts
+// ends up in volum-content.json, and nlohmann::json::dump() throws on invalid
+// UTF-8, so half a glyph is not a cosmetic problem.
+inline std::size_t Utf8SequenceLength(unsigned char lead)
+{
+  if (lead < 0x80)
+    return 1;
+  if ((lead & 0xE0) == 0xC0)
+    return 2;
+  if ((lead & 0xF0) == 0xE0)
+    return 3;
+  if ((lead & 0xF8) == 0xF0)
+    return 4;
+  return 0; // continuation byte or invalid lead
+}
+
+// Byte length of the well-formed UTF-8 sequence at s[i], or 0 if there is not one.
+//
+// The lead byte alone is not enough. dump() throws on every ill-formed sequence,
+// not only on one cut in half, so checking the length and stopping there let
+// "A\xE2bc" (a three-byte lead followed by ASCII), an overlong "\xC0\x80" and an
+// out-of-range "\xF4\x90..." through to the registry - the exact outcome this
+// decoder exists to prevent.
+inline std::size_t Utf8ValidSequenceLength(const std::string& s, std::size_t i)
+{
+  if (i >= s.size())
+    return 0;
+  const unsigned char lead = static_cast<unsigned char>(s[i]);
+  const std::size_t len = Utf8SequenceLength(lead);
+  if (len == 0 || i + len > s.size())
+    return 0;
+  if (len == 1)
+    return 1;
+
+  for (std::size_t k = 1; k < len; ++k)
+    if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80)
+      return 0;
+
+  // Decode far enough to reject the forms that are the right shape but not legal
+  // scalar values: an overlong encoding, a surrogate half, anything above U+10FFFF.
+  unsigned int cp = lead & (0xFFu >> (len + 1));
+  for (std::size_t k = 1; k < len; ++k)
+    cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3Fu);
+
+  static const unsigned int kMin[5] = {0, 0, 0x80, 0x800, 0x10000};
+  if (cp < kMin[len] || cp > 0x10FFFFu || (cp >= 0xD800u && cp <= 0xDFFFu))
+    return 0;
+
+  return len;
+}
+
+// Longest prefix of s that is at most maxBytes long and never splits a UTF-8
+// sequence. Malformed input stops the scan rather than being copied through.
+inline std::string Utf8Prefix(const std::string& s, std::size_t maxBytes)
+{
+  std::size_t end = 0;
+  while (end < s.size())
+  {
+    const std::size_t len = Utf8ValidSequenceLength(s, end);
+    if (len == 0 || end + len > maxBytes)
+      break;
+    end += len;
+  }
+  return s.substr(0, end);
+}
+
+// Normalize a cab name: drop whitespace, uppercase, cap at 3 characters. Empty
+// input returns "" so callers can fall back to the slot default.
+//
+// Counts characters, not bytes. The old byte counter cut a four-byte glyph after
+// three bytes, and that invalid fragment went into the builder draft and then into
+// the registry, where dump() throws - so naming a cabinet with an emoji could take
+// the plug-in down while saving the amp.
 inline std::string NormalizeCabName(const std::string& in)
 {
   std::string s;
-  for (char c : in)
+  int chars = 0;
+  std::size_t i = 0;
+  while (i < in.size() && chars < 3)
   {
-    if (std::isspace((unsigned char)c))
-      continue;
-    s.push_back((char)std::toupper((unsigned char)c));
-    if (s.size() >= 3)
-      break;
+    const unsigned char lead = static_cast<unsigned char>(in[i]);
+    const std::size_t len = Utf8ValidSequenceLength(in, i);
+    if (len == 0)
+      break; // malformed: stop rather than emit a partial character
+
+    if (len == 1)
+    {
+      if (std::isspace(lead))
+      {
+        ++i;
+        continue;
+      }
+      s.push_back(static_cast<char>(std::toupper(lead)));
+    }
+    else
+    {
+      // No case mapping outside ASCII: std::toupper is byte-wise and would corrupt
+      // the sequence.
+      s.append(in, i, len);
+    }
+    ++chars;
+    i += len;
   }
   return s;
 }
@@ -480,12 +571,12 @@ inline constexpr std::size_t kMaxPresetNameLen = 28; // preset name
 // cap is the primary guard; this is defense-in-depth at the persistence edge.
 inline std::string ClampName(const std::string& s, std::size_t maxChars)
 {
-  if (s.size() <= maxChars)
-    return s;
-  std::size_t cut = maxChars;
-  while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80)
-    --cut; // back up over UTF-8 continuation bytes
-  return s.substr(0, cut);
+  // No short-circuit on length: a name that is already within the cap can still be
+  // ill-formed - a filename from another machine, a paste from a mangled source - and
+  // this is the last stop before the registry writer, which rejects the whole
+  // document rather than one bad name. Utf8Prefix stops at the first invalid
+  // sequence, so a short bad name is trimmed instead of failing the user's save.
+  return Utf8Prefix(s, maxChars);
 }
 
 // Short pill label for a custom capture name. Names longer than maxChars bytes
@@ -496,7 +587,7 @@ inline std::string ShortCaptureLabel(const std::string& name, std::size_t maxCha
 {
   if (name.size() <= maxChars)
     return name;
-  return name.substr(0, maxChars) + "\u2026";
+  return Utf8Prefix(name, maxChars) + "\u2026";
 }
 
 // Case-insensitive name comparison + within-list uniqueness check. Names must be

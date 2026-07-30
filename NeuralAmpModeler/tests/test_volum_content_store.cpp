@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "../VoLumContentStore.h"
+#include "../VoLumCustomNamImport.h"
 
 using namespace volum::content;
 using volum::VoLumAmpSettings;
@@ -217,6 +218,132 @@ TEST_CASE("ImportFileCopy copies the source under a unique stored name")
   CHECK(body == "RIFFfake");
 }
 
+TEST_CASE("Custom NAM import validates every copied capture before commit")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+
+  const auto base = TestBase("custom-nam-transaction-success");
+  const auto first = WriteSrc(base / "incoming", "MRSH.nam", "valid-one");
+  const auto second = WriteSrc(base / "incoming", "Fender.nam", "valid-two");
+  ContentStore store(base);
+
+  CustomAmp draft;
+  draft.id = "amp_tx";
+  draft.name = "Two captures";
+  draft.files = {
+    CustomNamFile{"MRSH.nam", 0, 1, "", first.string()},
+    CustomNamFile{"Fender.nam", 1, 2, "", second.string()},
+  };
+
+  int validations = 0;
+  const auto prepared = PrepareCustomNamImport(store, draft, draft.id, [&](const std::filesystem::path& path) {
+    ++validations;
+    std::ifstream in(path, std::ios::binary);
+    std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return body.rfind("valid-", 0) == 0 ? std::string() : std::string("invalid NAM");
+  });
+
+  REQUIRE(prepared);
+  CHECK(validations == 2);
+  CHECK(prepared.copiedPaths.size() == 2);
+  REQUIRE(prepared.amp.files.size() == 2);
+  for (const auto& file : prepared.amp.files)
+  {
+    CHECK(file.sourcePath.empty());
+    REQUIRE_FALSE(file.storedPath.empty());
+    CHECK(std::filesystem::exists(store.ResolveStored(file.storedPath)));
+  }
+  // Preparing is side-effect-free with respect to the registry; the UI commits
+  // only after this result succeeds.
+  CHECK(store.reg().amps.empty());
+}
+
+TEST_CASE("Custom NAM import and runtime resolution accept UTF-8 source and library paths")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+
+  const auto base = TestBase("custom-nam-unicode-source");
+  const std::string unicodeDirUtf8 = "T\xC3\xB6ne_\xE6\x97\xA5\xE6\x9C\xAC_\xCE\x94";
+  const auto src = WriteSrc(base / PathFromUtf8(unicodeDirUtf8), "MRSH SL68.nam", "valid-unicode-source");
+  ContentStore store(base / PathFromUtf8("V\xC3\xB6Lum_\xE6\x97\xA5\xE6\x9C\xAC"));
+
+  CustomAmp draft;
+  draft.id = "amp_unicode";
+  draft.name = "Unicode source";
+  // PromptForFiles returns UTF-8 even on Windows. This exact boundary used to
+  // feed filesystem::path(std::string), which treated it as ANSI and silently
+  // saved an empty storedPath whenever a parent folder/username was non-ASCII.
+  draft.files = {CustomNamFile{"MRSH SL68.nam", 0, 1, "", PathToUtf8(src)}};
+
+  const auto prepared = PrepareCustomNamImport(store, draft, draft.id, [](const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return body == "valid-unicode-source" ? std::string() : std::string("unexpected bytes");
+  });
+
+  REQUIRE(prepared);
+  REQUIRE(prepared.amp.files.size() == 1);
+  CHECK_FALSE(prepared.amp.files[0].storedPath.empty());
+  const auto resolved = store.ResolveStored(prepared.amp.files[0].storedPath);
+  CHECK(std::filesystem::is_regular_file(resolved));
+  // Product runtime queues absolute paths as UTF-8 strings and converts them
+  // back only at filesystem boundaries. Pin that second half too.
+  CHECK(std::filesystem::is_regular_file(PathFromUtf8(PathToUtf8(resolved))));
+}
+
+TEST_CASE("Custom NAM import failure rolls back the whole multi-file save")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+
+  const auto base = TestBase("custom-nam-transaction-rollback");
+  const auto first = WriteSrc(base / "incoming", "Good.nam", "good");
+  const auto second = WriteSrc(base / "incoming", "Broken.nam", "broken");
+  ContentStore store(base);
+
+  CustomAmp draft;
+  draft.id = "amp_tx";
+  draft.name = "Atomic amp";
+  draft.files = {
+    CustomNamFile{"Good.nam", 0, 1, "", first.string()},
+    CustomNamFile{"Broken.nam", 1, 2, "", second.string()},
+  };
+
+  const auto prepared = PrepareCustomNamImport(store, draft, draft.id, [&](const std::filesystem::path& path) {
+    return path.filename().string().find("Broken") == std::string::npos ? std::string()
+                                                                        : std::string("unsupported NAM");
+  });
+
+  REQUIRE_FALSE(prepared);
+  CHECK(prepared.copiedPaths.empty());
+  CHECK(prepared.error.find("Broken.nam") != std::string::npos);
+  CHECK(prepared.error.find("unsupported NAM") != std::string::npos);
+  CHECK(store.reg().amps.empty());
+  std::error_code ec;
+  const auto ampsDir = store.AmpsDir();
+  CHECK(std::filesystem::is_empty(ampsDir, ec));
+  CHECK_FALSE(ec);
+  // Caller-owned draft remains retryable; only the result copy was modified.
+  CHECK(draft.files[0].sourcePath == first.string());
+  CHECK(draft.files[1].sourcePath == second.string());
+}
+
+TEST_CASE("Custom NAM import rejects an empty persisted capture path")
+{
+  volum::custom::CustomAmp draft;
+  draft.id = "amp_empty";
+  draft.name = "Broken manifest";
+  draft.files.push_back({"Missing.nam", 0, 1, "", ""});
+  ContentStore store(TestBase("custom-nam-empty-path"));
+
+  const auto prepared =
+    PrepareCustomNamImport(store, draft, draft.id, [](const std::filesystem::path&) { return std::string(); });
+  REQUIRE_FALSE(prepared);
+  CHECK(prepared.error.find("saved capture path is empty") != std::string::npos);
+}
+
 TEST_CASE("Removal matrix: deleting a pedal clears referencing PRE slots")
 {
   ContentStore store;
@@ -303,6 +430,11 @@ TEST_CASE("Removal matrix: deleting a custom amp removes its copied files by sto
 
   store.RemoveCustomAmp("amp_main");
   CHECK(store.reg().amps.empty());
+  // The payload deliberately outlives the in-memory removal: it is destroyed only
+  // once a registry that no longer names it is durable, so a failed registry write
+  // cannot leave the on-disk library pointing at a file that is already gone.
+  CHECK(std::filesystem::exists(store.ResolveStored(rel)));
+  REQUIRE(store.Save());
   CHECK_FALSE(std::filesystem::exists(store.ResolveStored(rel)));
 }
 
@@ -722,4 +854,225 @@ TEST_CASE("Reopen dirty baseline derives from preset content, not the live scene
   volum::VoLumAmpSettings editedOutput = baseline;
   editedOutput.outputLevel = 0.0;
   CHECK_FALSE(volum::AmpSettingsEqual(editedOutput, baseline));
+}
+
+// ---------------------------------------------------------------------------
+// Library durability
+//
+// volum-content.json is the only record of which custom amps, IRs, pedals and
+// preset banks exist, and what their scenes are. The payload files beside it are
+// worthless without it. Users sync this directory, restore it from backups and
+// hand-edit it, so the store has to treat its own registry as untrusted input and
+// has to order its writes so that no single failure destroys anything.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("A stored path that escapes the content directory resolves to nothing")
+{
+  const auto base = TestBase("stored-path-escape");
+  ContentStore store(base);
+
+  // A relative walk out of the library, the form a hand-merged or sync-mangled
+  // registry most plausibly ends up with.
+  CHECK(store.ResolveStored("../../sentinel.wav").empty());
+  CHECK(store.ResolveStored("ir/../../sentinel.wav").empty());
+  CHECK(store.ResolveStored("..").empty());
+
+  // An absolute path is worse than a walk: `mBase / absolute` discards mBase
+  // entirely and resolves wherever the string points.
+#ifdef _WIN32
+  CHECK(store.ResolveStored("C:/Windows/System32/drivers/etc/hosts").empty());
+  CHECK(store.ResolveStored("C:ir/relative-to-drive.wav").empty());
+  CHECK(store.ResolveStored("\\\\server\\share\\file.wav").empty());
+#endif
+  CHECK(store.ResolveStored("/etc/passwd").empty());
+  CHECK(store.ResolveStored("").empty());
+
+  // Every payload lives in a subdirectory of the library, so an entry that names a
+  // directory instead of a file is not a payload. It matters because remove()
+  // succeeds on an empty directory: "." and "ir" resolved to the library root and
+  // to its ir/ folder, and a delete would have taken the folder rather than a
+  // capture.
+  CHECK(store.ResolveStored(".").empty());
+  CHECK(store.ResolveStored("./").empty());
+  CHECK(store.ResolveStored("ir").empty());
+  CHECK(store.ResolveStored("ir/").empty());
+  CHECK(store.ResolveStored("./ir/ir_x__cab.wav").empty());
+
+  // Genuine library-relative paths still resolve, under the base.
+  const auto ok = store.ResolveStored("ir/ir_x__cab.wav");
+  REQUIRE_FALSE(ok.empty());
+  CHECK(ok == base / "ir" / "ir_x__cab.wav");
+}
+
+TEST_CASE("Deleting an entry whose path escapes the library leaves the outside file alone")
+{
+  const auto base = TestBase("stored-path-escape-delete");
+  // Somewhere outside the content directory that a traversal can reach.
+  const auto outside = WriteSrc(base.parent_path(), "sentinel-do-not-delete.wav", "precious");
+  REQUIRE(std::filesystem::exists(outside));
+
+  ContentStore store(base);
+  IRItem ir;
+  ir.id = "ir_evil";
+  ir.name = "Escaping IR";
+  ir.file = "../sentinel-do-not-delete.wav";
+  store.reg().irs.push_back(ir);
+
+  store.RemoveIR("ir_evil");
+  REQUIRE(store.Save());
+
+  CHECK(store.reg().irs.empty());
+  // The assertion that fails against the pre-fix code, which composed
+  // `mBase / relPath` and handed the result straight to filesystem::remove.
+  CHECK(std::filesystem::exists(outside));
+
+  std::error_code ec;
+  std::filesystem::remove(outside, ec);
+}
+
+TEST_CASE("A library that exists but cannot be read is never overwritten")
+{
+  const auto base = TestBase("registry-unreadable");
+
+  // A directory where the registry file belongs: it exists, and it is not a file we
+  // can read. This stands in for the real causes - antivirus, a backup or cloud-sync
+  // agent, another VoLum, a permissions change - without needing any of them.
+  //
+  // It has to be recognised before opening: Windows refuses to open a directory, but
+  // libc++ opens it happily and fails on the first read, which looks exactly like an
+  // empty file. That sent macOS down the "corrupt, back it up, rewrite" path and let
+  // the save through - caught by CI on this very test, not by the Windows run.
+  std::error_code ec;
+  std::filesystem::create_directories(base / "volum-content.json", ec);
+  REQUIRE_FALSE(ec);
+
+  ContentStore store(base);
+  CHECK_FALSE(store.Load());
+  CHECK(store.RegistryUnreadable());
+
+  // The in-memory registry is empty, because nothing could be read into it. The
+  // guarantee is not that it is correct - it cannot be - but that this emptiness
+  // never reaches disk. Before the fix Load() reported a clean empty library and
+  // the next save serialized it over the real one.
+  IRItem ir;
+  ir.id = "ir_new";
+  ir.name = "Imported during the outage";
+  store.reg().irs.push_back(ir);
+  CHECK_FALSE(store.Save());
+
+  // And nothing was filed away as a corrupt copy, which would have implied the
+  // contents were readable and rewritable.
+  CHECK_FALSE(std::filesystem::exists(base / "volum-content.json.bak"));
+
+  // Once the library can be read again, writing is allowed again.
+  std::filesystem::remove_all(base / "volum-content.json", ec);
+  REQUIRE_FALSE(ec);
+  ContentStore recovered(base);
+  CHECK(recovered.Load());
+  CHECK_FALSE(recovered.RegistryUnreadable());
+  CHECK(recovered.Save());
+}
+
+TEST_CASE("A missing library is a clean empty one, not an unreadable one")
+{
+  // The distinction the fix turns on: first run on a new machine must stay a
+  // normal, writable empty library.
+  const auto base = TestBase("registry-absent");
+  ContentStore store(base);
+  CHECK(store.Load());
+  CHECK_FALSE(store.RegistryUnreadable());
+  CHECK(store.Save());
+  CHECK(std::filesystem::exists(base / "volum-content.json"));
+}
+
+TEST_CASE("A failed registry write keeps the payload it was about to orphan")
+{
+  const auto base = TestBase("delete-save-failure");
+  const auto src = WriteSrc(base / "incoming", "cab.wav", "RIFFfake");
+  ContentStore store(base);
+  const std::string rel = store.ImportFileCopy(src, "ir", "ir_x");
+  REQUIRE_FALSE(rel.empty());
+
+  IRItem ir;
+  ir.id = "ir_x";
+  ir.name = "Doomed";
+  ir.file = rel;
+  store.reg().irs.push_back(ir);
+  REQUIRE(store.Save());
+
+  // Make the registry file unwritable by putting a directory in its place, which
+  // is what a sharing violation or a read-only library looks like to the atomic
+  // write. Note the store was constructed after this point in no test - the
+  // unreadable flag is not involved here; this is purely a write failure.
+  std::error_code ec;
+  std::filesystem::remove(base / "volum-content.json", ec);
+  std::filesystem::create_directories(base / "volum-content.json", ec);
+  REQUIRE_FALSE(ec);
+
+  store.RemoveIR("ir_x");
+  CHECK_FALSE(store.Save());
+
+  // Entry and file are still consistent with each other: the on-disk registry
+  // never lost the entry, and the payload it names is still there. Before the fix
+  // the file was deleted first, so this combination left an item that reappeared
+  // on restart and could never load again.
+  CHECK(std::filesystem::exists(base / "ir" / std::filesystem::path(rel).filename()));
+
+  // And the deletion is not forgotten - it lands as soon as a write succeeds.
+  std::filesystem::remove_all(base / "volum-content.json", ec);
+  REQUIRE(store.Save());
+  CHECK_FALSE(std::filesystem::exists(base / "ir" / std::filesystem::path(rel).filename()));
+}
+
+TEST_CASE("A second spelling of the same payload still counts as a reference")
+{
+  // Two entries can name one file in spellings that differ as text but resolve to the
+  // same file: a library merged from two machines, or restored from a backup made on
+  // a case-insensitive volume. A byte comparison saw no surviving reference and
+  // deleted the payload the just-written registry still names - the exact outcome the
+  // deferred delete exists to prevent, arrived at from the other side.
+  const auto base = TestBase("delete-alias-guard");
+  const auto src = WriteSrc(base / "incoming", "cab.wav", "RIFFfake");
+  ContentStore store(base);
+  const std::string rel = store.ImportFileCopy(src, "ir", "ir_shared");
+  REQUIRE_FALSE(rel.empty());
+
+  const std::string leaf = std::filesystem::path(rel).filename().string();
+
+  IRItem doomed;
+  doomed.id = "ir_doomed";
+  doomed.name = "Doomed";
+  doomed.file = rel;
+
+  IRItem survivor;
+  survivor.id = "ir_survivor";
+  survivor.name = "Survivor";
+  // Same file, different spelling: a backslash separator and a capitalised folder.
+  survivor.file = "IR\\" + leaf;
+
+  store.reg().irs.push_back(doomed);
+  store.reg().irs.push_back(survivor);
+  REQUIRE(store.Save());
+
+  store.RemoveIR("ir_doomed");
+  REQUIRE(store.Save());
+
+  CHECK(store.reg().irs.size() == 1);
+  CHECK(std::filesystem::exists(base / "ir" / leaf));
+}
+
+TEST_CASE("Rolling back an import deletes its copies immediately")
+{
+  // The other half of the ordering rule: files copied in by a transaction that
+  // never committed are referenced by nothing, so they must not wait for a Save
+  // that a failed import is never going to perform.
+  const auto base = TestBase("import-rollback-immediate");
+  const auto src = WriteSrc(base / "incoming", "cab.wav", "RIFFfake");
+  ContentStore store(base);
+  const std::string rel = store.ImportFileCopy(src, "ir", "ir_tmp");
+  REQUIRE_FALSE(rel.empty());
+  REQUIRE(std::filesystem::exists(store.ResolveStored(rel)));
+
+  store.RemoveStoredFile(rel);
+  CHECK_FALSE(std::filesystem::exists(store.ResolveStored(rel)));
 }
