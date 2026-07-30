@@ -39,7 +39,9 @@
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
 #include "VoLumTremolo.h"
+#include "VoLumLatencyReport.h"
 #include "VoLumProcessingPlan.h"
+#include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
 
@@ -280,6 +282,12 @@ private:
   // Exists so that we don't try to use a DSP module that's only
   // partially-instantiated.
   void _ApplyDSPStaging();
+  // VoLum: advance both lanes' deferred IR swaps once their replacement capture is
+  // staged (or the wait deadline expires). A removal fires by flagging the convolver
+  // for deletion; an addition is held back instead, so the out params tell the
+  // caller which lanes must not promote their staged IR this block.
+  // Audio thread, mStagingMutex held.
+  void _VolumStepDeferredIrSwaps(bool& holdMainIr, bool& holdSupportIr);
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
   // Fallback used when no main NAM model is loaded.
@@ -301,6 +309,17 @@ public:
   void _VolumSetSupportAmp(int ampIdx);
   void _VolumSetSupportCustom(int customIdx);
   void _VolumApplyFocusedLaneCabs();
+  // Single entry point that pushes restored backend state into the freshly built
+  // controls. The editor rebuilds every control from constructor defaults on each
+  // open, so a reopen must re-derive the whole visible selection rather than
+  // assume a control already holds the right value. Call this after any restore
+  // (editor open, DAW chunk load, session re-focus).
+  void _VolumSyncUiFromState();
+  // Apply one resolved UiSyncPlan to the cab row + channel stepper, and write the
+  // resolved custom routing back into the runtime caches.
+  void _VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool support);
+  // Build the plan input for the given lane from live backend state.
+  volum::UiSyncInput _VolumMakeUiSyncInput(bool support, const volum::custom::CustomAmp& customAmp);
   // Push the given lane's active custom IR onto the shared speaker row's IR chip
   // (empty/orphaned id -> chip off). Per-lane custom IR display.
   void _VolumReflectLaneIrChip(bool support);
@@ -335,6 +354,7 @@ public:
   // See volum::dsp_cache::kRestoreReappliedCaches for the locked param set.
   void _VolumApplyDspCaches();
   void _VolumSaveSettingsToFile();
+  void _VolumSaveCalibrationDefaults();
   void _VolumLoadSettingsFromFile();
   // VoLum: set the machine-global A2 Lite/Full mode, persist it, and reload all
   // four NAM lanes so the new slice is applied through the async staging path.
@@ -425,6 +445,14 @@ public:
   const char* _VolumMainAmpDisplayName() const;
   // True when the dual-amp SUPPORT lane currently owns the shared cab/IR controls.
   bool _VolumSupportFocused() { return GetParam(kDualAmpActive)->Bool() && mVolumDualAmpFocusedSupport; }
+  // True when the SUPPORT lane actually has an amp: a factory amp or a custom
+  // partner. Its default is "(none)".
+  bool _VolumHasSupportAmp();
+  // Drops SUPPORT focus when that lane has no amp. Focusing an empty lane pointed
+  // the shared cab row, the channel stepper and the S shortcut at something that
+  // does not exist: the row jumped to a phantom cab, the stepper read "---", and S
+  // edited a parameter nothing was listening to.
+  void _VolumClampSupportFocus();
   // Stage the custom IR at library index irIdx into the given lane's convolver,
   // enable that lane's IR toggle, record its IR id on the active scene, and
   // reflect it in the cab row when that lane is the one displayed.
@@ -432,13 +460,16 @@ public:
   // DIRECT capture to convolve; the restore path passes false (silent skip).
   void _VolumSelectIR(int irIdx, bool support, bool interactive = true);
   // Drop the given lane's custom IR (back to the baked cab) and clear its IR id.
-  void _VolumClearIR(bool support);
+  // deferToCabSwap delays the convolver removal until the replacement cab capture
+  // is staged, so the two swap on one block instead of leaving a gap of raw amp.
+  void _VolumClearIR(bool support, bool deferToCabSwap = false);
   // Re-resolve a scene/preset's IR id for a lane on recall: stage it, or fall back
   // to the baked cab when the id is empty/orphaned (the referenced IR was deleted).
   void _VolumApplyActiveIr(const std::string& irId, bool support);
   // Force the given lane's amp onto its DIRECT / No-Cab capture so a custom IR
-  // convolves the raw amp instead of an already-cabbed signal.
-  void _VolumForceDirectCapture(bool support);
+  // convolves the raw amp instead of an already-cabbed signal. Returns true when
+  // that queued a capture load, which the IR must wait for before it convolves.
+  bool _VolumForceDirectCapture(bool support);
   // Standalone session restore (custom MAIN focus + active preset), run once when
   // the UI opens so the cab controls exist for a custom-amp re-focus.
   void _VolumRestoreSessionSelection();
@@ -458,10 +489,13 @@ public:
   // --- F5 presets (per-amp bank, owner-keyed in the content registry) --------
   // Owner key for the currently focused amp: "factory:<idx>" or a custom amp id.
   std::string _VolumActiveOwnerKey() const;
-  // Publish the active owner key to the bridge + install the capture/apply hooks
-  // (once, at init) so registry preset ops act on the focused amp's bank with the
-  // real live settings.
+  // Install the capture/apply hooks so registry preset ops read and write the real
+  // live settings, and record this instance as their owner.
   void _VolumInstallPresetHooks();
+  // Claim the process-global preset bridge (hooks + active owner key) for this
+  // instance. Called by every preset operation, because the bridge is shared by all
+  // instances in the host and the last one to claim it wins.
+  void _VolumClaimPresetOps();
   void _VolumSyncPresetOwner();
   // Refresh the header bar's list/selection/dirty state for the active amp.
   void _VolumRefreshPresetBar();
@@ -564,9 +598,16 @@ private:
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
   std::string mVolumLastLoadedSupportFile;
+  std::string mVolumRequestedMainFile;
+  std::string mVolumMainLoadError;
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
+  std::atomic<bool> mVolumMainLoadFailed{false};
+  // Set when host state was restored into an already-open editor, consumed by the
+  // next OnIdle. UnserializeState runs on the host's thread, and the applier it
+  // wants writes IGraphics controls, so the call has to cross to the UI thread.
+  std::atomic<bool> mVolumUiSyncPending{false};
   // VoLum: when set, the next main-lane load in OnIdle bypasses the
   // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
   // even though its file path is unchanged.
@@ -579,7 +620,11 @@ private:
   // the loader thread, written on the main thread -> atomic.
   std::atomic<bool> mVolumLiteMode{false};
   bool mVolumInitComplete = false;
+  // Last report pushed to the Settings page, so the OnIdle poll only touches the UI
+  // when a number actually moved.
+  volum::LatencyReport mVolumLastLatencyReport{};
   bool mVolumSettingsDirty = false;
+  bool mVolumCalibrationDefaultsDirty = false;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
   // OnParamChange / OnParamChangeUI handlers triggered by setParam (which calls
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /
@@ -682,6 +727,20 @@ private:
   // false targets the MAIN amp's convolver (mIR). Per-lane custom IR (spec 3.2).
   dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath, bool support = false);
 
+  // VoLum 1.2.1 per-IR shaping. _VolumApplyIrShaping runs on the audio thread and
+  // applies the focused IR's trim + low/high cut to one lane after the convolver.
+  // _VolumPushIrShaping copies the active IR's library settings into that lane's
+  // atomics (call after an IR becomes active or its panel is edited).
+  // _VolumMigrateIrTrims auto-normalizes pre-1.2.1 IRs (no stored trim) once by
+  // measuring their .wav energy, then persists - retroactively fixing quiet IRs.
+  iplug::sample** _VolumApplyIrShaping(iplug::sample** in, const size_t numChannels, const int nFrames,
+                                       const double sampleRate, const bool support);
+  void _VolumPushIrShaping(bool support);
+  // Main thread: apply a shaping push that a deferred cab switch held back, once
+  // that switch has landed and the lane's convolver matches the shaping again.
+  void _VolumFlushDeferredIrShaping();
+  void _VolumMigrateIrTrims();
+
   bool _HaveModel() const { return this->mModel != nullptr; };
   // Prepare the input & output buffers
   void _PrepareBuffers(const size_t numChannels, const size_t numFrames);
@@ -719,6 +778,15 @@ private:
   // Make sure that the latency is reported correctly.
   void _UpdateLatency();
 
+  // Plugin PDC plus, in the standalone, the audio device's own round trip.
+  volum::LatencyReport _VolumLatencyReport() const;
+
+  // Push the latency report to the Settings page when it has changed. Called from
+  // OnIdle because iPlug2's standalone host runs OnReset() BEFORE openStream(), so
+  // the report taken there can never see the driver's latency (see the definition).
+  // `force` re-sends an unchanged report, for when the editor was just rebuilt.
+  void _VolumRefreshLatencyReport(bool force = false);
+
   // Update level meters
   // Called within ProcessBlock().
   // Assume _ProcessInput() and _ProcessOutput() were run immediately before.
@@ -746,12 +814,11 @@ private:
   dsp::noise_gate::Trigger mNoiseGateTrigger;
   dsp::noise_gate::Gain mNoiseGateGain;
   dsp::effect::VoLumCompressor mPreCompressor;
-  // PRE Pitch pedal engine. Reconfigured off the audio thread (OnReset / OnIdle)
-  // because Signalsmith configure() allocates; the audio thread try-locks
-  // mPrePitchMutex and passes dry through if a reconfigure is in progress.
+  // PRE Pitch pedal engine. Configured off the audio thread in OnReset because
+  // Configure() allocates; the audio thread try-locks mPrePitchMutex and passes
+  // dry through while a reset/reconfigure is in progress.
   dsp::effect::VoLumPitch mPitch;
   mutable std::mutex mPrePitchMutex;
-  std::atomic<bool> mPrePitchConfigureRequested{false};
   dsp::effect::VoLumPreEq mPreEq[2];
   recursive_linear_filter::Level mPreInputGain[2];
   recursive_linear_filter::Level mPreOutputGain[2];
@@ -778,6 +845,30 @@ private:
   std::atomic<bool> mShouldRemovePreModel[2]{{false}, {false}};
   std::atomic<bool> mShouldRemoveIR = false;
   std::atomic<bool> mShouldRemoveSupportIR = false;
+  // VoLum: whether a SUPPORT amp is selected at all, owned solely by
+  // _VolumRequestSupportModelLoad - the one place that decides whether a support
+  // model should exist. ProcessBlock cannot answer this from kSupportAmpIdx,
+  // because a custom (library) partner has no factory index and parks that param
+  // at -1; testing the param alone silenced the entire custom dual-amp lane.
+  std::atomic<bool> mVolumSupportSelected = false;
+  // VoLum: a cab-source switch changes the lane's capture and its IR together, but
+  // the capture loads asynchronously, so whichever side is ready first waits for the
+  // other and both land on one block. Dropping the IR early exposes raw, cab-less
+  // amp; adding it early stacks it on a baked cab that is still live. Set only when
+  // a capture load is actually coming - a pick that reuses the live capture switches
+  // at once. The block counters bound each wait (see StepDeferredIrSwap).
+  std::atomic<bool> mVolumDeferredRemoveIR = false;
+  std::atomic<bool> mVolumDeferredRemoveSupportIR = false;
+  std::atomic<int> mVolumDeferredRemoveIrBlocks = 0;
+  std::atomic<int> mVolumDeferredRemoveSupportIrBlocks = 0;
+  std::atomic<bool> mVolumDeferredApplyIR = false;
+  std::atomic<bool> mVolumDeferredApplySupportIR = false;
+  std::atomic<int> mVolumDeferredApplyIrBlocks = 0;
+  std::atomic<int> mVolumDeferredApplySupportIrBlocks = 0;
+  std::atomic<int> mVolumDeferredIrMaxBlocks = 512;
+  // Main thread only: a lane whose IR trim and cuts are waiting for its deferred
+  // swap to land, in either direction. [0] = MAIN, [1] = SUPPORT.
+  bool mVolumIrShapingPushPending[2]{false, false};
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
   std::atomic<bool> mModelCleared = false;
@@ -802,6 +893,22 @@ private:
   recursive_linear_filter::HighPass mHighPass;
   recursive_linear_filter::HighPass mSupportHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
+
+  // Per-IR shaping (VoLum 1.2.1). The focused IR's library settings (trim + low/
+  // high cut) are pushed to the atomics below off the audio thread when an IR is
+  // selected or its panel is edited; the audio thread reads them lock-free and
+  // applies trim + cuts on the IR lane, after the convolver and before the DC
+  // blocker. A cut Hz of 0 bypasses that filter. Not a DAW parameter.
+  recursive_linear_filter::HighPass mIrLowCut; // MAIN low-cut (high-pass)
+  recursive_linear_filter::LowPass mIrHighCut; // MAIN high-cut (low-pass)
+  recursive_linear_filter::HighPass mSupportIrLowCut; // SUPPORT low-cut
+  recursive_linear_filter::LowPass mSupportIrHighCut; // SUPPORT high-cut
+  std::atomic<double> mIrTrimLin{1.0};
+  std::atomic<double> mSupportIrTrimLin{1.0};
+  std::atomic<double> mIrLowCutHz{0.0};
+  std::atomic<double> mIrHighCutHz{0.0};
+  std::atomic<double> mSupportIrLowCutHz{0.0};
+  std::atomic<double> mSupportIrHighCutHz{0.0};
 
   dsp::noise_gate::Trigger mSupportNoiseGateTrigger;
   dsp::noise_gate::Gain mSupportNoiseGateGain;

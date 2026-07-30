@@ -131,8 +131,8 @@ TEST_CASE("SnapSlotForChannel keeps current, prefers a real cab, No Cab last")
   using volum::custom::SnapSlotForChannel;
   CustomAmp amp;
   // ch1: DIRECT + cab0 ; ch2: cab0 + cab1 ; ch3: DIRECT only.
-  amp.files = {{"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2},
-               {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
+  amp.files = {
+    {"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2}, {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
 
   // Current slot still valid for the new channel -> keep it.
   REQUIRE(SnapSlotForChannel(amp, 1, 0) == 0);
@@ -157,8 +157,8 @@ TEST_CASE("ResolveLaneCabs drives the channel-first cab view")
   using volum::custom::ResolveLaneCabs;
   // ch1: DIRECT + cab0 ; ch2: cab0 + cab1 (no DIRECT) ; ch3: DIRECT only.
   CustomAmp amp;
-  amp.files = {{"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2},
-               {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
+  amp.files = {
+    {"d1.nam", kDirectSlot, 1}, {"a.nam", 0, 1}, {"b.nam", 0, 2}, {"c.nam", 1, 2}, {"d3.nam", kDirectSlot, 3}};
 
   // Stepper lists the amp-wide channel set regardless of the current slot.
   {
@@ -225,6 +225,47 @@ TEST_CASE("ResolveLaneCabs on an amp with no assigned files is inert")
   CHECK(v.cabEnabled[0] == false);
 }
 
+TEST_CASE("Custom preset recall keeps channel five DIRECT routing and custom IR")
+{
+  using volum::custom::AssignedChannels;
+  using volum::custom::CustomAmp;
+  using volum::custom::CustomNamFile;
+  using volum::custom::kDirectSlot;
+  using volum::custom::ResolveLaneCabs;
+
+  CustomAmp amp;
+  amp.id = "amp_issue_22";
+  amp.name = "Five-channel direct amp";
+  for (int channel = 1; channel <= 5; ++channel)
+  {
+    CustomNamFile file;
+    file.file = "Direct-" + std::to_string(channel) + ".nam";
+    file.slot = kDirectSlot;
+    file.channel = channel;
+    file.storedPath = "amps/direct-" + std::to_string(channel) + ".nam";
+    amp.files.push_back(file);
+  }
+
+  volum::VoLumAmpSettings saved;
+  saved.speakerIdx = 0; // DIRECT / custom-IR row
+  saved.channelIdx = 4; // position of gain-stage channel 5
+  saved.activeIrId = "ir_issue_22";
+
+  volum::VoLumAmpSettings recalled;
+  REQUIRE_FALSE(volum::AmpSettingsFromJson(volum::AmpSettingsToJson(saved), recalled));
+  const auto channels = AssignedChannels(amp);
+  REQUIRE(channels.size() == 5);
+  const int recalledChannel = channels[(size_t)recalled.channelIdx];
+  const auto view = ResolveLaneCabs(amp, kDirectSlot, recalledChannel);
+
+  CHECK(view.channel == 5);
+  CHECK(view.slot == kDirectSlot);
+  CHECK(view.noCabEnabled);
+  CHECK(view.irEnabled);
+  CHECK(recalled.activeIrId == "ir_issue_22");
+  CHECK(volum::content::CaptureFileFor(amp, view.slot, view.channel) == "amps/direct-5.nam");
+}
+
 TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
 {
   using volum::custom::ClampName;
@@ -234,10 +275,18 @@ TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
   const std::string withEuro = std::string("abc") + "\xE2\x82\xAC" + "xyz"; // "abc<euro>xyz"
   REQUIRE(ClampName(withEuro, 4) == "abc"); // cap at 4 lands mid-euro -> back off to "abc"
   REQUIRE(ClampName(withEuro, 6) == std::string("abc") + "\xE2\x82\xAC"); // cap includes whole euro
+
+  // A short name is validated too. Skipping the scan when the byte length already fit
+  // let ill-formed text - a filename from another machine, a paste from a mangled
+  // source - through to the registry writer, which then refuses the whole document and
+  // fails an operation that had nothing wrong with it.
+  REQUIRE(ClampName(std::string("A") + "\xE2" + "bc", 24) == "A");
+  REQUIRE(ClampName(std::string("ok") + "\xF0\x9F\x98", 24) == "ok"); // truncated emoji
 }
 
 using volum::custom::AmpSlotChannels;
 using volum::custom::AmpSlots;
+using volum::custom::AssignedChannels;
 using volum::custom::CellFileCount;
 using volum::custom::CustomAmp;
 using volum::custom::FileAssigned;
@@ -246,7 +295,6 @@ using volum::custom::HasDuplicate;
 using volum::custom::IsDirectSlot;
 using volum::custom::kDirectSlot;
 using volum::custom::kUnassignedSlot;
-using volum::custom::AssignedChannels;
 using volum::custom::MaxAssignedChannel;
 using volum::custom::NormalizeCabName;
 using volum::custom::SaveDisabledReason;
@@ -314,6 +362,101 @@ TEST_CASE("NormalizeCabName uppercases, strips spaces, caps at 3 chars")
   REQUIRE(NormalizeCabName("  v 30 ") == "V30");
   REQUIRE(NormalizeCabName("greenback") == "GRE");
   REQUIRE(NormalizeCabName("   ").empty());
+}
+
+TEST_CASE("A cab name capped mid-glyph never yields invalid UTF-8")
+{
+  // Regression: the cap counted bytes, so a four-byte glyph was cut after three
+  // and the fragment went into the builder draft and then into
+  // volum-content.json, where nlohmann::json::dump() throws on invalid UTF-8 -
+  // taking the plug-in down while saving the amp rather than rejecting the name.
+  const std::string grinning = "\xF0\x9F\x98\x80"; // U+1F600, four bytes
+  const std::string euro = "\xE2\x82\xAC"; // U+20AC, three bytes
+
+  // The whole glyph survives, or none of it does; never three of its four bytes.
+  const std::string oneEmoji = NormalizeCabName(grinning);
+  CHECK(oneEmoji == grinning);
+  CHECK(volum::custom::Utf8Prefix(oneEmoji, oneEmoji.size()) == oneEmoji);
+
+  // Three characters means three characters, not three bytes.
+  CHECK(NormalizeCabName(grinning + grinning + grinning + grinning) == grinning + grinning + grinning);
+  CHECK(NormalizeCabName(euro + euro + euro + euro) == euro + euro + euro);
+
+  // Mixed input still counts characters, and ASCII is still uppercased.
+  CHECK(NormalizeCabName("a" + euro + "b" + "c") == "A" + euro + "B");
+
+  // Input that is already malformed stops the scan instead of copying a fragment.
+  CHECK(NormalizeCabName(std::string("AB") + "\xF0\x9F\x98") == "AB");
+  CHECK(NormalizeCabName("\x80\x80\x80").empty());
+}
+
+TEST_CASE("Utf8Prefix cuts only on character boundaries")
+{
+  using volum::custom::Utf8Prefix;
+  const std::string euro = "\xE2\x82\xAC";
+
+  CHECK(Utf8Prefix("abcdef", 3) == "abc");
+  CHECK(Utf8Prefix("abcdef", 99) == "abcdef");
+  CHECK(Utf8Prefix("abcdef", 0).empty());
+
+  // A budget that lands inside the euro sign excludes it entirely.
+  CHECK(Utf8Prefix("ab" + euro, 3) == "ab");
+  CHECK(Utf8Prefix("ab" + euro, 4) == "ab");
+  CHECK(Utf8Prefix("ab" + euro, 5) == "ab" + euro);
+
+  // A truncated sequence at the end of the input is never emitted.
+  CHECK(Utf8Prefix(std::string("ab") + "\xE2\x82", 99) == "ab");
+}
+
+TEST_CASE("The UTF-8 scanner rejects every ill-formed sequence, not only split ones")
+{
+  using volum::custom::NormalizeCabName;
+  using volum::custom::Utf8Prefix;
+
+  // The point of the scanner is that whatever it emits can be written to
+  // volum-content.json, and nlohmann's dump() throws on every ill-formed sequence -
+  // not only on one cut in half. Reading the lead byte's length and stopping there
+  // let three whole families through, so a registry could still be written that
+  // could never be written again.
+
+  // A lead byte followed by something that is not a continuation byte. Plausible
+  // from a name that was byte-truncated by an older build and then edited.
+  CHECK(Utf8Prefix(std::string("A") + "\xE2" + "bc", 99) == "A");
+  CHECK(NormalizeCabName(std::string("A") + "\xE2" + "bc") == "A");
+  CHECK(Utf8Prefix(std::string("A") + "\xF0\x9F" + "z", 99) == "A");
+
+  // Overlong encodings: the right shape for a two- or three-byte sequence, encoding
+  // a value that must be spelled shorter. "\xC0\x80" is the classic NUL smuggle.
+  CHECK(Utf8Prefix(std::string("A") + "\xC0\x80", 99) == "A");
+  CHECK(Utf8Prefix(std::string("A") + "\xE0\x80\xAF", 99) == "A");
+
+  // Above U+10FFFF, and the surrogate range, which is not encodable in UTF-8.
+  CHECK(Utf8Prefix(std::string("A") + "\xF4\x90\x80\x80", 99) == "A");
+  CHECK(Utf8Prefix(std::string("A") + "\xED\xA0\x80", 99) == "A");
+
+  // The shapes that are legal stay legal: 1-, 2-, 3- and 4-byte sequences, and the
+  // boundary values at each end of each range.
+  const std::string cases[] = {
+    "A", "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xEF\xBF\xBF", "\xF0\x90\x80\x80", "\xF4\x8F\xBF\xBF"};
+  for (const auto& ok : cases)
+  {
+    CAPTURE(ok);
+    CHECK(Utf8Prefix(ok, 99) == ok);
+  }
+}
+
+TEST_CASE("A pill label truncated mid-glyph never yields invalid UTF-8")
+{
+  using volum::custom::ShortCaptureLabel;
+  const std::string euro = "\xE2\x82\xAC";
+  const std::string ellipsis = "\u2026";
+
+  // Cap 5 lands inside the second euro sign; it is dropped rather than split.
+  CHECK(ShortCaptureLabel(euro + euro + euro) == euro + ellipsis);
+  // "abc" is 3 bytes and the euro needs 3 more, so the euro does not fit at all.
+  CHECK(ShortCaptureLabel("abc" + euro) == "abc" + ellipsis);
+  // Here it fits exactly, so it is kept whole.
+  CHECK(ShortCaptureLabel("ab" + euro + "cd") == "ab" + euro + ellipsis);
 }
 
 TEST_CASE("Duplicate (slot,channel) detection flags both colliding files")
@@ -789,6 +932,127 @@ TEST_CASE("Preset banks are isolated by active owner key (factory vs custom amp)
   const auto b = MockPresetsForAmp(0);
   REQUIRE(b.size() == 1);
   CHECK(b[0] == "OnlyB");
+}
+
+// Two plugin instances in one host share this bridge, and its capture/apply hooks
+// each hold a raw `this`. They used to be installed once per instance at
+// construction, so the newest instance owned preset capture and recall for every
+// other one: saving a preset in the first instance stored the second instance's rig,
+// recalling in the first changed the second, and closing that instance left the
+// globals pointing at a destroyed object. Every operation now claims the bridge
+// first, and a departing instance clears the hooks if they are still its own.
+TEST_CASE("The newest claim owns the preset hooks, and a departing owner clears them")
+{
+  using namespace volum::custom;
+
+  // Stand-ins for two plugin instances. Only their addresses matter.
+  int instanceA = 0;
+  int instanceB = 0;
+
+  volum::VoLumAmpSettings sceneA;
+  sceneA.toneBass = 1.5;
+  volum::VoLumAmpSettings sceneB;
+  sceneB.toneBass = 9.5;
+
+  auto claim = [](const void* owner, const volum::VoLumAmpSettings& scene) {
+    PresetCaptureHook() = [&scene]() { return scene; };
+    PresetApplyHook() = [](const volum::VoLumAmpSettings&) {};
+    PresetHookOwner() = owner;
+  };
+
+  SetActivePresetOwner("test:f5-two-instances");
+
+  // B was created last, but A is the one operating, so A claims and A's scene is
+  // what gets stored. Before the fix this stored B's.
+  claim(&instanceB, sceneB);
+  claim(&instanceA, sceneA);
+  const int i = AddPreset(0, "From A");
+  REQUIRE(i >= 0);
+  const auto& bank = volum::content::GlobalContentStore().reg().presetBanks.at("test:f5-two-instances");
+  CHECK(bank[(size_t)i].settings.toneBass == doctest::Approx(1.5));
+
+  // B closing must not disturb hooks A owns.
+  ClearPresetHooksIfOwnedBy(&instanceB);
+  CHECK(PresetHookOwner() == &instanceA);
+  REQUIRE(static_cast<bool>(PresetCaptureHook()));
+  CHECK(PresetCaptureHook()().toneBass == doctest::Approx(1.5));
+
+  // A closing does clear them, so nothing is left pointing at a dead instance.
+  ClearPresetHooksIfOwnedBy(&instanceA);
+  CHECK(PresetHookOwner() == nullptr);
+  CHECK_FALSE(static_cast<bool>(PresetCaptureHook()));
+  CHECK_FALSE(static_cast<bool>(PresetApplyHook()));
+
+  // And a bridge with no hooks stores defaults rather than dereferencing anything.
+  const int j = AddPreset(0, "No hooks");
+  REQUIRE(j >= 0);
+  CHECK(volum::AmpSettingsEqual(bank[(size_t)j].settings, volum::VoLumAmpSettings{}));
+}
+
+// Destructive confirmations name an item but used to remember only its row. The
+// library is process-global, so a second plugin editor can remove an earlier row
+// while a prompt is open, after which the remembered position belongs to a
+// different item. These are the lookups the overlay and the builder now use instead;
+// with them, "delete Foo" can only ever delete Foo.
+TEST_CASE("An item's identity survives rows shifting underneath it")
+{
+  using namespace volum::custom;
+
+  SetActivePresetOwner("test:stale-index");
+  AddPreset(0, "First");
+  AddPreset(0, "Second");
+  AddPreset(0, "Third");
+
+  const std::string secondId = PresetIdAt(1);
+  const std::string thirdId = PresetIdAt(2);
+  REQUIRE_FALSE(secondId.empty());
+  REQUIRE(PresetIndexById(thirdId) == 2);
+
+  // The row the prompt was opened on now holds a different preset.
+  DeletePreset(0, 0);
+  CHECK(PresetIdAt(1) == thirdId);
+
+  // Resolving by id follows the item; resolving by the remembered row would have
+  // hit "Third".
+  CHECK(PresetIndexById(secondId) == 0);
+  CHECK(PresetIndexById(thirdId) == 1);
+
+  // An id that is gone resolves to nothing, so the caller can say so instead of
+  // acting on a neighbour.
+  CHECK(PresetIndexById("preset_does_not_exist") == -1);
+  CHECK(PresetIndexById("") == -1);
+}
+
+TEST_CASE("IRs, pedals and custom amps resolve by id the same way")
+{
+  using namespace volum::custom;
+
+  const int irA = AddIR("StaleA.wav", "ir/a.wav");
+  const int irB = AddIR("StaleB.wav", "ir/b.wav");
+  REQUIRE(irB == irA + 1);
+  const std::string irBId = IRIdAt(irB);
+  REQUIRE_FALSE(irBId.empty());
+  DeleteIR(irA);
+  CHECK(IRIndexById(irBId) == irA); // shifted down by one, still the same IR
+  CHECK(IRIndexById("ir_gone") == -1);
+
+  const int pedA = AddPedal("PedA.nam", "pedals/a.nam");
+  const int pedB = AddPedal("PedB.nam", "pedals/b.nam");
+  REQUIRE(pedA >= 0);
+  REQUIRE(pedB >= 0);
+  const std::string pedBId = PedalIdAt(pedB);
+  REQUIRE_FALSE(pedBId.empty());
+  DeletePedal(pedA);
+  CHECK(PedalIndexById(pedBId) == pedB - 1);
+  CHECK(PedalIndexById("pedal_gone") == -1);
+
+  const int ampA = AddCustomAmp("StaleAmpA", 0);
+  const int ampB = AddCustomAmp("StaleAmpB", 1);
+  const std::string ampBId = CustomAmpIdAt(ampB);
+  REQUIRE_FALSE(ampBId.empty());
+  RemoveCustomAmp(ampA);
+  CHECK(CustomAmpIndexById(ampBId) == ampB - 1);
+  CHECK(CustomAmpIndexById("amp_gone") == -1);
 }
 
 TEST_CASE("RemoveCustomAmp keeps names and art ids aligned")

@@ -103,6 +103,11 @@
     <ClCompile Include="..\tests\test_volum_settings_atomic_write.cpp" />
     <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_regressions.cpp" />
+    <ClCompile Include="..\tests\test_volum_ui_sync_plan.cpp" />
+    <ClCompile Include="..\tests\test_volum_upgrade_migration.cpp" />
+    <ClCompile Include="..\tests\test_volum_input_calibration.cpp" />
+    <ClCompile Include="..\tests\test_volum_diag_log.cpp" />
+    <ClCompile Include="..\tests\test_volum_latency_report.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
@@ -125,6 +130,7 @@
     <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_content_store.cpp" />
     <ClCompile Include="..\tests\test_volum_content_crud_edge.cpp" />
+    <ClCompile Include="..\tests\test_volum_ir_shaping.cpp" />
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_staging.cpp" />
@@ -141,7 +147,14 @@
     <ClCompile Include="..\tests\test_volum_bypass_identity.cpp" />
     <ClCompile Include="..\tests\test_volum_nan_guard.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
+    <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
+    <ClCompile Include="..\tests\test_volum_preset_bar.cpp" />
+    <ClCompile Include="..\tests\test_volum_chunk_safe_read.cpp" />
+    <ClCompile Include="..\tests\test_volum_overlay_action_codes.cpp" />
+    <ClCompile Include="..\tests\test_volum_numeric_entry.cpp" />
+    <ClCompile Include="..\tests\test_volum_cab_step.cpp" />
     <ClCompile Include="..\tests\test_volum_wav_downmix.cpp" />
+    <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />

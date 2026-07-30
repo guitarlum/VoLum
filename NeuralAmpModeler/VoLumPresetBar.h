@@ -7,6 +7,7 @@
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
 #include "VoLumIrFileGuard.h"
+#include "VoLumPresetStep.h"
 
 #include <algorithm>
 #include <cctype>
@@ -103,8 +104,8 @@ public:
     {
       const IRECT mid = mRECT.GetReducedFromLeft(22.f).GetReducedFromRight(22.f);
       SetTextEntryLength((int)volum::custom::kMaxPresetNameLen);
-      ui->CreateTextEntry(*this, IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-                          mid, "");
+      ui->CreateTextEntry(
+        *this, IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mid, "");
     }
   }
 
@@ -196,8 +197,9 @@ private:
   {
     if (mList.empty())
       return;
-    const int n = (int)mList.size();
-    const int idx = ((mIdx < 0 ? 0 : mIdx) + dir % n + n) % n;
+    const int idx = volum::StepPresetIndex(mIdx, dir, (int)mList.size());
+    if (idx < 0)
+      return;
     if (mRecall)
     {
       // The host applies the preset and calls SelectName() back, so we don't
@@ -224,4 +226,3 @@ private:
   RecallCallback mRecall;
   SaveAsCallback mSaveAs;
 };
-

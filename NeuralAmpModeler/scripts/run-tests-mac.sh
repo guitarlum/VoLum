@@ -7,6 +7,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
 
+# Mirrors run-tests-win.ps1: the tests compile plugin headers that depend on the
+# local iPlug2 patches, so apply them before configuring. Idempotent.
+# Invoked through `bash` rather than directly because the executable bit is not
+# set consistently across the repo's shell scripts.
+bash "$PROJECT_DIR/iplug2-patches/apply-iplug2-patches.sh"
+
 SANITIZE=0
 for arg in "$@"; do
   case "$arg" in
@@ -44,5 +50,20 @@ if [[ "$SANITIZE" == "1" ]]; then
     --test-case-exclude="A2 core load and prewarm timing is visible in test logs" \
     --test-case-exclude="A2 container can lazily activate the Lite submodel after load"
 else
-  "$BUILD_DIR/NeuralAmpModeler-Tests"
+  # --duration prints each case's name as it finishes. doctest cannot report which
+  # case it was in when the process dies, so without this a crash in CI is just
+  # "Bus error" with no way to narrow it from a machine we do not have.
+  set +e
+  "$BUILD_DIR/NeuralAmpModeler-Tests" --duration=true
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    # A signal death prints one line and no backtrace, and CI runners keep no crash
+    # reports. Re-running under lldb turns "Bus error" into a symbolicated stack,
+    # which is the whole difference when the machine is one we cannot reproduce on.
+    echo "=== tests exited $rc; re-running under lldb for a backtrace ==="
+    lldb --batch -o run -k "bt all" -k "register read" -k "quit 1" \
+      -- "$BUILD_DIR/NeuralAmpModeler-Tests" --duration=true 2>&1 | tail -n 120 || true
+    exit "$rc"
+  fi
 fi

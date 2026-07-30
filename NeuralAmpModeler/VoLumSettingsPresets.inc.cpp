@@ -11,6 +11,23 @@ void NeuralAmpModeler::_VolumInstallPresetHooks()
     return _VolumActiveScene();
   };
   volum::custom::PresetApplyHook() = [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); };
+  volum::custom::PresetHookOwner() = this;
+}
+
+// Claims the process-global preset bridge for this instance, immediately before
+// using it.
+//
+// The bridge exists because the content layer cannot reach live params, but it is a
+// single set of globals shared by every instance in the host. Installing the hooks
+// once at construction meant the most recently created instance owned capture and
+// recall for all of them: saving a preset in the first instance stored the second
+// instance's rig, recalling in the first changed the second, and once that instance
+// was closed the hooks still held its destroyed `this`. Re-binding per operation
+// makes the caller the owner, and the caller is by definition alive.
+void NeuralAmpModeler::_VolumClaimPresetOps()
+{
+  _VolumInstallPresetHooks();
+  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
 }
 
 void NeuralAmpModeler::_VolumRememberActivePreset()
@@ -94,7 +111,7 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
 
 int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
 {
-  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  _VolumClaimPresetOps();
   const int idx = volum::custom::AddPreset(mVolumAmpIdx, name); // captures live via hook
   if (idx < 0)
     return idx;
@@ -110,7 +127,7 @@ int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
 
 void NeuralAmpModeler::_VolumOverwritePreset(int index)
 {
-  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  _VolumClaimPresetOps();
   volum::custom::OverwritePreset(mVolumAmpIdx, index); // captures live via hook
   mVolumActivePresetId = volum::custom::PresetIdAt(index);
   mVolumRecalledSnapshot = _VolumActiveScene();
@@ -122,7 +139,7 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index)
 
 void NeuralAmpModeler::_VolumRecallPreset(int index)
 {
-  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  _VolumClaimPresetOps();
   mVolumActivePresetId = volum::custom::PresetIdAt(index);
   volum::custom::RecallPreset(mVolumAmpIdx, index); // -> apply hook -> _VolumApplyRecalledPreset
   _VolumRefreshPresetBar();
@@ -132,7 +149,24 @@ void NeuralAmpModeler::_VolumApplyRecalledPreset(const volum::VoLumAmpSettings& 
 {
   _VolumActiveScene() = s; // make the live scene equal the preset
   _VolumApplyAmpSettings(_VolumActiveScene());
-  _VolumRefreshChannels();
+  // Refresh the cab row / channel stepper for the FOCUSED amp. When a custom amp
+  // is focused, the factory _VolumRefreshChannels() would rescan the underlying
+  // factory rig folder and clobber the custom lane's cab names, channel stepper,
+  // and (critically) mVolumCustomMainSlot/Channel that the .nam loader reads -
+  // so recalling a second preset after a factory<->custom round-trip loaded the
+  // wrong capture and desynced the UI. Mirror _VolumSelectCustomAmp instead.
+  if (mVolumCustomMainIdx >= 0)
+    _VolumApplyCustomMainCabs(mVolumCustomMainIdx, false);
+  else
+    _VolumRefreshChannels();
+  if (mVolumCustomSupportIdx >= 0)
+    _VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true);
+  // Both lanes have now staged their own capture; the shared cab row must end up
+  // describing the focused one. Without this, whichever lane was reconciled last won
+  // the row - and the SUPPORT branch above runs last whenever a custom partner is
+  // loaded. The mirror gap was a factory support amp, which is not reconciled here at
+  // all, leaving MAIN's cab on screen while SUPPORT was focused.
+  _VolumApplyFocusedLaneCabs();
   // Re-derive the scene from the now-live params so the retained baseline matches
   // exactly what _VolumRecomputePresetDirty() will read back (avoids a spurious
   // "(unsaved)" right after recall from param normalization).

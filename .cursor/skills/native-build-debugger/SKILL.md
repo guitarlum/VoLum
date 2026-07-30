@@ -20,9 +20,9 @@ within it the "Sanitized unit tests (ASan/UBSan)" step alone runs ~40-50 min
 (instrumented rebuild + 1.4M+ doctest assertions). Windows finishes much earlier.
 So a macOS job sitting on the sanitizer step for ~45 min is normal, not stuck - a
 real problem shows as a FAILED step, not a long-running one. The in-progress job
-log blob 404s until the job completes; gauge progress from step status
-(`gh run view <id> --json jobs`) instead, and only suspect a hang if total run
-time exceeds ~90 min.
+log blob 404s until the job completes; gauge progress from step status with
+`pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -RunId <id> -NoWait` instead, and
+only suspect a hang if total run time exceeds ~90 min.
 
 ## Windows
 

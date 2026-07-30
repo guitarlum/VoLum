@@ -82,4 +82,5 @@ Verification:
   - PRE capture discovery belongs in `VoLumPrePedalCaptures.h` / `test_volum_pre_pedal_captures.cpp`.
   - Signal-chain visibility/enablement decisions belong in `VoLumProcessingPlan.h` / `test_volum_processing_plan.cpp`.
   - Sidebar list scrollbar geometry belongs in `VoLumAmpListScroll.h` / `test_volum_amp_list_scroll.cpp`.
-- Keep `docs/user-guide.en.md` and `docs/user-guide.de.md` in sync for user-facing UI changes, and refresh stable `docs/user-guide-*.png` screenshots when the visible UI changes.
+- Never dump new controls into the `VoLumControls.h` umbrella; keep ownership in
+  the file that owns the surface.

@@ -25,8 +25,12 @@
 //   - writes are atomic (temp file + rename), reusing WriteJsonAtomically.
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <random>
 #include <string>
@@ -41,7 +45,75 @@ namespace volum
 namespace content
 {
 
-inline constexpr int kContentSchemaVersion = 2;
+// iPlug file pickers expose UTF-8 paths on every platform. On Windows,
+// filesystem::path(std::string) interprets bytes in the active ANSI code page,
+// so a UTF-8 username/folder resolves to a different, nonexistent path. Keep
+// registry paths UTF-8 and convert explicitly at the filesystem boundary.
+inline std::filesystem::path PathFromUtf8(const std::string& utf8)
+{
+#if defined(__cpp_char8_t)
+  const auto* first = reinterpret_cast<const char8_t*>(utf8.data());
+  return std::filesystem::path(std::u8string(first, first + utf8.size()));
+#else
+  return std::filesystem::u8path(utf8);
+#endif
+}
+
+inline std::string PathToUtf8(const std::filesystem::path& path)
+{
+#if defined(__cpp_char8_t)
+  const std::u8string utf8 = path.u8string();
+  return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+#else
+  return path.u8string();
+#endif
+}
+
+// True when relPath is a registry-relative path that stays inside the content
+// directory ("ir/ir_x__cab.wav", "amps/amp_y__G65.nam").
+//
+// Registry paths are only as trustworthy as volum-content.json, which users do
+// sync, restore from backups and hand-edit. `mBase / relPath` is not a safe
+// composition: an absolute relPath replaces the base outright, a drive-relative
+// "C:x" does the same on Windows, and ".." walks out of the library. Resolved
+// paths are handed to std::filesystem::remove on delete, so an escaping entry
+// meant VoLum could delete a file that was never its to touch.
+inline bool IsSafeStoredRelPath(const std::string& relPath)
+{
+  if (relPath.empty())
+    return false;
+
+  const auto path = PathFromUtf8(relPath);
+  // has_root_name covers "C:x" and "\\\\server\\share"; has_root_directory covers
+  // "/x". Checking both is wider than is_absolute(), which on Windows requires a
+  // root name *and* a root directory and so accepts each half on its own.
+  if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
+    return false;
+
+  // A payload is always a file inside a subdirectory, never a directory itself.
+  // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
+  // succeeds on an empty directory, so an entry like that could delete the
+  // library's own folder rather than a capture.
+  // A payload is always a file inside a subdirectory, never a directory itself.
+  // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
+  // succeeds on an empty directory, so an entry like that could delete the
+  // library's own folder rather than a capture.
+  if (!path.has_parent_path() || !path.has_filename())
+    return false;
+
+  for (const auto& part : path)
+  {
+    if (part == ".." || part == ".")
+      return false;
+  }
+  return true;
+}
+
+// v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
+// irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
+// missing keys defaulted), so v2 files load unchanged and v3 files load in older
+// builds; the bump is only a marker of the new capability, not a migration gate.
+inline constexpr int kContentSchemaVersion = 3;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
 // so adding/removing a custom pedal never reshuffles an index a saved chunk or
@@ -52,11 +124,243 @@ inline constexpr int kContentSchemaVersion = 2;
 inline constexpr int kCustomPedalIndexBase = 64;
 inline constexpr int kCustomPedalIndexMax = 127;
 
+// Per-IR shaping (VoLum 1.2.1). Custom IRs are convolved with a fixed -18 dB baked
+// into the convolver (dsp::ImpulseResponse::_SetWeights), so they land much quieter
+// than the baked stock cabs. These VoLum-side controls fix that and let a custom IR
+// be tone-shaped without editing the .wav. Stored per-IR in the library, so the
+// setting follows the IR wherever it is used (MAIN + SUPPORT lanes). Not a DAW
+// parameter, so no EParams/chunk change.
+inline constexpr double kIrTrimDbMin = -24.0;
+inline constexpr double kIrTrimDbMax = 24.0;
+// Cut Hz of 0 means the filter is OFF. When enabled the values are clamped to a
+// musical range (low-cut below the low mids, high-cut across the presence/air band).
+inline constexpr double kIrLowCutHzMax = 800.0;
+inline constexpr double kIrHighCutHzMin = 1000.0;
+inline constexpr double kIrHighCutHzMax = 20000.0;
+// The convolver bakes a fixed -18 dB into every custom IR (see _SetWeights). Auto-
+// normalize on import undoes that bake and equalizes broadband energy across IRs by
+// driving the effective convolution gain toward unity for equal-power input:
+// trimDb = 18 - 20*log10(L2(h)), clamped. Deterministic (unit-tested).
+inline constexpr double kIrBakedReductionDb = 18.0;
+
+inline double ClampIrTrimDb(double db)
+{
+  return std::clamp(db, kIrTrimDbMin, kIrTrimDbMax);
+}
+
+// Clamp a low-cut frequency; 0 (or non-positive) means OFF.
+inline double ClampIrLowCutHz(double hz)
+{
+  if (!(hz > 0.0))
+    return 0.0;
+  return std::clamp(hz, 20.0, kIrLowCutHzMax);
+}
+
+// Clamp a high-cut frequency; 0 (or non-positive) means OFF.
+inline double ClampIrHighCutHz(double hz)
+{
+  if (!(hz > 0.0))
+    return 0.0;
+  return std::clamp(hz, kIrHighCutHzMin, kIrHighCutHzMax);
+}
+
+inline double AutoNormalizeIrTrimDb(double l2Norm)
+{
+  if (!(l2Norm > 0.0))
+    return 0.0;
+  return ClampIrTrimDb(kIrBakedReductionDb - 20.0 * std::log10(l2Norm));
+}
+
+// Discrete UI steps for the IR panel, kept pure + shared so the popover and a unit
+// test agree on one ladder. dir < 0 lowers, dir > 0 raises. The cut ladders include
+// a 0 (= OFF) rung at the "open" end (low-cut off = lowest; high-cut off = highest).
+inline double StepIrTrimDb(double db, int dir)
+{
+  const double stepped = db + (dir >= 0 ? 0.5 : -0.5);
+  return ClampIrTrimDb(std::round(stepped * 2.0) / 2.0); // snap to a 0.5 dB grid
+}
+
+// Sort key for a ladder entry. OFF is stored as 0 but sits at opposite ends of the
+// two ladders: a disabled low cut is the most open setting at the bottom, a disabled
+// high cut is the most open setting at the top. Mapping it to +inf for the high-cut
+// ladder lets one ordering rule serve both.
+inline double IrLadderKey(double hz, bool offIsHighest)
+{
+  if (hz > 0.0)
+    return hz;
+  return offIsHighest ? std::numeric_limits<double>::infinity() : 0.0;
+}
+
+// Move to the adjacent rung: strictly the next one above for dir >= 0, strictly the
+// next one below otherwise. Deliberately not "round to nearest, then move by one" -
+// with typed entry a value can sit between rungs, and rounding first would silently
+// skip the rung the user is standing next to (137 Hz stepping up to 200 rather than
+// 150). At a rail there is no adjacent rung and the value is returned unchanged,
+// which is also what the popover reads to gray the button out.
+inline double StepIrLadder(const double* ladder, int n, double cur, int dir, bool offIsHighest)
+{
+  const double k = IrLadderKey(cur, offIsHighest);
+  int bestIdx = -1;
+  double bestKey = 0.0;
+  for (int i = 0; i < n; ++i)
+  {
+    const double ki = IrLadderKey(ladder[i], offIsHighest);
+    const bool candidate = (dir >= 0) ? (ki > k) : (ki < k);
+    if (!candidate)
+      continue;
+    const bool better = (bestIdx < 0) || ((dir >= 0) ? (ki < bestKey) : (ki > bestKey));
+    if (better)
+    {
+      bestIdx = i;
+      bestKey = ki;
+    }
+  }
+  return bestIdx < 0 ? cur : ladder[bestIdx];
+}
+
+inline double StepIrLowCutHz(double hz, int dir)
+{
+  // OFF at the bottom, then a musical low-cut sweep up to the low mids.
+  static const double kLadder[] = {0.0, 20, 30, 40, 50, 60, 80, 100, 120, 150, 200, 300, 400, 500, 650, 800};
+  const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
+  return ClampIrLowCutHz(StepIrLadder(kLadder, n, ClampIrLowCutHz(hz), dir, /*offIsHighest=*/false));
+}
+
+inline double StepIrHighCutHz(double hz, int dir)
+{
+  // Ascending presence/air ladder with OFF (0) as the top "fully open" rung, so
+  // stepping DOWN from OFF engages a 20 kHz cut and keeps darkening.
+  static const double kLadder[] = {1000, 1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 16000, 20000, 0.0};
+  const int n = static_cast<int>(sizeof(kLadder) / sizeof(kLadder[0]));
+  const double in = (hz > 0.0) ? ClampIrHighCutHz(hz) : 0.0;
+  return ClampIrHighCutHz(StepIrLadder(kLadder, n, in, dir, /*offIsHighest=*/true));
+}
+
+// Whether each stepper direction still has somewhere to go, so the popover can gray
+// out a button at its rail instead of offering a click that does nothing. Defined in
+// terms of the ladders above rather than duplicating the endpoints, so the two can
+// never drift apart.
+struct IrStepAvail
+{
+  bool canDown = true;
+  bool canUp = true;
+};
+
+inline IrStepAvail IrTrimStepAvail(double db)
+{
+  return {StepIrTrimDb(db, -1) != db, StepIrTrimDb(db, +1) != db};
+}
+
+inline IrStepAvail IrLowCutStepAvail(double hz)
+{
+  const double cur = ClampIrLowCutHz(hz);
+  return {StepIrLowCutHz(cur, -1) != cur, StepIrLowCutHz(cur, +1) != cur};
+}
+
+inline IrStepAvail IrHighCutStepAvail(double hz)
+{
+  const double cur = ClampIrHighCutHz(hz);
+  return {StepIrHighCutHz(cur, -1) != cur, StepIrHighCutHz(cur, +1) != cur};
+}
+
+// Typed entry for the IR shaping popover. The steppers walk a musical ladder, but a
+// user who knows the number they want should be able to type it, so typed values are
+// continuous and only clamped to the control's range - they do not snap to a rung.
+enum class IrTypedKind
+{
+  Invalid, // not a number: keep whatever the control already shows
+  Off, // "off", "-", or an explicit zero: disable the filter
+  Number
+};
+
+struct IrTypedValue
+{
+  IrTypedKind kind = IrTypedKind::Invalid;
+  double value = 0.0;
+};
+
+// Accepts what a user actually types: "2.5k", "2500 Hz", "-3 dB", "+3", "off".
+// A trailing k/K multiplies by 1000 so "1.5k" and "1500" mean the same thing.
+inline IrTypedValue ParseIrTypedValue(const std::string& text)
+{
+  std::string s;
+  s.reserve(text.size());
+  for (char c : text)
+    if (!std::isspace(static_cast<unsigned char>(c)))
+      s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+
+  if (s.empty() || s == "off" || s == "-" || s == "none")
+    return {IrTypedKind::Off, 0.0};
+
+  const char* begin = s.c_str();
+  char* end = nullptr;
+  const double raw = std::strtod(begin, &end);
+  if (end == begin || !std::isfinite(raw))
+    return {};
+
+  std::string suffix(end);
+  double scale = 1.0;
+  if (!suffix.empty() && suffix[0] == 'k')
+  {
+    scale = 1000.0;
+    suffix.erase(0, 1);
+  }
+  // Anything left must be a unit we recognize; a stray "2.5 foo" is a typo, not a value.
+  if (!(suffix.empty() || suffix == "hz" || suffix == "db"))
+    return {};
+
+  const double v = raw * scale;
+  if (v == 0.0)
+    return {IrTypedKind::Off, 0.0};
+  return {IrTypedKind::Number, v};
+}
+
+// A typed level of "off" means 0 dB (unity), since a makeup gain cannot be disabled.
+inline double ApplyTypedIrTrimDb(const std::string& text, double current)
+{
+  const IrTypedValue t = ParseIrTypedValue(text);
+  switch (t.kind)
+  {
+    case IrTypedKind::Off: return 0.0;
+    case IrTypedKind::Number: return ClampIrTrimDb(t.value);
+    default: return current;
+  }
+}
+
+inline double ApplyTypedIrLowCutHz(const std::string& text, double current)
+{
+  const IrTypedValue t = ParseIrTypedValue(text);
+  switch (t.kind)
+  {
+    case IrTypedKind::Off: return 0.0;
+    case IrTypedKind::Number: return ClampIrLowCutHz(t.value);
+    default: return current;
+  }
+}
+
+inline double ApplyTypedIrHighCutHz(const std::string& text, double current)
+{
+  const IrTypedValue t = ParseIrTypedValue(text);
+  switch (t.kind)
+  {
+    case IrTypedKind::Off: return 0.0;
+    case IrTypedKind::Number: return ClampIrHighCutHz(t.value);
+    default: return current;
+  }
+}
+
 struct IRItem
 {
   std::string id; // ir_<rand>
   std::string name; // user display name (unique within IR library, CI)
   std::string file; // stored path relative to base, e.g. "ir/ir_x__Mesa.wav"
+  double trimDb = 0.0; // VoLum-side makeup gain, dB (kIrTrimDbMin..Max)
+  double lowCutHz = 0.0; // low-cut (high-pass) freq; 0 = off
+  double highCutHz = 0.0; // high-cut (low-pass) freq; 0 = off
+  // Runtime-only (NOT serialized): false when the entry predates the trim field
+  // (no "trimDb" key on load), so the plugin knows to auto-normalize it once and
+  // persist. New imports set this true when they compute the auto-normalized trim.
+  bool trimCalibrated = false;
 };
 
 struct PedalItem
@@ -244,7 +548,12 @@ inline nlohmann::json RegistryToJson(const Registry& r)
 
   nlohmann::json irs = nlohmann::json::array();
   for (const auto& ir : r.irs)
-    irs.push_back({{"id", ir.id}, {"name", ir.name}, {"path", ir.file}});
+    irs.push_back({{"id", ir.id},
+                   {"name", ir.name},
+                   {"path", ir.file},
+                   {"trimDb", ir.trimDb},
+                   {"lowCutHz", ir.lowCutHz},
+                   {"highCutHz", ir.highCutHz}});
   j["irLibrary"] = irs;
 
   nlohmann::json peds = nlohmann::json::array();
@@ -308,6 +617,18 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
         item.name = ir["name"].get<std::string>();
       if (ir.contains("path") && ir["path"].is_string())
         item.file = ir["path"].get<std::string>();
+      // Per-IR shaping (v3). Presence of "trimDb" marks the entry as calibrated;
+      // a v2 entry without it is left uncalibrated so the plugin auto-normalizes
+      // it once from the .wav (retroactively fixing the "too quiet" complaint).
+      if (ir.contains("trimDb") && ir["trimDb"].is_number())
+      {
+        item.trimDb = ClampIrTrimDb(ir["trimDb"].get<double>());
+        item.trimCalibrated = true;
+      }
+      if (ir.contains("lowCutHz") && ir["lowCutHz"].is_number())
+        item.lowCutHz = ClampIrLowCutHz(ir["lowCutHz"].get<double>());
+      if (ir.contains("highCutHz") && ir["highCutHz"].is_number())
+        item.highCutHz = ClampIrHighCutHz(ir["highCutHz"].get<double>());
       r.irs.push_back(std::move(item));
     }
   }
@@ -402,6 +723,12 @@ public:
 
   std::filesystem::path RegistryPath() const { return mBase / "volum-content.json"; }
   std::filesystem::path BackupPath() const { return mBase / "volum-content.json.bak"; }
+  // Pre-migration snapshot, kept separate from the corrupt-file .bak so a later
+  // parse failure cannot overwrite the last known-good pre-upgrade copy.
+  std::filesystem::path MigrationBackupPath(const std::string& tag) const
+  {
+    return mBase / ("volum-content.json.pre-" + tag + ".bak");
+  }
   std::filesystem::path AmpsDir() const { return mBase / "amps"; }
   std::filesystem::path IrDir() const { return mBase / "ir"; }
   std::filesystem::path PedalsDir() const { return mBase / "pedals"; }
@@ -409,12 +736,19 @@ public:
   Registry& reg() { return mReg; }
   const Registry& reg() const { return mReg; }
 
-  // Absolute path for a registry-relative stored file ("ir/ir_x.wav").
+  // False only for an unconfigured store (unit tests), where imports have nowhere
+  // to copy to and callers legitimately fall back to bare filenames.
+  bool HasBaseDir() const { return !mBase.empty(); }
+
+  // Absolute path for a registry-relative stored file ("ir/ir_x.wav"). Empty when
+  // relPath would resolve outside the content directory, which makes every caller
+  // - loads and deletes alike - treat it as missing rather than as a file to act
+  // on. See IsSafeStoredRelPath.
   std::filesystem::path ResolveStored(const std::string& relPath) const
   {
-    if (relPath.empty())
+    if (!IsSafeStoredRelPath(relPath))
       return {};
-    return mBase / std::filesystem::path(relPath);
+    return mBase / PathFromUtf8(relPath);
   }
 
   // Load the registry. Missing file -> empty registry. Unparseable / wrong-shape
@@ -423,14 +757,43 @@ public:
   bool Load()
   {
     mReg = Registry{};
+    mRegistryUnreadable = false;
+    // Each pending delete describes a registry we are about to throw away. A
+    // delete whose Save() failed is still listed on disk, so carrying the queue
+    // across a reload would let the next successful save destroy a payload the
+    // freshly read registry still names - the exact state deferring the delete
+    // was meant to prevent. Every plugin instance's constructor calls Load() on
+    // the process-global store, so this is one new track away in any DAW.
+    mPendingFileDeletes.clear();
     const auto path = RegistryPath();
     std::error_code ec;
     if (mBase.empty() || !std::filesystem::exists(path, ec))
       return true;
 
+    // Something exists at the library's path that is not a file: a directory, a
+    // device, a broken sync artefact. Checked before opening because it is not
+    // portable to detect afterwards - Windows refuses to open a directory, while
+    // libc++ opens it and only fails on the first read, which is indistinguishable
+    // from an empty file and so went down the "corrupt, back it up and rewrite"
+    // path. Whatever it is, it is not ours to replace.
+    if (!std::filesystem::is_regular_file(path, ec))
+    {
+      mRegistryUnreadable = true;
+      return false;
+    }
+
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
-      return true;
+    {
+      // The library exists but something else is holding it: antivirus, a backup
+      // or cloud-sync agent, another VoLum, or a permissions change. Reporting a
+      // clean empty registry here was the worst possible answer, because the next
+      // save serialized that emptiness over a perfectly good file and took every
+      // custom amp, IR, pedal and preset bank with it. Refuse to write until a
+      // load succeeds instead; the user loses the session's edits, not the library.
+      mRegistryUnreadable = true;
+      return false;
+    }
 
     nlohmann::json j;
     try
@@ -458,13 +821,68 @@ public:
     return !healed;
   }
 
+  // True when a library file exists on disk that we were unable to read, so what
+  // is in memory is not what is on disk and must not be written over it.
+  bool RegistryUnreadable() const { return mRegistryUnreadable; }
+
+  // Set whenever a Save() did not reach the disk, cleared by the next one that
+  // does. Most mutators are void and cannot report a failure of their own, so
+  // callers that want to tell the user consult this after the operation. Taking
+  // it clears it, because a banner should be shown once.
+  bool TakeWriteFailure()
+  {
+    const bool failed = mLastWriteFailed;
+    mLastWriteFailed = false;
+    return failed;
+  }
+
   bool Save()
+  {
+    if (mBase.empty())
+      return true; // intentionally in-memory (unit tests / unconfigured store)
+    if (mRegistryUnreadable)
+    {
+      // See Load(): never overwrite a library we could not read.
+      mLastWriteFailed = true;
+      return false;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(mBase, ec);
+    if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec))
+    {
+      mLastWriteFailed = true;
+      return false;
+    }
+    mLastWriteFailed = false;
+
+    // Payload files are destroyed only once the registry that no longer mentions
+    // them is durable. Doing it the other way round meant a failed registry write
+    // left the on-disk library pointing at files VoLum had already deleted: the
+    // item came back on restart and could never load again. If this write fails
+    // the deletions stay pending, and both the entry and its file survive - which
+    // is the state the on-disk registry still describes.
+    FlushPendingFileDeletes();
+    return true;
+  }
+
+  // Snapshot the on-disk registry once, before a migration rewrites it in place.
+  // A one-way migration is the one moment the user cannot get their old file back
+  // by downgrading, so keep a copy. Does nothing if a snapshot for this tag already
+  // exists (so it stays a true pre-upgrade copy) or if there is nothing to copy.
+  // Returns true when a snapshot exists afterwards.
+  bool BackupBeforeMigration(const std::string& tag)
   {
     if (mBase.empty())
       return false;
     std::error_code ec;
-    std::filesystem::create_directories(mBase, ec);
-    return WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec);
+    const auto src = RegistryPath();
+    if (!std::filesystem::exists(src, ec))
+      return false;
+    const auto dst = MigrationBackupPath(tag);
+    if (std::filesystem::exists(dst, ec))
+      return true; // already snapshotted on an earlier attempt; never overwrite
+    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
+    return !ec;
   }
 
   // Copy `src` into `subDir` (one of amps/ir/pedals) under a unique stored name,
@@ -479,21 +897,28 @@ public:
     if (ec)
       return {};
 
-    const std::string leaf = src.filename().string();
+    const std::string leaf = PathToUtf8(src.filename());
     const std::string stored = idPrefix + "__" + leaf;
-    const auto dst = dstDir / stored;
+    const auto dst = dstDir / PathFromUtf8(stored);
     std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
     if (ec)
       return {};
     return subDir + "/" + stored;
   }
 
+  // Delete a file a transaction copied in but never committed to the registry.
+  // Nothing on disk refers to it, so there is no ordering to respect, and waiting
+  // for a Save that a failed import will never perform would only orphan it.
+  //
+  // Payloads the committed registry *does* reference are a different problem and
+  // go through QueueStoredFileDelete instead.
   void RemoveStoredFile(const std::string& relPath)
   {
-    if (relPath.empty())
+    const auto resolved = ResolveStored(relPath);
+    if (resolved.empty())
       return;
     std::error_code ec;
-    std::filesystem::remove(ResolveStored(relPath), ec);
+    std::filesystem::remove(resolved, ec);
   }
 
   // -- Removal matrix (spec 3.7) ------------------------------------------------
@@ -510,7 +935,7 @@ public:
       if (it->id == id)
       {
         legacyIndex = it->legacyIndex;
-        RemoveStoredFile(it->file);
+        QueueStoredFileDelete(it->file);
         mReg.pedals.erase(it);
         break;
       }
@@ -540,7 +965,7 @@ public:
     {
       if (it->id == id)
       {
-        RemoveStoredFile(it->file);
+        QueueStoredFileDelete(it->file);
         mReg.irs.erase(it);
         break;
       }
@@ -568,11 +993,11 @@ public:
     {
       if (it->id == id)
       {
-        // RemoveStoredFile resolves a registry-relative path; for amp manifests that
-        // is `storedPath` (e.g. "amps/amp_x__G65.nam"). `file` is only the display
-        // leaf, so deleting by it would miss the copied file and orphan it on disk.
+        // Delete by `storedPath` (e.g. "amps/amp_x__G65.nam"), the registry-relative
+        // path. `file` is only the display leaf, so deleting by it would resolve to
+        // the wrong place and orphan the copied file on disk.
         for (const auto& f : it->files)
-          RemoveStoredFile(f.storedPath);
+          QueueStoredFileDelete(f.storedPath);
         mReg.amps.erase(it);
         break;
       }
@@ -591,6 +1016,79 @@ public:
   }
 
 private:
+  // Queue a payload the committed registry still references. It is deleted by the
+  // next successful Save(), never before: see the comment there.
+  void QueueStoredFileDelete(const std::string& relPath)
+  {
+    if (relPath.empty())
+      return;
+    mPendingFileDeletes.push_back(relPath);
+  }
+
+  // True when the registry about to be written still names this payload. Deleting
+  // such a file would leave an entry that can never load again, which is the one
+  // outcome the whole deferred-delete scheme exists to avoid, so it is checked at
+  // the point of no return rather than trusted from the queue.
+  // Two entries can name one payload in spellings that differ as text but resolve to
+  // the same file: `ir/Foo.wav` against `ir/foo.wav` on Windows and macOS's default
+  // volume, or a backslash where VoLum writes a forward slash. That survives a
+  // library restored from a backup or merged from two machines. A byte comparison
+  // would miss the surviving entry and delete the payload it still names, so compare
+  // the way the filesystem does.
+  static bool SameStoredPath(const std::string& a, const std::string& b)
+  {
+    if (a.size() != b.size())
+      return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+      const unsigned char ca = static_cast<unsigned char>(a[i]);
+      const unsigned char cb = static_cast<unsigned char>(b[i]);
+      const bool sepA = ca == '/' || ca == '\\';
+      const bool sepB = cb == '/' || cb == '\\';
+      if (sepA || sepB)
+      {
+        if (!(sepA && sepB))
+          return false;
+        continue;
+      }
+      if (std::tolower(ca) != std::tolower(cb))
+        return false;
+    }
+    return true;
+  }
+
+  bool RegistryReferences(const std::string& relPath) const
+  {
+    if (relPath.empty())
+      return false;
+    for (const auto& ir : mReg.irs)
+      if (SameStoredPath(ir.file, relPath))
+        return true;
+    for (const auto& p : mReg.pedals)
+      if (SameStoredPath(p.file, relPath))
+        return true;
+    for (const auto& amp : mReg.amps)
+      for (const auto& f : amp.files)
+        if (SameStoredPath(f.storedPath, relPath))
+          return true;
+    return false;
+  }
+
+  void FlushPendingFileDeletes()
+  {
+    for (const auto& relPath : mPendingFileDeletes)
+    {
+      if (RegistryReferences(relPath))
+        continue; // the registry we just wrote still names it
+      const auto resolved = ResolveStored(relPath);
+      if (resolved.empty())
+        continue; // outside the content directory; not ours to delete
+      std::error_code ec;
+      std::filesystem::remove(resolved, ec);
+    }
+    mPendingFileDeletes.clear();
+  }
+
   void BackupCorrupt()
   {
     std::error_code ec;
@@ -604,6 +1102,9 @@ private:
 
   std::filesystem::path mBase;
   Registry mReg;
+  bool mRegistryUnreadable = false;
+  bool mLastWriteFailed = false;
+  std::vector<std::string> mPendingFileDeletes;
 };
 
 // Process-wide content store. The custom-content library (amps / IRs / pedals /
