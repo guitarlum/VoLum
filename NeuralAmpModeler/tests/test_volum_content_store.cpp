@@ -1024,6 +1024,43 @@ TEST_CASE("A failed registry write keeps the payload it was about to orphan")
   CHECK_FALSE(std::filesystem::exists(base / "ir" / std::filesystem::path(rel).filename()));
 }
 
+TEST_CASE("A second spelling of the same payload still counts as a reference")
+{
+  // Two entries can name one file in spellings that differ as text but resolve to the
+  // same file: a library merged from two machines, or restored from a backup made on
+  // a case-insensitive volume. A byte comparison saw no surviving reference and
+  // deleted the payload the just-written registry still names - the exact outcome the
+  // deferred delete exists to prevent, arrived at from the other side.
+  const auto base = TestBase("delete-alias-guard");
+  const auto src = WriteSrc(base / "incoming", "cab.wav", "RIFFfake");
+  ContentStore store(base);
+  const std::string rel = store.ImportFileCopy(src, "ir", "ir_shared");
+  REQUIRE_FALSE(rel.empty());
+
+  const std::string leaf = std::filesystem::path(rel).filename().string();
+
+  IRItem doomed;
+  doomed.id = "ir_doomed";
+  doomed.name = "Doomed";
+  doomed.file = rel;
+
+  IRItem survivor;
+  survivor.id = "ir_survivor";
+  survivor.name = "Survivor";
+  // Same file, different spelling: a backslash separator and a capitalised folder.
+  survivor.file = "IR\\" + leaf;
+
+  store.reg().irs.push_back(doomed);
+  store.reg().irs.push_back(survivor);
+  REQUIRE(store.Save());
+
+  store.RemoveIR("ir_doomed");
+  REQUIRE(store.Save());
+
+  CHECK(store.reg().irs.size() == 1);
+  CHECK(std::filesystem::exists(base / "ir" / leaf));
+}
+
 TEST_CASE("Rolling back an import deletes its copies immediately")
 {
   // The other half of the ordering rule: files copied in by a transaction that

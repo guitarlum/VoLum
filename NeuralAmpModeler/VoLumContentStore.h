@@ -1029,19 +1029,47 @@ private:
   // such a file would leave an entry that can never load again, which is the one
   // outcome the whole deferred-delete scheme exists to avoid, so it is checked at
   // the point of no return rather than trusted from the queue.
+  // Two entries can name one payload in spellings that differ as text but resolve to
+  // the same file: `ir/Foo.wav` against `ir/foo.wav` on Windows and macOS's default
+  // volume, or a backslash where VoLum writes a forward slash. That survives a
+  // library restored from a backup or merged from two machines. A byte comparison
+  // would miss the surviving entry and delete the payload it still names, so compare
+  // the way the filesystem does.
+  static bool SameStoredPath(const std::string& a, const std::string& b)
+  {
+    if (a.size() != b.size())
+      return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+      const unsigned char ca = static_cast<unsigned char>(a[i]);
+      const unsigned char cb = static_cast<unsigned char>(b[i]);
+      const bool sepA = ca == '/' || ca == '\\';
+      const bool sepB = cb == '/' || cb == '\\';
+      if (sepA || sepB)
+      {
+        if (!(sepA && sepB))
+          return false;
+        continue;
+      }
+      if (std::tolower(ca) != std::tolower(cb))
+        return false;
+    }
+    return true;
+  }
+
   bool RegistryReferences(const std::string& relPath) const
   {
     if (relPath.empty())
       return false;
     for (const auto& ir : mReg.irs)
-      if (ir.file == relPath)
+      if (SameStoredPath(ir.file, relPath))
         return true;
     for (const auto& p : mReg.pedals)
-      if (p.file == relPath)
+      if (SameStoredPath(p.file, relPath))
         return true;
     for (const auto& amp : mReg.amps)
       for (const auto& f : amp.files)
-        if (f.storedPath == relPath)
+        if (SameStoredPath(f.storedPath, relPath))
           return true;
     return false;
   }

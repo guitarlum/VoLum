@@ -275,6 +275,13 @@ TEST_CASE("ClampName caps a long name and never splits a UTF-8 glyph")
   const std::string withEuro = std::string("abc") + "\xE2\x82\xAC" + "xyz"; // "abc<euro>xyz"
   REQUIRE(ClampName(withEuro, 4) == "abc"); // cap at 4 lands mid-euro -> back off to "abc"
   REQUIRE(ClampName(withEuro, 6) == std::string("abc") + "\xE2\x82\xAC"); // cap includes whole euro
+
+  // A short name is validated too. Skipping the scan when the byte length already fit
+  // let ill-formed text - a filename from another machine, a paste from a mangled
+  // source - through to the registry writer, which then refuses the whole document and
+  // fails an operation that had nothing wrong with it.
+  REQUIRE(ClampName(std::string("A") + "\xE2" + "bc", 24) == "A");
+  REQUIRE(ClampName(std::string("ok") + "\xF0\x9F\x98", 24) == "ok"); // truncated emoji
 }
 
 using volum::custom::AmpSlotChannels;

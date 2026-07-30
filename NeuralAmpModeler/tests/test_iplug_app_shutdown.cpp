@@ -187,6 +187,22 @@ TEST_CASE("The watchdog is armed around the audio teardown only")
   // kill; the disarm has to happen before the body ends.
   CHECK(arm < close);
   CHECK(close < disarm);
+
+  // The MIDI ports have to be closed AND released inside the armed window. mMidiIn
+  // and mMidiOut are unique_ptrs declared below mDAC, so their backends - and any
+  // port still open - are torn down after this body returns, which is outside the
+  // watchdog. cancelCallback on its own does not close the port, so a wedged MIDI
+  // input could still leave the windowless process the watchdog was added to kill.
+  const auto closeIn = src.find("mMidiIn->closePort();");
+  const auto releaseIn = src.find("mMidiIn = nullptr;");
+  const auto releaseOut = src.find("mMidiOut = nullptr;");
+  REQUIRE(closeIn != std::string::npos);
+  REQUIRE(releaseIn != std::string::npos);
+  REQUIRE(releaseOut != std::string::npos);
+  CHECK(closeIn < disarm);
+  CHECK(releaseIn < disarm);
+  CHECK(releaseOut < disarm);
+  CHECK(arm < closeIn);
 }
 
 // ---------------------------------------------------------------------------

@@ -1202,6 +1202,7 @@ private:
       default: return; // click on the panel chrome: keep it open
     }
     SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
+    ReportLibraryWriteFailure();
     NotifyChanged(); // plugin migrates/re-pushes shaping to the live IR lanes
     SetDirty(false);
   }
@@ -1228,6 +1229,7 @@ private:
       default: SetDirty(false); return;
     }
     SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
+    ReportLibraryWriteFailure();
     NotifyChanged();
     SetDirty(false);
   }
