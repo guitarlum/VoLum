@@ -191,15 +191,16 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
 - `Enter` edits the focused target. In the standalone app, `Space` toggles its on/off state. In plug-ins, `B` toggles it so `Space` remains available for DAW Play/Stop.
 - `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.
-- `T` opens the tuner; `M` opens the metronome; `H` opens Settings.
+- `T` opens the tuner; `M` opens the metronome; `H` opens Settings and closes it again.
 - Selected knob: `Up` / `Down` adjusts, `Left` / `Right` selects another knob, `Shift` makes smaller steps.
 - `Enter` enters an exact value, `Delete` / `Backspace` resets, `Esc` leaves knob edit.
+- In the exact-value box a comma counts as a decimal point, and the unit the readout shows (`dB`, `%`, `ms`, `Hz`, `s`, `st`) may be typed after the number. Anything that is not a number leaves the control where it was; a number outside the range clamps to the nearest end.
 
 This covers the main playing and editing workflow. Full screen-reader support is not implemented yet.
 
 ## Settings And Safety
 
-Open Settings with the top-right gear or `H`. The overlay includes the shortcut guide and global settings.
+Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`. The overlay includes the shortcut guide and global settings.
 
 VoLum stores user settings automatically:
 
@@ -226,7 +227,7 @@ Lite mode is a per-computer preference: it is saved in `volum-settings.json`, no
 
 In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, and channel routing. In the VST3, use your DAW's audio settings instead.
 
-Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Choose one mono input channel for the guitar signal and route output L/R as needed. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size.
+Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Choose one mono input channel for the guitar signal and route output L/R as needed. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size. Some drivers refuse the size you pick and grant a different one; VoLum then keeps what the driver granted, so the list and the saved setting describe what is actually running.
 
 If you select a driver that has no usable device, such as ASIO on a laptop without an ASIO interface, VoLum shows an error and reverts to the previous working audio settings instead of closing.
 
