@@ -413,10 +413,19 @@ inline std::string PedalStoredPathByLegacy(int legacyIndex)
   return {};
 }
 
+// True when the finite PRE-capture index pool is exhausted, so a caller can tell
+// "no slots left" apart from "the library would not save" - the two reasons
+// AddPedal returns -1, which used to be reported to the user as the first one.
+inline bool PedalSlotsFull()
+{
+  return Store().reg().nextPedalIndex > content::kCustomPedalIndexMax;
+}
+
 // Appends an imported pedal and returns its list index, or -1 when the finite
 // PRE-capture index pool (kCustomPedalIndexBase..kCustomPedalIndexMax) is
-// exhausted. We refuse rather than clamp to kCustomPedalIndexMax, which would
-// alias the new pedal's captures onto an existing one. Callers must handle -1.
+// exhausted, or when the library could not be written. We refuse rather than
+// clamp to kCustomPedalIndexMax, which would alias the new pedal's captures onto
+// an existing one. Callers must handle -1.
 inline int AddPedal(const std::string& name, const std::string& file = "", const std::string& group = "")
 {
   auto& reg = Store().reg();
@@ -428,9 +437,18 @@ inline int AddPedal(const std::string& name, const std::string& file = "", const
   it.group = group;
   it.file = file;
   it.legacyIndex = reg.nextPedalIndex;
+  const int prevNextIndex = reg.nextPedalIndex;
   reg.nextPedalIndex = it.legacyIndex + 1;
   reg.pedals.push_back(std::move(it));
-  Store().Save();
+  // Same contract as AddIR: an import that cannot be persisted did not happen.
+  // The index is rolled back too, or every failed import would burn one of the 64
+  // capture slots for the lifetime of the library.
+  if (!Store().Save())
+  {
+    reg.pedals.pop_back();
+    reg.nextPedalIndex = prevNextIndex;
+    return -1;
+  }
   return (int)reg.pedals.size() - 1;
 }
 

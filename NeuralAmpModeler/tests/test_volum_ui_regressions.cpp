@@ -1162,7 +1162,9 @@ TEST_CASE("Every preset operation claims the shared bridge before using it")
   RequireContains(source, "volum::custom::ClearPresetHooksIfOwnedBy(this);");
 
   // Save, overwrite and recall: three operations, three claims, and each bridge
-  // call still present.
+  // call still present. The fourth claim is the callback the layout hands the
+  // Manage overlay, so its rename and delete - which go straight to the bridge
+  // rather than through the plugin - claim the bank too.
   auto count = [&source](const char* needle) {
     const std::string n(needle);
     std::size_t total = 0;
@@ -1171,7 +1173,8 @@ TEST_CASE("Every preset operation claims the shared bridge before using it")
     return total;
   };
 
-  CHECK(count("_VolumClaimPresetOps();") == 3);
+  CHECK(count("_VolumClaimPresetOps();") == 4);
+  RequireContains(source, "[pPlugin]() { pPlugin->_VolumClaimPresetOps(); }");
   RequireContains(source, "volum::custom::AddPreset(mVolumAmpIdx");
   RequireContains(source, "volum::custom::OverwritePreset(mVolumAmpIdx");
   RequireContains(source, "volum::custom::RecallPreset(mVolumAmpIdx");
@@ -1344,10 +1347,13 @@ TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
   const std::string drainBody = loader.substr(drain, loaderMain - drain);
   RequireDoesNotContain(drainBody, "VOLUM_LOG");
 
-  // The outcomes are still logged, just from the worker thread that produced them.
+  // The outcomes are still logged, just from the worker thread that produced them -
+  // and worded for what that thread actually knows. It has read and parsed the file;
+  // whether the model reaches the audio graph is decided later, in the drain, which
+  // may discard it as superseded. "loaded" claimed the second thing.
   const std::string loaderBody = loader.substr(loaderMain);
   RequireContains(loaderBody, "VOLUM_LOG(\"model\"");
-  RequireContains(loaderBody, "\" loaded \"");
+  RequireContains(loaderBody, "\" read \"");
   RequireContains(loaderBody, "\" load FAILED \"");
 }
 

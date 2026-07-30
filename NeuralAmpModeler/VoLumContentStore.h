@@ -90,9 +90,20 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
   if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
     return false;
 
+  // A payload is always a file inside a subdirectory, never a directory itself.
+  // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
+  // succeeds on an empty directory, so an entry like that could delete the
+  // library's own folder rather than a capture.
+  // A payload is always a file inside a subdirectory, never a directory itself.
+  // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
+  // succeeds on an empty directory, so an entry like that could delete the
+  // library's own folder rather than a capture.
+  if (!path.has_parent_path() || !path.has_filename())
+    return false;
+
   for (const auto& part : path)
   {
-    if (part == "..")
+    if (part == ".." || part == ".")
       return false;
   }
   return true;
@@ -747,6 +758,13 @@ public:
   {
     mReg = Registry{};
     mRegistryUnreadable = false;
+    // Each pending delete describes a registry we are about to throw away. A
+    // delete whose Save() failed is still listed on disk, so carrying the queue
+    // across a reload would let the next successful save destroy a payload the
+    // freshly read registry still names - the exact state deferring the delete
+    // was meant to prevent. Every plugin instance's constructor calls Load() on
+    // the process-global store, so this is one new track away in any DAW.
+    mPendingFileDeletes.clear();
     const auto path = RegistryPath();
     std::error_code ec;
     if (mBase.empty() || !std::filesystem::exists(path, ec))
@@ -807,16 +825,35 @@ public:
   // is in memory is not what is on disk and must not be written over it.
   bool RegistryUnreadable() const { return mRegistryUnreadable; }
 
+  // Set whenever a Save() did not reach the disk, cleared by the next one that
+  // does. Most mutators are void and cannot report a failure of their own, so
+  // callers that want to tell the user consult this after the operation. Taking
+  // it clears it, because a banner should be shown once.
+  bool TakeWriteFailure()
+  {
+    const bool failed = mLastWriteFailed;
+    mLastWriteFailed = false;
+    return failed;
+  }
+
   bool Save()
   {
     if (mBase.empty())
       return true; // intentionally in-memory (unit tests / unconfigured store)
     if (mRegistryUnreadable)
-      return false; // see Load(): never overwrite a library we could not read
+    {
+      // See Load(): never overwrite a library we could not read.
+      mLastWriteFailed = true;
+      return false;
+    }
     std::error_code ec;
     std::filesystem::create_directories(mBase, ec);
     if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec))
+    {
+      mLastWriteFailed = true;
       return false;
+    }
+    mLastWriteFailed = false;
 
     // Payload files are destroyed only once the registry that no longer mentions
     // them is durable. Doing it the other way round meant a failed registry write
@@ -988,10 +1025,33 @@ private:
     mPendingFileDeletes.push_back(relPath);
   }
 
+  // True when the registry about to be written still names this payload. Deleting
+  // such a file would leave an entry that can never load again, which is the one
+  // outcome the whole deferred-delete scheme exists to avoid, so it is checked at
+  // the point of no return rather than trusted from the queue.
+  bool RegistryReferences(const std::string& relPath) const
+  {
+    if (relPath.empty())
+      return false;
+    for (const auto& ir : mReg.irs)
+      if (ir.file == relPath)
+        return true;
+    for (const auto& p : mReg.pedals)
+      if (p.file == relPath)
+        return true;
+    for (const auto& amp : mReg.amps)
+      for (const auto& f : amp.files)
+        if (f.storedPath == relPath)
+          return true;
+    return false;
+  }
+
   void FlushPendingFileDeletes()
   {
     for (const auto& relPath : mPendingFileDeletes)
     {
+      if (RegistryReferences(relPath))
+        continue; // the registry we just wrote still names it
       const auto resolved = ResolveStored(relPath);
       if (resolved.empty())
         continue; // outside the content directory; not ours to delete
@@ -1015,6 +1075,7 @@ private:
   std::filesystem::path mBase;
   Registry mReg;
   bool mRegistryUnreadable = false;
+  bool mLastWriteFailed = false;
   std::vector<std::string> mPendingFileDeletes;
 };
 

@@ -79,10 +79,18 @@ public:
   // snapshot of preset `index`. When unset the bridge stores default settings.
   using SavePresetCallback = std::function<int(const std::string& name)>;
   using OverwritePresetCallback = std::function<void(int index)>;
-  void SetPresetCallbacks(SavePresetCallback saveCb, OverwritePresetCallback overwriteCb)
+  // Rename and delete go straight to the bridge rather than through the plugin, so
+  // they need the same ownership claim the other three operations make: the bank
+  // they act on is resolved from a process-global key that the most recently
+  // active editor wrote, and without a claim this editor's delete lands in another
+  // instance's bank.
+  using ClaimPresetOpsCallback = std::function<void()>;
+  void SetPresetCallbacks(SavePresetCallback saveCb, OverwritePresetCallback overwriteCb,
+                          ClaimPresetOpsCallback claimCb = nullptr)
   {
     mSavePreset = std::move(saveCb);
     mOverwritePreset = std::move(overwriteCb);
+    mClaimPresetOps = std::move(claimCb);
   }
 
   // ampIdx/ampName only matter for Presets; pedalSlot only for Pedals.
@@ -334,7 +342,11 @@ public:
           else
           {
             mError.clear();
-            const int i = mSavePreset ? mSavePreset(s) : AddPreset(mAmpIdx, s);
+            // Only through the plugin: AddPreset() reaches the shared capture hook,
+            // and calling it from here would use whichever instance last published
+            // itself rather than this one. The layout always installs mSavePreset.
+            const int i = mSavePreset ? mSavePreset(s) : -1;
+            ReportLibraryWriteFailure();
             ReloadList();
             mSel = i;
             NotifyChanged();
@@ -543,26 +555,47 @@ private:
     }
   }
 
+  // The library mutators are void: they change the in-memory registry and ask the
+  // store to persist it, and until now a write that never reached the disk left
+  // the list looking updated and the dialog closing as if all was well. The user
+  // then lost the whole session's library work at exit with nothing said. Say it.
+  void ReportLibraryWriteFailure()
+  {
+    if (!volum::custom::Store().TakeWriteFailure())
+      return;
+    mError = "Your library could not be saved - this change will be lost.";
+  }
+
+  void ClaimPresetOpsIfNeeded()
+  {
+    if (mManageKind == ManageKind::Presets && mClaimPresetOps)
+      mClaimPresetOps();
+  }
+
   void ApplyRename(int idx, const std::string& name)
   {
     using namespace volum::custom;
+    ClaimPresetOpsIfNeeded();
     switch (mManageKind)
     {
       case ManageKind::IR: RenameIR(idx, name); break;
       case ManageKind::Pedals: RenamePedal(idx, name); break;
       default: RenamePreset(mAmpIdx, idx, name); break;
     }
+    ReportLibraryWriteFailure();
   }
 
   void ApplyDelete(int idx)
   {
     using namespace volum::custom;
+    ClaimPresetOpsIfNeeded();
     switch (mManageKind)
     {
       case ManageKind::IR: DeleteIR(idx); break;
       case ManageKind::Pedals: DeletePedal(idx); break;
       default: DeletePreset(mAmpIdx, idx); break;
     }
+    ReportLibraryWriteFailure();
   }
 
   void NotifyChanged()
@@ -675,10 +708,17 @@ private:
       }
       else
       {
+        // Ask before adding, because -1 has two causes and the user needs to know
+        // which: a full capture pool is fixed by deleting a pedal, a library that
+        // will not write is not.
+        const bool slotsFull = volum::custom::PedalSlotsFull();
         if (volum::custom::AddPedal(base, rel) < 0)
         {
           store.RemoveStoredFile(rel);
-          mError = "Custom pedal slots are full - delete a pedal first.";
+          if (slotsFull)
+            mError = "Custom pedal slots are full - delete a pedal first.";
+          else
+            failed.push_back(base);
           continue;
         }
       }
@@ -846,6 +886,7 @@ private:
             }
             if (mOverwritePreset)
               mOverwritePreset(now);
+            ReportLibraryWriteFailure();
             NotifyChanged();
             SetDirty(false);
           };
@@ -1866,4 +1907,5 @@ private:
   PrimaryActionCallback mPrimaryAction;
   SavePresetCallback mSavePreset;
   OverwritePresetCallback mOverwritePreset;
+  ClaimPresetOpsCallback mClaimPresetOps;
 };
