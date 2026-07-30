@@ -198,7 +198,8 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
     // Records that this overlay owns the gesture in progress. See OnMouseDblClick.
-    mOwnsGesture = true;
+    // A click outside the panel closes the overlay and claims nothing.
+    mOwnsGesture = PanelRect().Contains(x, y);
 
     if (mPopupOpen)
     {
@@ -229,6 +230,13 @@ public:
         return;
       }
   }
+
+  // Ownership lasts exactly one gesture. Clearing it only when a double-click
+  // consumed it left the flag true from the click that opened a confirmation
+  // modal, so the stray double-click this guard exists to reject still passed it -
+  // the guard rejected only a double-click on an overlay that had never been
+  // clicked at all, which is not the failing case.
+  void OnMouseUp(float, float, const IMouseMod&) override { mOwnsGesture = false; }
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
   {
@@ -356,12 +364,22 @@ public:
       case TextTarget::RenameItem:
         if (mSel >= 0)
         {
-          if (!s.empty() && NameTaken(s, mSel))
+          // Resolve the row again: mSel and mItems both date from before the field
+          // opened. An entry with no id (only possible for a library written before
+          // ids existed) keeps the old positional behaviour.
+          const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);
+          if (target < 0)
+          {
+            mError = "\"" + mRenameName + "\" is no longer in your library.";
+            ReloadList();
+            mSel = -1;
+          }
+          else if (!s.empty() && NameTaken(s, target))
             SetNameError(s);
           else
           {
             mError.clear();
-            ApplyRename(mSel, s);
+            ApplyRename(target, s);
             ReloadList();
             NotifyChanged();
           }
@@ -898,7 +916,14 @@ private:
         break;
       case kRename:
         if (mSel >= 0 && mSel < (int)mItems.size())
+        {
+          // Remembered by id, like delete and overwrite: a text field can stay open
+          // for as long as the user is typing, and a deletion in another editor
+          // during that time shifts every row below it.
+          mRenameId = RowIdAt(mSel);
+          mRenameName = mItems[(size_t)mSel];
           StartTextEntry(TextTarget::RenameItem, NameEntryRect(rect), mItems[(size_t)mSel]);
+        }
         break;
       case kDelete:
         if (mSel >= 0 && mSel < (int)mItems.size())
@@ -1894,6 +1919,10 @@ private:
   // pending text entry target
   TextTarget mTextTarget = TextTarget::None;
   int mTextCabSlot = -1; // cab slot being renamed (TextTarget::CabName)
+  // The row a rename is for, remembered by identity because the field can stay open
+  // across another editor's deletion (TextTarget::RenameItem).
+  std::string mRenameId;
+  std::string mRenameName;
   IText mEntryText;
 
   int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals

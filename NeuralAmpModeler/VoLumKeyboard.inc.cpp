@@ -451,12 +451,19 @@ bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
       // DIVISION stepper under Sync, and the pitch modes each own their own knobs.
       // The mode pills do not clear the selection the way the sidebar and the cab row
       // do, so arrows kept editing a parameter that was no longer on screen while the
-      // hint bar named it. Drop the selection instead.
+      // hint bar named it. Drop the selection instead - and report the key as handled,
+      // because the handlers below this one take Up/Down to mean "switch amp" and
+      // Left/Right to mean "step channel". Both stage a model load and are instantly
+      // audible, so letting the key through would trade a silent edit for a loud one.
       if (pControl->IsHidden())
       {
-        mVolumSelectedKnobParamIdx = kNoParameter;
+        // The whole selection, not just the index: hand-clearing two fields left the
+        // knob wearing its keyboard ring (so it came back looking selected but no
+        // longer answering arrows the next time its mode was chosen) and left an open
+        // exact-value box with nothing driving it.
+        _ClearVoLumKnobSelection();
         _UpdateVoLumKeyboardFocusHint();
-        return false;
+        return true;
       }
 
       if (auto* pKnob = dynamic_cast<NAMKnobControl*>(pControl))

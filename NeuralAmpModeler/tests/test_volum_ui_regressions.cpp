@@ -1141,6 +1141,17 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   RequireDoesNotContain(overlay, "ApplyDelete(idx);");
   RequireDoesNotContain(overlay, "mOverwritePreset(idx);");
 
+  // Rename too. It was left on the row index while delete and overwrite moved to
+  // identity, and it is the operation whose field stays open longest - the whole
+  // time the user is typing - so it has the widest window for another editor to
+  // shift the rows underneath it.
+  RequireContains(overlay, "mRenameId = RowIdAt(mSel);");
+  RequireContains(overlay, "const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);");
+  RequireContains(overlay, "ApplyRename(target, s);");
+  RequireContains(overlay, "NameTaken(s, target)");
+  RequireDoesNotContain(overlay, "ApplyRename(mSel, s);");
+  RequireDoesNotContain(overlay, "NameTaken(s, mSel)");
+
   // Saving an open amp builder re-resolves its target the same way: a deletion
   // before that index would otherwise make UpdateCustomAmp adopt another amp's id
   // and overwrite its record with this draft.
@@ -1199,10 +1210,18 @@ TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
   // before it does anything.
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
 
-  RequireContains(overlay, "mOwnsGesture = true;");
   RequireContains(overlay, "const bool ownsGesture = mOwnsGesture;");
-  RequireContains(overlay, "mOwnsGesture = false;");
   RequireContains(overlay, "if (!ownsGesture)");
+
+  // Ownership has to END with the gesture, which is the half the first version of
+  // this fix missed: clearing the flag only inside the double-click handler left it
+  // true from the click that opened the confirmation, so the stray double-click still
+  // passed the guard and the documented repro was unfixed. Only a double-click on an
+  // overlay that had never been clicked at all was rejected - not the failing case.
+  RequireContains(overlay, "void OnMouseUp(float, float, const IMouseMod&) override { mOwnsGesture = false; }");
+  // And it BEGINS with a mouse-down the overlay's own panel received.
+  RequireContains(overlay, "mOwnsGesture = PanelRect().Contains(x, y);");
+  RequireDoesNotContain(overlay, "mOwnsGesture = true;");
 
   // The guard has to come before the row dispatch, or it guards nothing.
   const auto guard = overlay.find("if (!ownsGesture)");
@@ -1210,6 +1229,60 @@ TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
   REQUIRE(guard != std::string::npos);
   REQUIRE(rowDispatch != std::string::npos);
   CHECK(guard < rowDispatch);
+}
+
+TEST_CASE("A keyboard-selected knob that a mode switch hid consumes the key that drops it")
+{
+  // The bail-out returned false, meaning "not handled", so the chain below it ran:
+  // Up/Down is amp navigation and Left/Right steps the channel. Both stage a model
+  // load and are immediately audible, which is a worse outcome than the silent edit
+  // of an off-screen knob that the bail-out was added to stop. The Left/Right guard
+  // could not save it either, because it tests the very selection just cleared.
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+
+  const auto hidden = keyboard.find("if (pControl->IsHidden())");
+  REQUIRE(hidden != std::string::npos);
+  const auto blockEnd = keyboard.find("}", keyboard.find("_UpdateVoLumKeyboardFocusHint();", hidden));
+  REQUIRE(blockEnd != std::string::npos);
+  const std::string bail = keyboard.substr(hidden, blockEnd - hidden);
+  RequireContains(bail, "return true;");
+  RequireDoesNotContain(bail, "return false;");
+
+  // And it drops the whole selection rather than two of its four fields, or the knob
+  // keeps its keyboard ring - coming back looking selected while no longer answering
+  // arrows - and an open exact-value box is left with nothing driving it.
+  RequireContains(bail, "_ClearVoLumKnobSelection();");
+}
+
+TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invalidates")
+{
+  // The cab row is one control shared by both lanes and every write to it is now
+  // conditioned on which lane is focused. A clamp that only flipped the flag left the
+  // row describing SUPPORT while MAIN was focused - the exact state that guard exists
+  // to prevent - and a click on a cab then edited MAIN with an index belonging to the
+  // support amp's layout.
+  const std::string source = ReadPluginSource();
+
+  const auto clamp = source.find("void NeuralAmpModeler::_VolumClampSupportFocus()");
+  REQUIRE(clamp != std::string::npos);
+  const auto clampEnd = source.find("\n}", clamp);
+  REQUIRE(clampEnd != std::string::npos);
+  const std::string body = source.substr(clamp, clampEnd - clamp);
+  RequireContains(body, "mVolumDualAmpFocusedSupport = false;");
+  RequireContains(body, "_VolumApplyFocusedLaneCabs();");
+
+  // A lane whose amp the library no longer contains is not a lane either: a custom
+  // support amp deleted from another instance left a stale index behind.
+  RequireContains(source, "mVolumCustomSupportIdx < static_cast<int>(volum::custom::MockCustomAmps().size())");
+
+  // The layout pass reads the focus flag to decide which lane's toggles are visible,
+  // so it has to clamp before taking that reading, not after.
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
+  const auto clampCall = runtime.find("_VolumClampSupportFocus();");
+  const auto snapshot = runtime.find("const bool supportFocusNow = dualActiveNow && mVolumDualAmpFocusedSupport;");
+  REQUIRE(clampCall != std::string::npos);
+  REQUIRE(snapshot != std::string::npos);
+  CHECK(clampCall < snapshot);
 }
 
 TEST_CASE("Custom NAM save and async load failures cannot masquerade as success")

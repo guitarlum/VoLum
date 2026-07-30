@@ -102,6 +102,41 @@ inline std::size_t Utf8SequenceLength(unsigned char lead)
   return 0; // continuation byte or invalid lead
 }
 
+// Byte length of the well-formed UTF-8 sequence at s[i], or 0 if there is not one.
+//
+// The lead byte alone is not enough. dump() throws on every ill-formed sequence,
+// not only on one cut in half, so checking the length and stopping there let
+// "A\xE2bc" (a three-byte lead followed by ASCII), an overlong "\xC0\x80" and an
+// out-of-range "\xF4\x90..." through to the registry - the exact outcome this
+// decoder exists to prevent.
+inline std::size_t Utf8ValidSequenceLength(const std::string& s, std::size_t i)
+{
+  if (i >= s.size())
+    return 0;
+  const unsigned char lead = static_cast<unsigned char>(s[i]);
+  const std::size_t len = Utf8SequenceLength(lead);
+  if (len == 0 || i + len > s.size())
+    return 0;
+  if (len == 1)
+    return 1;
+
+  for (std::size_t k = 1; k < len; ++k)
+    if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80)
+      return 0;
+
+  // Decode far enough to reject the forms that are the right shape but not legal
+  // scalar values: an overlong encoding, a surrogate half, anything above U+10FFFF.
+  unsigned int cp = lead & (0xFFu >> (len + 1));
+  for (std::size_t k = 1; k < len; ++k)
+    cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3Fu);
+
+  static const unsigned int kMin[5] = {0, 0, 0x80, 0x800, 0x10000};
+  if (cp < kMin[len] || cp > 0x10FFFFu || (cp >= 0xD800u && cp <= 0xDFFFu))
+    return 0;
+
+  return len;
+}
+
 // Longest prefix of s that is at most maxBytes long and never splits a UTF-8
 // sequence. Malformed input stops the scan rather than being copied through.
 inline std::string Utf8Prefix(const std::string& s, std::size_t maxBytes)
@@ -109,8 +144,8 @@ inline std::string Utf8Prefix(const std::string& s, std::size_t maxBytes)
   std::size_t end = 0;
   while (end < s.size())
   {
-    const std::size_t len = Utf8SequenceLength(static_cast<unsigned char>(s[end]));
-    if (len == 0 || end + len > s.size() || end + len > maxBytes)
+    const std::size_t len = Utf8ValidSequenceLength(s, end);
+    if (len == 0 || end + len > maxBytes)
       break;
     end += len;
   }
@@ -132,8 +167,8 @@ inline std::string NormalizeCabName(const std::string& in)
   while (i < in.size() && chars < 3)
   {
     const unsigned char lead = static_cast<unsigned char>(in[i]);
-    const std::size_t len = Utf8SequenceLength(lead);
-    if (len == 0 || i + len > in.size())
+    const std::size_t len = Utf8ValidSequenceLength(in, i);
+    if (len == 0)
       break; // malformed: stop rather than emit a partial character
 
     if (len == 1)
