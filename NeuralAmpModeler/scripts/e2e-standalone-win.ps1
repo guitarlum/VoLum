@@ -85,7 +85,8 @@ function Copy-AudioConfigOnly {
 # Launch VoLum against a sandboxed LOCALAPPDATA and close it the way a user would.
 # CloseMainWindow posts WM_CLOSE, which runs the normal shutdown path - the one that
 # saves settings. Killing the process instead would skip the save and make every
-# persistence assertion below vacuous, so a hard kill is reported as a failure.
+# persistence assertion below vacuous, so a hard kill is reported as a failure - and
+# so is any non-zero exit, including the watchdog's own.
 function Invoke-VoLumRun {
   param([string]$SandboxRoot, [int]$SettleSec = 6)
 
@@ -116,12 +117,21 @@ function Invoke-VoLumRun {
 
   [void]$proc.CloseMainWindow()
   if ($proc.WaitForExit(20000)) {
-    $result.graceful = $true
     $result.exitCode = $proc.ExitCode
+    # Exiting is not enough. The shutdown watchdog exists precisely because a wedged
+    # driver could hang the exit, and it reports a distinct non-zero code when it
+    # kills the process - see kVoLumShutdownWatchdogExitCode. Accepting any exit
+    # would let the release's headline fix regress into "the watchdog covers for it",
+    # which is a leaked audio device and lost settings on every quit.
+    $result.graceful = ($proc.ExitCode -eq 0)
+    if (-not $result.graceful) {
+      Write-Host ("  exit code {0} on close" -f $proc.ExitCode) -ForegroundColor Yellow
+    }
   }
   else {
     $proc.Kill()
     [void]$proc.WaitForExit(10000)
+    Write-Host "  window did not close within 20 s; process killed" -ForegroundColor Yellow
   }
   return $result
 }
@@ -389,11 +399,14 @@ function Test-CustomLane {
   # The settings file agreeing with itself is not enough: the bug this pins left the
   # persisted position correct while loading the WRONG capture, so the UI said
   # channel 5 and the user heard channel 1. Only the load log can tell them apart.
+  # "read", not "loaded": the loader thread logs the file it parsed, which is the
+  # part that identifies the capture. Accept either word so this keeps working
+  # across the wording change.
   $topChannel = $channels[$topPos]
   $expected = @($amp.files | Where-Object { $_.slot -lt 0 -and $_.channel -eq $topChannel })[0]
   $log = Join-Path $root "volum.log"
   if ($expected -and (Test-Path $log)) {
-    $loaded = @(Get-Content $log | Select-String -Pattern "\[model\] MAIN loaded (.+)$" |
+    $loaded = @(Get-Content $log | Select-String -Pattern "\[model\] MAIN (?:read|loaded) (.+)$" |
         ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() })
     $last = if ($loaded.Count) { $loaded[-1] } else { "" }
     $leaf = Split-Path $expected.storedPath -Leaf
