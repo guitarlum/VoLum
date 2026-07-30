@@ -402,8 +402,19 @@ bool NeuralAmpModeler::_VolumHasSupportAmp()
 
 void NeuralAmpModeler::_VolumClampSupportFocus()
 {
-  if (mVolumDualAmpFocusedSupport && !_VolumHasSupportAmp())
-    mVolumDualAmpFocusedSupport = false;
+  if (!mVolumDualAmpFocusedSupport || _VolumHasSupportAmp())
+    return;
+
+  mVolumDualAmpFocusedSupport = false;
+
+  // Moving focus is only half the job. The cab row is shared by both lanes and every
+  // write to it is now conditioned on which lane is focused, so a clamp that only
+  // flipped the flag left the row still describing SUPPORT while MAIN was focused -
+  // the exact state that guard exists to prevent, and a click on a cab then edited
+  // MAIN with an index from the support amp's layout. Re-derive here so no caller
+  // has to remember: _VolumApplyFocusedLaneCabs does not call _UpdateVoLumLayout,
+  // so there is no re-entrancy back into this.
+  _VolumApplyFocusedLaneCabs();
 }
 
 void NeuralAmpModeler::_VolumApplyDualAmpFocus()

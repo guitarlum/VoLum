@@ -401,6 +401,43 @@ TEST_CASE("Utf8Prefix cuts only on character boundaries")
   CHECK(Utf8Prefix(std::string("ab") + "\xE2\x82", 99) == "ab");
 }
 
+TEST_CASE("The UTF-8 scanner rejects every ill-formed sequence, not only split ones")
+{
+  using volum::custom::NormalizeCabName;
+  using volum::custom::Utf8Prefix;
+
+  // The point of the scanner is that whatever it emits can be written to
+  // volum-content.json, and nlohmann's dump() throws on every ill-formed sequence -
+  // not only on one cut in half. Reading the lead byte's length and stopping there
+  // let three whole families through, so a registry could still be written that
+  // could never be written again.
+
+  // A lead byte followed by something that is not a continuation byte. Plausible
+  // from a name that was byte-truncated by an older build and then edited.
+  CHECK(Utf8Prefix(std::string("A") + "\xE2" + "bc", 99) == "A");
+  CHECK(NormalizeCabName(std::string("A") + "\xE2" + "bc") == "A");
+  CHECK(Utf8Prefix(std::string("A") + "\xF0\x9F" + "z", 99) == "A");
+
+  // Overlong encodings: the right shape for a two- or three-byte sequence, encoding
+  // a value that must be spelled shorter. "\xC0\x80" is the classic NUL smuggle.
+  CHECK(Utf8Prefix(std::string("A") + "\xC0\x80", 99) == "A");
+  CHECK(Utf8Prefix(std::string("A") + "\xE0\x80\xAF", 99) == "A");
+
+  // Above U+10FFFF, and the surrogate range, which is not encodable in UTF-8.
+  CHECK(Utf8Prefix(std::string("A") + "\xF4\x90\x80\x80", 99) == "A");
+  CHECK(Utf8Prefix(std::string("A") + "\xED\xA0\x80", 99) == "A");
+
+  // The shapes that are legal stay legal: 1-, 2-, 3- and 4-byte sequences, and the
+  // boundary values at each end of each range.
+  const std::string cases[] = {
+    "A", "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xEF\xBF\xBF", "\xF0\x90\x80\x80", "\xF4\x8F\xBF\xBF"};
+  for (const auto& ok : cases)
+  {
+    CAPTURE(ok);
+    CHECK(Utf8Prefix(ok, 99) == ok);
+  }
+}
+
 TEST_CASE("A pill label truncated mid-glyph never yields invalid UTF-8")
 {
   using volum::custom::ShortCaptureLabel;

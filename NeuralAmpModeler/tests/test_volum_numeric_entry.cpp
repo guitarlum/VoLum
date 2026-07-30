@@ -2,7 +2,10 @@
 
 #include "../VoLumNumericEntry.h"
 
+#include <filesystem>
+#include <fstream>
 #include <limits>
+#include <sstream>
 
 // Regression coverage for the exact-value box. iPlug2 converted the typed text with
 // IParam::StringToValue, whose numeric fallback is atof(), so "", " ", "abc" and "-"
@@ -104,4 +107,23 @@ TEST_CASE("An out-of-range but finite number is passed through for the caller to
   // behaviour is to land on 100.
   CHECK(Parse("1000000") == doctest::Approx(1000000.0));
   CHECK(Parse("-1000000") == doctest::Approx(-1000000.0));
+}
+
+TEST_CASE("A list-valued parameter refuses text that is not one of its own values")
+{
+  // The enum/bool branch of the exact-entry box handed the text to
+  // IParam::StringToValue, which returns 0 for anything it does not recognise - so a
+  // typo moved the parameter to its minimum, reintroducing for list params exactly
+  // the defect the numeric path above removes. No list param reaches that control
+  // today, which is why this is a source pin rather than a behavioural test: the
+  // point is that whoever wires the first one does not inherit the trap.
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumExactEntry.h";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  const std::string src = ss.str();
+
+  CHECK(src.find("pParam->MapDisplayText(str ? str : \"\", &mapped)") != std::string::npos);
+  CHECK(src.find("pParam->StringToValue(") == std::string::npos);
 }

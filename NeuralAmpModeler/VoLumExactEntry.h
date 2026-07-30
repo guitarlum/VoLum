@@ -103,13 +103,18 @@ public:
     if (!pParam)
       return;
 
-    // Enum and bool params map names, not numbers ("Off", "Poly"), and iPlug2 does
-    // that mapping properly. Only knobs reach this control today, but a list-valued
-    // one arriving later should not silently stop accepting its own display text.
+    // Enum and bool params map names, not numbers ("Off", "Poly"). Only knobs reach
+    // this control today, but a list-valued one arriving later should not silently
+    // stop accepting its own display text. Matched against the param's own display
+    // texts rather than handed to StringToValue, which returns 0 for anything it does
+    // not recognise - which would move the parameter to its minimum on a typo, the
+    // one behaviour the numeric path below exists to stop.
     if (pParam->Type() == IParam::kTypeEnum || pParam->Type() == IParam::kTypeBool)
     {
-      SetValueFromUserInput(pParam->ToNormalized(pParam->StringToValue(str ? str : "")), 0);
-      return;
+      double mapped = 0.0;
+      if (pParam->MapDisplayText(str ? str : "", &mapped))
+        SetValueFromUserInput(pParam->ToNormalized(mapped), 0);
+      return; // no match: cancel, exactly like an unparseable number below
     }
 
     double typed = 0.0;
