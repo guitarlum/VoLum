@@ -58,14 +58,12 @@ else
   rc=$?
   set -e
   if [[ "$rc" -ne 0 ]]; then
-    # A signal death prints one line and no backtrace. macOS has already written a
-    # full one; surfacing it here is the difference between "Bus error" and a
-    # symbolicated stack, on a machine most of us cannot reproduce on.
-    echo "=== tests exited $rc; most recent crash reports ==="
-    ls -t "$HOME/Library/Logs/DiagnosticReports/"*.ips 2>/dev/null | head -2 | while read -r report; do
-      echo "--- $report"
-      cat "$report"
-    done
+    # A signal death prints one line and no backtrace, and CI runners keep no crash
+    # reports. Re-running under lldb turns "Bus error" into a symbolicated stack,
+    # which is the whole difference when the machine is one we cannot reproduce on.
+    echo "=== tests exited $rc; re-running under lldb for a backtrace ==="
+    lldb --batch -o run -k "bt all" -k "register read" -k "quit 1" \
+      -- "$BUILD_DIR/NeuralAmpModeler-Tests" --duration=true 2>&1 | tail -n 120 || true
     exit "$rc"
   fi
 fi
