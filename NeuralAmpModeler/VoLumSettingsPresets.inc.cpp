@@ -62,19 +62,45 @@ void NeuralAmpModeler::_VolumSyncPresetOwner()
   // validated against the live bank in _VolumRefreshPresetBar, so a since-deleted
   // preset simply shows nothing selected.
   auto itId = mVolumActivePresetIdByOwner.find(key);
-  auto itSnap = mVolumRecalledSnapshotByOwner.find(key);
-  if (itId != mVolumActivePresetIdByOwner.end() && !itId->second.empty()
-      && itSnap != mVolumRecalledSnapshotByOwner.end())
-  {
-    mVolumActivePresetId = itId->second;
-    mVolumRecalledSnapshot = itSnap->second;
-    mVolumHasRecalledSnapshot = true;
-  }
-  else
+  if (itId == mVolumActivePresetIdByOwner.end() || itId->second.empty())
   {
     mVolumHasRecalledSnapshot = false;
     mVolumActivePresetId.clear();
+    return;
   }
+  mVolumActivePresetId = itId->second;
+
+  auto itSnap = mVolumRecalledSnapshotByOwner.find(key);
+  if (itSnap != mVolumRecalledSnapshotByOwner.end())
+  {
+    mVolumRecalledSnapshot = itSnap->second;
+    mVolumHasRecalledSnapshot = true;
+    return;
+  }
+
+  // An id with no snapshot beside it: this selection was read back from
+  // volum-settings.json, which stores ids only. Previously both were required, so
+  // every amp restored from the file was dropped here and reported no preset - the
+  // file remembered the selection and this function threw it away. The baseline the
+  // "(unsaved)" marker diffs against is then the preset's own stored content, which
+  // is the same choice the DAW-chunk restore path makes.
+  const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+  auto itBank = banks.find(key);
+  if (itBank != banks.end())
+    for (const auto& pr : itBank->second)
+      if (pr.id == mVolumActivePresetId)
+      {
+        mVolumRecalledSnapshot = pr.settings;
+        mVolumRecalledSnapshotByOwner[key] = pr.settings;
+        mVolumHasRecalledSnapshot = true;
+        return;
+      }
+
+  // Recorded, but deleted from the bank since. Drop the stale id rather than
+  // carrying it to the next launch.
+  mVolumHasRecalledSnapshot = false;
+  mVolumActivePresetId.clear();
+  mVolumActivePresetIdByOwner.erase(key);
 }
 
 void NeuralAmpModeler::_VolumRefreshPresetBar()

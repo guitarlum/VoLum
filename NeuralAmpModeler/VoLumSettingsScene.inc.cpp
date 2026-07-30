@@ -350,6 +350,18 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // custom-support refs already round-trip inside each scene's JSON.
   j["volumCustomMainId"] = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   j["volumActivePresetId"] = mVolumActivePresetId;
+  // 1.2.1: the same selection for every amp, not only the focused one. The single
+  // key above describes whichever amp was in focus when the file was written, so
+  // every other amp reopened reading "No Preset" - and an exit from an amp with
+  // nothing recalled wrote an empty id, losing the focused one too. The live pair is
+  // folded in rather than relying on the map alone, so a save that lands between a
+  // recall and the next amp switch still records it.
+  {
+    auto activePresetIdsByOwner = mVolumActivePresetIdByOwner;
+    if (mVolumHasRecalledSnapshot && !mVolumActivePresetId.empty())
+      activePresetIdsByOwner[_VolumActiveOwnerKey()] = mVolumActivePresetId;
+    j["volumActivePresetIdByOwner"] = volum::VolumActivePresetIdsToJson(activePresetIdsByOwner);
+  }
 
   namespace fs = std::filesystem;
   fs::path settingsPath = volum::VolumUserSettingsFilePath();
@@ -472,6 +484,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
       mVolumRestoreCustomMainId = j["volumCustomMainId"].get<std::string>();
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
+    // 1.2.1 per-amp selections. Absent in files written by 1.2.0, in which case the
+    // single id above still restores the amp that was focused, exactly as before.
+    if (j.contains("volumActivePresetIdByOwner"))
+      mVolumActivePresetIdByOwner = volum::VolumActivePresetIdsFromJson(j["volumActivePresetIdByOwner"]);
     if (volum::HasDualAmpUserSettings(j))
       settingsHealed = true; // Rewrite shared settings without new-only dual-amp fields.
 
