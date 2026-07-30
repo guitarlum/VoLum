@@ -54,7 +54,14 @@ struct UnsafeChunk
     const int strStartPos = GetBytes(&len, static_cast<int>(sizeof(len)), startPos);
     if (strStartPos >= 0)
     {
-      const int strEndPos = strStartPos + len; // the overflow lives here
+      // The overflow lives here - but wrapped through unsigned, not by letting the
+      // signed addition overflow for real. Written the obvious way, this is UB, and
+      // clang on arm64 acts on it: from `strStartPos + len <= Size()` it concludes
+      // `len <= Size() - strStartPos`, folds the clamp below to `len`, and the copy
+      // that was supposed to be capped at 4 bytes becomes an INT_MAX memmove off the
+      // end of the vector. That crashed the whole suite on macOS while passing on
+      // MSVC. Unsigned wrap gives the same bit pattern with none of the licence.
+      const int strEndPos = static_cast<int>(static_cast<unsigned>(strStartPos) + static_cast<unsigned>(len));
       if (strEndPos <= Size())
       {
         if (len > 0)
