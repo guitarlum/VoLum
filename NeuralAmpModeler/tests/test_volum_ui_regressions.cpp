@@ -1285,18 +1285,32 @@ TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
   // before it does anything.
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
 
-  RequireContains(overlay, "const bool ownsGesture = mOwnsGesture;");
+  RequireContains(
+    overlay, "const bool ownsGesture = mOwnsGesture && mGestureConfirmEpoch == VoLumConfirmClickEpoch();");
   RequireContains(overlay, "if (!ownsGesture)");
 
-  // Ownership has to END with the gesture, which is the half the first version of
-  // this fix missed: clearing the flag only inside the double-click handler left it
-  // true from the click that opened the confirmation, so the stray double-click still
-  // passed the guard and the documented repro was unfixed. Only a double-click on an
-  // overlay that had never been clicked at all was rejected - not the failing case.
-  RequireContains(overlay, "void OnMouseUp(float, float, const IMouseMod&) override { mOwnsGesture = false; }");
-  // And it BEGINS with a mouse-down the overlay's own panel received.
+  // It BEGINS with a mouse-down the overlay's own panel received, and the modal's
+  // click counter is sampled with it.
   RequireContains(overlay, "mOwnsGesture = PanelRect().Contains(x, y);");
+  RequireContains(overlay, "mGestureConfirmEpoch = VoLumConfirmClickEpoch();");
   RequireDoesNotContain(overlay, "mOwnsGesture = true;");
+
+  // What it must NOT do is clear the claim on mouse-up. That was the second attempt
+  // at this fix and it rejected every legitimate double-click as well: Windows sends
+  // the up BEFORE the dblclick, so by the time the handler ran the claim from the
+  // matching down was already gone, and double-clicking a Manage row did nothing.
+  // The overlay's own events are identical in both cases; only the modal's counter
+  // distinguishes them.
+  RequireDoesNotContain(overlay, "void OnMouseUp(float, float, const IMouseMod&) override { mOwnsGesture = false; }");
+
+  // The counter only moves where it should: the modal bumps it on the click it
+  // consumes, nowhere else.
+  const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumConfirmDialog.h");
+  RequireContains(dialog, "++VoLumConfirmClickEpoch();");
+  const auto bump = dialog.find("++VoLumConfirmClickEpoch();");
+  const auto down = dialog.find("void OnMouseDown(float x, float y, const IMouseMod&) override");
+  REQUIRE(down != std::string::npos);
+  CHECK(bump > down);
 
   // The guard has to come before the row dispatch, or it guards nothing.
   const auto guard = overlay.find("if (!ownsGesture)");
@@ -1327,6 +1341,15 @@ TEST_CASE("A keyboard-selected knob that a mode switch hid consumes the key that
   // keeps its keyboard ring - coming back looking selected while no longer answering
   // arrows - and an open exact-value box is left with nothing driving it.
   RequireContains(bail, "_ClearVoLumKnobSelection();");
+
+  // Consuming the key is right for the arrows and wrong for the two keys the focus
+  // handler suppresses while a knob is selected. It ran before this one and declined
+  // them on behalf of the selection just dropped, so eating them here as well costs
+  // the user a press: Enter would not open the knob that replaced the hidden one, and
+  // the on/off key would not toggle the focused block.
+  RequireContains(bail, "return _ActivateVoLumKeyboardTarget();");
+  RequireContains(bail, "return _ToggleVoLumKeyboardTarget();");
+  RequireContains(bail, "key.VK == kVK_RETURN");
 }
 
 TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invalidates")
@@ -1350,13 +1373,19 @@ TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invali
   // support amp deleted from another instance left a stale index behind.
   RequireContains(source, "mVolumCustomSupportIdx < static_cast<int>(volum::custom::MockCustomAmps().size())");
 
-  // The layout pass reads the focus flag to decide which lane's toggles are visible,
-  // so it has to clamp before taking that reading, not after.
+  // The layout pass reads the focus flag twice - once to choose between the two amp
+  // knob groups, once to choose between the two lane toggle rows - so it has to clamp
+  // before the FIRST of those, not just before the second. Clamping in between put
+  // the support amp's knobs on screen under a hero, cab row and hint bar that had all
+  // already moved back to MAIN, and left them there until some later pass.
   const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
   const auto clampCall = runtime.find("_VolumClampSupportFocus();");
+  const auto knobGroups = runtime.find("supportFocus ? \"SUPPORT_AMP_KNOBS\" : \"AMP_KNOBS\"");
   const auto snapshot = runtime.find("const bool supportFocusNow = dualActiveNow && mVolumDualAmpFocusedSupport;");
   REQUIRE(clampCall != std::string::npos);
+  REQUIRE(knobGroups != std::string::npos);
   REQUIRE(snapshot != std::string::npos);
+  CHECK(clampCall < knobGroups);
   CHECK(clampCall < snapshot);
 }
 

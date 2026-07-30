@@ -463,6 +463,21 @@ bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
         // exact-value box with nothing driving it.
         _ClearVoLumKnobSelection();
         _UpdateVoLumKeyboardFocusHint();
+
+        // _HandleVoLumKeyboardFocusKey already ran and declined these two, because it
+        // suppresses them whenever a knob is selected. The selection it deferred to
+        // was the stale one just dropped, so swallowing them here as well would cost
+        // the user a press: Enter would not open the knob that replaced the hidden
+        // one, and the on/off key would not toggle the focused block.
+        if (key.VK == kVK_RETURN)
+          return _ActivateVoLumKeyboardTarget();
+#ifdef APP_API
+        if (key.VK == ' ')
+#else
+        if (key.VK == 'b' || key.VK == 'B')
+#endif
+          return _ToggleVoLumKeyboardTarget();
+
         return true;
       }
 
