@@ -48,6 +48,20 @@ and pedal *import* only.
 settings file through the Lite toggle, and a failed settings write silently
 discards custom-amp scene edits (opus5 `P-state-serialization-content` 4, 10).
 
+**Row identity is resolved too late, and against the wrong snapshot.** 1.2.1
+made every destructive confirmation resolve its target by stable id instead of
+by row number, which closes the window from the prompt onward. The window
+*before* the prompt is still open: `ReloadList` snapshots only names, so the id
+is fetched from the live registry at click time and a deletion in another editor
+between drawing and clicking retargets the confirmation onto its neighbour. The
+IR shaping popover has the same shape with no id at all, `_VolumHasSupportAmp`
+range-checks an index where it should re-resolve `supportCustomId`, and the
+preset bank is still reached through an ambient process-global owner key rather
+than one passed with the operation (gpt `ui-input` 2, 3, 4, 5). All four are the
+same missing rule: snapshot the id when the row is drawn, resolve it immediately
+before the mutation, and refuse rather than fall back to whoever occupies the
+row now.
+
 ## Scope for the planning session
 
 Decide, with reasons, between:
@@ -87,6 +101,8 @@ Whatever is chosen must also answer:
   `NeuralAmpModeler/tests/`.
 - `e2e-standalone-win.ps1` gains a two-writer scenario, since it already runs the
   real app against a sandboxed `LOCALAPPDATA`.
+- An item deleted from a second store between a list being drawn and a row of it
+  being clicked produces "that item is gone", never an action on its neighbour.
 
 ## Out of scope
 

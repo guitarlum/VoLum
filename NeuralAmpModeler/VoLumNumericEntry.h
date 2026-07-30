@@ -66,6 +66,13 @@ inline bool ParseNumericEntry(const std::string& text, double& out)
   if (stop == start)
     return false; // nothing numeric at all: "", "abc", "-", "+"
 
+  // strtod backs up over an exponent it cannot complete, so "1e" parses as 1 and
+  // leaves "e" behind - which the unit rule below would then wave through, turning a
+  // half-typed number into a different, plausible one. No VoLum unit begins with e,
+  // so a leftover e can only be that.
+  if (*stop == 'e' || *stop == 'E')
+    return false;
+
   // Everything after the number must be whitespace or a unit. This is what rejects
   // "1,5" once the second comma rule does not apply, "1.2.3", and "5-3".
   for (const char* p = stop; *p; ++p)

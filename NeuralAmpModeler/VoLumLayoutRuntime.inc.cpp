@@ -59,6 +59,13 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumSupportAmpMenu))
       menu->Hide(true);
 
+    // Before anything reads mVolumDualAmpFocusedSupport. Focus can be pointing at a
+    // SUPPORT lane whose amp has just been set to (none), and this pass is what
+    // repairs it - so a reader that runs first, like the AMP case below choosing
+    // between the two knob groups, would put the support knobs on screen under a
+    // hero, cab row and hint bar that have all already moved back to MAIN.
+    _VolumClampSupportFocus();
+
     // Hide/show the correct group based on focused effect. Pedal bypass affects
     // DSP only: visible controls stay editable so users can prepare settings
     // (including by mouse wheel) before engaging the block.
@@ -191,11 +198,6 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
 
     bool ampExpanded = (mVolumExpandedSection == EVoLumSection::AMP);
     const bool dualActiveNow = GetParam(kDualAmpActive)->Bool();
-    // Before the snapshot, not after: _VolumApplyDualAmpFocus below clamps focus off a
-    // SUPPORT lane that has no amp, and reading the flag first left that lane's toggles
-    // on screen for a whole pass while focus, the hint bar and the arrow keys had
-    // already moved back to MAIN. Idempotent, so clamping twice costs nothing.
-    _VolumClampSupportFocus();
     const bool supportFocusNow = dualActiveNow && mVolumDualAmpFocusedSupport;
     _HideControlGroup(pGfx, "MAIN_LANE_TOGGLES", !ampExpanded || supportFocusNow);
     _HideControlGroup(pGfx, "SUPPORT_LANE_TOGGLES", !ampExpanded || !supportFocusNow);

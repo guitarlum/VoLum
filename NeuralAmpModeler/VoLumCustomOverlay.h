@@ -200,6 +200,7 @@ public:
     // Records that this overlay owns the gesture in progress. See OnMouseDblClick.
     // A click outside the panel closes the overlay and claims nothing.
     mOwnsGesture = PanelRect().Contains(x, y);
+    mGestureConfirmEpoch = VoLumConfirmClickEpoch();
 
     if (mPopupOpen)
     {
@@ -230,13 +231,6 @@ public:
         return;
       }
   }
-
-  // Ownership lasts exactly one gesture. Clearing it only when a double-click
-  // consumed it left the flag true from the click that opened a confirmation
-  // modal, so the stray double-click this guard exists to reject still passed it -
-  // the guard rejected only a double-click on an overlay that had never been
-  // clicked at all, which is not the failing case.
-  void OnMouseUp(float, float, const IMouseMod&) override { mOwnsGesture = false; }
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
   {
@@ -288,16 +282,20 @@ public:
 
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
-    // A double-click only counts if this overlay also received the mouse-down that
-    // began it. Windows delivers down, up, dblclick, up - so when a confirmation
-    // modal sits on top, takes the down and hides itself, the dblclick that follows
-    // is hit-tested afresh and lands here, on whatever row happens to be under the
-    // now-gone Delete button. At the default window size that is row five, so
-    // double-clicking Delete both deleted the chosen item and recalled an unrelated
-    // preset (or selected an unrelated IR, or loaded an unrelated pedal) before
-    // closing Manage. Requiring the matching down makes a gesture that did not
-    // start here inert.
-    const bool ownsGesture = mOwnsGesture;
+    // A double-click only counts if no confirmation modal has eaten a click since
+    // this overlay's last mouse-down. Windows delivers down, up, dblclick, up - so
+    // when a modal sits on top, takes the down and hides itself, the dblclick that
+    // follows is hit-tested afresh and lands here, on whatever row happens to be
+    // under the now-gone Delete button. At the default window size that is row five,
+    // so double-clicking Delete both deleted the chosen item and recalled an
+    // unrelated preset (or selected an unrelated IR, or loaded an unrelated pedal)
+    // before closing Manage.
+    //
+    // The overlay's own events cannot tell the two apart: it sees its own down and
+    // up before a modal opens either way, so clearing the claim on mouse-up rejects
+    // every real row double-click along with the stray one. The modal's click
+    // counter is the difference - it moves in exactly the case to reject.
+    const bool ownsGesture = mOwnsGesture && mGestureConfirmEpoch == VoLumConfirmClickEpoch();
     mOwnsGesture = false;
     if (!ownsGesture)
       return;
@@ -1911,6 +1909,7 @@ private:
   std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text
   int mHoverAction = -1; // hotspot action under the cursor (-1 = none)
   bool mOwnsGesture = false; // this overlay received the mouse-down of the current click
+  unsigned mGestureConfirmEpoch = 0; // VoLumConfirmClickEpoch() at that mouse-down
   std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
 
   // in-overlay popup (builder speaker/channel pickers)

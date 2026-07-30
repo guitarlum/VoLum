@@ -18,6 +18,17 @@
 #include <utility>
 #include <vector>
 
+// Bumped every time the modal consumes a mouse-down. The modal hides on the down,
+// so the second click of a double-click on its own button is hit-tested afresh and
+// lands on whatever surface was underneath. That surface cannot tell such a click
+// from one of its own by looking at its own events - it saw a down and an up before
+// the modal opened either way - so it compares this counter instead.
+inline unsigned& VoLumConfirmClickEpoch()
+{
+  static unsigned epoch = 0;
+  return epoch;
+}
+
 // ---------------------------------------------------------------------------
 // Shared "Are you sure?" confirmation modal, used for every destructive delete
 // (Manage panel + sidebar trash). Attached full-window above other surfaces;
@@ -94,6 +105,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    ++VoLumConfirmClickEpoch();
     if (DeleteRect().Contains(x, y))
     {
       auto cb = mOnConfirm;
@@ -170,4 +182,3 @@ private:
   std::string mTitle, mMessage, mConfirmLabel = "Delete";
   std::function<void()> mOnConfirm;
 };
-

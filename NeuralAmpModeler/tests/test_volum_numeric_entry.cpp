@@ -85,6 +85,15 @@ TEST_CASE("Trailing junk that is not a unit is refused")
   CHECK(Parse("5-3") == kUntouched);
   CHECK(Parse("3 4") == kUntouched);
   CHECK(Parse("2 + 2") == kUntouched);
+
+  // A half-typed exponent is the same trap as "1,5": strtod backs up over the part it
+  // cannot complete and reports 1, and the unit rule then accepts the leftover e as a
+  // unit. Committing a plausible number the user did not type is the outcome this
+  // whole parser exists to prevent.
+  CHECK(Parse("1e") == kUntouched);
+  CHECK(Parse("2.5E") == kUntouched);
+  CHECK(Parse("1e+") == kUntouched);
+  CHECK(Parse("1e3") == doctest::Approx(1000.0)); // a complete one still parses
 }
 
 TEST_CASE("Values that are not finite are refused")
