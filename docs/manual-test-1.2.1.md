@@ -49,19 +49,29 @@ point is what appears on screen.*
   (`3 dB`, `50 %`) and confirm both are accepted.
 - **Manage list with 100+ items:** the overwrite / rename / delete / IR icons on
   rows past the 100th must act on their own row.
-- **Double-click Delete in a confirmation:** the row underneath the button must not
-  also be activated. Try it several times at the default window size, where the
-  button sits over row five.
+- **Double-click, both directions.** This guard was got wrong twice, so check both:
+  - Double-click a Manage row (a preset, an IR, a pedal). It must run that row's
+    normal action - recall / select / load - and close Manage. One version of the
+    fix rejected this along with the bad case.
+  - Double-click Delete in a confirmation. The row underneath the button must
+    *not* also be activated. Try it several times at the default window size,
+    where the button sits over row five.
 - **A selected knob that a mode switch hides** (Tremolo `CROSSOVER`, Delay `TIME`
-  under Sync, the pitch modes): the next arrow key must do *nothing at all*. In
-  particular it must not switch amps (Up/Down) or step the channel (Left/Right) -
-  the first version of this fix let the key through to those handlers.
+  under Sync, the pitch modes):
+  - The next *arrow* key must do nothing at all - in particular it must not switch
+    amps (Up/Down) or step the channel (Left/Right).
+  - The next *Enter*, and the next `B` (plug-in) or Space (standalone), must work
+    on the first press: Enter opens the knob that replaced the hidden one, and the
+    other toggles the focused block. An earlier version ate these too.
 - **Rename a preset, then confirm it renamed the row you clicked.** With two plugin
   windows open: start a rename in one, delete a different preset in the other, then
   press Enter in the first. It must rename the item you named, or say it is gone.
-- **Switch to an amp whose scene has no support partner while SUPPORT is focused.**
-  The cab row must move to MAIN in the same moment, along with MAIN's lane toggles -
-  not one interaction later.
+- **Switch to an amp whose scene has no support partner while SUPPORT is focused,**
+  or set the support amp to `(none)` with SUPPORT focused. Everything must move to
+  MAIN in the same moment: the cab row, MAIN's lane toggles, *and* the amp knobs.
+  The knobs were the last thing still lagging a pass behind.
+- **Type `1e` into an exact-value box.** The knob must not move. `1e3` must be
+  accepted as 1000.
 
 ## 1c. Behaviour that changed on purpose
 
