@@ -604,6 +604,10 @@ private:
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
   std::atomic<bool> mVolumMainLoadFailed{false};
+  // Set when host state was restored into an already-open editor, consumed by the
+  // next OnIdle. UnserializeState runs on the host's thread, and the applier it
+  // wants writes IGraphics controls, so the call has to cross to the UI thread.
+  std::atomic<bool> mVolumUiSyncPending{false};
   // VoLum: when set, the next main-lane load in OnIdle bypasses the
   // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
   // even though its file path is unchanged.
