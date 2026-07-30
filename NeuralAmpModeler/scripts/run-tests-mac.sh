@@ -53,5 +53,19 @@ else
   # --duration prints each case's name as it finishes. doctest cannot report which
   # case it was in when the process dies, so without this a crash in CI is just
   # "Bus error" with no way to narrow it from a machine we do not have.
+  set +e
   "$BUILD_DIR/NeuralAmpModeler-Tests" --duration=true
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    # A signal death prints one line and no backtrace. macOS has already written a
+    # full one; surfacing it here is the difference between "Bus error" and a
+    # symbolicated stack, on a machine most of us cannot reproduce on.
+    echo "=== tests exited $rc; most recent crash reports ==="
+    ls -t "$HOME/Library/Logs/DiagnosticReports/"*.ips 2>/dev/null | head -2 | while read -r report; do
+      echo "--- $report"
+      cat "$report"
+    done
+    exit "$rc"
+  fi
 fi
