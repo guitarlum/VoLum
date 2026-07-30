@@ -571,8 +571,11 @@ inline constexpr std::size_t kMaxPresetNameLen = 28; // preset name
 // cap is the primary guard; this is defense-in-depth at the persistence edge.
 inline std::string ClampName(const std::string& s, std::size_t maxChars)
 {
-  if (s.size() <= maxChars)
-    return s;
+  // No short-circuit on length: a name that is already within the cap can still be
+  // ill-formed - a filename from another machine, a paste from a mangled source - and
+  // this is the last stop before the registry writer, which rejects the whole
+  // document rather than one bad name. Utf8Prefix stops at the first invalid
+  // sequence, so a short bad name is trimmed instead of failing the user's save.
   return Utf8Prefix(s, maxChars);
 }
 

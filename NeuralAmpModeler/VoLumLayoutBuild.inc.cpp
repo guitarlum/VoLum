@@ -166,6 +166,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           (customIdx >= 0 && customIdx < (int)names.size()) ? names[(size_t)customIdx] : std::string();
         auto doDelete = [this, customIdx]() {
           volum::custom::RemoveCustomAmp(customIdx);
+          // The sidebar has nowhere to show a message, unlike the Manage panel. At
+          // least record it, so a library that refused the write is diagnosable from
+          // volum.log instead of only visible as an amp that comes back on relaunch.
+          if (volum::custom::Store().TakeWriteFailure())
+            VOLUM_LOG("library", "custom amp deleted in the UI but the library write failed");
           auto* pGfx2 = GetUI();
           if (!pGfx2)
             return;
