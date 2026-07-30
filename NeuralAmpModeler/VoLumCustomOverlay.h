@@ -8,12 +8,14 @@
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
 #include "VoLumIrFileGuard.h"
+#include "VoLumOverlayActionCodes.h"
 #include "VoLumPresetBar.h"
 #include "VoLumListMenu.h"
 #include "VoLumConfirmDialog.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -38,7 +40,9 @@ public:
 
   // editIdx is the custom-amp index being edited, or -1 for a brand-new amp.
   // The host updates that entry in place (no duplicate) when editIdx >= 0.
-  using BuilderSavedCallback = std::function<void(const volum::custom::CustomAmp& amp, int editIdx)>;
+  // Empty return value means success. A non-empty error keeps the builder open
+  // so a failed copy/NAM validation can never look like a successful save.
+  using BuilderSavedCallback = std::function<std::string(const volum::custom::CustomAmp& amp, int editIdx)>;
   using ChangedCallback = std::function<void()>; // a managed list was mutated
 
   explicit VoLumCustomOverlayControl(const IRECT& fullBounds)
@@ -75,10 +79,18 @@ public:
   // snapshot of preset `index`. When unset the bridge stores default settings.
   using SavePresetCallback = std::function<int(const std::string& name)>;
   using OverwritePresetCallback = std::function<void(int index)>;
-  void SetPresetCallbacks(SavePresetCallback saveCb, OverwritePresetCallback overwriteCb)
+  // Rename and delete go straight to the bridge rather than through the plugin, so
+  // they need the same ownership claim the other three operations make: the bank
+  // they act on is resolved from a process-global key that the most recently
+  // active editor wrote, and without a claim this editor's delete lands in another
+  // instance's bank.
+  using ClaimPresetOpsCallback = std::function<void()>;
+  void SetPresetCallbacks(SavePresetCallback saveCb, OverwritePresetCallback overwriteCb,
+                          ClaimPresetOpsCallback claimCb = nullptr)
   {
     mSavePreset = std::move(saveCb);
     mOverwritePreset = std::move(overwriteCb);
+    mClaimPresetOps = std::move(claimCb);
   }
 
   // ampIdx/ampName only matter for Presets; pedalSlot only for Pedals.
@@ -185,15 +197,25 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    // Records that this overlay owns the gesture in progress. See OnMouseDblClick.
+    // A click outside the panel closes the overlay and claims nothing.
+    mOwnsGesture = PanelRect().Contains(x, y);
+    mGestureConfirmEpoch = VoLumConfirmClickEpoch();
+
     if (mPopupOpen)
     {
       for (const auto& hs : mPopupHotspots)
         if (hs.first.Contains(x, y))
         {
-          HandlePopup(hs.second);
+          HandlePopup(hs.second, hs.first);
           return;
         }
-      mPopupOpen = false; // click elsewhere closes the popup
+      // Only a click OUTSIDE dismisses. Clicking the popover's own chrome - its
+      // title, the gaps between rows, a grayed-out stepper - used to close it,
+      // which made the IR editor feel like it was fighting the user.
+      if (mPopupRect.Contains(x, y))
+        return;
+      mPopupOpen = false;
       SetDirty(false);
       return;
     }
@@ -260,6 +282,24 @@ public:
 
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
+    // A double-click only counts if no confirmation modal has eaten a click since
+    // this overlay's last mouse-down. Windows delivers down, up, dblclick, up - so
+    // when a modal sits on top, takes the down and hides itself, the dblclick that
+    // follows is hit-tested afresh and lands here, on whatever row happens to be
+    // under the now-gone Delete button. At the default window size that is row five,
+    // so double-clicking Delete both deleted the chosen item and recalled an
+    // unrelated preset (or selected an unrelated IR, or loaded an unrelated pedal)
+    // before closing Manage.
+    //
+    // The overlay's own events cannot tell the two apart: it sees its own down and
+    // up before a modal opens either way, so clearing the claim on mouse-up rejects
+    // every real row double-click along with the stray one. The modal's click
+    // counter is the difference - it moves in exactly the case to reject.
+    const bool ownsGesture = mOwnsGesture && mGestureConfirmEpoch == VoLumConfirmClickEpoch();
+    mOwnsGesture = false;
+    if (!ownsGesture)
+      return;
+
     // Double-clicking a Manage row runs its primary action (recall preset /
     // select IR / load pedal) and closes. Icons behave like a single click.
     if (mPopupOpen || mScreen == volum::custom::Screen::Builder)
@@ -276,7 +316,7 @@ public:
       if (hs.first.Contains(x, y))
       {
         const int code = hs.second;
-        if (code >= kRowBase && code < kRowBase + 256)
+        if (code >= kRowBase && code < kRowBase + volum::custom::kActionStride)
         {
           const int idx = code - kRowBase;
           if (mPrimaryAction && idx >= 0 && idx < (int)mItems.size())
@@ -292,6 +332,11 @@ public:
   void OnTextEntryCompletion(const char* str, int) override
   {
     using namespace volum::custom;
+    if (IsIrValueTarget(mTextTarget))
+    {
+      ApplyIrValueEntry(str ? str : "");
+      return;
+    }
     const std::string s = ClampName(str ? str : "", (std::size_t)NameEntryCap(mTextTarget));
     switch (mTextTarget)
     {
@@ -303,7 +348,11 @@ public:
           else
           {
             mError.clear();
-            const int i = mSavePreset ? mSavePreset(s) : AddPreset(mAmpIdx, s);
+            // Only through the plugin: AddPreset() reaches the shared capture hook,
+            // and calling it from here would use whichever instance last published
+            // itself rather than this one. The layout always installs mSavePreset.
+            const int i = mSavePreset ? mSavePreset(s) : -1;
+            ReportLibraryWriteFailure();
             ReloadList();
             mSel = i;
             NotifyChanged();
@@ -313,12 +362,22 @@ public:
       case TextTarget::RenameItem:
         if (mSel >= 0)
         {
-          if (!s.empty() && NameTaken(s, mSel))
+          // Resolve the row again: mSel and mItems both date from before the field
+          // opened. An entry with no id (only possible for a library written before
+          // ids existed) keeps the old positional behaviour.
+          const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);
+          if (target < 0)
+          {
+            mError = "\"" + mRenameName + "\" is no longer in your library.";
+            ReloadList();
+            mSel = -1;
+          }
+          else if (!s.empty() && NameTaken(s, target))
             SetNameError(s);
           else
           {
             mError.clear();
-            ApplyRename(mSel, s);
+            ApplyRename(target, s);
             ReloadList();
             NotifyChanged();
           }
@@ -363,14 +422,19 @@ private:
     kEditName,
     kCabNameBase = 70, // [kCabNameBase, +kNumCabSlots) cab-slot rename chips
     kArtBase = 80, // [kArtBase, kArtBase + kNumCustomArts) art swatch picks
-    kRowBase = 100, // Manage row body (select / double-click primary action)
-    kFileSpeakerBase = 200,
-    kFileChannelBase = 300,
-    kFileRemoveBase = 400,
-    kRowOverwriteBase = 500, // Manage inline [overwrite] icon (presets only)
-    kRowRenameBase = 600, // Manage inline [pen] icon
-    kRowDeleteBase = 700, // Manage inline [trash] icon
-    kPopupBase = 1000
+    // Row-indexed families, each "base + row index". Spaced by kActionStride
+    // rather than by 100: a library has as many rows as the user made, and at 100
+    // apart the families overlapped from the 101st row on, so an icon click ran a
+    // different row's action. See VoLumOverlayActionCodes.h.
+    kRowBase = volum::custom::ActionBase(volum::custom::ActionFamily::Row),
+    kFileSpeakerBase = volum::custom::ActionBase(volum::custom::ActionFamily::FileSpeaker),
+    kFileChannelBase = volum::custom::ActionBase(volum::custom::ActionFamily::FileChannel),
+    kFileRemoveBase = volum::custom::ActionBase(volum::custom::ActionFamily::FileRemove),
+    kRowOverwriteBase = volum::custom::ActionBase(volum::custom::ActionFamily::Overwrite),
+    kRowRenameBase = volum::custom::ActionBase(volum::custom::ActionFamily::Rename),
+    kRowDeleteBase = volum::custom::ActionBase(volum::custom::ActionFamily::Delete),
+    kRowIrCfgBase = volum::custom::ActionBase(volum::custom::ActionFamily::IrCfg),
+    kPopupBase = volum::custom::ActionBase(volum::custom::ActionFamily::Popup)
   };
 
   enum class TextTarget
@@ -379,14 +443,60 @@ private:
     NewItem,
     RenameItem,
     ProfileName,
-    CabName
+    CabName,
+    IrTrim,
+    IrLowCut,
+    IrHighCut
   };
+
+  static bool IsIrValueTarget(TextTarget t)
+  {
+    return t == TextTarget::IrTrim || t == TextTarget::IrLowCut || t == TextTarget::IrHighCut;
+  }
 
   enum class PopupKind
   {
     Speaker,
-    Channel
+    Channel,
+    IrSettings // per-IR trim + low/high cut editor (VoLum 1.2.1)
   };
+
+  // Popup-local action codes for the IR-settings editor (offsets from kPopupBase).
+  enum IrCfgPopupAction
+  {
+    kIrCfgTrimDown = 0,
+    kIrCfgTrimUp,
+    kIrCfgLowDown,
+    kIrCfgLowUp,
+    kIrCfgHighDown,
+    kIrCfgHighUp,
+    // Clicking a value field types the number directly instead of stepping to it.
+    kIrCfgTrimEdit,
+    kIrCfgLowEdit,
+    kIrCfgHighEdit
+  };
+
+  // IR shaping popover geometry. The panel height is derived from these rather than
+  // hardcoded, so rows always fill it exactly - the 1.2.1 build had 16 px of dead
+  // space under the last row because the two numbers were maintained separately.
+  static constexpr float kIrPopupW = 268.f;
+  static constexpr float kIrPopupPad = 12.f;
+  static constexpr float kIrPopupTitleH = 18.f;
+  static constexpr float kIrPopupTitleGap = 10.f;
+  static constexpr float kIrPopupRowH = 26.f;
+  static constexpr float kIrPopupRowGap = 8.f;
+  static constexpr int kIrPopupRows = 3;
+  static constexpr float kIrPopupH = 2.f * kIrPopupPad + kIrPopupTitleH + kIrPopupTitleGap + kIrPopupRows * kIrPopupRowH
+                                     + (kIrPopupRows - 1) * kIrPopupRowGap;
+  static constexpr float kIrRowLabelW = 62.f;
+  static constexpr float kIrRowBtnW = 24.f;
+  static constexpr float kIrRowBtnGap = 5.f;
+
+  static IRECT IrRowRect(const IRECT& inner, int row)
+  {
+    const float t = inner.T + kIrPopupTitleH + kIrPopupTitleGap + row * (kIrPopupRowH + kIrPopupRowGap);
+    return IRECT(inner.L, t, inner.R, t + kIrPopupRowH);
+  }
 
   IRECT PanelRect() const
   {
@@ -425,6 +535,10 @@ private:
 
   void ReloadList()
   {
+    // The preset bank is resolved from a process-global key, so listing it needs the
+    // same claim its rename and delete make. Without one this panel can show another
+    // instance's presets, and then rename or delete the row the user clicked in it.
+    ClaimPresetOpsIfNeeded();
     switch (mManageKind)
     {
       case ManageKind::IR: mItems = volum::custom::MockIRLibrary(); break;
@@ -435,26 +549,73 @@ private:
       mSel = mItems.empty() ? -1 : (int)mItems.size() - 1;
   }
 
+  // Stable id of the item at a row, and the row an id is at now.
+  //
+  // A confirmation prompt names an item but used to remember only its row. The
+  // library is process-global, so a second plugin editor can delete an earlier row
+  // while the prompt is open; confirming then acted on whatever had shifted into
+  // that position - deleting or overwriting an item the prompt never mentioned.
+  std::string RowIdAt(int idx) const
+  {
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return volum::custom::IRIdAt(idx);
+      case ManageKind::Pedals: return volum::custom::PedalIdAt(idx);
+      default: return volum::custom::PresetIdAt(idx);
+    }
+  }
+
+  int RowIndexById(const std::string& id) const
+  {
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return volum::custom::IRIndexById(id);
+      case ManageKind::Pedals: return volum::custom::PedalIndexById(id);
+      default: return volum::custom::PresetIndexById(id);
+    }
+  }
+
+  // The library mutators are void: they change the in-memory registry and ask the
+  // store to persist it, and until now a write that never reached the disk left
+  // the list looking updated and the dialog closing as if all was well. The user
+  // then lost the whole session's library work at exit with nothing said. Say it.
+  void ReportLibraryWriteFailure()
+  {
+    if (!volum::custom::Store().TakeWriteFailure())
+      return;
+    mError = "Your library could not be saved - this change will be lost.";
+  }
+
+  void ClaimPresetOpsIfNeeded()
+  {
+    if (mManageKind == ManageKind::Presets && mClaimPresetOps)
+      mClaimPresetOps();
+  }
+
   void ApplyRename(int idx, const std::string& name)
   {
     using namespace volum::custom;
+    ClaimPresetOpsIfNeeded();
     switch (mManageKind)
     {
       case ManageKind::IR: RenameIR(idx, name); break;
       case ManageKind::Pedals: RenamePedal(idx, name); break;
       default: RenamePreset(mAmpIdx, idx, name); break;
     }
+    ReportLibraryWriteFailure();
   }
 
   void ApplyDelete(int idx)
   {
     using namespace volum::custom;
+    ClaimPresetOpsIfNeeded();
     switch (mManageKind)
     {
       case ManageKind::IR: DeleteIR(idx); break;
       case ManageKind::Pedals: DeletePedal(idx); break;
       default: DeletePreset(mAmpIdx, idx); break;
     }
+    ReportLibraryWriteFailure();
   }
 
   void NotifyChanged()
@@ -505,6 +666,7 @@ private:
     // grows as we add - and reported together.
     std::vector<std::string> skipped;
     std::vector<std::string> tooLarge;
+    std::vector<std::string> failed;
     int added = 0;
     for (const auto& fn : files)
     {
@@ -525,7 +687,7 @@ private:
       if (mManageKind == ManageKind::IR)
       {
         std::error_code ec;
-        const std::uintmax_t bytes = std::filesystem::file_size(std::filesystem::path(fn.Get()), ec);
+        const std::uintmax_t bytes = std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec);
         if (!ec && !volum::IrFileBytesAcceptable(bytes))
         {
           tooLarge.push_back(base);
@@ -537,23 +699,46 @@ private:
       // resolvable registry-relative path. When no base dir is set (unit tests),
       // ImportFileCopy returns "" and we fall back to the bare filename.
       auto& store = volum::content::GlobalContentStore();
+      const char* const subDir = (mManageKind == ManageKind::IR) ? "ir" : "pedals";
+      const char* const idPrefix = (mManageKind == ManageKind::IR) ? "ir" : "pedal";
+      const std::string idp = volum::content::MintId(store.reg(), idPrefix);
+      std::string rel = store.ImportFileCopy(volum::content::PathFromUtf8(fn.Get()), subDir, idp);
+      if (rel.empty())
+      {
+        // With a base dir configured, an empty result means the copy itself failed
+        // - unreadable source, full or read-only disk. Recording the bare filename
+        // instead used to make that look like a successful import and left an entry
+        // in the library that could never load.
+        if (store.HasBaseDir())
+        {
+          failed.push_back(base);
+          continue;
+        }
+        rel = leaf; // unconfigured store (unit tests): nothing was copied anywhere
+      }
+
       if (mManageKind == ManageKind::IR)
       {
-        const std::string idp = volum::content::MintId(store.reg(), "ir");
-        std::string rel = store.ImportFileCopy(std::filesystem::path(fn.Get()), "ir", idp);
-        if (rel.empty())
-          rel = leaf;
-        volum::custom::AddIR(base, rel);
+        if (volum::custom::AddIR(base, rel) < 0)
+        {
+          store.RemoveStoredFile(rel);
+          failed.push_back(base);
+          continue;
+        }
       }
       else
       {
-        const std::string idp = volum::content::MintId(store.reg(), "pedal");
-        std::string rel = store.ImportFileCopy(std::filesystem::path(fn.Get()), "pedals", idp);
-        if (rel.empty())
-          rel = leaf;
+        // Ask before adding, because -1 has two causes and the user needs to know
+        // which: a full capture pool is fixed by deleting a pedal, a library that
+        // will not write is not.
+        const bool slotsFull = volum::custom::PedalSlotsFull();
         if (volum::custom::AddPedal(base, rel) < 0)
         {
-          mError = "Custom pedal slots are full - delete a pedal first.";
+          store.RemoveStoredFile(rel);
+          if (slotsFull)
+            mError = "Custom pedal slots are full - delete a pedal first.";
+          else
+            failed.push_back(base);
           continue;
         }
       }
@@ -566,10 +751,12 @@ private:
       mSel = (int)mItems.size() - 1;
       NotifyChanged();
     }
-    if (!tooLarge.empty())
-      mError = tooLarge.size() == 1
-                 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
-                 : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");
+    if (!failed.empty())
+      mError = failed.size() == 1 ? ("\"" + failed.front() + "\" could not be added to your library.")
+                                  : (std::to_string(failed.size()) + " files could not be added to your library.");
+    else if (!tooLarge.empty())
+      mError = tooLarge.size() == 1 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
+                                    : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");
     else if (!skipped.empty())
       mError = skipped.size() == 1 ? ("\"" + skipped.front() + "\" already exists - skipped.")
                                    : (std::to_string(skipped.size()) + " names already existed - skipped.");
@@ -593,24 +780,43 @@ private:
   {
     switch (target)
     {
+      case TextTarget::IrTrim:
+      case TextTarget::IrLowCut:
+      case TextTarget::IrHighCut: return 12; // "-12.5 dB", "16.0 kHz", "Off"
       case TextTarget::CabName: return 3;
       case TextTarget::ProfileName: return (int)volum::custom::kMaxCustomNameLen; // amp name
       case TextTarget::NewItem: return (int)volum::custom::kMaxPresetNameLen; // new preset
       case TextTarget::RenameItem:
         return (int)(mManageKind == ManageKind::Presets ? volum::custom::kMaxPresetNameLen
-                                                         : volum::custom::kMaxCustomNameLen);
+                                                        : volum::custom::kMaxCustomNameLen);
       default: return (int)volum::custom::kMaxCustomNameLen;
     }
   }
 
-  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current)
+  // Typed entry inside the IR popover. The field is grown a little past the value
+  // rect so a caret plus "-12.5 dB" is comfortably readable, and the popover stays
+  // open underneath so the result is visible the moment the entry commits.
+  void StartIrValueEntry(TextTarget target, const IRECT& valueRect, const std::string& current)
+  {
+    IRECT box = valueRect.GetPadded(2.f);
+    if (box.W() < 90.f)
+      box = IRECT(box.R - 90.f, box.T, box.R, box.B);
+    // Centred, unlike the left-aligned name fields: these rows read as values and
+    // the entry sits exactly where the value was, so left-aligning it makes the
+    // text jump sideways the moment the field opens.
+    IText centred = mEntryText;
+    centred.mAlign = EAlign::Center;
+    StartTextEntry(target, box, current, &centred);
+  }
+
+  void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, const IText* style = nullptr)
   {
     auto* ui = GetUI();
     if (!ui)
       return;
     mTextTarget = target;
     SetTextEntryLength(NameEntryCap(target));
-    ui->CreateTextEntry(*this, mEntryText, bounds, current.c_str());
+    ui->CreateTextEntry(*this, style ? *style : mEntryText, bounds, current.c_str());
   }
 
   /* ---------------- action handling ---------------- */
@@ -634,25 +840,30 @@ private:
   void HandleManageAction(int action, const IRECT& rect)
   {
     // Inline per-row icons select that row, then run overwrite / rename / delete.
-    if (action >= kRowOverwriteBase && action < kRowOverwriteBase + 100)
+    if (action >= kRowOverwriteBase && action < kRowOverwriteBase + volum::custom::kActionStride)
     {
       mSel = action - kRowOverwriteBase;
       HandleManageAction(kUpdate, rect);
       return;
     }
-    if (action >= kRowRenameBase && action < kRowRenameBase + 100)
+    if (action >= kRowRenameBase && action < kRowRenameBase + volum::custom::kActionStride)
     {
       mSel = action - kRowRenameBase;
       HandleManageAction(kRename, rect);
       return;
     }
-    if (action >= kRowDeleteBase && action < kRowDeleteBase + 100)
+    if (action >= kRowDeleteBase && action < kRowDeleteBase + volum::custom::kActionStride)
     {
       mSel = action - kRowDeleteBase;
       HandleManageAction(kDelete, rect);
       return;
     }
-    if (action >= kRowBase && action < kRowBase + 256)
+    if (action >= kRowIrCfgBase && action < kRowIrCfgBase + volum::custom::kActionStride)
+    {
+      OpenIrSettingsPopup(action - kRowIrCfgBase, rect);
+      return;
+    }
+    if (action >= kRowBase && action < kRowBase + volum::custom::kActionStride)
     {
       mSel = action - kRowBase;
       SetDirty(false);
@@ -679,9 +890,23 @@ private:
         {
           const int idx = mSel;
           const std::string nm = mItems[(size_t)idx];
-          auto doOverwrite = [this, idx]() {
+          // Remembered by id, not by row: see RowIdAt. A registry entry with no id
+          // at all (only possible for a library written before ids existed) keeps
+          // the old positional behaviour rather than becoming unusable.
+          const std::string id = RowIdAt(idx);
+          auto doOverwrite = [this, id, idx, nm]() {
+            const int now = id.empty() ? idx : RowIndexById(id);
+            if (now < 0)
+            {
+              mError = "\"" + nm + "\" is no longer in your library.";
+              ReloadList();
+              mSel = -1;
+              SetDirty(false);
+              return;
+            }
             if (mOverwritePreset)
-              mOverwritePreset(idx);
+              mOverwritePreset(now);
+            ReportLibraryWriteFailure();
             NotifyChanged();
             SetDirty(false);
           };
@@ -693,15 +918,35 @@ private:
         break;
       case kRename:
         if (mSel >= 0 && mSel < (int)mItems.size())
+        {
+          // Remembered by id, like delete and overwrite: a text field can stay open
+          // for as long as the user is typing, and a deletion in another editor
+          // during that time shifts every row below it.
+          mRenameId = RowIdAt(mSel);
+          mRenameName = mItems[(size_t)mSel];
           StartTextEntry(TextTarget::RenameItem, NameEntryRect(rect), mItems[(size_t)mSel]);
+        }
         break;
       case kDelete:
         if (mSel >= 0 && mSel < (int)mItems.size())
         {
           const int idx = mSel;
           const std::string nm = mItems[(size_t)idx];
-          auto doDelete = [this, idx]() {
-            ApplyDelete(idx);
+          // Remembered by id, not by row: see RowIdAt. Deleting the wrong item here
+          // is unrecoverable, which is exactly what the prompt promises it is not.
+          // An entry with no id keeps the old positional behaviour.
+          const std::string id = RowIdAt(idx);
+          auto doDelete = [this, id, idx, nm]() {
+            const int now = id.empty() ? idx : RowIndexById(id);
+            if (now < 0)
+            {
+              mError = "\"" + nm + "\" is no longer in your library.";
+              ReloadList();
+              mSel = -1;
+              SetDirty(false);
+              return;
+            }
+            ApplyDelete(now);
             ReloadList();
             mSel = -1;
             NotifyChanged();
@@ -721,6 +966,8 @@ private:
   void HandleBuilderAction(int action, const IRECT& rect)
   {
     using namespace volum::custom;
+    if (action != kBuilderSave)
+      mError.clear();
     if (action == kEditName)
     {
       StartTextEntry(TextTarget::ProfileName, rect.GetPadded(-2.f), mBuilderAmp.name);
@@ -782,7 +1029,14 @@ private:
       if (SaveDisabledReason(mBuilderAmp).empty())
       {
         if (mBuilderSaved)
-          mBuilderSaved(mBuilderAmp, mBuilderEditIdx);
+        {
+          mError = mBuilderSaved(mBuilderAmp, mBuilderEditIdx);
+          if (!mError.empty())
+          {
+            SetDirty(false);
+            return;
+          }
+        }
         Hide(true);
       }
       return;
@@ -795,7 +1049,7 @@ private:
     }
     // Per-file action ranges are 100 apart, so each span must stay < 100 to
     // avoid one branch swallowing another's codes.
-    if (action >= kFileRemoveBase && action < kFileRemoveBase + 100)
+    if (action >= kFileRemoveBase && action < kFileRemoveBase + volum::custom::kActionStride)
     {
       const int i = action - kFileRemoveBase;
       if (i >= 0 && i < (int)mBuilderAmp.files.size())
@@ -803,12 +1057,12 @@ private:
       SetDirty(false);
       return;
     }
-    if (action >= kFileChannelBase && action < kFileChannelBase + 100)
+    if (action >= kFileChannelBase && action < kFileChannelBase + volum::custom::kActionStride)
     {
       OpenChannelPopup(action - kFileChannelBase, rect);
       return;
     }
-    if (action >= kFileSpeakerBase && action < kFileSpeakerBase + 100)
+    if (action >= kFileSpeakerBase && action < kFileSpeakerBase + volum::custom::kActionStride)
     {
       OpenSpeakerPopup(action - kFileSpeakerBase, rect);
       return;
@@ -843,6 +1097,27 @@ private:
     LayoutPopup(anchor);
   }
 
+  // IR shaping editor: a compact fixed-size popover (trim + low/high cut), anchored
+  // to the row's gear icon. Distinct from the list popups (Speaker/Channel).
+  void OpenIrSettingsPopup(int irIdx, const IRECT& anchor)
+  {
+    if (mManageKind != ManageKind::IR || irIdx < 0 || irIdx >= (int)mItems.size())
+      return;
+    mPopupKind = PopupKind::IrSettings;
+    mPopupIrIdx = irIdx;
+    const float w = kIrPopupW, h = kIrPopupH;
+    const IRECT panel = PanelRect();
+    float left = anchor.R - w; // hang left from the gear so it stays on-panel
+    if (left < panel.L + 6.f)
+      left = panel.L + 6.f;
+    float top = anchor.B + 2.f;
+    if (top + h > panel.B - 6.f)
+      top = std::max(panel.T + 6.f, anchor.T - 2.f - h);
+    mPopupRect = IRECT(left, top, left + w, top + h);
+    mPopupOpen = true;
+    SetDirty(false);
+  }
+
   void LayoutPopup(const IRECT& anchor)
   {
     const float rowH = 20.f;
@@ -860,9 +1135,14 @@ private:
     SetDirty(false);
   }
 
-  void HandlePopup(int code)
+  void HandlePopup(int code, const IRECT& rect)
   {
     using namespace volum::custom;
+    if (mPopupKind == PopupKind::IrSettings)
+    {
+      HandleIrSettingsPopup(code - kPopupBase, rect);
+      return;
+    }
     const int j = code - kPopupBase;
     if (j < 0 || j >= (int)mPopupItems.size())
     {
@@ -892,8 +1172,73 @@ private:
     SetDirty(false);
   }
 
+  // One +/- click on the IR editor: step the value, persist, and re-push live so the
+  // audible level/tone change is immediate. The popover stays open for further tweaks.
+  void HandleIrSettingsPopup(int act, const IRECT& rect)
+  {
+    using namespace volum::custom;
+    if (mPopupIrIdx < 0 || mPopupIrIdx >= (int)mItems.size())
+    {
+      mPopupOpen = false;
+      SetDirty(false);
+      return;
+    }
+    IRShaping s = IRShapingAt(mPopupIrIdx);
+    switch (act)
+    {
+      // Prefilled with the formatted value on purpose: it doubles as a hint that
+      // "1.5 kHz", "-3 dB" and "Off" are all accepted spellings.
+      case kIrCfgTrimEdit: StartIrValueEntry(TextTarget::IrTrim, rect, FmtIrTrim(s.trimDb)); return;
+      case kIrCfgLowEdit: StartIrValueEntry(TextTarget::IrLowCut, rect, FmtIrCut(s.lowCutHz)); return;
+      case kIrCfgHighEdit: StartIrValueEntry(TextTarget::IrHighCut, rect, FmtIrCut(s.highCutHz)); return;
+      case kIrCfgTrimDown: s.trimDb = volum::content::StepIrTrimDb(s.trimDb, -1); break;
+      case kIrCfgTrimUp: s.trimDb = volum::content::StepIrTrimDb(s.trimDb, +1); break;
+      case kIrCfgLowDown: s.lowCutHz = volum::content::StepIrLowCutHz(s.lowCutHz, -1); break;
+      case kIrCfgLowUp: s.lowCutHz = volum::content::StepIrLowCutHz(s.lowCutHz, +1); break;
+      case kIrCfgHighDown: s.highCutHz = volum::content::StepIrHighCutHz(s.highCutHz, -1); break;
+      case kIrCfgHighUp: s.highCutHz = volum::content::StepIrHighCutHz(s.highCutHz, +1); break;
+      default: return; // click on the panel chrome: keep it open
+    }
+    SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
+    ReportLibraryWriteFailure();
+    NotifyChanged(); // plugin migrates/re-pushes shaping to the live IR lanes
+    SetDirty(false);
+  }
+
+  // Commit a typed IR value. Typed numbers are continuous within the control's
+  // range rather than snapped to the stepper ladder - someone who types 137 Hz
+  // means 137 Hz. Unparseable text leaves the value alone instead of resetting it.
+  void ApplyIrValueEntry(const std::string& text)
+  {
+    using namespace volum::custom;
+    const TextTarget target = mTextTarget;
+    mTextTarget = TextTarget::None;
+    if (mPopupIrIdx < 0 || mPopupIrIdx >= (int)mItems.size())
+    {
+      SetDirty(false);
+      return;
+    }
+    IRShaping s = IRShapingAt(mPopupIrIdx);
+    switch (target)
+    {
+      case TextTarget::IrTrim: s.trimDb = volum::content::ApplyTypedIrTrimDb(text, s.trimDb); break;
+      case TextTarget::IrLowCut: s.lowCutHz = volum::content::ApplyTypedIrLowCutHz(text, s.lowCutHz); break;
+      case TextTarget::IrHighCut: s.highCutHz = volum::content::ApplyTypedIrHighCutHz(text, s.highCutHz); break;
+      default: SetDirty(false); return;
+    }
+    SetIRShaping(mPopupIrIdx, s.trimDb, s.lowCutHz, s.highCutHz);
+    ReportLibraryWriteFailure();
+    NotifyChanged();
+    SetDirty(false);
+  }
+
   void DrawPopup(IGraphics& g)
   {
+    if (mPopupKind == PopupKind::IrSettings)
+    {
+      DrawIrSettingsPopup(g);
+      return;
+    }
     g.FillRoundRect(VoLumColors::HERO_BG, mPopupRect, 4.f);
     g.DrawRoundRect(VoLumColors::TEAL_DIM, mPopupRect, 4.f, nullptr, 1.5f);
     const float rowH = 20.f;
@@ -906,6 +1251,83 @@ private:
                  mPopupItems[(size_t)j].c_str(), row.GetPadded(-8.f, 0.f, -4.f, 0.f));
       mPopupHotspots.emplace_back(row, kPopupBase + j);
     }
+  }
+
+  static std::string FmtIrTrim(double db)
+  {
+    char b[24];
+    std::snprintf(b, sizeof(b), "%+.1f dB", db);
+    return b;
+  }
+  static std::string FmtIrCut(double hz)
+  {
+    if (!(hz > 0.0))
+      return "Off";
+    char b[24];
+    if (hz >= 1000.0)
+      std::snprintf(b, sizeof(b), "%.1f kHz", hz / 1000.0);
+    else
+      std::snprintf(b, sizeof(b), "%.0f Hz", hz);
+    return b;
+  }
+
+  // One label / value / [-] [+] line inside the IR editor. `downAct`/`upAct` are
+  // popup action offsets registered as hotspots for the steppers, `editAct` makes the
+  // value field itself clickable for typed entry. A stepper at its rail is drawn dim
+  // and registers no hotspot, so it neither reacts nor dismisses the popover.
+  void DrawIrStepperRow(IGraphics& g, const IRECT& row, const char* label, const std::string& value, int downAct,
+                        int upAct, int editAct, volum::content::IrStepAvail avail)
+  {
+    g.DrawText(IText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Middle), label,
+               IRECT(row.L, row.T, row.L + kIrRowLabelW, row.B));
+
+    const IRECT plus(row.R - kIrRowBtnW, row.T, row.R, row.B);
+    const IRECT minus(plus.L - kIrRowBtnGap - kIrRowBtnW, row.T, plus.L - kIrRowBtnGap, row.B);
+    const IRECT valueR(row.L + kIrRowLabelW, row.T, minus.L - 8.f, row.B);
+
+    // The value reads as an editable field so the typed-entry affordance is visible
+    // without a hover, matching how the rest of the overlay marks click targets.
+    g.FillRoundRect(VoLumColors::BTN_OFF_BG, valueR, 3.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, valueR, 3.f, nullptr, 1.f);
+    g.DrawText(IText(12.f, VoLumColors::CREAM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), value.c_str(), valueR);
+    mPopupHotspots.emplace_back(valueR, kPopupBase + editAct);
+
+    const std::pair<IRECT, bool> btns[] = {{minus, false}, {plus, true}};
+    const bool enabled[] = {avail.canDown, avail.canUp};
+    for (int i = 0; i < 2; ++i)
+    {
+      const IRECT& r = btns[i].first;
+      const bool on = enabled[i];
+      g.FillRoundRect(on ? VoLumColors::BTN_OFF_BG : IColor(8, 200, 162, 78), r, 3.f);
+      g.DrawRoundRect(on ? VoLumColors::TEAL_DIM : IColor(60, 120, 140, 120), r, 3.f, nullptr, 1.f);
+      const IColor glyph = on ? VoLumColors::CREAM : IColor(70, 220, 214, 190);
+      const float cx = r.MW(), cy = r.MH();
+      g.DrawLine(glyph, cx - 4.f, cy, cx + 4.f, cy, nullptr, 1.4f);
+      if (btns[i].second)
+        g.DrawLine(glyph, cx, cy - 4.f, cx, cy + 4.f, nullptr, 1.4f);
+      if (on)
+        mPopupHotspots.emplace_back(r, kPopupBase + (btns[i].second ? upAct : downAct));
+    }
+  }
+
+  void DrawIrSettingsPopup(IGraphics& g)
+  {
+    using namespace volum::custom;
+    g.FillRoundRect(VoLumColors::HERO_BG, mPopupRect, 4.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, mPopupRect, 4.f, nullptr, 1.5f);
+    const IRShaping s = IRShapingAt(mPopupIrIdx);
+    const IRECT inner = mPopupRect.GetPadded(-kIrPopupPad);
+    const IRECT title(inner.L, inner.T, inner.R, inner.T + kIrPopupTitleH);
+    g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "IR SHAPING", title);
+    g.DrawText(IText(9.f, VoLumColors::CREAM_DIM, "Josefin-Regular", EAlign::Far, EVAlign::Middle),
+               "click a value to type", title);
+
+    DrawIrStepperRow(g, IrRowRect(inner, 0), "Level", FmtIrTrim(s.trimDb), kIrCfgTrimDown, kIrCfgTrimUp, kIrCfgTrimEdit,
+                     volum::content::IrTrimStepAvail(s.trimDb));
+    DrawIrStepperRow(g, IrRowRect(inner, 1), "Low cut", FmtIrCut(s.lowCutHz), kIrCfgLowDown, kIrCfgLowUp, kIrCfgLowEdit,
+                     volum::content::IrLowCutStepAvail(s.lowCutHz));
+    DrawIrStepperRow(g, IrRowRect(inner, 2), "High cut", FmtIrCut(s.highCutHz), kIrCfgHighDown, kIrCfgHighUp,
+                     kIrCfgHighEdit, volum::content::IrHighCutStepAvail(s.highCutHz));
   }
 
   /* ---------------- shared draw helpers ---------------- */
@@ -1034,7 +1456,6 @@ private:
 
       g.PathClipRegion(listArea);
       const float iconW = 24.f;
-      const int nIcons = presets ? 3 : 2;
       float y = listArea.T + 4.f - mManageScroll;
       for (int i = 0; i < (int)mItems.size(); i++)
       {
@@ -1061,6 +1482,17 @@ private:
         const IRECT pen(ix, row.T, ix + iconW, row.B);
         DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
         AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
+        if (mManageKind == ManageKind::IR)
+        {
+          ix -= iconW;
+          const IRECT gear(ix, row.T, ix + iconW, row.B);
+          // A tinted gear when this IR carries a non-default trim/cut, so a shaped
+          // IR reads as edited at a glance.
+          const volum::custom::IRShaping s = volum::custom::IRShapingAt(i);
+          const bool shaped = (s.trimDb != 0.0) || (s.lowCutHz > 0.0) || (s.highCutHz > 0.0);
+          DrawGearGlyph(g, gear, shaped ? VoLumColors::GOLD : VoLumColors::CREAM_DIM);
+          AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
+        }
         ix -= iconW;
         if (presets)
         {
@@ -1106,8 +1538,8 @@ private:
         const float maxScroll = contentH - listArea.H();
         const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
         const float t = (maxScroll > 0.f) ? (mManageScroll / maxScroll) : 0.f;
-        const IRECT thumb(track.L, track.T + (track.H() - thumbH) * t, track.R,
-                          track.T + (track.H() - thumbH) * t + thumbH);
+        const IRECT thumb(
+          track.L, track.T + (track.H() - thumbH) * t, track.R, track.T + (track.H() - thumbH) * t + thumbH);
         DrawVoLumScrollbar(g, track, thumb);
       }
     }
@@ -1267,9 +1699,19 @@ private:
       g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, thumbY, track.R, thumbY + thumbH));
     }
 
-    DrawFooter(g, IRECT(left.L, left.B - 30.f, left.R, left.B),
-               "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
-               "Sparse coverage is fine. Stored as a per-amp manifest - your files are never renamed.");
+    const IRECT builderFooter(left.L, left.B - 30.f, left.R, left.B);
+    if (!mError.empty())
+    {
+      g.PathClipRegion(builderFooter);
+      g.DrawText(
+        IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), mError.c_str(), builderFooter);
+      g.PathClipRegion();
+    }
+    else
+    {
+      DrawFooter(g, builderFooter, "Pick a speaker (DIRECT = amp-only, pair with a custom IR) and channel per file.",
+                 "Sparse coverage is fine. Stored as a per-amp manifest - your files are never renamed.");
+    }
 
     // ---- RIGHT (top): art picker as a 3x2 gallery -------------------------
     {
@@ -1440,23 +1882,41 @@ private:
     g.DrawLine(col, cx - 6.f, cy + 6.f, cx + 6.f, cy + 6.f, nullptr, t);
   }
 
+  // Gear / cog: a ring of short teeth around a hollow hub. Opens the IR shaping editor.
+  static void DrawGearGlyph(IGraphics& g, const IRECT& r, const IColor& col)
+  {
+    const float cx = r.MW(), cy = r.MH();
+    const float t = 1.2f;
+    const float rIn = 3.2f, rOut = 6.0f;
+    for (int k = 0; k < 8; ++k)
+    {
+      const float a = (float)k * (3.14159265f / 4.f);
+      const float ca = std::cos(a), sa = std::sin(a);
+      g.DrawLine(col, cx + ca * rIn, cy + sa * rIn, cx + ca * rOut, cy + sa * rOut, nullptr, t);
+    }
+    g.DrawCircle(col, cx, cy, rIn, nullptr, t);
+  }
+
   volum::custom::Screen mScreen = volum::custom::Screen::Presets;
   ManageKind mManageKind = ManageKind::Presets;
   int mAmpIdx = 0;
   std::string mAmpName;
   std::vector<std::string> mItems;
   int mSel = -1;
-  std::string mError; // transient "name already exists" banner (Manage screen)
+  std::string mError; // transient validation/name banner (Manage + Builder)
   volum::custom::CustomAmp mBuilderAmp;
   std::vector<std::pair<IRECT, int>> mHotspots;
   std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text
   int mHoverAction = -1; // hotspot action under the cursor (-1 = none)
+  bool mOwnsGesture = false; // this overlay received the mouse-down of the current click
+  unsigned mGestureConfirmEpoch = 0; // VoLumConfirmClickEpoch() at that mouse-down
   std::string mCurTip; // last tooltip pushed via SetTooltip (de-dupe)
 
   // in-overlay popup (builder speaker/channel pickers)
   bool mPopupOpen = false;
   PopupKind mPopupKind = PopupKind::Speaker;
   int mPopupFileIdx = -1;
+  int mPopupIrIdx = -1; // IR library index for PopupKind::IrSettings
   IRECT mPopupRect;
   std::vector<std::string> mPopupItems;
   std::vector<std::pair<IRECT, int>> mPopupHotspots;
@@ -1464,6 +1924,10 @@ private:
   // pending text entry target
   TextTarget mTextTarget = TextTarget::None;
   int mTextCabSlot = -1; // cab slot being renamed (TextTarget::CabName)
+  // The row a rename is for, remembered by identity because the field can stay open
+  // across another editor's deletion (TextTarget::RenameItem).
+  std::string mRenameId;
+  std::string mRenameName;
   IText mEntryText;
 
   int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals
@@ -1477,4 +1941,5 @@ private:
   PrimaryActionCallback mPrimaryAction;
   SavePresetCallback mSavePreset;
   OverwritePresetCallback mOverwritePreset;
+  ClaimPresetOpsCallback mClaimPresetOps;
 };

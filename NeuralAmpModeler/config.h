@@ -1,7 +1,7 @@
 #define PLUG_NAME "VoLum"
 #define PLUG_MFR "Lum"
-#define PLUG_VERSION_HEX 0x00010200
-#define PLUG_VERSION_STR "1.2.0"
+#define PLUG_VERSION_HEX 0x00010201
+#define PLUG_VERSION_STR "1.2.1"
 #define PLUG_UNIQUE_ID 'VoLm'
 #define PLUG_MFR_ID 'Lum0'
 #define PLUG_URL_STR "https://github.com/guitarlum/VoLum"
@@ -101,7 +101,8 @@
 #define METERBACKGROUND2X_FN "MeterBackground@2x.png"
 #define METERBACKGROUND3X_FN "MeterBackground@3x.png"
 
-// Standalone only: if 1, settings overlay opens on launch (for scripts/ui-mockup capture — see scripts/capture-volum-settings-ui.ps1).
+// Standalone only: if 1, settings overlay opens on launch (for scripts/ui-mockup capture — see
+// scripts/capture-volum-settings-ui.ps1).
 #if defined(APP_API)
   #ifndef VOLUM_OPEN_SETTINGS_AT_LAUNCH
     #define VOLUM_OPEN_SETTINGS_AT_LAUNCH 0

@@ -13,7 +13,7 @@ class ChunkVersion
 {
 public:
   ChunkVersion(int major, int minor, int patch)
- : mMajor(major)
+  : mMajor(major)
   , mMinor(minor)
   , mPatch(patch)
   {
@@ -58,6 +58,64 @@ private:
   int mMinor = 0;
   int mPatch = 0;
 };
+
+// Parses a chunk version without throwing.
+//
+// The ChunkVersion(std::string) constructor above uses std::stoi and throws on
+// anything it cannot parse. That is fine for tests and for strings we produced
+// ourselves, but the state chunk is attacker- and corruption-controlled data
+// arriving through UnserializeState, which hosts call across a C++ ABI boundary
+// with no exception barrier (see IPlugVST3_Common.h). A project file carrying a
+// valid VoLum header and a version of "", "1.2", "1.x.0" or a 20-digit number
+// therefore took the host down instead of being rejected.
+//
+// Stricter than stoi on purpose: stoi accepted "1.2.3junk" and negative
+// components. Every version VoLum or NAM has ever serialized is digits and dots
+// (PLUG_VERSION_STR, e.g. "1.2.1"; oldest NAM chunks, e.g. "0.7.15"), so
+// requiring exactly that costs no real chunk and rejects garbage earlier.
+inline bool TryParseChunkVersion(const std::string& versionStr, ChunkVersion& out)
+{
+  // Any real component is tiny; the cap keeps accumulation far from overflow.
+  constexpr long long kMaxComponent = 1000000;
+
+  int parts[3] = {0, 0, 0};
+  int partCount = 0;
+  size_t i = 0;
+
+  for (;;)
+  {
+    if (partCount == 3)
+      return false; // a fourth segment
+
+    long long value = 0;
+    size_t digits = 0;
+    while (i < versionStr.size() && versionStr[i] >= '0' && versionStr[i] <= '9')
+    {
+      value = value * 10 + (versionStr[i] - '0');
+      if (value > kMaxComponent)
+        return false;
+      ++digits;
+      ++i;
+    }
+
+    if (digits == 0)
+      return false; // empty string, empty segment, or a non-digit lead
+
+    parts[partCount++] = static_cast<int>(value);
+
+    if (i == versionStr.size())
+      break;
+    if (versionStr[i] != '.')
+      return false; // trailing junk
+    ++i;
+  }
+
+  if (partCount != 3)
+    return false;
+
+  out = ChunkVersion(parts[0], parts[1], parts[2]);
+  return true;
+}
 
 inline bool ChunkUses0500SerializedConfig(const ChunkVersion& version)
 {

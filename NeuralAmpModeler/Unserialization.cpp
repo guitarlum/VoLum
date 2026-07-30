@@ -1,5 +1,7 @@
 #include "VoLumChunkVersion.h"
 #include "VoLumChunkLayout.h"
+#include "VoLumChunkSafeRead.h"
+#include "VoLumDiagLog.h"
 #include "VoLumJsonMigration.h"
 
 // Unserialization
@@ -89,15 +91,24 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
 {
   int pos = startPos;
   WDL_String path;
-  pos = chunk.GetStr(path, pos);
+  pos = volum::SafeGetStr(chunk, pos, path);
+  if (pos < 0)
+    return -1;
   config["NAMPath"] = std::string(path.Get());
-  pos = chunk.GetStr(path, pos);
+  pos = volum::SafeGetStr(chunk, pos, path);
+  if (pos < 0)
+    return -1;
   config["IRPath"] = std::string(path.Get());
 
   for (auto it = paramNames.begin(); it != paramNames.end(); ++it)
   {
     double v = 0.0;
     pos = chunk.Get(&v, pos);
+    // A truncated chunk used to leave every remaining name at 0.0 in `config`,
+    // which the caller then applied to live params as if the project had asked
+    // for it. Failing here keeps a short read from silently rewriting the rig.
+    if (pos < 0)
+      return -1;
     config[*it] = v;
   }
   return pos;
@@ -513,11 +524,23 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // We already got through the header before calling this.
   int pos = startPos;
 
-  // Get the version
+  // Get the version. A chunk that carries our header but no parsable version is
+  // corrupt, not old: rejecting it here leaves the instance exactly as it was,
+  // whereas the previous ChunkVersion(std::string) construction threw
+  // std::invalid_argument out through the host's state callback.
   WDL_String wVersion;
-  pos = chunk.GetStr(wVersion, pos);
-  std::string versionStr(wVersion.Get());
-  volum::ChunkVersion version(versionStr);
+  pos = volum::SafeGetStr(chunk, pos, wVersion);
+  if (pos < 0)
+    return -1;
+
+  const std::string versionStr(wVersion.Get());
+  volum::ChunkVersion version(0, 0, 0);
+  if (!volum::TryParseChunkVersion(versionStr, version))
+  {
+    VOLUM_LOG("state", "rejecting chunk with unparsable version \"" + versionStr + "\"");
+    return -1;
+  }
+
   // Act accordingly
   nlohmann::json config;
 
@@ -588,6 +611,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // You shouldn't be here...
     assert(false);
   }
+  VOLUM_LOG("chunk", "decoded state written by version " + versionStr + " (" + std::to_string(chunk.Size())
+                       + " bytes, this build reads " + std::to_string(kNumParams) + " params)");
   // v0.9.0 migration: applied for ALL pre-0.9.0 chunks regardless of which
   // _GetConfigFrom_X_X_X path produced the dict above. Each pre-0.9.0 loader's per-version
   // _UpdateConfigFrom only chains backwards (predecessor), so this single call is what
@@ -598,20 +623,51 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     volum::MigrateOktaverbSubModeToV0_9_1(config);
   if (volum::ShouldRemapReverbMixForChunkVersion(version))
     volum::MigrateReverbMixToEqualPowerV0_9_3(config);
+
+  // Every reader above returns a negative position when the chunk ran out mid-way.
+  // Applying a config built from a short read means pushing a half-read project
+  // onto the live rig - and a negative `pos` then makes `chunk.Size() - pos` one
+  // byte larger than the chunk, so the per-amp section detectors report sections
+  // that are not there. Reject before anything is applied, which is what the
+  // version-parse failure above already promises: the instance is left as it was.
+  if (pos < 0)
+  {
+    VOLUM_LOG("state", "rejecting truncated chunk written by version " + versionStr);
+    return -1;
+  }
+
   _UnserializeApplyConfig(config);
 
   // VoLum: per-amp settings tail after serialized params (v0.7.15+ and VoLum 0.1.x)
   if (volum::ChunkUses0700SerializedConfig(version) || volum::ChunkUses0600SerializedConfig(version)
       || volum::ChunkUses0500SerializedConfig(version) || volum::ChunkUses0715SerializedConfig(version))
   {
-    // SerializeParams wrote kNumParams doubles; now read the per-amp block
+    // SerializeParams wrote kNumParams doubles; now read the per-amp block.
+    //
+    // Everything below reads into copies and is committed only once the whole tail
+    // has been read. A decoder returns a negative position when the chunk ran out,
+    // and every later one runs from that negative position. A failed `Get` leaves
+    // its destination alone, so the numbers survive - but every boolean is read into
+    // a local carrying the decoder's own default and assigned afterwards,
+    // unconditionally. A chunk truncated inside this tail therefore reset the noise
+    // gate, EQ, pre-comp, PRE-capture and POST toggles of all fifteen amps plus the
+    // lock flags, and the instance kept running with them and saved them back out -
+    // although this function reported the load as failed.
+    //
+    // Rejecting outright is not an option here: ChunkUses0715SerializedConfig also
+    // matches upstream NAM 0.7.15+ projects, which have no VoLum tail at all, so a
+    // short read is a legitimate outcome for them. Leaving the members untouched
+    // gives those chunks what they had before (a fresh instance is at its defaults
+    // anyway) without letting a truncated VoLum chunk overwrite anything.
     volum::VoLumChunkSelection selection;
-    pos = volum::GetVoLumChunkSelection(chunk, pos, selection);
-    mVolumAmpIdx = selection.ampIdx;
-    mVolumSpeakerIdx = selection.speakerIdx;
-    mVolumChannelIdx = selection.channelIdx;
+    const int selectionEnd = volum::GetVoLumChunkSelection(chunk, pos, selection);
+    const bool haveSelection = selectionEnd >= 0;
+    if (!haveSelection)
+      VOLUM_LOG("state", "no readable per-amp tail in chunk written by version " + versionStr
+                           + "; keeping the current per-amp scenes");
+    pos = haveSelection ? selectionEnd : pos;
 
-    const int remainingPerAmpBytes = chunk.Size() - pos;
+    const int remainingPerAmpBytes = haveSelection ? chunk.Size() - pos : 0;
     const bool hasPreAmpSettings = volum::ChunkHasExtendedPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasDualAmpSettings = volum::ChunkHasDualAmpPerAmpSettings(remainingPerAmpBytes, volum::kAmpCount);
     const bool hasSupportPolaritySettings =
@@ -623,9 +679,15 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // hasPrePostLockSnapshots is computed AFTER the lock flags are read so we
     // know exactly how many extra bytes to expect. Done below.
 
-    for (int i = 0; i < volum::kAmpCount; i++)
+    auto pendingAmpSettings = mVolumAmpSettings;
+    bool pendingPreLocked = false;
+    bool pendingPostLocked = false;
+    auto pendingLockedPre = mVolumLiveLockedPre;
+    auto pendingLockedPost = mVolumLiveLockedPost;
+
+    for (int i = 0; haveSelection && i < volum::kAmpCount; i++)
     {
-      auto& s = mVolumAmpSettings[i];
+      auto& s = pendingAmpSettings[i];
       pos = volum::GetLegacyPerAmpSettings(chunk, pos, s);
       if (hasPreAmpSettings)
       {
@@ -643,22 +705,37 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // factory POST scene instead of inheriting the previously selected amp.
     }
 
-    if (hasPrePostLockFlags)
-      pos = volum::GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked);
-    else
-    {
-      mVolumPreLocked = false;
-      mVolumPostLocked = false;
-    }
+    if (haveSelection && pos >= 0 && hasPrePostLockFlags)
+      pos = volum::GetPrePostLockFlags(chunk, pos, pendingPreLocked, pendingPostLocked);
 
     // Live lock snapshots are appended after the flags iff the corresponding
     // lock is engaged. Older 1.0.1-dev chunks may have flags without snapshots;
     // detect that case and skip the snapshot read (live PRE/POST then come up
     // empty exactly like before — pre-existing limitation, not a new regression).
-    if (volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, mVolumPreLocked, mVolumPostLocked))
+    if (haveSelection && pos >= 0
+        && volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked,
+                                               pendingPostLocked))
     {
       pos = volum::GetPrePostLockSnapshots(
-        chunk, pos, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre, mVolumLiveLockedPost);
+        chunk, pos, pendingPreLocked, pendingPostLocked, pendingLockedPre, pendingLockedPost);
+    }
+
+    const bool perAmpTailComplete = haveSelection && pos >= 0;
+    if (perAmpTailComplete)
+    {
+      mVolumAmpIdx = selection.ampIdx;
+      mVolumSpeakerIdx = selection.speakerIdx;
+      mVolumChannelIdx = selection.channelIdx;
+      mVolumAmpSettings = pendingAmpSettings;
+      mVolumPreLocked = pendingPreLocked;
+      mVolumPostLocked = pendingPostLocked;
+      mVolumLiveLockedPre = pendingLockedPre;
+      mVolumLiveLockedPost = pendingLockedPost;
+    }
+    else if (haveSelection)
+    {
+      VOLUM_LOG("state", "chunk written by version " + versionStr
+                           + " is truncated inside the per-amp tail; keeping the current per-amp scenes");
     }
 
     // VoLum 1.2.0 id tail (sentinel-probed; absent on <=1.1.0 chunks). Restores
@@ -666,7 +743,10 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // _VolumRestoreFromSettings so the active amp's IR/support resolve on load.
     volum::ChunkIdTail idTail;
     int idTailPos = pos;
-    const bool haveIdTail = volum::TryGetChunkIdTail(chunk, pos, chunk.Size(), idTail, &idTailPos);
+    // There is no id tail behind a tail that did not read: probing from a negative
+    // position would search the chunk from the wrong offset.
+    const bool haveIdTail =
+      perAmpTailComplete && volum::TryGetChunkIdTail(chunk, pos, chunk.Size(), idTail, &idTailPos);
     if (haveIdTail)
     {
       pos = idTailPos;
@@ -735,12 +815,27 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       mVolumActivePresetId = idTail.activePresetId;
     }
 
-    mVolumInitComplete = false;
-    _VolumRestoreFromSettings(mVolumAmpIdx);
-    _VolumApplyLiveLockSnapshots();
-    _VolumRefreshChannels();
-    mVolumNeedsLoad.store(true);
-    mVolumInitComplete = true;
+    // Scoped rather than assigned: UnserializeState now catches exceptions instead
+    // of letting them reach the host, and a throw between these two points used to
+    // leave the flag false for the life of the instance. That silently switches off
+    // SUPPORT/PRE model loading, latency reporting, settings persistence and
+    // preset-dirty tracking - a quieter failure than the crash it replaced.
+    {
+      struct InitCompleteScope
+      {
+        bool& flag;
+        explicit InitCompleteScope(bool& f)
+        : flag(f)
+        {
+          flag = false;
+        }
+        ~InitCompleteScope() { flag = true; }
+      } initScope(mVolumInitComplete);
+      _VolumRestoreFromSettings(mVolumAmpIdx);
+      _VolumApplyLiveLockSnapshots();
+      _VolumRefreshChannels();
+      mVolumNeedsLoad.store(true);
+    }
 
     // After base restore, re-focus a custom MAIN amp recorded in the id tail so
     // its scene + cabs + .nam load (the binary per-amp array only covers factory
@@ -757,10 +852,14 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // the one-shot guard lets the restore run again after this state load. This
       // fixes "VST3/AU reopen drops the focused custom amp" (the immediate select
       // below only reaches the UI when an editor already exists at load time).
-      mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(
-        /*loadedFromChunk=*/true, idTail.customMainId, mVolumRestoreCustomMainId);
-      mVolumRestorePresetId = idTail.activePresetId;
+      const volum::RestoreSelection restored = volum::ResolveRestoreSelection(
+        /*loadedFromChunk=*/true, {idTail.customMainId, idTail.activePresetId},
+        {mVolumRestoreCustomMainId, mVolumRestorePresetId});
+      mVolumRestoreCustomMainId = restored.customMainId;
+      mVolumRestorePresetId = restored.activePresetId;
       mVolumDidRestorePresetSelection = false;
+      VOLUM_LOG("chunk", "id tail: customMain='" + restored.customMainId + "' preset='" + restored.activePresetId
+                           + "' ampIdx=" + std::to_string(mVolumAmpIdx));
 
       const int cmi = volum::custom::CustomAmpIndexById(idTail.customMainId);
       if (cmi >= 0)
@@ -789,6 +888,18 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     }
   }
 
+  // Hosts also load state into an editor that is already open - project load with the
+  // window up, undo, host preset switching - and that path never reached the applier,
+  // so the cab row kept describing the state the chunk just replaced.
+  //
+  // Requested rather than run here. This function executes on whichever thread the
+  // host chose to restore state on, and the applier walks the live IGraphics tree:
+  // it mutates the amp list, hero, cab row and channel stepper, and can rescan a rig
+  // directory into shared channel vectors. Doing that while the editor draws or
+  // handles a click on the UI thread is a data race. OnIdle is this plug-in's
+  // UI-thread pump, and OnUIOpen runs the same applier once the controls exist.
+  mVolumUiSyncPending.store(true);
+
   return pos;
 }
 
@@ -796,6 +907,15 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
 {
   nlohmann::json config;
   int pos = _GetConfigFrom_Earlier(chunk, startPos, config);
+  // Same rule as the versioned path: a short read leaves every parameter it never
+  // reached at this reader's own default, and applying that pushes a half-read
+  // project onto the live rig. Here there is not even a version to blame it on -
+  // the chunk had no VoLum header - so a failed read is reported, not applied.
+  if (pos < 0)
+  {
+    VOLUM_LOG("state", "rejecting truncated headerless chunk");
+    return -1;
+  }
   _UnserializeApplyConfig(config);
   return pos;
 }
