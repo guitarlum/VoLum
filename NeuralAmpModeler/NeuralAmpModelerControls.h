@@ -790,7 +790,12 @@ public:
       static_cast<IVLabelControl*>(GetNamedChild(childName))->SetStr(ss.str().c_str());
     };
 
-    SetControlStr("Sample rate", modelInfo.sampleRate, "Hz", mControlNames.sampleRate);
+    // "Model rate", not "Sample rate": this is the rate the capture was trained at,
+    // which is 48 kHz for every rig VoLum ships and for almost every NAM capture in
+    // circulation. Under the old label it sat directly above the round-trip line,
+    // which is derived from the audio device - so a constant 48000 next to a
+    // device-dependent figure read as a device rate that was ignoring the interface.
+    SetControlStr("Model rate", modelInfo.sampleRate, "Hz", mControlNames.sampleRate);
 
     mHasInfo = true;
   };
