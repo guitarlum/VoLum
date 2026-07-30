@@ -96,6 +96,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\tests\test_main.cpp" />
+    <ClCompile Include="..\tests\test_build_script_guards.cpp" />
     <ClCompile Include="..\tests\test_nam_rigs.cpp" />
     <ClCompile Include="..\tests\test_process_io.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_version.cpp" />

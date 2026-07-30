@@ -11,6 +11,7 @@ set(REPO_ROOT "${PROJECT_DIR}/..")
 
 add_executable(NeuralAmpModeler-Tests
   test_main.cpp
+  test_build_script_guards.cpp
   test_nam_rigs.cpp
   test_process_io.cpp
   test_volum_chunk_version.cpp
