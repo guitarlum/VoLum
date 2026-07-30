@@ -1,5 +1,55 @@
-# F5 — Presets: save / load / recall a full rig
+# F5 — Presets: factory bank + shareable preset files
 
-Plan a preset system that saves, recalls, and manages a full VoLum rig as a single named snapshot. A preset captures the ENTIRE signal chain: selected amp(s)/speaker/channel (including the dual-amp setup) plus all PRE and POST settings. Recalling a preset OVERWRITES the current state in one action. Presets are layered on top of (not a replacement for) the existing per-amp auto-memory (`_VolumSaveCurrentToSettings` / `_VolumRestoreFromSettings` in `VoLumSettings.inc.cpp`); the PRE/POST lock feature (F2) stays a separate live-switching convenience and is NOT stored in preset data. Most of the effort is UI/UX. Decide: the compact preset bar in the AMP title strip / header (current name + prev/next footswitch-style arrows + a dropdown opening a full browser built on the settings-overlay pattern + Save / Save As / Rename / Delete); the set of FACTORY presets built from bundled rigs and how Factory (read-only) is visually separated from User presets; on-disk format and location (versioned JSON in the user profile next to `volum-settings.json`, see `VoLumPaths.h`); export/import of single preset files for sharing; and missing-content handling when a preset references a custom amp / IR / pedal the user does not have (clear fallback + non-destructive warning, never a crash or silent wrong sound). Produce a feature ticket with: preset data schema and version, save/recall semantics (what is written, in what order, how dual-amp is handled), chunk/settings version bump and migration (see `test_volum_chunk_version.cpp`, `Unserialization.cpp`), UI spec for the preset bar + browser overlay, factory preset list, export/import + missing-content behavior, tests (preset round-trip, recall sets every param, factory presets load, missing-content fallback, version migration — see `test_volum_user_settings_io.cpp` / `test_volum_chunk_codec.cpp`), docs EN/DE + screenshots, changelog. Do not implement.
+The bulk of F5 shipped in 1.2.0. This is the remainder, re-scoped after verifying
+what is actually in the code.
 
-Work must happen on a dedicated feature branch off the latest `dev`, named `feature/presets`. Do not commit to `dev` or `main` directly. The branch is merged back into `dev` only after the ticket's acceptance criteria are met and tests/docs/changelog are in place. Never promote to `main` outside of a release.
+## Already shipped (do not re-plan)
+
+Named full-rig presets — amp(s), cab/channel, PRE, POST, dual amp — with save,
+recall, overwrite, rename, delete, `<`/`>` cycling and an `(unsaved)` dirty
+marker. Banks live in `volum-content.json` (`presetBanks`), shared by the
+standalone and every plug-in instance. Orphaned references to deleted content are
+dropped on recall rather than crashing. See changelog `06/20/2026`,
+`docs/user-guide.en.md` § Presets, and `VoLumSettingsPresets.inc.cpp` /
+`VoLumPresetBar.h`.
+
+1.2.1 additionally made preset ops claim the live rig per window, resolve
+rename/delete by identity rather than row position, and report library write
+failures.
+
+## Still open
+
+### 1. A factory preset bank
+
+There is no curated starting set. The only reset affordance is the
+`Default (factory settings)` row (`VoLumAmpMenus.inc.cpp` ~61), which restores
+shipped defaults for the current amp — not a named preset library.
+
+Decide: are factory presets shipped as a read-only bank alongside the user's
+banks, or seeded into a user bank on first run? Read-only is safer (an upgrade can
+refresh them) but needs the UI to refuse overwrite/rename/delete on those rows,
+which currently assume mutability. They also have to survive the identity-based
+lookup 1.2.1 introduced.
+
+### 2. Export / import of individual presets
+
+No way to hand a preset to another player. A preset references content by opaque
+id (custom amps, IRs, pedals), so an exported file is only meaningful with the
+captures it names: either export must refuse presets that reference custom
+content, or the format has to carry the payloads and the importer has to
+de-duplicate against the receiving library. That decision is the whole ticket.
+
+Note `B6-multi-instance-content-library.md` is a prerequisite in spirit: import
+writes the shared library, which is exactly the surface B6 is fixing.
+
+## Acceptance criteria
+
+- Factory presets are reachable on a clean install and cannot be silently
+  destroyed by the normal Manage actions.
+- An exported preset re-imported on another machine either reproduces the rig or
+  says precisely which content is missing — never loads a half-rig silently.
+- Import cannot corrupt or duplicate existing library content.
+- Doctests for the export/import round trip and for factory-bank immutability.
+- EN/DE user guide + changelog.
+
+Work on a branch off latest `dev`. Do not commit to `dev` or `main` directly.
