@@ -16,7 +16,7 @@
 
 [CmdletBinding()]
 param(
-  [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "corrupt")]
+  [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -538,6 +538,80 @@ function Test-FutureSchema {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: every amp's selected preset comes back, not just the focused one
+#
+# Reported from 1.2.1 testing: "only the last active amp remembers the selected
+# preset". Settings stored a single active preset id - whichever amp was in focus
+# when the file was written - so every other amp reopened reading "No Preset".
+#
+# Two amps are seeded with a preset each and the app is launched focused on the
+# first. The second is never visited during the run, which is the whole point: its
+# selection has to survive a session that never touches it.
+# --------------------------------------------------------------------------
+function Test-PresetMemory {
+  Write-Host "`n[presets] every amp's selected preset survives a restart" -ForegroundColor Cyan
+  $sandbox = New-Sandbox "presets"
+  Copy-SeedState $sandbox
+  $root = Join-Path $sandbox "VoLum"
+  $contentPath = Join-Path $root "content\volum-content.json"
+  $settingsPath = Join-Path $root "volum-settings.json"
+
+  $focusedOwner = "factory:0"
+  $awayOwner = "factory:5"
+  $focusedPreset = "preset_e2e_focused"
+  $awayPreset = "preset_e2e_away"
+
+  $reg = Read-Json $contentPath
+  if (-not $reg) { throw "Seed library has no volum-content.json; nothing to hang a preset bank on." }
+  if (-not $reg.presetBanks) {
+    $reg | Add-Member -NotePropertyName presetBanks -NotePropertyValue ([pscustomobject]@{}) -Force
+  }
+  # A bank entry needs an id to be kept by the registry reader; `settings` is left
+  # empty so the preset simply means "factory defaults", which is enough to be
+  # found by id.
+  $reg.presetBanks | Add-Member -NotePropertyName $focusedOwner -NotePropertyValue `
+  @([pscustomobject]@{ id = $focusedPreset; name = "E2E Focused"; settings = [pscustomobject]@{} }) -Force
+  $reg.presetBanks | Add-Member -NotePropertyName $awayOwner -NotePropertyValue `
+  @([pscustomobject]@{ id = $awayPreset; name = "E2E Away"; settings = [pscustomobject]@{} }) -Force
+  $reg | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
+
+  $settings = Read-Json $settingsPath
+  if (-not $settings) { throw "Seed library has no volum-settings.json." }
+  # Focus a factory amp, not a custom one, so the owner key is predictable.
+  $settings | Add-Member -NotePropertyName volumCustomMainId -NotePropertyValue "" -Force
+  $settings | Add-Member -NotePropertyName lastAmpIdx -NotePropertyValue 0 -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetId -NotePropertyValue $focusedPreset -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetIdByOwner -NotePropertyValue ([pscustomobject]@{
+      $focusedOwner = $focusedPreset
+      $awayOwner    = $awayPreset
+    }) -Force
+  $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+  $writtenBefore = (Get-Item $settingsPath).LastWriteTimeUtc
+
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox
+  Assert-True "app opened a window" $run.started
+  Assert-True "app closed gracefully" $run.graceful
+
+  # Without this the rest is vacuous: if the app never rewrote the file, the seeded
+  # keys would still be sitting there and every assertion below would pass against
+  # a build that cannot read them.
+  Assert-True "settings rewritten on shutdown" ((Get-Item $settingsPath).LastWriteTimeUtc -ne $writtenBefore)
+
+  $after = Read-Json $settingsPath
+  Assert-True "settings still parse" ($null -ne $after)
+  if ($after) {
+    Assert-True "per-amp preset map written back" ($null -ne $after.volumActivePresetIdByOwner)
+    Assert-Equal "focused amp keeps its preset" $focusedPreset $after.volumActivePresetIdByOwner.$focusedOwner
+    # The regression itself: an amp that was not in focus for the whole session.
+    Assert-Equal "amp never visited keeps its preset" $awayPreset $after.volumActivePresetIdByOwner.$awayOwner
+    # The 1.2.0 key stays truthful for the focused amp, so an older build reading
+    # this file behaves exactly as it did before.
+    Assert-Equal "single-id key still names the focused amp's preset" $focusedPreset $after.volumActivePresetId
+  }
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# --------------------------------------------------------------------------
 # Scenario: unreadable library must not brick the app
 # --------------------------------------------------------------------------
 function Test-Corrupt {
@@ -571,6 +645,7 @@ if ($Scenario -in @("all", "custom")) { Test-CustomLane }
 if ($Scenario -in @("all", "brokenrefs")) { Test-BrokenRefs }
 if ($Scenario -in @("all", "future")) { Test-FutureSchema }
 if ($Scenario -in @("all", "upgrade")) { Test-Upgrade }
+if ($Scenario -in @("all", "presets")) { Test-PresetMemory }
 if ($Scenario -in @("all", "corrupt")) { Test-Corrupt }
 
 Write-Host ""
