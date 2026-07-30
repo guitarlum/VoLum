@@ -1303,3 +1303,71 @@ TEST_CASE("Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct
   CHECK(out.dualAmpActive == in.dualAmpActive);
   CHECK(out.supportToneTreble == doctest::Approx(in.supportToneTreble));
 }
+
+// ---------------------------------------------------------------------------
+// Per-amp active preset ids (1.2.1).
+//
+// Reported from testing 1.2.1: "when restarting standalone, only the last active
+// amp remembers the selected preset". Through 1.2.0 the settings file carried one
+// `volumActivePresetId` - whichever amp happened to be focused when it was written -
+// so every other amp reopened reading "No Preset" even though its selection was
+// still in its bank. Worse, ending a session on an amp with nothing recalled wrote
+// an empty id and no amp restored at all.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Every amp's preset selection survives the settings round trip, not just the focused one")
+{
+  // Owner keys as VoLumContentStore.h mints them: "factory:<idx>" for a shipped amp,
+  // the opaque amp id for a custom one. Spelled literally so this case does not pull
+  // the content store in; the helpers are string-to-string and format-agnostic.
+  std::unordered_map<std::string, std::string> byOwner;
+  byOwner["factory:3"] = "preset_a";
+  byOwner["factory:7"] = "preset_b";
+  byOwner["amp_custom_x"] = "preset_c";
+
+  const auto back = volum::VolumActivePresetIdsFromJson(volum::VolumActivePresetIdsToJson(byOwner));
+
+  REQUIRE(back.size() == 3);
+  CHECK(back.at("factory:3") == "preset_a");
+  CHECK(back.at("factory:7") == "preset_b");
+  CHECK(back.at("amp_custom_x") == "preset_c");
+}
+
+TEST_CASE("A settings file with no per-amp preset map loads as no selections rather than failing")
+{
+  // What every 1.2.0 file looks like. The single `volumActivePresetId` still
+  // restores the focused amp through its own path, so the upgrade is silent.
+  CHECK(volum::VolumActivePresetIdsFromJson(nlohmann::json::object()).empty());
+
+  // And a file whose key is the wrong shape entirely must not throw: losing one
+  // amp's preset selection is a nuisance, failing the settings load would cost the
+  // user every other setting in the file.
+  CHECK(volum::VolumActivePresetIdsFromJson(nlohmann::json()).empty()); // null
+  CHECK(volum::VolumActivePresetIdsFromJson(nlohmann::json::array({1, 2})).empty());
+  CHECK(volum::VolumActivePresetIdsFromJson("factory:0").empty());
+}
+
+TEST_CASE("Entries that cannot name a preset are dropped, not stored as blanks")
+{
+  nlohmann::json j = nlohmann::json::object();
+  j["factory:0"] = "preset_ok";
+  j["factory:1"] = ""; // an amp with nothing recalled
+  j["factory:2"] = 42; // wrong type
+  j["factory:3"] = nlohmann::json::object(); // wrong type
+  j[""] = "preset_orphan"; // no owner to apply it to
+
+  const auto back = volum::VolumActivePresetIdsFromJson(j);
+  REQUIRE(back.size() == 1);
+  CHECK(back.at("factory:0") == "preset_ok");
+
+  // Writing is symmetric: an empty id is absence, not an entry holding "".
+  std::unordered_map<std::string, std::string> byOwner;
+  byOwner["factory:0"] = "preset_ok";
+  byOwner["factory:1"] = "";
+  byOwner[""] = "preset_orphan";
+  const auto written = volum::VolumActivePresetIdsToJson(byOwner);
+  CHECK(written.size() == 1);
+  CHECK(written.contains("factory:0"));
+  CHECK_FALSE(written.contains("factory:1"));
+  CHECK_FALSE(written.contains(""));
+}

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
+#include <unordered_map>
 
 #include "VoLumAmpeteCatalog.h"
 
@@ -593,6 +595,51 @@ inline bool ReadAmpCoreBlock(const nlohmann::json& a, VoLumAmpSettings& s)
   b("noiseGate", s.noiseGateActive, d.noiseGateActive);
   b("eq", s.eqActive, d.eqActive);
   return healed;
+}
+
+// Which preset each amp had selected, keyed by owner key ("factory:<idx>" or a
+// custom amp id).
+//
+// Through 1.2.0 only the focused amp's id was stored, as a single string. Every
+// other amp therefore came back reading "No Preset" on the next launch even though
+// its selection was still sitting in its bank - and if the session happened to end
+// on an amp with nothing recalled, the stored id was empty and no amp restored at
+// all. The single key is still written next to this one, because 1.2.0 reads it.
+//
+// Ids only, never the recalled snapshot that the "(unsaved)" marker diffs against.
+// That baseline is the preset's own stored content, which already lives in the
+// content registry; a second copy here would be free to drift from the first.
+// Readers rebuild it from the bank (see _VolumSyncPresetOwner).
+//
+// Additive, so no version bump - see the note on kVoLumUserSettingsVersion.
+inline nlohmann::json VolumActivePresetIdsToJson(const std::unordered_map<std::string, std::string>& byOwner)
+{
+  nlohmann::json j = nlohmann::json::object();
+  for (const auto& entry : byOwner)
+    if (!entry.first.empty() && !entry.second.empty())
+      j[entry.first] = entry.second;
+  return j;
+}
+
+// Tolerant by construction: a missing key, a value of the wrong type, or an entry
+// naming a preset that no longer exists all have to degrade to "this amp has no
+// preset selected" rather than failing the settings load, which would cost the user
+// every other setting in the file.
+inline std::unordered_map<std::string, std::string> VolumActivePresetIdsFromJson(const nlohmann::json& j)
+{
+  std::unordered_map<std::string, std::string> byOwner;
+  if (!j.is_object())
+    return byOwner;
+  for (auto it = j.begin(); it != j.end(); ++it)
+  {
+    if (!it.value().is_string())
+      continue;
+    const std::string presetId = it.value().get<std::string>();
+    if (it.key().empty() || presetId.empty())
+      continue;
+    byOwner[it.key()] = presetId;
+  }
+  return byOwner;
 }
 
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
