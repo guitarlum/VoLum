@@ -4,7 +4,7 @@ Everything that could be automated this pass is automated. Run these three
 commands first; only the checks below them still need a human.
 
 ```pwsh
-pwsh NeuralAmpModeler/scripts/run-tests-win.ps1              # 677 doctests
+pwsh NeuralAmpModeler/scripts/run-tests-win.ps1              # 683 doctests
 pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1         # 127 on-disk state checks
 pwsh NeuralAmpModeler/scripts/smoke-standalone-audio-config-win.ps1
 pwsh NeuralAmpModeler/scripts/reaper-harness/run-reaper-harness.ps1  # real-host render
@@ -50,9 +50,32 @@ point is what appears on screen.*
 - **Manage list with 100+ items:** the overwrite / rename / delete / IR icons on
   rows past the 100th must act on their own row.
 - **Double-click Delete in a confirmation:** the row underneath the button must not
-  also be activated.
+  also be activated. Try it several times at the default window size, where the
+  button sits over row five.
 - **A selected knob that a mode switch hides** (Tremolo `CROSSOVER`, Delay `TIME`
-  under Sync, the pitch modes) must stop taking arrow keys.
+  under Sync, the pitch modes): the next arrow key must do *nothing at all*. In
+  particular it must not switch amps (Up/Down) or step the channel (Left/Right) -
+  the first version of this fix let the key through to those handlers.
+- **Rename a preset, then confirm it renamed the row you clicked.** With two plugin
+  windows open: start a rename in one, delete a different preset in the other, then
+  press Enter in the first. It must rename the item you named, or say it is gone.
+- **Switch to an amp whose scene has no support partner while SUPPORT is focused.**
+  The cab row must move to MAIN in the same moment, along with MAIN's lane toggles -
+  not one interaction later.
+
+## 1c. Behaviour that changed on purpose
+
+*Why here: these are not bugs, but they are different from 1.2.0 and worth
+confirming you like them.*
+
+- **Setting SUPPORT to `(none)` fades rather than cuts.** The lane keeps playing its
+  previous capture for one idle tick (longer if a capture is mid-load) instead of
+  going silent on the next audio block.
+- **The standalone Settings/Preferences dialog switches the tuner off**, because
+  applying an audio-device change closes and rebuilds the editor.
+- **A MIDI port that is busy at launch turns MIDI off for that session only.** Your
+  settings file keeps naming the device; relaunch once the other program has let go
+  and it comes back.
 
 ## 2. Real DAW hosting
 
