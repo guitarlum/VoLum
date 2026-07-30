@@ -4,9 +4,10 @@ Everything that could be automated this pass is automated. Run these three
 commands first; only the checks below them still need a human.
 
 ```pwsh
-pwsh NeuralAmpModeler/scripts/run-tests-win.ps1          # 592 doctests
-pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1     # 118 on-disk state checks
+pwsh NeuralAmpModeler/scripts/run-tests-win.ps1              # 677 doctests
+pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1         # 127 on-disk state checks
 pwsh NeuralAmpModeler/scripts/smoke-standalone-audio-config-win.ps1
+pwsh NeuralAmpModeler/scripts/reaper-harness/run-reaper-harness.ps1  # real-host render
 ```
 
 Each item below says **why** it is still manual, so the list shrinks over time
@@ -23,11 +24,43 @@ instead of growing by habit.
 - **Nothing clicks or drops** when changing channel, amp, or cab while playing.
 - **Dual Amp** MAIN/SUPPORT still sum in phase after the above.
 
+## 1b. Things only your eyes can confirm
+
+*Why manual: the screenshot harness needs an unlocked desktop. `PrintWindow` cannot
+composite VoLum's GL surface while the session is locked - the capture comes back
+as a blank white client area - so the scripted UI sweep that would normally cover
+these could not run overnight. Each item below is a fix from this pass whose whole
+point is what appears on screen.*
+
+- **`H` closes the Settings page** it opened (so does `Esc`, so does the gear).
+- **Leave a custom amp, come back to a factory amp:** **No Cab** and **Custom IR**
+  must be clickable again, not greyed out. Reach the bad case by picking a custom
+  amp whose current gain stage has no DIRECT capture, then clicking a factory amp.
+- **Dual Amp with no support amp:** turn Dual Amp on with `Tab`/the hero toggle
+  while SUPPORT is still `(none)`. Focus must stay on MAIN - the cab row must keep
+  showing MAIN's cabs and the channel stepper must not read `---`.
+- **Dual Amp, both lanes on custom amps:** recall a preset, then check the cab row
+  describes the *focused* lane. Switch focus and check it follows.
+- **Press `S` on a custom amp:** it must step that custom amp's cabs (skipping
+  slots it has no capture for), exactly like clicking them, and must not relabel
+  the channel stepper with the factory amp's channels.
+- **Exact-value box:** type `abc`, then an empty string, into a knob's exact-value
+  entry. The knob must not move. Then type `1,5` and a value with its unit
+  (`3 dB`, `50 %`) and confirm both are accepted.
+- **Manage list with 100+ items:** the overwrite / rename / delete / IR icons on
+  rows past the 100th must act on their own row.
+- **Double-click Delete in a confirmation:** the row underneath the button must not
+  also be activated.
+- **A selected knob that a mode switch hides** (Tremolo `CROSSOVER`, Delay `TIME`
+  under Sync, the pitch modes) must stop taking arrow keys.
+
 ## 2. Real DAW hosting
 
-*Why manual: no REAPER/Cubase automation harness exists, and the plugin's state
-path differs from the standalone's — the DAW chunk, not the settings file, is
-authoritative.*
+*Why manual: the REAPER harness now renders through the plugin for real and checks
+a project save/reopen round-trip, but it cannot drive the rig - which amp, cab, or
+IR is loaded is GUI-only state. The checks below are exactly the part it cannot
+reach, and the plugin's state path differs from the standalone's: the DAW chunk,
+not the settings file, is authoritative.*
 
 - **Reopen with a custom IR.** In REAPER, load VoLum, select a custom IR, close
   the plugin window, reopen it. The cab row must still show the copper **Custom

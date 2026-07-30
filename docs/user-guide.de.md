@@ -191,15 +191,16 @@ Die Inhaltsbibliothek wird von allen geöffneten Instanzen und Spuren geteilt. I
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
 - `Enter` bearbeitet das fokussierte Ziel. In der Standalone-App schaltet `Leertaste` es ein/aus. Im Plugin übernimmt `B` diese Funktion, damit `Leertaste` für Start/Stopp der DAW frei bleibt.
 - `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts.
-- `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet Einstellungen.
+- `T` öffnet den Tuner; `M` öffnet das Metronom; `H` öffnet die Einstellungen und schließt sie wieder.
 - Gewählter Regler: `Hoch` / `Runter` ändert den Wert, `Links` / `Rechts` wählt einen anderen Regler, `Umschalt` macht kleinere Schritte.
 - `Enter` gibt einen exakten Wert ein, `Entf` / `Rücktaste` setzt zurück, `Esc` beendet die Reglerbearbeitung.
+- Im Eingabefeld für den exakten Wert gilt ein Komma als Dezimaltrennzeichen, und die angezeigte Einheit (`dB`, `%`, `ms`, `Hz`, `s`, `st`) darf hinter der Zahl mitgetippt werden. Was sich nicht als Zahl lesen lässt, lässt den Regler unverändert; eine Zahl außerhalb des Bereichs rastet am nächstliegenden Ende ein.
 
 Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screenreader-Unterstützung gibt es noch nicht.
 
 ## Einstellungen Und Sicherheit
 
-Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`. Das Overlay enthält auch die Tastaturübersicht und globale Einstellungen.
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`. Das Overlay enthält auch die Tastaturübersicht und globale Einstellungen.
 
 VoLum speichert Benutzereinstellungen automatisch:
 
@@ -226,7 +227,7 @@ Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json
 
 In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`, um Audiotreiber, getrennte Ein- und Ausgabegeräte, Samplerate und Kanalrouting zu wählen. In der VST3-Version nutzt du stattdessen die Audioeinstellungen deiner DAW.
 
-Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Wähle einen Mono-Eingangskanal für das Gitarrensignal und route Output L/R nach Bedarf. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben.
+Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Wähle einen Mono-Eingangskanal für das Gitarrensignal und route Output L/R nach Bedarf. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben. Manche Treiber lehnen die gewählte Größe ab und geben eine andere zurück; VoLum behält dann die vom Treiber vergebene Größe, sodass Liste und gespeicherter Wert das beschreiben, was tatsächlich läuft.
 
 Wenn du einen Treiber ohne nutzbares Gerät auswählst, zum Beispiel ASIO auf einem Laptop ohne ASIO-Interface, zeigt VoLum eine Fehlermeldung und stellt die vorher funktionierende Audiokonfiguration wieder her, statt sich zu schließen.
 
