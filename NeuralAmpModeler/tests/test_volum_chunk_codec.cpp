@@ -31,7 +31,68 @@ struct MemoryChunk
     return pos + static_cast<int>(sizeof(T));
   }
 };
+
+// Reproduces iPlug2's IByteChunk::Get behaviour on a chunk that ran out: it
+// returns -1 and leaves the destination alone, rather than asserting. MemoryChunk
+// above cannot model that, because its REQUIRE aborts the test instead.
+struct TruncatableChunk
+{
+  std::vector<unsigned char> bytes;
+
+  template <typename T>
+  void Put(const T* value)
+  {
+    const auto* first = reinterpret_cast<const unsigned char*>(value);
+    bytes.insert(bytes.end(), first, first + sizeof(T));
+  }
+
+  template <typename T>
+  int Get(T* value, int pos) const
+  {
+    if (pos < 0 || static_cast<size_t>(pos) + sizeof(T) > bytes.size())
+      return -1;
+    std::memcpy(value, bytes.data() + pos, sizeof(T));
+    return pos + static_cast<int>(sizeof(T));
+  }
+
+  int Size() const { return static_cast<int>(bytes.size()); }
+};
 } // namespace
+
+TEST_CASE("A per-amp decoder that runs out still rewrites the toggles it was handed")
+{
+  // The premise behind reading the per-amp tail into copies and committing only on
+  // success. A failed `Get` leaves its destination alone, so the numeric fields
+  // survive - but every boolean is read into a local with the decoder's own default
+  // and assigned afterwards, unconditionally. A decoder handed a position past the
+  // end, or the negative position a previous failure returned, therefore reports
+  // failure through its return value while still flipping the scene's switches.
+  // Fifteen of these run in a row, so one truncation inside the tail reset the noise
+  // gate, EQ, pre-comp, PRE-capture and POST toggles of every amp - and the instance
+  // kept running with them and saved them back out.
+  volum::VoLumAmpSettings mine{};
+  mine.noiseGateActive = false;
+  mine.eqActive = false;
+  mine.gateThreshold = -37.5;
+
+  TruncatableChunk empty;
+  volum::VoLumAmpSettings target = mine;
+  const int pos = volum::GetLegacyPerAmpSettings(empty, 0, target);
+
+  CHECK(pos < 0);                                        // the read failed
+  CHECK(target.gateThreshold == doctest::Approx(-37.5)); // numbers survive it
+  CHECK(target.noiseGateActive);                         // switches do not
+  CHECK(target.eqActive);
+
+  // Same from a position that is already negative, which is what every amp after
+  // the first failure is decoded from.
+  TruncatableChunk full;
+  volum::VoLumAmpSettings written{};
+  volum::PutCurrentVoLumChunkState(full, {0, 0, 0}, &written, 1);
+  volum::VoLumAmpSettings afterFailure = mine;
+  CHECK(volum::GetLegacyPerAmpSettings(full, -1, afterFailure) < 0);
+  CHECK(afterFailure.noiseGateActive);
+}
 
 TEST_CASE("Per-amp selection misaligns unless the reader consumes every serialized param double")
 {
@@ -869,8 +930,7 @@ TEST_CASE("Id tail round-trips per-amp + locked POST tremolo settings")
   in.perAmpTremolo[0].sync = true;
   in.perAmpTremolo[0].division = 6; // 1/8T
   in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeOptical] = volum::TremoloModeSnapshot{2.0, 0.55, 0.1, 0.4, 600.0};
-  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic] =
-    volum::TremoloModeSnapshot{7.0, 0.95, 0.5, 1.0, 1500.0};
+  in.perAmpTremolo[0].modes[volum::kVoLumTremoloModeHarmonic] = volum::TremoloModeSnapshot{7.0, 0.95, 0.5, 1.0, 1500.0};
 
   // Last amp: Optical, free-running.
   in.perAmpTremolo[volum::kAmpCount - 1].present = true;
@@ -1132,7 +1192,7 @@ TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effect
 // bounds, while still honoring the live (non-mode) values that were present.
 TEST_CASE("Id tail effect blocks with missing/short modes arrays seed ship defaults")
 {
-  const volum::PitchTail defPitch;     // default-constructed = ship defaults
+  const volum::PitchTail defPitch; // default-constructed = ship defaults
   const volum::TremoloTail defTremolo; // default-constructed = ship defaults
 
   nlohmann::json j;
@@ -1200,23 +1260,66 @@ TEST_CASE("Id tail effect blocks with missing/short modes arrays seed ship defau
 // decision the "VST3 reopen drops the custom amp" bug got wrong - the chunk was
 // never allowed to win, so a plugin re-applied the settings pick (or nothing) and
 // fell back to a factory amp.
-TEST_CASE("ResolveRestoreCustomMainId: chunk selection wins for a plugin project")
+TEST_CASE("ResolveRestoreSelection: chunk selection wins for a plugin project")
 {
   // A project focused on a custom amp overrides whatever the settings remember.
-  CHECK(volum::ResolveRestoreCustomMainId(/*loadedFromChunk=*/true, "amp_project", "amp_settings") == "amp_project");
+  // The preset id travels with it, because the bank belongs to that amp.
+  const auto sel = volum::ResolveRestoreSelection(
+    /*loadedFromChunk=*/true, {"amp_project", "preset_project"}, {"amp_settings", "preset_settings"});
+  CHECK(sel.customMainId == "amp_project");
+  CHECK(sel.activePresetId == "preset_project");
 }
 
-TEST_CASE("ResolveRestoreCustomMainId: an empty chunk id (factory project) still wins over settings")
+TEST_CASE("ResolveRestoreSelection: an empty chunk id (factory project) still wins over settings")
 {
   // The bug direction: a project saved on a FACTORY amp (empty chunk id) must NOT
   // resurrect the settings' custom amp. Empty is authoritative when it came from a
   // chunk.
-  CHECK(volum::ResolveRestoreCustomMainId(/*loadedFromChunk=*/true, "", "amp_settings").empty());
+  const auto sel = volum::ResolveRestoreSelection(
+    /*loadedFromChunk=*/true, {"", ""}, {"amp_settings", "preset_settings"});
+  CHECK(sel.customMainId.empty());
+  CHECK(sel.activePresetId.empty());
 }
 
-TEST_CASE("ResolveRestoreCustomMainId: no chunk (standalone launch) uses the settings pick")
+TEST_CASE("ResolveRestoreSelection: no chunk (standalone launch) uses the settings pick")
 {
   // Pure standalone launch: there is no chunk, so the machine-global last
   // selection is the correct source.
-  CHECK(volum::ResolveRestoreCustomMainId(/*loadedFromChunk=*/false, "ignored", "amp_settings") == "amp_settings");
+  const auto sel = volum::ResolveRestoreSelection(
+    /*loadedFromChunk=*/false, {"ignored", "ignored"}, {"amp_settings", "preset_settings"});
+  CHECK(sel.customMainId == "amp_settings");
+  CHECK(sel.activePresetId == "preset_settings");
+}
+
+TEST_CASE("ValidateRestoreSelection keeps a selection the content store still resolves")
+{
+  const auto sel = volum::ValidateRestoreSelection({"amp_a", "preset_a"}, true, true);
+  CHECK(sel.customMainId == "amp_a");
+  CHECK(sel.activePresetId == "preset_a");
+}
+
+TEST_CASE("ValidateRestoreSelection drops the preset when its owning custom amp is gone")
+{
+  // Opening a project whose custom amp was deleted (or that moved to another
+  // machine): the preset bank went with the amp, so keeping the preset id would
+  // label the header with a preset that has no owner.
+  const auto sel = volum::ValidateRestoreSelection({"amp_deleted", "preset_a"}, false, true);
+  CHECK(sel.customMainId.empty());
+  CHECK(sel.activePresetId.empty());
+}
+
+TEST_CASE("ValidateRestoreSelection drops only the preset when the amp survives")
+{
+  const auto sel = volum::ValidateRestoreSelection({"amp_a", "preset_deleted"}, true, false);
+  CHECK(sel.customMainId == "amp_a");
+  CHECK(sel.activePresetId.empty());
+}
+
+TEST_CASE("ValidateRestoreSelection leaves a factory-amp selection alone")
+{
+  // No custom amp id at all: the "unknown custom amp" rule must not fire and wipe
+  // a perfectly valid preset id on a factory amp.
+  const auto sel = volum::ValidateRestoreSelection({"", "preset_a"}, false, true);
+  CHECK(sel.customMainId.empty());
+  CHECK(sel.activePresetId == "preset_a");
 }

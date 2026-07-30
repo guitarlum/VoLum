@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../config.h"
 #include "../VoLumTriptychLayout.h"
 
 #include <filesystem>
@@ -82,6 +83,36 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
   RequireContains(triptych, "{EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive}");
 }
 
+TEST_CASE("All pedal controls remain editable while their block is bypassed")
+{
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
+
+  // Pin every bypassable PRE/POST block before asserting the shared policy.
+  for (const char* group : {"PITCH_TRANSPOSE_KNOBS", "PITCH_OCTAVER_KNOBS", "COMP_KNOBS", "PRE_NAM1_KNOBS",
+                            "PRE_NAM2_KNOBS", "DELAY_KNOBS", "REVERB_KNOBS", "TREMOLO_KNOBS"})
+    RequireContains(runtime, group);
+
+  INFO("Bypass must affect DSP only; visible controls must keep accepting mouse-wheel and pointer edits");
+  CHECK(runtime.find("disableGroup(") == std::string::npos);
+  CHECK(runtime.find("SetDisabled(") == std::string::npos);
+}
+
+TEST_CASE("Windows binary version resource matches config.h")
+{
+  const std::string rc = ReadText(RepoRoot() / "NeuralAmpModeler" / "resources" / "main.rc");
+  const std::string version = PLUG_VERSION_STR;
+  std::string numeric = version;
+  for (char& c : numeric)
+    if (c == '.')
+      c = ',';
+  numeric += ",0";
+
+  RequireContains(rc, ("FILEVERSION " + numeric).c_str());
+  RequireContains(rc, ("PRODUCTVERSION " + numeric).c_str());
+  RequireContains(rc, ("VALUE \"FileVersion\", \"" + version + "\"").c_str());
+  RequireContains(rc, ("VALUE \"ProductVersion\", \"" + version + "\"").c_str());
+}
+
 TEST_CASE("Collapsed PRE slots show selected pedal short labels")
 {
   const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp
@@ -154,15 +185,26 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "key.VK == 'h' || key.VK == 'H'");
   RequireContains(source, "settings->As<NAMSettingsPageControl>()->HideAnimated(false);");
   RequireContains(source, "key.VK == kTabKey");
+  // Standalone retains Space; plug-ins use B and leave Space for DAW transport.
+  RequireContains(source, "#ifdef APP_API");
+  RequireContains(source, "if (key.VK == ' ')");
+  RequireContains(source, "if (key.VK == 'b' || key.VK == 'B')");
+  RequireContains(source, "constexpr const char* kToggleOnOffHint = \"Space on/off\";");
+  RequireContains(source, "constexpr const char* kToggleOnOffHint = \"B on/off\";");
   RequireContains(source, "return _CycleVoLumKeyboardTarget(key.VK == kVK_LEFT ? -1 : 1)");
   // POST Tab/arrow cycling must reach all three cards (Delay/Reverb/Tremolo), not
   // just toggle Delay<->Reverb (the "can't arrow to Tremolo in POST" bug).
   RequireContains(source, "mVolumFocusedEffect = targets[wrap(current + direction, 3)];");
   RequireContains(source, "Left/Right channel  |  S cab  |  Tab target");
-  RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected");
+  // S runs the cab row's own step, which fires the callback a click fires. Covered
+  // properly in test_volum_cab_step.cpp; pinned here so the shortcut layer keeps
+  // routing through it rather than growing a second copy of the cab logic again.
+  RequireContains(source, "StepKeyboard(direction)");
   RequireContains(source, "Left/Right or Tab target");
   RequireContains(settings, "Shortcut info");
   RequireContains(settings, "\"1/2/3\", \"PRE / AMP / POST\"");
+  RequireContains(settings, "\"Space\", \"toggle\"");
+  RequireContains(settings, "\"B\", \"toggle\"");
   RequireContains(settings, "\"S\", \"cab\"");
   RequireContains(settings, "\"T\", \"tuner\"");
   RequireContains(settings, "\"M\", \"metronome\"");
@@ -278,6 +320,22 @@ TEST_CASE("OnIdle coalesces the deferred settings write")
   CHECK(writePos - clearPos < 120);
 }
 
+TEST_CASE("Only direct calibration UI edits update machine-global defaults")
+{
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "source == EParamSource::kUI");
+  RequireContains(source, "paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel");
+  RequireContains(source, "mVolumCalibrationDefaultsDirty = true;");
+  RequireContains(source, "if (mVolumCalibrationDefaultsDirty)");
+  RequireContains(source, "_VolumSaveCalibrationDefaults();");
+  // DAW/project restore sets the EParams directly and must not call the writer.
+  const auto loadPos = source.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(loadPos != std::string::npos);
+  const auto loadEnd = source.find("\n}", loadPos);
+  REQUIRE(loadEnd != std::string::npos);
+  CHECK(source.substr(loadPos, loadEnd - loadPos).find("_VolumSaveCalibrationDefaults") == std::string::npos);
+}
+
 TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
 {
   const std::string source = ReadPluginSource();
@@ -293,8 +351,15 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "const int restoredReverbMode = std::clamp(s.postReverbMode");
   RequireContains(source, "_VolumRestoreDelayModeSnapshot(restoredDelayMode);");
   RequireContains(source, "_VolumRestoreReverbModeSnapshot(restoredReverbMode);");
-  RequireContains(source, "spkCtrl->As<VoLumSpeakerRowControl>()->SetSelected(mVolumSpeakerIdx);");
   RequireContains(source, "_UpdateVoLumLayout(pGfx);");
+
+  // No lane's cab selection is pushed from a restore path any more. mVolumSpeakerIdx
+  // is a raw persisted index there: for a custom lane the resolver still has to snap
+  // it to a slot the channel carries, and when SUPPORT is focused it belongs to the
+  // other lane - the row is shared. The pin that was meant to prevent this matched on
+  // the receiver name `spkRow->` and so missed the `spkCtrl->` spelling in
+  // _VolumApplyAmpSettings; matched on the call instead, it catches either.
+  RequireDoesNotContain(source, "SetSelected(mVolumSpeakerIdx);");
 }
 
 TEST_CASE("POST Tremolo per-mode switch is guarded from snapshot re-entry")
@@ -339,7 +404,8 @@ TEST_CASE("Tremolo depth floor + Delay/Tremolo tempo sync are wired into the aud
   const std::string source = ReadPluginSource();
 
   RequireContains(source, "volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value())");
-  RequireContains(source, "std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)");
+  RequireContains(
+    source, "std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)");
   RequireContains(source, "volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())");
 }
 
@@ -542,9 +608,13 @@ TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the def
   // nothing) and fell back to a factory amp. Pin the wiring so a future refactor
   // cannot silently drop it back to the immediate-select-only path.
   const std::string plugin = ReadPluginSource();
-  RequireContains(plugin, "mVolumRestoreCustomMainId = volum::ResolveRestoreCustomMainId(");
-  RequireContains(plugin, "mVolumRestorePresetId = idTail.activePresetId;");
+  RequireContains(plugin, "const volum::RestoreSelection restored = volum::ResolveRestoreSelection(");
+  RequireContains(plugin, "mVolumRestoreCustomMainId = restored.customMainId;");
+  RequireContains(plugin, "mVolumRestorePresetId = restored.activePresetId;");
   RequireContains(plugin, "mVolumDidRestorePresetSelection = false;");
+  // Second stage: the editor-open consumer drops ids the content store cannot
+  // resolve, so a deleted custom amp cannot leave an ownerless preset label.
+  RequireContains(plugin, "volum::ValidateRestoreSelection(");
 }
 
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
@@ -752,10 +822,44 @@ TEST_CASE("Legacy chunks without lock tail default to unlocked on deserialize")
 {
   const std::string source = ReadPluginSource();
 
-  RequireContains(source, "if (hasPrePostLockFlags)");
-  RequireContains(source, "pos = volum::GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked);");
-  RequireContains(source, "mVolumPreLocked = false;");
-  RequireContains(source, "mVolumPostLocked = false;");
+  RequireContains(source, "hasPrePostLockFlags");
+  RequireContains(source, "volum::GetPrePostLockFlags(chunk, pos, pendingPreLocked, pendingPostLocked)");
+  // The pending copies start unlocked, so a chunk with no lock tail still restores
+  // unlocked - without the decoders being handed the live members.
+  RequireContains(source, "bool pendingPreLocked = false;");
+  RequireContains(source, "bool pendingPostLocked = false;");
+}
+
+TEST_CASE("A chunk truncated inside the per-amp tail leaves every scene alone")
+{
+  // The tail is fifteen scenes, the lock flags and the lock snapshots. A failed read
+  // spares the numbers but still writes every boolean from a local carrying the
+  // decoder's default (see the codec test), so one truncation used to reset the
+  // toggles of all fifteen amps, and the instance then saved them. Rejecting the
+  // load instead is not available here: the same version predicate matches upstream
+  // NAM projects, which have no VoLum tail at all.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "auto pendingAmpSettings = mVolumAmpSettings;");
+  RequireContains(source, "auto& s = pendingAmpSettings[i];");
+  RequireContains(source, "const bool perAmpTailComplete = haveSelection && pos >= 0;");
+  RequireContains(source, "mVolumAmpSettings = pendingAmpSettings;");
+  // The decoders must never see the live members again.
+  RequireDoesNotContain(source, "auto& s = mVolumAmpSettings[i];");
+  RequireDoesNotContain(source, "GetPrePostLockFlags(chunk, pos, mVolumPreLocked, mVolumPostLocked)");
+  RequireDoesNotContain(source, "chunk, pos, mVolumPreLocked, mVolumPostLocked, mVolumLiveLockedPre");
+
+  // The selection is part of the same commit: it used to be assigned straight out
+  // of a read that may have failed.
+  RequireContains(source, "const int selectionEnd = volum::GetVoLumChunkSelection(chunk, pos, selection);");
+  RequireContains(source, "const bool haveSelection = selectionEnd >= 0;");
+  RequireDoesNotContain(source, "pos = volum::GetVoLumChunkSelection(chunk, pos, selection);");
+
+  // And there is no id tail behind a tail that did not read.
+  RequireContains(source, "perAmpTailComplete && volum::TryGetChunkIdTail(");
+
+  // The headerless legacy path applied its config even when the read failed.
+  RequireContains(source, "rejecting truncated headerless chunk");
 }
 
 TEST_CASE("VoLum loader queue coalesces duplicate support and PRE requests")
@@ -800,15 +904,94 @@ TEST_CASE("VoLum NAM cache copies dspData before Core consumes cached fields")
   RequireDoesNotContain(source, "return nam::get_dsp(cacheIt->second);");
 }
 
-TEST_CASE("VoLum settings panel shows current latency under model information")
+TEST_CASE("Switching from a custom IR to a baked cab keeps convolving until the swap")
+{
+  // 1.2.1 deferred the convolver teardown but left _VolumClearIR turning the IR
+  // toggle off immediately, and the audio thread gates convolution on that toggle -
+  // so the cab-less burst survived the fix and was reported again. The gate must
+  // read the deferral, and the shaping reset must wait with it or a shaped IR drops
+  // to unity mid-note. The timing itself is unit-tested in test_volum_dsp_staging.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(source, "volum::dsp_staging::IrConvolutionActive(");
+  RequireContains(source, "mVolumDeferredRemoveIR.load(std::memory_order_relaxed))");
+  RequireContains(source, "mVolumDeferredRemoveSupportIR.load(std::memory_order_relaxed))");
+  // The raw param must not reach the plan again; that is exactly the regression.
+  RequireDoesNotContain(source, "toneStackActive, GetParam(kIRToggle)->Value()");
+
+  RequireContains(header, "bool mVolumIrShapingPushPending[2]{false, false};");
+  RequireContains(source, "mVolumIrShapingPushPending[lane] = deferToCabSwap;");
+  RequireContains(source, "void NeuralAmpModeler::_VolumFlushDeferredIrShaping()");
+  RequireContains(source, "_VolumFlushDeferredIrShaping();");
+
+  // Choosing an IR again during the wait cancels the swap: the pending removal
+  // clears mStagedIR too, so firing it afterwards would discard the new IR.
+  const auto selectPos = source.find("void NeuralAmpModeler::_VolumSelectIR(int irIdx");
+  REQUIRE(selectPos != std::string::npos);
+  const auto cancelPos = source.find("mVolumDeferredRemoveIR).store(false);", selectPos);
+  REQUIRE(cancelPos != std::string::npos);
+  CHECK(cancelPos < source.find("_VolumForceDirectCapture(support);", selectPos));
+}
+
+TEST_CASE("Switching from a baked cab to a custom IR waits for the DIRECT capture")
+{
+  // The mirror image of the gap above, reported as a volume jump: the IR applied on
+  // the next block while the baked-cab capture it replaces was still live, so the
+  // lane briefly ran cab plus IR. The staged IR is held until its capture is staged.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  RequireContains(header, "std::atomic<bool> mVolumDeferredApplyIR = false;");
+  RequireContains(header, "std::atomic<bool> mVolumDeferredApplySupportIR = false;");
+  RequireContains(source, "const bool captureLoading = _VolumForceDirectCapture(support);");
+  RequireContains(source, "mVolumDeferredApplySupportIR : mVolumDeferredApplyIR).store(captureLoading);");
+  // The hold is what keeps the staged IR parked for those blocks.
+  RequireContains(source, "if (mStagedIR != nullptr && !holdMainIr)");
+  RequireContains(source, "if (mStagedSupportIR != nullptr && !holdSupportIr)");
+  RequireContains(source, "_VolumStepDeferredIrSwaps(holdMainIr, holdSupportIr);");
+  // Only wait when a capture is actually on its way; _VolumForceDirectCapture says so.
+  RequireContains(source, "bool NeuralAmpModeler::_VolumForceDirectCapture(bool support)");
+  RequireContains(source, "return !alreadyDirect;");
+}
+
+TEST_CASE("Picking No Cab while an IR is active switches at once instead of waiting")
+{
+  // An active IR already holds the lane on DIRECT, so No Cab reuses the live capture
+  // and nothing is staged. Deferring there held the IR for the whole bounded wait,
+  // reported as "from custom IR to no cab takes forever".
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "const bool captureChanges =");
+  RequireContains(source, "_VolumClearIR(supportFocus, /*deferToCabSwap=*/captureChanges);");
+}
+
+TEST_CASE("VoLum settings panel reports round-trip latency, not just plugin PDC")
 {
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
 
-  RequireContains(controls, "Current latency: %.1f ms (%d samples)");
-  RequireContains(controls, "SetCurrentLatency(int samples, double sampleRate)");
-  RequireContains(source, "SetCurrentLatency(GetLatency(), GetSampleRate())");
+  // The wording and arithmetic live in the pure header (test_volum_latency_report);
+  // here we pin that the control renders it and the plugin feeds it real device data.
+  RequireContains(controls, "SetCurrentLatency(const volum::LatencyReport& report)");
+  RequireContains(controls, "volum::FormatLatencyLines(report, kStandalone)");
+  RequireContains(source, "host->GetStreamLatencyFrames()");
+  RequireContains(source, "host->GetIOBufferSize()");
+  // The old PDC-only line read 0.0 ms while the player heard 21 ms of ASIO.
+  RequireDoesNotContain(controls, "Current latency: %.1f ms (%d samples)");
   RequireDoesNotContain(source, " |  Latency:");
+
+  // iPlug2's standalone host calls OnReset() before openStream(), so a report taken
+  // only there can never see the driver's latency and the line silently degrades to
+  // "driver reports none" after every audio-settings change. The OnIdle poll is what
+  // makes it correct itself; without it the readout is stale exactly when looked at.
+  RequireContains(source, "void NeuralAmpModeler::_VolumRefreshLatencyReport(bool force)");
+  RequireContains(source, "_VolumRefreshLatencyReport();");
+  RequireContains(source, "_VolumRefreshLatencyReport(/*force=*/true);");
+
+  // Both rows must exist, or the caveat line has nowhere to render and the readout
+  // clips mid-sentence like it did in 1.2.1.
+  RequireContains(controls, "mControlNames.latencyDetail");
 }
 
 TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wired")
@@ -830,29 +1013,127 @@ TEST_CASE("Custom SUPPORT cab/channel + IR-direct gate + amp-name helper are wir
 
   // D: a custom IR needs a DIRECT capture; the row greys out and selection is
   // hard-blocked otherwise. Channel-first: the gate is now per-channel (the IR
-  // enable comes from the resolver; selection checks ChannelHasDirect).
+  // enable comes from the resolved plan; selection checks ChannelHasDirect).
   RequireContains(speakerRow, "void SetIrEnabled(bool enabled");
-  RequireContains(source, "row->SetIrEnabled(v.irEnabled");
-  RequireContains(source, "!volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
+  RequireContains(source, "row->SetIrEnabled(plan.irEnabled");
+  RequireContains(source, "if (!volum::custom::ChannelHasDirect(amp, laneChannel))");
 }
 
 TEST_CASE("Custom cab navigation is channel-first")
 {
   const std::string source = ReadPluginSource();
   const std::string speakerRow = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSpeakerRow.h");
+  const std::string syncPlan = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUiSyncPlan.h");
 
   // The speaker row can gate the No Cab button (per-channel DIRECT availability).
   RequireContains(speakerRow, "void SetNoCabEnabled(bool enabled");
-  // Custom lane cab refresh runs through the pure channel-first resolver.
-  RequireContains(source, "volum::custom::ResolveLaneCabs(amp, curSlot, curCh)");
-  RequireContains(source, "row->SetNoCabEnabled(v.noCabEnabled");
-  RequireContains(source, "row->SetIrEnabled(v.irEnabled");
-  // The custom channel stepper lists the amp-WIDE gain stages.
+  // Cab refresh runs through the pure channel-first resolver, now reached via the
+  // shared UI sync planner rather than open-coded in the plugin.
+  RequireContains(syncPlan, "custom::ResolveLaneCabs(amp, in.customSlot, channel)");
+  RequireContains(source, "row->SetNoCabEnabled(plan.noCabEnabled");
+  RequireContains(source, "row->SetIrEnabled(plan.irEnabled");
+  // The channel stepper lists the amp-WIDE gain stages.
   RequireContains(source, "const auto channels = volum::custom::AssignedChannels(amp);");
-  // Factory amps always re-enable No Cab (DIRECT on every channel).
-  RequireContains(source, "row->SetNoCabEnabled(true);");
   // Custom IR selection is gated per-channel, not amp-wide.
-  RequireContains(source, "volum::custom::ChannelHasDirect(volum::custom::CustomAmpAt(customLane), laneChannel)");
+  RequireContains(source, "volum::custom::ChannelHasDirect(amp, laneChannel)");
+}
+
+TEST_CASE("Editor reopen re-derives the whole visible selection from backend state")
+{
+  // Regression (1.2.1): closing and reopening the window with a custom IR active
+  // showed "No Cab". The editor rebuilds every control from constructor defaults,
+  // and the old reopen path only pushed SetSelected(speakerIdx) - which an IR had
+  // forced to 0 - so nothing restored the copper IR chip. Custom amps escaped it
+  // only because their restore happened to run the full cab-resolve path.
+  const std::string source = ReadPluginSource();
+
+  // One entry point, called once the whole editor exists.
+  RequireContains(source, "void NeuralAmpModeler::_VolumSyncUiFromState()");
+  RequireContains(source, "_VolumSyncUiFromState();");
+
+  // The layout build must NOT push a partial selection of its own; that split
+  // between "build" and "apply" is what let the IR chip go missing. Matched without
+  // the receiver name: as written with `spkRow->` this pin sat next to a live
+  // `spkCtrl->` copy in _VolumApplyAmpSettings and never saw it.
+  RequireDoesNotContain(source, "SetSelected(mVolumSpeakerIdx);");
+
+  // Both lanes resolve through the same pure planner.
+  RequireContains(source, "volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportFocus, unusedAmp))");
+  RequireContains(source, "volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportLane, amp))");
+}
+
+TEST_CASE("Loading DAW state into an open editor re-derives the visible selection")
+{
+  // Regression (1.2.1): the chunk reader only pushed individual params, on the
+  // assumption that the editor is built after state arrives. Hosts also load state
+  // into a window that is already open - reopening a project with the plug-in window
+  // up, undo, switching host presets - and that left the cab row, IR chip and amp
+  // list describing the rig the chunk had just replaced. Clicking any of them then
+  // committed the stale reading back over the restored state.
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+
+  const auto fnPos = unserialize.find("int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  REQUIRE(fnPos != std::string::npos);
+  const auto fnEnd = unserialize.find("\n}", fnPos);
+  REQUIRE(fnEnd != std::string::npos);
+  const std::string body = unserialize.substr(fnPos, fnEnd - fnPos);
+
+  INFO("chunk restore must end by requesting a re-derive of the whole visible selection");
+  CHECK(body.find("mVolumUiSyncPending.store(true);") != std::string::npos);
+
+  // But it must not run the applier itself. UnserializeState is called on the host's
+  // thread; the applier writes IGraphics controls and can rescan a rig directory into
+  // shared channel vectors, so running it there races the editor's own drawing and
+  // input. The request crosses to OnIdle, which is the UI-thread pump.
+  CHECK(body.find("_VolumSyncUiFromState();") == std::string::npos);
+
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "if (GetUI() && mVolumUiSyncPending.exchange(false))");
+  const auto idlePos = source.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idlePos != std::string::npos);
+  const auto consume = source.find("mVolumUiSyncPending.exchange(false)", idlePos);
+  REQUIRE(consume != std::string::npos);
+  CHECK(consume - idlePos < 400);
+
+  // A request that arrives with the window shut is satisfied by the open path, which
+  // runs the same applier - so the flag is cleared there rather than left to fire a
+  // second, redundant sync on the first idle.
+  const auto openPos = source.find("void NeuralAmpModeler::OnUIOpen()");
+  REQUIRE(openPos != std::string::npos);
+  const auto clear = source.find("mVolumUiSyncPending.store(false);", openPos);
+  REQUIRE(clear != std::string::npos);
+  CHECK(clear < source.find("\n}", openPos));
+}
+
+TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")
+{
+  // Regression (1.2.1): a custom amp saved on gain stage 5 with an active IR came
+  // back on stage 1 after an app restart. _VolumForceDirectCapture read
+  // mVolumCustomMainChannel, a runtime cache still at its default (1) during a
+  // restore, instead of deriving the stage from the persisted stepper position.
+  const std::string source = ReadPluginSource();
+
+  // The same stale read survived one function up, in _VolumSelectIR's DIRECT gate,
+  // which every restore path reaches first - and that one does not merely pick the
+  // wrong stage, it clears the scene's IR id and lets the next save write the
+  // clearing out. So the pin covers both functions, not just the one that was fixed.
+  auto bodyOf = [&source](const char* signature) {
+    const auto fnPos = source.find(signature);
+    REQUIRE(fnPos != std::string::npos);
+    const auto fnEnd = source.find("\n}", fnPos);
+    REQUIRE(fnEnd != std::string::npos);
+    return source.substr(fnPos, fnEnd - fnPos);
+  };
+
+  for (const char* fn : {"bool NeuralAmpModeler::_VolumForceDirectCapture(",
+                         "void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)"})
+  {
+    const std::string body = bodyOf(fn);
+    INFO("MAIN must derive its gain stage from the persisted stepper position: " << fn);
+    CHECK(body.find("volum::CustomChannelAtStep(amp, mVolumChannelIdx)") != std::string::npos);
+    INFO("reading the runtime gain-stage cache for MAIN is the bug being pinned out: " << fn);
+    CHECK(body.find(": mVolumCustomMainChannel;") == std::string::npos);
+  }
 }
 
 TEST_CASE("Reopen restores the dirty baseline from preset content")
@@ -872,9 +1153,272 @@ TEST_CASE("Reopen restores the dirty baseline from preset content")
   CHECK(count >= 2);
 }
 
+TEST_CASE("Preset recall refreshes the focused custom amp's cabs, not the factory rig")
+{
+  // Regression: recalling a preset while a custom amp is focused used to call the
+  // factory _VolumRefreshChannels() unconditionally. That rescans the underlying
+  // factory rig folder, clobbers the custom cab row / channel stepper, and leaves
+  // mVolumCustomMainSlot/Channel stale so the wrong .nam loads - reproduced by
+  // custom preset A -> factory amp -> back to custom -> recall preset B. The recall
+  // path must mirror _VolumSelectCustomAmp: use _VolumApplyCustomMainCabs when a
+  // custom amp is focused.
+  const std::string source = ReadPluginSource();
+
+  const auto fnPos = source.find("void NeuralAmpModeler::_VolumApplyRecalledPreset(");
+  REQUIRE(fnPos != std::string::npos);
+  const auto fnEnd = source.find("\n}", fnPos);
+  REQUIRE(fnEnd != std::string::npos);
+  const std::string body = source.substr(fnPos, fnEnd - fnPos);
+
+  INFO("recall must branch on the focused custom main amp");
+  CHECK(body.find("if (mVolumCustomMainIdx >= 0)") != std::string::npos);
+  CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomMainIdx, false)") != std::string::npos);
+  // The factory refresh must still be the else branch for factory amps.
+  CHECK(body.find("_VolumRefreshChannels();") != std::string::npos);
+  // A focused custom SUPPORT amp is refreshed too so its cab chip tracks the preset.
+  CHECK(body.find("_VolumApplyCustomMainCabs(mVolumCustomSupportIdx, true)") != std::string::npos);
+}
+
+TEST_CASE("Destructive confirmations act on the item they named, not on a row number")
+{
+  // The prompt captured the row and re-applied it when the user confirmed. Another
+  // editor removing an earlier row in the meantime made that row belong to a
+  // different item, so "Delete Foo" deleted Bar - irreversibly, and against exactly
+  // the promise the prompt makes.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+
+  RequireContains(overlay, "std::string RowIdAt(int idx) const");
+  RequireContains(overlay, "int RowIndexById(const std::string& id) const");
+  // Both destructive confirmations resolve at confirm time and bail out by name.
+  RequireContains(overlay, "const int now = id.empty() ? idx : RowIndexById(id);");
+  RequireContains(overlay, "is no longer in your library.");
+  RequireContains(overlay, "ApplyDelete(now);");
+  RequireContains(overlay, "mOverwritePreset(now);");
+  // And the stale-index calls are gone.
+  RequireDoesNotContain(overlay, "ApplyDelete(idx);");
+  RequireDoesNotContain(overlay, "mOverwritePreset(idx);");
+
+  // Rename too. It was left on the row index while delete and overwrite moved to
+  // identity, and it is the operation whose field stays open longest - the whole
+  // time the user is typing - so it has the widest window for another editor to
+  // shift the rows underneath it.
+  RequireContains(overlay, "mRenameId = RowIdAt(mSel);");
+  RequireContains(overlay, "const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);");
+  RequireContains(overlay, "ApplyRename(target, s);");
+  RequireContains(overlay, "NameTaken(s, target)");
+  RequireDoesNotContain(overlay, "ApplyRename(mSel, s);");
+  RequireDoesNotContain(overlay, "NameTaken(s, mSel)");
+
+  // Saving an open amp builder re-resolves its target the same way: a deletion
+  // before that index would otherwise make UpdateCustomAmp adopt another amp's id
+  // and overwrite its record with this draft.
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "editIdx = volum::custom::CustomAmpIndexById(ampIn.id);");
+  RequireContains(source, "return \"Save failed: this amp is no longer in your library\";");
+}
+
+TEST_CASE("Every preset operation claims the shared bridge before using it")
+{
+  // The capture/apply hooks and the active owner key are process-global, so the
+  // instance that last installed them decides whose rig a preset records and whose
+  // rig a recall changes. Installing at construction handed that to whichever
+  // instance the host created last.
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "void NeuralAmpModeler::_VolumClaimPresetOps()");
+  RequireContains(source, "volum::custom::PresetHookOwner() = this;");
+  RequireContains(source, "volum::custom::ClearPresetHooksIfOwnedBy(this);");
+
+  // Seven claims. Save, overwrite and recall are the three operations. The fourth is
+  // the callback the layout hands the Manage overlay, so its rename and delete -
+  // which go straight to the bridge rather than through the plugin - claim the bank
+  // too. The last three are the READ sites: opening the preset menu, and the two
+  // callbacks that bounds-check a chosen row. MockPresetsForAmp ignores its ampIdx
+  // and resolves the bank through the global key, so listing without claiming shows
+  // another instance's presets and hands their row numbers to this instance's bank.
+  auto count = [&source](const char* needle) {
+    const std::string n(needle);
+    std::size_t total = 0;
+    for (std::size_t pos = source.find(n); pos != std::string::npos; pos = source.find(n, pos + n.size()))
+      ++total;
+    return total;
+  };
+
+  CHECK(count("_VolumClaimPresetOps();") == 7);
+  // Each read of the bank is preceded by a claim rather than following one.
+  for (const char* readSite : {"const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);",
+                               "const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);",
+                               "const auto presets = volum::custom::MockPresetsForAmp(ampIdx);"})
+  {
+    const auto read = source.find(readSite);
+    REQUIRE(read != std::string::npos);
+    const auto claim = source.rfind("_VolumClaimPresetOps();", read);
+    REQUIRE(claim != std::string::npos);
+    // The first bank read after that claim is this one, so nothing reads the bank
+    // between the two.
+    const auto firstReadAfterClaim = source.find("MockPresetsForAmp", claim);
+    CHECK(firstReadAfterClaim > read);
+    CHECK(firstReadAfterClaim < read + std::string(readSite).size());
+  }
+  RequireContains(source, "[pPlugin]() { pPlugin->_VolumClaimPresetOps(); }");
+  RequireContains(source, "volum::custom::AddPreset(mVolumAmpIdx");
+  RequireContains(source, "volum::custom::OverwritePreset(mVolumAmpIdx");
+  RequireContains(source, "volum::custom::RecallPreset(mVolumAmpIdx");
+
+  // Three owner-key publishes: one inside the claim helper, plus the two read-only
+  // sites that use no hook (the preset-bar refresh and the amp-switch sync). A
+  // fourth appearing inside an operation would look like a claim while leaving the
+  // hooks pointing at another instance.
+  CHECK(count("volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());") == 3);
+}
+
+TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
+{
+  // Windows delivers down, up, dblclick, up. The confirmation modal acts and hides
+  // on the down, so the dblclick that follows was hit-tested again and landed on the
+  // Manage overlay underneath - at the default window size, on row five. Confirming
+  // a delete with a double-click therefore also recalled an unrelated preset (or
+  // selected an unrelated IR, or loaded an unrelated pedal) and closed Manage.
+  //
+  // The overlay needs a real graphics host to instantiate, so this pins the wiring:
+  // the gesture flag is set on mouse-down and required by the double-click handler
+  // before it does anything.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+
+  RequireContains(
+    overlay, "const bool ownsGesture = mOwnsGesture && mGestureConfirmEpoch == VoLumConfirmClickEpoch();");
+  RequireContains(overlay, "if (!ownsGesture)");
+
+  // It BEGINS with a mouse-down the overlay's own panel received, and the modal's
+  // click counter is sampled with it.
+  RequireContains(overlay, "mOwnsGesture = PanelRect().Contains(x, y);");
+  RequireContains(overlay, "mGestureConfirmEpoch = VoLumConfirmClickEpoch();");
+  RequireDoesNotContain(overlay, "mOwnsGesture = true;");
+
+  // What it must NOT do is clear the claim on mouse-up. That was the second attempt
+  // at this fix and it rejected every legitimate double-click as well: Windows sends
+  // the up BEFORE the dblclick, so by the time the handler ran the claim from the
+  // matching down was already gone, and double-clicking a Manage row did nothing.
+  // The overlay's own events are identical in both cases; only the modal's counter
+  // distinguishes them.
+  RequireDoesNotContain(overlay, "void OnMouseUp(float, float, const IMouseMod&) override { mOwnsGesture = false; }");
+
+  // The counter only moves where it should: the modal bumps it on the click it
+  // consumes, nowhere else.
+  const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumConfirmDialog.h");
+  RequireContains(dialog, "++VoLumConfirmClickEpoch();");
+  const auto bump = dialog.find("++VoLumConfirmClickEpoch();");
+  const auto down = dialog.find("void OnMouseDown(float x, float y, const IMouseMod&) override");
+  REQUIRE(down != std::string::npos);
+  CHECK(bump > down);
+
+  // The guard has to come before the row dispatch, or it guards nothing.
+  const auto guard = overlay.find("if (!ownsGesture)");
+  const auto rowDispatch = overlay.find("mPrimaryAction(mManageKind, mAmpIdx, mPedalSlot, idx);");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(rowDispatch != std::string::npos);
+  CHECK(guard < rowDispatch);
+}
+
+TEST_CASE("A keyboard-selected knob that a mode switch hid consumes the key that drops it")
+{
+  // The bail-out returned false, meaning "not handled", so the chain below it ran:
+  // Up/Down is amp navigation and Left/Right steps the channel. Both stage a model
+  // load and are immediately audible, which is a worse outcome than the silent edit
+  // of an off-screen knob that the bail-out was added to stop. The Left/Right guard
+  // could not save it either, because it tests the very selection just cleared.
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+
+  const auto hidden = keyboard.find("if (pControl->IsHidden())");
+  REQUIRE(hidden != std::string::npos);
+  const auto blockEnd = keyboard.find("}", keyboard.find("_UpdateVoLumKeyboardFocusHint();", hidden));
+  REQUIRE(blockEnd != std::string::npos);
+  const std::string bail = keyboard.substr(hidden, blockEnd - hidden);
+  RequireContains(bail, "return true;");
+  RequireDoesNotContain(bail, "return false;");
+
+  // And it drops the whole selection rather than two of its four fields, or the knob
+  // keeps its keyboard ring - coming back looking selected while no longer answering
+  // arrows - and an open exact-value box is left with nothing driving it.
+  RequireContains(bail, "_ClearVoLumKnobSelection();");
+
+  // Consuming the key is right for the arrows and wrong for the two keys the focus
+  // handler suppresses while a knob is selected. It ran before this one and declined
+  // them on behalf of the selection just dropped, so eating them here as well costs
+  // the user a press: Enter would not open the knob that replaced the hidden one, and
+  // the on/off key would not toggle the focused block.
+  RequireContains(bail, "return _ActivateVoLumKeyboardTarget();");
+  RequireContains(bail, "return _ToggleVoLumKeyboardTarget();");
+  RequireContains(bail, "key.VK == kVK_RETURN");
+}
+
+TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invalidates")
+{
+  // The cab row is one control shared by both lanes and every write to it is now
+  // conditioned on which lane is focused. A clamp that only flipped the flag left the
+  // row describing SUPPORT while MAIN was focused - the exact state that guard exists
+  // to prevent - and a click on a cab then edited MAIN with an index belonging to the
+  // support amp's layout.
+  const std::string source = ReadPluginSource();
+
+  const auto clamp = source.find("void NeuralAmpModeler::_VolumClampSupportFocus()");
+  REQUIRE(clamp != std::string::npos);
+  const auto clampEnd = source.find("\n}", clamp);
+  REQUIRE(clampEnd != std::string::npos);
+  const std::string body = source.substr(clamp, clampEnd - clamp);
+  RequireContains(body, "mVolumDualAmpFocusedSupport = false;");
+  RequireContains(body, "_VolumApplyFocusedLaneCabs();");
+
+  // A lane whose amp the library no longer contains is not a lane either: a custom
+  // support amp deleted from another instance left a stale index behind.
+  RequireContains(source, "mVolumCustomSupportIdx < static_cast<int>(volum::custom::MockCustomAmps().size())");
+
+  // The layout pass reads the focus flag twice - once to choose between the two amp
+  // knob groups, once to choose between the two lane toggle rows - so it has to clamp
+  // before the FIRST of those, not just before the second. Clamping in between put
+  // the support amp's knobs on screen under a hero, cab row and hint bar that had all
+  // already moved back to MAIN, and left them there until some later pass.
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
+  const auto clampCall = runtime.find("_VolumClampSupportFocus();");
+  const auto knobGroups = runtime.find("supportFocus ? \"SUPPORT_AMP_KNOBS\" : \"AMP_KNOBS\"");
+  const auto snapshot = runtime.find("const bool supportFocusNow = dualActiveNow && mVolumDualAmpFocusedSupport;");
+  REQUIRE(clampCall != std::string::npos);
+  REQUIRE(knobGroups != std::string::npos);
+  REQUIRE(snapshot != std::string::npos);
+  CHECK(clampCall < knobGroups);
+  CHECK(clampCall < snapshot);
+}
+
+TEST_CASE("Custom NAM save and async load failures cannot masquerade as success")
+{
+  const std::string source = ReadPluginSource();
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  RequireContains(source, "PrepareCustomNamImport(");
+  RequireContains(overlay, "PathFromUtf8(fn.Get())");
+  RequireContains(source, "PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel))");
+  RequireContains(source, "if (!prepared)");
+  RequireContains(source, "return \"Save failed: \" + prepared.error;");
+  RequireContains(source, "mVolumMainLoadFailed.store(true);");
+  RequireContains(source, "if (superseded)");
+  RequireContains(source, "LOAD FAILED");
+  RequireContains(source, "(still playing ");
+  // Keep every WDL/iPlug path string UTF-8 all the way to the native filesystem
+  // boundary. Reconstructing with path(std::string) invokes the Windows ANSI
+  // code page and can recreate the original failure under a Unicode profile.
+  RequireContains(source, "mVolumRigsRoot = volum::content::PathToUtf8(root);");
+  RequireContains(source, "std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad)");
+  RequireContains(overlay, "std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec)");
+  RequireDoesNotContain(source, "std::filesystem::path(fileToLoad)");
+  RequireDoesNotContain(source, "std::filesystem::path(mVolumRigsRoot)");
+  RequireDoesNotContain(overlay, "std::filesystem::path(fn.Get())");
+  // The active footer filename is committed from mNAMPaths only after the DSP
+  // staging path reports a successful model swap.
+  RequireContains(source, "volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());");
+}
+
 TEST_CASE("Keyboard and mouse toggles share one dirty-marking funnel")
 {
-  // Funnel B: the keyboard Space toggle historically skipped _VolumMarkPresetDirty
+  // Funnel B: the keyboard toggle historically skipped _VolumMarkPresetDirty
   // while the mouse chip called it. Both must now route through _VolumUserToggleParam.
   const std::string source = ReadPluginSource();
 
@@ -923,4 +1467,94 @@ TEST_CASE("Restore re-applies cached DSP gains and tone coefficients")
   RequireContains(source, "mSupportToneStack->SetParam(\"bass\", GetParam(kSupportToneBass)->Value());");
   RequireContains(source, "mSupportToneStack->SetParam(\"middle\", GetParam(kSupportToneMid)->Value());");
   RequireContains(source, "mSupportToneStack->SetParam(\"treble\", GetParam(kSupportToneTreble)->Value());");
+}
+
+TEST_CASE("A custom SUPPORT partner is admitted to the audio graph")
+{
+  // A custom (library) SUPPORT amp has no factory index, so the selection path
+  // parks kSupportAmpIdx at -1. ProcessBlock used to derive "a support amp is
+  // selected" from that param alone, so runSupportModel/runDualAmp stayed false
+  // and the custom dual-amp lane was silent while the UI showed it loaded.
+  const std::string source = ReadPluginSource();
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+
+  const auto processBlock = source.find("void NeuralAmpModeler::ProcessBlock(");
+  REQUIRE(processBlock != std::string::npos);
+  const std::string processBody = source.substr(processBlock, 2500);
+
+  RequireContains(processBody, "mVolumSupportSelected.load(std::memory_order_relaxed)");
+  RequireDoesNotContain(processBody, "GetParam(kSupportAmpIdx)->Int() >= 0");
+
+  // The flag is only trustworthy if the one function that owns it maintains it on
+  // every path. Two load paths (custom partner, factory amp) arm it; every exit
+  // that asks the audio thread to drop the model clears it. Counting them is what
+  // makes a newly added exit that forgets the flag fail here.
+  auto countOf = [](const std::string& haystack, const std::string& needle) {
+    size_t n = 0;
+    for (size_t at = haystack.find(needle); at != std::string::npos; at = haystack.find(needle, at + 1))
+      ++n;
+    return n;
+  };
+  const auto request = loader.find("void NeuralAmpModeler::_VolumRequestSupportModelLoad()");
+  REQUIRE(request != std::string::npos);
+  const std::string requestBody = loader.substr(request);
+
+  CHECK(countOf(requestBody, "mVolumSupportSelected.store(true)") == 2);
+  CHECK(countOf(requestBody, "mVolumSupportSelected.store(false)") == 5);
+  CHECK(countOf(requestBody, "mShouldRemoveSupportModel.store(true)")
+        == countOf(requestBody, "mVolumSupportSelected.store(false)"));
+}
+
+TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
+{
+  // _VolumDrainLoaderResults runs on the audio thread: ProcessBlock ->
+  // _ApplyDSPStaging -> _VolumDrainLoaderResults. Every VOLUM_LOG entry takes a
+  // mutex, stats the log file, may rename it, and opens an ofstream. Logging load
+  // outcomes from the drain therefore put blocking file I/O in the realtime
+  // callback on every amp, channel or cab switch - and VoLumDiagLog.h's own
+  // contract says never to call it from the audio thread.
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+
+  const auto drain = loader.find("void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  REQUIRE(drain != std::string::npos);
+  const auto loaderMain = loader.find("void NeuralAmpModeler::_VolumLoaderThreadMain()");
+  REQUIRE(loaderMain != std::string::npos);
+  REQUIRE(drain < loaderMain); // the drain body is bounded by the next function
+
+  const std::string drainBody = loader.substr(drain, loaderMain - drain);
+  RequireDoesNotContain(drainBody, "VOLUM_LOG");
+
+  // The outcomes are still logged, just from the worker thread that produced them -
+  // and worded for what that thread actually knows. It has read and parsed the file;
+  // whether the model reaches the audio graph is decided later, in the drain, which
+  // may discard it as superseded. "loaded" claimed the second thing.
+  const std::string loaderBody = loader.substr(loaderMain);
+  RequireContains(loaderBody, "VOLUM_LOG(\"model\"");
+  RequireContains(loaderBody, "\" read \"");
+  RequireContains(loaderBody, "\" load FAILED \"");
+}
+
+TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay muted")
+{
+  // An active tuner memsets every output channel (silenceForTuner in
+  // ProcessBlock). mTunerDSP is a plugin member, so it outlives the editor, and
+  // the only two places that can clear it -- the tuner toggle and the tuner
+  // control's dismiss action -- both require an editor. Closing the plugin window
+  // with the tuner open therefore silenced the instance for good, invisibly: the
+  // editor is rebuilt with the tuner hidden, so reopening showed a normal UI over
+  // a dead signal path.
+  const std::string source = ReadPluginSource();
+
+  const auto onUIClose = source.find("void NeuralAmpModeler::OnUIClose()");
+  REQUIRE(onUIClose != std::string::npos);
+  const auto body = source.substr(onUIClose, 700);
+
+  // The deactivation has to live in OnUIClose itself, not merely somewhere in the
+  // translation unit.
+  RequireContains(body, "mTunerDSP.SetActive(false);");
+
+  // Pin the two facts that make the above load-bearing, so this test keeps
+  // failing for the right reason if either moves.
+  RequireContains(source, "processingPlan.silenceForTuner");
+  RequireContains(source, "mTunerDSP.IsActive()");
 }

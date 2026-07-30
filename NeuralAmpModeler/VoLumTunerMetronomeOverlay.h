@@ -18,6 +18,7 @@
 #include "VoLumMetronomeDSP.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <functional>
 
@@ -54,13 +55,12 @@ public:
     DrawCornerAccent(g, panel.R - 11.f, panel.B - 11.f, 16.f, true, true);
 
     const IRECT titleRect(panel.L, panel.T + 14.f, panel.R, panel.T + 34.f);
-    g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               "TUNER", titleRect);
+    g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "TUNER", titleRect);
 
     if (!mResult.valid)
     {
-      g.DrawText(IText(16.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-                 "Play a note...", IRECT(panel.L, panel.T + 70.f, panel.R, panel.T + 100.f));
+      g.DrawText(IText(16.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), "Play a note...",
+                 IRECT(panel.L, panel.T + 70.f, panel.R, panel.T + 100.f));
       return;
     }
 
@@ -96,12 +96,13 @@ public:
     const IRECT centsRect(panel.L, barRect.B + 4.f, panel.R, barRect.B + 20.f);
     char centsStr[16];
     snprintf(centsStr, sizeof(centsStr), "%+.0f cents", mResult.cents);
-    g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), centsStr, centsRect);
+    g.DrawText(
+      IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), centsStr, centsRect);
 
-    g.DrawText(IText(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-               "FLAT", IRECT(barRect.L - 30.f, barRect.T, barRect.L - 2.f, barRect.B));
-    g.DrawText(IText(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-               "SHARP", IRECT(barRect.R + 2.f, barRect.T, barRect.R + 34.f, barRect.B));
+    g.DrawText(IText(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), "FLAT",
+               IRECT(barRect.L - 30.f, barRect.T, barRect.L - 2.f, barRect.B));
+    g.DrawText(IText(10.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), "SHARP",
+               IRECT(barRect.R + 2.f, barRect.T, barRect.R + 34.f, barRect.B));
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -172,8 +173,7 @@ public:
   {
     if (mMouseIsOver)
     {
-      g.FillEllipse(IColor(44, 200, 200, 200), mRECT.MW(), mRECT.MH(),
-                    mRECT.W() * 0.5f, mRECT.H() * 0.5f);
+      g.FillEllipse(IColor(44, 200, 200, 200), mRECT.MW(), mRECT.MH(), mRECT.W() * 0.5f, mRECT.H() * 0.5f);
     }
 
     float alpha = mActive ? 1.f : 0.35f;
@@ -229,8 +229,7 @@ public:
     DrawCornerAccent(g, panel.R - 11.f, panel.B - 11.f, 16.f, true, true);
 
     const IRECT titleRect(panel.L, panel.T + 14.f, panel.R, panel.T + 34.f);
-    g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               "METRONOME", titleRect);
+    g.DrawText(IText(14.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "METRONOME", titleRect);
 
     // On/Off toggle
     const float toggleY = panel.T + 48.f;
@@ -246,7 +245,8 @@ public:
     g.FillCircle(VoLumColors::TEXT_BRIGHT, knobX, toggleRect.MH(), toggleH / 2.f - 3.f);
 
     const IRECT onOffLabel(toggleRect.R + 8.f, toggleRect.T, toggleRect.R + 50.f, toggleRect.B);
-    g.DrawText(IText(12.f, mActive ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle),
+    g.DrawText(IText(12.f, mActive ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near,
+                     EVAlign::Middle),
                mActive ? "ON" : "OFF", onOffLabel);
 
     mToggleRect = toggleRect;
@@ -270,7 +270,8 @@ public:
     snprintf(bpmStr, sizeof(bpmStr), "%.0f", mBPM);
     g.FillRoundRect(IColor(220, 14, 16, 22), bpmValueRect, 4.f);
     g.DrawRoundRect(IColor(50, 200, 162, 78), bpmValueRect, 4.f, nullptr, 1.f);
-    g.DrawText(IText(18.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle), bpmStr, bpmValueRect);
+    g.DrawText(
+      IText(18.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle), bpmStr, bpmValueRect);
 
     mBpmMinusRect = bpmMinusRect;
     mBpmValueRect = bpmValueRect;
@@ -296,8 +297,8 @@ public:
 
     char volStr[8];
     snprintf(volStr, sizeof(volStr), "%d%%", static_cast<int>(mVolume * 100.f));
-    g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle),
-               volStr, IRECT(barR + 4.f, volY, panel.R - 8.f, volY + 22.f));
+    g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Middle), volStr,
+               IRECT(barR + 4.f, volY, panel.R - 8.f, volY + 22.f));
 
     mVolBarRect = IRECT(barL, volY, barR, volY + 22.f);
 
@@ -439,7 +440,13 @@ public:
     {
       char* end = nullptr;
       const float bpm = std::strtof(str, &end);
-      if (end != str)
+      // isfinite, not just "something parsed": strtof accepts "nan" and "inf", and
+      // std::clamp passes NaN straight through because both of its comparisons are
+      // false. That NaN reached SetBPM and then samplesPerBeat = rate * 60 / NaN,
+      // whose conversion to int is undefined - in practice a silent metronome or a
+      // one-sample beat interval, and a value that never compares equal so the
+      // recalculation ran every block. Unparsable input keeps the previous tempo.
+      if (end != str && std::isfinite(bpm))
       {
         mBPM = std::clamp(bpm, volum::MetronomeDSP::kMinBPM, volum::MetronomeDSP::kMaxBPM);
         if (mOnBPMChanged)

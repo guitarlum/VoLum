@@ -143,8 +143,8 @@ inline nlohmann::json PitchTailToJson(const PitchTail& p)
   for (int i = 0; i < kVoLumPitchModeCount; ++i)
     modes.push_back(
       {{"mix", p.modes[i].mix}, {"dry", p.modes[i].dry}, {"level", p.modes[i].level}, {"voice", p.modes[i].voicing}});
-  return nlohmann::json{{"active", p.active}, {"mode", p.mode},      {"semi", p.semitones}, {"mix", p.mix},
-                        {"octDn", p.octDown}, {"octUp", p.octUp},    {"dry", p.dry},        {"voice", p.voicing},
+  return nlohmann::json{{"active", p.active}, {"mode", p.mode},       {"semi", p.semitones}, {"mix", p.mix},
+                        {"octDn", p.octDown}, {"octUp", p.octUp},     {"dry", p.dry},        {"voice", p.voicing},
                         {"level", p.level},   {"tchar", p.transChar}, {"modes", modes}};
 }
 
@@ -207,10 +207,9 @@ inline nlohmann::json TremoloTailToJson(const TremoloTail& t)
                      {"shape", t.modes[i].shape},
                      {"mix", t.modes[i].mix},
                      {"xover", t.modes[i].crossover}});
-  return nlohmann::json{{"active", t.active},   {"mode", t.mode},   {"rate", t.rate},
-                        {"depth", t.depth},     {"shape", t.shape}, {"mix", t.mix},
-                        {"xover", t.crossover}, {"sync", t.sync},   {"div", t.division},
-                        {"modes", modes}};
+  return nlohmann::json{{"active", t.active}, {"mode", t.mode}, {"rate", t.rate},       {"depth", t.depth},
+                        {"shape", t.shape},   {"mix", t.mix},   {"xover", t.crossover}, {"sync", t.sync},
+                        {"div", t.division},  {"modes", modes}};
 }
 
 inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
@@ -362,7 +361,16 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   return t;
 }
 
-// Decide which custom MAIN amp id to restore into the UI when the editor opens.
+// The deferred-restore references the editor consumes when it opens: which custom
+// MAIN amp to re-focus and which preset to re-label. They travel together because
+// a preset bank belongs to one amp.
+struct RestoreSelection
+{
+  std::string customMainId;
+  std::string activePresetId;
+};
+
+// Decide which selection to restore into the UI when the editor opens.
 //
 // Standalone restores its last selection from volum-settings.json (the machine-
 // global pick). A plugin instance ALSO loads that same settings file in its
@@ -373,10 +381,28 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
 // remember. When there is no chunk (pure standalone launch) the settings value
 // is used. This is the exact precedence the 1.2.0 "VST3 reopen drops the custom
 // amp" bug got wrong (the chunk selection was never propagated to editor-open).
-inline std::string ResolveRestoreCustomMainId(bool loadedFromChunk, const std::string& chunkId,
-                                              const std::string& settingsId)
+inline RestoreSelection ResolveRestoreSelection(bool loadedFromChunk, const RestoreSelection& chunk,
+                                                const RestoreSelection& settings)
 {
-  return loadedFromChunk ? chunkId : settingsId;
+  return loadedFromChunk ? chunk : settings;
+}
+
+// Second stage: drop references the content store cannot resolve on THIS machine.
+// The caller owns the store and reports what it found. A custom amp that no longer
+// exists also invalidates the preset id, because the bank belonged to that amp -
+// keeping it would restore a preset label with no owner.
+inline RestoreSelection ValidateRestoreSelection(const RestoreSelection& in, bool customMainIdKnown, bool presetIdKnown)
+{
+  RestoreSelection out = in;
+  if (!out.customMainId.empty() && !customMainIdKnown)
+  {
+    out.customMainId.clear();
+    out.activePresetId.clear();
+    return out;
+  }
+  if (!presetIdKnown)
+    out.activePresetId.clear();
+  return out;
 }
 
 // Append the id tail. Uses only scalar Put<T> so it works against both iPlug's

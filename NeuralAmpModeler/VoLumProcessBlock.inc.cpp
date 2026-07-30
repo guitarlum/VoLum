@@ -22,9 +22,9 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
 {
   if (processingPlan.runPrePitch)
   {
-    // Reconfigure (block-size/quality change) happens off the audio thread in
-    // OnIdle. Here we only try-lock; if a reconfigure is mid-flight we pass the
-    // dry signal through for this block rather than allocate or block.
+    // Reconfigure happens off the audio thread in OnReset. Here we only try-lock;
+    // if reset is in flight we pass dry rather than block, and VoLumPitch itself
+    // uses its preallocated reserve (never grows from Process).
     std::unique_lock<std::mutex> lock(mPrePitchMutex, std::try_to_lock);
     if (lock.owns_lock() && mPitch.Configured())
     {
@@ -126,7 +126,12 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
 
     sample** irPointers = toneStackOutPointers;
     if (processingPlan.runIR)
+    {
       irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, nFrames);
+      // VoLum 1.2.1: per-IR trim + low/high cut (undoes the convolver's baked
+      // -18 dB and lets a custom IR be shaped without editing the .wav).
+      irPointers = _VolumApplyIrShaping(irPointers, numChannelsInternal, nFrames, sampleRate, /*support=*/false);
+    }
 
     hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, nFrames);
   }
@@ -181,7 +186,11 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   // mirroring the MAIN lane (tone stack -> IR -> high-pass). Independent of the
   // MAIN convolver so a custom IR is local to one lane (spec 3.2).
   if (processingPlan.runSupportIR)
+  {
     supportPostPointers = mSupportIR->Process(supportPostPointers, numChannelsInternal, nFrames);
+    supportPostPointers =
+      _VolumApplyIrShaping(supportPostPointers, numChannelsInternal, nFrames, sampleRate, /*support=*/true);
+  }
 
   supportPostPointers = mSupportHighPass.Process(supportPostPointers, numChannelsInternal, nFrames);
   return supportPostPointers[0];
@@ -248,9 +257,8 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   {
     // Sync converts BPM + division to an LFO Hz (shared postBpm computed above).
     const bool tremoloSync = GetParam(kTremoloSync)->Bool();
-    const double tremoloRateHz = tremoloSync
-                                   ? volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())
-                                   : GetParam(kTremoloRate)->Value();
+    const double tremoloRateHz = tremoloSync ? volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())
+                                             : GetParam(kTremoloRate)->Value();
     mTremolo.SetParams(tremoloRateHz, volum::VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value()),
                        GetParam(kTremoloShape)->Value(), GetParam(kTremoloMix)->Value(),
                        GetParam(kTremoloCrossover)->Value(), GetParam(kTremoloMode)->Int(), sampleRate);

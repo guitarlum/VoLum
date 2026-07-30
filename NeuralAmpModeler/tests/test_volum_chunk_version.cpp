@@ -315,3 +315,108 @@ TEST_CASE("VoLum 1.x chunks use the 0.7.15 serialized config + extended per-amp 
   CHECK(volum::ChunkHasPostPerAmpSettings(withIdTail, volum::kAmpCount));
   CHECK(volum::ChunkHasPostSnapshotPerAmpSettings(withIdTail, volum::kAmpCount));
 }
+
+// ---------------------------------------------------------------------------
+// TryParseChunkVersion
+//
+// The state chunk's version string is corruption- and attacker-controlled, and
+// UnserializeState is called across a C++ ABI boundary that hosts do not wrap in
+// a try/catch. ChunkVersion(std::string) throws (std::stoi, plus an explicit
+// throw on the segment count), so a project file with a valid VoLum header and a
+// malformed version took the DAW down while opening the project instead of being
+// rejected as bad state.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Every version string VoLum has ever serialized parses")
+{
+  volum::ChunkVersion v(0, 0, 0);
+
+  REQUIRE(volum::TryParseChunkVersion("1.2.1", v));
+  CHECK(v.GetMajor() == 1);
+  CHECK(v.GetMinor() == 2);
+  CHECK(v.GetPatch() == 1);
+
+  // Oldest NAM chunks, and a two-digit patch component.
+  REQUIRE(volum::TryParseChunkVersion("0.7.15", v));
+  CHECK(v.GetMajor() == 0);
+  CHECK(v.GetMinor() == 7);
+  CHECK(v.GetPatch() == 15);
+
+  REQUIRE(volum::TryParseChunkVersion("0.1.0", v));
+  CHECK(v.GetMajor() == 0);
+  CHECK(v.GetMinor() == 1);
+  CHECK(v.GetPatch() == 0);
+
+  // Leading zeros and multi-digit majors are still just digits.
+  REQUIRE(volum::TryParseChunkVersion("10.20.30", v));
+  CHECK(v.GetMajor() == 10);
+  CHECK(v.GetMinor() == 20);
+  CHECK(v.GetPatch() == 30);
+}
+
+TEST_CASE("The parser agrees with the throwing constructor on well-formed input")
+{
+  for (const char* text : {"0.0.0", "0.1.0", "0.7.15", "0.9.3", "1.0.0", "1.1.2", "1.2.0", "1.2.1"})
+  {
+    CAPTURE(text);
+    const volum::ChunkVersion expected{std::string(text)};
+    volum::ChunkVersion actual(0, 0, 0);
+    REQUIRE(volum::TryParseChunkVersion(text, actual));
+    CHECK(actual.GetMajor() == expected.GetMajor());
+    CHECK(actual.GetMinor() == expected.GetMinor());
+    CHECK(actual.GetPatch() == expected.GetPatch());
+  }
+}
+
+TEST_CASE("Malformed versions are rejected without throwing")
+{
+  // Each of these threw out of ChunkVersion(std::string) before the fix: the
+  // first group from the explicit segment-count throw, the rest from std::stoi.
+  const char* malformed[] = {
+    "", // header present, version absent
+    "1",
+    "1.2",
+    "1.2.3.4", // wrong segment count
+    "1.x.0",
+    "x.2.1",
+    "1.2.x", // non-numeric segment
+    "1..0",
+    "..",
+    ".1.2",
+    "1.2.", // empty segment
+    "-1.2.3",
+    "1.-2.3", // negative component
+    "99999999999999999999.0.0", // out of int range
+    "1.2.3-beta",
+    "1.2.3 ",
+    " 1.2.3",
+    "v1.2.1", // trailing or leading junk
+    "1,2,1", // decimal-comma locale mangling
+  };
+
+  for (const char* text : malformed)
+  {
+    CAPTURE(text);
+    volum::ChunkVersion v(7, 7, 7);
+    CHECK_FALSE(volum::TryParseChunkVersion(text, v));
+
+    // A rejected parse must leave the caller's version untouched, so a failure
+    // cannot be mistaken for "0.0.0" and routed into a legacy migration path.
+    CHECK(v.GetMajor() == 7);
+    CHECK(v.GetMinor() == 7);
+    CHECK(v.GetPatch() == 7);
+  }
+}
+
+TEST_CASE("Parsing arbitrary bytes never throws")
+{
+  // The version field can contain anything at all once a chunk is corrupt.
+  std::string text;
+  for (int b = 0; b < 256; ++b)
+  {
+    text.assign(3, static_cast<char>(b));
+    volum::ChunkVersion v(0, 0, 0);
+    CAPTURE(b);
+    CHECK_NOTHROW(volum::TryParseChunkVersion(text, v));
+  }
+}

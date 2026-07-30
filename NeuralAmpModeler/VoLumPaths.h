@@ -263,4 +263,24 @@ inline std::filesystem::path VolumDualAmpSettingsFilePath()
 #endif
 }
 
+// Rolling diagnostic log, sibling of volum-settings.json. See VoLumDiagLog.h.
+inline std::filesystem::path VolumDiagLogFilePath()
+{
+  namespace fs = std::filesystem;
+#ifdef _WIN32
+  const char* la = std::getenv("LOCALAPPDATA");
+  if (!la || !*la)
+    return {};
+  return fs::path(la) / "VoLum" / "volum.log";
+#elif defined(__APPLE__)
+  const char* home = std::getenv("HOME");
+  if (!home || !*home)
+    return {};
+  return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum.log";
+#else
+  (void)0;
+  return {};
+#endif
+}
+
 } // namespace volum

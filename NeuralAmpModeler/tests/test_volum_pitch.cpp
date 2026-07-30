@@ -137,6 +137,70 @@ TEST_CASE("VoLumPitch passthrough when unconfigured")
     CHECK(o[0][i] == doctest::Approx(static_cast<double>(in[i])));
 }
 
+TEST_CASE("VoLumPitch pre-reserves host block growth and never reallocates in Process")
+{
+  VoLumPitch pitch;
+  pitch.Configure(kSR, 64);
+  pitch.Reset();
+  pitch.SetParams(VoLumPitch::Mode::Transpose, 7.0, 1.0, 0.0, 0.0, 0.0, VoLumPitch::Voicing::Modern, 0.0,
+                  VoLumPitch::Character::Poly);
+
+  CHECK(pitch.PreparedBlockSize() >= VoLumPitch::kRealtimeBlockReserve);
+  const int latency = pitch.Latency();
+
+  for (size_t block : {size_t{64}, size_t{128}, size_t{256}, size_t{1024}})
+  {
+    auto in = makeSine(196.0, block);
+    DSP_SAMPLE* ptr[1] = {in.data()};
+    DSP_SAMPLE** out = pitch.Process(ptr, 1, block);
+    CHECK(out != ptr); // Processed from the off-thread reserve, not dry fallback.
+    CHECK(pitch.PreparedBlockSize() >= static_cast<int>(block));
+    CHECK(pitch.Latency() == latency);
+    for (size_t i = 0; i < block; ++i)
+      CHECK(std::isfinite(static_cast<double>(out[0][i])));
+  }
+
+  // Beyond the fixed reserve, fail safe to dry for one block. Most importantly,
+  // do not grow/reconfigure the shifter on the real-time thread.
+  const size_t oversized = static_cast<size_t>(pitch.PreparedBlockSize()) + 1;
+  auto in = makeSine(196.0, oversized);
+  DSP_SAMPLE* ptr[1] = {in.data()};
+  CHECK(pitch.Process(ptr, 1, oversized) == ptr);
+  CHECK(pitch.PreparedBlockSize() == VoLumPitch::kRealtimeBlockReserve);
+  CHECK(pitch.Latency() == latency);
+}
+
+TEST_CASE("VoLumPitch stays finite across supported sample rates and small host blocks")
+{
+  for (double sr : {44100.0, 48000.0, 96000.0})
+    for (int block : {64, 128, 256})
+      for (int workload = 0; workload < 3; ++workload)
+      {
+        const auto mode = workload == 2 ? VoLumPitch::Mode::Octaver : VoLumPitch::Mode::Transpose;
+        const auto character = workload == 0 ? VoLumPitch::Character::Instant : VoLumPitch::Character::Poly;
+        VoLumPitch pitch;
+        pitch.Configure(sr, block);
+        pitch.Reset();
+        pitch.SetParams(mode, 7.0, 1.0, 0.8, 0.8, 0.5, VoLumPitch::Voicing::Modern, 0.0, character);
+
+        std::vector<DSP_SAMPLE> in(static_cast<size_t>(block));
+        for (int n = 0; n < block; ++n)
+          in[static_cast<size_t>(n)] =
+            static_cast<DSP_SAMPLE>(0.5 * std::sin(2.0 * M_PI * 196.0 * static_cast<double>(n) / sr));
+        DSP_SAMPLE* ptr[1] = {in.data()};
+
+        for (int pass = 0; pass < 32; ++pass)
+        {
+          DSP_SAMPLE** out = pitch.Process(ptr, 1, in.size());
+          for (size_t i = 0; i < in.size(); ++i)
+          {
+            CHECK(std::isfinite(static_cast<double>(out[0][i])));
+            CHECK(std::abs(static_cast<double>(out[0][i])) < 8.0);
+          }
+        }
+      }
+}
+
 TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Poly < Drop) and bounded")
 {
   VoLumPitch pitch;
@@ -167,7 +231,7 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Poly < Drop) 
                   VoLumPitch::Character::Poly);
   const int polyLat = pitch.Latency();
   CHECK(polyLat > instantLat); // poly adds polyphony just above the tightest mono character
-  CHECK(polyLat < dropLat);    // ...but is now cheaper than Drop (was ~3x Drop before the RE port)
+  CHECK(polyLat < dropLat); // ...but is now cheaper than Drop (was ~3x Drop before the RE port)
   // Poly ~14 ms; locked well under the old ~49 ms so a regression to the WSOLA-floor
   // tuning is caught, and bounded above so a runaway grain can't blow up PDC.
   CHECK(polyLat < static_cast<int>(kSR * 0.020));
@@ -288,6 +352,65 @@ TEST_CASE("VoLumPitch POLY WSOLA search stays below the grain band (no runaway r
     CHECK(g.band > 0);
     CHECK(g.search < g.band); // THE invariant: search >= band => runaway splicing.
   }
+}
+
+namespace
+{
+// Run one POLY GranularVoice over rich transient material at a given ratio and
+// return how many crossfaded splices it started. Splice cadence is the direct
+// signal for the positive-semitone crackle: a shortened grain re-splices far more
+// often than the ~20 ms band.
+unsigned long long polySpliceCount(double ratio, size_t n)
+{
+  using GV = dsp::effect::GranularVoice;
+  GV voice;
+  voice.Configure(kSR, kBlock);
+  voice.SetCharacter(GV::Character::Poly);
+  voice.Reset();
+  voice.SetRatio(ratio);
+  auto in = makeGuitar(196.0, n); // G3, decaying harmonics: transient + polyphonic-ish
+  std::vector<DSP_SAMPLE> out(n);
+  for (size_t start = 0; start < n; start += static_cast<size_t>(kBlock))
+  {
+    const size_t m = std::min<size_t>(static_cast<size_t>(kBlock), n - start);
+    voice.Process(in.data() + start, out.data() + start, m);
+  }
+  return voice.SpliceStarts();
+}
+} // namespace
+
+TEST_CASE("POLY upshift keeps its grain cadence (no positive-semitone crackle)")
+{
+  // REGRESSION GUARD for the positive-semitone crackle. POLY splices by a whole
+  // `band` (~20 ms) and _WsolaRefine nudges the target within [-search, +search].
+  // DOWNtuning always sounded great; UPshift crackled because WSOLA's negative lags
+  // shortened the grain, so POLY re-spliced far more often than one grain per band.
+  // The fix floors the upshift splice target at the intended one-band jump, so WSOLA
+  // can only push the splice DEEPER into history (longer grain), never shorten it.
+  // That imposes a hard cadence ceiling: with each grain travelling at least `band`,
+  // the splice count over N samples at ratio f cannot exceed ~ N*(f-1)/band. Steady
+  // sines hide the bug (any offset lands on similar waveform), so drive rich
+  // transient material. Measured on this signal: pre-fix upshift ~93 splices/s,
+  // post-fix ~25 (== the ceiling); the known-good downshift path is ~61 and untouched.
+  const double ratioUp = std::pow(2.0, 7.0 / 12.0); // +7 semitones (worst allowed upshift)
+  const double ratioDn = std::pow(2.0, -7.0 / 12.0); // -7 semitones (known-good downtuning)
+  const size_t n = static_cast<size_t>(kSR); // 1 second
+  const double band = 0.020 * kSR; // POLY grain spacing in samples
+
+  const auto up = polySpliceCount(ratioUp, n);
+  const auto down = polySpliceCount(ratioDn, n);
+  const double ceiling = static_cast<double>(n) * (ratioUp - 1.0) / band; // ~24.9
+
+  INFO("upshift splices=", up, " downshift splices=", down, " ceiling~", ceiling);
+  // The effect is engaged in both directions.
+  CHECK(up > 3);
+  CHECK(down > 3);
+  // THE guard: post-fix the upshift grain never shortens below `band`, so the splice
+  // count is capped near the one-band-per-grain ceiling. Pre-fix it ran several-fold
+  // higher (WSOLA-shortened grains); the +5 slack covers block/warmup boundary jitter.
+  CHECK(static_cast<double>(up) <= ceiling + 5.0);
+  // The upshift-only fix must not perturb the downshift path into a runaway either.
+  CHECK(static_cast<double>(down) < 4.0 * ceiling);
 }
 
 TEST_CASE("VoLumPitch transpose Mix=0 equals latency-delayed dry")

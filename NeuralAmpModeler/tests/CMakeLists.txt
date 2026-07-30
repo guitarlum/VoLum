@@ -18,6 +18,11 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_settings_atomic_write.cpp
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp
+  test_volum_ui_sync_plan.cpp
+  test_volum_upgrade_migration.cpp
+  test_volum_input_calibration.cpp
+  test_volum_diag_log.cpp
+  test_volum_latency_report.cpp
   test_volum_amp_list_scroll.cpp
   test_volum_amp_catalog.cpp
   test_delay_reverb_dsp.cpp
@@ -34,6 +39,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_custom_content.cpp
   test_volum_content_store.cpp
   test_volum_content_crud_edge.cpp
+  test_volum_ir_shaping.cpp
   test_volum_processing_plan.cpp
   test_volum_dsp_cache_params.cpp
   test_volum_dsp_staging.cpp
@@ -50,7 +56,14 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_level_mute.cpp
   test_volum_knob_wheel.cpp
   test_iplug_app_vector_accumulator.cpp
+  test_iplug_app_shutdown.cpp
+  test_volum_preset_bar.cpp
+  test_volum_chunk_safe_read.cpp
+  test_volum_overlay_action_codes.cpp
+  test_volum_numeric_entry.cpp
+  test_volum_cab_step.cpp
   test_volum_wav_downmix.cpp
+  test_volum_loopback_detect.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"

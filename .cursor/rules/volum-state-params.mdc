@@ -51,6 +51,24 @@ Settings persistence:
   - macOS: `~/Library/Application Support/VoLum/volum-settings.json`
 - `<rigsRoot>/volum-settings.json` remains a legacy read fallback.
 
+Do NOT bump `kVoLumUserSettingsVersion` for purely additive fields:
+
+- `VolumUserSettingsToJson` / `FromJson` is forward-tolerant by design. An older
+  reader ignores unknown keys, and a newer reader accepts any `version` above its
+  own without triggering legacy migration. **Adding** optional keys needs no bump.
+- Bump only when the change is non-additive: an existing key changes meaning
+  (units, scale, encoding), an existing key is removed, or the reader must
+  actively rewrite/relocate old data.
+- History: the 1.0.1 RC bumped 6 -> 7 just to gate two booleans
+  (`preLocked` / `postLocked`). Downgrading to 1.0.0 then hit destructive
+  legacy-v1 migration, because the old clamp mapped any unknown version back to
+  v1. The fix was to revert the bump. Bug class: **locked the version field too
+  eagerly.**
+- When unsure, leave the version alone and add a `test_volum_user_settings_io.cpp`
+  test proving both directions: JSON from the current build loads in a simulated
+  older reader with no `healed`, and JSON from a simulated future build
+  (`version` + 1, extra unknown keys) loads with no `healed` and no data loss.
+
 Settings SSOT (single source of truth for per-amp `VoLumAmpSettings`):
 
 - The data model is the `VoLumAmpSettings` struct (`VoLumAmpeteCatalog.h`). Every
@@ -84,10 +102,14 @@ DAW-chunk persistence coverage (do NOT rely on pluginval):
 - `kNumParams` lives in `VoLumParams.h` (dependency-free, included by
   `NeuralAmpModeler.h`) so tests measure against the real enum, never a copy.
 
-Verification:
+Verification (run the Windows tests, `AGENTS.md` "Fast Commands"):
 
-- Run the Windows tests (`AGENTS.md` "Fast Commands").
-- Add focused doctests for new DSP/state behavior before calling work done.
-- Register new test files in both `NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj` and `NeuralAmpModeler/tests/CMakeLists.txt`.
-- Params/keyboard/state tests: `test_eparam_order.cpp`, `test_keyboard_steps.cpp`, `test_volum_chunk_version.cpp`, `test_volum_chunk_codec.cpp`.
+- New parameter: pin index and step size in `test_eparam_order.cpp` and
+  `test_keyboard_steps.cpp`.
+- New serialization path: version branch in `test_volum_chunk_version.cpp` plus
+  round-trip/bounds coverage in `test_volum_chunk_codec.cpp`.
 - User settings JSON: `test_volum_user_settings_io.cpp`.
+- Old DAW sessions must still load, and old param names must stay readable
+  through migration.
+- If a fix would change user-facing display wording or symbols (for example
+  `-∞ dB` vs `OFF`), ask before deviating from the planned wording.

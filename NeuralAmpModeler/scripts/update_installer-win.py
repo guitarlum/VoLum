@@ -34,6 +34,25 @@ def main():
 
     config = parse_config(projectpath)
 
+    # WINDOWS BINARY VERSION RESOURCE
+    #
+    # The installer upgrade smoke reads ProductVersion from the installed .exe.
+    # Keep main.rc in lockstep with config.h; otherwise a correctly named 1.2.1
+    # installer can still contain an executable reporting the previous release.
+    resource_version = ",".join(config["FULL_VER_STR"].split(".")) + ",0"
+    for line in fileinput.input(projectpath + "/resources/main.rc", inplace=1):
+        stripped = line.lstrip()
+        indent = line[: len(line) - len(stripped)]
+        if stripped.startswith("FILEVERSION "):
+            line = indent + "FILEVERSION " + resource_version + "\n"
+        elif stripped.startswith("PRODUCTVERSION "):
+            line = indent + "PRODUCTVERSION " + resource_version + "\n"
+        elif 'VALUE "FileVersion"' in stripped:
+            line = indent + 'VALUE "FileVersion", "' + config["FULL_VER_STR"] + '"\n'
+        elif 'VALUE "ProductVersion"' in stripped:
+            line = indent + 'VALUE "ProductVersion", "' + config["FULL_VER_STR"] + '"\n'
+        sys.stdout.write(line)
+
     # WIN INSTALLER
     print("Updating Windows Installer version info...")
 

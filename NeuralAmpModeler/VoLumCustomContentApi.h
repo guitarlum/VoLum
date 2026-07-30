@@ -160,7 +160,11 @@ inline int AddCustomAmp(const CustomAmp& amp)
   if (a.id.empty())
     a.id = content::MintId(reg, "amp");
   reg.amps.push_back(std::move(a));
-  Store().Save();
+  if (!Store().Save())
+  {
+    reg.amps.pop_back();
+    return -1;
+  }
   return (int)reg.amps.size() - 1;
 }
 
@@ -187,8 +191,13 @@ inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
     unique = base + " " + std::to_string(suffix++);
   a.name = unique;
   a.art = ((a.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
+  CustomAmp previous = reg.amps[(size_t)idx];
   reg.amps[(size_t)idx] = std::move(a);
-  Store().Save();
+  if (!Store().Save())
+  {
+    reg.amps[(size_t)idx] = std::move(previous);
+    return -1;
+  }
   return idx;
 }
 
@@ -258,6 +267,8 @@ inline int IRIndexById(const std::string& id)
 // Append a custom IR to the global library. `file` is the stored registry-
 // relative path (the plugin copies the source in first); in tests it is just a
 // filename. Returns its index.
+// Returns -1 when the library could not be written, matching AddCustomAmp: an
+// entry that exists only in memory would look imported until the next restart.
 inline int AddIR(const std::string& name, const std::string& file = "")
 {
   auto& reg = Store().reg();
@@ -266,7 +277,11 @@ inline int AddIR(const std::string& name, const std::string& file = "")
   it.name = name.empty() ? "Imported IR" : name;
   it.file = file;
   reg.irs.push_back(std::move(it));
-  Store().Save();
+  if (!Store().Save())
+  {
+    reg.irs.pop_back();
+    return -1;
+  }
   return (int)reg.irs.size() - 1;
 }
 
@@ -288,6 +303,44 @@ inline void DeleteIR(int idx)
     Store().RemoveIR(irs[(size_t)idx].id);
     Store().Save();
   }
+}
+
+// Per-IR shaping (VoLum 1.2.1): trim + low/high cut that follow the IR in the
+// library (applied on whichever lane loads it).
+struct IRShaping
+{
+  double trimDb = 0.0;
+  double lowCutHz = 0.0; // 0 = off
+  double highCutHz = 0.0; // 0 = off
+  bool calibrated = false;
+};
+
+inline IRShaping IRShapingAt(int idx)
+{
+  const auto& irs = Store().reg().irs;
+  if (idx < 0 || idx >= (int)irs.size())
+    return {};
+  const auto& it = irs[(size_t)idx];
+  return {it.trimDb, it.lowCutHz, it.highCutHz, it.trimCalibrated};
+}
+
+inline IRShaping IRShapingById(const std::string& id)
+{
+  return IRShapingAt(IRIndexById(id));
+}
+
+// Persist edited shaping for the IR at `idx` (clamped to the library ranges). Marks
+// the entry calibrated so the auto-normalize migration never overwrites a user edit.
+inline void SetIRShaping(int idx, double trimDb, double lowCutHz, double highCutHz)
+{
+  auto& irs = Store().reg().irs;
+  if (idx < 0 || idx >= (int)irs.size())
+    return;
+  irs[(size_t)idx].trimDb = content::ClampIrTrimDb(trimDb);
+  irs[(size_t)idx].lowCutHz = content::ClampIrLowCutHz(lowCutHz);
+  irs[(size_t)idx].highCutHz = content::ClampIrHighCutHz(highCutHz);
+  irs[(size_t)idx].trimCalibrated = true;
+  Store().Save();
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +384,17 @@ inline std::string PedalIdAt(int idx)
   return (idx >= 0 && idx < (int)peds.size()) ? peds[(size_t)idx].id : std::string();
 }
 
+inline int PedalIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& peds = Store().reg().pedals;
+  for (int i = 0; i < (int)peds.size(); ++i)
+    if (peds[(size_t)i].id == id)
+      return i;
+  return -1;
+}
+
 // Resolve an imported pedal by its stable PRE-capture legacy index (the value a
 // scene/preset/param stores). Returns "" when no pedal owns that index.
 inline std::string PedalNameByLegacy(int legacyIndex)
@@ -349,10 +413,19 @@ inline std::string PedalStoredPathByLegacy(int legacyIndex)
   return {};
 }
 
+// True when the finite PRE-capture index pool is exhausted, so a caller can tell
+// "no slots left" apart from "the library would not save" - the two reasons
+// AddPedal returns -1, which used to be reported to the user as the first one.
+inline bool PedalSlotsFull()
+{
+  return Store().reg().nextPedalIndex > content::kCustomPedalIndexMax;
+}
+
 // Appends an imported pedal and returns its list index, or -1 when the finite
 // PRE-capture index pool (kCustomPedalIndexBase..kCustomPedalIndexMax) is
-// exhausted. We refuse rather than clamp to kCustomPedalIndexMax, which would
-// alias the new pedal's captures onto an existing one. Callers must handle -1.
+// exhausted, or when the library could not be written. We refuse rather than
+// clamp to kCustomPedalIndexMax, which would alias the new pedal's captures onto
+// an existing one. Callers must handle -1.
 inline int AddPedal(const std::string& name, const std::string& file = "", const std::string& group = "")
 {
   auto& reg = Store().reg();
@@ -364,9 +437,18 @@ inline int AddPedal(const std::string& name, const std::string& file = "", const
   it.group = group;
   it.file = file;
   it.legacyIndex = reg.nextPedalIndex;
+  const int prevNextIndex = reg.nextPedalIndex;
   reg.nextPedalIndex = it.legacyIndex + 1;
   reg.pedals.push_back(std::move(it));
-  Store().Save();
+  // Same contract as AddIR: an import that cannot be persisted did not happen.
+  // The index is rolled back too, or every failed import would burn one of the 64
+  // capture slots for the lifetime of the library.
+  if (!Store().Save())
+  {
+    reg.pedals.pop_back();
+    reg.nextPedalIndex = prevNextIndex;
+    return -1;
+  }
   return (int)reg.pedals.size() - 1;
 }
 
@@ -424,6 +506,27 @@ inline PresetSettingsApply& PresetApplyHook()
 {
   static PresetSettingsApply h;
   return h;
+}
+
+// Address of the instance whose hooks are currently installed. The hooks are one
+// process-global pair shared by every plugin instance in the host, so this records
+// who last claimed them; a departing instance uses it to find out whether the
+// globals still point at itself. Treated purely as an opaque token.
+inline const void*& PresetHookOwner()
+{
+  static const void* owner = nullptr;
+  return owner;
+}
+
+// Drops the hooks if owner installed them, so a closing instance cannot leave a
+// destroyed object behind them. A no-op when another instance has since claimed.
+inline void ClearPresetHooksIfOwnedBy(const void* owner)
+{
+  if (PresetHookOwner() != owner)
+    return;
+  PresetCaptureHook() = nullptr;
+  PresetApplyHook() = nullptr;
+  PresetHookOwner() = nullptr;
 }
 
 inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
@@ -495,6 +598,20 @@ inline std::string PresetIdAt(int idx)
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
     return {};
   return it->second[(size_t)idx].id;
+}
+
+inline int PresetIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ActivePresetOwnerKey());
+  if (it == banks.end())
+    return -1;
+  for (int i = 0; i < (int)it->second.size(); ++i)
+    if (it->second[(size_t)i].id == id)
+      return i;
+  return -1;
 }
 
 inline void RenamePreset(int /*ampIdx*/, int idx, const std::string& name)
