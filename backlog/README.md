@@ -61,9 +61,13 @@ fresh Cursor planning chat.
 
 ### Reference (not a prompt)
 - `1.0.1-review-findings.md` — engineering review notes captured during the 1.0.1 cycle.
-- `1.2.1-audit-deferred.md` — triage ledger over the 19-pass pre-release audit of
-  1.2.1: every finding, its severity, and whether it was fixed or deferred. The
-  evidence itself lives in `audit-notes/opus5/` and `audit-notes/gpt56/`.
+- `1.2.1-audit-deferred.md` — **start here for anything about the 1.2.1 audit.**
+  Triage ledger over all 25 review passes: every finding, its severity, and
+  whether 1.2.1 fixed it or deferred it, plus a suggested order for 1.3.0. The
+  evidence itself lives in `audit-notes/` (`opus5/`, `gpt56/`, `selfreview/`,
+  `selfreview-gpt/`), keyed by the report and finding ids the ledger cites.
+  `B6`, `B7` and `B8` above are the three deferred clusters big enough to have
+  been promoted out of it into their own prompts.
 
 ## Suggested order
 

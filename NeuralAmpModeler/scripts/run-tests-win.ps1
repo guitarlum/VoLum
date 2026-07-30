@@ -16,11 +16,22 @@ Set-Location $slnDir
 # nothing. Truthiness is false for both $null and 0, so it only exits on a real
 # failure.
 function Invoke-Check([string]$path) {
+  # Cleared first, because a child that succeeds without running a native command
+  # never writes $LASTEXITCODE - check-test-source-parity.ps1 falls off the end on
+  # success - so the value read below would be whatever the *caller's* shell left
+  # there. Running the suite from a session whose last command failed then aborted
+  # it with that code, before anything was built, blaming the first check.
+  $global:LASTEXITCODE = 0
   & $path
   if ($LASTEXITCODE) { exit $LASTEXITCODE }
 }
 
 # Apply our local iPlug2 patches (idempotent). See NeuralAmpModeler/iplug2-patches/README.md.
+# Deliberately not Invoke-Check: this script reports failure by Write-Error under
+# ErrorActionPreference=Stop, which is a terminating error that propagates out here
+# and stops the run with exit 1. It does all its work through
+# System.Diagnostics.Process, so it never writes $LASTEXITCODE at all and there is
+# nothing for Invoke-Check to read.
 & (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
 
 # Fail early if a test source is registered in only one of the two build
