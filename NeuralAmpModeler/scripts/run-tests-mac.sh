@@ -50,5 +50,8 @@ if [[ "$SANITIZE" == "1" ]]; then
     --test-case-exclude="A2 core load and prewarm timing is visible in test logs" \
     --test-case-exclude="A2 container can lazily activate the Lite submodel after load"
 else
-  "$BUILD_DIR/NeuralAmpModeler-Tests"
+  # --duration prints each case's name as it finishes. doctest cannot report which
+  # case it was in when the process dies, so without this a crash in CI is just
+  # "Bus error" with no way to narrow it from a machine we do not have.
+  "$BUILD_DIR/NeuralAmpModeler-Tests" --duration=true
 fi
