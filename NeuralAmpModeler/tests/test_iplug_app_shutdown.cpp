@@ -373,3 +373,26 @@ TEST_CASE("Preferences describes the ASIO driver it will actually open, and prob
   CHECK(src.find("if (mDAC && mAudioOutputDevs.size())") != std::string::npos);
   CHECK(src.find("if (mDAC && mAudioInputDevs.size())") != std::string::npos);
 }
+
+TEST_CASE("The first-run settings file is named with a separator POSIX understands")
+{
+  const std::string src = ReadForkAppHostSource();
+
+  // Upstream appended "\\settings.ini" in the OS_MAC branch of InitState - the branch
+  // taken only when the settings directory does not exist yet, i.e. first run on a
+  // clean mac. On POSIX a backslash is an ordinary filename character, not a
+  // separator, so that produced a file literally named "\settings.ini" inside the
+  // new directory. The second launch found the directory, looked for "settings.ini",
+  // did not find it and wrote defaults - so the first session's audio device, buffer
+  // size, sample rate and MIDI selection were lost, exactly once, on every new mac.
+  //
+  // Pinned by source because InitState resolves a real HOME, creates a real
+  // directory and is platform-gated, so the mac branch cannot be reached from a
+  // Windows-hosted unit test at all. The check is the negative one: no append of a
+  // backslash-prefixed filename anywhere in the file.
+  CHECK(src.find("Append(\"\\\\settings.ini\")") == std::string::npos);
+
+  // All three appends - the shared existing-directory path plus one per platform's
+  // create-directory branch - name the file the same way.
+  CHECK(CountOccurrences(src, "Append(\"settings.ini\")") == 3);
+}
