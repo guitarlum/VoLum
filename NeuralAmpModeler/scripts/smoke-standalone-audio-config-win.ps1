@@ -22,6 +22,10 @@ $slnDir = (Resolve-Path (Join-Path $here "..")).Path
 $exe = Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe"
 $settingsDir = Join-Path $env:LOCALAPPDATA "VoLum"
 $settingsPath = Join-Path $settingsDir "settings.ini"
+$logPath = Join-Path $settingsDir "volum.log"
+
+# Set once VoLum has reported that this machine cannot draw; see Test-GraphicsUnavailable.
+$script:graphicsUnavailable = $false
 
 Add-Type @'
 using System;
@@ -84,10 +88,26 @@ function Get-MSBuild {
   return $msbuild
 }
 
+function Get-WindowTitle {
+  param([IntPtr] $Window)
+
+  $title = New-Object System.Text.StringBuilder 256
+  [VoLumSmokeWin32]::GetWindowText($Window, $title, $title.Capacity) | Out-Null
+  return $title.ToString()
+}
+
+# Only a window actually titled "VoLum" counts as the interface. A message box is a
+# top-level #32770 window owned by the same process, so MainWindowHandle happily
+# returns one - and that is how this test passed for months on a runner where the
+# interface never opened at all: it was finding the "Audio Error" box that startup
+# put up, calling it the main window, and moving on. The one downstream check that
+# would have noticed, opening Preferences, was allowed to fail with a warning.
 function Find-VoLumMainWindow {
   $process = Get-Process VoLum -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($process -and $process.MainWindowHandle -ne [IntPtr]::Zero) {
-    return $process.MainWindowHandle
+    if ((Get-WindowTitle -Window $process.MainWindowHandle) -eq "VoLum") {
+      return $process.MainWindowHandle
+    }
   }
 
   $main = [VoLumSmokeWin32]::FindWindow("#32770", "VoLum")
@@ -128,6 +148,23 @@ function Close-VoLum {
   }
 
   Get-Process VoLum -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+# VoLum refuses to draw without OpenGL 2.0 and says so instead of jumping through the
+# null entry point nanovg would otherwise call. GitHub's Windows runners have no GPU
+# and only the generic OpenGL 1.1 implementation, so this is the expected outcome
+# there - and reaching it is itself worth asserting, since the alternative is the
+# 0xC0000005 that used to end the process with no window and no explanation.
+function Test-GraphicsUnavailable {
+  $dialog = [VoLumSmokeWin32]::FindWindow("#32770", "Graphics Error")
+  if ($dialog -eq [IntPtr]::Zero) {
+    return $false
+  }
+
+  $script:graphicsUnavailable = $true
+  [VoLumSmokeWin32]::PostMessage($dialog, 0x0111, [IntPtr]1, [IntPtr]::Zero) | Out-Null # WM_COMMAND / IDOK
+  Start-Sleep -Milliseconds 300
+  return $true
 }
 
 function Close-AudioErrorDialogs {
@@ -188,13 +225,12 @@ function Write-StartupDiagnostics {
     Write-Host "settings.ini does not exist at $settingsPath"
   }
 
-  $log = Join-Path $settingsDir "volum.log"
-  if (Test-Path $log) {
+  if (Test-Path $logPath) {
     Write-Host "--- volum.log (last 60 lines) ---"
-    Get-Content $log -Tail 60 | ForEach-Object { Write-Host "  $_" }
+    Get-Content $logPath -Tail 60 | ForEach-Object { Write-Host "  $_" }
   }
   else {
-    Write-Host "volum.log does not exist at $log"
+    Write-Host "volum.log does not exist at $logPath"
   }
 
   try {
@@ -221,6 +257,12 @@ function Wait-VoLumAlive {
   $process = $null
   for ($i = 0; $i -lt ($StartupSeconds * 4); ++$i) {
     Close-AudioErrorDialogs
+
+    if (Test-GraphicsUnavailable) {
+      Write-Host "SKIP: $CaseName - this machine has no OpenGL 2.0, so the interface cannot open."
+      Write-Host "      VoLum reported that and exited; the window checks do not apply here."
+      return $null
+    }
 
     $process = Get-Process VoLum -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $process) {
@@ -341,6 +383,36 @@ function Assert-AudioDevicesFromIni {
   Write-Host "OK: settings.ini lists audio devices (indev='$indev', outdev='$outdev')"
 }
 
+# A launch that cannot open any audio device must leave the stored configuration
+# alone. It used to revert to a default-constructed state and write that out, so one
+# start with the interface unplugged replaced the device, channel, buffer and rate the
+# user had chosen - and plugging the interface back in did not bring them back,
+# because settings.ini no longer named it.
+function Assert-AudioSettingsSurvived {
+  param(
+    [string] $CaseName,
+    [string] $Seeded
+  )
+
+  $log = Join-Path $settingsDir "volum.log"
+  if (-not (Test-Path $log)) { return }
+  if (-not (Select-String -Path $log -Pattern "audio failure" -Quiet)) { return }
+
+  foreach ($key in @("indev", "outdev", "sr", "out1", "out2")) {
+    $seededValue = if ($Seeded -match "(?m)^$([regex]::Escape($key))=(.*)$") { $Matches[1].Trim() } else { $null }
+    if (-not $seededValue) { continue }
+
+    $actual = Get-IniValue -Path $settingsPath -Key $key
+    if ($actual -ne $seededValue) {
+      Write-StartupDiagnostics -CaseName $CaseName
+      throw ("$CaseName failed: no audio device was available, but settings.ini rewrote " +
+             "$key from '$seededValue' to '$actual'. A failed start must not discard the stored settings.")
+    }
+  }
+
+  Write-Host "OK: no audio device available, and the stored audio settings were left intact"
+}
+
 function Test-ControlVisible {
   param(
     [IntPtr] $Dialog,
@@ -455,6 +527,8 @@ outchan=0
 try {
   foreach ($buffer in $Buffers) {
     Close-VoLum
+    # So the assertions below read this launch's log rather than an earlier one's.
+    Remove-Item -Path $logPath -Force -ErrorAction SilentlyContinue
     $settings = Set-IniValue -Content $originalSettings -Key "driver" -Value "0"
     $settings = Set-IniValue -Content $settings -Key "buffer" -Value "$buffer"
     Set-Content -Path $settingsPath -Value $settings -NoNewline
@@ -464,37 +538,51 @@ try {
     $expectedBuffer = Get-ExpectedVisibleBufferSize -Buffer $buffer
     $actualBuffer = Get-IniValue -Path $settingsPath -Key "buffer"
     if ($actualBuffer -ne "$expectedBuffer") {
+      Write-StartupDiagnostics -CaseName "buffer=$buffer"
       throw "buffer=$buffer failed: settings.ini has buffer=$actualBuffer, expected normalized buffer=$expectedBuffer."
     }
-    Write-Host "OK: startup buffer=$buffer normalized=$expectedBuffer pid=$($process.Id)"
+
+    # Whatever else happened, the file must still describe the devices it was given.
+    # Reverting to a default-constructed state and persisting it meant that starting
+    # once with the interface unplugged silently replaced the user's configuration.
+    Assert-AudioSettingsSurvived -CaseName "buffer=$buffer" -Seeded $settings
+
+    $launchedPid = if ($process) { $process.Id } else { "n/a" }
+    Write-Host "OK: startup buffer=$buffer normalized=$expectedBuffer pid=$launchedPid"
   }
 
-  try {
-    $pref = Open-Preferences
-    Assert-StandaloneAudioLayout -Dialog $pref
-    [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
-    Write-Host "OK: Preferences exposes separate input/output device combos and one mono input channel combo"
-  }
-  catch {
-    Write-Host "WARN: Preferences UI probe failed: $($_.Exception.Message)"
+  if ($script:graphicsUnavailable) {
+    Write-Host "SKIP: Preferences and ASIO-fallback probes need the interface, which cannot open on this machine."
     Assert-AudioDevicesFromIni
   }
-  $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
-  Set-Content -Path $settingsPath -Value $asioSettings -NoNewline
-  Start-VoLumApp | Out-Null
-  $process = Wait-VoLumAlive -CaseName "ASIO fallback"
-  $driver = Get-IniValue -Path $settingsPath -Key "driver"
-
-  if ($driver -eq "0") {
-    $pref = Open-Preferences
-    [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
-    Write-Host "OK: ASIO unavailable fallback reverted to DirectSound pid=$($process.Id)"
-  }
-  elseif ($RequireAsioFallback) {
-    throw "ASIO fallback was required, but settings.ini still has driver=$driver."
-  }
   else {
-    Write-Host "SKIP: ASIO fallback was not exercised; settings.ini has driver=$driver."
+    try {
+      $pref = Open-Preferences
+      Assert-StandaloneAudioLayout -Dialog $pref
+      [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
+      Write-Host "OK: Preferences exposes separate input/output device combos and one mono input channel combo"
+    }
+    catch {
+      Write-Host "WARN: Preferences UI probe failed: $($_.Exception.Message)"
+      Assert-AudioDevicesFromIni
+    }
+    $asioSettings = Set-IniValue -Content $originalSettings -Key "driver" -Value "1"
+    Set-Content -Path $settingsPath -Value $asioSettings -NoNewline
+    Start-VoLumApp | Out-Null
+    $process = Wait-VoLumAlive -CaseName "ASIO fallback"
+    $driver = Get-IniValue -Path $settingsPath -Key "driver"
+
+    if ($driver -eq "0") {
+      $pref = Open-Preferences
+      [VoLumSmokeWin32]::PostMessage($pref, 0x0111, [IntPtr]2, [IntPtr]::Zero) | Out-Null # IDCANCEL
+      Write-Host "OK: ASIO unavailable fallback reverted to DirectSound pid=$($process.Id)"
+    }
+    elseif ($RequireAsioFallback) {
+      throw "ASIO fallback was required, but settings.ini still has driver=$driver."
+    }
+    else {
+      Write-Host "SKIP: ASIO fallback was not exercised; settings.ini has driver=$driver."
+    }
   }
 }
 finally {
@@ -505,6 +593,11 @@ finally {
   else {
     Remove-Item -Path $settingsPath -Force -ErrorAction SilentlyContinue
   }
-  Start-VoLumApp | Out-Null
-  Start-Sleep -Seconds 2
+
+  # Leave VoLum running the way the developer found it - but not on a machine where
+  # starting it only produces a modal error nobody is there to dismiss.
+  if (-not $script:graphicsUnavailable) {
+    Start-VoLumApp | Out-Null
+    Start-Sleep -Seconds 2
+  }
 }
