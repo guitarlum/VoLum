@@ -124,6 +124,8 @@ Beide tempo-synchronisierten POST-Pedale — Delay und Tremolo — teilen sich e
 
 **Reverb** bietet Hall, Plate und Oktaverb. Hall und Plate liefern klassische Räume. Oktaverb ergänzt die Pitch-Wash-Stimmen `HALO`, `SHIMMER` und `BLOOM` mit Intensity-Regler.
 
+`PRE-DLY` legt fest, wie lange der Reverb wartet, bevor er einsetzt. Seit 1.2.1 ist das die ganze Wahrheit: Das Effektsignal beginnt genau dort. Frühere Versionen hatten davor noch eine eigene Verzögerung, zu der der Regler nur hinzuaddiert hat — deshalb liegt der Standardwert für neue Patches jetzt bei kurzen 10 ms statt bei den 20–30 ms, die vorher darin versteckt waren. Deine gespeicherten Presets behalten ihre Werte.
+
 **Tremolo** läuft als Letztes, hinter dem Reverb, und moduliert so den gesamten Effektklang. Der **OPTICAL / BIAS / HARMONIC**-Wähler bestimmt den Charakter:
 
 - **Optical** ist ein hackender Photozellen-Lautstärke-Gate.
@@ -230,6 +232,8 @@ In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`
 Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Wähle einen Mono-Eingangskanal für das Gitarrensignal und route Output L/R nach Bedarf. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben. Manche Treiber lehnen die gewählte Größe ab und geben eine andere zurück; VoLum behält dann die vom Treiber vergebene Größe, sodass Liste und gespeicherter Wert das beschreiben, was tatsächlich läuft.
 
 Wenn du einen Treiber ohne nutzbares Gerät auswählst, zum Beispiel ASIO auf einem Laptop ohne ASIO-Interface, zeigt VoLum eine Fehlermeldung und stellt die vorher funktionierende Audiokonfiguration wieder her, statt sich zu schließen.
+
+Die angezeigte Samplerate ist die, mit der der Treiber tatsächlich läuft. Manche Interfaces beziehen ihre Rate aus dem eigenen Kontrollpanel oder von einer externen Clock und ändern sie auf Anfrage nicht; VoLum zeigt dann, was wirklich passiert ist, und nicht, was angefragt wurde. Änderst du die Rate im Kontrollpanel deines Interfaces, während VoLum läuft, folgt VoLum und öffnet den Stream mit der neuen Rate erneut. Ist eine aus einer früheren Sitzung gespeicherte Rate auf dem aktuellen Gerät nicht verfügbar, wählt VoLum die nächstgelegene verfügbare und speichert diese.
 
 Die Zeile **Latency** zeigt in der Standalone-App die tatsächlich hörbare Gesamtlatenz — die eigene Verarbeitungszeit von VoLum plus die vom Treiber gemeldete Latenz — sofern der Treiber eine meldet. ASIO-Treiber tun das. WASAPI und DirectSound meist nicht; in diesem Fall zeigt VoLum nur die eigene Verzögerung samt Puffergröße und weist darauf hin, dass die echte Gesamtlatenz höher liegt, anstatt eine Schätzung als Zahl auszugeben: der Unterschied ist erheblich, und ein plausibel aussehender Wert wäre schlechter als gar keiner. Der größte Teil der Gesamtlatenz entfällt auf Treiber und Puffergröße — ein kleinerer Puffer oder ein besserer Treiber bewegt den Wert also deutlich mehr als jede VoLum-Einstellung.
 

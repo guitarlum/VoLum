@@ -52,12 +52,15 @@ git -C iPlug2 status --short
   scroll-wheel deltas back to device-relative direction when macOS natural
   scrolling has already inverted them, so trackpad knob gestures match the rest
   of the system.
+- `0e7036b33 APP: tell the truth about the sample rate, and follow the driver` —
+  Reads the ASIO rate back after setting it, follows a rate the user changes in
+  their interface's own control panel, clamps an unopenable stored rate,
+  reports startup audio failures once a window exists, resolves `settings.ini`
+  through `LOCALAPPDATA`, waits for a previous instance that is still quitting,
+  and bounds plugin teardown with a watchdog of its own. Also folds in the
+  former working-tree patch exposing `GetIOBufferSize()` and
+  `GetStreamLatencyFrames()`.
 
 ## Working-tree patches
 
-- `0001-app-host-expose-io-buffer-and-stream-latency.patch` — Adds
-  `IPlugAPPHost::GetIOBufferSize()` and `GetStreamLatencyFrames()` so the
-  standalone Settings page can report the real round trip (plugin delay plus
-  I/O buffer plus the driver's own latency) instead of only the plugin's
-  algorithmic delay. Fold this into the mirror branch on the next submodule
-  bump and delete the file.
+None. All VoLum changes live in the mirror branch.
