@@ -16,7 +16,8 @@
 
 [CmdletBinding()]
 param(
-  [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt")]
+  [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
+    "samplerate")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -631,6 +632,61 @@ function Test-Corrupt {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: settings.ini names a sample rate the device cannot open
+#
+# Reachable from an ordinary file: settings.ini records whatever rate was in use at
+# the last quit, and the next session may be on a different interface - or on the
+# same one after its control panel was changed. Before 1.2.1 the open failed, the
+# failure was reported through a MessageBox posted to a window that did not exist
+# yet, and the app came up with no audio and no explanation.
+# --------------------------------------------------------------------------
+function Test-SampleRate {
+  Write-Host "`n[samplerate] settings.ini names a rate the device does not offer" -ForegroundColor Cyan
+  $sandbox = New-Sandbox "samplerate"
+  Copy-AudioConfigOnly $sandbox
+  $root = Join-Path $sandbox "VoLum"
+  $ini = Join-Path $root "settings.ini"
+
+  # DirectSound with the default devices, so this runs the same way on any Windows
+  # machine instead of depending on which interface happens to be plugged in. 12345 Hz
+  # is not in RtAudio's SAMPLE_RATES table, so no device can report it as supported.
+  @(
+    "[audio]",
+    "driver=0",
+    "indev=Default Device",
+    "outdev=Default Device",
+    "in1=1",
+    "out1=1",
+    "out2=2",
+    "buffer=512",
+    "sr=12345"
+  ) | Set-Content $ini -Encoding ASCII
+
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox
+  Assert-True "app opens despite an unopenable stored rate" $run.started
+  Assert-True "app closed gracefully" $run.graceful
+
+  # The correction needs a device to be corrected against. When no driver on this
+  # machine can open a stream at all, VoLum logs no "stream open" line and there is
+  # nothing to assert - report that rather than passing or failing on nothing.
+  $log = Join-Path $root "volum.log"
+  $opened = if (Test-Path $log) { (Get-Content $log -Raw) -match 'stream open: (\d+) Hz' } else { $false }
+  if (-not $opened) {
+    Write-Host "  SKIP  no audio device opened a stream on this machine" -ForegroundColor Yellow
+    if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+    return
+  }
+  $openedRate = [int]$Matches[1]
+
+  $after = Get-Content $ini -Raw
+  $rate = if ($after -match '(?m)^sr=(\d+)') { [int]$Matches[1] } else { 0 }
+  Assert-True "stream opened at a real rate, not the stored one" ($openedRate -ne 12345) "opened at $openedRate"
+  Assert-Equal "settings.ini records the rate the driver opened" $openedRate $rate
+
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# --------------------------------------------------------------------------
 
 Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
@@ -647,6 +703,7 @@ if ($Scenario -in @("all", "future")) { Test-FutureSchema }
 if ($Scenario -in @("all", "upgrade")) { Test-Upgrade }
 if ($Scenario -in @("all", "presets")) { Test-PresetMemory }
 if ($Scenario -in @("all", "corrupt")) { Test-Corrupt }
+if ($Scenario -in @("all", "samplerate")) { Test-SampleRate }
 
 Write-Host ""
 if ($script:Failures.Count -eq 0) {

@@ -132,7 +132,7 @@ struct ReverbModeSnapshot
   double mix = 0.3;
   double decay = 3.0;
   double tone = 4.5;
-  double preDelay = 20.0;
+  double preDelay = 10.0;
   double shimmer = 0.5;
   int subMode = kVoLumOktaverbSubModeShimmer;
 };
@@ -142,7 +142,7 @@ struct OktaverbSubModeSnapshot
   double mix = 0.40;
   double decay = 5.0;
   double tone = 5.5;
-  double preDelay = 30.0;
+  double preDelay = 10.0;
   double shimmer = 0.65;
 };
 
@@ -261,7 +261,7 @@ struct VoLumAmpSettings
   double postReverbMix = 0.20;
   double postReverbDecay = 2.5;
   double postReverbTone = 5.0;
-  double postReverbPreDelay = 30.0;
+  double postReverbPreDelay = 10.0;
   double postReverbShimmer = 0.0;
   int postReverbMode = 0; // 0=Hall, 1=Plate, 2=Oktaverb
   int postReverbSubMode = 1; // Oktaverb sub-mode (0=Halo, 1=Shimmer, 2=Bloom)
@@ -270,15 +270,17 @@ struct VoLumAmpSettings
     DelayModeSnapshot{320.0, 0.42, 0.32, 0.50, 0.50, false},
     DelayModeSnapshot{600.0, 0.30, 0.32, 0.50, 0.00, false},
   };
+  // Pre-delays match VoLumEffectSettings; see the note there on why they moved to
+  // 10 ms in 1.2.1.
   ReverbModeSnapshot postReverbModes[kVoLumReverbModeCount] = {
-    ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, 0},
-    ReverbModeSnapshot{0.20, 2.5, 4.5, 20.0, 0.0, 0},
-    ReverbModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70, kVoLumOktaverbSubModeShimmer},
+    ReverbModeSnapshot{0.20, 2.5, 5.0, 10.0, 0.0, 0},
+    ReverbModeSnapshot{0.20, 2.5, 4.5, 10.0, 0.0, 0},
+    ReverbModeSnapshot{0.30, 6.0, 6.0, 10.0, 0.70, kVoLumOktaverbSubModeShimmer},
   };
   OktaverbSubModeSnapshot postOktaverbSubModes[3] = {
-    OktaverbSubModeSnapshot{0.30, 5.5, 6.0, 25.0, 0.65},
-    OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70},
-    OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
+    OktaverbSubModeSnapshot{0.30, 5.5, 6.0, 10.0, 0.65},
+    OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 10.0, 0.70},
+    OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 10.0, 0.75},
   };
 
   // Per-amp POST Tremolo (third POST pedal). The scalar fields are the LIVE
