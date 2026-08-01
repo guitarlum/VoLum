@@ -567,7 +567,7 @@ TEST_CASE("The poll is wired to the window and stands down while Preferences is 
 
   // Reopening the stream underneath a dialog the user is editing would take the
   // device away mid-selection. The driver's pending rate keeps until it closes.
-  CHECK(src.find("if (wParam == kAudioStatusTimerID && gPreferencesHWND == NULL)") != std::string::npos);
+  CHECK(src.find("if (wParam == kAudioStatusTimerID && gPreferencesHWND == NULL && pAppHost)") != std::string::npos);
 
   // Apply re-reads the state, so the combo shows the rate the driver actually took
   // rather than the one that was asked for.
@@ -584,11 +584,13 @@ TEST_CASE("A relaunch blocked by a windowless previous instance says so")
   // Upstream: FindWindow returns NULL, SetForegroundWindow(NULL) does nothing, and
   // the process exits 0. Double-clicking VoLum appeared to do nothing at all, with
   // no hint that a process had to be ended first.
+  // Not "raise": doctest's break-into-debugger expands to raise(SIGTRAP) on macOS, and
+  // a local of that name turns every assertion in this case into a compile error.
   const auto guard = src.find("if (hWnd)");
-  const auto raise = src.find("SetForegroundWindow(hWnd);");
+  const auto toForeground = src.find("SetForegroundWindow(hWnd);");
   REQUIRE(guard != std::string::npos);
-  REQUIRE(raise != std::string::npos);
-  CHECK(guard < raise);
+  REQUIRE(toForeground != std::string::npos);
+  CHECK(guard < toForeground);
   CHECK(src.find("MB_OK | MB_ICONWARNING") != std::string::npos);
 
   // An orderly shutdown destroys the window before the process exits, so a launch
