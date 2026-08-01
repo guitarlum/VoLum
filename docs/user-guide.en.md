@@ -233,6 +233,8 @@ Pick an input device and an output device independently. On macOS, built-in micr
 
 If you select a driver that has no usable device, such as ASIO on a laptop without an ASIO interface, VoLum shows an error and reverts to the previous working audio settings instead of closing.
 
+If the problem is there from the start - your interface is unplugged, or switched off - there is nothing to revert to, so VoLum keeps your settings exactly as they are and opens without audio. Connect the interface and start VoLum again and your setup is where you left it.
+
 The sample rate VoLum displays is the one the driver is actually running. Some interfaces take their rate from their own control panel or an external clock and will not change it on request; VoLum shows you what happened rather than what it asked for. Change the rate in your interface's control panel while VoLum is open and it follows, reopening the stream at the new rate. If a rate saved from a previous session is not available on the current device, VoLum picks the nearest one that is and saves that instead.
 
 The **Latency** line in the standalone reports the round trip you actually hear — VoLum's own processing delay plus the latency your audio driver reports — whenever the driver reports one. ASIO drivers do. WASAPI and DirectSound usually do not, and in that case VoLum shows only its own delay plus the buffer size and states that the real round trip is higher, rather than presenting a guess as a number: the difference is not small, and a plausible-looking figure would be worse than none. Most of the round trip belongs to the driver and the buffer size, so a smaller buffer or a better driver moves it far more than any VoLum setting does.

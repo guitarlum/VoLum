@@ -44,11 +44,12 @@ struct WetResponse
 // Impulse response of the wet bus. Mix is 1.0, where the equal-power crossfade puts the
 // dry coefficient at cos(pi/2) = 0, so nothing of the input impulse survives into the
 // output and every sample below is reverb.
-WetResponse RenderWet(int mode, int subMode, double decay, double tone, double preDelayMs, double seconds = 2.0)
+WetResponse RenderWet(int mode, int subMode, double decay, double tone, double preDelayMs, double seconds = 2.0,
+                      double sr = kSR)
 {
-  const size_t frames = static_cast<size_t>(kSR * seconds);
+  const size_t frames = static_cast<size_t>(sr * seconds);
   dsp::effect::Reverb reverb;
-  reverb.SetParams(1.0, decay, tone, preDelayMs, 0.0, mode, kSR, subMode);
+  reverb.SetParams(1.0, decay, tone, preDelayMs, 0.0, mode, sr, subMode);
 
   std::vector<double> in(frames, 0.0);
   in[0] = 1.0;
@@ -64,10 +65,11 @@ WetResponse RenderWet(int mode, int subMode, double decay, double tone, double p
   return resp;
 }
 
-// Per-window RMS of the stereo pair.
-std::vector<double> Envelope(const WetResponse& resp)
+// Per-window RMS of the stereo pair. The window is a duration, not a sample count, so
+// every helper below indexes the envelope in milliseconds whatever the sample rate is.
+std::vector<double> Envelope(const WetResponse& resp, double sr = kSR)
 {
-  const size_t win = static_cast<size_t>(kSR * kWindowMs / 1000.0);
+  const size_t win = static_cast<size_t>(sr * kWindowMs / 1000.0);
   std::vector<double> env;
   env.reserve(resp.l.size() / win);
   for (size_t start = 0; start + win <= resp.l.size(); start += win)
@@ -353,6 +355,174 @@ TEST_CASE("Reverb: Plate produces a stereo image rather than two copies of one s
 // ---------------------------------------------------------------------------
 // Guards on the fix itself
 // ---------------------------------------------------------------------------
+
+TEST_CASE("Reverb: the early field holds up at every sample rate, not just 48 kHz")
+{
+  // Everything above is measured at 48 kHz, and every delay length in both topologies
+  // is derived from the sample rate: Hall's lines and the new diffuser from
+  // milliseconds, Plate's whole tank from Dattorro's 29761 Hz reference. A rounding or
+  // scaling mistake in either would leave 48 kHz correct and something else wrong,
+  // which is the sort of thing that reaches a user before it reaches a test - most
+  // interfaces run at 44.1.
+  struct Case
+  {
+    const char* name;
+    int mode;
+    int subMode;
+  };
+  const Case cases[] = {{"hall", dsp::effect::Reverb::kModeHall, 0},
+                        {"plate", dsp::effect::Reverb::kModePlate, 0},
+                        {"oktaverb-shimmer", dsp::effect::Reverb::kModeOktaverb, 1}};
+
+  for (double sr : {44100.0, 48000.0, 96000.0})
+    for (const auto& c : cases)
+    {
+      INFO("sr=" << sr << " mode=" << std::string(c.name));
+      const auto env = Envelope(RenderWet(c.mode, c.subMode, 2.5, 5.0, 0.0, 2.0, sr), sr);
+
+      // The same three properties the 48 kHz cases check, at the same thresholds.
+      const double onset = OnsetMs(env);
+      INFO("onset=" << onset << " ms");
+      CHECK(onset >= 0.0);
+      CHECK(onset <= 10.0);
+
+      const double quietest = QuietestWindowDb(env, 10.0, 250.0);
+      INFO("quietest=" << quietest << " dB");
+      CHECK(quietest > -40.0);
+
+      // Crest is checked on the two plain modes only, as at 48 kHz. Shimmer's early
+      // field is legitimately spiky - the pitch-shifted feedback swells in rather than
+      // arriving - and it measures 7.0 to 8.5 here, so a density threshold would say
+      // nothing about it either way. Measured: hall 1.22 / 1.21 / 1.30 and plate
+      // 1.28 / 1.34 / 1.35 at 44.1, 48 and 96 kHz.
+      if (c.mode != dsp::effect::Reverb::kModeOktaverb)
+      {
+        const double crest = CrestFactor(env, 0.0, 200.0);
+        INFO("crest=" << crest);
+        CHECK(crest < 2.0);
+      }
+    }
+}
+
+TEST_CASE("Reverb: the response has the same shape in time at every sample rate")
+{
+  // The property the scaling exists for, stated as something a listener would notice:
+  // the same patch must sound the same whatever the interface is running at. Every
+  // delay length is derived from the rate - Hall's lines and the diffuser from
+  // milliseconds, Plate's whole tank from Dattorro's 29761 Hz reference - and getting
+  // any of that wrong changes the size of the room without changing anything a
+  // per-rate check would look at.
+  //
+  // That is not hypothetical, and it is why this case exists as well as the per-rate
+  // ones: with ScaleFromRef stubbed out to return Dattorro's raw table, every
+  // per-rate check above still passed, because each of them only ever looks at one
+  // rate at a time and a wrongly sized plate is still a perfectly dense reverb.
+  // Comparing the envelopes against each other on a common millisecond grid is the
+  // only way the difference shows up at all.
+  struct Case
+  {
+    const char* name;
+    int mode;
+    int subMode;
+  };
+  const Case cases[] = {{"hall", dsp::effect::Reverb::kModeHall, 0},
+                        {"plate", dsp::effect::Reverb::kModePlate, 0},
+                        {"oktaverb-shimmer", dsp::effect::Reverb::kModeOktaverb, 1}};
+
+  for (const auto& c : cases)
+  {
+    const auto reference = Envelope(RenderWet(c.mode, c.subMode, 2.5, 5.0, 0.0, 2.0, 48000.0), 48000.0);
+    const double referencePeak = PeakOf(reference);
+    REQUIRE(referencePeak > 0.0);
+
+    for (double sr : {44100.0, 96000.0})
+    {
+      INFO("mode=" << std::string(c.name) << " sr=" << sr);
+      const auto other = Envelope(RenderWet(c.mode, c.subMode, 2.5, 5.0, 0.0, 2.0, sr), sr);
+      const double otherPeak = PeakOf(other);
+      REQUIRE(otherPeak > 0.0);
+
+      // Mean absolute difference of the two decay curves in dB, each normalised to its
+      // own peak so this measures shape rather than level - level has its own case.
+      // Windows are 5 ms at both rates, so index i is the same instant in both.
+      const size_t to = std::min(MsToWindow(1500.0), std::min(reference.size(), other.size()));
+      double sum = 0.0;
+      size_t counted = 0;
+      for (size_t i = 0; i < to; ++i)
+      {
+        const double a = 20.0 * std::log10(std::max(reference[i], 1e-9) / referencePeak);
+        const double b = 20.0 * std::log10(std::max(other[i], 1e-9) / otherPeak);
+        sum += std::abs(a - b);
+        ++counted;
+      }
+      REQUIRE(counted > 0);
+      const double meanDb = sum / static_cast<double>(counted);
+      INFO("mean envelope difference = " << meanDb << " dB");
+      // Measured, at 44.1 and 96 kHz: hall 0.73 / 1.86, plate 0.75 / 1.63, oktaverb
+      // 0.72 / 2.33. Both scaling paths were then broken in turn to check this notices.
+      // With ScaleFromRef returning Dattorro's raw table, plate at 96 kHz goes to 5.48;
+      // with ScaleDelay pinned to 48 kHz, hall goes to 19.67 and oktaverb to 17.49.
+      CHECK(meanDb < 3.0);
+    }
+  }
+}
+
+TEST_CASE("Reverb: the wet level barely moves with the sample rate")
+{
+  // A listener switching a session from 44.1 to 48 kHz should not have to re-set Mix.
+  // Broadband noise for the same reason as the level test below: a single tone only
+  // probes wherever it lands among the tank's modes, and those move with the rate.
+  //
+  // Measured against 44.1 kHz: at 48 kHz, hall -0.16 dB, plate -0.09, oktaverb -0.03,
+  // which is nothing. At 96 kHz, hall -1.57 dB, plate -0.79, oktaverb -0.33. The 96 kHz
+  // drift is the damping filters inside the loop, which lose a fixed fraction per pass
+  // while the number of passes per second doubles; it predates the topology change and
+  // is left alone here because it can only be corrected by altering the tail. The
+  // thresholds separate "the two rates everyone uses agree" from "96 kHz is close".
+  const int modes[] = {
+    dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate, dsp::effect::Reverb::kModeOktaverb};
+
+  for (int mode : modes)
+  {
+    double reference = 0.0;
+    for (double sr : {44100.0, 48000.0, 96000.0})
+    {
+      const size_t frames = static_cast<size_t>(sr * 2.0);
+      dsp::effect::Reverb reverb;
+      reverb.SetParams(1.0, 2.5, 5.0, 0.0, 0.0, mode, sr, 0);
+
+      // Deterministic noise, and the same waveform in time at every rate.
+      std::vector<double> in(frames, 0.0);
+      unsigned state = 22222u;
+      for (size_t i = 0; i < frames; ++i)
+      {
+        state = state * 1664525u + 1013904223u;
+        in[i] = (static_cast<double>(state >> 8) / 8388608.0) - 1.0;
+      }
+      std::vector<double> inR = in;
+      double* inputs[2] = {in.data(), inR.data()};
+      auto** out = reverb.Process(inputs, 2, frames);
+
+      // Skip the first 250 ms so the measurement is of the tail, not of the onset.
+      const size_t from = static_cast<size_t>(sr * 0.25);
+      double sum = 0.0;
+      for (size_t i = from; i < frames; ++i)
+        sum += out[0][i] * out[0][i] + out[1][i] * out[1][i];
+      const double rms = std::sqrt(sum / (2.0 * static_cast<double>(frames - from)));
+
+      INFO("mode=" << mode << " sr=" << sr << " rms=" << rms);
+      REQUIRE(rms > 0.0);
+      if (reference == 0.0)
+        reference = rms;
+      else
+      {
+        const double db = 20.0 * std::log10(rms / reference);
+        INFO("level vs 44.1 kHz = " << db << " dB");
+        CHECK(std::abs(db) < (sr > 50000.0 ? 2.0 : 0.4));
+      }
+    }
+  }
+}
 
 TEST_CASE("Reverb: Plate tank halves are different lengths")
 {
