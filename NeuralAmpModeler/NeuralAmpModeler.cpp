@@ -352,7 +352,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kReverbMix)->InitDouble("ReverbMix", 0.20, 0.0, 1.0, 0.01);
   GetParam(kReverbDecay)->InitDouble("ReverbDecay", 2.5, 0.1, 10.0, 0.1, "s");
   GetParam(kReverbTone)->InitDouble("ReverbTone", 5.0, 0.0, 10.0, 0.1);
-  GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 30.0, 0.0, 200.0, 1.0, "ms");
+  GetParam(kReverbPreDelay)->InitDouble("ReverbPreDelay", 10.0, 0.0, 200.0, 1.0, "ms");
   GetParam(kReverbShimmer)->InitDouble("ReverbShimmer", 0.0, 0.0, 1.0, 0.01);
   GetParam(kReverbMode)->InitEnum("ReverbMode", volum::kVoLumReverbModeHall, {"Hall", "Plate", "Oktaverb"});
   // Oktaverb-only sub-toggle.

@@ -53,13 +53,18 @@ struct VoLumEffectSettings
 {
   bool reverbActive = false;
   int reverbMode = 0;
+  // The 10 ms pre-delay defaults date from 1.2.1. Until then the reverb produced no
+  // wet energy at all for the first 53 ms (Hall) or 172 ms (Plate), so the pre-delay
+  // defaults were sitting inside a hole and had almost nothing to do. Now that the
+  // wet signal starts where the pre-delay says it does, 20-30 ms is an audible gap
+  // before the reverb arrives, which is a deliberate effect rather than a default.
   ReverbModeSnapshot reverbModes[kVoLumReverbModeCount] = {
     // Hall: the good Cathedral-ish recipe from iteration 2, exposed simply as Hall.
-    ReverbModeSnapshot{0.20, 2.5, 5.0, 30.0, 0.0, /*subMode*/ 0},
+    ReverbModeSnapshot{0.20, 2.5, 5.0, 10.0, 0.0, /*subMode*/ 0},
     // Plate: restored dev/original plate behaviour and defaults.
-    ReverbModeSnapshot{0.20, 2.5, 4.5, 20.0, 0.0, /*subMode*/ 0},
+    ReverbModeSnapshot{0.20, 2.5, 4.5, 10.0, 0.0, /*subMode*/ 0},
     // Oktaverb: high-quality pitch-reverb with Halo / Shimmer / Bloom voices.
-    ReverbModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70, /*subMode*/ kVoLumOktaverbSubModeShimmer},
+    ReverbModeSnapshot{0.30, 6.0, 6.0, 10.0, 0.70, /*subMode*/ kVoLumOktaverbSubModeShimmer},
   };
 
   // Defaults are placeholders until final voicing values are chosen by ear.
@@ -67,11 +72,11 @@ struct VoLumEffectSettings
   // since the +12 voice carries the body; Shimmer / Bloom unchanged.
   OktaverbSubModeSnapshot oktaverbSubModes[3] = {
     // Halo (was Dark in 0.9.1): bright tone, moderate decay, midway intensity.
-    OktaverbSubModeSnapshot{0.30, 5.5, 6.0, 25.0, 0.65},
+    OktaverbSubModeSnapshot{0.30, 5.5, 6.0, 10.0, 0.65},
     // Shimmer
-    OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 30.0, 0.70},
+    OktaverbSubModeSnapshot{0.30, 6.0, 6.0, 10.0, 0.70},
     // Bloom
-    OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 20.0, 0.75},
+    OktaverbSubModeSnapshot{0.30, 5.5, 5.5, 10.0, 0.75},
   };
 
   // Tremolo per-mode knob memory (live working copy; synced to/from each amp's

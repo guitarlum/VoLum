@@ -514,9 +514,12 @@ TEST_CASE("Reverb: pre-delay defers early Hall wet taps")
   auto** noPreOut = noPreDelay.Process(inputs, 2, frames);
   auto** longPreOut = longPreDelay.Process(inputs, 2, frames);
 
+  // The window is the pre-delay itself: 40 ms, 1920 samples at 48 kHz. Without pre-delay
+  // the wet signal starts within a millisecond, and with it the same window has to stay
+  // quiet. A window further out would compare tails, not onsets.
   double noPreEarlyEnergy = 0.0;
   double longPreEarlyEnergy = 0.0;
-  for (size_t i = 2500; i < 3500; ++i)
+  for (size_t i = 0; i < 1920; ++i)
   {
     noPreEarlyEnergy += std::abs(noPreOut[0][i]) + std::abs(noPreOut[1][i]);
     longPreEarlyEnergy += std::abs(longPreOut[0][i]) + std::abs(longPreOut[1][i]);
@@ -644,8 +647,7 @@ TEST_CASE("Reverb: sample rate change reallocates without crash")
 TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
-                  0.5, 0.0, true);
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
 
   const size_t frames = 32;
   std::vector<double> left(frames, 0.0), right(frames, 0.0);
@@ -662,8 +664,7 @@ TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
 TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0,
-                  0.5, 0.5, true);
+  delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
 
   const size_t frames = 48;
   std::vector<double> left(frames, 0.0), right(frames, 0.0);
@@ -684,8 +685,7 @@ TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
 TEST_CASE("Delay: Digital PingPong mono-duplicated input first repeat on right")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
-                  0.5, 0.0, true);
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
 
   const size_t frames = 32;
   std::vector<double> mono(frames, 0.0);
@@ -702,8 +702,7 @@ TEST_CASE("Delay: Digital PingPong mono-duplicated input first repeat on right")
 TEST_CASE("Delay: Analog PingPong mono-duplicated input favors right on first repeats")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0,
-                  0.5, 0.5, true);
+  delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
 
   const size_t frames = 48;
   std::vector<double> mono(frames, 0.0);
@@ -724,8 +723,7 @@ TEST_CASE("Delay: Analog PingPong mono-duplicated input favors right on first re
 TEST_CASE("Delay: SetParams mode change clears delay ring buffers")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
-                  0.5, 0.0, false);
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, false);
 
   const size_t frames = 32;
   std::vector<double> left(frames, 0.0), right(frames, 0.0);
@@ -733,8 +731,7 @@ TEST_CASE("Delay: SetParams mode change clears delay ring buffers")
   double* inputs[2] = {left.data(), right.data()};
   delay.Process(inputs, 2, frames);
 
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0,
-                  0.5, 0.0, false);
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.0, false);
 
   std::fill(left.begin(), left.end(), 0.0);
   std::fill(right.begin(), right.end(), 0.0);
@@ -748,8 +745,7 @@ TEST_CASE("Delay: SetParams mode change clears delay ring buffers")
 TEST_CASE("Delay: SetParams ping-pong toggle clears delay ring buffers")
 {
   dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
-                  0.5, 0.0, false);
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, false);
 
   const size_t frames = 32;
   std::vector<double> left(frames, 0.0), right(frames, 0.0);
@@ -757,8 +753,7 @@ TEST_CASE("Delay: SetParams ping-pong toggle clears delay ring buffers")
   double* inputs[2] = {left.data(), right.data()};
   delay.Process(inputs, 2, frames);
 
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0,
-                  0.5, 0.0, true);
+  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
 
   std::fill(left.begin(), left.end(), 0.0);
   std::fill(right.begin(), right.end(), 0.0);
@@ -1046,7 +1041,12 @@ TEST_CASE("Reverb: Mix=0 outputs dry within float-cast tolerance, all modes")
   // Shimmer always run the dry+wet sum through tanh (Oktaverb's runaway protection),
   // which gently reshapes even a Mix=0 dry signal — that's by design and not a
   // regression of the equal-power crossfade work.
-  struct ModeSpec { int mode; int subMode; const char* name; };
+  struct ModeSpec
+  {
+    int mode;
+    int subMode;
+    const char* name;
+  };
   ModeSpec specs[] = {
     {dsp::effect::Reverb::kModeHall, 0, "Hall"},
     {dsp::effect::Reverb::kModePlate, 0, "Plate"},
@@ -1221,8 +1221,8 @@ TEST_CASE("Delay+Reverb: SR x block-size matrix produces finite bounded output")
   {
     for (size_t bs : blockSizes)
     {
-      for (int reverbMode : {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate,
-                             dsp::effect::Reverb::kModeOktaverb})
+      for (int reverbMode :
+           {dsp::effect::Reverb::kModeHall, dsp::effect::Reverb::kModePlate, dsp::effect::Reverb::kModeOktaverb})
       {
         INFO("sr=" << sr << " bs=" << bs << " reverbMode=" << reverbMode);
         dsp::effect::Delay delay;
