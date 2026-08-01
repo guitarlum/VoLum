@@ -601,3 +601,58 @@ TEST_CASE("A relaunch blocked by a windowless previous instance says so")
   // A minimised instance is restored, not just raised.
   CHECK(src.find("if (IsIconic(hWnd))") != std::string::npos);
 }
+
+TEST_CASE("A start with no audio device keeps the settings the user already had")
+{
+  const std::string src = ReadForkAppHostSource();
+
+  // mActiveState describes a stream that opened. Before the first one does it is a
+  // default-constructed AppState, and the recovery path used to revert to it and
+  // persist the result - so starting once with the interface unplugged replaced the
+  // device, channels, buffer and rate in settings.ini with defaults, permanently.
+  // Plugging the interface back in did not undo it: the file no longer named it.
+  const auto guard = src.find("if (!mHaveWorkingAudioState)");
+  const auto revert = src.find("mState = mActiveState;");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(revert != std::string::npos);
+  CHECK(guard < revert);
+
+  // And the flag means what it says: set where a stream has demonstrably opened.
+  const auto open = src.find("mDAC->openStream(");
+  REQUIRE(open != std::string::npos);
+  CHECK(src.find("mHaveWorkingAudioState = true;", open) != std::string::npos);
+}
+
+namespace
+{
+std::string ReadForkGraphicsWinSource()
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IGraphics"
+                    / "Platforms" / "IGraphicsWin.cpp";
+  std::ifstream in(path);
+  REQUIRE_MESSAGE(in.good(), "could not open " << path.string());
+  std::stringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+} // namespace
+
+TEST_CASE("A machine without OpenGL 2.0 is told so, not crashed")
+{
+  const std::string src = ReadForkGraphicsWinSource();
+
+  // Windows substitutes a generic OpenGL 1.1 implementation when no real one is
+  // available - Remote Desktop, a VM without 3D, a driver that failed to load.
+  // wglCreateContext and gladLoadGL both succeed there; the GL 2.0 entry points stay
+  // null, and nanovg's first glCreateProgram is a call to address zero. The process
+  // vanished on startup with no window, no message, and 0xC0000005 in the event log.
+  const auto check = src.find("if (!GLAD_GL_VERSION_2_0)");
+  const auto load = src.find("if (!gladLoadGL())");
+  REQUIRE(load != std::string::npos);
+  REQUIRE(check != std::string::npos);
+  CHECK(load < check);
+
+  // Reported, and stopped before the null call rather than after it.
+  CHECK(src.find("\"Graphics Error\"", check) != std::string::npos);
+  CHECK(src.find("ExitProcess(kGLUnavailableExitCode);", check) != std::string::npos);
+}
