@@ -142,6 +142,7 @@ function Close-AudioErrorDialogs {
 
 function Start-VoLumApp {
   $proc = Start-Process $exe -PassThru
+  $script:lastLaunched = $proc
   try {
     if (-not $proc.WaitForInputIdle(60000)) {
       Write-Host "WARN: VoLum did not report input idle within 60s; continuing smoke wait."
@@ -151,6 +152,67 @@ function Start-VoLumApp {
     Write-Host "WARN: WaitForInputIdle unavailable: $($_.Exception.Message)"
   }
   return $proc
+}
+
+# A startup that ends without a window says nothing about why on its own, and this
+# script is the only place CI runs the real executable. Print what the machine knows:
+# the exit code (0xC0000005 and friends name the fault outright), the settings that
+# were seeded, and VoLum's own log.
+function Write-StartupDiagnostics {
+  param([string] $CaseName)
+
+  Write-Host "--- diagnostics for $CaseName ---"
+
+  $proc = $script:lastLaunched
+  if ($proc) {
+    try {
+      $proc.Refresh()
+      if ($proc.HasExited) {
+        $code = $proc.ExitCode
+        Write-Host ("exit code: {0} (0x{1:X8})" -f $code, ($code -band 0xFFFFFFFF))
+      }
+      else {
+        Write-Host "process is still running (pid $($proc.Id))"
+      }
+    }
+    catch {
+      Write-Host "exit code unavailable: $($_.Exception.Message)"
+    }
+  }
+
+  if (Test-Path $settingsPath) {
+    Write-Host "--- settings.ini ---"
+    Get-Content $settingsPath | ForEach-Object { Write-Host "  $_" }
+  }
+  else {
+    Write-Host "settings.ini does not exist at $settingsPath"
+  }
+
+  $log = Join-Path $settingsDir "volum.log"
+  if (Test-Path $log) {
+    Write-Host "--- volum.log (last 60 lines) ---"
+    Get-Content $log -Tail 60 | ForEach-Object { Write-Host "  $_" }
+  }
+  else {
+    Write-Host "volum.log does not exist at $log"
+  }
+
+  try {
+    $since = (Get-Date).AddMinutes(-10)
+    $events = Get-WinEvent -FilterHashtable @{ LogName = "Application"; StartTime = $since } -ErrorAction SilentlyContinue |
+      Where-Object { $_.Message -match "VoLum" } | Select-Object -First 5
+    if ($events) {
+      Write-Host "--- Application event log ---"
+      foreach ($e in $events) {
+        Write-Host "  [$($e.TimeCreated)] $($e.ProviderName): $($e.Message -replace "`r?`n", ' | ')"
+      }
+    }
+  }
+  catch {
+    Write-Host "event log unavailable: $($_.Exception.Message)"
+  }
+
+  Write-Host "--- end diagnostics ---"
 }
 
 function Wait-VoLumAlive {
@@ -173,6 +235,8 @@ function Wait-VoLumAlive {
 
     Start-Sleep -Milliseconds 250
   }
+
+  Write-StartupDiagnostics -CaseName $CaseName
 
   if (-not $process) {
     throw "$CaseName failed: VoLum.exe exited during startup."
