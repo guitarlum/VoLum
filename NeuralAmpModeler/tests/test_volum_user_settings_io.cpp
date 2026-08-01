@@ -669,7 +669,7 @@ TEST_CASE("Corrupt effect settings heal to defaults")
   CHECK(loaded.reverbModes[0].mix == doctest::Approx(0.20));
   CHECK(loaded.reverbModes[0].decay == doctest::Approx(2.5));
   CHECK(loaded.reverbModes[0].tone == doctest::Approx(5.0));
-  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(30.0));
+  CHECK(loaded.reverbModes[0].preDelay == doctest::Approx(10.0));
   CHECK(loaded.reverbModes[0].shimmer == doctest::Approx(0.0));
 }
 
@@ -703,7 +703,9 @@ TEST_CASE("Legacy flat effect settings populate existing mode snapshots")
     CHECK(loaded.reverbModes[i].mix == doctest::Approx(0.44));
     CHECK(loaded.reverbModes[i].decay == doctest::Approx(6.0));
     CHECK(loaded.reverbModes[i].tone == doctest::Approx(3.0));
-    CHECK(loaded.reverbModes[i].preDelay == doctest::Approx(20.0));
+    // A legacy flat block carries no pre-delay, so this is the struct default, which
+    // moved to 10 ms in 1.2.1 when the reverb stopped being silent at the start.
+    CHECK(loaded.reverbModes[i].preDelay == doctest::Approx(10.0));
     CHECK(loaded.reverbModes[i].shimmer == doctest::Approx(0.5));
   }
 }

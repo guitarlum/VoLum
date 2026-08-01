@@ -112,6 +112,7 @@
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
+    <ClCompile Include="..\tests\test_reverb_diffusion.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_effects.cpp" />
     <ClCompile Include="..\tests\test_golden_dsp.cpp" />
     <ClCompile Include="..\tests\test_golden_rigs.cpp" />
