@@ -1,4 +1,37 @@
-# Q4 — Screenshot/click harness: deterministic custom-amp seeding + a real scrollbar test
+# Q4 — Screenshot harness: the last three gaps
+
+## Already landed (changelog `06/29/2026`)
+
+Most of this ticket is done. Kept open only for the three items in "Remaining"
+below; the original text follows for context.
+
+- **Deterministic seeding:** `VOLUM_SEED_CUSTOM_AMPS=N` (`NeuralAmpModeler.cpp`
+  ~475-511), `#ifndef NDEBUG`, seeded into a temp sandbox so it never touches the
+  real content store.
+- **Scrollbar geometry test:** `VoLumAmpListScroll.h` extracted, with four cases in
+  `test_volum_amp_list_scroll.cpp` covering scrollable state, `RowRightX`, thumb
+  size/position and drag-to-offset mapping.
+- **Runbook:** `docs/screenshot-recipes.md` plus `docs/screenshot-seed/`.
+- **`volum-ui.mdc`:** documents the seeding recipe (~68-72).
+
+## Remaining
+
+1. The **name-area shrink-to-fit** geometry is still unpinned — it was in scope
+   item 2 below but no helper or test covers it.
+2. `AGENTS.md` "Fast Commands" still does not mention `win-screenshot.ps1` /
+   `win-click.ps1`, so the harness stays undiscoverable from the routing index.
+3. Cross-link `AddCustomAmp` (now `VoLumCustomContentApi.h`, not
+   `VoLumCustomContentMock.h`) as the seam the harness should use, and state that
+   the `+` builder overlay is not scriptable.
+
+Note the harness's practical ceiling, learned the hard way during the 1.2.1 audit:
+`PrintWindow` cannot composite VoLum's GL surface while the desktop is locked, so
+the capture comes back as a blank white client area. Any overnight or unattended
+screenshot sweep needs an unlocked session.
+
+---
+
+# Original ticket — deterministic custom-amp seeding + a real scrollbar test
 
 Make the local self-verification harness able to reach UI states that only appear
 once the amp library overflows (i.e. with custom amps present), and add a proper

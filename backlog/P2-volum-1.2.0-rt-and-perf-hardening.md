@@ -1,53 +1,55 @@
-# P2: VoLum 1.2.0 RT + performance hardening
+# P2 — UI-thread performance: dirty-check and settings-save churn
 
-Seeded from the 1.2.0 thermo-nuclear review (`docs/design/1.2.0-quality-review.md`,
-sections 1 and 4). The audio path is already free of content-store/JSON/filesystem;
-these are the remaining real-time risks and UI-thread perf hotspots.
+Originally a five-part RT + performance ticket seeded from the 1.2.0 quality
+review. **Three of the five parts are now owned by
+`B7-audio-thread-rt-violations.md`**, which came out of the 1.2.1 audit with a
+wider scope and the correct root cause (the audio thread performs the model
+handoff). This file keeps only the two parts B7 does not cover, because they are
+UI-thread performance rather than real-time safety.
+
+Moved to B7: the lock-free staging drain, the main I/O buffer capacity assert, and
+async IR loading. All three verified still open in the code — do not treat them as
+fixed, just plan them in B7.
 
 ## Problem
 
-1. **Audio-thread mutexes in the staging drain.** `_ApplyDSPStaging()` (top of
-   every `ProcessBlock`) calls `_VolumDrainLoaderResults()`, which takes
-   `mVolumLoaderMutex` + `mStagingMutex` and may call `model->Reset()` (can
-   allocate inside NAM). Pre-existing pattern that 1.2.0 extends.
-2. **Main I/O buffer resize on the audio thread.** `_PrepareBuffers` may `resize`
-   `mInputArray` / `mOutputArray` when `numFrames` changes mid-stream (dual-amp
-   scratch already pre-reserves + asserts; main buffers do not).
-3. **Sync IR load on the UI callback.** `_VolumSelectIR` -> `_StageIR` loads a WAV
-   + allocates on the calling (UI) thread — a hitch, not an audio fault.
-4. **Dirty-check serializes JSON per knob move.** `AmpSettingsEqual` builds two
-   full JSON trees and string-compares; called from `_VolumRecomputePresetDirty`.
-5. **Settings-save churn under automation.** Every param change sets
-   `mVolumSettingsDirty` and `OnIdle` always calls `_VolumSaveCurrentToSettings()`;
-   with custom scenes redirecting to `GlobalContentStore`, automation -> per-sample
-   map writes + atomic JSON writes in standalone.
+1. **The preset dirty check serializes JSON on every knob move.**
+   `AmpSettingsEqual()` (`VoLumAmpSettingsJson.h` ~98) is
+   `AmpSettingsToJson(a) == AmpSettingsToJson(b)`: two full JSON trees built and
+   compared to answer one boolean. It is called from
+   `_VolumRecomputePresetDirty()`, i.e. per parameter change, so a knob drag or a
+   host automation lane pays two tree builds per event to decide whether to draw
+   `(unsaved)`.
+2. **Settings-save churn under automation.** `mVolumSettingsDirty` is set from many
+   param and selection paths, and `OnIdle` writes the settings file whenever it is
+   set (`NeuralAmpModeler.cpp` ~956). Coalescing to once per idle tick already
+   landed, but with automation running that is still an atomic JSON write of the
+   whole settings document every tick, and custom scenes route through the shared
+   content store.
 
 ## Scope
 
-- (1) Replace the staging hand-off with a lock-free SPSC queue of `unique_ptr`
-  commits drained in `_ApplyDSPStaging` with moves only; call `Reset()` on the
-  loader thread before enqueue. Remove the second mutex grab from the audio path.
-- (2) Reserve `mInputArray`/`mOutputArray` to max block size in `OnReset`; assert
-  capacity (no `resize`) in `ProcessBlock`.
-- (3) Route IR loads through the same async loader path as NAM models.
-- (4) Replace `AmpSettingsEqual`'s JSON compare with a field-wise / hashed compare
-  for the dirty flag (keep the JSON codec for persistence only).
-- (5) Set `mVolumSettingsDirty` only for VoLum-owned params; coalesce
-  `_VolumSaveCurrentToSettings` (save when dirty, throttled, not every idle tick).
+- (1) Replace the JSON compare with a field-wise or hashed compare for the dirty
+  flag only. The JSON codec stays the persistence format; nothing about the file
+  changes. A cheap hash has to include every field the codec writes, or the dirty
+  marker starts lying — which is worse than being slow, so this wants a test that
+  walks each field.
+- (2) Set `mVolumSettingsDirty` only for VoLum-owned params, and put a time-based
+  throttle in front of `_VolumSaveCurrentToSettings` rather than saving on every
+  idle tick that happens to find the flag set. Exit must still flush, or the
+  throttle turns into data loss.
 
-## Acceptance Criteria
+## Acceptance criteria
 
-- No mutex acquisition, allocation, or `Reset()` on the audio thread in the
-  staging drain; verified by inspection + a stress test that loads models while
-  audio runs.
-- No buffer `resize` in `ProcessBlock`; capacity assert holds across block-size
-  changes.
-- Knob automation does not trigger per-sample disk writes in standalone.
-- Tests green; macOS sanitizer (TSan/ASan via CI) clean on the staging change.
+- A knob drag does not build JSON per event; the `(unsaved)` marker still appears
+  and clears exactly as it does today.
+- Automating a parameter in a DAW does not produce a settings write per idle tick;
+  closing the app or the project still persists the final state.
+- Doctests: field-wise equality agrees with the JSON compare across every field
+  (including the ones added in 1.2.1), and the throttle flushes on shutdown.
+- `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` green; macOS via CI.
 
 ## Verification
 
-- `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`
-- `bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize` via CI.
-- Manual: automate a knob in a DAW and confirm no disk thrash / no dropouts on
-  rapid amp switching.
+- Manual: automate a knob in a DAW, watch for disk thrash and for a stale
+  `(unsaved)` state.

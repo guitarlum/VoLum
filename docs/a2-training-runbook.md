@@ -183,9 +183,9 @@ slice. Verified against a Tone3000 A2 reference and by a 5-epoch smoke export.
 Benefits: standard A2 format, Gateway toggle works, future-proof, and VoLum
 still plays Full with zero plugin work.
 
-Lite/CPU-saver mode in VoLum (a Full/Lite selector that calls
-`SetSlimmableSize(0.0)`) is tracked in `backlog/F4-a2-lite-mode-support.md`.
-Default stays Full.
+Lite/CPU-saver mode shipped in VoLum 1.2.0 (changelog 06/24/2026): the Settings
+A2 Lite switch calls `_VolumSetLiteMode()`, which drives `SetSlimmableSize` in
+`VoLumLoader.inc.cpp`. Default stays Full.
 
 ## Run a round (operational)
 

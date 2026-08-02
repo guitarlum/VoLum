@@ -1,5 +1,48 @@
-# F8 — Import Your Own Pedals (custom PRE NAM captures)
+# F8 — Custom pedals: assignable type groups
 
-Plan letting users import their own `.nam` captures into the PRE pedal slots. PRE pedals are NAM captures discovered by `volum::DiscoverPrePedalCaptures` (`VoLumPrePedalCaptures.h`), curated through the hardcoded `kPrePedalCaptureMetadata` table; discovery already falls back gracefully for unknown files, so this feature extends an existing path. Imported captures are stored in the F6 user-content area (not `rigs/PrePedals/`). This is simpler than F6/F7: one capture per slot, no speaker/channel matrix. Decide: how the user labels an imported capture and assigns a group (Klon / TS-Boost / Distortion / Fuzz / Other) or leaves it ungrouped; how custom captures merge with the curated list in the PRE capture menu (`VoLumTriptychMenus.h`) without breaking `PreNam1Capture` / `PreNam2Capture` indexing (0 = EMPTY, bounded by the capture list — see `test_volum_pre_pedal_captures.cpp` and `test_volum_chunk_codec.cpp`); and crucially INDEX STABILITY across sessions so saved settings and presets (F5) keep pointing at the right capture when the user adds/removes custom files. Produce a feature ticket with: import + label/group UX spec, merged-list ordering and stable-index strategy, storage schema, tests (discovery incl. custom files, index stability, param bounds, settings/preset round-trip), docs EN/DE + screenshots, changelog. Do not implement.
+Importing custom PRE pedals shipped in 1.2.0. Only the grouping half of the
+original ticket is still open.
 
-This ticket depends on F6 (user-content storage). Work must happen on a dedicated feature branch off the latest `dev`, named `feature/import-your-own-pedals`. Do not commit to `dev` or `main` directly. The branch is merged back into `dev` only after the ticket's acceptance criteria are met and tests/docs/changelog are in place. Never promote to `main` outside of a release.
+## Already shipped (do not re-plan)
+
+Import of `.nam` captures into the PRE pedal slots from the Manage panel, listed
+under a **CUSTOM** group in the PRE capture menu, with a stable per-pedal index
+(`PedalItem.legacyIndex` / `nextPedalIndex`) so existing projects keep pointing at
+the same capture. Changelog `06/20/2026`; pool-exhaustion handling `06/29/2026`;
+1.2.1 added write-failure reporting and stopped a failed import from consuming a
+slot. See `docs/user-guide.en.md` and `VoLumContentStore.h`.
+
+## Still open
+
+Custom pedals all land in one flat **CUSTOM** group. The original ticket wanted
+the user to assign a type — Klon / TS-Boost / Distortion / Fuzz / Other — so
+imports file themselves next to the curated pedals of the same character instead
+of in an undifferentiated list that grows without structure.
+
+The schema is already there and unused: `PedalItem.group` exists in
+`VoLumContentStore.h`, but the import path passes an empty group
+(`AddPedal(base, rel)` at `VoLumCustomOverlay.h` ~735) and no UI ever sets it.
+So this is a UI + menu-grouping change, not a storage change.
+
+Decide:
+
+- Fixed group list or free text? Fixed is testable and keeps the menu tidy; free
+  text repeats the naming problem the custom-amp cab slots deliberately avoided.
+- Where the group is chosen: at import time, or editable afterwards in Manage.
+  Editable means the PRE menu has to regroup live.
+- Whether custom pedals interleave with curated pedals of the same group, or sit
+  in a `CUSTOM` sub-section beneath each. Interleaving reads better but makes the
+  delete-while-loaded case (a deferred 1.2.1 finding) harder to reason about.
+- Migration: every existing pedal has an empty group. `Other` on read is the
+  obvious default; confirm that leaves projects sounding identical.
+
+## Acceptance criteria
+
+- Group choice survives a save/reload and a library re-read.
+- Pedals imported before this change still load and still resolve to the same
+  capture; no PRE index churn.
+- Doctests for group persistence, the empty-group migration default, and menu
+  grouping as a pure helper.
+- EN/DE user guide + changelog.
+
+Work on a branch off latest `dev`. Do not commit to `dev` or `main` directly.

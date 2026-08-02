@@ -16,9 +16,9 @@ namespace
 bool RunningWithAddressSanitizer()
 {
 #if defined(__has_feature)
-#if __has_feature(address_sanitizer)
+  #if __has_feature(address_sanitizer)
   return true;
-#endif
+  #endif
 #endif
 #if defined(__SANITIZE_ADDRESS__)
   return true;
@@ -38,11 +38,12 @@ const char* PlatformExpected(const char* windowsExpected, const char* macExpecte
 #endif
 }
 
-void ExpectGoldenHash(
-  const char* name, const std::string& actual, const char* windowsExpected, const char* macExpected,
-  const char* macSanitizedExpected = nullptr)
+void ExpectGoldenHash(const char* name, const std::string& actual, const char* windowsExpected, const char* macExpected,
+                      const char* macSanitizedExpected = nullptr)
 {
-  INFO(name << " actual=" << actual);
+  // std::string, not the raw pointer: doctest stringifies a const char* as its address,
+  // which made the failure log useless for reading a new hash off a CI run.
+  INFO(std::string(name) << " actual=" << actual);
   const char* expected = PlatformExpected(windowsExpected, macExpected, macSanitizedExpected);
   REQUIRE(expected != nullptr);
   CHECK(actual == std::string(expected));
@@ -203,24 +204,27 @@ TEST_CASE("Golden DSP: delay mode hashes stay stable")
                    "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
 }
 
+// Every reverb hash below changed in 1.2.1, deliberately: the topology was fixed. The
+// FDN modes gained input diffusion and an early field, and Plate gained the half of
+// Dattorro's tank that had been missing along with his output tap network. Tail
+// lengths, loop gains and tone curves did not move, but every output sample did. What
+// the new response has to satisfy lives in test_reverb_diffusion.cpp; this case only
+// pins it against unintended drift from here on.
 TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
 {
   ExpectGoldenHash("reverb-hall", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeHall, 0)),
-                   "6543e40308c95bad7b3f92e2547ad7356487fd3b17feeab2d67fe59d32c49c27",
-                   "ce06ec43c60943dc804da6de5a3b919dbe5c54eef1c265e155b976a726078614");
+                   "b9c9c3d862c7b2574af9b4f3e8d49c1cc335359da23085381e5b46095463811c",
+                   "1b31218a539934d9bd7a4a059865d3acb56989ab1efb7fe1d6d406bc2de3603f");
   ExpectGoldenHash("reverb-plate", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModePlate, 0)),
-                   "9dfd2ba555997d6ad0538af6b5611633670dcdf0c788a69fad3bf32cc3704537",
-                   "1bb2b19d45af941e66885541bb52f52c3b2249d2b0e8fc4947f312ac96d12f8c");
-  ExpectGoldenHash("oktaverb-halo",
-                   volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0)),
-                   "82f6cf8958e8eadba4b001366180294205bd0ff673e91dfd70d1e6e961e1b593",
-                   "277327db47e598594027aa1932cba7a2a73278727dcf7d4ccc00e9bbfa78a035");
-  ExpectGoldenHash("oktaverb-shimmer",
-                   volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1)),
-                   "0bc3193b9a26cb6d9565298620094b3b5a8c3de207dd58e40e9281ed37b05795",
-                   "f1f1ca0911668c0c172c3a90838108f8fbdf8801f756346c5ed8a5f348c8d7d2");
-  ExpectGoldenHash("oktaverb-bloom",
-                   volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2)),
-                   "82c916ceddd513d49093f0834a10d5d622db7d8111ff54d1cdd2eaeb77b114c9",
-                   "459870bf7ea1fba68422192cd70200aa40ec2f4f93dc6469a0dd14d4ab95003d");
+                   "d5bfb6e4c8719746bfd4766338cf13ef8521f146457eb95a6468a481db58ea4b",
+                   "481cda1a11928f3827513a514b1161923af4d7b2c4c6984895314fee3463a62b");
+  ExpectGoldenHash("oktaverb-halo", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0)),
+                   "a41f1390cffb91bfb95370ebfe33d9bf05df45981cbaf8042cce22a4548326ef",
+                   "5d0dd19eb152df64b1890a44803783cc187dfcaa8a58486219e67f25ceb8ae18");
+  ExpectGoldenHash("oktaverb-shimmer", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1)),
+                   "6bc913cb27b0981b7c51754d255eb59960f251bfffb92e99ba013527d3144e3f",
+                   "6589f106d1b4f21a4fa5d02a6427e099e2e6262a006d9a9f3c6952a2668d377d");
+  ExpectGoldenHash("oktaverb-bloom", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2)),
+                   "4882fc22573ea37ddcde462baf0b01bf4033f6f2d9297dc0df278b094f444573",
+                   "ccef0b8b59f73e02d6c00be43b220d915c76964f0d5153581101d879ce67fbe9");
 }
