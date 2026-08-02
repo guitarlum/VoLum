@@ -7,6 +7,17 @@ files, was already fixed and tested). These are niche/latent hardening items kep
 here for a future quality pass. Each changes load/restore behavior, so each needs
 a focused test.
 
+## Already landed
+
+Item 4, first half: `AddPedal` now refuses once the 64-slot PRE-capture pool is
+exhausted instead of clamping every new pedal to index 127
+(`VoLumCustomContentApi.h` ~429), covered by "AddPedal refuses once the PRE-capture
+index pool is exhausted" in `test_volum_custom_content.cpp`. Changelog
+`06/29/2026`. 1.2.1 additionally made a failed import stop consuming a slot.
+
+Items 1, 2, 3 and the second half of 4 are all still open, verified against the
+current code — the notes below are accurate, not stale.
+
 ## Problem
 
 1. **Preset values relabel a drifted custom-amp scene (niche).** Restore
@@ -17,20 +28,26 @@ a focused test.
    another project between saves (custom scenes are library-global, not stored in
    the DAW chunk), so the chunk relabels the drifted library scene as the preset.
    Applying `pr.settings` on the matched-preset path would harden this.
-2. **`customSupportId` id-tail field is dead (cleanup, not a bug).** The id-tail
-   writes `customSupportId` (`NeuralAmpModeler.cpp` ~2153) but unserialize never
-   reads it. Support is correctly restored from the scene's `supportCustomId`
-   (`_VolumApplyAmpSettings`, `VoLumSettings.inc.cpp` ~618) and from
-   `perAmpSupportId` for factory slots. The unused field can simply be removed.
+2. **`customSupportId` is written and round-tripped but has no consumer on
+   restore.** The id-tail writes it (`NeuralAmpModeler.cpp` ~1078) and the codec
+   round-trips it under test (`VoLumChunkIdTail.h`, `test_volum_chunk_codec.cpp`,
+   `test_volum_state_roundtrip.cpp`), so it is *not* dead in the "delete it" sense
+   — `Unserialization.cpp` simply never reads it. Support is restored from the
+   scene's `supportCustomId` instead (`_VolumApplyAmpSettings`,
+   `VoLumSettings.inc.cpp` ~618) and from `perAmpSupportId` for factory slots. So
+   the choice is to either wire the restore path (making the chunk authoritative
+   for the support partner, which is the point of storing it) or drop the field and
+   its tests. Do not "clean it up" without picking one deliberately.
 3. **`_VolumActiveScene()` inserts empty scenes on read (latent).** It returns
    `customScenes[id]` via `operator[]` (`NeuralAmpModeler.cpp` ~4172). Any read
    path with a stale/erased id silently persists a default scene. The scene is
    created at selection so it doesn't bite in practice, but it is a footgun. Used
    in many write paths too, so the fix needs a read/write split.
-4. **Pedal legacy-index cap collides at 127 (edge).** Once `nextPedalIndex > 127`,
-   `AddPedal` (`VoLumCustomContentMock.h` ~357) clamps every new pedal to 127 ->
-   colliding PRE-capture indices, silently (needs 64 imported pedals to hit).
-   `PedalLegacyIndexAt` (~319) returns `0` (== EMPTY) for out-of-range.
+4. **`PedalLegacyIndexAt` still returns `0` for an out-of-range row.** The
+   exhaustion half is fixed (see above), but `PedalLegacyIndexAt`
+   (`VoLumCustomContentApi.h` ~375) still answers `0` — which is the EMPTY sentinel
+   — for an index it cannot resolve, so a caller cannot distinguish "no pedal" from
+   "bad row". Should return `-1` with the callers guarded.
 
 ## Scope
 
@@ -41,9 +58,8 @@ a focused test.
   resolve it and set `mVolumCustomSupportIdx` / scene support field.
 - Fix (3): add a const `_VolumActiveSceneOrDefault()` for read sites; keep the
   mutable `operator[]` accessor only where a scene must be created.
-- Fix (4): reject `AddPedal` when the 64-slot pool is exhausted (surface a
-  reason like the builder's `SaveDisabledReason`); return a sentinel (-1) from
-  `PedalLegacyIndexAt` for OOR and guard callers.
+- Fix (4): return a sentinel (-1) from `PedalLegacyIndexAt` for out-of-range and
+  guard the callers. (Rejecting `AddPedal` on an exhausted pool already landed.)
 
 ## Acceptance Criteria
 

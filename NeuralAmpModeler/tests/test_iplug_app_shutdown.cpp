@@ -181,10 +181,10 @@ TEST_CASE("The watchdog is armed around the audio teardown only")
   REQUIRE(close != std::string::npos);
   REQUIRE(disarm != std::string::npos);
 
-  // mIPlug is declared before mDAC, so the plugin destructor - which joins the
-  // model loader and writes the settings file, neither of them bounded - runs
-  // after this destructor body. Leaving the timer armed put that work under a 5 s
-  // kill; the disarm has to happen before the body ends.
+  // The plugin destructor - which joins the model loader and writes the settings
+  // file - must not run under the audio budget: five seconds is not enough for a
+  // capture load that is halfway through, and killing it there would be a kill on a
+  // healthy quit. So the disarm has to happen before the plugin is released.
   CHECK(arm < close);
   CHECK(close < disarm);
 
@@ -203,6 +203,40 @@ TEST_CASE("The watchdog is armed around the audio teardown only")
   CHECK(releaseIn < disarm);
   CHECK(releaseOut < disarm);
   CHECK(arm < closeIn);
+}
+
+TEST_CASE("Plugin teardown is bounded too, on a budget of its own")
+{
+  // Unbounded plugin teardown produces the same end state as a wedged driver: a
+  // VoLum process with no window, still holding the audio device, which the next
+  // launch cannot get past. It just takes a different route there.
+  CHECK(iplug::kVoLumPluginTeardownWatchdogMs > iplug::kVoLumShutdownWatchdogMs);
+
+  // Loading a large capture takes seconds, and the join waits for it. A budget that
+  // could expire during one would turn a healthy quit into a kill.
+  CHECK(iplug::kVoLumPluginTeardownWatchdogMs >= 15000);
+
+  const std::string src = [] {
+    const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IPlug"
+                      / "APP" / "IPlugAPP_host.cpp";
+    std::ifstream in(path, std::ios::binary);
+    REQUIRE(in.good());
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+  }();
+
+  // mIPlug is declared before mDAC, so member destruction would release it after the
+  // destructor body has returned - outside any watchdog. It has to be released
+  // explicitly, inside the second armed window.
+  const auto armPlugin = src.find("VoLumArmShutdownWatchdog(kVoLumPluginTeardownWatchdogMs);");
+  const auto releasePlugin = src.find("mIPlug = nullptr;");
+  REQUIRE(armPlugin != std::string::npos);
+  REQUIRE(releasePlugin != std::string::npos);
+  CHECK(armPlugin < releasePlugin);
+
+  const auto disarmAfterPlugin = src.find("VoLumDisarmShutdownWatchdog();", releasePlugin);
+  REQUIRE(disarmAfterPlugin != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------
@@ -318,12 +352,15 @@ TEST_CASE("The ASIO input resolution never rewrites the saved input device")
 
   // The one INI write left in TryToChangeAudio is the pre-existing
   // device-disappeared reset, which genuinely has new state to record.
-  const auto tryToChange = src.find("bool IPlugAPPHost::TryToChangeAudio()");
+  const std::string signature = "bool IPlugAPPHost::TryToChangeAudio()";
+  const auto tryToChange = src.find(signature);
   REQUIRE(tryToChange != std::string::npos);
-  const auto selectMidi = src.find("bool IPlugAPPHost::SelectMIDIDevice", tryToChange);
-  REQUIRE(selectMidi != std::string::npos);
+  // The next member definition, whichever one it is - anchoring on a particular
+  // neighbour made this count whatever was inserted between them.
+  const auto nextMember = src.find("IPlugAPPHost::", tryToChange + signature.size());
+  REQUIRE(nextMember != std::string::npos);
   std::size_t iniWrites = 0;
-  for (auto pos = src.find("UpdateINI()", tryToChange); pos != std::string::npos && pos < selectMidi;
+  for (auto pos = src.find("UpdateINI()", tryToChange); pos != std::string::npos && pos < nextMember;
        pos = src.find("UpdateINI()", pos + 1))
     ++iniWrites;
   CHECK(iniWrites == 1);
@@ -395,4 +432,227 @@ TEST_CASE("The first-run settings file is named with a separator POSIX understan
   // All three appends - the shared existing-directory path plus one per platform's
   // create-directory branch - name the file the same way.
   CHECK(CountOccurrences(src, "Append(\"settings.ini\")") == 3);
+}
+
+// ---------------------------------------------------------------------------
+// The sample rate the app reports, and the one the driver is actually running
+//
+// A 1.2.1 user with an RME Babyface Pro FS: "ich kann die Sampling-Rate meines
+// Interfaces nicht umstellen, obwohl die Anzeige das behauptet" - the display
+// claimed the change had happened while the interface stayed where it was. Changing
+// it in RME's own panel instead stopped the audio for good, and quitting then left a
+// process behind that had to be ended by hand before VoLum would start again.
+//
+// Every one of those paths needs a live ASIO driver, so source guards are what is
+// available. The end-to-end coverage for the stored-rate half is the
+// "unsupported sample rate in settings.ini" scenario in e2e-standalone-win.ps1.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+std::string ReadForkRtAudioSource()
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2"
+                    / "Dependencies" / "IPlug" / "RTAudio" / "RtAudio.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+std::string ReadForkAppMainSource()
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IPlug"
+                    / "APP" / "IPlugAPP_main.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+} // namespace
+
+TEST_CASE("RtAudio reports the rate the ASIO driver took, not the one it was asked for")
+{
+  const std::string src = ReadForkRtAudioSource();
+
+  // ASIOSetSampleRate can return ASE_OK from a driver that then stays where it was -
+  // most often one clocked from its own control panel or an external source. Without
+  // the read-back every layer above believed the request.
+  const auto setRate = src.find("result = ASIOSetSampleRate( (ASIOSampleRate) sampleRate );");
+  const auto readBack = src.find("if ( ASIOGetSampleRate( &actualRate ) == ASE_OK && actualRate > 0.0 )");
+  REQUIRE(setRate != std::string::npos);
+  REQUIRE(readBack != std::string::npos);
+  CHECK(setRate < readBack);
+
+  // And the read-back has to land before stream_.sampleRate is written, or
+  // getStreamSampleRate() keeps echoing the request.
+  const auto store = src.find("stream_.sampleRate = sampleRate;", readBack);
+  REQUIRE(store != std::string::npos);
+  CHECK(readBack < store);
+}
+
+TEST_CASE("A driver that changes the rate on its own tells the host, by both routes")
+{
+  const std::string src = ReadForkRtAudioSource();
+
+  // sampleRateChanged: RtAudio stops the stream here. Before this, nothing else
+  // happened, so the stream stayed stopped and the user heard nothing more until the
+  // application was restarted.
+  // rfind: the signature appears twice, as a forward declaration and as the
+  // definition. The declaration is first.
+  const auto callback = src.rfind("static void sampleRateChanged( ASIOSampleRate sRate )");
+  REQUIRE(callback != std::string::npos);
+  const auto note = src.find("object->notePendingExternalSampleRate(", callback);
+  const auto stop = src.find("object->stopStream();", callback);
+  REQUIRE(note != std::string::npos);
+  REQUIRE(stop != std::string::npos);
+  CHECK(note < stop); // recorded before the stream goes away
+
+  // kAsioResetRequest: the route several drivers take instead, RME's among them. The
+  // comment there always said to defer the reset and do it later; nothing ever did.
+  const auto reset = src.find("case kAsioResetRequest:");
+  REQUIRE(reset != std::string::npos);
+  const auto resetEnd = src.find("case kAsioResyncRequest:", reset);
+  REQUIRE(resetEnd != std::string::npos);
+  const auto resetNote = src.find("object->notePendingDeviceReset();", reset);
+  CHECK(resetNote != std::string::npos);
+  CHECK(resetNote < resetEnd);
+}
+
+TEST_CASE("The app adopts the driver's rate and follows it when it moves")
+{
+  const std::string src = ReadForkAppHostSource();
+
+  // Adopted at open time, the same way the renegotiated buffer size is.
+  const auto open = src.find("mDAC->openStream(");
+  const auto adopt = src.find("const unsigned int actualSR = mDAC->getStreamSampleRate();", open);
+  const auto start = src.find("mDAC->startStream();", open);
+  REQUIRE(open != std::string::npos);
+  REQUIRE(adopt != std::string::npos);
+  REQUIRE(start != std::string::npos);
+  CHECK(open < adopt);
+
+  // Before startStream, so the plugin is reconfigured with no callback running.
+  CHECK(adopt < start);
+  CHECK(src.find("mIPlug->SetSampleRate(mSampleRate);", adopt) < start);
+
+  // Followed afterwards, from the window's timer rather than the driver's callback
+  // thread: reopening a stream from inside the driver's own callback is how a
+  // deadlock at quit gets written.
+  CHECK(src.find("void IPlugAPPHost::PollAudioStatus()") != std::string::npos);
+  CHECK(src.find("mDAC->takePendingDeviceReset();") != std::string::npos);
+  CHECK(src.find("mDAC->takePendingExternalSampleRate();") != std::string::npos);
+
+  // A driver that asks to be reopened after every open must not spin the app.
+  CHECK(src.find("mFollowDriverChanges = false;") != std::string::npos);
+
+  // A stored rate the device does not offer is corrected instead of failing to open.
+  const auto initAudio = src.find("bool IPlugAPPHost::InitAudio(");
+  REQUIRE(initAudio != std::string::npos);
+  CHECK(src.find("NearestSupportedSampleRate(sr, (int) inId, (int) outId)", initAudio) != std::string::npos);
+
+  // And a failure that happens before the window exists is held until it can be seen.
+  // MessageBox(NULL, ...) at startup is a report nobody receives.
+  CHECK(src.find("mDeferredAudioError.Set(message);") != std::string::npos);
+}
+
+TEST_CASE("The poll is wired to the window and stands down while Preferences is open")
+{
+  const std::string src = ReadForkAppDialogSource();
+
+  CHECK(src.find("SetTimer(hwndDlg, kAudioStatusTimerID, 500, NULL);") != std::string::npos);
+  CHECK(src.find("KillTimer(hwndDlg, kAudioStatusTimerID);") != std::string::npos);
+
+  // Reopening the stream underneath a dialog the user is editing would take the
+  // device away mid-selection. The driver's pending rate keeps until it closes.
+  CHECK(src.find("if (wParam == kAudioStatusTimerID && gPreferencesHWND == NULL && pAppHost)") != std::string::npos);
+
+  // Apply re-reads the state, so the combo shows the rate the driver actually took
+  // rather than the one that was asked for.
+  const auto apply = src.find("case IDAPPLY:");
+  REQUIRE(apply != std::string::npos);
+  const auto applyEnd = src.find("break;", apply);
+  CHECK(src.find("_this->PopulateAudioDialogs(hwndDlg);", apply) < applyEnd);
+}
+
+TEST_CASE("A relaunch blocked by a windowless previous instance says so")
+{
+  const std::string src = ReadForkAppMainSource();
+
+  // Upstream: FindWindow returns NULL, SetForegroundWindow(NULL) does nothing, and
+  // the process exits 0. Double-clicking VoLum appeared to do nothing at all, with
+  // no hint that a process had to be ended first.
+  // Not "raise": doctest's break-into-debugger expands to raise(SIGTRAP) on macOS, and
+  // a local of that name turns every assertion in this case into a compile error.
+  const auto guard = src.find("if (hWnd)");
+  const auto toForeground = src.find("SetForegroundWindow(hWnd);");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(toForeground != std::string::npos);
+  CHECK(guard < toForeground);
+  CHECK(src.find("MB_OK | MB_ICONWARNING") != std::string::npos);
+
+  // An orderly shutdown destroys the window before the process exits, so a launch
+  // that lands in that gap must wait rather than accuse a healthy quit.
+  CHECK(src.find("kZombieWaitMs") != std::string::npos);
+  CHECK(src.find("hMutex = OpenMutex(MUTEX_ALL_ACCESS, 0, BUNDLE_NAME);") != std::string::npos);
+
+  // A minimised instance is restored, not just raised.
+  CHECK(src.find("if (IsIconic(hWnd))") != std::string::npos);
+}
+
+TEST_CASE("A start with no audio device keeps the settings the user already had")
+{
+  const std::string src = ReadForkAppHostSource();
+
+  // mActiveState describes a stream that opened. Before the first one does it is a
+  // default-constructed AppState, and the recovery path used to revert to it and
+  // persist the result - so starting once with the interface unplugged replaced the
+  // device, channels, buffer and rate in settings.ini with defaults, permanently.
+  // Plugging the interface back in did not undo it: the file no longer named it.
+  const auto guard = src.find("if (!mHaveWorkingAudioState)");
+  const auto revert = src.find("mState = mActiveState;");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(revert != std::string::npos);
+  CHECK(guard < revert);
+
+  // And the flag means what it says: set where a stream has demonstrably opened.
+  const auto open = src.find("mDAC->openStream(");
+  REQUIRE(open != std::string::npos);
+  CHECK(src.find("mHaveWorkingAudioState = true;", open) != std::string::npos);
+}
+
+namespace
+{
+std::string ReadForkGraphicsWinSource()
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IGraphics"
+                    / "Platforms" / "IGraphicsWin.cpp";
+  std::ifstream in(path);
+  REQUIRE_MESSAGE(in.good(), "could not open " << path.string());
+  std::stringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+} // namespace
+
+TEST_CASE("A machine without OpenGL 2.0 is told so, not crashed")
+{
+  const std::string src = ReadForkGraphicsWinSource();
+
+  // Windows substitutes a generic OpenGL 1.1 implementation when no real one is
+  // available - Remote Desktop, a VM without 3D, a driver that failed to load.
+  // wglCreateContext and gladLoadGL both succeed there; the GL 2.0 entry points stay
+  // null, and nanovg's first glCreateProgram is a call to address zero. The process
+  // vanished on startup with no window, no message, and 0xC0000005 in the event log.
+  const auto check = src.find("if (!GLAD_GL_VERSION_2_0)");
+  const auto load = src.find("if (!gladLoadGL())");
+  REQUIRE(load != std::string::npos);
+  REQUIRE(check != std::string::npos);
+  CHECK(load < check);
+
+  // Reported, and stopped before the null call rather than after it.
+  CHECK(src.find("\"Graphics Error\"", check) != std::string::npos);
+  CHECK(src.find("ExitProcess(kGLUnavailableExitCode);", check) != std::string::npos);
 }
