@@ -229,3 +229,5 @@
 08/03/2026 - VoLum 1.2.1 (fix - Preferences says so when the driver refuses the sample rate you picked): ASIO drivers may open at a rate other than the one requested - usually because the clock is set in the driver's own control panel or comes from an external source. VoLum shows the rate that was really opened, which is truthful but on its own looks like the control is broken: you choose 96000, the box reads 88200, and nothing connects the two. It now says which rate was refused, which one is in use, and where the setting usually lives.
 
 08/02/2026 - v1.2.1 VoLum release. See GitHub release notes for included changes.
+
+08/03/2026 - v1.2.2 VoLum release. See GitHub release notes for included changes.
