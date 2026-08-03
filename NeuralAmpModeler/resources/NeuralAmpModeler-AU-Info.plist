@@ -20,17 +20,17 @@
 			<key>type</key>
 			<string>aufx</string>
 			<key>version</key>
-			<integer>66050</integer>
+			<integer>66049</integer>
 		</dict>
 	</array>
 	<key>AudioUnit Version</key>
-	<string>0x00010202</string>
+	<string>0x00010201</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
 	<string>VoLum</string>
 	<key>CFBundleGetInfoString</key>
-	<string>VoLum v1.2.2 Copyright 2024-2026 Steffen Dangmann and VoLum contributors</string>
+	<string>VoLum v1.2.1 Copyright 2024-2026 Steffen Dangmann and VoLum contributors</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.Lum.audiounit.VoLum</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -40,11 +40,11 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.2</string>
+	<string>1.2.1</string>
 	<key>CFBundleSignature</key>
 	<string>VoLm</string>
 	<key>CFBundleVersion</key>
-	<string>1.2.2</string>
+	<string>1.2.1</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>
