@@ -32,6 +32,7 @@ Rules below auto-attach on the files they own; you do not need to open them by h
 - Windows portable package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full zip` (the script resolves its helpers relative to the working directory, so it must run from `scripts`)
 - Windows installer package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full installer`
 - Windows standalone end-to-end scenarios: `pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1`
+- Windows standalone rate/buffer switching stress: `pwsh NeuralAmpModeler/scripts/stress-standalone-rate-switch-win.ps1` (needs a real ASIO device)
 - macOS release-equivalent package: `bash NeuralAmpModeler/scripts/makedist-mac.sh full all`
 - Watch/dispatch CI: `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref <branch> [-Dispatch] [-NoWait]`
 - Format: `bash format.bash`
