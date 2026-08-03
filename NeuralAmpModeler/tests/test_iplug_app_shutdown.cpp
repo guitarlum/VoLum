@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 
+#include "VoLumAppInstanceGuard.h"
 #include "VoLumAppShutdown.h"
 
 #include <filesystem>
@@ -258,6 +259,17 @@ std::string ReadForkAppHostSource()
 {
   const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IPlug"
                     / "APP" / "IPlugAPP_host.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+std::string ReadForkAppShutdownSource()
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IPlug"
+                    / "APP" / "VoLumAppShutdown.h";
   std::ifstream in(path, std::ios::binary);
   REQUIRE(in.good());
   std::ostringstream ss;
@@ -586,7 +598,7 @@ TEST_CASE("A relaunch blocked by a windowless previous instance says so")
   // no hint that a process had to be ended first.
   // Not "raise": doctest's break-into-debugger expands to raise(SIGTRAP) on macOS, and
   // a local of that name turns every assertion in this case into a compile error.
-  const auto guard = src.find("if (hWnd)");
+  const auto guard = src.find("VoLumInstanceStart::FocusExisting");
   const auto toForeground = src.find("SetForegroundWindow(hWnd);");
   REQUIRE(guard != std::string::npos);
   REQUIRE(toForeground != std::string::npos);
@@ -600,6 +612,126 @@ TEST_CASE("A relaunch blocked by a windowless previous instance says so")
 
   // A minimised instance is restored, not just raised.
   CHECK(src.find("if (IsIconic(hWnd))") != std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Startup: the mutex outlived the process that made it
+//
+// 2026-08-03, on the reporter's machine: a session of hard sample-rate switching
+// left asio4all64.dll with a thread parked in SleepEx. VoLum's own teardown had
+// finished - volum.log has both "complete" lines - but the exit hung inside the
+// driver's DLL_PROCESS_DETACH, so the process stayed in the table with its handle
+// table intact. That kept \Sessions\2\BaseNamedObjects\VoLum alive, and every
+// launch afterwards read the surviving mutex as "already running" and refused.
+// Task Manager would not end it either: Windows had already marked it exited, so
+// taskkill answered "there is no running instance of the task".
+//
+// Two fixes, and they are independent on purpose. VoLumExitProcessNow stops the
+// process being stranded in the first place; the guard below stops a stranded one
+// from taking the next launch down with it.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("A leftover mutex with no live owner does not block the next launch")
+{
+  using iplug::VoLumDecideInstanceStart;
+  using iplug::VoLumInstanceStart;
+
+  // The reported case: mutex still there, no window, nothing actually running.
+  // Pre-fix this was ReportStuckInstance, and the advice it gave - end the process
+  // in Task Manager - could not be followed, because the process was already dead.
+  CHECK(VoLumDecideInstanceStart(/*mutexExists*/ true, /*windowFound*/ false, /*liveInstance*/ false)
+        == VoLumInstanceStart::Start);
+
+  // A live instance showing its window is still the common case: focus it.
+  CHECK(VoLumDecideInstanceStart(true, true, true) == VoLumInstanceStart::FocusExisting);
+
+  // A window found while the process is on its way out is still worth focusing;
+  // liveness only gets a vote when there is no window to go to.
+  CHECK(VoLumDecideInstanceStart(true, true, false) == VoLumInstanceStart::FocusExisting);
+
+  // Alive but windowless after the grace period is a genuinely stuck instance, and
+  // ending that one in Task Manager does work.
+  CHECK(VoLumDecideInstanceStart(true, false, true) == VoLumInstanceStart::ReportStuckInstance);
+
+  // No mutex at all: nothing to think about.
+  CHECK(VoLumDecideInstanceStart(false, false, false) == VoLumInstanceStart::Start);
+  CHECK(VoLumDecideInstanceStart(false, false, true) == VoLumInstanceStart::Start);
+}
+
+TEST_CASE("The launch guard asks whether an instance is alive, not whether a mutex exists")
+{
+  const std::string src = ReadForkAppMainSource();
+
+  // The liveness probe is consulted, and only when the mutex is there - the
+  // short-circuit keeps a normal first launch off the process snapshot entirely.
+  CHECK(src.find("hMutex != NULL && VoLumAnotherLiveInstanceExists()") != std::string::npos);
+
+  // And the decision, rather than the bare mutex handle, is what gates the exit.
+  const auto decide = src.find("VoLumDecideInstanceStart(");
+  const auto report = src.find("VoLumInstanceStart::ReportStuckInstance");
+  REQUIRE(decide != std::string::npos);
+  REQUIRE(report != std::string::npos);
+  CHECK(decide < report);
+}
+
+TEST_CASE("The exit does not run any driver's DLL_PROCESS_DETACH")
+{
+  const std::string src = ReadForkAppMainSource();
+
+  // Returning from WinMain ends in ExitProcess, which calls DllMain on every module
+  // still loaded - including every ASIO driver on the machine, because probing the
+  // devices loads them all and the SDK never unloads them. One wedged driver was
+  // enough to strand the process for good.
+  const auto release = src.find("ReleaseMutex(hMutex);");
+  const auto leave = src.find("VoLumExitProcessNow(0);");
+  REQUIRE(release != std::string::npos);
+  REQUIRE(leave != std::string::npos);
+  CHECK(release < leave);
+
+  // TerminateProcess is the only exit that skips DllMain; _Exit and exit do not.
+  const std::string shutdown = ReadForkAppShutdownSource();
+  CHECK(shutdown.find("::TerminateProcess(::GetCurrentProcess()") != std::string::npos);
+
+  // Which costs the settings file its safety net. WritePrivateProfileString writes
+  // behind a cache, and nothing flushes it once the CRT stops running - so the
+  // all-NULL flush has to be the last thing UpdateINI does.
+  const std::string host = ReadForkAppHostSource();
+  const auto update = host.find("void IPlugAPPHost::UpdateINI()");
+  REQUIRE(update != std::string::npos);
+  const auto lastWrite = host.find("WritePrivateProfileString(\"midi\", \"outchan\", buf, ini);", update);
+  REQUIRE(lastWrite != std::string::npos);
+  CHECK(host.find("WritePrivateProfileString(NULL, NULL, NULL, ini);", lastWrite) != std::string::npos);
+
+  // The watchdog has to leave the same way. It fires precisely when a driver is
+  // wedged, so an _Exit there would hand control straight back to that driver.
+  const auto fire = shutdown.find("if (VoLumShutdownWatchdogArmed().load())");
+  REQUIRE(fire != std::string::npos);
+  CHECK(shutdown.find("VoLumExitProcessNow(kVoLumShutdownWatchdogExitCode);", fire) != std::string::npos);
+  CHECK(shutdown.find("std::_Exit(kVoLumShutdownWatchdogExitCode)") == std::string::npos);
+}
+
+TEST_CASE("A sample rate the driver refused is explained, not just displayed")
+{
+  const std::string host = ReadForkAppHostSource();
+  const std::string dialog = ReadForkAppDialogSource();
+
+  // The substitution is recorded where it is detected - after the open, where
+  // mState.mAudioSR holds whatever the driver actually took.
+  CHECK(host.find("mSubstitutedFromSR = requestedSR;") != std::string::npos);
+  CHECK(host.find("mSubstitutedToSR = mState.mAudioSR;") != std::string::npos);
+
+  // And cleared on a granted request, so a later Apply cannot report a stale one.
+  const auto granted = host.find("mSubstitutedFromSR = 0;");
+  REQUIRE(granted != std::string::npos);
+
+  // Reported from both ways out of Preferences. Apply alone would leave the user
+  // who picks a rate and presses OK with a silently different number.
+  const auto apply = dialog.find("case IDAPPLY:");
+  const auto ok = dialog.find("case IDOK:");
+  REQUIRE(apply != std::string::npos);
+  REQUIRE(ok != std::string::npos);
+  CHECK(dialog.find("ReportSampleRateSubstitution(hwndDlg, _this);", apply) < dialog.find("case IDCANCEL:", apply));
+  CHECK(dialog.find("ReportSampleRateSubstitution(hwndDlg, _this);", ok) < apply);
 }
 
 TEST_CASE("A start with no audio device keeps the settings the user already had")
