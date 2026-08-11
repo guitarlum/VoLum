@@ -68,6 +68,10 @@ try
       $token = $token.TrimEnd(".,;:")
 
       $normalized = $token.Replace("\", "/")
+      # Placeholders (`<ref>`), shell operators (`||`) and C++ expressions
+      # (`mModel->process`) are not paths, and GetExtension below throws on the
+      # characters they contain rather than returning empty.
+      if ($normalized.IndexOfAny([System.IO.Path]::GetInvalidPathChars()) -ge 0) { continue }
       $hasRoot = $false
       foreach ($root in $knownRoots) { if ($normalized.StartsWith($root)) { $hasRoot = $true; break } }
       $ext = [System.IO.Path]::GetExtension($normalized).ToLowerInvariant()

@@ -221,8 +221,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,2,1,0
- PRODUCTVERSION 1,2,1,0
+ FILEVERSION 1,2,2,0
+ PRODUCTVERSION 1,2,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -237,8 +237,8 @@ BEGIN
     BEGIN
         BLOCK "040004e4"
         BEGIN
-            VALUE "FileVersion", "1.2.1"
-            VALUE "ProductVersion", "1.2.1"
+            VALUE "FileVersion", "1.2.2"
+            VALUE "ProductVersion", "1.2.2"
             VALUE "FileDescription", "VoLum - NAM Player"
             VALUE "InternalName", "VoLum"
             VALUE "ProductName", "VoLum"
