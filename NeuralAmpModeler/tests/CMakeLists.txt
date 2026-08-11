@@ -50,6 +50,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_codec.cpp
   test_volum_state_roundtrip.cpp
   test_volum_pitch.cpp
+  test_volum_pitch_artifacts.cpp
   test_volum_tremolo.cpp
   test_volum_ir_file_guard.cpp
   test_volum_pre_post_lock.cpp

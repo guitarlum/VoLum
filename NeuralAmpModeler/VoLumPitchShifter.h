@@ -33,6 +33,15 @@
 //            collapsed POLY from ~49 ms to ~14 ms while keeping exact pitch and
 //            polyphony. See _spike/refs/RESEARCH-NOTES.md Phase 6 (local, gitignored).
 //
+// SPLICE ALIGNMENT IS THE THING TO PROTECT. Two separate releases tried to cure a
+// POLY upshift crackle by reasoning about splice CADENCE, and both were wrong:
+// a shortened grain is harmless as long as the join is waveform-aligned, while a
+// perfectly regular cadence still crackles if the joins land at arbitrary phase.
+// Constrain WSOLA's SEARCH RANGE, never its RESULT - clamping the result throws
+// away the alignment it just found. `tests/test_volum_pitch_artifacts.cpp` measures
+// this directly (non-harmonic residual, impulsiveness, per-splice correlation)
+// instead of counting splices.
+//
 // Latency = read-pointer headroom (group delay). The dry path is delayed by the
 // same amount so dry/wet stay aligned; the host compensates the total via PDC.
 // Latency depends on CHARACTER, so the plugin re-reports it when character/mode
@@ -88,6 +97,12 @@ public:
   // hundreds of cents of detune to <=6 cents. See RESEARCH-NOTES-pitch-modes.md.
   static constexpr double kPmaxFreq = 600.0;
   static constexpr double kPminFreq = 40.0;
+  // How much normalized cross-correlation a splice candidate may give up to be
+  // chosen for being nearer. Correlation peaks recur every signal period and are
+  // near-equal in height, so a small tolerance picks the nearest peak instead of an
+  // arbitrarily distant one; too large a value would accept genuinely misaligned
+  // joins, which is the failure this whole path exists to avoid.
+  static constexpr double kAlignTol = 0.02;
 
   // Allocates - call OFF the audio thread (Configure). Ring is sized for the
   // worst case (DROP) so changing character later never reallocates.
@@ -113,6 +128,10 @@ public:
 
     mPeriodScratch.assign(static_cast<size_t>(2 * tmax + 4), 0.0);
     mRefWin.assign(static_cast<size_t>(std::max(worst.corrWin, 1)), 0.0);
+    // One correlation slot per candidate lag, for the widest search any character
+    // uses. Sized here so _WsolaRefineRange never allocates on the audio thread.
+    const int maxSearch = std::max(drop.search, poly.search);
+    mCorrScratch.assign(static_cast<size_t>(2 * maxSearch + 1), 0.0);
 
     mPeriodUpdate = std::max(1, static_cast<int>(std::lround(mSampleRate * 0.01)));
     SetCharacter(Character::Drop);
@@ -164,12 +183,13 @@ public:
   {
     int search = 0;
     int band = 0;
+    int xfade = 0;
     bool fixedGrain = false;
   };
   static SpliceGeometry SpliceGeometryFor(Character c, double sampleRate)
   {
     const Timing t = _ComputeTimingFor(c, sampleRate > 0.0 ? sampleRate : 48000.0);
-    return {t.search, static_cast<int>(t.band), t.fixedGrain};
+    return {t.search, static_cast<int>(t.band), t.xfade, t.fixedGrain};
   }
 
   void Reset()
@@ -184,6 +204,8 @@ public:
     mFading = false;
     mFadePos = 0;
     mSpliceStarts = 0;
+    mSpliceCorrSum = 0.0;
+    mSpliceCorrCount = 0;
   }
 
   // ratio = output_freq / input_freq (2^(semitones/12)).
@@ -240,6 +262,13 @@ public:
         {
           const int k = std::max(1, static_cast<int>(std::lround((mDelay - mDLo) / P)));
           double cand = mDelay - k * P; // smaller delay (skip forward)
+          // Downshift keeps the full two-sided search. Here the target sits at the LOW
+          // delay boundary and grain length is `dHi - cand`, so it is a POSITIVE lag
+          // that shortens the grain while the `dc >= xfade+1` guard blocks most of the
+          // negative half. Downshift can therefore only shorten - the opposite of what
+          // the 1.2.1 comment claimed - yet it measures clean, because a shortened but
+          // waveform-ALIGNED grain is benign; only misaligned joins crackle. Alignment,
+          // not cadence, is the thing worth protecting.
           if (mWsola)
             cand = _WsolaRefine(cand);
           if (cand >= static_cast<double>(mXfade) + 1.0)
@@ -247,7 +276,7 @@ public:
             mDelayNew = cand;
             mFading = true;
             mFadePos = 0;
-            ++mSpliceStarts;
+            _NoteSplice();
           }
         }
         else if (f > 1.0 && mDelay < mDLo)
@@ -255,25 +284,20 @@ public:
           const int k = std::max(1, static_cast<int>(std::lround((mDHi - mDelay) / P)));
           const double base = mDelay + k * P; // larger delay (jump back / duplicate)
           double cand = base;
+          // UPSHIFT grain floor, applied to the SEARCH RANGE. The target sits at the
+          // HIGH delay boundary, so grain length is `cand - dLo`: a negative lag
+          // SHORTENS the grain and makes the next splice fire early. Restricting the
+          // search to non-negative lags means every candidate WSOLA may return is
+          // already a legal (non-shortening) one, so we get a waveform-aligned join
+          // AND a bounded cadence. 1.2.1 instead searched both halves and clamped the
+          // answer up to `base` afterwards, which threw the alignment away on nearly
+          // every splice and is what actually crackled - see _WsolaRefineRange.
           if (mWsola)
-            cand = _WsolaRefine(cand);
-          // UPSHIFT-ONLY grain floor. _WsolaRefine searches [-search, +search] around
-          // the splice target. On DOWNshift the target sits at the LOW delay boundary,
-          // where _WsolaRefine's own `dc >= xfade+1` clamp already blocks the
-          // grain-shortening (negative-lag) half, so downshift can only LENGTHEN a grain
-          // and stays stable. On UPshift the target sits at the HIGH boundary with the
-          // full search free, so a negative lag SHORTENS the effective grain: the next
-          // splice then fires well before `band`, POLY re-splices far more often than
-          // intended, and positive shifts crackle. Mirror the downshift asymmetry by
-          // never letting the refined target fall below the intended one-band jump, so
-          // WSOLA may only push the splice DEEPER into history. Downshift path is
-          // untouched.
-          if (cand < base)
-            cand = base;
+            cand = _WsolaRefineRange(cand, 0, mSearch, true);
           mDelayNew = cand;
           mFading = true;
           mFadePos = 0;
-          ++mSpliceStarts;
+          _NoteSplice();
         }
       }
 
@@ -389,15 +413,38 @@ private:
     return mBuf[i0] * (1.0 - frac) + mBuf[i1] * frac;
   }
 
-  // WSOLA: pick the splice offset in [-search, search] around `cand` whose window
+  // WSOLA: pick the splice offset in [lagMin, lagMax] around `cand` whose window
   // best matches (normalized cross-correlation) the window we are leaving, so the
   // crossfade joins waveform-aligned segments -> minimal warble and zero pitch
   // bias (self-correcting; does not depend on an exact period estimate).
-  double _WsolaRefine(double cand)
+  //
+  // The caller passes the lag range, and the range is the ONLY place grain-length
+  // constraints may be applied. Clamping the RESULT instead silently discards the
+  // alignment WSOLA just found: on a decaying note the best-correlating candidate
+  // is reliably the nearest one in history (higher harmonics decay, so closer
+  // segments look more alike), so a "floor at the intended jump" clamp fired on
+  // essentially every splice and pinned the target to an arbitrary phase. That was
+  // the 1.2.1 upshift crackle - measurably, upshift splice gaps became rigidly
+  // constant at exactly the nominal grain, the signature of a defeated search.
+  //
+  // With preferNearest, candidates correlating within kAlignTol of the best are
+  // treated as equally aligned (correlation peaks recur every signal period and are
+  // near-equal in height) and the one with the SMALLEST |lag| wins. That keeps the
+  // read pointer's group delay - and therefore dry/wet comb filtering below 100%
+  // MIX - as tight as the alignment allows. It is enabled only on the upshift path,
+  // whose range is one-sided and would otherwise drift far into history. The
+  // downshift path keeps plain argmax: it measures clean today, and the nearest-lag
+  // preference costs it several dB of non-harmonic energy there.
+  double _WsolaRefine(double cand) { return _WsolaRefineRange(cand, -mSearch, mSearch, false); }
+
+  double _WsolaRefineRange(double cand, int lagMin, int lagMax, bool preferNearest)
   {
     const int win = mCorrWin;
-    if (win <= 0 || static_cast<long long>(mWriteCount) < static_cast<long long>(mDHi) + win + mSearch + 4)
+    if (win <= 0 || lagMax < lagMin
+        || static_cast<long long>(mWriteCount) < static_cast<long long>(mDHi) + win + mSearch + 4)
       return cand;
+    if (static_cast<size_t>(lagMax - lagMin + 1) > mCorrScratch.size())
+      return cand; // never reachable with Configure()'s sizing; fail safe, no alloc
     double rn = 0.0;
     for (int j = 0; j < win; ++j)
     {
@@ -408,11 +455,16 @@ private:
     rn = std::sqrt(rn) + 1e-9;
     double bestC = -2.0;
     int bestLag = 0;
-    for (int lag = -mSearch; lag <= mSearch; ++lag)
+    bool any = false;
+    for (int lag = lagMin; lag <= lagMax; ++lag)
     {
+      const size_t slot = static_cast<size_t>(lag - lagMin);
       const double dc = cand + lag;
       if (dc < static_cast<double>(mXfade) + 1.0)
+      {
+        mCorrScratch[slot] = -2.0;
         continue;
+      }
       double dot = 0.0;
       double sn = 0.0;
       for (int j = 0; j < win; ++j)
@@ -422,13 +474,50 @@ private:
         sn += v * v;
       }
       const double cc = dot / (rn * (std::sqrt(sn) + 1e-9));
+      mCorrScratch[slot] = cc;
       if (cc > bestC)
       {
         bestC = cc;
         bestLag = lag;
+        any = true;
       }
     }
-    return cand + bestLag;
+    if (!any)
+      return cand;
+    int chosen = bestLag;
+    if (preferNearest)
+    {
+      for (int lag = lagMin; lag <= lagMax; ++lag)
+      {
+        if (mCorrScratch[static_cast<size_t>(lag - lagMin)] < bestC - kAlignTol)
+          continue;
+        if (std::abs(lag) < std::abs(chosen))
+          chosen = lag;
+      }
+    }
+    return cand + chosen;
+  }
+
+  // Normalized cross-correlation between the segment we are leaving (at mDelay) and
+  // the one we are joining (at dc). Measured at the delay ACTUALLY spliced to, not
+  // the one the search returned, so it stays honest if a caller ever post-processes
+  // the search result - which is exactly the mistake that produced the 1.2.1 crackle
+  // while a cadence-based regression test stayed green. 1.0 is a perfect join.
+  double _SpliceCorr(double dc) const
+  {
+    const int win = mCorrWin;
+    if (win <= 0)
+      return 1.0;
+    double dot = 0.0, rn = 0.0, sn = 0.0;
+    for (int j = 0; j < win; ++j)
+    {
+      const double a = _ReadAtDelay(mDelay + static_cast<double>(j));
+      const double b = _ReadAtDelay(dc + static_cast<double>(j));
+      dot += a * b;
+      rn += a * a;
+      sn += b * b;
+    }
+    return dot / ((std::sqrt(rn) + 1e-9) * (std::sqrt(sn) + 1e-9));
   }
 
   // Autocorrelation period estimate over recent history. Keeps the last estimate
@@ -498,6 +587,7 @@ private:
   std::vector<double> mBuf;
   std::vector<double> mPeriodScratch;
   std::vector<double> mRefWin;
+  std::vector<double> mCorrScratch;
   size_t mWrite = 0;
   unsigned long long mWriteCount = 0;
 
@@ -511,13 +601,44 @@ private:
   bool mFading = false;
   int mFadePos = 0;
 
-  // Test/introspection only: number of crossfaded splices started since Reset().
-  // Lets a regression test assert POLY's splice cadence stays near the grain band
-  // (a shortened grain => runaway splicing => crackle). Behaviour-neutral counter.
+  // Test/introspection only, behaviour-neutral. Splice COUNT alone cannot
+  // characterise this engine: 1.2.1 shipped a cadence-capped regression test that
+  // passed while the sound was broken, because the damage was in splice ALIGNMENT.
+  //
+  // Cadence is deliberately NOT exposed here, tempting as it looks. A rigidly
+  // constant splice spacing was the fingerprint of the defeated search, but the
+  // FIXED engine is near-rigid too - preferring the nearest acceptable lag is what
+  // makes it so. An assertion on cadence spread would therefore pass on both, which
+  // is the trap that has already cost two releases. Alignment is the real signal.
   unsigned long long mSpliceStarts = 0;
+  double mSpliceCorrSum = 0.0;
+  unsigned long long mSpliceCorrCount = 0;
+
+  // Called at every accepted splice, after mDelayNew is settled.
+  void _NoteSplice()
+  {
+    ++mSpliceStarts;
+    if (mWsola)
+    {
+      mSpliceCorrSum += _SpliceCorr(mDelayNew);
+      ++mSpliceCorrCount;
+    }
+  }
 
 public:
   unsigned long long SpliceStarts() const { return mSpliceStarts; }
+  // Mean normalized cross-correlation achieved across splices since Reset(). 1.0
+  // means every join was perfectly waveform-aligned. Only meaningful for WSOLA
+  // characters (DROP/POLY); INSTANT does not search, and reports 1.0.
+  //
+  // The MEAN, not the minimum: a single splice during engine warm-up or a near
+  // -silent passage correlates poorly for reasons that have nothing to do with the
+  // splice logic, so the worst case is too noisy to assert on (measured swinging
+  // negative even on a healthy engine).
+  double MeanSpliceCorr() const
+  {
+    return mSpliceCorrCount ? mSpliceCorrSum / static_cast<double>(mSpliceCorrCount) : 1.0;
+  }
 };
 
 class VoLumPitch
