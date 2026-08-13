@@ -12,9 +12,9 @@ aren't, and only add controls the research proves earn their place.
 
 ## How to run this (mandatory)
 
-Follow the local research process. LOCAL ONLY: references, measurement scripts,
-rendered WAVs and prototypes stay in local scratch (verify `git check-ignore`
-before any commit); never stage/commit/push them. Satisfy the anti-shortcut
+Follow the local research process. References, measurement scripts, rendered
+WAVs and prototypes are working material and stay in local scratch. Satisfy the
+anti-shortcut
 checklist (>= 6 primary sources actually read, reference measured before
 designing, per-candidate spec with falsifiable metrics, A/B spike vs. reference)
 before touching production code.

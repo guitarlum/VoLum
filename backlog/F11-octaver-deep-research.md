@@ -11,9 +11,8 @@ we can defend with numbers — not to add knobs for their own sake.
 
 ## How to run this (mandatory)
 
-Follow the local research process. It is LOCAL ONLY: every reference, measurement
-script, rendered WAV, and prototype stays in local scratch and is never staged,
-committed or pushed (verify with `git check-ignore` before any commit). Satisfy
+Follow the local research process. Every reference, measurement script, rendered
+WAV, and prototype is working material and stays in local scratch. Satisfy
 the anti-shortcut checklist (>= 6 primary sources actually read, reference
 measured before designing, per-candidate spec with falsifiable metrics, A/B spike
 beats/matches reference) before writing any production code. "Googled 4 times" is
