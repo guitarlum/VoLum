@@ -21,6 +21,10 @@ description: Prepare VoLum PRs and GitHub releases. Use when creating release PR
 4. User-facing text:
    - Preserve README images/badges unless user explicitly asks to change them.
    - Release notes should mention concrete asset names and install path choices.
+   - **Keep release notes short, and scale them to the release.** A single
+     bugfix gets a few sentences: what is fixed, who is affected, what did not
+     change. No engineering narrative, no test-strategy or process sections, no
+     recap of how the bug was found - that belongs in the PR and changelog.
 5. CI on a release branch:
    - Pushing `release/*` triggers nothing; CI auto-runs only on `dev`/`main`.
    - `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref release/x.y.z -Dispatch`
