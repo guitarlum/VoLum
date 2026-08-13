@@ -57,11 +57,10 @@ naming what already exists.
   pack. Overlaps `F5`'s export half; settle the id re-keying story once, in
   whichever ships first.
 - `F11-octaver-deep-research.md` — give the Octaver mode the same
-  measured-reference deep-research treatment the transpose engine got (uses the
-  local `deep-research` skill; reference the reference Chaos Bed as black-box
-  reference). Ship the best octaver defensible with numbers; no gratuitous knobs.
+  measured-reference research treatment the transpose engine got. Ship the best
+  octaver defensible with numbers; no gratuitous knobs.
 - `F12-tremolo-deep-research.md` — validate/sharpen the three POST Tremolo voices
-  (Optical/Bias/Harmonic) against measured real-tremolo references (same skill).
+  (Optical/Bias/Harmonic) against measured real-tremolo references.
   Fix any voice that isn't an honest emulation; only add controls the research
   proves. The 1.2.1 audit also parked four Tremolo *voicing* findings for this
   pass — see `1.2.1-audit-deferred.md` § "Voicing changes".

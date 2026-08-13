@@ -5,35 +5,30 @@ Do not commit to `dev`/`main`. Merge to `dev` only after acceptance criteria + t
 
 The PRE Pitch **Octaver** mode currently reuses the transpose granular voices at
 fixed ±12 ratios (down/up) blended with dry, plus a VINTAGE/MODERN voicing pill.
-It works, but it was never given the same deep-research + measured-reference
-treatment the transpose engine got. This story is to do that properly and ship
-the best octaver we can defend with numbers — not to add knobs for their own sake.
+It works, but it was never given the same measured-reference treatment the
+transpose engine got. This story is to do that properly and ship the best octaver
+we can defend with numbers — not to add knobs for their own sake.
 
 ## How to run this (mandatory)
 
-Use the local skill **`deep-research`** (`~/.cursor/skills/deep-research/SKILL.md`).
-It is LOCAL ONLY: every ref, measurement script, rendered WAV, and prototype lives
-under the gitignored `local-scratch/` (verify with `git check-ignore` before any commit).
-Do not stage/commit/push any of it. Satisfy the skill's anti-shortcut checklist
-(>= 6 primary sources actually read, reference measured before designing,
-per-candidate spec with falsifiable metrics, A/B spike beats/matches reference)
-before writing any production code. "Googled 4 times" is an explicit failure mode.
+Follow the local research process. It is LOCAL ONLY: every reference, measurement
+script, rendered WAV, and prototype stays in local scratch and is never staged,
+committed or pushed (verify with `git check-ignore` before any commit). Satisfy
+the anti-shortcut checklist (>= 6 primary sources actually read, reference
+measured before designing, per-candidate spec with falsifiable metrics, A/B spike
+beats/matches reference) before writing any production code. "Googled 4 times" is
+an explicit failure mode.
 
-## Reference targets (owned binaries — black-box only)
+## Reference targets
 
-- **a commercial reference "Chaos Bed" octaver** (already installed, VST3 +
-  standalone). Measure headless from rendered audio like the transpose work did
-  (see `local-scratch/measure_reference.py`); if its octaver section won't isolate headless,
-  render WAVs from standalone and analyze offline. Document which path.
-- Any other owned POG/OC-style octaver (user can install on request). Ask before
-  assuming availability.
+- An owned octaver of the polyphonic-digital lineage, measured black-box from
+  rendered audio. Availability is a local question; ask before assuming.
 
 ## Research questions to answer with sources + numbers
 
-- Mono analog divider (OC-2 / Boss, flip-flop octave-down, gritty, chord-mush)
-  vs. poly digital (EHX POG / Boss OC-5, FFT/organ-like, chord-safe): which
-  lineage does VoLum's octaver want to emulate, and does the VINTAGE/MODERN pill
-  map onto that split honestly?
+- Mono analog divider (flip-flop octave-down, gritty, chord-mush) vs. poly
+  digital (FFT/organ-like, chord-safe): which lineage does VoLum's octaver want
+  to emulate, and does the VINTAGE/MODERN pill map onto that split honestly?
 - For octave-DOWN specifically: is a time-domain period-doubling / waveform
   re-synthesis cleaner than our granular ±12, and at what latency/cents cost?
 - Tracking on chords vs. single notes: quantify how the reference degrades on a
@@ -43,12 +38,12 @@ before writing any production code. "Googled 4 times" is an explicit failure mod
 
 ## Deliverables
 
-- Gitignored `local-scratch/research notes.md` extended with an octaver section:
-  correction framing, comparison table, copyable building blocks (each with
-  source + license), per-candidate spec with expected latency/cents/artifact
-  numbers, and the the reference octaver measurement results.
-- A spike (extend `local-scratch/engines.py` / `local-scratch/spike_ab.py`) that A/Bs each
-  candidate octaver vs. the measured reference on guitar-like test signals
+- Local research notes extended with an octaver section: correction framing,
+  comparison table, copyable building blocks (each with source + license),
+  per-candidate spec with expected latency/cents/artifact numbers, and the
+  reference measurement results.
+- A local spike that A/Bs each candidate octaver vs. the measured reference on
+  guitar-like test signals
   (additive tone with decay + pick transient, single notes AND a power chord)
   and renders WAVs for the ear check.
 - A 2-3 option writeup for the human (metrics + WAVs + your pick), same format as
@@ -81,5 +76,5 @@ before writing any production code. "Googled 4 times" is an explicit failure mod
 
 ## Out of scope (v1)
 
-- Polyphonic Range/Lowest-note targeting (OC-5 style), −2 octave voice. Note as
+- Polyphonic Range/Lowest-note targeting, −2 octave voice. Note as
   follow-ups only if the research says they matter.

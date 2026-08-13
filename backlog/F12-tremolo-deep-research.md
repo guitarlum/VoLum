@@ -5,26 +5,25 @@ Do not commit to `dev`/`main`. Merge to `dev` only after acceptance criteria + t
 
 The POST **Tremolo** already ships three voices (OPTICAL / BIAS / HARMONIC) with
 RATE / DEPTH / SHAPE / MIX, tempo sync, and a HARMONIC X-OVER knob (see changelog
-06/26/2026). It was modelled from descriptions, not from measured
+06/26/2026). It was modelled from published descriptions, not from measured
 references. This story is to give it the same measured-reference rigor the
 transpose engine got: confirm the three voices are honest emulations, fix any that
 aren't, and only add controls the research proves earn their place.
 
 ## How to run this (mandatory)
 
-Use the local skill **`deep-research`** (`~/.cursor/skills/deep-research/SKILL.md`).
-LOCAL ONLY: refs, measurement scripts, rendered WAVs, prototypes live under the
-gitignored `local-scratch/` (verify `git check-ignore` before any commit); never
-stage/commit/push them. Satisfy the anti-shortcut checklist (>= 6 primary sources
-actually read, reference measured before designing, per-candidate spec with
-falsifiable metrics, A/B spike vs. reference) before touching production code.
+Follow the local research process. LOCAL ONLY: references, measurement scripts,
+rendered WAVs and prototypes stay in local scratch (verify `git check-ignore`
+before any commit); never stage/commit/push them. Satisfy the anti-shortcut
+checklist (>= 6 primary sources actually read, reference measured before
+designing, per-candidate spec with falsifiable metrics, A/B spike vs. reference)
+before touching production code.
 
-## Reference targets (owned binaries — black-box only)
+## Reference targets
 
-- Any owned amp/plugin with a real tremolo (reference archetypes, amp-sim tremolos,
-  or a hardware unit captured to WAV). Ask the user which tremolos they own /
-  can install before assuming. Measure headless from rendered audio, or render WAVs
-  from standalone and analyze offline; document which path.
+- Any owned amp/plugin with a real tremolo, or a hardware unit captured to WAV.
+  Ask the user which tremolos they own / can install before assuming. Measure
+  black-box from rendered audio and analyze offline.
 - Classic references to characterize against: optical (photocell, choppy, e.g.
   Fender brownface/blackface), bias tremolo (smooth, tube-bias, "Bang Bang"),
   harmonic tremolo (band-split anti-phase, brownface). Get measured AM depth,
@@ -49,7 +48,7 @@ falsifiable metrics, A/B spike vs. reference) before touching production code.
 
 ## Deliverables
 
-- Gitignored `local-scratch/research notes.md` extended with a tremolo section:
+- Local research notes extended with a tremolo section:
   correction framing, per-voice comparison table (measured AM depth / shape /
   band behavior), copyable building blocks with source + license, per-voice spec
   with falsifiable metrics, and reference-measurement results.

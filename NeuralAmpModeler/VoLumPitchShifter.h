@@ -12,26 +12,21 @@
 // Why not a phase vocoder: for low guitar strings at low latency an STFT vocoder
 // either drifts or needs ~64-85 ms. Why not the old fixed-grain dual-tap: its
 // grain was not period-aligned, so it warbled and ran sharp on upshifts. Measured
-// against a commercial reference (a commercial reference transpose), this engine
-// matches it on pitch accuracy (~0.5 cents), drift (~3 cents) and warble, at
-// roughly half the old latency. See local-scratch/research notes.md (local).
+// against a commercial low-latency shifter, this engine matches it on pitch
+// accuracy (~0.5 cents), drift (~3 cents) and warble, at roughly half the old
+// latency.
 //
 // Three CHARACTERs trade latency vs accuracy / monophonic vs polyphonic:
 //   DROP:    WSOLA splice search, PERIOD-synchronous -> exact mono pitch even at
 //            +/-12, ~17 ms. Monophonic (one period estimate).
 //   INSTANT: period-sync, no search -> tightest ~8.6 ms. Monophonic.
 //   POLY:    FIXED-grain WSOLA splice (no pitch estimate) -> tracks CHORDS, not
-//            just single notes, at ~14 ms. It is a time-domain
-//            
-//            
-//            single-pointer granular shifter (no FFT/IPP, no phase vocoder) whose
-//            TRUE impulse latency is ~2-8 ms (shift-dependent), constant across host
-//            block sizes -> a genuine low-latency algorithm. The key insight ported
-//            here: the read pointer is clamped to >= xfade by the splice, so the
-//            WSOLA search/correlation windows are HISTORY reads that need not inflate
-//            the delay floor (latency = xfade + 0.5*band, not +search+corr). That
-//            collapsed POLY from ~49 ms to ~14 ms while keeping exact pitch and
-//            polyphony. See local-scratch/research notes.md Phase 6 (local, gitignored).
+//            just single notes, at ~14 ms. A time-domain single-pointer granular
+//            shifter (no FFT, no phase vocoder). What keeps it cheap: the read
+//            pointer is clamped to >= xfade by the splice, so the WSOLA search and
+//            correlation windows are HISTORY reads that need not inflate the delay
+//            floor (latency = xfade + 0.5*band, not +search+corr). That collapsed
+//            POLY from ~49 ms to ~14 ms while keeping exact pitch and polyphony.
 //
 // SPLICE ALIGNMENT IS THE THING TO PROTECT. Two separate releases tried to cure a
 // POLY upshift crackle by reasoning about splice CADENCE, and both were wrong:
@@ -92,9 +87,9 @@ public:
   // estimate locked to a wrong lag -> mid-cycle splices -> the audible "warps and
   // moves" detune on those strings. Lowering the floor to 40 Hz brings the whole
   // guitar range in and fixes it at ZERO latency cost (the tracker only widens its
-  // history read; latency = xfade+..., independent of the search range). Measured
-  // in local-scratch/: drop C / 7-string / 8-string all go from tens/
-  // hundreds of cents of detune to <=6 cents. See research notes.
+  // history read; latency = xfade+..., independent of the search range). Measured:
+  // drop C / 7-string / 8-string all go from tens/hundreds of cents of detune to
+  // <=6 cents.
   static constexpr double kPmaxFreq = 600.0;
   static constexpr double kPminFreq = 40.0;
   // How much normalized cross-correlation a splice candidate may give up to be
@@ -330,11 +325,9 @@ private:
       // POLY: fixed-grain WSOLA, no pitch estimate -> works on chords. Pitch is set
       // purely by the read-pointer rate (exact, no drift); the WSOLA search/corr only
       // pick a waveform-aligned splice point and the delay BAND sets how often we
-      // splice. Dynamic research of the a commercial reference transpose (research notes
-      // Phase 6) measured its TRUE impulse latency at ~2-8 ms (shift-dependent, NOT
-      // the 71-sample reported PDC) using a short delay band; constant across host
-      // block sizes => a genuine low-latency algorithm, not in-block lookahead.
-      // Replicating that here: the latency floor is xfade + 0.5*band, NOT
+      // splice. A short delay band is what buys the low impulse latency here, and it
+      // stays constant across host block sizes rather than relying on in-block
+      // lookahead. The latency floor is xfade + 0.5*band, NOT
       // xfade+search+corr+0.5*band - the splice already clamps the read pointer to
       // >= xfade, so search/corr are history reads that do NOT raise latency (see the
       // fixed-grain dLo below). That lets us use a GENEROUS search/corr (robust splice
@@ -342,7 +335,7 @@ private:
       // band. Band 20 ms is the floor at which WSOLA splices stay rare enough to keep
       // every chord voice (shorter bands splice so often that WSOLA's per-splice
       // dominant-period locking cancels inner voices). Net: ~49 ms -> ~14 ms, still
-      // exact pitch (<=3 cents) and polyphonic. (Verified in local-scratch volum_poly_sim.py.)
+      // exact pitch (<=3 cents) and polyphonic.
       t.wsola = true;
       t.fixedGrain = true;
       t.xfade = std::max(8, static_cast<int>(std::lround(sr * 0.004)));

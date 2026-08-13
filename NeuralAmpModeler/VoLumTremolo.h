@@ -8,7 +8,7 @@
 // VoLumPitchShifter.h placement) so it builds directly without touching the
 // AudioDSPTools submodule. Operates in place on the stereo POST bus.
 //
-// Three modelled amp/pedal tremolo voices:
+// Three classic amp/pedal tremolo voices, modelled from published descriptions:
 //   - Optical   : LFO-driven gain through an asymmetric photocell envelope (fast
 //                 attack, lazy release) so the throb sags down and snaps back -
 //                 a clearly non-sine pulse even at slow rates. (Reverb.com "6

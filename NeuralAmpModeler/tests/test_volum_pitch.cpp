@@ -221,8 +221,8 @@ TEST_CASE("VoLumPitch latency is a per-character ladder (Instant < Poly < Drop) 
   // Instant ~8.6 ms; still above a hard floor (period-sync read-ahead).
   CHECK(instantLat > static_cast<int>(kSR * 0.004));
 
-  // Poly (fixed-grain WSOLA, chord-capable) is now LOW latency: the dynamic-RE port
-  // (research notes Phase 6) proved the read pointer is clamped to >= xfade by the
+  // Poly (fixed-grain WSOLA, chord-capable) is now LOW latency: the read pointer is
+  // clamped to >= xfade by the
   // splice, so the WSOLA search/correlation are history reads that do not inflate the
   // delay floor (latency = xfade + 0.5*band). Poly therefore sits just above the
   // tightest mono character (Instant) and BELOW Drop - it buys polyphony at almost no
@@ -613,7 +613,7 @@ TEST_CASE("VoLumPitch handles NaN/Inf input without propagating")
     CHECK(std::isfinite(static_cast<double>(o[0][i])));
 }
 
-// --- POLY character (independent replication of reference the reference transpose family) ---
+// --- POLY character (fixed-grain WSOLA, polyphonic) ---
 
 TEST_CASE("VoLumPitch POLY transposes a CHORD keeping every voice (polyphonic)")
 {

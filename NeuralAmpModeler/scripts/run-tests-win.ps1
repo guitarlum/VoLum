@@ -47,6 +47,10 @@ Invoke-Check (Join-Path $here "check-shell-exec-bits.ps1")
 # is worse than verbose guidance.
 Invoke-Check (Join-Path $here "check-agent-artifact-links.ps1")
 
+# This repo is public and changelog.txt ships inside the installer, so a
+# competitor name or a note about how its binary was studied reaches users.
+Invoke-Check (Join-Path $here "check-no-vendor-refs.ps1")
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source
