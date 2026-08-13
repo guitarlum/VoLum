@@ -97,8 +97,7 @@ inline constexpr int kVoLumPitchVoicingModern = 1;
 // PRE Pitch transpose character: 0=Drop (WSOLA period-sync, exact mono, ~17 ms;
 // RETIRED from the picker - see VoLumEffectiveTransChar below), 1=Instant
 // (period-sync, ~8.6 ms, tightest mono feel), 2=Poly (fixed-grain WSOLA, no pitch
-// estimate -> polyphonic/chord-capable, ~14 ms; independent replication of the reference
-// a commercial reference transpose family). History: the Pitch feature is unreleased-
+// estimate -> polyphonic/chord-capable, ~14 ms). History: the Pitch feature is unreleased-
 // dev-only, so adding Poly as value 2 has no public migration impact (out-of-range
 // stored values still clamp into range).
 inline constexpr int kVoLumPitchCharacterDrop = 0;

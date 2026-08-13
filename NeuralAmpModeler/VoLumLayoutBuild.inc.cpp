@@ -889,7 +889,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   auto* pitchModePicker = new VoLumModePickerControl(pitchPickerRect, kPrePitchMode, {"TRANSPOSE", "OCTAVER"});
   pitchModePicker->SetTooltip(
     "TRANSPOSE = shift the whole signal by semitones (drop tuning / capo) | OCTAVER = "
-    "POG-style blend of independent octave-down / octave-up / dry voices.");
+    "Polyphonic blend of independent octave-down / octave-up / dry voices.");
   pGraphics->AttachControl(pitchModePicker, -1, "PITCH_MODE_PICKER");
 
   const float pitchPillW = 200.f;
