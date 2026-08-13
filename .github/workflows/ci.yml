@@ -2,16 +2,19 @@ name: CI
 
 # pull_request: runs when a PR to dev/main is opened/updated.
 # push: dev is the integration gate, main is the release branch gate.
+# release/**: rehearse the full matrix on release branches before promoting to main.
 on:
   workflow_dispatch:
   push:
     branches:
       - dev
       - main
+      - release/**
   pull_request:
     branches:
       - dev
       - main
+      - release/**
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

@@ -31,14 +31,17 @@ param(
   [int] $Cycles = 4,
   [int] $SwitchesPerCycle = 12,
   [int] $ExitSeconds = 15,
-  [switch] $SkipBuild
+  # Defaults to the local Release build. Point it at an unpacked portable zip to
+  # stress the binary that will actually ship, which is where the report came from.
+  [string] $Exe
 )
 
 $ErrorActionPreference = "Stop"
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnDir = (Resolve-Path (Join-Path $here "..")).Path
-$exe = Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe"
+$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe" }
+$procName = [System.IO.Path]::GetFileNameWithoutExtension($exe)
 
 $realSettings = Join-Path $env:LOCALAPPDATA "VoLum\settings.ini"
 $sandbox = Join-Path ([System.IO.Path]::GetTempPath()) ("volum-stress-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 8))
@@ -198,10 +201,10 @@ function Test-MutexHeld {
 # ---------------------------------------------------------------------------
 
 if (-not (Test-Path $exe)) {
-  Write-Error "VoLum.exe not found at $exe. Build the app first, or drop -SkipBuild."
+  Write-Error "VoLum executable not found at $exe. Build the app first, or pass -Exe."
 }
 
-Get-Process VoLum -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 300
 
 New-Item -ItemType Directory -Force -Path $sandboxData | Out-Null
@@ -232,7 +235,7 @@ try {
     $main = Find-MainWindow
     if ($main -eq [IntPtr]::Zero) {
       Fail "cycle ${cycle}: the VoLum window never appeared"
-      Get-Process VoLum -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      Get-Process $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
       continue
     }
 
@@ -301,7 +304,7 @@ try {
 
     # A process that lingers here is the reported bug, whether or not it is running:
     # its handle table keeps the mutex alive and the next launch reads that as "busy".
-    $lingering = @(Get-Process VoLum -ErrorAction SilentlyContinue)
+    $lingering = @(Get-Process $procName -ErrorAction SilentlyContinue)
     if ($lingering.Count -gt 0) {
       Fail "cycle ${cycle}: $($lingering.Count) VoLum process(es) still listed after exit"
     }
@@ -351,7 +354,7 @@ try {
     [VoLumStressWin32]::PostMessage($main, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
   }
   $proc.WaitForExit(($ExitSeconds * 1000)) | Out-Null
-  Get-Process VoLum -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 finally {
   $env:LOCALAPPDATA = $savedLocalAppData
