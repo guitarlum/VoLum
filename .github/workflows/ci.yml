@@ -158,7 +158,6 @@ jobs:
       - name: Smoke Windows upgrade install
         env:
           GH_TOKEN: ${{ github.token }}
-          VOLUM_UPGRADE_SMOKE_FROM_TAG: v1.0.0
         run: ./NeuralAmpModeler/scripts/smoke-upgrade-install-win.ps1
         shell: pwsh
 
@@ -304,7 +303,6 @@ jobs:
       - name: Smoke macOS upgrade install
         env:
           GH_TOKEN: ${{ github.token }}
-          VOLUM_UPGRADE_SMOKE_FROM_TAG: v1.0.0
         run: |
           chmod +x NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
           bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh

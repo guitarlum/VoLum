@@ -21,7 +21,11 @@ if [[ -z "$FROM_TAG" ]]; then
 fi
 
 if [[ -z "$FROM_TAG" ]]; then
-  FROM_TAG="v1.0.0"
+  echo "SKIP: no published release to upgrade from."
+  if [[ -n "${GITHUB_ENV:-}" ]]; then
+    echo "VOLUM_UPGRADE_SMOKE_SKIPPED=1" >> "$GITHUB_ENV"
+  fi
+  exit 0
 fi
 
 if ! gh release view "$FROM_TAG" --repo guitarlum/VoLum >/dev/null 2>&1; then

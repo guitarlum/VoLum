@@ -57,7 +57,7 @@ if (-not $FromTag) {
 }
 
 if (-not $FromTag) {
-  $FromTag = "v1.0.0"
+  Fail-UpgradeSmoke "No published release to upgrade from."
 }
 
 gh release view $FromTag --repo guitarlum/VoLum *> $null
