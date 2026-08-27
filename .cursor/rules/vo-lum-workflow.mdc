@@ -51,7 +51,11 @@ alwaysApply: true
 
 ## Scope discipline
 
-- Touch only files needed for the request. Do not add docs/README/ADRs unless asked.
+- Touch only files needed for the request.
+- Do not add product specs, README essays, or ADRs by default. An ADR is allowed
+  only when all three hold: hard to reverse, surprising without context, and the
+  result of a real trade-off. Product specs live in `.scratch/<effort>/` and are
+  deleted when the effort ships.
 
 ## Branching
 

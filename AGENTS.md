@@ -23,6 +23,19 @@ Rules below auto-attach on the files they own; you do not need to open them by h
 - Upstream sync with NAMCore or NeuralAmpModelerPlugin: skill `upstream-sync`.
 - Writing or trimming rules/skills/`AGENTS.md`: `.cursor/rules/ai-artifact-authoring.mdc`.
 
+## Agent skills
+
+### Issue tracker
+
+Planning lives in tracked `.scratch/<effort>/` (maps, specs, tickets). Foggy
+multi-session work starts with `/wayfinder`. GitHub Issues stay user-facing.
+See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context. `CONTEXT.md` is a lazy glossary, not a spec. See
+`docs/agents/domain.md`.
+
 ## Fast Commands
 
 - Windows tests: `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`

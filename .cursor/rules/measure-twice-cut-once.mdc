@@ -7,8 +7,8 @@ alwaysApply: true
 
 ## Measure Twice: Plan Before Drafting
 
-For non-trivial or ambiguous work, prefer the `/grill-me` skill. Skip grilling
-for obvious single-step changes.
+For non-trivial or ambiguous work, prefer the `/grill-with-docs` skill. Skip
+grilling for obvious single-step changes.
 
 ## Cut Once: Implementation Handoff
 

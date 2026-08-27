@@ -1,8 +1,8 @@
 # VoLum Backlog
 
-This folder holds planning prompts for open work. It is a tracked planning
-artifact: each open item below is a ready-to-paste prompt for a fresh Cursor
-planning chat.
+This folder is the **legacy** paste-prompt store. New planning goes in
+`.scratch/<effort>/` (see `docs/agents/issue-tracker.md`). Live prompts below
+stay until a `/wayfinder` session migrates them.
 
 **Only open work lives here.** When an item ships, delete its prompt file and add
 a one-line summary to the Done archive at the bottom. When an item ships
@@ -11,17 +11,19 @@ landed, so nobody re-plans shipped behaviour.
 
 ## How to use
 
-1. Pick one item. Open a fresh Cursor chat per item.
-2. Paste the prompt body into the chat.
-3. Let the planning session produce a scoped ticket
-   (problem, scope, acceptance criteria, tests/docs/changelog).
-4. Open a second chat to implement on the named feature branch.
-5. Merge back into `dev` once acceptance criteria are met.
+1. For a **new** foggy effort (e.g. 1.3.0 scope): fresh chat, `/wayfinder`,
+   destination first. Do not add files here.
+2. For one of the **live prompts below** until they migrate: paste into a fresh
+   chat, produce a scoped ticket, implement on `feature/<topic>`, merge to `dev`.
    Never promote to `main` outside of a release.
 
 ## Open items
 
-Verified against the code on 2026-07-30, not against the prompts' own claims.
+Verified against the code on 2026-08-27, not against the prompts' own claims.
+Nothing listed here fully shipped since the 2026-07-30 check (1.2.2 was a
+pitch-splice bugfix already covered by done `F1`; the 1.3.0 changelog line is
+splice CPU, not `F11`/`F12`).
+
 Items marked **partially shipped** have a status block at the top of the file
 naming what already exists.
 
