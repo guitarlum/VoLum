@@ -7,15 +7,24 @@ wayfinder maps, grilling tickets, or agent implementation tickets there.
 `backlog/` is the legacy paste-prompt store. New planning goes here. Live
 backlog prompts remain until a wayfinder session migrates them.
 
+## Two kinds of effort directory (do not mix)
+
+A directory is **either** a wayfinder map **or** an implementation spec.
+
+| Kind | Marker | `issues/` tickets | Status values |
+| --- | --- | --- | --- |
+| **Map** | `map.md` | Decision tickets (`Type: research\|prototype\|grilling\|task`) | `open`, `claimed`, `resolved` |
+| **Spec** | `spec.md`, no `map.md` | Implementation tickets | `ready-for-agent`, `claimed`, `resolved` |
+
+Never put `ready-for-agent` tickets in a directory that has `map.md`. When a
+map is clear, create a **new** `.scratch/<feature-slug>/` for each spec.
+
 ## Conventions
 
 - One effort per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
 - Implementation issues are one file per ticket at
   `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a
   single combined tickets file
-- Status is a `Status:` line near the top: `ready-for-agent`, `claimed`, or
-  `resolved`
 - Comments append under a `## Comments` heading
 - When the effort ships, delete `.scratch/<feature-slug>/`. Specs are working
   memory, not always-loaded docs.
@@ -38,12 +47,24 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 - **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`,
   with the question in the body. A `Type:` line records the ticket type
   (`research`/`prototype`/`grilling`/`task`); a `Status:` line records
-  `claimed`/`resolved`.
+  `open` / `claimed` / `resolved`.
 - **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked
   when every file it lists is `resolved`.
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open,
-  unblocked, and unclaimed; first by number wins.
+- **Frontier**: open (`Status: open` or missing), unblocked, and not `claimed`;
+  first by number wins.
 - **Claim**: set `Status: claimed` and save before any work.
 - **Resolve**: append the answer under an `## Answer` heading, set
   `Status: resolved`, then append a context pointer (gist + link) to the map's
   Decisions-so-far in `map.md`.
+
+## After the map (conductor)
+
+When every child of `map.md` is `resolved`, stop `/wayfinder`. New chat:
+
+1. Write `.scratch/<feature-slug>/spec.md` plus `issues/` with
+   `Status: ready-for-agent` (one feature directory per headline, not inside
+   the map folder).
+2. One main agent; sub-agents per spec. The iteration loop in
+   `vo-lum-workflow` applies: tests, changelog, docs, UAT build for the owner.
+3. Do not promote to `main` without that UAT. Set the timebox here — not as a
+   standing promise on the map.

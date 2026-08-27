@@ -11,9 +11,12 @@ landed, so nobody re-plans shipped behaviour.
 
 ## How to use
 
-1. For a **new** foggy effort (e.g. 1.3.0 scope): fresh chat, `/wayfinder`,
-   destination first. Do not add files here.
-2. For one of the **live prompts below** until they migrate: paste into a fresh
+1. **1.3.0 scope is being wayfound** at `.scratch/release-1.3.0/map.md`. Do not
+   start a parallel 1.3.0 plan here. Live prompts below stay until that map
+   migrates or parks them.
+2. For a **new** foggy effort: fresh chat, `/wayfinder`, destination first. Do
+   not add files here.
+3. For one of the **live prompts below** until they migrate: paste into a fresh
    chat, produce a scoped ticket, implement on `feature/<topic>`, merge to `dev`.
    Never promote to `main` outside of a release.
 

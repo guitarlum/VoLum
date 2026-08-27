@@ -11,9 +11,9 @@ exploring the codebase.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
 If any of these files don't exist, **proceed silently**. Don't flag their
-absence; don't suggest creating them upfront. `/domain-modeling` (reached via
-`/grill-with-docs`) creates them lazily when terms or decisions actually get
-resolved.
+absence; don't suggest creating them upfront. `/domain-modeling` (via
+`/wayfinder` on a map, or `/grill-with-docs` for a one-session design) creates
+them lazily when terms or decisions actually get resolved.
 
 `CONTEXT.md` is a glossary of product nouns, not a spec. Do not put
 implementation, file paths, or feature plans in it.

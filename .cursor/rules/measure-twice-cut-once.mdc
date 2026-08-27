@@ -7,8 +7,9 @@ alwaysApply: true
 
 ## Measure Twice: Plan Before Drafting
 
-For non-trivial or ambiguous work, prefer the `/grill-with-docs` skill. Skip
-grilling for obvious single-step changes.
+Foggy work that will take more than one session: `/wayfinder` (see `AGENTS.md`).
+A single-session design with no map: `/grill-with-docs`. Skip both for obvious
+single-step changes.
 
 ## Cut Once: Implementation Handoff
 

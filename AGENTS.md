@@ -23,13 +23,17 @@ Rules below auto-attach on the files they own; you do not need to open them by h
 - Upstream sync with NAMCore or NeuralAmpModelerPlugin: skill `upstream-sync`.
 - Retraining bundled NAM captures to A2: skill `a2-training` (ops in `training/cloud/`).
 - Writing or trimming rules/skills/`AGENTS.md`: `.cursor/rules/ai-artifact-authoring.mdc`.
+- Wayfinder maps / scratch tickets: `.cursor/rules/volum-scratch-planning.mdc`.
 
 ## Agent skills
 
 ### Issue tracker
 
 Planning lives in tracked `.scratch/<effort>/` (maps, specs, tickets). Foggy
-multi-session work starts with `/wayfinder`. GitHub Issues stay user-facing.
+multi-session work starts with `/wayfinder`. When a map has no open tickets,
+start a **conductor** chat (not `/wayfinder`) and write new
+`.scratch/<feature>/spec.md` directories — never implementation tickets next
+to `map.md`. GitHub Issues stay user-facing.
 See `docs/agents/issue-tracker.md`.
 
 ### Domain docs

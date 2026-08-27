@@ -12,6 +12,9 @@ alwaysApply: true
 
 ## Every meaningful iteration (before you stop or hand off)
 
+A wayfinder or scratch-planning session that does not change product code,
+tests, or user-facing docs skips this loop.
+
 1. **Run tests** when C++/NAM/plugin logic changed:
    - `NeuralAmpModeler/scripts/run-tests-win.ps1` (Release x64), or the equivalent CI command you are using.
    - macOS parity: `NeuralAmpModeler/scripts/run-tests-mac.sh`; sanitizer parity: `NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`.

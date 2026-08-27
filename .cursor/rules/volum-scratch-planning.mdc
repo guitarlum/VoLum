@@ -1,0 +1,18 @@
+---
+description: Wayfinder maps and scratch tickets are planning; do not mix implementation tickets into a map directory.
+globs: .scratch/**/*.md
+alwaysApply: false
+---
+
+# Scratch planning
+
+If this effort has a `map.md`, you are **wayfinding**: resolve one decision
+ticket, do not implement product code unless that map's Notes explicitly carry
+execution.
+
+- Decision tickets: `Type: research|prototype|grilling|task` and
+  `Status: open|claimed|resolved`. Claim before work. One grilling ticket per
+  session. Sub-agents may resolve research; they must not answer grilling.
+- Never add `Status: ready-for-agent` (implementation) tickets next to a map.
+  After the map is clear, create a **new** `.scratch/<feature>/` with `spec.md`.
+- Ops: `docs/agents/issue-tracker.md`. Do not publish maps to GitHub Issues.
