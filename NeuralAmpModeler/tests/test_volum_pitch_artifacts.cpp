@@ -383,6 +383,42 @@ TEST_CASE("PitchArtifacts: alignment holds at 44.1 and 96 kHz too")
   }
 }
 
+TEST_CASE("PitchArtifacts: extract-once WSOLA picks the same lag as nested reads")
+{
+  // CPU-only change: overlapping candidate windows are interpolated once, then
+  // the lag loop uses that linear buffer. The j-loop sum order is unchanged, so
+  // the chosen lag must match the nested-read oracle on the same warmed-up state.
+  // POLY and DROP both search; INSTANT does not. Exact == is the sound contract.
+  const size_t n = static_cast<size_t>(0.5 * kSR);
+  const std::vector<double> in = MakePluck(82.41, n);
+  for (auto character : {GranularVoice::Character::Poly, GranularVoice::Character::Drop})
+  {
+    for (double semi : kReachableShifts)
+    {
+      GranularVoice voice;
+      voice.Configure(kSR, static_cast<int>(kBlock));
+      voice.SetCharacter(character);
+      voice.SetRatio(std::pow(2.0, semi / 12.0));
+      voice.Reset();
+      std::vector<double> out(n);
+      for (size_t off = 0; off < n; off += kBlock)
+        voice.Process(in.data() + off, out.data() + off, std::min(kBlock, n - off));
+
+      const auto g = GranularVoice::SpliceGeometryFor(character, kSR);
+      const double cand = voice.DebugDelay();
+      const double nestedTwo = voice.DebugWsolaRefineRangeNested(cand, -g.search, g.search, false);
+      const double extractTwo = voice.DebugWsolaRefineRange(cand, -g.search, g.search, false);
+      const double nestedUp = voice.DebugWsolaRefineRangeNested(cand, 0, g.search, true);
+      const double extractUp = voice.DebugWsolaRefineRange(cand, 0, g.search, true);
+      INFO("character=" << static_cast<int>(character) << " semitones=" << semi << " cand=" << cand
+                        << " nestedTwo=" << nestedTwo << " extractTwo=" << extractTwo << " nestedUp=" << nestedUp
+                        << " extractUp=" << extractUp);
+      CHECK(extractTwo == nestedTwo);
+      CHECK(extractUp == nestedUp);
+    }
+  }
+}
+
 TEST_CASE("PitchArtifacts: full pedal stays finite and bounded across the matrix")
 {
   // Guards the whole VoLumPitch wrapper (dry ring, mix, level, octaver summing)
