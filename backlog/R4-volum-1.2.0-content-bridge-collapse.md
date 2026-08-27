@@ -1,7 +1,6 @@
 # R4: Rename + partial-collapse the VoLum content "Mock" bridge
 
-Seeded from the 1.2.0 thermo-nuclear review (`docs/design/1.2.0-quality-review.md`,
-section 3.2). Medium-risk refactor across ~40 call sites; deferred from the review
+Seeded from the 1.2.0 quality review. Medium-risk refactor across ~40 call sites; deferred from the review
 pass to its own session.
 
 ## Already landed — phase 1 only

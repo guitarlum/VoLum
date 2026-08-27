@@ -10,7 +10,7 @@ Scope to decide in the ticket:
 
 - **Bundle format** — a single archive (e.g. `.volumpack` = zip) that contains
   `volum-settings.json` plus the referenced custom content (manifests + `.nam` +
-  IR wavs), addressed by the stable opaque IDs defined in the 1.2.0 spec, so
+  IR wavs), addressed by the stable opaque IDs in `volum-content.json`, so
   references survive re-import even if local ordering differs.
 - **Export** — "Export settings…" in the settings overlay: writes the bundle;
   optionally lets the user pick subsets (all / presets only / a single custom
@@ -32,7 +32,7 @@ conflict/merge, orphaned-ref drop, corrupt-bundle rejection leaves config
 intact), docs EN/DE + changelog. Do not implement here.
 
 Depends on the 1.2.0 BYO + presets backend (stable IDs, settings JSON schema,
-tolerant reader, removal matrix — see `docs/design/1.2.0-byo-presets-spec.md`).
+tolerant reader, removal matrix in `VoLumContentStore.h`).
 Work on a dedicated `feature/settings-import-export` branch off the latest
 `dev`; merge back into `dev` only after acceptance criteria + tests/docs/
 changelog are in place. Never promote to `main` outside of a release.

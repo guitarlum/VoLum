@@ -20,9 +20,10 @@ landed, so nobody re-plans shipped behaviour.
 ## Open items
 
 Verified against the code on 2026-08-27, not against the prompts' own claims.
-Nothing listed here fully shipped since the 2026-07-30 check (1.2.2 was a
-pitch-splice bugfix already covered by done `F1`; the 1.3.0 changelog line is
-splice CPU, not `F11`/`F12`).
+Shipped since the last sweep: **1.2.1** and **1.2.2**. Current `dev` also has
+unreleased 1.3.0 WSOLA cheapening (changelog 08/27; `config.h` is still 1.2.2).
+No open *prompt file* fully shipped. Several *ledger* items did — see
+`1.2.1-audit-deferred.md` § "Fixed after 1.2.1 shipped".
 
 Items marked **partially shipped** have a status block at the top of the file
 naming what already exists.
@@ -32,6 +33,8 @@ naming what already exists.
   plus the standalone, silently overwrite each other's custom library. Highest
   deferred severity from the 1.2.1 audit: it loses user content. Do this with `R4`
   phase 2, which proposes the same per-instance ownership from the refactor side.
+  1.2.1 closed the *erase-on-unreadable* and *delete-before-commit* paths, not
+  two-writer last-write-wins.
 - `B7-audio-thread-rt-violations.md` — the audio callback allocates, frees
   megabytes, constructs and destroys models, calls host/UI APIs, takes blocking
   mutexes and can throw. One ticket because they share one root cause: the model
@@ -53,7 +56,8 @@ naming what already exists.
 - `F9-midi-support.md` — Program Change recalls presets, CC maps to key params via
   MIDI-learn. Depends on `F5` for preset ordering and on `B7` for a real-time-safe
   handoff — the 1.2.1 spike was gated out precisely because `ProcessMidiMsg()`
-  runs on the audio thread. Lowest priority.
+  runs on the audio thread. GitHub [#15](https://github.com/guitarlum/VoLum/issues/15).
+  Lowest priority.
 - `F10-settings-import-export.md` — a portable `.volumpack` bundle of settings plus
   the custom content it references, for moving between machines or sharing a rig
   pack. Overlaps `F5`'s export half; settle the id re-keying story once, in
@@ -78,12 +82,12 @@ naming what already exists.
 
 ### OS Support
 - `O1-linux-support-spike.md` — feasibility spike; can run in parallel with
-  anything.
+  anything. GitHub [#17](https://github.com/guitarlum/VoLum/issues/17).
 
 ### Quality / Testing
 - `Q2-volum-1.2.0-structure-decompose.md` — **partially shipped.**
   `VoLumCustomUi.h` is now a 35-line umbrella and the scrollbar is shared, but the
-  overlay it split out is itself 1814 lines and still owns both Manage and Builder.
+  overlay it split out is itself ~1946 lines and still owns both Manage and Builder.
   Remaining: that split, the duplicated pen/bin glyphs, the PRE capture menu, and a
   builder popup that draws without clipping or a height cap.
 - `Q3-volum-1.2.0-custom-content-correctness.md` — **partially shipped.** Latent
@@ -92,9 +96,8 @@ naming what already exists.
   restore, the `customSupportId` restore path, the `_VolumActiveScene()` read/write
   split, and an out-of-range `PedalLegacyIndexAt` returning the EMPTY sentinel.
 - `Q4-screenshot-harness-custom-amp-seed.md` — **mostly shipped.** Seeding, the
-  scrollbar geometry test and the runbook all landed. Remaining three small gaps:
-  a name-area shrink-to-fit test, an `AGENTS.md` pointer to the capture harness,
-  and one stale cross-link.
+  scrollbar geometry test, the runbook, the `AGENTS.md` harness pointer, and the
+  `AddCustomAmp` cross-link all landed. Remaining: a name-area shrink-to-fit test.
 - `P2-volum-1.2.0-rt-and-perf-hardening.md` — **re-scoped.** Now only the two
   UI-thread performance items: the preset dirty check builds two JSON trees per
   knob event, and settings still write on every idle tick that finds the flag set.
@@ -108,12 +111,33 @@ naming what already exists.
   to `VoLumCustomContentApi.h` landed; phases 2-5 did not. Phase 2 (per-instance
   preset hooks and owner key) is the same change `B6` needs — pair them.
 
+### On GitHub, no prompt yet
+
+User-facing requests that are not a file in this folder. Do not treat the
+feature list above as complete without these.
+
+- [#20](https://github.com/guitarlum/VoLum/issues/20) — CLAP format. Needs an
+  iPlug2 spike before it can be sized.
+- [#25](https://github.com/guitarlum/VoLum/issues/25) — Chorus effect.
+- [#26](https://github.com/guitarlum/VoLum/issues/26) — browse Tone3000 for
+  custom NAM profiles.
+
+### Deferred spikes (no prompt)
+
+- macOS explicit mic access (`AVCaptureDevice.requestAccess`) on standalone
+  start, re-probe on grant. Implicit CoreAudio probe works today.
+- REAPER plugin-side keyboard override — can VoLum ask the host to route keys
+  without the FX-header "Send all keyboard input to plug-in" toggle?
+
+Closed, no longer distorting the list: #16 CI tiering, #21 Space for DAW
+transport, #22 empty bug title, #23 Input Calibration persist. `F4` A2-Lite is
+in the Done archive.
+
 ### Loose nits
 
 Carried over from the retired 1.0.1 review doc; all cosmetic, none blocking. Kept
 as one list rather than five files.
 
-- A duplicate step in `.github/workflows/ci.yml`.
 - Changelog date ordering is inconsistent with the file's own style in places.
 - `PrePostLockSim` in the tests is a hand-maintained mirror of the production lock
   state machine and can drift from it. The only one with real substance — it wants
@@ -124,44 +148,39 @@ as one list rather than five files.
 ### Reference (not a prompt)
 - `1.2.1-audit-deferred.md` — **start here for anything about the 1.2.1 audit.**
   Triage ledger over all 25 review passes: every finding, its severity, and
-  whether 1.2.1 fixed it or deferred it, plus a suggested order for 1.3.0. The
-  evidence itself lives in `audit-notes/` (`opus5/`, `gpt56/`, `selfreview/`,
-  `selfreview-gpt/`), keyed by the report and finding ids the ledger cites.
+  whether 1.2.1 fixed it, a later build fixed it, or it is still deferred, plus a
+  suggested order for 1.3.0. The evidence itself lives in `audit-notes/`
+  (`opus5/`, `gpt56/`, `selfreview/`, `selfreview-gpt/`), keyed by the report and
+  finding ids the ledger cites.
   `B6`, `B7` and `B8` above are the three deferred clusters big enough to have
   been promoted out of it into their own prompts. Most of the deferred work from
   that audit is *only* in this ledger, so read it before planning 1.3.0 scope.
 
 ## Suggested order
 
-The 1.2.1 audit reshuffled this: content-safety bugs now come before features,
-and two of the highest-value items are not files in this folder at all — they live
-in `1.2.1-audit-deferred.md`.
+The 1.2.1 audit reshuffled this: content-safety bugs now come before features.
+The two IR-loudness blockers that used to sit at #2 are done (see the ledger).
 
 1. **`B6` + the "deleting content that is currently playing" cluster** from the
    ledger, with `R4` phase 2 folded in. All three want the same content-removal
    transaction and the same per-instance ownership; done separately it gets
    designed three times. This is the only deferred cluster that destroys user
    content.
-2. **The two one-shot IR calibration bugs** (ledger: `opus5
-   P-custom-content-library` 1 and `P-state-serialization-content` 1). Both
-   permanently mis-set IR loudness, so every day they stay open is more libraries
-   to re-measure later.
-3. **Forward-compatible chunk reading** (ledger: `gpt56 P2-9`). Same shape as the
-   bug that reset every project in 1.2.0. It cannot fire today, but it fires the
-   first time a 1.3.0 project is opened in 1.2.1 — so it has to land *before*
-   1.3.0 writes chunks.
-4. **`F14`** — cheap, settled, and only pays off a release after it ships.
-5. **`F11` / `F12`** — the deep-research voicing passes, which also clear the
+2. **Forward-compatible chunk reading** (ledger: `gpt56 P2-9`). Same shape as the
+   bug that reset every project in 1.2.0. It cannot fire until a later build
+   writes extra params, and it has to land *before* that write.
+3. **`F14`** — cheap, settled, and only pays off a release after it ships.
+4. **`F11` / `F12`** — the deep-research voicing passes, which also clear the
    Tremolo voicing findings the audit parked.
-6. **`F5` → `F10` → `F8`** — presets remainder, then the settings bundle that
+5. **`F5` → `F10` → `F8`** — presets remainder, then the settings bundle that
    reuses its id re-keying, then pedal groups.
-7. **`F9`** — MIDI, after `F5` (preset ordering) and `B7` (real-time handoff).
-8. **`B7` + `P2`** — a deliberate real-time and performance pass, not a slot
+6. **`F9`** — MIDI, after `F5` (preset ordering) and `B7` (real-time handoff).
+7. **`B7` + `P2`** — a deliberate real-time and performance pass, not a slot
    squeezed between features.
-9. **Hygiene: `Q2`, `Q3`, `Q4` remainder, the UI polish table** in the ledger,
+8. **Hygiene: `Q2`, `Q3`, `Q4` remainder, the UI polish table** in the ledger,
    which is cheap and highly visible.
-10. **`O1`** Linux spike, in parallel whenever. **`R3`** periodically. **`B8`**
-    whenever the packaging scripts are next touched. **`F13`** any time.
+9. **`O1`** Linux spike, in parallel whenever. **`R3`** periodically. **`B8`**
+   whenever the packaging scripts are next touched. **`F13`** any time.
 
 ## Done (archive)
 

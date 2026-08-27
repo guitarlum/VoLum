@@ -1,7 +1,6 @@
 # Q2: VoLum 1.2.0 structure decomposition + UI dedup
 
-Seeded from the 1.2.0 thermo-nuclear review (`docs/design/1.2.0-quality-review.md`,
-section 3). Pure structure/hygiene; no user-visible behavior change. Deferred from
+Seeded from the 1.2.0 quality review. Pure structure/hygiene; no user-visible behavior change. Deferred from
 the review pass because the overlay split is medium-to-high risk and benefits from
 a focused session with app-smoke screenshots.
 
@@ -17,7 +16,7 @@ a focused session with app-smoke screenshots.
 ## Problem — what is still wrong
 
 The 1964-line file was split, but the biggest piece just moved: **
-`VoLumCustomOverlay.h` is 1814 lines** and still owns both full screens (Manage
+`VoLumCustomOverlay.h` is ~1946 lines** and still owns both full screens (Manage
 CRUD + Builder), popups, import and the per-frame int-encoded hotspot registry.
 That is the part the ~500-line discipline was aimed at, and the 1.2.1 audit found
 several defects clustered in exactly this file, which is corroboration rather than

@@ -1,7 +1,6 @@
 # Q3: VoLum 1.2.0 custom-content correctness fixes
 
-Seeded from the 1.2.0 thermo-nuclear review (`docs/design/1.2.0-quality-review.md`,
-section 2). NOTE: re-verified after the review — **none of these are urgent
+Seeded from the 1.2.0 quality review. NOTE: re-verified after the review — **none of these are urgent
 user-facing bugs** (the one real bug in this cluster, `RemoveCustomAmp` orphaning
 files, was already fixed and tested). These are niche/latent hardening items kept
 here for a future quality pass. Each changes load/restore behavior, so each needs
@@ -15,8 +14,8 @@ exhausted instead of clamping every new pedal to index 127
 index pool is exhausted" in `test_volum_custom_content.cpp`. Changelog
 `06/29/2026`. 1.2.1 additionally made a failed import stop consuming a slot.
 
-Items 1, 2, 3 and the second half of 4 are all still open, verified against the
-current code — the notes below are accurate, not stale.
+Items 1, 2, 3 and the second half of 4 are all still open, re-verified against
+the code on 2026-08-27 — the notes below are accurate, not stale.
 
 ## Problem
 

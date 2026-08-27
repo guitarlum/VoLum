@@ -21,6 +21,7 @@ Rules below auto-attach on the files they own; you do not need to open them by h
 - Build/CI failures: skill `native-build-debugger`.
 - Submodule or vendored code questions: `.cursor/rules/volum-submodules.mdc`.
 - Upstream sync with NAMCore or NeuralAmpModelerPlugin: skill `upstream-sync`.
+- Retraining bundled NAM captures to A2: skill `a2-training` (ops in `training/cloud/`).
 - Writing or trimming rules/skills/`AGENTS.md`: `.cursor/rules/ai-artifact-authoring.mdc`.
 
 ## Agent skills
@@ -42,6 +43,7 @@ Single-context. `CONTEXT.md` is a lazy glossary, not a spec. See
 - macOS tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh`
 - macOS sanitizer tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`
 - Windows app smoke check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`
+- Windows screenshot / click harness: `pwsh NeuralAmpModeler/scripts/win-screenshot.ps1`, `win-click.ps1`, `win-key.ps1` (recipes in `docs/screenshot-recipes.md`; debug-only `VOLUM_SEED_CUSTOM_AMPS=N` for sidebar overflow)
 - Windows portable package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full zip` (the script resolves its helpers relative to the working directory, so it must run from `scripts`)
 - Windows installer package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full installer`
 - Windows standalone end-to-end scenarios: `pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1`

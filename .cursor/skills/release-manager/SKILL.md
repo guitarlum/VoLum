@@ -31,7 +31,14 @@ description: Prepare VoLum PRs and GitHub releases. Use when creating release PR
      starts a run and follows it to green, naming the failing step if it is not.
    - Artifacts for manual testing: `VoLum-win` (installer + portable zip + pdbs)
      and `VoLum-mac`; fetch with `gh run download <id> -n VoLum-win -D <dir>`.
-6. Before finish:
+6. Human checks (CI has no audio device; do not keep a dated checklist):
+   - Custom IR ↔ baked cab mid-note: no raw-amp burst, no click.
+   - Amp / channel / cab change while playing: no click or dropout.
+   - Fresh/upgrade install: I/O devices populate; `volum-settings.json` survives;
+     macOS TCC does not re-prompt after grant.
+   - REAPER: if VoLum keys do not reach the plugin, enable FX-header
+     "Send all keyboard input to plug-in".
+7. Before finish:
    - Report PR/release URL.
    - Report CI state if available.
    - Mention any skipped local tests.

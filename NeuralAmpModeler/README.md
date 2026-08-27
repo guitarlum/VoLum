@@ -6,14 +6,14 @@ This is the build and architecture reference for contributors. For download and 
 
 VoLum is an independent NAM-based amp collection app. It still keeps selected upstream-compatible files and paths so future NAM Plugin fixes can be cherry-picked, but the shipped product is the curated VoLum workflow.
 
-| Area | VoLum 1.2 behavior |
+| Area | Current behavior (1.2.2 shipped; 1.3.0 work on `dev`) |
 | --- | --- |
-| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. All captures are NAM Architecture 2 (A2) packed containers, played at full size (A2-Lite opt-in is backlog `F4`). |
-| **Rig building** | PRE compressor + two NAM pedal slots, AMP controls, Dual Amp, and POST Delay/Reverb in the triptych UI. |
+| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. All captures are NAM Architecture 2 (A2) packed containers, played at full size. Settings has an opt-in A2-Lite switch (shipped in 1.2.0 as `F4`). |
+| **Rig building** | PRE pitch (Transpose INSTANT/POLY + Octaver) + compressor + two NAM pedal slots, AMP controls, Dual Amp, and POST Delay/Reverb/Tremolo in the triptych UI. |
 | **Custom content (BYO)** | Import your own NAM amp captures (A1 or A2), IRs, and pedal captures into a VoLum-owned content library (`volum-content.json`); referenced from DAW projects by stable opaque ids. |
-| **Presets** | Per-amp named snapshots of the full rig (capture/recall/overwrite/rename/delete) with an exact-compare "(unsaved)" indicator. |
-| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, Dual Amp, custom-IR/support ids, and the active preset stored in user profile JSON; VST3 also serializes state (chunk 1.2.0 with an append-only id tail). |
-| **Practice tools** | Chromatic tuner and metronome in standalone and VST3. |
+| **Presets** | Per-amp named snapshots of the full rig (capture/recall/overwrite/rename/delete) with an exact-compare "(unsaved)" indicator. Active preset id is remembered per amp. |
+| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, Dual Amp, custom-IR/support ids, and the active preset stored in user profile JSON; VST3/AU also serialize state (chunk 1.2.0 with an append-only id tail). |
+| **Practice tools** | Chromatic tuner and metronome in standalone, VST3, and AU. |
 | **Keyboard workflow** | Section switching, focus movement, knob edit mode, exact entry, toggles, tuner/metronome/settings shortcuts. |
 | **Runtime behavior** | Background model loading, per-amp DSP cache, NAM output NaN scrub, and final-bus output safety. |
 | **UI** | 900x600 dark UI with amp gallery, procedural art, grouped knobs, pedal cards, and settings overlay. |

@@ -8,6 +8,12 @@ UI with the small capture harness under `NeuralAmpModeler/scripts/`.
 The screenshots are shared: both `user-guide.en.md` and `user-guide.de.md`
 reference the same PNGs, so one capture pass covers both languages.
 
+For sidebar overflow (scrollbar, custom-row glyphs) that the seed library does
+not reach, launch a **debug** build with `VOLUM_SEED_CUSTOM_AMPS=N`. That calls
+`volum::custom::AddCustomAmp` in `VoLumCustomContentApi.h` into a temp sandbox
+and never touches the real content store. The `+` builder overlay is not
+scriptable with `win-click.ps1`; do not try to complete it from the harness.
+
 ## 0. Prerequisites
 
 - Build the standalone (Release x64): `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`

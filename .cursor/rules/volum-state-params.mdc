@@ -27,22 +27,21 @@ Preset/session migration:
 - VoLum `0.6.0` adds `ReverbPreDelay` and `ReverbShimmer`; preserve those migration paths.
 - If serialization behavior changes, add/update `test_volum_chunk_version.cpp` and `test_volum_chunk_codec.cpp`.
 
-Presets / recall + dirty (1.2.0 UI shell vs backend boundary):
+Presets / recall + dirty:
 
-- In the current UI shell, **preset recall is a stub**: picking a preset only
-  relabels the header bar (`VoLumPresetBarControl::SelectName`) and clears
-  `(unsaved)`. It does **not** load any stored `VoLumAmpSettings` - there are no
-  per-preset snapshots in `VoLumCustomContentApi`. Do not try to "fix" recall to
-  move knobs in the shell; that is backend work.
-- The `(unsaved)` flag in the shell is a **coarse one-way dirty flag**
-  (`_VolumMarkPresetDirty` → `SetDirtyState(true)` on any cab/channel/AMP/PRE/
-  POST/IR edit), cleared only on a fresh recall/save. It cannot clear when the rig
-  returns 1:1 to the preset, because the shell has no recalled snapshot to diff
-  against. True equality-based dirty (`live != recalled snapshot`) is a **backend**
-  responsibility - see `docs/design/1.2.0-byo-presets-spec.md` §2.1 and §4 #6.
-- Custom amps: the shell shares one factory DSP/param state, so per-custom-amp
-  knob memory is also backend (§4 #7). The *manifest* CRUD is already correct in
-  the shell (`UpdateCustomAmp` edits in place; `CustomAmpAt` loads the real amp).
+- Banks live in the content registry (`presetBanks`), owner-keyed
+  (`factory:<idx>` or a custom-amp id). Capture/apply hooks are still
+  process-global (`PresetCaptureHook` / `PresetApplyHook`); each editor claims
+  them via `_VolumClaimPresetOps()` before a read or mutation. Per-instance
+  ownership is `B6` / `R4` phase 2, not done.
+- Recall applies `pr.settings` through `_VolumApplyRecalledPreset`. On a custom
+  amp that path must not call the factory `_VolumRefreshChannels()` (1.2.1).
+- `(unsaved)` is equality against the recalled snapshot:
+  `!AmpSettingsEqual(_VolumActiveScene(), mVolumRecalledSnapshot)`.
+  `AmpSettingsEqual` currently builds two JSON trees (`VoLumAmpSettingsJson.h`);
+  replacing that is `P2`.
+- The active preset id is stored per owner in settings
+  (`mVolumActivePresetIdByOwner`). A single global id is the 1.2.0 bug.
 
 Settings persistence:
 

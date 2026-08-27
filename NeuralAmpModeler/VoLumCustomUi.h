@@ -15,8 +15,7 @@
 //                   numbered channels) with a live (speaker x channel) grid.
 //
 // The PRE pedal dropdown (custom pedals + "Manage custom pedals...") lives in
-// VoLumTriptychMenus.h. This is the UI-shell phase: navigation, layout, and the
-// live coverage are real; load/save/import are stubs.
+// VoLumTriptychMenus.h. Load/save/import are live against the content registry.
 
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentApi.h"

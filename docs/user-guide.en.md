@@ -2,7 +2,7 @@
 
 **Languages:** English | [Deutsch](user-guide.de.md)
 
-This guide explains the VoLum 1.2 interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
+This guide explains the current VoLum interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
 
 ## Contents
 

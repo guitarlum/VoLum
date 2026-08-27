@@ -2,7 +2,7 @@
 
 **Sprachen:** [English](user-guide.en.md) | Deutsch
 
-Dieses Handbuch erklärt die VoLum-1.2-Oberfläche nach der Installation. Downloads, Hinweise zu unsignierten Builds und Installationspfade stehen in der [Haupt-README](../README.de.md).
+Dieses Handbuch erklärt die aktuelle VoLum-Oberfläche nach der Installation. Downloads, Hinweise zu unsignierten Builds und Installationspfade stehen in der [Haupt-README](../README.de.md).
 
 ## Inhalt
 
