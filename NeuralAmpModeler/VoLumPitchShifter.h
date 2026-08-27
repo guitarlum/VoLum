@@ -127,6 +127,10 @@ public:
     // uses. Sized here so _WsolaRefineRange never allocates on the audio thread.
     const int maxSearch = std::max(drop.search, poly.search);
     mCorrScratch.assign(static_cast<size_t>(2 * maxSearch + 1), 0.0);
+    // Candidate span for extract-once WSOLA: two-sided search plus the correlation
+    // window. Filled once per splice so the lag loop never re-interpolates the ring.
+    const int maxCandSpan = 2 * maxSearch + std::max(worst.corrWin, 1);
+    mCandWin.assign(static_cast<size_t>(std::max(maxCandSpan, 1)), 0.0);
 
     mPeriodUpdate = std::max(1, static_cast<int>(std::lround(mSampleRate * 0.01)));
     SetCharacter(Character::Drop);
@@ -221,7 +225,10 @@ public:
       mBuf[mWrite] = static_cast<double>(in[i]);
       ++mWriteCount;
 
-      if (--mPeriodCountdown <= 0)
+      // POLY splices by the fixed grain, not the period estimate. The tracker is a
+      // ~1.3M-op burst every 10 ms that INSTANT already proves is not the crackle;
+      // skip it here so POLY does not pay for a value it never reads.
+      if (!mFixedGrain && --mPeriodCountdown <= 0)
       {
         mPeriodCountdown = mPeriodUpdate;
         _UpdatePeriod();
@@ -430,14 +437,96 @@ private:
   // preference costs it several dB of non-harmonic energy there.
   double _WsolaRefine(double cand) { return _WsolaRefineRange(cand, -mSearch, mSearch, false); }
 
+  // Shared early-outs and the preferNearest pick. Both extract-once and the nested
+  // oracle call this after they have filled mCorrScratch / bestC / bestLag.
+  double _WsolaPick(double cand, int lagMin, int lagMax, bool preferNearest, double bestC, int bestLag, bool any) const
+  {
+    if (!any)
+      return cand;
+    int chosen = bestLag;
+    if (preferNearest)
+    {
+      for (int lag = lagMin; lag <= lagMax; ++lag)
+      {
+        if (mCorrScratch[static_cast<size_t>(lag - lagMin)] < bestC - kAlignTol)
+          continue;
+        if (std::abs(lag) < std::abs(chosen))
+          chosen = lag;
+      }
+    }
+    return cand + chosen;
+  }
+
+  bool _WsolaPrepare(int lagMin, int lagMax, int win) const
+  {
+    return win > 0 && lagMax >= lagMin
+           && static_cast<long long>(mWriteCount) >= static_cast<long long>(mDHi) + win + mSearch + 4
+           && static_cast<size_t>(lagMax - lagMin + 1) <= mCorrScratch.size();
+  }
+
+  // Extract-once WSOLA: overlapping candidate windows share interpolating ring
+  // reads, so the nested `_ReadAtDelay(dc + j)` loop was ~search*corrWin ring
+  // walks per splice (POLY: ~590k up, ~1.2M down). Fill the span once with the
+  // same reader, then run the identical j-loop sum order from that linear buffer.
+  // Same winner, same alignment; the cost is the interpolations, not the FMAs.
   double _WsolaRefineRange(double cand, int lagMin, int lagMax, bool preferNearest)
   {
     const int win = mCorrWin;
-    if (win <= 0 || lagMax < lagMin
-        || static_cast<long long>(mWriteCount) < static_cast<long long>(mDHi) + win + mSearch + 4)
+    if (!_WsolaPrepare(lagMin, lagMax, win))
       return cand;
-    if (static_cast<size_t>(lagMax - lagMin + 1) > mCorrScratch.size())
+    const int span = (lagMax - lagMin) + win;
+    if (span <= 0 || static_cast<size_t>(span) > mCandWin.size())
       return cand; // never reachable with Configure()'s sizing; fail safe, no alloc
+    double rn = 0.0;
+    for (int j = 0; j < win; ++j)
+    {
+      const double v = _ReadAtDelay(mDelay + j);
+      mRefWin[static_cast<size_t>(j)] = v;
+      rn += v * v;
+    }
+    rn = std::sqrt(rn) + 1e-9;
+    for (int i = 0; i < span; ++i)
+      mCandWin[static_cast<size_t>(i)] = _ReadAtDelay(cand + static_cast<double>(lagMin + i));
+    double bestC = -2.0;
+    int bestLag = 0;
+    bool any = false;
+    for (int lag = lagMin; lag <= lagMax; ++lag)
+    {
+      const size_t slot = static_cast<size_t>(lag - lagMin);
+      const double dc = cand + lag;
+      if (dc < static_cast<double>(mXfade) + 1.0)
+      {
+        mCorrScratch[slot] = -2.0;
+        continue;
+      }
+      double dot = 0.0;
+      double sn = 0.0;
+      const int offset = lag - lagMin;
+      for (int j = 0; j < win; ++j)
+      {
+        const double v = mCandWin[static_cast<size_t>(offset + j)];
+        dot += mRefWin[static_cast<size_t>(j)] * v;
+        sn += v * v;
+      }
+      const double cc = dot / (rn * (std::sqrt(sn) + 1e-9));
+      mCorrScratch[slot] = cc;
+      if (cc > bestC)
+      {
+        bestC = cc;
+        bestLag = lag;
+        any = true;
+      }
+    }
+    return _WsolaPick(cand, lagMin, lagMax, preferNearest, bestC, bestLag, any);
+  }
+
+  // Nested-read oracle for the extract-once pin. Not used by Process. Same
+  // interpolating reader and the same j-loop order as the pre-extract engine.
+  double _WsolaRefineRangeNested(double cand, int lagMin, int lagMax, bool preferNearest)
+  {
+    const int win = mCorrWin;
+    if (!_WsolaPrepare(lagMin, lagMax, win))
+      return cand;
     double rn = 0.0;
     for (int j = 0; j < win; ++j)
     {
@@ -475,20 +564,7 @@ private:
         any = true;
       }
     }
-    if (!any)
-      return cand;
-    int chosen = bestLag;
-    if (preferNearest)
-    {
-      for (int lag = lagMin; lag <= lagMax; ++lag)
-      {
-        if (mCorrScratch[static_cast<size_t>(lag - lagMin)] < bestC - kAlignTol)
-          continue;
-        if (std::abs(lag) < std::abs(chosen))
-          chosen = lag;
-      }
-    }
-    return cand + chosen;
+    return _WsolaPick(cand, lagMin, lagMax, preferNearest, bestC, bestLag, any);
   }
 
   // Normalized cross-correlation between the segment we are leaving (at mDelay) and
@@ -581,6 +657,7 @@ private:
   std::vector<double> mPeriodScratch;
   std::vector<double> mRefWin;
   std::vector<double> mCorrScratch;
+  std::vector<double> mCandWin;
   size_t mWrite = 0;
   unsigned long long mWriteCount = 0;
 
@@ -620,6 +697,18 @@ private:
 
 public:
   unsigned long long SpliceStarts() const { return mSpliceStarts; }
+  // Test hooks. DebugWsolaRefineRange is the live extract-once path;
+  // DebugWsolaRefineRangeNested is the pre-extract oracle. Both leave the read
+  // pointer and fade state untouched.
+  double DebugDelay() const { return mDelay; }
+  double DebugWsolaRefineRange(double cand, int lagMin, int lagMax, bool preferNearest)
+  {
+    return _WsolaRefineRange(cand, lagMin, lagMax, preferNearest);
+  }
+  double DebugWsolaRefineRangeNested(double cand, int lagMin, int lagMax, bool preferNearest)
+  {
+    return _WsolaRefineRangeNested(cand, lagMin, lagMax, preferNearest);
+  }
   // Mean normalized cross-correlation achieved across splices since Reset(). 1.0
   // means every join was perfectly waveform-aligned. Only meaningful for WSOLA
   // characters (DROP/POLY); INSTANT does not search, and reports 1.0.
