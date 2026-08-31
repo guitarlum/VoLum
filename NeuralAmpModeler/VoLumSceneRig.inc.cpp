@@ -303,6 +303,55 @@ void NeuralAmpModeler::_VolumMarkPresetDirty()
   _VolumRecomputePresetDirty();
 }
 
+void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx)
+{
+  if (ampIdx < 0 || ampIdx >= volum::kAmpCount)
+    return;
+  if (mVolumInitComplete)
+    _VolumSaveCurrentToSettings();
+  mVolumAmpIdx = ampIdx;
+  mVolumCustomMainIdx = -1;
+  _VolumRestoreFromSettings(ampIdx);
+  _VolumRefreshChannels();
+  mVolumNeedsLoad.store(true);
+#ifdef APP_API
+  mVolumSettingsDirty = true;
+#endif
+
+  // Publish the bank even headless; MIDI recall must work with the editor closed.
+  _VolumSyncPresetOwner();
+  _VolumRefreshPresetBar();
+
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
+  auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
+  if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
+    nameCtrl->SetName(volum::kAmps[ampIdx].displayName, true);
+  if (heroCtrl)
+  {
+    char ph[4] = {volum::kAmps[ampIdx].displayName[0], static_cast<char>('0' + (ampIdx % 10)), 0, 0};
+    heroCtrl->SetPlaceholder(ph, ampIdx);
+    heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
+  }
+  _VolumApplyFocusedLaneCabs();
+
+  if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
+  {
+    auto* trip = tripCtrl->As<VoLumTriptychControl>();
+    const bool preActive =
+      GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
+    trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx,
+                   volum::kAmps[ampIdx].displayName,
+                   _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+                   _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
+    mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
+    mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
+    trip->SetDirty(false);
+  }
+}
+
 void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
 {
   const auto& names = volum::custom::MockCustomAmps();

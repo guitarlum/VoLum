@@ -27,6 +27,7 @@
 // strings and so never travelled in the binary per-amp block), plus the focused
 // custom MAIN / SUPPORT amp ids and the active preset id for the focused amp.
 
+#include <algorithm>
 #include <string>
 
 #include "VoLumAmpeteCatalog.h"
@@ -55,7 +56,9 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // division) and the live-locked POST delay snapshot ("lockedPostDelay"). The
 // delay's other params still travel in the binary per-amp block; only the
 // appended sync/division pair needs the tail. Informational only.
-inline constexpr int kVoLumIdTailSchema = 5;
+// Schema 6 (MIDI control): added the per-instance input channel (`midiCh`):
+// 0 = Omni, 1..16 = one MIDI channel.
+inline constexpr int kVoLumIdTailSchema = 6;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -112,6 +115,7 @@ struct DelayTail
 
 struct ChunkIdTail
 {
+  int midiCh = 0; // per-instance MIDI channel (0=Omni, 1..16)
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
   std::string customSupportId; // custom dual SUPPORT partner id ("" = factory/none)
   std::string activePresetId; // recalled preset id for the focused amp ("" = none)
@@ -284,6 +288,7 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
 {
   nlohmann::json j;
   j["v"] = kVoLumIdTailSchema;
+  j["midiCh"] = std::clamp(t.midiCh, 0, 16);
   j["customMainId"] = t.customMainId;
   j["customSupportId"] = t.customSupportId;
   j["activePresetId"] = t.activePresetId;
@@ -321,6 +326,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   if (!j.is_object())
     return t;
   auto str = [](const nlohmann::json& v) { return v.is_string() ? v.get<std::string>() : std::string(); };
+  if (j.contains("midiCh") && j["midiCh"].is_number_integer())
+    t.midiCh = std::clamp(j["midiCh"].get<int>(), 0, 16);
   if (j.contains("customMainId"))
     t.customMainId = str(j["customMainId"]);
   if (j.contains("customSupportId"))

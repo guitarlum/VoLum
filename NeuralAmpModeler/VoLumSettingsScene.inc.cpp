@@ -350,6 +350,9 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // custom-support refs already round-trip inside each scene's JSON.
   j["volumCustomMainId"] = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   j["volumActivePresetId"] = mVolumActivePresetId;
+  // Standalone has no DAW project chunk; persist the same per-instance MIDI
+  // channel field in its instance settings equivalent.
+  j["midiCh"] = mVolumMidiChannel.load();
   // 1.2.1: the same selection for every amp, not only the focused one. The single
   // key above describes whichever amp was in focus when the file was written, so
   // every other amp reopened reading "No Preset" - and an exit from an amp with
@@ -484,6 +487,8 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
       mVolumRestoreCustomMainId = j["volumCustomMainId"].get<std::string>();
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
+    if (j.contains("midiCh") && j["midiCh"].is_number_integer())
+      mVolumMidiChannel.store(std::clamp(j["midiCh"].get<int>(), 0, 16));
     // 1.2.1 per-amp selections. Absent in files written by 1.2.0, in which case the
     // single id above still restores the amp that was focused, exactly as before.
     if (j.contains("volumActivePresetIdByOwner"))

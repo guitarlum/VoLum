@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
+#include <string>
+#include <vector>
 
 /** Full-window dim + explicit panel rect (must match layout math in NAMSettingsPageControl). */
 class VoLumSettingsBackdropControl : public IControl
@@ -74,6 +76,211 @@ public:
     g.DrawRect(IColor(89, 200, 162, 78), mRECT);
     g.DrawRect(IColor(31, 200, 162, 78), mRECT.GetPadded(3.f));
   }
+};
+
+struct VoLumMidiSettingsRow
+{
+  int slot = -1;
+  std::string ampName;
+  std::string presetName;
+  bool valid = false;
+};
+
+struct VoLumMidiSoundChoice
+{
+  std::string ampId;
+  std::string ampName;
+  std::string presetId;
+  std::string presetName;
+};
+
+/** Compact MIDI channel + interim Sound assignment list for the Settings card. */
+class VoLumMidiSettingsControl : public IControl
+{
+public:
+  using ChannelCallback = std::function<void(int)>;
+  using AssignCallback = std::function<void(int, const std::string&, const std::string&)>;
+  using ClearCallback = std::function<void(int)>;
+
+  explicit VoLumMidiSettingsControl(const IRECT& bounds)
+  : IControl(bounds)
+  , mMenu("Assign MIDI Sound")
+  {
+    mIgnoreMouse = false;
+  }
+
+  void SetCallbacks(ChannelCallback channel, AssignCallback assign, ClearCallback clear)
+  {
+    mChannelCallback = std::move(channel);
+    mAssignCallback = std::move(assign);
+    mClearCallback = std::move(clear);
+  }
+
+  void SetData(int channel, std::vector<VoLumMidiSettingsRow> rows, std::vector<VoLumMidiSoundChoice> choices)
+  {
+    mChannel = std::clamp(channel, 0, 16);
+    mRows = std::move(rows);
+    mChoices = std::move(choices);
+    ClampScroll();
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IRECT channel = ChannelRect();
+    g.FillRoundRect(VoLumColors::BTN_OFF_BG, channel, 3.f);
+    g.DrawRoundRect(VoLumColors::GOLD_DIM, channel, 3.f);
+    const std::string channelText = mChannel == 0 ? "‹  Omni  ›" : "‹  Ch " + std::to_string(mChannel) + "  ›";
+    g.DrawText(IText(11.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+               channelText.c_str(), channel);
+
+    const IRECT list = ListRect();
+    g.PathClipRegion(list);
+    float y = list.T - mScroll;
+    for (const auto& row : mRows)
+    {
+      const IRECT rr(list.L, y, list.R, y + kRowH);
+      y += kRowH;
+      if (rr.B < list.T || rr.T > list.B)
+        continue;
+      const IColor color = row.valid ? VoLumColors::TEXT_MED : IColor(255, 224, 88, 88);
+      const std::string label =
+        std::to_string(row.slot) + "  " + row.ampName + " / " + row.presetName;
+      g.DrawText(IText(9.f, color, "Josefin-Sans", EAlign::Near, EVAlign::Middle), label.c_str(),
+                 rr.GetReducedFromRight(16.f));
+      g.DrawText(IText(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "×",
+                 rr.GetFromRight(14.f));
+    }
+    g.PathClipRegion();
+
+    const float contentH = static_cast<float>(mRows.size()) * kRowH;
+    if (contentH > list.H() + 0.5f)
+    {
+      const IRECT track(list.R - 4.f, list.T, list.R, list.B);
+      const float thumbH = std::max(12.f, track.H() * list.H() / contentH);
+      const float maxScroll = contentH - list.H();
+      const float t = maxScroll > 0.f ? mScroll / maxScroll : 0.f;
+      const IRECT thumb(track.L, track.T + (track.H() - thumbH) * t, track.R,
+                        track.T + (track.H() - thumbH) * t + thumbH);
+      DrawVoLumScrollbar(g, track, thumb);
+    }
+
+    const IRECT add = AddRect();
+    g.FillRoundRect(VoLumColors::BTN_OFF_BG, add, 3.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM, add, 3.f);
+    g.DrawText(IText(10.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "+ Add Sound", add);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod&) override
+  {
+    const IRECT channel = ChannelRect();
+    if (channel.Contains(x, y))
+    {
+      const int delta = x < channel.MW() ? -1 : 1;
+      mChannel = (mChannel + delta + 17) % 17;
+      if (mChannelCallback)
+        mChannelCallback(mChannel);
+      SetDirty(false);
+      return;
+    }
+
+    if (AddRect().Contains(x, y))
+    {
+      bool used[128]{};
+      for (const auto& row : mRows)
+        if (row.slot >= 0 && row.slot < 128)
+          used[row.slot] = true;
+      mTargetSlot = 0;
+      while (mTargetSlot < 128 && used[mTargetSlot])
+        ++mTargetSlot;
+      if (mTargetSlot < 128)
+        OpenChoiceMenu(AddRect());
+      return;
+    }
+
+    const IRECT list = ListRect();
+    if (!list.Contains(x, y))
+      return;
+    const int rowIdx = static_cast<int>((y - list.T + mScroll) / kRowH);
+    if (rowIdx < 0 || rowIdx >= static_cast<int>(mRows.size()))
+      return;
+    const int slot = mRows[static_cast<size_t>(rowIdx)].slot;
+    if (x >= list.R - 18.f)
+    {
+      if (mClearCallback)
+        mClearCallback(slot);
+    }
+    else
+    {
+      mTargetSlot = slot;
+      OpenChoiceMenu(IRECT(x, y, x + 1.f, y + 1.f));
+    }
+  }
+
+  void OnMouseWheel(float, float, const IMouseMod&, float d) override
+  {
+    mScroll -= d * kRowH * 1.5f;
+    ClampScroll();
+    SetDirty(false);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* selected, int) override
+  {
+    if (!selected || !selected->GetChosenItem())
+      return;
+    const int choiceIdx = selected->GetChosenItem()->GetTag();
+    if (choiceIdx < 0 || choiceIdx >= static_cast<int>(mMenuChoices.size()) || mTargetSlot < 0)
+      return;
+    const auto& choice = mMenuChoices[static_cast<size_t>(choiceIdx)];
+    if (mAssignCallback)
+      mAssignCallback(mTargetSlot, choice.ampId, choice.presetId);
+  }
+
+private:
+  static constexpr float kRowH = 15.f;
+
+  IRECT ChannelRect() const { return mRECT.GetFromTop(20.f); }
+  IRECT AddRect() const { return mRECT.GetFromBottom(18.f); }
+  IRECT ListRect() const { return IRECT(mRECT.L, ChannelRect().B + 2.f, mRECT.R, AddRect().T - 2.f); }
+
+  void ClampScroll()
+  {
+    const float maxScroll = std::max(0.f, static_cast<float>(mRows.size()) * kRowH - ListRect().H());
+    mScroll = std::clamp(mScroll, 0.f, maxScroll);
+  }
+
+  void OpenChoiceMenu(const IRECT& anchor)
+  {
+    mMenu.Clear();
+    mMenuChoices = mChoices;
+    std::string currentAmp;
+    IPopupMenu* submenu = nullptr;
+    for (int i = 0; i < static_cast<int>(mMenuChoices.size()); ++i)
+    {
+      const auto& choice = mMenuChoices[static_cast<size_t>(i)];
+      if (!submenu || choice.ampId != currentAmp)
+      {
+        currentAmp = choice.ampId;
+        submenu = new IPopupMenu(choice.ampName.c_str());
+        mMenu.AddItem(choice.ampName.c_str(), submenu);
+      }
+      submenu->AddItem(new IPopupMenu::Item(choice.presetName.c_str(), IPopupMenu::Item::kNoFlags, i));
+    }
+    if (mMenuChoices.empty())
+      mMenu.AddItem("No named presets", -1, IPopupMenu::Item::kDisabled);
+    GetUI()->CreatePopupMenu(*this, mMenu, anchor);
+  }
+
+  int mChannel = 0;
+  int mTargetSlot = -1;
+  float mScroll = 0.f;
+  std::vector<VoLumMidiSettingsRow> mRows;
+  std::vector<VoLumMidiSoundChoice> mChoices;
+  std::vector<VoLumMidiSoundChoice> mMenuChoices;
+  IPopupMenu mMenu;
+  ChannelCallback mChannelCallback;
+  AssignCallback mAssignCallback;
+  ClearCallback mClearCallback;
 };
 
 /** Thin horizontal rule above settings footer (mouse passes through). */

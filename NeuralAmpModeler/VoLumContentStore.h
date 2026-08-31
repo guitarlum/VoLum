@@ -38,6 +38,7 @@
 
 #include "VoLumAmpSettingsJson.h"
 #include "VoLumCustomModel.h" // volum::custom::CustomAmp + pure helpers
+#include "VoLumMidi.h"
 #include "VoLumSettingsFileIO.h" // WriteJsonAtomically
 
 namespace volum
@@ -113,7 +114,8 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
 // builds; the bump is only a marker of the new capability, not a migration gate.
-inline constexpr int kContentSchemaVersion = 3;
+// v4 adds the machine-global MIDI Sound assignment map.
+inline constexpr int kContentSchemaVersion = 4;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
 // so adding/removing a custom pedal never reshuffles an index a saved chunk or
@@ -424,8 +426,47 @@ struct Registry
   std::vector<PedalItem> pedals; // global pedal library
   std::map<std::string, std::vector<Preset>> presetBanks; // ownerKey -> presets
   std::map<std::string, VoLumAmpSettings> customScenes; // ampId -> live scene
+  std::vector<MidiSound> midiSoundMap; // Program Change slot -> amp + named preset
   int nextPedalIndex = kCustomPedalIndexBase; // monotonic, never reused
 };
+
+struct ResolvedMidiSound
+{
+  std::string ampId;
+  std::string presetId;
+  VoLumAmpSettings settings;
+};
+
+// Pure/headless lookup used by OnIdle and tests. Missing amps, missing presets,
+// unassigned slots, and unsupported shipped Factory preset ids all stay no-op.
+inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int slot)
+{
+  const MidiSound* sound = FindMidiSound(r.midiSoundMap, slot);
+  if (!sound)
+    return std::nullopt;
+
+  const int factoryIdx = FactoryAmpIndexFromId(sound->ampId);
+  bool ampKnown = factoryIdx >= 0 && factoryIdx < kAmpCount;
+  if (!ampKnown)
+  {
+    for (const auto& amp : r.amps)
+      if (amp.id == sound->ampId)
+      {
+        ampKnown = true;
+        break;
+      }
+  }
+  if (!ampKnown)
+    return std::nullopt;
+
+  const auto bank = r.presetBanks.find(sound->ampId);
+  if (bank == r.presetBanks.end())
+    return std::nullopt;
+  for (const auto& preset : bank->second)
+    if (preset.id == sound->presetId)
+      return ResolvedMidiSound{sound->ampId, preset.id, preset.settings};
+  return std::nullopt;
+}
 
 // ---------------------------------------------------------------------------
 // id minting
@@ -577,6 +618,11 @@ inline nlohmann::json RegistryToJson(const Registry& r)
     scenes[sc.first] = AmpSettingsToJson(sc.second);
   j["customScenes"] = scenes;
 
+  nlohmann::json midiSounds = nlohmann::json::array();
+  for (const auto& sound : r.midiSoundMap)
+    midiSounds.push_back({{"slot", sound.slot}, {"ampId", sound.ampId}, {"presetId", sound.presetId}});
+  j["midiSoundMap"] = midiSounds;
+
   return j;
 }
 
@@ -697,6 +743,28 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
       if (AmpSettingsFromJson(sc.value(), settings))
         h = true;
       r.customScenes[sc.key()] = settings;
+    }
+  }
+
+  if (j.contains("midiSoundMap") && j["midiSoundMap"].is_array())
+  {
+    for (const auto& entry : j["midiSoundMap"])
+    {
+      if (!entry.is_object() || !entry.contains("slot") || !entry["slot"].is_number_integer()
+          || !entry.contains("ampId") || !entry["ampId"].is_string() || !entry.contains("presetId")
+          || !entry["presetId"].is_string())
+      {
+        h = true;
+        continue;
+      }
+      MidiSound sound{entry["slot"].get<int>(), entry["ampId"].get<std::string>(),
+                      entry["presetId"].get<std::string>()};
+      if (sound.slot < 0 || sound.slot >= kMidiSoundSlotCount || sound.ampId.empty() || sound.presetId.empty())
+      {
+        h = true;
+        continue;
+      }
+      AssignMidiSound(r.midiSoundMap, std::move(sound));
     }
   }
 

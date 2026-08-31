@@ -1,6 +1,6 @@
 # MIDI docs, changelog
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 
 ## Goal

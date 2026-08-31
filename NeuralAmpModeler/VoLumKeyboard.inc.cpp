@@ -23,6 +23,7 @@ bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
   }
   if (key.VK == 'h' || key.VK == 'H')
   {
+    _VolumRefreshMidiSettingsChrome();
     if (auto* pGfx = GetUI())
       if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
         settings->As<NAMSettingsPageControl>()->HideAnimated(false);

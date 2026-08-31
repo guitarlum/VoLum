@@ -1,6 +1,6 @@
 # MIDI decoder + channel filter
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 ## Goal

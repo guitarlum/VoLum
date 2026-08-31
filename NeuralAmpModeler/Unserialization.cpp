@@ -806,6 +806,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
+      mVolumMidiChannel.store(idTail.midiCh);
       mVolumActivePresetId = idTail.activePresetId;
     }
 

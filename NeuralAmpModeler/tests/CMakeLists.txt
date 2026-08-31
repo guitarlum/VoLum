@@ -67,6 +67,8 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_cab_step.cpp
   test_volum_wav_downmix.cpp
   test_volum_loopback_detect.cpp
+  test_volum_midi_decoder.cpp
+  test_volum_midi_handoff.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
@@ -93,6 +95,7 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${REPO_ROOT}/eigen"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM"
   "${REPO_ROOT}/iPlug2/IPlug/APP"
+  "${REPO_ROOT}/iPlug2/WDL"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras/nlohmann"
 )

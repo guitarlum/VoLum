@@ -1061,7 +1061,7 @@ public:
     const IRECT closeR(headerRow.R - 36.f, headerRow.T + 4.f, headerRow.R - 6.f, headerRow.T + 32.f);
     AddNamedChildControl(new VoLumSettingsCloseControl(closeR, closeAction), mControlNames.close);
 
-    // Shared section-cap style for the three cards (gold, bold, centred).
+    // Shared section-cap style for the settings cards (gold, bold, centred).
     const IVStyle sectionCapStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
       IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
 
@@ -1089,8 +1089,6 @@ public:
     (void)inner.ReduceFromBottom(14.f);
 
     // ---- Card row: Input calibration | Output mode | Performance ----
-    // Three equal, framed cards in one balanced row so the Performance / Lite
-    // toggle gets a real home instead of floating on the divider.
     {
       const IRECT cardsBand = inner.GetPadded(-2.f, 0.f, -2.f, 0.f);
       const float cardGap = 14.f;
@@ -1198,7 +1196,19 @@ public:
     AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, hintStyle), mControlNames.audioHint);
 
     const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
-    AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutArea), mControlNames.shortcutInfo);
+    {
+      const float midiW = std::min(270.f, shortcutArea.W() * 0.40f);
+      const float gap = 14.f;
+      const IRECT shortcutInfoArea(shortcutArea.L, shortcutArea.T, shortcutArea.R - midiW - gap, shortcutArea.B);
+      const IRECT midiArea(shortcutInfoArea.R + gap, shortcutArea.T, shortcutArea.R, shortcutArea.B);
+      AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutInfoArea), mControlNames.shortcutInfo);
+      AddNamedChildControl(new VoLumSettingsGroupFrameControl(midiArea), mControlNames.midiGroupFrame);
+      AddNamedChildControl(
+        new IVLabelControl(midiArea.GetPadded(-10.f).GetFromTop(16.f), "MIDI", sectionCapStyle),
+        mControlNames.midiSection);
+      AddNamedChildControl(
+        new VoLumMidiSettingsControl(midiArea.GetPadded(-12.f, -20.f, -12.f, -6.f)), mControlNames.midiControl);
+    }
     AddNamedChildControl(new ModelInfoControl(modelInfoArea, modelInfoStyle), mControlNames.modelInfo);
     {
       const auto aboutLineText = leftText.WithAlign(EAlign::Far).WithVAlign(EVAlign::Top);
@@ -1237,6 +1247,20 @@ public:
       sw->SetTooltip(volum::InputCalibrationTooltip(available));
   }
 
+  void SetMidiCallbacks(VoLumMidiSettingsControl::ChannelCallback channel,
+                        VoLumMidiSettingsControl::AssignCallback assign,
+                        VoLumMidiSettingsControl::ClearCallback clear)
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiControl))
+      midi->As<VoLumMidiSettingsControl>()->SetCallbacks(std::move(channel), std::move(assign), std::move(clear));
+  }
+
+  void SetMidiData(int channel, std::vector<VoLumMidiSettingsRow> rows, std::vector<VoLumMidiSoundChoice> choices)
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiControl))
+      midi->As<VoLumMidiSettingsControl>()->SetData(channel, std::move(rows), std::move(choices));
+  }
+
 private:
   IBitmap mBitmap;
   IBitmap mInputLevelBackgroundBitmap;
@@ -1265,10 +1289,13 @@ private:
     const std::string outputGroupFrame = "OutputGroupFrame";
     const std::string inputGroupFrame = "InputGroupFrame";
     const std::string perfGroupFrame = "PerfGroupFrame";
+    const std::string midiGroupFrame = "MidiGroupFrame";
     const std::string title = "Title";
     const std::string liteMode = "LiteMode";
     const std::string perfSection = "PerfSection";
     const std::string perfHelp = "PerfHelp";
+    const std::string midiSection = "MidiSection";
+    const std::string midiControl = "MidiControl";
     const std::string inputHelp = "InputHelp";
     const std::string audioHint = "AudioHint";
   } mControlNames;
