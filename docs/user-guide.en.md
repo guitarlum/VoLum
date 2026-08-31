@@ -224,7 +224,19 @@ This covers the main playing and editing workflow. Full screen-reader support is
 
 ## Settings And Safety
 
-Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`. The overlay includes the shortcut guide and global settings.
+Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`.
+
+The overlay has two tabs.
+
+![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
+
+**SIGNAL** is how audio and MIDI get in and out: input calibration, output mode, performance (FULL / LITE), and the MIDI input channel for this instance.
+
+![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)
+
+**SYSTEM** is this build and this machine: the keyboard shortcut guide, information about the loaded model, the content library slot for moving your library between machines (Export / Import Pack, not enabled in this build), and the About block with the version and the update reminder.
+
+VoLum reopens Settings on the tab you used last.
 
 VoLum stores user settings automatically:
 
@@ -237,7 +249,7 @@ Fresh VST3 instances read those defaults when you add VoLum to a track. After th
 
 ### MIDI Program Change
 
-VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. In **Settings -> MIDI**, choose Omni or one input channel for this instance and use **Add Sound** to assign the next free slot by choosing an amp and then a named preset. Click an assigned row to replace its Sound, or its `×` to clear it. The assignment list is machine-global, while the channel is stored per plugin instance; Omni is the default.
+VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. Assign the slots in **PLAY**: use **+ Add** to take the next free program number by choosing an amp and then a named preset, click an assigned row to replace its Sound, or its `×` to clear it. In **Settings -> SIGNAL -> MIDI**, choose Omni or one input channel for this instance. The assignment list is machine-global, while the channel is stored per plugin instance; Omni is the default.
 
 An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel remains in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel in VoLum.
 

@@ -1077,12 +1077,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     auto* settingsPage = new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                                     crossSVG, volumSettingsStyle, volumSettingsRadioStyle);
     pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
-    settingsPage->SetMidiCallbacks(
-      [pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); },
-      [pPlugin](int slot, const std::string& ampId, const std::string& presetId) {
-        pPlugin->_VolumAssignMidiSound(slot, ampId, presetId);
-      },
-      [pPlugin](int slot) { pPlugin->_VolumClearMidiSound(slot); });
+    settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
     pPlugin->_VolumRefreshMidiSettingsChrome();
 
     // Tuner overlay (on top of everything)
@@ -1095,7 +1090,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // F5 preset bar — centred in the top header band, above the AMP/triptych
     // column. Clicking opens the anchored preset dropdown; < > cycle presets.
     {
-      const float presetBarW = 240.f;
+      // Narrower than the pre-1.3.0 240: the PLAY|BUILD toggle now shares this
+      // band, and at 240 the bar's right border sat 4 px from the toggle so the
+      // two read as one welded control.
+      const float presetBarW = 224.f;
       const IRECT presetBarArea(mainCX - presetBarW * 0.5f, b.T + 12.f, mainCX + presetBarW * 0.5f, b.T + 40.f);
       pGraphics->AttachControl(
         new VoLumPresetBarControl(presetBarArea, [pPlugin]() { pPlugin->_VolumShowPresetMenu(); }),
@@ -1355,8 +1353,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // Attach last: several legacy overlay controls own the whole canvas even
   // while visually hidden, so the always-available mode switch must sit above
   // them to remain visible and clickable in BUILD as well as PLAY.
+  pGraphics->AttachControl(new VoLumSettingsVertRuleControl(IRECT(mainR - 125.f, b.T + 16.f, mainR - 121.f, b.T + 38.f)));
   auto* modeToggle = new VoLumModeToggleControl(
-    IRECT(mainR - 238.f, b.T + 14.f, mainR - 126.f, b.T + 40.f),
+    IRECT(mainR - 234.f, b.T + 14.f, mainR - 130.f, b.T + 40.f),
     [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
   modeToggle->SetMode(mVolumUiMode);
   pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);

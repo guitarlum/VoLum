@@ -7,8 +7,12 @@
 //   related settings rows.
 // - VoLumSettingsFooterSepControl / VoLumSettingsVertRuleControl: hairlines.
 // - VoLumSettingsCloseControl: the X button at the top-right of the panel.
+// - VoLumUpdateNoticeControl / VoLumSettingsCheckboxControl: update row bits.
+// - VoLumSettingsShortcutInfoControl: the keyboard cheat-sheet columns.
 //
-// Extracted from VoLumCoreControls.h on the 1.0 hygiene split.
+// Extracted from VoLumCoreControls.h on the 1.0 hygiene split. The two-tab
+// chrome (tab strip, MIDI channel row, content-library slot) lives next door in
+// VoLumSettingsTabs.h.
 
 #include "VoLumColorHelpers.h"
 
@@ -78,209 +82,135 @@ public:
   }
 };
 
-struct VoLumMidiSettingsRow
-{
-  int slot = -1;
-  std::string ampName;
-  std::string presetName;
-  bool valid = false;
-};
-
-struct VoLumMidiSoundChoice
-{
-  std::string ampId;
-  std::string ampName;
-  std::string presetId;
-  std::string presetName;
-};
-
-/** Compact MIDI channel + interim Sound assignment list for the Settings card. */
-class VoLumMidiSettingsControl : public IControl
+/** Right-aligned gold "update available" pill. Draws nothing when no update is
+ * pending, so container Hide propagation cannot resurrect a stale notice. */
+class VoLumUpdateNoticeControl : public IControl
 {
 public:
-  using ChannelCallback = std::function<void(int)>;
-  using AssignCallback = std::function<void(int, const std::string&, const std::string&)>;
-  using ClearCallback = std::function<void(int)>;
-
-  explicit VoLumMidiSettingsControl(const IRECT& bounds)
+  VoLumUpdateNoticeControl(const IRECT& bounds, std::function<void()> onClick)
   : IControl(bounds)
-  , mMenu("Assign MIDI Sound")
+  , mOnClick(std::move(onClick))
   {
-    mIgnoreMouse = false;
   }
 
-  void SetCallbacks(ChannelCallback channel, AssignCallback assign, ClearCallback clear)
+  void SetUpdate(bool available, const std::string& version)
   {
-    mChannelCallback = std::move(channel);
-    mAssignCallback = std::move(assign);
-    mClearCallback = std::move(clear);
-  }
-
-  void SetData(int channel, std::vector<VoLumMidiSettingsRow> rows, std::vector<VoLumMidiSoundChoice> choices)
-  {
-    mChannel = std::clamp(channel, 0, 16);
-    mRows = std::move(rows);
-    mChoices = std::move(choices);
-    ClampScroll();
+    mAvailable = available;
+    // Guard the version: an empty string used to render "Update available:  - …".
+    mLabel = version.empty() ? "Update available  ·  What's new"
+                             : "Update available: " + version + "  ·  What's new";
     SetDirty(false);
   }
 
   void Draw(IGraphics& g) override
   {
-    const IRECT channel = ChannelRect();
-    g.FillRoundRect(VoLumColors::BTN_OFF_BG, channel, 3.f);
-    g.DrawRoundRect(VoLumColors::GOLD_DIM, channel, 3.f);
-    const std::string channelText = mChannel == 0 ? "‹  Omni  ›" : "‹  Ch " + std::to_string(mChannel) + "  ›";
-    g.DrawText(IText(11.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
-               channelText.c_str(), channel);
-
-    const IRECT list = ListRect();
-    g.PathClipRegion(list);
-    float y = list.T - mScroll;
-    for (const auto& row : mRows)
-    {
-      const IRECT rr(list.L, y, list.R, y + kRowH);
-      y += kRowH;
-      if (rr.B < list.T || rr.T > list.B)
-        continue;
-      const IColor color = row.valid ? VoLumColors::TEXT_MED : IColor(255, 224, 88, 88);
-      const std::string label =
-        std::to_string(row.slot) + "  " + row.ampName + " / " + row.presetName;
-      g.DrawText(IText(9.f, color, "Josefin-Sans", EAlign::Near, EVAlign::Middle), label.c_str(),
-                 rr.GetReducedFromRight(16.f));
-      g.DrawText(IText(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "×",
-                 rr.GetFromRight(14.f));
-    }
-    g.PathClipRegion();
-
-    const float contentH = static_cast<float>(mRows.size()) * kRowH;
-    if (contentH > list.H() + 0.5f)
-    {
-      const IRECT track(list.R - 4.f, list.T, list.R, list.B);
-      const float thumbH = std::max(12.f, track.H() * list.H() / contentH);
-      const float maxScroll = contentH - list.H();
-      const float t = maxScroll > 0.f ? mScroll / maxScroll : 0.f;
-      const IRECT thumb(track.L, track.T + (track.H() - thumbH) * t, track.R,
-                        track.T + (track.H() - thumbH) * t + thumbH);
-      DrawVoLumScrollbar(g, track, thumb);
-    }
-
-    const IRECT add = AddRect();
-    g.FillRoundRect(VoLumColors::BTN_OFF_BG, add, 3.f);
-    g.DrawRoundRect(VoLumColors::TEAL_DIM, add, 3.f);
-    g.DrawText(IText(10.f, VoLumColors::TEAL, "Josefin-Bold", EAlign::Center, EVAlign::Middle), "+ Add Sound", add);
+    if (!mAvailable)
+      return;
+    const IRECT pill = PillRect(g);
+    g.FillRoundRect(VoLumColors::GOLD.WithOpacity(mMouseIsOver ? 0.34f : 0.24f), pill, pill.H() * 0.5f);
+    g.DrawRoundRect(VoLumColors::GOLD, pill, pill.H() * 0.5f);
+    g.DrawText(IText(10.f, mMouseIsOver ? VoLumColors::TEXT_BRIGHT : VoLumColors::GOLD, "Josefin-Bold", EAlign::Center,
+                     EVAlign::Middle),
+               mLabel.c_str(), pill);
   }
 
-  void OnMouseDown(float x, float y, const IMouseMod&) override
+  void OnMouseDown(float, float, const IMouseMod&) override
   {
-    const IRECT channel = ChannelRect();
-    if (channel.Contains(x, y))
-    {
-      const int delta = x < channel.MW() ? -1 : 1;
-      mChannel = (mChannel + delta + 17) % 17;
-      if (mChannelCallback)
-        mChannelCallback(mChannel);
-      SetDirty(false);
-      return;
-    }
-
-    if (AddRect().Contains(x, y))
-    {
-      bool used[128]{};
-      for (const auto& row : mRows)
-        if (row.slot >= 0 && row.slot < 128)
-          used[row.slot] = true;
-      mTargetSlot = 0;
-      while (mTargetSlot < 128 && used[mTargetSlot])
-        ++mTargetSlot;
-      if (mTargetSlot < 128)
-        OpenChoiceMenu(AddRect());
-      return;
-    }
-
-    const IRECT list = ListRect();
-    if (!list.Contains(x, y))
-      return;
-    const int rowIdx = static_cast<int>((y - list.T + mScroll) / kRowH);
-    if (rowIdx < 0 || rowIdx >= static_cast<int>(mRows.size()))
-      return;
-    const int slot = mRows[static_cast<size_t>(rowIdx)].slot;
-    if (x >= list.R - 18.f)
-    {
-      if (mClearCallback)
-        mClearCallback(slot);
-    }
-    else
-    {
-      mTargetSlot = slot;
-      OpenChoiceMenu(IRECT(x, y, x + 1.f, y + 1.f));
-    }
+    if (mAvailable && mOnClick)
+      mOnClick();
   }
-
-  void OnMouseWheel(float, float, const IMouseMod&, float d) override
+  void OnMouseOver(float, float, const IMouseMod&) override
   {
-    mScroll -= d * kRowH * 1.5f;
-    ClampScroll();
+    mMouseIsOver = true;
     SetDirty(false);
   }
-
-  void OnPopupMenuSelection(IPopupMenu* selected, int) override
+  void OnMouseOut() override
   {
-    if (!selected || !selected->GetChosenItem())
-      return;
-    const int choiceIdx = selected->GetChosenItem()->GetTag();
-    if (choiceIdx < 0 || choiceIdx >= static_cast<int>(mMenuChoices.size()) || mTargetSlot < 0)
-      return;
-    const auto& choice = mMenuChoices[static_cast<size_t>(choiceIdx)];
-    if (mAssignCallback)
-      mAssignCallback(mTargetSlot, choice.ampId, choice.presetId);
+    mMouseIsOver = false;
+    SetDirty(false);
+  }
+  bool IsHit(float x, float y) const override
+  {
+    return mAvailable && IControl::IsHit(x, y);
   }
 
 private:
-  static constexpr float kRowH = 15.f;
-
-  IRECT ChannelRect() const { return mRECT.GetFromTop(20.f); }
-  IRECT AddRect() const { return mRECT.GetFromBottom(18.f); }
-  IRECT ListRect() const { return IRECT(mRECT.L, ChannelRect().B + 2.f, mRECT.R, AddRect().T - 2.f); }
-
-  void ClampScroll()
+  IRECT PillRect(IGraphics& g) const
   {
-    const float maxScroll = std::max(0.f, static_cast<float>(mRows.size()) * kRowH - ListRect().H());
-    mScroll = std::clamp(mScroll, 0.f, maxScroll);
+    IRECT measured;
+    g.MeasureText(IText(10.f, "Josefin-Bold"), mLabel.c_str(), measured);
+    const float w = std::min(mRECT.W(), measured.W() + 22.f);
+    const float h = std::min(mRECT.H(), 16.f);
+    return IRECT(mRECT.R - w, mRECT.MH() - h * 0.5f, mRECT.R, mRECT.MH() + h * 0.5f);
   }
 
-  void OpenChoiceMenu(const IRECT& anchor)
+  bool mAvailable = false;
+  std::string mLabel = "Update available";
+  std::function<void()> mOnClick;
+};
+
+/** Labelled checkbox for the settings footer (visible on/off state, no param). */
+class VoLumSettingsCheckboxControl : public IControl
+{
+public:
+  using Callback = std::function<void(bool)>;
+
+  VoLumSettingsCheckboxControl(const IRECT& bounds, const char* label, Callback callback)
+  : IControl(bounds)
+  , mLabel(label ? label : "")
+  , mCallback(std::move(callback))
   {
-    mMenu.Clear();
-    mMenuChoices = mChoices;
-    std::string currentAmp;
-    IPopupMenu* submenu = nullptr;
-    for (int i = 0; i < static_cast<int>(mMenuChoices.size()); ++i)
+  }
+
+  void SetChecked(bool checked)
+  {
+    mChecked = checked;
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IRECT box = BoxRect();
+    g.FillRoundRect(mChecked ? VoLumColors::GOLD.WithOpacity(0.28f) : IColor(255, 9, 9, 14), box, 2.f);
+    g.DrawRoundRect(mMouseIsOver ? VoLumColors::GOLD : VoLumColors::FRAME, box, 2.f);
+    if (mChecked)
     {
-      const auto& choice = mMenuChoices[static_cast<size_t>(i)];
-      if (!submenu || choice.ampId != currentAmp)
-      {
-        currentAmp = choice.ampId;
-        submenu = new IPopupMenu(choice.ampName.c_str());
-        mMenu.AddItem(choice.ampName.c_str(), submenu);
-      }
-      submenu->AddItem(new IPopupMenu::Item(choice.presetName.c_str(), IPopupMenu::Item::kNoFlags, i));
+      g.DrawLine(VoLumColors::GOLD, box.L + 3.f, box.MH(), box.MW() - 1.f, box.B - 3.5f, nullptr, 1.6f);
+      g.DrawLine(VoLumColors::GOLD, box.MW() - 1.f, box.B - 3.5f, box.R - 2.5f, box.T + 3.f, nullptr, 1.6f);
     }
-    if (mMenuChoices.empty())
-      mMenu.AddItem("No named presets", -1, IPopupMenu::Item::kDisabled);
-    GetUI()->CreatePopupMenu(*this, mMenu, anchor);
+    g.DrawText(IText(11.f, mMouseIsOver ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Josefin-Sans",
+                     EAlign::Near, EVAlign::Middle),
+               mLabel.c_str(), IRECT(box.R + 7.f, mRECT.T, mRECT.R, mRECT.B));
   }
 
-  int mChannel = 0;
-  int mTargetSlot = -1;
-  float mScroll = 0.f;
-  std::vector<VoLumMidiSettingsRow> mRows;
-  std::vector<VoLumMidiSoundChoice> mChoices;
-  std::vector<VoLumMidiSoundChoice> mMenuChoices;
-  IPopupMenu mMenu;
-  ChannelCallback mChannelCallback;
-  AssignCallback mAssignCallback;
-  ClearCallback mClearCallback;
+  void OnMouseDown(float, float, const IMouseMod&) override
+  {
+    mChecked = !mChecked;
+    if (mCallback)
+      mCallback(mChecked);
+    SetDirty(false);
+  }
+  void OnMouseOver(float, float, const IMouseMod&) override
+  {
+    mMouseIsOver = true;
+    SetDirty(false);
+  }
+  void OnMouseOut() override
+  {
+    mMouseIsOver = false;
+    SetDirty(false);
+  }
+
+private:
+  IRECT BoxRect() const
+  {
+    const float s = 13.f;
+    return IRECT(mRECT.L, mRECT.MH() - s * 0.5f, mRECT.L + s, mRECT.MH() + s * 0.5f);
+  }
+
+  std::string mLabel;
+  bool mChecked = false;
+  Callback mCallback;
 };
 
 /** Thin horizontal rule above settings footer (mouse passes through). */
@@ -369,23 +299,26 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    // Match the three settings cards: lifted panel depth + gold border + inner hairline.
-    DrawPanelDepth(g, mRECT);
-    g.DrawRect(IColor(89, 200, 162, 78), mRECT);
-    g.DrawRect(IColor(31, 200, 162, 78), mRECT.GetPadded(3.f));
-
-    const IRECT inner = mRECT.GetPadded(-16.f, -8.f, -16.f, -8.f);
-    const IText titleText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top);
+    // No frame or title of its own: the Settings card that hosts this control
+    // draws the panel depth and caps it with "Keyboard shortcuts".
     const IText keyText(11.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top);
     const IText descText(10.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Top);
     const IText capText(10.f, VoLumColors::GOLD_DIM, "Josefin-Bold", EAlign::Near, EVAlign::Top);
 
-    g.DrawText(titleText, "Shortcut info", inner.GetFromTop(16.f));
-    const IRECT body = inner.GetReducedFromTop(20.f);
+    // A band, not the full card: on the SYSTEM tab this card is ~720 px wide but
+    // the three columns only need ~330 px of text, so spreading them edge to edge
+    // left each key list floating alone in its third. Left-aligned so "Navigate"
+    // starts under the card's caption.
     const float gap = 18.f;
-    const float colW = (body.W() - 2.f * gap) / 3.f;
-    const IRECT navCol(body.L, body.T, body.L + colW, body.B);
-    const IRECT editCol(navCol.R + gap, body.T, navCol.R + gap + colW, body.B);
+    const IRECT body = mRECT.GetFromLeft(std::min(mRECT.W(), 560.f));
+    // Weighted, not equal thirds: "PRE / AMP / POST" is ~95 px of the ~142 px
+    // Navigate needs, and at an equal third it overflowed the divider and
+    // collided with the Edit column's keys. Edit and Tools have slack to spare.
+    const float colBand = body.W() - 2.f * gap;
+    const float navW = colBand * 0.47f;
+    const float editW = colBand * 0.27f;
+    const IRECT navCol(body.L, body.T, body.L + navW, body.B);
+    const IRECT editCol(navCol.R + gap, body.T, navCol.R + gap + editW, body.B);
     const IRECT toolCol(editCol.R + gap, body.T, body.R, body.B);
 
     g.DrawLine(
@@ -397,7 +330,10 @@ public:
     auto drawPair = [&](const IRECT& col, int row, float keyW, const char* key, const char* desc) {
       const float y = col.T + 14.f + row * rowH;
       g.DrawText(keyText, key, IRECT(col.L, y, col.L + keyW, y + rowH));
-      g.DrawText(descText, desc, IRECT(col.L + keyW + 5.f, y, col.R, y + rowH));
+      const IRECT descR(col.L + keyW + 5.f, y, col.R, y + rowH);
+      g.PathClipRegion(descR);
+      g.DrawText(descText, desc, descR);
+      g.PathClipRegion();
     };
 
     // One key-column width per section (widest key in that column) so every

@@ -531,8 +531,6 @@ public:
   void _VolumSelectFactoryAmp(int ampIdx);
   void _VolumRefreshMidiSettingsChrome();
   void _VolumSetMidiChannel(int channel);
-  void _VolumAssignMidiSound(int slot, const std::string& ampId, const std::string& presetId);
-  void _VolumClearMidiSound(int slot);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
   int _VolumSavePresetAs(const std::string& name);
   // Overwrite preset `index` in the active bank with the live scene.

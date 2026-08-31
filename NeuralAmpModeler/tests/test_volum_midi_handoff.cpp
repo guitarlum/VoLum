@@ -120,18 +120,25 @@ TEST_CASE("MIDI channel id tail defaults to Omni and clamps to 1 through 16")
   CHECK(volum::IdTailFromJson({{"midiCh", -2}}).midiCh == 0);
 }
 
-TEST_CASE("Settings MIDI chrome exposes the channel and marks invalid assignments red")
+TEST_CASE("Settings MIDI chrome exposes the channel and nothing else")
 {
+  // PLAY owns the Sound assignment list (.scratch/midi-control/spec.md), so the
+  // interim list-in-Settings chrome is gone. The channel is the only MIDI control
+  // Settings still owns, and it still rides the DAW id tail, not the sound map.
   const auto root = RepoRoot() / "NeuralAmpModeler";
   const std::string controls = ReadText(root / "NeuralAmpModelerControls.h");
-  const std::string overlay = ReadText(root / "VoLumSettingsOverlay.h");
+  const std::string tabs = ReadText(root / "VoLumSettingsTabs.h");
   const std::string settings = ReadText(root / "VoLumSettingsScene.inc.cpp");
 
-  CHECK(controls.find("VoLumMidiSettingsControl") != std::string::npos);
+  CHECK(tabs.find("class VoLumMidiChannelControl") != std::string::npos);
+  CHECK(tabs.find("mChannel == 0 ?") != std::string::npos);
+  CHECK(tabs.find("Omni") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
-  CHECK(overlay.find("mChannel == 0 ?") != std::string::npos);
-  CHECK(overlay.find("Omni") != std::string::npos);
-  CHECK(overlay.find("row.valid ? VoLumColors::TEXT_MED : IColor(255, 224, 88, 88)") != std::string::npos);
+  CHECK(controls.find("void SetMidiChannel(int channel)") != std::string::npos);
+  // No slot rows, no Add, no assign/clear callbacks left in the Settings chrome.
+  CHECK(controls.find("VoLumMidiSettingsControl") == std::string::npos);
+  CHECK(tabs.find("AssignCallback") == std::string::npos);
+  CHECK(tabs.find("ClearCallback") == std::string::npos);
   CHECK(settings.find("j[\"midiCh\"] = mVolumMidiChannel.load()") != std::string::npos);
   CHECK(settings.find("midiSoundMap") == std::string::npos);
 }

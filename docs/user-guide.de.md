@@ -224,7 +224,19 @@ Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screen
 
 ## Einstellungen Und Sicherheit
 
-Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`. Das Overlay enthält auch die Tastaturübersicht und globale Einstellungen.
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`.
+
+Das Overlay hat zwei Reiter.
+
+![VoLum-Einstellungen, Reiter SIGNAL](user-guide-settings-signal.png)
+
+**SIGNAL** regelt, wie Audio und MIDI hinein und hinaus gelangen: Eingangskalibrierung, Ausgangsmodus, Performance (FULL / LITE) und der MIDI-Eingangskanal dieser Instanz.
+
+![VoLum-Einstellungen, Reiter SYSTEM](user-guide-settings-system.png)
+
+**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht, Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren, in diesem Build noch nicht aktiv), und den About-Block mit Version und Update-Hinweis.
+
+VoLum öffnet die Einstellungen wieder auf dem zuletzt genutzten Reiter.
 
 VoLum speichert Benutzereinstellungen automatisch:
 
@@ -237,7 +249,7 @@ Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Da
 
 ### MIDI Program Change
 
-VoLum empfängt MIDI Program Change in VST3, AU und der Standalone-App. Die Slots `0` bis `127` rufen Sounds auf: Jede Zuweisung verbindet einen Amp mit einem seiner benannten Presets einschließlich Cab, Kanal, PRE, POST und Dual-Amp-Setup. Wähle unter **Settings -> MIDI** Omni oder einen Eingangskanal für diese Instanz. Mit **Add Sound** weist du den nächsten freien Slot zu, indem du zuerst einen Amp und dann ein benanntes Preset wählst. Klicke auf eine belegte Zeile, um ihren Sound zu ersetzen, oder auf ihr `×`, um sie zu löschen. Die Zuweisungsliste gilt rechnerweit; der Kanal wird dagegen pro Plugin-Instanz gespeichert. Omni ist die Voreinstellung.
+VoLum empfängt MIDI Program Change in VST3, AU und der Standalone-App. Die Slots `0` bis `127` rufen Sounds auf: Jede Zuweisung verbindet einen Amp mit einem seiner benannten Presets einschließlich Cab, Kanal, PRE, POST und Dual-Amp-Setup. Die Zuweisung erfolgt in **PLAY**: Mit **+ Add** belegst du die nächste freie Programmnummer, indem du zuerst einen Amp und dann ein benanntes Preset wählst; ein Klick auf eine belegte Zeile ersetzt ihren Sound, ein Klick auf ihr `×` löscht sie. Wähle unter **Settings -> SIGNAL -> MIDI** Omni oder einen Eingangskanal für diese Instanz. Die Zuweisungsliste gilt rechnerweit; der Kanal wird dagegen pro Plugin-Instanz gespeichert. Omni ist die Voreinstellung.
 
 Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter **File -> Preferences**; der Kanal bleibt in den VoLum-Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst den Kanal in VoLum.
 

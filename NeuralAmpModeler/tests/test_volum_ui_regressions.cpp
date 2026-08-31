@@ -106,6 +106,155 @@ TEST_CASE("POST carries a fourth Chorus card wired to the Throat motif")
   RequireContains(motifs, "effect == EVoLumEffectFocus::CHORUS");
 }
 
+TEST_CASE("Clear and close affordances stroke a cross instead of drawing U+00D7")
+{
+  // Josefin ships no U+00D7, so "×" renders as a tofu box. Every clear/close
+  // affordance must go through DrawCrossGlyph.
+  const std::string helpers = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumColorHelpers.h");
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string settings = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+
+  RequireContains(helpers, "inline void DrawCrossGlyph(");
+  RequireContains(play, "DrawCrossGlyph(g, clear,");
+  RequireContains(play, "DrawCrossGlyph(g, PickerCloseRect()");
+  // The glyph itself must never come back as text in these two surfaces.
+  RequireDoesNotContain(play, "\xC3\x97\"");
+  RequireDoesNotContain(settings, "\xC3\x97\"");
+}
+
+TEST_CASE("PLAY rail rows restore the list clip so none escape over the pinned Add")
+{
+  // IGraphics has no clip stack: an inner PathClipRegion() with no argument
+  // clears the rail-list scissor entirely, and an inverted intersection is
+  // treated as "no clip". Either one let the last row paint over Add.
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+
+  RequireContains(play, "void DrawSlot(IGraphics& g, const IRECT& row, int index, const IRECT& clip)");
+  RequireContains(play, "const IRECT c = r.Intersect(clip);");
+  RequireContains(play, "if (c.W() <= 0.f || c.H() <= 0.f)");
+  RequireContains(play, "g.PathClipRegion(clip);");
+  RequireContains(play, "if (row.B > list.T + 0.5f && row.T < list.B - 0.5f)");
+}
+
+TEST_CASE("PLAY hero art maps through FractalCaseForAmp like the BUILD hero")
+{
+  // Passing the raw amp index drew a different fractal in PLAY than in BUILD for
+  // the same amp.
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+
+  RequireContains(hero, "DrawHeroFractalArt(g, artRect, FractalCaseForAmp(");
+  RequireContains(play, "DrawHeroFractalArt(g, artRect, FractalCaseForAmp(art));");
+}
+
+TEST_CASE("Settings update notice self-gates so opening Settings cannot resurrect it")
+{
+  // NAMSettingsPageControl::HideAnimated calls IContainerBase::Hide(false), which
+  // un-hides every descendant. A Hide()-based update button therefore reappeared
+  // with no update pending; the notice must decide inside Draw instead.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+
+  RequireContains(overlay, "class VoLumUpdateNoticeControl");
+  RequireContains(overlay, "if (!mAvailable)");
+  RequireContains(overlay, "return mAvailable && IControl::IsHit(x, y);");
+  // An empty version must not render "Update available:  - What's new".
+  RequireContains(overlay, "version.empty() ? \"Update available");
+  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version);");
+  RequireDoesNotContain(controls, "mUpdateButton->Hide(!available);");
+  // Auto-check state must be visible; IVToggleControl drew neither frame nor value here.
+  RequireContains(overlay, "class VoLumSettingsCheckboxControl");
+  RequireContains(controls, "mAutoCheck->SetChecked(autoCheck);");
+  RequireDoesNotContain(controls, "new IVToggleControl");
+}
+
+TEST_CASE("Shortcut info columns are weighted and clipped so Navigate cannot bleed")
+{
+  // "PRE / AMP / POST" is ~95 px of the ~142 px Navigate needs; at an equal third
+  // it overflowed the divider onto the Edit column's keys.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+
+  RequireContains(overlay, "const float navW = colBand * 0.47f;");
+  RequireContains(overlay, "g.PathClipRegion(descR);");
+  RequireDoesNotContain(overlay, "const float colW = (body.W() - 2.f * gap) / 3.f;");
+}
+
+TEST_CASE("Settings is exactly two tabs and every locked capability still has a home")
+{
+  // The one-page overlay could not hold calibration, output mode, performance,
+  // MIDI, shortcuts, model info, about and update at 900x600 without clipping its
+  // own footer onto the panel's corner accents.
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+
+  RequireContains(tabs, "class VoLumSettingsTabStripControl");
+  RequireContains(controls, "kTabNames[kTabCount] = {\"SIGNAL\", \"SYSTEM\"}");
+  RequireContains(controls, "static constexpr int kTabCount = 2;");
+  RequireContains(controls, "void _BuildSignalTab(const IRECT& body)");
+  RequireContains(controls, "void _BuildSystemTab(const IRECT& body)");
+
+  // SIGNAL owns the audio/MIDI path.
+  RequireContains(controls, "\"Input calibration\", mControlNames.inputGroupFrame");
+  RequireContains(controls, "\"Output mode\", mControlNames.outputGroupFrame");
+  RequireContains(controls, "\"Performance\", mControlNames.perfGroupFrame");
+  RequireContains(controls, "\"MIDI\", mControlNames.midiGroupFrame");
+  RequireContains(controls, "audioHintStr");
+  // SYSTEM owns this install.
+  RequireContains(controls, "\"Keyboard shortcuts\"");
+  RequireContains(controls, "\"Model information\"");
+  RequireContains(controls, "\"Content library\"");
+  RequireContains(controls, "mControlNames.aboutGroupFrame");
+
+  // Both tabs live in one container, so every show path that un-hides all
+  // descendants has to re-assert which tab owns the body.
+  RequireContains(controls, "void _ApplyTabVisibility()");
+  // Twice: once for HideAnimated's immediate un-hide, once for the fade's final
+  // IContainerBase::Hide(false).
+  size_t applied = 0;
+  for (size_t pos = controls.find("_ApplyTabVisibility();"); pos != std::string::npos;
+       pos = controls.find("_ApplyTabVisibility();", pos + 1))
+    ++applied;
+  CHECK(applied >= 3); // OnAttached + HideAnimated + animation end
+  RequireContains(controls, "if (!mWillHide)");
+}
+
+TEST_CASE("Settings keeps the MIDI channel only; PLAY owns the Sound assignment list")
+{
+  // .scratch/midi-control/spec.md: PLAY owns the list. The interim Settings list
+  // was duplicate chrome and had to go, channel and all its plumbing stay.
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+
+  RequireContains(tabs, "class VoLumMidiChannelControl");
+  RequireContains(tabs, "mChannel == 0 ? \"Omni\"");
+  RequireContains(controls, "void SetMidiChannel(int channel)");
+  RequireContains(layout, "settingsPage->SetMidiCallbacks([pPlugin](int channel)");
+
+  // No Add / slot rows / choice menu anywhere in the Settings chrome.
+  RequireDoesNotContain(overlay, "VoLumMidiSettingsControl");
+  RequireDoesNotContain(tabs, "Add Sound");
+  RequireDoesNotContain(tabs, "SOUND MAP");
+  RequireDoesNotContain(controls, "Add Sound");
+}
+
+TEST_CASE("Settings reserves a labelled, inert Content library slot for Pack IO")
+{
+  // .scratch/pack/spec.md puts Export/Import Pack in Gear -> Settings, but Pack IO
+  // is not merged on this branch: the row must be designed and dead, never a
+  // button that looks live and crashes.
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+
+  RequireContains(tabs, "class VoLumSettingsPackRowControl");
+  RequireContains(tabs, "\"Export Pack\\xE2\\x80\\xA6\"");
+  RequireContains(tabs, "\"Import Pack\\xE2\\x80\\xA6\"");
+  RequireContains(tabs, "Not enabled in this build.");
+  // Inert: no click handler, no action function, no callback.
+  RequireDoesNotContain(tabs, "ExportPack(");
+  RequireDoesNotContain(tabs, "ImportPack(");
+}
+
 TEST_CASE("All pedal controls remain editable while their block is bypassed")
 {
   const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
@@ -226,7 +375,10 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   // routing through it rather than growing a second copy of the cab logic again.
   RequireContains(source, "StepKeyboard(direction)");
   RequireContains(source, "Left/Right or Tab target");
-  RequireContains(settings, "Shortcut info");
+  // The cheat-sheet's own title moved to the SYSTEM tab's card cap; the control
+  // only draws the columns now.
+  RequireContains(controls, "\"Keyboard shortcuts\"");
+  RequireContains(settings, "class VoLumSettingsShortcutInfoControl");
   RequireContains(settings, "\"1/2/3\", \"PRE / AMP / POST\"");
   RequireContains(settings, "\"Space\", \"toggle\"");
   RequireContains(settings, "\"B\", \"toggle\"");

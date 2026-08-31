@@ -155,10 +155,14 @@ inline void DrawChorusThroatMotif(IGraphics& g, const IRECT& r, bool dimmed)
   {
     float cx, cy, rx, ry;
   };
-  const Mouth front{r.L + w * 0.50f, r.T + h * (big ? 0.70f : 0.68f), w * (big ? 0.40f : 0.38f),
-                    h * (big ? 0.13f : 0.14f)};
-  const Mouth back{r.L + w * 0.50f, r.T + h * (big ? 0.28f : 0.32f), w * (big ? 0.11f : 0.14f),
-                   h * (big ? 0.045f : 0.06f)};
+  // Card-size mouths fill 0.13h..0.87h so the tunnel is centred in the card art
+  // like the locked motif mock. The previous 0.235h..0.83h span left an uneven
+  // band above and a dead sixth of the card below the near mouth. Quiet metrics
+  // are unchanged: at ~20 px the tighter span is what keeps the mouths readable.
+  const Mouth front{r.L + w * 0.50f, r.T + h * (big ? 0.715f : 0.68f), w * (big ? 0.44f : 0.38f),
+                    h * (big ? 0.155f : 0.14f)};
+  const Mouth back{r.L + w * 0.50f, r.T + h * (big ? 0.185f : 0.32f), w * (big ? 0.135f : 0.14f),
+                   h * (big ? 0.055f : 0.06f)};
 
   auto lerpMouth = [](const Mouth& a, const Mouth& b, float t) {
     return Mouth{a.cx + (b.cx - a.cx) * t, a.cy + (b.cy - a.cy) * t, a.rx + (b.rx - a.rx) * t,

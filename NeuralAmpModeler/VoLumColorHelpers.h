@@ -93,6 +93,17 @@ inline void DrawDiamond(IGraphics& g, float cx, float cy, float halfSize, const 
   g.DrawLine(col, cx - halfSize, cy, cx, cy - halfSize);
 }
 
+// Helper: a drawn "clear/close" cross centred in r. Josefin has no U+00D7, so
+// "×" renders as a tofu box; every clear affordance must stroke it instead.
+inline void DrawCrossGlyph(IGraphics& g, const IRECT& r, const IColor& col, float thickness = 1.4f)
+{
+  const float half = std::min(r.W(), r.H()) * 0.26f;
+  const float cx = r.MW();
+  const float cy = r.MH();
+  g.DrawLine(col, cx - half, cy - half, cx + half, cy + half, nullptr, thickness);
+  g.DrawLine(col, cx - half, cy + half, cx + half, cy - half, nullptr, thickness);
+}
+
 // ===========================================================================
 // VoLum 1.2.0 UI modernization design tokens
 // ---------------------------------------------------------------------------

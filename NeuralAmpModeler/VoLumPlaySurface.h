@@ -7,6 +7,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumFractalArt.h"
 #include "VoLumPlayModel.h"
+#include "VoLumTriptychMotifs.h"
 
 #include <array>
 #include <cmath>
@@ -42,11 +43,12 @@ public:
                        VoLumSelectionStyle::AmberPicker, 1.f, 0.f);
     DrawVoLumSelection(g, build, mMode == volum::UiMode::Build, mMouseIsOver && build.Contains(mMouseX, mMouseY),
                        VoLumSelectionStyle::AmberPicker, 1.f, 0.f);
-    g.DrawText(VoLumType::Value(8.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker,
-                                                       mMode == volum::UiMode::Play)),
+    g.DrawLine(VoLumColors::GOLD_DIM.WithOpacity(0.35f), mRECT.MW(), mRECT.T + 4.f, mRECT.MW(), mRECT.B - 4.f);
+    g.DrawText(VoLumType::Label(10.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker,
+                                                        mMode == volum::UiMode::Play)),
                "PLAY", play);
-    g.DrawText(VoLumType::Value(8.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker,
-                                                       mMode == volum::UiMode::Build)),
+    g.DrawText(VoLumType::Label(10.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker,
+                                                        mMode == volum::UiMode::Build)),
                "BUILD", build);
   }
 
@@ -111,7 +113,8 @@ public:
   void SetData(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry,
                const std::string& activeAmpId, const std::string& activePresetId, int lastSlot,
                const std::string& liveAmpName, int liveArt, bool customArt, bool dual, const std::string& supportName,
-               int supportArt, bool supportCustom, const std::array<bool, FxCount>& fx, bool dirty)
+               int supportArt, bool supportCustom, const std::array<bool, FxCount>& fx,
+               const std::array<bool, FxCount>& fxAvailable, int midiChannel, bool dirty)
   {
     mSlots = volum::BuildPlaySlots(factory, registry);
     mChoices = volum::BuildSoundChoices(factory, registry);
@@ -126,7 +129,10 @@ public:
     mSupportArt = supportArt;
     mSupportCustom = supportCustom;
     mFx = fx;
+    mFxAvailable = fxAvailable;
+    mMidiChannel = midiChannel;
     mDirty = dirty;
+    ClampRailScroll();
     SetDirty(false);
   }
 
@@ -156,6 +162,12 @@ public:
   {
     if (mPickerOpen)
     {
+      if (PickerCloseRect().Contains(x, y))
+      {
+        mPickerOpen = false;
+        SetDirty(false);
+        return;
+      }
       const int choice = PickerChoiceAt(x, y);
       if (choice >= 0 && choice < static_cast<int>(mChoices.size()) && mAssign)
         mAssign(mEditSlot, mChoices[(size_t)choice]);
@@ -169,6 +181,7 @@ public:
     {
       mEditSlot = FirstFreeSlot();
       mPickerOpen = mEditSlot >= 0 && !mChoices.empty();
+      mPickerScroll = 0.f;
       SetDirty(false);
       return;
     }
@@ -183,6 +196,14 @@ public:
       }
       else if (mSlots[(size_t)row].valid && mRecall)
         mRecall(mSlots[(size_t)row].slot, mSlots[(size_t)row].sound);
+      else if (!mSlots[(size_t)row].valid && !mChoices.empty())
+      {
+        // A numbered hole stays in the rail; clicking it is the way to fill it.
+        mEditSlot = mSlots[(size_t)row].slot;
+        mPickerOpen = true;
+        mPickerScroll = 0.f;
+        SetDirty(false);
+      }
       return;
     }
 
@@ -203,40 +224,109 @@ public:
       return;
     mEditSlot = mSlots[(size_t)row].slot;
     mPickerOpen = true;
+    mPickerScroll = 0.f;
+    SetDirty(false);
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod&) override
+  {
+    const int row = mPickerOpen ? -1 : SlotAt(x, y);
+    int fx = -1;
+    if (!mPickerOpen)
+      for (int i = 0; i < FxCount; ++i)
+        if (FxRect(i).Contains(x, y))
+          fx = i;
+    const int choice = mPickerOpen ? PickerChoiceAt(x, y) : -1;
+    if (row != mHoverRow || fx != mHoverFx || choice != mHoverChoice)
+    {
+      mHoverRow = row;
+      mHoverFx = fx;
+      mHoverChoice = choice;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    mHoverRow = mHoverFx = mHoverChoice = -1;
     SetDirty(false);
   }
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
   {
     if (mPickerOpen && PickerRect().Contains(x, y))
-      mPickerScroll = std::clamp(mPickerScroll - d * 34.f, 0.f, PickerMaxScroll());
+      mPickerScroll = std::clamp(mPickerScroll - d * 30.f, 0.f, PickerMaxScroll());
     else if (RailListRect().Contains(x, y))
-      mRailScroll = std::clamp(mRailScroll - d * 59.f, 0.f, RailMaxScroll());
+      mRailScroll = std::clamp(mRailScroll - d * kRowPitch, 0.f, RailMaxScroll());
     SetDirty(false);
   }
 
 private:
-  IRECT HeaderRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.R, mRECT.T + 46.f); }
-  IRECT UpperRect() const { return IRECT(mRECT.L + 12.f, mRECT.T + 56.f, mRECT.R - 12.f, mRECT.B - 142.f); }
-  IRECT RailRect() const { return UpperRect().GetFromRight(172.f); }
+  // Opus D metrics. The rail rows, board wells and art panel are sized from the
+  // locked 900x600 mock (.scratch/release-1.3.0/play-proto/opus2, variant D), so
+  // every band below is expressed relative to mRECT rather than hard-coded.
+  static constexpr float kHeaderH = 46.f;
+  static constexpr float kRailW = 170.f;
+  static constexpr float kRailGap = 10.f;
+  static constexpr float kRailCapH = 18.f;
+  static constexpr float kRowH = 66.f;
+  static constexpr float kRowPitch = 70.f;
+  static constexpr float kAddH = 30.f;
+  static constexpr float kAddGap = 8.f;
+  static constexpr float kBoardBandH = 140.f;
+  static constexpr float kPickerRowH = 30.f;
+  static constexpr float kPickerCapH = 22.f;
+
+  IRECT HeaderRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.R, mRECT.T + kHeaderH); }
+  IRECT StageRect() const
+  {
+    return IRECT(mRECT.L + 10.f, mRECT.T + kHeaderH + 8.f, mRECT.R - 12.f, mRECT.B - kBoardBandH);
+  }
+  IRECT RailRect() const { return StageRect().GetFromRight(kRailW); }
+  IRECT ArtRect() const
+  {
+    const auto stage = StageRect();
+    return IRECT(stage.L, stage.T, RailRect().L - kRailGap, stage.B);
+  }
+  float RailContentH() const
+  {
+    return mSlots.empty() ? 0.f : static_cast<float>(mSlots.size()) * kRowPitch - (kRowPitch - kRowH);
+  }
+  // The Add row follows the last thumb until the list is long enough to scroll;
+  // from then on it stays pinned to the bottom of the rail so it is always
+  // reachable. Both readings of "Add pinned under the list" hold, and a rail
+  // with one Sound no longer leaves a 300 px hole above the button.
   IRECT RailListRect() const
   {
-    const auto r = RailRect();
-    return IRECT(r.L, r.T + 22.f, r.R, r.B - 42.f);
+    const auto rail = RailRect();
+    const float top = rail.T + kRailCapH;
+    const float maxBottom = rail.B - kAddH - kAddGap;
+    return IRECT(rail.L, top, rail.R, std::min(maxBottom, top + std::max(RailContentH(), kRowH)));
   }
   IRECT AddRect() const
   {
-    const auto r = RailRect();
-    return IRECT(r.L, r.B - 36.f, r.R, r.B);
+    const auto list = RailListRect();
+    return IRECT(list.L, list.B + kAddGap, list.R, list.B + kAddGap + kAddH);
+  }
+  IRECT EmptyRect() const { return IRECT(mRECT.L, HeaderRect().B, mRECT.R, mRECT.B - kBoardBandH); }
+  float EmptyAnchorY() const
+  {
+    const auto empty = EmptyRect();
+    return empty.T + empty.H() * 0.36f;
   }
   IRECT EmptyAddRect() const
   {
-    const IRECT empty(mRECT.L, 46.f, mRECT.R, mRECT.B - 142.f);
-    return IRECT(empty.MW() - 78.f, empty.MH() + 62.f, empty.MW() + 78.f, empty.MH() + 98.f);
+    const float cx = EmptyRect().MW();
+    const float top = EmptyAnchorY() + 108.f;
+    return IRECT(cx - 75.f, top, cx + 75.f, top + 35.f);
   }
-  IRECT ArtRect() const { return UpperRect().GetReducedFromRight(182.f); }
-  IRECT BoardRect() const { return IRECT(mRECT.L + 12.f, mRECT.B - 133.f, mRECT.R - 12.f, mRECT.B - 9.f); }
-  IRECT PickerRect() const { return IRECT(mRECT.MW() - 230.f, 76.f, mRECT.MW() + 230.f, 532.f); }
+  IRECT BoardRect() const { return IRECT(mRECT.L + 34.f, mRECT.B - 130.f, mRECT.R - 34.f, mRECT.B - 8.f); }
+  IRECT MeterRect(bool out) const
+  {
+    const auto board = BoardRect();
+    return out ? IRECT(mRECT.R - 24.f, board.T + 8.f, mRECT.R - 14.f, board.B - 28.f)
+               : IRECT(mRECT.L + 14.f, board.T + 8.f, mRECT.L + 24.f, board.B - 28.f);
+  }
 
   int ActiveRow() const
   {
@@ -248,50 +338,84 @@ private:
 
   void DrawHeader(IGraphics& g)
   {
-    FillVGradient(g, HeaderRect(), IColor(255, 18, 24, 33), IColor(240, 11, 15, 22));
-    g.DrawLine(VoLumColors::TEAL_DIM.WithOpacity(0.3f), mRECT.L, 46.f, mRECT.R, 46.f);
-    g.DrawText(VoLumType::Display(25.f, VoLumColors::GOLD, EAlign::Near), "VoLum",
-               IRECT(16.f, 4.f, 150.f, 31.f));
-    g.DrawText(VoLumType::Value(6.5f, VoLumColors::GOLD_DIM, EAlign::Near), "NAM PLAYER",
-               IRECT(18.f, 28.f, 150.f, 42.f));
-    g.FillCircle(VoLumColors::TEAL, 413.f, 23.f, 2.5f);
-    g.DrawText(VoLumType::Value(7.f, VoLumColors::CREAM_DIM), "SOUNDS  ·  PROGRAM CHANGE",
-               IRECT(426.f, 13.f, 610.f, 33.f));
+    const auto h = HeaderRect();
+    FillVGradient(g, h, IColor(255, 18, 24, 33), IColor(240, 11, 15, 22));
+    g.DrawLine(VoLumColors::TEAL_DIM.WithOpacity(0.3f), h.L, h.B, h.R, h.B);
+    g.DrawText(VoLumType::Display(26.f, VoLumColors::GOLD, EAlign::Near), "VoLum",
+               IRECT(h.L + 16.f, h.T + 3.f, h.L + 170.f, h.T + 29.f));
+    g.DrawText(VoLumType::Label(10.f, VoLumColors::GOLD_DIM, EAlign::Near), "NAM PLAYER",
+               IRECT(h.L + 18.f, h.T + 27.f, h.L + 170.f, h.T + 41.f));
+
+    // Read-only reminder that PLAY is driven by Program Change. The channel
+    // itself is edited in Settings (product law), never here.
+    const IRECT chip(h.MW() - 66.f, h.T + 13.f, h.MW() + 66.f, h.T + 33.f);
+    g.FillRoundRect(IColor(200, 10, 20, 26), chip, 3.f);
+    g.DrawRoundRect(VoLumColors::TEAL_DIM.WithOpacity(0.55f), chip, 3.f);
+    g.FillCircle(VoLumColors::TEAL, chip.L + 13.f, chip.MH(), 3.f);
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), "MIDI IN",
+               IRECT(chip.L + 23.f, chip.T, chip.L + 78.f, chip.B));
+    const std::string chan = mMidiChannel <= 0 ? "OMNI" : "CH " + std::to_string(mMidiChannel);
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::GOLD, EAlign::Near), chan.c_str(),
+               IRECT(chip.L + 78.f, chip.T, chip.R - 8.f, chip.B));
   }
 
   void DrawEmpty(IGraphics& g)
   {
-    const IRECT empty(mRECT.L, 46.f, mRECT.R, mRECT.B - 142.f);
-    const float glow = 0.08f + 0.06f * (0.5f + 0.5f * std::sin(mPhase));
-    DrawSoftGlowCircle(g, empty.MW(), empty.MH() - 12.f, 138.f, VoLumColors::GOLD.WithOpacity(glow));
-    DrawHeroFractalArt(g, IRECT(empty.MW() - 110.f, empty.MH() - 100.f, empty.MW() + 110.f, empty.MH() + 60.f), 14);
-    g.FillRect(IColor(205, 8, 10, 15), empty);
+    const auto empty = EmptyRect();
+    const float cx = empty.MW();
+    const float cy = EmptyAnchorY();
+    // A breathing brass halo, not amp art: art behind the headline reads as
+    // dirt on the panel rather than an unlit stage.
+    // Stacked soft fills, not a stroked ring: a 1 px circle behind the headline
+    // read as a stray artifact instead of an unlit stage waiting for a rig.
+    const float breathe = 0.5f + 0.5f * std::sin(mPhase);
+    DrawSoftGlowCircle(g, cx, cy - 6.f, 176.f, VoLumColors::GOLD.WithOpacity(0.040f + 0.030f * breathe));
+    DrawSoftGlowCircle(g, cx, cy - 6.f, 108.f, VoLumColors::GOLD.WithOpacity(0.045f + 0.035f * breathe));
+    DrawSoftGlowCircle(g, cx, cy - 6.f, 58.f, VoLumColors::GOLD.WithOpacity(0.055f + 0.040f * breathe));
+
     g.DrawText(VoLumType::Display(38.f, VoLumColors::CREAM), "No Sounds assigned",
-               IRECT(empty.L, empty.MH() - 46.f, empty.R, empty.MH() + 4.f));
-    DrawDiamond(g, empty.MW(), empty.MH() + 12.f, 3.f, VoLumColors::GOLD_DIM);
-    g.DrawText(VoLumType::Body(12.f, VoLumColors::CREAM_DIM), "Add a Sound to light this stage.",
-               IRECT(empty.L, empty.MH() + 25.f, empty.R, empty.MH() + 49.f));
+               IRECT(empty.L, cy - 26.f, empty.R, cy + 14.f));
+    DrawDiamond(g, cx, cy + 24.f, 3.5f, VoLumColors::GOLD_DIM);
+    g.DrawText(VoLumType::Body(12.f, VoLumColors::CREAM_DIM), "PLAY recalls your rigs by MIDI Program Change.",
+               IRECT(empty.L, cy + 36.f, empty.R, cy + 54.f));
+    g.DrawText(VoLumType::Body(12.f, VoLumColors::CREAM_DIM), "Add a Sound to give this stage something to light up.",
+               IRECT(empty.L, cy + 56.f, empty.R, cy + 74.f));
+
     const IRECT add = EmptyAddRect();
+    const bool hot = mHoverRow == kHoverAdd;
+    g.FillRoundRect(VoLumColors::GOLD.WithOpacity(hot ? 0.16f : 0.07f), add, 2.f);
     g.DrawRoundRect(VoLumColors::GOLD_DIM, add, 2.f);
-    g.DrawText(VoLumType::Value(9.f, VoLumColors::GOLD), "+  ADD SOUND", add);
+    g.DrawText(VoLumType::Label(12.f, VoLumColors::GOLD), "+   Add Sound", add);
   }
 
   void DrawAmpPanel(IGraphics& g, const IRECT& rect, const std::string& name, int art, bool custom, bool support)
   {
-    const float pulse = 0.5f + 0.5f * std::sin(mPhase + (support ? 0.7f : 0.f));
+    // No glow behind the art: BUILD's hero (VoLumHero.h) is background + fractal,
+    // and a glow scaled to this much larger panel washed the whole stage brown.
     g.FillRect(VoLumColors::HERO_BG, rect);
-    DrawSoftGlowCircle(g, rect.MW(), rect.MH(), rect.W() * 0.48f,
-                       (support ? VoLumColors::TEAL : VoLumColors::GOLD).WithOpacity(0.06f + pulse * 0.10f));
     const IRECT artRect = rect.GetPadded(-18.f);
     if (custom)
       DrawCustomAmpArt(g, artRect, art, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
     else
-      DrawHeroFractalArt(g, artRect, art);
+      // FractalCaseForAmp, not the raw amp index: BUILD's hero (VoLumHero.h) maps
+      // through it, and without the mapping the same amp showed a different
+      // fractal in PLAY than in BUILD.
+      DrawHeroFractalArt(g, artRect, FractalCaseForAmp(art));
     g.FillRect(IColor(85, 4, 6, 10), IRECT(rect.L, rect.B - 44.f, rect.R, rect.B));
     g.DrawRect((support ? VoLumColors::TEAL_DIM : VoLumColors::GOLD_DIM).WithOpacity(0.7f), rect);
-    const std::string role = support ? "SUPPORT · " + name : (mDual ? "MAIN · " + name : name);
-    g.DrawText(VoLumType::Value(6.5f, support ? VoLumColors::TEAL : VoLumColors::GOLD, EAlign::Near), role.c_str(),
-               IRECT(rect.L + 8.f, rect.T + 5.f, rect.R - 8.f, rect.T + 19.f));
+    const float acc = 14.f;
+    const IColor corner = (support ? VoLumColors::TEAL : VoLumColors::CORNER).WithOpacity(0.8f);
+    DrawCornerAccent(g, rect.L + 6.f, rect.T + 6.f, acc, false, false, corner);
+    DrawCornerAccent(g, rect.R - 6.f, rect.T + 6.f, acc, true, false, corner);
+    // Only tag the panel in dual, where MAIN vs SUPPORT is the whole point. In
+    // mono the amp name is already the overlay's secondary line, and printing it
+    // twice on one panel just crowds the corner accents.
+    if (mDual)
+    {
+      const std::string role = (support ? "SUPPORT · " : "MAIN · ") + name;
+      g.DrawText(VoLumType::Label(9.f, support ? VoLumColors::TEAL : VoLumColors::GOLD_DIM, EAlign::Near), role.c_str(),
+                 IRECT(rect.L + 24.f, rect.T + 4.f, rect.R - 8.f, rect.T + 20.f));
+    }
   }
 
   void DrawStage(IGraphics& g)
@@ -309,32 +433,54 @@ private:
 
     const int active = ActiveRow();
     std::string title = mLiveAmpName;
+    std::string secondary;
     int pc = -1;
     if (active >= 0)
     {
       title = mSlots[(size_t)active].sound.presetName;
+      secondary = mSlots[(size_t)active].sound.ampName;
       pc = mSlots[(size_t)active].slot;
     }
+
     const IRECT overlay(art.L, art.B - 58.f, art.R, art.B);
-    g.FillRect(IColor(190, 5, 7, 11), overlay);
-    const std::string pcText = pc >= 0 ? "PC " + TwoDigits(pc) : "LIVE";
-    g.DrawText(VoLumType::Value(17.f, VoLumColors::GOLD, EAlign::Near), pcText.c_str(),
-               IRECT(overlay.L + 14.f, overlay.T + 14.f, overlay.L + 85.f, overlay.B - 5.f));
-    g.DrawText(VoLumType::Display(32.f, VoLumColors::TEXT_BRIGHT, EAlign::Near), title.c_str(),
-               IRECT(overlay.L + 90.f, overlay.T + 5.f, overlay.R - 120.f, overlay.B - 3.f));
+    g.FillRect(IColor(205, 5, 7, 11), overlay);
+    // 0.5, not 0.22: several amp arts draw their own bright horizon rule, and at
+    // 0.22 the band's top edge disappeared into the artwork.
+    g.DrawLine(VoLumColors::GOLD_DIM.WithOpacity(0.5f), overlay.L, overlay.T, overlay.R, overlay.T);
+    // No PC slug when nothing has been recalled yet: a "LIVE" chip with no
+    // program number claimed a recall that never happened.
+    const float titleL = pc >= 0 ? overlay.L + 66.f : overlay.L + 22.f;
+    if (pc >= 0)
+      g.DrawText(VoLumType::Value(19.f, VoLumColors::GOLD, EAlign::Near), TwoDigits(pc).c_str(),
+                 IRECT(overlay.L + 18.f, overlay.T + 12.f, overlay.L + 60.f, overlay.B - 8.f));
+
+    const IText titleText = VoLumType::Display(26.f, VoLumColors::TEXT_BRIGHT, EAlign::Near);
+    const IRECT titleRect(titleL, overlay.T + 4.f, overlay.R - 120.f, overlay.B - 4.f);
+    g.PathClipRegion(titleRect);
+    g.DrawText(titleText, title.c_str(), titleRect);
+    g.PathClipRegion();
+    if (!secondary.empty())
+    {
+      IRECT measured = titleRect;
+      g.MeasureText(titleText, title.c_str(), measured);
+      const float sx = std::min(titleRect.L + measured.W() + 14.f, titleRect.R - 90.f);
+      g.DrawText(VoLumType::Label(10.f, VoLumColors::TEAL_DIM, EAlign::Near), secondary.c_str(),
+                 IRECT(sx, overlay.T + 20.f, titleRect.R, overlay.B - 12.f));
+    }
     if (mDirty)
-      g.DrawText(VoLumType::Value(7.f, VoLumColors::AMBER), "UNSAVED",
-                 IRECT(overlay.R - 112.f, overlay.T + 15.f, overlay.R - 12.f, overlay.B - 8.f));
+      g.DrawText(VoLumType::Label(10.f, VoLumColors::AMBER, EAlign::Far), "(unsaved)",
+                 IRECT(overlay.R - 112.f, overlay.T + 20.f, overlay.R - 14.f, overlay.B - 12.f));
     DrawRail(g);
   }
 
   void DrawRail(IGraphics& g)
   {
     const auto rail = RailRect();
-    g.DrawText(VoLumType::Value(7.f, VoLumColors::TEAL_DIM, EAlign::Near), "SOUNDS",
-               IRECT(rail.L, rail.T, rail.R - 28.f, rail.T + 18.f));
-    g.DrawText(VoLumType::Value(7.f, VoLumColors::GOLD_DIM, EAlign::Far), "PC",
-               IRECT(rail.L, rail.T, rail.R, rail.T + 18.f));
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Near), "SOUNDS",
+               IRECT(rail.L + 2.f, rail.T, rail.R - 30.f, rail.T + 15.f));
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::GOLD_DIM, EAlign::Far), "PC",
+               IRECT(rail.L, rail.T, rail.R - 2.f, rail.T + 15.f));
+
     const auto list = RailListRect();
     g.PathClipRegion(list);
     int sticky = -1;
@@ -346,49 +492,111 @@ private:
         sticky = i;
         continue;
       }
-      if (row.B >= list.T && row.T <= list.B)
-        DrawSlot(g, row, i);
+      if (row.B > list.T + 0.5f && row.T < list.B - 0.5f)
+        DrawSlot(g, row, i, list);
     }
     if (sticky >= 0)
-      DrawSlot(g, RailRowRect(sticky, true), sticky);
+      DrawSlot(g, RailRowRect(sticky, true), sticky, list);
     g.PathClipRegion();
-    g.FillRect(IColor(20, 252, 222, 145), AddRect());
-    g.DrawRect(VoLumColors::GOLD_DIM.WithOpacity(0.65f), AddRect());
-    g.DrawText(VoLumType::Value(8.f, VoLumColors::GOLD), "+  ADD", AddRect());
+
+    const float maxScroll = RailMaxScroll();
+    if (maxScroll > 0.5f)
+    {
+      const IRECT track(list.R - 4.f, list.T, list.R, list.B);
+      const float contentH = RailContentH();
+      const float thumbH = std::max(16.f, track.H() * list.H() / contentH);
+      const float t = mRailScroll / maxScroll;
+      const float top = track.T + (track.H() - thumbH) * t;
+      DrawVoLumScrollbar(g, track, IRECT(track.L, top, track.R, top + thumbH));
+    }
+
+    // Dashed slot, not a solid button: the mock's rail Add reads as "an empty
+    // place a Sound could go", which is also what distinguishes it from a row.
+    const IRECT add = AddRect();
+    const bool hot = mHoverRow == kHoverAdd;
+    g.FillRect(VoLumColors::GOLD.WithOpacity(hot ? 0.12f : 0.03f), add);
+    g.DrawDottedRect(VoLumColors::GOLD_DIM.WithOpacity(hot ? 0.95f : 0.6f), add, nullptr, 1.f, 4.f);
+    g.DrawText(VoLumType::Label(15.f, VoLumColors::GOLD.WithOpacity(hot ? 1.f : 0.8f)), "+", add);
   }
 
-  void DrawSlot(IGraphics& g, const IRECT& row, int index)
+  // clip is the rail list rect: IGraphics has no clip stack, so every inner
+  // PathClipRegion must restore the caller's clip instead of clearing it, or the
+  // last row escapes the list and paints over the pinned Add button.
+  void DrawSlot(IGraphics& g, const IRECT& row, int index, const IRECT& clip)
   {
     const auto& slot = mSlots[(size_t)index];
     const bool active = index == ActiveRow();
-    g.FillRect(slot.valid ? IColor(230, 8, 12, 18) : IColor(230, 20, 10, 13), row);
-    DrawVoLumSelection(g, row, active, false, VoLumSelectionStyle::Brass, 1.f, 0.f);
-    g.DrawRect(slot.valid ? VoLumColors::TEAL_DIM.WithOpacity(0.45f) : VoLumColors::DANGER.WithOpacity(0.55f), row);
+    const bool hovered = mHoverRow == index;
+    g.FillRect(slot.valid ? IColor(235, 10, 14, 20) : IColor(235, 26, 12, 15), row);
+    DrawVoLumSelection(g, row, active, hovered && !active, VoLumSelectionStyle::Brass, 2.f, 0.f);
+    if (!active)
+      g.DrawRect(slot.valid ? VoLumColors::TEAL_DIM.WithOpacity(0.42f) : VoLumColors::DANGER.WithOpacity(0.55f), row);
+
+    const float textL = row.L + 56.f;
     if (slot.valid)
     {
-      const IRECT art(row.L + 2.f, row.T + 2.f, row.L + 47.f, row.B - 2.f);
+      // A full-height tile of the amp's own hero art, flush to the row's left
+      // edge. The 22 px sidebar mini fractal does not scale to 46x60: it drew a
+      // small figure in the corner of an inset well and read as an icon slot.
+      const IRECT thumb(row.L + 1.f, row.T + 1.f, row.L + 49.f, row.B - 1.f);
+      g.FillRect(VoLumColors::HERO_BG, thumb);
+      g.PathClipRegion(thumb);
       if (slot.sound.customArt)
-        DrawCustomAmpArt(g, art, slot.sound.art, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
+        DrawCustomAmpArt(g, thumb, slot.sound.art, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
       else
-        DrawStripMiniFractal(g, art, slot.sound.art);
-      g.DrawText(VoLumType::Value(10.f, VoLumColors::GOLD, EAlign::Near), TwoDigits(slot.slot).c_str(),
-                 IRECT(row.L + 53.f, row.T + 4.f, row.R - 15.f, row.T + 19.f));
-      g.DrawText(VoLumType::Display(14.f, VoLumColors::CREAM, EAlign::Near), slot.sound.presetName.c_str(),
-                 IRECT(row.L + 53.f, row.T + 17.f, row.R - 15.f, row.T + 37.f));
-      g.DrawText(VoLumType::Label(7.f, VoLumColors::TEAL_DIM, EAlign::Near), slot.sound.ampName.c_str(),
-                 IRECT(row.L + 53.f, row.T + 36.f, row.R - 15.f, row.B - 2.f));
-      if (active)
-        g.DrawText(VoLumType::Value(5.5f, VoLumColors::GOLD, EAlign::Far), "LIVE",
-                   IRECT(row.L, row.T + 4.f, row.R - 5.f, row.T + 17.f));
+        DrawHeroFractalArt(g, thumb, FractalCaseForAmp(slot.sound.art));
+      g.PathClipRegion(clip);
+      g.DrawLine(VoLumColors::TEAL_DIM.WithOpacity(0.45f), thumb.R, thumb.T, thumb.R, thumb.B);
+      g.DrawText(VoLumType::Value(17.f, VoLumColors::GOLD, EAlign::Near), TwoDigits(slot.slot).c_str(),
+                 IRECT(textL, row.T + 4.f, row.R - 40.f, row.T + 24.f));
+      // IGraphics has no clip stack, so restore the caller's clip rather than
+      // clearing it, and skip the draw when the intersection is degenerate: an
+      // inverted scissor rect is treated as "no clip" and let rows escape the
+      // list to paint over the pinned Add button.
+      auto clipped = [&](const IRECT& r, const IText& t, const char* s) {
+        const IRECT c = r.Intersect(clip);
+        if (c.W() <= 0.f || c.H() <= 0.f)
+          return;
+        g.PathClipRegion(c);
+        g.DrawText(t, s, r);
+        g.PathClipRegion(clip);
+      };
+      clipped(IRECT(textL, row.T + 23.f, row.R - 8.f, row.T + 43.f),
+              VoLumType::Display(17.f, active ? VoLumColors::SEL_TEXT : VoLumColors::CREAM, EAlign::Near),
+              slot.sound.presetName.c_str());
+      clipped(IRECT(textL, row.T + 43.f, row.R - 8.f, row.T + 57.f),
+              VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Near), slot.sound.ampName.c_str());
+      // LIVE and the clear affordance share the row's top-right corner: while the
+      // pointer is on the row you get the action, otherwise the state. The brass
+      // selection border already says "live", so nothing is lost.
+      if (active && !hovered)
+      {
+        g.FillCircle(VoLumColors::GOLD, row.R - 40.f, row.T + 14.f, 2.5f);
+        g.DrawText(VoLumType::Label(8.f, VoLumColors::GOLD, EAlign::Far), "LIVE",
+                   IRECT(row.L, row.T + 7.f, row.R - 8.f, row.T + 21.f));
+      }
     }
     else
     {
-      g.DrawText(VoLumType::Value(10.f, VoLumColors::CREAM_DIM, EAlign::Near), TwoDigits(slot.slot).c_str(),
-                 IRECT(row.L + 10.f, row.T + 5.f, row.R, row.T + 22.f));
-      g.DrawText(VoLumType::Label(9.f, VoLumColors::DANGER, EAlign::Near), "INVALID SLOT",
-                 IRECT(row.L + 10.f, row.T + 23.f, row.R - 15.f, row.B - 5.f));
+      // Same text column as a valid row: the number is the one thing a numbered
+      // hole still has, and indenting it to the empty thumb well broke the rail's
+      // vertical rhythm.
+      g.DrawText(VoLumType::Value(17.f, VoLumColors::CREAM_DIM, EAlign::Near), TwoDigits(slot.slot).c_str(),
+                 IRECT(textL, row.T + 13.f, row.R - 8.f, row.T + 33.f));
+      // Same words as the Settings Sound map ("missing sound"): the slot is fine,
+      // the Sound it pointed at is gone, and two names for one state is a bug.
+      g.DrawText(VoLumType::Label(10.f, VoLumColors::DANGER, EAlign::Near), "MISSING SOUND",
+                 IRECT(textL, row.T + 34.f, row.R - 8.f, row.T + 50.f));
     }
-    g.DrawText(VoLumType::Label(8.f, VoLumColors::CREAM_DIM), "×", ClearRectForRow(index, row));
+    // Clear is a hover affordance: a permanent glyph on every row read as noise
+    // at 8 px and was too small to hit.
+    if (hovered)
+    {
+      const IRECT clear = ClearRectForRow(index, row);
+      g.FillRoundRect(VoLumColors::DANGER_FILL, clear, 2.f);
+      g.DrawRoundRect(VoLumColors::DANGER, clear, 2.f);
+      DrawCrossGlyph(g, clear, VoLumColors::TEXT_BRIGHT);
+    }
   }
 
   void DrawBoard(IGraphics& g)
@@ -396,38 +604,81 @@ private:
     const auto board = BoardRect();
     DrawPanelDepth(g, board);
     g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.38f), board);
-    g.DrawText(VoLumType::Value(6.5f, VoLumColors::TEAL_DIM, EAlign::Near), "PRE  ·  STOMP TO BYPASS",
-               IRECT(board.L + 20.f, board.T + 4.f, board.MW() - 8.f, board.T + 19.f));
-    g.DrawText(VoLumType::Value(6.5f, VoLumColors::GOLD_DIM, EAlign::Near), "POST",
-               IRECT(board.MW() + 8.f, board.T + 4.f, board.R - 20.f, board.T + 19.f));
-    static const char* kNames[FxCount] = {"PITCH", "COMP", "NAM 1", "NAM 2", "CHORUS", "DELAY", "REVERB", "TREM"};
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Near), "Pre  ·  stomp to bypass the live rig",
+               IRECT(board.L + 8.f, board.T + 3.f, FxRect(3).R, board.T + 18.f));
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::GOLD_DIM, EAlign::Near), "Post",
+               IRECT(FxRect(4).L, board.T + 3.f, board.R - 8.f, board.T + 18.f));
     for (int i = 0; i < FxCount; ++i)
-    {
-      const IRECT r = FxRect(i);
-      DrawInsetWell(g, r, 2.f);
-      if (mFx[(size_t)i])
-      {
-        g.FillRect(IColor(62, 252, 222, 145), r);
-        g.DrawRect(VoLumColors::SEL_BORDER, r);
-      }
-      else
-        g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(0.35f), r);
-      g.DrawCircle(mFx[(size_t)i] ? VoLumColors::GOLD : VoLumColors::TEAL_DIM.WithOpacity(0.35f), r.MW(), r.T + 29.f,
-                   9.f);
-      g.FillCircle(mFx[(size_t)i] ? VoLumColors::GOLD : IColor(255, 28, 36, 45), r.MW(), r.T + 29.f, 3.f);
-      g.DrawText(VoLumType::Value(7.f, mFx[(size_t)i] ? VoLumColors::GOLD : VoLumColors::CREAM_DIM), kNames[i],
-                 IRECT(r.L, r.B - 27.f, r.R, r.B - 6.f));
-    }
-    DrawMeter(g, IRECT(board.L + 4.f, board.T + 24.f, board.L + 10.f, board.B - 12.f), false);
-    DrawMeter(g, IRECT(board.R - 10.f, board.T + 24.f, board.R - 4.f, board.B - 12.f), true);
+      DrawStomp(g, i);
+    DrawMeter(g, false);
+    DrawMeter(g, true);
   }
 
-  void DrawMeter(IGraphics& g, const IRECT& r, bool out)
+  void DrawStomp(IGraphics& g, int i)
   {
-    g.FillRect(IColor(255, 4, 6, 9), r);
+    static const char* kNames[FxCount] = {"PITCH", "COMP", "NAM 1", "NAM 2", "CHORUS", "DELAY", "REVERB", "TREM"};
+    const IRECT r = FxRect(i);
+    const bool on = mFx[(size_t)i];
+    const bool live = mFxAvailable[(size_t)i];
+    const bool hovered = mHoverFx == i;
+    DrawInsetWell(g, r, 2.f);
+    if (on)
+    {
+      g.FillRect(IColor(58, 252, 222, 145), r);
+      g.DrawRect(VoLumColors::SEL_BORDER, r);
+    }
+    else
+    {
+      if (hovered)
+        g.FillRect(VoLumColors::SEL_BG_SOFT, r);
+      g.DrawRect(VoLumColors::TEAL_DIM.WithOpacity(live ? (hovered ? 0.5f : 0.32f) : 0.13f), r);
+    }
+
+    // The well carries the pedal's own motif, same as the Quiet strip and the
+    // pedal cards. Eight identical footswitch rings gave the board no identity
+    // beyond the caption, and the Opus D board is motif-first.
+    static const EVoLumEffectFocus kFocus[FxCount] = {
+      EVoLumEffectFocus::PITCH,  EVoLumEffectFocus::COMP,   EVoLumEffectFocus::PRE_NAM1,
+      EVoLumEffectFocus::PRE_NAM2, EVoLumEffectFocus::CHORUS, EVoLumEffectFocus::DELAY,
+      EVoLumEffectFocus::REVERB, EVoLumEffectFocus::TREMOLO};
+    const IRECT motif(r.L + 6.f, r.T + 5.f, r.R - 6.f, r.B - 26.f);
+    // Clip: the motifs bloom and glow past their rect (a lit NAM 1 threw gold
+    // nodes into the NAM 2 well), and wells here sit 4 px apart.
+    g.PathClipRegion(motif);
+    // Variant stays 0: the PLAY caption is the fixed "PITCH" from the spec, so a
+    // motif that switched to the Octaver chevrons would contradict its own label.
+    DrawEffectMotif(g, motif, kFocus[i], !on);
+    g.PathClipRegion();
+    // An effect the current rig cannot reach (NAM 2 in mono) reads as furniture,
+    // not as a stomp you failed to hit: veil the motif rather than hide it.
+    if (!live)
+      g.FillRect(IColor(150, 9, 12, 17), motif);
+    if (on)
+      g.FillCircle(VoLumColors::GOLD, r.R - 12.f, r.T + 11.f, 2.5f);
+
+    const IColor ink =
+      on ? VoLumColors::GOLD : (live ? VoLumColors::CREAM_DIM : VoLumColors::CREAM_DIM.WithOpacity(0.35f));
+    g.DrawText(VoLumType::Label(9.f, ink), kNames[i], IRECT(r.L, r.B - 24.f, r.R, r.B - 8.f));
+  }
+
+  void DrawMeter(IGraphics& g, bool out)
+  {
+    const IRECT r = MeterRect(out);
+    DrawInsetWell(g, r, 1.f);
     const float level = 0.3f + 0.42f * (0.5f + 0.5f * std::sin(mPhase + (out ? 0.45f : 0.f)));
-    const IRECT fill(r.L + 1.f, r.B - 1.f - (r.H() - 2.f) * level, r.R - 1.f, r.B - 1.f);
-    g.FillRect(out ? VoLumColors::TEAL : VoLumColors::GOLD, fill);
+    // Segmented ladder: a solid bar in a 10 px well reads as a stray rectangle.
+    const int segments = 18;
+    const float segH = (r.H() - 4.f) / segments;
+    const IColor lit = out ? VoLumColors::TEAL : VoLumColors::GOLD;
+    for (int i = 0; i < segments; ++i)
+    {
+      const float frac = static_cast<float>(segments - i) / segments;
+      const float top = r.T + 2.f + i * segH;
+      const IRECT seg(r.L + 2.f, top, r.R - 2.f, top + segH - 1.f);
+      g.FillRect(frac <= level ? lit : lit.WithOpacity(0.10f), seg);
+    }
+    g.DrawText(VoLumType::Label(8.f, VoLumColors::CREAM_DIM), out ? "OUT" : "IN",
+               IRECT(r.L - 6.f, r.B + 4.f, r.R + 6.f, r.B + 20.f));
   }
 
   void DrawPicker(IGraphics& g)
@@ -436,10 +687,12 @@ private:
     g.FillRoundRect(IColor(250, 8, 11, 16), panel, 4.f);
     g.DrawRoundRect(VoLumColors::GOLD_DIM, panel, 4.f);
     g.DrawText(VoLumType::Display(24.f, VoLumColors::CREAM), "Choose Sound",
-               IRECT(panel.L, panel.T + 10.f, panel.R, panel.T + 48.f));
-    g.DrawText(VoLumType::Value(7.f, VoLumColors::CREAM_DIM), ("ASSIGN TO PC " + TwoDigits(mEditSlot)).c_str(),
-               IRECT(panel.L, panel.T + 44.f, panel.R, panel.T + 68.f));
-    const IRECT list(panel.L + 12.f, panel.T + 76.f, panel.R - 12.f, panel.B - 12.f);
+               IRECT(panel.L, panel.T + 10.f, panel.R, panel.T + 42.f));
+    g.DrawText(VoLumType::Label(10.f, VoLumColors::CREAM_DIM), ("Assign to PC " + TwoDigits(mEditSlot)).c_str(),
+               IRECT(panel.L, panel.T + 40.f, panel.R, panel.T + 58.f));
+    DrawCrossGlyph(g, PickerCloseRect(), VoLumColors::GOLD_DIM, 1.5f);
+
+    const IRECT list = PickerListRect();
     g.PathClipRegion(list);
     float y = list.T - mPickerScroll;
     bool factoryHeader = false, userHeader = false;
@@ -449,30 +702,43 @@ private:
       if ((isFactory && !factoryHeader) || (!isFactory && !userHeader))
       {
         const char* label = isFactory ? "FACTORY" : "USER";
-        g.DrawText(VoLumType::Value(7.f, isFactory ? VoLumColors::GOLD_DIM : VoLumColors::TEAL_DIM, EAlign::Near),
-                   label, IRECT(list.L + 4.f, y, list.R, y + 24.f));
-        y += 24.f;
+        g.DrawText(VoLumType::Label(9.f, isFactory ? VoLumColors::GOLD_DIM : VoLumColors::TEAL_DIM, EAlign::Near),
+                   label, IRECT(list.L + 6.f, y, list.R, y + kPickerCapH));
+        g.DrawLine(VoLumColors::FRAME.WithOpacity(0.5f), list.L + 58.f, y + kPickerCapH * 0.5f, list.R - 6.f,
+                   y + kPickerCapH * 0.5f);
+        y += kPickerCapH;
         factoryHeader |= isFactory;
         userHeader |= !isFactory;
       }
-      const IRECT row(list.L, y, list.R, y + 34.f);
+      const IRECT row(list.L, y, list.R, y + kPickerRowH);
       if (row.B >= list.T && row.T <= list.B)
       {
-        g.FillRect(IColor(180, 16, 20, 28), IRECT(row.L, row.T + 1.f, row.R, row.B - 1.f));
-        g.DrawText(VoLumType::Label(12.f, VoLumColors::CREAM, EAlign::Near), mChoices[(size_t)i].presetName.c_str(),
-                   IRECT(row.L + 10.f, row.T, row.MW() + 60.f, row.B));
-        g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Far), mChoices[(size_t)i].ampName.c_str(),
+        DrawVoLumSelection(g, row, false, mHoverChoice == i, VoLumSelectionStyle::ListTeal, 2.f, 1.f);
+        g.DrawText(VoLumType::Body(13.f, VoLumColors::CREAM, EAlign::Near), mChoices[(size_t)i].presetName.c_str(),
+                   IRECT(row.L + 10.f, row.T, row.MW(), row.B));
+        g.DrawText(VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Far), mChoices[(size_t)i].ampName.c_str(),
                    IRECT(row.MW(), row.T, row.R - 10.f, row.B));
       }
-      y += 34.f;
+      y += kPickerRowH;
     }
     g.PathClipRegion();
+
+    const float maxScroll = PickerMaxScroll();
+    if (maxScroll > 0.5f)
+    {
+      const IRECT track(list.R + 2.f, list.T, list.R + 6.f, list.B);
+      const float thumbH = std::max(18.f, track.H() * list.H() / PickerContentHeight());
+      const float top = track.T + (track.H() - thumbH) * (mPickerScroll / maxScroll);
+      DrawVoLumScrollbar(g, track, IRECT(track.L, top, track.R, top + thumbH));
+    }
   }
 
   int SlotAt(float x, float y) const
   {
+    if ((mSlots.empty() ? EmptyAddRect() : AddRect()).Contains(x, y))
+      return kHoverAdd;
     const auto list = RailListRect();
-    if (!list.Contains(x, y))
+    if (mSlots.empty() || !list.Contains(x, y))
       return -1;
     const int active = ActiveRow();
     if (active >= 0)
@@ -481,36 +747,40 @@ private:
       if (natural.T < list.T && RailRowRect(active, true).Contains(x, y))
         return active;
     }
-    const int row = static_cast<int>((y - list.T + mRailScroll) / 59.f);
-    return row >= 0 && row < static_cast<int>(mSlots.size()) ? row : -1;
+    const int row = static_cast<int>((y - list.T + mRailScroll) / kRowPitch);
+    if (row < 0 || row >= static_cast<int>(mSlots.size()))
+      return -1;
+    return RailRowRect(row, false).Contains(x, y) ? row : -1;
   }
   IRECT ClearRectForRow(int index) const
   {
+    if (index < 0 || index >= static_cast<int>(mSlots.size()))
+      return IRECT();
     const auto natural = RailRowRect(index, false);
     const bool sticky = index == ActiveRow() && natural.T < RailListRect().T;
     return ClearRectForRow(index, sticky ? RailRowRect(index, true) : natural);
   }
-  IRECT ClearRectForRow(int, const IRECT& row) const { return IRECT(row.R - 16.f, row.B - 18.f, row.R, row.B); }
+  // Top-right, not bottom-right: at the bottom this box sat on top of the row's
+  // amp-name line.
+  IRECT ClearRectForRow(int, const IRECT& row) const { return IRECT(row.R - 26.f, row.T + 5.f, row.R - 6.f, row.T + 23.f); }
   IRECT FxRect(int i) const
   {
     const auto board = BoardRect();
-    const float left = board.L + 20.f;
-    const float usable = board.W() - 40.f;
-    const float gap = 7.f;
-    const float divider = 11.f;
-    const float width = (usable - gap * 6.f - divider) / 8.f;
-    const float x = left + i * (width + gap) + (i >= 4 ? divider - gap : 0.f);
-    return IRECT(x, board.T + 23.f, x + width, board.B - 8.f);
+    const float left = board.L + 6.f;
+    const float right = board.R - 6.f;
+    const float gap = 4.f;
+    const float divider = 16.f;
+    const float width = (right - left - gap * 7.f - divider) / 8.f;
+    const float x = left + i * (width + gap) + (i >= 4 ? divider : 0.f);
+    return IRECT(x, board.T + 21.f, x + width, board.B - 14.f);
   }
-  float RailMaxScroll() const
-  {
-    return std::max(0.f, static_cast<float>(mSlots.size()) * 59.f - RailListRect().H());
-  }
+  float RailMaxScroll() const { return std::max(0.f, RailContentH() - RailListRect().H()); }
+  void ClampRailScroll() { mRailScroll = std::clamp(mRailScroll, 0.f, RailMaxScroll()); }
   IRECT RailRowRect(int index, bool sticky) const
   {
     const auto list = RailListRect();
-    const float top = sticky ? list.T : list.T + index * 59.f - mRailScroll;
-    return IRECT(list.L, top, list.R - 2.f, top + 54.f);
+    const float top = sticky ? list.T : list.T + index * kRowPitch - mRailScroll;
+    return IRECT(list.L, top, list.R - (RailMaxScroll() > 0.5f ? 8.f : 0.f), top + kRowH);
   }
   float PickerContentHeight() const
   {
@@ -519,12 +789,30 @@ private:
     bool hasFactory = false, hasUser = false;
     for (const auto& c : mChoices)
       c.factory ? hasFactory = true : hasUser = true;
-    return static_cast<float>(mChoices.size()) * 34.f + (hasFactory ? 24.f : 0.f) + (hasUser ? 24.f : 0.f);
+    return static_cast<float>(mChoices.size()) * kPickerRowH + (hasFactory ? kPickerCapH : 0.f)
+           + (hasUser ? kPickerCapH : 0.f);
   }
-  float PickerMaxScroll() const { return std::max(0.f, PickerContentHeight() - (PickerRect().H() - 88.f)); }
+  IRECT PickerRect() const
+  {
+    const auto empty = EmptyRect();
+    const float h = std::clamp(PickerContentHeight() + 82.f, 180.f, empty.H() - 24.f);
+    const float cy = empty.MH();
+    return IRECT(mRECT.MW() - 205.f, cy - h * 0.5f, mRECT.MW() + 205.f, cy + h * 0.5f);
+  }
+  IRECT PickerListRect() const
+  {
+    const auto panel = PickerRect();
+    return IRECT(panel.L + 14.f, panel.T + 64.f, panel.R - 20.f, panel.B - 12.f);
+  }
+  IRECT PickerCloseRect() const
+  {
+    const auto panel = PickerRect();
+    return IRECT(panel.R - 30.f, panel.T + 6.f, panel.R - 6.f, panel.T + 30.f);
+  }
+  float PickerMaxScroll() const { return std::max(0.f, PickerContentHeight() - PickerListRect().H()); }
   int PickerChoiceAt(float x, float y) const
   {
-    const IRECT list(PickerRect().L + 12.f, PickerRect().T + 76.f, PickerRect().R - 12.f, PickerRect().B - 12.f);
+    const IRECT list = PickerListRect();
     if (!list.Contains(x, y))
       return -1;
     float rowY = list.T - mPickerScroll;
@@ -534,13 +822,13 @@ private:
       const bool factory = mChoices[(size_t)i].factory;
       if ((factory && !factoryHeader) || (!factory && !userHeader))
       {
-        rowY += 24.f;
+        rowY += kPickerCapH;
         factoryHeader |= factory;
         userHeader |= !factory;
       }
-      if (IRECT(list.L, rowY, list.R, rowY + 34.f).Contains(x, y))
+      if (IRECT(list.L, rowY, list.R, rowY + kPickerRowH).Contains(x, y))
         return i;
-      rowY += 34.f;
+      rowY += kPickerRowH;
     }
     return -1;
   }
@@ -561,24 +849,17 @@ private:
       return "--";
     return n < 10 ? "0" + std::to_string(n) : std::to_string(n);
   }
-  static int FactoryAmpForOwner(const std::string& owner)
-  {
-    try
-    {
-      return std::clamp(std::stoi(owner.substr(8)), 0, volum::kAmpCount - 1);
-    }
-    catch (...)
-    {
-      return 0;
-    }
-  }
+
+  static constexpr int kHoverAdd = -2;
 
   std::vector<volum::PlaySlot> mSlots;
   std::vector<volum::SoundChoice> mChoices;
   std::string mActiveAmpId, mActivePresetId, mLiveAmpName, mSupportName;
-  int mLastSlot = -1, mLiveArt = 0, mSupportArt = 0, mEditSlot = -1;
+  int mLastSlot = -1, mLiveArt = 0, mSupportArt = 0, mEditSlot = -1, mMidiChannel = 0;
+  int mHoverRow = -1, mHoverFx = -1, mHoverChoice = -1;
   bool mCustomArt = false, mDual = false, mSupportCustom = false, mDirty = false, mPickerOpen = false;
   std::array<bool, FxCount> mFx{};
+  std::array<bool, FxCount> mFxAvailable{};
   float mRailScroll = 0.f, mPickerScroll = 0.f, mPhase = 0.f;
   RecallCallback mRecall;
   AssignCallback mAssign;

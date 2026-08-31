@@ -61,6 +61,13 @@ At the default launch size the window is ~916x659 and the captured canvas is
 canvas point (cx,cy) maps to roughly window (cx+8, cy+51). Sections switch with
 `1` PRE / `2` AMP / `3` POST; amps switch with `{ESC}` then `{UP}`/`{DOWN}`.
 
+`win-key.ps1` only lands while VoLum is the foreground window, and merely
+launching it is not enough: click into the window once (`win-click.ps1`) before
+the first key, or the whole key sequence goes nowhere and the capture silently
+shows the wrong state. A capture that comes back uniformly light grey is the same
+symptom - the GL surface was never composited because the window was not in
+front.
+
 ## 3. Per-shot recipe
 
 Launch fresh (`Start-Process ...\VoLum.exe`; wait ~6s) before each group. All
@@ -68,8 +75,10 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 
 | PNG | Amp / how to reach | State delta from seed | Transient step |
 | --- | --- | --- | --- |
-| `user-guide-play.png` | THC Sunset (seed lastAmpIdx 14) | start with no `midiSoundMap` entries | click PLAY (708,78), click **Add Sound** (458,383), then choose the first Factory sound (250,240); repeat from the pinned rail Add button (860,491) and choose two more Factory rows |
-| `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view) | none | none |
+| `user-guide-play.png` | THC Sunset (seed lastAmpIdx 14) | start with no `midiSoundMap` entries | click PLAY (699,77), click the empty-state **+ Add Sound** (458,371), then the first Factory row (458,209); repeat from the rail Add row (810,212) and (810,282) for two more Factory rows, then click rail row 01 (810,226) to recall it (LIVE) |
+| `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view) | none | click **THC Sunset** in the browser (93,565) - the seed reopens on the custom amp |
+| `user-guide-settings-signal.png` | any | none | click the gear (870,80); Settings opens on the tab it was left on, so click **SIGNAL** (382,164) |
+| `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** (533,164) |
 | `user-guide-pre.png` | SLO100 (`{ESC}{UP}` to 13) | none | `1` then `{RIGHT}` (focus Klon) |
 | `user-guide-pre-pedal.png` | SLO100 | none | from PRE/Klon focused, click (471,251) to open the capture chooser |
 | `user-guide-pitch-transpose.png` | SLO100 | `prePitchActive=true, prePitchMode=0, prePitchSemitones=-2, prePitchTransChar=2`; comp+NAM off | `1` then `{LEFT}` (focus PITCH) |

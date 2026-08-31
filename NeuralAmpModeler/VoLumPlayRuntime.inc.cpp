@@ -87,6 +87,14 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
   for (size_t i = 0; i < fx.size(); ++i)
     fx[i] = paramBool(volum::kPlayBypassParamNames[i]);
 
+  // A PRE NAM slot with no capture loaded is armed but silent, so the board
+  // greys it out the way BUILD leaves the row unnamed. Everything else on the
+  // board always has something to bypass.
+  std::array<bool, VoLumPlaySurfaceControl::FxCount> fxAvailable{};
+  fxAvailable.fill(true);
+  fxAvailable[VoLumPlaySurfaceControl::Nam1] = mPreModel[0] != nullptr;
+  fxAvailable[VoLumPlaySurfaceControl::Nam2] = mPreModel[1] != nullptr;
+
   const bool dual = GetParam(kDualAmpActive)->Bool() && _VolumHasSupportAmp();
   std::string supportName;
   int supportArt = 0;
@@ -116,7 +124,8 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
     mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), _VolumActiveOwnerKey(), mVolumActivePresetId,
     mVolumLastRecalledPlaySlot, _VolumMainAmpDisplayName(),
     mVolumCustomMainIdx >= 0 ? volum::custom::CustomAmpArt(mVolumCustomMainIdx) : mVolumAmpIdx,
-    mVolumCustomMainIdx >= 0, dual, supportName, supportArt, supportCustom, fx, dirty);
+    mVolumCustomMainIdx >= 0, dual, supportName, supportArt, supportCustom, fx, fxAvailable,
+    mVolumMidiChannel.load(std::memory_order_relaxed), dirty);
 }
 
 bool NeuralAmpModeler::VolumRecallSound(const std::string& ampId, const std::string& presetId)

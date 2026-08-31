@@ -11,6 +11,7 @@
 #include "VoLumKeyboardNav.h"
 #include "VoLumExactEntry.h"
 #include "VoLumSettingsOverlay.h"
+#include "VoLumSettingsTabs.h"
 
 #include <algorithm>
 #include <cstdlib>
