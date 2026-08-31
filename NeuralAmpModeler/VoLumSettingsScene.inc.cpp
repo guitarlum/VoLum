@@ -350,6 +350,7 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // custom-support refs already round-trip inside each scene's JSON.
   j["volumCustomMainId"] = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   j["volumActivePresetId"] = mVolumActivePresetId;
+  j["volumUiMode"] = volum::UiModeToString(mVolumUiMode);
   // 1.2.1: the same selection for every amp, not only the focused one. The single
   // key above describes whichever amp was in focus when the file was written, so
   // every other amp reopened reading "No Preset" - and an exit from an amp with
@@ -482,6 +483,7 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     // re-selection once the UI opens (see OnUIOpen). Absent on older files.
     if (j.contains("volumCustomMainId") && j["volumCustomMainId"].is_string())
       mVolumRestoreCustomMainId = j["volumCustomMainId"].get<std::string>();
+    mVolumUiMode = volum::UiModeFromJson(j, "volumUiMode");
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
     // 1.2.1 per-amp selections. Absent in files written by 1.2.0, in which case the

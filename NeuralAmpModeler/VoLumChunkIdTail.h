@@ -55,7 +55,9 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // division) and the live-locked POST delay snapshot ("lockedPostDelay"). The
 // delay's other params still travel in the binary per-amp block; only the
 // appended sync/division pair needs the tail. Informational only.
-inline constexpr int kVoLumIdTailSchema = 5;
+// Schema 6 (PLAY): added the per-instance UI mode ("uiMode"). Missing/invalid
+// values default to BUILD.
+inline constexpr int kVoLumIdTailSchema = 6;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -115,6 +117,7 @@ struct ChunkIdTail
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
   std::string customSupportId; // custom dual SUPPORT partner id ("" = factory/none)
   std::string activePresetId; // recalled preset id for the focused amp ("" = none)
+  std::string uiMode = "build"; // "play" | "build"; per plugin instance
   std::string perAmpIrId[kAmpCount]; // factory amp -> active custom IR cab id
   std::string perAmpSupportIrId[kAmpCount]; // factory amp -> SUPPORT lane custom IR id
   std::string perAmpSupportId[kAmpCount]; // factory amp -> custom support partner id
@@ -287,6 +290,7 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
   j["customMainId"] = t.customMainId;
   j["customSupportId"] = t.customSupportId;
   j["activePresetId"] = t.activePresetId;
+  j["uiMode"] = t.uiMode == "play" ? "play" : "build";
   nlohmann::json perAmp = nlohmann::json::array();
   for (int i = 0; i < kAmpCount; ++i)
   {
@@ -327,6 +331,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
     t.customSupportId = str(j["customSupportId"]);
   if (j.contains("activePresetId"))
     t.activePresetId = str(j["activePresetId"]);
+  if (j.contains("uiMode"))
+    t.uiMode = str(j["uiMode"]) == "play" ? "play" : "build";
   if (j.contains("perAmp") && j["perAmp"].is_array())
   {
     const auto& arr = j["perAmp"];

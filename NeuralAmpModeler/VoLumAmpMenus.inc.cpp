@@ -49,26 +49,31 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();
+  const bool hasFactory = mVolumCustomMainIdx < 0
+    && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
   std::vector<VoLumListMenuControl::Row> rows;
+  // Default is an action, not a named preset, and stays pinned above both banks.
+  rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
+  if (hasFactory)
+  {
+    rows.push_back({"FACTORY", -98, false, false, false, false, true});
+    rows.push_back({volum::kFactoryPresetDisplayName, 0, false, false});
+  }
+  rows.push_back({"USER", -97, true, false, false, false, true});
   if (presets.empty())
-  {
-    // No presets to come back from, so the reset-to-factory row is pointless.
-    rows.push_back({"No presets yet", -99, false, true}); // dim hint
-  }
+    rows.push_back({"No user presets yet", -99, false, true});
   else
-  {
-    // Pinned reset-to-factory row at the top, separated by a divider.
-    rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
     for (int i = 0; i < (int)presets.size(); i++)
-      rows.push_back({presets[(size_t)i], i, false, false});
-  }
+      rows.push_back({presets[(size_t)i], i + (hasFactory ? 1 : 0), false, false});
   // When the rig is dirty, offer a one-click save path right in the dropdown:
   // overwrite the active named preset, or (no named preset / on Default) save a
   // new one. Saves opening the Manage panel just to commit a tweak.
   if (dirty)
   {
-    if (activePresetIdx >= 0 && activePresetIdx < (int)presets.size())
-      rows.push_back({"Overwrite \"" + presets[(size_t)activePresetIdx] + "\"", VoLumListMenuControl::kOverwrite, true,
+    const int activeUserIdx = activePresetIdx - (hasFactory ? 1 : 0);
+    if (volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
+        && activeUserIdx >= 0 && activeUserIdx < (int)presets.size())
+      rows.push_back({"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true,
                       false, true});
     else
       rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});

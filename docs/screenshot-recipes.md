@@ -68,6 +68,7 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 
 | PNG | Amp / how to reach | State delta from seed | Transient step |
 | --- | --- | --- | --- |
+| `user-guide-play.png` | THC Sunset (seed lastAmpIdx 14) | start with no `midiSoundMap` entries | click PLAY (708,78), click **Add Sound** (458,383), then choose the first Factory sound (250,240); repeat from the pinned rail Add button (860,491) and choose two more Factory rows |
 | `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view) | none | none |
 | `user-guide-pre.png` | SLO100 (`{ESC}{UP}` to 13) | none | `1` then `{RIGHT}` (focus Klon) |
 | `user-guide-pre-pedal.png` | SLO100 | none | from PRE/Klon focused, click (471,251) to open the capture chooser |

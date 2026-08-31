@@ -113,7 +113,8 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
 // builds; the bump is only a marker of the new capability, not a migration gate.
-inline constexpr int kContentSchemaVersion = 3;
+// v4 adds the machine-global MIDI Sound assignments used by MIDI and PLAY.
+inline constexpr int kContentSchemaVersion = 4;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
 // so adding/removing a custom pedal never reshuffles an index a saved chunk or
@@ -379,6 +380,13 @@ struct Preset
   VoLumAmpSettings settings;
 };
 
+struct MidiSoundAssignment
+{
+  int slot = 0; // Program Change 0..127
+  std::string ampId; // factory:<idx> or custom amp id
+  std::string presetId; // User preset id or shipped factory:<idx>:v1 id
+};
+
 // Owner key for a preset bank or scene: factory amps use "factory:<idx>",
 // custom amps use their opaque amp id.
 inline std::string FactoryOwnerKey(int ampIdx)
@@ -423,9 +431,55 @@ struct Registry
   std::vector<IRItem> irs; // global IR library
   std::vector<PedalItem> pedals; // global pedal library
   std::map<std::string, std::vector<Preset>> presetBanks; // ownerKey -> presets
+  std::vector<MidiSoundAssignment> midiSoundMap; // machine-global PC -> Sound
   std::map<std::string, VoLumAmpSettings> customScenes; // ampId -> live scene
   int nextPedalIndex = kCustomPedalIndexBase; // monotonic, never reused
 };
+
+inline const MidiSoundAssignment* MidiSoundAtSlot(const Registry& r, int slot)
+{
+  for (const auto& assignment : r.midiSoundMap)
+    if (assignment.slot == slot)
+      return &assignment;
+  return nullptr;
+}
+
+inline int FirstFreeMidiSoundSlot(const Registry& r)
+{
+  for (int slot = 0; slot < 128; ++slot)
+    if (!MidiSoundAtSlot(r, slot))
+      return slot;
+  return -1;
+}
+
+inline bool AssignMidiSound(Registry& r, int slot, const std::string& ampId, const std::string& presetId)
+{
+  if (slot < 0 || slot > 127 || ampId.empty() || presetId.empty())
+    return false;
+  for (auto& assignment : r.midiSoundMap)
+  {
+    if (assignment.slot == slot)
+    {
+      assignment.ampId = ampId;
+      assignment.presetId = presetId;
+      return true;
+    }
+  }
+  r.midiSoundMap.push_back({slot, ampId, presetId});
+  std::sort(r.midiSoundMap.begin(), r.midiSoundMap.end(),
+            [](const MidiSoundAssignment& a, const MidiSoundAssignment& b) { return a.slot < b.slot; });
+  return true;
+}
+
+inline bool ClearMidiSound(Registry& r, int slot)
+{
+  const auto it = std::remove_if(
+    r.midiSoundMap.begin(), r.midiSoundMap.end(), [slot](const MidiSoundAssignment& a) { return a.slot == slot; });
+  if (it == r.midiSoundMap.end())
+    return false;
+  r.midiSoundMap.erase(it, r.midiSoundMap.end());
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // id minting
@@ -572,6 +626,12 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   }
   j["presetBanks"] = banks;
 
+  nlohmann::json soundMap = nlohmann::json::array();
+  for (const auto& assignment : r.midiSoundMap)
+    soundMap.push_back(
+      {{"slot", assignment.slot}, {"ampId", assignment.ampId}, {"presetId", assignment.presetId}});
+  j["midiSoundMap"] = soundMap;
+
   nlohmann::json scenes = nlohmann::json::object();
   for (const auto& sc : r.customScenes)
     scenes[sc.first] = AmpSettingsToJson(sc.second);
@@ -685,6 +745,33 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
       if (!presets.empty())
         r.presetBanks[bank.key()] = std::move(presets);
     }
+  }
+
+  if (j.contains("midiSoundMap") && j["midiSoundMap"].is_array())
+  {
+    bool used[128] = {};
+    for (const auto& entry : j["midiSoundMap"])
+    {
+      if (!entry.is_object() || !entry.contains("slot") || !entry["slot"].is_number_integer()
+          || !entry.contains("ampId") || !entry["ampId"].is_string() || !entry.contains("presetId")
+          || !entry["presetId"].is_string())
+      {
+        h = true;
+        continue;
+      }
+      const int slot = entry["slot"].get<int>();
+      const std::string ampId = entry["ampId"].get<std::string>();
+      const std::string presetId = entry["presetId"].get<std::string>();
+      if (slot < 0 || slot > 127 || used[slot] || ampId.empty() || presetId.empty())
+      {
+        h = true;
+        continue;
+      }
+      used[slot] = true;
+      r.midiSoundMap.push_back({slot, ampId, presetId});
+    }
+    std::sort(r.midiSoundMap.begin(), r.midiSoundMap.end(),
+              [](const MidiSoundAssignment& a, const MidiSoundAssignment& b) { return a.slot < b.slot; });
   }
 
   if (j.contains("customScenes") && j["customScenes"].is_object())

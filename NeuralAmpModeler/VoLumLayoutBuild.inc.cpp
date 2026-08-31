@@ -1042,6 +1042,23 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
   _UpdateVoLumLayout(pGraphics);
 
+  // PLAY is a single opaque surface over BUILD. The compact top toolbar and
+  // mode toggle are attached after it and deliberately remain reachable.
+  pGraphics->AttachControl(
+    new VoLumPlaySurfaceControl(
+      b,
+      [this](int slot, const volum::SoundChoice& sound) {
+        if (VolumRecallSound(sound.ampId, sound.presetId))
+        {
+          mVolumLastRecalledPlaySlot = slot;
+          _VolumRefreshPlaySurface();
+        }
+      },
+      [this](int slot, const volum::SoundChoice& sound) { _VolumAssignPlaySound(slot, sound); },
+      [this](int slot) { _VolumClearPlaySound(slot); },
+      [this](const char* paramName) { _VolumTogglePlayBypass(paramName); }),
+    kCtrlTagVoLumPlaySurface);
+
   // Toolbar buttons (top-right of main panel): Tuner | Metronome | Gear
   {
     const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
@@ -1073,7 +1090,6 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
       },
       gearSVG));
-
     pGraphics
       ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                                  crossSVG, volumSettingsStyle, volumSettingsRadioStyle),
@@ -1131,10 +1147,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             return;
           auto* presetBar = bar->As<VoLumPresetBarControl>();
           const int idx = presetBar->ActiveIndex();
-          if (idx < 0)
+          if (idx < 0 || presetBar->IsFactoryActive())
             return;
           const std::string name = presetBar->ActiveName();
-          auto doOverwrite = [pPlugin, idx]() { pPlugin->_VolumOverwritePreset(idx); };
+          const bool hasFactory = pPlugin->mVolumCustomMainIdx < 0
+            && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
+          const int userIdx = idx - (hasFactory ? 1 : 0);
+          auto doOverwrite = [pPlugin, userIdx]() { pPlugin->_VolumOverwritePreset(userIdx); };
           if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
             dlg->As<VoLumConfirmDialogControl>()->Show("Are you sure?",
                                                        "Overwrite preset \"" + name + "\" with the current settings?",
@@ -1155,7 +1174,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         // recalls the wrong preset.
         pPlugin->_VolumClaimPresetOps();
         const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
-        if (code >= 0 && code < (int)presets.size())
+        const bool hasFactory = pPlugin->mVolumCustomMainIdx < 0
+          && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
+        if (code >= 0 && code < static_cast<int>(presets.size()) + (hasFactory ? 1 : 0))
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
       });
       pGraphics->AttachControl(presetMenu, kCtrlTagVoLumPresetMenu)->Hide(true);
@@ -1295,7 +1316,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             pPlugin->_VolumClaimPresetOps(); // the bounds check below reads the owner-keyed bank
             const auto presets = volum::custom::MockPresetsForAmp(ampIdx);
             if (index >= 0 && index < (int)presets.size())
-              pPlugin->_VolumRecallPreset(index); // apply settings + drive the bar
+              pPlugin->_VolumRecallUserPreset(index); // Manage contains User rows only
           }
           else if (kind == MK::IR)
           {
@@ -1342,12 +1363,30 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // planner. Setting a partial selection here is what used to leave a lane with
   // an active custom IR reading as "No Cab".
 
+  // Attach last: several legacy overlay controls own the whole canvas even
+  // while visually hidden, so the always-available mode switch must sit above
+  // them to remain visible and clickable in BUILD as well as PLAY.
+  auto* modeToggle = new VoLumModeToggleControl(
+    IRECT(mainR - 238.f, b.T + 14.f, mainR - 126.f, b.T + 40.f),
+    [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
+  modeToggle->SetMode(mVolumUiMode);
+  pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
+
   _SyncVoLumExactEntry();
+  if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+    surface->Hide(mVolumUiMode != volum::UiMode::Play);
+  if (auto* preset = pGraphics->GetControlWithTag(kCtrlTagVoLumPresetBar))
+    preset->Hide(mVolumUiMode == volum::UiMode::Play);
+  if (mVolumUiMode == volum::UiMode::Play)
+    _VolumRefreshPlaySurface();
+  pGraphics->SetAllControlsDirty();
 
   // Keyboard: keep the original arrows, add a shallow PRE/AMP/POST focus layer.
   pGraphics->SetKeyHandlerFunc([this](const IKeyPress& key, bool isUp) {
     if (isUp)
       return false;
+    if (mVolumUiMode == volum::UiMode::Play)
+      return false; // hidden BUILD controls must not react to navigation shortcuts
 
     if (auto* pGfx = GetUI())
     {

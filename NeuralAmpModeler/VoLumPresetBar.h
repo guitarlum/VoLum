@@ -50,6 +50,7 @@ public:
     mName.clear();
     mEmpty = true;
     mDirtyEdit = false;
+    mFactory = false;
     SetDirty(false);
   }
 
@@ -60,10 +61,21 @@ public:
     mName = name ? name : "";
     mEmpty = mName.empty();
     mDirtyEdit = false;
+    mFactory = false;
     mIdx = -1;
     for (int i = 0; i < (int)mList.size(); i++)
       if (mList[(size_t)i] == mName)
         mIdx = i;
+    SetDirty(false);
+  }
+
+  void SelectAt(int index, const char* name, bool factory)
+  {
+    mName = name ? name : "";
+    mEmpty = mName.empty();
+    mDirtyEdit = false;
+    mIdx = (index >= 0 && index < static_cast<int>(mList.size())) ? index : -1;
+    mFactory = factory;
     SetDirty(false);
   }
 
@@ -95,6 +107,7 @@ public:
   const std::string& ActiveName() const { return mName; }
   // Whether the live rig has diverged from the recalled snapshot.
   bool IsEditDirty() const { return mDirtyEdit; }
+  bool IsFactoryActive() const { return mFactory; }
 
   // Open an inline text entry to name a new preset; on completion fires the
   // save-as callback. Used by the dropdown's "Save current as new..." row.
@@ -211,6 +224,7 @@ private:
     mName = mList[(size_t)mIdx];
     mEmpty = false;
     mDirtyEdit = false; // cycling to a stored preset is a clean recall
+    mFactory = false;
     SetDirty(false);
   }
 
@@ -220,6 +234,7 @@ private:
   std::string mName;
   bool mEmpty = true;
   bool mDirtyEdit = false;
+  bool mFactory = false;
   std::vector<std::string> mList;
   int mIdx = -1;
   OpenCallback mOpen;

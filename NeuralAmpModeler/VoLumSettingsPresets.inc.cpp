@@ -84,6 +84,16 @@ void NeuralAmpModeler::_VolumSyncPresetOwner()
   // file remembered the selection and this function threw it away. The baseline the
   // "(unsaved)" marker diffs against is then the preset's own stored content, which
   // is the same choice the DAW-chunk restore path makes.
+  if (mVolumCustomMainIdx < 0)
+    if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+        factory && factory->id == mVolumActivePresetId)
+    {
+      mVolumRecalledSnapshot = factory->settings;
+      mVolumRecalledSnapshotByOwner[key] = factory->settings;
+      mVolumHasRecalledSnapshot = true;
+      return;
+    }
+
   const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
   auto itBank = banks.find(key);
   if (itBank != banks.end())
@@ -113,18 +123,33 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
     return;
   volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
   auto* bar = pb->As<VoLumPresetBarControl>();
-  bar->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx)); // clears selection + dirty
+  const bool hasFactory = mVolumCustomMainIdx < 0
+    && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  std::vector<std::string> names;
+  if (hasFactory)
+    names.push_back(volum::kFactoryPresetDisplayName);
+  const auto users = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
+  names.insert(names.end(), users.begin(), users.end());
+  bar->SetList(names); // clears selection + dirty
 
   if (mVolumHasRecalledSnapshot && !mVolumActivePresetId.empty())
   {
+    if (hasFactory)
+      if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+          factory && factory->id == mVolumActivePresetId)
+      {
+        bar->SelectAt(0, volum::kFactoryPresetDisplayName, true);
+        _VolumRecomputePresetDirty();
+        return;
+      }
     const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
     auto it = banks.find(_VolumActiveOwnerKey());
     bool found = false;
     if (it != banks.end())
-      for (const auto& pr : it->second)
-        if (pr.id == mVolumActivePresetId)
+      for (int i = 0; i < static_cast<int>(it->second.size()); ++i)
+        if (const auto& pr = it->second[static_cast<size_t>(i)]; pr.id == mVolumActivePresetId)
         {
-          bar->SelectName(pr.name.c_str());
+          bar->SelectAt(i + (hasFactory ? 1 : 0), pr.name.c_str(), false);
           found = true;
           break;
         }
@@ -165,9 +190,35 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index)
 
 void NeuralAmpModeler::_VolumRecallPreset(int index)
 {
+  const bool hasFactory = mVolumCustomMainIdx < 0
+    && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  if (hasFactory && index == 0)
+  {
+    _VolumRecallFactoryPreset();
+    return;
+  }
+  _VolumRecallUserPreset(index - (hasFactory ? 1 : 0));
+}
+
+void NeuralAmpModeler::_VolumRecallUserPreset(int index)
+{
   _VolumClaimPresetOps();
+  if (index < 0 || index >= static_cast<int>(volum::custom::MockPresetsForAmp(mVolumAmpIdx).size()))
+    return;
   mVolumActivePresetId = volum::custom::PresetIdAt(index);
   volum::custom::RecallPreset(mVolumAmpIdx, index); // -> apply hook -> _VolumApplyRecalledPreset
+  _VolumRefreshPresetBar();
+}
+
+void NeuralAmpModeler::_VolumRecallFactoryPreset()
+{
+  if (mVolumCustomMainIdx >= 0)
+    return;
+  const auto* preset = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+  if (!preset)
+    return;
+  mVolumActivePresetId = preset->id;
+  _VolumApplyRecalledPreset(preset->settings);
   _VolumRefreshPresetBar();
 }
 

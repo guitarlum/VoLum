@@ -807,6 +807,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
+      mVolumUiMode = volum::UiModeFromString(idTail.uiMode);
     }
 
     // Scoped rather than assigned: UnserializeState now catches exceptions instead
