@@ -46,6 +46,7 @@
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
+#include "VoLumPack.h" // 1.3.0 .volumpack export / import
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -116,6 +117,8 @@ enum ECtrlTags
   kCtrlTagVoLumPresetMenu,
   kCtrlTagVoLumCustomOverlay,
   kCtrlTagVoLumConfirm,
+  // 1.3.0 Pack export/import
+  kCtrlTagVoLumPackOverlay,
   kNumCtrlTags
 };
 
@@ -457,6 +460,20 @@ public:
   // an id this instance is still playing has disappeared from the library. Called
   // on the next moment this instance needs that id.
   void _VolumRepairRigForMissingContent();
+
+  // --- Pack export / import (Gear -> Settings) ---------------------------------
+  // The Pack modal asks the questions; these three do the IO. Export/import
+  // return an error string for the modal's status line, or "" on success (and on a
+  // cancelled file dialog, which is not a failure).
+  std::string _VolumExportPack(const volum::pack::ExportSelection& selection);
+  volum::pack::PackContents _VolumPickPack();
+  std::string _VolumImportPack(const volum::pack::PackContents& pack, volum::pack::ImportVerb verb, bool alsoSettings);
+  // Library ids this instance's rig is playing, so an import preview can name what
+  // it would have to reload.
+  std::vector<std::string> _VolumSoundingLibraryIds() const;
+  // Lanes playing an id the import replaced move to the new payload rather than to
+  // the delete fallback: a confirmed replace is not a delete.
+  void _VolumReloadReplacedLibraryIds(const std::vector<std::string>& ids);
   // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,
   // and channel labels into the shared speaker row + channel stepper (display
   // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp

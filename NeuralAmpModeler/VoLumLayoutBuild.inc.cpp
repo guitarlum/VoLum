@@ -74,11 +74,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     ampNames[i] = volum::kAmps[i].displayName;
 
   const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
-  pGraphics->AttachControl(
-    new VoLumAmpListControl(
-      ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
-      [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
-    kCtrlTagVoLumAmpList);
+  pGraphics->AttachControl(new VoLumAmpListControl(ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
+                                                   [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
+                           kCtrlTagVoLumAmpList);
 
   // F6: populate the sidebar CUSTOM section (custom amps render as real list
   // entries below the factory amps) and wire its +/edit/delete affordances.
@@ -113,8 +111,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           (customIdx >= 0 && customIdx < (int)names.size()) ? names[(size_t)customIdx] : std::string();
         // Planned before the delete, while the amp still exists to be described,
         // and applied after it so the rig lands on content that is really there.
-        const std::string confirmBody = _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp,
-                                                               volum::custom::CustomAmpIdAt(customIdx), nm);
+        const std::string confirmBody =
+          _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp, volum::custom::CustomAmpIdAt(customIdx), nm);
         auto doDelete = [this, customIdx]() {
           volum::custom::RemoveCustomAmp(customIdx);
           // The sidebar has nowhere to show a message, unlike the Manage panel. At
@@ -1262,6 +1260,33 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
       // Shared "Are you sure?" modal, attached above the overlay.
       pGraphics->AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)->Hide(true);
+    }
+
+    // Pack export / import modal, opened from the Settings "Content library" row.
+    {
+      auto* pack = new VoLumPackOverlayControl(b);
+      pack->SetCallbacks([pPlugin](const volum::pack::ExportSelection& sel) { return pPlugin->_VolumExportPack(sel); },
+                         [pPlugin]() { return pPlugin->_VolumPickPack(); },
+                         [pPlugin, pack](volum::pack::ImportVerb verb, bool alsoSettings) {
+                           return pPlugin->_VolumImportPack(pack->OpenedPack(), verb, alsoSettings);
+                         });
+#if defined(APP_API)
+      pack->SetStandalone(true);
+#endif
+      pGraphics->AttachControl(pack, kCtrlTagVoLumPackOverlay)->Hide(true);
+
+      if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
+      {
+        settings->As<NAMSettingsPageControl>()->SetPackCallbacks(
+          [pPlugin, pack]() {
+            pack->SetSoundingIds(pPlugin->_VolumSoundingLibraryIds());
+            pack->ShowExport();
+          },
+          [pPlugin, pack]() {
+            pack->SetSoundingIds(pPlugin->_VolumSoundingLibraryIds());
+            pack->ShowImport();
+          });
+      }
     }
 
     // Metronome config overlay

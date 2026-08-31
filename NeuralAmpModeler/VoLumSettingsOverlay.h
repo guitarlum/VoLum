@@ -151,6 +151,79 @@ private:
   IActionFunction mCloseAction;
 };
 
+/** Content-library row: caption plus the Export Pack / Import Pack buttons.
+ *
+ * One control for both buttons so the Settings page grows by a single named child
+ * and one pair of callbacks. The Pack chrome itself is a separate modal
+ * (VoLumPackOverlayControl); this row only opens it. */
+class VoLumSettingsPackRowControl : public IControl
+{
+public:
+  VoLumSettingsPackRowControl(const IRECT& bounds, std::function<void()> onExport, std::function<void()> onImport)
+  : IControl(bounds)
+  , mOnExport(std::move(onExport))
+  , mOnImport(std::move(onImport))
+  {
+    mIgnoreMouse = false;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.DrawText(IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "Content library",
+               IRECT(mRECT.L, mRECT.T, mRECT.L + 130.f, mRECT.B));
+    const IRECT helpR(mRECT.L + 132.f, mRECT.T, _ExportRect().L - 10.f, mRECT.B);
+    g.PathClipRegion(helpR);
+    g.DrawText(IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Middle),
+               "Back up or share your custom content as a Pack", helpR);
+    g.PathClipRegion();
+    _DrawBtn(g, _ExportRect(), "Export Pack...", mHover == 1);
+    _DrawBtn(g, _ImportRect(), "Import Pack...", mHover == 2);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod&) override
+  {
+    if (_ExportRect().Contains(x, y) && mOnExport)
+      mOnExport();
+    else if (_ImportRect().Contains(x, y) && mOnImport)
+      mOnImport();
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod&) override
+  {
+    const int was = mHover;
+    mHover = _ExportRect().Contains(x, y) ? 1 : (_ImportRect().Contains(x, y) ? 2 : 0);
+    if (was != mHover)
+      SetDirty(false);
+  }
+
+  void OnMouseOut() override
+  {
+    mHover = 0;
+    SetDirty(false);
+  }
+
+private:
+  static constexpr float kBtnW = 116.f;
+  IRECT _ImportRect() const { return IRECT(mRECT.R - kBtnW, mRECT.T + 2.f, mRECT.R, mRECT.B - 2.f); }
+  IRECT _ExportRect() const
+  {
+    return IRECT(mRECT.R - 2.f * kBtnW - 8.f, mRECT.T + 2.f, mRECT.R - kBtnW - 8.f, mRECT.B - 2.f);
+  }
+
+  static void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool hover)
+  {
+    g.FillRoundRect(hover ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
+    g.DrawRoundRect(hover ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, hover ? 1.3f : 1.f);
+    g.DrawText(IText(11.5f, hover ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
+                     EVAlign::Middle),
+               label, r);
+  }
+
+  std::function<void()> mOnExport;
+  std::function<void()> mOnImport;
+  int mHover = 0;
+};
+
 class VoLumSettingsShortcutInfoControl : public IControl
 {
 public:

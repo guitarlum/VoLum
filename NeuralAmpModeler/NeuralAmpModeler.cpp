@@ -47,6 +47,7 @@
 #include "VoLumControls.h"
 #include "VoLumCustomUi.h"
 #include "VoLumCustomNamImport.h"
+#include "VoLumPackOverlay.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -2104,6 +2105,7 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
 #include "VoLumSceneRig.inc.cpp"
 #include "VoLumAmpMenus.inc.cpp"
 #include "VoLumRigRepair.inc.cpp"
+#include "VoLumPackActions.inc.cpp"
 
 // VoLum ProcessBlock helpers + async-loader + per-amp settings persistence.
 // Tail-included for file-size hygiene; all are part of this TU.

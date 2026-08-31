@@ -174,7 +174,11 @@ Custom names (amps, IRs, pedals, and presets) have sensible length limits so the
 
 ![VoLum custom pedal manager](user-guide-custom-pedal.png)
 
-The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library.
+The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library. Two VoLums may edit the library at the same time — the standalone app and one in your DAW, or two tracks — and each one only writes its own changes, so importing an IR in one window can no longer be undone by the other window saving a preset.
+
+Deleting something that is currently playing moves that lane in the same action, in the window you deleted it in: a deleted main amp falls back to the factory amp shown in the list, a deleted pedal leaves its PRE slot empty, a deleted IR returns to the amp's built-in cabinet, and a deleted preset is forgotten. The confirmation tells you what is playing and where it will go before you agree. Another open VoLum keeps playing what it already has until it next needs the deleted item.
+
+See [Content Library Packs](#content-library-packs) for moving a library to another machine or sharing part of it.
 
 ## Tuner And Metronome
 
@@ -224,6 +228,29 @@ The Calibrate switch and dBu value are machine-global startup defaults. A direct
 The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE NAM pedals, the main amp, and the dual-amp support lane. Lite does not change the separate Pitch/Octaver DSP, so bypass Pitch/Octaver or use a larger audio buffer if that effect is the CPU bottleneck.
 
 Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
+
+### Content Library Packs
+
+![VoLum Pack import preview](user-guide-pack-import.png)
+
+The **Content library** row in Settings has **Export Pack...** and **Import Pack...**. A Pack is one `.volumpack` file holding the custom amps, IRs, pedals, and presets you chose together with their capture files, so you can back up your library, move it to another machine, or hand part of it to somebody else.
+
+**Export** offers two scopes:
+
+- **Everything** — the whole library. In the standalone app it also carries your machine settings and MIDI slots.
+- **Selected amps and presets** — tick what should travel. A ticked amp brings its preset bank with it, and every IR, pedal, and dual-amp partner those presets need is added for you and listed under the box ("Also including: ..."). You cannot untick a requirement: a Pack that referenced content it did not carry would import as a broken amp. A preset on a *factory* amp brings its custom IR and pedal but no amp entry, because the factory capture already ships with VoLum.
+
+**Import** shows what would happen before anything changes: what is added, what is replaced, what shares a name with something you already have (both are kept — names are labels, ids are identity), and what your rig is playing right now and would therefore reload. An Everything Pack additionally offers three ways to resolve conflicts:
+
+- **Overwrite** — the Pack wins where the two disagree; anything of yours the Pack does not mention stays.
+- **Add** — yours wins where the two disagree; only genuinely new items are added.
+- **Reset** — the Pack replaces your library; items not in it are deleted.
+
+A Pack somebody shared with you merges by id like Overwrite and does not offer Reset, so a Pack from a friend can never wipe your collection.
+
+**Also restore machine settings** is a separate tick box, only offered in the standalone app and only for an Everything Pack. It restores the last amp, per-amp knob positions, Lite mode, input calibration, and MIDI slots. Plug-ins never write those, so they never offer the box either.
+
+The import happens in one step. Your previous library is kept beside the new one as `volum-content.json.pre-import.bak`, a damaged or truncated Pack changes nothing at all, and a Pack written by a newer VoLum than yours is refused by name instead of being half-read. PRE slot numbers are local to your machine, so an imported pedal whose slot is already taken is renumbered and the Pack's own presets follow it.
 
 ### Standalone Audio Settings
 

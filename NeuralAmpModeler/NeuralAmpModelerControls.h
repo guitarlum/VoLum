@@ -1086,6 +1086,23 @@ public:
     (void)inner.ReduceFromBottom(12.f);
     const IRECT sepRow = inner.ReduceFromBottom(1.f);
     AddNamedChildControl(new VoLumSettingsFooterSepControl(sepRow), mControlNames.footerSep);
+    (void)inner.ReduceFromBottom(10.f);
+
+    // Content library: Export Pack / Import Pack. A full-width row rather than a
+    // fourth card, because a Pack is about the whole library, not one of the three
+    // per-instance settings the cards hold.
+    const IRECT packRow = inner.ReduceFromBottom(26.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
+    AddNamedChildControl(new VoLumSettingsPackRowControl(
+                           packRow,
+                           [this]() {
+                             if (mOnExportPack)
+                               mOnExportPack();
+                           },
+                           [this]() {
+                             if (mOnImportPack)
+                               mOnImportPack();
+                           }),
+                         mControlNames.packRow);
     (void)inner.ReduceFromBottom(14.f);
 
     // ---- Card row: Input calibration | Output mode | Performance ----
@@ -1224,6 +1241,14 @@ public:
     modelInfoControl->SetCurrentLatency(report);
   }
 
+  // The Content library row only opens the Pack modal; the plugin owns the file
+  // dialogs and the import, so it hands its two entry points down here.
+  void SetPackCallbacks(std::function<void()> onExport, std::function<void()> onImport)
+  {
+    mOnExportPack = std::move(onExport);
+    mOnImportPack = std::move(onImport);
+  }
+
   // Keep the input-calibration card's status line and tooltip in step with whether
   // the loaded model can actually be calibrated against.
   void SetInputCalibrationAvailable(bool available)
@@ -1246,6 +1271,8 @@ private:
   ISVG mCloseSVG;
   int mAnimationTime = 200;
   bool mWillHide = false;
+  std::function<void()> mOnExportPack;
+  std::function<void()> mOnImportPack;
 
   // Names for controls
   // Make sure that these are all unique and that you use them with AddNamedChildControl
@@ -1271,6 +1298,7 @@ private:
     const std::string perfHelp = "PerfHelp";
     const std::string inputHelp = "InputHelp";
     const std::string audioHint = "AudioHint";
+    const std::string packRow = "PackRow";
   } mControlNames;
 
   class InputLevelControl : public IEditableTextControl
