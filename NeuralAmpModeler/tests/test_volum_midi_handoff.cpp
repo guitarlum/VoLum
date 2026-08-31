@@ -42,20 +42,20 @@ TEST_CASE("MIDI sound map assigns reassigns clears and round-trips")
 {
   using namespace volum::content;
   Registry registry;
-  volum::AssignMidiSound(registry.midiSoundMap, {5, "factory:7", "preset_lead"});
-  volum::AssignMidiSound(registry.midiSoundMap, {6, "factory:7", "factory:7:v1"});
-  volum::AssignMidiSound(registry.midiSoundMap, {5, "factory:2", "preset_clean"});
+  REQUIRE(AssignMidiSound(registry, 5, "factory:7", "preset_lead"));
+  REQUIRE(AssignMidiSound(registry, 6, "factory:7", "factory:7:v1"));
+  REQUIRE(AssignMidiSound(registry, 5, "factory:2", "preset_clean"));
 
   REQUIRE(registry.midiSoundMap.size() == 2);
-  CHECK(registry.midiSoundMap[0].slot == 5);
-  CHECK(registry.midiSoundMap[0].ampId == "factory:2");
-  CHECK(volum::ClearMidiSound(registry.midiSoundMap, 6));
-  CHECK_FALSE(volum::ClearMidiSound(registry.midiSoundMap, 6));
+  REQUIRE(registry.midiSoundMap.count(5) == 1);
+  CHECK(registry.midiSoundMap.at(5).ampId == "factory:2"); // reassigned in place
+  CHECK(ClearMidiSound(registry, 6));
+  CHECK_FALSE(ClearMidiSound(registry, 6));
 
   const Registry loaded = RegistryFromJson(RegistryToJson(registry));
   REQUIRE(loaded.midiSoundMap.size() == 1);
-  CHECK(loaded.midiSoundMap[0].slot == 5);
-  CHECK(loaded.midiSoundMap[0].presetId == "preset_clean");
+  REQUIRE(loaded.midiSoundMap.count(5) == 1);
+  CHECK(loaded.midiSoundMap.at(5).presetId == "preset_clean");
 }
 
 TEST_CASE("Headless MIDI resolution applies assigned factory and custom User presets")
@@ -68,7 +68,7 @@ TEST_CASE("Headless MIDI resolution applies assigned factory and custom User pre
   factoryPreset.name = "Lead";
   factoryPreset.settings.toneBass = 8.25;
   registry.presetBanks["factory:7"] = {factoryPreset};
-  volum::AssignMidiSound(registry.midiSoundMap, {12, "factory:7", factoryPreset.id});
+  REQUIRE(AssignMidiSound(registry, 12, "factory:7", factoryPreset.id));
 
   volum::custom::CustomAmp customAmp;
   customAmp.id = "amp_custom";
@@ -79,7 +79,7 @@ TEST_CASE("Headless MIDI resolution applies assigned factory and custom User pre
   customPreset.name = "Clean";
   customPreset.settings.outputLevel = -4.5;
   registry.presetBanks[customAmp.id] = {customPreset};
-  volum::AssignMidiSound(registry.midiSoundMap, {13, customAmp.id, customPreset.id});
+  REQUIRE(AssignMidiSound(registry, 13, customAmp.id, customPreset.id));
 
   const auto factory = ResolveMidiSound(registry, 12);
   REQUIRE(factory.has_value());
@@ -97,9 +97,9 @@ TEST_CASE("Headless MIDI resolution ignores unassigned missing invalid and out-o
 {
   using namespace volum::content;
   Registry registry;
-  volum::AssignMidiSound(registry.midiSoundMap, {2, "factory:99", "preset_missing_amp"});
-  volum::AssignMidiSound(registry.midiSoundMap, {3, "factory:2", "preset_missing"});
-  volum::AssignMidiSound(registry.midiSoundMap, {4, "amp_deleted", "preset_deleted"});
+  REQUIRE(AssignMidiSound(registry, 2, "factory:99", "preset_missing_amp"));
+  REQUIRE(AssignMidiSound(registry, 3, "factory:2", "preset_missing"));
+  REQUIRE(AssignMidiSound(registry, 4, "amp_deleted", "preset_deleted"));
 
   CHECK_FALSE(ResolveMidiSound(registry, -1).has_value());
   CHECK_FALSE(ResolveMidiSound(registry, 128).has_value());

@@ -48,6 +48,7 @@
 #include "VoLumCustomUi.h"
 #include "VoLumCustomNamImport.h"
 #include "VoLumPlaySurface.h"
+#include "VoLumPackOverlay.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -513,7 +514,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       if (!contentDir.empty())
       {
         volum::content::GlobalContentStore().SetBaseDir(contentDir);
-        volum::content::GlobalContentStore().Load();
+        // EnsureLoaded, not Load: the store is process-global, so a second track's
+        // constructor re-reading the file used to wipe a live sibling's unflushed
+        // catalog - an import or a preset that had not reached disk yet simply
+        // disappeared, and the next save persisted the version without it.
+        volum::content::GlobalContentStore().EnsureLoaded();
         // One-time: auto-normalize the trim of any pre-1.2.1 IR (no stored trim)
         // so previously-imported custom IRs stop landing ~18 dB below stock cabs.
         _VolumMigrateIrTrims();
@@ -1088,16 +1093,12 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // pattern in this file's const dirty-checks (_VolumIsPreDirty/_VolumIsPostDirty).
   if (mVolumInitComplete)
   {
+    // A focused custom amp's scene used to live in the shared content library, so
+    // this had to flush the store to disk to keep live knob edits - and that write
+    // was also what let one instance's catalog save move another's knobs. The scene
+    // rides in the id tail below now (like a factory amp's per-amp block), so the
+    // project carries it and the library is not touched by a host state-save.
     const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();
-    // A focused custom amp keeps its scene in the shared content library (only
-    // its id lives in the chunk), so the tweak just written to customScenes[id]
-    // by _VolumSaveCurrentToSettings is in-memory only. In a DAW/plugin the
-    // content store is otherwise flushed to disk only on content CRUD, so live
-    // custom-amp knob edits would be lost on host restart. Flush here (host
-    // state-save) so they survive. Factory scenes are fully in the chunk and
-    // need no flush; guard on the custom focus to avoid disk I/O otherwise.
-    if (mVolumCustomMainIdx >= 0)
-      volum::content::GlobalContentStore().Save();
   }
 
   WDL_String header("###NeuralAmpModeler###"); // Don't change this!
@@ -1209,6 +1210,9 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     idTail.lockedPostDelay = delayTailFromSettings(mVolumLiveLockedPost);
     idTail.lockedPostChorus = chorusTailFromSettings(mVolumLiveLockedPost);
   }
+  // 1.3.0: the focused custom amp's live knobs travel with the project, not with
+  // the shared library. Only ids this instance has actually touched are written.
+  idTail.customScenes = mVolumCustomScenes;
   volum::PutChunkIdTail(chunk, idTail);
 
   return ok;
@@ -2185,6 +2189,8 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
 #include "VoLumSceneRig.inc.cpp"
 #include "VoLumAmpMenus.inc.cpp"
 #include "VoLumPlayRuntime.inc.cpp"
+#include "VoLumRigRepair.inc.cpp"
+#include "VoLumPackActions.inc.cpp"
 
 // VoLum ProcessBlock helpers + async-loader + per-amp settings persistence.
 // Tail-included for file-size hygiene; all are part of this TU.

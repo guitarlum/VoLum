@@ -1233,7 +1233,17 @@ public:
     {
       const IRECT cardBody = _AddCard(kTabSystem, packCard, "Content library", mControlNames.packGroupFrame,
                                       mControlNames.packSection, EAlign::Near);
-      _Reg(kTabSystem, AddNamedChildControl(new VoLumSettingsPackRowControl(cardBody), mControlNames.packRow));
+      _Reg(kTabSystem, AddNamedChildControl(new VoLumSettingsPackRowControl(
+                                             cardBody,
+                                             [this]() {
+                                               if (mOnExportPack)
+                                                 mOnExportPack();
+                                             },
+                                             [this]() {
+                                               if (mOnImportPack)
+                                                 mOnImportPack();
+                                             }),
+                                           mControlNames.packRow));
     }
     {
       // Byte escapes, not \u: this file's narrow-literal charset is not UTF-8, so
@@ -1337,6 +1347,14 @@ public:
     modelInfoControl->SetCurrentLatency(report);
   }
 
+  // The Content library row only opens the Pack modal; the plugin owns the file
+  // dialogs and the import, so it hands its two entry points down here.
+  void SetPackCallbacks(std::function<void()> onExport, std::function<void()> onImport)
+  {
+    mOnExportPack = std::move(onExport);
+    mOnImportPack = std::move(onImport);
+  }
+
   // Keep the input-calibration card's status line and tooltip in step with whether
   // the loaded model can actually be calibrated against.
   void SetInputCalibrationAvailable(bool available)
@@ -1372,6 +1390,8 @@ private:
   ISVG mCloseSVG;
   int mAnimationTime = 200;
   bool mWillHide = false;
+  std::function<void()> mOnExportPack;
+  std::function<void()> mOnImportPack;
 
   // Names for controls
   // Make sure that these are all unique and that you use them with AddNamedChildControl

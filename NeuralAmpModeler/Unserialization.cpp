@@ -830,6 +830,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
       mVolumUiMode = volum::UiModeFromString(idTail.uiMode);
+      // 1.3.0: the project's own custom-amp scenes. Installed before the custom
+      // re-focus below, which reads them through _VolumCustomScene. An older chunk
+      // has none, and the first focus then migrates whatever the pre-1.3.0 shared
+      // library still holds for that amp.
+      if (!idTail.customScenes.empty())
+        mVolumCustomScenes = idTail.customScenes;
     }
 
     // Scoped rather than assigned: UnserializeState now catches exceptions instead

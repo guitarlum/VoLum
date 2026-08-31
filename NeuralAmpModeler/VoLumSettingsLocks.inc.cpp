@@ -91,15 +91,15 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
 
 void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 {
-  // A focused custom amp (F6) keeps its own scene in the content library, keyed
-  // by its stable id. Redirect the live snapshot there so we never clobber the
-  // underlying factory amp slot (mVolumAmpIdx) while a custom amp is active.
+  // A focused custom amp (F6) keeps its own scene on this instance, keyed by its
+  // stable id. Redirect the live snapshot there so we never clobber the underlying
+  // factory amp slot (mVolumAmpIdx) while a custom amp is active.
   volum::VoLumAmpSettings* target = &mVolumAmpSettings[mVolumAmpIdx];
   if (mVolumCustomMainIdx >= 0)
   {
     const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
     if (!id.empty())
-      target = &volum::content::GlobalContentStore().reg().customScenes[id];
+      target = &_VolumCustomScene(id);
   }
   auto& s = *target;
   s.speakerIdx = mVolumSpeakerIdx;

@@ -50,14 +50,14 @@ TEST_CASE("midiSoundMap is ordered, replaceable, clearable, and persistent")
   CHECK(volum::content::AssignMidiSound(registry, 3, "factory:1", "factory:1:v1"));
   CHECK(volum::content::AssignMidiSound(registry, 12, "factory:4", "factory:4:v1"));
   REQUIRE(registry.midiSoundMap.size() == 2);
-  CHECK(registry.midiSoundMap[0].slot == 3);
-  CHECK(registry.midiSoundMap[1].slot == 12);
-  CHECK(registry.midiSoundMap[1].ampId == "factory:4");
+  CHECK(registry.midiSoundMap.count(3) == 1);
+  CHECK(registry.midiSoundMap.count(12) == 1);
+  CHECK(registry.midiSoundMap.at(12).ampId == "factory:4"); // reassigned, not appended
 
   const auto restored = volum::content::RegistryFromJson(volum::content::RegistryToJson(registry));
   REQUIRE(restored.midiSoundMap.size() == 2);
-  CHECK(restored.midiSoundMap[0].slot == 3);
-  CHECK(restored.midiSoundMap[1].presetId == "factory:4:v1");
+  CHECK(restored.midiSoundMap.count(3) == 1);
+  CHECK(restored.midiSoundMap.at(12).presetId == "factory:4:v1");
 
   CHECK(volum::content::ClearMidiSound(registry, 3));
   CHECK_FALSE(volum::content::ClearMidiSound(registry, 3));

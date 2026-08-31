@@ -12,6 +12,7 @@
 // only adds the small main-amp core block + the two id strings, so the field
 // list stays in lock-step with the rest of the settings code.
 
+#include <map>
 #include <string>
 
 #include "VoLumUserSettingsIO.h"
@@ -98,6 +99,46 @@ inline bool AmpSettingsFromJson(const nlohmann::json& a, VoLumAmpSettings& s)
 inline bool AmpSettingsEqual(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
 {
   return AmpSettingsToJson(a) == AmpSettingsToJson(b);
+}
+
+// ---------------------------------------------------------------------------
+// Per-instance custom-amp scenes (1.3.0)
+// ---------------------------------------------------------------------------
+//
+// Until 1.3.0 a focused custom amp's live knobs lived in the shared content
+// library ("customScenes"), which made every catalog write a rewrite of every
+// other instance's sounding rig: saving a preset in one DAW track could move the
+// knobs on another. Custom amps behave like factory amps now - the scene belongs
+// to the VoLum instance, so it travels in the DAW chunk (id tail) and, for the
+// standalone, in volum-settings.json.
+//
+// Keyed by custom-amp library id. One codec for both carriers so a scene written
+// by the standalone and one restored from a project cannot drift apart.
+inline nlohmann::json CustomScenesToJson(const std::map<std::string, VoLumAmpSettings>& byAmpId)
+{
+  nlohmann::json j = nlohmann::json::object();
+  for (const auto& entry : byAmpId)
+    if (!entry.first.empty())
+      j[entry.first] = AmpSettingsToJson(entry.second);
+  return j;
+}
+
+// Tolerant: a wrong-typed entry is dropped rather than failing the load, because
+// the cost of refusing is every other scene in the file.
+inline std::map<std::string, VoLumAmpSettings> CustomScenesFromJson(const nlohmann::json& j)
+{
+  std::map<std::string, VoLumAmpSettings> out;
+  if (!j.is_object())
+    return out;
+  for (auto it = j.begin(); it != j.end(); ++it)
+  {
+    if (it.key().empty() || !it.value().is_object())
+      continue;
+    VoLumAmpSettings s;
+    AmpSettingsFromJson(it.value(), s);
+    out[it.key()] = s;
+  }
+  return out;
 }
 
 } // namespace volum

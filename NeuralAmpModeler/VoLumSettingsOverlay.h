@@ -288,6 +288,88 @@ private:
   IActionFunction mCloseAction;
 };
 
+/** Content-library row: the Export Pack / Import Pack pair on the SYSTEM tab.
+ *
+ * One control for both buttons so the Settings page grows by a single named child
+ * and one pair of callbacks. The Pack chrome itself is a separate modal
+ * (VoLumPackOverlayControl); this row only opens it.
+ *
+ * No caption of its own: the SYSTEM card that hosts this control already caps it
+ * with "Content library". */
+class VoLumSettingsPackRowControl : public IControl
+{
+public:
+  VoLumSettingsPackRowControl(const IRECT& bounds, std::function<void()> onExport, std::function<void()> onImport)
+  : IControl(bounds)
+  , mOnExport(std::move(onExport))
+  , mOnImport(std::move(onImport))
+  {
+    mIgnoreMouse = false;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    _DrawBtn(g, _ExportRect(), "Export Pack...", mHover == 1);
+    _DrawBtn(g, _ImportRect(), "Import Pack...", mHover == 2);
+
+    const IText help(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Top);
+    const float helpT = mRECT.T + kRowH + 8.f;
+    g.DrawText(help, "Back up, move or share your custom", IRECT(mRECT.L, helpT, mRECT.R, helpT + 14.f));
+    g.DrawText(help, "amps, presets, IRs and pedals as a Pack.",
+               IRECT(mRECT.L, helpT + 13.f, mRECT.R, helpT + 27.f));
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod&) override
+  {
+    if (_ExportRect().Contains(x, y) && mOnExport)
+      mOnExport();
+    else if (_ImportRect().Contains(x, y) && mOnImport)
+      mOnImport();
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod&) override
+  {
+    const int was = mHover;
+    mHover = _ExportRect().Contains(x, y) ? 1 : (_ImportRect().Contains(x, y) ? 2 : 0);
+    if (was != mHover)
+      SetDirty(false);
+  }
+
+  void OnMouseOut() override
+  {
+    mHover = 0;
+    SetDirty(false);
+  }
+
+private:
+  // The two buttons share the card's width so they read as one pair, with the
+  // help lines underneath. The card body is ~64 px tall, so the row cannot also
+  // hold a caption; the card's own cap supplies it.
+  static constexpr float kRowH = 28.f;
+  static constexpr float kBtnGap = 10.f;
+  IRECT _ExportRect() const
+  {
+    return IRECT(mRECT.L, mRECT.T, mRECT.L + (mRECT.W() - kBtnGap) * 0.5f, mRECT.T + kRowH);
+  }
+  IRECT _ImportRect() const
+  {
+    return IRECT(mRECT.R - (mRECT.W() - kBtnGap) * 0.5f, mRECT.T, mRECT.R, mRECT.T + kRowH);
+  }
+
+  static void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool hover)
+  {
+    g.FillRoundRect(hover ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
+    g.DrawRoundRect(hover ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, hover ? 1.3f : 1.f);
+    g.DrawText(IText(11.5f, hover ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
+                     EVAlign::Middle),
+               label, r);
+  }
+
+  std::function<void()> mOnExport;
+  std::function<void()> mOnImport;
+  int mHover = 0;
+};
+
 class VoLumSettingsShortcutInfoControl : public IControl
 {
 public:

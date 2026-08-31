@@ -40,12 +40,11 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
     return;
   }
 
-  // Reading the bank is an owner-keyed operation too: MockPresetsForAmp ignores its
-  // ampIdx and indexes through the process-global key, so without a claim this menu
-  // can list another instance's presets - and the row the user then picks is applied
-  // as a bare index into this instance's bank.
-  _VolumClaimPresetOps();
-  const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
+  // Reading the bank is an owner-keyed operation too, so name the owner: indexing
+  // through the ambient process-global key let this menu list another instance's
+  // presets, and the row the user then picked was applied as a bare index into
+  // this instance's bank.
+  const auto presets = volum::custom::PresetsForOwner(_VolumClaimPresetOps());
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();

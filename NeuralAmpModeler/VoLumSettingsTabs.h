@@ -9,9 +9,9 @@
 // - VoLumSettingsTabStripControl: the segmented tab selector under the title.
 // - VoLumMidiChannelControl: channel-only MIDI row. The Sound assignment list
 //   lives in PLAY (.scratch/midi-control/spec.md); Settings keeps the channel.
-// - VoLumSettingsPackRowControl: the designed, inert Content library row that
-//   reserves the Export/Import Pack slot (.scratch/pack/spec.md) on a branch
-//   where Pack IO is not merged.
+//
+// The SYSTEM tab's Content library row (VoLumSettingsPackRowControl) lives in
+// VoLumSettingsOverlay.h, next to the Pack modal it opens.
 //
 // Split out of VoLumSettingsOverlay.h, which already owns the panel shell.
 
@@ -216,42 +216,4 @@ private:
   int mChannel = 0;
   int mHover = kHoverNone;
   ChannelCallback mCallback;
-};
-
-/** Content library row: the Export/Import Pack slot, drawn as an explicitly
- * disabled pair so the layout is final before Pack IO merges. Ignores the
- * mouse on purpose - a button that looks live and does nothing is worse than
- * one that says it is not ready. */
-class VoLumSettingsPackRowControl : public IControl
-{
-public:
-  explicit VoLumSettingsPackRowControl(const IRECT& bounds)
-  : IControl(bounds)
-  {
-    mIgnoreMouse = true;
-  }
-
-  void Draw(IGraphics& g) override
-  {
-    const IRECT row = mRECT.GetFromTop(28.f);
-    const float w = (row.W() - 10.f) * 0.5f;
-    const IRECT exportR(row.L, row.T, row.L + w, row.B);
-    const IRECT importR(row.R - w, row.T, row.R, row.B);
-    const IColor ghost = VoLumColors::TEAL_DIM.WithOpacity(0.35f);
-    const IText label(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.55f), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    for (const IRECT& button : {exportR, importR})
-    {
-      g.FillRoundRect(IColor(255, 10, 13, 18), button, 3.f);
-      g.DrawRoundRect(ghost, button, 3.f);
-    }
-    // Byte escapes, not \u: the narrow-literal charset here is not UTF-8, so a
-    // \u2026 ellipsis came out as one invalid byte and truncated the label.
-    g.DrawText(label, "Export Pack\xE2\x80\xA6", exportR);
-    g.DrawText(label, "Import Pack\xE2\x80\xA6", importR);
-
-    const IText help(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.72f), "Josefin-Sans", EAlign::Near, EVAlign::Top);
-    g.DrawText(help, "Move your amps, presets, IRs and pedals between machines.",
-               IRECT(mRECT.L, row.B + 8.f, mRECT.R, row.B + 22.f));
-    g.DrawText(help, "Not enabled in this build.", IRECT(mRECT.L, row.B + 21.f, mRECT.R, row.B + 35.f));
-  }
 };

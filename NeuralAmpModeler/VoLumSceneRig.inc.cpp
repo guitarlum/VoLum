@@ -303,18 +303,36 @@ void NeuralAmpModeler::_VolumMarkPresetDirty()
   _VolumRecomputePresetDirty();
 }
 
-void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx)
+// Select a factory amp exactly as clicking its sidebar row does: snapshot the
+// outgoing lane, drop any custom MAIN focus, restore *this instance's* saved scene
+// for that amp, reload the capture, and re-derive the chrome.
+//
+// Extracted from the sidebar callback because a delete of the custom amp that is
+// currently playing has to land on the same state. Reproducing half of it inline
+// was the delete-while-playing bug: the chrome said the factory amp while the audio
+// thread still ran the deleted capture, because nothing set mVolumNeedsLoad.
+//
+// snapshotOutgoing=false is the delete path. A delete has no lane to snapshot: the
+// custom amp the live knobs belong to is gone, and folding them into the factory
+// slot on the way out would overwrite the knobs the user actually left on that
+// factory amp - the revert is supposed to restore those, not replace them.
+void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx, bool snapshotOutgoing)
 {
   if (ampIdx < 0 || ampIdx >= volum::kAmpCount)
     return;
-  if (mVolumInitComplete)
+
+  if (snapshotOutgoing)
     _VolumSaveCurrentToSettings();
   mVolumAmpIdx = ampIdx;
-  mVolumCustomMainIdx = -1;
+  mVolumCustomMainIdx = -1; // back on a factory amp
   _VolumRestoreFromSettings(ampIdx);
   _VolumRefreshChannels();
   mVolumNeedsLoad.store(true);
 #ifdef APP_API
+  // Coalesce the disk write: OnIdle() flushes mVolumSettingsDirty. Writing
+  // synchronously here serialized all amps + dual-amp state and atomically wrote
+  // two JSON files on every selection, which stalled the UI thread (very visible
+  // on held arrow-key repeats).
   mVolumSettingsDirty = true;
 #endif
 
@@ -335,7 +353,19 @@ void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx)
     heroCtrl->SetPlaceholder(ph, ampIdx);
     heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
   }
+  // Re-derive the whole cab row for this factory amp, rather than only restoring
+  // its labels. A custom amp leaves behind more than names: on a gain stage with no
+  // DIRECT capture it greys out No Cab and Custom IR, and those two flags are
+  // written nowhere else. Coming back to a factory amp - which always ships a raw
+  // DIRECT capture - left both buttons disabled and swallowing clicks until the
+  // window was closed and reopened.
   _VolumApplyFocusedLaneCabs();
+
+  if (auto* alCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+  {
+    auto* list = alCtrl->As<VoLumAmpListControl>();
+    list->SetSelected(ampIdx); // also clears any custom selection
+  }
 
   if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
   {
@@ -369,7 +399,7 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   _VolumSyncPresetOwner();
   const std::string ampId = volum::custom::CustomAmpIdAt(customIdx);
   if (!ampId.empty())
-    _VolumApplyAmpSettings(volum::content::GlobalContentStore().reg().customScenes[ampId]);
+    _VolumApplyAmpSettings(_VolumCustomScene(ampId));
 
   auto* pGfx = GetUI();
   if (!pGfx)
@@ -540,13 +570,38 @@ void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, bool support
       stepper->As<VoLumChannelStepControl>()->SetChannels(labels, sel);
 }
 
+// This instance's live scene for one custom amp. Lazily seeded from a pre-1.3.0
+// library's shared customScenes so upgrading does not reset the knobs, and from
+// the amp's factory-default settings otherwise (first focus).
+//
+// Draining the migration entry rather than copying it is deliberate: the library
+// stops writing that map, so leaving it in place would let a later focus of the
+// same amp pull stale pre-upgrade knobs over what the user has since done.
+volum::VoLumAmpSettings& NeuralAmpModeler::_VolumCustomScene(const std::string& ampId)
+{
+  const auto existing = mVolumCustomScenes.find(ampId);
+  if (existing != mVolumCustomScenes.end())
+    return existing->second;
+
+  auto& legacy = volum::content::GlobalContentStore().reg().legacyCustomScenes;
+  const auto migrated = legacy.find(ampId);
+  if (migrated != legacy.end())
+  {
+    auto& scene = mVolumCustomScenes[ampId];
+    scene = migrated->second;
+    legacy.erase(migrated);
+    return scene;
+  }
+  return mVolumCustomScenes[ampId];
+}
+
 volum::VoLumAmpSettings& NeuralAmpModeler::_VolumActiveScene()
 {
   if (mVolumCustomMainIdx >= 0)
   {
     const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
     if (!id.empty())
-      return volum::content::GlobalContentStore().reg().customScenes[id];
+      return _VolumCustomScene(id);
   }
   return mVolumAmpSettings[mVolumAmpIdx];
 }

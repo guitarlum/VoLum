@@ -28,8 +28,10 @@
 // custom MAIN / SUPPORT amp ids and the active preset id for the focused amp.
 
 #include <algorithm>
+#include <map>
 #include <string>
 
+#include "VoLumAmpSettingsJson.h" // CustomScenesToJson / CustomScenesFromJson
 #include "VoLumAmpeteCatalog.h"
 
 #if __has_include(<nlohmann/json.hpp>)
@@ -58,9 +60,12 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // appended sync/division pair needs the tail. Informational only.
 // Schema 6 (1.3.0): MIDI per-instance input channel (`midiCh`, 0=Omni, 1..16),
 // PLAY/BUILD mode (`uiMode`), per-amp POST Chorus (`cho`) and the live-locked
-// POST chorus snapshot (`lockedPostChorus`). Chorus EParams sit past the frozen
-// 1.2.2 chunk prefix, so the tail is the ONLY place its saved values travel -
-// never as extra prefix doubles. Informational only.
+// POST chorus snapshot (`lockedPostChorus`), plus "customScenes", the
+// focused-custom-amp live knobs that used to live in the shared content library
+// and belong to the project now, the same way a factory amp's scene does.
+// Chorus EParams sit past the frozen 1.2.2 chunk prefix, so the tail is the ONLY
+// place its saved values travel - never as extra prefix doubles.
+// Informational only.
 inline constexpr int kVoLumIdTailSchema = 6;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
@@ -159,6 +164,9 @@ struct ChunkIdTail
   DelayTail lockedPostDelay; // live-locked POST delay sync snapshot (present iff POST locked + written)
   ChorusTail perAmpChorus[kAmpCount]; // factory amp -> POST Chorus pedal settings
   ChorusTail lockedPostChorus; // live-locked POST chorus snapshot (present iff POST locked + written)
+  // 1.3.0: this instance's live scene per custom amp id. Previously shared through
+  // the content library, where one instance's catalog write moved another's knobs.
+  std::map<std::string, VoLumAmpSettings> customScenes;
 
   ChunkIdTail()
   {
@@ -408,6 +416,10 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
     j["lockedPostDelay"] = DelayTailToJson(t.lockedPostDelay);
   if (t.lockedPostChorus.present)
     j["lockedPostChorus"] = ChorusTailToJson(t.lockedPostChorus);
+  // Omitted entirely when this project never focused a custom amp, so a chunk
+  // written on factory amps is byte-identical to a 1.2.x one apart from the schema.
+  if (!t.customScenes.empty())
+    j["customScenes"] = CustomScenesToJson(t.customScenes);
   return j;
 }
 
@@ -464,6 +476,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
     t.lockedPostDelay = DelayTailFromJson(j["lockedPostDelay"]);
   if (j.contains("lockedPostChorus"))
     t.lockedPostChorus = ChorusTailFromJson(j["lockedPostChorus"]);
+  if (j.contains("customScenes"))
+    t.customScenes = CustomScenesFromJson(j["customScenes"]);
   return t;
 }
 

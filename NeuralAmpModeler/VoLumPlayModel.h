@@ -157,20 +157,20 @@ inline std::vector<PlaySlot> BuildPlaySlots(const std::vector<FactoryPreset>& fa
 {
   std::vector<PlaySlot> out;
   out.reserve(registry.midiSoundMap.size());
-  for (const auto& assignment : registry.midiSoundMap)
+  // The registry keys the map by slot, so iteration is already in slot order.
+  for (const auto& kv : registry.midiSoundMap)
   {
     PlaySlot slot;
-    slot.slot = assignment.slot;
-    slot.valid = ResolveSound(factoryPresets, registry, assignment.ampId, assignment.presetId, slot.sound);
+    slot.slot = kv.first;
+    slot.valid = ResolveSound(factoryPresets, registry, kv.second.ampId, kv.second.presetId, slot.sound);
     if (!slot.valid)
     {
-      slot.sound.ampId = assignment.ampId;
-      slot.sound.presetId = assignment.presetId;
+      slot.sound.ampId = kv.second.ampId;
+      slot.sound.presetId = kv.second.presetId;
       slot.sound.presetName = "Invalid slot";
     }
     out.push_back(std::move(slot));
   }
-  std::sort(out.begin(), out.end(), [](const PlaySlot& a, const PlaySlot& b) { return a.slot < b.slot; });
   return out;
 }
 

@@ -196,7 +196,11 @@ Namen für eigene Inhalte (Amps, IRs, Pedale und Presets) haben sinnvolle Länge
 
 ![VoLum Verwaltung eigener Pedale](user-guide-custom-pedal.png)
 
-Die Inhaltsbibliothek wird von allen geöffneten Instanzen und Spuren geteilt. In einer DAW speichert das Projekt stabile Referenzen (IDs) auf deine eigenen Amps, IRs, Pedale und das aktive Preset, sodass das erneute Öffnen eines Projekts sie wiederherstellt, solange die Einträge noch in deiner Bibliothek vorhanden sind.
+Die Inhaltsbibliothek wird von allen geöffneten Instanzen und Spuren geteilt. In einer DAW speichert das Projekt stabile Referenzen (IDs) auf deine eigenen Amps, IRs, Pedale und das aktive Preset, sodass das erneute Öffnen eines Projekts sie wiederherstellt, solange die Einträge noch in deiner Bibliothek vorhanden sind. Zwei VoLums dürfen die Bibliothek gleichzeitig bearbeiten – die Standalone-App und eine in deiner DAW oder zwei Spuren – und jedes schreibt nur seine eigenen Änderungen. Eine in einem Fenster importierte IR kann also nicht mehr verschwinden, weil das andere Fenster ein Preset speichert.
+
+Löschst du etwas, das gerade klingt, wandert die betroffene Lane in derselben Aktion mit – in dem Fenster, in dem du gelöscht hast: ein gelöschter Haupt-Amp fällt auf den Werk-Amp aus der Liste zurück, ein gelöschtes Pedal lässt seinen PRE-Slot leer, eine gelöschte IR kehrt zur eingebackenen Box des Amps zurück, und ein gelöschtes Preset wird einfach vergessen. Die Bestätigung nennt vorher, was gerade klingt und wohin es geht. Ein anderes offenes VoLum spielt weiter, was es hat, bis es den gelöschten Eintrag das nächste Mal braucht.
+
+Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon weitergibst, steht unter [Packs der Inhaltsbibliothek](#packs-der-inhaltsbibliothek).
 
 ## Tuner Und Metronom
 
@@ -272,6 +276,29 @@ Der Calibrate-Schalter und der dBu-Wert sind rechnerweite Start-Defaults. Eine d
 Die **Performance**-Karte der Einstellungen hat einen **FULL / LITE**-Schalter; der aktive Modus ist hervorgehoben (FULL ist die Voreinstellung), du siehst also stets, welcher Qualitätsmodus läuft. Lite tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Schaltest du auf Lite, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-NAM-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur. Der separate Pitch/Octaver-DSP wird dadurch nicht verändert; umgehe Pitch/Octaver oder nutze einen größeren Audiopuffer, wenn dieser Effekt die CPU-Grenze verursacht.
 
 Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json` gespeichert, nicht im Projekt. Er bleibt also für jedes Projekt und jede DAW-Sitzung auf diesem Rechner aktiv, und ein auf einem schnellen Rechner gespeichertes Projekt spielt auf einem langsamen weiterhin Lite. Captures, die keine A2-Container sind (ältere Modelle mit nur einer Größe und die meisten eigenen Importe), bleiben unberührt — der Schalter hat dort einfach keine Wirkung. Standard ist Full.
+
+### Packs der Inhaltsbibliothek
+
+![VoLum Pack-Import-Vorschau](user-guide-pack-import.png)
+
+Die Zeile **Content library** in den Einstellungen hat **Export Pack...** und **Import Pack...**. Ein Pack ist eine einzige `.volumpack`-Datei, die die von dir ausgewählten eigenen Amps, IRs, Pedale und Presets samt ihrer Capture-Dateien enthält. Damit kannst du deine Bibliothek sichern, auf einen anderen Rechner umziehen oder einen Teil davon weitergeben.
+
+**Export** bietet zwei Umfänge:
+
+- **Everything** – die gesamte Bibliothek. In der Standalone-App reisen zusätzlich deine Rechner-Einstellungen und MIDI-Slots mit.
+- **Selected amps and presets** – hake an, was mitkommen soll. Ein angehakter Amp nimmt seine Preset-Bank mit, und jede IR, jedes Pedal und jeder Dual-Amp-Partner, den diese Presets brauchen, wird automatisch ergänzt und unter der Liste genannt („Also including: ...“). Eine Voraussetzung lässt sich nicht abwählen: Ein Pack, das auf Inhalte verweist, die es nicht mitbringt, würde als defekter Amp ankommen. Ein Preset auf einem *Werk*-Amp nimmt seine eigene IR und sein eigenes Pedal mit, aber keinen Amp-Eintrag – das Werk-Capture liegt VoLum ohnehin bei.
+
+**Import** zeigt vor jeder Änderung, was passieren würde: was hinzukommt, was ersetzt wird, was denselben Namen wie ein vorhandener Eintrag trägt (beide bleiben – Namen sind Beschriftungen, IDs sind Identität) und was dein Rig gerade spielt und daher neu laden müsste. Ein Everything-Pack bietet zusätzlich drei Wege, Konflikte aufzulösen:
+
+- **Overwrite** – bei Uneinigkeit gewinnt das Pack; alles, was das Pack nicht erwähnt, bleibt erhalten.
+- **Add** – bei Uneinigkeit gewinnt deine Bibliothek; nur wirklich neue Einträge kommen hinzu.
+- **Reset** – das Pack ersetzt deine Bibliothek; nicht enthaltene Einträge werden gelöscht.
+
+Ein Pack, das dir jemand geschickt hat, wird wie bei Overwrite über IDs zusammengeführt und bietet kein Reset an – ein Pack von einem Freund kann deine Sammlung also nie löschen.
+
+**Also restore machine settings** ist ein eigenes Kästchen, das nur die Standalone-App und nur für ein Everything-Pack anbietet. Es stellt den letzten Amp, die Knopfstellungen pro Amp, den Lite-Modus, die Eingangskalibrierung und die MIDI-Slots wieder her. Plug-ins schreiben diese Dinge nie und bieten das Kästchen daher auch nicht an.
+
+Der Import geschieht in einem Schritt. Deine vorherige Bibliothek bleibt daneben als `volum-content.json.pre-import.bak` liegen, ein beschädigtes oder abgeschnittenes Pack ändert überhaupt nichts, und ein Pack aus einem neueren VoLum als deinem wird namentlich abgelehnt statt halb gelesen. PRE-Slot-Nummern gelten nur auf deinem Rechner: Ist der Slot eines importierten Pedals schon belegt, wird es umnummeriert, und die Presets des Packs folgen ihm.
 
 ### Standalone-Audio- und MIDI-Einstellungen
 

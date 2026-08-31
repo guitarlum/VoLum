@@ -74,11 +74,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     ampNames[i] = volum::kAmps[i].displayName;
 
   const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
-  pGraphics->AttachControl(
-    new VoLumAmpListControl(
-      ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
-      [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
-    kCtrlTagVoLumAmpList);
+  pGraphics->AttachControl(new VoLumAmpListControl(ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
+                                                   [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
+                           kCtrlTagVoLumAmpList);
 
   // F6: populate the sidebar CUSTOM section (custom amps render as real list
   // entries below the factory amps) and wire its +/edit/delete affordances.
@@ -111,6 +109,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         const auto& names = volum::custom::MockCustomAmps();
         const std::string nm =
           (customIdx >= 0 && customIdx < (int)names.size()) ? names[(size_t)customIdx] : std::string();
+        // Planned before the delete, while the amp still exists to be described,
+        // and applied after it so the rig lands on content that is really there.
+        const std::string confirmBody =
+          _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp, volum::custom::CustomAmpIdAt(customIdx), nm);
         auto doDelete = [this, customIdx]() {
           volum::custom::RemoveCustomAmp(customIdx);
           // The sidebar has nowhere to show a message, unlike the Manage panel. At
@@ -127,37 +129,28 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             list->SetCustomAmps(volum::custom::MockCustomAmps(), volum::custom::MockCustomAmpArts());
             list->SetCustomSelected(-1);
           }
-          // Selection cleared -> revert the hero/name from the (now-deleted)
-          // custom amp back to the active factory amp.
-          if (auto* heroCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumHeroImage))
-          {
-            auto* h = heroCtrl->As<VoLumHeroImageControl>();
-            char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
-            h->SetPlaceholder(ph, mVolumAmpIdx);
-            h->SetName(volum::kAmps[mVolumAmpIdx].displayName);
-          }
-          if (auto* nameCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumSubRowText))
-            if (mVolumExpandedSection == EVoLumSection::AMP)
-              nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
-          // The deleted custom amp may have been the focused main; fall back to
-          // the active factory amp so the preset bar shows the right bank.
+          // The deleted amp may have been the focused main and/or the dual SUPPORT
+          // partner. Keep the row-index caches valid before the repair runs, since
+          // the repair reads them (and the rows below the deleted one shifted up).
           if (mVolumCustomMainIdx == customIdx)
             mVolumCustomMainIdx = -1;
           else if (mVolumCustomMainIdx > customIdx)
             --mVolumCustomMainIdx;
-          // The deleted amp may also have been the dual SUPPORT partner; keep
-          // mVolumCustomSupportIdx valid (RemoveCustomAmp already drops the
-          // supportCustomId references in stored scenes).
           if (mVolumCustomSupportIdx == customIdx)
             mVolumCustomSupportIdx = -1;
           else if (mVolumCustomSupportIdx > customIdx)
             --mVolumCustomSupportIdx;
+          // Move the sounding rig off the deleted capture: MAIN reverts to the
+          // sidebar factory amp as if clicked (which reloads the model and rebuilds
+          // the hero/name/cab chrome), SUPPORT drops. Doing this by hand here was
+          // the delete-while-playing bug - the chrome changed and the audio thread
+          // kept the dead capture.
+          _VolumApplyPendingRigRepair();
           _VolumSyncPresetOwner();
           _VolumRefreshPresetBar();
         };
         if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
-          dlg->As<VoLumConfirmDialogControl>()->Show(
-            "Delete?", "Delete custom amp \"" + nm + "\"? This cannot be undone.", doDelete);
+          dlg->As<VoLumConfirmDialogControl>()->Show("Delete?", confirmBody, doDelete);
         else
           doDelete();
       });
@@ -1155,12 +1148,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             bar->As<VoLumPresetBarControl>()->PromptSaveAs();
           return;
         }
-        // Claim before the bounds check, not only inside _VolumRecallPreset: the
-        // check reads the owner-keyed bank, and validating a row against one
-        // instance's bank while recalling it from another's is how a stale index
-        // recalls the wrong preset.
-        pPlugin->_VolumClaimPresetOps();
-        const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
+        // Name the owner for the bounds check, not only inside _VolumRecallPreset:
+        // validating a row against one instance's bank while recalling it from
+        // another's is how a stale index recalls the wrong preset. The menu's rows
+        // are the Ready row (when this amp ships one) plus the User bank, so the
+        // bound has to count both the way _VolumRecallPreset splits them.
+        const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
         const bool hasFactory = pPlugin->mVolumCustomMainIdx < 0
           && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
         if (code >= 0 && code < static_cast<int>(presets.size()) + (hasFactory ? 1 : 0))
@@ -1280,7 +1273,14 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // F5 preset capture: save-as / overwrite snapshot the live scene.
       overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name); },
                                   [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); },
-                                  [pPlugin]() { pPlugin->_VolumClaimPresetOps(); });
+                                  [pPlugin]() { return pPlugin->_VolumClaimPresetOps(); });
+      // Deleting an IR, pedal or preset this instance is playing has to move the
+      // sounding rig, not only the library row.
+      overlay->SetRigRepairCallbacks(
+        [pPlugin](volum::rig::LibraryKind kind, const std::string& id, const std::string& name) {
+          return pPlugin->_VolumPlanLibraryDelete(kind, id, name);
+        },
+        [pPlugin]() { pPlugin->_VolumApplyPendingRigRepair(); });
       // Manage-panel destructive actions (delete / overwrite) go through the
       // shared confirm modal.
       overlay->SetConfirmCallback(
@@ -1300,8 +1300,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           using MK = VoLumCustomOverlayControl::ManageKind;
           if (kind == MK::Presets)
           {
-            pPlugin->_VolumClaimPresetOps(); // the bounds check below reads the owner-keyed bank
-            const auto presets = volum::custom::MockPresetsForAmp(ampIdx);
+            // The bounds check below reads the owner-keyed bank, so ask for this
+            // instance's key rather than trusting the ambient one.
+            const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
             if (index >= 0 && index < (int)presets.size())
               pPlugin->_VolumRecallUserPreset(index); // Manage contains User rows only
           }
@@ -1359,6 +1360,36 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
   modeToggle->SetMode(mVolumUiMode);
   pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
+
+  // Pack export / import modal, opened from the Settings "Content library" row.
+  // Attached after the mode switch, not with the other overlays: it is a modal
+  // over the whole editor, so the PLAY/BUILD toggle must not draw through it or
+  // take clicks meant for the Pack sheet.
+  {
+    auto* pack = new VoLumPackOverlayControl(b);
+    pack->SetCallbacks([this](const volum::pack::ExportSelection& sel) { return _VolumExportPack(sel); },
+                       [this]() { return _VolumPickPack(); },
+                       [this, pack](volum::pack::ImportVerb verb, bool alsoSettings) {
+                         return _VolumImportPack(pack->OpenedPack(), verb, alsoSettings);
+                       });
+#if defined(APP_API)
+    pack->SetStandalone(true);
+#endif
+    pGraphics->AttachControl(pack, kCtrlTagVoLumPackOverlay)->Hide(true);
+
+    if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
+    {
+      settings->As<NAMSettingsPageControl>()->SetPackCallbacks(
+        [this, pack]() {
+          pack->SetSoundingIds(_VolumSoundingLibraryIds());
+          pack->ShowExport();
+        },
+        [this, pack]() {
+          pack->SetSoundingIds(_VolumSoundingLibraryIds());
+          pack->ShowImport();
+        });
+    }
+  }
 
   _SyncVoLumExactEntry();
   if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))

@@ -57,44 +57,16 @@ private:
   std::atomic<int> mSlot{kEmpty};
 };
 
-// Machine-global content-library record. `ampId` is factory:<idx> or a custom
-// amp id; `presetId` is a User preset id or a shipped Factory preset id.
+// A slot's Sound as the RT-side decoder describes it: `ampId` is factory:<idx> or
+// a custom amp id, `presetId` a User preset id or a shipped Factory preset id.
+// The stored library keys these by slot (content::Registry::midiSoundMap), so this
+// carries the slot with it and never owns the collection.
 struct MidiSound
 {
   int slot = -1;
   std::string ampId;
   std::string presetId;
 };
-
-inline const MidiSound* FindMidiSound(const std::vector<MidiSound>& map, int slot)
-{
-  if (slot < 0 || slot >= kMidiSoundSlotCount)
-    return nullptr;
-  for (const auto& sound : map)
-    if (sound.slot == slot)
-      return &sound;
-  return nullptr;
-}
-
-inline void AssignMidiSound(std::vector<MidiSound>& map, MidiSound sound)
-{
-  if (sound.slot < 0 || sound.slot >= kMidiSoundSlotCount || sound.ampId.empty() || sound.presetId.empty())
-    return;
-  auto it = std::find_if(map.begin(), map.end(), [&](const MidiSound& existing) { return existing.slot == sound.slot; });
-  if (it == map.end())
-    map.push_back(std::move(sound));
-  else
-    *it = std::move(sound);
-  std::sort(map.begin(), map.end(), [](const MidiSound& a, const MidiSound& b) { return a.slot < b.slot; });
-}
-
-inline bool ClearMidiSound(std::vector<MidiSound>& map, int slot)
-{
-  const auto oldSize = map.size();
-  map.erase(std::remove_if(map.begin(), map.end(), [&](const MidiSound& sound) { return sound.slot == slot; }),
-            map.end());
-  return map.size() != oldSize;
-}
 
 inline int FactoryAmpIndexFromId(const std::string& ampId)
 {

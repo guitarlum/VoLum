@@ -42,6 +42,8 @@ std::string ReadPluginSource()
   blob += "\n";
   blob += ReadText(root / "VoLumSceneRig.inc.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumRigRepair.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumAmpMenus.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumProcessBlock.inc.cpp");
@@ -239,20 +241,45 @@ TEST_CASE("Settings keeps the MIDI channel only; PLAY owns the Sound assignment 
   RequireDoesNotContain(controls, "Add Sound");
 }
 
-TEST_CASE("Settings reserves a labelled, inert Content library slot for Pack IO")
+TEST_CASE("The SYSTEM tab's Content library row opens the live Pack modal")
 {
-  // .scratch/pack/spec.md puts Export/Import Pack in Gear -> Settings, but Pack IO
-  // is not merged on this branch: the row must be designed and dead, never a
-  // button that looks live and crashes.
+  // .scratch/pack/spec.md puts Export/Import Pack in Gear -> Settings. Pack IO is
+  // merged now, so the row must be the wired one: the inert placeholder that once
+  // reserved the slot in VoLumSettingsTabs.h has to be gone, or the two classes
+  // shadow each other and the dead one can win the overload.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
 
-  RequireContains(tabs, "class VoLumSettingsPackRowControl");
-  RequireContains(tabs, "\"Export Pack\\xE2\\x80\\xA6\"");
-  RequireContains(tabs, "\"Import Pack\\xE2\\x80\\xA6\"");
-  RequireContains(tabs, "Not enabled in this build.");
-  // Inert: no click handler, no action function, no callback.
-  RequireDoesNotContain(tabs, "ExportPack(");
-  RequireDoesNotContain(tabs, "ImportPack(");
+  RequireContains(overlay, "class VoLumSettingsPackRowControl");
+  RequireContains(overlay, "\"Export Pack...\"");
+  RequireContains(overlay, "\"Import Pack...\"");
+  RequireDoesNotContain(tabs, "class VoLumSettingsPackRowControl");
+  RequireDoesNotContain(overlay, "Not enabled in this build.");
+
+  // Wired end to end: the row takes both callbacks, the page exposes the setter,
+  // and the layout hands the plugin's Pack entry points down.
+  RequireContains(controls, "new VoLumSettingsPackRowControl(");
+  RequireContains(controls, "mOnExportPack();");
+  RequireContains(controls, "mOnImportPack();");
+  RequireContains(controls, "void SetPackCallbacks(");
+  RequireContains(layout, "SetPackCallbacks(");
+}
+
+TEST_CASE("The Pack modal is attached above the PLAY/BUILD mode switch")
+{
+  // Attach order is z-order. The mode switch is deliberately attached after the
+  // legacy overlays so it stays visible and clickable in both modes, which means
+  // anything that is a real modal has to come after it in turn - otherwise the
+  // toggle paints through the Pack sheet and eats the clicks over its own rect.
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+
+  const auto toggle = layout.find("AttachControl(modeToggle, kCtrlTagVoLumModeToggle)");
+  const auto pack = layout.find("AttachControl(pack, kCtrlTagVoLumPackOverlay)");
+  REQUIRE(toggle != std::string::npos);
+  REQUIRE(pack != std::string::npos);
+  CHECK(toggle < pack);
 }
 
 TEST_CASE("All pedal controls remain editable while their block is bypassed")
@@ -980,24 +1007,78 @@ TEST_CASE("PRE/POST lock UI and settings helpers are wired")
   RequireContains(settings, "_VolumRestoreEffectSettings()");
 }
 
-TEST_CASE("SerializeState flushes the content store when a custom amp is focused")
+TEST_CASE("SerializeState carries custom-amp scenes in the chunk, not the library")
 {
-  // Regression (1.2.0): a focused custom amp keeps its scene in the shared
-  // content library (only the id is in the DAW chunk). _VolumSaveCurrentToSettings
-  // writes live knob edits into customScenes[id] in memory, but in a DAW/plugin
-  // the store is otherwise only flushed on content CRUD - so live custom-amp
-  // knob tweaks were lost on host restart. SerializeState (host state-save) and
-  // the plugin-format destructor must flush the store when a custom amp is
-  // focused. Pin both so the flush can't silently regress.
+  // 1.2.0 kept a focused custom amp's live knobs in the shared content library, so
+  // SerializeState had to flush the whole store to keep them - and that write was
+  // also how one instance's catalog save moved another instance's knobs.
+  //
+  // 1.3.0 (two-writer library): custom amps behave like factory amps. The scene
+  // belongs to the instance and travels in the DAW chunk's id tail, so a host
+  // state-save must NOT write the library at all.
   const std::string source = ReadPluginSource();
 
   // Single-line substrings only: file line endings differ across platforms (CRLF
   // on Windows checkouts, LF on macOS/Linux), so a multi-line "\r\n" match would
-  // pass on Windows but fail on macOS CI. Pin the guard + the flush call and the
-  // save-current call so the persistence path can't silently regress.
+  // pass on Windows but fail on macOS CI.
   RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
-  RequireContains(source, "if (mVolumCustomMainIdx >= 0)");
-  RequireContains(source, "volum::content::GlobalContentStore().Save();");
+  RequireContains(source, "idTail.customScenes = mVolumCustomScenes;");
+  RequireContains(source, "if (!idTail.customScenes.empty())");
+
+  // The instance's scene map is the only home for a custom amp's live knobs. A
+  // reference to the library's map here would be the shared-state bug returning.
+  RequireDoesNotContain(source, "reg().customScenes");
+
+  // The constructor must not re-read the file over a live sibling's unflushed
+  // catalog: every plugin instance's constructor reaches the same global store.
+  RequireContains(source, "volum::content::GlobalContentStore().EnsureLoaded();");
+  RequireDoesNotContain(source, "volum::content::GlobalContentStore().Load();");
+}
+
+TEST_CASE("Deleting content that is playing moves the sounding rig, not just the list")
+{
+  // Before 1.3.0 a delete updated the catalog and part of the chrome and stopped:
+  // nothing set mVolumNeedsLoad, so the audio thread kept running a capture whose
+  // file had just been removed - factory amp in the sidebar, dead custom amp in
+  // the speakers. Every delete path now plans the repair (VoLumRigRepair.h) before
+  // the catalog mutation and applies it after.
+  const std::string source = ReadPluginSource();
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+
+  // Sidebar bin (custom amps): plan -> confirm with the planned copy -> delete ->
+  // repair. The copy has to be the planned one, or the dialog stops naming the
+  // in-use case and the destination.
+  RequireContains(source, "_VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp,");
+  RequireContains(source, "dlg->As<VoLumConfirmDialogControl>()->Show(\"Delete?\", confirmBody, doDelete);");
+  RequireDoesNotContain(source, "\"Delete custom amp \\\"\" + nm + \"\\\"? This cannot be undone.\"");
+  RequireContains(source, "_VolumApplyPendingRigRepair();");
+
+  // Manage panel (IRs, pedals, presets) goes through the same two callbacks.
+  RequireContains(source, "return pPlugin->_VolumPlanLibraryDelete(kind, id, name);");
+  RequireContains(source, "[pPlugin]() { pPlugin->_VolumApplyPendingRigRepair(); });");
+  RequireContains(overlay, "mPlanRigRepair(RigKind(), id, nm)");
+  RequireContains(overlay, "if (mApplyRigRepair)");
+
+  // The MAIN fallback is a real amp selection - scene restore plus a capture
+  // reload - not a chrome update. And it must not fold the deleted amp's knobs
+  // into the factory slot it is reverting to.
+  RequireContains(source, "void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx, bool snapshotOutgoing)");
+  RequireContains(source, "if (snapshotOutgoing)");
+  RequireContains(source, "_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
+  RequireContains(source, "[this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }");
+
+  // The IR teardown is deferred so the lane does not expose a burst of raw,
+  // cab-less amp while the baked-cab capture loads (VoLumDspStaging.h).
+  RequireContains(source, "_VolumClearIR(false, true);");
+  RequireContains(source, "_VolumClearIR(true, true);");
+
+  // A dropped PRE slot drops the live model too: capture EMPTY, pill off.
+  RequireContains(source, "_VolumSetPreNamCapture(0, 0); // EMPTY: drops the live PRE model");
+  RequireContains(source, "_VolumSetPreNamCapture(1, 0);");
+
+  // SUPPORT drops to "(none)" through the ordinary path, which clears the custom
+  // partner as well as the factory reference.
+  RequireContains(source, "_VolumSetSupportAmp(-1); // \"(none)\": clears the custom partner too");
 }
 
 TEST_CASE("IR staging passes the UTF-8 path into ImpulseResponse")
@@ -1456,25 +1537,23 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   RequireContains(source, "return \"Save failed: this amp is no longer in your library\";");
 }
 
-TEST_CASE("Every preset operation claims the shared bridge before using it")
+TEST_CASE("Every preset operation names the owner of the bank it acts on")
 {
   // The capture/apply hooks and the active owner key are process-global, so the
   // instance that last installed them decides whose rig a preset records and whose
   // rig a recall changes. Installing at construction handed that to whichever
-  // instance the host created last.
+  // instance the host created last; re-claiming per operation fixed the hooks.
+  //
+  // 1.3.0 (two-writer library) finishes the job for the *bank*: the owner key is a
+  // parameter, not ambient state. Reading it back out of a global still meant a
+  // second editor switching amps mid-operation could redirect the first editor's
+  // read, and nothing in the code said which bank was intended.
   const std::string source = ReadPluginSource();
 
-  RequireContains(source, "void NeuralAmpModeler::_VolumClaimPresetOps()");
+  RequireContains(source, "std::string NeuralAmpModeler::_VolumClaimPresetOps()");
   RequireContains(source, "volum::custom::PresetHookOwner() = this;");
   RequireContains(source, "volum::custom::ClearPresetHooksIfOwnedBy(this);");
 
-  // Seven claims. Save, overwrite and recall are the three operations. The fourth is
-  // the callback the layout hands the Manage overlay, so its rename and delete -
-  // which go straight to the bridge rather than through the plugin - claim the bank
-  // too. The last three are the READ sites: opening the preset menu, and the two
-  // callbacks that bounds-check a chosen row. MockPresetsForAmp ignores its ampIdx
-  // and resolves the bank through the global key, so listing without claiming shows
-  // another instance's presets and hands their row numbers to this instance's bank.
   auto count = [&source](const char* needle) {
     const std::string n(needle);
     std::size_t total = 0;
@@ -1483,32 +1562,32 @@ TEST_CASE("Every preset operation claims the shared bridge before using it")
     return total;
   };
 
-  CHECK(count("_VolumClaimPresetOps();") == 7);
-  // Each read of the bank is preceded by a claim rather than following one.
-  for (const char* readSite : {"const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);",
-                               "const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);",
-                               "const auto presets = volum::custom::MockPresetsForAmp(ampIdx);"})
-  {
-    const auto read = source.find(readSite);
-    REQUIRE(read != std::string::npos);
-    const auto claim = source.rfind("_VolumClaimPresetOps();", read);
-    REQUIRE(claim != std::string::npos);
-    // The first bank read after that claim is this one, so nothing reads the bank
-    // between the two.
-    const auto firstReadAfterClaim = source.find("MockPresetsForAmp", claim);
-    CHECK(firstReadAfterClaim > read);
-    CHECK(firstReadAfterClaim < read + std::string(readSite).size());
-  }
-  RequireContains(source, "[pPlugin]() { pPlugin->_VolumClaimPresetOps(); }");
-  RequireContains(source, "volum::custom::AddPreset(mVolumAmpIdx");
-  RequireContains(source, "volum::custom::OverwritePreset(mVolumAmpIdx");
-  RequireContains(source, "volum::custom::RecallPreset(mVolumAmpIdx");
+  // No production path resolves a preset bank through the ambient key. The legacy
+  // index-based signatures still exist for the bridge's own tests; the plugin does
+  // not use them.
+  RequireDoesNotContain(source, "MockPresetsForAmp");
+  RequireDoesNotContain(source, "volum::custom::AddPreset(");
+  RequireDoesNotContain(source, "volum::custom::OverwritePreset(");
+  RequireDoesNotContain(source, "volum::custom::RecallPreset(");
+  RequireDoesNotContain(source, "volum::custom::PresetIdAt(");
 
-  // Three owner-key publishes: one inside the claim helper, plus the two read-only
-  // sites that use no hook (the preset-bar refresh and the amp-switch sync). A
-  // fourth appearing inside an operation would look like a claim while leaving the
-  // hooks pointing at another instance.
-  CHECK(count("volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());") == 3);
+  // Every write names its owner.
+  RequireContains(source, "volum::custom::AddPresetForOwner(_VolumActiveOwnerKey(), name)");
+  RequireContains(source, "volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index)");
+  RequireContains(source, "volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index)");
+
+  // ... and so does every read. Four: the preset bar, the preset menu, and the two
+  // callbacks that bounds-check a chosen row before recalling it.
+  CHECK(count("volum::custom::PresetsForOwner(") == 4);
+
+  // The overlay gets a key supplier, not a bare "claim" it cannot inspect, so its
+  // rename/delete (which bypass the plugin) act on this instance's bank.
+  RequireContains(source, "[pPlugin]() { return pPlugin->_VolumClaimPresetOps(); }");
+
+  // Two owner-key publishes: one inside the claim helper (for the legacy bridge
+  // signatures) and one on amp switch. A third inside an operation would look like
+  // a claim while leaving the hooks pointing at another instance.
+  CHECK(count("volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());") == 2);
 }
 
 TEST_CASE("A double-click the overlay did not begin cannot run a row's action")
