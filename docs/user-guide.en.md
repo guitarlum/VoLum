@@ -213,6 +213,12 @@ Use the standalone app as your tone library editor. It writes the global per-amp
 
 Fresh VST3 instances read those defaults when you add VoLum to a track. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration is the deliberate exception described below: a direct calibration edit becomes the machine default, while saved project state still wins when that project is restored.
 
+### Update Checks And Privacy
+
+The standalone app and plug-in check for a newer stable VoLum release at most once every 24 hours. A gold dot on the Settings gear means an update is available. Open Settings to read the reminder; the dot stays until you use the update row or **Check now**. The update row opens the release page in your browser. VoLum only notifies you: it never downloads or installs an update.
+
+**Check automatically** is on by default and can be switched off in Settings; **Check now** performs a manual check. Each check is a plain HTTPS GET of `https://guitarlum.github.io/VoLum/appcast.json`, with no query string, telemetry, or VoLum-generated identifier. The 24-hour throttle and reminder are stored separately in `volum-update-state.json` beside the main settings file.
+
 ### Input Calibration
 
 The **Input calibration** card describes your audio interface's analog level at digital 0 dBFS. Enter the interface value in dBu and enable **Calibrate input**. When the loaded NAM capture contains an input-calibration value, VoLum offsets the AMP Input gain so the model sees the level used during capture; models without that metadata leave the calibration controls unavailable.

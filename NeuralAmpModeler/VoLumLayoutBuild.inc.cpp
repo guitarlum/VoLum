@@ -1073,6 +1073,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
       },
       gearSVG));
+    pGraphics
+      ->AttachControl(new VoLumUpdateBadgeControl(
+                        IRECT(gearArea.R - 5.f, gearArea.T - 1.f, gearArea.R + 2.f, gearArea.T + 6.f)),
+                      kCtrlTagVoLumUpdateBadge)
+      ->Hide(true);
 
     pGraphics
       ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,

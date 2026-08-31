@@ -24,6 +24,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -44,6 +45,8 @@
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
+#include "VoLumUpdateCheck.h"
+#include "VoLumUpdateState.h"
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -76,6 +79,7 @@ enum ECtrlTags
   kCtrlTagOutputMode,
   kCtrlTagCalibrateInput,
   kCtrlTagInputCalibrationLevel,
+  kCtrlTagVoLumUpdateBadge,
   kCtrlTagVoLumAmpList,
   kCtrlTagVoLumSpeakerRow,
   kCtrlTagVoLumHeroImage,
@@ -360,6 +364,9 @@ public:
   // four NAM lanes so the new slice is applied through the async staging path.
   void _VolumSetLiteMode(bool lite);
   bool _VolumIsLiteMode() const { return mVolumLiteMode.load(); }
+  void _VolumCheckForUpdatesNow();
+  void _VolumSetAutoUpdateCheck(bool enabled);
+  void _VolumUseAvailableUpdate();
   void _VolumSaveEffectSettings();
   void _VolumRestoreEffectSettings();
   void _VolumSaveDelayModeSnapshot(int mode);
@@ -716,6 +723,16 @@ private:
   // contents are never silently mutated by lock-driven amp switching.
   volum::VoLumAmpSettings mVolumLiveLockedPre;
   volum::VoLumAmpSettings mVolumLiveLockedPost;
+
+  void _VolumLoadUpdateState();
+  void _VolumStartUpdateCheck(bool manual);
+  void _VolumConsumeUpdateResult();
+  void _VolumRefreshUpdateUi();
+  volum::update::UpdateState mVolumUpdateState;
+  std::shared_ptr<volum::update::AsyncResult> mVolumUpdateResult;
+  bool mVolumUpdateStateLoaded = false;
+  bool mVolumUpdateCheckInFlight = false;
+  int mVolumUpdateFooterTicks = 0;
 
   // Tuner & Metronome DSP
   volum::TunerDSP mTunerDSP;

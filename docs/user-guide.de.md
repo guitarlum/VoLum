@@ -213,6 +213,12 @@ Nutze die Standalone-App als Editor für deine Klangbibliothek. Sie schreibt die
 
 Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben keine globalen Amp-Szenen, deshalb können zwei Spuren einander ihre Rigs nicht überschreiben. Die unten beschriebene Eingangskalibrierung ist die bewusste Ausnahme: Eine direkt bearbeitete Kalibrierung wird zum Rechner-Default, während der gespeicherte Projektzustand beim Laden weiterhin Vorrang hat.
 
+### Update-Prüfung Und Datenschutz
+
+Standalone-App und Plugin prüfen höchstens einmal in 24 Stunden, ob eine neuere stabile VoLum-Version verfügbar ist. Ein goldener Punkt am Einstellungs-Zahnrad weist auf ein Update hin. Öffne die Einstellungen, um den Hinweis zu lesen; der Punkt bleibt sichtbar, bis du die Update-Zeile oder **Check now** benutzt. Die Update-Zeile öffnet die Release-Seite im Browser. VoLum weist nur auf Updates hin und lädt oder installiert nichts.
+
+**Check automatically** ist standardmäßig aktiv und lässt sich in den Einstellungen abschalten; **Check now** startet eine manuelle Prüfung. Jede Prüfung ist ein einfacher HTTPS-GET auf `https://guitarlum.github.io/VoLum/appcast.json` — ohne Query-String, Telemetrie oder von VoLum erzeugte Kennung. Die 24-Stunden-Drosselung und der Hinweiszustand liegen getrennt in `volum-update-state.json` neben der Haupt-Einstellungsdatei.
+
 ### Eingangskalibrierung
 
 Die Karte **Input calibration** beschreibt den analogen Pegel deines Audiointerfaces bei digital 0 dBFS. Trage den Interface-Wert in dBu ein und aktiviere **Calibrate input**. Enthält das geladene NAM-Capture einen Eingangskalibrierungswert, gleicht VoLum den AMP-Input-Gain so an, dass das Modell den Pegel seiner Aufnahme erhält; bei Modellen ohne diese Metadaten bleiben die Kalibrierungsfelder nicht verfügbar.

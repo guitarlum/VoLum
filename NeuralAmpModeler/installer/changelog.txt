@@ -1,3 +1,5 @@
+08/31/2026 - VoLum 1.3.0 (feature - subtle update reminders): VoLum can now check a small static release manifest once per day and place a dot on the Settings gear when a newer stable version exists. Settings offers the release link, a manual check, and an on-by-default automatic-check toggle. This is notify-only: VoLum neither downloads nor installs software, and the request sends no query string or VoLum-generated identifier.
+
 08/31/2026 - VoLum 1.3.0 (fix - custom IRs with non-English folder names load on Windows): The WAV opener treated the path as the Windows ANSI code page, so an IR under a user folder with e.g. umlauts or CJK characters failed to open. Paths are now opened as UTF-8, matching how VoLum already stores them.
 
 08/27/2026 - VoLum 1.3.0 (perf - POLY and DROP pitch splices do the same search with far fewer ring reads): The join is unchanged. Overlapping candidate windows are interpolated once per splice instead of once per lag, and POLY no longer runs a period tracker it never used. Latency, mix, PDC, presets and saved state stay the same. INSTANT is untouched (it does not search).

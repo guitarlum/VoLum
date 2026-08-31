@@ -812,6 +812,7 @@ void NeuralAmpModeler::OnIdle()
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
 
+  _VolumConsumeUpdateResult();
   _VolumRefreshLatencyReport();
   _VolumFlushDeferredIrShaping();
 
@@ -985,6 +986,12 @@ void NeuralAmpModeler::OnIdle()
       else if (!mVolumMainLoadError.empty())
       {
         footer->As<VoLumFooterControl>()->SetText(mVolumMainLoadError.c_str());
+      }
+      else if (mVolumUpdateFooterTicks > 0)
+      {
+        const std::string updateText = "VoLum " + mVolumUpdateState.latestKnownVersion + " is available in Settings";
+        footer->As<VoLumFooterControl>()->SetText(updateText.c_str());
+        --mVolumUpdateFooterTicks;
       }
       else if (dualActive && mVolumDualAmpOutputHot.load())
       {
@@ -1208,6 +1215,9 @@ void NeuralAmpModeler::OnUIOpen()
   // satisfies any sync a state restore requested while the window was closed.
   mVolumUiSyncPending.store(false);
   _VolumSyncUiFromState();
+  _VolumLoadUpdateState();
+  _VolumRefreshUpdateUi();
+  _VolumStartUpdateCheck(false);
 }
 
 // Standalone: re-focus the last custom MAIN amp and re-select the active preset
@@ -2391,3 +2401,4 @@ void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPoint
 #include "Unserialization.cpp"
 
 #include "VoLumLayoutBuild.inc.cpp"
+#include "VoLumUpdateCheck.inc.cpp"

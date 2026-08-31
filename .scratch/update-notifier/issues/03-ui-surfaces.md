@@ -1,6 +1,6 @@
 # Update notifier UI (S3)
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02
 
 ## Goal
