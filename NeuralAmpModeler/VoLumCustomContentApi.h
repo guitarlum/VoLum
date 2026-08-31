@@ -395,6 +395,19 @@ inline int PedalIndexById(const std::string& id)
   return -1;
 }
 
+// The PRE-capture index a pedal library id owns, or -1. The inverse of the
+// *ByLegacy lookups below: a PRE slot stores the index, while a delete or a Pack
+// import speaks in library ids, so the two have to meet somewhere.
+inline int PedalLegacyIndexById(const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  for (const auto& p : Store().reg().pedals)
+    if (p.id == id)
+      return p.legacyIndex;
+  return -1;
+}
+
 // Resolve an imported pedal by its stable PRE-capture legacy index (the value a
 // scene/preset/param stores). Returns "" when no pedal owns that index.
 inline std::string PedalNameByLegacy(int legacyIndex)

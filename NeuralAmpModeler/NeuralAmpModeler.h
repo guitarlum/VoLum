@@ -45,6 +45,7 @@
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
+#include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -429,7 +430,33 @@ public:
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
   void _VolumShowManageCustomPedals(int preSlot = -1);
   void _VolumShowPresetMenu();
+  // Select a factory amp exactly as clicking its sidebar row does (scene restore +
+  // capture reload + chrome). Shared by the sidebar, the keyboard, and the
+  // delete-while-playing fallback.
+  // snapshotOutgoing=false skips folding the live knobs into the outgoing lane's
+  // slot; the delete path uses it, because the amp those knobs belong to is gone.
+  void _VolumSelectFactoryAmp(int ampIdx, bool snapshotOutgoing = true);
   void _VolumSelectCustomAmp(int customIdx);
+
+  // --- Delete / Pack-replace of a library id this instance is playing ----------
+  // Snapshot the sounding rig in library terms for volum::rig::PlanDelete.
+  volum::rig::SoundingRig _VolumSnapshotSoundingRig() const;
+  // Plan the repair for an about-to-happen delete (or Pack replace) and remember
+  // it. Returns the confirm-dialog body, which names the in-use case and the
+  // destination. Planned before the catalog mutation because a pedal's rig
+  // reference is its capture index, which the delete takes with it.
+  std::string _VolumPlanLibraryDelete(volum::rig::LibraryKind kind, const std::string& id,
+                                      const std::string& displayName);
+  std::string _VolumPlanLibraryReplace(volum::rig::LibraryKind kind, const std::string& id,
+                                       const std::string& displayName);
+  // Run the plan remembered by the two above; clears it. No-op when the deleted id
+  // was not sounding, which is the common case.
+  void _VolumApplyPendingRigRepair();
+  void _VolumApplyRigRepair(const volum::rig::RigRepairPlan& plan);
+  // Re-derive the rig after a catalog change made by *another* instance, i.e. when
+  // an id this instance is still playing has disappeared from the library. Called
+  // on the next moment this instance needs that id.
+  void _VolumRepairRigForMissingContent();
   // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,
   // and channel labels into the shared speaker row + channel stepper (display
   // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
@@ -531,6 +558,10 @@ public:
   // keeps the knobs the user left behind.
   std::map<std::string, volum::VoLumAmpSettings> mVolumCustomScenes;
   volum::VoLumAmpSettings& _VolumCustomScene(const std::string& ampId);
+  // The repair planned for the delete/replace the confirm dialog is asking about.
+  // Held between the plan and the user's answer; empty repairs mean "nothing this
+  // instance is playing is affected".
+  volum::rig::RigRepairPlan mVolumPendingRigRepair;
   // Record/forget the active preset for the current owner key.
   void _VolumRememberActivePreset();
   void _VolumForgetActivePreset();

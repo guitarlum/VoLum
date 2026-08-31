@@ -42,6 +42,8 @@ std::string ReadPluginSource()
   blob += "\n";
   blob += ReadText(root / "VoLumSceneRig.inc.cpp");
   blob += "\n";
+  blob += ReadText(root / "VoLumRigRepair.inc.cpp");
+  blob += "\n";
   blob += ReadText(root / "VoLumAmpMenus.inc.cpp");
   blob += "\n";
   blob += ReadText(root / "VoLumProcessBlock.inc.cpp");
@@ -800,6 +802,52 @@ TEST_CASE("SerializeState carries custom-amp scenes in the chunk, not the librar
   // catalog: every plugin instance's constructor reaches the same global store.
   RequireContains(source, "volum::content::GlobalContentStore().EnsureLoaded();");
   RequireDoesNotContain(source, "volum::content::GlobalContentStore().Load();");
+}
+
+TEST_CASE("Deleting content that is playing moves the sounding rig, not just the list")
+{
+  // Before 1.3.0 a delete updated the catalog and part of the chrome and stopped:
+  // nothing set mVolumNeedsLoad, so the audio thread kept running a capture whose
+  // file had just been removed - factory amp in the sidebar, dead custom amp in
+  // the speakers. Every delete path now plans the repair (VoLumRigRepair.h) before
+  // the catalog mutation and applies it after.
+  const std::string source = ReadPluginSource();
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+
+  // Sidebar bin (custom amps): plan -> confirm with the planned copy -> delete ->
+  // repair. The copy has to be the planned one, or the dialog stops naming the
+  // in-use case and the destination.
+  RequireContains(source, "_VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp,");
+  RequireContains(source, "dlg->As<VoLumConfirmDialogControl>()->Show(\"Delete?\", confirmBody, doDelete);");
+  RequireDoesNotContain(source, "\"Delete custom amp \\\"\" + nm + \"\\\"? This cannot be undone.\"");
+  RequireContains(source, "_VolumApplyPendingRigRepair();");
+
+  // Manage panel (IRs, pedals, presets) goes through the same two callbacks.
+  RequireContains(source, "return pPlugin->_VolumPlanLibraryDelete(kind, id, name);");
+  RequireContains(source, "[pPlugin]() { pPlugin->_VolumApplyPendingRigRepair(); });");
+  RequireContains(overlay, "mPlanRigRepair(RigKind(), id, nm)");
+  RequireContains(overlay, "if (mApplyRigRepair)");
+
+  // The MAIN fallback is a real amp selection - scene restore plus a capture
+  // reload - not a chrome update. And it must not fold the deleted amp's knobs
+  // into the factory slot it is reverting to.
+  RequireContains(source, "void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx, bool snapshotOutgoing)");
+  RequireContains(source, "if (snapshotOutgoing)");
+  RequireContains(source, "_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
+  RequireContains(source, "[this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }");
+
+  // The IR teardown is deferred so the lane does not expose a burst of raw,
+  // cab-less amp while the baked-cab capture loads (VoLumDspStaging.h).
+  RequireContains(source, "_VolumClearIR(false, true);");
+  RequireContains(source, "_VolumClearIR(true, true);");
+
+  // A dropped PRE slot drops the live model too: capture EMPTY, pill off.
+  RequireContains(source, "_VolumSetPreNamCapture(0, 0); // EMPTY: drops the live PRE model");
+  RequireContains(source, "_VolumSetPreNamCapture(1, 0);");
+
+  // SUPPORT drops to "(none)" through the ordinary path, which clears the custom
+  // partner as well as the factory reference.
+  RequireContains(source, "_VolumSetSupportAmp(-1); // \"(none)\": clears the custom partner too");
 }
 
 TEST_CASE("IR staging passes the UTF-8 path into ImpulseResponse")

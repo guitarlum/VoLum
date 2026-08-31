@@ -132,6 +132,7 @@
     <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_content_store.cpp" />
     <ClCompile Include="..\tests\test_volum_content_crud_edge.cpp" />
+    <ClCompile Include="..\tests\test_volum_rig_repair.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_shaping.cpp" />
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />

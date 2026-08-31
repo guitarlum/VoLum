@@ -2103,6 +2103,7 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
 #include "VoLumLayoutRuntime.inc.cpp"
 #include "VoLumSceneRig.inc.cpp"
 #include "VoLumAmpMenus.inc.cpp"
+#include "VoLumRigRepair.inc.cpp"
 
 // VoLum ProcessBlock helpers + async-loader + per-amp settings persistence.
 // Tail-included for file-size hygiene; all are part of this TU.

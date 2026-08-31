@@ -303,6 +303,85 @@ void NeuralAmpModeler::_VolumMarkPresetDirty()
   _VolumRecomputePresetDirty();
 }
 
+// Select a factory amp exactly as clicking its sidebar row does: snapshot the
+// outgoing lane, drop any custom MAIN focus, restore *this instance's* saved scene
+// for that amp, reload the capture, and re-derive the chrome.
+//
+// Extracted from the sidebar callback because a delete of the custom amp that is
+// currently playing has to land on the same state. Reproducing half of it inline
+// was the delete-while-playing bug: the chrome said the factory amp while the audio
+// thread still ran the deleted capture, because nothing set mVolumNeedsLoad.
+//
+// snapshotOutgoing=false is the delete path. A delete has no lane to snapshot: the
+// custom amp the live knobs belong to is gone, and folding them into the factory
+// slot on the way out would overwrite the knobs the user actually left on that
+// factory amp - the revert is supposed to restore those, not replace them.
+void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx, bool snapshotOutgoing)
+{
+  if (ampIdx < 0 || ampIdx >= volum::kAmpCount)
+    return;
+
+  if (snapshotOutgoing)
+    _VolumSaveCurrentToSettings();
+  mVolumAmpIdx = ampIdx;
+  mVolumCustomMainIdx = -1; // back on a factory amp
+  _VolumRestoreFromSettings(ampIdx);
+  _VolumRefreshChannels();
+  mVolumNeedsLoad.store(true);
+#ifdef APP_API
+  // Coalesce the disk write: OnIdle() flushes mVolumSettingsDirty. Writing
+  // synchronously here serialized all amps + dual-amp state and atomically wrote
+  // two JSON files on every selection, which stalled the UI thread (very visible
+  // on held arrow-key repeats).
+  mVolumSettingsDirty = true;
+#endif
+
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
+  auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
+  if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
+    nameCtrl->SetName(volum::kAmps[ampIdx].displayName, true);
+  if (heroCtrl)
+  {
+    char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
+    heroCtrl->SetPlaceholder(ph, ampIdx);
+    heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
+  }
+  // Re-derive the whole cab row for this factory amp, rather than only restoring
+  // its labels. A custom amp leaves behind more than names: on a gain stage with no
+  // DIRECT capture it greys out No Cab and Custom IR, and those two flags are
+  // written nowhere else. Coming back to a factory amp - which always ships a raw
+  // DIRECT capture - left both buttons disabled and swallowing clicks until the
+  // window was closed and reopened.
+  _VolumApplyFocusedLaneCabs();
+
+  // F5: refresh the header preset strip to this amp's preset bank.
+  _VolumSyncPresetOwner();
+  _VolumRefreshPresetBar();
+
+  if (auto* alCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+  {
+    auto* list = alCtrl->As<VoLumAmpListControl>();
+    list->SetSelected(ampIdx); // also clears any custom selection
+  }
+
+  if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
+  {
+    auto* trip = tripCtrl->As<VoLumTriptychControl>();
+    const bool preActive =
+      GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
+    trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx,
+                   volum::kAmps[ampIdx].displayName,
+                   _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+                   _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
+    mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
+    mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
+    trip->SetDirty(false);
+  }
+}
+
 void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
 {
   const auto& names = volum::custom::MockCustomAmps();

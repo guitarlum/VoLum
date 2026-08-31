@@ -10,6 +10,7 @@
 #include "VoLumIrFileGuard.h"
 #include "VoLumOverlayActionCodes.h"
 #include "VoLumPresetBar.h"
+#include "VoLumRigRepair.h" // LibraryKind for the delete-while-playing callbacks
 #include "VoLumListMenu.h"
 #include "VoLumConfirmDialog.h"
 
@@ -73,6 +74,23 @@ public:
 
   void SetConfirmCallback(ConfirmCallback cb) { mConfirm = std::move(cb); }
   void SetPrimaryActionCallback(PrimaryActionCallback cb) { mPrimaryAction = std::move(cb); }
+
+  // Delete of an id this instance is currently playing (VoLumRigRepair.h).
+  //   planCb: asked before the delete; returns the confirm body, which names the
+  //           in-use case and where the lane is going. Planning has to happen
+  //           first, because a pedal's rig reference is its capture index and the
+  //           delete takes that with it.
+  //   applyCb: asked after the delete; moves the lane off the dead payload.
+  // Unset (unit tests, no plugin) falls back to the plain "cannot be undone" copy
+  // and no repair.
+  using RigRepairPlanCallback = std::function<std::string(volum::rig::LibraryKind, const std::string& id,
+                                                         const std::string& displayName)>;
+  using RigRepairApplyCallback = std::function<void()>;
+  void SetRigRepairCallbacks(RigRepairPlanCallback planCb, RigRepairApplyCallback applyCb)
+  {
+    mPlanRigRepair = std::move(planCb);
+    mApplyRigRepair = std::move(applyCb);
+  }
 
   // F5 preset capture hooks (real backend). SaveCb captures the live settings
   // into a new named preset and returns its bank index; OverwriteCb replaces the
@@ -611,6 +629,16 @@ private:
     ReportLibraryWriteFailure();
   }
 
+  volum::rig::LibraryKind RigKind() const
+  {
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return volum::rig::LibraryKind::IR;
+      case ManageKind::Pedals: return volum::rig::LibraryKind::Pedal;
+      default: return volum::rig::LibraryKind::Preset;
+    }
+  }
+
   void ApplyDelete(int idx)
   {
     using namespace volum::custom;
@@ -622,6 +650,11 @@ private:
       default: DeletePresetForOwner(PresetOwnerKey(), idx); break;
     }
     ReportLibraryWriteFailure();
+    // The entry is out of the catalog; now move this instance's rig off it. The
+    // library row and the sounding rig are two different things, and only fixing
+    // the first left the audio thread on a payload that no longer exists.
+    if (mApplyRigRepair)
+      mApplyRigRepair();
   }
 
   void NotifyChanged()
@@ -958,9 +991,14 @@ private:
             NotifyChanged();
             SetDirty(false);
           };
+          // Asked before the delete so the copy can name the in-use case and the
+          // destination ("PRE 1 will be empty", "MAIN will fall back to ...").
+          const std::string body =
+            mPlanRigRepair
+              ? mPlanRigRepair(RigKind(), id, nm)
+              : "Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.";
           if (mConfirm)
-            mConfirm(
-              "Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.", doDelete, "Delete");
+            mConfirm(body, doDelete, "Delete");
           else
             doDelete();
         }
@@ -1944,6 +1982,8 @@ private:
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
   ConfirmCallback mConfirm;
+  RigRepairPlanCallback mPlanRigRepair; // see VoLumRigRepair.h
+  RigRepairApplyCallback mApplyRigRepair;
   PrimaryActionCallback mPrimaryAction;
   SavePresetCallback mSavePreset;
   OverwritePresetCallback mOverwritePreset;

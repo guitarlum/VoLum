@@ -77,60 +77,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->AttachControl(
     new VoLumAmpListControl(
       ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
-      [this](int ampIdx) {
-        _VolumSaveCurrentToSettings();
-        mVolumAmpIdx = ampIdx;
-        mVolumCustomMainIdx = -1; // back on a factory amp
-        _VolumRestoreFromSettings(ampIdx);
-        _VolumRefreshChannels();
-        mVolumNeedsLoad.store(true);
-#ifdef APP_API
-        // Coalesce the disk write: OnIdle() flushes mVolumSettingsDirty.
-        // Writing synchronously here serialized all amps + dual-amp state
-        // and atomically wrote two JSON files on every selection, which
-        // stalled the UI thread (very visible on held arrow-key repeats).
-        mVolumSettingsDirty = true;
-#endif
-
-        auto* pGfx = GetUI();
-        if (!pGfx)
-          return;
-        auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
-        auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
-        if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
-          nameCtrl->SetName(volum::kAmps[ampIdx].displayName, true);
-        if (heroCtrl)
-        {
-          char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
-          heroCtrl->SetPlaceholder(ph, ampIdx);
-          heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
-        }
-        // Re-derive the whole cab row for this factory amp, rather than only
-        // restoring its labels. A custom amp leaves behind more than names: on a
-        // gain stage with no DIRECT capture it greys out No Cab and Custom IR, and
-        // those two flags are written nowhere else. Coming back to a factory amp -
-        // which always ships a raw DIRECT capture - left both buttons disabled and
-        // swallowing clicks until the window was closed and reopened.
-        _VolumApplyFocusedLaneCabs();
-
-        // F5: refresh the header preset strip to this amp's preset bank.
-        _VolumSyncPresetOwner();
-        _VolumRefreshPresetBar();
-
-        if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
-        {
-          auto* trip = tripCtrl->As<VoLumTriptychControl>();
-          const bool preActive =
-            GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-          trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx,
-                         volum::kAmps[ampIdx].displayName,
-                         _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
-                         _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
-          mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
-          mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
-          trip->SetDirty(false);
-        }
-      }),
+      [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
     kCtrlTagVoLumAmpList);
 
   // F6: populate the sidebar CUSTOM section (custom amps render as real list
@@ -164,6 +111,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         const auto& names = volum::custom::MockCustomAmps();
         const std::string nm =
           (customIdx >= 0 && customIdx < (int)names.size()) ? names[(size_t)customIdx] : std::string();
+        // Planned before the delete, while the amp still exists to be described,
+        // and applied after it so the rig lands on content that is really there.
+        const std::string confirmBody = _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp,
+                                                               volum::custom::CustomAmpIdAt(customIdx), nm);
         auto doDelete = [this, customIdx]() {
           volum::custom::RemoveCustomAmp(customIdx);
           // The sidebar has nowhere to show a message, unlike the Manage panel. At
@@ -180,37 +131,28 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             list->SetCustomAmps(volum::custom::MockCustomAmps(), volum::custom::MockCustomAmpArts());
             list->SetCustomSelected(-1);
           }
-          // Selection cleared -> revert the hero/name from the (now-deleted)
-          // custom amp back to the active factory amp.
-          if (auto* heroCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumHeroImage))
-          {
-            auto* h = heroCtrl->As<VoLumHeroImageControl>();
-            char ph[4] = {volum::kAmps[mVolumAmpIdx].displayName[0], (char)('0' + (mVolumAmpIdx % 10)), 0, 0};
-            h->SetPlaceholder(ph, mVolumAmpIdx);
-            h->SetName(volum::kAmps[mVolumAmpIdx].displayName);
-          }
-          if (auto* nameCtrl = pGfx2->GetControlWithTag(kCtrlTagVoLumSubRowText))
-            if (mVolumExpandedSection == EVoLumSection::AMP)
-              nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[mVolumAmpIdx].displayName, true);
-          // The deleted custom amp may have been the focused main; fall back to
-          // the active factory amp so the preset bar shows the right bank.
+          // The deleted amp may have been the focused main and/or the dual SUPPORT
+          // partner. Keep the row-index caches valid before the repair runs, since
+          // the repair reads them (and the rows below the deleted one shifted up).
           if (mVolumCustomMainIdx == customIdx)
             mVolumCustomMainIdx = -1;
           else if (mVolumCustomMainIdx > customIdx)
             --mVolumCustomMainIdx;
-          // The deleted amp may also have been the dual SUPPORT partner; keep
-          // mVolumCustomSupportIdx valid (RemoveCustomAmp already drops the
-          // supportCustomId references in stored scenes).
           if (mVolumCustomSupportIdx == customIdx)
             mVolumCustomSupportIdx = -1;
           else if (mVolumCustomSupportIdx > customIdx)
             --mVolumCustomSupportIdx;
+          // Move the sounding rig off the deleted capture: MAIN reverts to the
+          // sidebar factory amp as if clicked (which reloads the model and rebuilds
+          // the hero/name/cab chrome), SUPPORT drops. Doing this by hand here was
+          // the delete-while-playing bug - the chrome changed and the audio thread
+          // kept the dead capture.
+          _VolumApplyPendingRigRepair();
           _VolumSyncPresetOwner();
           _VolumRefreshPresetBar();
         };
         if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
-          dlg->As<VoLumConfirmDialogControl>()->Show(
-            "Delete?", "Delete custom amp \"" + nm + "\"? This cannot be undone.", doDelete);
+          dlg->As<VoLumConfirmDialogControl>()->Show("Delete?", confirmBody, doDelete);
         else
           doDelete();
       });
@@ -1271,6 +1213,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name); },
                                   [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); },
                                   [pPlugin]() { return pPlugin->_VolumClaimPresetOps(); });
+      // Deleting an IR, pedal or preset this instance is playing has to move the
+      // sounding rig, not only the library row.
+      overlay->SetRigRepairCallbacks(
+        [pPlugin](volum::rig::LibraryKind kind, const std::string& id, const std::string& name) {
+          return pPlugin->_VolumPlanLibraryDelete(kind, id, name);
+        },
+        [pPlugin]() { pPlugin->_VolumApplyPendingRigRepair(); });
       // Manage-panel destructive actions (delete / overwrite) go through the
       // shared confirm modal.
       overlay->SetConfirmCallback(
