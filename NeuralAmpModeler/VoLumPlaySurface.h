@@ -16,6 +16,19 @@
 #include <utility>
 #include <vector>
 
+/** The PLAY / BUILD mode pair in the header cluster.
+ *
+ * A word pair, not a switch. The pre-1.3.0 version drew its own bevelled well and
+ * filled the active half solid amber, which made the loudest object in the header
+ * a control the player touches twice a session - and because it is attached above
+ * the legacy full-canvas overlays, that amber slab floated on top of Settings,
+ * Pack and Manage.
+ *
+ * So: no well, no outer border, brass instead of amber (the quiet dialect the cab
+ * row and the PLAY rail already speak), and the inactive word recedes rather than
+ * competing. It now reads as a sibling of the tuner / metronome / gear glyphs to
+ * its right, which is what it is. Z-order is fixed at the attach site in
+ * VoLumLayoutBuild.inc.cpp: this goes on before the overlays, so they cover it. */
 class VoLumModeToggleControl : public IControl
 {
 public:
@@ -35,21 +48,13 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    const IRECT play = mRECT.GetFromLeft(mRECT.W() * 0.5f);
-    const IRECT build = mRECT.GetFromRight(mRECT.W() * 0.5f);
-    g.FillRoundRect(IColor(210, 7, 9, 14), mRECT, 2.f);
-    g.DrawRoundRect(VoLumColors::GOLD_DIM.WithOpacity(0.55f), mRECT, 2.f);
-    DrawVoLumSelection(g, play, mMode == volum::UiMode::Play, mMouseIsOver && play.Contains(mMouseX, mMouseY),
-                       VoLumSelectionStyle::AmberPicker, 1.f, 0.f);
-    DrawVoLumSelection(g, build, mMode == volum::UiMode::Build, mMouseIsOver && build.Contains(mMouseX, mMouseY),
-                       VoLumSelectionStyle::AmberPicker, 1.f, 0.f);
-    g.DrawLine(VoLumColors::GOLD_DIM.WithOpacity(0.35f), mRECT.MW(), mRECT.T + 4.f, mRECT.MW(), mRECT.B - 4.f);
-    g.DrawText(VoLumType::Label(10.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker,
-                                                        mMode == volum::UiMode::Play)),
-               "PLAY", play);
-    g.DrawText(VoLumType::Label(10.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker,
-                                                        mMode == volum::UiMode::Build)),
-               "BUILD", build);
+    const IRECT play = CellRect(volum::UiMode::Play);
+    const IRECT build = CellRect(volum::UiMode::Build);
+    DrawCell(g, play, "PLAY", volum::UiMode::Play);
+    DrawCell(g, build, "BUILD", volum::UiMode::Build);
+    // Hairline between the two words, inset so it reads as a separator rather
+    // than as the wall of a box.
+    g.DrawLine(VoLumColors::FRAME.WithOpacity(0.8f), mRECT.MW(), mRECT.T + 7.f, mRECT.MW(), mRECT.B - 7.f);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -72,6 +77,26 @@ public:
   }
 
 private:
+  IRECT CellRect(volum::UiMode mode) const
+  {
+    const IRECT half = mode == volum::UiMode::Play ? mRECT.GetFromLeft(mRECT.W() * 0.5f)
+                                                   : mRECT.GetFromRight(mRECT.W() * 0.5f);
+    return half.GetPadded(0.f, -4.f, 0.f, -4.f);
+  }
+
+  void DrawCell(IGraphics& g, const IRECT& cell, const char* label, volum::UiMode mode)
+  {
+    const bool active = mMode == mode;
+    const bool hovered = !active && mMouseIsOver && cell.Contains(mMouseX, mMouseY);
+    DrawVoLumSelection(g, cell, active, hovered, VoLumSelectionStyle::Brass, 2.f, 0.f);
+    // Selection ink for the active word; the same ink at 0.55 for the idle one, so
+    // the pair stays one family and only the live mode carries weight.
+    const IColor ink = active ? SelectionInkColor(VoLumSelectionStyle::Brass, true)
+                              : SelectionInkColor(VoLumSelectionStyle::Brass, false)
+                                  .WithOpacity(hovered ? 0.85f : 0.55f);
+    g.DrawText(VoLumType::Label(10.f, ink), label, cell);
+  }
+
   volum::UiMode mMode = volum::UiMode::Build;
   bool mMouseIsOver = false;
   float mMouseX = 0.f;

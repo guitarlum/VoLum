@@ -181,26 +181,31 @@ TEST_CASE("Shortcut info columns are weighted and clipped so Navigate cannot ble
   RequireDoesNotContain(overlay, "const float colW = (body.W() - 2.f * gap) / 3.f;");
 }
 
-TEST_CASE("Settings is exactly two tabs and every locked capability still has a home")
+TEST_CASE("Settings is exactly three tabs and every locked capability still has a home")
 {
   // The one-page overlay could not hold calibration, output mode, performance,
   // MIDI, shortcuts, model info, about and update at 900x600 without clipping its
-  // own footer onto the panel's corner accents.
+  // own footer onto the panel's corner accents. MIDI is a tab of its own since
+  // 1.3.0: it carries the Program Change assignment list, which does not fit on a
+  // card beside three other cards.
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
 
   RequireContains(tabs, "class VoLumSettingsTabStripControl");
-  RequireContains(controls, "kTabNames[kTabCount] = {\"SIGNAL\", \"SYSTEM\"}");
-  RequireContains(controls, "static constexpr int kTabCount = 2;");
+  RequireContains(controls, "kTabNames[kTabCount] = {\"SIGNAL\", \"MIDI\", \"SYSTEM\"}");
+  RequireContains(controls, "static constexpr int kTabCount = 3;");
   RequireContains(controls, "void _BuildSignalTab(const IRECT& body)");
+  RequireContains(controls, "void _BuildMidiTab(const IRECT& body)");
   RequireContains(controls, "void _BuildSystemTab(const IRECT& body)");
 
-  // SIGNAL owns the audio/MIDI path.
+  // SIGNAL owns the audio path.
   RequireContains(controls, "\"Input calibration\", mControlNames.inputGroupFrame");
   RequireContains(controls, "\"Output mode\", mControlNames.outputGroupFrame");
   RequireContains(controls, "\"Performance\", mControlNames.perfGroupFrame");
-  RequireContains(controls, "\"MIDI\", mControlNames.midiGroupFrame");
   RequireContains(controls, "audioHintStr");
+  // MIDI owns the channel and the assignments.
+  RequireContains(controls, "\"MIDI channel\", mControlNames.midiGroupFrame");
+  RequireContains(controls, "\"Sounds by Program Change\", mControlNames.midiMapGroupFrame");
   // SYSTEM owns this install.
   RequireContains(controls, "\"Keyboard shortcuts\"");
   RequireContains(controls, "\"Model information\"");
@@ -220,25 +225,42 @@ TEST_CASE("Settings is exactly two tabs and every locked capability still has a 
   RequireContains(controls, "if (!mWillHide)");
 }
 
-TEST_CASE("Settings keeps the MIDI channel only; PLAY owns the Sound assignment list")
+TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
 {
-  // .scratch/midi-control/spec.md: PLAY owns the list. The interim Settings list
-  // was duplicate chrome and had to go, channel and all its plumbing stay.
+  // Owner override to .scratch/midi-control/spec.md: the assignment list lives on
+  // both surfaces. What must never happen is a second store - both have to read
+  // registry.midiSoundMap through BuildPlaySlots and write it through the plugin's
+  // assign/clear pair, or the two lists drift apart the moment one is edited.
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
 
   RequireContains(tabs, "class VoLumMidiChannelControl");
   RequireContains(tabs, "mChannel == 0 ? \"Omni\"");
+  RequireContains(tabs, "class VoLumMidiSoundMapControl");
   RequireContains(controls, "void SetMidiChannel(int channel)");
+  RequireContains(controls, "void SetMidiSoundMap(");
   RequireContains(layout, "settingsPage->SetMidiCallbacks([pPlugin](int channel)");
 
-  // No Add / slot rows / choice menu anywhere in the Settings chrome.
+  // Both surfaces derive their rows from the same pure model helper.
+  RequireContains(tabs, "volum::BuildPlaySlots(factory, registry)");
+  RequireContains(play, "volum::BuildPlaySlots(factory, registry)");
+  RequireContains(tabs, "volum::BuildSoundChoices(factory, registry)");
+  RequireContains(play, "volum::BuildSoundChoices(factory, registry)");
+
+  // Both write through the same two plugin methods; the Settings tab keeps no
+  // copy of its own, and the panel is refilled from the live registry.
+  RequireContains(layout, "settingsPage->SetMidiSoundMapCallbacks(");
+  RequireContains(layout, "pPlugin->_VolumAssignPlaySound(slot, sound)");
+  RequireContains(layout, "pPlugin->_VolumClearPlaySound(slot)");
+  RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg())");
+  RequireDoesNotContain(tabs, "midiSoundMap =");
+
+  // The pre-1.3.0 duplicate-list control is still gone; this is a new one.
   RequireDoesNotContain(overlay, "VoLumMidiSettingsControl");
-  RequireDoesNotContain(tabs, "Add Sound");
-  RequireDoesNotContain(tabs, "SOUND MAP");
-  RequireDoesNotContain(controls, "Add Sound");
 }
 
 TEST_CASE("The SYSTEM tab's Content library row opens the live Pack modal")
@@ -267,19 +289,99 @@ TEST_CASE("The SYSTEM tab's Content library row opens the live Pack modal")
   RequireContains(layout, "SetPackCallbacks(");
 }
 
-TEST_CASE("The Pack modal is attached above the PLAY/BUILD mode switch")
+TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair")
 {
-  // Attach order is z-order. The mode switch is deliberately attached after the
-  // legacy overlays so it stays visible and clickable in both modes, which means
-  // anything that is a real modal has to come after it in turn - otherwise the
-  // toggle paints through the Pack sheet and eats the clicks over its own rect.
+  // Attach order is z-order, and the 1.3.0 bug was attaching the mode pair last:
+  // it then painted and hit-tested on top of Settings, Pack, Manage, the confirm
+  // modal, the tuner and the metronome. It only has to outrank the PLAY surface,
+  // which owns the whole main panel while visible; every real overlay comes after.
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
 
   const auto toggle = layout.find("AttachControl(modeToggle, kCtrlTagVoLumModeToggle)");
-  const auto pack = layout.find("AttachControl(pack, kCtrlTagVoLumPackOverlay)");
+  const auto playSurface = layout.find("kCtrlTagVoLumPlaySurface);");
   REQUIRE(toggle != std::string::npos);
-  REQUIRE(pack != std::string::npos);
-  CHECK(toggle < pack);
+  REQUIRE(playSurface != std::string::npos);
+  INFO("the mode pair must stay clickable over the PLAY surface");
+  CHECK(playSurface < toggle);
+
+  for (const char* overlay : {"AttachControl(settingsPage, kCtrlTagSettingsBox)",
+                              "AttachControl(pack, kCtrlTagVoLumPackOverlay)",
+                              "AttachControl(overlay, kCtrlTagVoLumCustomOverlay)",
+                              "AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)",
+                              "AttachControl(tunerCtrl, kCtrlTagVoLumTuner)",
+                              "AttachControl(metCtrl, kCtrlTagVoLumMetronome)"})
+  {
+    INFO(overlay);
+    const auto at = layout.find(overlay);
+    REQUIRE(at != std::string::npos);
+    CHECK(toggle < at);
+  }
+
+  // And it is drawn in the quiet dialect, not as an amber slab: the pair routes
+  // through the selection SSOT with the Brass style the cab row and rail speak.
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto ctrl = play.find("class VoLumModeToggleControl");
+  const auto ctrlEnd = play.find("class VoLumPlaySurfaceControl");
+  REQUIRE(ctrl != std::string::npos);
+  REQUIRE(ctrlEnd != std::string::npos);
+  const std::string body = play.substr(ctrl, ctrlEnd - ctrl);
+  RequireContains(body, "DrawVoLumSelection(g, cell, active, hovered, VoLumSelectionStyle::Brass");
+  RequireContains(body, "SelectionInkColor(VoLumSelectionStyle::Brass");
+  RequireDoesNotContain(body, "AmberPicker");
+  RequireDoesNotContain(body, "FillRoundRect(IColor(210, 7, 9, 14), mRECT");
+}
+
+TEST_CASE("PLAY consumes up/down to step Sounds and never falls through to BUILD")
+{
+  // Before 1.3.0 the PLAY branch returned false for every key, so arrows did
+  // nothing at all; returning them unhandled instead would be worse, because the
+  // BUILD amp list behind PLAY would silently switch amps.
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  const std::string model = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayModel.h");
+
+  RequireContains(layout, "if (key.VK != kVK_UP && key.VK != kVK_DOWN)");
+  RequireContains(layout, "_VolumStepPlaySlot(key.VK == kVK_UP ? -1 : 1);");
+  RequireContains(layout, "return true; // consumed either way");
+  // A modal over PLAY owns the keyboard.
+  RequireContains(layout, "kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay");
+
+  // The step goes through the same recall a rail click uses, and the decision of
+  // which slot is next is a pure helper with its own doctest.
+  RequireContains(runtime, "volum::StepAssignedSlot(slots, mVolumLastRecalledPlaySlot, dir)");
+  RequireContains(runtime, "VolumRecallSound(slot.sound.ampId, slot.sound.presetId)");
+  RequireContains(model, "inline int StepAssignedSlot(");
+
+  // Documented where the keyboard is documented.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+  RequireContains(overlay, "\"Sound in PLAY\"");
+}
+
+TEST_CASE("Pack export offers Sound, whole-amp and Everything, and the closure is not a footnote")
+{
+  // The tick list shipped as one undifferentiated column of amps and presets with
+  // the closure as a grey line under it. A player could not tell "this Sound" from
+  // "this whole amp", and the one genuinely surprising fact about a Pack - what
+  // gets dragged along - was the quietest thing on the sheet.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
+
+  RequireContains(overlay, "enum class Scope");
+  RequireContains(overlay, "static constexpr int kScopeCount = 3;");
+  RequireContains(overlay, "\"Everything\"");
+  RequireContains(overlay, "\"Sounds\"");
+  RequireContains(overlay, "\"A whole amp\"");
+
+  // Scopes map onto the existing selection contract; no new Pack fields.
+  RequireContains(overlay, "sel.everything = mScope == Scope::Everything;");
+  RequireContains(overlay, "(r.isAmp ? sel.ampIds : sel.presetIds).push_back(r.id)");
+
+  // The closure has its own band, drawn on every scope, and locked rows stay
+  // locked: a requirement is not a choice.
+  RequireContains(overlay, "IRECT _AlsoRect() const");
+  RequireContains(overlay, "void _DrawAlso(IGraphics& g)");
+  RequireContains(overlay, "ITEMS COME ALONG");
+  RequireContains(overlay, "r.required = !r.picked");
+  RequireDoesNotContain(overlay, "\"Also including: \"");
 }
 
 TEST_CASE("All pedal controls remain editable while their block is bypassed")

@@ -42,6 +42,8 @@ Mit dem Umschalter **PLAY | BUILD** in der Kopfzeile wechselst du zwischen Bühn
 
 PLAY ordnet gespeicherte Sounds Program-Change-Slots zu. Klicke **Add Sound**, wähle ein Werk- oder User-Preset und danach den zu belegenden Slot. Für jeden der 15 Werk-Amps gibt es immer ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar. Ein Klick auf einen belegten Slot ruft seinen vollständigen Sound auf, ein Doppelklick ersetzt die Zuordnung und die kleine Entfernen-Schaltfläche löscht sie. Der hervorgehobene Slot ist der zuletzt aus PLAY aufgerufene und bleibt bei Live-Änderungen markiert; **EDITED** zeigt an, dass das aktuelle Rig von diesem Snapshot abweicht.
 
+`Hoch` und `Runter` springen zum vorherigen oder nächsten belegten Slot und rufen ihn auf, damit du den Sound ohne Maus wechseln kannst. Leere Programmnummern werden übersprungen, ebenso Zuweisungen, deren Amp oder Preset fehlt; die Liste läuft an beiden Enden um.
+
 Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet.
 
 ## Amp Wählen
@@ -214,7 +216,8 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 
 ## Tastatur
 
-- Ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
+- In PLAY: `Hoch` / `Runter` springt zum vorherigen oder nächsten belegten Sound und ruft ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um.
+- In BUILD, ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
 - `Enter` bearbeitet das fokussierte Ziel. In der Standalone-App schaltet `Leertaste` es ein/aus. Im Plugin übernimmt `B` diese Funktion, damit `Leertaste` für Start/Stopp der DAW frei bleibt.
@@ -230,15 +233,17 @@ Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screen
 
 Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`.
 
-Das Overlay hat zwei Reiter.
+Das Overlay hat drei Reiter.
 
 ![VoLum-Einstellungen, Reiter SIGNAL](user-guide-settings-signal.png)
 
-**SIGNAL** regelt, wie Audio und MIDI hinein und hinaus gelangen: Eingangskalibrierung, Ausgangsmodus, Performance (FULL / LITE) und der MIDI-Eingangskanal dieser Instanz.
+**SIGNAL** regelt, wie Audio hinein und hinaus gelangt: Eingangskalibrierung, Ausgangsmodus und Performance (FULL / LITE).
+
+**MIDI** legt fest, auf welchem Kanal diese Instanz hört (Omni oder `1`–`16`) und was jede Program-Change-Nummer aufruft. Es ist dieselbe Liste, die PLAY zeigt: Ein hier hinzugefügter Sound erscheint auch auf der PLAY-Leiste und umgekehrt.
 
 ![VoLum-Einstellungen, Reiter SYSTEM](user-guide-settings-system.png)
 
-**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht, Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren, in diesem Build noch nicht aktiv), und den About-Block mit Version und Update-Hinweis.
+**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht, Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren), und den About-Block mit Version und Update-Hinweis.
 
 VoLum öffnet die Einstellungen wieder auf dem zuletzt genutzten Reiter.
 
@@ -253,9 +258,16 @@ Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Da
 
 ### MIDI Program Change
 
-VoLum empfängt MIDI Program Change in VST3, AU und der Standalone-App. Die Slots `0` bis `127` rufen Sounds auf: Jede Zuweisung verbindet einen Amp mit einem seiner benannten Presets einschließlich Cab, Kanal, PRE, POST und Dual-Amp-Setup. Die Zuweisung erfolgt in **PLAY**: Mit **+ Add** belegst du die nächste freie Programmnummer, indem du zuerst einen Amp und dann ein benanntes Preset wählst; ein Klick auf eine belegte Zeile ersetzt ihren Sound, ein Klick auf ihr `×` löscht sie. Wähle unter **Settings -> SIGNAL -> MIDI** Omni oder einen Eingangskanal für diese Instanz. Die Zuweisungsliste gilt rechnerweit; der Kanal wird dagegen pro Plugin-Instanz gespeichert. Omni ist die Voreinstellung.
+VoLum empfängt MIDI Program Change in VST3, AU und der Standalone-App. Die Slots `0` bis `127` rufen Sounds auf: Jede Zuweisung verbindet einen Amp mit einem seiner benannten Presets einschließlich Cab, Kanal, PRE, POST und Dual-Amp-Setup.
 
-Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter **File -> Preferences**; der Kanal bleibt in den VoLum-Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst den Kanal in VoLum.
+Zuweisen kannst du auf beiden Oberflächen, je nachdem, welche vor dir liegt:
+
+- In **PLAY** belegst du mit **+ Add** die nächste freie Programmnummer, indem du zuerst einen Amp und dann ein benanntes Preset wählst; ein Klick auf eine belegte Zeile ersetzt ihren Sound, ein Klick auf ihr `×` löscht sie.
+- Unter **Settings -> MIDI** steht dieselbe Liste als Tabelle aus Programmnummer, Sound und Amp, mit demselben Knopf **+ Add Sound**. Es gibt nur eine Liste: Beide Oberflächen lesen und schreiben dieselben Zuweisungen.
+
+Der Reiter **Settings -> MIDI** wählt außerdem Omni oder einen Eingangskanal für diese Instanz. Die Zuweisungsliste gilt rechnerweit; der Kanal wird dagegen pro Plugin-Instanz gespeichert. Omni ist die Voreinstellung.
+
+Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. Ein gelöschter Sound behält in beiden Listen seine Programmnummer und wird rot dargestellt: Das Programm gibt es weiterhin, das Ziel dahinter nicht mehr. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter **File -> Preferences**; der Kanal bleibt in den VoLum-Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst den Kanal in VoLum.
 
 Durch MIDI-Eingang ändert sich der Komponententyp von VoLums AU von `aufx` zu `aumf`. Bereits vorhandene AU-Instanzen müssen nach dem Update eventuell entfernt und neu eingesetzt werden.
 
@@ -283,10 +295,13 @@ Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json
 
 Die Zeile **Content library** in den Einstellungen hat **Export Pack...** und **Import Pack...**. Ein Pack ist eine einzige `.volumpack`-Datei, die die von dir ausgewählten eigenen Amps, IRs, Pedale und Presets samt ihrer Capture-Dateien enthält. Damit kannst du deine Bibliothek sichern, auf einen anderen Rechner umziehen oder einen Teil davon weitergeben.
 
-**Export** bietet zwei Umfänge:
+**Export** bietet drei Umfänge:
 
 - **Everything** – die gesamte Bibliothek. In der Standalone-App reisen zusätzlich deine Rechner-Einstellungen und MIDI-Slots mit.
-- **Selected amps and presets** – hake an, was mitkommen soll. Ein angehakter Amp nimmt seine Preset-Bank mit, und jede IR, jedes Pedal und jeder Dual-Amp-Partner, den diese Presets brauchen, wird automatisch ergänzt und unter der Liste genannt („Also including: ...“). Eine Voraussetzung lässt sich nicht abwählen: Ein Pack, das auf Inhalte verweist, die es nicht mitbringt, würde als defekter Amp ankommen. Ein Preset auf einem *Werk*-Amp nimmt seine eigene IR und sein eigenes Pedal mit, aber keinen Amp-Eintrag – das Werk-Capture liegt VoLum ohnehin bei.
+- **Sounds** – hake benannte Presets an. Jede Zeile nennt den Amp, zu dem das Preset gehört, und PLAY-Zuweisungen stehen oben mit ihrer Program-Change-Nummer. Ein angehaktes Sound nimmt jede IR, jedes Pedal und jeden Dual-Amp-Partner mit, den es braucht.
+- **A whole amp** – hake einen eigenen Amp an, und jedes Preset darauf reist mit.
+
+Voraussetzungen, die du nicht angehakt hast, stehen namentlich im hervorgehobenen Feld unter der Liste und lassen sich nicht weglassen: Ein Pack, das auf Inhalte verweist, die es nicht mitbringt, würde als defekter Amp ankommen. Ein Preset auf einem *Werk*-Amp nimmt seine eigene IR und sein eigenes Pedal mit, aber keinen Amp-Eintrag – das Werk-Capture liegt VoLum ohnehin bei.
 
 **Import** zeigt vor jeder Änderung, was passieren würde: was hinzukommt, was ersetzt wird, was denselben Namen wie ein vorhandener Eintrag trägt (beide bleiben – Namen sind Beschriftungen, IDs sind Identität) und was dein Rig gerade spielt und daher neu laden müsste. Ein Everything-Pack bietet zusätzlich drei Wege, Konflikte aufzulösen:
 

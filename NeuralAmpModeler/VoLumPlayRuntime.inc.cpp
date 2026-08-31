@@ -27,6 +27,27 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
     _UpdateVoLumLayout();
 }
 
+bool NeuralAmpModeler::_VolumStepPlaySlot(int dir)
+{
+  const auto& registry = volum::content::GlobalContentStore().reg();
+  const auto slots = volum::BuildPlaySlots(mVolumFactoryPresets, registry);
+  const int next = volum::StepAssignedSlot(slots, mVolumLastRecalledPlaySlot, dir);
+  if (next < 0)
+    return false;
+  for (const auto& slot : slots)
+  {
+    if (slot.slot != next || !slot.valid)
+      continue;
+    // Same path a rail click takes, so a keyboard step and a click cannot drift.
+    if (!VolumRecallSound(slot.sound.ampId, slot.sound.presetId))
+      return false;
+    mVolumLastRecalledPlaySlot = next;
+    _VolumRefreshPlaySurface();
+    return true;
+  }
+  return false;
+}
+
 bool NeuralAmpModeler::_VolumTogglePlayBypass(const char* paramName)
 {
   if (!paramName)
@@ -50,7 +71,10 @@ void NeuralAmpModeler::_VolumAssignPlaySound(int slot, const volum::SoundChoice&
     return;
   if (!store.Save())
     store.reg().midiSoundMap = before;
+  // Both surfaces, always: the caller can be the PLAY rail or the Settings MIDI
+  // tab, and the one that is not on screen must not keep a stale list.
   _VolumRefreshPlaySurface();
+  _VolumRefreshMidiSettingsChrome();
 }
 
 void NeuralAmpModeler::_VolumClearPlaySound(int slot)
@@ -64,6 +88,7 @@ void NeuralAmpModeler::_VolumClearPlaySound(int slot)
   if (mVolumLastRecalledPlaySlot == slot)
     mVolumLastRecalledPlaySlot = -1;
   _VolumRefreshPlaySurface();
+  _VolumRefreshMidiSettingsChrome();
 }
 
 void NeuralAmpModeler::_VolumRefreshPlaySurface()

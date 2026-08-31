@@ -1029,6 +1029,18 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       [this](const char* paramName) { _VolumTogglePlayBypass(paramName); }),
     kCtrlTagVoLumPlaySurface);
 
+  // Mode pair, attached here and not last. It has to sit above the PLAY surface
+  // (which owns the whole main panel while visible) so it stays clickable in PLAY,
+  // and below everything attached after this point - Settings, Pack, Manage, the
+  // confirm modal, tuner and metronome are all full-canvas overlays, and a header
+  // control that painted and hit-tested through them was the 1.3.0 bug.
+  pGraphics->AttachControl(new VoLumSettingsVertRuleControl(IRECT(mainR - 125.f, b.T + 16.f, mainR - 121.f, b.T + 38.f)));
+  auto* modeToggle = new VoLumModeToggleControl(
+    IRECT(mainR - 226.f, b.T + 14.f, mainR - 134.f, b.T + 40.f),
+    [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
+  modeToggle->SetMode(mVolumUiMode);
+  pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
+
   // Toolbar buttons (top-right of main panel): Tuner | Metronome | Gear
   {
     const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
@@ -1071,6 +1083,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
                                                     crossSVG, volumSettingsStyle, volumSettingsRadioStyle);
     pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
     settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
+    // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
+    // PLAY are two views of one midiSoundMap rather than two stores.
+    settingsPage->SetMidiSoundMapCallbacks(
+      [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
+      [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
     pPlugin->_VolumRefreshMidiSettingsChrome();
 
     // Tuner overlay (on top of everything)
@@ -1351,20 +1368,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // planner. Setting a partial selection here is what used to leave a lane with
   // an active custom IR reading as "No Cab".
 
-  // Attach last: several legacy overlay controls own the whole canvas even
-  // while visually hidden, so the always-available mode switch must sit above
-  // them to remain visible and clickable in BUILD as well as PLAY.
-  pGraphics->AttachControl(new VoLumSettingsVertRuleControl(IRECT(mainR - 125.f, b.T + 16.f, mainR - 121.f, b.T + 38.f)));
-  auto* modeToggle = new VoLumModeToggleControl(
-    IRECT(mainR - 234.f, b.T + 14.f, mainR - 130.f, b.T + 40.f),
-    [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
-  modeToggle->SetMode(mVolumUiMode);
-  pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
-
   // Pack export / import modal, opened from the Settings "Content library" row.
-  // Attached after the mode switch, not with the other overlays: it is a modal
-  // over the whole editor, so the PLAY/BUILD toggle must not draw through it or
-  // take clicks meant for the Pack sheet.
+  // Still after the mode pair, like every other full-canvas overlay: the header
+  // must not draw through the Pack sheet or take clicks meant for it.
   {
     auto* pack = new VoLumPackOverlayControl(b);
     pack->SetCallbacks([this](const volum::pack::ExportSelection& sel) { return _VolumExportPack(sel); },
@@ -1405,7 +1411,27 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     if (isUp)
       return false;
     if (mVolumUiMode == volum::UiMode::Play)
-      return false; // hidden BUILD controls must not react to navigation shortcuts
+    {
+      // Up/Down step the Sound rail; everything else stays unhandled, because the
+      // hidden BUILD controls behind PLAY must not react to navigation shortcuts.
+      if (key.VK != kVK_UP && key.VK != kVK_DOWN)
+        return false;
+      if (auto* pGfx = GetUI())
+      {
+        // A full-canvas overlay over PLAY owns the keyboard: stepping the live rig
+        // from behind an open Settings or Pack sheet is not a shortcut, it is a
+        // surprise.
+        for (int tag : {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,
+                        kCtrlTagVoLumConfirm, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome})
+        {
+          auto* c = pGfx->GetControlWithTag(tag);
+          if (c && !c->IsHidden())
+            return false;
+        }
+      }
+      _VolumStepPlaySlot(key.VK == kVK_UP ? -1 : 1);
+      return true; // consumed either way: never fall through to BUILD amp switching
+    }
 
     if (auto* pGfx = GetUI())
     {

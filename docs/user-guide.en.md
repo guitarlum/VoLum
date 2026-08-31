@@ -42,6 +42,8 @@ Use the **PLAY | BUILD** switch in the header to move between the stage surface 
 
 PLAY turns saved sounds into Program Change slots. Click **Add Sound**, choose a factory or User preset, then choose the slot to fill. The 15 factory amps always provide one read-only factory preset named **Ready**; User presets remain editable in BUILD. Click a populated slot to recall its complete sound, double-click it to replace the assignment, and use the small remove button to clear it. The highlighted slot is the last one recalled from PLAY and remains highlighted while you make live changes; **EDITED** indicates that the live rig differs from that recalled snapshot.
 
+`Up` and `Down` step to the previous or next assigned slot and recall it, so you can change Sound without the mouse. Empty program numbers are skipped, as are assignments whose amp or preset is missing, and the list wraps at both ends.
+
 The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched.
 
 ## Choose An Amp
@@ -214,7 +216,8 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 
 ## Keyboard Controls
 
-- No knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
+- In PLAY: `Up` / `Down` steps to the previous or next assigned Sound and recalls it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends.
+- In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
 - `Enter` edits the focused target. In the standalone app, `Space` toggles its on/off state. In plug-ins, `B` toggles it so `Space` remains available for DAW Play/Stop.
@@ -230,15 +233,17 @@ This covers the main playing and editing workflow. Full screen-reader support is
 
 Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`.
 
-The overlay has two tabs.
+The overlay has three tabs.
 
 ![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
 
-**SIGNAL** is how audio and MIDI get in and out: input calibration, output mode, performance (FULL / LITE), and the MIDI input channel for this instance.
+**SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE).
+
+**MIDI** is which channel this instance listens on (Omni or `1`–`16`) and what each Program Change number plays. The assignment list is the same one PLAY shows, so a Sound you add here appears on the PLAY rail and the other way round.
 
 ![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)
 
-**SYSTEM** is this build and this machine: the keyboard shortcut guide, information about the loaded model, the content library slot for moving your library between machines (Export / Import Pack, not enabled in this build), and the About block with the version and the update reminder.
+**SYSTEM** is this build and this machine: the keyboard shortcut guide, information about the loaded model, the content library slot for moving your library between machines (Export / Import Pack), and the About block with the version and the update reminder.
 
 VoLum reopens Settings on the tab you used last.
 
@@ -253,9 +258,16 @@ Fresh VST3 instances read those defaults when you add VoLum to a track. After th
 
 ### MIDI Program Change
 
-VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. Assign the slots in **PLAY**: use **+ Add** to take the next free program number by choosing an amp and then a named preset, click an assigned row to replace its Sound, or its `×` to clear it. In **Settings -> SIGNAL -> MIDI**, choose Omni or one input channel for this instance. The assignment list is machine-global, while the channel is stored per plugin instance; Omni is the default.
+VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup.
 
-An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel remains in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel in VoLum.
+Assign the slots on either surface, whichever is in front of you:
+
+- In **PLAY**, use **+ Add** to take the next free program number by choosing an amp and then a named preset, click an assigned row to replace its Sound, or its `×` to clear it.
+- In **Settings -> MIDI**, the same list appears as a table of program number, Sound, and amp, with the same **+ Add Sound** button. There is only one list: both surfaces read and write the same assignments.
+
+The **Settings -> MIDI** tab also chooses Omni or one input channel for this instance. The assignment list is machine-global, while the channel is stored per plugin instance; Omni is the default.
+
+An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number in both lists and reads red, because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel remains in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel in VoLum.
 
 MIDI input changes VoLum's AU component type from `aufx` to `aumf`. Existing AU instances may therefore need to be removed and inserted again after updating.
 
@@ -283,10 +295,13 @@ Lite mode is a per-computer preference: it is saved in `volum-settings.json`, no
 
 The **Content library** row in Settings has **Export Pack...** and **Import Pack...**. A Pack is one `.volumpack` file holding the custom amps, IRs, pedals, and presets you chose together with their capture files, so you can back up your library, move it to another machine, or hand part of it to somebody else.
 
-**Export** offers two scopes:
+**Export** offers three scopes:
 
 - **Everything** — the whole library. In the standalone app it also carries your machine settings and MIDI slots.
-- **Selected amps and presets** — tick what should travel. A ticked amp brings its preset bank with it, and every IR, pedal, and dual-amp partner those presets need is added for you and listed under the box ("Also including: ..."). You cannot untick a requirement: a Pack that referenced content it did not carry would import as a broken amp. A preset on a *factory* amp brings its custom IR and pedal but no amp entry, because the factory capture already ships with VoLum.
+- **Sounds** — tick named presets. Each row names the amp it belongs to, and PLAY assignments sit at the top with their Program Change number. A ticked Sound brings every IR, pedal, and dual-amp partner it needs.
+- **A whole amp** — tick a custom amp and every preset saved on it travels with it.
+
+Requirements you did not tick are named in the highlighted band under the list and cannot be left behind: a Pack that referenced content it did not carry would import as a broken amp. A preset on a *factory* amp brings its custom IR and pedal but no amp entry, because the factory capture already ships with VoLum.
 
 **Import** shows what would happen before anything changes: what is added, what is replaced, what shares a name with something you already have (both are kept — names are labels, ids are identity), and what your rig is playing right now and would therefore reload. An Everything Pack additionally offers three ways to resolve conflicts:
 

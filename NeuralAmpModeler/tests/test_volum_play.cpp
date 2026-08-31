@@ -82,6 +82,49 @@ TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC
   CHECK(slots[1].sound.presetName == "Invalid slot");
 }
 
+TEST_CASE("PLAY arrows step only the slots a Program Change could actually recall")
+{
+  const auto factory = volum::DefaultFactoryPresets();
+  volum::content::Registry registry;
+
+  // Nothing assigned: the arrows have nowhere to go and must say so rather than
+  // silently recalling slot 0.
+  CHECK(volum::StepAssignedSlot(volum::BuildPlaySlots(factory, registry), -1, 1) == -1);
+  CHECK(volum::StepAssignedSlot(volum::BuildPlaySlots(factory, registry), 4, -1) == -1);
+
+  volum::content::AssignMidiSound(registry, 2, "factory:7", "factory:7:v1");
+  volum::content::AssignMidiSound(registry, 5, "missing-amp", "missing-preset"); // hole that reads red
+  volum::content::AssignMidiSound(registry, 9, "factory:3", "factory:3:v1");
+  const auto slots = volum::BuildPlaySlots(factory, registry);
+
+  // Nothing recalled yet: down starts at the top of the rail, up at the bottom.
+  CHECK(volum::StepAssignedSlot(slots, -1, 1) == 2);
+  CHECK(volum::StepAssignedSlot(slots, -1, -1) == 9);
+
+  // 5 is assigned but unresolvable, so stepping jumps straight over it.
+  CHECK(volum::StepAssignedSlot(slots, 2, 1) == 9);
+  CHECK(volum::StepAssignedSlot(slots, 9, -1) == 2);
+
+  // Wrap at both ends: the rail is short and holding Down means "the next one".
+  CHECK(volum::StepAssignedSlot(slots, 9, 1) == 2);
+  CHECK(volum::StepAssignedSlot(slots, 2, -1) == 9);
+
+  // A slot that is not reachable any more (cleared, or gone invalid while live)
+  // hands off to the neighbour in the direction of travel, not back to the start.
+  CHECK(volum::StepAssignedSlot(slots, 5, 1) == 9);
+  CHECK(volum::StepAssignedSlot(slots, 5, -1) == 2);
+  CHECK(volum::StepAssignedSlot(slots, 40, 1) == 2); // past the end, so wrap
+  CHECK(volum::StepAssignedSlot(slots, 0, -1) == 9); // before the start, so wrap
+
+  // One reachable slot: stepping is a no-op that still resolves to that slot,
+  // never to -1, so the key stays consumed instead of falling through to BUILD.
+  volum::content::Registry one;
+  volum::content::AssignMidiSound(one, 11, "factory:7", "factory:7:v1");
+  const auto single = volum::BuildPlaySlots(factory, one);
+  CHECK(volum::StepAssignedSlot(single, 11, 1) == 11);
+  CHECK(volum::StepAssignedSlot(single, 11, -1) == 11);
+}
+
 TEST_CASE("Last-recalled highlight survives dirty edits but not another origin")
 {
   volum::PlaySlot slot;

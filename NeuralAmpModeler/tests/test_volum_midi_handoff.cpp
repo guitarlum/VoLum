@@ -120,11 +120,12 @@ TEST_CASE("MIDI channel id tail defaults to Omni and clamps to 1 through 16")
   CHECK(volum::IdTailFromJson({{"midiCh", -2}}).midiCh == 0);
 }
 
-TEST_CASE("Settings MIDI chrome exposes the channel and nothing else")
+TEST_CASE("Settings MIDI chrome owns the channel and the assignment list, but stores neither")
 {
-  // PLAY owns the Sound assignment list (.scratch/midi-control/spec.md), so the
-  // interim list-in-Settings chrome is gone. The channel is the only MIDI control
-  // Settings still owns, and it still rides the DAW id tail, not the sound map.
+  // The channel is per instance and rides the DAW id tail. The assignment list is
+  // machine global and lives in the content registry. Both are edited on the MIDI
+  // tab, and the tab must persist neither itself: a Settings-local copy of the
+  // sound map is how PLAY and Settings would start disagreeing.
   const auto root = RepoRoot() / "NeuralAmpModeler";
   const std::string controls = ReadText(root / "NeuralAmpModelerControls.h");
   const std::string tabs = ReadText(root / "VoLumSettingsTabs.h");
@@ -133,14 +134,18 @@ TEST_CASE("Settings MIDI chrome exposes the channel and nothing else")
   CHECK(tabs.find("class VoLumMidiChannelControl") != std::string::npos);
   CHECK(tabs.find("mChannel == 0 ?") != std::string::npos);
   CHECK(tabs.find("Omni") != std::string::npos);
+  CHECK(tabs.find("class VoLumMidiSoundMapControl") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
+  CHECK(controls.find("SetMidiSoundMapCallbacks") != std::string::npos);
   CHECK(controls.find("void SetMidiChannel(int channel)") != std::string::npos);
-  // No slot rows, no Add, no assign/clear callbacks left in the Settings chrome.
+  CHECK(controls.find("void SetMidiSoundMap(") != std::string::npos);
+  // The pre-1.3.0 duplicate-list control stays gone.
   CHECK(controls.find("VoLumMidiSettingsControl") == std::string::npos);
-  CHECK(tabs.find("AssignCallback") == std::string::npos);
-  CHECK(tabs.find("ClearCallback") == std::string::npos);
+  // The channel persists per instance; the sound map does not ride this document.
   CHECK(settings.find("j[\"midiCh\"] = mVolumMidiChannel.load()") != std::string::npos);
   CHECK(settings.find("midiSoundMap") == std::string::npos);
+  // The tab reads the registry's map; it never assigns into it directly.
+  CHECK(tabs.find("midiSoundMap =") == std::string::npos);
 }
 
 TEST_CASE("ProcessMidiMsg is an integer-only RT handoff")

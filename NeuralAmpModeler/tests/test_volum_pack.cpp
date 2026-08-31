@@ -294,6 +294,27 @@ TEST_CASE("Export closure auto-includes what a selection references")
   }
 }
 
+TEST_CASE("Pack export and import labels name the amp a preset belongs to")
+{
+  Library lib("preset-amp-label");
+  const Registry& r = lib.store.reg();
+  CHECK(OwnerDisplayName(r, "amp_one") == "Plexi");
+  CHECK(PresetWithAmpLabel(r, "Lead", "amp_one") == "Preset \"Lead\"  ·  Plexi");
+  CHECK(OwnerDisplayName(r, volum::content::FactoryOwnerKey(7)) == volum::kAmps[7].displayName);
+  CHECK(OwnerDisplayName(r, "missing-amp") == "missing-amp");
+
+  ExportSelection sel;
+  sel.everything = false;
+  sel.ampIds = {"amp_one"};
+  CHECK(Mentions(BuildExportPlan(r, sel).alsoIncluding, "Preset \"Lead\"  ·  Plexi"));
+
+  PackContents pack;
+  pack.ok = true;
+  pack.library = r;
+  CHECK(Mentions(BuildImportPreview(r, pack, ImportVerb::Overwrite, false, true).replaces,
+                 "Preset \"Lead\"  ·  Plexi"));
+}
+
 TEST_CASE("A Share Pack carries no settings and no MIDI sound map; Everything carries both")
 {
   Library lib("export-payload");

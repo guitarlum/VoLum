@@ -181,4 +181,52 @@ inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::st
          && slot.sound.presetId == activePresetId;
 }
 
+// The slot PLAY's up/down arrows should land on, given the slot playing now.
+//
+// Only slots a Program Change would actually recall are reachable: unassigned
+// numbers do not exist in `slots` at all, and an assigned slot whose Sound is
+// gone is skipped, exactly as ProcessMidiMsg drops a PC that will not resolve.
+// Stepping wraps, because the rail is short and a player holding Down at the
+// bottom of it means "the next one", not "nothing".
+//
+// `currentSlot` may be -1 (nothing recalled yet) or a slot that is no longer
+// reachable - cleared, or gone invalid since it was recalled - in which case the
+// step lands on the nearest reachable slot in the direction of travel.
+// Returns -1 when there is nothing to step to.
+inline int StepAssignedSlot(const std::vector<PlaySlot>& slots, int currentSlot, int dir)
+{
+  std::vector<int> reachable;
+  reachable.reserve(slots.size());
+  for (const auto& slot : slots)
+    if (slot.valid)
+      reachable.push_back(slot.slot);
+  if (reachable.empty())
+    return -1;
+  // BuildPlaySlots walks a slot-keyed map, so this is already ascending; sort
+  // anyway so the helper is honest about its own contract.
+  std::sort(reachable.begin(), reachable.end());
+
+  const int count = static_cast<int>(reachable.size());
+  const bool forward = dir >= 0;
+  if (currentSlot < 0)
+    return forward ? reachable.front() : reachable.back();
+
+  const auto at = std::find(reachable.begin(), reachable.end(), currentSlot);
+  if (at != reachable.end())
+  {
+    const int index = static_cast<int>(at - reachable.begin());
+    return reachable[static_cast<size_t>(((index + (forward ? 1 : -1)) % count + count) % count)];
+  }
+
+  // Current slot is not reachable any more: fall to the neighbour we were heading
+  // towards, wrapping when there is none on that side.
+  if (forward)
+  {
+    const auto next = std::upper_bound(reachable.begin(), reachable.end(), currentSlot);
+    return next == reachable.end() ? reachable.front() : *next;
+  }
+  const auto prev = std::lower_bound(reachable.begin(), reachable.end(), currentSlot);
+  return prev == reachable.begin() ? reachable.back() : *(prev - 1);
+}
+
 } // namespace volum

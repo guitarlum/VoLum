@@ -148,6 +148,25 @@ inline void AddUnique(std::vector<std::string>& v, const std::string& s)
 }
 } // namespace detail
 
+// The name a player sees for a preset-bank owner: a factory amp's display name,
+// or a custom amp's library name. A missing owner still prints the key so a hole
+// is a named row, not a nameless one.
+inline std::string OwnerDisplayName(const content::Registry& r, const std::string& ownerKey)
+{
+  const int idx = FactoryAmpIndexFromId(ownerKey);
+  if (idx >= 0 && idx < kAmpCount && content::FactoryOwnerKey(idx) == ownerKey)
+    return kAmps[idx].displayName;
+  if (const auto* amp = detail::FindAmp(r, ownerKey))
+    return amp->name;
+  return ownerKey.empty() ? "(unknown amp)" : ownerKey;
+}
+
+inline std::string PresetWithAmpLabel(const content::Registry& r, const std::string& presetName,
+                                     const std::string& ownerKey)
+{
+  return "Preset \"" + presetName + "\"  ·  " + OwnerDisplayName(r, ownerKey);
+}
+
 // Resolve a selection into the full set of items a Pack has to carry.
 //
 // Selecting a custom amp takes its preset bank with it - that is what "export this
@@ -198,7 +217,7 @@ inline ExportPlan BuildExportPlan(const content::Registry& r, const ExportSelect
       if (std::find(plan.presetIds.begin(), plan.presetIds.end(), pr.id) == plan.presetIds.end())
       {
         plan.presetIds.push_back(pr.id);
-        plan.alsoIncluding.push_back("Preset \"" + pr.name + "\"");
+        plan.alsoIncluding.push_back(PresetWithAmpLabel(r, pr.name, ampId));
       }
   }
 
@@ -246,7 +265,7 @@ inline ExportPlan BuildExportPlan(const content::Registry& r, const ExportSelect
       if (std::find(plan.presetIds.begin(), plan.presetIds.end(), pr.id) == plan.presetIds.end())
       {
         plan.presetIds.push_back(pr.id);
-        plan.alsoIncluding.push_back("Preset \"" + pr.name + "\"");
+        plan.alsoIncluding.push_back(PresetWithAmpLabel(r, pr.name, plan.ampIds[i]));
         pullSettings(pr.settings);
       }
   }
@@ -563,14 +582,14 @@ inline ImportPreview BuildImportPreview(const content::Registry& current, const 
       std::string owner;
       size_t at = 0;
       const bool present = FindPreset(current, pr.id, owner, at);
-      note(present, "Preset \"" + pr.name + "\"", pr.id);
+      note(present, PresetWithAmpLabel(incoming, pr.name, bank.first), pr.id);
       if (!present)
       {
         const auto mine = current.presetBanks.find(bank.first);
         if (mine != current.presetBanks.end())
           for (const auto& other : mine->second)
             if (other.id != pr.id && other.name == pr.name)
-              out.nameCollisions.push_back("Preset \"" + pr.name + "\"");
+              out.nameCollisions.push_back(PresetWithAmpLabel(incoming, pr.name, bank.first));
       }
     }
 
@@ -592,7 +611,7 @@ inline ImportPreview BuildImportPreview(const content::Registry& current, const 
         std::string owner;
         size_t at = 0;
         if (!FindPreset(incoming, pr.id, owner, at))
-          out.removals.push_back("Preset \"" + pr.name + "\"");
+          out.removals.push_back(PresetWithAmpLabel(current, pr.name, bank.first));
       }
   }
 

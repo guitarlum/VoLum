@@ -241,10 +241,15 @@ void NeuralAmpModeler::_VolumRefreshMidiSettingsChrome()
   auto* pGfx = GetUI();
   if (!pGfx)
     return;
-  // Settings shows the channel only; PLAY owns the Sound assignment list, so
-  // there is no row/choice model to rebuild here.
-  if (auto* raw = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
-    raw->As<NAMSettingsPageControl>()->SetMidiChannel(mVolumMidiChannel.load());
+  auto* raw = pGfx->GetControlWithTag(kCtrlTagSettingsBox);
+  if (!raw)
+    return;
+  auto* page = raw->As<NAMSettingsPageControl>();
+  page->SetMidiChannel(mVolumMidiChannel.load());
+  // Rebuilt from the live registry every time, never cached: the map is machine
+  // global, so another instance or the PLAY rail can have changed it since the
+  // panel was last opened.
+  page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg());
 }
 
 void NeuralAmpModeler::_VolumRecallFactoryPreset()

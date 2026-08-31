@@ -59,7 +59,7 @@ public:
   void ShowExport()
   {
     mScreen = Screen::Export;
-    mEverything = true;
+    mScope = Scope::Everything;
     mScroll = 0;
     mStatus.clear();
     _RebuildRows();
@@ -107,7 +107,7 @@ public:
                mScreen == Screen::Export ? "EXPORT PACK" : "IMPORT PACK", inner.GetFromTop(20.f));
 
     if (mScreen == Screen::Export)
-      _DrawExport(g, inner);
+      _DrawExport(g);
     else
       _DrawImport(g, inner);
 
@@ -156,14 +156,22 @@ public:
 
     if (mScreen == Screen::Export)
     {
-      if (_ScopeRect(0).Contains(x, y) || _ScopeRect(1).Contains(x, y))
-      {
-        mEverything = _ScopeRect(0).Contains(x, y);
-        mScroll = 0;
-        SetDirty(false);
-        return;
-      }
-      if (!mEverything && _ListRect().Contains(x, y))
+      for (int i = 0; i < kScopeCount; ++i)
+        if (_ScopeRect(i).Contains(x, y))
+        {
+          if (mScope != (Scope)i)
+          {
+            // Ticks do not survive a scope change on purpose: "this Sound" and
+            // "this whole amp" are different questions, so carrying an answer
+            // across would export something the user never looked at.
+            mScope = (Scope)i;
+            mScroll = 0;
+            _RebuildRows();
+          }
+          SetDirty(false);
+          return;
+        }
+      if (mScope != Scope::Everything && _ListRect().Contains(x, y))
       {
         const int row = mScroll + (int)((y - _ListRect().T) / kRowH);
         if (row >= 0 && row < (int)mRows.size())
@@ -201,16 +209,32 @@ private:
     Import
   };
 
+  // What travels. Three questions a player actually asks, mapped onto the two
+  // fields ExportSelection already has: Everything is the whole library, Sounds
+  // ticks presets, Amps ticks custom amps and lets BuildExportPlan pull each
+  // amp's whole bank in behind it.
+  enum class Scope
+  {
+    Everything,
+    Sounds,
+    Amps
+  };
+  static constexpr int kScopeCount = 3;
+
   struct Row
   {
     bool isAmp = true;
     std::string id;
     std::string label;
+    std::string sub; // the amp a Sound belongs to, or an amp's preset count
+    int pc = -1; // Program Change slot this Sound is on in PLAY, or -1
     bool picked = false;
     bool required = false; // dragged in by the closure: shown ticked and locked
   };
 
   static constexpr float kRowH = 20.f;
+  // Items per line in the closure band, tuned to the 524 px band at 11 px Josefin.
+  static constexpr size_t kAlsoPerLine = 2;
 
   IRECT _BoxRect() const
   {
@@ -231,15 +255,23 @@ private:
   IRECT _ScopeRect(int which) const
   {
     const IRECT box = _BoxRect();
-    const float t = box.T + 44.f + which * 22.f;
-    return IRECT(box.L + 18.f, t, box.R - 18.f, t + 20.f);
+    const float t = box.T + 42.f + which * 24.f;
+    return IRECT(box.L + 18.f, t, box.R - 18.f, t + 23.f);
   }
   IRECT _ListRect() const
   {
     const IRECT box = _BoxRect();
-    const float top = mScreen == Screen::Export ? box.T + 94.f : box.T + 66.f;
-    const float bottom = mScreen == Screen::Export ? box.B - 90.f : box.B - (_VerbsVisible() ? 126.f : 66.f);
+    const float top = mScreen == Screen::Export ? _ScopeRect(kScopeCount - 1).B + 8.f : box.T + 66.f;
+    const float bottom = mScreen == Screen::Export ? _AlsoRect().T - 8.f : box.B - (_VerbsVisible() ? 126.f : 66.f);
     return IRECT(box.L + 18.f, top, box.R - 18.f, bottom);
+  }
+  // The closure band. Fixed height and always drawn: what a selection drags along
+  // is the one thing about a Pack that surprises people, so it gets a permanent
+  // block under the list rather than a caption that appears when it has news.
+  IRECT _AlsoRect() const
+  {
+    const IRECT box = _BoxRect();
+    return IRECT(box.L + 18.f, box.B - 104.f, box.R - 18.f, box.B - 54.f);
   }
   int _VisibleRows() const { return std::max(1, (int)(_ListRect().H() / kRowH)); }
   bool _VerbsVisible() const
@@ -271,19 +303,46 @@ private:
   void _RebuildRows()
   {
     mRows.clear();
-    const auto& reg = volum::content::GlobalContentStore().reg();
-    for (const auto& a : reg.amps)
-      mRows.push_back({true, a.id, "Custom amp   " + a.name, false, false});
-    for (const auto& bank : reg.presetBanks)
-      for (const auto& pr : bank.second)
-        mRows.push_back({false, pr.id, "Preset          " + pr.name, false, false});
     mAlsoIncluding.clear();
+    const auto& reg = volum::content::GlobalContentStore().reg();
+
+    if (mScope == Scope::Amps)
+    {
+      for (const auto& a : reg.amps)
+      {
+        const auto bank = reg.presetBanks.find(a.id);
+        const size_t presets = bank == reg.presetBanks.end() ? 0u : bank->second.size();
+        mRows.push_back({true, a.id, a.name,
+                         presets == 1 ? std::string("1 preset") : std::to_string(presets) + " presets", -1, false,
+                         false});
+      }
+      return;
+    }
+    if (mScope == Scope::Sounds)
+    {
+      // PLAY's assignments first, tagged with their program number: "export the
+      // Sounds I gig with" is the common case, and hunting for them inside an
+      // undifferentiated bank list is what made the old tick list cryptic.
+      for (int pass = 0; pass < 2; ++pass)
+        for (const auto& bank : reg.presetBanks)
+          for (const auto& pr : bank.second)
+          {
+            int pc = -1;
+            for (const auto& slot : reg.midiSoundMap)
+              if (slot.second.presetId == pr.id && slot.second.ampId == bank.first)
+                pc = slot.first;
+            if ((pass == 0) != (pc >= 0))
+              continue;
+            mRows.push_back(
+              {false, pr.id, pr.name, volum::pack::OwnerDisplayName(reg, bank.first), pc, false, false});
+          }
+    }
   }
 
   volum::pack::ExportSelection _Selection() const
   {
     volum::pack::ExportSelection sel;
-    sel.everything = mEverything;
+    sel.everything = mScope == Scope::Everything;
     for (const auto& r : mRows)
       if (r.picked)
         (r.isAmp ? sel.ampIds : sel.presetIds).push_back(r.id);
@@ -306,19 +365,24 @@ private:
     }
   }
 
-  void _DrawExport(IGraphics& g, const IRECT& inner)
+  void _DrawExport(IGraphics& g)
   {
-    _DrawRadio(g, _ScopeRect(0), "Everything - your whole library, MIDI slots and machine settings", mEverything);
-    _DrawRadio(g, _ScopeRect(1), "Selected amps and presets", !mEverything);
+    // Three scopes in the player's own words. "Everything" is a backup, "Sounds"
+    // is what a set list is made of, "amp" is the thing a player hands to a
+    // friend - and the second column says what each one costs.
+    _DrawScope(g, 0, "Everything", mStandalone ? "your whole library, machine settings and MIDI slots"
+                                               : "your whole library, every amp, IR, pedal and preset");
+    _DrawScope(g, 1, "Sounds", "pick presets - your PLAY assignments are at the top");
+    _DrawScope(g, 2, "A whole amp", "one custom amp and every preset saved on it");
 
     const IRECT list = _ListRect();
     g.FillRect(IColor(60, 10, 12, 16), list);
     g.DrawRect(VoLumColors::FRAME, list);
 
-    if (mEverything)
+    if (mScope == Scope::Everything)
     {
-      g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-                 "Everything in your library travels, including unused IRs and pedals.", list);
+      g.DrawText(IText(11.5f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+                 "Nothing to pick: everything in your library travels, unused IRs and pedals included.", list);
     }
     else
     {
@@ -333,23 +397,112 @@ private:
         g.DrawRect(r.required ? VoLumColors::TEXT_DIM : VoLumColors::FRAME, boxR);
         if (on)
           g.FillRect(r.required ? VoLumColors::TEXT_DIM : VoLumColors::AMBER, boxR.GetPadded(-2.5f));
-        g.DrawText(IText(11.f, r.required ? VoLumColors::TEXT_DIM : VoLumColors::CREAM, "Josefin-Sans", EAlign::Near,
+
+        const IColor ink = r.required ? VoLumColors::TEXT_DIM : VoLumColors::CREAM;
+        // A PC chip, so a row the player recognises from their footswitch reads as
+        // the same object here.
+        float textL = rowR.L + 18.f;
+        if (r.pc >= 0)
+        {
+          const IRECT chip(textL, rowR.T + 3.f, textL + 30.f, rowR.B - 3.f);
+          g.DrawRoundRect(VoLumColors::GOLD_DIM, chip, 2.f);
+          g.DrawText(IText(9.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+                     (r.pc < 10 ? "0" + std::to_string(r.pc) : std::to_string(r.pc)).c_str(), chip);
+          textL = chip.R + 8.f;
+        }
+        const IRECT nameR(textL, rowR.T, rowR.R - 168.f, rowR.B);
+        g.PathClipRegion(nameR);
+        g.DrawText(IText(11.5f, ink, "Josefin-Sans", EAlign::Near, EVAlign::Middle), r.label.c_str(), nameR);
+        g.PathClipRegion(list);
+        g.DrawText(IText(10.f, r.required ? VoLumColors::TEXT_DIM : VoLumColors::TEAL_DIM, "Josefin-Sans", EAlign::Far,
                          EVAlign::Middle),
-                   r.label.c_str(), IRECT(rowR.L + 18.f, rowR.T, rowR.R, rowR.B));
+                   r.sub.c_str(), IRECT(rowR.R - 164.f, rowR.T, rowR.R - 4.f, rowR.B));
       }
       if (mRows.empty())
         g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-                   "No custom amps or presets in your library yet.", list);
+                   mScope == Scope::Amps ? "No custom amps in your library yet."
+                                         : "No saved presets yet - a Sound is an amp plus a named preset.",
+                   list);
       g.PathClipRegion();
     }
 
-    const IRECT alsoR(inner.L, list.B + 4.f, inner.R, list.B + 34.f);
-    std::string also;
-    for (const auto& s : mAlsoIncluding)
-      also += (also.empty() ? "" : ", ") + s;
-    if (!mEverything)
-      g.DrawText(IText(10.5f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
-                 also.empty() ? "Requirements are added automatically." : ("Also including: " + also).c_str(), alsoR);
+    _DrawAlso(g);
+  }
+
+  // The closure, as the loudest thing on the screen after the scope. Two lines of
+  // names, then a count if it still does not fit: "also including" is where a Pack
+  // stops being what you ticked and starts being what will actually import.
+  void _DrawAlso(IGraphics& g)
+  {
+    const IRECT band = _AlsoRect();
+    g.FillRoundRect(IColor(58, 232, 168, 92), band, 3.f);
+    g.DrawRoundRect(VoLumColors::AMBER.WithOpacity(0.65f), band, 3.f);
+
+    const IRECT capR(band.L + 10.f, band.T + 4.f, band.R - 10.f, band.T + 18.f);
+    const IRECT bodyR(band.L + 10.f, band.T + 18.f, band.R - 10.f, band.B - 4.f);
+    const IText cap(10.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
+    const IText body(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Near, EVAlign::Top);
+
+    if (mScope == Scope::Everything)
+    {
+      g.DrawText(cap, "ALSO INCLUDING", capR);
+      // Two DrawText calls, not one string with a newline: IGraphics lays out a
+      // single line and the second half would be dropped.
+      g.DrawText(body, "Every IR, pedal and capture file your library references.", bodyR);
+      if (mStandalone)
+        g.DrawText(body, "Plus your machine settings and the MIDI Program Change slots.",
+                   IRECT(bodyR.L, bodyR.T + 13.f, bodyR.R, bodyR.T + 26.f));
+      return;
+    }
+    if (mAlsoIncluding.empty())
+    {
+      g.DrawText(cap, "ALSO INCLUDING", capR);
+      g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
+                 mRows.empty() ? "Nothing yet." : "Nothing extra yet. Tick something and its requirements appear here.",
+                 bodyR);
+      return;
+    }
+
+    g.DrawText(cap,
+               (std::to_string(mAlsoIncluding.size()) + (mAlsoIncluding.size() == 1 ? " ITEM COMES ALONG"
+                                                                                   : " ITEMS COME ALONG"))
+                 .c_str(),
+               capR);
+    // Two lines, chunked by item rather than by character: a name cut in half is
+    // worse than a "+2 more".
+    std::string lines[2];
+    size_t shown = 0;
+    for (const auto& item : mAlsoIncluding)
+    {
+      const size_t line = shown < kAlsoPerLine ? 0u : 1u;
+      if (line > 1 || shown >= kAlsoPerLine * 2)
+        break;
+      lines[line] += (lines[line].empty() ? "" : ", ") + item;
+      ++shown;
+    }
+    if (shown < mAlsoIncluding.size())
+      lines[1] += (lines[1].empty() ? "" : ", ") + std::string("+")
+                  + std::to_string(mAlsoIncluding.size() - shown) + " more";
+    for (int i = 0; i < 2; ++i)
+      if (!lines[i].empty())
+        g.DrawText(body, lines[i].c_str(),
+                   IRECT(bodyR.L, bodyR.T + i * 13.f, bodyR.R, bodyR.T + (i + 1) * 13.f));
+  }
+
+  void _DrawScope(IGraphics& g, int which, const char* title, const char* detail)
+  {
+    const IRECT r = _ScopeRect(which);
+    const bool on = mScope == (Scope)which;
+    const float cy = r.MH();
+    g.DrawCircle(on ? VoLumColors::AMBER : VoLumColors::FRAME, r.L + 6.f, cy, 5.5f, nullptr, 1.2f);
+    if (on)
+      g.FillCircle(VoLumColors::AMBER, r.L + 6.f, cy, 3.f);
+    const IRECT titleR(r.L + 18.f, r.T, r.L + 128.f, r.B);
+    g.DrawText(IText(12.f, on ? VoLumColors::GOLD : VoLumColors::CREAM, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
+               title, titleR);
+    g.DrawText(IText(11.f, on ? VoLumColors::CREAM : VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near,
+                     EVAlign::Middle),
+               detail, IRECT(titleR.R, r.T, r.R, r.B));
   }
 
   // -- Import ------------------------------------------------------------------
@@ -471,17 +624,6 @@ private:
     SetDirty(false);
   }
 
-  void _DrawRadio(IGraphics& g, const IRECT& r, const char* label, bool on)
-  {
-    const float cy = r.MH();
-    g.DrawCircle(on ? VoLumColors::AMBER : VoLumColors::FRAME, r.L + 6.f, cy, 5.5f, nullptr, 1.2f);
-    if (on)
-      g.FillCircle(VoLumColors::AMBER, r.L + 6.f, cy, 3.f);
-    g.DrawText(
-      IText(11.5f, on ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Sans", EAlign::Near, EVAlign::Middle),
-      label, IRECT(r.L + 18.f, r.T, r.R, r.B));
-  }
-
   void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool primary)
   {
     g.FillRoundRect(primary ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
@@ -499,7 +641,7 @@ private:
   };
 
   Screen mScreen = Screen::Export;
-  bool mEverything = true;
+  Scope mScope = Scope::Everything;
   bool mStandalone = false;
   bool mAlsoSettings = false;
   volum::pack::ImportVerb mVerb = volum::pack::ImportVerb::Overwrite;

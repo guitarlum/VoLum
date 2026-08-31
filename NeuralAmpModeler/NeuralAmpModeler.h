@@ -457,6 +457,8 @@ public:
   void _VolumSetUiMode(volum::UiMode mode);
   void _VolumRefreshPlaySurface();
   bool _VolumTogglePlayBypass(const char* paramName);
+  // PLAY up/down: recall the previous/next Program Change slot that resolves.
+  bool _VolumStepPlaySlot(int dir);
   void _VolumAssignPlaySound(int slot, const volum::SoundChoice& sound);
   void _VolumClearPlaySound(int slot);
   // Select a factory amp exactly as clicking its sidebar row does (scene restore +

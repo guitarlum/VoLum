@@ -1049,15 +1049,15 @@ public:
     SetDirty(true);
   }
 
-  // Two tabs, switched in-panel. SIGNAL owns the audio and MIDI path
-  // (calibration, output mode, performance, channel); SYSTEM owns everything
-  // about this install (shortcuts, loaded model, content library, about and
-  // update). The one-page version could not hold all of it at 900x600 without
-  // clipping its own footer.
+  // Three tabs, switched in-panel. SIGNAL owns the audio path (calibration,
+  // output mode, performance); MIDI owns the channel and the Program Change
+  // Sound assignments; SYSTEM owns everything about this install (shortcuts,
+  // loaded model, content library, about and update). The one-page version could
+  // not hold all of it at 900x600 without clipping its own footer.
   void OnAttached() override
   {
     const IRECT rootB = GetRECT();
-    // 0.88, not 0.84: two tabs need a body tall enough that neither one has to
+    // 0.88, not 0.84: the tabs need a body tall enough that none of them has to
     // squeeze. The dim margin is still ~54 px, so the panel still reads as an
     // overlay rather than a second window.
     const IRECT panel =
@@ -1082,9 +1082,10 @@ public:
                          mControlNames.close);
 
     const IRECT tabRow = inner.ReduceFromTop(30.f);
-    AddNamedChildControl(new VoLumSettingsTabStripControl(tabRow, {kTabNames[kTabSignal], kTabNames[kTabSystem]},
-                                                         [this](int tab) { SetActiveTab(tab); }),
-                         mControlNames.tabStrip);
+    AddNamedChildControl(
+      new VoLumSettingsTabStripControl(tabRow, {kTabNames[kTabSignal], kTabNames[kTabMidi], kTabNames[kTabSystem]},
+                                       [this](int tab) { SetActiveTab(tab); }),
+      mControlNames.tabStrip);
 
     (void)inner.ReduceFromTop(7.f);
     AddNamedChildControl(new IVLabelControl(inner.ReduceFromTop(14.f), kTabHints[kTabSignal], _HintStyle()),
@@ -1097,13 +1098,14 @@ public:
     // body clear of them so no card footer paints over a bracket.
     const IRECT body(inner.L, inner.T, inner.R, panel.B - 30.f);
     _BuildSignalTab(body);
+    _BuildMidiTab(body);
     _BuildSystemTab(body);
     _ApplyTabVisibility();
 
     OnResize();
   }
 
-  // ---- SIGNAL: how audio and MIDI get in and out --------------------------
+  // ---- SIGNAL: how audio gets in and out ----------------------------------
   void _BuildSignalTab(const IRECT& body)
   {
     const auto text = IText(15.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
@@ -1112,8 +1114,6 @@ public:
     IRECT rest = body;
     const IRECT cardsRow = rest.ReduceFromTop(196.f);
     (void)rest.ReduceFromTop(18.f);
-    const IRECT midiCard = rest.ReduceFromTop(92.f);
-    (void)rest.ReduceFromTop(16.f);
     const IRECT hintRow = rest.ReduceFromTop(16.f);
 
     const float gap = 14.f;
@@ -1185,13 +1185,6 @@ public:
                                             mControlNames.perfHelp));
     }
 
-    // --- MIDI: channel only. PLAY owns the Sound assignment list. ---
-    {
-      const IRECT cardBody = _AddCard(kTabSignal, midiCard, "MIDI", mControlNames.midiGroupFrame,
-                                      mControlNames.midiSection, EAlign::Near);
-      _Reg(kTabSignal, AddNamedChildControl(new VoLumMidiChannelControl(cardBody), mControlNames.midiControl));
-    }
-
 #if defined(APP_API)
     const char* audioHintStr = "Audio device / sample rate / buffer: open File > Preferences";
 #else
@@ -1199,6 +1192,30 @@ public:
 #endif
     _Reg(kTabSignal, AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, _HintStyle()),
                                           mControlNames.audioHint));
+  }
+
+  // ---- MIDI: which channel, and what each program number plays ------------
+  //
+  // The assignment list is the tab's body, not a footnote: choosing what Program
+  // Change 0..127 recalls is the whole reason a player opens this tab, and the
+  // channel filter above it is one stepper.
+  void _BuildMidiTab(const IRECT& body)
+  {
+    IRECT rest = body;
+    const IRECT channelCard = rest.ReduceFromTop(84.f);
+    (void)rest.ReduceFromTop(14.f);
+    const IRECT mapCard = rest;
+
+    {
+      const IRECT cardBody = _AddCard(kTabMidi, channelCard, "MIDI channel", mControlNames.midiGroupFrame,
+                                      mControlNames.midiSection, EAlign::Near);
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiChannelControl(cardBody), mControlNames.midiControl));
+    }
+    {
+      const IRECT cardBody = _AddCard(kTabMidi, mapCard, "Sounds by Program Change", mControlNames.midiMapGroupFrame,
+                                      mControlNames.midiMapSection, EAlign::Near);
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiSoundMapControl(cardBody), mControlNames.midiSoundMap));
+    }
   }
 
   // ---- SYSTEM: this build, this library, this keyboard --------------------
@@ -1259,8 +1276,9 @@ public:
   }
 
   static constexpr int kTabSignal = 0;
-  static constexpr int kTabSystem = 1;
-  static constexpr int kTabCount = 2;
+  static constexpr int kTabMidi = 1;
+  static constexpr int kTabSystem = 2;
+  static constexpr int kTabCount = 3;
 
   void SetActiveTab(int tab)
   {
@@ -1280,8 +1298,9 @@ public:
   }
 
 private:
-  static constexpr const char* kTabNames[kTabCount] = {"SIGNAL", "SYSTEM"};
-  static constexpr const char* kTabHints[kTabCount] = {"How audio and MIDI get in and out of VoLum",
+  static constexpr const char* kTabNames[kTabCount] = {"SIGNAL", "MIDI", "SYSTEM"};
+  static constexpr const char* kTabHints[kTabCount] = {"How audio gets in and out of VoLum",
+                                                       "Which channel VoLum listens on, and what each program plays",
                                                        "This build, your library, your keyboard"};
 
   IControl* _Reg(int tab, IControl* control)
@@ -1368,17 +1387,31 @@ public:
       sw->SetTooltip(volum::InputCalibrationTooltip(available));
   }
 
-  // Channel only: the Sound assignment list moved to PLAY (.scratch/midi-control/spec.md).
   void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel)
   {
     if (auto* midi = GetNamedChild(mControlNames.midiControl))
       midi->As<VoLumMidiChannelControl>()->SetCallback(std::move(channel));
   }
 
+  // Assign/clear go straight back out to the plugin, which writes the one shared
+  // midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
+  void SetMidiSoundMapCallbacks(VoLumMidiSoundMapControl::AssignCallback assign,
+                                VoLumMidiSoundMapControl::ClearCallback clear)
+  {
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+      map->As<VoLumMidiSoundMapControl>()->SetCallbacks(std::move(assign), std::move(clear));
+  }
+
   void SetMidiChannel(int channel)
   {
     if (auto* midi = GetNamedChild(mControlNames.midiControl))
       midi->As<VoLumMidiChannelControl>()->SetChannel(channel);
+  }
+
+  void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry)
+  {
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+      map->As<VoLumMidiSoundMapControl>()->SetData(factory, registry);
   }
 
 private:
@@ -1429,6 +1462,9 @@ private:
     const std::string perfHelp = "PerfHelp";
     const std::string midiSection = "MidiSection";
     const std::string midiControl = "MidiControl";
+    const std::string midiMapGroupFrame = "MidiMapGroupFrame";
+    const std::string midiMapSection = "MidiMapSection";
+    const std::string midiSoundMap = "MidiSoundMap";
     const std::string inputHelp = "InputHelp";
     const std::string audioHint = "AudioHint";
   } mControlNames;
