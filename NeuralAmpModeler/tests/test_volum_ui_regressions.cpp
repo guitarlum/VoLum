@@ -352,9 +352,11 @@ TEST_CASE("PLAY consumes up/down to step Sounds and never falls through to BUILD
   RequireContains(runtime, "VolumRecallSound(slot.sound.ampId, slot.sound.presetId)");
   RequireContains(model, "inline int StepAssignedSlot(");
 
-  // Documented where the keyboard is documented.
+  // Documented where the keyboard is documented, with the key spelled out: the
+  // first attempt used U+2191/2193 arrow glyphs, which Josefin does not have, so
+  // the cheat sheet shipped a labelled row with an empty key column.
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
-  RequireContains(overlay, "\"Sound in PLAY\"");
+  RequireContains(overlay, "\"Up/Dn\", \"Sound in PLAY\"");
 }
 
 TEST_CASE("Pack export offers Sound, whole-amp and Everything, and the closure is not a footnote")

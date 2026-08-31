@@ -456,9 +456,14 @@ private:
     }
     if (mAlsoIncluding.empty())
     {
+      // Three different silences, and telling a player to "tick something" while
+      // their tick is on screen reads as the band not having noticed.
+      const bool anyPicked = std::any_of(mRows.begin(), mRows.end(), [](const Row& r) { return r.picked; });
+      const char* why = mRows.empty() ? "Nothing to export in this scope."
+                        : anyPicked   ? "Nothing extra: what you ticked carries everything it needs."
+                                      : "Tick something and its requirements appear here.";
       g.DrawText(cap, "ALSO INCLUDING", capR);
-      g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top),
-                 mRows.empty() ? "Nothing yet." : "Nothing extra yet. Tick something and its requirements appear here.",
+      g.DrawText(IText(11.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Near, EVAlign::Top), why,
                  bodyR);
       return;
     }

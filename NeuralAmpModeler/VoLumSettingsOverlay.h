@@ -431,9 +431,9 @@ public:
     drawPair(navCol, 1, navKeyW, "Tab", "target focus");
     drawPair(navCol, 2, navKeyW, "Arrows", "amp / channel");
     // PLAY has one shortcut and it is the whole point of the mode, so it gets its
-    // own line rather than a parenthesis on the BUILD arrows row.
-    // Byte escapes, not \u: this file's narrow-literal charset is not UTF-8.
-    drawPair(navCol, 3, navKeyW, "\xE2\x86\x91\xE2\x86\x93", "Sound in PLAY");
+    // own line rather than a parenthesis on the BUILD arrows row. Spelled out, not
+    // as arrow glyphs: Josefin has no U+2191/2193, so those drew an empty key.
+    drawPair(navCol, 3, navKeyW, "Up/Dn", "Sound in PLAY");
 
     g.DrawText(capText, "Edit", IRECT(editCol.L, editCol.T, editCol.R, editCol.T + 12.f));
     drawPair(editCol, 0, editKeyW, "Enter", "edit");

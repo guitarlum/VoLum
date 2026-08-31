@@ -318,7 +318,8 @@ public:
                      EVAlign::Middle),
                "+  Add Sound", add);
     g.DrawText(IText(10.5f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Middle),
-               mChoices.empty() ? "Save a preset first: a Sound is an amp plus a named preset."
+               mChoices.empty()  ? "Save a preset first: a Sound is an amp plus a named preset."
+               : mSlots.empty() ? "PLAY shows the same list."
                                 : "Click a row to reassign it. PLAY shows the same list.",
                IRECT(add.R + 12.f, add.T, mRECT.R, add.B));
   }
