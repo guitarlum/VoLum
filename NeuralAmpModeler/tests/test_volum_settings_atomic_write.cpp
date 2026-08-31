@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../VoLumSettingsFileIO.h"
+#include "../VoLumUpdateState.h"
 
 #include <atomic>
 #include <filesystem>
@@ -146,5 +147,28 @@ TEST_CASE("A document containing invalid UTF-8 fails the write instead of throwi
   // The previous good file survives untouched, and no temp file is left behind.
   const nlohmann::json loaded = ReadJsonFile(path);
   CHECK(loaded == good);
+  CHECK_FALSE(HasAtomicTempFile(root));
+}
+
+TEST_CASE("Update sidecar round-trips independently of user settings")
+{
+  const auto root = TestRoot("update-sidecar");
+  const auto path = root / "volum-update-state.json";
+  volum::update::UpdateState expected;
+  expected.lastCheckUtc = 1'787'000'000;
+  expected.lastSeenVersion = "1.3.0";
+  expected.latestKnownVersion = "1.3.1";
+  expected.latestKnownUrl = "https://github.com/guitarlum/VoLum/releases/tag/v1.3.1";
+  expected.latestKnownNotes = "Maintenance release.";
+  expected.autoCheck = false;
+
+  REQUIRE(volum::update::SaveUpdateState(path, expected));
+  const auto loaded = volum::update::LoadUpdateState(path);
+  CHECK(loaded.lastCheckUtc == expected.lastCheckUtc);
+  CHECK(loaded.lastSeenVersion == expected.lastSeenVersion);
+  CHECK(loaded.latestKnownVersion == expected.latestKnownVersion);
+  CHECK(loaded.latestKnownUrl == expected.latestKnownUrl);
+  CHECK(loaded.latestKnownNotes == expected.latestKnownNotes);
+  CHECK(loaded.autoCheck == expected.autoCheck);
   CHECK_FALSE(HasAtomicTempFile(root));
 }

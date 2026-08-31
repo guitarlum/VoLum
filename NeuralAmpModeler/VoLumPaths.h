@@ -217,6 +217,27 @@ inline std::filesystem::path VolumUserSettingsFilePath()
 #endif
 }
 
+// Machine-wide update-check throttle and reminder state. Plugins may write this
+// sidecar without touching the standalone-owned volum-settings.json.
+inline std::filesystem::path VolumUpdateStateFilePath()
+{
+  namespace fs = std::filesystem;
+#ifdef _WIN32
+  const char* la = std::getenv("LOCALAPPDATA");
+  if (!la || !*la)
+    return {};
+  return fs::path(la) / "VoLum" / "volum-update-state.json";
+#elif defined(__APPLE__)
+  const char* home = std::getenv("HOME");
+  if (!home || !*home)
+    return {};
+  return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-update-state.json";
+#else
+  (void)0;
+  return {};
+#endif
+}
+
 // VoLum-owned content store directory (1.2.0 BYO + presets). Sibling of
 // volum-settings.json, but unlike that file the content store is read AND
 // written by ALL formats (standalone + VST3 + AU) so a plugin instance can

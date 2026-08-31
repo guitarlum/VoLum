@@ -102,6 +102,7 @@
     <ClCompile Include="..\tests\test_volum_chunk_version.cpp" />
     <ClCompile Include="..\tests\test_volum_paths.cpp" />
     <ClCompile Include="..\tests\test_volum_settings_atomic_write.cpp" />
+    <ClCompile Include="..\tests\test_volum_update_check.cpp" />
     <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_regressions.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_sync_plan.cpp" />

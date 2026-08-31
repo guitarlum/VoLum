@@ -1,6 +1,6 @@
 # Appcast workflow (S1)
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 ## Goal
@@ -20,3 +20,7 @@ Workflow file present; JSON fixture parses with the (forthcoming) checker, or a 
 ## Done when
 
 Workflow committed. No client required.
+
+## Comments
+
+Repository owner must enable GitHub Pages with **GitHub Actions** as its source once.

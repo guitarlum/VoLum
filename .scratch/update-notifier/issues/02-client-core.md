@@ -1,6 +1,6 @@
 # Update client core (S2)
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 ## Goal

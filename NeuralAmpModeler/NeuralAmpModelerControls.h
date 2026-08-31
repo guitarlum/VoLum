@@ -67,6 +67,22 @@ public:
   }
 };
 
+class VoLumUpdateBadgeControl : public IControl
+{
+public:
+  explicit VoLumUpdateBadgeControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillEllipse(VoLumColors::GOLD, mRECT);
+    g.DrawEllipse(VoLumColors::HERO_BG, mRECT, nullptr, 1.f);
+  }
+};
+
 class NAMKnobControl : public IVKnobControl, public IBitmapBase
 {
 public:
@@ -1067,8 +1083,8 @@ public:
 
     // ---- Footer, reserved bottom-up so the card row absorbs any extra slack ----
     // Bottom: model information (left) + about (right). The About block needs four
-    // lines (brand + version + ecosystem + URL), so keep this row tall enough.
-    const IRECT metaRow = inner.ReduceFromBottom(64.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
+    // lines plus the update reminder and controls, so keep this row tall enough.
+    const IRECT metaRow = inner.ReduceFromBottom(92.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
     const float modelColW = metaRow.W() * 0.46f;
     const auto modelInfoArea = metaRow.GetFromLeft(modelColW);
     const auto aboutArea = metaRow.GetFromRight(metaRow.W() - modelColW);
@@ -1338,24 +1354,75 @@ private:
 
       {
         IRECT lineR(GetRECT());
-        const float capH = 20.f;
+        const float capH = 18.f;
         const float rowH = 14.f;
         const IText capText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Far, EVAlign::Top);
         const IText rowText = mStyle.valueText.WithVAlign(EVAlign::Top);
         AddChildControl(new IVLabelControl(lineR.ReduceFromTop(capH), "VoLum · By Lum", mStyle.WithValueText(capText)));
-        AddChildControl(
-          new IVLabelControl(lineR.ReduceFromTop(rowH), buildInfoStr.Get(), mStyle.WithValueText(rowText)));
+        mUpdateButton = new IVButtonControl(
+          lineR.ReduceFromTop(18.f),
+          [](IControl* pCaller) {
+            if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(pCaller->GetDelegate()))
+              plugin->_VolumUseAvailableUpdate();
+          },
+          "Update available", mStyle.WithDrawFrame(false).WithValueText(rowText), true);
+        AddChildControl(mUpdateButton);
+        mUpdateButton->Hide(true);
+        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(rowH), buildInfoStr.Get(), mStyle.WithValueText(rowText)));
         const IColor urlMo = VoLumColors::GOLD_DIM;
         const IColor urlClk = VoLumColors::GOLD;
         AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "Built on the Neural Amp Modeler ecosystem",
                                         "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo, urlClk));
         AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "github.com/guitarlum/VoLum",
                                         "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo, urlClk));
+
+        const IRECT actionRow = lineR.ReduceFromTop(22.f);
+        const float checkW = 82.f;
+        mAutoCheck = new IVToggleControl(
+          actionRow.GetReducedFromRight(checkW + 8.f),
+          [](IControl* pCaller) {
+            if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(pCaller->GetDelegate()))
+              plugin->_VolumSetAutoUpdateCheck(pCaller->GetValue() > 0.5);
+          },
+          "Check automatically", mStyle.WithDrawFrame(false).WithValueText(rowText), "OFF", "ON", true);
+        AddChildControl(mAutoCheck);
+        AddChildControl(new IVButtonControl(
+          actionRow.GetFromRight(checkW),
+          [](IControl* pCaller) {
+            if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(pCaller->GetDelegate()))
+              plugin->_VolumCheckForUpdatesNow();
+          },
+          "Check now", mStyle.WithDrawFrame(true).WithValueText(rowText), true));
       }
     };
+
+    void SetUpdateInfo(bool autoCheck, bool available, const std::string& version)
+    {
+      if (mAutoCheck)
+      {
+        mAutoCheck->SetValue(autoCheck ? 1.0 : 0.0);
+        mAutoCheck->SetDirty(false);
+      }
+      if (mUpdateButton)
+      {
+        const std::string label = "Update available: " + version + " - What's new";
+        mUpdateButton->SetLabelStr(label.c_str());
+        mUpdateButton->Hide(!available);
+        mUpdateButton->SetDirty(false);
+      }
+    }
 
   private:
     IVStyle mStyle;
     IText mText;
+    IVButtonControl* mUpdateButton = nullptr;
+    IVToggleControl* mAutoCheck = nullptr;
   };
+
+public:
+  void SetUpdateInfo(bool autoCheck, bool available, const std::string& version)
+  {
+    if (auto* about = GetNamedChild(mControlNames.about))
+      static_cast<AboutControl*>(about)->SetUpdateInfo(autoCheck, available, version);
+  }
 };
