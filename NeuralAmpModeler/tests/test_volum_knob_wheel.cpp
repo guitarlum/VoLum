@@ -95,6 +95,11 @@ enum EParams
   kTremoloSync,
   kTremoloDivision,
   kPrePitchTransChar,
+  kChorusRate,
+  kChorusDepth,
+  kChorusTone,
+  kChorusWidth,
+  kChorusMix,
   kNumParams
 };
 

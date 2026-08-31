@@ -109,16 +109,17 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
     }
     case EVoLumSection::POST:
     {
-      constexpr EVoLumEffectFocus targets[3] = {
+      constexpr EVoLumEffectFocus targets[4] = {
+        EVoLumEffectFocus::CHORUS,
         EVoLumEffectFocus::DELAY,
         EVoLumEffectFocus::REVERB,
         EVoLumEffectFocus::TREMOLO,
       };
       int current = 0;
-      for (int i = 0; i < 3; ++i)
+      for (int i = 0; i < 4; ++i)
         if (targets[i] == mVolumFocusedEffect)
           current = i;
-      mVolumFocusedEffect = targets[wrap(current + direction, 3)];
+      mVolumFocusedEffect = targets[wrap(current + direction, 4)];
       mVolumDualAmpFocusedSupport = false;
       break;
     }
@@ -155,6 +156,7 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
     case EVoLumEffectFocus::DELAY: paramIdx = kDelayActive; break;
     case EVoLumEffectFocus::REVERB: paramIdx = kReverbActive; break;
     case EVoLumEffectFocus::TREMOLO: paramIdx = kTremoloActive; break;
+    case EVoLumEffectFocus::CHORUS: paramIdx = kChorusActive; break;
   }
 
   if (paramIdx == kNoParameter)
@@ -279,6 +281,11 @@ void NeuralAmpModeler::_UpdateVoLumKeyboardFocusHint()
       action = kToggleOnOffHint;
       nav = "Left/Right or Tab target";
       break;
+    case EVoLumEffectFocus::CHORUS:
+      target = "Chorus";
+      action = kToggleOnOffHint;
+      nav = "Left/Right or Tab target";
+      break;
   }
 
   WDL_String line;
@@ -303,6 +310,7 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::DELAY: return GetParam(kDelaySync)->Bool() ? kDelayFeedback : kDelayTime;
     case EVoLumEffectFocus::REVERB: return kReverbMix;
     case EVoLumEffectFocus::TREMOLO: return GetParam(kTremoloSync)->Bool() ? kTremoloDepth : kTremoloRate;
+    case EVoLumEffectFocus::CHORUS: return kChorusRate;
   }
   return kNoParameter;
 }
@@ -334,6 +342,7 @@ int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
       return GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic
                ? RememberedOrFirst(kTremoloHarmonicParams, remembered)
                : RememberedOrFirst(kTremoloParams, remembered);
+    case EVoLumEffectFocus::CHORUS: return RememberedOrFirst(kChorusParams, remembered);
   }
   return _DefaultVoLumKeyboardKnobForFocus();
 }
@@ -375,6 +384,7 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
       return GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic
                ? SelectAdjacentFromList(this, kTremoloHarmonicParams, currentParamIdx, direction)
                : SelectAdjacentFromList(this, kTremoloParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::CHORUS: return SelectAdjacentFromList(this, kChorusParams, currentParamIdx, direction);
   }
   return false;
 }

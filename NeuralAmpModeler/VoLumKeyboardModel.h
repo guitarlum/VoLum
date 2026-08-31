@@ -8,7 +8,7 @@
 
 namespace volum::keyboard
 {
-constexpr int kTargetCount = 9;
+constexpr int kTargetCount = 10;
 
 constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
 {
@@ -22,6 +22,7 @@ constexpr int TargetIndex(EVoLumEffectFocus focus, bool supportAmp)
     case EVoLumEffectFocus::REVERB: return 6;
     case EVoLumEffectFocus::PITCH: return 7;
     case EVoLumEffectFocus::TREMOLO: return 8;
+    case EVoLumEffectFocus::CHORUS: return 9;
   }
   return 0;
 }
@@ -79,6 +80,10 @@ constexpr std::array<int, 4> kTremoloParams = {
 // Harmonic mode exposes the band-split CROSSOVER knob too.
 constexpr std::array<int, 5> kTremoloHarmonicParams = {
   kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover,
+};
+
+constexpr std::array<int, 5> kChorusParams = {
+  kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix,
 };
 
 constexpr std::array<int, 3> kPitchTransposeParams = {
@@ -146,7 +151,12 @@ inline double StepForParam(int paramIdx, bool fine)
     case kPreCompMix:
     case kTremoloDepth:
     case kTremoloShape:
-    case kTremoloMix: return fine ? 0.01 : 0.05;
+    case kTremoloMix:
+    case kChorusRate:
+    case kChorusDepth:
+    case kChorusTone:
+    case kChorusWidth:
+    case kChorusMix: return fine ? 0.01 : 0.05;
     default: return fine ? 0.1 : 1.0;
   }
 }

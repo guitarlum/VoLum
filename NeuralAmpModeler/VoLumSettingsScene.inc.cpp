@@ -106,6 +106,15 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
     s.postTremoloCrossover = defaults.postTremoloCrossover;
     s.postTremoloSync = defaults.postTremoloSync;
     s.postTremoloDivision = defaults.postTremoloDivision;
+    s.postChorusActive = defaults.postChorusActive;
+    s.postChorusMode = defaults.postChorusMode;
+    s.postChorusRate = defaults.postChorusRate;
+    s.postChorusDepth = defaults.postChorusDepth;
+    s.postChorusTone = defaults.postChorusTone;
+    s.postChorusWidth = defaults.postChorusWidth;
+    s.postChorusMix = defaults.postChorusMix;
+    for (int mode = 0; mode < volum::kVoLumChorusModeCount; ++mode)
+      s.postChorusModes[mode] = defaults.postChorusModes[mode];
     for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
       s.postDelayModes[mode] = defaults.postDelayModes[mode];
     for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
@@ -124,6 +133,8 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
     mVolumEffectSettings.oktaverbSubModes[subMode] = s.postOktaverbSubModes[subMode];
   for (int mode = 0; mode < volum::kVoLumTremoloModeCount; ++mode)
     mVolumEffectSettings.tremoloModes[mode] = s.postTremoloModes[mode];
+  for (int mode = 0; mode < volum::kVoLumChorusModeCount; ++mode)
+    mVolumEffectSettings.chorusModes[mode] = s.postChorusModes[mode];
 
   struct PostRestoreGuard
   {
@@ -170,20 +181,31 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   setParam(kTremoloCrossover, s.postTremoloCrossover);
   setParam(kTremoloSync, s.postTremoloSync ? 1.0 : 0.0);
   setParam(kTremoloDivision, s.postTremoloDivision);
+  setParam(kChorusActive, s.postChorusActive ? 1.0 : 0.0);
+  setParam(kChorusMode, s.postChorusMode);
+  setParam(kChorusRate, s.postChorusRate);
+  setParam(kChorusDepth, s.postChorusDepth);
+  setParam(kChorusTone, s.postChorusTone);
+  setParam(kChorusWidth, s.postChorusWidth);
+  setParam(kChorusMix, s.postChorusMix);
   mVolumEffectSettings.delayActive = s.postDelayActive;
   mVolumEffectSettings.delayMode = s.postDelayMode;
   mVolumEffectSettings.reverbActive = s.postReverbActive;
   mVolumEffectSettings.reverbMode = s.postReverbMode;
   mVolumEffectSettings.tremoloMode = s.postTremoloMode;
+  mVolumEffectSettings.chorusMode = s.postChorusMode;
   const int restoredDelayMode = std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1);
   const int restoredReverbMode = std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1);
   const int restoredTremoloMode = std::clamp(s.postTremoloMode, 0, volum::kVoLumTremoloModeCount - 1);
+  const int restoredChorusMode = std::clamp(s.postChorusMode, 0, volum::kVoLumChorusModeCount - 1);
   _VolumSaveDelayModeSnapshot(restoredDelayMode);
   _VolumSaveReverbModeSnapshot(restoredReverbMode);
   _VolumSaveTremoloModeSnapshot(restoredTremoloMode);
+  _VolumSaveChorusModeSnapshot(restoredChorusMode);
   _VolumRestoreDelayModeSnapshot(restoredDelayMode);
   _VolumRestoreReverbModeSnapshot(restoredReverbMode);
   _VolumRestoreTremoloModeSnapshot(restoredTremoloMode);
+  _VolumRestoreChorusModeSnapshot(restoredChorusMode);
 }
 
 void NeuralAmpModeler::_VolumRestoreFromSettings(int ampIdx)

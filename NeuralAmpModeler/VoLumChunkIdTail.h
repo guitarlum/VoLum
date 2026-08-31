@@ -55,7 +55,11 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // division) and the live-locked POST delay snapshot ("lockedPostDelay"). The
 // delay's other params still travel in the binary per-amp block; only the
 // appended sync/division pair needs the tail. Informational only.
-inline constexpr int kVoLumIdTailSchema = 5;
+// Schema 6 (post-chorus): added per-amp POST Chorus ("cho") and the live-locked
+// POST chorus snapshot ("lockedPostChorus"). Chorus is the first feature whose
+// EParams sit past the frozen 1.2.2 chunk prefix, so the tail is the ONLY place
+// its saved values travel - never as extra prefix doubles. Informational only.
+inline constexpr int kVoLumIdTailSchema = 6;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -110,6 +114,29 @@ struct DelayTail
   int division = kVoLumTremoloDivisionDefault;
 };
 
+// POST Chorus pedal per-amp settings. Chorus params live PAST the frozen 1.2.2
+// prefix, so unlike Delay/Reverb nothing about this pedal is in the binary block:
+// the whole knob row travels here. `present` distinguishes "written by a
+// chorus-aware build" from "absent" (older chunk -> chorus defaults = bypassed).
+struct ChorusTail
+{
+  bool present = false;
+  bool active = false;
+  int mode = kVoLumChorusModeDefault;
+  double rate = 0.35;
+  double depth = 0.45;
+  double tone = 0.40;
+  double width = 0.70;
+  double mix = 0.50;
+  // Per-mode knob memory (Classic / Warped / Clear / Ensemble).
+  ChorusModeSnapshot modes[kVoLumChorusModeCount] = {
+    kVoLumChorusModeDefaults[0],
+    kVoLumChorusModeDefaults[1],
+    kVoLumChorusModeDefaults[2],
+    kVoLumChorusModeDefaults[3],
+  };
+};
+
 struct ChunkIdTail
 {
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
@@ -126,6 +153,8 @@ struct ChunkIdTail
   TremoloTail lockedPostTremolo; // live-locked POST tremolo snapshot (present iff POST locked + written)
   DelayTail perAmpDelay[kAmpCount]; // factory amp -> POST Delay tempo-sync settings
   DelayTail lockedPostDelay; // live-locked POST delay sync snapshot (present iff POST locked + written)
+  ChorusTail perAmpChorus[kAmpCount]; // factory amp -> POST Chorus pedal settings
+  ChorusTail lockedPostChorus; // live-locked POST chorus snapshot (present iff POST locked + written)
 
   ChunkIdTail()
   {
@@ -262,6 +291,65 @@ inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
   return t;
 }
 
+inline nlohmann::json ChorusTailToJson(const ChorusTail& c)
+{
+  nlohmann::json modes = nlohmann::json::array();
+  for (int i = 0; i < kVoLumChorusModeCount; ++i)
+    modes.push_back({{"rate", c.modes[i].rate},
+                     {"depth", c.modes[i].depth},
+                     {"tone", c.modes[i].tone},
+                     {"width", c.modes[i].width},
+                     {"mix", c.modes[i].mix}});
+  return nlohmann::json{{"active", c.active}, {"mode", c.mode},   {"rate", c.rate}, {"depth", c.depth},
+                        {"tone", c.tone},     {"width", c.width}, {"mix", c.mix},   {"modes", modes}};
+}
+
+inline ChorusTail ChorusTailFromJson(const nlohmann::json& j)
+{
+  ChorusTail c;
+  if (!j.is_object())
+    return c;
+  auto num = [](const nlohmann::json& v, double d) { return v.is_number() ? v.get<double>() : d; };
+  auto integer = [](const nlohmann::json& v, int d) { return v.is_number_integer() ? v.get<int>() : d; };
+  auto boolean = [](const nlohmann::json& v, bool d) { return v.is_boolean() ? v.get<bool>() : d; };
+  if (j.contains("active"))
+    c.active = boolean(j["active"], false);
+  if (j.contains("mode"))
+    c.mode = integer(j["mode"], kVoLumChorusModeDefault);
+  if (j.contains("rate"))
+    c.rate = num(j["rate"], c.rate);
+  if (j.contains("depth"))
+    c.depth = num(j["depth"], c.depth);
+  if (j.contains("tone"))
+    c.tone = num(j["tone"], c.tone);
+  if (j.contains("width"))
+    c.width = num(j["width"], c.width);
+  if (j.contains("mix"))
+    c.mix = num(j["mix"], c.mix);
+  if (j.contains("modes") && j["modes"].is_array())
+  {
+    const auto& arr = j["modes"];
+    for (int i = 0; i < kVoLumChorusModeCount && i < static_cast<int>(arr.size()); ++i)
+    {
+      const auto& m = arr[i];
+      if (!m.is_object())
+        continue;
+      if (m.contains("rate"))
+        c.modes[i].rate = num(m["rate"], c.modes[i].rate);
+      if (m.contains("depth"))
+        c.modes[i].depth = num(m["depth"], c.modes[i].depth);
+      if (m.contains("tone"))
+        c.modes[i].tone = num(m["tone"], c.modes[i].tone);
+      if (m.contains("width"))
+        c.modes[i].width = num(m["width"], c.modes[i].width);
+      if (m.contains("mix"))
+        c.modes[i].mix = num(m["mix"], c.modes[i].mix);
+    }
+  }
+  c.present = true;
+  return c;
+}
+
 inline nlohmann::json DelayTailToJson(const DelayTail& d)
 {
   return nlohmann::json{{"sync", d.sync}, {"div", d.division}};
@@ -301,6 +389,8 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
       entry["trem"] = TremoloTailToJson(t.perAmpTremolo[i]);
     if (t.perAmpDelay[i].present)
       entry["dly"] = DelayTailToJson(t.perAmpDelay[i]);
+    if (t.perAmpChorus[i].present)
+      entry["cho"] = ChorusTailToJson(t.perAmpChorus[i]);
     perAmp.push_back(entry);
   }
   j["perAmp"] = perAmp;
@@ -310,6 +400,8 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
     j["lockedPostTremolo"] = TremoloTailToJson(t.lockedPostTremolo);
   if (t.lockedPostDelay.present)
     j["lockedPostDelay"] = DelayTailToJson(t.lockedPostDelay);
+  if (t.lockedPostChorus.present)
+    j["lockedPostChorus"] = ChorusTailToJson(t.lockedPostChorus);
   return j;
 }
 
@@ -350,6 +442,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         t.perAmpTremolo[i] = TremoloTailFromJson(arr[i]["trem"]);
       if (arr[i].contains("dly"))
         t.perAmpDelay[i] = DelayTailFromJson(arr[i]["dly"]);
+      if (arr[i].contains("cho"))
+        t.perAmpChorus[i] = ChorusTailFromJson(arr[i]["cho"]);
     }
   }
   if (j.contains("lockedPrePitch"))
@@ -358,6 +452,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
     t.lockedPostTremolo = TremoloTailFromJson(j["lockedPostTremolo"]);
   if (j.contains("lockedPostDelay"))
     t.lockedPostDelay = DelayTailFromJson(j["lockedPostDelay"]);
+  if (j.contains("lockedPostChorus"))
+    t.lockedPostChorus = ChorusTailFromJson(j["lockedPostChorus"]);
   return t;
 }
 

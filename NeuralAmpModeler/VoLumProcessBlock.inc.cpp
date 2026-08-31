@@ -94,6 +94,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
     if (volum::ScrubNonFiniteInPlace(mOutputPointers[0], static_cast<std::size_t>(nFrames)))
     {
+      mChorus.Reset();
       mDelay.Reset();
       mReverb.Reset();
       mTremolo.Reset();
@@ -104,6 +105,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, nFrames);
     if (!mPostEffectsClearedForMissingModel)
     {
+      mChorus.Reset();
       mDelay.Reset();
       mReverb.Reset();
       mTremolo.Reset();
@@ -169,6 +171,7 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   mSupportModel->process(supportTriggerOutput[0], supportOutputPtr, nFrames);
   if (volum::ScrubNonFiniteInPlace(supportOutputPtr, static_cast<std::size_t>(nFrames)))
   {
+    mChorus.Reset();
     mDelay.Reset();
     mReverb.Reset();
     mTremolo.Reset();
@@ -207,12 +210,15 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   // internal lines still hold the previous tail. Without this, re-enabling the effect
   // later replays a "ghost" of whatever was playing before bypass. Mirrors how
   // _FallbackDSP already clears POST when the main model goes missing.
+  if (mPostChorusWasActive && !processingPlan.runChorus)
+    mChorus.Reset();
   if (mPostDelayWasActive && !processingPlan.runDelay)
     mDelay.Reset();
   if (mPostReverbWasActive && !processingPlan.runReverb)
     mReverb.Reset();
   if (mPostTremoloWasActive && !processingPlan.runTremolo)
     mTremolo.Reset();
+  mPostChorusWasActive = processingPlan.runChorus;
   mPostDelayWasActive = processingPlan.runDelay;
   mPostReverbWasActive = processingPlan.runReverb;
   mPostTremoloWasActive = processingPlan.runTremolo;
@@ -227,6 +233,17 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
 #endif
   if (!(postBpm > 0.0))
     postBpm = 120.0;
+
+  // Chorus runs FIRST in POST: modulating the dry amp tone before it hits the
+  // delay/reverb tails is the pedalboard order, and it keeps the repeats from
+  // smearing the chorus into mush. Processes in place on the POST bus.
+  if (processingPlan.runChorus)
+  {
+    mChorus.SetParams(GetParam(kChorusRate)->Value(), GetParam(kChorusDepth)->Value(),
+                      GetParam(kChorusTone)->Value(), GetParam(kChorusWidth)->Value(), GetParam(kChorusMix)->Value(),
+                      GetParam(kChorusMode)->Int(), sampleRate);
+    mChorus.Process(postPointers, numChannelsExternalOut, nFrames);
+  }
 
   if (processingPlan.runDelay)
   {

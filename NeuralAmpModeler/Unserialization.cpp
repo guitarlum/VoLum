@@ -792,6 +792,25 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
           s.postTremoloModes[m].crossover = std::clamp(t.modes[m].crossover, 200.0, 2000.0);
         }
       };
+      auto applyChorusTail = [](const volum::ChorusTail& c, volum::VoLumAmpSettings& s) {
+        if (!c.present)
+          return;
+        s.postChorusActive = c.active;
+        s.postChorusMode = std::clamp(c.mode, 0, volum::kVoLumChorusModeCount - 1);
+        s.postChorusRate = std::clamp(c.rate, 0.0, 1.0);
+        s.postChorusDepth = std::clamp(c.depth, 0.0, 1.0);
+        s.postChorusTone = std::clamp(c.tone, 0.0, 1.0);
+        s.postChorusWidth = std::clamp(c.width, 0.0, 1.0);
+        s.postChorusMix = std::clamp(c.mix, 0.0, 1.0);
+        for (int m = 0; m < volum::kVoLumChorusModeCount; ++m)
+        {
+          s.postChorusModes[m].rate = std::clamp(c.modes[m].rate, 0.0, 1.0);
+          s.postChorusModes[m].depth = std::clamp(c.modes[m].depth, 0.0, 1.0);
+          s.postChorusModes[m].tone = std::clamp(c.modes[m].tone, 0.0, 1.0);
+          s.postChorusModes[m].width = std::clamp(c.modes[m].width, 0.0, 1.0);
+          s.postChorusModes[m].mix = std::clamp(c.modes[m].mix, 0.0, 1.0);
+        }
+      };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
         mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
@@ -802,10 +821,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         applyPitchTail(idTail.perAmpPitch[i], mVolumAmpSettings[i]);
         applyTremoloTail(idTail.perAmpTremolo[i], mVolumAmpSettings[i]);
         applyDelayTail(idTail.perAmpDelay[i], mVolumAmpSettings[i]);
+        applyChorusTail(idTail.perAmpChorus[i], mVolumAmpSettings[i]);
       }
       applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
+      applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
     }
 

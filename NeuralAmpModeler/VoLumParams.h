@@ -131,6 +131,17 @@ enum EParams
   // tempo-division stepper (mirrors the Tremolo Sync/Division pair).
   kDelaySync,
   kDelayDivision,
+  // Chorus (POST) - first POST pedal, runs before Delay. Appended at the very end
+  // to keep all prior serialized indices stable. These sit PAST the frozen 1.2.2
+  // chunk prefix (see kVoLumChunkParamPrefixCount below): their saved values
+  // travel in the id-tail JSON ("cho"), never as extra prefix doubles.
+  kChorusActive,
+  kChorusMode,
+  kChorusRate,
+  kChorusDepth,
+  kChorusTone,
+  kChorusWidth,
+  kChorusMix,
   kNumParams
 };
 

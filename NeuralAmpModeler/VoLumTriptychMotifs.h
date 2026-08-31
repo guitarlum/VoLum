@@ -137,6 +137,82 @@ inline void DrawNeuralNetMotif(IGraphics& g, const IRECT& r, const int* layers, 
   }
 }
 
+// POST Chorus - Throat: a wireframe hyperboloid read as a wormhole. Signal goes
+// in the near (teal) mouth and comes out the far (gold) one slightly displaced.
+// Straight generators with a fixed twist plus latitude rings: a tunnel, not an
+// LFO waveform, so it never reads as another Delay/Tremolo curve. One glyph for
+// all four voices; the same construction at Quiet ~20 px and at card size, with
+// gold and bloom gated behind the shared `min(w,h) > 40` size check.
+inline void DrawChorusThroatMotif(IGraphics& g, const IRECT& r, bool dimmed)
+{
+  using namespace volumart;
+  const float am = dimmed ? 0.28f : 1.0f;
+  const float w = r.W();
+  const float h = r.H();
+  const bool big = std::min(w, h) > 40.f;
+
+  struct Mouth
+  {
+    float cx, cy, rx, ry;
+  };
+  const Mouth front{r.L + w * 0.50f, r.T + h * (big ? 0.70f : 0.68f), w * (big ? 0.40f : 0.38f),
+                    h * (big ? 0.13f : 0.14f)};
+  const Mouth back{r.L + w * 0.50f, r.T + h * (big ? 0.28f : 0.32f), w * (big ? 0.11f : 0.14f),
+                   h * (big ? 0.045f : 0.06f)};
+
+  auto lerpMouth = [](const Mouth& a, const Mouth& b, float t) {
+    return Mouth{a.cx + (b.cx - a.cx) * t, a.cy + (b.cy - a.cy) * t, a.rx + (b.rx - a.rx) * t,
+                 a.ry + (b.ry - a.ry) * t};
+  };
+  auto strokeMouth = [&](const Mouth& e, int segs, const IColor& col, float lw) {
+    float px = e.cx + e.rx;
+    float py = e.cy;
+    for (int i = 1; i <= segs; ++i)
+    {
+      const float a = (float)i / (float)segs * 6.28318f;
+      const float x = e.cx + e.rx * cosf(a);
+      const float y = e.cy + e.ry * sinf(a);
+      g.DrawLine(col, px, py, x, y, nullptr, lw);
+      px = x;
+      py = y;
+    }
+  };
+
+  if (big)
+    Bloom(g, back.cx, back.cy, std::min(w, h) * 0.42f, kGold, 0.14f * am);
+
+  const int nLat = big ? 5 : 3;
+  const int nGen = big ? 14 : 6;
+  const float twist = 0.55f;
+  const int segs = big ? 48 : 16;
+
+  for (int i = 0; i < nLat; ++i)
+  {
+    const float t = (float)i / (float)(nLat - 1);
+    const Mouth e = lerpMouth(front, back, t);
+    const IColor col = (t > 0.72f) ? (big ? kGold : kTeal) : Mix(kTeal, kBlue, t);
+    strokeMouth(e, segs, WithA(col, (0.35f + 0.55f * t) * am), big ? (t > 0.8f ? 2.2f : 1.35f) : 1.15f);
+  }
+  for (int i = 0; i < nGen; ++i)
+  {
+    const float a0 = (float)i / (float)nGen * 6.28318f;
+    const float a1 = a0 + twist;
+    const IColor col = WithA(Mix(kDim, kTeal, (i % 2) ? 0.4f : 0.85f), 0.55f * am);
+    g.DrawLine(col, front.cx + front.rx * cosf(a0), front.cy + front.ry * sinf(a0), back.cx + back.rx * cosf(a1),
+               back.cy + back.ry * sinf(a1), nullptr, big ? 1.15f : 0.95f);
+  }
+  strokeMouth(front, segs, WithA(kTeal, 0.95f * am), big ? 2.3f : 1.4f);
+  if (big)
+  {
+    strokeMouth(back, segs, WithA(kGoldHi, 0.95f * am), 1.8f);
+    g.FillCircle(WithA(kGoldHi, 0.95f * am), back.cx, back.cy, 2.8f);
+  }
+  else
+  {
+    g.FillCircle(WithA(kTeal, 0.95f * am), back.cx, back.cy, 1.5f);
+  }
+}
+
 // Per-effect "motif" drawn in pedal cards and in the Quiet PRE/POST slots.
 // `dimmed` collapses alpha when the effect is bypassed.
 // `variant` lets one effect draw a sub-mode-specific motif. Currently only PITCH
@@ -305,6 +381,10 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
         g.DrawLine(WithA(kDim, 0.3f * decay * activeMul), baseX, r.T + r.H() * 0.16f, baseX, r.B - r.H() * 0.16f,
                    nullptr, 0.6f);
     }
+  }
+  else if (effect == EVoLumEffectFocus::CHORUS)
+  {
+    DrawChorusThroatMotif(g, r, dimmed);
   }
   else if (effect == EVoLumEffectFocus::TREMOLO)
   {

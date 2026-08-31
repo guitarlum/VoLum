@@ -240,6 +240,11 @@ private:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam1Capture)->Int());
       case EVoLumEffectFocus::PRE_NAM2:
         return plugin->_VolumGetPreCaptureLabel(plugin->GetParam(kPreNam2Capture)->Int());
+      case EVoLumEffectFocus::CHORUS:
+        // No tempo sync on this pedal, so the footer is mode + blend.
+        plugin->GetParam(kChorusMode)->GetDisplay(modeText);
+        summary.SetFormatted(64, "%s . %.0f %%", modeText.Get(), plugin->GetParam(kChorusMix)->Value() * 100.0);
+        return summary.Get();
       case EVoLumEffectFocus::TREMOLO:
         plugin->GetParam(kTremoloMode)->GetDisplay(modeText);
         if (plugin->GetParam(kTremoloSync)->Bool())

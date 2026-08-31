@@ -1196,6 +1196,21 @@ volum::VoLumAmpSettings MakeFullyPopulatedAmpSettings()
     s.postTremoloModes[i].mix = 0.4 + 0.1 * i;
     s.postTremoloModes[i].crossover = 500.0 + 100.0 * i;
   }
+  s.postChorusActive = true;
+  s.postChorusMode = volum::kVoLumChorusModeEnsemble;
+  s.postChorusRate = 0.62;
+  s.postChorusDepth = 0.31;
+  s.postChorusTone = 0.83;
+  s.postChorusWidth = 0.17;
+  s.postChorusMix = 0.94;
+  for (int i = 0; i < volum::kVoLumChorusModeCount; ++i)
+  {
+    s.postChorusModes[i].rate = 0.11 + 0.07 * i;
+    s.postChorusModes[i].depth = 0.21 + 0.07 * i;
+    s.postChorusModes[i].tone = 0.31 + 0.07 * i;
+    s.postChorusModes[i].width = 0.41 + 0.07 * i;
+    s.postChorusModes[i].mix = 0.51 + 0.07 * i;
+  }
   for (int i = 0; i < volum::kVoLumPitchModeCount; ++i)
   {
     s.prePitchModes[i].mix = 0.3 + 0.1 * i;
@@ -1285,6 +1300,22 @@ TEST_CASE("Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct
     CHECK(out.postTremoloModes[i].shape == doctest::Approx(in.postTremoloModes[i].shape));
     CHECK(out.postTremoloModes[i].mix == doctest::Approx(in.postTremoloModes[i].mix));
     CHECK(out.postTremoloModes[i].crossover == doctest::Approx(in.postTremoloModes[i].crossover));
+  }
+  CHECK(out.postChorusActive == in.postChorusActive);
+  CHECK(out.postChorusMode == in.postChorusMode);
+  CHECK(out.postChorusRate == doctest::Approx(in.postChorusRate));
+  CHECK(out.postChorusDepth == doctest::Approx(in.postChorusDepth));
+  CHECK(out.postChorusTone == doctest::Approx(in.postChorusTone));
+  CHECK(out.postChorusWidth == doctest::Approx(in.postChorusWidth));
+  CHECK(out.postChorusMix == doctest::Approx(in.postChorusMix));
+  for (int i = 0; i < volum::kVoLumChorusModeCount; ++i)
+  {
+    INFO("postChorusModes[" << i << "]");
+    CHECK(out.postChorusModes[i].rate == doctest::Approx(in.postChorusModes[i].rate));
+    CHECK(out.postChorusModes[i].depth == doctest::Approx(in.postChorusModes[i].depth));
+    CHECK(out.postChorusModes[i].tone == doctest::Approx(in.postChorusModes[i].tone));
+    CHECK(out.postChorusModes[i].width == doctest::Approx(in.postChorusModes[i].width));
+    CHECK(out.postChorusModes[i].mix == doctest::Approx(in.postChorusModes[i].mix));
   }
 
   // POST delay tempo-sync (the two newest EParams).

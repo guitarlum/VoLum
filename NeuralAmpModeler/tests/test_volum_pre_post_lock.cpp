@@ -128,8 +128,17 @@ void CopyPostBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& 
     dst.postReverbModes[mode] = src.postReverbModes[mode];
   for (int subMode = 0; subMode < 3; ++subMode)
     dst.postOktaverbSubModes[subMode] = src.postOktaverbSubModes[subMode];
+  dst.postChorusActive = src.postChorusActive;
+  dst.postChorusMode = src.postChorusMode;
+  dst.postChorusRate = src.postChorusRate;
+  dst.postChorusDepth = src.postChorusDepth;
+  dst.postChorusTone = src.postChorusTone;
+  dst.postChorusWidth = src.postChorusWidth;
+  dst.postChorusMix = src.postChorusMix;
   for (int mode = 0; mode < volum::kVoLumTremoloModeCount; ++mode)
     dst.postTremoloModes[mode] = src.postTremoloModes[mode];
+  for (int mode = 0; mode < volum::kVoLumChorusModeCount; ++mode)
+    dst.postChorusModes[mode] = src.postChorusModes[mode];
 }
 
 // Mirrors _VolumSaveCurrentToSettings / _VolumRestoreFromSettings / lock helpers in VoLumSettings.inc.cpp.
@@ -760,6 +769,46 @@ TEST_CASE("POST dirty compare includes tremolo params")
     REQUIRE_FALSE(volum::PostBlockEquals(a, b));
   }
   // Identical tremolo (factory Bang Bang default) compares equal.
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    REQUIRE(volum::PostBlockEquals(a, b));
+  }
+}
+
+TEST_CASE("POST dirty compare includes chorus params")
+{
+  // Without these fields in PostBlockEquals, editing the chorus would leave the
+  // preset looking clean and the edit would be silently dropped on amp switch.
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postChorusActive = !a.postChorusActive;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postChorusMode = a.postChorusMode == volum::kVoLumChorusModeClassic ? volum::kVoLumChorusModeEnsemble
+                                                                         : volum::kVoLumChorusModeClassic;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  for (int knob = 0; knob < 5; ++knob)
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    double* fields[5] = {&b.postChorusRate, &b.postChorusDepth, &b.postChorusTone, &b.postChorusWidth,
+                         &b.postChorusMix};
+    *fields[knob] += 0.13;
+    INFO("chorus knob " << knob);
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
+  {
+    volum::VoLumAmpSettings a;
+    volum::VoLumAmpSettings b;
+    b.postChorusModes[volum::kVoLumChorusModeClear].width += 0.2;
+    REQUIRE_FALSE(volum::PostBlockEquals(a, b));
+  }
   {
     volum::VoLumAmpSettings a;
     volum::VoLumAmpSettings b;

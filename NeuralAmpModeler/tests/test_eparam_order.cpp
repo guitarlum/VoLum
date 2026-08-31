@@ -142,7 +142,22 @@ TEST_CASE("EParam: Delay tempo sync/division appended at the very end")
   // keep all prior serialized indices stable.
   CHECK(kDelaySync == kPrePitchTransChar + 1);
   CHECK(kDelayDivision == kDelaySync + 1);
-  CHECK(kNumParams == kDelayDivision + 1);
+}
+
+TEST_CASE("EParam: Chorus params appended past the frozen chunk prefix")
+{
+  // First feature to land PAST kVoLumChunkParamPrefixCount. The prefix writer must
+  // keep emitting exactly 93 doubles, so these seven indices are NOT in the binary
+  // param prefix - their saved values travel in the id-tail JSON ("cho").
+  CHECK(kChorusActive == kDelayDivision + 1);
+  CHECK(kChorusMode == kChorusActive + 1);
+  CHECK(kChorusRate == kChorusMode + 1);
+  CHECK(kChorusDepth == kChorusRate + 1);
+  CHECK(kChorusTone == kChorusDepth + 1);
+  CHECK(kChorusWidth == kChorusTone + 1);
+  CHECK(kChorusMix == kChorusWidth + 1);
+  CHECK(kNumParams == kChorusMix + 1);
+  CHECK(kChorusActive >= kVoLumChunkParamPrefixCount);
 }
 
 TEST_CASE("EParam: total count is stable")
@@ -156,7 +171,10 @@ TEST_CASE("EParam: total count is stable")
   // Crossover, Sync, Division): 81 -> 90.
   // Transpose-engine rework appended kPrePitchTransChar (Drop/Instant): 90 -> 91.
   // Delay tempo sync appended kDelaySync + kDelayDivision: 91 -> 93.
-  CHECK(kNumParams == 93);
+  // POST Chorus pedal appended 7 params (Active, Mode, Rate, Depth, Tone, Width,
+  // Mix): 93 -> 100. The chunk prefix stays frozen at 93 - anything past it is
+  // id-tail JSON only, which is what makes this append safe for 1.2.2 readers.
+  CHECK(kNumParams == 100);
   CHECK(kVoLumChunkParamPrefixCount == 93);
   CHECK(kNumParams >= kVoLumChunkParamPrefixCount);
 }

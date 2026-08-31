@@ -1,6 +1,6 @@
 # Chorus params, POST card, Throat motif, state
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01, 02
 
 ## Goal
@@ -35,3 +35,43 @@ Launch standalone (`run-app-win.ps1`) and iterate until the card matches the moc
 ## Done when
 
 UI judged in the standalone app. Revert-fail proven. Changelog + user guides are ticket 04.
+
+## Result
+
+Seven params appended after index 92 (`kNumParams` 93 -> 100);
+`kVoLumChunkParamPrefixCount` stays 93, so the chunk prefix width is unchanged
+and 1.2.2 chunks still load. Saved values ride in the id-tail JSON as `cho` per
+amp and `lockedPostChorus` for the live POST lock (schema 6). A 1.2.2-shaped
+chunk with no chorus keys loads with the card bypassed on WARPED.
+
+POST is four equal peers (`ComputePostCards` plus a third connector); Throat
+motif in `VoLumTriptychMotifs.h`; quiet-strip label `CHORUS`; mode picker
+CLASSIC / WARPED / CLEAR / ENSEMBLE via `DrawVoLumSelection`; knob row RATE
+DEPTH TONE WIDTH MIX. Per-mode knob memory mirrors Delay/Reverb/Tremolo.
+Keyboard cycling covers all four cards.
+
+UI judged in the standalone (`run-app-win.ps1`) against
+`.scratch/release-1.3.0/chorus-motif/index.html`: four cards fit at 900x600 with
+no knob-row clipping, and the wireframe hyperboloid with its gold mouth ellipse
+and gold dot matches the mock's THROAT panel. Captured in
+`docs/user-guide-chorus.png`.
+
+### Revert-fail proof
+
+**Pass I - integration points, DSP left intact** (5 failed):
+
+| Revert | Test that failed |
+| --- | --- |
+| `plan.runChorus = false` | `Chorus runs first in the POST chain and is wired to its own params` |
+| id-tail drops the per-amp `cho` key | `Id tail round-trips per-amp + locked POST chorus settings` |
+| id-tail drops `lockedPostChorus` | (same) |
+| POST dirty compare ignores chorus | `POST dirty compare includes chorus params` |
+| user settings stop writing `postChorusActive` | `Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct-direct (non-circular)` |
+| `kPostSlots` back to three cards | `POST carries a fourth Chorus card wired to the Throat motif` |
+
+**Pass II - param-order and keyboard claims** (4 failed):
+
+| Revert | Test that failed |
+| --- | --- |
+| `kVoLumChunkParamPrefixCount = kNumParams` | `Chunk param prefix is frozen at the 1.2.2 count`, `EParam: Chorus params appended past the frozen chunk prefix`, `EParam: total count is stable` |
+| chorus knobs dropped from the keyboard step table | `Keyboard step: chorus knobs are all 0..1, so 0.05 normal / 0.01 fine` |

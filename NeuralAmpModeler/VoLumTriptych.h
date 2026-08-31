@@ -142,7 +142,8 @@ private:
     {EVoLumEffectFocus::PRE_NAM1, "NAM 1", kPreNam1Active},
     {EVoLumEffectFocus::PRE_NAM2, "NAM 2", kPreNam2Active},
   };
-  static constexpr QuietSlot kPostSlots[3] = {
+  static constexpr QuietSlot kPostSlots[4] = {
+    {EVoLumEffectFocus::CHORUS, "CHORUS", kChorusActive},
     {EVoLumEffectFocus::DELAY, "DELAY", kDelayActive},
     {EVoLumEffectFocus::REVERB, "REVRB", kReverbActive},
     {EVoLumEffectFocus::TREMOLO, "TREM", kTremoloActive},
@@ -490,10 +491,10 @@ private:
     preSlots[2].label = mPreNam1Label.c_str();
     preSlots[3].label = mPreNam2Label.c_str();
     const QuietSlot* slots = (section == EVoLumSection::PRE) ? preSlots.data() : kPostSlots;
-    const int slotCount = (section == EVoLumSection::PRE) ? 4 : 3;
+    const int slotCount = 4;
     const float innerTop = underlineY + 2.f;
     const float innerBot = block.B - 4.f;
-    // Each section fills its own box: POST's 3 slots are taller than PRE's 4.
+    // Each section fills its own box; PRE and POST now both carry 4 slots.
     const float slotH = (innerBot - innerTop) / (float)slotCount;
 
     for (int i = 0; i < slotCount; ++i)
@@ -709,7 +710,7 @@ private:
   EVoLumEffectFocus _FirstActiveOrFirst(EVoLumSection section) const
   {
     const QuietSlot* slots = (section == EVoLumSection::PRE) ? kPreSlots : kPostSlots;
-    const int count = (section == EVoLumSection::PRE) ? 4 : 3;
+    const int count = 4;
     for (int i = 0; i < count; ++i)
       if (_GetParamBool(slots[i].paramIdx))
         return slots[i].focus;
@@ -989,7 +990,7 @@ private:
   // DrawEffectMotif is the most expensive op in this control (recursive
   // fractal art); caching the rendered output to a layer means hover
   // transitions only redraw cheap overlays + frames on top.
-  static constexpr size_t kEffectFocusCount = static_cast<size_t>(EVoLumEffectFocus::TREMOLO) + 1;
+  static constexpr size_t kEffectFocusCount = static_cast<size_t>(EVoLumEffectFocus::CHORUS) + 1;
   std::array<ILayerPtr, kEffectFocusCount> mSlotMotifLayers;
   std::array<bool, kEffectFocusCount> mSlotMotifCachedBypass{};
   std::array<int, kEffectFocusCount> mSlotMotifCachedVariant{}; // PITCH sub-mode the cached layer used.
