@@ -7,6 +7,7 @@ Dieses Handbuch erklärt die aktuelle VoLum-Oberfläche nach der Installation. D
 ## Inhalt
 
 - [Hauptansicht](#hauptansicht)
+- [PLAY-Ansicht](#play-ansicht)
 - [Amp Wählen](#amp-wählen)
 - [PRE-Bereich](#pre-bereich)
 - [Dual Amp](#dual-amp)
@@ -32,6 +33,16 @@ Dieses Handbuch erklärt die aktuelle VoLum-Oberfläche nach der Installation. D
 Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen. Jedes mitgelieferte Amp-, Cab- und PRE-NAM-Capture ist ein NAM-Architecture-2-(A2)-Profil, trainiert auf den besten Sitz zwischen 700 und 1200 Epochen. Standardmäßig spielt VoLum die volle A2-Variante; der optionale Lite-Modus wird unter Einstellungen beschrieben.
 
 VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual Amp wieder her.
+
+## PLAY-Ansicht
+
+![VoLum PLAY-Ansicht](user-guide-play.png)
+
+Mit dem Umschalter **PLAY | BUILD** in der Kopfzeile wechselst du zwischen Bühnenoberfläche und vollständigem Editor. Jede Plug-in-Instanz merkt sich ihren Modus im Projekt; die Standalone-App merkt sich ebenfalls den letzten Modus. Der Wechsel zu PLAY ruft niemals einen Sound auf und verändert ihn nicht.
+
+PLAY ordnet gespeicherte Sounds Program-Change-Slots zu. Klicke **Add Sound**, wähle ein Werk- oder User-Preset und danach den zu belegenden Slot. Für jeden der 15 Werk-Amps gibt es immer ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar. Ein Klick auf einen belegten Slot ruft seinen vollständigen Sound auf, ein Doppelklick ersetzt die Zuordnung und die kleine Entfernen-Schaltfläche löscht sie. Der hervorgehobene Slot ist der zuletzt aus PLAY aufgerufene und bleibt bei Live-Änderungen markiert; **EDITED** zeigt an, dass das aktuelle Rig von diesem Snapshot abweicht.
+
+Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet.
 
 ## Amp Wählen
 
@@ -162,7 +173,7 @@ Ein Preset ist eine benannte Momentaufnahme des gesamten Rigs für den fokussier
 3. Mit den Pfeilen `<` / `>` blätterst du gespeicherte Presets direkt durch, oder du wählst eines aus der Liste.
 4. **Update** überschreibt das gewählte Preset mit dem aktuellen Rig (mit Rückfrage); **Rename** und **Delete** verwalten die Liste.
 
-Presets sind pro Amp: Jeder Amp (Werk oder eigen) hat seine eigene Preset-Liste. Die Leiste zeigt **(unsaved)**, sobald das aktuelle Rig vom geladenen Preset abweicht, und wird wieder sauber, sobald das Rig wieder übereinstimmt. Die fest angeheftete Zeile **Default (factory settings)** setzt den fokussierten Amp auf seine Auslieferungswerte zurück.
+Presets sind pro Amp: Jeder Amp (Werk oder eigen) hat seine eigene User-Liste. Jeder Werk-Amp besitzt zusätzlich ein schreibgeschütztes Werk-Preset namens **Ready**. Wenn du Ready bearbeitest und speicherst, entsteht eine User-Kopie; Werk-Zeilen werden nie überschrieben oder gelöscht. Die Leiste zeigt **(unsaved)**, sobald das aktuelle Rig vom geladenen Preset abweicht, und wird wieder sauber, sobald das Rig wieder übereinstimmt. Die fest angeheftete Zeile **Default (factory settings)** setzt den fokussierten Amp oberhalb der Bereiche Factory und User auf seine Auslieferungswerte zurück.
 
 ## Eigene Inhalte (Bring Your Own)
 

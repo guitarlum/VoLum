@@ -154,6 +154,8 @@
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
     <ClCompile Include="..\tests\test_volum_preset_bar.cpp" />
+    <ClCompile Include="..\tests\test_volum_factory_presets.cpp" />
+    <ClCompile Include="..\tests\test_volum_play.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_safe_read.cpp" />
     <ClCompile Include="..\tests\test_volum_overlay_action_codes.cpp" />
     <ClCompile Include="..\tests\test_volum_numeric_entry.cpp" />

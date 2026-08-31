@@ -829,6 +829,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       mVolumMidiChannel.store(idTail.midiCh);
       applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
+      mVolumUiMode = volum::UiModeFromString(idTail.uiMode);
     }
 
     // Scoped rather than assigned: UnserializeState now catches exceptions instead

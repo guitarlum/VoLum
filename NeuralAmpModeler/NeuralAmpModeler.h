@@ -49,6 +49,7 @@
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
 #include "VoLumUpdateCheck.h"
 #include "VoLumUpdateState.h"
+#include "VoLumPlayModel.h"
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -122,6 +123,8 @@ enum ECtrlTags
   kCtrlTagVoLumPresetMenu,
   kCtrlTagVoLumCustomOverlay,
   kCtrlTagVoLumConfirm,
+  kCtrlTagVoLumPlaySurface,
+  kCtrlTagVoLumModeToggle,
   kNumCtrlTags
 };
 
@@ -283,6 +286,10 @@ public:
   void OnParamChangeUI(int paramIdx, iplug::EParamSource source) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
+  // Shared headless Sound recall used by MIDI and PLAY. Returns false without
+  // changing the sounding rig when either id cannot be resolved.
+  bool VolumRecallSound(const std::string& ampId, const std::string& presetId);
+
 private:
   // Allocates mInputPointers and mOutputPointers
   void _AllocateIOPointers(const size_t nChans);
@@ -442,6 +449,11 @@ public:
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
   void _VolumShowManageCustomPedals(int preSlot = -1);
   void _VolumShowPresetMenu();
+  void _VolumSetUiMode(volum::UiMode mode);
+  void _VolumRefreshPlaySurface();
+  bool _VolumTogglePlayBypass(const char* paramName);
+  void _VolumAssignPlaySound(int slot, const volum::SoundChoice& sound);
+  void _VolumClearPlaySound(int slot);
   void _VolumSelectCustomAmp(int customIdx);
   // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,
   // and channel labels into the shared speaker row + channel stepper (display
@@ -528,6 +540,8 @@ public:
   // Recall preset `index`: apply its snapshot to the live chain, retain it as the
   // recalled snapshot (drives the equality-based "(unsaved)" flag), update the bar.
   void _VolumRecallPreset(int index);
+  void _VolumRecallUserPreset(int index);
+  void _VolumRecallFactoryPreset();
   // Apply a recalled snapshot to the live chain and retain it (called by the
   // bridge apply hook so Manage/menu/bar recalls share one path).
   void _VolumApplyRecalledPreset(const volum::VoLumAmpSettings& s);
@@ -544,6 +558,9 @@ public:
   // restored in _VolumSyncPresetOwner; pruned when a preset is deleted/missing.
   std::unordered_map<std::string, std::string> mVolumActivePresetIdByOwner;
   std::unordered_map<std::string, volum::VoLumAmpSettings> mVolumRecalledSnapshotByOwner;
+  std::vector<volum::FactoryPreset> mVolumFactoryPresets;
+  volum::UiMode mVolumUiMode = volum::UiMode::Build;
+  int mVolumLastRecalledPlaySlot = -1;
   // Record/forget the active preset for the current owner key.
   void _VolumRememberActivePreset();
   void _VolumForgetActivePreset();

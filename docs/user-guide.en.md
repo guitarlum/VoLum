@@ -7,6 +7,7 @@ This guide explains the current VoLum interface after installation. For download
 ## Contents
 
 - [Main View](#main-view)
+- [PLAY View](#play-view)
 - [Choose An Amp](#choose-an-amp)
 - [PRE Section](#pre-section)
 - [Dual Amp](#dual-amp)
@@ -32,6 +33,16 @@ This guide explains the current VoLum interface after installation. For download
 The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. Every bundled amp, cab, and PRE NAM capture is a NAM Architecture 2 (A2) profile, trained to its best fit between 700 and 1200 epochs. VoLum plays the full A2 slice by default; the optional Lite mode is described under Settings.
 
 VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
+
+## PLAY View
+
+![VoLum PLAY view](user-guide-play.png)
+
+Use the **PLAY | BUILD** switch in the header to move between the stage surface and the full editor. Each plug-in instance remembers its mode in the project; the standalone app remembers its last mode too. Entering PLAY never recalls or changes a sound.
+
+PLAY turns saved sounds into Program Change slots. Click **Add Sound**, choose a factory or User preset, then choose the slot to fill. The 15 factory amps always provide one read-only factory preset named **Ready**; User presets remain editable in BUILD. Click a populated slot to recall its complete sound, double-click it to replace the assignment, and use the small remove button to clear it. The highlighted slot is the last one recalled from PLAY and remains highlighted while you make live changes; **EDITED** indicates that the live rig differs from that recalled snapshot.
+
+The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched.
 
 ## Choose An Amp
 
@@ -162,7 +173,7 @@ A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, 
 3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
 4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
 
-Presets are per amp: each amp (factory or custom) keeps its own preset list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults.
+Presets are per amp: each amp (factory or custom) keeps its own User list. Every factory amp also has one read-only Factory preset named **Ready**. Editing Ready and saving creates a User copy; Factory rows are never overwritten or deleted. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
 
 ## Custom Content (Bring Your Own)
 

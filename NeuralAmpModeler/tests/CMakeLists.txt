@@ -63,6 +63,8 @@ add_executable(NeuralAmpModeler-Tests
   test_iplug_app_vector_accumulator.cpp
   test_iplug_app_shutdown.cpp
   test_volum_preset_bar.cpp
+  test_volum_factory_presets.cpp
+  test_volum_play.cpp
   test_volum_chunk_safe_read.cpp
   test_volum_overlay_action_codes.cpp
   test_volum_numeric_entry.cpp

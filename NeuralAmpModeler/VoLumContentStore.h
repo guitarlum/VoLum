@@ -32,6 +32,7 @@
 #include <fstream>
 #include <limits>
 #include <map>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -114,7 +115,7 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
 // builds; the bump is only a marker of the new capability, not a migration gate.
-// v4 adds the machine-global MIDI Sound assignment map.
+// v4 adds the machine-global MIDI Sound assignments used by MIDI and PLAY.
 inline constexpr int kContentSchemaVersion = 4;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
@@ -381,6 +382,8 @@ struct Preset
   VoLumAmpSettings settings;
 };
 
+using MidiSoundAssignment = MidiSound;
+
 // Owner key for a preset bank or scene: factory amps use "factory:<idx>",
 // custom amps use their opaque amp id.
 inline std::string FactoryOwnerKey(int ampIdx)
@@ -437,8 +440,10 @@ struct ResolvedMidiSound
   VoLumAmpSettings settings;
 };
 
-// Pure/headless lookup used by OnIdle and tests. Missing amps, missing presets,
-// unassigned slots, and unsupported shipped Factory preset ids all stay no-op.
+// Pure/headless lookup used by OnIdle, PLAY, and tests. Missing amps, missing
+// User presets, unassigned slots, and mismatched Factory ids stay no-op. Shipped
+// Ready presets (`factory:<idx>:v1`) resolve even though they are not stored in
+// the user presetBanks.
 inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int slot)
 {
   const MidiSound* sound = FindMidiSound(r.midiSoundMap, slot);
@@ -459,6 +464,10 @@ inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int 
   if (!ampKnown)
     return std::nullopt;
 
+  if (factoryIdx >= 0 && factoryIdx < kAmpCount
+      && sound->presetId == FactoryOwnerKey(factoryIdx) + ":v1")
+    return ResolvedMidiSound{sound->ampId, sound->presetId, VoLumAmpSettings{}};
+
   const auto bank = r.presetBanks.find(sound->ampId);
   if (bank == r.presetBanks.end())
     return std::nullopt;
@@ -466,6 +475,32 @@ inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int 
     if (preset.id == sound->presetId)
       return ResolvedMidiSound{sound->ampId, preset.id, preset.settings};
   return std::nullopt;
+}
+
+inline const MidiSoundAssignment* MidiSoundAtSlot(const Registry& r, int slot)
+{
+  return FindMidiSound(r.midiSoundMap, slot);
+}
+
+inline int FirstFreeMidiSoundSlot(const Registry& r)
+{
+  for (int slot = 0; slot < kMidiSoundSlotCount; ++slot)
+    if (!MidiSoundAtSlot(r, slot))
+      return slot;
+  return -1;
+}
+
+inline bool AssignMidiSound(Registry& r, int slot, const std::string& ampId, const std::string& presetId)
+{
+  if (slot < 0 || slot >= kMidiSoundSlotCount || ampId.empty() || presetId.empty())
+    return false;
+  volum::AssignMidiSound(r.midiSoundMap, {slot, ampId, presetId});
+  return true;
+}
+
+inline bool ClearMidiSound(Registry& r, int slot)
+{
+  return volum::ClearMidiSound(r.midiSoundMap, slot);
 }
 
 // ---------------------------------------------------------------------------
@@ -613,15 +648,16 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   }
   j["presetBanks"] = banks;
 
+  nlohmann::json soundMap = nlohmann::json::array();
+  for (const auto& assignment : r.midiSoundMap)
+    soundMap.push_back(
+      {{"slot", assignment.slot}, {"ampId", assignment.ampId}, {"presetId", assignment.presetId}});
+  j["midiSoundMap"] = soundMap;
+
   nlohmann::json scenes = nlohmann::json::object();
   for (const auto& sc : r.customScenes)
     scenes[sc.first] = AmpSettingsToJson(sc.second);
   j["customScenes"] = scenes;
-
-  nlohmann::json midiSounds = nlohmann::json::array();
-  for (const auto& sound : r.midiSoundMap)
-    midiSounds.push_back({{"slot", sound.slot}, {"ampId", sound.ampId}, {"presetId", sound.presetId}});
-  j["midiSoundMap"] = midiSounds;
 
   return j;
 }
@@ -733,6 +769,33 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
     }
   }
 
+  if (j.contains("midiSoundMap") && j["midiSoundMap"].is_array())
+  {
+    bool used[128] = {};
+    for (const auto& entry : j["midiSoundMap"])
+    {
+      if (!entry.is_object() || !entry.contains("slot") || !entry["slot"].is_number_integer()
+          || !entry.contains("ampId") || !entry["ampId"].is_string() || !entry.contains("presetId")
+          || !entry["presetId"].is_string())
+      {
+        h = true;
+        continue;
+      }
+      const int slot = entry["slot"].get<int>();
+      const std::string ampId = entry["ampId"].get<std::string>();
+      const std::string presetId = entry["presetId"].get<std::string>();
+      if (slot < 0 || slot > 127 || used[slot] || ampId.empty() || presetId.empty())
+      {
+        h = true;
+        continue;
+      }
+      used[slot] = true;
+      r.midiSoundMap.push_back({slot, ampId, presetId});
+    }
+    std::sort(r.midiSoundMap.begin(), r.midiSoundMap.end(),
+              [](const MidiSoundAssignment& a, const MidiSoundAssignment& b) { return a.slot < b.slot; });
+  }
+
   if (j.contains("customScenes") && j["customScenes"].is_object())
   {
     for (const auto& sc : j["customScenes"].items())
@@ -743,28 +806,6 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
       if (AmpSettingsFromJson(sc.value(), settings))
         h = true;
       r.customScenes[sc.key()] = settings;
-    }
-  }
-
-  if (j.contains("midiSoundMap") && j["midiSoundMap"].is_array())
-  {
-    for (const auto& entry : j["midiSoundMap"])
-    {
-      if (!entry.is_object() || !entry.contains("slot") || !entry["slot"].is_number_integer()
-          || !entry.contains("ampId") || !entry["ampId"].is_string() || !entry.contains("presetId")
-          || !entry["presetId"].is_string())
-      {
-        h = true;
-        continue;
-      }
-      MidiSound sound{entry["slot"].get<int>(), entry["ampId"].get<std::string>(),
-                      entry["presetId"].get<std::string>()};
-      if (sound.slot < 0 || sound.slot >= kMidiSoundSlotCount || sound.ampId.empty() || sound.presetId.empty())
-      {
-        h = true;
-        continue;
-      }
-      AssignMidiSound(r.midiSoundMap, std::move(sound));
     }
   }
 

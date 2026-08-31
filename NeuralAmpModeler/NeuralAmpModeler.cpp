@@ -47,6 +47,7 @@
 #include "VoLumControls.h"
 #include "VoLumCustomUi.h"
 #include "VoLumCustomNamImport.h"
+#include "VoLumPlaySurface.h"
 
 using namespace iplug;
 using namespace igraphics;
@@ -476,6 +477,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
       mVolumRigsRoot = volum::content::PathToUtf8(root);
+    mVolumFactoryPresets = volum::LoadFactoryPresets(
+      root.empty() ? std::filesystem::path{} : root / "factory-presets.json");
     // 1.2.0: bind + load the all-format custom-content library (F5-F8). The base
     // dir is VoLum-owned and writable from standalone/VST3/AU; fall back to a
     // content/ folder beside the rigs tree if the OS path cannot be resolved.
@@ -827,6 +830,16 @@ void NeuralAmpModeler::OnIdle()
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
+  if (auto* pGfx = GetUI())
+    if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
+      toggle->SetDirty(false); // keep the switch above animated BUILD/PLAY chrome
+  if (mVolumUiMode == volum::UiMode::Play)
+  {
+    _VolumRefreshPlaySurface();
+    if (auto* pGfx = GetUI())
+      if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+        surface->As<VoLumPlaySurfaceControl>()->Tick();
+  }
 
   _VolumConsumeUpdateResult();
 
@@ -1121,6 +1134,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;
+  idTail.uiMode = volum::UiModeToString(mVolumUiMode);
   auto pitchTailFromSettings = [](const volum::VoLumAmpSettings& s) {
     volum::PitchTail p;
     p.present = true;
@@ -2170,6 +2184,7 @@ std::string NeuralAmpModeler::_GetVoLumKnobHintText(int paramIdx) const
 #include "VoLumLayoutRuntime.inc.cpp"
 #include "VoLumSceneRig.inc.cpp"
 #include "VoLumAmpMenus.inc.cpp"
+#include "VoLumPlayRuntime.inc.cpp"
 
 // VoLum ProcessBlock helpers + async-loader + per-amp settings persistence.
 // Tail-included for file-size hygiene; all are part of this TU.
