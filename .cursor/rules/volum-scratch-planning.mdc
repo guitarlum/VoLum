@@ -13,6 +13,11 @@ execution.
 - Decision tickets: `Type: research|prototype|grilling|task` and
   `Status: open|claimed|resolved`. Claim before work. One grilling ticket per
   session. Sub-agents may resolve research; they must not answer grilling.
+  HITL grilling rounds use Cursor **AskQuestion** (option picker; recommended
+  choice first, labeled `(Recommended)`), not markdown-only ❓ blocks.
 - Never add `Status: ready-for-agent` (implementation) tickets next to a map.
   After the map is clear, create a **new** `.scratch/<feature>/` with `spec.md`.
+- Chat memory of this map is stale after compression. Re-read `map.md` and the
+  claimed ticket from disk before grilling, answering, or resolving. Do not
+  trust a summary of Decisions-so-far.
 - Ops: `docs/agents/issue-tracker.md`. Do not publish maps to GitHub Issues.

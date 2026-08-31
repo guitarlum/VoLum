@@ -53,6 +53,9 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 - **Frontier**: open (`Status: open` or missing), unblocked, and not `claimed`;
   first by number wins.
 - **Claim**: set `Status: claimed` and save before any work.
+- **Re-read**: after context compression, or whenever the chat might be
+  summarizing, read `map.md` and the claimed ticket from disk again. Do not
+  treat earlier conversation as the map.
 - **Resolve**: append the answer under an `## Answer` heading, set
   `Status: resolved`, then append a context pointer (gist + link) to the map's
   Decisions-so-far in `map.md`.

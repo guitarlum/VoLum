@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VoLum PLAY — Gig Loop</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;500;600;700&family=Michroma&family=Poiret+One&display=swap");
+    :root {
+      --black:#090a0f; --ink:#111118; --panel:#171820; --panel2:#1d1d26;
+      --gold:rgb(252,222,145); --brass:#b98335; --teal:rgb(91,196,196);
+      --cream:#f5eddd; --muted:#817c71; --line:#3d3527;
+      --in:.35; --in2:.30; --out-l:.3; --out-r:.2;
+    }
+    * { box-sizing:border-box }
+    html,body { margin:0; width:100%; min-height:100%; }
+    body {
+      overflow:hidden; color:var(--cream); font-family:"Josefin Sans",sans-serif;
+      background:radial-gradient(circle at 50% 38%,#252630 0,#111218 45%,#08090d 80%);
+      display:flex; flex-direction:column; align-items:center; padding-top:16px;
+    }
+    button { font:inherit; }
+    .plugin {
+      width:900px; height:600px; flex:0 0 600px; position:relative; overflow:hidden;
+      background:linear-gradient(180deg,#12131a,#0c0d12); border:1px solid #55431f;
+      box-shadow:0 28px 75px #000c,inset 0 0 0 3px #090a0e;
+    }
+    .plugin::before,.plugin::after,.deco::before,.deco::after {
+      content:""; position:absolute; width:20px; height:20px; pointer-events:none; z-index:20;
+    }
+    .plugin::before { left:5px; top:5px; border-left:2px solid #8a6925; border-top:2px solid #8a6925; }
+    .plugin::after { right:5px; bottom:5px; border-right:2px solid #8a6925; border-bottom:2px solid #8a6925; }
+    .topbar {
+      height:68px; display:flex; align-items:center; padding:0 21px 0 27px;
+      background:linear-gradient(180deg,#16161e,#101118); border-bottom:1px solid #30291e;
+      position:relative; z-index:12;
+    }
+    .brand { width:170px; color:var(--gold); line-height:.82; }
+    .logo { font:30px "Poiret One"; letter-spacing:.5px; }
+    .brand small { display:block; margin-left:28px; font:7px "Michroma"; letter-spacing:1.5px; }
+    .now { border-left:1px solid #3d3323; padding-left:16px; min-width:295px; position:relative; }
+    .now::before { content:""; position:absolute; width:6px; height:6px; left:12px; top:4px; transform:translateX(-21px) rotate(45deg); background:var(--teal); box-shadow:0 0 10px var(--teal); }
+    .now-top { color:var(--teal); font:7px "Michroma"; letter-spacing:1.4px; margin-bottom:5px; }
+    .now-name { color:var(--gold); font-weight:700; font-size:15px; letter-spacing:.3px; }
+    .dirty-mark { color:#e7a94a; font-size:11px; margin-left:5px; display:none; }
+    html[data-dirty="true"] .dirty-mark { display:inline; }
+    .empty-now { display:none; }
+    body.empty .gig-now { display:none; }
+    body.empty .empty-now { display:block; }
+    .top-spacer { flex:1; }
+    .mode { display:flex; height:28px; border:1px solid #4a3f2e; padding:3px; margin-right:17px; background:#0b0c11; }
+    .mode button { border:0; padding:0 14px; background:transparent; color:#6e6960; font:7px "Michroma"; }
+    .mode .active { color:#101118; background:linear-gradient(180deg,var(--gold),#bd8738); }
+    .tools { display:flex; gap:16px; align-items:center; }
+    .tool { width:18px; height:27px; border:0; background:none; color:var(--cream); position:relative; padding:0; }
+    .tuner::before { content:""; position:absolute; left:2px; top:8px; width:13px; height:7px; border:2px solid currentColor; border-bottom:0; border-radius:12px 12px 0 0; }
+    .tuner::after { content:""; position:absolute; width:2px; height:8px; left:8px; top:8px; background:currentColor; transform:rotate(17deg); transform-origin:bottom; }
+    .metro::before { content:""; position:absolute; left:5px; top:4px; width:8px; height:18px; border:2px solid currentColor; transform:skew(-7deg); }
+    .gear { font-size:22px; line-height:22px; }
+    .badge { position:absolute; width:6px; height:6px; right:-3px; top:0; border-radius:50%; background:var(--teal); }
+    .stage { height:532px; position:relative; }
+    .variant { display:none; height:100%; }
+    html[data-variant="A"] .variant-a,html[data-variant="B"] .variant-b,html[data-variant="C"] .variant-c { display:block; }
+
+    /* shared gig vocabulary */
+    .section-kicker { color:var(--teal); font:7px "Michroma"; letter-spacing:1.1px; }
+    .section-title { color:var(--gold); font:19px "Poiret One"; letter-spacing:1.3px; }
+    .hint { color:#736d62; font:7px "Michroma"; letter-spacing:.7px; }
+    .add { border:1px solid #665437; height:25px; padding:0 10px; background:#101118; color:var(--gold); font:7px "Michroma"; cursor:pointer; }
+    .add:hover { background:var(--teal); color:var(--ink); border-color:var(--teal); }
+    .select-head { display:flex; justify-content:space-between; align-items:center; }
+    .recall-ribbon {
+      position:absolute; z-index:8; left:8px; top:8px; padding:5px 8px;
+      color:#111118; background:var(--gold); font:7px "Michroma"; letter-spacing:.7px;
+      opacity:0; transform:translateY(-3px); transition:opacity 180ms,transform 180ms;
+    }
+    .is-recalled .recall-ribbon { opacity:1; transform:translateY(0); }
+    .pc { display:block; color:var(--teal); font:7px "Michroma"; letter-spacing:1px; }
+    .corner::before,.corner::after { content:""; position:absolute; width:13px; height:13px; z-index:5; }
+    .corner::before { left:5px; top:5px; border-left:1px solid var(--teal); border-top:1px solid var(--teal); }
+    .corner::after { right:5px; bottom:5px; border-right:1px solid var(--brass); border-bottom:1px solid var(--brass); }
+    .invalid {
+      cursor:not-allowed!important; background:
+        linear-gradient(57deg,transparent 0 49%,#755a2f 49.5% 50%,transparent 50.5%),
+        linear-gradient(116deg,transparent 0 43%,#755a2f 43.5% 44%,transparent 44.5%),#111219!important;
+    }
+    .invalid-number { color:#66583e; font:37px "Poiret One"; }
+    .invalid-label { color:#9d8356; font:7px "Michroma"; letter-spacing:.8px; }
+
+    .art-frame { position:relative; overflow:hidden; background:#15161e; border:1px solid #4b402f;
+      box-shadow:0 0 calc(6px + var(--in)*28px) rgba(252,222,145,calc(var(--in)*.38)); }
+    .art-frame.support { box-shadow:0 0 calc(6px + var(--in2)*26px) rgba(91,196,196,calc(var(--in2)*.34)); }
+    .art-frame::after {
+      content:""; position:absolute; inset:2px; pointer-events:none; z-index:4;
+      border:1px solid var(--gold);
+      background:radial-gradient(ellipse at 50% 38%, rgba(252,222,145,calc(.06 + var(--in)*.36)), transparent 70%);
+      mix-blend-mode:soft-light;
+      box-shadow:inset 0 0 calc(12px + var(--in)*28px) rgba(252,222,145,calc(var(--in)*.42));
+    }
+    .art-frame.support::after {
+      border-color:var(--teal);
+      background:radial-gradient(ellipse at 50% 38%, rgba(91,196,196,calc(.05 + var(--in2)*.32)), transparent 70%);
+      box-shadow:inset 0 0 calc(12px + var(--in2)*26px) rgba(91,196,196,calc(var(--in2)*.38));
+    }
+    .art-live {
+      width:100%; height:100%; object-fit:cover; display:block; will-change:filter;
+      filter:brightness(calc(.56 + var(--in)*0.78)) saturate(calc(.86 + var(--in)*0.22));
+    }
+    .support .art-live {
+      filter:brightness(calc(.56 + var(--in2)*0.70)) saturate(calc(.86 + var(--in2)*0.18));
+    }
+    .art-label { position:absolute; z-index:6; top:8px; left:9px; color:var(--gold); font:7px "Michroma"; letter-spacing:.8px; }
+    .support .art-label { color:var(--teal); }
+    .sound-panel .art-label { display:none; }
+    html[data-dual="true"] .a-art-pair .art-label { display:none; }
+    .support { display:none; }
+    html[data-dual="true"] .support { display:block; }
+
+    .meter { width:15px; height:103px; padding:3px; border:1px solid #433724; background:#07080c; position:relative; }
+    .meter-fill { position:absolute; inset:3px; transform-origin:bottom; background:repeating-linear-gradient(to top,var(--teal) 0 3px,transparent 3px 6px); transform:scaleY(var(--in)); }
+    .meter.out-l .meter-fill { background:repeating-linear-gradient(to top,#c28d33 0 3px,transparent 3px 6px); transform:scaleY(var(--out-l)); }
+    .meter.out-r .meter-fill { background:repeating-linear-gradient(to top,var(--gold) 0 3px,transparent 3px 6px); transform:scaleY(var(--out-r)); }
+    .meter-name { margin-top:4px; text-align:center; color:var(--gold); font:6px "Michroma"; white-space:nowrap; }
+    .out-r-wrap { display:none; }
+    html[data-dual="true"] .out-r-wrap { display:block; }
+    .meter-group { display:flex; align-items:center; justify-content:center; gap:8px; }
+
+    .stomp {
+      position:relative; border:1px solid #3b3a37; color:#8d887e; background:#15161d;
+      overflow:hidden; cursor:pointer; text-align:left; transition:border-color 150ms,transform 120ms;
+    }
+    .stomp:hover { transform:translateY(-1px); border-color:#736142; }
+    .stomp img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.18; pointer-events:none; }
+    .stomp-copy { position:absolute; z-index:2; left:8px; bottom:7px; font:7px "Michroma"; letter-spacing:.5px; }
+    .stomp-led { position:absolute; z-index:3; right:7px; top:7px; width:7px; height:7px; border-radius:50%; background:#30323a; border:1px solid #4b4c52; }
+    .stomp.on { border-color:#4c9a9e; color:var(--cream); }
+    .stomp.on .stomp-led { background:var(--teal); border-color:#a9ebe6; box-shadow:0 0 9px var(--teal); }
+    .stomp.on img { opacity:.43; }
+    .stomp[data-fx="NAM 1"].on,.stomp[data-fx="NAM 2"].on { border-color:#a87832; }
+    .stomp[data-fx="NAM 1"].on .stomp-led,.stomp[data-fx="NAM 2"].on .stomp-led { background:var(--gold); box-shadow:0 0 9px #d59d3d; }
+    .bank-label { position:absolute; z-index:4; top:6px; left:7px; color:#706956; font:6px "Michroma"; }
+
+    /* A: selected art tile grid + adjacent live rig */
+    .a-layout { height:100%; display:grid; grid-template-columns:430px 1fr; }
+    .a-picker { padding:17px 14px 13px 22px; border-right:1px solid #332d22; }
+    .a-picker .select-head { height:38px; }
+    .tile-grid { height:446px; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:218px 218px; gap:8px; }
+    .sound-tile { position:relative; overflow:hidden; border:1px solid #3c362d; background:#15161e; cursor:pointer; min-width:0; transition:border-color 180ms,transform 180ms; }
+    .sound-tile:hover { border-color:var(--teal); transform:translateY(-2px); }
+    .sound-tile.is-recalled { grid-column:span 2; grid-row:span 2; border-color:var(--brass); box-shadow:inset 0 0 0 2px #3d2c14; }
+    .sound-tile img { width:100%; height:100%; object-fit:cover; display:block; }
+    .sound-tile.is-recalled img { height:calc(100% + 36px); object-position:center top; }
+    .sound-tile .dual-thumb { display:flex; height:100%; }
+    .sound-tile .dual-thumb img { width:50%; object-fit:cover; }
+    .tile-vignette { position:absolute; inset:0; background:linear-gradient(180deg,transparent 36%,#090a10f4 91%); }
+    .tile-copy { position:absolute; z-index:5; left:10px; right:8px; bottom:9px; }
+    .tile-name { display:block; color:var(--gold); font-weight:700; font-size:12px; margin-top:5px; line-height:1.05; }
+    .tile-scene { display:block; color:#aaa297; font-size:9px; margin-top:3px; }
+    .sound-tile.is-recalled .tile-name { font-size:18px; }
+    .sound-tile.is-recalled .tile-copy { bottom:15px; }
+    .tile-invalid { display:grid; place-items:center; text-align:center; }
+    .a-rig { padding:16px 20px 13px; display:grid; grid-template-rows:40px 236px 1fr; }
+    .rig-head { display:flex; align-items:center; justify-content:space-between; }
+    .rig-status { color:var(--gold); font:7px "Michroma"; letter-spacing:.8px; }
+    html[data-dirty="true"] .rig-status::after { content:" · UNSAVED"; color:#e1a146; }
+    .a-hero-row { display:grid; grid-template-columns:35px 1fr 50px; gap:9px; align-items:center; }
+    .a-art-pair { display:grid; grid-template-columns:1fr; gap:7px; height:220px; }
+    html[data-dual="true"] .a-art-pair { grid-template-columns:1fr 1fr; }
+    .a-art-pair .art-frame { height:220px; }
+    .a-stomps { position:relative; padding-top:22px; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr); gap:6px; }
+    .a-stomps::before { content:"LIVE RIG · CLICK TO STOMP"; position:absolute; top:6px; left:0; color:var(--teal); font:6px "Michroma"; letter-spacing:.8px; }
+    .a-stomps .stomp:nth-child(-n+4)::after { content:"PRE"; position:absolute; left:7px; top:6px; color:#8a744c; font:5px "Michroma"; z-index:3; }
+    .a-stomps .stomp:nth-child(n+5)::after { content:"POST"; position:absolute; left:7px; top:6px; color:#8a744c; font:5px "Michroma"; z-index:3; }
+
+    /* B: PC-order cinema + pedalboard */
+    .b-layout { height:100%; display:grid; grid-template-rows:333px 199px; }
+    .cinema { padding:15px 24px 10px; border-bottom:1px solid #302b22; }
+    .cinema .select-head { height:37px; }
+    .reel { height:265px; display:flex; gap:7px; }
+    .sound-panel { width:78px; min-width:0; position:relative; overflow:hidden; border:1px solid #3e382f; background:#15161e; cursor:pointer; transition:width 240ms,border-color 180ms; }
+    .sound-panel.is-recalled { width:514px; border-color:var(--brass); box-shadow:inset 0 0 0 2px #3c2a12; }
+    .sound-panel .panel-arts { display:flex; width:514px; height:100%; }
+    .sound-panel .panel-arts .art-frame { flex:1; border:0; }
+    .sound-panel.is-recalled .panel-art { height:calc(100% + 32px); object-position:center top; }
+    .sound-panel:not(.is-recalled) .panel-arts { width:180px; transform:translateX(-48px); opacity:.55; }
+    .sound-panel:not(.is-recalled) .support { display:none!important; }
+    .sound-panel .panel-vignette { position:absolute; inset:0; background:linear-gradient(180deg,transparent 43%,#090a10f2 94%); z-index:4; }
+    .panel-copy { position:absolute; z-index:7; left:14px; bottom:13px; }
+    .panel-name { display:block; color:var(--gold); font-size:18px; font-weight:700; }
+    .panel-scene { display:block; font-size:9px; color:#b1a99b; margin-top:3px; letter-spacing:.5px; }
+    .sound-panel:not(.is-recalled) .panel-copy { left:50px; bottom:12px; width:190px; transform:rotate(-90deg); transform-origin:left bottom; }
+    .sound-panel:not(.is-recalled) .panel-name { font-size:11px; }
+    .sound-panel:not(.is-recalled) .panel-scene { display:none; }
+    .sound-panel.invalid { width:54px; flex:0 0 54px; display:grid; place-items:center; }
+    .sound-panel.invalid .invalid-number { position:absolute; top:14px; left:10px; font-size:28px; }
+    .sound-panel.invalid .invalid-label { writing-mode:vertical-rl; position:absolute; bottom:15px; left:21px; }
+    .pedalboard { display:grid; grid-template-columns:54px 1fr 78px; gap:10px; padding:12px 22px 13px; background:#0b0c11; }
+    .b-stomps { position:relative; padding-top:23px; display:grid; grid-template-columns:repeat(8,1fr); gap:6px; }
+    .b-stomps::before { content:"LIVE RIG · PRE"; position:absolute; top:5px; left:0; color:var(--gold); font:6px "Michroma"; letter-spacing:.8px; }
+    .b-stomps::after { content:"POST"; position:absolute; top:5px; left:50%; color:var(--teal); font:6px "Michroma"; letter-spacing:.8px; }
+    .b-stomps .stomp { height:147px; }
+    .b-stomps .stomp::after { content:""; position:absolute; z-index:1; left:0; right:0; bottom:0; height:25px; background:#0b0c11e8; }
+    .b-stomps .stomp-copy { left:6px; right:3px; bottom:8px; font-size:6px; white-space:nowrap; }
+
+    /* C: vertical instrument chain + art wall + PC strip */
+    .c-layout { height:100%; display:grid; grid-template-columns:213px 1fr 154px; grid-template-rows:438px 94px; }
+    .vertical-rig { grid-row:span 2; padding:13px 11px 11px 17px; border-right:1px solid #342e22; background:linear-gradient(90deg,#101118,#16171e); }
+    .vertical-rig .select-head { height:30px; }
+    .c-stomps { display:flex; flex-direction:column; gap:5px; position:relative; }
+    .c-stomps::before { content:""; position:absolute; left:24px; top:-5px; bottom:-6px; width:1px; background:#448c90; opacity:.7; }
+    .c-stomps .stomp { height:54px; flex:0 0 54px; }
+    .c-stomps .stomp img { width:58px; right:auto; opacity:.3; }
+    .c-stomps .stomp-copy { left:71px; bottom:19px; }
+    .c-stomps .stomp-led { right:12px; top:22px; }
+    .wall { position:relative; padding:13px 12px 9px; border-bottom:1px solid #342e22; min-width:0; }
+    .wall-caption { position:absolute; z-index:7; left:12px; right:12px; bottom:9px; height:78px; background:#0a0b11; pointer-events:none; }
+    .wall .section-kicker { position:absolute; z-index:8; left:23px; bottom:59px; }
+    .wall-title { position:absolute; z-index:8; left:22px; bottom:23px; color:var(--gold); font:27px "Poiret One"; letter-spacing:1.3px; }
+    .wall-scene { position:absolute; z-index:8; right:23px; bottom:27px; color:#b3aa9d; font:8px "Michroma"; }
+    .c-art-pair { height:413px; display:grid; grid-template-columns:1fr; gap:7px; }
+    html[data-dual="true"] .c-art-pair { grid-template-columns:1fr 1fr; }
+    .c-art-pair .art-live { height:calc(100% + 46px); object-position:center top; }
+    .c-art-pair .art-frame::before { content:""; position:absolute; z-index:7; left:0; right:0; top:0; height:44px; background:#15161e; }
+    .c-art-pair .art-label { display:block!important; z-index:8; }
+    .c-picker { padding:13px 13px 9px 10px; border-left:1px solid #342e22; }
+    .c-picker .select-head { height:35px; }
+    .pc-list { display:flex; flex-direction:column; gap:7px; }
+    .pc-slot { height:68px; border:1px solid #3b372f; background:#15161d; color:var(--cream); display:grid; grid-template-columns:45px 1fr; position:relative; overflow:hidden; cursor:pointer; text-align:left; padding:0; }
+    .pc-slot img { width:45px; height:100%; object-fit:cover; opacity:.55; }
+    .pc-slot-copy { padding:10px 5px; min-width:0; }
+    .pc-slot-name { display:block; color:var(--gold); font-size:8px; font-weight:700; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pc-slot.is-recalled { border-color:var(--gold); box-shadow:inset 3px 0 var(--gold); }
+    .pc-slot.is-recalled::after { content:"LIVE"; position:absolute; right:4px; top:4px; color:#111118; background:var(--gold); padding:2px 3px; font:5px "Michroma"; }
+    .pc-slot.invalid { display:grid; grid-template-columns:1fr; place-items:center; text-align:center; }
+    .c-rack { grid-column:2 / 4; display:grid; grid-template-columns:1fr 1fr 1fr 125px; gap:8px; padding:9px 12px; background:#0a0b10; }
+    .rack-meter { border:1px solid #3b352a; background:#13141b; padding:8px; position:relative; }
+    .rack-meter span { color:var(--gold); font:6px "Michroma"; }
+    .h-track { position:absolute; left:34px; right:8px; top:17px; height:15px; background:repeating-linear-gradient(90deg,#252832 0 6px,transparent 6px 9px); overflow:hidden; }
+    .h-fill { display:block; height:100%; width:var(--in-pct,35%); background:linear-gradient(90deg,var(--teal),var(--gold)); }
+    .rack-out-l .h-fill { width:var(--out-l-pct,30%); background:linear-gradient(90deg,#9d6d28,var(--gold)); }
+    .rack-out-r .h-fill { width:var(--out-r-pct,20%); background:linear-gradient(90deg,#916b30,var(--teal)); }
+    .rack-out-r { display:none; }
+    html[data-dual="true"] .rack-out-r { display:block; }
+    .rack-state { border:1px solid #3b352a; display:grid; place-items:center; text-align:center; color:var(--teal); font:6px "Michroma"; line-height:1.8; }
+
+    /* empty */
+    .empty-state { display:none; position:absolute; inset:68px 0 0; z-index:30; background:radial-gradient(circle at 50% 45%,#1d1e27,#101118 52%,#0a0b10); place-items:center; }
+    body.empty .empty-state { display:grid; }
+    .empty-center { text-align:center; margin-top:-20px; }
+    .empty-diamond { width:80px; height:80px; border:1px solid #5a4a30; transform:rotate(45deg); margin:0 auto 34px; position:relative; }
+    .empty-diamond::before { content:"+"; position:absolute; inset:0; display:grid; place-items:center; transform:rotate(-45deg); color:var(--gold); font:30px "Poiret One"; }
+    .empty-title { color:var(--gold); font:25px "Poiret One"; letter-spacing:2px; }
+    .empty-copy { color:#7f796e; font:7px "Michroma"; letter-spacing:.9px; margin:10px 0 20px; }
+    .empty-add { border:0; padding:11px 28px; background:var(--gold); color:#111118; font:7px "Michroma"; }
+
+    /* controls outside plugin */
+    .outside { width:900px; margin-top:10px; display:grid; grid-template-rows:38px 38px; gap:6px; }
+    .outside-top { display:flex; justify-content:center; gap:10px; }
+    .scene,.variant-nav,.walkthrough,.state-line { border:1px solid #4b412e; background:#101118ee; box-shadow:0 7px 20px #0007; }
+    .scene { display:flex; }
+    .scene button { width:65px; border:0; background:transparent; color:#706b62; font:7px "Michroma"; }
+    .scene button.active { background:var(--teal); color:#111118; }
+    .variant-nav { display:flex; align-items:center; }
+    .variant-nav button { width:40px; height:100%; border:0; background:transparent; color:var(--gold); font-size:17px; }
+    .variant-label { width:230px; text-align:center; font:7px "Michroma"; letter-spacing:.8px; }
+    .variant-label b { color:var(--teal); margin-right:8px; }
+    .outside-bottom { display:grid; grid-template-columns:545px 1fr; gap:10px; }
+    .walkthrough { display:grid; grid-template-columns:repeat(3,1fr); overflow:hidden; }
+    .walkthrough button { border:0; border-right:1px solid #373126; background:transparent; color:#9b958a; font:7px "Michroma"; letter-spacing:.35px; cursor:pointer; }
+    .walkthrough button:last-child { border-right:0; }
+    .walkthrough button:hover { color:var(--gold); background:#19191e; }
+    .walkthrough em { color:var(--teal); font-style:normal; margin-right:5px; }
+    .state-line { display:flex; align-items:center; padding:0 12px; color:#8e887d; font:6px "Michroma"; letter-spacing:.4px; white-space:nowrap; }
+    .state-line b { color:var(--gold); font-weight:400; }
+    @media(max-height:735px){body{padding-top:6px}.outside{margin-top:5px;gap:3px;grid-template-rows:34px 34px}}
+  </style>
+</head>
+<body>
+  <main class="plugin">
+    <header class="topbar">
+      <div class="brand"><span class="logo">VoLum</span><small>NAM PLAYER</small></div>
+      <div class="now"><div class="gig-now"><div class="now-top">PLAY · RECALLED PC <span class="current-pc">00</span></div><div class="now-name"><span class="current-name">THC Sunset</span> · <span class="current-scene">Crunch</span><span class="dirty-mark">(unsaved)</span></div></div><div class="empty-now"><div class="now-top">PLAY · NO PROGRAM</div><div class="now-name">No Sounds assigned</div></div></div>
+      <div class="top-spacer"></div>
+      <div class="mode"><button class="active">PLAY</button><button>BUILD</button></div>
+      <div class="tools"><button class="tool tuner"></button><button class="tool metro"></button><button class="tool gear">⚙<i class="badge"></i></button></div>
+    </header>
+    <section class="stage">
+      <section class="variant variant-a">
+        <div class="a-layout">
+          <div class="a-picker">
+            <div class="select-head"><div><div class="section-kicker">1 · PICK A SOUND</div><div class="hint">CLICK AMP ART TO RECALL</div></div><button class="add">+ ADD</button></div>
+            <div class="tile-grid sound-host" data-kind="tiles"></div>
+          </div>
+          <div class="a-rig">
+            <div class="rig-head"><div><div class="section-kicker">2 · STOMP THE LIVE RIG</div><div class="section-title current-name">THC Sunset</div></div><div class="rig-status">RECALLED</div></div>
+            <div class="a-hero-row">
+              <div class="meter-group"><div><div class="meter in"><i class="meter-fill"></i></div><div class="meter-name">IN</div></div></div>
+              <div class="a-art-pair"><div class="art-frame corner main"><span class="art-label">MAIN</span><img class="art-live main-art" src="../art/hero-thc-sunset.png"></div><div class="art-frame corner support"><span class="art-label">SUPPORT</span><img class="art-live support-art" src="../art/hero-jmp-2203.png"></div></div>
+              <div class="meter-group"><div><div class="meter out-l"><i class="meter-fill"></i></div><div class="meter-name">OUT L</div></div><div class="out-r-wrap"><div class="meter out-r"><i class="meter-fill"></i></div><div class="meter-name">OUT R</div></div></div>
+            </div>
+            <div class="a-stomps stomp-host"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="variant variant-b">
+        <div class="b-layout">
+          <div class="cinema">
+            <div class="select-head"><div><span class="section-title">Sound cinema</span> <span class="hint">CLICK A PANEL TO RECALL · PC ORDER →</span></div><button class="add">+ ADD SOUND</button></div>
+            <div class="reel sound-host" data-kind="cinema"></div>
+          </div>
+          <div class="pedalboard">
+            <div class="meter-group"><div><div class="meter in"><i class="meter-fill"></i></div><div class="meter-name">IN</div></div></div>
+            <div class="b-stomps stomp-host"></div>
+            <div class="meter-group"><div><div class="meter out-l"><i class="meter-fill"></i></div><div class="meter-name">OUT L</div></div><div class="out-r-wrap"><div class="meter out-r"><i class="meter-fill"></i></div><div class="meter-name">OUT R</div></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="variant variant-c">
+        <div class="c-layout">
+          <aside class="vertical-rig"><div class="select-head"><div class="section-kicker">LIVE RIG · STOMP</div><span class="hint">PRE / POST</span></div><div class="c-stomps stomp-host"></div></aside>
+          <div class="wall corner">
+            <div class="c-art-pair"><div class="art-frame main"><span class="art-label">MAIN</span><img class="art-live main-art" src="../art/hero-thc-sunset.png"></div><div class="art-frame support"><span class="art-label">SUPPORT</span><img class="art-live support-art" src="../art/hero-jmp-2203.png"></div></div>
+            <div class="wall-caption"></div>
+            <div class="section-kicker">NOW PLAYING · PC <span class="current-pc">00</span></div><div class="wall-title current-name">THC Sunset</div><div class="wall-scene"><span class="current-scene">Crunch</span><span class="dirty-mark">(unsaved)</span></div>
+          </div>
+          <aside class="c-picker"><div class="select-head"><div><div class="section-kicker">SOUNDS</div><div class="hint">CLICK TO RECALL</div></div><button class="add">+</button></div><div class="pc-list sound-host" data-kind="list"></div></aside>
+          <div class="c-rack">
+            <div class="rack-meter"><span>IN</span><i class="h-track"><i class="h-fill"></i></i></div>
+            <div class="rack-meter rack-out-l"><span>OUT L</span><i class="h-track"><i class="h-fill"></i></i></div>
+            <div class="rack-meter rack-out-r"><span>OUT R</span><i class="h-track"><i class="h-fill"></i></i></div>
+            <div class="rack-state">48 kHz · LIVE<br><span class="stereo-state">MONO</span></div>
+          </div>
+        </div>
+      </section>
+    </section>
+    <section class="empty-state"><div class="empty-center"><div class="empty-diamond"></div><div class="empty-title">No Sounds assigned</div><div class="empty-copy">BUILD A SOUND, THEN ASSIGN ITS PROGRAM CHANGE</div><button class="empty-add">ADD SOUND</button></div></section>
+  </main>
+
+  <aside class="outside">
+    <div class="outside-top">
+      <div class="scene"><button id="gig" class="active">GIG</button><button id="empty">EMPTY</button></div>
+      <div class="variant-nav"><button id="prev">←</button><div class="variant-label"><b>A</b><span>ART TILE GRID</span></div><button id="next">→</button></div>
+    </div>
+    <div class="outside-bottom">
+      <div class="walkthrough"><button data-walk="00"><em>1</em> RECALL 00</button><button data-walk="chorus"><em>2</em> STOMP CHORUS</button><button data-walk="01"><em>3</em> RECALL 01</button></div>
+      <div class="state-line">PC&nbsp;<b id="state-pc">00</b>&nbsp; · DIRTY&nbsp;<b id="state-dirty">NO</b>&nbsp; · CHORUS&nbsp;<b id="state-chorus">ON</b>&nbsp; · DUAL&nbsp;<b id="state-dual">NO</b></div>
+    </div>
+  </aside>
+
+  <script>
+    (() => {
+      const FX = ["PITCH","COMP","NAM 1","NAM 2","CHORUS","DELAY","REVRB","TREM"];
+      const SOUNDS = {
+        "00": {name:"THC Sunset",scene:"Crunch",main:"hero-thc-sunset.png",dual:false,snap:[1,1,1,0,1,0,1,0]},
+        "01": {name:"Marshall 2204",scene:"Lead",main:"hero-marshall-2204.png",support:"hero-jmp-2203.png",dual:true,snap:[1,1,1,1,1,1,0,0]},
+        "07": {name:"Orange ORS100",scene:"Clean",main:"hero-jmp-2203.png",dual:false,snap:[0,1,1,0,0,1,1,0]},
+        "12": {name:"Monomyth Skele1",scene:"Room",main:"hero-thc-sunset.png",dual:false,snap:[1,0,1,0,1,0,1,1]}
+      };
+      const ORDER = ["00","01","04","07","12"];
+      const params = new URLSearchParams(location.search);
+      const variants = ["A","B","C"];
+      const variantNames = {A:"ART TILE GRID",B:"HORIZONTAL CINEMA",C:"INSTRUMENT PANEL"};
+      let variant = (params.get("variant") || "A").toUpperCase();
+      let current = SOUNDS[params.get("pc")] ? params.get("pc") : "00";
+      let live = [...SOUNDS[current].snap];
+      let dirty = false;
+
+      function soundArt(s, dualClass="") {
+        const support = s.dual ? `<div class="art-frame support ${dualClass}"><span class="art-label">SUPPORT</span><img class="panel-art" src="../art/${s.support}"></div>` : "";
+        return `<div class="art-frame main"><span class="art-label">${s.dual ? "MAIN" : ""}</span><img class="panel-art" src="../art/${s.main}"></div>${support}`;
+      }
+      function renderSoundHosts() {
+        document.querySelectorAll('.sound-host').forEach(host => {
+          const kind = host.dataset.kind;
+          if (kind === "tiles") {
+            host.innerHTML = ORDER.map(pc => pc === "04"
+              ? `<button class="sound-tile tile-invalid invalid" disabled><div><div class="invalid-number">04</div><div class="invalid-label">INVALID · NO RECALL</div></div></button>`
+              : `<button class="sound-tile corner" data-pc="${pc}"><span class="recall-ribbon">RECALLED</span><div class="${SOUNDS[pc].dual ? "dual-thumb" : ""}"><img src="../art/${SOUNDS[pc].main}">${SOUNDS[pc].dual ? `<img src="../art/${SOUNDS[pc].support}">` : ""}</div><i class="tile-vignette"></i><span class="tile-copy"><span class="pc">PC ${pc}${SOUNDS[pc].dual ? " · DUAL" : ""}</span><span class="tile-name">${SOUNDS[pc].name}</span><span class="tile-scene">${SOUNDS[pc].scene}</span></span></button>`).join("");
+          } else if (kind === "cinema") {
+            host.innerHTML = ORDER.map(pc => pc === "04"
+              ? `<button class="sound-panel invalid" disabled><span class="invalid-number">04</span><span class="invalid-label">INVALID · NO RECALL</span></button>`
+              : `<button class="sound-panel corner" data-pc="${pc}"><span class="recall-ribbon">RECALLED · PC ${pc}</span><span class="panel-arts">${soundArt(SOUNDS[pc])}</span><i class="panel-vignette"></i><span class="panel-copy"><span class="panel-name">${SOUNDS[pc].name}</span><span class="panel-scene">${SOUNDS[pc].scene}${SOUNDS[pc].dual ? " · DUAL AMP" : ""}</span></span></button>`).join("");
+          } else {
+            host.innerHTML = ORDER.map(pc => pc === "04"
+              ? `<button class="pc-slot invalid" disabled><span><span class="invalid-number">04</span><br><span class="invalid-label">INVALID</span></span></button>`
+              : `<button class="pc-slot" data-pc="${pc}"><img src="../art/${SOUNDS[pc].main}"><span class="pc-slot-copy"><span class="pc">PC ${pc}</span><span class="pc-slot-name">${SOUNDS[pc].name}</span></span></button>`).join("");
+          }
+        });
+        document.querySelectorAll('[data-pc]').forEach(el => el.addEventListener('click',() => recall(el.dataset.pc)));
+      }
+      function stompMarkup(name,index) {
+        const img = index < 4 ? "card-pre-strip.png" : index === 5 ? "card-delay.png" : index === 7 ? "card-trem.png" : "card-reverb.png";
+        return `<button class="stomp" data-fx="${name}" data-index="${index}"><img src="../art/${img}"><i class="stomp-led"></i><span class="stomp-copy">${name}</span></button>`;
+      }
+      function renderStomps() {
+        document.querySelectorAll('.stomp-host').forEach(host => host.innerHTML = FX.map(stompMarkup).join(""));
+        document.querySelectorAll('.stomp').forEach(el => el.addEventListener('click',() => stomp(Number(el.dataset.index))));
+      }
+      function recall(pc) {
+        if (!SOUNDS[pc]) return;
+        current = pc; live = [...SOUNDS[pc].snap]; dirty = false; render();
+      }
+      function stomp(index) {
+        live[index] = live[index] ? 0 : 1; dirty = true; render();
+      }
+      function render() {
+        const s = SOUNDS[current];
+        document.documentElement.dataset.dual = String(s.dual);
+        document.documentElement.dataset.dirty = String(dirty);
+        document.querySelectorAll('.current-pc').forEach(el => el.textContent = current);
+        document.querySelectorAll('.current-name').forEach(el => el.textContent = s.name);
+        document.querySelectorAll('.current-scene').forEach(el => el.textContent = s.scene);
+        document.querySelectorAll('.main-art').forEach(el => el.src = `../art/${s.main}`);
+        document.querySelectorAll('.support-art').forEach(el => el.src = `../art/${s.support || "hero-jmp-2203.png"}`);
+        document.querySelectorAll('[data-pc]').forEach(el => el.classList.toggle('is-recalled',el.dataset.pc === current));
+        document.querySelectorAll('.sound-panel .panel-art').forEach(el => el.classList.remove('art-live'));
+        document.querySelectorAll(`.sound-panel[data-pc="${current}"] .panel-art`).forEach(el => el.classList.add('art-live'));
+        document.querySelectorAll('.stomp').forEach(el => el.classList.toggle('on',!!live[Number(el.dataset.index)]));
+        document.querySelectorAll('.stereo-state').forEach(el => el.textContent = s.dual ? "DUAL AMP · STEREO" : "MONO");
+        document.querySelector('#state-pc').textContent = current;
+        document.querySelector('#state-dirty').textContent = dirty ? "YES" : "NO";
+        document.querySelector('#state-chorus').textContent = live[4] ? "ON" : "OFF";
+        document.querySelector('#state-dual').textContent = s.dual ? "YES" : "NO";
+      }
+      function setVariant(v) {
+        variant = variants.includes(v) ? v : "A";
+        document.documentElement.dataset.variant = variant;
+        document.querySelector('.variant-label b').textContent = variant;
+        document.querySelector('.variant-label span').textContent = variantNames[variant];
+        const u = new URL(location.href); u.searchParams.set('variant',variant); history.replaceState(null,"",u);
+      }
+      function setEmpty(value) {
+        document.body.classList.toggle('empty',value);
+        document.querySelector('#gig').classList.toggle('active',!value);
+        document.querySelector('#empty').classList.toggle('active',value);
+      }
+      renderSoundHosts(); renderStomps(); setVariant(variant);
+      if(params.get('demo') === 'dirty') {
+        current = "00"; live = [...SOUNDS[current].snap]; live[4] = live[4] ? 0 : 1; dirty = true;
+      }
+      render();
+      document.querySelector('#prev').onclick = () => setVariant(variants[(variants.indexOf(variant)+2)%3]);
+      document.querySelector('#next').onclick = () => setVariant(variants[(variants.indexOf(variant)+1)%3]);
+      document.querySelector('#gig').onclick = () => setEmpty(false);
+      document.querySelector('#empty').onclick = () => setEmpty(true);
+      if(params.get('scene') === 'empty') setEmpty(true);
+      document.querySelector('[data-walk="00"]').onclick = () => recall("00");
+      document.querySelector('[data-walk="chorus"]').onclick = () => stomp(4);
+      document.querySelector('[data-walk="01"]').onclick = () => recall("01");
+
+      const freeze = Number(params.get('freeze'));
+      let raf = 0,quiet = 0;
+      function paint(v) {
+        const n = Math.max(0,Math.min(1,v));
+        const n2 = Math.max(0,Math.min(1, n*0.86 + 0.04));
+        document.documentElement.style.setProperty('--in',n.toFixed(3));
+        document.documentElement.style.setProperty('--in2',n2.toFixed(3));
+        document.documentElement.style.setProperty('--out-l',Math.max(0,n*.9-.02).toFixed(3));
+        document.documentElement.style.setProperty('--out-r',Math.max(0,n*.78+.05).toFixed(3));
+        document.documentElement.style.setProperty('--in-pct',`${(n*100).toFixed(1)}%`);
+        document.documentElement.style.setProperty('--out-l-pct',`${(Math.max(0,n*.9-.02)*100).toFixed(1)}%`);
+        document.documentElement.style.setProperty('--out-r-pct',`${(Math.max(0,n*.78+.05)*100).toFixed(1)}%`);
+      }
+      if(params.has('freeze') && Number.isFinite(freeze)) {
+        document.documentElement.dataset.freezeIn = String(freeze); paint(freeze);
+      } else {
+        const start = performance.now();
+        const tick = now => {
+          if(document.hidden) return;
+          const t=(now-start)/1000,phrase=Math.sin(t*.2)>-.76?1:.03;
+          const swell=Math.max(0,Math.sin(t*.88)*.63+.31);
+          const jitter=(Math.sin(t*17.1)+Math.sin(t*29.3))*.035;
+          const v=Math.max(0,Math.min(1,(swell+jitter)*phrase));
+          paint(v); quiet=v<.01?quiet+1:0;
+          if(quiet<70) raf=requestAnimationFrame(tick);
+          else setTimeout(()=>{quiet=0;raf=requestAnimationFrame(tick)},650);
+        };
+        document.addEventListener('visibilitychange',()=>{cancelAnimationFrame(raf);if(!document.hidden)raf=requestAnimationFrame(tick)});
+        raf=requestAnimationFrame(tick);
+      }
+    })();
+  </script>
+</body>
+</html>
