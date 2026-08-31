@@ -239,6 +239,8 @@ The overlay has three tabs.
 
 **SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE).
 
+![VoLum Settings, MIDI tab](user-guide-settings-midi.png)
+
 **MIDI** is which channel this instance listens on (Omni or `1`–`16`) and what each Program Change number plays. The assignment list is the same one PLAY shows, so a Sound you add here appears on the PLAY rail and the other way round.
 
 ![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)

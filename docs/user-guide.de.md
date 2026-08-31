@@ -239,6 +239,8 @@ Das Overlay hat drei Reiter.
 
 **SIGNAL** regelt, wie Audio hinein und hinaus gelangt: Eingangskalibrierung, Ausgangsmodus und Performance (FULL / LITE).
 
+![VoLum-Einstellungen, Reiter MIDI](user-guide-settings-midi.png)
+
 **MIDI** legt fest, auf welchem Kanal diese Instanz hört (Omni oder `1`–`16`) und was jede Program-Change-Nummer aufruft. Es ist dieselbe Liste, die PLAY zeigt: Ein hier hinzugefügter Sound erscheint auch auf der PLAY-Leiste und umgekehrt.
 
 ![VoLum-Einstellungen, Reiter SYSTEM](user-guide-settings-system.png)
