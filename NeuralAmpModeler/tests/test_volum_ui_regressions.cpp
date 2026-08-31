@@ -83,13 +83,36 @@ TEST_CASE("POST pedal cards refresh active art state from delay and reverb param
   RequireContains(triptych, "{EVoLumEffectFocus::REVERB, \"REVRB\", kReverbActive}");
 }
 
+TEST_CASE("POST carries a fourth Chorus card wired to the Throat motif")
+{
+  const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
+  const std::string motifs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMotifs.h");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychLayout.h");
+  const std::string build = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
+  const std::string card = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
+
+  // Quiet strip slot + expanded card + connector, all in bus order (chorus first).
+  RequireContains(triptych, "{EVoLumEffectFocus::CHORUS, \"CHORUS\", kChorusActive}");
+  RequireContains(layout, "Rect chorus;");
+  RequireContains(layout, "Rect connector3;");
+  RequireContains(build, "EVoLumEffectFocus::CHORUS, onPedalClick");
+  RequireContains(build, "kCtrlTagVoLumChainConnector3");
+  RequireContains(runtime, "card->SetActiveState(GetParam(kChorusActive)->Bool());");
+  // The card footer must read the chorus mode, not fall through to "BYPASS".
+  RequireContains(card, "case EVoLumEffectFocus::CHORUS:");
+  // Throat motif: wormhole mouths + straight generators, not another LFO curve.
+  RequireContains(motifs, "DrawChorusThroatMotif");
+  RequireContains(motifs, "effect == EVoLumEffectFocus::CHORUS");
+}
+
 TEST_CASE("All pedal controls remain editable while their block is bypassed")
 {
   const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutRuntime.inc.cpp");
 
   // Pin every bypassable PRE/POST block before asserting the shared policy.
   for (const char* group : {"PITCH_TRANSPOSE_KNOBS", "PITCH_OCTAVER_KNOBS", "COMP_KNOBS", "PRE_NAM1_KNOBS",
-                            "PRE_NAM2_KNOBS", "DELAY_KNOBS", "REVERB_KNOBS", "TREMOLO_KNOBS"})
+                            "PRE_NAM2_KNOBS", "DELAY_KNOBS", "REVERB_KNOBS", "TREMOLO_KNOBS", "CHORUS_KNOBS"})
     RequireContains(runtime, group);
 
   INFO("Bypass must affect DSP only; visible controls must keep accepting mouse-wheel and pointer edits");
@@ -192,9 +215,11 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "constexpr const char* kToggleOnOffHint = \"Space on/off\";");
   RequireContains(source, "constexpr const char* kToggleOnOffHint = \"B on/off\";");
   RequireContains(source, "return _CycleVoLumKeyboardTarget(key.VK == kVK_LEFT ? -1 : 1)");
-  // POST Tab/arrow cycling must reach all three cards (Delay/Reverb/Tremolo), not
-  // just toggle Delay<->Reverb (the "can't arrow to Tremolo in POST" bug).
-  RequireContains(source, "mVolumFocusedEffect = targets[wrap(current + direction, 3)];");
+  // POST Tab/arrow cycling must reach all four cards (Chorus/Delay/Reverb/
+  // Tremolo), not just toggle Delay<->Reverb (the "can't arrow to Tremolo in
+  // POST" bug). PRE has four too, so both sections use the same wrap count.
+  RequireContains(source, "mVolumFocusedEffect = targets[wrap(current + direction, 4)];");
+  RequireContains(source, "EVoLumEffectFocus::CHORUS: paramIdx = kChorusActive; break;");
   RequireContains(source, "Left/Right channel  |  S cab  |  Tab target");
   // S runs the cab row's own step, which fires the callback a click fires. Covered
   // properly in test_volum_cab_step.cpp; pinned here so the shortcut layer keeps
@@ -407,6 +432,29 @@ TEST_CASE("Tremolo depth floor + Delay/Tremolo tempo sync are wired into the aud
   RequireContains(
     source, "std::clamp(volum::VoLumTremoloSyncMs(postBpm, GetParam(kDelayDivision)->Int()), 10.0, 2000.0)");
   RequireContains(source, "volum::VoLumTremoloSyncRateHz(postBpm, GetParam(kTremoloDivision)->Int())");
+}
+
+TEST_CASE("Chorus runs first in the POST chain and is wired to its own params")
+{
+  // Bus order is Chorus -> Delay -> Reverb -> Tremolo. Pin the ordering by source
+  // position: if Chorus ever drifts behind Delay the repeats start smearing the
+  // modulation, which is audible but easy to miss in a diff.
+  const std::string post = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumProcessBlock.inc.cpp");
+  const std::string plan = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumProcessingPlan.h");
+
+  const auto chorus = post.find("mChorus.Process(postPointers");
+  const auto delay = post.find("if (processingPlan.runDelay)");
+  const auto reverb = post.find("if (processingPlan.runReverb)");
+  REQUIRE(chorus != std::string::npos);
+  REQUIRE(delay != std::string::npos);
+  REQUIRE(reverb != std::string::npos);
+  CHECK(chorus < delay);
+  CHECK(delay < reverb);
+
+  RequireContains(post, "GetParam(kChorusMode)->Int()");
+  // Bypass edge and missing-model scrub must clear the line like Delay/Reverb do.
+  RequireContains(post, "mChorus.Reset();");
+  RequireContains(plan, "plan.runChorus = (haveMainModel || plan.runSupportModel) && chorusActive;");
 }
 
 TEST_CASE("Delay/Tremolo Sync toggles swap the free-running knob for a division stepper")
@@ -731,16 +779,22 @@ TEST_CASE("Triptych shared layout keeps expanded pedal card geometry aligned")
 
   const auto postFrames = volum::triptych_layout::ComputeFrames(triptych, EVoLumSection::POST);
   const auto postCards = volum::triptych_layout::ComputePostCards(postFrames.post);
-  CHECK(postCards.delay.L == doctest::Approx(327.f));
-  CHECK(postCards.delay.R == doctest::Approx(471.f));
-  CHECK(postCards.reverb.L == doctest::Approx(481.f));
-  CHECK(postCards.reverb.R == doctest::Approx(625.f));
-  CHECK(postCards.tremolo.L == doctest::Approx(635.f));
+  // Four POST cards in bus order (Chorus -> Delay -> Reverb -> Tremolo). The span
+  // is unchanged from the 3-card layout: only the per-card width shrank.
+  CHECK(postCards.chorus.L == doctest::Approx(327.f));
+  CHECK(postCards.chorus.R == doctest::Approx(432.5f));
+  CHECK(postCards.delay.L == doctest::Approx(442.5f));
+  CHECK(postCards.delay.R == doctest::Approx(548.f));
+  CHECK(postCards.reverb.L == doctest::Approx(558.f));
+  CHECK(postCards.reverb.R == doctest::Approx(663.5f));
+  CHECK(postCards.tremolo.L == doctest::Approx(673.5f));
   CHECK(postCards.tremolo.R == doctest::Approx(779.f));
-  CHECK(postCards.connector1.L == doctest::Approx(postCards.delay.R));
-  CHECK(postCards.connector1.R == doctest::Approx(postCards.reverb.L));
-  CHECK(postCards.connector2.L == doctest::Approx(postCards.reverb.R));
-  CHECK(postCards.connector2.R == doctest::Approx(postCards.tremolo.L));
+  CHECK(postCards.connector1.L == doctest::Approx(postCards.chorus.R));
+  CHECK(postCards.connector1.R == doctest::Approx(postCards.delay.L));
+  CHECK(postCards.connector2.L == doctest::Approx(postCards.delay.R));
+  CHECK(postCards.connector2.R == doctest::Approx(postCards.reverb.L));
+  CHECK(postCards.connector3.L == doctest::Approx(postCards.reverb.R));
+  CHECK(postCards.connector3.R == doctest::Approx(postCards.tremolo.L));
 }
 
 TEST_CASE("PRE/POST lock UI and settings helpers are wired")

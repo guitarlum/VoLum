@@ -97,6 +97,13 @@ enum EParams
   kPrePitchTransChar,
   kDelaySync,
   kDelayDivision,
+  kChorusActive,
+  kChorusMode,
+  kChorusRate,
+  kChorusDepth,
+  kChorusTone,
+  kChorusWidth,
+  kChorusMix,
   kNumParams
 };
 
@@ -126,6 +133,34 @@ TEST_CASE("Keyboard step: tremolo depth/shape/mix = 0.05 normal, 0.01 fine")
   CHECK(volum::keyboard::StepForParam(kTremoloDepth, true) == 0.01);
   CHECK(volum::keyboard::StepForParam(kTremoloShape, false) == 0.05);
   CHECK(volum::keyboard::StepForParam(kTremoloMix, true) == 0.01);
+}
+
+TEST_CASE("Keyboard step: chorus knobs are all 0..1, so 0.05 normal / 0.01 fine")
+{
+  // Unlike Tremolo RATE (Hz) the chorus RATE knob is normalized and mapped per
+  // mode, so it must NOT inherit the 0.5/0.1 Hz step.
+  for (int p : {kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix})
+  {
+    INFO("param " << p);
+    CHECK(volum::keyboard::StepForParam(p, false) == 0.05);
+    CHECK(volum::keyboard::StepForParam(p, true) == 0.01);
+  }
+}
+
+TEST_CASE("Keyboard: CHORUS is a distinct focus target with its own knob memory slot")
+{
+  using namespace volum::keyboard;
+  const int chorus = TargetIndex(EVoLumEffectFocus::CHORUS, false);
+  CHECK(chorus < kTargetCount);
+  for (auto other : {EVoLumEffectFocus::DELAY, EVoLumEffectFocus::REVERB, EVoLumEffectFocus::TREMOLO,
+                     EVoLumEffectFocus::PITCH, EVoLumEffectFocus::COMP, EVoLumEffectFocus::PRE_NAM1,
+                     EVoLumEffectFocus::PRE_NAM2, EVoLumEffectFocus::AMP})
+  {
+    INFO("vs focus " << static_cast<int>(other));
+    CHECK(TargetIndex(other, false) != chorus);
+  }
+  CHECK(kChorusParams.size() == 5);
+  CHECK(Contains(kChorusParams, kChorusWidth));
 }
 
 TEST_CASE("Keyboard step: delay mix = 0.05 normal, 0.01 fine")

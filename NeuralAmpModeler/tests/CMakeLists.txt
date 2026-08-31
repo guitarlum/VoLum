@@ -53,6 +53,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_pitch.cpp
   test_volum_pitch_artifacts.cpp
   test_volum_tremolo.cpp
+  test_volum_chorus.cpp
   test_volum_ir_file_guard.cpp
   test_volum_pre_post_lock.cpp
   test_volum_nan_guard.cpp

@@ -1019,6 +1019,65 @@ TEST_CASE("Id tail round-trips per-amp + locked POST delay tempo-sync settings")
   CHECK(out.lockedPostDelay.division == 7);
 }
 
+TEST_CASE("Id tail round-trips per-amp + locked POST chorus settings")
+{
+  // Chorus is the first pedal whose EParams sit past the frozen 1.2.2 param
+  // prefix, so the id tail is the ONLY carrier for its saved state. If these keys
+  // are dropped the whole pedal silently resets to bypassed on every reload.
+  volum::ChunkIdTail in;
+
+  in.perAmpChorus[0].present = true;
+  in.perAmpChorus[0].active = true;
+  in.perAmpChorus[0].mode = volum::kVoLumChorusModeEnsemble;
+  in.perAmpChorus[0].rate = 0.62;
+  in.perAmpChorus[0].depth = 0.31;
+  in.perAmpChorus[0].tone = 0.83;
+  in.perAmpChorus[0].width = 0.17;
+  in.perAmpChorus[0].mix = 0.94;
+  in.perAmpChorus[0].modes[volum::kVoLumChorusModeClassic] = volum::ChorusModeSnapshot{0.11, 0.22, 0.33, 0.44, 0.55};
+  in.perAmpChorus[0].modes[volum::kVoLumChorusModeClear] = volum::ChorusModeSnapshot{0.66, 0.77, 0.88, 0.99, 0.10};
+
+  in.perAmpChorus[volum::kAmpCount - 1].present = true;
+  in.perAmpChorus[volum::kAmpCount - 1].mode = volum::kVoLumChorusModeClassic;
+  in.perAmpChorus[volum::kAmpCount - 1].rate = 0.05;
+
+  in.lockedPostChorus.present = true;
+  in.lockedPostChorus.active = true;
+  in.lockedPostChorus.mode = volum::kVoLumChorusModeClear;
+  in.lockedPostChorus.mix = 0.42;
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpChorus[0].present);
+  CHECK(out.perAmpChorus[0].active);
+  CHECK(out.perAmpChorus[0].mode == volum::kVoLumChorusModeEnsemble);
+  CHECK(out.perAmpChorus[0].rate == doctest::Approx(0.62));
+  CHECK(out.perAmpChorus[0].depth == doctest::Approx(0.31));
+  CHECK(out.perAmpChorus[0].tone == doctest::Approx(0.83));
+  CHECK(out.perAmpChorus[0].width == doctest::Approx(0.17));
+  CHECK(out.perAmpChorus[0].mix == doctest::Approx(0.94));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClassic].rate == doctest::Approx(0.11));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClassic].width == doctest::Approx(0.44));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClear].tone == doctest::Approx(0.88));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClear].mix == doctest::Approx(0.10));
+
+  CHECK(out.perAmpChorus[volum::kAmpCount - 1].present);
+  CHECK_FALSE(out.perAmpChorus[volum::kAmpCount - 1].active);
+  CHECK(out.perAmpChorus[volum::kAmpCount - 1].rate == doctest::Approx(0.05));
+
+  // Untouched amp stays absent -> chorus defaults to bypassed downstream.
+  CHECK_FALSE(out.perAmpChorus[1].present);
+
+  CHECK(out.lockedPostChorus.present);
+  CHECK(out.lockedPostChorus.active);
+  CHECK(out.lockedPostChorus.mode == volum::kVoLumChorusModeClear);
+  CHECK(out.lockedPostChorus.mix == doctest::Approx(0.42));
+}
+
 TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")
 {
   // Simulate the real layout: arbitrary fixed-tail bytes, then the id tail.
@@ -1175,15 +1234,18 @@ TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effect
     CHECK_FALSE(out.perAmpPitch[i].present);
     CHECK_FALSE(out.perAmpTremolo[i].present);
     CHECK_FALSE(out.perAmpDelay[i].present);
+    CHECK_FALSE(out.perAmpChorus[i].present);
     // Absent tails keep their bypassed-by-default field values.
     CHECK_FALSE(out.perAmpPitch[i].active);
     CHECK_FALSE(out.perAmpTremolo[i].active);
     CHECK_FALSE(out.perAmpDelay[i].sync);
+    CHECK_FALSE(out.perAmpChorus[i].active);
   }
   // Locked-effect snapshots are absent on an older tail too.
   CHECK_FALSE(out.lockedPrePitch.present);
   CHECK_FALSE(out.lockedPostTremolo.present);
   CHECK_FALSE(out.lockedPostDelay.present);
+  CHECK_FALSE(out.lockedPostChorus.present);
 }
 
 // A tremolo/pitch-aware build that predates per-mode memory wrote the effect

@@ -392,12 +392,14 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     _UpdateVoLumKeyboardFocusHint();
   };
 
+  auto* chorusCard = new VoLumPedalCardControl(postCards.chorus.As<IRECT>(), EVoLumEffectFocus::CHORUS, onPedalClick);
   auto* delayCard = new VoLumPedalCardControl(postCards.delay.As<IRECT>(), EVoLumEffectFocus::DELAY, onPedalClick);
   auto* reverbCard = new VoLumPedalCardControl(postCards.reverb.As<IRECT>(), EVoLumEffectFocus::REVERB, onPedalClick);
   auto* tremoloCard =
     new VoLumPedalCardControl(postCards.tremolo.As<IRECT>(), EVoLumEffectFocus::TREMOLO, onPedalClick);
   auto* chainLink = new VoLumChainConnectorControl(postCards.connector1.As<IRECT>());
   auto* chainLink2 = new VoLumChainConnectorControl(postCards.connector2.As<IRECT>());
+  auto* chainLink3 = new VoLumChainConnectorControl(postCards.connector3.As<IRECT>());
   auto* pitchCard = new VoLumPedalCardControl(preCards.pitch.As<IRECT>(), EVoLumEffectFocus::PITCH, onPedalClick);
   auto* compCard = new VoLumPedalCardControl(preCards.comp.As<IRECT>(), EVoLumEffectFocus::COMP, onPedalClick);
   auto* preNam1Card = new VoLumPedalCardControl(preCards.nam1.As<IRECT>(), EVoLumEffectFocus::PRE_NAM1, onPedalClick);
@@ -413,10 +415,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->AttachControl(preNam1Card, kCtrlTagVoLumPreNam1Card)->Hide(true);
   pGraphics->AttachControl(preChainLink3, kCtrlTagVoLumPreChainConnector3)->Hide(true);
   pGraphics->AttachControl(preNam2Card, kCtrlTagVoLumPreNam2Card)->Hide(true);
-  pGraphics->AttachControl(delayCard, kCtrlTagVoLumDelayCard)->Hide(true);
+  pGraphics->AttachControl(chorusCard, kCtrlTagVoLumChorusCard)->Hide(true);
   pGraphics->AttachControl(chainLink, kCtrlTagVoLumChainConnector)->Hide(true);
-  pGraphics->AttachControl(reverbCard, kCtrlTagVoLumReverbCard)->Hide(true);
+  pGraphics->AttachControl(delayCard, kCtrlTagVoLumDelayCard)->Hide(true);
   pGraphics->AttachControl(chainLink2, kCtrlTagVoLumChainConnector2)->Hide(true);
+  pGraphics->AttachControl(reverbCard, kCtrlTagVoLumReverbCard)->Hide(true);
+  pGraphics->AttachControl(chainLink3, kCtrlTagVoLumChainConnector3)->Hide(true);
   pGraphics->AttachControl(tremoloCard, kCtrlTagVoLumTremoloCard)->Hide(true);
 
   yPos += volum::triptych_layout::kTriptychH + 4.f;
@@ -763,6 +767,32 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     new VoLumPowerSwitchControl(
       IRECT(tremSwX - 14.f, knobT - 4.f, tremSwX + 14.f, knobT + knobDiam + 2.f), kTremoloActive),
     -1, "TREMOLO_POWER");
+
+  // CHORUS KNOBS (Centered) - RATE / DEPTH / TONE / WIDTH / MIX. Five plain 0..1
+  // knobs, no tempo sync and no per-mode slot swap: the mode picker retunes what
+  // each knob spans instead of changing which knobs exist.
+  drawKnobCol(1, "RATE", kChorusRate, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+              "Modulation speed. Each voice maps this to its own range - WARPED is the slowest, CLASSIC the fastest.");
+  drawKnobCol(2, "DEPTH", kChorusDepth, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+              "How far the pitch/delay wanders each cycle. Small values shimmer, large values seasick.");
+  drawKnobCol(3, "TONE", kChorusTone, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+              "Low-pass on the wet voice only. Counter-clockwise darkens the chorus without dulling the dry amp.");
+  drawKnobCol(4, "WIDTH", kChorusWidth, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+              "How far apart the left and right modulation runs. 0% is mono-safe, 100% is the widest image.");
+  drawKnobCol(5, "MIX", kChorusMix, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
+              "Dry/wet blend. 0% is bit-perfect bypass; on WARPED, 100% is full vibrato with no dry left.");
+  IRECT chorusPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
+  auto* chorusModePicker =
+    new VoLumModePickerControl(chorusPickerRect, kChorusMode, {"CLASSIC", "WARPED", "CLEAR", "ENSEMBLE"});
+  chorusModePicker->SetTooltip("CLASSIC = short bright single-voice swirl | WARPED = long, dark and deep (MIX 100% "
+                               "= vibrato) | CLEAR = transparent two-tap doubling | ENSEMBLE = three-tap lush wash.");
+  pGraphics->AttachControl(chorusModePicker, -1, "CHORUS_KNOBS");
+
+  float chorusSwX = mainCX - 242.f;
+  pGraphics->AttachControl(
+    new VoLumPowerSwitchControl(
+      IRECT(chorusSwX - 14.f, knobT - 4.f, chorusSwX + 14.f, knobT + knobDiam + 2.f), kChorusActive),
+    -1, "CHORUS_POWER");
 
   // PRE KNOBS
   drawKnobCol(1, "GAIN", kPreNam1Gain, "dB", "PRE_NAM1_KNOBS", true, 6, 1, 0.f, 66.f);

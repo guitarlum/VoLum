@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "VoLumTremolo.h" // tremolo mode/division constants used in per-amp defaults
+#include "VoLumChorus.h" // chorus mode constants used in per-amp defaults
 
 namespace volum
 {
@@ -169,6 +170,29 @@ struct TremoloModeSnapshot
   double crossover = 800.0; // Hz (Harmonic band split)
 };
 
+// Per-chorus-mode knob memory (Classic / Warped / Clear / Ensemble). Every knob
+// is shared across the four voices, so the whole row is remembered per mode and
+// switching voices recalls that voice's last setting. All values are 0..1 knob
+// positions; VoLumChorus maps them to Hz / ms per mode.
+struct ChorusModeSnapshot
+{
+  double rate = 0.35;
+  double depth = 0.45;
+  double tone = 0.40;
+  double width = 0.70;
+  double mix = 0.50;
+};
+
+// Ship defaults for the four voices, in mode order. Single source of truth: the
+// per-amp scene, the live effect-settings working copy and the chunk id tail all
+// seed from here so a "reset to defaults" lands on the same row everywhere.
+inline constexpr ChorusModeSnapshot kVoLumChorusModeDefaults[kVoLumChorusModeCount] = {
+  ChorusModeSnapshot{0.45, 0.40, 0.55, 0.60, 0.45}, // Classic: quicker, brighter, modest blend
+  ChorusModeSnapshot{0.35, 0.45, 0.40, 0.70, 0.50}, // Warped: slow, dark, wide
+  ChorusModeSnapshot{0.40, 0.35, 0.70, 0.65, 0.40}, // Clear: shallow and transparent
+  ChorusModeSnapshot{0.28, 0.55, 0.50, 0.80, 0.55}, // Ensemble: slowest, deepest, widest
+};
+
 struct VoLumAmpSettings
 {
   int speakerIdx = 3;
@@ -299,6 +323,23 @@ struct VoLumAmpSettings
     TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Optical
     TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Bias
     TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Harmonic
+  };
+
+  // Per-amp POST Chorus (first POST pedal, ahead of Delay). Same shape as the
+  // tremolo block: scalars are the LIVE selected-mode values, postChorusModes[]
+  // remembers each voice's last knob row. Ships bypassed on WARPED.
+  bool postChorusActive = false;
+  int postChorusMode = kVoLumChorusModeDefault;
+  double postChorusRate = 0.35; // 0..1
+  double postChorusDepth = 0.45; // 0..1
+  double postChorusTone = 0.40; // 0..1
+  double postChorusWidth = 0.70; // 0..1
+  double postChorusMix = 0.50; // 0..1
+  ChorusModeSnapshot postChorusModes[kVoLumChorusModeCount] = {
+    kVoLumChorusModeDefaults[0],
+    kVoLumChorusModeDefaults[1],
+    kVoLumChorusModeDefaults[2],
+    kVoLumChorusModeDefaults[3],
   };
 
   // 1.2.0 BYO custom-content references (additive, id-based). Both default to

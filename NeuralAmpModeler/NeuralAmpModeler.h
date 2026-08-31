@@ -40,6 +40,7 @@
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
 #include "VoLumTremolo.h"
+#include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
 #include "VoLumMidi.h"
 #include "VoLumProcessingPlan.h"
@@ -102,11 +103,13 @@ enum ECtrlTags
   kCtrlTagVoLumPreChainConnector1,
   kCtrlTagVoLumPreChainConnector2,
   kCtrlTagVoLumPreChainConnector3,
+  kCtrlTagVoLumChorusCard,
   kCtrlTagVoLumDelayCard,
   kCtrlTagVoLumReverbCard,
   kCtrlTagVoLumTremoloCard,
   kCtrlTagVoLumChainConnector,
   kCtrlTagVoLumChainConnector2,
+  kCtrlTagVoLumChainConnector3,
   kCtrlTagVoLumSubRowText,
   kCtrlTagVoLumNoiseGate,
   kCtrlTagVoLumEQ,
@@ -379,6 +382,8 @@ public:
   void _VolumRestoreOktaverbSubModeSnapshot(int subMode);
   void _VolumSaveTremoloModeSnapshot(int mode);
   void _VolumRestoreTremoloModeSnapshot(int mode);
+  void _VolumSaveChorusModeSnapshot(int mode);
+  void _VolumRestoreChorusModeSnapshot(int mode);
   void _VolumSavePrePitchModeSnapshot(int mode);
   void _VolumRestorePrePitchModeSnapshot(int mode);
   void _SelectVoLumKnob(int paramIdx);
@@ -653,6 +658,8 @@ private:
   bool mVolumReverbRestoreInProgress = false;
   // Same re-entrancy guard for the tremolo per-mode snapshot restore cascade.
   bool mVolumTremoloRestoreInProgress = false;
+  // ...and for the chorus per-mode snapshot restore cascade.
+  bool mVolumChorusRestoreInProgress = false;
   // Live working store for PRE Pitch per-mode knob memory (PRE has no effect-
   // settings struct like POST, so the live snapshots live here). Synced to/from
   // each amp's prePitchModes via the PRE save/restore-to-slot helpers.
@@ -856,6 +863,7 @@ private:
   dsp::effect::Delay mDelay;
   dsp::effect::Reverb mReverb;
   volum::TremoloDSP mTremolo;
+  volum::ChorusDSP mChorus;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
   std::unique_ptr<ResamplingNAM> mSupportModel;
@@ -910,6 +918,7 @@ private:
   bool mPostDelayWasActive = false;
   bool mPostReverbWasActive = false;
   bool mPostTremoloWasActive = false;
+  bool mPostChorusWasActive = false;
   // Serializes writes from non-audio threads (UnserializeState path -> _StageModel /
   // _StageIR) against the audio-thread read/move in _ApplyDSPStaging. The VoLum
   // worker-queue path drains on the audio thread already, so it does not need this

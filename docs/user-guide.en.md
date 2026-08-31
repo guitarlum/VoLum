@@ -111,12 +111,23 @@ The SUPPORT lane **OUTPUT** knob also mutes that lane completely at the fully co
 
 ![VoLum POST section](user-guide-post.png)
 
-POST runs after the amp. It contains Delay, Reverb, and Tremolo cards.
+POST runs after the amp. It contains Chorus, Delay, Reverb, and Tremolo cards, in that order.
 
 1. Click **POST**.
-2. Click **DELAY**, **REVERB**, or **TREM**.
+2. Click **CHORUS**, **DELAY**, **REVERB**, or **TREM**.
 3. Use the card button or spacebar to enable it.
 4. Edit the focused card in the knob row.
+
+**Chorus** runs first, before the delay and reverb, so it modulates the dry amp tone rather than smearing the tails. The **CLASSIC / WARPED / CLEAR / ENSEMBLE** picker selects the voice:
+
+- **Classic** is a short, bright single-voice swirl.
+- **Warped** is longer, darker and deeper — the factory default voice. At **MIX** 100% no dry signal is left, which turns it into a vibrato.
+- **Clear** doubles the signal with two quarter-cycle-apart voices for a transparent widening.
+- **Ensemble** stacks three voices for a dense, slow wash.
+
+The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every voice uses all five. RATE and DEPTH span a different range in each mode, so the same knob position is slow and deep in Warped and quick and shallow in Classic. TONE is a low-pass on the chorus voice only, so you can darken it without dulling the dry amp. WIDTH sets how far apart the left and right modulation runs: at 0% both channels move together and the result is mono-safe. **MIX** at 0% is a bit-perfect bypass, so you can leave the card on and dial the effect in from nothing. There is no tempo sync on this pedal.
+
+![VoLum POST Chorus card](user-guide-chorus.png)
 
 **Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
 
@@ -136,9 +147,9 @@ The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smoot
 
 ![VoLum POST Tremolo card](user-guide-tremolo.png)
 
-The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
+The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one chorus/delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
 
-Switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one.
+Switching Chorus voice, Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one. Each POST pedal also remembers its own knob positions per mode, so stepping through the voices and back leaves your settings where you left them.
 
 ## Presets
 

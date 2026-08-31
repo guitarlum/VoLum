@@ -144,6 +144,7 @@
     <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch_artifacts.cpp" />
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
+    <ClCompile Include="..\tests\test_volum_chorus.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_post_lock.cpp" />
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />

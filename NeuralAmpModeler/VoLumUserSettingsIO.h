@@ -89,6 +89,16 @@ struct VoLumEffectSettings
     TremoloModeSnapshot{3.0, 0.85, 0.0, 0.60, 800.0}, // Harmonic
   };
 
+  // Chorus per-mode knob memory (live working copy; synced to/from each amp's
+  // postChorusModes). chorusMode tracks the live selected voice.
+  int chorusMode = kVoLumChorusModeDefault;
+  ChorusModeSnapshot chorusModes[kVoLumChorusModeCount] = {
+    kVoLumChorusModeDefaults[0],
+    kVoLumChorusModeDefaults[1],
+    kVoLumChorusModeDefaults[2],
+    kVoLumChorusModeDefaults[3],
+  };
+
   bool delayActive = false;
   int delayMode = kVoLumDelayModeDigital;
   // Default snapshots per design guide.
@@ -229,6 +239,22 @@ inline nlohmann::json TremoloModeSnapshotsToJson(const TremoloModeSnapshot* mode
       {"shape", modes[i].shape},
       {"mix", modes[i].mix},
       {"crossover", modes[i].crossover},
+    });
+  }
+  return out;
+}
+
+inline nlohmann::json ChorusModeSnapshotsToJson(const ChorusModeSnapshot* modes, int modeCount)
+{
+  nlohmann::json out = nlohmann::json::array();
+  for (int i = 0; i < modeCount; ++i)
+  {
+    out.push_back({
+      {"rate", modes[i].rate},
+      {"depth", modes[i].depth},
+      {"tone", modes[i].tone},
+      {"width", modes[i].width},
+      {"mix", modes[i].mix},
     });
   }
   return out;
@@ -376,6 +402,28 @@ inline bool PostBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetBool(o, "postTremoloSync", out.postTremoloSync);
   any |=
     detail::JsonGetClampedInt(o, "postTremoloDivision", out.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1);
+  any |= detail::JsonGetBool(o, "postChorusActive", out.postChorusActive);
+  any |= detail::JsonGetClampedInt(o, "postChorusMode", out.postChorusMode, 0, kVoLumChorusModeCount - 1);
+  any |= detail::JsonGetClampedDouble(o, "postChorusRate", out.postChorusRate, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postChorusDepth", out.postChorusDepth, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postChorusTone", out.postChorusTone, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postChorusWidth", out.postChorusWidth, 0.0, 1.0);
+  any |= detail::JsonGetClampedDouble(o, "postChorusMix", out.postChorusMix, 0.0, 1.0);
+  if (o.contains("postChorusModes") && o["postChorusModes"].is_array())
+  {
+    const auto& modes = o["postChorusModes"];
+    for (int i = 0; i < kVoLumChorusModeCount && i < static_cast<int>(modes.size()); ++i)
+    {
+      const auto& m = modes[i];
+      auto& dst = out.postChorusModes[i];
+      detail::JsonGetClampedDouble(m, "rate", dst.rate, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "depth", dst.depth, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "tone", dst.tone, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "width", dst.width, 0.0, 1.0);
+      detail::JsonGetClampedDouble(m, "mix", dst.mix, 0.0, 1.0);
+    }
+    any = true;
+  }
   if (o.contains("postDelayModes") && o["postDelayModes"].is_array())
   {
     const auto& modes = o["postDelayModes"];
@@ -513,10 +561,18 @@ inline nlohmann::json PostBlockToJson(const VoLumAmpSettings& s)
   o["postTremoloCrossover"] = s.postTremoloCrossover;
   o["postTremoloSync"] = s.postTremoloSync;
   o["postTremoloDivision"] = s.postTremoloDivision;
+  o["postChorusActive"] = s.postChorusActive;
+  o["postChorusMode"] = s.postChorusMode;
+  o["postChorusRate"] = s.postChorusRate;
+  o["postChorusDepth"] = s.postChorusDepth;
+  o["postChorusTone"] = s.postChorusTone;
+  o["postChorusWidth"] = s.postChorusWidth;
+  o["postChorusMix"] = s.postChorusMix;
   o["postDelayModes"] = DelayModeSnapshotsToJson(s.postDelayModes, kVoLumDelayModeCount);
   o["postReverbModes"] = ReverbModeSnapshotsToJson(s.postReverbModes, kVoLumReverbModeCount);
   o["postOktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(s.postOktaverbSubModes, 3);
   o["postTremoloModes"] = TremoloModeSnapshotsToJson(s.postTremoloModes, kVoLumTremoloModeCount);
+  o["postChorusModes"] = ChorusModeSnapshotsToJson(s.postChorusModes, kVoLumChorusModeCount);
   return o;
 }
 
@@ -715,6 +771,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     e["oktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(fx->oktaverbSubModes, 3);
     e["tremoloMode"] = fx->tremoloMode;
     e["tremoloModes"] = TremoloModeSnapshotsToJson(fx->tremoloModes, kVoLumTremoloModeCount);
+    e["chorusMode"] = fx->chorusMode;
+    e["chorusModes"] = ChorusModeSnapshotsToJson(fx->chorusModes, kVoLumChorusModeCount);
     j["effects"] = e;
   }
 
@@ -1039,6 +1097,13 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         loadBool(a, "postTremoloSync", s.postTremoloSync, defaults.postTremoloSync);
         loadInt(a, "postTremoloDivision", s.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1,
                 defaults.postTremoloDivision);
+        loadBool(a, "postChorusActive", s.postChorusActive, defaults.postChorusActive);
+        loadInt(a, "postChorusMode", s.postChorusMode, 0, kVoLumChorusModeCount - 1, defaults.postChorusMode);
+        loadDouble(a, "postChorusRate", s.postChorusRate, 0.0, 1.0, defaults.postChorusRate);
+        loadDouble(a, "postChorusDepth", s.postChorusDepth, 0.0, 1.0, defaults.postChorusDepth);
+        loadDouble(a, "postChorusTone", s.postChorusTone, 0.0, 1.0, defaults.postChorusTone);
+        loadDouble(a, "postChorusWidth", s.postChorusWidth, 0.0, 1.0, defaults.postChorusWidth);
+        loadDouble(a, "postChorusMix", s.postChorusMix, 0.0, 1.0, defaults.postChorusMix);
         if (a.contains("postDelayModes") && a["postDelayModes"].is_array())
         {
           const auto& modes = a["postDelayModes"];
@@ -1114,6 +1179,25 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           }
         }
         else if (a.contains("postTremoloModes"))
+        {
+          healed = true;
+        }
+        if (a.contains("postChorusModes") && a["postChorusModes"].is_array())
+        {
+          const auto& modes = a["postChorusModes"];
+          for (int modeIdx = 0; modeIdx < kVoLumChorusModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
+          {
+            const auto& mode = modes[modeIdx];
+            auto& dst = s.postChorusModes[modeIdx];
+            const auto& def = defaults.postChorusModes[modeIdx];
+            loadDouble(mode, "rate", dst.rate, 0.0, 1.0, def.rate);
+            loadDouble(mode, "depth", dst.depth, 0.0, 1.0, def.depth);
+            loadDouble(mode, "tone", dst.tone, 0.0, 1.0, def.tone);
+            loadDouble(mode, "width", dst.width, 0.0, 1.0, def.width);
+            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
+          }
+        }
+        else if (a.contains("postChorusModes"))
         {
           healed = true;
         }
@@ -1346,6 +1430,31 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     int rawTremoloMode = defaults.tremoloMode;
     loadInt(e, "tremoloMode", rawTremoloMode, 0, kVoLumTremoloModeCount - 1, defaults.tremoloMode);
     fx->tremoloMode = std::clamp(rawTremoloMode, 0, kVoLumTremoloModeCount - 1);
+
+    if (e.contains("chorusModes") && e["chorusModes"].is_array())
+    {
+      const auto& modes = e["chorusModes"];
+      const int avail = static_cast<int>(modes.size());
+      for (int i = 0; i < kVoLumChorusModeCount; ++i)
+      {
+        if (i < avail)
+        {
+          const auto& mode = modes[i];
+          loadDouble(mode, "rate", fx->chorusModes[i].rate, 0.0, 1.0, defaults.chorusModes[i].rate);
+          loadDouble(mode, "depth", fx->chorusModes[i].depth, 0.0, 1.0, defaults.chorusModes[i].depth);
+          loadDouble(mode, "tone", fx->chorusModes[i].tone, 0.0, 1.0, defaults.chorusModes[i].tone);
+          loadDouble(mode, "width", fx->chorusModes[i].width, 0.0, 1.0, defaults.chorusModes[i].width);
+          loadDouble(mode, "mix", fx->chorusModes[i].mix, 0.0, 1.0, defaults.chorusModes[i].mix);
+        }
+        else
+        {
+          fx->chorusModes[i] = defaults.chorusModes[i];
+        }
+      }
+    }
+    int rawChorusMode = defaults.chorusMode;
+    loadInt(e, "chorusMode", rawChorusMode, 0, kVoLumChorusModeCount - 1, defaults.chorusMode);
+    fx->chorusMode = std::clamp(rawChorusMode, 0, kVoLumChorusModeCount - 1);
   }
 
   if (didHeal)

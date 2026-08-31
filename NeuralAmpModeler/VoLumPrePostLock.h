@@ -68,8 +68,26 @@ inline bool TremoloModeSnapshotEquals(const TremoloModeSnapshot& a, const Tremol
          && NearlyEqual(a.mix, b.mix) && NearlyEqual(a.crossover, b.crossover);
 }
 
+inline bool ChorusModeSnapshotEquals(const ChorusModeSnapshot& a, const ChorusModeSnapshot& b)
+{
+  return NearlyEqual(a.rate, b.rate) && NearlyEqual(a.depth, b.depth) && NearlyEqual(a.tone, b.tone)
+         && NearlyEqual(a.width, b.width) && NearlyEqual(a.mix, b.mix);
+}
+
 inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
 {
+  if (a.postChorusActive != b.postChorusActive || a.postChorusMode != b.postChorusMode)
+    return false;
+
+  if (!NearlyEqual(a.postChorusRate, b.postChorusRate) || !NearlyEqual(a.postChorusDepth, b.postChorusDepth)
+      || !NearlyEqual(a.postChorusTone, b.postChorusTone) || !NearlyEqual(a.postChorusWidth, b.postChorusWidth)
+      || !NearlyEqual(a.postChorusMix, b.postChorusMix))
+    return false;
+
+  for (int mode = 0; mode < kVoLumChorusModeCount; ++mode)
+    if (!ChorusModeSnapshotEquals(a.postChorusModes[mode], b.postChorusModes[mode]))
+      return false;
+
   if (a.postDelayActive != b.postDelayActive || a.postReverbActive != b.postReverbActive
       || a.postDelayMode != b.postDelayMode || a.postDelayPingPong != b.postDelayPingPong
       || a.postDelaySync != b.postDelaySync || a.postDelayDivision != b.postDelayDivision

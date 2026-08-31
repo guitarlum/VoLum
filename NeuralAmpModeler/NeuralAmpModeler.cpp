@@ -406,6 +406,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kDelayDivision)
     ->InitEnum("DelayDivision", volum::kVoLumTremoloDivisionDefault,
                {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"});
+
+  // Chorus (POST) - first POST pedal, runs before Delay. Ships bypassed on the
+  // WARPED voice. All five knobs are 0..1; VoLumChorus maps them per mode.
+  GetParam(kChorusActive)->InitBool("ChorusActive", false);
+  GetParam(kChorusMode)
+    ->InitEnum("ChorusMode", volum::kVoLumChorusModeDefault, {"Classic", "Warped", "Clear", "Ensemble"});
+  GetParam(kChorusRate)->InitDouble("ChorusRate", 0.35, 0.0, 1.0, 0.01);
+  GetParam(kChorusDepth)->InitDouble("ChorusDepth", 0.45, 0.0, 1.0, 0.01);
+  GetParam(kChorusTone)->InitDouble("ChorusTone", 0.40, 0.0, 1.0, 0.01);
+  GetParam(kChorusWidth)->InitDouble("ChorusWidth", 0.70, 0.0, 1.0, 0.01);
+  GetParam(kChorusMix)->InitDouble("ChorusMix", 0.50, 0.0, 1.0, 0.01);
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");
@@ -610,7 +621,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     haveMainModel, noiseGateActive, toneStackActive, irActive, mIR != nullptr, GetParam(kPreCompActive)->Bool(),
     preNamActive, havePreNam, GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(),
     dualAmpActive, haveSupportModel, supportToneStackActive, supportIrActive, mSupportIR != nullptr,
-    GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool());
+    GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool(), GetParam(kChorusActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   if (processingPlan.runDualAmp)
@@ -776,12 +787,15 @@ void NeuralAmpModeler::OnReset()
   mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
   mTremolo.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
+  mChorus.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
   mDelay.Reset();
   mReverb.Reset();
   mTremolo.Reset();
+  mChorus.Reset();
   mPostDelayWasActive = false;
   mPostReverbWasActive = false;
   mPostTremoloWasActive = false;
+  mPostChorusWasActive = false;
   mPostEffectsClearedForMissingModel = false;
   // Pre-reserve dual-amp scratch buffers so ProcessBlock never has to grow them on
   // the audio thread when block size or dual-amp activation changes mid-session.
@@ -1140,6 +1154,20 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
       t.modes[m] = s.postTremoloModes[m];
     return t;
   };
+  auto chorusTailFromSettings = [](const volum::VoLumAmpSettings& s) {
+    volum::ChorusTail c;
+    c.present = true;
+    c.active = s.postChorusActive;
+    c.mode = s.postChorusMode;
+    c.rate = s.postChorusRate;
+    c.depth = s.postChorusDepth;
+    c.tone = s.postChorusTone;
+    c.width = s.postChorusWidth;
+    c.mix = s.postChorusMix;
+    for (int m = 0; m < volum::kVoLumChorusModeCount; ++m)
+      c.modes[m] = s.postChorusModes[m];
+    return c;
+  };
   auto delayTailFromSettings = [](const volum::VoLumAmpSettings& s) {
     volum::DelayTail d;
     d.present = true;
@@ -1157,6 +1185,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     idTail.perAmpPitch[i] = pitchTailFromSettings(mVolumAmpSettings[i]);
     idTail.perAmpTremolo[i] = tremoloTailFromSettings(mVolumAmpSettings[i]);
     idTail.perAmpDelay[i] = delayTailFromSettings(mVolumAmpSettings[i]);
+    idTail.perAmpChorus[i] = chorusTailFromSettings(mVolumAmpSettings[i]);
   }
   if (mVolumPreLocked)
     idTail.lockedPrePitch = pitchTailFromSettings(mVolumLiveLockedPre);
@@ -1164,6 +1193,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   {
     idTail.lockedPostTremolo = tremoloTailFromSettings(mVolumLiveLockedPost);
     idTail.lockedPostDelay = delayTailFromSettings(mVolumLiveLockedPost);
+    idTail.lockedPostChorus = chorusTailFromSettings(mVolumLiveLockedPost);
   }
   volum::PutChunkIdTail(chunk, idTail);
 
@@ -1580,6 +1610,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       // the collapsed POST strip motif + focused card art refresh their active/dim
       // state immediately (previously they only updated on the next focus/card flip).
       case kTremoloActive:
+      case kChorusActive:
       case kDualAmpActive:
       case kSupportAmpIdx:
       case kSupportSpeakerIdx:
@@ -1686,6 +1717,20 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         const int newMode = std::clamp(GetParam(kTremoloMode)->Int(), 0, volum::kVoLumTremoloModeCount - 1);
         mVolumEffectSettings.tremoloMode = newMode;
         _VolumRestoreTremoloModeSnapshot(newMode);
+        _UpdateVoLumLayout(pGraphics);
+        break;
+      }
+      case kChorusMode:
+      {
+        // Same per-mode knob memory as Delay/Reverb/Tremolo. No knob appears or
+        // disappears here, but the card footer and motif still need a repaint.
+        if (mVolumPostRestoreInProgress)
+          break;
+        const int oldMode = std::clamp(mVolumEffectSettings.chorusMode, 0, volum::kVoLumChorusModeCount - 1);
+        _VolumSaveChorusModeSnapshot(oldMode);
+        const int newMode = std::clamp(GetParam(kChorusMode)->Int(), 0, volum::kVoLumChorusModeCount - 1);
+        mVolumEffectSettings.chorusMode = newMode;
+        _VolumRestoreChorusModeSnapshot(newMode);
         _UpdateVoLumLayout(pGraphics);
         break;
       }
