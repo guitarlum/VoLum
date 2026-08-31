@@ -213,6 +213,14 @@ Use the standalone app as your tone library editor. It writes the global per-amp
 
 Fresh VST3 instances read those defaults when you add VoLum to a track. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration is the deliberate exception described below: a direct calibration edit becomes the machine default, while saved project state still wins when that project is restored.
 
+### MIDI Program Change
+
+VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. In **Settings -> MIDI**, choose Omni or one input channel for this instance and use **Add Sound** to assign the next free slot by choosing an amp and then a named preset. Click an assigned row to replace its Sound, or its `×` to clear it. The assignment list is machine-global, while the channel is stored per plugin instance; Omni is the default.
+
+An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel remains in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel in VoLum.
+
+MIDI input changes VoLum's AU component type from `aufx` to `aumf`. Existing AU instances may therefore need to be removed and inserted again after updating.
+
 ### Update Checks And Privacy
 
 The standalone app and plug-in check for a newer stable VoLum release at most once every 24 hours. A gold dot on the Settings gear means an update is available. Open Settings to read the reminder; the dot stays until you use the update row or **Check now**. The update row opens the release page in your browser. VoLum only notifies you: it never downloads or installs an update.
@@ -231,9 +239,9 @@ The Settings overlay's **Performance** card has a **FULL / LITE** switch; the ac
 
 Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
 
-### Standalone Audio Settings
+### Standalone Audio And MIDI Settings
 
-In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, and channel routing. In the VST3, use your DAW's audio settings instead.
+In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, channel routing, and MIDI input port. In the VST3, use your DAW's audio and MIDI routing instead.
 
 Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Choose one mono input channel for the guitar signal and route output L/R as needed. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size. Some drivers refuse the size you pick and grant a different one; VoLum then keeps what the driver granted, so the list and the saved setting describe what is actually running.
 

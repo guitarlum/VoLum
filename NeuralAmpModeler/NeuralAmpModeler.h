@@ -41,6 +41,7 @@
 #include "VoLumMetronomeDSP.h"
 #include "VoLumTremolo.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumMidi.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
@@ -265,6 +266,7 @@ public:
   ~NeuralAmpModeler();
 
   void ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames) override;
+  void ProcessMidiMsg(const iplug::IMidiMsg& msg) override;
   void OnReset() override;
   void OnIdle() override;
 
@@ -506,6 +508,14 @@ public:
   void _VolumSyncPresetOwner();
   // Refresh the header bar's list/selection/dirty state for the active amp.
   void _VolumRefreshPresetBar();
+  // Headless Sound recall shared by MIDI and the preset UI. Validates the amp
+  // and named preset before changing the sounding rig.
+  bool _VolumRecallSound(const std::string& ampId, const std::string& presetId);
+  void _VolumSelectFactoryAmp(int ampIdx);
+  void _VolumRefreshMidiSettingsChrome();
+  void _VolumSetMidiChannel(int channel);
+  void _VolumAssignMidiSound(int slot, const std::string& ampId, const std::string& presetId);
+  void _VolumClearMidiSound(int slot);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
   int _VolumSavePresetAs(const std::string& name);
   // Overwrite preset `index` in the active bank with the live scene.
@@ -615,6 +625,10 @@ private:
   // next OnIdle. UnserializeState runs on the host's thread, and the applier it
   // wants writes IGraphics controls, so the call has to cross to the UI thread.
   std::atomic<bool> mVolumUiSyncPending{false};
+  // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins
+  // handoff; content-library resolution happens in OnIdle.
+  volum::MidiLatestWinsQueue mVolumMidiQueue;
+  std::atomic<int> mVolumMidiChannel{volum::kMidiOmniChannel};
   // VoLum: when set, the next main-lane load in OnIdle bypasses the
   // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
   // even though its file path is unchanged.

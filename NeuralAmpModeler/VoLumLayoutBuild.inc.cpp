@@ -77,60 +77,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->AttachControl(
     new VoLumAmpListControl(
       ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
-      [this](int ampIdx) {
-        _VolumSaveCurrentToSettings();
-        mVolumAmpIdx = ampIdx;
-        mVolumCustomMainIdx = -1; // back on a factory amp
-        _VolumRestoreFromSettings(ampIdx);
-        _VolumRefreshChannels();
-        mVolumNeedsLoad.store(true);
-#ifdef APP_API
-        // Coalesce the disk write: OnIdle() flushes mVolumSettingsDirty.
-        // Writing synchronously here serialized all amps + dual-amp state
-        // and atomically wrote two JSON files on every selection, which
-        // stalled the UI thread (very visible on held arrow-key repeats).
-        mVolumSettingsDirty = true;
-#endif
-
-        auto* pGfx = GetUI();
-        if (!pGfx)
-          return;
-        auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage)->As<VoLumHeroImageControl>();
-        auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText)->As<VoLumSubRowTextControl>();
-        if (nameCtrl && mVolumExpandedSection == EVoLumSection::AMP)
-          nameCtrl->SetName(volum::kAmps[ampIdx].displayName, true);
-        if (heroCtrl)
-        {
-          char ph[4] = {volum::kAmps[ampIdx].displayName[0], (char)('0' + (ampIdx % 10)), 0, 0};
-          heroCtrl->SetPlaceholder(ph, ampIdx);
-          heroCtrl->SetName(volum::kAmps[ampIdx].displayName);
-        }
-        // Re-derive the whole cab row for this factory amp, rather than only
-        // restoring its labels. A custom amp leaves behind more than names: on a
-        // gain stage with no DIRECT capture it greys out No Cab and Custom IR, and
-        // those two flags are written nowhere else. Coming back to a factory amp -
-        // which always ships a raw DIRECT capture - left both buttons disabled and
-        // swallowing clicks until the window was closed and reopened.
-        _VolumApplyFocusedLaneCabs();
-
-        // F5: refresh the header preset strip to this amp's preset bank.
-        _VolumSyncPresetOwner();
-        _VolumRefreshPresetBar();
-
-        if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
-        {
-          auto* trip = tripCtrl->As<VoLumTriptychControl>();
-          const bool preActive =
-            GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-          trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), ampIdx,
-                         volum::kAmps[ampIdx].displayName,
-                         _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
-                         _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
-          mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
-          mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
-          trip->SetDirty(false);
-        }
-      }),
+      [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
     kCtrlTagVoLumAmpList);
 
   // F6: populate the sidebar CUSTOM section (custom amps render as real list
@@ -1069,7 +1016,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // Gear button
     pGraphics->AttachControl(new NAMCircleButtonControl(
       gearArea,
-      [pGraphics](IControl* pCaller) {
+      [pGraphics, pPlugin](IControl* pCaller) {
+        pPlugin->_VolumRefreshMidiSettingsChrome();
         pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
       },
       gearSVG));
@@ -1079,11 +1027,16 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
                       kCtrlTagVoLumUpdateBadge)
       ->Hide(true);
 
-    pGraphics
-      ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
-                                                 crossSVG, volumSettingsStyle, volumSettingsRadioStyle),
-                      kCtrlTagSettingsBox)
-      ->Hide(true);
+    auto* settingsPage = new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
+                                                    crossSVG, volumSettingsStyle, volumSettingsRadioStyle);
+    pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
+    settingsPage->SetMidiCallbacks(
+      [pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); },
+      [pPlugin](int slot, const std::string& ampId, const std::string& presetId) {
+        pPlugin->_VolumAssignMidiSound(slot, ampId, presetId);
+      },
+      [pPlugin](int slot) { pPlugin->_VolumClearMidiSound(slot); });
+    pPlugin->_VolumRefreshMidiSettingsChrome();
 
     // Tuner overlay (on top of everything)
     {
@@ -1469,49 +1422,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       }
 
       const int newIdx = newPos;
-      mVolumAmpIdx = newIdx;
-      mVolumCustomMainIdx = -1; // keyboard-nav landed on a factory amp
-      _VolumRestoreFromSettings(newIdx);
-      _VolumRefreshChannels();
-      mVolumNeedsLoad.store(true);
-#ifdef APP_API
-      // Coalesced; flushed by OnIdle() (see selection callback note above).
-      mVolumSettingsDirty = true;
-#endif
-      if (pGfx)
-      {
-        if (ampList)
-          ampList->SetSelected(newIdx); // also clears any custom selection
-        // Same reason as the sidebar-click path: arriving from a custom amp leaves
-        // its cab names on the row and, on a stage without a DIRECT capture, No Cab
-        // and Custom IR disabled. This path did not even restore the names.
-        _VolumApplyFocusedLaneCabs();
-        if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
-        {
-          char ph[4] = {volum::kAmps[newIdx].displayName[0], (char)('0' + (newIdx % 10)), 0, 0};
-          heroCtrl->As<VoLumHeroImageControl>()->SetPlaceholder(ph, newIdx);
-          heroCtrl->As<VoLumHeroImageControl>()->SetName(volum::kAmps[newIdx].displayName);
-        }
-        if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
-          if (mVolumExpandedSection == EVoLumSection::AMP)
-            nameCtrl->As<VoLumSubRowTextControl>()->SetName(volum::kAmps[newIdx].displayName, true);
-        // F5: refresh the header preset strip to this amp's bank.
-        _VolumSyncPresetOwner();
-        _VolumRefreshPresetBar();
-        if (auto* tripCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumTriptych))
-        {
-          auto* trip = tripCtrl->As<VoLumTriptychControl>();
-          const bool preActive =
-            GetParam(kPreCompActive)->Bool() || GetParam(kPreNam1Active)->Bool() || GetParam(kPreNam2Active)->Bool();
-          trip->SetState(preActive, GetParam(kDelayActive)->Value() || GetParam(kReverbActive)->Value(), newIdx,
-                         volum::kAmps[newIdx].displayName,
-                         _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
-                         _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
-          mVolumPreLockUiDirty = mVolumPreLocked && _VolumIsPreDirty();
-          mVolumPostLockUiDirty = mVolumPostLocked && _VolumIsPostDirty();
-          trip->SetDirty(false);
-        }
-      }
+      _VolumSelectFactoryAmp(newIdx);
+      if (ampList)
+        ampList->SetSelected(newIdx); // also clears any custom selection
       return true;
     }
     if (key.VK == kVK_LEFT || key.VK == kVK_RIGHT)

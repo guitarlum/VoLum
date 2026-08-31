@@ -800,12 +800,14 @@ void NeuralAmpModeler::OnReset()
                        + " samples");
 }
 
+void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
+{
+  if (const auto slot = volum::DecodeMidiProgramChange(msg, mVolumMidiChannel.load(std::memory_order_relaxed)))
+    mVolumMidiQueue.Enqueue(*slot);
+}
+
 void NeuralAmpModeler::OnIdle()
 {
-  mInputSender.TransmitData(*this);
-  mOutputSender.TransmitData(*this);
-  mOutputSenderR.TransmitData(*this);
-
   // Host state restored into an open editor. Only consumed while an editor exists, so
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
@@ -813,6 +815,18 @@ void NeuralAmpModeler::OnIdle()
     _VolumSyncUiFromState();
 
   _VolumConsumeUpdateResult();
+
+  if (const auto slot = mVolumMidiQueue.Drain())
+  {
+    const auto sound = volum::content::ResolveMidiSound(volum::content::GlobalContentStore().reg(), *slot);
+    if (sound)
+      _VolumRecallSound(sound->ampId, sound->presetId);
+  }
+
+  mInputSender.TransmitData(*this);
+  mOutputSender.TransmitData(*this);
+  mOutputSenderR.TransmitData(*this);
+
   _VolumRefreshLatencyReport();
   _VolumFlushDeferredIrShaping();
 
@@ -1089,6 +1103,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // ids). Sentinel-guarded + appended last so older builds ignore it (see
   // VoLumChunkIdTail.h).
   volum::ChunkIdTail idTail;
+  idTail.midiCh = mVolumMidiChannel.load();
   idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;

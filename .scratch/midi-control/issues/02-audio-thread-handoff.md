@@ -1,6 +1,6 @@
 # MIDI audio-thread handoff + headless recall
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 ## Goal
