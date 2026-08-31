@@ -4,14 +4,12 @@
 // included by test translation units WITHOUT pulling in the IGraphics / iPlug
 // plugin headers. This is the SINGLE SOURCE OF TRUTH for `kNumParams`.
 //
-// Why this matters: `SerializeState` writes every `kNumParams` param double via
-// iPlug's `SerializeParams()`, and the current-version chunk reader
+// Why this matters: `SerializeState` writes the frozen 1.2.2 prefix
+// (`kVoLumChunkParamPrefixCount` doubles), and the current-version chunk reader
 // (`Unserialization.cpp`, >= 1.2.0 branch) must consume exactly that many before
-// it reaches the per-amp selection/scene block. The 1.2.0 "VST3/AU state resets
-// to default on load" bug was a hand-maintained 71-name reader list drifting
-// from this enum. Tests that need the real param count (e.g.
-// test_volum_state_roundtrip.cpp) include this header so they measure against
-// the true `kNumParams`, never a hardcoded copy.
+// it reaches the per-amp selection/scene block. Live `kNumParams` may grow; extra
+// EParams overlay from id-tail JSON. The 1.2.0 "VST3/AU state resets to default
+// on load" bug was a hand-maintained 71-name reader list drifting from the writer.
 //
 // EParams order is serialization-sensitive: never reorder or renumber existing
 // entries; append new params immediately before `kNumParams`.
@@ -135,3 +133,12 @@ enum EParams
   kDelayDivision,
   kNumParams
 };
+
+// Frozen DAW-chunk param-prefix length (VoLum 1.2.2). SerializeState writes this
+// many doubles, and the >= 1.2.0 reader consumes this many, even after kNumParams
+// grows. New automatable knobs are real EParams (indices 0–92 stay put) whose
+// saved values live in id-tail JSON, not as extra prefix doubles. See
+// .scratch/release-1.3.0/issues/07-forward-compatible-chunks.md.
+inline constexpr int kVoLumChunkParamPrefixCount = 93;
+static_assert(kNumParams >= kVoLumChunkParamPrefixCount,
+              "param prefix is the 1.2.2 list; new params append after it");

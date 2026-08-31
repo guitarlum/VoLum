@@ -546,19 +546,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
 
   if (version >= volum::ChunkVersion(1, 2, 0))
   {
-    // Current layout. SerializeParams() writes ALL kNumParams param doubles, so
-    // the reader MUST consume exactly that many to keep `pos` aligned for the
-    // per-amp block that follows. Earlier releases used a hand-maintained name
-    // list (_GetConfigFrom_0_9_0, 71 entries ending at SupportAmpPan). 1.2.0
-    // appended ~22 params (kSupportIRToggle, PRE Pitch, Tremolo, Delay sync/div)
-    // WITHOUT extending that list, so the reader stopped 22 doubles short and the
-    // per-amp selection/scene then read raw param bytes as garbage -> VST3/AU
-    // "state resets to default on every load" (standalone was unaffected: it
-    // restores from volum-settings.json in the ctor, not from the DAW chunk).
-    // Read by LIVE param name so this reader can never drift from the enum again.
+    // Frozen 1.2.2 prefix (93 doubles), not live kNumParams. Extra EParams are
+    // restored from id-tail JSON after this read. A 1.2.2 plugin opening a
+    // later save therefore still lands on the per-amp tail.
     std::vector<std::string> paramNames;
-    paramNames.reserve(kNumParams);
-    for (int i = 0; i < kNumParams; ++i)
+    paramNames.reserve(kVoLumChunkParamPrefixCount);
+    for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)
       paramNames.push_back(GetParam(i)->GetName());
     pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);
   }
@@ -612,7 +605,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     assert(false);
   }
   VOLUM_LOG("chunk", "decoded state written by version " + versionStr + " (" + std::to_string(chunk.Size())
-                       + " bytes, this build reads " + std::to_string(kNumParams) + " params)");
+                       + " bytes, this build reads " + std::to_string(kVoLumChunkParamPrefixCount)
+                       + " prefix params, kNumParams=" + std::to_string(kNumParams) + ")");
   // v0.9.0 migration: applied for ALL pre-0.9.0 chunks regardless of which
   // _GetConfigFrom_X_X_X path produced the dict above. Each pre-0.9.0 loader's per-version
   // _UpdateConfigFrom only chains backwards (predecessor), so this single call is what

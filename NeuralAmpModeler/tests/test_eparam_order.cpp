@@ -157,4 +157,6 @@ TEST_CASE("EParam: total count is stable")
   // Transpose-engine rework appended kPrePitchTransChar (Drop/Instant): 90 -> 91.
   // Delay tempo sync appended kDelaySync + kDelayDivision: 91 -> 93.
   CHECK(kNumParams == 93);
+  CHECK(kVoLumChunkParamPrefixCount == 93);
+  CHECK(kNumParams >= kVoLumChunkParamPrefixCount);
 }

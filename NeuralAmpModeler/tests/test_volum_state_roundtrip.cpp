@@ -13,25 +13,27 @@
 // Real DAW-chunk SerializeState -> UnserializeState round-trip.
 //
 // Why this test exists (1.2.0 critical bug it guards against):
-//   SerializeState writes ALL `kNumParams` param doubles via iPlug's
-//   SerializeParams(), then appends the VoLum per-amp block (selection, per-amp
+//   SerializeState writes kVoLumChunkParamPrefixCount (the frozen 1.2.2 list,
+//   93) param doubles, then appends the VoLum per-amp block (selection, per-amp
 //   scenes, PRE/POST lock flags+snapshots) and the sentinel-guarded id tail
 //   (custom amp/support/preset refs + per-amp pitch/tremolo/delay-sync). The
-//   current-version chunk reader MUST consume EXACTLY `kNumParams` param doubles
-//   before it reaches the per-amp block; the shipped 1.2.0 reader used a frozen
-//   71-name list while the writer emitted 93, so it read the selection/scene 22
-//   doubles too early -> every VST3/AU reload restored garbage -> "state resets
-//   to default on load". Standalone masked it (restores from volum-settings.json).
+//   current-version chunk reader MUST consume EXACTLY `kVoLumChunkParamPrefixCount`
+//   param doubles before it reaches the per-amp block; the shipped 1.2.0 reader
+//   used a frozen 71-name list while the writer emitted 93, so it read the
+//   selection/scene 22 doubles too early -> every VST3/AU reload restored garbage
+//   -> "state resets to default on load". 1.3.0 keeps writing 93 even after
+//   kNumParams grows, so a shipped 1.2.2 reader still aligns. Standalone masked
+//   the 1.2.0 bug (restores from volum-settings.json).
 //
 // How this test avoids the circularity that let the bug ship:
-//   - It measures against the REAL `kNumParams` from the enum (VoLumParams.h),
-//     never a hardcoded copy. Add a param and this test tracks it automatically.
+//   - It measures against kVoLumChunkParamPrefixCount (93), not live kNumParams,
+//     so a later Chorus param bump cannot silently change this alignment test.
 //   - It parses the whole tail with the REAL shared codec templates
 //     (VoLumChunkCodec.h) and the REAL layout detectors (VoLumChunkLayout.h) and
 //     the REAL id-tail reader (VoLumChunkIdTail.h) that production uses. Only the
 //     trivial param-double loop and the two path strings are reproduced inline
 //     (the source pin in test_volum_ui_regressions.cpp locks that the production
-//     reader builds its param list from a `kNumParams` live-name loop).
+//     reader builds its param list from a kVoLumChunkParamPrefixCount loop).
 //   - It models iPlug's VST3 wrapper trailing 4-byte bypass int: SetState reads
 //     the whole chunk, calls UnserializeState -> pos, seek(pos), reads 4 bytes;
 //     if that read fails the host discards ALL state. So a correct round-trip
@@ -101,11 +103,11 @@ constexpr int kBypassBytes = static_cast<int>(sizeof(int)); // iPlug VST3 traili
 // Build a chunk byte-for-byte like NeuralAmpModeler::SerializeState for the
 // current (>= 1.2.0) format, then append the VST3 wrapper's 4-byte bypass int.
 // `paramCount` is a knob purely so the negative test can simulate a
-// writer/reader param-count skew; production always uses kNumParams.
+// writer/reader param-count skew; production always uses kVoLumChunkParamPrefixCount.
 MemoryChunk BuildCurrentChunk(const volum::VoLumChunkSelection& selection,
                               const volum::VoLumAmpSettings (&amps)[volum::kAmpCount], bool preLocked, bool postLocked,
                               const volum::VoLumAmpSettings& preSnapshot, const volum::VoLumAmpSettings& postSnapshot,
-                              const volum::ChunkIdTail& idTail, int paramCount = kNumParams)
+                              const volum::ChunkIdTail& idTail, int paramCount = kVoLumChunkParamPrefixCount)
 {
   MemoryChunk chunk;
   chunk.PutStr("###NeuralAmpModeler###");
@@ -131,8 +133,8 @@ MemoryChunk BuildCurrentChunk(const volum::VoLumChunkSelection& selection,
 // Mirror of NeuralAmpModeler::UnserializeState -> _UnserializeStateWithKnownVersion
 // for the current format. Uses the SAME shared codec + layout detectors +
 // id-tail reader as production; the param loop consumes `readParamCount`
-// doubles (production uses kNumParams via the live-name loop).
-ParsedState ParseCurrentChunk(const MemoryChunk& chunk, int readParamCount = kNumParams)
+// doubles (production uses kVoLumChunkParamPrefixCount).
+ParsedState ParseCurrentChunk(const MemoryChunk& chunk, int readParamCount = kVoLumChunkParamPrefixCount)
 {
   ParsedState out;
   int pos = 0;
@@ -261,7 +263,7 @@ void SeedNonDefaultState(volum::VoLumChunkSelection& selection, volum::VoLumAmpS
 }
 } // namespace
 
-TEST_CASE("Real DAW chunk round-trips selection + scene + custom refs + effects at the true kNumParams")
+TEST_CASE("Real DAW chunk round-trips selection + scene + custom refs + effects at the frozen prefix")
 {
   volum::VoLumChunkSelection selection;
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
@@ -347,9 +349,9 @@ TEST_CASE("Real DAW chunk round-trips selection + scene + custom refs + effects 
   CHECK(got.postSnapshot.postReverbMix == doctest::Approx(0.31));
 }
 
-TEST_CASE("Reader that consumes fewer than kNumParams param doubles derails selection + byte alignment")
+TEST_CASE("Reader that consumes fewer than the frozen prefix derails selection + byte alignment")
 {
-  // Reproduce the EXACT 1.2.0 mechanism: the writer emits kNumParams param
+  // Reproduce the EXACT 1.2.0 mechanism: the writer emits the prefix param
   // doubles but the reader stops short (the shipped bug read 71 of 93). This is
   // the anti-theater proof that the round-trip assertions above have teeth: with
   // a short read the selection reads leftover param bytes and `pos` no longer
@@ -365,8 +367,8 @@ TEST_CASE("Reader that consumes fewer than kNumParams param doubles derails sele
     BuildCurrentChunk(selection, amps, /*preLocked=*/true, /*postLocked=*/true, preSnapshot, postSnapshot, idTail);
 
   // Simulate the frozen-list short read: stop 22 params early (93 -> 71 shape).
-  REQUIRE(kNumParams > 22);
-  const ParsedState got = ParseCurrentChunk(chunk, /*readParamCount=*/kNumParams - 22);
+  REQUIRE(kVoLumChunkParamPrefixCount > 22);
+  const ParsedState got = ParseCurrentChunk(chunk, /*readParamCount=*/kVoLumChunkParamPrefixCount - 22);
 
   const bool selectionSurvived =
     (got.selection.ampIdx == kSelectedAmp && got.selection.speakerIdx == 2 && got.selection.channelIdx == 1);
@@ -374,10 +376,11 @@ TEST_CASE("Reader that consumes fewer than kNumParams param doubles derails sele
   CHECK(got.pos != chunk.Size() - kBypassBytes);
 }
 
-TEST_CASE("A full-count read is required for exact byte alignment (kNumParams is the contract)")
+TEST_CASE("A frozen-prefix read is required for exact byte alignment")
 {
-  // Belt-and-suspenders: only reading exactly kNumParams param doubles lands the
-  // reader at size - 4. Reading one too few or one too many misaligns.
+  // Belt-and-suspenders: only reading exactly kVoLumChunkParamPrefixCount param
+  // doubles lands the reader at size - 4. Reading one too few or one too many
+  // misaligns. Live kNumParams may grow past this; the prefix must not.
   volum::VoLumChunkSelection selection;
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   volum::ChunkIdTail idTail;
@@ -388,7 +391,84 @@ TEST_CASE("A full-count read is required for exact byte alignment (kNumParams is
   const MemoryChunk chunk =
     BuildCurrentChunk(selection, amps, /*preLocked=*/false, /*postLocked=*/false, preSnapshot, postSnapshot, idTail);
 
-  CHECK(ParseCurrentChunk(chunk, kNumParams).pos == chunk.Size() - kBypassBytes);
-  CHECK(ParseCurrentChunk(chunk, kNumParams - 1).pos != chunk.Size() - kBypassBytes);
-  CHECK(ParseCurrentChunk(chunk, kNumParams + 1).pos != chunk.Size() - kBypassBytes);
+  CHECK(ParseCurrentChunk(chunk, kVoLumChunkParamPrefixCount).pos == chunk.Size() - kBypassBytes);
+  CHECK(ParseCurrentChunk(chunk, kVoLumChunkParamPrefixCount - 1).pos != chunk.Size() - kBypassBytes);
+  CHECK(ParseCurrentChunk(chunk, kVoLumChunkParamPrefixCount + 1).pos != chunk.Size() - kBypassBytes);
+}
+
+TEST_CASE("Extra prefix doubles derail a 1.2.2-shaped reader (why the writer is frozen)")
+{
+  // A 1.3.0 that wrote kNumParams > 93 as prefix doubles would recreate the
+  // 1.2.0 project-reset bug in every shipped 1.2.2 plugin. Pin that a 93-double
+  // reader cannot skip leftover prefix doubles: selection and pos both break.
+  volum::VoLumChunkSelection selection;
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::ChunkIdTail idTail;
+  volum::VoLumAmpSettings preSnapshot{};
+  volum::VoLumAmpSettings postSnapshot{};
+  SeedNonDefaultState(selection, amps, idTail, preSnapshot, postSnapshot);
+
+  const MemoryChunk chunk = BuildCurrentChunk(selection, amps, /*preLocked=*/false, /*postLocked=*/false, preSnapshot,
+                                              postSnapshot, idTail, /*paramCount=*/kVoLumChunkParamPrefixCount + 7);
+
+  const ParsedState got = ParseCurrentChunk(chunk, kVoLumChunkParamPrefixCount);
+  const bool selectionSurvived =
+    (got.selection.ampIdx == kSelectedAmp && got.selection.speakerIdx == 2 && got.selection.channelIdx == 1);
+  CHECK_FALSE(selectionSurvived);
+  CHECK(got.pos != chunk.Size() - kBypassBytes);
+}
+
+TEST_CASE("Unknown id-tail JSON keys keep a 1.2.2-shaped reader aligned")
+{
+  // The format 1.2.2 already skips: extra keys inside the length-prefixed id-tail
+  // JSON. Chorus / MIDI channel / PLAY mode ride there, never as extra prefix
+  // doubles. A 93-double reader must keep selection and land at size - 4.
+  volum::VoLumChunkSelection selection;
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::ChunkIdTail idTail;
+  volum::VoLumAmpSettings preSnapshot{};
+  volum::VoLumAmpSettings postSnapshot{};
+  SeedNonDefaultState(selection, amps, idTail, preSnapshot, postSnapshot);
+
+  MemoryChunk chunk;
+  chunk.PutStr("###NeuralAmpModeler###");
+  chunk.PutStr("1.2.0");
+  chunk.PutStr("C:/rigs/main.nam");
+  chunk.PutStr("C:/rigs/cab.wav");
+  for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)
+  {
+    double v = 1000.0 + i;
+    chunk.Put(&v);
+  }
+  volum::PutCurrentVoLumChunkState(chunk, selection, amps, volum::kAmpCount);
+  volum::PutPrePostLockFlags(chunk, false, false);
+  volum::PutPrePostLockSnapshots(chunk, false, false, preSnapshot, postSnapshot);
+
+  nlohmann::json j = volum::IdTailToJson(idTail);
+  j["midiCh"] = 3;
+  j["uiMode"] = "play";
+  j["cho"] = {{"active", true}, {"mode", 1}, {"mix", 0.5}};
+  const std::string extra = j.dump();
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(extra.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : extra)
+    chunk.Put(&c);
+  int bypass = 0;
+  chunk.Put(&bypass);
+
+  const ParsedState got = ParseCurrentChunk(chunk, kVoLumChunkParamPrefixCount);
+  CHECK(got.pos == chunk.Size() - kBypassBytes);
+  CHECK(got.selection.ampIdx == kSelectedAmp);
+  CHECK(got.selection.speakerIdx == 2);
+  CHECK(got.selection.channelIdx == 1);
+  CHECK(got.idTail.customMainId == "amp_main_custom");
+  CHECK(got.idTail.activePresetId == "preset_lead_01");
+}
+
+TEST_CASE("Chunk param prefix is frozen at the 1.2.2 count")
+{
+  CHECK(kVoLumChunkParamPrefixCount == 93);
+  CHECK(kNumParams >= kVoLumChunkParamPrefixCount);
 }

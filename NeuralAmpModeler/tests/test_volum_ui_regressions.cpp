@@ -794,22 +794,28 @@ TEST_CASE("SerializeState flushes the content store when a custom amp is focused
   RequireContains(source, "volum::content::GlobalContentStore().Save();");
 }
 
-TEST_CASE("Current-version chunk reader consumes every serialized param (VST/AU state restore)")
+TEST_CASE("IR staging passes the UTF-8 path into ImpulseResponse")
 {
-  // Regression (1.2.0 critical): SerializeParams() writes ALL kNumParams param
-  // doubles, but the pre-fix reader used a hand-maintained 71-entry list for every
-  // version >= 0.9.0. When 1.2.0 appended ~22 params (kSupportIRToggle, PRE Pitch,
-  // Tremolo, Delay sync) the reader stopped short, `pos` misaligned, and the
-  // per-amp selection/scene read garbage -> VST3/AU "everything resets to default
-  // on every load" (standalone masked it via volum-settings.json). Pin the
-  // current-version branch that reads params by LIVE name so it can never drift
-  // from the enum again.
+  // AudioDSPTools #25: filesystem::path::string() is the ANSI code page on
+  // Windows. _StageIR must hand irPath.Get() (UTF-8) to ImpulseResponse.
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "stagedIR = std::make_unique<dsp::ImpulseResponse>(irPath.Get(), sampleRate);");
+  RequireDoesNotContain(source, "irPathU8.string()");
+}
+
+TEST_CASE("Current-version chunk reader consumes the frozen 1.2.2 param prefix")
+{
+  // 1.2.0 read a live kNumParams loop. 1.3.0 freezes the prefix at 93 so a
+  // later Chorus (or any) param bump cannot misalign a shipped 1.2.2 reader.
+  // Extra EParams overlay from id-tail JSON, not extra prefix doubles.
   const std::string source = ReadPluginSource();
 
   RequireContains(source, "if (version >= volum::ChunkVersion(1, 2, 0))");
-  RequireContains(source, "for (int i = 0; i < kNumParams; ++i)");
+  RequireContains(source, "for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)");
   RequireContains(source, "paramNames.push_back(GetParam(i)->GetName());");
   RequireContains(source, "pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);");
+  RequireContains(source, "for (int i = 0; i < kVoLumChunkParamPrefixCount && ok; ++i)");
+  RequireDoesNotContain(source, "bool ok = SerializeParams(chunk);");
 }
 
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")

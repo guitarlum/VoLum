@@ -1058,7 +1058,15 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   chunk.PutStr(version.Get());
   chunk.PutStr(mNAMPaths.live.Get());
   chunk.PutStr(mIRPaths.live.Get());
-  bool ok = SerializeParams(chunk);
+  // VoLum 1.3.0: freeze the param prefix at the 1.2.2 list (93 doubles). Extra
+  // EParams are real automatable knobs but their saved values travel in id-tail
+  // JSON so a shipped 1.2.2 reader still lands on the per-amp tail.
+  bool ok = true;
+  for (int i = 0; i < kVoLumChunkParamPrefixCount && ok; ++i)
+  {
+    double v = GetParam(i)->Value();
+    ok &= (chunk.Put(&v) > 0);
+  }
 
   // VoLum: append per-amp settings after params (see Unserialization.cpp)
   volum::PutCurrentVoLumChunkState(
@@ -2107,8 +2115,10 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
   std::unique_ptr<dsp::ImpulseResponse> stagedIR;
   try
   {
-    auto irPathU8 = std::filesystem::u8path(irPath.Get());
-    stagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
+    // irPath is UTF-8 (iPlug). Pass it straight into ImpulseResponse / wav::Load.
+    // Do not go through filesystem::path::string() — that is the ANSI code page
+    // on Windows and was the Unicode IR load bug (AudioDSPTools #25).
+    stagedIR = std::make_unique<dsp::ImpulseResponse>(irPath.Get(), sampleRate);
     wavState = stagedIR->GetWavState();
   }
   catch (std::runtime_error& e)
