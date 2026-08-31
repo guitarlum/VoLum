@@ -1149,12 +1149,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             bar->As<VoLumPresetBarControl>()->PromptSaveAs();
           return;
         }
-        // Claim before the bounds check, not only inside _VolumRecallPreset: the
-        // check reads the owner-keyed bank, and validating a row against one
-        // instance's bank while recalling it from another's is how a stale index
-        // recalls the wrong preset.
-        pPlugin->_VolumClaimPresetOps();
-        const auto presets = volum::custom::MockPresetsForAmp(pPlugin->mVolumAmpIdx);
+        // Name the owner for the bounds check, not only inside _VolumRecallPreset:
+        // validating a row against one instance's bank while recalling it from
+        // another's is how a stale index recalls the wrong preset.
+        const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
         if (code >= 0 && code < (int)presets.size())
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
       });
@@ -1272,7 +1270,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // F5 preset capture: save-as / overwrite snapshot the live scene.
       overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name); },
                                   [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); },
-                                  [pPlugin]() { pPlugin->_VolumClaimPresetOps(); });
+                                  [pPlugin]() { return pPlugin->_VolumClaimPresetOps(); });
       // Manage-panel destructive actions (delete / overwrite) go through the
       // shared confirm modal.
       overlay->SetConfirmCallback(
@@ -1292,8 +1290,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           using MK = VoLumCustomOverlayControl::ManageKind;
           if (kind == MK::Presets)
           {
-            pPlugin->_VolumClaimPresetOps(); // the bounds check below reads the owner-keyed bank
-            const auto presets = volum::custom::MockPresetsForAmp(ampIdx);
+            // The bounds check below reads the owner-keyed bank, so ask for this
+            // instance's key rather than trusting the ambient one.
+            const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
             if (index >= 0 && index < (int)presets.size())
               pPlugin->_VolumRecallPreset(index); // apply settings + drive the bar
           }

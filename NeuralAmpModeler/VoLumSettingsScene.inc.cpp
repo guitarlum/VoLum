@@ -362,6 +362,13 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
       activePresetIdsByOwner[_VolumActiveOwnerKey()] = mVolumActivePresetId;
     j["volumActivePresetIdByOwner"] = volum::VolumActivePresetIdsToJson(activePresetIdsByOwner);
   }
+  // 1.3.0: custom-amp live scenes. Machine-global here for the same reason the
+  // per-factory-amp scenes are: the standalone window IS the machine. Plugins get
+  // theirs from the DAW chunk and never write this file (see the guard in
+  // _VolumSaveSettingsToFile's callers), so a project cannot move the standalone's
+  // knobs and a catalog write cannot move anybody's.
+  if (!mVolumCustomScenes.empty())
+    j["volumCustomScenes"] = volum::CustomScenesToJson(mVolumCustomScenes);
 
   namespace fs = std::filesystem;
   fs::path settingsPath = volum::VolumUserSettingsFilePath();
@@ -389,8 +396,10 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
     return;
   }
 
-  // Persist the shared content library too (custom-amp scenes accumulate live
-  // knob edits via _VolumSaveCurrentToSettings). No-op when no base dir is set.
+  // Persist the shared content library too. Since 1.3.0 the scenes travel above,
+  // in this file - the library only needs flushing for catalog edits, and Save()
+  // is a locked read-modify-write merge, so doing it here cannot drop a sibling's
+  // items. No-op when no base dir is set.
   volum::content::GlobalContentStore().Save();
 }
 
@@ -488,6 +497,12 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     // single id above still restores the amp that was focused, exactly as before.
     if (j.contains("volumActivePresetIdByOwner"))
       mVolumActivePresetIdByOwner = volum::VolumActivePresetIdsFromJson(j["volumActivePresetIdByOwner"]);
+    // 1.3.0 custom-amp scenes. A new plugin insert reads them here too, which is
+    // how "a new insert inherits initial scenes from the machine settings file"
+    // stays true for custom amps now that they behave like factory amps; a project
+    // chunk then overrides whatever it carries.
+    if (j.contains("volumCustomScenes"))
+      mVolumCustomScenes = volum::CustomScenesFromJson(j["volumCustomScenes"]);
     if (volum::HasDualAmpUserSettings(j))
       settingsHealed = true; // Rewrite shared settings without new-only dual-amp fields.
 

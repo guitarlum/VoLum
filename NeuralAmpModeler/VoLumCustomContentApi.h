@@ -482,6 +482,12 @@ inline void DeletePedal(int idx)
 // amp, the plugin publishes that amp's owner key here on each switch; the bridge
 // reads it instead of deriving a factory key from the ampIdx argument (which is
 // always the underlying factory slot, even while a custom amp is focused).
+// 1.3.0: every preset operation below also exists in a `*ForOwner` form that takes
+// the owner key explicitly. The ambient key is a convenience for the index-based
+// legacy signatures and for tests, never the thing production code depends on:
+// with two editors open, whichever one last switched amps owned the global, and an
+// operation from the other one landed in the wrong amp's bank. Callers that know
+// their own owner key - which every plugin instance does - pass it.
 inline std::string& ActivePresetOwnerKey()
 {
   static std::string key = content::FactoryOwnerKey(0);
@@ -529,10 +535,10 @@ inline void ClearPresetHooksIfOwnedBy(const void* owner)
   PresetHookOwner() = nullptr;
 }
 
-inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
+inline std::vector<std::string> PresetsForOwner(const std::string& ownerKey)
 {
   const auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   std::vector<std::string> names;
   if (it != banks.end())
     for (const auto& pr : it->second)
@@ -540,12 +546,17 @@ inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
   return names;
 }
 
+inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
+{
+  return PresetsForOwner(ActivePresetOwnerKey());
+}
+
 // Capture the current live settings (via the plugin hook) into a new named
 // preset, de-duplicating the display name. Returns its index in the bank.
-inline int AddPreset(int /*ampIdx*/, const std::string& name)
+inline int AddPresetForOwner(const std::string& ownerKey, const std::string& name)
 {
   auto& reg = Store().reg();
-  auto& bank = reg.presetBanks[ActivePresetOwnerKey()];
+  auto& bank = reg.presetBanks[ownerKey];
   const std::string fallback = name.empty() ? "Preset" : name;
   std::string unique = fallback;
   int suffix = 2;
@@ -567,11 +578,16 @@ inline int AddPreset(int /*ampIdx*/, const std::string& name)
   return (int)bank.size() - 1;
 }
 
+inline int AddPreset(int /*ampIdx*/, const std::string& name)
+{
+  return AddPresetForOwner(ActivePresetOwnerKey(), name);
+}
+
 // Overwrite an existing preset's snapshot with the current live settings.
-inline void OverwritePreset(int /*ampIdx*/, int idx)
+inline void OverwritePresetForOwner(const std::string& ownerKey, int idx)
 {
   auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
     return;
   if (PresetCaptureHook())
@@ -579,33 +595,48 @@ inline void OverwritePreset(int /*ampIdx*/, int idx)
   Store().Save();
 }
 
+inline void OverwritePreset(int /*ampIdx*/, int idx)
+{
+  OverwritePresetForOwner(ActivePresetOwnerKey(), idx);
+}
+
 // Recall a preset: apply its stored snapshot to the live chain (via the plugin
 // hook). No-op (other than selection) in unit tests where no hook is installed.
-inline void RecallPreset(int /*ampIdx*/, int idx)
+inline void RecallPresetForOwner(const std::string& ownerKey, int idx)
 {
   auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
     return;
   if (PresetApplyHook())
     PresetApplyHook()(it->second[(size_t)idx].settings);
 }
 
-inline std::string PresetIdAt(int idx)
+inline void RecallPreset(int /*ampIdx*/, int idx)
+{
+  RecallPresetForOwner(ActivePresetOwnerKey(), idx);
+}
+
+inline std::string PresetIdAtForOwner(const std::string& ownerKey, int idx)
 {
   const auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
     return {};
   return it->second[(size_t)idx].id;
 }
 
-inline int PresetIndexById(const std::string& id)
+inline std::string PresetIdAt(int idx)
+{
+  return PresetIdAtForOwner(ActivePresetOwnerKey(), idx);
+}
+
+inline int PresetIndexByIdForOwner(const std::string& ownerKey, const std::string& id)
 {
   if (id.empty())
     return -1;
   const auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   if (it == banks.end())
     return -1;
   for (int i = 0; i < (int)it->second.size(); ++i)
@@ -614,10 +645,15 @@ inline int PresetIndexById(const std::string& id)
   return -1;
 }
 
-inline void RenamePreset(int /*ampIdx*/, int idx, const std::string& name)
+inline int PresetIndexById(const std::string& id)
+{
+  return PresetIndexByIdForOwner(ActivePresetOwnerKey(), id);
+}
+
+inline void RenamePresetForOwner(const std::string& ownerKey, int idx, const std::string& name)
 {
   auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   if (it == banks.end())
     return;
   auto& bank = it->second;
@@ -628,10 +664,15 @@ inline void RenamePreset(int /*ampIdx*/, int idx, const std::string& name)
   }
 }
 
-inline void DeletePreset(int /*ampIdx*/, int idx)
+inline void RenamePreset(int /*ampIdx*/, int idx, const std::string& name)
+{
+  RenamePresetForOwner(ActivePresetOwnerKey(), idx, name);
+}
+
+inline void DeletePresetForOwner(const std::string& ownerKey, int idx)
 {
   auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ActivePresetOwnerKey());
+  auto it = banks.find(ownerKey);
   if (it == banks.end())
     return;
   auto& bank = it->second;
@@ -642,6 +683,11 @@ inline void DeletePreset(int /*ampIdx*/, int idx)
       banks.erase(it);
     Store().Save();
   }
+}
+
+inline void DeletePreset(int /*ampIdx*/, int idx)
+{
+  DeletePresetForOwner(ActivePresetOwnerKey(), idx);
 }
 
 // ---------------------------------------------------------------------------

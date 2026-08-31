@@ -320,7 +320,7 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   _VolumSyncPresetOwner();
   const std::string ampId = volum::custom::CustomAmpIdAt(customIdx);
   if (!ampId.empty())
-    _VolumApplyAmpSettings(volum::content::GlobalContentStore().reg().customScenes[ampId]);
+    _VolumApplyAmpSettings(_VolumCustomScene(ampId));
 
   auto* pGfx = GetUI();
   if (!pGfx)
@@ -491,13 +491,38 @@ void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, bool support
       stepper->As<VoLumChannelStepControl>()->SetChannels(labels, sel);
 }
 
+// This instance's live scene for one custom amp. Lazily seeded from a pre-1.3.0
+// library's shared customScenes so upgrading does not reset the knobs, and from
+// the amp's factory-default settings otherwise (first focus).
+//
+// Draining the migration entry rather than copying it is deliberate: the library
+// stops writing that map, so leaving it in place would let a later focus of the
+// same amp pull stale pre-upgrade knobs over what the user has since done.
+volum::VoLumAmpSettings& NeuralAmpModeler::_VolumCustomScene(const std::string& ampId)
+{
+  const auto existing = mVolumCustomScenes.find(ampId);
+  if (existing != mVolumCustomScenes.end())
+    return existing->second;
+
+  auto& legacy = volum::content::GlobalContentStore().reg().legacyCustomScenes;
+  const auto migrated = legacy.find(ampId);
+  if (migrated != legacy.end())
+  {
+    auto& scene = mVolumCustomScenes[ampId];
+    scene = migrated->second;
+    legacy.erase(migrated);
+    return scene;
+  }
+  return mVolumCustomScenes[ampId];
+}
+
 volum::VoLumAmpSettings& NeuralAmpModeler::_VolumActiveScene()
 {
   if (mVolumCustomMainIdx >= 0)
   {
     const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
     if (!id.empty())
-      return volum::content::GlobalContentStore().reg().customScenes[id];
+      return _VolumCustomScene(id);
   }
   return mVolumAmpSettings[mVolumAmpIdx];
 }

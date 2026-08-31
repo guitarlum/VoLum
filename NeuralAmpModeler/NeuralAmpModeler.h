@@ -24,6 +24,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -495,7 +496,7 @@ public:
   // Claim the process-global preset bridge (hooks + active owner key) for this
   // instance. Called by every preset operation, because the bridge is shared by all
   // instances in the host and the last one to claim it wins.
-  void _VolumClaimPresetOps();
+  std::string _VolumClaimPresetOps();
   void _VolumSyncPresetOwner();
   // Refresh the header bar's list/selection/dirty state for the active amp.
   void _VolumRefreshPresetBar();
@@ -522,6 +523,14 @@ public:
   // restored in _VolumSyncPresetOwner; pruned when a preset is deleted/missing.
   std::unordered_map<std::string, std::string> mVolumActivePresetIdByOwner;
   std::unordered_map<std::string, volum::VoLumAmpSettings> mVolumRecalledSnapshotByOwner;
+  // This instance's live scene per custom amp id - the custom-amp equivalent of
+  // mVolumAmpSettings[ampIdx]. Before 1.3.0 this map lived in the shared content
+  // library, so one instance's catalog write moved another instance's knobs; the
+  // sounding rig belongs to the instance (DAW chunk / standalone settings) now.
+  // Seeded on first touch from a pre-1.3.0 library's customScenes, so an upgrade
+  // keeps the knobs the user left behind.
+  std::map<std::string, volum::VoLumAmpSettings> mVolumCustomScenes;
+  volum::VoLumAmpSettings& _VolumCustomScene(const std::string& ampId);
   // Record/forget the active preset for the current owner key.
   void _VolumRememberActivePreset();
   void _VolumForgetActivePreset();

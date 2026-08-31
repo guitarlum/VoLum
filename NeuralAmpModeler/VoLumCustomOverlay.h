@@ -80,11 +80,12 @@ public:
   using SavePresetCallback = std::function<int(const std::string& name)>;
   using OverwritePresetCallback = std::function<void(int index)>;
   // Rename and delete go straight to the bridge rather than through the plugin, so
-  // they need the same ownership claim the other three operations make: the bank
-  // they act on is resolved from a process-global key that the most recently
-  // active editor wrote, and without a claim this editor's delete lands in another
-  // instance's bank.
-  using ClaimPresetOpsCallback = std::function<void()>;
+  // they need the owner key of the instance that owns this overlay. Resolving the
+  // bank from an ambient process-global key meant the most recently active editor
+  // decided which bank every editor acted on, and this editor's delete could land
+  // in another instance's presets. The callback returns that key (and, on the
+  // plugin side, still re-claims the capture/apply hooks).
+  using ClaimPresetOpsCallback = std::function<std::string()>;
   void SetPresetCallbacks(SavePresetCallback saveCb, OverwritePresetCallback overwriteCb,
                           ClaimPresetOpsCallback claimCb = nullptr)
   {
@@ -543,7 +544,7 @@ private:
     {
       case ManageKind::IR: mItems = volum::custom::MockIRLibrary(); break;
       case ManageKind::Pedals: mItems = volum::custom::MockCustomPedals(); break;
-      default: mItems = volum::custom::MockPresetsForAmp(mAmpIdx); break;
+      default: mItems = volum::custom::PresetsForOwner(PresetOwnerKey()); break;
     }
     if (mSel >= (int)mItems.size())
       mSel = mItems.empty() ? -1 : (int)mItems.size() - 1;
@@ -561,7 +562,7 @@ private:
     {
       case ManageKind::IR: return volum::custom::IRIdAt(idx);
       case ManageKind::Pedals: return volum::custom::PedalIdAt(idx);
-      default: return volum::custom::PresetIdAt(idx);
+      default: return volum::custom::PresetIdAtForOwner(PresetOwnerKey(), idx);
     }
   }
 
@@ -571,7 +572,7 @@ private:
     {
       case ManageKind::IR: return volum::custom::IRIndexById(id);
       case ManageKind::Pedals: return volum::custom::PedalIndexById(id);
-      default: return volum::custom::PresetIndexById(id);
+      default: return volum::custom::PresetIndexByIdForOwner(PresetOwnerKey(), id);
     }
   }
 
@@ -586,10 +587,15 @@ private:
     mError = "Your library could not be saved - this change will be lost.";
   }
 
+  // The owner key of the preset bank this overlay acts on, re-asked every time so
+  // it cannot go stale while the panel is open (the user can switch amps behind
+  // it). Empty when no plugin is wired up, i.e. in unit tests.
+  std::string PresetOwnerKey() const { return mClaimPresetOps ? mClaimPresetOps() : std::string(); }
+
   void ClaimPresetOpsIfNeeded()
   {
     if (mManageKind == ManageKind::Presets && mClaimPresetOps)
-      mClaimPresetOps();
+      (void)mClaimPresetOps();
   }
 
   void ApplyRename(int idx, const std::string& name)
@@ -600,7 +606,7 @@ private:
     {
       case ManageKind::IR: RenameIR(idx, name); break;
       case ManageKind::Pedals: RenamePedal(idx, name); break;
-      default: RenamePreset(mAmpIdx, idx, name); break;
+      default: RenamePresetForOwner(PresetOwnerKey(), idx, name); break;
     }
     ReportLibraryWriteFailure();
   }
@@ -613,7 +619,7 @@ private:
     {
       case ManageKind::IR: DeleteIR(idx); break;
       case ManageKind::Pedals: DeletePedal(idx); break;
-      default: DeletePreset(mAmpIdx, idx); break;
+      default: DeletePresetForOwner(PresetOwnerKey(), idx); break;
     }
     ReportLibraryWriteFailure();
   }

@@ -27,8 +27,10 @@
 // strings and so never travelled in the binary per-amp block), plus the focused
 // custom MAIN / SUPPORT amp ids and the active preset id for the focused amp.
 
+#include <map>
 #include <string>
 
+#include "VoLumAmpSettingsJson.h" // CustomScenesToJson / CustomScenesFromJson
 #include "VoLumAmpeteCatalog.h"
 
 #if __has_include(<nlohmann/json.hpp>)
@@ -55,7 +57,10 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // division) and the live-locked POST delay snapshot ("lockedPostDelay"). The
 // delay's other params still travel in the binary per-amp block; only the
 // appended sync/division pair needs the tail. Informational only.
-inline constexpr int kVoLumIdTailSchema = 5;
+// Schema 6 (1.3.0): added "customScenes", the focused-custom-amp live knobs that
+// used to live in the shared content library. They belong to the project now, the
+// same way a factory amp's scene does. Informational only.
+inline constexpr int kVoLumIdTailSchema = 6;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -126,6 +131,9 @@ struct ChunkIdTail
   TremoloTail lockedPostTremolo; // live-locked POST tremolo snapshot (present iff POST locked + written)
   DelayTail perAmpDelay[kAmpCount]; // factory amp -> POST Delay tempo-sync settings
   DelayTail lockedPostDelay; // live-locked POST delay sync snapshot (present iff POST locked + written)
+  // 1.3.0: this instance's live scene per custom amp id. Previously shared through
+  // the content library, where one instance's catalog write moved another's knobs.
+  std::map<std::string, VoLumAmpSettings> customScenes;
 
   ChunkIdTail()
   {
@@ -310,6 +318,10 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
     j["lockedPostTremolo"] = TremoloTailToJson(t.lockedPostTremolo);
   if (t.lockedPostDelay.present)
     j["lockedPostDelay"] = DelayTailToJson(t.lockedPostDelay);
+  // Omitted entirely when this project never focused a custom amp, so a chunk
+  // written on factory amps is byte-identical to a 1.2.x one apart from the schema.
+  if (!t.customScenes.empty())
+    j["customScenes"] = CustomScenesToJson(t.customScenes);
   return j;
 }
 
@@ -358,6 +370,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
     t.lockedPostTremolo = TremoloTailFromJson(j["lockedPostTremolo"]);
   if (j.contains("lockedPostDelay"))
     t.lockedPostDelay = DelayTailFromJson(j["lockedPostDelay"]);
+  if (j.contains("customScenes"))
+    t.customScenes = CustomScenesFromJson(j["customScenes"]);
   return t;
 }
 
