@@ -216,7 +216,7 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 
 ## Keyboard Controls
 
-- In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` saves the live rig (name popup for Factory/Default; overwrite for a dirty User preset) without changing PLAY numbers.
+- In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` saves the live rig (name popup for Factory/Default; overwrite for a dirty User preset) without changing PLAY numbers. While Settings, Pack, or another overlay is open, those PLAY keys are ignored so they cannot change the rail behind the window.
 - In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
@@ -231,7 +231,7 @@ This covers the main playing and editing workflow. Full screen-reader support is
 
 ## Settings And Safety
 
-Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`.
+Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`. Keys do not change the amp or the PLAY rail while Settings is open.
 
 The overlay has three tabs.
 
@@ -256,7 +256,7 @@ VoLum stores user settings automatically:
 
 Use the standalone app as your tone library editor. It writes the global per-amp defaults in this file, including speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
-Fresh VST3 instances read those defaults when you add VoLum to a track. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration is the deliberate exception described below: a direct calibration edit becomes the machine default, while saved project state still wins when that project is restored.
+Fresh VST3 instances read those per-amp defaults when you add VoLum to a track. They do not inherit the standalone app's PLAY/BUILD mode or MIDI listen channel: a new insert starts in BUILD on All MIDI channels until the project saves those per instance. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration and A2 Lite are the deliberate exceptions described below: a direct edit becomes the machine default, while saved project state still wins for everything else when that project is restored.
 
 ### MIDI Program Change
 
@@ -264,10 +264,10 @@ VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0`
 
 Assign the slots on either surface, whichever is in front of you:
 
-- In **PLAY**, **+** is **Add this sound** when the live rig is not on the rail, or **Add Sound** when it already is. Add Sound opens the picker on the next free program number (you can change that number first). Click an assigned row to recall it, use the assign control or double-click to replace the Sound, or tap `×` to clear it.
+- In **PLAY**, **+** is **Add this sound** when the live rig is not on the rail, or **Add Sound** when it already is. Add this sound writes the live User Sound onto the next free program number and marks that row LIVE. Add Sound opens the picker on the next free program number (you can change that number first). Click an assigned row to recall it, use the assign control or double-click to replace the Sound, or tap `×` to clear it.
 - In **Settings -> MIDI**, the same list appears as a table of program number, Sound, and amp. Click a row's number to type a new one (`0`–`127`), or click the rest of the row to pick another Sound. Moving a Sound onto a number that is already taken swaps the two rather than overwriting one. **+ Add Sound** asks for the number first, prefilled with the first free one, and then for the Sound. There is only one list: both surfaces read and write the same assignments.
 
-The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance. **What each program number plays** is the same assignment list PLAY shows. That list is machine-global, while the listen filter is stored per plugin instance. All MIDI channels is the default.
+The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance. **What each program number plays** is the same assignment list PLAY shows. That list is machine-global, while the listen filter is stored per plugin instance. A new plug-in insert starts on All MIDI channels; it does not copy the standalone app's channel. All MIDI channels is the default.
 
 An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number in both lists and reads red, because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel remains in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel in VoLum.
 
@@ -289,7 +289,7 @@ The Calibrate switch and dBu value are machine-global startup defaults. A direct
 
 The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE NAM pedals, the main amp, and the dual-amp support lane. Lite does not change the separate Pitch/Octaver DSP, so bypass Pitch/Octaver or use a larger audio buffer if that effect is the CPU bottleneck.
 
-Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
+Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. A Lite toggle from standalone or a plug-in writes only that key, the same way calibration does, so it cannot move PLAY/BUILD, the MIDI listen channel, or per-amp scenes. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
 
 ### Content Library Packs
 

@@ -379,6 +379,7 @@ public:
   void _VolumApplyDspCaches();
   void _VolumSaveSettingsToFile();
   void _VolumSaveCalibrationDefaults();
+  void _VolumSaveLiteMode();
   void _VolumLoadSettingsFromFile();
   // VoLum: set the machine-global A2 Lite/Full mode, persist it, and reload all
   // four NAM lanes so the new slice is applied through the async staging path.

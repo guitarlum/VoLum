@@ -99,6 +99,8 @@ TEST_CASE("Scroll thumb drag maps cursor y to a new offset")
   bar.OnUp();
   CHECK_FALSE(bar.dragging);
   CHECK(volum::scroll::WheelDelta(1.f, 20.f) == doctest::Approx(-30.f));
+  CHECK(volum::scroll::ListWheelDelta(0.4f, 20.f) == doctest::Approx(-8.f));
+  CHECK(volum::scroll::ListWheelDelta(1.f, 20.f) == doctest::Approx(-30.f));
   CHECK(volum::scroll::ClampScroll(-4.f, 10.f) == 0.f);
   CHECK(volum::scroll::ClampScroll(40.f, 10.f) == 10.f);
 }
@@ -120,6 +122,9 @@ TEST_CASE("Add this sound Save As first for Default or dirty Factory")
   CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, false, false)); // clean Factory Ready
   CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::OverwriteUser, true, false));
   CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::OverwriteUser, false, true));
+  CHECK(volum::AddHeardMarksLive(3, false));
+  CHECK_FALSE(volum::AddHeardMarksLive(-1, false)); // map full
+  CHECK_FALSE(volum::AddHeardMarksLive(0, true)); // Default has no id yet
 }
 
 TEST_CASE("PLAY illumination: quiet breathes, loud is brighter")
@@ -132,6 +137,12 @@ TEST_CASE("PLAY illumination: quiet breathes, loud is brighter")
   CHECK(volum::PlayCoronaOpacity(loud) > volum::PlayCoronaOpacity(dim));
 }
 
+TEST_CASE("AnyOverlayOpen is true when any listed tag is showing")
+{
+  CHECK_FALSE(volum::ui::AnyOverlayOpen({1, 2, 3}, [](int) { return false; }));
+  CHECK(volum::ui::AnyOverlayOpen({1, 2, 3}, [](int tag) { return tag == 2; }));
+}
+
 TEST_CASE("Invalid PLAY slots share one label")
 {
   const auto factory = volum::DefaultFactoryPresets();
@@ -140,6 +151,17 @@ TEST_CASE("Invalid PLAY slots share one label")
   const auto slots = volum::BuildPlaySlots(factory, registry);
   REQUIRE(slots.size() == 1);
   CHECK(slots[0].sound.presetName == std::string(volum::kPlayInvalidSlotLabel));
+  CHECK(volum::OccupiedSlotLabel(true, "Lead") == "Lead");
+  CHECK(volum::OccupiedSlotLabel(false, "Lead") == std::string(volum::kPlayInvalidSlotLabel));
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  CHECK(play.find("MISSING SOUND") == std::string::npos);
+  CHECK(tabs.find("MISSING SOUND") == std::string::npos);
+  CHECK(play.find("Missing Sound") == std::string::npos);
+  CHECK(play.find("a missing Sound") == std::string::npos);
+  CHECK(tabs.find("gone missing") == std::string::npos);
+  CHECK(play.find("OccupiedSlotLabel(") != std::string::npos);
+  CHECK(tabs.find("OccupiedSlotLabel(") != std::string::npos);
 }
 
 TEST_CASE("Overlay attach needles exist in the layout and chrome is attached first")
@@ -190,6 +212,9 @@ TEST_CASE("PLAY T/M/H and Ctrl+S fall through the PLAY key branch")
   CHECK(volum::SectionForEffectFocus(EVoLumEffectFocus::AMP) == EVoLumSection::AMP);
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   REQUIRE(layout.find("PlayBranchConsumes(key.C, railStep, stomp >= 0)") != std::string::npos);
+  const auto consumes = layout.find("PlayBranchConsumes(key.C, railStep, stomp >= 0)");
+  const auto swallow = layout.find("return true;", consumes);
+  REQUIRE(layout.find("AnyOverlayOpen(", consumes) < swallow);
   const auto playBranch = layout.find("if (mVolumUiMode == volum::UiMode::Play)");
   const auto fallthrough = layout.find("T / M / H / Ctrl+S fall through to the shared handler.");
   const auto shared = layout.find("if (_HandleVoLumKeyboardFocusKey(key))");
@@ -216,7 +241,13 @@ TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
   REQUIRE(runtime.find("FirstFreeMidiSoundSlot") != std::string::npos);
   REQUIRE(runtime.find("void NeuralAmpModeler::_VolumAddHeardPlaySound()") != std::string::npos);
   REQUIRE(runtime.find("AddHeardNeedsSaveAs") != std::string::npos);
+  REQUIRE(runtime.find("AddHeardMarksLive") != std::string::npos);
   REQUIRE(runtime.find("_VolumPromptSaveAs(finish)") != std::string::npos);
+  const auto finish = runtime.find("auto finish = [this]()");
+  REQUIRE(finish != std::string::npos);
+  const auto finishEnd = runtime.find("_VolumPromptSaveAs(finish)", finish);
+  REQUIRE(finishEnd != std::string::npos);
+  CHECK(runtime.substr(finish, finishEnd - finish).find("mVolumLastRecalledPlaySlot = slot") != std::string::npos);
 }
 
 TEST_CASE("H peels Pack before it closes Settings")
@@ -237,10 +268,19 @@ TEST_CASE("Name dialog Enter in the field saves")
   CHECK(volum::custom::NormalizePresetName("  Lead  ") == "Lead");
   CHECK(volum::custom::NameDialogCommitAfterTextEntry("Lead"));
   CHECK_FALSE(volum::custom::NameDialogCommitAfterTextEntry(""));
+  bool armed = true;
+  CHECK(volum::custom::NameDialogCommitOnce(armed, "Lead"));
+  CHECK_FALSE(armed);
+  CHECK_FALSE(volum::custom::NameDialogCommitOnce(armed, "Lead"));
+  armed = true;
+  CHECK_FALSE(volum::custom::NameDialogCommitOnce(armed, ""));
+  CHECK(armed);
   const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumNameDialog.h");
   const auto complete = dialog.find("void OnTextEntryCompletion");
   REQUIRE(complete != std::string::npos);
   CHECK(dialog.find("Commit();", complete) != std::string::npos);
+  CHECK(dialog.find("std::move(mOnSave)") != std::string::npos);
+  CHECK(dialog.find("mOnSave = nullptr") != std::string::npos);
 }
 
 TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
@@ -250,9 +290,30 @@ TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
   REQUIRE(load != std::string::npos);
   const auto apply = scene.find("UiModeFromMachineSettings(true, j, mVolumUiMode)", load);
   REQUIRE(apply != std::string::npos);
+  const auto midi = scene.find("MidiChannelFromMachineSettings(true, j,", load);
+  REQUIRE(midi != std::string::npos);
   const auto guard = scene.rfind("#if defined(APP_API)", apply);
   REQUIRE(guard != std::string::npos);
   CHECK(apply - guard < 80);
+  CHECK(midi - guard < 200);
+  CHECK(scene.find("j.contains(\"midiCh\")", load) == std::string::npos);
+  const auto setLite = scene.find("void NeuralAmpModeler::_VolumSetLiteMode(bool lite)");
+  const auto owner = scene.find("std::string NeuralAmpModeler::_VolumActiveOwnerKey()");
+  REQUIRE(setLite != std::string::npos);
+  REQUIRE(owner != std::string::npos);
+  CHECK(setLite < owner);
+  CHECK(scene.substr(setLite, owner - setLite).find("_VolumSaveLiteMode();") != std::string::npos);
+  CHECK(scene.substr(setLite, owner - setLite).find("_VolumSaveSettingsToFile") == std::string::npos);
+}
+
+TEST_CASE("PLAY picker, Settings MIDI, and Pack share ListWheelDelta")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
+  CHECK(play.find("ListWheelDelta(d, kPickerRowH)") != std::string::npos);
+  CHECK(tabs.find("ListWheelDelta(d, kRowH)") != std::string::npos);
+  CHECK(pack.find("ListWheelDelta(d, kRowH)") != std::string::npos);
 }
 
 TEST_CASE("Degenerate dual heal only rewrites centered inverted pans")

@@ -216,7 +216,7 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 
 ## Tastatur
 
-- In PLAY: `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Sound und rufen ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um. `1`–`8` schalten die acht Stomps. `T`, `M` und `H` öffnen weiterhin Tuner, Metronom und Einstellungen. `Ctrl+S` speichert das aktuelle Rig (Namensfeld für Factory/Default; Überschreiben für ein schmutziges User-Preset) ohne PLAY-Nummern zu ändern.
+- In PLAY: `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Sound und rufen ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um. `1`–`8` schalten die acht Stomps. `T`, `M` und `H` öffnen weiterhin Tuner, Metronom und Einstellungen. `Ctrl+S` speichert das aktuelle Rig (Namensfeld für Factory/Default; Überschreiben für ein schmutziges User-Preset) ohne PLAY-Nummern zu ändern. Solange Einstellungen, Pack oder ein anderes Overlay offen ist, werden diese PLAY-Tasten ignoriert, damit sie die Leiste dahinter nicht verstellen.
 - In BUILD, ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
@@ -231,7 +231,7 @@ Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screen
 
 ## Einstellungen Und Sicherheit
 
-Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`.
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`. Tasten ändern den Amp und die PLAY-Leiste nicht, solange die Einstellungen offen sind.
 
 Das Overlay hat drei Reiter.
 
@@ -256,7 +256,7 @@ VoLum speichert Benutzereinstellungen automatisch:
 
 Nutze die Standalone-App als Editor für deine Klangbibliothek. Sie schreibt die globalen Defaults pro Amp in diese Datei, inklusive Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual-Amp-Setup.
 
-Neue VST3-Instanzen lesen diese Defaults, wenn du VoLum auf eine Spur lädst. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben keine globalen Amp-Szenen, deshalb können zwei Spuren einander ihre Rigs nicht überschreiben. Die unten beschriebene Eingangskalibrierung ist die bewusste Ausnahme: Eine direkt bearbeitete Kalibrierung wird zum Rechner-Default, während der gespeicherte Projektzustand beim Laden weiterhin Vorrang hat.
+Neue VST3-Instanzen lesen diese Defaults pro Amp, wenn du VoLum auf eine Spur lädst. Sie übernehmen weder PLAY/BUILD noch den MIDI-Hörkanal der Standalone-App: Ein neuer Insert startet in BUILD auf allen MIDI-Kanälen, bis das Projekt diese Werte pro Instanz speichert. Danach gehört der Zustand dieser Plugin-Instanz dem DAW-Projekt. Reaper, Cubase, Live und andere Hosts speichern und laden den VST3-Zustand mit dem Projekt und mit ihren normalen Plugin-Preset-Systemen. VST3-Instanzen schreiben keine globalen Amp-Szenen, deshalb können zwei Spuren einander ihre Rigs nicht überschreiben. Eingangskalibrierung und A2 Lite sind die bewussten Ausnahmen weiter unten: Eine direkte Änderung wird zum Rechner-Default, während der gespeicherte Projektzustand für alles andere beim Laden Vorrang hat.
 
 ### MIDI Program Change
 
@@ -264,10 +264,10 @@ VoLum empfängt MIDI Program Change in VST3, AU und der Standalone-App. Die Slot
 
 Zuweisen kannst du auf beiden Oberflächen, je nachdem, welche vor dir liegt:
 
-- In **PLAY** ist **+** **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt, oder **Add Sound**, wenn es schon dort ist. Add Sound öffnet den Wähler auf der nächsten freien Programmnummer (die Zahl kannst du vorher ändern). Ein Klick auf eine belegte Zeile ruft sie auf, die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt den Sound, `×` löscht sie.
+- In **PLAY** ist **+** **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt, oder **Add Sound**, wenn es schon dort ist. Add this sound schreibt den aktuellen User-Sound auf die nächste freie Programmnummer und markiert diese Zeile LIVE. Add Sound öffnet den Wähler auf der nächsten freien Programmnummer (die Zahl kannst du vorher ändern). Ein Klick auf eine belegte Zeile ruft sie auf, die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt den Sound, `×` löscht sie.
 - Unter **Settings -> MIDI** steht dieselbe Liste als Tabelle aus Programmnummer, Sound und Amp. Klicke auf die Nummer einer Zeile, um eine neue einzutippen (`0`–`127`), oder klicke auf den Rest der Zeile, um einen anderen Sound zu wählen. Landet ein Sound auf einer bereits belegten Nummer, tauschen beide den Platz, statt dass einer überschrieben wird. **+ Add Sound** fragt zuerst nach der Nummer – voreingestellt auf die erste freie – und danach nach dem Sound. Es gibt nur eine Liste: Beide Oberflächen lesen und schreiben dieselben Zuweisungen.
 
-Die Karte **What this VoLum listens to** unter **Settings -> MIDI** wählt alle MIDI-Kanäle oder genau einen von `1`–`16` für diese Instanz. **What each program number plays** ist dieselbe Zuweisungsliste wie in PLAY. Die Liste gilt rechnerweit; der Hörfilter wird pro Plugin-Instanz gespeichert. Alle MIDI-Kanäle sind die Voreinstellung.
+Die Karte **What this VoLum listens to** unter **Settings -> MIDI** wählt alle MIDI-Kanäle oder genau einen von `1`–`16` für diese Instanz. **What each program number plays** ist dieselbe Zuweisungsliste wie in PLAY. Die Liste gilt rechnerweit; der Hörfilter wird pro Plugin-Instanz gespeichert. Ein neuer Plugin-Insert startet auf allen MIDI-Kanälen und kopiert nicht den Kanal der Standalone-App. Alle MIDI-Kanäle sind die Voreinstellung.
 
 Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. Ein gelöschter Sound behält in beiden Listen seine Programmnummer und wird rot dargestellt: Das Programm gibt es weiterhin, das Ziel dahinter nicht mehr. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter **File -> Preferences**; der Kanal bleibt in den VoLum-Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst den Kanal in VoLum.
 
@@ -289,7 +289,7 @@ Der Calibrate-Schalter und der dBu-Wert sind rechnerweite Start-Defaults. Eine d
 
 Die **Performance**-Karte der Einstellungen hat einen **FULL / LITE**-Schalter; der aktive Modus ist hervorgehoben (FULL ist die Voreinstellung), du siehst also stets, welcher Qualitätsmodus läuft. Lite tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Schaltest du auf Lite, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-NAM-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur. Der separate Pitch/Octaver-DSP wird dadurch nicht verändert; umgehe Pitch/Octaver oder nutze einen größeren Audiopuffer, wenn dieser Effekt die CPU-Grenze verursacht.
 
-Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json` gespeichert, nicht im Projekt. Er bleibt also für jedes Projekt und jede DAW-Sitzung auf diesem Rechner aktiv, und ein auf einem schnellen Rechner gespeichertes Projekt spielt auf einem langsamen weiterhin Lite. Captures, die keine A2-Container sind (ältere Modelle mit nur einer Größe und die meisten eigenen Importe), bleiben unberührt — der Schalter hat dort einfach keine Wirkung. Standard ist Full.
+Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json` gespeichert, nicht im Projekt. Er bleibt also für jedes Projekt und jede DAW-Sitzung auf diesem Rechner aktiv, und ein auf einem schnellen Rechner gespeichertes Projekt spielt auf einem langsamen weiterhin Lite. Ein Lite-Schalter in Standalone oder Plugin schreibt nur diesen einen Schlüssel, genau wie die Kalibrierung, und kann deshalb PLAY/BUILD, den MIDI-Hörkanal oder Amp-Szenen nicht verschieben. Captures, die keine A2-Container sind (ältere Modelle mit nur einer Größe und die meisten eigenen Importe), bleiben unberührt — der Schalter hat dort einfach keine Wirkung. Standard ist Full.
 
 ### Packs der Inhaltsbibliothek
 

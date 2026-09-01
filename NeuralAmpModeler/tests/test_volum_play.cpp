@@ -23,6 +23,13 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   CHECK(volum::UiModeFromMachineSettings(true, standalone, volum::UiMode::Build) == volum::UiMode::Play);
   CHECK(volum::UiModeFromMachineSettings(false, standalone, volum::UiMode::Build) == volum::UiMode::Build);
   CHECK(volum::UiModeFromMachineSettings(false, standalone, volum::UiMode::Play) == volum::UiMode::Play);
+  nlohmann::json midi = {{"midiCh", 7}};
+  CHECK(volum::MidiChannelFromJson(midi) == 7);
+  CHECK(volum::MidiChannelFromJson(nlohmann::json::object(), 3) == 3);
+  CHECK(volum::MidiChannelFromJson({{"midiCh", 99}}) == 16);
+  CHECK(volum::MidiChannelFromMachineSettings(true, midi, 0) == 7);
+  CHECK(volum::MidiChannelFromMachineSettings(false, midi, 0) == 0);
+  CHECK(volum::MidiChannelFromMachineSettings(false, midi, 12) == 12);
   CHECK(volum::ActionForUiModeTransition(volum::UiMode::Build, volum::UiMode::Play)
         == volum::UiModeTransitionAction::RefreshOnly);
 }

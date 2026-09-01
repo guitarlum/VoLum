@@ -152,7 +152,7 @@ public:
       return;
     const IRECT list = _ListRect();
     mScroll = volum::scroll::ClampScroll(
-      mScroll + volum::scroll::WheelDelta(d, kRowH), std::max(0.f, _ListContentH() - list.H()));
+      mScroll + volum::scroll::ListWheelDelta(d, kRowH), std::max(0.f, _ListContentH() - list.H()));
     SetDirty(false);
   }
 

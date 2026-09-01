@@ -7,6 +7,7 @@
 #include "VoLumAmpListScroll.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace volum
 {
@@ -24,6 +25,15 @@ using amplist::ThumbYToScroll;
 inline float WheelDelta(float notches, float rowH)
 {
   return -notches * rowH * 1.5f;
+}
+
+// Precision touchpads stream many fractional events (|d| < 1). Map those 1:1
+// to pixels. A wheel notch / coarse detent sends |d| >= 1 and jumps 1.5 rows.
+inline float ListWheelDelta(float notches, float rowH)
+{
+  if (std::abs(notches) < 1.f)
+    return -notches * rowH;
+  return WheelDelta(notches, rowH);
 }
 
 inline float ClampScroll(float scroll, float maxScroll)

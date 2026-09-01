@@ -146,6 +146,7 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   CHECK(controls.find("VoLumMidiSettingsControl") == std::string::npos);
   // The filter persists per instance; the sound map does not ride this document.
   CHECK(settings.find("j[\"midiCh\"] = mVolumMidiChannel.load()") != std::string::npos);
+  CHECK(settings.find("MidiChannelFromMachineSettings(true, j,") != std::string::npos);
   CHECK(settings.find("midiSoundMap") == std::string::npos);
   // The tab reads the registry's map; it never assigns into it directly.
   CHECK(tabs.find("midiSoundMap =") == std::string::npos);

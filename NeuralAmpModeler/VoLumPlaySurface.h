@@ -432,7 +432,8 @@ public:
   {
     if (mPickerOpen && PickerRect().Contains(x, y))
     {
-      mPickerScroll = std::clamp(mPickerScroll - d * 30.f, 0.f, PickerMaxScroll());
+      mPickerScroll =
+        volum::scroll::ClampScroll(mPickerScroll + volum::scroll::ListWheelDelta(d, kPickerRowH), PickerMaxScroll());
       SetDirty(false);
       return;
     }
@@ -1008,7 +1009,7 @@ private:
     const IRECT note(value.R + 26.f, row.T, row.R, row.B);
     if (const volum::PlaySlot* taken = SlotHolder(mEditSlot))
       g.DrawText(VoLumType::Label(9.f, VoLumColors::AMBER, EAlign::Near),
-                 ("replaces " + (taken->valid ? taken->sound.presetName : std::string("a missing Sound"))).c_str(),
+                 ("replaces " + volum::OccupiedSlotLabel(taken->valid, taken->sound.presetName)).c_str(),
                  note);
     else
       g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), "free", note);

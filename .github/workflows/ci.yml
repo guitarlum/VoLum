@@ -52,7 +52,7 @@ jobs:
             BASE="${{ github.event.pull_request.base.sha }}"
           else
             BASE="${{ github.event.before }}"
-            if [[ "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
               BASE="HEAD^"
             fi
           fi

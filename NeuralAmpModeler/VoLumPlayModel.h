@@ -44,6 +44,21 @@ inline UiMode UiModeFromMachineSettings(bool standalone, const nlohmann::json& v
   return standalone ? UiModeFromJson(value, "volumUiMode") : fallback;
 }
 
+inline int MidiChannelFromJson(const nlohmann::json& value, int fallback = 0)
+{
+  if (!value.is_object() || !value.contains("midiCh") || !value["midiCh"].is_number_integer())
+    return fallback;
+  return std::clamp(value["midiCh"].get<int>(), 0, 16);
+}
+
+// Same split as UiMode: the listen filter in volum-settings.json is the
+// standalone window. A plugin keeps Omni (or the project id-tail) so a
+// standalone channel lock cannot move the next VST3 insert.
+inline int MidiChannelFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? MidiChannelFromJson(value, fallback) : fallback;
+}
+
 enum class UiModeTransitionAction
 {
   RefreshOnly
@@ -99,6 +114,11 @@ inline bool LivePresetDirty(bool hasSnapshot, const VoLumAmpSettings& live, cons
 }
 
 inline constexpr const char* kPlayInvalidSlotLabel = "Invalid slot";
+
+inline std::string OccupiedSlotLabel(bool valid, const std::string& presetName)
+{
+  return valid ? presetName : std::string(kPlayInvalidSlotLabel);
+}
 
 struct SoundChoice
 {
@@ -247,6 +267,13 @@ inline bool PlayPlusAddsHeard(bool dirty, bool factoryOrDefaultOrigin, bool live
 inline bool AddHeardNeedsSaveAs(PresetSaveAction action, bool dirty, bool presetIdEmpty)
 {
   return action == PresetSaveAction::SaveUserCopy && (dirty || presetIdEmpty);
+}
+
+// Add this sound can write a MIDI row only when a User Sound exists and the
+// map still has a free program number. Otherwise finish() is a silent no-op.
+inline bool AddHeardMarksLive(int firstFreeSlot, bool presetIdEmpty)
+{
+  return firstFreeSlot >= 0 && !presetIdEmpty;
 }
 
 inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::string& activeAmpId,

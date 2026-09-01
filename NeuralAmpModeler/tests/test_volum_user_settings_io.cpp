@@ -979,6 +979,17 @@ TEST_CASE("User settings IO round-trips machine-global liteMode")
 
 // An older settings file (no liteMode key) must load cleanly defaulting to Full
 // with no heal flag (additive forward tolerance, no version bump).
+TEST_CASE("Lite merge-write keeps sibling machine keys")
+{
+  nlohmann::json j = {{"midiCh", 4}, {"volumUiMode", "play"}, {"lastAmpIdx", 2}};
+  const auto out = volum::MergeLiteModeIntoSettings(j, true);
+  CHECK(out["liteMode"] == true);
+  CHECK(out["midiCh"] == 4);
+  CHECK(out["volumUiMode"] == "play");
+  CHECK(out["lastAmpIdx"] == 2);
+  CHECK(out["version"] == volum::kVoLumUserSettingsVersion);
+}
+
 TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Full)")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};

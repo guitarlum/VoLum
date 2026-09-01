@@ -593,6 +593,16 @@ inline bool NameDialogCommitAfterTextEntry(const std::string& name)
   return !name.empty();
 }
 
+// Enter in the field and the Save button can both reach Commit. The first
+// success disarms; a second completion must not fire the callback again.
+inline bool NameDialogCommitOnce(bool& armed, const std::string& name)
+{
+  if (!armed || name.empty())
+    return false;
+  armed = false;
+  return true;
+}
+
 // Short pill label for a custom capture name. Names longer than maxChars bytes
 // are clipped to maxChars + a single-glyph ellipsis so they fit the tiny Amp-view
 // quiet-slot pill instead of overflowing into the neighbouring pill. Curated

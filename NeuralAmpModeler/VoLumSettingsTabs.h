@@ -553,10 +553,11 @@ public:
     if (mScreen == kScreenPicker)
     {
       if (PickerListRect().Contains(x, y))
-        mPickerScroll = std::clamp(mPickerScroll - d * kRowH * 2.f, 0.f, PickerMaxScroll());
+        mPickerScroll =
+          volum::scroll::ClampScroll(mPickerScroll + volum::scroll::ListWheelDelta(d, kRowH), PickerMaxScroll());
     }
     else if (mScreen == kScreenList && ListRect().Contains(x, y))
-      mScroll = std::clamp(mScroll - d * kRowH * 2.f, 0.f, MaxScroll());
+      mScroll = volum::scroll::ClampScroll(mScroll + volum::scroll::ListWheelDelta(d, kRowH), MaxScroll());
     SetDirty(false);
   }
 
@@ -854,7 +855,7 @@ private:
     const std::string status =
       taken == nullptr ? NumberLabel(mNumberDraft) + " is free."
                        : NumberLabel(mNumberDraft) + " already plays "
-                           + (taken->valid ? taken->sound.presetName : std::string("a Sound that has gone missing"))
+                           + volum::OccupiedSlotLabel(taken->valid, taken->sound.presetName)
                            + ". Choosing a Sound replaces it.";
     g.DrawText(taken == nullptr ? line : line.WithFGColor(VoLumColors::GOLD), status.c_str(),
                IRECT(body.L + 6.f, field.B + 8.f, body.R, field.B + 24.f));

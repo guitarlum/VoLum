@@ -769,7 +769,7 @@ TEST_CASE("Amp settings restore refreshes support channel list")
 
 TEST_CASE("Global VoLum settings writes are standalone-only")
 {
-  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string source = ReadPluginSource();
   const std::string needle = "_VolumSaveSettingsToFile();";
   size_t count = 0;
   size_t pos = source.find(needle);

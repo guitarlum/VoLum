@@ -519,11 +519,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
       mVolumRestoreCustomMainId = j["volumCustomMainId"].get<std::string>();
 #if defined(APP_API)
     mVolumUiMode = volum::UiModeFromMachineSettings(true, j, mVolumUiMode);
+    mVolumMidiChannel.store(volum::MidiChannelFromMachineSettings(true, j, mVolumMidiChannel.load()));
 #endif
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
-    if (j.contains("midiCh") && j["midiCh"].is_number_integer())
-      mVolumMidiChannel.store(std::clamp(j["midiCh"].get<int>(), 0, 16));
     // 1.2.1 per-amp selections. Absent in files written by 1.2.0, in which case the
     // single id above still restores the amp that was focused, exactly as before.
     if (j.contains("volumActivePresetIdByOwner"))
@@ -567,13 +566,49 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   }
 }
 
+void NeuralAmpModeler::_VolumSaveLiteMode()
+{
+  namespace fs = std::filesystem;
+  const fs::path settingsPath = volum::VolumUserSettingsFilePath();
+  if (settingsPath.empty())
+    return;
+
+  // Same read-merge-write as calibration: a plugin Lite click must not dump
+  // standalone PLAY/BUILD, midiCh, or scenes into the shared machine file.
+  static std::mutex liteModeSettingsMutex;
+  std::lock_guard<std::mutex> lock(liteModeSettingsMutex);
+
+  nlohmann::json j = nlohmann::json::object();
+  std::error_code ec;
+  if (fs::exists(settingsPath, ec))
+  {
+    try
+    {
+      std::ifstream in(settingsPath);
+      in >> j;
+      if (!j.is_object())
+        return;
+    }
+    catch (...)
+    {
+      std::cerr << "VoLum: liteMode not saved because volum-settings.json is unreadable" << std::endl;
+      return;
+    }
+  }
+
+  j = volum::MergeLiteModeIntoSettings(std::move(j), mVolumLiteMode.load());
+  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+    std::cerr << "VoLum: liteMode write failed: " << ec.message() << std::endl;
+}
+
 void NeuralAmpModeler::_VolumSetLiteMode(bool lite)
 {
   if (mVolumLiteMode.load() == lite)
     return;
   mVolumLiteMode.store(lite);
-  // Persist the machine-global choice immediately (JSON, not the plugin chunk).
-  _VolumSaveSettingsToFile();
+  // Persist only the Lite key. A full-file write from a plugin would move the
+  // standalone window's PLAY/BUILD, MIDI channel, and scenes.
+  _VolumSaveLiteMode();
   // Re-apply the new slice to every lane by requesting a reload through the
   // proven async staging path; the loader picks up mVolumLiteMode and calls
   // SetSlimmableSize before Reset. Non-slimmable lanes simply reload unchanged.

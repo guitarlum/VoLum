@@ -1423,13 +1423,14 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       {
         if (auto* pGfx = GetUI())
         {
-          for (int tag : {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,
-                          kCtrlTagVoLumConfirm, kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome})
-          {
-            auto* c = pGfx->GetControlWithTag(tag);
-            if (c && !c->IsHidden())
-              return false;
-          }
+          if (volum::ui::AnyOverlayOpen(
+                {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
+                 kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome},
+                [&](int tag) {
+                  auto* c = pGfx->GetControlWithTag(tag);
+                  return c && !c->IsHidden();
+                }))
+            return true;
         }
         if (stomp >= 0)
           _VolumTogglePlayBypass(volum::kPlayBypassParamNames[static_cast<size_t>(stomp)]);
@@ -1498,14 +1499,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         {
           // H is advertised as the settings key and is what opened this page, so it
           // has to close it too - reaching for it again and having nothing happen
-          // reads as a stuck window. Everything else stays unhandled: the rig
+          // reads as a stuck window. Everything else is swallowed: the rig
           // shortcuts must not edit the amp behind a full-window overlay.
           if (key.VK == kVK_ESCAPE || key.VK == 'h' || key.VK == 'H')
-          {
             settings->As<NAMSettingsPageControl>()->HideAnimated(true);
-            return true;
-          }
-          return false;
+          return true;
         }
       }
 
@@ -1515,9 +1513,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // list / knobs don't move. Non-nav keys fall through to the focused
       // control (text entry etc.).
       {
-        const int kModalTags[] = {kCtrlTagVoLumNameDialog,     kCtrlTagVoLumConfirm,       kCtrlTagVoLumPackOverlay,
-                                  kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,    kCtrlTagVoLumIrMenu,
-                                  kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+        const int kModalTags[] = {kCtrlTagSettingsBox,         kCtrlTagVoLumNameDialog,    kCtrlTagVoLumConfirm,
+                                  kCtrlTagVoLumPackOverlay,    kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumPresetMenu,
+                                  kCtrlTagVoLumIrMenu,         kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
         for (int tag : kModalTags)
         {
           auto* c = pGfx->GetControlWithTag(tag);

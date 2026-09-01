@@ -703,6 +703,18 @@ inline std::unordered_map<std::string, std::string> VolumActivePresetIdsFromJson
   return byOwner;
 }
 
+// Plugin Lite toggles must not dump the whole machine file (that would move
+// standalone PLAY/BUILD, midiCh, and scenes). Read-merge-write only this key.
+inline nlohmann::json MergeLiteModeIntoSettings(nlohmann::json j, bool liteMode)
+{
+  if (!j.is_object())
+    j = nlohmann::json::object();
+  if (!j.contains("version"))
+    j["version"] = kVoLumUserSettingsVersion;
+  j["liteMode"] = liteMode;
+  return j;
+}
+
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
                                               const VoLumEffectSettings* fx = nullptr, bool includeDualAmp = true,
                                               bool preLocked = false, bool postLocked = false,

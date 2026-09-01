@@ -136,15 +136,17 @@ private:
 
   void Commit()
   {
-    if (mName.empty())
+    bool armed = static_cast<bool>(mOnSave);
+    if (!volum::custom::NameDialogCommitOnce(armed, mName))
     {
-      StartEntry();
+      if (mName.empty() && mOnSave)
+        StartEntry();
       return;
     }
-    auto cb = mOnSave;
+    auto cb = std::move(mOnSave);
+    mOnSave = nullptr;
     Hide(true);
-    if (cb)
-      cb(mName);
+    cb(mName);
   }
 
   void DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool primary)
