@@ -29,6 +29,8 @@ bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
         settings->As<NAMSettingsPageControl>()->HideAnimated(false);
     return true;
   }
+  if (key.C && (key.VK == 's' || key.VK == 'S'))
+    return _VolumHandleSaveShortcut();
   if (key.VK == 's' || key.VK == 'S')
     return _CycleVoLumKeyboardSpeaker(key.S ? -1 : 1);
 

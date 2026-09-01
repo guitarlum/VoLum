@@ -20,15 +20,17 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   nlohmann::json standalone = {{"volumUiMode", "play"}};
   CHECK(volum::UiModeFromJson(standalone, "volumUiMode") == volum::UiMode::Play);
   CHECK(volum::UiModeFromJson(nlohmann::json::object(), "volumUiMode") == volum::UiMode::Build);
+  CHECK(volum::UiModeFromMachineSettings(true, standalone, volum::UiMode::Build) == volum::UiMode::Play);
+  CHECK(volum::UiModeFromMachineSettings(false, standalone, volum::UiMode::Build) == volum::UiMode::Build);
+  CHECK(volum::UiModeFromMachineSettings(false, standalone, volum::UiMode::Play) == volum::UiMode::Play);
   CHECK(volum::ActionForUiModeTransition(volum::UiMode::Build, volum::UiMode::Play)
         == volum::UiModeTransitionAction::RefreshOnly);
 }
 
 TEST_CASE("PLAY stomps own exactly the eight performance bypass parameters")
 {
-  const std::array<std::string, 8> expected = {
-    "PrePitchActive", "PreCompActive", "PreNam1Active", "PreNam2Active",
-    "ChorusActive",   "DelayActive",   "ReverbActive", "TremoloActive"};
+  const std::array<std::string, 8> expected = {"PrePitchActive", "PreCompActive", "PreNam1Active", "PreNam2Active",
+                                               "ChorusActive",   "DelayActive",   "ReverbActive",  "TremoloActive"};
   for (size_t i = 0; i < expected.size(); ++i)
     CHECK(volum::kPlayBypassParamNames[i] == expected[i]);
 }
@@ -125,6 +127,90 @@ TEST_CASE("PLAY arrows step only the slots a Program Change could actually recal
   CHECK(volum::StepAssignedSlot(single, 11, -1) == 11);
 }
 
+TEST_CASE("SwapMidiSoundSlots exchanges program numbers and can move onto a hole")
+{
+  volum::content::Registry registry;
+  REQUIRE(volum::content::AssignMidiSound(registry, 2, "factory:7", "factory:7:v1"));
+  REQUIRE(volum::content::AssignMidiSound(registry, 9, "factory:3", "factory:3:v1"));
+
+  CHECK_FALSE(volum::content::SwapMidiSoundSlots(registry, -1, 2));
+  CHECK_FALSE(volum::content::SwapMidiSoundSlots(registry, 2, 128));
+  CHECK(volum::content::SwapMidiSoundSlots(registry, 2, 2));
+  CHECK(registry.midiSoundMap.at(2).ampId == "factory:7");
+
+  REQUIRE(volum::content::SwapMidiSoundSlots(registry, 2, 9));
+  CHECK(registry.midiSoundMap.at(2).ampId == "factory:3");
+  CHECK(registry.midiSoundMap.at(9).ampId == "factory:7");
+
+  REQUIRE(volum::content::SwapMidiSoundSlots(registry, 9, 4)); // 4 is empty: move, do not copy
+  CHECK(registry.midiSoundMap.count(9) == 0);
+  CHECK(registry.midiSoundMap.at(4).ampId == "factory:7");
+  CHECK(registry.midiSoundMap.at(2).ampId == "factory:3");
+}
+
+TEST_CASE("MIDI map mutation edges preserve assignments holes bounds and first-free order")
+{
+  using namespace volum::content;
+  Registry registry;
+
+  SUBCASE("empty-empty and same-slot swaps are successful no-ops")
+  {
+    CHECK(SwapMidiSoundSlots(registry, 4, 11));
+    CHECK(registry.midiSoundMap.empty());
+
+    REQUIRE(AssignMidiSound(registry, 4, "factory:7", "factory:7:v1"));
+    const auto before = RegistryToJson(registry);
+    CHECK(SwapMidiSoundSlots(registry, 4, 4));
+    CHECK(RegistryToJson(registry) == before);
+  }
+
+  SUBCASE("both positions are range-checked without mutating the map")
+  {
+    REQUIRE(AssignMidiSound(registry, 6, "factory:7", "factory:7:v1"));
+    const auto before = RegistryToJson(registry);
+    CHECK_FALSE(SwapMidiSoundSlots(registry, -1, 6));
+    CHECK_FALSE(SwapMidiSoundSlots(registry, 6, -1));
+    CHECK_FALSE(SwapMidiSoundSlots(registry, 128, 6));
+    CHECK_FALSE(SwapMidiSoundSlots(registry, 6, 128));
+    CHECK(RegistryToJson(registry) == before);
+
+    CHECK_FALSE(AssignMidiSound(registry, -1, "factory:2", "factory:2:v1"));
+    CHECK_FALSE(AssignMidiSound(registry, 128, "factory:2", "factory:2:v1"));
+    CHECK(RegistryToJson(registry) == before);
+  }
+
+  SUBCASE("assigning an occupied slot replaces exactly that Sound")
+  {
+    REQUIRE(AssignMidiSound(registry, 3, "factory:1", "factory:1:v1"));
+    REQUIRE(AssignMidiSound(registry, 8, "factory:2", "factory:2:v1"));
+    REQUIRE(AssignMidiSound(registry, 3, "factory:9", "factory:9:v1"));
+    REQUIRE(registry.midiSoundMap.size() == 2);
+    CHECK(registry.midiSoundMap.at(3).ampId == "factory:9");
+    CHECK(registry.midiSoundMap.at(3).presetId == "factory:9:v1");
+    CHECK(registry.midiSoundMap.at(8).ampId == "factory:2");
+  }
+
+  SUBCASE("occupied slots exchange both ids and a hole move frees the old lowest slot")
+  {
+    REQUIRE(AssignMidiSound(registry, 0, "factory:1", "factory:1:v1"));
+    REQUIRE(AssignMidiSound(registry, 1, "factory:2", "factory:2:v1"));
+    CHECK(FirstFreeMidiSoundSlot(registry) == 2);
+
+    REQUIRE(SwapMidiSoundSlots(registry, 0, 1));
+    CHECK(registry.midiSoundMap.at(0).ampId == "factory:2");
+    CHECK(registry.midiSoundMap.at(0).presetId == "factory:2:v1");
+    CHECK(registry.midiSoundMap.at(1).ampId == "factory:1");
+    CHECK(registry.midiSoundMap.at(1).presetId == "factory:1:v1");
+    CHECK(FirstFreeMidiSoundSlot(registry) == 2);
+
+    REQUIRE(SwapMidiSoundSlots(registry, 0, 9));
+    CHECK(registry.midiSoundMap.count(0) == 0);
+    CHECK(registry.midiSoundMap.at(9).ampId == "factory:2");
+    CHECK(registry.midiSoundMap.at(1).ampId == "factory:1");
+    CHECK(FirstFreeMidiSoundSlot(registry) == 0);
+  }
+}
+
 TEST_CASE("Last-recalled highlight survives dirty edits but not another origin")
 {
   volum::PlaySlot slot;
@@ -137,4 +223,45 @@ TEST_CASE("Last-recalled highlight survives dirty edits but not another origin")
   CHECK(volum::IsLastRecalledSlot(slot, 5, "factory:7", "factory:7:v1"));
   CHECK_FALSE(volum::IsLastRecalledSlot(slot, 6, "factory:7", "factory:7:v1"));
   CHECK_FALSE(volum::IsLastRecalledSlot(slot, 5, "factory:8", "factory:8:v1"));
+}
+
+TEST_CASE("Two slots with the same Sound: last recalled PC wins")
+{
+  volum::PlaySlot a;
+  a.slot = 2;
+  a.valid = true;
+  a.sound.ampId = "factory:7";
+  a.sound.presetId = "factory:7:v1";
+  volum::PlaySlot b = a;
+  b.slot = 9;
+  CHECK_FALSE(volum::IsLastRecalledSlot(a, 9, "factory:7", "factory:7:v1"));
+  CHECK(volum::IsLastRecalledSlot(b, 9, "factory:7", "factory:7:v1"));
+  CHECK(volum::IsLastRecalledSlot(a, 2, "factory:7", "factory:7:v1"));
+}
+
+TEST_CASE("Save As from a Factory PLAY origin drops LIVE on that slot")
+{
+  volum::PlaySlot origin;
+  origin.slot = 4;
+  origin.valid = true;
+  origin.sound.ampId = "factory:7";
+  origin.sound.presetId = "factory:7:v1";
+  CHECK(volum::IsLastRecalledSlot(origin, 4, "factory:7", "factory:7:v1"));
+  CHECK_FALSE(volum::IsLastRecalledSlot(origin, 4, "factory:7", "preset_lead"));
+  CHECK(volum::PlayPlusAddsHeard(false, false, false));
+  volum::content::Registry registry;
+  volum::content::AssignMidiSound(registry, 4, "factory:7", "factory:7:v1");
+  CHECK(volum::content::FirstFreeMidiSoundSlot(registry) == 0);
+}
+
+TEST_CASE("Default with no snapshot dirties against factory settings")
+{
+  volum::VoLumAmpSettings live;
+  CHECK_FALSE(volum::LivePresetDirty(false, live, {}));
+  live.toneBass = 8.0;
+  CHECK(volum::LivePresetDirty(false, live, {}));
+  volum::VoLumAmpSettings recalled = live;
+  CHECK_FALSE(volum::LivePresetDirty(true, live, recalled));
+  live.toneMid = 2.0;
+  CHECK(volum::LivePresetDirty(true, live, recalled));
 }

@@ -99,7 +99,15 @@ TEST_CASE("Update Check now marks the known release seen before rechecking")
   CHECK(volum::update::ShouldShowBadge(state, "1.2.2"));
 }
 
-TEST_CASE("Opening Settings is not wired to mark an update seen")
+TEST_CASE("VOLUM_FAKE_UPDATE injects 2.0.0 without touching the network")
+{
+  CHECK(volum::update::FakeUpdateManifest().version == "2.0.0");
+  CHECK(volum::update::FakeUpdateManifest().notes.find("signal chain") != std::string::npos);
+  CHECK(volum::update::FakeUpdateManifest().url.rfind("https://", 0) == 0);
+  CHECK(volum::update::CompareVersionStrings("2.0.0", "1.2.2") > 0);
+}
+
+TEST_CASE("Settings gear opener does not consume the update badge")
 {
   const auto sourcePath = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumLayoutBuild.inc.cpp";
   std::ifstream in(sourcePath, std::ios::binary);

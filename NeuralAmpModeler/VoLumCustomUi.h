@@ -35,5 +35,6 @@
 #include "VoLumPresetBar.h"
 #include "VoLumListMenu.h"
 #include "VoLumConfirmDialog.h"
+#include "VoLumNameDialog.h"
 
 #include "VoLumCustomOverlay.h"

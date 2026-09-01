@@ -478,8 +478,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
       mVolumRigsRoot = volum::content::PathToUtf8(root);
-    mVolumFactoryPresets = volum::LoadFactoryPresets(
-      root.empty() ? std::filesystem::path{} : root / "factory-presets.json");
+    mVolumFactoryPresets =
+      volum::LoadFactoryPresets(root.empty() ? std::filesystem::path{} : root / "factory-presets.json");
     // 1.2.0: bind + load the all-format custom-content library (F5-F8). The base
     // dir is VoLum-owned and writable from standalone/VST3/AU; fall back to a
     // content/ folder beside the rigs tree if the OS path cannot be resolved.
@@ -851,8 +851,8 @@ void NeuralAmpModeler::OnIdle()
   if (const auto slot = mVolumMidiQueue.Drain())
   {
     const auto sound = volum::content::ResolveMidiSound(volum::content::GlobalContentStore().reg(), *slot);
-    if (sound)
-      _VolumRecallSound(sound->ampId, sound->presetId);
+    if (sound && _VolumRecallSound(sound->ampId, sound->presetId))
+      mVolumLastRecalledPlaySlot = *slot;
   }
 
   mInputSender.TransmitData(*this);
@@ -2465,6 +2465,15 @@ void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPoint
   // Right now, we didn't specify MAXNC when we initialized these, so it's 1.
   const int nChansHack = 1;
   mInputSender.ProcessBlock(inputPointer, (int)nFrames, kCtrlTagInputMeter, nChansHack);
+  {
+    float peak = 0.f;
+    if (inputPointer && nChansIn > 0 && inputPointer[0])
+    {
+      for (size_t i = 0; i < nFrames; ++i)
+        peak = std::max(peak, std::fabs(static_cast<float>(inputPointer[0][i])));
+    }
+    mVolumPlayInPeak.store(std::min(peak, 1.f), std::memory_order_relaxed);
+  }
   // L (channel 0) goes to the primary OUT meter.
   mOutputSender.ProcessBlock(outputPointer, (int)nFrames, kCtrlTagOutputMeter, nChansHack);
 

@@ -146,7 +146,7 @@ TEST_CASE("PLAY hero art maps through FractalCaseForAmp like the BUILD hero")
   const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
 
   RequireContains(hero, "DrawHeroFractalArt(g, artRect, FractalCaseForAmp(");
-  RequireContains(play, "DrawHeroFractalArt(g, artRect, FractalCaseForAmp(art));");
+  RequireContains(play, "DrawHeroFractalArt(g, paint, FractalCaseForAmp(art));");
 }
 
 TEST_CASE("Settings update notice self-gates so opening Settings cannot resurrect it")
@@ -162,12 +162,20 @@ TEST_CASE("Settings update notice self-gates so opening Settings cannot resurrec
   RequireContains(overlay, "return mAvailable && IControl::IsHit(x, y);");
   // An empty version must not render "Update available:  - What's new".
   RequireContains(overlay, "version.empty() ? \"Update available");
-  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version);");
+  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version, notes);");
   RequireDoesNotContain(controls, "mUpdateButton->Hide(!available);");
   // Auto-check state must be visible; IVToggleControl drew neither frame nor value here.
   RequireContains(overlay, "class VoLumSettingsCheckboxControl");
   RequireContains(controls, "mAutoCheck->SetChecked(autoCheck);");
   RequireDoesNotContain(controls, "new IVToggleControl");
+  // One left-aligned stack: a right-floating, vertically-centred pill drew the
+  // release notes through the checkbox and off the card.
+  RequireContains(controls, "volum::LayoutAboutCard(body.W(), body.H())");
+  RequireContains(controls, "new VoLumUpdateNoticeControl(IRECT(body.L, body.T + l.noticeT, body.R, body.T + l.noticeB)");
+  RequireDoesNotContain(controls, "left.ReduceFromRight((GetRECT().W() - colGap) * 0.44f)");
+  RequireContains(overlay, "return IRECT(mRECT.L, mRECT.T, mRECT.L + w, mRECT.T + h);");
+  RequireDoesNotContain(overlay, "return IRECT(mRECT.R - w, mRECT.MH() - h * 0.5f, mRECT.R, mRECT.MH() + h * 0.5f);");
+  RequireContains(overlay, "g.PathClipRegion(notes);");
 }
 
 TEST_CASE("Shortcut info columns are weighted and clipped so Navigate cannot bleed")
@@ -204,8 +212,9 @@ TEST_CASE("Settings is exactly three tabs and every locked capability still has 
   RequireContains(controls, "\"Performance\", mControlNames.perfGroupFrame");
   RequireContains(controls, "audioHintStr");
   // MIDI owns the channel and the assignments.
-  RequireContains(controls, "\"MIDI channel\", mControlNames.midiGroupFrame");
-  RequireContains(controls, "\"Sounds by Program Change\", mControlNames.midiMapGroupFrame");
+  RequireContains(controls, "\"What this VoLum listens to\", mControlNames.midiGroupFrame");
+  RequireContains(controls, "\"What each program number plays\"");
+  RequireContains(controls, "mControlNames.midiMapGroupFrame");
   // SYSTEM owns this install.
   RequireContains(controls, "\"Keyboard shortcuts\"");
   RequireContains(controls, "\"Model information\"");
@@ -239,7 +248,8 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
 
   RequireContains(tabs, "class VoLumMidiChannelControl");
-  RequireContains(tabs, "mChannel == 0 ? \"Omni\"");
+  RequireContains(tabs, "\"All MIDI channels\"");
+  RequireContains(tabs, "MIDI calls this Omni.");
   RequireContains(tabs, "class VoLumMidiSoundMapControl");
   RequireContains(controls, "void SetMidiChannel(int channel)");
   RequireContains(controls, "void SetMidiSoundMap(");
@@ -254,6 +264,8 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   // Both write through the same two plugin methods; the Settings tab keeps no
   // copy of its own, and the panel is refilled from the live registry.
   RequireContains(layout, "settingsPage->SetMidiSoundMapCallbacks(");
+  RequireContains(layout, "settingsPage->SetMidiSoundMapSwap(");
+  RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
   RequireContains(layout, "pPlugin->_VolumAssignPlaySound(slot, sound)");
   RequireContains(layout, "pPlugin->_VolumClearPlaySound(slot)");
   RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg())");
@@ -261,6 +273,64 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
 
   // The pre-1.3.0 duplicate-list control is still gone; this is a new one.
   RequireDoesNotContain(overlay, "VoLumMidiSettingsControl");
+}
+
+TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound row a channel")
+{
+  // Two unrelated MIDI numbers meet on this tab. Before 1.3.0 the copy let them
+  // share vocabulary - a card captioned CHANNEL over a column headed PC - so a
+  // guitarist reasonably read the rows as sixteen more channels. The listen
+  // filter now leads with what it does, and the rows are program numbers
+  // everywhere they are named.
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+
+  RequireContains(controls, "\"What this VoLum listens to\", mControlNames.midiGroupFrame");
+  RequireContains(tabs, "\"All MIDI channels\"");
+  RequireContains(tabs, "\"Just one channel\"");
+  // Omni survives exactly once, as the parenthetical for players who know it.
+  RequireContains(tabs, "MIDI calls this Omni.");
+  // The two situations that actually decide the answer, in the player's terms.
+  RequireContains(tabs, "One guitarist, one pedalboard: leave this on All.");
+  RequireContains(tabs, "Two VoLums on the same MIDI cable");
+  // The old stepper legend is gone: a default install only ever showed "Omni",
+  // and "Ch 7" made the filter look like one of the numbered rows below it.
+  RequireDoesNotContain(tabs, "\"CHANNEL\"");
+  RequireDoesNotContain(tabs, "\"Ch \"");
+
+  RequireContains(controls, "\"What each program number plays\"");
+  RequireContains(tabs, "\"PROGRAM\"");
+  RequireContains(tabs, "\"PROGRAM NUMBER\"");
+  RequireContains(tabs, "Sound for program number ");
+  RequireContains(tabs, "your footswitch calls it up by its program number");
+  RequireDoesNotContain(tabs, "\"PC\"");
+  RequireDoesNotContain(tabs, "Sound for Program Change ");
+}
+
+TEST_CASE("Settings edits a program number through swap, so no edit can drop a Sound")
+{
+  // Settings is not the performance surface, so the number is an editable field.
+  // Retyping it routes through SwapMidiSoundSlots: moving onto a free number is a
+  // move, onto an occupied one an exchange. Row-swap drag is gone.
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+
+  RequireContains(tabs, "OpenNumberStep(FirstFreeSlot())");
+  RequireContains(tabs, "BeginNumberEntry(kTextAddStep");
+  RequireContains(tabs, "\"Choose Sound\"");
+  RequireContains(tabs, "OpenPicker(mNumberDraft)");
+  RequireContains(tabs, " already plays ");
+
+  RequireContains(tabs, "BeginNumberEntry(kTextRenumber");
+  RequireContains(tabs, "mSwap(slot, number)");
+  RequireDoesNotContain(tabs, "mSwap(pressSlot, mSlots[static_cast<size_t>(dropRow)].slot)");
+  RequireDoesNotContain(tabs, "Drag one row onto another");
+  RequireContains(tabs, "void SetSwapCallback(SwapCallback swap)");
+  RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
+
+  RequireContains(tabs, "volum::ParseNumericEntry(str, parsed)");
+  RequireContains(tabs, "kNoValIdx");
+  RequireContains(tabs, "volum::scroll::Interaction");
 }
 
 TEST_CASE("The SYSTEM tab's Content library row opens the live Pack modal")
@@ -304,12 +374,11 @@ TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair"
   INFO("the mode pair must stay clickable over the PLAY surface");
   CHECK(playSurface < toggle);
 
-  for (const char* overlay : {"AttachControl(settingsPage, kCtrlTagSettingsBox)",
-                              "AttachControl(pack, kCtrlTagVoLumPackOverlay)",
-                              "AttachControl(overlay, kCtrlTagVoLumCustomOverlay)",
-                              "AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)",
-                              "AttachControl(tunerCtrl, kCtrlTagVoLumTuner)",
-                              "AttachControl(metCtrl, kCtrlTagVoLumMetronome)"})
+  for (const char* overlay :
+       {"AttachControl(settingsPage, kCtrlTagSettingsBox)", "AttachControl(pack, kCtrlTagVoLumPackOverlay)",
+        "AttachControl(overlay, kCtrlTagVoLumCustomOverlay)",
+        "AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)",
+        "AttachControl(tunerCtrl, kCtrlTagVoLumTuner)", "AttachControl(metCtrl, kCtrlTagVoLumMetronome)"})
   {
     INFO(overlay);
     const auto at = layout.find(overlay);
@@ -317,18 +386,126 @@ TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair"
     CHECK(toggle < at);
   }
 
-  // And it is drawn in the quiet dialect, not as an amber slab: the pair routes
-  // through the selection SSOT with the Brass style the cab row and rail speak.
+  // Destination glyph, brass family, hover names the other mode.
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   const auto ctrl = play.find("class VoLumModeToggleControl");
   const auto ctrlEnd = play.find("class VoLumPlaySurfaceControl");
   REQUIRE(ctrl != std::string::npos);
   REQUIRE(ctrlEnd != std::string::npos);
   const std::string body = play.substr(ctrl, ctrlEnd - ctrl);
-  RequireContains(body, "DrawVoLumSelection(g, cell, active, hovered, VoLumSelectionStyle::Brass");
+  RequireContains(body, "DrawVoLumSelection(g, mRECT, false, mMouseIsOver, VoLumSelectionStyle::Brass, 3.f, 1.5f);");
   RequireContains(body, "SelectionInkColor(VoLumSelectionStyle::Brass");
   RequireDoesNotContain(body, "AmberPicker");
-  RequireDoesNotContain(body, "FillRoundRect(IColor(210, 7, 9, 14), mRECT");
+  RequireDoesNotContain(body, "static constexpr float kCellW = 30.f;");
+  RequireDoesNotContain(body, "mSplitX");
+  RequireContains(body, "volum::UiMode Destination() const");
+  RequireContains(body, "mCallback(Destination());");
+  RequireContains(body, "static void DrawPlayGlyph(IGraphics& g, const IRECT& r, const IColor& ink)");
+  RequireContains(body, "static void DrawBuildGlyph(IGraphics& g, const IRECT& r, const IColor& ink)");
+  RequireContains(body, "SetTooltip(tip);");
+  RequireContains(body, "Destination() == volum::UiMode::Play ? \"PLAY\" : \"BUILD\"");
+  RequireContains(layout, "IRECT(mainR - 218.f, b.T + 12.f, mainR - 128.f, b.T + 42.f)");
+  RequireContains(layout, "const float presetBarW = 240.f;");
+  RequireDoesNotContain(layout, "IRECT(mainR - 202.f, b.T + 14.f, mainR - 134.f, b.T + 40.f)");
+  RequireContains(play, "const IRECT chip(h.MW() - 66.f, h.T + 14.f, h.MW() + 66.f, h.T + 40.f);");
+  RequireDoesNotContain(play, "h.R - 344.f");
+}
+
+TEST_CASE("PLAY assignment is click-only: no row-swap or picker-to-row drag")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+
+  RequireDoesNotContain(play, "using SwapCallback = std::function<void(int, int)>;");
+  RequireDoesNotContain(play, "BeginDrag(DragKind::Row");
+  RequireDoesNotContain(play, "BeginDrag(DragKind::Choice");
+  RequireDoesNotContain(layout, "[this](int a, int b) { _VolumSwapPlaySounds(a, b); }");
+  RequireContains(runtime, "volum::content::SwapMidiSoundSlots(store.reg(), slotA, slotB)");
+  RequireContains(play, "mRecall(slot.slot, slot.sound);");
+  RequireContains(play, "mAddHeard()");
+  RequireContains(play, "mod.R");
+  RequireContains(play, "mEditInBuild(static_cast<int>(kStompFocus[static_cast<size_t>(i)]))");
+
+  RequireContains(play, "IRECT AssignRectForRow(int index) const");
+  RequireContains(play, "DrawPenGlyph(g, assign, VoLumColors::TEXT_BRIGHT);");
+  RequireContains(play, "if (AssignRectForRow(row).Contains(x, y))");
+
+  RequireContains(play, "OpenPicker(FirstFreeSlot(), true);");
+  RequireContains(play, "SetEditSlot(mEditSlot - 1);");
+  RequireContains(play, "volum::ParseNumericEntry(str, parsed)");
+  RequireContains(play, "kNoValIdx");
+  RequireContains(play, "\"replaces \"");
+}
+
+TEST_CASE("PLAY row art is a layer-cached mini fractal, and the rail scrolls like the sidebar")
+{
+  // The rail used to call DrawHeroFractalArt per row per frame into a 48x64
+  // portrait strip: that is the hero renderer, and a hero composition cropped to a
+  // strip reads as a smear rather than as art. Row art is now the same mini
+  // fractal the sidebar draws, cached per art id and blitted with DrawFittedLayer
+  // so it survives a window resize (regression B3).
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+
+  RequireContains(play, "if (!g.CheckLayer(mFactoryArtLayers[(size_t)amp]))");
+  RequireContains(play, "DrawSidebarMiniFractal(");
+  RequireContains(play, "FractalCaseForAmp(amp)");
+  RequireContains(play, "g.DrawFittedLayer(art, thumb, nullptr);");
+  RequireContains(play, "void OnRescale() override");
+  RequireContains(play, "for (auto& layer : mFactoryArtLayers)");
+  RequireDoesNotContain(play, "|| g.CheckLayer(");
+  RequireDoesNotContain(play, "DrawHeroFractalArt(g, thumb");
+  // Layers are built before the rail list clip: StartLayer mutates the clip region.
+  const auto build = play.find("BuildRowArtLayers(g);");
+  const auto clipList = play.find("g.PathClipRegion(list);");
+  REQUIRE(build != std::string::npos);
+  REQUIRE(clipList != std::string::npos);
+  CHECK(build < clipList);
+
+  // Precision vs detent, and an eased target - the sidebar's exact split. Jumping a
+  // whole kRowPitch per event with no animation made a trackpad flick teleport.
+  RequireContains(play, "if (std::abs(d) < 1.f)");
+  RequireContains(play, "mRailScroll = mRailScrollTarget;");
+  RequireContains(play, "void StartRailScrollAnim()");
+  RequireContains(play, "mRailScroll += (mRailScrollTarget - mRailScroll) * 0.45f;");
+}
+
+TEST_CASE("PLAY speaks BUILD's palette: brass chrome, teal only for SUPPORT and amp names")
+{
+  // Switching modes must not change the colour of the instrument. PLAY shipped on a
+  // blue-green canvas with teal frames on the board, the rail rows, the header chip
+  // and the OUT meter, so BUILD and PLAY read as two different products. Teal is
+  // VoLum's SUPPORT-lane identity; on this surface only the secondary amp name and
+  // the SUPPORT panel may use it.
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string core = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
+
+  // The same canvas BUILD paints.
+  RequireContains(core, "FillVGradient(g, mRECT, IColor(255, 21, 21, 29), IColor(255, 12, 12, 18));");
+  RequireContains(play, "FillVGradient(g, mRECT, IColor(255, 21, 21, 29), IColor(255, 12, 12, 18));");
+  RequireContains(play, "DrawVignette(g, mRECT, 72);");
+  RequireDoesNotContain(play, "IColor(255, 20, 26, 36)");
+
+  // A lit stomp is the motif at full brightness, same as BUILD's PRE/POST tiles.
+  // Brass selection, a gold LED, and gold captions were the yellow brick that
+  // replaced the art the moment more than two pedals were on.
+  RequireContains(play, "DrawEffectMotif(g, motif, kStompFocus[i], !on);");
+  RequireDoesNotContain(play, "DrawVoLumSelection(g, r, true, false, VoLumSelectionStyle::Brass, 2.f, 0.f);");
+  RequireDoesNotContain(play, "g.FillCircle(VoLumColors::GOLD, r.R - 12.f, r.T + 11.f, 2.5f);");
+  RequireDoesNotContain(play, "IColor(58, 252, 222, 145)");
+
+  // Chrome that explained itself, or labelled a column that is not there.
+  RequireDoesNotContain(play, "stomp to bypass the live rig");
+  RequireDoesNotContain(play, "\"PC\"");
+
+  // Teal survives in exactly two places: the SUPPORT amp panel and the secondary
+  // amp name under the live title.
+  size_t tealUses = 0;
+  for (size_t at = play.find("VoLumColors::TEAL"); at != std::string::npos; at = play.find("VoLumColors::TEAL", at + 1))
+    ++tealUses;
+  INFO("teal uses in VoLumPlaySurface.h: " << tealUses);
+  CHECK(tealUses <= 6);
+  RequireContains(play, "g.DrawText(VoLumType::Label(10.f, VoLumColors::TEAL_DIM, EAlign::Near), secondary.c_str()");
 }
 
 TEST_CASE("PLAY consumes up/down to step Sounds and never falls through to BUILD")
@@ -340,9 +517,12 @@ TEST_CASE("PLAY consumes up/down to step Sounds and never falls through to BUILD
   const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
   const std::string model = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayModel.h");
 
-  RequireContains(layout, "if (key.VK != kVK_UP && key.VK != kVK_DOWN)");
-  RequireContains(layout, "_VolumStepPlaySlot(key.VK == kVK_UP ? -1 : 1);");
-  RequireContains(layout, "return true; // consumed either way");
+  RequireContains(layout, "const int stomp = (key.VK >= '1' && key.VK <= '8')");
+  RequireContains(layout, "_VolumTogglePlayBypass(volum::kPlayBypassParamNames");
+  RequireContains(layout, "key.VK == kVK_LEFT || key.VK == kVK_RIGHT");
+  RequireContains(layout, "_VolumStepPlaySlot((key.VK == kVK_UP || key.VK == kVK_LEFT) ? -1 : 1);");
+  RequireContains(layout, "T / M / H / Ctrl+S fall through to the shared handler.");
+  RequireDoesNotContain(layout, "_VolumStepPlaySlot(key.VK == kVK_UP ? -1 : 1);");
   // A modal over PLAY owns the keyboard.
   RequireContains(layout, "kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay");
 
@@ -357,6 +537,7 @@ TEST_CASE("PLAY consumes up/down to step Sounds and never falls through to BUILD
   // the cheat sheet shipped a labelled row with an empty key column.
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
   RequireContains(overlay, "\"Up/Dn\", \"Sound in PLAY\"");
+  RequireContains(overlay, "\"1-8\", \"stomps in PLAY\"");
 }
 
 TEST_CASE("Pack export offers Sound, whole-amp and Everything, and the closure is not a footnote")
@@ -514,6 +695,7 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(settings, "\"Space\", \"toggle\"");
   RequireContains(settings, "\"B\", \"toggle\"");
   RequireContains(settings, "\"S\", \"cab\"");
+  RequireContains(settings, "\"Ctrl+S\", \"save Sound\"");
   RequireContains(settings, "\"T\", \"tuner\"");
   RequireContains(settings, "\"M\", \"metronome\"");
   RequireContains(settings, "\"H\", \"settings\"");
@@ -1680,9 +1862,9 @@ TEST_CASE("Every preset operation names the owner of the bank it acts on")
   RequireContains(source, "volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index)");
   RequireContains(source, "volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index)");
 
-  // ... and so does every read. Four: the preset bar, the preset menu, and the two
-  // callbacks that bounds-check a chosen row before recalling it.
-  CHECK(count("volum::custom::PresetsForOwner(") == 4);
+  // ... and so does every read. Five: the preset bar, the preset menu, the two
+  // callbacks that bounds-check a chosen row before recalling it, and Ctrl+S.
+  CHECK(count("volum::custom::PresetsForOwner(") == 5);
 
   // The overlay gets a key supplier, not a bare "claim" it cannot inspect, so its
   // rename/delete (which bypass the plugin) act on this instance's bank.

@@ -3,8 +3,14 @@ name: CI
 # pull_request: runs when a PR to dev/main is opened/updated.
 # push: dev is the integration gate, main is the release branch gate.
 # release/**: rehearse the full matrix on release branches before promoting to main.
+# workflow_dispatch windows_only: Windows tests + installer + zip, no macOS/pluginval/smokes.
 on:
   workflow_dispatch:
+    inputs:
+      windows_only:
+        description: 'Windows tests + installer + zip only (skip macOS, coverage, NAMCore, pluginval, smokes)'
+        type: boolean
+        default: false
   push:
     branches:
       - dev
@@ -26,6 +32,7 @@ env:
 jobs:
   formatting:
     name: Formatting
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -61,6 +68,7 @@ jobs:
 
   namcore:
     name: NAMCore regression tests
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -136,6 +144,12 @@ jobs:
       - name: Verify Windows installer layout
         run: ./NeuralAmpModeler/scripts/verify-installer-win.ps1 -RunSilentInstall
         shell: pwsh
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+
+      - name: Verify Windows installer exists
+        run: ./NeuralAmpModeler/scripts/verify-installer-win.ps1
+        shell: pwsh
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_only }}
 
       - name: Build Windows portable zip
         run: |
@@ -148,14 +162,17 @@ jobs:
         shell: pwsh
 
       - name: Validate Windows VST3 with pluginval
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         run: ./NeuralAmpModeler/scripts/validate-vst3-win.ps1
         shell: pwsh
 
       - name: Smoke Windows standalone audio config
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         run: ./NeuralAmpModeler/scripts/smoke-standalone-audio-config-win.ps1
         shell: pwsh
 
       - name: Smoke Windows upgrade install
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./NeuralAmpModeler/scripts/smoke-upgrade-install-win.ps1
@@ -172,6 +189,7 @@ jobs:
 
   macos:
     name: macOS (tests + full distribution + plugin validation)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -342,6 +360,7 @@ jobs:
 
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
     runs-on: macos-latest
     steps:
       - name: Check out repository

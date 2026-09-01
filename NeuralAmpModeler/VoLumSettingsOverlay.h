@@ -93,12 +93,11 @@ public:
   {
   }
 
-  void SetUpdate(bool available, const std::string& version)
+  void SetUpdate(bool available, const std::string& version, const std::string& notes = {})
   {
     mAvailable = available;
-    // Guard the version: an empty string used to render "Update available:  - …".
-    mLabel = version.empty() ? "Update available  ·  What's new"
-                             : "Update available: " + version + "  ·  What's new";
+    mNotes = notes;
+    mLabel = version.empty() ? "Update available  ·  What's new" : "Update available: " + version + "  ·  What's new";
     SetDirty(false);
   }
 
@@ -112,6 +111,13 @@ public:
     g.DrawText(IText(10.f, mMouseIsOver ? VoLumColors::TEXT_BRIGHT : VoLumColors::GOLD, "Josefin-Bold", EAlign::Center,
                      EVAlign::Middle),
                mLabel.c_str(), pill);
+    if (!mNotes.empty())
+    {
+      const IRECT notes(mRECT.L, pill.B + 4.f, mRECT.R, mRECT.B);
+      g.PathClipRegion(notes);
+      g.DrawText(IText(10.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Near, EVAlign::Top), mNotes.c_str(), notes);
+      g.PathClipRegion();
+    }
   }
 
   void OnMouseDown(float, float, const IMouseMod&) override
@@ -129,10 +135,7 @@ public:
     mMouseIsOver = false;
     SetDirty(false);
   }
-  bool IsHit(float x, float y) const override
-  {
-    return mAvailable && IControl::IsHit(x, y);
-  }
+  bool IsHit(float x, float y) const override { return mAvailable && IControl::IsHit(x, y); }
 
 private:
   IRECT PillRect(IGraphics& g) const
@@ -140,12 +143,13 @@ private:
     IRECT measured;
     g.MeasureText(IText(10.f, "Josefin-Bold"), mLabel.c_str(), measured);
     const float w = std::min(mRECT.W(), measured.W() + 22.f);
-    const float h = std::min(mRECT.H(), 16.f);
-    return IRECT(mRECT.R - w, mRECT.MH() - h * 0.5f, mRECT.R, mRECT.MH() + h * 0.5f);
+    const float h = 16.f;
+    return IRECT(mRECT.L, mRECT.T, mRECT.L + w, mRECT.T + h);
   }
 
   bool mAvailable = false;
   std::string mLabel = "Update available";
+  std::string mNotes;
   std::function<void()> mOnClick;
 };
 
@@ -315,8 +319,7 @@ public:
     const IText help(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Top);
     const float helpT = mRECT.T + kRowH + 8.f;
     g.DrawText(help, "Back up, move or share your custom", IRECT(mRECT.L, helpT, mRECT.R, helpT + 14.f));
-    g.DrawText(help, "amps, presets, IRs and pedals as a Pack.",
-               IRECT(mRECT.L, helpT + 13.f, mRECT.R, helpT + 27.f));
+    g.DrawText(help, "amps, presets, IRs and pedals as a Pack.", IRECT(mRECT.L, helpT + 13.f, mRECT.R, helpT + 27.f));
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -347,14 +350,8 @@ private:
   // hold a caption; the card's own cap supplies it.
   static constexpr float kRowH = 28.f;
   static constexpr float kBtnGap = 10.f;
-  IRECT _ExportRect() const
-  {
-    return IRECT(mRECT.L, mRECT.T, mRECT.L + (mRECT.W() - kBtnGap) * 0.5f, mRECT.T + kRowH);
-  }
-  IRECT _ImportRect() const
-  {
-    return IRECT(mRECT.R - (mRECT.W() - kBtnGap) * 0.5f, mRECT.T, mRECT.R, mRECT.T + kRowH);
-  }
+  IRECT _ExportRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.L + (mRECT.W() - kBtnGap) * 0.5f, mRECT.T + kRowH); }
+  IRECT _ImportRect() const { return IRECT(mRECT.R - (mRECT.W() - kBtnGap) * 0.5f, mRECT.T, mRECT.R, mRECT.T + kRowH); }
 
   static void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool hover)
   {
@@ -423,7 +420,7 @@ public:
     // own keyW, so Navigate/Edit descriptions stair-stepped while Tools (all 16)
     // happened to line up.
     const float navKeyW = 42.f; // "Arrows"
-    const float editKeyW = 34.f; // "Enter" / standalone "Space"
+    const float editKeyW = 48.f; // "Ctrl+S"
     const float toolKeyW = 16.f; // single letters
 
     g.DrawText(capText, "Navigate", IRECT(navCol.L, navCol.T, navCol.R, navCol.T + 12.f));
@@ -434,6 +431,7 @@ public:
     // own line rather than a parenthesis on the BUILD arrows row. Spelled out, not
     // as arrow glyphs: Josefin has no U+2191/2193, so those drew an empty key.
     drawPair(navCol, 3, navKeyW, "Up/Dn", "Sound in PLAY");
+    drawPair(navCol, 4, navKeyW, "1-8", "stomps in PLAY");
 
     g.DrawText(capText, "Edit", IRECT(editCol.L, editCol.T, editCol.R, editCol.T + 12.f));
     drawPair(editCol, 0, editKeyW, "Enter", "edit");
@@ -443,7 +441,8 @@ public:
     drawPair(editCol, 1, editKeyW, "B", "toggle");
 #endif
     drawPair(editCol, 2, editKeyW, "S", "cab");
-    drawPair(editCol, 3, editKeyW, "Esc", "close");
+    drawPair(editCol, 3, editKeyW, "Ctrl+S", "save Sound");
+    drawPair(editCol, 4, editKeyW, "Esc", "close");
 
     g.DrawText(capText, "Tools", IRECT(toolCol.L, toolCol.T, toolCol.R, toolCol.T + 12.f));
     drawPair(toolCol, 0, toolKeyW, "T", "tuner");

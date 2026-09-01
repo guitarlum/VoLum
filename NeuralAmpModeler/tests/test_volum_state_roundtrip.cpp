@@ -465,6 +465,7 @@ TEST_CASE("Unknown id-tail JSON keys keep a 1.2.2-shaped reader aligned")
   CHECK(got.selection.channelIdx == 1);
   CHECK(got.idTail.customMainId == "amp_main_custom");
   CHECK(got.idTail.activePresetId == "preset_lead_01");
+  CHECK(got.idTail.uiMode == "play");
 }
 
 TEST_CASE("Chunk param prefix is frozen at the 1.2.2 count")

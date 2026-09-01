@@ -151,8 +151,8 @@ public:
     IColor col;
     if (mEmpty || mName.empty())
     {
-      label = "No Preset";
-      col = VoLumColors::CREAM_DIM;
+      label = mDirtyEdit ? "No Preset  (unsaved)" : "No Preset";
+      col = mDirtyEdit ? VoLumColors::AMBER : VoLumColors::CREAM_DIM;
     }
     else if (mDirtyEdit)
     {

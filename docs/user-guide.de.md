@@ -38,11 +38,11 @@ VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zu
 
 ![VoLum PLAY-Ansicht](user-guide-play.png)
 
-Mit dem Umschalter **PLAY | BUILD** in der Kopfzeile wechselst du zwischen Bühnenoberfläche und vollständigem Editor. Jede Plug-in-Instanz merkt sich ihren Modus im Projekt; die Standalone-App merkt sich ebenfalls den letzten Modus. Der Wechsel zu PLAY ruft niemals einen Sound auf und verändert ihn nicht.
+Mit dem Umschalter in der Kopfzeile wechselst du zwischen Bühne und Editor: er zeigt immer den **anderen** Modus (Fader in PLAY, Stomp-Ring in BUILD). Hover nennt das Ziel. Jede Plug-in-Instanz merkt sich ihren Modus im Projekt; ein neuer Insert startet in BUILD und folgt nicht dem Standalone-Fenster. Die Standalone-App merkt sich den letzten Modus. Der Wechsel zu PLAY ruft niemals einen Sound auf und verändert ihn nicht. PRE/POST-Sperre gilt nur in BUILD und fällt beim Wechsel nach PLAY.
 
-PLAY ordnet gespeicherte Sounds Program-Change-Slots zu. Klicke **Add Sound**, wähle ein Werk- oder User-Preset und danach den zu belegenden Slot. Für jeden der 15 Werk-Amps gibt es immer ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar. Ein Klick auf einen belegten Slot ruft seinen vollständigen Sound auf, ein Doppelklick ersetzt die Zuordnung und die kleine Entfernen-Schaltfläche löscht sie. Der hervorgehobene Slot ist der zuletzt aus PLAY aufgerufene und bleibt bei Live-Änderungen markiert; **EDITED** zeigt an, dass das aktuelle Rig von diesem Snapshot abweicht.
+PLAY ordnet gespeicherte Sounds Program-Change-Slots zu. **Ctrl+S** schreibt das gehörte Rig in einen Sound und ändert keine PLAY-Nummern: ein schmutziges User-Preset wird überschrieben; Factory, Default oder ein unbenanntes Rig öffnet ein Namensfeld und legt ein User-Preset an. **+** ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Default öffnet immer zuerst das Namensfeld, ein schmutziges Factory ebenfalls, und belegt danach die nächste freie Programmnummer. Liegt der Sound bereits sauber auf der Leiste, ist **+** **Add Sound** und öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Für jeden der 15 Werk-Amps gibt es immer ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar. Ein Klick auf einen belegten Slot ruft seinen vollständigen Sound auf, die Zuweisen-Schaltfläche (oder ein Doppelklick) ersetzt ihn, und die kleine Entfernen-Schaltfläche löscht ihn. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. Der hervorgehobene Slot ist der zuletzt aus PLAY aufgerufene und bleibt bei Live-Änderungen markiert; **(unsaved)** zeigt an, dass das aktuelle Rig von diesem Snapshot abweicht.
 
-`Hoch` und `Runter` springen zum vorherigen oder nächsten belegten Slot und rufen ihn auf, damit du den Sound ohne Maus wechseln kannst. Leere Programmnummern werden übersprungen, ebenso Zuweisungen, deren Amp oder Preset fehlt; die Liste läuft an beiden Enden um.
+`Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Slot und rufen ihn auf. Die Tasten `1` bis `8` schalten die acht Stomps von links nach rechts. Leere Programmnummern werden übersprungen, ebenso Zuweisungen, deren Amp oder Preset fehlt; die Liste läuft an beiden Enden um.
 
 Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet.
 
@@ -216,7 +216,7 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 
 ## Tastatur
 
-- In PLAY: `Hoch` / `Runter` springt zum vorherigen oder nächsten belegten Sound und ruft ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um.
+- In PLAY: `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Sound und rufen ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um. `1`–`8` schalten die acht Stomps. `T`, `M` und `H` öffnen weiterhin Tuner, Metronom und Einstellungen. `Ctrl+S` speichert das aktuelle Rig (Namensfeld für Factory/Default; Überschreiben für ein schmutziges User-Preset) ohne PLAY-Nummern zu ändern.
 - In BUILD, ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
@@ -241,11 +241,11 @@ Das Overlay hat drei Reiter.
 
 ![VoLum-Einstellungen, Reiter MIDI](user-guide-settings-midi.png)
 
-**MIDI** legt fest, auf welchem Kanal diese Instanz hört (Omni oder `1`–`16`) und was jede Program-Change-Nummer aufruft. Es ist dieselbe Liste, die PLAY zeigt: Ein hier hinzugefügter Sound erscheint auch auf der PLAY-Leiste und umgekehrt.
+**MIDI** legt fest, worauf dieses VoLum hört und welchen Sound jede Program-Change-Nummer aufruft. Der Hörfilter steht standardmäßig auf **Alle MIDI-Kanäle** (MIDI nennt das Omni). Lass ihn dort, wenn ein Gitarrist und ein Pedalboard unterwegs sind; sperre eine Instanz nur dann auf Kanal `1`–`16`, wenn zwei VoLums dasselbe Kabel teilen. Es ist dieselbe Liste, die PLAY zeigt: Ein hier hinzugefügter Sound erscheint auch auf der PLAY-Leiste und umgekehrt.
 
 ![VoLum-Einstellungen, Reiter SYSTEM](user-guide-settings-system.png)
 
-**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht, Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren), und den About-Block mit Version und Update-Hinweis.
+**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht (einschließlich **Ctrl+S** zum Speichern eines Sounds), Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren), und den About-Block mit Version und Update-Hinweis.
 
 VoLum öffnet die Einstellungen wieder auf dem zuletzt genutzten Reiter.
 
@@ -264,10 +264,10 @@ VoLum empfängt MIDI Program Change in VST3, AU und der Standalone-App. Die Slot
 
 Zuweisen kannst du auf beiden Oberflächen, je nachdem, welche vor dir liegt:
 
-- In **PLAY** belegst du mit **+ Add** die nächste freie Programmnummer, indem du zuerst einen Amp und dann ein benanntes Preset wählst; ein Klick auf eine belegte Zeile ersetzt ihren Sound, ein Klick auf ihr `×` löscht sie.
-- Unter **Settings -> MIDI** steht dieselbe Liste als Tabelle aus Programmnummer, Sound und Amp, mit demselben Knopf **+ Add Sound**. Es gibt nur eine Liste: Beide Oberflächen lesen und schreiben dieselben Zuweisungen.
+- In **PLAY** ist **+** **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt, oder **Add Sound**, wenn es schon dort ist. Add Sound öffnet den Wähler auf der nächsten freien Programmnummer (die Zahl kannst du vorher ändern). Ein Klick auf eine belegte Zeile ruft sie auf, die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt den Sound, `×` löscht sie.
+- Unter **Settings -> MIDI** steht dieselbe Liste als Tabelle aus Programmnummer, Sound und Amp. Klicke auf die Nummer einer Zeile, um eine neue einzutippen (`0`–`127`), oder klicke auf den Rest der Zeile, um einen anderen Sound zu wählen. Landet ein Sound auf einer bereits belegten Nummer, tauschen beide den Platz, statt dass einer überschrieben wird. **+ Add Sound** fragt zuerst nach der Nummer – voreingestellt auf die erste freie – und danach nach dem Sound. Es gibt nur eine Liste: Beide Oberflächen lesen und schreiben dieselben Zuweisungen.
 
-Der Reiter **Settings -> MIDI** wählt außerdem Omni oder einen Eingangskanal für diese Instanz. Die Zuweisungsliste gilt rechnerweit; der Kanal wird dagegen pro Plugin-Instanz gespeichert. Omni ist die Voreinstellung.
+Die Karte **What this VoLum listens to** unter **Settings -> MIDI** wählt alle MIDI-Kanäle oder genau einen von `1`–`16` für diese Instanz. **What each program number plays** ist dieselbe Zuweisungsliste wie in PLAY. Die Liste gilt rechnerweit; der Hörfilter wird pro Plugin-Instanz gespeichert. Alle MIDI-Kanäle sind die Voreinstellung.
 
 Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. Ein gelöschter Sound behält in beiden Listen seine Programmnummer und wird rot dargestellt: Das Programm gibt es weiterhin, das Ziel dahinter nicht mehr. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter **File -> Preferences**; der Kanal bleibt in den VoLum-Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst den Kanal in VoLum.
 
@@ -277,7 +277,7 @@ Durch MIDI-Eingang ändert sich der Komponententyp von VoLums AU von `aufx` zu `
 
 Standalone-App und Plugin prüfen höchstens einmal in 24 Stunden, ob eine neuere stabile VoLum-Version verfügbar ist. Ein goldener Punkt am Einstellungs-Zahnrad weist auf ein Update hin. Öffne die Einstellungen, um den Hinweis zu lesen; der Punkt bleibt sichtbar, bis du die Update-Zeile oder **Check now** benutzt. Die Update-Zeile öffnet die Release-Seite im Browser. VoLum weist nur auf Updates hin und lädt oder installiert nichts.
 
-**Check automatically** ist standardmäßig aktiv und lässt sich in den Einstellungen abschalten; **Check now** startet eine manuelle Prüfung. Jede Prüfung ist ein einfacher HTTPS-GET auf `https://guitarlum.github.io/VoLum/appcast.json` — ohne Query-String, Telemetrie oder von VoLum erzeugte Kennung. Die 24-Stunden-Drosselung und der Hinweiszustand liegen getrennt in `volum-update-state.json` neben der Haupt-Einstellungsdatei.
+**Check for updates automatically** ist standardmäßig aktiv und lässt sich in den Einstellungen abschalten; **Check now** steht in derselben Zeile. Jede Prüfung ist ein einfacher HTTPS-GET auf `https://guitarlum.github.io/VoLum/appcast.json` — ohne Query-String, Telemetrie oder von VoLum erzeugte Kennung. Die 24-Stunden-Drosselung und der Hinweiszustand liegen getrennt in `volum-update-state.json` neben der Haupt-Einstellungsdatei.
 
 ### Eingangskalibrierung
 
@@ -305,7 +305,7 @@ Die Zeile **Content library** in den Einstellungen hat **Export Pack...** und **
 
 Voraussetzungen, die du nicht angehakt hast, stehen namentlich im hervorgehobenen Feld unter der Liste und lassen sich nicht weglassen: Ein Pack, das auf Inhalte verweist, die es nicht mitbringt, würde als defekter Amp ankommen. Ein Preset auf einem *Werk*-Amp nimmt seine eigene IR und sein eigenes Pedal mit, aber keinen Amp-Eintrag – das Werk-Capture liegt VoLum ohnehin bei.
 
-**Import** zeigt vor jeder Änderung, was passieren würde: was hinzukommt, was ersetzt wird, was denselben Namen wie ein vorhandener Eintrag trägt (beide bleiben – Namen sind Beschriftungen, IDs sind Identität) und was dein Rig gerade spielt und daher neu laden müsste. Ein Everything-Pack bietet zusätzlich drei Wege, Konflikte aufzulösen:
+**Import** listet jeden Amp, jede IR, jedes Pedal und jedes Preset in der Datei als eigenen Haken, alle standardmäßig an, und die Kopfzeile zählt Presets mit. Hake ab, was du nicht willst; ein Preset hakt IR, Pedal und Partner-Amp fest, und ein abgehakter Amp nimmt seine Presets mit. Overwrite und Add gelten immer für die angehakte Teilmenge. **Reset** gibt es nur, wenn jeder Eintrag noch angehakt ist, damit ein Teilimport den Rest deiner Bibliothek nicht löschen kann. Die Vorschau nennt, was hinzukommt, was ersetzt wird, was denselben Namen wie ein vorhandener Eintrag trägt (beide bleiben – Namen sind Beschriftungen, IDs sind Identität) und was dein Rig gerade spielt und daher neu laden müsste. Ein Everything-Pack bietet zusätzlich drei Wege, Konflikte aufzulösen:
 
 - **Overwrite** – bei Uneinigkeit gewinnt das Pack; alles, was das Pack nicht erwähnt, bleibt erhalten.
 - **Add** – bei Uneinigkeit gewinnt deine Bibliothek; nur wirklich neue Einträge kommen hinzu.

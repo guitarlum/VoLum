@@ -2,6 +2,8 @@
 
 #include "VoLumContentStore.h"
 #include "VoLumFactoryPresets.h"
+#include "VoLumPickerGroups.h"
+#include "VoLumTriptychState.h"
 
 #include <algorithm>
 #include <array>
@@ -34,6 +36,14 @@ inline UiMode UiModeFromJson(const nlohmann::json& value, const char* key)
   return UiModeFromString(value[key].get<std::string>());
 }
 
+// Machine-file PLAY/BUILD is standalone-only. A plugin keeps `fallback`
+// (constructor default or the project id-tail) so a PLAY standalone quit
+// cannot open the next VST3 insert on the stage.
+inline UiMode UiModeFromMachineSettings(bool standalone, const nlohmann::json& value, UiMode fallback)
+{
+  return standalone ? UiModeFromJson(value, "volumUiMode") : fallback;
+}
+
 enum class UiModeTransitionAction
 {
   RefreshOnly
@@ -44,14 +54,51 @@ inline UiModeTransitionAction ActionForUiModeTransition(UiMode, UiMode)
   return UiModeTransitionAction::RefreshOnly;
 }
 
-inline constexpr std::array<const char*, 8> kPlayBypassParamNames = {
-  "PrePitchActive", "PreCompActive", "PreNam1Active", "PreNam2Active",
-  "ChorusActive",   "DelayActive",   "ReverbActive", "TremoloActive"};
+inline bool EnteringPlayDropsLocks(UiMode from, UiMode to)
+{
+  return from != UiMode::Play && to == UiMode::Play;
+}
+
+// PLAY key branch: arrows + 1-8 only. Ctrl+S, T/M/H, and plain S fall through.
+inline bool PlayBranchConsumes(bool ctrl, bool arrow, bool stompDigit)
+{
+  return !ctrl && (arrow || stompDigit);
+}
+
+inline EVoLumSection SectionForEffectFocus(EVoLumEffectFocus f)
+{
+  switch (f)
+  {
+    case EVoLumEffectFocus::PITCH:
+    case EVoLumEffectFocus::COMP:
+    case EVoLumEffectFocus::PRE_NAM1:
+    case EVoLumEffectFocus::PRE_NAM2: return EVoLumSection::PRE;
+    case EVoLumEffectFocus::CHORUS:
+    case EVoLumEffectFocus::DELAY:
+    case EVoLumEffectFocus::REVERB:
+    case EVoLumEffectFocus::TREMOLO: return EVoLumSection::POST;
+    default: return EVoLumSection::AMP;
+  }
+}
+
+inline constexpr std::array<const char*, 8> kPlayBypassParamNames = {"PrePitchActive", "PreCompActive", "PreNam1Active",
+                                                                     "PreNam2Active",  "ChorusActive",  "DelayActive",
+                                                                     "ReverbActive",   "TremoloActive"};
 
 inline bool IsPlaySnapshotDirty(bool hasSnapshot, const VoLumAmpSettings& live, const VoLumAmpSettings& recalled)
 {
   return hasSnapshot && !AmpSettingsEqual(live, recalled);
 }
+
+// Default (no recalled snapshot) dirties against factory-default settings.
+inline bool LivePresetDirty(bool hasSnapshot, const VoLumAmpSettings& live, const VoLumAmpSettings& recalled)
+{
+  if (!hasSnapshot)
+    return !AmpSettingsEqual(live, VoLumAmpSettings{});
+  return IsPlaySnapshotDirty(true, live, recalled);
+}
+
+inline constexpr const char* kPlayInvalidSlotLabel = "Invalid slot";
 
 struct SoundChoice
 {
@@ -128,7 +175,8 @@ inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const
   {
     if (ampId != content::FactoryOwnerKey(factory->ampIdx))
       return false;
-    out = {ampId, presetId, kFactoryPresetDisplayName, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
+    out = {
+      ampId, presetId, kFactoryPresetDisplayName, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
     return true;
   }
   const std::string ampName = AmpNameForOwner(registry, ampId);
@@ -167,11 +215,38 @@ inline std::vector<PlaySlot> BuildPlaySlots(const std::vector<FactoryPreset>& fa
     {
       slot.sound.ampId = kv.second.ampId;
       slot.sound.presetId = kv.second.presetId;
-      slot.sound.presetName = "Invalid slot";
+      slot.sound.presetName = kPlayInvalidSlotLabel;
     }
     out.push_back(std::move(slot));
   }
   return out;
+}
+
+inline bool SoundIsAssigned(const std::vector<PlaySlot>& slots, const std::string& ampId, const std::string& presetId)
+{
+  for (const auto& slot : slots)
+  {
+    if (slot.valid && slot.sound.ampId == ampId && slot.sound.presetId == presetId)
+      return true;
+  }
+  return false;
+}
+
+// + is "Add this sound" when the live rig is not already a PLAY row, or when
+// a dirty Factory/Default must be saved as a new User Sound first.
+inline bool PlayPlusAddsHeard(bool dirty, bool factoryOrDefaultOrigin, bool liveAssigned)
+{
+  if (factoryOrDefaultOrigin && dirty)
+    return true;
+  return !liveAssigned;
+}
+
+// Save As before assign: Factory/Default that is dirty, or Default (empty id)
+// which can never be written to a MIDI slot. Clean Factory Ready can be
+// assigned as-is.
+inline bool AddHeardNeedsSaveAs(PresetSaveAction action, bool dirty, bool presetIdEmpty)
+{
+  return action == PresetSaveAction::SaveUserCopy && (dirty || presetIdEmpty);
 }
 
 inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::string& activeAmpId,

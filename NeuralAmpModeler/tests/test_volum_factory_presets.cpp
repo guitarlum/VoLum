@@ -58,6 +58,7 @@ TEST_CASE("Dirty Factory Save creates a User preset and leaves Factory unchanged
   const auto factory = volum::DefaultFactoryPresets();
   const auto before = factory[3].settings;
   CHECK(volum::SaveActionForActivePreset(factory[3].id) == volum::PresetSaveAction::SaveUserCopy);
+  CHECK(volum::SaveActionForActivePreset("") == volum::PresetSaveAction::SaveUserCopy);
   CHECK(volum::SaveActionForActivePreset("preset_user") == volum::PresetSaveAction::OverwriteUser);
 
   volum::custom::SetActivePresetOwner(volum::content::FactoryOwnerKey(3));

@@ -526,8 +526,7 @@ inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int 
   if (!ampKnown)
     return std::nullopt;
 
-  if (factoryIdx >= 0 && factoryIdx < kAmpCount
-      && sound->presetId == FactoryOwnerKey(factoryIdx) + ":v1")
+  if (factoryIdx >= 0 && factoryIdx < kAmpCount && sound->presetId == FactoryOwnerKey(factoryIdx) + ":v1")
     return ResolvedMidiSound{sound->ampId, sound->presetId, VoLumAmpSettings{}};
 
   const auto bank = r.presetBanks.find(sound->ampId);
@@ -558,6 +557,39 @@ inline bool AssignMidiSound(Registry& r, int slot, const std::string& ampId, con
 inline bool ClearMidiSound(Registry& r, int slot)
 {
   return r.midiSoundMap.erase(slot) > 0;
+}
+
+// Swap the Sounds on two program numbers. An empty number is allowed: swapping
+// with a hole moves the Sound there. Same number is a no-op. Out-of-range is
+// refused so a drag cannot invent slot 128.
+inline bool SwapMidiSoundSlots(Registry& r, int a, int b)
+{
+  if (a < 0 || a >= kMidiSoundSlotCount || b < 0 || b >= kMidiSoundSlotCount)
+    return false;
+  if (a == b)
+    return true;
+  const auto ia = r.midiSoundMap.find(a);
+  const auto ib = r.midiSoundMap.find(b);
+  const bool hasA = ia != r.midiSoundMap.end();
+  const bool hasB = ib != r.midiSoundMap.end();
+  if (!hasA && !hasB)
+    return true;
+  if (hasA && !hasB)
+  {
+    MidiSoundAssignment val = ia->second;
+    r.midiSoundMap.erase(ia);
+    r.midiSoundMap[b] = std::move(val);
+    return true;
+  }
+  if (!hasA && hasB)
+  {
+    MidiSoundAssignment val = ib->second;
+    r.midiSoundMap.erase(ib);
+    r.midiSoundMap[a] = std::move(val);
+    return true;
+  }
+  std::swap(ia->second, ib->second);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -927,8 +959,7 @@ inline MidiSlotState ResolveMidiSlot(const Registry& r, int slot, int factoryAmp
     return MidiSlotState::Unassigned;
   if (!MidiAmpIdResolves(r, it->second.ampId, factoryAmpCount))
     return MidiSlotState::Invalid;
-  return MidiPresetIdResolves(r, it->second.ampId, it->second.presetId) ? MidiSlotState::Valid
-                                                                       : MidiSlotState::Invalid;
+  return MidiPresetIdResolves(r, it->second.ampId, it->second.presetId) ? MidiSlotState::Valid : MidiSlotState::Invalid;
 }
 
 // ---------------------------------------------------------------------------
@@ -1009,8 +1040,8 @@ void MergeContentVector(std::vector<T>& target, const std::vector<T>& baseline, 
   {
     if (findConstById(current, was.id) != nullptr)
       continue; // still ours; not a removal
-    target.erase(std::remove_if(target.begin(), target.end(), [&was](const T& e) { return e.id == was.id; }),
-                 target.end());
+    target.erase(
+      std::remove_if(target.begin(), target.end(), [&was](const T& e) { return e.id == was.id; }), target.end());
   }
 
   for (const auto& mine : current)
@@ -1030,8 +1061,8 @@ inline void MergeContentPresetBanks(std::map<std::string, std::vector<Preset>>& 
                                     const std::map<std::string, std::vector<Preset>>& current)
 {
   static const std::vector<Preset> kEmpty;
-  auto bankOf = [](const std::map<std::string, std::vector<Preset>>& m, const std::string& key)
-    -> const std::vector<Preset>& {
+  auto bankOf = [](const std::map<std::string, std::vector<Preset>>& m,
+                   const std::string& key) -> const std::vector<Preset>& {
     const auto it = m.find(key);
     return it == m.end() ? kEmpty : it->second;
   };

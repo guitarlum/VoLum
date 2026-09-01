@@ -257,7 +257,7 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
   // that phase-cancel to near silence: split them hard L/R like the dual toggle
   // would. setParam bypasses OnParamChange, so do it explicitly here on restore /
   // preset recall too. (Heals "custom amp makes no sound in dual mode".)
-  if (s.dualAmpActive && s.supportPolarityInvert && std::abs(s.mainAmpPan) < 1e-3 && std::abs(s.supportAmpPan) < 1e-3)
+  if (volum::DegenerateDualNeedsPanHeal(s))
   {
     setParam(kMainAmpPan, -1.0);
     setParam(kSupportAmpPan, 1.0);
@@ -517,7 +517,9 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     // re-selection once the UI opens (see OnUIOpen). Absent on older files.
     if (j.contains("volumCustomMainId") && j["volumCustomMainId"].is_string())
       mVolumRestoreCustomMainId = j["volumCustomMainId"].get<std::string>();
-    mVolumUiMode = volum::UiModeFromJson(j, "volumUiMode");
+#if defined(APP_API)
+    mVolumUiMode = volum::UiModeFromMachineSettings(true, j, mVolumUiMode);
+#endif
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
     if (j.contains("midiCh") && j["midiCh"].is_number_integer())

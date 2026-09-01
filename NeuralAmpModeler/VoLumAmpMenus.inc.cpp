@@ -34,6 +34,14 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* bar = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar);
   if (!raw || !bar)
     return;
+  if (volum::ui::AnyOverlayOpen(
+        {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
+         kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome},
+        [&](int tag) {
+          auto* c = pGfx->GetControlWithTag(tag);
+          return c && !c->IsHidden();
+        }))
+    return;
   if (!raw->IsHidden())
   {
     raw->Hide(true);
@@ -48,22 +56,26 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();
-  const bool hasFactory = mVolumCustomMainIdx < 0
-    && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  const bool hasFactory =
+    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  volum::InitPickerGroups(mVolumPresetPickerGroups, hasFactory, !presets.empty());
   std::vector<VoLumListMenuControl::Row> rows;
   // Default is an action, not a named preset, and stays pinned above both banks.
   rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
   if (hasFactory)
   {
-    rows.push_back({"FACTORY", -98, false, false, false, false, true});
-    rows.push_back({volum::kFactoryPresetDisplayName, 0, false, false});
+    rows.push_back(
+      {mVolumPresetPickerGroups.factoryOpen ? "FACTORY" : "FACTORY  ·", -98, false, false, false, false, true});
+    if (mVolumPresetPickerGroups.factoryOpen)
+      rows.push_back({volum::kFactoryPresetDisplayName, 0, false, false});
   }
-  rows.push_back({"USER", -97, true, false, false, false, true});
-  if (presets.empty())
-    rows.push_back({"No user presets yet", -99, false, true});
-  else
-    for (int i = 0; i < (int)presets.size(); i++)
-      rows.push_back({presets[(size_t)i], i + (hasFactory ? 1 : 0), false, false});
+  if (!presets.empty())
+  {
+    rows.push_back({mVolumPresetPickerGroups.userOpen ? "USER" : "USER  ·", -97, false, false, false, false, true});
+    if (mVolumPresetPickerGroups.userOpen)
+      for (int i = 0; i < (int)presets.size(); i++)
+        rows.push_back({presets[(size_t)i], i + (hasFactory ? 1 : 0), false, false});
+  }
   // When the rig is dirty, offer a one-click save path right in the dropdown:
   // overwrite the active named preset, or (no named preset / on Default) save a
   // new one. Saves opening the Manage panel just to commit a tweak.
@@ -72,8 +84,8 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
     const int activeUserIdx = activePresetIdx - (hasFactory ? 1 : 0);
     if (volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
         && activeUserIdx >= 0 && activeUserIdx < (int)presets.size())
-      rows.push_back({"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true,
-                      false, true});
+      rows.push_back(
+        {"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});
     else
       rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
   }
@@ -91,6 +103,13 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   menu->SetMenuRect(IRECT(l, top, l + w, top + h));
   const int selected = bar->As<VoLumPresetBarControl>()->ActiveIndex();
   menu->SetRows(rows, selected);
+  menu->SetHeaderCallback([this](int code) {
+    volum::TogglePickerGroup(mVolumPresetPickerGroups, code == -98);
+    if (auto* pGfx = GetUI())
+      if (auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
+        raw->Hide(true);
+    _VolumShowPresetMenu();
+  });
   menu->Hide(false);
 }
 

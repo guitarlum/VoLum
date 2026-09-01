@@ -32,7 +32,7 @@ void NeuralAmpModeler::_VolumStartUpdateCheck(bool manual)
     return;
 
   const auto now = VolumUtcNow();
-  if (!manual)
+  if (!manual && !volum::update::FakeUpdateRequested())
   {
     if (!volum::update::ShouldCheck(now, mVolumUpdateState.lastCheckUtc))
       return;
@@ -46,6 +46,16 @@ void NeuralAmpModeler::_VolumStartUpdateCheck(bool manual)
   mVolumUpdateResult = result;
   mVolumUpdateCheckInFlight = true;
   const std::string currentVersion = PLUG_VERSION_STR;
+
+  if (volum::update::FakeUpdateRequested())
+  {
+    // UAT-only: never persist, never hit the network. A sidecar write would
+    // leave a phantom 2.0.0 on the next real launch.
+    result->manifest = volum::update::FakeUpdateManifest();
+    result->succeeded = true;
+    result->complete.store(true, std::memory_order_release);
+    return;
+  }
 
   std::thread([result, statePath, currentVersion, now]() {
     // Persist the attempt before network I/O. Offline machines are therefore
@@ -83,9 +93,19 @@ void NeuralAmpModeler::_VolumConsumeUpdateResult()
     return;
 
   const bool succeeded = mVolumUpdateResult->succeeded;
+  const auto manifest = mVolumUpdateResult->manifest;
   mVolumUpdateResult.reset();
   mVolumUpdateCheckInFlight = false;
-  mVolumUpdateState = volum::update::LoadUpdateState(volum::VolumUpdateStateFilePath());
+
+  if (volum::update::FakeUpdateRequested() && succeeded)
+  {
+    // Stay in memory. Writing 2.0.0 into the sidecar would haunt the next real launch.
+    mVolumUpdateState.latestKnownVersion = manifest.version;
+    mVolumUpdateState.latestKnownUrl = manifest.url;
+    mVolumUpdateState.latestKnownNotes = manifest.notes;
+  }
+  else
+    mVolumUpdateState = volum::update::LoadUpdateState(volum::VolumUpdateStateFilePath());
 
   const volum::update::BadgeState badge{mVolumUpdateState.latestKnownVersion, mVolumUpdateState.lastSeenVersion};
   if (succeeded && volum::update::ShouldShowBadge(badge, PLUG_VERSION_STR))
@@ -99,14 +119,13 @@ void NeuralAmpModeler::_VolumRefreshUpdateUi()
   if (!pGraphics)
     return;
 
-  const volum::update::BadgeState badgeState{mVolumUpdateState.latestKnownVersion,
-                                              mVolumUpdateState.lastSeenVersion};
+  const volum::update::BadgeState badgeState{mVolumUpdateState.latestKnownVersion, mVolumUpdateState.lastSeenVersion};
   const bool available = volum::update::IsUpdateAvailable(badgeState, PLUG_VERSION_STR);
   if (auto* badge = pGraphics->GetControlWithTag(kCtrlTagVoLumUpdateBadge))
     badge->Hide(!volum::update::ShouldShowBadge(badgeState, PLUG_VERSION_STR));
   if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
-    settings->As<NAMSettingsPageControl>()->SetUpdateInfo(mVolumUpdateState.autoCheck, available,
-                                                          mVolumUpdateState.latestKnownVersion);
+    settings->As<NAMSettingsPageControl>()->SetUpdateInfo(
+      mVolumUpdateState.autoCheck, available, mVolumUpdateState.latestKnownVersion, mVolumUpdateState.latestKnownNotes);
 }
 
 void NeuralAmpModeler::_VolumCheckForUpdatesNow()

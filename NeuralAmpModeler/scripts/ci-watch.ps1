@@ -8,6 +8,7 @@
 #
 # Examples:
 #   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Dispatch -Ref release/1.2.1
+#   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Dispatch -WindowsOnly -Ref feature/1.3.0
 #   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -RunId 30286593044
 #   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref dev -NoWait
 
@@ -18,6 +19,7 @@ param(
   [string]$Repo = "guitarlum/VoLum",
   [string]$Workflow = "ci.yml",
   [switch]$Dispatch,
+  [switch]$WindowsOnly,
   [switch]$NoWait,
   [int]$PollSeconds = 60,
   [int]$TimeoutMinutes = 120
@@ -45,7 +47,12 @@ if (-not $Ref -and -not $RunId)
 
 if ($Dispatch)
 {
-  & gh workflow run $Workflow --repo $Repo --ref $Ref
+  $dispatchArgs = @('workflow', 'run', $Workflow, '--repo', $Repo, '--ref', $Ref)
+  if ($WindowsOnly)
+  {
+    $dispatchArgs += @('-f', 'windows_only=true')
+  }
+  & gh @dispatchArgs
   if ($LASTEXITCODE -ne 0) { Write-Error "workflow dispatch failed" }
   # The run does not appear in the list immediately.
   Start-Sleep -Seconds 10

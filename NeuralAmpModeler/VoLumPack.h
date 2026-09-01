@@ -141,6 +141,11 @@ inline bool FindPreset(const content::Registry& r, const std::string& id, std::s
   return false;
 }
 
+inline bool Has(const std::vector<std::string>& v, const std::string& s)
+{
+  return std::find(v.begin(), v.end(), s) != v.end();
+}
+
 inline void AddUnique(std::vector<std::string>& v, const std::string& s)
 {
   if (!s.empty() && std::find(v.begin(), v.end(), s) == v.end())
@@ -162,7 +167,7 @@ inline std::string OwnerDisplayName(const content::Registry& r, const std::strin
 }
 
 inline std::string PresetWithAmpLabel(const content::Registry& r, const std::string& presetName,
-                                     const std::string& ownerKey)
+                                      const std::string& ownerKey)
 {
   return "Preset \"" + presetName + "\"  ·  " + OwnerDisplayName(r, ownerKey);
 }
@@ -489,7 +494,10 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive)
   {
     if (const std::string* settings = archive.Find(kSettingsEntry))
       out.settingsJson = *settings;
-    out.includesMidiSoundMap = !out.library.midiSoundMap.empty();
+    // Presence is a promise, not a count. An Everything backup made while the
+    // MIDI map is empty must still clear stale local assignments when restored.
+    // Fall back to the old inference for a writer that omitted the manifest key.
+    out.includesMidiSoundMap = manifest.value("includesMidiSoundMap", !out.library.midiSoundMap.empty());
   }
   else
   {
@@ -507,8 +515,310 @@ inline PackContents OpenPack(const std::filesystem::path& path)
 }
 
 // ---------------------------------------------------------------------------
+// Import: ticks
+// ---------------------------------------------------------------------------
+//
+// A Pack is a fixed file, but importing all of it is not the only reasonable
+// answer: one amp out of somebody's whole-library backup is a normal ask. So the
+// preview is a tick list over what the archive carries, defaulting to everything,
+// and the ticks are applied by narrowing the PackContents *before* ApplyPack. The
+// `.volumpack` on disk is never rewritten and ApplyPack never learns about ticks.
+
+inline size_t PresetCount(const content::Registry& r)
+{
+  size_t n = 0;
+  for (const auto& bank : r.presetBanks)
+    n += bank.second.size();
+  return n;
+}
+
+// The import header: what kind of Pack this is and what is inside it. Presets are
+// counted alongside amps, IRs and pedals because a Pack that is mostly presets
+// otherwise reads as almost empty.
+inline std::string PackSummaryLine(const PackContents& pack)
+{
+  auto count = [](size_t n, const char* one, const char* many) {
+    return std::to_string(n) + " " + (n == 1 ? one : many);
+  };
+  return std::string(pack.job == Job::Everything ? "Everything Pack" : "Share Pack") + "  -  "
+         + count(pack.library.amps.size(), "amp", "amps") + ", " + count(pack.library.irs.size(), "IR", "IRs") + ", "
+         + count(pack.library.pedals.size(), "pedal", "pedals") + ", "
+         + count(PresetCount(pack.library), "preset", "presets");
+}
+
+struct ImportTicks
+{
+  std::vector<std::string> ampIds;
+  std::vector<std::string> irIds;
+  std::vector<std::string> pedalIds;
+  std::vector<std::string> presetIds;
+
+  bool HasAmp(const std::string& id) const { return detail::Has(ampIds, id); }
+  bool HasIr(const std::string& id) const { return detail::Has(irIds, id); }
+  bool HasPedal(const std::string& id) const { return detail::Has(pedalIds, id); }
+  bool HasPreset(const std::string& id) const { return detail::Has(presetIds, id); }
+
+  size_t Count() const { return ampIds.size() + irIds.size() + pedalIds.size() + presetIds.size(); }
+  bool Empty() const { return Count() == 0; }
+
+  // Every id the Pack carries is ticked. Not a count comparison: a tick list can
+  // hold an id the Pack does not have, and that must not pass for "all".
+  bool AllSelected(const PackContents& pack) const
+  {
+    const auto& r = pack.library;
+    for (const auto& a : r.amps)
+      if (!HasAmp(a.id))
+        return false;
+    for (const auto& ir : r.irs)
+      if (!HasIr(ir.id))
+        return false;
+    for (const auto& p : r.pedals)
+      if (!HasPedal(p.id))
+        return false;
+    for (const auto& bank : r.presetBanks)
+      for (const auto& pr : bank.second)
+        if (!HasPreset(pr.id))
+          return false;
+    return true;
+  }
+};
+
+inline ImportTicks AllTicks(const PackContents& pack)
+{
+  ImportTicks ticks;
+  for (const auto& a : pack.library.amps)
+    ticks.ampIds.push_back(a.id);
+  for (const auto& ir : pack.library.irs)
+    ticks.irIds.push_back(ir.id);
+  for (const auto& p : pack.library.pedals)
+    ticks.pedalIds.push_back(p.id);
+  for (const auto& bank : pack.library.presetBanks)
+    for (const auto& pr : bank.second)
+      ticks.presetIds.push_back(pr.id);
+  return ticks;
+}
+
+// The closure that makes a tick list importable, using the same rule the export
+// preview shows: a preset carries its IR, its PRE pedal and its support partner,
+// so ticking the preset ticks those too. Companions are locked in the UI - a
+// requirement is not a choice - and the direction of the amp rule is the other
+// way round: an amp the user unticked takes its own presets out with it, so a
+// preset can never be imported onto an amp that did not come along.
+inline ImportTicks ApplyCompanionLock(const content::Registry& incoming, ImportTicks ticks)
+{
+  using namespace detail;
+
+  auto keepKnown = [](std::vector<std::string>& ids, auto exists) {
+    std::vector<std::string> kept;
+    for (const auto& id : ids)
+      if (exists(id) && !Has(kept, id))
+        kept.push_back(id);
+    ids = std::move(kept);
+  };
+  keepKnown(ticks.ampIds, [&](const std::string& id) { return FindAmp(incoming, id) != nullptr; });
+  keepKnown(ticks.irIds, [&](const std::string& id) { return FindIr(incoming, id) != nullptr; });
+  keepKnown(ticks.pedalIds, [&](const std::string& id) { return FindPedal(incoming, id) != nullptr; });
+
+  std::vector<std::string> presets;
+  for (const auto& id : ticks.presetIds)
+  {
+    std::string owner;
+    size_t at = 0;
+    if (!FindPreset(incoming, id, owner, at) || Has(presets, id))
+      continue;
+    // A bank owned by a custom amp the Pack carries but the user did not tick is
+    // a preset with nowhere to live. A factory owner is always here, so those are
+    // free to travel alone.
+    if (FindAmp(incoming, owner) && !ticks.HasAmp(owner))
+      continue;
+    presets.push_back(id);
+  }
+  ticks.presetIds = std::move(presets);
+
+  // Indexed, not range-for: a partner amp arrives with its own bank, whose presets
+  // have requirements of their own. Growing while iterating is the point, exactly
+  // as in BuildExportPlan.
+  for (size_t i = 0; i < ticks.presetIds.size(); ++i)
+  {
+    ExportSelection one;
+    one.everything = false;
+    one.presetIds = {ticks.presetIds[i]};
+    const auto plan = BuildExportPlan(incoming, one);
+    for (const auto& id : plan.ampIds)
+      AddUnique(ticks.ampIds, id);
+    for (const auto& id : plan.irIds)
+      AddUnique(ticks.irIds, id);
+    for (const auto& id : plan.pedalIds)
+      AddUnique(ticks.pedalIds, id);
+    for (const auto& id : plan.presetIds)
+      AddUnique(ticks.presetIds, id);
+  }
+  return ticks;
+}
+
+// The subset of `ticks` that something else in the list requires, so the UI can
+// draw those rows ticked and refuse to unclick them. Takes an already-closed tick
+// list (the output of ApplyCompanionLock).
+inline ImportTicks CompanionLocks(const content::Registry& incoming, const ImportTicks& ticks)
+{
+  using namespace detail;
+  ImportTicks locked;
+  for (const auto& presetId : ticks.presetIds)
+  {
+    ExportSelection one;
+    one.everything = false;
+    one.presetIds = {presetId};
+    const auto plan = BuildExportPlan(incoming, one);
+    for (const auto& id : plan.ampIds)
+      AddUnique(locked.ampIds, id);
+    for (const auto& id : plan.irIds)
+      AddUnique(locked.irIds, id);
+    for (const auto& id : plan.pedalIds)
+      AddUnique(locked.pedalIds, id);
+    for (const auto& id : plan.presetIds)
+      if (id != presetId) // the seed is the user's own tick, not a requirement
+        AddUnique(locked.presetIds, id);
+  }
+  return locked;
+}
+
+// Narrow a Pack to the ticked ids. Payload bytes for dropped items go too: an
+// unticked IR must not leave its wav behind in the user's library.
+inline PackContents SubsetPack(const PackContents& full, const ImportTicks& ticks)
+{
+  PackContents out = full;
+  auto& r = out.library;
+
+  r.amps.erase(
+    std::remove_if(r.amps.begin(), r.amps.end(), [&ticks](const custom::CustomAmp& a) { return !ticks.HasAmp(a.id); }),
+    r.amps.end());
+  r.irs.erase(
+    std::remove_if(r.irs.begin(), r.irs.end(), [&ticks](const content::IRItem& i) { return !ticks.HasIr(i.id); }),
+    r.irs.end());
+  r.pedals.erase(std::remove_if(r.pedals.begin(), r.pedals.end(),
+                                [&ticks](const content::PedalItem& p) { return !ticks.HasPedal(p.id); }),
+                 r.pedals.end());
+  for (auto bank = r.presetBanks.begin(); bank != r.presetBanks.end();)
+  {
+    auto& presets = bank->second;
+    presets.erase(std::remove_if(presets.begin(), presets.end(),
+                                 [&ticks](const content::Preset& p) { return !ticks.HasPreset(p.id); }),
+                  presets.end());
+    bank = presets.empty() ? r.presetBanks.erase(bank) : std::next(bank);
+  }
+
+  std::set<std::string> needed;
+  for (const auto& a : r.amps)
+    for (const auto& f : a.files)
+      if (custom::FileAssigned(f))
+        needed.insert(f.storedPath);
+  for (const auto& ir : r.irs)
+    needed.insert(ir.file);
+  for (const auto& p : r.pedals)
+    needed.insert(p.file);
+  for (auto f = out.files.begin(); f != out.files.end();)
+    f = needed.count(f->first) ? std::next(f) : out.files.erase(f);
+
+  return out;
+}
+
+// Reset deletes everything the Pack does not carry, so it is only honest when the
+// whole non-empty Pack is coming: a subset Reset would delete the user's library
+// down to the handful of rows they happened to tick, while a vacuously complete
+// empty Pack would delete the whole local library. `userTicks` must be the raw
+// choices, before companion closure adds locked requirements back.
+inline bool ResetAllowed(const PackContents& full, const ImportTicks& userTicks)
+{
+  return full.ok && !AllTicks(full).Empty() && userTicks.AllSelected(full);
+}
+
+// ---------------------------------------------------------------------------
 // Import: preview
 // ---------------------------------------------------------------------------
+
+// One incoming library item, with what the local library already thinks about it.
+// The tick list is drawn from this, so the rows and the ids stay the same object.
+enum class ItemKind
+{
+  Amp,
+  Ir,
+  Pedal,
+  Preset
+};
+
+struct ImportItem
+{
+  ItemKind kind = ItemKind::Amp;
+  std::string id;
+  std::string label; // the same wording the preview uses
+  bool present = false; // an item with this id is already here
+  bool nameCollision = false; // same name, different id: both are kept
+  bool sounding = false; // this instance is playing it right now
+};
+
+// Every item the Pack carries, in preview order. `soundingIds` is whatever this
+// instance's rig is playing; empty from a headless caller.
+inline std::vector<ImportItem> ImportItems(const content::Registry& current, const PackContents& pack,
+                                           const std::vector<std::string>& soundingIds = {})
+{
+  using namespace detail;
+  std::vector<ImportItem> out;
+  const auto& incoming = pack.library;
+  auto sounding = [&soundingIds](const std::string& id) { return !id.empty() && Has(soundingIds, id); };
+
+  for (const auto& a : incoming.amps)
+  {
+    ImportItem item{
+      ItemKind::Amp, a.id, "Custom amp \"" + a.name + "\"", FindAmp(current, a.id) != nullptr, false, sounding(a.id)};
+    if (!item.present)
+      for (const auto& mine : current.amps)
+        if (mine.id != a.id && mine.name == a.name)
+          item.nameCollision = true;
+    out.push_back(std::move(item));
+  }
+  for (const auto& ir : incoming.irs)
+  {
+    ImportItem item{
+      ItemKind::Ir, ir.id, "IR \"" + ir.name + "\"", FindIr(current, ir.id) != nullptr, false, sounding(ir.id)};
+    if (!item.present)
+      for (const auto& mine : current.irs)
+        if (mine.id != ir.id && mine.name == ir.name)
+          item.nameCollision = true;
+    out.push_back(std::move(item));
+  }
+  for (const auto& p : incoming.pedals)
+  {
+    ImportItem item{
+      ItemKind::Pedal, p.id, "Pedal \"" + p.name + "\"", FindPedal(current, p.id) != nullptr, false, sounding(p.id)};
+    if (!item.present)
+      for (const auto& mine : current.pedals)
+        if (mine.id != p.id && mine.name == p.name)
+          item.nameCollision = true;
+    out.push_back(std::move(item));
+  }
+  for (const auto& bank : incoming.presetBanks)
+    for (const auto& pr : bank.second)
+    {
+      std::string owner;
+      size_t at = 0;
+      ImportItem item{ItemKind::Preset,
+                      pr.id,
+                      PresetWithAmpLabel(incoming, pr.name, bank.first),
+                      FindPreset(current, pr.id, owner, at),
+                      false,
+                      sounding(pr.id)};
+      if (!item.present)
+      {
+        const auto mine = current.presetBanks.find(bank.first);
+        if (mine != current.presetBanks.end())
+          for (const auto& other : mine->second)
+            if (other.id != pr.id && other.name == pr.name)
+              item.nameCollision = true;
+      }
+      out.push_back(std::move(item));
+    }
+  return out;
+}
 
 struct ImportPreview
 {
@@ -535,63 +845,21 @@ inline ImportPreview BuildImportPreview(const content::Registry& current, const 
   ImportPreview out;
   const auto& incoming = packContents.library;
 
-  auto sounding = [&soundingIds](const std::string& id) {
-    return !id.empty() && std::find(soundingIds.begin(), soundingIds.end(), id) != soundingIds.end();
-  };
-
-  auto note = [&](bool present, const std::string& label, const std::string& id) {
-    if (!present)
-      out.adds.push_back(label);
-    else if (verb == ImportVerb::Add)
-      return; // keep mine: nothing happens to this item
-    else
+  for (const auto& item : ImportItems(current, packContents, soundingIds))
+  {
+    if (!item.present)
     {
-      out.replaces.push_back(label);
-      if (sounding(id))
-        out.inUseReloads.push_back(label);
+      out.adds.push_back(item.label);
+      if (item.nameCollision)
+        out.nameCollisions.push_back(item.label);
     }
-  };
-
-  for (const auto& a : incoming.amps)
-  {
-    note(FindAmp(current, a.id) != nullptr, "Custom amp \"" + a.name + "\"", a.id);
-    if (!FindAmp(current, a.id))
-      for (const auto& mine : current.amps)
-        if (mine.id != a.id && mine.name == a.name)
-          out.nameCollisions.push_back("Custom amp \"" + a.name + "\"");
-  }
-  for (const auto& ir : incoming.irs)
-  {
-    note(FindIr(current, ir.id) != nullptr, "IR \"" + ir.name + "\"", ir.id);
-    if (!FindIr(current, ir.id))
-      for (const auto& mine : current.irs)
-        if (mine.id != ir.id && mine.name == ir.name)
-          out.nameCollisions.push_back("IR \"" + ir.name + "\"");
-  }
-  for (const auto& p : incoming.pedals)
-  {
-    note(FindPedal(current, p.id) != nullptr, "Pedal \"" + p.name + "\"", p.id);
-    if (!FindPedal(current, p.id))
-      for (const auto& mine : current.pedals)
-        if (mine.id != p.id && mine.name == p.name)
-          out.nameCollisions.push_back("Pedal \"" + p.name + "\"");
-  }
-  for (const auto& bank : incoming.presetBanks)
-    for (const auto& pr : bank.second)
+    else if (verb != ImportVerb::Add) // Add keeps mine: nothing happens to this item
     {
-      std::string owner;
-      size_t at = 0;
-      const bool present = FindPreset(current, pr.id, owner, at);
-      note(present, PresetWithAmpLabel(incoming, pr.name, bank.first), pr.id);
-      if (!present)
-      {
-        const auto mine = current.presetBanks.find(bank.first);
-        if (mine != current.presetBanks.end())
-          for (const auto& other : mine->second)
-            if (other.id != pr.id && other.name == pr.name)
-              out.nameCollisions.push_back(PresetWithAmpLabel(incoming, pr.name, bank.first));
-      }
+      out.replaces.push_back(item.label);
+      if (item.sounding)
+        out.inUseReloads.push_back(item.label);
     }
+  }
 
   if (verb == ImportVerb::Reset)
   {

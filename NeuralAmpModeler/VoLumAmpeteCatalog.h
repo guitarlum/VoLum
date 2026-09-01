@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <string>
 
 #include "config.h"
@@ -366,4 +367,11 @@ struct VoLumAmpSettings
   int supportCustomSlot = -2;
   int supportCustomChannel = 0; // gain stage (>= 1); 0 == not saved
 };
+
+// Both lanes centered + support invert phase-cancels to near silence.
+inline bool DegenerateDualNeedsPanHeal(const VoLumAmpSettings& s)
+{
+  return s.dualAmpActive && s.supportPolarityInvert && std::abs(s.mainAmpPan) < 1e-3
+         && std::abs(s.supportAmpPan) < 1e-3;
+}
 } // namespace volum

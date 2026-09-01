@@ -4,6 +4,7 @@
 // Extracted from VoLumCustomUi.h for file-size hygiene.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumScroll.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
 #include "VoLumIrFileGuard.h"
@@ -48,6 +49,7 @@ public:
   };
 
   using SelectCallback = std::function<void(int code)>;
+  using HeaderCallback = std::function<void(int code)>;
 
   // Attached at full-window bounds so a click anywhere outside the menu can
   // dismiss it (the menu paints only into mMenuRect). Position the visible menu
@@ -59,6 +61,7 @@ public:
   }
 
   void SetCallback(SelectCallback cb) { mCb = std::move(cb); }
+  void SetHeaderCallback(HeaderCallback cb) { mHeaderCb = std::move(cb); }
 
   void SetRows(const std::vector<Row>& rows, int selectedCode)
   {
@@ -146,14 +149,9 @@ public:
 
     if (scrollable)
     {
-      const float trackX = mMenuRect.R - sbW - 1.f;
-      IRECT track(trackX, mMenuRect.T + 4.f, mMenuRect.R - 2.f, mMenuRect.B - 4.f);
-      g.FillRect(IColor(40, 200, 162, 78), track);
-      const float maxScroll = ContentH() - mMenuRect.H();
-      const float thumbH = std::max(18.f, track.H() * (mMenuRect.H() / ContentH()));
-      const float t = (maxScroll > 0.f) ? (mScroll / maxScroll) : 0.f;
-      const float thumbY = track.T + (track.H() - thumbH) * t;
-      g.FillRect(VoLumColors::GOLD_DIM, IRECT(track.L, thumbY, track.R, thumbY + thumbH));
+      const auto m = ScrollMetricsNow();
+      const IRECT track(mMenuRect.R - sbW - 1.f, mMenuRect.T + 4.f, mMenuRect.R - 2.f, mMenuRect.B - 4.f);
+      DrawVoLumScrollbar(g, track, IRECT(track.L, m.thumbY, track.R, m.thumbY + m.thumbH), mBar.dragging);
     }
   }
 
@@ -164,11 +162,43 @@ public:
       Hide(true); // click-outside dismisses
       return;
     }
+    const bool scrollable = ContentH() > mMenuRect.H() + 0.5f;
+    if (scrollable)
+    {
+      const auto m = ScrollMetricsNow();
+      const float trackL = mMenuRect.R - 6.f;
+      if (mBar.OnDown(x, y, trackL, mMenuRect.R - 2.f, m))
+      {
+        mScroll = volum::scroll::ThumbYToScroll(y - mBar.grabDY, m.trackTop, m.trackH, m.thumbH, m.maxScroll);
+        SetDirty(false);
+        return;
+      }
+    }
     const int idx = RowAtY(y);
+    if (idx >= 0 && idx < (int)mRows.size() && mRows[(size_t)idx].header)
+    {
+      if (mHeaderCb)
+        mHeaderCb(mRows[(size_t)idx].code);
+      return;
+    }
     if (idx >= 0 && idx < (int)mRows.size() && !mRows[(size_t)idx].dim && !mRows[(size_t)idx].header && mCb)
       mCb(mRows[(size_t)idx].code);
     Hide(true);
   }
+
+  void OnMouseDrag(float x, float y, float, float, const IMouseMod&) override
+  {
+    if (!mBar.dragging)
+      return;
+    const auto m = ScrollMetricsNow();
+    const float next = mBar.OnDrag(y, m);
+    if (next >= 0.f)
+      mScroll = next;
+    SetDirty(false);
+    (void)x;
+  }
+
+  void OnMouseUp(float, float, const IMouseMod&) override { mBar.OnUp(); }
 
   void OnMouseOver(float x, float y, const IMouseMod&) override
   {
@@ -197,6 +227,11 @@ public:
 private:
   float ContentH() const { return 12.f + (float)mRows.size() * kRowH; }
 
+  volum::scroll::ScrollMetrics ScrollMetricsNow() const
+  {
+    return volum::scroll::ComputeScroll(mMenuRect.T + 4.f, mMenuRect.B - 4.f, mMenuRect.H(), ContentH(), mScroll);
+  }
+
   void ClampScroll()
   {
     const float maxScroll = std::max(0.f, ContentH() - mMenuRect.H());
@@ -215,5 +250,6 @@ private:
   int mHovered = -1;
   float mScroll = 0.f;
   SelectCallback mCb;
+  HeaderCallback mHeaderCb;
+  volum::scroll::Interaction mBar;
 };
-

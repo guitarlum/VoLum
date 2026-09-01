@@ -22,6 +22,7 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <condition_variable>
 #include <deque>
 #include <map>
@@ -52,6 +53,7 @@
 #include "VoLumUpdateCheck.h"
 #include "VoLumUpdateState.h"
 #include "VoLumPlayModel.h"
+#include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
 
@@ -130,6 +132,7 @@ enum ECtrlTags
   kCtrlTagVoLumPlaySurface,
   kCtrlTagVoLumModeToggle,
   kCtrlTagVoLumPackOverlay,
+  kCtrlTagVoLumNameDialog,
   kNumCtrlTags
 };
 
@@ -461,6 +464,7 @@ public:
   bool _VolumStepPlaySlot(int dir);
   void _VolumAssignPlaySound(int slot, const volum::SoundChoice& sound);
   void _VolumClearPlaySound(int slot);
+  void _VolumSwapPlaySounds(int slotA, int slotB);
   // Select a factory amp exactly as clicking its sidebar row does (scene restore +
   // capture reload + chrome). Shared by the sidebar, the keyboard, and the
   // delete-while-playing fallback.
@@ -579,6 +583,11 @@ public:
   void _VolumSetMidiChannel(int channel);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
   int _VolumSavePresetAs(const std::string& name);
+  bool _VolumLivePresetDirty();
+  void _VolumPromptSaveAs(std::function<void()> after = {});
+  bool _VolumHandleSaveShortcut();
+  void _VolumAddHeardPlaySound();
+  void _VolumFocusBuildEffect(int focus);
   // Overwrite preset `index` in the active bank with the live scene.
   void _VolumOverwritePreset(int index);
   // Recall preset `index`: apply its snapshot to the live chain, retain it as the
@@ -605,6 +614,9 @@ public:
   std::vector<volum::FactoryPreset> mVolumFactoryPresets;
   volum::UiMode mVolumUiMode = volum::UiMode::Build;
   int mVolumLastRecalledPlaySlot = -1;
+  volum::PickerGroupSession mVolumPresetPickerGroups;
+  volum::PickerGroupSession mVolumPlayPickerGroups;
+  std::atomic<float> mVolumPlayInPeak{0.f};
   // This instance's live scene per custom amp id - the custom-amp equivalent of
   // mVolumAmpSettings[ampIdx]. Before 1.3.0 this map lived in the shared content
   // library, so one instance's catalog write moved another instance's knobs; the

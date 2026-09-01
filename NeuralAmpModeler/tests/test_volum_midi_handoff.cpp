@@ -109,7 +109,7 @@ TEST_CASE("Headless MIDI resolution ignores unassigned missing invalid and out-o
   CHECK_FALSE(ResolveMidiSound(registry, 4).has_value());
 }
 
-TEST_CASE("MIDI channel id tail defaults to Omni and clamps to 1 through 16")
+TEST_CASE("MIDI listen filter in the id tail defaults to all channels and clamps to 1 through 16")
 {
   volum::ChunkIdTail tail;
   CHECK(tail.midiCh == 0);
@@ -120,28 +120,31 @@ TEST_CASE("MIDI channel id tail defaults to Omni and clamps to 1 through 16")
   CHECK(volum::IdTailFromJson({{"midiCh", -2}}).midiCh == 0);
 }
 
-TEST_CASE("Settings MIDI chrome owns the channel and the assignment list, but stores neither")
+TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, but stores neither")
 {
-  // The channel is per instance and rides the DAW id tail. The assignment list is
-  // machine global and lives in the content registry. Both are edited on the MIDI
-  // tab, and the tab must persist neither itself: a Settings-local copy of the
-  // sound map is how PLAY and Settings would start disagreeing.
+  // The listen filter is per instance and rides the DAW id tail. The assignment
+  // list is machine global and lives in the content registry. Both are edited on
+  // the MIDI tab, and the tab must persist neither itself: a Settings-local copy
+  // of the sound map is how PLAY and Settings would start disagreeing.
   const auto root = RepoRoot() / "NeuralAmpModeler";
   const std::string controls = ReadText(root / "NeuralAmpModelerControls.h");
   const std::string tabs = ReadText(root / "VoLumSettingsTabs.h");
   const std::string settings = ReadText(root / "VoLumSettingsScene.inc.cpp");
 
   CHECK(tabs.find("class VoLumMidiChannelControl") != std::string::npos);
-  CHECK(tabs.find("mChannel == 0 ?") != std::string::npos);
-  CHECK(tabs.find("Omni") != std::string::npos);
+  // 0 is still "every channel" in the data; only the words in front of it changed.
+  CHECK(tabs.find("const bool all = mChannel == 0;") != std::string::npos);
+  CHECK(tabs.find("\"All MIDI channels\"") != std::string::npos);
+  CHECK(tabs.find("MIDI calls this Omni.") != std::string::npos);
   CHECK(tabs.find("class VoLumMidiSoundMapControl") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapCallbacks") != std::string::npos);
+  CHECK(controls.find("SetMidiSoundMapSwap") != std::string::npos);
   CHECK(controls.find("void SetMidiChannel(int channel)") != std::string::npos);
   CHECK(controls.find("void SetMidiSoundMap(") != std::string::npos);
   // The pre-1.3.0 duplicate-list control stays gone.
   CHECK(controls.find("VoLumMidiSettingsControl") == std::string::npos);
-  // The channel persists per instance; the sound map does not ride this document.
+  // The filter persists per instance; the sound map does not ride this document.
   CHECK(settings.find("j[\"midiCh\"] = mVolumMidiChannel.load()") != std::string::npos);
   CHECK(settings.find("midiSoundMap") == std::string::npos);
   // The tab reads the registry's map; it never assigns into it directly.
@@ -163,4 +166,20 @@ TEST_CASE("ProcessMidiMsg is an integer-only RT handoff")
   CHECK(body.find("GlobalContentStore") == std::string::npos);
   CHECK(body.find("filesystem") == std::string::npos);
   CHECK(body.find("GetUI") == std::string::npos);
+}
+
+TEST_CASE("A Program Change moves PLAY's LIVE slot, not only the live rig")
+{
+  // OnIdle recalled the Sound but left mVolumLastRecalledPlaySlot on the previous
+  // number, so the rail's LIVE chip and the stage overlay stayed put while the
+  // amp behind them changed. Rail clicks and Up/Down already wrote the slot;
+  // MIDI has to as well, or a pedalboard cannot switch the current play.
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto idle = source.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idle != std::string::npos);
+  const auto drain = source.find("mVolumMidiQueue.Drain()", idle);
+  REQUIRE(drain != std::string::npos);
+  const std::string body = source.substr(drain, 400);
+  CHECK(body.find("_VolumRecallSound(sound->ampId, sound->presetId)") != std::string::npos);
+  CHECK(body.find("mVolumLastRecalledPlaySlot = *slot") != std::string::npos);
 }

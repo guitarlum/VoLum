@@ -777,8 +777,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   IRECT chorusPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
   auto* chorusModePicker =
     new VoLumModePickerControl(chorusPickerRect, kChorusMode, {"CLASSIC", "WARPED", "CLEAR", "ENSEMBLE"});
-  chorusModePicker->SetTooltip("CLASSIC = short bright single-voice swirl | WARPED = long, dark and deep (MIX 100% "
-                               "= vibrato) | CLEAR = transparent two-tap doubling | ENSEMBLE = three-tap lush wash.");
+  chorusModePicker->SetTooltip(
+    "CLASSIC = short bright single-voice swirl | WARPED = long, dark and deep (MIX 100% "
+    "= vibrato) | CLEAR = transparent two-tap doubling | ENSEMBLE = three-tap lush wash.");
   pGraphics->AttachControl(chorusModePicker, -1, "CHORUS_KNOBS");
 
   float chorusSwX = mainCX - 242.f;
@@ -1026,7 +1027,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       },
       [this](int slot, const volum::SoundChoice& sound) { _VolumAssignPlaySound(slot, sound); },
       [this](int slot) { _VolumClearPlaySound(slot); },
-      [this](const char* paramName) { _VolumTogglePlayBypass(paramName); }),
+      [this](const char* paramName) { _VolumTogglePlayBypass(paramName); },
+      [this](int focus) { _VolumFocusBuildEffect(focus); }, [this]() { _VolumAddHeardPlaySound(); }),
     kCtrlTagVoLumPlaySurface);
 
   // Mode pair, attached here and not last. It has to sit above the PLAY surface
@@ -1034,10 +1036,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // and below everything attached after this point - Settings, Pack, Manage, the
   // confirm modal, tuner and metronome are all full-canvas overlays, and a header
   // control that painted and hit-tested through them was the 1.3.0 bug.
-  pGraphics->AttachControl(new VoLumSettingsVertRuleControl(IRECT(mainR - 125.f, b.T + 16.f, mainR - 121.f, b.T + 38.f)));
+  pGraphics->AttachControl(
+    new VoLumSettingsVertRuleControl(IRECT(mainR - 125.f, b.T + 16.f, mainR - 121.f, b.T + 38.f)));
+  // Destination toggle: 90 x 30, larger than the 26 px tool circles, left of the rule.
   auto* modeToggle = new VoLumModeToggleControl(
-    IRECT(mainR - 226.f, b.T + 14.f, mainR - 134.f, b.T + 40.f),
-    [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
+    IRECT(mainR - 218.f, b.T + 12.f, mainR - 128.f, b.T + 42.f), [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
   modeToggle->SetMode(mVolumUiMode);
   pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
 
@@ -1074,36 +1077,31 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       },
       gearSVG));
     pGraphics
-      ->AttachControl(new VoLumUpdateBadgeControl(
-                        IRECT(gearArea.R - 5.f, gearArea.T - 1.f, gearArea.R + 2.f, gearArea.T + 6.f)),
-                      kCtrlTagVoLumUpdateBadge)
+      ->AttachControl(
+        new VoLumUpdateBadgeControl(IRECT(gearArea.R - 5.f, gearArea.T - 1.f, gearArea.R + 2.f, gearArea.T + 6.f)),
+        kCtrlTagVoLumUpdateBadge)
       ->Hide(true);
 
     auto* settingsPage = new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                                     crossSVG, volumSettingsStyle, volumSettingsRadioStyle);
-    pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
     settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
     // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
     // PLAY are two views of one midiSoundMap rather than two stores.
     settingsPage->SetMidiSoundMapCallbacks(
       [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
       [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
+    settingsPage->SetMidiSoundMapSwap([pPlugin](int a, int b) { pPlugin->_VolumSwapPlaySounds(a, b); });
+    settingsPage->SetMidiPickerGroups(&pPlugin->mVolumPlayPickerGroups);
     pPlugin->_VolumRefreshMidiSettingsChrome();
 
-    // Tuner overlay (on top of everything)
-    {
-      auto* tunerCtrl = new VoLumTunerControl(b);
-      tunerCtrl->SetDismissAction([pPlugin]() { pPlugin->mTunerDSP.SetActive(false); });
-      pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
-    }
+    auto* tunerCtrl = new VoLumTunerControl(b);
+    tunerCtrl->SetDismissAction([pPlugin]() { pPlugin->mTunerDSP.SetActive(false); });
 
     // F5 preset bar — centred in the top header band, above the AMP/triptych
     // column. Clicking opens the anchored preset dropdown; < > cycle presets.
     {
-      // Narrower than the pre-1.3.0 240: the PLAY|BUILD toggle now shares this
-      // band, and at 240 the bar's right border sat 4 px from the toggle so the
-      // two read as one welded control.
-      const float presetBarW = 224.f;
+      // 240: the destination toggle is 90 px on the right, so the name still clears it.
+      const float presetBarW = 240.f;
       const IRECT presetBarArea(mainCX - presetBarW * 0.5f, b.T + 12.f, mainCX + presetBarW * 0.5f, b.T + 40.f);
       pGraphics->AttachControl(
         new VoLumPresetBarControl(presetBarArea, [pPlugin]() { pPlugin->_VolumShowPresetMenu(); }),
@@ -1147,7 +1145,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           if (idx < 0 || presetBar->IsFactoryActive())
             return;
           const std::string name = presetBar->ActiveName();
-          const bool hasFactory = pPlugin->mVolumCustomMainIdx < 0
+          const bool hasFactory =
+            pPlugin->mVolumCustomMainIdx < 0
             && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
           const int userIdx = idx - (hasFactory ? 1 : 0);
           auto doOverwrite = [pPlugin, userIdx]() { pPlugin->_VolumOverwritePreset(userIdx); };
@@ -1161,8 +1160,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         }
         if (code == VoLumListMenuControl::kSaveAsNew)
         {
-          if (auto* bar = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-            bar->As<VoLumPresetBarControl>()->PromptSaveAs();
+          pPlugin->_VolumPromptSaveAs();
           return;
         }
         // Name the owner for the bounds check, not only inside _VolumRecallPreset:
@@ -1171,7 +1169,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         // are the Ready row (when this amp ships one) plus the User bank, so the
         // bound has to count both the way _VolumRecallPreset splits them.
         const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
-        const bool hasFactory = pPlugin->mVolumCustomMainIdx < 0
+        const bool hasFactory =
+          pPlugin->mVolumCustomMainIdx < 0
           && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
         if (code >= 0 && code < static_cast<int>(presets.size()) + (hasFactory ? 1 : 0))
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
@@ -1200,6 +1199,34 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           pPlugin->_VolumClearIR(support); // back to baked cab
       });
       pGraphics->AttachControl(irMenu, kCtrlTagVoLumIrMenu)->Hide(true);
+    }
+
+    // Full-window overlays attach after BUILD chrome so they cover the preset bar
+    // and every anchored dropdown (iPlug attach order is z-order).
+    pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
+
+    // Pack sits above Settings and below Manage / confirm / name / tuner /
+    // metronome. Attach order is z-order; this matches volum::ui::kOverlayAttachNeedles.
+    {
+      auto* pack = new VoLumPackOverlayControl(b);
+      pack->SetCallbacks([this](const volum::pack::ExportSelection& sel) { return _VolumExportPack(sel); },
+                         [this]() { return _VolumPickPack(); },
+                         [this, pack](volum::pack::ImportVerb verb, bool alsoSettings) {
+                           return _VolumImportPack(pack->OpenedPack(), verb, alsoSettings);
+                         });
+#if defined(APP_API)
+      pack->SetStandalone(true);
+#endif
+      pGraphics->AttachControl(pack, kCtrlTagVoLumPackOverlay)->Hide(true);
+      settingsPage->SetPackCallbacks(
+        [this, pack]() {
+          pack->SetSoundingIds(_VolumSoundingLibraryIds());
+          pack->ShowExport();
+        },
+        [this, pack]() {
+          pack->SetSoundingIds(_VolumSoundingLibraryIds());
+          pack->ShowImport();
+        });
     }
 
     // Manage + Builder overlay (on top of everything; hidden until invoked).
@@ -1340,6 +1367,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
       // Shared "Are you sure?" modal, attached above the overlay.
       pGraphics->AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)->Hide(true);
+      auto* nameDlg = new VoLumNameDialogControl(b);
+      pGraphics->AttachControl(nameDlg, kCtrlTagVoLumNameDialog)->Hide(true);
+      pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
     }
 
     // Metronome config overlay
@@ -1368,35 +1398,6 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // planner. Setting a partial selection here is what used to leave a lane with
   // an active custom IR reading as "No Cab".
 
-  // Pack export / import modal, opened from the Settings "Content library" row.
-  // Still after the mode pair, like every other full-canvas overlay: the header
-  // must not draw through the Pack sheet or take clicks meant for it.
-  {
-    auto* pack = new VoLumPackOverlayControl(b);
-    pack->SetCallbacks([this](const volum::pack::ExportSelection& sel) { return _VolumExportPack(sel); },
-                       [this]() { return _VolumPickPack(); },
-                       [this, pack](volum::pack::ImportVerb verb, bool alsoSettings) {
-                         return _VolumImportPack(pack->OpenedPack(), verb, alsoSettings);
-                       });
-#if defined(APP_API)
-    pack->SetStandalone(true);
-#endif
-    pGraphics->AttachControl(pack, kCtrlTagVoLumPackOverlay)->Hide(true);
-
-    if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
-    {
-      settings->As<NAMSettingsPageControl>()->SetPackCallbacks(
-        [this, pack]() {
-          pack->SetSoundingIds(_VolumSoundingLibraryIds());
-          pack->ShowExport();
-        },
-        [this, pack]() {
-          pack->SetSoundingIds(_VolumSoundingLibraryIds());
-          pack->ShowImport();
-        });
-    }
-  }
-
   _SyncVoLumExactEntry();
   if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))
     surface->Hide(mVolumUiMode != volum::UiMode::Play);
@@ -1412,25 +1413,31 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       return false;
     if (mVolumUiMode == volum::UiMode::Play)
     {
-      // Up/Down step the Sound rail; everything else stays unhandled, because the
-      // hidden BUILD controls behind PLAY must not react to navigation shortcuts.
-      if (key.VK != kVK_UP && key.VK != kVK_DOWN)
-        return false;
-      if (auto* pGfx = GetUI())
+      // PLAY owns the arrows and 1..8. Up/Down and Left/Right both step the Sound
+      // rail: Left/Right used to fall through to BUILD's channel stepper, so a
+      // player changing "channel" in PLAY moved the hidden amp and left LIVE put.
+      // 1/2/3 stay swallowed so they cannot retarget PRE/AMP/POST behind the board.
+      const bool railStep = key.VK == kVK_UP || key.VK == kVK_DOWN || key.VK == kVK_LEFT || key.VK == kVK_RIGHT;
+      const int stomp = (key.VK >= '1' && key.VK <= '8') ? key.VK - '1' : -1;
+      if (volum::PlayBranchConsumes(key.C, railStep, stomp >= 0))
       {
-        // A full-canvas overlay over PLAY owns the keyboard: stepping the live rig
-        // from behind an open Settings or Pack sheet is not a shortcut, it is a
-        // surprise.
-        for (int tag : {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,
-                        kCtrlTagVoLumConfirm, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome})
+        if (auto* pGfx = GetUI())
         {
-          auto* c = pGfx->GetControlWithTag(tag);
-          if (c && !c->IsHidden())
-            return false;
+          for (int tag : {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,
+                          kCtrlTagVoLumConfirm, kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome})
+          {
+            auto* c = pGfx->GetControlWithTag(tag);
+            if (c && !c->IsHidden())
+              return false;
+          }
         }
+        if (stomp >= 0)
+          _VolumTogglePlayBypass(volum::kPlayBypassParamNames[static_cast<size_t>(stomp)]);
+        else
+          _VolumStepPlaySlot((key.VK == kVK_UP || key.VK == kVK_LEFT) ? -1 : 1);
+        return true;
       }
-      _VolumStepPlaySlot(key.VK == kVK_UP ? -1 : 1);
-      return true; // consumed either way: never fall through to BUILD amp switching
+      // T / M / H / Ctrl+S fall through to the shared handler.
     }
 
     if (auto* pGfx = GetUI())
@@ -1455,8 +1462,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // anchored dropdown) for consistent dismissal across the UI.
       if (key.VK == kVK_ESCAPE)
       {
-        const int kDismissTags[] = {kCtrlTagVoLumConfirm, kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,
-                                    kCtrlTagVoLumIrMenu,  kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+        const int kDismissTags[] = {kCtrlTagVoLumNameDialog,     kCtrlTagVoLumConfirm,       kCtrlTagVoLumPackOverlay,
+                                    kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,    kCtrlTagVoLumIrMenu,
+                                    kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
         for (int tag : kDismissTags)
         {
           if (auto* c = pGfx->GetControlWithTag(tag))
@@ -1467,6 +1475,19 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
               pGfx->SetAllControlsDirty();
               return true;
             }
+          }
+        }
+      }
+
+      if (key.VK == 'h' || key.VK == 'H')
+      {
+        if (auto* pack = pGfx->GetControlWithTag(kCtrlTagVoLumPackOverlay))
+        {
+          if (!pack->IsHidden())
+          {
+            pack->Hide(true);
+            pGfx->SetAllControlsDirty();
+            return true;
           }
         }
       }
@@ -1494,8 +1515,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // list / knobs don't move. Non-nav keys fall through to the focused
       // control (text entry etc.).
       {
-        const int kModalTags[] = {kCtrlTagVoLumConfirm, kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,
-                                  kCtrlTagVoLumIrMenu,  kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+        const int kModalTags[] = {kCtrlTagVoLumNameDialog,     kCtrlTagVoLumConfirm,       kCtrlTagVoLumPackOverlay,
+                                  kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,    kCtrlTagVoLumIrMenu,
+                                  kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
         for (int tag : kModalTags)
         {
           auto* c = pGfx->GetControlWithTag(tag);

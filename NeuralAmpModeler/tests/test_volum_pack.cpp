@@ -311,8 +311,8 @@ TEST_CASE("Pack export and import labels name the amp a preset belongs to")
   PackContents pack;
   pack.ok = true;
   pack.library = r;
-  CHECK(Mentions(BuildImportPreview(r, pack, ImportVerb::Overwrite, false, true).replaces,
-                 "Preset \"Lead\"  ·  Plexi"));
+  CHECK(
+    Mentions(BuildImportPreview(r, pack, ImportVerb::Overwrite, false, true).replaces, "Preset \"Lead\"  ·  Plexi"));
 }
 
 TEST_CASE("A Share Pack carries no settings and no MIDI sound map; Everything carries both")
@@ -777,8 +777,539 @@ TEST_CASE("Re-importing the same pedal keeps the PRE index local presets already
 }
 
 // ---------------------------------------------------------------------------
+// Import ticks
+// ---------------------------------------------------------------------------
+
+TEST_CASE("The import header counts presets alongside amps, IRs and pedals")
+{
+  Library lib("import-header", "sender");
+  PackContents pack;
+  pack.ok = true;
+  pack.job = Job::Everything;
+  pack.library = lib.store.reg();
+
+  CHECK(PresetCount(pack.library) == 1);
+  CHECK(PackSummaryLine(pack) == "Everything Pack  -  1 amp, 1 IR, 1 pedal, 1 preset");
+
+  // Plurals, and a second bank: the count is every bank summed, not the first one.
+  Preset extra;
+  extra.id = "preset_extra";
+  extra.name = "Clean";
+  pack.library.presetBanks[volum::content::FactoryOwnerKey(3)] = {extra};
+  pack.library.irs.push_back(pack.library.irs[0]);
+  pack.library.irs[1].id = "ir_two";
+  pack.job = Job::Share;
+  CHECK(PresetCount(pack.library) == 2);
+  CHECK(PackSummaryLine(pack) == "Share Pack  -  1 amp, 2 IRs, 1 pedal, 2 presets");
+}
+
+TEST_CASE("Every item in an import preview is a tick, and all of them start on")
+{
+  Library lib("import-ticks-all", "sender");
+  PackContents pack;
+  pack.ok = true;
+  pack.library = lib.store.reg();
+
+  const auto all = AllTicks(pack);
+  CHECK(all.ampIds == std::vector<std::string>{"amp_one"});
+  CHECK(all.irIds == std::vector<std::string>{"ir_one"});
+  CHECK(all.pedalIds == std::vector<std::string>{"pedal_one"});
+  CHECK(all.presetIds == std::vector<std::string>{"preset_one"});
+  CHECK(all.Count() == 4);
+  CHECK(all.AllSelected(pack));
+  CHECK(ResetAllowed(pack, all));
+
+  // Every row the preview offers is one of those ids, so nothing can be listed
+  // without a tick to turn it off.
+  const auto items = ImportItems(Registry{}, pack);
+  REQUIRE(items.size() == 4);
+  for (const auto& item : items)
+  {
+    CHECK_FALSE(item.id.empty());
+    CHECK_FALSE(item.label.empty());
+    CHECK_FALSE(item.present); // an empty local library: all four are adds
+  }
+
+  SUBCASE("one tick off is not all selected, and Reset is off the table")
+  {
+    ImportTicks fewer = all;
+    fewer.irIds.clear();
+    CHECK_FALSE(fewer.AllSelected(pack));
+    CHECK_FALSE(ResetAllowed(pack, fewer));
+  }
+  SUBCASE("an id the Pack does not carry cannot stand in for one it does")
+  {
+    ImportTicks bogus = all;
+    bogus.pedalIds = {"pedal_from_another_pack"};
+    CHECK_FALSE(bogus.AllSelected(pack));
+    CHECK_FALSE(ResetAllowed(pack, bogus));
+  }
+  SUBCASE("a Pack that could not be read never allows Reset")
+  {
+    PackContents broken;
+    broken.error = "This Pack is damaged.";
+    CHECK_FALSE(ResetAllowed(broken, AllTicks(broken)));
+  }
+}
+
+TEST_CASE("Reset eligibility requires a readable non-empty Pack and every raw user tick")
+{
+  Library lib("reset-raw-ticks", "sender");
+  PackContents pack;
+  pack.ok = true;
+  pack.library = lib.store.reg();
+  const ImportTicks all = AllTicks(pack);
+  REQUIRE(ResetAllowed(pack, all));
+
+  SUBCASE("each real item kind independently vetoes Reset")
+  {
+    ImportTicks withoutAmp = all;
+    withoutAmp.ampIds.clear();
+    CHECK_FALSE(ResetAllowed(pack, withoutAmp));
+
+    ImportTicks withoutIr = all;
+    withoutIr.irIds.clear();
+    CHECK_FALSE(ResetAllowed(pack, withoutIr));
+
+    ImportTicks withoutPedal = all;
+    withoutPedal.pedalIds.clear();
+    CHECK_FALSE(ResetAllowed(pack, withoutPedal));
+
+    ImportTicks withoutPreset = all;
+    withoutPreset.presetIds.clear();
+    CHECK_FALSE(ResetAllowed(pack, withoutPreset));
+  }
+
+  SUBCASE("companion closure cannot turn a user-unticked row into Reset consent")
+  {
+    ImportTicks userTicks = all;
+    userTicks.irIds.clear(); // the preset requires this IR, but the user turned its row off
+    const ImportTicks closedTicks = ApplyCompanionLock(pack.library, userTicks);
+    REQUIRE(closedTicks.HasIr("ir_one"));
+    REQUIRE(closedTicks.AllSelected(pack));
+    CHECK_FALSE(userTicks.AllSelected(pack));
+    CHECK_FALSE(ResetAllowed(pack, userTicks));
+  }
+
+  SUBCASE("a damaged Pack stays ineligible even when all of its rows are selected")
+  {
+    PackContents damaged = pack;
+    damaged.ok = false;
+    damaged.error = "This Pack is damaged.";
+    CHECK_FALSE(ResetAllowed(damaged, AllTicks(damaged)));
+  }
+
+  SUBCASE("a readable but empty Pack cannot Reset the local library to nothing")
+  {
+    PackContents empty;
+    empty.ok = true;
+    const ImportTicks none = AllTicks(empty);
+    REQUIRE(none.Empty());
+    REQUIRE(none.AllSelected(empty)); // vacuously true is not destructive consent
+    CHECK_FALSE(ResetAllowed(empty, none));
+    CHECK(PackSummaryLine(empty) == "Share Pack  -  0 amps, 0 IRs, 0 pedals, 0 presets");
+  }
+}
+
+TEST_CASE("SubsetPack drops the unticked items and their payload bytes")
+{
+  Library sender("subset-sender", "sender");
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()));
+  REQUIRE(pack.ok);
+  const std::string irFile = pack.library.irs[0].file;
+
+  SUBCASE("everything ticked is the Pack unchanged")
+  {
+    const auto same = SubsetPack(pack, AllTicks(pack));
+    CHECK(same.ok);
+    CHECK(same.job == pack.job);
+    CHECK(same.library.amps.size() == 1);
+    CHECK(same.library.irs.size() == 1);
+    CHECK(same.library.pedals.size() == 1);
+    CHECK(PresetCount(same.library) == 1);
+    CHECK(same.files.size() == pack.files.size());
+  }
+
+  SUBCASE("unticking the amp takes the amp, its bank and its capture file out")
+  {
+    ImportTicks ticks = AllTicks(pack);
+    ticks.ampIds.clear();
+    ticks = ApplyCompanionLock(pack.library, ticks);
+    const auto subset = SubsetPack(pack, ticks);
+
+    CHECK(subset.library.amps.empty());
+    CHECK(PresetCount(subset.library) == 0); // the bank had nowhere to live
+    CHECK(subset.library.presetBanks.empty()); // and no empty bank is left behind
+    CHECK(subset.library.irs.size() == 1); // the IR was ticked in its own right
+    CHECK(subset.files.count(sender.ampStoredPath) == 0);
+    CHECK(subset.files.count(irFile) == 1);
+  }
+
+  SUBCASE("unticking the IR leaves its wav out of the user's library")
+  {
+    ImportTicks ticks;
+    ticks.ampIds = {"amp_one"}; // amp only: no preset, so nothing requires the IR
+    ticks = ApplyCompanionLock(pack.library, ticks);
+    const auto subset = SubsetPack(pack, ticks);
+
+    CHECK(subset.library.amps.size() == 1);
+    CHECK(subset.library.irs.empty());
+    CHECK(subset.library.pedals.empty());
+    CHECK(subset.files.count(irFile) == 0);
+    CHECK(subset.files.count(sender.ampStoredPath) == 1);
+  }
+}
+
+TEST_CASE("SubsetPack AllTicks preserves every Pack id byte and machine payload")
+{
+  Library sender("subset-identity", "sender");
+  sender.store.reg().midiSoundMap[17] = MidiSoundAssignment{"amp_one", "preset_one"};
+  REQUIRE(sender.store.Save());
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), "{\"volumLastAmp\":7}");
+  REQUIRE(pack.ok);
+
+  const auto same = SubsetPack(pack, AllTicks(pack));
+  CHECK(volum::content::RegistryToJson(same.library) == volum::content::RegistryToJson(pack.library));
+  CHECK(same.files == pack.files);
+  CHECK(same.settingsJson == pack.settingsJson);
+  CHECK(same.includesMidiSoundMap == pack.includesMidiSoundMap);
+  CHECK(same.contractVersion == pack.contractVersion);
+  CHECK(same.job == pack.job);
+  CHECK(AllTicks(same).ampIds == AllTicks(pack).ampIds);
+  CHECK(AllTicks(same).irIds == AllTicks(pack).irIds);
+  CHECK(AllTicks(same).pedalIds == AllTicks(pack).pedalIds);
+  CHECK(AllTicks(same).presetIds == AllTicks(pack).presetIds);
+}
+
+TEST_CASE("Companion lock: a ticked preset drags in the IR, pedal and partner it needs")
+{
+  Library lib("import-companions", "sender");
+  // A preset on a factory amp: nothing to untick above it, so the closure is the
+  // only thing keeping its IR and pedal aboard.
+  Preset factoryPreset;
+  factoryPreset.id = "preset_factory";
+  factoryPreset.name = "Factory lead";
+  factoryPreset.settings.activeIrId = "ir_one";
+  factoryPreset.settings.preNam1Capture = kCustomPedalIndexBase;
+  lib.store.reg().presetBanks[volum::content::FactoryOwnerKey(7)] = {factoryPreset};
+
+  PackContents pack;
+  pack.ok = true;
+  pack.library = lib.store.reg();
+
+  SUBCASE("ticking only the preset pulls its IR and its pedal")
+  {
+    ImportTicks ticks;
+    ticks.presetIds = {"preset_factory"};
+    const auto closed = ApplyCompanionLock(pack.library, ticks);
+    CHECK(closed.HasPreset("preset_factory"));
+    CHECK(closed.HasIr("ir_one"));
+    CHECK(closed.HasPedal("pedal_one"));
+    CHECK(closed.ampIds.empty()); // a factory capture ships with VoLum
+
+    // ... and those two are locked, so the UI cannot offer to click them off.
+    const auto locks = CompanionLocks(pack.library, closed);
+    CHECK(locks.HasIr("ir_one"));
+    CHECK(locks.HasPedal("pedal_one"));
+    CHECK_FALSE(locks.HasPreset("preset_factory")); // the user's own tick
+
+    // The subset carries them, so the import cannot land a preset pointing at an
+    // IR that is not there.
+    const auto subset = SubsetPack(pack, closed);
+    CHECK(subset.library.irs.size() == 1);
+    CHECK(subset.library.pedals.size() == 1);
+  }
+
+  SUBCASE("unticking a companion does not stick while its preset is ticked")
+  {
+    ImportTicks ticks;
+    ticks.presetIds = {"preset_factory"};
+    ticks.irIds = {}; // the user tried to drop the IR
+    CHECK(ApplyCompanionLock(pack.library, ticks).HasIr("ir_one"));
+  }
+
+  SUBCASE("a support partner and the partner's own bank come along")
+  {
+    const auto partnerSrc = WriteSrc(lib.base / "incoming", "Partner.nam", "NAM-partner");
+    CustomAmp partner;
+    partner.id = "amp_partner";
+    partner.name = "Partner";
+    CustomNamFile f;
+    f.file = "Partner.nam";
+    f.slot = kDirectSlot;
+    f.channel = 1;
+    f.storedPath = lib.store.ImportFileCopy(partnerSrc, "amps", "amp_partner_0");
+    partner.files = {f};
+    lib.store.reg().amps.push_back(partner);
+    Preset partnerPreset;
+    partnerPreset.id = "preset_partner";
+    partnerPreset.name = "Partner tone";
+    lib.store.reg().presetBanks["amp_partner"] = {partnerPreset};
+    lib.store.reg().presetBanks[volum::content::FactoryOwnerKey(7)][0].settings.supportCustomId = "amp_partner";
+
+    PackContents withPartner;
+    withPartner.ok = true;
+    withPartner.library = lib.store.reg();
+
+    ImportTicks ticks;
+    ticks.presetIds = {"preset_factory"};
+    const auto closed = ApplyCompanionLock(withPartner.library, ticks);
+    CHECK(closed.HasAmp("amp_partner"));
+    CHECK(closed.HasPreset("preset_partner"));
+    const auto locks = CompanionLocks(withPartner.library, closed);
+    CHECK(locks.HasAmp("amp_partner"));
+    CHECK(locks.HasPreset("preset_partner"));
+  }
+}
+
+TEST_CASE("Preset import closure matches export across IR pedal and dual-amp partner")
+{
+  Library lib("import-dual-closure", "sender");
+
+  CustomAmp partner;
+  partner.id = "amp_partner";
+  partner.name = "Dual partner";
+  lib.store.reg().amps.push_back(partner);
+
+  IRItem partnerIr;
+  partnerIr.id = "ir_partner";
+  partnerIr.name = "Partner IR";
+  partnerIr.file = "ir/partner.wav";
+  lib.store.reg().irs.push_back(partnerIr);
+
+  Preset partnerPreset;
+  partnerPreset.id = "preset_partner";
+  partnerPreset.name = "Partner voice";
+  partnerPreset.settings.activeIrId = "ir_partner";
+  partnerPreset.settings.preNam2Capture = kCustomPedalIndexBase;
+  lib.store.reg().presetBanks["amp_partner"] = {partnerPreset};
+  lib.store.reg().presetBanks["amp_one"][0].settings.supportCustomId = "amp_partner";
+
+  ImportTicks userTicks;
+  userTicks.ampIds = {"amp_one"}; // the selected preset's custom owner must travel
+  userTicks.presetIds = {"preset_one"};
+  const ImportTicks closed = ApplyCompanionLock(lib.store.reg(), userTicks);
+
+  CHECK(closed.HasPreset("preset_one"));
+  CHECK(closed.HasIr("ir_one"));
+  CHECK(closed.HasPedal("pedal_one"));
+  CHECK(closed.HasAmp("amp_partner"));
+  CHECK(closed.HasPreset("preset_partner"));
+  CHECK(closed.HasIr("ir_partner"));
+
+  ExportSelection selection;
+  selection.everything = false;
+  selection.presetIds = {"preset_one"};
+  const ExportPlan exportClosure = BuildExportPlan(lib.store.reg(), selection);
+  CHECK(exportClosure.irIds == std::vector<std::string>{"ir_one", "ir_partner"});
+  CHECK(exportClosure.pedalIds == std::vector<std::string>{"pedal_one"});
+  CHECK(exportClosure.ampIds == std::vector<std::string>{"amp_partner"});
+  CHECK(exportClosure.presetIds == std::vector<std::string>{"preset_one", "preset_partner"});
+
+  const ImportTicks locks = CompanionLocks(lib.store.reg(), closed);
+  CHECK(locks.HasAmp("amp_partner"));
+  CHECK(locks.HasPreset("preset_partner"));
+  CHECK(locks.HasIr("ir_one"));
+  CHECK(locks.HasIr("ir_partner"));
+  CHECK(locks.HasPedal("pedal_one"));
+}
+
+TEST_CASE("A ticked preset whose amp was unticked cannot be imported at all")
+{
+  // The hole this exists to close: an amp left out and its preset left in would
+  // import a preset onto an amp that is not there.
+  Library lib("import-orphan-preset", "sender");
+  PackContents pack;
+  pack.ok = true;
+  pack.library = lib.store.reg();
+
+  ImportTicks ticks;
+  ticks.presetIds = {"preset_one"}; // amp_one deliberately not ticked
+  ticks.irIds = {"ir_one"};
+  const auto closed = ApplyCompanionLock(pack.library, ticks);
+  CHECK_FALSE(closed.HasPreset("preset_one"));
+  CHECK_FALSE(closed.HasAmp("amp_one"));
+  CHECK(SubsetPack(pack, closed).library.presetBanks.empty());
+
+  // Tick the amp and the same preset is fine, IR and pedal in tow.
+  ticks.ampIds = {"amp_one"};
+  const auto both = ApplyCompanionLock(pack.library, ticks);
+  CHECK(both.HasPreset("preset_one"));
+  CHECK(both.HasIr("ir_one"));
+  CHECK(both.HasPedal("pedal_one"));
+}
+
+TEST_CASE("Unticking a custom amp drops every preset it owns but not factory-owned presets")
+{
+  Library lib("import-drop-owner-bank", "sender");
+  Preset second = lib.store.reg().presetBanks["amp_one"][0];
+  second.id = "preset_two";
+  second.name = "Clean";
+  lib.store.reg().presetBanks["amp_one"].push_back(second);
+
+  Preset factory;
+  factory.id = "preset_factory";
+  factory.name = "Factory-owned";
+  lib.store.reg().presetBanks[volum::content::FactoryOwnerKey(4)] = {factory};
+
+  ImportTicks ticks;
+  ticks.presetIds = {"preset_one", "preset_two", "preset_factory"};
+  const ImportTicks closed = ApplyCompanionLock(lib.store.reg(), ticks);
+  CHECK_FALSE(closed.HasPreset("preset_one"));
+  CHECK_FALSE(closed.HasPreset("preset_two"));
+  CHECK(closed.HasPreset("preset_factory"));
+  CHECK(closed.ampIds.empty());
+}
+
+TEST_CASE("A factory-owned preset survives closure and SubsetPack without a custom amp")
+{
+  PackContents pack;
+  pack.ok = true;
+  Preset factory;
+  factory.id = "preset_factory";
+  factory.name = "Factory clean";
+  pack.library.presetBanks[volum::content::FactoryOwnerKey(6)] = {factory};
+
+  ImportTicks userTicks;
+  userTicks.presetIds = {"preset_factory"};
+  const ImportTicks closed = ApplyCompanionLock(pack.library, userTicks);
+  REQUIRE(closed.HasPreset("preset_factory"));
+  REQUIRE(closed.ampIds.empty());
+  REQUIRE(ResetAllowed(pack, userTicks));
+
+  const PackContents subset = SubsetPack(pack, closed);
+  CHECK(subset.library.amps.empty());
+  REQUIRE(subset.library.presetBanks.size() == 1);
+  REQUIRE(subset.library.presetBanks.count(volum::content::FactoryOwnerKey(6)) == 1);
+  CHECK(subset.library.presetBanks.at(volum::content::FactoryOwnerKey(6))[0].id == "preset_factory");
+}
+
+TEST_CASE("An import of a subset writes only the ticked items into the library")
+{
+  Library sender("subset-apply-sender", "sender");
+  sender.store.reg().amps[0].id = "amp_two";
+  sender.store.reg().amps[0].name = "Bassman";
+  sender.store.reg().presetBanks["amp_two"] = sender.store.reg().presetBanks["amp_one"];
+  sender.store.reg().presetBanks.erase("amp_one");
+  sender.store.reg().presetBanks["amp_two"][0].id = "preset_two";
+  sender.store.reg().irs[0].id = "ir_two";
+  sender.store.reg().irs[0].name = "Bassman IR";
+  sender.store.reg().presetBanks["amp_two"][0].settings.activeIrId = "ir_two";
+  sender.store.reg().pedals[0].id = "pedal_two";
+  sender.store.reg().pedals[0].name = "Tube Screamer";
+  REQUIRE(sender.store.Save());
+
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()));
+  REQUIRE(pack.ok);
+  const std::string senderIrFile = pack.library.irs[0].file;
+
+  // The receiver wants the amp and nothing else: no preset, so no IR or pedal is
+  // required, and none may arrive.
+  ImportTicks ticks;
+  ticks.ampIds = {"amp_two"};
+  const auto subset = SubsetPack(pack, ApplyCompanionLock(pack.library, ticks));
+
+  Library receiver("subset-apply-receiver", "recv");
+  const auto preview = BuildImportPreview(receiver.store.reg(), subset, ImportVerb::Overwrite, false, true);
+  CHECK(Mentions(preview.adds, "Bassman"));
+  CHECK_FALSE(Mentions(preview.adds, "Bassman IR"));
+  CHECK_FALSE(Mentions(preview.adds, "Tube Screamer"));
+
+  REQUIRE(ApplyPack(receiver.store, subset, ImportVerb::Overwrite, false, true).ok);
+  ContentStore reloaded(receiver.base);
+  REQUIRE(reloaded.Load());
+  CHECK(reloaded.reg().amps.size() == 2);
+  CHECK(reloaded.reg().irs.size() == 1); // the receiver's own, nothing added
+  CHECK(reloaded.reg().pedals.size() == 1);
+  CHECK(reloaded.reg().presetBanks.count("amp_two") == 0);
+  CHECK_FALSE(std::filesystem::exists(reloaded.ResolveStored(senderIrFile)));
+  // The one thing that was ticked did arrive, bytes and all.
+  std::string body;
+  REQUIRE(ReadWholeFile(reloaded.ResolveStored(sender.ampStoredPath), body));
+  CHECK(body == "NAM-amp-sender");
+}
+
+TEST_CASE("SubsetPack AllTicks keeps same-id replace and same-name distinct-id add laws")
+{
+  Library sender("subset-collision-sender", "sender");
+  Library receiver("subset-collision-receiver", "receiver");
+  sender.store.reg().irs[0].id = "ir_distinct";
+  sender.store.reg().irs[0].name = receiver.store.reg().irs[0].name;
+  REQUIRE(sender.store.Save());
+
+  const PackContents full = PackFrom(sender, EverythingPlan(sender.store.reg()));
+  REQUIRE(full.ok);
+  const PackContents subset = SubsetPack(full, AllTicks(full));
+  const auto preview = BuildImportPreview(receiver.store.reg(), subset, ImportVerb::Overwrite, false, true);
+  CHECK(Mentions(preview.replaces, "Plexi"));
+  CHECK(Mentions(preview.adds, "Mesa OS"));
+  CHECK(Mentions(preview.nameCollisions, "Mesa OS"));
+
+  REQUIRE(ApplyPack(receiver.store, subset, ImportVerb::Overwrite, false, true).ok);
+  ContentStore reloaded(receiver.base);
+  REQUIRE(reloaded.Load());
+  REQUIRE(reloaded.reg().amps.size() == 1);
+  CHECK(reloaded.reg().amps[0].id == "amp_one");
+  CHECK(reloaded.reg().amps[0].name == "Plexi");
+  REQUIRE(reloaded.reg().irs.size() == 2);
+  CHECK(std::any_of(
+    reloaded.reg().irs.begin(), reloaded.reg().irs.end(), [](const IRItem& ir) { return ir.id == "ir_one"; }));
+  CHECK(std::any_of(
+    reloaded.reg().irs.begin(), reloaded.reg().irs.end(), [](const IRItem& ir) { return ir.id == "ir_distinct"; }));
+}
+
+TEST_CASE("Subsetting everything changes nothing about how a Pack merges")
+{
+  // The conflict rules are the same object before and after the tick list existed:
+  // same id replaces, same name with a different id keeps both.
+  Library sender("subset-neutral-sender", "sender");
+  Library receiver("subset-neutral-receiver", "recv");
+  sender.store.reg().irs[0].id = "ir_other";
+  sender.store.reg().irs[0].name = "Mesa OS"; // the receiver's IR name
+  REQUIRE(sender.store.Save());
+
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()));
+  REQUIRE(pack.ok);
+  const auto all = SubsetPack(pack, ApplyCompanionLock(pack.library, AllTicks(pack)));
+
+  const auto preview = BuildImportPreview(receiver.store.reg(), all, ImportVerb::Overwrite, false, true);
+  CHECK(Mentions(preview.replaces, "Plexi")); // same amp id
+  CHECK(Mentions(preview.nameCollisions, "Mesa OS"));
+  CHECK(Mentions(preview.adds, "Mesa OS")); // an add, never a silent replace
+
+  REQUIRE(ApplyPack(receiver.store, all, ImportVerb::Overwrite, false, true).ok);
+  ContentStore reloaded(receiver.base);
+  REQUIRE(reloaded.Load());
+  CHECK(reloaded.reg().amps.size() == 1);
+  CHECK(reloaded.reg().irs.size() == 2);
+  std::string body;
+  REQUIRE(ReadWholeFile(reloaded.ResolveStored(sender.ampStoredPath), body));
+  CHECK(body == "NAM-amp-sender"); // the Pack won its own id
+}
+
+// ---------------------------------------------------------------------------
 // Machine settings checkbox
 // ---------------------------------------------------------------------------
+
+TEST_CASE("An Everything Pack with an empty MIDI map still clears stale local slots")
+{
+  Library sender("empty-midi-sender", "sender");
+  REQUIRE(sender.store.reg().midiSoundMap.empty());
+  const PackContents pack = PackFrom(sender, EverythingPlan(sender.store.reg()), "{}");
+  REQUIRE(pack.ok);
+  REQUIRE(pack.job == Job::Everything);
+  REQUIRE(pack.library.midiSoundMap.empty());
+  REQUIRE(pack.includesMidiSoundMap);
+
+  Library receiver("empty-midi-receiver", "receiver");
+  receiver.store.reg().midiSoundMap[23] = MidiSoundAssignment{"amp_one", "preset_one"};
+  REQUIRE(receiver.store.Save());
+  REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true).ok);
+
+  ContentStore reloaded(receiver.base);
+  REQUIRE(reloaded.Load());
+  CHECK(reloaded.reg().midiSoundMap.empty());
+}
 
 TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not the verbs")
 {

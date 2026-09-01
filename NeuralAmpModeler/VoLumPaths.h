@@ -158,6 +158,29 @@ struct ChannelFile
   std::string label;
 };
 
+// filesystem::path::string() is the ANSI code page on Windows and UTF-8 on
+// macOS. Channel / pedal discovery must use UTF-8 so a non-ASCII leaf matches
+// on both, the same way content::PathToUtf8 does for the library.
+inline std::string PathLeafUtf8(const std::filesystem::path& path)
+{
+#if defined(__cpp_char8_t)
+  const std::u8string utf8 = path.filename().u8string();
+  return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+#else
+  return path.filename().u8string();
+#endif
+}
+
+inline std::string PathStemUtf8(const std::filesystem::path& path)
+{
+#if defined(__cpp_char8_t)
+  const std::u8string utf8 = path.stem().u8string();
+  return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+#else
+  return path.stem().u8string();
+#endif
+}
+
 // Scan an amp folder for .nam files matching a speaker prefix (e.g. "V30"),
 // returning sorted list of {filename, channelLabel} pairs.
 inline std::vector<ChannelFile> DiscoverChannels(const std::filesystem::path& rigsRoot, const char* ampFolder,
@@ -177,7 +200,7 @@ inline std::vector<ChannelFile> DiscoverChannels(const std::filesystem::path& ri
   {
     if (!entry.is_regular_file(ec))
       continue;
-    std::string name = entry.path().filename().string();
+    std::string name = PathLeafUtf8(entry.path());
     if (name.size() > 4 && name.compare(name.size() - 4, 4, ".nam") == 0 && name.compare(0, prefix.size(), prefix) == 0)
     {
       auto lastDash = name.rfind('-');

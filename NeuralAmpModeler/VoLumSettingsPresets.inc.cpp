@@ -132,8 +132,8 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
   // belongs to whichever one last switched amps, so reading "the active bank"
   // through it could show another instance's presets in this bar. The shipped
   // Ready row is not a library item, so it is prepended here.
-  const bool hasFactory = mVolumCustomMainIdx < 0
-    && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  const bool hasFactory =
+    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
   std::vector<std::string> names;
   if (hasFactory)
     names.push_back(volum::kFactoryPresetDisplayName);
@@ -199,8 +199,8 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index)
 
 void NeuralAmpModeler::_VolumRecallPreset(int index)
 {
-  const bool hasFactory = mVolumCustomMainIdx < 0
-    && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  const bool hasFactory =
+    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
   if (hasFactory && index == 0)
   {
     _VolumRecallFactoryPreset();
@@ -308,12 +308,47 @@ void NeuralAmpModeler::_VolumRecomputePresetDirty()
   if (!pb)
     return;
   auto* bar = pb->As<VoLumPresetBarControl>();
-  if (!mVolumHasRecalledSnapshot)
-  {
-    bar->SetDirtyState(false);
-    return;
-  }
+  bar->SetDirtyState(_VolumLivePresetDirty());
+}
+
+bool NeuralAmpModeler::_VolumLivePresetDirty()
+{
   _VolumSaveCurrentToSettings();
-  const bool dirty = !volum::AmpSettingsEqual(_VolumActiveScene(), mVolumRecalledSnapshot);
-  bar->SetDirtyState(dirty);
+  return volum::LivePresetDirty(mVolumHasRecalledSnapshot, _VolumActiveScene(), mVolumRecalledSnapshot);
+}
+
+void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after)
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog);
+  if (!raw)
+    return;
+  std::string seed = _VolumMainAmpDisplayName();
+  if (seed.empty())
+    seed = "My preset";
+  raw->As<VoLumNameDialogControl>()->Show(
+    "Save as new preset", "Name this User preset.", seed, [this, after](const std::string& name) {
+      if (_VolumSavePresetAs(name) >= 0 && after)
+        after();
+    });
+}
+
+bool NeuralAmpModeler::_VolumHandleSaveShortcut()
+{
+  if (volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser)
+  {
+    const auto users = volum::custom::PresetsForOwner(_VolumClaimPresetOps());
+    for (int i = 0; i < static_cast<int>(users.size()); ++i)
+    {
+      if (volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), i) == mVolumActivePresetId)
+      {
+        _VolumOverwritePreset(i);
+        return true;
+      }
+    }
+  }
+  _VolumPromptSaveAs();
+  return true;
 }

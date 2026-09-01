@@ -579,6 +579,20 @@ inline std::string ClampName(const std::string& s, std::size_t maxChars)
   return Utf8Prefix(s, maxChars);
 }
 
+inline std::string NormalizePresetName(const char* str)
+{
+  std::string name = str ? str : "";
+  const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+  name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
+  name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
+  return ClampName(name, kMaxPresetNameLen);
+}
+
+inline bool NameDialogCommitAfterTextEntry(const std::string& name)
+{
+  return !name.empty();
+}
+
 // Short pill label for a custom capture name. Names longer than maxChars bytes
 // are clipped to maxChars + a single-glyph ellipsis so they fit the tiny Amp-view
 // quiet-slot pill instead of overflowing into the neighbouring pill. Curated

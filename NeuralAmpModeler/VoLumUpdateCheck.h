@@ -1,7 +1,8 @@
 #pragma once
 
 #include <atomic>
-#include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -49,8 +50,8 @@ inline bool ParseVersion(const std::string& text, Version& out)
   };
 
   Version parsed;
-  if (!component(parsed.major) || *p++ != '.' || !component(parsed.minor) || *p++ != '.'
-      || !component(parsed.patch) || *p != '\0')
+  if (!component(parsed.major) || *p++ != '.' || !component(parsed.minor) || *p++ != '.' || !component(parsed.patch)
+      || *p != '\0')
     return false;
   out = parsed;
   return true;
@@ -83,6 +84,17 @@ struct Manifest
   std::string url;
 };
 
+inline bool FakeUpdateRequested()
+{
+  const char* v = std::getenv("VOLUM_FAKE_UPDATE");
+  return v && v[0] != '\0' && std::strcmp(v, "0") != 0;
+}
+
+inline Manifest FakeUpdateManifest()
+{
+  return {"2.0.0", "configure your own signal chain freely", "https://github.com/guitarlum/VoLum/releases"};
+}
+
 inline bool ParseManifest(const std::string& text, Manifest& out)
 {
   const auto root = nlohmann::json::parse(text, nullptr, false);
@@ -93,8 +105,8 @@ inline bool ParseManifest(const std::string& text, Manifest& out)
   {
     const auto schema = root.find("schema");
     const auto stable = root.find("stable");
-    if (schema == root.end() || !schema->is_number_integer() || schema->get<std::int64_t>() != 1
-        || stable == root.end() || !stable->is_object())
+    if (schema == root.end() || !schema->is_number_integer() || schema->get<std::int64_t>() != 1 || stable == root.end()
+        || !stable->is_object())
       return false;
 
     const auto version = stable->find("version");

@@ -3,6 +3,20 @@
 void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
 {
   const auto transition = volum::ActionForUiModeTransition(mVolumUiMode, mode);
+  if (volum::EnteringPlayDropsLocks(mVolumUiMode, mode) && (mVolumPreLocked || mVolumPostLocked))
+  {
+    // Keep what is sounding: commit the locked live blocks into the scene, then
+    // drop the lock so PLAY recalls cannot desync PRE/POST.
+    if (mVolumPreLocked)
+      _VolumStorePreToCurrentAmp();
+    if (mVolumPostLocked)
+      _VolumStorePostToCurrentAmp();
+    mVolumPreLocked = false;
+    mVolumPostLocked = false;
+    mVolumPreLockUiDirty = false;
+    mVolumPostLockUiDirty = false;
+  }
+  _VolumClampSupportFocus();
   mVolumUiMode = mode;
   if (auto* pGfx = GetUI())
   {
@@ -91,6 +105,27 @@ void NeuralAmpModeler::_VolumClearPlaySound(int slot)
   _VolumRefreshMidiSettingsChrome();
 }
 
+void NeuralAmpModeler::_VolumSwapPlaySounds(int slotA, int slotB)
+{
+  auto& store = volum::content::GlobalContentStore();
+  const auto before = store.reg().midiSoundMap;
+  if (!volum::content::SwapMidiSoundSlots(store.reg(), slotA, slotB))
+    return;
+  if (!store.Save())
+  {
+    store.reg().midiSoundMap = before;
+    return;
+  }
+  // LIVE follows the Sound: the program number that now holds the recalled
+  // assignment is the one the highlight has to sit on.
+  if (mVolumLastRecalledPlaySlot == slotA)
+    mVolumLastRecalledPlaySlot = slotB;
+  else if (mVolumLastRecalledPlaySlot == slotB)
+    mVolumLastRecalledPlaySlot = slotA;
+  _VolumRefreshPlaySurface();
+  _VolumRefreshMidiSettingsChrome();
+}
+
 void NeuralAmpModeler::_VolumRefreshPlaySurface()
 {
   if (mVolumUiMode != volum::UiMode::Play)
@@ -141,23 +176,53 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
     }
   }
 
-  if (mVolumHasRecalledSnapshot)
-    _VolumSaveCurrentToSettings();
-  const bool dirty =
-    volum::IsPlaySnapshotDirty(mVolumHasRecalledSnapshot, _VolumActiveScene(), mVolumRecalledSnapshot);
+  const bool dirty = _VolumLivePresetDirty();
   raw->As<VoLumPlaySurfaceControl>()->SetData(
     mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), _VolumActiveOwnerKey(), mVolumActivePresetId,
     mVolumLastRecalledPlaySlot, _VolumMainAmpDisplayName(),
     mVolumCustomMainIdx >= 0 ? volum::custom::CustomAmpArt(mVolumCustomMainIdx) : mVolumAmpIdx,
     mVolumCustomMainIdx >= 0, dual, supportName, supportArt, supportCustom, fx, fxAvailable,
-    mVolumMidiChannel.load(std::memory_order_relaxed), dirty);
+    mVolumMidiChannel.load(std::memory_order_relaxed), dirty,
+    _VolumGetPreCaptureShortLabel(GetParam(kPreNam1Capture)->Int(), "NAM 1"),
+    _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
+  raw->As<VoLumPlaySurfaceControl>()->SetPlusAddsHeard(volum::PlayPlusAddsHeard(
+    dirty, volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::SaveUserCopy,
+    volum::SoundIsAssigned(volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()),
+                           _VolumActiveOwnerKey(), mVolumActivePresetId)));
+  raw->As<VoLumPlaySurfaceControl>()->SetInPeak(mVolumPlayInPeak.load(std::memory_order_relaxed));
+  raw->As<VoLumPlaySurfaceControl>()->SetPickerGroups(&mVolumPlayPickerGroups);
+}
+
+void NeuralAmpModeler::_VolumAddHeardPlaySound()
+{
+  auto finish = [this]() {
+    auto& store = volum::content::GlobalContentStore();
+    const int slot = volum::content::FirstFreeMidiSoundSlot(store.reg());
+    if (slot < 0 || mVolumActivePresetId.empty())
+      return;
+    _VolumAssignPlaySound(slot, {_VolumActiveOwnerKey(), mVolumActivePresetId, {}, {}, false, 0, false});
+  };
+  if (volum::AddHeardNeedsSaveAs(
+        volum::SaveActionForActivePreset(mVolumActivePresetId), _VolumLivePresetDirty(), mVolumActivePresetId.empty()))
+  {
+    _VolumPromptSaveAs(finish);
+    return;
+  }
+  finish();
+}
+
+void NeuralAmpModeler::_VolumFocusBuildEffect(int focus)
+{
+  const auto f = static_cast<EVoLumEffectFocus>(focus);
+  mVolumExpandedSection = volum::SectionForEffectFocus(f);
+  mVolumFocusedEffect = f;
+  _VolumSetUiMode(volum::UiMode::Build);
 }
 
 bool NeuralAmpModeler::VolumRecallSound(const std::string& ampId, const std::string& presetId)
 {
   volum::SoundChoice resolved;
-  if (!volum::ResolveSound(
-        mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), ampId, presetId, resolved))
+  if (!volum::ResolveSound(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), ampId, presetId, resolved))
     return false;
 
   if (mVolumInitComplete)

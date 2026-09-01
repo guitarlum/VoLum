@@ -13,6 +13,7 @@
 #include "VoLumRigRepair.h" // LibraryKind for the delete-while-playing callbacks
 #include "VoLumListMenu.h"
 #include "VoLumConfirmDialog.h"
+#include "VoLumScroll.h"
 
 #include <algorithm>
 #include <cctype>
@@ -83,8 +84,8 @@ public:
   //   applyCb: asked after the delete; moves the lane off the dead payload.
   // Unset (unit tests, no plugin) falls back to the plain "cannot be undone" copy
   // and no repair.
-  using RigRepairPlanCallback = std::function<std::string(volum::rig::LibraryKind, const std::string& id,
-                                                         const std::string& displayName)>;
+  using RigRepairPlanCallback =
+    std::function<std::string(volum::rig::LibraryKind, const std::string& id, const std::string& displayName)>;
   using RigRepairApplyCallback = std::function<void()>;
   void SetRigRepairCallbacks(RigRepairPlanCallback planCb, RigRepairApplyCallback applyCb)
   {
@@ -243,6 +244,15 @@ public:
       Hide(true);
       return;
     }
+    if (mScreen != volum::custom::Screen::Builder
+        && mManageBar.OnDown(x, y, mManageTrack.L, mManageTrack.R, mManageScrollM))
+    {
+      mManageScroll =
+        volum::scroll::ThumbYToScroll(y - mManageBar.grabDY, mManageScrollM.trackTop, mManageScrollM.trackH,
+                                      mManageScrollM.thumbH, mManageScrollM.maxScroll);
+      SetDirty(false);
+      return;
+    }
     for (const auto& hs : mHotspots)
       if (hs.first.Contains(x, y))
       {
@@ -250,6 +260,19 @@ public:
         return;
       }
   }
+
+  void OnMouseDrag(float x, float y, float, float, const IMouseMod&) override
+  {
+    if (!mManageBar.dragging)
+      return;
+    const float next = mManageBar.OnDrag(y, mManageScrollM);
+    if (next >= 0.f)
+      mManageScroll = next;
+    SetDirty(false);
+    (void)x;
+  }
+
+  void OnMouseUp(float, float, const IMouseMod&) override { mManageBar.OnUp(); }
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
   {
@@ -993,10 +1016,9 @@ private:
           };
           // Asked before the delete so the copy can name the in-use case and the
           // destination ("PRE 1 will be empty", "MAIN will fall back to ...").
-          const std::string body =
-            mPlanRigRepair
-              ? mPlanRigRepair(RigKind(), id, nm)
-              : "Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.";
+          const std::string body = mPlanRigRepair
+                                     ? mPlanRigRepair(RigKind(), id, nm)
+                                     : "Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.";
           if (mConfirm)
             mConfirm(body, doDelete, "Delete");
           else
@@ -1577,14 +1599,12 @@ private:
 
       if (scrollable)
       {
-        const float trackX = listArea.R - sbW - 1.f;
-        IRECT track(trackX, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
-        const float maxScroll = contentH - listArea.H();
-        const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
-        const float t = (maxScroll > 0.f) ? (mManageScroll / maxScroll) : 0.f;
-        const IRECT thumb(
-          track.L, track.T + (track.H() - thumbH) * t, track.R, track.T + (track.H() - thumbH) * t + thumbH);
-        DrawVoLumScrollbar(g, track, thumb);
+        mManageScrollM = volum::scroll::ComputeScroll(listArea.T, listArea.B, listArea.H(), contentH, mManageScroll);
+        mManageTrack = IRECT(listArea.R - sbW - 1.f, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
+        DrawVoLumScrollbar(
+          g, mManageTrack,
+          IRECT(mManageTrack.L, mManageScrollM.thumbY, mManageTrack.R, mManageScrollM.thumbY + mManageScrollM.thumbH),
+          mManageBar.dragging);
       }
     }
 
@@ -1977,6 +1997,9 @@ private:
   int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals
   int mBuilderEditIdx = -1; // custom-amp index being edited (-1 = new draft)
   float mManageScroll = 0.f; // Manage list scroll offset (px)
+  IRECT mManageTrack;
+  volum::scroll::ScrollMetrics mManageScrollM;
+  volum::scroll::Interaction mManageBar;
   float mBuilderFileScroll = 0.f; // builder file-manifest scroll offset (px)
 
   BuilderSavedCallback mBuilderSaved;

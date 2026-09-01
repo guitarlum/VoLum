@@ -66,7 +66,8 @@ enum class PresetSaveAction
 
 inline PresetSaveAction SaveActionForActivePreset(const std::string& id)
 {
-  return IsFactoryPresetId(id) ? PresetSaveAction::SaveUserCopy : PresetSaveAction::OverwriteUser;
+  // Empty id is Default / no named preset — cannot overwrite, must Save As.
+  return (id.empty() || IsFactoryPresetId(id)) ? PresetSaveAction::SaveUserCopy : PresetSaveAction::OverwriteUser;
 }
 
 inline std::vector<FactoryPreset> DefaultFactoryPresets()
