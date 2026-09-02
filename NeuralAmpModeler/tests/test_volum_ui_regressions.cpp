@@ -409,7 +409,8 @@ TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair"
   RequireContains(layout, "presetBarArea(header.presetL, header.inkT, header.presetR, header.inkB)");
   RequireDoesNotContain(layout, "IRECT(mainR - 218.f, b.T + 12.f, mainR - 128.f, b.T + 42.f)");
   RequireDoesNotContain(layout, "IRECT(mainR - 202.f, b.T + 14.f, mainR - 134.f, b.T + 40.f)");
-  RequireContains(play, "const IRECT chip(h.MW() - 66.f, h.T + 14.f, h.MW() + 66.f, h.T + 40.f);");
+  RequireDoesNotContain(play, "const IRECT chip(h.MW() - 66.f, h.T + 14.f, h.MW() + 66.f, h.T + 40.f);");
+  RequireDoesNotContain(play, "\"MIDI IN\"");
   RequireDoesNotContain(play, "h.R - 344.f");
 }
 

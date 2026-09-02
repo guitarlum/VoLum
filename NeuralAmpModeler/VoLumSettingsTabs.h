@@ -362,6 +362,39 @@ public:
     SetDirty(false);
   }
 
+  // Settings closes from the gear, the panel × and Escape; a sub-screen left open
+  // there would otherwise still be up the next time the page opens.
+  void ResetToList()
+  {
+    if (GetAnimationFunction())
+      OnEndAnimation();
+    mEmptyFlash = 0.f;
+    mScreen = kScreenList;
+    mEditSlot = -1;
+    mTextTarget = kTextNone;
+    mTextSlot = -1;
+    mPressRow = -1;
+    mPressSlot = -1;
+    mPressCell = kCellNone;
+    mHoverRow = -1;
+    mHoverChoice = -1;
+    mHoverHeader = 0;
+    mHoverCell = kCellNone;
+    mNumberHover = kNumberHoverNone;
+    mListBar.OnUp();
+    mPickerBar.OnUp();
+    SetDirty(false);
+  }
+
+  // Escape backs out of a sub-screen before it is allowed to close Settings.
+  bool ConsumeEscape()
+  {
+    if (mScreen == kScreenList)
+      return false;
+    ResetToList();
+    return true;
+  }
+
   void Draw(IGraphics& g) override
   {
     if (mScreen == kScreenPicker)
@@ -413,18 +446,27 @@ public:
       }
     }
 
+    // Nothing to assign means Add cannot lead anywhere, so it reads inert rather
+    // than swallowing the click silently.
     const IRECT add = AddRect();
-    const bool hot = mHoverRow == kHoverAdd;
-    g.FillRoundRect(hot ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, add, 3.f);
-    g.DrawRoundRect(hot ? VoLumColors::AMBER : VoLumColors::FRAME, add, 3.f, nullptr, hot ? 1.3f : 1.f);
-    g.DrawText(IText(11.5f, hot ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
-                     EVAlign::Middle),
+    const bool addLive = !mChoices.empty();
+    const bool hot = addLive && mHoverRow == kHoverAdd;
+    g.FillRoundRect(hot ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG.WithOpacity(addLive ? 1.f : 0.45f), add,
+                    3.f);
+    g.DrawRoundRect(hot ? VoLumColors::AMBER : VoLumColors::FRAME.WithOpacity(addLive ? 1.f : 0.5f), add, 3.f, nullptr,
+                    hot ? 1.3f : 1.f);
+    g.DrawText(IText(11.5f, hot ? VoLumColors::TEXT_BRIGHT : (addLive ? VoLumColors::CREAM : VoLumColors::TEXT_DIM),
+                     "Josefin-Bold", EAlign::Center, EVAlign::Middle),
                "+  Add Sound", add);
 
     const IText foot(10.5f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Middle);
     if (mChoices.empty())
     {
-      g.DrawText(foot, "Save a preset first: a Sound is an amp plus a named preset.",
+      const IText why = mEmptyFlash > 0.f
+                          ? IText(10.5f, VoLumColors::GOLD.WithOpacity(0.55f + 0.45f * mEmptyFlash), "Josefin-Bold",
+                                  EAlign::Near, EVAlign::Middle)
+                          : foot;
+      g.DrawText(why, "Save a preset first: a Sound is an amp plus a named preset.",
                  IRECT(add.R + 12.f, add.T, mRECT.R, add.B));
     }
     else
@@ -450,7 +492,10 @@ public:
 
     if (AddRect().Contains(x, y))
     {
-      OpenNumberStep(FirstFreeSlot());
+      if (mChoices.empty())
+        FlashEmptyHint();
+      else
+        OpenNumberStep(FirstFreeSlot());
       return;
     }
 
@@ -659,6 +704,27 @@ private:
     mPickerScroll = 0.f;
     mHoverChoice = -1;
     InitPickerSession();
+    SetDirty(false);
+  }
+
+  // The answer to "why did nothing happen" is already on screen, so the click
+  // pulses that line instead of opening anything.
+  void FlashEmptyHint()
+  {
+    mEmptyFlash = 1.f;
+    SetAnimation(
+      [this](IControl* pCaller) {
+        const float progress = static_cast<float>(pCaller->GetAnimationProgress());
+        if (progress > 1.f)
+        {
+          mEmptyFlash = 0.f;
+          pCaller->OnEndAnimation();
+          return;
+        }
+        mEmptyFlash = 1.f - progress;
+        SetDirty(false);
+      },
+      700);
     SetDirty(false);
   }
 
@@ -1099,6 +1165,7 @@ private:
   int mTextSlot = -1;
   float mScroll = 0.f;
   float mPickerScroll = 0.f;
+  float mEmptyFlash = 0.f;
   volum::scroll::Interaction mListBar;
   volum::scroll::Interaction mPickerBar;
   volum::PickerGroupSession* mPickerGroups = nullptr;

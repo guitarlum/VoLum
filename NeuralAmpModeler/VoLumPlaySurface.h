@@ -500,6 +500,9 @@ private:
   // locked 900x600 mock (.scratch/release-1.3.0/play-proto/opus2, variant D), so
   // every band below is expressed relative to mRECT rather than hard-coded.
   static constexpr float kHeaderH = 46.f;
+  // BUILD sidebar column width (VoLumLayoutBuild.inc.cpp). The PLAY wordmark
+  // stays inside it so it never spills over the shared main-panel chrome.
+  static constexpr float kSidebarW = 178.f;
   static constexpr float kRailW = 170.f;
   static constexpr float kRailGap = 10.f;
   static constexpr float kRailCapH = 18.f;
@@ -630,27 +633,18 @@ private:
     return -1;
   }
 
+  // Shared chrome (LayoutHeaderChrome / VoLumBuildHeaderPlateControl) already
+  // paints the main-panel plate, the PLAY/BUILD toggle and the tuner/metronome/
+  // gear cluster across this same 46 px band. PLAY only adds the wordmark, and
+  // only over the BUILD sidebar column, so nothing overpaints shared chrome.
   void DrawHeader(IGraphics& g)
   {
     const auto h = HeaderRect();
-    FillVGradient(g, h, VoLumColors::PANEL_TOP, VoLumColors::PANEL_BOT);
-    g.DrawLine(VoLumColors::FRAME, h.L, h.B, h.R, h.B);
+    const float wordmarkR = h.L + kSidebarW - 8.f;
     g.DrawText(VoLumType::Display(26.f, VoLumColors::GOLD, EAlign::Near), "VoLum",
-               IRECT(h.L + 16.f, h.T + 3.f, h.L + 170.f, h.T + 29.f));
+               IRECT(h.L + 16.f, h.T + 3.f, wordmarkR, h.T + 29.f));
     g.DrawText(VoLumType::Label(10.f, VoLumColors::GOLD_DIM, EAlign::Near), "NAM PLAYER",
-               IRECT(h.L + 18.f, h.T + 27.f, h.L + 170.f, h.T + 41.f));
-
-    // Same 26 px band as tuner / metronome / gear (T+14 .. T+40). Horizontally
-    // centred on the PLAY header, where the listen reminder belongs.
-    const IRECT chip(h.MW() - 66.f, h.T + 14.f, h.MW() + 66.f, h.T + 40.f);
-    g.FillRoundRect(VoLumColors::WELL_DARK, chip, 3.f);
-    g.DrawRoundRect(VoLumColors::FRAME, chip, 3.f);
-    g.FillCircle(VoLumColors::GOLD_DIM, chip.L + 13.f, chip.MH(), 3.f);
-    g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), "MIDI IN",
-               IRECT(chip.L + 23.f, chip.T, chip.L + 78.f, chip.B));
-    const std::string chan = mMidiChannel <= 0 ? "ALL" : "CH " + std::to_string(mMidiChannel);
-    g.DrawText(VoLumType::Label(9.f, VoLumColors::GOLD, EAlign::Near), chan.c_str(),
-               IRECT(chip.L + 78.f, chip.T, chip.R - 8.f, chip.B));
+               IRECT(h.L + 18.f, h.T + 27.f, wordmarkR, h.T + 41.f));
   }
 
   void DrawEmpty(IGraphics& g)
@@ -817,8 +811,8 @@ private:
     const bool hot = mHoverRow == kHoverAdd;
     g.FillRect(VoLumColors::GOLD.WithOpacity(hot ? 0.12f : 0.03f), add);
     g.DrawDottedRect(VoLumColors::GOLD_DIM.WithOpacity(hot ? 0.95f : 0.6f), add, nullptr, 1.f, 4.f);
-    g.DrawText(VoLumType::Label(mPlusAddsHeard ? 11.f : 15.f, VoLumColors::GOLD.WithOpacity(hot ? 1.f : 0.8f)),
-               mPlusAddsHeard ? "Add this sound" : "+", add);
+    g.DrawText(VoLumType::Label(12.f, VoLumColors::GOLD.WithOpacity(hot ? 1.f : 0.8f)),
+               mPlusAddsHeard ? "+   Add this sound" : "+   Add Sound", add);
   }
 
   // clip is the rail list rect: IGraphics has no clip stack, so every inner

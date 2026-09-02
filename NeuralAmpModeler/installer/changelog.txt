@@ -1,3 +1,5 @@
+09/02/2026 - VoLum 1.3.0 (fix - PLAY header, Settings Esc, empty Add): PLAY's leftover header plate and MIDI chip are gone; the toggle sits on the shared Flanks rails. Closing Settings drops a mid-flow Add/picker. Esc backs out of that flow before it closes Settings. + Add Sound is inert until a preset exists.
+
 09/02/2026 - VoLum 1.3.0 (fix - Settings MIDI assign, header rails, Pack help, folder marks): Settings MIDI Add Sound and All now persist. The BUILD header is one 26 px band: PLAY/BUILD on the left, name centered, tuner/metro/gear on the right. Factory/User folders show + / -. The Content library card fits both help lines.
 
 09/02/2026 - VoLum 1.3.0 (fix - Settings keys, Add-this-sound LIVE, plugin MIDI/Lite): Arrows and 1-8 no longer change the PLAY rail behind Settings. Add this sound marks the new row LIVE. Save As fires once. A plug-in insert no longer inherits the standalone MIDI channel; a Lite toggle writes only that key. Invalid slots say Invalid slot on both surfaces.

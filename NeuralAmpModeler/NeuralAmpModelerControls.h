@@ -1004,6 +1004,13 @@ public:
   {
     if (key.VK == kVK_ESCAPE)
     {
+      // Escape pops the MIDI tab's Add/picker sub-screen first; only a page that
+      // has nothing left to back out of closes.
+      if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+      {
+        if (map->As<VoLumMidiSoundMapControl>()->ConsumeEscape())
+          return true;
+      }
       HideAnimated(true);
       return true;
     }
@@ -1024,6 +1031,10 @@ public:
     }
     else // hide subcontrols immediately
     {
+      // Every close path lands here, so the MIDI tab always reopens on its list
+      // rather than on a half-finished Add.
+      if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+        map->As<VoLumMidiSoundMapControl>()->ResetToList();
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
     }
 

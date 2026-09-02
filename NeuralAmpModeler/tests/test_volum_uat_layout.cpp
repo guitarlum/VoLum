@@ -387,6 +387,57 @@ TEST_CASE("Mirrored Flanks header: toggle left, name center, tools right")
   CHECK(layout.find("VoLumSettingsVertRuleControl(IRECT(mainR - 125.f") == std::string::npos);
 }
 
+TEST_CASE("PLAY header is wordmark-only; rail Add matches empty-state copy")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto hdr = play.find("void DrawHeader(IGraphics& g)");
+  const auto empty = play.find("void DrawEmpty(IGraphics& g)");
+  REQUIRE(hdr != std::string::npos);
+  REQUIRE(empty != std::string::npos);
+  REQUIRE(hdr < empty);
+  const std::string header = play.substr(hdr, empty - hdr);
+  CHECK(header.find("FillVGradient") == std::string::npos);
+  CHECK(header.find("MIDI IN") == std::string::npos);
+  CHECK(header.find("kSidebarW") != std::string::npos);
+  CHECK(play.find("mPlusAddsHeard ? \"+   Add this sound\" : \"+   Add Sound\"") != std::string::npos);
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto hidePreset = layout.find("preset->Hide(mVolumUiMode == volum::UiMode::Play)");
+  CHECK(hidePreset != std::string::npos);
+}
+
+TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
+{
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto hideFn = controls.find("void HideAnimated(bool hide)");
+  const auto reset = controls.find("ResetToList()", hideFn);
+  const auto hideKids = controls.find("ForAllChildrenFunc([hide]", hideFn);
+  REQUIRE(hideFn != std::string::npos);
+  REQUIRE(reset != std::string::npos);
+  REQUIRE(hideKids != std::string::npos);
+  CHECK(reset < hideKids);
+
+  const auto esc = controls.find("if (key.VK == kVK_ESCAPE)");
+  const auto consume = controls.find("ConsumeEscape()", esc);
+  const auto close = controls.find("HideAnimated(true);", esc);
+  REQUIRE(esc != std::string::npos);
+  REQUIRE(consume != std::string::npos);
+  REQUIRE(close != std::string::npos);
+  CHECK(consume < close);
+
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  CHECK(tabs.find("bool ConsumeEscape()") != std::string::npos);
+  CHECK(tabs.find("void ResetToList()") != std::string::npos);
+  CHECK(tabs.find("FlashEmptyHint()") != std::string::npos);
+  const auto addClick = tabs.find("if (AddRect().Contains(x, y))");
+  const auto flash = tabs.find("FlashEmptyHint();", addClick);
+  const auto open = tabs.find("OpenNumberStep(FirstFreeSlot());", addClick);
+  REQUIRE(addClick != std::string::npos);
+  REQUIRE(flash != std::string::npos);
+  REQUIRE(open != std::string::npos);
+  CHECK(flash < open);
+  CHECK(tabs.find("if (mChoices.empty())") != std::string::npos);
+}
+
 TEST_CASE("Settings MIDI callbacks are wired after the page attaches")
 {
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
