@@ -107,10 +107,16 @@ public:
       // amber accent tick + small amber label, no selection affordance.
       if (r.header)
       {
-        const IRECT tick(row.L, row.MH(), row.L + 10.f, row.MH() + 1.f);
-        g.FillRect(VoLumColors::AMBER.WithOpacity(0.75f), tick);
+        const bool disclosure = !r.label.empty() && (r.label[0] == '+' || r.label[0] == '-');
+        if (i == mHovered)
+          g.FillRoundRect(VoLumColors::ITEM_HOVER, row.GetPadded(0.f, -2.f, 0.f, -2.f), 2.f);
+        if (!disclosure)
+        {
+          const IRECT tick(row.L, row.MH(), row.L + 10.f, row.MH() + 1.f);
+          g.FillRect(VoLumColors::AMBER.WithOpacity(0.75f), tick);
+        }
         g.DrawText(IText(10.f, VoLumColors::AMBER, "Josefin-Bold", EAlign::Near, EVAlign::Middle), r.label.c_str(),
-                   IRECT(row.L + 14.f, row.T, row.R, row.B));
+                   IRECT(row.L + (disclosure ? 2.f : 14.f), row.T, row.R, row.B));
         if (r.dividerBelow)
           g.DrawLine(VoLumColors::FRAME, row.L, row.B, row.R, row.B, nullptr, 1.f);
         continue;

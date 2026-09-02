@@ -404,8 +404,10 @@ TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair"
   RequireContains(body, "static void DrawBuildGlyph(IGraphics& g, const IRECT& r, const IColor& ink)");
   RequireContains(body, "SetTooltip(tip);");
   RequireContains(body, "Destination() == volum::UiMode::Play ? \"PLAY\" : \"BUILD\"");
-  RequireContains(layout, "IRECT(mainR - 218.f, b.T + 12.f, mainR - 128.f, b.T + 42.f)");
-  RequireContains(layout, "const float presetBarW = 240.f;");
+  RequireContains(layout, "LayoutHeaderChrome(mainL, mainR, b.T)");
+  RequireContains(layout, "IRECT(header.toggleL, header.inkT, header.toggleR, header.inkB)");
+  RequireContains(layout, "presetBarArea(header.presetL, header.inkT, header.presetR, header.inkB)");
+  RequireDoesNotContain(layout, "IRECT(mainR - 218.f, b.T + 12.f, mainR - 128.f, b.T + 42.f)");
   RequireDoesNotContain(layout, "IRECT(mainR - 202.f, b.T + 14.f, mainR - 134.f, b.T + 40.f)");
   RequireContains(play, "const IRECT chip(h.MW() - 66.f, h.T + 14.f, h.MW() + 66.f, h.T + 40.f);");
   RequireDoesNotContain(play, "h.R - 344.f");

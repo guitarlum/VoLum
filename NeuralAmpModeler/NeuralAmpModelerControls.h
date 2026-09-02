@@ -9,6 +9,7 @@
 // VoLum: custom controls and keyboard stepping (upstream-equivalent file fence)
 #include "VoLumAboutLayout.h"
 #include "VoLumControls.h"
+#include "VoLumPackLayout.h"
 #include "VoLumKeyboardModel.h"
 #include "VoLumLatencyReport.h"
 #include "VoLumOutputMode.h"
@@ -1101,6 +1102,7 @@ public:
     _BuildMidiTab(body);
     _BuildSystemTab(body);
     _ApplyTabVisibility();
+    _ApplyMidiWiring();
 
     OnResize();
   }
@@ -1228,7 +1230,7 @@ public:
     IRECT rest = body;
     const IRECT shortcutCard = rest.ReduceFromTop(124.f);
     (void)rest.ReduceFromTop(10.f);
-    const IRECT midRow = rest.ReduceFromTop(100.f);
+    const IRECT midRow = rest.ReduceFromTop(volum::packui::SystemMidRowH());
     (void)rest.ReduceFromTop(10.f);
     const IRECT aboutCard = rest;
 
@@ -1390,8 +1392,8 @@ public:
 
   void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel)
   {
-    if (auto* midi = GetNamedChild(mControlNames.midiControl))
-      midi->As<VoLumMidiChannelControl>()->SetCallback(std::move(channel));
+    mMidiChannelCb = std::move(channel);
+    _ApplyMidiWiring();
   }
 
   // Assign/clear/swap go straight back out to the plugin, which writes the one
@@ -1399,14 +1401,15 @@ public:
   void SetMidiSoundMapCallbacks(VoLumMidiSoundMapControl::AssignCallback assign,
                                 VoLumMidiSoundMapControl::ClearCallback clear)
   {
-    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      map->As<VoLumMidiSoundMapControl>()->SetCallbacks(std::move(assign), std::move(clear));
+    mMidiAssign = std::move(assign);
+    mMidiClear = std::move(clear);
+    _ApplyMidiWiring();
   }
 
   void SetMidiSoundMapSwap(VoLumMidiSoundMapControl::SwapCallback swap)
   {
-    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      map->As<VoLumMidiSoundMapControl>()->SetSwapCallback(std::move(swap));
+    mMidiSwap = std::move(swap);
+    _ApplyMidiWiring();
   }
 
   void SetMidiChannel(int channel)
@@ -1423,8 +1426,8 @@ public:
 
   void SetMidiPickerGroups(volum::PickerGroupSession* session)
   {
-    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      map->As<VoLumMidiSoundMapControl>()->SetPickerGroups(session);
+    mMidiPickerGroups = session;
+    _ApplyMidiWiring();
   }
 
 private:
@@ -1438,6 +1441,30 @@ private:
   bool mWillHide = false;
   std::function<void()> mOnExportPack;
   std::function<void()> mOnImportPack;
+  VoLumMidiChannelControl::ChannelCallback mMidiChannelCb;
+  VoLumMidiSoundMapControl::AssignCallback mMidiAssign;
+  VoLumMidiSoundMapControl::ClearCallback mMidiClear;
+  VoLumMidiSoundMapControl::SwapCallback mMidiSwap;
+  volum::PickerGroupSession* mMidiPickerGroups = nullptr;
+
+  void _ApplyMidiWiring()
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiControl))
+    {
+      if (mMidiChannelCb)
+        midi->As<VoLumMidiChannelControl>()->SetCallback(mMidiChannelCb);
+    }
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+    {
+      auto* soundMap = map->As<VoLumMidiSoundMapControl>();
+      if (mMidiAssign || mMidiClear)
+        soundMap->SetCallbacks(mMidiAssign, mMidiClear);
+      if (mMidiSwap)
+        soundMap->SetSwapCallback(mMidiSwap);
+      if (mMidiPickerGroups)
+        soundMap->SetPickerGroups(mMidiPickerGroups);
+    }
+  }
 
   // Names for controls
   // Make sure that these are all unique and that you use them with AddNamedChildControl

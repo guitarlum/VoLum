@@ -65,13 +65,14 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   if (hasFactory)
   {
     rows.push_back(
-      {mVolumPresetPickerGroups.factoryOpen ? "FACTORY" : "FACTORY  ·", -98, false, false, false, false, true});
+      {volum::PickerGroupMenuLabel(true, mVolumPresetPickerGroups.factoryOpen), -98, false, false, false, false, true});
     if (mVolumPresetPickerGroups.factoryOpen)
       rows.push_back({volum::kFactoryPresetDisplayName, 0, false, false});
   }
   if (!presets.empty())
   {
-    rows.push_back({mVolumPresetPickerGroups.userOpen ? "USER" : "USER  ·", -97, false, false, false, false, true});
+    rows.push_back(
+      {volum::PickerGroupMenuLabel(false, mVolumPresetPickerGroups.userOpen), -97, false, false, false, false, true});
     if (mVolumPresetPickerGroups.userOpen)
       for (int i = 0; i < (int)presets.size(); i++)
         rows.push_back({presets[(size_t)i], i + (hasFactory ? 1 : 0), false, false});

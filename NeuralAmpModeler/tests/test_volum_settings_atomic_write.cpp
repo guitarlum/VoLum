@@ -5,6 +5,7 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -44,6 +45,15 @@ bool HasAtomicTempFile(const std::filesystem::path& dir)
 
 } // namespace
 
+TEST_CASE("ReplaceFileAtomically refuses POSIX rename over a write-bit-clear file")
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsFileIO.h";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  const std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(src.find("st.permissions() & std::filesystem::perms::owner_write") != std::string::npos);
+}
+
 TEST_CASE("WriteJsonAtomically writes complete JSON and removes temp file")
 {
   const auto root = TestRoot("golden");
@@ -60,6 +70,26 @@ TEST_CASE("WriteJsonAtomically writes complete JSON and removes temp file")
   CHECK(std::filesystem::exists(path));
   CHECK_FALSE(HasAtomicTempFile(root));
   CHECK(ReadJsonFile(path) == payload);
+}
+
+TEST_CASE("WriteJsonAtomically refuses a read-only target and leaves it intact")
+{
+  // macOS CI: POSIX rename replaces a chmod u-w file. The replace helper must
+  // honor the write bit so a backup lock cannot wipe the library.
+  const auto root = TestRoot("read-only-target");
+  const auto path = root / "volum-settings.json";
+  const nlohmann::json original = {{"writer", "original"}, {"value", 1}};
+  const nlohmann::json replacement = {{"writer", "replacement"}, {"value", 2}};
+
+  std::error_code ec;
+  REQUIRE(volum::WriteJsonAtomically(path, original, ec));
+  std::filesystem::permissions(path, std::filesystem::perms::owner_read, std::filesystem::perm_options::replace);
+
+  CHECK_FALSE(volum::WriteJsonAtomically(path, replacement, ec));
+  CHECK(ec);
+  std::filesystem::permissions(path, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
+  CHECK(ReadJsonFile(path) == original);
+  CHECK_FALSE(HasAtomicTempFile(root));
 }
 
 TEST_CASE("WriteJsonAtomically leaves existing file untouched when target path is invalid")

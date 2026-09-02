@@ -15,6 +15,7 @@
 // VoLumSettingsTabs.h.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumPackLayout.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -317,9 +318,12 @@ public:
     _DrawBtn(g, _ImportRect(), "Import Pack...", mHover == 2);
 
     const IText help(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Top);
-    const float helpT = mRECT.T + kRowH + 8.f;
-    g.DrawText(help, "Back up, move or share your custom", IRECT(mRECT.L, helpT, mRECT.R, helpT + 14.f));
-    g.DrawText(help, "amps, presets, IRs and pedals as a Pack.", IRECT(mRECT.L, helpT + 13.f, mRECT.R, helpT + 27.f));
+    const float helpT = mRECT.T + volum::packui::kPackRowBtnH + volum::packui::kPackRowBtnToHelp;
+    g.DrawText(help, "Back up, move or share your custom",
+               IRECT(mRECT.L, helpT, mRECT.R, helpT + volum::packui::kPackRowHelpLineH));
+    g.DrawText(help, "amps, presets, IRs and pedals as a Pack.",
+               IRECT(mRECT.L, helpT + volum::packui::kPackRowHelpLineGap, mRECT.R,
+                     helpT + volum::packui::kPackRowHelpLineGap + volum::packui::kPackRowHelpLineH));
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -348,10 +352,15 @@ private:
   // The two buttons share the card's width so they read as one pair, with the
   // help lines underneath. The card body is ~64 px tall, so the row cannot also
   // hold a caption; the card's own cap supplies it.
-  static constexpr float kRowH = 28.f;
   static constexpr float kBtnGap = 10.f;
-  IRECT _ExportRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.L + (mRECT.W() - kBtnGap) * 0.5f, mRECT.T + kRowH); }
-  IRECT _ImportRect() const { return IRECT(mRECT.R - (mRECT.W() - kBtnGap) * 0.5f, mRECT.T, mRECT.R, mRECT.T + kRowH); }
+  IRECT _ExportRect() const
+  {
+    return IRECT(mRECT.L, mRECT.T, mRECT.L + (mRECT.W() - kBtnGap) * 0.5f, mRECT.T + volum::packui::kPackRowBtnH);
+  }
+  IRECT _ImportRect() const
+  {
+    return IRECT(mRECT.R - (mRECT.W() - kBtnGap) * 0.5f, mRECT.T, mRECT.R, mRECT.T + volum::packui::kPackRowBtnH);
+  }
 
   static void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool hover)
   {

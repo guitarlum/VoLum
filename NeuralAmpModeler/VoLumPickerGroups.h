@@ -3,8 +3,29 @@
 // Factory / User accordion: first-open rules + session memory. Shared by the
 // PLAY Add picker, the Settings MIDI picker, and the BUILD preset menu.
 
+#include <string>
+
 namespace volum
 {
+
+inline constexpr float kPickerGroupMarkW = 16.f;
+
+inline const char* PickerGroupGlyph(bool open)
+{
+  return open ? "-" : "+";
+}
+
+inline const char* PickerGroupTitle(bool factory)
+{
+  return factory ? "FACTORY" : "USER";
+}
+
+// Finder-style mark on the left of the heading. BUILD's preset menu is text
+// rows, so the glyph rides in the label.
+inline std::string PickerGroupMenuLabel(bool factory, bool open)
+{
+  return std::string(PickerGroupGlyph(open)) + "  " + PickerGroupTitle(factory);
+}
 
 struct PickerGroupSession
 {

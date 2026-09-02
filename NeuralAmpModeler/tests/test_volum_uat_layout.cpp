@@ -5,6 +5,7 @@
 #include "../VoLumCustomModel.h"
 #include "../VoLumFactoryPresets.h"
 #include "../VoLumOverlayStack.h"
+#include "../VoLumHeaderChrome.h"
 #include "../VoLumPackLayout.h"
 #include "../VoLumPickerGroups.h"
 #include "../VoLumPlayLight.h"
@@ -65,6 +66,16 @@ TEST_CASE("Picker groups: one section starts open, two start collapsed, then mem
   CHECK(play.find("InitPickerGroups(") != std::string::npos);
   CHECK(tabs.find("InitPickerGroups(") != std::string::npos);
   CHECK(menus.find("InitPickerGroups(") != std::string::npos);
+  CHECK(std::string(volum::PickerGroupGlyph(false)) == "+");
+  CHECK(std::string(volum::PickerGroupGlyph(true)) == "-");
+  CHECK(volum::PickerGroupMenuLabel(true, false) == "+  FACTORY");
+  CHECK(volum::PickerGroupMenuLabel(false, true) == "-  USER");
+  CHECK(play.find("FACTORY  ·") == std::string::npos);
+  CHECK(tabs.find("FACTORY  ·") == std::string::npos);
+  CHECK(menus.find("FACTORY  ·") == std::string::npos);
+  CHECK(play.find("PickerGroupGlyph(") != std::string::npos);
+  CHECK(tabs.find("PickerGroupGlyph(") != std::string::npos);
+  CHECK(menus.find("PickerGroupMenuLabel(") != std::string::npos);
 }
 
 TEST_CASE("About action row is pinned inside a 96 px leftover card")
@@ -75,6 +86,14 @@ TEST_CASE("About action row is pinned inside a 96 px leftover card")
   CHECK(l.actionT == doctest::Approx(96.f - volum::kAboutActionH));
   CHECK(l.noticeB <= l.actionT + 0.01f);
   CHECK(l.actionT >= 0.f);
+}
+
+TEST_CASE("SYSTEM mid-row body fits both Pack help lines")
+{
+  CHECK(volum::packui::SettingsCardBodyH(volum::packui::SystemMidRowH())
+        >= volum::packui::PackRowMinBodyH() - 0.01f);
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  CHECK(controls.find("SystemMidRowH()") != std::string::npos);
 }
 
 TEST_CASE("Pack status sits above the also-including band")
@@ -347,4 +366,35 @@ TEST_CASE("PLAY art sits above the name banner")
   REQUIRE(play.find("stage.B - kBannerH") != std::string::npos);
   REQUIRE(play.find("IRECT BannerRect()") != std::string::npos);
   REQUIRE(play.find("DrawCachedStageArt") != std::string::npos);
+}
+
+TEST_CASE("Mirrored Flanks header: toggle left, name center, tools right")
+{
+  const auto h = volum::LayoutHeaderChrome(178.f, 900.f, 0.f);
+  CHECK(h.plateB == doctest::Approx(46.f));
+  CHECK(h.inkT == doctest::Approx(14.f));
+  CHECK(h.inkB == doctest::Approx(40.f));
+  CHECK(h.toggleL == doctest::Approx(196.f));
+  CHECK(h.toggleR == doctest::Approx(300.f));
+  CHECK(h.presetL == doctest::Approx(419.f));
+  CHECK(h.presetR == doctest::Approx(659.f));
+  CHECK(h.tunerL == doctest::Approx(778.f));
+  CHECK(h.gearR == doctest::Approx(882.f));
+  CHECK(h.cabBandT == doctest::Approx(56.f));
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  CHECK(layout.find("LayoutHeaderChrome(mainL, mainR, b.T)") != std::string::npos);
+  CHECK(layout.find("VoLumBuildHeaderPlateControl") != std::string::npos);
+  CHECK(layout.find("VoLumSettingsVertRuleControl(IRECT(mainR - 125.f") == std::string::npos);
+}
+
+TEST_CASE("Settings MIDI callbacks are wired after the page attaches")
+{
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto attach = layout.find("AttachControl(settingsPage, kCtrlTagSettingsBox)");
+  const auto setMidi = layout.find("settingsPage->SetMidiCallbacks([pPlugin](int channel)");
+  REQUIRE(attach != std::string::npos);
+  REQUIRE(setMidi != std::string::npos);
+  CHECK(attach < setMidi);
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  CHECK(controls.find("_ApplyMidiWiring()") != std::string::npos);
 }

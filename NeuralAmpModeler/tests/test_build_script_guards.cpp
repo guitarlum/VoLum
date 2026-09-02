@@ -65,3 +65,13 @@ TEST_CASE("The iPlug2 patch step is not routed through Invoke-Check")
   // And the reason stays next to it, since the shape is the whole trap.
   CHECK(src.find("Deliberately not Invoke-Check") != std::string::npos);
 }
+
+TEST_CASE("Agent artifact-link check skips gitignored paths")
+{
+  // Windows CI died on `training/a2-final/` in the A2 skill: the folder is
+  // gitignored and gone, but the historical note is still the right pointer.
+  // A missing *tracked* path must still fail.
+  const std::string src = ReadRepoFile("NeuralAmpModeler/scripts/check-agent-artifact-links.ps1");
+  CHECK(src.find("git check-ignore -q -- $normalized") != std::string::npos);
+  CHECK(src.find("PSNativeCommandUseErrorActionPreference") != std::string::npos);
+}

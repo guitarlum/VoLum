@@ -1,3 +1,5 @@
+09/02/2026 - VoLum 1.3.0 (fix - Settings MIDI assign, header rails, Pack help, folder marks): Settings MIDI Add Sound and All now persist. The BUILD header is one 26 px band: PLAY/BUILD on the left, name centered, tuner/metro/gear on the right. Factory/User folders show + / -. The Content library card fits both help lines.
+
 09/02/2026 - VoLum 1.3.0 (fix - Settings keys, Add-this-sound LIVE, plugin MIDI/Lite): Arrows and 1-8 no longer change the PLAY rail behind Settings. Add this sound marks the new row LIVE. Save As fires once. A plug-in insert no longer inherits the standalone MIDI channel; a Lite toggle writes only that key. Invalid slots say Invalid slot on both surfaces.
 
 09/02/2026 - VoLum 1.3.0 (fix - PLAY + on Default, plugin mode, Save As Enter, Pack stack): Add this sound on Default opens the name popup instead of doing nothing. A new plug-in insert no longer inherits the standalone app's PLAY/BUILD. Enter in the Save As field saves on the first press. Pack sits under confirm/name/tuner, and H closes Pack before Settings.

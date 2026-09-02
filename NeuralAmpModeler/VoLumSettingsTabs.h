@@ -528,15 +528,18 @@ public:
   {
     const bool list = mScreen == kScreenList;
     const int choice = mScreen == kScreenPicker ? PickerChoiceAt(x, y) : -1;
+    const int header = mScreen == kScreenPicker ? PickerHeaderAt(x, y) : 0;
     const int row = list ? (AddRect().Contains(x, y) ? kHoverAdd : RowAt(x, y)) : -1;
     const int cell = list && row >= 0 ? CellAt(RowRect(row), x) : kCellNone;
     const int button = mScreen == kScreenNumber ? NumberHoverAt(x, y) : kNumberHoverNone;
-    if (row == mHoverRow && choice == mHoverChoice && cell == mHoverCell && button == mNumberHover)
+    if (row == mHoverRow && choice == mHoverChoice && cell == mHoverCell && button == mNumberHover
+        && header == mHoverHeader)
       return;
     mHoverRow = row;
     mHoverChoice = choice;
     mHoverCell = cell;
     mNumberHover = button;
+    mHoverHeader = header;
     SetDirty(false);
   }
 
@@ -545,6 +548,7 @@ public:
     mHoverRow = mHoverChoice = -1;
     mHoverCell = kCellNone;
     mNumberHover = kNumberHoverNone;
+    mHoverHeader = 0;
     SetDirty(false);
   }
 
@@ -1049,10 +1053,14 @@ private:
       {
         const bool factory = kind > 0;
         const bool open = PickerGroupOpen(factory);
+        DrawVoLumSelection(g, row, false, mHoverHeader == kind, VoLumSelectionStyle::ListTeal, 2.f, 1.f);
+        g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle),
+                   volum::PickerGroupGlyph(open),
+                   IRECT(row.L + 6.f, row.T, row.L + 6.f + volum::kPickerGroupMarkW, row.B));
         g.DrawText(IText(10.f, factory ? VoLumColors::GOLD_DIM : VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near,
                          EVAlign::Middle),
-                   factory ? (open ? "FACTORY" : "FACTORY  ·") : (open ? "USER" : "USER  ·"),
-                   IRECT(row.L + 8.f, row.T, row.R, row.B));
+                   volum::PickerGroupTitle(factory),
+                   IRECT(row.L + 6.f + volum::kPickerGroupMarkW, row.T, row.R, row.B));
         return;
       }
       DrawVoLumSelection(g, row, false, mHoverChoice == choice, VoLumSelectionStyle::ListTeal, 2.f, 1.f);
@@ -1082,6 +1090,7 @@ private:
   int mNumberHover = kNumberHoverNone;
   int mHoverRow = -1;
   int mHoverChoice = -1;
+  int mHoverHeader = 0;
   int mHoverCell = kCellNone;
   int mPressRow = -1;
   int mPressSlot = -1;

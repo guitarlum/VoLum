@@ -1353,7 +1353,8 @@ TEST_CASE("A failed save stays pending and is carried by the next successful one
 
   // Make the library file unwritable the way a permissions change or a backup
   // agent does: readable, so the store does not latch RegistryUnreadable, but
-  // impossible to replace by rename.
+  // impossible to replace by rename. POSIX rename would otherwise ignore the
+  // file write bit; ReplaceFileAtomically refuses that case.
   std::filesystem::permissions(store.RegistryPath(), std::filesystem::perms::owner_read,
                                std::filesystem::perm_options::replace);
 

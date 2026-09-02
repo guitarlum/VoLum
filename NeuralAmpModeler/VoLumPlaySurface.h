@@ -6,6 +6,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumFractalArt.h"
+#include "VoLumHeaderChrome.h"
 #include "VoLumNumericEntry.h"
 #include "VoLumPlayLight.h"
 #include "VoLumPlayModel.h"
@@ -26,7 +27,7 @@
  *
  * One control. Idle shows the other mode (where a click will go): BUILD's
  * faders while you are in PLAY, PLAY's stomp ring while you are in BUILD.
- * Larger than the 26 px tuner / metronome / gear circles; same brass family.
+ * Same 26 px ink band as tuner / metronome / gear; a wider brass pill.
  * Z-order is fixed at the attach site in VoLumLayoutBuild.inc.cpp: this goes
  * on before the overlays, so they cover it. */
 class VoLumModeToggleControl : public IControl
@@ -115,6 +116,24 @@ private:
   bool mMouseIsOver = false;
   std::string mTip;
   Callback mCallback;
+};
+
+/** BUILD's copy of PLAY's 46 px plate + hairline. Mouse-transparent so the
+ * toggle, preset bar and tool circles on top stay hittable. */
+class VoLumBuildHeaderPlateControl : public IControl
+{
+public:
+  explicit VoLumBuildHeaderPlateControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    FillVGradient(g, mRECT, VoLumColors::PANEL_TOP, VoLumColors::PANEL_BOT);
+    g.DrawLine(VoLumColors::FRAME, mRECT.L, mRECT.B, mRECT.R, mRECT.B);
+  }
 };
 
 class VoLumPlaySurfaceControl : public IControl
@@ -408,15 +427,17 @@ public:
         if (FxRect(i).Contains(x, y))
           fx = i;
     const int choice = mPickerOpen ? PickerChoiceAt(x, y) : -1;
+    const int header = mPickerOpen ? PickerHeaderAt(x, y) : 0;
     int step = 0;
     if (mPickerOpen && mSlotEditable)
       step = PickerSlotStepRect(-1).Contains(x, y) ? -1 : (PickerSlotStepRect(1).Contains(x, y) ? 1 : 0);
-    if (row != mHoverRow || fx != mHoverFx || choice != mHoverChoice || step != mHoverStep)
+    if (row != mHoverRow || fx != mHoverFx || choice != mHoverChoice || step != mHoverStep || header != mHoverHeader)
     {
       mHoverRow = row;
       mHoverFx = fx;
       mHoverChoice = choice;
       mHoverStep = step;
+      mHoverHeader = header;
       SetDirty(false);
     }
   }
@@ -425,6 +446,7 @@ public:
   {
     mHoverRow = mHoverFx = mHoverChoice = -1;
     mHoverStep = 0;
+    mHoverHeader = 0;
     SetDirty(false);
   }
 
@@ -1035,10 +1057,13 @@ private:
       {
         const bool factory = kind > 0;
         const bool open = PickerGroupOpen(factory);
+        const bool hovered = mHoverHeader == kind;
+        DrawVoLumSelection(g, row, false, hovered, VoLumSelectionStyle::ListTeal, 2.f, 1.f);
+        g.DrawText(VoLumType::Label(10.f, VoLumColors::GOLD, EAlign::Near), volum::PickerGroupGlyph(open),
+                   IRECT(row.L + 6.f, row.T, row.L + 6.f + volum::kPickerGroupMarkW, row.B));
         g.DrawText(VoLumType::Label(9.f, factory ? VoLumColors::GOLD_DIM : VoLumColors::CREAM_DIM, EAlign::Near),
-                   factory ? (open ? "FACTORY" : "FACTORY  ·") : (open ? "USER" : "USER  ·"),
-                   IRECT(list.L + 6.f, row.T, list.R, row.B));
-        g.DrawLine(VoLumColors::FRAME.WithOpacity(0.5f), list.L + 58.f, row.MH(), list.R - 6.f, row.MH());
+                   volum::PickerGroupTitle(factory),
+                   IRECT(row.L + 6.f + volum::kPickerGroupMarkW, row.T, row.R, row.B));
         return;
       }
       DrawVoLumSelection(g, row, false, mHoverChoice == choice, VoLumSelectionStyle::ListTeal, 2.f, 1.f);
@@ -1380,7 +1405,7 @@ private:
   std::vector<volum::SoundChoice> mChoices;
   std::string mActiveAmpId, mActivePresetId, mLiveAmpName, mSupportName;
   int mLastSlot = -1, mLiveArt = 0, mSupportArt = 0, mEditSlot = -1, mMidiChannel = 0;
-  int mHoverRow = -1, mHoverFx = -1, mHoverChoice = -1, mHoverStep = 0;
+  int mHoverRow = -1, mHoverFx = -1, mHoverChoice = -1, mHoverStep = 0, mHoverHeader = 0;
   bool mCustomArt = false, mDual = false, mSupportCustom = false, mDirty = false, mPickerOpen = false;
   bool mSlotEditable = false; // the picker was opened by Add, so it owns the number
   bool mPlusAddsHeard = false;

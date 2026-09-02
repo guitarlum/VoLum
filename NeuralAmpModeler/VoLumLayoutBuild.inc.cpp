@@ -47,6 +47,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   const float mainR = b.R;
   const float mainW = mainR - mainL;
   const float mainCX = mainL + mainW / 2.f;
+  const auto header = volum::LayoutHeaderChrome(mainL, mainR, b.T);
 
   pGraphics->AttachControl(new VoLumBackgroundControl(b, sidebarW));
   pGraphics->AttachControl(new VoLumKnobSelectionClearControl(IRECT(mainL, b.T, mainR, b.B), [this]() {
@@ -178,7 +179,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   const float contentTop = b.T + (b.H() - contentH) / 2.f;
 
   // Speaker mode row
-  float yPos = contentTop;
+  float yPos = std::max(contentTop, header.cabBandT);
   const IRECT speakerArea(mainL, yPos, mainR, yPos + speakerH);
   pGraphics->AttachControl(
     new VoLumSpeakerRowControl(
@@ -1031,16 +1032,14 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       [this](int focus) { _VolumFocusBuildEffect(focus); }, [this]() { _VolumAddHeardPlaySound(); }),
     kCtrlTagVoLumPlaySurface);
 
-  // Mode pair, attached here and not last. It has to sit above the PLAY surface
-  // (which owns the whole main panel while visible) so it stays clickable in PLAY,
-  // and below everything attached after this point - Settings, Pack, Manage, the
-  // confirm modal, tuner and metronome are all full-canvas overlays, and a header
-  // control that painted and hit-tested through them was the 1.3.0 bug.
-  pGraphics->AttachControl(
-    new VoLumSettingsVertRuleControl(IRECT(mainR - 125.f, b.T + 16.f, mainR - 121.f, b.T + 38.f)));
-  // Destination toggle: 90 x 30, larger than the 26 px tool circles, left of the rule.
+  // Mirrored Flanks: plate first (under the ink), then toggle / tools / name.
+  // The cluster sits above the PLAY surface so it stays clickable in PLAY, and
+  // below the overlays attached after this point.
+  pGraphics->AttachControl(new VoLumBuildHeaderPlateControl(
+    IRECT(header.plateL, header.plateT, header.plateR, header.plateB)));
   auto* modeToggle = new VoLumModeToggleControl(
-    IRECT(mainR - 218.f, b.T + 12.f, mainR - 128.f, b.T + 42.f), [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
+    IRECT(header.toggleL, header.inkT, header.toggleR, header.inkB),
+    [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
   modeToggle->SetMode(mVolumUiMode);
   pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
 
@@ -1053,9 +1052,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
     const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
 
-    const IRECT gearArea(mainR - 44.f, b.T + 14.f, mainR - 18.f, b.T + 40.f);
-    const IRECT metronomeArea(mainR - 80.f, b.T + 14.f, mainR - 54.f, b.T + 40.f);
-    const IRECT tunerArea(mainR - 116.f, b.T + 14.f, mainR - 90.f, b.T + 40.f);
+    const IRECT gearArea(header.gearL, header.inkT, header.gearR, header.inkB);
+    const IRECT metronomeArea(header.metroL, header.inkT, header.metroR, header.inkB);
+    const IRECT tunerArea(header.tunerL, header.inkT, header.tunerR, header.inkB);
 
     // Tuner button
     auto* pPlugin = this;
@@ -1084,15 +1083,6 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
     auto* settingsPage = new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                                     crossSVG, volumSettingsStyle, volumSettingsRadioStyle);
-    settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
-    // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
-    // PLAY are two views of one midiSoundMap rather than two stores.
-    settingsPage->SetMidiSoundMapCallbacks(
-      [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
-      [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
-    settingsPage->SetMidiSoundMapSwap([pPlugin](int a, int b) { pPlugin->_VolumSwapPlaySounds(a, b); });
-    settingsPage->SetMidiPickerGroups(&pPlugin->mVolumPlayPickerGroups);
-    pPlugin->_VolumRefreshMidiSettingsChrome();
 
     auto* tunerCtrl = new VoLumTunerControl(b);
     tunerCtrl->SetDismissAction([pPlugin]() { pPlugin->mTunerDSP.SetActive(false); });
@@ -1100,9 +1090,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // F5 preset bar — centred in the top header band, above the AMP/triptych
     // column. Clicking opens the anchored preset dropdown; < > cycle presets.
     {
-      // 240: the destination toggle is 90 px on the right, so the name still clears it.
-      const float presetBarW = 240.f;
-      const IRECT presetBarArea(mainCX - presetBarW * 0.5f, b.T + 12.f, mainCX + presetBarW * 0.5f, b.T + 40.f);
+      const IRECT presetBarArea(header.presetL, header.inkT, header.presetR, header.inkB);
       pGraphics->AttachControl(
         new VoLumPresetBarControl(presetBarArea, [pPlugin]() { pPlugin->_VolumShowPresetMenu(); }),
         kCtrlTagVoLumPresetBar);
@@ -1204,6 +1192,17 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // Full-window overlays attach after BUILD chrome so they cover the preset bar
     // and every anchored dropdown (iPlug attach order is z-order).
     pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
+    // Children exist only after AttachControl → OnAttached. Setting these
+    // earlier left mAssign / mCallback null, so Add Sound and All did nothing.
+    settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
+    // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
+    // PLAY are two views of one midiSoundMap rather than two stores.
+    settingsPage->SetMidiSoundMapCallbacks(
+      [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
+      [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
+    settingsPage->SetMidiSoundMapSwap([pPlugin](int a, int b) { pPlugin->_VolumSwapPlaySounds(a, b); });
+    settingsPage->SetMidiPickerGroups(&pPlugin->mVolumPlayPickerGroups);
+    pPlugin->_VolumRefreshMidiSettingsChrome();
 
     // Pack sits above Settings and below Manage / confirm / name / tuner /
     // metronome. Attach order is z-order; this matches volum::ui::kOverlayAttachNeedles.

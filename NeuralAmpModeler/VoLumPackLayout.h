@@ -17,6 +17,30 @@ inline constexpr float kAlsoH = 50.f;
 inline constexpr float kAlsoGap = 8.f;
 inline constexpr float kListPad = 8.f;
 
+// SYSTEM Content library card: buttons + two help lines. The mid-row card
+// must be at least this body height after _AddCard's pad and caption.
+inline constexpr float kPackRowBtnH = 28.f;
+inline constexpr float kPackRowBtnToHelp = 8.f;
+inline constexpr float kPackRowHelpLineH = 14.f;
+inline constexpr float kPackRowHelpLineGap = 13.f;
+inline constexpr float kSettingsCardPadY = 12.f;
+inline constexpr float kSettingsCardCapH = 24.f;
+
+inline float PackRowMinBodyH()
+{
+  return kPackRowBtnH + kPackRowBtnToHelp + kPackRowHelpLineH + kPackRowHelpLineGap;
+}
+
+inline float SettingsCardBodyH(float cardH)
+{
+  return cardH - 2.f * kSettingsCardPadY - kSettingsCardCapH;
+}
+
+inline float SystemMidRowH()
+{
+  return std::max(120.f, PackRowMinBodyH() + 2.f * kSettingsCardPadY + kSettingsCardCapH);
+}
+
 struct PackChrome
 {
   float goT = 0.f;
