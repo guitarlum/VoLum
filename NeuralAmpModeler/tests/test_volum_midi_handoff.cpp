@@ -135,6 +135,8 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   // 0 is still "every channel" in the data; only the words in front of it changed.
   CHECK(tabs.find("const bool all = mChannel == 0;") != std::string::npos);
   CHECK(tabs.find("\"All MIDI channels\"") != std::string::npos);
+  CHECK(tabs.find("g.DrawRoundRect(VoLumColors::GOLD_DIM, allR, 3.f)") != std::string::npos);
+  CHECK(tabs.find("g.DrawRoundRect(VoLumColors::GOLD_DIM, oneR, 3.f)") != std::string::npos);
   CHECK(tabs.find("MIDI calls this Omni.") != std::string::npos);
   CHECK(tabs.find("class VoLumMidiSoundMapControl") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);

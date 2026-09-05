@@ -528,18 +528,27 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    IText text(12.5f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
-    g.DrawText(text, mText.c_str(), mRECT);
+    // Inset from the window's L-corners so 12.5 px Josefin has a real middle
+    // in the 24 px band instead of sitting on the hairline.
+    const IRECT ink = mRECT.GetPadded(-18.f, 0.f, -18.f, 0.f);
+    const IText text(12.5f, mAlert ? VoLumColors::AMBER : VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center,
+                     EVAlign::Middle);
+    const std::string fitted = FitTextToWidth(g, text, mText.c_str(), ink.W());
+    g.DrawText(text, fitted.c_str(), ink);
   }
 
-  void SetText(const char* text)
+  void SetText(const char* text) { SetStatus(text, false); }
+
+  void SetStatus(const char* text, bool alert)
   {
-    mText = text;
+    mText = text ? text : "";
+    mAlert = alert;
     SetDirty(false);
   }
 
 private:
   std::string mText = "(no rig loaded)";
+  bool mAlert = false;
 };
 
 // Art Deco channel stepper: gold-themed [<] Ch 1 [>]

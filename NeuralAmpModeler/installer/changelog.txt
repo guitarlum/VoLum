@@ -1,3 +1,11 @@
+09/05/2026 - VoLum 1.3.0 (fix - PLAY arrows scroll the sound list): Arrow keys still recall the next Sound, and the rail now scrolls so the LIVE row stays in view instead of pinning a stuck thumb at the top.
+09/05/2026 - VoLum 1.3.0 (change - PLAY/BUILD sits with the tools): The destination toggle is a compact pill immediately left of tuner / metronome / Settings, not a wide mark on the left rail.
+09/05/2026 - VoLum 1.3.0 (fix - MIDI listen switch outline): All MIDI channels and Just one channel draw the same frame as other buttons, so the pair reads as a switch.
+
+09/02/2026 - VoLum 1.3.0 (fix - BUILD status row): BUILD's capture filename sits in a padded 24 px row instead of on the window frame. Keyboard shortcuts are a 10 px line under that row while a target is focused, not a card over the knobs.
+
+09/02/2026 - VoLum 1.3.0 (fix - header ink on one centerline): The 26 px header band sits in the middle of the 46 px plate, so the wordmark, PLAY/BUILD toggle and tools share one row. PLAY's hairline is still one full-width stroke.
+
 09/02/2026 - VoLum 1.3.0 (fix - PLAY header, Settings Esc, empty Add): PLAY's leftover header plate and MIDI chip are gone; the toggle sits on the shared Flanks rails. Closing Settings drops a mid-flow Add/picker. Esc backs out of that flow before it closes Settings. + Add Sound is inert until a preset exists.
 
 09/02/2026 - VoLum 1.3.0 (fix - Settings MIDI assign, header rails, Pack help, folder marks): Settings MIDI Add Sound and All now persist. The BUILD header is one 26 px band: PLAY/BUILD on the left, name centered, tuner/metro/gear on the right. Factory/User folders show + / -. The Content library card fits both help lines.

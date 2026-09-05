@@ -368,18 +368,20 @@ TEST_CASE("PLAY art sits above the name banner")
   REQUIRE(play.find("DrawCachedStageArt") != std::string::npos);
 }
 
-TEST_CASE("Mirrored Flanks header: toggle left, name center, tools right")
+TEST_CASE("Header chrome: name center, PLAY/BUILD on the tool rail")
 {
   const auto h = volum::LayoutHeaderChrome(178.f, 900.f, 0.f);
   CHECK(h.plateB == doctest::Approx(46.f));
-  CHECK(h.inkT == doctest::Approx(14.f));
-  CHECK(h.inkB == doctest::Approx(40.f));
-  CHECK(h.toggleL == doctest::Approx(196.f));
-  CHECK(h.toggleR == doctest::Approx(300.f));
+  CHECK(h.inkT == doctest::Approx(10.f));
+  CHECK(h.inkB == doctest::Approx(36.f));
+  CHECK(h.inkT == doctest::Approx((h.plateB - 26.f) * 0.5f));
+  CHECK(h.toggleL == doctest::Approx(721.f));
+  CHECK(h.toggleR == doctest::Approx(765.f));
   CHECK(h.presetL == doctest::Approx(419.f));
   CHECK(h.presetR == doctest::Approx(659.f));
   CHECK(h.tunerL == doctest::Approx(778.f));
   CHECK(h.gearR == doctest::Approx(882.f));
+  CHECK(h.toggleR + volum::kHeaderToolGap == doctest::Approx(h.tunerL));
   CHECK(h.cabBandT == doctest::Approx(56.f));
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   CHECK(layout.find("LayoutHeaderChrome(mainL, mainR, b.T)") != std::string::npos);
@@ -396,13 +398,55 @@ TEST_CASE("PLAY header is wordmark-only; rail Add matches empty-state copy")
   REQUIRE(empty != std::string::npos);
   REQUIRE(hdr < empty);
   const std::string header = play.substr(hdr, empty - hdr);
-  CHECK(header.find("FillVGradient") == std::string::npos);
+  CHECK(header.find("FillVGradient") != std::string::npos);
+  CHECK(header.find("g.DrawLine(VoLumColors::FRAME, h.L, h.B, h.R, h.B)") != std::string::npos);
   CHECK(header.find("MIDI IN") == std::string::npos);
   CHECK(header.find("kSidebarW") != std::string::npos);
+  CHECK(header.find("volum::kHeaderRail") != std::string::npos);
+  CHECK(header.find("LayoutHeaderChrome") != std::string::npos);
   CHECK(play.find("mPlusAddsHeard ? \"+   Add this sound\" : \"+   Add Sound\"") != std::string::npos);
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   const auto hidePreset = layout.find("preset->Hide(mVolumUiMode == volum::UiMode::Play)");
   CHECK(hidePreset != std::string::npos);
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  CHECK(layout.find("kCtrlTagVoLumHeaderPlate") != std::string::npos);
+  CHECK(layout.find("plate->Hide(mVolumUiMode == volum::UiMode::Play)") != std::string::npos);
+  CHECK(runtime.find("plate->Hide(mode == volum::UiMode::Play)") != std::string::npos);
+}
+
+TEST_CASE("PLAY rail follows the LIVE slot instead of pinning it")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("void EnsureActiveRowVisible()") != std::string::npos);
+  CHECK(play.find("if (lastSlot != prevSlot)") != std::string::npos);
+  CHECK(play.find("volum::scroll::ScrollToReveal") != std::string::npos);
+  CHECK(play.find("bool sticky") == std::string::npos);
+  CHECK(play.find("RailRowRect(int index, bool") == std::string::npos);
+}
+
+TEST_CASE("BUILD status row is padded; hint sits under it")
+{
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const std::string footer = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
+  const std::string hint = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardNav.h");
+  const auto footerClass = footer.find("class VoLumFooterControl");
+  const auto hintClass = hint.find("class VoLumKeyboardHintControl");
+  REQUIRE(footerClass != std::string::npos);
+  REQUIRE(hintClass != std::string::npos);
+  const std::string footerBody = footer.substr(footerClass, 900);
+  const std::string hintBody = hint.substr(hintClass, 800);
+  CHECK(layout.find("hintH + 6.f + footerH") == std::string::npos);
+  CHECK(layout.find("footerGap + footerH + hintH") != std::string::npos);
+  CHECK(layout.find("const float footerH = 24.f;") != std::string::npos);
+  CHECK(layout.find("const float hintH = 16.f;") != std::string::npos);
+  CHECK(layout.find("footerArea.T - 6.f - hintH") == std::string::npos);
+  CHECK(layout.find("IRECT hintArea(mainL, footerArea.B, mainR, footerArea.B + hintH)") != std::string::npos);
+  CHECK(footerBody.find("FitTextToWidth") != std::string::npos);
+  CHECK(footerBody.find("void SetStatus(const char* text, bool alert)") != std::string::npos);
+  CHECK(hintBody.find("FillRoundRect") == std::string::npos);
+  CHECK(hintBody.find("FitTextToWidth") != std::string::npos);
+  const std::string plugin = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  CHECK(plugin.find("SetStatus(\"Output safety active - lower output or wet mix\", true)") != std::string::npos);
 }
 
 TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")

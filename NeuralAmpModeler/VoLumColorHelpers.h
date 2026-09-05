@@ -183,6 +183,31 @@ inline void FillVGradient(IGraphics& g, const IRECT& r, const IColor& top, const
   g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, r.B, {{top, 0.f}, {bot, 1.f}}));
 }
 
+// Trim `s` (appending an ellipsis) until it fits within maxW. Used by the BUILD
+// status row so Dual Amp filenames cannot walk the gold frame.
+inline std::string FitTextToWidth(IGraphics& g, const IText& text, const char* s, float maxW)
+{
+  if (!s || !*s)
+    return "";
+  std::string str = s;
+  IRECT m;
+  g.MeasureText(text, str.c_str(), m);
+  if (m.W() <= maxW)
+    return str;
+  while (str.size() > 1)
+  {
+    str.pop_back();
+    while (!str.empty() && (static_cast<unsigned char>(str.back()) & 0xC0) == 0x80)
+      str.pop_back();
+    const std::string cand = str + "\u2026";
+    IRECT mr;
+    g.MeasureText(text, cand.c_str(), mr);
+    if (mr.W() <= maxW)
+      return cand;
+  }
+  return str + "\u2026";
+}
+
 // Panel: subtle top-lit vertical gradient + 1px top inner highlight + bottom shadow line.
 inline void DrawPanelDepth(IGraphics& g, const IRECT& r, float roundness = 0.f)
 {

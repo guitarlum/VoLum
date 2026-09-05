@@ -172,12 +172,14 @@ public:
 
     const IRECT allR = AllRect();
     DrawVoLumSelection(g, allR, all, mHover == kHoverAll && !all, VoLumSelectionStyle::AmberPicker, 3.f, 0.f);
+    g.DrawRoundRect(VoLumColors::GOLD_DIM, allR, 3.f);
     g.DrawText(IText(13.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker, all), "Josefin-Bold", EAlign::Center,
                      EVAlign::Middle),
                "All MIDI channels", allR);
 
     const IRECT oneR = OneRect();
     DrawVoLumSelection(g, oneR, !all, all && mHover == kHoverOne, VoLumSelectionStyle::AmberPicker, 3.f, 0.f);
+    g.DrawRoundRect(VoLumColors::GOLD_DIM, oneR, 3.f);
     g.DrawText(IText(13.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker, !all), "Josefin-Bold", EAlign::Center,
                      EVAlign::Middle),
                all ? "Just one channel" : ("Channel " + std::to_string(mChannel)).c_str(), oneR);

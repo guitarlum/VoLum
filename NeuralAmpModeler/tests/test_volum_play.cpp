@@ -2,6 +2,7 @@
 
 #include "VoLumChunkIdTail.h"
 #include "VoLumPlayModel.h"
+#include "VoLumScroll.h"
 
 TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
 {
@@ -259,6 +260,17 @@ TEST_CASE("Save As from a Factory PLAY origin drops LIVE on that slot")
   volum::content::Registry registry;
   volum::content::AssignMidiSound(registry, 4, "factory:7", "factory:7:v1");
   CHECK(volum::content::FirstFreeMidiSoundSlot(registry) == 0);
+}
+
+TEST_CASE("PLAY rail scroll reveals the LIVE row instead of pinning it")
+{
+  using volum::scroll::ScrollToReveal;
+  // Row 4 (70 px pitch, 66 px tall) in a 200 px view, currently at 0: must scroll down.
+  CHECK(ScrollToReveal(0.f, 280.f, 346.f, 200.f, 500.f) == doctest::Approx(146.f));
+  // Row 0 while scrolled to the bottom: must scroll up.
+  CHECK(ScrollToReveal(400.f, 0.f, 66.f, 200.f, 500.f) == doctest::Approx(0.f));
+  // Already visible: stay put so a dirty refresh does not yank the list.
+  CHECK(ScrollToReveal(100.f, 120.f, 186.f, 200.f, 500.f) == doctest::Approx(100.f));
 }
 
 TEST_CASE("Default with no snapshot dirties against factory settings")

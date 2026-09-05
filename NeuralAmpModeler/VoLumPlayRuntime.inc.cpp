@@ -22,6 +22,8 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
   {
     if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
       surface->Hide(mode != volum::UiMode::Play);
+    if (auto* plate = pGfx->GetControlWithTag(kCtrlTagVoLumHeaderPlate))
+      plate->Hide(mode == volum::UiMode::Play);
     if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
       toggle->As<VoLumModeToggleControl>()->SetMode(mode);
     if (auto* preset = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))

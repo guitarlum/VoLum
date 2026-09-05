@@ -27,7 +27,7 @@
  *
  * One control. Idle shows the other mode (where a click will go): BUILD's
  * faders while you are in PLAY, PLAY's stomp ring while you are in BUILD.
- * Same 26 px ink band as tuner / metronome / gear; a wider brass pill.
+ * Same 26 px ink band as tuner / metronome / gear, sitting on that right rail.
  * Z-order is fixed at the attach site in VoLumLayoutBuild.inc.cpp: this goes
  * on before the overlays, so they cover it. */
 class VoLumModeToggleControl : public IControl
@@ -118,8 +118,9 @@ private:
   Callback mCallback;
 };
 
-/** BUILD's copy of PLAY's 46 px plate + hairline. Mouse-transparent so the
- * toggle, preset bar and tool circles on top stay hittable. */
+/** BUILD's copy of PLAY's 46 px plate + hairline. Hidden in PLAY so the
+ * surface can own one full-width rule. Mouse-transparent so the toggle,
+ * preset bar and tool circles on top stay hittable. */
 class VoLumBuildHeaderPlateControl : public IControl
 {
 public:
@@ -190,6 +191,7 @@ public:
                const std::array<bool, FxCount>& fxAvailable, int midiChannel, bool dirty,
                const char* nam1Label = nullptr, const char* nam2Label = nullptr)
   {
+    const int prevSlot = mLastSlot;
     mSlots = volum::BuildPlaySlots(factory, registry);
     mChoices = volum::BuildSoundChoices(factory, registry);
     mActiveAmpId = activeAmpId;
@@ -221,6 +223,8 @@ public:
       mCachedSupportCustom = mSupportCustom;
     }
     ClampRailScroll();
+    if (lastSlot != prevSlot)
+      EnsureActiveRowVisible();
     SetDirty(false);
   }
 
@@ -499,7 +503,7 @@ private:
   // Opus D metrics. The rail rows, board wells and art panel are sized from the
   // locked 900x600 mock (.scratch/release-1.3.0/play-proto/opus2, variant D), so
   // every band below is expressed relative to mRECT rather than hard-coded.
-  static constexpr float kHeaderH = 46.f;
+  static constexpr float kHeaderH = volum::kHeaderPlateH;
   // BUILD sidebar column width (VoLumLayoutBuild.inc.cpp). The PLAY wordmark
   // stays inside it so it never spills over the shared main-panel chrome.
   static constexpr float kSidebarW = 178.f;
@@ -633,18 +637,23 @@ private:
     return -1;
   }
 
-  // Shared chrome (LayoutHeaderChrome / VoLumBuildHeaderPlateControl) already
-  // paints the main-panel plate, the PLAY/BUILD toggle and the tuner/metronome/
-  // gear cluster across this same 46 px band. PLAY only adds the wordmark, and
-  // only over the BUILD sidebar column, so nothing overpaints shared chrome.
+  // Full-width plate + one hairline. The BUILD plate is hidden in PLAY so this
+  // rule is not drawn twice over the main column. Shared chrome still sits
+  // on top for the toggle and tools; the wordmark only uses the left column.
   void DrawHeader(IGraphics& g)
   {
     const auto h = HeaderRect();
-    const float wordmarkR = h.L + kSidebarW - 8.f;
-    g.DrawText(VoLumType::Display(26.f, VoLumColors::GOLD, EAlign::Near), "VoLum",
-               IRECT(h.L + 16.f, h.T + 3.f, wordmarkR, h.T + 29.f));
+    FillVGradient(g, h, VoLumColors::PANEL_TOP, VoLumColors::PANEL_BOT);
+    g.DrawLine(VoLumColors::FRAME, h.L, h.B, h.R, h.B);
+    // Wordmark rides the shared ink band and the same 18 px rail inset the gear
+    // uses on the right, so all three header clusters read on one centerline.
+    const auto chrome = volum::LayoutHeaderChrome(h.L + kSidebarW, h.R, h.T);
+    const float wordL = h.L + volum::kHeaderRail;
+    const float wordR = h.L + kSidebarW - 12.f;
+    g.DrawText(VoLumType::Display(22.f, VoLumColors::GOLD, EAlign::Near), "VoLum",
+               IRECT(wordL, chrome.inkT - 2.f, wordR, chrome.inkT + 18.f));
     g.DrawText(VoLumType::Label(10.f, VoLumColors::GOLD_DIM, EAlign::Near), "NAM PLAYER",
-               IRECT(h.L + 18.f, h.T + 27.f, wordmarkR, h.T + 41.f));
+               IRECT(wordL, chrome.inkT + 16.f, wordR, chrome.inkB + 2.f));
   }
 
   void DrawEmpty(IGraphics& g)
@@ -781,20 +790,12 @@ private:
 
     const auto list = RailListRect();
     g.PathClipRegion(list);
-    int sticky = -1;
     for (int i = 0; i < static_cast<int>(mSlots.size()); ++i)
     {
-      const IRECT row = RailRowRect(i, false);
-      if (i == ActiveRow() && row.T < list.T)
-      {
-        sticky = i;
-        continue;
-      }
+      const IRECT row = RailRowRect(i);
       if (row.B > list.T + 0.5f && row.T < list.B - 0.5f)
         DrawSlot(g, row, i, list);
     }
-    if (sticky >= 0)
-      DrawSlot(g, RailRowRect(sticky, true), sticky, list);
     g.PathClipRegion();
 
     const auto scroll = RailScrollMetrics();
@@ -1084,25 +1085,16 @@ private:
     const auto list = RailListRect();
     if (mSlots.empty() || !list.Contains(x, y))
       return -1;
-    const int active = ActiveRow();
-    if (active >= 0)
-    {
-      const auto natural = RailRowRect(active, false);
-      if (natural.T < list.T && RailRowRect(active, true).Contains(x, y))
-        return active;
-    }
     const int row = static_cast<int>((y - list.T + mRailScroll) / kRowPitch);
     if (row < 0 || row >= static_cast<int>(mSlots.size()))
       return -1;
-    return RailRowRect(row, false).Contains(x, y) ? row : -1;
+    return RailRowRect(row).Contains(x, y) ? row : -1;
   }
   IRECT ClearRectForRow(int index) const
   {
     if (index < 0 || index >= static_cast<int>(mSlots.size()))
       return IRECT();
-    const auto natural = RailRowRect(index, false);
-    const bool sticky = index == ActiveRow() && natural.T < RailListRect().T;
-    return ClearRectForRow(index, sticky ? RailRowRect(index, true) : natural);
+    return ClearRectForRow(index, RailRowRect(index));
   }
   // Top-right, not bottom-right: at the bottom this box sat on top of the row's
   // amp-name line.
@@ -1114,9 +1106,7 @@ private:
   {
     if (index < 0 || index >= static_cast<int>(mSlots.size()))
       return IRECT();
-    const auto natural = RailRowRect(index, false);
-    const bool sticky = index == ActiveRow() && natural.T < RailListRect().T;
-    return AssignRectForRow(index, sticky ? RailRowRect(index, true) : natural);
+    return AssignRectForRow(index, RailRowRect(index));
   }
   IRECT AssignRectForRow(int, const IRECT& row) const
   {
@@ -1139,6 +1129,18 @@ private:
     const float maxScroll = RailMaxScroll();
     mRailScroll = std::clamp(mRailScroll, 0.f, maxScroll);
     mRailScrollTarget = std::clamp(mRailScrollTarget, 0.f, maxScroll);
+  }
+
+  void EnsureActiveRowVisible()
+  {
+    const int active = ActiveRow();
+    const float viewH = RailListRect().H();
+    if (active < 0 || viewH < 1.f)
+      return;
+    const float rowTop = static_cast<float>(active) * kRowPitch;
+    const float next = volum::scroll::ScrollToReveal(mRailScroll, rowTop, rowTop + kRowH, viewH, RailMaxScroll());
+    mRailScroll = next;
+    mRailScrollTarget = next;
   }
 
   static int CustomArtIndex(int art)
@@ -1199,10 +1201,10 @@ private:
         return &candidate;
     return nullptr;
   }
-  IRECT RailRowRect(int index, bool sticky) const
+  IRECT RailRowRect(int index) const
   {
     const auto list = RailListRect();
-    const float top = sticky ? list.T : list.T + index * kRowPitch - mRailScroll;
+    const float top = list.T + index * kRowPitch - mRailScroll;
     return IRECT(list.L, top, list.R - (RailMaxScroll() > 0.5f ? 8.f : 0.f), top + kRowH);
   }
   void InitPickerSession()

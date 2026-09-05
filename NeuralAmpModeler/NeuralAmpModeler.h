@@ -131,6 +131,7 @@ enum ECtrlTags
   kCtrlTagVoLumCustomOverlay,
   kCtrlTagVoLumConfirm,
   kCtrlTagVoLumPlaySurface,
+  kCtrlTagVoLumHeaderPlate,
   kCtrlTagVoLumModeToggle,
   kCtrlTagVoLumPackOverlay,
   kCtrlTagVoLumNameDialog,

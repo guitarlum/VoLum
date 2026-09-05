@@ -14,6 +14,10 @@ not reach, launch a **debug** build with `VOLUM_SEED_CUSTOM_AMPS=N`. That calls
 and never touches the real content store. The `+` builder overlay is not
 scriptable with `win-click.ps1`; do not try to complete it from the harness.
 
+To review the update badge, About pill, and footer reminder without a real
+release, launch with `VOLUM_FAKE_UPDATE=1`. That injects an in-memory 2.0.0
+manifest and does not write `volum-update-state.json`.
+
 The Pack file dialogs are separate top-level windows, so `win-key.ps1` (which
 activates VoLum's main window first) sends its keys to the wrong place. Type into
 them with `[System.Windows.Forms.SendKeys]::SendWait()` against whatever is in the
@@ -87,7 +91,7 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 
 | PNG | Amp / how to reach | State delta from seed | Transient step |
 | --- | --- | --- | --- |
-| `user-guide-play.png` | THC Sunset (seed lastAmpIdx 14) | start with no `midiSoundMap` entries | click the destination toggle (735,78) if the header shows the stomp-ring (you are in BUILD; one click enters PLAY). Canvas bounds are `mainR-218..mainR-128`, `T+12..T+42`. Then click the empty-state **+ Add Sound** (458,371), then the first Factory row (458,209); repeat from the rail Add row (810,212) and (810,282) for two more Factory rows, then click rail row 01 (810,226) to recall it (LIVE) |
+| `user-guide-play.png` | THC Sunset (seed lastAmpIdx 14) | start with no `midiSoundMap` entries | click the destination toggle (751,74) if the header shows the stomp-ring (you are in BUILD; one click enters PLAY). Canvas bounds are `721..765`, `T+10..T+36`, immediately left of the tuner. Then click the empty-state **+ Add Sound** (458,371), then the first Factory row (458,209); repeat from the rail Add row (810,212) and (810,282) for two more Factory rows, then click rail row 01 (810,226) to recall it (LIVE) |
 | `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view) | none | click **THC Sunset** in the browser (93,565) - the seed reopens on the custom amp |
 | `user-guide-settings-signal.png` | any | none | click the gear (870,80); Settings opens on the tab it was left on, so click **SIGNAL** (308,164) |
 | `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist, so the list shows both an assigned and a red missing row | from Settings, click **MIDI** (458,164) |
@@ -120,6 +124,6 @@ relaunch). Everything else is reachable from the seed with the transient step.
   a card or pill edge, sits on a hairline, or wraps out of its frame. About:
   checkbox + **Check now** stay inside the About card. Pack: scope subtitle and
   also-including text stay inside their pills. PLAY: art sits above the name
-  banner; the destination toggle is left of tuner / metronome / gear and larger
-  than those circles.
+  banner; the destination toggle is a compact pill immediately left of tuner /
+  metronome / gear.
 - Restore your real library from the backup created in step 0.

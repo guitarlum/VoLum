@@ -170,12 +170,14 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   const float labelH = 20.f;
   const float valueH = 18.f;
   const float toggleH = 34.f;
-  const float hintH = 44.f;
-  const float hintGap = 10.f;
-  const float footerH = 18.f;
+  const float footerGap = 10.f;
+  const float footerH = 24.f;
+  const float hintH = 16.f;
 
+  // Status row, then a 16 px hint line that is empty pad until a target is
+  // focused. No overlay, and not the old 44 px card.
   const float contentH = speakerH + 6.f + heroH + 4.f + nameH + gapAfterAmpName + ampToKnobHairlineH + gapAfterHairline
-                         + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + hintGap + hintH + 6.f + footerH;
+                         + labelH + knobDiam + valueH + 2.f + 10.f + toggleH + footerGap + footerH + hintH;
   const float contentTop = b.T + (b.H() - contentH) / 2.f;
 
   // Speaker mode row
@@ -969,12 +971,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     new VoLumKnobLabelControl(IRECT(eqX + switchW + 4.f, toggleY, eqX + switchW + 46.f, toggleY + switchH), "EQ"), -1,
     "SUPPORT_LANE_TOGGLES");
 
-  const IRECT hintArea(mainCX - 270.f, toggleY + toggleH + 10.f, mainCX + 270.f, toggleY + toggleH + 10.f + 44.f);
-  pGraphics->AttachControl(new VoLumKeyboardHintControl(hintArea), kCtrlTagVoLumKeyboardHint);
-
-  // Footer
-  const IRECT footerArea(mainL, hintArea.B + 6.f, mainR, hintArea.B + 6.f + 18.f);
+  const IRECT footerArea(mainL, toggleY + toggleH + footerGap, mainR, toggleY + toggleH + footerGap + footerH);
   pGraphics->AttachControl(new VoLumFooterControl(footerArea), kCtrlTagVoLumFooter);
+  const IRECT hintArea(mainL, footerArea.B, mainR, footerArea.B + hintH);
+  pGraphics->AttachControl(new VoLumKeyboardHintControl(hintArea), kCtrlTagVoLumKeyboardHint);
   if (!mVolumLastLoadedFile.empty())
     pGraphics->GetControlWithTag(kCtrlTagVoLumFooter)->As<VoLumFooterControl>()->SetText(mVolumLastLoadedFile.c_str());
 
@@ -1032,11 +1032,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       [this](int focus) { _VolumFocusBuildEffect(focus); }, [this]() { _VolumAddHeardPlaySound(); }),
     kCtrlTagVoLumPlaySurface);
 
-  // Mirrored Flanks: plate first (under the ink), then toggle / tools / name.
+  // Plate first (under the ink), then the right-rail cluster and the name.
   // The cluster sits above the PLAY surface so it stays clickable in PLAY, and
   // below the overlays attached after this point.
   pGraphics->AttachControl(new VoLumBuildHeaderPlateControl(
-    IRECT(header.plateL, header.plateT, header.plateR, header.plateB)));
+                             IRECT(header.plateL, header.plateT, header.plateR, header.plateB)),
+                           kCtrlTagVoLumHeaderPlate);
   auto* modeToggle = new VoLumModeToggleControl(
     IRECT(header.toggleL, header.inkT, header.toggleR, header.inkB),
     [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
@@ -1400,6 +1401,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   _SyncVoLumExactEntry();
   if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))
     surface->Hide(mVolumUiMode != volum::UiMode::Play);
+  if (auto* plate = pGraphics->GetControlWithTag(kCtrlTagVoLumHeaderPlate))
+    plate->Hide(mVolumUiMode == volum::UiMode::Play);
   if (auto* preset = pGraphics->GetControlWithTag(kCtrlTagVoLumPresetBar))
     preset->Hide(mVolumUiMode == volum::UiMode::Play);
   if (mVolumUiMode == volum::UiMode::Play)

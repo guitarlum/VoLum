@@ -1027,11 +1027,11 @@ void NeuralAmpModeler::OnIdle()
       {
         // Master safety took priority because it indicates the actual final-bus is being
         // shaped, which is the louder problem regardless of dual-amp state.
-        footer->As<VoLumFooterControl>()->SetText("Output safety active - lower output or wet mix");
+        footer->As<VoLumFooterControl>()->SetStatus("Output safety active - lower output or wet mix", true);
       }
       else if (!mVolumMainLoadError.empty())
       {
-        footer->As<VoLumFooterControl>()->SetText(mVolumMainLoadError.c_str());
+        footer->As<VoLumFooterControl>()->SetStatus(mVolumMainLoadError.c_str(), true);
       }
       else if (mVolumUpdateFooterTicks > 0)
       {
@@ -1041,7 +1041,7 @@ void NeuralAmpModeler::OnIdle()
       }
       else if (dualActive && mVolumDualAmpOutputHot.load())
       {
-        footer->As<VoLumFooterControl>()->SetText("Dual Amp output hot - lower lane or output levels");
+        footer->As<VoLumFooterControl>()->SetStatus("Dual Amp output hot - lower lane or output levels", true);
       }
       else if (dualActive && !mVolumLastLoadedFile.empty() && !mVolumLastLoadedSupportFile.empty())
       {

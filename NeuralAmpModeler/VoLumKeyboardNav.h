@@ -4,8 +4,8 @@
 //
 // - VoLumChannelStepControl: dual-amp channel stepper used to cycle through
 //   per-amp channel snapshots when the keyboard focus is on the support row.
-// - VoLumKeyboardHintControl: floating hint overlay shown next to the focused
-//   knob, explaining the keyboard shortcuts that apply to it.
+// - VoLumKeyboardHintControl: one quiet line under BUILD's status row while a
+//   target is focused. Empty draws nothing, so the band is just bottom pad.
 //
 // Extracted from VoLumCoreControls.h on the 1.0 hygiene split.
 
@@ -146,45 +146,18 @@ public:
     if (mHintText.empty())
       return;
 
-    g.FillRoundRect(IColor(168, 14, 16, 22), mRECT, 7.f);
-    g.DrawRoundRect(IColor(72, 200, 162, 78), mRECT, 7.f, nullptr, 1.f);
-
-    const IText titleText(12.5f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    const IText detailText(11.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
-
-    const IRECT inner = mRECT.GetPadded(-18.f, -6.f, -18.f, -6.f);
-    const IRECT top = inner.GetFromTop(17.f);
-    const IRECT bottom = IRECT(inner.L, top.B + 2.f, inner.R, inner.B);
-    g.DrawText(titleText, mHintTitle.c_str(), top);
-    g.DrawText(detailText, mHintDetail.c_str(), bottom);
+    const IRECT ink = mRECT.GetPadded(-18.f, 0.f, -18.f, 0.f);
+    const IText text(10.f, VoLumColors::GOLD_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    const std::string fitted = FitTextToWidth(g, text, mHintText.c_str(), ink.W());
+    g.DrawText(text, fitted.c_str(), ink);
   }
 
   void SetHintText(const char* hintText)
   {
     mHintText = (hintText && hintText[0]) ? hintText : "";
-    mHintTitle.clear();
-    mHintDetail.clear();
-
-    if (!mHintText.empty())
-    {
-      const std::string divider = "  |  ";
-      const auto firstSplit = mHintText.find(divider);
-      if (firstSplit == std::string::npos)
-      {
-        mHintTitle = mHintText;
-      }
-      else
-      {
-        mHintTitle = mHintText.substr(0, firstSplit);
-        mHintDetail = mHintText.substr(firstSplit + divider.size());
-      }
-    }
-
     SetDirty(false);
   }
 
 private:
   std::string mHintText;
-  std::string mHintTitle;
-  std::string mHintDetail;
 };

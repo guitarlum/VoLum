@@ -41,6 +41,18 @@ inline float ClampScroll(float scroll, float maxScroll)
   return std::clamp(scroll, 0.f, std::max(0.f, maxScroll));
 }
 
+// Keep `item` inside the viewport. Used when keyboard / MIDI changes the
+// selected row: pinning it to the top while leaving scroll put is what made
+// PLAY's LIVE slot look stuck.
+inline float ScrollToReveal(float scroll, float itemTop, float itemBottom, float viewH, float maxScroll)
+{
+  if (itemTop < scroll)
+    scroll = itemTop;
+  else if (itemBottom > scroll + viewH)
+    scroll = itemBottom - viewH;
+  return ClampScroll(scroll, maxScroll);
+}
+
 struct Interaction
 {
   bool dragging = false;
