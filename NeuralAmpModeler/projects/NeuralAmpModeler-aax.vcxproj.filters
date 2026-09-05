@@ -59,6 +59,7 @@
       <Filter>IGraphics\Drawing</Filter>
     </ClCompile>
     <ClCompile Include="..\NeuralAmpModeler.cpp" />
+    <ClCompile Include="..\VoLumHttpGet.cpp" />
     <ClCompile Include="..\NeuralAmpModelerCore\NAM\convnet.cpp">
       <Filter>NAM</Filter>
     </ClCompile>

@@ -261,6 +261,12 @@
 		AADD00000000000000000101 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
 		AADD00000000000000000102 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
 		AADD00000000000000000103 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
+		AADD00000000000000000104 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
+		AADD00000000000000000105 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
+		AADD00000000000000000106 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
+		AADD00000000000000000107 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
+		AADD00000000000000000108 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
+		AADD00000000000000000109 /* VoLumHttpGet.mm in Sources */ = {isa = PBXBuildFile; fileRef = AADD00000000000000000100 /* VoLumHttpGet.mm */; };
 		4F3EE1C0231438D000004786 /* NeuralAmpModeler-macOS-MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4F1B4AE32014D33600BC64D4 /* NeuralAmpModeler-macOS-MainMenu.xib */; };
 		4F3EE1C2231438D000004786 /* IPlugProcessor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F8F61A8202807B9003F2573 /* IPlugProcessor.cpp */; };
 		4F3EE1C3231438D000004786 /* RtMidi.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F10D3D7203A6719003EF82A /* RtMidi.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
@@ -2734,6 +2740,7 @@
 				AA7002060000000000000000 /* slimmable.cpp in Sources */,
 				4F2FB1922A0047430027AB66 /* dsp.cpp in Sources */,
 				4F8D9707209EF5AC006E2A11 /* NeuralAmpModeler.cpp in Sources */,
+				AADD00000000000000000104 /* VoLumHttpGet.mm in Sources */,
 				4F7C495A255DDFC400DF7588 /* ITextEntryControl.cpp in Sources */,
 				4F2FB17F2A0047430027AB66 /* wav.cpp in Sources */,
 				4F78D9BB13B63BA50032E0F3 /* IPlugAPIBase.cpp in Sources */,
@@ -2820,6 +2827,7 @@
 				4F2FB1B52A0047430027AB66 /* activations.cpp in Sources */,
 				4FB1F58C20E4B006004157C8 /* IGraphicsMac.mm in Sources */,
 				4F3862F22014BBEC0009F402 /* NeuralAmpModeler.cpp in Sources */,
+				AADD00000000000000000105 /* VoLumHttpGet.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2870,6 +2878,7 @@
 				4F2FB1682A0047430027AB66 /* dsp.cpp in Sources */,
 				4F3EE1DD231438D000004786 /* IGraphicsMac.mm in Sources */,
 				4F3EE1DE231438D000004786 /* NeuralAmpModeler.cpp in Sources */,
+				AADD00000000000000000106 /* VoLumHttpGet.mm in Sources */,
 				4F2FB1A42A0047430027AB66 /* convnet.cpp in Sources */,
 				4F3EE1E0231438D000004786 /* IPlugAPIBase.cpp in Sources */,
 				4F3EE1E1231438D000004786 /* IPlugPluginBase.cpp in Sources */,
@@ -2894,6 +2903,7 @@
 				4F78BE1422E7406D00AD537E /* NeuralAmpModeler.h in Sources */,
 				4F0D965C23099F6900BFDED0 /* IPlugProcessor.cpp in Sources */,
 				4F78BE1522E7406D00AD537E /* NeuralAmpModeler.cpp in Sources */,
+				AADD00000000000000000107 /* VoLumHttpGet.mm in Sources */,
 				4F78BE1622E7406D00AD537E /* IGraphicsMac_view.mm in Sources */,
 				4F78BE1722E7406D00AD537E /* IGraphicsMac.mm in Sources */,
 				4F78BE1822E7406D00AD537E /* IGraphicsCoreText.mm in Sources */,
@@ -3078,6 +3088,7 @@
 				4F472103209B294400A0A0A8 /* IPlugVST3_Controller.cpp in Sources */,
 				4F78BE2D22E7412300AD537E /* IGraphicsNanoVG_src.m in Sources */,
 				4FC3EFCB2086C27800BD11FA /* NeuralAmpModeler.cpp in Sources */,
+				AADD00000000000000000108 /* VoLumHttpGet.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3152,6 +3163,7 @@
 				4FFBB90520863B0E00DDD0E7 /* baseiids.cpp in Sources */,
 				4FFBB90620863B0E00DDD0E7 /* IPlugTimer.cpp in Sources */,
 				4FFBB90720863B0E00DDD0E7 /* NeuralAmpModeler.cpp in Sources */,
+				AADD00000000000000000109 /* VoLumHttpGet.mm in Sources */,
 				4F2FB1A12A0047430027AB66 /* convnet.cpp in Sources */,
 				4F2FB15A2A0047420027AB66 /* RecursiveLinearFilter.cpp in Sources */,
 				4FFBB90820863B0E00DDD0E7 /* pluginfactory.cpp in Sources */,

@@ -66,6 +66,44 @@ TEST_CASE("The iPlug2 patch step is not routed through Invoke-Check")
   CHECK(src.find("Deliberately not Invoke-Check") != std::string::npos);
 }
 
+TEST_CASE("Every plugin target that compiles NeuralAmpModeler.cpp also compiles the HTTP get")
+{
+  // Update-check calls VolumHttpGetString from NeuralAmpModeler.cpp. APP/VST3
+  // had the translation unit; AU (and AAX on Windows) did not, so macOS
+  // `makedist-mac.sh full all` failed linking AU x86_64 with a missing symbol.
+  const std::string pbx = ReadRepoFile("NeuralAmpModeler/projects/NeuralAmpModeler-macOS.xcodeproj/project.pbxproj");
+  int macPhases = 0;
+  for (size_t pos = 0;;)
+  {
+    const auto begin = pbx.find("isa = PBXSourcesBuildPhase", pos);
+    if (begin == std::string::npos)
+      break;
+    auto end = pbx.find("isa = PBXSourcesBuildPhase", begin + 1);
+    if (end == std::string::npos)
+      end = pbx.find("/* End PBXSourcesBuildPhase", begin);
+    REQUIRE(end != std::string::npos);
+    const std::string block = pbx.substr(begin, end - begin);
+    if (block.find("NeuralAmpModeler.cpp in Sources") != std::string::npos)
+    {
+      ++macPhases;
+      CHECK(block.find("VoLumHttpGet.mm in Sources") != std::string::npos);
+    }
+    pos = begin + 1;
+  }
+  CHECK(macPhases >= 3);
+
+  const char* windowsProjects[] = {"NeuralAmpModeler/projects/NeuralAmpModeler-app.vcxproj",
+                                   "NeuralAmpModeler/projects/NeuralAmpModeler-vst3.vcxproj",
+                                   "NeuralAmpModeler/projects/NeuralAmpModeler-aax.vcxproj"};
+  for (const char* rel : windowsProjects)
+  {
+    const std::string proj = ReadRepoFile(rel);
+    if (proj.find("NeuralAmpModeler.cpp") == std::string::npos)
+      continue;
+    CHECK(proj.find("VoLumHttpGet.cpp") != std::string::npos);
+  }
+}
+
 TEST_CASE("Agent artifact-link check skips gitignored paths")
 {
   // Windows CI died on `training/a2-final/` in the A2 skill: the folder is
