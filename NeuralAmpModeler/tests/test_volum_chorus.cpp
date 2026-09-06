@@ -107,6 +107,30 @@ TEST_CASE("Chorus MIX 0 is bit-identical passthrough (all modes)")
   }
 }
 
+TEST_CASE("Chorus MIX 0 is bit-identical without Reset after a wet buffer")
+{
+  // ProcessBlock calls SetParams every block and never Reset()s on MIX. The
+  // one-pole must snap to 0 or the wet blend lingers.
+  for (int mode = 0; mode < ChorusDSP::kNumModes; ++mode)
+  {
+    ChorusDSP chorus;
+    chorus.Prepare(kSR, kBlock, 2);
+    chorus.SetParams(0.5, 1.0, 0.5, 1.0, 1.0, mode, kSR);
+    const auto wetIn = makeChord(kBlock * 4);
+    runStream(chorus, wetIn);
+
+    const auto dryIn = makeChord(1 << 14);
+    chorus.SetParams(0.5, 1.0, 0.5, 1.0, 0.0, mode, kSR);
+    const auto out = runStream(chorus, dryIn);
+    INFO("mode " << mode);
+    for (size_t i = 0; i < dryIn.l.size(); ++i)
+    {
+      REQUIRE(out.l[i] == dryIn.l[i]);
+      REQUIRE(out.r[i] == dryIn.r[i]);
+    }
+  }
+}
+
 TEST_CASE("Chorus alters the signal at MIX 1 (all modes)")
 {
   const auto in = makeChord(1 << 15);

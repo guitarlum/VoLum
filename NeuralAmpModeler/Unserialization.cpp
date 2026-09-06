@@ -793,23 +793,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         }
       };
       auto applyChorusTail = [](const volum::ChorusTail& c, volum::VoLumAmpSettings& s) {
-        if (!c.present)
-          return;
-        s.postChorusActive = c.active;
-        s.postChorusMode = std::clamp(c.mode, 0, volum::kVoLumChorusModeCount - 1);
-        s.postChorusRate = std::clamp(c.rate, 0.0, 1.0);
-        s.postChorusDepth = std::clamp(c.depth, 0.0, 1.0);
-        s.postChorusTone = std::clamp(c.tone, 0.0, 1.0);
-        s.postChorusWidth = std::clamp(c.width, 0.0, 1.0);
-        s.postChorusMix = std::clamp(c.mix, 0.0, 1.0);
-        for (int m = 0; m < volum::kVoLumChorusModeCount; ++m)
-        {
-          s.postChorusModes[m].rate = std::clamp(c.modes[m].rate, 0.0, 1.0);
-          s.postChorusModes[m].depth = std::clamp(c.modes[m].depth, 0.0, 1.0);
-          s.postChorusModes[m].tone = std::clamp(c.modes[m].tone, 0.0, 1.0);
-          s.postChorusModes[m].width = std::clamp(c.modes[m].width, 0.0, 1.0);
-          s.postChorusModes[m].mix = std::clamp(c.modes[m].mix, 0.0, 1.0);
-        }
+        volum::ApplyChorusTailToSettings(c, s);
       };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {

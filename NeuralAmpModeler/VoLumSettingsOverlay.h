@@ -300,7 +300,7 @@ private:
  * (VoLumPackOverlayControl); this row only opens it.
  *
  * No caption of its own: the SYSTEM card that hosts this control already caps it
- * with "Content library". */
+ * with "Back up your library". */
 class VoLumSettingsPackRowControl : public IControl
 {
 public:
@@ -319,9 +319,9 @@ public:
 
     const IText help(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Top);
     const float helpT = mRECT.T + volum::packui::kPackRowBtnH + volum::packui::kPackRowBtnToHelp;
-    g.DrawText(help, "Back up, move or share your custom",
+    g.DrawText(help, "Move your custom amps, presets, IRs and pedals to",
                IRECT(mRECT.L, helpT, mRECT.R, helpT + volum::packui::kPackRowHelpLineH));
-    g.DrawText(help, "amps, presets, IRs and pedals as a Pack.",
+    g.DrawText(help, "another computer, or share part of your library.",
                IRECT(mRECT.L, helpT + volum::packui::kPackRowHelpLineGap, mRECT.R,
                      helpT + volum::packui::kPackRowHelpLineGap + volum::packui::kPackRowHelpLineH));
   }

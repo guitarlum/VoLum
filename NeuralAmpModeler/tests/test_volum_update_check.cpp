@@ -124,3 +124,31 @@ TEST_CASE("Settings gear opener does not consume the update badge")
   CHECK(opener.find("_VolumUseAvailableUpdate") == std::string::npos);
   CHECK(opener.find("_VolumCheckForUpdatesNow") == std::string::npos);
 }
+
+TEST_CASE("A successful check clears a withdrawn or equal-or-older advertised release")
+{
+  volum::update::UpdateState state;
+  state.autoCheck = false;
+  state.lastSeenVersion = "1.2.9";
+  state.latestKnownVersion = "1.3.0";
+  state.latestKnownUrl = "https://example.com/v1.3.0";
+  state.latestKnownNotes = "old";
+
+  volum::update::Manifest current{"1.2.2", "same", "https://example.com/now"};
+  volum::update::ApplyCheckedManifest(state, current, "1.2.2", 42);
+  CHECK(state.lastCheckUtc == 42);
+  CHECK_FALSE(state.autoCheck); // preserved
+  CHECK(state.lastSeenVersion == "1.2.9"); // preserved
+  CHECK(state.latestKnownVersion.empty());
+  CHECK(state.latestKnownUrl.empty());
+  CHECK(state.latestKnownNotes.empty());
+
+  volum::update::Manifest newer{"1.3.0", "notes", "https://example.com/v1.3.0"};
+  volum::update::ApplyCheckedManifest(state, newer, "1.2.2", 99);
+  CHECK(state.lastCheckUtc == 99);
+  CHECK_FALSE(state.autoCheck);
+  CHECK(state.lastSeenVersion == "1.2.9");
+  CHECK(state.latestKnownVersion == "1.3.0");
+  CHECK(state.latestKnownUrl == "https://example.com/v1.3.0");
+  CHECK(state.latestKnownNotes == "notes");
+}

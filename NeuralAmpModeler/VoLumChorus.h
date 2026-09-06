@@ -108,6 +108,10 @@ public:
     mTone = _Clamp01(tone);
     mWidth = _Clamp01(width);
     mMixTarget = _Clamp01(mix);
+    // ProcessBlock calls SetParams every buffer without Reset(). MIX=0 must
+    // snap or the 15 ms one-pole keeps a wet blend after the knob hits zero.
+    if (mMixTarget <= 0.0)
+      mMix = 0.0;
   }
 
   void Reset()

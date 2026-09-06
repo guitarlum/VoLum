@@ -3,6 +3,7 @@
 #include "IControls.h"
 #include "ITextEntryControl.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumAmpListScroll.h"
 #include <cmath>
 #include <functional>
 #include <algorithm>
@@ -331,6 +332,25 @@ inline void DrawVoLumScrollbar(IGraphics& g, const IRECT& track, const IRECT& th
 {
   g.FillRect(IColor(40, 200, 162, 78), track);
   g.FillRect(dragging ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, thumb);
+}
+
+// Track geometry that matches every other VoLum list: a kScrollbarW-wide
+// reservation with the visible bar inset 1 px from the list edge.
+inline IRECT VoLumScrollTrackRect(const IRECT& list)
+{
+  return IRECT(list.R - volum::amplist::kScrollbarW + 1.f, list.T + 1.f, list.R - 1.f, list.B - 1.f);
+}
+
+// Recessed two-state brass pill (FULL|LITE, All|One). Caller draws the labels.
+inline void DrawVoLumSegmentSwitch(IGraphics& g, const IRECT& track, bool secondActive)
+{
+  const float cr = track.H() * 0.5f;
+  const IRECT activeR =
+    secondActive ? track.GetFromRight(track.W() * 0.5f) : track.GetFromLeft(track.W() * 0.5f);
+  g.FillRoundRect(IColor(255, 9, 9, 14), track, cr);
+  g.FillRoundRect(VoLumColors::GOLD.WithOpacity(0.30f), activeR, cr);
+  g.DrawRoundRect(VoLumColors::GOLD, activeR, cr, nullptr, 1.25f);
+  g.DrawRoundRect(VoLumColors::FRAME, track, cr, nullptr, 1.f);
 }
 
 // On-selection text colour matching DrawVoLumSelection's fill per style.

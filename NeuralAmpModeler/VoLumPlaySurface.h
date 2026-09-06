@@ -69,7 +69,7 @@ public:
   void OnMouseOver(float, float, const IMouseMod&) override
   {
     mMouseIsOver = true;
-    const char* tip = Destination() == volum::UiMode::Play ? "PLAY" : "BUILD";
+    const char* tip = Destination() == volum::UiMode::Play ? "Switch to PLAY" : "Switch to BUILD";
     if (mTip != tip)
     {
       mTip = tip;
@@ -180,7 +180,25 @@ public:
     SetDirty(false);
   }
 
+  // Esc closes the picker; arrows and 1-8 stay here so they cannot step the
+  // rail or stomps underneath. T/M/H and Ctrl+S still fall through.
+  bool ConsumePlayKey(const IKeyPress& key)
+  {
+    if (!mPickerOpen)
+      return false;
+    if (key.VK == kVK_ESCAPE)
+    {
+      mPickerOpen = false;
+      SetDirty(false);
+      return true;
+    }
+    const bool rail = key.VK == kVK_UP || key.VK == kVK_DOWN || key.VK == kVK_LEFT || key.VK == kVK_RIGHT;
+    const bool stomp = key.VK >= '1' && key.VK <= '8';
+    return rail || stomp;
+  }
+
   void SetInPeak(float peak) { mInPeak = std::clamp(peak, 0.f, 1.f); }
+  void SetOutPeak(float peak) { mOutPeak = std::clamp(peak, 0.f, 1.f); }
 
   void SetPickerGroups(volum::PickerGroupSession* session) { mPickerGroups = session; }
 
@@ -342,7 +360,7 @@ public:
         mAddHeard();
         return;
       }
-      OpenPicker(FirstFreeSlot(), true);
+      OpenPicker(volum::AddPickerStartSlot(FirstFreeSlot()), true);
       return;
     }
 
@@ -381,6 +399,8 @@ public:
           mEditInBuild(static_cast<int>(kStompFocus[static_cast<size_t>(i)]));
         return;
       }
+      if (!mFxAvailable[(size_t)i])
+        return;
       if (mBypass)
         mBypass(volum::kPlayBypassParamNames[static_cast<size_t>(i)]);
       return;
@@ -444,6 +464,7 @@ public:
       mHoverHeader = header;
       SetDirty(false);
     }
+    ApplyPlayTip(x, y);
   }
 
   void OnMouseOut() override
@@ -451,6 +472,7 @@ public:
     mHoverRow = mHoverFx = mHoverChoice = -1;
     mHoverStep = 0;
     mHoverHeader = 0;
+    ApplyPlayTip(0.f, 0.f, true);
     SetDirty(false);
   }
 
@@ -719,7 +741,7 @@ private:
     DrawCornerAccent(g, rect.R - 6.f, rect.T + 6.f, acc, true, false, corner);
     if (mDual)
     {
-      const std::string role = (support ? "SUPPORT · " : "MAIN · ") + name;
+      const std::string role = (support ? "SUPPORT - " : "MAIN - ") + name;
       g.DrawText(VoLumType::Label(9.f, support ? VoLumColors::TEAL : VoLumColors::GOLD_DIM, EAlign::Near), role.c_str(),
                  IRECT(rect.L + 24.f, rect.T + 4.f, rect.R - 8.f, rect.T + 20.f));
     }
@@ -856,19 +878,20 @@ private:
         const IRECT c = r.Intersect(clip);
         if (c.W() <= 0.f || c.H() <= 0.f)
           return;
+        const std::string fitted = FitTextToWidth(g, t, s, r.W());
         g.PathClipRegion(c);
-        g.DrawText(t, s, r);
+        g.DrawText(t, fitted.c_str(), r);
         g.PathClipRegion(clip);
       };
       clipped(IRECT(textL, row.T + 23.f, row.R - 8.f, row.T + 43.f),
               VoLumType::Display(17.f, active ? VoLumColors::SEL_TEXT : VoLumColors::CREAM, EAlign::Near),
               slot.sound.presetName.c_str());
-      clipped(IRECT(textL, row.T + 43.f, row.R - 8.f, row.T + 57.f),
+      const float ampR = hovered ? row.R - 52.f : row.R - 8.f;
+      clipped(IRECT(textL, row.T + 43.f, ampR, row.T + 57.f),
               VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Near), slot.sound.ampName.c_str());
-      // LIVE and the clear affordance share the row's top-right corner: while the
-      // pointer is on the row you get the action, otherwise the state. The brass
-      // selection border already says "live", so nothing is lost.
-      if (active && !hovered)
+      // LIVE stays in the top-right even while the pointer is on the row.
+      // Reassign/clear sit on the lower-right so they cannot cover the badge.
+      if (active)
       {
         g.FillCircle(VoLumColors::GOLD, row.R - 40.f, row.T + 14.f, 2.5f);
         g.DrawText(VoLumType::Label(8.f, VoLumColors::GOLD, EAlign::Far), "LIVE",
@@ -930,6 +953,8 @@ private:
                IRECT(board.L + 8.f, board.T + 3.f, FxRect(3).R, board.T + 18.f));
     g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), "Post",
                IRECT(FxRect(4).L, board.T + 3.f, board.R - 8.f, board.T + 18.f));
+    const float divX = (FxRect(3).R + FxRect(4).L) * 0.5f;
+    g.DrawLine(VoLumColors::FRAME.WithOpacity(0.7f), divX, board.T + 20.f, divX, board.B - 10.f);
     for (int i = 0; i < FxCount; ++i)
       DrawStomp(g, i);
     DrawMeter(g, false);
@@ -950,8 +975,8 @@ private:
     const bool hovered = mHoverFx == i;
     DrawInsetWell(g, r, 2.f);
     // Same language as BUILD's PRE/POST tiles: the motif lights when the pedal is
-    // on, and the well stays a quiet frame. A brass selection chip plus a gold LED
-    // plus gold captions turned every engaged stomp into a yellow brick.
+    // on, and the well stays a quiet frame. Engaged state lives in one gold strip
+    // under the caption, not a brass chip plus LED plus gold caption.
     if (hovered && !on)
       g.FillRect(VoLumColors::SEL_BG_SOFT, r);
     g.DrawRect(VoLumColors::FRAME.WithOpacity(live ? (on ? 0.9f : (hovered ? 1.f : 0.55f)) : 0.3f), r);
@@ -975,13 +1000,20 @@ private:
     const IColor ink =
       on ? VoLumColors::CREAM : (live ? VoLumColors::CREAM_DIM : VoLumColors::CREAM_DIM.WithOpacity(0.35f));
     g.DrawText(VoLumType::Label(9.f, ink), name, IRECT(r.L, r.B - 24.f, r.R, r.B - 8.f));
+    // One footswitch bar under the caption: gold when engaged, a visible unlit
+    // track when the slot can fire, nothing when the rig cannot reach it.
+    if (live)
+    {
+      const IRECT led(r.L + 8.f, r.B - 7.f, r.R - 8.f, r.B - 5.f);
+      g.FillRect(on ? VoLumColors::GOLD : IColor(30, 200, 162, 78), led);
+    }
   }
 
   void DrawMeter(IGraphics& g, bool out)
   {
     const IRECT r = MeterRect(out);
     DrawInsetWell(g, r, 1.f);
-    const float level = std::clamp(out ? mInPeak * 0.85f : mInPeak, 0.f, 1.f);
+    const float level = std::clamp(out ? mOutPeak : mInPeak, 0.f, 1.f);
     // Segmented ladder: a solid bar in a 10 px well reads as a stray rectangle.
     const int segments = 18;
     const float segH = (r.H() - 4.f) / segments;
@@ -1044,7 +1076,6 @@ private:
 
     const IRECT list = PickerListRect();
     g.PathClipRegion(list);
-    float y = list.T - mPickerScroll;
     WalkPickerRows([&](int kind, int choice, const IRECT& row) {
       if (row.B < list.T || row.T > list.B)
         return;
@@ -1096,11 +1127,11 @@ private:
       return IRECT();
     return ClearRectForRow(index, RailRowRect(index));
   }
-  // Top-right, not bottom-right: at the bottom this box sat on top of the row's
-  // amp-name line.
+  // Lower-right, not top-right: LIVE keeps the top corner while the pointer is
+  // on the row, so clear cannot appear under where the badge just was.
   IRECT ClearRectForRow(int, const IRECT& row) const
   {
-    return IRECT(row.R - 26.f, row.T + 5.f, row.R - 6.f, row.T + 23.f);
+    return IRECT(row.R - 26.f, row.B - 23.f, row.R - 6.f, row.B - 5.f);
   }
   IRECT AssignRectForRow(int index) const
   {
@@ -1110,7 +1141,7 @@ private:
   }
   IRECT AssignRectForRow(int, const IRECT& row) const
   {
-    return IRECT(row.R - 48.f, row.T + 5.f, row.R - 28.f, row.T + 23.f);
+    return IRECT(row.R - 48.f, row.B - 23.f, row.R - 28.f, row.B - 5.f);
   }
   IRECT FxRect(int i) const
   {
@@ -1205,7 +1236,7 @@ private:
   {
     const auto list = RailListRect();
     const float top = list.T + index * kRowPitch - mRailScroll;
-    return IRECT(list.L, top, list.R - (RailMaxScroll() > 0.5f ? 8.f : 0.f), top + kRowH);
+    return IRECT(list.L, top, volum::amplist::RowRightX(list.R, RailContentH(), list.H()), top + kRowH);
   }
   void InitPickerSession()
   {
@@ -1244,10 +1275,11 @@ private:
   void WalkPickerRows(Fn&& fn) const
   {
     const IRECT list = PickerListRect();
+    const float rowR = volum::amplist::RowRightX(list.R, PickerContentHeight(), list.H());
     float y = list.T - mPickerScroll;
     if (HasPickerFactory())
     {
-      fn(1, -1, IRECT(list.L, y, list.R, y + kPickerCapH));
+      fn(1, -1, IRECT(list.L, y, rowR, y + kPickerCapH));
       y += kPickerCapH;
       if (PickerGroupOpen(true))
       {
@@ -1255,14 +1287,14 @@ private:
         {
           if (!mChoices[(size_t)i].factory)
             continue;
-          fn(0, i, IRECT(list.L, y, list.R, y + kPickerRowH));
+          fn(0, i, IRECT(list.L, y, rowR, y + kPickerRowH));
           y += kPickerRowH;
         }
       }
     }
     if (HasPickerUser())
     {
-      fn(-1, -1, IRECT(list.L, y, list.R, y + kPickerCapH));
+      fn(-1, -1, IRECT(list.L, y, rowR, y + kPickerCapH));
       y += kPickerCapH;
       if (PickerGroupOpen(false))
       {
@@ -1270,7 +1302,7 @@ private:
         {
           if (mChoices[(size_t)i].factory)
             continue;
-          fn(0, i, IRECT(list.L, y, list.R, y + kPickerRowH));
+          fn(0, i, IRECT(list.L, y, rowR, y + kPickerRowH));
           y += kPickerRowH;
         }
       }
@@ -1325,7 +1357,7 @@ private:
   IRECT PickerListRect() const
   {
     const auto panel = PickerRect();
-    return IRECT(panel.L + 14.f, panel.T + 74.f, panel.R - 20.f, panel.B - 12.f);
+    return IRECT(panel.L + 14.f, panel.T + 74.f, panel.R - 14.f, panel.B - 12.f);
   }
   IRECT PickerCloseRect() const
   {
@@ -1343,16 +1375,8 @@ private:
     const auto list = PickerListRect();
     return volum::scroll::ComputeScroll(list.T, list.B, list.H(), PickerContentHeight(), mPickerScroll);
   }
-  IRECT RailTrackRect() const
-  {
-    const auto list = RailListRect();
-    return IRECT(list.R - 4.f, list.T, list.R, list.B);
-  }
-  IRECT PickerTrackRect() const
-  {
-    const auto list = PickerListRect();
-    return IRECT(list.R + 2.f, list.T, list.R + 6.f, list.B);
-  }
+  IRECT RailTrackRect() const { return VoLumScrollTrackRect(RailListRect()); }
+  IRECT PickerTrackRect() const { return VoLumScrollTrackRect(PickerListRect()); }
   int PickerHeaderAt(float x, float y) const
   {
     const IRECT list = PickerListRect();
@@ -1395,6 +1419,48 @@ private:
     return n < 10 ? "0" + std::to_string(n) : std::to_string(n);
   }
 
+  const char* StompCaption(int i) const
+  {
+    static const char* kFixed[FxCount] = {"PITCH", "COMP", nullptr, nullptr, "CHORUS", "DELAY", "REVERB", "TREM"};
+    if (i == Nam1)
+      return mNam1Label.c_str();
+    if (i == Nam2)
+      return mNam2Label.c_str();
+    return kFixed[i];
+  }
+
+  void ApplyPlayTip(float x, float y, bool clear = false)
+  {
+    std::string tip;
+    if (!clear && !mPickerOpen)
+    {
+      if (mHoverFx >= 0 && mHoverFx < FxCount)
+      {
+        const char* name = StompCaption(mHoverFx);
+        if (mFxAvailable[(size_t)mHoverFx])
+          tip = std::string(name) + ": click to bypass, right-click to edit in BUILD";
+        else
+          tip = std::string(name) + " is empty - right-click to load a capture in BUILD";
+      }
+      else if (mHoverRow >= 0 && mHoverRow < static_cast<int>(mSlots.size()))
+      {
+        const auto& slot = mSlots[(size_t)mHoverRow];
+        if (ClearRectForRow(mHoverRow).Contains(x, y))
+          tip = "Clear this program";
+        else if (AssignRectForRow(mHoverRow).Contains(x, y))
+          tip = "Point this program at another Sound";
+        else if (!slot.valid)
+          tip = "This Sound is missing. Pick another.";
+        else
+          tip = slot.sound.presetName + " - " + slot.sound.ampName;
+      }
+    }
+    if (mCurTip == tip)
+      return;
+    mCurTip = tip;
+    SetTooltip(tip.c_str());
+  }
+
   static constexpr int kHoverAdd = -2;
 
   std::vector<volum::PlaySlot> mSlots;
@@ -1407,9 +1473,10 @@ private:
   bool mPlusAddsHeard = false;
   std::string mNam1Label = "NAM 1";
   std::string mNam2Label = "NAM 2";
+  std::string mCurTip;
   std::array<bool, FxCount> mFx{};
   std::array<bool, FxCount> mFxAvailable{};
-  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f;
+  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f;
   int mCachedMainArt = -1, mCachedSupportArt = -1;
   bool mCachedMainCustom = false, mCachedSupportCustom = false;
 

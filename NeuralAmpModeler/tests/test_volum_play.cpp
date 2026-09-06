@@ -92,6 +92,27 @@ TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC
   CHECK(slots[1].sound.presetName == "Invalid slot");
 }
 
+TEST_CASE("User Sounds on a factory amp keep that amp's fractal art")
+{
+  const auto factory = volum::DefaultFactoryPresets();
+  volum::content::Registry registry;
+  volum::content::Preset user;
+  user.id = "preset_lead";
+  user.name = "Lead";
+  registry.presetBanks["factory:7"] = {user};
+  volum::SoundChoice choice;
+  REQUIRE(volum::ResolveSound(factory, registry, "factory:7", "preset_lead", choice));
+  CHECK_FALSE(choice.customArt);
+  CHECK(choice.art == 7);
+  CHECK(choice.factory == false);
+
+  volum::content::AssignMidiSound(registry, 4, "factory:7", "preset_lead");
+  const auto slots = volum::BuildPlaySlots(factory, registry);
+  REQUIRE(slots.size() == 1);
+  CHECK_FALSE(slots[0].sound.customArt);
+  CHECK(slots[0].sound.art == 7);
+}
+
 TEST_CASE("PLAY arrows step only the slots a Program Change could actually recall")
 {
   const auto factory = volum::DefaultFactoryPresets();

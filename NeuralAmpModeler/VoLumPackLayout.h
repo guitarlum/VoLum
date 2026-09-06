@@ -17,7 +17,7 @@ inline constexpr float kAlsoH = 50.f;
 inline constexpr float kAlsoGap = 8.f;
 inline constexpr float kListPad = 8.f;
 
-// SYSTEM Content library card: buttons + two help lines. The mid-row card
+// SYSTEM library backup card: buttons + two help lines. The mid-row card
 // must be at least this body height after _AddCard's pad and caption.
 inline constexpr float kPackRowBtnH = 28.f;
 inline constexpr float kPackRowBtnToHelp = 8.f;

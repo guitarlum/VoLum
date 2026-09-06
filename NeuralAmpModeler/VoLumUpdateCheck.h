@@ -8,6 +8,8 @@
 #include <string>
 #include <utility>
 
+#include "VoLumUpdateState.h"
+
 #if __has_include(<nlohmann/json.hpp>)
   #include <nlohmann/json.hpp>
 #elif __has_include(<json.hpp>)
@@ -160,6 +162,25 @@ inline void OnSettingsOpened(BadgeState&)
 inline void MarkSeen(BadgeState& state)
 {
   state.lastSeenVersion = state.latestKnownVersion;
+}
+
+// Merge a successful appcast into the sidecar without touching autoCheck /
+// lastSeenVersion. A withdrawn or equal-or-older stable clears the cache so
+// a yanked 1.3.0 cannot stay advertised forever.
+inline void ApplyCheckedManifest(UpdateState& state, const Manifest& manifest, const std::string& currentVersion,
+                                 std::int64_t nowUtc)
+{
+  state.lastCheckUtc = nowUtc;
+  if (CompareVersionStrings(manifest.version, currentVersion) > 0)
+  {
+    state.latestKnownVersion = manifest.version;
+    state.latestKnownUrl = manifest.url;
+    state.latestKnownNotes = manifest.notes;
+    return;
+  }
+  state.latestKnownVersion.clear();
+  state.latestKnownUrl.clear();
+  state.latestKnownNotes.clear();
 }
 
 struct AsyncResult

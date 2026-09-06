@@ -122,6 +122,11 @@ TEST_CASE("Scroll thumb drag maps cursor y to a new offset")
   CHECK(volum::scroll::ListWheelDelta(1.f, 20.f) == doctest::Approx(-30.f));
   CHECK(volum::scroll::ClampScroll(-4.f, 10.f) == 0.f);
   CHECK(volum::scroll::ClampScroll(40.f, 10.f) == 10.f);
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  CHECK(play.find("VoLumScrollTrackRect(") != std::string::npos);
+  CHECK(tabs.find("VoLumScrollTrackRect(") != std::string::npos);
+  CHECK(play.find("amplist::RowRightX(") != std::string::npos);
 }
 
 TEST_CASE("PLAY + becomes Add this sound for dirty Factory or an unassigned User")
@@ -223,25 +228,39 @@ TEST_CASE("Entering PLAY drops PRE/POST lock without restoring the scene")
 TEST_CASE("PLAY T/M/H and Ctrl+S fall through the PLAY key branch")
 {
   CHECK(volum::PlayBranchConsumes(false, true, false));
+  CHECK(volum::PlayBranchConsumes(true, true, false)); // Ctrl+arrow still owns the rail
   CHECK(volum::PlayBranchConsumes(false, false, true));
-  CHECK_FALSE(volum::PlayBranchConsumes(true, true, false)); // Ctrl+S
+  CHECK(volum::PlayBranchConsumes(true, false, true));
+  CHECK_FALSE(volum::PlayBranchConsumes(true, false, false)); // Ctrl+S is not a rail key
   CHECK_FALSE(volum::PlayBranchConsumes(false, false, false)); // T/M/H/plain S
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, 's'));
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, ' '));
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, 'b'));
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, '\t'));
+  CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(true, 's')); // Ctrl+S saves
+  CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(false, 't'));
+  CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(false, 'm'));
+  CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(false, 'h'));
   CHECK(volum::SectionForEffectFocus(EVoLumEffectFocus::PRE_NAM1) == EVoLumSection::PRE);
   CHECK(volum::SectionForEffectFocus(EVoLumEffectFocus::CHORUS) == EVoLumSection::POST);
   CHECK(volum::SectionForEffectFocus(EVoLumEffectFocus::AMP) == EVoLumSection::AMP);
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   REQUIRE(layout.find("PlayBranchConsumes(key.C, railStep, stomp >= 0)") != std::string::npos);
+  REQUIRE(layout.find("PlaySwallowsHiddenBuildEdit(key.C, key.VK)") != std::string::npos);
   const auto consumes = layout.find("PlayBranchConsumes(key.C, railStep, stomp >= 0)");
   const auto swallow = layout.find("return true;", consumes);
   REQUIRE(layout.find("AnyOverlayOpen(", consumes) < swallow);
   const auto playBranch = layout.find("if (mVolumUiMode == volum::UiMode::Play)");
   const auto fallthrough = layout.find("T / M / H / Ctrl+S fall through to the shared handler.");
+  const auto hideBuild = layout.find("PlaySwallowsHiddenBuildEdit(key.C, key.VK)");
   const auto shared = layout.find("if (_HandleVoLumKeyboardFocusKey(key))");
   REQUIRE(playBranch != std::string::npos);
   REQUIRE(fallthrough != std::string::npos);
+  REQUIRE(hideBuild != std::string::npos);
   REQUIRE(shared != std::string::npos);
   CHECK(playBranch < fallthrough);
-  CHECK(fallthrough < shared);
+  CHECK(fallthrough < hideBuild);
+  CHECK(hideBuild < shared);
 }
 
 TEST_CASE("Ctrl+S and Default dirty use the live-vs-default comparison")
@@ -252,6 +271,21 @@ TEST_CASE("Ctrl+S and Default dirty use the live-vs-default comparison")
   REQUIRE(presets.find("bool NeuralAmpModeler::_VolumHandleSaveShortcut()") != std::string::npos);
   REQUIRE(presets.find("_VolumPromptSaveAs") != std::string::npos);
   REQUIRE(presets.find("kCtrlTagVoLumNameDialog") != std::string::npos);
+}
+
+TEST_CASE("Ctrl+S overwrite and Save As do not write midiSoundMap")
+{
+  // Ctrl+S writes the live rig into the current Sound. Add this sound is the
+  // only path that may mint a MIDI slot. If save grew an AssignMidiSound call,
+  // PLAY numbers would move under the player's foot.
+  const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  REQUIRE(presets.find("bool NeuralAmpModeler::_VolumHandleSaveShortcut()") != std::string::npos);
+  REQUIRE(presets.find("int NeuralAmpModeler::_VolumSavePresetAs") != std::string::npos);
+  REQUIRE(presets.find("void NeuralAmpModeler::_VolumOverwritePreset") != std::string::npos);
+  CHECK(presets.find("AssignMidiSound") == std::string::npos);
+  CHECK(presets.find("midiSoundMap") == std::string::npos);
+  CHECK(runtime.find("AssignMidiSound") != std::string::npos);
 }
 
 TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
@@ -273,12 +307,11 @@ TEST_CASE("H peels Pack before it closes Settings")
 {
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   const auto hGate = layout.find("if (key.VK == 'h' || key.VK == 'H')");
-  const auto settingsH = layout.find("if (key.VK == kVK_ESCAPE || key.VK == 'h' || key.VK == 'H')");
   REQUIRE(hGate != std::string::npos);
-  REQUIRE(settingsH != std::string::npos);
-  CHECK(hGate < settingsH);
   const auto packHide = layout.find("kCtrlTagVoLumPackOverlay", hGate);
   REQUIRE(packHide != std::string::npos);
+  const auto settingsH = layout.find("page->HideAnimated(true)", packHide);
+  REQUIRE(settingsH != std::string::npos);
   CHECK(packHide < settingsH);
 }
 
@@ -422,6 +455,10 @@ TEST_CASE("PLAY rail follows the LIVE slot instead of pinning it")
   CHECK(play.find("volum::scroll::ScrollToReveal") != std::string::npos);
   CHECK(play.find("bool sticky") == std::string::npos);
   CHECK(play.find("RailRowRect(int index, bool") == std::string::npos);
+  CHECK(play.find("if (active && !hovered)") == std::string::npos);
+  CHECK(play.find("row.B - 23.f") != std::string::npos);
+  CHECK(play.find("FitTextToWidth") != std::string::npos);
+  CHECK(play.find("mCurTip") != std::string::npos);
 }
 
 TEST_CASE("BUILD status row is padded; hint sits under it")
@@ -468,6 +505,12 @@ TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
   REQUIRE(close != std::string::npos);
   CHECK(consume < close);
 
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  REQUIRE(layout.find("page->ConsumeEscape()") != std::string::npos);
+  REQUIRE(layout.find("ConsumePlayKey(key)") != std::string::npos);
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("bool ConsumePlayKey(const IKeyPress& key)") != std::string::npos);
+
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
   CHECK(tabs.find("bool ConsumeEscape()") != std::string::npos);
   CHECK(tabs.find("void ResetToList()") != std::string::npos);
@@ -492,4 +535,43 @@ TEST_CASE("Settings MIDI callbacks are wired after the page attaches")
   CHECK(attach < setMidi);
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   CHECK(controls.find("_ApplyMidiWiring()") != std::string::npos);
+}
+
+TEST_CASE("Add picker lands on 0 when every program number is taken")
+{
+  CHECK(volum::AddPickerStartSlot(-1) == 0);
+  CHECK(volum::AddPickerStartSlot(7) == 7);
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("OpenPicker(volum::AddPickerStartSlot(FirstFreeSlot()), true);") != std::string::npos);
+}
+
+TEST_CASE("Empty PLAY NAM stomps do not take a bypass click")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto guard = play.find("if (!mFxAvailable[(size_t)i])");
+  const auto bypass = play.find("mBypass(volum::kPlayBypassParamNames");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(bypass != std::string::npos);
+  CHECK(guard < bypass);
+}
+
+TEST_CASE("PLAY OUT meter follows the output peak")
+{
+  const std::string plugin = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(plugin.find("mVolumPlayOutPeak.store") != std::string::npos);
+  CHECK(runtime.find("SetOutPeak(") != std::string::npos);
+  CHECK(play.find("out ? mOutPeak : mInPeak") != std::string::npos);
+}
+
+TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
+{
+  auto noHigh = [](const std::filesystem::path& path) {
+    const std::string text = ReadText(path);
+    for (unsigned char c : text)
+      CHECK(c < 0x80);
+  };
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
 }

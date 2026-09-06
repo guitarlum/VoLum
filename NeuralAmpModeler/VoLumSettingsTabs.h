@@ -21,7 +21,7 @@
 // content::Registry::midiSoundMap through volum::BuildPlaySlots and mutate it
 // through the plugin's assign/clear/swap path, so neither can hold a private copy.
 //
-// The SYSTEM tab's Content library row (VoLumSettingsPackRowControl) lives in
+// The SYSTEM tab's library backup row (VoLumSettingsPackRowControl) lives in
 // VoLumSettingsOverlay.h, next to the Pack modal it opens.
 //
 // Split out of VoLumSettingsOverlay.h, which already owns the panel shell.
@@ -169,50 +169,43 @@ public:
   void Draw(IGraphics& g) override
   {
     const bool all = mChannel == 0;
+    const IRECT pill = PillRect();
+    DrawVoLumSegmentSwitch(g, pill, !all);
+    const IText onText(12.f, VoLumColors::SEL_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const IText offText(
+      12.f, VoLumColors::TEXT_DIM.WithOpacity(0.55f), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    g.DrawText(all ? onText : offText, "All channels", AllRect());
+    g.DrawText(all ? offText : onText, "One channel", OneRect());
 
-    const IRECT allR = AllRect();
-    DrawVoLumSelection(g, allR, all, mHover == kHoverAll && !all, VoLumSelectionStyle::AmberPicker, 3.f, 0.f);
-    g.DrawRoundRect(VoLumColors::GOLD_DIM, allR, 3.f);
-    g.DrawText(IText(13.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker, all), "Josefin-Bold", EAlign::Center,
-                     EVAlign::Middle),
-               "All MIDI channels", allR);
-
-    const IRECT oneR = OneRect();
-    DrawVoLumSelection(g, oneR, !all, all && mHover == kHoverOne, VoLumSelectionStyle::AmberPicker, 3.f, 0.f);
-    g.DrawRoundRect(VoLumColors::GOLD_DIM, oneR, 3.f);
-    g.DrawText(IText(13.f, SelectionInkColor(VoLumSelectionStyle::AmberPicker, !all), "Josefin-Bold", EAlign::Center,
-                     EVAlign::Middle),
-               all ? "Just one channel" : ("Channel " + std::to_string(mChannel)).c_str(), oneR);
     if (!all)
     {
+      const IRECT step = StepperRect();
+      DrawInsetWell(g, step, step.H() * 0.5f);
       // Byte escapes, not \u: the narrow-literal execution charset here is not
       // UTF-8, so a \u2039 single-quote glyph came out as one invalid byte and the
       // arrows vanished from the stepper.
-      const IColor dark(255, 26, 18, 8);
-      g.DrawText(IText(15.f, mHover == kHoverDown ? dark : dark.WithOpacity(0.55f), "Josefin-Bold", EAlign::Center,
-                       EVAlign::Middle),
-                 "\xE2\x80\xB9", oneR.GetFromLeft(20.f));
-      g.DrawText(IText(15.f, mHover == kHoverUp ? dark : dark.WithOpacity(0.55f), "Josefin-Bold", EAlign::Center,
-                       EVAlign::Middle),
-                 "\xE2\x80\xBA", oneR.GetFromRight(20.f));
+      g.DrawText(IText(15.f, mHover == kHoverDown ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold",
+                       EAlign::Center, EVAlign::Middle),
+                 "\xE2\x80\xB9", step.GetFromLeft(22.f));
+      g.DrawText(VoLumType::Value(13.f, VoLumColors::GOLD), ("CH " + std::to_string(mChannel)).c_str(), step);
+      g.DrawText(IText(15.f, mHover == kHoverUp ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold",
+                       EAlign::Center, EVAlign::Middle),
+                 "\xE2\x80\xBA", step.GetFromRight(22.f));
     }
 
     const IText body(11.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Middle);
     const IText dim(10.5f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Middle);
 
-    g.DrawText(dim, all ? "MIDI calls this Omni." : "Anything on the other 15 channels is ignored.",
-               IRECT(mRECT.L, mRECT.T + 30.f, mRECT.L + kColumnW, mRECT.T + 44.f));
+    g.DrawText(dim, all ? "MIDI calls this Omni." : "Other channels are ignored.",
+               IRECT(mRECT.L, mRECT.T + 30.f, mRECT.L + 200.f, mRECT.T + 44.f));
 
-    const float textL = mRECT.L + kColumnW + 22.f;
-    g.DrawText(
-      body, "One guitarist, one pedalboard: leave this on All.", IRECT(textL, mRECT.T + 1.f, mRECT.R, mRECT.T + 15.f));
-    g.DrawText(body, "Two VoLums on the same MIDI cable: give each one its own channel,",
+    const float textL = mRECT.L + 336.f;
+    g.DrawText(body, "One guitarist, one board: leave this on All channels.",
+               IRECT(textL, mRECT.T + 1.f, mRECT.R, mRECT.T + 15.f));
+    g.DrawText(body, "Two VoLums on one MIDI cable: give each its own channel.",
                IRECT(textL, mRECT.T + 15.f, mRECT.R, mRECT.T + 29.f));
-    g.DrawText(body, "so a footswitch can change one amp without touching the other.",
-               IRECT(textL, mRECT.T + 29.f, mRECT.R, mRECT.T + 43.f));
 #if defined(APP_API)
-    g.DrawText(
-      dim, "Pick the MIDI port under File > Preferences.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
+    g.DrawText(dim, "Pick the MIDI port under File > Preferences.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
 #else
     g.DrawText(dim, "MIDI arrives on this track's input.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
 #endif
@@ -225,19 +218,20 @@ public:
       Commit(0);
       return;
     }
-    const IRECT one = OneRect();
-    if (!one.Contains(x, y))
-      return;
-    if (mChannel == 0)
+    if (OneRect().Contains(x, y))
     {
-      // Entering "just one channel" must not silently reset to 1 for a player who
-      // had already picked 7 and toggled back to All to compare.
-      Commit(mLastOne);
+      if (mChannel == 0)
+        Commit(mLastOne);
       return;
     }
-    if (x < one.L + 20.f)
+    if (mChannel == 0)
+      return;
+    const IRECT step = StepperRect();
+    if (!step.Contains(x, y))
+      return;
+    if (x < step.L + 22.f)
       Commit(mChannel == 1 ? volum::kMidiChannelCount : mChannel - 1);
-    else if (x > one.R - 20.f)
+    else if (x > step.R - 22.f)
       Commit(mChannel == volum::kMidiChannelCount ? 1 : mChannel + 1);
   }
 
@@ -257,35 +251,39 @@ public:
   }
 
 private:
-  static constexpr float kAllW = 150.f;
-  static constexpr float kOneW = 138.f;
-  static constexpr float kColumnW = kAllW + 8.f + kOneW;
-  static constexpr float kRowH = 27.f;
+  static constexpr float kPillW = 200.f;
+  static constexpr float kPillH = 26.f;
   static constexpr int kHoverNone = 0;
   static constexpr int kHoverAll = 1;
   static constexpr int kHoverOne = 2;
   static constexpr int kHoverDown = 3;
   static constexpr int kHoverUp = 4;
 
-  // Anchored to the top, not the middle: the Omni hint sits under the pair and
-  // the three explanation lines beside it, so the card reads as one band.
-  IRECT AllRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.L + kAllW, mRECT.T + kRowH); }
-  IRECT OneRect() const { return IRECT(mRECT.L + kAllW + 8.f, mRECT.T, mRECT.L + kColumnW, mRECT.T + kRowH); }
+  IRECT PillRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.L + kPillW, mRECT.T + kPillH); }
+  IRECT AllRect() const { return PillRect().GetFromLeft(kPillW * 0.5f); }
+  IRECT OneRect() const { return PillRect().GetFromRight(kPillW * 0.5f); }
+  IRECT StepperRect() const
+  {
+    const IRECT pill = PillRect();
+    return IRECT(pill.R + 12.f, pill.T, pill.R + 108.f, pill.B);
+  }
 
   int HoverAt(float x, float y) const
   {
     if (AllRect().Contains(x, y))
       return kHoverAll;
-    const IRECT one = OneRect();
-    if (!one.Contains(x, y))
-      return kHoverNone;
-    if (mChannel == 0)
+    if (OneRect().Contains(x, y))
       return kHoverOne;
-    if (x < one.L + 20.f)
+    if (mChannel == 0)
+      return kHoverNone;
+    const IRECT step = StepperRect();
+    if (!step.Contains(x, y))
+      return kHoverNone;
+    if (x < step.L + 22.f)
       return kHoverDown;
-    if (x > one.R - 20.f)
+    if (x > step.R - 22.f)
       return kHoverUp;
-    return kHoverOne;
+    return kHoverNone;
   }
 
   void Commit(int channel)
@@ -364,7 +362,7 @@ public:
     SetDirty(false);
   }
 
-  // Settings closes from the gear, the panel × and Escape; a sub-screen left open
+  // Settings closes from the gear, the panel cross and Escape; a sub-screen left open
   // there would otherwise still be up the next time the page opens.
   void ResetToList()
   {
@@ -475,7 +473,8 @@ public:
     {
       g.DrawText(foot, "Click a number to change it. Click a row to pick another Sound.",
                  IRECT(add.R + 12.f, add.T, mRECT.R, add.MH()));
-      g.DrawText(foot, "Clear a row with ×. PLAY shows the same list.", IRECT(add.R + 12.f, add.MH(), mRECT.R, add.B));
+      g.DrawText(foot, "The cross at the end of a row clears it. PLAY shows the same list.",
+                 IRECT(add.R + 12.f, add.MH(), mRECT.R, add.B));
     }
   }
 
@@ -938,16 +937,8 @@ private:
   // ---- Add, step two, and click-to-reassign: which Sound -------------------
   IRECT PickerListRect() const { return IRECT(mRECT.L, mRECT.T + 26.f, mRECT.R, mRECT.B); }
   IRECT PickerCloseRect() const { return IRECT(mRECT.R - 22.f, mRECT.T, mRECT.R, mRECT.T + 22.f); }
-  IRECT ListTrackRect() const
-  {
-    const IRECT list = ListRect();
-    return IRECT(list.R - 5.f, list.T + 1.f, list.R - 1.f, list.B - 1.f);
-  }
-  IRECT PickerTrackRect() const
-  {
-    const IRECT list = PickerListRect();
-    return IRECT(list.R - 5.f, list.T + 1.f, list.R - 1.f, list.B - 1.f);
-  }
+  IRECT ListTrackRect() const { return VoLumScrollTrackRect(ListRect()); }
+  IRECT PickerTrackRect() const { return VoLumScrollTrackRect(PickerListRect()); }
   volum::scroll::ScrollMetrics ListScrollMetrics() const
   {
     const IRECT list = ListRect();

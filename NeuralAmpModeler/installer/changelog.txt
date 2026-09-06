@@ -1,3 +1,12 @@
+09/06/2026 - VoLum 1.3.0 (change - PLAY rail and stomps read as a board): LIVE stays on the sounding row while you hover; reassign and clear sit on the lower-right. Long names ellipsize. The rail scrollbar matches every other list. Engaged stomps light a footswitch bar; hover says click to bypass and right-click to edit in BUILD. An empty NAM slot no longer takes a bypass click. The OUT meter follows the actual output. + with a full 0-127 map opens a replace picker instead of doing nothing.
+09/06/2026 - VoLum 1.3.0 (change - MIDI listen switch and Pack caption): Settings MIDI is one brass All/One switch with a channel stepper only when One is on. The Pack card is titled Back up your library. Hover on the header toggle says Switch to PLAY or Switch to BUILD.
+09/06/2026 - VoLum 1.3.0 (fix - Esc peels MIDI Add and the PLAY picker): Esc on Settings MIDI backs out of Add/picker before it closes Settings, even when the cursor is not over the page. Esc closes the PLAY Sound picker; arrows and 1-8 cannot step the rail underneath it.
+09/06/2026 - VoLum 1.3.0 (fix - PLAY User Sounds keep factory art): A User preset saved on a bundled amp draws that amp's fractal on the PLAY rail instead of custom-art tile 0.
+09/06/2026 - VoLum 1.3.0 (fix - PLAY no longer edits the hidden BUILD rig): S, Space, B, Tab, and Ctrl+arrows stay on PLAY; they no longer change cab, Dual Amp, or the amp list behind the board. T/M/H and Ctrl+S still work.
+09/06/2026 - VoLum 1.3.0 (fix - 1.2.2 sessions force chorus off): Loading an older DAW chunk onto a live instance that already had Chorus on now bypasses it, matching a fresh insert.
+09/06/2026 - VoLum 1.3.0 (fix - Chorus MIX 0 is instant): Turning MIX to 0 is bit-identical passthrough on the next buffer, not after a 15 ms fade.
+09/06/2026 - VoLum 1.3.0 (fix - withdrawn update notices clear): A successful check that is no longer newer than this build forgets the advertised release, so a yanked tag cannot stay on the gear.
+
 09/05/2026 - VoLum 1.3.0 (fix - AU links the update check): Every macOS target that compiles NeuralAmpModeler.cpp now also compiles VoLumHttpGet.mm, so AU x86_64 links instead of dying on VolumHttpGetString.
 
 09/05/2026 - VoLum 1.3.0 (fix - PLAY arrows scroll the sound list): Arrow keys still recall the next Sound, and the rail now scrolls so the LIVE row stays in view instead of pinning a stuck thumb at the top.

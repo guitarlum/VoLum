@@ -1,6 +1,6 @@
 # PLAY surface (Opus D)
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 ## Goal

@@ -38,13 +38,13 @@ VoLum saves most playing choices per amp. When you come back to an amp, it resto
 
 ![VoLum PLAY view](user-guide-play.png)
 
-Use the header toggle next to tuner, metronome, and Settings to move between the stage and the editor: it always shows the **other** mode (faders while you are in PLAY, the stomp ring while you are in BUILD). In BUILD the preset name sits in the center; in PLAY that slot stays empty. Hover names the destination. Each plug-in instance remembers its mode in the project; a new insert starts in BUILD and does not follow the standalone window. The standalone app remembers its last mode. Entering PLAY never recalls or changes a sound. PRE/POST lock is BUILD-only and drops when you enter PLAY.
+Use the header toggle next to tuner, metronome, and Settings to move between the stage and the editor: it always shows the **other** mode (faders while you are in PLAY, the stomp ring while you are in BUILD). In BUILD the preset name sits in the center; in PLAY that slot stays empty. Hover says where the click goes. Each plug-in instance remembers its mode in the project; a new insert starts in BUILD and does not follow the standalone window. The standalone app remembers its last mode. Entering PLAY never recalls or changes a sound. PRE/POST lock is BUILD-only and drops when you enter PLAY.
 
 PLAY turns saved sounds into Program Change slots. **Ctrl+S** writes what you hear into a Sound and never moves PLAY numbers: a dirty User preset overwrites in place; Factory, Default, or an unnamed rig opens a name popup and creates a User preset. **+** is **Add this sound** when the live rig is not already on the rail (or when a dirty Factory/Default still needs saving). Default always opens the name popup first; a dirty Factory does too. Then it assigns the next free program number. When the live Sound is already assigned and clean, **+** is **Add Sound** and opens the picker. Pick the program number (it defaults to the next free one, `0`–`127`; an occupied number replaces that Sound), then choose a factory or User preset. Factory and User sections start open if only one exists, both collapsed if both exist, and then remember what you opened. A `+` or `-` on the left of each heading shows that the section expands. The 15 factory amps always provide one read-only factory preset named **Ready**; User presets remain editable in BUILD. Click a populated slot to recall its complete sound, use the assign control (or double-click) to replace it, and use the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. The highlighted slot is the last one recalled from PLAY and remains highlighted while you make live changes; **(unsaved)** indicates that the live rig differs from that recalled snapshot.
 
 `Up` / `Down` and `Left` / `Right` step to the previous or next assigned slot and recall it. Keys `1` through `8` toggle the eight stomps left to right. Empty program numbers are skipped, as are assignments whose amp or preset is missing, and the list wraps at both ends.
 
-The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched.
+The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched.
 
 ## Choose An Amp
 
@@ -295,7 +295,7 @@ Lite mode is a per-computer preference: it is saved in `volum-settings.json`, no
 
 ![VoLum Pack import preview](user-guide-pack-import.png)
 
-The **Content library** card in Settings is tall enough for both help lines. It has **Export Pack...** and **Import Pack...**. A Pack is one `.volumpack` file holding the custom amps, IRs, pedals, and presets you chose together with their capture files, so you can back up your library, move it to another machine, or hand part of it to somebody else.
+The **Back up your library** card in Settings is tall enough for both help lines. It has **Export Pack...** and **Import Pack...**. A Pack is one `.volumpack` file holding the custom amps, IRs, pedals, and presets you chose together with their capture files, so you can back up your library, move it to another machine, or hand part of it to somebody else.
 
 **Export** offers three scopes:
 

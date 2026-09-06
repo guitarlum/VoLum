@@ -362,6 +362,28 @@ inline ChorusTail ChorusTailFromJson(const nlohmann::json& j)
   return c;
 }
 
+// Older chunks omit `cho`. Overlaying that onto a live 1.3.0 instance must
+// force chorus off rather than leaving the current scene's chorus running.
+inline void ApplyChorusTailToSettings(const ChorusTail& c, VoLumAmpSettings& s)
+{
+  const ChorusTail src = c.present ? c : ChorusTail{};
+  s.postChorusActive = src.active;
+  s.postChorusMode = std::clamp(src.mode, 0, kVoLumChorusModeCount - 1);
+  s.postChorusRate = std::clamp(src.rate, 0.0, 1.0);
+  s.postChorusDepth = std::clamp(src.depth, 0.0, 1.0);
+  s.postChorusTone = std::clamp(src.tone, 0.0, 1.0);
+  s.postChorusWidth = std::clamp(src.width, 0.0, 1.0);
+  s.postChorusMix = std::clamp(src.mix, 0.0, 1.0);
+  for (int m = 0; m < kVoLumChorusModeCount; ++m)
+  {
+    s.postChorusModes[m].rate = std::clamp(src.modes[m].rate, 0.0, 1.0);
+    s.postChorusModes[m].depth = std::clamp(src.modes[m].depth, 0.0, 1.0);
+    s.postChorusModes[m].tone = std::clamp(src.modes[m].tone, 0.0, 1.0);
+    s.postChorusModes[m].width = std::clamp(src.modes[m].width, 0.0, 1.0);
+    s.postChorusModes[m].mix = std::clamp(src.modes[m].mix, 0.0, 1.0);
+  }
+}
+
 inline nlohmann::json DelayTailToJson(const DelayTail& d)
 {
   return nlohmann::json{{"sync", d.sync}, {"div", d.division}};

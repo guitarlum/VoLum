@@ -2474,6 +2474,15 @@ void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPoint
     }
     mVolumPlayInPeak.store(std::min(peak, 1.f), std::memory_order_relaxed);
   }
+  {
+    float peak = 0.f;
+    if (outputPointer && nChansOut > 0 && outputPointer[0])
+    {
+      for (size_t i = 0; i < nFrames; ++i)
+        peak = std::max(peak, std::fabs(static_cast<float>(outputPointer[0][i])));
+    }
+    mVolumPlayOutPeak.store(std::min(peak, 1.f), std::memory_order_relaxed);
+  }
   // L (channel 0) goes to the primary OUT meter.
   mOutputSender.ProcessBlock(outputPointer, (int)nFrames, kCtrlTagOutputMeter, nChansHack);
 

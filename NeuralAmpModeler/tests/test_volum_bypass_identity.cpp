@@ -15,6 +15,7 @@
 #include "third_party/doctest.h"
 #include "../../AudioDSPTools/dsp/Delay.h"
 #include "../../AudioDSPTools/dsp/Reverb.h"
+#include "../VoLumChorus.h"
 #include "../VoLumLevelMute.h"
 #include "../VoLumMasterSafety.h"
 #include "../VoLumNanGuard.h"
@@ -77,6 +78,51 @@ TEST_CASE("BypassIdentity: Reverb at mix=0 is identity (Hall and Plate)")
     CHECK(BuffersEqual(outL, input, 1e-4));
     CHECK(BuffersEqual(outR, input, 1e-4));
   }
+}
+
+TEST_CASE("BypassIdentity: Chorus at MIX=0 is identity (all modes)")
+{
+  // kChorusActive false skips Process entirely (processing-plan pin). MIX=0 is
+  // the other bypass: the stomp is on but the wet blend is empty, and that must
+  // still be bit-identical so a zeroed MIX knob is not a colouring stage.
+  auto inputL = MakeSine(256);
+  auto inputR = MakeSine(256);
+  for (int mode = 0; mode < volum::ChorusDSP::kNumModes; ++mode)
+  {
+    INFO("chorus mode=" << mode);
+    volum::ChorusDSP chorus;
+    chorus.Prepare(48000.0, 256, 2);
+    chorus.SetParams(0.5, 1.0, 0.5, 1.0, 0.0, mode, 48000.0);
+    std::vector<double> workL = inputL;
+    std::vector<double> workR = inputR;
+    double* in[2] = {workL.data(), workR.data()};
+    chorus.Process(in, 2, static_cast<int>(workL.size()));
+    CHECK(BuffersEqual(workL, inputL, 0.0));
+    CHECK(BuffersEqual(workR, inputR, 0.0));
+  }
+}
+
+TEST_CASE("BypassIdentity: Chorus -> Delay -> Reverb all at mix=0 is POST-chain identity")
+{
+  volum::ChorusDSP chorus;
+  dsp::effect::Delay delay;
+  dsp::effect::Reverb reverb;
+  chorus.Prepare(48000.0, 256, 2);
+  chorus.SetParams(0.4, 0.8, 0.5, 0.7, 0.0, volum::ChorusDSP::kWarped, 48000.0);
+  delay.SetParams(150.0, 0.0, 0.0, dsp::effect::Delay::kModeDigital, 48000.0);
+  reverb.SetParams(0.0, 3.0, 5.0, 0.0, 0.5, dsp::effect::Reverb::kModeHall, 48000.0);
+
+  auto input = MakeSine(256);
+  std::vector<double> workL = input;
+  std::vector<double> workR = input;
+  double* in[2] = {workL.data(), workR.data()};
+  chorus.Process(in, 2, static_cast<int>(workL.size()));
+  auto** afterDelay = delay.Process(in, 2, workL.size());
+  auto** afterReverb = reverb.Process(afterDelay, 2, workL.size());
+  std::vector<double> outL(afterReverb[0], afterReverb[0] + workL.size());
+  std::vector<double> outR(afterReverb[1], afterReverb[1] + workR.size());
+  CHECK(BuffersEqual(outL, input, 1e-4));
+  CHECK(BuffersEqual(outR, input, 1e-4));
 }
 
 TEST_CASE("BypassIdentity: Delay -> Reverb both at mix=0 is full-chain identity")

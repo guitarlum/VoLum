@@ -192,6 +192,7 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
     volum::SoundIsAssigned(volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()),
                            _VolumActiveOwnerKey(), mVolumActivePresetId)));
   raw->As<VoLumPlaySurfaceControl>()->SetInPeak(mVolumPlayInPeak.load(std::memory_order_relaxed));
+  raw->As<VoLumPlaySurfaceControl>()->SetOutPeak(mVolumPlayOutPeak.load(std::memory_order_relaxed));
   raw->As<VoLumPlaySurfaceControl>()->SetPickerGroups(&mVolumPlayPickerGroups);
 }
 

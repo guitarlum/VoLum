@@ -218,7 +218,7 @@ TEST_CASE("Settings is exactly three tabs and every locked capability still has 
   // SYSTEM owns this install.
   RequireContains(controls, "\"Keyboard shortcuts\"");
   RequireContains(controls, "\"Model information\"");
-  RequireContains(controls, "\"Content library\"");
+  RequireContains(controls, "\"Back up your library\"");
   RequireContains(controls, "mControlNames.aboutGroupFrame");
 
   // Both tabs live in one container, so every show path that un-hides all
@@ -248,7 +248,7 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
 
   RequireContains(tabs, "class VoLumMidiChannelControl");
-  RequireContains(tabs, "\"All MIDI channels\"");
+  RequireContains(tabs, "\"All channels\"");
   RequireContains(tabs, "MIDI calls this Omni.");
   RequireContains(tabs, "class VoLumMidiSoundMapControl");
   RequireContains(controls, "void SetMidiChannel(int channel)");
@@ -286,17 +286,27 @@ TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound r
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
 
   RequireContains(controls, "\"What this VoLum listens to\", mControlNames.midiGroupFrame");
-  RequireContains(tabs, "\"All MIDI channels\"");
-  RequireContains(tabs, "\"Just one channel\"");
+  RequireContains(tabs, "\"All channels\"");
+  RequireContains(tabs, "\"One channel\"");
   // Omni survives exactly once, as the parenthetical for players who know it.
   RequireContains(tabs, "MIDI calls this Omni.");
   // The two situations that actually decide the answer, in the player's terms.
-  RequireContains(tabs, "One guitarist, one pedalboard: leave this on All.");
-  RequireContains(tabs, "Two VoLums on the same MIDI cable");
+  RequireContains(tabs, "One guitarist, one board: leave this on All channels.");
+  RequireContains(tabs, "Two VoLums on one MIDI cable");
   // The old stepper legend is gone: a default install only ever showed "Omni",
   // and "Ch 7" made the filter look like one of the numbered rows below it.
   RequireDoesNotContain(tabs, "\"CHANNEL\"");
   RequireDoesNotContain(tabs, "\"Ch \"");
+
+  const auto midiClass = tabs.find("class VoLumMidiChannelControl");
+  const auto midiEnd = tabs.find("class VoLumMidiSoundMapControl");
+  REQUIRE(midiClass != std::string::npos);
+  REQUIRE(midiEnd != std::string::npos);
+  const std::string midiBody = tabs.substr(midiClass, midiEnd - midiClass);
+  RequireContains(midiBody, "DrawVoLumSegmentSwitch(");
+  RequireDoesNotContain(midiBody, "AmberPicker");
+  RequireContains(controls, "DrawVoLumSegmentSwitch(");
+  RequireContains(controls, "ReduceFromTop(92.f)");
 
   RequireContains(controls, "\"What each program number plays\"");
   RequireContains(tabs, "\"PROGRAM\"");
@@ -403,7 +413,7 @@ TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair"
   RequireContains(body, "static void DrawPlayGlyph(IGraphics& g, const IRECT& r, const IColor& ink)");
   RequireContains(body, "static void DrawBuildGlyph(IGraphics& g, const IRECT& r, const IColor& ink)");
   RequireContains(body, "SetTooltip(tip);");
-  RequireContains(body, "Destination() == volum::UiMode::Play ? \"PLAY\" : \"BUILD\"");
+  RequireContains(body, "Destination() == volum::UiMode::Play ? \"Switch to PLAY\" : \"Switch to BUILD\"");
   RequireContains(layout, "LayoutHeaderChrome(mainL, mainR, b.T)");
   RequireContains(layout, "IRECT(header.toggleL, header.inkT, header.toggleR, header.inkB)");
   RequireContains(layout, "presetBarArea(header.presetL, header.inkT, header.presetR, header.inkB)");
@@ -434,7 +444,7 @@ TEST_CASE("PLAY assignment is click-only: no row-swap or picker-to-row drag")
   RequireContains(play, "DrawPenGlyph(g, assign, VoLumColors::TEXT_BRIGHT);");
   RequireContains(play, "if (AssignRectForRow(row).Contains(x, y))");
 
-  RequireContains(play, "OpenPicker(FirstFreeSlot(), true);");
+  RequireContains(play, "OpenPicker(volum::AddPickerStartSlot(FirstFreeSlot()), true);");
   RequireContains(play, "SetEditSlot(mEditSlot - 1);");
   RequireContains(play, "volum::ParseNumericEntry(str, parsed)");
   RequireContains(play, "kNoValIdx");

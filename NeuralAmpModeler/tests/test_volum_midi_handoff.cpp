@@ -8,6 +8,8 @@
 #include <fstream>
 #include <sstream>
 
+using iplug::IMidiMsg;
+
 namespace
 {
 std::string ReadText(const std::filesystem::path& path)
@@ -109,6 +111,17 @@ TEST_CASE("Headless MIDI resolution ignores unassigned missing invalid and out-o
   CHECK_FALSE(ResolveMidiSound(registry, 4).has_value());
 }
 
+TEST_CASE("Headless MIDI resolution applies a Factory Ready Sound")
+{
+  using namespace volum::content;
+  Registry registry;
+  REQUIRE(AssignMidiSound(registry, 8, "factory:7", "factory:7:v1"));
+  const auto ready = ResolveMidiSound(registry, 8);
+  REQUIRE(ready.has_value());
+  CHECK(ready->ampId == "factory:7");
+  CHECK(ready->presetId == "factory:7:v1");
+}
+
 TEST_CASE("MIDI listen filter in the id tail defaults to all channels and clamps to 1 through 16")
 {
   volum::ChunkIdTail tail;
@@ -134,9 +147,8 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   CHECK(tabs.find("class VoLumMidiChannelControl") != std::string::npos);
   // 0 is still "every channel" in the data; only the words in front of it changed.
   CHECK(tabs.find("const bool all = mChannel == 0;") != std::string::npos);
-  CHECK(tabs.find("\"All MIDI channels\"") != std::string::npos);
-  CHECK(tabs.find("g.DrawRoundRect(VoLumColors::GOLD_DIM, allR, 3.f)") != std::string::npos);
-  CHECK(tabs.find("g.DrawRoundRect(VoLumColors::GOLD_DIM, oneR, 3.f)") != std::string::npos);
+  CHECK(tabs.find("\"All channels\"") != std::string::npos);
+  CHECK(tabs.find("DrawVoLumSegmentSwitch(") != std::string::npos);
   CHECK(tabs.find("MIDI calls this Omni.") != std::string::npos);
   CHECK(tabs.find("class VoLumMidiSoundMapControl") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
@@ -185,4 +197,111 @@ TEST_CASE("A Program Change moves PLAY's LIVE slot, not only the live rig")
   const std::string body = source.substr(drain, 400);
   CHECK(body.find("_VolumRecallSound(sound->ampId, sound->presetId)") != std::string::npos);
   CHECK(body.find("mVolumLastRecalledPlaySlot = *slot") != std::string::npos);
+}
+
+// Closest controller mock that CI can run: the same IMidiMsg a host delivers on
+// the audio thread, then the exact Decode → latest-wins queue → ResolveMidiSound
+// path ProcessMidiMsg + OnIdle use. Does not construct NeuralAmpModeler.
+namespace
+{
+struct MidiControllerApply
+{
+  std::optional<int> liveSlot;
+  std::optional<volum::content::ResolvedMidiSound> sound;
+
+  void Send(const IMidiMsg& msg, int savedChannel, volum::MidiLatestWinsQueue& queue,
+            const volum::content::Registry& registry)
+  {
+    if (const auto slot = volum::DecodeMidiProgramChange(msg, savedChannel))
+      queue.Enqueue(*slot);
+    const auto drained = queue.Drain();
+    if (!drained)
+      return;
+    sound = volum::content::ResolveMidiSound(registry, *drained);
+    if (sound)
+      liveSlot = *drained;
+  }
+};
+} // namespace
+
+TEST_CASE("IMidiMsg Program Change composes decode queue resolve and LIVE slot")
+{
+  using namespace volum::content;
+  Registry registry;
+  Preset lead;
+  lead.id = "preset_lead";
+  lead.name = "Lead";
+  lead.settings.toneBass = 7.5;
+  registry.presetBanks["factory:7"] = {lead};
+  REQUIRE(AssignMidiSound(registry, 12, "factory:7", lead.id));
+  REQUIRE(AssignMidiSound(registry, 3, "factory:2", "factory:2:v1"));
+  REQUIRE(AssignMidiSound(registry, 9, "missing-amp", "gone"));
+
+  volum::MidiLatestWinsQueue queue;
+  MidiControllerApply apply;
+
+  IMidiMsg pc;
+  pc.MakeProgramChange(12, 0);
+  apply.Send(pc, volum::kMidiOmniChannel, queue, registry);
+  REQUIRE(apply.sound.has_value());
+  CHECK(apply.liveSlot == 12);
+  CHECK(apply.sound->ampId == "factory:7");
+  CHECK(apply.sound->presetId == lead.id);
+  CHECK(apply.sound->settings.toneBass == doctest::Approx(7.5));
+
+  pc.MakeProgramChange(3, 4); // iPlug channel 4 = user MIDI channel 5
+  apply.Send(pc, 5, queue, registry);
+  REQUIRE(apply.sound.has_value());
+  CHECK(apply.liveSlot == 3);
+  CHECK(apply.sound->ampId == "factory:2");
+  CHECK(apply.sound->presetId == "factory:2:v1");
+
+  const auto previousLive = apply.liveSlot;
+  pc.MakeProgramChange(12, 0); // channel 1, filter is channel 5
+  apply.Send(pc, 5, queue, registry);
+  CHECK(apply.liveSlot == previousLive); // filtered: LIVE stays
+
+  pc.MakeProgramChange(9, 4);
+  apply.Send(pc, 5, queue, registry);
+  CHECK_FALSE(apply.sound.has_value()); // assigned but invalid
+  CHECK(apply.liveSlot == previousLive); // OnIdle only writes LIVE on successful recall
+
+  pc.MakeProgramChange(1, 4);
+  apply.Send(pc, 5, queue, registry);
+  CHECK_FALSE(apply.sound.has_value()); // unassigned
+  CHECK(apply.liveSlot == previousLive);
+
+  pc.MakeNoteOnMsg(60, 100, 0, 4);
+  apply.Send(pc, 5, queue, registry);
+  CHECK(apply.liveSlot == previousLive);
+}
+
+TEST_CASE("IMidiMsg burst keeps only the newest Program Change")
+{
+  using namespace volum::content;
+  Registry registry;
+  REQUIRE(AssignMidiSound(registry, 4, "factory:1", "factory:1:v1"));
+  REQUIRE(AssignMidiSound(registry, 7, "factory:2", "factory:2:v1"));
+
+  volum::MidiLatestWinsQueue queue;
+  IMidiMsg first;
+  first.MakeProgramChange(4, 0);
+  IMidiMsg second;
+  second.MakeProgramChange(7, 0);
+  REQUIRE(volum::DecodeMidiProgramChange(first, 0).has_value());
+  queue.Enqueue(*volum::DecodeMidiProgramChange(first, 0));
+  queue.Enqueue(*volum::DecodeMidiProgramChange(second, 0));
+
+  MidiControllerApply apply;
+  // Drain once, as OnIdle does: latest-wins, no backlog.
+  const auto drained = queue.Drain();
+  REQUIRE(drained.has_value());
+  CHECK(*drained == 7);
+  apply.sound = ResolveMidiSound(registry, *drained);
+  if (apply.sound)
+    apply.liveSlot = *drained;
+  REQUIRE(apply.sound.has_value());
+  CHECK(apply.liveSlot == 7);
+  CHECK(apply.sound->ampId == "factory:2");
+  CHECK_FALSE(queue.Drain().has_value());
 }

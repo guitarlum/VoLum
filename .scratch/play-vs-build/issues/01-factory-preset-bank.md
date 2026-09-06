@@ -1,6 +1,6 @@
 # Factory preset bank
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 ## Goal

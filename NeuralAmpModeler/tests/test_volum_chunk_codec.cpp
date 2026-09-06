@@ -1248,6 +1248,33 @@ TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effect
   CHECK_FALSE(out.lockedPostChorus.present);
 }
 
+TEST_CASE("Absent chorus tail forces a dirty live scene off")
+{
+  volum::VoLumAmpSettings live;
+  live.postChorusActive = true;
+  live.postChorusMode = volum::kVoLumChorusModeClassic;
+  live.postChorusMix = 1.0;
+  live.postChorusRate = 0.9;
+
+  volum::ChorusTail missing;
+  CHECK_FALSE(missing.present);
+  volum::ApplyChorusTailToSettings(missing, live);
+  CHECK_FALSE(live.postChorusActive);
+  CHECK(live.postChorusMode == volum::kVoLumChorusModeDefault);
+  CHECK(live.postChorusMix == doctest::Approx(0.50));
+  CHECK(live.postChorusRate == doctest::Approx(0.35));
+
+  volum::ChorusTail written;
+  written.present = true;
+  written.active = true;
+  written.mode = volum::kVoLumChorusModeClear;
+  written.mix = 0.8;
+  volum::ApplyChorusTailToSettings(written, live);
+  CHECK(live.postChorusActive);
+  CHECK(live.postChorusMode == volum::kVoLumChorusModeClear);
+  CHECK(live.postChorusMix == doctest::Approx(0.8));
+}
+
 // A tremolo/pitch-aware build that predates per-mode memory wrote the effect
 // block WITHOUT a "modes" array (or with a short one). Loading it must seed the
 // missing per-mode snapshots from the ship defaults and never index out of

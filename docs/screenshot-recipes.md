@@ -110,7 +110,7 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 | `user-guide-custom-pedal.png` | any | none | `1`, click NAM1 (471,251) twice, click "Manage custom pedals..." (494,628) |
 | `user-guide-tuner.png` | any | none | key `t` |
 | `user-guide-metronome.png` | any | none | key `m` |
-| `user-guide-pack-import.png` | any | none | click gear (870,80), **SYSTEM** (608,164), then **Export Pack...** (533,397) in the Content library card, **Export...** (536,521), type a `.volumpack` path into Save As + `{ENTER}`, then **Import Pack...** (726,397) and the same path + `{ENTER}` |
+| `user-guide-pack-import.png` | any | none | click gear (870,80), **SYSTEM** (608,164), then **Export Pack...** (533,397) in the Back up your library card, **Export...** (536,521), type a `.volumpack` path into Save As + `{ENTER}`, then **Import Pack...** (726,397) and the same path + `{ENTER}` |
 
 State deltas are edits to the focused amp's block in `volum-settings.json` between
 launches (close the app, edit the JSON with the same key names shown above, then

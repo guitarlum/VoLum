@@ -75,9 +75,48 @@ inline bool EnteringPlayDropsLocks(UiMode from, UiMode to)
 }
 
 // PLAY key branch: arrows + 1-8 only. Ctrl+S, T/M/H, and plain S fall through.
-inline bool PlayBranchConsumes(bool ctrl, bool arrow, bool stompDigit)
+inline bool PlayBranchConsumes(bool /*ctrl*/, bool arrow, bool stompDigit)
 {
-  return !ctrl && (arrow || stompDigit);
+  // Ctrl+arrows used to fall through to BUILD's amp list. PLAY owns the rail
+  // even with modifiers; Ctrl+S is not an arrow and still falls through.
+  return arrow || stompDigit;
+}
+
+// Keys that would edit the hidden BUILD rig (cab, Dual Amp, section focus).
+// T/M/H and Ctrl+S must still reach the shared handler.
+inline bool PlaySwallowsHiddenBuildEdit(bool ctrl, int vk)
+{
+  if (ctrl && (vk == 's' || vk == 'S'))
+    return false;
+  if (vk == 't' || vk == 'T' || vk == 'm' || vk == 'M' || vk == 'h' || vk == 'H')
+    return false;
+  return vk == 's' || vk == 'S' || vk == '\t' || vk == ' ' || vk == 'b' || vk == 'B';
+}
+
+// Add opens the picker on the first free program number. When every number is
+// taken, land on 0 so the picker can replace instead of swallowing the click.
+inline int AddPickerStartSlot(int firstFree)
+{
+  return firstFree < 0 ? 0 : firstFree;
+}
+
+inline void FillSoundArt(const content::Registry& registry, const std::string& owner, int& art, bool& customArt)
+{
+  const int factoryIdx = FactoryAmpIndexFromId(owner);
+  if (factoryIdx >= 0 && factoryIdx < kAmpCount)
+  {
+    art = factoryIdx;
+    customArt = false;
+    return;
+  }
+  art = 0;
+  customArt = true;
+  for (const auto& amp : registry.amps)
+    if (amp.id == owner)
+    {
+      art = amp.art;
+      return;
+    }
 }
 
 inline EVoLumSection SectionForEffectFocus(EVoLumEffectFocus f)
@@ -179,10 +218,9 @@ inline std::vector<SoundChoice> BuildSoundChoices(const std::vector<FactoryPrese
     for (const auto& preset : bank.second)
     {
       int art = 0;
-      for (const auto& amp : registry.amps)
-        if (amp.id == bank.first)
-          art = amp.art;
-      out.push_back({bank.first, preset.id, preset.name, ampName, false, art, true});
+      bool customArt = true;
+      FillSoundArt(registry, bank.first, art, customArt);
+      out.push_back({bank.first, preset.id, preset.name, ampName, false, art, customArt});
     }
   }
   return out;
@@ -210,10 +248,9 @@ inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const
     if (preset.id == presetId)
     {
       int art = 0;
-      for (const auto& amp : registry.amps)
-        if (amp.id == ampId)
-          art = amp.art;
-      out = {ampId, presetId, preset.name, ampName, false, art, true};
+      bool customArt = true;
+      FillSoundArt(registry, ampId, art, customArt);
+      out = {ampId, presetId, preset.name, ampName, false, art, customArt};
       return true;
     }
   }

@@ -935,18 +935,11 @@ public:
   {
     // Explicit two-state switch so the active quality mode is unambiguous:
     // FULL (best quality, default) on the left, LITE (lower CPU) on the right.
-    const bool lite = IsLite();
     const IRECT seg = SegmentTrack();
-    const float cr = seg.H() * 0.5f;
+    DrawVoLumSegmentSwitch(g, seg, IsLite());
+    const bool lite = IsLite();
     const IRECT leftR = seg.GetFromLeft(seg.W() * 0.5f);
     const IRECT rightR = seg.GetFromRight(seg.W() * 0.5f);
-    const IRECT activeR = lite ? rightR : leftR;
-
-    // Recessed track, then a brass slug behind the active segment.
-    g.FillRoundRect(IColor(255, 9, 9, 14), seg, cr);
-    g.FillRoundRect(VoLumColors::GOLD.WithOpacity(0.30f), activeR, cr);
-    g.DrawRoundRect(VoLumColors::GOLD, activeR, cr, &mBlend, 1.25f);
-    g.DrawRoundRect(VoLumColors::FRAME, seg, cr, &mBlend, 1.f);
 
     const IText onText(12.f, VoLumColors::SEL_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     const IText offText(
@@ -955,7 +948,7 @@ public:
     g.DrawText(lite ? onText : offText, "LITE", rightR);
 
     if (mMouseIsOver)
-      g.FillRoundRect(PluginColors::MOUSEOVER, seg, cr);
+      g.FillRoundRect(PluginColors::MOUSEOVER, seg, seg.H() * 0.5f);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -1000,17 +993,24 @@ public:
     modelInfoControl->ClearModelInfo();
   }
 
+  bool ConsumeEscape()
+  {
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+      return map->As<VoLumMidiSoundMapControl>()->ConsumeEscape();
+    return false;
+  }
+
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
   {
+    (void)x;
+    (void)y;
     if (key.VK == kVK_ESCAPE)
     {
       // Escape pops the MIDI tab's Add/picker sub-screen first; only a page that
-      // has nothing left to back out of closes.
-      if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      {
-        if (map->As<VoLumMidiSoundMapControl>()->ConsumeEscape())
-          return true;
-      }
+      // has nothing left to back out of closes. The plugin key handler also
+      // calls ConsumeEscape so Esc works when the cursor is not over Settings.
+      if (ConsumeEscape())
+        return true;
       HideAnimated(true);
       return true;
     }
@@ -1217,7 +1217,7 @@ public:
     IRECT rest = body;
     // Taller than the old Omni stepper: the listen filter now spells out All vs
     // one channel, plus the two situations that decide which a guitarist wants.
-    const IRECT channelCard = rest.ReduceFromTop(112.f);
+    const IRECT channelCard = rest.ReduceFromTop(92.f);
     (void)rest.ReduceFromTop(14.f);
     const IRECT mapCard = rest;
 
@@ -1264,7 +1264,7 @@ public:
     }
     {
       const IRECT cardBody = _AddCard(
-        kTabSystem, packCard, "Content library", mControlNames.packGroupFrame, mControlNames.packSection, EAlign::Near);
+        kTabSystem, packCard, "Back up your library", mControlNames.packGroupFrame, mControlNames.packSection, EAlign::Near);
       _Reg(kTabSystem, AddNamedChildControl(new VoLumSettingsPackRowControl(
                                               cardBody,
                                               [this]() {
@@ -1380,7 +1380,7 @@ public:
     modelInfoControl->SetCurrentLatency(report);
   }
 
-  // The Content library row only opens the Pack modal; the plugin owns the file
+  // The library backup row only opens the Pack modal; the plugin owns the file
   // dialogs and the import, so it hands its two entry points down here.
   void SetPackCallbacks(std::function<void()> onExport, std::function<void()> onImport)
   {

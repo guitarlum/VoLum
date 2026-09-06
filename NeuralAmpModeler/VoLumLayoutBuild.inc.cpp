@@ -1415,6 +1415,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       return false;
     if (mVolumUiMode == volum::UiMode::Play)
     {
+      if (auto* pGfx = GetUI())
+        if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+          if (surface->As<VoLumPlaySurfaceControl>()->ConsumePlayKey(key))
+            return true;
       // PLAY owns the arrows and 1..8. Up/Down and Left/Right both step the Sound
       // rail: Left/Right used to fall through to BUILD's channel stepper, so a
       // player changing "channel" in PLAY moved the hidden amp and left LIVE put.
@@ -1441,6 +1445,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         return true;
       }
       // T / M / H / Ctrl+S fall through to the shared handler.
+      if (volum::PlaySwallowsHiddenBuildEdit(key.C, key.VK))
+        return true;
     }
 
     if (auto* pGfx = GetUI())
@@ -1499,12 +1505,21 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       {
         if (!settings->IsHidden())
         {
+          auto* page = settings->As<NAMSettingsPageControl>();
           // H is advertised as the settings key and is what opened this page, so it
           // has to close it too - reaching for it again and having nothing happen
-          // reads as a stuck window. Everything else is swallowed: the rig
-          // shortcuts must not edit the amp behind a full-window overlay.
-          if (key.VK == kVK_ESCAPE || key.VK == 'h' || key.VK == 'H')
-            settings->As<NAMSettingsPageControl>()->HideAnimated(true);
+          // reads as a stuck window. Escape peels MIDI Add/picker first. Everything
+          // else is swallowed: the rig shortcuts must not edit the amp behind a
+          // full-window overlay.
+          if (key.VK == kVK_ESCAPE)
+          {
+            if (page->ConsumeEscape())
+              return true;
+            page->HideAnimated(true);
+            return true;
+          }
+          if (key.VK == 'h' || key.VK == 'H')
+            page->HideAnimated(true);
           return true;
         }
       }

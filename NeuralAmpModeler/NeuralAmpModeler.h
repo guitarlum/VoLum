@@ -620,6 +620,7 @@ public:
   volum::PickerGroupSession mVolumPresetPickerGroups;
   volum::PickerGroupSession mVolumPlayPickerGroups;
   std::atomic<float> mVolumPlayInPeak{0.f};
+  std::atomic<float> mVolumPlayOutPeak{0.f};
   // This instance's live scene per custom amp id - the custom-amp equivalent of
   // mVolumAmpSettings[ampIdx]. Before 1.3.0 this map lived in the shared content
   // library, so one instance's catalog write moved another instance's knobs; the

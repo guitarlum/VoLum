@@ -71,13 +71,7 @@ void NeuralAmpModeler::_VolumStartUpdateCheck(bool manual)
         && volum::update::ParseManifest(response, manifest))
     {
       state = volum::update::LoadUpdateState(statePath);
-      state.lastCheckUtc = now;
-      if (volum::update::CompareVersionStrings(manifest.version, currentVersion) > 0)
-      {
-        state.latestKnownVersion = manifest.version;
-        state.latestKnownUrl = manifest.url;
-        state.latestKnownNotes = manifest.notes;
-      }
+      volum::update::ApplyCheckedManifest(state, manifest, currentVersion, now);
       volum::update::SaveUpdateState(statePath, state);
       result->manifest = std::move(manifest);
       result->succeeded = true;
