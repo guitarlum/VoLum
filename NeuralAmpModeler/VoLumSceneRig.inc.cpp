@@ -894,27 +894,13 @@ iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const
                                                        const double sampleRate, const bool support)
 {
   const double trim = (support ? mSupportIrTrimLin : mIrTrimLin).load(std::memory_order_relaxed);
-  if (trim != 1.0)
-    for (size_t c = 0; c < numChannels; ++c)
-      for (int i = 0; i < nFrames; ++i)
-        in[c][i] = static_cast<iplug::sample>(static_cast<double>(in[c][i]) * trim);
-
-  iplug::sample** p = in;
   const double lowHz = (support ? mSupportIrLowCutHz : mIrLowCutHz).load(std::memory_order_relaxed);
-  if (lowHz > 0.0)
-  {
-    auto& f = support ? mSupportIrLowCut : mIrLowCut;
-    f.SetParams(recursive_linear_filter::HighPassParams(sampleRate, lowHz));
-    p = f.Process(p, numChannels, nFrames);
-  }
   const double highHz = (support ? mSupportIrHighCutHz : mIrHighCutHz).load(std::memory_order_relaxed);
-  if (highHz > 0.0)
-  {
-    auto& f = support ? mSupportIrHighCut : mIrHighCut;
-    f.SetParams(recursive_linear_filter::LowPassParams(sampleRate, highHz));
-    p = f.Process(p, numChannels, nFrames);
-  }
-  return p;
+  auto& lowCut = support ? mSupportIrLowCut : mIrLowCut;
+  auto& highCut = support ? mSupportIrHighCut : mIrHighCut;
+  auto* shaped = volum::ApplyIrShapingLane(reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim,
+                                           lowHz, highHz, lowCut, highCut);
+  return reinterpret_cast<iplug::sample**>(shaped);
 }
 
 // One-time migration for IRs imported before 1.2.1 (no stored trim): measure the

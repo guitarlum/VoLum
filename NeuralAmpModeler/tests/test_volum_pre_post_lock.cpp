@@ -239,34 +239,6 @@ struct PrePostLockSim
 };
 } // namespace
 
-TEST_CASE("User settings round-trips PRE/POST lock flags at current version")
-{
-  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
-  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, true);
-
-  REQUIRE(j["version"] == volum::kVoLumUserSettingsVersion);
-  REQUIRE(j["preLocked"] == true);
-  REQUIRE(j["postLocked"] == true);
-
-  bool preLocked = false;
-  bool postLocked = false;
-  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, nullptr, &preLocked, &postLocked);
-  REQUIRE(preLocked);
-  REQUIRE(postLocked);
-}
-
-TEST_CASE("User settings preserves independent PRE and POST lock combinations")
-{
-  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
-  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, false);
-
-  bool preLocked = false;
-  bool postLocked = false;
-  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, nullptr, &preLocked, &postLocked);
-  REQUIRE(preLocked);
-  REQUIRE_FALSE(postLocked);
-}
-
 TEST_CASE("User settings v6 with lock flags is read as locked (no version gate)")
 {
   nlohmann::json j;

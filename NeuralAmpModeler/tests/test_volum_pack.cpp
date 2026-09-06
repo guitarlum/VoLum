@@ -1313,6 +1313,7 @@ TEST_CASE("An Everything Pack with an empty MIDI map still clears stale local sl
 
 TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not the verbs")
 {
+  // SYSTEM Pack overlay ticks alsoSettings and calls _VolumImportPack -> ApplyPack.
   Library sender("settings-sender", "sender");
   sender.store.reg().midiSoundMap[5] = MidiSoundAssignment{"amp_one", "preset_one"};
   REQUIRE(sender.store.Save());

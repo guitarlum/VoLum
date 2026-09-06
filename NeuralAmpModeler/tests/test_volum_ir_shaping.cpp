@@ -1,8 +1,10 @@
 #include "third_party/doctest.h"
 
 #include <cmath>
+#include <vector>
 
 #include "../VoLumContentStore.h"
+#include "../VoLumIrShapingDsp.h"
 
 using namespace volum::content;
 
@@ -222,4 +224,55 @@ TEST_CASE("A pre-1.2.1 IR (no trimDb key) loads uncalibrated with cuts off")
   CHECK(r.irs[0].lowCutHz == doctest::Approx(0.0));
   CHECK(r.irs[0].highCutHz == doctest::Approx(0.0));
   CHECK_FALSE(r.irs[0].trimCalibrated);
+}
+
+TEST_CASE("IR shaping DSP changes the post-IR buffer vs filters off on both lanes")
+{
+  const double sr = 48000.0;
+  const int nFrames = 2048;
+  auto fillSine = [&](std::vector<DSP_SAMPLE>& buf, double hz) {
+    for (int i = 0; i < nFrames; ++i)
+      buf[static_cast<size_t>(i)] = static_cast<DSP_SAMPLE>(std::sin(2.0 * 3.14159265358979323846 * hz * i / sr));
+  };
+  auto energyTail = [](const std::vector<DSP_SAMPLE>& buf) {
+    double sum = 0.0;
+    for (size_t i = buf.size() / 2; i < buf.size(); ++i)
+    {
+      const double s = static_cast<double>(buf[i]);
+      sum += s * s;
+    }
+    return sum;
+  };
+
+  auto runLane = [&](double trim, double lowHz, double highHz, double sineHz) {
+    std::vector<DSP_SAMPLE> L(static_cast<size_t>(nFrames)), R(static_cast<size_t>(nFrames));
+    fillSine(L, sineHz);
+    fillSine(R, sineHz);
+    DSP_SAMPLE* chans[2] = {L.data(), R.data()};
+    recursive_linear_filter::HighPass hp;
+    recursive_linear_filter::LowPass lp;
+    // Process writes a DSP-owned buffer; trim is in-place on `in`. Measure what
+    // ProcessBlock actually hears (the returned pointers), not only L/R.
+    DSP_SAMPLE** out = volum::ApplyIrShapingLane(chans, 2, nFrames, sr, trim, lowHz, highHz, hp, lp);
+    std::vector<DSP_SAMPLE> outL(out[0], out[0] + nFrames);
+    std::vector<DSP_SAMPLE> outR(out[1], out[1] + nFrames);
+    return energyTail(outL) + energyTail(outR);
+  };
+
+  const double dryLow = runLane(1.0, 0.0, 0.0, 40.0);
+  const double cutLow = runLane(1.0, 2000.0, 0.0, 40.0);
+  CHECK(cutLow < dryLow * 0.5);
+
+  const double dryHigh = runLane(1.0, 0.0, 0.0, 8000.0);
+  const double cutHigh = runLane(1.0, 0.0, 400.0, 8000.0);
+  CHECK(cutHigh < dryHigh * 0.5);
+
+  const double dryTrim = runLane(1.0, 0.0, 0.0, 440.0);
+  const double halfTrim = runLane(0.5, 0.0, 0.0, 440.0);
+  CHECK(halfTrim == doctest::Approx(dryTrim * 0.25).epsilon(0.02));
+
+  // SUPPORT is a second filter pair, same helper — a skip of that lane would
+  // still pass a MAIN-only test.
+  const double supportCut = runLane(1.0, 2000.0, 0.0, 40.0);
+  CHECK(supportCut == doctest::Approx(cutLow).epsilon(1e-9));
 }

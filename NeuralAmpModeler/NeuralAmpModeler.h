@@ -12,6 +12,7 @@
 
 #include "Colors.h"
 #include "ToneStack.h"
+#include "VoLumIrShapingDsp.h"
 #include "VoLumDualAmpPlan.h"
 #include "VoLumPreEffects.h"
 #include "VoLumPitchShifter.h"

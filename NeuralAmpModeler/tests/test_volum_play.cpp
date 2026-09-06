@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 
+#include "VoLumAmpSettingsJson.h"
 #include "VoLumChunkIdTail.h"
 #include "VoLumPlayModel.h"
 #include "VoLumScroll.h"
@@ -304,4 +305,64 @@ TEST_CASE("Default with no snapshot dirties against factory settings")
   CHECK_FALSE(volum::LivePresetDirty(true, live, recalled));
   live.toneMid = 2.0;
   CHECK(volum::LivePresetDirty(true, live, recalled));
+}
+
+TEST_CASE("Sound recall applies Factory Ready snapshot, not noon or ResolveMidiSound empty settings")
+{
+  auto factory = volum::DefaultFactoryPresets();
+  REQUIRE(factory.size() > 7);
+  factory[7].settings.toneBass = 8.25;
+  factory[7].settings.speakerIdx = 1;
+  factory[7].settings.dualAmpActive = true;
+
+  volum::content::Registry registry;
+  REQUIRE(volum::content::AssignMidiSound(registry, 2, "factory:7", "factory:7:v1"));
+
+  const auto midi = volum::content::ResolveMidiSound(registry, 2);
+  REQUIRE(midi.has_value());
+  CHECK(midi->ampId == "factory:7");
+  CHECK(midi->presetId == "factory:7:v1");
+  CHECK(midi->settings.toneBass == doctest::Approx(5.0)); // trap: PC lookup is ids only
+  CHECK(midi->settings.speakerIdx == 3);
+
+  const auto applied = volum::ResolveSoundSettings(factory, registry, midi->ampId, midi->presetId);
+  REQUIRE(applied.has_value());
+  CHECK(volum::AmpSettingsEqual(*applied, factory[7].settings));
+  CHECK_FALSE(volum::AmpSettingsEqual(*applied, midi->settings));
+}
+
+TEST_CASE("Sound recall applies User preset settings including cab Dual Amp and PRE")
+{
+  auto factory = volum::DefaultFactoryPresets();
+  volum::content::Registry registry;
+  volum::content::Preset user;
+  user.id = "preset_lead";
+  user.name = "Lead";
+  user.settings.speakerIdx = 0;
+  user.settings.channelIdx = 2;
+  user.settings.dualAmpActive = true;
+  user.settings.supportAmpIdx = 3;
+  user.settings.preCompActive = true;
+  user.settings.preCompAmount = 6.5;
+  user.settings.postDelayActive = true;
+  user.settings.postDelayMix = 0.4;
+  registry.presetBanks["factory:7"] = {user};
+  REQUIRE(volum::content::AssignMidiSound(registry, 4, "factory:7", user.id));
+
+  const auto midi = volum::content::ResolveMidiSound(registry, 4);
+  REQUIRE(midi.has_value());
+  const auto applied = volum::ResolveSoundSettings(factory, registry, midi->ampId, midi->presetId);
+  REQUIRE(applied.has_value());
+  CHECK(volum::AmpSettingsEqual(*applied, user.settings));
+}
+
+TEST_CASE("Sound recall settings are nullopt for invalid and unassigned slots")
+{
+  const auto factory = volum::DefaultFactoryPresets();
+  volum::content::Registry registry;
+  REQUIRE(volum::content::AssignMidiSound(registry, 9, "missing-amp", "missing-preset"));
+
+  CHECK_FALSE(volum::ResolveSoundSettings(factory, registry, "missing-amp", "missing-preset").has_value());
+  CHECK_FALSE(volum::ResolveSoundSettings(factory, registry, "factory:7", "no-such-preset").has_value());
+  CHECK_FALSE(volum::content::ResolveMidiSound(registry, 1).has_value()); // hole
 }

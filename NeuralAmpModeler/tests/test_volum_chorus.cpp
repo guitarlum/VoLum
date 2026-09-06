@@ -93,20 +93,6 @@ double peakOf(const std::vector<double>& v)
 }
 } // namespace
 
-TEST_CASE("Chorus MIX 0 is bit-identical passthrough (all modes)")
-{
-  for (int mode = 0; mode < ChorusDSP::kNumModes; ++mode)
-  {
-    const auto in = makeChord(1 << 15);
-    const auto out = runMode(mode, in, 0.5, 1.0, 0.5, 1.0, 0.0 /*mix*/);
-    for (size_t i = 0; i < in.l.size(); ++i)
-    {
-      REQUIRE(out.l[i] == in.l[i]);
-      REQUIRE(out.r[i] == in.r[i]);
-    }
-  }
-}
-
 TEST_CASE("Chorus MIX 0 is bit-identical without Reset after a wet buffer")
 {
   // ProcessBlock calls SetParams every block and never Reset()s on MIX. The

@@ -1,149 +1,66 @@
 #include "third_party/doctest.h"
 #include "../config.h"
-
-// EParams enum only — avoid pulling IGraphics via NeuralAmpModeler.h
-enum EParams
-{
-  kInputLevel = 0,
-  kNoiseGateThreshold,
-  kToneBass,
-  kToneMid,
-  kToneTreble,
-  kOutputLevel,
-  kNoiseGateActive,
-  kEQActive,
-  kIRToggle,
-  kDelayActive,
-  kDelayTime,
-  kDelayFeedback,
-  kDelayMix,
-  kDelayMode,
-  kDelayTone,
-  kDelayAge,
-  kDelayPingPong,
-  kReverbActive,
-  kReverbMix,
-  kReverbDecay,
-  kReverbTone,
-  kReverbPreDelay,
-  kReverbShimmer,
-  kReverbMode,
-  kReverbSubMode,
-  kBoostActive,
-  kBoostDrive,
-  kBoostTone,
-  kBoostLevel,
-  kPreCompActive,
-  kPreCompAmount,
-  kPreCompRatio,
-  kPreCompAttack,
-  kPreCompRelease,
-  kPreCompMix,
-  kPreCompLevel,
-  kPreNam1Active,
-  kPreNam1Capture,
-  kPreNam1Gain,
-  kPreNam1Bass,
-  kPreNam1Mid,
-  kPreNam1MidFreq,
-  kPreNam1Treble,
-  kPreNam1Level,
-  kPreNam2Active,
-  kPreNam2Capture,
-  kPreNam2Gain,
-  kPreNam2Bass,
-  kPreNam2Mid,
-  kPreNam2MidFreq,
-  kPreNam2Treble,
-  kPreNam2Level,
-  kCalibrateInput,
-  kInputCalibrationLevel,
-  kOutputMode,
-  kVoLumAmpeteRig,
-  kDualAmpActive,
-  kDualAmpRoute,
-  kMainAmpPan,
-  kSupportAmpIdx,
-  kSupportSpeakerIdx,
-  kSupportChannelIdx,
-  kSupportInputLevel,
-  kSupportNoiseGateThreshold,
-  kSupportToneBass,
-  kSupportToneMid,
-  kSupportToneTreble,
-  kSupportOutputLevel,
-  kSupportNoiseGateActive,
-  kSupportEQActive,
-  kSupportAmpPan,
-  kSupportIRToggle,
-  kPrePitchActive,
-  kPrePitchMode,
-  kPrePitchSemitones,
-  kPrePitchMix,
-  kPrePitchOctDown,
-  kPrePitchOctUp,
-  kPrePitchDry,
-  kPrePitchVoicing,
-  kPrePitchLevel,
-  kTremoloActive,
-  kTremoloMode,
-  kTremoloRate,
-  kTremoloDepth,
-  kTremoloShape,
-  kTremoloMix,
-  kTremoloCrossover,
-  kTremoloSync,
-  kTremoloDivision,
-  kPrePitchTransChar,
-  kDelaySync,
-  kDelayDivision,
-  kChorusActive,
-  kChorusMode,
-  kChorusRate,
-  kChorusDepth,
-  kChorusTone,
-  kChorusWidth,
-  kChorusMix,
-  kNumParams
-};
-
+#include "../VoLumParams.h"
 #include "../VoLumKeyboardModel.h"
 
-TEST_CASE("Keyboard step: delay time = 5ms normal, 1ms fine")
+TEST_CASE("Keyboard step sizes")
 {
-  CHECK(volum::keyboard::StepForParam(kDelayTime, false) == 5.0);
-  CHECK(volum::keyboard::StepForParam(kDelayTime, true) == 1.0);
-}
-
-TEST_CASE("Keyboard step: tremolo rate = 0.5Hz normal, 0.1Hz fine")
-{
-  CHECK(volum::keyboard::StepForParam(kTremoloRate, false) == 0.5);
-  CHECK(volum::keyboard::StepForParam(kTremoloRate, true) == 0.1);
-}
-
-TEST_CASE("Keyboard step: tremolo crossover = 5Hz normal, 1Hz fine")
-{
-  CHECK(volum::keyboard::StepForParam(kTremoloCrossover, false) == 5.0);
-  CHECK(volum::keyboard::StepForParam(kTremoloCrossover, true) == 1.0);
-}
-
-TEST_CASE("Keyboard step: tremolo depth/shape/mix = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kTremoloDepth, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kTremoloDepth, true) == 0.01);
-  CHECK(volum::keyboard::StepForParam(kTremoloShape, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kTremoloMix, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: chorus knobs are all 0..1, so 0.05 normal / 0.01 fine")
-{
-  // Unlike Tremolo RATE (Hz) the chorus RATE knob is normalized and mapped per
-  // mode, so it must NOT inherit the 0.5/0.1 Hz step.
-  for (int p : {kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix})
+  struct Row
   {
-    INFO("param " << p);
-    CHECK(volum::keyboard::StepForParam(p, false) == 0.05);
-    CHECK(volum::keyboard::StepForParam(p, true) == 0.01);
+    int param;
+    double coarse;
+    double fine;
+  };
+  const Row rows[] = {
+    {kDelayTime, 5.0, 1.0},
+    {kTremoloRate, 0.5, 0.1},
+    {kTremoloCrossover, 5.0, 1.0},
+    {kTremoloDepth, 0.05, 0.01},
+    {kTremoloShape, 0.05, 0.01},
+    {kTremoloMix, 0.05, 0.01},
+    {kChorusRate, 0.05, 0.01},
+    {kChorusDepth, 0.05, 0.01},
+    {kChorusTone, 0.05, 0.01},
+    {kChorusWidth, 0.05, 0.01},
+    {kChorusMix, 0.05, 0.01},
+    {kDelayMix, 0.05, 0.01},
+    {kDelayFeedback, 0.05, 0.01},
+    {kReverbMix, 0.05, 0.01},
+    {kReverbDecay, 0.05, 0.01},
+    {kReverbPreDelay, 5.0, 1.0},
+    {kReverbShimmer, 0.05, 0.01},
+    {kToneBass, 0.5, 0.1},
+    {kToneMid, 0.5, 0.1},
+    {kToneTreble, 0.5, 0.1},
+    {kReverbTone, 0.5, 0.1},
+    {kSupportToneBass, 0.5, 0.1},
+    {kSupportToneMid, 0.5, 0.1},
+    {kSupportToneTreble, 0.5, 0.1},
+    {kInputLevel, 0.5, 0.1},
+    {kOutputLevel, 0.5, 0.1},
+    {kSupportInputLevel, 0.5, 0.1},
+    {kSupportOutputLevel, 0.5, 0.1},
+    {kPreNam1Gain, 0.5, 0.1},
+    {kPreNam1Level, 0.5, 0.1},
+    {kPreNam2Gain, 0.5, 0.1},
+    {kPreNam2Level, 0.5, 0.1},
+    {kPreCompLevel, 0.5, 0.1},
+    {kNoiseGateThreshold, 1.0, 0.1},
+    {kSupportNoiseGateThreshold, 1.0, 0.1},
+    {kDelayTone, 0.05, 0.01},
+    {kDelayAge, 0.05, 0.01},
+    {kPrePitchSemitones, 1.0, 1.0},
+    {kPrePitchMix, 0.05, 0.01},
+    {kPrePitchOctDown, 0.05, 0.01},
+    {kPrePitchOctUp, 0.05, 0.01},
+    {kPrePitchDry, 0.05, 0.01},
+    {kPrePitchLevel, 0.5, 0.1},
+  };
+  for (const auto& row : rows)
+  {
+    INFO("param " << row.param);
+    CHECK(volum::keyboard::StepForParam(row.param, false) == row.coarse);
+    CHECK(volum::keyboard::StepForParam(row.param, true) == row.fine);
   }
 }
 
@@ -161,102 +78,4 @@ TEST_CASE("Keyboard: CHORUS is a distinct focus target with its own knob memory 
   }
   CHECK(kChorusParams.size() == 5);
   CHECK(Contains(kChorusParams, kChorusWidth));
-}
-
-TEST_CASE("Keyboard step: delay mix = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kDelayMix, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kDelayMix, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: delay feedback = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kDelayFeedback, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kDelayFeedback, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: reverb mix = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kReverbMix, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kReverbMix, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: reverb decay = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kReverbDecay, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kReverbDecay, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: reverb pre-delay = 5ms normal, 1ms fine")
-{
-  CHECK(volum::keyboard::StepForParam(kReverbPreDelay, false) == 5.0);
-  CHECK(volum::keyboard::StepForParam(kReverbPreDelay, true) == 1.0);
-}
-
-TEST_CASE("Keyboard step: reverb shimmer = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kReverbShimmer, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kReverbShimmer, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: tone knobs = 0.5 normal, 0.1 fine")
-{
-  int toneParams[] = {
-    kToneBass, kToneMid, kToneTreble, kReverbTone, kSupportToneBass, kSupportToneMid, kSupportToneTreble};
-  for (int i = 0; i < 7; i++)
-  {
-    CHECK(volum::keyboard::StepForParam(toneParams[i], false) == 0.5);
-    CHECK(volum::keyboard::StepForParam(toneParams[i], true) == 0.1);
-  }
-}
-
-TEST_CASE("Keyboard step: level knobs = 0.5 normal, 0.1 fine")
-{
-  int levelParams[] = {kInputLevel,   kOutputLevel, kSupportInputLevel, kSupportOutputLevel, kPreNam1Gain,
-                       kPreNam1Level, kPreNam2Gain, kPreNam2Level,      kPreCompLevel};
-  for (int i = 0; i < 9; i++)
-  {
-    CHECK(volum::keyboard::StepForParam(levelParams[i], false) == 0.5);
-    CHECK(volum::keyboard::StepForParam(levelParams[i], true) == 0.1);
-  }
-}
-
-TEST_CASE("Keyboard step: noise gate thresholds = 1.0 normal, 0.1 fine")
-{
-  int thresholdParams[] = {kNoiseGateThreshold, kSupportNoiseGateThreshold};
-  for (int i = 0; i < 2; i++)
-  {
-    CHECK(volum::keyboard::StepForParam(thresholdParams[i], false) == 1.0);
-    CHECK(volum::keyboard::StepForParam(thresholdParams[i], true) == 0.1);
-  }
-}
-
-TEST_CASE("Keyboard step: delay tone/age = 0.05 normal, 0.01 fine")
-{
-  CHECK(volum::keyboard::StepForParam(kDelayTone, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kDelayTone, true) == 0.01);
-  CHECK(volum::keyboard::StepForParam(kDelayAge, false) == 0.05);
-  CHECK(volum::keyboard::StepForParam(kDelayAge, true) == 0.01);
-}
-
-TEST_CASE("Keyboard step: pitch semitones = whole steps (integer transpose)")
-{
-  CHECK(volum::keyboard::StepForParam(kPrePitchSemitones, false) == 1.0);
-  CHECK(volum::keyboard::StepForParam(kPrePitchSemitones, true) == 1.0);
-}
-
-TEST_CASE("Keyboard step: pitch normalized knobs = 0.05 normal, 0.01 fine")
-{
-  int normParams[] = {kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp, kPrePitchDry};
-  for (int p : normParams)
-  {
-    CHECK(volum::keyboard::StepForParam(p, false) == 0.05);
-    CHECK(volum::keyboard::StepForParam(p, true) == 0.01);
-  }
-}
-
-TEST_CASE("Keyboard step: pitch level = 0.5 normal, 0.1 fine (dB)")
-{
-  CHECK(volum::keyboard::StepForParam(kPrePitchLevel, false) == 0.5);
-  CHECK(volum::keyboard::StepForParam(kPrePitchLevel, true) == 0.1);
 }

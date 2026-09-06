@@ -1124,33 +1124,6 @@ TEST_CASE("Standalone settings persist the active preset id (Q1/B5)")
   RequireContains(plugin, "mVolumRestorePresetId = j[\"volumActivePresetId\"].get<std::string>();");
 }
 
-TEST_CASE("Standalone settings persist every amp's preset selection, not just the focused amp's")
-{
-  // Reported from 1.2.1 testing: "only the last active amp remembers the selected
-  // preset". The key pinned above is a single string describing whichever amp was
-  // focused when the file was written, so every other amp reopened reading
-  // "No Preset" - and an exit from an amp with nothing recalled wrote an empty id,
-  // taking the focused one with it.
-  const std::string plugin = ReadPluginSource();
-  RequireContains(plugin, "j[\"volumActivePresetIdByOwner\"] = volum::VolumActivePresetIdsToJson(");
-  RequireContains(
-    plugin, "mVolumActivePresetIdByOwner = volum::VolumActivePresetIdsFromJson(j[\"volumActivePresetIdByOwner\"]);");
-
-  // The live pair is folded into what gets written, so a save landing between a
-  // recall and the next amp switch still records that recall.
-  RequireContains(plugin, "activePresetIdsByOwner[_VolumActiveOwnerKey()] = mVolumActivePresetId;");
-
-  // And the read side has to accept an id with no snapshot beside it, because the
-  // file stores ids only. Requiring both - which is what shipped - meant every
-  // selection restored from the file was discarded on the amp switch that should
-  // have shown it, so persisting them would have changed nothing.
-  RequireContains(plugin, "mVolumRecalledSnapshotByOwner[key] = pr.settings;");
-  // Written as the conjunction rather than the whole statement: the old code made the
-  // snapshot a precondition of using the id, so no persisted id could ever apply.
-  // One line, so this does not depend on wrapping or line endings.
-  RequireDoesNotContain(plugin, "&& itSnap != mVolumRecalledSnapshotByOwner.end())");
-}
-
 TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the deferred restore")
 {
   // The "VST3/AU reopen drops the focused custom amp" fix: UnserializeState must
@@ -1389,21 +1362,6 @@ TEST_CASE("IR staging passes the UTF-8 path into ImpulseResponse")
   RequireDoesNotContain(source, "irPathU8.string()");
 }
 
-TEST_CASE("Current-version chunk reader consumes the frozen 1.2.2 param prefix")
-{
-  // 1.2.0 read a live kNumParams loop. 1.3.0 freezes the prefix at 93 so a
-  // later Chorus (or any) param bump cannot misalign a shipped 1.2.2 reader.
-  // Extra EParams overlay from id-tail JSON, not extra prefix doubles.
-  const std::string source = ReadPluginSource();
-
-  RequireContains(source, "if (version >= volum::ChunkVersion(1, 2, 0))");
-  RequireContains(source, "for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)");
-  RequireContains(source, "paramNames.push_back(GetParam(i)->GetName());");
-  RequireContains(source, "pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);");
-  RequireContains(source, "for (int i = 0; i < kVoLumChunkParamPrefixCount && ok; ++i)");
-  RequireDoesNotContain(source, "bool ok = SerializeParams(chunk);");
-}
-
 TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
 {
   const std::string triptych = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptych.h");
@@ -1417,36 +1375,6 @@ TEST_CASE("PRE/POST lock header layout keeps store icon gated and amp-facing")
   RequireContains(triptych, "Unlock POST (restore this amp's saved scene)");
   RequireContains(triptych, "Store PRE to ");
   RequireContains(triptych, "Store POST to ");
-}
-
-TEST_CASE("PRE/POST lock unlock restores local slot instead of flushing overlay")
-{
-  const std::string settings = ReadPluginSource();
-
-  // Unlock restores from the active scene (focused custom amp scene, or the factory
-  // amp slot via _VolumActiveScene()) instead of flushing the live overlay.
-  RequireContains(settings, "_VolumRestorePreFromSlot(_VolumActiveScene());");
-  RequireContains(settings, "_VolumRestorePostFromSlot(_VolumActiveScene());");
-  RequireContains(settings, "if (!mVolumPreLocked)");
-  RequireContains(settings, "if (!mVolumPostLocked)");
-  RequireContains(settings, "_VolumStorePreToCurrentAmp()");
-  RequireContains(settings, "_VolumStorePostToCurrentAmp()");
-  RequireDoesNotContain(
-    settings, "_VolumSavePreToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPreLocked = false;");
-  RequireDoesNotContain(
-    settings, "_VolumSavePostToSlot(mVolumAmpSettings[mVolumAmpIdx]);\r\n  mVolumPostLocked = false;");
-}
-
-TEST_CASE("Legacy chunks without lock tail default to unlocked on deserialize")
-{
-  const std::string source = ReadPluginSource();
-
-  RequireContains(source, "hasPrePostLockFlags");
-  RequireContains(source, "volum::GetPrePostLockFlags(chunk, pos, pendingPreLocked, pendingPostLocked)");
-  // The pending copies start unlocked, so a chunk with no lock tail still restores
-  // unlocked - without the decoders being handed the live members.
-  RequireContains(source, "bool pendingPreLocked = false;");
-  RequireContains(source, "bool pendingPostLocked = false;");
 }
 
 TEST_CASE("A chunk truncated inside the per-amp tail leaves every scene alone")

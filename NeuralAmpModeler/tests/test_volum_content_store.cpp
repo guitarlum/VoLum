@@ -55,17 +55,9 @@ TEST_CASE("MintId returns prefixed, unique opaque ids")
 
 TEST_CASE("Cab names are clamped to the 3-char rule at the load boundary")
 {
-  // Direct model helper: whitespace dropped, uppercased, capped at 3; an empty
-  // (or whitespace-only) slot falls back to its CBn default.
-  volum::custom::CustomAmp a;
-  a.cabNames = {"Bogner 4x12", "Marshall 1960", "   "};
-  volum::custom::NormalizeAmpCabNames(a);
-  CHECK(a.cabNames[0] == "BOG");
-  CHECK(a.cabNames[1] == "MAR");
-  CHECK(a.cabNames[2] == "CB3");
-
   // Load path: a hand-edited / migrated registry carrying over-long names must
   // not survive into the live model (otherwise the cabinet row overflows).
+  // UTF-8 ClampName / NormalizeCabName cases live in custom_content.
   nlohmann::json amp;
   amp["id"] = "amp_clamp";
   amp["name"] = "Monomyth Skeleton Key";
@@ -1290,6 +1282,24 @@ TEST_CASE("Concurrent saves from two threads keep the library parseable and comp
   ContentStore next(base);
   REQUIRE(next.Load()); // a clean (non-healed) load: the file is well-formed
   CHECK(next.reg().irs.size() == 50);
+}
+
+TEST_CASE("ContentStore Save keeps assigned and invalid MIDI slots")
+{
+  const auto base = TestBase("midi-map-quit");
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  REQUIRE(AssignMidiSound(store.reg(), 3, "factory:2", "factory:2:v1"));
+  REQUIRE(AssignMidiSound(store.reg(), 9, "deleted-amp", "gone-preset"));
+  REQUIRE(store.Save());
+
+  ContentStore reloaded(base);
+  REQUIRE(reloaded.Load());
+  REQUIRE(reloaded.reg().midiSoundMap.size() == 2);
+  CHECK(reloaded.reg().midiSoundMap.at(3).ampId == "factory:2");
+  CHECK(reloaded.reg().midiSoundMap.at(3).presetId == "factory:2:v1");
+  CHECK(reloaded.reg().midiSoundMap.at(9).ampId == "deleted-amp");
+  CHECK(reloaded.reg().midiSoundMap.at(9).presetId == "gone-preset");
 }
 
 TEST_CASE("A second EnsureLoaded does not read over an unflushed catalog")

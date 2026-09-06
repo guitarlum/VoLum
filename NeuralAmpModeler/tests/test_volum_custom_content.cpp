@@ -8,6 +8,7 @@
 // BYO-amp builder and main-view focus behavior, plus the registry-backed
 // projection/mutation API in VoLumCustomContentApi.h.
 
+using volum::custom::ChannelStepIndex;
 using volum::custom::SnapChannel;
 using volum::custom::SpeakerEnabled;
 
@@ -18,45 +19,42 @@ TEST_CASE("SpeakerEnabled reflects whether a slot has any captures")
   REQUIRE(SpeakerEnabled(std::vector<int>{2, 3}) == true);
 }
 
-TEST_CASE("SnapChannel keeps the current channel when it is still available")
+TEST_CASE("SnapChannel and ChannelStepIndex")
 {
-  REQUIRE(SnapChannel(std::vector<int>{1, 2, 3}, 2) == 2);
-  REQUIRE(SnapChannel(std::vector<int>{1, 2}, 1) == 1);
-}
+  SUBCASE("keep current when still available")
+  {
+    REQUIRE(SnapChannel(std::vector<int>{1, 2, 3}, 2) == 2);
+    REQUIRE(SnapChannel(std::vector<int>{1, 2}, 1) == 1);
+  }
 
-TEST_CASE("SnapChannel falls back to the first available channel")
-{
-  // Current channel 3 is not available on a {1,2} slot -> snap to first (1).
-  REQUIRE(SnapChannel(std::vector<int>{1, 2}, 3) == 1);
-  // Current channel 1 not available on a {2,3} slot -> snap to first (2).
-  REQUIRE(SnapChannel(std::vector<int>{2, 3}, 1) == 2);
-}
+  SUBCASE("fallback to first available")
+  {
+    REQUIRE(SnapChannel(std::vector<int>{1, 2}, 3) == 1);
+    REQUIRE(SnapChannel(std::vector<int>{2, 3}, 1) == 2);
+  }
 
-TEST_CASE("SnapChannel returns -1 for an empty/disabled speaker slot")
-{
-  REQUIRE(SnapChannel(std::vector<int>{}, 1) == -1);
-  REQUIRE(SnapChannel(std::vector<int>{}, 0) == -1);
-}
+  SUBCASE("empty slot returns -1")
+  {
+    REQUIRE(SnapChannel(std::vector<int>{}, 1) == -1);
+    REQUIRE(SnapChannel(std::vector<int>{}, 0) == -1);
+  }
 
-TEST_CASE("ChannelStepIndex maps a channel number to its stepper position")
-{
-  using volum::custom::ChannelStepIndex;
-  // A Fryette-style amp that only ships channels {3,4}: channel 3 -> row 0, 4 -> row 1.
-  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 3) == 0);
-  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 4) == 1);
-  REQUIRE(ChannelStepIndex(std::vector<int>{1, 2, 3}, 3) == 2);
-}
+  SUBCASE("ChannelStepIndex maps a channel number to its stepper position")
+  {
+    REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 3) == 0);
+    REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 4) == 1);
+    REQUIRE(ChannelStepIndex(std::vector<int>{1, 2, 3}, 3) == 2);
+  }
 
-TEST_CASE("ChannelStepIndex defaults to row 0 when the channel is absent/empty")
-{
-  using volum::custom::ChannelStepIndex;
-  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 1) == 0); // not present -> 0
-  REQUIRE(ChannelStepIndex(std::vector<int>{}, 2) == 0); // empty slot -> 0
+  SUBCASE("ChannelStepIndex absent/empty -> 0")
+  {
+    REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 1) == 0);
+    REQUIRE(ChannelStepIndex(std::vector<int>{}, 2) == 0);
+  }
 }
 
 TEST_CASE("SnapChannel + ChannelStepIndex preserve a higher gain stage across a cab switch")
 {
-  using volum::custom::ChannelStepIndex;
   // On channel 4, switch to a cab slot that also covers {3,4}: keep 4 (row 1),
   // do NOT snap back to channel 3 / row 0 (item: cab/IR switch must keep channel).
   const std::vector<int> newSlot{3, 4};
@@ -354,14 +352,6 @@ TEST_CASE("Cab rename keeps file links intact (files reference slots, not names)
   amp.cabNames[0] = "XYZ"; // rename slot 0
   REQUIRE(SlotLabel(amp, 0) == "XYZ");
   REQUIRE(AmpSlotChannels(amp, 0) == std::vector<int>{1}); // link survives the rename
-}
-
-TEST_CASE("NormalizeCabName uppercases, strips spaces, caps at 3 chars")
-{
-  REQUIRE(NormalizeCabName("g65") == "G65");
-  REQUIRE(NormalizeCabName("  v 30 ") == "V30");
-  REQUIRE(NormalizeCabName("greenback") == "GRE");
-  REQUIRE(NormalizeCabName("   ").empty());
 }
 
 TEST_CASE("A cab name capped mid-glyph never yields invalid UTF-8")

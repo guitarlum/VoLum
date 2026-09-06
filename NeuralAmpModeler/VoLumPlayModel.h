@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -255,6 +256,27 @@ inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const
     }
   }
   return false;
+}
+
+// Settings VolumRecallSound will apply. Factory Ready is the shipped snapshot
+// (not noon / VoLumAmpSettings{}). ResolveMidiSound still returns empty settings
+// for factory:<n>:v1 — that lookup is identity only; this is the apply path.
+inline std::optional<VoLumAmpSettings> ResolveSoundSettings(const std::vector<FactoryPreset>& factoryPresets,
+                                                            const content::Registry& registry, const std::string& ampId,
+                                                            const std::string& presetId)
+{
+  SoundChoice choice;
+  if (!ResolveSound(factoryPresets, registry, ampId, presetId, choice))
+    return std::nullopt;
+  if (const auto* factory = FindFactoryPresetById(factoryPresets, presetId))
+    return factory->settings;
+  const auto bank = registry.presetBanks.find(ampId);
+  if (bank == registry.presetBanks.end())
+    return std::nullopt;
+  for (const auto& preset : bank->second)
+    if (preset.id == presetId)
+      return preset.settings;
+  return std::nullopt;
 }
 
 inline std::vector<PlaySlot> BuildPlaySlots(const std::vector<FactoryPreset>& factoryPresets,

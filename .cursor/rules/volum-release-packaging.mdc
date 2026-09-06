@@ -14,11 +14,12 @@ alwaysApply: false
 
 Branch/workflow facts:
 
-- `CI` uploads `VoLum-win` and `VoLum-mac`; automatic push/PR runs target `dev` and `main` only.
-- A `release/*` or `feature/*` branch therefore gets **no** run from pushing. Dispatch one:
+- `CI` uploads `VoLum-win` and `VoLum-mac`. Automatic push/PR runs target `dev`, `main`, and `release/**`.
+- A `feature/*` branch with no open PR to those gates gets **no** run from pushing. Dispatch one:
   `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref <branch> -Dispatch`. Add `-WindowsOnly`
-  for tests + installer + zip without macOS, pluginval, or smokes. Manual runs
-  build the selected ref unless checkout is overridden.
+  for tests + installer + zip without macOS, pluginval, or smokes. Do **not** dispatch
+  `release/**` or `dev`/`main` after a push — that duplicates the ~93 minute matrix.
+  Manual runs build the selected ref unless checkout is overridden.
 - `Release Native` is main-only: it checks out `main`, bumps metadata, tags, then builds from that tag.
 - Regular CI now runs Windows/macOS doctests, macOS sanitizer doctests, NAMCore regression tests, Windows installer smoke verification, package layout checks, and VST3 validation through pluginval plus the Steinberg validator when available.
 

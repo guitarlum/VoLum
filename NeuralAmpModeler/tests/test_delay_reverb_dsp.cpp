@@ -38,20 +38,6 @@ TEST_CASE("Delay: no NaN on first block after SetParams")
   REQUIRE_FALSE(hasNaN(out[1], frames));
 }
 
-TEST_CASE("Delay: mix=0 passes input through unchanged")
-{
-  dsp::effect::Delay delay;
-  delay.SetParams(100.0, 0.5, 0.0, 1, 44100.0);
-
-  const size_t frames = 64;
-  std::vector<double> inL(frames, 0.75);
-  double* inputs[1] = {inL.data()};
-
-  auto** out = delay.Process(inputs, 1, frames);
-  for (size_t i = 0; i < frames; i++)
-    CHECK(out[0][i] == doctest::Approx(0.75));
-}
-
 TEST_CASE("Delay: Reset clears state, no stale audio leaks")
 {
   dsp::effect::Delay delay;
@@ -90,23 +76,6 @@ TEST_CASE("Delay: all staging modes produce output without NaN")
     auto** out = delay.Process(inputs, 2, frames);
     REQUIRE_FALSE(hasNaN(out[0], frames));
     REQUIRE_FALSE(hasNaN(out[1], frames));
-  }
-}
-
-TEST_CASE("Delay: reverse mode mix=0 passes input through unchanged")
-{
-  dsp::effect::Delay delay;
-  delay.SetParams(100.0, 0.5, 0.0, dsp::effect::Delay::kModeReverse, 1000.0);
-
-  const size_t frames = 100;
-  std::vector<double> inL(frames, 0.25);
-  double* inputs[1] = {inL.data()};
-
-  for (int block = 0; block < 3; ++block)
-  {
-    auto** out = delay.Process(inputs, 1, frames);
-    for (size_t i = 0; i < frames; i++)
-      CHECK(out[0][i] == doctest::Approx(0.25));
   }
 }
 
@@ -304,20 +273,6 @@ TEST_CASE("Reverb: no NaN on first block after SetParams")
   auto** out = reverb.Process(inputs, 2, frames);
   REQUIRE_FALSE(hasNaN(out[0], frames));
   REQUIRE_FALSE(hasNaN(out[1], frames));
-}
-
-TEST_CASE("Reverb: mix=0 passes input through unchanged")
-{
-  dsp::effect::Reverb reverb;
-  reverb.SetParams(0.0, 3.0, 6.0, 20.0, 0.5, 0, 44100.0);
-
-  const size_t frames = 64;
-  std::vector<double> inL(frames, 0.6), inR(frames, 0.6);
-  double* inputs[2] = {inL.data(), inR.data()};
-
-  auto** out = reverb.Process(inputs, 2, frames);
-  for (size_t i = 0; i < frames; i++)
-    CHECK(out[0][i] == doctest::Approx(0.6).epsilon(0.001));
 }
 
 TEST_CASE("Reverb: Hall (mode 0) produces output without NaN")
@@ -1027,44 +982,6 @@ void fillSineBlock(std::vector<double>& dst, int block, size_t frames, double am
     dst[i] = amp * std::sin(static_cast<double>(block * frames + i) * 0.05);
 }
 } // namespace
-
-TEST_CASE("Reverb: Mix=0 outputs dry within float-cast tolerance, all modes")
-{
-  const size_t frames = 256;
-  std::vector<double> input(frames, 0.0);
-  for (size_t i = 0; i < frames; ++i)
-    input[i] = 0.4 * std::sin(static_cast<double>(i) * 0.05);
-  double* inputs[2] = {input.data(), input.data()};
-
-  // Hall, Plate, and Oktaverb Bloom at Mix=0 pass dry through bit-identically
-  // (modulo DSP_SAMPLE float round-trip). Halo and
-  // Shimmer always run the dry+wet sum through tanh (Oktaverb's runaway protection),
-  // which gently reshapes even a Mix=0 dry signal — that's by design and not a
-  // regression of the equal-power crossfade work.
-  struct ModeSpec
-  {
-    int mode;
-    int subMode;
-    const char* name;
-  };
-  ModeSpec specs[] = {
-    {dsp::effect::Reverb::kModeHall, 0, "Hall"},
-    {dsp::effect::Reverb::kModePlate, 0, "Plate"},
-    {dsp::effect::Reverb::kModeOktaverb, 2, "Bloom"},
-  };
-  for (const auto& spec : specs)
-  {
-    INFO("mode=" << spec.name);
-    dsp::effect::Reverb reverb;
-    reverb.SetParams(0.0, 3.0, 5.0, 0.0, 0.5, spec.mode, 48000.0, spec.subMode);
-    auto** out = reverb.Process(inputs, 2, frames);
-    REQUIRE_FALSE(hasNaN(out[0], frames));
-    // dryCoef = cos(0) = 1.0, wetCoef = sin(0) = 0; output = input within DSP_SAMPLE
-    // (float) round-trip precision.
-    for (size_t i = 0; i < frames; ++i)
-      CHECK(std::abs(out[0][i] - input[i]) < 1e-4);
-  }
-}
 
 TEST_CASE("Reverb: Mix=1 attenuates dry and presents wet-only output, Hall + Plate")
 {

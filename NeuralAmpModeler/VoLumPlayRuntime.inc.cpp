@@ -229,6 +229,10 @@ bool NeuralAmpModeler::VolumRecallSound(const std::string& ampId, const std::str
   volum::SoundChoice resolved;
   if (!volum::ResolveSound(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), ampId, presetId, resolved))
     return false;
+  const auto settings =
+    volum::ResolveSoundSettings(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), ampId, presetId);
+  if (!settings)
+    return false;
 
   if (mVolumInitComplete)
     _VolumSaveCurrentToSettings();
@@ -261,23 +265,8 @@ bool NeuralAmpModeler::VolumRecallSound(const std::string& ampId, const std::str
     _VolumSelectCustomAmp(custom);
   }
 
-  if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, presetId))
-  {
-    mVolumActivePresetId = factory->id;
-    _VolumApplyRecalledPreset(factory->settings);
-  }
-  else
-  {
-    const auto bank = volum::content::GlobalContentStore().reg().presetBanks.find(ampId);
-    if (bank == volum::content::GlobalContentStore().reg().presetBanks.end())
-      return false;
-    const auto preset =
-      std::find_if(bank->second.begin(), bank->second.end(), [&](const auto& item) { return item.id == presetId; });
-    if (preset == bank->second.end())
-      return false;
-    mVolumActivePresetId = preset->id;
-    _VolumApplyRecalledPreset(preset->settings);
-  }
+  mVolumActivePresetId = resolved.presetId;
+  _VolumApplyRecalledPreset(*settings);
 
   _VolumSyncUiFromState();
   _VolumRefreshPresetBar();

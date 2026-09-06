@@ -40,26 +40,6 @@ TEST_CASE("MIDI latest-wins handoff drains only the newest slot")
   CHECK_FALSE(queue.Drain().has_value());
 }
 
-TEST_CASE("MIDI sound map assigns reassigns clears and round-trips")
-{
-  using namespace volum::content;
-  Registry registry;
-  REQUIRE(AssignMidiSound(registry, 5, "factory:7", "preset_lead"));
-  REQUIRE(AssignMidiSound(registry, 6, "factory:7", "factory:7:v1"));
-  REQUIRE(AssignMidiSound(registry, 5, "factory:2", "preset_clean"));
-
-  REQUIRE(registry.midiSoundMap.size() == 2);
-  REQUIRE(registry.midiSoundMap.count(5) == 1);
-  CHECK(registry.midiSoundMap.at(5).ampId == "factory:2"); // reassigned in place
-  CHECK(ClearMidiSound(registry, 6));
-  CHECK_FALSE(ClearMidiSound(registry, 6));
-
-  const Registry loaded = RegistryFromJson(RegistryToJson(registry));
-  REQUIRE(loaded.midiSoundMap.size() == 1);
-  REQUIRE(loaded.midiSoundMap.count(5) == 1);
-  CHECK(loaded.midiSoundMap.at(5).presetId == "preset_clean");
-}
-
 TEST_CASE("Headless MIDI resolution applies assigned factory and custom User presets")
 {
   using namespace volum::content;

@@ -209,6 +209,15 @@ function Test-Roundtrip {
   $settingsBefore = Read-Json $settingsPath
   if (-not $contentBefore) { throw "Seed library has no volum-content.json; nothing to round-trip." }
 
+  # Assigned + invalid slots must survive shutdown save. Holes are omitted; an
+  # invalid row keeps its program number.
+  $contentBefore | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue @(
+    [pscustomobject]@{ slot = 4; ampId = "factory:0"; presetId = "factory:0:v1" },
+    [pscustomobject]@{ slot = 17; ampId = "deleted-amp"; presetId = "gone-preset" }
+  ) -Force
+  $contentBefore | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
+  $contentBefore = Read-Json $contentPath
+
   $run = Invoke-VoLumRun -SandboxRoot $sandbox
   Assert-True "app opened a window" $run.started
   Assert-True "app closed gracefully" $run.graceful
@@ -217,6 +226,12 @@ function Test-Roundtrip {
   Assert-True "content registry still parses" ($null -ne $contentAfter)
   if ($contentAfter) {
     Assert-NoContentLoss $contentBefore $contentAfter
+
+    $mapKey = {
+      param($reg)
+      @($reg.midiSoundMap | Sort-Object { [int]$_.slot } | ForEach-Object { "{0}:{1}:{2}" -f $_.slot, $_.ampId, $_.presetId }) -join "|"
+    }
+    Assert-Equal "midiSoundMap survives quit including invalid slot" (& $mapKey $contentBefore) (& $mapKey $contentAfter)
 
     # IR shaping is the newest field in the format and the easiest to drop on a
     # rewrite, so compare it value by value rather than just checking the id.

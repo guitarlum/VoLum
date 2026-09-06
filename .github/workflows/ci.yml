@@ -38,7 +38,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
 
       - name: Install clang-format
         run: |
@@ -361,6 +361,7 @@ jobs:
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    continue-on-error: true
     runs-on: macos-latest
     steps:
       - name: Check out repository
