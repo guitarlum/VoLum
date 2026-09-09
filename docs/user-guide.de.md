@@ -36,15 +36,25 @@ VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zu
 
 ## PLAY-Ansicht
 
-![VoLum PLAY-Ansicht](user-guide-play.png)
-
 Mit dem Umschalter neben Tuner, Metronom und Settings wechselst du zwischen Bühne und Editor: er zeigt immer den **anderen** Modus (Fader in PLAY, Stomp-Ring in BUILD). In BUILD sitzt der Preset-Name in der Mitte; in PLAY bleibt dieser Platz leer. Hover sagt, wohin der Klick führt. Jede Plug-in-Instanz merkt sich ihren Modus im Projekt; ein neuer Insert startet in BUILD und folgt nicht dem Standalone-Fenster. Die Standalone-App merkt sich den letzten Modus. Der Wechsel zu PLAY ruft niemals einen Sound auf und verändert ihn nicht. PRE/POST-Sperre gilt nur in BUILD und fällt beim Wechsel nach PLAY.
 
-PLAY ordnet gespeicherte Sounds Program-Change-Slots zu. **Ctrl+S** schreibt das gehörte Rig in einen Sound und ändert keine PLAY-Nummern: ein schmutziges User-Preset wird überschrieben; Factory, Default oder ein unbenanntes Rig öffnet ein Namensfeld und legt ein User-Preset an. **+** ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Default öffnet immer zuerst das Namensfeld, ein schmutziges Factory ebenfalls, und belegt danach die nächste freie Programmnummer. Liegt der Sound bereits sauber auf der Leiste, ist **+** **Add Sound** und öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Ein `+` oder `-` links an der Überschrift zeigt, dass der Abschnitt aufklappt. Für jeden der 15 Werk-Amps gibt es immer ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar. Ein Klick auf einen belegten Slot ruft seinen vollständigen Sound auf, die Zuweisen-Schaltfläche (oder ein Doppelklick) ersetzt ihn, und die kleine Entfernen-Schaltfläche löscht ihn. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. Der hervorgehobene Slot ist der zuletzt aus PLAY aufgerufene und bleibt bei Live-Änderungen markiert; **(unsaved)** zeigt an, dass das aktuelle Rig von diesem Snapshot abweicht.
+![VoLum PLAY leere Leiste](user-guide-play-empty.png)
+
+Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Produkt. Der aktuelle Amp liegt weiterhin dahinter. **+ Add this sound** schreibt das Gehörte auf die nächste freie Programmnummer, sobald es ein User-Sound ist. Factory, Default oder ein unbenanntes Rig öffnet zuerst ein Namensfeld; Default tut das immer, ein schmutziges Factory ebenfalls.
+
+![VoLum PLAY Add-Sound-Wähler](user-guide-play-picker.png)
+
+**Add Sound** öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Ein `+` oder `-` links an der Überschrift zeigt, dass der Abschnitt aufklappt. Jeder mitgelieferte Amp hat ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar.
+
+![VoLum PLAY-Board](user-guide-play.png)
+
+Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** schreibt das aktuelle Rig in einen Sound und ändert keine Programmnummern: ein schmutziges User-Preset wird überschrieben. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab.
+
+Dieselbe **+**-Schaltfläche ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Sie ist **Add Sound**, wenn der aktuelle Sound bereits sauber zugewiesen ist.
 
 `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Slot und rufen ihn auf. Die Tasten `1` bis `8` schalten die acht Stomps von links nach rechts. Leere Programmnummern werden übersprungen, ebenso Zuweisungen, deren Amp oder Preset fehlt; die Liste läuft an beiden Enden um.
 
-Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Klick umgeht, Rechtsklick springt nach BUILD mit dieser Karte. Ein leerer NAM-Slot nimmt keinen Bypass-Klick. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet.
+Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Klick umgeht, Rechtsklick springt nach BUILD mit dieser Karte. Ein leerer NAM-Slot nimmt keinen Bypass-Klick. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet. MIDI-Hörkanal und AU `aufx` → `aumf` stehen unter Einstellungen → MIDI Program Change.
 
 ## Amp Wählen
 
@@ -293,9 +303,9 @@ Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json
 
 ### Packs der Inhaltsbibliothek
 
-![VoLum Pack-Import-Vorschau](user-guide-pack-import.png)
+![VoLum Pack-Export](user-guide-pack-export.png)
 
-Die Karte **Back up your library** in den Einstellungen ist hoch genug für beide Hilfszeilen. Sie hat **Export Pack...** und **Import Pack...**. Ein Pack ist eine einzige `.volumpack`-Datei, die die von dir ausgewählten eigenen Amps, IRs, Pedale und Presets samt ihrer Capture-Dateien enthält. Damit kannst du deine Bibliothek sichern, auf einen anderen Rechner umziehen oder einen Teil davon weitergeben.
+Die Karte **Back up your library** im SYSTEM-Reiter hat **Export Pack...** und **Import Pack...**. Ein Pack ist eine einzige `.volumpack`-Datei, die die von dir ausgewählten eigenen Amps, IRs, Pedale und Presets samt ihrer Capture-Dateien enthält. Damit kannst du deine Bibliothek sichern, auf einen anderen Rechner umziehen oder einen Teil davon weitergeben.
 
 **Export** bietet drei Umfänge:
 
@@ -304,6 +314,8 @@ Die Karte **Back up your library** in den Einstellungen ist hoch genug für beid
 - **A whole amp** – hake einen eigenen Amp an, und jedes Preset darauf reist mit.
 
 Voraussetzungen, die du nicht angehakt hast, stehen namentlich im hervorgehobenen Feld unter der Liste und lassen sich nicht weglassen: Ein Pack, das auf Inhalte verweist, die es nicht mitbringt, würde als defekter Amp ankommen. Ein Preset auf einem *Werk*-Amp nimmt seine eigene IR und sein eigenes Pedal mit, aber keinen Amp-Eintrag – das Werk-Capture liegt VoLum ohnehin bei.
+
+![VoLum Pack-Import-Vorschau](user-guide-pack-import.png)
 
 **Import** listet jeden Amp, jede IR, jedes Pedal und jedes Preset in der Datei als eigenen Haken, alle standardmäßig an, und die Kopfzeile zählt Presets mit. Hake ab, was du nicht willst; ein Preset hakt IR, Pedal und Partner-Amp fest, und ein abgehakter Amp nimmt seine Presets mit. Overwrite und Add gelten immer für die angehakte Teilmenge. **Reset** gibt es nur, wenn jeder Eintrag noch angehakt ist, damit ein Teilimport den Rest deiner Bibliothek nicht löschen kann. Die Vorschau nennt, was hinzukommt, was ersetzt wird, was denselben Namen wie ein vorhandener Eintrag trägt (beide bleiben – Namen sind Beschriftungen, IDs sind Identität) und was dein Rig gerade spielt und daher neu laden müsste. Ein Everything-Pack bietet zusätzlich drei Wege, Konflikte aufzulösen:
 

@@ -1,6 +1,7 @@
 #include "third_party/doctest.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -1491,4 +1492,50 @@ TEST_CASE("An import is a catalog writer: a sibling's unflushed item survives it
     if (ir.id == "ir_sibling")
       found = true;
   CHECK(found);
+}
+
+TEST_CASE("Screenshot-seed library WritePacks an Everything Pack the import shot can open")
+{
+  // docs/screenshot-seed is the how-to library. Recapture used to export it
+  // through the OS Save As dialog; this writes the same Pack from the seed so
+  // Import Pack... can open a known path. VOLUM_WRITE_SEED_PACK copies it out
+  // for ui-drive.ps1 -PackOpen (do not commit the .volumpack).
+  const auto seed = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "docs"
+                    / "screenshot-seed" / "content";
+  REQUIRE(std::filesystem::exists(seed / "volum-content.json"));
+
+  auto work = TestBase("screenshot-seed-pack");
+  std::error_code ec;
+  std::filesystem::remove_all(work, ec);
+  std::filesystem::copy(seed, work, std::filesystem::copy_options::recursive, ec);
+  REQUIRE_FALSE(ec);
+
+  ContentStore store(work);
+  REQUIRE(store.Load());
+  REQUIRE_FALSE(store.reg().amps.empty());
+  CHECK(store.reg().amps[0].name == "Monomyth Skeleton Key");
+  REQUIRE_FALSE(store.reg().irs.empty());
+  CHECK(store.reg().irs[0].name.find("Marshall 4x12") != std::string::npos);
+  REQUIRE_FALSE(store.reg().pedals.empty());
+  CHECK(store.reg().pedals[0].name.find("Klon") != std::string::npos);
+
+  const auto out = work / "seed.volumpack";
+  std::string err;
+  REQUIRE_MESSAGE(WritePack(store, EverythingPlan(store.reg()), "", out, &err), err);
+  const auto contents = OpenPack(out);
+  REQUIRE(contents.ok);
+  CHECK(contents.job == Job::Everything);
+  REQUIRE_FALSE(contents.library.amps.empty());
+  CHECK(contents.library.amps[0].name == "Monomyth Skeleton Key");
+  CHECK_FALSE(contents.library.irs.empty());
+  CHECK_FALSE(contents.library.pedals.empty());
+
+  if (const char* dest = std::getenv("VOLUM_WRITE_SEED_PACK"))
+  {
+    const std::filesystem::path copyTo(dest);
+    std::filesystem::create_directories(copyTo.parent_path(), ec);
+    std::filesystem::copy_file(out, copyTo, std::filesystem::copy_options::overwrite_existing, ec);
+    REQUIRE_FALSE(ec);
+    REQUIRE(std::filesystem::exists(copyTo));
+  }
 }

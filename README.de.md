@@ -3,7 +3,11 @@
 # VoLum
 
 <p align="center">
-  <img src="docs/user-guide-main.png" alt="VoLum Standalone-Oberfläche" width="820">
+  <img src="docs/user-guide-play.png" alt="VoLum PLAY-Board" width="820">
+</p>
+
+<p align="center">
+  <img src="docs/user-guide-main.png" alt="VoLum BUILD-Editor" width="820">
 </p>
 
 VoLum ist eine Open-Source-Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. VoLum nutzt den [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, ist aber ein eigenes fokussiertes Produkt: 15 kuratierte Amps, PRE-Pedale (inklusive Transpose/Octaver-Pitch-Pedal), Dual Amp, POST Delay/Reverb/Tremolo, eigene Amp-/IR-/Pedal-Importe, Presets pro Amp, Tuner, Metronom und eine schnelle dunkle Oberfläche als Standalone-App oder VST3.
@@ -12,14 +16,11 @@ VoLum ist eine Open-Source-Gitarren-Amp-Sammlung für Bühne, Studio und Übungs
 
 ## Was VoLum Besonders Macht
 
-- **Eine kuratierte Amp-Sammlung statt leerem Blatt:** 15 Profi-Amps — Vintage, modern und Boutique — jeder mit mehreren Gain-Kanälen und vier Speaker-Modi, alle als vollwertige NAM-Architecture-2-(A2)-Profile. Einen auswählen und spielen.
-- **Ein komplettes Rig in einem Fenster:** Pitch, Kompressor und zwei NAM-Drive-Pedal-Slots vorne, Amp und Cab in der Mitte, Delay/Reverb/Tremolo dahinter — die ganze `PRE | AMP | POST`-Kette auf einen Blick.
-- **Ein Pitch-Pedal für Gitarre gebaut:** latenzarmes Transpose (mono oder polyphon) für Drop-Tunings und Capo-Shifts sowie ein polyphoner Octaver, der seine Stimmung sogar auf tief gestimmten Bass-Saiten hält.
-- **Dual Amp:** zwei Amps gleichzeitig fahren, jede Spur pannen und die Support-Polarität drehen — für breite, geschichtete Sounds aus einer einzigen Spur.
-- **POST-Effekte mit echtem Charakter:** Digital-, Analog- und Reverse-Delay sowie Optical-, Bias- und Harmonic-Tremolo — beide tempo-synchronisierbar — plus eine Reverb-Suite, die über Hall und Plate hinausgeht: **Oktaverb** schichtet Halo-, Shimmer- und Bloom-Pitch-Wash-Stimmen für üppige Oktav-Shimmer-Räume.
-- **Bring Your Own:** eigene Amp-Captures, Impulsantworten und Pedal-Captures in eine verwaltete Bibliothek importieren, die auch nach dem Verschieben der Originaldateien weiter funktioniert.
-- **Merkt sich deine Sounds:** jeder Amp behält eigene Regler, Kanal, Cab, PRE/POST und Dual-Amp-Setup, und Presets pro Amp rufen ein ganzes Rig mit einem Klick ab.
-- **Für Bühne und Studio gemacht:** lautloser Tuner und Metronom, volle Tastatursteuerung und eine schnelle dunkle Oberfläche — kostenlos und Open Source, als Standalone oder VST3.
+- **PLAY und BUILD in einem Fenster:** PLAY ist die Bühnen-Setlist aus Sounds; BUILD ist der Editor. Jeder mitgelieferte Amp bringt ein Factory-**Ready**-Snapshot mit, das du zuweisen kannst, ohne vorher zu speichern.
+- **MIDI Program Change:** 128 Slots, dieselbe Liste wie in PLAY. Kein Learn, kein CC — Sound wählen, Programmnummer senden.
+- **POST-Chorus:** vier Stimmen sitzen vor dem Delay, die Modulation trifft den Amp also vor Wiederholungen und Raum.
+- **Eine Pack-Datei:** ein `.volumpack` sichert, zieht um oder teilt die eigene Bibliothek (Amps, IRs, Pedale, Presets) in einem Schritt.
+- **Nur Update-Hinweis:** VoLum kann sagen, dass es eine neuere Version gibt. Es lädt niemals ein Update herunter.
 
 ## Download
 

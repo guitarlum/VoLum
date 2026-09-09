@@ -1,6 +1,6 @@
 # PLAY docs, changelog, screenshots
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 
 ## Goal
@@ -17,3 +17,9 @@ User-visible finish for PLAY/BUILD and the factory bank.
 ## Done when
 
 EN/DE match. PNGs match shipping UI. Windows tests still green.
+
+## Notes
+
+2026-09-09: RC how-to recapture on `feature/1.3.0`. PLAY empty → picker → board,
+Pack export then import, README five headlines, recipes canvas coords, changelog
+docs line. Windows tests not re-run (docs-only).

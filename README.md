@@ -3,7 +3,11 @@
 # VoLum
 
 <p align="center">
-  <img src="docs/user-guide-main.png" alt="VoLum standalone UI" width="820">
+  <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
+</p>
+
+<p align="center">
+  <img src="docs/user-guide-main.png" alt="VoLum BUILD editor" width="820">
 </p>
 
 VoLum is an open-source guitar amp collection for the stage, studio, and practice desk. It uses the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, but ships as its own focused app: 15 curated amps, built-in PRE pedals (including a Transpose/Octaver pitch pedal), Dual Amp, POST delay/reverb/tremolo, your own amp/IR/pedal imports, per-amp presets, a tuner, a metronome, and a fast dark UI for standalone use or VST3 hosts.
@@ -12,14 +16,11 @@ VoLum is an open-source guitar amp collection for the stage, studio, and practic
 
 ## Why It Stands Out
 
-- **A curated amp collection, not a blank slate:** 15 pro amps — vintage, modern, and boutique — each with multiple gain channels and four speaker modes, all full-size NAM Architecture 2 (A2) profiles. Pick one and play.
-- **A complete rig in one window:** pitch, compressor, and two NAM drive-pedal slots up front, amp and cab in the middle, delay/reverb/tremolo after — the whole `PRE | AMP | POST` chain at a glance.
-- **A pitch pedal built for guitar:** low-latency Transpose (mono or polyphonic) for drop tunings and capo shifts, plus a polyphonic Octaver that holds its tuning even on detuned low strings.
-- **Dual Amp:** run two amps at once, pan each lane, and flip support polarity for wide, layered tones from a single track.
-- **POST effects with real character:** Digital, Analog, and Reverse delay and Optical, Bias, and Harmonic tremolo — both tempo-syncable — plus a reverb suite that goes past Hall and Plate into **Oktaverb**, layering Halo, Shimmer, and Bloom pitch-wash voices for lush octave-shimmer ambience.
-- **Bring your own:** import your amp captures, impulse responses, and pedal captures into a managed library that keeps working after you move the original files.
-- **Remembers your tones:** every amp keeps its own knobs, channel, cab, PRE/POST, and Dual Amp setup, and per-amp presets recall a whole rig in one click.
-- **Made for stage and studio:** a silent tuner and metronome, full keyboard control, and a fast dark UI — free and open source, as standalone or VST3.
+- **PLAY and BUILD in one window:** PLAY is a stage setlist of Sounds; BUILD is the editor. Every bundled amp ships a Factory **Ready** snapshot you can assign without saving first.
+- **MIDI Program Change:** 128 slots, the same list PLAY shows. No Learn, no CC — pick a Sound, send a program number.
+- **POST Chorus:** four voices sit ahead of Delay, so modulation hits the amp before repeats and room.
+- **One Pack file:** a `.volumpack` backs up, moves, or shares the custom library (amps, IRs, pedals, presets) in one step.
+- **Update reminder only:** VoLum can tell you a newer release exists. It never downloads an update.
 
 ## Download
 

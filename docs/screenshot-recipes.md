@@ -18,10 +18,16 @@ To review the update badge, About pill, and footer reminder without a real
 release, launch with `VOLUM_FAKE_UPDATE=1`. That injects an in-memory 2.0.0
 manifest and does not write `volum-update-state.json`.
 
-The Pack file dialogs are separate top-level windows, so `win-key.ps1` (which
-activates VoLum's main window first) sends its keys to the wrong place. Type into
-them with `[System.Windows.Forms.SendKeys]::SendWait()` against whatever is in the
-foreground instead, and give the dialog ~2s to appear.
+Canvas clicks and captures go through `scripts/ui-drive.ps1` (client pixels, one
+process per shot). Do not chain `win-click.ps1` then `capture-volum-canvas.ps1`:
+foreground is lost between processes and PrintWindow returns a blank canvas.
+`win-click.ps1` stays window-relative for ad-hoc probes.
+
+Pack Open/Save dialogs are separate `#32770` windows. Default `ui-drive.ps1`
+ForceFront cancels iPlug `PromptForFile` and the import overlay shows **No Pack
+opened.** Write the seed Pack first, then
+`ui-drive.ps1 -Clicks "718,346" -PackOpen <seed.volumpack>`. That pastes via the
+clipboard; do not SendKeys an 8.3 path (`~` is ALT).
 
 ## 0. Prerequisites
 
@@ -29,6 +35,8 @@ foreground instead, and give the dialog ~2s to appear.
   (or build target `NeuralAmpModeler-app`). Exe lands at
   `NeuralAmpModeler/build-win/app/x64/Release/VoLum.exe`.
 - Harness scripts (Windows PowerShell 5.x):
+  - `scripts/ui-drive.ps1 -Clicks "cx,cy" -Out <png>` - canvas click + capture.
+    `-PackOpen <file>` completes the native Open dialog without ForceFront.
   - `scripts/capture-volum-canvas.ps1 -OutPath <png>` - crops the client canvas
     to match the docs framing (~900x600 at the default window size).
   - `scripts/win-key.ps1 -Keys "<SendKeys>"` - sends keys (`1`/`2`/`3`, `{UP}`,
@@ -53,6 +61,15 @@ Copy-Item docs/screenshot-seed/volum-dual-amp-settings.json "$dst\" -Force
 Copy-Item docs/screenshot-seed/content "$dst\" -Recurse -Force
 ```
 
+To write the Pack the import shot opens, without the OS Save As dialog:
+
+```powershell
+$env:VOLUM_WRITE_SEED_PACK = "$env:TEMP\volum-docs\seed.volumpack"
+pwsh NeuralAmpModeler/scripts/run-tests-win.ps1 -Filter "Screenshot-seed library WritePacks"
+```
+
+Do not commit the `.volumpack`.
+
 The seed pre-dials the five feature amps to sensible "some effects on, never all"
 scenes and seeds the bring-your-own library:
 
@@ -66,8 +83,10 @@ scenes and seeds the bring-your-own library:
 ## 2. Geometry
 
 At the default launch size the window is ~916x659 and the captured canvas is
-900x600. Click coords below are window-relative (what `win-click.ps1` expects);
-canvas point (cx,cy) maps to roughly window (cx+8, cy+51). Sections switch with
+900x600. `win-click.ps1` wants window-relative pixels; canvas point (cx,cy) maps
+to roughly window (cx+8, cy+51). The 1.3.0 capture loop clicks **canvas**
+coordinates: header toggle `(743, 22)`, gear `(869, 22)`, Settings tabs SIGNAL /
+MIDI / SYSTEM `(300, 113)` / `(450, 113)` / `(600, 113)`. Sections switch with
 `1` PRE / `2` AMP / `3` POST; amps switch with `{ESC}` then `{UP}`/`{DOWN}`.
 
 `win-key.ps1` only lands while VoLum is the foreground window, and merely
@@ -91,11 +110,13 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 
 | PNG | Amp / how to reach | State delta from seed | Transient step |
 | --- | --- | --- | --- |
-| `user-guide-play.png` | THC Sunset (seed lastAmpIdx 14) | start with no `midiSoundMap` entries | click the destination toggle (751,74) if the header shows the stomp-ring (you are in BUILD; one click enters PLAY). Canvas bounds are `721..765`, `T+10..T+36`, immediately left of the tuner. Then click the empty-state **+ Add Sound** (458,371), then the first Factory row (458,209); repeat from the rail Add row (810,212) and (810,282) for two more Factory rows, then click rail row 01 (810,226) to recall it (LIVE) |
-| `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view) | none | click **THC Sunset** in the browser (93,565) - the seed reopens on the custom amp |
-| `user-guide-settings-signal.png` | any | none | click the gear (870,80); Settings opens on the tab it was left on, so click **SIGNAL** (308,164) |
-| `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist, so the list shows both an assigned and a red missing row | from Settings, click **MIDI** (458,164) |
-| `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** (608,164) |
+| `user-guide-play-empty.png` | Soldano SLO100 (`lastAmpIdx` 13, empty `midiSoundMap`) | no PLAY assignments | canvas: empty click `(10,10)` then toggle `(743, 22)` into PLAY. Fail the shot if **+** is not **+ Add this sound** or if PLAY\|BUILD words are in the header |
+| `user-guide-play-picker.png` | Soldano, after one User Sound is LIVE | map slot 0 to Crunch Rhythm | from the empty board, **+ Add this sound** `(450, 324)` once to put LIVE on the rail, then rail **+ Add Sound** `(803, 301)`. Picker: PROGRAM next-free, User heading `(450, 265)` expanded |
+| `user-guide-play.png` | Soldano SLO100 | slots 0–2 = Crunch Rhythm / Lead Boost / Clean Verb, slot 0 LIVE | canvas toggle `(743, 22)` if you are in BUILD. Fail if **+** is not **+ Add Sound** or if a safety banner is visible |
+| `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view) | none | click **THC Sunset** in the browser (93,565) - the seed reopens on the custom amp. Compact pill left of tuner, not PLAY\|BUILD words |
+| `user-guide-settings-signal.png` | any | none | canvas gear `(869, 22)`; Settings opens on the tab it was left on, so click **SIGNAL** `(300, 113)` |
+| `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist (`preset_gone_forever`), so the list shows assigned rows and a red **Invalid slot** | from Settings, click **MIDI** `(450, 113)` |
+| `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** `(600, 113)`. Both **Back up your library** help lines stay inside the card |
 | `user-guide-pre.png` | SLO100 (`{ESC}{UP}` to 13) | none | `1` then `{RIGHT}` (focus Klon) |
 | `user-guide-pre-pedal.png` | SLO100 | none | from PRE/Klon focused, click (471,251) to open the capture chooser |
 | `user-guide-pitch-transpose.png` | SLO100 | `prePitchActive=true, prePitchMode=0, prePitchSemitones=-2, prePitchTransChar=2`; comp+NAM off | `1` then `{LEFT}` (focus PITCH) |
@@ -110,7 +131,8 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 | `user-guide-custom-pedal.png` | any | none | `1`, click NAM1 (471,251) twice, click "Manage custom pedals..." (494,628) |
 | `user-guide-tuner.png` | any | none | key `t` |
 | `user-guide-metronome.png` | any | none | key `m` |
-| `user-guide-pack-import.png` | any | none | click gear (870,80), **SYSTEM** (608,164), then **Export Pack...** (533,397) in the Back up your library card, **Export...** (536,521), type a `.volumpack` path into Save As + `{ENTER}`, then **Import Pack...** (726,397) and the same path + `{ENTER}` |
+| `user-guide-pack-export.png` | any (Soldano map as in PLAY board) | none | canvas gear `(869, 22)`, **SYSTEM** `(600, 113)`, **Export Pack...** `(525, 346)`, scope **Sounds** `(250, 173)`, tick first Sound `(198, 228)`. Fail if the companion band is missing or still says `Also including:` |
+| `user-guide-pack-import.png` | any | `$env:VOLUM_WRITE_SEED_PACK="$env:TEMP\volum-docs\seed.volumpack"` then `run-tests-win.ps1 -Filter "Screenshot-seed library WritePacks"`; do not commit the Pack | canvas gear / SYSTEM, then `ui-drive.ps1 -Clicks "718,346" -PackOpen $env:TEMP\volum-docs\seed.volumpack`. Fail on **No Pack opened.** |
 
 State deltas are edits to the focused amp's block in `volum-settings.json` between
 launches (close the app, edit the JSON with the same key names shown above, then
