@@ -24,17 +24,15 @@ Rules below auto-attach on the files they own; you do not need to open them by h
 - Retraining bundled NAM captures to A2: skill `a2-training` (ops in `training/cloud/`).
 - Writing or trimming rules/skills/`AGENTS.md`: `.cursor/rules/ai-artifact-authoring.mdc`.
 - Wayfinder maps / scratch tickets: `.cursor/rules/volum-scratch-planning.mdc`.
+- Goal+verify loops: `/conductor` for AFK, overnight, spec overnight, or dispatching a clear map. Ordinary one-slice features and bugs: Plan mode or implement (`vo-lum-workflow`). Foggy headlines: `/wayfinder`. Skip all three for one-step edits. Do not install pstack.
 
 ## Agent skills
 
 ### Issue tracker
 
-Planning lives in tracked `.scratch/<effort>/` (maps, specs, tickets). Foggy
-multi-session work starts with `/wayfinder`. When a map has no open tickets,
-start a **conductor** chat (not `/wayfinder`) and write new
-`.scratch/<feature>/spec.md` directories — never implementation tickets next
-to `map.md`. GitHub Issues stay user-facing.
-See `docs/agents/issue-tracker.md`.
+Planning lives in `.scratch/`. Foggy multi-session: `/wayfinder`. Sitting-with-you
+implementation: Plan / implement. AFK / overnight: `/conductor`. See
+`docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
@@ -54,4 +52,5 @@ Single-context. `CONTEXT.md` is a lazy glossary, not a spec. See
 - Windows standalone rate/buffer switching stress: `pwsh NeuralAmpModeler/scripts/stress-standalone-rate-switch-win.ps1` (needs a real ASIO device)
 - macOS release-equivalent package: `bash NeuralAmpModeler/scripts/makedist-mac.sh full all`
 - Watch/dispatch CI: `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref <branch> [-Dispatch] [-NoWait]`
+- Conductor loop status: `pwsh NeuralAmpModeler/scripts/conductor-status.ps1 -Effort <slug>`
 - Format: `bash format.bash`

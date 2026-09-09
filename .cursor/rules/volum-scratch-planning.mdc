@@ -20,4 +20,10 @@ execution.
 - Chat memory of this map is stale after compression. Re-read `map.md` and the
   claimed ticket from disk before grilling, answering, or resolving. Do not
   trust a summary of Decisions-so-far.
+- If this effort has a `loop.md`, you are in a **conductor** loop: chat memory
+  of the goal and predicate is stale after compression. First tool call every
+  turn (including `/loop` wakes) is
+  `NeuralAmpModeler/scripts/conductor-status.ps1 -Effort <slug>`. Do not trust
+  a summary of Goal, Predicate, Verifier, or Ledger. Append ledger rows; never
+  rewrite them from memory. Mechanics: `.cursor/skills/conductor/SKILL.md`.
 - Ops: `docs/agents/issue-tracker.md`. Do not publish maps to GitHub Issues.

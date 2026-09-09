@@ -7,15 +7,31 @@
 # Patterns are read from `vendor-denylist.txt` next to this script when present,
 # one regex per line, `#` for comments. Physical amplifier names VoLum models
 # are fine and belong nowhere near that list.
+#
+#   pwsh NeuralAmpModeler/scripts/check-no-vendor-refs.ps1
+#   pwsh NeuralAmpModeler/scripts/check-no-vendor-refs.ps1 -Staged
+#
+# Missing or empty denylist: fail closed on this machine. CI has no denylist
+# on purpose and skips the tree scan (hooks never run in CI).
+
+param(
+  [switch]$Staged
+)
 
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $here "..\..")).Path
 $denyFile = Join-Path $here "vendor-denylist.txt"
+$inCi = $env:CI -or ($env:GITHUB_ACTIONS -eq "true")
 
 if (-not (Test-Path $denyFile))
 {
-  Write-Host "No vendor-denylist.txt next to this script; nothing to check." -ForegroundColor DarkGray
+  if ($Staged -or -not $inCi) {
+    Write-Host "Refuse: vendor-denylist.txt is missing." -ForegroundColor Red
+    Write-Host "pwsh NeuralAmpModeler/scripts/install-local-guards.ps1" -ForegroundColor Yellow
+    exit 1
+  }
+  Write-Host "No vendor-denylist.txt; CI skip." -ForegroundColor DarkGray
   exit 0
 }
 
@@ -27,7 +43,11 @@ $denied = Get-Content -LiteralPath $denyFile |
 
 if ($denied.Count -eq 0)
 {
-  Write-Host "vendor-denylist.txt is empty; nothing to check." -ForegroundColor DarkGray
+  if ($Staged -or -not $inCi) {
+    Write-Host "Refuse: vendor-denylist.txt is empty." -ForegroundColor Red
+    exit 1
+  }
+  Write-Host "vendor-denylist.txt is empty; CI skip." -ForegroundColor DarkGray
   exit 0
 }
 
@@ -48,9 +68,15 @@ $skipDirs = @('iPlug2/', 'eigen/', 'NeuralAmpModelerCore/', 'AudioDSPTools/',
 Push-Location $repoRoot
 try
 {
-  $files = git ls-files | Where-Object {
+  if ($Staged) {
+    $files = @(& git diff --cached --name-only --diff-filter=ACMR)
+  }
+  else {
+    $files = @(& git ls-files)
+  }
+  $files = $files | Where-Object {
     $f = $_
-    -not ($skipDirs | Where-Object { $f.StartsWith($_) })
+    $_ -and -not ($skipDirs | Where-Object { $f.StartsWith($_) })
   }
 
   $findings = @()
@@ -79,7 +105,8 @@ try
   if ($findings.Count -gt 0)
   {
     Write-Host ""
-    Write-Host "Third-party product references in tracked files:" -ForegroundColor Red
+    $scope = $(if ($Staged) { "staged files" } else { "tracked files" })
+    Write-Host ("Third-party product references in {0}:" -f $scope) -ForegroundColor Red
     foreach ($f in $findings)
     {
       Write-Host ("  {0}:{1}" -f $f.File, $f.Line) -ForegroundColor Yellow
@@ -92,7 +119,8 @@ try
     exit 1
   }
 
-  Write-Host "No third-party product references in tracked files." -ForegroundColor Green
+  $scope = $(if ($Staged) { "staged files" } else { "tracked files" })
+  Write-Host ("No third-party product references in {0}." -f $scope) -ForegroundColor Green
   exit 0
 }
 finally

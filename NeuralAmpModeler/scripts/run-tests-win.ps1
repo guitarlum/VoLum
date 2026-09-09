@@ -47,6 +47,10 @@ Invoke-Check (Join-Path $here "check-shell-exec-bits.ps1")
 # is worse than verbose guidance.
 Invoke-Check (Join-Path $here "check-agent-artifact-links.ps1")
 
+# Local clone must have the denylist + commit-msg hook. CI has neither on
+# purpose; that check is a no-op when CI or GITHUB_ACTIONS is set.
+Invoke-Check (Join-Path $here "check-local-guards.ps1")
+
 # changelog.txt ships inside the installer, so anything written there reaches
 # every user.
 Invoke-Check (Join-Path $here "check-no-vendor-refs.ps1")

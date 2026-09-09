@@ -10,6 +10,8 @@ backlog prompts remain until a wayfinder session migrates them.
 ## Two kinds of effort directory (do not mix)
 
 A directory is **either** a wayfinder map **or** an implementation spec.
+A spec (or a simple-goal loop) may also carry `loop.md`; that file is the
+conductor SSOT, not a third kind of effort.
 
 | Kind | Marker | `issues/` tickets | Status values |
 | --- | --- | --- | --- |
@@ -17,7 +19,9 @@ A directory is **either** a wayfinder map **or** an implementation spec.
 | **Spec** | `spec.md`, no `map.md` | Implementation tickets | `ready-for-agent`, `claimed`, `resolved` |
 
 Never put `ready-for-agent` tickets in a directory that has `map.md`. When a
-map is clear, create a **new** `.scratch/<feature-slug>/` for each spec.
+map is clear, create a **new** `.scratch/<feature-slug>/` for each spec. A
+simple `/conductor` goal with no spec writes only `loop.md` in a new slug
+directory.
 
 ## Conventions
 
@@ -62,12 +66,54 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 
 ## After the map (conductor)
 
-When every child of `map.md` is `resolved`, stop `/wayfinder`. New chat:
+When every child of `map.md` is `resolved`, stop `/wayfinder`. Sitting-with-you
+work is Plan / implement, not `/conductor`. AFK / overnight: `/conductor`
+(see `.cursor/skills/conductor/SKILL.md`). Do not promote to `main` without
+owner UAT. One-step and one-slice work skip both `/wayfinder` and `/conductor`.
 
-1. Write `.scratch/<feature-slug>/spec.md` plus `issues/` with
-   `Status: ready-for-agent` (one feature directory per headline, not inside
-   the map folder).
-2. One main agent; sub-agents per spec. The iteration loop in
-   `vo-lum-workflow` applies: tests, changelog, docs, UAT build for the owner.
-3. Do not promote to `main` without that UAT. Set the timebox here — not as a
-   standing promise on the map.
+## Conductor operations
+
+Mechanics live in `.cursor/skills/conductor/SKILL.md`. This file is the
+`loop.md` template only.
+
+- **File**: `.scratch/<slug>/loop.md`
+- **Status**: `pwsh NeuralAmpModeler/scripts/conductor-status.ps1 -Effort <slug>`
+  (`-Path` if the file is not under `.scratch/`; `-RequirePredicate` before
+  dispatch spawns). Several loops with no `-Effort` is an error.
+- **Predicate**: prefer `.scratch/<slug>/verify.ps1`. Bundles (bug / UI / DSP /
+  packaging / sound) are in the skill.
+- **Verifier**: write `hash:` from the status script’s `worktree_hash` and
+  `verdict: accepted` or `defects`. A later `git diff HEAD` change invalidates it.
+- **Wake prompt**: three lines only (below). Copy into Cursor `/loop`.
+- **Ledger**: append-only. Never rewrite rows from memory.
+
+Template:
+
+```markdown
+# <slug>
+
+## Goal
+
+<one sentence outcome>
+
+## Predicate
+
+- `pwsh .scratch/<slug>/verify.ps1` exit 0
+
+## Wake prompt
+
+First tool call: `pwsh NeuralAmpModeler/scripts/conductor-status.ps1 -Effort <slug>`.
+Do not trust chat memory. Continue until every Predicate line passes.
+Escalate and stop on new product, new sound / golden retune, irreversible git, or a real dead end.
+
+## Verifier
+
+- hash:
+- verdict:
+
+## Children
+
+(none)
+
+## Ledger
+```

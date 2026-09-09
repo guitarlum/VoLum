@@ -9,17 +9,14 @@ alwaysApply: true
 
 Foggy work that will take more than one session: `/wayfinder` (see `AGENTS.md`).
 A single-session design with no map: `/grill-with-docs`. Skip both for obvious
-single-step changes.
+single-step changes. Ordinary one-slice features and bugs the user is sitting
+with: Plan mode or implement under `vo-lum-workflow`. `/conductor` is for AFK /
+overnight, a durable `loop.md`, spec overnight, or dispatching a clear map.
 
 ## Cut Once: Implementation Handoff
 
 End every implementation plan with a short `Implementation Recommendation`:
 
-- **Model:** pick by task shape, not habit — a fast implementation-tier model for
-  scoped wording/docs/script/config edits, a strong reasoning model for complex
-  debugging, architecture, unclear-tradeoff refactors, or safety-critical work.
-  Say so and let the user choose when the shape is ambiguous. Never name a model
-  that is not currently available in this environment; describe the tier instead.
 - **Skills:** split into **attach before coding** (shapes implementation) and
   **run after only if requested** (opt-in retro/review). Say so explicitly if
   none fit.
