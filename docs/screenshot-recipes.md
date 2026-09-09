@@ -19,7 +19,9 @@ release, launch with `VOLUM_FAKE_UPDATE=1`. That injects an in-memory 2.0.0
 manifest and does not write `volum-update-state.json`.
 
 Canvas clicks and captures go through `scripts/ui-drive.ps1` (client pixels, one
-process per shot). Do not chain `win-click.ps1` then `capture-volum-canvas.ps1`:
+process per shot). Clicks always run before Keys in the same call: do not put
+`{ESC}` in `-Keys` with a menu-opening `-Clicks`, or the menu closes before
+capture. Do not chain `win-click.ps1` then `capture-volum-canvas.ps1`:
 foreground is lost between processes and PrintWindow returns a blank canvas.
 `win-click.ps1` stays window-relative for ad-hoc probes.
 
@@ -44,11 +46,19 @@ clipboard; do not SendKeys an 8.3 path (`~` is ALT).
   - `scripts/win-click.ps1 -X <x> -Y <y>` - clicks a window-relative pixel.
   - `scripts/win-screenshot.ps1` - full-window capture + a dark-pixel sanity check.
 
-> WARNING: the seed OVERWRITES your personal VoLum library. Back it up first:
-> ```powershell
-> Copy-Item "$env:LOCALAPPDATA\VoLum" "$env:LOCALAPPDATA\VoLum-backup" -Recurse -Force
-> ```
-> Restore it when done by copying the backup back over `$env:LOCALAPPDATA\VoLum`.
+Docs recapture on this machine must drive the sandbox, not the real library.
+`scripts/.ui-sandbox-launch.ps1 -Reseed` copies the seed into
+`%TEMP%\volum-ui-sandbox\VoLum`, redirects `LOCALAPPDATA`, and writes `pid.txt`.
+`ui-drive.ps1` refuses to click unless that pid is the running VoLum. Comp/Pitch
+deltas are sandbox JSON edits between launches without `-Reseed` (do not write
+them into the committed seed: the hero stays Comp off, Pitch off).
+
+If you install the seed over a live library instead, it OVERWRITES that library.
+Back it up first:
+```powershell
+Copy-Item "$env:LOCALAPPDATA\VoLum" "$env:LOCALAPPDATA\VoLum-backup" -Recurse -Force
+```
+Restore it when done by copying the backup back over `$env:LOCALAPPDATA\VoLum`.
 
 ## 1. Install the seed
 
@@ -92,9 +102,11 @@ bring-your-own library:
 At the default launch size the window is ~916x659 and the captured canvas is
 900x600. `win-click.ps1` wants window-relative pixels; canvas point (cx,cy) maps
 to roughly window (cx+8, cy+51). The 1.3.0 capture loop clicks **canvas**
-coordinates: header toggle `(743, 22)`, gear `(869, 22)`, Settings tabs SIGNAL /
-MIDI / SYSTEM `(300, 113)` / `(450, 113)` / `(600, 113)`. Sections switch with
-`1` PRE / `2` AMP / `3` POST; amps switch with `{ESC}` then `{UP}`/`{DOWN}`.
+coordinates: header toggle `(743, 22)`, gear `(869, 22)`, preset bar `(539, 23)`
+(ink band, not the cab row -- F5 is the control's feature name, not a capture
+key; F5 opens the tuner). Settings tabs SIGNAL / MIDI / SYSTEM `(300, 113)` /
+`(450, 113)` / `(600, 113)`. Sections switch with `1` PRE / `2` AMP / `3` POST;
+amps switch with `{ESC}` then `{UP}`/`{DOWN}`.
 
 `win-key.ps1` only lands while VoLum is the foreground window, and merely
 launching it is not enough: click into the window once (`win-click.ps1`) before
@@ -124,18 +136,18 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 | `user-guide-settings-signal.png` | any | none | canvas gear `(869, 22)`; Settings opens on the tab it was left on, so click **SIGNAL** `(300, 113)` |
 | `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist (`preset_gone_forever`), so the list shows assigned rows and a red **Invalid slot** | from Settings, click **MIDI** `(450, 113)` |
 | `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** `(600, 113)`. Both **Back up your library** help lines stay inside the card |
-| `user-guide-pre.png` | THC Sunset | `preCompActive=true` (hero keeps Comp off) | `1` then `{RIGHT}{RIGHT}` (focus Klon). Fail if either NAM slot is empty |
-| `user-guide-pre-pedal.png` | THC Sunset | none | from PRE/Klon focused, click (471,251) to open the capture chooser |
-| `user-guide-pitch-transpose.png` | THC Sunset | `prePitchActive=true, prePitchMode=0, prePitchSemitones=-2, prePitchTransChar=2`; Comp off; both NAM still assigned | `1` then `{LEFT}` (focus PITCH) |
-| `user-guide-pitch-octaver.png` | THC Sunset | `prePitchActive=true, prePitchMode=1, prePitchOctDown=0.8, prePitchVoicing=1`; Comp off; both NAM still assigned | `1` then `{LEFT}` |
-| `user-guide-presets.png` | THC Sunset | none (Sunset Crunch bank) | click preset bar (546,76). Menu must show Default, Ready, Sunset Crunch, Manage |
+| `user-guide-pre.png` | THC Sunset | `preCompActive=true` (hero keeps Comp off) | `1` then click Comp card. Fail if either NAM slot is empty |
+| `user-guide-pre-pedal.png` | THC Sunset | none | from PRE, click Klon card `(455, 230)` twice to open the capture chooser |
+| `user-guide-pitch-transpose.png` | THC Sunset | `prePitchActive=true, prePitchMode=0, prePitchSemitones=-2, prePitchTransChar=2`; Comp off; both NAM still assigned | `1` then click Pitch card `(280, 230)` |
+| `user-guide-pitch-octaver.png` | THC Sunset | `prePitchActive=true, prePitchMode=1, prePitchOctDown=0.8, prePitchVoicing=1`; Comp off; both NAM still assigned | `1` then click Pitch card `(280, 230)` |
+| `user-guide-presets.png` | THC Sunset | none (Sunset Crunch bank) | click preset bar `(539, 23)`, then expand FACTORY `(430, 88)` and USER `(430, 112)`. Menu must show Default, Ready, Sunset Crunch, Manage |
 | `user-guide-post.png` | ORS100 (lastAmpIdx 11) | none | `{ESC}` then `{UP}` to 11, `3` (POST; Delay focused). Fail if either NAM slot is an empty `+` |
 | `user-guide-chorus.png` | ORS100 | `postChorusActive=true` | `3` then `{LEFT}` (focus CHORUS) |
 | `user-guide-tremolo.png` | ORS100 | `postDelayActive=false, postTremoloActive=true, postTremoloMode=1` | `3` then `{RIGHT}{RIGHT}` (focus TREM) |
 | `user-guide-dual-amp.png` | Marshall 2204 (lastAmpIdx 7) | none (dual on in sidecar) | `2` (AMP). Fail if either NAM slot is empty |
 | `user-guide-custom-amp.png` | Monomyth (`{ESC}` then 8x `{DOWN}` from Marshall 2204) | none | click pen icon (125,625) to open builder |
 | `user-guide-custom-ir.png` | Monomyth (ch1) | none | click "Custom IR" cab (674,111) |
-| `user-guide-custom-pedal.png` | any | none | `1`, click NAM1 (471,251) twice, click "Manage custom pedals..." (494,628) |
+| `user-guide-custom-pedal.png` | Monomyth | none | `1`, click NAM1 `(455, 230)` twice. The chooser (CUSTOM **5000$ Klon** + **Manage custom pedals...**) is the shot |
 | `user-guide-tuner.png` | THC Sunset | none | key `t`. Background is the filled BUILD hero |
 | `user-guide-metronome.png` | THC Sunset | none | key `m`. Background is the filled BUILD hero |
 | `user-guide-pack-export.png` | any (Soldano map as in PLAY board) | none | canvas gear `(869, 22)`, **SYSTEM** `(600, 113)`, **Export Pack...** `(525, 346)`, scope **Sounds** `(250, 173)`, tick first Sound `(198, 228)`. Fail if the companion band is missing or still says `Also including:` |
