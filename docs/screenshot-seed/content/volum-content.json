@@ -888,6 +888,199 @@
           "treble": 6.5
         }
       }
+    ],
+    "factory:14": [
+      {
+        "id": "preset_sunset1c3",
+        "name": "Sunset Crunch",
+        "settings": {
+          "activeIrId": "",
+          "bass": 5.0,
+          "channel": 2,
+          "eq": true,
+          "gate": -80.0,
+          "input": 0,
+          "mid": 5.0,
+          "noiseGate": true,
+          "output": 0,
+          "postDelayActive": false,
+          "postDelayAge": 0.0,
+          "postDelayDivision": 4,
+          "postDelayFeedback": 0.35,
+          "postDelayMix": 0.28,
+          "postDelayMode": 0,
+          "postDelayModes": [
+            {
+              "age": 0.0,
+              "feedback": 0.35,
+              "mix": 0.28,
+              "pingPong": false,
+              "time": 320.0,
+              "tone": 0.5
+            },
+            {
+              "age": 0.5,
+              "feedback": 0.42,
+              "mix": 0.32,
+              "pingPong": false,
+              "time": 320.0,
+              "tone": 0.5
+            },
+            {
+              "age": 0.0,
+              "feedback": 0.3,
+              "mix": 0.32,
+              "pingPong": false,
+              "time": 600.0,
+              "tone": 0.5
+            }
+          ],
+          "postDelayPingPong": false,
+          "postDelaySync": false,
+          "postDelayTime": 320.0,
+          "postDelayTone": 0.5,
+          "postOktaverbSubModes": [
+            {
+              "decay": 5.5,
+              "mix": 0.3,
+              "preDelay": 25.0,
+              "shimmer": 0.65,
+              "tone": 6.0
+            },
+            {
+              "decay": 6.0,
+              "mix": 0.3,
+              "preDelay": 30.0,
+              "shimmer": 0.7,
+              "tone": 6.0
+            },
+            {
+              "decay": 5.5,
+              "mix": 0.3,
+              "preDelay": 20.0,
+              "shimmer": 0.75,
+              "tone": 5.5
+            }
+          ],
+          "postReverbActive": true,
+          "postReverbDecay": 2.5,
+          "postReverbMix": 0.2,
+          "postReverbMode": 0,
+          "postReverbModes": [
+            {
+              "decay": 2.5,
+              "mix": 0.2,
+              "preDelay": 30.0,
+              "shimmer": 0.0,
+              "subMode": 1,
+              "tone": 5.0
+            },
+            {
+              "decay": 2.5,
+              "mix": 0.2,
+              "preDelay": 20.0,
+              "shimmer": 0.0,
+              "subMode": 0,
+              "tone": 4.5
+            },
+            {
+              "decay": 6.0,
+              "mix": 0.3,
+              "preDelay": 30.0,
+              "shimmer": 0.7,
+              "subMode": 1,
+              "tone": 6.0
+            }
+          ],
+          "postReverbPreDelay": 30.0,
+          "postReverbShimmer": 0.0,
+          "postReverbSubMode": 1,
+          "postReverbTone": 5.0,
+          "postTremoloActive": false,
+          "postTremoloCrossover": 800.0,
+          "postTremoloDepth": 0.85,
+          "postTremoloDivision": 4,
+          "postTremoloMix": 1.0,
+          "postTremoloMode": 1,
+          "postTremoloModes": [
+            {
+              "crossover": 800.0,
+              "depth": 0.85,
+              "mix": 0.6,
+              "rate": 3.0,
+              "shape": 0.0
+            },
+            {
+              "crossover": 800.0,
+              "depth": 0.85,
+              "mix": 1.0,
+              "rate": 5.0,
+              "shape": 0.0
+            },
+            {
+              "crossover": 800.0,
+              "depth": 0.85,
+              "mix": 0.6,
+              "rate": 3.0,
+              "shape": 0.0
+            }
+          ],
+          "postTremoloRate": 5.0,
+          "postTremoloShape": 0.0,
+          "postTremoloSync": false,
+          "postValid": true,
+          "preCompActive": false,
+          "preCompAmount": 3.0,
+          "preCompAttack": 4.0,
+          "preCompLevel": 0.0,
+          "preCompMix": 1.0,
+          "preCompRatio": 4.0,
+          "preCompRelease": 120.0,
+          "preNam1Active": true,
+          "preNam1Bass": 5.0,
+          "preNam1Capture": 1,
+          "preNam1Gain": 2,
+          "preNam1Level": 0.0,
+          "preNam1Mid": 5.0,
+          "preNam1MidFreq": 650.0,
+          "preNam1Treble": 5.0,
+          "preNam2Active": true,
+          "preNam2Bass": 5.0,
+          "preNam2Capture": 3,
+          "preNam2Gain": 1.5,
+          "preNam2Level": 0.0,
+          "preNam2Mid": 5.0,
+          "preNam2MidFreq": 650.0,
+          "preNam2Treble": 5.0,
+          "prePitchActive": false,
+          "prePitchDry": 1.0,
+          "prePitchLevel": 0.0,
+          "prePitchMix": 1.0,
+          "prePitchMode": 0,
+          "prePitchModes": [
+            {
+              "dry": 1.0,
+              "level": 0.0,
+              "mix": 1.0,
+              "voicing": 1
+            },
+            {
+              "dry": 1.0,
+              "level": 0.0,
+              "mix": 1.0,
+              "voicing": 1
+            }
+          ],
+          "prePitchOctDown": 0.0,
+          "prePitchOctUp": 0.0,
+          "prePitchSemitones": 0.0,
+          "prePitchTransChar": 0,
+          "prePitchVoicing": 1,
+          "speaker": 3,
+          "supportActiveIrId": "",
+          "treble": 5.0
+        }
+      }
     ]
   },
   "schemaVersion": 2

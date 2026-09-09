@@ -1500,8 +1500,8 @@ TEST_CASE("Screenshot-seed library WritePacks an Everything Pack the import shot
   // through the OS Save As dialog; this writes the same Pack from the seed so
   // Import Pack... can open a known path. VOLUM_WRITE_SEED_PACK copies it out
   // for ui-drive.ps1 -PackOpen (do not commit the .volumpack).
-  const auto seed = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "docs"
-                    / "screenshot-seed" / "content";
+  const auto seed =
+    std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "docs" / "screenshot-seed" / "content";
   REQUIRE(std::filesystem::exists(seed / "volum-content.json"));
 
   auto work = TestBase("screenshot-seed-pack");

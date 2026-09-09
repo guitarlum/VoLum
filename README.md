@@ -3,10 +3,6 @@
 # VoLum
 
 <p align="center">
-  <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
-</p>
-
-<p align="center">
   <img src="docs/user-guide-main.png" alt="VoLum BUILD editor" width="820">
 </p>
 
@@ -16,7 +12,7 @@ VoLum is an open-source guitar amp collection for the stage, studio, and practic
 
 ## Why It Stands Out
 
-- **PLAY and BUILD in one window:** PLAY is a stage setlist of Sounds; BUILD is the editor. Every bundled amp ships a Factory **Ready** snapshot you can assign without saving first.
+- **BUILD then PLAY in one window:** BUILD is the editor. PLAY is the stage setlist. Every bundled amp ships a Factory **Ready** snapshot you can assign without saving first.
 - **MIDI Program Change:** 128 slots, the same list PLAY shows. No Learn, no CC — pick a Sound, send a program number.
 - **POST Chorus:** four voices sit ahead of Delay, so modulation hits the amp before repeats and room.
 - **One Pack file:** a `.volumpack` backs up, moves, or shares the custom library (amps, IRs, pedals, presets) in one step.
@@ -119,6 +115,14 @@ VoLum does not currently provide a native Linux build. Some users have reported 
 | THC Sunset | 5 |
 
 Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
+
+## PLAY
+
+Once a tone exists in BUILD, switch to PLAY and assign Ready or your User presets to program numbers. The board is the setlist: click a row to recall it, or send MIDI Program Change.
+
+<p align="center">
+  <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
+</p>
 
 ## Learn More
 

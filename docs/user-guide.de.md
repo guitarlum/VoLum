@@ -6,22 +6,24 @@ Dieses Handbuch erklärt die aktuelle VoLum-Oberfläche nach der Installation. D
 
 ## Inhalt
 
-- [Hauptansicht](#hauptansicht)
-- [PLAY-Ansicht](#play-ansicht)
+- [BUILD-Ansicht](#build-ansicht)
 - [Amp Wählen](#amp-wählen)
 - [PRE-Bereich](#pre-bereich)
 - [Dual Amp](#dual-amp)
 - [POST-Bereich](#post-bereich)
 - [Presets](#presets)
+- [PLAY-Ansicht](#play-ansicht)
 - [Eigene Inhalte (Bring Your Own)](#eigene-inhalte-bring-your-own)
 - [Tuner Und Metronom](#tuner-und-metronom)
 - [Tastatur](#tastatur)
 - [Einstellungen Und Sicherheit](#einstellungen-und-sicherheit)
 - [Fehler Melden Oder Feature Vorschlagen](#fehler-melden-oder-feature-vorschlagen)
 
-## Hauptansicht
+## BUILD-Ansicht
 
-![VoLum Hauptansicht](user-guide-main.png)
+![VoLum BUILD-Editor](user-guide-main.png)
+
+BUILD ist der Editor. Stelle hier Amp, Pedale und ein benanntes Preset ein, und wechsle danach zu PLAY, um diese Sounds auf die Bühne zu legen.
 
 1. **Amp-Browser:** wähle einen der mitgelieferten Amps.
 2. **Amp-Panel:** zeigt den fokussierten Amp. Im Dual-Amp-Modus teilt es sich in MAIN und SUPPORT.
@@ -30,31 +32,11 @@ Dieses Handbuch erklärt die aktuelle VoLum-Oberfläche nach der Installation. D
 5. **PRE | AMP | POST-Leiste:** öffnet immer genau einen Bereich.
 6. **Toolbar:** PLAY/BUILD, Tuner, Metronom und Einstellungen sitzen oben rechts.
 
+Der Umschalter neben Tuner, Metronom und Settings zeigt immer den **anderen** Modus (Stomp-Ring in BUILD, Fader in PLAY). In BUILD sitzt der Preset-Name in der Mitte; in PLAY bleibt dieser Platz leer. Hover sagt, wohin der Klick führt. Jede Plug-in-Instanz merkt sich ihren Modus im Projekt; ein neuer Insert startet in BUILD und folgt nicht dem Standalone-Fenster. Die Standalone-App merkt sich den letzten Modus. Der Wechsel zu PLAY ruft niemals einen Sound auf und verändert ihn nicht. PRE/POST-Sperre gilt nur in BUILD und fällt beim Wechsel nach PLAY.
+
 Die mitgelieferten NAM-Profile wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Nutze einen ähnlichen Pro-Line-Eingangspegel in VoLum, um den aufgenommenen Sounds möglichst nah zu kommen. Jedes mitgelieferte Amp-, Cab- und PRE-NAM-Capture ist ein NAM-Architecture-2-(A2)-Profil, trainiert auf den besten Sitz zwischen 700 und 1200 Epochen. Standardmäßig spielt VoLum die volle A2-Variante; der optionale Lite-Modus wird unter Einstellungen beschrieben.
 
 VoLum speichert die meisten Spiel-Einstellungen pro Amp. Wenn du zu einem Amp zurückkehrst, stellt VoLum Speaker, Kanal, Regler, PRE-Pedale, POST-Effekte und Dual Amp wieder her.
-
-## PLAY-Ansicht
-
-Mit dem Umschalter neben Tuner, Metronom und Settings wechselst du zwischen Bühne und Editor: er zeigt immer den **anderen** Modus (Fader in PLAY, Stomp-Ring in BUILD). In BUILD sitzt der Preset-Name in der Mitte; in PLAY bleibt dieser Platz leer. Hover sagt, wohin der Klick führt. Jede Plug-in-Instanz merkt sich ihren Modus im Projekt; ein neuer Insert startet in BUILD und folgt nicht dem Standalone-Fenster. Die Standalone-App merkt sich den letzten Modus. Der Wechsel zu PLAY ruft niemals einen Sound auf und verändert ihn nicht. PRE/POST-Sperre gilt nur in BUILD und fällt beim Wechsel nach PLAY.
-
-![VoLum PLAY leere Leiste](user-guide-play-empty.png)
-
-Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Produkt. Der aktuelle Amp liegt weiterhin dahinter. **+ Add this sound** schreibt das Gehörte auf die nächste freie Programmnummer, sobald es ein User-Sound ist. Factory, Default oder ein unbenanntes Rig öffnet zuerst ein Namensfeld; Default tut das immer, ein schmutziges Factory ebenfalls.
-
-![VoLum PLAY Add-Sound-Wähler](user-guide-play-picker.png)
-
-**Add Sound** öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Ein `+` oder `-` links an der Überschrift zeigt, dass der Abschnitt aufklappt. Jeder mitgelieferte Amp hat ein schreibgeschütztes Werk-Preset namens **Ready**; User-Presets bleiben in BUILD bearbeitbar.
-
-![VoLum PLAY-Board](user-guide-play.png)
-
-Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** schreibt das aktuelle Rig in einen Sound und ändert keine Programmnummern: ein schmutziges User-Preset wird überschrieben. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab.
-
-Dieselbe **+**-Schaltfläche ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Sie ist **Add Sound**, wenn der aktuelle Sound bereits sauber zugewiesen ist.
-
-`Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Slot und rufen ihn auf. Die Tasten `1` bis `8` schalten die acht Stomps von links nach rechts. Leere Programmnummern werden übersprungen, ebenso Zuweisungen, deren Amp oder Preset fehlt; die Liste läuft an beiden Enden um.
-
-Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Klick umgeht, Rechtsklick springt nach BUILD mit dieser Karte. Ein leerer NAM-Slot nimmt keinen Bypass-Klick. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet. MIDI-Hörkanal und AU `aufx` → `aumf` stehen unter Einstellungen → MIDI Program Change.
 
 ## Amp Wählen
 
@@ -180,12 +162,36 @@ Beim Wechsel von Chorus-Stimme, Delay-Modus, Ping-Pong, Reverb-Modus oder Oktave
 
 Ein Preset ist eine benannte Momentaufnahme des gesamten Rigs für den fokussierten Amp: Speaker/Cab, Kanal, alle Regler, PRE-Pedale, POST-Effekte und das Dual-Amp-Setup.
 
+Jeder Werk-Amp bringt ein schreibgeschütztes Werk-Preset namens **Ready** mit. Das ist der Noon-Snapshot: du kannst es in PLAY zuweisen, ohne vorher zu speichern. Wenn du Ready bearbeitest und speicherst, entsteht eine User-Kopie; Werk-Zeilen werden nie überschrieben oder gelöscht.
+
 1. Stelle einen Sound ein und öffne die Preset-Leiste in der AMP-Kopfzeile.
 2. Mit **Save current as new** speicherst du ihn unter einem Namen.
 3. Mit den Pfeilen `<` / `>` blätterst du gespeicherte Presets direkt durch, oder du wählst eines aus der Liste.
 4. **Update** überschreibt das gewählte Preset mit dem aktuellen Rig (mit Rückfrage); **Rename** und **Delete** verwalten die Liste.
 
-Presets sind pro Amp: Jeder Amp (Werk oder eigen) hat seine eigene User-Liste. Jeder Werk-Amp besitzt zusätzlich ein schreibgeschütztes Werk-Preset namens **Ready**. Wenn du Ready bearbeitest und speicherst, entsteht eine User-Kopie; Werk-Zeilen werden nie überschrieben oder gelöscht. Die Leiste zeigt **(unsaved)**, sobald das aktuelle Rig vom geladenen Preset abweicht, und wird wieder sauber, sobald das Rig wieder übereinstimmt. Die fest angeheftete Zeile **Default (factory settings)** setzt den fokussierten Amp oberhalb der Bereiche Factory und User auf seine Auslieferungswerte zurück.
+Presets sind pro Amp: Jeder Amp (Werk oder eigen) hat seine eigene User-Liste. Die Leiste zeigt **(unsaved)**, sobald das aktuelle Rig vom geladenen Preset abweicht, und wird wieder sauber, sobald das Rig wieder übereinstimmt. Die fest angeheftete Zeile **Default (factory settings)** setzt den fokussierten Amp oberhalb der Bereiche Factory und User auf seine Auslieferungswerte zurück.
+
+## PLAY-Ansicht
+
+Wenn die Sounds in BUILD stehen, wechsle zu PLAY und weise sie Programmnummern zu. Derselbe Umschalter zeigt in PLAY die Fader.
+
+![VoLum PLAY leere Leiste](user-guide-play-empty.png)
+
+Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Produkt. Der aktuelle Amp liegt weiterhin dahinter. **+ Add this sound** schreibt das Gehörte auf die nächste freie Programmnummer, sobald es ein User-Sound ist. Factory, Default oder ein unbenanntes Rig öffnet zuerst ein Namensfeld; Default tut das immer, ein schmutziges Factory ebenfalls.
+
+![VoLum PLAY Add-Sound-Wähler](user-guide-play-picker.png)
+
+**Add Sound** öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Ein `+` oder `-` links an der Überschrift zeigt, dass der Abschnitt aufklappt. Weise **Ready** oder ein User-Preset zu, das du in BUILD gespeichert hast.
+
+![VoLum PLAY-Board](user-guide-play.png)
+
+Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** schreibt das aktuelle Rig in einen Sound und ändert keine Programmnummern: ein schmutziges User-Preset wird überschrieben. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab.
+
+Dieselbe **+**-Schaltfläche ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Sie ist **Add Sound**, wenn der aktuelle Sound bereits sauber zugewiesen ist.
+
+`Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Slot und rufen ihn auf. Die Tasten `1` bis `8` schalten die acht Stomps von links nach rechts. Leere Programmnummern werden übersprungen, ebenso Zuweisungen, deren Amp oder Preset fehlt; die Liste läuft an beiden Enden um.
+
+Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Klick umgeht, Rechtsklick springt nach BUILD mit dieser Karte. Ein leerer NAM-Slot nimmt keinen Bypass-Klick. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet. MIDI-Hörkanal und AU `aufx` → `aumf` stehen unter Einstellungen → MIDI Program Change.
 
 ## Eigene Inhalte (Bring Your Own)
 

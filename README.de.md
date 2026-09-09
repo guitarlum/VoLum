@@ -3,10 +3,6 @@
 # VoLum
 
 <p align="center">
-  <img src="docs/user-guide-play.png" alt="VoLum PLAY-Board" width="820">
-</p>
-
-<p align="center">
   <img src="docs/user-guide-main.png" alt="VoLum BUILD-Editor" width="820">
 </p>
 
@@ -16,7 +12,7 @@ VoLum ist eine Open-Source-Gitarren-Amp-Sammlung für Bühne, Studio und Übungs
 
 ## Was VoLum Besonders Macht
 
-- **PLAY und BUILD in einem Fenster:** PLAY ist die Bühnen-Setlist aus Sounds; BUILD ist der Editor. Jeder mitgelieferte Amp bringt ein Factory-**Ready**-Snapshot mit, das du zuweisen kannst, ohne vorher zu speichern.
+- **Erst BUILD, dann PLAY in einem Fenster:** BUILD ist der Editor. PLAY ist die Bühnen-Setlist. Jeder mitgelieferte Amp bringt ein Factory-**Ready**-Snapshot mit, das du zuweisen kannst, ohne vorher zu speichern.
 - **MIDI Program Change:** 128 Slots, dieselbe Liste wie in PLAY. Kein Learn, kein CC — Sound wählen, Programmnummer senden.
 - **POST-Chorus:** vier Stimmen sitzen vor dem Delay, die Modulation trifft den Amp also vor Wiederholungen und Raum.
 - **Eine Pack-Datei:** ein `.volumpack` sichert, zieht um oder teilt die eigene Bibliothek (Amps, IRs, Pedale, Presets) in einem Schritt.
@@ -119,6 +115,14 @@ VoLum bietet derzeit keinen nativen Linux-Build an. Einige Nutzer haben berichte
 | THC Sunset | 5 |
 
 Jeder Amp enthält die Speaker-Modi `AMP`, `G12`, `G65` und `V30`.
+
+## PLAY
+
+Sobald ein Sound in BUILD steht, wechsle zu PLAY und weise Ready oder deine User-Presets Programmnummern zu. Das Board ist die Setlist: eine Zeile anklicken ruft sie auf, oder sende MIDI Program Change.
+
+<p align="center">
+  <img src="docs/user-guide-play.png" alt="VoLum PLAY-Board" width="820">
+</p>
 
 ## Mehr Erfahren
 

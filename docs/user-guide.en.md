@@ -6,22 +6,24 @@ This guide explains the current VoLum interface after installation. For download
 
 ## Contents
 
-- [Main View](#main-view)
-- [PLAY View](#play-view)
+- [BUILD](#build)
 - [Choose An Amp](#choose-an-amp)
 - [PRE Section](#pre-section)
 - [Dual Amp](#dual-amp)
 - [POST Section](#post-section)
 - [Presets](#presets)
+- [PLAY View](#play-view)
 - [Custom Content (Bring Your Own)](#custom-content-bring-your-own)
 - [Tuner And Metronome](#tuner-and-metronome)
 - [Keyboard Controls](#keyboard-controls)
 - [Settings And Safety](#settings-and-safety)
 - [Report A Bug Or Request A Feature](#report-a-bug-or-request-a-feature)
 
-## Main View
+## BUILD
 
-![VoLum main view](user-guide-main.png)
+![VoLum BUILD editor](user-guide-main.png)
+
+BUILD is the editor. Dial the amp, pedals, and a named preset here, then switch to PLAY to put those Sounds on the stage.
 
 1. **Amp browser:** choose one of the bundled amps.
 2. **Amp panel:** see the focused amp. In Dual Amp mode it splits into MAIN and SUPPORT.
@@ -30,31 +32,11 @@ This guide explains the current VoLum interface after installation. For download
 5. **PRE | AMP | POST strip:** open one section at a time.
 6. **Toolbar:** PLAY/BUILD, tuner, metronome, and settings live in the top-right corner.
 
+The header toggle next to tuner, metronome, and Settings always shows the **other** mode (the stomp ring while you are in BUILD, faders while you are in PLAY). In BUILD the preset name sits in the center; in PLAY that slot stays empty. Hover says where the click goes. Each plug-in instance remembers its mode in the project; a new insert starts in BUILD and does not follow the standalone window. The standalone app remembers its last mode. Entering PLAY never recalls or changes a sound. PRE/POST lock is BUILD-only and drops when you enter PLAY.
+
 The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. Every bundled amp, cab, and PRE NAM capture is a NAM Architecture 2 (A2) profile, trained to its best fit between 700 and 1200 epochs. VoLum plays the full A2 slice by default; the optional Lite mode is described under Settings.
 
 VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
-
-## PLAY View
-
-Use the header toggle next to tuner, metronome, and Settings to move between the stage and the editor: it always shows the **other** mode (faders while you are in PLAY, the stomp ring while you are in BUILD). In BUILD the preset name sits in the center; in PLAY that slot stays empty. Hover says where the click goes. Each plug-in instance remembers its mode in the project; a new insert starts in BUILD and does not follow the standalone window. The standalone app remembers its last mode. Entering PLAY never recalls or changes a sound. PRE/POST lock is BUILD-only and drops when you enter PLAY.
-
-![VoLum PLAY empty board](user-guide-play-empty.png)
-
-A first visit with no Sounds assigned is an empty setlist, not an empty product. The live amp is still behind it. **+ Add this sound** writes what you hear onto the next free program number once it is a User Sound. Factory, Default, or an unnamed rig opens a name popup first; Default always does, and a dirty Factory does too.
-
-![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
-
-**Add Sound** opens the picker. Pick the program number (next free by default, `0`–`127`; an occupied number replaces that Sound), then a Factory or User preset. Factory and User sections start open if only one exists, both collapsed if both exist, and then remember what you opened. A `+` or `-` on the left of each heading shows that the section expands. Every bundled amp has one read-only Factory preset named **Ready**; User presets stay editable in BUILD.
-
-![VoLum PLAY board](user-guide-play.png)
-
-Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** writes the live rig into a Sound and never moves program numbers: a dirty User preset overwrites in place. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot.
-
-The same **+** control is **Add this sound** when the live rig is not already on the rail (or a dirty Factory/Default still needs saving). It is **Add Sound** when the live Sound is already assigned and clean.
-
-`Up` / `Down` and `Left` / `Right` step to the previous or next assigned slot and recall it. Keys `1` through `8` toggle the eight stomps left to right. Empty program numbers are skipped, as are assignments whose amp or preset is missing, and the list wraps at both ends.
-
-The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel and AU `aufx` → `aumf` are under Settings → MIDI Program Change.
 
 ## Choose An Amp
 
@@ -180,12 +162,36 @@ Switching Chorus voice, Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice cl
 
 A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, channel, all knobs, PRE pedals, POST effects, and the Dual Amp setup.
 
+Every factory amp ships one read-only Factory preset named **Ready**. That is the noon snapshot: you can assign it in PLAY without saving first. Editing Ready and saving creates a User copy; Factory rows are never overwritten or deleted.
+
 1. Dial in a tone, then open the preset bar in the AMP header.
 2. Use **Save current as new** to store it under a name.
 3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
 4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
 
-Presets are per amp: each amp (factory or custom) keeps its own User list. Every factory amp also has one read-only Factory preset named **Ready**. Editing Ready and saving creates a User copy; Factory rows are never overwritten or deleted. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
+Presets are per amp: each amp (factory or custom) keeps its own User list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
+
+## PLAY View
+
+When the tones exist in BUILD, switch to PLAY and assign them to program numbers. Use the same header toggle: it shows faders while you are in PLAY.
+
+![VoLum PLAY empty board](user-guide-play-empty.png)
+
+A first visit with no Sounds assigned is an empty setlist, not an empty product. The live amp is still behind it. **+ Add this sound** writes what you hear onto the next free program number once it is a User Sound. Factory, Default, or an unnamed rig opens a name popup first; Default always does, and a dirty Factory does too.
+
+![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
+
+**Add Sound** opens the picker. Pick the program number (next free by default, `0`–`127`; an occupied number replaces that Sound), then a Factory or User preset. Factory and User sections start open if only one exists, both collapsed if both exist, and then remember what you opened. A `+` or `-` on the left of each heading shows that the section expands. Assign **Ready** or a User preset you saved in BUILD.
+
+![VoLum PLAY board](user-guide-play.png)
+
+Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** writes the live rig into a Sound and never moves program numbers: a dirty User preset overwrites in place. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot.
+
+The same **+** control is **Add this sound** when the live rig is not already on the rail (or a dirty Factory/Default still needs saving). It is **Add Sound** when the live Sound is already assigned and clean.
+
+`Up` / `Down` and `Left` / `Right` step to the previous or next assigned slot and recall it. Keys `1` through `8` toggle the eight stomps left to right. Empty program numbers are skipped, as are assignments whose amp or preset is missing, and the list wraps at both ends.
+
+The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel and AU `aufx` → `aumf` are under Settings → MIDI Program Change.
 
 ## Custom Content (Bring Your Own)
 
