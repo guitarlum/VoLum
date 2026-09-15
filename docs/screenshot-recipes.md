@@ -131,7 +131,7 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 | --- | --- | --- | --- |
 | `user-guide-play-empty.png` | Soldano SLO100 (`lastAmpIdx` 13, empty `midiSoundMap`) | no PLAY assignments | canvas: empty click `(10,10)` then toggle `(743, 22)` into PLAY. Fail the shot if **+** is not **+ Add this sound** or if PLAY\|BUILD words are in the header |
 | `user-guide-play-picker.png` | Soldano, after one User Sound is LIVE | map slot 0 to Crunch Rhythm | from the empty board, **+ Add this sound** `(450, 324)` once to put LIVE on the rail, then rail **+ Add Sound** `(803, 301)`. Picker: PROGRAM next-free, User heading `(450, 265)` expanded |
-| `user-guide-play.png` | Soldano SLO100 | slots 0–2 = Crunch Rhythm / Lead Boost / Clean Verb, slot 0 LIVE | canvas toggle `(743, 22)` if you are in BUILD. Fail if **+** is not **+ Add Sound** or if a safety banner is visible |
+| `user-guide-play.png` | Soldano SLO100 | slots 0–2 = Crunch Rhythm / Lead Boost / Clean Verb, slot 0 LIVE | canvas toggle `(743, 22)` if you are in BUILD. Fail if **+** is not **+ Add Sound** or if a safety banner is visible. PLAY IN/OUT should read in the same ballpark as BUILD. Drag a rail row onto another to swap; drop in the gap to slide Sounds along existing program numbers |
 | `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view, **Sunset Crunch**) | none | click **THC Sunset** in the browser (93,565) if the custom amp is focused. Compact pill left of tuner. Fail if NAM 2 is an empty `+` or the preset bar is not Sunset Crunch |
 | `user-guide-settings-signal.png` | any | none | canvas gear `(869, 22)`; Settings opens on the tab it was left on, so click **SIGNAL** `(300, 113)` |
 | `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist (`preset_gone_forever`), so the list shows assigned rows and a red **Invalid slot** | from Settings, click **MIDI** `(450, 113)` |
@@ -156,6 +156,25 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 State deltas are edits to the focused amp's block in `volum-settings.json` between
 launches (close the app, edit the JSON with the same key names shown above, then
 relaunch). Everything else is reachable from the seed with the transient step.
+
+## 3b. PLAY/MIDI drag UAT (1.3.0-round)
+
+Does not recapture a docs PNG. Proves meters plus swap/insert on the live exe
+without writing the real library.
+
+1. `pwsh NeuralAmpModeler/scripts/run-app-win.ps1` (builds and opens the standalone).
+2. Stop that instance, then
+   `pwsh NeuralAmpModeler/scripts/.ui-sandbox-launch.ps1 -Reseed -DocMap`
+   so the three-Sound Soldano map is in `%TEMP%\volum-ui-sandbox`.
+3. Canvas toggle `(743, 22)` into PLAY if the header still shows the PLAY glyph.
+4. Fail if PLAY IN/OUT do not share BUILD's dB ballpark (a −12 dBFS peak should
+   fill most of the ladder, not ~25%).
+5. `pwsh NeuralAmpModeler/scripts/win-drag.ps1` a rail row onto another assigned
+   row: program numbers stay, Sounds swap.
+6. Drag into the gap between two rows: Sounds slide along the existing PCs;
+   holes stay absent.
+7. Settings -> MIDI `(869, 22)` then `(450, 113)` shows the same order after
+   the drag.
 
 ## 4. Verify + restore
 

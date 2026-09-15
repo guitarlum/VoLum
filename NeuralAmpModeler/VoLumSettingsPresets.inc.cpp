@@ -182,6 +182,7 @@ int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
+  _VolumReassignLivePlaySlotAfterSave();
   return idx;
 }
 
@@ -195,6 +196,7 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index)
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
+  _VolumReassignLivePlaySlotAfterSave();
 }
 
 void NeuralAmpModeler::_VolumRecallPreset(int index)
@@ -214,6 +216,7 @@ void NeuralAmpModeler::_VolumRecallUserPreset(int index)
   _VolumClaimPresetOps();
   mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), index);
   volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index); // -> apply hook -> _VolumApplyRecalledPreset
+  _VolumSyncLivePlaySlotFromActivePair();
   _VolumRefreshPresetBar();
   if (GetUI())
     _VolumSyncUiFromState();
@@ -261,6 +264,7 @@ void NeuralAmpModeler::_VolumRecallFactoryPreset()
     return;
   mVolumActivePresetId = preset->id;
   _VolumApplyRecalledPreset(preset->settings);
+  _VolumSyncLivePlaySlotFromActivePair();
   _VolumRefreshPresetBar();
 }
 
@@ -325,18 +329,8 @@ void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after)
   auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog);
   if (!raw)
     return;
-  std::string seed = _VolumMainAmpDisplayName();
-  if (seed.empty())
-    seed = "My preset";
-  raw->As<VoLumNameDialogControl>()->Show(
-    "Save as new preset", "Name this User preset.", seed, [this, after](const std::string& name) {
-      if (_VolumSavePresetAs(name) >= 0 && after)
-        after();
-    });
-}
-
-bool NeuralAmpModeler::_VolumHandleSaveShortcut()
-{
+  std::string currentName;
+  int currentUserIdx = -1;
   if (volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser)
   {
     const auto users = volum::custom::PresetsForOwner(_VolumClaimPresetOps());
@@ -344,11 +338,32 @@ bool NeuralAmpModeler::_VolumHandleSaveShortcut()
     {
       if (volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), i) == mVolumActivePresetId)
       {
-        _VolumOverwritePreset(i);
-        return true;
+        currentName = users[(size_t)i];
+        currentUserIdx = i;
+        break;
       }
     }
   }
+  const std::string seed = volum::SaveDialogSeedName(volum::SaveActionForActivePreset(mVolumActivePresetId), currentName);
+  raw->As<VoLumNameDialogControl>()->Show(
+    "Save preset", "Name this User preset.", seed, [this, after, currentName, currentUserIdx](const std::string& name) {
+      bool ok = false;
+      if (volum::SaveDialogOverwritesCurrent(name, currentName) && currentUserIdx >= 0)
+      {
+        _VolumOverwritePreset(currentUserIdx);
+        ok = true;
+      }
+      else
+        ok = _VolumSavePresetAs(name) >= 0;
+      if (!ok)
+        return;
+      if (after)
+        after();
+    });
+}
+
+bool NeuralAmpModeler::_VolumHandleSaveShortcut()
+{
   _VolumPromptSaveAs();
   return true;
 }

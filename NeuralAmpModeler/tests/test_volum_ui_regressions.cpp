@@ -265,7 +265,9 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   // copy of its own, and the panel is refilled from the live registry.
   RequireContains(layout, "settingsPage->SetMidiSoundMapCallbacks(");
   RequireContains(layout, "settingsPage->SetMidiSoundMapSwap(");
+  RequireContains(layout, "settingsPage->SetMidiSoundMapInsert(");
   RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
+  RequireContains(layout, "pPlugin->_VolumInsertPlaySound(from, before)");
   RequireContains(layout, "pPlugin->_VolumAssignPlaySound(slot, sound)");
   RequireContains(layout, "pPlugin->_VolumClearPlaySound(slot)");
   RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg())");
@@ -321,7 +323,8 @@ TEST_CASE("Settings edits a program number through swap, so no edit can drop a S
 {
   // Settings is not the performance surface, so the number is an editable field.
   // Retyping it routes through SwapMidiSoundSlots: moving onto a free number is a
-  // move, onto an occupied one an exchange. Row-swap drag is gone.
+  // move, onto an occupied one an exchange. Row drag matches PLAY: drop-on swaps,
+  // drop-between inserts among the assigned PCs.
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
 
@@ -333,10 +336,14 @@ TEST_CASE("Settings edits a program number through swap, so no edit can drop a S
 
   RequireContains(tabs, "BeginNumberEntry(kTextRenumber");
   RequireContains(tabs, "mSwap(slot, number)");
-  RequireDoesNotContain(tabs, "mSwap(pressSlot, mSlots[static_cast<size_t>(dropRow)].slot)");
-  RequireDoesNotContain(tabs, "Drag one row onto another");
+  RequireContains(tabs, "const int destSlot = mSlots[static_cast<size_t>(mDropRow)].slot");
+  RequireContains(tabs, "mSwap(fromSlot, destSlot)");
   RequireContains(tabs, "void SetSwapCallback(SwapCallback swap)");
+  RequireContains(tabs, "void SetInsertCallback(InsertCallback insert)");
+  RequireContains(tabs, "CommitMidiDrop(");
+  RequireContains(tabs, "DrawMidiDrop(");
   RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
+  RequireContains(layout, "pPlugin->_VolumInsertPlaySound(from, before)");
 
   RequireContains(tabs, "volum::ParseNumericEntry(str, parsed)");
   RequireContains(tabs, "kNoValIdx");
@@ -424,17 +431,21 @@ TEST_CASE("Every full-canvas overlay is attached above the PLAY/BUILD mode pair"
   RequireDoesNotContain(play, "h.R - 344.f");
 }
 
-TEST_CASE("PLAY assignment is click-only: no row-swap or picker-to-row drag")
+TEST_CASE("PLAY assignment drag swaps or inserts among existing program numbers")
 {
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
 
-  RequireDoesNotContain(play, "using SwapCallback = std::function<void(int, int)>;");
-  RequireDoesNotContain(play, "BeginDrag(DragKind::Row");
-  RequireDoesNotContain(play, "BeginDrag(DragKind::Choice");
-  RequireDoesNotContain(layout, "[this](int a, int b) { _VolumSwapPlaySounds(a, b); }");
+  RequireContains(play, "using SwapCallback = std::function<void(int, int)>;");
+  RequireContains(play, "CommitRailDrop(");
+  RequireContains(play, "DrawRailDrop(");
+  RequireContains(layout, "_VolumSwapPlaySounds(a, b)");
+  RequireContains(layout, "_VolumInsertPlaySound(from, before)");
   RequireContains(runtime, "volum::content::SwapMidiSoundSlots(store.reg(), slotA, slotB)");
+  RequireContains(runtime, "InsertMidiSoundAmongAssigned");
+  RequireContains(runtime, "FollowLiveSlotAfterReorder");
+  RequireContains(runtime, "_VolumSyncLivePlaySlotFromActivePair");
   RequireContains(play, "mRecall(slot.slot, slot.sound);");
   RequireContains(play, "mAddHeard()");
   RequireContains(play, "mod.R");
@@ -447,6 +458,8 @@ TEST_CASE("PLAY assignment is click-only: no row-swap or picker-to-row drag")
   RequireContains(play, "OpenPicker(volum::AddPickerStartSlot(FirstFreeSlot()), true);");
   RequireContains(play, "SetEditSlot(mEditSlot - 1);");
   RequireContains(play, "volum::ParseNumericEntry(str, parsed)");
+  RequireContains(play, "if (number >= 0 && number < volum::kMidiSoundSlotCount)");
+  RequireContains(play, "if (mod.R)");
   RequireContains(play, "kNoValIdx");
   RequireContains(play, "\"replaces \"");
 }
@@ -1141,6 +1154,7 @@ TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the def
   // Second stage: the editor-open consumer drops ids the content store cannot
   // resolve, so a deleted custom amp cannot leave an ownerless preset label.
   RequireContains(plugin, "volum::ValidateRestoreSelection(");
+  RequireContains(plugin, "mVolumLastRecalledPlaySlot = idTail.lastPlaySlot;");
 }
 
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")

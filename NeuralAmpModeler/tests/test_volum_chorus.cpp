@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "../VoLumAmpeteCatalog.h"
 #include "../VoLumChorus.h"
 
 #include <algorithm>
@@ -296,6 +297,13 @@ TEST_CASE("Chorus mode names cover every mode and default safely")
   CHECK(std::string(volum::VoLumChorusModeName(-1)) == "Warped");
   CHECK(std::string(volum::VoLumChorusModeName(999)) == "Warped");
   CHECK(volum::kVoLumChorusModeDefault == volum::kVoLumChorusModeWarped);
+  const auto classic = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeClassic];
+  CHECK(classic.depth == doctest::Approx(0.65));
+  CHECK(classic.mix == doctest::Approx(0.60));
+  CHECK(classic.rate == doctest::Approx(0.45));
+  const auto warped = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeWarped];
+  CHECK(warped.mix == doctest::Approx(0.50));
+  CHECK(warped.depth == doctest::Approx(0.45));
 }
 
 TEST_CASE("Chorus survives an out-of-range mode and degenerate sample rate")

@@ -592,6 +592,72 @@ inline bool SwapMidiSoundSlots(Registry& r, int a, int b)
   return true;
 }
 
+// Rotate assigned Sounds so `fromSlot` lands at the visual index of
+// `beforeSlot`. Program numbers stay; holes stay holes. `beforeSlot` == -1
+// means "after the last assigned PC".
+inline bool InsertMidiSoundAmongAssigned(Registry& r, int fromSlot, int beforeSlot)
+{
+  if (fromSlot < 0 || fromSlot >= kMidiSoundSlotCount)
+    return false;
+  if (beforeSlot != -1 && (beforeSlot < 0 || beforeSlot >= kMidiSoundSlotCount))
+    return false;
+  if (fromSlot == beforeSlot)
+    return true;
+  if (!MidiSoundAtSlot(r, fromSlot))
+    return false;
+
+  std::vector<int> pcs;
+  pcs.reserve(r.midiSoundMap.size());
+  for (const auto& kv : r.midiSoundMap)
+    pcs.push_back(kv.first);
+  std::sort(pcs.begin(), pcs.end());
+
+  const auto fromIt = std::find(pcs.begin(), pcs.end(), fromSlot);
+  if (fromIt == pcs.end())
+    return false;
+  const int fromIndex = static_cast<int>(fromIt - pcs.begin());
+  int destIndex = static_cast<int>(pcs.size());
+  if (beforeSlot >= 0)
+  {
+    const auto beforeIt = std::find(pcs.begin(), pcs.end(), beforeSlot);
+    if (beforeIt == pcs.end())
+      return false;
+    destIndex = static_cast<int>(beforeIt - pcs.begin());
+  }
+  if (fromIndex < destIndex)
+    destIndex -= 1;
+  if (fromIndex == destIndex)
+    return true;
+
+  std::vector<MidiSoundAssignment> sounds;
+  sounds.reserve(pcs.size());
+  for (int pc : pcs)
+    sounds.push_back(r.midiSoundMap[pc]);
+  const MidiSoundAssignment moving = sounds[static_cast<size_t>(fromIndex)];
+  sounds.erase(sounds.begin() + fromIndex);
+  sounds.insert(sounds.begin() + destIndex, moving);
+  for (size_t i = 0; i < pcs.size(); ++i)
+    r.midiSoundMap[pcs[i]] = sounds[i];
+  return true;
+}
+
+inline int FollowLiveSlotAfterReorder(const std::map<int, MidiSoundAssignment>& before,
+                                      const std::map<int, MidiSoundAssignment>& after, int lastSlot)
+{
+  if (lastSlot < 0)
+    return lastSlot;
+  const auto it = before.find(lastSlot);
+  if (it == before.end())
+    return lastSlot;
+  const auto now = after.find(lastSlot);
+  if (now != after.end() && now->second.ampId == it->second.ampId && now->second.presetId == it->second.presetId)
+    return lastSlot;
+  for (const auto& kv : after)
+    if (kv.second.ampId == it->second.ampId && kv.second.presetId == it->second.presetId)
+      return kv.first;
+  return lastSlot;
+}
+
 // ---------------------------------------------------------------------------
 // id minting
 // ---------------------------------------------------------------------------
@@ -890,7 +956,13 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
       // as no entry at all; keeping it would only make an empty map look busy.
       if (a.ampId.empty() && a.presetId.empty())
         continue;
-      r.midiSoundMap[e["slot"].get<int>()] = std::move(a);
+      const int slot = e["slot"].get<int>();
+      if (slot < 0 || slot >= kMidiSoundSlotCount)
+      {
+        h = true;
+        continue;
+      }
+      r.midiSoundMap[slot] = std::move(a);
     }
   }
 
@@ -1656,6 +1728,8 @@ public:
   void SetMidiSlot(int slot, const std::string& ampId, const std::string& presetId)
   {
     std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    if (slot < 0 || slot >= kMidiSoundSlotCount)
+      return;
     if (ampId.empty() && presetId.empty())
     {
       mReg.midiSoundMap.erase(slot);

@@ -16,7 +16,11 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   volum::ChunkIdTail tail;
   CHECK(tail.uiMode == "build");
   tail.uiMode = "play";
+  tail.lastPlaySlot = 7;
   CHECK(volum::IdTailFromJson(volum::IdTailToJson(tail)).uiMode == "play");
+  CHECK(volum::IdTailFromJson(volum::IdTailToJson(tail)).lastPlaySlot == 7);
+  tail.lastPlaySlot = -1;
+  CHECK(volum::IdTailFromJson(volum::IdTailToJson(tail)).lastPlaySlot == -1);
   nlohmann::json oldTail = nlohmann::json::object();
   CHECK(volum::IdTailFromJson(oldTail).uiMode == "build");
   nlohmann::json standalone = {{"volumUiMode", "play"}};
@@ -42,6 +46,11 @@ TEST_CASE("PLAY stomps own exactly the eight performance bypass parameters")
                                                "ChorusActive",   "DelayActive",   "ReverbActive",  "TremoloActive"};
   for (size_t i = 0; i < expected.size(); ++i)
     CHECK(volum::kPlayBypassParamNames[i] == expected[i]);
+  CHECK(volum::PlayStompCanBypass(0, 0, 0));
+  CHECK(volum::PlayStompCanBypass(2, 4, 0));
+  CHECK_FALSE(volum::PlayStompCanBypass(2, 0, 4));
+  CHECK(volum::PlayStompCanBypass(3, 0, 2));
+  CHECK_FALSE(volum::PlayStompCanBypass(3, 4, 0));
 }
 
 TEST_CASE("PLAY bypass edits make a recalled snapshot dirty")
@@ -75,6 +84,63 @@ TEST_CASE("midiSoundMap is ordered, replaceable, clearable, and persistent")
   CHECK(volum::content::FirstFreeMidiSoundSlot(registry) == 0);
 }
 
+TEST_CASE("Insert among assigned PCs keeps the numbers and slides the Sounds")
+{
+  volum::content::Registry registry;
+  REQUIRE(volum::content::AssignMidiSound(registry, 0, "factory:0", "a"));
+  REQUIRE(volum::content::AssignMidiSound(registry, 2, "factory:1", "b"));
+  REQUIRE(volum::content::AssignMidiSound(registry, 5, "factory:2", "c"));
+  CHECK(volum::content::InsertMidiSoundAmongAssigned(registry, 5, 2));
+  CHECK(registry.midiSoundMap.at(0).presetId == "a");
+  CHECK(registry.midiSoundMap.at(2).presetId == "c");
+  CHECK(registry.midiSoundMap.at(5).presetId == "b");
+  CHECK(registry.midiSoundMap.count(1) == 0);
+  CHECK(volum::content::SwapMidiSoundSlots(registry, 0, 2));
+  CHECK(registry.midiSoundMap.at(0).presetId == "c");
+  CHECK(registry.midiSoundMap.at(2).presetId == "a");
+
+  volum::content::Registry dense;
+  REQUIRE(volum::content::AssignMidiSound(dense, 0, "factory:0", "a"));
+  REQUIRE(volum::content::AssignMidiSound(dense, 1, "factory:1", "b"));
+  REQUIRE(volum::content::AssignMidiSound(dense, 2, "factory:2", "c"));
+  REQUIRE(volum::content::AssignMidiSound(dense, 3, "factory:3", "d"));
+  const auto beforeDense = dense.midiSoundMap;
+  CHECK(volum::content::InsertMidiSoundAmongAssigned(dense, 3, 0));
+  CHECK(dense.midiSoundMap.at(0).presetId == "d");
+  CHECK(dense.midiSoundMap.at(1).presetId == "a");
+  CHECK(dense.midiSoundMap.at(2).presetId == "b");
+  CHECK(dense.midiSoundMap.at(3).presetId == "c");
+  CHECK(dense.midiSoundMap.size() == 4);
+  CHECK(volum::content::FollowLiveSlotAfterReorder(beforeDense, dense.midiSoundMap, 0) == 1);
+  CHECK(volum::content::FollowLiveSlotAfterReorder(beforeDense, dense.midiSoundMap, -1) == -1);
+}
+
+TEST_CASE("MIDI JSON drops out-of-range slots and keeps amp-only rows")
+{
+  nlohmann::json j = {{"version", 4},
+                      {"midiSoundMap", nlohmann::json::array({
+                                         {{"slot", 3}, {"ampId", "factory:1"}, {"presetId", "factory:1:v1"}},
+                                         {{"slot", 200}, {"ampId", "factory:2"}, {"presetId", "factory:2:v1"}},
+                                         {{"slot", 4}, {"ampId", "factory:3"}, {"presetId", ""}},
+                                       })}};
+  bool healed = false;
+  const auto r = volum::content::RegistryFromJson(j, &healed);
+  CHECK(healed);
+  CHECK(r.midiSoundMap.count(3) == 1);
+  CHECK(r.midiSoundMap.count(200) == 0);
+  CHECK(r.midiSoundMap.count(4) == 1);
+  CHECK(r.midiSoundMap.at(4).presetId.empty());
+}
+
+TEST_CASE("Save dialog seed is New Preset or the current User name")
+{
+  CHECK(volum::SaveDialogSeedName(volum::PresetSaveAction::SaveUserCopy, "Lead")
+        == std::string(volum::kSaveDialogNewPresetSeed));
+  CHECK(volum::SaveDialogSeedName(volum::PresetSaveAction::OverwriteUser, "Lead") == "Lead");
+  CHECK(volum::SaveDialogOverwritesCurrent("Lead", "Lead"));
+  CHECK_FALSE(volum::SaveDialogOverwritesCurrent("Other", "Lead"));
+}
+
 TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC order")
 {
   const auto factory = volum::DefaultFactoryPresets();
@@ -91,6 +157,8 @@ TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC
   CHECK(slots[1].slot == 9);
   CHECK_FALSE(slots[1].valid);
   CHECK(slots[1].sound.presetName == "Invalid slot");
+  CHECK(volum::FindAssignedSlot(slots, "factory:7", "factory:7:v1") == 2);
+  CHECK(volum::FindAssignedSlot(slots, "missing-amp", "missing-preset") == -1);
 }
 
 TEST_CASE("User Sounds on a factory amp keep that amp's fractal art")

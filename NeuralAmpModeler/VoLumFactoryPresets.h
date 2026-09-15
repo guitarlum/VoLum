@@ -70,6 +70,20 @@ inline PresetSaveAction SaveActionForActivePreset(const std::string& id)
   return (id.empty() || IsFactoryPresetId(id)) ? PresetSaveAction::SaveUserCopy : PresetSaveAction::OverwriteUser;
 }
 
+inline constexpr const char* kSaveDialogNewPresetSeed = "New Preset";
+
+inline std::string SaveDialogSeedName(PresetSaveAction action, const std::string& currentUserName)
+{
+  if (action == PresetSaveAction::OverwriteUser && !currentUserName.empty())
+    return currentUserName;
+  return kSaveDialogNewPresetSeed;
+}
+
+inline bool SaveDialogOverwritesCurrent(const std::string& typedName, const std::string& currentUserName)
+{
+  return !currentUserName.empty() && typedName == currentUserName;
+}
+
 inline std::vector<FactoryPreset> DefaultFactoryPresets()
 {
   std::vector<FactoryPreset> out;

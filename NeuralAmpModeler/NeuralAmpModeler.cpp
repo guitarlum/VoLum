@@ -1136,6 +1136,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;
   idTail.uiMode = volum::UiModeToString(mVolumUiMode);
+  idTail.lastPlaySlot = mVolumLastRecalledPlaySlot;
   auto pitchTailFromSettings = [](const volum::VoLumAmpSettings& s) {
     volum::PitchTail p;
     p.present = true;
@@ -1311,20 +1312,30 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
   if (mVolumRestorePresetId.empty())
     return;
   volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
-  const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
-  auto it = banks.find(_VolumActiveOwnerKey());
-  if (it != banks.end())
-    for (const auto& pr : it->second)
-      if (pr.id == mVolumRestorePresetId)
-      {
-        mVolumActivePresetId = pr.id;
-        // Baseline = the preset's stored content, so a reopen with unsaved edits
-        // correctly reads dirty (see _VolumRefreshPresetBar -> _VolumRecomputePresetDirty).
-        mVolumRecalledSnapshot = pr.settings;
-        mVolumHasRecalledSnapshot = true;
-        _VolumRememberActivePreset();
-        break;
-      }
+  if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, mVolumRestorePresetId))
+  {
+    mVolumActivePresetId = factory->id;
+    mVolumRecalledSnapshot = factory->settings;
+    mVolumHasRecalledSnapshot = true;
+    _VolumRememberActivePreset();
+  }
+  else
+  {
+    const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+    auto it = banks.find(_VolumActiveOwnerKey());
+    if (it != banks.end())
+      for (const auto& pr : it->second)
+        if (pr.id == mVolumRestorePresetId)
+        {
+          mVolumActivePresetId = pr.id;
+          // Baseline = the preset's stored content, so a reopen with unsaved edits
+          // correctly reads dirty (see _VolumRefreshPresetBar -> _VolumRecomputePresetDirty).
+          mVolumRecalledSnapshot = pr.settings;
+          mVolumHasRecalledSnapshot = true;
+          _VolumRememberActivePreset();
+          break;
+        }
+  }
   mVolumRestorePresetId.clear();
   _VolumRefreshPresetBar();
 }
@@ -2472,7 +2483,7 @@ void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPoint
       for (size_t i = 0; i < nFrames; ++i)
         peak = std::max(peak, std::fabs(static_cast<float>(inputPointer[0][i])));
     }
-    mVolumPlayInPeak.store(std::min(peak, 1.f), std::memory_order_relaxed);
+    mVolumPlayInPeak.store(volum::MeterNormFromLinear(peak), std::memory_order_relaxed);
   }
   {
     float peak = 0.f;
@@ -2481,7 +2492,7 @@ void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPoint
       for (size_t i = 0; i < nFrames; ++i)
         peak = std::max(peak, std::fabs(static_cast<float>(outputPointer[0][i])));
     }
-    mVolumPlayOutPeak.store(std::min(peak, 1.f), std::memory_order_relaxed);
+    mVolumPlayOutPeak.store(volum::MeterNormFromLinear(peak), std::memory_order_relaxed);
   }
   // L (channel 0) goes to the primary OUT meter.
   mOutputSender.ProcessBlock(outputPointer, (int)nFrames, kCtrlTagOutputMeter, nChansHack);

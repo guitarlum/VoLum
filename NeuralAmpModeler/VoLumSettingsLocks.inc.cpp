@@ -298,6 +298,19 @@ void NeuralAmpModeler::_VolumSaveEffectSettings()
 
 void NeuralAmpModeler::_VolumRestoreEffectSettings()
 {
+  struct PostRestoreGuard
+  {
+    bool& flag;
+    bool prev;
+    explicit PostRestoreGuard(bool& f)
+    : flag(f)
+    , prev(f)
+    {
+      flag = true;
+    }
+    ~PostRestoreGuard() { flag = prev; }
+  } postGuard(mVolumPostRestoreInProgress);
+
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
@@ -311,6 +324,7 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
   _VolumRestoreReverbModeSnapshot(std::clamp(fx.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   setParam(kTremoloMode, fx.tremoloMode);
   _VolumRestoreTremoloModeSnapshot(std::clamp(fx.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1));
+  setParam(kChorusActive, GetParam(kChorusActive)->Value());
   setParam(kChorusMode, fx.chorusMode);
   _VolumRestoreChorusModeSnapshot(std::clamp(fx.chorusMode, 0, volum::kVoLumChorusModeCount - 1));
   _UpdateVoLumLayout();

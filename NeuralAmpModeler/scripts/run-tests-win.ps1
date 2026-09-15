@@ -61,10 +61,17 @@ if ($env:GITHUB_ACTIONS -eq "true") {
 }
 if (-not $msbuild) {
   $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-  if (-not (Test-Path $vswhere)) {
-    Write-Error "vswhere.exe not found. Install Visual Studio Build Tools."
+  if (Test-Path $vswhere) {
+    $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
   }
-  $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+  if (-not $msbuild) {
+    foreach ($cand in @(
+        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+        "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+      )) {
+      if (Test-Path -LiteralPath $cand) { $msbuild = $cand; break }
+    }
+  }
 }
 if (-not $msbuild) {
   Write-Error "MSBuild.exe not found."

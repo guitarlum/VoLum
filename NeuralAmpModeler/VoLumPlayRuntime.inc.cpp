@@ -32,11 +32,18 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
       menu->Hide(true);
     if (auto* overlay = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
       overlay->Hide(true);
+    if (mode == volum::UiMode::Play)
+    {
+      _ClearVoLumKnobSelection();
+      if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+        surface->As<VoLumPlaySurfaceControl>()->ClosePicker();
+    }
     pGfx->SetAllControlsDirty();
   }
 #ifdef APP_API
   mVolumSettingsDirty = true;
 #endif
+  DirtyParametersFromUI();
   if (mode == volum::UiMode::Play && transition == volum::UiModeTransitionAction::RefreshOnly)
     _VolumRefreshPlaySurface();
   else
@@ -107,6 +114,42 @@ void NeuralAmpModeler::_VolumClearPlaySound(int slot)
   _VolumRefreshMidiSettingsChrome();
 }
 
+void NeuralAmpModeler::_VolumSyncLivePlaySlotFromActivePair()
+{
+  const int found = volum::FindAssignedSlot(
+    volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()), _VolumActiveOwnerKey(),
+    mVolumActivePresetId);
+  if (found >= 0)
+    mVolumLastRecalledPlaySlot = found;
+}
+
+void NeuralAmpModeler::_VolumReassignLivePlaySlotAfterSave()
+{
+  if (mVolumLastRecalledPlaySlot < 0 || mVolumActivePresetId.empty())
+    return;
+  if (!volum::content::MidiSoundAtSlot(volum::content::GlobalContentStore().reg(), mVolumLastRecalledPlaySlot))
+    return;
+  _VolumAssignPlaySound(mVolumLastRecalledPlaySlot,
+                        {_VolumActiveOwnerKey(), mVolumActivePresetId, {}, {}, false, 0, false});
+}
+
+void NeuralAmpModeler::_VolumInsertPlaySound(int fromSlot, int beforeSlot)
+{
+  auto& store = volum::content::GlobalContentStore();
+  const auto before = store.reg().midiSoundMap;
+  if (!volum::content::InsertMidiSoundAmongAssigned(store.reg(), fromSlot, beforeSlot))
+    return;
+  if (!store.Save())
+  {
+    store.reg().midiSoundMap = before;
+    return;
+  }
+  mVolumLastRecalledPlaySlot =
+    volum::content::FollowLiveSlotAfterReorder(before, store.reg().midiSoundMap, mVolumLastRecalledPlaySlot);
+  _VolumRefreshPlaySurface();
+  _VolumRefreshMidiSettingsChrome();
+}
+
 void NeuralAmpModeler::_VolumSwapPlaySounds(int slotA, int slotB)
 {
   auto& store = volum::content::GlobalContentStore();
@@ -118,12 +161,8 @@ void NeuralAmpModeler::_VolumSwapPlaySounds(int slotA, int slotB)
     store.reg().midiSoundMap = before;
     return;
   }
-  // LIVE follows the Sound: the program number that now holds the recalled
-  // assignment is the one the highlight has to sit on.
-  if (mVolumLastRecalledPlaySlot == slotA)
-    mVolumLastRecalledPlaySlot = slotB;
-  else if (mVolumLastRecalledPlaySlot == slotB)
-    mVolumLastRecalledPlaySlot = slotA;
+  mVolumLastRecalledPlaySlot =
+    volum::content::FollowLiveSlotAfterReorder(before, store.reg().midiSoundMap, mVolumLastRecalledPlaySlot);
   _VolumRefreshPlaySurface();
   _VolumRefreshMidiSettingsChrome();
 }
@@ -149,13 +188,12 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
   for (size_t i = 0; i < fx.size(); ++i)
     fx[i] = paramBool(volum::kPlayBypassParamNames[i]);
 
-  // A PRE NAM slot with no capture loaded is armed but silent, so the board
-  // greys it out the way BUILD leaves the row unnamed. Everything else on the
-  // board always has something to bypass.
+  // NAM wells are available when a capture is assigned, even if bypass has
+  // unloaded the model. Empty slots stay veiled and ignore click / 3 / 4.
   std::array<bool, VoLumPlaySurfaceControl::FxCount> fxAvailable{};
   fxAvailable.fill(true);
-  fxAvailable[VoLumPlaySurfaceControl::Nam1] = mPreModel[0] != nullptr;
-  fxAvailable[VoLumPlaySurfaceControl::Nam2] = mPreModel[1] != nullptr;
+  fxAvailable[VoLumPlaySurfaceControl::Nam1] = volum::PlayNamCaptureAssigned(GetParam(kPreNam1Capture)->Int());
+  fxAvailable[VoLumPlaySurfaceControl::Nam2] = volum::PlayNamCaptureAssigned(GetParam(kPreNam2Capture)->Int());
 
   const bool dual = GetParam(kDualAmpActive)->Bool() && _VolumHasSupportAmp();
   std::string supportName;
@@ -199,6 +237,12 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
 void NeuralAmpModeler::_VolumAddHeardPlaySound()
 {
   auto finish = [this]() {
+    if (volum::SoundIsAssigned(volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()),
+                               _VolumActiveOwnerKey(), mVolumActivePresetId))
+    {
+      _VolumRefreshPlaySurface();
+      return;
+    }
     auto& store = volum::content::GlobalContentStore();
     const int slot = volum::content::FirstFreeMidiSoundSlot(store.reg());
     if (!volum::AddHeardMarksLive(slot, mVolumActivePresetId.empty()))
@@ -267,6 +311,7 @@ bool NeuralAmpModeler::VolumRecallSound(const std::string& ampId, const std::str
 
   mVolumActivePresetId = resolved.presetId;
   _VolumApplyRecalledPreset(*settings);
+  _VolumSyncLivePlaySlotFromActivePair();
 
   _VolumSyncUiFromState();
   _VolumRefreshPresetBar();

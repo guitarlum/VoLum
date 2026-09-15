@@ -80,16 +80,14 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   // When the rig is dirty, offer a one-click save path right in the dropdown:
   // overwrite the active named preset, or (no named preset / on Default) save a
   // new one. Saves opening the Manage panel just to commit a tweak.
-  if (dirty)
-  {
-    const int activeUserIdx = activePresetIdx - (hasFactory ? 1 : 0);
-    if (volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
-        && activeUserIdx >= 0 && activeUserIdx < (int)presets.size())
-      rows.push_back(
-        {"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});
-    else
-      rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
-  }
+  const int activeUserIdx = activePresetIdx - (hasFactory ? 1 : 0);
+  const bool userActive = volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
+                          && activeUserIdx >= 0 && activeUserIdx < (int)presets.size();
+  if (userActive)
+    rows.push_back(
+      {"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});
+  if (dirty || userActive)
+    rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
   rows.push_back({"Manage presets...", VoLumListMenuControl::kManage, true, false});
 
   auto* menu = raw->As<VoLumListMenuControl>();

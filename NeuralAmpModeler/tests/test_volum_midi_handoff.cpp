@@ -134,6 +134,7 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapSwap") != std::string::npos);
+  CHECK(controls.find("SetMidiSoundMapInsert") != std::string::npos);
   CHECK(controls.find("void SetMidiChannel(int channel)") != std::string::npos);
   CHECK(controls.find("void SetMidiSoundMap(") != std::string::npos);
   // The pre-1.3.0 duplicate-list control stays gone.

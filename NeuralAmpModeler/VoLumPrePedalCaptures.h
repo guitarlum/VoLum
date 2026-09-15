@@ -120,4 +120,10 @@ inline bool ShouldLoadPrePedalCapture(bool active, int captureIdx)
   return active && captureIdx > kPreCaptureEmptyIndex;
 }
 
+// PLAY availability: a capture is on the slot even when bypass has unloaded it.
+inline bool PlayNamCaptureAssigned(int captureIdx)
+{
+  return captureIdx > kPreCaptureEmptyIndex;
+}
+
 } // namespace volum

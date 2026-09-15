@@ -188,7 +188,7 @@ struct ChorusModeSnapshot
 // per-amp scene, the live effect-settings working copy and the chunk id tail all
 // seed from here so a "reset to defaults" lands on the same row everywhere.
 inline constexpr ChorusModeSnapshot kVoLumChorusModeDefaults[kVoLumChorusModeCount] = {
-  ChorusModeSnapshot{0.45, 0.40, 0.55, 0.60, 0.45}, // Classic: quicker, brighter, modest blend
+  ChorusModeSnapshot{0.45, 0.65, 0.55, 0.60, 0.60}, // Classic: quicker, brighter, first-listen blend
   ChorusModeSnapshot{0.35, 0.45, 0.40, 0.70, 0.50}, // Warped: slow, dark, wide
   ChorusModeSnapshot{0.40, 0.35, 0.70, 0.65, 0.40}, // Clear: shallow and transparent
   ChorusModeSnapshot{0.28, 0.55, 0.50, 0.80, 0.55}, // Ensemble: slowest, deepest, widest

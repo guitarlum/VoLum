@@ -83,15 +83,27 @@ inline bool PlayBranchConsumes(bool /*ctrl*/, bool arrow, bool stompDigit)
   return arrow || stompDigit;
 }
 
-// Keys that would edit the hidden BUILD rig (cab, Dual Amp, section focus).
-// T/M/H and Ctrl+S must still reach the shared handler.
+// Keys that would edit the hidden BUILD rig (cab, Dual Amp, section focus,
+// selected-knob reset / exact entry). T/M/H and Ctrl+S must still reach the
+// shared handler. 8 / 13 / 0x2E are iPlug kVK_BACK / kVK_RETURN / kVK_DELETE.
 inline bool PlaySwallowsHiddenBuildEdit(bool ctrl, int vk)
 {
   if (ctrl && (vk == 's' || vk == 'S'))
     return false;
   if (vk == 't' || vk == 'T' || vk == 'm' || vk == 'M' || vk == 'h' || vk == 'H')
     return false;
-  return vk == 's' || vk == 'S' || vk == '\t' || vk == ' ' || vk == 'b' || vk == 'B';
+  return vk == 's' || vk == 'S' || vk == '\t' || vk == ' ' || vk == 'b' || vk == 'B' || vk == 8 || vk == 13
+         || vk == 0x2E;
+}
+
+// Stomps 1-8: NAM wells (indices 2 and 3) need a capture. Off still counts.
+inline bool PlayStompCanBypass(int stompIndex, int nam1Capture, int nam2Capture)
+{
+  if (stompIndex == 2)
+    return nam1Capture > 0;
+  if (stompIndex == 3)
+    return nam2Capture > 0;
+  return stompIndex >= 0 && stompIndex < 8;
 }
 
 // Add opens the picker on the first free program number. When every number is
@@ -301,6 +313,14 @@ inline std::vector<PlaySlot> BuildPlaySlots(const std::vector<FactoryPreset>& fa
   return out;
 }
 
+inline int FindAssignedSlot(const std::vector<PlaySlot>& slots, const std::string& ampId, const std::string& presetId)
+{
+  for (const auto& slot : slots)
+    if (slot.valid && slot.sound.ampId == ampId && slot.sound.presetId == presetId)
+      return slot.slot;
+  return -1;
+}
+
 inline bool SoundIsAssigned(const std::vector<PlaySlot>& slots, const std::string& ampId, const std::string& presetId)
 {
   for (const auto& slot : slots)
@@ -323,9 +343,9 @@ inline bool PlayPlusAddsHeard(bool dirty, bool factoryOrDefaultOrigin, bool live
 // Save As before assign: Factory/Default that is dirty, or Default (empty id)
 // which can never be written to a MIDI slot. Clean Factory Ready can be
 // assigned as-is.
-inline bool AddHeardNeedsSaveAs(PresetSaveAction action, bool dirty, bool presetIdEmpty)
+inline bool AddHeardNeedsSaveAs(PresetSaveAction, bool dirty, bool presetIdEmpty)
 {
-  return action == PresetSaveAction::SaveUserCopy && (dirty || presetIdEmpty);
+  return dirty || presetIdEmpty;
 }
 
 // Add this sound can write a MIDI row only when a User Sound exists and the

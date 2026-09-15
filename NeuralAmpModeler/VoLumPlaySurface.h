@@ -159,6 +159,8 @@ public:
   using BypassCallback = std::function<void(const char*)>;
   using EditInBuildCallback = std::function<void(int)>;
   using AddHeardCallback = std::function<void()>;
+  using SwapCallback = std::function<void(int, int)>;
+  using InsertCallback = std::function<void(int, int)>;
 
   VoLumPlaySurfaceControl(const IRECT& bounds, RecallCallback recall, AssignCallback assign, ClearCallback clear,
                           BypassCallback bypass, EditInBuildCallback edit, AddHeardCallback addHeard)
@@ -180,8 +182,17 @@ public:
     SetDirty(false);
   }
 
+  void ClosePicker()
+  {
+    if (!mPickerOpen)
+      return;
+    mPickerOpen = false;
+    SetDirty(false);
+  }
+
   // Esc closes the picker; arrows and 1-8 stay here so they cannot step the
-  // rail or stomps underneath. T/M/H and Ctrl+S still fall through.
+  // rail or stomps underneath. T/M/H and Ctrl+S still fall through. The
+  // layout skips this when an overlay is open so Settings owns Esc first.
   bool ConsumePlayKey(const IKeyPress& key)
   {
     if (!mPickerOpen)
@@ -201,6 +212,11 @@ public:
   void SetOutPeak(float peak) { mOutPeak = std::clamp(peak, 0.f, 1.f); }
 
   void SetPickerGroups(volum::PickerGroupSession* session) { mPickerGroups = session; }
+  void SetReorderCallbacks(SwapCallback swap, InsertCallback insert)
+  {
+    mSwap = std::move(swap);
+    mInsert = std::move(insert);
+  }
 
   void SetData(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry,
                const std::string& activeAmpId, const std::string& activePresetId, int lastSlot,
@@ -261,9 +277,10 @@ public:
 
   void Tick()
   {
-    mPhase += 0.035f;
+    mPhase += 0.015f;
     if (mPhase > 6.283185f)
       mPhase -= 6.283185f;
+    mLampPeak = volum::PlayLampFollow(mLampPeak, mInPeak);
     SetDirty(false);
   }
 
@@ -343,6 +360,19 @@ public:
       return;
     }
 
+    if (mod.R)
+    {
+      for (int i = 0; i < FxCount; ++i)
+      {
+        if (!FxRect(i).Contains(x, y))
+          continue;
+        if (mEditInBuild)
+          mEditInBuild(static_cast<int>(kStompFocus[static_cast<size_t>(i)]));
+        return;
+      }
+      return;
+    }
+
     const auto railM = RailScrollMetrics();
     const IRECT railTrack = RailTrackRect();
     if (mRailBar.OnDown(x, y, railTrack.L, railTrack.R, railM))
@@ -379,13 +409,11 @@ public:
         return;
       }
       const auto& slot = mSlots[(size_t)row];
-      if (slot.valid)
-      {
-        if (mRecall)
-          mRecall(slot.slot, slot.sound);
-      }
-      else if (!mChoices.empty())
-        OpenPicker(slot.slot, false);
+      mPressRow = row;
+      mPressSlot = slot.slot;
+      mPressX = x;
+      mPressY = y;
+      mDragging = false;
       return;
     }
 
@@ -425,17 +453,56 @@ public:
         mPickerScroll = next;
       SetDirty(false);
     }
-    (void)x;
+    else if (mPressRow >= 0 && !mPickerOpen)
+    {
+      if (!mDragging && (std::abs(x - mPressX) > 6.f || std::abs(y - mPressY) > 6.f))
+        mDragging = true;
+      if (mDragging)
+      {
+        mDragX = x;
+        mDragY = y;
+        UpdateDropTarget(x, y);
+        SetDirty(false);
+      }
+    }
   }
 
-  void OnMouseUp(float, float, const IMouseMod&) override
+  void OnMouseUp(float x, float y, const IMouseMod&) override
   {
     mRailBar.OnUp();
     mPickerBar.OnUp();
+    const int pressRow = mPressRow;
+    const int pressSlot = mPressSlot;
+    const bool wasDrag = mDragging;
+    mPressRow = -1;
+    mPressSlot = -1;
+    mDragging = false;
+    mDropRow = -1;
+    mDropInsert = false;
+    if (pressRow < 0 || pressRow >= static_cast<int>(mSlots.size()))
+      return;
+    if (wasDrag)
+    {
+      CommitRailDrop(pressSlot, x, y);
+      SetDirty(false);
+      return;
+    }
+    if (SlotAt(x, y) != pressRow)
+      return;
+    const auto& slot = mSlots[(size_t)pressRow];
+    if (slot.valid)
+    {
+      if (mRecall)
+        mRecall(slot.slot, slot.sound);
+    }
+    else if (!mChoices.empty())
+      OpenPicker(slot.slot, false);
   }
 
-  void OnMouseDblClick(float x, float y, const IMouseMod&) override
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
+    if (mod.R)
+      return;
     const int row = SlotAt(x, y);
     if (row < 0 || row >= static_cast<int>(mSlots.size()) || mChoices.empty())
       return;
@@ -517,7 +584,11 @@ public:
     // assignment to program 0.
     double parsed = 0.0;
     if (str && volum::ParseNumericEntry(str, parsed))
-      mEditSlot = static_cast<int>(std::clamp(std::round(parsed), 0.0, 127.0));
+    {
+      const int number = static_cast<int>(std::lround(parsed));
+      if (number >= 0 && number < volum::kMidiSoundSlotCount)
+        mEditSlot = number;
+    }
     SetDirty(false);
   }
 
@@ -728,7 +799,7 @@ private:
   {
     DrawCachedStageArt(g, rect, art, custom, support ? mStageSupportLayer : mStageMainLayer);
     const float pulse = volum::PlayIdlePulse(mPhase);
-    const float bright = volum::PlayArtBrightness(mInPeak, pulse);
+    const float bright = volum::PlayArtBrightness(mLampPeak, pulse);
     const float veil = std::clamp(1.f - bright, 0.f, 0.64f);
     g.FillRect(IColor(static_cast<int>(veil * 140.f), 6, 8, 12), rect);
     const float corona = volum::PlayCoronaOpacity(bright);
@@ -836,6 +907,87 @@ private:
     g.DrawDottedRect(VoLumColors::GOLD_DIM.WithOpacity(hot ? 0.95f : 0.6f), add, nullptr, 1.f, 4.f);
     g.DrawText(VoLumType::Label(12.f, VoLumColors::GOLD.WithOpacity(hot ? 1.f : 0.8f)),
                mPlusAddsHeard ? "+   Add this sound" : "+   Add Sound", add);
+    DrawRailDrop(g);
+  }
+
+  void UpdateDropTarget(float x, float y)
+  {
+    mDropRow = -1;
+    mDropInsert = false;
+    if (mSlots.empty())
+      return;
+    const int row = SlotAt(x, y);
+    if (row < 0)
+    {
+      const auto list = RailListRect();
+      if (x >= list.L && x <= list.R && y >= list.B - 8.f && y <= AddRect().T)
+      {
+        mDropRow = static_cast<int>(mSlots.size());
+        mDropInsert = true;
+      }
+      return;
+    }
+    const IRECT r = RailRowRect(row);
+    const float t = (y - r.T) / std::max(1.f, r.H());
+    if (t < 0.28f)
+    {
+      mDropRow = row;
+      mDropInsert = true;
+    }
+    else if (t > 0.72f)
+    {
+      mDropRow = row + 1;
+      mDropInsert = true;
+    }
+    else
+    {
+      mDropRow = row;
+      mDropInsert = false;
+    }
+  }
+
+  void CommitRailDrop(int fromSlot, float x, float y)
+  {
+    UpdateDropTarget(x, y);
+    if (mDropRow < 0)
+      return;
+    if (mDropInsert)
+    {
+      const int beforeSlot =
+        (mDropRow >= 0 && mDropRow < static_cast<int>(mSlots.size())) ? mSlots[(size_t)mDropRow].slot : -1;
+      if (mInsert && beforeSlot != fromSlot)
+        mInsert(fromSlot, beforeSlot);
+      return;
+    }
+    if (mDropRow >= 0 && mDropRow < static_cast<int>(mSlots.size()))
+    {
+      const int toSlot = mSlots[(size_t)mDropRow].slot;
+      if (mSwap && toSlot != fromSlot)
+        mSwap(fromSlot, toSlot);
+    }
+  }
+
+  void DrawRailDrop(IGraphics& g)
+  {
+    if (!mDragging || mPressRow < 0 || mPressRow >= static_cast<int>(mSlots.size()))
+      return;
+    if (mDropInsert && mDropRow >= 0)
+    {
+      const float y = (mDropRow >= static_cast<int>(mSlots.size())) ? RailListRect().B
+                                                                   : RailRowRect(mDropRow).T;
+      const auto list = RailListRect();
+      g.FillRect(VoLumColors::GOLD.WithOpacity(0.85f), IRECT(list.L, y - 1.5f, list.R - 6.f, y + 1.5f));
+    }
+    else if (mDropRow >= 0 && mDropRow < static_cast<int>(mSlots.size()))
+    {
+      g.DrawRect(VoLumColors::GOLD, RailRowRect(mDropRow).GetPadded(-1.f), nullptr, 1.5f);
+    }
+    const IRECT ghost = RailRowRect(mPressRow);
+    const IRECT lifted(mDragX - ghost.W() * 0.5f, mDragY - ghost.H() * 0.5f, mDragX + ghost.W() * 0.5f,
+                       mDragY + ghost.H() * 0.5f);
+    g.FillRect(VoLumColors::WELL_DARK.WithOpacity(0.88f), lifted);
+    g.DrawRect(VoLumColors::GOLD.WithOpacity(0.9f), lifted, nullptr, 1.2f);
+    g.DrawText(VoLumType::Label(10.f, VoLumColors::CREAM), mSlots[(size_t)mPressRow].sound.presetName.c_str(), lifted);
   }
 
   // clip is the rail list rect: IGraphics has no clip stack, so every inner
@@ -1476,7 +1628,8 @@ private:
   std::string mCurTip;
   std::array<bool, FxCount> mFx{};
   std::array<bool, FxCount> mFxAvailable{};
-  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f;
+  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f,
+        mLampPeak = 0.f;
   int mCachedMainArt = -1, mCachedSupportArt = -1;
   bool mCachedMainCustom = false, mCachedSupportCustom = false;
 
@@ -1495,4 +1648,9 @@ private:
   BypassCallback mBypass;
   EditInBuildCallback mEditInBuild;
   AddHeardCallback mAddHeard;
+  SwapCallback mSwap;
+  InsertCallback mInsert;
+  int mPressRow = -1, mPressSlot = -1, mDropRow = -1;
+  float mPressX = 0.f, mPressY = 0.f, mDragX = 0.f, mDragY = 0.f;
+  bool mDragging = false, mDropInsert = false;
 };

@@ -19,7 +19,7 @@
 // MIDI is a first-class tab, not a card on SIGNAL, and it carries the same Sound
 // assignment list PLAY does. One store, two surfaces: both read
 // content::Registry::midiSoundMap through volum::BuildPlaySlots and mutate it
-// through the plugin's assign/clear/swap path, so neither can hold a private copy.
+// through the plugin's assign/clear/swap/insert path, so neither can hold a private copy.
 //
 // The SYSTEM tab's library backup row (VoLumSettingsPackRowControl) lives in
 // VoLumSettingsOverlay.h, next to the Pack modal it opens.
@@ -312,10 +312,11 @@ private:
  *
  * Settings is not the performance surface, so the number is an editable field
  * rather than a caption: clicking it types a new one. Assignment is Add /
- * reassign / clear (clicks). Row-swap drag is disabled so Program Change
- * numbers stay put unless the player asks. Clicking a number still goes out as
- * a swap, which is safe - SwapMidiSoundSlots onto an empty number is a move
- * and onto an occupied one an exchange, so neither edit can silently drop a Sound.
+ * reassign / clear (clicks). Drag matches PLAY: drop on a row swaps Sounds,
+ * drop between rows slides them along the existing assigned PCs. Holes stay
+ * holes. Clicking a number still goes out as a swap, which is safe -
+ * SwapMidiSoundSlots onto an empty number is a move and onto an occupied one
+ * an exchange, so neither edit can silently drop a Sound.
  *
  * Adding asks for the number first (prefilled with the first free one) and the
  * Sound second, because the number is the thing the player's footswitch sends
@@ -330,6 +331,7 @@ public:
   using AssignCallback = std::function<void(int, const volum::SoundChoice&)>;
   using ClearCallback = std::function<void(int)>;
   using SwapCallback = std::function<void(int, int)>;
+  using InsertCallback = std::function<void(int, int)>;
 
   explicit VoLumMidiSoundMapControl(const IRECT& bounds)
   : IControl(bounds)
@@ -344,6 +346,7 @@ public:
   }
 
   void SetSwapCallback(SwapCallback swap) { mSwap = std::move(swap); }
+  void SetInsertCallback(InsertCallback insert) { mInsert = std::move(insert); }
   void SetPickerGroups(volum::PickerGroupSession* session) { mPickerGroups = session; }
 
   void SetData(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry)
@@ -356,9 +359,35 @@ public:
     mScroll = std::clamp(mScroll, 0.f, MaxScroll());
     if (mScreen != kScreenList && mChoices.empty())
       mScreen = kScreenList;
-    mPressRow = -1;
-    mPressSlot = -1;
-    mPressCell = kCellNone;
+    if (mDragging && mPressSlot >= 0)
+    {
+      mPressRow = -1;
+      for (int i = 0; i < static_cast<int>(mSlots.size()); ++i)
+      {
+        if (mSlots[static_cast<size_t>(i)].slot == mPressSlot)
+        {
+          mPressRow = i;
+          break;
+        }
+      }
+      if (mPressRow < 0)
+      {
+        mDragging = false;
+        mPressSlot = -1;
+        mPressCell = kCellNone;
+        mDropRow = -1;
+        mDropInsert = false;
+      }
+    }
+    else
+    {
+      mPressRow = -1;
+      mPressSlot = -1;
+      mPressCell = kCellNone;
+      mDragging = false;
+      mDropRow = -1;
+      mDropInsert = false;
+    }
     SetDirty(false);
   }
 
@@ -376,6 +405,9 @@ public:
     mPressRow = -1;
     mPressSlot = -1;
     mPressCell = kCellNone;
+    mDragging = false;
+    mDropRow = -1;
+    mDropInsert = false;
     mHoverRow = -1;
     mHoverChoice = -1;
     mHoverHeader = 0;
@@ -471,11 +503,12 @@ public:
     }
     else
     {
-      g.DrawText(foot, "Click a number to change it. Click a row to pick another Sound.",
+      g.DrawText(foot, "Drag onto a row to swap, into a gap to slide. Click a number to retype.",
                  IRECT(add.R + 12.f, add.T, mRECT.R, add.MH()));
-      g.DrawText(foot, "The cross at the end of a row clears it. PLAY shows the same list.",
+      g.DrawText(foot, "The cross clears a row. PLAY shows the same list.",
                  IRECT(add.R + 12.f, add.MH(), mRECT.R, add.B));
     }
+    DrawMidiDrop(g);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
@@ -516,6 +549,8 @@ public:
     mPressRow = row;
     mPressSlot = mSlots[static_cast<size_t>(row)].slot;
     mPressCell = CellAt(RowRect(row), x);
+    mPressX = x;
+    mPressY = y;
   }
 
   void OnMouseDrag(float x, float y, float, float, const IMouseMod&) override
@@ -536,7 +571,18 @@ public:
         mPickerScroll = next;
       SetDirty(false);
     }
-    (void)x;
+    else if (mScreen == kScreenList && mPressRow >= 0 && mPressCell == kCellBody)
+    {
+      if (!mDragging && (std::abs(x - mPressX) > 6.f || std::abs(y - mPressY) > 6.f))
+        mDragging = true;
+      if (mDragging)
+      {
+        mDragX = x;
+        mDragY = y;
+        UpdateDropTarget(x, y);
+        SetDirty(false);
+      }
+    }
   }
 
   void OnMouseUp(float x, float y, const IMouseMod&) override
@@ -549,11 +595,22 @@ public:
     const int pressRow = mPressRow;
     const int pressSlot = mPressSlot;
     const int pressCell = mPressCell;
+    const bool wasDrag = mDragging;
     mPressRow = -1;
     mPressSlot = -1;
     mPressCell = kCellNone;
+    mDragging = false;
+    mDropRow = -1;
+    mDropInsert = false;
 
-    if (RowAt(x, y) != pressRow)
+    if (wasDrag)
+    {
+      CommitMidiDrop(pressSlot, x, y);
+      return;
+    }
+
+    const int dropRow = RowAt(x, y);
+    if (dropRow != pressRow)
       return;
 
     if (pressCell == kCellClear)
@@ -627,7 +684,12 @@ public:
       SetDirty(false);
       return;
     }
-    const int number = std::clamp(static_cast<int>(std::lround(parsed)), 0, volum::kMidiSoundSlotCount - 1);
+    const int number = static_cast<int>(std::lround(parsed));
+    if (number < 0 || number >= volum::kMidiSoundSlotCount)
+    {
+      SetDirty(false);
+      return;
+    }
 
     if (target == kTextAddStep)
       mNumberDraft = number;
@@ -694,6 +756,86 @@ private:
     if (row < 0 || row >= static_cast<int>(mSlots.size()))
       return -1;
     return RowRect(row).Contains(x, y) ? row : -1;
+  }
+
+  void UpdateDropTarget(float x, float y)
+  {
+    mDropRow = -1;
+    mDropInsert = false;
+    if (mSlots.empty())
+      return;
+    const int row = RowAt(x, y);
+    if (row < 0)
+    {
+      const auto list = ListRect();
+      if (x >= list.L && x <= list.R && y >= list.B - 8.f && y <= AddRect().T)
+      {
+        mDropRow = static_cast<int>(mSlots.size());
+        mDropInsert = true;
+      }
+      return;
+    }
+    const IRECT r = RowRect(row);
+    const float t = (y - r.T) / std::max(1.f, r.H());
+    if (t < 0.28f)
+    {
+      mDropRow = row;
+      mDropInsert = true;
+    }
+    else if (t > 0.72f)
+    {
+      mDropRow = row + 1;
+      mDropInsert = true;
+    }
+    else
+    {
+      mDropRow = row;
+      mDropInsert = false;
+    }
+  }
+
+  void CommitMidiDrop(int fromSlot, float x, float y)
+  {
+    UpdateDropTarget(x, y);
+    if (mDropRow < 0)
+      return;
+    if (mDropInsert)
+    {
+      const int beforeSlot =
+        (mDropRow >= 0 && mDropRow < static_cast<int>(mSlots.size())) ? mSlots[(size_t)mDropRow].slot : -1;
+      if (mInsert && beforeSlot != fromSlot)
+        mInsert(fromSlot, beforeSlot);
+      return;
+    }
+    if (mDropRow >= 0 && mDropRow < static_cast<int>(mSlots.size()))
+    {
+      const int destSlot = mSlots[static_cast<size_t>(mDropRow)].slot;
+      if (mSwap && destSlot != fromSlot)
+        mSwap(fromSlot, destSlot);
+    }
+  }
+
+  void DrawMidiDrop(IGraphics& g)
+  {
+    if (!mDragging || mPressRow < 0 || mPressRow >= static_cast<int>(mSlots.size()))
+      return;
+    if (mDropInsert && mDropRow >= 0)
+    {
+      const float y = (mDropRow >= static_cast<int>(mSlots.size())) ? ListRect().B : RowRect(mDropRow).T;
+      const auto list = ListRect();
+      g.FillRect(VoLumColors::GOLD.WithOpacity(0.85f), IRECT(list.L, y - 1.5f, list.R - 6.f, y + 1.5f));
+    }
+    else if (mDropRow >= 0 && mDropRow < static_cast<int>(mSlots.size()))
+    {
+      g.DrawRect(VoLumColors::GOLD, RowRect(mDropRow).GetPadded(-1.f), nullptr, 1.5f);
+    }
+    const IRECT ghost = RowRect(mPressRow);
+    const IRECT lifted(mDragX - ghost.W() * 0.5f, mDragY - ghost.H() * 0.5f, mDragX + ghost.W() * 0.5f,
+                       mDragY + ghost.H() * 0.5f);
+    g.FillRect(VoLumColors::WELL_DARK.WithOpacity(0.88f), lifted);
+    g.DrawRect(VoLumColors::GOLD.WithOpacity(0.9f), lifted, nullptr, 1.2f);
+    g.DrawText(IText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+               mSlots[(size_t)mPressRow].sound.presetName.c_str(), lifted);
   }
 
   void OpenPicker(int slot)
@@ -1154,6 +1296,13 @@ private:
   int mPressRow = -1;
   int mPressSlot = -1;
   int mPressCell = kCellNone;
+  bool mDragging = false;
+  bool mDropInsert = false;
+  int mDropRow = -1;
+  float mPressX = 0.f;
+  float mPressY = 0.f;
+  float mDragX = 0.f;
+  float mDragY = 0.f;
   int mTextTarget = kTextNone;
   int mTextSlot = -1;
   float mScroll = 0.f;
@@ -1165,4 +1314,5 @@ private:
   AssignCallback mAssign;
   ClearCallback mClear;
   SwapCallback mSwap;
+  InsertCallback mInsert;
 };

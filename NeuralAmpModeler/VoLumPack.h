@@ -886,7 +886,7 @@ inline ImportPreview BuildImportPreview(const content::Registry& current, const 
   // Machine settings are standalone-only and ride their own checkbox, never one of
   // the three verbs. A plugin has no volum-settings.json to write.
   out.writesSettings = standalone && alsoSettings && !packContents.settingsJson.empty();
-  out.replacesMidiSoundMap = standalone && alsoSettings && packContents.includesMidiSoundMap;
+  out.replacesMidiSoundMap = packContents.includesMidiSoundMap && (alsoSettings || !standalone);
   return out;
 }
 
@@ -1127,9 +1127,10 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       store.RemovePedal(id);
   }
 
-  // 5. MIDI slots and machine settings ride the standalone checkbox, not the verbs.
+  // 5. MIDI map is library content (plugin + standalone). Machine settings file
+  // stays standalone-only.
   const bool applySettings = standalone && alsoSettings;
-  if (applySettings && packContents.includesMidiSoundMap)
+  if (packContents.includesMidiSoundMap && (alsoSettings || !standalone))
     reg.midiSoundMap = incoming.midiSoundMap;
 
   if (!store.Save())

@@ -144,8 +144,8 @@ TEST_CASE("Add this sound Save As first for Default or dirty Factory")
   CHECK(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, true, true)); // dirty Default
   CHECK(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, true, false)); // dirty Factory
   CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, false, false)); // clean Factory Ready
-  CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::OverwriteUser, true, false));
-  CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::OverwriteUser, false, true));
+  CHECK(volum::AddHeardNeedsSaveAs(A::OverwriteUser, true, false));
+  CHECK(volum::AddHeardNeedsSaveAs(A::OverwriteUser, false, true));
   CHECK(volum::AddHeardMarksLive(3, false));
   CHECK_FALSE(volum::AddHeardMarksLive(-1, false)); // map full
   CHECK_FALSE(volum::AddHeardMarksLive(0, true)); // Default has no id yet
@@ -159,6 +159,14 @@ TEST_CASE("PLAY illumination: quiet breathes, loud is brighter")
   CHECK(loud > dimHi);
   CHECK(dimHi > dim);
   CHECK(volum::PlayCoronaOpacity(loud) > volum::PlayCoronaOpacity(dim));
+  CHECK(volum::MeterNormFromLinear(0.25f) == doctest::Approx(0.83f).epsilon(0.03f));
+  const float floorBright = volum::PlayArtBrightness(volum::kPlayPlayingFloorNorm, 1.f);
+  CHECK(floorBright + 1e-4f >= dimHi);
+  CHECK(volum::PlayLampFollow(0.2f, 0.8f) > 0.2f);
+  CHECK(volum::PlayLampFollow(0.2f, 0.8f) < volum::PlayLampFollow(0.2f, 0.8f, 0.9f, 0.04f));
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("PlayArtBrightness(mLampPeak, pulse)") != std::string::npos);
+  CHECK(play.find("PlayArtBrightness(mInPeak, pulse)") == std::string::npos);
 }
 
 TEST_CASE("AnyOverlayOpen is true when any listed tag is showing")
@@ -237,6 +245,9 @@ TEST_CASE("PLAY T/M/H and Ctrl+S fall through the PLAY key branch")
   CHECK(volum::PlaySwallowsHiddenBuildEdit(false, ' '));
   CHECK(volum::PlaySwallowsHiddenBuildEdit(false, 'b'));
   CHECK(volum::PlaySwallowsHiddenBuildEdit(false, '\t'));
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, 8)); // kVK_BACK
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, 13)); // kVK_RETURN
+  CHECK(volum::PlaySwallowsHiddenBuildEdit(false, 0x2E)); // kVK_DELETE
   CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(true, 's')); // Ctrl+S saves
   CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(false, 't'));
   CHECK_FALSE(volum::PlaySwallowsHiddenBuildEdit(false, 'm'));
@@ -247,10 +258,11 @@ TEST_CASE("PLAY T/M/H and Ctrl+S fall through the PLAY key branch")
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   REQUIRE(layout.find("PlayBranchConsumes(key.C, railStep, stomp >= 0)") != std::string::npos);
   REQUIRE(layout.find("PlaySwallowsHiddenBuildEdit(key.C, key.VK)") != std::string::npos);
-  const auto consumes = layout.find("PlayBranchConsumes(key.C, railStep, stomp >= 0)");
-  const auto swallow = layout.find("return true;", consumes);
-  REQUIRE(layout.find("AnyOverlayOpen(", consumes) < swallow);
   const auto playBranch = layout.find("if (mVolumUiMode == volum::UiMode::Play)");
+  const auto consumePlay = layout.find("ConsumePlayKey(key)", playBranch);
+  REQUIRE(playBranch != std::string::npos);
+  REQUIRE(consumePlay != std::string::npos);
+  REQUIRE(layout.find("AnyOverlayOpen(", playBranch) < consumePlay);
   const auto fallthrough = layout.find("T / M / H / Ctrl+S fall through to the shared handler.");
   const auto hideBuild = layout.find("PlaySwallowsHiddenBuildEdit(key.C, key.VK)");
   const auto shared = layout.find("if (_HandleVoLumKeyboardFocusKey(key))");
@@ -273,19 +285,16 @@ TEST_CASE("Ctrl+S and Default dirty use the live-vs-default comparison")
   REQUIRE(presets.find("kCtrlTagVoLumNameDialog") != std::string::npos);
 }
 
-TEST_CASE("Ctrl+S overwrite and Save As do not write midiSoundMap")
+TEST_CASE("Ctrl+S always prompts and may reassign the LIVE slot only")
 {
-  // Ctrl+S writes the live rig into the current Sound. Add this sound is the
-  // only path that may mint a MIDI slot. If save grew an AssignMidiSound call,
-  // PLAY numbers would move under the player's foot.
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
   const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
   REQUIRE(presets.find("bool NeuralAmpModeler::_VolumHandleSaveShortcut()") != std::string::npos);
-  REQUIRE(presets.find("int NeuralAmpModeler::_VolumSavePresetAs") != std::string::npos);
-  REQUIRE(presets.find("void NeuralAmpModeler::_VolumOverwritePreset") != std::string::npos);
+  REQUIRE(presets.find("_VolumPromptSaveAs()") != std::string::npos);
+  REQUIRE(presets.find("SaveDialogSeedName") != std::string::npos);
   CHECK(presets.find("AssignMidiSound") == std::string::npos);
-  CHECK(presets.find("midiSoundMap") == std::string::npos);
-  CHECK(runtime.find("AssignMidiSound") != std::string::npos);
+  REQUIRE(runtime.find("_VolumReassignLivePlaySlotAfterSave") != std::string::npos);
+  REQUIRE(runtime.find("FirstFreeMidiSoundSlot") != std::string::npos);
 }
 
 TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
@@ -553,6 +562,13 @@ TEST_CASE("Empty PLAY NAM stomps do not take a bypass click")
   REQUIRE(guard != std::string::npos);
   REQUIRE(bypass != std::string::npos);
   CHECK(guard < bypass);
+  REQUIRE(play.find("if (mod.R)") != std::string::npos);
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  REQUIRE(runtime.find("PlayNamCaptureAssigned(GetParam(kPreNam1Capture)->Int())") != std::string::npos);
+  CHECK(runtime.find("fxAvailable[VoLumPlaySurfaceControl::Nam1] = mPreModel[0] != nullptr") == std::string::npos);
+  REQUIRE(runtime.find("_ClearVoLumKnobSelection()") != std::string::npos);
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  REQUIRE(layout.find("PlayStompCanBypass(stomp,") != std::string::npos);
 }
 
 TEST_CASE("PLAY OUT meter follows the output peak")

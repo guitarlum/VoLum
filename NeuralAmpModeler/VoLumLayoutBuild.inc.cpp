@@ -1031,6 +1031,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       [this](const char* paramName) { _VolumTogglePlayBypass(paramName); },
       [this](int focus) { _VolumFocusBuildEffect(focus); }, [this]() { _VolumAddHeardPlaySound(); }),
     kCtrlTagVoLumPlaySurface);
+  if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+    surface->As<VoLumPlaySurfaceControl>()->SetReorderCallbacks(
+      [this](int a, int b) { _VolumSwapPlaySounds(a, b); },
+      [this](int from, int before) { _VolumInsertPlaySound(from, before); });
 
   // Plate first (under the ink), then the right-rail cluster and the name.
   // The cluster sits above the PLAY surface so it stays clickable in PLAY, and
@@ -1073,6 +1077,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       gearArea,
       [pGraphics, pPlugin](IControl* pCaller) {
         pPlugin->_VolumRefreshMidiSettingsChrome();
+        const int kDropdownTags[] = {kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu,
+                                     kCtrlTagVoLumSupportAmpMenu};
+        for (int tag : kDropdownTags)
+          if (auto* c = pGraphics->GetControlWithTag(tag))
+            c->Hide(true);
+        if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+          surface->As<VoLumPlaySurfaceControl>()->ClosePicker();
         pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
       },
       gearSVG));
@@ -1202,6 +1213,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
       [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
     settingsPage->SetMidiSoundMapSwap([pPlugin](int a, int b) { pPlugin->_VolumSwapPlaySounds(a, b); });
+    settingsPage->SetMidiSoundMapInsert([pPlugin](int from, int before) { pPlugin->_VolumInsertPlaySound(from, before); });
     settingsPage->SetMidiPickerGroups(&pPlugin->mVolumPlayPickerGroups);
     pPlugin->_VolumRefreshMidiSettingsChrome();
 
@@ -1415,10 +1427,21 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       return false;
     if (mVolumUiMode == volum::UiMode::Play)
     {
+      bool overlayOpen = false;
       if (auto* pGfx = GetUI())
-        if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
-          if (surface->As<VoLumPlaySurfaceControl>()->ConsumePlayKey(key))
-            return true;
+      {
+        overlayOpen = volum::ui::AnyOverlayOpen(
+          {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
+           kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome},
+          [&](int tag) {
+            auto* c = pGfx->GetControlWithTag(tag);
+            return c && !c->IsHidden();
+          });
+        if (!overlayOpen)
+          if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+            if (surface->As<VoLumPlaySurfaceControl>()->ConsumePlayKey(key))
+              return true;
+      }
       // PLAY owns the arrows and 1..8. Up/Down and Left/Right both step the Sound
       // rail: Left/Right used to fall through to BUILD's channel stepper, so a
       // player changing "channel" in PLAY moved the hidden amp and left LIVE put.
@@ -1427,19 +1450,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       const int stomp = (key.VK >= '1' && key.VK <= '8') ? key.VK - '1' : -1;
       if (volum::PlayBranchConsumes(key.C, railStep, stomp >= 0))
       {
-        if (auto* pGfx = GetUI())
-        {
-          if (volum::ui::AnyOverlayOpen(
-                {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
-                 kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome},
-                [&](int tag) {
-                  auto* c = pGfx->GetControlWithTag(tag);
-                  return c && !c->IsHidden();
-                }))
-            return true;
-        }
+        if (overlayOpen)
+          return true;
         if (stomp >= 0)
-          _VolumTogglePlayBypass(volum::kPlayBypassParamNames[static_cast<size_t>(stomp)]);
+        {
+          if (volum::PlayStompCanBypass(stomp, GetParam(kPreNam1Capture)->Int(), GetParam(kPreNam2Capture)->Int()))
+            _VolumTogglePlayBypass(volum::kPlayBypassParamNames[static_cast<size_t>(stomp)]);
+        }
         else
           _VolumStepPlaySlot((key.VK == kVK_UP || key.VK == kVK_LEFT) ? -1 : 1);
         return true;
@@ -1467,14 +1484,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       if (pGfx->GetControlInTextEntry())
         return false;
 
-      // ESC closes the topmost open transient surface (overlay first, then any
-      // anchored dropdown) for consistent dismissal across the UI.
+      // ESC: true top overlays first, then Settings (so a leftover BUILD
+      // dropdown behind the page cannot steal the first Esc), then dropdowns.
       if (key.VK == kVK_ESCAPE)
       {
-        const int kDismissTags[] = {kCtrlTagVoLumNameDialog,     kCtrlTagVoLumConfirm,       kCtrlTagVoLumPackOverlay,
-                                    kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,    kCtrlTagVoLumIrMenu,
-                                    kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
-        for (int tag : kDismissTags)
+        const int kTopOverlays[] = {kCtrlTagVoLumNameDialog, kCtrlTagVoLumConfirm, kCtrlTagVoLumPackOverlay,
+                                    kCtrlTagVoLumCustomOverlay};
+        for (int tag : kTopOverlays)
         {
           if (auto* c = pGfx->GetControlWithTag(tag))
           {
@@ -1521,6 +1537,24 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           if (key.VK == 'h' || key.VK == 'H')
             page->HideAnimated(true);
           return true;
+        }
+      }
+
+      if (key.VK == kVK_ESCAPE)
+      {
+        const int kDropdownTags[] = {kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu,
+                                     kCtrlTagVoLumSupportAmpMenu};
+        for (int tag : kDropdownTags)
+        {
+          if (auto* c = pGfx->GetControlWithTag(tag))
+          {
+            if (!c->IsHidden())
+            {
+              c->Hide(true);
+              pGfx->SetAllControlsDirty();
+              return true;
+            }
+          }
         }
       }
 

@@ -590,6 +590,9 @@ public:
   bool _VolumLivePresetDirty();
   void _VolumPromptSaveAs(std::function<void()> after = {});
   bool _VolumHandleSaveShortcut();
+  void _VolumReassignLivePlaySlotAfterSave();
+  void _VolumSyncLivePlaySlotFromActivePair();
+  void _VolumInsertPlaySound(int fromSlot, int beforeSlot);
   void _VolumAddHeardPlaySound();
   void _VolumFocusBuildEffect(int focus);
   // Overwrite preset `index` in the active bank with the live scene.

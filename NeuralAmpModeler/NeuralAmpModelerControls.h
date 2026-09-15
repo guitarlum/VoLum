@@ -1407,8 +1407,8 @@ public:
     _ApplyMidiWiring();
   }
 
-  // Assign/clear/swap go straight back out to the plugin, which writes the one
-  // shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
+  // Assign/clear/swap/insert go straight back out to the plugin, which writes the
+  // one shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
   void SetMidiSoundMapCallbacks(VoLumMidiSoundMapControl::AssignCallback assign,
                                 VoLumMidiSoundMapControl::ClearCallback clear)
   {
@@ -1420,6 +1420,12 @@ public:
   void SetMidiSoundMapSwap(VoLumMidiSoundMapControl::SwapCallback swap)
   {
     mMidiSwap = std::move(swap);
+    _ApplyMidiWiring();
+  }
+
+  void SetMidiSoundMapInsert(VoLumMidiSoundMapControl::InsertCallback insert)
+  {
+    mMidiInsert = std::move(insert);
     _ApplyMidiWiring();
   }
 
@@ -1456,6 +1462,7 @@ private:
   VoLumMidiSoundMapControl::AssignCallback mMidiAssign;
   VoLumMidiSoundMapControl::ClearCallback mMidiClear;
   VoLumMidiSoundMapControl::SwapCallback mMidiSwap;
+  VoLumMidiSoundMapControl::InsertCallback mMidiInsert;
   volum::PickerGroupSession* mMidiPickerGroups = nullptr;
 
   void _ApplyMidiWiring()
@@ -1472,6 +1479,8 @@ private:
         soundMap->SetCallbacks(mMidiAssign, mMidiClear);
       if (mMidiSwap)
         soundMap->SetSwapCallback(mMidiSwap);
+      if (mMidiInsert)
+        soundMap->SetInsertCallback(mMidiInsert);
       if (mMidiPickerGroups)
         soundMap->SetPickerGroups(mMidiPickerGroups);
     }

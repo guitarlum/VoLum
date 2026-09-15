@@ -878,19 +878,30 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // reopen as dirty (mirrors the standalone session-restore fix).
       if (!idTail.activePresetId.empty())
       {
-        const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
-        auto it = banks.find(_VolumActiveOwnerKey());
-        if (it != banks.end())
-          for (const auto& pr : it->second)
-            if (pr.id == idTail.activePresetId)
-            {
-              mVolumActivePresetId = pr.id;
-              mVolumRecalledSnapshot = pr.settings;
-              mVolumHasRecalledSnapshot = true;
-              _VolumRememberActivePreset();
-              break;
-            }
+        if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, idTail.activePresetId))
+        {
+          mVolumActivePresetId = factory->id;
+          mVolumRecalledSnapshot = factory->settings;
+          mVolumHasRecalledSnapshot = true;
+          _VolumRememberActivePreset();
+        }
+        else
+        {
+          const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+          auto it = banks.find(_VolumActiveOwnerKey());
+          if (it != banks.end())
+            for (const auto& pr : it->second)
+              if (pr.id == idTail.activePresetId)
+              {
+                mVolumActivePresetId = pr.id;
+                mVolumRecalledSnapshot = pr.settings;
+                mVolumHasRecalledSnapshot = true;
+                _VolumRememberActivePreset();
+                break;
+              }
+        }
       }
+      mVolumLastRecalledPlaySlot = idTail.lastPlaySlot;
       _VolumRefreshPresetBar();
     }
   }

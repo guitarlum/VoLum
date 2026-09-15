@@ -1360,7 +1360,7 @@ TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not t
 
     ContentStore reloaded(receiver.base);
     REQUIRE(reloaded.Load());
-    CHECK(reloaded.reg().midiSoundMap.count(1) == 1); // mine
+    CHECK(reloaded.reg().midiSoundMap.count(1) == 1);
     CHECK(reloaded.reg().midiSoundMap.count(5) == 0);
   }
 
@@ -1372,13 +1372,13 @@ TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not t
     const auto preview =
       BuildImportPreview(receiver.store.reg(), pack, ImportVerb::Overwrite, true, /*standalone=*/false);
     CHECK_FALSE(preview.writesSettings);
-    CHECK_FALSE(preview.replacesMidiSoundMap);
+    CHECK(preview.replacesMidiSoundMap);
 
     REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, /*standalone=*/false, settingsPath).ok);
     CHECK_FALSE(std::filesystem::exists(settingsPath));
     ContentStore reloaded(receiver.base);
     REQUIRE(reloaded.Load());
-    CHECK(reloaded.reg().midiSoundMap.empty());
+    CHECK(reloaded.reg().midiSoundMap.count(5) == 1);
   }
 }
 

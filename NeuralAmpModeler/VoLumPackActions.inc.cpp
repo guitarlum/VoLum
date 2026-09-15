@@ -139,6 +139,8 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   _VolumPushIrShaping(true);
   _VolumSyncPresetOwner();
   _VolumRefreshPresetBar();
+  _VolumRefreshMidiSettingsChrome();
+  _VolumRefreshPlaySurface();
   _VolumSyncUiFromState();
 
 #if defined(APP_API)

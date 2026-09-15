@@ -151,6 +151,7 @@ struct ChunkIdTail
   std::string customSupportId; // custom dual SUPPORT partner id ("" = factory/none)
   std::string activePresetId; // recalled preset id for the focused amp ("" = none)
   std::string uiMode = "build"; // "play" | "build"; per plugin instance
+  int lastPlaySlot = -1; // last recalled PLAY / MIDI program number, or -1
   std::string perAmpIrId[kAmpCount]; // factory amp -> active custom IR cab id
   std::string perAmpSupportIrId[kAmpCount]; // factory amp -> SUPPORT lane custom IR id
   std::string perAmpSupportId[kAmpCount]; // factory amp -> custom support partner id
@@ -411,6 +412,7 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
   j["customSupportId"] = t.customSupportId;
   j["activePresetId"] = t.activePresetId;
   j["uiMode"] = t.uiMode == "play" ? "play" : "build";
+  j["lastPlaySlot"] = t.lastPlaySlot;
   nlohmann::json perAmp = nlohmann::json::array();
   for (int i = 0; i < kAmpCount; ++i)
   {
@@ -463,6 +465,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
     t.activePresetId = str(j["activePresetId"]);
   if (j.contains("uiMode"))
     t.uiMode = str(j["uiMode"]) == "play" ? "play" : "build";
+  if (j.contains("lastPlaySlot") && j["lastPlaySlot"].is_number_integer())
+    t.lastPlaySlot = std::clamp(j["lastPlaySlot"].get<int>(), -1, 127);
   if (j.contains("perAmp") && j["perAmp"].is_array())
   {
     const auto& arr = j["perAmp"];

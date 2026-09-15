@@ -1207,6 +1207,17 @@ TEST_CASE("Two writers: preset banks merge per preset, not per bank")
   CHECK(std::find(names.begin(), names.end(), "Lead") != names.end());
 }
 
+TEST_CASE("SetMidiSlot refuses program numbers outside 0..127")
+{
+  const auto base = TestBase("midi-slot-range");
+  ContentStore store(base);
+  store.SetMidiSlot(128, "amp_1", "p");
+  store.SetMidiSlot(-3, "amp_1", "p");
+  CHECK(store.reg().midiSoundMap.empty());
+  store.SetMidiSlot(0, "amp_1", "p");
+  REQUIRE(store.reg().midiSoundMap.size() == 1);
+}
+
 TEST_CASE("Two writers: MIDI slot assignments merge per slot")
 {
   const auto base = TestBase("two-writer-midi");
