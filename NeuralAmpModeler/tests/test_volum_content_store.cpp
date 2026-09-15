@@ -1376,8 +1376,8 @@ TEST_CASE("A failed save stays pending and is carried by the next successful one
   // agent does: readable, so the store does not latch RegistryUnreadable, but
   // impossible to replace by rename. POSIX rename would otherwise ignore the
   // file write bit; ReplaceFileAtomically refuses that case.
-  std::filesystem::permissions(store.RegistryPath(), std::filesystem::perms::owner_read,
-                               std::filesystem::perm_options::replace);
+  std::filesystem::permissions(
+    store.RegistryPath(), std::filesystem::perms::owner_read, std::filesystem::perm_options::replace);
 
   store.reg().irs.push_back({"ir_pending", "Pending", "ir/pending.wav"});
   CHECK_FALSE(store.Save());
@@ -1389,8 +1389,8 @@ TEST_CASE("A failed save stays pending and is carried by the next successful one
   CHECK(store.reg().irs.size() == 2);
   CHECK(store.HasUnflushedChanges());
 
-  std::filesystem::permissions(store.RegistryPath(), std::filesystem::perms::owner_all,
-                               std::filesystem::perm_options::replace);
+  std::filesystem::permissions(
+    store.RegistryPath(), std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
   REQUIRE(store.Save());
   CHECK_FALSE(store.HasUnflushedChanges());
 

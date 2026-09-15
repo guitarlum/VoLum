@@ -74,48 +74,21 @@ TEST_CASE("Repository PrePedals use curated labels and type order")
   const auto captures = volum::DiscoverPrePedalCaptures(RepoRoot() / "rigs");
 
   const std::vector<std::string> filenames = {
-    "FX-Minotaur-Klon-1.nam",
-    "FX-PettyJohn-Myth-1.nam",
-    "FX-OriginEffects-Halcyon-1.nam",
-    "FX-OriginEffects-Halcyon-2.nam",
-    "FX-PettyJohn-Mash-1.nam",
-    "FX-OriginEffects-Revival-1.nam",
-    "FX-Beetronics-Fatbee-1.nam",
-    "FX-PettyJohn-Nuke-1.nam",
-    "FX-JHS-Bender-1.nam",
+    "FX-Minotaur-Klon-1.nam",         "FX-PettyJohn-Myth-1.nam", "FX-OriginEffects-Halcyon-1.nam",
+    "FX-OriginEffects-Halcyon-2.nam", "FX-PettyJohn-Mash-1.nam", "FX-OriginEffects-Revival-1.nam",
+    "FX-Beetronics-Fatbee-1.nam",     "FX-PettyJohn-Nuke-1.nam", "FX-JHS-Bender-1.nam",
   };
   const std::vector<std::string> labels = {
-    "Klon",
-    "PettyJohn Myth",
-    "Halcyon TS",
-    "Halcyon TS +Gain",
-    "PettyJohn Mash",
-    "Revival Drive",
-    "Fatbee",
-    "PettyJohn Nuke",
-    "JHS Bender",
+    "Klon",          "PettyJohn Myth", "Halcyon TS",     "Halcyon TS +Gain", "PettyJohn Mash",
+    "Revival Drive", "Fatbee",         "PettyJohn Nuke", "JHS Bender",
   };
   const std::vector<std::string> shortLabels = {
-    "Klon",
-    "Myth",
-    "TS",
-    "TS+",
-    "Mash",
-    "Revi",
-    "FatB",
-    "Nuke",
-    "Bndr",
+    "Klon", "Myth", "TS", "TS+", "Mash", "Revi", "FatB", "Nuke", "Bndr",
   };
   const std::vector<volum::PrePedalCaptureGroup> groups = {
-    volum::PrePedalCaptureGroup::Klon,
-    volum::PrePedalCaptureGroup::Klon,
-    volum::PrePedalCaptureGroup::TsBoost,
-    volum::PrePedalCaptureGroup::TsBoost,
-    volum::PrePedalCaptureGroup::TsBoost,
-    volum::PrePedalCaptureGroup::Distortion,
-    volum::PrePedalCaptureGroup::Fuzz,
-    volum::PrePedalCaptureGroup::Fuzz,
-    volum::PrePedalCaptureGroup::Fuzz,
+    volum::PrePedalCaptureGroup::Klon,    volum::PrePedalCaptureGroup::Klon,    volum::PrePedalCaptureGroup::TsBoost,
+    volum::PrePedalCaptureGroup::TsBoost, volum::PrePedalCaptureGroup::TsBoost, volum::PrePedalCaptureGroup::Distortion,
+    volum::PrePedalCaptureGroup::Fuzz,    volum::PrePedalCaptureGroup::Fuzz,    volum::PrePedalCaptureGroup::Fuzz,
   };
 
   REQUIRE(captures.size() == filenames.size());

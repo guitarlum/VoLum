@@ -973,8 +973,7 @@ private:
       return;
     if (mDropInsert && mDropRow >= 0)
     {
-      const float y = (mDropRow >= static_cast<int>(mSlots.size())) ? RailListRect().B
-                                                                   : RailRowRect(mDropRow).T;
+      const float y = (mDropRow >= static_cast<int>(mSlots.size())) ? RailListRect().B : RailRowRect(mDropRow).T;
       const auto list = RailListRect();
       g.FillRect(VoLumColors::GOLD.WithOpacity(0.85f), IRECT(list.L, y - 1.5f, list.R - 6.f, y + 1.5f));
     }
@@ -983,8 +982,8 @@ private:
       g.DrawRect(VoLumColors::GOLD, RailRowRect(mDropRow).GetPadded(-1.f), nullptr, 1.5f);
     }
     const IRECT ghost = RailRowRect(mPressRow);
-    const IRECT lifted(mDragX - ghost.W() * 0.5f, mDragY - ghost.H() * 0.5f, mDragX + ghost.W() * 0.5f,
-                       mDragY + ghost.H() * 0.5f);
+    const IRECT lifted(
+      mDragX - ghost.W() * 0.5f, mDragY - ghost.H() * 0.5f, mDragX + ghost.W() * 0.5f, mDragY + ghost.H() * 0.5f);
     g.FillRect(VoLumColors::WELL_DARK.WithOpacity(0.88f), lifted);
     g.DrawRect(VoLumColors::GOLD.WithOpacity(0.9f), lifted, nullptr, 1.2f);
     g.DrawText(VoLumType::Label(10.f, VoLumColors::CREAM), mSlots[(size_t)mPressRow].sound.presetName.c_str(), lifted);
@@ -1210,8 +1209,7 @@ private:
     const IRECT note(value.R + 26.f, row.T, row.R, row.B);
     if (const volum::PlaySlot* taken = SlotHolder(mEditSlot))
       g.DrawText(VoLumType::Label(9.f, VoLumColors::AMBER, EAlign::Near),
-                 ("replaces " + volum::OccupiedSlotLabel(taken->valid, taken->sound.presetName)).c_str(),
-                 note);
+                 ("replaces " + volum::OccupiedSlotLabel(taken->valid, taken->sound.presetName)).c_str(), note);
     else
       g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), "free", note);
   }

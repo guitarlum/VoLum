@@ -1039,12 +1039,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // Plate first (under the ink), then the right-rail cluster and the name.
   // The cluster sits above the PLAY surface so it stays clickable in PLAY, and
   // below the overlays attached after this point.
-  pGraphics->AttachControl(new VoLumBuildHeaderPlateControl(
-                             IRECT(header.plateL, header.plateT, header.plateR, header.plateB)),
-                           kCtrlTagVoLumHeaderPlate);
-  auto* modeToggle = new VoLumModeToggleControl(
-    IRECT(header.toggleL, header.inkT, header.toggleR, header.inkB),
-    [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
+  pGraphics->AttachControl(
+    new VoLumBuildHeaderPlateControl(IRECT(header.plateL, header.plateT, header.plateR, header.plateB)),
+    kCtrlTagVoLumHeaderPlate);
+  auto* modeToggle = new VoLumModeToggleControl(IRECT(header.toggleL, header.inkT, header.toggleR, header.inkB),
+                                                [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
   modeToggle->SetMode(mVolumUiMode);
   pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
 
@@ -1077,8 +1076,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       gearArea,
       [pGraphics, pPlugin](IControl* pCaller) {
         pPlugin->_VolumRefreshMidiSettingsChrome();
-        const int kDropdownTags[] = {kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu,
-                                     kCtrlTagVoLumSupportAmpMenu};
+        const int kDropdownTags[] = {
+          kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
         for (int tag : kDropdownTags)
           if (auto* c = pGraphics->GetControlWithTag(tag))
             c->Hide(true);
@@ -1213,7 +1212,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
       [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
     settingsPage->SetMidiSoundMapSwap([pPlugin](int a, int b) { pPlugin->_VolumSwapPlaySounds(a, b); });
-    settingsPage->SetMidiSoundMapInsert([pPlugin](int from, int before) { pPlugin->_VolumInsertPlaySound(from, before); });
+    settingsPage->SetMidiSoundMapInsert(
+      [pPlugin](int from, int before) { pPlugin->_VolumInsertPlaySound(from, before); });
     settingsPage->SetMidiPickerGroups(&pPlugin->mVolumPlayPickerGroups);
     pPlugin->_VolumRefreshMidiSettingsChrome();
 
@@ -1488,8 +1488,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // dropdown behind the page cannot steal the first Esc), then dropdowns.
       if (key.VK == kVK_ESCAPE)
       {
-        const int kTopOverlays[] = {kCtrlTagVoLumNameDialog, kCtrlTagVoLumConfirm, kCtrlTagVoLumPackOverlay,
-                                    kCtrlTagVoLumCustomOverlay};
+        const int kTopOverlays[] = {
+          kCtrlTagVoLumNameDialog, kCtrlTagVoLumConfirm, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay};
         for (int tag : kTopOverlays)
         {
           if (auto* c = pGfx->GetControlWithTag(tag))
@@ -1542,8 +1542,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
       if (key.VK == kVK_ESCAPE)
       {
-        const int kDropdownTags[] = {kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu,
-                                     kCtrlTagVoLumSupportAmpMenu};
+        const int kDropdownTags[] = {
+          kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
         for (int tag : kDropdownTags)
         {
           if (auto* c = pGfx->GetControlWithTag(tag))
@@ -1564,9 +1564,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       // list / knobs don't move. Non-nav keys fall through to the focused
       // control (text entry etc.).
       {
-        const int kModalTags[] = {kCtrlTagSettingsBox,         kCtrlTagVoLumNameDialog,    kCtrlTagVoLumConfirm,
-                                  kCtrlTagVoLumPackOverlay,    kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumPresetMenu,
-                                  kCtrlTagVoLumIrMenu,         kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+        const int kModalTags[] = {kCtrlTagSettingsBox,      kCtrlTagVoLumNameDialog,     kCtrlTagVoLumConfirm,
+                                  kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,
+                                  kCtrlTagVoLumIrMenu,      kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
         for (int tag : kModalTags)
         {
           auto* c = pGfx->GetControlWithTag(tag);

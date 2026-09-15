@@ -116,9 +116,9 @@ void NeuralAmpModeler::_VolumClearPlaySound(int slot)
 
 void NeuralAmpModeler::_VolumSyncLivePlaySlotFromActivePair()
 {
-  const int found = volum::FindAssignedSlot(
-    volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()), _VolumActiveOwnerKey(),
-    mVolumActivePresetId);
+  const int found =
+    volum::FindAssignedSlot(volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()),
+                            _VolumActiveOwnerKey(), mVolumActivePresetId);
   if (found >= 0)
     mVolumLastRecalledPlaySlot = found;
 }
@@ -129,8 +129,8 @@ void NeuralAmpModeler::_VolumReassignLivePlaySlotAfterSave()
     return;
   if (!volum::content::MidiSoundAtSlot(volum::content::GlobalContentStore().reg(), mVolumLastRecalledPlaySlot))
     return;
-  _VolumAssignPlaySound(mVolumLastRecalledPlaySlot,
-                        {_VolumActiveOwnerKey(), mVolumActivePresetId, {}, {}, false, 0, false});
+  _VolumAssignPlaySound(
+    mVolumLastRecalledPlaySlot, {_VolumActiveOwnerKey(), mVolumActivePresetId, {}, {}, false, 0, false});
 }
 
 void NeuralAmpModeler::_VolumInsertPlaySound(int fromSlot, int beforeSlot)

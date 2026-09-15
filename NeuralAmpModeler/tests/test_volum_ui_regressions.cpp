@@ -171,7 +171,8 @@ TEST_CASE("Settings update notice self-gates so opening Settings cannot resurrec
   // One left-aligned stack: a right-floating, vertically-centred pill drew the
   // release notes through the checkbox and off the card.
   RequireContains(controls, "volum::LayoutAboutCard(body.W(), body.H())");
-  RequireContains(controls, "new VoLumUpdateNoticeControl(IRECT(body.L, body.T + l.noticeT, body.R, body.T + l.noticeB)");
+  RequireContains(
+    controls, "new VoLumUpdateNoticeControl(IRECT(body.L, body.T + l.noticeT, body.R, body.T + l.noticeB)");
   RequireDoesNotContain(controls, "left.ReduceFromRight((GetRECT().W() - colGap) * 0.44f)");
   RequireContains(overlay, "return IRECT(mRECT.L, mRECT.T, mRECT.L + w, mRECT.T + h);");
   RequireDoesNotContain(overlay, "return IRECT(mRECT.R - w, mRECT.MH() - h * 0.5f, mRECT.R, mRECT.MH() + h * 0.5f);");

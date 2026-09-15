@@ -707,8 +707,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // detect that case and skip the snapshot read (live PRE/POST then come up
     // empty exactly like before — pre-existing limitation, not a new regression).
     if (haveSelection && pos >= 0
-        && volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked,
-                                               pendingPostLocked))
+        && volum::ChunkHasPrePostLockSnapshots(
+          remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked, pendingPostLocked))
     {
       pos = volum::GetPrePostLockSnapshots(
         chunk, pos, pendingPreLocked, pendingPostLocked, pendingLockedPre, pendingLockedPost);

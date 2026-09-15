@@ -649,4 +649,3 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
   setParam(kReverbPreDelay, s.preDelay);
   setParam(kReverbShimmer, s.shimmer);
 }
-

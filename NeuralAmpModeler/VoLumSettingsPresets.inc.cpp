@@ -344,7 +344,8 @@ void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after)
       }
     }
   }
-  const std::string seed = volum::SaveDialogSeedName(volum::SaveActionForActivePreset(mVolumActivePresetId), currentName);
+  const std::string seed =
+    volum::SaveDialogSeedName(volum::SaveActionForActivePreset(mVolumActivePresetId), currentName);
   raw->As<VoLumNameDialogControl>()->Show(
     "Save preset", "Name this User preset.", seed, [this, after, currentName, currentUserIdx](const std::string& name) {
       bool ok = false;

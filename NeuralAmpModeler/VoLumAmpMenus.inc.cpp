@@ -81,8 +81,9 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   // overwrite the active named preset, or (no named preset / on Default) save a
   // new one. Saves opening the Manage panel just to commit a tweak.
   const int activeUserIdx = activePresetIdx - (hasFactory ? 1 : 0);
-  const bool userActive = volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
-                          && activeUserIdx >= 0 && activeUserIdx < (int)presets.size();
+  const bool userActive =
+    volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
+    && activeUserIdx >= 0 && activeUserIdx < (int)presets.size();
   if (userActive)
     rows.push_back(
       {"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});

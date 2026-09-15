@@ -47,8 +47,9 @@ Stereo makeChord(size_t n, double amp = 0.3)
   for (size_t i = 0; i < n; ++i)
   {
     const double t = static_cast<double>(i) / kSR;
-    const double v = amp * (std::sin(2.0 * M_PI * 110.0 * t) + std::sin(2.0 * M_PI * 277.0 * t)
-                            + std::sin(2.0 * M_PI * 1320.0 * t) / 3.0);
+    const double v =
+      amp
+      * (std::sin(2.0 * M_PI * 110.0 * t) + std::sin(2.0 * M_PI * 277.0 * t) + std::sin(2.0 * M_PI * 1320.0 * t) / 3.0);
     s.l[i] = v;
     s.r[i] = v;
   }

@@ -205,7 +205,8 @@ public:
     g.DrawText(body, "Two VoLums on one MIDI cable: give each its own channel.",
                IRECT(textL, mRECT.T + 15.f, mRECT.R, mRECT.T + 29.f));
 #if defined(APP_API)
-    g.DrawText(dim, "Pick the MIDI port under File > Preferences.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
+    g.DrawText(
+      dim, "Pick the MIDI port under File > Preferences.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
 #else
     g.DrawText(dim, "MIDI arrives on this track's input.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
 #endif
@@ -483,8 +484,8 @@ public:
     const IRECT add = AddRect();
     const bool addLive = !mChoices.empty();
     const bool hot = addLive && mHoverRow == kHoverAdd;
-    g.FillRoundRect(hot ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG.WithOpacity(addLive ? 1.f : 0.45f), add,
-                    3.f);
+    g.FillRoundRect(
+      hot ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG.WithOpacity(addLive ? 1.f : 0.45f), add, 3.f);
     g.DrawRoundRect(hot ? VoLumColors::AMBER : VoLumColors::FRAME.WithOpacity(addLive ? 1.f : 0.5f), add, 3.f, nullptr,
                     hot ? 1.3f : 1.f);
     g.DrawText(IText(11.5f, hot ? VoLumColors::TEXT_BRIGHT : (addLive ? VoLumColors::CREAM : VoLumColors::TEXT_DIM),
@@ -494,19 +495,18 @@ public:
     const IText foot(10.5f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Middle);
     if (mChoices.empty())
     {
-      const IText why = mEmptyFlash > 0.f
-                          ? IText(10.5f, VoLumColors::GOLD.WithOpacity(0.55f + 0.45f * mEmptyFlash), "Josefin-Bold",
-                                  EAlign::Near, EVAlign::Middle)
-                          : foot;
-      g.DrawText(why, "Save a preset first: a Sound is an amp plus a named preset.",
-                 IRECT(add.R + 12.f, add.T, mRECT.R, add.B));
+      const IText why = mEmptyFlash > 0.f ? IText(10.5f, VoLumColors::GOLD.WithOpacity(0.55f + 0.45f * mEmptyFlash),
+                                                  "Josefin-Bold", EAlign::Near, EVAlign::Middle)
+                                          : foot;
+      g.DrawText(
+        why, "Save a preset first: a Sound is an amp plus a named preset.", IRECT(add.R + 12.f, add.T, mRECT.R, add.B));
     }
     else
     {
       g.DrawText(foot, "Drag onto a row to swap, into a gap to slide. Click a number to retype.",
                  IRECT(add.R + 12.f, add.T, mRECT.R, add.MH()));
-      g.DrawText(foot, "The cross clears a row. PLAY shows the same list.",
-                 IRECT(add.R + 12.f, add.MH(), mRECT.R, add.B));
+      g.DrawText(
+        foot, "The cross clears a row. PLAY shows the same list.", IRECT(add.R + 12.f, add.MH(), mRECT.R, add.B));
     }
     DrawMidiDrop(g);
   }
@@ -830,8 +830,8 @@ private:
       g.DrawRect(VoLumColors::GOLD, RowRect(mDropRow).GetPadded(-1.f), nullptr, 1.5f);
     }
     const IRECT ghost = RowRect(mPressRow);
-    const IRECT lifted(mDragX - ghost.W() * 0.5f, mDragY - ghost.H() * 0.5f, mDragX + ghost.W() * 0.5f,
-                       mDragY + ghost.H() * 0.5f);
+    const IRECT lifted(
+      mDragX - ghost.W() * 0.5f, mDragY - ghost.H() * 0.5f, mDragX + ghost.W() * 0.5f, mDragY + ghost.H() * 0.5f);
     g.FillRect(VoLumColors::WELL_DARK.WithOpacity(0.88f), lifted);
     g.DrawRect(VoLumColors::GOLD.WithOpacity(0.9f), lifted, nullptr, 1.2f);
     g.DrawText(IText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
@@ -1065,11 +1065,10 @@ private:
     const IText line(11.f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Middle);
     const IText dim(10.5f, VoLumColors::TEXT_DIM.WithOpacity(0.75f), "Josefin-Sans", EAlign::Near, EVAlign::Middle);
     const volum::PlaySlot* taken = SlotAtNumber(mNumberDraft);
-    const std::string status =
-      taken == nullptr ? NumberLabel(mNumberDraft) + " is free."
-                       : NumberLabel(mNumberDraft) + " already plays "
-                           + volum::OccupiedSlotLabel(taken->valid, taken->sound.presetName)
-                           + ". Choosing a Sound replaces it.";
+    const std::string status = taken == nullptr ? NumberLabel(mNumberDraft) + " is free."
+                                                : NumberLabel(mNumberDraft) + " already plays "
+                                                    + volum::OccupiedSlotLabel(taken->valid, taken->sound.presetName)
+                                                    + ". Choosing a Sound replaces it.";
     g.DrawText(taken == nullptr ? line : line.WithFGColor(VoLumColors::GOLD), status.c_str(),
                IRECT(body.L + 6.f, field.B + 8.f, body.R, field.B + 24.f));
     g.DrawText(dim, "This is the number your footswitch or floorboard sends. Anything from 0 to 127.",

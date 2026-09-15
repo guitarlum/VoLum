@@ -706,7 +706,7 @@ class IContainerBaseWithNamedChildren : public IContainerBase
 {
 public:
   IContainerBaseWithNamedChildren(const IRECT& bounds)
-  : IContainerBase(bounds) {};
+  : IContainerBase(bounds){};
   ~IContainerBaseWithNamedChildren() = default;
 
 protected:
@@ -748,7 +748,7 @@ class ModelInfoControl : public IContainerBaseWithNamedChildren
 public:
   ModelInfoControl(const IRECT& bounds, const IVStyle& style)
   : IContainerBaseWithNamedChildren(bounds)
-  , mStyle(style) {};
+  , mStyle(style){};
 
   void ClearModelInfo()
   {
@@ -832,7 +832,7 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize) {};
+  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize){};
 
   void DrawWidget(IGraphics& g) override
   {
@@ -1263,8 +1263,8 @@ public:
                                             mControlNames.modelInfo));
     }
     {
-      const IRECT cardBody = _AddCard(
-        kTabSystem, packCard, "Back up your library", mControlNames.packGroupFrame, mControlNames.packSection, EAlign::Near);
+      const IRECT cardBody = _AddCard(kTabSystem, packCard, "Back up your library", mControlNames.packGroupFrame,
+                                      mControlNames.packSection, EAlign::Near);
       _Reg(kTabSystem, AddNamedChildControl(new VoLumSettingsPackRowControl(
                                               cardBody,
                                               [this]() {
@@ -1586,7 +1586,7 @@ private:
     AboutControl(const IRECT& bounds, const IVStyle& style, const IText& text)
     : IContainerBase(bounds)
     , mStyle(style)
-    , mText(text) {};
+    , mText(text){};
 
     void OnAttached() override
     {

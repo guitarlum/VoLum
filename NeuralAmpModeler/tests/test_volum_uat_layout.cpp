@@ -90,8 +90,7 @@ TEST_CASE("About action row is pinned inside a 96 px leftover card")
 
 TEST_CASE("SYSTEM mid-row body fits both Pack help lines")
 {
-  CHECK(volum::packui::SettingsCardBodyH(volum::packui::SystemMidRowH())
-        >= volum::packui::PackRowMinBodyH() - 0.01f);
+  CHECK(volum::packui::SettingsCardBodyH(volum::packui::SystemMidRowH()) >= volum::packui::PackRowMinBodyH() - 0.01f);
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   CHECK(controls.find("SystemMidRowH()") != std::string::npos);
 }
