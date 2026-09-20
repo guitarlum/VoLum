@@ -13,6 +13,7 @@
 // VoLumTriptych.h.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumPrePedalCaptures.h"
 #include "VoLumTriptychMotifs.h"
 #include "VoLumTriptychState.h"
 #include "NeuralAmpModeler.h"
@@ -124,16 +125,22 @@ public:
     if (mPlaceholder)
       return;
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
-    if (mIsFocused)
+    const int captureSlot = (mEffect == EVoLumEffectFocus::PRE_NAM1)   ? 0
+                            : (mEffect == EVoLumEffectFocus::PRE_NAM2) ? 1
+                                                                       : -1;
+    if (plugin && captureSlot >= 0)
     {
-      if (plugin && mEffect == EVoLumEffectFocus::PRE_NAM1)
+      const int captureIdx = plugin->GetParam(captureSlot == 0 ? kPreNam1Capture : kPreNam2Capture)->Int();
+      const auto action =
+        volum::DecideCaptureCardClick(mIsFocused, captureIdx > volum::kPreCaptureEmptyIndex);
+      // Focus first where both are wanted: the focus callback rebuilds the layout,
+      // and that pass hides the capture menu unconditionally. Opening before it
+      // would close the menu on the same click.
+      if (action == volum::CaptureCardClick::FocusThenOpenPicker && mCallback)
+        mCallback(this, false);
+      if (action != volum::CaptureCardClick::FocusOnly)
       {
-        plugin->_VolumShowPreCaptureMenu(0, mRECT);
-        return;
-      }
-      if (plugin && mEffect == EVoLumEffectFocus::PRE_NAM2)
-      {
-        plugin->_VolumShowPreCaptureMenu(1, mRECT);
+        plugin->_VolumShowPreCaptureMenu(captureSlot, mRECT);
         return;
       }
     }

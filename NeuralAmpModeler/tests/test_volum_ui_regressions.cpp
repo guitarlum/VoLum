@@ -658,6 +658,22 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
   RequireContains(source, "Pan the MAIN amp lane.");
 }
 
+TEST_CASE("The PRE NAM card routes its click through the shared capture-card protocol")
+{
+  // The decision itself is covered in test_volum_pre_pedal_captures.cpp. This
+  // only pins that the control actually asks - a correct protocol nobody calls
+  // is exactly how the empty SUPPORT lane shipped.
+  const std::string card = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
+  RequireContains(card, "volum::DecideCaptureCardClick(mIsFocused, captureIdx > volum::kPreCaptureEmptyIndex)");
+  // Focus before open, or the layout rebuild the focus callback triggers hides
+  // the menu that was just opened.
+  const auto focusCall = card.find("action == volum::CaptureCardClick::FocusThenOpenPicker && mCallback");
+  const auto openCall = card.find("plugin->_VolumShowPreCaptureMenu(captureSlot, mRECT);");
+  REQUIRE(focusCall != std::string::npos);
+  REQUIRE(openCall != std::string::npos);
+  CHECK(focusCall < openCall);
+}
+
 TEST_CASE("Keyboard channel navigation routes through the focused lane's stepper callback")
 {
   const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp

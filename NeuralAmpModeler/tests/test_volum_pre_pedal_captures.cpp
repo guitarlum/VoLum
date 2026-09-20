@@ -106,3 +106,30 @@ TEST_CASE("Repository PrePedals use curated labels and type order")
   CHECK(std::string(volum::PrePedalCaptureGroupLabel(volum::PrePedalCaptureGroup::Distortion)) == "Distortion");
   CHECK(std::string(volum::PrePedalCaptureGroupLabel(volum::PrePedalCaptureGroup::Fuzz)) == "Fuzz");
 }
+
+TEST_CASE("An empty PRE NAM card opens the capture picker on the click its footer asks for")
+{
+  using volum::CaptureCardClick;
+  using volum::DecideCaptureCardClick;
+
+  // The footer of an empty slot reads "Click to change". Gating the picker on
+  // the card already being focused made that first click change nothing - the
+  // same affordance lie as the empty Dual Amp SUPPORT lane, which is what this
+  // sweep was started by. An empty slot has exactly one action, so take it.
+  CHECK(DecideCaptureCardClick(/*cardFocused=*/false, /*slotHasCapture=*/false)
+        == CaptureCardClick::FocusThenOpenPicker);
+
+  // Focus has to happen first: the focus callback rebuilds the layout and that
+  // pass hides the capture menu unconditionally, so opening first would close
+  // the menu on the same click.
+  CHECK(DecideCaptureCardClick(true, false) == CaptureCardClick::OpenPicker);
+
+  // A slot that already holds a capture keeps focus-then-change, so one stray
+  // click on the card cannot replace a capture that is in use.
+  CHECK(DecideCaptureCardClick(false, true) == CaptureCardClick::FocusOnly);
+  CHECK(DecideCaptureCardClick(true, true) == CaptureCardClick::OpenPicker);
+
+  // The empty sentinel is the same one the loader and PLAY availability use.
+  CHECK_FALSE(volum::PlayNamCaptureAssigned(volum::kPreCaptureEmptyIndex));
+  CHECK(volum::PlayNamCaptureAssigned(volum::kPreCaptureEmptyIndex + 1));
+}
