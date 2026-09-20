@@ -1547,7 +1547,21 @@ public:
       return false;
     }
 
-    Registry merged = MergeRegistries(ReadRegistryFromDisk(), mBaseline, mReg);
+    const DiskRegistry disk = ReadRegistryFromDisk();
+    if (!disk.readable)
+    {
+      // Same verdict Load() reaches, for a file that went bad after Load() read
+      // it: cloud-sync placeholder, antivirus, a permissions change, or a second
+      // VoLum that backed the file up as corrupt. The merge treats an unreadable
+      // file as "disk names nothing", and MergeContentVector keeps only the ids
+      // this writer touched, so writing here replaces a whole library with this
+      // session's edits. Refuse, and let the caller show the banner: the user
+      // loses the session's edits, not the library.
+      mLastWriteFailed = true;
+      return false;
+    }
+
+    Registry merged = MergeRegistries(disk.reg, mBaseline, mReg);
     if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(merged), ec))
     {
       mLastWriteFailed = true;
@@ -1745,20 +1759,32 @@ public:
   }
 
 private:
-  // The registry exactly as it is on disk right now, for the merge in Save(). Any
-  // failure yields an empty registry, which makes the merge degrade to "replay my
-  // changes onto nothing" - the pre-1.3.0 behaviour, and the best available when
-  // the file cannot be read. Load() is what refuses to write over a file it could
-  // not read; by the time Save() runs, that verdict has already been made.
-  Registry ReadRegistryFromDisk() const
+  // The registry exactly as it is on disk right now, for the merge in Save().
+  //
+  // "Absent" and "unreadable" are not the same answer and must not share one.
+  // An absent file is a fresh library: merging onto nothing is correct. A file
+  // that exists but cannot be read means disk holds content we cannot see, and
+  // merging onto nothing would write this session's edits over all of it.
+  // Load() already refuses that, but its verdict only covers a file that was
+  // already bad when the store loaded - not one that goes bad afterwards, which
+  // is the common case (cloud sync, antivirus, a second VoLum backing it up).
+  struct DiskRegistry
+  {
+    Registry reg;
+    bool readable = true;
+  };
+
+  DiskRegistry ReadRegistryFromDisk() const
   {
     std::error_code ec;
     const auto path = RegistryPath();
-    if (mBase.empty() || !std::filesystem::is_regular_file(path, ec))
-      return Registry{};
+    if (mBase.empty() || !std::filesystem::exists(path, ec))
+      return DiskRegistry{};
+    if (!std::filesystem::is_regular_file(path, ec))
+      return DiskRegistry{Registry{}, false};
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
-      return Registry{};
+      return DiskRegistry{Registry{}, false};
     nlohmann::json j;
     try
     {
@@ -1766,11 +1792,11 @@ private:
     }
     catch (...)
     {
-      return Registry{};
+      return DiskRegistry{Registry{}, false};
     }
     if (!j.is_object())
-      return Registry{};
-    return RegistryFromJson(j);
+      return DiskRegistry{Registry{}, false};
+    return DiskRegistry{RegistryFromJson(j), true};
   }
 
   // Queue a payload the committed registry still references. It is deleted by the

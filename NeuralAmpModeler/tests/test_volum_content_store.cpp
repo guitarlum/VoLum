@@ -25,6 +25,12 @@ std::filesystem::path TestBase(const char* name)
   return root;
 }
 
+std::string ReadAll(const std::filesystem::path& p)
+{
+  std::ifstream in(p, std::ios::binary);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 std::filesystem::path WriteSrc(const std::filesystem::path& dir, const char* leaf, const char* body)
 {
   std::error_code ec;
@@ -1418,6 +1424,70 @@ TEST_CASE("An unreadable library is never overwritten, and the failure is visibl
   CHECK_FALSE(store.Save());
   CHECK(store.TakeWriteFailure());
   CHECK(std::filesystem::is_directory(store.RegistryPath())); // untouched
+}
+
+TEST_CASE("A library that goes unreadable after Load is not replaced by this session")
+{
+  // Load() refuses to write over a file it could not read. That verdict only
+  // covers a file that was already bad when the store loaded. Save() re-reads
+  // the file to merge onto it, and that re-read used to answer "empty" for
+  // every failure - so a library that went unreadable AFTER a good Load (cloud
+  // sync placeholder, antivirus, a second VoLum that backed it up as corrupt)
+  // was replaced by whatever this session happened to touch. Standalone quit
+  // alone was enough: the settings save calls Save() unconditionally.
+  const auto base = TestBase("reread-unreadable");
+  ContentStore store(base);
+
+  store.reg().irs.push_back({"ir_keep_a", "Keep A", "ir/a.wav"});
+  store.reg().irs.push_back({"ir_keep_b", "Keep B", "ir/b.wav"});
+  REQUIRE(store.Save());
+  REQUIRE(store.Load());
+  REQUIRE(store.reg().irs.size() == 2);
+
+  SUBCASE("unparseable")
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary) << "{ not json";
+  }
+  SUBCASE("zero length")
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary | std::ios::trunc);
+  }
+
+  const std::string damaged = ReadAll(store.RegistryPath());
+
+  // A save with no local edit at all - exactly what standalone quit does.
+  CHECK_FALSE(store.Save());
+  CHECK(store.TakeWriteFailure());
+  // Refusing means the bytes are untouched. Writing would have replaced a
+  // recoverable file with an authoritative empty catalog, and there is no .bak
+  // from this path to recover from.
+  CHECK(ReadAll(store.RegistryPath()) == damaged);
+
+  // And with a local edit, which is what made the old behaviour destructive:
+  // the merge kept only the touched id and dropped both loaded IRs.
+  store.reg().irs.push_back({"ir_session", "Session", "ir/session.wav"});
+  CHECK_FALSE(store.Save());
+  CHECK(ReadAll(store.RegistryPath()) == damaged);
+}
+
+TEST_CASE("A library file that is simply absent is still a legitimate fresh save")
+{
+  // The other half of the same gate: absent is not unreadable. A first run, or
+  // a user who deleted the file on purpose, must still be able to save.
+  const auto base = TestBase("reread-absent");
+  ContentStore store(base);
+
+  store.reg().irs.push_back({"ir_first", "First", "ir/first.wav"});
+  REQUIRE(store.Save());
+
+  std::error_code ec;
+  std::filesystem::remove(store.RegistryPath(), ec);
+  REQUIRE_FALSE(ec);
+
+  store.reg().irs.push_back({"ir_second", "Second", "ir/second.wav"});
+  CHECK(store.Save());
+  CHECK_FALSE(store.TakeWriteFailure());
+  CHECK(std::filesystem::is_regular_file(store.RegistryPath()));
 }
 
 TEST_CASE("The library lock is exclusive while held")
