@@ -2428,3 +2428,30 @@ TEST_CASE("tier2b editing an amp queues a delete for a capture the edit dropped"
   const std::string body = api.substr(start, end - start);
   RequireContains(body, "QueueStoredFileDelete(oldFile.storedPath)");
 }
+
+TEST_CASE("tier2c a plugin import preview names the MIDI map replace")
+{
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
+  const auto start = overlay.find("if (preview.writesSettings)");
+  REQUIRE(start != std::string::npos);
+  const std::string body = overlay.substr(start, 500);
+  RequireContains(body, "preview.replacesMidiSoundMap");
+  RequireContains(body, "\"MIDI slots\"");
+}
+
+TEST_CASE("tier2c a committed library reloads when the settings write fails")
+{
+  const std::string actions = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+  const auto start = actions.find("const auto result = volum::pack::ApplyPack(");
+  REQUIRE(start != std::string::npos);
+  const auto end = actions.find("return {};", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = actions.substr(start, end - start);
+  const auto committed = body.find("if (result.libraryCommitted)");
+  const auto failed = body.find("if (!result.ok)");
+  REQUIRE(committed != std::string::npos);
+  REQUIRE(failed != std::string::npos);
+  CHECK(committed < failed);
+  const std::string beforeError = body.substr(committed, failed - committed);
+  RequireContains(beforeError, "_VolumReloadReplacedLibraryIds(result.replacedIds)");
+}

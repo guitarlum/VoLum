@@ -75,6 +75,13 @@ struct ExportSelection
   std::vector<std::string> presetIds; // named presets the user ticked
 };
 
+// Sounds and Amps with every box off are not an export. Everything is a backup
+// even when the custom library is empty.
+inline bool ExportSelectionHasCargo(const ExportSelection& sel)
+{
+  return sel.everything || !sel.ampIds.empty() || !sel.presetIds.empty();
+}
+
 struct ExportPlan
 {
   Job job = Job::Everything;
@@ -915,6 +922,9 @@ inline ImportPreview BuildImportPreview(const content::Registry& current, const 
 struct ImportResult
 {
   bool ok = false;
+  // True once the library Save has landed, even when the later machine-settings
+  // write fails. The caller still reloads replaced captures in that case.
+  bool libraryCommitted = false;
   std::string error;
   std::vector<std::string> replacedIds; // ids whose payload changed, for a rig reload
   std::filesystem::path backupPath; // the prior library file, kept
@@ -1247,11 +1257,13 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
     return out;
   }
   std::filesystem::remove_all(rollback, ec);
+  out.libraryCommitted = true;
 
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
     if (!WriteWholeFile(settingsPath, packContents.settingsJson))
     {
+      out.ok = false;
       out.error = "The library was imported, but the machine settings could not be written.";
       return out;
     }

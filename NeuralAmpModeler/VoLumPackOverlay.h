@@ -122,7 +122,8 @@ public:
       _DrawImport(g, inner);
 
     _DrawBtn(g, _CancelRect(), "Cancel", false);
-    _DrawBtn(g, _GoRect(), mScreen == Screen::Export ? "Export..." : "Import", true);
+    const bool goEnabled = mScreen != Screen::Export || volum::pack::ExportSelectionHasCargo(_Selection());
+    _DrawBtn(g, _GoRect(), mScreen == Screen::Export ? "Export..." : "Import", true, goEnabled);
 
     if (!mStatus.empty())
     {
@@ -169,6 +170,8 @@ public:
     }
     if (_GoRect().Contains(x, y))
     {
+      if (mScreen == Screen::Export && !volum::pack::ExportSelectionHasCargo(_Selection()))
+        return;
       _Go();
       return;
     }
@@ -724,6 +727,9 @@ private:
     if (preview.writesSettings)
       mImportRows.push_back({false, volum::pack::ItemKind::Amp, "", false, false, "Restore",
                              "machine settings and MIDI slots", VoLumColors::AMBER});
+    else if (preview.replacesMidiSoundMap)
+      mImportRows.push_back(
+        {false, volum::pack::ItemKind::Amp, "", false, false, "Replace", "MIDI slots", VoLumColors::AMBER});
     if (mImportRows.empty())
       mImportRows.push_back({false, volum::pack::ItemKind::Amp, "", false, false, "",
                              "This Pack carries nothing this build understands.", VoLumColors::TEXT_DIM});
@@ -819,7 +825,7 @@ private:
     mStatus.clear();
     if (mScreen == Screen::Export)
     {
-      if (!mExport)
+      if (!mExport || !volum::pack::ExportSelectionHasCargo(_Selection()))
         return;
       const std::string err = mExport(_Selection());
       if (err.empty())
@@ -859,8 +865,15 @@ private:
     SetDirty(false);
   }
 
-  void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool primary)
+  void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool primary, bool enabled = true)
   {
+    if (!enabled)
+    {
+      g.FillRoundRect(VoLumColors::BTN_OFF_BG, r, 3.f);
+      g.DrawRoundRect(VoLumColors::FRAME, r, 3.f, nullptr, 1.f);
+      g.DrawText(IText(12.f, VoLumColors::TEXT_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label, r);
+      return;
+    }
     g.FillRoundRect(primary ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
     g.DrawRoundRect(primary ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, primary ? 1.3f : 1.f);
     g.DrawText(IText(12.f, primary ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,

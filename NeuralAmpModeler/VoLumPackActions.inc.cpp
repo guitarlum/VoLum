@@ -126,22 +126,24 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
 #endif
 
   const auto result = volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath);
+  // A settings-file failure still committed the library. Reload replaced captures
+  // before reporting that error, or the rig keeps playing the bytes just overwritten.
+  if (result.libraryCommitted)
+  {
+    _VolumMigrateIrTrims();
+    _VolumRepairRigForMissingContent(); // Reset can delete an id this rig was playing
+    _VolumReloadReplacedLibraryIds(result.replacedIds);
+    _VolumReconcileActiveIr();
+    _VolumPushIrShaping(false);
+    _VolumPushIrShaping(true);
+    _VolumSyncPresetOwner();
+    _VolumRefreshPresetBar();
+    _VolumRefreshMidiSettingsChrome();
+    _VolumRefreshPlaySurface();
+    _VolumSyncUiFromState();
+  }
   if (!result.ok)
     return result.error.empty() ? std::string("The Pack could not be imported.") : result.error;
-
-  // The catalog changed under the live rig. Re-derive everything that reads it,
-  // in the same order the Manage panel's own change hook uses.
-  _VolumMigrateIrTrims();
-  _VolumRepairRigForMissingContent(); // Reset can delete an id this rig was playing
-  _VolumReloadReplacedLibraryIds(result.replacedIds);
-  _VolumReconcileActiveIr();
-  _VolumPushIrShaping(false);
-  _VolumPushIrShaping(true);
-  _VolumSyncPresetOwner();
-  _VolumRefreshPresetBar();
-  _VolumRefreshMidiSettingsChrome();
-  _VolumRefreshPlaySurface();
-  _VolumSyncUiFromState();
 
 #if defined(APP_API)
   // An Everything import with the box ticked has just replaced the machine

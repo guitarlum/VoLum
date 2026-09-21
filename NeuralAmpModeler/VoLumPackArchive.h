@@ -152,7 +152,7 @@ inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries)
 
     PutU32(out, kLocalSig);
     PutU16(out, 20); // version needed
-    PutU16(out, 0); // flags
+    PutU16(out, 0x800); // bit 11: the entry name is UTF-8
     PutU16(out, 0); // method 0 = STORE
     PutU16(out, 0); // mod time - fixed, so the same library exports byte-identical
     PutU16(out, 0); // mod date
@@ -173,7 +173,7 @@ inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries)
     PutU32(out, kCentralSig);
     PutU16(out, 20); // version made by
     PutU16(out, 20); // version needed
-    PutU16(out, 0); // flags
+    PutU16(out, 0x800); // bit 11: the entry name is UTF-8
     PutU16(out, 0); // method
     PutU16(out, 0); // time
     PutU16(out, 0); // date

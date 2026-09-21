@@ -1715,6 +1715,54 @@ TEST_CASE("An import is a catalog writer: a sibling's unflushed item survives it
   CHECK(found);
 }
 
+TEST_CASE("tier2c a settings write failure still commits the library")
+{
+  Library sender("settings-fail-sender", "sender");
+  const std::string settings = "{\"volumLastAmp\":9}";
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), settings);
+  REQUIRE(pack.ok);
+
+  Library receiver("settings-fail-receiver", "recv");
+  const auto settingsPath = receiver.base / "blocked-settings";
+  std::error_code ec;
+  std::filesystem::create_directories(settingsPath, ec);
+  REQUIRE_FALSE(ec);
+
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath);
+  CHECK_FALSE(result.ok);
+  CHECK(result.libraryCommitted);
+  CHECK(result.error.find("machine settings") != std::string::npos);
+
+  ContentStore reloaded(receiver.base);
+  REQUIRE(reloaded.Load());
+  CHECK(reloaded.reg().amps.size() == 1);
+}
+
+TEST_CASE("tier2c an empty Sounds or Amps selection is not an export")
+{
+  ExportSelection sounds;
+  sounds.everything = false;
+  CHECK_FALSE(ExportSelectionHasCargo(sounds));
+  sounds.presetIds.push_back("preset_one");
+  CHECK(ExportSelectionHasCargo(sounds));
+
+  ExportSelection everything;
+  CHECK(ExportSelectionHasCargo(everything));
+}
+
+TEST_CASE("tier2c a Pack marks entry names as UTF-8")
+{
+  const std::string blob = BuildArchive({{"payload/amps/id__Muller.nam", "x"}});
+  REQUIRE(blob.size() > 8);
+  CHECK(static_cast<unsigned char>(blob[6]) == 0x00);
+  CHECK(static_cast<unsigned char>(blob[7]) == 0x08);
+  const auto central = blob.find("PK\x01\x02");
+  REQUIRE(central != std::string::npos);
+  REQUIRE(central + 10 < blob.size());
+  CHECK(static_cast<unsigned char>(blob[central + 8]) == 0x00);
+  CHECK(static_cast<unsigned char>(blob[central + 9]) == 0x08);
+}
+
 TEST_CASE("Screenshot-seed library WritePacks an Everything Pack the import shot can open")
 {
   // docs/screenshot-seed is the how-to library. Recapture used to export it
