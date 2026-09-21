@@ -50,6 +50,15 @@
 
 #define VST3_SUBCATEGORY "Fx"
 
+// VST3 carries Program Change as an IMidiMapping parameter, one set per MIDI
+// channel, and iPlug defaults both of these to 1. Settings offers a per-channel
+// listen filter and tells the user "Two VoLums on one MIDI cable: give each its
+// own channel", so a one-channel bus would make that advice silently do nothing
+// in VST3 while working in standalone and AU. The cost is a parameter set per
+// channel in the host's automation list; the alternative is a control that lies.
+#define VST3_NUM_MIDI_IN_CHANS 16
+#define VST3_NUM_CC_CHANS 16
+
 #define APP_NUM_CHANNELS 2
 #define APP_N_VECTOR_WAIT 0
 #define APP_MULT 1
