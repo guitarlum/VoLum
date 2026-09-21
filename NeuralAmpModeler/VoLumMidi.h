@@ -45,9 +45,7 @@ inline std::optional<int> DecodeMidiSoundRecall(const iplug::IMidiMsg& msg, int 
   int slot = -1;
   switch (msg.StatusMsg())
   {
-    case iplug::IMidiMsg::kProgramChange:
-      slot = msg.Program();
-      break;
+    case iplug::IMidiMsg::kProgramChange: slot = msg.Program(); break;
     case iplug::IMidiMsg::kControlChange:
       if (recallCc < kMidiRecallCcMin || recallCc > kMidiRecallCcMax)
         return std::nullopt;
@@ -55,8 +53,7 @@ inline std::optional<int> DecodeMidiSoundRecall(const iplug::IMidiMsg& msg, int 
         return std::nullopt;
       slot = static_cast<int>(msg.mData2);
       break;
-    default:
-      return std::nullopt;
+    default: return std::nullopt;
   }
   if (slot < 0 || slot >= kMidiSoundSlotCount)
     return std::nullopt;

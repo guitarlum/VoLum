@@ -1494,7 +1494,9 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   RequireContains(source, "_VolumProcessMainAmpChain");
   RequireContains(source, "_VolumProcessDualAmpSupportLane");
   RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
-  RequireContains(loader, "volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());");
+  RequireContains(
+    loader,
+    "volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());");
   RequireContains(header, "volum::dsp_staging::WdlStagedPathPair mNAMPaths;");
   RequireContains(header, "void _VolumDropQueuedLoadRequests(Pred pred)");
   RequireDoesNotContain(source, ".detach()");
@@ -1812,7 +1814,8 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   // time the user is typing - so it has the widest window for another editor to
   // shift the rows underneath it.
   RequireContains(overlay, "mRenameId = RowIdAt(mSel);");
-  RequireContains(overlay, "const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));");
+  RequireContains(
+    overlay, "const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));");
   RequireContains(overlay, "ApplyRename(target, s);");
   RequireContains(overlay, "NameTaken(s, target)");
   RequireDoesNotContain(overlay, "ApplyRename(mSel, s);");
@@ -2168,7 +2171,8 @@ TEST_CASE("Audio-thread model apply retires to the graveyard and never throws")
 
   const auto process = header.find("void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)");
   REQUIRE(process != std::string::npos);
-  const auto processEnd = header.find("void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)", process);
+  const auto processEnd =
+    header.find("void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)", process);
   REQUIRE(processEnd != std::string::npos);
   const std::string processBody = header.substr(process, processEnd - process);
   RequireContains(processBody, "ProcessOrBypassNamBlock");
@@ -2229,8 +2233,7 @@ TEST_CASE("Custom sidebar selection re-derives the focused lane's cab row")
   // _VolumApplyAmpSettings claims every caller ends in _VolumApplyFocusedLaneCabs.
   // The custom sidebar path called _VolumApplyCustomMainCabs(Y) with MAIN, so a
   // SUPPORT-focused click left the previous partner's names on the shared row.
-  const std::string select =
-    MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::_VolumSelectCustomAmp(");
+  const std::string select = MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::_VolumSelectCustomAmp(");
   RequireContains(select, "_VolumApplyCustomMainCabs(customIdx);");
 
   // The headless early-return also calls ApplyCustomMainCabs (a no-op without UI).
@@ -2263,5 +2266,3 @@ TEST_CASE("Polarity writes the active scene, not the parked factory slot")
   RequireContains(source, "_VolumActiveScene().supportPolarityInvert");
   RequireDoesNotContain(source, "mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert");
 }
-
-

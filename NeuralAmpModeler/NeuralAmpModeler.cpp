@@ -640,16 +640,16 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool(), GetParam(kChorusActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
-  const bool dualScratchReady = processingPlan.runDualAmp
-                                && volum::dsp_staging::ResizeScratchNoAlloc(mDualMainLaneBuffer, numFrames);
+  const bool dualScratchReady =
+    processingPlan.runDualAmp && volum::dsp_staging::ResizeScratchNoAlloc(mDualMainLaneBuffer, numFrames);
   if (dualScratchReady)
     std::memcpy(mDualMainLaneBuffer.data(), preAmpPointers[0], numFrames * sizeof(sample));
 
   sample** hpfPointers =
     _VolumProcessMainAmpChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
-  sample* supportLane =
-    dualScratchReady ? _VolumProcessDualAmpSupportLane(processingPlan, numChannelsInternal, nFrames, sampleRate)
-                     : nullptr;
+  sample* supportLane = dualScratchReady
+                          ? _VolumProcessDualAmpSupportLane(processingPlan, numChannelsInternal, nFrames, sampleRate)
+                          : nullptr;
 
   // restore previous floating point state
   std::feupdateenv(&fe_state);
@@ -825,8 +825,8 @@ void NeuralAmpModeler::OnReset()
 
 void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 {
-  if (const auto slot = volum::DecodeMidiSoundRecall(msg, mVolumMidiChannel.load(std::memory_order_relaxed),
-                                                     mVolumMidiRecallCc.load(std::memory_order_relaxed)))
+  if (const auto slot = volum::DecodeMidiSoundRecall(
+        msg, mVolumMidiChannel.load(std::memory_order_relaxed), mVolumMidiRecallCc.load(std::memory_order_relaxed)))
     mVolumMidiQueue.Enqueue(*slot);
 }
 

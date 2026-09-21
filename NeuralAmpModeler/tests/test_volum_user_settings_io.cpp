@@ -987,7 +987,8 @@ TEST_CASE("User settings IO round-trips machine-global liteMode")
 // with no heal flag (additive forward tolerance, no version bump).
 TEST_CASE("Lite merge-write keeps sibling machine keys")
 {
-  nlohmann::json j = {{"midiCh", 4}, {"volumUiMode", "play"}, {"lastPlaySlot", 7}, {"midiRecallCc", 20}, {"lastAmpIdx", 2}};
+  nlohmann::json j = {
+    {"midiCh", 4}, {"volumUiMode", "play"}, {"lastPlaySlot", 7}, {"midiRecallCc", 20}, {"lastAmpIdx", 2}};
   const auto out = volum::MergeLiteModeIntoSettings(j, true);
   CHECK(out["liteMode"] == true);
   CHECK(out["midiCh"] == 4);

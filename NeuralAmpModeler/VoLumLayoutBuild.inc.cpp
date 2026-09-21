@@ -1,4 +1,4 @@
-﻿// VoLumLayoutBuild.inc.cpp: _BuildVoLumLayout - the full one-time UI build/attach
+// VoLumLayoutBuild.inc.cpp: _BuildVoLumLayout - the full one-time UI build/attach
 // pass. Extracted verbatim from the constructor's mLayoutFunc lambda body for
 // file-size hygiene; tail-#included into the NeuralAmpModeler TU (not a separate
 // build target). Behaviour is identical: the lambda now just forwards here.
@@ -113,14 +113,14 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         // Planned before the delete, while the amp still exists to be described,
         // and applied after it so the rig lands on content that is really there.
         const std::string deleteId = volum::custom::CustomAmpIdAt(customIdx);
-        const std::string confirmBody =
-          _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp, deleteId, nm);
+        const std::string confirmBody = _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp, deleteId, nm);
         auto doDelete = [this, customIdx, deleteId]() {
           // Re-resolve by id at confirm time, the way the Manage panel already
           // does. The row index was captured before the dialog opened, and another
           // editor deleting an earlier row in the meantime shifts everything below
           // it - so a confirm that named one amp deleted its neighbour.
-          const int target = volum::ResolveConfirmRowIndex(deleteId, customIdx, volum::custom::CustomAmpIndexById(deleteId));
+          const int target =
+            volum::ResolveConfirmRowIndex(deleteId, customIdx, volum::custom::CustomAmpIndexById(deleteId));
           if (target < 0)
             return; // already gone; the confirm describes something that no longer exists
           volum::custom::RemoveCustomAmp(target);
@@ -1219,7 +1219,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // Children exist only after AttachControl â†’ OnAttached. Setting these
     // earlier left mAssign / mCallback null, so Add Sound and All did nothing.
     settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); },
-                                  [pPlugin](int cc) { pPlugin->_VolumSetMidiRecallCc(cc); });
+                                   [pPlugin](int cc) { pPlugin->_VolumSetMidiRecallCc(cc); });
     // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
     // PLAY are two views of one midiSoundMap rather than two stores.
     settingsPage->SetMidiSoundMapCallbacks(
@@ -1566,8 +1566,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
               return true;
             case OverlayId::Dropdown:
             {
-              const int kDropdownTags[] = {kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu,
-                                           kCtrlTagVoLumSupportAmpMenu};
+              const int kDropdownTags[] = {
+                kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
               for (int tag : kDropdownTags)
                 if (hideTag(tag))
                   return true;
@@ -1671,4 +1671,3 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     pControl->SetMouseEventsWhenDisabled(volum::DisabledPointerPolicy::kMouseEventsWhenDisabled);
   });
 }
-

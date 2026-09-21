@@ -329,8 +329,7 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "Recall CC",
-               LabelRect());
+    g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "Recall CC", LabelRect());
 
     const IRECT step = StepperRect();
     DrawInsetWell(g, step, step.H() * 0.5f);
@@ -344,8 +343,8 @@ public:
 
     const IText body(11.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Middle);
     g.DrawText(body, "Value is the program number.", IRECT(mRECT.L, mRECT.T + 30.f, mRECT.R, mRECT.T + 44.f));
-    g.DrawText(body, "Use this when Program Change never arrives.",
-               IRECT(mRECT.L, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
+    g.DrawText(
+      body, "Use this when Program Change never arrives.", IRECT(mRECT.L, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
   }
 
   void OnMouseDown(float x, float y, const IMouseMod&) override

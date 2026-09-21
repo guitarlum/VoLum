@@ -79,9 +79,9 @@ TEST_CASE("A per-amp decoder that runs out still rewrites the toggles it was han
   volum::VoLumAmpSettings target = mine;
   const int pos = volum::GetLegacyPerAmpSettings(empty, 0, target);
 
-  CHECK(pos < 0);                                        // the read failed
+  CHECK(pos < 0); // the read failed
   CHECK(target.gateThreshold == doctest::Approx(-37.5)); // numbers survive it
-  CHECK(target.noiseGateActive);                         // switches do not
+  CHECK(target.noiseGateActive); // switches do not
   CHECK(target.eqActive);
 
   // Same from a position that is already negative, which is what every amp after

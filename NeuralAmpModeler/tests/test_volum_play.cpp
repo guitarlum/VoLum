@@ -46,8 +46,7 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", 123}}) == volum::kMidiRecallCcDefault);
   CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", -2}}) == volum::kMidiRecallCcDefault);
   CHECK(volum::MidiRecallCcFromMachineSettings(true, cc, volum::kMidiRecallCcDefault) == 20);
-  CHECK(volum::MidiRecallCcFromMachineSettings(false, cc, volum::kMidiRecallCcDefault)
-        == volum::kMidiRecallCcDefault);
+  CHECK(volum::MidiRecallCcFromMachineSettings(false, cc, volum::kMidiRecallCcDefault) == volum::kMidiRecallCcDefault);
   CHECK(volum::MidiRecallCcFromMachineSettings(false, cc, 74) == 74);
   nlohmann::json slot = {{"lastPlaySlot", 7}};
   CHECK(volum::LastPlaySlotFromJson(slot) == 7);

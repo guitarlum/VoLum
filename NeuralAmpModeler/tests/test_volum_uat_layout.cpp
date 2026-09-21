@@ -613,4 +613,3 @@ TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
 }
-
