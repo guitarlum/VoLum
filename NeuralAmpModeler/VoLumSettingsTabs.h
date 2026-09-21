@@ -8,6 +8,7 @@
 //
 // - VoLumSettingsTabStripControl: the segmented tab selector under the title.
 // - VoLumMidiChannelControl: the per-instance listen filter (all channels, or one).
+// - VoLumMidiRecallCcControl: the per-instance Sound-recall CC (value = program).
 // - VoLumMidiSoundMapControl: the program number 0-127 Sound assignment list.
 //
 // Two different MIDI numbers meet on this tab and a guitarist has no reason to
@@ -199,16 +200,15 @@ public:
     g.DrawText(dim, all ? "MIDI calls this Omni." : "Other channels are ignored.",
                IRECT(mRECT.L, mRECT.T + 30.f, mRECT.L + 200.f, mRECT.T + 44.f));
 
-    const float textL = mRECT.L + 336.f;
     g.DrawText(body, "One guitarist, one board: leave this on All channels.",
-               IRECT(textL, mRECT.T + 1.f, mRECT.R, mRECT.T + 15.f));
+               IRECT(mRECT.L, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
     g.DrawText(body, "Two VoLums on one MIDI cable: give each its own channel.",
-               IRECT(textL, mRECT.T + 15.f, mRECT.R, mRECT.T + 29.f));
+               IRECT(mRECT.L, mRECT.T + 58.f, mRECT.R, mRECT.T + 72.f));
 #if defined(APP_API)
     g.DrawText(
-      dim, "Pick the MIDI port under File > Preferences.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
+      dim, "Pick the MIDI port under File > Preferences.", IRECT(mRECT.L, mRECT.T + 72.f, mRECT.R, mRECT.T + 86.f));
 #else
-    g.DrawText(dim, "MIDI arrives on this track's input.", IRECT(textL, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
+    g.DrawText(dim, "MIDI arrives on this track's input.", IRECT(mRECT.L, mRECT.T + 72.f, mRECT.R, mRECT.T + 86.f));
 #endif
   }
 
@@ -301,6 +301,129 @@ private:
   int mLastOne = 1;
   int mHover = kHoverNone;
   ChannelCallback mCallback;
+};
+
+/** The per-instance Sound-recall CC: value 0-127 is the program number.
+ *
+ * Default 102 (MIDI-undefined). 120-127 are channel-mode messages and cannot be
+ * chosen here: hosts eat them, so they never reach the plugin. Same stepper and
+ * commit-callback shape as the listen filter beside it. */
+class VoLumMidiRecallCcControl : public IControl
+{
+public:
+  using CcCallback = std::function<void(int)>;
+
+  explicit VoLumMidiRecallCcControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = false;
+  }
+
+  void SetCallback(CcCallback callback) { mCallback = std::move(callback); }
+
+  void SetCc(int cc)
+  {
+    mCc = volum::ClampMidiRecallCc(cc);
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.DrawText(IText(12.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Middle), "Recall CC",
+               LabelRect());
+
+    const IRECT step = StepperRect();
+    DrawInsetWell(g, step, step.H() * 0.5f);
+    g.DrawText(IText(15.f, mHover == kHoverDown ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold",
+                     EAlign::Center, EVAlign::Middle),
+               "\xE2\x80\xB9", step.GetFromLeft(22.f));
+    g.DrawText(VoLumType::Value(13.f, VoLumColors::GOLD), std::to_string(mCc).c_str(), step);
+    g.DrawText(IText(15.f, mHover == kHoverUp ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, "Josefin-Bold",
+                     EAlign::Center, EVAlign::Middle),
+               "\xE2\x80\xBA", step.GetFromRight(22.f));
+
+    const IText body(11.5f, VoLumColors::TEXT_MED, "Josefin-Sans", EAlign::Near, EVAlign::Middle);
+    g.DrawText(body, "Value is the program number.", IRECT(mRECT.L, mRECT.T + 30.f, mRECT.R, mRECT.T + 44.f));
+    g.DrawText(body, "Use this when Program Change never arrives.",
+               IRECT(mRECT.L, mRECT.T + 44.f, mRECT.R, mRECT.T + 58.f));
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod&) override
+  {
+    const IRECT step = StepperRect();
+    if (!step.Contains(x, y))
+      return;
+    if (x < step.L + 22.f)
+      Commit(mCc == volum::kMidiRecallCcMin ? volum::kMidiRecallCcMax : mCc - 1);
+    else if (x > step.R - 22.f)
+      Commit(mCc == volum::kMidiRecallCcMax ? volum::kMidiRecallCcMin : mCc + 1);
+  }
+
+  void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
+  {
+    if (std::abs(d) < 0.01f || !StepperRect().Contains(x, y))
+      return;
+    const int step = d > 0.f ? 1 : -1;
+    int next = mCc + step;
+    if (next < volum::kMidiRecallCcMin)
+      next = volum::kMidiRecallCcMax;
+    else if (next > volum::kMidiRecallCcMax)
+      next = volum::kMidiRecallCcMin;
+    Commit(next);
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod&) override
+  {
+    const int hover = HoverAt(x, y);
+    if (hover == mHover)
+      return;
+    mHover = hover;
+    SetDirty(false);
+  }
+
+  void OnMouseOut() override
+  {
+    mHover = kHoverNone;
+    SetDirty(false);
+  }
+
+private:
+  static constexpr float kStepperW = 96.f;
+  static constexpr float kStepperH = 26.f;
+  static constexpr int kHoverNone = 0;
+  static constexpr int kHoverDown = 1;
+  static constexpr int kHoverUp = 2;
+
+  IRECT LabelRect() const { return IRECT(mRECT.L, mRECT.T, mRECT.L + 88.f, mRECT.T + kStepperH); }
+  IRECT StepperRect() const
+  {
+    const float l = LabelRect().R + 8.f;
+    return IRECT(l, mRECT.T, l + kStepperW, mRECT.T + kStepperH);
+  }
+
+  int HoverAt(float x, float y) const
+  {
+    const IRECT step = StepperRect();
+    if (!step.Contains(x, y))
+      return kHoverNone;
+    if (x < step.L + 22.f)
+      return kHoverDown;
+    if (x > step.R - 22.f)
+      return kHoverUp;
+    return kHoverNone;
+  }
+
+  void Commit(int cc)
+  {
+    mCc = volum::ClampMidiRecallCc(cc);
+    if (mCallback)
+      mCallback(mCc);
+    SetDirty(false);
+  }
+
+  int mCc = volum::kMidiRecallCcDefault;
+  int mHover = kHoverNone;
+  CcCallback mCallback;
 };
 
 /** The program number 0-127 Sound assignment list, as Settings shows it.

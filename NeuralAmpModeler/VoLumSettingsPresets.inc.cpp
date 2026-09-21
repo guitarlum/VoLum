@@ -260,6 +260,16 @@ void NeuralAmpModeler::_VolumSetMidiChannel(int channel)
   _VolumRefreshMidiSettingsChrome();
 }
 
+void NeuralAmpModeler::_VolumSetMidiRecallCc(int cc)
+{
+  mVolumMidiRecallCc.store(volum::ClampMidiRecallCc(cc));
+#ifdef APP_API
+  mVolumSettingsDirty = true;
+#endif
+  DirtyParametersFromUI();
+  _VolumRefreshMidiSettingsChrome();
+}
+
 void NeuralAmpModeler::_VolumRefreshMidiSettingsChrome()
 {
   auto* pGfx = GetUI();
@@ -270,6 +280,7 @@ void NeuralAmpModeler::_VolumRefreshMidiSettingsChrome()
     return;
   auto* page = raw->As<NAMSettingsPageControl>();
   page->SetMidiChannel(mVolumMidiChannel.load());
+  page->SetMidiRecallCc(mVolumMidiRecallCc.load());
   // Rebuilt from the live registry every time, never cached: the map is machine
   // global, so another instance or the PLAY rail can have changed it since the
   // panel was last opened.

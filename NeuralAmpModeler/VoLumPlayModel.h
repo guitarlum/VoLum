@@ -2,6 +2,7 @@
 
 #include "VoLumContentStore.h"
 #include "VoLumFactoryPresets.h"
+#include "VoLumMidi.h"
 #include "VoLumPickerGroups.h"
 #include "VoLumTriptychState.h"
 
@@ -58,6 +59,21 @@ inline int MidiChannelFromJson(const nlohmann::json& value, int fallback = 0)
 inline int MidiChannelFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
 {
   return standalone ? MidiChannelFromJson(value, fallback) : fallback;
+}
+
+inline int MidiRecallCcFromJson(const nlohmann::json& value, int fallback = kMidiRecallCcDefault)
+{
+  if (!value.is_object() || !value.contains("midiRecallCc") || !value["midiRecallCc"].is_number_integer())
+    return fallback;
+  return ClampMidiRecallCc(value["midiRecallCc"].get<int>());
+}
+
+// Same split as midiCh: the recall CC in volum-settings.json is the standalone
+// window. A plugin keeps `fallback` (constructor default or the project id-tail)
+// so a standalone CC choice cannot move the next VST3 insert.
+inline int MidiRecallCcFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? MidiRecallCcFromJson(value, fallback) : fallback;
 }
 
 inline int LastPlaySlotFromJson(const nlohmann::json& value, int fallback = -1)

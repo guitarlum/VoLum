@@ -260,12 +260,17 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
 
   RequireContains(tabs, "class VoLumMidiChannelControl");
+  RequireContains(tabs, "class VoLumMidiRecallCcControl");
+  RequireContains(tabs, "\"Recall CC\"");
+  RequireContains(tabs, "Value is the program number.");
   RequireContains(tabs, "\"All channels\"");
   RequireContains(tabs, "MIDI calls this Omni.");
   RequireContains(tabs, "class VoLumMidiSoundMapControl");
   RequireContains(controls, "void SetMidiChannel(int channel)");
+  RequireContains(controls, "void SetMidiRecallCc(int cc)");
   RequireContains(controls, "void SetMidiSoundMap(");
   RequireContains(layout, "settingsPage->SetMidiCallbacks([pPlugin](int channel)");
+  RequireContains(layout, "pPlugin->_VolumSetMidiRecallCc(cc)");
 
   // Both surfaces derive their rows from the same pure model helper.
   RequireContains(tabs, "volum::BuildPlaySlots(factory, registry)");
@@ -320,7 +325,7 @@ TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound r
   RequireContains(midiBody, "DrawVoLumSegmentSwitch(");
   RequireDoesNotContain(midiBody, "AmberPicker");
   RequireContains(controls, "DrawVoLumSegmentSwitch(");
-  RequireContains(controls, "ReduceFromTop(92.f)");
+  RequireContains(controls, "ReduceFromTop(134.f)");
 
   RequireContains(controls, "\"What each program number plays\"");
   RequireContains(tabs, "\"PROGRAM\"");

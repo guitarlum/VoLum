@@ -586,6 +586,7 @@ public:
   bool _VolumRecallSound(const std::string& ampId, const std::string& presetId);
   void _VolumRefreshMidiSettingsChrome();
   void _VolumSetMidiChannel(int channel);
+  void _VolumSetMidiRecallCc(int cc);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
   int _VolumSavePresetAs(const std::string& name);
   bool _VolumLivePresetDirty();
@@ -728,6 +729,7 @@ private:
   // handoff; content-library resolution happens in OnIdle.
   volum::MidiLatestWinsQueue mVolumMidiQueue;
   std::atomic<int> mVolumMidiChannel{volum::kMidiOmniChannel};
+  std::atomic<int> mVolumMidiRecallCc{volum::kMidiRecallCcDefault};
   // VoLum: when set, the next main-lane load in OnIdle bypasses the
   // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
   // even though its file path is unchanged.

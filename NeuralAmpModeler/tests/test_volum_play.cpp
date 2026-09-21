@@ -36,6 +36,19 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   CHECK(volum::MidiChannelFromMachineSettings(true, midi, 0) == 7);
   CHECK(volum::MidiChannelFromMachineSettings(false, midi, 0) == 0);
   CHECK(volum::MidiChannelFromMachineSettings(false, midi, 12) == 12);
+  nlohmann::json cc = {{"midiRecallCc", 20}};
+  CHECK(volum::MidiRecallCcFromJson(cc) == 20);
+  CHECK(volum::MidiRecallCcFromJson(nlohmann::json::object()) == volum::kMidiRecallCcDefault);
+  CHECK(volum::MidiRecallCcFromJson(nlohmann::json::object(), 74) == 74);
+  CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", 0}}) == 0);
+  CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", 119}}) == 119);
+  CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", 120}}) == volum::kMidiRecallCcDefault);
+  CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", 123}}) == volum::kMidiRecallCcDefault);
+  CHECK(volum::MidiRecallCcFromJson({{"midiRecallCc", -2}}) == volum::kMidiRecallCcDefault);
+  CHECK(volum::MidiRecallCcFromMachineSettings(true, cc, volum::kMidiRecallCcDefault) == 20);
+  CHECK(volum::MidiRecallCcFromMachineSettings(false, cc, volum::kMidiRecallCcDefault)
+        == volum::kMidiRecallCcDefault);
+  CHECK(volum::MidiRecallCcFromMachineSettings(false, cc, 74) == 74);
   nlohmann::json slot = {{"lastPlaySlot", 7}};
   CHECK(volum::LastPlaySlotFromJson(slot) == 7);
   CHECK(volum::LastPlaySlotFromJson(nlohmann::json::object(), -1) == -1);

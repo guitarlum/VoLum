@@ -191,7 +191,7 @@ The same **+** control is **Add this sound** when the live rig is not already on
 
 `Up` / `Down` and `Left` / `Right` step to the previous or next assigned slot and recall it. Keys `1` through `8` toggle the eight stomps left to right. Empty program numbers are skipped, as are assignments whose amp or preset is missing, and the list wraps at both ends.
 
-The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel and AU `aufx` → `aumf` are under Settings → MIDI Program Change.
+The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel, the Sound-recall CC, and AU `aufx` → `aumf` are under Settings → MIDI.
 
 ## Custom Content (Bring Your Own)
 
@@ -257,7 +257,7 @@ The overlay has three tabs.
 
 ![VoLum Settings, MIDI tab](user-guide-settings-midi.png)
 
-**MIDI** is what this VoLum listens to and which Sound each Program Change plays. The listen filter defaults to **All MIDI channels** (MIDI calls this Omni). Leave it there for one guitarist and one pedalboard; lock an instance to channel `1`–`16` only when two VoLums share a cable. The assignment list is the same one PLAY shows, so a Sound you add here appears on the PLAY rail and the other way round.
+**MIDI** is what this VoLum listens to and which Sound each Program Change plays. The listen filter defaults to **All MIDI channels** (MIDI calls this Omni). Leave it there for one guitarist and one pedalboard; lock an instance to channel `1`–`16` only when two VoLums share a cable. Beside it, **Recall CC** defaults to `102`: that CC's value is the program number, so one controller covers all 128 slots. Use it when Program Change never arrives. The assignment list is the same one PLAY shows, so a Sound you add here appears on the PLAY rail and the other way round.
 
 ![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)
 
@@ -272,20 +272,20 @@ VoLum stores user settings automatically:
 
 Use the standalone app as your tone library editor. It writes the global per-amp defaults in this file, including speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
 
-Fresh VST3 instances read those per-amp defaults when you add VoLum to a track. They do not inherit the standalone app's PLAY/BUILD mode or MIDI listen channel: a new insert starts in BUILD on All MIDI channels until the project saves those per instance. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration and A2 Lite are the deliberate exceptions described below: a direct edit becomes the machine default, while saved project state still wins for everything else when that project is restored.
+Fresh VST3 instances read those per-amp defaults when you add VoLum to a track. They do not inherit the standalone app's PLAY/BUILD mode, MIDI listen channel, or recall CC: a new insert starts in BUILD on All MIDI channels and CC `102` until the project saves those per instance. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration and A2 Lite are the deliberate exceptions described below: a direct edit becomes the machine default, while saved project state still wins for everything else when that project is restored.
 
-### MIDI Program Change
+### MIDI Program Change And Recall CC
 
-VoLum accepts MIDI Program Change in VST3, AU, and the standalone app. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup.
+VoLum accepts MIDI Program Change in AU and the standalone app, and a MIDI CC in every format including VST3. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. The CC's value is that same program number.
 
 Assign the slots on either surface, whichever is in front of you:
 
 - In **PLAY**, **+** is **Add this sound** when the live rig is not on the rail, or **Add Sound** when it already is. Add this sound writes the live User Sound onto the next free program number and marks that row LIVE. Add Sound opens the picker on the next free program number (you can change that number first). Click an assigned row to recall it, use the assign control or double-click to replace the Sound, or tap `×` to clear it.
 - In **Settings -> MIDI**, the same list appears as a table of program number, Sound, and amp. Click a row's number to type a new one (`0`–`127`), or click the rest of the row to pick another Sound. Drag a row onto another to swap Sounds, or into the gap between rows to slide them along the existing program numbers. Moving a Sound onto a number that is already taken swaps the two rather than overwriting one. **+ Add Sound** asks for the number first, prefilled with the first free one, and then for the Sound. With no presets yet the button is dimmed; a click restates the “save a preset first” line instead of doing nothing. There is only one list: both surfaces read and write the same assignments.
 
-The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance. **What each program number plays** is the same assignment list PLAY shows. That list is machine-global, while the listen filter is stored per plugin instance. A new plug-in insert starts on All MIDI channels; it does not copy the standalone app's channel. All MIDI channels is the default.
+The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance, and the **Recall CC** (default `102`, range `0`–`119`) that recalls a Sound by value. **What each program number plays** is the same assignment list PLAY shows. That list is machine-global, while the listen filter and recall CC are stored per plugin instance. A new plug-in insert starts on All MIDI channels and CC `102`; it does not copy the standalone app's channel or CC. All MIDI channels is the default.
 
-An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number in both lists and reads red, because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel remains in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel in VoLum.
+An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number in both lists and reads red, because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. CC numbers `120`–`127` cannot be the recall CC: those are channel-mode messages (All Notes Off is `123`) and hosts consume them. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel and recall CC remain in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel and recall CC in VoLum.
 
 MIDI input changes VoLum's AU component type from `aufx` to `aumf`. Existing AU instances may therefore need to be removed and inserted again after updating.
 
@@ -305,7 +305,7 @@ The Calibrate switch and dBu value are machine-global startup defaults. A direct
 
 The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE NAM pedals, the main amp, and the dual-amp support lane. Lite does not change the separate Pitch/Octaver DSP, so bypass Pitch/Octaver or use a larger audio buffer if that effect is the CPU bottleneck.
 
-Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. A Lite toggle from standalone or a plug-in writes only that key, the same way calibration does, so it cannot move PLAY/BUILD, the MIDI listen channel, or per-amp scenes. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
+Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. A Lite toggle from standalone or a plug-in writes only that key, the same way calibration does, so it cannot move PLAY/BUILD, the MIDI listen channel, the recall CC, or per-amp scenes. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
 
 ### Content Library Packs
 

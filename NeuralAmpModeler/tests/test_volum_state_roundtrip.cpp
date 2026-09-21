@@ -230,6 +230,7 @@ void SeedNonDefaultState(volum::VoLumChunkSelection& selection, volum::VoLumAmpS
   idTail.customMainId = "amp_main_custom";
   idTail.customSupportId = "amp_support_custom";
   idTail.activePresetId = "preset_lead_01";
+  idTail.midiRecallCc = 20;
   idTail.perAmpIrId[kSelectedAmp] = "ir_custom_3";
   idTail.perAmpSupportIrId[kSelectedAmp] = "ir_support_3";
   idTail.perAmpSupportId[kSelectedAmp] = "amp_support_slotref";
@@ -316,6 +317,7 @@ TEST_CASE("Real DAW chunk round-trips selection + scene + custom refs + effects 
   CHECK(got.idTail.customMainId == "amp_main_custom");
   CHECK(got.idTail.customSupportId == "amp_support_custom");
   CHECK(got.idTail.activePresetId == "preset_lead_01");
+  CHECK(got.idTail.midiRecallCc == 20);
   CHECK(got.idTail.perAmpIrId[kSelectedAmp] == "ir_custom_3");
   CHECK(got.idTail.perAmpSupportIrId[kSelectedAmp] == "ir_support_3");
   CHECK(got.idTail.perAmpSupportId[kSelectedAmp] == "amp_support_slotref");

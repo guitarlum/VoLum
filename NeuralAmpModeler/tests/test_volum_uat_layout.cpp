@@ -364,10 +364,13 @@ TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
   REQUIRE(apply != std::string::npos);
   const auto midi = scene.find("MidiChannelFromMachineSettings(true, j,", load);
   REQUIRE(midi != std::string::npos);
+  const auto recallCc = scene.find("MidiRecallCcFromMachineSettings(true, j,", load);
+  REQUIRE(recallCc != std::string::npos);
   const auto guard = scene.rfind("#if defined(APP_API)", apply);
   REQUIRE(guard != std::string::npos);
-  CHECK(apply - guard < 80);
-  CHECK(midi - guard < 200);
+  CHECK(scene.find("#endif", guard) > apply);
+  CHECK(scene.find("#endif", guard) > midi);
+  CHECK(scene.find("#endif", guard) > recallCc);
   CHECK(scene.find("j.contains(\"midiCh\")", load) == std::string::npos);
   const auto setLite = scene.find("void NeuralAmpModeler::_VolumSetLiteMode(bool lite)");
   const auto owner = scene.find("std::string NeuralAmpModeler::_VolumActiveOwnerKey()");

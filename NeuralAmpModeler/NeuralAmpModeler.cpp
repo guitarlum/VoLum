@@ -825,7 +825,8 @@ void NeuralAmpModeler::OnReset()
 
 void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 {
-  if (const auto slot = volum::DecodeMidiProgramChange(msg, mVolumMidiChannel.load(std::memory_order_relaxed)))
+  if (const auto slot = volum::DecodeMidiSoundRecall(msg, mVolumMidiChannel.load(std::memory_order_relaxed),
+                                                     mVolumMidiRecallCc.load(std::memory_order_relaxed)))
     mVolumMidiQueue.Enqueue(*slot);
 }
 
@@ -1153,6 +1154,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // VoLumChunkIdTail.h).
   volum::ChunkIdTail idTail;
   idTail.midiCh = mVolumMidiChannel.load();
+  idTail.midiRecallCc = mVolumMidiRecallCc.load();
   idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;

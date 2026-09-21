@@ -377,6 +377,7 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // Standalone has no DAW project chunk; persist the same per-instance MIDI
   // channel field in its instance settings equivalent.
   j["midiCh"] = mVolumMidiChannel.load();
+  j["midiRecallCc"] = mVolumMidiRecallCc.load();
   j["volumUiMode"] = volum::UiModeToString(mVolumUiMode);
   // PLAY cursor: the DAW chunk already carries lastPlaySlot; standalone has no
   // chunk, so the same instance key has to live here or a relaunch starts empty.
@@ -525,6 +526,7 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 #if defined(APP_API)
     mVolumUiMode = volum::UiModeFromMachineSettings(true, j, mVolumUiMode);
     mVolumMidiChannel.store(volum::MidiChannelFromMachineSettings(true, j, mVolumMidiChannel.load()));
+    mVolumMidiRecallCc.store(volum::MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load()));
     mVolumLastRecalledPlaySlot = volum::LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot);
     // Pack import-with-settings writes uiMode here without going through the
     // toggle. Derive PLAY chrome now so the surface cannot stay shown over BUILD.
@@ -590,7 +592,7 @@ void NeuralAmpModeler::_VolumSaveLiteMode()
     return;
 
   // Same read-merge-write as calibration: a plugin Lite click must not dump
-  // standalone PLAY/BUILD, midiCh, lastPlaySlot, or scenes into the shared machine file.
+  // standalone PLAY/BUILD, midiCh, midiRecallCc, lastPlaySlot, or scenes into the shared machine file.
   static std::mutex liteModeSettingsMutex;
   std::lock_guard<std::mutex> lock(liteModeSettingsMutex);
 

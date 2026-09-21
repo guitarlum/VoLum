@@ -1218,7 +1218,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
     // Children exist only after AttachControl â†’ OnAttached. Setting these
     // earlier left mAssign / mCallback null, so Add Sound and All did nothing.
-    settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
+    settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); },
+                                  [pPlugin](int cc) { pPlugin->_VolumSetMidiRecallCc(cc); });
     // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
     // PLAY are two views of one midiSoundMap rather than two stores.
     settingsPage->SetMidiSoundMapCallbacks(

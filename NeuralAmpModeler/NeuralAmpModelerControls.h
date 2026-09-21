@@ -1063,10 +1063,10 @@ public:
   }
 
   // Three tabs, switched in-panel. SIGNAL owns the audio path (calibration,
-  // output mode, performance); MIDI owns the channel and the Program Change
-  // Sound assignments; SYSTEM owns everything about this install (shortcuts,
-  // loaded model, content library, about and update). The one-page version could
-  // not hold all of it at 900x600 without clipping its own footer.
+  // output mode, performance); MIDI owns the channel, the recall CC, and the
+  // Program Change Sound assignments; SYSTEM owns everything about this install
+  // (shortcuts, loaded model, content library, about and update). The one-page
+  // version could not hold all of it at 900x600 without clipping its own footer.
   void OnAttached() override
   {
     const IRECT rootB = GetRECT();
@@ -1207,24 +1207,31 @@ public:
          AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, _HintStyle()), mControlNames.audioHint));
   }
 
-  // ---- MIDI: which channel, and what each program number plays ------------
+  // ---- MIDI: which channel, which recall CC, and what each program number plays
   //
   // The assignment list is the tab's body, not a footnote: choosing what program
   // number 0..127 recalls is the whole reason a player opens this tab. The listen
-  // filter above it is a two-button choice most players never have to change.
+  // filter and recall CC above it are two-button / stepper choices most players
+  // never have to change.
   void _BuildMidiTab(const IRECT& body)
   {
     IRECT rest = body;
     // Taller than the old Omni stepper: the listen filter now spells out All vs
-    // one channel, plus the two situations that decide which a guitarist wants.
-    const IRECT channelCard = rest.ReduceFromTop(92.f);
+    // one channel beside the recall CC, plus the two situations that decide which
+    // a guitarist wants.
+    const IRECT channelCard = rest.ReduceFromTop(134.f);
     (void)rest.ReduceFromTop(14.f);
     const IRECT mapCard = rest;
 
     {
       const IRECT cardBody = _AddCard(kTabMidi, channelCard, "What this VoLum listens to", mControlNames.midiGroupFrame,
                                       mControlNames.midiSection, EAlign::Near);
-      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiChannelControl(cardBody), mControlNames.midiControl));
+      const float gap = 20.f;
+      const float leftW = std::min(340.f, std::max(220.f, cardBody.W() * 0.55f));
+      const IRECT channelR(cardBody.L, cardBody.T, cardBody.L + leftW, cardBody.B);
+      const IRECT ccR(channelR.R + gap, cardBody.T, cardBody.R, cardBody.B);
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiChannelControl(channelR), mControlNames.midiControl));
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiRecallCcControl(ccR), mControlNames.midiRecallCc));
     }
     {
       const IRECT cardBody = _AddCard(kTabMidi, mapCard, "What each program number plays",
@@ -1315,7 +1322,7 @@ private:
   static constexpr const char* kTabNames[kTabCount] = {"SIGNAL", "MIDI", "SYSTEM"};
   static constexpr const char* kTabHints[kTabCount] = {
     "How audio gets in and out of VoLum",
-    "Which MIDI channels this VoLum hears, and which Sound each program number plays",
+    "Which MIDI channel and recall CC this VoLum hears, and which Sound each program number plays",
     "This build, your library, your keyboard"};
 
   IControl* _Reg(int tab, IControl* control)
@@ -1401,9 +1408,11 @@ public:
       sw->SetTooltip(volum::InputCalibrationTooltip(available));
   }
 
-  void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel)
+  void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel,
+                        VoLumMidiRecallCcControl::CcCallback recallCc = {})
   {
     mMidiChannelCb = std::move(channel);
+    mMidiRecallCcCb = std::move(recallCc);
     _ApplyMidiWiring();
   }
 
@@ -1435,6 +1444,12 @@ public:
       midi->As<VoLumMidiChannelControl>()->SetChannel(channel);
   }
 
+  void SetMidiRecallCc(int cc)
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiRecallCc))
+      midi->As<VoLumMidiRecallCcControl>()->SetCc(cc);
+  }
+
   void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry)
   {
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
@@ -1459,6 +1474,7 @@ private:
   std::function<void()> mOnExportPack;
   std::function<void()> mOnImportPack;
   VoLumMidiChannelControl::ChannelCallback mMidiChannelCb;
+  VoLumMidiRecallCcControl::CcCallback mMidiRecallCcCb;
   VoLumMidiSoundMapControl::AssignCallback mMidiAssign;
   VoLumMidiSoundMapControl::ClearCallback mMidiClear;
   VoLumMidiSoundMapControl::SwapCallback mMidiSwap;
@@ -1471,6 +1487,11 @@ private:
     {
       if (mMidiChannelCb)
         midi->As<VoLumMidiChannelControl>()->SetCallback(mMidiChannelCb);
+    }
+    if (auto* cc = GetNamedChild(mControlNames.midiRecallCc))
+    {
+      if (mMidiRecallCcCb)
+        cc->As<VoLumMidiRecallCcControl>()->SetCallback(mMidiRecallCcCb);
     }
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
     {
@@ -1522,6 +1543,7 @@ private:
     const std::string perfHelp = "PerfHelp";
     const std::string midiSection = "MidiSection";
     const std::string midiControl = "MidiControl";
+    const std::string midiRecallCc = "MidiRecallCc";
     const std::string midiMapGroupFrame = "MidiMapGroupFrame";
     const std::string midiMapSection = "MidiMapSection";
     const std::string midiSoundMap = "MidiSoundMap";

@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../VoLumAmpSettingsJson.h"
+#include "../VoLumPlayModel.h" // MidiChannel/MidiRecallCc machine-settings readers
 #include "../VoLumUserSettingsIO.h"
 
 #include <filesystem>
@@ -986,10 +987,11 @@ TEST_CASE("User settings IO round-trips machine-global liteMode")
 // with no heal flag (additive forward tolerance, no version bump).
 TEST_CASE("Lite merge-write keeps sibling machine keys")
 {
-  nlohmann::json j = {{"midiCh", 4}, {"volumUiMode", "play"}, {"lastPlaySlot", 7}, {"lastAmpIdx", 2}};
+  nlohmann::json j = {{"midiCh", 4}, {"volumUiMode", "play"}, {"lastPlaySlot", 7}, {"midiRecallCc", 20}, {"lastAmpIdx", 2}};
   const auto out = volum::MergeLiteModeIntoSettings(j, true);
   CHECK(out["liteMode"] == true);
   CHECK(out["midiCh"] == 4);
+  CHECK(out["midiRecallCc"] == 20);
   CHECK(out["volumUiMode"] == "play");
   CHECK(out["lastPlaySlot"] == 7);
   CHECK(out["lastAmpIdx"] == 2);
@@ -1433,6 +1435,7 @@ TEST_CASE("lastPlaySlot is a standalone instance key, not a VoLumAmpSettings fie
   const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
   CHECK_FALSE(written.contains("lastPlaySlot"));
   CHECK_FALSE(written.contains("midiCh"));
+  CHECK_FALSE(written.contains("midiRecallCc"));
   CHECK_FALSE(written.contains("volumUiMode"));
 
   nlohmann::json future = written;
@@ -1518,4 +1521,42 @@ TEST_CASE("Standalone settings write and read lastPlaySlot")
   const auto chrome = scene.find("_VolumRefreshPlaySurface();", apply);
   REQUIRE(chrome != std::string::npos);
   CHECK(chrome < scene.find("#endif", guard));
+}
+
+TEST_CASE("midiRecallCc is an additive standalone instance key (no version bump)")
+{
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  CHECK_FALSE(written.contains("midiRecallCc"));
+  CHECK(written["version"] == volum::kVoLumUserSettingsVersion);
+
+  nlohmann::json older = written;
+  older.erase("midiRecallCc");
+  CHECK(volum::MidiRecallCcFromJson(older) == volum::kMidiRecallCcDefault);
+
+  nlohmann::json future = written;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["midiRecallCc"] = 20;
+  future["unknownFutureKey"] = true;
+  CHECK(volum::MidiRecallCcFromJson(future) == 20);
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(future, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  const std::string scene((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(scene.find("j[\"midiRecallCc\"] = mVolumMidiRecallCc.load();") != std::string::npos);
+  CHECK(scene.find("MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load())") != std::string::npos);
+  const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(load != std::string::npos);
+  const auto apply = scene.find("MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load())", load);
+  REQUIRE(apply != std::string::npos);
+  const auto guard = scene.rfind("#if defined(APP_API)", apply);
+  REQUIRE(guard != std::string::npos);
+  CHECK(scene.find("#endif", guard) > apply);
 }
