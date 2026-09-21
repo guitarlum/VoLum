@@ -376,6 +376,9 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // channel field in its instance settings equivalent.
   j["midiCh"] = mVolumMidiChannel.load();
   j["volumUiMode"] = volum::UiModeToString(mVolumUiMode);
+  // PLAY cursor: the DAW chunk already carries lastPlaySlot; standalone has no
+  // chunk, so the same instance key has to live here or a relaunch starts empty.
+  j["lastPlaySlot"] = mVolumLastRecalledPlaySlot;
   // 1.2.1: the same selection for every amp, not only the focused one. The single
   // key above describes whichever amp was in focus when the file was written, so
   // every other amp reopened reading "No Preset" - and an exit from an amp with
@@ -520,6 +523,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 #if defined(APP_API)
     mVolumUiMode = volum::UiModeFromMachineSettings(true, j, mVolumUiMode);
     mVolumMidiChannel.store(volum::MidiChannelFromMachineSettings(true, j, mVolumMidiChannel.load()));
+    mVolumLastRecalledPlaySlot = volum::LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot);
+    // Pack import-with-settings writes uiMode here without going through the
+    // toggle. Derive PLAY chrome now so the surface cannot stay shown over BUILD.
+    _VolumRefreshPlaySurface();
 #endif
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
@@ -574,7 +581,7 @@ void NeuralAmpModeler::_VolumSaveLiteMode()
     return;
 
   // Same read-merge-write as calibration: a plugin Lite click must not dump
-  // standalone PLAY/BUILD, midiCh, or scenes into the shared machine file.
+  // standalone PLAY/BUILD, midiCh, lastPlaySlot, or scenes into the shared machine file.
   static std::mutex liteModeSettingsMutex;
   std::lock_guard<std::mutex> lock(liteModeSettingsMutex);
 

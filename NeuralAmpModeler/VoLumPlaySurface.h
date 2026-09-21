@@ -43,6 +43,8 @@ public:
 
   void SetMode(volum::UiMode mode)
   {
+    if (mMode == mode)
+      return;
     mMode = mode;
     SetDirty(false);
   }

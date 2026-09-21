@@ -704,7 +704,7 @@ inline std::unordered_map<std::string, std::string> VolumActivePresetIdsFromJson
 }
 
 // Plugin Lite toggles must not dump the whole machine file (that would move
-// standalone PLAY/BUILD, midiCh, and scenes). Read-merge-write only this key.
+// standalone PLAY/BUILD, midiCh, lastPlaySlot, and scenes). Read-merge-write only this key.
 inline nlohmann::json MergeLiteModeIntoSettings(nlohmann::json j, bool liteMode)
 {
   if (!j.is_object())

@@ -60,6 +60,38 @@ inline int MidiChannelFromMachineSettings(bool standalone, const nlohmann::json&
   return standalone ? MidiChannelFromJson(value, fallback) : fallback;
 }
 
+inline int LastPlaySlotFromJson(const nlohmann::json& value, int fallback = -1)
+{
+  if (!value.is_object() || !value.contains("lastPlaySlot") || !value["lastPlaySlot"].is_number_integer())
+    return fallback;
+  return std::clamp(value["lastPlaySlot"].get<int>(), -1, 127);
+}
+
+// Same split as midiCh / volumUiMode: the PLAY cursor in volum-settings.json is
+// the standalone window. A plugin keeps `fallback` (constructor -1 or the
+// project id-tail) so a standalone quit cannot move the next VST3 insert.
+inline int LastPlaySlotFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? LastPlaySlotFromJson(value, fallback) : fallback;
+}
+
+// PLAY is attached at full-window bounds. Hide/show of that surface, the BUILD
+// header plate, and the preset bar is a function of UiMode - not something a
+// caller remembers. Host restore writes mVolumUiMode and runs _VolumSyncUiFromState;
+// if that path skips this plan, PLAY left shown swallows every BUILD click.
+struct PlayChromePlan
+{
+  bool hidePlaySurface = true;
+  bool hideHeaderPlate = false;
+  bool hidePresetBar = false;
+};
+
+inline PlayChromePlan PlayChromeForUiMode(UiMode mode)
+{
+  const bool play = mode == UiMode::Play;
+  return {!play, play, play};
+}
+
 enum class UiModeTransitionAction
 {
   RefreshOnly

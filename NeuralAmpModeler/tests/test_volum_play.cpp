@@ -36,6 +36,17 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   CHECK(volum::MidiChannelFromMachineSettings(true, midi, 0) == 7);
   CHECK(volum::MidiChannelFromMachineSettings(false, midi, 0) == 0);
   CHECK(volum::MidiChannelFromMachineSettings(false, midi, 12) == 12);
+  nlohmann::json slot = {{"lastPlaySlot", 7}};
+  CHECK(volum::LastPlaySlotFromJson(slot) == 7);
+  CHECK(volum::LastPlaySlotFromJson(nlohmann::json::object(), -1) == -1);
+  CHECK(volum::LastPlaySlotFromJson(nlohmann::json::object(), 3) == 3);
+  CHECK(volum::LastPlaySlotFromJson({{"lastPlaySlot", 99}}) == 99);
+  CHECK(volum::LastPlaySlotFromJson({{"lastPlaySlot", 200}}) == 127);
+  CHECK(volum::LastPlaySlotFromJson({{"lastPlaySlot", -9}}) == -1);
+  CHECK(volum::LastPlaySlotFromJson({{"lastPlaySlot", 7.5}}) == -1);
+  CHECK(volum::LastPlaySlotFromMachineSettings(true, slot, -1) == 7);
+  CHECK(volum::LastPlaySlotFromMachineSettings(false, slot, -1) == -1);
+  CHECK(volum::LastPlaySlotFromMachineSettings(false, slot, 3) == 3);
   CHECK(volum::ActionForUiModeTransition(volum::UiMode::Build, volum::UiMode::Play)
         == volum::UiModeTransitionAction::RefreshOnly);
 }
@@ -433,4 +444,21 @@ TEST_CASE("Sound recall settings are nullopt for invalid and unassigned slots")
   CHECK_FALSE(volum::ResolveSoundSettings(factory, registry, "missing-amp", "missing-preset").has_value());
   CHECK_FALSE(volum::ResolveSoundSettings(factory, registry, "factory:7", "no-such-preset").has_value());
   CHECK_FALSE(volum::content::ResolveMidiSound(registry, 1).has_value()); // hole
+}
+
+TEST_CASE("PLAY chrome hide flags are a function of UiMode")
+{
+  // Host restore writes mVolumUiMode then runs _VolumSyncUiFromState. If hide/show
+  // lives only in the toggle path, PLAY left shown at full-window bounds swallows
+  // every BUILD click. These flags are what every sync path must apply.
+  const auto build = volum::PlayChromeForUiMode(volum::UiMode::Build);
+  CHECK(build.hidePlaySurface);
+  CHECK_FALSE(build.hideHeaderPlate);
+  CHECK_FALSE(build.hidePresetBar);
+
+  const auto play = volum::PlayChromeForUiMode(volum::UiMode::Play);
+  CHECK_FALSE(play.hidePlaySurface);
+  CHECK(play.hideHeaderPlate);
+  CHECK(play.hidePresetBar);
+  CHECK(play.hideHeaderPlate == (volum::UiMode::Play == volum::UiMode::Play));
 }

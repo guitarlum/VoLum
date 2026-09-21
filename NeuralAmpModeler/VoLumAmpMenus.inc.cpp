@@ -345,6 +345,12 @@ void NeuralAmpModeler::_VolumSyncUiFromState()
 
   // Cab row + channel stepper for the focused lane.
   _VolumApplyFocusedLaneCabs();
+
+  // PLAY covers the whole window, so a restore that lands BUILD while the surface
+  // is still shown hands every click to a hidden-in-spirit overlay. Deriving the
+  // chrome from mVolumUiMode here means a host restore cannot forget it; nothing
+  // else on this path touched PLAY at all.
+  _VolumRefreshPlaySurface();
 }
 
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)

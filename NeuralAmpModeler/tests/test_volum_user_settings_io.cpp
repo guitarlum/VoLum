@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 
 TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
 {
@@ -981,11 +982,12 @@ TEST_CASE("User settings IO round-trips machine-global liteMode")
 // with no heal flag (additive forward tolerance, no version bump).
 TEST_CASE("Lite merge-write keeps sibling machine keys")
 {
-  nlohmann::json j = {{"midiCh", 4}, {"volumUiMode", "play"}, {"lastAmpIdx", 2}};
+  nlohmann::json j = {{"midiCh", 4}, {"volumUiMode", "play"}, {"lastPlaySlot", 7}, {"lastAmpIdx", 2}};
   const auto out = volum::MergeLiteModeIntoSettings(j, true);
   CHECK(out["liteMode"] == true);
   CHECK(out["midiCh"] == 4);
   CHECK(out["volumUiMode"] == "play");
+  CHECK(out["lastPlaySlot"] == 7);
   CHECK(out["lastAmpIdx"] == 2);
   CHECK(out["version"] == volum::kVoLumUserSettingsVersion);
 }
@@ -1414,4 +1416,63 @@ TEST_CASE("Entries that cannot name a preset are dropped, not stored as blanks")
   CHECK(written.contains("factory:0"));
   CHECK_FALSE(written.contains("factory:1"));
   CHECK_FALSE(written.contains(""));
+}
+
+TEST_CASE("lastPlaySlot is a standalone instance key, not a VoLumAmpSettings field")
+{
+  // H17: the PLAY cursor is the same class of per-instance key as midiCh /
+  // volumUiMode. It does not live on VoLumAmpSettings, so it must NOT enter the
+  // exhaustive amp-settings pin and must NOT bump kVoLumUserSettingsVersion.
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  CHECK_FALSE(written.contains("lastPlaySlot"));
+  CHECK_FALSE(written.contains("midiCh"));
+  CHECK_FALSE(written.contains("volumUiMode"));
+
+  nlohmann::json future = written;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["lastPlaySlot"] = 7;
+  future["unknownFutureKey"] = true;
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(future, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+
+  nlohmann::json older = written;
+  older.erase("lastPlaySlot");
+  healed = false;
+  volum::VolumUserSettingsFromJson(older, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+}
+
+TEST_CASE("Standalone settings write and read lastPlaySlot")
+{
+  // The decode helper is pinned in test_volum_play.cpp. This pin is the scene
+  // file wiring: without these two lines a quit/relaunch starts the PLAY cursor
+  // at -1 even though the DAW chunk already round-trips the same key.
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  const std::string scene((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(scene.find("j[\"lastPlaySlot\"] = mVolumLastRecalledPlaySlot;") != std::string::npos);
+  CHECK(scene.find("LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot)") != std::string::npos);
+  const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(load != std::string::npos);
+  const auto apply = scene.find("LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot)", load);
+  REQUIRE(apply != std::string::npos);
+  // The read belongs inside the APP_API guard: a plugin insert must not take a
+  // standalone window's PLAY cursor. Proven structurally rather than by counting
+  // characters - a byte-distance proxy breaks the moment anyone edits a nearby
+  // comment, which says nothing about whether the guard still holds.
+  const auto guard = scene.rfind("#if defined(APP_API)", apply);
+  REQUIRE(guard != std::string::npos);
+  CHECK(scene.find("#endif", guard) > apply);
+
+  // And the chrome refresh sits in that same guarded block, after the read, so
+  // an imported uiMode cannot leave PLAY covering BUILD.
+  const auto chrome = scene.find("_VolumRefreshPlaySurface();", apply);
+  REQUIRE(chrome != std::string::npos);
+  CHECK(chrome < scene.find("#endif", guard));
 }
