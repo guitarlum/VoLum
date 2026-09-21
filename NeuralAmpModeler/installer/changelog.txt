@@ -235,3 +235,7 @@
 08/03/2026 - v1.2.1 VoLum release. See GitHub release notes for included changes.
 
 08/13/2026 - v1.2.2 VoLum release. See GitHub release notes for included changes.
+
+09/20/2026 - VoLum 1.2.3 (fix - a second amp can be added to Dual Amp again): Turning on Dual Amp and clicking the empty SUPPORT panel did nothing at all, so anyone who had not already chosen a second amp could never choose one. The panel opened its amp list only when it was already the selected lane, while selecting a lane was refused until it held an amp - a lane had to contain an amp before you could put one in it. The empty panel now opens the list on the first click, as the user guide has always said. A panel that already holds an amp is unchanged: click once to select that lane, again to swap the amp. Two things that made it worse are also fixed. The SUPPORT pan control was drawn over the "Choose support amp" text on an empty panel and swallowed clicks aimed at it; it now appears only once the lane holds an amp, like the polarity control beside it. And double-clicking - the natural response to a click that appears to do nothing - was ignored outright; it now works. Reported on macOS, but it happened on Windows too.
+
+09/21/2026 - v1.2.3 VoLum release. See GitHub release notes for included changes.

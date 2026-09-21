@@ -407,10 +407,11 @@ bool NeuralAmpModeler::_VolumHasSupportAmp()
 
 void NeuralAmpModeler::_VolumClampSupportFocus()
 {
-  if (!mVolumDualAmpFocusedSupport || _VolumHasSupportAmp())
+  const bool clamped = volum::dualamp::ClampSupportFocus(mVolumDualAmpFocusedSupport, _VolumHasSupportAmp());
+  if (clamped == mVolumDualAmpFocusedSupport)
     return;
 
-  mVolumDualAmpFocusedSupport = false;
+  mVolumDualAmpFocusedSupport = clamped;
 
   // Moving focus is only half the job. The cab row is shared by both lanes and every
   // write to it is now conditioned on which lane is focused, so a clamp that only
@@ -440,9 +441,11 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
   const bool supportFocus = dualActive && mVolumDualAmpFocusedSupport;
   const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;
-  // Polarity belongs to the SUPPORT lane whenever it has an amp - a factory amp
-  // or a custom support partner.
-  const bool showSupportPolarity = showPanKnobs && _VolumHasSupportAmp();
+  // Polarity and PAN both belong to the SUPPORT lane only once it has an amp - a
+  // factory amp or a custom support partner. An ungated PAN knob sat on the empty
+  // lane's title strip, directly over the "Choose support amp" call to action, and
+  // ate the clicks meant for it.
+  const bool showSupportLaneControls = showPanKnobs && _VolumHasSupportAmp();
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
@@ -471,11 +474,11 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
       });
       mainPanGrp->ForControlInGroup("SUPPORT_PAN_KNOB", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPanKnobSlot());
-        c->Hide(!showPanKnobs);
+        c->Hide(!showSupportLaneControls);
       });
       mainPanGrp->ForControlInGroup("SUPPORT_POLARITY_TOGGLE", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPolarityToggleSlot());
-        c->Hide(!showSupportPolarity);
+        c->Hide(!showSupportLaneControls);
       });
     }
   }
