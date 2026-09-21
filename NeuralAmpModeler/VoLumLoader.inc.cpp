@@ -45,7 +45,7 @@ void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampI
   request.fileToLoad = fileToLoad;
   request.rigsRoot = std::move(rigsRoot);
   request.sampleRate = GetSampleRate();
-  request.blockSize = GetBlockSize();
+  request.blockSize = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -95,7 +95,7 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
   request.ampIdx = ampIdx;
   request.fileToLoad = fileToLoad;
   request.sampleRate = GetSampleRate();
-  request.blockSize = GetBlockSize();
+  request.blockSize = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -118,7 +118,7 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
   request.slot = slot;
   request.fileToLoad = fileToLoad;
   request.sampleRate = GetSampleRate();
-  request.blockSize = GetBlockSize();
+  request.blockSize = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -133,8 +133,10 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
 }
 
 // Runs on the audio thread, from _ApplyDSPStaging inside ProcessBlock. Nothing
-// here may do file I/O - load outcomes are logged by _VolumLoaderThreadMain
-// instead. See the note at the log call there.
+// here may do file I/O, Reset/prewarm a NAM, WDL_String::Set, or destroy a
+// ResamplingNAM - load outcomes are logged by _VolumLoaderThreadMain, stale
+// rate/block results re-queue via mVolumNeedsLoad, and outgoing models go to
+// the OnIdle graveyard.
 void NeuralAmpModeler::_VolumDrainLoaderResults()
 {
   std::deque<VoLumLoadResult> results;
@@ -145,14 +147,13 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
     results.swap(mVolumLoadResults);
   }
 
+  const double liveRate = GetSampleRate();
+  const int liveBlock = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
+
   for (auto& result : results)
   {
-    if (result.model != nullptr && (result.sampleRate != GetSampleRate() || result.blockSize != GetBlockSize()))
-    {
-      result.model->Reset(GetSampleRate(), GetBlockSize());
-      result.sampleRate = GetSampleRate();
-      result.blockSize = GetBlockSize();
-    }
+    const bool rateMismatch =
+      result.model != nullptr && (result.sampleRate != liveRate || result.blockSize != liveBlock);
 
     if (result.kind == VoLumLoadKind::Main)
     {
@@ -164,25 +165,24 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
         else if (!mVolumLoadingMainPath.empty())
           superseded = true;
       }
-      if (superseded)
-        continue;
-      mVolumIsLoading.store(false);
-      if (mVolumNeedsLoad.load())
-        continue;
+      if (!superseded)
+        mVolumIsLoading.store(false);
 
-      if (!result.error.empty())
+      const auto action = volum::dsp_staging::DecideLoaderResult(
+        result.model != nullptr, superseded, mVolumNeedsLoad.load(), rateMismatch, !result.error.empty());
+      if (action == volum::dsp_staging::LoaderResultAction::RetireAndReload)
+        mVolumNeedsLoad.store(true);
+      else if (action == volum::dsp_staging::LoaderResultAction::Ignore && !result.error.empty())
       {
         // Keep the last known-good model for uninterrupted audio, but tell the
         // main/UI thread to make the fallback explicit in the footer.
         mVolumMainLoadFailed.store(true);
-        continue;
       }
-
-      if (result.model != nullptr)
+      else if (action == volum::dsp_staging::LoaderResultAction::Stage)
       {
         std::lock_guard<std::mutex> lock(mStagingMutex);
-        mStagedModel = std::move(result.model);
-        volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());
+        volum::dsp_staging::StageIncomingModel(mStagedModel, result.model, mDspGraveyard);
+        volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());
       }
       continue;
     }
@@ -195,19 +195,17 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
           mVolumLoadingSupportPath.clear();
       }
       mVolumSupportIsLoading.store(false);
-      if (mVolumSupportNeedsLoad.load())
-        continue;
 
-      if (!result.error.empty())
-      {
+      const auto action = volum::dsp_staging::DecideLoaderResult(
+        result.model != nullptr, false, mVolumSupportNeedsLoad.load(), rateMismatch, !result.error.empty());
+      if (action == volum::dsp_staging::LoaderResultAction::RetireAndReload)
+        mVolumSupportNeedsLoad.store(true);
+      else if (action == volum::dsp_staging::LoaderResultAction::Ignore && !result.error.empty())
         mShouldRemoveSupportModel.store(true);
-        continue;
-      }
-
-      if (result.model != nullptr)
+      else if (action == volum::dsp_staging::LoaderResultAction::Stage)
       {
         std::lock_guard<std::mutex> lock(mStagingMutex);
-        mStagedSupportModel = std::move(result.model);
+        volum::dsp_staging::StageIncomingModel(mStagedSupportModel, result.model, mDspGraveyard);
       }
       continue;
     }
@@ -222,20 +220,24 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       if (mVolumLoadingPrePath[slot] == result.path)
         mVolumLoadingPrePath[slot].clear();
     }
-    if (mVolumPreNeedsLoad[slot].load())
-      continue;
 
-    if (!result.error.empty())
-    {
+    const auto action = volum::dsp_staging::DecideLoaderResult(
+      result.model != nullptr, false, mVolumPreNeedsLoad[slot].load(), rateMismatch, !result.error.empty());
+    if (action == volum::dsp_staging::LoaderResultAction::RetireAndReload)
+      mVolumPreNeedsLoad[slot].store(true);
+    else if (action == volum::dsp_staging::LoaderResultAction::Ignore && !result.error.empty())
       mShouldRemovePreModel[slot].store(true);
-      continue;
-    }
-
-    if (result.model != nullptr)
+    else if (action == volum::dsp_staging::LoaderResultAction::Stage)
     {
       std::lock_guard<std::mutex> lock(mStagingMutex);
-      mStagedPreModel[slot] = std::move(result.model);
+      volum::dsp_staging::StageIncomingModel(mStagedPreModel[slot], result.model, mDspGraveyard);
     }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    for (auto& result : results)
+      volum::dsp_staging::RetireToGraveyard(result.model, mDspGraveyard);
   }
 }
 

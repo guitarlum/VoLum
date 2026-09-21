@@ -211,9 +211,10 @@ public:
 
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
-    if (num_frames > mMaxExternalBlockSize)
-      // We can afford to be careful
-      throw std::runtime_error("More frames were provided than the max expected!");
+    // Hosts grow the callback without OnReset. Throw would unwind ProcessBlock
+    // (and leak the host FP env); allocate is also forbidden here.
+    if (!volum::dsp_staging::ProcessOrBypassNamBlock(num_frames, mMaxExternalBlockSize, input, output, 1))
+      return;
 
     if (!NeedToResample())
     {
@@ -1012,11 +1013,18 @@ private:
   bool mPostReverbWasActive = false;
   bool mPostTremoloWasActive = false;
   bool mPostChorusWasActive = false;
-  // Serializes writes from non-audio threads (UnserializeState path -> _StageModel /
-  // _StageIR) against the audio-thread read/move in _ApplyDSPStaging. The VoLum
-  // worker-queue path drains on the audio thread already, so it does not need this
-  // mutex; it is for the legacy NAM staging entry points only.
+  // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
+  // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
+  // The audio thread only moves unique_ptrs into mDspGraveyard; ~ResamplingNAM
+  // runs on OnIdle. Also covers the published NAM path buffer commit.
   mutable std::mutex mStagingMutex;
+  // Audio thread writes, OnIdle destroys. Reserved so push_back never reallocates
+  // in the callback. Overflow last-resorts to reset() on this thread.
+  std::vector<std::unique_ptr<ResamplingNAM>> mDspGraveyard;
+  // Path of the model just staged. Drain writes the pending buffer; apply
+  // promotes it so OnIdle cannot commit the live path before the object.
+  char mPendingNamPath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedNamPath;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
@@ -1049,6 +1057,9 @@ private:
   std::vector<iplug::sample> mDualSupportLaneBuffer;
   std::vector<iplug::sample> mDualMainAlignedBuffer;
   std::vector<iplug::sample> mDualSupportAlignedBuffer;
+  // 0 until OnReset reserves kRealtimeBlockReserve. ProcessBlock dry-passes
+  // until then so the first callback cannot allocate.
+  int mReservedAudioBlockSize = 0;
   volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
   volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
 

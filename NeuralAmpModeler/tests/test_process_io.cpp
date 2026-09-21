@@ -1,6 +1,10 @@
 #include "third_party/doctest.h"
 #include "../VoLumDualAmpPlan.h"
 #include "../VoLumProcessIO.h"
+
+#define VOLUM_DSP_STAGING_SKIP_WDL
+#include "../VoLumDspStagingWdl.h"
+
 #include <vector>
 
 TEST_CASE("APP_API stereo sum uses full per-channel gain")
@@ -266,4 +270,68 @@ TEST_CASE("Dual amp center stack can align a delayed support impulse")
   const float expected = static_cast<float>(0.70710678 * 2.0);
   DOCTEST_CHECK(left[1] == doctest::Approx(expected));
   DOCTEST_CHECK(right[1] == doctest::Approx(expected));
+}
+
+TEST_CASE("Audio scratch reserves the pitch-sized cap, not the last host block")
+{
+  // Revert of T1-3: OnReset assigned GetBlockSize() and ProcessBlock resized
+  // (and ResamplingNAM::process threw) when a host grew nFrames without OnReset.
+  CHECK(volum::dsp_staging::kRealtimeBlockReserve == 8192);
+  CHECK(volum::dsp_staging::ReservedAudioBlockSize(64) == volum::dsp_staging::kRealtimeBlockReserve);
+  CHECK(volum::dsp_staging::ReservedAudioBlockSize(128) == volum::dsp_staging::kRealtimeBlockReserve);
+  CHECK(volum::dsp_staging::ReservedAudioBlockSize(16384) == 16384);
+  CHECK(volum::dsp_staging::AudioBlockFitsReserve(64, 8192));
+  CHECK_FALSE(volum::dsp_staging::AudioBlockFitsReserve(8193, 8192));
+  CHECK_FALSE(volum::dsp_staging::AudioBlockFitsReserve(64, 0));
+}
+
+TEST_CASE("Scratch resize refuses to allocate past the off-thread reserve")
+{
+  std::vector<float> buf;
+  buf.reserve(static_cast<size_t>(volum::dsp_staging::kRealtimeBlockReserve));
+  const auto reserved = buf.capacity();
+
+  CHECK(volum::dsp_staging::ResizeScratchNoAlloc(buf, 64));
+  CHECK(buf.size() == 64);
+  CHECK(buf.capacity() == reserved);
+
+  CHECK(volum::dsp_staging::ResizeScratchNoAlloc(buf, static_cast<size_t>(volum::dsp_staging::kRealtimeBlockReserve)));
+  CHECK(buf.capacity() == reserved);
+
+  CHECK_FALSE(volum::dsp_staging::ResizeScratchNoAlloc(buf, reserved + 1));
+  CHECK(buf.capacity() == reserved);
+  CHECK(buf.size() == static_cast<size_t>(volum::dsp_staging::kRealtimeBlockReserve));
+}
+
+TEST_CASE("An oversized NAM block copies dry and does not throw")
+{
+  float in[4] = {1.f, 2.f, 3.f, 4.f};
+  float out[4] = {0.f, 0.f, 0.f, 0.f};
+  float* ip = in;
+  float* op = out;
+
+  CHECK_FALSE(volum::dsp_staging::ProcessOrBypassNamBlock(4, 2, &ip, &op, 1));
+  CHECK(out[0] == doctest::Approx(1.f));
+  CHECK(out[1] == doctest::Approx(2.f));
+  CHECK(out[2] == doctest::Approx(3.f));
+  CHECK(out[3] == doctest::Approx(4.f));
+
+  out[0] = -1.f;
+  CHECK(volum::dsp_staging::ProcessOrBypassNamBlock(2, 2, &ip, &op, 1));
+  CHECK(out[0] == doctest::Approx(-1.f));
+}
+
+TEST_CASE("An oversized ProcessBlock copies or silences the external bus")
+{
+  float inL[2] = {0.5f, -0.25f};
+  float outL[2] = {9.f, 9.f};
+  float outR[2] = {8.f, 8.f};
+  float* inputs[1] = {inL};
+  float* outputs[2] = {outL, outR};
+
+  volum::dsp_staging::CopyOrSilenceExternalBlock(inputs, outputs, 2, 1, 2);
+  CHECK(outL[0] == doctest::Approx(0.5f));
+  CHECK(outL[1] == doctest::Approx(-0.25f));
+  CHECK(outR[0] == doctest::Approx(0.f));
+  CHECK(outR[1] == doctest::Approx(0.f));
 }

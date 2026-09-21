@@ -1463,7 +1463,7 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   RequireContains(source, "_VolumProcessMainAmpChain");
   RequireContains(source, "_VolumProcessDualAmpSupportLane");
   RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
-  RequireContains(loader, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());");
+  RequireContains(loader, "volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());");
   RequireContains(header, "volum::dsp_staging::WdlStagedPathPair mNAMPaths;");
   RequireContains(header, "void _VolumDropQueuedLoadRequests(Pred pred)");
   RequireDoesNotContain(source, ".detach()");
@@ -1975,7 +1975,13 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   RequireContains(source, "if (!prepared)");
   RequireContains(source, "return \"Save failed: \" + prepared.error;");
   RequireContains(source, "mVolumMainLoadFailed.store(true);");
-  RequireContains(source, "if (superseded)");
+  // A load the user has already moved on from must not be applied as if it were
+  // the one they asked for. The drain used to spell that `if (superseded)`; it now
+  // feeds the same fact into the shared decision so the retire-vs-apply choice is
+  // testable off the audio thread (test_volum_dsp_staging.cpp).
+  RequireContains(source, "superseded = true;");
+  RequireContains(source, "volum::dsp_staging::DecideLoaderResult(");
+  RequireContains(source, "result.model != nullptr, superseded,");
   RequireContains(source, "LOAD FAILED");
   RequireContains(source, "(still playing ");
   // Keep every WDL/iPlug path string UTF-8 all the way to the native filesystem
@@ -2099,6 +2105,11 @@ TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
 
   const std::string drainBody = loader.substr(drain, loaderMain - drain);
   RequireDoesNotContain(drainBody, "VOLUM_LOG");
+  // T1-2: a stale-rate result used to ResetAndPrewarm on this thread. The helper
+  // decides RetireAndReload; the drain must not call Reset itself.
+  RequireDoesNotContain(drainBody, "->Reset(");
+  RequireContains(drainBody, "DecideLoaderResult");
+  RequireContains(drainBody, "RetireToGraveyard");
 
   // The outcomes are still logged, just from the worker thread that produced them -
   // and worded for what that thread actually knows. It has read and parsed the file;
@@ -2108,6 +2119,32 @@ TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
   RequireContains(loaderBody, "VOLUM_LOG(\"model\"");
   RequireContains(loaderBody, "\" read \"");
   RequireContains(loaderBody, "\" load FAILED \"");
+}
+
+TEST_CASE("Audio-thread model apply retires to the graveyard and never throws")
+{
+  // NeuralAmpModeler / ResamplingNAM cannot be constructed in this binary (iPlug).
+  // The helpers in test_volum_dsp_staging.cpp and test_process_io.cpp own the
+  // behaviour; these pins are only the call sites.
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  const auto apply = source.find("void NeuralAmpModeler::_ApplyDSPStaging()");
+  REQUIRE(apply != std::string::npos);
+  const auto applyEnd = source.find("void NeuralAmpModeler::_VolumFlushDeferredIrShaping()", apply);
+  REQUIRE(applyEnd != std::string::npos);
+  const std::string applyBody = source.substr(apply, applyEnd - apply);
+  RequireContains(applyBody, "PublishStagedModel");
+  RequireContains(applyBody, "PublishPathNoAlloc(mPublishedNamPath, mPendingNamPath)");
+  RequireDoesNotContain(applyBody, "CommitStagedPathOnApply(mNAMPaths)");
+
+  const auto process = header.find("void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)");
+  REQUIRE(process != std::string::npos);
+  const auto processEnd = header.find("void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)", process);
+  REQUIRE(processEnd != std::string::npos);
+  const std::string processBody = header.substr(process, processEnd - process);
+  RequireContains(processBody, "ProcessOrBypassNamBlock");
+  RequireDoesNotContain(processBody, "throw std::runtime_error");
 }
 
 TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay muted")

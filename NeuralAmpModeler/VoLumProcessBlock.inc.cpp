@@ -147,9 +147,8 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   if (!processingPlan.runDualAmp)
     return nullptr;
 
-  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames)
-         && "Dual-amp support scratch not pre-reserved");
-  mDualSupportLaneBuffer.resize(nFrames);
+  if (!volum::dsp_staging::ResizeScratchNoAlloc(mDualSupportLaneBuffer, static_cast<size_t>(nFrames)))
+    return nullptr;
 
   const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
   for (size_t i = 0; i < static_cast<size_t>(nFrames); ++i)

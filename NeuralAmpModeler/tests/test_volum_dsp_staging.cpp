@@ -1,5 +1,9 @@
 ﻿#include "third_party/doctest.h"
-#include "../VoLumDspStaging.h"
+
+#define VOLUM_DSP_STAGING_SKIP_WDL
+#include "../VoLumDspStagingWdl.h"
+
+#include <string>
 
 TEST_CASE("DSP staging keeps live path until staged asset is applied")
 {
@@ -165,4 +169,114 @@ TEST_CASE("A non-positive deadline disables deferral so the removal is immediate
   const auto step = StepDeferredIrSwap(/*pending=*/true, /*waitedBlocks=*/0, /*replacementStaged=*/false,
                                        /*maxWaitBlocks=*/0);
   CHECK(step.fire == true);
+}
+
+namespace
+{
+struct Counted
+{
+  static int live;
+  Counted() { ++live; }
+  ~Counted() { --live; }
+};
+int Counted::live = 0;
+} // namespace
+
+TEST_CASE("Publishing a staged model retires the live one instead of destroying it")
+{
+  // Revert of T1-1: `live = std::move(staged)` runs ~ResamplingNAM in ProcessBlock.
+  Counted::live = 0;
+  auto live = std::make_unique<Counted>();
+  auto staged = std::make_unique<Counted>();
+  std::vector<std::unique_ptr<Counted>> graveyard;
+  graveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+
+  volum::dsp_staging::PublishStagedModel(live, staged, graveyard);
+
+  CHECK(staged == nullptr);
+  CHECK(live != nullptr);
+  CHECK(graveyard.size() == 1);
+  CHECK(Counted::live == 2);
+
+  graveyard.clear();
+  CHECK(Counted::live == 1);
+  live.reset();
+  CHECK(Counted::live == 0);
+}
+
+TEST_CASE("Staging an incoming model retires a not-yet-applied predecessor")
+{
+  Counted::live = 0;
+  auto staged = std::make_unique<Counted>();
+  auto incoming = std::make_unique<Counted>();
+  std::vector<std::unique_ptr<Counted>> graveyard;
+  graveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+
+  volum::dsp_staging::StageIncomingModel(staged, incoming, graveyard);
+
+  CHECK(incoming == nullptr);
+  CHECK(staged != nullptr);
+  CHECK(graveyard.size() == 1);
+  CHECK(Counted::live == 2);
+
+  graveyard.clear();
+  CHECK(Counted::live == 1);
+}
+
+TEST_CASE("A full graveyard last-resorts to destroy rather than reallocating")
+{
+  Counted::live = 0;
+  std::vector<std::unique_ptr<Counted>> graveyard;
+  graveyard.reserve(1);
+  auto first = std::make_unique<Counted>();
+  auto second = std::make_unique<Counted>();
+  CHECK(Counted::live == 2);
+
+  // Retiring moves ownership; it must not destroy. That is the whole point - the
+  // caller is the audio thread.
+  volum::dsp_staging::RetireToGraveyard(first, graveyard);
+  CHECK(first == nullptr);
+  CHECK(graveyard.size() == 1);
+  CHECK(Counted::live == 2);
+
+  // At capacity there is no room left, and growing the vector would allocate in
+  // the callback - the thing the graveyard exists to avoid. Destroying here is
+  // the lesser evil, and only reachable if OnIdle has not run for 16 swaps.
+  volum::dsp_staging::RetireToGraveyard(second, graveyard);
+  CHECK(second == nullptr);
+  CHECK(graveyard.size() == 1);
+  CHECK(graveyard.capacity() == 1); // no reallocation
+  CHECK(Counted::live == 1);
+}
+
+TEST_CASE("A loader result whose rate or block is stale is dropped for reload")
+{
+  using volum::dsp_staging::DecideLoaderResult;
+  using volum::dsp_staging::LoaderResultAction;
+
+  // Revert of T1-2: the drain used to Reset/prewarm this result on the audio thread.
+  CHECK(DecideLoaderResult(true, false, false, true, false) == LoaderResultAction::RetireAndReload);
+  CHECK(DecideLoaderResult(true, false, false, false, false) == LoaderResultAction::Stage);
+  CHECK(DecideLoaderResult(true, true, false, true, false) == LoaderResultAction::Retire);
+  CHECK(DecideLoaderResult(true, false, true, false, false) == LoaderResultAction::Retire);
+  CHECK(DecideLoaderResult(false, false, false, false, true) == LoaderResultAction::Ignore);
+  CHECK(DecideLoaderResult(false, false, false, false, false) == LoaderResultAction::Ignore);
+}
+
+TEST_CASE("A published NAM path copies into a fixed buffer without needing WDL")
+{
+  char pending[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::CopyPathNoAlloc(pending, sizeof(pending), "C:/rigs/Ampete One/AMP-Ampt-1.nam");
+  CHECK(std::string(pending) == "C:/rigs/Ampete One/AMP-Ampt-1.nam");
+
+  volum::dsp_staging::RtPublishedPath slot;
+  CHECK_FALSE(slot.dirty.load());
+  volum::dsp_staging::PublishPathNoAlloc(slot, pending);
+  CHECK(slot.dirty.load());
+  CHECK(std::string(slot.text) == std::string(pending));
+
+  slot.dirty.store(false);
+  volum::dsp_staging::PublishPathNoAlloc(slot, nullptr);
+  CHECK(slot.dirty.load());
+  CHECK(slot.text[0] == '\0');
 }
