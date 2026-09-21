@@ -103,6 +103,42 @@ struct Library
   }
 };
 
+// Same id and same stored relative path, different bytes. The default Library
+// fixture tags the path so two instances never collide; these two do, which is
+// the Keep-mine overwrite and the half-applied swap.
+struct CollidingPair
+{
+  std::filesystem::path base;
+  ContentStore store;
+  std::string ampRel;
+  std::string irRel;
+
+  CollidingPair(const char* name, const std::string& ampBytes, const std::string& irBytes)
+  : base(TestBase(name))
+  , store(base)
+  {
+    CustomAmp amp;
+    amp.id = "amp_one";
+    amp.name = "Plexi";
+    CustomNamFile f;
+    f.file = "Plexi.nam";
+    f.slot = kDirectSlot;
+    f.channel = 1;
+    f.storedPath = store.ImportFileCopy(WriteSrc(base / "incoming", "Plexi.nam", ampBytes), "amps", "amp_one_0");
+    amp.files = {f};
+    ampRel = f.storedPath;
+    store.reg().amps.push_back(amp);
+
+    IRItem ir;
+    ir.id = "ir_one";
+    ir.name = "Mesa OS";
+    ir.file = store.ImportFileCopy(WriteSrc(base / "incoming", "Mesa.wav", irBytes), "ir", "ir_one");
+    irRel = ir.file;
+    store.reg().irs.push_back(ir);
+    REQUIRE(store.Save());
+  }
+};
+
 ExportPlan EverythingPlan(const Registry& r)
 {
   ExportSelection sel;
@@ -293,6 +329,17 @@ TEST_CASE("Export closure auto-includes what a selection references")
     CHECK_FALSE(Mentions(BuildExportPlan(lib.store.reg(), share).irIds, "ir_spare"));
     CHECK(Mentions(EverythingPlan(lib.store.reg()).irIds, "ir_spare"));
   }
+
+  SUBCASE("a preset on a custom amp pulls the owner amp and its captures")
+  {
+    ExportSelection sel;
+    sel.everything = false;
+    sel.presetIds = {"preset_one"};
+    const auto plan = BuildExportPlan(lib.store.reg(), sel);
+    CHECK(plan.ampIds == std::vector<std::string>{"amp_one"});
+    CHECK(Mentions(plan.alsoIncluding, "Plexi"));
+    CHECK(Mentions(PackPayloadFiles(lib.store.reg(), plan), lib.ampStoredPath));
+  }
 }
 
 TEST_CASE("Pack export and import labels name the amp a preset belongs to")
@@ -405,6 +452,55 @@ TEST_CASE("Export refuses when a capture file is missing rather than packing a h
   CHECK_FALSE(WritePack(lib.store, EverythingPlan(lib.store.reg()), "", out, &err));
   CHECK(Mentions({err}, "Could not read"));
   CHECK_FALSE(std::filesystem::exists(out));
+}
+
+TEST_CASE("Sounds export of a custom-amp preset writes the owner amp into the Pack")
+{
+  Library lib("export-owner-amp");
+  ExportSelection sel;
+  sel.everything = false;
+  sel.presetIds = {"preset_one"};
+  std::string err;
+  const auto out = lib.base / "sound.volumpack";
+  REQUIRE_MESSAGE(WritePack(lib.store, BuildExportPlan(lib.store.reg(), sel), "", out, &err), err);
+  const auto pack = OpenPack(out);
+  REQUIRE(pack.ok);
+  REQUIRE(pack.library.amps.size() == 1);
+  CHECK(pack.library.amps[0].id == "amp_one");
+  REQUIRE(pack.files.count(lib.ampStoredPath) == 1);
+  CHECK(pack.files.at(lib.ampStoredPath) == "NAM-amp-a");
+}
+
+TEST_CASE("Everything export of a factory-only library still writes settings and the MIDI map")
+{
+  ContentStore store(TestBase("factory-only-everything"));
+  store.reg().midiSoundMap[3] =
+    MidiSoundAssignment{volum::content::FactoryOwnerKey(0), volum::content::FactoryOwnerKey(0) + ":v1"};
+  REQUIRE(store.Save());
+
+  const auto plan = EverythingPlan(store.reg());
+  CHECK(plan.ampIds.empty());
+  CHECK(plan.irIds.empty());
+  CHECK(plan.pedalIds.empty());
+  CHECK(plan.presetIds.empty());
+  CHECK(plan.includeSettings);
+  CHECK(plan.includeMidiSoundMap);
+  CHECK_FALSE(plan.Empty());
+  ExportSelection shareNothing;
+  shareNothing.everything = false;
+  CHECK(BuildExportPlan(store.reg(), shareNothing).Empty());
+
+  const auto out = store.BaseDir() / "factory.volumpack";
+  std::string err;
+  const std::string settings = "{\"volumLastAmp\":2}";
+  REQUIRE_MESSAGE(WritePack(store, plan, settings, out, &err), err);
+  const auto pack = OpenPack(out);
+  REQUIRE(pack.ok);
+  CHECK(pack.job == Job::Everything);
+  CHECK(pack.includesMidiSoundMap);
+  REQUIRE(pack.library.midiSoundMap.count(3) == 1);
+  CHECK(pack.library.midiSoundMap.at(3).ampId == volum::content::FactoryOwnerKey(0));
+  CHECK(pack.settingsJson == settings);
 }
 
 // ---------------------------------------------------------------------------
@@ -708,6 +804,38 @@ TEST_CASE("Overwrite, Add and Reset differ exactly where the ticket says they do
     REQUIRE(reloaded.reg().presetBanks.at("amp_one").size() == 1);
     CHECK(reloaded.reg().presetBanks.at("amp_one")[0].id == "preset_one");
   }
+}
+
+TEST_CASE("Add keeps the local capture bytes when the stored path collides")
+{
+  // Real collision: same id, same stored relative path, different bytes. The
+  // fixture above tags sender/receiver paths apart, which is why this hole
+  // stayed green.
+  CollidingPair sender("keep-mine-sender", "NAM-amp-theirs", "RIFF-ir-theirs");
+  CollidingPair receiver("keep-mine-receiver", "NAM-amp-mine", "RIFF-ir-mine");
+  REQUIRE(sender.ampRel == receiver.ampRel);
+  REQUIRE(sender.irRel == receiver.irRel);
+
+  std::string err;
+  const auto out = sender.base / "out.volumpack";
+  REQUIRE_MESSAGE(WritePack(sender.store, EverythingPlan(sender.store.reg()), "", out, &err), err);
+  const auto pack = OpenPack(out);
+  REQUIRE(pack.ok);
+  REQUIRE(pack.files.count(receiver.ampRel) == 1);
+  CHECK(pack.files.at(receiver.ampRel) == "NAM-amp-theirs");
+
+  const auto preview = BuildImportPreview(receiver.store.reg(), pack, ImportVerb::Add, false, true);
+  CHECK(preview.replaces.empty());
+
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Add, false, true);
+  REQUIRE_MESSAGE(result.ok, result.error);
+  CHECK(result.replacedIds.empty());
+
+  std::string ampBody, irBody;
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampRel), ampBody));
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.irRel), irBody));
+  CHECK(ampBody == "NAM-amp-mine");
+  CHECK(irBody == "RIFF-ir-mine");
 }
 
 TEST_CASE("An imported pedal whose PRE index is taken is renumbered, and the Pack's presets follow")
@@ -1104,10 +1232,12 @@ TEST_CASE("Preset import closure matches export across IR pedal and dual-amp par
   const ExportPlan exportClosure = BuildExportPlan(lib.store.reg(), selection);
   CHECK(exportClosure.irIds == std::vector<std::string>{"ir_one", "ir_partner"});
   CHECK(exportClosure.pedalIds == std::vector<std::string>{"pedal_one"});
-  CHECK(exportClosure.ampIds == std::vector<std::string>{"amp_partner"});
+  // The seed preset's owner is the same class of requirement as the partner.
+  CHECK(exportClosure.ampIds == std::vector<std::string>{"amp_one", "amp_partner"});
   CHECK(exportClosure.presetIds == std::vector<std::string>{"preset_one", "preset_partner"});
 
   const ImportTicks locks = CompanionLocks(lib.store.reg(), closed);
+  CHECK(locks.HasAmp("amp_one"));
   CHECK(locks.HasAmp("amp_partner"));
   CHECK(locks.HasPreset("preset_partner"));
   CHECK(locks.HasIr("ir_one"));
@@ -1445,6 +1575,96 @@ TEST_CASE("A corrupt Pack changes nothing at all")
   CHECK(body == "NAM-amp-recv"); // never touched
 }
 
+TEST_CASE("A held content-store lock leaves live captures and the catalog untouched")
+{
+  CollidingPair sender("lock-held-sender", "NAM-amp-theirs", "RIFF-ir-theirs");
+  CollidingPair receiver("lock-held-receiver", "NAM-amp-mine", "RIFF-ir-mine");
+  REQUIRE(sender.ampRel == receiver.ampRel);
+
+  std::string err;
+  const auto out = sender.base / "out.volumpack";
+  REQUIRE_MESSAGE(WritePack(sender.store, EverythingPlan(sender.store.reg()), "", out, &err), err);
+  const auto pack = OpenPack(out);
+  REQUIRE(pack.ok);
+
+  const std::string before = volum::content::RegistryToJson(receiver.store.reg()).dump();
+  volum::content::RegistryFileLock holder;
+  REQUIRE(holder.Acquire(receiver.store.LockPath()));
+
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true, {}, 80);
+  CHECK_FALSE(result.ok);
+  CHECK_FALSE(result.error.empty());
+
+  CHECK(volum::content::RegistryToJson(receiver.store.reg()).dump() == before);
+  std::string body;
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampRel), body));
+  CHECK(body == "NAM-amp-mine");
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.irRel), body));
+  CHECK(body == "RIFF-ir-mine");
+  CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-stage"));
+}
+
+TEST_CASE("A failed catalog Save restores live capture bytes")
+{
+  CollidingPair sender("save-fail-sender", "NAM-amp-theirs", "RIFF-ir-theirs");
+  CollidingPair receiver("save-fail-receiver", "NAM-amp-mine", "RIFF-ir-mine");
+
+  std::string err;
+  const auto out = sender.base / "out.volumpack";
+  REQUIRE_MESSAGE(WritePack(sender.store, EverythingPlan(sender.store.reg()), "", out, &err), err);
+  const auto pack = OpenPack(out);
+  REQUIRE(pack.ok);
+
+  const auto registry = receiver.store.RegistryPath();
+  std::filesystem::permissions(registry, std::filesystem::perms::owner_read, std::filesystem::perm_options::replace);
+
+  const std::string before = volum::content::RegistryToJson(receiver.store.reg()).dump();
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true);
+  std::filesystem::permissions(registry, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
+
+  CHECK_FALSE(result.ok);
+  CHECK(volum::content::RegistryToJson(receiver.store.reg()).dump() == before);
+  std::string body;
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampRel), body));
+  CHECK(body == "NAM-amp-mine");
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.irRel), body));
+  CHECK(body == "RIFF-ir-mine");
+  CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-rollback"));
+}
+
+TEST_CASE("A mid-swap write error restores the file that already landed")
+{
+  CollidingPair sender("mid-swap-sender", "NAM-amp-theirs", "RIFF-ir-theirs");
+  CollidingPair receiver("mid-swap-receiver", "NAM-amp-mine", "RIFF-ir-mine");
+  REQUIRE(sender.ampRel == receiver.ampRel);
+  REQUIRE(sender.irRel == receiver.irRel);
+
+  std::string err;
+  const auto out = sender.base / "out.volumpack";
+  REQUIRE_MESSAGE(WritePack(sender.store, EverythingPlan(sender.store.reg()), "", out, &err), err);
+  const auto pack = OpenPack(out);
+  REQUIRE(pack.ok);
+
+  // amps/... sorts before ir/... in the payload map, so the amp lands first.
+  // A non-empty directory at the IR path makes remove + rename + copy all fail.
+  const auto irDst = receiver.store.ResolveStored(receiver.irRel);
+  REQUIRE(std::filesystem::is_regular_file(irDst));
+  std::error_code ec;
+  std::filesystem::remove(irDst, ec);
+  std::filesystem::create_directory(irDst, ec);
+  REQUIRE_FALSE(ec);
+  WriteSrc(irDst, "blocker.txt", "no");
+
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true);
+  CHECK_FALSE(result.ok);
+
+  std::string body;
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampRel), body));
+  CHECK(body == "NAM-amp-mine");
+  CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-stage"));
+  CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-rollback"));
+}
+
 TEST_CASE("A successful import leaves the prior library in a backup")
 {
   Library sender("backup-sender", "sender");
@@ -1463,6 +1683,7 @@ TEST_CASE("A successful import leaves the prior library in a backup")
   CHECK(nlohmann::json::parse(backup).dump() == before);
   // And no staging directory is left behind.
   CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-stage"));
+  CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-rollback"));
 }
 
 TEST_CASE("An import is a catalog writer: a sibling's unflushed item survives it")
