@@ -214,6 +214,8 @@ Namen für eigene Inhalte (Amps, IRs, Pedale und Presets) haben sinnvolle Länge
 
 ![VoLum Verwaltung eigener Pedale](user-guide-custom-pedal.png)
 
+Kann VoLum die Bibliotheksdatei nicht lesen, bleibt sie als `volum-content.json.bak` erhalten (ein älteres Backup wandert nach `volum-content.json.bak.1`), und das nächste Fenster sagt das. Ein Amp, den du in der Liste löschst, wird gemeldet, wenn das Speichern die Platte nicht erreicht.
+
 Die Inhaltsbibliothek wird von allen geöffneten Instanzen und Spuren geteilt. In einer DAW speichert das Projekt stabile Referenzen (IDs) auf deine eigenen Amps, IRs, Pedale und das aktive Preset, sodass das erneute Öffnen eines Projekts sie wiederherstellt, solange die Einträge noch in deiner Bibliothek vorhanden sind. Zwei VoLums dürfen die Bibliothek gleichzeitig bearbeiten – die Standalone-App und eine in deiner DAW oder zwei Spuren – und jedes schreibt nur seine eigenen Änderungen. Eine in einem Fenster importierte IR kann also nicht mehr verschwinden, weil das andere Fenster ein Preset speichert.
 
 Löschst du etwas, das gerade klingt, wandert die betroffene Lane in derselben Aktion mit – in dem Fenster, in dem du gelöscht hast: ein gelöschter Haupt-Amp fällt auf den Werk-Amp aus der Liste zurück, ein gelöschtes Pedal lässt seinen PRE-Slot leer, eine gelöschte IR kehrt zur eingebackenen Box des Amps zurück, und ein gelöschtes Preset wird einfach vergessen. Die Bestätigung nennt vorher, was gerade klingt und wohin es geht. Ein anderes offenes VoLum spielt weiter, was es hat, bis es den gelöschten Eintrag das nächste Mal braucht.

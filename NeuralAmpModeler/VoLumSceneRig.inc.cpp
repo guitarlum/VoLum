@@ -856,7 +856,12 @@ void NeuralAmpModeler::_VolumApplyActiveIr(const std::string& irId, bool support
   if (idx < 0)
   {
     // Empty or orphaned id (the IR was deleted / is missing on this machine):
-    // drop the convolver so the baked cab takes over. No UI when headless.
+    // drop the convolver so the baked cab takes over, and drop the id so a later
+    // overwrite does not write the dead reference back. No UI when headless.
+    if (support)
+      _VolumActiveScene().supportActiveIrId.clear();
+    else
+      _VolumActiveScene().activeIrId.clear();
     (support ? mShouldRemoveSupportIR : mShouldRemoveIR) = true;
     if (support == _VolumSupportFocused())
       if (auto* pGfx = GetUI())
@@ -903,8 +908,8 @@ iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const
   const double highHz = (support ? mSupportIrHighCutHz : mIrHighCutHz).load(std::memory_order_relaxed);
   auto& lowCut = support ? mSupportIrLowCut : mIrLowCut;
   auto& highCut = support ? mSupportIrHighCut : mIrHighCut;
-  auto* shaped = volum::ApplyIrShapingLane(reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim,
-                                           lowHz, highHz, lowCut, highCut);
+  auto* shaped = volum::ApplyIrShapingLane(
+    reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim, lowHz, highHz, lowCut, highCut);
   return reinterpret_cast<iplug::sample**>(shaped);
 }
 

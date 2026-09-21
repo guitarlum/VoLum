@@ -1569,6 +1569,98 @@ TEST_CASE("MIDI sound map reader ignores unknown keys and malformed slots")
   CHECK(r.midiSoundMap.count(5) == 0);
 }
 
+TEST_CASE("tier2b a newer library schema keeps unknown keys through Save")
+{
+  const auto base = TestBase("passthrough-schema");
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = nlohmann::json::array({"keep-me"});
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  CHECK(store.Save());
+  std::ifstream in(store.RegistryPath());
+  nlohmann::json written;
+  in >> written;
+  CHECK(written["schemaVersion"] == 99);
+  REQUIRE(written.contains("someFutureTopLevelKey"));
+  CHECK(written["someFutureTopLevelKey"][0] == "keep-me");
+}
+
+TEST_CASE("tier2b a save does not clobber a sibling's newer unknown key")
+{
+  const auto base = TestBase("passthrough-merge");
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = "loaded";
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = "sibling";
+    j["anotherFutureKey"] = 7;
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  REQUIRE(store.Save());
+  std::ifstream in(store.RegistryPath());
+  nlohmann::json written;
+  in >> written;
+  CHECK(written["schemaVersion"] == 99);
+  CHECK(written["someFutureTopLevelKey"] == "sibling");
+  CHECK(written["anotherFutureKey"] == 7);
+}
+
+TEST_CASE("tier2b a colon in a stored leaf is not a safe library path")
+{
+  CHECK_FALSE(IsSafeStoredRelPath("amps/id__Foo:Bar.nam"));
+  CHECK(IsSafeStoredRelPath("amps/id__FooBar.nam"));
+}
+
+TEST_CASE("tier2b dropping a capture from an amp deletes the copied file on Save")
+{
+  const auto base = TestBase("orphan-capture");
+  const auto keepSrc = WriteSrc(base / "incoming", "Keep.nam", "keep");
+  const auto dropSrc = WriteSrc(base / "incoming", "Drop.nam", "drop");
+  ContentStore store(base);
+  const std::string keepRel = store.ImportFileCopy(keepSrc, "amps", "amp_edit_0");
+  const std::string dropRel = store.ImportFileCopy(dropSrc, "amps", "amp_edit_1");
+  REQUIRE_FALSE(keepRel.empty());
+  REQUIRE_FALSE(dropRel.empty());
+
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_edit";
+  amp.name = "Edit me";
+  amp.files = {{"Keep.nam", volum::custom::kDirectSlot, 1, keepRel}, {"Drop.nam", 0, 2, dropRel}};
+  store.reg().amps.push_back(amp);
+  REQUIRE(store.Save());
+  REQUIRE(std::filesystem::exists(store.ResolveStored(dropRel)));
+
+  volum::custom::CustomAmp edited = amp;
+  edited.files = {{"Keep.nam", volum::custom::kDirectSlot, 1, keepRel}};
+  for (const auto& oldFile : amp.files)
+  {
+    bool kept = false;
+    for (const auto& keptFile : edited.files)
+      if (keptFile.storedPath == oldFile.storedPath)
+        kept = true;
+    if (!kept)
+      store.QueueStoredFileDelete(oldFile.storedPath);
+  }
+  store.reg().amps[0] = std::move(edited);
+  REQUIRE(store.Save());
+  CHECK(std::filesystem::exists(store.ResolveStored(keepRel)));
+  CHECK_FALSE(std::filesystem::exists(store.ResolveStored(dropRel)));
+}
+
 TEST_CASE("MIDI slot resolution reports gone content as invalid, never as empty")
 {
   // Deleting content can only ever turn a row red. Renumbering the rows below it

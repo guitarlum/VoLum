@@ -194,6 +194,19 @@ inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
   a.name = unique;
   a.art = ((a.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
   CustomAmp previous = reg.amps[(size_t)idx];
+  for (const auto& oldFile : previous.files)
+  {
+    if (oldFile.storedPath.empty())
+      continue;
+    bool kept = false;
+    for (const auto& keptFile : a.files)
+    {
+      if (keptFile.storedPath == oldFile.storedPath)
+        kept = true;
+    }
+    if (!kept)
+      Store().QueueStoredFileDelete(oldFile.storedPath);
+  }
   reg.amps[(size_t)idx] = std::move(a);
   if (!Store().Save())
   {

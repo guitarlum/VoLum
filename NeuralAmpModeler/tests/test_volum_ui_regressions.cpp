@@ -2372,3 +2372,59 @@ TEST_CASE("tier2a OnReset reserves the dual-amp latency line")
   RequireContains(body, "mDualMainLatencyDelay.Reserve(");
   RequireContains(body, "mDualSupportLatencyDelay.Reserve(");
 }
+
+TEST_CASE("tier2b a missing IR id is cleared on the scene that recalled it")
+{
+  const std::string source = ReadPluginSource();
+  const std::string body = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyActiveIr(");
+  const auto missing = body.find("if (idx < 0)");
+  REQUIRE(missing != std::string::npos);
+  const std::string branch = body.substr(missing);
+  RequireContains(branch, "_VolumActiveScene().activeIrId.clear();");
+  RequireContains(branch, "_VolumActiveScene().supportActiveIrId.clear();");
+}
+
+TEST_CASE("tier2b sidebar delete tells the user when the library write fails")
+{
+  const std::string build = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto fail = build.find("if (volum::custom::Store().TakeWriteFailure())");
+  REQUIRE(fail != std::string::npos);
+  const std::string branch = build.substr(fail, 700);
+  RequireContains(branch, "_ShowMessageBox(");
+  RequireContains(branch, "Your library could not be saved - this change will be lost.");
+}
+
+TEST_CASE("tier2b opening the window shows a corrupt-library recovery")
+{
+  const std::string source = ReadPluginSource();
+  const auto open = source.find("void NeuralAmpModeler::OnUIOpen()");
+  REQUIRE(open != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::", open + 10);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(open, end - open);
+  RequireContains(body, "TakeCorruptRecoveryNotice()");
+  RequireContains(body, "_ShowMessageBox(gfx, notice.c_str(), \"VoLum\", EMsgBoxType::kMB_OK)");
+}
+
+TEST_CASE("tier2b preset rename uniqueness uses this overlay's owner")
+{
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto start = overlay.find("bool NameTaken(");
+  REQUIRE(start != std::string::npos);
+  const auto end = overlay.find("void SetNameError(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = overlay.substr(start, end - start);
+  RequireContains(body, "PresetsForOwner(PresetOwnerKey())");
+  RequireDoesNotContain(body, "PresetNameExists");
+}
+
+TEST_CASE("tier2b editing an amp queues a delete for a capture the edit dropped")
+{
+  const std::string api = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomContentApi.h");
+  const auto start = api.find("inline int UpdateCustomAmp(");
+  REQUIRE(start != std::string::npos);
+  const auto end = api.find("inline int AddCustomAmp(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = api.substr(start, end - start);
+  RequireContains(body, "QueueStoredFileDelete(oldFile.storedPath)");
+}

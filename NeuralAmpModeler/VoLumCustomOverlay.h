@@ -1468,7 +1468,7 @@ private:
     {
       case ManageKind::IR: return IRNameExists(name, exceptIdx);
       case ManageKind::Pedals: return PedalNameExists(name, exceptIdx);
-      default: return PresetNameExists(mAmpIdx, name, exceptIdx);
+      default: return NameExistsCI(PresetsForOwner(PresetOwnerKey()), name, exceptIdx);
     }
   }
 

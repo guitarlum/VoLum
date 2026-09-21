@@ -165,7 +165,7 @@ TEST_CASE("Save creates a missing base dir and Load round-trips from it")
   CHECK(reload.reg().amps[0].name == amp.name); // unicode survives the round-trip
 }
 
-TEST_CASE("Corrupt registry is backed up even when a stale .bak already exists")
+TEST_CASE("tier2b Corrupt registry rotates a stale .bak instead of overwriting it")
 {
   const auto base = CrudBase("bak-overwrite");
   ContentStore store(base);
@@ -183,10 +183,35 @@ TEST_CASE("Corrupt registry is backed up even when a stale .bak already exists")
 
   CHECK_FALSE(store.Load()); // recovered, not clean
   CHECK(store.reg().amps.empty());
-  // The corrupt file was moved aside and the backup now reflects the corrupt
-  // content, replacing the stale one.
   CHECK(std::filesystem::exists(store.BackupPath()));
   CHECK(ReadAll(store.BackupPath()) != "OLD-BAK");
+  const auto rotated = std::filesystem::path(store.BackupPath().string() + ".1");
+  CHECK(std::filesystem::exists(rotated));
+  CHECK(ReadAll(rotated) == "OLD-BAK");
+  CHECK(store.TakeCorruptRecoveryNotice().find("volum-content.json.bak") != std::string::npos);
+}
+
+TEST_CASE("tier2b a backup that cannot be rotated is left in place")
+{
+  const auto base = CrudBase("bak-rotate-blocked");
+  ContentStore store(base);
+  std::error_code ec;
+  {
+    std::ofstream(store.BackupPath(), std::ios::binary) << "OLD-BAK";
+  }
+  const auto blocked = std::filesystem::path(store.BackupPath().string() + ".1") / "occupied";
+  std::filesystem::create_directories(blocked, ec);
+  REQUIRE_FALSE(ec);
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary) << "{ this is not json ";
+  }
+
+  CHECK_FALSE(store.Load());
+  CHECK(ReadAll(store.BackupPath()) == "OLD-BAK");
+  CHECK(std::filesystem::is_regular_file(store.RegistryPath()));
+  const std::string notice = store.TakeCorruptRecoveryNotice();
+  CHECK(notice.find("could not be moved") != std::string::npos);
+  CHECK(notice.find("was kept as") == std::string::npos);
 }
 
 TEST_CASE("Registry round-trips unicode preset and IR names byte-for-byte")

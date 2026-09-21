@@ -1303,6 +1303,9 @@ void NeuralAmpModeler::OnUIOpen()
     _UpdateControlsFromModel();
   }
   _UpdateLatency();
+  if (const std::string notice = volum::content::GlobalContentStore().TakeCorruptRecoveryNotice(); !notice.empty())
+    if (auto* gfx = GetUI())
+      _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
   _VolumRestoreSessionSelection();
   // The editor is rebuilt from constructor defaults on every open, so the last
   // step is always to re-derive the visible selection from backend state. Without

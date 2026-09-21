@@ -128,7 +128,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           // least record it, so a library that refused the write is diagnosable from
           // volum.log instead of only visible as an amp that comes back on relaunch.
           if (volum::custom::Store().TakeWriteFailure())
+          {
             VOLUM_LOG("library", "custom amp deleted in the UI but the library write failed");
+            if (auto* gfx = GetUI())
+              _ShowMessageBox(
+                gfx, "Your library could not be saved - this change will be lost.", "VoLum", EMsgBoxType::kMB_OK);
+          }
           auto* pGfx2 = GetUI();
           if (!pGfx2)
             return;
