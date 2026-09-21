@@ -14,6 +14,7 @@
 // read this file.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumDualAmpInput.h"
 #include "VoLumFractalArt.h"
 
 #include <algorithm>
@@ -42,6 +43,11 @@ public:
   {
     mIgnoreMouse = (mFocusCallback == nullptr && mPickerCallback == nullptr && mDualToggleCallback == nullptr
                     && mDismissPickerCallback == nullptr);
+    // Both platforms deliver the second click of a fast double-click as
+    // OnMouseDblClick, never as a second OnMouseDown. Without this the SUPPORT
+    // lane's two-click protocol is unreachable by double-clicking - which is
+    // exactly what a user tries when the first click appears to do nothing.
+    mDblAsSingleClick = true;
   }
 
   void Draw(IGraphics& g) override
@@ -140,8 +146,24 @@ public:
   {
     (void)mod;
 
-    // 1. DUAL toggle chip — top-right of mono, top-right of MAIN panel in dual.
-    if (mDualToggleCallback && DualChipRect().Contains(x, y))
+    volum::dualamp::LaneState state;
+    state.dualActive = mDualAmpActive;
+    state.supportFocused = mSupportFocused;
+    state.hasSupportAmp = HasSupportAmp();
+    // IMPORTANT: sample the picker's visibility BEFORE running the focus callback. That callback
+    // rebuilds the layout and explicitly hides the menu — read it afterwards and we'd always see
+    // "closed" and re-open it on the same click.
+    state.pickerOpen = mIsPickerOpenCallback ? mIsPickerOpenCallback() : false;
+
+    const bool hitDualChip = mDualToggleCallback && DualChipRect().Contains(x, y);
+    const bool hitSupportHalf = (x >= mRECT.MW());
+    const auto decision = volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf);
+
+    using volum::dualamp::ClickAction;
+    if (decision.action == ClickAction::None)
+      return;
+
+    if (decision.action == ClickAction::ToggleDual)
     {
       if (mDismissPickerCallback)
         mDismissPickerCallback();
@@ -149,49 +171,29 @@ public:
       return;
     }
 
-    // 2. Lane focus + support-amp picker (dual mode only).
-    if (!mDualAmpActive)
-      return;
-
-    const bool clickedSupport = (x >= mRECT.MW());
-    const bool wasSupportFocused = mSupportFocused;
-
-    // IMPORTANT: capture the picker's visibility BEFORE running the focus callback. The focus
-    // callback rebuilds the layout and explicitly hides the menu — if we sampled it afterwards
-    // we'd always see "closed" and re-open it on the same click.
-    const bool pickerOpen = mIsPickerOpenCallback ? mIsPickerOpenCallback() : false;
-
-    mSupportFocused = clickedSupport;
-    if (mFocusCallback)
-      mFocusCallback(mSupportFocused);
-
-    // Picker behaviour on the SUPPORT panel (consistent two-click, incl. empty state):
-    //   - If the picker is already open: any click on the support panel dismisses it
-    //     so a second click is always "close".
-    //   - First click that shifts focus from MAIN to support: focus only, no picker.
-    //   - Support already focused (and picker closed): the click opens the picker.
-    // The empty "no support amp yet" lane behaves the same — the first click just
-    // focuses it (shows the "Choose support amp" CTA), the second opens the dropdown.
-    if (clickedSupport)
+    if (decision.nextSupportFocused != mSupportFocused)
     {
-      if (pickerOpen)
-      {
+      mSupportFocused = decision.nextSupportFocused;
+      if (mFocusCallback)
+        mFocusCallback(mSupportFocused);
+    }
+
+    switch (decision.action)
+    {
+      case ClickAction::OpenPicker:
+        if (mPickerCallback)
+        {
+          const float gap = 8.f;
+          const float mid = mRECT.MW();
+          mPickerCallback(IRECT(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B));
+        }
+        break;
+      case ClickAction::DismissPicker:
         if (mDismissPickerCallback)
           mDismissPickerCallback();
-      }
-      else if (mPickerCallback && wasSupportFocused)
-      {
-        const float gap = 8.f;
-        const float mid = mRECT.MW();
-        const IRECT supportPanel(mid + gap / 2.f, mRECT.T, mRECT.R, mRECT.B);
-        mPickerCallback(supportPanel);
-      }
-    }
-    else if (mDismissPickerCallback)
-    {
-      // Click on MAIN while the support menu is open should dismiss it. (Outside-the-hero clicks
-      // are handled by the global VoLumKnobSelectionClearControl.)
-      mDismissPickerCallback();
+        break;
+      default:
+        break;
     }
 
     SetDirty(false);
@@ -267,6 +269,14 @@ private:
   // the 22 px strip (1 px above, 1 px below) so the knob reads as visually centered with the
   // label text rather than floating in the art area above it.
   static constexpr float kPanKnobSize = 24.f;
+
+  // A lane holds an amp when it points at a factory entry or renders a custom
+  // partner. Drives both the empty-lane art and the click protocol, so the two
+  // can never disagree about whether the lane is fillable.
+  bool HasSupportAmp() const
+  {
+    return mSupportCustomMode || (mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount);
+  }
 
   IRECT DualChipRect() const
   {
@@ -449,7 +459,7 @@ private:
     DrawLane(g, left, mAmpIdx, "MAIN", mName.c_str(), !mSupportFocused, VoLumColors::AMBER,
              /*drawChip=*/true, /*empty=*/false);
     const bool hasFactorySupport = mSupportAmpIdx >= 0 && mSupportAmpIdx < volum::kAmpCount;
-    const bool hasSupport = mSupportCustomMode || hasFactorySupport;
+    const bool hasSupport = HasSupportAmp();
     const char* supportName = mSupportCustomMode
                                 ? mSupportCustomName.c_str()
                                 : (hasFactorySupport ? volum::kAmps[mSupportAmpIdx].displayName : "Choose support amp");
