@@ -14,8 +14,8 @@ void NeuralAmpModeler::_VolumInstallPresetHooks()
       // Locked PRE/POST live on the overlay, not the amp slot. A preset is a
       // snapshot of the sounding rig, so capture must overlay those blocks
       // without mutating the slot the lock is protecting.
-      return volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked,
-                                        mVolumLiveLockedPost);
+      return volum::SoundingPresetScene(
+        _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
     },
     [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); });
   volum::custom::PresetHookOwner() = this;
@@ -192,8 +192,8 @@ int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
     return idx;
   // The freshly saved preset becomes the active, clean recalled snapshot.
   mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), idx);
-  mVolumRecalledSnapshot = volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre,
-                                                      mVolumPostLocked, mVolumLiveLockedPost);
+  mVolumRecalledSnapshot = volum::SoundingPresetScene(
+    _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
   mVolumHasRecalledSnapshot = true;
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
@@ -209,8 +209,8 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index)
   if (!volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index)) // captures live via hook
     return;
   mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), index);
-  mVolumRecalledSnapshot = volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre,
-                                                      mVolumPostLocked, mVolumLiveLockedPost);
+  mVolumRecalledSnapshot = volum::SoundingPresetScene(
+    _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
   mVolumHasRecalledSnapshot = true;
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
@@ -339,8 +339,8 @@ void NeuralAmpModeler::_VolumRecomputePresetDirty()
 bool NeuralAmpModeler::_VolumLivePresetDirty()
 {
   _VolumSaveCurrentToSettings();
-  const auto sounding = volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre,
-                                                   mVolumPostLocked, mVolumLiveLockedPost);
+  const auto sounding = volum::SoundingPresetScene(
+    _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
   return volum::LivePresetDirty(mVolumHasRecalledSnapshot, sounding, mVolumRecalledSnapshot);
 }
 

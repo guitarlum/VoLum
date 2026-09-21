@@ -121,8 +121,8 @@ TEST_CASE("Factory Ready dirty ignores the postValid restore sentinel")
   REQUIRE(volum::AmpSettingsEqual(live, factory[0].settings));
   REQUIRE_FALSE(volum::LivePresetDirty(true, live, factory[0].settings));
   REQUIRE_FALSE(volum::AddHeardNeedsSaveAs(volum::PresetSaveAction::SaveUserCopy, false, false));
-  REQUIRE_FALSE(volum::AddHeardNeedsSaveAs(volum::PresetSaveAction::SaveUserCopy,
-                                          volum::LivePresetDirty(true, live, factory[0].settings), false));
+  REQUIRE_FALSE(volum::AddHeardNeedsSaveAs(
+    volum::PresetSaveAction::SaveUserCopy, volum::LivePresetDirty(true, live, factory[0].settings), false));
 
   live.toneBass = 8.0;
   REQUIRE(volum::LivePresetDirty(true, live, factory[0].settings));

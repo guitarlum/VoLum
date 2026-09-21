@@ -866,4 +866,3 @@ inline bool PresetNameExists(int ampIdx, const std::string& name, int exceptIdx 
 
 } // namespace custom
 } // namespace volum
-
