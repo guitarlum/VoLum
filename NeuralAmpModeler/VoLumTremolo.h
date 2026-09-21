@@ -89,16 +89,13 @@ inline double VoLumTremoloSyncMs(double bpm, int division)
   return (hz > 0.0) ? 1000.0 / hz : 500.0;
 }
 
-// The depth knob's lower range is perceptually "off": a 20% trough (depth 0.2)
-// dips only ~1.9 dB and is barely audible. Map the 0..1 knob onto an audible
-// 0.40..1.0 internal depth so even the minimum knob position throbs. Kept as a
-// pure mapping OUTSIDE TremoloDSP so the engine stays literal (passthrough at
-// internal depth 0) and the DSP unit tests keep their exact semantics.
-inline constexpr double kVoLumTremoloDepthFloor = 0.40;
+// Plugin mapping ProcessBlock uses for kTremoloDepth. Kept outside TremoloDSP so
+// the engine stays literal (passthrough at internal depth 0). Displayed DEPTH 0%
+// is engine depth 0: a floor here is what made the knob lie while the DSP tests
+// still passed.
 inline double VoLumTremoloDepthKnobToInternal(double knob)
 {
-  knob = std::clamp(knob, 0.0, 1.0);
-  return kVoLumTremoloDepthFloor + (1.0 - kVoLumTremoloDepthFloor) * knob;
+  return std::clamp(knob, 0.0, 1.0);
 }
 
 class TremoloDSP

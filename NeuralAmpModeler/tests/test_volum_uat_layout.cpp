@@ -6,6 +6,7 @@
 #include "../VoLumFactoryPresets.h"
 #include "../VoLumOverlayStack.h"
 #include "../VoLumHeaderChrome.h"
+#include "../VoLumKeyboardModel.h"
 #include "../VoLumPackLayout.h"
 #include "../VoLumPickerGroups.h"
 #include "../VoLumPlayLight.h"
@@ -313,14 +314,25 @@ TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
 
 TEST_CASE("H peels Pack before it closes Settings")
 {
-  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
-  const auto hGate = layout.find("if (key.VK == 'h' || key.VK == 'H')");
-  REQUIRE(hGate != std::string::npos);
-  const auto packHide = layout.find("kCtrlTagVoLumPackOverlay", hGate);
-  REQUIRE(packHide != std::string::npos);
-  const auto settingsH = layout.find("page->HideAnimated(true)", packHide);
-  REQUIRE(settingsH != std::string::npos);
-  CHECK(packHide < settingsH);
+  // This used to be pinned as "the Pack branch appears before the Settings
+  // branch in the H handler". Hotkey routing is now one decision function
+  // (volum::keyboard::RouteKey), so the invariant is asked directly instead of
+  // inferred from the order two strings happen to appear in a file.
+  using volum::keyboard::KeyConsumer;
+  using volum::keyboard::KeyKind;
+  using volum::keyboard::OverlayStack;
+  using volum::keyboard::RouteKey;
+
+  OverlayStack packOverSettings;
+  packOverSettings.settings = true;
+  packOverSettings.pack = true;
+  CHECK(RouteKey(packOverSettings, KeyKind::HotkeyH) == KeyConsumer::CloseOverlay);
+  CHECK(volum::keyboard::TopOverlay(packOverSettings) == volum::keyboard::OverlayId::Pack);
+
+  OverlayStack settingsOnly;
+  settingsOnly.settings = true;
+  CHECK(RouteKey(settingsOnly, KeyKind::HotkeyH) == KeyConsumer::CloseOverlay);
+  CHECK(volum::keyboard::TopOverlay(settingsOnly) == volum::keyboard::OverlayId::Settings);
 }
 
 TEST_CASE("Name dialog Enter in the field saves")
@@ -522,6 +534,14 @@ TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
   CHECK(tabs.find("bool ConsumeEscape()") != std::string::npos);
   CHECK(tabs.find("void ResetToList()") != std::string::npos);
+  const auto hideOverride = tabs.find("void Hide(bool hide) override");
+  REQUIRE(hideOverride != std::string::npos);
+  const auto hideDraw = tabs.find("void Draw(IGraphics& g) override", hideOverride);
+  REQUIRE(hideDraw != std::string::npos);
+  const auto hideReset = tabs.find("ResetToList()", hideOverride);
+  REQUIRE(hideReset != std::string::npos);
+  CHECK(hideReset < hideDraw);
+  CHECK(tabs.find("if (hide && mScreen != kScreenList)") != std::string::npos);
   CHECK(tabs.find("FlashEmptyHint()") != std::string::npos);
   const auto addClick = tabs.find("if (AddRect().Contains(x, y))");
   const auto flash = tabs.find("FlashEmptyHint();", addClick);

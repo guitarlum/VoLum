@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VoLumParams.h"
 #include "VoLumTriptychState.h"
 
 #include <algorithm>
@@ -44,6 +45,15 @@ constexpr std::array<int, 5> kDelayParams = {
   kDelayTime, kDelayFeedback, kDelayMix, kDelayTone, kDelayAge,
 };
 
+// TEMPO SYNC hides TIME and puts DIVISION in its slot. Keyboard remember / Left-Right
+// have to walk this list or Enter lands on a control that is not on screen.
+constexpr std::array<int, 4> kDelaySyncedParams = {
+  kDelayFeedback,
+  kDelayMix,
+  kDelayTone,
+  kDelayAge,
+};
+
 constexpr std::array<int, 4> kReverbParams = {
   kReverbMix,
   kReverbDecay,
@@ -81,6 +91,29 @@ constexpr std::array<int, 4> kTremoloParams = {
 constexpr std::array<int, 5> kTremoloHarmonicParams = {
   kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover,
 };
+
+constexpr std::array<int, 3> kTremoloSyncedParams = {
+  kTremoloDepth,
+  kTremoloShape,
+  kTremoloMix,
+};
+
+constexpr std::array<int, 4> kTremoloHarmonicSyncedParams = {
+  kTremoloDepth,
+  kTremoloShape,
+  kTremoloMix,
+  kTremoloCrossover,
+};
+
+inline int DefaultDelayKnob(bool tempoSync)
+{
+  return tempoSync ? kDelayFeedback : kDelayTime;
+}
+
+inline int DefaultTremoloKnob(bool tempoSync)
+{
+  return tempoSync ? kTremoloDepth : kTremoloRate;
+}
 
 constexpr std::array<int, 5> kChorusParams = {
   kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix,
@@ -156,7 +189,9 @@ inline double StepForParam(int paramIdx, bool fine)
     case kChorusDepth:
     case kChorusTone:
     case kChorusWidth:
-    case kChorusMix: return fine ? 0.01 : 0.05;
+    case kChorusMix:
+    case kMainAmpPan:
+    case kSupportAmpPan: return fine ? 0.01 : 0.05;
     default: return fine ? 0.1 : 1.0;
   }
 }
@@ -195,5 +230,159 @@ template <size_t N>
 inline bool Contains(const std::array<int, N>& params, int paramIdx)
 {
   return std::find(params.begin(), params.end(), paramIdx) != params.end();
+}
+
+// Windows VK codes (same values as iPlug kVK_*). Kept numeric so this header
+// stays free of IGraphics.
+inline constexpr int kKeyReturn = 0x0D;
+inline constexpr int kKeyEscape = 0x1B;
+inline constexpr int kKeyLeft = 0x25;
+inline constexpr int kKeyUp = 0x26;
+inline constexpr int kKeyRight = 0x27;
+inline constexpr int kKeyDown = 0x28;
+
+enum class OverlayId
+{
+  None = 0,
+  Metronome,
+  Tuner,
+  NameDialog,
+  Confirm,
+  Custom,
+  Pack,
+  Settings,
+  Dropdown,
+};
+
+struct OverlayStack
+{
+  bool exactEntry = false;
+  bool textEntry = false;
+  bool metronome = false;
+  bool tuner = false;
+  bool nameDialog = false;
+  bool confirm = false;
+  bool custom = false;
+  bool pack = false;
+  bool settings = false;
+  bool settingsMidiArmed = false;
+  bool dropdown = false;
+  bool knobSelected = false;
+};
+
+enum class KeyKind
+{
+  Escape,
+  HotkeyH,
+  HotkeyT,
+  HotkeyM,
+  Arrow,
+  Enter,
+  Other,
+};
+
+enum class KeyConsumer
+{
+  PassToTextEntry,
+  CancelExactEntry,
+  CloseOverlay,
+  PeelSettingsMidi,
+  OverlayNav,
+  Swallow,
+  FallThrough,
+  Knob,
+  Rig,
+};
+
+inline OverlayId TopOverlay(const OverlayStack& s)
+{
+  // Attach order is z-order. Last attached sits on top and must peel first.
+  if (s.metronome)
+    return OverlayId::Metronome;
+  if (s.tuner)
+    return OverlayId::Tuner;
+  if (s.nameDialog)
+    return OverlayId::NameDialog;
+  if (s.confirm)
+    return OverlayId::Confirm;
+  if (s.custom)
+    return OverlayId::Custom;
+  if (s.pack)
+    return OverlayId::Pack;
+  if (s.settings)
+    return OverlayId::Settings;
+  if (s.dropdown)
+    return OverlayId::Dropdown;
+  return OverlayId::None;
+}
+
+inline KeyKind ClassifyVk(int vk)
+{
+  if (vk == kKeyEscape)
+    return KeyKind::Escape;
+  if (vk == 'h' || vk == 'H')
+    return KeyKind::HotkeyH;
+  if (vk == 't' || vk == 'T')
+    return KeyKind::HotkeyT;
+  if (vk == 'm' || vk == 'M')
+    return KeyKind::HotkeyM;
+  if (vk == kKeyUp || vk == kKeyDown || vk == kKeyLeft || vk == kKeyRight)
+    return KeyKind::Arrow;
+  if (vk == kKeyReturn)
+    return KeyKind::Enter;
+  return KeyKind::Other;
+}
+
+// One function answers "who gets this key". A visible overlay blocks every
+// global hotkey except Escape, which closes the topmost overlay. Repeating that
+// condition at each call site is how H/T/M leaked through Manage and the tuner.
+inline KeyConsumer RouteKey(const OverlayStack& s, KeyKind kind)
+{
+  if (kind == KeyKind::Escape && s.exactEntry)
+    return KeyConsumer::CancelExactEntry;
+  if (s.textEntry)
+    return KeyConsumer::PassToTextEntry;
+
+  const OverlayId top = TopOverlay(s);
+
+  if (kind == KeyKind::Escape)
+  {
+    if (top == OverlayId::Settings && s.settingsMidiArmed)
+      return KeyConsumer::PeelSettingsMidi;
+    if (top != OverlayId::None)
+      return KeyConsumer::CloseOverlay;
+    if (s.knobSelected)
+      return KeyConsumer::Knob;
+    return KeyConsumer::Rig;
+  }
+
+  if (top == OverlayId::None)
+  {
+    if (kind == KeyKind::HotkeyH || kind == KeyKind::HotkeyT || kind == KeyKind::HotkeyM)
+      return KeyConsumer::Rig;
+    if (s.knobSelected)
+      return KeyConsumer::Knob;
+    return KeyConsumer::Rig;
+  }
+
+  if (kind == KeyKind::HotkeyH && (top == OverlayId::Settings || top == OverlayId::Pack))
+    return KeyConsumer::CloseOverlay;
+  if (kind == KeyKind::Arrow && top == OverlayId::Custom)
+    return KeyConsumer::OverlayNav;
+  if (kind == KeyKind::Enter && top == OverlayId::Confirm)
+    return KeyConsumer::FallThrough;
+  return KeyConsumer::Swallow;
+}
+
+inline bool SelectedKnobConsumesKind(KeyKind kind, bool innerHandled)
+{
+  if (kind == KeyKind::Arrow)
+    return true;
+  return innerHandled;
+}
+
+inline bool HideDisarmsMidiSubscreen(bool hiding, bool onList)
+{
+  return hiding && !onList;
 }
 } // namespace volum::keyboard

@@ -250,14 +250,36 @@ TEST_CASE("Tremolo shape morph is gentle (near sine through the first quarter)")
   CHECK(dQuarter < dFull); // monotonic: more knob => more square
 }
 
-TEST_CASE("Tremolo depth knob maps onto an audible floor")
+TEST_CASE("Tremolo depth knob mapping is identity (displayed 0% is engine 0)")
 {
   using volum::VoLumTremoloDepthKnobToInternal;
-  CHECK(VoLumTremoloDepthKnobToInternal(0.0) == doctest::Approx(0.40)); // min knob still throbs
-  CHECK(VoLumTremoloDepthKnobToInternal(1.0) == doctest::Approx(1.0)); // max = full chop
-  CHECK(VoLumTremoloDepthKnobToInternal(0.5) == doctest::Approx(0.70));
-  CHECK(VoLumTremoloDepthKnobToInternal(-1.0) == doctest::Approx(0.40)); // clamps
+  CHECK(VoLumTremoloDepthKnobToInternal(0.0) == doctest::Approx(0.0));
+  CHECK(VoLumTremoloDepthKnobToInternal(1.0) == doctest::Approx(1.0));
+  CHECK(VoLumTremoloDepthKnobToInternal(0.5) == doctest::Approx(0.5));
+  CHECK(VoLumTremoloDepthKnobToInternal(-1.0) == doctest::Approx(0.0)); // clamps
   CHECK(VoLumTremoloDepthKnobToInternal(2.0) == doctest::Approx(1.0)); // clamps
+}
+
+TEST_CASE("Tremolo DEPTH 0% through the plugin mapping is passthrough (all modes)")
+{
+  // ProcessBlock feeds VoLumTremoloDepthKnobToInternal(GetParam(kTremoloDepth)->Value())
+  // into TremoloDSP::SetParams, not the raw knob. The existing "passthrough at
+  // depth 0" case calls SetParams(0.0) directly and never sees a floor remap.
+  // This case uses the same helper ProcessBlock uses, with knob 0 and mix 100%.
+  for (int mode = 0; mode < TremoloDSP::kNumModes; ++mode)
+  {
+    TremoloDSP trem;
+    trem.Prepare(kSR, kBlock, 1);
+    const double mappedDepth = volum::VoLumTremoloDepthKnobToInternal(0.0);
+    trem.SetParams(5.0, mappedDepth, 0.5, 1.0 /*mix*/, 800.0, mode, kSR);
+    trem.Reset();
+    auto in = makeSine(220.0, 4096);
+    auto out = runStream(trem, in);
+    double maxErr = 0.0;
+    for (size_t i = 0; i < in.size(); ++i)
+      maxErr = std::max(maxErr, std::abs(out[i] - in[i]));
+    CHECK(maxErr < 1e-9);
+  }
 }
 
 TEST_CASE("Tremolo sync division to ms mapping (delay reuse)")

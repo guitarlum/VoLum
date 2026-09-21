@@ -1368,7 +1368,10 @@ void NeuralAmpModeler::OnUIClose()
   // can clear it is a control that no longer exists. Closing the window with the
   // tuner up therefore muted the instance permanently, and the editor is rebuilt
   // with the tuner hidden, so nothing on screen explained the silence.
-  mTunerDSP.SetActive(false);
+  // The metronome is the same shape: it keeps clicking with no window, and the
+  // rebuilt editor draws its button as off. The tuner half was fixed and pinned
+  // on its own, which is why the sibling stayed broken - they stop together now.
+  volum::HaltEditorOwnedOverlayDsp(mTunerDSP, mMetronomeDSP);
 
   // Save while params are still valid (destructor may run after teardown)
   _VolumSaveCurrentToSettings();
@@ -1497,6 +1500,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
         _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1));
       }
+      break;
+    case kChorusActive:
+      if (mVolumInitComplete && !mVolumPostRestoreInProgress)
+        mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
       break;
     case kReverbSubMode:
       // Do NOT write the new sub-mode to mVolumEffectSettings here. OnParamChangeUI runs after

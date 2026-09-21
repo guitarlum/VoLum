@@ -120,7 +120,7 @@ public:
     (void)y;
     if (!mHide && key.VK == kVK_ESCAPE)
     {
-      _Dismiss();
+      Dismiss();
       return true;
     }
     return false;
@@ -142,6 +142,8 @@ public:
   }
 
   void SetDismissAction(std::function<void()> fn) { mDismissAction = std::move(fn); }
+
+  void Dismiss() { _Dismiss(); }
 
 private:
   IRECT _PanelRect() const { return mRECT.GetCentredInside(340.f, 180.f); }
@@ -425,10 +427,20 @@ public:
     (void)y;
     if (!mHide && key.VK == kVK_ESCAPE)
     {
-      Hide(true);
+      Dismiss();
       return true;
     }
     return false;
+  }
+
+  void Dismiss()
+  {
+    Hide(true);
+    if (auto* ui = GetUI())
+    {
+      if (auto* textEntry = ui->GetTextEntryControl())
+        textEntry->DismissEdit();
+    }
   }
 
   void OnTextEntryCompletion(const char* str, int valIdx) override

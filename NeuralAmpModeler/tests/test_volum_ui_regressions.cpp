@@ -762,8 +762,23 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "SelectAdjacentFromList(this, kMainAmpMonoParams");
   RequireContains(source, "SelectAdjacentFromList(this, kMainAmpDualParams");
   RequireContains(source, "SelectAdjacentFromList(this, kSupportAmpParams");
+  RequireContains(source, "RememberedOrFirst(kDelaySyncedParams, remembered)");
+  RequireContains(source, "RememberedOrFirst(kTremoloSyncedParams, remembered)");
+  RequireContains(source, "volum::keyboard::RouteKey(stack, kind)");
+  RequireContains(source, "SelectedKnobConsumesKind(");
+  RequireContains(source, "As<VoLumTunerControl>()->Dismiss()");
+  RequireContains(source, "As<VoLumMetronomeControl>()->Dismiss()");
+  RequireContains(source, "SetActive(mMetronomeDSP.IsActive())");
+  RequireContains(source, "DisabledPointerPolicy::kMouseOverWhenDisabled");
+  RequireContains(source, "DisabledPointerPolicy::kMouseEventsWhenDisabled");
+  RequireDoesNotContain(source, "SetMouseEventsWhenDisabled(true)");
   RequireContains(header, "kMainAmpPan");
   RequireContains(header, "kSupportAmpPan");
+  RequireContains(header, "kDelaySyncedParams");
+  RequireContains(header, "kTremoloSyncedParams");
+  RequireContains(header, "kTremoloHarmonicSyncedParams");
+  RequireContains(header, "enum class KeyConsumer");
+  RequireContains(header, "inline KeyConsumer RouteKey(");
   RequireContains(controls, "volum::keyboard::StepForParam(GetParamIdx(), fine)");
   RequireContains(controls, "if (!mKeyboardSelected)");
   RequireContains(controls, "return Nudge(false, key.S);");
@@ -2163,16 +2178,17 @@ TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay 
   // control's dismiss action -- both require an editor. Closing the plugin window
   // with the tuner open therefore silenced the instance for good, invisibly: the
   // editor is rebuilt with the tuner hidden, so reopening showed a normal UI over
-  // a dead signal path.
+  // a dead signal path. The metronome click is the sibling: same editor-owned
+  // DSP, same OnUIClose, one helper so the second copy cannot be forgotten.
   const std::string source = ReadPluginSource();
 
   const auto onUIClose = source.find("void NeuralAmpModeler::OnUIClose()");
   REQUIRE(onUIClose != std::string::npos);
-  const auto body = source.substr(onUIClose, 700);
+  const auto body = source.substr(onUIClose, 900);
 
-  // The deactivation has to live in OnUIClose itself, not merely somewhere in the
-  // translation unit.
-  RequireContains(body, "mTunerDSP.SetActive(false);");
+  RequireContains(body, "HaltEditorOwnedOverlayDsp(");
+  RequireContains(body, "mTunerDSP");
+  RequireContains(body, "mMetronomeDSP");
 
   // Pin the two facts that make the above load-bearing, so this test keeps
   // failing for the right reason if either moves.

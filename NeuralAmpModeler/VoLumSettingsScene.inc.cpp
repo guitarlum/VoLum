@@ -193,6 +193,7 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   mVolumEffectSettings.reverbActive = s.postReverbActive;
   mVolumEffectSettings.reverbMode = s.postReverbMode;
   mVolumEffectSettings.tremoloMode = s.postTremoloMode;
+  mVolumEffectSettings.chorusActive = s.postChorusActive;
   mVolumEffectSettings.chorusMode = s.postChorusMode;
   const int restoredDelayMode = std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1);
   const int restoredReverbMode = std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1);
@@ -357,6 +358,7 @@ void NeuralAmpModeler::_VolumApplyDspCaches()
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
 {
   _VolumSaveEffectSettings();
+  mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
   // Keep the shared legacy file readable by already-installed older VoLum builds. New dual-amp
   // fields live in a sidecar that older builds do not know about, avoiding crashes when users
   // run a newer standalone and then open an older VST3 in a DAW.
@@ -565,7 +567,14 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     // Global effect defaults must not clobber POST params when a lock snapshot will
     // restore the carried scene immediately after _VolumRestoreFromSettings().
     if (!mVolumPostLocked)
+    {
       _VolumRestoreEffectSettings();
+      // H15: Restore currently assigns kChorusActive to itself because the Locks
+      // snapshot lacked chorusActive. Apply the saved mapping here so a pack-
+      // settings import cannot keep the pre-import switch (and OnIdle persist it).
+      GetParam(kChorusActive)->Set(volum::VoLumEffectChorusActiveParam(mVolumEffectSettings));
+      SendParameterValueFromDelegate(kChorusActive, GetParam(kChorusActive)->GetNormalized(), true);
+    }
   }
   catch (...)
   {

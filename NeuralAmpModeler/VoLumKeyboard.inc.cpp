@@ -338,9 +338,9 @@ int NeuralAmpModeler::_DefaultVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::COMP: return kPreCompAmount;
     case EVoLumEffectFocus::PRE_NAM1: return kPreNam1Gain;
     case EVoLumEffectFocus::PRE_NAM2: return kPreNam2Gain;
-    case EVoLumEffectFocus::DELAY: return GetParam(kDelaySync)->Bool() ? kDelayFeedback : kDelayTime;
+    case EVoLumEffectFocus::DELAY: return volum::keyboard::DefaultDelayKnob(GetParam(kDelaySync)->Bool());
     case EVoLumEffectFocus::REVERB: return kReverbMix;
-    case EVoLumEffectFocus::TREMOLO: return GetParam(kTremoloSync)->Bool() ? kTremoloDepth : kTremoloRate;
+    case EVoLumEffectFocus::TREMOLO: return volum::keyboard::DefaultTremoloKnob(GetParam(kTremoloSync)->Bool());
     case EVoLumEffectFocus::CHORUS: return kChorusRate;
   }
   return kNoParameter;
@@ -364,15 +364,22 @@ int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus() const
     case EVoLumEffectFocus::COMP: return RememberedOrFirst(kCompParams, remembered);
     case EVoLumEffectFocus::PRE_NAM1: return RememberedOrFirst(kPreNam1Params, remembered);
     case EVoLumEffectFocus::PRE_NAM2: return RememberedOrFirst(kPreNam2Params, remembered);
-    case EVoLumEffectFocus::DELAY: return RememberedOrFirst(kDelayParams, remembered);
+    case EVoLumEffectFocus::DELAY:
+      return GetParam(kDelaySync)->Bool() ? RememberedOrFirst(kDelaySyncedParams, remembered)
+                                         : RememberedOrFirst(kDelayParams, remembered);
     case EVoLumEffectFocus::REVERB:
       return GetParam(kReverbMode)->Int() == volum::kVoLumReverbModeOktaverb
                ? RememberedOrFirst(kOktaverbParams, remembered)
                : RememberedOrFirst(kReverbParams, remembered);
     case EVoLumEffectFocus::TREMOLO:
-      return GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic
-               ? RememberedOrFirst(kTremoloHarmonicParams, remembered)
-               : RememberedOrFirst(kTremoloParams, remembered);
+    {
+      const bool sync = GetParam(kTremoloSync)->Bool();
+      if (GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic)
+        return sync ? RememberedOrFirst(kTremoloHarmonicSyncedParams, remembered)
+                    : RememberedOrFirst(kTremoloHarmonicParams, remembered);
+      return sync ? RememberedOrFirst(kTremoloSyncedParams, remembered)
+                  : RememberedOrFirst(kTremoloParams, remembered);
+    }
     case EVoLumEffectFocus::CHORUS: return RememberedOrFirst(kChorusParams, remembered);
   }
   return _DefaultVoLumKeyboardKnobForFocus();
@@ -390,7 +397,9 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
   using namespace volum::keyboard;
   switch (mVolumFocusedEffect)
   {
-    case EVoLumEffectFocus::DELAY: return SelectAdjacentFromList(this, kDelayParams, currentParamIdx, direction);
+    case EVoLumEffectFocus::DELAY:
+      return GetParam(kDelaySync)->Bool() ? SelectAdjacentFromList(this, kDelaySyncedParams, currentParamIdx, direction)
+                                         : SelectAdjacentFromList(this, kDelayParams, currentParamIdx, direction);
     case EVoLumEffectFocus::REVERB:
     {
       const int reverbMode = GetParam(kReverbMode)->Int();
@@ -412,9 +421,14 @@ bool NeuralAmpModeler::_SelectAdjacentVoLumKnob(int currentParamIdx, int directi
     case EVoLumEffectFocus::PRE_NAM1: return SelectAdjacentFromList(this, kPreNam1Params, currentParamIdx, direction);
     case EVoLumEffectFocus::PRE_NAM2: return SelectAdjacentFromList(this, kPreNam2Params, currentParamIdx, direction);
     case EVoLumEffectFocus::TREMOLO:
-      return GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic
-               ? SelectAdjacentFromList(this, kTremoloHarmonicParams, currentParamIdx, direction)
-               : SelectAdjacentFromList(this, kTremoloParams, currentParamIdx, direction);
+    {
+      const bool sync = GetParam(kTremoloSync)->Bool();
+      if (GetParam(kTremoloMode)->Int() == volum::kVoLumTremoloModeHarmonic)
+        return sync ? SelectAdjacentFromList(this, kTremoloHarmonicSyncedParams, currentParamIdx, direction)
+                    : SelectAdjacentFromList(this, kTremoloHarmonicParams, currentParamIdx, direction);
+      return sync ? SelectAdjacentFromList(this, kTremoloSyncedParams, currentParamIdx, direction)
+                  : SelectAdjacentFromList(this, kTremoloParams, currentParamIdx, direction);
+    }
     case EVoLumEffectFocus::CHORUS: return SelectAdjacentFromList(this, kChorusParams, currentParamIdx, direction);
   }
   return false;
@@ -535,7 +549,10 @@ bool NeuralAmpModeler::_HandleVoLumSelectedKnobKey(const IKeyPress& key)
         if (handled)
           _SyncVoLumExactEntry();
 
-        return handled;
+        // Nudge returns false at the rail. Up/Down must still be consumed so they
+        // cannot fall through to amp load. PAN hits that rail in one coarse step
+        // of 1.0; any param at min/max is the same leak.
+        return volum::keyboard::SelectedKnobConsumesKind(volum::keyboard::ClassifyVk(key.VK), handled);
       }
     }
   }

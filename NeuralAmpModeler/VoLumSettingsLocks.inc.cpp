@@ -1,4 +1,4 @@
-// PRE/POST save-to-slot, lock + dirty state, effect/mode snapshot helpers.
+﻿// PRE/POST save-to-slot, lock + dirty state, effect/mode snapshot helpers.
 // Tail-#included via VoLumSettings.inc.cpp (NOT a separate TU); file-size hygiene.
 
 void NeuralAmpModeler::_VolumSavePreToSlot(volum::VoLumAmpSettings& s)
@@ -143,6 +143,7 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   }
 
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
+  mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
   mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
   mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
@@ -285,6 +286,7 @@ void NeuralAmpModeler::_VolumStorePostToCurrentAmp()
 void NeuralAmpModeler::_VolumSaveEffectSettings()
 {
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
+  mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
   mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
   mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
@@ -324,7 +326,7 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
   _VolumRestoreReverbModeSnapshot(std::clamp(fx.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   setParam(kTremoloMode, fx.tremoloMode);
   _VolumRestoreTremoloModeSnapshot(std::clamp(fx.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1));
-  setParam(kChorusActive, GetParam(kChorusActive)->Value());
+  setParam(kChorusActive, fx.chorusActive ? 1.0 : 0.0);
   setParam(kChorusMode, fx.chorusMode);
   _VolumRestoreChorusModeSnapshot(std::clamp(fx.chorusMode, 0, volum::kVoLumChorusModeCount - 1));
   _UpdateVoLumLayout();
@@ -347,7 +349,7 @@ void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
   // CURRENT mode (e.g. Analog.age=0.5, Reverse Bloom=0.0), not the static InitDouble default.
   // We update each delay knob's mDefault to the per-mode design value here, which is also
   // a natural place since it runs on every mode switch and on initial settings restore.
-  // Note: SetDefault() also overwrites mValue with the new default — we therefore call
+  // Note: SetDefault() also overwrites mValue with the new default â€” we therefore call
   // SetDefault() FIRST and then apply the user's saved snapshot value via Set(). The final
   // SendParameterValueFromDelegate carries the saved value through to the UI.
   const volum::VoLumEffectSettings designDefaults;
@@ -649,3 +651,4 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
   setParam(kReverbPreDelay, s.preDelay);
   setParam(kReverbShimmer, s.shimmer);
 }
+

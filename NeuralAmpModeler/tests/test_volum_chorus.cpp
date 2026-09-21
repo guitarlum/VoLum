@@ -1,9 +1,13 @@
 #include "third_party/doctest.h"
 #include "../VoLumAmpeteCatalog.h"
 #include "../VoLumChorus.h"
+#include "../VoLumUserSettingsIO.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -358,4 +362,61 @@ TEST_CASE("Chorus is stable across a live mode switch every block")
   // wet into a click.
   CHECK(maxDiff(io.l, dry.l) > 0.02);
   CHECK(peakOf(io.l) <= peakOf(dry.l) * 1.45 + 1e-6);
+}
+
+TEST_CASE("Chorus on/off restore reads VoLumEffectSettings.chorusActive (pack-import mapping)")
+{
+  // Pack-settings import's last apply is _VolumRestoreEffectSettings, which
+  // must set kChorusActive from fx.chorusActive the same way delay/reverb read
+  // fx.delayActive / fx.reverbActive. The plugin mapping is
+  // VoLumEffectChorusActiveParam (Scene applies it after restore). A DSP-only
+  // chorus test never sees this field.
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].postChorusActive = false; // per-amp scene disagrees on purpose
+  volum::VoLumEffectSettings fx;
+  fx.chorusActive = true;
+  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+
+  REQUIRE(j["effects"].contains("chorusActive"));
+  REQUIRE(j["effects"]["chorusActive"] == true);
+
+  volum::VoLumEffectSettings loaded;
+  loaded.chorusActive = false; // stale live switch, the H15 pre-import state
+  int last = 0;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &last, &loaded);
+  CHECK(loaded.chorusActive == true);
+  CHECK(volum::VoLumEffectChorusActiveParam(loaded) == 1.0);
+
+  fx.chorusActive = false;
+  const nlohmann::json jOff = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  loaded.chorusActive = true;
+  volum::VolumUserSettingsFromJson(jOff, amps, volum::kAmpCount, &last, &loaded);
+  CHECK(loaded.chorusActive == false);
+  CHECK(volum::VoLumEffectChorusActiveParam(loaded) == 0.0);
+
+  const auto scenePath =
+    std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  std::ifstream sceneIn(scenePath, std::ios::binary);
+  REQUIRE(sceneIn);
+  const std::string scene((std::istreambuf_iterator<char>(sceneIn)), std::istreambuf_iterator<char>());
+  CHECK(scene.find("VoLumEffectChorusActiveParam(mVolumEffectSettings)") != std::string::npos);
+  CHECK(scene.find("_VolumRestoreEffectSettings()") != std::string::npos);
+}
+
+TEST_CASE("Legacy effects JSON without chorusActive seeds from amp postChorusActive")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[0].postChorusActive = true;
+  volum::VoLumEffectSettings fx;
+  fx.chorusActive = false;
+  nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  REQUIRE(j["effects"].contains("chorusActive"));
+  j["effects"].erase("chorusActive");
+
+  volum::VoLumEffectSettings loaded;
+  loaded.chorusActive = false; // stale live off
+  int last = 0;
+  volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, &last, &loaded);
+  CHECK(loaded.chorusActive == true);
+  CHECK(volum::VoLumEffectChorusActiveParam(loaded) == 1.0);
 }

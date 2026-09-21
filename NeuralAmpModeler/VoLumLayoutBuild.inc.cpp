@@ -1081,6 +1081,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       new VoLumMetronomeButtonControl(
         metronomeArea, [pPlugin](IControl*) { pPlugin->_ToggleVoLumMetronomePanel(); }, metronomeSVG),
       kCtrlTagVoLumMetronomeButton);
+    if (auto* btn = pGraphics->GetControlWithTag(kCtrlTagVoLumMetronomeButton))
+      btn->As<VoLumMetronomeButtonControl>()->SetActive(mMetronomeDSP.IsActive());
 
     // Gear button
     pGraphics->AttachControl(new NAMCircleButtonControl(
@@ -1479,118 +1481,114 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
     if (auto* pGfx = GetUI())
     {
-      if (key.VK == kVK_ESCAPE)
-      {
-        if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
-        {
-          auto* exact = entry->As<VoLumExactEntryControl>();
-          if (!exact->IsHidden())
-          {
-            exact->CancelEntry();
-            return true;
-          }
-        }
-      }
+      using volum::keyboard::KeyConsumer;
+      using volum::keyboard::KeyKind;
+      using volum::keyboard::OverlayId;
 
-      if (pGfx->GetControlInTextEntry())
-        return false;
+      volum::keyboard::OverlayStack stack;
+      if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
+        stack.exactEntry = !entry->As<VoLumExactEntryControl>()->IsHidden();
+      stack.textEntry = pGfx->GetControlInTextEntry() != nullptr;
+      auto isOpen = [&](int tag) {
+        auto* c = pGfx->GetControlWithTag(tag);
+        return c && !c->IsHidden();
+      };
+      stack.metronome = isOpen(kCtrlTagVoLumMetronome);
+      stack.tuner = isOpen(kCtrlTagVoLumTuner);
+      stack.nameDialog = isOpen(kCtrlTagVoLumNameDialog);
+      stack.confirm = isOpen(kCtrlTagVoLumConfirm);
+      stack.custom = isOpen(kCtrlTagVoLumCustomOverlay);
+      stack.pack = isOpen(kCtrlTagVoLumPackOverlay);
+      stack.settings = isOpen(kCtrlTagSettingsBox);
+      stack.dropdown = isOpen(kCtrlTagVoLumPresetMenu) || isOpen(kCtrlTagVoLumIrMenu)
+                       || isOpen(kCtrlTagVoLumPreCaptureMenu) || isOpen(kCtrlTagVoLumSupportAmpMenu);
+      stack.knobSelected = mVolumSelectedKnobParamIdx != kNoParameter;
 
-      // ESC: true top overlays first, then Settings (so a leftover BUILD
-      // dropdown behind the page cannot steal the first Esc), then dropdowns.
-      if (key.VK == kVK_ESCAPE)
-      {
-        const int kTopOverlays[] = {
-          kCtrlTagVoLumNameDialog, kCtrlTagVoLumConfirm, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay};
-        for (int tag : kTopOverlays)
-        {
-          if (auto* c = pGfx->GetControlWithTag(tag))
-          {
-            if (!c->IsHidden())
-            {
-              c->Hide(true);
-              pGfx->SetAllControlsDirty();
-              return true;
-            }
-          }
-        }
-      }
+      const KeyKind kind = volum::keyboard::ClassifyVk(key.VK);
+      const KeyConsumer consumer = volum::keyboard::RouteKey(stack, kind);
+      const OverlayId top = volum::keyboard::TopOverlay(stack);
 
-      if (key.VK == 'h' || key.VK == 'H')
-      {
-        if (auto* pack = pGfx->GetControlWithTag(kCtrlTagVoLumPackOverlay))
+      auto hideTag = [&](int tag) {
+        if (auto* c = pGfx->GetControlWithTag(tag))
         {
-          if (!pack->IsHidden())
+          if (!c->IsHidden())
           {
-            pack->Hide(true);
+            c->Hide(true);
             pGfx->SetAllControlsDirty();
             return true;
           }
         }
-      }
+        return false;
+      };
 
-      if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+      switch (consumer)
       {
-        if (!settings->IsHidden())
-        {
-          auto* page = settings->As<NAMSettingsPageControl>();
-          // H is advertised as the settings key and is what opened this page, so it
-          // has to close it too - reaching for it again and having nothing happen
-          // reads as a stuck window. Escape peels MIDI Add/picker first. Everything
-          // else is swallowed: the rig shortcuts must not edit the amp behind a
-          // full-window overlay.
-          if (key.VK == kVK_ESCAPE)
+        case KeyConsumer::PassToTextEntry: return false;
+        case KeyConsumer::CancelExactEntry:
+          if (auto* entry = pGfx->GetControlWithTag(kCtrlTagVoLumExactEntry))
           {
-            if (page->ConsumeEscape())
-              return true;
-            page->HideAnimated(true);
-            return true;
+            auto* exact = entry->As<VoLumExactEntryControl>();
+            exact->CancelEntry();
           }
-          if (key.VK == 'h' || key.VK == 'H')
-            page->HideAnimated(true);
           return true;
-        }
-      }
-
-      if (key.VK == kVK_ESCAPE)
-      {
-        const int kDropdownTags[] = {
-          kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
-        for (int tag : kDropdownTags)
+        case KeyConsumer::PeelSettingsMidi:
+          if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+            if (settings->As<NAMSettingsPageControl>()->ConsumeEscape())
+              return true;
+          return true;
+        case KeyConsumer::CloseOverlay:
         {
-          if (auto* c = pGfx->GetControlWithTag(tag))
+          switch (top)
           {
-            if (!c->IsHidden())
-            {
-              c->Hide(true);
+            case OverlayId::Metronome:
+              if (auto* met = pGfx->GetControlWithTag(kCtrlTagVoLumMetronome))
+                met->As<VoLumMetronomeControl>()->Dismiss();
               pGfx->SetAllControlsDirty();
               return true;
-            }
-          }
-        }
-      }
-
-      // While a modal overlay or any anchored dropdown is open, the keyboard
-      // belongs to it - not the main view behind it. Route arrows into the
-      // builder art picker; otherwise swallow nav keys so the background amp
-      // list / knobs don't move. Non-nav keys fall through to the focused
-      // control (text entry etc.).
-      {
-        const int kModalTags[] = {kCtrlTagSettingsBox,      kCtrlTagVoLumNameDialog,     kCtrlTagVoLumConfirm,
-                                  kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,  kCtrlTagVoLumPresetMenu,
-                                  kCtrlTagVoLumIrMenu,      kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
-        for (int tag : kModalTags)
-        {
-          auto* c = pGfx->GetControlWithTag(tag);
-          if (!c || c->IsHidden())
-            continue;
-          const bool isNav = key.VK == kVK_UP || key.VK == kVK_DOWN || key.VK == kVK_LEFT || key.VK == kVK_RIGHT;
-          if (tag == kCtrlTagVoLumCustomOverlay && isNav)
-          {
-            if (c->As<VoLumCustomOverlayControl>()->OnArrowKey(key.VK))
+            case OverlayId::Tuner:
+              if (auto* tuner = pGfx->GetControlWithTag(kCtrlTagVoLumTuner))
+                tuner->As<VoLumTunerControl>()->Dismiss();
+              pGfx->SetAllControlsDirty();
               return true;
+            case OverlayId::NameDialog: hideTag(kCtrlTagVoLumNameDialog); return true;
+            case OverlayId::Confirm: hideTag(kCtrlTagVoLumConfirm); return true;
+            case OverlayId::Custom: hideTag(kCtrlTagVoLumCustomOverlay); return true;
+            case OverlayId::Pack: hideTag(kCtrlTagVoLumPackOverlay); return true;
+            case OverlayId::Settings:
+              if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+              {
+                auto* page = settings->As<NAMSettingsPageControl>();
+                if (kind == KeyKind::Escape && page->ConsumeEscape())
+                  return true;
+                page->HideAnimated(true);
+              }
+              return true;
+            case OverlayId::Dropdown:
+            {
+              const int kDropdownTags[] = {kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu,
+                                           kCtrlTagVoLumSupportAmpMenu};
+              for (int tag : kDropdownTags)
+                if (hideTag(tag))
+                  return true;
+              return true;
+            }
+            case OverlayId::None: break;
           }
-          return isNav; // swallow background navigation; let other keys pass
+          return true;
         }
+        case KeyConsumer::OverlayNav:
+          if (auto* overlay = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
+            overlay->As<VoLumCustomOverlayControl>()->OnArrowKey(key.VK);
+          return true;
+        case KeyConsumer::Swallow: return true;
+        case KeyConsumer::FallThrough: return false;
+        case KeyConsumer::Knob:
+          if (_HandleVoLumSelectedKnobKey(key))
+            return true;
+          if (kind == KeyKind::Arrow)
+            return true;
+          return false;
+        case KeyConsumer::Rig: break;
       }
     }
 
@@ -1668,8 +1666,8 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   });
 
   pGraphics->ForAllControlsFunc([](IControl* pControl) {
-    pControl->SetMouseEventsWhenDisabled(true);
-    pControl->SetMouseOverWhenDisabled(true);
+    pControl->SetMouseOverWhenDisabled(volum::DisabledPointerPolicy::kMouseOverWhenDisabled);
+    pControl->SetMouseEventsWhenDisabled(volum::DisabledPointerPolicy::kMouseEventsWhenDisabled);
   });
 }
 

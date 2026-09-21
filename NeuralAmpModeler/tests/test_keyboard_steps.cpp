@@ -3,6 +3,9 @@
 #include "../VoLumParams.h"
 #include "../VoLumKeyboardModel.h"
 #include "../VoLumDualAmpInput.h"
+#include "../VoLumHeaderChrome.h"
+#include "../VoLumTunerDSP.h"
+#include "../VoLumMetronomeDSP.h"
 
 TEST_CASE("Keyboard step sizes")
 {
@@ -56,6 +59,8 @@ TEST_CASE("Keyboard step sizes")
     {kPrePitchOctUp, 0.05, 0.01},
     {kPrePitchDry, 0.05, 0.01},
     {kPrePitchLevel, 0.5, 0.1},
+    {kMainAmpPan, 0.05, 0.01},
+    {kSupportAmpPan, 0.05, 0.01},
   };
   for (const auto& row : rows)
   {
@@ -121,5 +126,165 @@ TEST_CASE("Keyboard Dual Amp focus changes require a cab-row rederive")
     CHECK_FALSE(c.supportFocused);
     CHECK_FALSE(c.rederiveCabs);
   }
+}
+
+TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost overlay")
+{
+  using namespace volum::keyboard;
+
+  const OverlayStack empty{};
+
+  OverlayStack manage;
+  manage.custom = true;
+
+  OverlayStack tuner;
+  tuner.tuner = true;
+  tuner.knobSelected = true;
+
+  OverlayStack tunerOverSettings;
+  tunerOverSettings.tuner = true;
+  tunerOverSettings.settings = true;
+
+  OverlayStack metro;
+  metro.metronome = true;
+
+  OverlayStack settings;
+  settings.settings = true;
+
+  OverlayStack settingsMidi;
+  settingsMidi.settings = true;
+  settingsMidi.settingsMidiArmed = true;
+
+  OverlayStack pack;
+  pack.pack = true;
+
+  OverlayStack dropdown;
+  dropdown.dropdown = true;
+
+  OverlayStack confirm;
+  confirm.confirm = true;
+
+  OverlayStack knob;
+  knob.knobSelected = true;
+
+  OverlayStack exact;
+  exact.exactEntry = true;
+
+  OverlayStack text;
+  text.textEntry = true;
+
+  struct Row
+  {
+    const char* name;
+    OverlayStack stack;
+    KeyKind kind;
+    KeyConsumer want;
+  };
+  const Row rows[] = {
+    {"empty Esc", empty, KeyKind::Escape, KeyConsumer::Rig},
+    {"empty H", empty, KeyKind::HotkeyH, KeyConsumer::Rig},
+    {"empty T", empty, KeyKind::HotkeyT, KeyConsumer::Rig},
+    {"empty M", empty, KeyKind::HotkeyM, KeyConsumer::Rig},
+    {"empty arrow", empty, KeyKind::Arrow, KeyConsumer::Rig},
+    {"manage Esc", manage, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"manage H", manage, KeyKind::HotkeyH, KeyConsumer::Swallow},
+    {"manage T", manage, KeyKind::HotkeyT, KeyConsumer::Swallow},
+    {"manage M", manage, KeyKind::HotkeyM, KeyConsumer::Swallow},
+    {"manage 1/S/Tab", manage, KeyKind::Other, KeyConsumer::Swallow},
+    {"manage arrow", manage, KeyKind::Arrow, KeyConsumer::OverlayNav},
+    {"tuner Esc peels tuner before knob", tuner, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"tuner H", tuner, KeyKind::HotkeyH, KeyConsumer::Swallow},
+    {"tuner T", tuner, KeyKind::HotkeyT, KeyConsumer::Swallow},
+    {"tuner over settings Esc", tunerOverSettings, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"tuner over settings H", tunerOverSettings, KeyKind::HotkeyH, KeyConsumer::Swallow},
+    {"metro Esc", metro, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"metro H", metro, KeyKind::HotkeyH, KeyConsumer::Swallow},
+    {"settings Esc", settings, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"settings H closes", settings, KeyKind::HotkeyH, KeyConsumer::CloseOverlay},
+    {"settings T", settings, KeyKind::HotkeyT, KeyConsumer::Swallow},
+    {"settings MIDI Esc peels picker", settingsMidi, KeyKind::Escape, KeyConsumer::PeelSettingsMidi},
+    {"pack Esc", pack, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"pack H closes", pack, KeyKind::HotkeyH, KeyConsumer::CloseOverlay},
+    {"dropdown Esc", dropdown, KeyKind::Escape, KeyConsumer::CloseOverlay},
+    {"dropdown T", dropdown, KeyKind::HotkeyT, KeyConsumer::Swallow},
+    {"confirm Enter falls through", confirm, KeyKind::Enter, KeyConsumer::FallThrough},
+    {"confirm H", confirm, KeyKind::HotkeyH, KeyConsumer::Swallow},
+    {"knob Esc", knob, KeyKind::Escape, KeyConsumer::Knob},
+    {"knob arrow stays on knob", knob, KeyKind::Arrow, KeyConsumer::Knob},
+    {"knob T still opens tuner", knob, KeyKind::HotkeyT, KeyConsumer::Rig},
+    {"exact Esc", exact, KeyKind::Escape, KeyConsumer::CancelExactEntry},
+    {"text Esc", text, KeyKind::Escape, KeyConsumer::PassToTextEntry},
+    {"text H", text, KeyKind::HotkeyH, KeyConsumer::PassToTextEntry},
+  };
+
+  for (const auto& row : rows)
+  {
+    INFO(row.name);
+    CHECK(RouteKey(row.stack, row.kind) == row.want);
+  }
+
+  CHECK(TopOverlay(tunerOverSettings) == OverlayId::Tuner);
+  CHECK(TopOverlay(manage) == OverlayId::Custom);
+  CHECK(ClassifyVk(kKeyEscape) == KeyKind::Escape);
+  CHECK(ClassifyVk('H') == KeyKind::HotkeyH);
+  CHECK(ClassifyVk('t') == KeyKind::HotkeyT);
+  CHECK(ClassifyVk(kKeyUp) == KeyKind::Arrow);
+}
+
+TEST_CASE("Up/Down on a selected knob are consumed even when the value cannot move")
+{
+  using namespace volum::keyboard;
+  CHECK(SelectedKnobConsumesKind(KeyKind::Arrow, false));
+  CHECK(SelectedKnobConsumesKind(KeyKind::Arrow, true));
+  CHECK_FALSE(SelectedKnobConsumesKind(KeyKind::Other, false));
+  CHECK(SelectedKnobConsumesKind(KeyKind::Enter, true));
+  CHECK_FALSE(SelectedKnobConsumesKind(KeyKind::Enter, false));
+}
+
+TEST_CASE("Delay/Tremolo keyboard lists drop TIME/RATE while tempo-sync is on")
+{
+  using namespace volum::keyboard;
+  CHECK_FALSE(Contains(kDelaySyncedParams, kDelayTime));
+  CHECK(Contains(kDelaySyncedParams, kDelayFeedback));
+  CHECK(kDelaySyncedParams.front() == DefaultDelayKnob(true));
+  CHECK(DefaultDelayKnob(false) == kDelayTime);
+  CHECK_FALSE(Contains(kTremoloSyncedParams, kTremoloRate));
+  CHECK(kTremoloSyncedParams.front() == DefaultTremoloKnob(true));
+  CHECK(DefaultTremoloKnob(false) == kTremoloRate);
+  CHECK_FALSE(Contains(kTremoloHarmonicSyncedParams, kTremoloRate));
+  CHECK(Contains(kTremoloHarmonicSyncedParams, kTremoloCrossover));
+  CHECK(kTremoloHarmonicSyncedParams.front() == DefaultTremoloKnob(true));
+
+  const int rememberedTime = kDelayTime;
+  const int landed = Contains(kDelaySyncedParams, rememberedTime) ? rememberedTime : kDelaySyncedParams.front();
+  CHECK(landed == kDelayFeedback);
+}
+
+TEST_CASE("Leaving the MIDI tab disarms Add/picker")
+{
+  using volum::keyboard::HideDisarmsMidiSubscreen;
+  CHECK(HideDisarmsMidiSubscreen(true, false));
+  CHECK_FALSE(HideDisarmsMidiSubscreen(true, true));
+  CHECK_FALSE(HideDisarmsMidiSubscreen(false, false));
+  CHECK_FALSE(HideDisarmsMidiSubscreen(false, true));
+}
+
+TEST_CASE("Disabled controls keep hover for tooltips and refuse clicks")
+{
+  CHECK(volum::DisabledPointerPolicy::kMouseOverWhenDisabled);
+  CHECK_FALSE(volum::DisabledPointerPolicy::kMouseEventsWhenDisabled);
+}
+
+TEST_CASE("Editor close stops tuner mute and metronome click together")
+{
+  volum::TunerDSP tuner;
+  volum::MetronomeDSP metro;
+  tuner.SetActive(true);
+  metro.SetActive(true);
+  REQUIRE(tuner.IsActive());
+  REQUIRE(metro.IsActive());
+  volum::HaltEditorOwnedOverlayDsp(tuner, metro);
+  CHECK_FALSE(tuner.IsActive());
+  CHECK_FALSE(metro.IsActive());
 }
 

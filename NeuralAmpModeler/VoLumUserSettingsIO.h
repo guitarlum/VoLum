@@ -90,7 +90,10 @@ struct VoLumEffectSettings
   };
 
   // Chorus per-mode knob memory (live working copy; synced to/from each amp's
-  // postChorusModes). chorusMode tracks the live selected voice.
+  // postChorusModes). chorusActive / chorusMode track the live power switch and
+  // selected voice the same way delayActive / reverbActive do. Additive optional
+  // JSON key; do not bump kVoLumUserSettingsVersion.
+  bool chorusActive = false;
   int chorusMode = kVoLumChorusModeDefault;
   ChorusModeSnapshot chorusModes[kVoLumChorusModeCount] = {
     kVoLumChorusModeDefaults[0],
@@ -113,6 +116,14 @@ struct VoLumEffectSettings
     DelayModeSnapshot{600.0, 0.30, 0.32, 0.50, 0.00, false},
   };
 };
+
+// kChorusActive restore mapping. Delay/reverb restore reads fx.delayActive /
+// fx.reverbActive; chorus must do the same rather than assigning the live param
+// to itself. Pack-settings import applies this after _VolumRestoreEffectSettings.
+inline double VoLumEffectChorusActiveParam(const VoLumEffectSettings& fx)
+{
+  return fx.chorusActive ? 1.0 : 0.0;
+}
 
 inline void WriteDualAmpUserSettings(nlohmann::json& a, const VoLumAmpSettings& s)
 {
@@ -778,6 +789,7 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
     e["delayMode"] = fx->delayMode;
     e["reverbActive"] = fx->reverbActive;
     e["reverbMode"] = fx->reverbMode;
+    e["chorusActive"] = fx->chorusActive;
     e["delayModes"] = DelayModeSnapshotsToJson(fx->delayModes, kVoLumDelayModeCount);
     e["reverbModes"] = ReverbModeSnapshotsToJson(fx->reverbModes, kVoLumReverbModeCount);
     e["oktaverbSubModes"] = OktaverbSubModeSnapshotsToJson(fx->oktaverbSubModes, 3);
@@ -1223,6 +1235,17 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
     const VoLumEffectSettings defaults;
     loadBool(e, "delayActive", fx->delayActive, defaults.delayActive);
     loadBool(e, "reverbActive", fx->reverbActive, defaults.reverbActive);
+    loadBool(e, "chorusActive", fx->chorusActive, defaults.chorusActive);
+    // Additive key: older files stored chorus on/off only on the per-amp scene.
+    // Seed the global snapshot from the current amp so restore does not force
+    // the switch off (and OnIdle then persist that over postChorusActive).
+    if (!e.contains("chorusActive") && ampSettings && ampCount > 0)
+    {
+      int idx = 0;
+      if (lastAmpIdx)
+        idx = std::clamp(*lastAmpIdx, 0, ampCount - 1);
+      fx->chorusActive = ampSettings[idx].postChorusActive;
+    }
 
     // Settings v3 (effect-staging) introduces the smaller delay mode order
     //   {Digital, Analog, Reverse} (was {Tape, Digital, PingPong, Reverse}).

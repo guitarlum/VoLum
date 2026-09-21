@@ -68,4 +68,23 @@ inline HeaderChrome LayoutHeaderChrome(float mainL, float mainR, float windowT)
   return h;
 }
 
+// Disabled controls may show a tooltip; they must not take clicks. The layout
+// used to grant mouse-events-when-disabled to every control, which is how the
+// greyed Input calibration switch still toggled on factory rigs.
+struct DisabledPointerPolicy
+{
+  static constexpr bool kMouseOverWhenDisabled = true;
+  static constexpr bool kMouseEventsWhenDisabled = false;
+};
+
+// Tuner mute and metronome click are owned by editor chrome. Closing the
+// editor without stopping both left a VST3 instance clicking in the dark with
+// a rebuilt toolbar that drew the button off. One helper, both DSP members.
+template <typename Tuner, typename Metro>
+inline void HaltEditorOwnedOverlayDsp(Tuner& tuner, Metro& metro)
+{
+  tuner.SetActive(false);
+  metro.SetActive(false);
+}
+
 } // namespace volum

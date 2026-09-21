@@ -366,6 +366,7 @@ TEST_CASE("effect-staging effect snapshot fields round-trip through user setting
   fx.delayMode = volum::kVoLumDelayModeAnalog;
   fx.reverbActive = true;
   fx.reverbMode = volum::kVoLumReverbModeOktaverb;
+  fx.chorusActive = true;
 
   for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
   {
@@ -402,6 +403,7 @@ TEST_CASE("effect-staging effect snapshot fields round-trip through user setting
   CHECK(loaded.delayMode == volum::kVoLumDelayModeAnalog);
   CHECK(loaded.reverbActive == true);
   CHECK(loaded.reverbMode == volum::kVoLumReverbModeOktaverb);
+  CHECK(loaded.chorusActive == true);
   for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
   {
     CHECK(loaded.delayModes[i].time == doctest::Approx(250.0 + 50.0 * i));
@@ -575,6 +577,7 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   fx.delayModes[volum::kVoLumDelayModeReverse].time = 650.0;
   fx.delayModes[volum::kVoLumDelayModeReverse].feedback = 0.6;
   fx.delayModes[volum::kVoLumDelayModeReverse].mix = 0.4;
+  fx.chorusActive = true;
   fx.reverbActive = true;
   fx.reverbMode = 1;
   fx.reverbModes[1].mix = 0.7;
@@ -593,6 +596,7 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].time == doctest::Approx(650.0));
   CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].feedback == doctest::Approx(0.6));
   CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].mix == doctest::Approx(0.4));
+  CHECK(loaded.chorusActive == true);
   CHECK(loaded.reverbActive == true);
   CHECK(loaded.reverbMode == 1);
   CHECK(loaded.reverbModes[1].mix == doctest::Approx(0.7));
@@ -1445,6 +1449,45 @@ TEST_CASE("lastPlaySlot is a standalone instance key, not a VoLumAmpSettings fie
   healed = false;
   volum::VolumUserSettingsFromJson(older, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
   REQUIRE_FALSE(healed);
+}
+
+TEST_CASE("chorusActive is an additive VoLumEffectSettings key (no version bump)")
+{
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.chorusActive = true;
+  const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  REQUIRE(written["effects"].contains("chorusActive"));
+  CHECK(written["effects"]["chorusActive"] == true);
+  CHECK(written["version"] == volum::kVoLumUserSettingsVersion);
+
+  // A file written before this key existed must not force chorus off - restore
+  // is the last apply on the Pack-import path, so an off would then be
+  // persisted over the imported scene. It seeds from the amp scene instead, so
+  // the seed has to be written into the JSON, not poked into the output array
+  // that the read is about to overwrite.
+  volum::VoLumAmpSettings seeded[volum::kAmpCount]{};
+  seeded[0].postChorusActive = true;
+  nlohmann::json older = volum::VolumUserSettingsToJson(seeded, volum::kAmpCount, 0, &fx);
+  older["effects"].erase("chorusActive");
+  volum::VoLumEffectSettings loaded;
+  loaded.chorusActive = false;
+  bool healed = false;
+  int last = 0;
+  volum::VolumUserSettingsFromJson(older, amps, volum::kAmpCount, &last, &loaded, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(loaded.chorusActive == true);
+
+  nlohmann::json future = written;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["effects"]["unknownFutureFxKey"] = true;
+  healed = false;
+  volum::VoLumEffectSettings futureLoaded;
+  volum::VolumUserSettingsFromJson(future, amps, volum::kAmpCount, nullptr, &futureLoaded, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(futureLoaded.chorusActive == true);
 }
 
 TEST_CASE("Standalone settings write and read lastPlaySlot")

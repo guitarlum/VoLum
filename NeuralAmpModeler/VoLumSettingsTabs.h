@@ -428,6 +428,18 @@ public:
     return true;
   }
 
+  bool HasOpenSubscreen() const { return mScreen != kScreenList; }
+
+  // Tab hide is not overlay close. Overlay close already ResetToList; leaving
+  // the MIDI tab used to keep Add/picker armed so the next Esc was eaten by a
+  // screen that was no longer visible.
+  void Hide(bool hide) override
+  {
+    if (hide && mScreen != kScreenList)
+      ResetToList();
+    IControl::Hide(hide);
+  }
+
   void Draw(IGraphics& g) override
   {
     if (mScreen == kScreenPicker)
