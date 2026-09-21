@@ -1067,7 +1067,10 @@ private:
         // manual mapping.
         const auto parsed = volum::custom::ParseNamFileName(base);
         const int slot = parsed.matched ? parsed.slot : volum::custom::kUnassignedSlot;
-        const int channel = parsed.matched ? parsed.channel : 0;
+        // ParseNamFileName already drops a last-token number outside 1..kMaxChannels
+        // (G65-2204 is a model code). Re-check so a draft row is never "assigned"
+        // to a channel the loader will ignore.
+        const int channel = volum::custom::ChannelAssigned(parsed.channel) ? parsed.channel : 0;
         // Keep the absolute source path so Save can copy the capture into the
         // VoLum-owned content library (F6 import). storedPath is filled on save.
         volum::custom::CustomNamFile nf;
@@ -1720,13 +1723,16 @@ private:
 
       // channel chip
       char chLabel[12];
-      if (f.channel >= 1)
+      const bool chOk = ChannelAssigned(f.channel);
+      if (chOk)
         std::snprintf(chLabel, sizeof(chLabel), "Ch %d", f.channel);
       else
         std::snprintf(chLabel, sizeof(chLabel), "Ch -");
       g.FillRect(VoLumColors::HERO_BG, ch);
-      g.DrawRect(VoLumColors::TEAL_DIM, ch);
-      g.DrawText(IText(10.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle), chLabel, ch);
+      g.DrawRect(chOk ? VoLumColors::TEAL_DIM : VoLumColors::AMBER, ch);
+      g.DrawText(
+        IText(10.f, chOk ? VoLumColors::TEXT_MED : VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+        chLabel, ch);
       if (rowVisible)
         AddHotspot(ch, kFileChannelBase + i, "Assign this capture to a channel");
 

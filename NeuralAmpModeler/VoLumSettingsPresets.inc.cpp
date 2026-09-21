@@ -5,29 +5,31 @@ void NeuralAmpModeler::_VolumInstallPresetHooks()
 {
   // Capture: sync live params into the active scene, then hand back a copy so a
   // preset records the complete current rig (incl. the id-based custom refs that
-  // live on the scene, not on params).
-  volum::custom::PresetCaptureHook() = [this]() -> volum::VoLumAmpSettings {
-    _VolumSaveCurrentToSettings();
-    // Locked PRE/POST live on the overlay, not the amp slot. A preset is a
-    // snapshot of the sounding rig, so capture must overlay those blocks
-    // without mutating the slot the lock is protecting.
-    return volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked,
-                                      mVolumLiveLockedPost);
-  };
-  volum::custom::PresetApplyHook() = [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); };
+  // live on the scene, not on params). Registered per instance so a later claim
+  // of the process-global pair cannot make this editor persist another scene.
+  volum::custom::InstallInstancePresetHooks(
+    this,
+    [this]() -> volum::VoLumAmpSettings {
+      _VolumSaveCurrentToSettings();
+      // Locked PRE/POST live on the overlay, not the amp slot. A preset is a
+      // snapshot of the sounding rig, so capture must overlay those blocks
+      // without mutating the slot the lock is protecting.
+      return volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked,
+                                        mVolumLiveLockedPost);
+    },
+    [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); });
   volum::custom::PresetHookOwner() = this;
 }
 
 // Claims the process-global preset bridge for this instance, immediately before
 // using it.
 //
-// The bridge exists because the content layer cannot reach live params, but it is a
-// single set of globals shared by every instance in the host. Installing the hooks
-// once at construction meant the most recently created instance owned capture and
-// recall for all of them: saving a preset in the first instance stored the second
-// instance's rig, recalling in the first changed the second, and once that instance
-// was closed the hooks still held its destroyed `this`. Re-binding per operation
-// makes the caller the owner, and the caller is by definition alive.
+// The bridge exists because the content layer cannot reach live params. Capture
+// and apply are keyed per instance (see InstallInstancePresetHooks); this claim
+// still publishes the process-global pair and the owner key so overlay listing
+// and the legacy index-based signatures keep a current claimant. Save, overwrite,
+// and recall wrap themselves in PresetOpScope(this) so they never persist or
+// apply through whoever last claimed the globals.
 // Returns this instance's owner key so the caller can pass it explicitly instead
 // of reading the ambient global back out. The global is still set for the legacy
 // index-based bridge signatures, but nothing in the plugin depends on it.
@@ -183,6 +185,7 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
 
 int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
 {
+  volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
   const int idx = volum::custom::AddPresetForOwner(_VolumActiveOwnerKey(), name); // captures live via hook
   if (idx < 0)
@@ -201,8 +204,10 @@ int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
 
 void NeuralAmpModeler::_VolumOverwritePreset(int index)
 {
+  volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
-  volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index); // captures live via hook
+  if (!volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index)) // captures live via hook
+    return;
   mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), index);
   mVolumRecalledSnapshot = volum::SoundingPresetScene(_VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre,
                                                       mVolumPostLocked, mVolumLiveLockedPost);
@@ -227,9 +232,11 @@ void NeuralAmpModeler::_VolumRecallPreset(int index)
 
 void NeuralAmpModeler::_VolumRecallUserPreset(int index)
 {
+  volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
   mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), index);
-  volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index); // -> apply hook -> _VolumApplyRecalledPreset
+  if (!volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index)) // -> apply hook -> _VolumApplyRecalledPreset
+    return;
   _VolumSyncLivePlaySlotFromActivePair();
   _VolumRefreshPresetBar();
   if (GetUI())

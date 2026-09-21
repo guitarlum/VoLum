@@ -19,12 +19,14 @@ struct GlobalStoreReset
     volum::custom::SetActivePresetOwner(volum::content::FactoryOwnerKey(0));
     volum::custom::PresetCaptureHook() = nullptr;
     volum::custom::PresetApplyHook() = nullptr;
+    volum::custom::PresetHooksByInstance().clear();
   }
   ~GlobalStoreReset()
   {
     volum::custom::PresetCaptureHook() = nullptr;
     volum::custom::PresetApplyHook() = nullptr;
     volum::custom::PresetHookOwner() = nullptr;
+    volum::custom::PresetHooksByInstance().clear();
   }
 };
 } // namespace

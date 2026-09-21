@@ -286,12 +286,14 @@ using volum::custom::AmpSlotChannels;
 using volum::custom::AmpSlots;
 using volum::custom::AssignedChannels;
 using volum::custom::CellFileCount;
+using volum::custom::ChannelAssigned;
 using volum::custom::CustomAmp;
 using volum::custom::FileAssigned;
 using volum::custom::FileIsDuplicate;
 using volum::custom::HasDuplicate;
 using volum::custom::IsDirectSlot;
 using volum::custom::kDirectSlot;
+using volum::custom::kMaxChannels;
 using volum::custom::kUnassignedSlot;
 using volum::custom::MaxAssignedChannel;
 using volum::custom::NormalizeCabName;
@@ -306,13 +308,18 @@ TEST_CASE("IsDirectSlot recognises the amp-only DIRECT slot")
   REQUIRE(IsDirectSlot(kUnassignedSlot) == false);
 }
 
-TEST_CASE("FileAssigned requires both a real slot and a real channel")
+TEST_CASE("FileAssigned requires both a real slot and a channel the loader will use")
 {
   REQUIRE(FileAssigned({"a.nam", kDirectSlot, 1}) == true);
   REQUIRE(FileAssigned({"b.nam", 0, 2}) == true);
   REQUIRE(FileAssigned({"c.nam", kUnassignedSlot, 0}) == false); // no slot, no channel
   REQUIRE(FileAssigned({"d.nam", 0, 0}) == false); // missing channel
   REQUIRE(FileAssigned({"e.nam", kUnassignedSlot, 2}) == false); // missing slot
+  REQUIRE(ChannelAssigned(kMaxChannels) == true);
+  REQUIRE(FileAssigned({"f.nam", kDirectSlot, kMaxChannels}) == true);
+  REQUIRE(ChannelAssigned(kMaxChannels + 1) == false);
+  REQUIRE(FileAssigned({"g.nam", kDirectSlot, kMaxChannels + 1}) == false);
+  REQUIRE(FileAssigned({"G65-2204.nam", 1, 2204}) == false);
 }
 
 TEST_CASE("AmpSlots lists DIRECT first then populated cab slots in order")
@@ -485,6 +492,21 @@ TEST_CASE("AssignedChannels is empty when nothing is assigned")
   CHECK(AssignedChannels(amp).empty());
 }
 
+TEST_CASE("A channel above kMaxChannels is not assigned, not saveable, and not a loader channel")
+{
+  // G65-2204.nam auto-fill used to write channel 2204. FileAssigned said yes,
+  // AssignedChannels dropped it, Save was enabled, MAIN loaded nothing.
+  CustomAmp amp;
+  amp.name = "My amp";
+  amp.files = {{"G65-2204.nam", 1, 2204}};
+  REQUIRE_FALSE(FileAssigned(amp.files[0]));
+  REQUIRE(UnassignedCount(amp) == 1);
+  REQUIRE(AssignedChannels(amp).empty());
+  REQUIRE(AmpSlotChannels(amp, 1).empty());
+  REQUIRE(MaxAssignedChannel(amp) == 0);
+  REQUIRE(SaveDisabledReason(amp) == "Assign every file a cab + channel");
+}
+
 TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate states")
 {
   // Name gate first: empty and the builder default both read as unnamed.
@@ -518,6 +540,7 @@ TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate state
 
 TEST_CASE("ParseNamFileName auto-fills slot/channel/cab from the factory convention")
 {
+  using volum::custom::ChannelAssigned;
   using volum::custom::kDirectSlot;
   using volum::custom::ParseNamFileName;
 
@@ -549,6 +572,34 @@ TEST_CASE("ParseNamFileName auto-fills slot/channel/cab from the factory convent
   auto noCh = ParseNamFileName("G65-foo-bar.nam");
   REQUIRE(noCh.matched);
   REQUIRE(noCh.channel == 0);
+
+  // Two-token PREFIX-CODE (the shipped Marshall JMP 2204 style): last token is a
+  // model code, not a gain stage. Slot still auto-fills; channel stays unassigned
+  // so SaveDisabledReason and the loader agree the file is not ready.
+  auto modelCode = ParseNamFileName("G65-2204.nam");
+  REQUIRE(modelCode.matched);
+  REQUIRE(modelCode.slot == 1);
+  REQUIRE(modelCode.cabName == "G65");
+  REQUIRE(modelCode.channel == 0);
+  REQUIRE_FALSE(ChannelAssigned(modelCode.channel));
+
+  auto deluxe = ParseNamFileName("G12-Deluxe-1959.nam");
+  REQUIRE(deluxe.matched);
+  REQUIRE(deluxe.slot == 0);
+  REQUIRE(deluxe.channel == 0);
+
+  auto bassman = ParseNamFileName("AMP-Bassman-1962.nam");
+  REQUIRE(bassman.matched);
+  REQUIRE(bassman.slot == kDirectSlot);
+  REQUIRE(bassman.channel == 0);
+
+  auto chNine = ParseNamFileName("AMP-Test-9.nam");
+  REQUIRE(chNine.matched);
+  REQUIRE(chNine.channel == 0);
+
+  auto chEight = ParseNamFileName("AMP-Test-8.nam");
+  REQUIRE(chEight.matched);
+  REQUIRE(chEight.channel == 8);
 }
 
 TEST_CASE("Name uniqueness is case-insensitive within a content type")
@@ -977,6 +1028,92 @@ TEST_CASE("The newest claim owns the preset hooks, and a departing owner clears 
   const int j = AddPreset(0, "No hooks");
   REQUIRE(j >= 0);
   CHECK(volum::AmpSettingsEqual(bank[(size_t)j].settings, volum::VoLumAmpSettings{}));
+}
+
+TEST_CASE("Two claimants cannot make one editor persist or apply the other's scene")
+{
+  using namespace volum::custom;
+
+  PresetHooksByInstance().clear();
+  PresetCaptureHook() = nullptr;
+  PresetApplyHook() = nullptr;
+  PresetHookOwner() = nullptr;
+  struct ResetPresetHooks
+  {
+    ~ResetPresetHooks()
+    {
+      PresetHooksByInstance().clear();
+      PresetCaptureHook() = nullptr;
+      PresetApplyHook() = nullptr;
+      PresetHookOwner() = nullptr;
+    }
+  } reset;
+
+  int instanceA = 0;
+  int instanceB = 0;
+
+  volum::VoLumAmpSettings sceneA;
+  sceneA.toneBass = 1.5;
+  volum::VoLumAmpSettings sceneB;
+  sceneB.toneBass = 9.5;
+
+  volum::VoLumAmpSettings appliedA;
+  volum::VoLumAmpSettings appliedB;
+  int applyA = 0;
+  int applyB = 0;
+
+  InstallInstancePresetHooks(
+    &instanceA, [&sceneA]() { return sceneA; },
+    [&](const volum::VoLumAmpSettings& s) {
+      appliedA = s;
+      ++applyA;
+    });
+  InstallInstancePresetHooks(
+    &instanceB, [&sceneB]() { return sceneB; },
+    [&](const volum::VoLumAmpSettings& s) {
+      appliedB = s;
+      ++applyB;
+    });
+  // B claimed last: the process-global pair is B's. That is the bug if capture
+  // still reads it.
+  REQUIRE(PresetHookOwner() == &instanceB);
+  REQUIRE(PresetCaptureHook()().toneBass == doctest::Approx(9.5));
+
+  SetActivePresetOwner("test:n6-two-claimants");
+
+  {
+    PresetOpScope op(&instanceA);
+    const int i = AddPresetForOwner("test:n6-two-claimants", "From A");
+    REQUIRE(i >= 0);
+    const auto& bank = volum::content::GlobalContentStore().reg().presetBanks.at("test:n6-two-claimants");
+    CHECK(bank[(size_t)i].settings.toneBass == doctest::Approx(1.5));
+
+    sceneA.toneBass = 3.25;
+    REQUIRE(OverwritePresetForOwner("test:n6-two-claimants", i));
+    CHECK(bank[(size_t)i].settings.toneBass == doctest::Approx(3.25));
+
+    REQUIRE(RecallPresetForOwner("test:n6-two-claimants", i));
+    CHECK(applyA == 1);
+    CHECK(applyB == 0);
+    CHECK(appliedA.toneBass == doctest::Approx(3.25));
+  }
+
+  // Unscoped while editors are registered: refuse, do not silently take B.
+  const auto sizeBefore = volum::content::GlobalContentStore().reg().presetBanks["test:n6-two-claimants"].size();
+  CHECK(AddPresetForOwner("test:n6-two-claimants", "Stolen") == -1);
+  CHECK(volum::content::GlobalContentStore().reg().presetBanks["test:n6-two-claimants"].size() == sizeBefore);
+  CHECK_FALSE(OverwritePresetForOwner("test:n6-two-claimants", 0));
+  CHECK_FALSE(RecallPresetForOwner("test:n6-two-claimants", 0));
+  CHECK(applyB == 0);
+
+  int stranger = 0;
+  {
+    PresetOpScope op(&stranger);
+    CHECK(AddPresetForOwner("test:n6-two-claimants", "Stranger") == -1);
+  }
+
+  ClearPresetHooksIfOwnedBy(&instanceA);
+  ClearPresetHooksIfOwnedBy(&instanceB);
 }
 
 // Destructive confirmations name an item but used to remember only its row. The
