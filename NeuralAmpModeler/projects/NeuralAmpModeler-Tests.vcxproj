@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
@@ -125,6 +125,7 @@
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />
+    <ClCompile Include="..\tests\test_volum_dual_amp_input.cpp" />
     <ClCompile Include="..\tests\test_eparam_order.cpp" />
     <ClCompile Include="..\tests\test_tuner_dsp.cpp" />
     <ClCompile Include="..\tests\test_metronome_dsp.cpp" />
@@ -185,3 +186,4 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+

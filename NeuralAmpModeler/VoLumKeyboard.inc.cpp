@@ -1,6 +1,8 @@
-// VoLumKeyboard.inc.cpp: on-screen keyboard navigation + exact-entry member functions
+﻿// VoLumKeyboard.inc.cpp: on-screen keyboard navigation + exact-entry member functions
 // Extracted from NeuralAmpModeler.cpp for file-size hygiene. Tail-#included
 // into the NeuralAmpModeler translation unit; not a separate build target.
+
+#include "VoLumDualAmpInput.h"
 
 bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
 {
@@ -66,6 +68,7 @@ bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
 bool NeuralAmpModeler::_SwitchVoLumKeyboardSection(EVoLumSection section)
 {
   _ClearVoLumKnobSelection();
+  const bool previousFocus = mVolumDualAmpFocusedSupport;
   mVolumExpandedSection = section;
 
   switch (section)
@@ -84,6 +87,13 @@ bool NeuralAmpModeler::_SwitchVoLumKeyboardSection(EVoLumSection section)
       break;
   }
 
+  // The `2` key lands AMP with MAIN focused. If SUPPORT was focused, that is a
+  // focus change, and the shared cab row has to follow it.
+  const auto commit =
+    volum::dualamp::CommitFocus(previousFocus, mVolumDualAmpFocusedSupport, _VolumHasSupportAmp());
+  volum::dualamp::ApplyFocusCommit(
+    commit, [this](bool f) { mVolumDualAmpFocusedSupport = f; }, [this] { _VolumApplyFocusedLaneCabs(); });
+
   _UpdateVoLumLayout();
   _UpdateVoLumKeyboardFocusHint();
   return true;
@@ -92,6 +102,7 @@ bool NeuralAmpModeler::_SwitchVoLumKeyboardSection(EVoLumSection section)
 bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
 {
   _ClearVoLumKnobSelection();
+  const bool previousFocus = mVolumDualAmpFocusedSupport;
 
   auto wrap = [](int value, int count) { return (value + count) % count; };
 
@@ -136,6 +147,13 @@ bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(int direction)
       break;
     }
   }
+
+  // Tab in AMP flips lane focus. PRE/POST force MAIN. Either way the shared cab
+  // row is a derived consequence of the committed flag, not of whoever wrote it.
+  const auto commit =
+    volum::dualamp::CommitFocus(previousFocus, mVolumDualAmpFocusedSupport, _VolumHasSupportAmp());
+  volum::dualamp::ApplyFocusCommit(
+    commit, [this](bool f) { mVolumDualAmpFocusedSupport = f; }, [this] { _VolumApplyFocusedLaneCabs(); });
 
   _UpdateVoLumLayout();
   _UpdateVoLumKeyboardFocusHint();
@@ -185,8 +203,9 @@ bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget()
     // default partner is "(none)", so pressing 2 then the toggle key focused an
     // empty lane: the cab row jumped to a phantom cab, the channel stepper read
     // "---", and S edited a parameter nothing was listening to.
-    mVolumDualAmpFocusedSupport = next;
-    _VolumClampSupportFocus();
+    const auto commit = volum::dualamp::CommitFocus(mVolumDualAmpFocusedSupport, next, _VolumHasSupportAmp());
+    volum::dualamp::ApplyFocusCommit(
+      commit, [this](bool f) { mVolumDualAmpFocusedSupport = f; }, [this] { _VolumApplyFocusedLaneCabs(); });
   }
 
   _UpdateVoLumLayout();
@@ -566,3 +585,4 @@ void NeuralAmpModeler::_HideVoLumExactEntry()
     }
   }
 }
+

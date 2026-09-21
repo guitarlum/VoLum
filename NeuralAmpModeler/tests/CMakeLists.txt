@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 
 project(NeuralAmpModelerTests LANGUAGES CXX)
 
@@ -34,6 +34,7 @@ add_executable(NeuralAmpModeler-Tests
   test_golden_rigs.cpp
   test_golden_presets.cpp
   test_keyboard_steps.cpp
+  test_volum_dual_amp_input.cpp
   test_eparam_order.cpp
   test_tuner_dsp.cpp
   test_metronome_dsp.cpp
@@ -138,3 +139,4 @@ if(VOLUM_ENABLE_COVERAGE)
     message(FATAL_ERROR "VOLUM_ENABLE_COVERAGE requires Clang")
   endif()
 endif()
+

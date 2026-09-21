@@ -91,14 +91,48 @@ inline bool AmpSettingsFromJson(const nlohmann::json& a, VoLumAmpSettings& s)
   return healed;
 }
 
-// Value-equality over the full serialized settings. Used by the F5 preset
+// The apply path heals !postValid to true before snapshotting (factory POST
+// defaults, then _VolumSavePostToSlot). Reconstructors that copy the shipped
+// bank as the dirty baseline must apply the same heal; the bank keeps
+// postValid=false as the "never written" sentinel for restore.
+inline VoLumAmpSettings HealedFactoryPresetSettings(VoLumAmpSettings s)
+{
+  s.postValid = true;
+  return s;
+}
+
+// Value-equality over the sounding settings. Used by the F5 preset
 // "(unsaved)" indicator: the live scene is dirty iff it differs from the
 // recalled snapshot, so an A/B edit that lands back on the preset clears the
 // flag. Comparing the canonical JSON keeps this in lock-step with the codec
 // (any field the codec round-trips participates in equality automatically).
+//
+// postValid is excluded: it is a restore sentinel ("POST was never written"),
+// not a knob. Live save always stamps it true; shipped Factory Ready is {}.
+// Including it made every relaunched Ready read as (unsaved).
 inline bool AmpSettingsEqual(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
 {
-  return AmpSettingsToJson(a) == AmpSettingsToJson(b);
+  auto ja = AmpSettingsToJson(a);
+  auto jb = AmpSettingsToJson(b);
+  ja.erase("postValid");
+  jb.erase("postValid");
+  return ja == jb;
+}
+
+// SetList blanks the selection. It must not force the dirty bit off:
+// Manage-delete of the selected User preset forgets the id, Refresh calls
+// SetList, and Default would then discard the live sound the confirm promised
+// to keep.
+inline bool PresetBarSetListPreservesDirty()
+{
+  return true;
+}
+
+// Even with nothing selected: Forget after Manage-delete leaves the live
+// sound, and LivePresetDirty(false, live, {}) is the bit Save As / Default need.
+inline bool PresetBarNeedsDirtyRecompute(bool /*hasSelectedPreset*/)
+{
+  return true;
 }
 
 // ---------------------------------------------------------------------------

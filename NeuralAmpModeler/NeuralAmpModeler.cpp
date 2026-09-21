@@ -1421,7 +1421,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
             && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
         {
           mSupportPolarityInvert.store(true);
-          mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = true;
+          _VolumActiveScene().supportPolarityInvert = true;
           GetParam(kMainAmpPan)->Set(-1.0);
           SendParameterValueFromDelegate(kMainAmpPan, GetParam(kMainAmpPan)->GetNormalized(), true);
           GetParam(kSupportAmpPan)->Set(1.0);

@@ -7,6 +7,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
+#include "VoLumPrePostLock.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumOverlayActionCodes.h"
 #include "VoLumPresetBar.h"
@@ -407,7 +408,7 @@ public:
           // Resolve the row again: mSel and mItems both date from before the field
           // opened. An entry with no id (only possible for a library written before
           // ids existed) keeps the old positional behaviour.
-          const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);
+          const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));
           if (target < 0)
           {
             mError = "\"" + mRenameName + "\" is no longer in your library.";
@@ -957,7 +958,7 @@ private:
           // the old positional behaviour rather than becoming unusable.
           const std::string id = RowIdAt(idx);
           auto doOverwrite = [this, id, idx, nm]() {
-            const int now = id.empty() ? idx : RowIndexById(id);
+            const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));
             if (now < 0)
             {
               mError = "\"" + nm + "\" is no longer in your library.";
@@ -999,7 +1000,7 @@ private:
           // An entry with no id keeps the old positional behaviour.
           const std::string id = RowIdAt(idx);
           auto doDelete = [this, id, idx, nm]() {
-            const int now = id.empty() ? idx : RowIndexById(id);
+            const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));
             if (now < 0)
             {
               mError = "\"" + nm + "\" is no longer in your library.";

@@ -1,4 +1,4 @@
-#include "third_party/doctest.h"
+﻿#include "third_party/doctest.h"
 
 #include "../VoLumAboutLayout.h"
 #include "../VoLumAmpeteCatalog.h"
@@ -70,9 +70,9 @@ TEST_CASE("Picker groups: one section starts open, two start collapsed, then mem
   CHECK(std::string(volum::PickerGroupGlyph(true)) == "-");
   CHECK(volum::PickerGroupMenuLabel(true, false) == "+  FACTORY");
   CHECK(volum::PickerGroupMenuLabel(false, true) == "-  USER");
-  CHECK(play.find("FACTORY  ·") == std::string::npos);
-  CHECK(tabs.find("FACTORY  ·") == std::string::npos);
-  CHECK(menus.find("FACTORY  ·") == std::string::npos);
+  CHECK(play.find("FACTORY  Â·") == std::string::npos);
+  CHECK(tabs.find("FACTORY  Â·") == std::string::npos);
+  CHECK(menus.find("FACTORY  Â·") == std::string::npos);
   CHECK(play.find("PickerGroupGlyph(") != std::string::npos);
   CHECK(tabs.find("PickerGroupGlyph(") != std::string::npos);
   CHECK(menus.find("PickerGroupMenuLabel(") != std::string::npos);
@@ -277,7 +277,7 @@ TEST_CASE("PLAY T/M/H and Ctrl+S fall through the PLAY key branch")
 TEST_CASE("Ctrl+S and Default dirty use the live-vs-default comparison")
 {
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
-  REQUIRE(presets.find("LivePresetDirty(mVolumHasRecalledSnapshot, _VolumActiveScene(), mVolumRecalledSnapshot)")
+  REQUIRE(presets.find("LivePresetDirty(mVolumHasRecalledSnapshot, sounding, mVolumRecalledSnapshot)")
           != std::string::npos);
   REQUIRE(presets.find("bool NeuralAmpModeler::_VolumHandleSaveShortcut()") != std::string::npos);
   REQUIRE(presets.find("_VolumPromptSaveAs") != std::string::npos);
@@ -590,3 +590,4 @@ TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
 }
+

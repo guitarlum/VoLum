@@ -105,3 +105,35 @@ TEST_CASE("Factory Sounds are available to PLAY without seeding midiSoundMap")
   CHECK(sounds[0].factory);
   CHECK(registry.midiSoundMap.empty());
 }
+
+TEST_CASE("Factory Ready dirty ignores the postValid restore sentinel")
+{
+  // Live save always stamps postValid=true. Shipped Ready is VoLumAmpSettings{}
+  // (postValid=false). That sentinel is not a knob: after a no-edit relaunch
+  // the sounding scenes match, so PLAY + must assign Ready without Save As.
+  const auto factory = volum::DefaultFactoryPresets();
+  REQUIRE_FALSE(factory[0].settings.postValid);
+
+  volum::VoLumAmpSettings live = factory[0].settings;
+  live.postValid = true;
+  REQUIRE(volum::AmpSettingsEqual(live, factory[0].settings));
+  REQUIRE_FALSE(volum::LivePresetDirty(true, live, factory[0].settings));
+  REQUIRE_FALSE(volum::AddHeardNeedsSaveAs(volum::PresetSaveAction::SaveUserCopy, false, false));
+  REQUIRE_FALSE(volum::AddHeardNeedsSaveAs(volum::PresetSaveAction::SaveUserCopy,
+                                          volum::LivePresetDirty(true, live, factory[0].settings), false));
+
+  live.toneBass = 8.0;
+  REQUIRE(volum::LivePresetDirty(true, live, factory[0].settings));
+}
+
+TEST_CASE("Healed factory snapshot stamps postValid the way apply does")
+{
+  const auto factory = volum::DefaultFactoryPresets();
+  const auto healed = volum::HealedFactoryPresetSettings(factory[2].settings);
+  REQUIRE(healed.postValid);
+  REQUIRE_FALSE(factory[2].settings.postValid);
+
+  volum::VoLumAmpSettings live = factory[2].settings;
+  live.postValid = true;
+  REQUIRE(volum::AmpSettingsEqual(live, healed));
+}

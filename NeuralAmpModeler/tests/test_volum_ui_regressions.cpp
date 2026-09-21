@@ -1,4 +1,4 @@
-#include "third_party/doctest.h"
+﻿#include "third_party/doctest.h"
 #include "../config.h"
 #include "../VoLumTriptychLayout.h"
 
@@ -73,6 +73,17 @@ void RequireDoesNotContain(const std::string& haystack, const char* needle)
   INFO(needle);
   REQUIRE(haystack.find(needle) == std::string::npos);
 }
+
+std::string MemberFnUntilNext(const std::string& src, const char* signature)
+{
+  const auto start = src.find(signature);
+  REQUIRE(start != std::string::npos);
+  const auto sigEnd = src.find(')', start);
+  REQUIRE(sigEnd != std::string::npos);
+  const auto end = src.find(" NeuralAmpModeler::", sigEnd);
+  REQUIRE(end != std::string::npos);
+  return src.substr(start, end - start);
+}
 } // namespace
 
 TEST_CASE("POST pedal cards refresh active art state from delay and reverb params")
@@ -110,7 +121,7 @@ TEST_CASE("POST carries a fourth Chorus card wired to the Throat motif")
 
 TEST_CASE("Clear and close affordances stroke a cross instead of drawing U+00D7")
 {
-  // Josefin ships no U+00D7, so "×" renders as a tofu box. Every clear/close
+  // Josefin ships no U+00D7, so "Ã—" renders as a tofu box. Every clear/close
   // affordance must go through DrawCrossGlyph.
   const std::string helpers = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumColorHelpers.h");
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
@@ -1768,7 +1779,7 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   RequireContains(overlay, "std::string RowIdAt(int idx) const");
   RequireContains(overlay, "int RowIndexById(const std::string& id) const");
   // Both destructive confirmations resolve at confirm time and bail out by name.
-  RequireContains(overlay, "const int now = id.empty() ? idx : RowIndexById(id);");
+  RequireContains(overlay, "const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));");
   RequireContains(overlay, "is no longer in your library.");
   RequireContains(overlay, "ApplyDelete(now);");
   RequireContains(overlay, "mOverwritePreset(now);");
@@ -1781,7 +1792,7 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   // time the user is typing - so it has the widest window for another editor to
   // shift the rows underneath it.
   RequireContains(overlay, "mRenameId = RowIdAt(mSel);");
-  RequireContains(overlay, "const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);");
+  RequireContains(overlay, "const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));");
   RequireContains(overlay, "ApplyRename(target, s);");
   RequireContains(overlay, "NameTaken(s, target)");
   RequireDoesNotContain(overlay, "ApplyRename(mSel, s);");
@@ -1934,15 +1945,12 @@ TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invali
   // conditioned on which lane is focused. A clamp that only flipped the flag left the
   // row describing SUPPORT while MAIN was focused - the exact state that guard exists
   // to prevent - and a click on a cab then edited MAIN with an index belonging to the
-  // support amp's layout.
+  // support amp's layout. The decision lives in CommitFocus; clamp installs it.
   const std::string source = ReadPluginSource();
 
-  const auto clamp = source.find("void NeuralAmpModeler::_VolumClampSupportFocus()");
-  REQUIRE(clamp != std::string::npos);
-  const auto clampEnd = source.find("\n}", clamp);
-  REQUIRE(clampEnd != std::string::npos);
-  const std::string body = source.substr(clamp, clampEnd - clamp);
-  RequireContains(body, "mVolumDualAmpFocusedSupport = false;");
+  const std::string body = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumClampSupportFocus(");
+  RequireContains(body, "volum::dualamp::CommitFocus(");
+  RequireContains(body, "volum::dualamp::ApplyFocusCommit(");
   RequireContains(body, "_VolumApplyFocusedLaneCabs();");
 
   // A lane whose amp the library no longer contains is not a lane either: a custom
@@ -2171,3 +2179,68 @@ TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay 
   RequireContains(source, "processingPlan.silenceForTuner");
   RequireContains(source, "mTunerDSP.IsActive()");
 }
+
+TEST_CASE("Keyboard Dual Amp focus commits through the shared cab-row helper")
+{
+  // Tab, the `2` key, and the Dual-on key used to assign mVolumDualAmpFocusedSupport
+  // and rebuild layout without re-deriving the shared cab row. Knobs followed the
+  // new lane; a cab click then wrote that lane using the other lane's names.
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+
+  const std::string cycle = MemberFnUntilNext(keyboard, "bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(");
+  RequireContains(cycle, "volum::dualamp::CommitFocus(");
+  RequireContains(cycle, "volum::dualamp::ApplyFocusCommit(");
+  RequireContains(cycle, "_VolumApplyFocusedLaneCabs();");
+
+  const std::string section = MemberFnUntilNext(keyboard, "bool NeuralAmpModeler::_SwitchVoLumKeyboardSection(");
+  RequireContains(section, "volum::dualamp::CommitFocus(");
+  RequireContains(section, "volum::dualamp::ApplyFocusCommit(");
+  RequireContains(section, "_VolumApplyFocusedLaneCabs();");
+
+  const std::string toggle = MemberFnUntilNext(keyboard, "bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget(");
+  RequireContains(toggle, "volum::dualamp::CommitFocus(");
+  RequireContains(toggle, "volum::dualamp::ApplyFocusCommit(");
+  RequireContains(toggle, "_VolumApplyFocusedLaneCabs();");
+}
+
+TEST_CASE("Custom sidebar selection re-derives the focused lane's cab row")
+{
+  // _VolumApplyAmpSettings claims every caller ends in _VolumApplyFocusedLaneCabs.
+  // The custom sidebar path called _VolumApplyCustomMainCabs(Y) with MAIN, so a
+  // SUPPORT-focused click left the previous partner's names on the shared row.
+  const std::string select =
+    MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::_VolumSelectCustomAmp(");
+  RequireContains(select, "_VolumApplyCustomMainCabs(customIdx);");
+
+  // The headless early-return also calls ApplyCustomMainCabs (a no-op without UI).
+  // The focused-lane rederive has to run on the UI path after that return, or a
+  // SUPPORT-focused sidebar click still leaves the previous partner on the row.
+  const auto noUi = select.find("if (!pGfx)");
+  REQUIRE(noUi != std::string::npos);
+  const auto noUiReturn = select.find("return;", noUi);
+  REQUIRE(noUiReturn != std::string::npos);
+  REQUIRE(select.find("_VolumApplyFocusedLaneCabs();", noUiReturn) != std::string::npos);
+}
+
+TEST_CASE("Hero lane clicks ask the shared Dual Amp click protocol")
+{
+  // The protocol itself, including the empty-lane behaviour that #29 was about,
+  // is covered in test_volum_dual_amp_input.cpp. This only pins that the control
+  // asks: a correct protocol nobody calls is how that bug shipped.
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+  RequireContains(hero, "volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf)");
+  RequireContains(hero, "mDblAsSingleClick = true;");
+}
+
+TEST_CASE("Polarity writes the active scene, not the parked factory slot")
+{
+  // While a custom MAIN is focused, mVolumAmpIdx still names the parked factory
+  // amp. The glyph and Dual-on heal used to write that slot; returning to the
+  // factory amp restored a polarity it never had. The save path already writes
+  // _VolumActiveScene().
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "_VolumActiveScene().supportPolarityInvert");
+  RequireDoesNotContain(source, "mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert");
+}
+
+

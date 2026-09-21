@@ -1,4 +1,4 @@
-// VoLumLayoutBuild.inc.cpp: _BuildVoLumLayout - the full one-time UI build/attach
+﻿// VoLumLayoutBuild.inc.cpp: _BuildVoLumLayout - the full one-time UI build/attach
 // pass. Extracted verbatim from the constructor's mLayoutFunc lambda body for
 // file-size hygiene; tail-#included into the NeuralAmpModeler TU (not a separate
 // build target). Behaviour is identical: the lambda now just forwards here.
@@ -112,10 +112,18 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           (customIdx >= 0 && customIdx < (int)names.size()) ? names[(size_t)customIdx] : std::string();
         // Planned before the delete, while the amp still exists to be described,
         // and applied after it so the rig lands on content that is really there.
+        const std::string deleteId = volum::custom::CustomAmpIdAt(customIdx);
         const std::string confirmBody =
-          _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp, volum::custom::CustomAmpIdAt(customIdx), nm);
-        auto doDelete = [this, customIdx]() {
-          volum::custom::RemoveCustomAmp(customIdx);
+          _VolumPlanLibraryDelete(volum::rig::LibraryKind::CustomAmp, deleteId, nm);
+        auto doDelete = [this, customIdx, deleteId]() {
+          // Re-resolve by id at confirm time, the way the Manage panel already
+          // does. The row index was captured before the dialog opened, and another
+          // editor deleting an earlier row in the meantime shifts everything below
+          // it - so a confirm that named one amp deleted its neighbour.
+          const int target = volum::ResolveConfirmRowIndex(deleteId, customIdx, volum::custom::CustomAmpIndexById(deleteId));
+          if (target < 0)
+            return; // already gone; the confirm describes something that no longer exists
+          volum::custom::RemoveCustomAmp(target);
           // The sidebar has nowhere to show a message, unlike the Manage panel. At
           // least record it, so a library that refused the write is diagnosable from
           // volum.log instead of only visible as an amp that comes back on relaunch.
@@ -133,13 +141,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           // The deleted amp may have been the focused main and/or the dual SUPPORT
           // partner. Keep the row-index caches valid before the repair runs, since
           // the repair reads them (and the rows below the deleted one shifted up).
-          if (mVolumCustomMainIdx == customIdx)
+          if (mVolumCustomMainIdx == target)
             mVolumCustomMainIdx = -1;
-          else if (mVolumCustomMainIdx > customIdx)
+          else if (mVolumCustomMainIdx > target)
             --mVolumCustomMainIdx;
-          if (mVolumCustomSupportIdx == customIdx)
+          if (mVolumCustomSupportIdx == target)
             mVolumCustomSupportIdx = -1;
-          else if (mVolumCustomSupportIdx > customIdx)
+          else if (mVolumCustomSupportIdx > target)
             --mVolumCustomSupportIdx;
           // Move the sounding rig off the deleted capture: MAIN reverts to the
           // sidebar factory amp as if clicked (which reloads the model and rebuilds
@@ -334,7 +342,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       if (GetParam(kDualAmpActive)->Bool())
         _VolumShowSupportAmpMenu(anchor);
     },
-    // DUAL chip — toggle the global Dual Amp parameter through the shared funnel
+    // DUAL chip â€” toggle the global Dual Amp parameter through the shared funnel
     // (host notify + OnParamChange + mark dirty), then refresh the focus hint.
     [this]() {
       _VolumUserToggleParam(kDualAmpActive);
@@ -343,7 +351,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // Dismiss the support-amp dropdown when the user clicks elsewhere on the hero (e.g. on
     // the MAIN panel) so the menu doesn't stay floating after a focus change.
     [this]() { _VolumHideSupportAmpMenu(); },
-    // Picker visibility check — lets the hero treat any support-panel click as "close" while
+    // Picker visibility check â€” lets the hero treat any support-panel click as "close" while
     // the menu is open, regardless of focus state.
     [this]() {
       if (auto* pGfx = GetUI())
@@ -354,7 +362,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->AttachControl(hero, kCtrlTagVoLumHeroImage);
 
   // PAN knobs live in the bottom-right of each lane's hero panel. Visibility is toggled in
-  // _VolumApplyDualAmpFocus — mono mode hides both. They use volumPanKnobStyle which has a
+  // _VolumApplyDualAmpFocus â€” mono mode hides both. They use volumPanKnobStyle which has a
   // transparent background so the knob blends into the hero art instead of punching a square
   // dark patch through it.
   pGraphics->AttachControl(
@@ -367,7 +375,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
                              [this]() {
                                const bool next = !mSupportPolarityInvert.load();
                                mSupportPolarityInvert.store(next);
-                               mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = next;
+                               // Active scene, not mVolumAmpSettings[mVolumAmpIdx]: while a custom
+                               // MAIN is focused that index still names the parked factory amp, so
+                               // writing it there handed the factory amp a polarity it never had.
+                               _VolumActiveScene().supportPolarityInvert = next;
                                mVolumSettingsDirty = true;
                                _VolumMarkPresetDirty();
                                if (auto* pGfx = GetUI())
@@ -525,7 +536,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   drawDivider(knobX(5) + colW, "AMP_KNOBS");
   drawKnobCol(6, "OUTPUT", kOutputLevel, "dB", "AMP_KNOBS", false);
 
-  // SUPPORT AMP KNOBS — identical layout to AMP_KNOBS, just bound to support params.
+  // SUPPORT AMP KNOBS â€” identical layout to AMP_KNOBS, just bound to support params.
   // Visibility is toggled on lane focus so the user sees one row at a time in the same slots.
   {
     float cx = knobX(0);
@@ -591,7 +602,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // Reverb sub-mode pill is currently used by Oktaverb only. Keep the reusable pill UI,
   // including the slimmer row and hover feedback, but do not expose placeholder modes.
   const float subPillW = 256.f;
-  // Slimmer than the AMP-row toggleH (34) — the row carries text-only pill labels and a
+  // Slimmer than the AMP-row toggleH (34) â€” the row carries text-only pill labels and a
   // single slide-switch, so a tighter 28 px height keeps it from feeling visually heavy.
   const float subPillH = 28.f;
   const float subPillY = knobT + knobDiam + valueH + 18.f;
@@ -937,7 +948,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   //   NOISE GATE | EQ
   //
   // DUAL AMP toggle now lives as a chip in the hero's top-right corner, and PAN is a per-lane
-  // floor-strip rail at the bottom of each hero panel — see VoLumHeroImageControl.
+  // floor-strip rail at the bottom of each hero panel â€” see VoLumHeroImageControl.
   float ngX = mainCX - 136.f;
   float eqX = mainCX + 30.f;
 
@@ -1003,7 +1014,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
   // Lane belonging on the SUPPORT amp-row knobs is conveyed solely by the teal knob pointer
   // dot. Labels and value text stay bright/neutral so the row reads cleanly. Set once at attach
-  // — SUPPORT_AMP_KNOBS is only ever visible while support is focused, so no retoggling.
+  // â€” SUPPORT_AMP_KNOBS is only ever visible while support is focused, so no retoggling.
   pGraphics->ForAllControlsFunc([](iplug::igraphics::IControl* c) {
     const char* g = c->GetGroup();
     if (!g || std::strcmp(g, "SUPPORT_AMP_KNOBS") != 0)
@@ -1098,7 +1109,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     auto* tunerCtrl = new VoLumTunerControl(b);
     tunerCtrl->SetDismissAction([pPlugin]() { pPlugin->mTunerDSP.SetActive(false); });
 
-    // F5 preset bar — centred in the top header band, above the AMP/triptych
+    // F5 preset bar â€” centred in the top header band, above the AMP/triptych
     // column. Clicking opens the anchored preset dropdown; < > cycle presets.
     {
       const IRECT presetBarArea(header.presetL, header.inkT, header.presetR, header.inkB);
@@ -1203,7 +1214,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     // Full-window overlays attach after BUILD chrome so they cover the preset bar
     // and every anchored dropdown (iPlug attach order is z-order).
     pGraphics->AttachControl(settingsPage, kCtrlTagSettingsBox)->Hide(true);
-    // Children exist only after AttachControl → OnAttached. Setting these
+    // Children exist only after AttachControl â†’ OnAttached. Setting these
     // earlier left mAssign / mCallback null, so Add Sound and All did nothing.
     settingsPage->SetMidiCallbacks([pPlugin](int channel) { pPlugin->_VolumSetMidiChannel(channel); });
     // Same two plugin methods the PLAY rail's Add/Clear call, so the MIDI tab and
@@ -1661,3 +1672,4 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     pControl->SetMouseOverWhenDisabled(true);
   });
 }
+

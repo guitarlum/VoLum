@@ -8,6 +8,7 @@
 #include "VoLumFractalArt.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumPresetStep.h"
+#include "VoLumAmpSettingsJson.h"
 
 #include <algorithm>
 #include <cctype>
@@ -42,15 +43,19 @@ public:
   void SetRecallCallback(RecallCallback cb) { mRecall = std::move(cb); }
   void SetSaveAsCallback(SaveAsCallback cb) { mSaveAs = std::move(cb); }
 
-  // Set the active amp's preset bank (mock). Empty list => "(unsaved)" + inert arrows.
+  // Set the active amp's preset bank. Clears selection (the caller re-selects).
+  // Empty list => "No Preset"; dirty is preserved so a follow-up recompute
+  // (or a Manage-delete that already marked dirty) cannot paint a clean bar
+  // over a live sound whose name was just forgotten.
   void SetList(const std::vector<std::string>& names)
   {
     mList = names;
     mIdx = -1;
     mName.clear();
     mEmpty = true;
-    mDirtyEdit = false;
     mFactory = false;
+    if (!volum::PresetBarSetListPreservesDirty())
+      mDirtyEdit = false;
     SetDirty(false);
   }
 

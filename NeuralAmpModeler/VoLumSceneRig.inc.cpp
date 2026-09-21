@@ -419,8 +419,13 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   _VolumRefreshPresetBar(); // this custom amp's preset bank
   if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
     al->As<VoLumAmpListControl>()->SetCustomSelected(customIdx);
-  // Make the shared cabinet row + channel stepper reflect this custom amp.
+  // Stage this custom MAIN (routing caches + .nam) even when SUPPORT is still
+  // focused - the row write inside that call is gated on focus. Then re-derive
+  // the shared row for whichever lane actually has focus, the way a factory
+  // sidebar click and a preset recall already do. Skipping the second call left
+  // the previous SUPPORT partner's names / enables / IR chip on screen.
   _VolumApplyCustomMainCabs(customIdx);
+  _VolumApplyFocusedLaneCabs();
 }
 
 // Build the pure planner's input for one lane from live backend state. The only

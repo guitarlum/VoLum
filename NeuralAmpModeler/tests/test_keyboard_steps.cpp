@@ -1,7 +1,8 @@
-#include "third_party/doctest.h"
+﻿#include "third_party/doctest.h"
 #include "../config.h"
 #include "../VoLumParams.h"
 #include "../VoLumKeyboardModel.h"
+#include "../VoLumDualAmpInput.h"
 
 TEST_CASE("Keyboard step sizes")
 {
@@ -79,3 +80,46 @@ TEST_CASE("Keyboard: CHORUS is a distinct focus target with its own knob memory 
   CHECK(kChorusParams.size() == 5);
   CHECK(Contains(kChorusParams, kChorusWidth));
 }
+
+TEST_CASE("Keyboard Dual Amp focus changes require a cab-row rederive")
+{
+  using volum::dualamp::CommitFocus;
+
+  // Tab MAIN -> SUPPORT with a partner loaded.
+  {
+    const auto c = CommitFocus(/*previous=*/false, /*requested=*/true, /*hasSupportAmp=*/true);
+    CHECK(c.supportFocused);
+    CHECK(c.rederiveCabs);
+  }
+  // Tab SUPPORT -> MAIN.
+  {
+    const auto c = CommitFocus(true, false, true);
+    CHECK_FALSE(c.supportFocused);
+    CHECK(c.rederiveCabs);
+  }
+  // `2` while SUPPORT is focused lands AMP on MAIN.
+  {
+    const auto c = CommitFocus(true, false, true);
+    CHECK_FALSE(c.supportFocused);
+    CHECK(c.rederiveCabs);
+  }
+  // Dual-on with a partner follows into SUPPORT.
+  {
+    const auto c = CommitFocus(false, true, true);
+    CHECK(c.supportFocused);
+    CHECK(c.rederiveCabs);
+  }
+  // Dual-on with an empty SUPPORT lane cannot keep focus, so the row stays MAIN.
+  {
+    const auto c = CommitFocus(false, true, false);
+    CHECK_FALSE(c.supportFocused);
+    CHECK_FALSE(c.rederiveCabs);
+  }
+  // Pressing `2` while MAIN is already focused is not a focus change.
+  {
+    const auto c = CommitFocus(false, false, true);
+    CHECK_FALSE(c.supportFocused);
+    CHECK_FALSE(c.rederiveCabs);
+  }
+}
+

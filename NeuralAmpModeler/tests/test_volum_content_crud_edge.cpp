@@ -16,6 +16,7 @@
 #include <string>
 
 #include "../VoLumContentStore.h"
+#include "../VoLumPrePostLock.h"
 
 using namespace volum::content;
 using volum::VoLumAmpSettings;
@@ -214,4 +215,48 @@ TEST_CASE("Registry round-trips unicode preset and IR names byte-for-byte")
   REQUIRE(back.presetBanks.count("amp_x") == 1);
   REQUIRE(back.presetBanks.at("amp_x").size() == 1);
   CHECK(back.presetBanks.at("amp_x")[0].name == pr.name);
+}
+
+TEST_CASE("Confirm-time delete re-resolves by id after an earlier row is removed")
+{
+  // Sidebar used to call RemoveCustomAmp(capturedIdx). Confirm open for Y at
+  // index 1; another editor deletes X; index 1 is now Z. Re-resolve by id.
+  const auto base = CrudBase("confirm-shift");
+  ContentStore store(base);
+  volum::custom::CustomAmp x;
+  x.id = "amp_x";
+  x.name = "X";
+  volum::custom::CustomAmp y;
+  y.id = "amp_y";
+  y.name = "Y";
+  volum::custom::CustomAmp z;
+  z.id = "amp_z";
+  z.name = "Z";
+  store.reg().amps = {x, y, z};
+
+  const int capturedIdx = 1;
+  const std::string namedId = store.reg().amps[(size_t)capturedIdx].id;
+  REQUIRE(namedId == "amp_y");
+
+  store.RemoveCustomAmp("amp_x");
+  REQUIRE(store.reg().amps.size() == 2);
+  REQUIRE(store.reg().amps[1].id == "amp_z");
+
+  int indexNow = -1;
+  for (int i = 0; i < (int)store.reg().amps.size(); ++i)
+    if (store.reg().amps[(size_t)i].id == namedId)
+      indexNow = i;
+  const int now = volum::ResolveConfirmRowIndex(namedId, capturedIdx, indexNow);
+  REQUIRE(now == 0);
+  REQUIRE(now != capturedIdx);
+
+  store.RemoveCustomAmp(store.reg().amps[(size_t)now].id);
+  REQUIRE(store.reg().amps.size() == 1);
+  CHECK(store.reg().amps[0].id == "amp_z");
+}
+
+TEST_CASE("Confirm-time delete no-ops when the named id is already gone")
+{
+  CHECK(volum::ResolveConfirmRowIndex("amp_y", 1, -1) == -1);
+  CHECK(volum::ResolveConfirmRowIndex("", 1, 0) == 1);
 }
