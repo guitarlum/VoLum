@@ -672,6 +672,17 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
   RequireContains(source, "c->Hide(!showPanKnobs);");
   RequireContains(source, "Pan the SUPPORT amp lane.");
   RequireContains(source, "Pan the MAIN amp lane.");
+
+  // The SUPPORT lane's own overlays additionally need an amp to belong to. An
+  // ungated PAN knob covered the empty lane's title strip - the exact 24x24 the
+  // "Choose support amp" call to action is drawn in - and swallowed the clicks
+  // meant to fill the lane, while dragging pan for an amp that did not exist.
+  RequireContains(source, "const bool showSupportLaneControls = showPanKnobs && _VolumHasSupportAmp();");
+  const auto supportKnob = source.find("ForControlInGroup(\"SUPPORT_PAN_KNOB\"");
+  REQUIRE(supportKnob != std::string::npos);
+  const auto supportKnobEnd = source.find("});", supportKnob);
+  REQUIRE(supportKnobEnd != std::string::npos);
+  RequireContains(source.substr(supportKnob, supportKnobEnd - supportKnob), "c->Hide(!showSupportLaneControls);");
 }
 
 TEST_CASE("The PRE NAM card routes its click through the shared capture-card protocol")
@@ -1971,10 +1982,26 @@ TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invali
   // support amp's layout. The decision lives in CommitFocus; clamp installs it.
   const std::string source = ReadPluginSource();
 
+  // The clamp is shared with the hero's click protocol. Both used to be written
+  // separately and disagreed - the hero demanded SUPPORT focus before it would
+  // open the picker, this refused focus to a lane with no amp, and the empty
+  // lane became unfillable (v1.2.3). Behaviour lives in VoLumDualAmpInput.h now
+  // so one test can drive the whole round trip (test_volum_dual_amp_input.cpp).
+  // The clamp installs its verdict through CommitFocus, which calls
+  // ClampSupportFocus and additionally reports whether the shared cab row has to
+  // be re-derived - focus and that rederive travel together so a path cannot
+  // take one without the other.
   const std::string body = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumClampSupportFocus(");
   RequireContains(body, "volum::dualamp::CommitFocus(");
   RequireContains(body, "volum::dualamp::ApplyFocusCommit(");
   RequireContains(body, "_VolumApplyFocusedLaneCabs();");
+
+  // The hero must not re-derive the protocol locally; that divergence is the bug.
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+  RequireContains(hero, "volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf)");
+  // Both platforms deliver the second click of a fast double-click as
+  // OnMouseDblClick, so a two-click protocol is unreachable without this.
+  RequireContains(hero, "mDblAsSingleClick = true;");
 
   // A lane whose amp the library no longer contains is not a lane either: a custom
   // support amp deleted from another instance left a stale index behind.

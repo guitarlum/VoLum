@@ -111,6 +111,7 @@
     <ClCompile Include="..\tests\test_volum_diag_log.cpp" />
     <ClCompile Include="..\tests\test_volum_latency_report.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
+    <ClCompile Include="..\tests\test_volum_dual_amp_input.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
     <ClCompile Include="..\tests\test_reverb_diffusion.cpp" />
