@@ -2293,3 +2293,82 @@ TEST_CASE("Polarity writes the active scene, not the parked factory slot")
   RequireContains(source, "_VolumActiveScene().supportPolarityInvert");
   RequireDoesNotContain(source, "mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert");
 }
+
+TEST_CASE("tier2a ProcessBlock keeps denormals off through the safety clip")
+{
+  const std::string source = ReadPluginSource();
+  const auto pb = source.find("void NeuralAmpModeler::ProcessBlock(");
+  REQUIRE(pb != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::OnReset()", pb);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(pb, end - pb);
+  const auto safety = body.rfind("SoftSafetyClip");
+  const auto restore = body.rfind("feupdateenv");
+  REQUIRE(safety != std::string::npos);
+  REQUIRE(restore != std::string::npos);
+  CHECK(restore > safety);
+}
+
+TEST_CASE("tier2a tuner mute leaves the metronome click on the bus")
+{
+  const std::string source = ReadPluginSource();
+  const auto pb = source.find("void NeuralAmpModeler::ProcessBlock(");
+  REQUIRE(pb != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::OnReset()", pb);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(pb, end - pb);
+  const auto tuner = body.find("silenceForTuner");
+  const auto metro = body.find("mMetronomeDSP.Process");
+  REQUIRE(tuner != std::string::npos);
+  REQUIRE(metro != std::string::npos);
+  CHECK(tuner < metro);
+}
+
+TEST_CASE("tier2a PRE pitch and compressor reset on the bypass edge")
+{
+  const std::string source = ReadPluginSource();
+  const auto pre = source.find("NeuralAmpModeler::_VolumProcessPreChain(");
+  REQUIRE(pre != std::string::npos);
+  const auto end = source.find("NeuralAmpModeler::_VolumProcessMainAmpChain(", pre);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(pre, end - pre);
+  RequireContains(body, "mPitch.Reset()");
+  RequireContains(body, "mPreCompressor.Reset()");
+}
+
+TEST_CASE("tier2a model apply latches latency instead of updating it on the audio thread")
+{
+  const std::string source = ReadPluginSource();
+  const auto apply = source.find("void NeuralAmpModeler::_ApplyDSPStaging()");
+  REQUIRE(apply != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::_VolumFlushDeferredIrShaping()", apply);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(apply, end - apply);
+  RequireDoesNotContain(body, "_UpdateLatency()");
+  RequireContains(body, "mLatencyDirty");
+}
+
+TEST_CASE("tier2a loader drain does not block on the loader mutex")
+{
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  const auto drain = loader.find("void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  REQUIRE(drain != std::string::npos);
+  const auto next = loader.find("void NeuralAmpModeler::_VolumLoaderThreadMain()", drain);
+  REQUIRE(next != std::string::npos);
+  const std::string body = loader.substr(drain, next - drain);
+  RequireContains(body, "try_to_lock");
+  RequireContains(body, "superseded = true;");
+  RequireDoesNotContain(body, "lock_guard<std::mutex> lock(mVolumLoaderMutex)");
+}
+
+TEST_CASE("tier2a OnReset reserves the dual-amp latency line")
+{
+  const std::string source = ReadPluginSource();
+  const auto reset = source.find("void NeuralAmpModeler::OnReset()");
+  REQUIRE(reset != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::ProcessMidiMsg(", reset);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(reset, end - reset);
+  RequireContains(body, "mDualMainLatencyDelay.Reserve(");
+  RequireContains(body, "mDualSupportLatencyDelay.Reserve(");
+}

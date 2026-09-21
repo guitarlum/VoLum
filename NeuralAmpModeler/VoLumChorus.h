@@ -112,6 +112,8 @@ public:
     // snap or the 15 ms one-pole keeps a wet blend after the knob hits zero.
     if (mMixTarget <= 0.0)
       mMix = 0.0;
+    else if (mMixTarget >= 1.0)
+      mMix = 1.0;
   }
 
   void Reset()
@@ -213,9 +215,15 @@ public:
         mToneState[c] = _Flush(mToneState[c]);
         wet = mToneState[c];
 
-        // MIX at exactly 0 must not touch the sample at all (the POST bus stays
-        // bit-identical while the card is on but fully dry).
-        io[c][s] = (wetGain > 0.0) ? (x * dryGain + wet * wetGain) : x;
+        // MIX at exactly 0 must not touch the sample. MIX at exactly 1 must not
+        // keep the cos(pi/2) dry residue: the user guide's full-wet chorus has
+        // no dry signal.
+        if (mMix >= 1.0)
+          io[c][s] = wet;
+        else if (wetGain > 0.0)
+          io[c][s] = x * dryGain + wet * wetGain;
+        else
+          io[c][s] = x;
       }
 
       mPhase += phaseInc;

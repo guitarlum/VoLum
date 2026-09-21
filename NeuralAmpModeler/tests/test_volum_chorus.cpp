@@ -123,6 +123,28 @@ TEST_CASE("Chorus MIX 0 is bit-identical without Reset after a wet buffer")
   }
 }
 
+TEST_CASE("tier2a Chorus MIX 1 is exact wet on an empty line")
+{
+  // cos(pi/2) is a few ulps above zero, so a blend at MIX 1 still multiplies
+  // a sliver of dry into the bus. An empty delay line's wet tap is silence;
+  // the first sample must be that silence, not the input.
+  for (int mode = 0; mode < ChorusDSP::kNumModes; ++mode)
+  {
+    ChorusDSP chorus;
+    chorus.Prepare(kSR, kBlock, 2);
+    chorus.SetParams(0.5, 1.0, 0.5, 1.0, 1.0, mode, kSR);
+    std::vector<double> l(static_cast<size_t>(kBlock), 0.0);
+    std::vector<double> r(static_cast<size_t>(kBlock), 0.0);
+    l[0] = 0.5;
+    r[0] = -0.4;
+    double* ptr[2] = {l.data(), r.data()};
+    chorus.Process(ptr, 2, kBlock);
+    INFO("mode " << mode);
+    CHECK(l[0] == 0.0);
+    CHECK(r[0] == 0.0);
+  }
+}
+
 TEST_CASE("Chorus alters the signal at MIX 1 (all modes)")
 {
   const auto in = makeChord(1 << 15);
@@ -394,8 +416,7 @@ TEST_CASE("Chorus on/off restore reads VoLumEffectSettings.chorusActive (pack-im
   CHECK(loaded.chorusActive == false);
   CHECK(volum::VoLumEffectChorusActiveParam(loaded) == 0.0);
 
-  const auto scenePath =
-    std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  const auto scenePath = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
   std::ifstream sceneIn(scenePath, std::ios::binary);
   REQUIRE(sceneIn);
   const std::string scene((std::istreambuf_iterator<char>(sceneIn)), std::istreambuf_iterator<char>());

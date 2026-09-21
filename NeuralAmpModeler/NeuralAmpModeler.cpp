@@ -651,9 +651,6 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
                           ? _VolumProcessDualAmpSupportLane(processingPlan, numChannelsInternal, nFrames, sampleRate)
                           : nullptr;
 
-  // restore previous floating point state
-  std::feupdateenv(&fe_state);
-
   // Let's get outta here
   // This is where we exit mono for whatever the output requires.
   if (dualScratchReady && supportLane != nullptr
@@ -696,15 +693,15 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   _VolumProcessPostChain(outputs, processingPlan, numChannelsExternalOut, nFrames, sampleRate);
 
-  // Metronome: sum click into output
-  mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
-
-  // Tuner active: silence output so player can tune without hearing amp
+  // Tuner mutes the guitar. The metronome click is summed after this so a
+  // click track still plays while the tuner overlay is up.
   if (processingPlan.silenceForTuner)
   {
     for (size_t c = 0; c < numChannelsExternalOut; c++)
       std::memset(outputs[c], 0, numFrames * sizeof(iplug::sample));
   }
+
+  mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
 
   if (processingPlan.runDualAmp)
   {
@@ -747,6 +744,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   }
   mMasterSafetyEngaged.store(mMasterSafetyHoldSamples > 0);
 
+  // Denormals stay flushed through POST and the safety clip. Restoring the host
+  // FP environment before the tails was leaving chorus, delay, and reverb to
+  // decay in denormal land.
+  std::feupdateenv(&fe_state);
+
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
   _UpdateMeters(mInputPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
@@ -783,6 +785,10 @@ void NeuralAmpModeler::OnReset()
     mSupportToneStack->Reset(sampleRate, maxBlockSize);
   mDualMainLatencyDelay.Reset();
   mDualSupportLatencyDelay.Reset();
+  mDualMainLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
+  mDualSupportLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
+  mPrePitchWasActive = false;
+  mPreCompWasActive = false;
   for (int i = 0; i < 2; ++i)
     mPreEq[i].Reset(sampleRate, maxBlockSize);
   mPreCompressor.Reset();
@@ -857,6 +863,8 @@ void NeuralAmpModeler::OnIdle()
       }
     }
   }
+  if (mLatencyDirty.exchange(false, std::memory_order_acquire))
+    _ApplyLatchedLatency();
   if (auto* pGfx = GetUI())
     if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
       toggle->SetDirty(false); // keep the switch above animated BUILD/PLAY chrome
@@ -1955,19 +1963,24 @@ void NeuralAmpModeler::_ApplyDSPStaging()
 
   if (removedMainModel || appliedMainModel)
   {
-    _UpdateLatency();
+    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
+    mLatencyDirty.store(true, std::memory_order_release);
     _SetInputGain();
     _SetOutputGain();
   }
   if (removedSupportModel || appliedSupportModel)
   {
-    _UpdateLatency();
+    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
+    mLatencyDirty.store(true, std::memory_order_release);
     _SetSupportOutputGain();
   }
   for (int i = 0; i < 2; ++i)
   {
     if (removedPreModel[i] || appliedPreModel[i])
-      _UpdateLatency();
+    {
+      mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
+      mLatencyDirty.store(true, std::memory_order_release);
+    }
   }
 }
 
@@ -2414,7 +2427,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
   }
 }
 
-void NeuralAmpModeler::_UpdateLatency()
+int NeuralAmpModeler::_ReportedLatencySamples() const
 {
   int preLatency = 0;
   const bool preNam1ShouldLoad =
@@ -2450,7 +2463,22 @@ void NeuralAmpModeler::_UpdateLatency()
     ampLatency = std::max(ampLatency, mSupportModel->GetLatency());
   }
   // Other things that add latency here...
-  const int latency = preLatency + ampLatency;
+  return preLatency + ampLatency;
+}
+
+void NeuralAmpModeler::_ApplyLatchedLatency()
+{
+  const int latency = mPendingLatency.load(std::memory_order_relaxed);
+  if (GetLatency() != latency)
+    SetLatency(latency);
+  _VolumRefreshLatencyReport(/*force=*/true);
+}
+
+void NeuralAmpModeler::_UpdateLatency()
+{
+  const int latency = _ReportedLatencySamples();
+  mPendingLatency.store(latency, std::memory_order_relaxed);
+  mLatencyDirty.store(false, std::memory_order_relaxed);
 
   // Feels weird to have to do this.
   if (GetLatency() != latency)

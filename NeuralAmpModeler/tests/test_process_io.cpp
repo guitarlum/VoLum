@@ -246,6 +246,57 @@ TEST_CASE("Dual amp delay line carries latency compensation across blocks")
   DOCTEST_CHECK(secondOut[1] == doctest::Approx(1.f));
 }
 
+TEST_CASE("tier2a dual amp delay reserve stays inside the cap")
+{
+  volum::DualAmpDelayLine<float> delay;
+  delay.Reserve(8);
+  std::vector<float> in{1.f, 2.f};
+  std::vector<float> out(2, -1.f);
+  const float* delayed = delay.Process(in.data(), out.data(), in.size(), 3);
+  CHECK(delayed == out.data());
+  CHECK(out[0] == doctest::Approx(0.f));
+
+  std::vector<float> bigIn(4, 0.5f);
+  std::vector<float> bigOut(4, -1.f);
+  const float* skipped = delay.Process(bigIn.data(), bigOut.data(), bigIn.size(), 100);
+  CHECK(skipped == bigIn.data());
+  CHECK(bigOut[0] == doctest::Approx(-1.f));
+}
+
+TEST_CASE("tier2a dual amp delay growth starts silent")
+{
+  volum::DualAmpDelayLine<float> delay;
+  delay.Reserve(8);
+  std::vector<float> in{1.f, 2.f, 3.f};
+  std::vector<float> out(3, -1.f);
+  delay.Process(in.data(), out.data(), in.size(), 2);
+  std::vector<float> in2{4.f, 5.f, 6.f, 7.f};
+  std::vector<float> out2(4, -1.f);
+  delay.Process(in2.data(), out2.data(), in2.size(), 4);
+  CHECK(out2[0] == doctest::Approx(0.f));
+  CHECK(out2[1] == doctest::Approx(0.f));
+  CHECK(out2[2] == doctest::Approx(0.f));
+  CHECK(out2[3] == doctest::Approx(0.f));
+}
+
+TEST_CASE("tier2a dual amp delay over the reserve does not resume the old ring")
+{
+  volum::DualAmpDelayLine<float> delay;
+  delay.Reserve(8);
+  std::vector<float> in{1.f, 2.f};
+  std::vector<float> out(2, -1.f);
+  delay.Process(in.data(), out.data(), in.size(), 3);
+  std::vector<float> big{9.f, 9.f};
+  std::vector<float> bigOut(2, -1.f);
+  const float* skipped = delay.Process(big.data(), bigOut.data(), big.size(), 100);
+  CHECK(skipped == big.data());
+  std::vector<float> in2{4.f, 5.f};
+  std::vector<float> out2(2, -1.f);
+  delay.Process(in2.data(), out2.data(), in2.size(), 3);
+  CHECK(out2[0] == doctest::Approx(0.f));
+  CHECK(out2[1] == doctest::Approx(0.f));
+}
+
 TEST_CASE("Dual amp center stack can align a delayed support impulse")
 {
   std::vector<float> main{1.f, 0.f, 0.f};

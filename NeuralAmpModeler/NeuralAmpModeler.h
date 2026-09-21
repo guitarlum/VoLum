@@ -803,6 +803,8 @@ private:
     double sampleRate = 0.0;
     int blockSize = 0;
     std::unique_ptr<ResamplingNAM> model;
+    // Set under the loader try_lock when a newer main load has replaced this one.
+    bool superseded = false;
   };
 
   std::thread mVolumLoaderThread;
@@ -910,7 +912,9 @@ private:
   void _UpdateControlsFromModel();
 
   // Make sure that the latency is reported correctly.
+  int _ReportedLatencySamples() const;
   void _UpdateLatency();
+  void _ApplyLatchedLatency();
 
   // Plugin PDC plus, in the standalone, the audio device's own round trip.
   volum::LatencyReport _VolumLatencyReport() const;
@@ -1015,6 +1019,12 @@ private:
   bool mPostReverbWasActive = false;
   bool mPostTremoloWasActive = false;
   bool mPostChorusWasActive = false;
+  bool mPrePitchWasActive = false;
+  bool mPreCompWasActive = false;
+  // Audio thread stores the sample count and sets the flag. OnIdle applies it.
+  // OnIdle must not read mModel: the audio thread owns those pointers.
+  std::atomic<int> mPendingLatency{0};
+  std::atomic<bool> mLatencyDirty{false};
   // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
   // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
   // The audio thread only moves unique_ptrs into mDspGraveyard; ~ResamplingNAM

@@ -224,7 +224,7 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 
 ![VoLum Tuner-Overlay](user-guide-tuner.png)
 
-Öffne den Tuner über die Toolbar. Solange er geöffnet ist, schaltet VoLum den Ausgang stumm, damit du lautlos stimmen kannst. Klick außerhalb des Fensters oder drücke `Esc`, um ihn zu schließen.
+Öffne den Tuner über die Toolbar. Solange er geöffnet ist, schaltet VoLum die Gitarre stumm, damit du lautlos stimmen kannst. Der Metronom-Klick bleibt hörbar. Klick außerhalb des Fensters oder drücke `Esc`, um ihn zu schließen.
 
 ![VoLum Metronom-Steuerung](user-guide-metronome.png)
 

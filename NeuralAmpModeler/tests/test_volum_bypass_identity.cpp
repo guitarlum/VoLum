@@ -46,8 +46,7 @@ std::vector<double> MakeSine(size_t frames, double amp = 0.3)
 
 TEST_CASE("BypassIdentity: Delay at mix=0 is identity")
 {
-  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog,
-                   dsp::effect::Delay::kModeReverse})
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog, dsp::effect::Delay::kModeReverse})
   {
     INFO("delay mode=" << mode);
     dsp::effect::Delay delay;
@@ -77,6 +76,25 @@ TEST_CASE("BypassIdentity: Reverb at mix=0 is identity (Hall and Plate)")
     std::vector<double> outR(out[1], out[1] + workR.size());
     CHECK(BuffersEqual(outL, input, 1e-4));
     CHECK(BuffersEqual(outR, input, 1e-4));
+  }
+}
+
+TEST_CASE("tier2a Oktaverb at mix=0 is identity in every sub-mode")
+{
+  for (int sub = 0; sub < 3; ++sub)
+  {
+    INFO("oktaverb sub=" << sub);
+    dsp::effect::Reverb reverb;
+    reverb.SetParams(0.0, 3.0, 5.0, 0.0, 0.5, dsp::effect::Reverb::kModeOktaverb, 48000.0, sub);
+    auto input = MakeSine(256);
+    std::vector<double> workL = input;
+    std::vector<double> workR = input;
+    double* in[2] = {workL.data(), workR.data()};
+    auto** out = reverb.Process(in, 2, workL.size());
+    std::vector<double> outL(out[0], out[0] + workL.size());
+    std::vector<double> outR(out[1], out[1] + workR.size());
+    CHECK(BuffersEqual(outL, input, 0.0));
+    CHECK(BuffersEqual(outR, input, 0.0));
   }
 }
 

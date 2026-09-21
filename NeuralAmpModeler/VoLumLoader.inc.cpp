@@ -145,6 +145,28 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
     if (!lock.owns_lock())
       return;
     results.swap(mVolumLoadResults);
+    // Path bookkeeping stays inside this one try_lock. A later blocking lock
+    // used to stall the audio thread behind the loader thread.
+    for (auto& result : results)
+    {
+      if (result.kind == VoLumLoadKind::Main)
+      {
+        if (mVolumLoadingMainPath == result.path)
+          mVolumLoadingMainPath.clear();
+        else if (!mVolumLoadingMainPath.empty())
+          result.superseded = true;
+      }
+      else if (result.kind == VoLumLoadKind::Support)
+      {
+        if (mVolumLoadingSupportPath == result.path)
+          mVolumLoadingSupportPath.clear();
+      }
+      else if (result.slot >= 0 && result.slot < 2)
+      {
+        if (mVolumLoadingPrePath[result.slot] == result.path)
+          mVolumLoadingPrePath[result.slot].clear();
+      }
+    }
   }
 
   const double liveRate = GetSampleRate();
@@ -157,14 +179,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
     if (result.kind == VoLumLoadKind::Main)
     {
-      bool superseded = false;
-      {
-        std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
-        if (mVolumLoadingMainPath == result.path)
-          mVolumLoadingMainPath.clear();
-        else if (!mVolumLoadingMainPath.empty())
-          superseded = true;
-      }
+      bool superseded = result.superseded;
       if (!superseded)
         mVolumIsLoading.store(false);
 
@@ -189,11 +204,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
     if (result.kind == VoLumLoadKind::Support)
     {
-      {
-        std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
-        if (mVolumLoadingSupportPath == result.path)
-          mVolumLoadingSupportPath.clear();
-      }
       mVolumSupportIsLoading.store(false);
 
       const auto action = volum::dsp_staging::DecideLoaderResult(
@@ -215,11 +225,6 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       continue;
 
     mVolumPreIsLoading[slot].store(false);
-    {
-      std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
-      if (mVolumLoadingPrePath[slot] == result.path)
-        mVolumLoadingPrePath[slot].clear();
-    }
 
     const auto action = volum::dsp_staging::DecideLoaderResult(
       result.model != nullptr, false, mVolumPreNeedsLoad[slot].load(), rateMismatch, !result.error.empty());

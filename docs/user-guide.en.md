@@ -224,7 +224,7 @@ See [Content Library Packs](#content-library-packs) for moving a library to anot
 
 ![VoLum tuner overlay](user-guide-tuner.png)
 
-Open the tuner from the toolbar. While it is open, VoLum mutes the output so you can tune silently. Click outside it or press `Esc` to close.
+Open the tuner from the toolbar. While it is open, VoLum mutes the guitar so you can tune silently. The metronome click still plays. Click outside it or press `Esc` to close.
 
 ![VoLum metronome controls](user-guide-metronome.png)
 
