@@ -635,6 +635,11 @@ public:
       g.DrawText(
         why, "Save a preset first: a Sound is an amp plus a named preset.", IRECT(add.R + 12.f, add.T, mRECT.R, add.B));
     }
+    else if (mSlots.empty())
+    {
+      g.DrawText(
+        foot, "Add a Sound to give a program number something to recall.", IRECT(add.R + 12.f, add.T, mRECT.R, add.B));
+    }
     else
     {
       g.DrawText(foot, "Drag onto a row to swap, into a gap to slide. Click a number to retype.",

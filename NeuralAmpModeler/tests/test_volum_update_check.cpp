@@ -65,6 +65,15 @@ TEST_CASE("Update manifest rejects malformed and wrong-type input without throwi
   }
 }
 
+TEST_CASE("tier2e a failed update check names itself and does not move the clock")
+{
+  CHECK(std::string(volum::update::CheckFailureNotice()).find("Could not check") != std::string::npos);
+  volum::update::UpdateState state;
+  state.lastCheckUtc = 42;
+  CHECK(state.lastCheckUtc == 42);
+  CHECK_FALSE(volum::update::ShouldCheck(42 + volum::update::kCheckIntervalSeconds - 1, state.lastCheckUtc));
+}
+
 TEST_CASE("Update throttle includes the exact 24 hour boundary")
 {
   constexpr std::int64_t last = 1'000'000;

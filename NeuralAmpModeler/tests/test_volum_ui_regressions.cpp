@@ -2510,3 +2510,72 @@ TEST_CASE("tier2d a full PLAY map opens the replace picker instead of doing noth
   RequireContains(play, "void OpenReplacePicker()");
   RequireContains(runtime, "OpenReplacePicker()");
 }
+
+TEST_CASE("tier2e Calibrated n/a disables that radio state")
+{
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto start = controls.find("void SetCalibratedDisable(");
+  REQUIRE(start != std::string::npos);
+  const auto end = controls.find("void OnMouseDown(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = controls.substr(start, end - start);
+  RequireContains(body, "SetStateDisabled(2, disable)");
+  const std::string click = controls.substr(end, 280);
+  RequireContains(click, "GetStateDisabled(index)");
+}
+
+TEST_CASE("tier2e the disabled dBu field draws through the grey blend")
+{
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto start = controls.find("class InputLevelControl");
+  REQUIRE(start != std::string::npos);
+  const std::string body = controls.substr(start, 900);
+  RequireContains(body, "g.FillRect(VoLumColors::HERO_BG, mRECT, &mBlend)");
+}
+
+TEST_CASE("tier2e an empty MIDI map does not teach drag or clear")
+{
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const auto drag = tabs.find("Drag onto a row to swap");
+  REQUIRE(drag != std::string::npos);
+  const auto empty = tabs.rfind("mSlots.empty()", drag);
+  REQUIRE(empty != std::string::npos);
+  CHECK(drag - empty < 600);
+  RequireContains(tabs, "Add a Sound to give a program number something to recall.");
+}
+
+TEST_CASE("tier2e Manage in a menu is teal and a clipped Manage row has no hotspot")
+{
+  const std::string menu = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumListMenu.h");
+  const auto draw = menu.find("const IColor col");
+  REQUIRE(draw != std::string::npos);
+  const std::string col = menu.substr(draw, 240);
+  RequireContains(col, "r.action ? VoLumColors::TEAL");
+  RequireDoesNotContain(col, "kManage");
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto manage = overlay.find("void DrawManage(");
+  REQUIRE(manage != std::string::npos);
+  const auto clamp = overlay.find("void ClampManageScroll(", manage);
+  REQUIRE(clamp != std::string::npos);
+  const std::string body = overlay.substr(manage, clamp - manage);
+  RequireContains(body, "const bool rowVisible");
+  const auto rename = overlay.find("case TextTarget::RenameItem:");
+  REQUIRE(rename != std::string::npos);
+  RequireContains(overlay.substr(rename, 700), "Enter a name.");
+  const auto visible = body.find("const bool rowVisible");
+  const auto hotspot = body.find("AddHotspot(row,", visible);
+  REQUIRE(hotspot != std::string::npos);
+  CHECK(body.find("if (rowVisible)", visible) < hotspot);
+}
+
+TEST_CASE("tier2e a failed update check does not stamp the 24 hour clock")
+{
+  const std::string inc = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUpdateCheck.inc.cpp");
+  const auto thread = inc.find("std::thread([result");
+  REQUIRE(thread != std::string::npos);
+  const auto get = inc.find("VolumHttpGetString", thread);
+  REQUIRE(get != std::string::npos);
+  const std::string before = inc.substr(thread, get - thread);
+  CHECK(before.find("lastCheckUtc") == std::string::npos);
+  RequireContains(inc, "CheckFailureNotice()");
+}

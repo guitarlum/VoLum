@@ -131,6 +131,11 @@ inline bool ParseManifest(const std::string& text, Manifest& out)
   }
 }
 
+inline const char* CheckFailureNotice()
+{
+  return "Could not check for updates. Try again when you are online.";
+}
+
 inline bool ShouldCheck(std::int64_t nowUtc, std::int64_t lastCheckUtc)
 {
   if (lastCheckUtc <= 0)

@@ -142,11 +142,9 @@ public:
         g.FillRoundRect(VoLumColors::TEAL.WithOpacity(0.55f), IRECT(row.L, row.T + 4.f, row.L + 4.f, row.B - 4.f), 2.f);
       if (selected)
         g.FillCircle(VoLumColors::TEAL, row.L + 8.f, row.MH(), 3.f);
-      const IColor col =
-        r.dim ? VoLumColors::CREAM_DIM
-              : (r.code == kManage
-                   ? VoLumColors::CREAM_DIM.WithOpacity(0.72f)
-                   : (r.action ? VoLumColors::TEAL : (selected ? VoLumColors::CREAM : VoLumColors::CREAM_DIM)));
+      const IColor col = r.dim
+                           ? VoLumColors::CREAM_DIM
+                           : (r.action ? VoLumColors::TEAL : (selected ? VoLumColors::CREAM : VoLumColors::CREAM_DIM));
       const float textL = row.L + (selected ? 18.f : (r.group ? 14.f : 12.f));
       g.DrawText(IText(12.f, col, "Josefin-Bold", EAlign::Near, EVAlign::Middle), r.label.c_str(),
                  IRECT(textL, row.T, row.R, row.B));

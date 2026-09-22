@@ -415,7 +415,12 @@ public:
             ReloadList();
             mSel = -1;
           }
-          else if (!s.empty() && NameTaken(s, target))
+          else if (s.empty())
+          {
+            mError = "Enter a name.";
+            SetDirty(false);
+          }
+          else if (NameTaken(s, target))
             SetNameError(s);
           else
           {
@@ -1533,6 +1538,9 @@ private:
         y += rowH;
         if (row.B < listArea.T || row.T > listArea.B)
           continue;
+        // Same rule as the builder file list: a row that runs into the footer
+        // still paints under the clip, but it does not take a click.
+        const bool rowVisible = (row.T >= listArea.T - 0.5f && row.B <= listArea.B + 0.5f);
 
         const bool sel = (i == mSel);
         if (sel)
@@ -1547,11 +1555,13 @@ private:
         float ix = row.R - iconW;
         const IRECT trash(ix, row.T, ix + iconW, row.B);
         DrawBinGlyph(g, trash, VoLumColors::CREAM_DIM);
-        AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
+        if (rowVisible)
+          AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
         ix -= iconW;
         const IRECT pen(ix, row.T, ix + iconW, row.B);
         DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
-        AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
+        if (rowVisible)
+          AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
         if (mManageKind == ManageKind::IR)
         {
           ix -= iconW;
@@ -1561,14 +1571,16 @@ private:
           const volum::custom::IRShaping s = volum::custom::IRShapingAt(i);
           const bool shaped = (s.trimDb != 0.0) || (s.lowCutHz > 0.0) || (s.highCutHz > 0.0);
           DrawGearGlyph(g, gear, shaped ? VoLumColors::GOLD : VoLumColors::CREAM_DIM);
-          AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
+          if (rowVisible)
+            AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
         }
         ix -= iconW;
         if (presets)
         {
           const IRECT ovr(ix, row.T, ix + iconW, row.B);
           DrawOverwriteGlyph(g, ovr, VoLumColors::CREAM_DIM);
-          AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
+          if (rowVisible)
+            AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
           ix -= iconW;
         }
 
@@ -1597,7 +1609,8 @@ private:
         }
         g.PathClipRegion(listArea);
 
-        AddHotspot(row, kRowBase + i, rowTip);
+        if (rowVisible)
+          AddHotspot(row, kRowBase + i, rowTip);
       }
       g.PathClipRegion();
 

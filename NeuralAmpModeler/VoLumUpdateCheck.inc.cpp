@@ -58,19 +58,15 @@ void NeuralAmpModeler::_VolumStartUpdateCheck(bool manual)
   }
 
   std::thread([result, statePath, currentVersion, now]() {
-    // Persist the attempt before network I/O. Offline machines are therefore
-    // throttled too, and concurrent plugin instances only risk one harmless
-    // last-writer-wins update to this dedicated sidecar.
-    auto state = volum::update::LoadUpdateState(statePath);
-    state.lastCheckUtc = now;
-    volum::update::SaveUpdateState(statePath, state);
-
+    // Stamp the 24 h clock only after a readable appcast. A failed or garbage
+    // check leaves the previous time alone so the next launch can try again,
+    // and the About card says the check did not succeed.
     std::string response;
     volum::update::Manifest manifest;
     if (VolumHttpGetString(kVolumAppcastUrl, response, kVolumUpdateTimeoutMs)
         && volum::update::ParseManifest(response, manifest))
     {
-      state = volum::update::LoadUpdateState(statePath);
+      auto state = volum::update::LoadUpdateState(statePath);
       volum::update::ApplyCheckedManifest(state, manifest, currentVersion, now);
       volum::update::SaveUpdateState(statePath, state);
       result->manifest = std::move(manifest);
@@ -90,6 +86,7 @@ void NeuralAmpModeler::_VolumConsumeUpdateResult()
   const auto manifest = mVolumUpdateResult->manifest;
   mVolumUpdateResult.reset();
   mVolumUpdateCheckInFlight = false;
+  mVolumUpdateCheckError = succeeded ? std::string() : volum::update::CheckFailureNotice();
 
   if (volum::update::FakeUpdateRequested() && succeeded)
   {
@@ -118,8 +115,9 @@ void NeuralAmpModeler::_VolumRefreshUpdateUi()
   if (auto* badge = pGraphics->GetControlWithTag(kCtrlTagVoLumUpdateBadge))
     badge->Hide(!volum::update::ShouldShowBadge(badgeState, PLUG_VERSION_STR));
   if (auto* settings = pGraphics->GetControlWithTag(kCtrlTagSettingsBox))
-    settings->As<NAMSettingsPageControl>()->SetUpdateInfo(
-      mVolumUpdateState.autoCheck, available, mVolumUpdateState.latestKnownVersion, mVolumUpdateState.latestKnownNotes);
+    settings->As<NAMSettingsPageControl>()->SetUpdateInfo(mVolumUpdateState.autoCheck, available,
+                                                          mVolumUpdateState.latestKnownVersion,
+                                                          mVolumUpdateState.latestKnownNotes, mVolumUpdateCheckError);
 }
 
 void NeuralAmpModeler::_VolumCheckForUpdatesNow()

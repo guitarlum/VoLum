@@ -706,7 +706,7 @@ class IContainerBaseWithNamedChildren : public IContainerBase
 {
 public:
   IContainerBaseWithNamedChildren(const IRECT& bounds)
-  : IContainerBase(bounds){};
+  : IContainerBase(bounds) {};
   ~IContainerBaseWithNamedChildren() = default;
 
 protected:
@@ -748,7 +748,7 @@ class ModelInfoControl : public IContainerBaseWithNamedChildren
 public:
   ModelInfoControl(const IRECT& bounds, const IVStyle& style)
   : IContainerBaseWithNamedChildren(bounds)
-  , mStyle(style){};
+  , mStyle(style) {};
 
   void ClearModelInfo()
   {
@@ -832,7 +832,7 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize){};
+  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize) {};
 
   void DrawWidget(IGraphics& g) override
   {
@@ -895,7 +895,21 @@ public:
       ss << " (n/a)";
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
+    // The constructor is given no option list, so the disabled-state buffer stays
+    // empty after OnInit copies the parameter's state count. Resize before the
+    // call or SetStateDisabled is a no-op and the radio stays live.
+    if (mNumStates > 2 && mDisabledState.GetSize() < mNumStates)
+      mDisabledState.Resize(mNumStates);
+    SetStateDisabled(2, disable);
   };
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const int index = GetButtonForPoint(x, y);
+    if (index > -1 && GetStateDisabled(index))
+      return;
+    IVRadioButtonControl::OnMouseDown(x, y, mod);
+  }
 };
 
 // VoLum: non-parameter A2 Lite-mode toggle for the Settings overlay. Reads and
@@ -1567,9 +1581,11 @@ private:
 
     void Draw(IGraphics& g) override
     {
-      g.FillRect(VoLumColors::HERO_BG, mRECT);
-      g.DrawRect(VoLumColors::FRAME, mRECT);
-      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f));
+      // SetDisabled greys through mBlend. The well has to use it or the field
+      // stays full strength next to a switch that already does.
+      g.FillRect(VoLumColors::HERO_BG, mRECT, &mBlend);
+      g.DrawRect(VoLumColors::FRAME, mRECT, &mBlend);
+      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f), &mBlend);
       ITextControl::Draw(g);
     };
 
@@ -1608,7 +1624,7 @@ private:
     AboutControl(const IRECT& bounds, const IVStyle& style, const IText& text)
     : IContainerBase(bounds)
     , mStyle(style)
-    , mText(text){};
+    , mText(text) {};
 
     void OnAttached() override
     {
@@ -1655,12 +1671,13 @@ private:
         "Check now", mStyle.WithDrawFrame(true).WithValueText(rowText.WithAlign(EAlign::Center)), true));
     };
 
-    void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {})
+    void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {},
+                       const std::string& checkError = {})
     {
       if (mAutoCheck)
         mAutoCheck->SetChecked(autoCheck);
       if (mUpdateNotice)
-        mUpdateNotice->SetUpdate(available, version, notes);
+        mUpdateNotice->SetUpdate(available, version, notes, checkError);
     }
 
   private:
@@ -1671,9 +1688,10 @@ private:
   };
 
 public:
-  void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {})
+  void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {},
+                     const std::string& checkError = {})
   {
     if (auto* about = GetNamedChild(mControlNames.about))
-      static_cast<AboutControl*>(about)->SetUpdateInfo(autoCheck, available, version, notes);
+      static_cast<AboutControl*>(about)->SetUpdateInfo(autoCheck, available, version, notes, checkError);
   }
 };

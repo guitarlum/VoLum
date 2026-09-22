@@ -851,6 +851,7 @@ private:
   std::shared_ptr<volum::update::AsyncResult> mVolumUpdateResult;
   bool mVolumUpdateStateLoaded = false;
   bool mVolumUpdateCheckInFlight = false;
+  std::string mVolumUpdateCheckError;
   int mVolumUpdateFooterTicks = 0;
 
   // Tuner & Metronome DSP

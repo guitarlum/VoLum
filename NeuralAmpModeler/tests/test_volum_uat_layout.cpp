@@ -87,6 +87,30 @@ TEST_CASE("About action row is pinned inside a 96 px leftover card")
   CHECK(l.actionT == doctest::Approx(96.f - volum::kAboutActionH));
   CHECK(l.noticeB <= l.actionT + 0.01f);
   CHECK(l.actionT >= 0.f);
+  CHECK(l.url2B > l.url2T + 1.f);
+  CHECK(l.noticeB - l.noticeT >= 16.f);
+}
+
+TEST_CASE("tier2e the shipped 76 px About body keeps the update pill above Check now")
+{
+  const auto l = volum::LayoutAboutCard(400.f, 76.f);
+  CHECK(l.actionFits);
+  CHECK(l.actionB == doctest::Approx(76.f));
+  CHECK(l.noticeB <= l.actionT - volum::kAboutGap + 0.01f);
+  CHECK(l.noticeB - l.noticeT >= 16.f);
+  CHECK(l.url1B <= l.url1T + 0.01f);
+}
+
+TEST_CASE("tier2e both factory and user sections start collapsed together")
+{
+  volum::PickerGroupSession session;
+  volum::InitPickerGroups(session, true, true);
+  CHECK_FALSE(session.factoryOpen);
+  CHECK_FALSE(session.userOpen);
+  volum::PickerGroupSession onlyFactory;
+  volum::InitPickerGroups(onlyFactory, true, false);
+  CHECK(onlyFactory.factoryOpen);
+  CHECK_FALSE(onlyFactory.userOpen);
 }
 
 TEST_CASE("SYSTEM mid-row body fits both Pack help lines")
