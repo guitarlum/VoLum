@@ -173,7 +173,7 @@ TEST_CASE("Settings update notice self-gates so opening Settings cannot resurrec
   RequireContains(overlay, "return mAvailable && IControl::IsHit(x, y);");
   // An empty version must not render "Update available:  - What's new".
   RequireContains(overlay, "version.empty() ? \"Update available");
-  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version, notes);");
+  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version, notes, checkError);");
   RequireDoesNotContain(controls, "mUpdateButton->Hide(!available);");
   // Auto-check state must be visible; IVToggleControl drew neither frame nor value here.
   RequireContains(overlay, "class VoLumSettingsCheckboxControl");
@@ -833,8 +833,9 @@ TEST_CASE("Support hero label remains centered with polarity glyph")
   RequireContains(hero, "Switch to Dual Amp");
   // The lane title is ellipsized to the strip width before drawing (long custom
   // amp names must not bleed past their lane).
-  RequireContains(hero, "FitTextToWidth(g, nameText, name, titleStrip.W()");
-  RequireContains(hero, "g.DrawText(nameText, fitted.c_str(), titleStrip);");
+  RequireContains(hero, "titleStrip.R - kPanKnobSize - 4.f");
+  RequireContains(hero, "FitTextToWidth(g, nameText, name, nameR.W() - 6.f)");
+  RequireContains(hero, "g.DrawText(nameText, fitted.c_str(), nameR);");
   RequireDoesNotContain(hero, "titleStrip.R - 34.f");
 }
 

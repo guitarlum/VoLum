@@ -320,19 +320,45 @@ inline bool JsonGetBool(const nlohmann::json& obj, const char* key, bool& target
   target = obj[key].get<bool>();
   return true;
 }
+
+// A present value outside the range is a corrupt setting: write the design
+// default and raise healed. A missing key leaves the target alone.
+inline bool JsonHealDouble(const nlohmann::json& obj, const char* key, double& target, double minValue, double maxValue,
+                           double def, bool& healed)
+{
+  if (!obj.contains(key))
+    return false;
+  if (!obj[key].is_number())
+  {
+    target = def;
+    healed = true;
+    return true;
+  }
+  const double v = obj[key].get<double>();
+  if (!std::isfinite(v) || v < minValue || v > maxValue)
+  {
+    target = def;
+    healed = true;
+    return true;
+  }
+  target = v;
+  return true;
+}
 } // namespace detail
 
-// Read a PRE block snapshot from JSON. Out-of-range / missing fields fall back
-// to the defaults already in `out`. Returns true if the object had at least one
-// recognized PRE key (so callers can tell a snapshot was present vs absent).
-inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
+// Read a PRE block snapshot from JSON. A present out-of-range ratio, attack,
+// or NAM mid frequency writes the design default and sets didHeal. Other
+// missing or rejected fields leave `out`. Returns true when at least one
+// recognized PRE key was present.
+inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out, bool* didHeal = nullptr)
 {
   const VoLumAmpSettings defaults;
   bool any = false;
+  bool healed = false;
   any |= detail::JsonGetBool(o, "preCompActive", out.preCompActive);
   any |= detail::JsonGetClampedDouble(o, "preCompAmount", out.preCompAmount, 0.0, 10.0);
-  any |= detail::JsonGetClampedDouble(o, "preCompRatio", out.preCompRatio, 1.0, 20.0);
-  any |= detail::JsonGetClampedDouble(o, "preCompAttack", out.preCompAttack, 0.1, 30.0);
+  any |= detail::JsonHealDouble(o, "preCompRatio", out.preCompRatio, 1.0, 20.0, defaults.preCompRatio, healed);
+  any |= detail::JsonHealDouble(o, "preCompAttack", out.preCompAttack, 0.1, 30.0, defaults.preCompAttack, healed);
   any |= detail::JsonGetClampedDouble(o, "preCompRelease", out.preCompRelease, 20.0, 800.0);
   any |= detail::JsonGetClampedDouble(o, "preCompMix", out.preCompMix, 0.0, 1.0);
   any |= detail::JsonGetClampedDouble(o, "preCompLevel", out.preCompLevel, -20.0, 20.0);
@@ -341,7 +367,8 @@ inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
   any |= detail::JsonGetClampedDouble(o, "preNam1Gain", out.preNam1Gain, -20.0, 20.0);
   any |= detail::JsonGetClampedDouble(o, "preNam1Bass", out.preNam1Bass, 0.0, 10.0);
   any |= detail::JsonGetClampedDouble(o, "preNam1Mid", out.preNam1Mid, 0.0, 10.0);
-  any |= detail::JsonGetClampedDouble(o, "preNam1MidFreq", out.preNam1MidFreq, 150.0, 2500.0);
+  any |=
+    detail::JsonHealDouble(o, "preNam1MidFreq", out.preNam1MidFreq, 150.0, 2500.0, defaults.preNam1MidFreq, healed);
   any |= detail::JsonGetClampedDouble(o, "preNam1Treble", out.preNam1Treble, 0.0, 10.0);
   any |= detail::JsonGetClampedDouble(o, "preNam1Level", out.preNam1Level, -20.0, 20.0);
   any |= detail::JsonGetBool(o, "preNam2Active", out.preNam2Active);
@@ -377,6 +404,8 @@ inline bool PreBlockFromJson(const nlohmann::json& o, VoLumAmpSettings& out)
     }
     any = true;
   }
+  if (didHeal && healed)
+    *didHeal = true;
   return any;
 }
 
@@ -669,10 +698,12 @@ inline bool ReadAmpCoreBlock(const nlohmann::json& a, VoLumAmpSettings& s)
   return healed;
 }
 
-// Inverse of WriteDualAmpUserSettings. Out-of-range values stay at whatever
-// `s` already holds (the caller passes a defaulted scene).
-inline void ReadDualAmpUserSettings(const nlohmann::json& a, VoLumAmpSettings& s, int ampCount)
+// Inverse of WriteDualAmpUserSettings. A present value outside its range
+// heals to the scene default. A missing key leaves `s` unchanged.
+inline bool ReadDualAmpUserSettings(const nlohmann::json& a, VoLumAmpSettings& s, int ampCount)
 {
+  const VoLumAmpSettings d;
+  bool healed = false;
   detail::JsonGetBool(a, "dualAmpActive", s.dualAmpActive);
   detail::JsonGetClampedInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2);
   detail::JsonGetClampedDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0);
@@ -684,7 +715,7 @@ inline void ReadDualAmpUserSettings(const nlohmann::json& a, VoLumAmpSettings& s
   detail::JsonGetClampedDouble(a, "supportBass", s.supportToneBass, 0.0, 10.0);
   detail::JsonGetClampedDouble(a, "supportMid", s.supportToneMid, 0.0, 10.0);
   detail::JsonGetClampedDouble(a, "supportTreble", s.supportToneTreble, 0.0, 10.0);
-  detail::JsonGetClampedDouble(a, "supportOutput", s.supportOutputLevel, -40.0, 10.0);
+  detail::JsonHealDouble(a, "supportOutput", s.supportOutputLevel, -40.0, 10.0, d.supportOutputLevel, healed);
   detail::JsonGetBool(a, "supportNoiseGate", s.supportNoiseGateActive);
   detail::JsonGetBool(a, "supportEq", s.supportEqActive);
   detail::JsonGetClampedDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0);
@@ -693,6 +724,7 @@ inline void ReadDualAmpUserSettings(const nlohmann::json& a, VoLumAmpSettings& s
     s.supportCustomId = a["supportCustomId"].get<std::string>();
   detail::JsonGetClampedInt(a, "supportCustomSlot", s.supportCustomSlot, -2, 2);
   detail::JsonGetClampedInt(a, "supportCustomChannel", s.supportCustomChannel, 0, 8);
+  return healed;
 }
 
 // Which preset each amp had selected, keyed by owner key ("factory:<idx>" or a
@@ -1018,7 +1050,10 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           s.activeIrId = a["activeIrId"].get<std::string>();
         if (a.contains("supportActiveIrId") && a["supportActiveIrId"].is_string())
           s.supportActiveIrId = a["supportActiveIrId"].get<std::string>();
-        PreBlockFromJson(a, s);
+        bool preHealed = false;
+        PreBlockFromJson(a, s, &preHealed);
+        if (preHealed)
+          healed = true;
         if (resetLegacyPreCaptureSelections && a.contains("preNam1Capture")
             && s.preNam1Capture != defaults.preNam1Capture)
         {
@@ -1031,7 +1066,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
           s.preNam2Capture = defaults.preNam2Capture;
           healed = true;
         }
-        ReadDualAmpUserSettings(a, s, ampCount);
+        if (ReadDualAmpUserSettings(a, s, ampCount))
+          healed = true;
         PostBlockFromJson(a, s);
       }
     }
