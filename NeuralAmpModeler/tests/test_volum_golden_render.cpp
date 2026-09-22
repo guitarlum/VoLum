@@ -579,8 +579,9 @@ std::string GroupFileText(const std::string& group, const std::string& reason, c
   ss << "  \"group\": " << json(group).dump() << ",\n";
   ss << "  \"reason\": " << json(reason).dump() << ",\n";
   ss << "  \"howToChange\": "
-     << json("Never edit by hand. Run NeuralAmpModeler/scripts/regen-golden-renders.ps1 -Reason \"<sound change>\" "
-             "and add a changelog.txt line containing that reason.")
+     << json(
+          "Never edit by hand. Run NeuralAmpModeler/scripts/regen-golden-renders.ps1 -Reason \"<sound change>\" "
+          "and add a changelog.txt line containing that reason.")
           .dump()
      << ",\n";
   ss << "  \"sampleRate\": " << static_cast<int>(kSampleRate) << ",\n";
@@ -630,8 +631,8 @@ void CheckGroup(const std::string& group, const std::vector<Render>& renders)
       const GroupResult same = CompareGroup(renders, existing.at("renders"));
       if (same.failures.empty())
       {
-        std::cout << "golden " << group << ": unchanged, kept (reason stays \"" << existing.value("reason", "")
-                  << "\")" << std::endl;
+        std::cout << "golden " << group << ": unchanged, kept (reason stays \"" << existing.value("reason", "") << "\")"
+                  << std::endl;
         return;
       }
       std::cout << "golden " << group << ": " << same.failures.size() << " value(s) moved, e.g. "
@@ -841,8 +842,8 @@ TEST_CASE("Golden renders: every PRE pedal alone and into the reference amp")
       return eq.Process(io, 1, static_cast<size_t>(n))[0];
     });
     PrepareNam(*amp, true);
-    renders.push_back(
-      MakeRender(RigLabel(file) + " FULL -> " + RigLabel(ReferenceAmpPath()) + " FULL", Tier::Tight, {RunNam(*amp, eqOut)}));
+    renders.push_back(MakeRender(
+      RigLabel(file) + " FULL -> " + RigLabel(ReferenceAmpPath()) + " FULL", Tier::Tight, {RunNam(*amp, eqOut)}));
 
     PrepareNam(*pedal, false);
     renders.push_back(MakeRender(RigLabel(file) + " LITE", Tier::Tight, {RunNam(*pedal, di)}));
@@ -894,12 +895,12 @@ TEST_CASE("Golden renders: tone stack, cab IR and compressor")
     recursive_linear_filter::HighPass lowCut;
     recursive_linear_filter::LowPass highCut;
     const double trim = std::pow(10.0, 6.0 / 20.0);
-    renders.push_back(MakeRender("cab IR (synthetic) +6 dB, 80 Hz - 6 kHz", Tier::Tight, {RunMono(di, [&](double* x, int n) {
-                                   double* io[1] = {x};
-                                   double** y = ir.Process(io, 1, static_cast<size_t>(n));
-                                   return volum::ApplyIrShapingLane(y, 1, n, kSampleRate, trim, 80.0, 6000.0, lowCut,
-                                                                    highCut)[0];
-                                 })}));
+    renders.push_back(
+      MakeRender("cab IR (synthetic) +6 dB, 80 Hz - 6 kHz", Tier::Tight, {RunMono(di, [&](double* x, int n) {
+                   double* io[1] = {x};
+                   double** y = ir.Process(io, 1, static_cast<size_t>(n));
+                   return volum::ApplyIrShapingLane(y, 1, n, kSampleRate, trim, 80.0, 6000.0, lowCut, highCut)[0];
+                 })}));
   }
 
   {
@@ -966,13 +967,12 @@ TEST_CASE("Golden renders: chorus modes at shipped defaults")
     volum::ChorusDSP chorus;
     chorus.Prepare(kSampleRate, kBlock, 2);
     chorus.Reset();
-    renders.push_back(MakeRender(std::string("chorus ") + volum::VoLumChorusModeName(mode), Tier::Tight,
-                                 RunStereo(input, [&](double** io, int n) {
-                                   chorus.SetParams(row.rate, row.depth, row.tone, row.width, row.mix, mode,
-                                                    kSampleRate);
-                                   chorus.Process(io, 2, n);
-                                   return io;
-                                 })));
+    renders.push_back(MakeRender(
+      std::string("chorus ") + volum::VoLumChorusModeName(mode), Tier::Tight, RunStereo(input, [&](double** io, int n) {
+        chorus.SetParams(row.rate, row.depth, row.tone, row.width, row.mix, mode, kSampleRate);
+        chorus.Process(io, 2, n);
+        return io;
+      })));
   }
   CheckGroup("chorus", renders);
 }
@@ -1041,8 +1041,8 @@ TEST_CASE("Golden renders: reverb modes at shipped defaults")
     reverb.Prepare(2, kBlock, kSampleRate);
     reverb.Reset();
     renders.push_back(MakeRender(c.name, Tier::Tight, RunStereo(input, [&](double** io, int n) {
-                                   reverb.SetParams(c.mix, c.decay, c.tone, c.preDelay, c.shimmer, c.mode, kSampleRate,
-                                                    c.subMode);
+                                   reverb.SetParams(
+                                     c.mix, c.decay, c.tone, c.preDelay, c.shimmer, c.mode, kSampleRate, c.subMode);
                                    return reverb.Process(io, 2, static_cast<size_t>(n));
                                  })));
   }

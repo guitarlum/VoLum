@@ -28,11 +28,11 @@
 // of block-by-block alternation, so one scheduler spike cannot fail a run.
 
 #if defined(__SANITIZE_ADDRESS__)
-#define VOLUM_BUDGET_SANITIZED 1
+  #define VOLUM_BUDGET_SANITIZED 1
 #elif defined(__has_feature)
-#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer) || __has_feature(undefined_behavior_sanitizer)
-#define VOLUM_BUDGET_SANITIZED 1
-#endif
+  #if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer) || __has_feature(undefined_behavior_sanitizer)
+    #define VOLUM_BUDGET_SANITIZED 1
+  #endif
 #endif
 
 namespace
@@ -116,10 +116,10 @@ void FillChordBlock(std::vector<NAM_SAMPLE>& dst, int block, double& t)
 {
   dst.resize(static_cast<size_t>(block));
   for (int i = 0; i < block; ++i, t += 1.0 / kSampleRate)
-    dst[static_cast<size_t>(i)] = static_cast<NAM_SAMPLE>(
-      0.08
-      * (std::sin(2.0 * kPi * 82.41 * t) + std::sin(2.0 * kPi * 123.47 * t) + std::sin(2.0 * kPi * 164.81 * t)
-         + std::sin(2.0 * kPi * 207.65 * t)));
+    dst[static_cast<size_t>(i)] =
+      static_cast<NAM_SAMPLE>(0.08
+                              * (std::sin(2.0 * kPi * 82.41 * t) + std::sin(2.0 * kPi * 123.47 * t)
+                                 + std::sin(2.0 * kPi * 164.81 * t) + std::sin(2.0 * kPi * 207.65 * t)));
 }
 
 double Median(std::vector<double> v)
