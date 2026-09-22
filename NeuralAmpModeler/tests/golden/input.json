@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "group": "input",
+  "reason": "golden renders introduced",
+  "howToChange": "Never edit by hand. Run NeuralAmpModeler/scripts/regen-golden-renders.ps1 -Reason \"<sound change>\" and add a changelog.txt line containing that reason.",
+  "sampleRate": 48000,
+  "blockSize": 128,
+  "renders": {
+    "DI": [
+      {"bandsDb":[-45.764,-30.205,-26.811,-26.115,-28.551,-30.184,-33.878,-38.9,-46.097,-47.615],"centroidHz":510.4,"crestDb":14.694,"envDb":[-140.0,-22.275,-18.392,-18.709,-19.17,-19.897,-20.547,-21.005,-21.302,-22.159,-22.739,-23.338,-23.865,-24.53,-20.452,-18.66,-18.454,-18.568,-18.322,-18.384,-18.473,-18.313,-18.479,-18.777,-22.375,-20.371,-20.371,-20.368,-20.373,-20.361,-24.07,-28.84,-19.035,-20.982,-22.566,-24.136,-25.842,-27.383,-42.76,-140.0],"peakDb":-6.118,"rmsDb":-20.812}
+    ]
+  }
+}

@@ -55,6 +55,13 @@ Invoke-Check (Join-Path $here "check-local-guards.ps1")
 # every user.
 Invoke-Check (Join-Path $here "check-no-vendor-refs.ps1")
 
+# A golden sound reference records why it was last regenerated, and that reason
+# must be in changelog.txt. Skipped while regen-golden-renders.ps1 is running:
+# the new reason reaches the changelog only after the references are written.
+if ($env:VOLUM_GOLDEN_REGEN -ne "1") {
+  Invoke-Check (Join-Path $here "check-golden-changelog.ps1")
+}
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source

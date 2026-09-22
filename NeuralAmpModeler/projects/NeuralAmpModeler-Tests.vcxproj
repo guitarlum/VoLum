@@ -119,10 +119,12 @@
     <ClCompile Include="..\tests\test_golden_dsp.cpp" />
     <ClCompile Include="..\tests\test_golden_rigs.cpp" />
     <ClCompile Include="..\tests\test_golden_presets.cpp" />
+    <ClCompile Include="..\tests\test_volum_golden_render.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\dsp.cpp">
       <ObjectFileName>$(IntDir)audiodsp_dsp.obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="..\..\AudioDSPTools\dsp\Delay.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\ImpulseResponse.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />

@@ -34,6 +34,7 @@ add_executable(NeuralAmpModeler-Tests
   test_golden_dsp.cpp
   test_golden_rigs.cpp
   test_golden_presets.cpp
+  test_volum_golden_render.cpp
   test_keyboard_steps.cpp
   test_volum_dual_amp_input.cpp
   test_eparam_order.cpp
@@ -81,6 +82,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_midi_handoff.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
