@@ -62,6 +62,7 @@ Path: `.scratch/<slug>/loop.md`. Sections: Goal, Predicate, Wake prompt, Verifie
 - **Verifier** is current state (hash + verdict), not a ledger. After a cold review, write `hash:` from `worktree_hash:` in the status output and `verdict: accepted` or `defects`. A later edit that changes `git diff HEAD` makes the status script print `STALE` — run the verifier again. Do not treat an old accepted verdict as live.
 - **Children** lists backtick paths to child `loop.md` files. Dispatch aggregates those, not every leftover loop on disk.
 - **Ledger** is append-only. One row per iteration: timestamp, what changed, predicate moved yes/no. Never rewrite rows from memory.
+- A `-Filter` run is not the effort predicate. Mark that row `predicate=partial` until the Predicate command in `loop.md` (usually `.scratch/<slug>/verify.ps1`) exits 0. Name a test as passed only when that test name appears in the command output.
 - Local machine, not a cloud agent: `VoLum.exe`, screenshots, locked-exe copies.
 
 ## Roles (coordinator vs spawn)
@@ -96,7 +97,7 @@ GOAL         one sentence from loop.md / the ticket
 SCOPE        paths it may write; paths it must not; exclusive branch or worktree
 CONTEXT      pointers to spec, ticket, loop.md — paste upstream facts the child cannot see
 ACCEPTANCE   checkable lines from the ticket
-VERIFY       exact commands (the Predicate, or the subset this unit owns)
+VERIFY       the Predicate command from loop.md. A -Filter subset is partial only.
 FORBIDDEN    no force-push, no golden retune, no product calls, no fixes outside SCOPE
 REPORT       status, paths, what you ran, verdict vs VERIFY, follow-ups
 ```
@@ -106,7 +107,7 @@ REPORT       status, paths, what you ran, verdict vs VERIFY, follow-ups
 1. Status script (above).
 2. Escalate and **stop** on: a new product call not in the locked spec/map; new sound / golden retune; irreversible git (force-push, hard reset); a real dead end. Do not ping for reversible mechanics.
 3. Pick implementer: this chat if the unit is small or needs the live exe here; otherwise spawn a **worker** with the brief above.
-4. Run the **Predicate** (or the unit’s VERIFY). Then spawn a **verifier** on the actual diff + that output. If the verifier finds a real defect, it is not done — fix (same writer) and verify again. Do not skip the verifier because tests passed. Write `## Verifier`.
+4. Run the **Predicate** command from `loop.md`. A `-Filter` subset may guide the edit; it does not close the loop. Then spawn a **verifier** on the actual diff + the Predicate output. If the verifier finds a real defect, it is not done — fix (same writer) and verify again. Do not skip the verifier because a subset passed. Write `## Verifier`.
 5. If it advanced: append a ledger row; commit that unit if the user wants commits as you go.
 6. If it did not: revert the attempt; ledger row with predicate=no; try another approach. Do not relax the predicate.
 7. Repeat until every Predicate line passes, a verifier has accepted the last unit against the current `worktree_hash`, **and** (spec mode) no `ready-for-agent` / `claimed` tickets remain.

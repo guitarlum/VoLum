@@ -64,13 +64,13 @@ std::string ReadPluginSource()
 
 void RequireContains(const std::string& haystack, const char* needle)
 {
-  INFO(needle);
+  INFO(std::string(needle));
   REQUIRE(haystack.find(needle) != std::string::npos);
 }
 
 void RequireDoesNotContain(const std::string& haystack, const char* needle)
 {
-  INFO(needle);
+  INFO(std::string(needle));
   REQUIRE(haystack.find(needle) == std::string::npos);
 }
 
