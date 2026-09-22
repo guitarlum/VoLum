@@ -2716,7 +2716,7 @@ TEST_CASE("tier2g the settings reader is the block readers and chorus has no pri
   REQUIRE(from != std::string::npos);
   const std::string body = io.substr(from, 8000);
   RequireContains(body, "ReadAmpCoreBlock(a, s)");
-  RequireContains(body, "PreBlockFromJson(a, s)");
+  RequireContains(body, "PreBlockFromJson(a, s, &preHealed)");
   RequireContains(body, "PostBlockFromJson(a, s)");
   RequireContains(body, "ReadDualAmpUserSettings(a, s, ampCount)");
   RequireDoesNotContain(body, "loadBool(a, \"postChorusActive\"");
