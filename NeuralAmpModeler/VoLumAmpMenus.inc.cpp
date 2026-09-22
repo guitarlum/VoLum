@@ -424,6 +424,14 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
   }
 }
 
+void NeuralAmpModeler::_VolumRebindCustomSupportIdx()
+{
+  const std::string& id = _VolumActiveScene().supportCustomId;
+  if (id.empty() || !volum::content::GlobalContentStore().IsLoaded())
+    return;
+  mVolumCustomSupportIdx = volum::custom::CustomAmpIndexById(id);
+}
+
 bool NeuralAmpModeler::_VolumHasSupportAmp()
 {
   const int factory = GetParam(kSupportAmpIdx)->Int();
@@ -515,4 +523,3 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
     }
   }
 }
-

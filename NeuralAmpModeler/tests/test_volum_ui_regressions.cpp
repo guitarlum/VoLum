@@ -2579,3 +2579,89 @@ TEST_CASE("tier2e a failed update check does not stamp the 24 hour clock")
   CHECK(before.find("lastCheckUtc") == std::string::npos);
   RequireContains(inc, "CheckFailureNotice()");
 }
+
+TEST_CASE("tier2f chorus last-knob memory is inside the target array")
+{
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  RequireContains(header, "std::array<int, 10> mVolumLastKeyboardKnobByTarget");
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+  const auto read = keyboard.find("int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus()");
+  REQUIRE(read != std::string::npos);
+  const std::string body = keyboard.substr(read, 500);
+  RequireContains(body, "target < static_cast<int>(mVolumLastKeyboardKnobByTarget.size())");
+}
+
+TEST_CASE("tier2f keyboard POST lands on the same first pedal as the header")
+{
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+  const auto post = keyboard.find("case EVoLumSection::POST:");
+  REQUIRE(post != std::string::npos);
+  const std::string body = keyboard.substr(post, 700);
+  RequireContains(body, "kChorusActive");
+  RequireContains(body, "EVoLumEffectFocus::CHORUS");
+  CHECK(body.find("kChorusActive") < body.find("kDelayActive"));
+}
+
+TEST_CASE("tier2f post lock chrome includes chorus and tremolo")
+{
+  const std::string cpp = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto start = cpp.find("bool IsPostBlockParam(");
+  REQUIRE(start != std::string::npos);
+  const auto end = cpp.find("void NeuralAmpModeler::_VolumRefreshPrePostLockChrome", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = cpp.substr(start, end - start);
+  RequireContains(body, "kChorusRate");
+  RequireContains(body, "kTremoloRate");
+  RequireContains(body, "kDelaySync");
+  RequireContains(body, "kDelayDivision");
+}
+
+TEST_CASE("tier2f the expanded pedal LED toggles bypass")
+{
+  const std::string card = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
+  const auto down = card.find("void OnMouseDown(");
+  REQUIRE(down != std::string::npos);
+  const std::string body = card.substr(down, 500);
+  RequireContains(body, "ledRect.Contains(x, y)");
+  RequireContains(body, "mCallback(this, true)");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto click = layout.find("auto onPedalClick");
+  REQUIRE(click != std::string::npos);
+  const std::string handler = layout.substr(click, 900);
+  RequireContains(handler, "if (isBypassClick)");
+  RequireContains(handler, "kChorusActive");
+  RequireDoesNotContain(handler.substr(0, 80), "(void)isBypassClick");
+}
+
+TEST_CASE("tier2f MAIN cab fallback does not paint the row while SUPPORT is focused")
+{
+  const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSceneRig.inc.cpp");
+  const auto start = rig.find("void NeuralAmpModeler::_VolumFallbackToAvailableCab()");
+  REQUIRE(start != std::string::npos);
+  const std::string body = rig.substr(start, 2200);
+  RequireContains(body, "row && !_VolumSupportFocused()");
+}
+
+TEST_CASE("tier2f the hero name stops before the PAN knob")
+{
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+  const auto lane = hero.find("void DrawLane(");
+  REQUIRE(lane != std::string::npos);
+  const std::string body = hero.substr(lane, 4000);
+  RequireContains(body, "titleStrip.R - kPanKnobSize");
+  RequireContains(body, "nameR.W() - 6.f");
+}
+
+TEST_CASE("tier2f SUPPORT identity follows the custom amp id")
+{
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
+  const auto start = menus.find("void NeuralAmpModeler::_VolumRebindCustomSupportIdx()");
+  REQUIRE(start != std::string::npos);
+  const std::string body = menus.substr(start, 400);
+  RequireContains(body, "supportCustomId");
+  RequireContains(body, "CustomAmpIndexById(id)");
+  const std::string cpp = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto idle = cpp.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idle != std::string::npos);
+  RequireContains(cpp.substr(idle, 800), "_VolumRebindCustomSupportIdx()");
+}

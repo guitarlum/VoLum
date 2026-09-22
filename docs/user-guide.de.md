@@ -152,7 +152,7 @@ Die gemeinsamen Regler sind **RATE**, **DEPTH**, **SHAPE** (formt den LFO von we
 
 ![VoLum POST-Tremolo-Karte](user-guide-tremolo.png)
 
-Die LED auf jeder Karte zeigt, ob sie aktiv ist. Das Label zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen werden pro Amp gespeichert, genau wie PRE. Das **Schloss** im POST-Kopf funktioniert wie bei PRE, damit du eine Chorus/Delay/Reverb/Tremolo-Szene beim Durchklicken der Amps mitnimmst; der **Store**-Pfeil erscheint, wenn du das Overlay im aktuellen Amp speichern kannst. Entsperren stellt das gespeicherte POST dieses Amps ohne Rückfrage wieder her. Ein Doppelklick auf einen POST-Regler stellt dessen Default wieder her.
+Die LED auf jeder Karte zeigt, ob sie aktiv ist. Ein Klick auf die LED schaltet das Pedal in den Bypass, genau wie der eingeklappte Streifen. Das Label zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen werden pro Amp gespeichert, genau wie PRE. Das **Schloss** im POST-Kopf funktioniert wie bei PRE, damit du eine Chorus/Delay/Reverb/Tremolo-Szene beim Durchklicken der Amps mitnimmst; der **Store**-Pfeil erscheint, wenn du das Overlay im aktuellen Amp speichern kannst. Entsperren stellt das gespeicherte POST dieses Amps ohne Rückfrage wieder her. Ein Doppelklick auf einen POST-Regler stellt dessen Default wieder her.
 
 Beim Wechsel von Chorus-Stimme, Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Stimme wird der alte Tail gelöscht, damit Wiederholungen und Raum aus dem vorherigen Modus nicht in den neuen Modus bluten. Jedes POST-Pedal merkt sich außerdem seine Reglerstellungen pro Modus: Wenn du die Stimmen durchsteppst und zurückkehrst, stehen deine Einstellungen noch so, wie du sie verlassen hast.
 

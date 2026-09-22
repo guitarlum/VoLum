@@ -192,8 +192,7 @@ public:
         if (mDismissPickerCallback)
           mDismissPickerCallback();
         break;
-      default:
-        break;
+      default: break;
     }
 
     SetDirty(false);
@@ -419,9 +418,12 @@ private:
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
     g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle), role,
                IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
+    // The PAN knob sits on the right of this strip. Fit and draw the name in
+    // the space to its left so a long name is not painted under the knob.
+    const IRECT nameR(titleStrip.L, titleStrip.T, titleStrip.R - kPanKnobSize - 4.f, titleStrip.B);
     const IText nameText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    const std::string fitted = FitTextToWidth(g, nameText, name, titleStrip.W() - 6.f);
-    g.DrawText(nameText, fitted.c_str(), titleStrip);
+    const std::string fitted = FitTextToWidth(g, nameText, name, nameR.W() - 6.f);
+    g.DrawText(nameText, fitted.c_str(), nameR);
   }
 
   // Trim `s` (appending an ellipsis) until it fits within maxW for the given

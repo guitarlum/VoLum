@@ -1049,7 +1049,9 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
     mVolumSpeakerIdx = sel;
     mVolumChannelIdx = volum::custom::ChannelStepIndex(volum::custom::AssignedChannels(amp), ch);
     _VolumSetCustomChannelStepper(mVolumCustomMainIdx, false, ch);
-    if (row)
+    // The shared cab row is SUPPORT's while that lane is focused. MAIN's
+    // fallback still updates MAIN's scene; it must not repaint SUPPORT's row.
+    if (row && !_VolumSupportFocused())
     {
       row->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
       row->As<VoLumSpeakerRowControl>()->SetSelected(sel);
@@ -1063,7 +1065,7 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
     mVolumSpeakerIdx = sel;
     mVolumAmpSettings[mVolumAmpIdx].speakerIdx = sel;
     _VolumRefreshChannels();
-    if (row)
+    if (row && !_VolumSupportFocused())
     {
       row->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
       row->As<VoLumSpeakerRowControl>()->SetSelected(sel);

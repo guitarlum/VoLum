@@ -152,7 +152,7 @@ The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smoot
 
 ![VoLum POST Tremolo card](user-guide-tremolo.png)
 
-The LED on each card shows whether it is active. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one chorus/delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
+The LED on each card shows whether it is active. Click the LED to bypass that pedal, the same way the collapsed strip does. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one chorus/delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
 
 Switching Chorus voice, Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one. Each POST pedal also remembers its own knob positions per mode, so stepping through the voices and back leaves your settings where you left them.
 

@@ -530,6 +530,9 @@ public:
   // True when the SUPPORT lane actually has an amp: a factory amp or a custom
   // partner. Its default is "(none)".
   bool _VolumHasSupportAmp();
+  // SUPPORT's live index follows supportCustomId, so a sibling delete of an
+  // earlier custom amp cannot retarget this instance onto the next row.
+  void _VolumRebindCustomSupportIdx();
   // Drops SUPPORT focus when that lane has no amp. Focusing an empty lane pointed
   // the shared cab row, the channel stepper and the S shortcut at something that
   // does not exist: the row jumped to a phantom cab, the stepper read "---", and S
@@ -686,11 +689,12 @@ private:
   int mVolumChannelIdx = 0;
   int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
   std::string mVolumSelectedKnobHintText;
-  // Size must match volum::keyboard::kTargetCount (9). Literal here to avoid
+  // Size must match volum::keyboard::kTargetCount (10). Literal here to avoid
   // pulling VoLumKeyboardModel.h into this header before EParams is declared.
-  std::array<int, 9> mVolumLastKeyboardKnobByTarget = {iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
+  // Index 9 is CHORUS; a size of 9 reads one past the array.
+  std::array<int, 10> mVolumLastKeyboardKnobByTarget = {
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
   // Reverb sub-mode pill is currently shown for Oktaverb only.
   // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
   // pick up a per-mode tooltip explaining what the knob actually does in that mode.

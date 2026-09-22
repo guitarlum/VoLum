@@ -397,7 +397,30 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     volum::triptych_layout::ComputeFrames(triptychBounds, EVoLumSection::POST).post);
 
   auto onPedalClick = [this](VoLumPedalCardControl* card, bool isBypassClick) {
-    (void)isBypassClick;
+    if (isBypassClick)
+    {
+      int paramIdx = -1;
+      switch (card->GetEffect())
+      {
+        case EVoLumEffectFocus::PITCH: paramIdx = kPrePitchActive; break;
+        case EVoLumEffectFocus::COMP: paramIdx = kPreCompActive; break;
+        case EVoLumEffectFocus::PRE_NAM1: paramIdx = kPreNam1Active; break;
+        case EVoLumEffectFocus::PRE_NAM2: paramIdx = kPreNam2Active; break;
+        case EVoLumEffectFocus::CHORUS: paramIdx = kChorusActive; break;
+        case EVoLumEffectFocus::DELAY: paramIdx = kDelayActive; break;
+        case EVoLumEffectFocus::REVERB: paramIdx = kReverbActive; break;
+        case EVoLumEffectFocus::TREMOLO: paramIdx = kTremoloActive; break;
+        default: break;
+      }
+      if (paramIdx >= 0)
+      {
+        const double next = GetParam(paramIdx)->Value() > 0.5 ? 0.0 : 1.0;
+        BeginInformHostOfParamChangeFromUI(paramIdx);
+        SendParameterValueFromUI(paramIdx, next);
+        EndInformHostOfParamChangeFromUI(paramIdx);
+      }
+      return;
+    }
     const EVoLumEffectFocus eff = card->GetEffect();
     mVolumFocusedEffect = eff;
     _UpdateVoLumLayout();

@@ -124,6 +124,15 @@ public:
   {
     if (mPlaceholder)
       return;
+    // Same control as the collapsed mini-pill: the LED toggles bypass and does
+    // not steal the click for focus or the capture menu.
+    const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
+    if (ledRect.Contains(x, y))
+    {
+      if (mCallback)
+        mCallback(this, true);
+      return;
+    }
     auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
     const int captureSlot = (mEffect == EVoLumEffectFocus::PRE_NAM1)   ? 0
                             : (mEffect == EVoLumEffectFocus::PRE_NAM2) ? 1
@@ -131,8 +140,7 @@ public:
     if (plugin && captureSlot >= 0)
     {
       const int captureIdx = plugin->GetParam(captureSlot == 0 ? kPreNam1Capture : kPreNam2Capture)->Int();
-      const auto action =
-        volum::DecideCaptureCardClick(mIsFocused, captureIdx > volum::kPreCaptureEmptyIndex);
+      const auto action = volum::DecideCaptureCardClick(mIsFocused, captureIdx > volum::kPreCaptureEmptyIndex);
       // Focus first where both are wanted: the focus callback rebuilds the layout,
       // and that pass hides the capture menu unconditionally. Opening before it
       // would close the menu on the same click.

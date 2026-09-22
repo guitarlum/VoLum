@@ -843,6 +843,7 @@ void NeuralAmpModeler::OnIdle()
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
+  _VolumRebindCustomSupportIdx();
 
   // Models the audio thread retired instead of destroying in the callback. Reaping
   // runs after the sync above so the restore stays the first thing an idle does;
@@ -1621,7 +1622,25 @@ bool IsPostBlockParam(int paramIdx)
     case kReverbPreDelay:
     case kReverbShimmer:
     case kReverbMode:
-    case kReverbSubMode: return true;
+    case kReverbSubMode:
+    case kDelaySync:
+    case kDelayDivision:
+    case kChorusActive:
+    case kChorusMode:
+    case kChorusRate:
+    case kChorusDepth:
+    case kChorusTone:
+    case kChorusWidth:
+    case kChorusMix:
+    case kTremoloActive:
+    case kTremoloMode:
+    case kTremoloRate:
+    case kTremoloDepth:
+    case kTremoloShape:
+    case kTremoloMix:
+    case kTremoloCrossover:
+    case kTremoloSync:
+    case kTremoloDivision: return true;
     default: return false;
   }
 }
