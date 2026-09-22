@@ -265,7 +265,12 @@ void NeuralAmpModeler::_VolumAddHeardPlaySound()
     auto& store = volum::content::GlobalContentStore();
     const int slot = volum::content::FirstFreeMidiSoundSlot(store.reg());
     if (!volum::AddHeardMarksLive(slot, mVolumActivePresetId.empty()))
+    {
+      if (auto* gfx = GetUI())
+        if (auto* surface = gfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+          surface->As<VoLumPlaySurfaceControl>()->OpenReplacePicker();
       return;
+    }
     _VolumAssignPlaySound(slot, {_VolumActiveOwnerKey(), mVolumActivePresetId, {}, {}, false, 0, false});
     mVolumLastRecalledPlaySlot = slot;
     _VolumRefreshPlaySurface();

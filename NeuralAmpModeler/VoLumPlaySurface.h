@@ -192,6 +192,10 @@ public:
     SetDirty(false);
   }
 
+  // The map has no free program number. Offer slot 0 so the click can replace
+  // a Sound instead of doing nothing.
+  void OpenReplacePicker() { OpenPicker(0, true); }
+
   // Esc closes the picker; arrows and 1-8 stay here so they cannot step the
   // rail or stomps underneath. T/M/H and Ctrl+S still fall through. The
   // layout skips this when an overlay is open so Settings owns Esc first.
@@ -261,6 +265,26 @@ public:
     ClampRailScroll();
     if (lastSlot != prevSlot)
       EnsureActiveRowVisible();
+    if (mPressSlot >= 0)
+    {
+      mPressRow = -1;
+      for (int i = 0; i < static_cast<int>(mSlots.size()); ++i)
+      {
+        if (mSlots[static_cast<size_t>(i)].slot == mPressSlot)
+        {
+          mPressRow = i;
+          break;
+        }
+      }
+      if (mPressRow < 0)
+      {
+        mDragging = false;
+        mPressSlot = -1;
+        mPressGlyph = kPressBody;
+        mDropRow = -1;
+        mDropInsert = false;
+      }
+    }
     SetDirty(false);
   }
 
@@ -387,7 +411,7 @@ public:
 
     if ((mSlots.empty() ? EmptyAddRect() : AddRect()).Contains(x, y))
     {
-      if (mPlusAddsHeard && mAddHeard)
+      if (mPlusAddsHeard && mAddHeard && FirstFreeSlot() >= 0)
       {
         mAddHeard();
         return;
@@ -399,23 +423,18 @@ public:
     const int row = SlotAt(x, y);
     if (row >= 0)
     {
-      if (ClearRectForRow(row).Contains(x, y))
-      {
-        if (mClear)
-          mClear(mSlots[(size_t)row].slot);
-        return;
-      }
-      if (AssignRectForRow(row).Contains(x, y))
-      {
-        OpenPicker(mSlots[(size_t)row].slot, false);
-        return;
-      }
       const auto& slot = mSlots[(size_t)row];
       mPressRow = row;
       mPressSlot = slot.slot;
       mPressX = x;
       mPressY = y;
       mDragging = false;
+      if (ClearRectForRow(row).Contains(x, y))
+        mPressGlyph = kPressClear;
+      else if (AssignRectForRow(row).Contains(x, y))
+        mPressGlyph = kPressAssign;
+      else
+        mPressGlyph = kPressBody;
       return;
     }
 
@@ -475,9 +494,11 @@ public:
     mPickerBar.OnUp();
     const int pressRow = mPressRow;
     const int pressSlot = mPressSlot;
+    const int pressGlyph = mPressGlyph;
     const bool wasDrag = mDragging;
     mPressRow = -1;
     mPressSlot = -1;
+    mPressGlyph = kPressBody;
     mDragging = false;
     mDropRow = -1;
     mDropInsert = false;
@@ -491,6 +512,17 @@ public:
     }
     if (SlotAt(x, y) != pressRow)
       return;
+    if (pressGlyph == kPressClear && ClearRectForRow(pressRow).Contains(x, y))
+    {
+      if (mClear)
+        mClear(mSlots[(size_t)pressRow].slot);
+      return;
+    }
+    if (pressGlyph == kPressAssign && AssignRectForRow(pressRow).Contains(x, y))
+    {
+      OpenPicker(mSlots[(size_t)pressRow].slot, false);
+      return;
+    }
     const auto& slot = mSlots[(size_t)pressRow];
     if (slot.valid)
     {
@@ -541,6 +573,12 @@ public:
     mHoverRow = mHoverFx = mHoverChoice = -1;
     mHoverStep = 0;
     mHoverHeader = 0;
+    mPressRow = -1;
+    mPressSlot = -1;
+    mPressGlyph = kPressBody;
+    mDragging = false;
+    mDropRow = -1;
+    mDropInsert = false;
     ApplyPlayTip(0.f, 0.f, true);
     SetDirty(false);
   }
@@ -919,9 +957,27 @@ private:
     if (mSlots.empty())
       return;
     const int row = SlotAt(x, y);
+    if (row == kHoverAdd)
+    {
+      mDropRow = static_cast<int>(mSlots.size());
+      mDropInsert = true;
+      return;
+    }
     if (row < 0)
     {
       const auto list = RailListRect();
+      if (list.Contains(x, y))
+      {
+        const float local = y - list.T + mRailScroll;
+        const int pitchRow = static_cast<int>(local / kRowPitch);
+        const float within = local - static_cast<float>(pitchRow) * kRowPitch;
+        if (pitchRow >= 0 && pitchRow < static_cast<int>(mSlots.size()) && within >= kRowH)
+        {
+          mDropRow = pitchRow + 1;
+          mDropInsert = true;
+          return;
+        }
+      }
       if (x >= list.L && x <= list.R && y >= list.B - 8.f && y <= AddRect().T)
       {
         mDropRow = static_cast<int>(mSlots.size());
@@ -1650,7 +1706,11 @@ private:
   AddHeardCallback mAddHeard;
   SwapCallback mSwap;
   InsertCallback mInsert;
+  static constexpr int kPressBody = 0;
+  static constexpr int kPressClear = 1;
+  static constexpr int kPressAssign = 2;
   int mPressRow = -1, mPressSlot = -1, mDropRow = -1;
+  int mPressGlyph = kPressBody;
   float mPressX = 0.f, mPressY = 0.f, mDragX = 0.f, mDragY = 0.f;
   bool mDragging = false, mDropInsert = false;
 };

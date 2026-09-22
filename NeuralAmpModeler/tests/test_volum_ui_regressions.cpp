@@ -2455,3 +2455,58 @@ TEST_CASE("tier2c a committed library reloads when the settings write fails")
   const std::string beforeError = body.substr(committed, failed - committed);
   RequireContains(beforeError, "_VolumReloadReplacedLibraryIds(result.replacedIds)");
 }
+
+TEST_CASE("tier2d the PLAY rail accepts a drop on Add and in the row gap")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto drop = play.find("void UpdateDropTarget(");
+  REQUIRE(drop != std::string::npos);
+  const auto end = play.find("void CommitRailDrop(", drop);
+  REQUIRE(end != std::string::npos);
+  const std::string body = play.substr(drop, end - drop);
+  RequireContains(body, "row == kHoverAdd");
+  RequireContains(body, "within >= kRowH");
+}
+
+TEST_CASE("tier2d PLAY plates commit on mouse-up and a drag still reorders")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto up = play.find("void OnMouseUp(");
+  REQUIRE(up != std::string::npos);
+  const auto end = play.find("void OnMouseDblClick(", up);
+  REQUIRE(end != std::string::npos);
+  const std::string body = play.substr(up, end - up);
+  const auto drag = body.find("if (wasDrag)");
+  const auto clear = body.find("kPressClear");
+  REQUIRE(drag != std::string::npos);
+  REQUIRE(clear != std::string::npos);
+  CHECK(drag < clear);
+  RequireContains(body, "CommitRailDrop(pressSlot, x, y)");
+}
+
+TEST_CASE("tier2d PLAY SetData follows the pressed Sound and OnMouseOut cancels the gesture")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto data = play.find("void SetData(");
+  REQUIRE(data != std::string::npos);
+  const auto dataEnd = play.find("void OnRescale()", data);
+  REQUIRE(dataEnd != std::string::npos);
+  const std::string setBody = play.substr(data, dataEnd - data);
+  RequireContains(setBody, "mSlots[static_cast<size_t>(i)].slot == mPressSlot");
+  const auto firstOut = play.find("void OnMouseOut() override");
+  REQUIRE(firstOut != std::string::npos);
+  const auto out = play.find("void OnMouseOut() override", firstOut + 1);
+  REQUIRE(out != std::string::npos);
+  const std::string outBody = play.substr(out, 400);
+  RequireContains(outBody, "mDragging = false");
+  RequireContains(outBody, "mPressSlot = -1");
+}
+
+TEST_CASE("tier2d a full PLAY map opens the replace picker instead of doing nothing")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  RequireContains(play, "FirstFreeSlot() >= 0");
+  RequireContains(play, "void OpenReplacePicker()");
+  RequireContains(runtime, "OpenReplacePicker()");
+}
