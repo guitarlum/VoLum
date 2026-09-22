@@ -45,7 +45,7 @@ void NeuralAmpModeler::_VolumQueueMainModelLoad(std::string fileToLoad, int ampI
   request.fileToLoad = fileToLoad;
   request.rigsRoot = std::move(rigsRoot);
   request.sampleRate = GetSampleRate();
-  request.blockSize = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
+  request.blockSize = volum::dsp_staging::NamResetBlockSize(GetBlockSize());
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -95,7 +95,7 @@ void NeuralAmpModeler::_VolumQueueSupportModelLoad(std::string fileToLoad, int a
   request.ampIdx = ampIdx;
   request.fileToLoad = fileToLoad;
   request.sampleRate = GetSampleRate();
-  request.blockSize = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
+  request.blockSize = volum::dsp_staging::NamResetBlockSize(GetBlockSize());
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -118,7 +118,7 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
   request.slot = slot;
   request.fileToLoad = fileToLoad;
   request.sampleRate = GetSampleRate();
-  request.blockSize = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
+  request.blockSize = volum::dsp_staging::NamResetBlockSize(GetBlockSize());
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
@@ -170,7 +170,7 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
   }
 
   const double liveRate = GetSampleRate();
-  const int liveBlock = volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize());
+  const int liveBlock = volum::dsp_staging::NamResetBlockSize(GetBlockSize());
 
   for (auto& result : results)
   {

@@ -16,7 +16,8 @@ namespace volum::dsp_staging
 {
 
 // Same cap as VoLumPitch::kRealtimeBlockReserve. Hosts grow the callback without
-// another OnReset; ProcessBlock must not allocate or throw past this.
+// another OnReset; ProcessBlock must not allocate or throw past this. Plain
+// scratch vectors only: they cost nothing until touched.
 constexpr int kRealtimeBlockReserve = 8192;
 constexpr size_t kDspGraveyardCapacity = 16;
 constexpr size_t kRtPathCapacity = 32768;
@@ -24,6 +25,17 @@ constexpr size_t kRtPathCapacity = 32768;
 inline int ReservedAudioBlockSize(int hostBlockSize)
 {
   return std::max({hostBlockSize, 64, kRealtimeBlockReserve});
+}
+
+// A NAM is Reset at the host block, never at kRealtimeBlockReserve. Its conv
+// ring buffers are 2 * lookback + maxBlock long and the write head walks all of
+// it, so an 8192 reserve made every block stream megabytes through the cache:
+// a PRE NAM + amp at 64 frames went from ~14% to ~82% of the deadline (p99 over
+// 100%) and crackled in 1.3.0. A larger host block is chunked by
+// ProcessNamInChunks instead.
+inline int NamResetBlockSize(int hostBlockSize)
+{
+  return std::max(hostBlockSize, 64);
 }
 
 inline bool AudioBlockFitsReserve(int nFrames, int reserved)
@@ -57,21 +69,27 @@ void CopyOrSilenceExternalBlock(Sample** inputs, Sample** outputs, int nFrames, 
   }
 }
 
-// Returns true when the NAM should run. Oversized blocks copy dry and never throw.
-template <typename Sample>
-bool ProcessOrBypassNamBlock(int numFrames, int maxBlock, Sample** input, Sample** output, int nChans)
+// Mono NAM block. A block past the NAM's Reset size runs as consecutive chunks
+// of at most maxBlock, which is sample-identical to the host having delivered
+// them that way - no allocation, no throw, no dry gap. maxBlock <= 0 (never
+// Reset) copies dry.
+template <typename Sample, typename ProcessFn>
+void ProcessNamInChunks(int numFrames, int maxBlock, Sample* input, Sample* output, ProcessFn&& process)
 {
-  if (numFrames >= 0 && numFrames <= maxBlock)
-    return true;
-  if (numFrames > 0 && input && output)
+  if (numFrames <= 0 || !input || !output)
+    return;
+  if (maxBlock <= 0)
   {
-    for (int c = 0; c < nChans; ++c)
-    {
-      if (input[c] && output[c] && input[c] != output[c])
-        std::memcpy(output[c], input[c], static_cast<size_t>(numFrames) * sizeof(Sample));
-    }
+    if (input != output)
+      std::memcpy(output, input, static_cast<size_t>(numFrames) * sizeof(Sample));
+    return;
   }
-  return false;
+  for (int offset = 0; offset < numFrames; offset += maxBlock)
+  {
+    Sample* in = input + offset;
+    Sample* out = output + offset;
+    process(&in, &out, std::min(maxBlock, numFrames - offset));
+  }
 }
 
 template <typename T>

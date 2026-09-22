@@ -779,7 +779,7 @@ void NeuralAmpModeler::OnReset()
     std::max(1, static_cast<int>(std::ceil(2.0 * sampleRate / std::max(1, maxBlockSize)))));
   // If there is a model or IR loaded, they need to be checked for resampling.
   const int reservedBlock = volum::dsp_staging::ReservedAudioBlockSize(maxBlockSize);
-  _ResetModelAndIR(sampleRate, reservedBlock);
+  _ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));
   mToneStack->Reset(sampleRate, maxBlockSize);
   if (mSupportToneStack)
     mSupportToneStack->Reset(sampleRate, maxBlockSize);
@@ -852,11 +852,14 @@ void NeuralAmpModeler::OnIdle()
   // ~ResamplingNAM never holds up ProcessBlock. Path commit stays under the lock:
   // removal still clears mNAMPaths on the audio thread.
   {
+    // The spare is reserved before the lock: ProcessBlock waits on mStagingMutex,
+    // so an allocation inside it can stall the audio thread.
     std::vector<std::unique_ptr<ResamplingNAM>> doomed;
+    doomed.reserve(volum::dsp_staging::kDspGraveyardCapacity);
     {
       std::lock_guard<std::mutex> lock(mStagingMutex);
-      doomed.swap(mDspGraveyard);
-      mDspGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+      if (!mDspGraveyard.empty())
+        doomed.swap(mDspGraveyard);
       if (mPublishedNamPath.dirty.exchange(false, std::memory_order_acq_rel))
       {
         volum::dsp_staging::StagePathOnSuccess(mNAMPaths, mPublishedNamPath.text);
@@ -2197,7 +2200,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     // load path too (no-op on non-slimmable models). Selected before Reset so
     // only the chosen slice is prewarmed.
     temp->SetSlimmableSize(mVolumLiteMode.load() ? 0.0 : 1.0);
-    temp->Reset(GetSampleRate(), volum::dsp_staging::ReservedAudioBlockSize(GetBlockSize()));
+    temp->Reset(GetSampleRate(), volum::dsp_staging::NamResetBlockSize(GetBlockSize()));
     {
       // Serialize the staging assignment against the audio thread's read/move in
       // _ApplyDSPStaging. _StageModel is called from the host's UnserializeState

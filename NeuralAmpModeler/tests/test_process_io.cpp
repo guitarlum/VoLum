@@ -354,22 +354,58 @@ TEST_CASE("Scratch resize refuses to allocate past the off-thread reserve")
   CHECK(buf.size() == static_cast<size_t>(volum::dsp_staging::kRealtimeBlockReserve));
 }
 
-TEST_CASE("An oversized NAM block copies dry and does not throw")
+TEST_CASE("A NAM is reset at the host block, not the scratch reserve")
 {
-  float in[4] = {1.f, 2.f, 3.f, 4.f};
-  float out[4] = {0.f, 0.f, 0.f, 0.f};
-  float* ip = in;
-  float* op = out;
+  // 1.3.0 crackle: every NAM was Reset at the 8192 scratch reserve. Its ring
+  // buffers then span the whole reserve and a PRE NAM + amp at 64 frames blew
+  // the realtime deadline. test_volum_realtime_budget.cpp measures the cost.
+  CHECK(volum::dsp_staging::NamResetBlockSize(64) == 64);
+  CHECK(volum::dsp_staging::NamResetBlockSize(128) == 128);
+  CHECK(volum::dsp_staging::NamResetBlockSize(1024) == 1024);
+  CHECK(volum::dsp_staging::NamResetBlockSize(16) == 64);
+  CHECK(volum::dsp_staging::NamResetBlockSize(0) == 64);
+  CHECK(volum::dsp_staging::NamResetBlockSize(128) < volum::dsp_staging::ReservedAudioBlockSize(128));
+}
 
-  CHECK_FALSE(volum::dsp_staging::ProcessOrBypassNamBlock(4, 2, &ip, &op, 1));
-  CHECK(out[0] == doctest::Approx(1.f));
-  CHECK(out[1] == doctest::Approx(2.f));
-  CHECK(out[2] == doctest::Approx(3.f));
-  CHECK(out[3] == doctest::Approx(4.f));
+TEST_CASE("An oversized NAM block runs in chunks, never dry")
+{
+  std::vector<float> in(10), out(10, 0.f);
+  for (int i = 0; i < 10; ++i)
+    in[static_cast<size_t>(i)] = static_cast<float>(i + 1);
+  std::vector<int> chunkSizes;
 
-  out[0] = -1.f;
-  CHECK(volum::dsp_staging::ProcessOrBypassNamBlock(2, 2, &ip, &op, 1));
-  CHECK(out[0] == doctest::Approx(-1.f));
+  volum::dsp_staging::ProcessNamInChunks(10, 4, in.data(), out.data(), [&](float** ip, float** op, int n) {
+    chunkSizes.push_back(n);
+    for (int i = 0; i < n; ++i)
+      op[0][i] = -ip[0][i];
+  });
+
+  CHECK(chunkSizes == std::vector<int>{4, 4, 2});
+  for (int i = 0; i < 10; ++i)
+    CHECK(out[static_cast<size_t>(i)] == doctest::Approx(-(i + 1)));
+}
+
+TEST_CASE("A NAM block within its reset size is one call")
+{
+  float in[3] = {1.f, 2.f, 3.f};
+  float out[3] = {0.f, 0.f, 0.f};
+  int calls = 0;
+  volum::dsp_staging::ProcessNamInChunks(3, 3, in, out, [&](float**, float**, int n) {
+    ++calls;
+    CHECK(n == 3);
+  });
+  CHECK(calls == 1);
+}
+
+TEST_CASE("A NAM that was never reset copies dry instead of processing")
+{
+  float in[2] = {0.5f, -0.25f};
+  float out[2] = {9.f, 9.f};
+  int calls = 0;
+  volum::dsp_staging::ProcessNamInChunks(2, 0, in, out, [&](float**, float**, int) { ++calls; });
+  CHECK(calls == 0);
+  CHECK(out[0] == doctest::Approx(0.5f));
+  CHECK(out[1] == doctest::Approx(-0.25f));
 }
 
 TEST_CASE("An oversized ProcessBlock copies or silences the external bus")

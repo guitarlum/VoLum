@@ -212,18 +212,16 @@ public:
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
     // Hosts grow the callback without OnReset. Throw would unwind ProcessBlock
-    // (and leak the host FP env); allocate is also forbidden here.
-    if (!volum::dsp_staging::ProcessOrBypassNamBlock(num_frames, mMaxExternalBlockSize, input, output, 1))
-      return;
-
-    if (!NeedToResample())
-    {
-      mEncapsulated->process(input, output, num_frames);
-    }
-    else
-    {
-      mResampler.ProcessBlock(input, output, num_frames, mBlockProcessFunc);
-    }
+    // (and leak the host FP env); allocate is also forbidden here. The model
+    // stays Reset at the host block (see NamResetBlockSize), so a bigger block
+    // is split rather than growing the model's buffers.
+    volum::dsp_staging::ProcessNamInChunks(
+      num_frames, mMaxExternalBlockSize, input[0], output[0], [this](NAM_SAMPLE** in, NAM_SAMPLE** out, int n) {
+        if (!NeedToResample())
+          mEncapsulated->process(in, out, n);
+        else
+          mResampler.ProcessBlock(in, out, n, mBlockProcessFunc);
+      });
   };
 
   void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)

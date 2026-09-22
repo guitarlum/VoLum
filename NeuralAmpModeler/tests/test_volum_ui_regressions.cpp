@@ -2203,8 +2203,16 @@ TEST_CASE("Audio-thread model apply retires to the graveyard and never throws")
     header.find("void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)", process);
   REQUIRE(processEnd != std::string::npos);
   const std::string processBody = header.substr(process, processEnd - process);
-  RequireContains(processBody, "ProcessOrBypassNamBlock");
+  RequireContains(processBody, "ProcessNamInChunks");
   RequireDoesNotContain(processBody, "throw std::runtime_error");
+
+  // Every NAM Reset goes through NamResetBlockSize. The 8192 scratch reserve on
+  // a NAM is the 1.3.0 crackle (see test_volum_realtime_budget.cpp).
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  RequireDoesNotContain(loader, "ReservedAudioBlockSize");
+  RequireContains(loader, "request.blockSize = volum::dsp_staging::NamResetBlockSize(GetBlockSize());");
+  RequireContains(source, "_ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));");
+  RequireContains(source, "temp->Reset(GetSampleRate(), volum::dsp_staging::NamResetBlockSize(GetBlockSize()));");
 }
 
 TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay muted")
