@@ -759,7 +759,6 @@ private:
   // Same re-entrancy guard for the tremolo per-mode snapshot restore cascade.
   bool mVolumTremoloRestoreInProgress = false;
   // ...and for the chorus per-mode snapshot restore cascade.
-  bool mVolumChorusRestoreInProgress = false;
   // Live working store for PRE Pitch per-mode knob memory (PRE has no effect-
   // settings struct like POST, so the live snapshots live here). Synced to/from
   // each amp's prePitchModes via the PRE save/restore-to-slot helpers.

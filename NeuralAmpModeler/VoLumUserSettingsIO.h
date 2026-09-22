@@ -669,6 +669,32 @@ inline bool ReadAmpCoreBlock(const nlohmann::json& a, VoLumAmpSettings& s)
   return healed;
 }
 
+// Inverse of WriteDualAmpUserSettings. Out-of-range values stay at whatever
+// `s` already holds (the caller passes a defaulted scene).
+inline void ReadDualAmpUserSettings(const nlohmann::json& a, VoLumAmpSettings& s, int ampCount)
+{
+  detail::JsonGetBool(a, "dualAmpActive", s.dualAmpActive);
+  detail::JsonGetClampedInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2);
+  detail::JsonGetClampedDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0);
+  detail::JsonGetClampedInt(a, "supportAmp", s.supportAmpIdx, -1, std::max(0, ampCount - 1));
+  detail::JsonGetClampedInt(a, "supportSpeaker", s.supportSpeakerIdx, 0, 3);
+  detail::JsonGetClampedInt(a, "supportChannel", s.supportChannelIdx, 0, 127);
+  detail::JsonGetClampedDouble(a, "supportInput", s.supportInputLevel, -20.0, 20.0);
+  detail::JsonGetClampedDouble(a, "supportGate", s.supportGateThreshold, -100.0, 0.0);
+  detail::JsonGetClampedDouble(a, "supportBass", s.supportToneBass, 0.0, 10.0);
+  detail::JsonGetClampedDouble(a, "supportMid", s.supportToneMid, 0.0, 10.0);
+  detail::JsonGetClampedDouble(a, "supportTreble", s.supportToneTreble, 0.0, 10.0);
+  detail::JsonGetClampedDouble(a, "supportOutput", s.supportOutputLevel, -40.0, 10.0);
+  detail::JsonGetBool(a, "supportNoiseGate", s.supportNoiseGateActive);
+  detail::JsonGetBool(a, "supportEq", s.supportEqActive);
+  detail::JsonGetClampedDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0);
+  detail::JsonGetBool(a, "supportPolarityInvert", s.supportPolarityInvert);
+  if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
+    s.supportCustomId = a["supportCustomId"].get<std::string>();
+  detail::JsonGetClampedInt(a, "supportCustomSlot", s.supportCustomSlot, -2, 2);
+  detail::JsonGetClampedInt(a, "supportCustomChannel", s.supportCustomChannel, 0, 8);
+}
+
 // Which preset each amp had selected, keyed by owner key ("factory:<idx>" or a
 // custom amp id).
 //
@@ -984,247 +1010,29 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
         const auto& a = j["amps"][key];
         auto& s = ampSettings[i];
         const VoLumAmpSettings defaults;
-        loadInt(a, "speaker", s.speakerIdx, 0, 3, defaults.speakerIdx);
-        loadInt(a, "channel", s.channelIdx, 0, 127, defaults.channelIdx);
-        loadDouble(a, "input", s.inputLevel, -20.0, 20.0, defaults.inputLevel);
-        loadDouble(a, "gate", s.gateThreshold, -100.0, 0.0, defaults.gateThreshold);
-        loadDouble(a, "bass", s.toneBass, 0.0, 10.0, defaults.toneBass);
-        loadDouble(a, "mid", s.toneMid, 0.0, 10.0, defaults.toneMid);
-        loadDouble(a, "treble", s.toneTreble, 0.0, 10.0, defaults.toneTreble);
-        loadDouble(a, "output", s.outputLevel, -40.0, 10.0, defaults.outputLevel);
-        loadBool(a, "noiseGate", s.noiseGateActive, defaults.noiseGateActive);
-        loadBool(a, "eq", s.eqActive, defaults.eqActive);
-        // VoLum 1.2.0: per-amp custom IR id (additive; absent on older files ->
-        // keep the default empty id == baked cab).
+        // Same block readers the writer composes, so a field added to a block
+        // is loaded here without a second hand-written list.
+        if (ReadAmpCoreBlock(a, s))
+          healed = true;
         if (a.contains("activeIrId") && a["activeIrId"].is_string())
           s.activeIrId = a["activeIrId"].get<std::string>();
         if (a.contains("supportActiveIrId") && a["supportActiveIrId"].is_string())
           s.supportActiveIrId = a["supportActiveIrId"].get<std::string>();
-        loadBool(a, "preCompActive", s.preCompActive, defaults.preCompActive);
-        loadDouble(a, "preCompAmount", s.preCompAmount, 0.0, 10.0, defaults.preCompAmount);
-        loadDouble(a, "preCompRatio", s.preCompRatio, 1.0, 20.0, defaults.preCompRatio);
-        loadDouble(a, "preCompAttack", s.preCompAttack, 0.1, 30.0, defaults.preCompAttack);
-        loadDouble(a, "preCompRelease", s.preCompRelease, 20.0, 800.0, defaults.preCompRelease);
-        loadDouble(a, "preCompMix", s.preCompMix, 0.0, 1.0, defaults.preCompMix);
-        loadDouble(a, "preCompLevel", s.preCompLevel, -20.0, 20.0, defaults.preCompLevel);
-        loadBool(a, "preNam1Active", s.preNam1Active, defaults.preNam1Active);
-        loadInt(a, "preNam1Capture", s.preNam1Capture, 0, 127, defaults.preNam1Capture);
+        PreBlockFromJson(a, s);
         if (resetLegacyPreCaptureSelections && a.contains("preNam1Capture")
             && s.preNam1Capture != defaults.preNam1Capture)
         {
           s.preNam1Capture = defaults.preNam1Capture;
           healed = true;
         }
-        loadDouble(a, "preNam1Gain", s.preNam1Gain, -20.0, 20.0, defaults.preNam1Gain);
-        loadDouble(a, "preNam1Bass", s.preNam1Bass, 0.0, 10.0, defaults.preNam1Bass);
-        loadDouble(a, "preNam1Mid", s.preNam1Mid, 0.0, 10.0, defaults.preNam1Mid);
-        loadDouble(a, "preNam1MidFreq", s.preNam1MidFreq, 150.0, 2500.0, defaults.preNam1MidFreq);
-        loadDouble(a, "preNam1Treble", s.preNam1Treble, 0.0, 10.0, defaults.preNam1Treble);
-        loadDouble(a, "preNam1Level", s.preNam1Level, -20.0, 20.0, defaults.preNam1Level);
-        loadBool(a, "preNam2Active", s.preNam2Active, defaults.preNam2Active);
-        loadInt(a, "preNam2Capture", s.preNam2Capture, 0, 127, defaults.preNam2Capture);
         if (resetLegacyPreCaptureSelections && a.contains("preNam2Capture")
             && s.preNam2Capture != defaults.preNam2Capture)
         {
           s.preNam2Capture = defaults.preNam2Capture;
           healed = true;
         }
-        loadDouble(a, "preNam2Gain", s.preNam2Gain, -20.0, 20.0, defaults.preNam2Gain);
-        loadDouble(a, "preNam2Bass", s.preNam2Bass, 0.0, 10.0, defaults.preNam2Bass);
-        loadDouble(a, "preNam2Mid", s.preNam2Mid, 0.0, 10.0, defaults.preNam2Mid);
-        loadDouble(a, "preNam2MidFreq", s.preNam2MidFreq, 150.0, 2500.0, defaults.preNam2MidFreq);
-        loadDouble(a, "preNam2Treble", s.preNam2Treble, 0.0, 10.0, defaults.preNam2Treble);
-        loadDouble(a, "preNam2Level", s.preNam2Level, -20.0, 20.0, defaults.preNam2Level);
-        loadBool(a, "prePitchActive", s.prePitchActive, defaults.prePitchActive);
-        loadInt(a, "prePitchMode", s.prePitchMode, 0, 1, defaults.prePitchMode);
-        loadDouble(a, "prePitchSemitones", s.prePitchSemitones, -12.0, 7.0, defaults.prePitchSemitones);
-        loadDouble(a, "prePitchMix", s.prePitchMix, 0.0, 1.0, defaults.prePitchMix);
-        loadDouble(a, "prePitchOctDown", s.prePitchOctDown, 0.0, 1.0, defaults.prePitchOctDown);
-        loadDouble(a, "prePitchOctUp", s.prePitchOctUp, 0.0, 1.0, defaults.prePitchOctUp);
-        loadDouble(a, "prePitchDry", s.prePitchDry, 0.0, 1.0, defaults.prePitchDry);
-        loadInt(a, "prePitchVoicing", s.prePitchVoicing, 0, 1, defaults.prePitchVoicing);
-        loadDouble(a, "prePitchLevel", s.prePitchLevel, -20.0, 20.0, defaults.prePitchLevel);
-        loadInt(a, "prePitchTransChar", s.prePitchTransChar, 0, volum::kVoLumPitchCharacterCount - 1,
-                defaults.prePitchTransChar);
-        if (a.contains("prePitchModes") && a["prePitchModes"].is_array())
-        {
-          const auto& modes = a["prePitchModes"];
-          for (int modeIdx = 0; modeIdx < kVoLumPitchModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
-          {
-            const auto& mode = modes[modeIdx];
-            auto& dst = s.prePitchModes[modeIdx];
-            const auto& def = defaults.prePitchModes[modeIdx];
-            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
-            loadDouble(mode, "dry", dst.dry, 0.0, 1.0, def.dry);
-            loadDouble(mode, "level", dst.level, -20.0, 20.0, def.level);
-            loadInt(mode, "voicing", dst.voicing, 0, 1, def.voicing);
-          }
-        }
-        else if (a.contains("prePitchModes"))
-        {
-          healed = true;
-        }
-        loadBool(a, "dualAmpActive", s.dualAmpActive, defaults.dualAmpActive);
-        loadInt(a, "dualAmpRoute", s.dualAmpRoute, 0, 2, defaults.dualAmpRoute);
-        loadDouble(a, "mainAmpPan", s.mainAmpPan, -1.0, 1.0, defaults.mainAmpPan);
-        loadInt(a, "supportAmp", s.supportAmpIdx, -1, ampCount - 1, defaults.supportAmpIdx);
-        loadInt(a, "supportSpeaker", s.supportSpeakerIdx, 0, 3, defaults.supportSpeakerIdx);
-        loadInt(a, "supportChannel", s.supportChannelIdx, 0, 127, defaults.supportChannelIdx);
-        loadDouble(a, "supportInput", s.supportInputLevel, -20.0, 20.0, defaults.supportInputLevel);
-        loadDouble(a, "supportGate", s.supportGateThreshold, -100.0, 0.0, defaults.supportGateThreshold);
-        loadDouble(a, "supportBass", s.supportToneBass, 0.0, 10.0, defaults.supportToneBass);
-        loadDouble(a, "supportMid", s.supportToneMid, 0.0, 10.0, defaults.supportToneMid);
-        loadDouble(a, "supportTreble", s.supportToneTreble, 0.0, 10.0, defaults.supportToneTreble);
-        loadDouble(a, "supportOutput", s.supportOutputLevel, -40.0, 10.0, defaults.supportOutputLevel);
-        loadBool(a, "supportNoiseGate", s.supportNoiseGateActive, defaults.supportNoiseGateActive);
-        loadBool(a, "supportEq", s.supportEqActive, defaults.supportEqActive);
-        loadDouble(a, "supportPan", s.supportAmpPan, -1.0, 1.0, defaults.supportAmpPan);
-        loadBool(a, "supportPolarityInvert", s.supportPolarityInvert, defaults.supportPolarityInvert);
-        // 1.2.0: custom SUPPORT partner id + its own cab/channel (additive; absent
-        // on older files -> keep defaults == no custom support partner).
-        if (a.contains("supportCustomId") && a["supportCustomId"].is_string())
-          s.supportCustomId = a["supportCustomId"].get<std::string>();
-        loadInt(a, "supportCustomSlot", s.supportCustomSlot, -2, 2, defaults.supportCustomSlot);
-        loadInt(a, "supportCustomChannel", s.supportCustomChannel, 0, 8, defaults.supportCustomChannel);
-
-        // v6+ per-amp POST live values. On legacy (v<6) settings the keys are absent
-        // and the struct defaults remain in place; postValid stays false so amp restore
-        // can initialize a fresh factory POST scene instead of copying the previously
-        // selected amp's POST settings.
-        loadBool(a, "postValid", s.postValid, defaults.postValid);
-        loadBool(a, "postDelayActive", s.postDelayActive, defaults.postDelayActive);
-        loadDouble(a, "postDelayTime", s.postDelayTime, 10.0, 2000.0, defaults.postDelayTime);
-        loadDouble(a, "postDelayFeedback", s.postDelayFeedback, 0.0, 0.99, defaults.postDelayFeedback);
-        loadDouble(a, "postDelayMix", s.postDelayMix, 0.0, 1.0, defaults.postDelayMix);
-        loadInt(a, "postDelayMode", s.postDelayMode, 0, kVoLumDelayModeCount - 1, defaults.postDelayMode);
-        loadDouble(a, "postDelayTone", s.postDelayTone, 0.0, 1.0, defaults.postDelayTone);
-        loadDouble(a, "postDelayAge", s.postDelayAge, 0.0, 1.0, defaults.postDelayAge);
-        loadBool(a, "postDelayPingPong", s.postDelayPingPong, defaults.postDelayPingPong);
-        loadBool(a, "postDelaySync", s.postDelaySync, defaults.postDelaySync);
-        loadInt(
-          a, "postDelayDivision", s.postDelayDivision, 0, kVoLumTremoloDivisionCount - 1, defaults.postDelayDivision);
-        loadBool(a, "postReverbActive", s.postReverbActive, defaults.postReverbActive);
-        loadDouble(a, "postReverbMix", s.postReverbMix, 0.0, 1.0, defaults.postReverbMix);
-        loadDouble(a, "postReverbDecay", s.postReverbDecay, 0.1, 10.0, defaults.postReverbDecay);
-        loadDouble(a, "postReverbTone", s.postReverbTone, 0.0, 10.0, defaults.postReverbTone);
-        loadDouble(a, "postReverbPreDelay", s.postReverbPreDelay, 0.0, 200.0, defaults.postReverbPreDelay);
-        loadDouble(a, "postReverbShimmer", s.postReverbShimmer, 0.0, 1.0, defaults.postReverbShimmer);
-        loadInt(a, "postReverbMode", s.postReverbMode, 0, kVoLumReverbModeCount - 1, defaults.postReverbMode);
-        loadInt(a, "postReverbSubMode", s.postReverbSubMode, 0, 2, defaults.postReverbSubMode);
-        loadBool(a, "postTremoloActive", s.postTremoloActive, defaults.postTremoloActive);
-        loadInt(a, "postTremoloMode", s.postTremoloMode, 0, kVoLumTremoloModeCount - 1, defaults.postTremoloMode);
-        loadDouble(a, "postTremoloRate", s.postTremoloRate, 0.1, 20.0, defaults.postTremoloRate);
-        loadDouble(a, "postTremoloDepth", s.postTremoloDepth, 0.0, 1.0, defaults.postTremoloDepth);
-        loadDouble(a, "postTremoloShape", s.postTremoloShape, 0.0, 1.0, defaults.postTremoloShape);
-        loadDouble(a, "postTremoloMix", s.postTremoloMix, 0.0, 1.0, defaults.postTremoloMix);
-        loadDouble(a, "postTremoloCrossover", s.postTremoloCrossover, 200.0, 2000.0, defaults.postTremoloCrossover);
-        loadBool(a, "postTremoloSync", s.postTremoloSync, defaults.postTremoloSync);
-        loadInt(a, "postTremoloDivision", s.postTremoloDivision, 0, kVoLumTremoloDivisionCount - 1,
-                defaults.postTremoloDivision);
-        loadBool(a, "postChorusActive", s.postChorusActive, defaults.postChorusActive);
-        loadInt(a, "postChorusMode", s.postChorusMode, 0, kVoLumChorusModeCount - 1, defaults.postChorusMode);
-        loadDouble(a, "postChorusRate", s.postChorusRate, 0.0, 1.0, defaults.postChorusRate);
-        loadDouble(a, "postChorusDepth", s.postChorusDepth, 0.0, 1.0, defaults.postChorusDepth);
-        loadDouble(a, "postChorusTone", s.postChorusTone, 0.0, 1.0, defaults.postChorusTone);
-        loadDouble(a, "postChorusWidth", s.postChorusWidth, 0.0, 1.0, defaults.postChorusWidth);
-        loadDouble(a, "postChorusMix", s.postChorusMix, 0.0, 1.0, defaults.postChorusMix);
-        if (a.contains("postDelayModes") && a["postDelayModes"].is_array())
-        {
-          const auto& modes = a["postDelayModes"];
-          for (int modeIdx = 0; modeIdx < kVoLumDelayModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
-          {
-            const auto& mode = modes[modeIdx];
-            auto& dst = s.postDelayModes[modeIdx];
-            const auto& def = defaults.postDelayModes[modeIdx];
-            loadDouble(mode, "time", dst.time, 10.0, 2000.0, def.time);
-            loadDouble(mode, "feedback", dst.feedback, 0.0, 0.99, def.feedback);
-            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
-            loadDouble(mode, "tone", dst.tone, 0.0, 1.0, def.tone);
-            loadDouble(mode, "age", dst.age, 0.0, 1.0, def.age);
-            loadBool(mode, "pingPong", dst.pingPong, def.pingPong);
-          }
-        }
-        else if (a.contains("postDelayModes"))
-        {
-          healed = true;
-        }
-        if (a.contains("postReverbModes") && a["postReverbModes"].is_array())
-        {
-          const auto& modes = a["postReverbModes"];
-          for (int modeIdx = 0; modeIdx < kVoLumReverbModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
-          {
-            const auto& mode = modes[modeIdx];
-            auto& dst = s.postReverbModes[modeIdx];
-            const auto& def = defaults.postReverbModes[modeIdx];
-            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
-            loadDouble(mode, "decay", dst.decay, 0.1, 10.0, def.decay);
-            loadDouble(mode, "tone", dst.tone, 0.0, 10.0, def.tone);
-            loadDouble(mode, "preDelay", dst.preDelay, 0.0, 200.0, def.preDelay);
-            loadDouble(mode, "shimmer", dst.shimmer, 0.0, 1.0, def.shimmer);
-            loadInt(mode, "subMode", dst.subMode, 0, 2, def.subMode);
-          }
-        }
-        else if (a.contains("postReverbModes"))
-        {
-          healed = true;
-        }
-        if (a.contains("postOktaverbSubModes") && a["postOktaverbSubModes"].is_array())
-        {
-          const auto& subModes = a["postOktaverbSubModes"];
-          for (int subIdx = 0; subIdx < 3 && subIdx < static_cast<int>(subModes.size()); ++subIdx)
-          {
-            const auto& sub = subModes[subIdx];
-            auto& dst = s.postOktaverbSubModes[subIdx];
-            const auto& def = defaults.postOktaverbSubModes[subIdx];
-            loadDouble(sub, "mix", dst.mix, 0.0, 1.0, def.mix);
-            loadDouble(sub, "decay", dst.decay, 0.1, 10.0, def.decay);
-            loadDouble(sub, "tone", dst.tone, 0.0, 10.0, def.tone);
-            loadDouble(sub, "preDelay", dst.preDelay, 0.0, 200.0, def.preDelay);
-            loadDouble(sub, "shimmer", dst.shimmer, 0.0, 1.0, def.shimmer);
-          }
-        }
-        else if (a.contains("postOktaverbSubModes"))
-        {
-          healed = true;
-        }
-        if (a.contains("postTremoloModes") && a["postTremoloModes"].is_array())
-        {
-          const auto& modes = a["postTremoloModes"];
-          for (int modeIdx = 0; modeIdx < kVoLumTremoloModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
-          {
-            const auto& mode = modes[modeIdx];
-            auto& dst = s.postTremoloModes[modeIdx];
-            const auto& def = defaults.postTremoloModes[modeIdx];
-            loadDouble(mode, "rate", dst.rate, 0.1, 20.0, def.rate);
-            loadDouble(mode, "depth", dst.depth, 0.0, 1.0, def.depth);
-            loadDouble(mode, "shape", dst.shape, 0.0, 1.0, def.shape);
-            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
-            loadDouble(mode, "crossover", dst.crossover, 200.0, 2000.0, def.crossover);
-          }
-        }
-        else if (a.contains("postTremoloModes"))
-        {
-          healed = true;
-        }
-        if (a.contains("postChorusModes") && a["postChorusModes"].is_array())
-        {
-          const auto& modes = a["postChorusModes"];
-          for (int modeIdx = 0; modeIdx < kVoLumChorusModeCount && modeIdx < static_cast<int>(modes.size()); ++modeIdx)
-          {
-            const auto& mode = modes[modeIdx];
-            auto& dst = s.postChorusModes[modeIdx];
-            const auto& def = defaults.postChorusModes[modeIdx];
-            loadDouble(mode, "rate", dst.rate, 0.0, 1.0, def.rate);
-            loadDouble(mode, "depth", dst.depth, 0.0, 1.0, def.depth);
-            loadDouble(mode, "tone", dst.tone, 0.0, 1.0, def.tone);
-            loadDouble(mode, "width", dst.width, 0.0, 1.0, def.width);
-            loadDouble(mode, "mix", dst.mix, 0.0, 1.0, def.mix);
-          }
-        }
-        else if (a.contains("postChorusModes"))
-        {
-          healed = true;
-        }
+        ReadDualAmpUserSettings(a, s, ampCount);
+        PostBlockFromJson(a, s);
       }
     }
   }

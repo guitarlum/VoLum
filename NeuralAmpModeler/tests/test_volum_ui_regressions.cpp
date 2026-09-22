@@ -2665,3 +2665,25 @@ TEST_CASE("tier2f SUPPORT identity follows the custom amp id")
   REQUIRE(idle != std::string::npos);
   RequireContains(cpp.substr(idle, 800), "_VolumRebindCustomSupportIdx()");
 }
+
+TEST_CASE("tier2g the settings reader is the block readers and chorus has no private restore flag")
+{
+  const std::string io = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUserSettingsIO.h");
+  const auto from = io.find("inline void VolumUserSettingsFromJson(");
+  REQUIRE(from != std::string::npos);
+  const std::string body = io.substr(from, 8000);
+  RequireContains(body, "ReadAmpCoreBlock(a, s)");
+  RequireContains(body, "PreBlockFromJson(a, s)");
+  RequireContains(body, "PostBlockFromJson(a, s)");
+  RequireContains(body, "ReadDualAmpUserSettings(a, s, ampCount)");
+  RequireDoesNotContain(body, "loadBool(a, \"postChorusActive\"");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  RequireDoesNotContain(header, "mVolumChorusRestoreInProgress");
+  const std::string tail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
+  RequireContains(tail, "double octDown = 0.8");
+  const std::string repair = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumRigRepair.inc.cpp");
+  const auto plan = repair.find("SiblingDeletedAmpNeedsRepair(ampGone(rig.mainCustomAmpId))");
+  const auto support = repair.find("SiblingDeletedAmpNeedsRepair(ampGone(rig.supportCustomAmpId))", plan);
+  REQUIRE(plan != std::string::npos);
+  REQUIRE(support != std::string::npos);
+}

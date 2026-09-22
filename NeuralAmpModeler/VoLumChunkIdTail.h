@@ -81,7 +81,7 @@ struct PitchTail
   int mode = 0; // 0=Transpose, 1=Octaver
   double semitones = 0.0;
   double mix = 1.0;
-  double octDown = 0.0;
+  double octDown = 0.8;
   double octUp = 0.0;
   double dry = 1.0;
   int voicing = 1; // 0=Vintage, 1=Modern
@@ -210,7 +210,7 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
   if (j.contains("mix"))
     p.mix = num(j["mix"], 1.0);
   if (j.contains("octDn"))
-    p.octDown = num(j["octDn"], 0.0);
+    p.octDown = num(j["octDn"], 0.8);
   if (j.contains("octUp"))
     p.octUp = num(j["octUp"], 0.0);
   if (j.contains("dry"))

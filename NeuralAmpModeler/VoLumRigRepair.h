@@ -204,8 +204,7 @@ inline RigRepairPlan PlanDelete(const SoundingRig& rig, const LibraryItemRef& it
       if (onMain && onSupport)
         inUse = " It is convolving MAIN and SUPPORT right now. Both lanes will fall back to their baked cab.";
       else if (onMain)
-        inUse = " It is convolving MAIN right now. MAIN will fall back to " + FactoryAmpLabel(labels)
-                + "'s baked cab.";
+        inUse = " It is convolving MAIN right now. MAIN will fall back to " + FactoryAmpLabel(labels) + "'s baked cab.";
       else if (onSupport)
         inUse = " It is convolving SUPPORT right now. SUPPORT will fall back to its baked cab.";
       break;
@@ -229,8 +228,8 @@ inline RigRepairPlan PlanDelete(const SoundingRig& rig, const LibraryItemRef& it
         plan.after.preCapture[1] = 0;
       }
       if (one || two)
-        inUse = " It is loaded in " + PreSlotList(one, two) + " right now. " + PreSlotList(one, two)
-                + " will be empty.";
+        inUse =
+          " It is loaded in " + PreSlotList(one, two) + " right now. " + PreSlotList(one, two) + " will be empty.";
       break;
     }
     case LibraryKind::Preset:
@@ -324,6 +323,14 @@ inline RigRepairPlan PlanReplace(const SoundingRig& rig, const LibraryItemRef& i
 inline bool SiblingMustRepairOnNextNeed(bool resolvable)
 {
   return !resolvable;
+}
+
+// Both lanes pass ampGone(...). The resolvable helper stays as it is; this
+// wrapper is the polarity the repair plan uses, so a later edit cannot flip
+// only the MAIN call.
+inline bool SiblingDeletedAmpNeedsRepair(bool gone)
+{
+  return SiblingMustRepairOnNextNeed(!gone);
 }
 
 } // namespace volum::rig

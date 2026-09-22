@@ -520,21 +520,8 @@ void NeuralAmpModeler::_VolumSaveChorusModeSnapshot(int mode)
 
 void NeuralAmpModeler::_VolumRestoreChorusModeSnapshot(int mode)
 {
-  // Same re-entrancy guard as the reverb/tremolo paths: the setParam cascade
-  // below reaches OnParamChangeUI for the chorus knobs and would otherwise write
-  // the partially-restored state back into the snapshot we are loading from.
-  struct RestoreGuard
-  {
-    bool& flag;
-    bool prev;
-    explicit RestoreGuard(bool& f)
-    : flag(f)
-    , prev(f)
-    {
-      flag = true;
-    }
-    ~RestoreGuard() { flag = prev; }
-  } guard(mVolumChorusRestoreInProgress);
+  // The mode handler already bails while mVolumPostRestoreInProgress is set.
+  // Nothing reads a chorus-only flag, so this restore does not keep one.
 
   // Per-knob double-click "reset to default" lands on the design value for the
   // CURRENT chorus voice, matching the delay/reverb/tremolo behavior.
@@ -651,4 +638,3 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
   setParam(kReverbPreDelay, s.preDelay);
   setParam(kReverbShimmer, s.shimmer);
 }
-
