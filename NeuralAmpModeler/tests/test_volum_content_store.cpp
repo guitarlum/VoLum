@@ -579,6 +579,23 @@ TEST_CASE("DefaultCaptureSelection picks DIRECT-first, lowest channel")
   CHECK(c2 == 7);
 }
 
+TEST_CASE("tier2h a file-less custom amp does not keep the previous cab")
+{
+  using volum::custom::kDirectSlot;
+  volum::custom::CustomAmp empty;
+  int slot = 3, channel = 4;
+  CaptureSelectionOrDefault(empty, slot, channel);
+  CHECK(slot == kDirectSlot);
+  CHECK(channel == 1);
+
+  volum::custom::CustomAmp amp;
+  amp.files = {{"a.nam", 0, 2}};
+  int pickedSlot = 3, pickedChannel = 4;
+  CaptureSelectionOrDefault(amp, pickedSlot, pickedChannel);
+  CHECK(pickedSlot == 0);
+  CHECK(pickedChannel == 2);
+}
+
 TEST_CASE("Custom-amp storedPath survives a registry round-trip")
 {
   Registry r;

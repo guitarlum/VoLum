@@ -290,6 +290,7 @@ enum class KeyConsumer
   OverlayNav,
   Swallow,
   FallThrough,
+  ConfirmEnter,
   Knob,
   Rig,
 };
@@ -370,7 +371,7 @@ inline KeyConsumer RouteKey(const OverlayStack& s, KeyKind kind)
   if (kind == KeyKind::Arrow && top == OverlayId::Custom)
     return KeyConsumer::OverlayNav;
   if (kind == KeyKind::Enter && top == OverlayId::Confirm)
-    return KeyConsumer::FallThrough;
+    return KeyConsumer::ConfirmEnter;
   return KeyConsumer::Swallow;
 }
 

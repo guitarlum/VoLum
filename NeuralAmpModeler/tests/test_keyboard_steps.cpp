@@ -75,9 +75,9 @@ TEST_CASE("Keyboard: CHORUS is a distinct focus target with its own knob memory 
   using namespace volum::keyboard;
   const int chorus = TargetIndex(EVoLumEffectFocus::CHORUS, false);
   CHECK(chorus < kTargetCount);
-  for (auto other : {EVoLumEffectFocus::DELAY, EVoLumEffectFocus::REVERB, EVoLumEffectFocus::TREMOLO,
-                     EVoLumEffectFocus::PITCH, EVoLumEffectFocus::COMP, EVoLumEffectFocus::PRE_NAM1,
-                     EVoLumEffectFocus::PRE_NAM2, EVoLumEffectFocus::AMP})
+  for (auto other :
+       {EVoLumEffectFocus::DELAY, EVoLumEffectFocus::REVERB, EVoLumEffectFocus::TREMOLO, EVoLumEffectFocus::PITCH,
+        EVoLumEffectFocus::COMP, EVoLumEffectFocus::PRE_NAM1, EVoLumEffectFocus::PRE_NAM2, EVoLumEffectFocus::AMP})
   {
     INFO("vs focus " << static_cast<int>(other));
     CHECK(TargetIndex(other, false) != chorus);
@@ -207,7 +207,7 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
     {"pack H closes", pack, KeyKind::HotkeyH, KeyConsumer::CloseOverlay},
     {"dropdown Esc", dropdown, KeyKind::Escape, KeyConsumer::CloseOverlay},
     {"dropdown T", dropdown, KeyKind::HotkeyT, KeyConsumer::Swallow},
-    {"confirm Enter falls through", confirm, KeyKind::Enter, KeyConsumer::FallThrough},
+    {"confirm Enter reaches the dialog", confirm, KeyKind::Enter, KeyConsumer::ConfirmEnter},
     {"confirm H", confirm, KeyKind::HotkeyH, KeyConsumer::Swallow},
     {"knob Esc", knob, KeyKind::Escape, KeyConsumer::Knob},
     {"knob arrow stays on knob", knob, KeyKind::Arrow, KeyConsumer::Knob},
@@ -287,4 +287,3 @@ TEST_CASE("Editor close stops tuner mute and metronome click together")
   CHECK_FALSE(tuner.IsActive());
   CHECK_FALSE(metro.IsActive());
 }
-

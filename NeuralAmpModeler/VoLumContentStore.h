@@ -471,6 +471,16 @@ inline bool DefaultCaptureSelection(const custom::CustomAmp& amp, int& slot, int
   return true;
 }
 
+// File-less amps leave DefaultCaptureSelection's outputs untouched. A new
+// SUPPORT partner must not keep the previous partner's cab, so start from
+// DIRECT / channel 1 and only replace that when the amp has files.
+inline void CaptureSelectionOrDefault(const custom::CustomAmp& amp, int& slot, int& channel)
+{
+  slot = custom::kDirectSlot;
+  channel = 1;
+  DefaultCaptureSelection(amp, slot, channel);
+}
+
 struct Registry
 {
   std::vector<custom::CustomAmp> amps; // manifests (inline)

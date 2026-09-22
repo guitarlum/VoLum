@@ -1673,13 +1673,6 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 
   if (auto pGraphics = GetUI())
   {
-    // A user-driven param edit may diverge the live chain from the recalled
-    // preset snapshot -> re-evaluate the "(unsaved)" flag with an equality test
-    // (so nudging a knob back to the preset value clears it again). Programmatic
-    // restores (amp switch, preset recall) arrive via kDelegate/kReset, not kUI.
-    if (source == EParamSource::kUI)
-      _VolumRecomputePresetDirty();
-
     bool active = GetParam(paramIdx)->Bool();
 
     switch (paramIdx)
@@ -1833,6 +1826,13 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
     }
 
     _VolumRefreshPrePostLockChrome(paramIdx);
+
+    // After the mode switch. Recompute saves the live knobs into the current
+    // mode slot; doing that first would stamp the outgoing knobs onto the mode
+    // just selected. kDelegate/kReset stay out so a recall can finish before
+    // the snapshot is compared. VST3 undo and automation arrive as kHost.
+    if (source == EParamSource::kUI || source == EParamSource::kHost)
+      _VolumRecomputePresetDirty();
   }
 }
 

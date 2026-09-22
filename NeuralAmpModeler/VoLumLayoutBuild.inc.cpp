@@ -1610,6 +1610,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             overlay->As<VoLumCustomOverlayControl>()->OnArrowKey(key.VK);
           return true;
         case KeyConsumer::Swallow: return true;
+        case KeyConsumer::ConfirmEnter:
+          if (auto* confirm = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
+            confirm->OnKeyDown(0.f, 0.f, key);
+          return true;
         case KeyConsumer::FallThrough: return false;
         case KeyConsumer::Knob:
           if (_HandleVoLumSelectedKnobKey(key))

@@ -2666,6 +2666,48 @@ TEST_CASE("tier2f SUPPORT identity follows the custom amp id")
   RequireContains(cpp.substr(idle, 800), "_VolumRebindCustomSupportIdx()");
 }
 
+TEST_CASE("tier2h host undo refreshes the unsaved flag and Enter confirms off the dialog")
+{
+  const std::string source = ReadPluginSource();
+  const auto ui = source.find("void NeuralAmpModeler::OnParamChangeUI");
+  REQUIRE(ui != std::string::npos);
+  const auto modeCase = source.find("case kDelayMode:", ui);
+  REQUIRE(modeCase != std::string::npos);
+  CHECK(source.substr(ui, modeCase - ui).find("_VolumRecomputePresetDirty") == std::string::npos);
+  const auto recompute = source.find("_VolumRecomputePresetDirty()", modeCase);
+  REQUIRE(recompute != std::string::npos);
+  RequireContains(source.substr(recompute - 220, 260), "source == EParamSource::kUI || source == EParamSource::kHost");
+
+  const std::string keys = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardModel.h");
+  RequireContains(keys, "return KeyConsumer::ConfirmEnter;");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto enter = layout.find("case KeyConsumer::ConfirmEnter:");
+  REQUIRE(enter != std::string::npos);
+  RequireContains(layout.substr(enter, 280), "confirm->OnKeyDown(0.f, 0.f, key);");
+
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
+  const auto pick = menus.find("void NeuralAmpModeler::_VolumSetSupportCustom");
+  REQUIRE(pick != std::string::npos);
+  const std::string pickBody = menus.substr(pick, 1600);
+  RequireContains(pickBody, "CaptureSelectionOrDefault(amp, s, c)");
+  RequireDoesNotContain(pickBody, "if (volum::content::DefaultCaptureSelection(amp, s, c))");
+}
+
+TEST_CASE("tier2h macOS alert swap matches the panel and WinMM drops a status-less byte")
+{
+  const std::string mac = ReadText(RepoRoot() / "iPlug2" / "IGraphics" / "Platforms" / "IGraphicsMac.mm");
+  const auto panel = mac.find("EMsgBoxResult IGraphicsMac::ShowMessageBox");
+  REQUIRE(panel != std::string::npos);
+  RequireContains(mac.substr(panel, 1600), "NSRunAlertPanel(msg, @\"%@\", @\"OK\"");
+  const std::string plugin = ReadPluginSource();
+  RequireContains(plugin, "return pGraphics->ShowMessageBox(caption, str, type);");
+
+  const std::string rtmidi = ReadText(RepoRoot() / "iPlug2" / "Dependencies" / "IPlug" / "RTMidi" / "RtMidi.cpp");
+  const auto winmm = rtmidi.find("if ( inputStatus == MIM_DATA )");
+  REQUIRE(winmm != std::string::npos);
+  RequireContains(rtmidi.substr(winmm, 400), "if ( !(status & 0x80) ) return;");
+}
+
 TEST_CASE("tier2g the settings reader is the block readers and chorus has no private restore flag")
 {
   const std::string io = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUserSettingsIO.h");

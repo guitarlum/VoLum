@@ -218,7 +218,7 @@ If VoLum cannot read the library file, it keeps that file as `volum-content.json
 
 The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library. Two VoLums may edit the library at the same time — the standalone app and one in your DAW, or two tracks — and each one only writes its own changes, so importing an IR in one window can no longer be undone by the other window saving a preset.
 
-Deleting something that is currently playing moves that lane in the same action, in the window you deleted it in: a deleted main amp falls back to the factory amp shown in the list, a deleted pedal leaves its PRE slot empty, a deleted IR returns to the amp's built-in cabinet, and a deleted preset is forgotten. The confirmation tells you what is playing and where it will go before you agree. Another open VoLum keeps playing what it already has until it next needs the deleted item.
+Deleting something that is currently playing moves that lane in the same action, in the window you deleted it in: a deleted main amp falls back to the factory amp shown in the list, a deleted pedal leaves its PRE slot empty, a deleted IR returns to the amp's built-in cabinet, and a deleted preset is forgotten. The confirmation tells you what is playing and where it will go before you agree. Enter agrees even when the pointer is not over that window. Another open VoLum keeps playing what it already has until it next needs the deleted item.
 
 See [Content Library Packs](#content-library-packs) for moving a library to another machine or sharing part of it.
 

@@ -257,12 +257,10 @@ void NeuralAmpModeler::_VolumSetSupportCustom(int customIdx)
   _VolumActiveScene().supportCustomId = volum::custom::CustomAmpIdAt(customIdx);
   {
     const auto amp = volum::custom::CustomAmpAt(customIdx);
-    int s = volum::custom::kDirectSlot, c = 1;
-    if (volum::content::DefaultCaptureSelection(amp, s, c))
-    {
-      mVolumCustomSupportSlot = s;
-      mVolumCustomSupportChannel = c;
-    }
+    int s = 0, c = 0;
+    volum::content::CaptureSelectionOrDefault(amp, s, c);
+    mVolumCustomSupportSlot = s;
+    mVolumCustomSupportChannel = c;
     // Persist the freshly resolved cab/channel so it round-trips like MAIN.
     _VolumActiveScene().supportCustomSlot = mVolumCustomSupportSlot;
     _VolumActiveScene().supportCustomChannel = mVolumCustomSupportChannel;
