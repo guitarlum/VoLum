@@ -2529,6 +2529,9 @@ TEST_CASE("tier2e Calibrated n/a disables that radio state")
   REQUIRE(end != std::string::npos);
   const std::string body = controls.substr(start, end - start);
   RequireContains(body, "SetStateDisabled(2, disable)");
+  // A bare Resize leaves Raw/Normalized holding garbage and the radio stuck.
+  RequireContains(body, "EnsureRadioDisabledStates(mDisabledState, mNumStates)");
+  RequireDoesNotContain(body, "mDisabledState.Resize(");
   const std::string click = controls.substr(end, 280);
   RequireContains(click, "GetStateDisabled(index)");
 }

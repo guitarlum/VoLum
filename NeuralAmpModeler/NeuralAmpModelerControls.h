@@ -896,10 +896,10 @@ public:
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
     // The constructor is given no option list, so the disabled-state buffer stays
-    // empty after OnInit copies the parameter's state count. Resize before the
+    // empty after OnInit copies the parameter's state count. Grow it before the
     // call or SetStateDisabled is a no-op and the radio stays live.
-    if (mNumStates > 2 && mDisabledState.GetSize() < mNumStates)
-      mDisabledState.Resize(mNumStates);
+    if (mNumStates > 2)
+      volum::EnsureRadioDisabledStates(mDisabledState, mNumStates);
     SetStateDisabled(2, disable);
   };
 
