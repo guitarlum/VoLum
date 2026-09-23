@@ -727,8 +727,8 @@ private:
       const double excursion = mRamp[0].Tick();
       const double drift = mRamp[1].Tick();
       const double shift = mRamp[2].Tick();
-      const double near = mRamp[3].Tick();
-      const double far = mRamp[4].Tick();
+      const double nearGain = mRamp[3].Tick();
+      const double farGain = mRamp[4].Tick();
       const double drift0 = mRamp[5].Tick();
       const double drift1 = mRamp[6].Tick();
       const double drift2 = mRamp[7].Tick();
@@ -743,8 +743,8 @@ private:
       const double vR = _Read(1, baseR + shift + excursion * lfoR + drift * drift2);
       if (chans > 1)
       {
-        _Emit(ch[0][i], 0, near * vL + centreGain * vC + far * vR, g);
-        _Emit(ch[1][i], 1, far * vL + centreGain * vC + near * vR, g);
+        _Emit(ch[0][i], 0, nearGain * vL + centreGain * vC + farGain * vR, g);
+        _Emit(ch[1][i], 1, farGain * vL + centreGain * vC + nearGain * vR, g);
       }
       else
         _Emit(ch[0][i], 0, monoNorm * (kEnsembleMono[0] * vL + kEnsembleMono[1] * vC + kEnsembleMono[2] * vR), g);
