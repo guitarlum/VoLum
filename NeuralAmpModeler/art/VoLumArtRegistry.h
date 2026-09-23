@@ -42,7 +42,7 @@ inline constexpr ArtSpec kArtSpecs[kFactoryArtCount] = {
   {6,  7,  "Marshall 2204",      "Windswept Glow",   "VoLumArtMarshall2204.h",  ArtClass::Split,     true},
   {7,  8,  "Marshall JMP 2203",  "Depth Triforce",   "VoLumArtJmp2203.h",       ArtClass::Split,     true},
   {8,  9,  "Marshall JVM",       "Levy Nebula",      "VoLumArtJvm210.h",        ArtClass::Additive,  true},
-  {9,  10, "Orange OD120",       "Ember Bulb",       "VoLumArtOrangeOd120.h",   ArtClass::Additive,  false},
+  {9,  10, "Orange OD120",       "Ember Bulb",       "VoLumArtOrangeOd120.h",   ArtClass::Additive,  true},
   {10, 11, "Orange ORS100",      "Julia Nebula",     "VoLumArtOrangeOrs100.h",  ArtClass::Additive,  false},
   {11, 12, "Sebago Texas Fl.",   "Clifford Nebula",  "VoLumArtSebago.h",        ArtClass::Additive,  false},
   {12, 13, "Soldano SLO100",     "Beacon Sweep",     "VoLumArtSoldano.h",       ArtClass::Split,     true},
