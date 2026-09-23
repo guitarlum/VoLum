@@ -47,6 +47,7 @@ tests, or user-facing docs skips this loop.
 - **You run** builds/tests in this environment; do not only tell the user what to run.
 - After failures: diagnose, fix, retry—do not stop after one error.
 - Rebuild the standalone with `run-app-win.ps1` (it stops `VoLum` and `VoLum_x64`). If the linker reports a locked VST3, close the host DAW.
+- Never junction the main checkout's submodules into a `git worktree`. `git worktree remove --force` follows junctions and empties the main checkout (happened 2026-09-23; recovered with `git submodule update --init`). Run `git submodule update --init` inside the worktree instead.
 - Shell is **Windows PowerShell 5.x**: chain commands with `;` plus `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`. Do not use `&&` / `||` — PowerShell 5.x rejects them as invalid statement separators.
 - Multi-line `git commit` messages: write the message to a temp file, then
   `git commit -F <file>`. A bash heredoc is invalid here, and a here-string
