@@ -34,7 +34,7 @@ inline constexpr int kFactoryArtCount = 15;
 // clang-format off
 inline constexpr ArtSpec kArtSpecs[kFactoryArtCount] = {
   {0,  0,  "Ampete One",         "Dragon Nebula",    "VoLumArtAmpeteOne.h",     ArtClass::Additive,  true},
-  {1,  1,  "Bad Cat Mini Cat",   "Eyes in the Dark", "VoLumArtBadCat.h",        ArtClass::Split,     false},
+  {1,  1,  "Bad Cat Mini Cat",   "Eyes in the Dark", "VoLumArtBadCat.h",        ArtClass::Split,     true},
   {2,  2,  "Brunetti XL 2",      "Verdant Fern",     "VoLumArtBrunetti.h",      ArtClass::Transform, false},
   {3,  4,  "Fryette Deliv. 120", "Spiral Galaxy",    "VoLumArtFryette.h",       ArtClass::Split,     false},
   {4,  5,  "H&K TriAmp Mk2",     "Lissajous Nebula", "VoLumArtHkTriamp.h",      ArtClass::Additive,  true},
