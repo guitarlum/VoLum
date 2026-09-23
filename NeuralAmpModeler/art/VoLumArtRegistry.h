@@ -46,7 +46,7 @@ inline constexpr ArtSpec kArtSpecs[kFactoryArtCount] = {
   {10, 11, "Orange ORS100",      "Julia Nebula",     "VoLumArtOrangeOrs100.h",  ArtClass::Additive,  true},
   {11, 12, "Sebago Texas Fl.",   "Clifford Nebula",  "VoLumArtSebago.h",        ArtClass::Additive,  true},
   {12, 13, "Soldano SLO100",     "Beacon Sweep",     "VoLumArtSoldano.h",       ArtClass::Split,     true},
-  {13, 14, "THC Sunset",         "Dark Sun",         "VoLumArtThcSunset.h",     ArtClass::Split,     false},
+  {13, 14, "THC Sunset",         "Dark Sun",         "VoLumArtThcSunset.h",     ArtClass::Split,     true},
   {14, 3,  "Diezel Herbert Mk1", "Lichtenberg Glow", "VoLumArtDiezelHerbert.h", ArtClass::Split,     false},
 };
 // clang-format on
