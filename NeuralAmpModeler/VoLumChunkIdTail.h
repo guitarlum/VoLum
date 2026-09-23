@@ -132,10 +132,10 @@ struct ChorusTail
   bool present = false;
   bool active = false;
   int mode = kVoLumChorusModeDefault;
-  double rate = 0.35;
-  double depth = 0.45;
-  double tone = 0.40;
-  double width = 0.70;
+  double rate = 0.44;
+  double depth = 0.36;
+  double tone = 0.21;
+  double width = 0.60;
   double mix = 0.50;
   // Per-mode knob memory (Classic / Warped / Clear / Ensemble).
   ChorusModeSnapshot modes[kVoLumChorusModeCount] = {

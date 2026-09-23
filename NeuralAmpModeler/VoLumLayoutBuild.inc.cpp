@@ -809,21 +809,25 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   // knobs, no tempo sync and no per-mode slot swap: the mode picker retunes what
   // each knob spans instead of changing which knobs exist.
   drawKnobCol(1, "RATE", kChorusRate, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
-              "Modulation speed. Each voice maps this to its own range - WARPED is the slowest, CLASSIC the fastest.");
+              "LFO speed. Each voice has its own range: CLASSIC 0.1-10 Hz, WARPED 0.2-6, CLEAR "
+              "0.1-2, ENSEMBLE 0.15-3.");
   drawKnobCol(2, "DEPTH", kChorusDepth, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
-              "How far the pitch/delay wanders each cycle. Small values shimmer, large values seasick.");
+              "Detune in cents, the same strength at any RATE (CLASSIC: the Juno delay sweep, "
+              "0-6 ms). High values go seasick; at the slowest rates the deepest settings are capped.");
   drawKnobCol(3, "TONE", kChorusTone, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
-              "Low-pass on the wet voice only. Counter-clockwise darkens the chorus without dulling the dry amp.");
+              "Low-pass on the wet voice only (3-12 kHz). Counter-clockwise darkens the chorus "
+              "without dulling the dry amp.");
   drawKnobCol(4, "WIDTH", kChorusWidth, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
-              "How far apart the left and right modulation runs. 0% is mono-safe, 100% is the widest image.");
+              "How far apart the left and right modulation runs. 0% is mono-safe, 100% is the "
+              "widest image. ENSEMBLE: spreads the L/C/R voices; CLEAR: stereo cross-mix.");
   drawKnobCol(5, "MIX", kChorusMix, "%", "CHORUS_KNOBS", true, 5, 1, effectKnobOffset, effectColW,
               "Dry/wet blend. 0% is bit-perfect bypass; on WARPED, 100% is full vibrato with no dry left.");
   IRECT chorusPickerRect(mainCX + 140.f, knobT + 2.f, mainCX + 230.f, knobT + knobDiam + valueH - 2.f);
   auto* chorusModePicker =
     new VoLumModePickerControl(chorusPickerRect, kChorusMode, {"CLASSIC", "WARPED", "CLEAR", "ENSEMBLE"});
   chorusModePicker->SetTooltip(
-    "CLASSIC = short bright single-voice swirl | WARPED = long, dark and deep (MIX 100% "
-    "= vibrato) | CLEAR = transparent two-tap doubling | ENSEMBLE = three-tap lush wash.");
+    "CLASSIC = Juno-60 stereo sweep | WARPED = tape wow and flutter (MIX 100% = vibrato) | "
+    "CLEAR = Dimension-style wide, mono-clean | ENSEMBLE = 80s tri-stereo rack chorus, L/C/R.");
   pGraphics->AttachControl(chorusModePicker, -1, "CHORUS_KNOBS");
 
   float chorusSwX = mainCX - 242.f;

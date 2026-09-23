@@ -414,10 +414,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kChorusActive)->InitBool("ChorusActive", false);
   GetParam(kChorusMode)
     ->InitEnum("ChorusMode", volum::kVoLumChorusModeDefault, {"Classic", "Warped", "Clear", "Ensemble"});
-  GetParam(kChorusRate)->InitDouble("ChorusRate", 0.35, 0.0, 1.0, 0.01);
-  GetParam(kChorusDepth)->InitDouble("ChorusDepth", 0.45, 0.0, 1.0, 0.01);
-  GetParam(kChorusTone)->InitDouble("ChorusTone", 0.40, 0.0, 1.0, 0.01);
-  GetParam(kChorusWidth)->InitDouble("ChorusWidth", 0.70, 0.0, 1.0, 0.01);
+  GetParam(kChorusRate)->InitDouble("ChorusRate", 0.44, 0.0, 1.0, 0.01);
+  GetParam(kChorusDepth)->InitDouble("ChorusDepth", 0.36, 0.0, 1.0, 0.01);
+  GetParam(kChorusTone)->InitDouble("ChorusTone", 0.21, 0.0, 1.0, 0.01);
+  GetParam(kChorusWidth)->InitDouble("ChorusWidth", 0.60, 0.0, 1.0, 0.01);
   GetParam(kChorusMix)->InitDouble("ChorusMix", 0.50, 0.0, 1.0, 0.01);
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);

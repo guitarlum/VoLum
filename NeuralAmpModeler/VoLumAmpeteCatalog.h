@@ -174,24 +174,25 @@ struct TremoloModeSnapshot
 // Per-chorus-mode knob memory (Classic / Warped / Clear / Ensemble). Every knob
 // is shared across the four voices, so the whole row is remembered per mode and
 // switching voices recalls that voice's last setting. All values are 0..1 knob
-// positions; VoLumChorus maps them to Hz / ms per mode.
+// positions; VoLumChorus maps them to Hz / cents / ms per mode.
 struct ChorusModeSnapshot
 {
-  double rate = 0.35;
-  double depth = 0.45;
-  double tone = 0.40;
-  double width = 0.70;
+  double rate = 0.44;
+  double depth = 0.36;
+  double tone = 0.21;
+  double width = 0.60;
   double mix = 0.50;
 };
 
 // Ship defaults for the four voices, in mode order. Single source of truth: the
 // per-amp scene, the live effect-settings working copy and the chunk id tail all
 // seed from here so a "reset to defaults" lands on the same row everywhere.
+// Knob positions map through ChorusDSP::RateHz / DepthAmount / ToneHz.
 inline constexpr ChorusModeSnapshot kVoLumChorusModeDefaults[kVoLumChorusModeCount] = {
-  ChorusModeSnapshot{0.45, 0.65, 0.55, 0.60, 0.60}, // Classic: quicker, brighter, first-listen blend
-  ChorusModeSnapshot{0.35, 0.45, 0.40, 0.70, 0.50}, // Warped: slow, dark, wide
-  ChorusModeSnapshot{0.40, 0.35, 0.70, 0.65, 0.40}, // Clear: shallow and transparent
-  ChorusModeSnapshot{0.28, 0.55, 0.50, 0.80, 0.55}, // Ensemble: slowest, deepest, widest
+  ChorusModeSnapshot{0.40, 0.62, 0.60, 1.00, 0.50}, // Classic: 0.63 Hz, 3.7 ms sweep (8 ct), 6.9 kHz, 180 deg
+  ChorusModeSnapshot{0.44, 0.36, 0.21, 0.60, 0.50}, // Warped: 0.89 Hz wow, 18 ct, 4.0 kHz
+  ChorusModeSnapshot{0.46, 0.40, 0.85, 0.70, 0.50}, // Clear: 0.40 Hz, 8 ct, 9.8 kHz
+  ChorusModeSnapshot{0.43, 0.36, 0.75, 1.00, 0.50}, // Ensemble: 0.54 Hz, 9 ct, 8.5 kHz, full L/C/R
 };
 
 struct VoLumAmpSettings
@@ -331,10 +332,10 @@ struct VoLumAmpSettings
   // remembers each voice's last knob row. Ships bypassed on WARPED.
   bool postChorusActive = false;
   int postChorusMode = kVoLumChorusModeDefault;
-  double postChorusRate = 0.35; // 0..1
-  double postChorusDepth = 0.45; // 0..1
-  double postChorusTone = 0.40; // 0..1
-  double postChorusWidth = 0.70; // 0..1
+  double postChorusRate = 0.44; // 0..1
+  double postChorusDepth = 0.36; // 0..1
+  double postChorusTone = 0.21; // 0..1
+  double postChorusWidth = 0.60; // 0..1
   double postChorusMix = 0.50; // 0..1
   ChorusModeSnapshot postChorusModes[kVoLumChorusModeCount] = {
     kVoLumChorusModeDefaults[0],

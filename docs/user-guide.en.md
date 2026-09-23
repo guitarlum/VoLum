@@ -125,12 +125,12 @@ POST runs after the amp. It contains Chorus, Delay, Reverb, and Tremolo cards, i
 
 **Chorus** runs first, before the delay and reverb, so it modulates the dry amp tone rather than smearing the tails. The **CLASSIC / WARPED / CLEAR / ENSEMBLE** picker selects the voice:
 
-- **Classic** is a short, bright single-voice swirl.
-- **Warped** is longer, darker and deeper — the factory default voice. At **MIX** 100% no dry signal is left, which turns it into a vibrato.
-- **Clear** doubles the signal with two quarter-cycle-apart voices for a transparent widening.
-- **Ensemble** stacks three voices for a dense, slow wash.
+- **Classic** is a Juno-60 stereo sweep (triangle delay, left and right 180° apart).
+- **Warped** is tape wow, drift and flutter — the factory default voice. At **MIX** 100% no dry signal is left, which turns it into a vibrato.
+- **Clear** is a Dimension-style wide chorus that stays pitch-clean in mono.
+- **Ensemble** is an 80s tri-stereo rack chorus: three slow voices on left, centre and right.
 
-The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every voice uses all five. RATE and DEPTH span a different range in each mode, so the same knob position is slow and deep in Warped and quick and shallow in Classic. TONE is a low-pass on the chorus voice only, so you can darken it without dulling the dry amp. WIDTH sets how far apart the left and right modulation runs: at 0% both channels move together and the result is mono-safe. **MIX** at 0% is a bit-perfect bypass, so you can leave the card on and dial the effect in from nothing. There is no tempo sync on this pedal.
+The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every voice uses all five. DEPTH is cents of detune (in Classic it is the Juno delay sweep). Each voice maps RATE to its own Hertz range. TONE is a 3–12 kHz low-pass on the chorus voice only, so you can darken it without dulling the dry amp. WIDTH sets how far apart the left and right modulation runs: at 0% both channels move together and the result is mono-safe. Every voice ships at **MIX** 50%. **MIX** glides onto its end stops; at 0% it settles into a bit-perfect bypass, so you can leave the card on and dial the effect in from nothing. There is no tempo sync on this pedal.
 
 ![VoLum POST Chorus card](user-guide-chorus.png)
 
@@ -154,7 +154,7 @@ The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smoot
 
 The LED on each card shows whether it is active. Click the LED to bypass that pedal, the same way the collapsed strip does. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one chorus/delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
 
-Switching Chorus voice, Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one. Each POST pedal also remembers its own knob positions per mode, so stepping through the voices and back leaves your settings where you left them.
+Switching Chorus voice fades the old voice out before the new one fades in; switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one. Each POST pedal also remembers its own knob positions per mode, so stepping through the voices and back leaves your settings where you left them.
 
 ## Presets
 

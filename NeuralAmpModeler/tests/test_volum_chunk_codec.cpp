@@ -1202,7 +1202,7 @@ TEST_CASE("Absent chorus tail forces a dirty live scene off")
   CHECK_FALSE(live.postChorusActive);
   CHECK(live.postChorusMode == volum::kVoLumChorusModeDefault);
   CHECK(live.postChorusMix == doctest::Approx(0.50));
-  CHECK(live.postChorusRate == doctest::Approx(0.35));
+  CHECK(live.postChorusRate == doctest::Approx(0.44));
 
   volum::ChorusTail written;
   written.present = true;

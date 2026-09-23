@@ -125,12 +125,12 @@ POST liegt hinter dem Amp. Der Bereich enthält in dieser Reihenfolge Chorus-, D
 
 **Chorus** läuft als Erstes, vor Delay und Reverb, und moduliert damit den trockenen Amp-Klang, statt die Fahnen zu verwaschen. Der **CLASSIC / WARPED / CLEAR / ENSEMBLE**-Wähler bestimmt den Charakter:
 
-- **Classic** ist ein kurzer, heller Einstimmen-Swirl.
-- **Warped** ist länger, dunkler und tiefer — die Werks-Standardstimme. Bei **MIX** 100 % bleibt kein Trockensignal übrig, das ergibt ein Vibrato.
-- **Clear** verdoppelt das Signal mit zwei um eine Viertelperiode versetzten Stimmen und verbreitert transparent.
-- **Ensemble** stapelt drei Stimmen zu einem dichten, langsamen Teppich.
+- **Classic** ist ein Juno-60-Stereo-Sweep (Dreieck-Delay, links und rechts 180° versetzt).
+- **Warped** ist Tape-Wow, Drift und Flutter — die Werks-Standardstimme. Bei **MIX** 100 % bleibt kein Trockensignal übrig, das ergibt ein Vibrato.
+- **Clear** ist ein Dimension-artiger, breiter Chorus, der in Mono tonhöhenrein bleibt.
+- **Ensemble** ist ein Tri-Stereo-Rack-Chorus der 80er: drei langsame Stimmen links, Mitte und rechts.
 
-Die Regler sind **RATE**, **DEPTH**, **TONE**, **WIDTH** und **MIX**, und jede Stimme nutzt alle fünf. RATE und DEPTH decken je Modus einen anderen Bereich ab: Dieselbe Reglerstellung ist in Warped langsam und tief, in Classic schnell und flach. TONE ist ein Tiefpass nur auf der Chorus-Stimme, du kannst sie also abdunkeln, ohne den trockenen Amp zu dämpfen. WIDTH bestimmt, wie weit die Modulation von links und rechts auseinanderläuft: bei 0 % laufen beide Kanäle gleich und das Ergebnis bleibt monokompatibel. **MIX** auf 0 % ist ein bit-genauer Bypass, du kannst die Karte also eingeschaltet lassen und den Effekt aus dem Nichts einregeln. Dieses Pedal hat keinen Tempo-Sync.
+Die Regler sind **RATE**, **DEPTH**, **TONE**, **WIDTH** und **MIX**, und jede Stimme nutzt alle fünf. DEPTH ist Verstimmung in Cent (bei Classic der Juno-Delay-Sweep). Jede Stimme mappt RATE auf ihren eigenen Hertz-Bereich. TONE ist ein 3–12-kHz-Tiefpass nur auf der Chorus-Stimme, du kannst sie also abdunkeln, ohne den trockenen Amp zu dämpfen. WIDTH bestimmt, wie weit die Modulation von links und rechts auseinanderläuft: bei 0 % laufen beide Kanäle gleich und das Ergebnis bleibt monokompatibel. Jede Stimme startet bei **MIX** 50 %. **MIX** gleitet an die Endanschläge; bei 0 % setzt sich ein bit-genauer Bypass durch, du kannst die Karte also eingeschaltet lassen und den Effekt aus dem Nichts einregeln. Dieses Pedal hat keinen Tempo-Sync.
 
 ![VoLum POST-Chorus-Karte](user-guide-chorus.png)
 
@@ -154,7 +154,7 @@ Die gemeinsamen Regler sind **RATE**, **DEPTH**, **SHAPE** (formt den LFO von we
 
 Die LED auf jeder Karte zeigt, ob sie aktiv ist. Ein Klick auf die LED schaltet das Pedal in den Bypass, genau wie der eingeklappte Streifen. Das Label zeigt den aktuellen Modus oder eine kurze Preset-Zusammenfassung. POST-Einstellungen werden pro Amp gespeichert, genau wie PRE. Das **Schloss** im POST-Kopf funktioniert wie bei PRE, damit du eine Chorus/Delay/Reverb/Tremolo-Szene beim Durchklicken der Amps mitnimmst; der **Store**-Pfeil erscheint, wenn du das Overlay im aktuellen Amp speichern kannst. Entsperren stellt das gespeicherte POST dieses Amps ohne Rückfrage wieder her. Ein Doppelklick auf einen POST-Regler stellt dessen Default wieder her.
 
-Beim Wechsel von Chorus-Stimme, Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Stimme wird der alte Tail gelöscht, damit Wiederholungen und Raum aus dem vorherigen Modus nicht in den neuen Modus bluten. Jedes POST-Pedal merkt sich außerdem seine Reglerstellungen pro Modus: Wenn du die Stimmen durchsteppst und zurückkehrst, stehen deine Einstellungen noch so, wie du sie verlassen hast.
+Beim Wechsel der Chorus-Stimme wird die alte Stimme ausgeblendet, bevor die neue einfadet; beim Wechsel von Delay-Modus, Ping-Pong, Reverb-Modus oder Oktaverb-Stimme wird der alte Tail gelöscht, damit Wiederholungen und Raum aus dem vorherigen Modus nicht in den neuen Modus bluten. Jedes POST-Pedal merkt sich außerdem seine Reglerstellungen pro Modus: Wenn du die Stimmen durchsteppst und zurückkehrst, stehen deine Einstellungen noch so, wie du sie verlassen hast.
 
 ## Presets
 
