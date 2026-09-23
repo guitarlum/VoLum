@@ -40,7 +40,7 @@ inline constexpr ArtSpec kArtSpecs[kFactoryArtCount] = {
   {4,  5,  "H&K TriAmp Mk2",     "Lissajous Nebula", "VoLumArtHkTriamp.h",      ArtClass::Additive,  true},
   {5,  6,  "Lichtlaerm Prom.",   "Koch Deep",        "VoLumArtLichtlaerm.h",    ArtClass::Additive,  true},
   {6,  7,  "Marshall 2204",      "Windswept Glow",   "VoLumArtMarshall2204.h",  ArtClass::Split,     true},
-  {7,  8,  "Marshall JMP 2203",  "Depth Triforce",   "VoLumArtJmp2203.h",       ArtClass::Split,     false},
+  {7,  8,  "Marshall JMP 2203",  "Depth Triforce",   "VoLumArtJmp2203.h",       ArtClass::Split,     true},
   {8,  9,  "Marshall JVM",       "Levy Nebula",      "VoLumArtJvm210.h",        ArtClass::Additive,  false},
   {9,  10, "Orange OD120",       "Ember Bulb",       "VoLumArtOrangeOd120.h",   ArtClass::Additive,  false},
   {10, 11, "Orange ORS100",      "Julia Nebula",     "VoLumArtOrangeOrs100.h",  ArtClass::Additive,  false},
