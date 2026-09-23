@@ -238,6 +238,7 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 
 ## Keyboard Controls
 
+- `P` switches between BUILD and PLAY, in the standalone app and in plug-ins. It is ignored while a name is being typed or while Settings, Pack, or another overlay is open.
 - In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` always opens the name dialog and may reassign the LIVE program number, never a new one. While Settings, Pack, or another overlay is open, those PLAY keys are ignored so they cannot change the rail behind the window.
 - In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.

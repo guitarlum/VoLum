@@ -1479,6 +1479,23 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     if (auto* pGfx = GetUI())
       if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog))
         nameDialogOpen = !dlg->IsHidden();
+    if (volum::keyboard::IsUiModeToggleKey(key.VK, key.C, key.A) && !nameDialogOpen)
+    {
+      bool overlayOpen = false;
+      if (auto* pGfx = GetUI())
+        overlayOpen = volum::ui::AnyOverlayOpen(
+          {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
+           kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome, kCtrlTagVoLumPresetMenu},
+          [&](int tag) {
+            auto* c = pGfx->GetControlWithTag(tag);
+            return c && !c->IsHidden();
+          });
+      if (!overlayOpen)
+      {
+        _VolumSetUiMode(mVolumUiMode == volum::UiMode::Play ? volum::UiMode::Build : volum::UiMode::Play);
+        return true;
+      }
+    }
     if (mVolumUiMode == volum::UiMode::Play && !nameDialogOpen)
     {
       bool overlayOpen = false;

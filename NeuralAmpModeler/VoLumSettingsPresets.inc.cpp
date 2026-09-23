@@ -155,7 +155,7 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
       if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
           factory && factory->id == mVolumActivePresetId)
       {
-        bar->SelectAt(0, factory->name, true);
+        bar->SelectAt(0, factory->name.c_str(), true);
         selected = true;
       }
     if (!selected)

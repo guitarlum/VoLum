@@ -238,6 +238,7 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 
 ## Tastatur
 
+- `P` wechselt zwischen BUILD und PLAY, in der Standalone-App und im Plugin. Solange ein Name getippt wird oder Einstellungen, Pack oder ein anderes Overlay offen ist, wird die Taste ignoriert.
 - In PLAY: `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Sound und rufen ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um. `1`–`8` schalten die acht Stomps. `T`, `M` und `H` öffnen weiterhin Tuner, Metronom und Einstellungen. `Ctrl+S` öffnet immer den Namensdialog und kann die LIVE-Programmnummer neu belegen, nie eine neue erfinden. Solange Einstellungen, Pack oder ein anderes Overlay offen ist, werden diese PLAY-Tasten ignoriert, damit sie die Leiste dahinter nicht verstellen.
 - In BUILD, ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.

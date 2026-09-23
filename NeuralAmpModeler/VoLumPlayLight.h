@@ -75,17 +75,26 @@ inline float PlayAttackTarget(float inNorm, float lampNorm)
   return std::clamp((inNorm - lampNorm - kPlayAttackRiseMin) / kPlayAttackRiseSpan, 0.f, 1.f);
 }
 
+// The output may carry a reverb or delay tail for up to ~3 s after the input
+// stops, never longer, and never on its own: the metronome click or a stray
+// output level cannot wake the art.
+inline constexpr float kPlayTailHoldStep = 1.f / 180.f;
+
 // All zero is silence, which is the rest state BUILD shows.
 struct PlayLight
 {
   float lamp = 0.f; // smoothed input, dB-norm
   float energy = 0.f; // 0..1 sustained level
   float attack = 0.f; // 0..1 pick envelope, ~120 ms decay
+  float outLamp = 0.f; // smoothed output, dB-norm
+  float tailHold = 0.f; // how much of the output tail may still count
 };
 
-// One 60 Hz tick. inNorm is the last block's input peak on the dB-norm; the
-// lamp follows a smoothed envelope, never the raw ladder sample.
-inline PlayLight AdvancePlayLight(const PlayLight& prev, float inNorm)
+// One 60 Hz tick. inNorm / outNorm are the last block's input / output peaks on
+// the dB-norm; the lamps follow a smoothed envelope, never the raw ladder sample.
+// Picks and the sustained level come from the input (the player's dynamics; the
+// output depends on amp gain and the Output knob). The output only extends it.
+inline PlayLight AdvancePlayLight(const PlayLight& prev, float inNorm, float outNorm = 0.f)
 {
   const float in = std::clamp(inNorm, 0.f, 1.f);
   PlayLight next;
@@ -93,7 +102,12 @@ inline PlayLight AdvancePlayLight(const PlayLight& prev, float inNorm)
   if (next.attack < 1e-3f)
     next.attack = 0.f;
   next.lamp = PlayLampFollow(prev.lamp, in);
-  next.energy = PlayLightEnergy(next.lamp);
+  const float inEnergy = PlayLightEnergy(next.lamp);
+  next.outLamp = PlayLampFollow(prev.outLamp, std::clamp(outNorm, 0.f, 1.f));
+  next.tailHold = std::max(inEnergy, prev.tailHold - kPlayTailHoldStep);
+  if (next.tailHold < 1e-3f)
+    next.tailHold = 0.f;
+  next.energy = std::max(inEnergy, std::min(PlayLightEnergy(next.outLamp), next.tailHold));
   return next;
 }
 

@@ -318,6 +318,13 @@ inline OverlayId TopOverlay(const OverlayStack& s)
   return OverlayId::None;
 }
 
+// P flips BUILD / PLAY, the same key in standalone and plugin; Space stays the
+// DAW transport's.
+inline bool IsUiModeToggleKey(int vk, bool ctrl, bool alt)
+{
+  return (vk == 'p' || vk == 'P') && !ctrl && !alt;
+}
+
 inline KeyKind ClassifyVk(int vk)
 {
   if (vk == kKeyEscape)

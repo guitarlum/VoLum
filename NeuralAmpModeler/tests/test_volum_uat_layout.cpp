@@ -1,4 +1,4 @@
-﻿#include "third_party/doctest.h"
+#include "third_party/doctest.h"
 
 #include "../VoLumAboutLayout.h"
 #include "../VoLumAmpeteCatalog.h"
@@ -222,6 +222,21 @@ TEST_CASE("PLAY light: silence is BUILD, -18 dBFS is the full look")
   // A chord ringing out keeps the art alive while it decays.
   CHECK(HoldPlayInput(normal, -50.f, 45).energy > 0.f);
 
+  // A reverb or delay tail on the output carries the motion briefly after the
+  // input stops, but never wakes the art by itself and never holds it forever.
+  auto withOutput = [](volum::PlayLight light, float inDb, float outDb, int ticks) {
+    const float in = volum::MeterNormFromDb(inDb);
+    const float out = volum::MeterNormFromDb(outDb);
+    for (int i = 0; i < ticks; ++i)
+      light = volum::AdvancePlayLight(light, in, out);
+    return light;
+  };
+  const volum::PlayLight played = withOutput(rest, -18.f, -12.f, 600);
+  CHECK(withOutput(played, -90.f, -20.f, 90).energy > 0.2f); // 1.5 s into the tail
+  CHECK(withOutput(played, -90.f, -20.f, 600).energy == 0.f); // 10 s later: rest
+  CHECK(withOutput(rest, -90.f, -12.f, 600).energy == 0.f); // output alone (metronome)
+  CHECK(HoldPlayInput(normal, -90.f, 90).energy < withOutput(played, -90.f, -20.f, 90).energy);
+
   // A pick: the attack jumps on the step, then decays while the note is held.
   const volum::PlayLight picked = HoldPlayInput(rest, -12.f, 1);
   CHECK(picked.attack >= 0.99f);
@@ -235,7 +250,7 @@ TEST_CASE("PLAY light: silence is BUILD, -18 dBFS is the full look")
   CHECK(volum::PlayGlowAmount(after) == 0.f);
 
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  CHECK(play.find("AdvancePlayLight(mLight, mInPeak)") != std::string::npos);
+  CHECK(play.find("AdvancePlayLight(mLight, mInPeak, mOutPeak)") != std::string::npos);
   CHECK(play.find("PlayGlowAmount(mLight)") != std::string::npos);
   CHECK(play.find("veil * 140") == std::string::npos);
 }
@@ -745,4 +760,24 @@ TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchModel.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+}
+
+TEST_CASE("P toggles BUILD and PLAY in standalone and plugin")
+{
+  CHECK(volum::keyboard::IsUiModeToggleKey('p', false, false));
+  CHECK(volum::keyboard::IsUiModeToggleKey('P', false, false));
+  CHECK_FALSE(volum::keyboard::IsUiModeToggleKey('p', true, false)); // Ctrl+P stays free for hosts
+  CHECK_FALSE(volum::keyboard::IsUiModeToggleKey('p', false, true));
+  CHECK_FALSE(volum::keyboard::IsUiModeToggleKey(' ', false, false)); // Space is the DAW transport
+
+  // Checked before PLAY swallows keys, skipped while a name is typed or an overlay is up.
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto toggle = layout.find("IsUiModeToggleKey(key.VK, key.C, key.A) && !nameDialogOpen");
+  const auto playBranch = layout.find("if (mVolumUiMode == volum::UiMode::Play && !nameDialogOpen)");
+  REQUIRE(toggle != std::string::npos);
+  REQUIRE(playBranch != std::string::npos);
+  CHECK(toggle < playBranch);
+  CHECK(layout.find(
+          "_VolumSetUiMode(mVolumUiMode == volum::UiMode::Play ? volum::UiMode::Build : volum::UiMode::Play)", toggle)
+        < playBranch);
 }

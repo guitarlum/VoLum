@@ -352,7 +352,7 @@ public:
     const float dt = mHaveTick ? std::chrono::duration<float>(now - mLastTick).count() : 0.f;
     mLastTick = now;
     mHaveTick = true;
-    mLight = volum::AdvancePlayLight(mLight, mInPeak);
+    mLight = volum::AdvancePlayLight(mLight, mInPeak, mOutPeak);
     volumart::AdvanceArtMotion(
       mArtMotion, mLight.energy, mLight.attack, volum::PlayBloomWeight(volum::PlayGlowAmount(mLight)), dt);
     if (mArtDebug.on && mArtDebug.runClock)
