@@ -209,22 +209,24 @@ TEST_CASE("Golden DSP: delay mode hashes stay stable")
 // Dattorro's tank that had been missing along with his output tap network. Tail
 // lengths, loop gains and tone curves did not move, but every output sample did. What
 // the new response has to satisfy lives in test_reverb_diffusion.cpp; this case only
-// pins it against unintended drift from here on.
+// pins it against unintended drift from here on. They moved again in 1.3.0 when the
+// reverb started taking L and R separately (this case feeds independent noise per
+// side); an L == R input is bit-identical to before (test_reverb_stereo_input.cpp).
 TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
 {
   ExpectGoldenHash("reverb-hall", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeHall, 0)),
-                   "b9c9c3d862c7b2574af9b4f3e8d49c1cc335359da23085381e5b46095463811c",
+                   "0e0dea2148d1d48201560bbd9ced13f5d8d5abd55d457f8189fc7fb84cefe275",
                    "1b31218a539934d9bd7a4a059865d3acb56989ab1efb7fe1d6d406bc2de3603f");
   ExpectGoldenHash("reverb-plate", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModePlate, 0)),
-                   "d5bfb6e4c8719746bfd4766338cf13ef8521f146457eb95a6468a481db58ea4b",
+                   "36bb5435950bd077ef61f2fa4a563485490caf0384e90ef328b96f9ecb8b0c8c",
                    "481cda1a11928f3827513a514b1161923af4d7b2c4c6984895314fee3463a62b");
   ExpectGoldenHash("oktaverb-halo", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0)),
-                   "a41f1390cffb91bfb95370ebfe33d9bf05df45981cbaf8042cce22a4548326ef",
+                   "8c7271c2c52d50c11cfb359ffa77e2c539cf5431c0239fe78451763a4041f434",
                    "5d0dd19eb152df64b1890a44803783cc187dfcaa8a58486219e67f25ceb8ae18");
   ExpectGoldenHash("oktaverb-shimmer", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1)),
-                   "6bc913cb27b0981b7c51754d255eb59960f251bfffb92e99ba013527d3144e3f",
+                   "3403ec0e51ca3dc37eb94cd14a1847b8135a1925cc83ab695dfa78498d775c86",
                    "6589f106d1b4f21a4fa5d02a6427e099e2e6262a006d9a9f3c6952a2668d377d");
   ExpectGoldenHash("oktaverb-bloom", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2)),
-                   "4882fc22573ea37ddcde462baf0b01bf4033f6f2d9297dc0df278b094f444573",
+                   "bb97b2c1331309464e2d18f4d75ee81bf374ffbe99a6346bb6b6bf9e561d678e",
                    "ccef0b8b59f73e02d6c00be43b220d915c76964f0d5153581101d879ce67fbe9");
 }

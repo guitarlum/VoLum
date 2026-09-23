@@ -116,6 +116,7 @@
     <ClCompile Include="..\tests\test_volum_art_anim.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
     <ClCompile Include="..\tests\test_reverb_diffusion.cpp" />
+    <ClCompile Include="..\tests\test_reverb_stereo_input.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_effects.cpp" />
     <ClCompile Include="..\tests\test_golden_dsp.cpp" />
     <ClCompile Include="..\tests\test_golden_rigs.cpp" />
@@ -129,7 +130,6 @@
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />
-    <ClCompile Include="..\tests\test_volum_dual_amp_input.cpp" />
     <ClCompile Include="..\tests\test_eparam_order.cpp" />
     <ClCompile Include="..\tests\test_tuner_dsp.cpp" />
     <ClCompile Include="..\tests\test_metronome_dsp.cpp" />
