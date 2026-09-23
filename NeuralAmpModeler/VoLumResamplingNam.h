@@ -71,9 +71,9 @@ public:
     // go.
     // _prewarm_samples = 0;
 
-    // And be ready
-    int maxBlockSize = 2048; // Conservative
-    Reset(expected_sample_rate, maxBlockSize);
+    // VoLum: no Reset here. Every caller selects the A2 slice with
+    // SetSlimmableSize and then Resets at the host block; a Reset here prewarmed
+    // the Full slice of a Lite load for nothing. Until Reset, process() copies dry.
   };
 
   ~ResamplingNAM() = default;

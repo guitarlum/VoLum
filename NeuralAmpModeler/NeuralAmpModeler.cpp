@@ -320,6 +320,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
   _InitToneStack();
   mDspGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+  mIrGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
   nam::activations::Activation::enable_fast_tanh();
   GetParam(kInputLevel)->InitGain("Input", 0.0, -20.0, 20.0, 0.1);
   GetParam(kToneBass)->InitDouble("Bass", 5.0, 0.0, 10.0, 0.1);
@@ -845,28 +846,9 @@ void NeuralAmpModeler::OnIdle()
     _VolumSyncUiFromState();
   _VolumRebindCustomSupportIdx();
 
-  // Models the audio thread retired instead of destroying in the callback. Reaping
-  // runs after the sync above so the restore stays the first thing an idle does;
-  // freeing a few megabytes can wait a tick, a stale editor cannot. The vector is
-  // swapped out under the lock and the destructors run after it is dropped, so
-  // ~ResamplingNAM never holds up ProcessBlock. Path commit stays under the lock:
-  // removal still clears mNAMPaths on the audio thread.
-  {
-    // The spare is reserved before the lock: ProcessBlock waits on mStagingMutex,
-    // so an allocation inside it can stall the audio thread.
-    std::vector<std::unique_ptr<ResamplingNAM>> doomed;
-    doomed.reserve(volum::dsp_staging::kDspGraveyardCapacity);
-    {
-      std::lock_guard<std::mutex> lock(mStagingMutex);
-      if (!mDspGraveyard.empty())
-        doomed.swap(mDspGraveyard);
-      if (mPublishedNamPath.dirty.exchange(false, std::memory_order_acq_rel))
-      {
-        volum::dsp_staging::StagePathOnSuccess(mNAMPaths, mPublishedNamPath.text);
-        volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);
-      }
-    }
-  }
+  // Runs after the sync above so the restore stays the first thing an idle does;
+  // freeing a few megabytes can wait a tick, a stale editor cannot.
+  _VolumReapAudioThreadRetirees();
   if (mLatencyDirty.exchange(false, std::memory_order_acquire))
     _ApplyLatchedLatency();
   if (auto* pGfx = GetUI())
@@ -1887,6 +1869,48 @@ void NeuralAmpModeler::_AllocateIOPointers(const size_t nChans)
     throw std::runtime_error("Failed to allocate pointer to output buffer!\n");
 }
 
+// Models, IRs and drained loader results the audio thread retired instead of
+// destroying in the callback, and the live paths it published with each asset.
+// ProcessBlock blocks on mStagingMutex, so nothing below allocates or frees while
+// holding it: spares are reserved first, everything is swapped out, and the
+// destructors and WDL_String work run after the lock is dropped.
+void NeuralAmpModeler::_VolumReapAudioThreadRetirees()
+{
+  std::vector<std::unique_ptr<ResamplingNAM>> doomed;
+  doomed.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+  std::vector<std::unique_ptr<dsp::ImpulseResponse>> doomedIrs;
+  doomedIrs.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+  decltype(mVolumSpentLoadResults) doomedResults;
+
+  struct PathLane
+  {
+    volum::dsp_staging::RtPublishedPath& slot;
+    volum::dsp_staging::WdlStagedPathPair& paths;
+    std::string text;
+    volum::dsp_staging::PublishedPathAction action = volum::dsp_staging::PublishedPathAction::None;
+  };
+  PathLane lanes[] = {{mPublishedNamPath, mNAMPaths, {}},
+                      {mPublishedIRPath, mIRPaths, {}},
+                      {mPublishedSupportIRPath, mSupportIRPaths, {}}};
+  for (auto& lane : lanes)
+    if (lane.slot.dirty.load(std::memory_order_acquire))
+      lane.text.reserve(volum::dsp_staging::kRtPathCapacity);
+
+  {
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    if (!mDspGraveyard.empty())
+      doomed.swap(mDspGraveyard);
+    if (!mIrGraveyard.empty())
+      doomedIrs.swap(mIrGraveyard);
+    doomedResults.swap(mVolumSpentLoadResults);
+    for (auto& lane : lanes)
+      lane.action = volum::dsp_staging::TakePublishedPath(lane.slot, lane.text);
+  }
+
+  for (auto& lane : lanes)
+    volum::dsp_staging::ApplyPublishedPath(lane.action, lane.text, lane.paths);
+}
+
 void NeuralAmpModeler::_ApplyDSPStaging()
 {
   _VolumDrainLoaderResults();
@@ -1910,11 +1934,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
 
     if (mShouldRemoveModel)
     {
-      volum::dsp_staging::RetireToGraveyard(mModel, mDspGraveyard);
-      volum::dsp_staging::RetireToGraveyard(mStagedModel, mDspGraveyard);
-      volum::dsp_staging::ClearLiveAndStagedPath(mNAMPaths);
-      mPublishedNamPath.dirty.store(false, std::memory_order_relaxed);
-      mPublishedNamPath.text[0] = '\0';
+      volum::dsp_staging::RetireLiveAndStaged(mModel, mStagedModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedNamPath);
       mPendingNamPath[0] = '\0';
       mShouldRemoveModel = false;
       mModelCleared = true;
@@ -1922,31 +1943,29 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     }
     if (mShouldRemoveSupportModel)
     {
-      volum::dsp_staging::RetireToGraveyard(mSupportModel, mDspGraveyard);
-      volum::dsp_staging::RetireToGraveyard(mStagedSupportModel, mDspGraveyard);
+      volum::dsp_staging::RetireLiveAndStaged(mSupportModel, mStagedSupportModel, mDspGraveyard);
       mShouldRemoveSupportModel = false;
       removedSupportModel = true;
     }
     if (mShouldRemoveIR)
     {
-      mIR = nullptr;
-      mStagedIR = nullptr;
-      volum::dsp_staging::ClearLiveAndStagedPath(mIRPaths);
+      volum::dsp_staging::RetireLiveAndStaged(mIR, mStagedIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedIRPath);
+      mPendingIRPath[0] = '\0';
       mShouldRemoveIR = false;
     }
     if (mShouldRemoveSupportIR)
     {
-      mSupportIR = nullptr;
-      mStagedSupportIR = nullptr;
-      volum::dsp_staging::ClearLiveAndStagedPath(mSupportIRPaths);
+      volum::dsp_staging::RetireLiveAndStaged(mSupportIR, mStagedSupportIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedSupportIRPath);
+      mPendingSupportIRPath[0] = '\0';
       mShouldRemoveSupportIR = false;
     }
     for (int i = 0; i < 2; ++i)
     {
       if (mShouldRemovePreModel[i])
       {
-        volum::dsp_staging::RetireToGraveyard(mPreModel[i], mDspGraveyard);
-        volum::dsp_staging::RetireToGraveyard(mStagedPreModel[i], mDspGraveyard);
+        volum::dsp_staging::RetireLiveAndStaged(mPreModel[i], mStagedPreModel[i], mDspGraveyard);
         mShouldRemovePreModel[i] = false;
         removedPreModel[i] = true;
       }
@@ -1974,15 +1993,13 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     }
     if (mStagedIR != nullptr && !holdMainIr)
     {
-      mIR = std::move(mStagedIR);
-      mStagedIR = nullptr;
-      volum::dsp_staging::CommitStagedPathOnApply(mIRPaths);
+      volum::dsp_staging::PublishStagedModel(mIR, mStagedIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedIRPath, mPendingIRPath);
     }
     if (mStagedSupportIR != nullptr && !holdSupportIr)
     {
-      mSupportIR = std::move(mStagedSupportIR);
-      mStagedSupportIR = nullptr;
-      volum::dsp_staging::CommitStagedPathOnApply(mSupportIRPaths);
+      volum::dsp_staging::PublishStagedModel(mSupportIR, mStagedSupportIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedSupportIRPath, mPendingSupportIRPath);
     }
   }
 
@@ -2206,20 +2223,20 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       // _ApplyDSPStaging. _StageModel is called from the host's UnserializeState
       // path and (in non-VoLum builds) from the file-browser completion handler,
       // both off the audio thread. mNAMPaths.live commits in OnIdle from the
-      // published path buffer so ProcessBlock never WDL_String::Set's.
+      // published path buffer so ProcessBlock never WDL_String::Set's, and no
+      // WDL_String is touched while the audio thread may wait on this lock.
       std::lock_guard<std::mutex> lock(mStagingMutex);
       volum::dsp_staging::StageIncomingModel(mStagedModel, temp, mDspGraveyard);
-      volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);
       volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, modelPath.Get());
     }
     VOLUM_LOG("model", std::string("staged ") + modelPath.Get());
   }
   catch (std::runtime_error& e)
   {
+    std::unique_ptr<ResamplingNAM> replacedModel; // destroyed after the lock below
     {
       std::lock_guard<std::mutex> lock(mStagingMutex);
-      mStagedModel = nullptr;
-      volum::dsp_staging::ClearStagedPath(mNAMPaths);
+      replacedModel = volum::dsp_staging::ReplaceStaged(mStagedModel, nullptr);
     }
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
@@ -2302,22 +2319,26 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
     std::cerr << e.what() << std::endl;
   }
 
+  // Declared before the lock so the IR it replaces is destroyed after unlocking:
+  // ProcessBlock blocks on mStagingMutex every block.
+  std::unique_ptr<dsp::ImpulseResponse> replacedIR;
   {
     // Publish the staged IR (and its path) under the staging mutex so the audio thread
-    // sees a fully-constructed object or none at all. Live path commits in _ApplyDSPStaging.
+    // sees a fully-constructed object or none at all. _ApplyDSPStaging publishes the
+    // pending path with the object and OnIdle commits it to m(Support)IRPaths.
     // The MAIN amp and the dual-amp SUPPORT lane stage into separate convolvers.
     std::lock_guard<std::mutex> lock(mStagingMutex);
     auto& stagedSlot = support ? mStagedSupportIR : mStagedIR;
-    auto& pathPair = support ? mSupportIRPaths : mIRPaths;
+    char* pendingPath = support ? mPendingSupportIRPath : mPendingIRPath;
     if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
     {
-      stagedSlot = std::move(stagedIR);
-      volum::dsp_staging::StagePathOnSuccess(pathPair, irPath);
+      replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, std::move(stagedIR));
+      volum::dsp_staging::CopyPathNoAlloc(pendingPath, volum::dsp_staging::kRtPathCapacity, irPath.Get());
     }
     else
     {
-      stagedSlot = nullptr;
-      volum::dsp_staging::ClearStagedPath(pathPair);
+      replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, nullptr);
+      pendingPath[0] = '\0';
     }
   }
 

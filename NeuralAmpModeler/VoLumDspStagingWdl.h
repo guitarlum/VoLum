@@ -3,9 +3,12 @@
 #include "VoLumDspStaging.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <vector>
 
 // WDL_String is provided by iPlug headers before this include in NeuralAmpModeler.h.
@@ -123,6 +126,54 @@ void PublishStagedModel(std::unique_ptr<T>& live, std::unique_ptr<T>& staged,
   live = std::move(staged);
 }
 
+// Removal of a lane's asset (NAM or IR): both the live object and one still
+// waiting to be applied go to the graveyard.
+template <typename T>
+void RetireLiveAndStaged(std::unique_ptr<T>& live, std::unique_ptr<T>& staged,
+                         std::vector<std::unique_ptr<T>>& graveyard)
+{
+  RetireToGraveyard(live, graveyard);
+  RetireToGraveyard(staged, graveyard);
+}
+
+// Off the audio thread, under the staging lock the audio thread blocks on. The
+// predecessor is handed back so the caller destroys it after unlocking.
+template <typename T>
+[[nodiscard]] std::unique_ptr<T> ReplaceStaged(std::unique_ptr<T>& staged, std::unique_ptr<T> incoming)
+{
+  std::unique_ptr<T> previous = std::move(staged);
+  staged = std::move(incoming);
+  return previous;
+}
+
+template <typename T>
+[[nodiscard]] std::unique_ptr<T> ReplaceStaged(std::unique_ptr<T>& staged, std::nullptr_t)
+{
+  return ReplaceStaged(staged, std::unique_ptr<T>{});
+}
+
+// Loader results the audio thread has drained. Their strings and the container
+// itself are freed in OnIdle, so a processed batch is swapped into an empty slot.
+constexpr size_t kSpentLoaderBatchSlots = 4;
+
+// Audio thread, under the lock OnIdle reaps the slots under. False means every
+// slot still waits for OnIdle: the caller keeps the batch and retries.
+template <typename Batch, size_t N>
+bool HandOffSpentBatch(Batch& batch, std::array<Batch, N>& slots)
+{
+  if (batch.empty())
+    return true;
+  for (auto& slot : slots)
+  {
+    if (slot.empty())
+    {
+      slot.swap(batch);
+      return true;
+    }
+  }
+  return false;
+}
+
 enum class LoaderResultAction
 {
   Ignore,
@@ -143,9 +194,14 @@ inline LoaderResultAction DecideLoaderResult(bool hasModel, bool superseded, boo
   return LoaderResultAction::Stage;
 }
 
+// The live path of an asset, handed from the audio thread (which applies the
+// asset) to OnIdle (which owns the WDL_String). Both sides touch it under the
+// staging lock.
 struct RtPublishedPath
 {
   char text[kRtPathCapacity]{};
+  // The asset was removed: OnIdle clears the live path instead of committing text.
+  bool clear = false;
   std::atomic<bool> dirty{false};
 };
 
@@ -160,10 +216,38 @@ inline void CopyPathNoAlloc(char* dest, size_t destCap, const char* src)
   dest[n] = '\0';
 }
 
+// An empty path means "keep the live path" (an IR re-staged for a new sample
+// rate may carry none), so it must not overwrite a publish OnIdle has not taken.
 inline void PublishPathNoAlloc(RtPublishedPath& slot, const char* src)
 {
+  if (!src || !*src)
+    return;
   CopyPathNoAlloc(slot.text, kRtPathCapacity, src);
+  slot.clear = false;
   slot.dirty.store(true, std::memory_order_release);
+}
+
+inline void PublishPathClearNoAlloc(RtPublishedPath& slot)
+{
+  slot.text[0] = '\0';
+  slot.clear = true;
+  slot.dirty.store(true, std::memory_order_release);
+}
+
+enum class PublishedPathAction
+{
+  None,
+  Commit,
+  Clear
+};
+
+inline PublishedPathAction TakePublishedPath(RtPublishedPath& slot)
+{
+  if (!slot.dirty.exchange(false, std::memory_order_acq_rel))
+    return PublishedPathAction::None;
+  const bool clear = slot.clear;
+  slot.clear = false;
+  return clear ? PublishedPathAction::Clear : PublishedPathAction::Commit;
 }
 
 #ifndef VOLUM_DSP_STAGING_SKIP_WDL
@@ -203,5 +287,34 @@ inline void ClearLiveAndStagedPath(WdlStagedPathPair& paths)
 }
 
 #endif // VOLUM_DSP_STAGING_SKIP_WDL
+
+// OnIdle, under the staging lock. `out` must already hold kRtPathCapacity so the
+// copy cannot allocate while the audio thread may be waiting on the lock; an
+// unreserved `out` leaves the publish for the next idle tick.
+inline PublishedPathAction TakePublishedPath(RtPublishedPath& slot, std::string& out)
+{
+  if (out.capacity() < kRtPathCapacity)
+    return PublishedPathAction::None;
+  const PublishedPathAction action = TakePublishedPath(slot);
+  if (action == PublishedPathAction::Commit)
+    out.assign(slot.text);
+  return action;
+}
+
+// OnIdle, after the staging lock is released: the WDL_String work. Found by ADL,
+// so the plugin's WdlStagedPathPair and a test's pair type both work.
+template <typename PathPair>
+void ApplyPublishedPath(PublishedPathAction action, const std::string& path, PathPair& paths)
+{
+  switch (action)
+  {
+    case PublishedPathAction::Commit:
+      StagePathOnSuccess(paths, path.c_str());
+      CommitStagedPathOnApply(paths);
+      break;
+    case PublishedPathAction::Clear: ClearLiveAndStagedPath(paths); break;
+    case PublishedPathAction::None: break;
+  }
+}
 
 } // namespace volum::dsp_staging

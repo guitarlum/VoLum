@@ -193,6 +193,9 @@ private:
   // caller which lanes must not promote their staged IR this block.
   // Audio thread, mStagingMutex held.
   void _VolumStepDeferredIrSwaps(bool& holdMainIr, bool& holdSupportIr);
+  // OnIdle: destroy what _ApplyDSPStaging and the loader drain retired, and commit
+  // the live paths they published.
+  void _VolumReapAudioThreadRetirees();
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
   // Fallback used when no main NAM model is loaded.
@@ -692,6 +695,12 @@ private:
   std::condition_variable mVolumLoaderCv;
   std::deque<VoLumLoadRequest> mVolumLoadRequests;
   std::deque<VoLumLoadResult> mVolumLoadResults;
+  // Audio thread only: the batch the drain swapped out of mVolumLoadResults. It
+  // parks here while every spent slot still waits for OnIdle.
+  std::deque<VoLumLoadResult> mVolumDrainBatch;
+  // Guarded by mStagingMutex. Drained batches (heap strings and all) wait here
+  // so OnIdle, not the audio thread, frees them.
+  std::array<std::deque<VoLumLoadResult>, volum::dsp_staging::kSpentLoaderBatchSlots> mVolumSpentLoadResults;
 
   template <typename Pred>
   void _VolumDropQueuedLoadRequests(Pred pred)
@@ -908,16 +917,23 @@ private:
   std::atomic<bool> mLatencyDirty{false};
   // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
   // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
-  // The audio thread only moves unique_ptrs into mDspGraveyard; ~ResamplingNAM
-  // runs on OnIdle. Also covers the published NAM path buffer commit.
+  // The audio thread only moves unique_ptrs into the graveyards; ~ResamplingNAM
+  // and ~ImpulseResponse run on OnIdle. Also covers the published path buffers.
+  // Nothing is allocated or destroyed while it is held off the audio thread.
   mutable std::mutex mStagingMutex;
   // Audio thread writes, OnIdle destroys. Reserved so push_back never reallocates
   // in the callback. Overflow last-resorts to reset() on this thread.
   std::vector<std::unique_ptr<ResamplingNAM>> mDspGraveyard;
-  // Path of the model just staged. Drain writes the pending buffer; apply
-  // promotes it so OnIdle cannot commit the live path before the object.
+  std::vector<std::unique_ptr<dsp::ImpulseResponse>> mIrGraveyard;
+  // Path of the asset just staged. The stager writes the pending buffer; apply
+  // publishes it so OnIdle cannot commit the live path before the object, and
+  // the audio thread never touches a WDL_String.
   char mPendingNamPath[volum::dsp_staging::kRtPathCapacity]{};
   volum::dsp_staging::RtPublishedPath mPublishedNamPath;
+  char mPendingIRPath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedIRPath;
+  char mPendingSupportIRPath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedSupportIRPath;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
@@ -956,7 +972,7 @@ private:
   volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
   volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
 
-  // VoLum: live/staged path pairs commit with staged models/IR in _ApplyDSPStaging (see VoLumDspStagingWdl.h).
+  // VoLum: live paths commit in OnIdle from what _ApplyDSPStaging published (see VoLumDspStagingWdl.h).
   volum::dsp_staging::WdlStagedPathPair mNAMPaths;
   volum::dsp_staging::WdlStagedPathPair mIRPaths;
   volum::dsp_staging::WdlStagedPathPair mSupportIRPaths;

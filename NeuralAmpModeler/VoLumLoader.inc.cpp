@@ -136,10 +136,20 @@ void NeuralAmpModeler::_VolumQueuePreNamLoad(int slot, std::string fileToLoad)
 // here may do file I/O, Reset/prewarm a NAM, WDL_String::Set, or destroy a
 // ResamplingNAM - load outcomes are logged by _VolumLoaderThreadMain, stale
 // rate/block results re-queue via mVolumNeedsLoad, and outgoing models go to
-// the OnIdle graveyard.
+// the OnIdle graveyard. The drained batch itself (its heap strings and deque
+// blocks) is handed to OnIdle too, via mVolumSpentLoadResults.
 void NeuralAmpModeler::_VolumDrainLoaderResults()
 {
-  std::deque<VoLumLoadResult> results;
+  // A batch still parked from an earlier drain: every spent slot was waiting for
+  // OnIdle. New results stay queued on the loader side until it can go.
+  if (!mVolumDrainBatch.empty())
+  {
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    if (!volum::dsp_staging::HandOffSpentBatch(mVolumDrainBatch, mVolumSpentLoadResults))
+      return;
+  }
+
+  auto& results = mVolumDrainBatch;
   {
     std::unique_lock<std::mutex> lock(mVolumLoaderMutex, std::try_to_lock);
     if (!lock.owns_lock())
@@ -168,6 +178,8 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       }
     }
   }
+  if (results.empty())
+    return;
 
   const double liveRate = GetSampleRate();
   const int liveBlock = volum::dsp_staging::NamResetBlockSize(GetBlockSize());
@@ -243,6 +255,8 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
     std::lock_guard<std::mutex> lock(mStagingMutex);
     for (auto& result : results)
       volum::dsp_staging::RetireToGraveyard(result.model, mDspGraveyard);
+    // False parks the batch; the next drain retries before taking new results.
+    volum::dsp_staging::HandOffSpentBatch(results, mVolumSpentLoadResults);
   }
 }
 

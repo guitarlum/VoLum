@@ -1501,9 +1501,12 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
   const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
 
-  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(pathPair, irPath);");
-  RequireContains(source, "volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);");
-  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);");
+  RequireContains(
+    source, "volum::dsp_staging::CopyPathNoAlloc(pendingPath, volum::dsp_staging::kRtPathCapacity, irPath.Get());");
+  RequireContains(source, "volum::dsp_staging::ApplyPublishedPath(lane.action, lane.text, lane.paths);");
+  RequireContains(
+    source,
+    "volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, modelPath.Get());");
   RequireContains(source, "_VolumProcessMainAmpChain");
   RequireContains(source, "_VolumProcessDualAmpSupportLane");
   RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
@@ -2200,6 +2203,70 @@ TEST_CASE("Audio-thread model apply retires to the graveyard and never throws")
   RequireContains(applyBody, "PublishStagedModel");
   RequireContains(applyBody, "PublishPathNoAlloc(mPublishedNamPath, mPendingNamPath)");
   RequireDoesNotContain(applyBody, "CommitStagedPathOnApply(mNAMPaths)");
+
+  // 1.3.0 hardening: IRs follow the same rules. The apply used to free the outgoing
+  // convolver (`mIR = std::move(mStagedIR)`, `mIR = nullptr`) and copy or clear the
+  // WDL_String paths in the callback. The helpers are unit-tested in
+  // test_volum_dsp_staging.cpp; these are the call sites.
+  RequireContains(applyBody, "PublishStagedModel(mIR, mStagedIR, mIrGraveyard)");
+  RequireContains(applyBody, "PublishStagedModel(mSupportIR, mStagedSupportIR, mIrGraveyard)");
+  RequireContains(applyBody, "RetireLiveAndStaged(mIR, mStagedIR, mIrGraveyard)");
+  RequireContains(applyBody, "RetireLiveAndStaged(mSupportIR, mStagedSupportIR, mIrGraveyard)");
+  RequireContains(applyBody, "PublishPathNoAlloc(mPublishedIRPath, mPendingIRPath)");
+  RequireContains(applyBody, "PublishPathNoAlloc(mPublishedSupportIRPath, mPendingSupportIRPath)");
+  RequireContains(applyBody, "PublishPathClearNoAlloc(mPublishedIRPath)");
+  RequireContains(applyBody, "PublishPathClearNoAlloc(mPublishedSupportIRPath)");
+  RequireContains(applyBody, "PublishPathClearNoAlloc(mPublishedNamPath)");
+  RequireDoesNotContain(applyBody, "mIR = ");
+  RequireDoesNotContain(applyBody, "mSupportIR = ");
+  RequireDoesNotContain(applyBody, "mStagedIR = ");
+  RequireDoesNotContain(applyBody, "mStagedSupportIR = ");
+  RequireDoesNotContain(applyBody, "CommitStagedPathOnApply");
+  RequireDoesNotContain(applyBody, "ClearLiveAndStagedPath");
+  RequireContains(source, "mIrGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);");
+
+  // OnIdle reaps both graveyards and the drained loader batches, and commits all
+  // three published paths.
+  const std::string reap = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReapAudioThreadRetirees()");
+  RequireContains(reap, "doomedIrs.swap(mIrGraveyard);");
+  RequireContains(reap, "doomed.swap(mDspGraveyard);");
+  RequireContains(reap, "doomedResults.swap(mVolumSpentLoadResults);");
+  RequireContains(reap, "{mPublishedNamPath, mNAMPaths, {}}");
+  RequireContains(reap, "{mPublishedIRPath, mIRPaths, {}}");
+  RequireContains(reap, "{mPublishedSupportIRPath, mSupportIRPaths, {}}");
+  RequireContains(MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()"), "_VolumReapAudioThreadRetirees();");
+
+  // _StageIR / _StageModel destroy what they replace after dropping mStagingMutex.
+  const std::string stageIr = MemberFnUntilNext(source, "dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(");
+  RequireContains(stageIr, "replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, std::move(stagedIR));");
+  RequireContains(stageIr, "replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, nullptr);");
+  RequireDoesNotContain(stageIr, "stagedSlot = std::move");
+  RequireDoesNotContain(stageIr, "stagedSlot = nullptr");
+  RequireDoesNotContain(stageIr, "StagePathOnSuccess");
+  RequireDoesNotContain(stageIr, "ClearStagedPath");
+  const std::string stageModel = MemberFnUntilNext(source, "std::string NeuralAmpModeler::_StageModel(");
+  RequireContains(stageModel, "replacedModel = volum::dsp_staging::ReplaceStaged(mStagedModel, nullptr);");
+  RequireDoesNotContain(stageModel, "mStagedModel = nullptr");
+  RequireDoesNotContain(stageModel, "StagePathOnSuccess");
+
+  // The drained batch is handed to OnIdle, never a local that dies in the callback.
+  const std::string loaderSource = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  const std::string drain = MemberFnUntilNext(loaderSource, "void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  RequireDoesNotContain(drain, "std::deque<VoLumLoadResult> results;");
+  RequireContains(drain, "auto& results = mVolumDrainBatch;");
+  size_t handOffs = 0;
+  for (auto at = drain.find("HandOffSpentBatch("); at != std::string::npos;
+       at = drain.find("HandOffSpentBatch(", at + 1))
+    ++handOffs;
+  CHECK(handOffs == 2); // the parked retry and the end of every drain
+
+  // No Reset in the ResamplingNAM constructor: it prewarmed the Full slice of
+  // every Lite load (behaviour pinned in test_volum_dsp_staging.cpp).
+  const auto ctor = header.find("ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated");
+  REQUIRE(ctor != std::string::npos);
+  const auto ctorEnd = header.find("~ResamplingNAM()", ctor);
+  REQUIRE(ctorEnd != std::string::npos);
+  RequireDoesNotContain(header.substr(ctor, ctorEnd - ctor), "Reset(");
 
   const auto process = header.find("void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)");
   REQUIRE(process != std::string::npos);
