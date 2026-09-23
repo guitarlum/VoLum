@@ -187,7 +187,7 @@ volum::PlayLight HoldPlayInput(volum::PlayLight light, float dbfs, int ticks)
 }
 } // namespace
 
-TEST_CASE("PLAY light: silence is BUILD, -12 dBFS is the full look")
+TEST_CASE("PLAY light: silence is BUILD, -18 dBFS is the full look")
 {
   CHECK(volum::MeterNormFromLinear(0.25f) == doctest::Approx(0.83f).epsilon(0.03f));
   CHECK(volum::PlayLampFollow(0.2f, 0.8f) > 0.2f);
@@ -197,26 +197,30 @@ TEST_CASE("PLAY light: silence is BUILD, -12 dBFS is the full look")
   const volum::PlayLight rest;
   CHECK(volum::PlayGlowAmount(rest) == 0.f);
   CHECK(volum::PlayBloomWeight(volum::PlayGlowAmount(rest)) == 0.f);
-  const volum::PlayLight hum = HoldPlayInput(rest, -40.f, 600);
+  // Interface hiss and pickup hum sit below the floor.
+  const volum::PlayLight hum = HoldPlayInput(rest, -62.f, 600);
   CHECK(hum.energy == 0.f);
   CHECK(hum.attack == 0.f);
   CHECK(volum::PlayGlowAmount(hum) == 0.f);
 
   // A normal guitar level reaches the full look; 0 dBFS is not needed.
-  const volum::PlayLight normal = HoldPlayInput(rest, -12.f, 600);
+  const volum::PlayLight normal = HoldPlayInput(rest, -18.f, 600);
   CHECK(normal.energy >= 0.99f);
   CHECK(volum::PlayGlowAmount(normal) >= 0.99f);
   CHECK(normal.attack == 0.f); // a held level is not a pick
   CHECK(volum::PlayCoronaOpacity(volum::PlayGlowAmount(normal), 0.f) > volum::PlayCoronaOpacity(0.f, 1.f));
 
-  // Quieter playing still glows, in order.
-  const float e30 = HoldPlayInput(rest, -30.f, 600).energy;
-  const float e24 = HoldPlayInput(rest, -24.f, 600).energy;
-  const float e18 = HoldPlayInput(rest, -18.f, 600).energy;
-  CHECK(e30 > 0.f);
-  CHECK(e30 < e24);
-  CHECK(e24 < e18);
-  CHECK(e18 < normal.energy);
+  // A rolled-back volume pot still moves the art, and louder moves it more.
+  const float e45 = HoldPlayInput(rest, -45.f, 600).energy;
+  const float e36 = HoldPlayInput(rest, -36.f, 600).energy;
+  const float e27 = HoldPlayInput(rest, -27.f, 600).energy;
+  CHECK(e45 > 0.05f);
+  CHECK(e45 < e36);
+  CHECK(e36 < e27);
+  CHECK(e27 < normal.energy);
+
+  // A chord ringing out keeps the art alive while it decays.
+  CHECK(HoldPlayInput(normal, -50.f, 45).energy > 0.f);
 
   // A pick: the attack jumps on the step, then decays while the note is held.
   const volum::PlayLight picked = HoldPlayInput(rest, -12.f, 1);

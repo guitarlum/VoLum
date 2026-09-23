@@ -166,9 +166,9 @@ TEST_CASE("Art anim: Art motion stays at rest through silence")
   CHECK(s.m.bloom == 0.f);
   CHECK(s.m.Wake() == 0.f);
 
-  // Hum and noise under the energy floor are silence too.
+  // Hum and noise under the energy floor (-62 dBFS here) are silence too.
   for (int i = 0; i < 600; ++i)
-    Step(light, s, 0.45f);
+    Step(light, s, volum::MeterNormFromDb(-62.f));
   CHECK(s.m.IsRest());
   CHECK(s.m.clock == 0.0);
 }

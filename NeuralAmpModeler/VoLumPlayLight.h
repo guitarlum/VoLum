@@ -18,10 +18,13 @@ namespace volum
 
 inline constexpr float kPlayMeterDbMin = -70.0f;
 inline constexpr float kPlayMeterDbMax = -0.01f;
-// Energy window on the dB-norm: 0 at or below -33.6 dBFS (hum, noise, a dying
-// tail), 1 from -11.9 dBFS up.
-inline constexpr float kPlayEnergyFloorNorm = 0.52f;
-inline constexpr float kPlayEnergyFullNorm = 0.83f;
+// Energy window on the dB-norm: 0 at or below -55 dBFS (interface and pickup
+// noise stay under it), 1 from -18 dBFS up. A rolled-back volume pot or a chord
+// ringing out still moves the art.
+inline constexpr float kPlayEnergyFloorNorm = 0.2143f;
+inline constexpr float kPlayEnergyFullNorm = 0.7429f;
+// Lamp release per 60 Hz tick (~1 s), so a decaying chord holds the motion.
+inline constexpr float kPlayLampRelease = 0.025f;
 // Attack: how far the input leads the lamp, which lags a pick by design.
 inline constexpr float kPlayAttackRiseMin = 0.04f;
 inline constexpr float kPlayAttackRiseSpan = 0.16f;
@@ -46,8 +49,8 @@ inline float PlayIdlePulse(float phase)
   return 0.5f + 0.5f * std::sin(phase);
 }
 
-// One-pole toward the dB-norm. Attack ~200 ms / release ~600 ms at 60 Hz.
-inline float PlayLampFollow(float current, float target, float attack = 0.15f, float release = 0.04f)
+// One-pole toward the dB-norm. Attack ~200 ms / release ~1 s at 60 Hz.
+inline float PlayLampFollow(float current, float target, float attack = 0.15f, float release = kPlayLampRelease)
 {
   const float coeff = target > current ? attack : release;
   return current + (target - current) * coeff;
