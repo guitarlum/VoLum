@@ -572,7 +572,7 @@ TEST_CASE("Chorus mode switch and MIX end-stop drags do not click")
         const auto row = volum::kVoLumChorusModeDefaults[mode];
         chorus.SetParams(row.rate, row.depth, row.tone, row.width, 0.5, mode, kSR);
         double* ptr[2] = {io.l.data() + start, io.r.data() + start};
-        chorus.Process(ptr, 2, kBlock);
+        chorus.Process(ptr, 2, static_cast<int>(std::min<size_t>(kBlock, n - start)));
       }
       const double steady = std::max(maxStep(io.l, at - 24000, at), maxStep(io.r, at - 24000, at));
       const double around = std::max(maxStep(io.l, at, at + 4800), maxStep(io.r, at, at + 4800));
@@ -596,7 +596,7 @@ TEST_CASE("Chorus mode switch and MIX end-stop drags do not click")
           mix = row.mix + (endMix - row.mix) * std::min(1.0, static_cast<double>(start - t0) / (8.0 * kBlock));
         chorus.SetParams(row.rate, row.depth, row.tone, row.width, mix, mode, kSR);
         double* ptr[2] = {io.l.data() + start, io.r.data() + start};
-        chorus.Process(ptr, 2, kBlock);
+        chorus.Process(ptr, 2, static_cast<int>(std::min<size_t>(kBlock, n - start)));
       }
       const double steady = maxStep(io.l, t0 - 24000, t0);
       const double later = maxStep(io.l, t0 + 24000, n);

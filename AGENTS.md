@@ -41,7 +41,7 @@ Single-context. `CONTEXT.md` is a lazy glossary, not a spec. See
 
 ## Fast Commands
 
-- Windows tests: `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`
+- Windows tests: `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` (`-Asan` = AddressSanitizer build with the macOS sanitizer job's exclusions; run it before pushing DSP or buffer code)
 - macOS tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh`
 - macOS sanitizer tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`
 - Windows app smoke check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`

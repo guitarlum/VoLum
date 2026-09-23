@@ -2,7 +2,10 @@
 # From repo: VoLum\NeuralAmpModeler\scripts
 
 param(
-  [string]$Filter
+  [string]$Filter,
+  # AddressSanitizer build of the same suite, with the exclusions of the macOS
+  # sanitizer CI job. Catches the heap overruns that job fails on before a push.
+  [switch]$Asan
 )
 
 $ErrorActionPreference = "Stop"
@@ -92,6 +95,22 @@ if (-not $msbuild) {
 }
 if (-not $msbuild) {
   Write-Error "MSBuild.exe not found."
+}
+
+if ($Asan) {
+  $asanOut = Join-Path $slnDir "build-win\tests-asan"
+  & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-Tests /p:Configuration=Release /p:Platform=x64 /p:EnableASAN=true "/p:OutDir=$asanOut\" "/p:IntDir=$asanOut\obj\" /m /v:minimal
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  $runtime = Get-ChildItem (Join-Path (Split-Path (Split-Path (Split-Path $msbuild))) "..\VC\Tools\MSVC\*\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll") -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $runtime) { Write-Error "clang_rt.asan_dynamic-x86_64.dll not found next to the MSVC toolset." }
+  $env:PATH = "$($runtime.DirectoryName);$env:PATH"
+  $mac = Get-Content -Raw (Join-Path $here "run-tests-mac.sh")
+  $exclude = if ($mac -match '--test-case-exclude="([^"]+)"') { $Matches[1] } else { "" }
+  $asanArgs = @()
+  if ($exclude) { $asanArgs += "--test-case-exclude=$exclude" }
+  if ($Filter) { $asanArgs += "--test-case=*$Filter*" }
+  & (Join-Path $asanOut "NeuralAmpModeler-Tests.exe") @asanArgs
+  exit $LASTEXITCODE
 }
 
 & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-Tests /p:Configuration=Release /p:Platform=x64 /m /v:minimal
