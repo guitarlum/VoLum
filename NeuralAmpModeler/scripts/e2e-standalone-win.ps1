@@ -37,6 +37,14 @@ if (-not (Test-Path $Exe)) {
 }
 if (-not $SeedFrom) { $SeedFrom = Join-Path $env:LOCALAPPDATA "VoLum" }
 
+# The schema this build writes, so an upgrade is checked against the real target
+# rather than a number that goes stale on the next bump.
+$storeHeader = Get-Content (Join-Path $slnDir "VoLumContentStore.h") -Raw
+if ($storeHeader -notmatch 'kContentSchemaVersion\s*=\s*(\d+)\s*;') {
+  Write-Error "kContentSchemaVersion not found in VoLumContentStore.h"
+}
+$script:ContentSchemaVersion = [int]$Matches[1]
+
 $script:Failures = @()
 $script:Checks = 0
 
@@ -65,8 +73,8 @@ function New-Sandbox {
   return $dir
 }
 
-# Copy the seed library into a sandbox. `settings.ini` comes along so the app picks
-# the same audio device instead of prompting on a device it has never seen.
+# Copy the seed library into a sandbox. The seed's settings.ini is replaced: see
+# Write-SandboxAudioConfig.
 function Copy-SeedState {
   param([string]$SandboxRoot)
   if (-not (Test-Path $SeedFrom)) {
@@ -75,12 +83,17 @@ function Copy-SeedState {
   Copy-Item (Join-Path $SeedFrom "*") (Join-Path $SandboxRoot "VoLum") -Recurse -Force
   # A log from the seed would make the fresh-log assertions meaningless.
   Remove-Item (Join-Path $SandboxRoot "VoLum\volum.log") -Force -ErrorAction SilentlyContinue
+  Write-SandboxAudioConfig $SandboxRoot
 }
 
-function Copy-AudioConfigOnly {
+# DirectSound on the default devices. The seed's own interface (an ASIO driver on a
+# dev box) is often absent - unplugged, or unavailable while the session is locked -
+# and any failed open puts a modal "Audio Error" box in front of the window, which
+# blocks the graceful close every scenario asserts on.
+function Write-SandboxAudioConfig {
   param([string]$SandboxRoot)
-  $ini = Join-Path $SeedFrom "settings.ini"
-  if (Test-Path $ini) { Copy-Item $ini (Join-Path $SandboxRoot "VoLum") -Force }
+  @("[audio]", "driver=0", "indev=Default Device", "outdev=Default Device", "in1=1", "out1=1", "out2=2",
+    "buffer=512", "sr=48000") | Set-Content (Join-Path $SandboxRoot "VoLum\settings.ini") -Encoding ASCII
 }
 
 # Launch VoLum against a sandboxed LOCALAPPDATA and close it the way a user would.
@@ -90,7 +103,10 @@ function Copy-AudioConfigOnly {
 # so is any non-zero exit, including the watchdog's own.
 function Invoke-VoLumRun {
   # -Drive runs against the live window after the settle, before the graceful close.
-  param([string]$SandboxRoot, [int]$SettleSec = 6, [scriptblock]$Drive)
+  # -AcknowledgeNotice presses OK, as a user would, on a startup message box whose
+  # "caption: text" matches it; the text lands in the result's `notices`. Any other
+  # box is left up, so a launch it blocks still fails to open.
+  param([string]$SandboxRoot, [int]$SettleSec = 6, [scriptblock]$Drive, [string]$AcknowledgeNotice)
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $Exe
@@ -98,15 +114,31 @@ function Invoke-VoLumRun {
   $psi.EnvironmentVariables["LOCALAPPDATA"] = $SandboxRoot
   $proc = [System.Diagnostics.Process]::Start($psi)
 
+  $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null; drive = $null; notices = @() }
+  $blocking = @{}
+  $acknowledged = @{}
   $deadline = (Get-Date).AddSeconds($LaunchTimeoutSec)
   while ((Get-Date) -lt $deadline) {
     $proc.Refresh()
     if ($proc.HasExited) { break }
     if ($proc.MainWindowHandle -ne 0) { break }
+    foreach ($box in [VoLumE2eUi]::OwnedDialogs($proc.Id)) {
+      $text = [VoLumE2eUi]::DialogText($box)
+      if ($AcknowledgeNotice -and $text -match $AcknowledgeNotice) {
+        if (-not $acknowledged.ContainsKey($box)) {
+          $acknowledged[$box] = $true
+          $result.notices += $text
+        }
+        [VoLumE2eUi]::PressOk($box)
+      }
+      elseif (-not $blocking.ContainsKey($text)) {
+        $blocking[$text] = $true
+        Write-Host ("  startup blocked by a message box: {0}" -f $text) -ForegroundColor Yellow
+      }
+    }
     Start-Sleep -Milliseconds 250
   }
 
-  $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null; drive = $null }
   if ($proc.HasExited) {
     $result.exitCode = $proc.ExitCode
     return $result
@@ -137,9 +169,11 @@ function Invoke-VoLumRun {
     }
   }
   else {
+    $boxes = @([VoLumE2eUi]::OwnedDialogs($proc.Id) | ForEach-Object { [VoLumE2eUi]::DialogText($_) })
     $proc.Kill()
     [void]$proc.WaitForExit(10000)
     Write-Host "  window did not close within 20 s; process killed" -ForegroundColor Yellow
+    foreach ($b in $boxes) { Write-Host ("  close blocked by a message box: {0}" -f $b) -ForegroundColor Yellow }
   }
   return $result
 }
@@ -177,7 +211,7 @@ function Assert-NoContentLoss {
 function Test-Fresh {
   Write-Host "`n[fresh] first launch with no existing state" -ForegroundColor Cyan
   $sandbox = New-Sandbox "fresh"
-  Copy-AudioConfigOnly $sandbox
+  Write-SandboxAudioConfig $sandbox
   $root = Join-Path $sandbox "VoLum"
 
   $run = Invoke-VoLumRun -SandboxRoot $sandbox
@@ -320,7 +354,8 @@ function Test-Upgrade {
   Assert-True "upgraded registry still parses" ($null -ne $after)
   if ($after) {
     Assert-NoContentLoss $before $after
-    Assert-Equal "registry upgraded to schema v3" 3 $after.schemaVersion
+    Assert-Equal ("registry upgraded to the current schema v{0}" -f $script:ContentSchemaVersion) `
+      $script:ContentSchemaVersion $after.schemaVersion
     if ($irCount -gt 0) {
       $calibrated = @($after.irLibrary | Where-Object { $null -ne $_.trimDb }).Count
       Assert-Equal "every IR gained a measured trim" $irCount $calibrated
@@ -640,13 +675,18 @@ function Test-PresetMemory {
 function Test-Corrupt {
   Write-Host "`n[corrupt] truncated content registry" -ForegroundColor Cyan
   $sandbox = New-Sandbox "corrupt"
-  Copy-AudioConfigOnly $sandbox
+  Write-SandboxAudioConfig $sandbox
   $root = Join-Path $sandbox "VoLum"
   New-Item -ItemType Directory -Path (Join-Path $root "content") -Force | Out-Null
   '{ "schemaVersion": 3, "customAmps": [ { "id": "amp_trunc"' |
     Set-Content (Join-Path $root "content\volum-content.json") -Encoding UTF8
 
-  $run = Invoke-VoLumRun -SandboxRoot $sandbox
+  # Since 1.3.0 the recovery is announced in a message box while the window opens
+  # (OnUIOpen), and the window appears once it is acknowledged.
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox -AcknowledgeNotice "^VoLum: Could not read the library"
+  Assert-Equal "recovery notice shown once" 1 @($run.notices).Count
+  Assert-True "recovery notice names the .bak" (@($run.notices | Where-Object { $_ -match "volum-content\.json\.bak" }).Count -eq 1) `
+    ("notices: " + ($run.notices -join " | "))
   Assert-True "app still opens with an unreadable library" $run.started
   Assert-True "app closed gracefully" $run.graceful
   Assert-True "unreadable library moved aside as .bak" (Test-Path (Join-Path $root "content\volum-content.json.bak"))
@@ -665,7 +705,6 @@ function Test-Corrupt {
 function Test-SampleRate {
   Write-Host "`n[samplerate] settings.ini names a rate the device does not offer" -ForegroundColor Cyan
   $sandbox = New-Sandbox "samplerate"
-  Copy-AudioConfigOnly $sandbox
   $root = Join-Path $sandbox "VoLum"
   $ini = Join-Path $root "settings.ini"
 
@@ -734,7 +773,59 @@ public static class VoLumE2eUi {
   [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr h);
+  [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)]
+  static extern IntPtr SendText(IntPtr h, uint msg, IntPtr w, StringBuilder l);
   [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+
+  // Visible owned dialog boxes of a process: its MessageBoxes. VoLum's main window
+  // is an unowned #32770, so it never matches.
+  public static IntPtr[] OwnedDialogs(int pid) {
+    var found = new System.Collections.Generic.List<IntPtr>();
+    EnumWindows((h, l) => {
+      uint p; GetWindowThreadProcessId(h, out p);
+      if (p != (uint)pid || !IsWindowVisible(h) || GetWindow(h, 4) == IntPtr.Zero) return true;
+      var c = new StringBuilder(64);
+      GetClassName(h, c, 64);
+      if (c.ToString() == "#32770") found.Add(h);
+      return true;
+    }, IntPtr.Zero);
+    return found.ToArray();
+  }
+  static string TextOf(IntPtr h) {
+    var s = new StringBuilder(1024);
+    SendText(h, 0x000D, (IntPtr)s.Capacity, s); // WM_GETTEXT
+    return s.ToString();
+  }
+  // "Caption: body" of a MessageBox.
+  public static string DialogText(IntPtr box) {
+    var body = new StringBuilder();
+    EnumChildWindows(box, (h, l) => {
+      var c = new StringBuilder(64);
+      GetClassName(h, c, 64);
+      if (c.ToString() == "Static") body.Append(TextOf(h));
+      return true;
+    }, IntPtr.Zero);
+    return TextOf(box) + ": " + body.ToString().Trim();
+  }
+  // WM_COMMAND with the button's own id: a lone OK button in a MessageBox is
+  // IDCANCEL, not IDOK. Works without input, so also on a locked desktop.
+  public static void PressOk(IntPtr box) {
+    IntPtr button = IntPtr.Zero;
+    EnumChildWindows(box, (h, l) => {
+      var c = new StringBuilder(64);
+      GetClassName(h, c, 64);
+      if (c.ToString() != "Button") return true;
+      button = h;
+      return false;
+    }, IntPtr.Zero);
+    if (button != IntPtr.Zero) PostMessage(box, 0x0111, (IntPtr)GetDlgCtrlID(button), button);
+  }
 
   public static IntPtr PlugWindow(IntPtr main) {
     IntPtr found = IntPtr.Zero;
@@ -794,11 +885,7 @@ function Test-SaveDialog {
   Write-Host "`n[savedialog] PLAY Add this sound: Cancel writes nothing, Save adds one Sound" -ForegroundColor Cyan
   $sandbox = New-Sandbox "savedialog"
   $root = Join-Path $sandbox "VoLum"
-  # DirectSound on the default devices: the dialog needs no particular interface,
-  # and an absent ASIO device from the seed would put a modal "Audio Error" box in
-  # front of every click.
-  @("[audio]", "driver=0", "indev=Default Device", "outdev=Default Device", "in1=1", "out1=1", "out2=2",
-    "buffer=512", "sr=48000") | Set-Content (Join-Path $root "settings.ini") -Encoding ASCII
+  Write-SandboxAudioConfig $sandbox
   $contentPath = Join-Path $root "content\volum-content.json"
   $settingsPath = Join-Path $root "volum-settings.json"
   $logPath = Join-Path $root "volum.log"

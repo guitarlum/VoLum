@@ -3,6 +3,8 @@
 // file-size hygiene; tail-#included into the NeuralAmpModeler TU (not a separate
 // build target). Behaviour is identical: the lambda now just forwards here.
 
+#include "VoLumSelfCapture.h"
+
 void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 {
   // Diagonal, aspect-locked scaling via the bottom-right corner grip. This is
@@ -1715,4 +1717,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     pControl->SetMouseOverWhenDisabled(volum::DisabledPointerPolicy::kMouseOverWhenDisabled);
     pControl->SetMouseEventsWhenDisabled(volum::DisabledPointerPolicy::kMouseEventsWhenDisabled);
   });
+
+  // Debug/test only, and only with VOLUM_SELF_CAPTURE_DIR set. Must stay last.
+  volum::selfcapture::AttachIfRequested(pGraphics);
 }

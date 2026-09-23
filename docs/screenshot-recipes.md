@@ -115,8 +115,35 @@ shows the wrong state. A capture that comes back uniformly light grey is the sam
 symptom - the GL surface was never composited because the window was not in
 front. A **locked workstation** produces exactly that, for every shot, with no
 other symptom: `PrintWindow` hands back DWM's last composited surface, and while
-LogonUI owns the desktop there is none. There is no way round it from a script,
-so check `Get-Process LogonUI` before blaming the recipe, and unlock first.
+LogonUI owns the desktop there is none. Check `Get-Process LogonUI` before
+blaming the recipe, then either unlock or use the `-Locked` mode below.
+
+### 2b. Locked-screen capture (`ui-drive.ps1 -Locked`)
+
+`-Locked` drives VoLum through window messages and captures from inside the app,
+so it works the same with the workstation locked or unlocked. It needs VoLum
+started with `VOLUM_SELF_CAPTURE_DIR` (`.ui-sandbox-launch.ps1` sets it to
+`%TEMP%\volum-ui-sandbox\capture`); without that variable the capture control is
+never attached.
+
+```powershell
+pwsh NeuralAmpModeler/scripts/.ui-sandbox-launch.ps1 -Reseed
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "869,22;300,113" -Out shots\signal.png
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Keys "{ESC};^s" -Out shots\save-dialog.png
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Keys "{END} 2" -Out shots\save-dialog-typed.png
+```
+
+- Clicks are canvas pixels, scaled to the plug window's client width / 900.
+- `-Keys` takes the SendKeys subset: `^` Ctrl, `+` Shift, `%` Alt, `{ESC}`
+  `{ENTER}` `{TAB}` arrows `{HOME}` `{END}` `{BS}` `{DEL}` `{F1}`..`{F12}`,
+  `{X n}` repeats, other characters are typed. Modifiers reach VoLum by sharing
+  its key state for each stroke (`AttachThreadInput`).
+- The PNG is the GL framebuffer at client resolution (900x600 at 100% scale),
+  read after every control drew. Anything iPlug draws outside the control list
+  (corner resizer, tooltips, native Open/Save dialogs) is missing, and
+  `-PackOpen` is refused.
+- Each call is one shot; state carries over between calls because the app keeps
+  running.
 
 The Settings tab strip is sized to content and centred, so tab x positions move
 when the number of tabs changes. It is three tabs wide since 1.3.0: window x
