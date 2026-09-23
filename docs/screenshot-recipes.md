@@ -33,6 +33,14 @@ capture. Do not chain `win-click.ps1` then `capture-volum-canvas.ps1`:
 foreground is lost between processes and PrintWindow returns a blank canvas.
 `win-click.ps1` stays window-relative for ad-hoc probes.
 
+To run Pack export / import without the native Save / Open dialog (a locked
+workstation cannot drive either), launch with `VOLUM_PACK_SAVE_PATH=<file>` and/or
+`VOLUM_PACK_OPEN_PATH=<file>`. Export... then writes that file and Import Pack...
+opens it, through the same code the dialog path runs; unset or empty, the
+dialogs come back. Every export, open and import also logs a `[pack]` line in
+`volum.log`. `e2e-standalone-win.ps1 -Scenario pack -ShotsDir <dir>` drives the
+whole round trip this way and saves the overlays as `06-*.png`.
+
 Pack Open/Save dialogs are separate `#32770` windows. Default `ui-drive.ps1`
 ForceFront cancels iPlug `PromptForFile` and the import overlay shows **No Pack
 opened.** Write the seed Pack first, then
@@ -149,7 +157,7 @@ pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Keys "{END} 2" -Out shots\sa
 - The PNG is the GL framebuffer at client resolution (900x600 at 100% scale),
   read after every control drew. Anything iPlug draws outside the control list
   (corner resizer, tooltips, native Open/Save dialogs) is missing, and
-  `-PackOpen` is refused.
+  `-PackOpen` is refused: launch with `VOLUM_PACK_OPEN_PATH` instead (see above).
 - Each call is one shot; state carries over between calls because the app keeps
   running.
 

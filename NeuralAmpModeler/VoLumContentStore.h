@@ -119,6 +119,15 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
   return true;
 }
 
+// The leaf a copied file is stored under: the user's own file name, minus the
+// one character IsSafeStoredRelPath refuses mid-path. macOS allows ':' in a name
+// (Finder shows it as '/'); stored as-is, the copy would never resolve again.
+inline std::string StoredLeafName(std::string leaf)
+{
+  std::replace(leaf.begin(), leaf.end(), ':', '_');
+  return leaf;
+}
+
 // v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
@@ -1676,7 +1685,7 @@ public:
     if (ec)
       return {};
 
-    const std::string leaf = PathToUtf8(src.filename());
+    const std::string leaf = StoredLeafName(PathToUtf8(src.filename()));
     const std::string stored = idPrefix + "__" + leaf;
     const auto dst = dstDir / PathFromUtf8(stored);
     std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);

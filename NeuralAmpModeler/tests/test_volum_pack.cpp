@@ -1763,6 +1763,37 @@ TEST_CASE("tier2c a Pack marks entry names as UTF-8")
   CHECK(static_cast<unsigned char>(blob[central + 9]) == 0x08);
 }
 
+TEST_CASE("A capture named with a colon is stored under a leaf the library can resolve and pack")
+{
+  using volum::content::IsSafeStoredRelPath;
+  using volum::content::StoredLeafName;
+  // macOS allows ':' in a file name; the store and the archive both refuse it
+  // mid-path, so the copy must not keep it or the amp can never load or travel.
+  CHECK(StoredLeafName("Foo:Bar.nam") == "Foo_Bar.nam");
+  CHECK(StoredLeafName("Plexi.nam") == "Plexi.nam");
+  CHECK(IsSafeStoredRelPath("amps/amp_c_0__" + StoredLeafName("Foo:Bar.nam")));
+
+#if !defined(_WIN32)
+  // Windows cannot hold such a name (':' opens an alternate data stream).
+  const auto base = TestBase("colon-leaf");
+  ContentStore store(base);
+  const auto src = WriteSrc(base / "incoming", "Foo:Bar.nam", "NAM-colon");
+  const std::string rel = store.ImportFileCopy(src, "amps", "amp_c_0");
+  REQUIRE_FALSE(rel.empty());
+  CHECK(IsSafeStoredRelPath(rel));
+  CHECK_FALSE(store.ResolveStored(rel).empty());
+
+  CustomAmp amp;
+  amp.id = "amp_c";
+  amp.name = "Colon";
+  amp.files = {{"Foo:Bar.nam", kDirectSlot, 1, rel}};
+  store.reg().amps.push_back(amp);
+  REQUIRE(store.Save());
+  std::string err;
+  CHECK_MESSAGE(WritePack(store, EverythingPlan(store.reg()), "", base / "colon.volumpack", &err), err);
+#endif
+}
+
 TEST_CASE("Screenshot-seed library WritePacks an Everything Pack the import shot can open")
 {
   // docs/screenshot-seed is the how-to library. Recapture used to export it

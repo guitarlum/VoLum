@@ -17,14 +17,16 @@
 [CmdletBinding()]
 param(
   [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
-    "samplerate", "savedialog")]
+    "samplerate", "savedialog", "pack")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
   # live library, which is the only place real .nam/.wav payloads exist on a dev box.
   [string]$SeedFrom,
   [int]$LaunchTimeoutSec = 60,
-  [switch]$KeepSandbox
+  [switch]$KeepSandbox,
+  # pack scenario: also save the export/import overlays as <ShotsDir>\06-*.png.
+  [string]$ShotsDir
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,12 +108,15 @@ function Invoke-VoLumRun {
   # -AcknowledgeNotice presses OK, as a user would, on a startup message box whose
   # "caption: text" matches it; the text lands in the result's `notices`. Any other
   # box is left up, so a launch it blocks still fails to open.
-  param([string]$SandboxRoot, [int]$SettleSec = 6, [scriptblock]$Drive, [string]$AcknowledgeNotice)
+  # -Environment adds variables for this launch only (the Pack dialog hooks, self-capture).
+  param([string]$SandboxRoot, [int]$SettleSec = 6, [scriptblock]$Drive, [string]$AcknowledgeNotice,
+    [hashtable]$Environment = @{})
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $Exe
   $psi.UseShellExecute = $false
   $psi.EnvironmentVariables["LOCALAPPDATA"] = $SandboxRoot
+  foreach ($k in $Environment.Keys) { $psi.EnvironmentVariables[$k] = [string]$Environment[$k] }
   $proc = [System.Diagnostics.Process]::Start($psi)
 
   $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null; drive = $null; notices = @() }
@@ -962,6 +967,455 @@ function Test-SaveDialog {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: Pack export -> import through the real Settings -> SYSTEM overlay
+#
+# Library A (the screenshot seed plus a Sound on the custom amp and a PLAY map)
+# exports Everything, a Sounds subset and A whole amp through the overlay. Each
+# Pack is imported through the overlay into a fresh, empty library B, and B's
+# registry and payload files are compared with A's for exactly what that scope
+# promises. Then the three verbs run against a library that already has the
+# items, and a truncated Pack is refused without writing anything.
+#
+# The native Save / Open dialogs cannot be driven on a locked desktop, so
+# VOLUM_PACK_SAVE_PATH / VOLUM_PACK_OPEN_PATH stand in for them
+# (VoLumPackActions.inc.cpp); everything after the chosen path is the code the
+# button runs. Canvas coordinates: the modal is 560x408 centred in 900x600
+# (VoLumPackOverlay.h, VoLumPackLayout.h).
+# --------------------------------------------------------------------------
+$script:PackUi = @{
+  gear = @(869, 22); system = @(600, 113); export = @(525, 346); import = @(718, 346)
+  go = @(529, 473); cancel = @(371, 473)
+  scopeSounds = @(250, 174); scopeAmp = @(250, 198)
+  exportRow0 = 227 # centre of the first export tick row; rows are 20 px apart
+  verbOverwrite = @(272, 397); verbAdd = @(447, 397); verbReset = @(622, 397)
+  alsoSettings = @(300, 441)
+}
+
+function Invoke-PackClick {
+  param([IntPtr]$Plug, $At, [int]$SleepMs = 450)
+  [VoLumE2eUi]::Click($Plug, $At[0], $At[1])
+  Start-Sleep -Milliseconds $SleepMs
+}
+
+# VoLum paints itself into <CaptureDir>\<stem>.bmp (VoLumSelfCapture.h), which
+# works on a locked workstation. Only with -ShotsDir.
+function Save-PackShot {
+  param([string]$CaptureDir, [string]$Name)
+  if (-not $ShotsDir) { return }
+  $stem = "e2e-" + [DateTime]::UtcNow.Ticks
+  $done = Join-Path $CaptureDir "done.txt"
+  Remove-Item $done -Force -ErrorAction SilentlyContinue
+  [IO.File]::WriteAllText((Join-Path $CaptureDir "request.txt"), $stem)
+  $until = (Get-Date).AddSeconds(8)
+  $landed = $false
+  while ((Get-Date) -lt $until) {
+    if ((Test-Path $done) -and ((Get-Content $done -Raw) -like "$stem.bmp *")) { $landed = $true; break }
+    Start-Sleep -Milliseconds 100
+  }
+  if (-not $landed) { Write-Host ("  shot {0} did not land" -f $Name) -ForegroundColor Yellow; return }
+  Add-Type -AssemblyName System.Drawing
+  New-Item -ItemType Directory -Path $ShotsDir -Force | Out-Null
+  $bmp = Join-Path $CaptureDir "$stem.bmp"
+  $img = [System.Drawing.Image]::FromFile($bmp)
+  try { $img.Save((Join-Path $ShotsDir "$Name.png"), [System.Drawing.Imaging.ImageFormat]::Png) }
+  finally { $img.Dispose() }
+  Remove-Item $bmp -Force -ErrorAction SilentlyContinue
+}
+
+function Read-PackArchive {
+  param([string]$Path)
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::OpenRead($Path)
+  try {
+    $out = @{ names = @($zip.Entries | ForEach-Object { $_.FullName }) }
+    foreach ($n in @("manifest.json", "library.json", "settings.json")) {
+      $e = $zip.GetEntry($n)
+      if ($e) {
+        $r = New-Object IO.StreamReader($e.Open(), [Text.Encoding]::UTF8)
+        $out[$n] = $r.ReadToEnd()
+        $r.Close()
+      }
+    }
+    return $out
+  }
+  finally { $zip.Dispose() }
+}
+
+function ConvertTo-Canon { param($Value) return ($Value | ConvertTo-Json -Depth 40 -Compress) }
+
+function Get-PresetIndex {
+  param($Registry)
+  $ix = @{}
+  if ($Registry -and $Registry.presetBanks) {
+    foreach ($bank in $Registry.presetBanks.PSObject.Properties) {
+      foreach ($pr in @($bank.Value)) {
+        $ix[$pr.id] = [pscustomobject]@{ owner = $bank.Name; name = $pr.name; settings = (ConvertTo-Canon $pr.settings) }
+      }
+    }
+  }
+  return $ix
+}
+
+function Get-MapKey {
+  param($Registry)
+  $rows = Get-MidiMapRows $Registry
+  return (@($rows | Sort-Object { [int]$_.slot } |
+      ForEach-Object { "{0}:{1}:{2}" -f $_.slot, $_.ampId, $_.presetId }) -join "|")
+}
+
+function Join-Ids { param($Ids) return ((@($Ids) | Where-Object { $_ } | Sort-Object) -join ",") }
+
+function Get-StoredFile {
+  param([string]$Root, [string]$Rel)
+  return (Join-Path $Root ("content\" + ($Rel -replace "/", "\")))
+}
+
+function Get-FileSha {
+  param([string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) { return "" }
+  return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
+
+# B holds exactly the promised items, each identical to A's, with the same bytes
+# behind every stored path.
+function Assert-PackLanded {
+  param([string]$Label, $SrcReg, [string]$SrcRoot, $DstReg, [string]$DstRoot,
+    [string[]]$Amps = @(), [string[]]$Irs = @(), [string[]]$Pedals = @(), [string[]]$Presets = @())
+  if (-not $DstReg) { Assert-True "[$Label] receiver library written" $false; return }
+  $sameBytes = {
+    param($rel)
+    $b = Get-StoredFile $DstRoot $rel
+    (Test-Path -LiteralPath $b) -and ((Get-FileSha (Get-StoredFile $SrcRoot $rel)) -eq (Get-FileSha $b))
+  }
+  foreach ($id in $Amps) {
+    $s = @($SrcReg.customAmps | Where-Object { $_.id -eq $id })[0]
+    $d = @($DstReg.customAmps | Where-Object { $_.id -eq $id })[0]
+    Assert-True "[$Label] custom amp '$($s.name)' imported" ($null -ne $d)
+    if (-not $d) { continue }
+    Assert-Equal "[$Label] custom amp '$($s.name)' identical" (ConvertTo-Canon $s) (ConvertTo-Canon $d)
+    foreach ($f in @($s.files | Where-Object { $_.storedPath })) {
+      Assert-True "[$Label] capture '$($f.storedPath)' on disk with the same bytes" (& $sameBytes $f.storedPath)
+    }
+  }
+  foreach ($kind in @(@{ key = "irLibrary"; ids = $Irs; what = "IR" }, @{ key = "customPedals"; ids = $Pedals; what = "pedal" })) {
+    foreach ($id in $kind.ids) {
+      $s = @($SrcReg.($kind.key) | Where-Object { $_.id -eq $id })[0]
+      $d = @($DstReg.($kind.key) | Where-Object { $_.id -eq $id })[0]
+      Assert-True "[$Label] $($kind.what) '$($s.name)' imported" ($null -ne $d)
+      if (-not $d) { continue }
+      Assert-Equal "[$Label] $($kind.what) '$($s.name)' identical" (ConvertTo-Canon $s) (ConvertTo-Canon $d)
+      Assert-True "[$Label] $($kind.what) file '$($s.path)' on disk with the same bytes" (& $sameBytes $s.path)
+    }
+  }
+  $si = Get-PresetIndex $SrcReg
+  $di = Get-PresetIndex $DstReg
+  foreach ($id in $Presets) {
+    $s = $si[$id]
+    $d = $di[$id]
+    Assert-True "[$Label] preset '$($s.name)' imported" ($null -ne $d)
+    if (-not $d) { continue }
+    Assert-Equal "[$Label] preset '$($s.name)' stays on its amp" $s.owner $d.owner
+    Assert-Equal "[$Label] preset '$($s.name)' keeps its name" $s.name $d.name
+    Assert-Equal "[$Label] preset '$($s.name)' keeps its settings" $s.settings $d.settings
+  }
+  Assert-Equal "[$Label] no other custom amps" (Join-Ids $Amps) (Join-Ids ($DstReg.customAmps | ForEach-Object { $_.id }))
+  Assert-Equal "[$Label] no other IRs" (Join-Ids $Irs) (Join-Ids ($DstReg.irLibrary | ForEach-Object { $_.id }))
+  Assert-Equal "[$Label] no other pedals" (Join-Ids $Pedals) (Join-Ids ($DstReg.customPedals | ForEach-Object { $_.id }))
+  Assert-Equal "[$Label] no other presets" (Join-Ids $Presets) (Join-Ids $di.Keys)
+}
+
+# A fresh library B opens `$PackPath` through Settings -> SYSTEM -> Import Pack...
+# `$Choose` clicks verbs / the settings box before Import.
+function Invoke-PackImportFresh {
+  param([string]$Name, [string]$PackPath, [scriptblock]$Choose)
+  $sandbox = New-Sandbox ("pack-import-" + $Name)
+  Write-SandboxAudioConfig $sandbox
+  $cap = Join-Path $sandbox "capture"
+  New-Item -ItemType Directory -Path $cap -Force | Out-Null
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox -SettleSec 7 `
+    -Environment @{ VOLUM_PACK_OPEN_PATH = $PackPath; VOLUM_SELF_CAPTURE_DIR = $cap } -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    $ui = $script:PackUi
+    Invoke-PackClick $h $ui.gear
+    Invoke-PackClick $h $ui.system
+    Invoke-PackClick $h $ui.import 900
+    Save-PackShot $cap "06-import-$Name"
+    if ($Choose) { & $Choose $h $cap }
+    Invoke-PackClick $h $ui.go 1500
+    Save-PackShot $cap "06-import-$Name-done"
+  }
+  Assert-True "[$Name] receiver opened" $run.started
+  Assert-True "[$Name] receiver closed gracefully" $run.graceful
+  $root = Join-Path $sandbox "VoLum"
+  $log = Join-Path $root "volum.log"
+  return @{
+    sandbox = $sandbox; root = $root
+    reg = Read-Json (Join-Path $root "content\volum-content.json")
+    settings = Read-Json (Join-Path $root "volum-settings.json")
+    log = $(if (Test-Path $log) { Get-Content $log -Raw } else { "" })
+  }
+}
+
+function Test-Pack {
+  Write-Host "`n[pack] export Everything / Sounds / A whole amp, import each into a fresh library" -ForegroundColor Cyan
+  $ui = $script:PackUi
+  $seed = Join-Path (Split-Path -Parent $slnDir) "docs\screenshot-seed"
+  $sandA = New-Sandbox "pack-source"
+  $rootA = Join-Path $sandA "VoLum"
+  Copy-Item (Join-Path $seed "volum-settings.json") $rootA -Force
+  Copy-Item (Join-Path $seed "volum-dual-amp-settings.json") $rootA -Force
+  Copy-Item (Join-Path $seed "content") $rootA -Recurse -Force
+  Write-SandboxAudioConfig $sandA
+  $contentA = Join-Path $rootA "content\volum-content.json"
+
+  # A Sound on the custom amp (its owner and PRE pedal must travel with it), the
+  # custom pedal on a factory Sound, and a PLAY map over all three kinds of owner.
+  $j = Read-Json $contentA
+  $ampId = $j.customAmps[0].id
+  $irId = $j.irLibrary[0].id
+  $pedalId = $j.customPedals[0].id
+  $pedalIdx = $j.customPedals[0].legacyIndex
+  $skelId = "preset_e2e_skel"
+  $leadBoost = @($j.presetBanks.'factory:13' | Where-Object { $_.name -eq "Lead Boost" })[0]
+  if (-not $leadBoost -or $leadBoost.settings.activeIrId -ne $irId) { throw "seed changed: Lead Boost no longer carries the custom IR" }
+  $j.presetBanks | Add-Member -NotePropertyName $ampId -NotePropertyValue @([pscustomobject]@{
+      id = $skelId; name = "Skeleton Lead"; settings = [pscustomobject]@{ preNam1Capture = $pedalIdx }
+    }) -Force
+  foreach ($pr in $j.presetBanks.'factory:13') { if ($pr.name -eq "Crunch Rhythm") { $pr.settings.preNam1Capture = $pedalIdx } }
+  $j | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue @(
+    [pscustomobject]@{ slot = 0; ampId = "factory:13"; presetId = "preset_402e30dc" },
+    [pscustomobject]@{ slot = 1; ampId = $ampId; presetId = $skelId },
+    [pscustomobject]@{ slot = 5; ampId = "factory:14"; presetId = "preset_sunset1c3" }
+  ) -Force
+  $j | ConvertTo-Json -Depth 100 | Set-Content $contentA -Encoding UTF8
+
+  $packDir = Join-Path $sandA "packs"
+  New-Item -ItemType Directory -Path $packDir -Force | Out-Null
+  $drop = Join-Path $packDir "drop.volumpack"
+  $capA = Join-Path $sandA "capture"
+  New-Item -ItemType Directory -Path $capA -Force | Out-Null
+  $state = @{ emptySoundsWrote = $null; took = @() }
+
+  # Export rows list PLAY Sounds first, in bank order ("amp_..." < "factory:13" <
+  # "factory:14"): 0 Skeleton Lead, 1 Crunch Rhythm, 2 Sunset Crunch, then 3 Lead
+  # Boost, 4 Clean Verb. The manifests below prove which rows were ticked.
+  $runA = Invoke-VoLumRun -SandboxRoot $sandA -SettleSec 7 `
+    -Environment @{ VOLUM_PACK_SAVE_PATH = $drop; VOLUM_SELF_CAPTURE_DIR = $capA } -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    $take = {
+      param($name)
+      $until = (Get-Date).AddSeconds(6)
+      while (-not (Test-Path $drop) -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 100 }
+      if (Test-Path $drop) {
+        Move-Item $drop (Join-Path $packDir "$name.volumpack") -Force
+        $state.took += $name
+      }
+    }
+    Invoke-PackClick $h $ui.gear
+    Invoke-PackClick $h $ui.system
+    Save-PackShot $capA "06-settings-system"
+    Invoke-PackClick $h $ui.export
+    Save-PackShot $capA "06-export-everything"
+    Invoke-PackClick $h $ui.go 900
+    & $take "everything"
+
+    # Sounds with nothing ticked: Export... is dead.
+    Invoke-PackClick $h $ui.export
+    Invoke-PackClick $h $ui.scopeSounds
+    Save-PackShot $capA "06-export-sounds-empty"
+    Invoke-PackClick $h $ui.go 900
+    $state.emptySoundsWrote = Test-Path $drop
+    Invoke-PackClick $h @(300, $ui.exportRow0)
+    Invoke-PackClick $h @(300, ($ui.exportRow0 + 3 * 20))
+    Save-PackShot $capA "06-export-sounds"
+    Invoke-PackClick $h $ui.go 900
+    & $take "sounds"
+
+    Invoke-PackClick $h $ui.export
+    Invoke-PackClick $h $ui.scopeAmp
+    Invoke-PackClick $h @(300, $ui.exportRow0)
+    Save-PackShot $capA "06-export-amp"
+    Invoke-PackClick $h $ui.go 900
+    & $take "amp"
+  }
+  Assert-True "source opened" $runA.started
+  Assert-True "source closed gracefully" $runA.graceful
+  Assert-Equal "zero-tick Sounds export wrote nothing" $false $state.emptySoundsWrote
+  Assert-Equal "three Packs written through Export..." "everything,sounds,amp" ($state.took -join ",")
+  $regA = Read-Json $contentA
+  $logA = if (Test-Path (Join-Path $rootA "volum.log")) { Get-Content (Join-Path $rootA "volum.log") -Raw } else { "" }
+  Assert-Equal "log records three exports" 3 ([regex]::Matches($logA, "\[pack\] export wrote")).Count
+  if (-not $regA -or $state.took.Count -ne 3) {
+    if (-not $KeepSandbox) { Remove-Item $sandA -Recurse -Force -ErrorAction SilentlyContinue }
+    return
+  }
+  $allAmps = @($regA.customAmps | ForEach-Object { $_.id })
+  $allIrs = @($regA.irLibrary | ForEach-Object { $_.id })
+  $allPedals = @($regA.customPedals | ForEach-Object { $_.id })
+  $allPresets = @((Get-PresetIndex $regA).Keys)
+  $everything = Join-Path $packDir "everything.volumpack"
+  $sounds = Join-Path $packDir "sounds.volumpack"
+  $amp = Join-Path $packDir "amp.volumpack"
+
+  # What each file carries, straight from the archive.
+  $pe = Read-PackArchive $everything
+  $me = $pe["manifest.json"] | ConvertFrom-Json
+  Assert-Equal "Everything manifest job" "everything" $me.job
+  Assert-True "Everything carries settings and the MIDI map" ($me.includesSettings -and $me.includesMidiSoundMap -and $pe["settings.json"])
+  Assert-Equal "Everything carries every preset" (Join-Ids $allPresets) (Join-Ids $me.presets)
+  Assert-Equal "Everything carries the PLAY map" (Get-MapKey $regA) (Get-MapKey ($pe["library.json"] | ConvertFrom-Json))
+  $ps = Read-PackArchive $sounds
+  $ms = $ps["manifest.json"] | ConvertFrom-Json
+  Assert-Equal "Sounds manifest job" "share" $ms.job
+  Assert-Equal "Sounds carries the two ticked presets" (Join-Ids @($skelId, $leadBoost.id)) (Join-Ids $ms.presets)
+  Assert-Equal "Sounds pulls the custom-amp owner" $ampId (Join-Ids $ms.customAmps)
+  Assert-Equal "Sounds pulls Lead Boost's IR" $irId (Join-Ids $ms.irLibrary)
+  Assert-Equal "Sounds pulls Skeleton Lead's pedal" $pedalId (Join-Ids $ms.pedals)
+  Assert-True "Sounds carries no settings" (-not $ps["settings.json"] -and -not $ms.includesSettings)
+  Assert-Equal "Sounds carries no MIDI map" "" (Get-MapKey ($ps["library.json"] | ConvertFrom-Json))
+  $pa = Read-PackArchive $amp
+  $ma = $pa["manifest.json"] | ConvertFrom-Json
+  Assert-Equal "Amp manifest job" "share" $ma.job
+  Assert-Equal "Amp carries the amp" $ampId (Join-Ids $ma.customAmps)
+  Assert-Equal "Amp carries its bank" $skelId (Join-Ids $ma.presets)
+  Assert-Equal "Amp pulls its preset's pedal" $pedalId (Join-Ids $ma.pedals)
+  Assert-Equal "Amp carries no IR" "" (Join-Ids $ma.irLibrary)
+
+  # Everything + "Also restore machine settings".
+  $e = Invoke-PackImportFresh "everything" $everything {
+    param($h, $cap)
+    Invoke-PackClick $h $ui.alsoSettings
+    Save-PackShot $cap "06-import-everything-settings"
+  }
+  Assert-PackLanded "everything" $regA $rootA $e.reg $e.root $allAmps $allIrs $allPedals $allPresets
+  Assert-Equal "[everything] PLAY map restored" (Get-MapKey $regA) (Get-MapKey $e.reg)
+  $packSettings = $pe["settings.json"] | ConvertFrom-Json
+  if ($e.settings -and $packSettings) {
+    foreach ($field in @("lastAmpIdx", "volumCustomMainId", "volumActivePresetId", "liteMode")) {
+      Assert-Equal "[everything] machine setting '$field' restored" $packSettings.$field $e.settings.$field
+    }
+    # Compared after the receiver quit: the restored rig has to survive its own
+    # next settings save, not just land in the file.
+    Assert-Equal "[everything] per-amp scenes restored" (ConvertTo-Canon $packSettings.amps) (ConvertTo-Canon $e.settings.amps)
+    Assert-Equal "[everything] POST effects restored" (ConvertTo-Canon $packSettings.effects) (ConvertTo-Canon $e.settings.effects)
+  }
+  else { Assert-True "[everything] machine settings readable" $false }
+  Assert-True "[everything] log records the settings import" ($e.log -match "\[pack\] import overwrite \+settings: applied")
+
+  # Everything without the box: library only, machine and MIDI slots untouched.
+  $n = Invoke-PackImportFresh "everything-nosettings" $everything $null
+  Assert-PackLanded "everything-nosettings" $regA $rootA $n.reg $n.root $allAmps $allIrs $allPedals $allPresets
+  Assert-Equal "[everything-nosettings] PLAY map not applied without the box" "" (Get-MapKey $n.reg)
+  Assert-True "[everything-nosettings] machine settings not restored" (
+    $n.settings -and $n.settings.lastAmpIdx -ne $packSettings.lastAmpIdx) ("lastAmpIdx " + $n.settings.lastAmpIdx)
+  if (-not $KeepSandbox) { Remove-Item $n.sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+
+  $s = Invoke-PackImportFresh "sounds" $sounds $null
+  Assert-PackLanded "sounds" $regA $rootA $s.reg $s.root @($ampId) @($irId) @($pedalId) @($skelId, $leadBoost.id)
+  Assert-Equal "[sounds] a Share Pack brings no MIDI slots" "" (Get-MapKey $s.reg)
+  if (-not $KeepSandbox) { Remove-Item $s.sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+
+  $a = Invoke-PackImportFresh "amp" $amp $null
+  Assert-PackLanded "amp" $regA $rootA $a.reg $a.root @($ampId) @() @($pedalId) @($skelId)
+  if (-not $KeepSandbox) { Remove-Item $a.sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+
+  # The verbs, against the library that already holds everything: a renamed
+  # preset and replaced capture bytes stand for "mine", plus one local-only preset.
+  $vRoot = $e.root
+  $vContent = Join-Path $vRoot "content\volum-content.json"
+  $vReg = Read-Json $vContent
+  if ($vReg) {
+    foreach ($pr in @($vReg.presetBanks.$ampId)) { if ($pr.id -eq $skelId) { $pr.name = "Mine Renamed" } }
+    $vReg.presetBanks | Add-Member -NotePropertyName "factory:0" -NotePropertyValue @([pscustomobject]@{
+        id = "preset_e2e_local"; name = "Local Only"; settings = [pscustomobject]@{}
+      }) -Force
+    $vReg | ConvertTo-Json -Depth 100 | Set-Content $vContent -Encoding UTF8
+    $capRel = @($regA.customAmps[0].files | Where-Object { $_.storedPath })[0].storedPath
+    $capFile = Get-StoredFile $vRoot $capRel
+    [IO.File]::WriteAllText($capFile, "LOCAL-CAPTURE-BYTES")
+    $localSha = Get-FileSha $capFile
+    $packSha = Get-FileSha (Get-StoredFile $rootA $capRel)
+    $verbState = @{}
+    $vCap = Join-Path $e.sandbox "capture"
+    $readState = {
+      $r = Read-Json $vContent
+      $ix = Get-PresetIndex $r
+      @{ skelName = $(if ($ix[$skelId]) { $ix[$skelId].name } else { "" }); local = $ix.ContainsKey("preset_e2e_local")
+        sha = (Get-FileSha $capFile) }
+    }
+    $runV = Invoke-VoLumRun -SandboxRoot $e.sandbox -SettleSec 7 `
+      -Environment @{ VOLUM_PACK_OPEN_PATH = $everything; VOLUM_SELF_CAPTURE_DIR = $vCap } -Drive {
+      param($proc)
+      $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+      if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+      Invoke-PackClick $h $ui.gear
+      Invoke-PackClick $h $ui.system
+      Invoke-PackClick $h $ui.import 900
+      Invoke-PackClick $h $ui.verbAdd
+      Save-PackShot $vCap "06-import-verb-add"
+      Invoke-PackClick $h $ui.go 1500
+      $verbState.add = & $readState
+      Invoke-PackClick $h $ui.import 900
+      Invoke-PackClick $h $ui.go 1500
+      $verbState.overwrite = & $readState
+      Invoke-PackClick $h $ui.import 900
+      Invoke-PackClick $h $ui.verbReset
+      Save-PackShot $vCap "06-import-verb-reset"
+      Invoke-PackClick $h $ui.go 1500
+      $verbState.reset = & $readState
+    }
+    Assert-True "[verbs] app opened" $runV.started
+    Assert-True "[verbs] app closed gracefully" $runV.graceful
+    if ($verbState.add) {
+      Assert-Equal "[verbs] Add keeps my preset name" "Mine Renamed" $verbState.add.skelName
+      Assert-Equal "[verbs] Add keeps my capture bytes" $localSha $verbState.add.sha
+      Assert-True "[verbs] Add keeps my local-only preset" $verbState.add.local
+    }
+    else { Assert-True "[verbs] Add ran" $false }
+    if ($verbState.overwrite) {
+      Assert-Equal "[verbs] Overwrite takes the Pack's name" "Skeleton Lead" $verbState.overwrite.skelName
+      Assert-Equal "[verbs] Overwrite takes the Pack's capture bytes" $packSha $verbState.overwrite.sha
+      Assert-True "[verbs] Overwrite keeps my local-only preset" $verbState.overwrite.local
+    }
+    else { Assert-True "[verbs] Overwrite ran" $false }
+    if ($verbState.reset) {
+      Assert-True "[verbs] Reset deletes my local-only preset" (-not $verbState.reset.local)
+      Assert-Equal "[verbs] Reset keeps the Pack's preset" "Skeleton Lead" $verbState.reset.skelName
+    }
+    else { Assert-True "[verbs] Reset ran" $false }
+    $vAfter = Read-Json $vContent
+    Assert-PackLanded "verbs after Reset" $regA $rootA $vAfter $vRoot $allAmps $allIrs $allPedals $allPresets
+  }
+  else { Assert-True "[verbs] library readable" $false }
+  if (-not $KeepSandbox) { Remove-Item $e.sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+
+  # A truncated download: refused with a reason, nothing written.
+  $bytes = [IO.File]::ReadAllBytes($everything)
+  $corrupt = Join-Path $packDir "truncated.volumpack"
+  $cut = New-Object byte[] ([int]($bytes.Length * 0.6))
+  [Array]::Copy($bytes, $cut, $cut.Length)
+  [IO.File]::WriteAllBytes($corrupt, $cut)
+  $c = Invoke-PackImportFresh "corrupt" $corrupt $null
+  Assert-True "[corrupt] refusal logged with a reason" ($c.log -match "\[pack\] open refused: \S") `
+  (($c.log -split "`n" | Where-Object { $_ -match "\[pack\]" }) -join " / ")
+  Assert-True "[corrupt] no import ran" ($c.log -notmatch "\[pack\] import ")
+  $cr = $c.reg
+  Assert-True "[corrupt] library holds nothing" (-not $cr -or (
+      @($cr.customAmps).Count + @($cr.irLibrary).Count + @($cr.customPedals).Count + (Get-PresetIndex $cr).Count -eq 0))
+  $stray = @(Get-ChildItem (Join-Path $c.root "content") -Recurse -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -notin @("volum-content.json", "volum-content.lock") })
+  Assert-True "[corrupt] no payload file written" ($stray.Count -eq 0) (($stray | ForEach-Object { $_.FullName }) -join ", ")
+  if (-not $KeepSandbox) {
+    Remove-Item $c.sandbox -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $sandA -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+# --------------------------------------------------------------------------
 
 Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
@@ -980,6 +1434,7 @@ if ($Scenario -in @("all", "presets")) { Test-PresetMemory }
 if ($Scenario -in @("all", "corrupt")) { Test-Corrupt }
 if ($Scenario -in @("all", "samplerate")) { Test-SampleRate }
 if ($Scenario -in @("all", "savedialog")) { Test-SaveDialog }
+if ($Scenario -in @("all", "pack")) { Test-Pack }
 
 Write-Host ""
 if ($script:Failures.Count -eq 0) {
