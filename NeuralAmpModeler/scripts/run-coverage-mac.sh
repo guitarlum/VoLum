@@ -45,8 +45,12 @@ cd "$REPO_ROOT"
 # optimized build by a few ULPs and report a "failure"; that must not abort the
 # coverage run (which would also skip the report below). doctest still executes
 # every case and writes the profile, so swallow its exit code and keep going.
+#
+# The golden renders run ~250 NAM renders; at -O0 that is many minutes of CI for
+# code the Release jobs already gate. "Golden render references:*" (changelog
+# rule, default rows) stays in.
 TEST_EXIT=0
-LLVM_PROFILE_FILE="$PROFRAW" "$BINARY" || TEST_EXIT=$?
+LLVM_PROFILE_FILE="$PROFRAW" "$BINARY" --test-case-exclude="Golden renders:*" || TEST_EXIT=$?
 if [[ "$TEST_EXIT" -ne 0 ]]; then
   echo "==> NOTE: doctest returned $TEST_EXIT under the -O0 coverage build (expected for"
   echo "    bit-exact golden comparisons); coverage was still measured. See the blocking"

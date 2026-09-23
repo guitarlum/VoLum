@@ -2182,11 +2182,14 @@ TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
 
 TEST_CASE("Audio-thread model apply retires to the graveyard and never throws")
 {
-  // NeuralAmpModeler / ResamplingNAM cannot be constructed in this binary (iPlug).
-  // The helpers in test_volum_dsp_staging.cpp and test_process_io.cpp own the
-  // behaviour; these pins are only the call sites.
+  // NeuralAmpModeler cannot be constructed in this binary (iPlug). The helpers in
+  // test_volum_dsp_staging.cpp and test_process_io.cpp own the behaviour, and
+  // test_volum_golden_render.cpp renders through ResamplingNAM; these pins are
+  // only the call sites.
   const std::string source = ReadPluginSource();
-  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  const std::string pluginHeader = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  RequireContains(pluginHeader, "#include \"VoLumResamplingNam.h\"");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumResamplingNam.h");
 
   const auto apply = source.find("void NeuralAmpModeler::_ApplyDSPStaging()");
   REQUIRE(apply != std::string::npos);

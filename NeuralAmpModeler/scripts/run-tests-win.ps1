@@ -56,9 +56,19 @@ Invoke-Check (Join-Path $here "check-local-guards.ps1")
 Invoke-Check (Join-Path $here "check-no-vendor-refs.ps1")
 
 # A golden sound reference records why it was last regenerated, and that reason
-# must be in changelog.txt. Skipped while regen-golden-renders.ps1 is running:
-# the new reason reaches the changelog only after the references are written.
-if ($env:VOLUM_GOLDEN_REGEN -ne "1") {
+# must be in changelog.txt. Skipped only for regen-golden-renders.ps1's own run:
+# the new reason reaches the changelog after the references are written. A
+# VOLUM_GOLDEN_REGEN left set in a shell must not turn a full run into a regen.
+if ($env:VOLUM_GOLDEN_REGEN -eq "1") {
+  if ($env:CI -or $env:GITHUB_ACTIONS) {
+    Write-Host "VOLUM_GOLDEN_REGEN is set on CI; golden references are never regenerated there." -ForegroundColor Red
+    exit 1
+  }
+  if ($Filter -ne "Golden renders:") {
+    Write-Host "VOLUM_GOLDEN_REGEN=1 is set in this shell. Only regen-golden-renders.ps1 sets it; clear it (Remove-Item Env:VOLUM_GOLDEN_REGEN) and rerun." -ForegroundColor Red
+    exit 1
+  }
+} else {
   Invoke-Check (Join-Path $here "check-golden-changelog.ps1")
 }
 
