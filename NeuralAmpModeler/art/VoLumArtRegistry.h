@@ -38,7 +38,7 @@ inline constexpr ArtSpec kArtSpecs[kFactoryArtCount] = {
   {2,  2,  "Brunetti XL 2",      "Verdant Fern",     "VoLumArtBrunetti.h",      ArtClass::Transform, true},
   {3,  4,  "Fryette Deliv. 120", "Spiral Galaxy",    "VoLumArtFryette.h",       ArtClass::Split,     true},
   {4,  5,  "H&K TriAmp Mk2",     "Lissajous Nebula", "VoLumArtHkTriamp.h",      ArtClass::Additive,  true},
-  {5,  6,  "Lichtlaerm Prom.",   "Koch Deep",        "VoLumArtLichtlaerm.h",    ArtClass::Additive,  false},
+  {5,  6,  "Lichtlaerm Prom.",   "Koch Deep",        "VoLumArtLichtlaerm.h",    ArtClass::Additive,  true},
   {6,  7,  "Marshall 2204",      "Windswept Glow",   "VoLumArtMarshall2204.h",  ArtClass::Split,     false},
   {7,  8,  "Marshall JMP 2203",  "Depth Triforce",   "VoLumArtJmp2203.h",       ArtClass::Split,     false},
   {8,  9,  "Marshall JVM",       "Levy Nebula",      "VoLumArtJvm210.h",        ArtClass::Additive,  false},
