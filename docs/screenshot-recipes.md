@@ -26,6 +26,12 @@ the meter norm, and `0` is silence. It pins the IN level the PLAY surface sees
 changes. Wait about 2 s after entering PLAY before capturing, so the lamp has
 settled. Silence must match the BUILD hero's brightness; `-12` is the full look.
 
+To capture a PLAY art at a fixed motion frame, launch with
+`VOLUM_ART_ANIM_DEBUG=<art>[:<energy>|off[:<time>|run[:<pick>]]]` (Release too; see
+section 3c). It replaces the art in every PLAY stage panel and ignores audio, the
+Settings toggle and the per-art registry flag; nothing else changes, and without
+the variable nothing changes at all.
+
 Canvas clicks and captures go through `scripts/ui-drive.ps1` (client pixels, one
 process per shot). Clicks always run before Keys in the same call: do not put
 `{ESC}` in `-Keys` with a menu-opening `-Clicks`, or the menu closes before
@@ -225,6 +231,41 @@ without writing the real library.
    holes stay absent.
 7. Settings -> MIDI `(869, 22)` then `(450, 113)` shows the same Sounds on the
    same program numbers (footswitch bank 1) after the drag.
+
+## 3c. PLAY art motion frames (energy 0 / 0.5 / 1)
+
+Does not recapture a docs PNG. Shoots one art at a chosen energy, motion time
+and pick, for review of an art's animation (`NeuralAmpModeler/art/`) or its
+silence identity.
+
+`VOLUM_ART_ANIM_DEBUG=<art>[:<energy>|off[:<time>|run[:<pick>]]]`:
+
+| Field | Values |
+| --- | --- |
+| `art` | `0`-`14` = factory amp index in sidebar order (`5` H&K TriAmp, `13` Soldano), or `c0`-`c5` = custom-art style |
+| `energy` | `0`-`1` (glow, bloom and motion as if playing at that level); `off` = the static art, exactly what the toggle-off path draws |
+| `time` | motion seconds (default `0`); `run` = let the motion clock run live |
+| `pick` | `0`-`1` (default `0`); above 0 also stamps one pick 0.05 s ago |
+
+```powershell
+$env:VOLUM_ART_ANIM_DEBUG = "13:0.5:2.5"     # Soldano, half level, 2.5 s into its motion
+pwsh NeuralAmpModeler/scripts/.ui-sandbox-launch.ps1 -Reseed
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "10,10;743,22" -SettleMs 2500 -Out shots\soldano-0.5.png
+```
+
+- Energy 0 / 0.5 / 1: `<art>:0:<t>`, `<art>:0.5:<t>`, `<art>:1:<t>`; add `:1` for a pick.
+  A few time steps (`:1:2.5`, `:1:4`, `:1:6`) show the motion itself.
+- Silence identity: `<art>:0:7.3` must match `<art>:off` within 2/255 per channel
+  inside the art (for any time). Compare the paint rect, not the whole canvas:
+  the PLAY corona pulses on its own.
+- Dual lanes: click Marshall 2204 in the sidebar `(90, 308)` before the toggle;
+  both lanes then show the debug art at the lane width.
+- Cost: add `VOLUM_ART_ANIM_PERF=1`. Each panel then shows `art <avg> ms (peak <max>)
+  prep <ms>` for its animator's `Draw`, and every 120 frames writes an `[art]` line
+  with the same numbers to `volum.log` (the sandbox log is
+  `%TEMP%\volum-ui-sandbox\VoLum\volum.log`). Use `<art>:1:run` and `<art>:1:run:1`
+  and wait ~5 s so a full window is in. Budget: average 1.5 ms, peak 2.5 ms at
+  900x600 mono; a resting art stays under 0.15 ms.
 
 ## 4. Verify + restore
 

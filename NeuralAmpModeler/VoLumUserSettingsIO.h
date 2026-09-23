@@ -774,14 +774,24 @@ inline std::unordered_map<std::string, std::string> VolumActivePresetIdsFromJson
 
 // Plugin Lite toggles must not dump the whole machine file (that would move
 // standalone PLAY/BUILD, midiCh, midiRecallCc, lastPlaySlot, and scenes). Read-merge-write only this key.
-inline nlohmann::json MergeLiteModeIntoSettings(nlohmann::json j, bool liteMode)
+inline nlohmann::json MergeMachineBoolIntoSettings(nlohmann::json j, const char* key, bool value)
 {
   if (!j.is_object())
     j = nlohmann::json::object();
   if (!j.contains("version"))
     j["version"] = kVoLumUserSettingsVersion;
-  j["liteMode"] = liteMode;
+  j[key] = value;
   return j;
+}
+
+inline nlohmann::json MergeLiteModeIntoSettings(nlohmann::json j, bool liteMode)
+{
+  return MergeMachineBoolIntoSettings(std::move(j), "liteMode", liteMode);
+}
+
+inline nlohmann::json MergeAnimatePlayArtIntoSettings(nlohmann::json j, bool animatePlayArt)
+{
+  return MergeMachineBoolIntoSettings(std::move(j), "animatePlayArt", animatePlayArt);
 }
 
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,
@@ -789,7 +799,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
                                               bool preLocked = false, bool postLocked = false,
                                               const VoLumAmpSettings* liveLockedPre = nullptr,
                                               const VoLumAmpSettings* liveLockedPost = nullptr, bool liteMode = false,
-                                              bool calibrateInput = false, double inputCalibrationLevel = 12.0)
+                                              bool calibrateInput = false, double inputCalibrationLevel = 12.0,
+                                              bool animatePlayArt = true)
 {
   nlohmann::json j;
   j["version"] = kVoLumUserSettingsVersion;
@@ -799,6 +810,8 @@ inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSetting
   // VoLum 1.2.0: machine-global A2 Lite mode (false = Full, default). Additive
   // optional key; older readers ignore it, so no version bump.
   j["liteMode"] = liteMode;
+  // VoLum 1.3.0: machine-global "Animate art in PLAY" (default on). Additive, no bump.
+  j["animatePlayArt"] = animatePlayArt;
   // Machine-global input-interface calibration defaults. These are existing
   // EParams and still round-trip in DAW project chunks; the JSON values only
   // seed new instances/startup, and a restored project remains authoritative.
@@ -867,7 +880,8 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
                                       VoLumAmpSettings* liveLockedPre = nullptr,
                                       VoLumAmpSettings* liveLockedPost = nullptr, bool* haveLiveLockedPre = nullptr,
                                       bool* haveLiveLockedPost = nullptr, bool* liteMode = nullptr,
-                                      bool* calibrateInput = nullptr, double* inputCalibrationLevel = nullptr)
+                                      bool* calibrateInput = nullptr, double* inputCalibrationLevel = nullptr,
+                                      bool* animatePlayArt = nullptr)
 {
   bool healed = false;
   auto loadInt = [&](const nlohmann::json& obj, const char* key, int& target, int minValue, int maxValue,
@@ -973,6 +987,12 @@ inline void VolumUserSettingsFromJson(const nlohmann::json& j, VoLumAmpSettings*
   {
     *liteMode = false;
     loadBool(j, "liteMode", *liteMode, false);
+  }
+  // VoLum 1.3.0: "Animate art in PLAY". Optional, no version gate; default on.
+  if (animatePlayArt)
+  {
+    *animatePlayArt = true;
+    loadBool(j, "animatePlayArt", *animatePlayArt, true);
   }
 
   // Additive global calibration defaults. Missing keys (pre-1.2.1 settings)

@@ -9,6 +9,7 @@
 // - VoLumSettingsTabStripControl: the segmented tab selector under the title.
 // - VoLumMidiChannelControl: the per-instance listen filter (all channels, or one).
 // - VoLumMidiRecallCcControl: the per-instance Sound-recall CC (value = program).
+// - VoLumAnimateArtSwitchControl: SIGNAL's "Animate art in PLAY" switch.
 //
 // The tab's third piece, the program number 0-127 Sound assignments drawn as a
 // footswitch bank view, is VoLumMidiFootswitchControl in VoLumMidiFootswitch.h.
@@ -136,6 +137,67 @@ private:
   int mActive = 0;
   int mHover = -1;
   Callback mCallback;
+};
+
+/** SIGNAL > Performance: "Animate art in PLAY" as OFF | ON, under Lite.
+ *
+ * Machine-global, like Lite; the owner hands in the getter and setter so this
+ * header needs no plugin type. Off keeps every PLAY art still (lowest CPU). */
+class VoLumAnimateArtSwitchControl : public IControl
+{
+public:
+  using Getter = std::function<bool()>;
+  using Setter = std::function<void(bool)>;
+
+  VoLumAnimateArtSwitchControl(const IRECT& bounds, Getter get, Setter set)
+  : IControl(bounds)
+  , mGet(std::move(get))
+  , mSet(std::move(set))
+  {
+    SetTooltip("Moves the amp art while you play. Off = still art, lowest CPU.");
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const bool on = IsOn();
+    g.DrawText(IText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
+               "Animate art in PLAY", mRECT.GetFromTop(kLabelH));
+    const IRECT seg = SegmentTrack();
+    DrawVoLumSegmentSwitch(g, seg, on);
+    const IText onText(12.f, VoLumColors::SEL_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    const IText offText(
+      12.f, VoLumColors::TEXT_DIM.WithOpacity(0.55f), "Josefin-Bold", EAlign::Center, EVAlign::Middle);
+    g.DrawText(on ? offText : onText, "OFF", seg.GetFromLeft(seg.W() * 0.5f));
+    g.DrawText(on ? onText : offText, "ON", seg.GetFromRight(seg.W() * 0.5f));
+    if (mMouseIsOver)
+      g.FillRoundRect(COLOR_WHITE.WithOpacity(0.06f), seg, seg.H() * 0.5f);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod&) override
+  {
+    const IRECT seg = SegmentTrack();
+    if (!seg.Contains(x, y))
+      return;
+    if (mSet)
+      mSet(x >= seg.MW());
+    SetDirty(false);
+  }
+
+private:
+  static constexpr float kLabelH = 18.f;
+  static constexpr float kSegH = 26.f;
+
+  bool IsOn() const { return mGet ? mGet() : true; }
+
+  IRECT SegmentTrack() const
+  {
+    const float segW = std::min(176.f, mRECT.W());
+    return IRECT(
+      mRECT.MW() - segW * 0.5f, mRECT.T + kLabelH + 2.f, mRECT.MW() + segW * 0.5f, mRECT.T + kLabelH + 2.f + kSegH);
+  }
+
+  Getter mGet;
+  Setter mSet;
 };
 
 /** The per-instance listen filter: all MIDI channels, or exactly one of 1-16.

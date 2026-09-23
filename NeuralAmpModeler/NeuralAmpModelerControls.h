@@ -1199,10 +1199,11 @@ public:
       const IRECT cardBody =
         _AddCard(kTabSignal, perfCard, "Performance", mControlNames.perfGroupFrame, mControlNames.perfSection);
       const float liteH = 30.f;
-      const float helpH = 30.f;
-      IRECT group = cardBody.GetCentredInside(cardBody.W(), liteH + 12.f + helpH);
+      const float helpH = 22.f;
+      const float animateH = 46.f;
+      IRECT group = cardBody.GetCentredInside(cardBody.W(), liteH + 8.f + helpH + 10.f + animateH);
       const IRECT liteR = group.ReduceFromTop(liteH);
-      (void)group.ReduceFromTop(12.f);
+      (void)group.ReduceFromTop(8.f);
       _Reg(kTabSignal, AddNamedChildControl(new VoLumLiteModeSwitchControl(liteR, leftText), mControlNames.liteMode));
       // Short enough to fit a third of the panel: the longer wording clipped a
       // character off each end of this card.
@@ -1210,6 +1211,18 @@ public:
            AddNamedChildControl(
              new IVLabelControl(group.ReduceFromTop(helpH), "Smaller A2 slice, lower CPU.", _HelpStyle(EVAlign::Top)),
              mControlNames.perfHelp));
+      (void)group.ReduceFromTop(10.f);
+      _Reg(kTabSignal, AddNamedChildControl(new VoLumAnimateArtSwitchControl(
+                                              group.ReduceFromTop(animateH),
+                                              [this]() {
+                                                auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate());
+                                                return plugin ? plugin->_VolumIsAnimatePlayArt() : true;
+                                              },
+                                              [this](bool on) {
+                                                if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+                                                  plugin->_VolumSetAnimatePlayArt(on);
+                                              }),
+                                            mControlNames.animateArt));
     }
 
 #if defined(APP_API)
@@ -1549,6 +1562,7 @@ private:
     const std::string liteMode = "LiteMode";
     const std::string perfSection = "PerfSection";
     const std::string perfHelp = "PerfHelp";
+    const std::string animateArt = "AnimateArt";
     const std::string midiSection = "MidiSection";
     const std::string midiControl = "MidiControl";
     const std::string midiRecallCc = "MidiRecallCc";

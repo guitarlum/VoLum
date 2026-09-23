@@ -366,7 +366,7 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
     mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
     /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
     mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load(), GetParam(kCalibrateInput)->Bool(),
-    GetParam(kInputCalibrationLevel)->Value());
+    GetParam(kInputCalibrationLevel)->Value(), mVolumAnimatePlayArt.load());
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   // 1.2.0 additive session refs (ignored by older builds): the focused custom
@@ -508,11 +508,13 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     bool parsedLiteMode = false;
     bool parsedCalibrateInput = kDefaultCalibrateInput;
     double parsedInputCalibrationLevel = kDefaultInputCalibrationLevel;
-    volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
-                                     &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
-                                     &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
-                                     &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel);
+    bool parsedAnimatePlayArt = true;
+    volum::VolumUserSettingsFromJson(
+      j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx, &mVolumEffectSettings, &settingsHealed,
+      &mVolumPreLocked, &mVolumPostLocked, &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
+      &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel, &parsedAnimatePlayArt);
     mVolumLiteMode.store(parsedLiteMode);
+    mVolumAnimatePlayArt.store(parsedAnimatePlayArt);
     GetParam(kCalibrateInput)->Set(parsedCalibrateInput ? 1.0 : 0.0);
     GetParam(kInputCalibrationLevel)->Set(parsedInputCalibrationLevel);
     if (haveLivePreSnapshot)
@@ -586,6 +588,11 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 
 void NeuralAmpModeler::_VolumSaveLiteMode()
 {
+  _VolumSaveMachineBool("liteMode", mVolumLiteMode.load());
+}
+
+void NeuralAmpModeler::_VolumSaveMachineBool(const char* key, bool value)
+{
   namespace fs = std::filesystem;
   const fs::path settingsPath = volum::VolumUserSettingsFilePath();
   if (settingsPath.empty())
@@ -593,8 +600,8 @@ void NeuralAmpModeler::_VolumSaveLiteMode()
 
   // Same read-merge-write as calibration: a plugin Lite click must not dump
   // standalone PLAY/BUILD, midiCh, midiRecallCc, lastPlaySlot, or scenes into the shared machine file.
-  static std::mutex liteModeSettingsMutex;
-  std::lock_guard<std::mutex> lock(liteModeSettingsMutex);
+  static std::mutex machineBoolSettingsMutex;
+  std::lock_guard<std::mutex> lock(machineBoolSettingsMutex);
 
   nlohmann::json j = nlohmann::json::object();
   std::error_code ec;
@@ -609,14 +616,24 @@ void NeuralAmpModeler::_VolumSaveLiteMode()
     }
     catch (...)
     {
-      std::cerr << "VoLum: liteMode not saved because volum-settings.json is unreadable" << std::endl;
+      std::cerr << "VoLum: " << key << " not saved because volum-settings.json is unreadable" << std::endl;
       return;
     }
   }
 
-  j = volum::MergeLiteModeIntoSettings(std::move(j), mVolumLiteMode.load());
+  j = volum::MergeMachineBoolIntoSettings(std::move(j), key, value);
   if (!volum::WriteJsonAtomically(settingsPath, j, ec))
-    std::cerr << "VoLum: liteMode write failed: " << ec.message() << std::endl;
+    std::cerr << "VoLum: " << key << " write failed: " << ec.message() << std::endl;
+}
+
+void NeuralAmpModeler::_VolumSetAnimatePlayArt(bool animate)
+{
+  if (mVolumAnimatePlayArt.load() == animate)
+    return;
+  mVolumAnimatePlayArt.store(animate);
+  // Only this key: a plugin click must not rewrite the standalone's machine file.
+  _VolumSaveMachineBool("animatePlayArt", animate);
+  _VolumRefreshPlaySurface();
 }
 
 void NeuralAmpModeler::_VolumSetLiteMode(bool lite)

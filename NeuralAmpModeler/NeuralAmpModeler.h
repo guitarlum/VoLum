@@ -269,6 +269,10 @@ public:
   // four NAM lanes so the new slice is applied through the async staging path.
   void _VolumSetLiteMode(bool lite);
   bool _VolumIsLiteMode() const { return mVolumLiteMode.load(); }
+  // VoLum 1.3.0: machine-global "Animate art in PLAY" (UI only), persisted like Lite.
+  void _VolumSetAnimatePlayArt(bool animate);
+  bool _VolumIsAnimatePlayArt() const { return mVolumAnimatePlayArt.load(); }
+  void _VolumSaveMachineBool(const char* key, bool value);
   void _VolumCheckForUpdatesNow();
   void _VolumSetAutoUpdateCheck(bool enabled);
   void _VolumUseAvailableUpdate();
@@ -625,6 +629,7 @@ private:
   // (NOT the plugin chunk), applied to every lane at model load time. Read on
   // the loader thread, written on the main thread -> atomic.
   std::atomic<bool> mVolumLiteMode{false};
+  std::atomic<bool> mVolumAnimatePlayArt{true};
   bool mVolumInitComplete = false;
   // Last report pushed to the Settings page, so the OnIdle poll only touches the UI
   // when a number actually moved.

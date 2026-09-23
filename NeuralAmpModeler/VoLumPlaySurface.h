@@ -5,8 +5,10 @@
 // drawing and interaction so VoLumControls.h stays an umbrella.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumDiagLog.h"
 #include "VoLumFractalArt.h"
 #include "VoLumHeaderChrome.h"
+#include "art/VoLumArtMotion.h"
 #include "VoLumNumericEntry.h"
 #include "VoLumPlayLight.h"
 #include "VoLumPlayModel.h"
@@ -16,10 +18,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -142,6 +146,22 @@ public:
 
 class VoLumPlaySurfaceControl : public IControl
 {
+  // One PLAY stage panel's animator, keyed like the static layer (art + pixel size).
+  struct StageArtSlot
+  {
+    std::unique_ptr<volumart::ArtAnimator> anim;
+    volum::StageArtKey key;
+    bool none = false; // no animator for this key (registry flag off)
+    bool prepared = false;
+    bool moreWork = false;
+    float prepMs = 0.f;
+    double perfSumMs = 0.0;
+    float perfPeakMs = 0.f;
+    int perfFrames = 0;
+    float perfAvgShown = 0.f;
+    float perfPeakShown = 0.f;
+  };
+
 public:
   enum Fx : int
   {
@@ -180,6 +200,28 @@ public:
     float fake = 0.f;
     if (volum::ParsePlayFakePeak(std::getenv("VOLUM_PLAY_FAKE_PEAK"), fake))
       mFakeInPeak = fake;
+    // Same harness: VOLUM_ART_ANIM_DEBUG pins the stage art and its motion frame,
+    // VOLUM_ART_ANIM_PERF shows and logs what the art costs per frame.
+    if (const char* dbg = std::getenv("VOLUM_ART_ANIM_DEBUG"); dbg && dbg[0])
+    {
+      mArtDebug = volumart::ParseArtAnimDebug(dbg);
+      if (!mArtDebug.on)
+        std::fprintf(stderr, "VoLum: ignoring malformed VOLUM_ART_ANIM_DEBUG=%s\n", dbg);
+    }
+    if (const char* perf = std::getenv("VOLUM_ART_ANIM_PERF"); perf && perf[0] && perf[0] != '0')
+      mArtPerf = true;
+  }
+
+  // Settings > SIGNAL > Performance "Animate art in PLAY". Off drops every
+  // animator so PLAY draws the static cached art.
+  void SetAnimateArt(bool animate)
+  {
+    if (mAnimateArt == animate)
+      return;
+    mAnimateArt = animate;
+    mMainArtSlot = {};
+    mSupportArtSlot = {};
+    SetDirty(false);
   }
 
   void SetPlusAddsHeard(bool addsHeard)
@@ -295,19 +337,37 @@ public:
     mStageSupportLayer = nullptr;
     mStageMainKey = {};
     mStageSupportKey = {};
+    mMainArtSlot = {};
+    mSupportArtSlot = {};
   }
 
+  // OnIdle calls this only while PLAY is shown, so art motion (like the light)
+  // stands still in BUILD.
   void Tick()
   {
     mPhase += 0.015f;
     if (mPhase > 6.283185f)
       mPhase -= 6.283185f;
+    const auto now = std::chrono::steady_clock::now();
+    const float dt = mHaveTick ? std::chrono::duration<float>(now - mLastTick).count() : 0.f;
+    mLastTick = now;
+    mHaveTick = true;
     mLight = volum::AdvancePlayLight(mLight, mInPeak);
+    volumart::AdvanceArtMotion(
+      mArtMotion, mLight.energy, mLight.attack, volum::PlayBloomWeight(volum::PlayGlowAmount(mLight)), dt);
+    if (mArtDebug.on && mArtDebug.runClock)
+    {
+      const float a = std::max(mArtDebug.energy, mArtDebug.pick);
+      if (a > 0.f)
+        mArtDebugClock += std::clamp(dt, 0.f, volumart::kMaxMotionDt)
+                          * (volumart::kClockRateFloor + (1.f - volumart::kClockRateFloor) * a);
+    }
     SetDirty(false);
   }
 
   void Draw(IGraphics& g) override
   {
+    mArtPreparedThisFrame = false;
     // The same top-lit gradient + vignette + brass frame BUILD's canvas draws
     // (VoLumBackgroundControl). PLAY used to open on a blue-green (20, 26, 36)
     // wash, so switching modes changed the colour of the instrument.
@@ -819,11 +879,22 @@ private:
   // stretched in the other. The backdrop is BUILD's panel gradient so silence
   // looks exactly like the BUILD hero.
   void DrawCachedStageArt(IGraphics& g, const IRECT& artRect, int art, bool custom, ILayerPtr& layer,
-                          volum::StageArtKey& cached, float bloom)
+                          volum::StageArtKey& cached, StageArtSlot& slot, float bloom)
   {
+    if (mArtDebug.on)
+    {
+      art = mArtDebug.art;
+      custom = mArtDebug.custom;
+    }
     const float scale = g.GetScreenScale() * g.GetDrawScale();
     const IRECT paint = artRect.GetPadded(-18.f).GetPixelAligned(scale);
     const volum::StageArtKey want = volum::MakeStageArtKey(art, custom, paint.W(), paint.H(), scale);
+    if (DrawAnimatedStageArt(g, artRect, paint, want, slot))
+    {
+      layer = nullptr;
+      cached = {};
+      return;
+    }
     if (!g.CheckLayer(layer) || !volum::StageArtLayerMatches(cached, want))
     {
       g.StartLayer(this, paint);
@@ -834,9 +905,7 @@ private:
       layer = g.EndLayer();
       cached = want;
     }
-    g.PathRect(artRect);
-    g.PathFill(IPattern::CreateLinearGradient(
-      artRect.L, artRect.T, artRect.L, artRect.B, {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
+    DrawStageBackdrop(g, artRect);
     if (!layer || !g.CheckLayer(layer))
       return;
     const IBitmap bitmap = layer->GetBitmap();
@@ -846,6 +915,93 @@ private:
       const IBlend add(EBlend::Add, bloom);
       g.DrawBitmap(bitmap, paint, 0, 0, &add);
     }
+  }
+
+  static void DrawStageBackdrop(IGraphics& g, const IRECT& artRect)
+  {
+    g.PathRect(artRect);
+    g.PathFill(IPattern::CreateLinearGradient(
+      artRect.L, artRect.T, artRect.L, artRect.B, {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
+  }
+
+  // The moving art (art/VoLumArtAnimator.h), when the toggle is on and the art's
+  // registry flag is set. False leaves the static path above to draw. Rest frames
+  // go through the animator too: its rest output is the static art.
+  bool DrawAnimatedStageArt(IGraphics& g, const IRECT& artRect, const IRECT& paint, const volum::StageArtKey& want,
+                            StageArtSlot& slot)
+  {
+    const bool animate = mArtDebug.on ? !mArtDebug.legacy : mAnimateArt;
+    if (!animate)
+    {
+      if (slot.anim || slot.none)
+        slot = {};
+      return false;
+    }
+    if (slot.key != want || (!slot.anim && !slot.none))
+    {
+      slot = {};
+      slot.key = want;
+      const int style = want.art;
+      slot.anim = want.custom
+                    ? volumart::MakeCustomArtAnimator(
+                        style, mArtDebug.on,
+                        [style](IGraphics& gg, const IRECT& r) {
+                          DrawCustomAmpArt(gg, r, style, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
+                        })
+                    : volumart::MakeFactoryArtAnimator(FractalCaseForAmp(want.art), mArtDebug.on);
+      slot.none = !slot.anim;
+    }
+    if (!slot.anim)
+      return false;
+    if (!slot.prepared || (slot.moreWork && !mArtPreparedThisFrame))
+    {
+      const auto t0 = std::chrono::steady_clock::now();
+      slot.moreWork = !slot.anim->Prepare(g, this, paint);
+      slot.prepared = true;
+      mArtPreparedThisFrame = true;
+      slot.prepMs += std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    }
+    DrawStageBackdrop(g, artRect);
+    const uint32_t seed = volumart::ArtMotionSeed(want.custom, want.custom ? want.art : FractalCaseForAmp(want.art));
+    const volumart::ArtMotion m = mArtDebug.on ? volumart::DebugArtMotion(mArtDebug, seed, mArtDebugClock)
+                                               : volumart::LiveArtMotion(mArtMotion, seed);
+    g.PathClipRegion(paint);
+    const auto t0 = std::chrono::steady_clock::now();
+    slot.anim->Draw(g, paint, m);
+    const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    g.PathClipRegion();
+    if (mArtPerf)
+      DrawArtPerf(g, paint, want, slot, m, ms);
+    return true;
+  }
+
+  // VOLUM_ART_ANIM_PERF: CPU submit time of ArtAnimator::Draw. The label shows the
+  // last 120 frames' average and max; each window is also written to volum.log.
+  void DrawArtPerf(IGraphics& g, const IRECT& paint, const volum::StageArtKey& key, StageArtSlot& slot,
+                   const volumart::ArtMotion& m, float ms)
+  {
+    slot.perfSumMs += ms;
+    slot.perfPeakMs = std::max(slot.perfPeakMs, ms);
+    if (++slot.perfFrames >= kArtPerfWindow)
+    {
+      slot.perfAvgShown = static_cast<float>(slot.perfSumMs / slot.perfFrames);
+      slot.perfPeakShown = slot.perfPeakMs;
+      char line[160];
+      std::snprintf(line, sizeof(line), "%s %d %dx%d E=%.2f P=%.2f draw avg %.3f ms peak %.3f ms prepare %.1f ms",
+                    key.custom ? "custom" : "amp", key.art, key.pixelW, key.pixelH, m.energy, m.pick, slot.perfAvgShown,
+                    slot.perfPeakShown, slot.prepMs);
+      VOLUM_LOG("art", line);
+      slot.perfSumMs = 0.0;
+      slot.perfPeakMs = 0.f;
+      slot.perfFrames = 0;
+    }
+    const bool firstWindow = slot.perfAvgShown <= 0.f && slot.perfFrames > 0;
+    const float avg = firstWindow ? static_cast<float>(slot.perfSumMs / slot.perfFrames) : slot.perfAvgShown;
+    const float peak = firstWindow ? slot.perfPeakMs : slot.perfPeakShown;
+    char label[96];
+    std::snprintf(label, sizeof(label), "art %.2f ms (peak %.2f)  prep %.0f ms", avg, peak, slot.prepMs);
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), label,
+               IRECT(paint.L + 4.f, paint.B - 16.f, paint.R - 4.f, paint.B - 2.f));
   }
 
   // Additive, so it only lifts the art; nothing is drawn at rest.
@@ -861,9 +1017,10 @@ private:
 
   void DrawAmpPanel(IGraphics& g, const IRECT& rect, const std::string& name, int art, bool custom, bool support)
   {
-    const float glow = volum::PlayGlowAmount(mLight);
+    const float glow = volum::PlayGlowAmount(mArtDebug.on ? volumart::DebugPlayLight(mArtDebug) : mLight);
     DrawCachedStageArt(g, rect, art, custom, support ? mStageSupportLayer : mStageMainLayer,
-                       support ? mStageSupportKey : mStageMainKey, volum::PlayBloomWeight(glow));
+                       support ? mStageSupportKey : mStageMainKey, support ? mSupportArtSlot : mMainArtSlot,
+                       volum::PlayBloomWeight(glow));
     const IColor accent = support ? VoLumColors::TEAL : VoLumColors::GOLD;
     if (glow > 0.f)
       DrawStageGlow(g, rect, accent, glow);
@@ -1714,6 +1871,18 @@ private:
   volum::PlayLight mLight;
   volum::StageArtKey mStageMainKey;
   volum::StageArtKey mStageSupportKey;
+
+  static constexpr int kArtPerfWindow = 120;
+  StageArtSlot mMainArtSlot;
+  StageArtSlot mSupportArtSlot;
+  volumart::ArtMotionState mArtMotion;
+  volumart::ArtAnimDebug mArtDebug;
+  double mArtDebugClock = 0.0;
+  bool mAnimateArt = true;
+  bool mArtPerf = false;
+  bool mArtPreparedThisFrame = false;
+  bool mHaveTick = false;
+  std::chrono::steady_clock::time_point mLastTick{};
 
   // Cached row art, keyed by art id rather than by row, so a rail of eight presets
   // on one amp costs one tile.

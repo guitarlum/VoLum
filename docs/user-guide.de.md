@@ -195,6 +195,8 @@ Dieselbe **+**-Schaltfläche ist **Add this sound**, wenn das aktuelle Rig nicht
 
 Die acht Stomp-Schalter sind Performance-Bypässe für Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo. Klick umgeht, Rechtsklick springt nach BUILD mit dieser Karte. Ein leerer NAM-Slot nimmt keinen Bypass-Klick. Sie ändern ausschließlich die jeweiligen Effekt-Bypass-Zustände. Amp, Cab, Kanal und alle anderen Rig-Werte bleiben unangetastet. MIDI-Hörkanal, die Sound-Recall-CC und AU `aufx` → `aumf` stehen unter Einstellungen → MIDI.
 
+Das Bühnenbild leuchtet auf und bewegt sich, während du spielst, und kehrt zum ruhigen BUILD-Bild zurück, sobald du aufhörst. Wie stark es sich bewegt, folgt deinem Anschlag: Der Knoten des H&K TriAmp trägt drei Lichtstrahlen, einen pro Kanal, und der Leuchtturm des Soldano dreht seine Strahlen über das Meer. Bilder eigener Amps drehen sich langsam und atmen. Weitere Werks-Amps bekommen ihre eigene Bewegung in kommenden Builds; bis dahin leuchten sie auf, bleiben aber still. Soll jedes Bild still bleiben (und etwas CPU gespart werden), schalte **Einstellungen → SIGNAL → Performance → Animate art in PLAY** aus.
+
 ## Eigene Inhalte (Bring Your Own)
 
 VoLum kann eigene NAM-Amp-Captures, Impulsantworten und Pedal-Captures laden. Importierte Dateien werden in eine VoLum-eigene Inhaltsbibliothek kopiert, damit sie auch nach dem Verschieben oder Löschen der Originale funktionieren, und alle Formate sehen dieselbe Bibliothek:
@@ -257,7 +259,7 @@ Das Overlay hat drei Reiter.
 
 ![VoLum-Einstellungen, Reiter SIGNAL](user-guide-settings-signal.png)
 
-**SIGNAL** regelt, wie Audio hinein und hinaus gelangt: Eingangskalibrierung, Ausgangsmodus und Performance (FULL / LITE).
+**SIGNAL** regelt, wie Audio hinein und hinaus gelangt: Eingangskalibrierung, Ausgangsmodus und Performance (FULL / LITE und **Animate art in PLAY**).
 
 ![VoLum-Einstellungen, Reiter MIDI](user-guide-settings-midi.png)
 
@@ -310,6 +312,8 @@ Der Calibrate-Schalter und der dBu-Wert sind rechnerweite Start-Defaults. Eine d
 Die **Performance**-Karte der Einstellungen hat einen **FULL / LITE**-Schalter; der aktive Modus ist hervorgehoben (FULL ist die Voreinstellung), du siehst also stets, welcher Qualitätsmodus läuft. Lite tauscht ein wenig Qualität gegen geringere CPU-Last. VoLums A2-Amp- und Pedal-Captures sind so gepackt, dass jede Datei sowohl eine volle Version als auch eine kleinere „Lite“-Version enthält. Schaltest du auf Lite, nutzt VoLum die kleinere Version auf jeder NAM-Spur: beide PRE-NAM-Pedale, der Haupt-Amp und die Dual-Amp-Support-Spur. Der separate Pitch/Octaver-DSP wird dadurch nicht verändert; umgehe Pitch/Octaver oder nutze einen größeren Audiopuffer, wenn dieser Effekt die CPU-Grenze verursacht.
 
 Der Lite-Modus ist eine Einstellung pro Rechner: Er wird in `volum-settings.json` gespeichert, nicht im Projekt. Er bleibt also für jedes Projekt und jede DAW-Sitzung auf diesem Rechner aktiv, und ein auf einem schnellen Rechner gespeichertes Projekt spielt auf einem langsamen weiterhin Lite. Ein Lite-Schalter in Standalone oder Plugin schreibt nur diesen einen Schlüssel, genau wie die Kalibrierung, und kann deshalb PLAY/BUILD, den MIDI-Hörkanal, die Recall-CC oder Amp-Szenen nicht verschieben. Captures, die keine A2-Container sind (ältere Modelle mit nur einer Größe und die meisten eigenen Importe), bleiben unberührt — der Schalter hat dort einfach keine Wirkung. Standard ist Full.
+
+Darunter entscheidet **Animate art in PLAY** (**OFF / ON**, Standard ON), ob sich das PLAY-Bühnenbild beim Spielen bewegt. Es ändert nur das Bild, nie den Klang, und wird wie Lite pro Rechner in `volum-settings.json` gespeichert.
 
 ### Packs der Inhaltsbibliothek
 

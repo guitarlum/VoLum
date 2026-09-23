@@ -195,6 +195,8 @@ The same **+** control is **Add this sound** when the live rig is not already on
 
 The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel, the Sound-recall CC, and AU `aufx` → `aumf` are under Settings → MIDI.
 
+The stage art lights up and moves while you play, and settles back to the still BUILD picture when you stop. How far it moves follows how hard you play: the H&K TriAmp's knot carries three beams of light, one per channel, and the Soldano's lighthouse turns its beams across the sea. Custom-amp art turns slowly and breathes. More factory amps get their own motion in coming builds; until then they light up but stay still. To keep every art still (and save a little CPU), turn off **Settings → SIGNAL → Performance → Animate art in PLAY**.
+
 ## Custom Content (Bring Your Own)
 
 VoLum can load your own NAM amp captures, impulse responses, and pedal captures. Imported files are copied into a VoLum-owned content library, so they keep working after you move or delete the originals, and every format sees the same library:
@@ -257,7 +259,7 @@ The overlay has three tabs.
 
 ![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
 
-**SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE).
+**SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE, and **Animate art in PLAY**).
 
 ![VoLum Settings, MIDI tab](user-guide-settings-midi.png)
 
@@ -310,6 +312,8 @@ The Calibrate switch and dBu value are machine-global startup defaults. A direct
 The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE NAM pedals, the main amp, and the dual-amp support lane. Lite does not change the separate Pitch/Octaver DSP, so bypass Pitch/Octaver or use a larger audio buffer if that effect is the CPU bottleneck.
 
 Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. A Lite toggle from standalone or a plug-in writes only that key, the same way calibration does, so it cannot move PLAY/BUILD, the MIDI listen channel, the recall CC, or per-amp scenes. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
+
+Under it, **Animate art in PLAY** (**OFF / ON**, default ON) decides whether the PLAY stage art moves while you play. It changes only the picture, never the sound, and is saved per computer in `volum-settings.json` the same way as Lite.
 
 ### Content Library Packs
 

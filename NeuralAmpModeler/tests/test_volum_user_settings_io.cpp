@@ -1013,6 +1013,92 @@ TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Ful
   CHECK(lite == false);
 }
 
+// VoLum 1.3.0: "Animate art in PLAY", machine-global like Lite, default on.
+TEST_CASE("animatePlayArt round-trips, defaults on, and is additive (no version bump)")
+{
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+
+  const nlohmann::json jOn = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE(jOn["animatePlayArt"] == true);
+  const nlohmann::json jOff = volum::VolumUserSettingsToJson(
+    amps, volum::kAmpCount, 0, nullptr, true, false, false, nullptr, nullptr, false, false, 12.0, false);
+  REQUIRE(jOff["animatePlayArt"] == false);
+
+  // `sentinel` is the opposite of the expected answer, so the loader must overwrite it.
+  auto read = [&](const nlohmann::json& j, bool sentinel, bool& healed) {
+    bool animate = sentinel;
+    healed = false;
+    volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &animate);
+    return animate;
+  };
+  bool healed = true;
+  CHECK(read(jOff, true, healed) == false);
+  CHECK_FALSE(healed);
+  CHECK(read(jOn, false, healed) == true);
+  CHECK_FALSE(healed);
+
+  // A file from before 1.3.0 has no key: animation on, nothing to heal.
+  nlohmann::json older = jOff;
+  older.erase("animatePlayArt");
+  bool animate = false;
+  volum::VolumUserSettingsFromJson(older, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &animate);
+  CHECK(animate);
+  CHECK_FALSE(healed);
+
+  // An older reader (one that does not ask for the key) loads a 1.3.0 file cleanly.
+  volum::VolumUserSettingsFromJson(jOff, amps, volum::kAmpCount, nullptr, nullptr, &healed);
+  CHECK_FALSE(healed);
+
+  // A future writer (version + 1, unknown keys) still yields the key, unhealed.
+  nlohmann::json future = jOff;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["unknownFutureKey"] = true;
+  CHECK(read(future, true, healed) == false);
+  CHECK_FALSE(healed);
+
+  // A wrong type heals back to the default.
+  nlohmann::json broken = jOff;
+  broken["animatePlayArt"] = "yes";
+  CHECK(read(broken, false, healed) == true);
+  CHECK(healed);
+}
+
+TEST_CASE("animatePlayArt merge-write touches only its own key")
+{
+  const nlohmann::json j = {{"midiCh", 4}, {"liteMode", true}, {"lastPlaySlot", 7}, {"lastAmpIdx", 2}};
+  const auto out = volum::MergeAnimatePlayArtIntoSettings(j, false);
+  CHECK(out["animatePlayArt"] == false);
+  CHECK(out["liteMode"] == true);
+  CHECK(out["midiCh"] == 4);
+  CHECK(out["lastPlaySlot"] == 7);
+  CHECK(out["lastAmpIdx"] == 2);
+  CHECK(out["version"] == volum::kVoLumUserSettingsVersion);
+  CHECK(out.size() == j.size() + 2);
+
+  // The plugin path: the Settings switch saves this key alone and pushes it to PLAY.
+  const auto root = std::filesystem::path(__FILE__).parent_path().parent_path();
+  auto readText = [](const std::filesystem::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    REQUIRE(in);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  };
+  const std::string scene = readText(root / "VoLumSettingsScene.inc.cpp");
+  const auto set = scene.find("void NeuralAmpModeler::_VolumSetAnimatePlayArt(bool animate)");
+  REQUIRE(set != std::string::npos);
+  const auto setEnd = scene.find("\n}", set);
+  REQUIRE(setEnd != std::string::npos);
+  const std::string body = scene.substr(set, setEnd - set);
+  CHECK(body.find("_VolumSaveMachineBool(\"animatePlayArt\", animate);") != std::string::npos);
+  CHECK(body.find("_VolumSaveSettingsToFile") == std::string::npos);
+  CHECK(scene.find("mVolumAnimatePlayArt.store(parsedAnimatePlayArt);") != std::string::npos);
+  CHECK(scene.find("GetParam(kInputCalibrationLevel)->Value(), mVolumAnimatePlayArt.load());") != std::string::npos);
+  const std::string runtime = readText(root / "VoLumPlayRuntime.inc.cpp");
+  CHECK(runtime.find("SetAnimateArt(mVolumAnimatePlayArt.load());") != std::string::npos);
+}
+
 TEST_CASE("User settings IO round-trips machine-global input calibration defaults")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
@@ -1258,8 +1344,11 @@ TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   amps[0] = full;
 
-  const nlohmann::json j =
-    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/0, /*fx=*/nullptr, /*includeDualAmp=*/true);
+  // Every machine-global key rides along at a non-default value too.
+  const nlohmann::json j = volum::VolumUserSettingsToJson(
+    amps, volum::kAmpCount, /*lastAmpIdx=*/0, /*fx=*/nullptr, /*includeDualAmp=*/true, /*preLocked=*/false,
+    /*postLocked=*/false, /*liveLockedPre=*/nullptr, /*liveLockedPost=*/nullptr, /*liteMode=*/true,
+    /*calibrateInput=*/true, /*inputCalibrationLevel=*/-3.5, /*animatePlayArt=*/false);
 
   // Structural: the per-amp object must emit every top-level key the canonical
   // composed codec emits. Catches a field dropped from the settings writer even
@@ -1275,9 +1364,16 @@ TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive
   // Value: every field survives the real settings round-trip.
   volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
   bool healed = false;
-  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  bool lite = false, calibrate = false, animate = true;
+  double level = 12.0;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, &lite, &calibrate, &level, &animate);
   REQUIRE_FALSE(healed);
   CHECK(volum::AmpSettingsEqual(loaded[0], full));
+  CHECK(lite);
+  CHECK(calibrate);
+  CHECK(level == doctest::Approx(-3.5));
+  CHECK_FALSE(animate);
 }
 
 // The preset/scene persistence path is AmpSettingsToJson/FromJson (see
