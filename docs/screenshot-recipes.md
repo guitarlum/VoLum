@@ -18,6 +18,14 @@ To review the update badge, About pill, and footer reminder without a real
 release, launch with `VOLUM_FAKE_UPDATE=1`. That injects an in-memory 2.0.0
 manifest and does not write `volum-update-state.json`.
 
+To capture the PLAY art "playing" look without a guitar, launch with
+`VOLUM_PLAY_FAKE_PEAK=<level>` (set it before `.ui-sandbox-launch.ps1`; the
+launched app inherits it). `-12` or `-12dB` is dBFS, a value from `0` to `1` is
+the meter norm, and `0` is silence. It pins the IN level the PLAY surface sees
+(IN meter and art glow); audio is untouched, and without the variable nothing
+changes. Wait about 2 s after entering PLAY before capturing, so the lamp has
+settled. Silence must match the BUILD hero's brightness; `-12` is the full look.
+
 Canvas clicks and captures go through `scripts/ui-drive.ps1` (client pixels, one
 process per shot). Clicks always run before Keys in the same call: do not put
 `{ESC}` in `-Keys` with a menu-opening `-Clicks`, or the menu closes before

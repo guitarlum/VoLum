@@ -12,6 +12,7 @@
 #include "../VoLumPlayLight.h"
 #include "../VoLumPlayModel.h"
 #include "../VoLumScroll.h"
+#include "../VoLumStageArtCache.h"
 
 #include <filesystem>
 #include <fstream>
@@ -175,22 +176,106 @@ TEST_CASE("Add this sound Save As first for Default or dirty Factory")
   CHECK_FALSE(volum::AddHeardMarksLive(0, true)); // Default has no id yet
 }
 
-TEST_CASE("PLAY illumination: quiet breathes, loud is brighter")
+namespace
 {
-  const float dim = volum::PlayArtBrightness(0.f, 0.f);
-  const float dimHi = volum::PlayArtBrightness(0.f, 1.f);
-  const float loud = volum::PlayArtBrightness(0.85f, 0.5f);
-  CHECK(loud > dimHi);
-  CHECK(dimHi > dim);
-  CHECK(volum::PlayCoronaOpacity(loud) > volum::PlayCoronaOpacity(dim));
+volum::PlayLight HoldPlayInput(volum::PlayLight light, float dbfs, int ticks)
+{
+  const float norm = volum::MeterNormFromDb(dbfs);
+  for (int i = 0; i < ticks; ++i)
+    light = volum::AdvancePlayLight(light, norm);
+  return light;
+}
+} // namespace
+
+TEST_CASE("PLAY light: silence is BUILD, -12 dBFS is the full look")
+{
   CHECK(volum::MeterNormFromLinear(0.25f) == doctest::Approx(0.83f).epsilon(0.03f));
-  const float floorBright = volum::PlayArtBrightness(volum::kPlayPlayingFloorNorm, 1.f);
-  CHECK(floorBright + 1e-4f >= dimHi);
   CHECK(volum::PlayLampFollow(0.2f, 0.8f) > 0.2f);
   CHECK(volum::PlayLampFollow(0.2f, 0.8f) < volum::PlayLampFollow(0.2f, 0.8f, 0.9f, 0.04f));
+
+  // Silence: nothing is drawn over the art, so PLAY shows it at BUILD brightness.
+  const volum::PlayLight rest;
+  CHECK(volum::PlayGlowAmount(rest) == 0.f);
+  CHECK(volum::PlayBloomWeight(volum::PlayGlowAmount(rest)) == 0.f);
+  const volum::PlayLight hum = HoldPlayInput(rest, -40.f, 600);
+  CHECK(hum.energy == 0.f);
+  CHECK(hum.attack == 0.f);
+  CHECK(volum::PlayGlowAmount(hum) == 0.f);
+
+  // A normal guitar level reaches the full look; 0 dBFS is not needed.
+  const volum::PlayLight normal = HoldPlayInput(rest, -12.f, 600);
+  CHECK(normal.energy >= 0.99f);
+  CHECK(volum::PlayGlowAmount(normal) >= 0.99f);
+  CHECK(normal.attack == 0.f); // a held level is not a pick
+  CHECK(volum::PlayCoronaOpacity(volum::PlayGlowAmount(normal), 0.f) > volum::PlayCoronaOpacity(0.f, 1.f));
+
+  // Quieter playing still glows, in order.
+  const float e30 = HoldPlayInput(rest, -30.f, 600).energy;
+  const float e24 = HoldPlayInput(rest, -24.f, 600).energy;
+  const float e18 = HoldPlayInput(rest, -18.f, 600).energy;
+  CHECK(e30 > 0.f);
+  CHECK(e30 < e24);
+  CHECK(e24 < e18);
+  CHECK(e18 < normal.energy);
+
+  // A pick: the attack jumps on the step, then decays while the note is held.
+  const volum::PlayLight picked = HoldPlayInput(rest, -12.f, 1);
+  CHECK(picked.attack >= 0.99f);
+  CHECK(volum::PlayGlowAmount(picked) > 0.f);
+  CHECK(HoldPlayInput(rest, -12.f, 45).attack < 0.05f);
+
+  // Letting go returns to rest exactly.
+  const volum::PlayLight after = HoldPlayInput(normal, -90.f, 600);
+  CHECK(after.energy == 0.f);
+  CHECK(after.attack == 0.f);
+  CHECK(volum::PlayGlowAmount(after) == 0.f);
+
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  CHECK(play.find("PlayArtBrightness(mLampPeak, pulse)") != std::string::npos);
-  CHECK(play.find("PlayArtBrightness(mInPeak, pulse)") == std::string::npos);
+  CHECK(play.find("AdvancePlayLight(mLight, mInPeak)") != std::string::npos);
+  CHECK(play.find("PlayGlowAmount(mLight)") != std::string::npos);
+  CHECK(play.find("veil * 140") == std::string::npos);
+}
+
+TEST_CASE("VOLUM_PLAY_FAKE_PEAK takes dBFS or the meter norm")
+{
+  float norm = -1.f;
+  CHECK(volum::ParsePlayFakePeak("-12", norm));
+  CHECK(norm == doctest::Approx(volum::MeterNormFromDb(-12.f)));
+  norm = -1.f;
+  CHECK(volum::ParsePlayFakePeak("-12dB", norm));
+  CHECK(norm == doctest::Approx(volum::MeterNormFromDb(-12.f)));
+  CHECK(volum::ParsePlayFakePeak("0.5", norm));
+  CHECK(norm == doctest::Approx(0.5f));
+  CHECK(volum::ParsePlayFakePeak("0", norm));
+  CHECK(norm == 0.f);
+  CHECK_FALSE(volum::ParsePlayFakePeak(nullptr, norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("", norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("loud", norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("2", norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("-12x", norm));
+}
+
+TEST_CASE("PLAY stage art cache is keyed by art and pixel size")
+{
+  // Default 900x600 window: the paint rect is 662x312 in mono, 309x312 per lane in dual.
+  const auto mono = volum::MakeStageArtKey(7, false, 662.f, 312.f, 1.f);
+  const auto dual = volum::MakeStageArtKey(7, false, 309.f, 312.f, 1.f);
+  CHECK(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, false, 662.f, 312.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, dual));
+  CHECK_FALSE(volum::StageArtLayerMatches(dual, mono));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, false, 662.f, 300.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, false, 662.f, 312.f, 2.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(8, false, 662.f, 312.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, true, 662.f, 312.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(volum::StageArtKey{}, volum::StageArtKey{}));
+  // StartLayer's rounding: ceil(scale * ceil(w)).
+  CHECK(volum::MakeStageArtKey(0, false, 309.f, 312.f, 1.5f).pixelW == 464);
+  CHECK(volum::MakeStageArtKey(0, false, 308.4f, 312.f, 1.f).pixelW == 309);
+
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("StageArtLayerMatches(cached, want)") != std::string::npos);
+  CHECK(play.find("g.DrawBitmap(bitmap, paint, 0, 0, nullptr);") != std::string::npos);
+  CHECK(play.find("DrawFittedLayer(layer, paint") == std::string::npos);
 }
 
 TEST_CASE("AnyOverlayOpen is true when any listed tag is showing")

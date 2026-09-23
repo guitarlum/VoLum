@@ -11,6 +11,7 @@
 #include "VoLumPlayLight.h"
 #include "VoLumPlayModel.h"
 #include "VoLumScroll.h"
+#include "VoLumStageArtCache.h"
 #include "VoLumTriptychMotifs.h"
 
 #include <algorithm>
@@ -174,6 +175,11 @@ public:
   , mEditInBuild(std::move(edit))
   , mAddHeard(std::move(addHeard))
   {
+    // Screenshot harness only (docs/screenshot-recipes.md): pins the IN level the
+    // PLAY light sees. Inert without the variable.
+    float fake = 0.f;
+    if (volum::ParsePlayFakePeak(std::getenv("VOLUM_PLAY_FAKE_PEAK"), fake))
+      mFakeInPeak = fake;
   }
 
   void SetPlusAddsHeard(bool addsHeard)
@@ -214,7 +220,7 @@ public:
     return rail || stomp;
   }
 
-  void SetInPeak(float peak) { mInPeak = std::clamp(peak, 0.f, 1.f); }
+  void SetInPeak(float peak) { mInPeak = mFakeInPeak >= 0.f ? mFakeInPeak : std::clamp(peak, 0.f, 1.f); }
   void SetOutPeak(float peak) { mOutPeak = std::clamp(peak, 0.f, 1.f); }
 
   void SetPickerGroups(volum::PickerGroupSession* session) { mPickerGroups = session; }
@@ -250,18 +256,6 @@ public:
     mDirty = dirty;
     mNam1Label = (nam1Label && nam1Label[0]) ? nam1Label : "NAM 1";
     mNam2Label = (nam2Label && nam2Label[0]) ? nam2Label : "NAM 2";
-    if (mCachedMainArt != mLiveArt || mCachedMainCustom != mCustomArt)
-    {
-      mStageMainLayer = nullptr;
-      mCachedMainArt = mLiveArt;
-      mCachedMainCustom = mCustomArt;
-    }
-    if (mCachedSupportArt != mSupportArt || mCachedSupportCustom != mSupportCustom)
-    {
-      mStageSupportLayer = nullptr;
-      mCachedSupportArt = mSupportArt;
-      mCachedSupportCustom = mSupportCustom;
-    }
     ClampRailScroll();
     if (lastSlot != prevSlot)
       EnsureActiveRowVisible();
@@ -299,6 +293,8 @@ public:
       layer = nullptr;
     mStageMainLayer = nullptr;
     mStageSupportLayer = nullptr;
+    mStageMainKey = {};
+    mStageSupportKey = {};
   }
 
   void Tick()
@@ -306,7 +302,7 @@ public:
     mPhase += 0.015f;
     if (mPhase > 6.283185f)
       mPhase -= 6.283185f;
-    mLampPeak = volum::PlayLampFollow(mLampPeak, mInPeak);
+    mLight = volum::AdvancePlayLight(mLight, mInPeak);
     SetDirty(false);
   }
 
@@ -818,10 +814,17 @@ private:
     g.DrawText(VoLumType::Label(12.f, VoLumColors::GOLD), mPlusAddsHeard ? "+   Add this sound" : "+   Add Sound", add);
   }
 
-  void DrawCachedStageArt(IGraphics& g, const IRECT& artRect, int art, bool custom, ILayerPtr& layer)
+  // Built at the pixel size it is drawn at and blitted 1:1. The key carries the
+  // size because the panel narrows in dual: a layer built for one width is
+  // stretched in the other. The backdrop is BUILD's panel gradient so silence
+  // looks exactly like the BUILD hero.
+  void DrawCachedStageArt(IGraphics& g, const IRECT& artRect, int art, bool custom, ILayerPtr& layer,
+                          volum::StageArtKey& cached, float bloom)
   {
-    const IRECT paint = artRect.GetPadded(-18.f);
-    if (!g.CheckLayer(layer))
+    const float scale = g.GetScreenScale() * g.GetDrawScale();
+    const IRECT paint = artRect.GetPadded(-18.f).GetPixelAligned(scale);
+    const volum::StageArtKey want = volum::MakeStageArtKey(art, custom, paint.W(), paint.H(), scale);
+    if (!g.CheckLayer(layer) || !volum::StageArtLayerMatches(cached, want))
     {
       g.StartLayer(this, paint);
       if (custom)
@@ -829,21 +832,43 @@ private:
       else
         DrawHeroFractalArt(g, paint, FractalCaseForAmp(art));
       layer = g.EndLayer();
+      cached = want;
     }
-    g.FillRect(VoLumColors::HERO_BG, artRect);
-    if (layer && g.CheckLayer(layer))
-      g.DrawFittedLayer(layer, paint, nullptr);
+    g.PathRect(artRect);
+    g.PathFill(IPattern::CreateLinearGradient(
+      artRect.L, artRect.T, artRect.L, artRect.B, {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
+    if (!layer || !g.CheckLayer(layer))
+      return;
+    const IBitmap bitmap = layer->GetBitmap();
+    g.DrawBitmap(bitmap, paint, 0, 0, nullptr);
+    if (bloom > 0.f)
+    {
+      const IBlend add(EBlend::Add, bloom);
+      g.DrawBitmap(bitmap, paint, 0, 0, &add);
+    }
+  }
+
+  // Additive, so it only lifts the art; nothing is drawn at rest.
+  static void DrawStageGlow(IGraphics& g, const IRECT& rect, const IColor& accent, float glow)
+  {
+    const IBlend add(EBlend::Add, 1.f);
+    const float radius = 0.62f * std::max(rect.W(), rect.H());
+    g.PathRect(rect);
+    g.PathFill(IPattern::CreateRadialGradient(
+                 rect.MW(), rect.MH(), radius, {{accent.WithOpacity(0.30f * glow), 0.f}, {COLOR_TRANSPARENT, 1.f}}),
+               IFillOptions(), &add);
   }
 
   void DrawAmpPanel(IGraphics& g, const IRECT& rect, const std::string& name, int art, bool custom, bool support)
   {
-    DrawCachedStageArt(g, rect, art, custom, support ? mStageSupportLayer : mStageMainLayer);
-    const float pulse = volum::PlayIdlePulse(mPhase);
-    const float bright = volum::PlayArtBrightness(mLampPeak, pulse);
-    const float veil = std::clamp(1.f - bright, 0.f, 0.64f);
-    g.FillRect(IColor(static_cast<int>(veil * 140.f), 6, 8, 12), rect);
-    const float corona = volum::PlayCoronaOpacity(bright);
-    const IColor frame = (support ? VoLumColors::TEAL : VoLumColors::GOLD).WithOpacity(corona);
+    const float glow = volum::PlayGlowAmount(mLight);
+    DrawCachedStageArt(g, rect, art, custom, support ? mStageSupportLayer : mStageMainLayer,
+                       support ? mStageSupportKey : mStageMainKey, volum::PlayBloomWeight(glow));
+    const IColor accent = support ? VoLumColors::TEAL : VoLumColors::GOLD;
+    if (glow > 0.f)
+      DrawStageGlow(g, rect, accent, glow);
+    const float corona = volum::PlayCoronaOpacity(glow, volum::PlayIdlePulse(mPhase));
+    const IColor frame = accent.WithOpacity(corona);
     g.DrawRect(frame, rect, nullptr, 2.2f);
     g.DrawRect(frame.WithOpacity(corona * 0.45f), rect.GetPadded(2.f), nullptr, 3.f);
     const float acc = 14.f;
@@ -1684,10 +1709,11 @@ private:
   std::string mCurTip;
   std::array<bool, FxCount> mFx{};
   std::array<bool, FxCount> mFxAvailable{};
-  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f,
-        mLampPeak = 0.f;
-  int mCachedMainArt = -1, mCachedSupportArt = -1;
-  bool mCachedMainCustom = false, mCachedSupportCustom = false;
+  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f;
+  float mFakeInPeak = -1.f; // VOLUM_PLAY_FAKE_PEAK; negative = live input
+  volum::PlayLight mLight;
+  volum::StageArtKey mStageMainKey;
+  volum::StageArtKey mStageSupportKey;
 
   // Cached row art, keyed by art id rather than by row, so a rail of eight presets
   // on one amp costs one tile.
