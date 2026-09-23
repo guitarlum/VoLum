@@ -169,6 +169,8 @@ Every factory amp ships one read-only Factory preset named **Ready**. That is th
 3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
 4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
 
+**Save current as new**, **Ctrl+S**, and PLAY's **+ Add this sound** all open the same name popup. Its confirm button reads **Update** while the name you type is the selected User preset's own name (that overwrites it) and **Save** for any other name (that creates a new preset). It switches as you type. `Enter` or that button saves. **Cancel**, `Esc`, or a click outside the popup closes it and writes nothing.
+
 Presets are per amp: each amp (factory or custom) keeps its own User list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
 
 ## PLAY View
@@ -177,7 +179,7 @@ When the tones exist in BUILD, switch to PLAY and assign them to program numbers
 
 ![VoLum PLAY empty board](user-guide-play-empty.png)
 
-A first visit with no Sounds assigned is an empty setlist, not an empty product. The live amp is still behind it. **+ Add this sound** writes what you hear onto the next free program number once it is a User Sound. Factory, Default, or an unnamed rig opens a name popup first; Default always does, and a dirty Factory does too.
+A first visit with no Sounds assigned is an empty setlist, not an empty product. The live amp is still behind it. **+ Add this sound** writes what you hear onto the next free program number once it is a User Sound. Factory, Default, or an unnamed rig opens a name popup first; Default always does, and a dirty Factory does too. **Save** in that popup creates the User Sound and puts it on the rail in one step; **Cancel**, `Esc`, or a click outside writes nothing and adds nothing.
 
 ![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
 
@@ -185,7 +187,7 @@ A first visit with no Sounds assigned is an empty setlist, not an empty product.
 
 ![VoLum PLAY board](user-guide-play.png)
 
-Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** always opens the name dialog (`New Preset` on Factory/Default, the current name on a User Sound). Enter on the same name overwrites; a new name mints a User Sound. If a rail slot is LIVE, that same program number now plays the saved Sound — Ctrl+S never invents a new number. Drag a row onto another to swap, into the gap between rows to slide Sounds along the existing program numbers, or onto the dashed Add plate to move it to the end. When every program number is taken, **+ Add this sound** opens the picker on program 0 so you can replace one. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot. PLAY IN/OUT meters use the same −70..0 dB window as BUILD.
+Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** always opens the name dialog (`New Preset` on Factory/Default, the current name on a User Sound). On the same name the button reads **Update** and overwrites; a new name reads **Save** and mints a User Sound. If a rail slot is LIVE, that same program number now plays the saved Sound — Ctrl+S never invents a new number. Drag a row onto another to swap, into the gap between rows to slide Sounds along the existing program numbers, or onto the dashed Add plate to move it to the end. When every program number is taken, **+ Add this sound** opens the picker on program 0 so you can replace one. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot. PLAY IN/OUT meters use the same −70..0 dB window as BUILD.
 
 The same **+** control is **Add this sound** when the live rig is not already on the rail (or a dirty Factory/Default still needs saving). It is **Add Sound** when the live Sound is already assigned and clean.
 

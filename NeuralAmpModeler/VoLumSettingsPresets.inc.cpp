@@ -363,38 +363,46 @@ void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after)
   auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog);
   if (!raw)
     return;
+  const auto action = volum::SaveActionForActivePreset(mVolumActivePresetId);
+  const std::string ownerKey = _VolumClaimPresetOps();
   std::string currentName;
-  int currentUserIdx = -1;
-  if (volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser)
+  std::string currentId;
+  if (action == volum::PresetSaveAction::OverwriteUser)
   {
-    const auto users = volum::custom::PresetsForOwner(_VolumClaimPresetOps());
-    for (int i = 0; i < static_cast<int>(users.size()); ++i)
+    const int idx = volum::custom::PresetIndexByIdForOwner(ownerKey, mVolumActivePresetId);
+    const auto users = volum::custom::PresetsForOwner(ownerKey);
+    if (idx >= 0 && idx < static_cast<int>(users.size()))
     {
-      if (volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), i) == mVolumActivePresetId)
-      {
-        currentName = users[(size_t)i];
-        currentUserIdx = i;
-        break;
-      }
+      currentName = users[static_cast<size_t>(idx)];
+      currentId = mVolumActivePresetId;
     }
   }
-  const std::string seed =
-    volum::SaveDialogSeedName(volum::SaveActionForActivePreset(mVolumActivePresetId), currentName);
+  const std::string seed = volum::SaveDialogSeedName(action, currentName);
+  VOLUM_LOG("preset", "save dialog open (" + std::string(currentId.empty() ? "new" : "may update") + ")");
   raw->As<VoLumNameDialogControl>()->Show(
-    "Save preset", "Name this User preset.", seed, [this, after, currentName, currentUserIdx](const std::string& name) {
+    "Save preset", "Name this User preset.", seed, currentName,
+    [this, after, currentName, currentId](const std::string& name) {
+      // The overwrite target is looked up by id now, not by an index remembered
+      // when the dialog opened: the bank can be edited or reordered in between.
+      const int overwriteIdx = volum::name_dialog::Overwrites(name, currentName)
+                                 ? volum::custom::PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)
+                                 : -1;
       bool ok = false;
-      if (volum::SaveDialogOverwritesCurrent(name, currentName) && currentUserIdx >= 0)
+      if (overwriteIdx >= 0)
       {
-        _VolumOverwritePreset(currentUserIdx);
+        _VolumOverwritePreset(overwriteIdx);
         ok = true;
       }
       else
         ok = _VolumSavePresetAs(name) >= 0;
+      VOLUM_LOG("preset", std::string("save dialog commit: ") + (overwriteIdx >= 0 ? "updated '" : "saved '") + name
+                            + "'" + (ok ? "" : " (refused)"));
       if (!ok)
         return;
       if (after)
         after();
-    });
+    },
+    []() { VOLUM_LOG("preset", "save dialog cancelled: nothing written"); });
 }
 
 bool NeuralAmpModeler::_VolumHandleSaveShortcut()

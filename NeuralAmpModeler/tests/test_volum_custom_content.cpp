@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 
+#include <filesystem>
 #include <vector>
 
 #include "../VoLumCustomContentApi.h"
@@ -1196,4 +1197,44 @@ TEST_CASE("RemoveCustomAmp keeps names and art ids aligned")
 
   volum::custom::RemoveCustomAmp(99999); // out of range no-op
   REQUIRE(volum::custom::MockCustomAmpArts().size() == volum::custom::MockCustomAmps().size());
+}
+
+TEST_CASE("Saving a preset into an on-disk library returns the row it wrote")
+{
+  // Save() replaces the registry with the merge of disk and memory. The index
+  // used to be read through a reference into the registry it replaced, so on a
+  // real library it came back -1 (or garbage) for a preset that was written and
+  // PLAY's save-then-add never added the Sound. The in-memory store never merges,
+  // which is why only a base dir shows it.
+  namespace fs = std::filesystem;
+  auto& store = volum::content::GlobalContentStore();
+  const auto savedReg = store.reg();
+  const fs::path base = fs::temp_directory_path() / "volum-add-preset-on-disk";
+  std::error_code ec;
+  fs::remove_all(base, ec);
+  fs::create_directories(base, ec);
+  store.SetBaseDir(base);
+  store.reg() = {};
+  store.Save();
+  auto& hooks = volum::custom::PresetHooksByInstance();
+  const auto savedHooks = hooks;
+  hooks.clear();
+
+  const std::string owner = "test:add-preset-on-disk";
+  for (const char* name : {"Lead", "Crunch", "Clean"})
+  {
+    CAPTURE(name);
+    const int idx = volum::custom::AddPresetForOwner(owner, name);
+    REQUIRE(idx >= 0);
+    const auto names = volum::custom::PresetsForOwner(owner);
+    REQUIRE(idx < static_cast<int>(names.size()));
+    CHECK(names[static_cast<size_t>(idx)] == name);
+    CHECK_FALSE(volum::custom::PresetIdAtForOwner(owner, idx).empty());
+  }
+  CHECK(volum::custom::PresetsForOwner(owner).size() == 3);
+
+  hooks = savedHooks;
+  store.SetBaseDir({});
+  store.reg() = savedReg;
+  fs::remove_all(base, ec);
 }

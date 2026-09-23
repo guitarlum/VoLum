@@ -703,6 +703,20 @@ inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
   return PresetsForOwner(ActivePresetOwnerKey());
 }
 
+inline int PresetIndexByIdForOwner(const std::string& ownerKey, const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ownerKey);
+  if (it == banks.end())
+    return -1;
+  for (int i = 0; i < (int)it->second.size(); ++i)
+    if (it->second[(size_t)i].id == id)
+      return i;
+  return -1;
+}
+
 // Capture the current live settings (via the plugin hook) into a new named
 // preset, de-duplicating the display name. Returns its index in the bank, or
 // -1 when a live editor is bound but this instance has no capture hook (refuse
@@ -730,9 +744,12 @@ inline int AddPresetForOwner(const std::string& ownerKey, const std::string& nam
   pr.name = unique;
   if (capture)
     pr.settings = capture();
+  const std::string id = pr.id;
   bank.push_back(std::move(pr));
+  // Save() replaces the registry with the merge of disk and memory, so `bank`
+  // dangles past this line and the merged bank may hold another writer's rows.
   Store().Save();
-  return (int)bank.size() - 1;
+  return PresetIndexByIdForOwner(ownerKey, id);
 }
 
 inline int AddPreset(int /*ampIdx*/, const std::string& name)
@@ -797,20 +814,6 @@ inline std::string PresetIdAtForOwner(const std::string& ownerKey, int idx)
 inline std::string PresetIdAt(int idx)
 {
   return PresetIdAtForOwner(ActivePresetOwnerKey(), idx);
-}
-
-inline int PresetIndexByIdForOwner(const std::string& ownerKey, const std::string& id)
-{
-  if (id.empty())
-    return -1;
-  const auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ownerKey);
-  if (it == banks.end())
-    return -1;
-  for (int i = 0; i < (int)it->second.size(); ++i)
-    if (it->second[(size_t)i].id == id)
-      return i;
-  return -1;
 }
 
 inline int PresetIndexById(const std::string& id)

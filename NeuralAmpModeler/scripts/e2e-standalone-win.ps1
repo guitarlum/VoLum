@@ -17,7 +17,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
-    "samplerate")]
+    "samplerate", "savedialog")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -89,7 +89,8 @@ function Copy-AudioConfigOnly {
 # persistence assertion below vacuous, so a hard kill is reported as a failure - and
 # so is any non-zero exit, including the watchdog's own.
 function Invoke-VoLumRun {
-  param([string]$SandboxRoot, [int]$SettleSec = 6)
+  # -Drive runs against the live window after the settle, before the graceful close.
+  param([string]$SandboxRoot, [int]$SettleSec = 6, [scriptblock]$Drive)
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $Exe
@@ -105,7 +106,7 @@ function Invoke-VoLumRun {
     Start-Sleep -Milliseconds 250
   }
 
-  $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null }
+  $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null; drive = $null }
   if ($proc.HasExited) {
     $result.exitCode = $proc.ExitCode
     return $result
@@ -115,6 +116,12 @@ function Invoke-VoLumRun {
 
   # Let the editor finish opening, restoring, and running its idle save.
   Start-Sleep -Seconds $SettleSec
+
+  if ($Drive) {
+    $proc.Refresh()
+    try { $result.drive = & $Drive $proc }
+    catch { Write-Host ("  drive step failed: {0}" -f $_.Exception.Message) -ForegroundColor Yellow }
+  }
 
   [void]$proc.CloseMainWindow()
   if ($proc.WaitForExit(20000)) {
@@ -702,6 +709,172 @@ function Test-SampleRate {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: PLAY "Add this sound" on an unsaved sound, cancelled and then saved
+#
+# Reported on 1.3.0: with PLAY empty and the Default sound, Add opened the name
+# dialog and Cancel still created a preset (sometimes a PLAY slot too); a few
+# rounds left "New Preset", "New Preset 2", ... behind. Cancel / Esc / a click
+# outside must write nothing; Save must create one preset and one PLAY slot.
+#
+# Input goes to VoLum's plugin window as window messages, not through the cursor
+# and the foreground window: it runs the real iPlug WndProc -> IGraphics -> control
+# path, and it works on a locked desktop, where synthetic clicks land on the lock
+# screen. Canvas coordinates are the 900x600 layout (dialog 420x188 centred; see
+# VoLumNameDialog.h BoxRect).
+# --------------------------------------------------------------------------
+if (-not ([System.Management.Automation.PSTypeName]'VoLumE2eUi').Type) {
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class VoLumE2eUi {
+  delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
+  [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+
+  public static IntPtr PlugWindow(IntPtr main) {
+    IntPtr found = IntPtr.Zero;
+    EnumChildWindows(main, (h, l) => {
+      var c = new StringBuilder(64);
+      GetClassName(h, c, 64);
+      if (c.ToString() != "IPlugWndClass") return true;
+      found = h;
+      return false;
+    }, IntPtr.Zero);
+    return found;
+  }
+  // Canvas pixels, scaled to the actual client size.
+  public static void Click(IntPtr plug, int cx, int cy) {
+    RECT r; GetClientRect(plug, out r);
+    double s = (r.Right - r.Left) / 900.0;
+    int x = (int)Math.Round(cx * s), y = (int)Math.Round(cy * s);
+    IntPtr at = (IntPtr)((y << 16) | (x & 0xFFFF));
+    SendMessage(plug, 0x0200, IntPtr.Zero, at);     // WM_MOUSEMOVE
+    SendMessage(plug, 0x0201, (IntPtr)1, at);       // WM_LBUTTONDOWN, MK_LBUTTON
+    SendMessage(plug, 0x0202, IntPtr.Zero, at);     // WM_LBUTTONUP
+  }
+  // iPlug derives the character from WM_KEYDOWN via ToAscii on the app thread's own
+  // keyboard state, which a message cannot carry: Shift is never down, so text is
+  // lowercase.
+  public static void Key(IntPtr plug, int vk) {
+    long scan = MapVirtualKey((uint)vk, 0);
+    SendMessage(plug, 0x0100, (IntPtr)vk, (IntPtr)(1 | (scan << 16)));                   // WM_KEYDOWN
+    SendMessage(plug, 0x0101, (IntPtr)vk, (IntPtr)(1 | (scan << 16) | 0xC0000000L));     // WM_KEYUP
+  }
+  // Lowercase letters, digits and spaces.
+  public static void Type(IntPtr plug, string text) {
+    foreach (char c in text) Key(plug, c == ' ' ? 0x20 : (int)char.ToUpperInvariant(c));
+  }
+}
+'@
+}
+
+function Get-PresetRows {
+  param($Registry)
+  $rows = @()
+  if ($Registry -and $Registry.presetBanks) {
+    foreach ($bank in $Registry.presetBanks.PSObject.Properties) {
+      foreach ($pr in @($bank.Value)) { $rows += [pscustomobject]@{ owner = $bank.Name; id = $pr.id; name = $pr.name } }
+    }
+  }
+  return , $rows
+}
+
+function Get-MidiMapRows {
+  param($Registry)
+  if ($Registry -and $Registry.midiSoundMap) { return , @($Registry.midiSoundMap) }
+  return , @()
+}
+
+function Test-SaveDialog {
+  Write-Host "`n[savedialog] PLAY Add this sound: Cancel writes nothing, Save adds one Sound" -ForegroundColor Cyan
+  $sandbox = New-Sandbox "savedialog"
+  $root = Join-Path $sandbox "VoLum"
+  # DirectSound on the default devices: the dialog needs no particular interface,
+  # and an absent ASIO device from the seed would put a modal "Audio Error" box in
+  # front of every click.
+  @("[audio]", "driver=0", "indev=Default Device", "outdev=Default Device", "in1=1", "out1=1", "out2=2",
+    "buffer=512", "sr=48000") | Set-Content (Join-Path $root "settings.ini") -Encoding ASCII
+  $contentPath = Join-Path $root "content\volum-content.json"
+  $settingsPath = Join-Path $root "volum-settings.json"
+  $logPath = Join-Path $root "volum.log"
+
+  # First launch writes a real settings file; the second opens straight into PLAY
+  # on factory amp 0 with no preset selected (the Default sound).
+  $first = Invoke-VoLumRun -SandboxRoot $sandbox
+  Assert-True "first launch opened a window" $first.started
+  $settings = Read-Json $settingsPath
+  if (-not $settings) { Assert-True "first launch wrote volum-settings.json" $false; return }
+  $settings | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "play" -Force
+  $settings | Add-Member -NotePropertyName volumCustomMainId -NotePropertyValue "" -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetId -NotePropertyValue "" -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetIdByOwner -NotePropertyValue ([pscustomobject]@{}) -Force
+  $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+  $presetsBefore = (Get-PresetRows (Read-Json $contentPath)).Count
+  $mapBefore = (Get-MidiMapRows (Read-Json $contentPath)).Count
+  Remove-Item $logPath -Force -ErrorAction SilentlyContinue
+
+  $addSound = @(450, 324)   # PLAY empty board: "+ Add this sound"
+  $cancel = @(351, 351)     # dialog Cancel button
+  $outside = @(450, 150)    # scrim above the dialog box
+
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox -SettleSec 7 -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    $open = { [VoLumE2eUi]::Click($h, $addSound[0], $addSound[1]); Start-Sleep -Milliseconds 400 }
+    for ($i = 0; $i -lt 5; $i++) {
+      & $open
+      [VoLumE2eUi]::Click($h, $cancel[0], $cancel[1]); Start-Sleep -Milliseconds 400
+    }
+    & $open
+    [VoLumE2eUi]::Key($h, 0x1B); Start-Sleep -Milliseconds 400
+    & $open
+    [VoLumE2eUi]::Click($h, $outside[0], $outside[1]); Start-Sleep -Milliseconds 400
+    $afterCancels = Read-Json $contentPath
+
+    # Save through the keyboard route: the seed is selected, typing replaces it,
+    # Enter commits.
+    & $open
+    [VoLumE2eUi]::Type($h, "e2e lead"); Start-Sleep -Milliseconds 200
+    [VoLumE2eUi]::Key($h, 0x0D); Start-Sleep -Milliseconds 1000
+    return @{ afterCancels = $afterCancels }
+  }
+  Assert-True "app opened a window" $run.started
+  Assert-True "app closed gracefully" $run.graceful
+
+  $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
+  $opens = ([regex]::Matches($log, "save dialog open")).Count
+  $cancels = ([regex]::Matches($log, "save dialog cancelled")).Count
+  $commits = ([regex]::Matches($log, "save dialog commit")).Count
+  # Positive control: without it a missed click would pass every "nothing written"
+  # check below for free.
+  Assert-Equal "Add opened the name dialog 8 times" 8 $opens
+  Assert-Equal "Cancel x5, Esc and outside click each cancelled" 7 $cancels
+  Assert-Equal "exactly one commit (Enter)" 1 $commits
+
+  $mid = if ($run.drive) { $run.drive.afterCancels } else { $null }
+  Assert-Equal "no preset written by 7 cancelled dialogs" $presetsBefore (Get-PresetRows $mid).Count
+  Assert-Equal "no PLAY slot written by 7 cancelled dialogs" $mapBefore (Get-MidiMapRows $mid).Count
+
+  $after = Read-Json $contentPath
+  $rows = Get-PresetRows $after
+  Assert-Equal "Save created exactly one preset" ($presetsBefore + 1) $rows.Count
+  $saved = @($rows | Where-Object { $_.name -ceq "e2e lead" })[0]
+  Assert-True "preset carries the typed name" ($null -ne $saved) ("names: " + (($rows | ForEach-Object { $_.name }) -join ", "))
+  $map = Get-MidiMapRows $after
+  Assert-Equal "Save added exactly one PLAY slot" ($mapBefore + 1) $map.Count
+  if ($saved -and $map.Count -ge 1) {
+    Assert-True "the PLAY slot is the saved preset" (@($map | Where-Object { $_.presetId -eq $saved.id }).Count -eq 1)
+  }
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# --------------------------------------------------------------------------
 
 Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
@@ -719,6 +892,7 @@ if ($Scenario -in @("all", "upgrade")) { Test-Upgrade }
 if ($Scenario -in @("all", "presets")) { Test-PresetMemory }
 if ($Scenario -in @("all", "corrupt")) { Test-Corrupt }
 if ($Scenario -in @("all", "samplerate")) { Test-SampleRate }
+if ($Scenario -in @("all", "savedialog")) { Test-SaveDialog }
 
 Write-Host ""
 if ($script:Failures.Count -eq 0) {

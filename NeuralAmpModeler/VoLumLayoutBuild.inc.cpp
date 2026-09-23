@@ -1467,7 +1467,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->SetKeyHandlerFunc([this](const IKeyPress& key, bool isUp) {
     if (isUp)
       return false;
-    if (mVolumUiMode == volum::UiMode::Play)
+    // PLAY swallows digits, S, Space, Backspace and Enter below; a name being typed
+    // into the Save dialog needs every one of them.
+    bool nameDialogOpen = false;
+    if (auto* pGfx = GetUI())
+      if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog))
+        nameDialogOpen = !dlg->IsHidden();
+    if (mVolumUiMode == volum::UiMode::Play && !nameDialogOpen)
     {
       bool overlayOpen = false;
       if (auto* pGfx = GetUI())
@@ -1579,7 +1585,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
                 tuner->As<VoLumTunerControl>()->Dismiss();
               pGfx->SetAllControlsDirty();
               return true;
-            case OverlayId::NameDialog: hideTag(kCtrlTagVoLumNameDialog); return true;
+            case OverlayId::NameDialog:
+              if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog))
+                dlg->As<VoLumNameDialogControl>()->Dismiss();
+              return true;
             case OverlayId::Confirm: hideTag(kCtrlTagVoLumConfirm); return true;
             case OverlayId::Custom: hideTag(kCtrlTagVoLumCustomOverlay); return true;
             case OverlayId::Pack: hideTag(kCtrlTagVoLumPackOverlay); return true;
@@ -1613,6 +1622,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         case KeyConsumer::ConfirmEnter:
           if (auto* confirm = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
             confirm->OnKeyDown(0.f, 0.f, key);
+          return true;
+        case KeyConsumer::NameDialogKey:
+          if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog))
+            dlg->OnKeyDown(0.f, 0.f, key);
           return true;
         case KeyConsumer::FallThrough: return false;
         case KeyConsumer::Knob:

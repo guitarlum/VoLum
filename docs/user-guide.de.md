@@ -169,6 +169,8 @@ Jeder Werk-Amp bringt ein schreibgeschütztes Werk-Preset namens **Ready** mit. 
 3. Mit den Pfeilen `<` / `>` blätterst du gespeicherte Presets direkt durch, oder du wählst eines aus der Liste.
 4. **Update** überschreibt das gewählte Preset mit dem aktuellen Rig (mit Rückfrage); **Rename** und **Delete** verwalten die Liste.
 
+**Save current as new**, **Ctrl+S** und in PLAY **+ Add this sound** öffnen alle dasselbe Namensfeld. Die Bestätigen-Schaltfläche heißt **Update**, solange der eingetippte Name der Name des gewählten User-Presets ist (das überschreibt es), und **Save** bei jedem anderen Namen (das legt ein neues Preset an). Sie wechselt beim Tippen. `Enter` oder diese Schaltfläche speichert. **Cancel**, `Esc` oder ein Klick außerhalb schließt das Feld, ohne etwas zu schreiben.
+
 Presets sind pro Amp: Jeder Amp (Werk oder eigen) hat seine eigene User-Liste. Die Leiste zeigt **(unsaved)**, sobald das aktuelle Rig vom geladenen Preset abweicht, und wird wieder sauber, sobald das Rig wieder übereinstimmt. Die fest angeheftete Zeile **Default (factory settings)** setzt den fokussierten Amp oberhalb der Bereiche Factory und User auf seine Auslieferungswerte zurück.
 
 ## PLAY-Ansicht
@@ -177,7 +179,7 @@ Wenn die Sounds in BUILD stehen, wechsle zu PLAY und weise sie Programmnummern z
 
 ![VoLum PLAY leere Leiste](user-guide-play-empty.png)
 
-Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Produkt. Der aktuelle Amp liegt weiterhin dahinter. **+ Add this sound** schreibt das Gehörte auf die nächste freie Programmnummer, sobald es ein User-Sound ist. Factory, Default oder ein unbenanntes Rig öffnet zuerst ein Namensfeld; Default tut das immer, ein schmutziges Factory ebenfalls.
+Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Produkt. Der aktuelle Amp liegt weiterhin dahinter. **+ Add this sound** schreibt das Gehörte auf die nächste freie Programmnummer, sobald es ein User-Sound ist. Factory, Default oder ein unbenanntes Rig öffnet zuerst ein Namensfeld; Default tut das immer, ein schmutziges Factory ebenfalls. **Save** in diesem Feld legt den User-Sound an und setzt ihn in einem Schritt auf die Leiste; **Cancel**, `Esc` oder ein Klick außerhalb schreibt nichts und fügt nichts hinzu.
 
 ![VoLum PLAY Add-Sound-Wähler](user-guide-play-picker.png)
 
@@ -185,7 +187,7 @@ Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Pro
 
 ![VoLum PLAY-Board](user-guide-play.png)
 
-Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** öffnet immer den Namensdialog (`New Preset` bei Factory/Default, der aktuelle Name bei einem User-Sound). Enter auf dem gleichen Namen überschreibt; ein neuer Name legt einen User-Sound an. Liegt ein Slot LIVE, spielt dieselbe Programmnummer danach den gespeicherten Sound — Ctrl+S erfindet keine neue Nummer. Ziehe eine Zeile auf eine andere zum Tauschen, in die Lücke dazwischen, um Sounds entlang der bestehenden Nummern zu schieben, oder auf die gestrichelte Add-Platte, um sie ans Ende zu setzen. Wenn jede Programmnummer belegt ist, öffnet **+ Add this sound** den Wähler auf Programm 0, damit du einen Sound ersetzen kannst. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab. PLAY IN/OUT teilen das −70..0 dB-Fenster von BUILD.
+Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** öffnet immer den Namensdialog (`New Preset` bei Factory/Default, der aktuelle Name bei einem User-Sound). Beim gleichen Namen heißt die Schaltfläche **Update** und überschreibt; ein neuer Name heißt **Save** und legt einen User-Sound an. Liegt ein Slot LIVE, spielt dieselbe Programmnummer danach den gespeicherten Sound — Ctrl+S erfindet keine neue Nummer. Ziehe eine Zeile auf eine andere zum Tauschen, in die Lücke dazwischen, um Sounds entlang der bestehenden Nummern zu schieben, oder auf die gestrichelte Add-Platte, um sie ans Ende zu setzen. Wenn jede Programmnummer belegt ist, öffnet **+ Add this sound** den Wähler auf Programm 0, damit du einen Sound ersetzen kannst. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab. PLAY IN/OUT teilen das −70..0 dB-Fenster von BUILD.
 
 Dieselbe **+**-Schaltfläche ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Sie ist **Add Sound**, wenn der aktuelle Sound bereits sauber zugewiesen ist.
 

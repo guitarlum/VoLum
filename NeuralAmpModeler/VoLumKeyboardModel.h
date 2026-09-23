@@ -291,6 +291,7 @@ enum class KeyConsumer
   Swallow,
   FallThrough,
   ConfirmEnter,
+  NameDialogKey,
   Knob,
   Rig,
 };
@@ -345,6 +346,11 @@ inline KeyConsumer RouteKey(const OverlayStack& s, KeyKind kind)
     return KeyConsumer::PassToTextEntry;
 
   const OverlayId top = TopOverlay(s);
+
+  // The name dialog owns its own text field: every key is typing, editing, Enter
+  // (commit) or Esc (cancel), wherever the pointer happens to be.
+  if (top == OverlayId::NameDialog)
+    return KeyConsumer::NameDialogKey;
 
   if (kind == KeyKind::Escape)
   {

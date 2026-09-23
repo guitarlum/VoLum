@@ -359,24 +359,39 @@ TEST_CASE("H peels Pack before it closes Settings")
   CHECK(volum::keyboard::TopOverlay(settingsOnly) == volum::keyboard::OverlayId::Settings);
 }
 
-TEST_CASE("Name dialog Enter in the field saves")
+TEST_CASE("Name dialog is a view over the model: only Enter and Save commit")
 {
+  // The decisions live in VoLumNameDialogModel.h (test_volum_name_dialog.cpp).
+  // These pins keep the control from growing its own again.
   CHECK(volum::custom::NormalizePresetName("  Lead  ") == "Lead");
-  CHECK(volum::custom::NameDialogCommitAfterTextEntry("Lead"));
-  CHECK_FALSE(volum::custom::NameDialogCommitAfterTextEntry(""));
-  bool armed = true;
-  CHECK(volum::custom::NameDialogCommitOnce(armed, "Lead"));
-  CHECK_FALSE(armed);
-  CHECK_FALSE(volum::custom::NameDialogCommitOnce(armed, "Lead"));
-  armed = true;
-  CHECK_FALSE(volum::custom::NameDialogCommitOnce(armed, ""));
-  CHECK(armed);
   const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumNameDialog.h");
   const auto complete = dialog.find("void OnTextEntryCompletion");
   REQUIRE(complete != std::string::npos);
-  CHECK(dialog.find("Commit();", complete) != std::string::npos);
+  const auto completeEnd = dialog.find("\n  }", complete);
+  REQUIRE(completeEnd != std::string::npos);
+  const std::string completion = dialog.substr(complete, completeEnd - complete);
+  CHECK(completion.find("ApplyTextEntryCompletion") != std::string::npos);
+  CHECK(completion.find("Commit") == std::string::npos);
+  // No iPlug text entry: it reports only on completion and eats the Cancel click.
+  CHECK(dialog.find("->CreateTextEntry(") == std::string::npos);
+  CHECK(dialog.find("volum::name_dialog::LabelText(label)") != std::string::npos);
   CHECK(dialog.find("std::move(mOnSave)") != std::string::npos);
-  CHECK(dialog.find("mOnSave = nullptr") != std::string::npos);
+
+  // The overwrite target is resolved by id inside the commit callback, never an
+  // index captured when the dialog opened.
+  const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
+  const auto prompt = presets.find("void NeuralAmpModeler::_VolumPromptSaveAs");
+  REQUIRE(prompt != std::string::npos);
+  const auto commit = presets.find("[this, after, currentName, currentId](const std::string& name)", prompt);
+  REQUIRE(commit != std::string::npos);
+  CHECK(presets.find("PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)", commit) != std::string::npos);
+  CHECK(presets.find("currentUserIdx", prompt) == std::string::npos);
+
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto route = layout.find("case KeyConsumer::NameDialogKey:");
+  REQUIRE(route != std::string::npos);
+  CHECK(layout.substr(route, 200).find("dlg->OnKeyDown(0.f, 0.f, key);") != std::string::npos);
+  CHECK(layout.find("mVolumUiMode == volum::UiMode::Play && !nameDialogOpen") != std::string::npos);
 }
 
 TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")

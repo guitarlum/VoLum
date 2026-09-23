@@ -164,6 +164,13 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
   OverlayStack confirm;
   confirm.confirm = true;
 
+  OverlayStack nameDialog;
+  nameDialog.nameDialog = true;
+
+  OverlayStack tunerOverName;
+  tunerOverName.nameDialog = true;
+  tunerOverName.tuner = true;
+
   OverlayStack knob;
   knob.knobSelected = true;
 
@@ -209,6 +216,13 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
     {"dropdown T", dropdown, KeyKind::HotkeyT, KeyConsumer::Swallow},
     {"confirm Enter reaches the dialog", confirm, KeyKind::Enter, KeyConsumer::ConfirmEnter},
     {"confirm H", confirm, KeyKind::HotkeyH, KeyConsumer::Swallow},
+    {"name dialog Enter commits through the dialog", nameDialog, KeyKind::Enter, KeyConsumer::NameDialogKey},
+    {"name dialog Esc cancels through the dialog", nameDialog, KeyKind::Escape, KeyConsumer::NameDialogKey},
+    {"name dialog H is typed, not Settings", nameDialog, KeyKind::HotkeyH, KeyConsumer::NameDialogKey},
+    {"name dialog T is typed, not the tuner", nameDialog, KeyKind::HotkeyT, KeyConsumer::NameDialogKey},
+    {"name dialog arrows move the caret", nameDialog, KeyKind::Arrow, KeyConsumer::NameDialogKey},
+    {"name dialog letters are typed", nameDialog, KeyKind::Other, KeyConsumer::NameDialogKey},
+    {"tuner above the name dialog peels first", tunerOverName, KeyKind::Escape, KeyConsumer::CloseOverlay},
     {"knob Esc", knob, KeyKind::Escape, KeyConsumer::Knob},
     {"knob arrow stays on knob", knob, KeyKind::Arrow, KeyConsumer::Knob},
     {"knob T still opens tuner", knob, KeyKind::HotkeyT, KeyConsumer::Rig},
