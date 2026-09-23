@@ -256,6 +256,7 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
@@ -266,7 +267,7 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   RequireContains(tabs, "Value is the program number.");
   RequireContains(tabs, "\"All channels\"");
   RequireContains(tabs, "MIDI calls this Omni.");
-  RequireContains(tabs, "class VoLumMidiSoundMapControl");
+  RequireContains(view, "class VoLumMidiFootswitchControl");
   RequireContains(controls, "void SetMidiChannel(int channel)");
   RequireContains(controls, "void SetMidiRecallCc(int cc)");
   RequireContains(controls, "void SetMidiSoundMap(");
@@ -274,22 +275,23 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   RequireContains(layout, "pPlugin->_VolumSetMidiRecallCc(cc)");
 
   // Both surfaces derive their rows from the same pure model helper.
-  RequireContains(tabs, "volum::BuildPlaySlots(factory, registry)");
+  RequireContains(view, "volum::BuildPlaySlots(factory, registry)");
   RequireContains(play, "volum::BuildPlaySlots(factory, registry)");
-  RequireContains(tabs, "volum::BuildSoundChoices(factory, registry)");
+  RequireContains(view, "volum::BuildSoundChoices(factory, registry)");
   RequireContains(play, "volum::BuildSoundChoices(factory, registry)");
 
-  // Both write through the same two plugin methods; the Settings tab keeps no
-  // copy of its own, and the panel is refilled from the live registry.
+  // Both write through the same plugin methods; the Settings tab keeps no copy
+  // of its own, and the panel is refilled from the live registry. The
+  // footswitch view has no insert: a switch's position is its program number.
   RequireContains(layout, "settingsPage->SetMidiSoundMapCallbacks(");
   RequireContains(layout, "settingsPage->SetMidiSoundMapSwap(");
-  RequireContains(layout, "settingsPage->SetMidiSoundMapInsert(");
+  RequireDoesNotContain(layout, "settingsPage->SetMidiSoundMapInsert(");
   RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
-  RequireContains(layout, "pPlugin->_VolumInsertPlaySound(from, before)");
   RequireContains(layout, "pPlugin->_VolumAssignPlaySound(slot, sound)");
   RequireContains(layout, "pPlugin->_VolumClearPlaySound(slot)");
-  RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg())");
+  RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(),");
   RequireDoesNotContain(tabs, "midiSoundMap =");
+  RequireDoesNotContain(view, "midiSoundMap =");
 
   // The pre-1.3.0 duplicate-list control is still gone; this is a new one.
   RequireDoesNotContain(overlay, "VoLumMidiSettingsControl");
@@ -319,7 +321,7 @@ TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound r
   RequireDoesNotContain(tabs, "\"Ch \"");
 
   const auto midiClass = tabs.find("class VoLumMidiChannelControl");
-  const auto midiEnd = tabs.find("class VoLumMidiSoundMapControl");
+  const auto midiEnd = tabs.find("class VoLumMidiRecallCcControl");
   REQUIRE(midiClass != std::string::npos);
   REQUIRE(midiEnd != std::string::npos);
   const std::string midiBody = tabs.substr(midiClass, midiEnd - midiClass);
@@ -328,44 +330,51 @@ TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound r
   RequireContains(controls, "DrawVoLumSegmentSwitch(");
   RequireContains(controls, "ReduceFromTop(134.f)");
 
+  // The footswitch view names its numbers the same way: program numbers on
+  // banks of switches, never "PC" and never a channel.
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   RequireContains(controls, "\"What each program number plays\"");
-  RequireContains(tabs, "\"PROGRAM\"");
-  RequireContains(tabs, "\"PROGRAM NUMBER\"");
-  RequireContains(tabs, "Sound for program number ");
-  RequireContains(tabs, "your footswitch calls it up by its program number");
-  RequireDoesNotContain(tabs, "\"PC\"");
-  RequireDoesNotContain(tabs, "Sound for Program Change ");
+  RequireContains(view, "\"Program numbers \"");
+  RequireContains(view, "\"BANK\"");
+  RequireContains(view, "Sound for program number ");
+  RequireContains(view, "Click a switch to give its program number a Sound.");
+  RequireDoesNotContain(view, "\"PC\"");
+  RequireDoesNotContain(view, "\"PC ");
+  RequireDoesNotContain(view, "hannel");
+  RequireDoesNotContain(view, "Sound for Program Change ");
 }
 
-TEST_CASE("Settings edits a program number through swap, so no edit can drop a Sound")
+TEST_CASE("Settings moves a Sound between program numbers only through swap, so no edit can drop a Sound")
 {
-  // Settings is not the performance surface, so the number is an editable field.
-  // Retyping it routes through SwapMidiSoundSlots: moving onto a free number is a
-  // move, onto an occupied one an exchange. Row drag matches PLAY: drop-on swaps,
-  // drop-between inserts among the assigned PCs.
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  // The footswitch view replaced the retype-the-number field: a switch's
+  // position is its program number, so moving a Sound is dragging its switch.
+  // Every drop routes through SwapMidiSoundSlots: onto a free number it is a
+  // move, onto an occupied one an exchange. Clicking a switch opens the Sound
+  // picker for that number directly; there is no separate number step.
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
 
-  RequireContains(tabs, "OpenNumberStep(FirstFreeSlot())");
-  RequireContains(tabs, "BeginNumberEntry(kTextAddStep");
-  RequireContains(tabs, "\"Choose Sound\"");
-  RequireContains(tabs, "OpenPicker(mNumberDraft)");
-  RequireContains(tabs, " already plays ");
-
-  RequireContains(tabs, "BeginNumberEntry(kTextRenumber");
-  RequireContains(tabs, "mSwap(slot, number)");
-  RequireContains(tabs, "const int destSlot = mSlots[static_cast<size_t>(mDropRow)].slot");
-  RequireContains(tabs, "mSwap(fromSlot, destSlot)");
-  RequireContains(tabs, "void SetSwapCallback(SwapCallback swap)");
-  RequireContains(tabs, "void SetInsertCallback(InsertCallback insert)");
-  RequireContains(tabs, "CommitMidiDrop(");
-  RequireContains(tabs, "DrawMidiDrop(");
+  RequireContains(view, "OpenPicker(from);");
+  RequireContains(view, "void SetSwapCallback(SwapCallback swap)");
+  RequireContains(view, "volum::footswitch::DecideDrop(from, to, SlotAt(from) != nullptr, SlotAt(to) != nullptr)");
+  RequireContains(view, "if (action != volum::footswitch::DropAction::None && mSwap)");
+  RequireContains(view, "mSwap(from, to);");
+  RequireContains(view, "void DrawDragGhost(IGraphics& g)");
   RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
-  RequireContains(layout, "pPlugin->_VolumInsertPlaySound(from, before)");
+  RequireDoesNotContain(view, "InsertCallback");
+  RequireDoesNotContain(view, "ParseNumericEntry");
 
-  RequireContains(tabs, "volum::ParseNumericEntry(str, parsed)");
-  RequireContains(tabs, "kNoValIdx");
-  RequireContains(tabs, "volum::scroll::Interaction");
+  // A drag can page: arrows once per entry, pips straight to their bank.
+  RequireContains(view, "if (mDragPageKind != hit.kind)");
+  const auto track = view.find("void UpdateDragTarget(float x, float y)");
+  REQUIRE(track != std::string::npos);
+  const auto pip = view.find("if (hit.kind == volum::footswitch::HitKind::Pip)", track);
+  REQUIRE(pip != std::string::npos);
+  CHECK(view.find("SetBank(hit.index);", pip) - pip < 80);
+  // The picker a switch opens is the shared, scrollable Sound list.
+  const std::string picker = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
+  RequireContains(view, "VoLumSoundPickerPanel mPicker;");
+  RequireContains(picker, "volum::scroll::Interaction");
 }
 
 TEST_CASE("The SYSTEM tab's Content library row opens the live Pack modal")
@@ -2618,13 +2627,19 @@ TEST_CASE("tier2e the disabled dBu field draws through the grey blend")
 
 TEST_CASE("tier2e an empty MIDI map does not teach drag or clear")
 {
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
-  const auto drag = tabs.find("Drag onto a row to swap");
+  // The drag / clear lines are the default; an empty map swaps them for the one
+  // thing that can happen next.
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  const auto drag = view.find("Drag onto another to swap. The cross clears.");
   REQUIRE(drag != std::string::npos);
-  const auto empty = tabs.rfind("mSlots.empty()", drag);
+  const auto empty = view.find("else if (mSlots.empty())", drag);
   REQUIRE(empty != std::string::npos);
-  CHECK(drag - empty < 600);
-  RequireContains(tabs, "Add a Sound to give a program number something to recall.");
+  CHECK(empty - drag < 900);
+  const auto emptyLine = view.find("Click a switch to give its program number a Sound.", empty);
+  REQUIRE(emptyLine != std::string::npos);
+  CHECK(emptyLine - empty < 200);
+  // No cross to hit on an empty switch.
+  RequireContains(view, "if (tileHover && assigned)");
 }
 
 TEST_CASE("tier2e Manage in a menu is teal and a clipped Manage row has no hotspot")

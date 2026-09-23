@@ -82,6 +82,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_loopback_detect.cpp
   test_volum_midi_decoder.cpp
   test_volum_midi_handoff.cpp
+  test_volum_midi_footswitch.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"

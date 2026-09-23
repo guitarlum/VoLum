@@ -25,8 +25,9 @@ if ($Reseed) {
 
   # Seed the MIDI Sound map: four assignments a player would recognise plus one
   # slot whose Sound is gone, so the MIDI tab and the PLAY rail both show the red
-  # "missing sound" state without hand-editing the UI. Also point one preset at
-  # the custom IR and the custom pedal so Pack export has a closure to show.
+  # "Invalid slot" state without hand-editing the UI. All five sit on the MIDI
+  # tab's first footswitch bank (programs 0-7). Also point one preset at the
+  # custom IR and the custom pedal so Pack export has a closure to show.
   $jsonPath = Join-Path $lib "content\volum-content.json"
   $j = Get-Content $jsonPath -Raw | ConvertFrom-Json
   $map = if ($EmptyMap) { @() } elseif ($DocMap) { @(
@@ -38,7 +39,7 @@ if ($Reseed) {
     [pscustomobject]@{ slot = 1; ampId = "factory:13"; presetId = "preset_17a37691" },
     [pscustomobject]@{ slot = 2; ampId = "factory:0";  presetId = "factory:0:v1" },
     [pscustomobject]@{ slot = 4; ampId = "factory:13"; presetId = "preset_b36c739e" },
-    [pscustomobject]@{ slot = 9; ampId = "factory:9";  presetId = "preset_gone_forever" }
+    [pscustomobject]@{ slot = 6; ampId = "factory:9";  presetId = "preset_gone_forever" }
   ) }
   $j | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue $map -Force
   foreach ($pr in $j.presetBanks.'factory:13') {

@@ -16,10 +16,17 @@
 # .ui-sandbox-launch.ps1 sets. -Keys uses the SendKeys subset: ^ Ctrl, + Shift,
 # % Alt, {ESC} {ENTER} {TAB} {UP} {DOWN} {LEFT} {RIGHT} {HOME} {END} {BS} {DEL}
 # {SPACE} {F1}..{F12}, {X n} repeats, anything else is typed. -PackOpen needs
-# the real desktop and is refused.
+# the real desktop and is refused. -Drags "x1,y1>x2,y2" drags with the button
+# held (add -HoldLastDrag to capture mid-drag).
 param(
   [string] $Clicks = "",
   [string] $Keys = "",
+  # -Locked only: "x1,y1>x2,y2[>x3,y3...];..." presses at the first point, drags
+  # through the rest and releases at the last. Runs after -Clicks, before -Keys.
+  [string] $Drags = "",
+  # -Locked only: keep the button down on the last -Drags entry until after the
+  # capture, so the shot shows the drag in flight; it is released afterwards.
+  [switch] $HoldLastDrag,
   [Parameter(Mandatory = $true)][string] $Out,
   [int] $SettleMs = 600,
   [switch] $NoForceFront,
@@ -233,6 +240,26 @@ public static class UiDriveMsg {
   public static void Hover(IntPtr plug, int cx, int cy) {
     SendMessage(plug, WM_MOUSEMOVE, IntPtr.Zero, At(plug, cx, cy));
   }
+  // Press at the first point, move through the rest with the button held
+  // (MK_LBUTTON in wParam, which iPlug routes to OnMouseDrag), release at the last.
+  public static void Drag(IntPtr plug, int[] xs, int[] ys, bool release) {
+    SendMessage(plug, WM_MOUSEMOVE, IntPtr.Zero, At(plug, xs[0], ys[0]));
+    SendMessage(plug, WM_LBUTTONDOWN, (IntPtr)1, At(plug, xs[0], ys[0]));
+    for (int p = 1; p < xs.Length; p++) {
+      const int steps = 12;
+      for (int i = 1; i <= steps; i++) {
+        int x = xs[p - 1] + (xs[p] - xs[p - 1]) * i / steps;
+        int y = ys[p - 1] + (ys[p] - ys[p - 1]) * i / steps;
+        SendMessage(plug, WM_MOUSEMOVE, (IntPtr)1, At(plug, x, y));
+        System.Threading.Thread.Sleep(15);
+      }
+      System.Threading.Thread.Sleep(120);
+    }
+    if (release) Release(plug, xs[xs.Length - 1], ys[ys.Length - 1]);
+  }
+  public static void Release(IntPtr plug, int cx, int cy) {
+    SendMessage(plug, WM_LBUTTONUP, IntPtr.Zero, At(plug, cx, cy));
+  }
 
   // iPlug reads modifiers with GetKeyState and the character with ToAscii on its
   // own thread. A message cannot carry either, so the key state is shared for the
@@ -316,6 +343,20 @@ public static class UiDriveMsg {
       Start-Sleep -Milliseconds 450
     }
   }
+  $held = $null
+  if ($Drags) {
+    $dragList = @($Drags.Split(';') | Where-Object { $_.Trim() })
+    for ($d = 0; $d -lt $dragList.Count; $d++) {
+      $points = @($dragList[$d].Split('>') | ForEach-Object { , ($_.Split(',') | ForEach-Object { [int]$_ }) })
+      if ($points.Count -lt 2) { Write-Error "-Drags entry '$($dragList[$d])' needs at least two points (x1,y1>x2,y2)." }
+      $xs = [int[]]@($points | ForEach-Object { $_[0] })
+      $ys = [int[]]@($points | ForEach-Object { $_[1] })
+      $hold = $HoldLastDrag -and $d -eq $dragList.Count - 1
+      [UiDriveMsg]::Drag($plug, $xs, $ys, -not $hold)
+      if ($hold) { $held = @($xs[-1], $ys[-1]) }
+      Start-Sleep -Milliseconds 450
+    }
+  }
   if ($Keys) {
     foreach ($chunk in $Keys.Split(';')) {
       if (-not $chunk) { continue }
@@ -326,8 +367,9 @@ public static class UiDriveMsg {
       Write-Warning "AttachThreadInput failed: Ctrl/Shift/Alt did not reach VoLum for at least one key."
     }
   }
-  # Park the pointer where nothing hovers, like the unlocked Poke.
-  [UiDriveMsg]::Hover($plug, 3, 597)
+  # Park the pointer where nothing hovers, like the unlocked Poke. A held drag
+  # stays where it is so the capture shows it in flight.
+  if (-not $held) { [UiDriveMsg]::Hover($plug, 3, 597) }
   Start-Sleep -Milliseconds $SettleMs
 
   $stem = "shot-" + [DateTime]::UtcNow.Ticks
@@ -351,12 +393,17 @@ public static class UiDriveMsg {
   try { $img.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png) }
   finally { $img.Dispose() }
   Remove-Item $bmp -Force -ErrorAction SilentlyContinue
+  if ($held) {
+    [UiDriveMsg]::Release($plug, $held[0], $held[1])
+    [UiDriveMsg]::Hover($plug, 3, 597)
+  }
   $locked = [bool](Get-Process LogonUI -ErrorAction SilentlyContinue)
   Write-Host ("Wrote {0} ({1}; self-capture, workstation {2})" -f $Out, ((Get-Content $done -Raw).Trim()),
     $(if ($locked) { "LOCKED" } else { "unlocked" }))
   exit 0
 }
 
+if ($Drags) { Write-Error "-Drags needs -Locked; on an unlocked desktop use win-drag.ps1." }
 if (-not $NoForceFront) {
   [UiDrive]::ForceFront($hwnd)
 }

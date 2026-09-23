@@ -1259,9 +1259,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     settingsPage->SetMidiSoundMapCallbacks(
       [pPlugin](int slot, const volum::SoundChoice& sound) { pPlugin->_VolumAssignPlaySound(slot, sound); },
       [pPlugin](int slot) { pPlugin->_VolumClearPlaySound(slot); });
+    // A footswitch drag onto a free program moves, onto a taken one swaps; both
+    // are SwapMidiSoundSlots. There is no insert: switch positions are the numbers.
     settingsPage->SetMidiSoundMapSwap([pPlugin](int a, int b) { pPlugin->_VolumSwapPlaySounds(a, b); });
-    settingsPage->SetMidiSoundMapInsert(
-      [pPlugin](int from, int before) { pPlugin->_VolumInsertPlaySound(from, before); });
     settingsPage->SetMidiPickerGroups(&pPlugin->mVolumPlayPickerGroups);
     pPlugin->_VolumRefreshMidiSettingsChrome();
 

@@ -284,7 +284,8 @@ void NeuralAmpModeler::_VolumRefreshMidiSettingsChrome()
   // Rebuilt from the live registry every time, never cached: the map is machine
   // global, so another instance or the PLAY rail can have changed it since the
   // panel was last opened.
-  page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg());
+  page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), mVolumLastRecalledPlaySlot,
+                        _VolumActiveOwnerKey(), mVolumActivePresetId);
 }
 
 void NeuralAmpModeler::_VolumRecallFactoryPreset()

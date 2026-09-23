@@ -160,6 +160,13 @@ pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Keys "{END} 2" -Out shots\sa
   `-PackOpen` is refused: launch with `VOLUM_PACK_OPEN_PATH` instead (see above).
 - Each call is one shot; state carries over between calls because the app keeps
   running.
+- `-Drags "x1,y1>x2,y2[>x3,y3]"` presses, drags through the points with the
+  button held and releases (after `-Clicks`, before `-Keys`). `-HoldLastDrag`
+  keeps the last one held until after the capture, for a drag-in-flight shot.
+  Settings MIDI footswitch: switch centres are x 162 / 354 / 546 / 738 at
+  y 412 (row 1) / 497 (row 2); the bank arrows are `(84, 353)` and `(202, 353)`.
+- Hover states cannot be captured locked: the real cursor is not over the
+  window, so `TrackMouseEvent` posts `WM_MOUSELEAVE` straight after the move.
 
 The Settings tab strip is sized to content and centred, so tab x positions move
 when the number of tabs changes. It is three tabs wide since 1.3.0: window x
@@ -177,7 +184,7 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 | `user-guide-play.png` | Soldano SLO100 | slots 0–2 = Crunch Rhythm / Lead Boost / Clean Verb, slot 0 LIVE | canvas toggle `(743, 22)` if you are in BUILD. Fail if **+** is not **+ Add Sound** or if a safety banner is visible. PLAY IN/OUT should read in the same ballpark as BUILD. Drag a rail row onto another to swap; drop in the gap to slide Sounds along existing program numbers |
 | `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view, **Sunset Crunch**) | none | click **THC Sunset** in the browser (93,565) if the custom amp is focused. Compact pill left of tuner. Fail if NAM 2 is an empty `+` or the preset bar is not Sunset Crunch |
 | `user-guide-settings-signal.png` | any | none | canvas gear `(869, 22)`; Settings opens on the tab it was left on, so click **SIGNAL** `(300, 113)` |
-| `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist (`preset_gone_forever`), so the list shows assigned rows and a red **Invalid slot** | from Settings, click **MIDI** `(450, 113)` |
+| `user-guide-settings-midi.png` | any | `.ui-sandbox-launch.ps1 -Reseed`: programs 0, 1, 2, 4 assigned and 6 pointing at a preset id that does not exist (`preset_gone_forever`), so footswitch bank 1 shows assigned, empty **+** and a red **Invalid slot** switch | toggle PLAY `(743, 22)`, click rail row 00 `(800, 105)` so switch 000 lights **LIVE**, toggle back `(743, 22)`, gear `(869, 22)`, **MIDI** `(450, 113)`. Fail if a switch name is cut mid-word without an ellipsis or LIVE is missing |
 | `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** `(600, 113)`. Both **Back up your library** help lines stay inside the card |
 | `user-guide-pre.png` | THC Sunset | `preCompActive=true` (hero keeps Comp off) | `1` then click Comp card. Fail if either NAM slot is empty |
 | `user-guide-pre-pedal.png` | THC Sunset | none | from PRE, click Klon card `(455, 230)` twice to open the capture chooser |
@@ -216,8 +223,8 @@ without writing the real library.
    row: program numbers stay, Sounds swap.
 6. Drag into the gap between two rows: Sounds slide along the existing PCs;
    holes stay absent.
-7. Settings -> MIDI `(869, 22)` then `(450, 113)` shows the same order after
-   the drag.
+7. Settings -> MIDI `(869, 22)` then `(450, 113)` shows the same Sounds on the
+   same program numbers (footswitch bank 1) after the drag.
 
 ## 4. Verify + restore
 

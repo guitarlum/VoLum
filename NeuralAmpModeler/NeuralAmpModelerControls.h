@@ -1010,7 +1010,7 @@ public:
   bool ConsumeEscape()
   {
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      return map->As<VoLumMidiSoundMapControl>()->ConsumeEscape();
+      return map->As<VoLumMidiFootswitchControl>()->ConsumeEscape();
     return false;
   }
 
@@ -1020,7 +1020,7 @@ public:
     (void)y;
     if (key.VK == kVK_ESCAPE)
     {
-      // Escape pops the MIDI tab's Add/picker sub-screen first; only a page that
+      // Escape pops the MIDI tab's Sound picker or drag first; only a page that
       // has nothing left to back out of closes. The plugin key handler also
       // calls ConsumeEscape so Esc works when the cursor is not over Settings.
       if (ConsumeEscape())
@@ -1045,10 +1045,10 @@ public:
     }
     else // hide subcontrols immediately
     {
-      // Every close path lands here, so the MIDI tab always reopens on its list
-      // rather than on a half-finished Add.
+      // Every close path lands here, so the MIDI tab always reopens on its
+      // footswitch board rather than on a half-finished Sound pick.
       if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-        map->As<VoLumMidiSoundMapControl>()->ResetToList();
+        map->As<VoLumMidiFootswitchControl>()->ResetToBoard();
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
     }
 
@@ -1223,7 +1223,7 @@ public:
 
   // ---- MIDI: which channel, which recall CC, and what each program number plays
   //
-  // The assignment list is the tab's body, not a footnote: choosing what program
+  // The footswitch view is the tab's body, not a footnote: choosing what program
   // number 0..127 recalls is the whole reason a player opens this tab. The listen
   // filter and recall CC above it are two-button / stepper choices most players
   // never have to change.
@@ -1250,7 +1250,7 @@ public:
     {
       const IRECT cardBody = _AddCard(kTabMidi, mapCard, "What each program number plays",
                                       mControlNames.midiMapGroupFrame, mControlNames.midiMapSection, EAlign::Near);
-      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiSoundMapControl(cardBody), mControlNames.midiSoundMap));
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiFootswitchControl(cardBody), mControlNames.midiSoundMap));
     }
   }
 
@@ -1430,25 +1430,19 @@ public:
     _ApplyMidiWiring();
   }
 
-  // Assign/clear/swap/insert go straight back out to the plugin, which writes the
-  // one shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
-  void SetMidiSoundMapCallbacks(VoLumMidiSoundMapControl::AssignCallback assign,
-                                VoLumMidiSoundMapControl::ClearCallback clear)
+  // Assign/clear/swap go straight back out to the plugin, which writes the one
+  // shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
+  void SetMidiSoundMapCallbacks(VoLumMidiFootswitchControl::AssignCallback assign,
+                                VoLumMidiFootswitchControl::ClearCallback clear)
   {
     mMidiAssign = std::move(assign);
     mMidiClear = std::move(clear);
     _ApplyMidiWiring();
   }
 
-  void SetMidiSoundMapSwap(VoLumMidiSoundMapControl::SwapCallback swap)
+  void SetMidiSoundMapSwap(VoLumMidiFootswitchControl::SwapCallback swap)
   {
     mMidiSwap = std::move(swap);
-    _ApplyMidiWiring();
-  }
-
-  void SetMidiSoundMapInsert(VoLumMidiSoundMapControl::InsertCallback insert)
-  {
-    mMidiInsert = std::move(insert);
     _ApplyMidiWiring();
   }
 
@@ -1464,10 +1458,13 @@ public:
       midi->As<VoLumMidiRecallCcControl>()->SetCc(cc);
   }
 
-  void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry)
+  // `liveProgram` and the active pair light the LIVE switch and pick the bank the
+  // footswitch view opens on.
+  void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry,
+                       int liveProgram, const std::string& activeAmpId, const std::string& activePresetId)
   {
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      map->As<VoLumMidiSoundMapControl>()->SetData(factory, registry);
+      map->As<VoLumMidiFootswitchControl>()->SetData(factory, registry, liveProgram, activeAmpId, activePresetId);
   }
 
   void SetMidiPickerGroups(volum::PickerGroupSession* session)
@@ -1489,10 +1486,9 @@ private:
   std::function<void()> mOnImportPack;
   VoLumMidiChannelControl::ChannelCallback mMidiChannelCb;
   VoLumMidiRecallCcControl::CcCallback mMidiRecallCcCb;
-  VoLumMidiSoundMapControl::AssignCallback mMidiAssign;
-  VoLumMidiSoundMapControl::ClearCallback mMidiClear;
-  VoLumMidiSoundMapControl::SwapCallback mMidiSwap;
-  VoLumMidiSoundMapControl::InsertCallback mMidiInsert;
+  VoLumMidiFootswitchControl::AssignCallback mMidiAssign;
+  VoLumMidiFootswitchControl::ClearCallback mMidiClear;
+  VoLumMidiFootswitchControl::SwapCallback mMidiSwap;
   volum::PickerGroupSession* mMidiPickerGroups = nullptr;
 
   void _ApplyMidiWiring()
@@ -1509,13 +1505,11 @@ private:
     }
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
     {
-      auto* soundMap = map->As<VoLumMidiSoundMapControl>();
+      auto* soundMap = map->As<VoLumMidiFootswitchControl>();
       if (mMidiAssign || mMidiClear)
         soundMap->SetCallbacks(mMidiAssign, mMidiClear);
       if (mMidiSwap)
         soundMap->SetSwapCallback(mMidiSwap);
-      if (mMidiInsert)
-        soundMap->SetInsertCallback(mMidiInsert);
       if (mMidiPickerGroups)
         soundMap->SetPickerGroups(mMidiPickerGroups);
     }

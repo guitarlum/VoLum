@@ -868,7 +868,11 @@ void NeuralAmpModeler::OnIdle()
   {
     const auto sound = volum::content::ResolveMidiSound(volum::content::GlobalContentStore().reg(), *slot);
     if (sound && _VolumRecallSound(sound->ampId, sound->presetId))
+    {
       mVolumLastRecalledPlaySlot = *slot;
+      // An open MIDI tab moves its LIVE lamp with the footswitch.
+      _VolumRefreshMidiSettingsChrome();
+    }
   }
 
   mInputSender.TransmitData(*this);

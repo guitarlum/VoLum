@@ -149,11 +149,13 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   CHECK(tabs.find("\"All channels\"") != std::string::npos);
   CHECK(tabs.find("DrawVoLumSegmentSwitch(") != std::string::npos);
   CHECK(tabs.find("MIDI calls this Omni.") != std::string::npos);
-  CHECK(tabs.find("class VoLumMidiSoundMapControl") != std::string::npos);
+  const std::string view = ReadText(root / "VoLumMidiFootswitch.h");
+  CHECK(view.find("class VoLumMidiFootswitchControl") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapSwap") != std::string::npos);
-  CHECK(controls.find("SetMidiSoundMapInsert") != std::string::npos);
+  // Footswitch positions are program numbers, so the tab has no insert path.
+  CHECK(controls.find("SetMidiSoundMapInsert") == std::string::npos);
   CHECK(controls.find("void SetMidiChannel(int channel)") != std::string::npos);
   CHECK(controls.find("void SetMidiRecallCc(int cc)") != std::string::npos);
   CHECK(controls.find("void SetMidiSoundMap(") != std::string::npos);
@@ -167,6 +169,7 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   CHECK(settings.find("midiSoundMap") == std::string::npos);
   // The tab reads the registry's map; it never assigns into it directly.
   CHECK(tabs.find("midiSoundMap =") == std::string::npos);
+  CHECK(view.find("midiSoundMap =") == std::string::npos);
 
   const std::string nam = ReadText(root / "NeuralAmpModeler.cpp");
   const std::string unser = ReadText(root / "Unserialization.cpp");

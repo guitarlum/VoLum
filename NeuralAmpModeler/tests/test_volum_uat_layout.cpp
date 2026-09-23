@@ -63,7 +63,7 @@ TEST_CASE("Picker groups: one section starts open, two start collapsed, then mem
   CHECK(both.factoryOpen); // session memory
 
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
   CHECK(play.find("InitPickerGroups(") != std::string::npos);
   CHECK(tabs.find("InitPickerGroups(") != std::string::npos);
@@ -148,7 +148,7 @@ TEST_CASE("Scroll thumb drag maps cursor y to a new offset")
   CHECK(volum::scroll::ClampScroll(-4.f, 10.f) == 0.f);
   CHECK(volum::scroll::ClampScroll(40.f, 10.f) == 10.f);
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   CHECK(play.find("VoLumScrollTrackRect(") != std::string::npos);
   CHECK(tabs.find("VoLumScrollTrackRect(") != std::string::npos);
   CHECK(play.find("amplist::RowRightX(") != std::string::npos);
@@ -295,7 +295,7 @@ TEST_CASE("Invalid PLAY slots share one label")
   CHECK(volum::OccupiedSlotLabel(true, "Lead") == "Lead");
   CHECK(volum::OccupiedSlotLabel(false, "Lead") == std::string(volum::kPlayInvalidSlotLabel));
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   CHECK(play.find("MISSING SOUND") == std::string::npos);
   CHECK(tabs.find("MISSING SOUND") == std::string::npos);
   CHECK(play.find("Missing Sound") == std::string::npos);
@@ -508,7 +508,7 @@ TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
 TEST_CASE("PLAY picker, Settings MIDI, and Pack share ListWheelDelta")
 {
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
   CHECK(play.find("ListWheelDelta(d, kPickerRowH)") != std::string::npos);
   CHECK(tabs.find("ListWheelDelta(d, kRowH)") != std::string::npos);
@@ -633,11 +633,11 @@ TEST_CASE("BUILD status row is padded; hint sits under it")
   CHECK(plugin.find("SetStatus(\"Output safety active - lower output or wet mix\", true)") != std::string::npos);
 }
 
-TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
+TEST_CASE("Settings MIDI hide resets to the footswitch board and Escape pops first")
 {
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const auto hideFn = controls.find("void HideAnimated(bool hide)");
-  const auto reset = controls.find("ResetToList()", hideFn);
+  const auto reset = controls.find("ResetToBoard()", hideFn);
   const auto hideKids = controls.find("ForAllChildrenFunc([hide]", hideFn);
   REQUIRE(hideFn != std::string::npos);
   REQUIRE(reset != std::string::npos);
@@ -658,22 +658,24 @@ TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   CHECK(play.find("bool ConsumePlayKey(const IKeyPress& key)") != std::string::npos);
 
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   CHECK(tabs.find("bool ConsumeEscape()") != std::string::npos);
-  CHECK(tabs.find("void ResetToList()") != std::string::npos);
+  CHECK(tabs.find("void ResetToBoard()") != std::string::npos);
   const auto hideOverride = tabs.find("void Hide(bool hide) override");
   REQUIRE(hideOverride != std::string::npos);
   const auto hideDraw = tabs.find("void Draw(IGraphics& g) override", hideOverride);
   REQUIRE(hideDraw != std::string::npos);
-  const auto hideReset = tabs.find("ResetToList()", hideOverride);
+  const auto hideReset = tabs.find("ResetToBoard()", hideOverride);
   REQUIRE(hideReset != std::string::npos);
   CHECK(hideReset < hideDraw);
-  CHECK(tabs.find("if (hide && mScreen != kScreenList)") != std::string::npos);
+  CHECK(tabs.find("if (hide && (mScreen != kScreenBoard || mDragging))") != std::string::npos);
   CHECK(tabs.find("FlashEmptyHint()") != std::string::npos);
-  const auto addClick = tabs.find("if (AddRect().Contains(x, y))");
-  const auto flash = tabs.find("FlashEmptyHint();", addClick);
-  const auto open = tabs.find("OpenNumberStep(FirstFreeSlot());", addClick);
-  REQUIRE(addClick != std::string::npos);
+  // A click on a switch with nothing to choose pulses the reason instead of
+  // opening an empty picker.
+  const auto click = tabs.find("// A click lands only where it started");
+  const auto flash = tabs.find("FlashEmptyHint();", click);
+  const auto open = tabs.find("OpenPicker(from);", click);
+  REQUIRE(click != std::string::npos);
   REQUIRE(flash != std::string::npos);
   REQUIRE(open != std::string::npos);
   CHECK(flash < open);
@@ -735,5 +737,8 @@ TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
       CHECK(c < 0x80);
   };
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchModel.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
 }
