@@ -138,11 +138,12 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
   // belongs to whichever one last switched amps, so reading "the active bank"
   // through it could show another instance's presets in this bar. The shipped
   // Ready row is not a library item, so it is prepended here.
-  const bool hasFactory =
-    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  const auto* factoryPreset =
+    mVolumCustomMainIdx < 0 ? volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) : nullptr;
+  const bool hasFactory = factoryPreset != nullptr;
   std::vector<std::string> names;
   if (hasFactory)
-    names.push_back(volum::kFactoryPresetDisplayName);
+    names.push_back(factoryPreset->name);
   const auto users = volum::custom::PresetsForOwner(_VolumActiveOwnerKey());
   names.insert(names.end(), users.begin(), users.end());
   bar->SetList(names); // clears selection; dirty is preserved then recomputed below
@@ -154,7 +155,7 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
       if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
           factory && factory->id == mVolumActivePresetId)
       {
-        bar->SelectAt(0, volum::kFactoryPresetDisplayName, true);
+        bar->SelectAt(0, factory->name, true);
         selected = true;
       }
     if (!selected)

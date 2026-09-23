@@ -14,14 +14,36 @@
 namespace volum
 {
 
+// Shown when factory-presets.json gives an amp no name of its own.
 inline constexpr const char* kFactoryPresetDisplayName = "Ready";
+inline constexpr size_t kFactoryPresetNameMaxBytes = 48;
 
 struct FactoryPreset
 {
   std::string id;
   int ampIdx = -1;
   VoLumAmpSettings settings;
+  std::string name = kFactoryPresetDisplayName;
 };
+
+// Trimmed, capped on a UTF-8 boundary; empty keeps the fallback name.
+inline std::string FactoryPresetNameFromJson(const std::string& raw)
+{
+  size_t b = 0, e = raw.size();
+  while (b < e && static_cast<unsigned char>(raw[b]) <= ' ')
+    ++b;
+  while (e > b && static_cast<unsigned char>(raw[e - 1]) <= ' ')
+    --e;
+  std::string name = raw.substr(b, e - b);
+  if (name.size() > kFactoryPresetNameMaxBytes)
+  {
+    size_t cut = kFactoryPresetNameMaxBytes;
+    while (cut > 0 && (static_cast<unsigned char>(name[cut]) & 0xC0) == 0x80)
+      --cut;
+    name.resize(cut);
+  }
+  return name.empty() ? std::string(kFactoryPresetDisplayName) : name;
+}
 
 inline std::string FactoryPresetId(int ampIdx)
 {
@@ -114,6 +136,8 @@ inline std::vector<FactoryPreset> LoadFactoryPresets(const std::filesystem::path
       auto it = root.find(preset.id);
       if (it == root.end() || !it->is_object())
         continue;
+      if (const auto nameIt = it->find("name"); nameIt != it->end() && nameIt->is_string())
+        preset.name = FactoryPresetNameFromJson(nameIt->get<std::string>());
       const auto settingsIt = it->find("settings");
       if (settingsIt == it->end() || !settingsIt->is_object())
         continue;

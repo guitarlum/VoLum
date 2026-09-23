@@ -268,8 +268,8 @@ inline std::vector<SoundChoice> BuildSoundChoices(const std::vector<FactoryPrese
   for (const auto& preset : factoryPresets)
   {
     if (preset.ampIdx >= 0 && preset.ampIdx < kAmpCount)
-      out.push_back({content::FactoryOwnerKey(preset.ampIdx), preset.id, kFactoryPresetDisplayName,
-                     kAmps[preset.ampIdx].displayName, true, preset.ampIdx, false});
+      out.push_back({content::FactoryOwnerKey(preset.ampIdx), preset.id, preset.name, kAmps[preset.ampIdx].displayName,
+                     true, preset.ampIdx, false});
   }
   for (const auto& bank : registry.presetBanks)
   {
@@ -294,8 +294,7 @@ inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const
   {
     if (ampId != content::FactoryOwnerKey(factory->ampIdx))
       return false;
-    out = {
-      ampId, presetId, kFactoryPresetDisplayName, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
+    out = {ampId, presetId, factory->name, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
     return true;
   }
   const std::string ampName = AmpNameForOwner(registry, ampId);

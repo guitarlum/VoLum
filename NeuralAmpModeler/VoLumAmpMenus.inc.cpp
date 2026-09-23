@@ -58,8 +58,9 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();
-  const bool hasFactory =
-    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  const auto* factoryPreset =
+    mVolumCustomMainIdx < 0 ? volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) : nullptr;
+  const bool hasFactory = factoryPreset != nullptr;
   volum::InitPickerGroups(mVolumPresetPickerGroups, hasFactory, !presets.empty());
   std::vector<VoLumListMenuControl::Row> rows;
   // Default is an action, not a named preset, and stays pinned above both banks.
@@ -69,7 +70,7 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
     rows.push_back(
       {volum::PickerGroupMenuLabel(true, mVolumPresetPickerGroups.factoryOpen), -98, false, false, false, false, true});
     if (mVolumPresetPickerGroups.factoryOpen)
-      rows.push_back({volum::kFactoryPresetDisplayName, 0, false, false});
+      rows.push_back({factoryPreset->name, 0, false, false});
   }
   if (!presets.empty())
   {

@@ -98,6 +98,35 @@ TEST_CASE("Factory snapshot file can revoice a preset without changing its id")
   CHECK(bank[6].settings.toneMid == doctest::Approx(7.25));
 }
 
+TEST_CASE("A factory preset shows the name its snapshot file gives it")
+{
+  const auto temp = std::filesystem::temp_directory_path() / "volum-factory-preset-names-test.json";
+  nlohmann::json root;
+  root["factory:12:v1"] = {{"name", "  Texas Crunch  "}, {"settings", nlohmann::json::object()}};
+  root["factory:3:v1"] = {{"name", ""}, {"settings", nlohmann::json::object()}};
+  root["factory:4:v1"] = {{"name", std::string(80, 'x')}, {"settings", nlohmann::json::object()}};
+  {
+    std::ofstream out(temp);
+    out << root.dump(2);
+  }
+  const auto bank = volum::LoadFactoryPresets(temp);
+  std::error_code ec;
+  std::filesystem::remove(temp, ec);
+  REQUIRE(bank.size() == volum::kAmpCount);
+  CHECK(bank[12].name == "Texas Crunch");
+  CHECK(bank[12].id == "factory:12:v1"); // the id PLAY slots and MIDI maps point at is unchanged
+  CHECK(bank[3].name == volum::kFactoryPresetDisplayName);
+  CHECK(bank[0].name == volum::kFactoryPresetDisplayName); // absent from the file
+  CHECK(bank[4].name.size() == volum::kFactoryPresetNameMaxBytes);
+
+  volum::content::Registry registry;
+  const auto sounds = volum::BuildSoundChoices(bank, registry);
+  CHECK(sounds[12].presetName == "Texas Crunch");
+  volum::SoundChoice resolved;
+  REQUIRE(volum::ResolveSound(bank, registry, volum::content::FactoryOwnerKey(12), "factory:12:v1", resolved));
+  CHECK(resolved.presetName == "Texas Crunch");
+}
+
 TEST_CASE("Factory Sounds are available to PLAY without seeding midiSoundMap")
 {
   volum::content::Registry registry;
