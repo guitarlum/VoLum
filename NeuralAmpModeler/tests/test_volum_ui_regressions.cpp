@@ -120,6 +120,32 @@ TEST_CASE("POST carries a fourth Chorus card wired to the Throat motif")
   RequireContains(motifs, "effect == EVoLumEffectFocus::CHORUS");
 }
 
+TEST_CASE("NAM fusion art draws the new figure and keeps the legacy one behind VOLUM_NAM_ART_LEGACY")
+{
+  const std::string motifs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMotifs.h");
+
+  // Both NAM cards route through the one switch, mirrored so the fingers meet at the seam.
+  RequireContains(motifs, "DrawNamFusionMotif(g, r, +1, dimmed);");
+  RequireContains(motifs, "DrawNamFusionMotif(g, r, -1, dimmed);");
+  RequireDoesNotContain(motifs, "DrawFusionFigure(g, r, +1, dimmed);");
+  RequireDoesNotContain(motifs, "DrawFusionFigure(g, r, -1, dimmed);");
+
+  // Unset draws the new figure; only exactly "1" brings the old one back.
+  RequireContains(motifs, "inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)");
+  RequireContains(motifs, "inline void DrawFusionFigureLegacy(IGraphics& g, const IRECT& r, int dir, bool dimmed)");
+  RequireContains(motifs, "ParseNamArtLegacy(std::getenv(\"VOLUM_NAM_ART_LEGACY\"))");
+  RequireContains(motifs, "return value && value[0] == '1' && value[1] == '\\0';");
+  const auto sw = motifs.find("inline void DrawNamFusionMotif(");
+  REQUIRE(sw != std::string::npos);
+  const std::string body = motifs.substr(sw, motifs.find("\n}", sw) - sw);
+  const auto legacyAt = body.find("DrawFusionFigureLegacy(g, r, dir, dimmed);");
+  const auto newAt = body.find("DrawFusionFigure(g, r, dir, dimmed);");
+  REQUIRE(body.find("if (legacy)") != std::string::npos);
+  REQUIRE(legacyAt != std::string::npos);
+  REQUIRE(newAt != std::string::npos);
+  REQUIRE(body.find("else", legacyAt) < newAt);
+}
+
 TEST_CASE("Clear and close affordances stroke a cross instead of drawing U+00D7")
 {
   // Josefin ships no U+00D7, so "Ã—" renders as a tofu box. Every clear/close
