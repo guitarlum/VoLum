@@ -150,6 +150,7 @@
     <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch_artifacts.cpp" />
     <ClCompile Include="..\tests\test_volum_realtime_budget.cpp" />
+    <ClCompile Include="..\tests\test_volum_self_capture_format.cpp" />
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
     <ClCompile Include="..\tests\test_volum_chorus.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />

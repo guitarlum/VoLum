@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -2743,4 +2744,101 @@ TEST_CASE("tier2g the settings reader is the block readers and chorus has no pri
   const auto support = repair.find("SiblingDeletedAmpNeedsRepair(ampGone(rig.supportCustomAmpId))", plan);
   REQUIRE(plan != std::string::npos);
   REQUIRE(support != std::string::npos);
+}
+
+namespace
+{
+// Every \u / \U escape inside a narrow ("...") string literal, outside comments.
+std::vector<std::string> NarrowLiteralUnicodeEscapes(const std::string& text)
+{
+  std::vector<std::string> hits;
+  bool inBlockComment = false;
+  size_t lineNo = 1;
+  for (size_t i = 0; i < text.size(); ++i)
+  {
+    const char c = text[i];
+    const char next = i + 1 < text.size() ? text[i + 1] : '\0';
+    if (c == '\n')
+    {
+      ++lineNo;
+      continue;
+    }
+    if (inBlockComment)
+    {
+      if (c == '*' && next == '/')
+      {
+        inBlockComment = false;
+        ++i;
+      }
+      continue;
+    }
+    if (c == '/' && next == '/')
+    {
+      while (i < text.size() && text[i] != '\n')
+        ++i;
+      --i;
+      continue;
+    }
+    if (c == '/' && next == '*')
+    {
+      inBlockComment = true;
+      ++i;
+      continue;
+    }
+    if (c == '\'')
+    {
+      for (++i; i < text.size() && text[i] != '\'' && text[i] != '\n'; ++i)
+        if (text[i] == '\\')
+          ++i;
+      continue;
+    }
+    if (c != '"')
+      continue;
+    const char before = i > 0 ? text[i - 1] : ' ';
+    const bool wide = before == 'L' || before == 'u' || before == 'U' || (before == '8' && i > 1 && text[i - 2] == 'u');
+    for (++i; i < text.size() && text[i] != '"' && text[i] != '\n'; ++i)
+    {
+      if (text[i] != '\\')
+        continue;
+      if (!wide && i + 1 < text.size() && (text[i + 1] == 'u' || text[i + 1] == 'U'))
+        hits.push_back("line " + std::to_string(lineNo));
+      ++i;
+    }
+  }
+  return hits;
+}
+} // namespace
+
+TEST_CASE("Product strings spell non-ASCII as UTF-8 bytes, never \\u escapes")
+{
+  // MSVC builds without /utf-8, so "\u2026" in a narrow literal compiles to one
+  // cp1252 byte. That is not UTF-8, and NanoVG stops drawing there: the name
+  // dialog hint lost "· Esc to cancel" and truncated labels lost their tail.
+  // Write the bytes ("\xE2\x80\xA6") the way the About card does.
+  CHECK(NarrowLiteralUnicodeEscapes("auto s = \"a\\u2026\";").size() == 1);
+  CHECK(NarrowLiteralUnicodeEscapes("auto s = u8\"a\\u2026\"; // \"\\u00B7\"").empty());
+  CHECK(NarrowLiteralUnicodeEscapes("auto s = \"a\\xE2\\x80\\xA6\";").empty());
+
+  namespace fs = std::filesystem;
+  std::vector<std::string> offenders;
+  const fs::path root = RepoRoot() / "NeuralAmpModeler";
+  for (fs::recursive_directory_iterator it(root), end; it != end; ++it)
+  {
+    const std::string rel = fs::relative(it->path(), root).generic_string();
+    if (it->is_directory()
+        && (rel.rfind("build", 0) == 0 || rel == "tests" || rel.find("third_party") != std::string::npos))
+    {
+      it.disable_recursion_pending();
+      continue;
+    }
+    const auto ext = it->path().extension();
+    if (!it->is_regular_file() || (ext != ".h" && ext != ".cpp"))
+      continue;
+    for (const auto& hit : NarrowLiteralUnicodeEscapes(ReadText(it->path())))
+      offenders.push_back(rel + " " + hit);
+  }
+  std::string list;
+  for (const auto& o : offenders)
+    list += o + "\n";
+  CHECK_MESSAGE(offenders.empty(), list);
 }

@@ -69,7 +69,7 @@ TEST_CASE("ShortCaptureLabel truncates long custom names to 5 chars + ellipsis")
   using volum::custom::ShortCaptureLabel;
   REQUIRE(ShortCaptureLabel("OD") == "OD"); // short names pass through
   REQUIRE(ShortCaptureLabel("BOOST") == "BOOST"); // exactly 5 -> unchanged
-  REQUIRE(ShortCaptureLabel("Klon Centaur") == std::string("Klon ") + "\u2026"); // > 5 -> clipped
+  REQUIRE(ShortCaptureLabel("Klon Centaur") == std::string("Klon ") + "\xE2\x80\xA6"); // > 5 -> clipped
 }
 
 TEST_CASE("HasDirectCapture is true only when a DIRECT (cab-less) capture exists")
@@ -447,7 +447,7 @@ TEST_CASE("A pill label truncated mid-glyph never yields invalid UTF-8")
 {
   using volum::custom::ShortCaptureLabel;
   const std::string euro = "\xE2\x82\xAC";
-  const std::string ellipsis = "\u2026";
+  const std::string ellipsis = "\xE2\x80\xA6";
 
   // Cap 5 lands inside the second euro sign; it is dropped rather than split.
   CHECK(ShortCaptureLabel(euro + euro + euro) == euro + ellipsis);

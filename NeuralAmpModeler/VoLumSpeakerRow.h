@@ -333,7 +333,7 @@ private:
     // Utf8Prefix, not substr: an IR named with non-ASCII characters would otherwise
     // be cut mid-sequence, and the label is drawn from the same string that gets
     // persisted.
-    return volum::custom::Utf8Prefix(mIrName, 11) + "\u2026";
+    return volum::custom::Utf8Prefix(mIrName, 11) + "\xE2\x80\xA6";
   }
 
   // No Cab (index 0) is gated by DIRECT availability on the current channel; cab

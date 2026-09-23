@@ -618,7 +618,7 @@ inline std::string ShortCaptureLabel(const std::string& name, std::size_t maxCha
 {
   if (name.size() <= maxChars)
     return name;
-  return Utf8Prefix(name, maxChars) + "\u2026";
+  return Utf8Prefix(name, maxChars) + "\xE2\x80\xA6";
 }
 
 // Case-insensitive name comparison + within-list uniqueness check. Names must be

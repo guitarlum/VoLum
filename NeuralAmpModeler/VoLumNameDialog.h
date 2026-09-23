@@ -107,8 +107,8 @@ public:
     DrawBtn(g, CancelRect(), "Cancel", false);
     DrawBtn(g, SaveRect(), volum::name_dialog::LabelText(label), true);
     g.DrawText(IText(9.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-               label == volum::name_dialog::ConfirmLabel::Update ? "Enter to update  \u00B7  Esc to cancel"
-                                                                 : "Enter to save  \u00B7  Esc to cancel",
+               label == volum::name_dialog::ConfirmLabel::Update ? "Enter to update  \xC2\xB7  Esc to cancel"
+                                                                 : "Enter to save  \xC2\xB7  Esc to cancel",
                box.GetPadded(-12.f).GetFromBottom(11.f));
   }
 

@@ -443,13 +443,13 @@ private:
       // Avoid leaving a dangling UTF-8 lead/continuation byte.
       while (!str.empty() && (static_cast<unsigned char>(str.back()) & 0xC0) == 0x80)
         str.pop_back();
-      const std::string cand = str + "\u2026";
+      const std::string cand = str + "\xE2\x80\xA6";
       IRECT mr;
       g.MeasureText(text, cand.c_str(), mr);
       if (mr.W() <= maxW)
         return cand;
     }
-    return str + "\u2026";
+    return str + "\xE2\x80\xA6";
   }
 
   void DrawDualHero(IGraphics& g)
