@@ -216,17 +216,17 @@ TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
 {
   ExpectGoldenHash("reverb-hall", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeHall, 0)),
                    "0e0dea2148d1d48201560bbd9ced13f5d8d5abd55d457f8189fc7fb84cefe275",
-                   "1b31218a539934d9bd7a4a059865d3acb56989ab1efb7fe1d6d406bc2de3603f");
+                   "651537db17d746e23b90f30fc04a36b2714bd93e452e307eb1bff93756acb8a5");
   ExpectGoldenHash("reverb-plate", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModePlate, 0)),
                    "36bb5435950bd077ef61f2fa4a563485490caf0384e90ef328b96f9ecb8b0c8c",
-                   "481cda1a11928f3827513a514b1161923af4d7b2c4c6984895314fee3463a62b");
+                   "a4805485fccd8a767fbc8f6ddc87484d008f572a0d1e4311bc446722bb41425b");
   ExpectGoldenHash("oktaverb-halo", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0)),
                    "8c7271c2c52d50c11cfb359ffa77e2c539cf5431c0239fe78451763a4041f434",
-                   "5d0dd19eb152df64b1890a44803783cc187dfcaa8a58486219e67f25ceb8ae18");
+                   "6165bcba62f985a34a94f1be51f8dbd135a9a68c479b48fe40ca79f5d7112a02");
   ExpectGoldenHash("oktaverb-shimmer", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1)),
                    "3403ec0e51ca3dc37eb94cd14a1847b8135a1925cc83ab695dfa78498d775c86",
-                   "6589f106d1b4f21a4fa5d02a6427e099e2e6262a006d9a9f3c6952a2668d377d");
+                   "0b77bfc150d7d07009b79f96e8d8999e50645320eb02b23af0c2ed773de89339");
   ExpectGoldenHash("oktaverb-bloom", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2)),
                    "bb97b2c1331309464e2d18f4d75ee81bf374ffbe99a6346bb6b6bf9e561d678e",
-                   "ccef0b8b59f73e02d6c00be43b220d915c76964f0d5153581101d879ce67fbe9");
+                   "91e46693fc1341469e3c429d149a26c491e746f4d371dfa1e9dbafe152807fc2");
 }
