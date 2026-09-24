@@ -134,7 +134,7 @@ The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every v
 
 ![VoLum POST Chorus card](user-guide-chorus.png)
 
-**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
+**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. Its echoes start from the middle of left and right, so in Dual Amp both amps echo, wherever they are panned. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
 
 Both tempo-synced POST pedals — Delay and Tremolo — share one tempo source. In a DAW they follow the host tempo; in the standalone app they follow the metronome BPM (set it in the metronome overlay, and it applies even while the metronome click is muted).
 
@@ -169,7 +169,7 @@ Every factory amp ships one read-only Factory preset named **Ready**. That is th
 3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
 4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
 
-**Save current as new**, **Ctrl+S**, and PLAY's **+ Add this sound** all open the same name popup. Its confirm button reads **Update** while the name you type is the selected User preset's own name (that overwrites it) and **Save** for any other name (that creates a new preset). It switches as you type. `Enter` or that button saves. **Cancel**, `Esc`, or a click outside the popup closes it and writes nothing.
+**Save current as new**, **Ctrl+S**, and PLAY's **+ Add this sound** all open the same name popup. Its confirm button reads **Update** while the name you type is the selected User preset's own name (that overwrites it) and **Save** for any other name (that creates a new preset). It switches as you type. `Enter` or that button saves. **Cancel**, `Esc`, or a click outside the popup closes it and writes nothing. Name fields work like any Windows text box: `Ctrl+Backspace` and `Ctrl+Delete` delete a whole word, `Ctrl+Left` / `Right` jump word by word (add `Shift` to select), double-click selects a word and triple-click everything, dragging selects, and `Ctrl+Z` / `Ctrl+Y` undo and redo. Manage's New and Rename and the amp builder's names use the same field.
 
 Presets are per amp: each amp (factory or custom) keeps its own User list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
 
@@ -218,7 +218,7 @@ Custom names (amps, IRs, pedals, and presets) have sensible length limits so the
 
 ![VoLum custom pedal manager](user-guide-custom-pedal.png)
 
-If VoLum cannot read the library file, it keeps that file as `volum-content.json.bak` (an older backup moves to `volum-content.json.bak.1`) and says so the next time a window opens. Deleting a custom amp from the list says so when the save does not reach disk.
+If VoLum cannot read the library file, it keeps that file as `volum-content.json.bak` (an older backup moves to `volum-content.json.bak.1`) and says so, over the VoLum window, the next time a window opens. Deleting a custom amp from the list says so when the save does not reach disk.
 
 The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library. Two VoLums may edit the library at the same time — the standalone app and one in your DAW, or two tracks — and each one only writes its own changes, so importing an IR in one window can no longer be undone by the other window saving a preset.
 
@@ -242,6 +242,7 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 - In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` always opens the name dialog and may reassign the LIVE program number, never a new one. While Settings, Pack, or another overlay is open, those PLAY keys are ignored so they cannot change the rail behind the window.
 - In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.
+- `Ctrl+S` opens the save dialog from any BUILD section (PRE, AMP, or POST), also while a knob is selected.
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
 - `Enter` edits the focused target. In the standalone app, `Space` toggles its on/off state. In plug-ins, `B` toggles it so `Space` remains available for DAW Play/Stop.
 - `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.
@@ -287,8 +288,8 @@ VoLum accepts MIDI Program Change in AU and the standalone app, and a MIDI CC in
 
 Assign the slots on either surface, whichever is in front of you:
 
-- In **PLAY**, **+** is **Add this sound** when the live rig is not on the rail, or **Add Sound** when it already is. Add this sound writes the live User Sound onto the next free program number and marks that row LIVE. Add Sound opens the picker on the next free program number (you can change that number first). Click an assigned row to recall it, use the assign control or double-click to replace the Sound, or tap `×` to clear it.
-- In **Settings -> MIDI**, the same assignments are laid out like a MIDI foot controller: 16 banks of 8 switches. Switch 1–8 on bank 1 sends program `0`–`7`, bank 2 sends `8`–`15`, and so on up to bank 16 (`120`–`127`). Each switch shows its program number on an LED readout, the Sound, its amp, and the amp's art; an empty switch shows **+**. Page with the arrows beside **BANK**, the mouse wheel, or the 16 bank dots (a lit dot means that bank has Sounds). The tab opens on the bank holding the LIVE Sound, whose switch is outlined and lit **LIVE**. Click a switch to pick its Sound. Drag a switch onto another to swap the two Sounds, or onto an empty switch to move it there; while dragging, hover an arrow or a bank dot to page, so a Sound can go to any program number. Hover a switch and click `×` to clear it. There is only one set of assignments: both surfaces read and write the same ones.
+- In **PLAY**, **+** is **Add this sound** when the live rig is not on the rail, or **Add Sound** when it already is. Add this sound writes the live User Sound onto the next free program number and marks that row LIVE. If the LIVE row plays a Factory Sound you have changed, Add this sound saves your version under a new name onto the next free program number, and the Factory Sound keeps its row. Add Sound opens the picker on the next free program number (you can change that number first). Click an assigned row to recall it, use the assign control or double-click to replace the Sound, or tap `×` to clear it.
+- In **Settings -> MIDI**, the same assignments are laid out like a MIDI foot controller: 16 banks of 8 switches. Switch 1–8 on bank 1 sends program `0`–`7`, bank 2 sends `8`–`15`, and so on up to bank 16 (`120`–`127`). Each switch shows its program number on an LED readout, the Sound, its amp, and the amp's art; an empty switch shows **+**. Page with the arrows beside **BANK**, the mouse wheel, `PageUp` / `PageDown`, or the 16 bank dots (a lit dot means that bank has Sounds). The tab opens on the bank holding the LIVE Sound, whose switch is outlined and lit **LIVE**; if nothing has been recalled yet, it opens on the first bank that has Sounds. Click a switch to pick its Sound. Drag a switch onto another to swap the two Sounds, or onto an empty switch to move it there; while dragging, hover an arrow or a bank dot to page, so a Sound can go to any program number. Hover a switch and click `×` to clear it. There is only one set of assignments: both surfaces read and write the same ones.
 
 The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance, and the **Recall CC** (default `102`, range `0`–`119`) that recalls a Sound by value. **What each program number plays** is the footswitch view of the same assignments PLAY shows. That list is machine-global, while the listen filter and recall CC are stored per plugin instance. A new plug-in insert starts on All MIDI channels and CC `102`; it does not copy the standalone app's channel or CC. All MIDI channels is the default.
 
@@ -325,7 +326,7 @@ The **Back up your library** card on the SYSTEM tab has **Export Pack...** and *
 **Export** offers three scopes:
 
 - **Everything** — the whole library. In the standalone app it also carries your machine settings and MIDI slots.
-- **Sounds** — tick named presets. Each row names the amp it belongs to, and PLAY assignments sit at the top with their Program Change number. A ticked Sound brings every IR, pedal, and dual-amp partner it needs.
+- **Sounds** — tick named presets. Each row names the amp it belongs to, and PLAY assignments sit at the top in Program Change order, with their number. A ticked Sound brings every IR, pedal, and dual-amp partner it needs.
 - **A whole amp** — tick a custom amp and every preset saved on it travels with it.
 
 Requirements you did not tick are named in the highlighted band under the list and cannot be left behind: a Pack that referenced content it did not carry would import as a broken amp. A preset on a *factory* amp brings its custom IR and pedal but no amp entry, because the factory capture already ships with VoLum.
@@ -342,7 +343,7 @@ A Pack somebody shared with you merges by id like Overwrite and does not offer R
 
 **Also restore machine settings** is a separate tick box, only offered in the standalone app and only for an Everything Pack. It restores the last amp, per-amp knob positions, Lite mode, input calibration, and MIDI slots. Plug-ins never write those, so they never offer the box either.
 
-The import happens in one step. Your previous library is kept beside the new one as `volum-content.json.pre-import.bak`, a damaged or truncated Pack changes nothing at all, and a Pack written by a newer VoLum than yours is refused by name instead of being half-read. PRE slot numbers are local to your machine, so an imported pedal whose slot is already taken is renumbered and the Pack's own presets follow it.
+The import happens in one step. Your previous library is kept beside the new one as `volum-content.json.pre-import.bak`, a damaged or truncated Pack changes nothing at all and says **This Pack is damaged.**, and a Pack written by a newer VoLum than yours is refused by name instead of being half-read. Where you keep your own version of an item, the preview shows your name for it. Capture, IR, and pedal files that the import leaves unused (the old files of a replaced amp, for example) are removed from your library folder; nothing outside it is touched, and nothing any item still uses. PRE slot numbers are local to your machine, so an imported pedal whose slot is already taken is renumbered and the Pack's own presets follow it.
 
 ### Standalone Audio And MIDI Settings
 
