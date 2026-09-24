@@ -226,6 +226,9 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
     {"knob Esc", knob, KeyKind::Escape, KeyConsumer::Knob},
     {"knob arrow stays on knob", knob, KeyKind::Arrow, KeyConsumer::Knob},
     {"knob T still opens tuner", knob, KeyKind::HotkeyT, KeyConsumer::Rig},
+    {"knob Enter opens the exact value", knob, KeyKind::Enter, KeyConsumer::Knob},
+    {"knob Delete resets the knob", knob, KeyKind::Delete, KeyConsumer::Knob},
+    {"knob Ctrl+S / Tab / 1-3 / S keep their global meaning", knob, KeyKind::Other, KeyConsumer::Rig},
     {"exact Esc", exact, KeyKind::Escape, KeyConsumer::CancelExactEntry},
     {"text Esc", text, KeyKind::Escape, KeyConsumer::PassToTextEntry},
     {"text H", text, KeyKind::HotkeyH, KeyConsumer::PassToTextEntry},
@@ -243,6 +246,42 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
   CHECK(ClassifyVk('H') == KeyKind::HotkeyH);
   CHECK(ClassifyVk('t') == KeyKind::HotkeyT);
   CHECK(ClassifyVk(kKeyUp) == KeyKind::Arrow);
+  CHECK(ClassifyVk(kKeyDelete) == KeyKind::Delete);
+  CHECK(ClassifyVk(kKeyBack) == KeyKind::Delete);
+}
+
+TEST_CASE("Ctrl+S reaches the save shortcut from every BUILD focus state, never through an overlay")
+{
+  // The Rig consumer is the path that runs _HandleVoLumKeyboardFocusKey, where Ctrl+S
+  // opens the save dialog. A selected knob is what PRE / POST editing leaves behind:
+  // click a knob, then Ctrl+S.
+  using namespace volum::keyboard;
+  const KeyKind ctrlS = ClassifyVk('S');
+  REQUIRE(ctrlS == ClassifyVk('s'));
+
+  OverlayStack nothing;
+  OverlayStack knob;
+  knob.knobSelected = true;
+  OverlayStack knobWithExactBox;
+  knobWithExactBox.knobSelected = true;
+  knobWithExactBox.exactEntry = true;
+  for (const auto& s : {nothing, knob, knobWithExactBox})
+    CHECK(RouteKey(s, ctrlS) == KeyConsumer::Rig);
+
+  for (int i = 0; i < 8; ++i)
+  {
+    OverlayStack s;
+    s.knobSelected = (i % 2) == 1;
+    switch (i / 2)
+    {
+      case 0: s.settings = true; break;
+      case 1: s.custom = true; break;
+      case 2: s.tuner = true; break;
+      default: s.dropdown = true; break;
+    }
+    INFO("overlay case " << i);
+    CHECK(RouteKey(s, ctrlS) == KeyConsumer::Swallow);
+  }
 }
 
 TEST_CASE("Up/Down on a selected knob are consumed even when the value cannot move")

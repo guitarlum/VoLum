@@ -784,6 +784,10 @@ public static class VoLumE2eUi {
   [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr h);
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint from, uint to, bool attach);
+  [DllImport("user32.dll")] static extern bool GetKeyboardState(byte[] s);
+  [DllImport("user32.dll")] static extern bool SetKeyboardState(byte[] s);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
   [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)]
   static extern IntPtr SendText(IntPtr h, uint msg, IntPtr w, StringBuilder l);
   [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
@@ -860,6 +864,24 @@ public static class VoLumE2eUi {
     long scan = MapVirtualKey((uint)vk, 0);
     SendMessage(plug, 0x0100, (IntPtr)vk, (IntPtr)(1 | (scan << 16)));                   // WM_KEYDOWN
     SendMessage(plug, 0x0101, (IntPtr)vk, (IntPtr)(1 | (scan << 16) | 0xC0000000L));     // WM_KEYUP
+  }
+  // iPlug reads Ctrl / Shift with GetKeyState on its own thread, so the key state is
+  // shared with that thread for the stroke. Returns false when it could not be.
+  public static bool KeyMod(IntPtr plug, int vk, bool shift, bool ctrl) {
+    uint pid;
+    uint target = GetWindowThreadProcessId(plug, out pid);
+    uint self = GetCurrentThreadId();
+    if (!AttachThreadInput(self, target, true)) return false;
+    byte[] saved = new byte[256];
+    GetKeyboardState(saved);
+    byte[] state = (byte[])saved.Clone();
+    if (shift) { state[0x10] = 0x80; state[0xA0] = 0x80; }
+    if (ctrl) { state[0x11] = 0x80; state[0xA2] = 0x80; }
+    SetKeyboardState(state);
+    Key(plug, vk);
+    SetKeyboardState(saved);
+    AttachThreadInput(self, target, false);
+    return true;
   }
   // Lowercase letters, digits and spaces.
   public static void Type(IntPtr plug, string text) {
@@ -964,6 +986,42 @@ function Test-SaveDialog {
     Assert-True "the PLAY slot is the saved preset" (@($map | Where-Object { $_.presetId -eq $saved.id }).Count -eq 1)
   }
 
+  # BUILD: Ctrl+S opens the dialog from PRE and POST, also once a knob is selected
+  # there (a clicked PRE knob, a POST knob picked with Enter). A selected knob used to
+  # take every key and drop the ones it did not use, Ctrl+S among them.
+  Write-Host "  [savedialog] BUILD Ctrl+S from PRE / POST, with and without a selected knob" -ForegroundColor Cyan
+  $settings = Read-Json $settingsPath
+  $settings | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "build" -Force
+  $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+  Remove-Item $logPath -Force -ErrorAction SilentlyContinue
+  $preKnob = @(439, 437)   # COMP INPUT, the first knob of the PRE focus that key 1 lands on
+  $build = Invoke-VoLumRun -SandboxRoot $sandbox -SettleSec 7 -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    $save = {
+      if (-not [VoLumE2eUi]::KeyMod($h, 0x53, $false, $true)) { $script:ctrlNotShared = $true }
+      Start-Sleep -Milliseconds 400
+      [VoLumE2eUi]::Key($h, 0x1B); Start-Sleep -Milliseconds 300
+    }
+    $script:ctrlNotShared = $false
+    [VoLumE2eUi]::Key($h, 0x31); Start-Sleep -Milliseconds 300   # 1 = PRE
+    & $save
+    [VoLumE2eUi]::Click($h, $preKnob[0], $preKnob[1]); Start-Sleep -Milliseconds 300
+    & $save
+    [VoLumE2eUi]::Key($h, 0x33); Start-Sleep -Milliseconds 300   # 3 = POST
+    & $save
+    [VoLumE2eUi]::Key($h, 0x0D); Start-Sleep -Milliseconds 300   # Enter selects the POST knob
+    & $save
+    return @{ ctrlShared = -not $script:ctrlNotShared }
+  }
+  Assert-True "BUILD run opened a window" $build.started
+  Assert-True "BUILD run closed gracefully" $build.graceful
+  Assert-True "Ctrl reached VoLum (AttachThreadInput)" ($build.drive -and $build.drive.ctrlShared)
+  $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
+  Assert-Equal "Ctrl+S opened the dialog from PRE, PRE knob, POST, POST knob" 4 ([regex]::Matches($log, "save dialog open")).Count
+  Assert-Equal "each BUILD dialog cancelled with Esc" 4 ([regex]::Matches($log, "save dialog cancelled")).Count
+  Assert-Equal "cancelled BUILD dialogs wrote no preset" $rows.Count (Get-PresetRows (Read-Json $contentPath)).Count
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 }
 

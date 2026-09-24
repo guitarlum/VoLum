@@ -234,8 +234,10 @@ inline bool Contains(const std::array<int, N>& params, int paramIdx)
 
 // Windows VK codes (same values as iPlug kVK_*). Kept numeric so this header
 // stays free of IGraphics.
+inline constexpr int kKeyBack = 0x08;
 inline constexpr int kKeyReturn = 0x0D;
 inline constexpr int kKeyEscape = 0x1B;
+inline constexpr int kKeyDelete = 0x2E;
 inline constexpr int kKeyLeft = 0x25;
 inline constexpr int kKeyUp = 0x26;
 inline constexpr int kKeyRight = 0x27;
@@ -278,6 +280,7 @@ enum class KeyKind
   HotkeyM,
   Arrow,
   Enter,
+  Delete,
   Other,
 };
 
@@ -339,7 +342,18 @@ inline KeyKind ClassifyVk(int vk)
     return KeyKind::Arrow;
   if (vk == kKeyReturn)
     return KeyKind::Enter;
+  if (vk == kKeyDelete || vk == kKeyBack)
+    return KeyKind::Delete;
   return KeyKind::Other;
+}
+
+// The keys a selected knob answers (NAMKnobControl::HandleKeyboardInput). Every
+// other key keeps its global meaning while a knob is selected: routing all of them
+// to the knob killed Ctrl+S, Tab, 1/2/3 and S as soon as a PRE or POST knob was
+// touched.
+inline bool KnobOwnsKind(KeyKind kind)
+{
+  return kind == KeyKind::Arrow || kind == KeyKind::Enter || kind == KeyKind::Delete;
 }
 
 // One function answers "who gets this key". A visible overlay blocks every
@@ -372,9 +386,7 @@ inline KeyConsumer RouteKey(const OverlayStack& s, KeyKind kind)
 
   if (top == OverlayId::None)
   {
-    if (kind == KeyKind::HotkeyH || kind == KeyKind::HotkeyT || kind == KeyKind::HotkeyM)
-      return KeyConsumer::Rig;
-    if (s.knobSelected)
+    if (s.knobSelected && KnobOwnsKind(kind))
       return KeyConsumer::Knob;
     return KeyConsumer::Rig;
   }
