@@ -17,14 +17,43 @@
 //  - EBlend::Add is only valid here in Draw (opaque framebuffer). Inside a layer
 //    it adds onto transparent black and loses the colour.
 //  - DropLayers() forgets every layer; the next Prepare rebuilds them.
+//  - An art that overflows a Dual lane fits itself (LaneFitted): its layers are
+//    built under the fit and blitted 1:1, its live elements drawn under the fit.
 
 #include "VoLumArtCommon.h"
+#include "VoLumArtLaneFit.h"
 #include "VoLumArtMotion.h"
 
 #include <memory>
 
 namespace volumart
 {
+inline ArtBox ArtBoxOf(const IRECT& r)
+{
+  return {r.L, r.T, r.R, r.B};
+}
+
+inline IRECT IRectOf(const ArtBox& b)
+{
+  return IRECT(b.L, b.T, b.R, b.B);
+}
+
+// paint() under the Dual lane fit (VoLumArtLaneFit.h). The identity fit adds no draw
+// state, so mono PLAY and BUILD draw exactly what they drew before.
+template <class Paint>
+inline void LaneFitted(IGraphics& g, const ArtLaneFit& f, Paint&& paint)
+{
+  if (f.Identity())
+  {
+    paint();
+    return;
+  }
+  g.PathTransformSave();
+  g.PathTransformMatrix(IMatrix(f.s, 0.0, 0.0, f.s, f.tx, f.ty));
+  paint();
+  g.PathTransformRestore();
+}
+
 struct ArtLayer
 {
   ILayerPtr layer;

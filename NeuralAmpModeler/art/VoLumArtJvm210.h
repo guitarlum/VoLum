@@ -6,13 +6,14 @@
 // curve's eight level-3 self-copies, teal into gold, and the seams between the copies flash each
 // time all eight cross them together; the level stretches the trails. Each pick re-folds the
 // curve from its base chord, one Levy fold per step, until the light melts back into the curve.
+// A PLAY Dual lane is narrower than the curve: there the whole art is fitted into it.
 
 #include "VoLumArtAnimator.h"
 #include "VoLumArtCommon.h"
 
 namespace volumart::art
 {
-inline void DrawJvm210Hero(IGraphics& g, const IRECT& rect)
+inline void DrawJvm210Art(IGraphics& g, const IRECT& rect)
 {
   [[maybe_unused]] const float cx = rect.MW(), cy = rect.MH(), w = rect.W(), h = rect.H();
   // clang-format off
@@ -43,6 +44,69 @@ inline void DrawJvm210Hero(IGraphics& g, const IRECT& rect)
   // clang-format on
 }
 
+// DrawJvm210Art's depth-11 Levy C curve, unscaled: 2049 points.
+inline std::vector<std::pair<float, float>> Jvm210Levy()
+{
+  struct Seg
+  {
+    float x1, y1, x2, y2;
+  };
+  std::vector<Seg> segs;
+  segs.push_back({-1.f, 0.f, 1.f, 0.f});
+  for (int depth = 0; depth < 11; depth++)
+  {
+    std::vector<Seg> next;
+    next.reserve(2 * segs.size());
+    for (auto& s : segs)
+    {
+      const float mx = (s.x1 + s.x2) / 2.f + (s.y2 - s.y1) / 2.f, my = (s.y1 + s.y2) / 2.f - (s.x2 - s.x1) / 2.f;
+      next.push_back({s.x1, s.y1, mx, my});
+      next.push_back({mx, my, s.x2, s.y2});
+    }
+    segs.swap(next);
+  }
+  std::vector<std::pair<float, float>> raw;
+  raw.reserve(segs.size() + 1);
+  raw.push_back({segs[0].x1, segs[0].y1});
+  for (auto& s : segs)
+    raw.push_back({s.x2, s.y2});
+  return raw;
+}
+
+// How far the PLAY light reaches past the curve: a comet head's halo at full level and pick.
+inline constexpr float kJvm210Reach = 10.f;
+
+// The curve as DrawJvm210Art scales it (its longer side 1.25 R about the centre) plus the
+// light's reach; bloom and dust are soft and may run past the lane.
+inline ArtBox Jvm210Extent(const IRECT& rect)
+{
+  float mnx = 1e9f, mny = 1e9f, mxx = -1e9f, mxy = -1e9f;
+  for (const auto& p : Jvm210Levy())
+  {
+    mnx = std::min(mnx, p.first);
+    mny = std::min(mny, p.second);
+    mxx = std::max(mxx, p.first);
+    mxy = std::max(mxy, p.second);
+  }
+  const float ext = std::max(mxx - mnx, mxy - mny);
+  const float S = std::min(rect.W(), rect.H()) * 1.25f / (ext > 0.f ? ext : 1.f);
+  const float hw = 0.5f * (mxx - mnx) * S, hh = 0.5f * (mxy - mny) * S;
+  return {rect.MW() - hw - kJvm210Reach, rect.MH() - hh - kJvm210Reach, rect.MW() + hw + kJvm210Reach,
+          rect.MH() + hh + kJvm210Reach};
+}
+
+inline ArtLaneFit Jvm210Fit(const IRECT& rect)
+{
+  if (!IsNarrowLane(rect.W(), rect.H()))
+    return {};
+  return LaneFit(ArtBoxOf(rect), Jvm210Extent(rect), kLaneFitMargin, 0.5f);
+}
+
+inline void DrawJvm210Hero(IGraphics& g, const IRECT& rect)
+{
+  LaneFitted(g, Jvm210Fit(rect), [&] { DrawJvm210Art(g, rect); });
+}
+
 inline IColor Jvm210White()
 {
   return IColor(255, 240, 250, 252);
@@ -61,33 +125,14 @@ protected:
   static constexpr float kFoldEnd = 1.3f;
   static constexpr float kSegsPerSecond = 160.f;
 
-  // Same curve and transform as DrawJvm210Hero.
+  // Same curve and transform as DrawJvm210Art; in a Dual lane the extras draw under the
+  // same lane fit as the hero.
   void PrepareExtras(const IRECT& r) override
   {
+    mFit = Jvm210Fit(r);
     const float cx = r.MW(), cy = r.MH(), w = r.W(), h = r.H();
     const float R = std::min(w, h);
-    struct Seg
-    {
-      float x1, y1, x2, y2;
-    };
-    std::vector<Seg> segs;
-    segs.push_back({-1.f, 0.f, 1.f, 0.f});
-    for (int depth = 0; depth < 11; depth++)
-    {
-      std::vector<Seg> next;
-      next.reserve(2 * segs.size());
-      for (auto& s : segs)
-      {
-        const float mx = (s.x1 + s.x2) / 2.f + (s.y2 - s.y1) / 2.f, my = (s.y1 + s.y2) / 2.f - (s.x2 - s.x1) / 2.f;
-        next.push_back({s.x1, s.y1, mx, my});
-        next.push_back({mx, my, s.x2, s.y2});
-      }
-      segs.swap(next);
-    }
-    std::vector<std::pair<float, float>> raw;
-    raw.push_back({segs[0].x1, segs[0].y1});
-    for (auto& s : segs)
-      raw.push_back({s.x2, s.y2});
+    const std::vector<std::pair<float, float>> raw = Jvm210Levy();
     float mnx = 1e9f, mny = 1e9f, mxx = -1e9f, mxy = -1e9f;
     for (auto& p : raw)
     {
@@ -121,8 +166,10 @@ protected:
     (void)r;
     if (mP.empty())
       return;
-    DrawComets(g, m);
-    DrawFolds(g, m);
+    LaneFitted(g, mFit, [&] {
+      DrawComets(g, m);
+      DrawFolds(g, m);
+    });
   }
 
 private:
@@ -326,6 +373,7 @@ private:
     g.PathLineTo(x, y);
   }
 
+  ArtLaneFit mFit;
   std::vector<float> mP; // the hero's 2049 curve points, x y interleaved
   std::vector<float> mPath;
   std::vector<float> mDots;

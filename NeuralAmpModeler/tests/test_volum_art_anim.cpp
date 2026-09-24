@@ -2,6 +2,7 @@
 
 #include "../VoLumAmpeteCatalog.h"
 #include "../VoLumPlayLight.h"
+#include "../art/VoLumArtLaneFit.h"
 #include "../art/VoLumArtMotion.h"
 #include "../art/VoLumArtRegistry.h"
 
@@ -348,6 +349,100 @@ TEST_CASE("Art anim: VOLUM_ART_ANIM_DEBUG grammar")
   {
     INFO(std::string(bad));
     CHECK_FALSE(p(bad).on);
+  }
+}
+
+namespace
+{
+// PLAY paint rects at 900 x 600: the mono panel and the MAIN Dual lane.
+constexpr volumart::ArtBox kMonoPaint{28.f, 72.f, 690.f, 384.f};
+constexpr volumart::ArtBox kDualLane{28.f, 72.f, 337.f, 384.f};
+
+void CheckInside(const volumart::ArtBox& outer, const volumart::ArtBox& b)
+{
+  CHECK(b.L >= outer.L - 1e-3f);
+  CHECK(b.T >= outer.T - 1e-3f);
+  CHECK(b.R <= outer.R + 1e-3f);
+  CHECK(b.B <= outer.B + 1e-3f);
+}
+} // namespace
+
+TEST_CASE("Art anim: Lane fit leaves mono PLAY, BUILD and an art that fits untouched")
+{
+  using volumart::ArtBox;
+  using volumart::LaneFit;
+  const ArtBox huge{-50.f, 40.f, 800.f, 420.f};
+  CHECK(LaneFit(kMonoPaint, huge, volumart::kLaneFitMargin, 1.f).Identity());
+  // BUILD: the mono hero art and one Dual lane's art.
+  CHECK(LaneFit({328.f, 116.f, 750.f, 312.f}, huge, volumart::kLaneFitMargin, 1.f).Identity());
+  CHECK(LaneFit({332.f, 138.f, 528.f, 280.f}, huge, volumart::kLaneFitMargin, 1.f).Identity());
+  CHECK_FALSE(volumart::IsNarrowLane(662.f, 312.f));
+  CHECK_FALSE(volumart::IsNarrowLane(196.f, 142.f));
+  CHECK(volumart::IsNarrowLane(309.f, 312.f));
+  // A Dual lane art that already sits inside the margin.
+  CHECK(LaneFit(kDualLane, {60.f, 100.f, 300.f, 360.f}, volumart::kLaneFitMargin, 1.f).Identity());
+  CHECK(LaneFit(kDualLane, {}, volumart::kLaneFitMargin, 1.f).Identity());
+}
+
+TEST_CASE("Art anim: Lane fit shrinks an overflowing art whole into a Dual lane, centred")
+{
+  using volumart::ArtBox;
+  using volumart::ArtLaneFit;
+  const float m = volumart::kLaneFitMargin;
+  const ArtBox room{kDualLane.L + m, kDualLane.T + m, kDualLane.R - m, kDualLane.B - m};
+  const float laneMid = 0.5f * (kDualLane.L + kDualLane.R);
+
+  // A planted art leaning out past the right edge (the Marshall tree): its foot stays down.
+  const ArtBox tree{40.f, 110.f, 380.f, 369.f};
+  const ArtLaneFit a = volumart::LaneFit(kDualLane, tree, m, 1.f);
+  CHECK(a.s < 1.f);
+  CHECK(a.s == doctest::Approx(room.W() / tree.W()));
+  const ArtBox at = a.Map(tree);
+  CheckInside(room, at);
+  CHECK(0.5f * (at.L + at.R) == doctest::Approx(laneMid));
+  CHECK(a.Y(tree.B) == doctest::Approx(tree.B));
+  CHECK(a.Unmap(kDualLane).Contains(tree));
+
+  // An art spilling over both sides (the JVM curve), anchored at its middle.
+  const ArtBox curve{-10.f, 100.f, 375.f, 356.f};
+  const ArtLaneFit b = volumart::LaneFit(kDualLane, curve, m, 0.5f);
+  const ArtBox bt = b.Map(curve);
+  CheckInside(room, bt);
+  CHECK(bt.W() == doctest::Approx(room.W()));
+  CHECK(bt.H() / bt.W() == doctest::Approx(curve.H() / curve.W()));
+  CHECK(0.5f * (bt.L + bt.R) == doctest::Approx(laneMid));
+  CHECK(0.5f * (bt.T + bt.B) == doctest::Approx(0.5f * (curve.T + curve.B)));
+
+  // Too tall to hold its anchor: pulled up inside the lane instead.
+  const ArtBox tall{0.f, 60.f, 360.f, 400.f};
+  CheckInside(room, volumart::LaneFit(kDualLane, tall, m, 1.f).Map(tall));
+
+  // A small art only out of place is moved, never enlarged.
+  const ArtBox small{300.f, 100.f, 350.f, 200.f};
+  const ArtLaneFit c = volumart::LaneFit(kDualLane, small, m, 0.5f);
+  CHECK(c.s == 1.f);
+  CheckInside(room, c.Map(small));
+
+  const ArtBox back = a.Unmap(a.Map(tree));
+  CHECK(back.L == doctest::Approx(tree.L));
+  CHECK(back.B == doctest::Approx(tree.B));
+}
+
+TEST_CASE("Art anim: The arts that overflow a Dual lane draw static and motion through their lane fit")
+{
+  for (const char* name : {"Marshall2204", "Jvm210", "Brunetti"})
+  {
+    INFO(name);
+    const std::string text = ReadText(PluginRoot() / "art" / ("VoLumArt" + std::string(name) + ".h"));
+    const std::string fit = std::string(name) + "Fit(";
+    CHECK(text.find("LaneFit(ArtBoxOf(rect), " + std::string(name) + "Extent(rect)") != std::string::npos);
+    const auto hero = text.find("inline void Draw" + std::string(name) + "Hero(IGraphics& g, const IRECT& rect)");
+    REQUIRE(hero != std::string::npos);
+    const auto body = text.substr(hero, text.find("\n}", hero) - hero);
+    CHECK(body.find(fit + "rect)") != std::string::npos);
+    CHECK(body.find("LaneFitted(g, ") != std::string::npos);
+    CHECK(text.find("mFit = " + fit + "r);") != std::string::npos);
+    CHECK(text.find("LaneFitted(g, mFit, ") != std::string::npos);
   }
 }
 

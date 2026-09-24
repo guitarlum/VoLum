@@ -6,6 +6,7 @@
 // about the trunk foot) while slow gust fronts roll through the crown and fan its tip embers;
 // a pick is a gust: a lean pulse, a bright front racing downwind and a spray of sparks. Embers
 // break off the tips and blow away, cooling gold to teal. Silence: the static art, exactly.
+// A PLAY Dual lane is too narrow for the leaning crown: there the whole art is fitted into it.
 
 #include "VoLumArtAnimator.h"
 #include "VoLumArtCommon.h"
@@ -87,11 +88,44 @@ inline void DrawMarshall2204Embers(IGraphics& g, const IRECT& rect)
   // clang-format on
 }
 
+// The farthest the PLAY wind leans the tree downwind, in degrees.
+inline constexpr float kMarshall2204MaxLean = 3.2f;
+
+// Branches and tip embers at rest and at the full lean, and the floating embers; the
+// glow is soft light and may run past the lane.
+inline ArtBox Marshall2204Extent(const IRECT& rect)
+{
+  const float footY = rect.T + rect.H() * 0.94f;
+  const float tLean = std::tan(kMarshall2204MaxLean * 0.017453293f);
+  ArtBox box{rect.MW(), footY, rect.MW(), footY};
+  auto add = [&](float x, float y, float rad) {
+    box.Add(x, y, rad);
+    box.Add(x + tLean * (footY - y), y, rad);
+  };
+  Marshall2204Grow(rect, 9, [&](const Marshall2204Branch& b, float ex, float ey) {
+    const float rad = b.d < 3 ? 3.3f : (b.d >= 7 ? 5.7f : 0.5f);
+    add(b.x, b.y, rad);
+    add(ex, ey, rad);
+  });
+  box.Add(rect.L + rect.W() * 0.55f, rect.T + rect.H() * 0.1f, 6.1f);
+  box.Add(rect.L + rect.W() * 0.95f, rect.T + rect.H() * 0.6f, 6.1f);
+  return box;
+}
+
+inline ArtLaneFit Marshall2204Fit(const IRECT& rect)
+{
+  if (!IsNarrowLane(rect.W(), rect.H()))
+    return {};
+  return LaneFit(ArtBoxOf(rect), Marshall2204Extent(rect), kLaneFitMargin, 1.f);
+}
+
 inline void DrawMarshall2204Hero(IGraphics& g, const IRECT& rect)
 {
-  DrawMarshall2204Glow(g, rect);
-  DrawMarshall2204Tree(g, rect);
-  DrawMarshall2204Embers(g, rect);
+  LaneFitted(g, Marshall2204Fit(rect), [&] {
+    DrawMarshall2204Glow(g, rect);
+    DrawMarshall2204Tree(g, rect);
+    DrawMarshall2204Embers(g, rect);
+  });
 }
 
 class Marshall2204Animator final : public ArtAnimator
@@ -113,16 +147,20 @@ class Marshall2204Animator final : public ArtAnimator
 public:
   // Rest is the whole static art in one layer (bit-exact); sounding draws the passes
   // separately so the tree can sway over an unmoved glow.
+  // In a Dual lane every pass is drawn under the lane fit: the layers are built fitted
+  // and blitted 1:1, the live sparks drawn fitted, mSeen is the art space in view.
   bool Prepare(IGraphics& g, IControl* owner, const IRECT& r) override
   {
+    mFit = Marshall2204Fit(r);
+    mSeen = IRectOf(mFit.Unmap(ArtBoxOf(r)));
     if (!mFull.Ok(g))
       mFull.Build(g, owner, r, [&] { DrawMarshall2204Hero(g, r); });
     if (!mGlow.Ok(g))
-      mGlow.Build(g, owner, r, [&] { DrawMarshall2204Glow(g, r); });
+      mGlow.Build(g, owner, r, [&] { LaneFitted(g, mFit, [&] { DrawMarshall2204Glow(g, r); }); });
     if (!mTree.Ok(g))
-      mTree.Build(g, owner, r, [&] { DrawMarshall2204Tree(g, r); });
+      mTree.Build(g, owner, r, [&] { LaneFitted(g, mFit, [&] { DrawMarshall2204Tree(g, r); }); });
     if (!mEmbers.Ok(g))
-      mEmbers.Build(g, owner, r, [&] { DrawMarshall2204Embers(g, r); });
+      mEmbers.Build(g, owner, r, [&] { LaneFitted(g, mFit, [&] { DrawMarshall2204Embers(g, r); }); });
     FindTips(r);
     return true;
   }
@@ -139,11 +177,13 @@ public:
     const float tS = std::tan(lean * 0.017453293f);
     const float px = r.MW(), py = r.T + r.H() * 0.94f; // trunk foot
     // Negative x-skew about the foot pushes everything above it right, into the lean.
-    const IMatrix sway = AboutPoint(px, py, 0.f, 1.f, 1.f, -lean);
+    const IMatrix sway = AboutPoint(mFit.X(px), mFit.Y(py), 0.f, 1.f, 1.f, -lean);
     mGlow.DrawLit(g, r, m.bloom);
     const float breath = 0.1f * m.energy * static_cast<float>(std::sin(0.45 * m.clock));
-    BloomAdd(g, px, r.B, mR * (0.8f + 0.1f * m.energy), kGold, 0.42f,
-             std::min(1.f, wake * (0.4f + 0.5f * m.energy + breath) + 0.35f * m.pick));
+    LaneFitted(g, mFit, [&] {
+      BloomAdd(g, px, r.B, mR * (0.8f + 0.1f * m.energy), kGold, 0.42f,
+               std::min(1.f, wake * (0.4f + 0.5f * m.energy + breath) + 0.35f * m.pick));
+    });
     mTree.DrawXform(g, r, sway);
     mTree.DrawXform(g, r, sway, m.bloom, true);
     if (wake < 1.f)
@@ -151,10 +191,12 @@ public:
       mEmbers.Draw(g, r, 1.f - wake);
       mEmbers.DrawAdd(g, r, m.bloom * (1.f - wake));
     }
-    FanTips(m, tS, py);
-    DrawFan(g);
-    BlowEmbers(r, m, wake, tS, py);
-    DrawEmbers(g);
+    LaneFitted(g, mFit, [&] {
+      FanTips(m, tS, py);
+      DrawFan(g);
+      BlowEmbers(mSeen, m, wake, tS, py);
+      DrawEmbers(g);
+    });
   }
 
   void DropLayers() override
@@ -180,8 +222,8 @@ private:
     return Hash01((pickId * 747796405u + m.seed) ^ (salt * 2654435761u));
   }
 
-  // Degrees of extra lean downwind, never upwind: an upwind sway would pull the crown's
-  // clipped edge into a dual lane.
+  // Degrees of extra lean downwind, never upwind: Marshall2204Extent fits a Dual lane
+  // to the tree over exactly this range.
   static float WindLean(const ArtMotion& m)
   {
     const float sway = m.energy
@@ -197,7 +239,7 @@ private:
       gust += (0.75f + 0.5f * PickHash(m, k, 3u)) * env * (1.f + 0.3f * std::sin(11.f * a));
     }
     gust = 2.6f * (1.f - std::exp(-gust * 3.2f / 2.6f));
-    return std::clamp(sway + gust, 0.f, 3.2f);
+    return std::clamp(sway + gust, 0.f, kMarshall2204MaxLean);
   }
 
   static float EdgeFade(const IRECT& r, float x, float y)
@@ -206,7 +248,7 @@ private:
   }
 
   // Tip embers (depth >= 7) at their exact base positions, from the same grow replay.
-  // Only tips inside the paint rect move: in a dual lane the crown overflows the right edge.
+  // Only tips in view move.
   void FindTips(const IRECT& r)
   {
     mR = std::min(r.W(), r.H());
@@ -214,17 +256,18 @@ private:
     mSpawn.clear();
     float xLo = 1e9f, xHi = -1e9f;
     uint32_t id = 0;
+    const IRECT& v = mSeen;
     Marshall2204Grow(r, 9, [&](const Marshall2204Branch& b, float ex, float ey) {
       if (b.d < 7)
         return;
       ++id;
       xLo = std::min(xLo, ex);
       xHi = std::max(xHi, ex);
-      if (ex < r.L + 4.f || ex > r.R - 4.f || ey < r.T + 4.f || ey > r.B - 4.f)
+      if (ex < v.L + 4.f || ex > v.R - 4.f || ey < v.T + 4.f || ey > v.B - 4.f)
         return;
       if (b.d >= 8 && Hash01(id * 2654435761u ^ 61u) < kFanKeep)
         mTips.push_back({ex, ey, 0.f, id});
-      if (ex < r.R - 36.f)
+      if (ex < v.R - 36.f)
         mSpawn.push_back({ex, ey});
     });
     const float span = std::max(1.f, xHi - xLo);
@@ -409,6 +452,8 @@ private:
   ArtLayer mGlow;
   ArtLayer mTree;
   ArtLayer mEmbers;
+  ArtLaneFit mFit;
+  IRECT mSeen;
   float mR = 0.f;
   std::vector<Tip> mTips;
   std::vector<Pt> mSpawn;

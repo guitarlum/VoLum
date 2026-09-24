@@ -6,13 +6,16 @@
 // cross the frame as a sheen on the leaflets and bow the frond from its planted foot as
 // they pass (the back fern later and less); the level is the wind's strength. A pick is
 // a gust: the frond whips and springs back, and a puff of spores leaves the gold tips.
+// A PLAY Dual lane is too narrow for the fronds: there the whole art is fitted into it.
 
 #include "VoLumArtAnimator.h"
 #include "VoLumArtCommon.h"
 
 namespace volumart::art
 {
-inline void DrawBrunettiHero(IGraphics& g, const IRECT& rect)
+// Points outside cull (padded by 4) are skipped; cull is rect unless a Dual lane fit
+// brings more of the art space into view.
+inline void DrawBrunettiArt(IGraphics& g, const IRECT& rect, const IRECT& cull)
 {
   [[maybe_unused]] const float cx = rect.MW(), cy = rect.MH(), w = rect.W(), h = rect.H();
   // clang-format off
@@ -29,7 +32,7 @@ inline void DrawBrunettiHero(IGraphics& g, const IRECT& rect)
       else { nx = -0.15f * px + 0.28f * py; ny = 0.26f * px + 0.24f * py + 0.44f; }
       px = nx; py = ny; if (i == 0) continue;
       const float sx = bx + px * fsc, sy = by - py * fh;
-      if (sx < rect.L - 4.f || sx > rect.R + 4.f || sy < rect.T - 4.f || sy > rect.B + 4.f) continue;
+      if (sx < cull.L - 4.f || sx > cull.R + 4.f || sy < cull.T - 4.f || sy > cull.B + 4.f) continue;
       IColor c = Mix(base, tip, std::min(1.f, py / 9.f));
       if (gold && py > 7.6f) c = Mix(c, kGoldHi, (py - 7.6f) / 2.4f);
       g.FillCircle(WithA(c, a), sx, sy, rr);
@@ -44,7 +47,7 @@ inline void DrawBrunettiHero(IGraphics& g, const IRECT& rect)
   // clang-format on
 }
 
-// One fern pass of DrawBrunettiHero, with its arguments: 0 = back, 1 = front, 2 = front gold-tipped.
+// One fern pass of DrawBrunettiArt, with its arguments: 0 = back, 1 = front, 2 = front gold-tipped.
 struct BrunettiFern
 {
   int n;
@@ -66,9 +69,9 @@ inline BrunettiFern BrunettiFernAt(const IRECT& rect, int pass)
   // clang-format on
 }
 
-// The pass's points in DrawBrunettiHero's order (same LCG, maps and cull); nothing is drawn.
+// The pass's points in DrawBrunettiArt's order (same LCG, maps and cull); nothing is drawn.
 template <class Visit>
-inline void BrunettiFernPoints(const IRECT& rect, const BrunettiFern& f, Visit&& visit)
+inline void BrunettiFernPoints(const IRECT& cull, const BrunettiFern& f, Visit&& visit)
 {
   // clang-format off
   float px = 0.f, py = 0.f; unsigned s = 42u;
@@ -81,7 +84,7 @@ inline void BrunettiFernPoints(const IRECT& rect, const BrunettiFern& f, Visit&&
     else { nx = -0.15f * px + 0.28f * py; ny = 0.26f * px + 0.24f * py + 0.44f; }
     px = nx; py = ny; if (i == 0) continue;
     const float sx = f.bx + px * f.fsc, sy = f.by - py * f.fh;
-    if (sx < rect.L - 4.f || sx > rect.R + 4.f || sy < rect.T - 4.f || sy > rect.B + 4.f) continue;
+    if (sx < cull.L - 4.f || sx > cull.R + 4.f || sy < cull.T - 4.f || sy > cull.B + 4.f) continue;
     visit(i, py, sx, sy);
   }
   // clang-format on
@@ -101,9 +104,9 @@ inline int BrunettiBandOf(float py)
 }
 
 // The pass's points in one bend band (band < 0: all of them), coloured as the hero colours them.
-inline void DrawBrunettiFernBand(IGraphics& g, const IRECT& rect, const BrunettiFern& f, int band)
+inline void DrawBrunettiFernBand(IGraphics& g, const IRECT& cull, const BrunettiFern& f, int band)
 {
-  BrunettiFernPoints(rect, f, [&](int, float py, float sx, float sy) {
+  BrunettiFernPoints(cull, f, [&](int, float py, float sx, float sy) {
     if (band >= 0 && BrunettiBandOf(py) != band)
       return;
     // clang-format off
@@ -112,6 +115,43 @@ inline void DrawBrunettiFernBand(IGraphics& g, const IRECT& rect, const Brunetti
     g.FillCircle(WithA(c, f.a), sx, sy, f.rr);
     // clang-format on
   });
+}
+
+// The front frond's bend at full level as a gust front passes, x h at its tip (Draw:
+// E * (0.012 + 0.045 * lean + sway)); the back frond bends 0.6 x as far.
+inline constexpr float kBrunettiWindReach = 0.06f;
+
+// Every leaflet of the three passes, upright and bent downwind, with a glint's radius;
+// the ground bloom is soft light and may run past the lane.
+inline ArtBox BrunettiExtent(const IRECT& rect)
+{
+  const IRECT everywhere(-1e6f, -1e6f, 1e6f, 1e6f);
+  ArtBox box{1e9f, 1e9f, -1e9f, -1e9f};
+  for (int pass = 0; pass < 3; ++pass)
+  {
+    const BrunettiFern f = BrunettiFernAt(rect, pass);
+    const float tip = (pass == 0 ? 0.6f : 1.f) * kBrunettiWindReach * rect.H();
+    BrunettiFernPoints(everywhere, f, [&](int, float py, float sx, float sy) {
+      const float s = std::clamp(py / 10.f, 0.f, 1.f), s2 = s * s;
+      box.Add(sx, sy, 2.4f);
+      box.Add(sx + tip * s2 * (6.f - 4.f * s + s2) / 3.f, sy, 2.4f);
+    });
+  }
+  return box;
+}
+
+inline ArtLaneFit BrunettiFit(const IRECT& rect)
+{
+  if (!IsNarrowLane(rect.W(), rect.H()))
+    return {};
+  return LaneFit(ArtBoxOf(rect), BrunettiExtent(rect), kLaneFitMargin, 1.f);
+}
+
+inline void DrawBrunettiHero(IGraphics& g, const IRECT& rect)
+{
+  const ArtLaneFit fit = BrunettiFit(rect);
+  const IRECT cull = IRectOf(fit.Unmap(ArtBoxOf(rect)));
+  LaneFitted(g, fit, [&] { DrawBrunettiArt(g, rect, cull); });
 }
 
 class BrunettiAnimator final : public ArtAnimator
@@ -133,11 +173,14 @@ class BrunettiAnimator final : public ArtAnimator
 public:
   // mRest is the hero itself, so silence is bit-exact. The swaying fern is the back pass
   // plus the two front passes cut into height bands, one layer each, built over the next
-  // frames; until they exist the art stays at rest.
+  // frames; until they exist the art stays at rest. In a Dual lane the layers are built
+  // under the lane fit and the live light drawn under it; mSeen is the art space in view.
   bool Prepare(IGraphics& g, IControl* owner, const IRECT& r) override
   {
     if (!mRest.Ok(g))
     {
+      mFit = BrunettiFit(r);
+      mSeen = IRectOf(mFit.Unmap(ArtBoxOf(r)));
       mRest.Build(g, owner, r, [&] { DrawBrunettiHero(g, r); });
       FindLeaves(r);
       return false;
@@ -145,7 +188,7 @@ public:
     if (!mBack.Ok(g))
     {
       const BrunettiFern back = BrunettiFernAt(r, 0);
-      mBack.Build(g, owner, r, [&] { DrawBrunettiFernBand(g, r, back, -1); });
+      mBack.Build(g, owner, r, [&] { LaneFitted(g, mFit, [&] { DrawBrunettiFernBand(g, mSeen, back, -1); }); });
       return false;
     }
     for (int k = 0; k < kBrunettiBands; ++k)
@@ -153,8 +196,10 @@ public:
       {
         const BrunettiFern front = BrunettiFernAt(r, 1), gold = BrunettiFernAt(r, 2);
         mBand[k].Build(g, owner, r, [&] {
-          DrawBrunettiFernBand(g, r, front, k);
-          DrawBrunettiFernBand(g, r, gold, k);
+          LaneFitted(g, mFit, [&] {
+            DrawBrunettiFernBand(g, mSeen, front, k);
+            DrawBrunettiFernBand(g, mSeen, gold, k);
+          });
         });
         return k == kBrunettiBands - 1;
       }
@@ -195,13 +240,17 @@ public:
     Chord(0.f, 1.f, bendBack, 0.f, mBackBy, mBackH, mBackA, mBackB);
 
     const float gx = r.MW(), gy = r.T + h * 0.86f, gR = std::min(r.W(), h) * 0.8f;
-    Bloom(g, gx, gy, gR, kTeal, 0.13f);
-    BloomAdd(g, gx, gy, gR, kTeal, 0.13f, m.bloom);
+    LaneFitted(g, mFit, [&] {
+      Bloom(g, gx, gy, gR, kTeal, 0.13f);
+      BloomAdd(g, gx, gy, gR, kTeal, 0.13f, m.bloom);
+    });
     DrawBent(g, r, mBack, mBackA, mBackB, m.bloom);
     for (int k = 0; k < kBrunettiBands; ++k)
       DrawBent(g, r, mBand[k], mA[k], mB[k], m.bloom);
-    DrawSheen(g, r, m, drift, wake);
-    DrawSpores(g, r, m, wake);
+    LaneFitted(g, mFit, [&] {
+      DrawSheen(g, r, m, drift, wake);
+      DrawSpores(g, r, m, wake);
+    });
   }
 
   void DropLayers() override
@@ -246,12 +295,12 @@ private:
     mBackX = back.bx + 1.2f * back.fsc;
     mFrondLeft = front.bx - 2.3f * front.fsc;
     mLeaves.clear();
-    BrunettiFernPoints(r, front, [&](int i, float py, float sx, float sy) {
+    BrunettiFernPoints(mSeen, front, [&](int i, float py, float sx, float sy) {
       if (Hash01(static_cast<uint32_t>(i) * 2654435761u ^ 0x1eafu) < kLeafShare)
         mLeaves.push_back({sx, sy, BrunettiBandOf(py), static_cast<uint32_t>(i), py > 7.6f});
     });
     std::vector<Tip> tips;
-    BrunettiFernPoints(r, gold, [&](int, float py, float sx, float sy) {
+    BrunettiFernPoints(mSeen, gold, [&](int, float py, float sx, float sy) {
       if (py > 8.4f)
         tips.push_back({sx, sy, BrunettiBandOf(py)});
     });
@@ -303,9 +352,11 @@ private:
     A = d0 + K * (by - s0 * H);
   }
 
-  static void DrawBent(IGraphics& g, const IRECT& r, const ArtLayer& layer, float A, float B, float bloom)
+  // A and B bend the art space; the layer holds the fitted art, so the chord is carried
+  // through the lane fit: x' = x + s A - B ty + B y.
+  void DrawBent(IGraphics& g, const IRECT& r, const ArtLayer& layer, float A, float B, float bloom) const
   {
-    const IMatrix xf(1.0, 0.0, B, 1.0, A, 0.0);
+    const IMatrix xf(1.0, 0.0, B, 1.0, mFit.s * A - B * mFit.ty, 0.0);
     layer.DrawXform(g, r, xf);
     if (bloom > 0.f)
       layer.DrawXform(g, r, xf, bloom, true);
@@ -434,6 +485,8 @@ private:
   ArtLayer mRest;
   ArtLayer mBack;
   ArtLayer mBand[kBrunettiBands];
+  ArtLaneFit mFit;
+  IRECT mSeen;
   std::vector<Leaf> mLeaves;
   std::vector<Tip> mTips;
   std::vector<float> mBucket[4];
