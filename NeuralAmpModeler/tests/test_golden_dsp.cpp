@@ -49,7 +49,7 @@ void ExpectGoldenHash(const char* name, const std::string& actual, const char* w
   CHECK(actual == std::string(expected));
 }
 
-std::vector<double> RunDelayGolden(int mode)
+std::vector<double> RunDelayGolden(int mode, bool sameOnBothSides = false)
 {
   constexpr double sampleRate = 48000.0;
   constexpr std::size_t frames = 512;
@@ -62,7 +62,9 @@ std::vector<double> RunDelayGolden(int mode)
   for (int block = 0; block < 24; ++block)
   {
     left = volum::test::MakeReferenceInput(frames, sampleRate, 0x1000U + static_cast<unsigned>(block));
-    right = volum::test::MakeReferenceInput(frames, sampleRate, 0x2000U + static_cast<unsigned>(block));
+    right = sameOnBothSides
+              ? left
+              : volum::test::MakeReferenceInput(frames, sampleRate, 0x2000U + static_cast<unsigned>(block));
     double* inputs[2] = {left.data(), right.data()};
     auto** out = delay.Process(inputs, 2, frames);
     volum::test::AppendChannel(rendered, out[0], frames);
@@ -191,17 +193,31 @@ TEST_CASE("Golden DSP: PRE effects and tone stack hashes stay stable")
                    "81ef87af81dac5d6a5cf146cb233d0ac72248addf3bce8dd4721b0a00a865518");
 }
 
+// Digital and Analog run ping-pong on independent noise per side, so their hashes moved
+// in 1.3.0 when the ping-pong seed became the L/R mid (was L only).
 TEST_CASE("Golden DSP: delay mode hashes stay stable")
 {
   ExpectGoldenHash("delay-digital", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital)),
-                   "32c0b64268eb5d72978c332ed545e751c8c5f20ba2d8e31442f8d77997be9f1c",
+                   "abfb022c399f822ee8aaac8d930170eed2cc37e795d4b8a785c991928f11a6a2",
                    "2e86b97a8c05dea10e7adb1f49fd2406746dd48a6b8019e4b7fa53ea97dadaf8");
   ExpectGoldenHash("delay-analog", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog)),
-                   "6fa73c812fac2f053beea8f3ae363a04c45a626ec52874dc41f3eb9b2f212573",
+                   "ac3e9d18fadb531d8bf0aa66c498cf8d1d180dea650f4809c43a773afca99ac9",
                    "2b22e1f4e29f863495a9bed90c24271c0543ff30aec1fe043b577134788eb195");
   ExpectGoldenHash("delay-reverse", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeReverse)),
                    "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4",
                    "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
+}
+
+// A single amp reaches the delay as L == R. These were pinned from the left-only
+// ping-pong seed before it became the L/R mid, and must never move.
+TEST_CASE("Golden DSP: ping-pong with the same input on both sides stays stable")
+{
+  ExpectGoldenHash("delay-digital-same-lr",
+                   volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital, true)),
+                   "e3734fcefe5528ee7e6c3906b1168a960dc24272a87620cee752e3e3d2a54745", "pending");
+  ExpectGoldenHash("delay-analog-same-lr",
+                   volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog, true)),
+                   "fe11f80414720180f957516e95cb22ed578aca9ae8b726194638ab9bcd408def", "pending");
 }
 
 // Every reverb hash below changed in 1.2.1, deliberately: the topology was fixed. The
