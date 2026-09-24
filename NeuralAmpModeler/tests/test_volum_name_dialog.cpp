@@ -4,6 +4,7 @@
 #include "VoLumNameDialogModel.h"
 
 #include <string>
+#include <utility>
 
 namespace nd = volum::name_dialog;
 
@@ -217,4 +218,211 @@ TEST_CASE("Name dialog text is UTF-8 safe, printable, and capped at the preset n
   // Seeds are clamped the same way the registry clamps names.
   auto longSeed = Opened(std::string(40, 'z'));
   CHECK(longSeed.draft.size() == volum::custom::kMaxPresetNameLen);
+}
+
+namespace
+{
+nd::KeyAction Ctrl(nd::State& s, int vk, bool shift = false)
+{
+  // Windows turns Ctrl+Backspace into DEL (0x7F) and Ctrl+letters into control
+  // characters; arrows and Delete carry no text.
+  const char* text = vk == nd::kVkBack ? "\x7f" : "";
+  return nd::ApplyKey(s, vk, text, shift, true, false);
+}
+
+nd::State AtEnd(const std::string& text)
+{
+  auto s = Opened(text);
+  nd::MoveCaretTo(s, s.draft.size(), false);
+  return s;
+}
+} // namespace
+
+TEST_CASE("Name dialog word boundaries: spaces and punctuation split words, UTF-8 stays whole")
+{
+  const std::string t = "Lead-Tone  v2";
+  CHECK(nd::PrevWordStart(t, t.size()) == 11); // "v2"
+  CHECK(nd::PrevWordStart(t, 11) == 5); // over the spaces, then "Tone"
+  CHECK(nd::PrevWordStart(t, 5) == 4); // the dash is its own run
+  CHECK(nd::PrevWordStart(t, 4) == 0);
+  CHECK(nd::PrevWordStart(t, 0) == 0);
+  CHECK(nd::NextWordStart(t, 0) == 4);
+  CHECK(nd::NextWordStart(t, 4) == 5);
+  CHECK(nd::NextWordStart(t, 5) == 11); // "Tone" plus the spaces after it
+  CHECK(nd::NextWordStart(t, 11) == t.size());
+
+  // A multibyte glyph is part of its word; no boundary lands inside it.
+  const std::string umlaut = "Gr\xC3\xBCn Amp";
+  CHECK(nd::PrevWordStart(umlaut, 5) == 0);
+  CHECK(nd::NextWordStart(umlaut, 0) == 6);
+  CHECK(nd::WordRangeAt(umlaut, 3) == std::pair<std::size_t, std::size_t>(0, 5));
+}
+
+TEST_CASE("Name dialog Ctrl+Backspace deletes the previous word")
+{
+  auto s = AtEnd("Crunch Rhythm 2");
+  CHECK(Ctrl(s, nd::kVkBack) == nd::KeyAction::Edited);
+  CHECK(s.draft == "Crunch Rhythm ");
+  Ctrl(s, nd::kVkBack);
+  CHECK(s.draft == "Crunch ");
+  Ctrl(s, nd::kVkBack);
+  CHECK(s.draft.empty());
+  CHECK(s.caret == 0);
+
+  // A selection goes first, like a plain Backspace.
+  auto sel = Opened("Clean Verb");
+  Ctrl(sel, nd::kVkBack);
+  CHECK(sel.draft.empty());
+}
+
+TEST_CASE("Name dialog Ctrl+Delete deletes the next word and the spaces after it")
+{
+  auto s = Opened("Crunch Rhythm 2");
+  nd::MoveCaretTo(s, 0, false);
+  CHECK(Ctrl(s, nd::kVkDelete) == nd::KeyAction::Edited);
+  CHECK(s.draft == "Rhythm 2");
+  CHECK(s.caret == 0);
+  nd::MoveCaretTo(s, 3, false); // inside a word: to its end and the spaces
+  Ctrl(s, nd::kVkDelete);
+  CHECK(s.draft == "Rhy2");
+}
+
+TEST_CASE("Name dialog Ctrl+Left / Ctrl+Right jump by word, Shift extends")
+{
+  auto s = AtEnd("Lead Boost Hot");
+  Ctrl(s, nd::kVkLeft);
+  CHECK(s.caret == 11);
+  CHECK_FALSE(nd::HasSelection(s));
+  Ctrl(s, nd::kVkLeft, true);
+  CHECK(nd::SelectedText(s) == "Boost ");
+  Ctrl(s, nd::kVkRight, true);
+  CHECK_FALSE(nd::HasSelection(s)); // back where the selection started
+  Ctrl(s, nd::kVkHome);
+  CHECK(s.caret == 0);
+  Ctrl(s, nd::kVkRight);
+  CHECK(s.caret == 5);
+  Ctrl(s, nd::kVkRight, true);
+  Ctrl(s, nd::kVkRight, true);
+  CHECK(nd::SelectedText(s) == "Boost Hot");
+}
+
+TEST_CASE("Name dialog Ctrl+Z undoes, typing runs undo as one step, Ctrl+Y and Ctrl+Shift+Z redo")
+{
+  auto s = Opened("Clean");
+  Type(s, "Lead"); // replaces the selected seed: one step
+  Type(s, " two"); // continues the run
+  CHECK(s.draft == "Lead two");
+  CHECK(Ctrl(s, 'Z') == nd::KeyAction::Edited);
+  CHECK(s.draft == "Clean");
+  CHECK(nd::SelectedText(s) == "Clean"); // selection restored with it
+  CHECK(Ctrl(s, 'Z') == nd::KeyAction::Ignored); // nothing older
+  CHECK(Ctrl(s, 'Y') == nd::KeyAction::Edited);
+  CHECK(s.draft == "Lead two");
+
+  // A caret move ends the run; held Backspace is one step of its own.
+  nd::ApplyKey(s, nd::kVkLeft, "", false, false, false);
+  nd::ApplyKey(s, nd::kVkRight, "", false, false, false);
+  Type(s, "!");
+  nd::ApplyKey(s, nd::kVkBack, "\b", false, false, false);
+  nd::ApplyKey(s, nd::kVkBack, "\b", false, false, false);
+  nd::ApplyKey(s, nd::kVkBack, "\b", false, false, false);
+  CHECK(s.draft == "Lead t");
+  Ctrl(s, 'Z');
+  CHECK(s.draft == "Lead two!");
+  Ctrl(s, 'Z');
+  CHECK(s.draft == "Lead two");
+  CHECK(Ctrl(s, 'Z', true) == nd::KeyAction::Edited); // Ctrl+Shift+Z
+  CHECK(s.draft == "Lead two!");
+
+  // A new edit clears the redo branch; paste and word delete are steps of their own.
+  Type(s, "?");
+  CHECK(Ctrl(s, 'Y') == nd::KeyAction::Ignored);
+  nd::PasteText(s, "xx");
+  Ctrl(s, nd::kVkBack); // "xx" is the last word; the "?" before it is punctuation
+  CHECK(s.draft == "Lead two!?");
+  Ctrl(s, 'Z');
+  CHECK(s.draft == "Lead two!?xx");
+  Ctrl(s, 'Z');
+  CHECK(s.draft == "Lead two!?");
+
+  // Reopening starts a fresh history.
+  nd::Open(s, "Other", "");
+  CHECK(Ctrl(s, 'Z') == nd::KeyAction::Ignored);
+}
+
+TEST_CASE("Name dialog cut is undoable")
+{
+  auto s = Opened("Crunch");
+  nd::CutSelection(s);
+  CHECK(s.draft.empty());
+  Ctrl(s, 'Z');
+  CHECK(s.draft == "Crunch");
+}
+
+TEST_CASE("Name dialog clicks: one places the caret, two select a word, three select all")
+{
+  nd::ClickTracker t;
+  CHECK(nd::RegisterClick(t, 1000.0, 10.f, 10.f, false) == 1);
+  CHECK(nd::RegisterClick(t, 1200.0, 11.f, 10.f, true) == 2);
+  CHECK(nd::RegisterClick(t, 1400.0, 11.f, 11.f, false) == 3);
+  CHECK(nd::RegisterClick(t, 1500.0, 11.f, 11.f, false) == 3);
+  CHECK(nd::RegisterClick(t, 2600.0, 11.f, 11.f, false) == 1); // too late
+  CHECK(nd::RegisterClick(t, 2700.0, 40.f, 11.f, false) == 1); // moved away
+  CHECK(nd::RegisterClick(t, 2750.0, 40.f, 11.f, true) == 2);
+
+  auto s = Opened("Crunch Rhythm");
+  nd::PointerDown(s, 9, 1, false);
+  CHECK(s.caret == 9);
+  CHECK_FALSE(nd::HasSelection(s));
+  nd::PointerDown(s, 9, 2, false);
+  CHECK(nd::SelectedText(s) == "Rhythm");
+  nd::PointerDown(s, 2, 2, false);
+  CHECK(nd::SelectedText(s) == "Crunch");
+  nd::PointerDown(s, 9, 3, false);
+  CHECK(nd::SelectedText(s) == "Crunch Rhythm");
+  nd::PointerDown(s, 3, 1, false);
+  nd::PointerDown(s, 9, 1, true); // Shift+click extends
+  CHECK(nd::SelectedText(s) == "nch Rh");
+}
+
+TEST_CASE("Name dialog drag selects by character, or by word after a double-click")
+{
+  auto s = Opened("Lead Boost Hot");
+  nd::PointerDown(s, 2, 1, false);
+  nd::PointerDrag(s, 7);
+  CHECK(nd::SelectedText(s) == "ad Bo");
+  nd::PointerDrag(s, 0); // back past the anchor
+  CHECK(nd::SelectedText(s) == "Le");
+
+  nd::PointerDown(s, 6, 2, false); // "Boost"
+  nd::PointerDrag(s, 12);
+  CHECK(nd::SelectedText(s) == "Boost Hot");
+  nd::PointerDrag(s, 1);
+  CHECK(nd::SelectedText(s) == "Lead Boost");
+
+  nd::PointerDown(s, 6, 3, false);
+  nd::PointerDrag(s, 1);
+  CHECK(nd::SelectedText(s) == "Lead Boost Hot");
+}
+
+TEST_CASE("Name dialog caret blinks at the Windows rate and shows on every key")
+{
+  CHECK(nd::CaretVisible(0.0));
+  CHECK(nd::CaretVisible(nd::kCaretBlinkMs - 1.0));
+  CHECK_FALSE(nd::CaretVisible(nd::kCaretBlinkMs + 1.0));
+  CHECK(nd::CaretVisible(2.0 * nd::kCaretBlinkMs + 1.0));
+  CHECK(nd::CaretBlinkPhase(nd::kCaretBlinkMs * 3.5) == 3);
+  CHECK(nd::kCaretBlinkMs == doctest::Approx(530.0));
+}
+
+TEST_CASE("Name dialog cap follows the item being named")
+{
+  nd::State s;
+  nd::Open(s, "V30 Cab", "", 3);
+  CHECK(s.draft == "V30");
+  nd::MoveCaretTo(s, s.draft.size(), false);
+  Type(s, "x");
+  CHECK(s.draft == "V30");
+  nd::Open(s, std::string(40, 'a'), "", volum::custom::kMaxCustomNameLen);
+  CHECK(s.draft.size() == volum::custom::kMaxCustomNameLen);
 }

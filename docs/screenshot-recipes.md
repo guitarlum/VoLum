@@ -266,6 +266,12 @@ pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "10,10;743,22" -Settl
   `%TEMP%\volum-ui-sandbox\VoLum\volum.log`). Use `<art>:1:run` and `<art>:1:run:1`
   and wait ~5 s so a full window is in. Budget: average 1.5 ms, peak 2.5 ms at
   900x600 mono; a resting art stays under 0.15 ms.
+- Whole-frame cost: `VOLUM_FRAME_PERF=<ms>` (Windows standalone) writes a
+  `[frame] draw <total> ms  regions <n>  [<per region>]` line to `volum.log` for
+  every painted frame that took at least `<ms>` (`0` logs all). Each region pays
+  one GPU sync, so compare region times rather than totals of frames with a
+  different region count. Drive input without `ui-drive.ps1` while measuring: a
+  self-capture repaints the whole window.
 
 ## 4. Verify + restore
 

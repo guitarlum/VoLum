@@ -952,11 +952,12 @@ function Test-SaveDialog {
     $afterCancels = Read-Json $contentPath
 
     # Save through the keyboard route: the seed is selected, typing replaces it,
-    # Enter commits.
+    # Ctrl+Backspace takes the last word back off, Enter commits (trailing space trimmed).
     & $open
-    [VoLumE2eUi]::Type($h, "e2e lead"); Start-Sleep -Milliseconds 200
+    [VoLumE2eUi]::Type($h, "e2e lead x"); Start-Sleep -Milliseconds 200
+    $ctrlShared = [VoLumE2eUi]::KeyMod($h, 0x08, $false, $true); Start-Sleep -Milliseconds 200
     [VoLumE2eUi]::Key($h, 0x0D); Start-Sleep -Milliseconds 1000
-    return @{ afterCancels = $afterCancels }
+    return @{ afterCancels = $afterCancels; ctrlShared = $ctrlShared }
   }
   Assert-True "app opened a window" $run.started
   Assert-True "app closed gracefully" $run.graceful
@@ -979,7 +980,8 @@ function Test-SaveDialog {
   $rows = Get-PresetRows $after
   Assert-Equal "Save created exactly one preset" ($presetsBefore + 1) $rows.Count
   $saved = @($rows | Where-Object { $_.name -ceq "e2e lead" })[0]
-  Assert-True "preset carries the typed name" ($null -ne $saved) ("names: " + (($rows | ForEach-Object { $_.name }) -join ", "))
+  Assert-True "Ctrl reached VoLum for Ctrl+Backspace" ($run.drive -and $run.drive.ctrlShared)
+  Assert-True "preset carries the typed name, last word removed by Ctrl+Backspace" ($null -ne $saved) ("names: " + (($rows | ForEach-Object { $_.name }) -join ", "))
   $map = Get-MidiMapRows $after
   Assert-Equal "Save added exactly one PLAY slot" ($mapBefore + 1) $map.Count
   if ($saved -and $map.Count -ge 1) {

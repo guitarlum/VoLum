@@ -440,6 +440,48 @@ TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
   CHECK(runtime.substr(finish, finishEnd - finish).find("mVolumLastRecalledPlaySlot = slot") != std::string::npos);
 }
 
+TEST_CASE("Every name prompt uses the shared name dialog; only numeric boxes stay native")
+{
+  // Manage new / rename and the builder's amp name / cab labels used iPlug's text
+  // entry, which has no word keys, no undo and commits on focus loss.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto start = overlay.find("void StartTextEntry(");
+  REQUIRE(start != std::string::npos);
+  const auto native = overlay.find("->CreateTextEntry(", start);
+  REQUIRE(native != std::string::npos);
+  const std::string beforeNative = overlay.substr(start, native - start);
+  CHECK(beforeNative.find("!IsIrValueTarget(target) && mNamePrompt") != std::string::npos);
+  CHECK(beforeNative.find("return;") != std::string::npos);
+
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto wire = layout.find("overlay->SetNamePromptCallback(");
+  REQUIRE(wire != std::string::npos);
+  CHECK(layout.substr(wire, 700).find("->ShowName(") != std::string::npos);
+
+  const std::string bar = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPresetBar.h");
+  CHECK(bar.find("CreateTextEntry(") == std::string::npos);
+}
+
+TEST_CASE("Name dialog keys and caret blink repaint the box, not the whole window")
+{
+  // iPlug repaints a dirty control's whole rect and every control under it. The
+  // dialog used to span the window, so each key repainted the entire UI.
+  const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumNameDialog.h");
+  const auto ctor = dialog.find("explicit VoLumNameDialogControl(const IRECT& fullBounds)");
+  REQUIRE(ctor != std::string::npos);
+  const std::string ctorBody = dialog.substr(ctor, 220);
+  CHECK(ctorBody.find(": IControl(BoxFor(fullBounds).GetPadded(5.f))") != std::string::npos);
+  CHECK(ctorBody.find("SetTargetRECT(fullBounds);") != std::string::npos);
+  CHECK(dialog.find("class VoLumNameDialogScrimControl") != std::string::npos);
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto scrim = layout.find("new VoLumNameDialogScrimControl(b)");
+  const auto dlg = layout.find("AttachControl(nameDlg, kCtrlTagVoLumNameDialog)");
+  REQUIRE(scrim != std::string::npos);
+  REQUIRE(dlg != std::string::npos);
+  CHECK(scrim < dlg);
+  CHECK(layout.find("nameDlg->SetScrim(nameScrim);") != std::string::npos);
+}
+
 TEST_CASE("H peels Pack before it closes Settings")
 {
   // This used to be pinned as "the Pack branch appears before the Settings

@@ -30,9 +30,6 @@ public:
   // Fired when the user steps presets with the < / > arrows; the host applies
   // that preset (settings recall) and drives the bar back via SelectName.
   using RecallCallback = std::function<void(int index)>;
-  // Fired when the user picks "Save current as new..." from the dropdown and
-  // types a name; the host snapshots the live rig under that name.
-  using SaveAsCallback = std::function<void(const std::string&)>;
 
   VoLumPresetBarControl(const IRECT& bounds, OpenCallback openCb)
   : IControl(bounds)
@@ -41,7 +38,6 @@ public:
   }
 
   void SetRecallCallback(RecallCallback cb) { mRecall = std::move(cb); }
-  void SetSaveAsCallback(SaveAsCallback cb) { mSaveAs = std::move(cb); }
 
   // Set the active amp's preset bank. Clears selection (the caller re-selects).
   // Empty list => "No Preset"; dirty is preserved so a follow-up recompute
@@ -113,31 +109,6 @@ public:
   // Whether the live rig has diverged from the recalled snapshot.
   bool IsEditDirty() const { return mDirtyEdit; }
   bool IsFactoryActive() const { return mFactory; }
-
-  // Open an inline text entry to name a new preset; on completion fires the
-  // save-as callback. Used by the dropdown's "Save current as new..." row.
-  void PromptSaveAs()
-  {
-    if (auto* ui = GetUI())
-    {
-      const IRECT mid = mRECT.GetReducedFromLeft(22.f).GetReducedFromRight(22.f);
-      SetTextEntryLength((int)volum::custom::kMaxPresetNameLen);
-      ui->CreateTextEntry(
-        *this, IText(13.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mid, "");
-    }
-  }
-
-  void OnTextEntryCompletion(const char* str, int) override
-  {
-    std::string name = str ? str : "";
-    // Trim surrounding whitespace; ignore an empty name.
-    const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
-    name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
-    name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
-    name = volum::custom::ClampName(name, volum::custom::kMaxPresetNameLen);
-    if (!name.empty() && mSaveAs)
-      mSaveAs(name);
-  }
 
   void Draw(IGraphics& g) override
   {
@@ -244,5 +215,4 @@ private:
   int mIdx = -1;
   OpenCallback mOpen;
   RecallCallback mRecall;
-  SaveAsCallback mSaveAs;
 };

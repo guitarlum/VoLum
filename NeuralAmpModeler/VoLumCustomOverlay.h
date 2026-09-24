@@ -77,6 +77,14 @@ public:
   void SetConfirmCallback(ConfirmCallback cb) { mConfirm = std::move(cb); }
   void SetPrimaryActionCallback(PrimaryActionCallback cb) { mPrimaryAction = std::move(cb); }
 
+  // Asks for a name through the shared name dialog (VoLumNameDialog.h), so every
+  // name field in VoLum edits the same way. onName runs only on confirm; a cancel
+  // writes nothing. Unset (unit tests, no plugin) falls back to iPlug's text entry.
+  using NamePromptCallback = std::function<void(
+    const std::string& title, const std::string& message, const std::string& seed, std::size_t maxLen,
+    const std::string& confirmLabel, std::function<void(const std::string&)> onName, std::function<void()> onCancel)>;
+  void SetNamePromptCallback(NamePromptCallback cb) { mNamePrompt = std::move(cb); }
+
   // Delete of an id this instance is currently playing (VoLumRigRepair.h).
   //   planCb: asked before the delete; returns the confirm body, which names the
   //           in-use case and where the lane is going. Planning has to happen
@@ -372,15 +380,17 @@ public:
       }
   }
 
-  void OnTextEntryCompletion(const char* str, int) override
+  void OnTextEntryCompletion(const char* str, int) override { ApplyTextResult(str ? str : ""); }
+
+  void ApplyTextResult(const std::string& text)
   {
     using namespace volum::custom;
     if (IsIrValueTarget(mTextTarget))
     {
-      ApplyIrValueEntry(str ? str : "");
+      ApplyIrValueEntry(text);
       return;
     }
-    const std::string s = ClampName(str ? str : "", (std::size_t)NameEntryCap(mTextTarget));
+    const std::string s = ClampName(text, (std::size_t)NameEntryCap(mTextTarget));
     switch (mTextTarget)
     {
       case TextTarget::NewItem: // presets only (IR/pedals add via file dialog)
@@ -883,8 +893,43 @@ private:
     if (!ui)
       return;
     mTextTarget = target;
+    if (!IsIrValueTarget(target) && mNamePrompt)
+    {
+      const NamePrompt p = NamePromptFor(target);
+      mNamePrompt(
+        p.title, p.message, current, (std::size_t)NameEntryCap(target), p.confirm,
+        [this, target](const std::string& name) {
+          mTextTarget = target;
+          ApplyTextResult(name);
+        },
+        [this]() {
+          mTextTarget = TextTarget::None;
+          mTextCabSlot = -1;
+          SetDirty(false);
+        });
+      return;
+    }
     SetTextEntryLength(NameEntryCap(target));
     ui->CreateTextEntry(*this, style ? *style : mEntryText, bounds, current.c_str());
+  }
+
+  struct NamePrompt
+  {
+    std::string title, message, confirm;
+  };
+
+  NamePrompt NamePromptFor(TextTarget target) const
+  {
+    const char* item = mManageKind == ManageKind::Presets ? "preset" : mManageKind == ManageKind::IR ? "IR" : "pedal";
+    switch (target)
+    {
+      case TextTarget::NewItem: return {"New preset", "Name the new User preset.", "Save"};
+      case TextTarget::RenameItem:
+        return {std::string("Rename ") + item, "New name for \"" + mRenameName + "\".", "Rename"};
+      case TextTarget::ProfileName: return {"Amp name", "Name this custom amp.", "OK"};
+      case TextTarget::CabName: return {"Cab label", "Up to 3 characters, shown on the cab button.", "OK"};
+      default: return {"Name", "", "OK"};
+    }
   }
 
   /* ---------------- action handling ---------------- */
@@ -2025,6 +2070,7 @@ private:
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
   ConfirmCallback mConfirm;
+  NamePromptCallback mNamePrompt;
   RigRepairPlanCallback mPlanRigRepair; // see VoLumRigRepair.h
   RigRepairApplyCallback mApplyRigRepair;
   PrimaryActionCallback mPrimaryAction;

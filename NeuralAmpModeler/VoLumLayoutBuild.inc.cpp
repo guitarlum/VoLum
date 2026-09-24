@@ -3,6 +3,7 @@
 // file-size hygiene; tail-#included into the NeuralAmpModeler TU (not a separate
 // build target). Behaviour is identical: the lambda now just forwards here.
 
+#include "VoLumFramePerf.h"
 #include "VoLumSelfCapture.h"
 
 void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
@@ -52,6 +53,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   const auto header = volum::LayoutHeaderChrome(mainL, mainR, b.T);
 
   pGraphics->AttachControl(new VoLumBackgroundControl(b, sidebarW));
+  const auto framePerf = volum::frameperf::AttachBeginIfRequested(pGraphics);
   pGraphics->AttachControl(new VoLumKnobSelectionClearControl(IRECT(mainL, b.T, mainR, b.B), [this]() {
     _ClearVoLumKnobSelection();
     _VolumHidePreCaptureMenu();
@@ -1156,7 +1158,6 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       {
         auto* bar = pb->As<VoLumPresetBarControl>();
         bar->SetRecallCallback([pPlugin](int index) { pPlugin->_VolumRecallPreset(index); });
-        bar->SetSaveAsCallback([pPlugin](const std::string& name) { pPlugin->_VolumSavePresetAs(name); });
         pPlugin->_VolumRefreshPresetBar();
       }
     }
@@ -1393,6 +1394,15 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
               dlg->As<VoLumConfirmDialogControl>()->Show("Are you sure?", msg, std::move(onConfirm), confirmLabel);
         });
+      overlay->SetNamePromptCallback(
+        [pPlugin](const std::string& title, const std::string& msg, const std::string& seed, std::size_t maxLen,
+                  const std::string& confirmLabel, std::function<void(const std::string&)> onName,
+                  std::function<void()> onCancel) {
+          if (auto* pGfx = pPlugin->GetUI())
+            if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog))
+              dlg->As<VoLumNameDialogControl>()->ShowName(
+                title, msg, seed, maxLen, confirmLabel, std::move(onName), std::move(onCancel));
+        });
       // Double-clicking a Manage row performs its primary action (mock):
       //   preset -> recall onto the header bar; IR -> use on the focused cab;
       //   pedal  -> load into the originating PRE NAM slot (backend wires DSP).
@@ -1427,7 +1437,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
 
       // Shared "Are you sure?" modal, attached above the overlay.
       pGraphics->AttachControl(new VoLumConfirmDialogControl(b), kCtrlTagVoLumConfirm)->Hide(true);
+      auto* nameScrim = new VoLumNameDialogScrimControl(b);
+      pGraphics->AttachControl(nameScrim)->Hide(true);
       auto* nameDlg = new VoLumNameDialogControl(b);
+      nameDlg->SetScrim(nameScrim);
       pGraphics->AttachControl(nameDlg, kCtrlTagVoLumNameDialog)->Hide(true);
       pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
     }
@@ -1739,6 +1752,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     pControl->SetMouseEventsWhenDisabled(volum::DisabledPointerPolicy::kMouseEventsWhenDisabled);
   });
 
-  // Debug/test only, and only with VOLUM_SELF_CAPTURE_DIR set. Must stay last.
+  // Debug only, and only with VOLUM_FRAME_PERF / VOLUM_SELF_CAPTURE_DIR set. Must stay last.
+  volum::frameperf::AttachEnd(pGraphics, framePerf);
   volum::selfcapture::AttachIfRequested(pGraphics);
 }
