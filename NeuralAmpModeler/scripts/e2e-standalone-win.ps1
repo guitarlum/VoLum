@@ -1043,6 +1043,90 @@ function Test-SaveDialog {
   Assert-Equal "each BUILD dialog cancelled with Esc" 4 ([regex]::Matches($log, "save dialog cancelled")).Count
   Assert-Equal "cancelled BUILD dialogs wrote no preset" $rows.Count (Get-PresetRows (Read-Json $contentPath)).Count
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+
+  # A dirty Factory Sound on the LIVE switch used to be overwritten: Save As from
+  # Add this sound retargeted that switch onto the new User copy, so finish() saw
+  # it assigned and added nothing. SaveOrigin::AddSound leaves the Factory row alone.
+  Write-Host "  [savedialog] Add this sound on a tweaked Factory switch adds a new switch" -ForegroundColor Cyan
+  $sandbox = New-Sandbox "savedialog-factory"
+  $root = Join-Path $sandbox "VoLum"
+  Write-SandboxAudioConfig $sandbox
+  $contentPath = Join-Path $root "content\volum-content.json"
+  $settingsPath = Join-Path $root "volum-settings.json"
+  $logPath = Join-Path $root "volum.log"
+
+  $first = Invoke-VoLumRun -SandboxRoot $sandbox
+  Assert-True "Factory case: first launch opened a window" $first.started
+  $content = Read-Json $contentPath
+  if (-not $content) { Assert-True "Factory case: first launch wrote volum-content.json" $false; return }
+  $content | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue @(
+    [pscustomobject]@{ slot = 0; ampId = "factory:0"; presetId = "factory:0:v1" }
+  ) -Force
+  $content | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
+
+  $settings = Read-Json $settingsPath
+  if (-not $settings) { Assert-True "Factory case: first launch wrote volum-settings.json" $false; return }
+  $settings | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "build" -Force
+  $settings | Add-Member -NotePropertyName volumCustomMainId -NotePropertyValue "" -Force
+  $settings | Add-Member -NotePropertyName lastAmpIdx -NotePropertyValue 0 -Force
+  $settings | Add-Member -NotePropertyName lastPlaySlot -NotePropertyValue 0 -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetId -NotePropertyValue "factory:0:v1" -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetIdByOwner -NotePropertyValue ([pscustomobject]@{
+      "factory:0" = "factory:0:v1"
+    }) -Force
+  $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+
+  $presetsBefore = (Get-PresetRows (Read-Json $contentPath)).Count
+  $mapBefore = Get-MidiMapRows (Read-Json $contentPath)
+  Assert-equal "Factory case: seeded one PLAY row" 1 $mapBefore.Count
+  Remove-Item $logPath -Force -ErrorAction SilentlyContinue
+
+  # One-slot rail: Add sits under the thumb (VoLumPlaySurface AddRect), centre ~803,161.
+  $railAdd = @(803, 161)
+  $preKnob = @(439, 437)   # COMP INPUT under PRE focus (same as BUILD Ctrl+S case)
+  $named = "factory add sound"
+  $factory = Invoke-VoLumRun -SandboxRoot $sandbox -SettleSec 7 -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    # Tweak the live Factory Sound so Add this sound must Save As first.
+    [VoLumE2eUi]::Key($h, 0x31); Start-Sleep -Milliseconds 300   # 1 = PRE
+    [VoLumE2eUi]::Click($h, $preKnob[0], $preKnob[1]); Start-Sleep -Milliseconds 300
+    for ($i = 0; $i -lt 4; $i++) { [VoLumE2eUi]::Key($h, 0x26); Start-Sleep -Milliseconds 80 }  # Up
+    [VoLumE2eUi]::Key($h, 0x50); Start-Sleep -Milliseconds 500   # P = PLAY
+    [VoLumE2eUi]::Click($h, $railAdd[0], $railAdd[1]); Start-Sleep -Milliseconds 400
+    [VoLumE2eUi]::Type($h, $named); Start-Sleep -Milliseconds 200
+    [VoLumE2eUi]::Key($h, 0x0D); Start-Sleep -Milliseconds 1000
+  }
+  Assert-True "Factory case: app opened a window" $factory.started
+  Assert-True "Factory case: app closed gracefully" $factory.graceful
+
+  $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
+  # Positive control: the sound was dirty (dialog opened) and the click hit Add.
+  Assert-equal "Factory case: dirty Add opened the name dialog once" 1 ([regex]::Matches($log, "save dialog open")).Count
+  Assert-equal "Factory case: exactly one save dialog commit" 1 ([regex]::Matches($log, "save dialog commit")).Count
+
+  $after = Read-Json $contentPath
+  $presetRows = Get-PresetRows $after
+  Assert-equal "Factory case: exactly one User preset created" ($presetsBefore + 1) $presetRows.Count
+  $saved = @($presetRows | Where-Object { $_.name -ceq $named })[0]
+  Assert-True "Factory case: preset carries the typed name" ($null -ne $saved) `
+    ("names: " + (($presetRows | ForEach-Object { $_.name }) -join ", "))
+
+  $map = Get-MidiMapRows $after
+  Assert-equal "Factory case: map gained exactly one row" 2 $map.Count
+  $slot0 = @($map | Where-Object { [int]$_.slot -eq 0 })[0]
+  Assert-True "Factory case: slot 0 still present" ($null -ne $slot0)
+  if ($slot0) {
+    Assert-equal "Factory case: slot 0 amp stays Factory" "factory:0" $slot0.ampId
+    Assert-equal "Factory case: slot 0 preset stays Factory Sound" "factory:0:v1" $slot0.presetId
+  }
+  if ($saved) {
+    $newRow = @($map | Where-Object { $_.presetId -eq $saved.id })[0]
+    Assert-True "Factory case: new map row points at the saved User preset" ($null -ne $newRow) `
+      ("map: " + (($map | ForEach-Object { "{0}:{1}:{2}" -f $_.slot, $_.ampId, $_.presetId }) -join " | "))
+  }
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 # --------------------------------------------------------------------------
