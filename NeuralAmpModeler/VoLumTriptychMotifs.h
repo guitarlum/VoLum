@@ -87,11 +87,69 @@ inline void DrawFusionFigureLegacy(IGraphics& g, const IRECT& r, int dir, bool d
   }
 }
 
+// Keypoints of the NAM1 figure traced off the Fusion Dance "HA!" frame (the left
+// dancer). u runs from the outer toe (0) to the shared inner edge (1), v from the
+// top of the raised arm (0) to the floor (1); the box is kFusionAspect wide per 1 tall.
+enum EFusionJoint
+{
+  kFjHead,
+  kFjNeck,
+  kFjWaist,
+  kFjPelvis,
+  kFjShoulderOut,
+  kFjElbowTop,
+  kFjWristTop,
+  kFjTipTop,
+  kFjShoulderIn,
+  kFjElbowLow,
+  kFjWristLow,
+  kFjTipLow,
+  kFjHipOut,
+  kFjKneeOut,
+  kFjAnkleOut,
+  kFjHeelOut,
+  kFjToeOut,
+  kFjHipIn,
+  kFjKneeIn,
+  kFjAnkleIn,
+  kFjHeelIn,
+  kFjToeIn,
+  kFjCount
+};
+constexpr float kFusionAspect = 1.34f;
+constexpr float kFusionHeadR = 0.112f;
+constexpr float kFusionPose[kFjCount][2] = {
+  {0.719f, 0.322f}, // head
+  {0.599f, 0.392f}, // neck
+  {0.523f, 0.483f}, // waist
+  {0.464f, 0.594f}, // pelvis
+  {0.542f, 0.350f}, // shoulderOut
+  {0.711f, 0.024f}, // elbowTop
+  {0.906f, 0.087f}, // wristTop
+  {1.000f, 0.108f}, // tipTop
+  {0.646f, 0.448f}, // shoulderIn
+  {0.807f, 0.636f}, // elbowLow
+  {0.911f, 0.566f}, // wristLow
+  {1.000f, 0.535f}, // tipLow
+  {0.432f, 0.608f}, // hipOut
+  {0.255f, 0.727f}, // kneeOut
+  {0.125f, 0.916f}, // ankleOut
+  {0.146f, 0.972f}, // heelOut
+  {0.005f, 0.979f}, // toeOut
+  {0.505f, 0.622f}, // hipIn
+  {0.635f, 0.720f}, // kneeIn
+  {0.563f, 0.916f}, // ankleIn
+  {0.521f, 0.972f}, // heelIn
+  {0.672f, 0.983f}, // toeIn
+};
+
 // The Fusion Dance "HA!" beat as a stylized silhouette. NAM1 (dir=+1) stands on
-// the left and leans right, NAM2 (dir=-1) is its mirror. Each figure stands on
-// its inner leg with the outer leg kicked out level, the outer arm arched over
-// the head and the inner arm straight, both index fingers touching the shared
-// inner edge where the partner's meet them; a gold flare fires there at card size.
+// the left and leans right, NAM2 (dir=-1) is its mirror. Deep wide crouch with
+// both feet planted: the outer leg reaches long and nearly straight, the inner
+// knee is bent over its foot. The torso leans ~45 degrees in, the head drops low
+// toward the partner; the outer arm arcs over the head and the inner arm bends
+// low in front, and both index fingers touch the shared inner edge where the
+// partner's meet them; gold flares fire there at card size.
 // The whole body is one path: NanoVG fills overlapping subpaths as a nonzero
 // union, so the dimmed alpha stays flat where limbs overlap. The pose keeps its
 // aspect and hugs the inner edge in the portrait card, the landscape PLAY well
@@ -101,21 +159,22 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
   using namespace volumart;
   const float am = dimmed ? 0.28f : 1.0f;
   const bool big = std::min(r.W(), r.H()) > 40.f;
-  const float aspect = 0.82f;
-  const float bh = std::min(r.H() * (big ? 0.94f : 1.f), r.W() / aspect);
-  const float bw = bh * aspect;
+  // At card size leave the 5 px halo room above the arm and below the feet.
+  const float bh = std::min(big ? r.H() - 12.f : r.H(), r.W() * (big ? 0.96f : 1.f) / kFusionAspect);
+  const float bw = bh * kFusionAspect;
   const float seam = dir > 0 ? r.R : r.L;
-  const float top = r.MH() - bh * 0.54f;
+  const float top = r.MH() - bh * 0.5f;
   const float fd = (float)dir;
   struct Pt
   {
     float x, y;
   };
-  // u runs from the outer edge (0) to the seam (1), v from the top (0) to the floor (1).
-  auto P = [&](float u, float v) { return Pt{seam - fd * (1.f - u) * bw, top + v * bh}; };
-  const float minRad = big ? 0.9f : 0.85f;
+  auto J = [&](EFusionJoint j) { return Pt{seam - fd * (1.f - kFusionPose[j][0]) * bw, top + kFusionPose[j][1] * bh}; };
+  const float minRad = big ? 0.9f : 0.8f;
   auto R = [&](float f) { return std::max(minRad, f * bh); };
   auto along = [](Pt a, Pt b, float t) { return Pt{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; };
+  // Control point that makes the quadratic a -> c -> b pass through m at t = 0.5.
+  auto through = [](Pt a, Pt m, Pt b) { return Pt{2.f * m.x - 0.5f * (a.x + b.x), 2.f * m.y - 0.5f * (a.y + b.y)}; };
 
   auto segment = [&](Pt a, float ra, Pt b, float rb) {
     const float dx = b.x - a.x, dy = b.y - a.y, len = std::sqrt(dx * dx + dy * dy);
@@ -147,69 +206,56 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
   };
   auto straight = [&](Pt a, Pt b, float ra, float rb) { limb(a, along(a, b, 0.5f), b, ra, rb, 1); };
 
-  // Skeleton.
-  const Pt pelvis = P(0.44f, 0.60f), neck = P(0.70f, 0.40f);
-  const float ax = neck.x - pelvis.x, ay = neck.y - pelvis.y, alen = std::sqrt(ax * ax + ay * ay);
-  const Pt axis{ax / alen, ay / alen};
-  const Pt out{axis.y * fd, -axis.x * fd}; // perpendicular to the spine, pointing outer-up
-  auto off = [](Pt p, Pt d, float k) { return Pt{p.x + d.x * k, p.y + d.y * k}; };
-  // At Quiet size the arms open wider and thinner, or head and arms clot into one blob.
-  const float headR = std::max(big ? 3.f : 1.7f, 0.056f * bh);
-  const float armR = big ? R(0.022f) : 0.62f, wristR = big ? R(0.014f) : 0.55f;
-  const Pt head = off(neck, axis, R(0.028f) + headR);
-  const Pt shOut = off(neck, out, R(0.062f)), shIn = off(neck, out, -R(0.062f));
-  const Pt touchTop = P(1.f, big ? 0.195f : 0.14f), touchLow = P(1.f, big ? 0.50f : 0.54f);
-  const Pt hipOut = off(pelvis, out, R(0.026f)), hipIn = off(pelvis, out, -R(0.026f));
-  const Pt elbowTop = P(0.67f, big ? 0.09f : 0.f), wristTop = P(0.935f, big ? 0.19f : 0.135f);
-  const Pt wristLow = P(0.935f, big ? 0.495f : 0.535f);
-  const Pt kneeOut = P(0.25f, 0.555f), ankleOut = P(0.06f, 0.495f), toe = P(0.f, 0.48f);
-  const Pt kneeIn = P(0.56f, 0.78f), ankleIn = P(0.53f, 0.955f);
-  const float tipR = std::max(0.35f, 0.003f * bh);
+  const Pt head = J(kFjHead), neck = J(kFjNeck), waist = J(kFjWaist), pelvis = J(kFjPelvis);
+  const Pt shOut = J(kFjShoulderOut), elbowTop = J(kFjElbowTop), wristTop = J(kFjWristTop), touchTop = J(kFjTipTop);
+  const Pt shIn = J(kFjShoulderIn), elbowLow = J(kFjElbowLow), wristLow = J(kFjWristLow), touchLow = J(kFjTipLow);
+  const float headR = std::max(big ? 3.f : 1.8f, kFusionHeadR * bh);
+  const float armR = big ? R(0.03f) : 0.62f, foreR = big ? R(0.024f) : 0.58f, wristR = big ? R(0.019f) : 0.55f;
+  const float handR = big ? R(0.03f) : 0.6f, tipR = std::max(0.35f, 0.004f * bh);
 
   // grow > 0 fattens every part for the halo pass.
   auto body = [&](float grow) {
     g.PathClear();
-    const Pt waist = along(pelvis, neck, 0.38f);
-    const Pt torso[6] = {off(neck, out, R(0.062f) + grow),   off(waist, out, R(0.042f) + grow),
-                         off(pelvis, out, R(0.048f) + grow), off(pelvis, out, -R(0.048f) - grow),
-                         off(waist, out, -R(0.042f) - grow), off(neck, out, -R(0.062f) - grow)};
-    g.PathMoveTo(torso[0].x, torso[0].y);
-    for (int i = 1; i < 6; ++i)
-      g.PathLineTo(torso[i].x, torso[i].y);
-    g.PathClose();
-    joint(pelvis, R(0.044f) + grow);
-    straight(neck, head, R(0.022f) + grow, R(0.02f) + grow);
+    limb(pelvis, through(pelvis, waist, neck), neck, R(0.062f) + grow, R(0.07f) + grow, big ? 6 : 2);
+    straight(shOut, shIn, armR + grow, armR + grow);
+    straight(neck, head, R(0.034f) + grow, R(0.03f) + grow);
     joint(head, headR + grow);
-    // Outer arm bends over the head, inner arm reaches straight; both end in a pointed finger.
-    limb(shOut, elbowTop, wristTop, armR + grow, wristR + grow, big ? 10 : 5);
+    // Outer arm arcs over the head, inner arm bends low in front; both end in a fist and a pointed finger.
+    limb(shOut, through(shOut, elbowTop, wristTop), wristTop, armR + grow, wristR + grow, big ? 10 : 5);
+    joint(wristTop, handR + grow);
     segment(wristTop, wristR + grow, touchTop, tipR + grow);
-    straight(shIn, wristLow, armR + grow, wristR + grow);
+    straight(shIn, elbowLow, armR + grow, foreR + grow);
+    straight(elbowLow, wristLow, foreR + grow, wristR + grow);
+    joint(wristLow, handR + grow);
     segment(wristLow, wristR + grow, touchLow, tipR + grow);
-    // Outer leg kicked out level with a pointed toe; inner leg bent, foot flat toward the partner.
-    straight(hipOut, kneeOut, R(0.032f) + grow, R(0.022f) + grow);
-    straight(kneeOut, ankleOut, R(0.022f) + grow, R(0.013f) + grow);
-    segment(ankleOut, R(0.013f) + grow, toe, tipR + grow);
-    straight(hipIn, kneeIn, R(0.034f) + grow, R(0.024f) + grow);
-    straight(kneeIn, ankleIn, R(0.024f) + grow, R(0.016f) + grow);
-    straight(P(0.51f, 0.98f), P(0.62f, 0.99f), R(0.013f) + grow, R(0.008f) + grow);
+    // Outer leg long and nearly straight, inner knee bent over its foot; both feet flat on the floor.
+    const Pt legs[2][5] = {{J(kFjHipOut), J(kFjKneeOut), J(kFjAnkleOut), J(kFjHeelOut), J(kFjToeOut)},
+                           {J(kFjHipIn), J(kFjKneeIn), J(kFjAnkleIn), J(kFjHeelIn), J(kFjToeIn)}};
+    for (const auto& leg : legs)
+    {
+      straight(leg[0], leg[1], R(0.046f) + grow, R(0.033f) + grow);
+      straight(leg[1], leg[2], R(0.033f) + grow, R(0.022f) + grow);
+      straight(leg[2], leg[3], R(0.022f) + grow, R(0.02f) + grow);
+      straight(leg[3], leg[4], R(0.02f) + grow, R(0.012f) + grow);
+    }
   };
 
   if (big)
   {
-    Bloom(g, along(pelvis, neck, 0.5f).x, along(pelvis, neck, 0.5f).y, bh * 0.5f, kTeal, 0.07f * am);
+    Bloom(g, along(pelvis, neck, 0.5f).x, along(pelvis, neck, 0.5f).y, bh * 0.6f, kTeal, 0.07f * am);
     // Swing trails: the outer arm's sweep from out wide to over the head.
     for (int k = 0; k < 3; ++k)
     {
-      const float rad = bh * (0.31f + 0.055f * (float)k);
-      const float a0 = 3.35f, a1 = 4.3f - 0.08f * (float)k;
+      const float rad = bh * (0.42f + 0.07f * (float)k);
+      const float a0 = 3.5f, a1 = 4.45f - 0.08f * (float)k;
       const int segs = 18;
       for (int i = 0; i < segs; ++i)
       {
         const float t0 = (float)i / (float)segs, t1 = (float)(i + 1) / (float)segs;
         const float p0 = a0 + (a1 - a0) * t0, p1 = a0 + (a1 - a0) * t1;
         g.DrawLine(WithA(kTeal, (0.05f + 0.3f * t1 * t1) * (1.f - 0.28f * (float)k) * am),
-                   neck.x + fd * std::cos(p0) * rad, neck.y + std::sin(p0) * rad, neck.x + fd * std::cos(p1) * rad,
-                   neck.y + std::sin(p1) * rad, nullptr, 1.3f);
+                   shOut.x + fd * std::cos(p0) * rad, shOut.y + std::sin(p0) * rad, shOut.x + fd * std::cos(p1) * rad,
+                   shOut.y + std::sin(p1) * rad, nullptr, 1.3f);
       }
     }
     body(5.f);
@@ -217,6 +263,7 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
     body(2.2f);
     g.PathFill(WithA(kTeal, 0.1f * am));
   }
+  const Pt toe = J(kFjToeOut);
   body(0.f);
   g.PathFill(IPattern::CreateLinearGradient(toe.x, toe.y, touchTop.x, touchTop.y,
                                             {{WithA(Mix(kDim, kBlue, 0.4f), 0.45f * am), 0.f},
@@ -227,7 +274,7 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
   {
     const float span = std::min(r.W(), r.H());
     Bloom(g, touchTop.x, touchTop.y, span * 0.5f, kGold, 0.2f * am);
-    Bloom(g, touchLow.x, touchLow.y, span * 0.26f, kGold, 0.12f * am);
+    Bloom(g, touchLow.x, touchLow.y, span * 0.3f, kGold, 0.14f * am);
     auto flare = [&](Pt c, float len, float wid, float a) {
       g.PathClear();
       g.PathMoveTo(c.x - len, c.y);
@@ -244,15 +291,16 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
     };
     g.FillCircle(WithA(kGold, 0.26f * am), touchTop.x, touchTop.y, 11.f);
     g.FillCircle(WithA(kGold, 0.45f * am), touchTop.x, touchTop.y, 6.5f);
-    flare(touchTop, bh * 0.22f, 2.2f, 0.95f * am);
+    flare(touchTop, bh * 0.3f, 2.2f, 0.95f * am);
     g.FillCircle(WithA(kGoldHi, am), touchTop.x, touchTop.y, 3.2f);
-    g.FillCircle(WithA(kGold, 0.35f * am), touchLow.x, touchLow.y, 6.f);
-    flare(touchLow, bh * 0.1f, 1.4f, 0.8f * am);
-    g.FillCircle(WithA(kGoldHi, am), touchLow.x, touchLow.y, 2.2f);
+    g.FillCircle(WithA(kGold, 0.35f * am), touchLow.x, touchLow.y, 7.f);
+    flare(touchLow, bh * 0.17f, 1.6f, 0.85f * am);
+    g.FillCircle(WithA(kGoldHi, am), touchLow.x, touchLow.y, 2.4f);
   }
   else
   {
-    g.FillCircle(WithA(kTeal, 0.9f * am), touchTop.x, touchTop.y, 1.4f);
+    g.FillCircle(WithA(kTeal, 0.9f * am), touchTop.x, touchTop.y, 1.3f);
+    g.FillCircle(WithA(kTeal, 0.9f * am), touchLow.x, touchLow.y, 1.1f);
   }
 }
 

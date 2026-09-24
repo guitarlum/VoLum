@@ -2,8 +2,11 @@
 #include "../config.h"
 #include "../VoLumTriptychLayout.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -144,6 +147,65 @@ TEST_CASE("NAM fusion art draws the new figure and keeps the legacy one behind V
   REQUIRE(legacyAt != std::string::npos);
   REQUIRE(newAt != std::string::npos);
   REQUIRE(body.find("else", legacyAt) < newAt);
+}
+
+TEST_CASE("NAM fusion figure is drawn from one joint table that holds the fusion pose")
+{
+  // The owner rejected the v2 figure (upright, ballet kick, heart arms) as "dancing".
+  // Read the traced table back and check the stance, not just that it exists.
+  const std::string motifs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMotifs.h");
+  const auto tableAt = motifs.find("constexpr float kFusionPose[kFjCount][2] = {");
+  REQUIRE(tableAt != std::string::npos);
+  RequireContains(motifs, "Pt{seam - fd * (1.f - kFusionPose[j][0]) * bw, top + kFusionPose[j][1] * bh}");
+  std::smatch m;
+  REQUIRE(std::regex_search(motifs, m, std::regex(R"(kFusionAspect = ([0-9.]+)f)")));
+  const float aspect = std::stof(m[1].str());
+  REQUIRE(std::regex_search(motifs, m, std::regex(R"(kFusionHeadR = ([0-9.]+)f)")));
+  const float headR = std::stof(m[1].str());
+
+  const std::string table = motifs.substr(tableAt, motifs.find("};", tableAt) - tableAt);
+  std::map<std::string, std::pair<float, float>> joint;
+  const std::regex row(R"(\{([0-9.]+)f, ([0-9.]+)f\}, // (\w+))");
+  for (std::sregex_iterator it(table.begin(), table.end(), row), end; it != end; ++it)
+    joint[(*it)[3].str()] = {std::stof((*it)[1].str()), std::stof((*it)[2].str())};
+  REQUIRE(joint.size() == 22);
+  auto u = [&](const char* n) { return joint.at(n).first; };
+  auto v = [&](const char* n) { return joint.at(n).second; };
+  for (const auto& [name, uv] : joint)
+  {
+    CAPTURE(name);
+    CHECK(uv.first >= 0.f);
+    CHECK(uv.first <= 1.f);
+    CHECK(uv.second >= 0.f);
+    CHECK(uv.second <= 1.f);
+  }
+
+  // Two index-finger contacts on the seam: one over the head, one at chest height.
+  CHECK(u("tipTop") == 1.f);
+  CHECK(u("tipLow") == 1.f);
+  CHECK(v("tipTop") < v("head") - headR);
+  CHECK(v("tipLow") > v("head"));
+  CHECK(v("tipLow") < v("pelvis"));
+  // Outer arm arcs over the head; the inner elbow drops below the finger it points.
+  CHECK(v("elbowTop") < v("head") - headR);
+  CHECK(v("elbowLow") > v("tipLow"));
+  // Deep wide crouch: every heel and toe on the floor, hips low, the outer toe out
+  // at the far edge and the inner knee bent forward of its ankle.
+  for (const char* foot : {"heelOut", "toeOut", "heelIn", "toeIn"})
+  {
+    CAPTURE(foot);
+    CHECK(v(foot) > 0.95f);
+  }
+  CHECK(v("pelvis") > 0.55f);
+  CHECK(v("pelvis") < 0.7f);
+  CHECK(u("toeOut") < 0.05f);
+  CHECK(u("kneeIn") > u("ankleIn"));
+  CHECK(v("kneeOut") > v("pelvis"));
+  // Torso leans 35-50 degrees from vertical toward the partner, head dropped in past the neck.
+  const float lean = std::atan2((u("neck") - u("pelvis")) * aspect, v("pelvis") - v("neck")) * 57.2958f;
+  CHECK(lean > 35.f);
+  CHECK(lean < 50.f);
+  CHECK(u("head") > u("neck"));
 }
 
 TEST_CASE("Clear and close affordances stroke a cross instead of drawing U+00D7")
