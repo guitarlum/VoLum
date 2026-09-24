@@ -184,7 +184,45 @@ inline std::string OwnerDisplayName(const content::Registry& r, const std::strin
 inline std::string PresetWithAmpLabel(const content::Registry& r, const std::string& presetName,
                                       const std::string& ownerKey)
 {
-  return "Preset \"" + presetName + "\"  ·  " + OwnerDisplayName(r, ownerKey);
+  return "Preset \"" + presetName + "\"  \xC2\xB7  " + OwnerDisplayName(r, ownerKey);
+}
+
+// One row in the Sounds export tick list. PLAY assignments come first, sorted by
+// program number; everything else follows in bank iteration order.
+struct ExportSoundRow
+{
+  std::string presetId;
+  std::string name;
+  std::string ownerKey;
+  std::string ownerLabel;
+  int pc = -1; // MIDI program, or -1 when not in the PLAY map
+};
+
+inline std::vector<ExportSoundRow> BuildExportSoundRows(const content::Registry& reg)
+{
+  std::vector<ExportSoundRow> play;
+  std::vector<ExportSoundRow> rest;
+  for (const auto& bank : reg.presetBanks)
+    for (const auto& pr : bank.second)
+    {
+      ExportSoundRow row;
+      row.presetId = pr.id;
+      row.name = pr.name;
+      row.ownerKey = bank.first;
+      row.ownerLabel = OwnerDisplayName(reg, bank.first);
+      row.pc = -1;
+      for (const auto& slot : reg.midiSoundMap)
+        if (slot.second.presetId == pr.id && slot.second.ampId == bank.first)
+        {
+          row.pc = slot.first;
+          break;
+        }
+      (row.pc >= 0 ? play : rest).push_back(std::move(row));
+    }
+  std::stable_sort(
+    play.begin(), play.end(), [](const ExportSoundRow& a, const ExportSoundRow& b) { return a.pc < b.pc; });
+  play.insert(play.end(), rest.begin(), rest.end());
+  return play;
 }
 
 // Resolve a selection into the full set of items a Pack has to carry.
@@ -424,7 +462,8 @@ inline bool WritePack(content::ContentStore& store, const ExportPlan& plan, cons
 struct PackContents
 {
   bool ok = false;
-  std::string error;
+  std::string error; // user-facing refusal (shown in the overlay)
+  std::string detail; // archive/parse reason for the [pack] log line
   int contractVersion = 0;
   Job job = Job::Share;
   content::Registry library;
@@ -435,12 +474,25 @@ struct PackContents
   explicit operator bool() const { return ok; }
 };
 
-inline PackContents ReadPackFromArchive(const ReadResult& archive)
+// Map zip-layer failures to the Pack copy the overlay shows. A truncated .volumpack
+// often loses its central directory and reports "no archive directory"; that is still
+// a damaged Pack when the bytes look like a zip, not "not a Pack at all".
+inline std::string UserFacingPackArchiveError(const std::string& archiveError, bool looksLikeZip)
+{
+  auto has = [&](const char* needle) { return archiveError.find(needle) != std::string::npos; };
+  if (has("truncated") || has("damaged") || has("corrupt") || has("checksum") || has("unsupported compression")
+      || (looksLikeZip && !archiveError.empty()))
+    return "This Pack is damaged.";
+  return "This is not a VoLum Pack.";
+}
+
+inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLikeZip = false)
 {
   PackContents out;
   if (!archive)
   {
-    out.error = archive.error.empty() ? "This is not a VoLum Pack." : archive.error;
+    out.detail = archive.error;
+    out.error = UserFacingPackArchiveError(archive.error, looksLikeZip);
     return out;
   }
 
@@ -536,7 +588,16 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive)
 
 inline PackContents OpenPack(const std::filesystem::path& path)
 {
-  return ReadPackFromArchive(ReadArchiveFromFile(path));
+  std::string blob;
+  if (!ReadWholeFile(path, blob))
+  {
+    PackContents out;
+    out.detail = "could not read file";
+    out.error = "This is not a VoLum Pack.";
+    return out;
+  }
+  const bool looksLikeZip = blob.size() >= 2 && blob[0] == 'P' && blob[1] == 'K';
+  return ReadPackFromArchive(ParseArchive(blob), looksLikeZip);
 }
 
 // ---------------------------------------------------------------------------
@@ -775,7 +836,8 @@ struct ImportItem
 {
   ItemKind kind = ItemKind::Amp;
   std::string id;
-  std::string label; // the same wording the preview uses
+  std::string label; // Pack wording (what lands on Overwrite / Add-new)
+  std::string localLabel; // local wording when present; Keep mine shows this
   bool present = false; // an item with this id is already here
   bool nameCollision = false; // same name, different id: both are kept
   bool sounding = false; // this instance is playing it right now
@@ -793,8 +855,11 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
 
   for (const auto& a : incoming.amps)
   {
-    ImportItem item{
-      ItemKind::Amp, a.id, "Custom amp \"" + a.name + "\"", FindAmp(current, a.id) != nullptr, false, sounding(a.id)};
+    ImportItem item{ItemKind::Amp, a.id, "Custom amp \"" + a.name + "\"", "", FindAmp(current, a.id) != nullptr, false,
+                    sounding(a.id)};
+    if (item.present)
+      if (const auto* mine = FindAmp(current, a.id))
+        item.localLabel = "Custom amp \"" + mine->name + "\"";
     if (!item.present)
       for (const auto& mine : current.amps)
         if (mine.id != a.id && mine.name == a.name)
@@ -804,7 +869,10 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
   for (const auto& ir : incoming.irs)
   {
     ImportItem item{
-      ItemKind::Ir, ir.id, "IR \"" + ir.name + "\"", FindIr(current, ir.id) != nullptr, false, sounding(ir.id)};
+      ItemKind::Ir, ir.id, "IR \"" + ir.name + "\"", "", FindIr(current, ir.id) != nullptr, false, sounding(ir.id)};
+    if (item.present)
+      if (const auto* mine = FindIr(current, ir.id))
+        item.localLabel = "IR \"" + mine->name + "\"";
     if (!item.present)
       for (const auto& mine : current.irs)
         if (mine.id != ir.id && mine.name == ir.name)
@@ -813,8 +881,11 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
   }
   for (const auto& p : incoming.pedals)
   {
-    ImportItem item{
-      ItemKind::Pedal, p.id, "Pedal \"" + p.name + "\"", FindPedal(current, p.id) != nullptr, false, sounding(p.id)};
+    ImportItem item{ItemKind::Pedal, p.id,          "Pedal \"" + p.name + "\"", "", FindPedal(current, p.id) != nullptr,
+                    false,           sounding(p.id)};
+    if (item.present)
+      if (const auto* mine = FindPedal(current, p.id))
+        item.localLabel = "Pedal \"" + mine->name + "\"";
     if (!item.present)
       for (const auto& mine : current.pedals)
         if (mine.id != p.id && mine.name == p.name)
@@ -829,9 +900,16 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
       ImportItem item{ItemKind::Preset,
                       pr.id,
                       PresetWithAmpLabel(incoming, pr.name, bank.first),
+                      "",
                       FindPreset(current, pr.id, owner, at),
                       false,
                       sounding(pr.id)};
+      if (item.present)
+      {
+        const auto bankIt = current.presetBanks.find(owner);
+        if (bankIt != current.presetBanks.end() && at < bankIt->second.size())
+          item.localLabel = PresetWithAmpLabel(current, bankIt->second[at].name, owner);
+      }
       if (!item.present)
       {
         const auto mine = current.presetBanks.find(bank.first);
@@ -1244,6 +1322,31 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   const bool applySettings = standalone && alsoSettings;
   if (packContents.includesMidiSoundMap && (alsoSettings || !standalone))
     reg.midiSoundMap = incoming.midiSoundMap;
+
+  // Payload files the merge made unreferenced: a replaced amp's old capture, or an
+  // Add that wrote the Pack's path while Keep mine kept the local catalog row.
+  // Only content-relative paths, and only after Save confirms the new registry -
+  // QueueStoredFileDelete + Save's flush refuse to remove anything still named.
+  auto collectPayloads = [](const content::Registry& r) {
+    std::vector<std::string> paths;
+    for (const auto& a : r.amps)
+      for (const auto& f : a.files)
+        if (!f.storedPath.empty())
+          paths.push_back(f.storedPath);
+    for (const auto& ir : r.irs)
+      if (!ir.file.empty())
+        paths.push_back(ir.file);
+    for (const auto& p : r.pedals)
+      if (!p.file.empty())
+        paths.push_back(p.file);
+    return paths;
+  };
+  for (const auto& rel : collectPayloads(priorReg))
+    if (!store.ReferencesStoredPath(rel))
+      store.QueueStoredFileDelete(rel);
+  for (const auto& rel : swapped)
+    if (!store.ReferencesStoredPath(rel))
+      store.QueueStoredFileDelete(rel);
 
   fileLock.Release();
   if (!store.Save())

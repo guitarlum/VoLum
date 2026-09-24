@@ -963,6 +963,7 @@ function Test-SaveDialog {
   if ($saved -and $map.Count -ge 1) {
     Assert-True "the PLAY slot is the saved preset" (@($map | Where-Object { $_.presetId -eq $saved.id }).Count -eq 1)
   }
+
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
@@ -1190,6 +1191,8 @@ function Test-Pack {
     [pscustomobject]@{ slot = 5; ampId = "factory:14"; presetId = "preset_sunset1c3" }
   ) -Force
   $j | ConvertTo-Json -Depth 100 | Set-Content $contentA -Encoding UTF8
+  $crunchId = "preset_402e30dc"
+  $sunsetId = "preset_sunset1c3"
 
   $packDir = Join-Path $sandA "packs"
   New-Item -ItemType Directory -Path $packDir -Force | Out-Null
@@ -1198,9 +1201,8 @@ function Test-Pack {
   New-Item -ItemType Directory -Path $capA -Force | Out-Null
   $state = @{ emptySoundsWrote = $null; took = @() }
 
-  # Export rows list PLAY Sounds first, in bank order ("amp_..." < "factory:13" <
-  # "factory:14"): 0 Skeleton Lead, 1 Crunch Rhythm, 2 Sunset Crunch, then 3 Lead
-  # Boost, 4 Clean Verb. The manifests below prove which rows were ticked.
+  # PLAY Sounds first by program number (not bank key): 00 Crunch Rhythm, 01 Skeleton
+  # Lead, 05 Sunset Crunch, then non-PLAY Lead Boost / Clean Verb.
   $runA = Invoke-VoLumRun -SandboxRoot $sandA -SettleSec 7 `
     -Environment @{ VOLUM_PACK_SAVE_PATH = $drop; VOLUM_SELF_CAPTURE_DIR = $capA } -Drive {
     param($proc)
@@ -1223,13 +1225,26 @@ function Test-Pack {
     Invoke-PackClick $h $ui.go 900
     & $take "everything"
 
-    # Sounds with nothing ticked: Export... is dead.
+    # Sounds with nothing ticked: Export... is dead (dimmed).
     Invoke-PackClick $h $ui.export
     Invoke-PackClick $h $ui.scopeSounds
     Save-PackShot $capA "06-export-sounds-empty"
+    Save-PackShot $capA "23-export-disabled"
     Invoke-PackClick $h $ui.go 900
     $state.emptySoundsWrote = Test-Path $drop
+
+    # Tick all three PLAY rows (program order) to prove list order via the manifest.
     Invoke-PackClick $h @(300, $ui.exportRow0)
+    Invoke-PackClick $h @(300, ($ui.exportRow0 + 1 * 20))
+    Invoke-PackClick $h @(300, ($ui.exportRow0 + 2 * 20))
+    Save-PackShot $capA "23-export-sounds-order"
+    Invoke-PackClick $h $ui.go 900
+    & $take "sounds-play-order"
+
+    # Re-open Sounds: Skeleton Lead (row 1) + Lead Boost (row 3) for the Share pack.
+    Invoke-PackClick $h $ui.export
+    Invoke-PackClick $h $ui.scopeSounds
+    Invoke-PackClick $h @(300, ($ui.exportRow0 + 1 * 20))
     Invoke-PackClick $h @(300, ($ui.exportRow0 + 3 * 20))
     Save-PackShot $capA "06-export-sounds"
     Invoke-PackClick $h $ui.go 900
@@ -1244,12 +1259,12 @@ function Test-Pack {
   }
   Assert-True "source opened" $runA.started
   Assert-True "source closed gracefully" $runA.graceful
-  Assert-Equal "zero-tick Sounds export wrote nothing" $false $state.emptySoundsWrote
-  Assert-Equal "three Packs written through Export..." "everything,sounds,amp" ($state.took -join ",")
+  Assert-equal "zero-tick Sounds export wrote nothing" $false $state.emptySoundsWrote
+  Assert-equal "four Packs written through Export..." "everything,sounds-play-order,sounds,amp" ($state.took -join ",")
   $regA = Read-Json $contentA
   $logA = if (Test-Path (Join-Path $rootA "volum.log")) { Get-Content (Join-Path $rootA "volum.log") -Raw } else { "" }
-  Assert-Equal "log records three exports" 3 ([regex]::Matches($logA, "\[pack\] export wrote")).Count
-  if (-not $regA -or $state.took.Count -ne 3) {
+  Assert-equal "log records four exports" 4 ([regex]::Matches($logA, "\[pack\] export wrote")).Count
+  if (-not $regA -or $state.took.Count -ne 4) {
     if (-not $KeepSandbox) { Remove-Item $sandA -Recurse -Force -ErrorAction SilentlyContinue }
     return
   }
@@ -1258,10 +1273,16 @@ function Test-Pack {
   $allPedals = @($regA.customPedals | ForEach-Object { $_.id })
   $allPresets = @((Get-PresetIndex $regA).Keys)
   $everything = Join-Path $packDir "everything.volumpack"
+  $soundsPlayOrder = Join-Path $packDir "sounds-play-order.volumpack"
   $sounds = Join-Path $packDir "sounds.volumpack"
   $amp = Join-Path $packDir "amp.volumpack"
 
-  # What each file carries, straight from the archive.
+  # PLAY-only Sounds: selection order follows the program-sorted tick list.
+  $po = Read-PackArchive $soundsPlayOrder
+  $mpo = $po["manifest.json"] | ConvertFrom-Json
+  Assert-equal "PLAY Sounds export order is program number" ($crunchId + "," + $skelId + "," + $sunsetId) ((@($mpo.presets) -join ","))
+
+    # What each file carries, straight from the archive.
   $pe = Read-PackArchive $everything
   $me = $pe["manifest.json"] | ConvertFrom-Json
   Assert-Equal "Everything manifest job" "everything" $me.job
@@ -1337,15 +1358,30 @@ function Test-Pack {
     $capRel = @($regA.customAmps[0].files | Where-Object { $_.storedPath })[0].storedPath
     $capFile = Get-StoredFile $vRoot $capRel
     [IO.File]::WriteAllText($capFile, "LOCAL-CAPTURE-BYTES")
-    $localSha = Get-FileSha $capFile
+    # Point the local catalog at a different leaf so Add writes the Pack path as an
+    # orphan and Overwrite leaves the local leaf unreferenced.
+    $localRel = ($capRel -replace '\.nam$', '_local.nam')
+    $localFile = Get-StoredFile $vRoot $localRel
+    New-Item -ItemType Directory -Path (Split-Path $localFile) -Force | Out-Null
+    [IO.File]::WriteAllText($localFile, "LOCAL-CAPTURE-BYTES")
+    foreach ($a in @($vReg.customAmps)) {
+      foreach ($f in @($a.files)) { if ($f.storedPath -eq $capRel) { $f.storedPath = $localRel } }
+    }
+    $vReg | ConvertTo-Json -Depth 100 | Set-Content $vContent -Encoding UTF8
+    Remove-Item $capFile -Force -ErrorAction SilentlyContinue
+    $localSha = Get-FileSha $localFile
     $packSha = Get-FileSha (Get-StoredFile $rootA $capRel)
     $verbState = @{}
     $vCap = Join-Path $e.sandbox "capture"
     $readState = {
       $r = Read-Json $vContent
       $ix = Get-PresetIndex $r
+      $ampPath = @($r.customAmps[0].files | Where-Object { $_.storedPath })[0].storedPath
       @{ skelName = $(if ($ix[$skelId]) { $ix[$skelId].name } else { "" }); local = $ix.ContainsKey("preset_e2e_local")
-        sha = (Get-FileSha $capFile) }
+        sha = (Get-FileSha (Get-StoredFile $vRoot $ampPath))
+        packPathExists = [bool](Test-Path (Get-StoredFile $vRoot $capRel))
+        localPathExists = [bool](Test-Path (Get-StoredFile $vRoot $localRel))
+        ampPath = $ampPath }
     }
     $runV = Invoke-VoLumRun -SandboxRoot $e.sandbox -SettleSec 7 `
       -Environment @{ VOLUM_PACK_OPEN_PATH = $everything; VOLUM_SELF_CAPTURE_DIR = $vCap } -Drive {
@@ -1357,6 +1393,7 @@ function Test-Pack {
       Invoke-PackClick $h $ui.import 900
       Invoke-PackClick $h $ui.verbAdd
       Save-PackShot $vCap "06-import-verb-add"
+      Save-PackShot $vCap "23-import-keep-mine"
       Invoke-PackClick $h $ui.go 1500
       $verbState.add = & $readState
       Invoke-PackClick $h $ui.import 900
@@ -1374,12 +1411,18 @@ function Test-Pack {
       Assert-Equal "[verbs] Add keeps my preset name" "Mine Renamed" $verbState.add.skelName
       Assert-Equal "[verbs] Add keeps my capture bytes" $localSha $verbState.add.sha
       Assert-True "[verbs] Add keeps my local-only preset" $verbState.add.local
+      Assert-equal "[verbs] Add keeps my catalog path" $localRel $verbState.add.ampPath
+      Assert-True "[verbs] Add deletes the unreferenced Pack payload" (-not $verbState.add.packPathExists)
+      Assert-True "[verbs] Add keeps my payload file" $verbState.add.localPathExists
     }
     else { Assert-True "[verbs] Add ran" $false }
     if ($verbState.overwrite) {
       Assert-Equal "[verbs] Overwrite takes the Pack's name" "Skeleton Lead" $verbState.overwrite.skelName
       Assert-Equal "[verbs] Overwrite takes the Pack's capture bytes" $packSha $verbState.overwrite.sha
       Assert-True "[verbs] Overwrite keeps my local-only preset" $verbState.overwrite.local
+      Assert-equal "[verbs] Overwrite takes the Pack catalog path" $capRel $verbState.overwrite.ampPath
+      Assert-True "[verbs] Overwrite keeps the Pack payload" $verbState.overwrite.packPathExists
+      Assert-True "[verbs] Overwrite deletes my replaced payload" (-not $verbState.overwrite.localPathExists)
     }
     else { Assert-True "[verbs] Overwrite ran" $false }
     if ($verbState.reset) {
@@ -1400,8 +1443,12 @@ function Test-Pack {
   [Array]::Copy($bytes, $cut, $cut.Length)
   [IO.File]::WriteAllBytes($corrupt, $cut)
   $c = Invoke-PackImportFresh "corrupt" $corrupt $null
-  Assert-True "[corrupt] refusal logged with a reason" ($c.log -match "\[pack\] open refused: \S") `
+  if ($ShotsDir -and (Test-Path (Join-Path $ShotsDir "06-import-corrupt.png"))) {
+    Copy-Item (Join-Path $ShotsDir "06-import-corrupt.png") (Join-Path $ShotsDir "23-import-damaged.png") -Force
+  }
+  Assert-True "[corrupt] refusal logged with Pack copy" ($c.log -match "\[pack\] open refused: This Pack is damaged\.") `
   (($c.log -split "`n" | Where-Object { $_ -match "\[pack\]" }) -join " / ")
+  Assert-True "[corrupt] refusal log keeps the technical reason" ($c.log -match "\[pack\] open refused: This Pack is damaged\. \(.+\)")
   Assert-True "[corrupt] no import ran" ($c.log -notmatch "\[pack\] import ")
   $cr = $c.reg
   Assert-True "[corrupt] library holds nothing" (-not $cr -or (

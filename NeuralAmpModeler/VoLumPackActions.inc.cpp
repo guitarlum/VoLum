@@ -89,8 +89,11 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
   if (fileName.GetLength() == 0)
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
   auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
-  VOLUM_LOG(
-    "pack", pack.ok ? std::string("opened ") + volum::pack::PackSummaryLine(pack) : "open refused: " + pack.error);
+  if (pack.ok)
+    VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+  else
+    VOLUM_LOG("pack", std::string("open refused: ") + pack.error
+                        + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
   return pack;
 }
 

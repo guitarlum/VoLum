@@ -1718,6 +1718,10 @@ public:
     mPendingFileDeletes.push_back(relPath);
   }
 
+  // True when the in-memory registry names this content-relative payload. Used by
+  // Pack import to queue deletes only for files no catalog row still references.
+  bool ReferencesStoredPath(const std::string& relPath) const { return RegistryReferences(relPath); }
+
   // -- Removal matrix (spec 3.7) ------------------------------------------------
 
   // Delete a custom pedal: drop the library entry + file, and clear every PRE

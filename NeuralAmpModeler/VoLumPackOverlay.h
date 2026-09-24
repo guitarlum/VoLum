@@ -421,21 +421,10 @@ private:
     }
     if (mScope == Scope::Sounds)
     {
-      // PLAY's assignments first, tagged with their program number: "export the
-      // Sounds I gig with" is the common case, and hunting for them inside an
-      // undifferentiated bank list is what made the old tick list cryptic.
-      for (int pass = 0; pass < 2; ++pass)
-        for (const auto& bank : reg.presetBanks)
-          for (const auto& pr : bank.second)
-          {
-            int pc = -1;
-            for (const auto& slot : reg.midiSoundMap)
-              if (slot.second.presetId == pr.id && slot.second.ampId == bank.first)
-                pc = slot.first;
-            if ((pass == 0) != (pc >= 0))
-              continue;
-            mRows.push_back({false, pr.id, pr.name, volum::pack::OwnerDisplayName(reg, bank.first), pc, false, false});
-          }
+      // PLAY's assignments first, ordered by program number: "export the Sounds I
+      // gig with" is the common case, and bank-key order used to list 01 before 00.
+      for (const auto& s : volum::pack::BuildExportSoundRows(reg))
+        mRows.push_back({false, s.presetId, s.name, s.ownerLabel, s.pc, false, false});
     }
   }
 
@@ -702,6 +691,9 @@ private:
       {
         row.verb = "Keep mine";
         row.color = VoLumColors::TEXT_DIM;
+        // Keep mine leaves the local item; name it the way it already is here.
+        if (!item.localLabel.empty())
+          row.what = item.localLabel;
       }
       else if (item.sounding)
       {
@@ -867,11 +859,14 @@ private:
 
   void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool primary, bool enabled = true)
   {
+    // Match Manage's disabled chrome (VoLumCustomOverlay::DrawButton): dimmed fill,
+    // dimmed frame, dimmed text. Cancel stays full cream so Export... cannot be
+    // mistaken for an active sibling when nothing is ticked.
     if (!enabled)
     {
-      g.FillRoundRect(VoLumColors::BTN_OFF_BG, r, 3.f);
-      g.DrawRoundRect(VoLumColors::FRAME, r, 3.f, nullptr, 1.f);
-      g.DrawText(IText(12.f, VoLumColors::TEXT_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label, r);
+      g.FillRoundRect(IColor(8, 200, 162, 78), r, 3.f);
+      g.DrawRoundRect(VoLumColors::BTN_OFF_BORDER, r, 3.f, nullptr, 1.f);
+      g.DrawText(IText(12.f, VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Center, EVAlign::Middle), label, r);
       return;
     }
     g.FillRoundRect(primary ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
