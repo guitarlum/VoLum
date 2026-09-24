@@ -433,10 +433,12 @@ TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
   REQUIRE(runtime.find("void NeuralAmpModeler::_VolumAddHeardPlaySound()") != std::string::npos);
   REQUIRE(runtime.find("AddHeardNeedsSaveAs") != std::string::npos);
   REQUIRE(runtime.find("AddHeardMarksLive") != std::string::npos);
-  REQUIRE(runtime.find("_VolumPromptSaveAs(finish)") != std::string::npos);
+  // A tweaked Factory slot used to be overwritten: the save moved the LIVE switch onto
+  // the new copy, so finish() found it assigned and added nothing.
+  REQUIRE(runtime.find("_VolumPromptSaveAs(finish, volum::SaveOrigin::AddSound)") != std::string::npos);
   const auto finish = runtime.find("auto finish = [this]()");
   REQUIRE(finish != std::string::npos);
-  const auto finishEnd = runtime.find("_VolumPromptSaveAs(finish)", finish);
+  const auto finishEnd = runtime.find("_VolumPromptSaveAs(finish, volum::SaveOrigin::AddSound)", finish);
   REQUIRE(finishEnd != std::string::npos);
   CHECK(runtime.substr(finish, finishEnd - finish).find("mVolumLastRecalledPlaySlot = slot") != std::string::npos);
 }
@@ -529,7 +531,7 @@ TEST_CASE("Name dialog is a view over the model: only Enter and Save commit")
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
   const auto prompt = presets.find("void NeuralAmpModeler::_VolumPromptSaveAs");
   REQUIRE(prompt != std::string::npos);
-  const auto commit = presets.find("[this, after, currentName, currentId](const std::string& name)", prompt);
+  const auto commit = presets.find("[this, after, origin, currentName, currentId](const std::string& name)", prompt);
   REQUIRE(commit != std::string::npos);
   CHECK(presets.find("PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)", commit) != std::string::npos);
   CHECK(presets.find("currentUserIdx", prompt) == std::string::npos);

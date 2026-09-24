@@ -157,6 +157,13 @@ TEST_CASE("Factory Ready dirty ignores the postValid restore sentinel")
   REQUIRE(volum::LivePresetDirty(true, live, factory[0].settings));
 }
 
+TEST_CASE("Only Ctrl+S moves the LIVE switch onto the copy it saved")
+{
+  CHECK(volum::SaveRetargetsLiveSlot(volum::SaveOrigin::Shortcut));
+  // Add this sound on a tweaked Factory switch adds a switch; the Factory one stays.
+  CHECK_FALSE(volum::SaveRetargetsLiveSlot(volum::SaveOrigin::AddSound));
+}
+
 TEST_CASE("Healed factory snapshot stamps postValid the way apply does")
 {
   const auto factory = volum::DefaultFactoryPresets();

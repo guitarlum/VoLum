@@ -475,9 +475,9 @@ public:
   void _VolumSetMidiChannel(int channel);
   void _VolumSetMidiRecallCc(int cc);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
-  int _VolumSavePresetAs(const std::string& name);
+  int _VolumSavePresetAs(const std::string& name, bool retargetLiveSlot = true);
   bool _VolumLivePresetDirty();
-  void _VolumPromptSaveAs(std::function<void()> after = {});
+  void _VolumPromptSaveAs(std::function<void()> after = {}, volum::SaveOrigin origin = volum::SaveOrigin::Shortcut);
   bool _VolumHandleSaveShortcut();
   void _VolumReassignLivePlaySlotAfterSave();
   void _VolumSyncLivePlaySlotFromActivePair();
@@ -485,7 +485,7 @@ public:
   void _VolumAddHeardPlaySound();
   void _VolumFocusBuildEffect(int focus);
   // Overwrite preset `index` in the active bank with the live scene.
-  void _VolumOverwritePreset(int index);
+  void _VolumOverwritePreset(int index, bool retargetLiveSlot = true);
   // Recall preset `index`: apply its snapshot to the live chain, retain it as the
   // recalled snapshot (drives the equality-based "(unsaved)" flag), update the bar.
   void _VolumRecallPreset(int index);
@@ -613,6 +613,8 @@ private:
   // next OnIdle. UnserializeState runs on the host's thread, and the applier it
   // wants writes IGraphics controls, so the call has to cross to the UI thread.
   std::atomic<bool> mVolumUiSyncPending{false};
+  // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
+  std::string mVolumPendingLibraryNotice;
   // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins
   // handoff; content-library resolution happens in OnIdle.
   volum::MidiLatestWinsQueue mVolumMidiQueue;

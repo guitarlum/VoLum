@@ -279,7 +279,7 @@ void NeuralAmpModeler::_VolumAddHeardPlaySound()
   if (volum::AddHeardNeedsSaveAs(
         volum::SaveActionForActivePreset(mVolumActivePresetId), _VolumLivePresetDirty(), mVolumActivePresetId.empty()))
   {
-    _VolumPromptSaveAs(finish);
+    _VolumPromptSaveAs(finish, volum::SaveOrigin::AddSound);
     return;
   }
   finish();

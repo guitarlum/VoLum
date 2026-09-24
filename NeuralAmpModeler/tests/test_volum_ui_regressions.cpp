@@ -2581,7 +2581,16 @@ TEST_CASE("tier2b opening the window shows a corrupt-library recovery")
   REQUIRE(end != std::string::npos);
   const std::string body = source.substr(open, end - open);
   RequireContains(body, "TakeCorruptRecoveryNotice()");
-  RequireContains(body, "_ShowMessageBox(gfx, notice.c_str(), \"VoLum\", EMsgBoxType::kMB_OK)");
+  RequireContains(body, "mVolumPendingLibraryNotice = std::move(notice);");
+  // OnUIOpen runs before the standalone window is shown; the box appeared alone.
+  RequireDoesNotContain(body, "_ShowMessageBox(");
+
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  const auto take = idle.find("std::move(mVolumPendingLibraryNotice)");
+  REQUIRE(take != std::string::npos);
+  const auto show = idle.find("_ShowMessageBox(gfx, notice.c_str(), \"VoLum\", EMsgBoxType::kMB_OK)", take);
+  REQUIRE(show != std::string::npos);
+  CHECK(idle.find("mVolumPendingLibraryNotice.clear();", take) < show);
 }
 
 TEST_CASE("tier2b preset rename uniqueness uses this overlay's owner")

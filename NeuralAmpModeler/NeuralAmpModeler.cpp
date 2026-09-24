@@ -845,6 +845,14 @@ void NeuralAmpModeler::OnIdle()
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
   _VolumRebindCustomSupportIdx();
+  if (!mVolumPendingLibraryNotice.empty())
+    if (auto* gfx = GetUI())
+    {
+      // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
+      const std::string notice = std::move(mVolumPendingLibraryNotice);
+      mVolumPendingLibraryNotice.clear();
+      _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+    }
 
   // Runs after the sync above so the restore stays the first thing an idle does;
   // freeing a few megabytes can wait a tick, a stale editor cannot.
@@ -1293,9 +1301,10 @@ void NeuralAmpModeler::OnUIOpen()
     _UpdateControlsFromModel();
   }
   _UpdateLatency();
-  if (const std::string notice = volum::content::GlobalContentStore().TakeCorruptRecoveryNotice(); !notice.empty())
-    if (auto* gfx = GetUI())
-      _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+  // Shown from OnIdle: the standalone runs OnUIOpen inside WM_INITDIALOG, before its
+  // window is shown, so a box raised here appeared alone with no VoLum behind it.
+  if (std::string notice = volum::content::GlobalContentStore().TakeCorruptRecoveryNotice(); !notice.empty())
+    mVolumPendingLibraryNotice = std::move(notice);
   _VolumRestoreSessionSelection();
   // The editor is rebuilt from constructor defaults on every open, so the last
   // step is always to re-derive the visible selection from backend state. Without

@@ -119,14 +119,13 @@ function Invoke-VoLumRun {
   foreach ($k in $Environment.Keys) { $psi.EnvironmentVariables[$k] = [string]$Environment[$k] }
   $proc = [System.Diagnostics.Process]::Start($psi)
 
-  $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null; drive = $null; notices = @() }
+  # `noticesBeforeWindow` counts the acknowledged boxes that came up before the main
+  # window existed; a notice raised from the open window lands in `notices` only.
+  $result = [ordered]@{ started = $false; graceful = $false; exitCode = $null; drive = $null; notices = @();
+    noticesBeforeWindow = 0 }
   $blocking = @{}
   $acknowledged = @{}
-  $deadline = (Get-Date).AddSeconds($LaunchTimeoutSec)
-  while ((Get-Date) -lt $deadline) {
-    $proc.Refresh()
-    if ($proc.HasExited) { break }
-    if ($proc.MainWindowHandle -ne 0) { break }
+  $answerBoxes = {
     foreach ($box in [VoLumE2eUi]::OwnedDialogs($proc.Id)) {
       $text = [VoLumE2eUi]::DialogText($box)
       if ($AcknowledgeNotice -and $text -match $AcknowledgeNotice) {
@@ -141,6 +140,13 @@ function Invoke-VoLumRun {
         Write-Host ("  startup blocked by a message box: {0}" -f $text) -ForegroundColor Yellow
       }
     }
+  }
+  $deadline = (Get-Date).AddSeconds($LaunchTimeoutSec)
+  while ((Get-Date) -lt $deadline) {
+    $proc.Refresh()
+    if ($proc.HasExited) { break }
+    if ($proc.MainWindowHandle -ne 0) { break }
+    . $answerBoxes
     Start-Sleep -Milliseconds 250
   }
 
@@ -150,9 +156,20 @@ function Invoke-VoLumRun {
   }
   $proc.Refresh()
   $result.started = ($proc.MainWindowHandle -ne 0)
+  $result.noticesBeforeWindow = @($result.notices).Count
 
-  # Let the editor finish opening, restoring, and running its idle save.
-  Start-Sleep -Seconds $SettleSec
+  # Let the editor finish opening, restoring, and running its idle save. A notice the
+  # open window raises is answered here, as a user would.
+  if ($AcknowledgeNotice) {
+    $settleEnd = (Get-Date).AddSeconds($SettleSec)
+    while ((Get-Date) -lt $settleEnd) {
+      . $answerBoxes
+      Start-Sleep -Milliseconds 250
+    }
+  }
+  else {
+    Start-Sleep -Seconds $SettleSec
+  }
 
   if ($Drive) {
     $proc.Refresh()
@@ -686,10 +703,11 @@ function Test-Corrupt {
   '{ "schemaVersion": 3, "customAmps": [ { "id": "amp_trunc"' |
     Set-Content (Join-Path $root "content\volum-content.json") -Encoding UTF8
 
-  # Since 1.3.0 the recovery is announced in a message box while the window opens
-  # (OnUIOpen), and the window appears once it is acknowledged.
+  # The recovery is announced in a message box over the open window. It used to come
+  # up alone from OnUIOpen, before the window was shown.
   $run = Invoke-VoLumRun -SandboxRoot $sandbox -AcknowledgeNotice "^VoLum: Could not read the library"
   Assert-Equal "recovery notice shown once" 1 @($run.notices).Count
+  Assert-Equal "recovery notice waits for the window" 0 $run.noticesBeforeWindow
   Assert-True "recovery notice names the .bak" (@($run.notices | Where-Object { $_ -match "volum-content\.json\.bak" }).Count -eq 1) `
     ("notices: " + ($run.notices -join " | "))
   Assert-True "app still opens with an unreadable library" $run.started

@@ -402,6 +402,19 @@ inline bool AddHeardMarksLive(int firstFreeSlot, bool presetIdEmpty)
   return firstFreeSlot >= 0 && !presetIdEmpty;
 }
 
+// Who asked for a save. Ctrl+S moves the LIVE switch onto the copy it just saved;
+// Add this sound adds a switch of its own and leaves the LIVE one as it was.
+enum class SaveOrigin
+{
+  Shortcut,
+  AddSound
+};
+
+inline bool SaveRetargetsLiveSlot(SaveOrigin origin)
+{
+  return origin == SaveOrigin::Shortcut;
+}
+
 inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::string& activeAmpId,
                                const std::string& activePresetId)
 {
