@@ -9,6 +9,7 @@
 #include "VoLumCabStep.h"
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomModel.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -245,6 +246,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     ClearVoLumKnobSelection(this);
 
     if (mIrBtnRect.Contains(x, y))
@@ -268,6 +270,12 @@ public:
         return;
       }
     }
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   // Keyboard equivalent of clicking the next cab button (the S shortcut). Runs the
@@ -401,4 +409,5 @@ private:
   std::string mNoCabDisabledHint;
   ChangeCallback mCallback;
   IrMenuCallback mIrMenuCb;
+  volum::ui::SecondPressGate mSecondPress;
 };

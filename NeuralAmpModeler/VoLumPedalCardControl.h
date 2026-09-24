@@ -14,6 +14,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumPrePedalCaptures.h"
+#include "VoLumSecondPress.h"
 #include "VoLumTriptychMotifs.h"
 #include "VoLumTriptychState.h"
 #include "NeuralAmpModeler.h"
@@ -122,6 +123,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     if (mPlaceholder)
       return;
     // Same control as the collapsed mini-pill: the LED toggles bypass and does
@@ -154,6 +156,12 @@ public:
     }
     if (mCallback)
       mCallback(this, false);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -284,4 +292,5 @@ private:
   bool mCachedBypassed = false;
   int mCachedVariant = -1; // PITCH motif sub-mode the cached art layer was drawn for.
   ClickCallback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };

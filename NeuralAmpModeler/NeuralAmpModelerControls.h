@@ -13,6 +13,7 @@
 #include "VoLumKeyboardModel.h"
 #include "VoLumLatencyReport.h"
 #include "VoLumOutputMode.h"
+#include "VoLumSecondPress.h"
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
 #define NAM_KNOB_HEIGHT 120.0f
@@ -166,6 +167,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     if (!IsDisabled())
     {
       SetSelectedForKeyboard(true);
@@ -175,6 +177,14 @@ public:
     }
 
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  // Double-click still resets to default, but only on the knob that took the
+  // first click: a dropdown row double-clicked over a knob must not reset it.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      IVKnobControl::OnMouseDblClick(x, y, mod);
   }
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
@@ -235,6 +245,7 @@ private:
   bool mKeyboardSelected = false;
   volum::keyboard::WheelAccumulator mWheelAccum;
   std::string mKeyboardLabel;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
@@ -356,8 +367,18 @@ public:
     (void)x;
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
   }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
+  }
+
+private:
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMFileNameControl : public IVButtonControl
@@ -969,6 +990,7 @@ public:
   {
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
     {
       const IRECT seg = SegmentTrack();
@@ -978,8 +1000,15 @@ public:
     SetDirty(false);
   }
 
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
+  }
+
 private:
   IText mLabelText;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren

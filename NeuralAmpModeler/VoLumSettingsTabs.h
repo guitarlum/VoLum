@@ -33,6 +33,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumMidi.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -82,6 +83,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     const int tab = TabAt(x, y);
     if (tab < 0 || tab == mActive)
       return;
@@ -89,6 +91,12 @@ public:
     if (mCallback)
       mCallback(tab);
     SetDirty(false);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod&) override
@@ -137,6 +145,7 @@ private:
   int mActive = 0;
   int mHover = -1;
   Callback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 /** SIGNAL > Performance: "Animate art in PLAY" as OFF | ON, under Lite.
@@ -175,12 +184,19 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     const IRECT seg = SegmentTrack();
     if (!seg.Contains(x, y))
       return;
     if (mSet)
       mSet(x >= seg.MW());
     SetDirty(false);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
 private:
@@ -198,6 +214,7 @@ private:
 
   Getter mGet;
   Setter mSet;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 /** The per-instance listen filter: all MIDI channels, or exactly one of 1-16.
@@ -277,6 +294,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     if (AllRect().Contains(x, y))
     {
       Commit(0);
@@ -297,6 +315,12 @@ public:
       Commit(mChannel == 1 ? volum::kMidiChannelCount : mChannel - 1);
     else if (x > step.R - 22.f)
       Commit(mChannel == volum::kMidiChannelCount ? 1 : mChannel + 1);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod&) override
@@ -364,6 +388,7 @@ private:
   int mLastOne = 1;
   int mHover = kHoverNone;
   ChannelCallback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 /** The per-instance Sound-recall CC: value 0-127 is the program number.
@@ -412,6 +437,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     const IRECT step = StepperRect();
     if (!step.Contains(x, y))
       return;
@@ -419,6 +445,12 @@ public:
       Commit(mCc == volum::kMidiRecallCcMin ? volum::kMidiRecallCcMax : mCc - 1);
     else if (x > step.R - 22.f)
       Commit(mCc == volum::kMidiRecallCcMax ? volum::kMidiRecallCcMin : mCc + 1);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
@@ -486,4 +518,5 @@ private:
   int mCc = volum::kMidiRecallCcDefault;
   int mHover = kHoverNone;
   CcCallback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };

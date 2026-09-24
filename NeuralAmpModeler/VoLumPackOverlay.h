@@ -17,6 +17,7 @@
 #include "VoLumPack.h"
 #include "VoLumPackLayout.h"
 #include "VoLumScroll.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <functional>
@@ -159,6 +160,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     const auto scroll = _ListScrollMetrics();
     const IRECT track = _ListTrackRect();
     if (mBar.OnDown(x, y, track.L, track.R, scroll))
@@ -240,6 +242,18 @@ public:
         SetDirty(false);
       }
     }
+  }
+
+  // The Settings row that opens this modal sits under it: the second press of a
+  // double-click on that row lands here, and the gate drops it. Export / Import
+  // write files, so they never run twice from one double-click. No mouse-up
+  // follows a double-click, so a scrollbar grab ends here.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (!mSecondPress.Take() || _GoRect().Contains(x, y))
+      return;
+    OnMouseDown(x, y, mod);
+    mBar.OnUp();
   }
 
   void OnMouseDrag(float x, float y, float, float, const IMouseMod&) override
@@ -896,6 +910,7 @@ private:
   volum::pack::ImportVerb mVerb = volum::pack::ImportVerb::Overwrite;
   float mScroll = 0.f;
   volum::scroll::Interaction mBar;
+  volum::ui::SecondPressGate mSecondPress;
   std::string mStatus;
   std::vector<Row> mRows;
   std::vector<std::string> mAlsoIncluding;

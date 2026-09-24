@@ -13,6 +13,7 @@
 #include "VoLumSettingsOverlay.h"
 #include "VoLumSettingsTabs.h"
 #include "VoLumMidiFootswitch.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -148,6 +149,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     float itemH = mRECT.H() / static_cast<float>(mModes.size());
     int clickedIdx = static_cast<int>((y - mRECT.T) / itemH);
     if (clickedIdx >= 0 && clickedIdx < static_cast<int>(mModes.size()))
@@ -155,6 +157,12 @@ public:
       SetValue(static_cast<double>(clickedIdx) / (mModes.size() - 1));
       SetDirty(true);
     }
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
   }
 
   void OnMouseOver(float /*x*/, float y, const IMouseMod& /*mod*/) override
@@ -180,6 +188,7 @@ public:
 private:
   std::vector<std::string> mModes;
   int mHovered = -1;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumSubRowTextControl : public IControl
@@ -403,6 +412,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& /*mod*/) override
   {
+    const auto pressed = mSecondPress.Press();
     const int n = static_cast<int>(mLabels.size());
     if (n <= 0)
       return;
@@ -413,6 +423,12 @@ public:
     else
       SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
     SetDirty(true);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
   }
 
   void OnMouseOver(float x, float /*y*/, const IMouseMod& /*mod*/) override
@@ -466,6 +482,7 @@ private:
   std::vector<int> mValues;
   int mValueDenom = 0;
   int mHovered = -1;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 // Vertical text label (draws each character stacked)

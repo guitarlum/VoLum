@@ -16,6 +16,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <array>
@@ -202,6 +203,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     ClearVoLumKnobSelection(this);
 
     // Scrollbar first: a forgiving grab zone covers the gutter + visible bar so
@@ -253,6 +255,17 @@ public:
         break;
       default: break;
     }
+  }
+
+  // Only the scrollbar repeats. A second press on a row would reload the amp the
+  // first press just picked, or pick its neighbour once the reveal scroll moved it.
+  // iPlug releases capture after a double-click, so no mouse-up ends a drag here.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (!mSecondPress.Take() || !Scrollable() || x < RowRight())
+      return;
+    OnMouseDown(x, y, mod);
+    mDraggingScrollbar = false;
   }
 
   void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
@@ -385,7 +398,7 @@ private:
   static constexpr float kHeaderH = 26.f;
   static constexpr float kLabelVNudge = 1.f; // px down so Josefin-Bold labels optically center on the art
 
-  static constexpr float kScrollbarW = volum::amplist::kScrollbarW;  // visible bar width when scrollable
+  static constexpr float kScrollbarW = volum::amplist::kScrollbarW; // visible bar width when scrollable
   static constexpr float kScrollGutter = volum::amplist::kScrollGutter; // empty gap between labels and bar
 
   bool Scrollable() const { return volum::amplist::Scrollable(ContentHeight(), mRECT.H()); }
@@ -570,8 +583,8 @@ private:
       {
         // Empty -> the whole header row is the add target; populated -> only the
         // + button. Match the row hover-fill so every clickable zone reacts.
-        const IRECT hoverR = mCustomNames.empty() ? header.GetPadded(-2.f, -1.f, -2.f, -1.f)
-                                                   : plus.GetPadded(-2.f, -3.f, -1.f, -3.f);
+        const IRECT hoverR =
+          mCustomNames.empty() ? header.GetPadded(-2.f, -1.f, -2.f, -1.f) : plus.GetPadded(-2.f, -3.f, -1.f, -3.f);
         g.FillRoundRect(VoLumColors::ITEM_HOVER, hoverR, 4.f);
       }
       g.DrawText(IText(10.f, addHovered ? VoLumColors::CREAM : VoLumColors::CREAM_DIM, "Josefin-Bold", EAlign::Near,
@@ -616,8 +629,9 @@ private:
 
       // Clip the name so a long custom-amp name can never reach the pen/trash.
       // Same optical-center nudge as the factory rows (see kLabelVNudge).
-      IRECT nameArea =
-        paddedRow.GetReducedFromLeft(38.f).GetReducedFromRight(hovered || selected ? 48.f : 6.f).GetVShifted(kLabelVNudge);
+      IRECT nameArea = paddedRow.GetReducedFromLeft(38.f)
+                         .GetReducedFromRight(hovered || selected ? 48.f : 6.f)
+                         .GetVShifted(kLabelVNudge);
       g.PathClipRegion(nameArea);
       g.DrawText(IText(13.f, selected ? VoLumColors::TEXT_BRIGHT : VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Near,
                        EVAlign::Middle),
@@ -692,7 +706,8 @@ private:
   float mScrollOffset = 0.f;
   float mScrollTarget = 0.f;
   bool mDraggingScrollbar = false; // thumb drag in progress
-  float mDragGrabDY = 0.f;         // cursor offset within thumb at grab time
+  float mDragGrabDY = 0.f; // cursor offset within thumb at grab time
+  volum::ui::SecondPressGate mSecondPress;
   std::vector<std::string> mAmpNames;
   std::vector<std::string> mAmpAbbrs;
   SelectionCallback mCallback;

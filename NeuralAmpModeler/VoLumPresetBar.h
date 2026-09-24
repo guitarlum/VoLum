@@ -9,6 +9,7 @@
 #include "VoLumIrFileGuard.h"
 #include "VoLumPresetStep.h"
 #include "VoLumAmpSettingsJson.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cctype>
@@ -149,6 +150,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     if (!mList.empty() && PrevRect().Contains(x, y))
     {
       Step(-1);
@@ -161,6 +163,13 @@ public:
     }
     if (mOpen)
       mOpen();
+  }
+
+  // Only the arrows repeat: the name opens the preset menu.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take() && !mList.empty() && (PrevRect().Contains(x, y) || NextRect().Contains(x, y)))
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod&) override
@@ -215,4 +224,5 @@ private:
   int mIdx = -1;
   OpenCallback mOpen;
   RecallCallback mRecall;
+  volum::ui::SecondPressGate mSecondPress;
 };

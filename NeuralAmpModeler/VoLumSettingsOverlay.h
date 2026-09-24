@@ -16,6 +16,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumPackLayout.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -198,10 +199,16 @@ public:
 
   void OnMouseDown(float, float, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     mChecked = !mChecked;
     if (mCallback)
       mCallback(mChecked);
     SetDirty(false);
+  }
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
   void OnMouseOver(float, float, const IMouseMod&) override
   {
@@ -224,6 +231,7 @@ private:
   std::string mLabel;
   bool mChecked = false;
   Callback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 /** Thin horizontal rule above settings footer (mouse passes through). */

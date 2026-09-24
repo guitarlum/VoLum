@@ -13,6 +13,7 @@
 #include "VoLumPlayLight.h"
 #include "VoLumPlayModel.h"
 #include "VoLumScroll.h"
+#include "VoLumSecondPress.h"
 #include "VoLumStageArtCache.h"
 #include "VoLumTriptychMotifs.h"
 
@@ -386,6 +387,8 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
+    mPressPickerOpen = mPickerOpen;
     if (mPickerOpen)
     {
       if (PickerCloseRect().Contains(x, y))
@@ -589,12 +592,22 @@ public:
       OpenPicker(slot.slot, false);
   }
 
+  // Double-clicking a plate opens its picker; anywhere else (a stomp, the picker's
+  // slot stepper) the second press counts as one. A press that opened or closed
+  // the picker moved what is under the cursor, so its second press is dropped.
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
-    if (mod.R)
+    if (!mSecondPress.Take() || mPickerOpen != mPressPickerOpen || mod.R)
       return;
-    const int row = SlotAt(x, y);
-    if (row < 0 || row >= static_cast<int>(mSlots.size()) || mChoices.empty())
+    const int row = mPickerOpen ? -1 : SlotAt(x, y);
+    if (row < 0)
+    {
+      OnMouseDown(x, y, mod);
+      mRailBar.OnUp();
+      mPickerBar.OnUp();
+      return;
+    }
+    if (row >= static_cast<int>(mSlots.size()) || mChoices.empty())
       return;
     OpenPicker(mSlots[(size_t)row].slot, false);
   }
@@ -1908,4 +1921,6 @@ private:
   int mPressGlyph = kPressBody;
   float mPressX = 0.f, mPressY = 0.f, mDragX = 0.f, mDragY = 0.f;
   bool mDragging = false, mDropInsert = false;
+  volum::ui::SecondPressGate mSecondPress;
+  bool mPressPickerOpen = false;
 };

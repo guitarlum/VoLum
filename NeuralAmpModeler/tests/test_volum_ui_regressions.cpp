@@ -1,5 +1,6 @@
 ﻿#include "third_party/doctest.h"
 #include "../config.h"
+#include "../VoLumSecondPress.h"
 #include "../VoLumTriptychLayout.h"
 
 #include <cmath>
@@ -3021,4 +3022,206 @@ TEST_CASE("Product strings spell non-ASCII as UTF-8 bytes, never \\u escapes")
   for (const auto& o : offenders)
     list += o + "\n";
   CHECK_MESSAGE(offenders.empty(), list);
+}
+TEST_CASE("A double-click counts as a press only on the control that took the first press")
+{
+  // Windows reports the second of two quick clicks as a double-click, and iPlug
+  // hit-tests it afresh. A control that never saw the first press (a pedal under a
+  // dropdown row that just closed) must not act on it.
+  volum::ui::SecondPressGate gate;
+  CHECK_FALSE(gate.TakeAt(100.0));
+
+  gate.ArmAt(1000.0);
+  CHECK(gate.TakeAt(1250.0));
+  // One replay per press: a stray third message is not a fourth click.
+  CHECK_FALSE(gate.TakeAt(1300.0));
+
+  // A press long ago is not the first half of this double-click.
+  gate.ArmAt(2000.0);
+  CHECK_FALSE(gate.TakeAt(2000.0 + volum::ui::kSecondPressWindowMs + 1.0));
+
+  // Covers the slowest setting of the Windows double-click speed slider.
+  CHECK(volum::ui::kSecondPressWindowMs >= 900.0);
+}
+
+namespace
+{
+enum class DblDecision
+{
+  Repeats, // the second press is a second click, gated to the control's own press
+  RepeatsParam, // same, replayed inside the host edit gesture (parameter-bound)
+  KnobResets, // knob: double-click resets to default, gated to the knob's own press
+  StockSwitch, // iPlug ISwitchControlBase already maps double-click to a click
+  OwnDblClick, // deliberate double-click action of its own
+  HeroDblAsSingle, // Dual Amp click protocol, see the Hero lane test
+  Drops, // first press opens, closes or picks; the second press is ignored
+};
+
+struct DblRow
+{
+  const char* file;
+  const char* cls;
+  DblDecision decision;
+};
+
+// Every VoLum control that handles OnMouseDown, and what a double-click does on it.
+const std::vector<DblRow>& DoubleClickDecisions()
+{
+  static const std::vector<DblRow> rows = {
+    {"NeuralAmpModelerControls.h", "NAMKnobControl", DblDecision::KnobResets},
+    {"NeuralAmpModelerControls.h", "VoLumPowerSwitchControl", DblDecision::RepeatsParam},
+    {"NeuralAmpModelerControls.h", "OutputModeControl", DblDecision::StockSwitch},
+    {"NeuralAmpModelerControls.h", "VoLumLiteModeSwitchControl", DblDecision::Repeats},
+    {"VoLumAmpList.h", "VoLumAmpListControl", DblDecision::Repeats},
+    {"VoLumConfirmDialog.h", "VoLumConfirmDialogControl", DblDecision::Drops},
+    {"VoLumCoreControls.h", "VoLumKnobSelectionClearControl", DblDecision::Drops},
+    {"VoLumCoreControls.h", "VoLumModePickerControl", DblDecision::RepeatsParam},
+    {"VoLumCoreControls.h", "VoLumSubModePillControl", DblDecision::RepeatsParam},
+    {"VoLumCustomOverlay.h", "VoLumCustomOverlayControl", DblDecision::OwnDblClick},
+    {"VoLumExactEntry.h", "VoLumExactEntryControl", DblDecision::Repeats},
+    {"VoLumHero.h", "VoLumHeroImageControl", DblDecision::HeroDblAsSingle},
+    {"VoLumHero.h", "VoLumSupportPolarityControl", DblDecision::Repeats},
+    {"VoLumKeyboardNav.h", "VoLumChannelStepControl", DblDecision::Repeats},
+    {"VoLumListMenu.h", "VoLumListMenuControl", DblDecision::Drops},
+    {"VoLumMidiFootswitch.h", "VoLumMidiFootswitchControl", DblDecision::OwnDblClick},
+    {"VoLumNameDialog.h", "VoLumNameDialogControl", DblDecision::OwnDblClick},
+    {"VoLumPackOverlay.h", "VoLumPackOverlayControl", DblDecision::Repeats},
+    {"VoLumPedalCardControl.h", "VoLumPedalCardControl", DblDecision::Repeats},
+    {"VoLumPlaySurface.h", "VoLumModeToggleControl", DblDecision::Drops},
+    {"VoLumPlaySurface.h", "VoLumPlaySurfaceControl", DblDecision::Repeats},
+    {"VoLumPresetBar.h", "VoLumPresetBarControl", DblDecision::Repeats},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsBackdropControl", DblDecision::Drops},
+    {"VoLumSettingsOverlay.h", "VoLumUpdateNoticeControl", DblDecision::Drops},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsCheckboxControl", DblDecision::Repeats},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsCloseControl", DblDecision::Drops},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsPackRowControl", DblDecision::Drops},
+    {"VoLumSettingsTabs.h", "VoLumSettingsTabStripControl", DblDecision::Repeats},
+    {"VoLumSettingsTabs.h", "VoLumAnimateArtSwitchControl", DblDecision::Repeats},
+    {"VoLumSettingsTabs.h", "VoLumMidiChannelControl", DblDecision::Repeats},
+    {"VoLumSettingsTabs.h", "VoLumMidiRecallCcControl", DblDecision::Repeats},
+    {"VoLumSpeakerRow.h", "VoLumSpeakerRowControl", DblDecision::Repeats},
+    {"VoLumTriptych.h", "VoLumTriptychControl", DblDecision::Repeats},
+    {"VoLumTriptychMenus.h", "VoLumPreCaptureMenuControl", DblDecision::Drops},
+    {"VoLumTunerMetronomeOverlay.h", "VoLumTunerControl", DblDecision::Drops},
+    {"VoLumTunerMetronomeOverlay.h", "VoLumMetronomeControl", DblDecision::Repeats},
+  };
+  return rows;
+}
+
+// Body of a top-level class: from its declaration to the first column-0 "};".
+std::string TopLevelClassBody(const std::string& src, const std::string& cls)
+{
+  const auto start = src.find("class " + cls + " :");
+  REQUIRE_MESSAGE(start != std::string::npos, cls);
+  const auto end = src.find("\n};", start);
+  REQUIRE_MESSAGE(end != std::string::npos, cls);
+  return src.substr(start, end - start);
+}
+
+std::string MemberBody(const std::string& body, const char* signature)
+{
+  const auto start = body.find(signature);
+  if (start == std::string::npos)
+    return {};
+  const auto end = body.find("\n  }", start);
+  return body.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+} // namespace
+
+TEST_CASE("Every clickable VoLum control has a double-click decision")
+{
+  // A class that handles OnMouseDown and is missing from the table gets the stock
+  // IControl::OnMouseDblClick: the second of two quick clicks is dropped, and on a
+  // parameter-bound control the value snaps back to its default.
+  namespace fs = std::filesystem;
+  std::vector<std::string> missing;
+  const fs::path root = RepoRoot() / "NeuralAmpModeler";
+  for (const auto& entry : fs::directory_iterator(root))
+  {
+    if (!entry.is_regular_file() || entry.path().extension() != ".h")
+      continue;
+    const std::string src = ReadText(entry.path());
+    const std::string file = entry.path().filename().string();
+    for (auto at = src.find("void OnMouseDown(float"); at != std::string::npos;
+         at = src.find("void OnMouseDown(float", at + 1))
+    {
+      const auto decl = src.rfind("\nclass ", at);
+      if (decl == std::string::npos)
+        continue;
+      const auto nameStart = decl + 7;
+      const std::string cls = src.substr(nameStart, src.find_first_of(" :\n", nameStart) - nameStart);
+      bool listed = false;
+      for (const auto& row : DoubleClickDecisions())
+        listed = listed || (file == row.file && cls == row.cls);
+      if (!listed)
+        missing.push_back(file + " " + cls);
+    }
+  }
+  std::string list;
+  for (const auto& m : missing)
+    list += m + "\n";
+  CHECK_MESSAGE(missing.empty(), list);
+}
+
+TEST_CASE("Steppers, arrows, pills and toggles count a fast second click")
+{
+  for (const auto& row : DoubleClickDecisions())
+  {
+    const std::string body = TopLevelClassBody(ReadText(RepoRoot() / "NeuralAmpModeler" / row.file), row.cls);
+    const std::string dbl = MemberBody(body, "void OnMouseDblClick(");
+    INFO(row.cls);
+    switch (row.decision)
+    {
+      case DblDecision::Repeats:
+      case DblDecision::RepeatsParam:
+        RequireContains(MemberBody(body, "void OnMouseDown("), "mSecondPress.Press();");
+        RequireContains(dbl, "mSecondPress.Take()");
+        RequireContains(dbl, row.decision == DblDecision::RepeatsParam ? "volum::ui::PressAgain(*this, x, y, mod)"
+                                                                       : "OnMouseDown(x, y, mod)");
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        break;
+      case DblDecision::KnobResets:
+        RequireContains(MemberBody(body, "void OnMouseDown("), "mSecondPress.Press();");
+        RequireContains(dbl, "mSecondPress.Take()");
+        RequireContains(dbl, "IVKnobControl::OnMouseDblClick(x, y, mod)");
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        break;
+      case DblDecision::StockSwitch:
+        RequireContains(body, "public IVRadioButtonControl");
+        RequireDoesNotContain(body, "OnMouseDblClick");
+        break;
+      case DblDecision::OwnDblClick: REQUIRE_FALSE(dbl.empty()); break;
+      case DblDecision::HeroDblAsSingle: RequireContains(body, "mDblAsSingleClick = true;"); break;
+      case DblDecision::Drops:
+        // The stock handler resets a bound parameter; these carry none.
+        REQUIRE(dbl.empty());
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        RequireDoesNotContain(body, "paramIdx");
+        break;
+    }
+  }
+
+  // The stock switch path: iPlug maps a double-click to a click for every switch.
+  const std::string icontrol = ReadText(RepoRoot() / "iPlug2" / "IGraphics" / "IControl.cpp");
+  const auto sw = icontrol.find("ISwitchControlBase::ISwitchControlBase(");
+  REQUIRE(sw != std::string::npos);
+  RequireContains(icontrol.substr(sw, 400), "mDblAsSingleClick = true;");
+}
+
+TEST_CASE("Knobs keep double-click = reset to default")
+{
+  // Documented in the user guide. Every VoLum knob is a NAMKnobControl, and the
+  // iPlug knob it forwards to resets the value.
+  const std::string knob =
+    TopLevelClassBody(ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h"), "NAMKnobControl");
+  RequireContains(knob, "public IVKnobControl");
+  RequireContains(MemberBody(knob, "void OnMouseDblClick("), "IVKnobControl::OnMouseDblClick(x, y, mod)");
+  const std::string ivknob = ReadText(RepoRoot() / "iPlug2" / "IGraphics" / "Controls" / "IControls.cpp");
+  const auto reset = ivknob.find("void IVKnobControl::OnMouseDblClick(");
+  REQUIRE(reset != std::string::npos);
+  RequireContains(ivknob.substr(reset, 200), "SetValueToDefault(");
+
+  const std::string plugin = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  RequireContains(plugin, "class VoLumPanKnobControl : public NAMKnobControl");
+  RequireContains(plugin, "class VoLumDialKnobControl : public NAMKnobControl");
 }

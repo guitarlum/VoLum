@@ -16,6 +16,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumDualAmpInput.h"
 #include "VoLumFractalArt.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstring>
@@ -539,12 +540,20 @@ public:
     (void)x;
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (mToggleCallback)
       mToggleCallback();
     SetDirty(false);
   }
 
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
+  }
+
 private:
   IsActiveCallback mIsActiveCallback;
   ToggleCallback mToggleCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };

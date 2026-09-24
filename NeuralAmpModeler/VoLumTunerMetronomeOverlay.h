@@ -16,6 +16,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -337,6 +338,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (mHide)
       return;
 
@@ -401,6 +403,15 @@ public:
         return;
       }
     }
+  }
+
+  // No mouse-up follows a double-click, so a volume grab ends here.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (!mSecondPress.Take())
+      return;
+    OnMouseDown(x, y, mod);
+    mDraggingVolume = false;
   }
 
   void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
@@ -533,4 +544,5 @@ private:
   bool mDraggingVolume = false;
   bool mEditingBPM = false;
   IText mBpmTextEntry;
+  volum::ui::SecondPressGate mSecondPress;
 };

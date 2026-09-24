@@ -11,6 +11,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumNumericEntry.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -70,6 +71,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     if (mHide)
       return;
 
@@ -87,6 +89,13 @@ public:
 
     if (!mEditing && GetEntryRect().Contains(x, y))
       StartEntry();
+  }
+
+  // Bound to the knob being edited, so the stock double-click would reset it.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnTextEntryCompletion(const char* str, int /*valIdx*/) override
@@ -239,6 +248,7 @@ private:
   std::string mLabel;
   std::string mRangeText;
   bool mEditing = false;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumParamValueControl : public IControl
