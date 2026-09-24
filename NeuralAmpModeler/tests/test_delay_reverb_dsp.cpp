@@ -612,7 +612,8 @@ TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
   auto** out = delay.Process(inputs, 2, frames);
   REQUIRE_FALSE(hasNaN(out[0], frames));
   REQUIRE_FALSE(hasNaN(out[1], frames));
-  CHECK(std::abs(out[1][10]) > 0.75);
+  // The seed is the L/R mid, so a left-only impulse repeats at half level on the right.
+  CHECK(std::abs(out[1][10]) == doctest::Approx(0.5).epsilon(0.05));
   CHECK(std::abs(out[0][10]) < 0.05);
 }
 
