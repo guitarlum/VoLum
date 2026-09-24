@@ -243,6 +243,7 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 - In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.
 - `Ctrl+S` opens the save dialog from any BUILD section (PRE, AMP, or POST), also while a knob is selected.
+- Buttons, arrows, and steppers count every click, however fast you click. Double-clicking a knob restores its default.
 - `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
 - `Enter` edits the focused target. In the standalone app, `Space` toggles its on/off state. In plug-ins, `B` toggles it so `Space` remains available for DAW Play/Stop.
 - `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.

@@ -243,6 +243,7 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 - In BUILD, ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Ctrl+S` öffnet den Speichern-Dialog in jedem BUILD-Bereich (PRE, AMP oder POST), auch wenn ein Regler ausgewählt ist.
+- Schaltflächen, Pfeile und Stepper zählen jeden Klick, egal wie schnell du klickst. Ein Doppelklick auf einen Regler stellt dessen Default wieder her.
 - `Tab` / `Umschalt+Tab` bewegt den Fokus im aktuellen Bereich; `Links` / `Rechts` auch in PRE/POST.
 - `Enter` bearbeitet das fokussierte Ziel. In der Standalone-App schaltet `Leertaste` es ein/aus. Im Plugin übernimmt `B` diese Funktion, damit `Leertaste` für Start/Stopp der DAW frei bleibt.
 - `S` wechselt Speaker/Cab der fokussierten Amp-Spur; `Umschalt+S` rückwärts.
