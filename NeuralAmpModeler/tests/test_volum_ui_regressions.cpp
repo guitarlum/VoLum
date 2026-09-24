@@ -420,7 +420,8 @@ TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound r
 
   // The footswitch view names its numbers the same way: program numbers on
   // banks of switches, never "PC" and never a channel.
-  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h")
+                           + ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
   RequireContains(controls, "\"What each program number plays\"");
   RequireContains(view, "\"Program numbers \"");
   RequireContains(view, "\"BANK\"");
@@ -2717,7 +2718,7 @@ TEST_CASE("tier2e an empty MIDI map does not teach drag or clear")
 {
   // The drag / clear lines are the default; an empty map swaps them for the one
   // thing that can happen next.
-  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
   const auto drag = view.find("Drag onto another to swap. The cross clears.");
   REQUIRE(drag != std::string::npos);
   const auto empty = view.find("else if (mSlots.empty())", drag);

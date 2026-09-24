@@ -1571,6 +1571,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       stack.custom = isOpen(kCtrlTagVoLumCustomOverlay);
       stack.pack = isOpen(kCtrlTagVoLumPackOverlay);
       stack.settings = isOpen(kCtrlTagSettingsBox);
+      if (stack.settings)
+        if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+          stack.settingsMidiBoard = settings->As<NAMSettingsPageControl>()->MidiBanksPageable();
       stack.dropdown = isOpen(kCtrlTagVoLumPresetMenu) || isOpen(kCtrlTagVoLumIrMenu)
                        || isOpen(kCtrlTagVoLumPreCaptureMenu) || isOpen(kCtrlTagVoLumSupportAmpMenu);
       stack.knobSelected = mVolumSelectedKnobParamIdx != kNoParameter;
@@ -1662,6 +1665,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         case KeyConsumer::NameDialogKey:
           if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog))
             dlg->OnKeyDown(0.f, 0.f, key);
+          return true;
+        case KeyConsumer::SettingsMidiPage:
+          if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
+            settings->As<NAMSettingsPageControl>()->PageMidiBanks(key.VK);
           return true;
         case KeyConsumer::FallThrough: return false;
         case KeyConsumer::Knob:

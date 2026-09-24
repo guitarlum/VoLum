@@ -237,6 +237,8 @@ inline bool Contains(const std::array<int, N>& params, int paramIdx)
 inline constexpr int kKeyBack = 0x08;
 inline constexpr int kKeyReturn = 0x0D;
 inline constexpr int kKeyEscape = 0x1B;
+inline constexpr int kKeyPageUp = 0x21;
+inline constexpr int kKeyPageDown = 0x22;
 inline constexpr int kKeyDelete = 0x2E;
 inline constexpr int kKeyLeft = 0x25;
 inline constexpr int kKeyUp = 0x26;
@@ -268,6 +270,8 @@ struct OverlayStack
   bool pack = false;
   bool settings = false;
   bool settingsMidiArmed = false;
+  // Settings shows the MIDI tab's footswitch board (not its Sound picker).
+  bool settingsMidiBoard = false;
   bool dropdown = false;
   bool knobSelected = false;
 };
@@ -281,6 +285,7 @@ enum class KeyKind
   Arrow,
   Enter,
   Delete,
+  Page,
   Other,
 };
 
@@ -295,6 +300,7 @@ enum class KeyConsumer
   FallThrough,
   ConfirmEnter,
   NameDialogKey,
+  SettingsMidiPage,
   Knob,
   Rig,
 };
@@ -344,6 +350,8 @@ inline KeyKind ClassifyVk(int vk)
     return KeyKind::Enter;
   if (vk == kKeyDelete || vk == kKeyBack)
     return KeyKind::Delete;
+  if (vk == kKeyPageUp || vk == kKeyPageDown)
+    return KeyKind::Page;
   return KeyKind::Other;
 }
 
@@ -397,6 +405,8 @@ inline KeyConsumer RouteKey(const OverlayStack& s, KeyKind kind)
     return KeyConsumer::OverlayNav;
   if (kind == KeyKind::Enter && top == OverlayId::Confirm)
     return KeyConsumer::ConfirmEnter;
+  if (kind == KeyKind::Page && top == OverlayId::Settings && s.settingsMidiBoard)
+    return KeyConsumer::SettingsMidiPage;
   return KeyConsumer::Swallow;
 }
 

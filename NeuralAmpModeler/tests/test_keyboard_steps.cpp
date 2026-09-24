@@ -155,6 +155,13 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
   settingsMidi.settings = true;
   settingsMidi.settingsMidiArmed = true;
 
+  OverlayStack midiBoard;
+  midiBoard.settings = true;
+  midiBoard.settingsMidiBoard = true;
+
+  OverlayStack tunerOverMidiBoard = midiBoard;
+  tunerOverMidiBoard.tuner = true;
+
   OverlayStack pack;
   pack.pack = true;
 
@@ -210,6 +217,11 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
     {"settings H closes", settings, KeyKind::HotkeyH, KeyConsumer::CloseOverlay},
     {"settings T", settings, KeyKind::HotkeyT, KeyConsumer::Swallow},
     {"settings MIDI Esc peels picker", settingsMidi, KeyKind::Escape, KeyConsumer::PeelSettingsMidi},
+    {"MIDI board PageUp/PageDown page the banks", midiBoard, KeyKind::Page, KeyConsumer::SettingsMidiPage},
+    {"other Settings tab or the picker: page keys swallowed", settings, KeyKind::Page, KeyConsumer::Swallow},
+    {"tuner above the MIDI board swallows page keys", tunerOverMidiBoard, KeyKind::Page, KeyConsumer::Swallow},
+    {"MIDI board still swallows other keys", midiBoard, KeyKind::Other, KeyConsumer::Swallow},
+    {"page keys with nothing open go to the rig", empty, KeyKind::Page, KeyConsumer::Rig},
     {"pack Esc", pack, KeyKind::Escape, KeyConsumer::CloseOverlay},
     {"pack H closes", pack, KeyKind::HotkeyH, KeyConsumer::CloseOverlay},
     {"dropdown Esc", dropdown, KeyKind::Escape, KeyConsumer::CloseOverlay},
@@ -248,6 +260,8 @@ TEST_CASE("A visible overlay blocks global hotkeys; Escape peels the topmost ove
   CHECK(ClassifyVk(kKeyUp) == KeyKind::Arrow);
   CHECK(ClassifyVk(kKeyDelete) == KeyKind::Delete);
   CHECK(ClassifyVk(kKeyBack) == KeyKind::Delete);
+  CHECK(ClassifyVk(kKeyPageUp) == KeyKind::Page);
+  CHECK(ClassifyVk(kKeyPageDown) == KeyKind::Page);
 }
 
 TEST_CASE("Ctrl+S reaches the save shortcut from every BUILD focus state, never through an overlay")

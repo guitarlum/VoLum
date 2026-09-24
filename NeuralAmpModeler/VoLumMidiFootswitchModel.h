@@ -56,12 +56,18 @@ inline int ClampBank(int bank)
   return std::clamp(bank, 0, kBankCount - 1);
 }
 
-// The page the view opens on: the one holding the live (last recalled) program,
-// or the first bank when nothing has been recalled yet.
-inline int OpeningBank(int liveProgram)
+// The page the view opens on: the one holding the live (last recalled) program;
+// with nothing recalled, the first bank that has Sounds, so a player whose map
+// starts at program 40 does not open on an empty page; bank 1 when none has.
+inline int OpeningBank(int liveProgram, const std::array<int, kBankCount>& occupancy)
 {
   const int bank = BankOf(liveProgram);
-  return bank < 0 ? 0 : bank;
+  if (bank >= 0)
+    return bank;
+  for (int i = 0; i < kBankCount; ++i)
+    if (occupancy[static_cast<size_t>(i)] > 0)
+      return i;
+  return 0;
 }
 
 // Arrows and the wheel stop at the ends rather than wrapping: a wheel that
@@ -69,6 +75,20 @@ inline int OpeningBank(int liveProgram)
 inline int StepBank(int bank, int dir)
 {
   return ClampBank(bank + (dir > 0 ? 1 : (dir < 0 ? -1 : 0)));
+}
+
+// PageUp / PageDown (iPlug kVK_PRIOR / kVK_NEXT) page back / forward, one bank a
+// press, stopping at the ends like the arrows. 0 for any other key.
+inline constexpr int kVkPageUp = 0x21;
+inline constexpr int kVkPageDown = 0x22;
+
+inline int PageKeyBankStep(int vk)
+{
+  if (vk == kVkPageUp)
+    return -1;
+  if (vk == kVkPageDown)
+    return 1;
+  return 0;
 }
 
 // One bank per wheel notch. Trackpads deliver fractions of a notch, so they
@@ -213,6 +233,15 @@ struct Hit
   HitKind kind = HitKind::None;
   int index = -1;
 };
+
+// Windows delivers every second quick click as a double-click. On the arrows and
+// the bank dots that is one more page; dropping it made fast paging skip every
+// other click. A double-click on a switch stays ignored: the first click already
+// opened the picker, and the second would pick whatever row is under the pointer.
+inline bool DoubleClickPages(HitKind kind)
+{
+  return kind == HitKind::Prev || kind == HitKind::Next || kind == HitKind::Pip;
+}
 
 // `occupied[i]` says whether switch i on the shown bank holds a Sound: only
 // those have a clear button to hit.

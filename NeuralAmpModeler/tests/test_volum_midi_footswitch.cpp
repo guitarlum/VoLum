@@ -72,14 +72,72 @@ TEST_CASE("Footswitch: out-of-range banks, switches and programs never wrap onto
 
 TEST_CASE("Footswitch: the view opens on the bank holding the live program")
 {
-  CHECK(OpeningBank(-1) == 0); // nothing recalled yet
-  CHECK(OpeningBank(0) == 0);
-  CHECK(OpeningBank(7) == 0);
-  CHECK(OpeningBank(8) == 1);
-  CHECK(OpeningBank(9) == 1);
-  CHECK(OpeningBank(42) == 5);
-  CHECK(OpeningBank(127) == 15);
-  CHECK(OpeningBank(500) == 0); // a stale out-of-range number is "nothing"
+  const std::array<int, kBankCount> none{};
+  CHECK(OpeningBank(-1, none) == 0); // nothing recalled yet, nothing assigned
+  CHECK(OpeningBank(0, none) == 0);
+  CHECK(OpeningBank(7, none) == 0);
+  CHECK(OpeningBank(8, none) == 1);
+  CHECK(OpeningBank(9, none) == 1);
+  CHECK(OpeningBank(42, none) == 5);
+  CHECK(OpeningBank(127, none) == 15);
+  CHECK(OpeningBank(500, none) == 0); // a stale out-of-range number is "nothing"
+}
+
+TEST_CASE("Footswitch: with nothing recalled the view opens on the first bank that has Sounds")
+{
+  const auto occupancy = BankOccupancy({44, 45, 97});
+  CHECK(OpeningBank(-1, occupancy) == 5);
+  CHECK(OpeningBank(500, occupancy) == 5); // stale number: same as nothing recalled
+  // A recalled program still wins, even on an empty bank.
+  CHECK(OpeningBank(3, occupancy) == 0);
+  CHECK(OpeningBank(100, occupancy) == 12);
+  CHECK(OpeningBank(-1, BankOccupancy({127})) == 15);
+}
+
+TEST_CASE("Footswitch: a quick second click on an arrow or bank dot pages again")
+{
+  // Windows makes every second quick click a double-click; ignoring it on the
+  // arrows made fast paging advance one bank per two clicks.
+  CHECK(DoubleClickPages(HitKind::Prev));
+  CHECK(DoubleClickPages(HitKind::Next));
+  CHECK(DoubleClickPages(HitKind::Pip));
+  // On a switch the first click opened the picker; the second must not pick a row.
+  CHECK_FALSE(DoubleClickPages(HitKind::Tile));
+  CHECK_FALSE(DoubleClickPages(HitKind::Clear));
+  CHECK_FALSE(DoubleClickPages(HitKind::None));
+
+  const auto root = FootswitchRepoRoot() / "NeuralAmpModeler";
+  const std::string view = FootswitchReadText(root / "VoLumMidiFootswitch.h");
+  const auto dbl = view.find("void OnMouseDblClick(float x, float y, const IMouseMod& mod) override");
+  REQUIRE(dbl != std::string::npos);
+  CHECK(view.substr(dbl, 240).find("volum::footswitch::DoubleClickPages(HitAt(x, y).kind)") != std::string::npos);
+  CHECK(view.substr(dbl, 240).find("OnMouseDown(x, y, mod);") != std::string::npos);
+}
+
+TEST_CASE("Footswitch: PageUp / PageDown reach the MIDI board through the key router")
+{
+  const auto root = FootswitchRepoRoot() / "NeuralAmpModeler";
+  const std::string view = FootswitchReadText(root / "VoLumMidiFootswitch.h");
+  const std::string controls = FootswitchReadText(root / "NeuralAmpModelerControls.h");
+  const std::string layout = FootswitchReadText(root / "VoLumLayoutBuild.inc.cpp");
+  CHECK(view.find("volum::footswitch::PageKeyBankStep(vk)") != std::string::npos);
+  CHECK(controls.find("->PageBankKey(vk)") != std::string::npos);
+  CHECK(layout.find("stack.settingsMidiBoard = settings->As<NAMSettingsPageControl>()->MidiBanksPageable();")
+        != std::string::npos);
+  const auto route = layout.find("case KeyConsumer::SettingsMidiPage:");
+  REQUIRE(route != std::string::npos);
+  CHECK(layout.substr(route, 220).find("->PageMidiBanks(key.VK);") != std::string::npos);
+}
+
+TEST_CASE("Footswitch: PageUp / PageDown page one bank and stop at the ends like the arrows")
+{
+  CHECK(PageKeyBankStep(0x21) == -1);
+  CHECK(PageKeyBankStep(0x22) == 1);
+  CHECK(PageKeyBankStep(0x26) == 0); // Up arrow is not a page key
+  CHECK(PageKeyBankStep('P') == 0);
+  CHECK(StepBank(0, PageKeyBankStep(0x21)) == 0);
+  CHECK(StepBank(15, PageKeyBankStep(0x22)) == 15);
+  CHECK(StepBank(3, PageKeyBankStep(0x22)) == 4);
 }
 
 TEST_CASE("Footswitch: arrows and wheel page one bank and stop at the ends")
@@ -216,7 +274,10 @@ TEST_CASE("Footswitch: hit-testing finds arrows, pips, switches and only an occu
 TEST_CASE("Footswitch: the Settings MIDI tab is the footswitch view, not the old table")
 {
   const auto root = FootswitchRepoRoot() / "NeuralAmpModeler";
-  const std::string view = FootswitchReadText(root / "VoLumMidiFootswitch.h");
+  // The control and its drawing half (VoLumMidiFootswitchDraw.h) are one view.
+  const std::string view =
+    FootswitchReadText(root / "VoLumMidiFootswitch.h") + FootswitchReadText(root / "VoLumMidiFootswitchDraw.h");
+  CHECK(view.find("#include \"VoLumMidiFootswitchDraw.h\"") != std::string::npos);
   const std::string tabs = FootswitchReadText(root / "VoLumSettingsTabs.h");
   const std::string controls = FootswitchReadText(root / "NeuralAmpModelerControls.h");
   const std::string layout = FootswitchReadText(root / "VoLumLayoutBuild.inc.cpp");
@@ -234,7 +295,7 @@ TEST_CASE("Footswitch: the Settings MIDI tab is the footswitch view, not the old
 
   // Numbering, paging, drop decisions and hit zones come from the tested model.
   CHECK(view.find("volum::footswitch::ProgramFor(mBank, hit.index)") != std::string::npos);
-  CHECK(view.find("volum::footswitch::OpeningBank(mLiveProgram)") != std::string::npos);
+  CHECK(view.find("volum::footswitch::OpeningBank(mLiveProgram, mOccupancy)") != std::string::npos);
   CHECK(view.find("volum::footswitch::WheelBankStep(mWheelAccum, d)") != std::string::npos);
   CHECK(view.find("volum::footswitch::DecideDrop(from, to,") != std::string::npos);
   CHECK(view.find("volum::footswitch::HitTest(BoardLayout(), x, y, OccupiedOnBank())") != std::string::npos);
@@ -282,7 +343,7 @@ TEST_CASE("Footswitch: the view reopens on the live bank and Escape backs out of
   REQUIRE(setData != std::string::npos);
   const auto follow = view.find("if (IsHidden())", setData);
   REQUIRE(follow != std::string::npos);
-  CHECK(view.find("mBank = volum::footswitch::OpeningBank(mLiveProgram);", follow) - follow < 120);
+  CHECK(view.find("mBank = volum::footswitch::OpeningBank(mLiveProgram, mOccupancy);", follow) - follow < 120);
   const auto hide = view.find("void Hide(bool hide) override");
   REQUIRE(hide != std::string::npos);
   CHECK(view.find("if (!hide && IsHidden())", hide) != std::string::npos);

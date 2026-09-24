@@ -1014,6 +1014,23 @@ public:
     return false;
   }
 
+  // The MIDI tab shows its footswitch board (not the Sound picker), so PageUp /
+  // PageDown page its banks.
+  bool MidiBanksPageable()
+  {
+    if (mActiveTab != kTabMidi || mWillHide)
+      return false;
+    auto* map = GetNamedChild(mControlNames.midiSoundMap);
+    return map && !map->IsHidden() && map->As<VoLumMidiFootswitchControl>()->OnBoard();
+  }
+
+  bool PageMidiBanks(int vk)
+  {
+    if (!MidiBanksPageable())
+      return false;
+    return GetNamedChild(mControlNames.midiSoundMap)->As<VoLumMidiFootswitchControl>()->PageBankKey(vk);
+  }
+
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
   {
     (void)x;

@@ -314,7 +314,8 @@ TEST_CASE("Invalid PLAY slots share one label")
   CHECK(volum::OccupiedSlotLabel(true, "Lead") == "Lead");
   CHECK(volum::OccupiedSlotLabel(false, "Lead") == std::string(volum::kPlayInvalidSlotLabel));
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h")
+                           + ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
   CHECK(play.find("MISSING SOUND") == std::string::npos);
   CHECK(tabs.find("MISSING SOUND") == std::string::npos);
   CHECK(play.find("Missing Sound") == std::string::npos);
@@ -799,6 +800,7 @@ TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
   };
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchModel.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
