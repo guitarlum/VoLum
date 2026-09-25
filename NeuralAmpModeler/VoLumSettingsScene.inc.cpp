@@ -193,6 +193,7 @@ void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
   mVolumEffectSettings.reverbActive = s.postReverbActive;
   mVolumEffectSettings.reverbMode = s.postReverbMode;
   mVolumEffectSettings.tremoloMode = s.postTremoloMode;
+  mVolumEffectSettings.chorusActive = s.postChorusActive;
   mVolumEffectSettings.chorusMode = s.postChorusMode;
   const int restoredDelayMode = std::clamp(s.postDelayMode, 0, volum::kVoLumDelayModeCount - 1);
   const int restoredReverbMode = std::clamp(s.postReverbMode, 0, volum::kVoLumReverbModeCount - 1);
@@ -357,6 +358,7 @@ void NeuralAmpModeler::_VolumApplyDspCaches()
 void NeuralAmpModeler::_VolumSaveSettingsToFile()
 {
   _VolumSaveEffectSettings();
+  mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
   // Keep the shared legacy file readable by already-installed older VoLum builds. New dual-amp
   // fields live in a sidecar that older builds do not know about, avoiding crashes when users
   // run a newer standalone and then open an older VST3 in a DAW.
@@ -364,7 +366,7 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
     mVolumAmpSettings.data(), volum::kAmpCount, mVolumAmpIdx, &mVolumEffectSettings,
     /*includeDualAmp=*/false, mVolumPreLocked, mVolumPostLocked, mVolumPreLocked ? &mVolumLiveLockedPre : nullptr,
     mVolumPostLocked ? &mVolumLiveLockedPost : nullptr, mVolumLiteMode.load(), GetParam(kCalibrateInput)->Bool(),
-    GetParam(kInputCalibrationLevel)->Value());
+    GetParam(kInputCalibrationLevel)->Value(), mVolumAnimatePlayArt.load());
   nlohmann::json dualAmpJson = volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount);
 
   // 1.2.0 additive session refs (ignored by older builds): the focused custom
@@ -375,7 +377,11 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // Standalone has no DAW project chunk; persist the same per-instance MIDI
   // channel field in its instance settings equivalent.
   j["midiCh"] = mVolumMidiChannel.load();
+  j["midiRecallCc"] = mVolumMidiRecallCc.load();
   j["volumUiMode"] = volum::UiModeToString(mVolumUiMode);
+  // PLAY cursor: the DAW chunk already carries lastPlaySlot; standalone has no
+  // chunk, so the same instance key has to live here or a relaunch starts empty.
+  j["lastPlaySlot"] = mVolumLastRecalledPlaySlot;
   // 1.2.1: the same selection for every amp, not only the focused one. The single
   // key above describes whichever amp was in focus when the file was written, so
   // every other amp reopened reading "No Preset" - and an exit from an amp with
@@ -502,11 +508,13 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     bool parsedLiteMode = false;
     bool parsedCalibrateInput = kDefaultCalibrateInput;
     double parsedInputCalibrationLevel = kDefaultInputCalibrationLevel;
-    volum::VolumUserSettingsFromJson(j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx,
-                                     &mVolumEffectSettings, &settingsHealed, &mVolumPreLocked, &mVolumPostLocked,
-                                     &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
-                                     &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel);
+    bool parsedAnimatePlayArt = true;
+    volum::VolumUserSettingsFromJson(
+      j, mVolumAmpSettings.data(), volum::kAmpCount, &mVolumAmpIdx, &mVolumEffectSettings, &settingsHealed,
+      &mVolumPreLocked, &mVolumPostLocked, &parsedLivePre, &parsedLivePost, &haveLivePreSnapshot, &haveLivePostSnapshot,
+      &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel, &parsedAnimatePlayArt);
     mVolumLiteMode.store(parsedLiteMode);
+    mVolumAnimatePlayArt.store(parsedAnimatePlayArt);
     GetParam(kCalibrateInput)->Set(parsedCalibrateInput ? 1.0 : 0.0);
     GetParam(kInputCalibrationLevel)->Set(parsedInputCalibrationLevel);
     if (haveLivePreSnapshot)
@@ -520,6 +528,11 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 #if defined(APP_API)
     mVolumUiMode = volum::UiModeFromMachineSettings(true, j, mVolumUiMode);
     mVolumMidiChannel.store(volum::MidiChannelFromMachineSettings(true, j, mVolumMidiChannel.load()));
+    mVolumMidiRecallCc.store(volum::MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load()));
+    mVolumLastRecalledPlaySlot = volum::LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot);
+    // Pack import-with-settings writes uiMode here without going through the
+    // toggle. Derive PLAY chrome now so the surface cannot stay shown over BUILD.
+    _VolumRefreshPlaySurface();
 #endif
     if (j.contains("volumActivePresetId") && j["volumActivePresetId"].is_string())
       mVolumRestorePresetId = j["volumActivePresetId"].get<std::string>();
@@ -558,7 +571,14 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     // Global effect defaults must not clobber POST params when a lock snapshot will
     // restore the carried scene immediately after _VolumRestoreFromSettings().
     if (!mVolumPostLocked)
+    {
       _VolumRestoreEffectSettings();
+      // H15: Restore currently assigns kChorusActive to itself because the Locks
+      // snapshot lacked chorusActive. Apply the saved mapping here so a pack-
+      // settings import cannot keep the pre-import switch (and OnIdle persist it).
+      GetParam(kChorusActive)->Set(volum::VoLumEffectChorusActiveParam(mVolumEffectSettings));
+      SendParameterValueFromDelegate(kChorusActive, GetParam(kChorusActive)->GetNormalized(), true);
+    }
   }
   catch (...)
   {
@@ -568,15 +588,20 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 
 void NeuralAmpModeler::_VolumSaveLiteMode()
 {
+  _VolumSaveMachineBool("liteMode", mVolumLiteMode.load());
+}
+
+void NeuralAmpModeler::_VolumSaveMachineBool(const char* key, bool value)
+{
   namespace fs = std::filesystem;
   const fs::path settingsPath = volum::VolumUserSettingsFilePath();
   if (settingsPath.empty())
     return;
 
   // Same read-merge-write as calibration: a plugin Lite click must not dump
-  // standalone PLAY/BUILD, midiCh, or scenes into the shared machine file.
-  static std::mutex liteModeSettingsMutex;
-  std::lock_guard<std::mutex> lock(liteModeSettingsMutex);
+  // standalone PLAY/BUILD, midiCh, midiRecallCc, lastPlaySlot, or scenes into the shared machine file.
+  static std::mutex machineBoolSettingsMutex;
+  std::lock_guard<std::mutex> lock(machineBoolSettingsMutex);
 
   nlohmann::json j = nlohmann::json::object();
   std::error_code ec;
@@ -591,14 +616,24 @@ void NeuralAmpModeler::_VolumSaveLiteMode()
     }
     catch (...)
     {
-      std::cerr << "VoLum: liteMode not saved because volum-settings.json is unreadable" << std::endl;
+      std::cerr << "VoLum: " << key << " not saved because volum-settings.json is unreadable" << std::endl;
       return;
     }
   }
 
-  j = volum::MergeLiteModeIntoSettings(std::move(j), mVolumLiteMode.load());
+  j = volum::MergeMachineBoolIntoSettings(std::move(j), key, value);
   if (!volum::WriteJsonAtomically(settingsPath, j, ec))
-    std::cerr << "VoLum: liteMode write failed: " << ec.message() << std::endl;
+    std::cerr << "VoLum: " << key << " write failed: " << ec.message() << std::endl;
+}
+
+void NeuralAmpModeler::_VolumSetAnimatePlayArt(bool animate)
+{
+  if (mVolumAnimatePlayArt.load() == animate)
+    return;
+  mVolumAnimatePlayArt.store(animate);
+  // Only this key: a plugin click must not rewrite the standalone's machine file.
+  _VolumSaveMachineBool("animatePlayArt", animate);
+  _VolumRefreshPlaySurface();
 }
 
 void NeuralAmpModeler::_VolumSetLiteMode(bool lite)

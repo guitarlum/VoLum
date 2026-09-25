@@ -1,5 +1,6 @@
-#include "third_party/doctest.h"
+﻿#include "third_party/doctest.h"
 #include "../VoLumAmpeteCatalog.h"
+#include "../VoLumAmpSettingsJson.h"
 #include "../VoLumChunkCodec.h"
 #include "../VoLumChunkLayout.h"
 #include "../VoLumPrePostLock.h"
@@ -50,97 +51,6 @@ volum::VoLumAmpSettings MakePostSlot(double delayMix)
   return s;
 }
 
-void CopyPreBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& dst)
-{
-  dst.preCompActive = src.preCompActive;
-  dst.preCompAmount = src.preCompAmount;
-  dst.preCompRatio = src.preCompRatio;
-  dst.preCompAttack = src.preCompAttack;
-  dst.preCompRelease = src.preCompRelease;
-  dst.preCompMix = src.preCompMix;
-  dst.preCompLevel = src.preCompLevel;
-  dst.preNam1Active = src.preNam1Active;
-  dst.preNam1Capture = src.preNam1Capture;
-  dst.preNam1Gain = src.preNam1Gain;
-  dst.preNam1Bass = src.preNam1Bass;
-  dst.preNam1Mid = src.preNam1Mid;
-  dst.preNam1MidFreq = src.preNam1MidFreq;
-  dst.preNam1Treble = src.preNam1Treble;
-  dst.preNam1Level = src.preNam1Level;
-  dst.preNam2Active = src.preNam2Active;
-  dst.preNam2Capture = src.preNam2Capture;
-  dst.preNam2Gain = src.preNam2Gain;
-  dst.preNam2Bass = src.preNam2Bass;
-  dst.preNam2Mid = src.preNam2Mid;
-  dst.preNam2MidFreq = src.preNam2MidFreq;
-  dst.preNam2Treble = src.preNam2Treble;
-  dst.preNam2Level = src.preNam2Level;
-  // PRE Pitch is part of the PRE block too; PreBlockEquals compares it, so the
-  // sim's copy must include it or save/restore drifts (the prePitch* fields were
-  // originally omitted here while PreBlockEquals checked them).
-  dst.prePitchActive = src.prePitchActive;
-  dst.prePitchMode = src.prePitchMode;
-  dst.prePitchSemitones = src.prePitchSemitones;
-  dst.prePitchMix = src.prePitchMix;
-  dst.prePitchOctDown = src.prePitchOctDown;
-  dst.prePitchOctUp = src.prePitchOctUp;
-  dst.prePitchDry = src.prePitchDry;
-  dst.prePitchVoicing = src.prePitchVoicing;
-  dst.prePitchLevel = src.prePitchLevel;
-  for (int mode = 0; mode < volum::kVoLumPitchModeCount; ++mode)
-    dst.prePitchModes[mode] = src.prePitchModes[mode];
-  dst.prePitchTransChar = src.prePitchTransChar;
-}
-
-void CopyPostBlock(const volum::VoLumAmpSettings& src, volum::VoLumAmpSettings& dst)
-{
-  dst.postValid = src.postValid;
-  dst.postDelayActive = src.postDelayActive;
-  dst.postDelayTime = src.postDelayTime;
-  dst.postDelayFeedback = src.postDelayFeedback;
-  dst.postDelayMix = src.postDelayMix;
-  dst.postDelayMode = src.postDelayMode;
-  dst.postDelayTone = src.postDelayTone;
-  dst.postDelayAge = src.postDelayAge;
-  dst.postDelayPingPong = src.postDelayPingPong;
-  dst.postDelaySync = src.postDelaySync;
-  dst.postDelayDivision = src.postDelayDivision;
-  dst.postReverbActive = src.postReverbActive;
-  dst.postReverbMix = src.postReverbMix;
-  dst.postReverbDecay = src.postReverbDecay;
-  dst.postReverbTone = src.postReverbTone;
-  dst.postReverbPreDelay = src.postReverbPreDelay;
-  dst.postReverbShimmer = src.postReverbShimmer;
-  dst.postReverbMode = src.postReverbMode;
-  dst.postReverbSubMode = src.postReverbSubMode;
-  dst.postTremoloActive = src.postTremoloActive;
-  dst.postTremoloMode = src.postTremoloMode;
-  dst.postTremoloRate = src.postTremoloRate;
-  dst.postTremoloDepth = src.postTremoloDepth;
-  dst.postTremoloShape = src.postTremoloShape;
-  dst.postTremoloMix = src.postTremoloMix;
-  dst.postTremoloCrossover = src.postTremoloCrossover;
-  dst.postTremoloSync = src.postTremoloSync;
-  dst.postTremoloDivision = src.postTremoloDivision;
-  for (int mode = 0; mode < volum::kVoLumDelayModeCount; ++mode)
-    dst.postDelayModes[mode] = src.postDelayModes[mode];
-  for (int mode = 0; mode < volum::kVoLumReverbModeCount; ++mode)
-    dst.postReverbModes[mode] = src.postReverbModes[mode];
-  for (int subMode = 0; subMode < 3; ++subMode)
-    dst.postOktaverbSubModes[subMode] = src.postOktaverbSubModes[subMode];
-  dst.postChorusActive = src.postChorusActive;
-  dst.postChorusMode = src.postChorusMode;
-  dst.postChorusRate = src.postChorusRate;
-  dst.postChorusDepth = src.postChorusDepth;
-  dst.postChorusTone = src.postChorusTone;
-  dst.postChorusWidth = src.postChorusWidth;
-  dst.postChorusMix = src.postChorusMix;
-  for (int mode = 0; mode < volum::kVoLumTremoloModeCount; ++mode)
-    dst.postTremoloModes[mode] = src.postTremoloModes[mode];
-  for (int mode = 0; mode < volum::kVoLumChorusModeCount; ++mode)
-    dst.postChorusModes[mode] = src.postChorusModes[mode];
-}
-
 // Mirrors _VolumSaveCurrentToSettings / _VolumRestoreFromSettings / lock helpers in VoLumSettings.inc.cpp.
 struct PrePostLockSim
 {
@@ -158,9 +68,9 @@ struct PrePostLockSim
   void SaveCurrentToSettings()
   {
     if (!preLocked)
-      CopyPreBlock(live, stored[ampIdx]);
+      volum::CopyPreBlock(live, stored[ampIdx]);
     if (!postLocked)
-      CopyPostBlock(live, stored[ampIdx]);
+      volum::CopyPostBlock(live, stored[ampIdx]);
     stored[ampIdx].inputLevel = live.inputLevel;
     stored[ampIdx].dualAmpActive = live.dualAmpActive;
     stored[ampIdx].mainAmpPan = live.mainAmpPan;
@@ -170,9 +80,9 @@ struct PrePostLockSim
   {
     ampIdx = idx;
     if (!preLocked)
-      CopyPreBlock(stored[idx], live);
+      volum::CopyPreBlock(stored[idx], live);
     if (!postLocked)
-      CopyPostBlock(stored[idx], live);
+      volum::CopyPostBlock(stored[idx], live);
   }
 
   void SetPreLocked(bool locked)
@@ -180,7 +90,7 @@ struct PrePostLockSim
     if (preLocked == locked)
       return;
     if (!locked)
-      CopyPreBlock(stored[ampIdx], live);
+      volum::CopyPreBlock(stored[ampIdx], live);
     preLocked = locked;
     preUiDirty = locked && IsPreDirty();
   }
@@ -190,20 +100,20 @@ struct PrePostLockSim
     if (postLocked == locked)
       return;
     if (!locked)
-      CopyPostBlock(stored[ampIdx], live);
+      volum::CopyPostBlock(stored[ampIdx], live);
     postLocked = locked;
     postUiDirty = locked && IsPostDirty();
   }
 
   void StorePreToCurrentAmp()
   {
-    CopyPreBlock(live, stored[ampIdx]);
+    volum::CopyPreBlock(live, stored[ampIdx]);
     preUiDirty = false;
   }
 
   void StorePostToCurrentAmp()
   {
-    CopyPostBlock(live, stored[ampIdx]);
+    volum::CopyPostBlock(live, stored[ampIdx]);
     postUiDirty = false;
   }
 
@@ -232,9 +142,9 @@ struct PrePostLockSim
   void SyncLockedSnapshotsFromLive()
   {
     if (preLocked)
-      CopyPreBlock(live, liveLockedPre);
+      volum::CopyPreBlock(live, liveLockedPre);
     if (postLocked)
-      CopyPostBlock(live, liveLockedPost);
+      volum::CopyPostBlock(live, liveLockedPost);
   }
 };
 } // namespace
@@ -1167,3 +1077,62 @@ TEST_CASE("Live lock snapshot save/load never modifies per-amp slot bytes")
   REQUIRE(loadedLivePre.preCompAmount == doctest::Approx(8.8));
   REQUIRE(loadedLivePost.postDelayMix == doctest::Approx(0.99));
 }
+
+TEST_CASE("CopyPreBlock copies every field PreBlockEquals observes and no amp-core field")
+{
+  volum::VoLumAmpSettings src = MakePreSlot(3.0);
+  src.preNam2Capture = 2;
+  src.prePitchModes[0].mix = 0.4;
+  src.prePitchTransChar = 1;
+  src.inputLevel = 9.0;
+  volum::VoLumAmpSettings dst;
+  dst.inputLevel = 1.5;
+  volum::CopyPreBlock(src, dst);
+  REQUIRE(volum::PreBlockEquals(src, dst));
+  REQUIRE(dst.inputLevel == doctest::Approx(1.5));
+}
+
+TEST_CASE("CopyPostBlock copies postValid even though PostBlockEquals ignores it")
+{
+  volum::VoLumAmpSettings src = MakePostSlot(0.55);
+  src.postChorusMix = 0.33;
+  src.postTremoloModes[0].depth = 0.7;
+  volum::VoLumAmpSettings dst;
+  dst.postValid = false;
+  volum::CopyPostBlock(src, dst);
+  REQUIRE(dst.postValid);
+  REQUIRE(volum::PostBlockEquals(src, dst));
+}
+
+TEST_CASE("Preset capture includes locked PRE/POST overlay without mutating the slot")
+{
+  volum::VoLumAmpSettings slot = MakePreSlot(1.0);
+  slot.postDelayMix = 0.20;
+  slot.postValid = true;
+  const volum::VoLumAmpSettings overlayPre = MakePreSlot(5.0);
+  const volum::VoLumAmpSettings overlayPost = MakePostSlot(0.75);
+
+  const auto captured = volum::SoundingPresetScene(slot, true, overlayPre, true, overlayPost);
+
+  REQUIRE(captured.preCompAmount == doctest::Approx(5.0));
+  REQUIRE(captured.postDelayMix == doctest::Approx(0.75));
+  REQUIRE(slot.preCompAmount == doctest::Approx(1.0));
+  REQUIRE(slot.postDelayMix == doctest::Approx(0.20));
+  REQUIRE(volum::PreBlockEquals(captured, overlayPre));
+  REQUIRE(volum::PostBlockEquals(captured, overlayPost));
+}
+
+TEST_CASE("Preset dirty after a locked save uses the sounding overlay, not the stale slot")
+{
+  volum::VoLumAmpSettings slot = MakePreSlot(1.0);
+  slot.postValid = true;
+  const volum::VoLumAmpSettings overlayPre = MakePreSlot(5.0);
+  const auto captured = volum::SoundingPresetScene(slot, true, overlayPre, false, {});
+  const auto sounding = volum::SoundingPresetScene(slot, true, overlayPre, false, {});
+
+  REQUIRE(volum::AmpSettingsEqual(sounding, captured));
+  REQUIRE_FALSE(volum::AmpSettingsEqual(slot, captured));
+  REQUIRE(volum::PreBlockEquals(captured, overlayPre));
+  REQUIRE_FALSE(volum::PreBlockEquals(slot, overlayPre));
+}
+

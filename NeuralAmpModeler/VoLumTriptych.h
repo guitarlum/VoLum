@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VoLumColorHelpers.h"
+#include "VoLumSecondPress.h"
 #include "VoLumTriptychLayout.h"
 #include "VoLumTriptychState.h"
 #include "VoLumTriptychMotifs.h"
@@ -761,6 +762,8 @@ private:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
+    mPressSection = mExpandedSection;
 
     // 1) Toggle pills first (highest precedence so users can flip bypass
     // without leaving the AMP view).
@@ -862,6 +865,18 @@ private:
       SetDirty(false);
       return;
     }
+  }
+
+  // A press that switched sections re-laid the strip out under the cursor, so the
+  // second one would hit something else. The locks do not repeat either: unlocking
+  // restores the amp's saved scene, so lock-unlock-lock is not a round trip.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (!mSecondPress.Take() || mExpandedSection != mPressSection)
+      return;
+    if (_HitContains(mPreLockRect, x, y) || _HitContains(mPostLockRect, x, y))
+      return;
+    OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -1014,4 +1029,6 @@ private:
   bool mPostLockHovered = false;
   bool mPreStoreHovered = false;
   bool mPostStoreHovered = false;
+  volum::ui::SecondPressGate mSecondPress;
+  EVoLumSection mPressSection = EVoLumSection::AMP;
 };

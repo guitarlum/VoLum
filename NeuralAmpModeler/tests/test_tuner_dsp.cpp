@@ -2,11 +2,12 @@
 #include "../VoLumTunerDSP.h"
 
 #include <cmath>
+#include <random>
 #include <string>
 #include <vector>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
 
 static std::vector<float> GenerateSine(float freq, float sampleRate, int numSamples, float amplitude = 0.5f)
@@ -111,6 +112,29 @@ TEST_CASE("TunerDSP: no valid result on silence")
 
   auto result = tuner.GetResult();
   CHECK_FALSE(result.valid);
+}
+
+TEST_CASE("tier2h tuner noise above the silence floor stays invalid")
+{
+  volum::TunerDSP tuner;
+  tuner.Reset(48000.0);
+  tuner.SetActive(true);
+
+  std::mt19937 rng(1);
+  std::uniform_real_distribution<float> dist(-1.f, 1.f);
+  std::vector<float> noise(volum::TunerDSP::kBufferSize);
+  for (float& sample : noise)
+    sample = dist(rng);
+  double energy = 0.0;
+  for (float sample : noise)
+    energy += static_cast<double>(sample) * sample;
+  const float rms = static_cast<float>(std::sqrt(energy / static_cast<double>(noise.size())));
+  const float gain = 0.001f / rms;
+  for (float& sample : noise)
+    sample *= gain;
+
+  tuner.Process(noise.data(), static_cast<int>(noise.size()));
+  CHECK_FALSE(tuner.GetResult().valid);
 }
 
 TEST_CASE("TunerDSP: NoteName covers all 12 notes")

@@ -2,7 +2,10 @@
 # From repo: VoLum\NeuralAmpModeler\scripts
 
 param(
-  [string]$Filter
+  [string]$Filter,
+  # AddressSanitizer build of the same suite, with the exclusions of the macOS
+  # sanitizer CI job. Catches the heap overruns that job fails on before a push.
+  [switch]$Asan
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,6 +58,23 @@ Invoke-Check (Join-Path $here "check-local-guards.ps1")
 # every user.
 Invoke-Check (Join-Path $here "check-no-vendor-refs.ps1")
 
+# A golden sound reference records why it was last regenerated, and that reason
+# must be in changelog.txt. Skipped only for regen-golden-renders.ps1's own run:
+# the new reason reaches the changelog after the references are written. A
+# VOLUM_GOLDEN_REGEN left set in a shell must not turn a full run into a regen.
+if ($env:VOLUM_GOLDEN_REGEN -eq "1") {
+  if ($env:CI -or $env:GITHUB_ACTIONS) {
+    Write-Host "VOLUM_GOLDEN_REGEN is set on CI; golden references are never regenerated there." -ForegroundColor Red
+    exit 1
+  }
+  if ($Filter -ne "Golden renders:") {
+    Write-Host "VOLUM_GOLDEN_REGEN=1 is set in this shell. Only regen-golden-renders.ps1 sets it; clear it (Remove-Item Env:VOLUM_GOLDEN_REGEN) and rerun." -ForegroundColor Red
+    exit 1
+  }
+} else {
+  Invoke-Check (Join-Path $here "check-golden-changelog.ps1")
+}
+
 $msbuild = $null
 if ($env:GITHUB_ACTIONS -eq "true") {
   $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue | Select-Object -First 1).Source
@@ -75,6 +95,22 @@ if (-not $msbuild) {
 }
 if (-not $msbuild) {
   Write-Error "MSBuild.exe not found."
+}
+
+if ($Asan) {
+  $asanOut = Join-Path $slnDir "build-win\tests-asan"
+  & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-Tests /p:Configuration=Release /p:Platform=x64 /p:EnableASAN=true "/p:OutDir=$asanOut\" "/p:IntDir=$asanOut\obj\" /m /v:minimal
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  $runtime = Get-ChildItem (Join-Path (Split-Path (Split-Path (Split-Path $msbuild))) "..\VC\Tools\MSVC\*\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll") -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $runtime) { Write-Error "clang_rt.asan_dynamic-x86_64.dll not found next to the MSVC toolset." }
+  $env:PATH = "$($runtime.DirectoryName);$env:PATH"
+  $mac = Get-Content -Raw (Join-Path $here "run-tests-mac.sh")
+  $exclude = if ($mac -match '--test-case-exclude="([^"]+)"') { $Matches[1] } else { "" }
+  $asanArgs = @()
+  if ($exclude) { $asanArgs += "--test-case-exclude=$exclude" }
+  if ($Filter) { $asanArgs += "--test-case=*$Filter*" }
+  & (Join-Path $asanOut "NeuralAmpModeler-Tests.exe") @asanArgs
+  exit $LASTEXITCODE
 }
 
 & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-Tests /p:Configuration=Release /p:Platform=x64 /m /v:minimal

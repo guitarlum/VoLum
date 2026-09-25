@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <map>
+#include <mutex>
 #include <set>
 #include <string>
 #include <vector>
@@ -74,6 +75,13 @@ struct ExportSelection
   std::vector<std::string> presetIds; // named presets the user ticked
 };
 
+// Sounds and Amps with every box off are not an export. Everything is a backup
+// even when the custom library is empty.
+inline bool ExportSelectionHasCargo(const ExportSelection& sel)
+{
+  return sel.everything || !sel.ampIds.empty() || !sel.presetIds.empty();
+}
+
 struct ExportPlan
 {
   Job job = Job::Everything;
@@ -88,7 +96,14 @@ struct ExportPlan
   bool includeSettings = false;
   bool includeMidiSoundMap = false;
 
-  bool Empty() const { return ampIds.empty() && irIds.empty() && pedalIds.empty() && presetIds.empty(); }
+  // Settings and the MIDI map are real cargo. An Everything backup of a
+  // factory-only library has empty item lists and must still be able to leave
+  // the machine; treating those flags as "nothing" was refusing that write.
+  bool Empty() const
+  {
+    return ampIds.empty() && irIds.empty() && pedalIds.empty() && presetIds.empty() && !includeSettings
+           && !includeMidiSoundMap;
+  }
 };
 
 namespace detail
@@ -169,7 +184,45 @@ inline std::string OwnerDisplayName(const content::Registry& r, const std::strin
 inline std::string PresetWithAmpLabel(const content::Registry& r, const std::string& presetName,
                                       const std::string& ownerKey)
 {
-  return "Preset \"" + presetName + "\"  ·  " + OwnerDisplayName(r, ownerKey);
+  return "Preset \"" + presetName + "\"  \xC2\xB7  " + OwnerDisplayName(r, ownerKey);
+}
+
+// One row in the Sounds export tick list. PLAY assignments come first, sorted by
+// program number; everything else follows in bank iteration order.
+struct ExportSoundRow
+{
+  std::string presetId;
+  std::string name;
+  std::string ownerKey;
+  std::string ownerLabel;
+  int pc = -1; // MIDI program, or -1 when not in the PLAY map
+};
+
+inline std::vector<ExportSoundRow> BuildExportSoundRows(const content::Registry& reg)
+{
+  std::vector<ExportSoundRow> play;
+  std::vector<ExportSoundRow> rest;
+  for (const auto& bank : reg.presetBanks)
+    for (const auto& pr : bank.second)
+    {
+      ExportSoundRow row;
+      row.presetId = pr.id;
+      row.name = pr.name;
+      row.ownerKey = bank.first;
+      row.ownerLabel = OwnerDisplayName(reg, bank.first);
+      row.pc = -1;
+      for (const auto& slot : reg.midiSoundMap)
+        if (slot.second.presetId == pr.id && slot.second.ampId == bank.first)
+        {
+          row.pc = slot.first;
+          break;
+        }
+      (row.pc >= 0 ? play : rest).push_back(std::move(row));
+    }
+  std::stable_sort(
+    play.begin(), play.end(), [](const ExportSoundRow& a, const ExportSoundRow& b) { return a.pc < b.pc; });
+  play.insert(play.end(), rest.begin(), rest.end());
+  return play;
 }
 
 // Resolve a selection into the full set of items a Pack has to carry.
@@ -178,7 +231,9 @@ inline std::string PresetWithAmpLabel(const content::Registry& r, const std::str
 // amp" means to the person clicking it - and every capture, IR and pedal those
 // presets and amps reference. A preset on a *factory* amp pulls in its custom IR
 // and pedal but no amp entry: the factory capture is shipped, so packing it would
-// be shipping VoLum's own content back to VoLum.
+// be shipping VoLum's own content back to VoLum. A preset on a *custom* amp pulls
+// the owner the same way `supportCustomId` does: those captures are not shipped,
+// and a Sound without them is an unplayable orphan.
 inline ExportPlan BuildExportPlan(const content::Registry& r, const ExportSelection& sel)
 {
   using namespace detail;
@@ -208,8 +263,16 @@ inline ExportPlan BuildExportPlan(const content::Registry& r, const ExportSelect
   {
     std::string owner;
     size_t at = 0;
-    if (FindPreset(r, id, owner, at))
-      AddUnique(plan.presetIds, id);
+    if (!FindPreset(r, id, owner, at))
+      continue;
+    AddUnique(plan.presetIds, id);
+    // Factory owners are not in r.amps; FindAmp misses them on purpose.
+    if (const auto* amp = FindAmp(r, owner))
+      if (!Has(plan.ampIds, amp->id))
+      {
+        plan.ampIds.push_back(amp->id);
+        plan.alsoIncluding.push_back("Custom amp \"" + amp->name + "\"");
+      }
   }
 
   // A selected amp brings its own bank.
@@ -399,7 +462,8 @@ inline bool WritePack(content::ContentStore& store, const ExportPlan& plan, cons
 struct PackContents
 {
   bool ok = false;
-  std::string error;
+  std::string error; // user-facing refusal (shown in the overlay)
+  std::string detail; // archive/parse reason for the [pack] log line
   int contractVersion = 0;
   Job job = Job::Share;
   content::Registry library;
@@ -410,12 +474,25 @@ struct PackContents
   explicit operator bool() const { return ok; }
 };
 
-inline PackContents ReadPackFromArchive(const ReadResult& archive)
+// Map zip-layer failures to the Pack copy the overlay shows. A truncated .volumpack
+// often loses its central directory and reports "no archive directory"; that is still
+// a damaged Pack when the bytes look like a zip, not "not a Pack at all".
+inline std::string UserFacingPackArchiveError(const std::string& archiveError, bool looksLikeZip)
+{
+  auto has = [&](const char* needle) { return archiveError.find(needle) != std::string::npos; };
+  if (has("truncated") || has("damaged") || has("corrupt") || has("checksum") || has("unsupported compression")
+      || (looksLikeZip && !archiveError.empty()))
+    return "This Pack is damaged.";
+  return "This is not a VoLum Pack.";
+}
+
+inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLikeZip = false)
 {
   PackContents out;
   if (!archive)
   {
-    out.error = archive.error.empty() ? "This is not a VoLum Pack." : archive.error;
+    out.detail = archive.error;
+    out.error = UserFacingPackArchiveError(archive.error, looksLikeZip);
     return out;
   }
 
@@ -511,7 +588,16 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive)
 
 inline PackContents OpenPack(const std::filesystem::path& path)
 {
-  return ReadPackFromArchive(ReadArchiveFromFile(path));
+  std::string blob;
+  if (!ReadWholeFile(path, blob))
+  {
+    PackContents out;
+    out.detail = "could not read file";
+    out.error = "This is not a VoLum Pack.";
+    return out;
+  }
+  const bool looksLikeZip = blob.size() >= 2 && blob[0] == 'P' && blob[1] == 'K';
+  return ReadPackFromArchive(ParseArchive(blob), looksLikeZip);
 }
 
 // ---------------------------------------------------------------------------
@@ -750,7 +836,8 @@ struct ImportItem
 {
   ItemKind kind = ItemKind::Amp;
   std::string id;
-  std::string label; // the same wording the preview uses
+  std::string label; // Pack wording (what lands on Overwrite / Add-new)
+  std::string localLabel; // local wording when present; Keep mine shows this
   bool present = false; // an item with this id is already here
   bool nameCollision = false; // same name, different id: both are kept
   bool sounding = false; // this instance is playing it right now
@@ -768,8 +855,11 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
 
   for (const auto& a : incoming.amps)
   {
-    ImportItem item{
-      ItemKind::Amp, a.id, "Custom amp \"" + a.name + "\"", FindAmp(current, a.id) != nullptr, false, sounding(a.id)};
+    ImportItem item{ItemKind::Amp, a.id, "Custom amp \"" + a.name + "\"", "", FindAmp(current, a.id) != nullptr, false,
+                    sounding(a.id)};
+    if (item.present)
+      if (const auto* mine = FindAmp(current, a.id))
+        item.localLabel = "Custom amp \"" + mine->name + "\"";
     if (!item.present)
       for (const auto& mine : current.amps)
         if (mine.id != a.id && mine.name == a.name)
@@ -779,7 +869,10 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
   for (const auto& ir : incoming.irs)
   {
     ImportItem item{
-      ItemKind::Ir, ir.id, "IR \"" + ir.name + "\"", FindIr(current, ir.id) != nullptr, false, sounding(ir.id)};
+      ItemKind::Ir, ir.id, "IR \"" + ir.name + "\"", "", FindIr(current, ir.id) != nullptr, false, sounding(ir.id)};
+    if (item.present)
+      if (const auto* mine = FindIr(current, ir.id))
+        item.localLabel = "IR \"" + mine->name + "\"";
     if (!item.present)
       for (const auto& mine : current.irs)
         if (mine.id != ir.id && mine.name == ir.name)
@@ -788,8 +881,11 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
   }
   for (const auto& p : incoming.pedals)
   {
-    ImportItem item{
-      ItemKind::Pedal, p.id, "Pedal \"" + p.name + "\"", FindPedal(current, p.id) != nullptr, false, sounding(p.id)};
+    ImportItem item{ItemKind::Pedal, p.id,          "Pedal \"" + p.name + "\"", "", FindPedal(current, p.id) != nullptr,
+                    false,           sounding(p.id)};
+    if (item.present)
+      if (const auto* mine = FindPedal(current, p.id))
+        item.localLabel = "Pedal \"" + mine->name + "\"";
     if (!item.present)
       for (const auto& mine : current.pedals)
         if (mine.id != p.id && mine.name == p.name)
@@ -804,9 +900,16 @@ inline std::vector<ImportItem> ImportItems(const content::Registry& current, con
       ImportItem item{ItemKind::Preset,
                       pr.id,
                       PresetWithAmpLabel(incoming, pr.name, bank.first),
+                      "",
                       FindPreset(current, pr.id, owner, at),
                       false,
                       sounding(pr.id)};
+      if (item.present)
+      {
+        const auto bankIt = current.presetBanks.find(owner);
+        if (bankIt != current.presetBanks.end() && at < bankIt->second.size())
+          item.localLabel = PresetWithAmpLabel(current, bankIt->second[at].name, owner);
+      }
       if (!item.present)
       {
         const auto mine = current.presetBanks.find(bank.first);
@@ -897,6 +1000,9 @@ inline ImportPreview BuildImportPreview(const content::Registry& current, const 
 struct ImportResult
 {
   bool ok = false;
+  // True once the library Save has landed, even when the later machine-settings
+  // write fails. The caller still reloads replaced captures in that case.
+  bool libraryCommitted = false;
   std::string error;
   std::vector<std::string> replacedIds; // ids whose payload changed, for a rig reload
   std::filesystem::path backupPath; // the prior library file, kept
@@ -904,11 +1010,53 @@ struct ImportResult
   explicit operator bool() const { return ok; }
 };
 
-// Validate, stage, swap. A Pack that fails validation changes nothing; a Pack that
-// fails at the registry write leaves the prior library file in `backupPath` and the
-// on-disk registry untouched (ContentStore::Save is atomic).
+namespace detail
+{
+inline bool CopyPayloadFile(const std::filesystem::path& from, const std::filesystem::path& to)
+{
+  std::error_code ec;
+  if (from.empty() || to.empty())
+    return false;
+  std::filesystem::create_directories(to.parent_path(), ec);
+  if (ec)
+    return false;
+  std::filesystem::remove(to, ec);
+  std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing, ec);
+  return !ec;
+}
+
+// Put the live tree back after a swap that must not stick. `written` is every
+// path we replaced or created; a path with a rollback copy is restored, a path
+// we minted is deleted so a failed import cannot leave the Pack's bytes behind.
+inline void RestoreSwappedPayloads(content::ContentStore& store, const std::filesystem::path& rollback,
+                                   const std::vector<std::string>& written)
+{
+  std::error_code ec;
+  for (const auto& rel : written)
+  {
+    const auto dst = store.ResolveStored(rel);
+    if (dst.empty())
+      continue;
+    const auto bak = rollback / content::PathFromUtf8(rel);
+    if (std::filesystem::exists(bak, ec))
+      CopyPayloadFile(bak, dst);
+    else
+      std::filesystem::remove(dst, ec);
+  }
+}
+} // namespace detail
+
+// Validate, stage, lock, swap, persist. A Pack that fails validation changes
+// nothing. The content-store lock is taken before any live payload is touched,
+// and every overwritten file is copied to `.volumpack-rollback` first, so a
+// mid-swap write error or a failed Save can put the tree back. ContentStore::Save
+// takes its own lock handle, which cannot nest with ours (LockFileEx / flock are
+// per-handle), so we release just before Save and roll the payloads back if that
+// write fails. `lockTimeoutMs` is Save's ceiling; tests pass a short one so a
+// held lock fails immediately instead of blocking the suite.
 inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& packContents, ImportVerb verb,
-                              bool alsoSettings, bool standalone, const std::filesystem::path& settingsPath = {})
+                              bool alsoSettings, bool standalone, const std::filesystem::path& settingsPath = {},
+                              int lockTimeoutMs = 4000)
 {
   using namespace detail;
   ImportResult out;
@@ -929,7 +1077,9 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   // 1. Stage every payload file beside the library. Nothing in the live tree is
   // touched yet, so a failure here is a no-op for the user.
   const auto stage = base / ".volumpack-stage";
+  const auto rollback = base / ".volumpack-rollback";
   std::filesystem::remove_all(stage, ec);
+  std::filesystem::remove_all(rollback, ec);
   for (const auto& f : packContents.files)
   {
     if (!content::IsSafeStoredRelPath(f.first))
@@ -946,7 +1096,18 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
     }
   }
 
-  // 2. Back up the library file before anything replaces it.
+  // 2. Lock before any live path is touched. Staging lives beside the library
+  // and is discarded if we cannot have the lock.
+  std::lock_guard<std::recursive_mutex> mutex(content::ContentStoreMutex());
+  content::RegistryFileLock fileLock;
+  if (!fileLock.Acquire(store.LockPath(), lockTimeoutMs))
+  {
+    std::filesystem::remove_all(stage, ec);
+    out.error = "Your library is in use by another VoLum - the import was not applied.";
+    return out;
+  }
+
+  // 3. Back up the library file before anything replaces it.
   const auto backup = base / "volum-content.json.packbak";
   if (std::filesystem::exists(store.RegistryPath(), ec))
   {
@@ -961,12 +1122,34 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
     out.backupPath = backup;
   }
 
-  // 3. Swap the staged files into the live tree.
+  // 4. Swap the staged files into the live tree. Add never overwrites a file
+  // that is already there: Keep mine includes the bytes, not just the catalog row.
+  std::vector<std::string> swapped;
+  auto abandonSwap = [&]() {
+    detail::RestoreSwappedPayloads(store, rollback, swapped);
+    std::filesystem::remove_all(stage, ec);
+    std::filesystem::remove_all(rollback, ec);
+  };
+
   for (const auto& f : packContents.files)
   {
     const auto dst = store.ResolveStored(f.first);
     if (dst.empty())
       continue;
+    const bool existed = std::filesystem::is_regular_file(dst, ec);
+    if (verb == ImportVerb::Add && existed)
+      continue;
+
+    if (existed)
+    {
+      if (!detail::CopyPayloadFile(dst, rollback / content::PathFromUtf8(f.first)))
+      {
+        abandonSwap();
+        out.error = "Could not back up your files before importing.";
+        return out;
+      }
+    }
+
     std::filesystem::create_directories(dst.parent_path(), ec);
     std::filesystem::remove(dst, ec);
     std::filesystem::rename(stage / content::PathFromUtf8(f.first), dst, ec);
@@ -978,16 +1161,23 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
         stage / content::PathFromUtf8(f.first), dst, std::filesystem::copy_options::overwrite_existing, ec);
       if (ec)
       {
-        std::filesystem::remove_all(stage, ec);
+        if (existed)
+          detail::CopyPayloadFile(rollback / content::PathFromUtf8(f.first), dst);
+        else
+          std::filesystem::remove(dst, ec);
+        abandonSwap();
         out.error = "Could not write the Pack's files into your library.";
         return out;
       }
     }
+    swapped.push_back(f.first);
   }
   std::filesystem::remove_all(stage, ec);
 
-  // 4. Merge the library. Under ContentStore::Save's lock this is one more catalog
-  // writer, so a concurrent standalone import and DAW preset save both survive.
+  // 5. Merge the library. The in-process mutex is already held; Save will take
+  // the file lock again after we drop ours, because a second exclusive handle
+  // in this process cannot nest.
+  const content::Registry priorReg = store.reg();
   auto& reg = store.reg();
   const auto& incoming = packContents.library;
   const bool packWins = verb != ImportVerb::Add;
@@ -1127,22 +1317,56 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       store.RemovePedal(id);
   }
 
-  // 5. MIDI map is library content (plugin + standalone). Machine settings file
+  // 6. MIDI map is library content (plugin + standalone). Machine settings file
   // stays standalone-only.
   const bool applySettings = standalone && alsoSettings;
   if (packContents.includesMidiSoundMap && (alsoSettings || !standalone))
     reg.midiSoundMap = incoming.midiSoundMap;
 
+  // Payload files the merge made unreferenced: a replaced amp's old capture, or an
+  // Add that wrote the Pack's path while Keep mine kept the local catalog row.
+  // Only content-relative paths, and only after Save confirms the new registry -
+  // QueueStoredFileDelete + Save's flush refuse to remove anything still named.
+  auto collectPayloads = [](const content::Registry& r) {
+    std::vector<std::string> paths;
+    for (const auto& a : r.amps)
+      for (const auto& f : a.files)
+        if (!f.storedPath.empty())
+          paths.push_back(f.storedPath);
+    for (const auto& ir : r.irs)
+      if (!ir.file.empty())
+        paths.push_back(ir.file);
+    for (const auto& p : r.pedals)
+      if (!p.file.empty())
+        paths.push_back(p.file);
+    return paths;
+  };
+  for (const auto& rel : collectPayloads(priorReg))
+    if (!store.ReferencesStoredPath(rel))
+      store.QueueStoredFileDelete(rel);
+  for (const auto& rel : swapped)
+    if (!store.ReferencesStoredPath(rel))
+      store.QueueStoredFileDelete(rel);
+
+  fileLock.Release();
   if (!store.Save())
   {
+    fileLock.Acquire(store.LockPath(), lockTimeoutMs);
+    store.Load();
+    store.reg() = priorReg;
+    detail::RestoreSwappedPayloads(store, rollback, swapped);
+    std::filesystem::remove_all(rollback, ec);
     out.error = "Your library could not be saved - the import was not applied.";
     return out;
   }
+  std::filesystem::remove_all(rollback, ec);
+  out.libraryCommitted = true;
 
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
     if (!WriteWholeFile(settingsPath, packContents.settingsJson))
     {
+      out.ok = false;
       out.error = "The library was imported, but the machine settings could not be written.";
       return out;
     }

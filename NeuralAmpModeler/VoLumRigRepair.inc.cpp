@@ -190,12 +190,12 @@ void NeuralAmpModeler::_VolumRepairRigForMissingContent()
   };
 
   using volum::rig::RigRepair;
-  if (volum::rig::SiblingMustRepairOnNextNeed(!ampGone(rig.mainCustomAmpId)) && !rig.mainCustomAmpId.empty())
+  if (volum::rig::SiblingDeletedAmpNeedsRepair(ampGone(rig.mainCustomAmpId)))
   {
     plan.repairs.push_back(RigRepair::RevertMainToFactoryAmp);
     plan.after.mainCustomAmpId.clear();
   }
-  if (rig.dualAmpActive && ampGone(rig.supportCustomAmpId))
+  if (rig.dualAmpActive && volum::rig::SiblingDeletedAmpNeedsRepair(ampGone(rig.supportCustomAmpId)))
   {
     plan.repairs.push_back(RigRepair::DropSupportLane);
     plan.after.dualAmpActive = false;

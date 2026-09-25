@@ -1,7 +1,7 @@
 #define PLUG_NAME "VoLum"
 #define PLUG_MFR "Lum"
-#define PLUG_VERSION_HEX 0x00010202
-#define PLUG_VERSION_STR "1.2.2"
+#define PLUG_VERSION_HEX 0x00010300
+#define PLUG_VERSION_STR "1.3.0"
 #define PLUG_UNIQUE_ID 'VoLm'
 #define PLUG_MFR_ID 'Lum0'
 #define PLUG_URL_STR "https://github.com/guitarlum/VoLum"
@@ -49,6 +49,15 @@
 #define AAX_DOES_AUDIOSUITE 1
 
 #define VST3_SUBCATEGORY "Fx"
+
+// VST3 carries Program Change as an IMidiMapping parameter, one set per MIDI
+// channel, and iPlug defaults both of these to 1. Settings offers a per-channel
+// listen filter and tells the user "Two VoLums on one MIDI cable: give each its
+// own channel", so a one-channel bus would make that advice silently do nothing
+// in VST3 while working in standalone and AU. The cost is a parameter set per
+// channel in the host's automation list; the alternative is a control that lies.
+#define VST3_NUM_MIDI_IN_CHANS 16
+#define VST3_NUM_CC_CHANS 16
 
 #define APP_NUM_CHANNELS 2
 #define APP_N_VECTOR_WAIT 0

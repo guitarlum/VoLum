@@ -6,6 +6,27 @@
 //
 // Tail-included by NeuralAmpModeler.cpp.
 
+namespace
+{
+// Test harness only: VOLUM_PACK_SAVE_PATH / VOLUM_PACK_OPEN_PATH stand in for the
+// native Save / Open dialog, which nothing can drive on a locked workstation
+// (e2e-standalone-win.ps1 -Scenario pack). Unset or empty, the dialog runs.
+std::string VolumPackDialogOverride(const char* name)
+{
+#if defined(OS_WIN)
+  const std::wstring wideName(name, name + std::strlen(name));
+  wchar_t buf[2048] = {};
+  const DWORD len = GetEnvironmentVariableW(wideName.c_str(), buf, 2048);
+  if (len == 0 || len >= 2048)
+    return {};
+  return volum::content::PathToUtf8(std::filesystem::path(buf));
+#else
+  const char* v = std::getenv(name);
+  return v ? std::string(v) : std::string();
+#endif
+}
+} // namespace
+
 std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelection& selection)
 {
   auto& store = volum::content::GlobalContentStore();
@@ -28,8 +49,14 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
 #endif
 
   WDL_String fileName, dir;
-  fileName.Set(plan.job == volum::pack::Job::Everything ? "VoLum library.volumpack" : "VoLum pack.volumpack");
-  GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack");
+  const std::string harnessPath = VolumPackDialogOverride("VOLUM_PACK_SAVE_PATH");
+  if (!harnessPath.empty())
+    fileName.Set(harnessPath.c_str());
+  else
+  {
+    fileName.Set(plan.job == volum::pack::Job::Everything ? "VoLum library.volumpack" : "VoLum pack.volumpack");
+    GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack");
+  }
   if (fileName.GetLength() == 0)
     return {}; // cancelled: not a failure
 
@@ -38,17 +65,36 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   if (out.extension() != ".volumpack")
     out += ".volumpack";
   if (!volum::pack::WritePack(store, plan, settingsJson, out, &error))
-    return error.empty() ? std::string("Could not write the Pack.") : error;
+  {
+    if (error.empty())
+      error = "Could not write the Pack.";
+    VOLUM_LOG("pack", "export failed: " + error);
+    return error;
+  }
+  VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(plan.job)
+                      + " Pack: " + std::to_string(plan.ampIds.size()) + " amps, " + std::to_string(plan.irIds.size())
+                      + " IRs, " + std::to_string(plan.pedalIds.size()) + " pedals, "
+                      + std::to_string(plan.presetIds.size()) + " presets");
   return {};
 }
 
 volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
 {
   WDL_String fileName, dir;
-  GetUI()->PromptForFile(fileName, dir, EFileAction::Open, "volumpack");
+  const std::string harnessPath = VolumPackDialogOverride("VOLUM_PACK_OPEN_PATH");
+  if (!harnessPath.empty())
+    fileName.Set(harnessPath.c_str());
+  else
+    GetUI()->PromptForFile(fileName, dir, EFileAction::Open, "volumpack");
   if (fileName.GetLength() == 0)
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
-  return volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
+  auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
+  if (pack.ok)
+    VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+  else
+    VOLUM_LOG("pack", std::string("open refused: ") + pack.error
+                        + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
+  return pack;
 }
 
 std::vector<std::string> NeuralAmpModeler::_VolumSoundingLibraryIds() const
@@ -126,29 +172,46 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
 #endif
 
   const auto result = volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath);
+  static const char* kVerbLog[3] = {"overwrite", "add", "reset"};
+  VOLUM_LOG("pack", std::string("import ") + kVerbLog[(int)verb] + (alsoSettings ? " +settings" : "") + ": "
+                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedIds.size()) + " replaced"
+                                   : "failed: " + result.error));
+  // A settings-file failure still committed the library. Reload replaced captures
+  // before reporting that error, or the rig keeps playing the bytes just overwritten.
+  if (result.libraryCommitted)
+  {
+    _VolumMigrateIrTrims();
+    _VolumRepairRigForMissingContent(); // Reset can delete an id this rig was playing
+    _VolumReloadReplacedLibraryIds(result.replacedIds);
+    _VolumReconcileActiveIr();
+    _VolumPushIrShaping(false);
+    _VolumPushIrShaping(true);
+    _VolumSyncPresetOwner();
+    _VolumRefreshPresetBar();
+    _VolumRefreshMidiSettingsChrome();
+    _VolumRefreshPlaySurface();
+    _VolumSyncUiFromState();
+  }
   if (!result.ok)
     return result.error.empty() ? std::string("The Pack could not be imported.") : result.error;
 
-  // The catalog changed under the live rig. Re-derive everything that reads it,
-  // in the same order the Manage panel's own change hook uses.
-  _VolumMigrateIrTrims();
-  _VolumRepairRigForMissingContent(); // Reset can delete an id this rig was playing
-  _VolumReloadReplacedLibraryIds(result.replacedIds);
-  _VolumReconcileActiveIr();
-  _VolumPushIrShaping(false);
-  _VolumPushIrShaping(true);
-  _VolumSyncPresetOwner();
-  _VolumRefreshPresetBar();
-  _VolumRefreshMidiSettingsChrome();
-  _VolumRefreshPlaySurface();
-  _VolumSyncUiFromState();
-
 #if defined(APP_API)
   // An Everything import with the box ticked has just replaced the machine
-  // settings file; read it back so this window matches what it will restore next
-  // launch instead of overwriting it on the next knob move.
+  // settings file. Read it back and put it on the live rig the way a launch does
+  // (constructor + OnUIOpen). Reading alone left the old knobs live on the newly
+  // focused amp, and the next settings save wrote them over its restored scene
+  // and dropped its preset. Nothing outgoing is snapshotted: the file replaced it.
   if (alsoSettings && !pack.settingsJson.empty())
+  {
     _VolumLoadSettingsFromFile();
+    _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
+    _VolumApplyLiveLockSnapshots();
+    _VolumRefreshPrePedalCaptures();
+    _VolumRefreshSupportChannels();
+    mVolumDidRestorePresetSelection = false;
+    _VolumRestoreSessionSelection();
+    _VolumSyncUiFromState();
+  }
 #endif
   return {};
 }

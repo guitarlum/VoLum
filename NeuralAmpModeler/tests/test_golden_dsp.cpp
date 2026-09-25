@@ -49,7 +49,7 @@ void ExpectGoldenHash(const char* name, const std::string& actual, const char* w
   CHECK(actual == std::string(expected));
 }
 
-std::vector<double> RunDelayGolden(int mode)
+std::vector<double> RunDelayGolden(int mode, bool sameOnBothSides = false)
 {
   constexpr double sampleRate = 48000.0;
   constexpr std::size_t frames = 512;
@@ -62,7 +62,9 @@ std::vector<double> RunDelayGolden(int mode)
   for (int block = 0; block < 24; ++block)
   {
     left = volum::test::MakeReferenceInput(frames, sampleRate, 0x1000U + static_cast<unsigned>(block));
-    right = volum::test::MakeReferenceInput(frames, sampleRate, 0x2000U + static_cast<unsigned>(block));
+    right = sameOnBothSides
+              ? left
+              : volum::test::MakeReferenceInput(frames, sampleRate, 0x2000U + static_cast<unsigned>(block));
     double* inputs[2] = {left.data(), right.data()};
     auto** out = delay.Process(inputs, 2, frames);
     volum::test::AppendChannel(rendered, out[0], frames);
@@ -191,17 +193,33 @@ TEST_CASE("Golden DSP: PRE effects and tone stack hashes stay stable")
                    "81ef87af81dac5d6a5cf146cb233d0ac72248addf3bce8dd4721b0a00a865518");
 }
 
+// Digital and Analog run ping-pong on independent noise per side, so their hashes moved
+// in 1.3.0 when the ping-pong seed became the L/R mid (was L only).
 TEST_CASE("Golden DSP: delay mode hashes stay stable")
 {
   ExpectGoldenHash("delay-digital", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital)),
-                   "32c0b64268eb5d72978c332ed545e751c8c5f20ba2d8e31442f8d77997be9f1c",
-                   "2e86b97a8c05dea10e7adb1f49fd2406746dd48a6b8019e4b7fa53ea97dadaf8");
+                   "abfb022c399f822ee8aaac8d930170eed2cc37e795d4b8a785c991928f11a6a2",
+                   "eee2751e4c25f5a2d29d30312129521c17cf07826d5437329533264b05289eed");
   ExpectGoldenHash("delay-analog", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog)),
-                   "6fa73c812fac2f053beea8f3ae363a04c45a626ec52874dc41f3eb9b2f212573",
-                   "2b22e1f4e29f863495a9bed90c24271c0543ff30aec1fe043b577134788eb195");
+                   "ac3e9d18fadb531d8bf0aa66c498cf8d1d180dea650f4809c43a773afca99ac9",
+                   "e2eb6d2b6326fb4232145e1fafae7aec4af1529217b07a407d25745943167bec");
   ExpectGoldenHash("delay-reverse", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeReverse)),
                    "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4",
                    "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
+}
+
+// A single amp reaches the delay as L == R. These were pinned from the left-only
+// ping-pong seed before it became the L/R mid, and must never move.
+TEST_CASE("Golden DSP: ping-pong with the same input on both sides stays stable")
+{
+  ExpectGoldenHash("delay-digital-same-lr",
+                   volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital, true)),
+                   "e3734fcefe5528ee7e6c3906b1168a960dc24272a87620cee752e3e3d2a54745",
+                   "f1317e7e4e65a70ea3ff667baaf71295d2c46ee475e914e75b44ee9df339cf22");
+  ExpectGoldenHash("delay-analog-same-lr",
+                   volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog, true)),
+                   "fe11f80414720180f957516e95cb22ed578aca9ae8b726194638ab9bcd408def",
+                   "494af847639a264c8d65ef38d9071bc8ba8e66e2817fbef49ad2b4bd80360548");
 }
 
 // Every reverb hash below changed in 1.2.1, deliberately: the topology was fixed. The
@@ -209,22 +227,24 @@ TEST_CASE("Golden DSP: delay mode hashes stay stable")
 // Dattorro's tank that had been missing along with his output tap network. Tail
 // lengths, loop gains and tone curves did not move, but every output sample did. What
 // the new response has to satisfy lives in test_reverb_diffusion.cpp; this case only
-// pins it against unintended drift from here on.
+// pins it against unintended drift from here on. They moved again in 1.3.0 when the
+// reverb started taking L and R separately (this case feeds independent noise per
+// side); an L == R input is bit-identical to before (test_reverb_stereo_input.cpp).
 TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
 {
   ExpectGoldenHash("reverb-hall", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeHall, 0)),
-                   "b9c9c3d862c7b2574af9b4f3e8d49c1cc335359da23085381e5b46095463811c",
-                   "1b31218a539934d9bd7a4a059865d3acb56989ab1efb7fe1d6d406bc2de3603f");
+                   "0e0dea2148d1d48201560bbd9ced13f5d8d5abd55d457f8189fc7fb84cefe275",
+                   "651537db17d746e23b90f30fc04a36b2714bd93e452e307eb1bff93756acb8a5");
   ExpectGoldenHash("reverb-plate", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModePlate, 0)),
-                   "d5bfb6e4c8719746bfd4766338cf13ef8521f146457eb95a6468a481db58ea4b",
-                   "481cda1a11928f3827513a514b1161923af4d7b2c4c6984895314fee3463a62b");
+                   "36bb5435950bd077ef61f2fa4a563485490caf0384e90ef328b96f9ecb8b0c8c",
+                   "a4805485fccd8a767fbc8f6ddc87484d008f572a0d1e4311bc446722bb41425b");
   ExpectGoldenHash("oktaverb-halo", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0)),
-                   "a41f1390cffb91bfb95370ebfe33d9bf05df45981cbaf8042cce22a4548326ef",
-                   "5d0dd19eb152df64b1890a44803783cc187dfcaa8a58486219e67f25ceb8ae18");
+                   "8c7271c2c52d50c11cfb359ffa77e2c539cf5431c0239fe78451763a4041f434",
+                   "6165bcba62f985a34a94f1be51f8dbd135a9a68c479b48fe40ca79f5d7112a02");
   ExpectGoldenHash("oktaverb-shimmer", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1)),
-                   "6bc913cb27b0981b7c51754d255eb59960f251bfffb92e99ba013527d3144e3f",
-                   "6589f106d1b4f21a4fa5d02a6427e099e2e6262a006d9a9f3c6952a2668d377d");
+                   "3403ec0e51ca3dc37eb94cd14a1847b8135a1925cc83ab695dfa78498d775c86",
+                   "0b77bfc150d7d07009b79f96e8d8999e50645320eb02b23af0c2ed773de89339");
   ExpectGoldenHash("oktaverb-bloom", volum::test::Sha256Hex(RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2)),
-                   "4882fc22573ea37ddcde462baf0b01bf4033f6f2d9297dc0df278b094f444573",
-                   "ccef0b8b59f73e02d6c00be43b220d915c76964f0d5153581101d879ce67fbe9");
+                   "bb97b2c1331309464e2d18f4d75ee81bf374ffbe99a6346bb6b6bf9e561d678e",
+                   "91e46693fc1341469e3c429d149a26c491e746f4d371dfa1e9dbafe152807fc2");
 }

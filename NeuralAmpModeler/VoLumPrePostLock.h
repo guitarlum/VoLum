@@ -3,6 +3,7 @@
 #include "VoLumAmpeteCatalog.h"
 
 #include <cmath>
+#include <string>
 
 namespace volum
 {
@@ -121,6 +122,121 @@ inline bool PostBlockEquals(const VoLumAmpSettings& a, const VoLumAmpSettings& b
       return false;
 
   return true;
+}
+
+// Field-for-field copies of the blocks PreBlockEquals / PostBlockEquals observe.
+// postValid is copied with POST because a stored preset is a written scene, even
+// though lock-dirty itself ignores the sentinel.
+inline void CopyPreBlock(const VoLumAmpSettings& src, VoLumAmpSettings& dst)
+{
+  dst.preCompActive = src.preCompActive;
+  dst.preCompAmount = src.preCompAmount;
+  dst.preCompRatio = src.preCompRatio;
+  dst.preCompAttack = src.preCompAttack;
+  dst.preCompRelease = src.preCompRelease;
+  dst.preCompMix = src.preCompMix;
+  dst.preCompLevel = src.preCompLevel;
+  dst.preNam1Active = src.preNam1Active;
+  dst.preNam1Capture = src.preNam1Capture;
+  dst.preNam1Gain = src.preNam1Gain;
+  dst.preNam1Bass = src.preNam1Bass;
+  dst.preNam1Mid = src.preNam1Mid;
+  dst.preNam1MidFreq = src.preNam1MidFreq;
+  dst.preNam1Treble = src.preNam1Treble;
+  dst.preNam1Level = src.preNam1Level;
+  dst.preNam2Active = src.preNam2Active;
+  dst.preNam2Capture = src.preNam2Capture;
+  dst.preNam2Gain = src.preNam2Gain;
+  dst.preNam2Bass = src.preNam2Bass;
+  dst.preNam2Mid = src.preNam2Mid;
+  dst.preNam2MidFreq = src.preNam2MidFreq;
+  dst.preNam2Treble = src.preNam2Treble;
+  dst.preNam2Level = src.preNam2Level;
+  dst.prePitchActive = src.prePitchActive;
+  dst.prePitchMode = src.prePitchMode;
+  dst.prePitchSemitones = src.prePitchSemitones;
+  dst.prePitchMix = src.prePitchMix;
+  dst.prePitchOctDown = src.prePitchOctDown;
+  dst.prePitchOctUp = src.prePitchOctUp;
+  dst.prePitchDry = src.prePitchDry;
+  dst.prePitchVoicing = src.prePitchVoicing;
+  dst.prePitchLevel = src.prePitchLevel;
+  dst.prePitchTransChar = src.prePitchTransChar;
+  for (int mode = 0; mode < kVoLumPitchModeCount; ++mode)
+    dst.prePitchModes[mode] = src.prePitchModes[mode];
+}
+
+inline void CopyPostBlock(const VoLumAmpSettings& src, VoLumAmpSettings& dst)
+{
+  dst.postValid = src.postValid;
+  dst.postDelayActive = src.postDelayActive;
+  dst.postDelayTime = src.postDelayTime;
+  dst.postDelayFeedback = src.postDelayFeedback;
+  dst.postDelayMix = src.postDelayMix;
+  dst.postDelayMode = src.postDelayMode;
+  dst.postDelayTone = src.postDelayTone;
+  dst.postDelayAge = src.postDelayAge;
+  dst.postDelayPingPong = src.postDelayPingPong;
+  dst.postDelaySync = src.postDelaySync;
+  dst.postDelayDivision = src.postDelayDivision;
+  dst.postReverbActive = src.postReverbActive;
+  dst.postReverbMix = src.postReverbMix;
+  dst.postReverbDecay = src.postReverbDecay;
+  dst.postReverbTone = src.postReverbTone;
+  dst.postReverbPreDelay = src.postReverbPreDelay;
+  dst.postReverbShimmer = src.postReverbShimmer;
+  dst.postReverbMode = src.postReverbMode;
+  dst.postReverbSubMode = src.postReverbSubMode;
+  dst.postTremoloActive = src.postTremoloActive;
+  dst.postTremoloMode = src.postTremoloMode;
+  dst.postTremoloRate = src.postTremoloRate;
+  dst.postTremoloDepth = src.postTremoloDepth;
+  dst.postTremoloShape = src.postTremoloShape;
+  dst.postTremoloMix = src.postTremoloMix;
+  dst.postTremoloCrossover = src.postTremoloCrossover;
+  dst.postTremoloSync = src.postTremoloSync;
+  dst.postTremoloDivision = src.postTremoloDivision;
+  dst.postChorusActive = src.postChorusActive;
+  dst.postChorusMode = src.postChorusMode;
+  dst.postChorusRate = src.postChorusRate;
+  dst.postChorusDepth = src.postChorusDepth;
+  dst.postChorusTone = src.postChorusTone;
+  dst.postChorusWidth = src.postChorusWidth;
+  dst.postChorusMix = src.postChorusMix;
+  for (int mode = 0; mode < kVoLumDelayModeCount; ++mode)
+    dst.postDelayModes[mode] = src.postDelayModes[mode];
+  for (int mode = 0; mode < kVoLumReverbModeCount; ++mode)
+    dst.postReverbModes[mode] = src.postReverbModes[mode];
+  for (int subMode = 0; subMode < 3; ++subMode)
+    dst.postOktaverbSubModes[subMode] = src.postOktaverbSubModes[subMode];
+  for (int mode = 0; mode < kVoLumTremoloModeCount; ++mode)
+    dst.postTremoloModes[mode] = src.postTremoloModes[mode];
+  for (int mode = 0; mode < kVoLumChorusModeCount; ++mode)
+    dst.postChorusModes[mode] = src.postChorusModes[mode];
+}
+
+// The sounding rig for a preset snapshot: locked PRE/POST live in the overlay,
+// not on the amp slot. Capture, dirty, and the save-time baseline must all use
+// this view so a locked block is stored and `(unsaved)` agrees.
+inline VoLumAmpSettings SoundingPresetScene(VoLumAmpSettings slot, bool preLocked,
+                                            const VoLumAmpSettings& liveLockedPre, bool postLocked,
+                                            const VoLumAmpSettings& liveLockedPost)
+{
+  if (preLocked)
+    CopyPreBlock(liveLockedPre, slot);
+  if (postLocked)
+    CopyPostBlock(liveLockedPost, slot);
+  return slot;
+}
+
+// Confirm-time re-resolve: the prompt named `id` at `capturedIdx`. The
+// process-global library may have shifted. Empty id keeps the old positional
+// behaviour (rows that have no identity).
+inline int ResolveConfirmRowIndex(const std::string& id, int capturedIdx, int indexNow)
+{
+  if (id.empty())
+    return capturedIdx;
+  return indexNow;
 }
 
 } // namespace volum

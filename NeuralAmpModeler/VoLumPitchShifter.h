@@ -51,6 +51,7 @@
 // Mono in/out (numChannels == 1; VoLum is mono internally).
 
 #include "../AudioDSPTools/dsp/dsp.h"
+#include "VoLumLevelMute.h"
 
 #include <algorithm>
 #include <array>
@@ -798,8 +799,10 @@ public:
     mOctUp = std::clamp(octUp01, 0.0, 1.0);
     mDry = std::clamp(dry01, 0.0, 1.0);
     mVoicing = voicing;
+    // Mute floor matches kPrePitchLevel Init min (-20 dB) and the −∞ display
+    // contract. ProcessBlock passes the raw param dB; this is the mapping.
     const double clampedDb = std::clamp(levelDb, -20.0, 20.0);
-    mLevel = std::pow(10.0, clampedDb / 20.0);
+    mLevel = volum::DbToAmpWithMuteFloor(clampedDb, -20.0);
     _ApplyCharacters();
   }
 

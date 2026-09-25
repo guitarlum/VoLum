@@ -33,6 +33,7 @@
 
 #include "VoLumAmpSettingsJson.h" // CustomScenesToJson / CustomScenesFromJson
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumMidi.h"
 
 #if __has_include(<nlohmann/json.hpp>)
   #include <nlohmann/json.hpp>
@@ -59,10 +60,11 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // delay's other params still travel in the binary per-amp block; only the
 // appended sync/division pair needs the tail. Informational only.
 // Schema 6 (1.3.0): MIDI per-instance input channel (`midiCh`, 0=Omni, 1..16),
-// PLAY/BUILD mode (`uiMode`), per-amp POST Chorus (`cho`) and the live-locked
-// POST chorus snapshot (`lockedPostChorus`), plus "customScenes", the
-// focused-custom-amp live knobs that used to live in the shared content library
-// and belong to the project now, the same way a factory amp's scene does.
+// Sound-recall CC (`midiRecallCc`, default 102, 0-119; additive, older files
+// default), PLAY/BUILD mode (`uiMode`), per-amp POST Chorus (`cho`) and the
+// live-locked POST chorus snapshot (`lockedPostChorus`), plus "customScenes",
+// the focused-custom-amp live knobs that used to live in the shared content
+// library and belong to the project now, the same way a factory amp's scene does.
 // Chorus EParams sit past the frozen 1.2.2 chunk prefix, so the tail is the ONLY
 // place its saved values travel - never as extra prefix doubles.
 // Informational only.
@@ -79,7 +81,7 @@ struct PitchTail
   int mode = 0; // 0=Transpose, 1=Octaver
   double semitones = 0.0;
   double mix = 1.0;
-  double octDown = 0.0;
+  double octDown = 0.8;
   double octUp = 0.0;
   double dry = 1.0;
   int voicing = 1; // 0=Vintage, 1=Modern
@@ -130,10 +132,10 @@ struct ChorusTail
   bool present = false;
   bool active = false;
   int mode = kVoLumChorusModeDefault;
-  double rate = 0.35;
-  double depth = 0.45;
-  double tone = 0.40;
-  double width = 0.70;
+  double rate = 0.44;
+  double depth = 0.36;
+  double tone = 0.21;
+  double width = 0.60;
   double mix = 0.50;
   // Per-mode knob memory (Classic / Warped / Clear / Ensemble).
   ChorusModeSnapshot modes[kVoLumChorusModeCount] = {
@@ -147,6 +149,7 @@ struct ChorusTail
 struct ChunkIdTail
 {
   int midiCh = 0; // per-instance MIDI channel (0=Omni, 1..16)
+  int midiRecallCc = kMidiRecallCcDefault; // per-instance Sound-recall CC (0-119)
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
   std::string customSupportId; // custom dual SUPPORT partner id ("" = factory/none)
   std::string activePresetId; // recalled preset id for the focused amp ("" = none)
@@ -207,7 +210,7 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
   if (j.contains("mix"))
     p.mix = num(j["mix"], 1.0);
   if (j.contains("octDn"))
-    p.octDown = num(j["octDn"], 0.0);
+    p.octDown = num(j["octDn"], 0.8);
   if (j.contains("octUp"))
     p.octUp = num(j["octUp"], 0.0);
   if (j.contains("dry"))
@@ -408,6 +411,7 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
   nlohmann::json j;
   j["v"] = kVoLumIdTailSchema;
   j["midiCh"] = std::clamp(t.midiCh, 0, 16);
+  j["midiRecallCc"] = ClampMidiRecallCc(t.midiRecallCc);
   j["customMainId"] = t.customMainId;
   j["customSupportId"] = t.customSupportId;
   j["activePresetId"] = t.activePresetId;
@@ -457,6 +461,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   auto str = [](const nlohmann::json& v) { return v.is_string() ? v.get<std::string>() : std::string(); };
   if (j.contains("midiCh") && j["midiCh"].is_number_integer())
     t.midiCh = std::clamp(j["midiCh"].get<int>(), 0, 16);
+  if (j.contains("midiRecallCc") && j["midiRecallCc"].is_number_integer())
+    t.midiRecallCc = ClampMidiRecallCc(j["midiRecallCc"].get<int>());
   if (j.contains("customMainId"))
     t.customMainId = str(j["customMainId"]);
   if (j.contains("customSupportId"))

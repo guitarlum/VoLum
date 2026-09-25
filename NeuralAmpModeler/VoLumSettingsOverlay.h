@@ -16,6 +16,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumPackLayout.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -94,10 +95,12 @@ public:
   {
   }
 
-  void SetUpdate(bool available, const std::string& version, const std::string& notes = {})
+  void SetUpdate(bool available, const std::string& version, const std::string& notes = {},
+                 const std::string& checkError = {})
   {
     mAvailable = available;
     mNotes = notes;
+    mCheckError = checkError;
     mLabel = version.empty() ? "Update available  ·  What's new" : "Update available: " + version + "  ·  What's new";
     SetDirty(false);
   }
@@ -105,7 +108,12 @@ public:
   void Draw(IGraphics& g) override
   {
     if (!mAvailable)
+    {
+      if (!mCheckError.empty())
+        g.DrawText(
+          IText(10.f, VoLumColors::AMBER, "Josefin-Sans", EAlign::Near, EVAlign::Middle), mCheckError.c_str(), mRECT);
       return;
+    }
     const IRECT pill = PillRect(g);
     g.FillRoundRect(VoLumColors::GOLD.WithOpacity(mMouseIsOver ? 0.34f : 0.24f), pill, pill.H() * 0.5f);
     g.DrawRoundRect(VoLumColors::GOLD, pill, pill.H() * 0.5f);
@@ -151,6 +159,7 @@ private:
   bool mAvailable = false;
   std::string mLabel = "Update available";
   std::string mNotes;
+  std::string mCheckError;
   std::function<void()> mOnClick;
 };
 
@@ -190,10 +199,16 @@ public:
 
   void OnMouseDown(float, float, const IMouseMod&) override
   {
+    const auto pressed = mSecondPress.Press();
     mChecked = !mChecked;
     if (mCallback)
       mCallback(mChecked);
     SetDirty(false);
+  }
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
   void OnMouseOver(float, float, const IMouseMod&) override
   {
@@ -216,6 +231,7 @@ private:
   std::string mLabel;
   bool mChecked = false;
   Callback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 /** Thin horizontal rule above settings footer (mouse passes through). */

@@ -419,8 +419,13 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   _VolumRefreshPresetBar(); // this custom amp's preset bank
   if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
     al->As<VoLumAmpListControl>()->SetCustomSelected(customIdx);
-  // Make the shared cabinet row + channel stepper reflect this custom amp.
+  // Stage this custom MAIN (routing caches + .nam) even when SUPPORT is still
+  // focused - the row write inside that call is gated on focus. Then re-derive
+  // the shared row for whichever lane actually has focus, the way a factory
+  // sidebar click and a preset recall already do. Skipping the second call left
+  // the previous SUPPORT partner's names / enables / IR chip on screen.
   _VolumApplyCustomMainCabs(customIdx);
+  _VolumApplyFocusedLaneCabs();
 }
 
 // Build the pure planner's input for one lane from live backend state. The only
@@ -851,7 +856,12 @@ void NeuralAmpModeler::_VolumApplyActiveIr(const std::string& irId, bool support
   if (idx < 0)
   {
     // Empty or orphaned id (the IR was deleted / is missing on this machine):
-    // drop the convolver so the baked cab takes over. No UI when headless.
+    // drop the convolver so the baked cab takes over, and drop the id so a later
+    // overwrite does not write the dead reference back. No UI when headless.
+    if (support)
+      _VolumActiveScene().supportActiveIrId.clear();
+    else
+      _VolumActiveScene().activeIrId.clear();
     (support ? mShouldRemoveSupportIR : mShouldRemoveIR) = true;
     if (support == _VolumSupportFocused())
       if (auto* pGfx = GetUI())
@@ -898,8 +908,8 @@ iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const
   const double highHz = (support ? mSupportIrHighCutHz : mIrHighCutHz).load(std::memory_order_relaxed);
   auto& lowCut = support ? mSupportIrLowCut : mIrLowCut;
   auto& highCut = support ? mSupportIrHighCut : mIrHighCut;
-  auto* shaped = volum::ApplyIrShapingLane(reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim,
-                                           lowHz, highHz, lowCut, highCut);
+  auto* shaped = volum::ApplyIrShapingLane(
+    reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim, lowHz, highHz, lowCut, highCut);
   return reinterpret_cast<iplug::sample**>(shaped);
 }
 
@@ -1039,7 +1049,9 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
     mVolumSpeakerIdx = sel;
     mVolumChannelIdx = volum::custom::ChannelStepIndex(volum::custom::AssignedChannels(amp), ch);
     _VolumSetCustomChannelStepper(mVolumCustomMainIdx, false, ch);
-    if (row)
+    // The shared cab row is SUPPORT's while that lane is focused. MAIN's
+    // fallback still updates MAIN's scene; it must not repaint SUPPORT's row.
+    if (row && !_VolumSupportFocused())
     {
       row->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
       row->As<VoLumSpeakerRowControl>()->SetSelected(sel);
@@ -1053,7 +1065,7 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
     mVolumSpeakerIdx = sel;
     mVolumAmpSettings[mVolumAmpIdx].speakerIdx = sel;
     _VolumRefreshChannels();
-    if (row)
+    if (row && !_VolumSupportFocused())
     {
       row->As<VoLumSpeakerRowControl>()->SetIrCab(false, "");
       row->As<VoLumSpeakerRowControl>()->SetSelected(sel);

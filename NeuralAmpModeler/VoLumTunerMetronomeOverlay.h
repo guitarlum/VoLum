@@ -16,6 +16,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumTunerDSP.h"
 #include "VoLumMetronomeDSP.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -120,7 +121,7 @@ public:
     (void)y;
     if (!mHide && key.VK == kVK_ESCAPE)
     {
-      _Dismiss();
+      Dismiss();
       return true;
     }
     return false;
@@ -142,6 +143,8 @@ public:
   }
 
   void SetDismissAction(std::function<void()> fn) { mDismissAction = std::move(fn); }
+
+  void Dismiss() { _Dismiss(); }
 
 private:
   IRECT _PanelRect() const { return mRECT.GetCentredInside(340.f, 180.f); }
@@ -335,6 +338,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (mHide)
       return;
 
@@ -401,6 +405,15 @@ public:
     }
   }
 
+  // No mouse-up follows a double-click, so a volume grab ends here.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (!mSecondPress.Take())
+      return;
+    OnMouseDown(x, y, mod);
+    mDraggingVolume = false;
+  }
+
   void OnMouseDrag(float x, float y, float dX, float dY, const IMouseMod& mod) override
   {
     (void)y;
@@ -425,10 +438,20 @@ public:
     (void)y;
     if (!mHide && key.VK == kVK_ESCAPE)
     {
-      Hide(true);
+      Dismiss();
       return true;
     }
     return false;
+  }
+
+  void Dismiss()
+  {
+    Hide(true);
+    if (auto* ui = GetUI())
+    {
+      if (auto* textEntry = ui->GetTextEntryControl())
+        textEntry->DismissEdit();
+    }
   }
 
   void OnTextEntryCompletion(const char* str, int valIdx) override
@@ -521,4 +544,5 @@ private:
   bool mDraggingVolume = false;
   bool mEditingBPM = false;
   IText mBpmTextEntry;
+  volum::ui::SecondPressGate mSecondPress;
 };

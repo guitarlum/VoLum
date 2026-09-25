@@ -1,5 +1,4 @@
 #include <algorithm> // std::clamp, std::min
-#include <cassert> // RT capacity invariants
 #include <cmath> // pow
 #include <chrono> // debug-only custom-amp seeding sandbox naming
 #include <cstdlib> // std::getenv (opt-in perf overlay)
@@ -320,6 +319,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
   VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
   _InitToneStack();
+  mDspGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+  mIrGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);
   nam::activations::Activation::enable_fast_tanh();
   GetParam(kInputLevel)->InitGain("Input", 0.0, -20.0, 20.0, 0.1);
   GetParam(kToneBass)->InitDouble("Bass", 5.0, 0.0, 10.0, 0.1);
@@ -414,10 +415,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kChorusActive)->InitBool("ChorusActive", false);
   GetParam(kChorusMode)
     ->InitEnum("ChorusMode", volum::kVoLumChorusModeDefault, {"Classic", "Warped", "Clear", "Ensemble"});
-  GetParam(kChorusRate)->InitDouble("ChorusRate", 0.35, 0.0, 1.0, 0.01);
-  GetParam(kChorusDepth)->InitDouble("ChorusDepth", 0.45, 0.0, 1.0, 0.01);
-  GetParam(kChorusTone)->InitDouble("ChorusTone", 0.40, 0.0, 1.0, 0.01);
-  GetParam(kChorusWidth)->InitDouble("ChorusWidth", 0.70, 0.0, 1.0, 0.01);
+  GetParam(kChorusRate)->InitDouble("ChorusRate", 0.44, 0.0, 1.0, 0.01);
+  GetParam(kChorusDepth)->InitDouble("ChorusDepth", 0.36, 0.0, 1.0, 0.01);
+  GetParam(kChorusTone)->InitDouble("ChorusTone", 0.21, 0.0, 1.0, 0.01);
+  GetParam(kChorusWidth)->InitDouble("ChorusWidth", 0.60, 0.0, 1.0, 0.01);
   GetParam(kChorusMix)->InitDouble("ChorusMix", 0.50, 0.0, 1.0, 0.01);
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
@@ -592,6 +593,14 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   const size_t numFrames = (size_t)nFrames;
   const double sampleRate = GetSampleRate();
 
+  // Host grew past the off-thread reserve, or OnReset has not run yet.
+  if (!volum::dsp_staging::AudioBlockFitsReserve(nFrames, mReservedAudioBlockSize))
+  {
+    volum::dsp_staging::CopyOrSilenceExternalBlock(
+      inputs, outputs, nFrames, static_cast<int>(numChannelsExternalIn), static_cast<int>(numChannelsExternalOut));
+    return;
+  }
+
   // Disable floating point denormals
   std::fenv_t fe_state;
   std::feholdexcept(&fe_state);
@@ -632,28 +641,22 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool(), GetParam(kChorusActive)->Bool());
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
-  if (processingPlan.runDualAmp)
-  {
-    // Capacity invariant: OnReset() pre-allocates these scratch buffers to
-    // maxBlockSize, so .resize() here must NEVER reallocate on the audio
-    // thread. assert() is a no-op in NDEBUG release builds and fires in
-    // debug + CI sanitizer builds if the invariant ever regresses.
-    assert(mDualMainLaneBuffer.capacity() >= static_cast<size_t>(numFrames)
-           && "Dual-amp main scratch not pre-reserved");
-    mDualMainLaneBuffer.resize(numFrames);
+  const bool dualScratchReady =
+    processingPlan.runDualAmp && volum::dsp_staging::ResizeScratchNoAlloc(mDualMainLaneBuffer, numFrames);
+  if (dualScratchReady)
     std::memcpy(mDualMainLaneBuffer.data(), preAmpPointers[0], numFrames * sizeof(sample));
-  }
 
   sample** hpfPointers =
     _VolumProcessMainAmpChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
-  sample* supportLane = _VolumProcessDualAmpSupportLane(processingPlan, numChannelsInternal, nFrames, sampleRate);
-
-  // restore previous floating point state
-  std::feupdateenv(&fe_state);
+  sample* supportLane = dualScratchReady
+                          ? _VolumProcessDualAmpSupportLane(processingPlan, numChannelsInternal, nFrames, sampleRate)
+                          : nullptr;
 
   // Let's get outta here
   // This is where we exit mono for whatever the output requires.
-  if (processingPlan.runDualAmp && supportLane != nullptr)
+  if (dualScratchReady && supportLane != nullptr
+      && volum::dsp_staging::ResizeScratchNoAlloc(mDualMainAlignedBuffer, numFrames)
+      && volum::dsp_staging::ResizeScratchNoAlloc(mDualSupportAlignedBuffer, numFrames))
   {
 #if defined(APP_API)
     constexpr bool kAppApi = true;
@@ -674,12 +677,6 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     if (mSupportModel)
       supportLatency = mSupportModel->GetLatency();
     const auto latencyComp = volum::MakeDualAmpLatencyCompensation(mainLatency, supportLatency);
-    assert(mDualMainAlignedBuffer.capacity() >= static_cast<size_t>(numFrames)
-           && "Dual-amp main-aligned scratch not pre-reserved");
-    assert(mDualSupportAlignedBuffer.capacity() >= static_cast<size_t>(numFrames)
-           && "Dual-amp support-aligned scratch not pre-reserved");
-    mDualMainAlignedBuffer.resize(numFrames);
-    mDualSupportAlignedBuffer.resize(numFrames);
     const sample* mainLane = mDualMainLatencyDelay.Process(
       hpfPointers[0], mDualMainAlignedBuffer.data(), numFrames, latencyComp.mainDelaySamples);
     const sample* compensatedSupportLane = mDualSupportLatencyDelay.Process(
@@ -697,15 +694,15 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   _VolumProcessPostChain(outputs, processingPlan, numChannelsExternalOut, nFrames, sampleRate);
 
-  // Metronome: sum click into output
-  mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
-
-  // Tuner active: silence output so player can tune without hearing amp
+  // Tuner mutes the guitar. The metronome click is summed after this so a
+  // click track still plays while the tuner overlay is up.
   if (processingPlan.silenceForTuner)
   {
     for (size_t c = 0; c < numChannelsExternalOut; c++)
       std::memset(outputs[c], 0, numFrames * sizeof(iplug::sample));
   }
+
+  mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
 
   if (processingPlan.runDualAmp)
   {
@@ -748,6 +745,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   }
   mMasterSafetyEngaged.store(mMasterSafetyHoldSamples > 0);
 
+  // Denormals stay flushed through POST and the safety clip. Restoring the host
+  // FP environment before the tails was leaving chorus, delay, and reverb to
+  // decay in denormal land.
+  std::feupdateenv(&fe_state);
+
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
   _UpdateMeters(mInputPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
@@ -777,12 +779,17 @@ void NeuralAmpModeler::OnReset()
   mVolumDeferredIrMaxBlocks.store(
     std::max(1, static_cast<int>(std::ceil(2.0 * sampleRate / std::max(1, maxBlockSize)))));
   // If there is a model or IR loaded, they need to be checked for resampling.
-  _ResetModelAndIR(sampleRate, GetBlockSize());
+  const int reservedBlock = volum::dsp_staging::ReservedAudioBlockSize(maxBlockSize);
+  _ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));
   mToneStack->Reset(sampleRate, maxBlockSize);
   if (mSupportToneStack)
     mSupportToneStack->Reset(sampleRate, maxBlockSize);
   mDualMainLatencyDelay.Reset();
   mDualSupportLatencyDelay.Reset();
+  mDualMainLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
+  mDualSupportLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
+  mPrePitchWasActive = false;
+  mPreCompWasActive = false;
   for (int i = 0; i < 2; ++i)
     mPreEq[i].Reset(sampleRate, maxBlockSize);
   mPreCompressor.Reset();
@@ -805,14 +812,15 @@ void NeuralAmpModeler::OnReset()
   mPostTremoloWasActive = false;
   mPostChorusWasActive = false;
   mPostEffectsClearedForMissingModel = false;
-  // Pre-reserve dual-amp scratch buffers so ProcessBlock never has to grow them on
-  // the audio thread when block size or dual-amp activation changes mid-session.
-  const size_t maxBlockSizeT = static_cast<size_t>(std::max(0, maxBlockSize));
-  mDualMainLaneBuffer.assign(maxBlockSizeT, 0.0);
-  mDualSupportLaneBuffer.assign(maxBlockSizeT, 0.0);
-  mDualMainAlignedBuffer.assign(maxBlockSizeT, 0.0);
-  mDualSupportAlignedBuffer.assign(maxBlockSizeT, 0.0);
-  _PrepareBuffers(kNumChannelsInternal, maxBlockSizeT);
+  // Hosts grow the callback without OnReset. Reserve the pitch-sized cap so
+  // ProcessBlock can resize within capacity; past that it dry-passes.
+  mReservedAudioBlockSize = reservedBlock;
+  const size_t reservedT = static_cast<size_t>(reservedBlock);
+  mDualMainLaneBuffer.assign(reservedT, 0.0);
+  mDualSupportLaneBuffer.assign(reservedT, 0.0);
+  mDualMainAlignedBuffer.assign(reservedT, 0.0);
+  mDualSupportAlignedBuffer.assign(reservedT, 0.0);
+  _PrepareBuffers(kNumChannelsInternal, reservedT);
   mTunerDSP.Reset(sampleRate);
   mMetronomeDSP.Reset(sampleRate);
   _UpdateLatency();
@@ -824,7 +832,8 @@ void NeuralAmpModeler::OnReset()
 
 void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 {
-  if (const auto slot = volum::DecodeMidiProgramChange(msg, mVolumMidiChannel.load(std::memory_order_relaxed)))
+  if (const auto slot = volum::DecodeMidiSoundRecall(
+        msg, mVolumMidiChannel.load(std::memory_order_relaxed), mVolumMidiRecallCc.load(std::memory_order_relaxed)))
     mVolumMidiQueue.Enqueue(*slot);
 }
 
@@ -835,6 +844,21 @@ void NeuralAmpModeler::OnIdle()
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
+  _VolumRebindCustomSupportIdx();
+  if (!mVolumPendingLibraryNotice.empty())
+    if (auto* gfx = GetUI())
+    {
+      // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
+      const std::string notice = std::move(mVolumPendingLibraryNotice);
+      mVolumPendingLibraryNotice.clear();
+      _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+    }
+
+  // Runs after the sync above so the restore stays the first thing an idle does;
+  // freeing a few megabytes can wait a tick, a stale editor cannot.
+  _VolumReapAudioThreadRetirees();
+  if (mLatencyDirty.exchange(false, std::memory_order_acquire))
+    _ApplyLatchedLatency();
   if (auto* pGfx = GetUI())
     if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
       toggle->SetDirty(false); // keep the switch above animated BUILD/PLAY chrome
@@ -852,7 +876,11 @@ void NeuralAmpModeler::OnIdle()
   {
     const auto sound = volum::content::ResolveMidiSound(volum::content::GlobalContentStore().reg(), *slot);
     if (sound && _VolumRecallSound(sound->ampId, sound->presetId))
+    {
       mVolumLastRecalledPlaySlot = *slot;
+      // An open MIDI tab moves its LIVE lamp with the footswitch.
+      _VolumRefreshMidiSettingsChrome();
+    }
   }
 
   mInputSender.TransmitData(*this);
@@ -1132,6 +1160,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // VoLumChunkIdTail.h).
   volum::ChunkIdTail idTail;
   idTail.midiCh = mVolumMidiChannel.load();
+  idTail.midiRecallCc = mVolumMidiRecallCc.load();
   idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;
@@ -1272,6 +1301,10 @@ void NeuralAmpModeler::OnUIOpen()
     _UpdateControlsFromModel();
   }
   _UpdateLatency();
+  // Shown from OnIdle: the standalone runs OnUIOpen inside WM_INITDIALOG, before its
+  // window is shown, so a box raised here appeared alone with no VoLum behind it.
+  if (std::string notice = volum::content::GlobalContentStore().TakeCorruptRecoveryNotice(); !notice.empty())
+    mVolumPendingLibraryNotice = std::move(notice);
   _VolumRestoreSessionSelection();
   // The editor is rebuilt from constructor defaults on every open, so the last
   // step is always to re-derive the visible selection from backend state. Without
@@ -1347,7 +1380,10 @@ void NeuralAmpModeler::OnUIClose()
   // can clear it is a control that no longer exists. Closing the window with the
   // tuner up therefore muted the instance permanently, and the editor is rebuilt
   // with the tuner hidden, so nothing on screen explained the silence.
-  mTunerDSP.SetActive(false);
+  // The metronome is the same shape: it keeps clicking with no window, and the
+  // rebuilt editor draws its button as off. The tuner half was fixed and pinned
+  // on its own, which is why the sibling stayed broken - they stop together now.
+  volum::HaltEditorOwnedOverlayDsp(mTunerDSP, mMetronomeDSP);
 
   // Save while params are still valid (destructor may run after teardown)
   _VolumSaveCurrentToSettings();
@@ -1400,7 +1436,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
             && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
         {
           mSupportPolarityInvert.store(true);
-          mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert = true;
+          _VolumActiveScene().supportPolarityInvert = true;
           GetParam(kMainAmpPan)->Set(-1.0);
           SendParameterValueFromDelegate(kMainAmpPan, GetParam(kMainAmpPan)->GetNormalized(), true);
           GetParam(kSupportAmpPan)->Set(1.0);
@@ -1476,6 +1512,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
         _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1));
       }
+      break;
+    case kChorusActive:
+      if (mVolumInitComplete && !mVolumPostRestoreInProgress)
+        mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
       break;
     case kReverbSubMode:
       // Do NOT write the new sub-mode to mVolumEffectSettings here. OnParamChangeUI runs after
@@ -1580,7 +1620,25 @@ bool IsPostBlockParam(int paramIdx)
     case kReverbPreDelay:
     case kReverbShimmer:
     case kReverbMode:
-    case kReverbSubMode: return true;
+    case kReverbSubMode:
+    case kDelaySync:
+    case kDelayDivision:
+    case kChorusActive:
+    case kChorusMode:
+    case kChorusRate:
+    case kChorusDepth:
+    case kChorusTone:
+    case kChorusWidth:
+    case kChorusMix:
+    case kTremoloActive:
+    case kTremoloMode:
+    case kTremoloRate:
+    case kTremoloDepth:
+    case kTremoloShape:
+    case kTremoloMix:
+    case kTremoloCrossover:
+    case kTremoloSync:
+    case kTremoloDivision: return true;
     default: return false;
   }
 }
@@ -1613,13 +1671,6 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 
   if (auto pGraphics = GetUI())
   {
-    // A user-driven param edit may diverge the live chain from the recalled
-    // preset snapshot -> re-evaluate the "(unsaved)" flag with an equality test
-    // (so nudging a knob back to the preset value clears it again). Programmatic
-    // restores (amp switch, preset recall) arrive via kDelegate/kReset, not kUI.
-    if (source == EParamSource::kUI)
-      _VolumRecomputePresetDirty();
-
     bool active = GetParam(paramIdx)->Bool();
 
     switch (paramIdx)
@@ -1773,6 +1824,13 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
     }
 
     _VolumRefreshPrePostLockChrome(paramIdx);
+
+    // After the mode switch. Recompute saves the live knobs into the current
+    // mode slot; doing that first would stamp the outgoing knobs onto the mode
+    // just selected. kDelegate/kReset stay out so a recall can finish before
+    // the snapshot is compared. VST3 undo and automation arrive as kHost.
+    if (source == EParamSource::kUI || source == EParamSource::kHost)
+      _VolumRecomputePresetDirty();
   }
 }
 
@@ -1824,6 +1882,48 @@ void NeuralAmpModeler::_AllocateIOPointers(const size_t nChans)
     throw std::runtime_error("Failed to allocate pointer to output buffer!\n");
 }
 
+// Models, IRs and drained loader results the audio thread retired instead of
+// destroying in the callback, and the live paths it published with each asset.
+// ProcessBlock blocks on mStagingMutex, so nothing below allocates or frees while
+// holding it: spares are reserved first, everything is swapped out, and the
+// destructors and WDL_String work run after the lock is dropped.
+void NeuralAmpModeler::_VolumReapAudioThreadRetirees()
+{
+  std::vector<std::unique_ptr<ResamplingNAM>> doomed;
+  doomed.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+  std::vector<std::unique_ptr<dsp::ImpulseResponse>> doomedIrs;
+  doomedIrs.reserve(volum::dsp_staging::kDspGraveyardCapacity);
+  decltype(mVolumSpentLoadResults) doomedResults;
+
+  struct PathLane
+  {
+    volum::dsp_staging::RtPublishedPath& slot;
+    volum::dsp_staging::WdlStagedPathPair& paths;
+    std::string text;
+    volum::dsp_staging::PublishedPathAction action = volum::dsp_staging::PublishedPathAction::None;
+  };
+  PathLane lanes[] = {{mPublishedNamPath, mNAMPaths, {}},
+                      {mPublishedIRPath, mIRPaths, {}},
+                      {mPublishedSupportIRPath, mSupportIRPaths, {}}};
+  for (auto& lane : lanes)
+    if (lane.slot.dirty.load(std::memory_order_acquire))
+      lane.text.reserve(volum::dsp_staging::kRtPathCapacity);
+
+  {
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    if (!mDspGraveyard.empty())
+      doomed.swap(mDspGraveyard);
+    if (!mIrGraveyard.empty())
+      doomedIrs.swap(mIrGraveyard);
+    doomedResults.swap(mVolumSpentLoadResults);
+    for (auto& lane : lanes)
+      lane.action = volum::dsp_staging::TakePublishedPath(lane.slot, lane.text);
+  }
+
+  for (auto& lane : lanes)
+    volum::dsp_staging::ApplyPublishedPath(lane.action, lane.text, lane.paths);
+}
+
 void NeuralAmpModeler::_ApplyDSPStaging()
 {
   _VolumDrainLoaderResults();
@@ -1847,38 +1947,38 @@ void NeuralAmpModeler::_ApplyDSPStaging()
 
     if (mShouldRemoveModel)
     {
-      mModel = nullptr;
-      mStagedModel = nullptr;
-      volum::dsp_staging::ClearLiveAndStagedPath(mNAMPaths);
+      volum::dsp_staging::RetireLiveAndStaged(mModel, mStagedModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedNamPath);
+      mPendingNamPath[0] = '\0';
       mShouldRemoveModel = false;
       mModelCleared = true;
       removedMainModel = true;
     }
     if (mShouldRemoveSupportModel)
     {
-      mSupportModel = nullptr;
+      volum::dsp_staging::RetireLiveAndStaged(mSupportModel, mStagedSupportModel, mDspGraveyard);
       mShouldRemoveSupportModel = false;
       removedSupportModel = true;
     }
     if (mShouldRemoveIR)
     {
-      mIR = nullptr;
-      mStagedIR = nullptr;
-      volum::dsp_staging::ClearLiveAndStagedPath(mIRPaths);
+      volum::dsp_staging::RetireLiveAndStaged(mIR, mStagedIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedIRPath);
+      mPendingIRPath[0] = '\0';
       mShouldRemoveIR = false;
     }
     if (mShouldRemoveSupportIR)
     {
-      mSupportIR = nullptr;
-      mStagedSupportIR = nullptr;
-      volum::dsp_staging::ClearLiveAndStagedPath(mSupportIRPaths);
+      volum::dsp_staging::RetireLiveAndStaged(mSupportIR, mStagedSupportIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedSupportIRPath);
+      mPendingSupportIRPath[0] = '\0';
       mShouldRemoveSupportIR = false;
     }
     for (int i = 0; i < 2; ++i)
     {
       if (mShouldRemovePreModel[i])
       {
-        mPreModel[i] = nullptr;
+        volum::dsp_staging::RetireLiveAndStaged(mPreModel[i], mStagedPreModel[i], mDspGraveyard);
         mShouldRemovePreModel[i] = false;
         removedPreModel[i] = true;
       }
@@ -1886,56 +1986,56 @@ void NeuralAmpModeler::_ApplyDSPStaging()
 
     if (mStagedModel != nullptr)
     {
-      mModel = std::move(mStagedModel);
-      mStagedModel = nullptr;
-      volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);
+      volum::dsp_staging::PublishStagedModel(mModel, mStagedModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedNamPath, mPendingNamPath);
       mNewModelLoadedInDSP = true;
       appliedMainModel = true;
     }
     if (mStagedSupportModel != nullptr)
     {
-      mSupportModel = std::move(mStagedSupportModel);
-      mStagedSupportModel = nullptr;
+      volum::dsp_staging::PublishStagedModel(mSupportModel, mStagedSupportModel, mDspGraveyard);
       appliedSupportModel = true;
     }
     for (int i = 0; i < 2; ++i)
     {
       if (mStagedPreModel[i] != nullptr)
       {
-        mPreModel[i] = std::move(mStagedPreModel[i]);
-        mStagedPreModel[i] = nullptr;
+        volum::dsp_staging::PublishStagedModel(mPreModel[i], mStagedPreModel[i], mDspGraveyard);
         appliedPreModel[i] = true;
       }
     }
     if (mStagedIR != nullptr && !holdMainIr)
     {
-      mIR = std::move(mStagedIR);
-      mStagedIR = nullptr;
-      volum::dsp_staging::CommitStagedPathOnApply(mIRPaths);
+      volum::dsp_staging::PublishStagedModel(mIR, mStagedIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedIRPath, mPendingIRPath);
     }
     if (mStagedSupportIR != nullptr && !holdSupportIr)
     {
-      mSupportIR = std::move(mStagedSupportIR);
-      mStagedSupportIR = nullptr;
-      volum::dsp_staging::CommitStagedPathOnApply(mSupportIRPaths);
+      volum::dsp_staging::PublishStagedModel(mSupportIR, mStagedSupportIR, mIrGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedSupportIRPath, mPendingSupportIRPath);
     }
   }
 
   if (removedMainModel || appliedMainModel)
   {
-    _UpdateLatency();
+    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
+    mLatencyDirty.store(true, std::memory_order_release);
     _SetInputGain();
     _SetOutputGain();
   }
   if (removedSupportModel || appliedSupportModel)
   {
-    _UpdateLatency();
+    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
+    mLatencyDirty.store(true, std::memory_order_release);
     _SetSupportOutputGain();
   }
   for (int i = 0; i < 2; ++i)
   {
     if (removedPreModel[i] || appliedPreModel[i])
-      _UpdateLatency();
+    {
+      mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
+      mLatencyDirty.store(true, std::memory_order_release);
+    }
   }
 }
 
@@ -2130,24 +2230,26 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     // load path too (no-op on non-slimmable models). Selected before Reset so
     // only the chosen slice is prewarmed.
     temp->SetSlimmableSize(mVolumLiteMode.load() ? 0.0 : 1.0);
-    temp->Reset(GetSampleRate(), GetBlockSize());
+    temp->Reset(GetSampleRate(), volum::dsp_staging::NamResetBlockSize(GetBlockSize()));
     {
       // Serialize the staging assignment against the audio thread's read/move in
       // _ApplyDSPStaging. _StageModel is called from the host's UnserializeState
       // path and (in non-VoLum builds) from the file-browser completion handler,
-      // both off the audio thread. mNAMPaths.live commits in _ApplyDSPStaging.
+      // both off the audio thread. mNAMPaths.live commits in OnIdle from the
+      // published path buffer so ProcessBlock never WDL_String::Set's, and no
+      // WDL_String is touched while the audio thread may wait on this lock.
       std::lock_guard<std::mutex> lock(mStagingMutex);
-      mStagedModel = std::move(temp);
-      volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);
+      volum::dsp_staging::StageIncomingModel(mStagedModel, temp, mDspGraveyard);
+      volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, modelPath.Get());
     }
     VOLUM_LOG("model", std::string("staged ") + modelPath.Get());
   }
   catch (std::runtime_error& e)
   {
+    std::unique_ptr<ResamplingNAM> replacedModel; // destroyed after the lock below
     {
       std::lock_guard<std::mutex> lock(mStagingMutex);
-      mStagedModel = nullptr;
-      volum::dsp_staging::ClearStagedPath(mNAMPaths);
+      replacedModel = volum::dsp_staging::ReplaceStaged(mStagedModel, nullptr);
     }
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
@@ -2230,22 +2332,26 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
     std::cerr << e.what() << std::endl;
   }
 
+  // Declared before the lock so the IR it replaces is destroyed after unlocking:
+  // ProcessBlock blocks on mStagingMutex every block.
+  std::unique_ptr<dsp::ImpulseResponse> replacedIR;
   {
     // Publish the staged IR (and its path) under the staging mutex so the audio thread
-    // sees a fully-constructed object or none at all. Live path commits in _ApplyDSPStaging.
+    // sees a fully-constructed object or none at all. _ApplyDSPStaging publishes the
+    // pending path with the object and OnIdle commits it to m(Support)IRPaths.
     // The MAIN amp and the dual-amp SUPPORT lane stage into separate convolvers.
     std::lock_guard<std::mutex> lock(mStagingMutex);
     auto& stagedSlot = support ? mStagedSupportIR : mStagedIR;
-    auto& pathPair = support ? mSupportIRPaths : mIRPaths;
+    char* pendingPath = support ? mPendingSupportIRPath : mPendingIRPath;
     if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
     {
-      stagedSlot = std::move(stagedIR);
-      volum::dsp_staging::StagePathOnSuccess(pathPair, irPath);
+      replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, std::move(stagedIR));
+      volum::dsp_staging::CopyPathNoAlloc(pendingPath, volum::dsp_staging::kRtPathCapacity, irPath.Get());
     }
     else
     {
-      stagedSlot = nullptr;
-      volum::dsp_staging::ClearStagedPath(pathPair);
+      replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, nullptr);
+      pendingPath[0] = '\0';
     }
   }
 
@@ -2380,7 +2486,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
   }
 }
 
-void NeuralAmpModeler::_UpdateLatency()
+int NeuralAmpModeler::_ReportedLatencySamples() const
 {
   int preLatency = 0;
   const bool preNam1ShouldLoad =
@@ -2416,7 +2522,22 @@ void NeuralAmpModeler::_UpdateLatency()
     ampLatency = std::max(ampLatency, mSupportModel->GetLatency());
   }
   // Other things that add latency here...
-  const int latency = preLatency + ampLatency;
+  return preLatency + ampLatency;
+}
+
+void NeuralAmpModeler::_ApplyLatchedLatency()
+{
+  const int latency = mPendingLatency.load(std::memory_order_relaxed);
+  if (GetLatency() != latency)
+    SetLatency(latency);
+  _VolumRefreshLatencyReport(/*force=*/true);
+}
+
+void NeuralAmpModeler::_UpdateLatency()
+{
+  const int latency = _ReportedLatencySamples();
+  mPendingLatency.store(latency, std::memory_order_relaxed);
+  mLatencyDirty.store(false, std::memory_order_relaxed);
 
   // Feels weird to have to do this.
   if (GetLatency() != latency)

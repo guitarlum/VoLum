@@ -36,26 +36,27 @@ inline constexpr AmpInfo kAmps[kAmpCount] = {
 
 inline constexpr const char* kSpeakerPrefixes[4] = {"AMP", "G12", "G65", "V30"};
 
-// Per-amp fractal art variant. Each value selects a `case N` branch in the
-// fractal art switches in VoLumFractalArt.h (Hero, Sidebar mini, Strip mini).
-// Cases 0..13 are the original 14 fractals; new amps add new cases (e.g. 14 = Lichtenberg, Diezel Herbert).
+// Per-amp fractal art variant. Each value is a fractal case: the hero art in
+// art/VoLumArt<Amp>.h (dispatched by art/VoLumArtDispatch.h, registry row in
+// art/VoLumArtRegistry.h) and the sidebar / strip minis in VoLumFractalArt.h.
+// New amps add new cases (e.g. 14 = Lichtenberg, Diezel Herbert).
 // Keep the order in sync with kAmps so existing amps preserve their visual identity.
 inline constexpr int kAmpFractalCase[kAmpCount] = {
-  0, // Ampete One               -> Dragon curve
-  1, // Bad Cat Mini Cat         -> Sierpinski triangle
-  2, // Brunetti XL 2            -> Barnsley fern
-  14, // Diezel Herbert Mk1       -> Lichtenberg discharge (NEW)
-  3, // Fryette Deliverance 120  -> Golden spiral
-  4, // H&K TriAmp Mk2           -> Lissajous knot
-  5, // Lichtlaerm Prometheus    -> Koch snowflake
-  6, // Marshall 2204 1982       -> Fractal tree
-  7, // Marshall JMP 2203 1976   -> H-tree
-  8, // Marshall JVM 210H OD1    -> Levy C curve
-  9, // Orange OD120 1975        -> Mandelbrot zoom
-  10, // Orange ORS100 1972       -> Julia set
-  11, // Sebago Texas Flood       -> Clifford attractor
-  12, // Soldano SLO100           -> Burning Ship fractal
-  13, // THC Sunset               -> Pentaflake
+  0, // Ampete One               -> Dragon Nebula (dragon curve)
+  1, // Bad Cat Mini Cat         -> Eyes in the Dark (cat eyes)
+  2, // Brunetti XL 2            -> Verdant Fern (Barnsley fern)
+  14, // Diezel Herbert Mk1       -> Lichtenberg Glow (discharge)
+  3, // Fryette Deliverance 120  -> Spiral Galaxy
+  4, // H&K TriAmp Mk2           -> Lissajous Nebula (Lissajous knot)
+  5, // Lichtlaerm Prometheus    -> Koch Deep (Koch snowflake)
+  6, // Marshall 2204 1982       -> Windswept Glow (fractal tree)
+  7, // Marshall JMP 2203 1976   -> Depth Triforce
+  8, // Marshall JVM 210H OD1    -> Levy Nebula (Levy C curve)
+  9, // Orange OD120 1975        -> Ember Bulb (Mandelbrot)
+  10, // Orange ORS100 1972       -> Julia Nebula (Julia set)
+  11, // Sebago Texas Flood       -> Clifford Nebula (Clifford attractor)
+  12, // Soldano SLO100           -> Beacon Sweep (Burning Ship)
+  13, // THC Sunset               -> Dark Sun (eclipse)
 };
 
 // Legacy constants for backward compatibility with serialized state (v0.7.14)
@@ -174,24 +175,25 @@ struct TremoloModeSnapshot
 // Per-chorus-mode knob memory (Classic / Warped / Clear / Ensemble). Every knob
 // is shared across the four voices, so the whole row is remembered per mode and
 // switching voices recalls that voice's last setting. All values are 0..1 knob
-// positions; VoLumChorus maps them to Hz / ms per mode.
+// positions; VoLumChorus maps them to Hz / cents / ms per mode.
 struct ChorusModeSnapshot
 {
-  double rate = 0.35;
-  double depth = 0.45;
-  double tone = 0.40;
-  double width = 0.70;
+  double rate = 0.44;
+  double depth = 0.36;
+  double tone = 0.21;
+  double width = 0.60;
   double mix = 0.50;
 };
 
 // Ship defaults for the four voices, in mode order. Single source of truth: the
 // per-amp scene, the live effect-settings working copy and the chunk id tail all
 // seed from here so a "reset to defaults" lands on the same row everywhere.
+// Knob positions map through ChorusDSP::RateHz / DepthAmount / ToneHz.
 inline constexpr ChorusModeSnapshot kVoLumChorusModeDefaults[kVoLumChorusModeCount] = {
-  ChorusModeSnapshot{0.45, 0.65, 0.55, 0.60, 0.60}, // Classic: quicker, brighter, first-listen blend
-  ChorusModeSnapshot{0.35, 0.45, 0.40, 0.70, 0.50}, // Warped: slow, dark, wide
-  ChorusModeSnapshot{0.40, 0.35, 0.70, 0.65, 0.40}, // Clear: shallow and transparent
-  ChorusModeSnapshot{0.28, 0.55, 0.50, 0.80, 0.55}, // Ensemble: slowest, deepest, widest
+  ChorusModeSnapshot{0.40, 0.62, 0.60, 1.00, 0.50}, // Classic: 0.63 Hz, 3.7 ms sweep (8 ct), 6.9 kHz, 180 deg
+  ChorusModeSnapshot{0.44, 0.36, 0.21, 0.60, 0.50}, // Warped: 0.89 Hz wow, 18 ct, 4.0 kHz
+  ChorusModeSnapshot{0.46, 0.40, 0.85, 0.70, 0.50}, // Clear: 0.40 Hz, 8 ct, 9.8 kHz
+  ChorusModeSnapshot{0.43, 0.36, 0.75, 1.00, 0.50}, // Ensemble: 0.54 Hz, 9 ct, 8.5 kHz, full L/C/R
 };
 
 struct VoLumAmpSettings
@@ -331,10 +333,10 @@ struct VoLumAmpSettings
   // remembers each voice's last knob row. Ships bypassed on WARPED.
   bool postChorusActive = false;
   int postChorusMode = kVoLumChorusModeDefault;
-  double postChorusRate = 0.35; // 0..1
-  double postChorusDepth = 0.45; // 0..1
-  double postChorusTone = 0.40; // 0..1
-  double postChorusWidth = 0.70; // 0..1
+  double postChorusRate = 0.44; // 0..1
+  double postChorusDepth = 0.36; // 0..1
+  double postChorusTone = 0.21; // 0..1
+  double postChorusWidth = 0.60; // 0..1
   double postChorusMix = 0.50; // 0..1
   ChorusModeSnapshot postChorusModes[kVoLumChorusModeCount] = {
     kVoLumChorusModeDefaults[0],

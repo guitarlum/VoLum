@@ -20,6 +20,23 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
                                                         const size_t numChannelsInternal, const int nFrames,
                                                         const double sampleRate)
 {
+  // Same falling-edge clear POST already does. A bypassed pitch ring or
+  // compressor envelope must not dump into the next time the pedal turns on.
+  if (processingPlan.runPrePitch)
+    mPrePitchWasActive = true;
+  else if (mPrePitchWasActive)
+  {
+    std::unique_lock<std::mutex> lock(mPrePitchMutex, std::try_to_lock);
+    if (lock.owns_lock())
+    {
+      mPitch.Reset();
+      mPrePitchWasActive = false;
+    }
+  }
+  if (mPreCompWasActive && !processingPlan.runPreComp)
+    mPreCompressor.Reset();
+  mPreCompWasActive = processingPlan.runPreComp;
+
   if (processingPlan.runPrePitch)
   {
     // Reconfigure happens off the audio thread in OnReset. Here we only try-lock;
@@ -147,9 +164,8 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   if (!processingPlan.runDualAmp)
     return nullptr;
 
-  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames)
-         && "Dual-amp support scratch not pre-reserved");
-  mDualSupportLaneBuffer.resize(nFrames);
+  if (!volum::dsp_staging::ResizeScratchNoAlloc(mDualSupportLaneBuffer, static_cast<size_t>(nFrames)))
+    return nullptr;
 
   const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
   for (size_t i = 0; i < static_cast<size_t>(nFrames); ++i)
@@ -239,9 +255,9 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   // smearing the chorus into mush. Processes in place on the POST bus.
   if (processingPlan.runChorus)
   {
-    mChorus.SetParams(GetParam(kChorusRate)->Value(), GetParam(kChorusDepth)->Value(),
-                      GetParam(kChorusTone)->Value(), GetParam(kChorusWidth)->Value(), GetParam(kChorusMix)->Value(),
-                      GetParam(kChorusMode)->Int(), sampleRate);
+    mChorus.SetParams(GetParam(kChorusRate)->Value(), GetParam(kChorusDepth)->Value(), GetParam(kChorusTone)->Value(),
+                      GetParam(kChorusWidth)->Value(), GetParam(kChorusMix)->Value(), GetParam(kChorusMode)->Int(),
+                      sampleRate);
     mChorus.Process(postPointers, numChannelsExternalOut, nFrames);
   }
 

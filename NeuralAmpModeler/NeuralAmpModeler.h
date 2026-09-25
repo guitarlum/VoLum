@@ -152,129 +152,7 @@ enum EMsgTags
   kNumMsgTags
 };
 
-// Get the sample rate of a NAM model.
-// Sometimes, the model doesn't know its own sample rate; this wrapper guesses 48k based on the way that most
-// people have used NAM in the past.
-double GetNAMSampleRate(const std::unique_ptr<nam::DSP>& model)
-{
-  // Some models are from when we didn't have sample rate in the model.
-  // For those, this wraps with the assumption that they're 48k models, which is probably true.
-  const double assumedSampleRate = 48000.0;
-  const double reportedEncapsulatedSampleRate = model->GetExpectedSampleRate();
-  const double encapsulatedSampleRate =
-    reportedEncapsulatedSampleRate <= 0.0 ? assumedSampleRate : reportedEncapsulatedSampleRate;
-  return encapsulatedSampleRate;
-};
-
-class ResamplingNAM : public nam::DSP
-{
-public:
-  // Resampling wrapper around the NAM models
-  ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated, const double expected_sample_rate)
-  : nam::DSP(1, 1, expected_sample_rate)
-  , mEncapsulated(std::move(encapsulated))
-  , mResampler(GetNAMSampleRate(mEncapsulated))
-  {
-    // Assign the encapsulated object's processing function to this object's member so that the resampler can use it:
-    auto ProcessBlockFunc = [&](NAM_SAMPLE** input, NAM_SAMPLE** output, int numFrames) {
-      mEncapsulated->process(input, output, numFrames);
-    };
-    mBlockProcessFunc = ProcessBlockFunc;
-
-    // Get the other information from the encapsulated NAM so that we can tell the outside world about what we're
-    // holding.
-    if (mEncapsulated->HasLoudness())
-    {
-      SetLoudness(mEncapsulated->GetLoudness());
-    }
-    if (mEncapsulated->HasInputLevel())
-    {
-      SetInputLevel(mEncapsulated->GetInputLevel());
-    }
-    if (mEncapsulated->HasOutputLevel())
-    {
-      SetOutputLevel(mEncapsulated->GetOutputLevel());
-    }
-
-    // NOTE: prewarm samples doesn't mean anything--we can prewarm the encapsulated model as it likes and be good to
-    // go.
-    // _prewarm_samples = 0;
-
-    // And be ready
-    int maxBlockSize = 2048; // Conservative
-    Reset(expected_sample_rate, maxBlockSize);
-  };
-
-  ~ResamplingNAM() = default;
-
-  void prewarm() override { mEncapsulated->prewarm(); };
-
-  void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
-  {
-    if (num_frames > mMaxExternalBlockSize)
-      // We can afford to be careful
-      throw std::runtime_error("More frames were provided than the max expected!");
-
-    if (!NeedToResample())
-    {
-      mEncapsulated->process(input, output, num_frames);
-    }
-    else
-    {
-      mResampler.ProcessBlock(input, output, num_frames, mBlockProcessFunc);
-    }
-  };
-
-  void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)
-  {
-    NAM_SAMPLE* inputPtrs[1] = {input};
-    NAM_SAMPLE* outputPtrs[1] = {output};
-    process(inputPtrs, outputPtrs, num_frames);
-  };
-
-  int GetLatency() const { return NeedToResample() ? mResampler.GetLatency() : 0; };
-
-  void Reset(const double sampleRate, const int maxBlockSize) override
-  {
-    mExpectedSampleRate = sampleRate;
-    mMaxExternalBlockSize = maxBlockSize;
-    mResampler.Reset(sampleRate, maxBlockSize);
-
-    // Allocations in the encapsulated model (HACK)
-    // Stolen some code from the resampler; it'd be nice to have these exposed as methods? :)
-    const double mUpRatio = sampleRate / GetEncapsulatedSampleRate();
-    const auto maxEncapsulatedBlockSize = static_cast<int>(std::ceil(static_cast<double>(maxBlockSize) / mUpRatio));
-    mEncapsulated->ResetAndPrewarm(sampleRate, maxEncapsulatedBlockSize);
-  };
-
-  // So that we can let the world know if we're resampling (useful for debugging)
-  double GetEncapsulatedSampleRate() const { return GetNAMSampleRate(mEncapsulated); };
-
-  // VoLum: if the encapsulated model is a slimmable container (A2), select its
-  // Lite (val < 0.5) or Full (val >= 0.5) slice. Plain (non-slimmable) models
-  // no-op gracefully. The container prepares the inactive slice under its own
-  // mutex; call this off the audio thread (loader thread / staging), not in
-  // ProcessBlock.
-  void SetSlimmableSize(const double val)
-  {
-    if (auto* slim = dynamic_cast<nam::SlimmableModel*>(mEncapsulated.get()))
-      slim->SetSlimmableSize(val);
-  };
-
-private:
-  bool NeedToResample() const { return GetExpectedSampleRate() != GetEncapsulatedSampleRate(); };
-  // The encapsulated NAM
-  std::unique_ptr<nam::DSP> mEncapsulated;
-
-  // The resampling wrapper
-  dsp::ResamplingContainer<NAM_SAMPLE, 1, 12> mResampler;
-
-  // Used to check that we don't get too large a block to process.
-  int mMaxExternalBlockSize = 0;
-
-  // This function is defined to conform to the interface expected by the iPlug2 resampler.
-  std::function<void(NAM_SAMPLE**, NAM_SAMPLE**, int)> mBlockProcessFunc;
-};
+#include "VoLumResamplingNam.h"
 
 class NeuralAmpModeler final : public iplug::Plugin
 {
@@ -315,6 +193,9 @@ private:
   // caller which lanes must not promote their staged IR this block.
   // Audio thread, mStagingMutex held.
   void _VolumStepDeferredIrSwaps(bool& holdMainIr, bool& holdSupportIr);
+  // OnIdle: destroy what _ApplyDSPStaging and the loader drain retired, and commit
+  // the live paths they published.
+  void _VolumReapAudioThreadRetirees();
   // Deallocates mInputPointers and mOutputPointers
   void _DeallocateIOPointers();
   // Fallback used when no main NAM model is loaded.
@@ -388,6 +269,10 @@ public:
   // four NAM lanes so the new slice is applied through the async staging path.
   void _VolumSetLiteMode(bool lite);
   bool _VolumIsLiteMode() const { return mVolumLiteMode.load(); }
+  // VoLum 1.3.0: machine-global "Animate art in PLAY" (UI only), persisted like Lite.
+  void _VolumSetAnimatePlayArt(bool animate);
+  bool _VolumIsAnimatePlayArt() const { return mVolumAnimatePlayArt.load(); }
+  void _VolumSaveMachineBool(const char* key, bool value);
   void _VolumCheckForUpdatesNow();
   void _VolumSetAutoUpdateCheck(bool enabled);
   void _VolumUseAvailableUpdate();
@@ -529,6 +414,9 @@ public:
   // True when the SUPPORT lane actually has an amp: a factory amp or a custom
   // partner. Its default is "(none)".
   bool _VolumHasSupportAmp();
+  // SUPPORT's live index follows supportCustomId, so a sibling delete of an
+  // earlier custom amp cannot retarget this instance onto the next row.
+  void _VolumRebindCustomSupportIdx();
   // Drops SUPPORT focus when that lane has no amp. Focusing an empty lane pointed
   // the shared cab row, the channel stepper and the S shortcut at something that
   // does not exist: the row jumped to a phantom cab, the stepper read "---", and S
@@ -585,10 +473,11 @@ public:
   bool _VolumRecallSound(const std::string& ampId, const std::string& presetId);
   void _VolumRefreshMidiSettingsChrome();
   void _VolumSetMidiChannel(int channel);
+  void _VolumSetMidiRecallCc(int cc);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
-  int _VolumSavePresetAs(const std::string& name);
+  int _VolumSavePresetAs(const std::string& name, bool retargetLiveSlot = true);
   bool _VolumLivePresetDirty();
-  void _VolumPromptSaveAs(std::function<void()> after = {});
+  void _VolumPromptSaveAs(std::function<void()> after = {}, volum::SaveOrigin origin = volum::SaveOrigin::Shortcut);
   bool _VolumHandleSaveShortcut();
   void _VolumReassignLivePlaySlotAfterSave();
   void _VolumSyncLivePlaySlotFromActivePair();
@@ -596,7 +485,7 @@ public:
   void _VolumAddHeardPlaySound();
   void _VolumFocusBuildEffect(int focus);
   // Overwrite preset `index` in the active bank with the live scene.
-  void _VolumOverwritePreset(int index);
+  void _VolumOverwritePreset(int index, bool retargetLiveSlot = true);
   // Recall preset `index`: apply its snapshot to the live chain, retain it as the
   // recalled snapshot (drives the equality-based "(unsaved)" flag), update the bar.
   void _VolumRecallPreset(int index);
@@ -684,11 +573,12 @@ private:
   int mVolumChannelIdx = 0;
   int mVolumSelectedKnobParamIdx = iplug::kNoParameter;
   std::string mVolumSelectedKnobHintText;
-  // Size must match volum::keyboard::kTargetCount (9). Literal here to avoid
+  // Size must match volum::keyboard::kTargetCount (10). Literal here to avoid
   // pulling VoLumKeyboardModel.h into this header before EParams is declared.
-  std::array<int, 9> mVolumLastKeyboardKnobByTarget = {iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
-                                                       iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
+  // Index 9 is CHORUS; a size of 9 reads one past the array.
+  std::array<int, 10> mVolumLastKeyboardKnobByTarget = {
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter,
+    iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter, iplug::kNoParameter};
   // Reverb sub-mode pill is currently shown for Oktaverb only.
   // Delay AGE knob label and knob/value controls swap per mode (GRIT/WEAR/AGE/BLOOM) and
   // pick up a per-mode tooltip explaining what the knob actually does in that mode.
@@ -723,10 +613,13 @@ private:
   // next OnIdle. UnserializeState runs on the host's thread, and the applier it
   // wants writes IGraphics controls, so the call has to cross to the UI thread.
   std::atomic<bool> mVolumUiSyncPending{false};
+  // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
+  std::string mVolumPendingLibraryNotice;
   // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins
   // handoff; content-library resolution happens in OnIdle.
   volum::MidiLatestWinsQueue mVolumMidiQueue;
   std::atomic<int> mVolumMidiChannel{volum::kMidiOmniChannel};
+  std::atomic<int> mVolumMidiRecallCc{volum::kMidiRecallCcDefault};
   // VoLum: when set, the next main-lane load in OnIdle bypasses the
   // same-path short-circuit so an A2 Lite/Full toggle re-stages the main model
   // even though its file path is unchanged.
@@ -738,6 +631,7 @@ private:
   // (NOT the plugin chunk), applied to every lane at model load time. Read on
   // the loader thread, written on the main thread -> atomic.
   std::atomic<bool> mVolumLiteMode{false};
+  std::atomic<bool> mVolumAnimatePlayArt{true};
   bool mVolumInitComplete = false;
   // Last report pushed to the Settings page, so the OnIdle poll only touches the UI
   // when a number actually moved.
@@ -752,7 +646,6 @@ private:
   // Same re-entrancy guard for the tremolo per-mode snapshot restore cascade.
   bool mVolumTremoloRestoreInProgress = false;
   // ...and for the chorus per-mode snapshot restore cascade.
-  bool mVolumChorusRestoreInProgress = false;
   // Live working store for PRE Pitch per-mode knob memory (PRE has no effect-
   // settings struct like POST, so the live snapshots live here). Synced to/from
   // each amp's prePitchModes via the PRE save/restore-to-slot helpers.
@@ -800,6 +693,8 @@ private:
     double sampleRate = 0.0;
     int blockSize = 0;
     std::unique_ptr<ResamplingNAM> model;
+    // Set under the loader try_lock when a newer main load has replaced this one.
+    bool superseded = false;
   };
 
   std::thread mVolumLoaderThread;
@@ -807,6 +702,12 @@ private:
   std::condition_variable mVolumLoaderCv;
   std::deque<VoLumLoadRequest> mVolumLoadRequests;
   std::deque<VoLumLoadResult> mVolumLoadResults;
+  // Audio thread only: the batch the drain swapped out of mVolumLoadResults. It
+  // parks here while every spent slot still waits for OnIdle.
+  std::deque<VoLumLoadResult> mVolumDrainBatch;
+  // Guarded by mStagingMutex. Drained batches (heap strings and all) wait here
+  // so OnIdle, not the audio thread, frees them.
+  std::array<std::deque<VoLumLoadResult>, volum::dsp_staging::kSpentLoaderBatchSlots> mVolumSpentLoadResults;
 
   template <typename Pred>
   void _VolumDropQueuedLoadRequests(Pred pred)
@@ -846,6 +747,7 @@ private:
   std::shared_ptr<volum::update::AsyncResult> mVolumUpdateResult;
   bool mVolumUpdateStateLoaded = false;
   bool mVolumUpdateCheckInFlight = false;
+  std::string mVolumUpdateCheckError;
   int mVolumUpdateFooterTicks = 0;
 
   // Tuner & Metronome DSP
@@ -907,7 +809,9 @@ private:
   void _UpdateControlsFromModel();
 
   // Make sure that the latency is reported correctly.
+  int _ReportedLatencySamples() const;
   void _UpdateLatency();
+  void _ApplyLatchedLatency();
 
   // Plugin PDC plus, in the standalone, the audio device's own round trip.
   volum::LatencyReport _VolumLatencyReport() const;
@@ -1012,11 +916,31 @@ private:
   bool mPostReverbWasActive = false;
   bool mPostTremoloWasActive = false;
   bool mPostChorusWasActive = false;
-  // Serializes writes from non-audio threads (UnserializeState path -> _StageModel /
-  // _StageIR) against the audio-thread read/move in _ApplyDSPStaging. The VoLum
-  // worker-queue path drains on the audio thread already, so it does not need this
-  // mutex; it is for the legacy NAM staging entry points only.
+  bool mPrePitchWasActive = false;
+  bool mPreCompWasActive = false;
+  // Audio thread stores the sample count and sets the flag. OnIdle applies it.
+  // OnIdle must not read mModel: the audio thread owns those pointers.
+  std::atomic<int> mPendingLatency{0};
+  std::atomic<bool> mLatencyDirty{false};
+  // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
+  // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
+  // The audio thread only moves unique_ptrs into the graveyards; ~ResamplingNAM
+  // and ~ImpulseResponse run on OnIdle. Also covers the published path buffers.
+  // Nothing is allocated or destroyed while it is held off the audio thread.
   mutable std::mutex mStagingMutex;
+  // Audio thread writes, OnIdle destroys. Reserved so push_back never reallocates
+  // in the callback. Overflow last-resorts to reset() on this thread.
+  std::vector<std::unique_ptr<ResamplingNAM>> mDspGraveyard;
+  std::vector<std::unique_ptr<dsp::ImpulseResponse>> mIrGraveyard;
+  // Path of the asset just staged. The stager writes the pending buffer; apply
+  // publishes it so OnIdle cannot commit the live path before the object, and
+  // the audio thread never touches a WDL_String.
+  char mPendingNamPath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedNamPath;
+  char mPendingIRPath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedIRPath;
+  char mPendingSupportIRPath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedSupportIRPath;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;
@@ -1049,10 +973,13 @@ private:
   std::vector<iplug::sample> mDualSupportLaneBuffer;
   std::vector<iplug::sample> mDualMainAlignedBuffer;
   std::vector<iplug::sample> mDualSupportAlignedBuffer;
+  // 0 until OnReset reserves kRealtimeBlockReserve. ProcessBlock dry-passes
+  // until then so the first callback cannot allocate.
+  int mReservedAudioBlockSize = 0;
   volum::DualAmpDelayLine<iplug::sample> mDualMainLatencyDelay;
   volum::DualAmpDelayLine<iplug::sample> mDualSupportLatencyDelay;
 
-  // VoLum: live/staged path pairs commit with staged models/IR in _ApplyDSPStaging (see VoLumDspStagingWdl.h).
+  // VoLum: live paths commit in OnIdle from what _ApplyDSPStaging published (see VoLumDspStagingWdl.h).
   volum::dsp_staging::WdlStagedPathPair mNAMPaths;
   volum::dsp_staging::WdlStagedPathPair mIRPaths;
   volum::dsp_staging::WdlStagedPathPair mSupportIRPaths;

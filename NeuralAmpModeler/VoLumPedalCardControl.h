@@ -13,6 +13,8 @@
 // VoLumTriptych.h.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumPrePedalCaptures.h"
+#include "VoLumSecondPress.h"
 #include "VoLumTriptychMotifs.h"
 #include "VoLumTriptychState.h"
 #include "NeuralAmpModeler.h"
@@ -121,24 +123,45 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     if (mPlaceholder)
       return;
-    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
-    if (mIsFocused)
+    // Same control as the collapsed mini-pill: the LED toggles bypass and does
+    // not steal the click for focus or the capture menu.
+    const IRECT ledRect(mRECT.R - 20.f, mRECT.B - 20.f, mRECT.R - 8.f, mRECT.B - 8.f);
+    if (ledRect.Contains(x, y))
     {
-      if (plugin && mEffect == EVoLumEffectFocus::PRE_NAM1)
+      if (mCallback)
+        mCallback(this, true);
+      return;
+    }
+    auto* plugin = dynamic_cast<PLUG_CLASS_NAME*>(GetDelegate());
+    const int captureSlot = (mEffect == EVoLumEffectFocus::PRE_NAM1)   ? 0
+                            : (mEffect == EVoLumEffectFocus::PRE_NAM2) ? 1
+                                                                       : -1;
+    if (plugin && captureSlot >= 0)
+    {
+      const int captureIdx = plugin->GetParam(captureSlot == 0 ? kPreNam1Capture : kPreNam2Capture)->Int();
+      const auto action = volum::DecideCaptureCardClick(mIsFocused, captureIdx > volum::kPreCaptureEmptyIndex);
+      // Focus first where both are wanted: the focus callback rebuilds the layout,
+      // and that pass hides the capture menu unconditionally. Opening before it
+      // would close the menu on the same click.
+      if (action == volum::CaptureCardClick::FocusThenOpenPicker && mCallback)
+        mCallback(this, false);
+      if (action != volum::CaptureCardClick::FocusOnly)
       {
-        plugin->_VolumShowPreCaptureMenu(0, mRECT);
-        return;
-      }
-      if (plugin && mEffect == EVoLumEffectFocus::PRE_NAM2)
-      {
-        plugin->_VolumShowPreCaptureMenu(1, mRECT);
+        plugin->_VolumShowPreCaptureMenu(captureSlot, mRECT);
         return;
       }
     }
     if (mCallback)
       mCallback(this, false);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -269,4 +292,5 @@ private:
   bool mCachedBypassed = false;
   int mCachedVariant = -1; // PITCH motif sub-mode the cached art layer was drawn for.
   ClickCallback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };

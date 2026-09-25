@@ -39,18 +39,34 @@ inline AboutLayout LayoutAboutCard(float bodyW, float bodyH)
   l.actionSplitX = std::max(0.f, bodyW - kAboutCheckNowW);
   l.actionFits = actionT >= 0.f && (actionB - actionT) >= kAboutActionH - 0.5f && actionB <= bodyH + 0.5f;
 
+  // A 76 px SYSTEM leftover cannot hold version, two links, a 16 px update
+  // pill, and the action row. Drop links from the bottom until the pill sits
+  // fully above the action row. A 96 px card still keeps both links.
+  const float noticeLimit = actionT - kAboutGap;
+  const float pillH = 16.f;
   float y = 0.f;
   l.versionT = y;
   l.versionB = y + kAboutRowH;
   y = l.versionB;
-  l.url1T = y;
-  l.url1B = y + kAboutRowH;
-  y = l.url1B;
-  l.url2T = y;
-  l.url2B = y + kAboutRowH;
-  y = l.url2B + kAboutGap;
-  l.noticeT = y;
-  l.noticeB = std::max(y, actionT - kAboutGap);
+
+  auto placeLink = [&](float& top, float& bottom) {
+    const float next = y + kAboutRowH;
+    if (next + kAboutGap + pillH <= noticeLimit + 0.01f)
+    {
+      top = y;
+      bottom = next;
+      y = next;
+    }
+    else
+    {
+      top = y;
+      bottom = y;
+    }
+  };
+  placeLink(l.url1T, l.url1B);
+  placeLink(l.url2T, l.url2B);
+  l.noticeT = y + kAboutGap;
+  l.noticeB = std::max(l.noticeT, noticeLimit);
   return l;
 }
 

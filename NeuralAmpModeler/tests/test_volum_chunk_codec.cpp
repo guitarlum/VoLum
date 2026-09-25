@@ -79,9 +79,9 @@ TEST_CASE("A per-amp decoder that runs out still rewrites the toggles it was han
   volum::VoLumAmpSettings target = mine;
   const int pos = volum::GetLegacyPerAmpSettings(empty, 0, target);
 
-  CHECK(pos < 0);                                        // the read failed
+  CHECK(pos < 0); // the read failed
   CHECK(target.gateThreshold == doctest::Approx(-37.5)); // numbers survive it
-  CHECK(target.noiseGateActive);                         // switches do not
+  CHECK(target.noiseGateActive); // switches do not
   CHECK(target.eqActive);
 
   // Same from a position that is already negative, which is what every amp after
@@ -737,6 +737,27 @@ TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
   CHECK(out.perAmpSupportChannel[0] == 0);
 }
 
+TEST_CASE("Id tail midiRecallCc round-trips, defaults to 102, and refuses 120-127")
+{
+  volum::ChunkIdTail in;
+  in.midiRecallCc = 20;
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.midiRecallCc == 20);
+
+  nlohmann::json missing;
+  missing["v"] = volum::kVoLumIdTailSchema;
+  CHECK(volum::IdTailFromJson(missing).midiRecallCc == volum::kMidiRecallCcDefault);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 119}}).midiRecallCc == 119);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 123}}).midiRecallCc == volum::kMidiRecallCcDefault);
+
+  nlohmann::json j = volum::IdTailToJson(in);
+  CHECK(j["midiRecallCc"] == 20);
+  CHECK(j["v"] == volum::kVoLumIdTailSchema);
+}
+
 TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
 {
   volum::ChunkIdTail in;
@@ -1081,6 +1102,7 @@ TEST_CASE("Empty id tail round-trips (all refs blank)")
   CHECK(out.customMainId.empty());
   CHECK(out.customSupportId.empty());
   CHECK(out.activePresetId.empty());
+  CHECK(out.midiRecallCc == volum::kMidiRecallCcDefault);
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
     CHECK(out.perAmpIrId[i].empty());
@@ -1180,7 +1202,7 @@ TEST_CASE("Absent chorus tail forces a dirty live scene off")
   CHECK_FALSE(live.postChorusActive);
   CHECK(live.postChorusMode == volum::kVoLumChorusModeDefault);
   CHECK(live.postChorusMix == doctest::Approx(0.50));
-  CHECK(live.postChorusRate == doctest::Approx(0.35));
+  CHECK(live.postChorusRate == doctest::Approx(0.44));
 
   volum::ChorusTail written;
   written.present = true;

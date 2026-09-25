@@ -105,11 +105,10 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
   // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
   // succeeds on an empty directory, so an entry like that could delete the
   // library's own folder rather than a capture.
-  // A payload is always a file inside a subdirectory, never a directory itself.
-  // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
-  // succeeds on an empty directory, so an entry like that could delete the
-  // library's own folder rather than a capture.
   if (!path.has_parent_path() || !path.has_filename())
+    return false;
+
+  if (relPath.find(':') != std::string::npos)
     return false;
 
   for (const auto& part : path)
@@ -118,6 +117,15 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
       return false;
   }
   return true;
+}
+
+// The leaf a copied file is stored under: the user's own file name, minus the
+// one character IsSafeStoredRelPath refuses mid-path. macOS allows ':' in a name
+// (Finder shows it as '/'); stored as-is, the copy would never resolve again.
+inline std::string StoredLeafName(std::string leaf)
+{
+  std::replace(leaf.begin(), leaf.end(), ':', '_');
+  return leaf;
 }
 
 // v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
@@ -472,6 +480,16 @@ inline bool DefaultCaptureSelection(const custom::CustomAmp& amp, int& slot, int
   return true;
 }
 
+// File-less amps leave DefaultCaptureSelection's outputs untouched. A new
+// SUPPORT partner must not keep the previous partner's cab, so start from
+// DIRECT / channel 1 and only replace that when the amp has files.
+inline void CaptureSelectionOrDefault(const custom::CustomAmp& amp, int& slot, int& channel)
+{
+  slot = custom::kDirectSlot;
+  channel = 1;
+  DefaultCaptureSelection(amp, slot, channel);
+}
+
 struct Registry
 {
   std::vector<custom::CustomAmp> amps; // manifests (inline)
@@ -485,6 +503,10 @@ struct Registry
   // sounding rig belongs to the instance now, so this is a one-way migration
   // source the plugin drains into its own per-instance scene map.
   std::map<std::string, VoLumAmpSettings> legacyCustomScenes;
+  // Keys this build does not understand, plus a schemaVersion newer than ours.
+  // Save writes them back so a newer library is not stripped by an older binary.
+  nlohmann::json passthrough = nlohmann::json::object();
+  int passthroughSchema = 0;
 };
 
 struct ResolvedMidiSound
@@ -769,7 +791,7 @@ inline bool CustomAmpFromJson(const nlohmann::json& j, custom::CustomAmp& out)
 inline nlohmann::json RegistryToJson(const Registry& r)
 {
   nlohmann::json j;
-  j["schemaVersion"] = kContentSchemaVersion;
+  j["schemaVersion"] = r.passthroughSchema > kContentSchemaVersion ? r.passthroughSchema : kContentSchemaVersion;
   j["nextPedalIndex"] = r.nextPedalIndex;
 
   nlohmann::json amps = nlohmann::json::array();
@@ -811,6 +833,15 @@ inline nlohmann::json RegistryToJson(const Registry& r)
     midi.push_back({{"slot", slot.first}, {"ampId", slot.second.ampId}, {"presetId", slot.second.presetId}});
   j["midiSoundMap"] = midi;
 
+  if (r.passthrough.is_object())
+  {
+    for (auto it = r.passthrough.begin(); it != r.passthrough.end(); ++it)
+    {
+      if (!j.contains(it.key()))
+        j[it.key()] = it.value();
+    }
+  }
+
   return j;
 }
 
@@ -820,6 +851,13 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
 {
   Registry r;
   bool h = false;
+
+  if (j.contains("schemaVersion") && j["schemaVersion"].is_number_integer())
+  {
+    const int version = j["schemaVersion"].get<int>();
+    if (version > kContentSchemaVersion)
+      r.passthroughSchema = version;
+  }
 
   if (j.contains("nextPedalIndex") && j["nextPedalIndex"].is_number_integer())
     r.nextPedalIndex = std::max(kCustomPedalIndexBase, j["nextPedalIndex"].get<int>());
@@ -963,6 +1001,23 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
         continue;
       }
       r.midiSoundMap[slot] = std::move(a);
+    }
+  }
+
+  if (j.is_object())
+  {
+    static const char* kKnown[] = {"schemaVersion", "nextPedalIndex", "customAmps",   "irLibrary",
+                                   "customPedals",  "presetBanks",    "customScenes", "midiSoundMap"};
+    for (auto it = j.begin(); it != j.end(); ++it)
+    {
+      bool known = false;
+      for (const char* key : kKnown)
+      {
+        if (it.key() == key)
+          known = true;
+      }
+      if (!known)
+        r.passthrough[it.key()] = it.value();
     }
   }
 
@@ -1193,6 +1248,20 @@ inline Registry MergeRegistries(const Registry& disk, const Registry& baseline, 
   // A migration source, not shared state: keep whatever this writer still has to
   // drain so a save does not lose scenes it has not migrated yet.
   out.legacyCustomScenes = current.legacyCustomScenes;
+  out.passthroughSchema = std::max(disk.passthroughSchema, current.passthroughSchema);
+  // Unknown keys follow the same rule as the collections above: a value this
+  // writer has not changed stays as disk has it, so a sibling who edited a
+  // future field is not overwritten by the copy this writer loaded.
+  if (current.passthrough.is_object())
+  {
+    const bool baselineObject = baseline.passthrough.is_object();
+    for (auto it = current.passthrough.begin(); it != current.passthrough.end(); ++it)
+    {
+      if (baselineObject && baseline.passthrough.contains(it.key()) && baseline.passthrough[it.key()] == it.value())
+        continue;
+      out.passthrough[it.key()] = it.value();
+    }
+  }
   return out;
 }
 
@@ -1547,7 +1616,21 @@ public:
       return false;
     }
 
-    Registry merged = MergeRegistries(ReadRegistryFromDisk(), mBaseline, mReg);
+    const DiskRegistry disk = ReadRegistryFromDisk();
+    if (!disk.readable)
+    {
+      // Same verdict Load() reaches, for a file that went bad after Load() read
+      // it: cloud-sync placeholder, antivirus, a permissions change, or a second
+      // VoLum that backed the file up as corrupt. The merge treats an unreadable
+      // file as "disk names nothing", and MergeContentVector keeps only the ids
+      // this writer touched, so writing here replaces a whole library with this
+      // session's edits. Refuse, and let the caller show the banner: the user
+      // loses the session's edits, not the library.
+      mLastWriteFailed = true;
+      return false;
+    }
+
+    Registry merged = MergeRegistries(disk.reg, mBaseline, mReg);
     if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(merged), ec))
     {
       mLastWriteFailed = true;
@@ -1602,7 +1685,7 @@ public:
     if (ec)
       return {};
 
-    const std::string leaf = PathToUtf8(src.filename());
+    const std::string leaf = StoredLeafName(PathToUtf8(src.filename()));
     const std::string stored = idPrefix + "__" + leaf;
     const auto dst = dstDir / PathFromUtf8(stored);
     std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
@@ -1625,6 +1708,19 @@ public:
     std::error_code ec;
     std::filesystem::remove(resolved, ec);
   }
+
+  // Queue a payload the committed registry still references. It is deleted by the
+  // next successful Save(), never before: see the comment there.
+  void QueueStoredFileDelete(const std::string& relPath)
+  {
+    if (relPath.empty())
+      return;
+    mPendingFileDeletes.push_back(relPath);
+  }
+
+  // True when the in-memory registry names this content-relative payload. Used by
+  // Pack import to queue deletes only for files no catalog row still references.
+  bool ReferencesStoredPath(const std::string& relPath) const { return RegistryReferences(relPath); }
 
   // -- Removal matrix (spec 3.7) ------------------------------------------------
 
@@ -1744,21 +1840,42 @@ public:
     mReg.midiSoundMap.erase(slot);
   }
 
+  // The sentence shown once after a corrupt library was moved aside. Empty when
+  // this session has not recovered a file.
+  std::string TakeCorruptRecoveryNotice()
+  {
+    std::string notice = std::move(mCorruptRecoveryNotice);
+    mCorruptRecoveryNotice.clear();
+    return notice;
+  }
+
 private:
-  // The registry exactly as it is on disk right now, for the merge in Save(). Any
-  // failure yields an empty registry, which makes the merge degrade to "replay my
-  // changes onto nothing" - the pre-1.3.0 behaviour, and the best available when
-  // the file cannot be read. Load() is what refuses to write over a file it could
-  // not read; by the time Save() runs, that verdict has already been made.
-  Registry ReadRegistryFromDisk() const
+  // The registry exactly as it is on disk right now, for the merge in Save().
+  //
+  // "Absent" and "unreadable" are not the same answer and must not share one.
+  // An absent file is a fresh library: merging onto nothing is correct. A file
+  // that exists but cannot be read means disk holds content we cannot see, and
+  // merging onto nothing would write this session's edits over all of it.
+  // Load() already refuses that, but its verdict only covers a file that was
+  // already bad when the store loaded - not one that goes bad afterwards, which
+  // is the common case (cloud sync, antivirus, a second VoLum backing it up).
+  struct DiskRegistry
+  {
+    Registry reg;
+    bool readable = true;
+  };
+
+  DiskRegistry ReadRegistryFromDisk() const
   {
     std::error_code ec;
     const auto path = RegistryPath();
-    if (mBase.empty() || !std::filesystem::is_regular_file(path, ec))
-      return Registry{};
+    if (mBase.empty() || !std::filesystem::exists(path, ec))
+      return DiskRegistry{};
+    if (!std::filesystem::is_regular_file(path, ec))
+      return DiskRegistry{Registry{}, false};
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
-      return Registry{};
+      return DiskRegistry{Registry{}, false};
     nlohmann::json j;
     try
     {
@@ -1766,20 +1883,11 @@ private:
     }
     catch (...)
     {
-      return Registry{};
+      return DiskRegistry{Registry{}, false};
     }
     if (!j.is_object())
-      return Registry{};
-    return RegistryFromJson(j);
-  }
-
-  // Queue a payload the committed registry still references. It is deleted by the
-  // next successful Save(), never before: see the comment there.
-  void QueueStoredFileDelete(const std::string& relPath)
-  {
-    if (relPath.empty())
-      return;
-    mPendingFileDeletes.push_back(relPath);
+      return DiskRegistry{Registry{}, false};
+    return DiskRegistry{RegistryFromJson(j), true};
   }
 
   // True when the registry about to be written still names this payload. Deleting
@@ -1846,15 +1954,55 @@ private:
     mPendingFileDeletes.clear();
   }
 
+  // Move `from` to `to`. A failed copy does not delete `from`: the previous
+  // backup is the file we are not allowed to lose.
+  static bool MoveFileAside(const std::filesystem::path& from, const std::filesystem::path& to)
+  {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (!ec)
+      return true;
+    ec.clear();
+    std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec)
+      return false;
+    ec.clear();
+    std::filesystem::remove(from, ec);
+    // A copy that leaves the source in place is not a move. Reporting success
+    // would let the next recovery rotate that leftover over the older backup.
+    std::error_code still;
+    const bool remains = std::filesystem::exists(from, still);
+    if (ec || still || remains)
+      return false;
+    return true;
+  }
+
   void BackupCorrupt()
   {
     std::error_code ec;
-    std::filesystem::rename(RegistryPath(), BackupPath(), ec);
-    if (ec)
+    const auto live = RegistryPath();
+    const auto bak = BackupPath();
+    const auto older = std::filesystem::path(bak.string() + ".1");
+    if (std::filesystem::exists(bak, ec))
     {
-      std::filesystem::copy_file(RegistryPath(), BackupPath(), std::filesystem::copy_options::overwrite_existing, ec);
-      std::filesystem::remove(RegistryPath(), ec);
+      std::filesystem::remove(older, ec); // a leftover .bak.1 should not block the rotate
+      if (!MoveFileAside(bak, older))
+      {
+        mCorruptRecoveryNotice =
+          "Could not read the library. The previous volum-content.json.bak could not be "
+          "moved, so the unreadable file was left in place.";
+        return;
+      }
     }
+    if (!MoveFileAside(live, bak))
+    {
+      mCorruptRecoveryNotice =
+        "Could not read the library. The unreadable file could not be moved aside and was left in place.";
+      return;
+    }
+    mCorruptRecoveryNotice =
+      "Could not read the library. The unreadable file was kept as volum-content.json.bak. "
+      "An older backup, if there was one, is volum-content.json.bak.1.";
   }
 
   std::filesystem::path mBase;
@@ -1865,6 +2013,7 @@ private:
   bool mLoaded = false;
   bool mRegistryUnreadable = false;
   bool mLastWriteFailed = false;
+  std::string mCorruptRecoveryNotice;
   std::vector<std::string> mPendingFileDeletes;
 };
 

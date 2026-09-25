@@ -1,6 +1,8 @@
-// VoLumAmpMenus.inc.cpp: factory reset + preset/support-amp menu + dual-amp focus member functions
+﻿// VoLumAmpMenus.inc.cpp: factory reset + preset/support-amp menu + dual-amp focus member functions
 // Extracted from NeuralAmpModeler.cpp for file-size hygiene. Tail-#included
 // into the NeuralAmpModeler translation unit; not a separate build target.
+
+#include "VoLumDualAmpInput.h"
 
 void NeuralAmpModeler::_VolumResetAmpToFactory()
 {
@@ -56,8 +58,9 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();
-  const bool hasFactory =
-    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  const auto* factoryPreset =
+    mVolumCustomMainIdx < 0 ? volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) : nullptr;
+  const bool hasFactory = factoryPreset != nullptr;
   volum::InitPickerGroups(mVolumPresetPickerGroups, hasFactory, !presets.empty());
   std::vector<VoLumListMenuControl::Row> rows;
   // Default is an action, not a named preset, and stays pinned above both banks.
@@ -67,7 +70,7 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
     rows.push_back(
       {volum::PickerGroupMenuLabel(true, mVolumPresetPickerGroups.factoryOpen), -98, false, false, false, false, true});
     if (mVolumPresetPickerGroups.factoryOpen)
-      rows.push_back({volum::kFactoryPresetDisplayName, 0, false, false});
+      rows.push_back({factoryPreset->name, 0, false, false});
   }
   if (!presets.empty())
   {
@@ -255,12 +258,10 @@ void NeuralAmpModeler::_VolumSetSupportCustom(int customIdx)
   _VolumActiveScene().supportCustomId = volum::custom::CustomAmpIdAt(customIdx);
   {
     const auto amp = volum::custom::CustomAmpAt(customIdx);
-    int s = volum::custom::kDirectSlot, c = 1;
-    if (volum::content::DefaultCaptureSelection(amp, s, c))
-    {
-      mVolumCustomSupportSlot = s;
-      mVolumCustomSupportChannel = c;
-    }
+    int s = 0, c = 0;
+    volum::content::CaptureSelectionOrDefault(amp, s, c);
+    mVolumCustomSupportSlot = s;
+    mVolumCustomSupportChannel = c;
     // Persist the freshly resolved cab/channel so it round-trips like MAIN.
     _VolumActiveScene().supportCustomSlot = mVolumCustomSupportSlot;
     _VolumActiveScene().supportCustomChannel = mVolumCustomSupportChannel;
@@ -345,6 +346,12 @@ void NeuralAmpModeler::_VolumSyncUiFromState()
 
   // Cab row + channel stepper for the focused lane.
   _VolumApplyFocusedLaneCabs();
+
+  // PLAY covers the whole window, so a restore that lands BUILD while the surface
+  // is still shown hands every click to a hidden-in-spirit overlay. Deriving the
+  // chrome from mVolumUiMode here means a host restore cannot forget it; nothing
+  // else on this path touched PLAY at all.
+  _VolumRefreshPlaySurface();
 }
 
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)
@@ -416,6 +423,14 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
   }
 }
 
+void NeuralAmpModeler::_VolumRebindCustomSupportIdx()
+{
+  const std::string& id = _VolumActiveScene().supportCustomId;
+  if (id.empty() || !volum::content::GlobalContentStore().IsLoaded())
+    return;
+  mVolumCustomSupportIdx = volum::custom::CustomAmpIndexById(id);
+}
+
 bool NeuralAmpModeler::_VolumHasSupportAmp()
 {
   const int factory = GetParam(kSupportAmpIdx)->Int();
@@ -430,19 +445,21 @@ bool NeuralAmpModeler::_VolumHasSupportAmp()
 
 void NeuralAmpModeler::_VolumClampSupportFocus()
 {
-  if (!mVolumDualAmpFocusedSupport || _VolumHasSupportAmp())
-    return;
-
-  mVolumDualAmpFocusedSupport = false;
-
-  // Moving focus is only half the job. The cab row is shared by both lanes and every
-  // write to it is now conditioned on which lane is focused, so a clamp that only
-  // flipped the flag left the row still describing SUPPORT while MAIN was focused -
-  // the exact state that guard exists to prevent, and a click on a cab then edited
-  // MAIN with an index from the support amp's layout. Re-derive here so no caller
-  // has to remember: _VolumApplyFocusedLaneCabs does not call _UpdateVoLumLayout,
-  // so there is no re-entrancy back into this.
-  _VolumApplyFocusedLaneCabs();
+  // Moving focus is only half the job. The cab row is shared by both lanes and
+  // every write to it is conditioned on which lane is focused, so a clamp that
+  // only flipped the flag left the row still describing SUPPORT while MAIN was
+  // focused - the exact state this guard exists to prevent, and a click on a cab
+  // then edited MAIN with an index from the support amp's layout.
+  //
+  // CommitFocus returns both halves so no caller has to remember the second one,
+  // and it only reports rederiveCabs when the clamp actually moved the flag -
+  // layout calls this on every pass and must not restage cabs each time.
+  // _VolumApplyFocusedLaneCabs does not call _UpdateVoLumLayout, so there is no
+  // re-entrancy back into this.
+  const auto commit =
+    volum::dualamp::CommitFocus(mVolumDualAmpFocusedSupport, mVolumDualAmpFocusedSupport, _VolumHasSupportAmp());
+  volum::dualamp::ApplyFocusCommit(
+    commit, [this](bool f) { mVolumDualAmpFocusedSupport = f; }, [this] { _VolumApplyFocusedLaneCabs(); });
 }
 
 void NeuralAmpModeler::_VolumApplyDualAmpFocus()
@@ -454,7 +471,7 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   _VolumClampSupportFocus();
 
   // Sync the speaker row to the focused lane (cab selection is per-amp). Lane belonging on the
-  // SUPPORT amp-row knobs is conveyed by their teal pointer dot + teal value text — set once at
+  // SUPPORT amp-row knobs is conveyed by their teal pointer dot + teal value text â€” set once at
   // attach time, no per-frame retoggling needed here.
   auto* pGfx = GetUI();
   if (!pGfx)
@@ -463,9 +480,11 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
   const bool supportFocus = dualActive && mVolumDualAmpFocusedSupport;
   const bool showPanKnobs = dualActive && mVolumExpandedSection == EVoLumSection::AMP;
-  // Polarity belongs to the SUPPORT lane whenever it has an amp - a factory amp
-  // or a custom support partner.
-  const bool showSupportPolarity = showPanKnobs && _VolumHasSupportAmp();
+  // Polarity and PAN both belong to the SUPPORT lane only once it has an amp - a
+  // factory amp or a custom support partner. An ungated PAN knob sat on the empty
+  // lane's title strip, directly over the "Choose support amp" call to action, and
+  // ate the clicks meant for it.
+  const bool showSupportLaneControls = showPanKnobs && _VolumHasSupportAmp();
 
   if (auto* spkRow = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow))
   {
@@ -494,11 +513,11 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
       });
       mainPanGrp->ForControlInGroup("SUPPORT_PAN_KNOB", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPanKnobSlot());
-        c->Hide(!showPanKnobs);
+        c->Hide(!showSupportLaneControls);
       });
       mainPanGrp->ForControlInGroup("SUPPORT_POLARITY_TOGGLE", [&](IControl* c) {
         c->SetTargetAndDrawRECTs(heroCtrl->GetSupportPolarityToggleSlot());
-        c->Hide(!showSupportPolarity);
+        c->Hide(!showSupportLaneControls);
       });
     }
   }

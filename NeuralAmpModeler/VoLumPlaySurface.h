@@ -5,20 +5,26 @@
 // drawing and interaction so VoLumControls.h stays an umbrella.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumDiagLog.h"
 #include "VoLumFractalArt.h"
 #include "VoLumHeaderChrome.h"
+#include "art/VoLumArtMotion.h"
 #include "VoLumNumericEntry.h"
 #include "VoLumPlayLight.h"
 #include "VoLumPlayModel.h"
 #include "VoLumScroll.h"
+#include "VoLumSecondPress.h"
+#include "VoLumStageArtCache.h"
 #include "VoLumTriptychMotifs.h"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,6 +49,8 @@ public:
 
   void SetMode(volum::UiMode mode)
   {
+    if (mMode == mode)
+      return;
     mMode = mode;
     SetDirty(false);
   }
@@ -139,6 +147,22 @@ public:
 
 class VoLumPlaySurfaceControl : public IControl
 {
+  // One PLAY stage panel's animator, keyed like the static layer (art + pixel size).
+  struct StageArtSlot
+  {
+    std::unique_ptr<volumart::ArtAnimator> anim;
+    volum::StageArtKey key;
+    bool none = false; // no animator for this key (registry flag off)
+    bool prepared = false;
+    bool moreWork = false;
+    float prepMs = 0.f;
+    double perfSumMs = 0.0;
+    float perfPeakMs = 0.f;
+    int perfFrames = 0;
+    float perfAvgShown = 0.f;
+    float perfPeakShown = 0.f;
+  };
+
 public:
   enum Fx : int
   {
@@ -172,6 +196,33 @@ public:
   , mEditInBuild(std::move(edit))
   , mAddHeard(std::move(addHeard))
   {
+    // Screenshot harness only (docs/screenshot-recipes.md): pins the IN level the
+    // PLAY light sees. Inert without the variable.
+    float fake = 0.f;
+    if (volum::ParsePlayFakePeak(std::getenv("VOLUM_PLAY_FAKE_PEAK"), fake))
+      mFakeInPeak = fake;
+    // Same harness: VOLUM_ART_ANIM_DEBUG pins the stage art and its motion frame,
+    // VOLUM_ART_ANIM_PERF shows and logs what the art costs per frame.
+    if (const char* dbg = std::getenv("VOLUM_ART_ANIM_DEBUG"); dbg && dbg[0])
+    {
+      mArtDebug = volumart::ParseArtAnimDebug(dbg);
+      if (!mArtDebug.on)
+        std::fprintf(stderr, "VoLum: ignoring malformed VOLUM_ART_ANIM_DEBUG=%s\n", dbg);
+    }
+    if (const char* perf = std::getenv("VOLUM_ART_ANIM_PERF"); perf && perf[0] && perf[0] != '0')
+      mArtPerf = true;
+  }
+
+  // Settings > SIGNAL > Performance "Animate art in PLAY". Off drops every
+  // animator so PLAY draws the static cached art.
+  void SetAnimateArt(bool animate)
+  {
+    if (mAnimateArt == animate)
+      return;
+    mAnimateArt = animate;
+    mMainArtSlot = {};
+    mSupportArtSlot = {};
+    SetDirty(false);
   }
 
   void SetPlusAddsHeard(bool addsHeard)
@@ -189,6 +240,10 @@ public:
     mPickerOpen = false;
     SetDirty(false);
   }
+
+  // The map has no free program number. Offer slot 0 so the click can replace
+  // a Sound instead of doing nothing.
+  void OpenReplacePicker() { OpenPicker(0, true); }
 
   // Esc closes the picker; arrows and 1-8 stay here so they cannot step the
   // rail or stomps underneath. T/M/H and Ctrl+S still fall through. The
@@ -208,7 +263,7 @@ public:
     return rail || stomp;
   }
 
-  void SetInPeak(float peak) { mInPeak = std::clamp(peak, 0.f, 1.f); }
+  void SetInPeak(float peak) { mInPeak = mFakeInPeak >= 0.f ? mFakeInPeak : std::clamp(peak, 0.f, 1.f); }
   void SetOutPeak(float peak) { mOutPeak = std::clamp(peak, 0.f, 1.f); }
 
   void SetPickerGroups(volum::PickerGroupSession* session) { mPickerGroups = session; }
@@ -244,21 +299,29 @@ public:
     mDirty = dirty;
     mNam1Label = (nam1Label && nam1Label[0]) ? nam1Label : "NAM 1";
     mNam2Label = (nam2Label && nam2Label[0]) ? nam2Label : "NAM 2";
-    if (mCachedMainArt != mLiveArt || mCachedMainCustom != mCustomArt)
-    {
-      mStageMainLayer = nullptr;
-      mCachedMainArt = mLiveArt;
-      mCachedMainCustom = mCustomArt;
-    }
-    if (mCachedSupportArt != mSupportArt || mCachedSupportCustom != mSupportCustom)
-    {
-      mStageSupportLayer = nullptr;
-      mCachedSupportArt = mSupportArt;
-      mCachedSupportCustom = mSupportCustom;
-    }
     ClampRailScroll();
     if (lastSlot != prevSlot)
       EnsureActiveRowVisible();
+    if (mPressSlot >= 0)
+    {
+      mPressRow = -1;
+      for (int i = 0; i < static_cast<int>(mSlots.size()); ++i)
+      {
+        if (mSlots[static_cast<size_t>(i)].slot == mPressSlot)
+        {
+          mPressRow = i;
+          break;
+        }
+      }
+      if (mPressRow < 0)
+      {
+        mDragging = false;
+        mPressSlot = -1;
+        mPressGlyph = kPressBody;
+        mDropRow = -1;
+        mDropInsert = false;
+      }
+    }
     SetDirty(false);
   }
 
@@ -273,19 +336,39 @@ public:
       layer = nullptr;
     mStageMainLayer = nullptr;
     mStageSupportLayer = nullptr;
+    mStageMainKey = {};
+    mStageSupportKey = {};
+    mMainArtSlot = {};
+    mSupportArtSlot = {};
   }
 
+  // OnIdle calls this only while PLAY is shown, so art motion (like the light)
+  // stands still in BUILD.
   void Tick()
   {
     mPhase += 0.015f;
     if (mPhase > 6.283185f)
       mPhase -= 6.283185f;
-    mLampPeak = volum::PlayLampFollow(mLampPeak, mInPeak);
+    const auto now = std::chrono::steady_clock::now();
+    const float dt = mHaveTick ? std::chrono::duration<float>(now - mLastTick).count() : 0.f;
+    mLastTick = now;
+    mHaveTick = true;
+    mLight = volum::AdvancePlayLight(mLight, mInPeak, mOutPeak);
+    volumart::AdvanceArtMotion(
+      mArtMotion, mLight.energy, mLight.attack, volum::PlayBloomWeight(volum::PlayGlowAmount(mLight)), dt);
+    if (mArtDebug.on && mArtDebug.runClock)
+    {
+      const float a = std::max(mArtDebug.energy, mArtDebug.pick);
+      if (a > 0.f)
+        mArtDebugClock += std::clamp(dt, 0.f, volumart::kMaxMotionDt)
+                          * (volumart::kClockRateFloor + (1.f - volumart::kClockRateFloor) * a);
+    }
     SetDirty(false);
   }
 
   void Draw(IGraphics& g) override
   {
+    mArtPreparedThisFrame = false;
     // The same top-lit gradient + vignette + brass frame BUILD's canvas draws
     // (VoLumBackgroundControl). PLAY used to open on a blue-green (20, 26, 36)
     // wash, so switching modes changed the colour of the instrument.
@@ -304,6 +387,8 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
+    mPressPickerOpen = mPickerOpen;
     if (mPickerOpen)
     {
       if (PickerCloseRect().Contains(x, y))
@@ -385,7 +470,7 @@ public:
 
     if ((mSlots.empty() ? EmptyAddRect() : AddRect()).Contains(x, y))
     {
-      if (mPlusAddsHeard && mAddHeard)
+      if (mPlusAddsHeard && mAddHeard && FirstFreeSlot() >= 0)
       {
         mAddHeard();
         return;
@@ -397,23 +482,18 @@ public:
     const int row = SlotAt(x, y);
     if (row >= 0)
     {
-      if (ClearRectForRow(row).Contains(x, y))
-      {
-        if (mClear)
-          mClear(mSlots[(size_t)row].slot);
-        return;
-      }
-      if (AssignRectForRow(row).Contains(x, y))
-      {
-        OpenPicker(mSlots[(size_t)row].slot, false);
-        return;
-      }
       const auto& slot = mSlots[(size_t)row];
       mPressRow = row;
       mPressSlot = slot.slot;
       mPressX = x;
       mPressY = y;
       mDragging = false;
+      if (ClearRectForRow(row).Contains(x, y))
+        mPressGlyph = kPressClear;
+      else if (AssignRectForRow(row).Contains(x, y))
+        mPressGlyph = kPressAssign;
+      else
+        mPressGlyph = kPressBody;
       return;
     }
 
@@ -473,9 +553,11 @@ public:
     mPickerBar.OnUp();
     const int pressRow = mPressRow;
     const int pressSlot = mPressSlot;
+    const int pressGlyph = mPressGlyph;
     const bool wasDrag = mDragging;
     mPressRow = -1;
     mPressSlot = -1;
+    mPressGlyph = kPressBody;
     mDragging = false;
     mDropRow = -1;
     mDropInsert = false;
@@ -489,6 +571,17 @@ public:
     }
     if (SlotAt(x, y) != pressRow)
       return;
+    if (pressGlyph == kPressClear && ClearRectForRow(pressRow).Contains(x, y))
+    {
+      if (mClear)
+        mClear(mSlots[(size_t)pressRow].slot);
+      return;
+    }
+    if (pressGlyph == kPressAssign && AssignRectForRow(pressRow).Contains(x, y))
+    {
+      OpenPicker(mSlots[(size_t)pressRow].slot, false);
+      return;
+    }
     const auto& slot = mSlots[(size_t)pressRow];
     if (slot.valid)
     {
@@ -499,12 +592,22 @@ public:
       OpenPicker(slot.slot, false);
   }
 
+  // Double-clicking a plate opens its picker; anywhere else (a stomp, the picker's
+  // slot stepper) the second press counts as one. A press that opened or closed
+  // the picker moved what is under the cursor, so its second press is dropped.
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
   {
-    if (mod.R)
+    if (!mSecondPress.Take() || mPickerOpen != mPressPickerOpen || mod.R)
       return;
-    const int row = SlotAt(x, y);
-    if (row < 0 || row >= static_cast<int>(mSlots.size()) || mChoices.empty())
+    const int row = mPickerOpen ? -1 : SlotAt(x, y);
+    if (row < 0)
+    {
+      OnMouseDown(x, y, mod);
+      mRailBar.OnUp();
+      mPickerBar.OnUp();
+      return;
+    }
+    if (row >= static_cast<int>(mSlots.size()) || mChoices.empty())
       return;
     OpenPicker(mSlots[(size_t)row].slot, false);
   }
@@ -539,6 +642,12 @@ public:
     mHoverRow = mHoverFx = mHoverChoice = -1;
     mHoverStep = 0;
     mHoverHeader = 0;
+    mPressRow = -1;
+    mPressSlot = -1;
+    mPressGlyph = kPressBody;
+    mDragging = false;
+    mDropRow = -1;
+    mDropInsert = false;
     ApplyPlayTip(0.f, 0.f, true);
     SetDirty(false);
   }
@@ -778,10 +887,28 @@ private:
     g.DrawText(VoLumType::Label(12.f, VoLumColors::GOLD), mPlusAddsHeard ? "+   Add this sound" : "+   Add Sound", add);
   }
 
-  void DrawCachedStageArt(IGraphics& g, const IRECT& artRect, int art, bool custom, ILayerPtr& layer)
+  // Built at the pixel size it is drawn at and blitted 1:1. The key carries the
+  // size because the panel narrows in dual: a layer built for one width is
+  // stretched in the other. The backdrop is BUILD's panel gradient so silence
+  // looks exactly like the BUILD hero.
+  void DrawCachedStageArt(IGraphics& g, const IRECT& artRect, int art, bool custom, ILayerPtr& layer,
+                          volum::StageArtKey& cached, StageArtSlot& slot, float bloom)
   {
-    const IRECT paint = artRect.GetPadded(-18.f);
-    if (!g.CheckLayer(layer))
+    if (mArtDebug.on)
+    {
+      art = mArtDebug.art;
+      custom = mArtDebug.custom;
+    }
+    const float scale = g.GetScreenScale() * g.GetDrawScale();
+    const IRECT paint = artRect.GetPadded(-18.f).GetPixelAligned(scale);
+    const volum::StageArtKey want = volum::MakeStageArtKey(art, custom, paint.W(), paint.H(), scale);
+    if (DrawAnimatedStageArt(g, artRect, paint, want, slot))
+    {
+      layer = nullptr;
+      cached = {};
+      return;
+    }
+    if (!g.CheckLayer(layer) || !volum::StageArtLayerMatches(cached, want))
     {
       g.StartLayer(this, paint);
       if (custom)
@@ -789,21 +916,129 @@ private:
       else
         DrawHeroFractalArt(g, paint, FractalCaseForAmp(art));
       layer = g.EndLayer();
+      cached = want;
     }
-    g.FillRect(VoLumColors::HERO_BG, artRect);
-    if (layer && g.CheckLayer(layer))
-      g.DrawFittedLayer(layer, paint, nullptr);
+    DrawStageBackdrop(g, artRect);
+    if (!layer || !g.CheckLayer(layer))
+      return;
+    const IBitmap bitmap = layer->GetBitmap();
+    g.DrawBitmap(bitmap, paint, 0, 0, nullptr);
+    if (bloom > 0.f)
+    {
+      const IBlend add(EBlend::Add, bloom);
+      g.DrawBitmap(bitmap, paint, 0, 0, &add);
+    }
+  }
+
+  static void DrawStageBackdrop(IGraphics& g, const IRECT& artRect)
+  {
+    g.PathRect(artRect);
+    g.PathFill(IPattern::CreateLinearGradient(
+      artRect.L, artRect.T, artRect.L, artRect.B, {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
+  }
+
+  // The moving art (art/VoLumArtAnimator.h), when the toggle is on and the art's
+  // registry flag is set. False leaves the static path above to draw. Rest frames
+  // go through the animator too: its rest output is the static art.
+  bool DrawAnimatedStageArt(IGraphics& g, const IRECT& artRect, const IRECT& paint, const volum::StageArtKey& want,
+                            StageArtSlot& slot)
+  {
+    const bool animate = mArtDebug.on ? !mArtDebug.legacy : mAnimateArt;
+    if (!animate)
+    {
+      if (slot.anim || slot.none)
+        slot = {};
+      return false;
+    }
+    if (slot.key != want || (!slot.anim && !slot.none))
+    {
+      slot = {};
+      slot.key = want;
+      const int style = want.art;
+      slot.anim = want.custom
+                    ? volumart::MakeCustomArtAnimator(
+                        style, mArtDebug.on,
+                        [style](IGraphics& gg, const IRECT& r) {
+                          DrawCustomAmpArt(gg, r, style, VoLumColors::CUSTOM_ART_BRIGHT, VoLumColors::CUSTOM_ART_DIM);
+                        })
+                    : volumart::MakeFactoryArtAnimator(FractalCaseForAmp(want.art), mArtDebug.on);
+      slot.none = !slot.anim;
+    }
+    if (!slot.anim)
+      return false;
+    if (!slot.prepared || (slot.moreWork && !mArtPreparedThisFrame))
+    {
+      const auto t0 = std::chrono::steady_clock::now();
+      slot.moreWork = !slot.anim->Prepare(g, this, paint);
+      slot.prepared = true;
+      mArtPreparedThisFrame = true;
+      slot.prepMs += std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    }
+    DrawStageBackdrop(g, artRect);
+    const uint32_t seed = volumart::ArtMotionSeed(want.custom, want.custom ? want.art : FractalCaseForAmp(want.art));
+    const volumart::ArtMotion m = mArtDebug.on ? volumart::DebugArtMotion(mArtDebug, seed, mArtDebugClock)
+                                               : volumart::LiveArtMotion(mArtMotion, seed);
+    g.PathClipRegion(paint);
+    const auto t0 = std::chrono::steady_clock::now();
+    slot.anim->Draw(g, paint, m);
+    const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    g.PathClipRegion();
+    if (mArtPerf)
+      DrawArtPerf(g, paint, want, slot, m, ms);
+    return true;
+  }
+
+  // VOLUM_ART_ANIM_PERF: CPU submit time of ArtAnimator::Draw. The label shows the
+  // last 120 frames' average and max; each window is also written to volum.log.
+  void DrawArtPerf(IGraphics& g, const IRECT& paint, const volum::StageArtKey& key, StageArtSlot& slot,
+                   const volumart::ArtMotion& m, float ms)
+  {
+    slot.perfSumMs += ms;
+    slot.perfPeakMs = std::max(slot.perfPeakMs, ms);
+    if (++slot.perfFrames >= kArtPerfWindow)
+    {
+      slot.perfAvgShown = static_cast<float>(slot.perfSumMs / slot.perfFrames);
+      slot.perfPeakShown = slot.perfPeakMs;
+      char line[160];
+      std::snprintf(line, sizeof(line), "%s %d %dx%d E=%.2f P=%.2f draw avg %.3f ms peak %.3f ms prepare %.1f ms",
+                    key.custom ? "custom" : "amp", key.art, key.pixelW, key.pixelH, m.energy, m.pick, slot.perfAvgShown,
+                    slot.perfPeakShown, slot.prepMs);
+      VOLUM_LOG("art", line);
+      slot.perfSumMs = 0.0;
+      slot.perfPeakMs = 0.f;
+      slot.perfFrames = 0;
+    }
+    const bool firstWindow = slot.perfAvgShown <= 0.f && slot.perfFrames > 0;
+    const float avg = firstWindow ? static_cast<float>(slot.perfSumMs / slot.perfFrames) : slot.perfAvgShown;
+    const float peak = firstWindow ? slot.perfPeakMs : slot.perfPeakShown;
+    char label[96];
+    std::snprintf(label, sizeof(label), "art %.2f ms (peak %.2f)  prep %.0f ms", avg, peak, slot.prepMs);
+    g.DrawText(VoLumType::Label(9.f, VoLumColors::CREAM_DIM, EAlign::Near), label,
+               IRECT(paint.L + 4.f, paint.B - 16.f, paint.R - 4.f, paint.B - 2.f));
+  }
+
+  // Additive, so it only lifts the art; nothing is drawn at rest.
+  static void DrawStageGlow(IGraphics& g, const IRECT& rect, const IColor& accent, float glow)
+  {
+    const IBlend add(EBlend::Add, 1.f);
+    const float radius = 0.62f * std::max(rect.W(), rect.H());
+    g.PathRect(rect);
+    g.PathFill(IPattern::CreateRadialGradient(
+                 rect.MW(), rect.MH(), radius, {{accent.WithOpacity(0.30f * glow), 0.f}, {COLOR_TRANSPARENT, 1.f}}),
+               IFillOptions(), &add);
   }
 
   void DrawAmpPanel(IGraphics& g, const IRECT& rect, const std::string& name, int art, bool custom, bool support)
   {
-    DrawCachedStageArt(g, rect, art, custom, support ? mStageSupportLayer : mStageMainLayer);
-    const float pulse = volum::PlayIdlePulse(mPhase);
-    const float bright = volum::PlayArtBrightness(mLampPeak, pulse);
-    const float veil = std::clamp(1.f - bright, 0.f, 0.64f);
-    g.FillRect(IColor(static_cast<int>(veil * 140.f), 6, 8, 12), rect);
-    const float corona = volum::PlayCoronaOpacity(bright);
-    const IColor frame = (support ? VoLumColors::TEAL : VoLumColors::GOLD).WithOpacity(corona);
+    const float glow = volum::PlayGlowAmount(mArtDebug.on ? volumart::DebugPlayLight(mArtDebug) : mLight);
+    DrawCachedStageArt(g, rect, art, custom, support ? mStageSupportLayer : mStageMainLayer,
+                       support ? mStageSupportKey : mStageMainKey, support ? mSupportArtSlot : mMainArtSlot,
+                       volum::PlayBloomWeight(glow));
+    const IColor accent = support ? VoLumColors::TEAL : VoLumColors::GOLD;
+    if (glow > 0.f)
+      DrawStageGlow(g, rect, accent, glow);
+    const float corona = volum::PlayCoronaOpacity(glow, volum::PlayIdlePulse(mPhase));
+    const IColor frame = accent.WithOpacity(corona);
     g.DrawRect(frame, rect, nullptr, 2.2f);
     g.DrawRect(frame.WithOpacity(corona * 0.45f), rect.GetPadded(2.f), nullptr, 3.f);
     const float acc = 14.f;
@@ -917,9 +1152,27 @@ private:
     if (mSlots.empty())
       return;
     const int row = SlotAt(x, y);
+    if (row == kHoverAdd)
+    {
+      mDropRow = static_cast<int>(mSlots.size());
+      mDropInsert = true;
+      return;
+    }
     if (row < 0)
     {
       const auto list = RailListRect();
+      if (list.Contains(x, y))
+      {
+        const float local = y - list.T + mRailScroll;
+        const int pitchRow = static_cast<int>(local / kRowPitch);
+        const float within = local - static_cast<float>(pitchRow) * kRowPitch;
+        if (pitchRow >= 0 && pitchRow < static_cast<int>(mSlots.size()) && within >= kRowH)
+        {
+          mDropRow = pitchRow + 1;
+          mDropInsert = true;
+          return;
+        }
+      }
       if (x >= list.L && x <= list.R && y >= list.B - 8.f && y <= AddRect().T)
       {
         mDropRow = static_cast<int>(mSlots.size());
@@ -1626,10 +1879,23 @@ private:
   std::string mCurTip;
   std::array<bool, FxCount> mFx{};
   std::array<bool, FxCount> mFxAvailable{};
-  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f,
-        mLampPeak = 0.f;
-  int mCachedMainArt = -1, mCachedSupportArt = -1;
-  bool mCachedMainCustom = false, mCachedSupportCustom = false;
+  float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f;
+  float mFakeInPeak = -1.f; // VOLUM_PLAY_FAKE_PEAK; negative = live input
+  volum::PlayLight mLight;
+  volum::StageArtKey mStageMainKey;
+  volum::StageArtKey mStageSupportKey;
+
+  static constexpr int kArtPerfWindow = 120;
+  StageArtSlot mMainArtSlot;
+  StageArtSlot mSupportArtSlot;
+  volumart::ArtMotionState mArtMotion;
+  volumart::ArtAnimDebug mArtDebug;
+  double mArtDebugClock = 0.0;
+  bool mAnimateArt = true;
+  bool mArtPerf = false;
+  bool mArtPreparedThisFrame = false;
+  bool mHaveTick = false;
+  std::chrono::steady_clock::time_point mLastTick{};
 
   // Cached row art, keyed by art id rather than by row, so a rail of eight presets
   // on one amp costs one tile.
@@ -1648,7 +1914,13 @@ private:
   AddHeardCallback mAddHeard;
   SwapCallback mSwap;
   InsertCallback mInsert;
+  static constexpr int kPressBody = 0;
+  static constexpr int kPressClear = 1;
+  static constexpr int kPressAssign = 2;
   int mPressRow = -1, mPressSlot = -1, mDropRow = -1;
+  int mPressGlyph = kPressBody;
   float mPressX = 0.f, mPressY = 0.f, mDragX = 0.f, mDragY = 0.f;
   bool mDragging = false, mDropInsert = false;
+  volum::ui::SecondPressGate mSecondPress;
+  bool mPressPickerOpen = false;
 };

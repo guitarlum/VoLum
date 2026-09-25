@@ -612,7 +612,8 @@ TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
   auto** out = delay.Process(inputs, 2, frames);
   REQUIRE_FALSE(hasNaN(out[0], frames));
   REQUIRE_FALSE(hasNaN(out[1], frames));
-  CHECK(std::abs(out[1][10]) > 0.75);
+  // The seed is the L/R mid, so a left-only impulse repeats at half level on the right.
+  CHECK(std::abs(out[1][10]) == doctest::Approx(0.5).epsilon(0.05));
   CHECK(std::abs(out[0][10]) < 0.05);
 }
 
@@ -717,6 +718,28 @@ TEST_CASE("Delay: SetParams ping-pong toggle clears delay ring buffers")
   for (size_t i = 0; i < frames; ++i)
     sumAbs += std::abs(out[0][i]) + std::abs(out[1][i]);
   CHECK(sumAbs < 1.0e-9);
+}
+
+// Dual Amp can pan an amp hard right. Ping-pong used to seed its lines from the left
+// input only, so that amp got no echoes at all.
+TEST_CASE("Delay: ping-pong echoes a source that is only on the right")
+{
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
+  {
+    CAPTURE(mode);
+    dsp::effect::Delay delay;
+    delay.SetParams(10.0, 0.5, 1.0, mode, 1000.0, 0.5, 0.0, true);
+
+    const size_t frames = 64;
+    std::vector<double> left(frames, 0.0), right(frames, 0.0);
+    right[0] = 1.0;
+    double* inputs[2] = {left.data(), right.data()};
+    auto** out = delay.Process(inputs, 2, frames);
+    double wet = 0.0;
+    for (size_t i = 1; i < frames; ++i)
+      wet += std::abs(out[0][i]) + std::abs(out[1][i]);
+    CHECK(wet > 0.1);
+  }
 }
 
 static std::vector<double> RunOktaverbSubMode(int subMode)

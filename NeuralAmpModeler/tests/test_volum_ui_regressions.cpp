@@ -1,11 +1,16 @@
-#include "third_party/doctest.h"
+﻿#include "third_party/doctest.h"
 #include "../config.h"
+#include "../VoLumSecondPress.h"
 #include "../VoLumTriptychLayout.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <regex>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -64,14 +69,25 @@ std::string ReadPluginSource()
 
 void RequireContains(const std::string& haystack, const char* needle)
 {
-  INFO(needle);
+  INFO(std::string(needle));
   REQUIRE(haystack.find(needle) != std::string::npos);
 }
 
 void RequireDoesNotContain(const std::string& haystack, const char* needle)
 {
-  INFO(needle);
+  INFO(std::string(needle));
   REQUIRE(haystack.find(needle) == std::string::npos);
+}
+
+std::string MemberFnUntilNext(const std::string& src, const char* signature)
+{
+  const auto start = src.find(signature);
+  REQUIRE(start != std::string::npos);
+  const auto sigEnd = src.find(')', start);
+  REQUIRE(sigEnd != std::string::npos);
+  const auto end = src.find(" NeuralAmpModeler::", sigEnd);
+  REQUIRE(end != std::string::npos);
+  return src.substr(start, end - start);
 }
 } // namespace
 
@@ -108,9 +124,94 @@ TEST_CASE("POST carries a fourth Chorus card wired to the Throat motif")
   RequireContains(motifs, "effect == EVoLumEffectFocus::CHORUS");
 }
 
+TEST_CASE("NAM fusion art draws the new figure and keeps the legacy one behind VOLUM_NAM_ART_LEGACY")
+{
+  const std::string motifs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMotifs.h");
+
+  // Both NAM cards route through the one switch, mirrored so the fingers meet at the seam.
+  RequireContains(motifs, "DrawNamFusionMotif(g, r, +1, dimmed);");
+  RequireContains(motifs, "DrawNamFusionMotif(g, r, -1, dimmed);");
+  RequireDoesNotContain(motifs, "DrawFusionFigure(g, r, +1, dimmed);");
+  RequireDoesNotContain(motifs, "DrawFusionFigure(g, r, -1, dimmed);");
+
+  // Unset draws the new figure; only exactly "1" brings the old one back.
+  RequireContains(motifs, "inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)");
+  RequireContains(motifs, "inline void DrawFusionFigureLegacy(IGraphics& g, const IRECT& r, int dir, bool dimmed)");
+  RequireContains(motifs, "ParseNamArtLegacy(std::getenv(\"VOLUM_NAM_ART_LEGACY\"))");
+  RequireContains(motifs, "return value && value[0] == '1' && value[1] == '\\0';");
+  const auto sw = motifs.find("inline void DrawNamFusionMotif(");
+  REQUIRE(sw != std::string::npos);
+  const std::string body = motifs.substr(sw, motifs.find("\n}", sw) - sw);
+  const auto legacyAt = body.find("DrawFusionFigureLegacy(g, r, dir, dimmed);");
+  const auto newAt = body.find("DrawFusionFigure(g, r, dir, dimmed);");
+  REQUIRE(body.find("if (legacy)") != std::string::npos);
+  REQUIRE(legacyAt != std::string::npos);
+  REQUIRE(newAt != std::string::npos);
+  REQUIRE(body.find("else", legacyAt) < newAt);
+}
+
+TEST_CASE("NAM fusion figure is drawn from one joint table that holds the fusion pose")
+{
+  // The owner rejected the v2 figure (upright, ballet kick, heart arms) as "dancing".
+  // Read the traced table back and check the stance, not just that it exists.
+  const std::string motifs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMotifs.h");
+  const auto tableAt = motifs.find("constexpr float kFusionPose[kFjCount][2] = {");
+  REQUIRE(tableAt != std::string::npos);
+  RequireContains(motifs, "Pt{seam - fd * (1.f - kFusionPose[j][0]) * bw, top + kFusionPose[j][1] * bh}");
+  std::smatch m;
+  REQUIRE(std::regex_search(motifs, m, std::regex(R"(kFusionAspect = ([0-9.]+)f)")));
+  const float aspect = std::stof(m[1].str());
+  REQUIRE(std::regex_search(motifs, m, std::regex(R"(kFusionHeadR = ([0-9.]+)f)")));
+  const float headR = std::stof(m[1].str());
+
+  const std::string table = motifs.substr(tableAt, motifs.find("};", tableAt) - tableAt);
+  std::map<std::string, std::pair<float, float>> joint;
+  const std::regex row(R"(\{([0-9.]+)f, ([0-9.]+)f\}, // (\w+))");
+  for (std::sregex_iterator it(table.begin(), table.end(), row), end; it != end; ++it)
+    joint[(*it)[3].str()] = {std::stof((*it)[1].str()), std::stof((*it)[2].str())};
+  REQUIRE(joint.size() == 22);
+  auto u = [&](const char* n) { return joint.at(n).first; };
+  auto v = [&](const char* n) { return joint.at(n).second; };
+  for (const auto& [name, uv] : joint)
+  {
+    CAPTURE(name);
+    CHECK(uv.first >= 0.f);
+    CHECK(uv.first <= 1.f);
+    CHECK(uv.second >= 0.f);
+    CHECK(uv.second <= 1.f);
+  }
+
+  // Two index-finger contacts on the seam: one over the head, one at chest height.
+  CHECK(u("tipTop") == 1.f);
+  CHECK(u("tipLow") == 1.f);
+  CHECK(v("tipTop") < v("head") - headR);
+  CHECK(v("tipLow") > v("head"));
+  CHECK(v("tipLow") < v("pelvis"));
+  // Outer arm arcs over the head; the inner elbow drops below the finger it points.
+  CHECK(v("elbowTop") < v("head") - headR);
+  CHECK(v("elbowLow") > v("tipLow"));
+  // Deep wide crouch: every heel and toe on the floor, hips low, the outer toe out
+  // at the far edge and the inner knee bent forward of its ankle.
+  for (const char* foot : {"heelOut", "toeOut", "heelIn", "toeIn"})
+  {
+    CAPTURE(foot);
+    CHECK(v(foot) > 0.95f);
+  }
+  CHECK(v("pelvis") > 0.55f);
+  CHECK(v("pelvis") < 0.7f);
+  CHECK(u("toeOut") < 0.05f);
+  CHECK(u("kneeIn") > u("ankleIn"));
+  CHECK(v("kneeOut") > v("pelvis"));
+  // Torso leans 35-50 degrees from vertical toward the partner, head dropped in past the neck.
+  const float lean = std::atan2((u("neck") - u("pelvis")) * aspect, v("pelvis") - v("neck")) * 57.2958f;
+  CHECK(lean > 35.f);
+  CHECK(lean < 50.f);
+  CHECK(u("head") > u("neck"));
+}
+
 TEST_CASE("Clear and close affordances stroke a cross instead of drawing U+00D7")
 {
-  // Josefin ships no U+00D7, so "×" renders as a tofu box. Every clear/close
+  // Josefin ships no U+00D7, so "Ã—" renders as a tofu box. Every clear/close
   // affordance must go through DrawCrossGlyph.
   const std::string helpers = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumColorHelpers.h");
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
@@ -162,7 +263,7 @@ TEST_CASE("Settings update notice self-gates so opening Settings cannot resurrec
   RequireContains(overlay, "return mAvailable && IControl::IsHit(x, y);");
   // An empty version must not render "Update available:  - What's new".
   RequireContains(overlay, "version.empty() ? \"Update available");
-  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version, notes);");
+  RequireContains(controls, "mUpdateNotice->SetUpdate(available, version, notes, checkError);");
   RequireDoesNotContain(controls, "mUpdateButton->Hide(!available);");
   // Auto-check state must be visible; IVToggleControl drew neither frame nor value here.
   RequireContains(overlay, "class VoLumSettingsCheckboxControl");
@@ -244,35 +345,42 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
   const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
 
   RequireContains(tabs, "class VoLumMidiChannelControl");
+  RequireContains(tabs, "class VoLumMidiRecallCcControl");
+  RequireContains(tabs, "\"Recall CC\"");
+  RequireContains(tabs, "Value is the program number.");
   RequireContains(tabs, "\"All channels\"");
   RequireContains(tabs, "MIDI calls this Omni.");
-  RequireContains(tabs, "class VoLumMidiSoundMapControl");
+  RequireContains(view, "class VoLumMidiFootswitchControl");
   RequireContains(controls, "void SetMidiChannel(int channel)");
+  RequireContains(controls, "void SetMidiRecallCc(int cc)");
   RequireContains(controls, "void SetMidiSoundMap(");
   RequireContains(layout, "settingsPage->SetMidiCallbacks([pPlugin](int channel)");
+  RequireContains(layout, "pPlugin->_VolumSetMidiRecallCc(cc)");
 
   // Both surfaces derive their rows from the same pure model helper.
-  RequireContains(tabs, "volum::BuildPlaySlots(factory, registry)");
+  RequireContains(view, "volum::BuildPlaySlots(factory, registry)");
   RequireContains(play, "volum::BuildPlaySlots(factory, registry)");
-  RequireContains(tabs, "volum::BuildSoundChoices(factory, registry)");
+  RequireContains(view, "volum::BuildSoundChoices(factory, registry)");
   RequireContains(play, "volum::BuildSoundChoices(factory, registry)");
 
-  // Both write through the same two plugin methods; the Settings tab keeps no
-  // copy of its own, and the panel is refilled from the live registry.
+  // Both write through the same plugin methods; the Settings tab keeps no copy
+  // of its own, and the panel is refilled from the live registry. The
+  // footswitch view has no insert: a switch's position is its program number.
   RequireContains(layout, "settingsPage->SetMidiSoundMapCallbacks(");
   RequireContains(layout, "settingsPage->SetMidiSoundMapSwap(");
-  RequireContains(layout, "settingsPage->SetMidiSoundMapInsert(");
+  RequireDoesNotContain(layout, "settingsPage->SetMidiSoundMapInsert(");
   RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
-  RequireContains(layout, "pPlugin->_VolumInsertPlaySound(from, before)");
   RequireContains(layout, "pPlugin->_VolumAssignPlaySound(slot, sound)");
   RequireContains(layout, "pPlugin->_VolumClearPlaySound(slot)");
-  RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg())");
+  RequireContains(presets, "page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(),");
   RequireDoesNotContain(tabs, "midiSoundMap =");
+  RequireDoesNotContain(view, "midiSoundMap =");
 
   // The pre-1.3.0 duplicate-list control is still gone; this is a new one.
   RequireDoesNotContain(overlay, "VoLumMidiSettingsControl");
@@ -302,53 +410,61 @@ TEST_CASE("The Settings MIDI tab says program numbers, and never calls a Sound r
   RequireDoesNotContain(tabs, "\"Ch \"");
 
   const auto midiClass = tabs.find("class VoLumMidiChannelControl");
-  const auto midiEnd = tabs.find("class VoLumMidiSoundMapControl");
+  const auto midiEnd = tabs.find("class VoLumMidiRecallCcControl");
   REQUIRE(midiClass != std::string::npos);
   REQUIRE(midiEnd != std::string::npos);
   const std::string midiBody = tabs.substr(midiClass, midiEnd - midiClass);
   RequireContains(midiBody, "DrawVoLumSegmentSwitch(");
   RequireDoesNotContain(midiBody, "AmberPicker");
   RequireContains(controls, "DrawVoLumSegmentSwitch(");
-  RequireContains(controls, "ReduceFromTop(92.f)");
+  RequireContains(controls, "ReduceFromTop(134.f)");
 
+  // The footswitch view names its numbers the same way: program numbers on
+  // banks of switches, never "PC" and never a channel.
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h")
+                           + ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
   RequireContains(controls, "\"What each program number plays\"");
-  RequireContains(tabs, "\"PROGRAM\"");
-  RequireContains(tabs, "\"PROGRAM NUMBER\"");
-  RequireContains(tabs, "Sound for program number ");
-  RequireContains(tabs, "your footswitch calls it up by its program number");
-  RequireDoesNotContain(tabs, "\"PC\"");
-  RequireDoesNotContain(tabs, "Sound for Program Change ");
+  RequireContains(view, "\"Program numbers \"");
+  RequireContains(view, "\"BANK\"");
+  RequireContains(view, "Sound for program number ");
+  RequireContains(view, "Click a switch to give its program number a Sound.");
+  RequireDoesNotContain(view, "\"PC\"");
+  RequireDoesNotContain(view, "\"PC ");
+  RequireDoesNotContain(view, "hannel");
+  RequireDoesNotContain(view, "Sound for Program Change ");
 }
 
-TEST_CASE("Settings edits a program number through swap, so no edit can drop a Sound")
+TEST_CASE("Settings moves a Sound between program numbers only through swap, so no edit can drop a Sound")
 {
-  // Settings is not the performance surface, so the number is an editable field.
-  // Retyping it routes through SwapMidiSoundSlots: moving onto a free number is a
-  // move, onto an occupied one an exchange. Row drag matches PLAY: drop-on swaps,
-  // drop-between inserts among the assigned PCs.
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  // The footswitch view replaced the retype-the-number field: a switch's
+  // position is its program number, so moving a Sound is dragging its switch.
+  // Every drop routes through SwapMidiSoundSlots: onto a free number it is a
+  // move, onto an occupied one an exchange. Clicking a switch opens the Sound
+  // picker for that number directly; there is no separate number step.
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
 
-  RequireContains(tabs, "OpenNumberStep(FirstFreeSlot())");
-  RequireContains(tabs, "BeginNumberEntry(kTextAddStep");
-  RequireContains(tabs, "\"Choose Sound\"");
-  RequireContains(tabs, "OpenPicker(mNumberDraft)");
-  RequireContains(tabs, " already plays ");
-
-  RequireContains(tabs, "BeginNumberEntry(kTextRenumber");
-  RequireContains(tabs, "mSwap(slot, number)");
-  RequireContains(tabs, "const int destSlot = mSlots[static_cast<size_t>(mDropRow)].slot");
-  RequireContains(tabs, "mSwap(fromSlot, destSlot)");
-  RequireContains(tabs, "void SetSwapCallback(SwapCallback swap)");
-  RequireContains(tabs, "void SetInsertCallback(InsertCallback insert)");
-  RequireContains(tabs, "CommitMidiDrop(");
-  RequireContains(tabs, "DrawMidiDrop(");
+  RequireContains(view, "OpenPicker(from);");
+  RequireContains(view, "void SetSwapCallback(SwapCallback swap)");
+  RequireContains(view, "volum::footswitch::DecideDrop(from, to, SlotAt(from) != nullptr, SlotAt(to) != nullptr)");
+  RequireContains(view, "if (action != volum::footswitch::DropAction::None && mSwap)");
+  RequireContains(view, "mSwap(from, to);");
+  RequireContains(view, "void DrawDragGhost(IGraphics& g)");
   RequireContains(layout, "pPlugin->_VolumSwapPlaySounds(a, b)");
-  RequireContains(layout, "pPlugin->_VolumInsertPlaySound(from, before)");
+  RequireDoesNotContain(view, "InsertCallback");
+  RequireDoesNotContain(view, "ParseNumericEntry");
 
-  RequireContains(tabs, "volum::ParseNumericEntry(str, parsed)");
-  RequireContains(tabs, "kNoValIdx");
-  RequireContains(tabs, "volum::scroll::Interaction");
+  // A drag can page: arrows once per entry, pips straight to their bank.
+  RequireContains(view, "if (mDragPageKind != hit.kind)");
+  const auto track = view.find("void UpdateDragTarget(float x, float y)");
+  REQUIRE(track != std::string::npos);
+  const auto pip = view.find("if (hit.kind == volum::footswitch::HitKind::Pip)", track);
+  REQUIRE(pip != std::string::npos);
+  CHECK(view.find("SetBank(hit.index);", pip) - pip < 80);
+  // The picker a switch opens is the shared, scrollable Sound list.
+  const std::string picker = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
+  RequireContains(view, "VoLumSoundPickerPanel mPicker;");
+  RequireContains(picker, "volum::scroll::Interaction");
 }
 
 TEST_CASE("The SYSTEM tab's Content library row opens the live Pack modal")
@@ -656,6 +772,33 @@ TEST_CASE("Dual amp pan knobs only show in AMP view")
   RequireContains(source, "c->Hide(!showPanKnobs);");
   RequireContains(source, "Pan the SUPPORT amp lane.");
   RequireContains(source, "Pan the MAIN amp lane.");
+
+  // The SUPPORT lane's own overlays additionally need an amp to belong to. An
+  // ungated PAN knob covered the empty lane's title strip - the exact 24x24 the
+  // "Choose support amp" call to action is drawn in - and swallowed the clicks
+  // meant to fill the lane, while dragging pan for an amp that did not exist.
+  RequireContains(source, "const bool showSupportLaneControls = showPanKnobs && _VolumHasSupportAmp();");
+  const auto supportKnob = source.find("ForControlInGroup(\"SUPPORT_PAN_KNOB\"");
+  REQUIRE(supportKnob != std::string::npos);
+  const auto supportKnobEnd = source.find("});", supportKnob);
+  REQUIRE(supportKnobEnd != std::string::npos);
+  RequireContains(source.substr(supportKnob, supportKnobEnd - supportKnob), "c->Hide(!showSupportLaneControls);");
+}
+
+TEST_CASE("The PRE NAM card routes its click through the shared capture-card protocol")
+{
+  // The decision itself is covered in test_volum_pre_pedal_captures.cpp. This
+  // only pins that the control actually asks - a correct protocol nobody calls
+  // is exactly how the empty SUPPORT lane shipped.
+  const std::string card = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
+  RequireContains(card, "volum::DecideCaptureCardClick(mIsFocused, captureIdx > volum::kPreCaptureEmptyIndex)");
+  // Focus before open, or the layout rebuild the focus callback triggers hides
+  // the menu that was just opened.
+  const auto focusCall = card.find("action == volum::CaptureCardClick::FocusThenOpenPicker && mCallback");
+  const auto openCall = card.find("plugin->_VolumShowPreCaptureMenu(captureSlot, mRECT);");
+  REQUIRE(focusCall != std::string::npos);
+  REQUIRE(openCall != std::string::npos);
+  CHECK(focusCall < openCall);
 }
 
 TEST_CASE("Keyboard channel navigation routes through the focused lane's stepper callback")
@@ -735,8 +878,23 @@ TEST_CASE("Keyboard accessibility layer keeps section and target shortcuts")
   RequireContains(source, "SelectAdjacentFromList(this, kMainAmpMonoParams");
   RequireContains(source, "SelectAdjacentFromList(this, kMainAmpDualParams");
   RequireContains(source, "SelectAdjacentFromList(this, kSupportAmpParams");
+  RequireContains(source, "RememberedOrFirst(kDelaySyncedParams, remembered)");
+  RequireContains(source, "RememberedOrFirst(kTremoloSyncedParams, remembered)");
+  RequireContains(source, "volum::keyboard::RouteKey(stack, kind)");
+  RequireContains(source, "SelectedKnobConsumesKind(");
+  RequireContains(source, "As<VoLumTunerControl>()->Dismiss()");
+  RequireContains(source, "As<VoLumMetronomeControl>()->Dismiss()");
+  RequireContains(source, "SetActive(mMetronomeDSP.IsActive())");
+  RequireContains(source, "DisabledPointerPolicy::kMouseOverWhenDisabled");
+  RequireContains(source, "DisabledPointerPolicy::kMouseEventsWhenDisabled");
+  RequireDoesNotContain(source, "SetMouseEventsWhenDisabled(true)");
   RequireContains(header, "kMainAmpPan");
   RequireContains(header, "kSupportAmpPan");
+  RequireContains(header, "kDelaySyncedParams");
+  RequireContains(header, "kTremoloSyncedParams");
+  RequireContains(header, "kTremoloHarmonicSyncedParams");
+  RequireContains(header, "enum class KeyConsumer");
+  RequireContains(header, "inline KeyConsumer RouteKey(");
   RequireContains(controls, "volum::keyboard::StepForParam(GetParamIdx(), fine)");
   RequireContains(controls, "if (!mKeyboardSelected)");
   RequireContains(controls, "return Nudge(false, key.S);");
@@ -775,8 +933,9 @@ TEST_CASE("Support hero label remains centered with polarity glyph")
   RequireContains(hero, "Switch to Dual Amp");
   // The lane title is ellipsized to the strip width before drawing (long custom
   // amp names must not bleed past their lane).
-  RequireContains(hero, "FitTextToWidth(g, nameText, name, titleStrip.W()");
-  RequireContains(hero, "g.DrawText(nameText, fitted.c_str(), titleStrip);");
+  RequireContains(hero, "titleStrip.R - kPanKnobSize - 4.f");
+  RequireContains(hero, "FitTextToWidth(g, nameText, name, nameR.W() - 6.f)");
+  RequireContains(hero, "g.DrawText(nameText, fitted.c_str(), nameR);");
   RequireDoesNotContain(hero, "titleStrip.R - 34.f");
 }
 
@@ -1441,13 +1600,18 @@ TEST_CASE("VoLum NAM loaders are owned and publish through DSP staging")
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
   const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
 
-  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(pathPair, irPath);");
-  RequireContains(source, "volum::dsp_staging::CommitStagedPathOnApply(mNAMPaths);");
-  RequireContains(source, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, modelPath);");
+  RequireContains(
+    source, "volum::dsp_staging::CopyPathNoAlloc(pendingPath, volum::dsp_staging::kRtPathCapacity, irPath.Get());");
+  RequireContains(source, "volum::dsp_staging::ApplyPublishedPath(lane.action, lane.text, lane.paths);");
+  RequireContains(
+    source,
+    "volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, modelPath.Get());");
   RequireContains(source, "_VolumProcessMainAmpChain");
   RequireContains(source, "_VolumProcessDualAmpSupportLane");
   RequireContains(loader, "std::lock_guard<std::mutex> lock(mStagingMutex);");
-  RequireContains(loader, "volum::dsp_staging::StagePathOnSuccess(mNAMPaths, result.path.c_str());");
+  RequireContains(
+    loader,
+    "volum::dsp_staging::CopyPathNoAlloc(mPendingNamPath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());");
   RequireContains(header, "volum::dsp_staging::WdlStagedPathPair mNAMPaths;");
   RequireContains(header, "void _VolumDropQueuedLoadRequests(Pred pred)");
   RequireDoesNotContain(source, ".detach()");
@@ -1752,7 +1916,7 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   RequireContains(overlay, "std::string RowIdAt(int idx) const");
   RequireContains(overlay, "int RowIndexById(const std::string& id) const");
   // Both destructive confirmations resolve at confirm time and bail out by name.
-  RequireContains(overlay, "const int now = id.empty() ? idx : RowIndexById(id);");
+  RequireContains(overlay, "const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));");
   RequireContains(overlay, "is no longer in your library.");
   RequireContains(overlay, "ApplyDelete(now);");
   RequireContains(overlay, "mOverwritePreset(now);");
@@ -1765,7 +1929,8 @@ TEST_CASE("Destructive confirmations act on the item they named, not on a row nu
   // time the user is typing - so it has the widest window for another editor to
   // shift the rows underneath it.
   RequireContains(overlay, "mRenameId = RowIdAt(mSel);");
-  RequireContains(overlay, "const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);");
+  RequireContains(
+    overlay, "const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));");
   RequireContains(overlay, "ApplyRename(target, s);");
   RequireContains(overlay, "NameTaken(s, target)");
   RequireDoesNotContain(overlay, "ApplyRename(mSel, s);");
@@ -1918,16 +2083,29 @@ TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invali
   // conditioned on which lane is focused. A clamp that only flipped the flag left the
   // row describing SUPPORT while MAIN was focused - the exact state that guard exists
   // to prevent - and a click on a cab then edited MAIN with an index belonging to the
-  // support amp's layout.
+  // support amp's layout. The decision lives in CommitFocus; clamp installs it.
   const std::string source = ReadPluginSource();
 
-  const auto clamp = source.find("void NeuralAmpModeler::_VolumClampSupportFocus()");
-  REQUIRE(clamp != std::string::npos);
-  const auto clampEnd = source.find("\n}", clamp);
-  REQUIRE(clampEnd != std::string::npos);
-  const std::string body = source.substr(clamp, clampEnd - clamp);
-  RequireContains(body, "mVolumDualAmpFocusedSupport = false;");
+  // The clamp is shared with the hero's click protocol. Both used to be written
+  // separately and disagreed - the hero demanded SUPPORT focus before it would
+  // open the picker, this refused focus to a lane with no amp, and the empty
+  // lane became unfillable (v1.2.3). Behaviour lives in VoLumDualAmpInput.h now
+  // so one test can drive the whole round trip (test_volum_dual_amp_input.cpp).
+  // The clamp installs its verdict through CommitFocus, which calls
+  // ClampSupportFocus and additionally reports whether the shared cab row has to
+  // be re-derived - focus and that rederive travel together so a path cannot
+  // take one without the other.
+  const std::string body = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumClampSupportFocus(");
+  RequireContains(body, "volum::dualamp::CommitFocus(");
+  RequireContains(body, "volum::dualamp::ApplyFocusCommit(");
   RequireContains(body, "_VolumApplyFocusedLaneCabs();");
+
+  // The hero must not re-derive the protocol locally; that divergence is the bug.
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+  RequireContains(hero, "volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf)");
+  // Both platforms deliver the second click of a fast double-click as
+  // OnMouseDblClick, so a two-click protocol is unreachable without this.
+  RequireContains(hero, "mDblAsSingleClick = true;");
 
   // A lane whose amp the library no longer contains is not a lane either: a custom
   // support amp deleted from another instance left a stale index behind.
@@ -1959,7 +2137,13 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   RequireContains(source, "if (!prepared)");
   RequireContains(source, "return \"Save failed: \" + prepared.error;");
   RequireContains(source, "mVolumMainLoadFailed.store(true);");
-  RequireContains(source, "if (superseded)");
+  // A load the user has already moved on from must not be applied as if it were
+  // the one they asked for. The drain used to spell that `if (superseded)`; it now
+  // feeds the same fact into the shared decision so the retire-vs-apply choice is
+  // testable off the audio thread (test_volum_dsp_staging.cpp).
+  RequireContains(source, "superseded = true;");
+  RequireContains(source, "volum::dsp_staging::DecideLoaderResult(");
+  RequireContains(source, "result.model != nullptr, superseded,");
   RequireContains(source, "LOAD FAILED");
   RequireContains(source, "(still playing ");
   // Keep every WDL/iPlug path string UTF-8 all the way to the native filesystem
@@ -2083,6 +2267,11 @@ TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
 
   const std::string drainBody = loader.substr(drain, loaderMain - drain);
   RequireDoesNotContain(drainBody, "VOLUM_LOG");
+  // T1-2: a stale-rate result used to ResetAndPrewarm on this thread. The helper
+  // decides RetireAndReload; the drain must not call Reset itself.
+  RequireDoesNotContain(drainBody, "->Reset(");
+  RequireContains(drainBody, "DecideLoaderResult");
+  RequireContains(drainBody, "RetireToGraveyard");
 
   // The outcomes are still logged, just from the worker thread that produced them -
   // and worded for what that thread actually knows. It has read and parsed the file;
@@ -2094,6 +2283,108 @@ TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
   RequireContains(loaderBody, "\" load FAILED \"");
 }
 
+TEST_CASE("Audio-thread model apply retires to the graveyard and never throws")
+{
+  // NeuralAmpModeler cannot be constructed in this binary (iPlug). The helpers in
+  // test_volum_dsp_staging.cpp and test_process_io.cpp own the behaviour, and
+  // test_volum_golden_render.cpp renders through ResamplingNAM; these pins are
+  // only the call sites.
+  const std::string source = ReadPluginSource();
+  const std::string pluginHeader = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  RequireContains(pluginHeader, "#include \"VoLumResamplingNam.h\"");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumResamplingNam.h");
+
+  const auto apply = source.find("void NeuralAmpModeler::_ApplyDSPStaging()");
+  REQUIRE(apply != std::string::npos);
+  const auto applyEnd = source.find("void NeuralAmpModeler::_VolumFlushDeferredIrShaping()", apply);
+  REQUIRE(applyEnd != std::string::npos);
+  const std::string applyBody = source.substr(apply, applyEnd - apply);
+  RequireContains(applyBody, "PublishStagedModel");
+  RequireContains(applyBody, "PublishPathNoAlloc(mPublishedNamPath, mPendingNamPath)");
+  RequireDoesNotContain(applyBody, "CommitStagedPathOnApply(mNAMPaths)");
+
+  // 1.3.0 hardening: IRs follow the same rules. The apply used to free the outgoing
+  // convolver (`mIR = std::move(mStagedIR)`, `mIR = nullptr`) and copy or clear the
+  // WDL_String paths in the callback. The helpers are unit-tested in
+  // test_volum_dsp_staging.cpp; these are the call sites.
+  RequireContains(applyBody, "PublishStagedModel(mIR, mStagedIR, mIrGraveyard)");
+  RequireContains(applyBody, "PublishStagedModel(mSupportIR, mStagedSupportIR, mIrGraveyard)");
+  RequireContains(applyBody, "RetireLiveAndStaged(mIR, mStagedIR, mIrGraveyard)");
+  RequireContains(applyBody, "RetireLiveAndStaged(mSupportIR, mStagedSupportIR, mIrGraveyard)");
+  RequireContains(applyBody, "PublishPathNoAlloc(mPublishedIRPath, mPendingIRPath)");
+  RequireContains(applyBody, "PublishPathNoAlloc(mPublishedSupportIRPath, mPendingSupportIRPath)");
+  RequireContains(applyBody, "PublishPathClearNoAlloc(mPublishedIRPath)");
+  RequireContains(applyBody, "PublishPathClearNoAlloc(mPublishedSupportIRPath)");
+  RequireContains(applyBody, "PublishPathClearNoAlloc(mPublishedNamPath)");
+  RequireDoesNotContain(applyBody, "mIR = ");
+  RequireDoesNotContain(applyBody, "mSupportIR = ");
+  RequireDoesNotContain(applyBody, "mStagedIR = ");
+  RequireDoesNotContain(applyBody, "mStagedSupportIR = ");
+  RequireDoesNotContain(applyBody, "CommitStagedPathOnApply");
+  RequireDoesNotContain(applyBody, "ClearLiveAndStagedPath");
+  RequireContains(source, "mIrGraveyard.reserve(volum::dsp_staging::kDspGraveyardCapacity);");
+
+  // OnIdle reaps both graveyards and the drained loader batches, and commits all
+  // three published paths.
+  const std::string reap = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReapAudioThreadRetirees()");
+  RequireContains(reap, "doomedIrs.swap(mIrGraveyard);");
+  RequireContains(reap, "doomed.swap(mDspGraveyard);");
+  RequireContains(reap, "doomedResults.swap(mVolumSpentLoadResults);");
+  RequireContains(reap, "{mPublishedNamPath, mNAMPaths, {}}");
+  RequireContains(reap, "{mPublishedIRPath, mIRPaths, {}}");
+  RequireContains(reap, "{mPublishedSupportIRPath, mSupportIRPaths, {}}");
+  RequireContains(MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()"), "_VolumReapAudioThreadRetirees();");
+
+  // _StageIR / _StageModel destroy what they replace after dropping mStagingMutex.
+  const std::string stageIr = MemberFnUntilNext(source, "dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(");
+  RequireContains(stageIr, "replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, std::move(stagedIR));");
+  RequireContains(stageIr, "replacedIR = volum::dsp_staging::ReplaceStaged(stagedSlot, nullptr);");
+  RequireDoesNotContain(stageIr, "stagedSlot = std::move");
+  RequireDoesNotContain(stageIr, "stagedSlot = nullptr");
+  RequireDoesNotContain(stageIr, "StagePathOnSuccess");
+  RequireDoesNotContain(stageIr, "ClearStagedPath");
+  const std::string stageModel = MemberFnUntilNext(source, "std::string NeuralAmpModeler::_StageModel(");
+  RequireContains(stageModel, "replacedModel = volum::dsp_staging::ReplaceStaged(mStagedModel, nullptr);");
+  RequireDoesNotContain(stageModel, "mStagedModel = nullptr");
+  RequireDoesNotContain(stageModel, "StagePathOnSuccess");
+
+  // The drained batch is handed to OnIdle, never a local that dies in the callback.
+  const std::string loaderSource = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  const std::string drain = MemberFnUntilNext(loaderSource, "void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  RequireDoesNotContain(drain, "std::deque<VoLumLoadResult> results;");
+  RequireContains(drain, "auto& results = mVolumDrainBatch;");
+  size_t handOffs = 0;
+  for (auto at = drain.find("HandOffSpentBatch("); at != std::string::npos;
+       at = drain.find("HandOffSpentBatch(", at + 1))
+    ++handOffs;
+  CHECK(handOffs == 2); // the parked retry and the end of every drain
+
+  // No Reset in the ResamplingNAM constructor: it prewarmed the Full slice of
+  // every Lite load (behaviour pinned in test_volum_dsp_staging.cpp).
+  const auto ctor = header.find("ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated");
+  REQUIRE(ctor != std::string::npos);
+  const auto ctorEnd = header.find("~ResamplingNAM()", ctor);
+  REQUIRE(ctorEnd != std::string::npos);
+  RequireDoesNotContain(header.substr(ctor, ctorEnd - ctor), "Reset(");
+
+  const auto process = header.find("void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)");
+  REQUIRE(process != std::string::npos);
+  const auto processEnd =
+    header.find("void process(NAM_SAMPLE* input, NAM_SAMPLE* output, const int num_frames)", process);
+  REQUIRE(processEnd != std::string::npos);
+  const std::string processBody = header.substr(process, processEnd - process);
+  RequireContains(processBody, "ProcessNamInChunks");
+  RequireDoesNotContain(processBody, "throw std::runtime_error");
+
+  // Every NAM Reset goes through NamResetBlockSize. The 8192 scratch reserve on
+  // a NAM is the 1.3.0 crackle (see test_volum_realtime_budget.cpp).
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  RequireDoesNotContain(loader, "ReservedAudioBlockSize");
+  RequireContains(loader, "request.blockSize = volum::dsp_staging::NamResetBlockSize(GetBlockSize());");
+  RequireContains(source, "_ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));");
+  RequireContains(source, "temp->Reset(GetSampleRate(), volum::dsp_staging::NamResetBlockSize(GetBlockSize()));");
+}
+
 TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay muted")
 {
   // An active tuner memsets every output channel (silenceForTuner in
@@ -2102,19 +2393,835 @@ TEST_CASE("Closing the editor deactivates the tuner so the instance cannot stay 
   // control's dismiss action -- both require an editor. Closing the plugin window
   // with the tuner open therefore silenced the instance for good, invisibly: the
   // editor is rebuilt with the tuner hidden, so reopening showed a normal UI over
-  // a dead signal path.
+  // a dead signal path. The metronome click is the sibling: same editor-owned
+  // DSP, same OnUIClose, one helper so the second copy cannot be forgotten.
   const std::string source = ReadPluginSource();
 
   const auto onUIClose = source.find("void NeuralAmpModeler::OnUIClose()");
   REQUIRE(onUIClose != std::string::npos);
-  const auto body = source.substr(onUIClose, 700);
+  const auto body = source.substr(onUIClose, 900);
 
-  // The deactivation has to live in OnUIClose itself, not merely somewhere in the
-  // translation unit.
-  RequireContains(body, "mTunerDSP.SetActive(false);");
+  RequireContains(body, "HaltEditorOwnedOverlayDsp(");
+  RequireContains(body, "mTunerDSP");
+  RequireContains(body, "mMetronomeDSP");
 
   // Pin the two facts that make the above load-bearing, so this test keeps
   // failing for the right reason if either moves.
   RequireContains(source, "processingPlan.silenceForTuner");
   RequireContains(source, "mTunerDSP.IsActive()");
+}
+
+TEST_CASE("Keyboard Dual Amp focus commits through the shared cab-row helper")
+{
+  // Tab, the `2` key, and the Dual-on key used to assign mVolumDualAmpFocusedSupport
+  // and rebuild layout without re-deriving the shared cab row. Knobs followed the
+  // new lane; a cab click then wrote that lane using the other lane's names.
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+
+  const std::string cycle = MemberFnUntilNext(keyboard, "bool NeuralAmpModeler::_CycleVoLumKeyboardTarget(");
+  RequireContains(cycle, "volum::dualamp::CommitFocus(");
+  RequireContains(cycle, "volum::dualamp::ApplyFocusCommit(");
+  RequireContains(cycle, "_VolumApplyFocusedLaneCabs();");
+
+  const std::string section = MemberFnUntilNext(keyboard, "bool NeuralAmpModeler::_SwitchVoLumKeyboardSection(");
+  RequireContains(section, "volum::dualamp::CommitFocus(");
+  RequireContains(section, "volum::dualamp::ApplyFocusCommit(");
+  RequireContains(section, "_VolumApplyFocusedLaneCabs();");
+
+  const std::string toggle = MemberFnUntilNext(keyboard, "bool NeuralAmpModeler::_ToggleVoLumKeyboardTarget(");
+  RequireContains(toggle, "volum::dualamp::CommitFocus(");
+  RequireContains(toggle, "volum::dualamp::ApplyFocusCommit(");
+  RequireContains(toggle, "_VolumApplyFocusedLaneCabs();");
+}
+
+TEST_CASE("Custom sidebar selection re-derives the focused lane's cab row")
+{
+  // _VolumApplyAmpSettings claims every caller ends in _VolumApplyFocusedLaneCabs.
+  // The custom sidebar path called _VolumApplyCustomMainCabs(Y) with MAIN, so a
+  // SUPPORT-focused click left the previous partner's names on the shared row.
+  const std::string select = MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::_VolumSelectCustomAmp(");
+  RequireContains(select, "_VolumApplyCustomMainCabs(customIdx);");
+
+  // The headless early-return also calls ApplyCustomMainCabs (a no-op without UI).
+  // The focused-lane rederive has to run on the UI path after that return, or a
+  // SUPPORT-focused sidebar click still leaves the previous partner on the row.
+  const auto noUi = select.find("if (!pGfx)");
+  REQUIRE(noUi != std::string::npos);
+  const auto noUiReturn = select.find("return;", noUi);
+  REQUIRE(noUiReturn != std::string::npos);
+  REQUIRE(select.find("_VolumApplyFocusedLaneCabs();", noUiReturn) != std::string::npos);
+}
+
+TEST_CASE("Hero lane clicks ask the shared Dual Amp click protocol")
+{
+  // The protocol itself, including the empty-lane behaviour that #29 was about,
+  // is covered in test_volum_dual_amp_input.cpp. This only pins that the control
+  // asks: a correct protocol nobody calls is how that bug shipped.
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+  RequireContains(hero, "volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf)");
+  RequireContains(hero, "mDblAsSingleClick = true;");
+}
+
+TEST_CASE("Polarity writes the active scene, not the parked factory slot")
+{
+  // While a custom MAIN is focused, mVolumAmpIdx still names the parked factory
+  // amp. The glyph and Dual-on heal used to write that slot; returning to the
+  // factory amp restored a polarity it never had. The save path already writes
+  // _VolumActiveScene().
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "_VolumActiveScene().supportPolarityInvert");
+  RequireDoesNotContain(source, "mVolumAmpSettings[mVolumAmpIdx].supportPolarityInvert");
+}
+
+TEST_CASE("tier2a ProcessBlock keeps denormals off through the safety clip")
+{
+  const std::string source = ReadPluginSource();
+  const auto pb = source.find("void NeuralAmpModeler::ProcessBlock(");
+  REQUIRE(pb != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::OnReset()", pb);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(pb, end - pb);
+  const auto safety = body.rfind("SoftSafetyClip");
+  const auto restore = body.rfind("feupdateenv");
+  REQUIRE(safety != std::string::npos);
+  REQUIRE(restore != std::string::npos);
+  CHECK(restore > safety);
+}
+
+TEST_CASE("tier2a tuner mute leaves the metronome click on the bus")
+{
+  const std::string source = ReadPluginSource();
+  const auto pb = source.find("void NeuralAmpModeler::ProcessBlock(");
+  REQUIRE(pb != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::OnReset()", pb);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(pb, end - pb);
+  const auto tuner = body.find("silenceForTuner");
+  const auto metro = body.find("mMetronomeDSP.Process");
+  REQUIRE(tuner != std::string::npos);
+  REQUIRE(metro != std::string::npos);
+  CHECK(tuner < metro);
+}
+
+TEST_CASE("tier2a PRE pitch and compressor reset on the bypass edge")
+{
+  const std::string source = ReadPluginSource();
+  const auto pre = source.find("NeuralAmpModeler::_VolumProcessPreChain(");
+  REQUIRE(pre != std::string::npos);
+  const auto end = source.find("NeuralAmpModeler::_VolumProcessMainAmpChain(", pre);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(pre, end - pre);
+  RequireContains(body, "mPitch.Reset()");
+  RequireContains(body, "mPreCompressor.Reset()");
+}
+
+TEST_CASE("tier2a model apply latches latency instead of updating it on the audio thread")
+{
+  const std::string source = ReadPluginSource();
+  const auto apply = source.find("void NeuralAmpModeler::_ApplyDSPStaging()");
+  REQUIRE(apply != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::_VolumFlushDeferredIrShaping()", apply);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(apply, end - apply);
+  RequireDoesNotContain(body, "_UpdateLatency()");
+  RequireContains(body, "mLatencyDirty");
+}
+
+TEST_CASE("tier2a loader drain does not block on the loader mutex")
+{
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  const auto drain = loader.find("void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  REQUIRE(drain != std::string::npos);
+  const auto next = loader.find("void NeuralAmpModeler::_VolumLoaderThreadMain()", drain);
+  REQUIRE(next != std::string::npos);
+  const std::string body = loader.substr(drain, next - drain);
+  RequireContains(body, "try_to_lock");
+  RequireContains(body, "superseded = true;");
+  RequireDoesNotContain(body, "lock_guard<std::mutex> lock(mVolumLoaderMutex)");
+}
+
+TEST_CASE("tier2a OnReset reserves the dual-amp latency line")
+{
+  const std::string source = ReadPluginSource();
+  const auto reset = source.find("void NeuralAmpModeler::OnReset()");
+  REQUIRE(reset != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::ProcessMidiMsg(", reset);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(reset, end - reset);
+  RequireContains(body, "mDualMainLatencyDelay.Reserve(");
+  RequireContains(body, "mDualSupportLatencyDelay.Reserve(");
+}
+
+TEST_CASE("tier2b a missing IR id is cleared on the scene that recalled it")
+{
+  const std::string source = ReadPluginSource();
+  const std::string body = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyActiveIr(");
+  const auto missing = body.find("if (idx < 0)");
+  REQUIRE(missing != std::string::npos);
+  const std::string branch = body.substr(missing);
+  RequireContains(branch, "_VolumActiveScene().activeIrId.clear();");
+  RequireContains(branch, "_VolumActiveScene().supportActiveIrId.clear();");
+}
+
+TEST_CASE("tier2b sidebar delete tells the user when the library write fails")
+{
+  const std::string build = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto fail = build.find("if (volum::custom::Store().TakeWriteFailure())");
+  REQUIRE(fail != std::string::npos);
+  const std::string branch = build.substr(fail, 700);
+  RequireContains(branch, "_ShowMessageBox(");
+  RequireContains(branch, "Your library could not be saved - this change will be lost.");
+}
+
+TEST_CASE("tier2b opening the window shows a corrupt-library recovery")
+{
+  const std::string source = ReadPluginSource();
+  const auto open = source.find("void NeuralAmpModeler::OnUIOpen()");
+  REQUIRE(open != std::string::npos);
+  const auto end = source.find("void NeuralAmpModeler::", open + 10);
+  REQUIRE(end != std::string::npos);
+  const std::string body = source.substr(open, end - open);
+  RequireContains(body, "TakeCorruptRecoveryNotice()");
+  RequireContains(body, "mVolumPendingLibraryNotice = std::move(notice);");
+  // OnUIOpen runs before the standalone window is shown; the box appeared alone.
+  RequireDoesNotContain(body, "_ShowMessageBox(");
+
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  const auto take = idle.find("std::move(mVolumPendingLibraryNotice)");
+  REQUIRE(take != std::string::npos);
+  const auto show = idle.find("_ShowMessageBox(gfx, notice.c_str(), \"VoLum\", EMsgBoxType::kMB_OK)", take);
+  REQUIRE(show != std::string::npos);
+  CHECK(idle.find("mVolumPendingLibraryNotice.clear();", take) < show);
+}
+
+TEST_CASE("tier2b preset rename uniqueness uses this overlay's owner")
+{
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto start = overlay.find("bool NameTaken(");
+  REQUIRE(start != std::string::npos);
+  const auto end = overlay.find("void SetNameError(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = overlay.substr(start, end - start);
+  RequireContains(body, "PresetsForOwner(PresetOwnerKey())");
+  RequireDoesNotContain(body, "PresetNameExists");
+}
+
+TEST_CASE("tier2b editing an amp queues a delete for a capture the edit dropped")
+{
+  const std::string api = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomContentApi.h");
+  const auto start = api.find("inline int UpdateCustomAmp(");
+  REQUIRE(start != std::string::npos);
+  const auto end = api.find("inline int AddCustomAmp(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = api.substr(start, end - start);
+  RequireContains(body, "QueueStoredFileDelete(oldFile.storedPath)");
+}
+
+TEST_CASE("tier2c a plugin import preview names the MIDI map replace")
+{
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
+  const auto start = overlay.find("if (preview.writesSettings)");
+  REQUIRE(start != std::string::npos);
+  const std::string body = overlay.substr(start, 500);
+  RequireContains(body, "preview.replacesMidiSoundMap");
+  RequireContains(body, "\"MIDI slots\"");
+}
+
+TEST_CASE("tier2c a committed library reloads when the settings write fails")
+{
+  const std::string actions = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+  const auto start = actions.find("const auto result = volum::pack::ApplyPack(");
+  REQUIRE(start != std::string::npos);
+  const auto end = actions.find("return {};", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = actions.substr(start, end - start);
+  const auto committed = body.find("if (result.libraryCommitted)");
+  const auto failed = body.find("if (!result.ok)");
+  REQUIRE(committed != std::string::npos);
+  REQUIRE(failed != std::string::npos);
+  CHECK(committed < failed);
+  const std::string beforeError = body.substr(committed, failed - committed);
+  RequireContains(beforeError, "_VolumReloadReplacedLibraryIds(result.replacedIds)");
+}
+
+TEST_CASE("tier2d the PLAY rail accepts a drop on Add and in the row gap")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto drop = play.find("void UpdateDropTarget(");
+  REQUIRE(drop != std::string::npos);
+  const auto end = play.find("void CommitRailDrop(", drop);
+  REQUIRE(end != std::string::npos);
+  const std::string body = play.substr(drop, end - drop);
+  RequireContains(body, "row == kHoverAdd");
+  RequireContains(body, "within >= kRowH");
+}
+
+TEST_CASE("tier2d PLAY plates commit on mouse-up and a drag still reorders")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto up = play.find("void OnMouseUp(");
+  REQUIRE(up != std::string::npos);
+  const auto end = play.find("void OnMouseDblClick(", up);
+  REQUIRE(end != std::string::npos);
+  const std::string body = play.substr(up, end - up);
+  const auto drag = body.find("if (wasDrag)");
+  const auto clear = body.find("kPressClear");
+  REQUIRE(drag != std::string::npos);
+  REQUIRE(clear != std::string::npos);
+  CHECK(drag < clear);
+  RequireContains(body, "CommitRailDrop(pressSlot, x, y)");
+}
+
+TEST_CASE("tier2d PLAY SetData follows the pressed Sound and OnMouseOut cancels the gesture")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const auto data = play.find("void SetData(");
+  REQUIRE(data != std::string::npos);
+  const auto dataEnd = play.find("void OnRescale()", data);
+  REQUIRE(dataEnd != std::string::npos);
+  const std::string setBody = play.substr(data, dataEnd - data);
+  RequireContains(setBody, "mSlots[static_cast<size_t>(i)].slot == mPressSlot");
+  const auto firstOut = play.find("void OnMouseOut() override");
+  REQUIRE(firstOut != std::string::npos);
+  const auto out = play.find("void OnMouseOut() override", firstOut + 1);
+  REQUIRE(out != std::string::npos);
+  const std::string outBody = play.substr(out, 400);
+  RequireContains(outBody, "mDragging = false");
+  RequireContains(outBody, "mPressSlot = -1");
+}
+
+TEST_CASE("tier2d a full PLAY map opens the replace picker instead of doing nothing")
+{
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  RequireContains(play, "FirstFreeSlot() >= 0");
+  RequireContains(play, "void OpenReplacePicker()");
+  RequireContains(runtime, "OpenReplacePicker()");
+}
+
+TEST_CASE("tier2e Calibrated n/a disables that radio state")
+{
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto start = controls.find("void SetCalibratedDisable(");
+  REQUIRE(start != std::string::npos);
+  const auto end = controls.find("void OnMouseDown(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = controls.substr(start, end - start);
+  RequireContains(body, "SetStateDisabled(2, disable)");
+  // A bare Resize leaves Raw/Normalized holding garbage and the radio stuck.
+  RequireContains(body, "EnsureRadioDisabledStates(mDisabledState, mNumStates)");
+  RequireDoesNotContain(body, "mDisabledState.Resize(");
+  const std::string click = controls.substr(end, 280);
+  RequireContains(click, "GetStateDisabled(index)");
+}
+
+TEST_CASE("tier2e the disabled dBu field draws through the grey blend")
+{
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto start = controls.find("class InputLevelControl");
+  REQUIRE(start != std::string::npos);
+  const std::string body = controls.substr(start, 900);
+  RequireContains(body, "g.FillRect(VoLumColors::HERO_BG, mRECT, &mBlend)");
+}
+
+TEST_CASE("tier2e an empty MIDI map does not teach drag or clear")
+{
+  // The drag / clear lines are the default; an empty map swaps them for the one
+  // thing that can happen next.
+  const std::string view = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
+  const auto drag = view.find("Drag onto another to swap. The cross clears.");
+  REQUIRE(drag != std::string::npos);
+  const auto empty = view.find("else if (mSlots.empty())", drag);
+  REQUIRE(empty != std::string::npos);
+  CHECK(empty - drag < 900);
+  const auto emptyLine = view.find("Click a switch to give its program number a Sound.", empty);
+  REQUIRE(emptyLine != std::string::npos);
+  CHECK(emptyLine - empty < 200);
+  // No cross to hit on an empty switch.
+  RequireContains(view, "if (tileHover && assigned)");
+}
+
+TEST_CASE("tier2e Manage in a menu is teal and a clipped Manage row has no hotspot")
+{
+  const std::string menu = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumListMenu.h");
+  const auto draw = menu.find("const IColor col");
+  REQUIRE(draw != std::string::npos);
+  const std::string col = menu.substr(draw, 240);
+  RequireContains(col, "r.action ? VoLumColors::TEAL");
+  RequireDoesNotContain(col, "kManage");
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto manage = overlay.find("void DrawManage(");
+  REQUIRE(manage != std::string::npos);
+  const auto clamp = overlay.find("void ClampManageScroll(", manage);
+  REQUIRE(clamp != std::string::npos);
+  const std::string body = overlay.substr(manage, clamp - manage);
+  RequireContains(body, "const bool rowVisible");
+  const auto rename = overlay.find("case TextTarget::RenameItem:");
+  REQUIRE(rename != std::string::npos);
+  RequireContains(overlay.substr(rename, 700), "Enter a name.");
+  const auto visible = body.find("const bool rowVisible");
+  const auto hotspot = body.find("AddHotspot(row,", visible);
+  REQUIRE(hotspot != std::string::npos);
+  CHECK(body.find("if (rowVisible)", visible) < hotspot);
+}
+
+TEST_CASE("tier2e a failed update check does not stamp the 24 hour clock")
+{
+  const std::string inc = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUpdateCheck.inc.cpp");
+  const auto thread = inc.find("std::thread([result");
+  REQUIRE(thread != std::string::npos);
+  const auto get = inc.find("VolumHttpGetString", thread);
+  REQUIRE(get != std::string::npos);
+  const std::string before = inc.substr(thread, get - thread);
+  CHECK(before.find("lastCheckUtc") == std::string::npos);
+  RequireContains(inc, "CheckFailureNotice()");
+}
+
+TEST_CASE("tier2f chorus last-knob memory is inside the target array")
+{
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  RequireContains(header, "std::array<int, 10> mVolumLastKeyboardKnobByTarget");
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+  const auto read = keyboard.find("int NeuralAmpModeler::_RememberedVoLumKeyboardKnobForFocus()");
+  REQUIRE(read != std::string::npos);
+  const std::string body = keyboard.substr(read, 500);
+  RequireContains(body, "target < static_cast<int>(mVolumLastKeyboardKnobByTarget.size())");
+}
+
+TEST_CASE("tier2f keyboard POST lands on the same first pedal as the header")
+{
+  const std::string keyboard = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboard.inc.cpp");
+  const auto post = keyboard.find("case EVoLumSection::POST:");
+  REQUIRE(post != std::string::npos);
+  const std::string body = keyboard.substr(post, 700);
+  RequireContains(body, "kChorusActive");
+  RequireContains(body, "EVoLumEffectFocus::CHORUS");
+  CHECK(body.find("kChorusActive") < body.find("kDelayActive"));
+}
+
+TEST_CASE("tier2f post lock chrome includes chorus and tremolo")
+{
+  const std::string cpp = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto start = cpp.find("bool IsPostBlockParam(");
+  REQUIRE(start != std::string::npos);
+  const auto end = cpp.find("void NeuralAmpModeler::_VolumRefreshPrePostLockChrome", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = cpp.substr(start, end - start);
+  RequireContains(body, "kChorusRate");
+  RequireContains(body, "kTremoloRate");
+  RequireContains(body, "kDelaySync");
+  RequireContains(body, "kDelayDivision");
+}
+
+TEST_CASE("tier2f the expanded pedal LED toggles bypass")
+{
+  const std::string card = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPedalCardControl.h");
+  const auto down = card.find("void OnMouseDown(");
+  REQUIRE(down != std::string::npos);
+  const std::string body = card.substr(down, 500);
+  RequireContains(body, "ledRect.Contains(x, y)");
+  RequireContains(body, "mCallback(this, true)");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto click = layout.find("auto onPedalClick");
+  REQUIRE(click != std::string::npos);
+  const std::string handler = layout.substr(click, 900);
+  RequireContains(handler, "if (isBypassClick)");
+  RequireContains(handler, "kChorusActive");
+  RequireDoesNotContain(handler.substr(0, 80), "(void)isBypassClick");
+}
+
+TEST_CASE("tier2f MAIN cab fallback does not paint the row while SUPPORT is focused")
+{
+  const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSceneRig.inc.cpp");
+  const auto start = rig.find("void NeuralAmpModeler::_VolumFallbackToAvailableCab()");
+  REQUIRE(start != std::string::npos);
+  const std::string body = rig.substr(start, 2200);
+  RequireContains(body, "row && !_VolumSupportFocused()");
+}
+
+TEST_CASE("tier2f the hero name stops before the PAN knob")
+{
+  const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
+  const auto lane = hero.find("void DrawLane(");
+  REQUIRE(lane != std::string::npos);
+  const std::string body = hero.substr(lane, 4000);
+  RequireContains(body, "titleStrip.R - kPanKnobSize");
+  RequireContains(body, "nameR.W() - 6.f");
+}
+
+TEST_CASE("tier2f SUPPORT identity follows the custom amp id")
+{
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
+  const auto start = menus.find("void NeuralAmpModeler::_VolumRebindCustomSupportIdx()");
+  REQUIRE(start != std::string::npos);
+  const std::string body = menus.substr(start, 400);
+  RequireContains(body, "supportCustomId");
+  RequireContains(body, "CustomAmpIndexById(id)");
+  const std::string cpp = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto idle = cpp.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idle != std::string::npos);
+  RequireContains(cpp.substr(idle, 800), "_VolumRebindCustomSupportIdx()");
+}
+
+TEST_CASE("tier2h host undo refreshes the unsaved flag and Enter confirms off the dialog")
+{
+  const std::string source = ReadPluginSource();
+  const auto ui = source.find("void NeuralAmpModeler::OnParamChangeUI");
+  REQUIRE(ui != std::string::npos);
+  const auto modeCase = source.find("case kDelayMode:", ui);
+  REQUIRE(modeCase != std::string::npos);
+  CHECK(source.substr(ui, modeCase - ui).find("_VolumRecomputePresetDirty") == std::string::npos);
+  const auto recompute = source.find("_VolumRecomputePresetDirty()", modeCase);
+  REQUIRE(recompute != std::string::npos);
+  RequireContains(source.substr(recompute - 220, 260), "source == EParamSource::kUI || source == EParamSource::kHost");
+
+  const std::string keys = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumKeyboardModel.h");
+  RequireContains(keys, "return KeyConsumer::ConfirmEnter;");
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto enter = layout.find("case KeyConsumer::ConfirmEnter:");
+  REQUIRE(enter != std::string::npos);
+  RequireContains(layout.substr(enter, 280), "confirm->OnKeyDown(0.f, 0.f, key);");
+
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
+  const auto pick = menus.find("void NeuralAmpModeler::_VolumSetSupportCustom");
+  REQUIRE(pick != std::string::npos);
+  const std::string pickBody = menus.substr(pick, 1600);
+  RequireContains(pickBody, "CaptureSelectionOrDefault(amp, s, c)");
+  RequireDoesNotContain(pickBody, "if (volum::content::DefaultCaptureSelection(amp, s, c))");
+}
+
+TEST_CASE("tier2h macOS alert swap matches the panel and WinMM drops a status-less byte")
+{
+  const std::string mac = ReadText(RepoRoot() / "iPlug2" / "IGraphics" / "Platforms" / "IGraphicsMac.mm");
+  const auto panel = mac.find("EMsgBoxResult IGraphicsMac::ShowMessageBox");
+  REQUIRE(panel != std::string::npos);
+  RequireContains(mac.substr(panel, 1600), "NSRunAlertPanel(msg, @\"%@\", @\"OK\"");
+  const std::string plugin = ReadPluginSource();
+  RequireContains(plugin, "return pGraphics->ShowMessageBox(caption, str, type);");
+
+  const std::string rtmidi = ReadText(RepoRoot() / "iPlug2" / "Dependencies" / "IPlug" / "RTMidi" / "RtMidi.cpp");
+  const auto winmm = rtmidi.find("if ( inputStatus == MIM_DATA )");
+  REQUIRE(winmm != std::string::npos);
+  RequireContains(rtmidi.substr(winmm, 400), "if ( !(status & 0x80) ) return;");
+}
+
+TEST_CASE("tier2g the settings reader is the block readers and chorus has no private restore flag")
+{
+  const std::string io = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumUserSettingsIO.h");
+  const auto from = io.find("inline void VolumUserSettingsFromJson(");
+  REQUIRE(from != std::string::npos);
+  const std::string body = io.substr(from, 8000);
+  RequireContains(body, "ReadAmpCoreBlock(a, s)");
+  RequireContains(body, "PreBlockFromJson(a, s, &preHealed)");
+  RequireContains(body, "PostBlockFromJson(a, s)");
+  RequireContains(body, "ReadDualAmpUserSettings(a, s, ampCount)");
+  RequireDoesNotContain(body, "loadBool(a, \"postChorusActive\"");
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  RequireDoesNotContain(header, "mVolumChorusRestoreInProgress");
+  const std::string tail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
+  RequireContains(tail, "double octDown = 0.8");
+  const std::string repair = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumRigRepair.inc.cpp");
+  const auto plan = repair.find("SiblingDeletedAmpNeedsRepair(ampGone(rig.mainCustomAmpId))");
+  const auto support = repair.find("SiblingDeletedAmpNeedsRepair(ampGone(rig.supportCustomAmpId))", plan);
+  REQUIRE(plan != std::string::npos);
+  REQUIRE(support != std::string::npos);
+}
+
+namespace
+{
+// Every \u / \U escape inside a narrow ("...") string literal, outside comments.
+std::vector<std::string> NarrowLiteralUnicodeEscapes(const std::string& text)
+{
+  std::vector<std::string> hits;
+  bool inBlockComment = false;
+  size_t lineNo = 1;
+  for (size_t i = 0; i < text.size(); ++i)
+  {
+    const char c = text[i];
+    const char next = i + 1 < text.size() ? text[i + 1] : '\0';
+    if (c == '\n')
+    {
+      ++lineNo;
+      continue;
+    }
+    if (inBlockComment)
+    {
+      if (c == '*' && next == '/')
+      {
+        inBlockComment = false;
+        ++i;
+      }
+      continue;
+    }
+    if (c == '/' && next == '/')
+    {
+      while (i < text.size() && text[i] != '\n')
+        ++i;
+      --i;
+      continue;
+    }
+    if (c == '/' && next == '*')
+    {
+      inBlockComment = true;
+      ++i;
+      continue;
+    }
+    if (c == '\'')
+    {
+      for (++i; i < text.size() && text[i] != '\'' && text[i] != '\n'; ++i)
+        if (text[i] == '\\')
+          ++i;
+      continue;
+    }
+    if (c != '"')
+      continue;
+    const char before = i > 0 ? text[i - 1] : ' ';
+    const bool wide = before == 'L' || before == 'u' || before == 'U' || (before == '8' && i > 1 && text[i - 2] == 'u');
+    for (++i; i < text.size() && text[i] != '"' && text[i] != '\n'; ++i)
+    {
+      if (text[i] != '\\')
+        continue;
+      if (!wide && i + 1 < text.size() && (text[i + 1] == 'u' || text[i + 1] == 'U'))
+        hits.push_back("line " + std::to_string(lineNo));
+      ++i;
+    }
+  }
+  return hits;
+}
+} // namespace
+
+TEST_CASE("Product strings spell non-ASCII as UTF-8 bytes, never \\u escapes")
+{
+  // MSVC builds without /utf-8, so "\u2026" in a narrow literal compiles to one
+  // cp1252 byte. That is not UTF-8, and NanoVG stops drawing there: the name
+  // dialog hint lost "· Esc to cancel" and truncated labels lost their tail.
+  // Write the bytes ("\xE2\x80\xA6") the way the About card does.
+  CHECK(NarrowLiteralUnicodeEscapes("auto s = \"a\\u2026\";").size() == 1);
+  CHECK(NarrowLiteralUnicodeEscapes("auto s = u8\"a\\u2026\"; // \"\\u00B7\"").empty());
+  CHECK(NarrowLiteralUnicodeEscapes("auto s = \"a\\xE2\\x80\\xA6\";").empty());
+
+  namespace fs = std::filesystem;
+  std::vector<std::string> offenders;
+  const fs::path root = RepoRoot() / "NeuralAmpModeler";
+  for (fs::recursive_directory_iterator it(root), end; it != end; ++it)
+  {
+    const std::string rel = fs::relative(it->path(), root).generic_string();
+    if (it->is_directory()
+        && (rel.rfind("build", 0) == 0 || rel == "tests" || rel.find("third_party") != std::string::npos))
+    {
+      it.disable_recursion_pending();
+      continue;
+    }
+    const auto ext = it->path().extension();
+    if (!it->is_regular_file() || (ext != ".h" && ext != ".cpp"))
+      continue;
+    for (const auto& hit : NarrowLiteralUnicodeEscapes(ReadText(it->path())))
+      offenders.push_back(rel + " " + hit);
+  }
+  std::string list;
+  for (const auto& o : offenders)
+    list += o + "\n";
+  CHECK_MESSAGE(offenders.empty(), list);
+}
+TEST_CASE("A double-click counts as a press only on the control that took the first press")
+{
+  // Windows reports the second of two quick clicks as a double-click, and iPlug
+  // hit-tests it afresh. A control that never saw the first press (a pedal under a
+  // dropdown row that just closed) must not act on it.
+  volum::ui::SecondPressGate gate;
+  CHECK_FALSE(gate.TakeAt(100.0));
+
+  gate.ArmAt(1000.0);
+  CHECK(gate.TakeAt(1250.0));
+  // One replay per press: a stray third message is not a fourth click.
+  CHECK_FALSE(gate.TakeAt(1300.0));
+
+  // A press long ago is not the first half of this double-click.
+  gate.ArmAt(2000.0);
+  CHECK_FALSE(gate.TakeAt(2000.0 + volum::ui::kSecondPressWindowMs + 1.0));
+
+  // Covers the slowest setting of the Windows double-click speed slider.
+  CHECK(volum::ui::kSecondPressWindowMs >= 900.0);
+}
+
+namespace
+{
+enum class DblDecision
+{
+  Repeats, // the second press is a second click, gated to the control's own press
+  RepeatsParam, // same, replayed inside the host edit gesture (parameter-bound)
+  KnobResets, // knob: double-click resets to default, gated to the knob's own press
+  StockSwitch, // iPlug ISwitchControlBase already maps double-click to a click
+  OwnDblClick, // deliberate double-click action of its own
+  HeroDblAsSingle, // Dual Amp click protocol, see the Hero lane test
+  Drops, // first press opens, closes or picks; the second press is ignored
+};
+
+struct DblRow
+{
+  const char* file;
+  const char* cls;
+  DblDecision decision;
+};
+
+// Every VoLum control that handles OnMouseDown, and what a double-click does on it.
+const std::vector<DblRow>& DoubleClickDecisions()
+{
+  static const std::vector<DblRow> rows = {
+    {"NeuralAmpModelerControls.h", "NAMKnobControl", DblDecision::KnobResets},
+    {"NeuralAmpModelerControls.h", "VoLumPowerSwitchControl", DblDecision::RepeatsParam},
+    {"NeuralAmpModelerControls.h", "OutputModeControl", DblDecision::StockSwitch},
+    {"NeuralAmpModelerControls.h", "VoLumLiteModeSwitchControl", DblDecision::Repeats},
+    {"VoLumAmpList.h", "VoLumAmpListControl", DblDecision::Repeats},
+    {"VoLumConfirmDialog.h", "VoLumConfirmDialogControl", DblDecision::Drops},
+    {"VoLumCoreControls.h", "VoLumKnobSelectionClearControl", DblDecision::Drops},
+    {"VoLumCoreControls.h", "VoLumModePickerControl", DblDecision::RepeatsParam},
+    {"VoLumCoreControls.h", "VoLumSubModePillControl", DblDecision::RepeatsParam},
+    {"VoLumCustomOverlay.h", "VoLumCustomOverlayControl", DblDecision::OwnDblClick},
+    {"VoLumExactEntry.h", "VoLumExactEntryControl", DblDecision::Repeats},
+    {"VoLumHero.h", "VoLumHeroImageControl", DblDecision::HeroDblAsSingle},
+    {"VoLumHero.h", "VoLumSupportPolarityControl", DblDecision::Repeats},
+    {"VoLumKeyboardNav.h", "VoLumChannelStepControl", DblDecision::Repeats},
+    {"VoLumListMenu.h", "VoLumListMenuControl", DblDecision::Drops},
+    {"VoLumMidiFootswitch.h", "VoLumMidiFootswitchControl", DblDecision::OwnDblClick},
+    {"VoLumNameDialog.h", "VoLumNameDialogControl", DblDecision::OwnDblClick},
+    {"VoLumPackOverlay.h", "VoLumPackOverlayControl", DblDecision::Repeats},
+    {"VoLumPedalCardControl.h", "VoLumPedalCardControl", DblDecision::Repeats},
+    {"VoLumPlaySurface.h", "VoLumModeToggleControl", DblDecision::Drops},
+    {"VoLumPlaySurface.h", "VoLumPlaySurfaceControl", DblDecision::Repeats},
+    {"VoLumPresetBar.h", "VoLumPresetBarControl", DblDecision::Repeats},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsBackdropControl", DblDecision::Drops},
+    {"VoLumSettingsOverlay.h", "VoLumUpdateNoticeControl", DblDecision::Drops},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsCheckboxControl", DblDecision::Repeats},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsCloseControl", DblDecision::Drops},
+    {"VoLumSettingsOverlay.h", "VoLumSettingsPackRowControl", DblDecision::Drops},
+    {"VoLumSettingsTabs.h", "VoLumSettingsTabStripControl", DblDecision::Repeats},
+    {"VoLumSettingsTabs.h", "VoLumAnimateArtSwitchControl", DblDecision::Repeats},
+    {"VoLumSettingsTabs.h", "VoLumMidiChannelControl", DblDecision::Repeats},
+    {"VoLumSettingsTabs.h", "VoLumMidiRecallCcControl", DblDecision::Repeats},
+    {"VoLumSpeakerRow.h", "VoLumSpeakerRowControl", DblDecision::Repeats},
+    {"VoLumTriptych.h", "VoLumTriptychControl", DblDecision::Repeats},
+    {"VoLumTriptychMenus.h", "VoLumPreCaptureMenuControl", DblDecision::Drops},
+    {"VoLumTunerMetronomeOverlay.h", "VoLumTunerControl", DblDecision::Drops},
+    {"VoLumTunerMetronomeOverlay.h", "VoLumMetronomeControl", DblDecision::Repeats},
+  };
+  return rows;
+}
+
+// Body of a top-level class: from its declaration to the first column-0 "};".
+std::string TopLevelClassBody(const std::string& src, const std::string& cls)
+{
+  const auto start = src.find("class " + cls + " :");
+  REQUIRE_MESSAGE(start != std::string::npos, cls);
+  const auto end = src.find("\n};", start);
+  REQUIRE_MESSAGE(end != std::string::npos, cls);
+  return src.substr(start, end - start);
+}
+
+std::string MemberBody(const std::string& body, const char* signature)
+{
+  const auto start = body.find(signature);
+  if (start == std::string::npos)
+    return {};
+  const auto end = body.find("\n  }", start);
+  return body.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+} // namespace
+
+TEST_CASE("Every clickable VoLum control has a double-click decision")
+{
+  // A class that handles OnMouseDown and is missing from the table gets the stock
+  // IControl::OnMouseDblClick: the second of two quick clicks is dropped, and on a
+  // parameter-bound control the value snaps back to its default.
+  namespace fs = std::filesystem;
+  std::vector<std::string> missing;
+  const fs::path root = RepoRoot() / "NeuralAmpModeler";
+  for (const auto& entry : fs::directory_iterator(root))
+  {
+    if (!entry.is_regular_file() || entry.path().extension() != ".h")
+      continue;
+    const std::string src = ReadText(entry.path());
+    const std::string file = entry.path().filename().string();
+    for (auto at = src.find("void OnMouseDown(float"); at != std::string::npos;
+         at = src.find("void OnMouseDown(float", at + 1))
+    {
+      const auto decl = src.rfind("\nclass ", at);
+      if (decl == std::string::npos)
+        continue;
+      const auto nameStart = decl + 7;
+      const std::string cls = src.substr(nameStart, src.find_first_of(" :\n", nameStart) - nameStart);
+      bool listed = false;
+      for (const auto& row : DoubleClickDecisions())
+        listed = listed || (file == row.file && cls == row.cls);
+      if (!listed)
+        missing.push_back(file + " " + cls);
+    }
+  }
+  std::string list;
+  for (const auto& m : missing)
+    list += m + "\n";
+  CHECK_MESSAGE(missing.empty(), list);
+}
+
+TEST_CASE("Steppers, arrows, pills and toggles count a fast second click")
+{
+  for (const auto& row : DoubleClickDecisions())
+  {
+    const std::string body = TopLevelClassBody(ReadText(RepoRoot() / "NeuralAmpModeler" / row.file), row.cls);
+    const std::string dbl = MemberBody(body, "void OnMouseDblClick(");
+    INFO(row.cls);
+    switch (row.decision)
+    {
+      case DblDecision::Repeats:
+      case DblDecision::RepeatsParam:
+        RequireContains(MemberBody(body, "void OnMouseDown("), "mSecondPress.Press();");
+        RequireContains(dbl, "mSecondPress.Take()");
+        RequireContains(dbl, row.decision == DblDecision::RepeatsParam ? "volum::ui::PressAgain(*this, x, y, mod)"
+                                                                       : "OnMouseDown(x, y, mod)");
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        break;
+      case DblDecision::KnobResets:
+        RequireContains(MemberBody(body, "void OnMouseDown("), "mSecondPress.Press();");
+        RequireContains(dbl, "mSecondPress.Take()");
+        RequireContains(dbl, "IVKnobControl::OnMouseDblClick(x, y, mod)");
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        break;
+      case DblDecision::StockSwitch:
+        RequireContains(body, "public IVRadioButtonControl");
+        RequireDoesNotContain(body, "OnMouseDblClick");
+        break;
+      case DblDecision::OwnDblClick: REQUIRE_FALSE(dbl.empty()); break;
+      case DblDecision::HeroDblAsSingle: RequireContains(body, "mDblAsSingleClick = true;"); break;
+      case DblDecision::Drops:
+        // The stock handler resets a bound parameter; these carry none.
+        REQUIRE(dbl.empty());
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        RequireDoesNotContain(body, "paramIdx");
+        break;
+    }
+  }
+
+  // The stock switch path: iPlug maps a double-click to a click for every switch.
+  const std::string icontrol = ReadText(RepoRoot() / "iPlug2" / "IGraphics" / "IControl.cpp");
+  const auto sw = icontrol.find("ISwitchControlBase::ISwitchControlBase(");
+  REQUIRE(sw != std::string::npos);
+  RequireContains(icontrol.substr(sw, 400), "mDblAsSingleClick = true;");
+}
+
+TEST_CASE("Knobs keep double-click = reset to default")
+{
+  // Documented in the user guide. Every VoLum knob is a NAMKnobControl, and the
+  // iPlug knob it forwards to resets the value.
+  const std::string knob =
+    TopLevelClassBody(ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h"), "NAMKnobControl");
+  RequireContains(knob, "public IVKnobControl");
+  RequireContains(MemberBody(knob, "void OnMouseDblClick("), "IVKnobControl::OnMouseDblClick(x, y, mod)");
+  const std::string ivknob = ReadText(RepoRoot() / "iPlug2" / "IGraphics" / "Controls" / "IControls.cpp");
+  const auto reset = ivknob.find("void IVKnobControl::OnMouseDblClick(");
+  REQUIRE(reset != std::string::npos);
+  RequireContains(ivknob.substr(reset, 200), "SetValueToDefault(");
+
+  const std::string plugin = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  RequireContains(plugin, "class VoLumPanKnobControl : public NAMKnobControl");
+  RequireContains(plugin, "class VoLumDialKnobControl : public NAMKnobControl");
 }

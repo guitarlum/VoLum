@@ -469,6 +469,8 @@ TEST_CASE("A sibling keeps its RAM copy until it next needs the deleted id")
   // reckoning is the next time it needs the id.
   CHECK_FALSE(SiblingMustRepairOnNextNeed(/*resolvable=*/true));
   CHECK(SiblingMustRepairOnNextNeed(/*resolvable=*/false));
+  CHECK(SiblingDeletedAmpNeedsRepair(true));
+  CHECK_FALSE(SiblingDeletedAmpNeedsRepair(false));
 
   // And when that moment comes, the sibling takes the same fallback a local delete
   // would have taken - it does not crash and it does not go silent.

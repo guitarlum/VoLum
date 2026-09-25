@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 using namespace iplug;
@@ -23,7 +24,7 @@ using namespace igraphics;
 // rounded ARCH that meets at the shared inner edge - fists at the TOP plus a
 // second pair at CENTRE, each on a gold "fusion spark". Wide crouched A-stance,
 // spiky hair + yelling mouth. Gold sparks/fists appear only at card size (blue thumbs).
-inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
+inline void DrawFusionFigureLegacy(IGraphics& g, const IRECT& r, int dir, bool dimmed)
 {
   using namespace volumart;
   const float activeMul = dimmed ? 0.3f : 1.0f;
@@ -48,9 +49,9 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
     g.FillEllipse(WithA(kTeal, 0.85f * activeMul), headX + dir * headR * 0.42f, headY + headR * 0.35f, headR * 0.32f,
                   headR * 0.28f); // wide-open yelling mouth
   L(shX, shY, headX - dir * W * 0.01f, headY + headR * 0.85f, 0.9f); // neck
-  L(shX, shY, hipX, hipY, 0.95f);                                    // torso (lean-in)
-  L(shX, shY, inElX, inElY, 0.95f);                                  // inner upper arm
-  L(inElX, inElY, midCx, midCy, 0.95f);                              // inner forearm -> centre fist
+  L(shX, shY, hipX, hipY, 0.95f); // torso (lean-in)
+  L(shX, shY, inElX, inElY, 0.95f); // inner upper arm
+  L(inElX, inElY, midCx, midCy, 0.95f); // inner forearm -> centre fist
   for (int i = 0; i < 8; i++) // outer arm arch (quadratic sh -> outCtl -> topC, sampled)
   {
     const float t0 = (float)i / 8.f, t1 = (float)(i + 1) / 8.f;
@@ -86,6 +87,240 @@ inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
   }
 }
 
+// Keypoints of the NAM1 figure traced off the Fusion Dance "HA!" frame (the left
+// dancer). u runs from the outer toe (0) to the shared inner edge (1), v from the
+// top of the raised arm (0) to the floor (1); the box is kFusionAspect wide per 1 tall.
+enum EFusionJoint
+{
+  kFjHead,
+  kFjNeck,
+  kFjWaist,
+  kFjPelvis,
+  kFjShoulderOut,
+  kFjElbowTop,
+  kFjWristTop,
+  kFjTipTop,
+  kFjShoulderIn,
+  kFjElbowLow,
+  kFjWristLow,
+  kFjTipLow,
+  kFjHipOut,
+  kFjKneeOut,
+  kFjAnkleOut,
+  kFjHeelOut,
+  kFjToeOut,
+  kFjHipIn,
+  kFjKneeIn,
+  kFjAnkleIn,
+  kFjHeelIn,
+  kFjToeIn,
+  kFjCount
+};
+constexpr float kFusionAspect = 1.34f;
+constexpr float kFusionHeadR = 0.112f;
+constexpr float kFusionPose[kFjCount][2] = {
+  {0.719f, 0.322f}, // head
+  {0.599f, 0.392f}, // neck
+  {0.523f, 0.483f}, // waist
+  {0.464f, 0.594f}, // pelvis
+  {0.542f, 0.350f}, // shoulderOut
+  {0.711f, 0.024f}, // elbowTop
+  {0.906f, 0.087f}, // wristTop
+  {1.000f, 0.108f}, // tipTop
+  {0.646f, 0.448f}, // shoulderIn
+  {0.807f, 0.636f}, // elbowLow
+  {0.911f, 0.566f}, // wristLow
+  {1.000f, 0.535f}, // tipLow
+  {0.432f, 0.608f}, // hipOut
+  {0.255f, 0.727f}, // kneeOut
+  {0.125f, 0.916f}, // ankleOut
+  {0.146f, 0.972f}, // heelOut
+  {0.005f, 0.979f}, // toeOut
+  {0.505f, 0.622f}, // hipIn
+  {0.635f, 0.720f}, // kneeIn
+  {0.563f, 0.916f}, // ankleIn
+  {0.521f, 0.972f}, // heelIn
+  {0.672f, 0.983f}, // toeIn
+};
+
+// The Fusion Dance "HA!" beat as a stylized silhouette. NAM1 (dir=+1) stands on
+// the left and leans right, NAM2 (dir=-1) is its mirror. Deep wide crouch with
+// both feet planted: the outer leg reaches long and nearly straight, the inner
+// knee is bent over its foot. The torso leans ~45 degrees in, the head drops low
+// toward the partner; the outer arm arcs over the head and the inner arm bends
+// low in front, and both index fingers touch the shared inner edge where the
+// partner's meet them; gold flares fire there at card size.
+// The whole body is one path: NanoVG fills overlapping subpaths as a nonzero
+// union, so the dimmed alpha stays flat where limbs overlap. The pose keeps its
+// aspect and hugs the inner edge in the portrait card, the landscape PLAY well
+// and the ~20 px Quiet slot alike.
+inline void DrawFusionFigure(IGraphics& g, const IRECT& r, int dir, bool dimmed)
+{
+  using namespace volumart;
+  const float am = dimmed ? 0.28f : 1.0f;
+  const bool big = std::min(r.W(), r.H()) > 40.f;
+  // At card size leave the 5 px halo room above the arm and below the feet.
+  const float bh = std::min(big ? r.H() - 12.f : r.H(), r.W() * (big ? 0.96f : 1.f) / kFusionAspect);
+  const float bw = bh * kFusionAspect;
+  const float seam = dir > 0 ? r.R : r.L;
+  const float top = r.MH() - bh * 0.5f;
+  const float fd = (float)dir;
+  struct Pt
+  {
+    float x, y;
+  };
+  auto J = [&](EFusionJoint j) { return Pt{seam - fd * (1.f - kFusionPose[j][0]) * bw, top + kFusionPose[j][1] * bh}; };
+  const float minRad = big ? 0.9f : 0.8f;
+  auto R = [&](float f) { return std::max(minRad, f * bh); };
+  auto along = [](Pt a, Pt b, float t) { return Pt{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; };
+  // Control point that makes the quadratic a -> c -> b pass through m at t = 0.5.
+  auto through = [](Pt a, Pt m, Pt b) { return Pt{2.f * m.x - 0.5f * (a.x + b.x), 2.f * m.y - 0.5f * (a.y + b.y)}; };
+
+  auto segment = [&](Pt a, float ra, Pt b, float rb) {
+    const float dx = b.x - a.x, dy = b.y - a.y, len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1e-3f)
+      return;
+    const float nx = -dy / len, ny = dx / len;
+    g.PathMoveTo(a.x + nx * ra, a.y + ny * ra);
+    g.PathLineTo(b.x + nx * rb, b.y + ny * rb);
+    g.PathLineTo(b.x - nx * rb, b.y - ny * rb);
+    g.PathLineTo(a.x - nx * ra, a.y - ny * ra);
+    g.PathClose();
+  };
+  auto joint = [&](Pt p, float rad) { g.PathCircle(p.x, p.y, rad); };
+  // Quadratic limb a -> c -> b tapering ra -> rb, rounded at every sample.
+  auto limb = [&](Pt a, Pt c, Pt b, float ra, float rb, int steps) {
+    Pt prev = a;
+    float prevR = ra;
+    joint(a, ra);
+    for (int i = 1; i <= steps; ++i)
+    {
+      const float t = (float)i / (float)steps, s = 1.f - t;
+      const Pt p{s * s * a.x + 2.f * s * t * c.x + t * t * b.x, s * s * a.y + 2.f * s * t * c.y + t * t * b.y};
+      const float rad = ra + (rb - ra) * t;
+      segment(prev, prevR, p, rad);
+      joint(p, rad);
+      prev = p;
+      prevR = rad;
+    }
+  };
+  auto straight = [&](Pt a, Pt b, float ra, float rb) { limb(a, along(a, b, 0.5f), b, ra, rb, 1); };
+
+  const Pt head = J(kFjHead), neck = J(kFjNeck), waist = J(kFjWaist), pelvis = J(kFjPelvis);
+  const Pt shOut = J(kFjShoulderOut), elbowTop = J(kFjElbowTop), wristTop = J(kFjWristTop), touchTop = J(kFjTipTop);
+  const Pt shIn = J(kFjShoulderIn), elbowLow = J(kFjElbowLow), wristLow = J(kFjWristLow), touchLow = J(kFjTipLow);
+  const float headR = std::max(big ? 3.f : 1.8f, kFusionHeadR * bh);
+  const float armR = big ? R(0.03f) : 0.62f, foreR = big ? R(0.024f) : 0.58f, wristR = big ? R(0.019f) : 0.55f;
+  const float handR = big ? R(0.03f) : 0.6f, tipR = std::max(0.35f, 0.004f * bh);
+
+  // grow > 0 fattens every part for the halo pass.
+  auto body = [&](float grow) {
+    g.PathClear();
+    limb(pelvis, through(pelvis, waist, neck), neck, R(0.062f) + grow, R(0.07f) + grow, big ? 6 : 2);
+    straight(shOut, shIn, armR + grow, armR + grow);
+    straight(neck, head, R(0.034f) + grow, R(0.03f) + grow);
+    joint(head, headR + grow);
+    // Outer arm arcs over the head, inner arm bends low in front; both end in a fist and a pointed finger.
+    limb(shOut, through(shOut, elbowTop, wristTop), wristTop, armR + grow, wristR + grow, big ? 10 : 5);
+    joint(wristTop, handR + grow);
+    segment(wristTop, wristR + grow, touchTop, tipR + grow);
+    straight(shIn, elbowLow, armR + grow, foreR + grow);
+    straight(elbowLow, wristLow, foreR + grow, wristR + grow);
+    joint(wristLow, handR + grow);
+    segment(wristLow, wristR + grow, touchLow, tipR + grow);
+    // Outer leg long and nearly straight, inner knee bent over its foot; both feet flat on the floor.
+    const Pt legs[2][5] = {{J(kFjHipOut), J(kFjKneeOut), J(kFjAnkleOut), J(kFjHeelOut), J(kFjToeOut)},
+                           {J(kFjHipIn), J(kFjKneeIn), J(kFjAnkleIn), J(kFjHeelIn), J(kFjToeIn)}};
+    for (const auto& leg : legs)
+    {
+      straight(leg[0], leg[1], R(0.046f) + grow, R(0.033f) + grow);
+      straight(leg[1], leg[2], R(0.033f) + grow, R(0.022f) + grow);
+      straight(leg[2], leg[3], R(0.022f) + grow, R(0.02f) + grow);
+      straight(leg[3], leg[4], R(0.02f) + grow, R(0.012f) + grow);
+    }
+  };
+
+  if (big)
+  {
+    Bloom(g, along(pelvis, neck, 0.5f).x, along(pelvis, neck, 0.5f).y, bh * 0.6f, kTeal, 0.07f * am);
+    // Swing trails: the outer arm's sweep from out wide to over the head.
+    for (int k = 0; k < 3; ++k)
+    {
+      const float rad = bh * (0.42f + 0.07f * (float)k);
+      const float a0 = 3.5f, a1 = 4.45f - 0.08f * (float)k;
+      const int segs = 18;
+      for (int i = 0; i < segs; ++i)
+      {
+        const float t0 = (float)i / (float)segs, t1 = (float)(i + 1) / (float)segs;
+        const float p0 = a0 + (a1 - a0) * t0, p1 = a0 + (a1 - a0) * t1;
+        g.DrawLine(WithA(kTeal, (0.05f + 0.3f * t1 * t1) * (1.f - 0.28f * (float)k) * am),
+                   shOut.x + fd * std::cos(p0) * rad, shOut.y + std::sin(p0) * rad, shOut.x + fd * std::cos(p1) * rad,
+                   shOut.y + std::sin(p1) * rad, nullptr, 1.3f);
+      }
+    }
+    body(5.f);
+    g.PathFill(WithA(kTeal, 0.05f * am));
+    body(2.2f);
+    g.PathFill(WithA(kTeal, 0.1f * am));
+  }
+  const Pt toe = J(kFjToeOut);
+  body(0.f);
+  g.PathFill(IPattern::CreateLinearGradient(toe.x, toe.y, touchTop.x, touchTop.y,
+                                            {{WithA(Mix(kDim, kBlue, 0.4f), 0.45f * am), 0.f},
+                                             {WithA(kTeal, 0.9f * am), 0.5f},
+                                             {WithA(Mix(kTeal, kBlue, 0.35f), 0.98f * am), 1.f}}));
+
+  if (big)
+  {
+    const float span = std::min(r.W(), r.H());
+    Bloom(g, touchTop.x, touchTop.y, span * 0.5f, kGold, 0.2f * am);
+    Bloom(g, touchLow.x, touchLow.y, span * 0.3f, kGold, 0.14f * am);
+    auto flare = [&](Pt c, float len, float wid, float a) {
+      g.PathClear();
+      g.PathMoveTo(c.x - len, c.y);
+      g.PathLineTo(c.x, c.y - wid);
+      g.PathLineTo(c.x + len, c.y);
+      g.PathLineTo(c.x, c.y + wid);
+      g.PathClose();
+      g.PathMoveTo(c.x, c.y - len);
+      g.PathLineTo(c.x + wid, c.y);
+      g.PathLineTo(c.x, c.y + len);
+      g.PathLineTo(c.x - wid, c.y);
+      g.PathClose();
+      g.PathFill(WithA(kGoldHi, a));
+    };
+    g.FillCircle(WithA(kGold, 0.26f * am), touchTop.x, touchTop.y, 11.f);
+    g.FillCircle(WithA(kGold, 0.45f * am), touchTop.x, touchTop.y, 6.5f);
+    flare(touchTop, bh * 0.3f, 2.2f, 0.95f * am);
+    g.FillCircle(WithA(kGoldHi, am), touchTop.x, touchTop.y, 3.2f);
+    g.FillCircle(WithA(kGold, 0.35f * am), touchLow.x, touchLow.y, 7.f);
+    flare(touchLow, bh * 0.17f, 1.6f, 0.85f * am);
+    g.FillCircle(WithA(kGoldHi, am), touchLow.x, touchLow.y, 2.4f);
+  }
+  else
+  {
+    g.FillCircle(WithA(kTeal, 0.9f * am), touchTop.x, touchTop.y, 1.3f);
+    g.FillCircle(WithA(kTeal, 0.9f * am), touchLow.x, touchLow.y, 1.1f);
+  }
+}
+
+// VOLUM_NAM_ART_LEGACY=1 draws the NAM1 / NAM2 cards with DrawFusionFigureLegacy
+// so the old and new fusion art can be compared side by side. Unset, empty or any
+// other value draws DrawFusionFigure.
+inline bool ParseNamArtLegacy(const char* value)
+{
+  return value && value[0] == '1' && value[1] == '\0';
+}
+
+inline void DrawNamFusionMotif(IGraphics& g, const IRECT& r, int dir, bool dimmed)
+{
+  static const bool legacy = ParseNamArtLegacy(std::getenv("VOLUM_NAM_ART_LEGACY"));
+  if (legacy)
+    DrawFusionFigureLegacy(g, r, dir, dimmed);
+  else
+    DrawFusionFigure(g, r, dir, dimmed);
+}
+
 //==============================================================================
 // Reverb & Delay Extension Controls (PRE / AMP / POST)
 //==============================================================================
@@ -101,10 +336,17 @@ inline void DrawNeuralNetMotif(IGraphics& g, const IRECT& r, const int* layers, 
   // thumbnail so the ~20 px slot reads blue/teal only.
   const bool big = std::min(r.W(), r.H()) > 40.f;
   const IColor node((int)(150.f * activeMul), 120, 210, 220);
-  const IColor out = big ? IColor((int)(235.f * activeMul), 252, 222, 145) : IColor((int)(235.f * activeMul), 120, 210, 220);
+  const IColor out =
+    big ? IColor((int)(235.f * activeMul), 252, 222, 145) : IColor((int)(235.f * activeMul), 120, 210, 220);
   unsigned rng = seed;
-  auto frand = [&]() -> float { rng = rng * 1664525u + 1013904223u; return (float)rng / (float)0xFFFFFFFFu; };
-  struct Node { float x, y; };
+  auto frand = [&]() -> float {
+    rng = rng * 1664525u + 1013904223u;
+    return (float)rng / (float)0xFFFFFFFFu;
+  };
+  struct Node
+  {
+    float x, y;
+  };
   std::vector<std::vector<Node>> pos(L);
   for (int i = 0; i < L; i++)
   {
@@ -159,14 +401,14 @@ inline void DrawChorusThroatMotif(IGraphics& g, const IRECT& r, bool dimmed)
   // like the locked motif mock. The previous 0.235h..0.83h span left an uneven
   // band above and a dead sixth of the card below the near mouth. Quiet metrics
   // are unchanged: at ~20 px the tighter span is what keeps the mouths readable.
-  const Mouth front{r.L + w * 0.50f, r.T + h * (big ? 0.715f : 0.68f), w * (big ? 0.44f : 0.38f),
-                    h * (big ? 0.155f : 0.14f)};
-  const Mouth back{r.L + w * 0.50f, r.T + h * (big ? 0.185f : 0.32f), w * (big ? 0.135f : 0.14f),
-                   h * (big ? 0.055f : 0.06f)};
+  const Mouth front{
+    r.L + w * 0.50f, r.T + h * (big ? 0.715f : 0.68f), w * (big ? 0.44f : 0.38f), h * (big ? 0.155f : 0.14f)};
+  const Mouth back{
+    r.L + w * 0.50f, r.T + h * (big ? 0.185f : 0.32f), w * (big ? 0.135f : 0.14f), h * (big ? 0.055f : 0.06f)};
 
   auto lerpMouth = [](const Mouth& a, const Mouth& b, float t) {
-    return Mouth{a.cx + (b.cx - a.cx) * t, a.cy + (b.cy - a.cy) * t, a.rx + (b.rx - a.rx) * t,
-                 a.ry + (b.ry - a.ry) * t};
+    return Mouth{
+      a.cx + (b.cx - a.cx) * t, a.cy + (b.cy - a.cy) * t, a.rx + (b.rx - a.rx) * t, a.ry + (b.ry - a.ry) * t};
   };
   auto strokeMouth = [&](const Mouth& e, int segs, const IColor& col, float lw) {
     float px = e.cx + e.rx;
@@ -242,7 +484,8 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
       // Octaver - Glow Chevrons: doubled up/down chevrons with a glowing root note
       // (gold only at card size), reading instantly as "octave up + octave down".
       const float cyy = r.MH(), ww = r.W() * 0.26f, hh = r.H() * 0.13f, gap = r.H() * 0.13f;
-      if (big) Bloom(g, cx, cyy, r.W() * 0.45f, kTeal, 0.08f * activeMul);
+      if (big)
+        Bloom(g, cx, cyy, r.W() * 0.45f, kTeal, 0.08f * activeMul);
       auto chev = [&](int dir, const IColor& c) {
         for (int k = 0; k < 2; k++)
         {
@@ -261,18 +504,24 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
         }
       };
       chev(-1, kTeal); // octave up
-      chev(1, kBlue);  // octave down
-      if (big) GlowDot(g, kGold, kGoldHi, cx, cyy, 4.f, 6.f);
-      else g.FillCircle(WithA(kTeal, activeMul), cx, cyy, 2.6f);
+      chev(1, kBlue); // octave down
+      if (big)
+        GlowDot(g, kGold, kGoldHi, cx, cyy, 4.f, 6.f);
+      else
+        g.FillCircle(WithA(kTeal, activeMul), cx, cyy, 2.6f);
     }
     else
     {
       // Transpose - Deep Helix: two phase-shifted strands with front/back depth
       // thickness, gradient teal->blue, rungs, and gold crossover nodes at card size.
-      if (big) Bloom(g, cx, r.MH(), r.W() * 0.5f, kTeal, 0.10f * activeMul);
+      if (big)
+        Bloom(g, cx, r.MH(), r.W() * 0.5f, kTeal, 0.10f * activeMul);
       const int segs = 96;
       const float amp = r.W() * 0.27f, y0 = r.T + r.H() * 0.1f, y1 = r.B - r.H() * 0.1f;
-      struct HP { float x, y, z; };
+      struct HP
+      {
+        float x, y, z;
+      };
       std::vector<HP> A(segs + 1), B(segs + 1);
       for (int s = 0; s <= segs; ++s)
       {
@@ -294,7 +543,8 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
       strand(B, kBlue, kTeal);
       if (big)
         for (int s = 0; s <= segs; ++s)
-          if (std::fabs(A[s].x - B[s].x) < amp * 0.12f) GlowDot(g, kGold, kGoldHi, cx, A[s].y, 2.4f, 6.f);
+          if (std::fabs(A[s].x - B[s].x) < amp * 0.12f)
+            GlowDot(g, kGold, kGoldHi, cx, A[s].y, 2.4f, 6.f);
     }
   }
   else if (effect == EVoLumEffectFocus::COMP)
@@ -347,12 +597,12 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
   else if (effect == EVoLumEffectFocus::PRE_NAM1)
   {
     // NAM capture 1: DBZ Fusion-Dance figure leaning right toward NAM2.
-    DrawFusionFigure(g, r, +1, dimmed);
+    DrawNamFusionMotif(g, r, +1, dimmed);
   }
   else if (effect == EVoLumEffectFocus::PRE_NAM2)
   {
     // NAM capture 2: mirror figure leaning left; fingers meet NAM1 at the border.
-    DrawFusionFigure(g, r, -1, dimmed);
+    DrawNamFusionMotif(g, r, -1, dimmed);
   }
   else if (effect == EVoLumEffectFocus::DELAY)
   {
@@ -360,7 +610,8 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
     // tap glows gold at card size, thumbnails stay teal.
     using namespace volumart;
     const float activeMul = dimmed ? 0.28f : 1.0f;
-    if (big) Bloom(g, r.L + r.W() * 0.14f, cy, r.W() * 0.62f, kTeal, 0.09f * activeMul);
+    if (big)
+      Bloom(g, r.L + r.W() * 0.14f, cy, r.W() * 0.62f, kTeal, 0.09f * activeMul);
     g.DrawLine(WithA(kDim, 0.3f * activeMul), r.L, cy, r.R, cy, nullptr, 0.5f);
     const int taps = 5;
     const float tapW = r.W() / (float)taps;
@@ -376,14 +627,16 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
         const float y = cy + sinf(t1 * 6.28318f * 3.f) * ampY * env;
         const IColor c = WithA(core, (0.5f + 0.4f * decay) * activeMul);
         const float lw = (big ? 1.9f : 1.4f) * decay;
-        if (first && big) GlowLine(g, kGold, c, pX, pY, X, y, lw, 3.f * decay);
-        else g.DrawLine(c, pX, pY, X, y, nullptr, lw);
+        if (first && big)
+          GlowLine(g, kGold, c, pX, pY, X, y, lw, 3.f * decay);
+        else
+          g.DrawLine(c, pX, pY, X, y, nullptr, lw);
         pX = X;
         pY = y;
       }
       if (t > 0)
-        g.DrawLine(WithA(kDim, 0.3f * decay * activeMul), baseX, r.T + r.H() * 0.16f, baseX, r.B - r.H() * 0.16f,
-                   nullptr, 0.6f);
+        g.DrawLine(
+          WithA(kDim, 0.3f * decay * activeMul), baseX, r.T + r.H() * 0.16f, baseX, r.B - r.H() * 0.16f, nullptr, 0.6f);
     }
   }
   else if (effect == EVoLumEffectFocus::CHORUS)
@@ -419,8 +672,9 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
       const float y = cy - r.H() * 0.4f * lfo;
       if (big)
         g.DrawLine(IColor((int)(70.f * activeMul), 200, 165, 87), pX, pY, x, y, nullptr, 3.2f);
-      g.DrawLine(big ? IColor((int)(210.f * activeMul), 252, 222, 145) : IColor((int)(210.f * activeMul), 120, 210, 220),
-                 pX, pY, x, y, nullptr, 1.4f);
+      g.DrawLine(
+        big ? IColor((int)(210.f * activeMul), 252, 222, 145) : IColor((int)(210.f * activeMul), 120, 210, 220), pX, pY,
+        x, y, nullptr, 1.4f);
       pX = x;
       pY = y;
     }
@@ -430,7 +684,8 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
     // Reverb (default) - Deep Dust: DLA-style branching dust grown from baseline +
     // mid seeds over a soft teal bloom. Scales from the ~22 px thumbnail to the ~150 px card.
     const float am = dimmed ? 0.4f : 1.0f;
-    if (big) volumart::Bloom(g, r.MW(), r.MH() + r.H() * 0.1f, std::min(r.W(), r.H()) * 0.6f, volumart::kTeal, 0.10f * am);
+    if (big)
+      volumart::Bloom(g, r.MW(), r.MH() + r.H() * 0.1f, std::min(r.W(), r.H()) * 0.6f, volumart::kTeal, 0.10f * am);
     const float scale = std::min(r.W(), r.H()); // ~22 thumb, ~150 card
     const float sizeFactor = std::clamp(scale / 150.f, 0.18f, 1.0f);
     const int count = std::max(450, (int)(12000.f * sizeFactor * sizeFactor));

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
@@ -111,17 +111,22 @@
     <ClCompile Include="..\tests\test_volum_diag_log.cpp" />
     <ClCompile Include="..\tests\test_volum_latency_report.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
+    <ClCompile Include="..\tests\test_volum_dual_amp_input.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
+    <ClCompile Include="..\tests\test_volum_art_anim.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
     <ClCompile Include="..\tests\test_reverb_diffusion.cpp" />
+    <ClCompile Include="..\tests\test_reverb_stereo_input.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_effects.cpp" />
     <ClCompile Include="..\tests\test_golden_dsp.cpp" />
     <ClCompile Include="..\tests\test_golden_rigs.cpp" />
     <ClCompile Include="..\tests\test_golden_presets.cpp" />
+    <ClCompile Include="..\tests\test_volum_golden_render.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\dsp.cpp">
       <ObjectFileName>$(IntDir)audiodsp_dsp.obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="..\..\AudioDSPTools\dsp\Delay.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\ImpulseResponse.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />
@@ -145,6 +150,8 @@
     <ClCompile Include="..\tests\test_volum_state_roundtrip.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch_artifacts.cpp" />
+    <ClCompile Include="..\tests\test_volum_realtime_budget.cpp" />
+    <ClCompile Include="..\tests\test_volum_self_capture_format.cpp" />
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
     <ClCompile Include="..\tests\test_volum_chorus.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />
@@ -152,6 +159,7 @@
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />
     <ClCompile Include="..\tests\test_volum_knob_wheel.cpp" />
     <ClCompile Include="..\tests\test_volum_bypass_identity.cpp" />
+    <ClCompile Include="..\tests\test_volum_name_dialog.cpp" />
     <ClCompile Include="..\tests\test_volum_nan_guard.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
@@ -167,6 +175,7 @@
     <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
     <ClCompile Include="..\tests\test_volum_midi_decoder.cpp" />
     <ClCompile Include="..\tests\test_volum_midi_handoff.cpp" />
+    <ClCompile Include="..\tests\test_volum_midi_footswitch.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
@@ -185,3 +194,4 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+

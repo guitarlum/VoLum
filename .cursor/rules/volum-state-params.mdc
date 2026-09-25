@@ -30,10 +30,15 @@ Preset/session migration:
 Presets / recall + dirty:
 
 - Banks live in the content registry (`presetBanks`), owner-keyed
-  (`factory:<idx>` or a custom-amp id). Capture/apply hooks are still
-  process-global (`PresetCaptureHook` / `PresetApplyHook`); each editor claims
-  them via `_VolumClaimPresetOps()` before a read or mutation. Per-instance
-  ownership is `B6` / `R4` phase 2, not done.
+  (`factory:<idx>` or a custom-amp id). Capture/apply hooks are **instance-keyed**
+  in `PresetHooksByInstance` (`VoLumCustomContentApi.h`). Save / overwrite /
+  recall bind a `PresetOpScope(this)` and resolve through that map, copying the
+  `std::function` out so a later claim cannot steal an in-flight call; an
+  unscoped call made while any editor is registered **refuses** rather than
+  using the last claimant. The table is mutex-guarded because instances are
+  constructed and destroyed on host threads. The process-global
+  `PresetCaptureHook` / `PresetApplyHook` pair survives only as the last-claimer
+  fallback for overlay listing and for tests that never register.
 - Recall applies `pr.settings` through `_VolumApplyRecalledPreset`. On a custom
   amp that path must not call the factory `_VolumRefreshChannels()` (1.2.1).
 - `(unsaved)` is equality against the recalled snapshot:

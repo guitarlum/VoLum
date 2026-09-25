@@ -693,6 +693,33 @@ TEST_CASE("VoLumPitch POLY single-note pitch is accurate across the range")
   }
 }
 
+TEST_CASE("VoLumPitch LEVEL floor through SetParams is silence (plugin mapping)")
+{
+  // ProcessBlock passes GetParam(kPrePitchLevel)->Value() straight into
+  // SetParams (VoLumProcessBlock.inc.cpp). The −∞ display is attached to that
+  // param's Init min of -20 dB. A test that pow()s -20 itself never sees the
+  // mute-floor mapping; this one uses the same SetParams call ProcessBlock uses.
+  auto peakAtLevel = [](VoLumPitch::Mode mode, double levelDb) {
+    VoLumPitch pitch;
+    pitch.Configure(kSR, kBlock);
+    pitch.Reset();
+    pitch.SetParams(mode, 0.0, 1.0, 1.0, 1.0, 1.0, VoLumPitch::Voicing::Modern, levelDb,
+                    VoLumPitch::Character::Instant);
+    auto in = makeSine(220.0, 4096, 0.8);
+    auto out = runStream(pitch, in);
+    double peak = 0.0;
+    for (DSP_SAMPLE v : out)
+      peak = std::max(peak, std::abs(static_cast<double>(v)));
+    return peak;
+  };
+
+  CHECK(peakAtLevel(VoLumPitch::Mode::Transpose, -20.0) < 1e-12);
+  CHECK(peakAtLevel(VoLumPitch::Mode::Octaver, -20.0) < 1e-12);
+  // Just above the mute floor still emits; otherwise the floor test is vacuous.
+  CHECK(peakAtLevel(VoLumPitch::Mode::Transpose, -19.9) > 0.01);
+  CHECK(peakAtLevel(VoLumPitch::Mode::Octaver, -19.9) > 0.01);
+}
+
 TEST_CASE("VoLumPitch POLY holds pitch across a long sustain (no drift)")
 {
   VoLumPitch pitch;

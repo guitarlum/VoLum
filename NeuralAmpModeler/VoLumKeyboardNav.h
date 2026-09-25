@@ -10,6 +10,7 @@
 // Extracted from VoLumCoreControls.h on the 1.0 hygiene split.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -85,6 +86,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     ClearVoLumKnobSelection(this);
 
     const int n = (int)mLabels.size();
@@ -102,6 +104,12 @@ public:
     if (mCallback)
       mCallback(mSelected);
     SetDirty(false);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -130,6 +138,7 @@ private:
   bool mMouseOverRight = false;
   std::vector<std::string> mLabels;
   ChangeCallback mCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumKeyboardHintControl : public IControl

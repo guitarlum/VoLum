@@ -6,11 +6,13 @@
 #include "../VoLumFactoryPresets.h"
 #include "../VoLumOverlayStack.h"
 #include "../VoLumHeaderChrome.h"
+#include "../VoLumKeyboardModel.h"
 #include "../VoLumPackLayout.h"
 #include "../VoLumPickerGroups.h"
 #include "../VoLumPlayLight.h"
 #include "../VoLumPlayModel.h"
 #include "../VoLumScroll.h"
+#include "../VoLumStageArtCache.h"
 
 #include <filesystem>
 #include <fstream>
@@ -61,7 +63,7 @@ TEST_CASE("Picker groups: one section starts open, two start collapsed, then mem
   CHECK(both.factoryOpen); // session memory
 
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
   CHECK(play.find("InitPickerGroups(") != std::string::npos);
   CHECK(tabs.find("InitPickerGroups(") != std::string::npos);
@@ -70,9 +72,9 @@ TEST_CASE("Picker groups: one section starts open, two start collapsed, then mem
   CHECK(std::string(volum::PickerGroupGlyph(true)) == "-");
   CHECK(volum::PickerGroupMenuLabel(true, false) == "+  FACTORY");
   CHECK(volum::PickerGroupMenuLabel(false, true) == "-  USER");
-  CHECK(play.find("FACTORY  ·") == std::string::npos);
-  CHECK(tabs.find("FACTORY  ·") == std::string::npos);
-  CHECK(menus.find("FACTORY  ·") == std::string::npos);
+  CHECK(play.find("FACTORY  Â·") == std::string::npos);
+  CHECK(tabs.find("FACTORY  Â·") == std::string::npos);
+  CHECK(menus.find("FACTORY  Â·") == std::string::npos);
   CHECK(play.find("PickerGroupGlyph(") != std::string::npos);
   CHECK(tabs.find("PickerGroupGlyph(") != std::string::npos);
   CHECK(menus.find("PickerGroupMenuLabel(") != std::string::npos);
@@ -86,6 +88,30 @@ TEST_CASE("About action row is pinned inside a 96 px leftover card")
   CHECK(l.actionT == doctest::Approx(96.f - volum::kAboutActionH));
   CHECK(l.noticeB <= l.actionT + 0.01f);
   CHECK(l.actionT >= 0.f);
+  CHECK(l.url2B > l.url2T + 1.f);
+  CHECK(l.noticeB - l.noticeT >= 16.f);
+}
+
+TEST_CASE("tier2e the shipped 76 px About body keeps the update pill above Check now")
+{
+  const auto l = volum::LayoutAboutCard(400.f, 76.f);
+  CHECK(l.actionFits);
+  CHECK(l.actionB == doctest::Approx(76.f));
+  CHECK(l.noticeB <= l.actionT - volum::kAboutGap + 0.01f);
+  CHECK(l.noticeB - l.noticeT >= 16.f);
+  CHECK(l.url1B <= l.url1T + 0.01f);
+}
+
+TEST_CASE("tier2e both factory and user sections start collapsed together")
+{
+  volum::PickerGroupSession session;
+  volum::InitPickerGroups(session, true, true);
+  CHECK_FALSE(session.factoryOpen);
+  CHECK_FALSE(session.userOpen);
+  volum::PickerGroupSession onlyFactory;
+  volum::InitPickerGroups(onlyFactory, true, false);
+  CHECK(onlyFactory.factoryOpen);
+  CHECK_FALSE(onlyFactory.userOpen);
 }
 
 TEST_CASE("SYSTEM mid-row body fits both Pack help lines")
@@ -122,7 +148,7 @@ TEST_CASE("Scroll thumb drag maps cursor y to a new offset")
   CHECK(volum::scroll::ClampScroll(-4.f, 10.f) == 0.f);
   CHECK(volum::scroll::ClampScroll(40.f, 10.f) == 10.f);
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   CHECK(play.find("VoLumScrollTrackRect(") != std::string::npos);
   CHECK(tabs.find("VoLumScrollTrackRect(") != std::string::npos);
   CHECK(play.find("amplist::RowRightX(") != std::string::npos);
@@ -150,22 +176,125 @@ TEST_CASE("Add this sound Save As first for Default or dirty Factory")
   CHECK_FALSE(volum::AddHeardMarksLive(0, true)); // Default has no id yet
 }
 
-TEST_CASE("PLAY illumination: quiet breathes, loud is brighter")
+namespace
 {
-  const float dim = volum::PlayArtBrightness(0.f, 0.f);
-  const float dimHi = volum::PlayArtBrightness(0.f, 1.f);
-  const float loud = volum::PlayArtBrightness(0.85f, 0.5f);
-  CHECK(loud > dimHi);
-  CHECK(dimHi > dim);
-  CHECK(volum::PlayCoronaOpacity(loud) > volum::PlayCoronaOpacity(dim));
+volum::PlayLight HoldPlayInput(volum::PlayLight light, float dbfs, int ticks)
+{
+  const float norm = volum::MeterNormFromDb(dbfs);
+  for (int i = 0; i < ticks; ++i)
+    light = volum::AdvancePlayLight(light, norm);
+  return light;
+}
+} // namespace
+
+TEST_CASE("PLAY light: silence is BUILD, -18 dBFS is the full look")
+{
   CHECK(volum::MeterNormFromLinear(0.25f) == doctest::Approx(0.83f).epsilon(0.03f));
-  const float floorBright = volum::PlayArtBrightness(volum::kPlayPlayingFloorNorm, 1.f);
-  CHECK(floorBright + 1e-4f >= dimHi);
   CHECK(volum::PlayLampFollow(0.2f, 0.8f) > 0.2f);
   CHECK(volum::PlayLampFollow(0.2f, 0.8f) < volum::PlayLampFollow(0.2f, 0.8f, 0.9f, 0.04f));
+
+  // Silence: nothing is drawn over the art, so PLAY shows it at BUILD brightness.
+  const volum::PlayLight rest;
+  CHECK(volum::PlayGlowAmount(rest) == 0.f);
+  CHECK(volum::PlayBloomWeight(volum::PlayGlowAmount(rest)) == 0.f);
+  // Interface hiss and pickup hum sit below the floor.
+  const volum::PlayLight hum = HoldPlayInput(rest, -62.f, 600);
+  CHECK(hum.energy == 0.f);
+  CHECK(hum.attack == 0.f);
+  CHECK(volum::PlayGlowAmount(hum) == 0.f);
+
+  // A normal guitar level reaches the full look; 0 dBFS is not needed.
+  const volum::PlayLight normal = HoldPlayInput(rest, -18.f, 600);
+  CHECK(normal.energy >= 0.99f);
+  CHECK(volum::PlayGlowAmount(normal) >= 0.99f);
+  CHECK(normal.attack == 0.f); // a held level is not a pick
+  CHECK(volum::PlayCoronaOpacity(volum::PlayGlowAmount(normal), 0.f) > volum::PlayCoronaOpacity(0.f, 1.f));
+
+  // A rolled-back volume pot still moves the art, and louder moves it more.
+  const float e45 = HoldPlayInput(rest, -45.f, 600).energy;
+  const float e36 = HoldPlayInput(rest, -36.f, 600).energy;
+  const float e27 = HoldPlayInput(rest, -27.f, 600).energy;
+  CHECK(e45 > 0.05f);
+  CHECK(e45 < e36);
+  CHECK(e36 < e27);
+  CHECK(e27 < normal.energy);
+
+  // A chord ringing out keeps the art alive while it decays.
+  CHECK(HoldPlayInput(normal, -50.f, 45).energy > 0.f);
+
+  // A reverb or delay tail on the output carries the motion briefly after the
+  // input stops, but never wakes the art by itself and never holds it forever.
+  auto withOutput = [](volum::PlayLight light, float inDb, float outDb, int ticks) {
+    const float in = volum::MeterNormFromDb(inDb);
+    const float out = volum::MeterNormFromDb(outDb);
+    for (int i = 0; i < ticks; ++i)
+      light = volum::AdvancePlayLight(light, in, out);
+    return light;
+  };
+  const volum::PlayLight played = withOutput(rest, -18.f, -12.f, 600);
+  CHECK(withOutput(played, -90.f, -20.f, 90).energy > 0.2f); // 1.5 s into the tail
+  CHECK(withOutput(played, -90.f, -20.f, 600).energy == 0.f); // 10 s later: rest
+  CHECK(withOutput(rest, -90.f, -12.f, 600).energy == 0.f); // output alone (metronome)
+  CHECK(HoldPlayInput(normal, -90.f, 90).energy < withOutput(played, -90.f, -20.f, 90).energy);
+
+  // A pick: the attack jumps on the step, then decays while the note is held.
+  const volum::PlayLight picked = HoldPlayInput(rest, -12.f, 1);
+  CHECK(picked.attack >= 0.99f);
+  CHECK(volum::PlayGlowAmount(picked) > 0.f);
+  CHECK(HoldPlayInput(rest, -12.f, 45).attack < 0.05f);
+
+  // Letting go returns to rest exactly.
+  const volum::PlayLight after = HoldPlayInput(normal, -90.f, 600);
+  CHECK(after.energy == 0.f);
+  CHECK(after.attack == 0.f);
+  CHECK(volum::PlayGlowAmount(after) == 0.f);
+
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  CHECK(play.find("PlayArtBrightness(mLampPeak, pulse)") != std::string::npos);
-  CHECK(play.find("PlayArtBrightness(mInPeak, pulse)") == std::string::npos);
+  CHECK(play.find("AdvancePlayLight(mLight, mInPeak, mOutPeak)") != std::string::npos);
+  CHECK(play.find("PlayGlowAmount(mLight)") != std::string::npos);
+  CHECK(play.find("veil * 140") == std::string::npos);
+}
+
+TEST_CASE("VOLUM_PLAY_FAKE_PEAK takes dBFS or the meter norm")
+{
+  float norm = -1.f;
+  CHECK(volum::ParsePlayFakePeak("-12", norm));
+  CHECK(norm == doctest::Approx(volum::MeterNormFromDb(-12.f)));
+  norm = -1.f;
+  CHECK(volum::ParsePlayFakePeak("-12dB", norm));
+  CHECK(norm == doctest::Approx(volum::MeterNormFromDb(-12.f)));
+  CHECK(volum::ParsePlayFakePeak("0.5", norm));
+  CHECK(norm == doctest::Approx(0.5f));
+  CHECK(volum::ParsePlayFakePeak("0", norm));
+  CHECK(norm == 0.f);
+  CHECK_FALSE(volum::ParsePlayFakePeak(nullptr, norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("", norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("loud", norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("2", norm));
+  CHECK_FALSE(volum::ParsePlayFakePeak("-12x", norm));
+}
+
+TEST_CASE("PLAY stage art cache is keyed by art and pixel size")
+{
+  // Default 900x600 window: the paint rect is 662x312 in mono, 309x312 per lane in dual.
+  const auto mono = volum::MakeStageArtKey(7, false, 662.f, 312.f, 1.f);
+  const auto dual = volum::MakeStageArtKey(7, false, 309.f, 312.f, 1.f);
+  CHECK(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, false, 662.f, 312.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, dual));
+  CHECK_FALSE(volum::StageArtLayerMatches(dual, mono));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, false, 662.f, 300.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, false, 662.f, 312.f, 2.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(8, false, 662.f, 312.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(mono, volum::MakeStageArtKey(7, true, 662.f, 312.f, 1.f)));
+  CHECK_FALSE(volum::StageArtLayerMatches(volum::StageArtKey{}, volum::StageArtKey{}));
+  // StartLayer's rounding: ceil(scale * ceil(w)).
+  CHECK(volum::MakeStageArtKey(0, false, 309.f, 312.f, 1.5f).pixelW == 464);
+  CHECK(volum::MakeStageArtKey(0, false, 308.4f, 312.f, 1.f).pixelW == 309);
+
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("StageArtLayerMatches(cached, want)") != std::string::npos);
+  CHECK(play.find("g.DrawBitmap(bitmap, paint, 0, 0, nullptr);") != std::string::npos);
+  CHECK(play.find("DrawFittedLayer(layer, paint") == std::string::npos);
 }
 
 TEST_CASE("AnyOverlayOpen is true when any listed tag is showing")
@@ -185,7 +314,8 @@ TEST_CASE("Invalid PLAY slots share one label")
   CHECK(volum::OccupiedSlotLabel(true, "Lead") == "Lead");
   CHECK(volum::OccupiedSlotLabel(false, "Lead") == std::string(volum::kPlayInvalidSlotLabel));
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h")
+                           + ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
   CHECK(play.find("MISSING SOUND") == std::string::npos);
   CHECK(tabs.find("MISSING SOUND") == std::string::npos);
   CHECK(play.find("Missing Sound") == std::string::npos);
@@ -277,7 +407,7 @@ TEST_CASE("PLAY T/M/H and Ctrl+S fall through the PLAY key branch")
 TEST_CASE("Ctrl+S and Default dirty use the live-vs-default comparison")
 {
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
-  REQUIRE(presets.find("LivePresetDirty(mVolumHasRecalledSnapshot, _VolumActiveScene(), mVolumRecalledSnapshot)")
+  REQUIRE(presets.find("LivePresetDirty(mVolumHasRecalledSnapshot, sounding, mVolumRecalledSnapshot)")
           != std::string::npos);
   REQUIRE(presets.find("bool NeuralAmpModeler::_VolumHandleSaveShortcut()") != std::string::npos);
   REQUIRE(presets.find("_VolumPromptSaveAs") != std::string::npos);
@@ -303,44 +433,114 @@ TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
   REQUIRE(runtime.find("void NeuralAmpModeler::_VolumAddHeardPlaySound()") != std::string::npos);
   REQUIRE(runtime.find("AddHeardNeedsSaveAs") != std::string::npos);
   REQUIRE(runtime.find("AddHeardMarksLive") != std::string::npos);
-  REQUIRE(runtime.find("_VolumPromptSaveAs(finish)") != std::string::npos);
+  // A tweaked Factory slot used to be overwritten: the save moved the LIVE switch onto
+  // the new copy, so finish() found it assigned and added nothing.
+  REQUIRE(runtime.find("_VolumPromptSaveAs(finish, volum::SaveOrigin::AddSound)") != std::string::npos);
   const auto finish = runtime.find("auto finish = [this]()");
   REQUIRE(finish != std::string::npos);
-  const auto finishEnd = runtime.find("_VolumPromptSaveAs(finish)", finish);
+  const auto finishEnd = runtime.find("_VolumPromptSaveAs(finish, volum::SaveOrigin::AddSound)", finish);
   REQUIRE(finishEnd != std::string::npos);
   CHECK(runtime.substr(finish, finishEnd - finish).find("mVolumLastRecalledPlaySlot = slot") != std::string::npos);
 }
 
-TEST_CASE("H peels Pack before it closes Settings")
+TEST_CASE("Every name prompt uses the shared name dialog; only numeric boxes stay native")
 {
+  // Manage new / rename and the builder's amp name / cab labels used iPlug's text
+  // entry, which has no word keys, no undo and commits on focus loss.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto start = overlay.find("void StartTextEntry(");
+  REQUIRE(start != std::string::npos);
+  const auto native = overlay.find("->CreateTextEntry(", start);
+  REQUIRE(native != std::string::npos);
+  const std::string beforeNative = overlay.substr(start, native - start);
+  CHECK(beforeNative.find("!IsIrValueTarget(target) && mNamePrompt") != std::string::npos);
+  CHECK(beforeNative.find("return;") != std::string::npos);
+
   const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
-  const auto hGate = layout.find("if (key.VK == 'h' || key.VK == 'H')");
-  REQUIRE(hGate != std::string::npos);
-  const auto packHide = layout.find("kCtrlTagVoLumPackOverlay", hGate);
-  REQUIRE(packHide != std::string::npos);
-  const auto settingsH = layout.find("page->HideAnimated(true)", packHide);
-  REQUIRE(settingsH != std::string::npos);
-  CHECK(packHide < settingsH);
+  const auto wire = layout.find("overlay->SetNamePromptCallback(");
+  REQUIRE(wire != std::string::npos);
+  CHECK(layout.substr(wire, 700).find("->ShowName(") != std::string::npos);
+
+  const std::string bar = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPresetBar.h");
+  CHECK(bar.find("CreateTextEntry(") == std::string::npos);
 }
 
-TEST_CASE("Name dialog Enter in the field saves")
+TEST_CASE("Name dialog keys and caret blink repaint the box, not the whole window")
 {
+  // iPlug repaints a dirty control's whole rect and every control under it. The
+  // dialog used to span the window, so each key repainted the entire UI.
+  const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumNameDialog.h");
+  const auto ctor = dialog.find("explicit VoLumNameDialogControl(const IRECT& fullBounds)");
+  REQUIRE(ctor != std::string::npos);
+  const std::string ctorBody = dialog.substr(ctor, 220);
+  CHECK(ctorBody.find(": IControl(BoxFor(fullBounds).GetPadded(5.f))") != std::string::npos);
+  CHECK(ctorBody.find("SetTargetRECT(fullBounds);") != std::string::npos);
+  CHECK(dialog.find("class VoLumNameDialogScrimControl") != std::string::npos);
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto scrim = layout.find("new VoLumNameDialogScrimControl(b)");
+  const auto dlg = layout.find("AttachControl(nameDlg, kCtrlTagVoLumNameDialog)");
+  REQUIRE(scrim != std::string::npos);
+  REQUIRE(dlg != std::string::npos);
+  CHECK(scrim < dlg);
+  CHECK(layout.find("nameDlg->SetScrim(nameScrim);") != std::string::npos);
+}
+
+TEST_CASE("H peels Pack before it closes Settings")
+{
+  // This used to be pinned as "the Pack branch appears before the Settings
+  // branch in the H handler". Hotkey routing is now one decision function
+  // (volum::keyboard::RouteKey), so the invariant is asked directly instead of
+  // inferred from the order two strings happen to appear in a file.
+  using volum::keyboard::KeyConsumer;
+  using volum::keyboard::KeyKind;
+  using volum::keyboard::OverlayStack;
+  using volum::keyboard::RouteKey;
+
+  OverlayStack packOverSettings;
+  packOverSettings.settings = true;
+  packOverSettings.pack = true;
+  CHECK(RouteKey(packOverSettings, KeyKind::HotkeyH) == KeyConsumer::CloseOverlay);
+  CHECK(volum::keyboard::TopOverlay(packOverSettings) == volum::keyboard::OverlayId::Pack);
+
+  OverlayStack settingsOnly;
+  settingsOnly.settings = true;
+  CHECK(RouteKey(settingsOnly, KeyKind::HotkeyH) == KeyConsumer::CloseOverlay);
+  CHECK(volum::keyboard::TopOverlay(settingsOnly) == volum::keyboard::OverlayId::Settings);
+}
+
+TEST_CASE("Name dialog is a view over the model: only Enter and Save commit")
+{
+  // The decisions live in VoLumNameDialogModel.h (test_volum_name_dialog.cpp).
+  // These pins keep the control from growing its own again.
   CHECK(volum::custom::NormalizePresetName("  Lead  ") == "Lead");
-  CHECK(volum::custom::NameDialogCommitAfterTextEntry("Lead"));
-  CHECK_FALSE(volum::custom::NameDialogCommitAfterTextEntry(""));
-  bool armed = true;
-  CHECK(volum::custom::NameDialogCommitOnce(armed, "Lead"));
-  CHECK_FALSE(armed);
-  CHECK_FALSE(volum::custom::NameDialogCommitOnce(armed, "Lead"));
-  armed = true;
-  CHECK_FALSE(volum::custom::NameDialogCommitOnce(armed, ""));
-  CHECK(armed);
   const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumNameDialog.h");
   const auto complete = dialog.find("void OnTextEntryCompletion");
   REQUIRE(complete != std::string::npos);
-  CHECK(dialog.find("Commit();", complete) != std::string::npos);
+  const auto completeEnd = dialog.find("\n  }", complete);
+  REQUIRE(completeEnd != std::string::npos);
+  const std::string completion = dialog.substr(complete, completeEnd - complete);
+  CHECK(completion.find("ApplyTextEntryCompletion") != std::string::npos);
+  CHECK(completion.find("Commit") == std::string::npos);
+  // No iPlug text entry: it reports only on completion and eats the Cancel click.
+  CHECK(dialog.find("->CreateTextEntry(") == std::string::npos);
+  CHECK(dialog.find("volum::name_dialog::LabelText(label)") != std::string::npos);
   CHECK(dialog.find("std::move(mOnSave)") != std::string::npos);
-  CHECK(dialog.find("mOnSave = nullptr") != std::string::npos);
+
+  // The overwrite target is resolved by id inside the commit callback, never an
+  // index captured when the dialog opened.
+  const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
+  const auto prompt = presets.find("void NeuralAmpModeler::_VolumPromptSaveAs");
+  REQUIRE(prompt != std::string::npos);
+  const auto commit = presets.find("[this, after, origin, currentName, currentId](const std::string& name)", prompt);
+  REQUIRE(commit != std::string::npos);
+  CHECK(presets.find("PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)", commit) != std::string::npos);
+  CHECK(presets.find("currentUserIdx", prompt) == std::string::npos);
+
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto route = layout.find("case KeyConsumer::NameDialogKey:");
+  REQUIRE(route != std::string::npos);
+  CHECK(layout.substr(route, 200).find("dlg->OnKeyDown(0.f, 0.f, key);") != std::string::npos);
+  CHECK(layout.find("mVolumUiMode == volum::UiMode::Play && !nameDialogOpen") != std::string::npos);
 }
 
 TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
@@ -352,10 +552,13 @@ TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
   REQUIRE(apply != std::string::npos);
   const auto midi = scene.find("MidiChannelFromMachineSettings(true, j,", load);
   REQUIRE(midi != std::string::npos);
+  const auto recallCc = scene.find("MidiRecallCcFromMachineSettings(true, j,", load);
+  REQUIRE(recallCc != std::string::npos);
   const auto guard = scene.rfind("#if defined(APP_API)", apply);
   REQUIRE(guard != std::string::npos);
-  CHECK(apply - guard < 80);
-  CHECK(midi - guard < 200);
+  CHECK(scene.find("#endif", guard) > apply);
+  CHECK(scene.find("#endif", guard) > midi);
+  CHECK(scene.find("#endif", guard) > recallCc);
   CHECK(scene.find("j.contains(\"midiCh\")", load) == std::string::npos);
   const auto setLite = scene.find("void NeuralAmpModeler::_VolumSetLiteMode(bool lite)");
   const auto owner = scene.find("std::string NeuralAmpModeler::_VolumActiveOwnerKey()");
@@ -369,7 +572,7 @@ TEST_CASE("Plugins ignore standalone volumUiMode in the machine file")
 TEST_CASE("PLAY picker, Settings MIDI, and Pack share ListWheelDelta")
 {
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
   CHECK(play.find("ListWheelDelta(d, kPickerRowH)") != std::string::npos);
   CHECK(tabs.find("ListWheelDelta(d, kRowH)") != std::string::npos);
@@ -494,11 +697,11 @@ TEST_CASE("BUILD status row is padded; hint sits under it")
   CHECK(plugin.find("SetStatus(\"Output safety active - lower output or wet mix\", true)") != std::string::npos);
 }
 
-TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
+TEST_CASE("Settings MIDI hide resets to the footswitch board and Escape pops first")
 {
   const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
   const auto hideFn = controls.find("void HideAnimated(bool hide)");
-  const auto reset = controls.find("ResetToList()", hideFn);
+  const auto reset = controls.find("ResetToBoard()", hideFn);
   const auto hideKids = controls.find("ForAllChildrenFunc([hide]", hideFn);
   REQUIRE(hideFn != std::string::npos);
   REQUIRE(reset != std::string::npos);
@@ -519,14 +722,24 @@ TEST_CASE("Settings MIDI hide resets to the list and Escape pops first")
   const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
   CHECK(play.find("bool ConsumePlayKey(const IKeyPress& key)") != std::string::npos);
 
-  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  const std::string tabs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
   CHECK(tabs.find("bool ConsumeEscape()") != std::string::npos);
-  CHECK(tabs.find("void ResetToList()") != std::string::npos);
+  CHECK(tabs.find("void ResetToBoard()") != std::string::npos);
+  const auto hideOverride = tabs.find("void Hide(bool hide) override");
+  REQUIRE(hideOverride != std::string::npos);
+  const auto hideDraw = tabs.find("void Draw(IGraphics& g) override", hideOverride);
+  REQUIRE(hideDraw != std::string::npos);
+  const auto hideReset = tabs.find("ResetToBoard()", hideOverride);
+  REQUIRE(hideReset != std::string::npos);
+  CHECK(hideReset < hideDraw);
+  CHECK(tabs.find("if (hide && (mScreen != kScreenBoard || mDragging))") != std::string::npos);
   CHECK(tabs.find("FlashEmptyHint()") != std::string::npos);
-  const auto addClick = tabs.find("if (AddRect().Contains(x, y))");
-  const auto flash = tabs.find("FlashEmptyHint();", addClick);
-  const auto open = tabs.find("OpenNumberStep(FirstFreeSlot());", addClick);
-  REQUIRE(addClick != std::string::npos);
+  // A click on a switch with nothing to choose pulses the reason instead of
+  // opening an empty picker.
+  const auto click = tabs.find("// A click lands only where it started");
+  const auto flash = tabs.find("FlashEmptyHint();", click);
+  const auto open = tabs.find("OpenPicker(from);", click);
+  REQUIRE(click != std::string::npos);
   REQUIRE(flash != std::string::npos);
   REQUIRE(open != std::string::npos);
   CHECK(flash < open);
@@ -588,5 +801,29 @@ TEST_CASE("Settings MIDI and PLAY copy stay in Josefin's glyph set")
       CHECK(c < 0x80);
   };
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsTabs.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitch.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchDraw.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiFootswitchModel.h");
+  noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumMidiSoundPicker.h");
   noHigh(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+}
+
+TEST_CASE("P toggles BUILD and PLAY in standalone and plugin")
+{
+  CHECK(volum::keyboard::IsUiModeToggleKey('p', false, false));
+  CHECK(volum::keyboard::IsUiModeToggleKey('P', false, false));
+  CHECK_FALSE(volum::keyboard::IsUiModeToggleKey('p', true, false)); // Ctrl+P stays free for hosts
+  CHECK_FALSE(volum::keyboard::IsUiModeToggleKey('p', false, true));
+  CHECK_FALSE(volum::keyboard::IsUiModeToggleKey(' ', false, false)); // Space is the DAW transport
+
+  // Checked before PLAY swallows keys, skipped while a name is typed or an overlay is up.
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto toggle = layout.find("IsUiModeToggleKey(key.VK, key.C, key.A) && !nameDialogOpen");
+  const auto playBranch = layout.find("if (mVolumUiMode == volum::UiMode::Play && !nameDialogOpen)");
+  REQUIRE(toggle != std::string::npos);
+  REQUIRE(playBranch != std::string::npos);
+  CHECK(toggle < playBranch);
+  CHECK(layout.find(
+          "_VolumSetUiMode(mVolumUiMode == volum::UiMode::Play ? volum::UiMode::Build : volum::UiMode::Play)", toggle)
+        < playBranch);
 }

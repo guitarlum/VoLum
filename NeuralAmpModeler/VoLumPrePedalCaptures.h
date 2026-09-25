@@ -126,4 +126,27 @@ inline bool PlayNamCaptureAssigned(int captureIdx)
   return captureIdx > kPreCaptureEmptyIndex;
 }
 
+// What a click on a PRE NAM pedal card should do.
+//
+// The card's footer reads "Click to change" whenever the slot is empty, but the
+// picker used to be gated on the card already being focused, so that first
+// click only moved focus and changed nothing. Same affordance lie as the empty
+// Dual Amp SUPPORT lane: art promising an action the gesture does not perform.
+// An empty slot offers exactly one action, so it opens the picker straight
+// away. A slot that already holds a capture keeps focus-then-change, so one
+// stray click cannot replace a capture that is in use.
+enum class CaptureCardClick
+{
+  FocusOnly,
+  OpenPicker,
+  FocusThenOpenPicker,
+};
+
+inline CaptureCardClick DecideCaptureCardClick(bool cardFocused, bool slotHasCapture)
+{
+  if (cardFocused)
+    return CaptureCardClick::OpenPicker;
+  return slotHasCapture ? CaptureCardClick::FocusOnly : CaptureCardClick::FocusThenOpenPicker;
+}
+
 } // namespace volum

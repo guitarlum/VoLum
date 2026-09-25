@@ -811,6 +811,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
       mVolumMidiChannel.store(idTail.midiCh);
+      mVolumMidiRecallCc.store(idTail.midiRecallCc);
       applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
       mVolumUiMode = volum::UiModeFromString(idTail.uiMode);

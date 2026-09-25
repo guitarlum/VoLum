@@ -20,14 +20,6 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
   mVolumUiMode = mode;
   if (auto* pGfx = GetUI())
   {
-    if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
-      surface->Hide(mode != volum::UiMode::Play);
-    if (auto* plate = pGfx->GetControlWithTag(kCtrlTagVoLumHeaderPlate))
-      plate->Hide(mode == volum::UiMode::Play);
-    if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
-      toggle->As<VoLumModeToggleControl>()->SetMode(mode);
-    if (auto* preset = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
-      preset->Hide(mode == volum::UiMode::Play);
     if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
       menu->Hide(true);
     if (auto* overlay = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
@@ -44,9 +36,11 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
   mVolumSettingsDirty = true;
 #endif
   DirtyParametersFromUI();
-  if (mode == volum::UiMode::Play && transition == volum::UiModeTransitionAction::RefreshOnly)
-    _VolumRefreshPlaySurface();
-  else
+  // Hide/show lives in _VolumRefreshPlaySurface so a restore that only syncs
+  // cannot leave PLAY intercepting BUILD clicks. BUILD still needs the layout
+  // pass that uncovers the knobs under the overlay.
+  _VolumRefreshPlaySurface();
+  if (!(mode == volum::UiMode::Play && transition == volum::UiModeTransitionAction::RefreshOnly))
     _UpdateVoLumLayout();
 }
 
@@ -169,10 +163,35 @@ void NeuralAmpModeler::_VolumSwapPlaySounds(int slotA, int slotB)
 
 void NeuralAmpModeler::_VolumRefreshPlaySurface()
 {
-  if (mVolumUiMode != volum::UiMode::Play)
-    return;
   auto* pGfx = GetUI();
   if (!pGfx)
+    return;
+
+  // Visibility is derived from mVolumUiMode on every call, including BUILD: the
+  // early return used to skip Hide, so a host restore into BUILD left PLAY shown
+  // at full-window bounds and it swallowed every click. Skip Hide when already
+  // matching - this function also runs every idle tick while PLAY is up.
+  const auto mode = mVolumUiMode;
+  const auto chrome = volum::PlayChromeForUiMode(mode);
+  if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+  {
+    if (surface->IsHidden() != chrome.hidePlaySurface)
+      surface->Hide(chrome.hidePlaySurface);
+  }
+  if (auto* plate = pGfx->GetControlWithTag(kCtrlTagVoLumHeaderPlate))
+  {
+    if (plate->IsHidden() != chrome.hideHeaderPlate)
+      plate->Hide(mode == volum::UiMode::Play);
+  }
+  if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
+    toggle->As<VoLumModeToggleControl>()->SetMode(mode);
+  if (auto* preset = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
+  {
+    if (preset->IsHidden() != chrome.hidePresetBar)
+      preset->Hide(chrome.hidePresetBar);
+  }
+
+  if (mVolumUiMode != volum::UiMode::Play)
     return;
   auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface);
   if (!raw)
@@ -229,6 +248,7 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
     dirty, volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::SaveUserCopy,
     volum::SoundIsAssigned(volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()),
                            _VolumActiveOwnerKey(), mVolumActivePresetId)));
+  raw->As<VoLumPlaySurfaceControl>()->SetAnimateArt(mVolumAnimatePlayArt.load());
   raw->As<VoLumPlaySurfaceControl>()->SetInPeak(mVolumPlayInPeak.load(std::memory_order_relaxed));
   raw->As<VoLumPlaySurfaceControl>()->SetOutPeak(mVolumPlayOutPeak.load(std::memory_order_relaxed));
   raw->As<VoLumPlaySurfaceControl>()->SetPickerGroups(&mVolumPlayPickerGroups);
@@ -246,7 +266,12 @@ void NeuralAmpModeler::_VolumAddHeardPlaySound()
     auto& store = volum::content::GlobalContentStore();
     const int slot = volum::content::FirstFreeMidiSoundSlot(store.reg());
     if (!volum::AddHeardMarksLive(slot, mVolumActivePresetId.empty()))
+    {
+      if (auto* gfx = GetUI())
+        if (auto* surface = gfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
+          surface->As<VoLumPlaySurfaceControl>()->OpenReplacePicker();
       return;
+    }
     _VolumAssignPlaySound(slot, {_VolumActiveOwnerKey(), mVolumActivePresetId, {}, {}, false, 0, false});
     mVolumLastRecalledPlaySlot = slot;
     _VolumRefreshPlaySurface();
@@ -254,7 +279,7 @@ void NeuralAmpModeler::_VolumAddHeardPlaySound()
   if (volum::AddHeardNeedsSaveAs(
         volum::SaveActionForActivePreset(mVolumActivePresetId), _VolumLivePresetDirty(), mVolumActivePresetId.empty()))
   {
-    _VolumPromptSaveAs(finish);
+    _VolumPromptSaveAs(finish, volum::SaveOrigin::AddSound);
     return;
   }
   finish();

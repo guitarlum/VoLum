@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 
 project(NeuralAmpModelerTests LANGUAGES CXX)
 
@@ -26,13 +26,17 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_diag_log.cpp
   test_volum_latency_report.cpp
   test_volum_amp_list_scroll.cpp
+  test_volum_dual_amp_input.cpp
   test_volum_amp_catalog.cpp
+  test_volum_art_anim.cpp
   test_delay_reverb_dsp.cpp
   test_reverb_diffusion.cpp
+  test_reverb_stereo_input.cpp
   test_volum_pre_effects.cpp
   test_golden_dsp.cpp
   test_golden_rigs.cpp
   test_golden_presets.cpp
+  test_volum_golden_render.cpp
   test_keyboard_steps.cpp
   test_eparam_order.cpp
   test_tuner_dsp.cpp
@@ -54,10 +58,13 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_state_roundtrip.cpp
   test_volum_pitch.cpp
   test_volum_pitch_artifacts.cpp
+  test_volum_realtime_budget.cpp
+  test_volum_self_capture_format.cpp
   test_volum_tremolo.cpp
   test_volum_chorus.cpp
   test_volum_ir_file_guard.cpp
   test_volum_pre_post_lock.cpp
+  test_volum_name_dialog.cpp
   test_volum_nan_guard.cpp
   test_volum_bypass_identity.cpp
   test_volum_level_mute.cpp
@@ -76,8 +83,10 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_loopback_detect.cpp
   test_volum_midi_decoder.cpp
   test_volum_midi_handoff.cpp
+  test_volum_midi_footswitch.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
@@ -138,3 +147,4 @@ if(VOLUM_ENABLE_COVERAGE)
     message(FATAL_ERROR "VOLUM_ENABLE_COVERAGE requires Clang")
   endif()
 endif()
+

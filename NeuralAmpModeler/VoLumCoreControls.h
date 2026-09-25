@@ -12,6 +12,8 @@
 #include "VoLumExactEntry.h"
 #include "VoLumSettingsOverlay.h"
 #include "VoLumSettingsTabs.h"
+#include "VoLumMidiFootswitch.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -108,7 +110,6 @@ public:
 };
 
 
-
 // VoLumHeroImageControl + VoLumSupportPolarityControl live in VoLumHero.h.
 
 class VoLumModePickerControl : public IControl
@@ -117,7 +118,8 @@ public:
   VoLumModePickerControl(const IRECT& bounds, int paramIdx, const std::vector<std::string>& modes)
   : IControl(bounds, paramIdx)
   , mModes(modes)
-  {}
+  {
+  }
 
   void Draw(IGraphics& g) override
   {
@@ -134,8 +136,8 @@ public:
 
       // Selection chrome via the shared helper (square amber fill / soft amber
       // hover wash). See VoLumColorHelpers.h DrawVoLumSelection.
-      DrawVoLumSelection(g, itemArea, isSelected, static_cast<int>(i) == mHovered,
-                         VoLumSelectionStyle::AmberPicker, /*roundness=*/0.f, /*inset=*/1.f);
+      DrawVoLumSelection(g, itemArea, isSelected, static_cast<int>(i) == mHovered, VoLumSelectionStyle::AmberPicker,
+                         /*roundness=*/0.f, /*inset=*/1.f);
 
       IColor textCol = SelectionInkColor(VoLumSelectionStyle::AmberPicker, isSelected);
       IText text(11.f, textCol, "Josefin-Bold", EAlign::Near, EVAlign::Middle);
@@ -147,6 +149,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     float itemH = mRECT.H() / static_cast<float>(mModes.size());
     int clickedIdx = static_cast<int>((y - mRECT.T) / itemH);
     if (clickedIdx >= 0 && clickedIdx < static_cast<int>(mModes.size()))
@@ -154,6 +157,12 @@ public:
       SetValue(static_cast<double>(clickedIdx) / (mModes.size() - 1));
       SetDirty(true);
     }
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
   }
 
   void OnMouseOver(float /*x*/, float y, const IMouseMod& /*mod*/) override
@@ -179,6 +188,7 @@ public:
 private:
   std::vector<std::string> mModes;
   int mHovered = -1;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumSubRowTextControl : public IControl
@@ -192,10 +202,12 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    if (mName.empty()) return;
+    if (mName.empty())
+      return;
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
 
-    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
+    g.DrawText(
+      IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
     float cy = nameArea.B + 8.f;
@@ -229,7 +241,8 @@ public:
   void Draw(IGraphics& g) override
   {
     const IRECT nameArea = IRECT(mRECT.L + 18.f, mRECT.T + 8.f, mRECT.R - 18.f, mRECT.T + 36.f);
-    g.DrawText(IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
+    g.DrawText(
+      IText(21.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle), mName.c_str(), nameArea);
 
     // Gold divider with diamond below the name
     float cy = nameArea.B + 8.f;
@@ -310,7 +323,12 @@ public:
 
   // Lane belonging is conveyed by the knob pointer-dot colour and value-text colour.
   // Labels stay neutral so the row reads cleanly. Methods kept as no-ops for ABI parity.
-  enum class LaneAccent : int { None = 0, Main = 1, Support = 2 };
+  enum class LaneAccent : int
+  {
+    None = 0,
+    Main = 1,
+    Support = 2
+  };
   void SetLaneAccent(LaneAccent /*accent*/) {}
   void SetSupportAccent(bool /*support*/) {}
 
@@ -394,6 +412,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& /*mod*/) override
   {
+    const auto pressed = mSecondPress.Press();
     const int n = static_cast<int>(mLabels.size());
     if (n <= 0)
       return;
@@ -404,6 +423,12 @@ public:
     else
       SetValue(static_cast<double>(idx) / static_cast<double>(n - 1));
     SetDirty(true);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
   }
 
   void OnMouseOver(float x, float /*y*/, const IMouseMod& /*mod*/) override
@@ -457,6 +482,7 @@ private:
   std::vector<int> mValues;
   int mValueDenom = 0;
   int mHovered = -1;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 // Vertical text label (draws each character stacked)
@@ -511,10 +537,7 @@ public:
     mIgnoreMouse = true;
   }
 
-  void Draw(IGraphics& g) override
-  {
-    g.FillRect(IColor(72, 200, 162, 78), mRECT);
-  }
+  void Draw(IGraphics& g) override { g.FillRect(IColor(72, 200, 162, 78), mRECT); }
 };
 
 class VoLumFooterControl : public IControl
@@ -531,8 +554,8 @@ public:
     // Inset from the window's L-corners so 12.5 px Josefin has a real middle
     // in the 24 px band instead of sitting on the hairline.
     const IRECT ink = mRECT.GetPadded(-18.f, 0.f, -18.f, 0.f);
-    const IText text(12.5f, mAlert ? VoLumColors::AMBER : VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center,
-                     EVAlign::Middle);
+    const IText text(
+      12.5f, mAlert ? VoLumColors::AMBER : VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
     const std::string fitted = FitTextToWidth(g, text, mText.c_str(), ink.W());
     g.DrawText(text, fitted.c_str(), ink);
   }
@@ -552,7 +575,6 @@ private:
 };
 
 // Art Deco channel stepper: gold-themed [<] Ch 1 [>]
-
 
 
 // VoLumTunerControl + VoLumMetronomeButtonControl + VoLumMetronomeControl

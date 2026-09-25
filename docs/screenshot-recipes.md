@@ -18,12 +18,34 @@ To review the update badge, About pill, and footer reminder without a real
 release, launch with `VOLUM_FAKE_UPDATE=1`. That injects an in-memory 2.0.0
 manifest and does not write `volum-update-state.json`.
 
+To capture the PLAY art "playing" look without a guitar, launch with
+`VOLUM_PLAY_FAKE_PEAK=<level>` (set it before `.ui-sandbox-launch.ps1`; the
+launched app inherits it). `-12` or `-12dB` is dBFS, a value from `0` to `1` is
+the meter norm, and `0` is silence. It pins the IN level the PLAY surface sees
+(IN meter and art glow); audio is untouched, and without the variable nothing
+changes. Wait about 2 s after entering PLAY before capturing, so the lamp has
+settled. Silence must match the BUILD hero's brightness; `-12` is the full look.
+
+To capture a PLAY art at a fixed motion frame, launch with
+`VOLUM_ART_ANIM_DEBUG=<art>[:<energy>|off[:<time>|run[:<pick>]]]` (Release too; see
+section 3c). It replaces the art in every PLAY stage panel and ignores audio, the
+Settings toggle and the per-art registry flag; nothing else changes, and without
+the variable nothing changes at all.
+
 Canvas clicks and captures go through `scripts/ui-drive.ps1` (client pixels, one
 process per shot). Clicks always run before Keys in the same call: do not put
 `{ESC}` in `-Keys` with a menu-opening `-Clicks`, or the menu closes before
 capture. Do not chain `win-click.ps1` then `capture-volum-canvas.ps1`:
 foreground is lost between processes and PrintWindow returns a blank canvas.
 `win-click.ps1` stays window-relative for ad-hoc probes.
+
+To run Pack export / import without the native Save / Open dialog (a locked
+workstation cannot drive either), launch with `VOLUM_PACK_SAVE_PATH=<file>` and/or
+`VOLUM_PACK_OPEN_PATH=<file>`. Export... then writes that file and Import Pack...
+opens it, through the same code the dialog path runs; unset or empty, the
+dialogs come back. Every export, open and import also logs a `[pack]` line in
+`volum.log`. `e2e-standalone-win.ps1 -Scenario pack -ShotsDir <dir>` drives the
+whole round trip this way and saves the overlays as `06-*.png`.
 
 Pack Open/Save dialogs are separate `#32770` windows. Default `ui-drive.ps1`
 ForceFront cancels iPlug `PromptForFile` and the import overlay shows **No Pack
@@ -115,8 +137,42 @@ shows the wrong state. A capture that comes back uniformly light grey is the sam
 symptom - the GL surface was never composited because the window was not in
 front. A **locked workstation** produces exactly that, for every shot, with no
 other symptom: `PrintWindow` hands back DWM's last composited surface, and while
-LogonUI owns the desktop there is none. There is no way round it from a script,
-so check `Get-Process LogonUI` before blaming the recipe, and unlock first.
+LogonUI owns the desktop there is none. Check `Get-Process LogonUI` before
+blaming the recipe, then either unlock or use the `-Locked` mode below.
+
+### 2b. Locked-screen capture (`ui-drive.ps1 -Locked`)
+
+`-Locked` drives VoLum through window messages and captures from inside the app,
+so it works the same with the workstation locked or unlocked. It needs VoLum
+started with `VOLUM_SELF_CAPTURE_DIR` (`.ui-sandbox-launch.ps1` sets it to
+`%TEMP%\volum-ui-sandbox\capture`); without that variable the capture control is
+never attached.
+
+```powershell
+pwsh NeuralAmpModeler/scripts/.ui-sandbox-launch.ps1 -Reseed
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "869,22;300,113" -Out shots\signal.png
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Keys "{ESC};^s" -Out shots\save-dialog.png
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Keys "{END} 2" -Out shots\save-dialog-typed.png
+```
+
+- Clicks are canvas pixels, scaled to the plug window's client width / 900.
+- `-Keys` takes the SendKeys subset: `^` Ctrl, `+` Shift, `%` Alt, `{ESC}`
+  `{ENTER}` `{TAB}` arrows `{HOME}` `{END}` `{BS}` `{DEL}` `{F1}`..`{F12}`,
+  `{X n}` repeats, other characters are typed. Modifiers reach VoLum by sharing
+  its key state for each stroke (`AttachThreadInput`).
+- The PNG is the GL framebuffer at client resolution (900x600 at 100% scale),
+  read after every control drew. Anything iPlug draws outside the control list
+  (corner resizer, tooltips, native Open/Save dialogs) is missing, and
+  `-PackOpen` is refused: launch with `VOLUM_PACK_OPEN_PATH` instead (see above).
+- Each call is one shot; state carries over between calls because the app keeps
+  running.
+- `-Drags "x1,y1>x2,y2[>x3,y3]"` presses, drags through the points with the
+  button held and releases (after `-Clicks`, before `-Keys`). `-HoldLastDrag`
+  keeps the last one held until after the capture, for a drag-in-flight shot.
+  Settings MIDI footswitch: switch centres are x 162 / 354 / 546 / 738 at
+  y 412 (row 1) / 497 (row 2); the bank arrows are `(84, 353)` and `(202, 353)`.
+- Hover states cannot be captured locked: the real cursor is not over the
+  window, so `TrackMouseEvent` posts `WM_MOUSELEAVE` straight after the move.
 
 The Settings tab strip is sized to content and centred, so tab x positions move
 when the number of tabs changes. It is three tabs wide since 1.3.0: window x
@@ -134,7 +190,7 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 | `user-guide-play.png` | Soldano SLO100 | slots 0–2 = Crunch Rhythm / Lead Boost / Clean Verb, slot 0 LIVE | canvas toggle `(743, 22)` if you are in BUILD. Fail if **+** is not **+ Add Sound** or if a safety banner is visible. PLAY IN/OUT should read in the same ballpark as BUILD. Drag a rail row onto another to swap; drop in the gap to slide Sounds along existing program numbers |
 | `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view, **Sunset Crunch**) | none | click **THC Sunset** in the browser (93,565) if the custom amp is focused. Compact pill left of tuner. Fail if NAM 2 is an empty `+` or the preset bar is not Sunset Crunch |
 | `user-guide-settings-signal.png` | any | none | canvas gear `(869, 22)`; Settings opens on the tab it was left on, so click **SIGNAL** `(300, 113)` |
-| `user-guide-settings-midi.png` | any | seed a few `midiSoundMap` entries, one of them pointing at a preset id that does not exist (`preset_gone_forever`), so the list shows assigned rows and a red **Invalid slot** | from Settings, click **MIDI** `(450, 113)` |
+| `user-guide-settings-midi.png` | any | `.ui-sandbox-launch.ps1 -Reseed`: programs 0, 1, 2, 4 assigned and 6 pointing at a preset id that does not exist (`preset_gone_forever`), so footswitch bank 1 shows assigned, empty **+** and a red **Invalid slot** switch | toggle PLAY `(743, 22)`, click rail row 00 `(800, 105)` so switch 000 lights **LIVE**, toggle back `(743, 22)`, gear `(869, 22)`, **MIDI** `(450, 113)`. Fail if a switch name is cut mid-word without an ellipsis or LIVE is missing |
 | `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** `(600, 113)`. Both **Back up your library** help lines stay inside the card |
 | `user-guide-pre.png` | THC Sunset | `preCompActive=true` (hero keeps Comp off) | `1` then click Comp card. Fail if either NAM slot is empty |
 | `user-guide-pre-pedal.png` | THC Sunset | none | from PRE, click Klon card `(455, 230)` twice to open the capture chooser |
@@ -173,8 +229,49 @@ without writing the real library.
    row: program numbers stay, Sounds swap.
 6. Drag into the gap between two rows: Sounds slide along the existing PCs;
    holes stay absent.
-7. Settings -> MIDI `(869, 22)` then `(450, 113)` shows the same order after
-   the drag.
+7. Settings -> MIDI `(869, 22)` then `(450, 113)` shows the same Sounds on the
+   same program numbers (footswitch bank 1) after the drag.
+
+## 3c. PLAY art motion frames (energy 0 / 0.5 / 1)
+
+Does not recapture a docs PNG. Shoots one art at a chosen energy, motion time
+and pick, for review of an art's animation (`NeuralAmpModeler/art/`) or its
+silence identity.
+
+`VOLUM_ART_ANIM_DEBUG=<art>[:<energy>|off[:<time>|run[:<pick>]]]`:
+
+| Field | Values |
+| --- | --- |
+| `art` | `0`-`14` = factory amp index in sidebar order (`5` H&K TriAmp, `13` Soldano), or `c0`-`c5` = custom-art style |
+| `energy` | `0`-`1` (glow, bloom and motion as if playing at that level); `off` = the static art, exactly what the toggle-off path draws |
+| `time` | motion seconds (default `0`); `run` = let the motion clock run live |
+| `pick` | `0`-`1` (default `0`); above 0 also stamps one pick 0.05 s ago |
+
+```powershell
+$env:VOLUM_ART_ANIM_DEBUG = "13:0.5:2.5"     # Soldano, half level, 2.5 s into its motion
+pwsh NeuralAmpModeler/scripts/.ui-sandbox-launch.ps1 -Reseed
+pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "10,10;743,22" -SettleMs 2500 -Out shots\soldano-0.5.png
+```
+
+- Energy 0 / 0.5 / 1: `<art>:0:<t>`, `<art>:0.5:<t>`, `<art>:1:<t>`; add `:1` for a pick.
+  A few time steps (`:1:2.5`, `:1:4`, `:1:6`) show the motion itself.
+- Silence identity: `<art>:0:7.3` must match `<art>:off` within 2/255 per channel
+  inside the art (for any time). Compare the paint rect, not the whole canvas:
+  the PLAY corona pulses on its own.
+- Dual lanes: click Marshall 2204 in the sidebar `(90, 308)` before the toggle;
+  both lanes then show the debug art at the lane width.
+- Cost: add `VOLUM_ART_ANIM_PERF=1`. Each panel then shows `art <avg> ms (peak <max>)
+  prep <ms>` for its animator's `Draw`, and every 120 frames writes an `[art]` line
+  with the same numbers to `volum.log` (the sandbox log is
+  `%TEMP%\volum-ui-sandbox\VoLum\volum.log`). Use `<art>:1:run` and `<art>:1:run:1`
+  and wait ~5 s so a full window is in. Budget: average 1.5 ms, peak 2.5 ms at
+  900x600 mono; a resting art stays under 0.15 ms.
+- Whole-frame cost: `VOLUM_FRAME_PERF=<ms>` (Windows standalone) writes a
+  `[frame] draw <total> ms  regions <n>  [<per region>]` line to `volum.log` for
+  every painted frame that took at least `<ms>` (`0` logs all). Each region pays
+  one GPU sync, so compare region times rather than totals of frames with a
+  different region count. Drive input without `ui-drive.ps1` while measuring: a
+  self-capture repaints the whole window.
 
 ## 4. Verify + restore
 

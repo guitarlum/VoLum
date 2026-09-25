@@ -2,6 +2,7 @@
 
 #include "VoLumContentStore.h"
 #include "VoLumFactoryPresets.h"
+#include "VoLumMidi.h"
 #include "VoLumPickerGroups.h"
 #include "VoLumTriptychState.h"
 
@@ -58,6 +59,53 @@ inline int MidiChannelFromJson(const nlohmann::json& value, int fallback = 0)
 inline int MidiChannelFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
 {
   return standalone ? MidiChannelFromJson(value, fallback) : fallback;
+}
+
+inline int MidiRecallCcFromJson(const nlohmann::json& value, int fallback = kMidiRecallCcDefault)
+{
+  if (!value.is_object() || !value.contains("midiRecallCc") || !value["midiRecallCc"].is_number_integer())
+    return fallback;
+  return ClampMidiRecallCc(value["midiRecallCc"].get<int>());
+}
+
+// Same split as midiCh: the recall CC in volum-settings.json is the standalone
+// window. A plugin keeps `fallback` (constructor default or the project id-tail)
+// so a standalone CC choice cannot move the next VST3 insert.
+inline int MidiRecallCcFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? MidiRecallCcFromJson(value, fallback) : fallback;
+}
+
+inline int LastPlaySlotFromJson(const nlohmann::json& value, int fallback = -1)
+{
+  if (!value.is_object() || !value.contains("lastPlaySlot") || !value["lastPlaySlot"].is_number_integer())
+    return fallback;
+  return std::clamp(value["lastPlaySlot"].get<int>(), -1, 127);
+}
+
+// Same split as midiCh / volumUiMode: the PLAY cursor in volum-settings.json is
+// the standalone window. A plugin keeps `fallback` (constructor -1 or the
+// project id-tail) so a standalone quit cannot move the next VST3 insert.
+inline int LastPlaySlotFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? LastPlaySlotFromJson(value, fallback) : fallback;
+}
+
+// PLAY is attached at full-window bounds. Hide/show of that surface, the BUILD
+// header plate, and the preset bar is a function of UiMode - not something a
+// caller remembers. Host restore writes mVolumUiMode and runs _VolumSyncUiFromState;
+// if that path skips this plan, PLAY left shown swallows every BUILD click.
+struct PlayChromePlan
+{
+  bool hidePlaySurface = true;
+  bool hideHeaderPlate = false;
+  bool hidePresetBar = false;
+};
+
+inline PlayChromePlan PlayChromeForUiMode(UiMode mode)
+{
+  const bool play = mode == UiMode::Play;
+  return {!play, play, play};
 }
 
 enum class UiModeTransitionAction
@@ -220,8 +268,8 @@ inline std::vector<SoundChoice> BuildSoundChoices(const std::vector<FactoryPrese
   for (const auto& preset : factoryPresets)
   {
     if (preset.ampIdx >= 0 && preset.ampIdx < kAmpCount)
-      out.push_back({content::FactoryOwnerKey(preset.ampIdx), preset.id, kFactoryPresetDisplayName,
-                     kAmps[preset.ampIdx].displayName, true, preset.ampIdx, false});
+      out.push_back({content::FactoryOwnerKey(preset.ampIdx), preset.id, preset.name, kAmps[preset.ampIdx].displayName,
+                     true, preset.ampIdx, false});
   }
   for (const auto& bank : registry.presetBanks)
   {
@@ -246,8 +294,7 @@ inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const
   {
     if (ampId != content::FactoryOwnerKey(factory->ampIdx))
       return false;
-    out = {
-      ampId, presetId, kFactoryPresetDisplayName, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
+    out = {ampId, presetId, factory->name, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
     return true;
   }
   const std::string ampName = AmpNameForOwner(registry, ampId);
@@ -353,6 +400,19 @@ inline bool AddHeardNeedsSaveAs(PresetSaveAction, bool dirty, bool presetIdEmpty
 inline bool AddHeardMarksLive(int firstFreeSlot, bool presetIdEmpty)
 {
   return firstFreeSlot >= 0 && !presetIdEmpty;
+}
+
+// Who asked for a save. Ctrl+S moves the LIVE switch onto the copy it just saved;
+// Add this sound adds a switch of its own and leaves the LIVE one as it was.
+enum class SaveOrigin
+{
+  Shortcut,
+  AddSound
+};
+
+inline bool SaveRetargetsLiveSlot(SaveOrigin origin)
+{
+  return origin == SaveOrigin::Shortcut;
 }
 
 inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::string& activeAmpId,

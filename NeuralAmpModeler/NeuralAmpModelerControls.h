@@ -13,6 +13,7 @@
 #include "VoLumKeyboardModel.h"
 #include "VoLumLatencyReport.h"
 #include "VoLumOutputMode.h"
+#include "VoLumSecondPress.h"
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
 #define NAM_KNOB_HEIGHT 120.0f
@@ -166,6 +167,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     if (!IsDisabled())
     {
       SetSelectedForKeyboard(true);
@@ -175,6 +177,14 @@ public:
     }
 
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  // Double-click still resets to default, but only on the knob that took the
+  // first click: a dropdown row double-clicked over a knob must not reset it.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      IVKnobControl::OnMouseDblClick(x, y, mod);
   }
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
@@ -235,6 +245,7 @@ private:
   bool mKeyboardSelected = false;
   volum::keyboard::WheelAccumulator mWheelAccum;
   std::string mKeyboardLabel;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
@@ -356,8 +367,18 @@ public:
     (void)x;
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
   }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
+  }
+
+private:
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMFileNameControl : public IVButtonControl
@@ -706,7 +727,7 @@ class IContainerBaseWithNamedChildren : public IContainerBase
 {
 public:
   IContainerBaseWithNamedChildren(const IRECT& bounds)
-  : IContainerBase(bounds){};
+  : IContainerBase(bounds) {};
   ~IContainerBaseWithNamedChildren() = default;
 
 protected:
@@ -748,7 +769,7 @@ class ModelInfoControl : public IContainerBaseWithNamedChildren
 public:
   ModelInfoControl(const IRECT& bounds, const IVStyle& style)
   : IContainerBaseWithNamedChildren(bounds)
-  , mStyle(style){};
+  , mStyle(style) {};
 
   void ClearModelInfo()
   {
@@ -832,7 +853,7 @@ class OutputModeControl : public IVRadioButtonControl
 {
 public:
   OutputModeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize)
-  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize){};
+  : IVRadioButtonControl(bounds, paramIdx, {}, "", style, EVShape::Ellipse, EDirection::Vertical, buttonSize) {};
 
   void DrawWidget(IGraphics& g) override
   {
@@ -895,7 +916,21 @@ public:
       ss << " (n/a)";
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
+    // The constructor is given no option list, so the disabled-state buffer stays
+    // empty after OnInit copies the parameter's state count. Grow it before the
+    // call or SetStateDisabled is a no-op and the radio stays live.
+    if (mNumStates > 2)
+      volum::EnsureRadioDisabledStates(mDisabledState, mNumStates);
+    SetStateDisabled(2, disable);
   };
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const int index = GetButtonForPoint(x, y);
+    if (index > -1 && GetStateDisabled(index))
+      return;
+    IVRadioButtonControl::OnMouseDown(x, y, mod);
+  }
 };
 
 // VoLum: non-parameter A2 Lite-mode toggle for the Settings overlay. Reads and
@@ -955,6 +990,7 @@ public:
   {
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
     {
       const IRECT seg = SegmentTrack();
@@ -964,8 +1000,15 @@ public:
     SetDirty(false);
   }
 
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
+  }
+
 private:
   IText mLabelText;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren
@@ -996,8 +1039,25 @@ public:
   bool ConsumeEscape()
   {
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      return map->As<VoLumMidiSoundMapControl>()->ConsumeEscape();
+      return map->As<VoLumMidiFootswitchControl>()->ConsumeEscape();
     return false;
+  }
+
+  // The MIDI tab shows its footswitch board (not the Sound picker), so PageUp /
+  // PageDown page its banks.
+  bool MidiBanksPageable()
+  {
+    if (mActiveTab != kTabMidi || mWillHide)
+      return false;
+    auto* map = GetNamedChild(mControlNames.midiSoundMap);
+    return map && !map->IsHidden() && map->As<VoLumMidiFootswitchControl>()->OnBoard();
+  }
+
+  bool PageMidiBanks(int vk)
+  {
+    if (!MidiBanksPageable())
+      return false;
+    return GetNamedChild(mControlNames.midiSoundMap)->As<VoLumMidiFootswitchControl>()->PageBankKey(vk);
   }
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
@@ -1006,7 +1066,7 @@ public:
     (void)y;
     if (key.VK == kVK_ESCAPE)
     {
-      // Escape pops the MIDI tab's Add/picker sub-screen first; only a page that
+      // Escape pops the MIDI tab's Sound picker or drag first; only a page that
       // has nothing left to back out of closes. The plugin key handler also
       // calls ConsumeEscape so Esc works when the cursor is not over Settings.
       if (ConsumeEscape())
@@ -1031,10 +1091,10 @@ public:
     }
     else // hide subcontrols immediately
     {
-      // Every close path lands here, so the MIDI tab always reopens on its list
-      // rather than on a half-finished Add.
+      // Every close path lands here, so the MIDI tab always reopens on its
+      // footswitch board rather than on a half-finished Sound pick.
       if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-        map->As<VoLumMidiSoundMapControl>()->ResetToList();
+        map->As<VoLumMidiFootswitchControl>()->ResetToBoard();
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
     }
 
@@ -1063,10 +1123,10 @@ public:
   }
 
   // Three tabs, switched in-panel. SIGNAL owns the audio path (calibration,
-  // output mode, performance); MIDI owns the channel and the Program Change
-  // Sound assignments; SYSTEM owns everything about this install (shortcuts,
-  // loaded model, content library, about and update). The one-page version could
-  // not hold all of it at 900x600 without clipping its own footer.
+  // output mode, performance); MIDI owns the channel, the recall CC, and the
+  // Program Change Sound assignments; SYSTEM owns everything about this install
+  // (shortcuts, loaded model, content library, about and update). The one-page
+  // version could not hold all of it at 900x600 without clipping its own footer.
   void OnAttached() override
   {
     const IRECT rootB = GetRECT();
@@ -1185,10 +1245,11 @@ public:
       const IRECT cardBody =
         _AddCard(kTabSignal, perfCard, "Performance", mControlNames.perfGroupFrame, mControlNames.perfSection);
       const float liteH = 30.f;
-      const float helpH = 30.f;
-      IRECT group = cardBody.GetCentredInside(cardBody.W(), liteH + 12.f + helpH);
+      const float helpH = 22.f;
+      const float animateH = 46.f;
+      IRECT group = cardBody.GetCentredInside(cardBody.W(), liteH + 8.f + helpH + 10.f + animateH);
       const IRECT liteR = group.ReduceFromTop(liteH);
-      (void)group.ReduceFromTop(12.f);
+      (void)group.ReduceFromTop(8.f);
       _Reg(kTabSignal, AddNamedChildControl(new VoLumLiteModeSwitchControl(liteR, leftText), mControlNames.liteMode));
       // Short enough to fit a third of the panel: the longer wording clipped a
       // character off each end of this card.
@@ -1196,6 +1257,18 @@ public:
            AddNamedChildControl(
              new IVLabelControl(group.ReduceFromTop(helpH), "Smaller A2 slice, lower CPU.", _HelpStyle(EVAlign::Top)),
              mControlNames.perfHelp));
+      (void)group.ReduceFromTop(10.f);
+      _Reg(kTabSignal, AddNamedChildControl(new VoLumAnimateArtSwitchControl(
+                                              group.ReduceFromTop(animateH),
+                                              [this]() {
+                                                auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate());
+                                                return plugin ? plugin->_VolumIsAnimatePlayArt() : true;
+                                              },
+                                              [this](bool on) {
+                                                if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+                                                  plugin->_VolumSetAnimatePlayArt(on);
+                                              }),
+                                            mControlNames.animateArt));
     }
 
 #if defined(APP_API)
@@ -1207,29 +1280,36 @@ public:
          AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, _HintStyle()), mControlNames.audioHint));
   }
 
-  // ---- MIDI: which channel, and what each program number plays ------------
+  // ---- MIDI: which channel, which recall CC, and what each program number plays
   //
-  // The assignment list is the tab's body, not a footnote: choosing what program
+  // The footswitch view is the tab's body, not a footnote: choosing what program
   // number 0..127 recalls is the whole reason a player opens this tab. The listen
-  // filter above it is a two-button choice most players never have to change.
+  // filter and recall CC above it are two-button / stepper choices most players
+  // never have to change.
   void _BuildMidiTab(const IRECT& body)
   {
     IRECT rest = body;
     // Taller than the old Omni stepper: the listen filter now spells out All vs
-    // one channel, plus the two situations that decide which a guitarist wants.
-    const IRECT channelCard = rest.ReduceFromTop(92.f);
+    // one channel beside the recall CC, plus the two situations that decide which
+    // a guitarist wants.
+    const IRECT channelCard = rest.ReduceFromTop(134.f);
     (void)rest.ReduceFromTop(14.f);
     const IRECT mapCard = rest;
 
     {
       const IRECT cardBody = _AddCard(kTabMidi, channelCard, "What this VoLum listens to", mControlNames.midiGroupFrame,
                                       mControlNames.midiSection, EAlign::Near);
-      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiChannelControl(cardBody), mControlNames.midiControl));
+      const float gap = 20.f;
+      const float leftW = std::min(340.f, std::max(220.f, cardBody.W() * 0.55f));
+      const IRECT channelR(cardBody.L, cardBody.T, cardBody.L + leftW, cardBody.B);
+      const IRECT ccR(channelR.R + gap, cardBody.T, cardBody.R, cardBody.B);
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiChannelControl(channelR), mControlNames.midiControl));
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiRecallCcControl(ccR), mControlNames.midiRecallCc));
     }
     {
       const IRECT cardBody = _AddCard(kTabMidi, mapCard, "What each program number plays",
                                       mControlNames.midiMapGroupFrame, mControlNames.midiMapSection, EAlign::Near);
-      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiSoundMapControl(cardBody), mControlNames.midiSoundMap));
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiFootswitchControl(cardBody), mControlNames.midiSoundMap));
     }
   }
 
@@ -1315,7 +1395,7 @@ private:
   static constexpr const char* kTabNames[kTabCount] = {"SIGNAL", "MIDI", "SYSTEM"};
   static constexpr const char* kTabHints[kTabCount] = {
     "How audio gets in and out of VoLum",
-    "Which MIDI channels this VoLum hears, and which Sound each program number plays",
+    "Which MIDI channel and recall CC this VoLum hears, and which Sound each program number plays",
     "This build, your library, your keyboard"};
 
   IControl* _Reg(int tab, IControl* control)
@@ -1401,31 +1481,27 @@ public:
       sw->SetTooltip(volum::InputCalibrationTooltip(available));
   }
 
-  void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel)
+  void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel,
+                        VoLumMidiRecallCcControl::CcCallback recallCc = {})
   {
     mMidiChannelCb = std::move(channel);
+    mMidiRecallCcCb = std::move(recallCc);
     _ApplyMidiWiring();
   }
 
-  // Assign/clear/swap/insert go straight back out to the plugin, which writes the
-  // one shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
-  void SetMidiSoundMapCallbacks(VoLumMidiSoundMapControl::AssignCallback assign,
-                                VoLumMidiSoundMapControl::ClearCallback clear)
+  // Assign/clear/swap go straight back out to the plugin, which writes the one
+  // shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
+  void SetMidiSoundMapCallbacks(VoLumMidiFootswitchControl::AssignCallback assign,
+                                VoLumMidiFootswitchControl::ClearCallback clear)
   {
     mMidiAssign = std::move(assign);
     mMidiClear = std::move(clear);
     _ApplyMidiWiring();
   }
 
-  void SetMidiSoundMapSwap(VoLumMidiSoundMapControl::SwapCallback swap)
+  void SetMidiSoundMapSwap(VoLumMidiFootswitchControl::SwapCallback swap)
   {
     mMidiSwap = std::move(swap);
-    _ApplyMidiWiring();
-  }
-
-  void SetMidiSoundMapInsert(VoLumMidiSoundMapControl::InsertCallback insert)
-  {
-    mMidiInsert = std::move(insert);
     _ApplyMidiWiring();
   }
 
@@ -1435,10 +1511,19 @@ public:
       midi->As<VoLumMidiChannelControl>()->SetChannel(channel);
   }
 
-  void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry)
+  void SetMidiRecallCc(int cc)
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiRecallCc))
+      midi->As<VoLumMidiRecallCcControl>()->SetCc(cc);
+  }
+
+  // `liveProgram` and the active pair light the LIVE switch and pick the bank the
+  // footswitch view opens on.
+  void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry,
+                       int liveProgram, const std::string& activeAmpId, const std::string& activePresetId)
   {
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
-      map->As<VoLumMidiSoundMapControl>()->SetData(factory, registry);
+      map->As<VoLumMidiFootswitchControl>()->SetData(factory, registry, liveProgram, activeAmpId, activePresetId);
   }
 
   void SetMidiPickerGroups(volum::PickerGroupSession* session)
@@ -1459,10 +1544,10 @@ private:
   std::function<void()> mOnExportPack;
   std::function<void()> mOnImportPack;
   VoLumMidiChannelControl::ChannelCallback mMidiChannelCb;
-  VoLumMidiSoundMapControl::AssignCallback mMidiAssign;
-  VoLumMidiSoundMapControl::ClearCallback mMidiClear;
-  VoLumMidiSoundMapControl::SwapCallback mMidiSwap;
-  VoLumMidiSoundMapControl::InsertCallback mMidiInsert;
+  VoLumMidiRecallCcControl::CcCallback mMidiRecallCcCb;
+  VoLumMidiFootswitchControl::AssignCallback mMidiAssign;
+  VoLumMidiFootswitchControl::ClearCallback mMidiClear;
+  VoLumMidiFootswitchControl::SwapCallback mMidiSwap;
   volum::PickerGroupSession* mMidiPickerGroups = nullptr;
 
   void _ApplyMidiWiring()
@@ -1472,15 +1557,18 @@ private:
       if (mMidiChannelCb)
         midi->As<VoLumMidiChannelControl>()->SetCallback(mMidiChannelCb);
     }
+    if (auto* cc = GetNamedChild(mControlNames.midiRecallCc))
+    {
+      if (mMidiRecallCcCb)
+        cc->As<VoLumMidiRecallCcControl>()->SetCallback(mMidiRecallCcCb);
+    }
     if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
     {
-      auto* soundMap = map->As<VoLumMidiSoundMapControl>();
+      auto* soundMap = map->As<VoLumMidiFootswitchControl>();
       if (mMidiAssign || mMidiClear)
         soundMap->SetCallbacks(mMidiAssign, mMidiClear);
       if (mMidiSwap)
         soundMap->SetSwapCallback(mMidiSwap);
-      if (mMidiInsert)
-        soundMap->SetInsertCallback(mMidiInsert);
       if (mMidiPickerGroups)
         soundMap->SetPickerGroups(mMidiPickerGroups);
     }
@@ -1520,8 +1608,10 @@ private:
     const std::string liteMode = "LiteMode";
     const std::string perfSection = "PerfSection";
     const std::string perfHelp = "PerfHelp";
+    const std::string animateArt = "AnimateArt";
     const std::string midiSection = "MidiSection";
     const std::string midiControl = "MidiControl";
+    const std::string midiRecallCc = "MidiRecallCc";
     const std::string midiMapGroupFrame = "MidiMapGroupFrame";
     const std::string midiMapSection = "MidiMapSection";
     const std::string midiSoundMap = "MidiSoundMap";
@@ -1545,9 +1635,11 @@ private:
 
     void Draw(IGraphics& g) override
     {
-      g.FillRect(VoLumColors::HERO_BG, mRECT);
-      g.DrawRect(VoLumColors::FRAME, mRECT);
-      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f));
+      // SetDisabled greys through mBlend. The well has to use it or the field
+      // stays full strength next to a switch that already does.
+      g.FillRect(VoLumColors::HERO_BG, mRECT, &mBlend);
+      g.DrawRect(VoLumColors::FRAME, mRECT, &mBlend);
+      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f), &mBlend);
       ITextControl::Draw(g);
     };
 
@@ -1586,7 +1678,7 @@ private:
     AboutControl(const IRECT& bounds, const IVStyle& style, const IText& text)
     : IContainerBase(bounds)
     , mStyle(style)
-    , mText(text){};
+    , mText(text) {};
 
     void OnAttached() override
     {
@@ -1633,12 +1725,13 @@ private:
         "Check now", mStyle.WithDrawFrame(true).WithValueText(rowText.WithAlign(EAlign::Center)), true));
     };
 
-    void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {})
+    void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {},
+                       const std::string& checkError = {})
     {
       if (mAutoCheck)
         mAutoCheck->SetChecked(autoCheck);
       if (mUpdateNotice)
-        mUpdateNotice->SetUpdate(available, version, notes);
+        mUpdateNotice->SetUpdate(available, version, notes, checkError);
     }
 
   private:
@@ -1649,9 +1742,10 @@ private:
   };
 
 public:
-  void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {})
+  void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {},
+                     const std::string& checkError = {})
   {
     if (auto* about = GetNamedChild(mControlNames.about))
-      static_cast<AboutControl*>(about)->SetUpdateInfo(autoCheck, available, version, notes);
+      static_cast<AboutControl*>(about)->SetUpdateInfo(autoCheck, available, version, notes, checkError);
   }
 };

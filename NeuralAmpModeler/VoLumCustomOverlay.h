@@ -7,6 +7,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
+#include "VoLumPrePostLock.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumOverlayActionCodes.h"
 #include "VoLumPresetBar.h"
@@ -75,6 +76,14 @@ public:
 
   void SetConfirmCallback(ConfirmCallback cb) { mConfirm = std::move(cb); }
   void SetPrimaryActionCallback(PrimaryActionCallback cb) { mPrimaryAction = std::move(cb); }
+
+  // Asks for a name through the shared name dialog (VoLumNameDialog.h), so every
+  // name field in VoLum edits the same way. onName runs only on confirm; a cancel
+  // writes nothing. Unset (unit tests, no plugin) falls back to iPlug's text entry.
+  using NamePromptCallback = std::function<void(
+    const std::string& title, const std::string& message, const std::string& seed, std::size_t maxLen,
+    const std::string& confirmLabel, std::function<void(const std::string&)> onName, std::function<void()> onCancel)>;
+  void SetNamePromptCallback(NamePromptCallback cb) { mNamePrompt = std::move(cb); }
 
   // Delete of an id this instance is currently playing (VoLumRigRepair.h).
   //   planCb: asked before the delete; returns the confirm body, which names the
@@ -371,15 +380,17 @@ public:
       }
   }
 
-  void OnTextEntryCompletion(const char* str, int) override
+  void OnTextEntryCompletion(const char* str, int) override { ApplyTextResult(str ? str : ""); }
+
+  void ApplyTextResult(const std::string& text)
   {
     using namespace volum::custom;
     if (IsIrValueTarget(mTextTarget))
     {
-      ApplyIrValueEntry(str ? str : "");
+      ApplyIrValueEntry(text);
       return;
     }
-    const std::string s = ClampName(str ? str : "", (std::size_t)NameEntryCap(mTextTarget));
+    const std::string s = ClampName(text, (std::size_t)NameEntryCap(mTextTarget));
     switch (mTextTarget)
     {
       case TextTarget::NewItem: // presets only (IR/pedals add via file dialog)
@@ -407,14 +418,19 @@ public:
           // Resolve the row again: mSel and mItems both date from before the field
           // opened. An entry with no id (only possible for a library written before
           // ids existed) keeps the old positional behaviour.
-          const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);
+          const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));
           if (target < 0)
           {
             mError = "\"" + mRenameName + "\" is no longer in your library.";
             ReloadList();
             mSel = -1;
           }
-          else if (!s.empty() && NameTaken(s, target))
+          else if (s.empty())
+          {
+            mError = "Enter a name.";
+            SetDirty(false);
+          }
+          else if (NameTaken(s, target))
             SetNameError(s);
           else
           {
@@ -877,8 +893,43 @@ private:
     if (!ui)
       return;
     mTextTarget = target;
+    if (!IsIrValueTarget(target) && mNamePrompt)
+    {
+      const NamePrompt p = NamePromptFor(target);
+      mNamePrompt(
+        p.title, p.message, current, (std::size_t)NameEntryCap(target), p.confirm,
+        [this, target](const std::string& name) {
+          mTextTarget = target;
+          ApplyTextResult(name);
+        },
+        [this]() {
+          mTextTarget = TextTarget::None;
+          mTextCabSlot = -1;
+          SetDirty(false);
+        });
+      return;
+    }
     SetTextEntryLength(NameEntryCap(target));
     ui->CreateTextEntry(*this, style ? *style : mEntryText, bounds, current.c_str());
+  }
+
+  struct NamePrompt
+  {
+    std::string title, message, confirm;
+  };
+
+  NamePrompt NamePromptFor(TextTarget target) const
+  {
+    const char* item = mManageKind == ManageKind::Presets ? "preset" : mManageKind == ManageKind::IR ? "IR" : "pedal";
+    switch (target)
+    {
+      case TextTarget::NewItem: return {"New preset", "Name the new User preset.", "Save"};
+      case TextTarget::RenameItem:
+        return {std::string("Rename ") + item, "New name for \"" + mRenameName + "\".", "Rename"};
+      case TextTarget::ProfileName: return {"Amp name", "Name this custom amp.", "OK"};
+      case TextTarget::CabName: return {"Cab label", "Up to 3 characters, shown on the cab button.", "OK"};
+      default: return {"Name", "", "OK"};
+    }
   }
 
   /* ---------------- action handling ---------------- */
@@ -957,7 +1008,7 @@ private:
           // the old positional behaviour rather than becoming unusable.
           const std::string id = RowIdAt(idx);
           auto doOverwrite = [this, id, idx, nm]() {
-            const int now = id.empty() ? idx : RowIndexById(id);
+            const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));
             if (now < 0)
             {
               mError = "\"" + nm + "\" is no longer in your library.";
@@ -999,7 +1050,7 @@ private:
           // An entry with no id keeps the old positional behaviour.
           const std::string id = RowIdAt(idx);
           auto doDelete = [this, id, idx, nm]() {
-            const int now = id.empty() ? idx : RowIndexById(id);
+            const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));
             if (now < 0)
             {
               mError = "\"" + nm + "\" is no longer in your library.";
@@ -1066,7 +1117,10 @@ private:
         // manual mapping.
         const auto parsed = volum::custom::ParseNamFileName(base);
         const int slot = parsed.matched ? parsed.slot : volum::custom::kUnassignedSlot;
-        const int channel = parsed.matched ? parsed.channel : 0;
+        // ParseNamFileName already drops a last-token number outside 1..kMaxChannels
+        // (G65-2204 is a model code). Re-check so a draft row is never "assigned"
+        // to a channel the loader will ignore.
+        const int channel = volum::custom::ChannelAssigned(parsed.channel) ? parsed.channel : 0;
         // Keep the absolute source path so Save can copy the capture into the
         // VoLum-owned content library (F6 import). storedPath is filled on save.
         volum::custom::CustomNamFile nf;
@@ -1464,7 +1518,7 @@ private:
     {
       case ManageKind::IR: return IRNameExists(name, exceptIdx);
       case ManageKind::Pedals: return PedalNameExists(name, exceptIdx);
-      default: return PresetNameExists(mAmpIdx, name, exceptIdx);
+      default: return NameExistsCI(PresetsForOwner(PresetOwnerKey()), name, exceptIdx);
     }
   }
 
@@ -1529,6 +1583,9 @@ private:
         y += rowH;
         if (row.B < listArea.T || row.T > listArea.B)
           continue;
+        // Same rule as the builder file list: a row that runs into the footer
+        // still paints under the clip, but it does not take a click.
+        const bool rowVisible = (row.T >= listArea.T - 0.5f && row.B <= listArea.B + 0.5f);
 
         const bool sel = (i == mSel);
         if (sel)
@@ -1543,11 +1600,13 @@ private:
         float ix = row.R - iconW;
         const IRECT trash(ix, row.T, ix + iconW, row.B);
         DrawBinGlyph(g, trash, VoLumColors::CREAM_DIM);
-        AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
+        if (rowVisible)
+          AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
         ix -= iconW;
         const IRECT pen(ix, row.T, ix + iconW, row.B);
         DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
-        AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
+        if (rowVisible)
+          AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
         if (mManageKind == ManageKind::IR)
         {
           ix -= iconW;
@@ -1557,14 +1616,16 @@ private:
           const volum::custom::IRShaping s = volum::custom::IRShapingAt(i);
           const bool shaped = (s.trimDb != 0.0) || (s.lowCutHz > 0.0) || (s.highCutHz > 0.0);
           DrawGearGlyph(g, gear, shaped ? VoLumColors::GOLD : VoLumColors::CREAM_DIM);
-          AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
+          if (rowVisible)
+            AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
         }
         ix -= iconW;
         if (presets)
         {
           const IRECT ovr(ix, row.T, ix + iconW, row.B);
           DrawOverwriteGlyph(g, ovr, VoLumColors::CREAM_DIM);
-          AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
+          if (rowVisible)
+            AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
           ix -= iconW;
         }
 
@@ -1593,7 +1654,8 @@ private:
         }
         g.PathClipRegion(listArea);
 
-        AddHotspot(row, kRowBase + i, rowTip);
+        if (rowVisible)
+          AddHotspot(row, kRowBase + i, rowTip);
       }
       g.PathClipRegion();
 
@@ -1719,13 +1781,16 @@ private:
 
       // channel chip
       char chLabel[12];
-      if (f.channel >= 1)
+      const bool chOk = ChannelAssigned(f.channel);
+      if (chOk)
         std::snprintf(chLabel, sizeof(chLabel), "Ch %d", f.channel);
       else
         std::snprintf(chLabel, sizeof(chLabel), "Ch -");
       g.FillRect(VoLumColors::HERO_BG, ch);
-      g.DrawRect(VoLumColors::TEAL_DIM, ch);
-      g.DrawText(IText(10.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle), chLabel, ch);
+      g.DrawRect(chOk ? VoLumColors::TEAL_DIM : VoLumColors::AMBER, ch);
+      g.DrawText(
+        IText(10.f, chOk ? VoLumColors::TEXT_MED : VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+        chLabel, ch);
       if (rowVisible)
         AddHotspot(ch, kFileChannelBase + i, "Assign this capture to a channel");
 
@@ -2005,6 +2070,7 @@ private:
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
   ConfirmCallback mConfirm;
+  NamePromptCallback mNamePrompt;
   RigRepairPlanCallback mPlanRigRepair; // see VoLumRigRepair.h
   RigRepairApplyCallback mApplyRigRepair;
   PrimaryActionCallback mPrimaryAction;

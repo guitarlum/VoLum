@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // VoLum 1.2.0 custom-content session API (F5-F8).
 //
@@ -26,6 +26,8 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -192,6 +194,19 @@ inline int UpdateCustomAmp(int idx, const CustomAmp& amp)
   a.name = unique;
   a.art = ((a.art % kNumCustomArts) + kNumCustomArts) % kNumCustomArts;
   CustomAmp previous = reg.amps[(size_t)idx];
+  for (const auto& oldFile : previous.files)
+  {
+    if (oldFile.storedPath.empty())
+      continue;
+    bool kept = false;
+    for (const auto& keptFile : a.files)
+    {
+      if (keptFile.storedPath == oldFile.storedPath)
+        kept = true;
+    }
+    if (!kept)
+      Store().QueueStoredFileDelete(oldFile.storedPath);
+  }
   reg.amps[(size_t)idx] = std::move(a);
   if (!Store().Save())
   {
@@ -514,6 +529,11 @@ inline void SetActivePresetOwner(const std::string& key)
 // The plugin installs these so registry preset ops capture/apply the *real* live
 // VoLumAmpSettings (the bridge has no access to live params). Unset in unit tests
 // (presets then carry default settings, which the round-trip tests still cover).
+//
+// The process-global pair is the last claimant: with two editors in one host it
+// is whoever claimed most recently. Production save/overwrite/recall bind a
+// PresetOpScope to `this` and look that instance up in PresetHooksByInstance
+// instead, so a later claim cannot make one editor persist the other's scene.
 using PresetSettingsCapture = std::function<VoLumAmpSettings()>;
 using PresetSettingsApply = std::function<void(const VoLumAmpSettings&)>;
 inline PresetSettingsCapture& PresetCaptureHook()
@@ -537,10 +557,129 @@ inline const void*& PresetHookOwner()
   return owner;
 }
 
-// Drops the hooks if owner installed them, so a closing instance cannot leave a
-// destroyed object behind them. A no-op when another instance has since claimed.
+struct InstancePresetHooks
+{
+  PresetSettingsCapture capture;
+  PresetSettingsApply apply;
+};
+
+inline std::map<const void*, InstancePresetHooks>& PresetHooksByInstance()
+{
+  static std::map<const void*, InstancePresetHooks> hooks;
+  return hooks;
+}
+
+// The table is written from plugin construction and destruction, and a host may
+// instantiate or tear down two instances on different threads - closing one
+// window while another opens is enough. The old process-global pair was two
+// pointer writes and survived that by luck; a concurrent map insert and erase
+// is undefined behaviour. Held only while looking a hook up or copying it out,
+// never while the hook runs, because the hook calls back into the editor.
+inline std::mutex& PresetHooksMutex()
+{
+  static std::mutex m;
+  return m;
+}
+
+// Nested per-thread bind of "the editor that started this preset op". Frame
+// lives on the caller's stack; the thread-local top pointer is the nest.
+struct PresetOpFrame
+{
+  const void* instance = nullptr;
+  PresetOpFrame* prev = nullptr;
+};
+
+inline PresetOpFrame*& PresetOpStackTop()
+{
+  thread_local PresetOpFrame* top = nullptr;
+  return top;
+}
+
+class PresetOpScope
+{
+public:
+  explicit PresetOpScope(const void* instance)
+  {
+    mFrame.instance = instance;
+    mFrame.prev = PresetOpStackTop();
+    PresetOpStackTop() = &mFrame;
+  }
+  ~PresetOpScope() { PresetOpStackTop() = mFrame.prev; }
+  PresetOpScope(const PresetOpScope&) = delete;
+  PresetOpScope& operator=(const PresetOpScope&) = delete;
+
+private:
+  PresetOpFrame mFrame;
+};
+
+inline const void* CurrentPresetOpInstance()
+{
+  const PresetOpFrame* top = PresetOpStackTop();
+  return top ? top->instance : nullptr;
+}
+
+inline void InstallInstancePresetHooks(const void* owner, PresetSettingsCapture capture, PresetSettingsApply apply)
+{
+  if (!owner)
+    return;
+  std::lock_guard<std::mutex> lock(PresetHooksMutex());
+  auto& slot = PresetHooksByInstance()[owner];
+  slot.capture = std::move(capture);
+  slot.apply = std::move(apply);
+  PresetCaptureHook() = slot.capture;
+  PresetApplyHook() = slot.apply;
+  PresetHookOwner() = owner;
+}
+
+enum class PresetHookResolve
+{
+  Use,
+  Refuse
+};
+
+inline PresetHookResolve ResolvePresetCapture(PresetSettingsCapture& out)
+{
+  std::lock_guard<std::mutex> lock(PresetHooksMutex());
+  if (const void* instance = CurrentPresetOpInstance())
+  {
+    auto it = PresetHooksByInstance().find(instance);
+    if (it == PresetHooksByInstance().end() || !it->second.capture)
+      return PresetHookResolve::Refuse;
+    out = it->second.capture; // copy: a later claim cannot steal this call
+    return PresetHookResolve::Use;
+  }
+  // Unscoped while any editor has registered: refuse rather than capture the
+  // last claimant's scene. Tests that never Install still use the global.
+  if (!PresetHooksByInstance().empty())
+    return PresetHookResolve::Refuse;
+  out = PresetCaptureHook();
+  return PresetHookResolve::Use;
+}
+
+inline PresetHookResolve ResolvePresetApply(PresetSettingsApply& out)
+{
+  std::lock_guard<std::mutex> lock(PresetHooksMutex());
+  if (const void* instance = CurrentPresetOpInstance())
+  {
+    auto it = PresetHooksByInstance().find(instance);
+    if (it == PresetHooksByInstance().end() || !it->second.apply)
+      return PresetHookResolve::Refuse;
+    out = it->second.apply;
+    return PresetHookResolve::Use;
+  }
+  if (!PresetHooksByInstance().empty())
+    return PresetHookResolve::Refuse;
+  out = PresetApplyHook();
+  return PresetHookResolve::Use;
+}
+
+// Drops this instance from the per-instance table always. The process-global
+// pair is cleared only when it still points at owner, so a later claimant is
+// left alone.
 inline void ClearPresetHooksIfOwnedBy(const void* owner)
 {
+  std::lock_guard<std::mutex> lock(PresetHooksMutex());
+  PresetHooksByInstance().erase(owner);
   if (PresetHookOwner() != owner)
     return;
   PresetCaptureHook() = nullptr;
@@ -564,10 +703,29 @@ inline std::vector<std::string> MockPresetsForAmp(int /*ampIdx*/)
   return PresetsForOwner(ActivePresetOwnerKey());
 }
 
+inline int PresetIndexByIdForOwner(const std::string& ownerKey, const std::string& id)
+{
+  if (id.empty())
+    return -1;
+  const auto& banks = Store().reg().presetBanks;
+  auto it = banks.find(ownerKey);
+  if (it == banks.end())
+    return -1;
+  for (int i = 0; i < (int)it->second.size(); ++i)
+    if (it->second[(size_t)i].id == id)
+      return i;
+  return -1;
+}
+
 // Capture the current live settings (via the plugin hook) into a new named
-// preset, de-duplicating the display name. Returns its index in the bank.
+// preset, de-duplicating the display name. Returns its index in the bank, or
+// -1 when a live editor is bound but this instance has no capture hook (refuse
+// rather than persist another instance's scene).
 inline int AddPresetForOwner(const std::string& ownerKey, const std::string& name)
 {
+  PresetSettingsCapture capture;
+  if (ResolvePresetCapture(capture) == PresetHookResolve::Refuse)
+    return -1;
   auto& reg = Store().reg();
   auto& bank = reg.presetBanks[ownerKey];
   const std::string fallback = name.empty() ? "Preset" : name;
@@ -584,11 +742,14 @@ inline int AddPresetForOwner(const std::string& ownerKey, const std::string& nam
   content::Preset pr;
   pr.id = content::MintId(reg, "preset");
   pr.name = unique;
-  if (PresetCaptureHook())
-    pr.settings = PresetCaptureHook()();
+  if (capture)
+    pr.settings = capture();
+  const std::string id = pr.id;
   bank.push_back(std::move(pr));
+  // Save() replaces the registry with the merge of disk and memory, so `bank`
+  // dangles past this line and the merged bank may hold another writer's rows.
   Store().Save();
-  return (int)bank.size() - 1;
+  return PresetIndexByIdForOwner(ownerKey, id);
 }
 
 inline int AddPreset(int /*ampIdx*/, const std::string& name)
@@ -597,15 +758,21 @@ inline int AddPreset(int /*ampIdx*/, const std::string& name)
 }
 
 // Overwrite an existing preset's snapshot with the current live settings.
-inline void OverwritePresetForOwner(const std::string& ownerKey, int idx)
+// Returns false when the op is bound to an instance that has no capture hook,
+// so the caller does not treat a refused write as a successful overwrite.
+inline bool OverwritePresetForOwner(const std::string& ownerKey, int idx)
 {
+  PresetSettingsCapture capture;
+  if (ResolvePresetCapture(capture) == PresetHookResolve::Refuse)
+    return false;
   auto& banks = Store().reg().presetBanks;
   auto it = banks.find(ownerKey);
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
-    return;
-  if (PresetCaptureHook())
-    it->second[(size_t)idx].settings = PresetCaptureHook()();
+    return true;
+  if (capture)
+    it->second[(size_t)idx].settings = capture();
   Store().Save();
+  return true;
 }
 
 inline void OverwritePreset(int /*ampIdx*/, int idx)
@@ -615,14 +782,19 @@ inline void OverwritePreset(int /*ampIdx*/, int idx)
 
 // Recall a preset: apply its stored snapshot to the live chain (via the plugin
 // hook). No-op (other than selection) in unit tests where no hook is installed.
-inline void RecallPresetForOwner(const std::string& ownerKey, int idx)
+// Returns false when the op is bound to an instance that has no apply hook.
+inline bool RecallPresetForOwner(const std::string& ownerKey, int idx)
 {
+  PresetSettingsApply apply;
+  if (ResolvePresetApply(apply) == PresetHookResolve::Refuse)
+    return false;
   auto& banks = Store().reg().presetBanks;
   auto it = banks.find(ownerKey);
   if (it == banks.end() || idx < 0 || idx >= (int)it->second.size())
-    return;
-  if (PresetApplyHook())
-    PresetApplyHook()(it->second[(size_t)idx].settings);
+    return true;
+  if (apply)
+    apply(it->second[(size_t)idx].settings);
+  return true;
 }
 
 inline void RecallPreset(int /*ampIdx*/, int idx)
@@ -642,20 +814,6 @@ inline std::string PresetIdAtForOwner(const std::string& ownerKey, int idx)
 inline std::string PresetIdAt(int idx)
 {
   return PresetIdAtForOwner(ActivePresetOwnerKey(), idx);
-}
-
-inline int PresetIndexByIdForOwner(const std::string& ownerKey, const std::string& id)
-{
-  if (id.empty())
-    return -1;
-  const auto& banks = Store().reg().presetBanks;
-  auto it = banks.find(ownerKey);
-  if (it == banks.end())
-    return -1;
-  for (int i = 0; i < (int)it->second.size(); ++i)
-    if (it->second[(size_t)i].id == id)
-      return i;
-  return -1;
 }
 
 inline int PresetIndexById(const std::string& id)

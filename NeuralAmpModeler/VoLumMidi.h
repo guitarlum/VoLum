@@ -17,21 +17,52 @@ namespace volum
 inline constexpr int kMidiSoundSlotCount = 128;
 inline constexpr int kMidiOmniChannel = 0;
 inline constexpr int kMidiChannelCount = 16;
+// MIDI leaves 102-119 undefined; 102 is therefore the default Sound-recall CC.
+// 120-127 are channel-mode (All Notes Off is 123) and hosts consume them.
+inline constexpr int kMidiRecallCcDefault = 102;
+inline constexpr int kMidiRecallCcMin = 0;
+inline constexpr int kMidiRecallCcMax = 119;
+
+// Anything outside 0-119, including the channel-mode band, snaps to the default
+// rather than onto 119: a stored 123 must not silently become a working CC.
+inline int ClampMidiRecallCc(int cc)
+{
+  if (cc < kMidiRecallCcMin || cc > kMidiRecallCcMax)
+    return kMidiRecallCcDefault;
+  return cc;
+}
 
 // User-facing saved channel: 0 = Omni, 1..16 = one MIDI channel. iPlug exposes
-// incoming channels as 0..15.
-inline std::optional<int> DecodeMidiProgramChange(const iplug::IMidiMsg& msg, int savedChannel)
+// incoming channels as 0..15. Program Change and the recall CC share this
+// function so the channel filter and the 0-127 slot range cannot diverge.
+inline std::optional<int> DecodeMidiSoundRecall(const iplug::IMidiMsg& msg, int savedChannel, int recallCc)
 {
   if (savedChannel < kMidiOmniChannel || savedChannel > kMidiChannelCount)
     return std::nullopt;
   if (savedChannel != kMidiOmniChannel && msg.Channel() != savedChannel - 1)
     return std::nullopt;
-  if (msg.StatusMsg() != iplug::IMidiMsg::kProgramChange)
-    return std::nullopt;
-  const int slot = msg.Program();
+
+  int slot = -1;
+  switch (msg.StatusMsg())
+  {
+    case iplug::IMidiMsg::kProgramChange: slot = msg.Program(); break;
+    case iplug::IMidiMsg::kControlChange:
+      if (recallCc < kMidiRecallCcMin || recallCc > kMidiRecallCcMax)
+        return std::nullopt;
+      if (static_cast<int>(msg.ControlChangeIdx()) != recallCc)
+        return std::nullopt;
+      slot = static_cast<int>(msg.mData2);
+      break;
+    default: return std::nullopt;
+  }
   if (slot < 0 || slot >= kMidiSoundSlotCount)
     return std::nullopt;
   return slot;
+}
+
+inline std::optional<int> DecodeMidiProgramChange(const iplug::IMidiMsg& msg, int savedChannel)
+{
+  return DecodeMidiSoundRecall(msg, savedChannel, kMidiRecallCcDefault);
 }
 
 // Capacity-one audio -> main handoff. A burst intentionally overwrites the

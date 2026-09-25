@@ -25,6 +25,12 @@ std::filesystem::path TestBase(const char* name)
   return root;
 }
 
+std::string ReadAll(const std::filesystem::path& p)
+{
+  std::ifstream in(p, std::ios::binary);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 std::filesystem::path WriteSrc(const std::filesystem::path& dir, const char* leaf, const char* body)
 {
   std::error_code ec;
@@ -571,6 +577,23 @@ TEST_CASE("DefaultCaptureSelection picks DIRECT-first, lowest channel")
   CHECK_FALSE(DefaultCaptureSelection(empty, s2, c2)); // no files -> false, outputs untouched
   CHECK(s2 == 7);
   CHECK(c2 == 7);
+}
+
+TEST_CASE("tier2h a file-less custom amp does not keep the previous cab")
+{
+  using volum::custom::kDirectSlot;
+  volum::custom::CustomAmp empty;
+  int slot = 3, channel = 4;
+  CaptureSelectionOrDefault(empty, slot, channel);
+  CHECK(slot == kDirectSlot);
+  CHECK(channel == 1);
+
+  volum::custom::CustomAmp amp;
+  amp.files = {{"a.nam", 0, 2}};
+  int pickedSlot = 3, pickedChannel = 4;
+  CaptureSelectionOrDefault(amp, pickedSlot, pickedChannel);
+  CHECK(pickedSlot == 0);
+  CHECK(pickedChannel == 2);
 }
 
 TEST_CASE("Custom-amp storedPath survives a registry round-trip")
@@ -1420,6 +1443,70 @@ TEST_CASE("An unreadable library is never overwritten, and the failure is visibl
   CHECK(std::filesystem::is_directory(store.RegistryPath())); // untouched
 }
 
+TEST_CASE("A library that goes unreadable after Load is not replaced by this session")
+{
+  // Load() refuses to write over a file it could not read. That verdict only
+  // covers a file that was already bad when the store loaded. Save() re-reads
+  // the file to merge onto it, and that re-read used to answer "empty" for
+  // every failure - so a library that went unreadable AFTER a good Load (cloud
+  // sync placeholder, antivirus, a second VoLum that backed it up as corrupt)
+  // was replaced by whatever this session happened to touch. Standalone quit
+  // alone was enough: the settings save calls Save() unconditionally.
+  const auto base = TestBase("reread-unreadable");
+  ContentStore store(base);
+
+  store.reg().irs.push_back({"ir_keep_a", "Keep A", "ir/a.wav"});
+  store.reg().irs.push_back({"ir_keep_b", "Keep B", "ir/b.wav"});
+  REQUIRE(store.Save());
+  REQUIRE(store.Load());
+  REQUIRE(store.reg().irs.size() == 2);
+
+  SUBCASE("unparseable")
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary) << "{ not json";
+  }
+  SUBCASE("zero length")
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary | std::ios::trunc);
+  }
+
+  const std::string damaged = ReadAll(store.RegistryPath());
+
+  // A save with no local edit at all - exactly what standalone quit does.
+  CHECK_FALSE(store.Save());
+  CHECK(store.TakeWriteFailure());
+  // Refusing means the bytes are untouched. Writing would have replaced a
+  // recoverable file with an authoritative empty catalog, and there is no .bak
+  // from this path to recover from.
+  CHECK(ReadAll(store.RegistryPath()) == damaged);
+
+  // And with a local edit, which is what made the old behaviour destructive:
+  // the merge kept only the touched id and dropped both loaded IRs.
+  store.reg().irs.push_back({"ir_session", "Session", "ir/session.wav"});
+  CHECK_FALSE(store.Save());
+  CHECK(ReadAll(store.RegistryPath()) == damaged);
+}
+
+TEST_CASE("A library file that is simply absent is still a legitimate fresh save")
+{
+  // The other half of the same gate: absent is not unreadable. A first run, or
+  // a user who deleted the file on purpose, must still be able to save.
+  const auto base = TestBase("reread-absent");
+  ContentStore store(base);
+
+  store.reg().irs.push_back({"ir_first", "First", "ir/first.wav"});
+  REQUIRE(store.Save());
+
+  std::error_code ec;
+  std::filesystem::remove(store.RegistryPath(), ec);
+  REQUIRE_FALSE(ec);
+
+  store.reg().irs.push_back({"ir_second", "Second", "ir/second.wav"});
+  CHECK(store.Save());
+  CHECK_FALSE(store.TakeWriteFailure());
+  CHECK(std::filesystem::is_regular_file(store.RegistryPath()));
+}
+
 TEST_CASE("The library lock is exclusive while held")
 {
   const auto base = TestBase("lock-exclusive");
@@ -1497,6 +1584,98 @@ TEST_CASE("MIDI sound map reader ignores unknown keys and malformed slots")
   CHECK(r.midiSoundMap.at(6).ampId == "amp_q");
   CHECK(r.midiSoundMap.at(6).presetId.empty());
   CHECK(r.midiSoundMap.count(5) == 0);
+}
+
+TEST_CASE("tier2b a newer library schema keeps unknown keys through Save")
+{
+  const auto base = TestBase("passthrough-schema");
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = nlohmann::json::array({"keep-me"});
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  CHECK(store.Save());
+  std::ifstream in(store.RegistryPath());
+  nlohmann::json written;
+  in >> written;
+  CHECK(written["schemaVersion"] == 99);
+  REQUIRE(written.contains("someFutureTopLevelKey"));
+  CHECK(written["someFutureTopLevelKey"][0] == "keep-me");
+}
+
+TEST_CASE("tier2b a save does not clobber a sibling's newer unknown key")
+{
+  const auto base = TestBase("passthrough-merge");
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = "loaded";
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = "sibling";
+    j["anotherFutureKey"] = 7;
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  REQUIRE(store.Save());
+  std::ifstream in(store.RegistryPath());
+  nlohmann::json written;
+  in >> written;
+  CHECK(written["schemaVersion"] == 99);
+  CHECK(written["someFutureTopLevelKey"] == "sibling");
+  CHECK(written["anotherFutureKey"] == 7);
+}
+
+TEST_CASE("tier2b a colon in a stored leaf is not a safe library path")
+{
+  CHECK_FALSE(IsSafeStoredRelPath("amps/id__Foo:Bar.nam"));
+  CHECK(IsSafeStoredRelPath("amps/id__FooBar.nam"));
+}
+
+TEST_CASE("tier2b dropping a capture from an amp deletes the copied file on Save")
+{
+  const auto base = TestBase("orphan-capture");
+  const auto keepSrc = WriteSrc(base / "incoming", "Keep.nam", "keep");
+  const auto dropSrc = WriteSrc(base / "incoming", "Drop.nam", "drop");
+  ContentStore store(base);
+  const std::string keepRel = store.ImportFileCopy(keepSrc, "amps", "amp_edit_0");
+  const std::string dropRel = store.ImportFileCopy(dropSrc, "amps", "amp_edit_1");
+  REQUIRE_FALSE(keepRel.empty());
+  REQUIRE_FALSE(dropRel.empty());
+
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_edit";
+  amp.name = "Edit me";
+  amp.files = {{"Keep.nam", volum::custom::kDirectSlot, 1, keepRel}, {"Drop.nam", 0, 2, dropRel}};
+  store.reg().amps.push_back(amp);
+  REQUIRE(store.Save());
+  REQUIRE(std::filesystem::exists(store.ResolveStored(dropRel)));
+
+  volum::custom::CustomAmp edited = amp;
+  edited.files = {{"Keep.nam", volum::custom::kDirectSlot, 1, keepRel}};
+  for (const auto& oldFile : amp.files)
+  {
+    bool kept = false;
+    for (const auto& keptFile : edited.files)
+      if (keptFile.storedPath == oldFile.storedPath)
+        kept = true;
+    if (!kept)
+      store.QueueStoredFileDelete(oldFile.storedPath);
+  }
+  store.reg().amps[0] = std::move(edited);
+  REQUIRE(store.Save());
+  CHECK(std::filesystem::exists(store.ResolveStored(keepRel)));
+  CHECK_FALSE(std::filesystem::exists(store.ResolveStored(dropRel)));
 }
 
 TEST_CASE("MIDI slot resolution reports gone content as invalid, never as empty")

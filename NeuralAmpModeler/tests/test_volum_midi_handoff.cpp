@@ -113,6 +113,21 @@ TEST_CASE("MIDI listen filter in the id tail defaults to all channels and clamps
   CHECK(volum::IdTailFromJson({{"midiCh", -2}}).midiCh == 0);
 }
 
+TEST_CASE("MIDI recall CC in the id tail defaults to 102 and refuses 120-127")
+{
+  volum::ChunkIdTail tail;
+  CHECK(tail.midiRecallCc == volum::kMidiRecallCcDefault);
+  tail.midiRecallCc = 20;
+  CHECK(volum::IdTailFromJson(volum::IdTailToJson(tail)).midiRecallCc == 20);
+  CHECK(volum::IdTailFromJson(nlohmann::json::object()).midiRecallCc == volum::kMidiRecallCcDefault);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 119}}).midiRecallCc == 119);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 0}}).midiRecallCc == 0);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 120}}).midiRecallCc == volum::kMidiRecallCcDefault);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 123}}).midiRecallCc == volum::kMidiRecallCcDefault);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 127}}).midiRecallCc == volum::kMidiRecallCcDefault);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", -2}}).midiRecallCc == volum::kMidiRecallCcDefault);
+}
+
 TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, but stores neither")
 {
   // The listen filter is per instance and rides the DAW id tail. The assignment
@@ -125,26 +140,46 @@ TEST_CASE("Settings MIDI chrome owns the listen filter and the assignment list, 
   const std::string settings = ReadText(root / "VoLumSettingsScene.inc.cpp");
 
   CHECK(tabs.find("class VoLumMidiChannelControl") != std::string::npos);
+  CHECK(tabs.find("class VoLumMidiRecallCcControl") != std::string::npos);
+  CHECK(tabs.find("\"Recall CC\"") != std::string::npos);
+  CHECK(tabs.find("Value is the program number.") != std::string::npos);
+  CHECK(tabs.find("Use this when Program Change never arrives.") != std::string::npos);
   // 0 is still "every channel" in the data; only the words in front of it changed.
   CHECK(tabs.find("const bool all = mChannel == 0;") != std::string::npos);
   CHECK(tabs.find("\"All channels\"") != std::string::npos);
   CHECK(tabs.find("DrawVoLumSegmentSwitch(") != std::string::npos);
   CHECK(tabs.find("MIDI calls this Omni.") != std::string::npos);
-  CHECK(tabs.find("class VoLumMidiSoundMapControl") != std::string::npos);
+  const std::string view = ReadText(root / "VoLumMidiFootswitch.h");
+  CHECK(view.find("class VoLumMidiFootswitchControl") != std::string::npos);
   CHECK(controls.find("SetMidiCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapCallbacks") != std::string::npos);
   CHECK(controls.find("SetMidiSoundMapSwap") != std::string::npos);
-  CHECK(controls.find("SetMidiSoundMapInsert") != std::string::npos);
+  // Footswitch positions are program numbers, so the tab has no insert path.
+  CHECK(controls.find("SetMidiSoundMapInsert") == std::string::npos);
   CHECK(controls.find("void SetMidiChannel(int channel)") != std::string::npos);
+  CHECK(controls.find("void SetMidiRecallCc(int cc)") != std::string::npos);
   CHECK(controls.find("void SetMidiSoundMap(") != std::string::npos);
   // The pre-1.3.0 duplicate-list control stays gone.
   CHECK(controls.find("VoLumMidiSettingsControl") == std::string::npos);
   // The filter persists per instance; the sound map does not ride this document.
   CHECK(settings.find("j[\"midiCh\"] = mVolumMidiChannel.load()") != std::string::npos);
+  CHECK(settings.find("j[\"midiRecallCc\"] = mVolumMidiRecallCc.load()") != std::string::npos);
   CHECK(settings.find("MidiChannelFromMachineSettings(true, j,") != std::string::npos);
+  CHECK(settings.find("MidiRecallCcFromMachineSettings(true, j,") != std::string::npos);
   CHECK(settings.find("midiSoundMap") == std::string::npos);
   // The tab reads the registry's map; it never assigns into it directly.
   CHECK(tabs.find("midiSoundMap =") == std::string::npos);
+  CHECK(view.find("midiSoundMap =") == std::string::npos);
+
+  const std::string nam = ReadText(root / "NeuralAmpModeler.cpp");
+  const std::string unser = ReadText(root / "Unserialization.cpp");
+  const std::string header = ReadText(root / "NeuralAmpModeler.h");
+  const std::string presets = ReadText(root / "VoLumSettingsPresets.inc.cpp");
+  CHECK(nam.find("idTail.midiRecallCc = mVolumMidiRecallCc.load()") != std::string::npos);
+  CHECK(unser.find("mVolumMidiRecallCc.store(idTail.midiRecallCc)") != std::string::npos);
+  CHECK(header.find("mVolumMidiRecallCc{volum::kMidiRecallCcDefault}") != std::string::npos);
+  CHECK(presets.find("void NeuralAmpModeler::_VolumSetMidiRecallCc(int cc)") != std::string::npos);
+  CHECK(presets.find("page->SetMidiRecallCc(mVolumMidiRecallCc.load())") != std::string::npos);
 }
 
 TEST_CASE("ProcessMidiMsg is an integer-only RT handoff")
@@ -157,7 +192,9 @@ TEST_CASE("ProcessMidiMsg is an integer-only RT handoff")
   REQUIRE(end != std::string::npos);
   const std::string body = source.substr(begin, end - begin);
 
-  CHECK(body.find("DecodeMidiProgramChange") != std::string::npos);
+  CHECK(body.find("DecodeMidiSoundRecall") != std::string::npos);
+  CHECK(body.find("mVolumMidiRecallCc.load") != std::string::npos);
+  CHECK(body.find("DecodeMidiProgramChange") == std::string::npos);
   CHECK(body.find("mVolumMidiQueue.Enqueue") != std::string::npos);
   CHECK(body.find("GlobalContentStore") == std::string::npos);
   CHECK(body.find("filesystem") == std::string::npos);
@@ -191,9 +228,9 @@ struct MidiControllerApply
   std::optional<volum::content::ResolvedMidiSound> sound;
 
   void Send(const IMidiMsg& msg, int savedChannel, volum::MidiLatestWinsQueue& queue,
-            const volum::content::Registry& registry)
+            const volum::content::Registry& registry, int recallCc = volum::kMidiRecallCcDefault)
   {
-    if (const auto slot = volum::DecodeMidiProgramChange(msg, savedChannel))
+    if (const auto slot = volum::DecodeMidiSoundRecall(msg, savedChannel, recallCc))
       queue.Enqueue(*slot);
     const auto drained = queue.Drain();
     if (!drained)
@@ -257,6 +294,34 @@ TEST_CASE("IMidiMsg Program Change composes decode queue resolve and LIVE slot")
   CHECK(apply.liveSlot == previousLive);
 }
 
+TEST_CASE("IMidiMsg recall CC composes decode queue resolve and LIVE slot")
+{
+  using namespace volum::content;
+  Registry registry;
+  Preset lead;
+  lead.id = "preset_lead";
+  lead.name = "Lead";
+  registry.presetBanks["factory:7"] = {lead};
+  REQUIRE(AssignMidiSound(registry, 12, "factory:7", lead.id));
+
+  volum::MidiLatestWinsQueue queue;
+  MidiControllerApply apply;
+  const IMidiMsg cc = IMidiMsg(0, static_cast<uint8_t>(IMidiMsg::kControlChange << 4), 102, 12);
+  apply.Send(cc, volum::kMidiOmniChannel, queue, registry, 102);
+  REQUIRE(apply.sound.has_value());
+  CHECK(apply.liveSlot == 12);
+  CHECK(apply.sound->ampId == "factory:7");
+
+  const auto previousLive = apply.liveSlot;
+  const IMidiMsg otherCc = IMidiMsg(0, static_cast<uint8_t>(IMidiMsg::kControlChange << 4), 74, 12);
+  apply.Send(otherCc, volum::kMidiOmniChannel, queue, registry, 102);
+  CHECK(apply.liveSlot == previousLive);
+
+  const IMidiMsg wrongCh = IMidiMsg(0, static_cast<uint8_t>((IMidiMsg::kControlChange << 4) | 0), 102, 12);
+  apply.Send(wrongCh, 5, queue, registry, 102);
+  CHECK(apply.liveSlot == previousLive);
+}
+
 TEST_CASE("IMidiMsg burst keeps only the newest Program Change")
 {
   using namespace volum::content;
@@ -269,9 +334,9 @@ TEST_CASE("IMidiMsg burst keeps only the newest Program Change")
   first.MakeProgramChange(4, 0);
   IMidiMsg second;
   second.MakeProgramChange(7, 0);
-  REQUIRE(volum::DecodeMidiProgramChange(first, 0).has_value());
-  queue.Enqueue(*volum::DecodeMidiProgramChange(first, 0));
-  queue.Enqueue(*volum::DecodeMidiProgramChange(second, 0));
+  REQUIRE(volum::DecodeMidiSoundRecall(first, 0, volum::kMidiRecallCcDefault).has_value());
+  queue.Enqueue(*volum::DecodeMidiSoundRecall(first, 0, volum::kMidiRecallCcDefault));
+  queue.Enqueue(*volum::DecodeMidiSoundRecall(second, 0, volum::kMidiRecallCcDefault));
 
   MidiControllerApply apply;
   // Drain once, as OnIdle does: latest-wins, no backlog.

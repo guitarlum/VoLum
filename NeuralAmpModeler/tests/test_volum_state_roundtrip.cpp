@@ -195,6 +195,14 @@ ParsedState ParseCurrentChunk(const MemoryChunk& chunk, int readParamCount = kVo
 
 // A non-default scene on the selected amp plus a non-default id tail, so we can
 // assert every category the 1.2.0 bug corrupted actually survives the trip.
+TEST_CASE("tier2g a pitch tail without octDn keeps the scene default")
+{
+  volum::PitchTail tail;
+  CHECK(tail.octDown == doctest::Approx(0.8));
+  const auto parsed = volum::PitchTailFromJson(nlohmann::json{{"active", true}});
+  CHECK(parsed.octDown == doctest::Approx(0.8));
+}
+
 constexpr int kSelectedAmp = 3;
 
 void SeedNonDefaultState(volum::VoLumChunkSelection& selection, volum::VoLumAmpSettings (&amps)[volum::kAmpCount],
@@ -230,6 +238,7 @@ void SeedNonDefaultState(volum::VoLumChunkSelection& selection, volum::VoLumAmpS
   idTail.customMainId = "amp_main_custom";
   idTail.customSupportId = "amp_support_custom";
   idTail.activePresetId = "preset_lead_01";
+  idTail.midiRecallCc = 20;
   idTail.perAmpIrId[kSelectedAmp] = "ir_custom_3";
   idTail.perAmpSupportIrId[kSelectedAmp] = "ir_support_3";
   idTail.perAmpSupportId[kSelectedAmp] = "amp_support_slotref";
@@ -251,6 +260,14 @@ void SeedNonDefaultState(volum::VoLumChunkSelection& selection, volum::VoLumAmpS
   idTail.perAmpDelay[kSelectedAmp].present = true;
   idTail.perAmpDelay[kSelectedAmp].sync = true;
   idTail.perAmpDelay[kSelectedAmp].division = 5;
+
+  idTail.midiCh = 4;
+  idTail.uiMode = "play";
+  idTail.lastPlaySlot = 12;
+  idTail.perAmpChorus[kSelectedAmp].present = true;
+  idTail.perAmpChorus[kSelectedAmp].active = true;
+  idTail.perAmpChorus[kSelectedAmp].mode = 2;
+  idTail.perAmpChorus[kSelectedAmp].mix = 0.7;
 
   // Locked PRE + POST live snapshots (present iff their flag is set).
   preSnapshot.preCompActive = true;
@@ -316,6 +333,7 @@ TEST_CASE("Real DAW chunk round-trips selection + scene + custom refs + effects 
   CHECK(got.idTail.customMainId == "amp_main_custom");
   CHECK(got.idTail.customSupportId == "amp_support_custom");
   CHECK(got.idTail.activePresetId == "preset_lead_01");
+  CHECK(got.idTail.midiRecallCc == 20);
   CHECK(got.idTail.perAmpIrId[kSelectedAmp] == "ir_custom_3");
   CHECK(got.idTail.perAmpSupportIrId[kSelectedAmp] == "ir_support_3");
   CHECK(got.idTail.perAmpSupportId[kSelectedAmp] == "amp_support_slotref");
@@ -336,6 +354,13 @@ TEST_CASE("Real DAW chunk round-trips selection + scene + custom refs + effects 
   CHECK(got.idTail.perAmpDelay[kSelectedAmp].present);
   CHECK(got.idTail.perAmpDelay[kSelectedAmp].sync);
   CHECK(got.idTail.perAmpDelay[kSelectedAmp].division == 5);
+  CHECK(got.idTail.midiCh == 4);
+  CHECK(got.idTail.uiMode == "play");
+  CHECK(got.idTail.lastPlaySlot == 12);
+  CHECK(got.idTail.perAmpChorus[kSelectedAmp].present);
+  CHECK(got.idTail.perAmpChorus[kSelectedAmp].active);
+  CHECK(got.idTail.perAmpChorus[kSelectedAmp].mode == 2);
+  CHECK(got.idTail.perAmpChorus[kSelectedAmp].mix == doctest::Approx(0.7));
 
   // Lock flags + live snapshots survived.
   CHECK(got.preLocked);
