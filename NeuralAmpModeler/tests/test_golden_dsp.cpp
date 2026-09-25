@@ -199,10 +199,10 @@ TEST_CASE("Golden DSP: delay mode hashes stay stable")
 {
   ExpectGoldenHash("delay-digital", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital)),
                    "abfb022c399f822ee8aaac8d930170eed2cc37e795d4b8a785c991928f11a6a2",
-                   "2e86b97a8c05dea10e7adb1f49fd2406746dd48a6b8019e4b7fa53ea97dadaf8");
+                   "eee2751e4c25f5a2d29d30312129521c17cf07826d5437329533264b05289eed");
   ExpectGoldenHash("delay-analog", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog)),
                    "ac3e9d18fadb531d8bf0aa66c498cf8d1d180dea650f4809c43a773afca99ac9",
-                   "2b22e1f4e29f863495a9bed90c24271c0543ff30aec1fe043b577134788eb195");
+                   "e2eb6d2b6326fb4232145e1fafae7aec4af1529217b07a407d25745943167bec");
   ExpectGoldenHash("delay-reverse", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeReverse)),
                    "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4",
                    "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
@@ -214,10 +214,12 @@ TEST_CASE("Golden DSP: ping-pong with the same input on both sides stays stable"
 {
   ExpectGoldenHash("delay-digital-same-lr",
                    volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital, true)),
-                   "e3734fcefe5528ee7e6c3906b1168a960dc24272a87620cee752e3e3d2a54745", "pending");
+                   "e3734fcefe5528ee7e6c3906b1168a960dc24272a87620cee752e3e3d2a54745",
+                   "f1317e7e4e65a70ea3ff667baaf71295d2c46ee475e914e75b44ee9df339cf22");
   ExpectGoldenHash("delay-analog-same-lr",
                    volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog, true)),
-                   "fe11f80414720180f957516e95cb22ed578aca9ae8b726194638ab9bcd408def", "pending");
+                   "fe11f80414720180f957516e95cb22ed578aca9ae8b726194638ab9bcd408def",
+                   "494af847639a264c8d65ef38d9071bc8ba8e66e2817fbef49ad2b4bd80360548");
 }
 
 // Every reverb hash below changed in 1.2.1, deliberately: the topology was fixed. The
