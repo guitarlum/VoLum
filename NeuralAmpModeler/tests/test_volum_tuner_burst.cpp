@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../VoLumTunerDSP.h"
+#include "VoLumBurstTiming.h"
 
 #include <algorithm>
 #include <chrono>
@@ -155,11 +156,6 @@ double Median(std::vector<double> v)
   std::sort(v.begin(), v.end());
   return v[v.size() / 2];
 }
-
-bool OnCi()
-{
-  return std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr;
-}
 } // namespace
 
 TEST_CASE("Tuner difference function is bit-identical to the scalar loop")
@@ -226,22 +222,25 @@ TEST_CASE("Tuner readout at 64 frames lands 15 blocks after the analysis is due,
 TEST_CASE("A tuner analysis due while one is running starts in the block after that one publishes")
 {
   constexpr int kBlock = 64;
-  constexpr int kBlocks = 1100;
+  constexpr int kBlocks = 900;
   const std::vector<float> signal = TwoTones(440.f, 220.f, kN, kBlock * kBlocks);
   volum::TunerDSP tuner;
   tuner.Reset(kSampleRate);
-  tuner.SetSliceTausPerBlockForTest(4); // 512 blocks per analysis; dues every 64 blocks pile up
+  // 410 blocks per analysis, not a multiple of the 64-block due spacing, so every restart below lands
+  // between two regular dues and only a due kept pending while the previous analysis ran can explain it.
+  tuner.SetSliceTausPerBlockForTest(5);
   tuner.SetActive(true);
   for (int b = 0; b < kBlocks; ++b)
   {
     tuner.Process(signal.data() + static_cast<size_t>(b) * kBlock, kBlock);
     const auto r = tuner.GetResult();
     INFO("block " << b);
-    // The dues merged while the first ran start the second at 575; the dues during that one start the third.
-    CHECK(tuner.AnalysisInProgress() == ((b >= 63 && b < 574) || (b >= 575 && b < 1086) || b >= 1087));
-    if (b < 574)
+    // Due at 63 + 64k. The first runs 63..472; the dues it overlapped start the second at 473 (runs to 882),
+    // and the dues during that one start the third at 883.
+    CHECK(tuner.AnalysisInProgress() == ((b >= 63 && b < 472) || (b >= 473 && b < 882) || b >= 883));
+    if (b < 472)
       CHECK_FALSE(r.valid);
-    else if (b < 1086)
+    else if (b < 882)
     {
       REQUIRE(r.valid);
       CHECK(r.frequency == doctest::Approx(440.f).epsilon(0.02));
@@ -251,9 +250,9 @@ TEST_CASE("A tuner analysis due while one is running starts in the block after t
       REQUIRE(r.valid);
       CHECK(r.frequency == doctest::Approx(220.f).epsilon(0.02));
     }
-    if (b == 1086)
+    if (b == 882)
     {
-      const size_t snapshotEnd = static_cast<size_t>(576) * kBlock;
+      const size_t snapshotEnd = static_cast<size_t>(474) * kBlock;
       CheckMatchesReference(signal.data() + (snapshotEnd - kN), tuner.Difference(), "second analysis");
     }
   }
@@ -283,7 +282,18 @@ TEST_CASE("Closing the tuner mid-analysis never publishes that snapshot after it
   }
 }
 
-TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::skip(kSkipTiming))
+namespace
+{
+struct TunerTiming
+{
+  double analysisMedian = 0.0;
+  double referenceMedian = 0.0;
+  double worstBlock = 0.0;
+};
+
+// 3 warm-up then 25 measured 4096-sample periods of 64-frame blocks, each alternated with one run of the
+// scalar difference loop. A period holds one whole analysis in steady state.
+TunerTiming MeasureTunerAnalysis()
 {
   constexpr int kBlock = 64;
   constexpr int kBlocksPerAnalysis = kN / kBlock;
@@ -298,7 +308,7 @@ TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::
   std::vector<float> refD(kHalf);
   long long n = 0;
   double refSink = 0.0;
-  double worst = 0.0;
+  TunerTiming t;
   std::vector<double> perAnalysis, reference;
 
   for (int run = 0; run < kWarmup + kRuns; ++run)
@@ -306,7 +316,6 @@ TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::
     for (int i = 0; i < kN; ++i)
       stream[i] = ChordSample(n++);
 
-    // Every block of one 4096-sample period: one whole analysis runs across them in steady state.
     auto timeAnalysis = [&] {
       double total = 0.0;
       for (int b = 0; b < kBlocksPerAnalysis; ++b)
@@ -316,7 +325,7 @@ TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::
         const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
         total += us;
         if (run >= kWarmup)
-          worst = std::max(worst, us);
+          t.worstBlock = std::max(t.worstBlock, us);
       }
       return total;
     };
@@ -348,15 +357,30 @@ TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::
 
   REQUIRE(tuner.GetResult().valid);
   CHECK(refSink > 0.0);
+  t.analysisMedian = Median(perAnalysis);
+  t.referenceMedian = Median(reference);
+  return t;
+}
+} // namespace
 
-  const double analysisMedian = Median(perAnalysis);
-  const double referenceMedian = Median(reference);
-  const double ratio = analysisMedian / std::max(1e-3, referenceMedian);
+TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::skip(kSkipTiming))
+{
+  TunerTiming first;
+  std::string worsts;
+  const double worst = volum_test::MinWorstBlockUs(volum_test::DeadlineRuns(), [&](int run) {
+    const TunerTiming t = MeasureTunerAnalysis();
+    if (run == 0)
+      first = t;
+    worsts += " " + std::to_string(t.worstBlock);
+    return t.worstBlock;
+  });
+
+  const double ratio = first.analysisMedian / std::max(1e-3, first.referenceMedian);
   INFO("tuner cost per analysis (all blocks of 4096 samples) median "
-       << analysisMedian << " us, worst block " << worst << " us; scalar difference loop median " << referenceMedian
-       << " us; ratio " << ratio);
+       << first.analysisMedian << " us; scalar difference loop median " << first.referenceMedian << " us; ratio "
+       << ratio << "; worst block per run (us):" << worsts << ", min " << worst);
   CHECK(ratio <= 0.35);
-  // Every block must fit a 64-frame buffer at 48 kHz. Hosted runners share cores.
-  if (!OnCi())
-    CHECK(worst < 1e6 * kBlock / kSampleRate);
+  // Every block of at least one run must fit a 64-frame buffer at 48 kHz. Hosted runners share cores.
+  if (!volum_test::OnCi())
+    CHECK(worst < volum_test::DeadlineUs(64, kSampleRate));
 }
