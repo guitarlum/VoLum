@@ -58,6 +58,11 @@
 #include <cmath>
 #include <vector>
 
+#if defined(_M_X64) || defined(__x86_64__) || defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+  #include <emmintrin.h>
+  #define VOLUM_PITCH_SSE2 1
+#endif
+
 namespace dsp
 {
 namespace effect
@@ -123,6 +128,7 @@ public:
       mBuf.assign(need, 0.0);
 
     mPeriodScratch.assign(static_cast<size_t>(2 * tmax + 4), 0.0);
+    mLagCorr.assign(static_cast<size_t>(tmax + 1), 0.0);
     mRefWin.assign(static_cast<size_t>(std::max(worst.corrWin, 1)), 0.0);
     // One correlation slot per candidate lag, for the widest search any character
     // uses. Sized here so _WsolaRefineRange never allocates on the audio thread.
@@ -132,6 +138,7 @@ public:
     // window. Filled once per splice so the lag loop never re-interpolates the ring.
     const int maxCandSpan = 2 * maxSearch + std::max(worst.corrWin, 1);
     mCandWin.assign(static_cast<size_t>(std::max(maxCandSpan, 1)), 0.0);
+    mCandSq.assign(mCandWin.size(), 0.0);
 
     mPeriodUpdate = std::max(1, static_cast<int>(std::lround(mSampleRate * 0.01)));
     SetCharacter(Character::Drop);
@@ -211,8 +218,43 @@ public:
   // ratio = output_freq / input_freq (2^(semitones/12)).
   void SetRatio(double ratio) { mRatio = std::clamp(ratio, 0.25, 4.0); }
 
+  // Period estimates produced inside one Process call, in update order. Two voices fed the same input
+  // from the same Reset reach every update at the same sample with the same ring, so the second can
+  // replay the first one's estimates instead of recomputing them.
+  struct PeriodLog
+  {
+    double* values = nullptr;
+    size_t capacity = 0;
+    size_t count = 0;
+  };
+
   void Process(const DSP_SAMPLE* in, DSP_SAMPLE* out, size_t numFrames)
   {
+    _Process(in, out, numFrames, nullptr, nullptr);
+  }
+  void ProcessRecordingPeriods(const DSP_SAMPLE* in, DSP_SAMPLE* out, size_t numFrames, PeriodLog& log)
+  {
+    log.count = 0;
+    _Process(in, out, numFrames, &log, nullptr);
+  }
+  void ProcessReplayingPeriods(const DSP_SAMPLE* in, DSP_SAMPLE* out, size_t numFrames, const PeriodLog& log)
+  {
+    _Process(in, out, numFrames, nullptr, &log);
+  }
+
+  // Everything the period tracker reads besides the ring contents, which the caller must vouch for.
+  bool TrackerMatches(const GranularVoice& o) const
+  {
+    return !mFixedGrain && !o.mFixedGrain && mSampleRate == o.mSampleRate && mBuf.size() == o.mBuf.size()
+           && mPeriodScratch.size() == o.mPeriodScratch.size() && mLagCorr.size() == o.mLagCorr.size()
+           && mWrite == o.mWrite && mWriteCount == o.mWriteCount && mPeriodUpdate == o.mPeriodUpdate
+           && mPeriodCountdown == o.mPeriodCountdown && mPeriod == o.mPeriod;
+  }
+
+private:
+  void _Process(const DSP_SAMPLE* in, DSP_SAMPLE* out, size_t numFrames, PeriodLog* record, const PeriodLog* replay)
+  {
+    size_t replayed = 0;
     if (mBuf.empty())
     {
       std::copy(in, in + numFrames, out);
@@ -232,7 +274,14 @@ public:
       if (!mFixedGrain && --mPeriodCountdown <= 0)
       {
         mPeriodCountdown = mPeriodUpdate;
-        _UpdatePeriod();
+        if (replay != nullptr && replayed < replay->count)
+          mPeriod = replay->values[replayed++];
+        else
+        {
+          _UpdatePeriod();
+          if (record != nullptr && record->count < record->capacity)
+            record->values[record->count++] = mPeriod;
+        }
       }
 
       double s = _ReadAtDelay(mDelay);
@@ -304,11 +353,11 @@ public:
         }
       }
 
-      mWrite = (mWrite + 1) % sz;
+      if (++mWrite >= sz)
+        mWrite = 0;
     }
   }
 
-private:
   struct Timing
   {
     int xfade = 0;
@@ -408,8 +457,11 @@ private:
     while (rp >= sz)
       rp -= sz;
     const double fl = std::floor(rp);
-    const size_t i0 = static_cast<size_t>(fl) % mBuf.size();
-    const size_t i1 = (i0 + 1) % mBuf.size();
+    const size_t n = mBuf.size();
+    size_t i0 = static_cast<size_t>(fl);
+    if (i0 >= n)
+      i0 %= n; // only a non-finite delay gets here; the loops above keep rp in [0, n)
+    const size_t i1 = (i0 + 1 >= n) ? 0 : i0 + 1;
     const double frac = rp - fl;
     return mBuf[i0] * (1.0 - frac) + mBuf[i1] * frac;
   }
@@ -491,6 +543,141 @@ private:
     double bestC = -2.0;
     int bestLag = 0;
     bool any = false;
+    if (mReferenceKernels)
+      _WsolaScanReference(cand, lagMin, lagMax, win, rn, bestC, bestLag, any);
+    else
+      _WsolaScan(cand, lagMin, lagMax, win, rn, bestC, bestLag, any);
+    return _WsolaPick(cand, lagMin, lagMax, preferNearest, bestC, bestLag, any);
+  }
+
+  static constexpr int kWsolaBlock = 8;
+
+  // Lag-blocked scan: kWsolaBlock lags share each pass over j, every lag keeping its own dot / sn
+  // accumulators in ascending j, so each correlation carries the one-lag-at-a-time loop's bits.
+  // The argmax still walks lags in ascending order.
+  void _WsolaScan(double cand, int lagMin, int lagMax, int win, double rn, double& bestC, int& bestLag, bool& any)
+  {
+    const double dcMin = static_cast<double>(mXfade) + 1.0;
+    int lag = lagMin;
+    // cand + lag grows with lag, so the lags too close to the write head are a prefix.
+    for (; lag <= lagMax && cand + lag < dcMin; ++lag)
+      mCorrScratch[static_cast<size_t>(lag - lagMin)] = -2.0;
+#if defined(VOLUM_PITCH_SSE2)
+    const int span = (lagMax - lagMin) + win;
+    for (int i = lag - lagMin; i < span; ++i)
+    {
+      const double v = mCandWin[static_cast<size_t>(i)];
+      mCandSq[static_cast<size_t>(i)] = v * v;
+    }
+#endif
+    double dot[kWsolaBlock];
+    double sn[kWsolaBlock];
+    while (lag <= lagMax)
+    {
+      const int count = std::min(kWsolaBlock, lagMax - lag + 1);
+      const size_t offset = static_cast<size_t>(lag - lagMin);
+      _WindowCorrelations(mRefWin.data(), mCandWin.data() + offset, mCandSq.data() + offset, win, count, dot, sn);
+      for (int b = 0; b < count; ++b, ++lag)
+      {
+        const size_t slot = static_cast<size_t>(lag - lagMin);
+        const double dc = cand + lag;
+        if (dc < dcMin)
+        {
+          mCorrScratch[slot] = -2.0;
+          continue;
+        }
+        const double cc = dot[b] / (rn * (std::sqrt(sn[b]) + 1e-9));
+        mCorrScratch[slot] = cc;
+        if (cc > bestC)
+        {
+          bestC = cc;
+          bestLag = lag;
+          any = true;
+        }
+      }
+    }
+  }
+
+  // dot[b] = sum over j < win of ref[j] * cand[b + j], sn[b] = sum of cand[b + j]^2, for b < count
+  // (count <= kWsolaBlock), each summed in ascending j. SSE2 lanes round every multiply and add
+  // separately, like scalar x64 code, so the squares come precomputed in candSq (same products).
+  // The scalar path keeps one `+= a * b` per term, so it contracts exactly as the old loop did.
+  static void _WindowCorrelations(const double* ref, const double* cand, const double* candSq, int win, int count,
+                                  double* dot, double* sn)
+  {
+    int b = 0;
+#if defined(VOLUM_PITCH_SSE2)
+    for (; b + 4 <= count; b += 4)
+    {
+      __m128d d0 = _mm_setzero_pd(), d1 = _mm_setzero_pd(), s0 = _mm_setzero_pd(), s1 = _mm_setzero_pd();
+      const double* c = cand + b;
+      const double* q = candSq + b;
+      for (int j = 0; j < win; ++j)
+      {
+        const __m128d r = _mm_set1_pd(ref[j]);
+        d0 = _mm_add_pd(d0, _mm_mul_pd(r, _mm_loadu_pd(c + j)));
+        d1 = _mm_add_pd(d1, _mm_mul_pd(r, _mm_loadu_pd(c + j + 2)));
+        s0 = _mm_add_pd(s0, _mm_loadu_pd(q + j));
+        s1 = _mm_add_pd(s1, _mm_loadu_pd(q + j + 2));
+      }
+      _mm_storeu_pd(dot + b, d0);
+      _mm_storeu_pd(dot + b + 2, d1);
+      _mm_storeu_pd(sn + b, s0);
+      _mm_storeu_pd(sn + b + 2, s1);
+    }
+#else
+    (void)candSq;
+    if (count == kWsolaBlock)
+    {
+      double d0 = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0, d4 = 0.0, d5 = 0.0, d6 = 0.0, d7 = 0.0;
+      double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0, s4 = 0.0, s5 = 0.0, s6 = 0.0, s7 = 0.0;
+      for (int j = 0; j < win; ++j)
+      {
+        const double r = ref[j];
+        const double* p = cand + j;
+        const double v0 = p[0], v1 = p[1], v2 = p[2], v3 = p[3], v4 = p[4], v5 = p[5], v6 = p[6], v7 = p[7];
+        d0 += r * v0;
+        s0 += v0 * v0;
+        d1 += r * v1;
+        s1 += v1 * v1;
+        d2 += r * v2;
+        s2 += v2 * v2;
+        d3 += r * v3;
+        s3 += v3 * v3;
+        d4 += r * v4;
+        s4 += v4 * v4;
+        d5 += r * v5;
+        s5 += v5 * v5;
+        d6 += r * v6;
+        s6 += v6 * v6;
+        d7 += r * v7;
+        s7 += v7 * v7;
+      }
+      const double dots[kWsolaBlock] = {d0, d1, d2, d3, d4, d5, d6, d7};
+      const double sns[kWsolaBlock] = {s0, s1, s2, s3, s4, s5, s6, s7};
+      std::copy(dots, dots + kWsolaBlock, dot);
+      std::copy(sns, sns + kWsolaBlock, sn);
+      return;
+    }
+#endif
+    for (; b < count; ++b)
+    {
+      double d = 0.0, s = 0.0;
+      for (int j = 0; j < win; ++j)
+      {
+        const double v = cand[b + j];
+        d += ref[j] * v;
+        s += v * v;
+      }
+      dot[b] = d;
+      sn[b] = s;
+    }
+  }
+
+  // The pre-blocking scan, verbatim: the oracle for _WsolaScan and the reference for the burst test.
+  void _WsolaScanReference(double cand, int lagMin, int lagMax, int win, double rn, double& bestC, int& bestLag,
+                           bool& any)
+  {
     for (int lag = lagMin; lag <= lagMax; ++lag)
     {
       const size_t slot = static_cast<size_t>(lag - lagMin);
@@ -518,7 +705,6 @@ private:
         any = true;
       }
     }
-    return _WsolaPick(cand, lagMin, lagMax, preferNearest, bestC, bestLag, any);
   }
 
   // Nested-read oracle for the extract-once pin. Not used by Process. Same
@@ -590,23 +776,151 @@ private:
     return dot / ((std::sqrt(rn) + 1e-9) * (std::sqrt(sn) + 1e-9));
   }
 
+  struct PeriodEstimate
+  {
+    double period = 0.0; // the tracker's next mPeriod
+    int bestLag = 0; // autocorrelation peak before refinement; 0 when the input was too quiet to search
+  };
+
   // Autocorrelation period estimate over recent history. Keeps the last estimate
   // on unvoiced/weak input. Runs ~every 10 ms, not per sample.
   void _UpdatePeriod()
+  {
+    mPeriod = mReferenceKernels ? _EstimatePeriodReference(mPeriod).period : _EstimatePeriod(mPeriod).period;
+  }
+
+  // Every lag's autocorrelation lands in mLagCorr from the lag-blocked kernel, so the refinement
+  // reads its neighbours instead of summing them again.
+  PeriodEstimate _EstimatePeriod(double previous)
+  {
+    const int tmin = std::max(2, static_cast<int>(mSampleRate / kPmaxFreq));
+    const int tmax = static_cast<int>(mSampleRate / kPminFreq);
+    const int L = tmax;
+    const int span = tmax + L;
+    if (static_cast<long long>(mWriteCount) < span + 2 || static_cast<int>(mPeriodScratch.size()) < span
+        || static_cast<int>(mLagCorr.size()) < tmax)
+      return {previous, 0};
+    // Integer delays: _ReadAtDelay(k) is b[i0] * 1 + b[i1] * 0, spelled out so -0 and non-finite
+    // neighbours come out the same.
+    const size_t n = mBuf.size();
+    size_t i0 = mWrite;
+    for (int k = 0; k < span; ++k)
+    {
+      const size_t i1 = (i0 + 1 >= n) ? 0 : i0 + 1;
+      mPeriodScratch[static_cast<size_t>(k)] = mBuf[i0] * 1.0 + mBuf[i1] * 0.0;
+      i0 = (i0 == 0) ? n - 1 : i0 - 1;
+    }
+    const double* s = mPeriodScratch.data();
+    double e = 0.0;
+    for (int k = 0; k < L; ++k)
+      e += s[k] * s[k];
+    if (e < 1e-7)
+      return {previous, 0};
+    double* r = mLagCorr.data();
+    _LagCorrelations(s, L, tmin, tmax, r);
+    double best = 0.0;
+    int bestLag = 0;
+    for (int lag = tmin; lag < tmax; ++lag)
+    {
+      if (r[lag] > best)
+      {
+        best = r[lag];
+        bestLag = lag;
+      }
+    }
+    if (bestLag <= 0 || best < 0.35 * e)
+      return {previous, bestLag};
+    double refined = static_cast<double>(bestLag);
+    if (bestLag > tmin && bestLag < tmax - 1)
+    {
+      const double rm = r[bestLag - 1];
+      const double rp = r[bestLag + 1];
+      const double denom = (rm + rp - 2.0 * best);
+      if (std::abs(denom) > 1e-9)
+        refined = bestLag + 0.5 * (rm - rp) / denom;
+    }
+    return {refined > 2.0 ? refined : previous, bestLag};
+  }
+
+  // r[lag] = sum over k < L of s[k] * s[k + lag] for lag in [lagBegin, lagEnd). Blocks of lags share
+  // each pass over k; each lag keeps one accumulator summed in ascending k as a single
+  // `+= a * b`, so it has the one-lag-at-a-time loop's bits (see _WindowCorrelations).
+  static void _LagCorrelations(const double* s, int L, int lagBegin, int lagEnd, double* r)
+  {
+    int lag = lagBegin;
+#if defined(VOLUM_PITCH_SSE2)
+    // Four accumulators: MSVC unrolls k by four and spills anything wider to the stack.
+    for (; lag + 8 <= lagEnd; lag += 8)
+    {
+      __m128d a0 = _mm_setzero_pd(), a1 = _mm_setzero_pd(), a2 = _mm_setzero_pd(), a3 = _mm_setzero_pd();
+      const double* p = s + lag;
+      for (int k = 0; k < L; ++k)
+      {
+        const __m128d x = _mm_set1_pd(s[k]);
+        a0 = _mm_add_pd(a0, _mm_mul_pd(x, _mm_loadu_pd(p + k)));
+        a1 = _mm_add_pd(a1, _mm_mul_pd(x, _mm_loadu_pd(p + k + 2)));
+        a2 = _mm_add_pd(a2, _mm_mul_pd(x, _mm_loadu_pd(p + k + 4)));
+        a3 = _mm_add_pd(a3, _mm_mul_pd(x, _mm_loadu_pd(p + k + 6)));
+      }
+      _mm_storeu_pd(r + lag, a0);
+      _mm_storeu_pd(r + lag + 2, a1);
+      _mm_storeu_pd(r + lag + 4, a2);
+      _mm_storeu_pd(r + lag + 6, a3);
+    }
+    for (; lag + 2 <= lagEnd; lag += 2)
+    {
+      __m128d a = _mm_setzero_pd();
+      for (int k = 0; k < L; ++k)
+        a = _mm_add_pd(a, _mm_mul_pd(_mm_set1_pd(s[k]), _mm_loadu_pd(s + k + lag)));
+      _mm_storeu_pd(r + lag, a);
+    }
+#else
+    for (; lag + 8 <= lagEnd; lag += 8)
+    {
+      double a0 = 0.0, a1 = 0.0, a2 = 0.0, a3 = 0.0, a4 = 0.0, a5 = 0.0, a6 = 0.0, a7 = 0.0;
+      for (int k = 0; k < L; ++k)
+      {
+        const double x = s[k];
+        const double* p = s + k + lag;
+        a0 += x * p[0];
+        a1 += x * p[1];
+        a2 += x * p[2];
+        a3 += x * p[3];
+        a4 += x * p[4];
+        a5 += x * p[5];
+        a6 += x * p[6];
+        a7 += x * p[7];
+      }
+      const double sums[8] = {a0, a1, a2, a3, a4, a5, a6, a7};
+      std::copy(sums, sums + 8, r + lag);
+    }
+#endif
+    for (; lag < lagEnd; ++lag)
+    {
+      double a = 0.0;
+      for (int k = 0; k < L; ++k)
+        a += s[k] * s[k + lag];
+      r[lag] = a;
+    }
+  }
+
+  // The pre-blocking tracker, verbatim apart from returning instead of assigning mPeriod: the
+  // oracle for _EstimatePeriod and the reference for the burst test.
+  PeriodEstimate _EstimatePeriodReference(double previous)
   {
     const int tmin = std::max(2, static_cast<int>(mSampleRate / kPmaxFreq));
     const int tmax = static_cast<int>(mSampleRate / kPminFreq);
     const int L = tmax;
     const int span = tmax + L;
     if (static_cast<long long>(mWriteCount) < span + 2 || static_cast<int>(mPeriodScratch.size()) < span)
-      return;
+      return {previous, 0};
     for (int k = 0; k < span; ++k)
       mPeriodScratch[static_cast<size_t>(k)] = _ReadAtDelay(static_cast<double>(k));
     double e = 0.0;
     for (int k = 0; k < L; ++k)
       e += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k)];
     if (e < 1e-7)
-      return;
+      return {previous, 0};
     double best = 0.0;
     int bestLag = 0;
     for (int lag = tmin; lag < tmax; ++lag)
@@ -621,7 +935,7 @@ private:
       }
     }
     if (bestLag <= 0 || best < 0.35 * e)
-      return;
+      return {previous, bestLag};
     double refined = static_cast<double>(bestLag);
     if (bestLag > tmin && bestLag < tmax - 1)
     {
@@ -635,8 +949,7 @@ private:
       if (std::abs(denom) > 1e-9)
         refined = bestLag + 0.5 * (rm - rp) / denom;
     }
-    if (refined > 2.0)
-      mPeriod = refined;
+    return {refined > 2.0 ? refined : previous, bestLag};
   }
 
   double mSampleRate = 0.0;
@@ -656,9 +969,11 @@ private:
 
   std::vector<double> mBuf;
   std::vector<double> mPeriodScratch;
+  std::vector<double> mLagCorr; // autocorrelation per lag, indexed by lag
   std::vector<double> mRefWin;
   std::vector<double> mCorrScratch;
   std::vector<double> mCandWin;
+  std::vector<double> mCandSq; // mCandWin squared, for the SSE2 splice scan
   size_t mWrite = 0;
   unsigned long long mWriteCount = 0;
 
@@ -671,6 +986,9 @@ private:
   double mDelayNew = 0.0;
   bool mFading = false;
   int mFadePos = 0;
+
+  // Test only: run the pre-blocking tracker and splice scan (same output, old cost).
+  bool mReferenceKernels = false;
 
   // Test/introspection only, behaviour-neutral. Splice COUNT alone cannot
   // characterise this engine: 1.2.1 shipped a cadence-capped regression test that
@@ -710,6 +1028,21 @@ public:
   {
     return _WsolaRefineRangeNested(cand, lagMin, lagMax, preferNearest);
   }
+  // Pre-blocking oracles: the same extract-once search, and the tracker, one lag at a time. The
+  // Estimate hooks leave mPeriod alone; DebugCorrScratch holds the last search's correlations.
+  double DebugWsolaRefineRangeReference(double cand, int lagMin, int lagMax, bool preferNearest)
+  {
+    const bool was = mReferenceKernels;
+    mReferenceKernels = true;
+    const double picked = _WsolaRefineRange(cand, lagMin, lagMax, preferNearest);
+    mReferenceKernels = was;
+    return picked;
+  }
+  const std::vector<double>& DebugCorrScratch() const { return mCorrScratch; }
+  PeriodEstimate DebugEstimatePeriod() { return _EstimatePeriod(mPeriod); }
+  PeriodEstimate DebugEstimatePeriodReference() { return _EstimatePeriodReference(mPeriod); }
+  double DebugPeriod() const { return mPeriod; }
+  void DebugSetReferenceKernels(bool on) { mReferenceKernels = on; }
   // Mean normalized cross-correlation achieved across splices since Reset(). 1.0
   // means every join was perfectly waveform-aligned. Only meaningful for WSOLA
   // characters (DROP/POLY); INSTANT does not search, and reports 1.0.
@@ -757,6 +1090,7 @@ public:
       mConfiguredSampleRate = mSampleRate;
       mConfiguredMaxBlock = mMaxBlock;
       mConfigured = true;
+      mVoicesInStep = true; // Configure resets both voices
     }
     _ApplyCharacters();
     const double fc = 3200.0;
@@ -767,6 +1101,13 @@ public:
   int Latency() const { return mLatency; }
   bool Configured() const { return mConfigured; }
   int PreparedBlockSize() const { return mMaxBlock; }
+  // Test only: the pre-blocking tracker and splice search, each voice tracking on its own.
+  void DebugSetReferenceKernels(bool on)
+  {
+    mReferenceKernels = on;
+    for (auto& voice : mVoices)
+      voice.DebugSetReferenceKernels(on);
+  }
 
   // Reported latency for a given mode/character at a sample rate, computed without
   // touching the live (audio-thread-updated) state. Mirrors _ApplyCharacters:
@@ -783,6 +1124,7 @@ public:
   {
     for (auto& voice : mVoices)
       voice.Reset();
+    mVoicesInStep = true;
     std::fill(mDryRing.begin(), mDryRing.end(), static_cast<DSP_SAMPLE>(0));
     mDryWrite = 0;
     mVintageLpState = {0.0, 0.0};
@@ -829,14 +1171,21 @@ public:
     for (size_t i = 0; i < numFrames; ++i)
     {
       mDryRing[mDryWrite] = in[i];
-      mDryScratch[i] = mDryRing[(mDryWrite + ringLen - lat) % ringLen];
-      mDryWrite = (mDryWrite + 1) % ringLen;
+      size_t readAt = mDryWrite + ringLen - lat;
+      if (readAt >= ringLen)
+        readAt -= ringLen;
+      mDryScratch[i] = mDryRing[readAt];
+      if (++mDryWrite >= ringLen)
+        mDryWrite = 0;
     }
 
     if (mMode == Mode::Transpose)
     {
       mVoices[0].SetRatio(std::pow(2.0, mSemitones / 12.0));
       mVoices[0].Process(in, mWet0.data(), numFrames);
+      // Voice 1 skipped this input, so its ring is stale until the next Reset.
+      if (numFrames > 0)
+        mVoicesInStep = false;
       for (size_t i = 0; i < numFrames; ++i)
       {
         const double y = mDryScratch[i] * (1.0 - mMix) + static_cast<double>(mWet0[i]) * mMix;
@@ -847,8 +1196,20 @@ public:
     {
       mVoices[0].SetRatio(0.5);
       mVoices[1].SetRatio(2.0);
-      mVoices[0].Process(in, mWet0.data(), numFrames);
-      mVoices[1].Process(in, mWet1.data(), numFrames);
+      // Both voices hold the same ring and reach each period update at the same sample, so the up
+      // voice replays the down voice's estimates. Voice 0 runs its whole block first, which is
+      // why the estimates are logged in order rather than shared as one value.
+      if (mVoicesInStep && !mReferenceKernels && mVoices[0].TrackerMatches(mVoices[1]))
+      {
+        GranularVoice::PeriodLog log{mPeriodLog.data(), mPeriodLog.size(), 0};
+        mVoices[0].ProcessRecordingPeriods(in, mWet0.data(), numFrames, log);
+        mVoices[1].ProcessReplayingPeriods(in, mWet1.data(), numFrames, log);
+      }
+      else
+      {
+        mVoices[0].Process(in, mWet0.data(), numFrames);
+        mVoices[1].Process(in, mWet1.data(), numFrames);
+      }
       for (size_t i = 0; i < numFrames; ++i)
       {
         double down = static_cast<double>(mWet0[i]);
@@ -919,6 +1280,12 @@ private:
     for (size_t c = 0; c < kMaxChannels; ++c)
       if (mOut[c].size() < cap)
         mOut[c].assign(cap, static_cast<DSP_SAMPLE>(0));
+    // One slot per period update a block can hold. A shorter log only costs the up voice its own
+    // estimates past the end, never a wrong one.
+    const size_t updateEvery = static_cast<size_t>(std::max(1L, std::lround(mSampleRate * 0.01)));
+    const size_t logNeed = cap / updateEvery + 2;
+    if (mPeriodLog.size() < logNeed)
+      mPeriodLog.assign(logNeed, 0.0);
   }
 
   bool _PrepareIO(size_t numChannels, size_t numFrames) const
@@ -959,6 +1326,11 @@ private:
 
   std::vector<DSP_SAMPLE> mWet0, mWet1, mDryScratch, mDryRing;
   size_t mDryWrite = 0;
+
+  // Both voices were reset together and have processed the same input since.
+  bool mVoicesInStep = false;
+  std::vector<double> mPeriodLog;
+  bool mReferenceKernels = false;
   std::array<std::vector<DSP_SAMPLE>, kMaxChannels> mOut;
   std::array<DSP_SAMPLE*, kMaxChannels> mOutPtrs{nullptr, nullptr};
 };
