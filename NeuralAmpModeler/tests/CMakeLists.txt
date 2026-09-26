@@ -43,6 +43,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_tuner_burst.cpp
   test_metronome_dsp.cpp
   test_tone_stack.cpp
+  test_volum_filter_core.cpp
   test_volum_pre_pedal_captures.cpp
   test_volum_custom_content.cpp
   test_volum_content_store.cpp

@@ -138,6 +138,7 @@
     <ClCompile Include="..\tests\test_volum_tuner_burst.cpp" />
     <ClCompile Include="..\tests\test_metronome_dsp.cpp" />
     <ClCompile Include="..\tests\test_tone_stack.cpp" />
+    <ClCompile Include="..\tests\test_volum_filter_core.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_pedal_captures.cpp" />
     <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_content_store.cpp" />
