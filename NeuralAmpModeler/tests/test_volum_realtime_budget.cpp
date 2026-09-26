@@ -25,11 +25,15 @@
 // small host blocks. 1.3.0 shipped a crackle because every NAM was Reset at the
 // 8192 scratch reserve: nothing failed, the audio just missed its deadline.
 //
-// Two guards. The production chain must cost well under the same chain Reset
-// at the 8192 reserve; that ratio is machine-independent (the regression made
-// them equal). The absolute share of the deadline is generous so a slow CI
-// runner still passes, but PRE NAM + amp that cannot keep up does not. Medians
-// of block-by-block alternation, so one scheduler spike cannot fail a run.
+// Two guards. Every model in the chain under test must be Reset at
+// NamResetBlockSize (the host block, far below the 8192 reserve); the plugin's
+// call sites are source-locked in test_volum_ui_regressions.cpp. The absolute
+// share of the deadline is generous so a slow CI runner still passes, but PRE
+// NAM + amp that cannot keep up does not. Medians of block-by-block
+// alternation, so one scheduler spike cannot fail a run. The cost against the
+// same chain Reset at the reserve is printed only: the A2 ring used to refresh
+// a reserve-sized mirror every block, and since it copies only written columns
+// the two chains cost about the same.
 
 #if defined(__SANITIZE_ADDRESS__)
   #define VOLUM_BUDGET_SANITIZED 1
@@ -129,6 +133,7 @@ struct Chain
 
   void Reset(int maxBlock)
   {
+    resetBlock = maxBlock;
     for (auto& m : models)
       m->ResetAndPrewarm(kSampleRate, maxBlock);
   }
@@ -156,6 +161,7 @@ struct Chain
   }
 
   std::vector<NAM_SAMPLE> a, b;
+  int resetBlock = 0;
   unsigned int fpModeDuringProcess = 0;
 };
 
@@ -233,8 +239,10 @@ void CheckChain(const std::vector<std::filesystem::path>& paths, double maxMedia
       const double ratio = m.productionMedian / std::max(1e-3, m.oversizedMedian);
       INFO(label << (full ? " FULL" : " LITE") << " block " << block << ": median " << m.productionMedian << " us ("
                  << 100.0 * share << "% of deadline), vs the 8192-reserve reset " << ratio);
-      // Healthy runs measure 0.14-0.36 here; the 1.3.0 regression is 1.0.
-      CHECK(ratio <= 0.6);
+      const int resetBlock = volum::dsp_staging::NamResetBlockSize(block);
+      CHECK(resetBlock == block);
+      CHECK(resetBlock * 16 <= volum::dsp_staging::ReservedAudioBlockSize(block));
+      CHECK(production.resetBlock == resetBlock);
       if (maxMedianShare > 0.0)
         CHECK(share < maxMedianShare);
     }
@@ -253,7 +261,7 @@ TEST_CASE("The heaviest VoLum chain is not paying the realtime reserve" * doctes
 {
   // Two PRE NAMs, main amp and Dual Amp SUPPORT all run on the audio thread.
   // Its absolute cost is the machine's (31-58% of the deadline here in FULL),
-  // so only the sizing ratio is enforced.
+  // so only the Reset size is enforced.
   const auto rigs = RigsRoot();
   CheckChain({FirstNam(rigs / "PrePedals", "FX-PettyJohn-Myth"), FirstNam(rigs / "PrePedals", "FX-Minotaur-Klon"),
               FirstNam(rigs / "Soldano SLO100", "AMP-"), FirstNam(rigs / "Diezel Herbert Mk1", "AMP-")},

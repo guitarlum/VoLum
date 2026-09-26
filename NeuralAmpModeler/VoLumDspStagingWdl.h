@@ -31,11 +31,12 @@ inline int ReservedAudioBlockSize(int hostBlockSize)
 }
 
 // A NAM is Reset at the host block, never at kRealtimeBlockReserve. Its conv
-// ring buffers are 2 * lookback + maxBlock long and the write head walks all of
-// it, so an 8192 reserve made every block stream megabytes through the cache:
-// a PRE NAM + amp at 64 frames went from ~14% to ~80-90% of the deadline (p99
-// over 100%) and crackled in 1.3.0. A larger host block is chunked by
-// ProcessNamInChunks instead.
+// ring buffers are 2 * lookback + maxBlock long; in 1.3.0 every block re-copied
+// a maxBlock-wide mirror of each ring, so an 8192 reserve streamed megabytes
+// through the cache and a PRE NAM + amp at 64 frames crackled (~80-90% of the
+// deadline). The mirror copy now covers only the columns a block writes, but a
+// reserve-sized reset still bloats the rings, so keep the host size. A larger
+// host block is chunked by ProcessNamInChunks instead.
 inline int NamResetBlockSize(int hostBlockSize)
 {
   return std::max(hostBlockSize, 64);

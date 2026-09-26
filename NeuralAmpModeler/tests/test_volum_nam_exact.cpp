@@ -119,10 +119,22 @@ struct RenderStats
   bool denormalsOffDuringProcess = true;
 };
 
-// Renders `input` through one model in host blocks of `block` frames, Reset and
-// chunked the way the plugin does it.
+// Host block `index` of a render Reset for `block`: either always `block`, or a
+// cycle of sizes below, at and above it (above is chunked like ProcessBlock), so
+// ring writes start and wrap at uneven positions.
+int HostBlockSize(int block, bool varied, int index)
+{
+  if (!varied)
+    return block;
+  const int cycle[] = {block, 1, block - 1, 37, 2 * block + 5, block / 2, 3};
+  return cycle[index % 7];
+}
+
+// Renders `input` through one model in host blocks of `block` frames (or the
+// varied cycle around it), Reset and chunked the way the plugin does it.
 std::vector<NAM_SAMPLE> RenderNam(const std::filesystem::path& path, bool full, int block,
-                                  const std::vector<NAM_SAMPLE>& input, RenderStats* stats = nullptr)
+                                  const std::vector<NAM_SAMPLE>& input, RenderStats* stats = nullptr,
+                                  bool variedBlocks = false)
 {
   nam::activations::Activation::enable_fast_tanh();
   auto model = nam::get_dsp(path);
@@ -135,9 +147,10 @@ std::vector<NAM_SAMPLE> RenderNam(const std::filesystem::path& path, bool full, 
   std::vector<NAM_SAMPLE> in(input);
   std::vector<NAM_SAMPLE> out(input.size(), 0);
   const int total = static_cast<int>(input.size());
-  for (int off = 0; off < total; off += block)
+  int n = 0;
+  for (int off = 0, index = 0; off < total; off += n, ++index)
   {
-    const int n = std::min(block, total - off);
+    n = std::min(HostBlockSize(block, variedBlocks, index), total - off);
     const unsigned int before = ReadFpMode();
     {
       const ScopedDenormalsOff denormalsOff;
@@ -163,8 +176,11 @@ struct LockCase
   const char* prefix;
   bool full;
   int block;
+  bool varied = false;
 };
 
+// The large and varied host blocks wrap every layer's ring at many offsets,
+// including blocks that write both ends of the ring.
 std::vector<LockCase> LockCases()
 {
   return {
@@ -172,6 +188,13 @@ std::vector<LockCase> LockCases()
     {"Soldano amp LITE 48k/64", "Soldano SLO100", "AMP-", false, 64},
     {"Myth PRE FULL 48k/64", "PrePedals", "FX-PettyJohn-Myth", true, 64},
     {"Myth PRE LITE 48k/64", "PrePedals", "FX-PettyJohn-Myth", false, 64},
+    {"Soldano amp FULL 48k/512", "Soldano SLO100", "AMP-", true, 512},
+    {"Soldano amp LITE 48k/512", "Soldano SLO100", "AMP-", false, 512},
+    {"Soldano amp FULL 48k/2048", "Soldano SLO100", "AMP-", true, 2048},
+    {"Soldano amp LITE 48k/2048", "Soldano SLO100", "AMP-", false, 2048},
+    {"Soldano amp FULL 48k/400 varied", "Soldano SLO100", "AMP-", true, 400, true},
+    {"Soldano amp LITE 48k/400 varied", "Soldano SLO100", "AMP-", false, 400, true},
+    {"Myth PRE FULL 48k/400 varied", "PrePedals", "FX-PettyJohn-Myth", true, 400, true},
   };
 }
 
@@ -190,6 +213,15 @@ const char* PinnedHash(const std::string& name)
     {"Soldano amp LITE 48k/64", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
     {"Myth PRE FULL 48k/64", "40f0fdf7041d62136c2302f1a18812288ae8d93600bdc3d673b8c413279114c0"},
     {"Myth PRE LITE 48k/64", "8e438ba76ecd28fa009078396f8393bd279623e6520cbb25ea043c99d8ecf5c0"},
+    // Captured from f9836c5 before the ring-mirror change. A2 output does not
+    // depend on the host block size, so these repeat the 64-frame values.
+    {"Soldano amp FULL 48k/512", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/512", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Soldano amp FULL 48k/2048", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/2048", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Soldano amp FULL 48k/400 varied", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/400 varied", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Myth PRE FULL 48k/400 varied", "40f0fdf7041d62136c2302f1a18812288ae8d93600bdc3d673b8c413279114c0"},
   };
   for (const Pin& p : pins)
     if (name == p.name)
@@ -215,7 +247,8 @@ TEST_CASE("NAM exact: bundled captures render the pinned bits")
   for (const LockCase& c : LockCases())
   {
     RenderStats stats;
-    const std::vector<NAM_SAMPLE> out = RenderNam(FirstNam(rigs / c.folder, c.prefix), c.full, c.block, input, &stats);
+    const std::vector<NAM_SAMPLE> out =
+      RenderNam(FirstNam(rigs / c.folder, c.prefix), c.full, c.block, input, &stats, c.varied);
     INFO(std::string(c.name));
     CHECK(stats.fpModeRestored);
     CHECK(stats.denormalsOffDuringProcess);
