@@ -91,6 +91,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_midi_handoff.cpp
   test_volum_midi_footswitch.cpp
   test_volum_meter_sender.cpp
+  test_volum_meter_dirty.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"

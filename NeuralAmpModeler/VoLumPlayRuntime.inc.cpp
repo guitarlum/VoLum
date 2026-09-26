@@ -191,6 +191,14 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
       preset->Hide(chrome.hidePresetBar);
   }
 
+  // BUILD meters sit under the opaque PLAY surface. Keep their values warm but
+  // never dirty while covered; every path back to BUILD clears this (this runs
+  // for BUILD before the early return) and SetAllControlsDirty repaints them.
+  const bool metersCovered = (mode == volum::UiMode::Play);
+  for (const int tag : {kCtrlTagInputMeter, kCtrlTagOutputMeter, kCtrlTagOutputMeterR})
+    if (auto* meter = pGfx->GetControlWithTag(tag))
+      meter->As<NAMMeterControl>()->SetCovered(metersCovered);
+
   if (mVolumUiMode != volum::UiMode::Play)
     return;
   auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface);

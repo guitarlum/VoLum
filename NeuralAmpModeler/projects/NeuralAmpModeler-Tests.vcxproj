@@ -186,6 +186,7 @@
     <ClCompile Include="..\tests\test_volum_midi_handoff.cpp" />
     <ClCompile Include="..\tests\test_volum_midi_footswitch.cpp" />
     <ClCompile Include="..\tests\test_volum_meter_sender.cpp" />
+    <ClCompile Include="..\tests\test_volum_meter_dirty.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />

@@ -12,6 +12,7 @@
 #include "VoLumPackLayout.h"
 #include "VoLumKeyboardModel.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumMeterDirty.h"
 #include "VoLumOutputMode.h"
 #include "VoLumSecondPress.h"
 
@@ -673,8 +674,8 @@ private:
 
 class NAMMeterControl : public IVPeakAvgMeterControl<>, public IBitmapBase
 {
-  static constexpr float KMeterMin = -70.0f;
-  static constexpr float KMeterMax = -0.01f;
+  static constexpr float KMeterMin = volum::kNamMeterMinDb;
+  static constexpr float KMeterMax = volum::kNamMeterMaxDb;
 
 public:
   NAMMeterControl(const IRECT& bounds, const IBitmap& bitmap, const IVStyle& style)
@@ -687,12 +688,48 @@ public:
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
 
+  void SetCovered(bool covered) { mCovered = covered; }
+
   void SetSafetyActive(bool active)
   {
     if (mSafetyActive == active)
       return;
     mSafetyActive = active;
-    SetDirty(false);
+    // Gate here (not in SetDirty): PLAY covers the BUILD meters; BUILD return
+    // already calls SetAllControlsDirty.
+    if (!mCovered)
+      SetDirty(false);
+  }
+
+  void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
+  {
+    if (IsDisabled() || msgTag != ISender<>::kUpdateMessage)
+      return;
+
+    IByteStream stream(pData, dataSize);
+    int pos = 0;
+    ISenderData<1, std::pair<float, float>> d;
+    pos = stream.Get(&d, pos);
+
+    bool needsDirty = false;
+    for (auto c = d.chanOffset; c < (d.chanOffset + d.nChans); c++)
+    {
+      const double peakAmp = static_cast<double>(std::get<0>(d.vals[c]));
+      const double avgAmp = static_cast<double>(std::get<1>(d.vals[c]));
+      const double lowPointAbs = std::fabs(static_cast<double>(KMeterMin));
+      const double rangeDB = std::fabs(static_cast<double>(KMeterMax) - static_cast<double>(KMeterMin));
+      const double linearPeakPos = (AmpToDB(peakAmp) + lowPointAbs) / rangeDB;
+      const double linearAvgPos = volum::NamMeterClippedAvgFromAmp(avgAmp, KMeterMin, KMeterMax);
+
+      if (volum::NamMeterNeedsDirty(GetValue(c), linearAvgPos, mSafetyActive, mSafetyActive, mCovered))
+        needsDirty = true;
+
+      SetValue(linearAvgPos, c);
+      mPeakValues[c] = static_cast<float>(linearPeakPos);
+    }
+
+    if (needsDirty)
+      SetDirty(false);
   }
 
   virtual void OnResize() override
@@ -720,6 +757,7 @@ public:
 
 private:
   bool mSafetyActive = false;
+  bool mCovered = false;
 };
 
 // Container where we can refer to children by names instead of indices
