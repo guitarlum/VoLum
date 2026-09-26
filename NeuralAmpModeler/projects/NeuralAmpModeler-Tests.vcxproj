@@ -34,6 +34,9 @@
     <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><CharacterSet>MultiByte</CharacterSet><PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(MSBuildThisFileDirectory)..\config\VoLum-release-opt.props" />
+  </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(SolutionDir)build-win\tests\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build-win\tests\$(Platform)\$(Configuration)\int\</IntDir>
   </PropertyGroup>

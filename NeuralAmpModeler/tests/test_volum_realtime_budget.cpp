@@ -15,6 +15,10 @@
 
 #define VOLUM_DSP_STAGING_SKIP_WDL
 #include "../VoLumDspStagingWdl.h"
+#include "../architecture.hpp"
+#if defined(ARCH_X86)
+  #include <immintrin.h>
+#endif
 
 // Realtime budget of the NAM chain VoLum actually runs: bundled captures,
 // Reset exactly as the plugin resets them (NamResetBlockSize), processed at
@@ -45,6 +49,46 @@ constexpr bool kSkipBudget = false;
 
 constexpr double kSampleRate = 48000.0;
 constexpr double kPi = 3.14159265358979323846;
+
+#if defined(ARCH_X86)
+constexpr unsigned int kFtzDaz = 0x8040;
+#endif
+
+unsigned int ReadFpMode()
+{
+#if defined(ARCH_X86)
+  return _mm_getcsr();
+#else
+  return 0;
+#endif
+}
+
+// ProcessBlock runs the NAM chain with FTZ|DAZ set. Restoring the saved MXCSR
+// keeps every later test case, the golden renders included, on IEEE denormals.
+class ScopedDenormalsOff
+{
+public:
+  ScopedDenormalsOff()
+  {
+#if defined(ARCH_X86)
+    mSaved = _mm_getcsr();
+    disable_denormals();
+#endif
+  }
+  ~ScopedDenormalsOff()
+  {
+#if defined(ARCH_X86)
+    _mm_setcsr(mSaved);
+#endif
+  }
+  ScopedDenormalsOff(const ScopedDenormalsOff&) = delete;
+  ScopedDenormalsOff& operator=(const ScopedDenormalsOff&) = delete;
+
+#if defined(ARCH_X86)
+private:
+  unsigned int mSaved = 0;
+#endif
+};
 
 std::filesystem::path RigsRoot()
 {
@@ -95,6 +139,7 @@ struct Chain
   {
     a.assign(src.begin(), src.begin() + block);
     b.resize(static_cast<size_t>(block));
+    const ScopedDenormalsOff denormalsOff;
     const auto t0 = std::chrono::steady_clock::now();
     NAM_SAMPLE* in = a.data();
     NAM_SAMPLE* out = b.data();
@@ -106,10 +151,12 @@ struct Chain
       std::swap(in, out);
     }
     const auto t1 = std::chrono::steady_clock::now();
+    fpModeDuringProcess = ReadFpMode();
     return std::chrono::duration<double, std::micro>(t1 - t0).count();
   }
 
   std::vector<NAM_SAMPLE> a, b;
+  unsigned int fpModeDuringProcess = 0;
 };
 
 void FillChordBlock(std::vector<NAM_SAMPLE>& dst, int block, double& t)
@@ -211,6 +258,24 @@ TEST_CASE("The heaviest VoLum chain is not paying the realtime reserve" * doctes
   CheckChain({FirstNam(rigs / "PrePedals", "FX-PettyJohn-Myth"), FirstNam(rigs / "PrePedals", "FX-Minotaur-Klon"),
               FirstNam(rigs / "Soldano SLO100", "AMP-"), FirstNam(rigs / "Diezel Herbert Mk1", "AMP-")},
              0.0, "2 PRE + main + support");
+}
+
+TEST_CASE("The budget chain runs with denormals flushed and hands back the caller's FP mode")
+{
+  Chain chain;
+  chain.Load({FirstNam(RigsRoot() / "Soldano SLO100", "AMP-")}, false);
+  chain.Reset(64);
+  std::vector<NAM_SAMPLE> src;
+  double t = 0.0;
+  FillChordBlock(src, 64, t);
+
+  const unsigned int before = ReadFpMode();
+  chain.ProcessTimed(src, 64);
+  CHECK(ReadFpMode() == before);
+#if defined(ARCH_X86)
+  CHECK_MESSAGE((before & kFtzDaz) == 0u, "an earlier test case left FTZ/DAZ set");
+  CHECK((chain.fpModeDuringProcess & kFtzDaz) == kFtzDaz);
+#endif
 }
 
 TEST_CASE("Chunking an oversized host block is sample-identical to smaller host blocks")

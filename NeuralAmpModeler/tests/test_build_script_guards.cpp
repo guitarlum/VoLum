@@ -104,6 +104,37 @@ TEST_CASE("Every plugin target that compiles NeuralAmpModeler.cpp also compiles 
   }
 }
 
+TEST_CASE("Tests, app and VST3 share the Release|x64 optimization props")
+{
+  // The tests were built /O2 without /GL and linked without /LTCG while the app
+  // and VST3 shipped with both, so the goldens and the realtime budget checked a
+  // differently compiled binary. One sheet keeps the flags in lockstep.
+  const std::string props = ReadRepoFile("NeuralAmpModeler/config/VoLum-release-opt.props");
+  CHECK(props.find("<WholeProgramOptimization>true</WholeProgramOptimization>") != std::string::npos);
+  CHECK(props.find("<LinkTimeCodeGeneration>UseFastLinkTimeCodeGeneration</LinkTimeCodeGeneration>")
+        != std::string::npos);
+
+  const char* projects[] = {"NeuralAmpModeler/projects/NeuralAmpModeler-Tests.vcxproj",
+                            "NeuralAmpModeler/projects/NeuralAmpModeler-app.vcxproj",
+                            "NeuralAmpModeler/projects/NeuralAmpModeler-vst3.vcxproj"};
+  for (const char* rel : projects)
+  {
+    INFO(rel);
+    const std::string proj = ReadRepoFile(rel);
+    const auto import = proj.find("config\\VoLum-release-opt.props\"");
+    REQUIRE(import != std::string::npos);
+    // After Microsoft.Cpp.props, inside the Release|x64 property-sheet group.
+    CHECK(proj.find("Microsoft.Cpp.props\"") < import);
+    const auto group = proj.rfind("<ImportGroup", import);
+    REQUIRE(group != std::string::npos);
+    CHECK(proj.find("</ImportGroup>", group) > import);
+    const std::string groupTag = proj.substr(group, proj.find('>', group) - group);
+    CHECK(groupTag.find("'Release|x64'") != std::string::npos);
+    // A project-level override would silently undo the shared sheet.
+    CHECK(proj.find("<WholeProgramOptimization>false") == std::string::npos);
+  }
+}
+
 TEST_CASE("Agent artifact-link check skips gitignored paths")
 {
   // Windows CI died on `training/a2-final/` in the A2 skill: the folder is
