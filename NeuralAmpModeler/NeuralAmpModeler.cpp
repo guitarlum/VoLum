@@ -704,7 +704,17 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   mMetronomeDSP.Process(outputs, nFrames, static_cast<int>(numChannelsExternalOut));
 
-  if (processingPlan.runDualAmp)
+  const volum::MeterGateStep meterStep =
+    volum::StepMeterGate(mVolumEditorOpen.load(std::memory_order_acquire), mVolumMetersRanLastBlock);
+  const bool runMeters = meterStep != volum::MeterGateStep::Skip;
+  if (meterStep == volum::MeterGateStep::RestartThenRun)
+  {
+    mInputSender.Restart();
+    mOutputSender.Restart();
+    mOutputSenderR.Restart();
+  }
+
+  if (runMeters && processingPlan.runDualAmp)
   {
     double peak = 0.0;
     for (size_t c = 0; c < numChannelsExternalOut; ++c)
@@ -752,7 +762,8 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
-  _UpdateMeters(mInputPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
+  if (runMeters)
+    _UpdateMeters(mInputPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
 }
 
 void NeuralAmpModeler::OnReset()
@@ -1295,6 +1306,7 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
 void NeuralAmpModeler::OnUIOpen()
 {
   Plugin::OnUIOpen();
+  mVolumEditorOpen.store(true, std::memory_order_release);
 
   if (mModel != nullptr)
   {
@@ -1375,6 +1387,7 @@ void NeuralAmpModeler::_VolumRestoreSessionSelection()
 
 void NeuralAmpModeler::OnUIClose()
 {
+  mVolumEditorOpen.store(false, std::memory_order_release);
   // An active tuner silences the entire output (see silenceForTuner in
   // ProcessBlock), and mTunerDSP outlives the editor while the only thing that
   // can clear it is a control that no longer exists. Closing the window with the

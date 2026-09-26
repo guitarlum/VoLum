@@ -58,16 +58,17 @@
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
+#include "VoLumPeakAvgSender.h"
 
 const int kNumPresets = 1;
 // The plugin is mono inside
 constexpr size_t kNumChannelsInternal = 1;
 
-class NAMSender : public iplug::IPeakAvgSender<>
+class NAMSender : public volum::PeakAvgSender<>
 {
 public:
   NAMSender()
-  : iplug::IPeakAvgSender<>(-90.0, true, 5.0f, 1.0f, 300.0f, 500.0f)
+  : volum::PeakAvgSender<>(-90.0, true, 5.0f, 1.0f, 300.0f, 500.0f)
   {
   }
 };
@@ -661,6 +662,10 @@ private:
   std::atomic<bool> mVolumSupportNeedsLoad{false};
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
+  // Set by OnUIOpen / cleared by OnUIClose; gates the meter work in ProcessBlock.
+  std::atomic<bool> mVolumEditorOpen{false};
+  // Audio thread only: whether the previous block ran the meters (see volum::StepMeterGate).
+  bool mVolumMetersRanLastBlock = false;
   std::atomic<bool> mSupportPolarityInvert{false};
   // Master safety stage telemetry: held briefly after any final post-FX sample crosses
   // the soft-clip knee (~+2.9 dBFS). Read by OnIdle for the footer and OUT meter warning.

@@ -89,6 +89,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_midi_decoder.cpp
   test_volum_midi_handoff.cpp
   test_volum_midi_footswitch.cpp
+  test_volum_meter_sender.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
@@ -128,7 +129,7 @@ target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
 )
 
 if(APPLE)
-  target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation")
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation" "-framework Accelerate")
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)
