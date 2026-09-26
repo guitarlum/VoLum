@@ -1597,6 +1597,46 @@ public:
       return false;
     }
 
+    // Settings-file idle path calls Save() on every flush. When this writer has
+    // nothing to flush (registry matches baseline, no pending deletes), skip the
+    // atomic rewrite — but still refuse if the on-disk library went unreadable
+    // or is not writable (Pack import uses Save() as its commit fence even when
+    // the catalog JSON is unchanged), and still materialize a missing file on
+    // first save of an empty library. Comparison, not a dirty flag —
+    // legacyCustomScenes can mutate without Save.
+    if (mPendingFileDeletes.empty() && RegistryToJson(mReg) == RegistryToJson(mBaseline))
+    {
+      std::error_code existsEc;
+      if (std::filesystem::exists(RegistryPath(), existsEc))
+      {
+        RegistryFileLock skipLock;
+        if (!skipLock.Acquire(LockPath()))
+        {
+          mLastWriteFailed = true;
+          return false;
+        }
+        const DiskRegistry disk = ReadRegistryFromDisk();
+        if (!disk.readable)
+        {
+          mLastWriteFailed = true;
+          return false;
+        }
+        // Probe writability without rewriting: Pack overwrite of colliding
+        // payloads can leave the catalog JSON identical while still needing
+        // Save() to fail on a read-only library so swapped files roll back.
+        {
+          std::fstream probe(RegistryPath(), std::ios::in | std::ios::out | std::ios::binary);
+          if (!probe)
+          {
+            mLastWriteFailed = true;
+            return false;
+          }
+        }
+        return true;
+      }
+      // Missing registry: fall through and write the empty (or baseline-equal) file.
+    }
+
     std::error_code ec;
     std::filesystem::create_directories(mBase, ec);
     if (ec)

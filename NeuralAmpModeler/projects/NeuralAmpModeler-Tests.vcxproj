@@ -180,6 +180,7 @@
     <ClCompile Include="..\tests\test_volum_numeric_entry.cpp" />
     <ClCompile Include="..\tests\test_volum_cab_step.cpp" />
     <ClCompile Include="..\tests\test_volum_wav_downmix.cpp" />
+    <ClCompile Include="..\tests\test_volum_write_debounce.cpp" />
     <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
     <ClCompile Include="..\tests\test_volum_midi_decoder.cpp" />
     <ClCompile Include="..\tests\test_volum_midi_handoff.cpp" />

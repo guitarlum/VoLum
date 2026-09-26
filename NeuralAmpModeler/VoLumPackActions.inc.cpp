@@ -40,6 +40,20 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   // - it just has no machine to describe.
   std::string settingsJson;
 #if defined(APP_API)
+  // Debounced idle writes may still be pending; Pack must see the live knobs.
+  _VolumSaveCurrentToSettings();
+  if (mVolumSettingsDirty || VolumDebounceFor(this).settings.isDirty())
+  {
+    mVolumSettingsDirty = false;
+    VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
+    _VolumSaveSettingsToFile();
+  }
+  if (mVolumCalibrationDefaultsDirty || VolumDebounceFor(this).calibration.isDirty())
+  {
+    mVolumCalibrationDefaultsDirty = false;
+    VolumDebounceFor(this).calibration.markWritten(VolumWriteNowMs());
+    _VolumSaveCalibrationDefaults();
+  }
   if (plan.includeSettings)
   {
     const auto path = volum::VolumUserSettingsFilePath();

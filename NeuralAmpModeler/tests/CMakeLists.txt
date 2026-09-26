@@ -85,6 +85,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_numeric_entry.cpp
   test_volum_cab_step.cpp
   test_volum_wav_downmix.cpp
+  test_volum_write_debounce.cpp
   test_volum_loopback_detect.cpp
   test_volum_midi_decoder.cpp
   test_volum_midi_handoff.cpp

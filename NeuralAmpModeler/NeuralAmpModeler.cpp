@@ -1,12 +1,13 @@
 #include <algorithm> // std::clamp, std::min
 #include <cmath> // pow
-#include <chrono> // debug-only custom-amp seeding sandbox naming
+#include <chrono> // debug-only custom-amp seeding sandbox naming; settings write debounce clock
 #include <cstdlib> // std::getenv (opt-in perf overlay)
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 
 #include "Colors.h"
@@ -48,9 +49,37 @@
 #include "VoLumCustomNamImport.h"
 #include "VoLumPlaySurface.h"
 #include "VoLumPackOverlay.h"
+#include "VoLumWriteDebounce.h"
 
 using namespace iplug;
 using namespace igraphics;
+
+namespace
+{
+double VolumWriteNowMs()
+{
+  using clock = std::chrono::steady_clock;
+  return std::chrono::duration<double, std::milli>(clock::now().time_since_epoch()).count();
+}
+
+struct VolumInstanceWriteDebounce
+{
+  volum::WriteDebounce settings;
+  volum::WriteDebounce calibration;
+};
+
+std::unordered_map<const NeuralAmpModeler*, VolumInstanceWriteDebounce> gVolumWriteDebounce;
+
+VolumInstanceWriteDebounce& VolumDebounceFor(const NeuralAmpModeler* self)
+{
+  return gVolumWriteDebounce[self];
+}
+
+void VolumForgetWriteDebounce(const NeuralAmpModeler* self)
+{
+  gVolumWriteDebounce.erase(self);
+}
+} // namespace
 
 const double kDCBlockerFrequency = 5.0;
 
@@ -573,6 +602,8 @@ NeuralAmpModeler::~NeuralAmpModeler()
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
   _VolumSaveSettingsToFile();
+  mVolumSettingsDirty = false;
+  VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
 #else
   // Plugin formats deliberately don't rewrite the shared per-amp
   // volum-settings.json from every instance (instances would fight over it),
@@ -582,6 +613,14 @@ NeuralAmpModeler::~NeuralAmpModeler()
   if (mVolumCustomMainIdx >= 0)
     volum::content::GlobalContentStore().Save();
 #endif
+  // Calibration defaults were never flushed on quit before debouncing; keep them
+  // synchronous here so a pending edit is not lost in the quiet window.
+  if (mVolumCalibrationDefaultsDirty)
+  {
+    mVolumCalibrationDefaultsDirty = false;
+    _VolumSaveCalibrationDefaults();
+  }
+  VolumForgetWriteDebounce(this);
   _DeallocateIOPointers();
 }
 
@@ -1037,18 +1076,37 @@ void NeuralAmpModeler::OnIdle()
       mVolumMainLoadError += " (still playing " + mVolumLastLoadedFile + ")";
   }
 
-  // Write settings file when dirty (knob/speaker/channel changed)
+  // Write settings file when dirty (knob/speaker/channel changed), coalesced:
+  // 500 ms quiet, or at least every 2 s during a continuous drag.
 #ifdef APP_API
   if (mVolumSettingsDirty)
   {
-    mVolumSettingsDirty = false;
-    _VolumSaveSettingsToFile();
+    auto& debounce = VolumDebounceFor(this).settings;
+    const double nowMs = VolumWriteNowMs();
+    // Paths that only flip the bool (selections outside OnParamChange) still need
+    // a dirty timestamp; knob drags already called dirty() on every change.
+    if (!debounce.isDirty())
+      debounce.dirty(nowMs);
+    if (debounce.shouldWrite(nowMs))
+    {
+      mVolumSettingsDirty = false;
+      debounce.markWritten(nowMs);
+      _VolumSaveSettingsToFile();
+    }
   }
 #endif
   if (mVolumCalibrationDefaultsDirty)
   {
-    mVolumCalibrationDefaultsDirty = false;
-    _VolumSaveCalibrationDefaults();
+    auto& debounce = VolumDebounceFor(this).calibration;
+    const double nowMs = VolumWriteNowMs();
+    if (!debounce.isDirty())
+      debounce.dirty(nowMs);
+    if (debounce.shouldWrite(nowMs))
+    {
+      mVolumCalibrationDefaultsDirty = false;
+      debounce.markWritten(nowMs);
+      _VolumSaveCalibrationDefaults();
+    }
   }
 
   if (auto* pGfx = GetUI())
@@ -1402,7 +1460,16 @@ void NeuralAmpModeler::OnUIClose()
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
   _VolumSaveSettingsToFile();
+  mVolumSettingsDirty = false;
+  VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
 #endif
+  // Calibration defaults were never flushed on close before debouncing them.
+  if (mVolumCalibrationDefaultsDirty)
+  {
+    mVolumCalibrationDefaultsDirty = false;
+    _VolumSaveCalibrationDefaults();
+  }
+  VolumDebounceFor(this).calibration.markWritten(VolumWriteNowMs());
 }
 
 void NeuralAmpModeler::OnParamChange(int paramIdx)
@@ -1568,7 +1635,12 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
   }
 
   if (mVolumInitComplete)
+  {
     mVolumSettingsDirty = true;
+#ifdef APP_API
+    VolumDebounceFor(this).settings.dirty(VolumWriteNowMs());
+#endif
+  }
 }
 
 namespace
@@ -1680,7 +1752,10 @@ void NeuralAmpModeler::_VolumRefreshPrePostLockChrome(int paramIdx)
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
   if (source == EParamSource::kUI && (paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel))
+  {
     mVolumCalibrationDefaultsDirty = true;
+    VolumDebounceFor(this).calibration.dirty(VolumWriteNowMs());
+  }
 
   if (auto pGraphics = GetUI())
   {

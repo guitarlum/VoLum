@@ -955,13 +955,23 @@ TEST_CASE("Amp settings restore refreshes support channel list")
 
 TEST_CASE("Global VoLum settings writes are standalone-only")
 {
-  const std::string source = ReadPluginSource();
+  std::string source = ReadPluginSource();
+  source += "\n";
+  source += ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
   const std::string needle = "_VolumSaveSettingsToFile();";
   size_t count = 0;
   size_t pos = source.find(needle);
   while (pos != std::string::npos)
   {
-    const auto appGuard = source.rfind("#ifdef APP_API", pos);
+    const auto appGuardIfdef = source.rfind("#ifdef APP_API", pos);
+    const auto appGuardDefined = source.rfind("#if defined(APP_API)", pos);
+    size_t appGuard = std::string::npos;
+    if (appGuardIfdef == std::string::npos)
+      appGuard = appGuardDefined;
+    else if (appGuardDefined == std::string::npos)
+      appGuard = appGuardIfdef;
+    else
+      appGuard = std::max(appGuardIfdef, appGuardDefined);
     const auto previousEndif = source.rfind("#endif", pos);
     const auto nextEndif = source.find("#endif", pos);
 
@@ -974,26 +984,55 @@ TEST_CASE("Global VoLum settings writes are standalone-only")
     pos = source.find(needle, pos + needle.size());
   }
 
-  // Selection/arrow-key paths now defer the write via mVolumSettingsDirty
-  // (flushed in OnIdle) to keep disk I/O off the selection hot path; only
-  // OnIdle's flush and the two teardown paths still write synchronously.
-  CHECK(count == 3);
+  // Selection/arrow-key paths defer the write via mVolumSettingsDirty (OnIdle
+  // asks WriteDebounce before flushing). Synchronous writers: OnIdle's timed
+  // flush, the two teardown paths, and Pack export's pending-settings flush.
+  CHECK(count == 4);
+}
+
+TEST_CASE("Pack export flushes pending settings before reading disk")
+{
+  const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+  const auto exportPos = pack.find("NeuralAmpModeler::_VolumExportPack");
+  REQUIRE(exportPos != std::string::npos);
+  const auto savePos = pack.find("_VolumSaveSettingsToFile();", exportPos);
+  REQUIRE(savePos != std::string::npos);
+  const auto readPos = pack.find("ReadWholeFile", savePos);
+  REQUIRE(readPos != std::string::npos);
+  RequireContains(pack, "_VolumSaveCurrentToSettings()");
 }
 
 TEST_CASE("OnIdle coalesces the deferred settings write")
 {
   const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
   // Selections defer the two-file disk write by setting mVolumSettingsDirty;
-  // OnIdle must keep draining it (clear the flag, then write) so deferred
-  // selections still persist without stalling the selection hot path.
+  // OnIdle must ask WriteDebounce (500 ms quiet / 2 s max) before writing so a
+  // knob drag does not rewrite volum-settings.json on every idle tick.
   const auto idlePos = source.find("void NeuralAmpModeler::OnIdle()");
   REQUIRE(idlePos != std::string::npos);
-  const auto clearPos = source.find("mVolumSettingsDirty = false;", idlePos);
-  REQUIRE(clearPos != std::string::npos);
-  const auto writePos = source.find("_VolumSaveSettingsToFile();", clearPos);
+  const auto dirtyPos = source.find("mVolumSettingsDirty", idlePos);
+  REQUIRE(dirtyPos != std::string::npos);
+  const auto shouldWritePos = source.find("shouldWrite", dirtyPos);
+  REQUIRE(shouldWritePos != std::string::npos);
+  const auto writePos = source.find("_VolumSaveSettingsToFile();", shouldWritePos);
   REQUIRE(writePos != std::string::npos);
-  // The drain (clear + write) must come close together inside OnIdle.
-  CHECK(writePos - clearPos < 120);
+  CHECK(writePos - dirtyPos < 800);
+  RequireContains(source, "VoLumWriteDebounce.h");
+  RequireContains(source, "WriteDebounce");
+}
+
+TEST_CASE("OnUIClose flushes pending calibration defaults")
+{
+  const std::string source = ReadPluginSource();
+  const auto onUIClose = source.find("void NeuralAmpModeler::OnUIClose()");
+  REQUIRE(onUIClose != std::string::npos);
+  const auto closeEnd = source.find("\n}\n", onUIClose);
+  REQUIRE(closeEnd != std::string::npos);
+  const auto body = source.substr(onUIClose, closeEnd - onUIClose);
+  // Before debouncing, close saved volum-settings.json but left calibration
+  // defaults pending until the next OnIdle — which never runs after close.
+  CHECK(body.find("_VolumSaveCalibrationDefaults()") != std::string::npos);
+  CHECK(body.find("mVolumCalibrationDefaultsDirty") != std::string::npos);
 }
 
 TEST_CASE("Only direct calibration UI edits update machine-global defaults")
