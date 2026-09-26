@@ -38,12 +38,21 @@ public:
   static constexpr float kMinFreq = 20.f;
   static constexpr float kMaxFreq = 2000.f;
   static constexpr float kSmoothingAlpha = 0.22f;
+  // An analysis is due every kBufferSize samples. It snapshots the last kBufferSize samples in the block
+  // it becomes due, then computes kSliceTausPerFrame difference taus per processed frame, so no block
+  // carries more than its share of the work. Blocks of 1024 frames or more finish in the block the
+  // analysis became due; smaller blocks publish about 1024 samples later. An analysis that becomes due
+  // while one is running starts in the block after that one publishes; further dues until then merge.
+  static constexpr int kSliceTausPerFrame = 2;
 
   void Reset(double sampleRate)
   {
     mSampleRate = static_cast<float>(sampleRate);
     mWritePos = 0;
     mSamplesCollected = 0;
+    mNextTau = 0;
+    mAnalysisDue = false;
+    mWasActive = false;
     mSmoothedFreq = 0.f;
     mSmoothedValid = false;
     mInvalidDetections = 0;
@@ -54,7 +63,10 @@ public:
   void Process(const float* input, int nFrames)
   {
     if (!mActive.load(std::memory_order_relaxed))
+    {
+      mWasActive = false;
       return;
+    }
 
     for (int i = 0; i < nFrames; ++i)
     {
@@ -62,18 +74,16 @@ public:
       mWritePos = (mWritePos + 1) % kBufferSize;
       ++mSamplesCollected;
     }
-
-    if (mSamplesCollected >= kBufferSize)
-    {
-      mSamplesCollected = 0;
-      _RunYIN();
-    }
+    _Analyze(nFrames);
   }
 
   void Process(const double* input, int nFrames)
   {
     if (!mActive.load(std::memory_order_relaxed))
+    {
+      mWasActive = false;
       return;
+    }
 
     for (int i = 0; i < nFrames; ++i)
     {
@@ -81,13 +91,14 @@ public:
       mWritePos = (mWritePos + 1) % kBufferSize;
       ++mSamplesCollected;
     }
-
-    if (mSamplesCollected >= kBufferSize)
-    {
-      mSamplesCollected = 0;
-      _RunYIN();
-    }
+    _Analyze(nFrames);
   }
+
+  // Test hook: a fixed number of taus per block instead of kSliceTausPerFrame per frame (0 = off).
+  void SetSliceTausPerBlockForTest(int taus) { mTestTausPerBlock = taus; }
+  // d[] of the analysis in progress or last finished; d[0] is 0.
+  const float* Difference() const { return mDiff; }
+  bool AnalysisInProgress() const { return mNextTau > 0; }
 
   void SetActive(bool active)
   {
@@ -114,14 +125,20 @@ public:
   // YIN difference: d[tau] = sum over j < kBufferSize / 2 of (x[j] - x[j + tau])^2, d[0] = 0. SIMD runs
   // one lane per tau, each summing in ascending j with the scalar loop's rounding (separate mul + add
   // on SSE2; fused on arm64, where clang contracts the scalar `sum += diff * diff`), so d[] carries the
-  // same bits as the scalar loop.
+  // same bits as the scalar loop, however the tau range is split.
   static void DifferenceFunction(const float* x, float* d)
   {
-    constexpr int halfBuf = kBufferSize / 2;
     d[0] = 0.f;
-    int tau = 1;
+    DifferenceRange(x, d, 1, kBufferSize / 2);
+  }
+
+  // d[tau] for tauBegin <= tau < tauEnd, with 1 <= tauBegin and tauEnd <= kBufferSize / 2.
+  static void DifferenceRange(const float* x, float* d, int tauBegin, int tauEnd)
+  {
+    constexpr int halfBuf = kBufferSize / 2;
+    int tau = tauBegin;
 #if defined(VOLUM_TUNER_SSE2)
-    for (; tau + 32 <= halfBuf; tau += 32)
+    for (; tau + 32 <= tauEnd; tau += 32)
     {
       __m128 acc0 = _mm_setzero_ps(), acc1 = _mm_setzero_ps(), acc2 = _mm_setzero_ps(), acc3 = _mm_setzero_ps();
       __m128 acc4 = _mm_setzero_ps(), acc5 = _mm_setzero_ps(), acc6 = _mm_setzero_ps(), acc7 = _mm_setzero_ps();
@@ -147,7 +164,7 @@ public:
       _mm_storeu_ps(d + tau + 24, acc6);
       _mm_storeu_ps(d + tau + 28, acc7);
     }
-    for (; tau + 4 <= halfBuf; tau += 4)
+    for (; tau + 4 <= tauEnd; tau += 4)
     {
       __m128 acc = _mm_setzero_ps();
       for (int j = 0; j < halfBuf; ++j)
@@ -155,7 +172,7 @@ public:
       _mm_storeu_ps(d + tau, acc);
     }
 #elif defined(VOLUM_TUNER_NEON)
-    for (; tau + 32 <= halfBuf; tau += 32)
+    for (; tau + 32 <= tauEnd; tau += 32)
     {
       float32x4_t acc0 = vdupq_n_f32(0.f), acc1 = vdupq_n_f32(0.f), acc2 = vdupq_n_f32(0.f), acc3 = vdupq_n_f32(0.f);
       float32x4_t acc4 = vdupq_n_f32(0.f), acc5 = vdupq_n_f32(0.f), acc6 = vdupq_n_f32(0.f), acc7 = vdupq_n_f32(0.f);
@@ -181,7 +198,7 @@ public:
       vst1q_f32(d + tau + 24, acc6);
       vst1q_f32(d + tau + 28, acc7);
     }
-    for (; tau + 4 <= halfBuf; tau += 4)
+    for (; tau + 4 <= tauEnd; tau += 4)
     {
       float32x4_t acc = vdupq_n_f32(0.f);
       for (int j = 0; j < halfBuf; ++j)
@@ -189,7 +206,7 @@ public:
       vst1q_f32(d + tau, acc);
     }
 #endif
-    for (; tau < halfBuf; ++tau)
+    for (; tau < tauEnd; ++tau)
     {
       float sum = 0.f;
       for (int j = 0; j < halfBuf; ++j)
@@ -216,20 +233,43 @@ private:
   }
 #endif
 
-  void _RunYIN()
+  void _Analyze(int nFrames)
   {
-    const int halfBuf = kBufferSize / 2;
-    float d[kBufferSize / 2];
-    float cumNorm[kBufferSize / 2];
+    if (!mWasActive)
+    {
+      // A snapshot taken before the tuner was closed never publishes after it reopens.
+      mWasActive = true;
+      mNextTau = 0;
+      mAnalysisDue = false;
+    }
+    if (mSamplesCollected >= kBufferSize)
+    {
+      mSamplesCollected = 0;
+      mAnalysisDue = true;
+    }
+    if (mNextTau == 0 && mAnalysisDue)
+    {
+      mAnalysisDue = false;
+      _BeginAnalysis();
+    }
+    if (mNextTau > 0)
+    {
+      const int budget = mTestTausPerBlock > 0 ? mTestTausPerBlock : kSliceTausPerFrame * nFrames;
+      const int end = (budget >= kBufferSize / 2 - mNextTau) ? kBufferSize / 2 : mNextTau + budget;
+      DifferenceRange(mAnalysisBuffer, mDiff, mNextTau, end);
+      mNextTau = end < kBufferSize / 2 ? end : 0;
+      if (mNextTau == 0)
+        _FinishAnalysis();
+    }
+  }
 
+  void _BeginAnalysis()
+  {
     const int tail = kBufferSize - mWritePos;
     std::memcpy(mAnalysisBuffer, mBuffer + mWritePos, static_cast<size_t>(tail) * sizeof(float));
     if (mWritePos > 0)
       std::memcpy(mAnalysisBuffer + tail, mBuffer, static_cast<size_t>(mWritePos) * sizeof(float));
 
-    cumNorm[0] = 1.f;
-
-    float runningSum = 0.f;
     float energy = 0.f;
     for (int j = 0; j < kBufferSize; ++j)
       energy += mAnalysisBuffer[j] * mAnalysisBuffer[j];
@@ -239,8 +279,17 @@ private:
       _PublishInvalid();
       return;
     }
+    mNextTau = 1;
+  }
 
-    DifferenceFunction(mAnalysisBuffer, d);
+  void _FinishAnalysis()
+  {
+    const int halfBuf = kBufferSize / 2;
+    const float* d = mDiff;
+    float cumNorm[kBufferSize / 2];
+    cumNorm[0] = 1.f;
+
+    float runningSum = 0.f;
     for (int tau = 1; tau < halfBuf; ++tau)
     {
       runningSum += d[tau];
@@ -356,8 +405,13 @@ private:
 
   float mBuffer[kBufferSize] = {};
   float mAnalysisBuffer[kBufferSize] = {};
+  float mDiff[kBufferSize / 2] = {};
   int mWritePos = 0;
   int mSamplesCollected = 0;
+  int mNextTau = 0; // next difference tau of the analysis in progress; 0 = none running
+  bool mAnalysisDue = false;
+  bool mWasActive = false;
+  int mTestTausPerBlock = 0;
   float mSampleRate = 48000.f;
   float mSmoothedFreq = 0.f;
   bool mSmoothedValid = false;
