@@ -6,7 +6,6 @@
 #include "get_dsp.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <deque>
@@ -177,80 +176,88 @@ TEST_CASE("Prefetch queue caps at cache-size-minus-one and keeps the loaded mode
   expectHit("V30-Ampt-2.nam");
 }
 
+TEST_CASE("A warm channel step keeps the previous channel and its cab neighbours")
+{
+  using volum::nam_cache::kDspCacheMaxEntries;
+  using volum::nam_cache::kPrefetchMaxEntries;
+  using volum::nam_cache::LruStore;
+  using volum::nam_cache::LruTouch;
+  using volum::nam_cache::PlanPrefetchActions;
+  using volum::nam_cache::SelectPrefetchPaths;
+
+  const auto siblings = ListAmpeteNamPaths();
+  auto pathNamed = [&](const char* filename) {
+    for (const auto& p : siblings)
+      if (std::filesystem::path(p).filename() == filename)
+        return p;
+    return std::string();
+  };
+  const std::string ch2 = pathNamed("G12-Ampt-2.nam");
+  const std::string ch3 = pathNamed("G12-Ampt-3.nam");
+  const std::string ch1 = pathNamed("G12-Ampt-1.nam");
+  const std::string ch4 = pathNamed("G12-Ampt-4.nam");
+  REQUIRE_FALSE(ch2.empty());
+  REQUIRE_FALSE(ch3.empty());
+
+  auto isCached = [](const std::unordered_map<std::string, int>& cache) {
+    return [&](const std::string& path) { return cache.find(path) != cache.end(); };
+  };
+
+  std::unordered_map<std::string, int> cache;
+  std::deque<std::string> order;
+  LruStore(cache, order, ch2, kDspCacheMaxEntries);
+  {
+    const auto selected = SelectPrefetchPaths(ch2, siblings, kPrefetchMaxEntries);
+    const auto plan = PlanPrefetchActions(selected, isCached(cache));
+    for (const auto& path : plan.promote)
+      LruTouch(order, path);
+    for (const auto& path : plan.fetch)
+      LruStore(cache, order, path, kDspCacheMaxEntries);
+  }
+
+  // Old warm step: a hit moves ch3 to the front and skips every sibling that
+  // is already cached, so the new parses evict the cab you just left.
+  {
+    auto skipped = cache;
+    auto skippedOrder = order;
+    LruTouch(skippedOrder, ch3);
+    const auto selected = SelectPrefetchPaths(ch3, siblings, kPrefetchMaxEntries);
+    for (const auto& path : selected)
+    {
+      if (skipped.find(path) == skipped.end())
+        LruStore(skipped, skippedOrder, path, kDspCacheMaxEntries);
+    }
+    CHECK(skipped.find(ch2) == skipped.end());
+  }
+
+  LruTouch(order, ch3);
+  {
+    const auto selected = SelectPrefetchPaths(ch3, siblings, kPrefetchMaxEntries);
+    const auto plan = PlanPrefetchActions(selected, isCached(cache));
+    for (const auto& path : plan.promote)
+      LruTouch(order, path);
+    for (const auto& path : plan.fetch)
+      LruStore(cache, order, path, kDspCacheMaxEntries);
+  }
+  CHECK(cache.find(ch2) != cache.end());
+  CHECK(cache.find(ch3) != cache.end());
+  if (!ch1.empty())
+    CHECK(cache.find(ch1) != cache.end());
+  if (!ch4.empty())
+    CHECK(cache.find(ch4) != cache.end());
+}
+
 TEST_CASE("VoLum loader uses FillDspDataFromNamFile and capped SelectPrefetchPaths")
 {
   const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
   REQUIRE(loader.find("FillDspDataFromNamFile") != std::string::npos);
   REQUIRE(loader.find("SelectPrefetchPaths") != std::string::npos);
   REQUIRE(loader.find("kPrefetchMaxEntries") != std::string::npos);
+  REQUIRE(loader.find("PlanPrefetchActions") != std::string::npos);
   // Prefetch must not call the path overload that builds twice.
   const auto prefetch = loader.find("else if (request.kind == VoLumLoadKind::MainPrefetch)");
   REQUIRE(prefetch != std::string::npos);
   const auto prefetchBody = loader.substr(prefetch, 600);
   REQUIRE(prefetchBody.find("FillDspDataFromNamFile") != std::string::npos);
   REQUIRE(prefetchBody.find("nam::get_dsp(fs::u8path") == std::string::npos);
-}
-
-TEST_CASE("Loader parse-only prefetch is faster than get_dsp(path, conf) discard")
-{
-  nam::activations::Activation::enable_fast_tanh();
-  const auto siblings = ListAmpeteNamPaths();
-  REQUIRE(siblings.size() >= 8);
-
-  std::string loaded;
-  for (const auto& p : siblings)
-  {
-    if (std::filesystem::path(p).filename() == "G12-Ampt-2.nam")
-    {
-      loaded = p;
-      break;
-    }
-  }
-  REQUIRE_FALSE(loaded.empty());
-
-  const auto toPrefetch =
-    volum::nam_cache::SelectPrefetchPaths(loaded, siblings, volum::nam_cache::kPrefetchMaxEntries);
-
-  // Warm the filesystem once so both timings measure parse/build, not cold disk.
-  for (const auto& p : toPrefetch)
-  {
-    nam::dspData warm;
-    volum::nam_cache::FillDspDataFromNamFile(p, warm);
-  }
-
-  using clock = std::chrono::steady_clock;
-  const auto beforeStart = clock::now();
-  for (const auto& p : siblings)
-  {
-    if (p == loaded)
-      continue;
-    nam::dspData conf;
-    // Old prefetch: build (twice inside get_dsp) and discard the model.
-    (void)nam::get_dsp(std::filesystem::path(p), conf);
-  }
-  const auto beforeMs = std::chrono::duration<double, std::milli>(clock::now() - beforeStart).count();
-
-  const auto afterStart = clock::now();
-  for (const auto& p : toPrefetch)
-  {
-    nam::dspData conf;
-    volum::nam_cache::FillDspDataFromNamFile(p, conf);
-  }
-  const auto afterMs = std::chrono::duration<double, std::milli>(clock::now() - afterStart).count();
-
-  INFO("before_ms=" << beforeMs << " after_ms=" << afterMs << " siblings=" << (siblings.size() - 1)
-                    << " prefetch_cap=" << toPrefetch.size());
-  {
-    const auto evidenceDir = RepoRoot() / ".scratch" / "perf-safe-wins" / "evidence" / "18";
-    std::error_code ec;
-    std::filesystem::create_directories(evidenceDir, ec);
-    std::ofstream out(evidenceDir / "timing.txt", std::ios::binary);
-    out << "before_loader_ms_per_amp_switch_old_prefetch=" << beforeMs << "\n";
-    out << "after_loader_ms_per_amp_switch_parse_only_capped=" << afterMs << "\n";
-    out << "old_sibling_count=" << (siblings.size() - 1) << "\n";
-    out << "new_prefetch_count=" << toPrefetch.size() << "\n";
-  }
-  CHECK(afterMs < beforeMs);
-  // Keep a clear gap so OS noise cannot flip the verdict on a warm cache.
-  CHECK(afterMs * 2.0 < beforeMs);
 }

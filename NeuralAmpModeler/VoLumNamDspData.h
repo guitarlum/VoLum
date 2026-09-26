@@ -116,13 +116,44 @@ inline std::vector<std::string> SelectPrefetchPaths(const std::string& loadedPat
   return out;
 }
 
+// Split a priority-ordered prefetch list. `promote` is the already-cached
+// paths, lowest priority first, so touching them in order leaves the most
+// likely next pick at the front of an LRU. `fetch` is the rest, best first.
+struct PrefetchActions
+{
+  std::vector<std::string> promote;
+  std::vector<std::string> fetch;
+};
+
+template <typename IsCached>
+inline PrefetchActions PlanPrefetchActions(const std::vector<std::string>& selected, IsCached isCached)
+{
+  PrefetchActions actions;
+  for (auto it = selected.rbegin(); it != selected.rend(); ++it)
+  {
+    if (isCached(*it))
+      actions.promote.push_back(*it);
+  }
+  for (const auto& path : selected)
+  {
+    if (!isCached(path))
+      actions.fetch.push_back(path);
+  }
+  return actions;
+}
+
 // Tiny LRU used by the cache-cap doctest (mirrors storeCache / touchCache).
+inline void LruTouch(std::deque<std::string>& order, const std::string& key)
+{
+  order.erase(std::remove(order.begin(), order.end(), key), order.end());
+  order.push_front(key);
+}
+
 inline void LruStore(std::unordered_map<std::string, int>& cache, std::deque<std::string>& order,
                      const std::string& key, size_t maxEntries)
 {
   cache[key] = 1;
-  order.erase(std::remove(order.begin(), order.end(), key), order.end());
-  order.push_front(key);
+  LruTouch(order, key);
   while (order.size() > maxEntries)
   {
     cache.erase(order.back());

@@ -365,12 +365,18 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
 
             const auto toPrefetch = volum::nam_cache::SelectPrefetchPaths(
               request.fileToLoad, siblings, volum::nam_cache::kPrefetchMaxEntries);
-            for (const auto& prefetchPath : toPrefetch)
+            // Already-cached picks are moved to the front (lowest priority
+            // first). Skipping them left the previous channel at the back, so
+            // one step on the same cab evicted it.
+            const auto plan = volum::nam_cache::PlanPrefetchActions(
+              toPrefetch, [&](const std::string& path) { return mVolumDspCache.find(path) != mVolumDspCache.end(); });
+            for (const auto& cachedPath : plan.promote)
+              touchCache(cachedPath);
+            for (const auto& prefetchPath : plan.fetch)
             {
               if (mVolumNeedsLoad.load() || mVolumLoaderStop.load())
                 break;
-              if (mVolumDspCache.find(prefetchPath) == mVolumDspCache.end())
-                _VolumQueueMainPrefetch(prefetchPath);
+              _VolumQueueMainPrefetch(prefetchPath);
             }
           }
         }
