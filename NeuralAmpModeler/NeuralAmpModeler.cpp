@@ -909,9 +909,6 @@ void NeuralAmpModeler::OnIdle()
   _VolumReapAudioThreadRetirees();
   if (mLatencyDirty.exchange(false, std::memory_order_acquire))
     _ApplyLatchedLatency();
-  if (auto* pGfx = GetUI())
-    if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
-      toggle->SetDirty(false); // keep the switch above animated BUILD/PLAY chrome
   if (mVolumUiMode == volum::UiMode::Play)
   {
     _VolumRefreshPlaySurface();

@@ -3264,3 +3264,27 @@ TEST_CASE("Knobs keep double-click = reset to default")
   RequireContains(plugin, "class VoLumPanKnobControl : public NAMKnobControl");
   RequireContains(plugin, "class VoLumDialKnobControl : public NAMKnobControl");
 }
+
+TEST_CASE("footer SetStatus and mode toggle skip idle dirty when unchanged")
+{
+  // Ticket 11 (U5): BUILD idle used to repaint the footer and mode toggle every
+  // tick. SetStatus must return before SetDirty when text+alert match; OnIdle must
+  // not force the toggle dirty (its own SetMode/hover already compare).
+  const std::string footer = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCoreControls.h");
+  const auto setStatus = footer.find("void SetStatus(const char* text, bool alert)");
+  REQUIRE(setStatus != std::string::npos);
+  const auto setStatusEnd = footer.find("\n  }", setStatus);
+  REQUIRE(setStatusEnd != std::string::npos);
+  const std::string body = footer.substr(setStatus, setStatusEnd - setStatus);
+  RequireContains(body, "if (mText == t && mAlert == alert)");
+  RequireContains(body, "return;");
+  const auto early = body.find("if (mText == t && mAlert == alert)");
+  const auto dirty = body.find("SetDirty(false)");
+  REQUIRE(early != std::string::npos);
+  REQUIRE(dirty != std::string::npos);
+  CHECK(early < dirty);
+
+  const std::string idle = MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::OnIdle()");
+  RequireDoesNotContain(idle, "toggle->SetDirty(false)");
+  RequireDoesNotContain(idle, "keep the switch above animated BUILD/PLAY chrome");
+}

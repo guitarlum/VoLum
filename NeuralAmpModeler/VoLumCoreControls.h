@@ -564,7 +564,10 @@ public:
 
   void SetStatus(const char* text, bool alert)
   {
-    mText = text ? text : "";
+    const char* t = text ? text : "";
+    if (mText == t && mAlert == alert)
+      return;
+    mText = t;
     mAlert = alert;
     SetDirty(false);
   }
