@@ -19,9 +19,13 @@ using iplug::DEFAULT_BLOCK_SIZE;
 
 #include "VoLumDspStagingWdl.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <functional>
 #include <memory>
+#include <type_traits>
 
 // Get the sample rate of a NAM model.
 // Sometimes, the model doesn't know its own sample rate; this wrapper guesses 48k based on the way that most
@@ -48,7 +52,7 @@ public:
   {
     // Assign the encapsulated object's processing function to this object's member so that the resampler can use it:
     auto ProcessBlockFunc = [&](NAM_SAMPLE** input, NAM_SAMPLE** output, int numFrames) {
-      mEncapsulated->process(input, output, numFrames);
+      ProcessEncapsulated(input, output, numFrames);
     };
     mBlockProcessFunc = ProcessBlockFunc;
 
@@ -78,7 +82,11 @@ public:
 
   ~ResamplingNAM() = default;
 
-  void prewarm() override { mEncapsulated->prewarm(); };
+  void prewarm() override
+  {
+    mEncapsulated->prewarm();
+    ResetConstantRun();
+  };
 
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
@@ -89,7 +97,7 @@ public:
     volum::dsp_staging::ProcessNamInChunks(
       num_frames, mMaxExternalBlockSize, input[0], output[0], [this](NAM_SAMPLE** in, NAM_SAMPLE** out, int n) {
         if (!NeedToResample())
-          mEncapsulated->process(in, out, n);
+          ProcessEncapsulated(in, out, n);
         else
           mResampler.ProcessBlock(in, out, n, mBlockProcessFunc);
       });
@@ -115,6 +123,8 @@ public:
     const double mUpRatio = sampleRate / GetEncapsulatedSampleRate();
     const auto maxEncapsulatedBlockSize = static_cast<int>(std::ceil(static_cast<double>(maxBlockSize) / mUpRatio));
     mEncapsulated->ResetAndPrewarm(sampleRate, maxEncapsulatedBlockSize);
+    mMaxEncapsulatedBlockSize = maxEncapsulatedBlockSize;
+    ResetConstantRun();
   };
 
   // So that we can let the world know if we're resampling (useful for debugging)
@@ -129,9 +139,77 @@ public:
   {
     if (auto* slim = dynamic_cast<nam::SlimmableModel*>(mEncapsulated.get()))
       slim->SetSlimmableSize(val);
+    ResetConstantRun();
   };
 
 private:
+  using SampleBits = std::conditional_t<sizeof(NAM_SAMPLE) == 8, std::uint64_t, std::uint32_t>;
+  static SampleBits BitsOf(const NAM_SAMPLE v)
+  {
+    SampleBits b;
+    std::memcpy(&b, &v, sizeof(b));
+    return b;
+  }
+
+  // VoLum: a feed-forward model that has been fed one constant value for longer
+  // than its receptive field keeps a frozen state and outputs one constant, so
+  // processing more of that value changes no bit. Skip it and repeat the last
+  // output (idle DAW tracks; the amp behind a PRE NAM, which outputs a DC
+  // constant on silence). Samples are compared as bits: +0 and -0 stay
+  // distinct, and a NaN or Inf never starts a run because NaN payloads out of
+  // the model are not guaranteed to repeat (the plugin scrubs them anyway).
+  // Audio thread only: integer compares, no allocation.
+  void ProcessEncapsulated(NAM_SAMPLE** input, NAM_SAMPLE** output, const int n)
+  {
+    const NAM_SAMPLE* in = input[0];
+    if (mSkipAfter <= 0 || n <= 0 || !std::isfinite(in[0]))
+    {
+      mEncapsulated->process(input, output, n);
+      mConstantRun = 0;
+      return;
+    }
+    const SampleBits c = BitsOf(in[0]);
+    for (int i = 1; i < n; ++i)
+    {
+      if (BitsOf(in[i]) != c)
+      {
+        mEncapsulated->process(input, output, n);
+        mConstantRun = 0;
+        return;
+      }
+    }
+    if (mConstantRun == 0 || c != mConstantBits)
+    {
+      mConstantBits = c;
+      mConstantRun = 0;
+      mOutputSettled = false;
+    }
+    NAM_SAMPLE* out = output[0];
+    if (mConstantRun >= mSkipAfter && mOutputSettled)
+    {
+      std::fill(out, out + n, mSettledOutput);
+      return;
+    }
+    mEncapsulated->process(input, output, n);
+    mConstantRun = std::min(mConstantRun + n, mSkipAfter);
+    if (mConstantRun >= mSkipAfter)
+    {
+      const SampleBits last = BitsOf(out[n - 1]);
+      mOutputSettled = std::all_of(out, out + n, [last](NAM_SAMPLE v) { return BitsOf(v) == last; });
+      mSettledOutput = out[n - 1];
+    }
+  }
+
+  // Run on every change of the model's state or slice outside process().
+  void ResetConstantRun()
+  {
+    const bool mono = mEncapsulated->NumInputChannels() == 1 && mEncapsulated->NumOutputChannels() == 1;
+    const int rf = mono ? mEncapsulated->FeedForwardReceptiveField() : 0;
+    mSkipAfter = (rf > 0 && mMaxEncapsulatedBlockSize > 0) ? rf + mMaxEncapsulatedBlockSize : 0;
+    mConstantRun = 0;
+    mOutputSettled = false;
+  }
+
   bool NeedToResample() const { return GetExpectedSampleRate() != GetEncapsulatedSampleRate(); };
   // The encapsulated NAM
   std::unique_ptr<nam::DSP> mEncapsulated;
@@ -141,6 +219,15 @@ private:
 
   // Used to check that we don't get too large a block to process.
   int mMaxExternalBlockSize = 0;
+  int mMaxEncapsulatedBlockSize = 0;
+
+  // VoLum: constant-input skip state (see ProcessEncapsulated). mSkipAfter is
+  // receptive field + max block, 0 = never skip.
+  int mSkipAfter = 0;
+  int mConstantRun = 0;
+  SampleBits mConstantBits = 0;
+  bool mOutputSettled = false;
+  NAM_SAMPLE mSettledOutput = 0;
 
   // This function is defined to conform to the interface expected by the iPlug2 resampler.
   std::function<void(NAM_SAMPLE**, NAM_SAMPLE**, int)> mBlockProcessFunc;
