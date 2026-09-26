@@ -18,7 +18,7 @@ class VoLumPreEq
 public:
   void Reset(double sampleRate, int maxBlockSize)
   {
-    (void) maxBlockSize;
+    (void)maxBlockSize;
     mSampleRate = sampleRate;
     _Refresh();
   }
@@ -46,9 +46,8 @@ private:
       return;
 
     mBassFilter.SetParams(recursive_linear_filter::BiquadParams(mSampleRate, 150.0, 0.707, 4.0 * (mBass - 5.0)));
-    mMidFilter.SetParams(recursive_linear_filter::BiquadParams(mSampleRate, mMidFrequency,
-                                                               mMid < 5.0 ? 1.5 : 0.7,
-                                                               3.0 * (mMid - 5.0)));
+    mMidFilter.SetParams(
+      recursive_linear_filter::BiquadParams(mSampleRate, mMidFrequency, mMid < 5.0 ? 1.5 : 0.7, 3.0 * (mMid - 5.0)));
     mTrebleFilter.SetParams(recursive_linear_filter::BiquadParams(mSampleRate, 1800.0, 0.707, 2.0 * (mTreble - 5.0)));
   }
 
@@ -88,7 +87,7 @@ public:
   void SetParams(double amount, double ratio, double attackMs, double releaseMs, double mix, double levelDb,
                  double sampleRate)
   {
-    (void) ratio; // 1176-style: ratio fixed at 4:1 internally; API arg retained for state compat.
+    (void)ratio; // 1176-style: ratio fixed at 4:1 internally; API arg retained for state compat.
     mAmount = std::clamp(amount, 0.0, 10.0);
     mAttackMs = std::clamp(attackMs, 0.02, 30.0);
     mReleaseMs = std::clamp(releaseMs, 20.0, 1100.0);
@@ -96,9 +95,9 @@ public:
     // Output=0 dB should feel like a calibrated compressor unity point, not the raw
     // 1176-style make-up gain. The user-facing knob remains centered at 0 dB.
     const double clampedLevelDb = std::clamp(levelDb, -20.0, 20.0);
-    mLevel = volum::IsLevelMuteValue(clampedLevelDb, -20.0) ?
-               0.0 :
-               std::pow(10.0, (clampedLevelDb + kUnityOutputCalibrationDb) / 20.0);
+    mLevel = volum::IsLevelMuteValue(clampedLevelDb, -20.0)
+               ? 0.0
+               : std::pow(10.0, (clampedLevelDb + kUnityOutputCalibrationDb) / 20.0);
     if (mSampleRate != sampleRate)
     {
       mSampleRate = sampleRate;
@@ -116,6 +115,8 @@ public:
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, const size_t numChannels, const size_t numFrames) override
   {
     _PrepareBuffers(numChannels, numFrames);
+    if (mDriven.size() < numChannels)
+      mDriven.resize(numChannels);
 
     if (mSampleRate <= 0.0)
       mSampleRate = 48000.0;
@@ -156,6 +157,7 @@ public:
       for (size_t c = 0; c < numChannels; ++c)
       {
         const double driven = fet(static_cast<double>(inputs[c][s]) * inputDriveGain);
+        mDriven[c] = driven;
         detector = std::max(detector, std::abs(driven));
       }
 
@@ -188,18 +190,18 @@ public:
         const double slope = 1.0 - 1.0 / kFixedRatio;
         const double kneeOver = over;
         gainDb = -slope * (kneeOver + softKneeDb * 0.5) * (kneeOver + softKneeDb * 0.5) / (2.0 * softKneeDb);
-        (void) kneePos;
+        (void)kneePos;
       }
       // Otherwise no compression (below knee region).
 
-      const double gain = std::pow(10.0, gainDb / 20.0) * makeup;
+      // pow(10, 0) is exactly 1, so skipping it below the knee keeps the output bits.
+      const double gain = (gainDb == 0.0) ? makeup : std::pow(10.0, gainDb / 20.0) * makeup;
 
       for (size_t c = 0; c < numChannels; ++c)
       {
         const double dry = static_cast<double>(inputs[c][s]);
-        // Wet path: drive into FET, then apply VCA gain, then output level.
-        const double driven = fet(dry * inputDriveGain);
-        const double wet = driven * gain * mLevel;
+        // Wet path: the detector's FET output, then VCA gain, then output level.
+        const double wet = mDriven[c] * gain * mLevel;
         double out = dry * (1.0 - mMix) + wet * mMix;
         if (!std::isfinite(out))
           out = 0.0;
@@ -219,6 +221,7 @@ private:
   double mLevel = 1.0;
   double mEnvelope = 0.0;
   double mEnvelopeSlow = 0.0;
+  std::vector<double> mDriven;
 };
 
 } // namespace effect

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -42,7 +43,247 @@ std::vector<double> makeSine(double freq, size_t n, double amp = 0.5)
     v[i] = amp * std::sin(2.0 * M_PI * freq * static_cast<double>(i) / kSR);
   return v;
 }
+
+// TremoloDSP before the gAnti / tanh(drive) trims: both gains every frame, drive and
+// tanh(drive) recomputed per call. Keep the expressions as they were; the live engine must
+// match it bit for bit.
+class ReferenceTremolo
+{
+public:
+  void Prepare(double sampleRate)
+  {
+    mSampleRate = (sampleRate > 0.0) ? sampleRate : 48000.0;
+    _RecomputeCoefs();
+    Reset();
+  }
+
+  void SetParams(double rateHz, double depth, double shape, double mix, double crossoverHz, int mode, double sampleRate)
+  {
+    if (sampleRate > 0.0 && sampleRate != mSampleRate)
+    {
+      mSampleRate = sampleRate;
+      _RecomputeCoefs();
+    }
+    mRateHz = std::clamp(rateHz, 0.01, 40.0);
+    mDepthTarget = std::clamp(depth, 0.0, 1.0);
+    mShape = std::clamp(shape, 0.0, 1.0);
+    mMixTarget = std::clamp(mix, 0.0, 1.0);
+    const double newCrossover = std::clamp(crossoverHz, 50.0, 8000.0);
+    if (newCrossover != mCrossoverHz)
+    {
+      mCrossoverHz = newCrossover;
+      mXoverCoef = _OnePoleCoef(mCrossoverHz);
+    }
+    if (mode < 0 || mode >= TremoloDSP::kNumModes)
+      mode = TremoloDSP::kBias;
+    mMode = mode;
+  }
+
+  void Reset()
+  {
+    mPhase = 0.0;
+    mDepth = mDepthTarget;
+    mMix = mMixTarget;
+    mOptGainState[0] = mOptGainState[1] = 1.0;
+    mLp1[0] = mLp1[1] = mLp2[0] = mLp2[1] = 0.0;
+  }
+
+  void Process(double** io, int numChannels, int numFrames)
+  {
+    if (io == nullptr || numChannels <= 0 || numFrames <= 0)
+      return;
+    const int chans = std::min(numChannels, 2);
+    const double phaseInc = mRateHz / mSampleRate;
+
+    for (int s = 0; s < numFrames; ++s)
+    {
+      mDepth += (mDepthTarget - mDepth) * mSmoothCoef;
+      mMix += (mMixTarget - mMix) * mSmoothCoef;
+
+      const double gPrimary = _ModGain(mPhase, mDepth);
+      const double gAnti = _ModGain(mPhase + 0.5, mDepth);
+
+      for (int c = 0; c < chans; ++c)
+      {
+        const double x = io[c][s];
+        mLp1[c] += (x - mLp1[c]) * mXoverCoef;
+        mLp2[c] += (mLp1[c] - mLp2[c]) * mXoverCoef;
+        mLp1[c] = _Flush(mLp1[c]);
+        mLp2[c] = _Flush(mLp2[c]);
+
+        const double optTarget = gPrimary;
+        const double optCoef = (optTarget > mOptGainState[c]) ? mOptAttackCoef : mOptReleaseCoef;
+        mOptGainState[c] += (optTarget - mOptGainState[c]) * optCoef;
+
+        double wet;
+        switch (mMode)
+        {
+          case TremoloDSP::kHarmonic:
+          {
+            const double low = mLp2[c];
+            const double high = x - low;
+            wet = low * gPrimary + high * gAnti;
+            break;
+          }
+          case TremoloDSP::kOptical: wet = x * mOptGainState[c]; break;
+          case TremoloDSP::kBias:
+          default: wet = x * gPrimary; break;
+        }
+
+        io[c][s] = x * (1.0 - mMix) + wet * mMix;
+      }
+
+      mPhase += phaseInc;
+      if (mPhase >= 1.0)
+        mPhase -= 1.0;
+    }
+  }
+
+private:
+  double _OnePoleCoef(double cutoffHz) const
+  {
+    const double c = 1.0 - std::exp(-2.0 * M_PI * cutoffHz / mSampleRate);
+    return std::clamp(c, 0.0, 1.0);
+  }
+
+  void _RecomputeCoefs()
+  {
+    mSmoothCoef = 1.0 - std::exp(-1.0 / (0.015 * mSampleRate));
+    mOptAttackCoef = 1.0 - std::exp(-1.0 / (0.003 * mSampleRate));
+    mOptReleaseCoef = 1.0 - std::exp(-1.0 / (0.028 * mSampleRate));
+    mXoverCoef = _OnePoleCoef(mCrossoverHz);
+  }
+
+  static double _Flush(double v) { return (std::abs(v) < 1e-20) ? 0.0 : v; }
+
+  double _ModGain(double phase, double depth) const
+  {
+    phase -= std::floor(phase);
+    const double bipolar = std::sin(2.0 * M_PI * phase);
+    double shaped;
+    if (mShape <= 1e-6)
+    {
+      shaped = bipolar;
+    }
+    else
+    {
+      const double drive = 1.0 + mShape * mShape * mShape * 12.0;
+      shaped = std::tanh(bipolar * drive) / std::tanh(drive);
+    }
+    const double unipolar = 0.5 * (shaped + 1.0);
+    return 1.0 - depth * (1.0 - unipolar);
+  }
+
+  double mSampleRate = 48000.0;
+  double mRateHz = 5.0;
+  double mDepth = 0.0;
+  double mDepthTarget = 0.0;
+  double mShape = 0.0;
+  double mMix = 1.0;
+  double mMixTarget = 1.0;
+  double mCrossoverHz = 800.0;
+  int mMode = TremoloDSP::kBias;
+
+  double mPhase = 0.0;
+  double mSmoothCoef = 0.01;
+  double mXoverCoef = 0.1;
+  double mOptAttackCoef = 0.3;
+  double mOptReleaseCoef = 0.05;
+
+  double mOptGainState[2] = {1.0, 1.0};
+  double mLp1[2] = {0.0, 0.0};
+  double mLp2[2] = {0.0, 0.0};
+};
+
+struct TremoloBlockParams
+{
+  double rateHz, depth, shape, mix, crossoverHz;
+  int mode;
+};
+
+// Renders the live engine and the reference side by side in stereo, applying params(block)
+// before every block, and returns whether every output sample has identical bits.
+template <typename ParamsFn>
+bool tremoloMatchesReference(ParamsFn params, size_t numBlocks, int blockSize, double sampleRate, std::string& where)
+{
+  TremoloDSP live;
+  ReferenceTremolo ref;
+  live.Prepare(sampleRate, blockSize, 2);
+  ref.Prepare(sampleRate);
+  const TremoloBlockParams first = params(0);
+  live.SetParams(first.rateHz, first.depth, first.shape, first.mix, first.crossoverHz, first.mode, sampleRate);
+  ref.SetParams(first.rateHz, first.depth, first.shape, first.mix, first.crossoverHz, first.mode, sampleRate);
+  live.Reset();
+  ref.Reset();
+
+  std::vector<double> liveL(blockSize), liveR(blockSize), refL(blockSize), refR(blockSize);
+  size_t frame = 0;
+  for (size_t b = 0; b < numBlocks; ++b)
+  {
+    const TremoloBlockParams p = params(b);
+    live.SetParams(p.rateHz, p.depth, p.shape, p.mix, p.crossoverHz, p.mode, sampleRate);
+    ref.SetParams(p.rateHz, p.depth, p.shape, p.mix, p.crossoverHz, p.mode, sampleRate);
+    for (int i = 0; i < blockSize; ++i, ++frame)
+    {
+      const double t = static_cast<double>(frame) / sampleRate;
+      liveL[i] = refL[i] = 0.45 * std::sin(2.0 * M_PI * 110.0 * t) + 0.3 * std::sin(2.0 * M_PI * 2750.0 * t);
+      liveR[i] = refR[i] = 0.6 * std::sin(2.0 * M_PI * 196.0 * t + 0.4);
+    }
+    double* livePtr[2] = {liveL.data(), liveR.data()};
+    double* refPtr[2] = {refL.data(), refR.data()};
+    live.Process(livePtr, 2, blockSize);
+    ref.Process(refPtr, 2, blockSize);
+    if (std::memcmp(liveL.data(), refL.data(), blockSize * sizeof(double)) != 0
+        || std::memcmp(liveR.data(), refR.data(), blockSize * sizeof(double)) != 0)
+    {
+      where = "block " + std::to_string(b);
+      return false;
+    }
+  }
+  return true;
+}
 } // namespace
+
+TEST_CASE("Tremolo output is bit-identical to the pre-trim engine at fixed settings")
+{
+  for (int mode = 0; mode < TremoloDSP::kNumModes; ++mode)
+  {
+    for (double shape : {0.0, 1e-6, 2e-6, 0.25, 0.5, 0.8, 1.0})
+    {
+      std::string where;
+      const bool same = tremoloMatchesReference(
+        [&](size_t) { return TremoloBlockParams{5.3, 0.85, shape, 0.9, 760.0, mode}; }, 48, 256, kSR, where);
+      INFO("mode=" << mode << " shape=" << shape << " first mismatch at " << where);
+      CHECK(same);
+    }
+  }
+}
+
+TEST_CASE("Tremolo output is bit-identical to the pre-trim engine across mid-stream changes")
+{
+  // Shape and mode move every block (including back to a shape seen before), so the cached
+  // drive has to follow SetParams exactly and gAnti has to be right on the first Harmonic frame.
+  const double shapes[] = {0.0, 0.7, 0.7, 1.0, 0.0, 0.35, 1e-6, 0.9, 0.35};
+  for (int blockSize : {1, 17, 64, 512})
+  {
+    for (double sampleRate : {44100.0, 48000.0, 96000.0})
+    {
+      std::string where;
+      const size_t blocks = static_cast<size_t>(std::max(64, 16384 / blockSize));
+      const bool same = tremoloMatchesReference(
+        [&](size_t b) {
+          const double shape = shapes[(b / 3) % (sizeof(shapes) / sizeof(shapes[0]))];
+          const int mode = static_cast<int>((b / 2) % TremoloDSP::kNumModes);
+          const double rate = 2.0 + static_cast<double>(b % 11);
+          const double depth = (b % 5 == 0) ? 1.0 : 0.6;
+          return TremoloBlockParams{rate, depth, shape, (b % 7 == 0) ? 0.5 : 1.0, 400.0 + 50.0 * (b % 9), mode};
+        },
+        blocks, blockSize, sampleRate, where);
+      INFO("blockSize=" << blockSize << " sampleRate=" << sampleRate << " first mismatch at " << where);
+      CHECK(same);
+    }
+  }
+}
 
 TEST_CASE("Tremolo passthrough at depth 0 (all modes)")
 {

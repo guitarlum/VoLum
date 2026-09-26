@@ -1002,12 +1002,14 @@ private:
   unsigned long long mSpliceStarts = 0;
   double mSpliceCorrSum = 0.0;
   unsigned long long mSpliceCorrCount = 0;
+  // Off in the product: the correlation costs about 2 x mCorrWin reads per splice and never reaches the audio.
+  bool mMeasureSpliceCorr = false;
 
   // Called at every accepted splice, after mDelayNew is settled.
   void _NoteSplice()
   {
     ++mSpliceStarts;
-    if (mWsola)
+    if (mWsola && mMeasureSpliceCorr)
     {
       mSpliceCorrSum += _SpliceCorr(mDelayNew);
       ++mSpliceCorrCount;
@@ -1043,7 +1045,10 @@ public:
   PeriodEstimate DebugEstimatePeriodReference() { return _EstimatePeriodReference(mPeriod); }
   double DebugPeriod() const { return mPeriod; }
   void DebugSetReferenceKernels(bool on) { mReferenceKernels = on; }
-  // Mean normalized cross-correlation achieved across splices since Reset(). 1.0
+  void DebugSetMeasureSpliceCorr(bool on) { mMeasureSpliceCorr = on; }
+  unsigned long long SpliceCorrCount() const { return mSpliceCorrCount; }
+  // Mean normalized cross-correlation achieved across splices since Reset(), counted only
+  // while DebugSetMeasureSpliceCorr(true) is on (otherwise 1.0). 1.0
   // means every join was perfectly waveform-aligned. Only meaningful for WSOLA
   // characters (DROP/POLY); INSTANT does not search, and reports 1.0.
   //

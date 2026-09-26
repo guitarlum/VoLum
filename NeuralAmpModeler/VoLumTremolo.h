@@ -131,7 +131,12 @@ public:
     }
     mRateHz = std::clamp(rateHz, 0.01, 40.0);
     mDepthTarget = std::clamp(depth, 0.0, 1.0);
-    mShape = std::clamp(shape, 0.0, 1.0);
+    const double newShape = std::clamp(shape, 0.0, 1.0);
+    if (newShape != mShape)
+    {
+      mShape = newShape;
+      _RecomputeShapeDrive();
+    }
     mMixTarget = std::clamp(mix, 0.0, 1.0);
     const double newCrossover = std::clamp(crossoverHz, 50.0, 8000.0);
     if (newCrossover != mCrossoverHz)
@@ -167,7 +172,7 @@ public:
       mMix += (mMixTarget - mMix) * mSmoothCoef;
 
       const double gPrimary = _ModGain(mPhase, mDepth);
-      const double gAnti = _ModGain(mPhase + 0.5, mDepth);
+      const double gAnti = (mMode == kHarmonic) ? _ModGain(mPhase + 0.5, mDepth) : 0.0;
 
       for (int c = 0; c < chans; ++c)
       {
@@ -233,6 +238,13 @@ private:
 
   static double _Flush(double v) { return (std::abs(v) < 1e-20) ? 0.0 : v; }
 
+  // _ModGain divides by the cached tanh: a reciprocal multiply would change the output bits.
+  void _RecomputeShapeDrive()
+  {
+    mShapeDrive = 1.0 + mShape * mShape * mShape * 12.0;
+    mShapeTanhDrive = std::tanh(mShapeDrive);
+  }
+
   // Shaped unipolar gain in [1-depth, 1]. phase wraps to [0,1).
   double _ModGain(double phase, double depth) const
   {
@@ -249,8 +261,7 @@ private:
       // ramp with a modest max drive keeps the wave sine-ish through the first
       // half of the knob and only eases into a SOFT square at 1.0, instead of
       // collapsing to a hard square almost immediately (the old shape^2 * 40).
-      const double drive = 1.0 + mShape * mShape * mShape * 12.0;
-      shaped = std::tanh(bipolar * drive) / std::tanh(drive);
+      shaped = std::tanh(bipolar * mShapeDrive) / mShapeTanhDrive;
     }
     const double unipolar = 0.5 * (shaped + 1.0); // 0..1
     return 1.0 - depth * (1.0 - unipolar);
@@ -261,6 +272,8 @@ private:
   double mDepth = 0.0;
   double mDepthTarget = 0.0;
   double mShape = 0.0;
+  double mShapeDrive = 1.0;
+  double mShapeTanhDrive = std::tanh(1.0);
   double mMix = 1.0;
   double mMixTarget = 1.0;
   double mCrossoverHz = 800.0;

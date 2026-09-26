@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -195,6 +196,7 @@ VoiceRun RunVoice(GranularVoice::Character character, double semitones, const st
   voice.Configure(sampleRate, static_cast<int>(kBlock));
   voice.SetCharacter(character);
   voice.SetRatio(std::pow(2.0, semitones / 12.0));
+  voice.DebugSetMeasureSpliceCorr(true);
   voice.Reset();
 
   VoiceRun r;
@@ -203,6 +205,8 @@ VoiceRun RunVoice(GranularVoice::Character character, double semitones, const st
     voice.Process(in.data() + off, r.out.data() + off, std::min(kBlock, in.size() - off));
   r.meanCorr = voice.MeanSpliceCorr();
   r.splices = voice.SpliceStarts();
+  // Every WSOLA splice must have been measured, or meanCorr is the unmeasured 1.0 and proves nothing.
+  REQUIRE(voice.SpliceCorrCount() == r.splices);
   return r;
 }
 
@@ -415,6 +419,47 @@ TEST_CASE("PitchArtifacts: extract-once WSOLA picks the same lag as nested reads
                         << " extractUp=" << extractUp);
       CHECK(extractTwo == nestedTwo);
       CHECK(extractUp == nestedUp);
+    }
+  }
+}
+
+TEST_CASE("PitchArtifacts: the splice-correlation diagnostic is off by default and never touches the audio")
+{
+  const size_t n = static_cast<size_t>(1.0 * kSR);
+  const std::vector<double> in = MakePluck(82.41, n);
+  for (auto character : {GranularVoice::Character::Poly, GranularVoice::Character::Drop})
+  {
+    for (double semi : kReachableShifts)
+    {
+      std::vector<double> outs[2];
+      unsigned long long corrCounts[2] = {};
+      unsigned long long splices[2] = {};
+      for (int measure = 0; measure < 2; ++measure)
+      {
+        GranularVoice voice;
+        voice.Configure(kSR, static_cast<int>(kBlock));
+        voice.SetCharacter(character);
+        voice.SetRatio(std::pow(2.0, semi / 12.0));
+        if (measure)
+          voice.DebugSetMeasureSpliceCorr(true);
+        voice.Reset();
+        outs[measure].assign(n, 0.0);
+        for (size_t off = 0; off < n; off += kBlock)
+          voice.Process(in.data() + off, outs[measure].data() + off, std::min(kBlock, n - off));
+        corrCounts[measure] = voice.SpliceCorrCount();
+        splices[measure] = voice.SpliceStarts();
+        if (!measure)
+          CHECK(voice.MeanSpliceCorr() == 1.0);
+      }
+      INFO("character=" << static_cast<int>(character) << " semitones=" << semi);
+      // POLY +2 on one second of pluck only splices a handful of times; one splice is enough
+      // to prove the diagnostic is counted only while the flag is on.
+      REQUIRE(splices[0] >= 1);
+      CHECK(corrCounts[0] == 0);
+      CHECK(corrCounts[1] == splices[1]);
+      CHECK(splices[0] == splices[1]);
+      REQUIRE(outs[0].size() == outs[1].size());
+      CHECK(std::memcmp(outs[0].data(), outs[1].data(), n * sizeof(double)) == 0);
     }
   }
 }
