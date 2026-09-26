@@ -119,7 +119,7 @@ TEST_CASE("Tests, app and VST3 share the Release|x64 optimization props")
                             "NeuralAmpModeler/projects/NeuralAmpModeler-vst3.vcxproj"};
   for (const char* rel : projects)
   {
-    INFO(rel);
+    INFO(std::string(rel));
     const std::string proj = ReadRepoFile(rel);
     const auto import = proj.find("config\\VoLum-release-opt.props\"");
     REQUIRE(import != std::string::npos);
