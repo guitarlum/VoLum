@@ -8,6 +8,8 @@
 // Owned class members (mVolum*Queue, mVolumLoaderThread, atomic flags) are
 // declared in NeuralAmpModeler.h and accessed normally.
 
+#include "VoLumNamDspData.h"
+
 void NeuralAmpModeler::_VolumStartLoader()
 {
   if (mVolumLoaderThread.joinable())
@@ -280,6 +282,9 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
     }
   };
 
+  static_assert(kVolumDspCacheMaxEntries == volum::nam_cache::kDspCacheMaxEntries,
+                "VoLumNamDspData.h cache cap must match NeuralAmpModeler.h");
+
   auto makeModel = [&](const std::string& path) {
     auto cacheIt = mVolumDspCache.find(path);
     if (cacheIt != mVolumDspCache.end())
@@ -290,10 +295,13 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
       return nam::get_dsp(cachedConfig);
     }
 
+    // VoLum: parse into dspData without the double build in get_dsp(path, conf),
+    // store, then build once the same way a cache hit does.
     nam::dspData conf;
-    auto model = nam::get_dsp(fs::u8path(path), conf);
+    volum::nam_cache::FillDspDataFromNamFile(fs::u8path(path), conf);
     storeCache(path, std::move(conf));
-    return model;
+    nam::dspData cachedConfig = mVolumDspCache.find(path)->second;
+    return nam::get_dsp(cachedConfig);
   };
 
   for (;;)
@@ -330,19 +338,21 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
 
         // ampIdx < 0 marks a custom-amp load (files live in the content library,
         // not the factory rig tree), so skip the factory sibling-prefetch scan.
+        // Cap at cache-size-minus-one and order by likely next pick so the model
+        // just loaded is never evicted from the 8-entry LRU.
         if (!mVolumNeedsLoad.load() && request.ampIdx >= 0 && !request.rigsRoot.empty())
         {
           const fs::path ampDir = fs::path(request.rigsRoot) / volum::kAmps[request.ampIdx].folderName;
           std::error_code ec;
           if (fs::is_directory(ampDir, ec))
           {
+            std::vector<std::string> siblings;
             for (const auto& entry : fs::directory_iterator(ampDir, ec))
             {
               if (mVolumNeedsLoad.load() || mVolumLoaderStop.load())
                 break;
               if (!entry.is_regular_file(ec))
                 continue;
-
               if (entry.path().extension() != ".nam")
                 continue;
 
@@ -350,10 +360,17 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
               const std::string prefetchPath = fs::weakly_canonical(entry.path(), pathEc).string();
               if (pathEc || prefetchPath.empty() || prefetchPath == request.fileToLoad)
                 continue;
+              siblings.push_back(prefetchPath);
+            }
+
+            const auto toPrefetch = volum::nam_cache::SelectPrefetchPaths(
+              request.fileToLoad, siblings, volum::nam_cache::kPrefetchMaxEntries);
+            for (const auto& prefetchPath : toPrefetch)
+            {
+              if (mVolumNeedsLoad.load() || mVolumLoaderStop.load())
+                break;
               if (mVolumDspCache.find(prefetchPath) == mVolumDspCache.end())
-              {
                 _VolumQueueMainPrefetch(prefetchPath);
-              }
             }
           }
         }
@@ -363,8 +380,9 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
         if (!mVolumNeedsLoad.load() && !mVolumLoaderStop.load()
             && mVolumDspCache.find(request.fileToLoad) == mVolumDspCache.end())
         {
+          // VoLum: parse only — do not build/prewarm a DSP that would be discarded.
           nam::dspData conf;
-          nam::get_dsp(fs::u8path(request.fileToLoad), conf);
+          volum::nam_cache::FillDspDataFromNamFile(fs::u8path(request.fileToLoad), conf);
           storeCache(request.fileToLoad, std::move(conf));
         }
       }
