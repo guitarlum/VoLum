@@ -33,33 +33,25 @@ public:
       return true;
     if ((nowMs - mLastChangeMs) >= kQuietMs)
       return true;
-    const double anchor = mHasWritten ? mLastWriteMs : mDirtySinceMs;
-    return (nowMs - anchor) >= kMaxIntervalMs;
+    // This burst only. Anchoring on the previous write makes the first edit
+    // after a long idle flush immediately, because that write is already > 2 s old.
+    return (nowMs - mDirtySinceMs) >= kMaxIntervalMs;
   }
 
-  void markWritten(double nowMs)
-  {
-    mDirty = false;
-    mHasWritten = true;
-    mLastWriteMs = nowMs;
-  }
+  void markWritten(double /*nowMs*/) { mDirty = false; }
 
   bool isDirty() const { return mDirty; }
 
   void reset()
   {
     mDirty = false;
-    mHasWritten = false;
     mLastChangeMs = 0.0;
-    mLastWriteMs = 0.0;
     mDirtySinceMs = 0.0;
   }
 
 private:
   bool mDirty = false;
-  bool mHasWritten = false;
   double mLastChangeMs = 0.0;
-  double mLastWriteMs = 0.0;
   double mDirtySinceMs = 0.0;
 };
 

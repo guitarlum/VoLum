@@ -84,6 +84,19 @@ TEST_CASE("WriteDebounce: continuous changes write at most every 2 s")
   CHECK_FALSE(naiveWrites == 3);
 }
 
+TEST_CASE("WriteDebounce: a new edit after a long idle still waits 500 ms")
+{
+  WriteDebounce d;
+  d.dirty(0.0);
+  CHECK(d.shouldWrite(500.0));
+  d.markWritten(500.0);
+  // More than 2 s after the last write. The new burst must not flush immediately.
+  d.dirty(10000.0);
+  CHECK_FALSE(d.shouldWrite(10000.0));
+  CHECK_FALSE(d.shouldWrite(10499.0));
+  CHECK(d.shouldWrite(10500.0));
+}
+
 TEST_CASE("WriteDebounce: flush writes immediately")
 {
   WriteDebounce d;
@@ -110,5 +123,25 @@ TEST_CASE("ContentStore Save returns early when registry matches baseline")
   REQUIRE(store.Save());
   const auto after = std::filesystem::last_write_time(regPath);
   CHECK(after == before);
+  CHECK_FALSE(store.HasUnflushedChanges());
+}
+
+TEST_CASE("ContentStore Save rewrites when a drained legacy scene is the only change")
+{
+  using namespace volum::content;
+  const auto base = ContentTestBase("save-legacy-drain");
+  {
+    std::ofstream seed(base / "volum-content.json");
+    seed << R"({"schemaVersion":4,"customScenes":{"amp_a":{"outputLevel":-3.0}}})";
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  REQUIRE(store.reg().legacyCustomScenes.count("amp_a") == 1);
+  store.reg().legacyCustomScenes.erase("amp_a");
+  CHECK(store.HasUnflushedChanges());
+  REQUIRE(store.Save());
+  std::ifstream in(store.RegistryPath());
+  const std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(body.find("customScenes") == std::string::npos);
   CHECK_FALSE(store.HasUnflushedChanges());
 }

@@ -845,6 +845,22 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   return j;
 }
 
+// legacyCustomScenes is read from "customScenes" and never written back, so a
+// JSON compare misses a drain of that map and would leave the key on disk.
+inline bool LegacyScenesEqual(const std::map<std::string, VoLumAmpSettings>& a,
+                              const std::map<std::string, VoLumAmpSettings>& b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (const auto& e : a)
+  {
+    const auto it = b.find(e.first);
+    if (it == b.end() || !volum::AmpSettingsEqual(e.second, it->second))
+      return false;
+  }
+  return true;
+}
+
 // Tolerant reader. Returns the parsed registry; `healed` (optional) is set true
 // when any entry was skipped/clamped so callers can rewrite the file.
 inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr)
@@ -1480,7 +1496,8 @@ public:
   bool HasUnflushedChanges() const
   {
     std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
-    return RegistryToJson(mReg) != RegistryToJson(mBaseline);
+    return !LegacyScenesEqual(mReg.legacyCustomScenes, mBaseline.legacyCustomScenes)
+           || RegistryToJson(mReg) != RegistryToJson(mBaseline);
   }
 
   // Load the registry. Missing file -> empty registry. Unparseable / wrong-shape
@@ -1604,7 +1621,8 @@ public:
     // the catalog JSON is unchanged), and still materialize a missing file on
     // first save of an empty library. Comparison, not a dirty flag —
     // legacyCustomScenes can mutate without Save.
-    if (mPendingFileDeletes.empty() && RegistryToJson(mReg) == RegistryToJson(mBaseline))
+    if (mPendingFileDeletes.empty() && LegacyScenesEqual(mReg.legacyCustomScenes, mBaseline.legacyCustomScenes)
+        && RegistryToJson(mReg) == RegistryToJson(mBaseline))
     {
       std::error_code existsEc;
       if (std::filesystem::exists(RegistryPath(), existsEc))
