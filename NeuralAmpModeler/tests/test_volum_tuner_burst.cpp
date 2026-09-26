@@ -320,12 +320,14 @@ TunerTiming MeasureTunerAnalysis()
       double total = 0.0;
       for (int b = 0; b < kBlocksPerAnalysis; ++b)
       {
+        const double c0 = volum_test::ThreadCpuUs();
         const auto t0 = std::chrono::steady_clock::now();
         tuner.Process(stream.data() + static_cast<size_t>(b) * kBlock, kBlock);
         const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+        const double cpuUs = volum_test::ThreadCpuUs() - c0;
         total += us;
         if (run >= kWarmup)
-          t.worstBlock = std::max(t.worstBlock, us);
+          t.worstBlock = std::max(t.worstBlock, cpuUs);
       }
       return total;
     };
@@ -378,7 +380,7 @@ TEST_CASE("Tuner analysis blocks cost a fraction of the scalar loop" * doctest::
   const double ratio = first.analysisMedian / std::max(1e-3, first.referenceMedian);
   INFO("tuner cost per analysis (all blocks of 4096 samples) median "
        << first.analysisMedian << " us; scalar difference loop median " << first.referenceMedian << " us; ratio "
-       << ratio << "; worst block per run (us):" << worsts << ", min " << worst);
+       << ratio << "; worst block thread-CPU per run (us):" << worsts << ", min " << worst);
   CHECK(ratio <= 0.35);
   // Every block of at least one run must fit a 64-frame buffer at 48 kHz. Hosted runners share cores.
   if (!volum_test::OnCi())

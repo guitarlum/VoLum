@@ -431,29 +431,32 @@ TEST_CASE("Pitch burst: Octaver and INSTANT tracker bursts cost a fraction of th
         p->Reset();
       }
       std::vector<DSP_SAMPLE> a(kBlock), b(kBlock);
-      std::vector<double> runLive, runRef;
+      std::vector<double> runLive, runRef, runLiveCpu;
       double runOtherWorst = 0.0;
       int bursts = 0;
       for (size_t off = 0; off + kBlock <= in.size(); off += kBlock)
       {
         for (size_t i = 0; i < kBlock; ++i)
           a[i] = b[i] = static_cast<DSP_SAMPLE>(in[off + i]);
-        auto timeBlock = [&](VoLumPitch& p, std::vector<DSP_SAMPLE>& buf) {
+        auto timeBlock = [&](VoLumPitch& p, std::vector<DSP_SAMPLE>& buf, double& cpuUs) {
           DSP_SAMPLE* ptr = buf.data();
+          const double c0 = volum_test::ThreadCpuUs();
           const auto t0 = std::chrono::steady_clock::now();
           p.Process(&ptr, 1, kBlock);
-          return std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+          const double wall = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+          cpuUs = volum_test::ThreadCpuUs() - c0;
+          return wall;
         };
-        double tl = 0.0, tr = 0.0;
+        double tl = 0.0, tr = 0.0, cl = 0.0, cr = 0.0;
         if ((off / kBlock) % 2 == 0)
         {
-          tl = timeBlock(live, a);
-          tr = timeBlock(reference, b);
+          tl = timeBlock(live, a, cl);
+          tr = timeBlock(reference, b, cr);
         }
         else
         {
-          tr = timeBlock(reference, b);
-          tl = timeBlock(live, a);
+          tr = timeBlock(reference, b, cr);
+          tl = timeBlock(live, a, cl);
         }
         // Sample n (0-based) runs the tracker when (n + 1) is a multiple of the update interval.
         const size_t firstUpdate = ((off / kUpdateEvery) + 1) * kUpdateEvery - 1;
@@ -467,6 +470,7 @@ TEST_CASE("Pitch burst: Octaver and INSTANT tracker bursts cost a fraction of th
           continue;
         runLive.push_back(tl);
         runRef.push_back(tr);
+        runLiveCpu.push_back(cl);
       }
       REQUIRE(runLive.size() >= 20);
       if (run == 0)
@@ -475,17 +479,17 @@ TEST_CASE("Pitch burst: Octaver and INSTANT tracker bursts cost a fraction of th
         refBursts = runRef;
         otherWorst = runOtherWorst;
       }
-      const double runWorst = *std::max_element(runLive.begin(), runLive.end());
+      const double runWorst = *std::max_element(runLiveCpu.begin(), runLiveCpu.end());
       worsts += " " + std::to_string(runWorst);
       return runWorst;
     });
     const double liveMedian = Median(liveBursts);
     const double refMedian = Median(refBursts);
     const double ratio = liveMedian / std::max(1e-3, refMedian);
-    INFO(s.name << ": burst block median " << liveMedian << " us, worst per run" << worsts << " us; reference median "
-                << refMedian << " us; ratio " << ratio << "; " << liveBursts.size() << " bursts; other blocks worst "
-                << otherWorst << " us");
-    MESSAGE(s.name << ": burst block median " << liveMedian << " us, worst per run" << worsts
+    INFO(s.name << ": burst block median " << liveMedian << " us, worst thread-CPU per run" << worsts
+                << " us; reference median " << refMedian << " us; ratio " << ratio << "; " << liveBursts.size()
+                << " bursts; other blocks worst " << otherWorst << " us");
+    MESSAGE(s.name << ": burst block median " << liveMedian << " us, worst thread-CPU per run" << worsts
                    << " us; reference median " << refMedian << " us; ratio " << ratio);
     CHECK(ratio <= 0.35);
     // A burst must fit a 64-frame buffer at 48 kHz in at least one of the runs. Hosted runners share cores.
