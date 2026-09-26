@@ -61,6 +61,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_pitch_artifacts.cpp
   test_volum_pitch_burst.cpp
   test_volum_realtime_budget.cpp
+  test_volum_nam_exact.cpp
   test_volum_self_capture_format.cpp
   test_volum_tremolo.cpp
   test_volum_chorus.cpp
