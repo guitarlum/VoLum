@@ -40,6 +40,7 @@ add_executable(NeuralAmpModeler-Tests
   test_keyboard_steps.cpp
   test_eparam_order.cpp
   test_tuner_dsp.cpp
+  test_volum_tuner_burst.cpp
   test_metronome_dsp.cpp
   test_tone_stack.cpp
   test_volum_pre_pedal_captures.cpp

@@ -5,8 +5,16 @@
 #include <cstring>
 #include <string>
 
+#if defined(_M_X64) || defined(__x86_64__) || defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+  #include <emmintrin.h>
+  #define VOLUM_TUNER_SSE2 1
+#elif defined(__aarch64__) && defined(__ARM_NEON)
+  #include <arm_neon.h>
+  #define VOLUM_TUNER_NEON 1
+#endif
+
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
 
 namespace volum
@@ -103,7 +111,111 @@ public:
     return names[noteIndex];
   }
 
+  // YIN difference: d[tau] = sum over j < kBufferSize / 2 of (x[j] - x[j + tau])^2, d[0] = 0. SIMD runs
+  // one lane per tau, each summing in ascending j with the scalar loop's rounding (separate mul + add
+  // on SSE2; fused on arm64, where clang contracts the scalar `sum += diff * diff`), so d[] carries the
+  // same bits as the scalar loop.
+  static void DifferenceFunction(const float* x, float* d)
+  {
+    constexpr int halfBuf = kBufferSize / 2;
+    d[0] = 0.f;
+    int tau = 1;
+#if defined(VOLUM_TUNER_SSE2)
+    for (; tau + 32 <= halfBuf; tau += 32)
+    {
+      __m128 acc0 = _mm_setzero_ps(), acc1 = _mm_setzero_ps(), acc2 = _mm_setzero_ps(), acc3 = _mm_setzero_ps();
+      __m128 acc4 = _mm_setzero_ps(), acc5 = _mm_setzero_ps(), acc6 = _mm_setzero_ps(), acc7 = _mm_setzero_ps();
+      for (int j = 0; j < halfBuf; ++j)
+      {
+        const __m128 xj = _mm_set1_ps(x[j]);
+        const float* lag = x + j + tau;
+        acc0 = _SquareDiffAdd(acc0, xj, lag);
+        acc1 = _SquareDiffAdd(acc1, xj, lag + 4);
+        acc2 = _SquareDiffAdd(acc2, xj, lag + 8);
+        acc3 = _SquareDiffAdd(acc3, xj, lag + 12);
+        acc4 = _SquareDiffAdd(acc4, xj, lag + 16);
+        acc5 = _SquareDiffAdd(acc5, xj, lag + 20);
+        acc6 = _SquareDiffAdd(acc6, xj, lag + 24);
+        acc7 = _SquareDiffAdd(acc7, xj, lag + 28);
+      }
+      _mm_storeu_ps(d + tau, acc0);
+      _mm_storeu_ps(d + tau + 4, acc1);
+      _mm_storeu_ps(d + tau + 8, acc2);
+      _mm_storeu_ps(d + tau + 12, acc3);
+      _mm_storeu_ps(d + tau + 16, acc4);
+      _mm_storeu_ps(d + tau + 20, acc5);
+      _mm_storeu_ps(d + tau + 24, acc6);
+      _mm_storeu_ps(d + tau + 28, acc7);
+    }
+    for (; tau + 4 <= halfBuf; tau += 4)
+    {
+      __m128 acc = _mm_setzero_ps();
+      for (int j = 0; j < halfBuf; ++j)
+        acc = _SquareDiffAdd(acc, _mm_set1_ps(x[j]), x + j + tau);
+      _mm_storeu_ps(d + tau, acc);
+    }
+#elif defined(VOLUM_TUNER_NEON)
+    for (; tau + 32 <= halfBuf; tau += 32)
+    {
+      float32x4_t acc0 = vdupq_n_f32(0.f), acc1 = vdupq_n_f32(0.f), acc2 = vdupq_n_f32(0.f), acc3 = vdupq_n_f32(0.f);
+      float32x4_t acc4 = vdupq_n_f32(0.f), acc5 = vdupq_n_f32(0.f), acc6 = vdupq_n_f32(0.f), acc7 = vdupq_n_f32(0.f);
+      for (int j = 0; j < halfBuf; ++j)
+      {
+        const float32x4_t xj = vdupq_n_f32(x[j]);
+        const float* lag = x + j + tau;
+        acc0 = _SquareDiffAdd(acc0, xj, lag);
+        acc1 = _SquareDiffAdd(acc1, xj, lag + 4);
+        acc2 = _SquareDiffAdd(acc2, xj, lag + 8);
+        acc3 = _SquareDiffAdd(acc3, xj, lag + 12);
+        acc4 = _SquareDiffAdd(acc4, xj, lag + 16);
+        acc5 = _SquareDiffAdd(acc5, xj, lag + 20);
+        acc6 = _SquareDiffAdd(acc6, xj, lag + 24);
+        acc7 = _SquareDiffAdd(acc7, xj, lag + 28);
+      }
+      vst1q_f32(d + tau, acc0);
+      vst1q_f32(d + tau + 4, acc1);
+      vst1q_f32(d + tau + 8, acc2);
+      vst1q_f32(d + tau + 12, acc3);
+      vst1q_f32(d + tau + 16, acc4);
+      vst1q_f32(d + tau + 20, acc5);
+      vst1q_f32(d + tau + 24, acc6);
+      vst1q_f32(d + tau + 28, acc7);
+    }
+    for (; tau + 4 <= halfBuf; tau += 4)
+    {
+      float32x4_t acc = vdupq_n_f32(0.f);
+      for (int j = 0; j < halfBuf; ++j)
+        acc = _SquareDiffAdd(acc, vdupq_n_f32(x[j]), x + j + tau);
+      vst1q_f32(d + tau, acc);
+    }
+#endif
+    for (; tau < halfBuf; ++tau)
+    {
+      float sum = 0.f;
+      for (int j = 0; j < halfBuf; ++j)
+      {
+        const float diff = x[j] - x[j + tau];
+        sum += diff * diff;
+      }
+      d[tau] = sum;
+    }
+  }
+
 private:
+#if defined(VOLUM_TUNER_SSE2)
+  static inline __m128 _SquareDiffAdd(__m128 acc, __m128 xj, const float* lag)
+  {
+    const __m128 diff = _mm_sub_ps(xj, _mm_loadu_ps(lag));
+    return _mm_add_ps(acc, _mm_mul_ps(diff, diff));
+  }
+#elif defined(VOLUM_TUNER_NEON)
+  static inline float32x4_t _SquareDiffAdd(float32x4_t acc, float32x4_t xj, const float* lag)
+  {
+    const float32x4_t diff = vsubq_f32(xj, vld1q_f32(lag));
+    return vfmaq_f32(acc, diff, diff);
+  }
+#endif
+
   void _RunYIN()
   {
     const int halfBuf = kBufferSize / 2;
@@ -115,7 +227,6 @@ private:
     if (mWritePos > 0)
       std::memcpy(mAnalysisBuffer + tail, mBuffer, static_cast<size_t>(mWritePos) * sizeof(float));
 
-    d[0] = 0.f;
     cumNorm[0] = 1.f;
 
     float runningSum = 0.f;
@@ -129,17 +240,10 @@ private:
       return;
     }
 
+    DifferenceFunction(mAnalysisBuffer, d);
     for (int tau = 1; tau < halfBuf; ++tau)
     {
-      float sum = 0.f;
-      for (int j = 0; j < halfBuf; ++j)
-      {
-        const float diff = mAnalysisBuffer[j] - mAnalysisBuffer[j + tau];
-        sum += diff * diff;
-      }
-      d[tau] = sum;
-      runningSum += sum;
-
+      runningSum += d[tau];
       cumNorm[tau] = (runningSum > 0.f) ? (d[tau] * tau / runningSum) : 1.f;
     }
 
@@ -225,9 +329,7 @@ private:
     if (mSmoothedValid)
     {
       const float semitoneDelta = std::fabs(12.f * std::log2(freq / mSmoothedFreq));
-      mSmoothedFreq = semitoneDelta < 0.75f
-                        ? (mSmoothedFreq * (1.f - kSmoothingAlpha) + freq * kSmoothingAlpha)
-                        : freq;
+      mSmoothedFreq = semitoneDelta < 0.75f ? (mSmoothedFreq * (1.f - kSmoothingAlpha) + freq * kSmoothingAlpha) : freq;
     }
     else
     {
