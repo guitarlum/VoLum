@@ -254,6 +254,17 @@ TEST_CASE("VoLum loader uses FillDspDataFromNamFile and capped SelectPrefetchPat
   REQUIRE(loader.find("SelectPrefetchPaths") != std::string::npos);
   REQUIRE(loader.find("kPrefetchMaxEntries") != std::string::npos);
   REQUIRE(loader.find("PlanPrefetchActions") != std::string::npos);
+  // Naming the planner is not enough: dropping the promote loop while keeping
+  // the call leaves a warm channel step evicting the cab you just left.
+  const auto planCall = loader.find("PlanPrefetchActions");
+  const auto afterPlan = loader.substr(planCall, 900);
+  const auto promote = afterPlan.find("plan.promote");
+  const auto touch = afterPlan.find("touchCache(", promote == std::string::npos ? 0 : promote);
+  const auto fetch = afterPlan.find("plan.fetch");
+  REQUIRE(promote != std::string::npos);
+  REQUIRE(touch != std::string::npos);
+  REQUIRE(fetch != std::string::npos);
+  REQUIRE(touch < fetch);
   // Prefetch must not call the path overload that builds twice.
   const auto prefetch = loader.find("else if (request.kind == VoLumLoadKind::MainPrefetch)");
   REQUIRE(prefetch != std::string::npos);
