@@ -601,7 +601,8 @@ private:
   // dot[b] = sum over j < win of ref[j] * cand[b + j], sn[b] = sum of cand[b + j]^2, for b < count
   // (count <= kWsolaBlock), each summed in ascending j. SSE2 lanes round every multiply and add
   // separately, like scalar x64 code, so the squares come precomputed in candSq (same products).
-  // The scalar path keeps one `+= a * b` per term, so it contracts exactly as the old loop did.
+  // Non-SSE2 must split mul and add the same way: Apple clang contracts `d += r * v` into an FMA
+  // that does not match the one-lag-at-a-time oracle's association.
   static void _WindowCorrelations(const double* ref, const double* cand, const double* candSq, int win, int count,
                                   double* dot, double* sn)
   {
@@ -631,27 +632,34 @@ private:
     {
       double d0 = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0, d4 = 0.0, d5 = 0.0, d6 = 0.0, d7 = 0.0;
       double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0, s4 = 0.0, s5 = 0.0, s6 = 0.0, s7 = 0.0;
+  #if defined(__clang__)
+    #pragma clang fp contract(off)
+  #endif
       for (int j = 0; j < win; ++j)
       {
         const double r = ref[j];
         const double* p = cand + j;
         const double v0 = p[0], v1 = p[1], v2 = p[2], v3 = p[3], v4 = p[4], v5 = p[5], v6 = p[6], v7 = p[7];
-        d0 += r * v0;
-        s0 += v0 * v0;
-        d1 += r * v1;
-        s1 += v1 * v1;
-        d2 += r * v2;
-        s2 += v2 * v2;
-        d3 += r * v3;
-        s3 += v3 * v3;
-        d4 += r * v4;
-        s4 += v4 * v4;
-        d5 += r * v5;
-        s5 += v5 * v5;
-        d6 += r * v6;
-        s6 += v6 * v6;
-        d7 += r * v7;
-        s7 += v7 * v7;
+        const double rd0 = r * v0, rd1 = r * v1, rd2 = r * v2, rd3 = r * v3;
+        const double rd4 = r * v4, rd5 = r * v5, rd6 = r * v6, rd7 = r * v7;
+        const double sq0 = v0 * v0, sq1 = v1 * v1, sq2 = v2 * v2, sq3 = v3 * v3;
+        const double sq4 = v4 * v4, sq5 = v5 * v5, sq6 = v6 * v6, sq7 = v7 * v7;
+        d0 += rd0;
+        s0 += sq0;
+        d1 += rd1;
+        s1 += sq1;
+        d2 += rd2;
+        s2 += sq2;
+        d3 += rd3;
+        s3 += sq3;
+        d4 += rd4;
+        s4 += sq4;
+        d5 += rd5;
+        s5 += sq5;
+        d6 += rd6;
+        s6 += sq6;
+        d7 += rd7;
+        s7 += sq7;
       }
       const double dots[kWsolaBlock] = {d0, d1, d2, d3, d4, d5, d6, d7};
       const double sns[kWsolaBlock] = {s0, s1, s2, s3, s4, s5, s6, s7};
@@ -663,18 +671,25 @@ private:
     for (; b < count; ++b)
     {
       double d = 0.0, s = 0.0;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
       for (int j = 0; j < win; ++j)
       {
         const double v = cand[b + j];
-        d += ref[j] * v;
-        s += v * v;
+        const double rd = ref[j] * v;
+        const double sq = v * v;
+        d += rd;
+        s += sq;
       }
       dot[b] = d;
       sn[b] = s;
     }
   }
 
-  // The pre-blocking scan, verbatim: the oracle for _WsolaScan and the reference for the burst test.
+  // The pre-blocking scan: the oracle for _WsolaScan and the reference for the burst test.
+  // Mul and add are separate statements (like SSE2) so Apple clang cannot contract them into
+  // FMAs that diverge from the blocked path on the same machine.
   void _WsolaScanReference(double cand, int lagMin, int lagMax, int win, double rn, double& bestC, int& bestLag,
                            bool& any)
   {
@@ -690,11 +705,16 @@ private:
       double dot = 0.0;
       double sn = 0.0;
       const int offset = lag - lagMin;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
       for (int j = 0; j < win; ++j)
       {
         const double v = mCandWin[static_cast<size_t>(offset + j)];
-        dot += mRefWin[static_cast<size_t>(j)] * v;
-        sn += v * v;
+        const double rd = mRefWin[static_cast<size_t>(j)] * v;
+        const double sq = v * v;
+        dot += rd;
+        sn += sq;
       }
       const double cc = dot / (rn * (std::sqrt(sn) + 1e-9));
       mCorrScratch[slot] = cc;
@@ -812,8 +832,14 @@ private:
     }
     const double* s = mPeriodScratch.data();
     double e = 0.0;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
     for (int k = 0; k < L; ++k)
-      e += s[k] * s[k];
+    {
+      const double sq = s[k] * s[k];
+      e += sq;
+    }
     if (e < 1e-7)
       return {previous, 0};
     double* r = mLagCorr.data();
@@ -843,8 +869,9 @@ private:
   }
 
   // r[lag] = sum over k < L of s[k] * s[k + lag] for lag in [lagBegin, lagEnd). Blocks of lags share
-  // each pass over k; each lag keeps one accumulator summed in ascending k as a single
-  // `+= a * b`, so it has the one-lag-at-a-time loop's bits (see _WindowCorrelations).
+  // each pass over k; each lag keeps one accumulator summed in ascending k. SSE2 rounds mul and add
+  // apart. The non-SSE2 blocked path must too: Apple clang contracts `a += x * p[i]` into an FMA that
+  // does not match the one-lag-at-a-time oracle's association on the same machine.
   static void _LagCorrelations(const double* s, int L, int lagBegin, int lagEnd, double* r)
   {
     int lag = lagBegin;
@@ -878,18 +905,30 @@ private:
     for (; lag + 8 <= lagEnd; lag += 8)
     {
       double a0 = 0.0, a1 = 0.0, a2 = 0.0, a3 = 0.0, a4 = 0.0, a5 = 0.0, a6 = 0.0, a7 = 0.0;
+  #if defined(__clang__)
+    #pragma clang fp contract(off)
+  #endif
       for (int k = 0; k < L; ++k)
       {
         const double x = s[k];
         const double* p = s + k + lag;
-        a0 += x * p[0];
-        a1 += x * p[1];
-        a2 += x * p[2];
-        a3 += x * p[3];
-        a4 += x * p[4];
-        a5 += x * p[5];
-        a6 += x * p[6];
-        a7 += x * p[7];
+        // Mul then add apart, like the SSE2 path — fused `+= x * p[i]` diverges from the oracle.
+        const double t0 = x * p[0];
+        const double t1 = x * p[1];
+        const double t2 = x * p[2];
+        const double t3 = x * p[3];
+        const double t4 = x * p[4];
+        const double t5 = x * p[5];
+        const double t6 = x * p[6];
+        const double t7 = x * p[7];
+        a0 += t0;
+        a1 += t1;
+        a2 += t2;
+        a3 += t3;
+        a4 += t4;
+        a5 += t5;
+        a6 += t6;
+        a7 += t7;
       }
       const double sums[8] = {a0, a1, a2, a3, a4, a5, a6, a7};
       std::copy(sums, sums + 8, r + lag);
@@ -898,14 +937,21 @@ private:
     for (; lag < lagEnd; ++lag)
     {
       double a = 0.0;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
       for (int k = 0; k < L; ++k)
-        a += s[k] * s[k + lag];
+      {
+        const double t = s[k] * s[k + lag];
+        a += t;
+      }
       r[lag] = a;
     }
   }
 
-  // The pre-blocking tracker, verbatim apart from returning instead of assigning mPeriod: the
-  // oracle for _EstimatePeriod and the reference for the burst test.
+  // The pre-blocking tracker (returns instead of assigning mPeriod): the oracle for _EstimatePeriod
+  // and the reference for the burst test. Mul and add are separate so Apple clang cannot contract
+  // them into FMAs that diverge from the blocked path (see _LagCorrelations).
   PeriodEstimate _EstimatePeriodReference(double previous)
   {
     const int tmin = std::max(2, static_cast<int>(mSampleRate / kPmaxFreq));
@@ -917,8 +963,15 @@ private:
     for (int k = 0; k < span; ++k)
       mPeriodScratch[static_cast<size_t>(k)] = _ReadAtDelay(static_cast<double>(k));
     double e = 0.0;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
     for (int k = 0; k < L; ++k)
-      e += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k)];
+    {
+      const double v = mPeriodScratch[static_cast<size_t>(k)];
+      const double sq = v * v;
+      e += sq;
+    }
     if (e < 1e-7)
       return {previous, 0};
     double best = 0.0;
@@ -926,8 +979,14 @@ private:
     for (int lag = tmin; lag < tmax; ++lag)
     {
       double r = 0.0;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
       for (int k = 0; k < L; ++k)
-        r += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + lag)];
+      {
+        const double t = mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + lag)];
+        r += t;
+      }
       if (r > best)
       {
         best = r;
@@ -940,10 +999,15 @@ private:
     if (bestLag > tmin && bestLag < tmax - 1)
     {
       double rm = 0.0, rp = 0.0;
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
       for (int k = 0; k < L; ++k)
       {
-        rm += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag - 1)];
-        rp += mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag + 1)];
+        const double tm = mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag - 1)];
+        const double tp = mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag + 1)];
+        rm += tm;
+        rp += tp;
       }
       const double denom = (rm + rp - 2.0 * best);
       if (std::abs(denom) > 1e-9)
