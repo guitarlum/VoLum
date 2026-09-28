@@ -904,6 +904,16 @@ void NeuralAmpModeler::OnIdle()
       _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
     }
 
+  // Take the audio thread's "a new main model is live" flag once per idle, with or
+  // without an editor. It used to be cleared only under GetUI(), so with the window
+  // closed every tick rebuilt the filename and wiped a load error before anyone
+  // could read it. Taken before the reap below: the audio thread publishes the path
+  // and then sets the flag, so the reap that follows commits the path this take
+  // belongs to. The take is applied before this idle's failure handler, so a load
+  // error reported in the same tick is not wiped, and the footer paints the name
+  // that the reap just committed.
+  const bool tookNewModel = mNewModelLoadedInDSP.exchange(false);
+
   // Runs after the sync above so the restore stays the first thing an idle does;
   // freeing a few megabytes can wait a tick, a stale editor cannot.
   _VolumReapAudioThreadRetirees();
@@ -1064,6 +1074,16 @@ void NeuralAmpModeler::OnIdle()
     mVolumPostLockUiDirty = false;
   }
 
+  if (tookNewModel)
+  {
+    mVolumLastLoadedFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());
+    // Only the publish this take belongs to clears the error, and it does so
+    // before this idle applies a newer failure. A load error that arrives with
+    // the editor closed now stays until the editor opens.
+    mVolumMainLoadError.clear();
+    mVolumModelRefreshPending = true;
+  }
+
   if (mVolumMainLoadFailed.exchange(false))
   {
     mVolumMainLoadError = "LOAD FAILED";
@@ -1155,14 +1175,12 @@ void NeuralAmpModeler::OnIdle()
     }
   }
 
-  if (mNewModelLoadedInDSP)
+  if (mVolumModelRefreshPending)
   {
-    mVolumLastLoadedFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(mNAMPaths.live.Get()).filename());
-    mVolumMainLoadError.clear();
     if (auto* pGraphics = GetUI())
     {
       _UpdateControlsFromModel();
-      mNewModelLoadedInDSP = false;
+      mVolumModelRefreshPending = false;
     }
   }
   if (mModelCleared)

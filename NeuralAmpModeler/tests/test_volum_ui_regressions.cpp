@@ -3288,3 +3288,42 @@ TEST_CASE("footer SetStatus and mode toggle skip idle dirty when unchanged")
   RequireDoesNotContain(idle, "toggle->SetDirty(false)");
   RequireDoesNotContain(idle, "keep the switch above animated BUILD/PLAY chrome");
 }
+
+TEST_CASE("headless OnIdle consumes the model-loaded flag once")
+{
+  // Ticket 16: with the editor closed the flag used to stay set, so every idle
+  // rebuilt the filename and cleared mVolumMainLoadError. The take is once, before
+  // the reap, and the clear is before this idle's failure handler so a later error
+  // survives until the editor opens.
+  const std::string idle = MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::OnIdle()");
+  const auto take = idle.find("mNewModelLoadedInDSP.exchange(false)");
+  const auto reap = idle.find("_VolumReapAudioThreadRetirees();");
+  const auto took = idle.find("if (tookNewModel)");
+  const auto fail = idle.find("mVolumMainLoadFailed.exchange(false)");
+  REQUIRE(take != std::string::npos);
+  REQUIRE(reap != std::string::npos);
+  REQUIRE(took != std::string::npos);
+  REQUIRE(fail != std::string::npos);
+  CHECK(take < reap);
+  CHECK(reap < took);
+  CHECK(took < fail);
+
+  const auto tookEnd = idle.find("if (mVolumMainLoadFailed", took);
+  REQUIRE(tookEnd != std::string::npos);
+  const std::string tookBody = idle.substr(took, tookEnd - took);
+  RequireContains(tookBody, "mVolumLastLoadedFile =");
+  RequireContains(tookBody, "mVolumMainLoadError.clear()");
+  RequireContains(tookBody, "mVolumModelRefreshPending = true");
+  CHECK(tookBody.find("GetUI()") == std::string::npos);
+
+  const auto pending = idle.find("if (mVolumModelRefreshPending)");
+  REQUIRE(pending != std::string::npos);
+  CHECK(fail < pending);
+  const auto pendingEnd = idle.find("if (mModelCleared)", pending);
+  REQUIRE(pendingEnd != std::string::npos);
+  const std::string pendingBody = idle.substr(pending, pendingEnd - pending);
+  RequireContains(pendingBody, "GetUI()");
+  RequireContains(pendingBody, "_UpdateControlsFromModel()");
+  RequireContains(pendingBody, "mVolumModelRefreshPending = false");
+  CHECK(idle.find("if (mNewModelLoadedInDSP)") == std::string::npos);
+}

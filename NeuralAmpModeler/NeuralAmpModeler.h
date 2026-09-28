@@ -912,6 +912,10 @@ private:
   bool mVolumIrShapingPushPending[2]{false, false};
 
   std::atomic<bool> mNewModelLoadedInDSP = false;
+  // Main thread only: OnIdle took mNewModelLoadedInDSP while the editor was closed
+  // and still owes that editor an _UpdateControlsFromModel(). Survives any number
+  // of idles; the GetUI() block in OnIdle consumes it.
+  bool mVolumModelRefreshPending = false;
   std::atomic<bool> mModelCleared = false;
   bool mPostEffectsClearedForMissingModel = false;
   // Previous-block POST plan flags. Used to detect a true -> false edge for Delay or
