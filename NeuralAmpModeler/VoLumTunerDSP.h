@@ -123,9 +123,8 @@ public:
   }
 
   // YIN difference: d[tau] = sum over j < kBufferSize / 2 of (x[j] - x[j + tau])^2, d[0] = 0. SIMD runs
-  // one lane per tau, each summing in ascending j with the scalar loop's rounding (separate mul + add
-  // on SSE2; fused on arm64, where clang contracts the scalar `sum += diff * diff`), so d[] carries the
-  // same bits as the scalar loop, however the tau range is split.
+  // one lane per tau, each summing in ascending j. SSE2 and NEON both multiply and add separately.
+  // A fused arm64 add (`vfmaq`) does not match the scalar loop on the CI clang, so d[] would drift.
   static void DifferenceFunction(const float* x, float* d)
   {
     d[0] = 0.f;
@@ -208,11 +207,18 @@ public:
 #endif
     for (; tau < tauEnd; ++tau)
     {
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
       float sum = 0.f;
+#if defined(__clang__)
+  #pragma clang loop unroll(disable)
+#endif
       for (int j = 0; j < halfBuf; ++j)
       {
         const float diff = x[j] - x[j + tau];
-        sum += diff * diff;
+        const float sq = diff * diff;
+        sum += sq;
       }
       d[tau] = sum;
     }
@@ -229,7 +235,7 @@ private:
   static inline float32x4_t _SquareDiffAdd(float32x4_t acc, float32x4_t xj, const float* lag)
   {
     const float32x4_t diff = vsubq_f32(xj, vld1q_f32(lag));
-    return vfmaq_f32(acc, diff, diff);
+    return vaddq_f32(acc, vmulq_f32(diff, diff));
   }
 #endif
 

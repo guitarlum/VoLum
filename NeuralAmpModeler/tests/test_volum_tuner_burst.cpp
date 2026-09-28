@@ -44,11 +44,18 @@ void ReferenceDifference(const float* x, float* d)
   d[0] = 0.f;
   for (int tau = 1; tau < kHalf; ++tau)
   {
+#if defined(__clang__)
+  #pragma clang fp contract(off)
+#endif
     float sum = 0.f;
+#if defined(__clang__)
+  #pragma clang loop unroll(disable)
+#endif
     for (int j = 0; j < kHalf; ++j)
     {
       const float diff = x[j] - x[j + tau];
-      sum += diff * diff;
+      const float sq = diff * diff;
+      sum += sq;
     }
     d[tau] = sum;
   }
