@@ -632,9 +632,6 @@ private:
     {
       double d0 = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0, d4 = 0.0, d5 = 0.0, d6 = 0.0, d7 = 0.0;
       double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0, s4 = 0.0, s5 = 0.0, s6 = 0.0, s7 = 0.0;
-  #if defined(__clang__)
-    #pragma clang fp contract(off)
-  #endif
       for (int j = 0; j < win; ++j)
       {
         const double r = ref[j];
@@ -671,9 +668,6 @@ private:
     for (; b < count; ++b)
     {
       double d = 0.0, s = 0.0;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
       for (int j = 0; j < win; ++j)
       {
         const double v = cand[b + j];
@@ -705,9 +699,6 @@ private:
       double dot = 0.0;
       double sn = 0.0;
       const int offset = lag - lagMin;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
       for (int j = 0; j < win; ++j)
       {
         const double v = mCandWin[static_cast<size_t>(offset + j)];
@@ -832,9 +823,6 @@ private:
     }
     const double* s = mPeriodScratch.data();
     double e = 0.0;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
     for (int k = 0; k < L; ++k)
     {
       const double sq = s[k] * s[k];
@@ -905,9 +893,6 @@ private:
     for (; lag + 8 <= lagEnd; lag += 8)
     {
       double a0 = 0.0, a1 = 0.0, a2 = 0.0, a3 = 0.0, a4 = 0.0, a5 = 0.0, a6 = 0.0, a7 = 0.0;
-  #if defined(__clang__)
-    #pragma clang fp contract(off)
-  #endif
       for (int k = 0; k < L; ++k)
       {
         const double x = s[k];
@@ -937,9 +922,6 @@ private:
     for (; lag < lagEnd; ++lag)
     {
       double a = 0.0;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
       for (int k = 0; k < L; ++k)
       {
         const double t = s[k] * s[k + lag];
@@ -963,9 +945,6 @@ private:
     for (int k = 0; k < span; ++k)
       mPeriodScratch[static_cast<size_t>(k)] = _ReadAtDelay(static_cast<double>(k));
     double e = 0.0;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
     for (int k = 0; k < L; ++k)
     {
       const double v = mPeriodScratch[static_cast<size_t>(k)];
@@ -979,9 +958,6 @@ private:
     for (int lag = tmin; lag < tmax; ++lag)
     {
       double r = 0.0;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
       for (int k = 0; k < L; ++k)
       {
         const double t = mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + lag)];
@@ -999,9 +975,6 @@ private:
     if (bestLag > tmin && bestLag < tmax - 1)
     {
       double rm = 0.0, rp = 0.0;
-#if defined(__clang__)
-  #pragma clang fp contract(off)
-#endif
       for (int k = 0; k < L; ++k)
       {
         const double tm = mPeriodScratch[static_cast<size_t>(k)] * mPeriodScratch[static_cast<size_t>(k + bestLag - 1)];
