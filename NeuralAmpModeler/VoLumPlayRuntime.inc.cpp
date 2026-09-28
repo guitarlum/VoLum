@@ -36,6 +36,16 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
   mVolumSettingsDirty = true;
 #endif
   DirtyParametersFromUI();
+  // BUILD may have changed the live amp+preset while last-recalled still names
+  // the previous PLAY row. Re-focus before refresh so IsLastRecalledSlot and
+  // EnsureActiveRowVisible both see the matching slot (without stealing focus
+  // when two rows share the same sound — FocusSlotForLiveSound keeps current).
+  if (mode == volum::UiMode::Play)
+  {
+    const auto slots = volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg());
+    mVolumLastRecalledPlaySlot =
+      volum::FocusSlotForLiveSound(slots, mVolumLastRecalledPlaySlot, _VolumActiveOwnerKey(), mVolumActivePresetId);
+  }
   // Hide/show lives in _VolumRefreshPlaySurface so a restore that only syncs
   // cannot leave PLAY intercepting BUILD clicks. BUILD still needs the layout
   // pass that uncovers the knobs under the overlay.

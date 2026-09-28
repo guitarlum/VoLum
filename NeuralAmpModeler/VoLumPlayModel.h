@@ -422,6 +422,21 @@ inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::st
          && slot.sound.presetId == activePresetId;
 }
 
+// BUILD -> PLAY focus: keep the current rail row when it already is the live
+// sound (duplicate rows stay put), otherwise jump to the first assigned hit,
+// otherwise leave the cursor alone when the live pair is not on the rail.
+inline int FocusSlotForLiveSound(const std::vector<PlaySlot>& slots, int currentSlot, const std::string& ampId,
+                                 const std::string& presetId)
+{
+  for (const auto& slot : slots)
+  {
+    if (IsLastRecalledSlot(slot, currentSlot, ampId, presetId))
+      return currentSlot;
+  }
+  const int found = FindAssignedSlot(slots, ampId, presetId);
+  return found >= 0 ? found : currentSlot;
+}
+
 // The slot PLAY's up/down arrows should land on, given the slot playing now.
 //
 // Only slots a Program Change would actually recall are reachable: unassigned

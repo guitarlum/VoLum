@@ -360,6 +360,33 @@ TEST_CASE("Two slots with the same Sound: last recalled PC wins")
   CHECK(volum::IsLastRecalledSlot(a, 2, "factory:7", "factory:7:v1"));
 }
 
+TEST_CASE("FocusSlotForLiveSound keeps or moves PLAY focus after a BUILD pick")
+{
+  volum::PlaySlot x;
+  x.slot = 2;
+  x.valid = true;
+  x.sound.ampId = "factory:7";
+  x.sound.presetId = "factory:7:v1";
+  volum::PlaySlot y;
+  y.slot = 7;
+  y.valid = true;
+  y.sound.ampId = "factory:3";
+  y.sound.presetId = "factory:3:v1";
+
+  // Live pair is y while last-recalled still names x: jump to y's row.
+  CHECK(volum::FocusSlotForLiveSound({x, y}, 2, "factory:3", "factory:3:v1") == 7);
+
+  // Two rows share y; current already matches: stay put (do not steal to first hit).
+  volum::PlaySlot yAt2 = y;
+  yAt2.slot = 2;
+  volum::PlaySlot yAt9 = y;
+  yAt9.slot = 9;
+  CHECK(volum::FocusSlotForLiveSound({yAt2, yAt9}, 2, "factory:3", "factory:3:v1") == 2);
+
+  // Live pair is not on the rail: leave the cursor alone.
+  CHECK(volum::FocusSlotForLiveSound({x}, 2, "factory:3", "factory:3:v1") == 2);
+}
+
 TEST_CASE("Save As from a Factory PLAY origin drops LIVE on that slot")
 {
   volum::PlaySlot origin;

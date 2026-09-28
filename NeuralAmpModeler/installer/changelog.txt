@@ -1,3 +1,4 @@
+28/09/2026 - VoLum 1.3.0 (fix - PLAY focus after BUILD): When you pick another sound in BUILD and that sound is already on the PLAY list, going back to PLAY highlights it. Sound otherwise unchanged.
 28/09/2026 - VoLum 1.3.0 (perf - load error while closed): A failed amp load that happens while the editor is closed is no longer wiped on the next idle tick. The message is still there when you open the window. The sound is unchanged.
 26/09/2026 - VoLum 1.3.0 (perf - amp switch cache): Switching amp, cab or channel no longer builds throw-away models for every sibling capture. The channel you just left stays cached, so stepping back does not reload it. The sound is unchanged.
 26/09/2026 - VoLum 1.3.0 (perf - level meters): The IN and OUT level meters only redraw when the shown level or the safety colour actually changes, and they stay still while PLAY covers them. A quiet BUILD window can settle with no meter redraws. Pixels and sound are unchanged.
