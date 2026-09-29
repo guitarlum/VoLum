@@ -1,4 +1,4 @@
-﻿#include "third_party/doctest.h"
+#include "third_party/doctest.h"
 #include "../config.h"
 #include "../VoLumSecondPress.h"
 #include "../VoLumTriptychLayout.h"
@@ -363,11 +363,14 @@ TEST_CASE("The Settings MIDI tab and PLAY are two views of one Sound map")
   RequireContains(layout, "settingsPage->SetMidiCallbacks([pPlugin](int channel)");
   RequireContains(layout, "pPlugin->_VolumSetMidiRecallCc(cc)");
 
-  // Both surfaces derive their rows from the same pure model helper.
+  // Both surfaces derive their rows from the same pure model helper. PLAY's rows
+  // are built once per refresh in the runtime and handed to SetData.
+  const std::string playRuntime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
   RequireContains(view, "volum::BuildPlaySlots(factory, registry)");
-  RequireContains(play, "volum::BuildPlaySlots(factory, registry)");
+  RequireContains(playRuntime, "volum::BuildPlaySlots(mVolumFactoryPresets, registry)");
   RequireContains(view, "volum::BuildSoundChoices(factory, registry)");
-  RequireContains(play, "volum::BuildSoundChoices(factory, registry)");
+  RequireContains(playRuntime, "volum::BuildSoundChoices(mVolumFactoryPresets, registry)");
+  RequireContains(play, "void SetData(std::vector<volum::PlaySlot> slots, std::vector<volum::SoundChoice> choices,");
 
   // Both write through the same plugin methods; the Settings tab keeps no copy
   // of its own, and the panel is refilled from the live registry. The

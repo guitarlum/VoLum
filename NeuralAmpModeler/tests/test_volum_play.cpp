@@ -5,6 +5,24 @@
 #include "VoLumPlayModel.h"
 #include "VoLumScroll.h"
 
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <sstream>
+#include <utility>
+
+namespace
+{
+std::string ReadPlaySource(const char* name)
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / name;
+  std::ifstream in(path, std::ios::binary);
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+} // namespace
+
 TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
 {
   CHECK(volum::UiModeFromString("") == volum::UiMode::Build);
@@ -74,6 +92,107 @@ TEST_CASE("PLAY stomps own exactly the eight performance bypass parameters")
   CHECK_FALSE(volum::PlayStompCanBypass(2, 0, 4));
   CHECK(volum::PlayStompCanBypass(3, 0, 2));
   CHECK_FALSE(volum::PlayStompCanBypass(3, 4, 0));
+}
+
+TEST_CASE("PLAY bypass indices are the params the eight bypass names belong to")
+{
+  // The per-tick PLAY refresh reads the stomps by index; the board click and
+  // the 1-8 keys still go by name. Each index must be the param whose InitBool
+  // gives it that name.
+  const std::array<std::pair<int, const char*>, 8> enums = {{{kPrePitchActive, "kPrePitchActive"},
+                                                             {kPreCompActive, "kPreCompActive"},
+                                                             {kPreNam1Active, "kPreNam1Active"},
+                                                             {kPreNam2Active, "kPreNam2Active"},
+                                                             {kChorusActive, "kChorusActive"},
+                                                             {kDelayActive, "kDelayActive"},
+                                                             {kReverbActive, "kReverbActive"},
+                                                             {kTremoloActive, "kTremoloActive"}}};
+  const std::string plugin = ReadPlaySource("NeuralAmpModeler.cpp");
+  for (size_t i = 0; i < enums.size(); ++i)
+  {
+    const std::string init =
+      std::string("GetParam(") + enums[i].second + ")->InitBool(\"" + volum::kPlayBypassParamNames[i] + "\"";
+    INFO(init);
+    CHECK(volum::kPlayBypassParams[i] == enums[i].first);
+    CHECK(plugin.find(init) != std::string::npos);
+  }
+  const std::string runtime = ReadPlaySource("VoLumPlayRuntime.inc.cpp");
+  CHECK(runtime.find("GetParam(volum::kPlayBypassParams[i])->Bool()") != std::string::npos);
+  CHECK(runtime.find("paramBool") == std::string::npos);
+}
+
+TEST_CASE("PLAY SetData inputs: unchanged rows do not repaint, any field change does")
+{
+  volum::PlaySlot slot;
+  slot.slot = 4;
+  slot.valid = true;
+  slot.sound = {"factory:13", "preset_a", "Crunch Rhythm", "Soldano SLO100", false, 13, false};
+  const std::vector<volum::PlaySlot> rail = {slot};
+
+  // The idle tick rebuilds identical rows: nothing to repaint.
+  std::vector<volum::PlaySlot> shown = rail;
+  CHECK_FALSE(volum::AssignIfChanged(shown, std::vector<volum::PlaySlot>(rail)));
+  std::string title = "THC Sunset";
+  CHECK_FALSE(volum::AssignIfChanged(title, "THC Sunset"));
+  bool dirty = true;
+  CHECK_FALSE(volum::AssignIfChanged(dirty, true));
+
+  // Every field of a row takes part.
+  const std::vector<std::function<void(volum::PlaySlot&)>> edits = {
+    [](volum::PlaySlot& s) { s.slot = 5; },
+    [](volum::PlaySlot& s) { s.valid = false; },
+    [](volum::PlaySlot& s) { s.sound.ampId = "factory:14"; },
+    [](volum::PlaySlot& s) { s.sound.presetId = "preset_b"; },
+    [](volum::PlaySlot& s) { s.sound.presetName = "Lead Boost"; },
+    [](volum::PlaySlot& s) { s.sound.ampName = "THC Sunset"; },
+    [](volum::PlaySlot& s) { s.sound.factory = true; },
+    [](volum::PlaySlot& s) { s.sound.art = 14; },
+    [](volum::PlaySlot& s) { s.sound.customArt = true; },
+  };
+  for (size_t i = 0; i < edits.size(); ++i)
+  {
+    INFO("edit " << i);
+    auto next = rail;
+    edits[i](next[0]);
+    auto current = rail;
+    CHECK(volum::AssignIfChanged(current, next));
+    CHECK(current == next);
+    CHECK_FALSE(volum::AssignIfChanged(current, next));
+  }
+  CHECK(volum::AssignIfChanged(title, "Soldano SLO100"));
+  CHECK(title == "Soldano SLO100");
+  CHECK(volum::AssignIfChanged(dirty, false));
+}
+
+TEST_CASE("PLAY SetData repaints only on a change, and the refresh builds the rail once")
+{
+  const std::string play = ReadPlaySource("VoLumPlaySurface.h");
+  const auto data = play.find("void SetData(");
+  REQUIRE(data != std::string::npos);
+  const auto end = play.find("void OnRescale()", data);
+  REQUIRE(end != std::string::npos);
+  const std::string body = play.substr(data, end - data);
+  CHECK(body.find("AssignIfChanged(mSlots, std::move(slots))") != std::string::npos);
+  const auto gate = body.find("if (changed)");
+  REQUIRE(gate != std::string::npos);
+  CHECK(body.find("SetDirty(false);", gate) < gate + 30);
+  size_t dirties = 0;
+  for (auto at = body.find("SetDirty("); at != std::string::npos; at = body.find("SetDirty(", at + 1))
+    ++dirties;
+  CHECK(dirties == 1);
+  CHECK(body.find("BuildPlaySlots") == std::string::npos);
+
+  const std::string runtime = ReadPlaySource("VoLumPlayRuntime.inc.cpp");
+  const auto refresh = runtime.find("void NeuralAmpModeler::_VolumRefreshPlaySurface()");
+  REQUIRE(refresh != std::string::npos);
+  const auto refreshEnd = runtime.find("void NeuralAmpModeler::", refresh + 1);
+  const std::string refreshBody = runtime.substr(refresh, refreshEnd - refresh);
+  size_t builds = 0;
+  for (auto at = refreshBody.find("BuildPlaySlots("); at != std::string::npos;
+       at = refreshBody.find("BuildPlaySlots(", at + 1))
+    ++builds;
+  CHECK(builds == 1);
+  CHECK(refreshBody.find("volum::SoundIsAssigned(slots, owner, mVolumActivePresetId)") != std::string::npos);
 }
 
 TEST_CASE("PLAY bypass edits make a recalled snapshot dirty")

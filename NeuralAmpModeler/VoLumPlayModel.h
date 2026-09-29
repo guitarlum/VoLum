@@ -3,6 +3,7 @@
 #include "VoLumContentStore.h"
 #include "VoLumFactoryPresets.h"
 #include "VoLumMidi.h"
+#include "VoLumParams.h"
 #include "VoLumPickerGroups.h"
 #include "VoLumTriptychState.h"
 
@@ -10,6 +11,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace volum
@@ -199,6 +201,12 @@ inline EVoLumSection SectionForEffectFocus(EVoLumEffectFocus f)
 inline constexpr std::array<const char*, 8> kPlayBypassParamNames = {"PrePitchActive", "PreCompActive", "PreNam1Active",
                                                                      "PreNam2Active",  "ChorusActive",  "DelayActive",
                                                                      "ReverbActive",   "TremoloActive"};
+// The same eight params by index, in stomp order, so the per-tick PLAY refresh
+// reads them without a name search. test_volum_play.cpp pins each index to the
+// name its InitBool gives it.
+inline constexpr std::array<int, 8> kPlayBypassParams = {kPrePitchActive, kPreCompActive, kPreNam1Active,
+                                                         kPreNam2Active,  kChorusActive,  kDelayActive,
+                                                         kReverbActive,   kTremoloActive};
 
 inline bool IsPlaySnapshotDirty(bool hasSnapshot, const VoLumAmpSettings& live, const VoLumAmpSettings& recalled)
 {
@@ -229,6 +237,13 @@ struct SoundChoice
   bool factory = false;
   int art = 0;
   bool customArt = false;
+
+  bool operator==(const SoundChoice& o) const
+  {
+    return ampId == o.ampId && presetId == o.presetId && presetName == o.presetName && ampName == o.ampName
+           && factory == o.factory && art == o.art && customArt == o.customArt;
+  }
+  bool operator!=(const SoundChoice& o) const { return !(*this == o); }
 };
 
 struct PlaySlot
@@ -236,7 +251,21 @@ struct PlaySlot
   int slot = 0;
   SoundChoice sound;
   bool valid = false;
+
+  bool operator==(const PlaySlot& o) const { return slot == o.slot && sound == o.sound && valid == o.valid; }
+  bool operator!=(const PlaySlot& o) const { return !(*this == o); }
 };
+
+// Stores `value` in `member` and reports whether it was different. PLAY's
+// SetData repaints only when one of its inputs reports a change.
+template <typename T, typename U>
+bool AssignIfChanged(T& member, U&& value)
+{
+  if (member == value)
+    return false;
+  member = std::forward<U>(value);
+  return true;
+}
 
 inline std::string AmpNameForOwner(const content::Registry& registry, const std::string& owner)
 {

@@ -1161,8 +1161,8 @@ TEST_CASE("Malformed calibration defaults heal safely")
 //
 // This pin sets *every* persisted field to a non-default, in-range value and
 // asserts a full round-trip through the real settings JSON path. Equality uses
-// the canonical composed codec (AmpSettingsEqual), so any field the settings
-// path drops shows up as inequality. It also asserts the per-amp JSON object
+// AmpSettingsEqual over every field the canonical composed codec writes, so any
+// field the settings path drops shows up as inequality. It also asserts the per-amp JSON object
 // contains every top-level key the canonical codec emits, catching a dropped
 // field structurally even if its value happened to match the default.
 //
@@ -1376,12 +1376,114 @@ TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive
   CHECK_FALSE(animate);
 }
 
+// --- Field-wise AmpSettingsEqual vs the JSON tree compare (oracle) -----------
+//
+// AmpSettingsEqual compares fields directly. Until 1.3.0 it compared the two
+// AmpSettingsToJson trees, which kept it in step with the codec for free. That
+// compare lives on here as the oracle: every key the codec writes (and every
+// field of every per-mode snapshot) is mutated on its own, from both the default
+// and the exhaustive fixture, and the two compares must agree. A field added to
+// the codec shows up here as a key the field-wise compare does not see.
+namespace
+{
+bool JsonAmpSettingsEqual(const volum::VoLumAmpSettings& a, const volum::VoLumAmpSettings& b)
+{
+  auto ja = volum::AmpSettingsToJson(a);
+  auto jb = volum::AmpSettingsToJson(b);
+  ja.erase("postValid");
+  jb.erase("postValid");
+  return ja == jb;
+}
+
+// A value for `v` that differs from both `v` and `avoid` and decodes in range.
+nlohmann::json Perturbed(const nlohmann::json& v, const nlohmann::json& avoid)
+{
+  if (v != avoid)
+    return avoid;
+  if (v.is_boolean())
+    return !v.get<bool>();
+  if (v.is_number_integer())
+  {
+    const long long n = v.get<long long>();
+    return n == 0 ? 1 : (n > 0 ? n - 1 : n + 1);
+  }
+  if (v.is_number_float())
+    return v.get<double>() == 0.0 ? 0.25 : v.get<double>() * 0.5;
+  if (v.is_string())
+    return v.get<std::string>() + "_x";
+  return v;
+}
+
+struct Mutation
+{
+  std::string path;
+  nlohmann::json json;
+};
+
+// One mutation per codec key; arrays of snapshots get one per element field.
+std::vector<Mutation> EveryKeyMutation(const nlohmann::json& base, const nlohmann::json& donor)
+{
+  std::vector<Mutation> out;
+  for (auto it = base.begin(); it != base.end(); ++it)
+  {
+    const auto& key = it.key();
+    if (it->is_array())
+    {
+      for (size_t i = 0; i < it->size(); ++i)
+        for (auto f = (*it)[i].begin(); f != (*it)[i].end(); ++f)
+        {
+          nlohmann::json m = base;
+          m[key][i][f.key()] = Perturbed(*f, donor[key][i][f.key()]);
+          out.push_back({key + "[" + std::to_string(i) + "]." + f.key(), m});
+        }
+      continue;
+    }
+    nlohmann::json m = base;
+    m[key] = Perturbed(*it, donor[key]);
+    out.push_back({key, m});
+  }
+  return out;
+}
+} // namespace
+
+TEST_CASE("AmpSettingsEqual (field-wise) agrees with the JSON tree compare for a change in every codec field")
+{
+  const volum::VoLumAmpSettings defaults{};
+  const volum::VoLumAmpSettings full = MakeFullyPopulatedAmpSettings();
+  CHECK(volum::AmpSettingsEqual(full, full));
+  CHECK(volum::AmpSettingsEqual(defaults, defaults));
+  CHECK(volum::AmpSettingsEqual(full, full) == JsonAmpSettingsEqual(full, full));
+  CHECK(volum::AmpSettingsEqual(full, defaults) == JsonAmpSettingsEqual(full, defaults));
+
+  int mutations = 0;
+  for (const auto* pair : {&defaults, &full})
+  {
+    const volum::VoLumAmpSettings& base = *pair;
+    const volum::VoLumAmpSettings& donor = pair == &defaults ? full : defaults;
+    for (const auto& m : EveryKeyMutation(volum::AmpSettingsToJson(base), volum::AmpSettingsToJson(donor)))
+    {
+      volum::VoLumAmpSettings mutated = base;
+      volum::AmpSettingsFromJson(m.json, mutated);
+      INFO("mutated codec field: " << m.path);
+      const bool oracle = JsonAmpSettingsEqual(base, mutated);
+      CHECK(volum::AmpSettingsEqual(base, mutated) == oracle);
+      CHECK(volum::AmpSettingsEqual(mutated, base) == oracle);
+      // Every field but the postValid sentinel must actually change the settings,
+      // or this case would not be testing it.
+      if (m.path != "postValid")
+        CHECK_FALSE(oracle);
+      ++mutations;
+    }
+  }
+  CHECK(mutations > 2 * 150);
+}
+
 // The preset/scene persistence path is AmpSettingsToJson/FromJson (see
 // VoLumContentStore RegistryToJson). Every existing preset round-trip asserts
-// fidelity via AmpSettingsEqual, but that comparator is defined as
-// AmpSettingsToJson(a) == AmpSettingsToJson(b) -- circular w.r.t. the codec
-// under test, so a field DROPPED from AmpSettingsToJson would vanish from both
-// sides and the check would pass vacuously. This pin instead compares the
+// fidelity via AmpSettingsEqual, which compares exactly the fields
+// AmpSettingsToJson writes -- circular w.r.t. the codec under test, so a field
+// DROPPED from AmpSettingsToJson (and so from the compare) would pass
+// vacuously. This pin instead compares the
 // DECODED STRUCT FIELDS directly to the non-default input, which fails loudly
 // if a 1.2.0 effect/BYO field stops surviving a preset save/reload.
 TEST_CASE("Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct-direct (non-circular)")

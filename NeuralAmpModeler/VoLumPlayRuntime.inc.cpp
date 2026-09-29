@@ -215,15 +215,9 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
   if (!raw)
     return;
 
-  auto paramBool = [this](const char* name) {
-    for (int i = 0; i < kNumParams; ++i)
-      if (std::strcmp(GetParam(i)->GetName(), name) == 0)
-        return GetParam(i)->Bool();
-    return false;
-  };
   std::array<bool, VoLumPlaySurfaceControl::FxCount> fx{};
   for (size_t i = 0; i < fx.size(); ++i)
-    fx[i] = paramBool(volum::kPlayBypassParamNames[i]);
+    fx[i] = GetParam(volum::kPlayBypassParams[i])->Bool();
 
   // NAM wells are available when a capture is assigned, even if bypass has
   // unloaded the model. Empty slots stay veiled and ignore click / 3 / 4.
@@ -254,8 +248,12 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
   }
 
   const bool dirty = _VolumLivePresetDirty();
+  const auto& registry = volum::content::GlobalContentStore().reg();
+  auto slots = volum::BuildPlaySlots(mVolumFactoryPresets, registry);
+  const std::string owner = _VolumActiveOwnerKey();
+  const bool liveAssigned = volum::SoundIsAssigned(slots, owner, mVolumActivePresetId);
   raw->As<VoLumPlaySurfaceControl>()->SetData(
-    mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), _VolumActiveOwnerKey(), mVolumActivePresetId,
+    std::move(slots), volum::BuildSoundChoices(mVolumFactoryPresets, registry), owner, mVolumActivePresetId,
     mVolumLastRecalledPlaySlot, _VolumMainAmpDisplayName(),
     mVolumCustomMainIdx >= 0 ? volum::custom::CustomAmpArt(mVolumCustomMainIdx) : mVolumAmpIdx,
     mVolumCustomMainIdx >= 0, dual, supportName, supportArt, supportCustom, fx, fxAvailable,
@@ -264,8 +262,7 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
     _VolumGetPreCaptureShortLabel(GetParam(kPreNam2Capture)->Int(), "NAM 2"));
   raw->As<VoLumPlaySurfaceControl>()->SetPlusAddsHeard(volum::PlayPlusAddsHeard(
     dirty, volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::SaveUserCopy,
-    volum::SoundIsAssigned(volum::BuildPlaySlots(mVolumFactoryPresets, volum::content::GlobalContentStore().reg()),
-                           _VolumActiveOwnerKey(), mVolumActivePresetId)));
+    liveAssigned));
   raw->As<VoLumPlaySurfaceControl>()->SetAnimateArt(mVolumAnimatePlayArt.load());
   raw->As<VoLumPlaySurfaceControl>()->SetInPeak(mVolumPlayInPeak.load(std::memory_order_relaxed));
   raw->As<VoLumPlaySurfaceControl>()->SetOutPeak(mVolumPlayOutPeak.load(std::memory_order_relaxed));

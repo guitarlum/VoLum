@@ -273,32 +273,39 @@ public:
     mInsert = std::move(insert);
   }
 
-  void SetData(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry,
+  // Called on every idle tick in PLAY. Repaints only when an input, the rail
+  // scroll or the press state actually changed; Tick() still repaints for the
+  // art and light every tick.
+  void SetData(std::vector<volum::PlaySlot> slots, std::vector<volum::SoundChoice> choices,
                const std::string& activeAmpId, const std::string& activePresetId, int lastSlot,
                const std::string& liveAmpName, int liveArt, bool customArt, bool dual, const std::string& supportName,
                int supportArt, bool supportCustom, const std::array<bool, FxCount>& fx,
                const std::array<bool, FxCount>& fxAvailable, int midiChannel, bool dirty,
                const char* nam1Label = nullptr, const char* nam2Label = nullptr)
   {
+    using volum::AssignIfChanged;
     const int prevSlot = mLastSlot;
-    mSlots = volum::BuildPlaySlots(factory, registry);
-    mChoices = volum::BuildSoundChoices(factory, registry);
-    mActiveAmpId = activeAmpId;
-    mActivePresetId = activePresetId;
-    mLastSlot = lastSlot;
-    mLiveAmpName = liveAmpName;
-    mLiveArt = liveArt;
-    mCustomArt = customArt;
-    mDual = dual;
-    mSupportName = supportName;
-    mSupportArt = supportArt;
-    mSupportCustom = supportCustom;
-    mFx = fx;
-    mFxAvailable = fxAvailable;
-    mMidiChannel = midiChannel;
-    mDirty = dirty;
-    mNam1Label = (nam1Label && nam1Label[0]) ? nam1Label : "NAM 1";
-    mNam2Label = (nam2Label && nam2Label[0]) ? nam2Label : "NAM 2";
+    const float prevScroll = mRailScroll, prevScrollTarget = mRailScrollTarget;
+    const int prevPressRow = mPressRow, prevPressSlot = mPressSlot, prevDropRow = mDropRow;
+    const bool prevDragging = mDragging;
+    bool changed = AssignIfChanged(mSlots, std::move(slots));
+    changed |= AssignIfChanged(mChoices, std::move(choices));
+    changed |= AssignIfChanged(mActiveAmpId, activeAmpId);
+    changed |= AssignIfChanged(mActivePresetId, activePresetId);
+    changed |= AssignIfChanged(mLastSlot, lastSlot);
+    changed |= AssignIfChanged(mLiveAmpName, liveAmpName);
+    changed |= AssignIfChanged(mLiveArt, liveArt);
+    changed |= AssignIfChanged(mCustomArt, customArt);
+    changed |= AssignIfChanged(mDual, dual);
+    changed |= AssignIfChanged(mSupportName, supportName);
+    changed |= AssignIfChanged(mSupportArt, supportArt);
+    changed |= AssignIfChanged(mSupportCustom, supportCustom);
+    changed |= AssignIfChanged(mFx, fx);
+    changed |= AssignIfChanged(mFxAvailable, fxAvailable);
+    changed |= AssignIfChanged(mMidiChannel, midiChannel);
+    changed |= AssignIfChanged(mDirty, dirty);
+    changed |= AssignIfChanged(mNam1Label, (nam1Label && nam1Label[0]) ? nam1Label : "NAM 1");
+    changed |= AssignIfChanged(mNam2Label, (nam2Label && nam2Label[0]) ? nam2Label : "NAM 2");
     ClampRailScroll();
     if (lastSlot != prevSlot)
       EnsureActiveRowVisible();
@@ -322,7 +329,10 @@ public:
         mDropInsert = false;
       }
     }
-    SetDirty(false);
+    changed |= mRailScroll != prevScroll || mRailScrollTarget != prevScrollTarget || mPressRow != prevPressRow
+               || mPressSlot != prevPressSlot || mDropRow != prevDropRow || mDragging != prevDragging;
+    if (changed)
+      SetDirty(false);
   }
 
   void OnRescale() override
