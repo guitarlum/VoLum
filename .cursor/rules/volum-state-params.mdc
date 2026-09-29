@@ -43,8 +43,9 @@ Presets / recall + dirty:
   amp that path must not call the factory `_VolumRefreshChannels()` (1.2.1).
 - `(unsaved)` is equality against the recalled snapshot:
   `!AmpSettingsEqual(_VolumActiveScene(), mVolumRecalledSnapshot)`.
-  `AmpSettingsEqual` currently builds two JSON trees (`VoLumAmpSettingsJson.h`);
-  replacing that is `P2`.
+  `AmpSettingsEqual` (`VoLumAmpSettingsJson.h`) compares field by field; its
+  oracle doctest in `test_volum_user_settings_io.cpp` checks it against the JSON
+  codec for every field, so a new codec field fails until the compare learns it.
 - The active preset id is stored per owner in settings
   (`mVolumActivePresetIdByOwner`). A single global id is the 1.2.0 bug.
 

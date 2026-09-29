@@ -72,7 +72,7 @@ All PRE and POST pedal controls remain editable while their block is bypassed, i
 The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
 
 - **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
-- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean.
+- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean. It follows single notes across the whole neck, up to the 24th fret of the high E.
 
 ![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
 
@@ -195,7 +195,7 @@ The same **+** control is **Add this sound** when the live rig is not already on
 
 The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel, the Sound-recall CC, and AU `aufx` → `aumf` are under Settings → MIDI.
 
-The stage art lights up and moves while you play, and settles back to the still BUILD picture when you stop. How far it moves follows how hard you play: the H&K TriAmp's knot carries three beams of light, one per channel, and the Soldano's lighthouse turns its beams across the sea. Custom-amp art turns slowly and breathes. More factory amps get their own motion in coming builds; until then they light up but stay still. To keep every art still (and save a little CPU), turn off **Settings → SIGNAL → Performance → Animate art in PLAY**.
+The stage art lights up and moves while you play, and settles back to the still BUILD picture when you stop. How far it moves follows how hard you play: the H&K TriAmp's knot carries three beams of light, one per channel, and the Soldano's lighthouse turns its beams across the sea. Custom-amp art turns slowly and breathes. Every factory amp has its own motion. To keep every art still (and save a little CPU), turn off **Settings → SIGNAL → Performance → Animate art in PLAY**.
 
 ## Custom Content (Bring Your Own)
 
