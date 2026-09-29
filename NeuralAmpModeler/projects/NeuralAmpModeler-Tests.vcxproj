@@ -155,6 +155,7 @@
     <ClCompile Include="..\tests\test_volum_state_roundtrip.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch_artifacts.cpp" />
+    <ClCompile Include="..\tests\test_volum_pitch_high_notes.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch_burst.cpp" />
     <ClCompile Include="..\tests\test_volum_realtime_budget.cpp" />
     <ClCompile Include="..\tests\test_volum_nam_exact.cpp" />

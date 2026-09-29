@@ -60,6 +60,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_state_roundtrip.cpp
   test_volum_pitch.cpp
   test_volum_pitch_artifacts.cpp
+  test_volum_pitch_high_notes.cpp
   test_volum_pitch_burst.cpp
   test_volum_realtime_budget.cpp
   test_volum_nam_exact.cpp

@@ -140,6 +140,8 @@ public:
     mWrite = 0;
     mWriteCount = 0;
     mPeriod = mSampleRate / 110.0; // default A2 until estimated
+    mPendingPeriod = 0.0;
+    mPeriodTracked = false;
     mPeriodCountdown = mPeriodUpdate;
     mDelay = static_cast<double>(mLatency);
     mDelayNew = mDelay;
@@ -153,12 +155,21 @@ public:
   // ratio = output_freq / input_freq (2^(semitones/12)).
   void SetRatio(double ratio) { mRatio = std::clamp(ratio, 0.25, 4.0); }
 
-  // Period estimates produced inside one Process call, in update order. Two voices fed the same input
+  // What a period update leaves behind: the period splices use plus the octave-jump candidate waiting
+  // for confirmation.
+  struct PeriodState
+  {
+    double period = 0.0;
+    double pending = 0.0; // unconfirmed harmonic-ratio jump; 0 when none
+    bool tracked = false; // a voiced estimate has replaced the Reset default
+  };
+
+  // Period updates produced inside one Process call, in update order. Two voices fed the same input
   // from the same Reset reach every update at the same sample with the same ring, so the second can
-  // replay the first one's estimates instead of recomputing them.
+  // replay the first one's states instead of recomputing them.
   struct PeriodLog
   {
-    double* values = nullptr;
+    PeriodState* values = nullptr;
     size_t capacity = 0;
     size_t count = 0;
   };
@@ -182,7 +193,8 @@ public:
   {
     return !mFixedGrain && !o.mFixedGrain && mSampleRate == o.mSampleRate && mBuf.size() == o.mBuf.size()
            && mTracker.SameShape(o.mTracker) && mWrite == o.mWrite && mWriteCount == o.mWriteCount
-           && mPeriodUpdate == o.mPeriodUpdate && mPeriodCountdown == o.mPeriodCountdown && mPeriod == o.mPeriod;
+           && mPeriodUpdate == o.mPeriodUpdate && mPeriodCountdown == o.mPeriodCountdown && mPeriod == o.mPeriod
+           && mPendingPeriod == o.mPendingPeriod && mPeriodTracked == o.mPeriodTracked;
   }
 
 private:
@@ -209,12 +221,17 @@ private:
       {
         mPeriodCountdown = mPeriodUpdate;
         if (replay != nullptr && replayed < replay->count)
-          mPeriod = replay->values[replayed++];
+        {
+          const PeriodState& st = replay->values[replayed++];
+          mPeriod = st.period;
+          mPendingPeriod = st.pending;
+          mPeriodTracked = st.tracked;
+        }
         else
         {
           _UpdatePeriod();
           if (record != nullptr && record->count < record->capacity)
-            record->values[record->count++] = mPeriod;
+            record->values[record->count++] = {mPeriod, mPendingPeriod, mPeriodTracked};
         }
       }
 
@@ -630,7 +647,44 @@ private:
   // on unvoiced/weak input. Runs ~every 10 ms, not per sample.
   void _UpdatePeriod()
   {
-    mPeriod = mReferenceKernels ? _EstimatePeriodReference(mPeriod).period : _EstimatePeriod(mPeriod).period;
+    _AcceptEstimate(mReferenceKernels ? _EstimatePeriodReference(mPeriod) : _EstimatePeriod(mPeriod));
+  }
+
+  // How far a reading may sit from an exact 2x / 3x (or 1/2, 1/3) ratio and still count as an octave
+  // or twelfth jump, and how close the next reading must land to confirm it.
+  static constexpr double kJumpTol = 0.03;
+
+  static bool _IsHarmonicJump(double ratio)
+  {
+    for (double m : {2.0, 3.0})
+      if (std::abs(ratio / m - 1.0) <= kJumpTol || std::abs(ratio * m - 1.0) <= kJumpTol)
+        return true;
+    return false;
+  }
+
+  // A reading 2x or 3x off the current period is the tracker's classic failure, and one wrong splice
+  // length is audible, so such a jump waits for the next update (10 ms) to agree. Glides, bends and
+  // ordinary interval changes apply at once; an unvoiced update drops the candidate.
+  void _AcceptEstimate(const PeriodEstimate& est)
+  {
+    if (est.bestLag <= 0)
+    {
+      mPendingPeriod = 0.0;
+      return;
+    }
+    const double p = est.period;
+    if (mPeriodTracked && _IsHarmonicJump(p / mPeriod))
+    {
+      const bool confirmed = mPendingPeriod > 0.0 && std::abs(p / mPendingPeriod - 1.0) <= kJumpTol;
+      if (!confirmed)
+      {
+        mPendingPeriod = p;
+        return;
+      }
+    }
+    mPeriod = p;
+    mPendingPeriod = 0.0;
+    mPeriodTracked = true;
   }
 
   PeriodEstimate _EstimatePeriod(double previous) { return mTracker.Estimate(mBuf, mWrite, mWriteCount, previous); }
@@ -670,6 +724,8 @@ private:
   double mPeriod = 0.0;
   int mPeriodUpdate = 1;
   int mPeriodCountdown = 1;
+  double mPendingPeriod = 0.0; // see _AcceptEstimate
+  bool mPeriodTracked = false;
 
   double mDelay = 0.0;
   double mDelayNew = 0.0;
@@ -733,6 +789,7 @@ public:
   PeriodEstimate DebugEstimatePeriod() { return _EstimatePeriod(mPeriod); }
   PeriodEstimate DebugEstimatePeriodReference() { return _EstimatePeriodReference(mPeriod); }
   double DebugPeriod() const { return mPeriod; }
+  void DebugAcceptEstimate(double period, int bestLag) { _AcceptEstimate({period, bestLag}); }
   void DebugSetReferenceKernels(bool on) { mReferenceKernels = on; }
   void DebugSetMeasureSpliceCorr(bool on) { mMeasureSpliceCorr = on; }
   unsigned long long SpliceCorrCount() const { return mSpliceCorrCount; }

@@ -190,7 +190,8 @@ std::vector<DSP_SAMPLE> RenderModeSwitches(bool reference = false)
   return out;
 }
 
-// Captured from the 1.3.0 engine (pre lag-blocking) on Windows x64 (MSVC, SSE2, /fp:precise).
+// Captured on Windows x64 (MSVC, SSE2, /fp:precise): POLY from the 1.3.0 engine before lag-blocking,
+// the tracker-driven cases (Octaver, INSTANT, DROP) after the high-note tracker fix moved them.
 // macOS contracts `r += a * b` into fused multiply-adds, so its bits differ; it prints its value
 // instead until one is pinned from a CI run.
 void ExpectEngineHash(const std::string& name, const std::string& actual, const char* windowsExpected)
@@ -212,17 +213,17 @@ const char* PinnedHash(const std::string& name)
     const char* hash;
   };
   static const Pin pins[] = {
-    {"octaver modern 48k/64", "84b6fcc53ca05bfdf10e178c9331373e078cb330a6aa325567bb23c475f73669"},
-    {"octaver vintage 48k/333", "08fe4ea0e3209f7a92b5e2864b57fe9f828b0e16d39321145c5fb003bfc04336"},
-    {"transpose instant -5 48k/64", "aaf406e8ebd0455b98ace0107d6ae627050908c3bb971894d5081d5695f14682"},
-    {"transpose instant +7 48k/64", "652cf573273eecbdbee675575aea4e4384eb1d6690d706c7acc41955be3af8e3"},
-    {"transpose drop -12 48k/128", "7ed6acd84dd2a5ee3ebe09d639cbabde639e33e5b544e560f4cee88c727cfd45"},
-    {"transpose drop +7 48k/128", "5cbe16ca48655bd0b838b61b7daf4675b17e5e20412c2ccccaf07245a72f6096"},
+    {"octaver modern 48k/64", "7f2971739762b291a00fc6e01d2c24a3ff8ae7b0e315463e8c76d0356e0cc617"},
+    {"octaver vintage 48k/333", "44398edc6ad6e5b76a6ab556024e5f81950b8c17fdf6f829d0121cfd58c61e2b"},
+    {"transpose instant -5 48k/64", "ce6d49a200be6c44f93a3acb6a7825b21d7061863b5bb2467ee2eda5dc293177"},
+    {"transpose instant +7 48k/64", "86a1637c1491a65e758b6b1fa79a68fc89c518fc282ed3dcb77db9b7a877daa9"},
+    {"transpose drop -12 48k/128", "86b9f94b8499caaa0f4f78adbe703c4a214764c1cdf210f98355aebe40491af0"},
+    {"transpose drop +7 48k/128", "958f4f05d864b3e383000486ee03dc5faead32cf49900588d5f9cd076b408782"},
     {"transpose poly -12 48k/64", "de0ba450f7e7be421f872a80700e03ee280c77033d9ea46d813c09d9c018eaee"},
     {"transpose poly +7 48k/64", "3f78aa8275600be1010da24405fd7b2ce3b273dc00df7dfa8212922034527e5b"},
-    {"octaver modern 44.1k/96", "1fd907cda053aae5388531ca00305b5b8cb232b8969e4b17defc3a457413d327"},
-    {"transpose instant -7 96k/256", "aba7743059ff49cb321e6e011e663f84fc541b8e2525f24f574000305a206393"},
-    {"mode switches", "6b05ff4223164721d54ec33dc37106ee8041da07d2b170221d6b0e2b24a7f87f"},
+    {"octaver modern 44.1k/96", "b7409bea55bce15582447632f505cce73e68c322530c5acaa59f8f40312c1c6c"},
+    {"transpose instant -7 96k/256", "3fb08a438c9cbd9d64dc942cc2313a7e827e3f0d9fc427425bc4e14dc6145a80"},
+    {"mode switches", "fe46316a939e7fd7a7ff1b7c30b1ef5efeeb1774d0d46fc23e3f2eaa1ca30da0"},
   };
   for (const Pin& p : pins)
     if (name == p.name)

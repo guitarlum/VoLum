@@ -291,7 +291,7 @@ private:
     const size_t updateEvery = static_cast<size_t>(std::max(1L, std::lround(mSampleRate * 0.01)));
     const size_t logNeed = cap / updateEvery + 2;
     if (mPeriodLog.size() < logNeed)
-      mPeriodLog.assign(logNeed, 0.0);
+      mPeriodLog.assign(logNeed, GranularVoice::PeriodState{});
   }
 
   bool _PrepareIO(size_t numChannels, size_t numFrames) const
@@ -335,7 +335,7 @@ private:
 
   // Both voices were reset together and have processed the same input since.
   bool mVoicesInStep = false;
-  std::vector<double> mPeriodLog;
+  std::vector<GranularVoice::PeriodState> mPeriodLog;
   bool mReferenceKernels = false;
   std::array<std::vector<DSP_SAMPLE>, kMaxChannels> mOut;
   std::array<DSP_SAMPLE*, kMaxChannels> mOutPtrs{nullptr, nullptr};
