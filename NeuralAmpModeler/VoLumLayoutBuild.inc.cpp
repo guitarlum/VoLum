@@ -1442,6 +1442,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       auto* nameDlg = new VoLumNameDialogControl(b);
       nameDlg->SetScrim(nameScrim);
       pGraphics->AttachControl(nameDlg, kCtrlTagVoLumNameDialog)->Hide(true);
+      auto* tunerScrim = new VoLumTunerScrimControl(b);
+      tunerCtrl->SetScrim(tunerScrim);
+      pGraphics->AttachControl(tunerScrim)->Hide(true);
       pGraphics->AttachControl(tunerCtrl, kCtrlTagVoLumTuner)->Hide(true);
     }
 

@@ -190,6 +190,7 @@
     <ClCompile Include="..\tests\test_volum_meter_dirty.cpp" />
     <ClCompile Include="..\tests\test_volum_loader_prefetch.cpp" />
     <ClCompile Include="..\tests\test_volum_text_fit.cpp" />
+    <ClCompile Include="..\tests\test_volum_tuner_overlay.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />

@@ -15,6 +15,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumTunerDSP.h"
+#include "VoLumTunerDirty.h"
 #include "VoLumMetronomeDSP.h"
 #include "VoLumSecondPress.h"
 
@@ -27,21 +28,49 @@
 // Tuner overlay (strobe-style chromatic tuner)
 // =========================================================================
 
+// The tuner's translucent full-window scrim, as its own static control attached
+// directly below the tuner and hidden with it, so a new reading repaints only
+// the panel. Mouse-transparent: the tuner's target rect still covers the window
+// and takes the click outside the panel and the Esc that close it.
+class VoLumTunerScrimControl : public IControl
+{
+public:
+  explicit VoLumTunerScrimControl(const IRECT& fullBounds)
+  : IControl(fullBounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override { g.FillRect(IColor(200, 8, 10, 14), mRECT); }
+};
+
 class VoLumTunerControl : public IControl
 {
 public:
+  // Drawn and dirtied over the panel plus its outer frame and anti-aliasing;
+  // hit over the whole window.
   VoLumTunerControl(const IRECT& bounds)
-  : IControl(bounds)
+  : IControl(PanelFor(bounds).GetPadded(kPanelPad))
+  , mFull(bounds)
   {
     mIgnoreMouse = false;
+    SetTargetRECT(bounds);
+  }
+
+  // Attached directly below this control; every show and hide goes through here.
+  void SetScrim(IControl* scrim) { mScrim = scrim; }
+
+  void Hide(bool hide) override
+  {
+    IControl::Hide(hide);
+    if (mScrim)
+      mScrim->Hide(hide);
   }
 
   void Draw(IGraphics& g) override
   {
     if (mHide)
       return;
-
-    g.FillRect(IColor(200, 8, 10, 14), mRECT);
 
     const IRECT panel = _PanelRect();
     const IRECT frame = panel.GetPadded(10.f);
@@ -131,13 +160,15 @@ public:
   {
     if (mHide)
       return;
+    if (volum::TunerResultDrawsSame(mResult, r))
+      return;
     mResult = r;
     SetDirty(false);
   }
 
   void Show()
   {
-    mResult = {};
+    mResult = volum::TunerResult();
     Hide(false);
     SetDirty(false);
   }
@@ -147,7 +178,11 @@ public:
   void Dismiss() { _Dismiss(); }
 
 private:
-  IRECT _PanelRect() const { return mRECT.GetCentredInside(340.f, 180.f); }
+  // The frame is stroked 10 px outside the panel; 12 keeps its anti-aliased
+  // edge inside the repainted rect.
+  static constexpr float kPanelPad = 12.f;
+  static IRECT PanelFor(const IRECT& full) { return full.GetCentredInside(340.f, 180.f); }
+  IRECT _PanelRect() const { return PanelFor(mFull); }
 
   void _Dismiss()
   {
@@ -156,6 +191,8 @@ private:
       mDismissAction();
   }
 
+  IRECT mFull;
+  IControl* mScrim = nullptr;
   volum::TunerResult mResult;
   std::function<void()> mDismissAction;
 };

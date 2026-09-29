@@ -95,6 +95,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_meter_dirty.cpp
   test_volum_loader_prefetch.cpp
   test_volum_text_fit.cpp
+  test_volum_tuner_overlay.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
