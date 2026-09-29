@@ -208,6 +208,19 @@ inline std::size_t NextBoundary(const std::string& text, std::size_t pos)
   return pos;
 }
 
+// Pen position after the first `bytes` of `text`, i.e. where the caret or a selection edge goes.
+// `rightEdge(str)` reports how far the drawn text reaches from its start. NanoVG measures glyph
+// outlines, so a trailing space (no outline) adds nothing: measuring the prefix alone left the caret
+// standing still after a typed space. A sentinel glyph after the prefix carries its full advance.
+template <typename RightEdge>
+float PrefixAdvance(const std::string& text, std::size_t bytes, RightEdge&& rightEdge)
+{
+  if (bytes == 0)
+    return 0.f;
+  static constexpr const char* kSentinel = "|";
+  return rightEdge(text.substr(0, bytes) + kSentinel) - rightEdge(std::string(kSentinel));
+}
+
 inline void DeleteSelection(State& s)
 {
   if (!HasSelection(s))

@@ -316,10 +316,12 @@ private:
 
   float PrefixWidth(IGraphics& g, std::size_t bytes) const
   {
-    if (bytes == 0)
-      return 0.f;
-    IRECT bounds;
-    return g.MeasureText(FieldText(), mModel.draft.substr(0, bytes).c_str(), bounds);
+    // Measured from a pen start at x = 0, so the right edge is the reach from where DrawText begins.
+    return volum::name_dialog::PrefixAdvance(mModel.draft, bytes, [&g](const std::string& str) {
+      IRECT bounds;
+      g.MeasureText(FieldText(), str.c_str(), bounds);
+      return bounds.R;
+    });
   }
 
   std::size_t CaretForX(float x)

@@ -28,6 +28,33 @@ void Type(nd::State& s, const char* text)
 }
 } // namespace
 
+TEST_CASE("Name dialog: a typed space moves the caret, even at the end of the name")
+{
+  // NanoVG-like measure: every glyph advances the pen, but only non-spaces have an outline, and the
+  // reported right edge is the last outline's (a trailing space reaches nowhere).
+  auto rightEdge = [](const std::string& s) {
+    float pen = 0.f, right = 0.f;
+    for (char c : s)
+    {
+      if (c == ' ')
+      {
+        pen += 3.f;
+        continue;
+      }
+      right = pen + 6.f; // outline 0.5 .. 6 inside a 7-wide advance
+      pen += 7.f;
+    }
+    return right;
+  };
+  using volum::name_dialog::PrefixAdvance;
+  CHECK(PrefixAdvance("ab", 0, rightEdge) == 0.f);
+  CHECK(PrefixAdvance("ab", 2, rightEdge) == doctest::Approx(14.f));
+  CHECK(PrefixAdvance("ab ", 3, rightEdge) == doctest::Approx(17.f)); // the reported bug: stayed at 14
+  CHECK(PrefixAdvance("ab  ", 4, rightEdge) == doctest::Approx(20.f));
+  CHECK(PrefixAdvance(" a", 1, rightEdge) == doctest::Approx(3.f)); // a leading space counts too
+  CHECK(PrefixAdvance("ab c", 3, rightEdge) == doctest::Approx(17.f)); // same spot mid-name
+}
+
 TEST_CASE("Name dialog: the completion a Cancel click causes never commits")
 {
   // Clicking Cancel takes focus from the text field; iPlug reports that as a
