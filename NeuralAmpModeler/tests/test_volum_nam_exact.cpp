@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -256,4 +258,25 @@ TEST_CASE("NAM exact: bundled captures render the pinned bits")
     CHECK(std::any_of(out.begin(), out.end(), [](NAM_SAMPLE v) { return v != 0; }));
     ExpectNamHash(c.name, volum::test::Sha256HexSamples(out));
   }
+}
+
+TEST_CASE("NAM exact: the A2 head ring skips its unread tail mirror")
+{
+  // Head reads mask every column into [0, pow2), so they never reach the tail
+  // mirror; re-mirroring it each block is dead work. Layer reads span the wrap
+  // and still need it.
+  const auto src = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "NeuralAmpModelerCore"
+                   / "NAM" / "wavenet" / "a2_fast.cpp";
+  std::ifstream f(src, std::ios::binary);
+  REQUIRE_MESSAGE(f.good(), src.string());
+  const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  auto body = [&](const std::string& signature) {
+    const size_t at = text.find(signature);
+    REQUIRE_MESSAGE(at != std::string::npos, signature);
+    const size_t end = text.find("#else", at);
+    REQUIRE(end != std::string::npos);
+    return text.substr(at, end - at);
+  };
+  CHECK(body("::_ring_write(Layer& L, int num_frames)").find("refresh_tail_mirror") != std::string::npos);
+  CHECK(body("::_head_ring_write(int num_frames)").find("refresh_tail_mirror") == std::string::npos);
 }
