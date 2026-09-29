@@ -163,8 +163,10 @@ private:
 
 inline SharedDspCache& GlobalDspCache()
 {
-  static SharedDspCache cache;
-  return cache;
+  // Never destroyed: a host that calls exit() while a loader thread is mid-parse would otherwise
+  // reach Store() on a mutex that static destruction already tore down.
+  static SharedDspCache* cache = new SharedDspCache;
+  return *cache;
 }
 
 // The parsed `utf8Path`, from the cache or parsed now and stored. `parsed`

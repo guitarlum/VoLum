@@ -114,6 +114,8 @@ public:
 
   void Reset(const double sampleRate, const int maxBlockSize) override
   {
+    const double previousRate = mExpectedSampleRate;
+    const int previousBlock = mMaxExternalBlockSize;
     mExpectedSampleRate = sampleRate;
     mMaxExternalBlockSize = maxBlockSize;
     // VoLum: the Lanczos pair (2 MiB each with double samples) exists only
@@ -124,7 +126,19 @@ public:
     if (NeedToResample())
     {
       if (!mResampler)
-        mResampler.emplace(GetEncapsulatedSampleRate());
+      {
+        // A failed allocation must not leave a resampling rate with no resampler to process through.
+        try
+        {
+          mResampler.emplace(GetEncapsulatedSampleRate());
+        }
+        catch (...)
+        {
+          mExpectedSampleRate = previousRate;
+          mMaxExternalBlockSize = previousBlock;
+          throw;
+        }
+      }
       mResampler->Reset(sampleRate, maxBlockSize);
     }
     else

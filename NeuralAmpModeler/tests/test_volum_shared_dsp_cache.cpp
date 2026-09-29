@@ -309,6 +309,19 @@ TEST_CASE("Shared NAM cache: only loader threads reach it")
   CHECK(ReadText(src / "NeuralAmpModeler.h").find("mVolumDspCache") == std::string::npos);
 }
 
+TEST_CASE("Shared NAM cache: survives static destruction at process exit")
+{
+  // A host may call exit() while a loader thread is mid-parse; a function-local static cache would
+  // be destroyed under it. The accessor hands out a heap object that is deliberately never freed.
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSharedDspCache.h");
+  const size_t fn = header.find("inline SharedDspCache& GlobalDspCache()");
+  REQUIRE(fn != std::string::npos);
+  const std::string body = header.substr(fn, header.find('}', fn) - fn);
+  CHECK(body.find("new SharedDspCache") != std::string::npos);
+  CHECK(body.find("static SharedDspCache cache") == std::string::npos);
+  CHECK(&volum::nam_cache::GlobalDspCache() == &volum::nam_cache::GlobalDspCache());
+}
+
 TEST_CASE("Shared NAM cache: parse cost and memory of a full cache (info)")
 {
   nam::activations::Activation::enable_fast_tanh();
