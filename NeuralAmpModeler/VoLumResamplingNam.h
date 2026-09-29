@@ -25,6 +25,7 @@ using iplug::DEFAULT_BLOCK_SIZE;
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <type_traits>
 
 // Get the sample rate of a NAM model.
@@ -48,7 +49,6 @@ public:
   ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated, const double expected_sample_rate)
   : nam::DSP(1, 1, expected_sample_rate)
   , mEncapsulated(std::move(encapsulated))
-  , mResampler(GetNAMSampleRate(mEncapsulated))
   {
     // Assign the encapsulated object's processing function to this object's member so that the resampler can use it:
     auto ProcessBlockFunc = [&](NAM_SAMPLE** input, NAM_SAMPLE** output, int numFrames) {
@@ -99,7 +99,7 @@ public:
         if (!NeedToResample())
           ProcessEncapsulated(in, out, n);
         else
-          mResampler.ProcessBlock(in, out, n, mBlockProcessFunc);
+          mResampler->ProcessBlock(in, out, n, mBlockProcessFunc);
       });
   };
 
@@ -110,13 +110,25 @@ public:
     process(inputPtrs, outputPtrs, num_frames);
   };
 
-  int GetLatency() const { return NeedToResample() ? mResampler.GetLatency() : 0; };
+  int GetLatency() const { return NeedToResample() && mResampler ? mResampler->GetLatency() : 0; };
 
   void Reset(const double sampleRate, const int maxBlockSize) override
   {
     mExpectedSampleRate = sampleRate;
     mMaxExternalBlockSize = maxBlockSize;
-    mResampler.Reset(sampleRate, maxBlockSize);
+    // VoLum: the Lanczos pair (2 MiB each with double samples) exists only
+    // while the host rate differs from the model's. It is dropped at the
+    // model's rate so that coming back rebuilds it, as the container Reset on
+    // every rate did; a kept one would take its same-args ClearBuffers path
+    // and keep its old phase.
+    if (NeedToResample())
+    {
+      if (!mResampler)
+        mResampler.emplace(GetEncapsulatedSampleRate());
+      mResampler->Reset(sampleRate, maxBlockSize);
+    }
+    else
+      mResampler.reset();
 
     // Allocations in the encapsulated model (HACK)
     // Stolen some code from the resampler; it'd be nice to have these exposed as methods? :)
@@ -129,6 +141,9 @@ public:
 
   // So that we can let the world know if we're resampling (useful for debugging)
   double GetEncapsulatedSampleRate() const { return GetNAMSampleRate(mEncapsulated); };
+
+  // Whether the Lanczos resampler buffers are allocated (tests).
+  bool HasResampler() const { return mResampler.has_value(); }
 
   // VoLum: if the encapsulated model is a slimmable container (A2), select its
   // Lite (val < 0.5) or Full (val >= 0.5) slice. Plain (non-slimmable) models
@@ -214,8 +229,8 @@ private:
   // The encapsulated NAM
   std::unique_ptr<nam::DSP> mEncapsulated;
 
-  // The resampling wrapper
-  dsp::ResamplingContainer<NAM_SAMPLE, 1, 12> mResampler;
+  // The resampling wrapper; engaged only after a Reset at a resampling rate.
+  std::optional<dsp::ResamplingContainer<NAM_SAMPLE, 1, 12>> mResampler;
 
   // Used to check that we don't get too large a block to process.
   int mMaxExternalBlockSize = 0;

@@ -160,6 +160,7 @@
     <ClCompile Include="..\tests\test_volum_realtime_budget.cpp" />
     <ClCompile Include="..\tests\test_volum_nam_exact.cpp" />
     <ClCompile Include="..\tests\test_volum_nam_idle_skip.cpp" />
+    <ClCompile Include="..\tests\test_volum_resampling_nam.cpp" />
     <ClCompile Include="..\tests\test_volum_self_capture_format.cpp" />
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
     <ClCompile Include="..\tests\test_volum_chorus.cpp" />
