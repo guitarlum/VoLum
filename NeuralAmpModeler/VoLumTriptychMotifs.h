@@ -12,6 +12,7 @@
 #include "VoLumFractalArt.h" // volumart:: atmosphere helpers (bloom/dust/glow/mix) for the 1.2.0 motif glow-up
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <vector>
@@ -516,13 +517,14 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
       // thickness, gradient teal->blue, rungs, and gold crossover nodes at card size.
       if (big)
         Bloom(g, cx, r.MH(), r.W() * 0.5f, kTeal, 0.10f * activeMul);
-      const int segs = 96;
+      constexpr int segs = 96;
       const float amp = r.W() * 0.27f, y0 = r.T + r.H() * 0.1f, y1 = r.B - r.H() * 0.1f;
       struct HP
       {
         float x, y, z;
       };
-      std::vector<HP> A(segs + 1), B(segs + 1);
+      using Strand = std::array<HP, segs + 1>;
+      Strand A, B;
       for (int s = 0; s <= segs; ++s)
       {
         const float t = (float)s / (float)segs, y = y0 + (y1 - y0) * t, ph = t * 2.4f * 6.28318f;
@@ -531,7 +533,7 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
       }
       for (int s = 0; s <= segs; s += 6)
         g.DrawLine(WithA(big ? kGold : kBlue, 0.32f * activeMul), A[s].x, A[s].y, B[s].x, B[s].y, nullptr, 1.f);
-      auto strand = [&](const std::vector<HP>& P, const IColor& c0, const IColor& c1) {
+      auto strand = [&](const Strand& P, const IColor& c0, const IColor& c1) {
         for (int i = 1; i <= segs; ++i)
         {
           const float z = P[i].z * 0.5f + 0.5f, lw = (big ? 2.5f : 1.6f) * (0.55f + 0.45f * z);
@@ -698,6 +700,9 @@ inline void DrawEffectMotif(IGraphics& g, const IRECT& r, EVoLumEffectFocus effe
       float x, y;
     };
     std::vector<Pt> pts;
+    // At most 18 seeds plus one point per attempt: one allocation instead of
+    // ~11 regrowths per draw.
+    pts.reserve(static_cast<size_t>(count) + 32);
     for (float f = 0.05f; f <= 0.95f; f += 0.15f)
       pts.push_back({r.L + r.W() * f, r.B});
     for (float f = 0.1f; f <= 0.9f; f += 0.2f)

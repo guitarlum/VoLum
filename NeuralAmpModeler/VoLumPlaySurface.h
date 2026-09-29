@@ -340,6 +340,11 @@ public:
     mStageSupportKey = {};
     mMainArtSlot = {};
     mSupportArtSlot = {};
+    for (auto& rowText : mRowText)
+    {
+      rowText.name.Reset();
+      rowText.amp.Reset();
+    }
   }
 
   // OnIdle calls this only while PLAY is shown, so art motion (like the light)
@@ -1047,7 +1052,9 @@ private:
     DrawCornerAccent(g, rect.R - 6.f, rect.T + 6.f, acc, true, false, corner);
     if (mDual)
     {
-      const std::string role = (support ? "SUPPORT - " : "MAIN - ") + name;
+      std::string& role = support ? mSupportRoleText : mMainRoleText;
+      role.assign(support ? "SUPPORT - " : "MAIN - ");
+      role += name;
       g.DrawText(VoLumType::Label(9.f, support ? VoLumColors::TEAL : VoLumColors::GOLD_DIM, EAlign::Near), role.c_str(),
                  IRECT(rect.L + 24.f, rect.T + 4.f, rect.R - 8.f, rect.T + 20.f));
     }
@@ -1067,15 +1074,10 @@ private:
       DrawAmpPanel(g, art, mLiveAmpName, mLiveArt, mCustomArt, false);
 
     const int active = ActiveRow();
-    std::string title = mLiveAmpName;
-    std::string secondary;
-    int pc = -1;
-    if (active >= 0)
-    {
-      title = mSlots[(size_t)active].sound.presetName;
-      secondary = mSlots[(size_t)active].sound.ampName;
-      pc = mSlots[(size_t)active].slot;
-    }
+    static const std::string kNoSecondary;
+    const std::string& title = active >= 0 ? mSlots[(size_t)active].sound.presetName : mLiveAmpName;
+    const std::string& secondary = active >= 0 ? mSlots[(size_t)active].sound.ampName : kNoSecondary;
+    const int pc = active >= 0 ? mSlots[(size_t)active].slot : -1;
 
     const IRECT banner = BannerRect();
     g.FillRect(IColor(205, 5, 7, 11), banner);
@@ -1117,6 +1119,8 @@ private:
     BuildRowArtLayers(g);
 
     const auto list = RailListRect();
+    if (mRowText.size() < mSlots.size())
+      mRowText.resize(mSlots.size());
     g.PathClipRegion(list);
     for (int i = 0; i < static_cast<int>(mSlots.size()); ++i)
     {
@@ -1278,21 +1282,22 @@ private:
       // clearing it, and skip the draw when the intersection is degenerate: an
       // inverted scissor rect is treated as "no clip" and let rows escape the
       // list to paint over the pinned Add button.
-      auto clipped = [&](const IRECT& r, const IText& t, const char* s) {
+      auto clipped = [&](const IRECT& r, const IText& t, const char* s, volum::textfit::Memo& memo) {
         const IRECT c = r.Intersect(clip);
         if (c.W() <= 0.f || c.H() <= 0.f)
           return;
-        const std::string fitted = FitTextToWidth(g, t, s, r.W());
+        const std::string& fitted = FitTextToWidth(memo, g, t, s, r.W());
         g.PathClipRegion(c);
         g.DrawText(t, fitted.c_str(), r);
         g.PathClipRegion(clip);
       };
+      auto& rowText = mRowText[(size_t)index];
       clipped(IRECT(textL, row.T + 23.f, row.R - 8.f, row.T + 43.f),
               VoLumType::Display(17.f, active ? VoLumColors::SEL_TEXT : VoLumColors::CREAM, EAlign::Near),
-              slot.sound.presetName.c_str());
+              slot.sound.presetName.c_str(), rowText.name);
       const float ampR = hovered ? row.R - 52.f : row.R - 8.f;
       clipped(IRECT(textL, row.T + 43.f, ampR, row.T + 57.f),
-              VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Near), slot.sound.ampName.c_str());
+              VoLumType::Label(9.f, VoLumColors::TEAL_DIM, EAlign::Near), slot.sound.ampName.c_str(), rowText.amp);
       // LIVE stays in the top-right even while the pointer is on the row.
       // Reassign/clear sit on the lower-right so they cannot cover the badge.
       if (active)
@@ -1445,8 +1450,9 @@ private:
     const IRECT row = PickerSlotRowRect();
     if (!mSlotEditable)
     {
-      g.DrawText(
-        VoLumType::Label(10.f, VoLumColors::CREAM_DIM), ("Assign to program " + TwoDigits(mEditSlot)).c_str(), row);
+      char assign[40];
+      std::snprintf(assign, sizeof(assign), "Assign to program %s", TwoDigits(mEditSlot).c_str());
+      g.DrawText(VoLumType::Label(10.f, VoLumColors::CREAM_DIM), assign, row);
       return;
     }
     g.DrawText(
@@ -1815,11 +1821,20 @@ private:
         return i;
     return -1;
   }
-  static std::string TwoDigits(int n)
+  // A program number as drawn ("--", "07", "42", "127"), on the stack.
+  struct TwoDigitText
   {
+    char s[12] = {};
+    const char* c_str() const { return s; }
+  };
+  static TwoDigitText TwoDigits(int n)
+  {
+    TwoDigitText t;
     if (n < 0)
-      return "--";
-    return n < 10 ? "0" + std::to_string(n) : std::to_string(n);
+      std::snprintf(t.s, sizeof(t.s), "--");
+    else
+      std::snprintf(t.s, sizeof(t.s), "%02d", n);
+    return t;
   }
 
   const char* StompCaption(int i) const
@@ -1877,6 +1892,15 @@ private:
   std::string mNam1Label = "NAM 1";
   std::string mNam2Label = "NAM 2";
   std::string mCurTip;
+  // Per-frame text kept across frames so drawing does not allocate: each rail
+  // row's fitted name and amp line, and the Dual panel role labels.
+  struct RowTextMemo
+  {
+    volum::textfit::Memo name;
+    volum::textfit::Memo amp;
+  };
+  std::vector<RowTextMemo> mRowText;
+  std::string mMainRoleText, mSupportRoleText;
   std::array<bool, FxCount> mFx{};
   std::array<bool, FxCount> mFxAvailable{};
   float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f;
