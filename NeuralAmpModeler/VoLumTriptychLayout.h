@@ -12,15 +12,24 @@ struct Rect
   float B = 0.f;
 
   Rect() = default;
-  Rect(float left, float top, float right, float bottom) : L(left), T(top), R(right), B(bottom) {}
+  Rect(float left, float top, float right, float bottom)
+  : L(left)
+  , T(top)
+  , R(right)
+  , B(bottom)
+  {
+  }
 
   float W() const { return R - L; }
   float H() const { return B - T; }
   float MW() const { return (L + R) / 2.f; }
   float MH() const { return (T + B) / 2.f; }
 
-  template<typename TargetRect>
-  TargetRect As() const { return TargetRect(L, T, R, B); }
+  template <typename TargetRect>
+  TargetRect As() const
+  {
+    return TargetRect(L, T, R, B);
+  }
 };
 
 // Triptych width is grown outward (symmetric about the center) vs the original
@@ -77,7 +86,7 @@ inline Rect BoundsForCenter(float centerX, float top)
   return Rect(centerX - kTriptychW / 2.f, top, centerX + kTriptychW / 2.f, top + kTriptychH);
 }
 
-template<typename T>
+template <typename T>
 inline Rect FromRect(const T& rect)
 {
   return Rect(rect.L, rect.T, rect.R, rect.B);

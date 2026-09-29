@@ -14,14 +14,14 @@ namespace
 class MemoryChunk
 {
 public:
-  template<typename T>
+  template <typename T>
   void Put(const T* value)
   {
     const auto* bytes = reinterpret_cast<const unsigned char*>(value);
     mBytes.insert(mBytes.end(), bytes, bytes + sizeof(T));
   }
 
-  template<typename T>
+  template <typename T>
   int Get(T* value, int pos) const
   {
     if (pos < 0 || pos + static_cast<int>(sizeof(T)) > static_cast<int>(mBytes.size()))
@@ -129,15 +129,9 @@ struct PrePostLockSim
   volum::VoLumAmpSettings liveLockedPre{};
   volum::VoLumAmpSettings liveLockedPost{};
 
-  bool IsPreDirtyLocked() const
-  {
-    return preLocked && !volum::PreBlockEquals(liveLockedPre, stored[ampIdx]);
-  }
+  bool IsPreDirtyLocked() const { return preLocked && !volum::PreBlockEquals(liveLockedPre, stored[ampIdx]); }
 
-  bool IsPostDirtyLocked() const
-  {
-    return postLocked && !volum::PostBlockEquals(liveLockedPost, stored[ampIdx]);
-  }
+  bool IsPostDirtyLocked() const { return postLocked && !volum::PostBlockEquals(liveLockedPost, stored[ampIdx]); }
 
   void SyncLockedSnapshotsFromLive()
   {
@@ -449,9 +443,8 @@ TEST_CASE("POST lock reload on B then switch back to origin A clears locked dirt
   sim.SwitchAmp(1);
   REQUIRE(sim.IsPostDirtyLocked());
 
-  const nlohmann::json j =
-    volum::VolumUserSettingsToJson(sim.stored, volum::kAmpCount, sim.ampIdx, nullptr, true, sim.preLocked,
-                                   sim.postLocked, nullptr, &sim.liveLockedPost);
+  const nlohmann::json j = volum::VolumUserSettingsToJson(sim.stored, volum::kAmpCount, sim.ampIdx, nullptr, true,
+                                                          sim.preLocked, sim.postLocked, nullptr, &sim.liveLockedPost);
 
   PrePostLockSim reloaded;
   bool postLocked = false;
@@ -609,9 +602,8 @@ TEST_CASE("POST dirty compare includes tremolo params")
   {
     volum::VoLumAmpSettings a;
     volum::VoLumAmpSettings b;
-    b.postTremoloMode = a.postTremoloMode == volum::kVoLumTremoloModeBias
-                          ? volum::kVoLumTremoloModeHarmonic
-                          : volum::kVoLumTremoloModeBias;
+    b.postTremoloMode = a.postTremoloMode == volum::kVoLumTremoloModeBias ? volum::kVoLumTremoloModeHarmonic
+                                                                          : volum::kVoLumTremoloModeBias;
     REQUIRE_FALSE(volum::PostBlockEquals(a, b));
   }
   {
@@ -672,15 +664,15 @@ TEST_CASE("POST dirty compare includes chorus params")
     volum::VoLumAmpSettings a;
     volum::VoLumAmpSettings b;
     b.postChorusMode = a.postChorusMode == volum::kVoLumChorusModeClassic ? volum::kVoLumChorusModeEnsemble
-                                                                         : volum::kVoLumChorusModeClassic;
+                                                                          : volum::kVoLumChorusModeClassic;
     REQUIRE_FALSE(volum::PostBlockEquals(a, b));
   }
   for (int knob = 0; knob < 5; ++knob)
   {
     volum::VoLumAmpSettings a;
     volum::VoLumAmpSettings b;
-    double* fields[5] = {&b.postChorusRate, &b.postChorusDepth, &b.postChorusTone, &b.postChorusWidth,
-                         &b.postChorusMix};
+    double* fields[5] = {
+      &b.postChorusRate, &b.postChorusDepth, &b.postChorusTone, &b.postChorusWidth, &b.postChorusMix};
     *fields[knob] += 0.13;
     INFO("chorus knob " << knob);
     REQUIRE_FALSE(volum::PostBlockEquals(a, b));
@@ -868,8 +860,8 @@ TEST_CASE("Chunk live lock snapshot round-trips and preserves per-amp slots")
   const int payloadBytes = volum::CurrentPerAmpSettingsPayloadBytes(volum::kAmpCount);
   // Detector recognizes flags+snapshots tail and rejects shorter tails.
   REQUIRE(volum::ChunkHasPrePostLockSnapshots(chunk.Size(), volum::kAmpCount, true, true));
-  REQUIRE_FALSE(volum::ChunkHasPrePostLockSnapshots(payloadBytes + volum::kPrePostLockFlagsBytes, volum::kAmpCount, true,
-                                                     true));
+  REQUIRE_FALSE(
+    volum::ChunkHasPrePostLockSnapshots(payloadBytes + volum::kPrePostLockFlagsBytes, volum::kAmpCount, true, true));
 
   // Read it back.
   volum::VoLumAmpSettings loadedAmps[volum::kAmpCount]{};
@@ -1049,8 +1041,8 @@ TEST_CASE("Live lock snapshot save/load never modifies per-amp slot bytes")
 
   volum::VoLumAmpSettings livePre = MakePreSlot(8.8);
   volum::VoLumAmpSettings livePost = MakePostSlot(0.99);
-  const nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, true, &livePre,
-                                                          &livePost);
+  const nlohmann::json j =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, true, true, true, &livePre, &livePost);
   // Reload into a fresh array.
   volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
   volum::VoLumAmpSettings loadedLivePre{};
@@ -1135,4 +1127,3 @@ TEST_CASE("Preset dirty after a locked save uses the sounding overlay, not the s
   REQUIRE(volum::PreBlockEquals(captured, overlayPre));
   REQUIRE_FALSE(volum::PreBlockEquals(slot, overlayPre));
 }
-

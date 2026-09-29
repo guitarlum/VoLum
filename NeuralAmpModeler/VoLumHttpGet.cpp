@@ -61,22 +61,19 @@ bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
   if (path.empty())
     path = L"/";
 
-  InternetHandle session{
-    WinHttpOpen(L"VoLum update notifier", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
-                WINHTTP_NO_PROXY_BYPASS, 0)};
-  if (!session.value
-      || !WinHttpSetTimeouts(session.value, timeoutMs, timeoutMs, timeoutMs, timeoutMs))
+  InternetHandle session{WinHttpOpen(
+    L"VoLum update notifier", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
+  if (!session.value || !WinHttpSetTimeouts(session.value, timeoutMs, timeoutMs, timeoutMs, timeoutMs))
     return false;
 
   InternetHandle connection{WinHttpConnect(session.value, host.c_str(), parts.nPort, 0)};
   if (!connection.value)
     return false;
 
-  InternetHandle request{
-    WinHttpOpenRequest(connection.value, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                       WINHTTP_FLAG_SECURE)};
-  if (!request.value || !WinHttpSendRequest(request.value, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0,
-                                             0, 0)
+  InternetHandle request{WinHttpOpenRequest(connection.value, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                            WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)};
+  if (!request.value
+      || !WinHttpSendRequest(request.value, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
       || !WinHttpReceiveResponse(request.value, nullptr))
     return false;
 

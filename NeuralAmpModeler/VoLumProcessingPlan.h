@@ -27,11 +27,10 @@ struct ProcessingPlan
 inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActive, bool toneStackActive, bool irActive,
                                          bool haveIR, bool preCompActive, const bool preNamActive[2],
                                          const bool havePreNam[2], bool delayActive, bool reverbActive,
-                                         bool tunerActive, bool dualAmpActive = false,
-                                         bool haveSupportModel = false, bool supportToneStackActive = false,
-                                         bool supportIrActive = false, bool haveSupportIR = false,
-                                         bool prePitchActive = false, bool tremoloActive = false,
-                                         bool chorusActive = false)
+                                         bool tunerActive, bool dualAmpActive = false, bool haveSupportModel = false,
+                                         bool supportToneStackActive = false, bool supportIrActive = false,
+                                         bool haveSupportIR = false, bool prePitchActive = false,
+                                         bool tremoloActive = false, bool chorusActive = false)
 {
   ProcessingPlan plan;
   plan.runPrePitch = prePitchActive;

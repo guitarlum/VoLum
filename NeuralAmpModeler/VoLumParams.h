@@ -151,5 +151,4 @@ enum EParams
 // saved values live in id-tail JSON, not as extra prefix doubles. See
 // .scratch/release-1.3.0/issues/07-forward-compatible-chunks.md.
 inline constexpr int kVoLumChunkParamPrefixCount = 93;
-static_assert(kNumParams >= kVoLumChunkParamPrefixCount,
-              "param prefix is the 1.2.2 list; new params append after it");
+static_assert(kNumParams >= kVoLumChunkParamPrefixCount, "param prefix is the 1.2.2 list; new params append after it");

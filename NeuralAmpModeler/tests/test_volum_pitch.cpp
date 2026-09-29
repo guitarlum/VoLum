@@ -703,8 +703,8 @@ TEST_CASE("VoLumPitch LEVEL floor through SetParams is silence (plugin mapping)"
     VoLumPitch pitch;
     pitch.Configure(kSR, kBlock);
     pitch.Reset();
-    pitch.SetParams(mode, 0.0, 1.0, 1.0, 1.0, 1.0, VoLumPitch::Voicing::Modern, levelDb,
-                    VoLumPitch::Character::Instant);
+    pitch.SetParams(
+      mode, 0.0, 1.0, 1.0, 1.0, 1.0, VoLumPitch::Voicing::Modern, levelDb, VoLumPitch::Character::Instant);
     auto in = makeSine(220.0, 4096, 0.8);
     auto out = runStream(pitch, in);
     double peak = 0.0;

@@ -115,19 +115,12 @@ inline LaneState ApplyHeroClick(const LaneState& state, bool hitDualChip, bool h
 
   switch (result.action)
   {
-    case ClickAction::ToggleDual:
-      next.dualActive = !state.dualActive;
-      break;
-    case ClickAction::OpenPicker:
-      next.pickerOpen = true;
-      break;
-    case ClickAction::DismissPicker:
-      next.pickerOpen = false;
-      break;
+    case ClickAction::ToggleDual: next.dualActive = !state.dualActive; break;
+    case ClickAction::OpenPicker: next.pickerOpen = true; break;
+    case ClickAction::DismissPicker: next.pickerOpen = false; break;
     case ClickAction::None:
     case ClickAction::FocusMain:
-    case ClickAction::FocusSupport:
-      break;
+    case ClickAction::FocusSupport: break;
   }
 
   next.supportFocused = ClampSupportFocus(next.supportFocused, next.hasSupportAmp);
