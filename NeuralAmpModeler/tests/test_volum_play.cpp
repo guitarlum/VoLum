@@ -10,6 +10,7 @@
 #include <functional>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -22,6 +23,40 @@ std::string ReadPlaySource(const char* name)
   return ss.str();
 }
 } // namespace
+
+TEST_CASE("PLAY rail rows compare every field, so SetData never keeps a stale row")
+{
+  // SetData stores a row only when operator== reports a change. These bindings stop compiling when a
+  // field is added: add it to operator== and to the mutations below, then fix the count here.
+  [[maybe_unused]] auto [ampId, presetId, presetName, ampName, factory, art, customArt] = volum::SoundChoice{};
+  [[maybe_unused]] auto [slot, sound, valid] = volum::PlaySlot{};
+
+  const volum::SoundChoice base{"a", "p", "n", "amp", false, 1, false};
+  const std::vector<std::function<void(volum::SoundChoice&)>> soundMutations = {
+    [](volum::SoundChoice& s) { s.ampId = "b"; },      [](volum::SoundChoice& s) { s.presetId = "q"; },
+    [](volum::SoundChoice& s) { s.presetName = "m"; }, [](volum::SoundChoice& s) { s.ampName = "other"; },
+    [](volum::SoundChoice& s) { s.factory = true; },   [](volum::SoundChoice& s) { s.art = 2; },
+    [](volum::SoundChoice& s) { s.customArt = true; },
+  };
+  for (size_t i = 0; i < soundMutations.size(); ++i)
+  {
+    CAPTURE(i);
+    volum::SoundChoice changed = base;
+    soundMutations[i](changed);
+    CHECK_FALSE(changed == base);
+  }
+  const volum::PlaySlot slotBase{3, base, true};
+  volum::PlaySlot other = slotBase;
+  other.slot = 4;
+  CHECK_FALSE(other == slotBase);
+  other = slotBase;
+  other.sound.art = 9;
+  CHECK_FALSE(other == slotBase);
+  other = slotBase;
+  other.valid = false;
+  CHECK_FALSE(other == slotBase);
+  CHECK(volum::PlaySlot{slotBase} == slotBase);
+}
 
 TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
 {
