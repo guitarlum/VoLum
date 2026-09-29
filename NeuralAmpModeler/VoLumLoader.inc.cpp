@@ -9,6 +9,7 @@
 // declared in NeuralAmpModeler.h and accessed normally.
 
 #include "VoLumNamDspData.h"
+#include "VoLumSharedDspCache.h"
 
 void NeuralAmpModeler::_VolumStartLoader()
 {
@@ -68,14 +69,17 @@ void NeuralAmpModeler::_VolumQueueMainPrefetch(std::string fileToLoad)
   if (fileToLoad.empty())
     return;
 
+  // Loader thread only. Also rechecked when the request runs (PrefetchDspData),
+  // since another instance may parse it meanwhile.
+  if (volum::nam_cache::GlobalDspCache().Contains(volum::nam_cache::DspCacheKey(fileToLoad)))
+    return;
+
   VoLumLoadRequest request;
   request.kind = VoLumLoadKind::MainPrefetch;
   request.fileToLoad = fileToLoad;
 
   {
     std::lock_guard<std::mutex> lock(mVolumLoaderMutex);
-    if (mVolumDspCache.find(fileToLoad) != mVolumDspCache.end())
-      return;
     const auto alreadyQueued =
       std::any_of(mVolumLoadRequests.begin(), mVolumLoadRequests.end(), [&](const VoLumLoadRequest& queued) {
         return queued.kind == VoLumLoadKind::MainPrefetch && queued.fileToLoad == fileToLoad;
@@ -266,41 +270,16 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
 {
   namespace fs = std::filesystem;
 
-  auto touchCache = [&](const std::string& key) {
-    mVolumDspCacheOrder.erase(
-      std::remove(mVolumDspCacheOrder.begin(), mVolumDspCacheOrder.end(), key), mVolumDspCacheOrder.end());
-    mVolumDspCacheOrder.push_front(key);
-  };
-
-  auto storeCache = [&](const std::string& key, nam::dspData&& config) {
-    mVolumDspCache[key] = std::move(config);
-    touchCache(key);
-    while (mVolumDspCacheOrder.size() > kVolumDspCacheMaxEntries)
-    {
-      mVolumDspCache.erase(mVolumDspCacheOrder.back());
-      mVolumDspCacheOrder.pop_back();
-    }
-  };
-
-  static_assert(kVolumDspCacheMaxEntries == volum::nam_cache::kDspCacheMaxEntries,
-                "VoLumNamDspData.h cache cap must match NeuralAmpModeler.h");
+  // VoLum: parsed captures live in the process-wide cache shared with every
+  // other instance's loader (VoLumSharedDspCache.h).
+  auto& dspCache = volum::nam_cache::GlobalDspCache();
 
   auto makeModel = [&](const std::string& path) {
-    auto cacheIt = mVolumDspCache.find(path);
-    if (cacheIt != mVolumDspCache.end())
-    {
-      touchCache(path);
-      // Core may consume/move fields during construction, so keep the cached copy immutable.
-      nam::dspData cachedConfig = cacheIt->second;
-      return nam::get_dsp(cachedConfig);
-    }
-
-    // VoLum: parse into dspData without the double build in get_dsp(path, conf),
-    // store, then build once the same way a cache hit does.
-    nam::dspData conf;
-    volum::nam_cache::FillDspDataFromNamFile(fs::u8path(path), conf);
-    storeCache(path, std::move(conf));
-    nam::dspData cachedConfig = mVolumDspCache.find(path)->second;
+    // Parse without the double build in get_dsp(path, conf), or reuse another
+    // load's parse. Core may consume/move fields during construction, so build
+    // from a copy; the shared entry stays immutable and no lock is held here.
+    const auto shared = volum::nam_cache::AcquireDspData(dspCache, path);
+    nam::dspData cachedConfig = *shared;
     return nam::get_dsp(cachedConfig);
   };
 
@@ -338,8 +317,9 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
 
         // ampIdx < 0 marks a custom-amp load (files live in the content library,
         // not the factory rig tree), so skip the factory sibling-prefetch scan.
-        // Cap at cache-size-minus-one and order by likely next pick so the model
-        // just loaded is never evicted from the 8-entry LRU.
+        // Cap at one instance's working set minus one and order by likely next
+        // pick, so this prefetch never evicts the model just loaded (other
+        // instances' loads can, once the shared cache is full).
         if (!mVolumNeedsLoad.load() && request.ampIdx >= 0 && !request.rigsRoot.empty())
         {
           const fs::path ampDir = fs::path(request.rigsRoot) / volum::kAmps[request.ampIdx].folderName;
@@ -368,10 +348,13 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
             // Already-cached picks are moved to the front (lowest priority
             // first). Skipping them left the previous channel at the back, so
             // one step on the same cab evicted it.
+            std::unordered_map<std::string, std::string> keys;
+            for (const auto& path : toPrefetch)
+              keys[path] = volum::nam_cache::DspCacheKey(path);
             const auto plan = volum::nam_cache::PlanPrefetchActions(
-              toPrefetch, [&](const std::string& path) { return mVolumDspCache.find(path) != mVolumDspCache.end(); });
+              toPrefetch, [&](const std::string& path) { return dspCache.Contains(keys[path]); });
             for (const auto& cachedPath : plan.promote)
-              touchCache(cachedPath);
+              dspCache.Touch(keys[cachedPath]);
             for (const auto& prefetchPath : plan.fetch)
             {
               if (mVolumNeedsLoad.load() || mVolumLoaderStop.load())
@@ -383,14 +366,10 @@ void NeuralAmpModeler::_VolumLoaderThreadMain()
       }
       else if (request.kind == VoLumLoadKind::MainPrefetch)
       {
-        if (!mVolumNeedsLoad.load() && !mVolumLoaderStop.load()
-            && mVolumDspCache.find(request.fileToLoad) == mVolumDspCache.end())
-        {
-          // VoLum: parse only — do not build/prewarm a DSP that would be discarded.
-          nam::dspData conf;
-          volum::nam_cache::FillDspDataFromNamFile(fs::u8path(request.fileToLoad), conf);
-          storeCache(request.fileToLoad, std::move(conf));
-        }
+        // VoLum: parse only — do not build/prewarm a DSP that would be discarded.
+        // Skipped when cached or being parsed by another instance's loader.
+        if (!mVolumNeedsLoad.load() && !mVolumLoaderStop.load())
+          volum::nam_cache::PrefetchDspData(dspCache, request.fileToLoad);
       }
       else
       {

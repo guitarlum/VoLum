@@ -723,10 +723,7 @@ private:
 
   std::atomic<bool> mVolumLoaderStop{false};
 
-  // Parsed NAM configs keyed by full path. Small LRU keeps switch-back fast without retaining every rig.
-  static constexpr size_t kVolumDspCacheMaxEntries = 8;
-  std::unordered_map<std::string, nam::dspData> mVolumDspCache;
-  std::deque<std::string> mVolumDspCacheOrder;
+  // Parsed NAM configs live in the process-wide cache of VoLumSharedDspCache.h.
   std::string mVolumLoadingMainPath;
   std::string mVolumLoadingSupportPath;
   std::string mVolumLoadingPrePath[2];

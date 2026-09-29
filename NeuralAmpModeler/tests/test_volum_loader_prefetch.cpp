@@ -250,7 +250,18 @@ TEST_CASE("A warm channel step keeps the previous channel and its cab neighbours
 TEST_CASE("VoLum loader uses FillDspDataFromNamFile and capped SelectPrefetchPaths")
 {
   const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
-  REQUIRE(loader.find("FillDspDataFromNamFile") != std::string::npos);
+  REQUIRE(loader.find("AcquireDspData(") != std::string::npos);
+  REQUIRE(loader.find("PrefetchDspData(") != std::string::npos);
+  // Both parse through FillDspDataFromNamFile, never the building path overload.
+  const std::string shared = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSharedDspCache.h");
+  for (const char* fn : {"inline SharedDspCache::Entry AcquireDspData(", "inline bool PrefetchDspData("})
+  {
+    const auto at = shared.find(fn);
+    REQUIRE(at != std::string::npos);
+    const auto body = shared.substr(at, shared.find("\n}", at) - at);
+    CHECK(body.find("FillDspDataFromNamFile") != std::string::npos);
+    CHECK(body.find("get_dsp") == std::string::npos);
+  }
   REQUIRE(loader.find("SelectPrefetchPaths") != std::string::npos);
   REQUIRE(loader.find("kPrefetchMaxEntries") != std::string::npos);
   REQUIRE(loader.find("PlanPrefetchActions") != std::string::npos);
@@ -259,7 +270,7 @@ TEST_CASE("VoLum loader uses FillDspDataFromNamFile and capped SelectPrefetchPat
   const auto planCall = loader.find("PlanPrefetchActions");
   const auto afterPlan = loader.substr(planCall, 900);
   const auto promote = afterPlan.find("plan.promote");
-  const auto touch = afterPlan.find("touchCache(", promote == std::string::npos ? 0 : promote);
+  const auto touch = afterPlan.find(".Touch(", promote == std::string::npos ? 0 : promote);
   const auto fetch = afterPlan.find("plan.fetch");
   REQUIRE(promote != std::string::npos);
   REQUIRE(touch != std::string::npos);
@@ -269,6 +280,6 @@ TEST_CASE("VoLum loader uses FillDspDataFromNamFile and capped SelectPrefetchPat
   const auto prefetch = loader.find("else if (request.kind == VoLumLoadKind::MainPrefetch)");
   REQUIRE(prefetch != std::string::npos);
   const auto prefetchBody = loader.substr(prefetch, 600);
-  REQUIRE(prefetchBody.find("FillDspDataFromNamFile") != std::string::npos);
-  REQUIRE(prefetchBody.find("nam::get_dsp(fs::u8path") == std::string::npos);
+  REQUIRE(prefetchBody.find("PrefetchDspData(") != std::string::npos);
+  REQUIRE(prefetchBody.find("get_dsp") == std::string::npos);
 }

@@ -1667,9 +1667,9 @@ TEST_CASE("VoLum NAM cache copies dspData before Core consumes cached fields")
 {
   const std::string source = ReadPluginSource();
 
-  RequireContains(source, "nam::dspData cachedConfig = cacheIt->second;");
+  RequireContains(source, "nam::dspData cachedConfig = *shared;");
   RequireContains(source, "return nam::get_dsp(cachedConfig);");
-  RequireDoesNotContain(source, "return nam::get_dsp(cacheIt->second);");
+  RequireDoesNotContain(source, "return nam::get_dsp(*shared);");
 }
 
 TEST_CASE("Switching from a custom IR to a baked cab keeps convolving until the swap")

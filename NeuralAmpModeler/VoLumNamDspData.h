@@ -22,7 +22,8 @@ namespace volum
 namespace nam_cache
 {
 
-// Must stay equal to NeuralAmpModeler::kVolumDspCacheMaxEntries.
+// One instance's working set in the shared cache (VoLumSharedDspCache.h): the
+// loaded model plus its prefetched siblings.
 inline constexpr size_t kDspCacheMaxEntries = 8;
 inline constexpr size_t kPrefetchMaxEntries = kDspCacheMaxEntries - 1;
 
