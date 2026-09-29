@@ -1,7 +1,11 @@
 #include "third_party/doctest.h"
 
+#include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <thread>
+#include <vector>
 
 #include "../VoLumContentStore.h"
 #include "../VoLumCustomNamImport.h"
@@ -19,6 +23,12 @@ std::filesystem::path TestBase(const char* name)
   std::filesystem::create_directories(root, ec);
   REQUIRE_FALSE(ec);
   return root;
+}
+
+std::string ReadAll(const std::filesystem::path& p)
+{
+  std::ifstream in(p, std::ios::binary);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
 std::filesystem::path WriteSrc(const std::filesystem::path& dir, const char* leaf, const char* body)
@@ -51,17 +61,9 @@ TEST_CASE("MintId returns prefixed, unique opaque ids")
 
 TEST_CASE("Cab names are clamped to the 3-char rule at the load boundary")
 {
-  // Direct model helper: whitespace dropped, uppercased, capped at 3; an empty
-  // (or whitespace-only) slot falls back to its CBn default.
-  volum::custom::CustomAmp a;
-  a.cabNames = {"Bogner 4x12", "Marshall 1960", "   "};
-  volum::custom::NormalizeAmpCabNames(a);
-  CHECK(a.cabNames[0] == "BOG");
-  CHECK(a.cabNames[1] == "MAR");
-  CHECK(a.cabNames[2] == "CB3");
-
   // Load path: a hand-edited / migrated registry carrying over-long names must
   // not survive into the live model (otherwise the cabinet row overflows).
+  // UTF-8 ClampName / NormalizeCabName cases live in custom_content.
   nlohmann::json amp;
   amp["id"] = "amp_clamp";
   amp["name"] = "Monomyth Skeleton Key";
@@ -80,7 +82,7 @@ TEST_CASE("Cab names are clamped to the 3-char rule at the load boundary")
   CHECK(r.amps[0].cabNames[2] == "ORA");
 }
 
-TEST_CASE("Registry round-trips amps, IRs, pedals, presets, and scenes")
+TEST_CASE("Registry round-trips amps, IRs, pedals, and presets")
 {
   Registry r;
   r.nextPedalIndex = 67;
@@ -104,10 +106,8 @@ TEST_CASE("Registry round-trips amps, IRs, pedals, presets, and scenes")
   preset.settings.preNam1Capture = 64;
   r.presetBanks[FactoryOwnerKey(7)] = {preset};
 
-  VoLumAmpSettings scene;
-  scene.outputLevel = -3.0;
-  scene.supportCustomId = "amp_def";
-  r.customScenes["amp_abc"] = scene;
+  r.midiSoundMap[5] = MidiSoundAssignment{"amp_abc", "preset_1"};
+  r.midiSoundMap[6] = MidiSoundAssignment{FactoryOwnerKey(7), FactoryPresetId(7)};
 
   const auto j = RegistryToJson(r);
   bool healed = true;
@@ -139,9 +139,10 @@ TEST_CASE("Registry round-trips amps, IRs, pedals, presets, and scenes")
   CHECK(bank[0].settings.activeIrId == "ir_1");
   CHECK(bank[0].settings.preNam1Capture == 64);
 
-  REQUIRE(loaded.customScenes.count("amp_abc") == 1);
-  CHECK(loaded.customScenes.at("amp_abc").outputLevel == doctest::Approx(-3.0));
-  CHECK(loaded.customScenes.at("amp_abc").supportCustomId == "amp_def");
+  REQUIRE(loaded.midiSoundMap.size() == 2);
+  CHECK(loaded.midiSoundMap.at(5).ampId == "amp_abc");
+  CHECK(loaded.midiSoundMap.at(5).presetId == "preset_1");
+  CHECK(loaded.midiSoundMap.at(6).presetId == "factory:7:v1");
 }
 
 TEST_CASE("Reader skips malformed entries and clamps without aborting")
@@ -348,47 +349,44 @@ TEST_CASE("Removal matrix: deleting a pedal clears referencing PRE slots")
 {
   ContentStore store;
   store.reg().pedals.push_back({"pedal_1", "Klon", "klon", "", 64});
-  VoLumAmpSettings scene;
-  scene.preNam1Capture = 64;
-  scene.preNam2Capture = 5; // factory, untouched
-  store.reg().customScenes["amp_a"] = scene;
   Preset pr;
   pr.id = "preset_1";
-  pr.settings.preNam2Capture = 64;
+  pr.settings.preNam1Capture = 64;
+  pr.settings.preNam2Capture = 5; // factory, untouched
   store.reg().presetBanks["factory:0"] = {pr};
 
   store.RemovePedal("pedal_1");
   CHECK(store.reg().pedals.empty());
-  CHECK(store.reg().customScenes["amp_a"].preNam1Capture == 0);
-  CHECK(store.reg().customScenes["amp_a"].preNam2Capture == 5);
-  CHECK(store.reg().presetBanks["factory:0"][0].settings.preNam2Capture == 0);
+  CHECK(store.reg().presetBanks["factory:0"][0].settings.preNam1Capture == 0);
+  CHECK(store.reg().presetBanks["factory:0"][0].settings.preNam2Capture == 5);
 }
 
 TEST_CASE("Removal matrix: deleting an IR clears activeIrId references")
 {
   ContentStore store;
   store.reg().irs.push_back({"ir_1", "Mesa", ""});
-  VoLumAmpSettings scene;
-  scene.activeIrId = "ir_1";
-  store.reg().customScenes["amp_a"] = scene;
+  Preset pr;
+  pr.id = "preset_1";
+  pr.settings.activeIrId = "ir_1";
+  pr.settings.supportActiveIrId = "ir_1";
+  store.reg().presetBanks["factory:0"] = {pr};
 
   store.RemoveIR("ir_1");
   CHECK(store.reg().irs.empty());
-  CHECK(store.reg().customScenes["amp_a"].activeIrId.empty());
+  CHECK(store.reg().presetBanks["factory:0"][0].settings.activeIrId.empty());
+  CHECK(store.reg().presetBanks["factory:0"][0].settings.supportActiveIrId.empty());
 }
 
-TEST_CASE("Removal matrix: deleting a custom amp cascades bank/scene and clears support refs")
+TEST_CASE("Removal matrix: deleting a custom amp cascades its bank and clears support refs")
 {
   ContentStore store;
   volum::custom::CustomAmp amp;
   amp.id = "amp_main";
   store.reg().amps.push_back(amp);
   store.reg().presetBanks["amp_main"] = {Preset{"preset_1", "P", {}}};
-  store.reg().customScenes["amp_main"] = VoLumAmpSettings{};
-
-  VoLumAmpSettings other;
-  other.supportCustomId = "amp_main";
-  store.reg().customScenes["amp_other"] = other;
+  // A pre-1.3.0 library's shared scene for this amp is a migration leftover; the
+  // delete has to drop it too or a re-imported amp reusing the id would inherit it.
+  store.reg().legacyCustomScenes["amp_main"] = VoLumAmpSettings{};
 
   // A preset in an unrelated bank that referenced the removed amp as its support
   // partner must also be reset to "(none)".
@@ -401,8 +399,7 @@ TEST_CASE("Removal matrix: deleting a custom amp cascades bank/scene and clears 
   store.RemoveCustomAmp("amp_main");
   CHECK(store.reg().amps.empty());
   CHECK(store.reg().presetBanks.count("amp_main") == 0);
-  CHECK(store.reg().customScenes.count("amp_main") == 0);
-  CHECK(store.reg().customScenes["amp_other"].supportCustomId.empty());
+  CHECK(store.reg().legacyCustomScenes.count("amp_main") == 0);
   CHECK(store.reg().presetBanks.at("factory:2")[0].settings.supportCustomId.empty());
 }
 
@@ -450,9 +447,6 @@ TEST_CASE("Removal matrix: deleting via the element-owned id does not dangle (AS
     ContentStore store;
     store.reg().irs.push_back({"ir_keep", "Keep", ""});
     store.reg().irs.push_back({"ir_drop", "Drop", ""});
-    VoLumAmpSettings scene;
-    scene.activeIrId = "ir_drop";
-    store.reg().customScenes["amp_a"] = scene;
     Preset pr;
     pr.id = "preset_1";
     pr.settings.activeIrId = "ir_drop";
@@ -461,7 +455,6 @@ TEST_CASE("Removal matrix: deleting via the element-owned id does not dangle (AS
     store.RemoveIR(store.reg().irs[1].id); // reference into the erased element
     CHECK(store.reg().irs.size() == 1);
     CHECK(store.reg().irs[0].id == "ir_keep");
-    CHECK(store.reg().customScenes["amp_a"].activeIrId.empty());
     CHECK(store.reg().presetBanks["factory:0"][0].settings.activeIrId.empty());
   }
 
@@ -469,13 +462,14 @@ TEST_CASE("Removal matrix: deleting via the element-owned id does not dangle (AS
   {
     ContentStore store;
     store.reg().pedals.push_back({"pedal_drop", "Klon", "klon", "", 64});
-    VoLumAmpSettings scene;
-    scene.preNam1Capture = 64;
-    store.reg().customScenes["amp_a"] = scene;
+    Preset pr;
+    pr.id = "preset_1";
+    pr.settings.preNam1Capture = 64;
+    store.reg().presetBanks["factory:0"] = {pr};
 
     store.RemovePedal(store.reg().pedals[0].id); // reference into the erased element
     CHECK(store.reg().pedals.empty());
-    CHECK(store.reg().customScenes["amp_a"].preNam1Capture == 0);
+    CHECK(store.reg().presetBanks["factory:0"][0].settings.preNam1Capture == 0);
   }
 
   SUBCASE("custom amp")
@@ -485,16 +479,15 @@ TEST_CASE("Removal matrix: deleting via the element-owned id does not dangle (AS
     amp.id = "amp_drop";
     store.reg().amps.push_back(amp);
     store.reg().presetBanks["amp_drop"] = {Preset{"preset_1", "P", {}}};
-    store.reg().customScenes["amp_drop"] = VoLumAmpSettings{};
-    VoLumAmpSettings other;
-    other.supportCustomId = "amp_drop";
-    store.reg().customScenes["amp_other"] = other;
+    Preset other;
+    other.id = "preset_other";
+    other.settings.supportCustomId = "amp_drop";
+    store.reg().presetBanks["factory:1"] = {other};
 
     store.RemoveCustomAmp(store.reg().amps[0].id); // reference into the erased element
     CHECK(store.reg().amps.empty());
     CHECK(store.reg().presetBanks.count("amp_drop") == 0);
-    CHECK(store.reg().customScenes.count("amp_drop") == 0);
-    CHECK(store.reg().customScenes["amp_other"].supportCustomId.empty());
+    CHECK(store.reg().presetBanks["factory:1"][0].settings.supportCustomId.empty());
   }
 }
 
@@ -584,6 +577,23 @@ TEST_CASE("DefaultCaptureSelection picks DIRECT-first, lowest channel")
   CHECK_FALSE(DefaultCaptureSelection(empty, s2, c2)); // no files -> false, outputs untouched
   CHECK(s2 == 7);
   CHECK(c2 == 7);
+}
+
+TEST_CASE("tier2h a file-less custom amp does not keep the previous cab")
+{
+  using volum::custom::kDirectSlot;
+  volum::custom::CustomAmp empty;
+  int slot = 3, channel = 4;
+  CaptureSelectionOrDefault(empty, slot, channel);
+  CHECK(slot == kDirectSlot);
+  CHECK(channel == 1);
+
+  volum::custom::CustomAmp amp;
+  amp.files = {{"a.nam", 0, 2}};
+  int pickedSlot = 3, pickedChannel = 4;
+  CaptureSelectionOrDefault(amp, pickedSlot, pickedChannel);
+  CHECK(pickedSlot == 0);
+  CHECK(pickedChannel == 2);
 }
 
 TEST_CASE("Custom-amp storedPath survives a registry round-trip")
@@ -721,13 +731,8 @@ TEST_CASE("Combined BYO project (multi-nam amp + IR + pedal + scene + preset) ro
   pedal.legacyIndex = kCustomPedalIndexBase;
   store.reg().pedals.push_back(pedal);
 
-  // Per-amp scene wiring the custom IR + pedal into the live rig.
-  VoLumAmpSettings scene;
-  scene.channelIdx = 2;
-  scene.activeIrId = "ir_byo";
-  scene.preNam1Active = true;
-  scene.preNam1Capture = kCustomPedalIndexBase;
-  store.reg().customScenes["amp_byo"] = scene;
+  // MIDI slot pointing at the custom amp's own bank.
+  store.reg().midiSoundMap[3] = MidiSoundAssignment{"amp_byo", "preset_byo"};
 
   // A preset in this amp's bank referencing all three custom refs together.
   Preset pr;
@@ -765,10 +770,10 @@ TEST_CASE("Combined BYO project (multi-nam amp + IR + pedal + scene + preset) ro
   CHECK(r.pedals[0].legacyIndex == kCustomPedalIndexBase);
   CHECK(std::filesystem::exists(reloaded.ResolveStored(r.pedals[0].file)));
 
-  // Per-amp scene keeps its custom IR + pedal wiring.
-  REQUIRE(r.customScenes.count("amp_byo") == 1);
-  CHECK(r.customScenes.at("amp_byo").activeIrId == "ir_byo");
-  CHECK(r.customScenes.at("amp_byo").preNam1Capture == kCustomPedalIndexBase);
+  // The MIDI slot survives the round-trip and still resolves.
+  REQUIRE(r.midiSoundMap.count(3) == 1);
+  CHECK(r.midiSoundMap.at(3).ampId == "amp_byo");
+  CHECK(ResolveMidiSlot(r, 3, 12) == MidiSlotState::Valid);
 
   // Preset keeps every custom ref together (the recall payload is intact).
   REQUIRE(r.presetBanks.count("amp_byo") == 1);
@@ -1075,4 +1080,673 @@ TEST_CASE("Rolling back an import deletes its copies immediately")
 
   store.RemoveStoredFile(rel);
   CHECK_FALSE(std::filesystem::exists(store.ResolveStored(rel)));
+}
+
+// ===========================================================================
+// Two-writer library (1.3.0)
+//
+// Before 1.3.0 every Save() serialized this writer's whole in-memory catalog over
+// the file. Two VoLums that both had the library open therefore overwrote each
+// other wholesale: an IR imported in standalone vanished the moment the DAW
+// instance saved a preset, because the DAW's copy of the catalog predated the
+// import. The fix is a locked read-modify-write - re-read under a cross-process
+// lock, replay only this writer's id-level changes, write the merge.
+// ===========================================================================
+
+TEST_CASE("Two writers on one library: both new items survive both saves")
+{
+  const auto base = TestBase("two-writer-both-items");
+
+  ContentStore standalone(base);
+  ContentStore daw(base);
+  REQUIRE(standalone.Load());
+  REQUIRE(daw.Load()); // both read the same (empty) starting catalog
+
+  // Standalone imports an IR.
+  standalone.reg().irs.push_back({"ir_standalone", "Mesa OS", "ir/mesa.wav"});
+  REQUIRE(standalone.Save());
+
+  // The DAW instance, whose catalog predates that import, saves a named preset.
+  Preset pr;
+  pr.id = "preset_daw";
+  pr.name = "Church clean";
+  daw.reg().presetBanks["factory:3"] = {pr};
+  REQUIRE(daw.Save());
+
+  ContentStore next(base);
+  REQUIRE(next.Load());
+  REQUIRE(next.reg().irs.size() == 1);
+  CHECK(next.reg().irs[0].id == "ir_standalone");
+  REQUIRE(next.reg().presetBanks.count("factory:3") == 1);
+  REQUIRE(next.reg().presetBanks.at("factory:3").size() == 1);
+  CHECK(next.reg().presetBanks.at("factory:3")[0].name == "Church clean");
+
+  // The writer that merged also adopts the other's item, so its own next save
+  // cannot drop it again.
+  REQUIRE(daw.reg().irs.size() == 1);
+  CHECK(daw.reg().irs[0].id == "ir_standalone");
+}
+
+TEST_CASE("Two writers: merges are by id, not by whole-list replacement")
+{
+  const auto base = TestBase("two-writer-id-level");
+
+  ContentStore a(base);
+  a.reg().pedals.push_back({"pedal_shared", "Klon", "klon", "pedals/klon.nam", 64});
+  a.reg().irs.push_back({"ir_shared", "Shared", "ir/shared.wav"});
+  REQUIRE(a.Save());
+
+  ContentStore b(base);
+  REQUIRE(b.Load());
+
+  SUBCASE("an add by each writer lands in one list")
+  {
+    a.reg().irs.push_back({"ir_a", "From A", "ir/a.wav"});
+    b.reg().irs.push_back({"ir_b", "From B", "ir/b.wav"});
+    REQUIRE(a.Save());
+    REQUIRE(b.Save());
+
+    ContentStore next(base);
+    REQUIRE(next.Load());
+    REQUIRE(next.reg().irs.size() == 3);
+    std::vector<std::string> ids;
+    for (const auto& ir : next.reg().irs)
+      ids.push_back(ir.id);
+    CHECK(std::find(ids.begin(), ids.end(), "ir_shared") != ids.end());
+    CHECK(std::find(ids.begin(), ids.end(), "ir_a") != ids.end());
+    CHECK(std::find(ids.begin(), ids.end(), "ir_b") != ids.end());
+  }
+
+  SUBCASE("a delete by one writer is not resurrected by the other's save")
+  {
+    // B still has ir_shared in memory. If Save() replayed B's whole list, the
+    // delete A already committed would come back from the dead.
+    a.RemoveIR("ir_shared");
+    REQUIRE(a.Save());
+
+    b.reg().irs.push_back({"ir_b", "From B", "ir/b.wav"});
+    REQUIRE(b.Save());
+
+    ContentStore next(base);
+    REQUIRE(next.Load());
+    REQUIRE(next.reg().irs.size() == 1);
+    CHECK(next.reg().irs[0].id == "ir_b");
+  }
+
+  SUBCASE("a rename by one writer is not reverted by the other's save")
+  {
+    a.reg().irs[0].name = "Renamed by A";
+    REQUIRE(a.Save());
+
+    b.reg().pedals[0].name = "Renamed by B";
+    REQUIRE(b.Save());
+
+    ContentStore next(base);
+    REQUIRE(next.Load());
+    REQUIRE(next.reg().irs.size() == 1);
+    CHECK(next.reg().irs[0].name == "Renamed by A");
+    REQUIRE(next.reg().pedals.size() == 1);
+    CHECK(next.reg().pedals[0].name == "Renamed by B");
+  }
+}
+
+TEST_CASE("Two writers: preset banks merge per preset, not per bank")
+{
+  // Two instances focused on the same amp both save a preset into that amp's
+  // bank. Replacing the bank wholesale loses one of them.
+  const auto base = TestBase("two-writer-banks");
+
+  ContentStore a(base);
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_shared";
+  amp.name = "Plexi";
+  a.reg().amps.push_back(amp);
+  REQUIRE(a.Save());
+
+  ContentStore b(base);
+  REQUIRE(b.Load());
+
+  Preset fromA;
+  fromA.id = "preset_a";
+  fromA.name = "Crunch";
+  a.reg().presetBanks["amp_shared"].push_back(fromA);
+  REQUIRE(a.Save());
+
+  Preset fromB;
+  fromB.id = "preset_b";
+  fromB.name = "Lead";
+  b.reg().presetBanks["amp_shared"].push_back(fromB);
+  REQUIRE(b.Save());
+
+  ContentStore next(base);
+  REQUIRE(next.Load());
+  REQUIRE(next.reg().presetBanks.count("amp_shared") == 1);
+  const auto& bank = next.reg().presetBanks.at("amp_shared");
+  REQUIRE(bank.size() == 2);
+  std::vector<std::string> names;
+  for (const auto& pr : bank)
+    names.push_back(pr.name);
+  CHECK(std::find(names.begin(), names.end(), "Crunch") != names.end());
+  CHECK(std::find(names.begin(), names.end(), "Lead") != names.end());
+}
+
+TEST_CASE("SetMidiSlot refuses program numbers outside 0..127")
+{
+  const auto base = TestBase("midi-slot-range");
+  ContentStore store(base);
+  store.SetMidiSlot(128, "amp_1", "p");
+  store.SetMidiSlot(-3, "amp_1", "p");
+  CHECK(store.reg().midiSoundMap.empty());
+  store.SetMidiSlot(0, "amp_1", "p");
+  REQUIRE(store.reg().midiSoundMap.size() == 1);
+}
+
+TEST_CASE("Two writers: MIDI slot assignments merge per slot")
+{
+  const auto base = TestBase("two-writer-midi");
+
+  ContentStore a(base);
+  a.reg().amps.push_back(volum::custom::CustomAmp{});
+  a.reg().amps[0].id = "amp_1";
+  REQUIRE(a.Save());
+
+  ContentStore b(base);
+  REQUIRE(b.Load());
+
+  a.SetMidiSlot(1, "amp_1", "");
+  REQUIRE(a.Save());
+  b.SetMidiSlot(2, "amp_1", "");
+  REQUIRE(b.Save());
+
+  ContentStore next(base);
+  REQUIRE(next.Load());
+  REQUIRE(next.reg().midiSoundMap.size() == 2);
+  CHECK(next.reg().midiSoundMap.at(1).ampId == "amp_1");
+  CHECK(next.reg().midiSoundMap.at(2).ampId == "amp_1");
+
+  // Clearing a slot is a change too, and it must not be undone by the other
+  // writer's stale copy of the map.
+  a.ClearMidiSlot(1);
+  REQUIRE(a.Save());
+  b.SetMidiSlot(3, "amp_1", "");
+  REQUIRE(b.Save());
+
+  ContentStore after(base);
+  REQUIRE(after.Load());
+  CHECK(after.reg().midiSoundMap.count(1) == 0);
+  CHECK(after.reg().midiSoundMap.count(2) == 1);
+  CHECK(after.reg().midiSoundMap.count(3) == 1);
+}
+
+TEST_CASE("Concurrent saves from two threads keep the library parseable and complete")
+{
+  // The cross-process lock is per handle and does not serialize threads inside
+  // one process, so two plugin instances on two host threads need the in-process
+  // mutex as well. Without it this test corrupts the file or loses an item.
+  const auto base = TestBase("two-writer-threads");
+
+  ContentStore a(base);
+  ContentStore b(base);
+  REQUIRE(a.Load());
+  REQUIRE(b.Load());
+
+  std::atomic<int> failures{0};
+  auto writer = [&failures](ContentStore& store, const char* prefix) {
+    for (int i = 0; i < 25; ++i)
+    {
+      IRItem ir;
+      ir.id = std::string(prefix) + std::to_string(i);
+      ir.name = ir.id;
+      ir.file = "ir/" + ir.id + ".wav";
+      {
+        std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+        store.reg().irs.push_back(ir);
+      }
+      if (!store.Save())
+        ++failures;
+    }
+  };
+
+  std::thread ta([&] { writer(a, "ir_a_"); });
+  std::thread tb([&] { writer(b, "ir_b_"); });
+  ta.join();
+  tb.join();
+  CHECK(failures.load() == 0);
+
+  ContentStore next(base);
+  REQUIRE(next.Load()); // a clean (non-healed) load: the file is well-formed
+  CHECK(next.reg().irs.size() == 50);
+}
+
+TEST_CASE("ContentStore Save keeps assigned and invalid MIDI slots")
+{
+  const auto base = TestBase("midi-map-quit");
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  REQUIRE(AssignMidiSound(store.reg(), 3, "factory:2", "factory:2:v1"));
+  REQUIRE(AssignMidiSound(store.reg(), 9, "deleted-amp", "gone-preset"));
+  REQUIRE(store.Save());
+
+  ContentStore reloaded(base);
+  REQUIRE(reloaded.Load());
+  REQUIRE(reloaded.reg().midiSoundMap.size() == 2);
+  CHECK(reloaded.reg().midiSoundMap.at(3).ampId == "factory:2");
+  CHECK(reloaded.reg().midiSoundMap.at(3).presetId == "factory:2:v1");
+  CHECK(reloaded.reg().midiSoundMap.at(9).ampId == "deleted-amp");
+  CHECK(reloaded.reg().midiSoundMap.at(9).presetId == "gone-preset");
+}
+
+TEST_CASE("A second EnsureLoaded does not read over an unflushed catalog")
+{
+  // Every plugin instance's constructor reaches the process-global store. When
+  // that call was an unconditional Load(), opening a second VoLum threw away an
+  // import or a preset the first one had not flushed yet, and the next Save()
+  // persisted the version without it.
+  const auto base = TestBase("ensure-loaded");
+
+  ContentStore store(base);
+  store.reg().irs.push_back({"ir_saved", "Saved", "ir/saved.wav"});
+  REQUIRE(store.Save());
+
+  store.reg().irs.push_back({"ir_unflushed", "Not saved yet", "ir/pending.wav"});
+  CHECK(store.HasUnflushedChanges());
+
+  REQUIRE(store.EnsureLoaded()); // second instance's constructor
+  REQUIRE(store.reg().irs.size() == 2);
+  CHECK(store.reg().irs[1].id == "ir_unflushed");
+  CHECK(store.HasUnflushedChanges());
+
+  // The unflushed item then reaches disk on the next save.
+  REQUIRE(store.Save());
+  CHECK_FALSE(store.HasUnflushedChanges());
+  ContentStore next(base);
+  REQUIRE(next.Load());
+  CHECK(next.reg().irs.size() == 2);
+}
+
+TEST_CASE("EnsureLoaded still performs the first read")
+{
+  const auto base = TestBase("ensure-loaded-first");
+  {
+    ContentStore seed(base);
+    seed.reg().irs.push_back({"ir_seed", "Seed", "ir/seed.wav"});
+    REQUIRE(seed.Save());
+  }
+
+  ContentStore store(base);
+  CHECK_FALSE(store.IsLoaded());
+  REQUIRE(store.EnsureLoaded());
+  CHECK(store.IsLoaded());
+  REQUIRE(store.reg().irs.size() == 1);
+  CHECK(store.reg().irs[0].id == "ir_seed");
+}
+
+TEST_CASE("A failed save stays pending and is carried by the next successful one")
+{
+  // The merge replays the difference between this writer's catalog and the last
+  // state it knows is on disk. A save that did not reach the disk must therefore
+  // leave that baseline alone: advancing it anyway makes the failed write look
+  // like a write that happened, and the item is silently dropped from the next
+  // change set - the user's import is gone with no error anywhere.
+  const auto base = TestBase("two-writer-save-failure");
+
+  ContentStore store(base);
+  store.reg().irs.push_back({"ir_first", "First", "ir/first.wav"});
+  REQUIRE(store.Save());
+  CHECK_FALSE(store.HasUnflushedChanges());
+
+  // Make the library file unwritable the way a permissions change or a backup
+  // agent does: readable, so the store does not latch RegistryUnreadable, but
+  // impossible to replace by rename. POSIX rename would otherwise ignore the
+  // file write bit; ReplaceFileAtomically refuses that case.
+  std::filesystem::permissions(
+    store.RegistryPath(), std::filesystem::perms::owner_read, std::filesystem::perm_options::replace);
+
+  store.reg().irs.push_back({"ir_pending", "Pending", "ir/pending.wav"});
+  CHECK_FALSE(store.Save());
+  CHECK(store.TakeWriteFailure());
+  CHECK_FALSE(store.TakeWriteFailure()); // a banner is shown once
+
+  // The item is still in memory - the user's edit is not silently dropped - and
+  // the store still knows it is not on disk.
+  CHECK(store.reg().irs.size() == 2);
+  CHECK(store.HasUnflushedChanges());
+
+  std::filesystem::permissions(
+    store.RegistryPath(), std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
+  REQUIRE(store.Save());
+  CHECK_FALSE(store.HasUnflushedChanges());
+
+  ContentStore next(base);
+  REQUIRE(next.Load());
+  REQUIRE(next.reg().irs.size() == 2);
+  CHECK(next.reg().irs[1].id == "ir_pending");
+}
+
+TEST_CASE("An unreadable library is never overwritten, and the failure is visible")
+{
+  const auto base = TestBase("two-writer-unreadable");
+
+  // A directory where the library file belongs: present, but unreadable as a
+  // registry. The store must refuse to write rather than replace it.
+  std::error_code ec;
+  ContentStore store(base);
+  std::filesystem::create_directories(store.RegistryPath(), ec);
+  REQUIRE_FALSE(ec);
+
+  CHECK_FALSE(store.Load());
+  CHECK(store.RegistryUnreadable());
+
+  store.reg().irs.push_back({"ir_doomed", "Doomed", "ir/doomed.wav"});
+  CHECK_FALSE(store.Save());
+  CHECK(store.TakeWriteFailure());
+  CHECK(std::filesystem::is_directory(store.RegistryPath())); // untouched
+}
+
+TEST_CASE("A library that goes unreadable after Load is not replaced by this session")
+{
+  // Load() refuses to write over a file it could not read. That verdict only
+  // covers a file that was already bad when the store loaded. Save() re-reads
+  // the file to merge onto it, and that re-read used to answer "empty" for
+  // every failure - so a library that went unreadable AFTER a good Load (cloud
+  // sync placeholder, antivirus, a second VoLum that backed it up as corrupt)
+  // was replaced by whatever this session happened to touch. Standalone quit
+  // alone was enough: the settings save calls Save() unconditionally.
+  const auto base = TestBase("reread-unreadable");
+  ContentStore store(base);
+
+  store.reg().irs.push_back({"ir_keep_a", "Keep A", "ir/a.wav"});
+  store.reg().irs.push_back({"ir_keep_b", "Keep B", "ir/b.wav"});
+  REQUIRE(store.Save());
+  REQUIRE(store.Load());
+  REQUIRE(store.reg().irs.size() == 2);
+
+  SUBCASE("unparseable")
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary) << "{ not json";
+  }
+  SUBCASE("zero length")
+  {
+    std::ofstream(store.RegistryPath(), std::ios::binary | std::ios::trunc);
+  }
+
+  const std::string damaged = ReadAll(store.RegistryPath());
+
+  // A save with no local edit at all - exactly what standalone quit does.
+  CHECK_FALSE(store.Save());
+  CHECK(store.TakeWriteFailure());
+  // Refusing means the bytes are untouched. Writing would have replaced a
+  // recoverable file with an authoritative empty catalog, and there is no .bak
+  // from this path to recover from.
+  CHECK(ReadAll(store.RegistryPath()) == damaged);
+
+  // And with a local edit, which is what made the old behaviour destructive:
+  // the merge kept only the touched id and dropped both loaded IRs.
+  store.reg().irs.push_back({"ir_session", "Session", "ir/session.wav"});
+  CHECK_FALSE(store.Save());
+  CHECK(ReadAll(store.RegistryPath()) == damaged);
+}
+
+TEST_CASE("A library file that is simply absent is still a legitimate fresh save")
+{
+  // The other half of the same gate: absent is not unreadable. A first run, or
+  // a user who deleted the file on purpose, must still be able to save.
+  const auto base = TestBase("reread-absent");
+  ContentStore store(base);
+
+  store.reg().irs.push_back({"ir_first", "First", "ir/first.wav"});
+  REQUIRE(store.Save());
+
+  std::error_code ec;
+  std::filesystem::remove(store.RegistryPath(), ec);
+  REQUIRE_FALSE(ec);
+
+  store.reg().irs.push_back({"ir_second", "Second", "ir/second.wav"});
+  CHECK(store.Save());
+  CHECK_FALSE(store.TakeWriteFailure());
+  CHECK(std::filesystem::is_regular_file(store.RegistryPath()));
+}
+
+TEST_CASE("The library lock is exclusive while held")
+{
+  const auto base = TestBase("lock-exclusive");
+  std::error_code ec;
+  std::filesystem::create_directories(base, ec);
+  const auto lockFile = base / "volum-content.lock";
+
+  RegistryFileLock first;
+  REQUIRE(first.Acquire(lockFile));
+  CHECK(first.Held());
+
+  RegistryFileLock second;
+  CHECK_FALSE(second.Acquire(lockFile, 50)); // contended: gives up, does not hang
+  CHECK_FALSE(second.Held());
+
+  first.Release();
+  CHECK(second.Acquire(lockFile, 50));
+}
+
+TEST_CASE("A killed lock holder does not stuck-lock the library")
+{
+  // The lock has to die with the process. A pid file or a cookie does not: a
+  // VoLum that crashes or is force-quit while holding it would leave the library
+  // unwritable for everyone until someone deleted a stale file by hand.
+  const auto base = TestBase("lock-killed-holder");
+  ContentStore victim(base);
+  victim.reg().irs.push_back({"ir_before", "Before", "ir/before.wav"});
+  REQUIRE(victim.Save());
+
+  RegistryFileLock holder;
+  REQUIRE(holder.Acquire(victim.LockPath()));
+  holder.SimulateProcessDeath(); // handle goes away with no orderly unlock
+
+  // The lock file itself is still on disk; that must not matter.
+  CHECK(std::filesystem::exists(victim.LockPath()));
+
+  ContentStore next(base);
+  REQUIRE(next.Load());
+  next.reg().irs.push_back({"ir_after", "After", "ir/after.wav"});
+  REQUIRE(next.Save());
+  CHECK_FALSE(next.TakeWriteFailure());
+
+  ContentStore verify(base);
+  REQUIRE(verify.Load());
+  CHECK(verify.reg().irs.size() == 2);
+}
+
+TEST_CASE("The lock lives beside the registry, never on it")
+{
+  // The registry is replaced by rename on every write, so a lock taken on it
+  // would be a lock on a file that no longer exists.
+  ContentStore store(std::filesystem::path("/tmp/volum-lock-path"));
+  CHECK(store.LockPath() != store.RegistryPath());
+  CHECK(store.LockPath().parent_path() == store.RegistryPath().parent_path());
+}
+
+TEST_CASE("MIDI sound map reader ignores unknown keys and malformed slots")
+{
+  nlohmann::json j;
+  j["schemaVersion"] = kContentSchemaVersion;
+  j["someFutureTopLevelKey"] = 42; // forward-compatible: ignored, not fatal
+  j["midiSoundMap"] = nlohmann::json::array();
+  j["midiSoundMap"].push_back(
+    {{"slot", 4}, {"ampId", "amp_x"}, {"presetId", "preset_x"}, {"unknownPerSlotKey", "ignored"}});
+  j["midiSoundMap"].push_back({{"ampId", "amp_y"}}); // no slot: skipped
+  j["midiSoundMap"].push_back({{"slot", 5}}); // no ampId: skipped
+  j["midiSoundMap"].push_back({{"slot", "not a number"}, {"ampId", "amp_z"}}); // skipped
+  j["midiSoundMap"].push_back({{"slot", 6}, {"ampId", "amp_q"}}); // amp-only Sound
+
+  bool healed = false;
+  const Registry r = RegistryFromJson(j, &healed);
+  REQUIRE(r.midiSoundMap.size() == 2);
+  CHECK(r.midiSoundMap.at(4).ampId == "amp_x");
+  CHECK(r.midiSoundMap.at(4).presetId == "preset_x");
+  CHECK(r.midiSoundMap.at(6).ampId == "amp_q");
+  CHECK(r.midiSoundMap.at(6).presetId.empty());
+  CHECK(r.midiSoundMap.count(5) == 0);
+}
+
+TEST_CASE("tier2b a newer library schema keeps unknown keys through Save")
+{
+  const auto base = TestBase("passthrough-schema");
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = nlohmann::json::array({"keep-me"});
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  CHECK(store.Save());
+  std::ifstream in(store.RegistryPath());
+  nlohmann::json written;
+  in >> written;
+  CHECK(written["schemaVersion"] == 99);
+  REQUIRE(written.contains("someFutureTopLevelKey"));
+  CHECK(written["someFutureTopLevelKey"][0] == "keep-me");
+}
+
+TEST_CASE("tier2b a save does not clobber a sibling's newer unknown key")
+{
+  const auto base = TestBase("passthrough-merge");
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = "loaded";
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  ContentStore store(base);
+  REQUIRE(store.Load());
+  {
+    nlohmann::json j;
+    j["schemaVersion"] = 99;
+    j["someFutureTopLevelKey"] = "sibling";
+    j["anotherFutureKey"] = 7;
+    j["irLibrary"] = nlohmann::json::array();
+    std::ofstream(base / "volum-content.json") << j.dump();
+  }
+  REQUIRE(store.Save());
+  std::ifstream in(store.RegistryPath());
+  nlohmann::json written;
+  in >> written;
+  CHECK(written["schemaVersion"] == 99);
+  CHECK(written["someFutureTopLevelKey"] == "sibling");
+  CHECK(written["anotherFutureKey"] == 7);
+}
+
+TEST_CASE("tier2b a colon in a stored leaf is not a safe library path")
+{
+  CHECK_FALSE(IsSafeStoredRelPath("amps/id__Foo:Bar.nam"));
+  CHECK(IsSafeStoredRelPath("amps/id__FooBar.nam"));
+}
+
+TEST_CASE("tier2b dropping a capture from an amp deletes the copied file on Save")
+{
+  const auto base = TestBase("orphan-capture");
+  const auto keepSrc = WriteSrc(base / "incoming", "Keep.nam", "keep");
+  const auto dropSrc = WriteSrc(base / "incoming", "Drop.nam", "drop");
+  ContentStore store(base);
+  const std::string keepRel = store.ImportFileCopy(keepSrc, "amps", "amp_edit_0");
+  const std::string dropRel = store.ImportFileCopy(dropSrc, "amps", "amp_edit_1");
+  REQUIRE_FALSE(keepRel.empty());
+  REQUIRE_FALSE(dropRel.empty());
+
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_edit";
+  amp.name = "Edit me";
+  amp.files = {{"Keep.nam", volum::custom::kDirectSlot, 1, keepRel}, {"Drop.nam", 0, 2, dropRel}};
+  store.reg().amps.push_back(amp);
+  REQUIRE(store.Save());
+  REQUIRE(std::filesystem::exists(store.ResolveStored(dropRel)));
+
+  volum::custom::CustomAmp edited = amp;
+  edited.files = {{"Keep.nam", volum::custom::kDirectSlot, 1, keepRel}};
+  for (const auto& oldFile : amp.files)
+  {
+    bool kept = false;
+    for (const auto& keptFile : edited.files)
+      if (keptFile.storedPath == oldFile.storedPath)
+        kept = true;
+    if (!kept)
+      store.QueueStoredFileDelete(oldFile.storedPath);
+  }
+  store.reg().amps[0] = std::move(edited);
+  REQUIRE(store.Save());
+  CHECK(std::filesystem::exists(store.ResolveStored(keepRel)));
+  CHECK_FALSE(std::filesystem::exists(store.ResolveStored(dropRel)));
+}
+
+TEST_CASE("MIDI slot resolution reports gone content as invalid, never as empty")
+{
+  // Deleting content can only ever turn a row red. Renumbering the rows below it
+  // would hand the player's footswitch a different sound than the one it had.
+  Registry r;
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_live";
+  r.amps.push_back(amp);
+  Preset pr;
+  pr.id = "preset_live";
+  pr.name = "Live";
+  r.presetBanks["amp_live"] = {pr};
+
+  r.midiSoundMap[1] = MidiSoundAssignment{"amp_live", "preset_live"};
+  r.midiSoundMap[2] = MidiSoundAssignment{"amp_live", ""}; // amp-only
+  r.midiSoundMap[3] = MidiSoundAssignment{"amp_gone", "preset_live"};
+  r.midiSoundMap[4] = MidiSoundAssignment{"amp_live", "preset_gone"};
+  r.midiSoundMap[5] = MidiSoundAssignment{FactoryOwnerKey(2), FactoryPresetId(2)};
+  r.midiSoundMap[6] = MidiSoundAssignment{FactoryOwnerKey(99), ""}; // beyond the bank
+
+  CHECK(ResolveMidiSlot(r, 1, 12) == MidiSlotState::Valid);
+  CHECK(ResolveMidiSlot(r, 2, 12) == MidiSlotState::Valid);
+  CHECK(ResolveMidiSlot(r, 3, 12) == MidiSlotState::Invalid);
+  CHECK(ResolveMidiSlot(r, 4, 12) == MidiSlotState::Invalid);
+  CHECK(ResolveMidiSlot(r, 5, 12) == MidiSlotState::Valid);
+  CHECK(ResolveMidiSlot(r, 6, 12) == MidiSlotState::Invalid);
+  CHECK(ResolveMidiSlot(r, 7, 12) == MidiSlotState::Unassigned);
+}
+
+TEST_CASE("Deleting content leaves its MIDI slot assigned but invalid")
+{
+  ContentStore store;
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_doomed";
+  store.reg().amps.push_back(amp);
+  store.reg().irs.push_back({"ir_1", "Mesa", ""});
+  store.SetMidiSlot(9, "amp_doomed", "");
+  REQUIRE(ResolveMidiSlot(store.reg(), 9, 12) == MidiSlotState::Valid);
+
+  store.RemoveCustomAmp("amp_doomed");
+  REQUIRE(store.reg().midiSoundMap.count(9) == 1); // the number stays with the pedalboard
+  CHECK(ResolveMidiSlot(store.reg(), 9, 12) == MidiSlotState::Invalid);
+}
+
+TEST_CASE("The registry no longer writes shared custom scenes")
+{
+  // 1.2.0 kept per-amp scenes in the library, so two instances editing the same
+  // custom amp moved each other's knobs. Scenes are per-instance state in 1.3.0;
+  // the field is read once for migration and never written again.
+  Registry r;
+  volum::custom::CustomAmp amp;
+  amp.id = "amp_a";
+  r.amps.push_back(amp);
+  VoLumAmpSettings scene;
+  scene.outputLevel = -3.0;
+  r.legacyCustomScenes["amp_a"] = scene;
+
+  const auto j = RegistryToJson(r);
+  CHECK_FALSE(j.contains("customScenes"));
+  CHECK(j["schemaVersion"].get<int>() == kContentSchemaVersion);
+
+  // A pre-1.3.0 file's scenes are still readable, so the instance that first
+  // focuses the amp can adopt them.
+  nlohmann::json old;
+  old["schemaVersion"] = 3;
+  old["customScenes"] = nlohmann::json::object();
+  old["customScenes"]["amp_a"] = volum::AmpSettingsToJson(scene);
+  bool healed = false;
+  const Registry migrated = RegistryFromJson(old, &healed);
+  REQUIRE(migrated.legacyCustomScenes.count("amp_a") == 1);
+  CHECK(migrated.legacyCustomScenes.at("amp_a").outputLevel == doctest::Approx(-3.0));
 }

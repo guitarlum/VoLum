@@ -134,5 +134,37 @@ inline LaneState ApplyHeroClick(const LaneState& state, bool hitDualChip, bool h
   return next;
 }
 
+// The cab/speaker row is one control shared by both lanes, and every write to
+// it is gated on which lane is focused. A path that flips the focus flag without
+// re-deriving the row leaves the other lane's names, enables and IR chip on
+// screen, and the next cab click then edits the focused lane using the other
+// lane's layout. Remembering to call the rederive is how that keeps happening -
+// Tab, the section key and the keyboard Dual-on gesture each forgot - so the
+// two travel together here instead.
+struct FocusCommit
+{
+  bool supportFocused = false;
+  bool rederiveCabs = false;
+};
+
+// `requested` is what the gesture wants. An empty SUPPORT lane cannot hold
+// focus, so the committed flag may differ from the request, and the row follows
+// what was committed rather than what was asked for.
+inline FocusCommit CommitFocus(bool previousSupportFocus, bool requested, bool hasSupportAmp)
+{
+  FocusCommit out;
+  out.supportFocused = ClampSupportFocus(requested, hasSupportAmp);
+  out.rederiveCabs = (previousSupportFocus != out.supportFocused);
+  return out;
+}
+
+template <typename SetFocusFn, typename RederiveCabsFn>
+inline void ApplyFocusCommit(const FocusCommit& commit, SetFocusFn&& setFocus, RederiveCabsFn&& rederiveCabs)
+{
+  setFocus(commit.supportFocused);
+  if (commit.rederiveCabs)
+    rederiveCabs();
+}
+
 } // namespace dualamp
 } // namespace volum

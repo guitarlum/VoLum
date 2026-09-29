@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 
 project(NeuralAmpModelerTests LANGUAGES CXX)
 
@@ -17,6 +17,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_version.cpp
   test_volum_paths.cpp
   test_volum_settings_atomic_write.cpp
+  test_volum_update_check.cpp
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp
   test_volum_ui_sync_plan.cpp
@@ -27,21 +28,28 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_amp_list_scroll.cpp
   test_volum_dual_amp_input.cpp
   test_volum_amp_catalog.cpp
+  test_volum_art_anim.cpp
   test_delay_reverb_dsp.cpp
   test_reverb_diffusion.cpp
+  test_reverb_stereo_input.cpp
   test_volum_pre_effects.cpp
   test_golden_dsp.cpp
   test_golden_rigs.cpp
   test_golden_presets.cpp
+  test_volum_golden_render.cpp
   test_keyboard_steps.cpp
   test_eparam_order.cpp
   test_tuner_dsp.cpp
+  test_volum_tuner_burst.cpp
   test_metronome_dsp.cpp
   test_tone_stack.cpp
+  test_volum_filter_core.cpp
   test_volum_pre_pedal_captures.cpp
   test_volum_custom_content.cpp
   test_volum_content_store.cpp
   test_volum_content_crud_edge.cpp
+  test_volum_rig_repair.cpp
+  test_volum_pack.cpp
   test_volum_ir_shaping.cpp
   test_volum_processing_plan.cpp
   test_volum_dsp_cache_params.cpp
@@ -52,9 +60,18 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_state_roundtrip.cpp
   test_volum_pitch.cpp
   test_volum_pitch_artifacts.cpp
+  test_volum_pitch_high_notes.cpp
+  test_volum_pitch_burst.cpp
+  test_volum_realtime_budget.cpp
+  test_volum_nam_exact.cpp
+  test_volum_nam_idle_skip.cpp
+  test_volum_resampling_nam.cpp
+  test_volum_self_capture_format.cpp
   test_volum_tremolo.cpp
+  test_volum_chorus.cpp
   test_volum_ir_file_guard.cpp
   test_volum_pre_post_lock.cpp
+  test_volum_name_dialog.cpp
   test_volum_nan_guard.cpp
   test_volum_bypass_identity.cpp
   test_volum_level_mute.cpp
@@ -62,14 +79,28 @@ add_executable(NeuralAmpModeler-Tests
   test_iplug_app_vector_accumulator.cpp
   test_iplug_app_shutdown.cpp
   test_volum_preset_bar.cpp
+  test_volum_factory_presets.cpp
+  test_volum_play.cpp
+  test_volum_uat_layout.cpp
   test_volum_chunk_safe_read.cpp
   test_volum_overlay_action_codes.cpp
   test_volum_numeric_entry.cpp
   test_volum_cab_step.cpp
   test_volum_wav_downmix.cpp
+  test_volum_write_debounce.cpp
   test_volum_loopback_detect.cpp
+  test_volum_midi_decoder.cpp
+  test_volum_midi_handoff.cpp
+  test_volum_midi_footswitch.cpp
+  test_volum_meter_sender.cpp
+  test_volum_meter_dirty.cpp
+  test_volum_loader_prefetch.cpp
+  test_volum_shared_dsp_cache.cpp
+  test_volum_text_fit.cpp
+  test_volum_tuner_overlay.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
@@ -94,6 +125,7 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${REPO_ROOT}/eigen"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM"
   "${REPO_ROOT}/iPlug2/IPlug/APP"
+  "${REPO_ROOT}/iPlug2/WDL"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras/nlohmann"
 )
@@ -105,7 +137,7 @@ target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
 )
 
 if(APPLE)
-  target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation")
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation" "-framework Accelerate")
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)
@@ -129,3 +161,4 @@ if(VOLUM_ENABLE_COVERAGE)
     message(FATAL_ERROR "VOLUM_ENABLE_COVERAGE requires Clang")
   endif()
 endif()
+

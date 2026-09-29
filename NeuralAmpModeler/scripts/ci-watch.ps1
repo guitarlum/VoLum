@@ -1,13 +1,15 @@
 # Dispatch and/or follow a GitHub Actions CI run, reporting job and step state.
 #
 # `gh run watch` tails a single run but says little about *which* step failed,
-# and CI only auto-triggers on `dev`/`main` - a release or feature branch needs
-# an explicit `workflow_dispatch`. This wraps both, and on failure prints the
-# failing job/step plus the tail of its log, which is the only part worth
-# reading first.
+# and CI auto-triggers on `dev`/`main`/`release/**`. A feature branch with no
+# open PR still needs an explicit `workflow_dispatch`. Do not -Dispatch a
+# release/** or dev/main ref after pushing — that starts a second full matrix.
+# This wraps watch, and on failure prints the failing job/step plus the tail
+# of its log, which is the only part worth reading first.
 #
 # Examples:
-#   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Dispatch -Ref release/1.2.1
+#   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref release/1.2.1
+#   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Dispatch -WindowsOnly -Ref feature/1.3.0
 #   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -RunId 30286593044
 #   pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref dev -NoWait
 
@@ -18,6 +20,7 @@ param(
   [string]$Repo = "guitarlum/VoLum",
   [string]$Workflow = "ci.yml",
   [switch]$Dispatch,
+  [switch]$WindowsOnly,
   [switch]$NoWait,
   [int]$PollSeconds = 60,
   [int]$TimeoutMinutes = 120
@@ -45,7 +48,12 @@ if (-not $Ref -and -not $RunId)
 
 if ($Dispatch)
 {
-  & gh workflow run $Workflow --repo $Repo --ref $Ref
+  $dispatchArgs = @('workflow', 'run', $Workflow, '--repo', $Repo, '--ref', $Ref)
+  if ($WindowsOnly)
+  {
+    $dispatchArgs += @('-f', 'windows_only=true')
+  }
+  & gh @dispatchArgs
   if ($LASTEXITCODE -ne 0) { Write-Error "workflow dispatch failed" }
   # The run does not appear in the list immediately.
   Start-Sleep -Seconds 10

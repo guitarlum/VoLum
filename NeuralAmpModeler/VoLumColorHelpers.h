@@ -1,8 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "IControls.h"
 #include "ITextEntryControl.h"
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumAmpListScroll.h"
+#include "VoLumTextFit.h"
 #include <cmath>
 #include <functional>
 #include <algorithm>
@@ -93,6 +95,17 @@ inline void DrawDiamond(IGraphics& g, float cx, float cy, float halfSize, const 
   g.DrawLine(col, cx - halfSize, cy, cx, cy - halfSize);
 }
 
+// Helper: a drawn "clear/close" cross centred in r. Josefin has no U+00D7, so
+// "×" renders as a tofu box; every clear affordance must stroke it instead.
+inline void DrawCrossGlyph(IGraphics& g, const IRECT& r, const IColor& col, float thickness = 1.4f)
+{
+  const float half = std::min(r.W(), r.H()) * 0.26f;
+  const float cx = r.MW();
+  const float cy = r.MH();
+  g.DrawLine(col, cx - half, cy - half, cx + half, cy + half, nullptr, thickness);
+  g.DrawLine(col, cx - half, cy + half, cx + half, cy - half, nullptr, thickness);
+}
+
 // ===========================================================================
 // VoLum 1.2.0 UI modernization design tokens
 // ---------------------------------------------------------------------------
@@ -106,22 +119,22 @@ namespace VoLumColors
 {
 // One selection treatment marks the active item in any mutually-exclusive group
 // (cab row, sidebar, art picker, mode lists, steppers).
-const IColor SEL_BG(40, 200, 162, 78);        // brass wash behind the active item
-const IColor SEL_BG_SOFT(20, 200, 162, 78);   // hover wash (telegraph the target)
-const IColor SEL_BORDER(235, 226, 156, 112);  // bright brass outline
-const IColor SEL_GLOW(64, 252, 222, 145);     // soft brass glow under selection
-const IColor SEL_TEXT(255, 255, 244, 224);    // cream text on selected
+const IColor SEL_BG(40, 200, 162, 78); // brass wash behind the active item
+const IColor SEL_BG_SOFT(20, 200, 162, 78); // hover wash (telegraph the target)
+const IColor SEL_BORDER(235, 226, 156, 112); // bright brass outline
+const IColor SEL_GLOW(64, 252, 222, 145); // soft brass glow under selection
+const IColor SEL_TEXT(255, 255, 244, 224); // cream text on selected
 
 // Destructive-action accent (delete/remove) - distinct from amber caution.
-const IColor DANGER(255, 228, 92, 80);      // red outline / label
-const IColor DANGER_FILL(78, 228, 92, 80);  // red button wash
-const IColor DANGER_GLOW(54, 228, 92, 80);  // red modal glow
+const IColor DANGER(255, 228, 92, 80); // red outline / label
+const IColor DANGER_FILL(78, 228, 92, 80); // red button wash
+const IColor DANGER_GLOW(54, 228, 92, 80); // red modal glow
 
 // Panel / well depth.
-const IColor PANEL_TOP(255, 23, 23, 31);   // panel gradient top (slightly lifted)
-const IColor PANEL_BOT(255, 13, 13, 19);   // panel gradient bottom
-const IColor WELL_DARK(255, 9, 9, 14);     // recessed well base
-const IColor INNER_SHADOW(120, 0, 0, 0);   // inset top shadow
+const IColor PANEL_TOP(255, 23, 23, 31); // panel gradient top (slightly lifted)
+const IColor PANEL_BOT(255, 13, 13, 19); // panel gradient bottom
+const IColor WELL_DARK(255, 9, 9, 14); // recessed well base
+const IColor INNER_SHADOW(120, 0, 0, 0); // inset top shadow
 const IColor RIM_LIGHT(26, 255, 248, 238); // faint top inner highlight
 } // namespace VoLumColors
 
@@ -172,6 +185,36 @@ inline void FillVGradient(IGraphics& g, const IRECT& r, const IColor& top, const
   g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, r.B, {{top, 0.f}, {bot, 1.f}}));
 }
 
+inline float MeasureTextWidth(IGraphics& g, const IText& text, const char* s)
+{
+  IRECT m;
+  g.MeasureText(text, s, m);
+  return m.W();
+}
+
+// Trim `s` (appending an ellipsis) until it fits within maxW. Used by the BUILD
+// status row so Dual Amp filenames cannot walk the gold frame.
+inline std::string FitTextToWidth(IGraphics& g, const IText& text, const char* s, float maxW)
+{
+  return volum::textfit::Fit(s, maxW, [&](const char* str) { return MeasureTextWidth(g, text, str); });
+}
+
+// Same result as FitTextToWidth, measured only when the text, font, width or
+// pixel scale changed since this memo's last call. For text drawn every frame.
+inline const std::string& FitTextToWidth(volum::textfit::Memo& memo, IGraphics& g, const IText& text, const char* s,
+                                         float maxW)
+{
+  volum::textfit::FitStyle style;
+  style.font = text.mFont;
+  style.size = text.mSize;
+  style.align = static_cast<int>(text.mAlign);
+  style.valign = static_cast<int>(text.mVAlign);
+  style.angle = text.mAngle;
+  style.maxW = maxW;
+  style.scale = g.GetTotalScale();
+  return memo.Get(s, style, [&](const char* str) { return MeasureTextWidth(g, text, str); });
+}
+
 // Panel: subtle top-lit vertical gradient + 1px top inner highlight + bottom shadow line.
 inline void DrawPanelDepth(IGraphics& g, const IRECT& r, float roundness = 0.f)
 {
@@ -179,8 +222,8 @@ inline void DrawPanelDepth(IGraphics& g, const IRECT& r, float roundness = 0.f)
     g.PathRoundRect(r, roundness);
   else
     g.PathRect(r);
-  g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, r.B,
-                                            {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
+  g.PathFill(
+    IPattern::CreateLinearGradient(r.L, r.T, r.L, r.B, {{VoLumColors::PANEL_TOP, 0.f}, {VoLumColors::PANEL_BOT, 1.f}}));
   g.DrawLine(VoLumColors::RIM_LIGHT, r.L + 1.5f, r.T + 1.f, r.R - 1.5f, r.T + 1.f);
   g.DrawLine(IColor(64, 0, 0, 0), r.L + 1.5f, r.B - 1.f, r.R - 1.5f, r.B - 1.f);
 }
@@ -191,8 +234,8 @@ inline void DrawInsetWell(IGraphics& g, const IRECT& r, float roundness = 3.f)
   g.FillRoundRect(VoLumColors::WELL_DARK, r, roundness);
   const IRECT top = IRECT(r.L, r.T, r.R, r.T + r.H() * 0.5f);
   g.PathRoundRect(top, roundness, roundness, 0.f, 0.f);
-  g.PathFill(IPattern::CreateLinearGradient(r.L, r.T, r.L, top.B,
-                                            {{VoLumColors::INNER_SHADOW, 0.f}, {COLOR_TRANSPARENT, 1.f}}));
+  g.PathFill(
+    IPattern::CreateLinearGradient(r.L, r.T, r.L, top.B, {{VoLumColors::INNER_SHADOW, 0.f}, {COLOR_TRANSPARENT, 1.f}}));
   g.DrawLine(IColor(20, 255, 248, 238), r.L + 1.f, r.B - 1.f, r.R - 1.f, r.B - 1.f);
 }
 
@@ -201,11 +244,11 @@ inline void DrawKnobWell(IGraphics& g, float cx, float cy, float radius)
 {
   g.FillCircle(IColor(120, 0, 0, 0), cx, cy + 1.5f, radius + 2.5f);
   g.PathCircle(cx, cy, radius);
-  g.PathFill(IPattern::CreateRadialGradient(cx, cy - radius * 0.35f, radius * 1.25f,
-                                            {{IColor(255, 24, 24, 32), 0.f}, {IColor(255, 9, 9, 14), 1.f}}));
+  g.PathFill(IPattern::CreateRadialGradient(
+    cx, cy - radius * 0.35f, radius * 1.25f, {{IColor(255, 24, 24, 32), 0.f}, {IColor(255, 9, 9, 14), 1.f}}));
   g.PathCircle(cx, cy, radius);
-  g.PathFill(IPattern::CreateLinearGradient(cx, cy - radius, cx, cy + radius * 0.2f,
-                                            {{IColor(110, 0, 0, 0), 0.f}, {COLOR_TRANSPARENT, 1.f}}));
+  g.PathFill(IPattern::CreateLinearGradient(
+    cx, cy - radius, cx, cy + radius * 0.2f, {{IColor(110, 0, 0, 0), 0.f}, {COLOR_TRANSPARENT, 1.f}}));
 }
 
 // Soft radial glow disc (selection underlays, hero frame breathing room).
@@ -229,15 +272,15 @@ inline void DrawSoftGlowCircle(IGraphics& g, float cx, float cy, float radius, c
 // ===========================================================================
 enum class VoLumSelectionStyle
 {
-  Brass,       // SEL_* brass wash + outline (cab row, time-sig grid)
-  ListTeal,    // ITEM_SEL_* teal wash + outline (sidebar list, menus)
+  Brass, // SEL_* brass wash + outline (cab row, time-sig grid)
+  ListTeal, // ITEM_SEL_* teal wash + outline (sidebar list, menus)
   AmberPicker, // solid amber fill (mode pickers + sub-mode pills)
 };
 
 // Draw the selection/hover background for one item. `roundness <= 0` draws square
 // corners (matches the mode picker); `inset` pads the fill in from the item rect.
-inline void DrawVoLumSelection(IGraphics& g, const IRECT& item, bool active, bool hovered,
-                               VoLumSelectionStyle style, float roundness = 3.f, float inset = 1.f)
+inline void DrawVoLumSelection(IGraphics& g, const IRECT& item, bool active, bool hovered, VoLumSelectionStyle style,
+                               float roundness = 3.f, float inset = 1.f)
 {
   const IRECT fill = item.GetPadded(-inset);
   const IColor amberHover(48, 226, 165, 78); // soft amber wash to telegraph the target
@@ -297,6 +340,24 @@ inline void DrawVoLumScrollbar(IGraphics& g, const IRECT& track, const IRECT& th
   g.FillRect(dragging ? VoLumColors::GOLD : VoLumColors::GOLD_DIM, thumb);
 }
 
+// Track geometry that matches every other VoLum list: a kScrollbarW-wide
+// reservation with the visible bar inset 1 px from the list edge.
+inline IRECT VoLumScrollTrackRect(const IRECT& list)
+{
+  return IRECT(list.R - volum::amplist::kScrollbarW + 1.f, list.T + 1.f, list.R - 1.f, list.B - 1.f);
+}
+
+// Recessed two-state brass pill (FULL|LITE, All|One). Caller draws the labels.
+inline void DrawVoLumSegmentSwitch(IGraphics& g, const IRECT& track, bool secondActive)
+{
+  const float cr = track.H() * 0.5f;
+  const IRECT activeR = secondActive ? track.GetFromRight(track.W() * 0.5f) : track.GetFromLeft(track.W() * 0.5f);
+  g.FillRoundRect(IColor(255, 9, 9, 14), track, cr);
+  g.FillRoundRect(VoLumColors::GOLD.WithOpacity(0.30f), activeR, cr);
+  g.DrawRoundRect(VoLumColors::GOLD, activeR, cr, nullptr, 1.25f);
+  g.DrawRoundRect(VoLumColors::FRAME, track, cr, nullptr, 1.f);
+}
+
 // On-selection text colour matching DrawVoLumSelection's fill per style.
 inline IColor SelectionInkColor(VoLumSelectionStyle style, bool active)
 {
@@ -317,8 +378,7 @@ inline void DrawVignette(IGraphics& g, const IRECT& r, int strength = 64)
   const float rad = std::max(r.W(), r.H()) * 0.72f;
   g.PathRect(r);
   g.PathFill(IPattern::CreateRadialGradient(
-    r.MW(), r.MH(), rad,
-    {{COLOR_TRANSPARENT, 0.f}, {COLOR_TRANSPARENT, 0.62f}, {IColor(strength, 0, 0, 0), 1.f}}));
+    r.MW(), r.MH(), rad, {{COLOR_TRANSPARENT, 0.f}, {COLOR_TRANSPARENT, 0.62f}, {IColor(strength, 0, 0, 0), 1.f}}));
 }
 
 #include "VoLumFractalArt.h"

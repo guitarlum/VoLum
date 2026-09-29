@@ -89,7 +89,7 @@ inline DualAmpPanGains MakeDualAmpPanGains(DualAmpRoute route, double mainPan, d
   return gains;
 }
 
-template<typename Sample>
+template <typename Sample>
 // Merge dual-amp main/support lanes to stereo. Identical behavior in standalone and DAW:
 // no clamp here. Final-bus bounding is the master safety stage at the end of ProcessBlock
 // (see VoLumMasterSafety.h); clamping mid-chain before Delay/Reverb would have been
@@ -116,15 +116,30 @@ inline void MergeDualAmpToStereo(const Sample* mainMono, const Sample* supportMo
   }
 }
 
-template<typename Sample>
+template <typename Sample>
 class DualAmpDelayLine
 {
 public:
+  static constexpr int kLatencyReserve = 8192;
+
   void Reset()
   {
-    mState.clear();
+    if (!mState.empty())
+      std::fill(mState.begin(), mState.end(), static_cast<Sample>(0));
     mDelaySamples = 0;
     mWriteIndex = 0;
+  }
+
+  // Off the audio thread. Process then retargets the ring inside this capacity
+  // and does not allocate when a model swap changes the resample latency.
+  void Reserve(int maxDelaySamples)
+  {
+    if (maxDelaySamples <= 0)
+      return;
+    const auto n = static_cast<std::size_t>(maxDelaySamples);
+    if (mState.capacity() < n)
+      mState.reserve(n);
+    mHasReserve = true;
   }
 
   const Sample* Process(const Sample* input, Sample* output, std::size_t nFrames, int delaySamples)
@@ -137,16 +152,35 @@ public:
 
     if (mDelaySamples != delaySamples)
     {
-      mState.assign(static_cast<std::size_t>(delaySamples), static_cast<Sample>(0));
+      const auto need = static_cast<std::size_t>(delaySamples);
+      if (mState.capacity() < need)
+      {
+        if (mHasReserve)
+        {
+          // Do not keep a half-applied ring. The next in-range delay starts silent.
+          Reset();
+          return input;
+        }
+        mState.assign(need, static_cast<Sample>(0));
+      }
+      else
+      {
+        if (mState.size() < need)
+          mState.resize(need, static_cast<Sample>(0));
+        // resize keeps the old prefix. A longer compensation ring must start
+        // silent, or the previous delay's samples play back as a click.
+        std::fill_n(mState.begin(), need, static_cast<Sample>(0));
+      }
       mDelaySamples = delaySamples;
       mWriteIndex = 0;
     }
 
+    const auto ring = static_cast<std::size_t>(mDelaySamples);
     for (std::size_t s = 0; s < nFrames; ++s)
     {
       output[s] = mState[mWriteIndex];
       mState[mWriteIndex] = input[s];
-      mWriteIndex = (mWriteIndex + 1) % mState.size();
+      mWriteIndex = (mWriteIndex + 1) % ring;
     }
 
     return output;
@@ -156,6 +190,7 @@ private:
   std::vector<Sample> mState;
   int mDelaySamples = 0;
   std::size_t mWriteIndex = 0;
+  bool mHasReserve = false;
 };
 
 } // namespace volum

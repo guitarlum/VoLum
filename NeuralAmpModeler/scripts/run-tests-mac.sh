@@ -41,14 +41,10 @@ cmake --build "$BUILD_DIR" --config "$BUILD_TYPE" -j"$(sysctl -n hw.ncpu)"
 
 cd "$REPO_ROOT"
 if [[ "$SANITIZE" == "1" ]]; then
+  # doctest's parseOptionImpl keeps only the last repeated --test-case-exclude.
+  # Comma-separated filters in ONE flag accumulate. Repeating the flag does not.
   "$BUILD_DIR/NeuralAmpModeler-Tests" \
-    --test-case-exclude="Golden *" \
-    --test-case-exclude="Load *NAM*" \
-    --test-case-exclude="Cached NAM dspData can construct multiple models when copied" \
-    --test-case-exclude="Core slimmable NAM example loads and processes" \
-    --test-case-exclude="Process one block through every bundled main NAM file" \
-    --test-case-exclude="A2 core load and prewarm timing is visible in test logs" \
-    --test-case-exclude="A2 container can lazily activate the Lite submodel after load"
+    --test-case-exclude="Golden *,Load *NAM*,Cached NAM dspData can construct multiple models when copied,Core slimmable NAM example loads and processes,Process one block through every bundled main NAM file,A2 core load and prewarm timing is visible in test logs,A2 container can lazily activate the Lite submodel after load"
 else
   # --duration prints each case's name as it finishes. doctest cannot report which
   # case it was in when the process dies, so without this a crash in CI is just

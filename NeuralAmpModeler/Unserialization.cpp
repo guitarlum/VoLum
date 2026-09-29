@@ -546,19 +546,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
 
   if (version >= volum::ChunkVersion(1, 2, 0))
   {
-    // Current layout. SerializeParams() writes ALL kNumParams param doubles, so
-    // the reader MUST consume exactly that many to keep `pos` aligned for the
-    // per-amp block that follows. Earlier releases used a hand-maintained name
-    // list (_GetConfigFrom_0_9_0, 71 entries ending at SupportAmpPan). 1.2.0
-    // appended ~22 params (kSupportIRToggle, PRE Pitch, Tremolo, Delay sync/div)
-    // WITHOUT extending that list, so the reader stopped 22 doubles short and the
-    // per-amp selection/scene then read raw param bytes as garbage -> VST3/AU
-    // "state resets to default on every load" (standalone was unaffected: it
-    // restores from volum-settings.json in the ctor, not from the DAW chunk).
-    // Read by LIVE param name so this reader can never drift from the enum again.
+    // Frozen 1.2.2 prefix (93 doubles), not live kNumParams. Extra EParams are
+    // restored from id-tail JSON after this read. A 1.2.2 plugin opening a
+    // later save therefore still lands on the per-amp tail.
     std::vector<std::string> paramNames;
-    paramNames.reserve(kNumParams);
-    for (int i = 0; i < kNumParams; ++i)
+    paramNames.reserve(kVoLumChunkParamPrefixCount);
+    for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)
       paramNames.push_back(GetParam(i)->GetName());
     pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);
   }
@@ -612,7 +605,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     assert(false);
   }
   VOLUM_LOG("chunk", "decoded state written by version " + versionStr + " (" + std::to_string(chunk.Size())
-                       + " bytes, this build reads " + std::to_string(kNumParams) + " params)");
+                       + " bytes, this build reads " + std::to_string(kVoLumChunkParamPrefixCount)
+                       + " prefix params, kNumParams=" + std::to_string(kNumParams) + ")");
   // v0.9.0 migration: applied for ALL pre-0.9.0 chunks regardless of which
   // _GetConfigFrom_X_X_X path produced the dict above. Each pre-0.9.0 loader's per-version
   // _UpdateConfigFrom only chains backwards (predecessor), so this single call is what
@@ -713,8 +707,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // detect that case and skip the snapshot read (live PRE/POST then come up
     // empty exactly like before — pre-existing limitation, not a new regression).
     if (haveSelection && pos >= 0
-        && volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked,
-                                               pendingPostLocked))
+        && volum::ChunkHasPrePostLockSnapshots(
+          remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked, pendingPostLocked))
     {
       pos = volum::GetPrePostLockSnapshots(
         chunk, pos, pendingPreLocked, pendingPostLocked, pendingLockedPre, pendingLockedPost);
@@ -798,6 +792,9 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
           s.postTremoloModes[m].crossover = std::clamp(t.modes[m].crossover, 200.0, 2000.0);
         }
       };
+      auto applyChorusTail = [](const volum::ChorusTail& c, volum::VoLumAmpSettings& s) {
+        volum::ApplyChorusTailToSettings(c, s);
+      };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
         mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
@@ -808,11 +805,22 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         applyPitchTail(idTail.perAmpPitch[i], mVolumAmpSettings[i]);
         applyTremoloTail(idTail.perAmpTremolo[i], mVolumAmpSettings[i]);
         applyDelayTail(idTail.perAmpDelay[i], mVolumAmpSettings[i]);
+        applyChorusTail(idTail.perAmpChorus[i], mVolumAmpSettings[i]);
       }
       applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
+      mVolumMidiChannel.store(idTail.midiCh);
+      mVolumMidiRecallCc.store(idTail.midiRecallCc);
+      applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
+      mVolumUiMode = volum::UiModeFromString(idTail.uiMode);
+      // 1.3.0: the project's own custom-amp scenes. Installed before the custom
+      // re-focus below, which reads them through _VolumCustomScene. An older chunk
+      // has none, and the first focus then migrates whatever the pre-1.3.0 shared
+      // library still holds for that amp.
+      if (!idTail.customScenes.empty())
+        mVolumCustomScenes = idTail.customScenes;
     }
 
     // Scoped rather than assigned: UnserializeState now catches exceptions instead
@@ -871,19 +879,30 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // reopen as dirty (mirrors the standalone session-restore fix).
       if (!idTail.activePresetId.empty())
       {
-        const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
-        auto it = banks.find(_VolumActiveOwnerKey());
-        if (it != banks.end())
-          for (const auto& pr : it->second)
-            if (pr.id == idTail.activePresetId)
-            {
-              mVolumActivePresetId = pr.id;
-              mVolumRecalledSnapshot = pr.settings;
-              mVolumHasRecalledSnapshot = true;
-              _VolumRememberActivePreset();
-              break;
-            }
+        if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, idTail.activePresetId))
+        {
+          mVolumActivePresetId = factory->id;
+          mVolumRecalledSnapshot = factory->settings;
+          mVolumHasRecalledSnapshot = true;
+          _VolumRememberActivePreset();
+        }
+        else
+        {
+          const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+          auto it = banks.find(_VolumActiveOwnerKey());
+          if (it != banks.end())
+            for (const auto& pr : it->second)
+              if (pr.id == idTail.activePresetId)
+              {
+                mVolumActivePresetId = pr.id;
+                mVolumRecalledSnapshot = pr.settings;
+                mVolumHasRecalledSnapshot = true;
+                _VolumRememberActivePreset();
+                break;
+              }
+        }
       }
+      mVolumLastRecalledPlaySlot = idTail.lastPlaySlot;
       _VolumRefreshPresetBar();
     }
   }

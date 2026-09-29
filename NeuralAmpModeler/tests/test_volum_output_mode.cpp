@@ -2,6 +2,42 @@
 #include "../VoLumOutputMode.h"
 
 #include <cstring>
+#include <vector>
+
+namespace
+{
+// Stand-in for WDL_TypedBuf<bool>: Resize leaves new slots holding whatever was
+// in memory, which is what the real buffer does.
+struct GarbageOnResizeBuf
+{
+  std::vector<bool> v;
+  int GetSize() const { return static_cast<int>(v.size()); }
+  void Resize(int n) { v.resize(static_cast<size_t>(n), true); }
+  struct Ref
+  {
+    std::vector<bool>* v;
+    std::vector<bool>::reference operator[](int i) { return (*v)[static_cast<size_t>(i)]; }
+  };
+  Ref Get() { return {&v}; }
+};
+} // namespace
+
+TEST_CASE("Growing the output-mode disabled flags leaves Raw and Normalized selectable")
+{
+  GarbageOnResizeBuf disabled;
+  volum::EnsureRadioDisabledStates(disabled, volum::kOutputModeCount);
+  REQUIRE(disabled.GetSize() == volum::kOutputModeCount);
+  CHECK_FALSE(disabled.v[volum::kOutputModeRaw]);
+  CHECK_FALSE(disabled.v[volum::kOutputModeNormalized]);
+  CHECK_FALSE(disabled.v[volum::kOutputModeCalibrated]);
+
+  // Calibrated then locks alone, and a second call keeps that lock.
+  disabled.v[volum::kOutputModeCalibrated] = true;
+  volum::EnsureRadioDisabledStates(disabled, volum::kOutputModeCount);
+  CHECK_FALSE(disabled.v[volum::kOutputModeRaw]);
+  CHECK_FALSE(disabled.v[volum::kOutputModeNormalized]);
+  CHECK(disabled.v[volum::kOutputModeCalibrated]);
+}
 
 TEST_CASE("Output mode labels stay aligned with param enum")
 {

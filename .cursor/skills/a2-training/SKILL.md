@@ -40,8 +40,8 @@ file has no Gateway Slim/Thin toggle; packed does. That is cosmetic, not a
 training bug.
 
 Map trained files **by basename**, not folder: 249 capture WAV names match 249
-`rigs/**/*.nam` names exactly. Swap `training/a2-final/<name>.nam` onto the
-matching `rigs/` leaf, then `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`
+`rigs/**/*.nam` names exactly. Swap each trained `*.nam` from the a2-final
+training output onto the matching `rigs/` leaf, then `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1`
 (`test_nam_rigs.cpp`, `test_volum_pre_pedal_captures.cpp`) and a changelog line.
 
 ## Fleet lessons (paid for)

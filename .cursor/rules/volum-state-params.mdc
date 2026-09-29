@@ -30,16 +30,22 @@ Preset/session migration:
 Presets / recall + dirty:
 
 - Banks live in the content registry (`presetBanks`), owner-keyed
-  (`factory:<idx>` or a custom-amp id). Capture/apply hooks are still
-  process-global (`PresetCaptureHook` / `PresetApplyHook`); each editor claims
-  them via `_VolumClaimPresetOps()` before a read or mutation. Per-instance
-  ownership is `B6` / `R4` phase 2, not done.
+  (`factory:<idx>` or a custom-amp id). Capture/apply hooks are **instance-keyed**
+  in `PresetHooksByInstance` (`VoLumCustomContentApi.h`). Save / overwrite /
+  recall bind a `PresetOpScope(this)` and resolve through that map, copying the
+  `std::function` out so a later claim cannot steal an in-flight call; an
+  unscoped call made while any editor is registered **refuses** rather than
+  using the last claimant. The table is mutex-guarded because instances are
+  constructed and destroyed on host threads. The process-global
+  `PresetCaptureHook` / `PresetApplyHook` pair survives only as the last-claimer
+  fallback for overlay listing and for tests that never register.
 - Recall applies `pr.settings` through `_VolumApplyRecalledPreset`. On a custom
   amp that path must not call the factory `_VolumRefreshChannels()` (1.2.1).
 - `(unsaved)` is equality against the recalled snapshot:
   `!AmpSettingsEqual(_VolumActiveScene(), mVolumRecalledSnapshot)`.
-  `AmpSettingsEqual` currently builds two JSON trees (`VoLumAmpSettingsJson.h`);
-  replacing that is `P2`.
+  `AmpSettingsEqual` (`VoLumAmpSettingsJson.h`) compares field by field; its
+  oracle doctest in `test_volum_user_settings_io.cpp` checks it against the JSON
+  codec for every field, so a new codec field fails until the compare learns it.
 - The active preset id is stored per owner in settings
   (`mVolumActivePresetIdByOwner`). A single global id is the 1.2.0 bug.
 

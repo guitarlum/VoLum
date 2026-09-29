@@ -1,9 +1,11 @@
 #include "third_party/doctest.h"
 #include "../VoLumAmpSettingsJson.h"
+#include "../VoLumPlayModel.h" // MidiChannel/MidiRecallCc machine-settings readers
 #include "../VoLumUserSettingsIO.h"
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 
 TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
 {
@@ -365,6 +367,7 @@ TEST_CASE("effect-staging effect snapshot fields round-trip through user setting
   fx.delayMode = volum::kVoLumDelayModeAnalog;
   fx.reverbActive = true;
   fx.reverbMode = volum::kVoLumReverbModeOktaverb;
+  fx.chorusActive = true;
 
   for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
   {
@@ -401,6 +404,7 @@ TEST_CASE("effect-staging effect snapshot fields round-trip through user setting
   CHECK(loaded.delayMode == volum::kVoLumDelayModeAnalog);
   CHECK(loaded.reverbActive == true);
   CHECK(loaded.reverbMode == volum::kVoLumReverbModeOktaverb);
+  CHECK(loaded.chorusActive == true);
   for (int i = 0; i < volum::kVoLumDelayModeCount; ++i)
   {
     CHECK(loaded.delayModes[i].time == doctest::Approx(250.0 + 50.0 * i));
@@ -574,6 +578,7 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   fx.delayModes[volum::kVoLumDelayModeReverse].time = 650.0;
   fx.delayModes[volum::kVoLumDelayModeReverse].feedback = 0.6;
   fx.delayModes[volum::kVoLumDelayModeReverse].mix = 0.4;
+  fx.chorusActive = true;
   fx.reverbActive = true;
   fx.reverbMode = 1;
   fx.reverbModes[1].mix = 0.7;
@@ -592,6 +597,7 @@ TEST_CASE("Effect settings JSON roundtrip preserves all params")
   CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].time == doctest::Approx(650.0));
   CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].feedback == doctest::Approx(0.6));
   CHECK(loaded.delayModes[volum::kVoLumDelayModeReverse].mix == doctest::Approx(0.4));
+  CHECK(loaded.chorusActive == true);
   CHECK(loaded.reverbActive == true);
   CHECK(loaded.reverbMode == 1);
   CHECK(loaded.reverbModes[1].mix == doctest::Approx(0.7));
@@ -979,6 +985,20 @@ TEST_CASE("User settings IO round-trips machine-global liteMode")
 
 // An older settings file (no liteMode key) must load cleanly defaulting to Full
 // with no heal flag (additive forward tolerance, no version bump).
+TEST_CASE("Lite merge-write keeps sibling machine keys")
+{
+  nlohmann::json j = {
+    {"midiCh", 4}, {"volumUiMode", "play"}, {"lastPlaySlot", 7}, {"midiRecallCc", 20}, {"lastAmpIdx", 2}};
+  const auto out = volum::MergeLiteModeIntoSettings(j, true);
+  CHECK(out["liteMode"] == true);
+  CHECK(out["midiCh"] == 4);
+  CHECK(out["midiRecallCc"] == 20);
+  CHECK(out["volumUiMode"] == "play");
+  CHECK(out["lastPlaySlot"] == 7);
+  CHECK(out["lastAmpIdx"] == 2);
+  CHECK(out["version"] == volum::kVoLumUserSettingsVersion);
+}
+
 TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Full)")
 {
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
@@ -991,6 +1011,92 @@ TEST_CASE("User settings IO tolerates settings without liteMode (defaults to Ful
     j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &lite);
   REQUIRE_FALSE(healed);
   CHECK(lite == false);
+}
+
+// VoLum 1.3.0: "Animate art in PLAY", machine-global like Lite, default on.
+TEST_CASE("animatePlayArt round-trips, defaults on, and is additive (no version bump)")
+{
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+
+  const nlohmann::json jOn = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE(jOn["animatePlayArt"] == true);
+  const nlohmann::json jOff = volum::VolumUserSettingsToJson(
+    amps, volum::kAmpCount, 0, nullptr, true, false, false, nullptr, nullptr, false, false, 12.0, false);
+  REQUIRE(jOff["animatePlayArt"] == false);
+
+  // `sentinel` is the opposite of the expected answer, so the loader must overwrite it.
+  auto read = [&](const nlohmann::json& j, bool sentinel, bool& healed) {
+    bool animate = sentinel;
+    healed = false;
+    volum::VolumUserSettingsFromJson(j, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &animate);
+    return animate;
+  };
+  bool healed = true;
+  CHECK(read(jOff, true, healed) == false);
+  CHECK_FALSE(healed);
+  CHECK(read(jOn, false, healed) == true);
+  CHECK_FALSE(healed);
+
+  // A file from before 1.3.0 has no key: animation on, nothing to heal.
+  nlohmann::json older = jOff;
+  older.erase("animatePlayArt");
+  bool animate = false;
+  volum::VolumUserSettingsFromJson(older, amps, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &animate);
+  CHECK(animate);
+  CHECK_FALSE(healed);
+
+  // An older reader (one that does not ask for the key) loads a 1.3.0 file cleanly.
+  volum::VolumUserSettingsFromJson(jOff, amps, volum::kAmpCount, nullptr, nullptr, &healed);
+  CHECK_FALSE(healed);
+
+  // A future writer (version + 1, unknown keys) still yields the key, unhealed.
+  nlohmann::json future = jOff;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["unknownFutureKey"] = true;
+  CHECK(read(future, true, healed) == false);
+  CHECK_FALSE(healed);
+
+  // A wrong type heals back to the default.
+  nlohmann::json broken = jOff;
+  broken["animatePlayArt"] = "yes";
+  CHECK(read(broken, false, healed) == true);
+  CHECK(healed);
+}
+
+TEST_CASE("animatePlayArt merge-write touches only its own key")
+{
+  const nlohmann::json j = {{"midiCh", 4}, {"liteMode", true}, {"lastPlaySlot", 7}, {"lastAmpIdx", 2}};
+  const auto out = volum::MergeAnimatePlayArtIntoSettings(j, false);
+  CHECK(out["animatePlayArt"] == false);
+  CHECK(out["liteMode"] == true);
+  CHECK(out["midiCh"] == 4);
+  CHECK(out["lastPlaySlot"] == 7);
+  CHECK(out["lastAmpIdx"] == 2);
+  CHECK(out["version"] == volum::kVoLumUserSettingsVersion);
+  CHECK(out.size() == j.size() + 2);
+
+  // The plugin path: the Settings switch saves this key alone and pushes it to PLAY.
+  const auto root = std::filesystem::path(__FILE__).parent_path().parent_path();
+  auto readText = [](const std::filesystem::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    REQUIRE(in);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  };
+  const std::string scene = readText(root / "VoLumSettingsScene.inc.cpp");
+  const auto set = scene.find("void NeuralAmpModeler::_VolumSetAnimatePlayArt(bool animate)");
+  REQUIRE(set != std::string::npos);
+  const auto setEnd = scene.find("\n}", set);
+  REQUIRE(setEnd != std::string::npos);
+  const std::string body = scene.substr(set, setEnd - set);
+  CHECK(body.find("_VolumSaveMachineBool(\"animatePlayArt\", animate);") != std::string::npos);
+  CHECK(body.find("_VolumSaveSettingsToFile") == std::string::npos);
+  CHECK(scene.find("mVolumAnimatePlayArt.store(parsedAnimatePlayArt);") != std::string::npos);
+  CHECK(scene.find("GetParam(kInputCalibrationLevel)->Value(), mVolumAnimatePlayArt.load());") != std::string::npos);
+  const std::string runtime = readText(root / "VoLumPlayRuntime.inc.cpp");
+  CHECK(runtime.find("SetAnimateArt(mVolumAnimatePlayArt.load());") != std::string::npos);
 }
 
 TEST_CASE("User settings IO round-trips machine-global input calibration defaults")
@@ -1055,8 +1161,8 @@ TEST_CASE("Malformed calibration defaults heal safely")
 //
 // This pin sets *every* persisted field to a non-default, in-range value and
 // asserts a full round-trip through the real settings JSON path. Equality uses
-// the canonical composed codec (AmpSettingsEqual), so any field the settings
-// path drops shows up as inequality. It also asserts the per-amp JSON object
+// AmpSettingsEqual over every field the canonical composed codec writes, so any
+// field the settings path drops shows up as inequality. It also asserts the per-amp JSON object
 // contains every top-level key the canonical codec emits, catching a dropped
 // field structurally even if its value happened to match the default.
 //
@@ -1196,6 +1302,21 @@ volum::VoLumAmpSettings MakeFullyPopulatedAmpSettings()
     s.postTremoloModes[i].mix = 0.4 + 0.1 * i;
     s.postTremoloModes[i].crossover = 500.0 + 100.0 * i;
   }
+  s.postChorusActive = true;
+  s.postChorusMode = volum::kVoLumChorusModeEnsemble;
+  s.postChorusRate = 0.62;
+  s.postChorusDepth = 0.31;
+  s.postChorusTone = 0.83;
+  s.postChorusWidth = 0.17;
+  s.postChorusMix = 0.94;
+  for (int i = 0; i < volum::kVoLumChorusModeCount; ++i)
+  {
+    s.postChorusModes[i].rate = 0.11 + 0.07 * i;
+    s.postChorusModes[i].depth = 0.21 + 0.07 * i;
+    s.postChorusModes[i].tone = 0.31 + 0.07 * i;
+    s.postChorusModes[i].width = 0.41 + 0.07 * i;
+    s.postChorusModes[i].mix = 0.51 + 0.07 * i;
+  }
   for (int i = 0; i < volum::kVoLumPitchModeCount; ++i)
   {
     s.prePitchModes[i].mix = 0.3 + 0.1 * i;
@@ -1223,8 +1344,11 @@ TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive
   volum::VoLumAmpSettings amps[volum::kAmpCount]{};
   amps[0] = full;
 
-  const nlohmann::json j =
-    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, /*lastAmpIdx=*/0, /*fx=*/nullptr, /*includeDualAmp=*/true);
+  // Every machine-global key rides along at a non-default value too.
+  const nlohmann::json j = volum::VolumUserSettingsToJson(
+    amps, volum::kAmpCount, /*lastAmpIdx=*/0, /*fx=*/nullptr, /*includeDualAmp=*/true, /*preLocked=*/false,
+    /*postLocked=*/false, /*liveLockedPre=*/nullptr, /*liveLockedPost=*/nullptr, /*liteMode=*/true,
+    /*calibrateInput=*/true, /*inputCalibrationLevel=*/-3.5, /*animatePlayArt=*/false);
 
   // Structural: the per-amp object must emit every top-level key the canonical
   // composed codec emits. Catches a field dropped from the settings writer even
@@ -1240,17 +1364,126 @@ TEST_CASE("User settings IO round-trips EVERY VoLumAmpSettings field (exhaustive
   // Value: every field survives the real settings round-trip.
   volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
   bool healed = false;
-  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  bool lite = false, calibrate = false, animate = true;
+  double level = 12.0;
+  volum::VolumUserSettingsFromJson(j, loaded, volum::kAmpCount, nullptr, nullptr, &healed, nullptr, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr, &lite, &calibrate, &level, &animate);
   REQUIRE_FALSE(healed);
   CHECK(volum::AmpSettingsEqual(loaded[0], full));
+  CHECK(lite);
+  CHECK(calibrate);
+  CHECK(level == doctest::Approx(-3.5));
+  CHECK_FALSE(animate);
+}
+
+// --- Field-wise AmpSettingsEqual vs the JSON tree compare (oracle) -----------
+//
+// AmpSettingsEqual compares fields directly. Until 1.3.0 it compared the two
+// AmpSettingsToJson trees, which kept it in step with the codec for free. That
+// compare lives on here as the oracle: every key the codec writes (and every
+// field of every per-mode snapshot) is mutated on its own, from both the default
+// and the exhaustive fixture, and the two compares must agree. A field added to
+// the codec shows up here as a key the field-wise compare does not see.
+namespace
+{
+bool JsonAmpSettingsEqual(const volum::VoLumAmpSettings& a, const volum::VoLumAmpSettings& b)
+{
+  auto ja = volum::AmpSettingsToJson(a);
+  auto jb = volum::AmpSettingsToJson(b);
+  ja.erase("postValid");
+  jb.erase("postValid");
+  return ja == jb;
+}
+
+// A value for `v` that differs from both `v` and `avoid` and decodes in range.
+nlohmann::json Perturbed(const nlohmann::json& v, const nlohmann::json& avoid)
+{
+  if (v != avoid)
+    return avoid;
+  if (v.is_boolean())
+    return !v.get<bool>();
+  if (v.is_number_integer())
+  {
+    const long long n = v.get<long long>();
+    return n == 0 ? 1 : (n > 0 ? n - 1 : n + 1);
+  }
+  if (v.is_number_float())
+    return v.get<double>() == 0.0 ? 0.25 : v.get<double>() * 0.5;
+  if (v.is_string())
+    return v.get<std::string>() + "_x";
+  return v;
+}
+
+struct Mutation
+{
+  std::string path;
+  nlohmann::json json;
+};
+
+// One mutation per codec key; arrays of snapshots get one per element field.
+std::vector<Mutation> EveryKeyMutation(const nlohmann::json& base, const nlohmann::json& donor)
+{
+  std::vector<Mutation> out;
+  for (auto it = base.begin(); it != base.end(); ++it)
+  {
+    const auto& key = it.key();
+    if (it->is_array())
+    {
+      for (size_t i = 0; i < it->size(); ++i)
+        for (auto f = (*it)[i].begin(); f != (*it)[i].end(); ++f)
+        {
+          nlohmann::json m = base;
+          m[key][i][f.key()] = Perturbed(*f, donor[key][i][f.key()]);
+          out.push_back({key + "[" + std::to_string(i) + "]." + f.key(), m});
+        }
+      continue;
+    }
+    nlohmann::json m = base;
+    m[key] = Perturbed(*it, donor[key]);
+    out.push_back({key, m});
+  }
+  return out;
+}
+} // namespace
+
+TEST_CASE("AmpSettingsEqual (field-wise) agrees with the JSON tree compare for a change in every codec field")
+{
+  const volum::VoLumAmpSettings defaults{};
+  const volum::VoLumAmpSettings full = MakeFullyPopulatedAmpSettings();
+  CHECK(volum::AmpSettingsEqual(full, full));
+  CHECK(volum::AmpSettingsEqual(defaults, defaults));
+  CHECK(volum::AmpSettingsEqual(full, full) == JsonAmpSettingsEqual(full, full));
+  CHECK(volum::AmpSettingsEqual(full, defaults) == JsonAmpSettingsEqual(full, defaults));
+
+  int mutations = 0;
+  for (const auto* pair : {&defaults, &full})
+  {
+    const volum::VoLumAmpSettings& base = *pair;
+    const volum::VoLumAmpSettings& donor = pair == &defaults ? full : defaults;
+    for (const auto& m : EveryKeyMutation(volum::AmpSettingsToJson(base), volum::AmpSettingsToJson(donor)))
+    {
+      volum::VoLumAmpSettings mutated = base;
+      volum::AmpSettingsFromJson(m.json, mutated);
+      INFO("mutated codec field: " << m.path);
+      const bool oracle = JsonAmpSettingsEqual(base, mutated);
+      CHECK(volum::AmpSettingsEqual(base, mutated) == oracle);
+      CHECK(volum::AmpSettingsEqual(mutated, base) == oracle);
+      // Every field but the postValid sentinel must actually change the settings,
+      // or this case would not be testing it.
+      if (m.path != "postValid")
+        CHECK_FALSE(oracle);
+      ++mutations;
+    }
+  }
+  CHECK(mutations > 2 * 150);
 }
 
 // The preset/scene persistence path is AmpSettingsToJson/FromJson (see
 // VoLumContentStore RegistryToJson). Every existing preset round-trip asserts
-// fidelity via AmpSettingsEqual, but that comparator is defined as
-// AmpSettingsToJson(a) == AmpSettingsToJson(b) -- circular w.r.t. the codec
-// under test, so a field DROPPED from AmpSettingsToJson would vanish from both
-// sides and the check would pass vacuously. This pin instead compares the
+// fidelity via AmpSettingsEqual, which compares exactly the fields
+// AmpSettingsToJson writes -- circular w.r.t. the codec under test, so a field
+// DROPPED from AmpSettingsToJson (and so from the compare) would pass
+// vacuously. This pin instead compares the
 // DECODED STRUCT FIELDS directly to the non-default input, which fails loudly
 // if a 1.2.0 effect/BYO field stops surviving a preset save/reload.
 TEST_CASE("Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct-direct (non-circular)")
@@ -1285,6 +1518,22 @@ TEST_CASE("Preset/scene path (AmpSettingsToJson) round-trips 1.2.0 fields struct
     CHECK(out.postTremoloModes[i].shape == doctest::Approx(in.postTremoloModes[i].shape));
     CHECK(out.postTremoloModes[i].mix == doctest::Approx(in.postTremoloModes[i].mix));
     CHECK(out.postTremoloModes[i].crossover == doctest::Approx(in.postTremoloModes[i].crossover));
+  }
+  CHECK(out.postChorusActive == in.postChorusActive);
+  CHECK(out.postChorusMode == in.postChorusMode);
+  CHECK(out.postChorusRate == doctest::Approx(in.postChorusRate));
+  CHECK(out.postChorusDepth == doctest::Approx(in.postChorusDepth));
+  CHECK(out.postChorusTone == doctest::Approx(in.postChorusTone));
+  CHECK(out.postChorusWidth == doctest::Approx(in.postChorusWidth));
+  CHECK(out.postChorusMix == doctest::Approx(in.postChorusMix));
+  for (int i = 0; i < volum::kVoLumChorusModeCount; ++i)
+  {
+    INFO("postChorusModes[" << i << "]");
+    CHECK(out.postChorusModes[i].rate == doctest::Approx(in.postChorusModes[i].rate));
+    CHECK(out.postChorusModes[i].depth == doctest::Approx(in.postChorusModes[i].depth));
+    CHECK(out.postChorusModes[i].tone == doctest::Approx(in.postChorusModes[i].tone));
+    CHECK(out.postChorusModes[i].width == doctest::Approx(in.postChorusModes[i].width));
+    CHECK(out.postChorusModes[i].mix == doctest::Approx(in.postChorusModes[i].mix));
   }
 
   // POST delay tempo-sync (the two newest EParams).
@@ -1372,4 +1621,141 @@ TEST_CASE("Entries that cannot name a preset are dropped, not stored as blanks")
   CHECK(written.contains("factory:0"));
   CHECK_FALSE(written.contains("factory:1"));
   CHECK_FALSE(written.contains(""));
+}
+
+TEST_CASE("lastPlaySlot is a standalone instance key, not a VoLumAmpSettings field")
+{
+  // H17: the PLAY cursor is the same class of per-instance key as midiCh /
+  // volumUiMode. It does not live on VoLumAmpSettings, so it must NOT enter the
+  // exhaustive amp-settings pin and must NOT bump kVoLumUserSettingsVersion.
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  CHECK_FALSE(written.contains("lastPlaySlot"));
+  CHECK_FALSE(written.contains("midiCh"));
+  CHECK_FALSE(written.contains("midiRecallCc"));
+  CHECK_FALSE(written.contains("volumUiMode"));
+
+  nlohmann::json future = written;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["lastPlaySlot"] = 7;
+  future["unknownFutureKey"] = true;
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(future, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+
+  nlohmann::json older = written;
+  older.erase("lastPlaySlot");
+  healed = false;
+  volum::VolumUserSettingsFromJson(older, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+}
+
+TEST_CASE("chorusActive is an additive VoLumEffectSettings key (no version bump)")
+{
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumEffectSettings fx;
+  fx.chorusActive = true;
+  const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, &fx);
+  REQUIRE(written["effects"].contains("chorusActive"));
+  CHECK(written["effects"]["chorusActive"] == true);
+  CHECK(written["version"] == volum::kVoLumUserSettingsVersion);
+
+  // A file written before this key existed must not force chorus off - restore
+  // is the last apply on the Pack-import path, so an off would then be
+  // persisted over the imported scene. It seeds from the amp scene instead, so
+  // the seed has to be written into the JSON, not poked into the output array
+  // that the read is about to overwrite.
+  volum::VoLumAmpSettings seeded[volum::kAmpCount]{};
+  seeded[0].postChorusActive = true;
+  nlohmann::json older = volum::VolumUserSettingsToJson(seeded, volum::kAmpCount, 0, &fx);
+  older["effects"].erase("chorusActive");
+  volum::VoLumEffectSettings loaded;
+  loaded.chorusActive = false;
+  bool healed = false;
+  int last = 0;
+  volum::VolumUserSettingsFromJson(older, amps, volum::kAmpCount, &last, &loaded, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(loaded.chorusActive == true);
+
+  nlohmann::json future = written;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["effects"]["unknownFutureFxKey"] = true;
+  healed = false;
+  volum::VoLumEffectSettings futureLoaded;
+  volum::VolumUserSettingsFromJson(future, amps, volum::kAmpCount, nullptr, &futureLoaded, &healed);
+  REQUIRE_FALSE(healed);
+  CHECK(futureLoaded.chorusActive == true);
+}
+
+TEST_CASE("Standalone settings write and read lastPlaySlot")
+{
+  // The decode helper is pinned in test_volum_play.cpp. This pin is the scene
+  // file wiring: without these two lines a quit/relaunch starts the PLAY cursor
+  // at -1 even though the DAW chunk already round-trips the same key.
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  const std::string scene((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(scene.find("j[\"lastPlaySlot\"] = mVolumLastRecalledPlaySlot;") != std::string::npos);
+  CHECK(scene.find("LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot)") != std::string::npos);
+  const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(load != std::string::npos);
+  const auto apply = scene.find("LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot)", load);
+  REQUIRE(apply != std::string::npos);
+  // The read belongs inside the APP_API guard: a plugin insert must not take a
+  // standalone window's PLAY cursor. Proven structurally rather than by counting
+  // characters - a byte-distance proxy breaks the moment anyone edits a nearby
+  // comment, which says nothing about whether the guard still holds.
+  const auto guard = scene.rfind("#if defined(APP_API)", apply);
+  REQUIRE(guard != std::string::npos);
+  CHECK(scene.find("#endif", guard) > apply);
+
+  // And the chrome refresh sits in that same guarded block, after the read, so
+  // an imported uiMode cannot leave PLAY covering BUILD.
+  const auto chrome = scene.find("_VolumRefreshPlaySurface();", apply);
+  REQUIRE(chrome != std::string::npos);
+  CHECK(chrome < scene.find("#endif", guard));
+}
+
+TEST_CASE("midiRecallCc is an additive standalone instance key (no version bump)")
+{
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json written = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  CHECK_FALSE(written.contains("midiRecallCc"));
+  CHECK(written["version"] == volum::kVoLumUserSettingsVersion);
+
+  nlohmann::json older = written;
+  older.erase("midiRecallCc");
+  CHECK(volum::MidiRecallCcFromJson(older) == volum::kMidiRecallCcDefault);
+
+  nlohmann::json future = written;
+  future["version"] = volum::kVoLumUserSettingsVersion + 1;
+  future["midiRecallCc"] = 20;
+  future["unknownFutureKey"] = true;
+  CHECK(volum::MidiRecallCcFromJson(future) == 20);
+  volum::VoLumAmpSettings loaded[volum::kAmpCount]{};
+  bool healed = false;
+  volum::VolumUserSettingsFromJson(future, loaded, volum::kAmpCount, nullptr, nullptr, &healed);
+  REQUIRE_FALSE(healed);
+
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  const std::string scene((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(scene.find("j[\"midiRecallCc\"] = mVolumMidiRecallCc.load();") != std::string::npos);
+  CHECK(scene.find("MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load())") != std::string::npos);
+  const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(load != std::string::npos);
+  const auto apply = scene.find("MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load())", load);
+  REQUIRE(apply != std::string::npos);
+  const auto guard = scene.rfind("#if defined(APP_API)", apply);
+  REQUIRE(guard != std::string::npos);
+  CHECK(scene.find("#endif", guard) > apply);
 }

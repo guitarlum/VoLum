@@ -7,10 +7,14 @@
 #include "config.h"
 #include "IControls.h"
 // VoLum: custom controls and keyboard stepping (upstream-equivalent file fence)
+#include "VoLumAboutLayout.h"
 #include "VoLumControls.h"
+#include "VoLumPackLayout.h"
 #include "VoLumKeyboardModel.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumMeterDirty.h"
 #include "VoLumOutputMode.h"
+#include "VoLumSecondPress.h"
 
 #define PLUG() static_cast<PLUG_CLASS_NAME*>(GetDelegate())
 #define NAM_KNOB_HEIGHT 120.0f
@@ -64,6 +68,22 @@ public:
       g.FillEllipse(PluginColors::MOUSEOVER, mRECT);
 
     ISVGButtonControl::Draw(g);
+  }
+};
+
+class VoLumUpdateBadgeControl : public IControl
+{
+public:
+  explicit VoLumUpdateBadgeControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillEllipse(VoLumColors::GOLD, mRECT);
+    g.DrawEllipse(VoLumColors::HERO_BG, mRECT, nullptr, 1.f);
   }
 };
 
@@ -148,6 +168,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
     if (!IsDisabled())
     {
       SetSelectedForKeyboard(true);
@@ -157,6 +178,14 @@ public:
     }
 
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  // Double-click still resets to default, but only on the knob that took the
+  // first click: a dropdown row double-clicked over a knob must not reset it.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      IVKnobControl::OnMouseDblClick(x, y, mod);
   }
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
@@ -217,6 +246,7 @@ private:
   bool mKeyboardSelected = false;
   volum::keyboard::WheelAccumulator mWheelAccum;
   std::string mKeyboardLabel;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
@@ -338,8 +368,18 @@ public:
     (void)x;
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
   }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
+  }
+
+private:
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMFileNameControl : public IVButtonControl
@@ -634,8 +674,8 @@ private:
 
 class NAMMeterControl : public IVPeakAvgMeterControl<>, public IBitmapBase
 {
-  static constexpr float KMeterMin = -70.0f;
-  static constexpr float KMeterMax = -0.01f;
+  static constexpr float KMeterMin = volum::kNamMeterMinDb;
+  static constexpr float KMeterMax = volum::kNamMeterMaxDb;
 
 public:
   NAMMeterControl(const IRECT& bounds, const IBitmap& bitmap, const IVStyle& style)
@@ -648,12 +688,48 @@ public:
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
 
+  void SetCovered(bool covered) { mCovered = covered; }
+
   void SetSafetyActive(bool active)
   {
     if (mSafetyActive == active)
       return;
     mSafetyActive = active;
-    SetDirty(false);
+    // Gate here (not in SetDirty): PLAY covers the BUILD meters; BUILD return
+    // already calls SetAllControlsDirty.
+    if (!mCovered)
+      SetDirty(false);
+  }
+
+  void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
+  {
+    if (IsDisabled() || msgTag != ISender<>::kUpdateMessage)
+      return;
+
+    IByteStream stream(pData, dataSize);
+    int pos = 0;
+    ISenderData<1, std::pair<float, float>> d;
+    pos = stream.Get(&d, pos);
+
+    bool needsDirty = false;
+    for (auto c = d.chanOffset; c < (d.chanOffset + d.nChans); c++)
+    {
+      const double peakAmp = static_cast<double>(std::get<0>(d.vals[c]));
+      const double avgAmp = static_cast<double>(std::get<1>(d.vals[c]));
+      const double lowPointAbs = std::fabs(static_cast<double>(KMeterMin));
+      const double rangeDB = std::fabs(static_cast<double>(KMeterMax) - static_cast<double>(KMeterMin));
+      const double linearPeakPos = (AmpToDB(peakAmp) + lowPointAbs) / rangeDB;
+      const double linearAvgPos = volum::NamMeterClippedAvgFromAmp(avgAmp, KMeterMin, KMeterMax);
+
+      if (volum::NamMeterNeedsDirty(GetValue(c), linearAvgPos, mSafetyActive, mSafetyActive, mCovered))
+        needsDirty = true;
+
+      SetValue(linearAvgPos, c);
+      mPeakValues[c] = static_cast<float>(linearPeakPos);
+    }
+
+    if (needsDirty)
+      SetDirty(false);
   }
 
   virtual void OnResize() override
@@ -681,6 +757,7 @@ public:
 
 private:
   bool mSafetyActive = false;
+  bool mCovered = false;
 };
 
 // Container where we can refer to children by names instead of indices
@@ -758,12 +835,10 @@ public:
 
   void OnAttached() override
   {
+    // No heading of its own: the Settings card that hosts this control already
+    // caps it with "Model information".
     IRECT r(GetRECT());
-    const float footerCapH = 20.f;
-    const IVStyle headingStyle = mStyle.WithDrawFrame(false).WithValueText(
-      IText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Near, EVAlign::Top));
-    AddChildControl(new IVLabelControl(r.ReduceFromTop(footerCapH), "Model information", headingStyle));
-    const float rowH = 14.f;
+    const float rowH = 15.f;
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.sampleRate);
     AddNamedChildControl(new IVLabelControl(r.ReduceFromTop(rowH), "", mStyle), mControlNames.currentLatency);
     // The latency caveat needs more characters than the 15 px rows fit - the single
@@ -879,7 +954,21 @@ public:
       ss << " (n/a)";
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
+    // The constructor is given no option list, so the disabled-state buffer stays
+    // empty after OnInit copies the parameter's state count. Grow it before the
+    // call or SetStateDisabled is a no-op and the radio stays live.
+    if (mNumStates > 2)
+      volum::EnsureRadioDisabledStates(mDisabledState, mNumStates);
+    SetStateDisabled(2, disable);
   };
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const int index = GetButtonForPoint(x, y);
+    if (index > -1 && GetStateDisabled(index))
+      return;
+    IVRadioButtonControl::OnMouseDown(x, y, mod);
+  }
 };
 
 // VoLum: non-parameter A2 Lite-mode toggle for the Settings overlay. Reads and
@@ -919,18 +1008,11 @@ public:
   {
     // Explicit two-state switch so the active quality mode is unambiguous:
     // FULL (best quality, default) on the left, LITE (lower CPU) on the right.
-    const bool lite = IsLite();
     const IRECT seg = SegmentTrack();
-    const float cr = seg.H() * 0.5f;
+    DrawVoLumSegmentSwitch(g, seg, IsLite());
+    const bool lite = IsLite();
     const IRECT leftR = seg.GetFromLeft(seg.W() * 0.5f);
     const IRECT rightR = seg.GetFromRight(seg.W() * 0.5f);
-    const IRECT activeR = lite ? rightR : leftR;
-
-    // Recessed track, then a brass slug behind the active segment.
-    g.FillRoundRect(IColor(255, 9, 9, 14), seg, cr);
-    g.FillRoundRect(VoLumColors::GOLD.WithOpacity(0.30f), activeR, cr);
-    g.DrawRoundRect(VoLumColors::GOLD, activeR, cr, &mBlend, 1.25f);
-    g.DrawRoundRect(VoLumColors::FRAME, seg, cr, &mBlend, 1.f);
 
     const IText onText(12.f, VoLumColors::SEL_TEXT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
     const IText offText(
@@ -939,13 +1021,14 @@ public:
     g.DrawText(lite ? onText : offText, "LITE", rightR);
 
     if (mMouseIsOver)
-      g.FillRoundRect(PluginColors::MOUSEOVER, seg, cr);
+      g.FillRoundRect(PluginColors::MOUSEOVER, seg, seg.H() * 0.5f);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
     {
       const IRECT seg = SegmentTrack();
@@ -955,8 +1038,15 @@ public:
     SetDirty(false);
   }
 
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
+  }
+
 private:
   IText mLabelText;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren
@@ -984,10 +1074,41 @@ public:
     modelInfoControl->ClearModelInfo();
   }
 
+  bool ConsumeEscape()
+  {
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+      return map->As<VoLumMidiFootswitchControl>()->ConsumeEscape();
+    return false;
+  }
+
+  // The MIDI tab shows its footswitch board (not the Sound picker), so PageUp /
+  // PageDown page its banks.
+  bool MidiBanksPageable()
+  {
+    if (mActiveTab != kTabMidi || mWillHide)
+      return false;
+    auto* map = GetNamedChild(mControlNames.midiSoundMap);
+    return map && !map->IsHidden() && map->As<VoLumMidiFootswitchControl>()->OnBoard();
+  }
+
+  bool PageMidiBanks(int vk)
+  {
+    if (!MidiBanksPageable())
+      return false;
+    return GetNamedChild(mControlNames.midiSoundMap)->As<VoLumMidiFootswitchControl>()->PageBankKey(vk);
+  }
+
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
   {
+    (void)x;
+    (void)y;
     if (key.VK == kVK_ESCAPE)
     {
+      // Escape pops the MIDI tab's Sound picker or drag first; only a page that
+      // has nothing left to back out of closes. The plugin key handler also
+      // calls ConsumeEscape so Esc works when the cursor is not over Settings.
+      if (ConsumeEscape())
+        return true;
       HideAnimated(true);
       return true;
     }
@@ -1004,9 +1125,14 @@ public:
       mHide = false;
       // Children were hidden on close; unhide immediately so they paint during the fade-in
       ForAllChildrenFunc([](int childIdx, IControl* pChild) { pChild->Hide(false); });
+      _ApplyTabVisibility();
     }
     else // hide subcontrols immediately
     {
+      // Every close path lands here, so the MIDI tab always reopens on its
+      // footswitch board rather than on a half-finished Sound pick.
+      if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+        map->As<VoLumMidiFootswitchControl>()->ResetToBoard();
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
     }
 
@@ -1023,6 +1149,8 @@ public:
         {
           pCaller->OnEndAnimation();
           IContainerBase::Hide(mWillHide);
+          if (!mWillHide)
+            _ApplyTabVisibility();
           GetUI()->SetAllControlsDirty();
           return;
         }
@@ -1032,184 +1160,330 @@ public:
     SetDirty(true);
   }
 
+  // Three tabs, switched in-panel. SIGNAL owns the audio path (calibration,
+  // output mode, performance); MIDI owns the channel, the recall CC, and the
+  // Program Change Sound assignments; SYSTEM owns everything about this install
+  // (shortcuts, loaded model, content library, about and update). The one-page
+  // version could not hold all of it at 900x600 without clipping its own footer.
   void OnAttached() override
   {
-    const float pad = 22.0f;
     const IRECT rootB = GetRECT();
-    const float panelW = rootB.W() * 0.84f;
-    const float panelH = rootB.H() * 0.84f;
-    const IRECT panel = rootB.GetCentredInside(static_cast<int>(panelW), static_cast<int>(panelH));
-    // Poiret reads too light/small for an overlay title; use Josefin-Bold for a clear “panel” headline.
+    // 0.92, not 0.88: SYSTEM's About card has to hold version, links, the update
+    // pill, its notes, and the auto-check row without stacking them on top of each
+    // other. The dim margin is still ~36 px.
+    const IRECT panel =
+      rootB.GetCentredInside(static_cast<int>(rootB.W() * 0.92f), static_cast<int>(rootB.H() * 0.92f));
+
+    AddNamedChildControl(new VoLumSettingsBackdropControl(rootB, panel), mControlNames.bitmap);
+
+    IRECT inner = panel.GetPadded(-22.f);
+
+    // Poiret reads too light for an overlay title; Josefin-Bold at 32 leaves the
+    // tab strip room to be the second-loudest thing on the panel.
     const IVStyle titleStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
-      IText(44.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
+      IText(32.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Middle));
+    const IRECT headerRow = inner.ReduceFromTop(40.f);
+    AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
+    const IRECT closeR(headerRow.R - 32.f, headerRow.MH() - 15.f, headerRow.R - 2.f, headerRow.MH() + 15.f);
+    AddNamedChildControl(
+      new VoLumSettingsCloseControl(
+        closeR,
+        [](IControl* pCaller) { static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true); }),
+      mControlNames.close);
+
+    const IRECT tabRow = inner.ReduceFromTop(30.f);
+    AddNamedChildControl(
+      new VoLumSettingsTabStripControl(tabRow, {kTabNames[kTabSignal], kTabNames[kTabMidi], kTabNames[kTabSystem]},
+                                       [this](int tab) { SetActiveTab(tab); }),
+      mControlNames.tabStrip);
+
+    (void)inner.ReduceFromTop(7.f);
+    AddNamedChildControl(
+      new IVLabelControl(inner.ReduceFromTop(14.f), kTabHints[kTabSignal], _HintStyle()), mControlNames.tabHint);
+    (void)inner.ReduceFromTop(8.f);
+    AddNamedChildControl(new VoLumSettingsFooterSepControl(inner.ReduceFromTop(1.f)), mControlNames.tabRule);
+    (void)inner.ReduceFromTop(12.f);
+
+    // The panel's bottom corner accents rise ~18 px from panel.B - 8; stop the
+    // body clear of them so no card footer paints over a bracket.
+    const IRECT body(inner.L, inner.T, inner.R, panel.B - 30.f);
+    _BuildSignalTab(body);
+    _BuildMidiTab(body);
+    _BuildSystemTab(body);
+    _ApplyTabVisibility();
+    _ApplyMidiWiring();
+
+    OnResize();
+  }
+
+  // ---- SIGNAL: how audio gets in and out ----------------------------------
+  void _BuildSignalTab(const IRECT& body)
+  {
     const auto text = IText(15.f, EAlign::Center, VoLumColors::TEXT_BRIGHT);
     const auto leftText = text.WithAlign(EAlign::Near).WithFGColor(VoLumColors::TEXT_BRIGHT);
-    const auto style = mStyle.WithDrawFrame(false).WithValueText(text);
-    const IVStyle leftStyle = style.WithValueText(leftText);
 
-    AddNamedChildControl(new VoLumSettingsBackdropControl(GetRECT(), panel), mControlNames.bitmap);
+    IRECT rest = body;
+    const IRECT cardsRow = rest.ReduceFromTop(196.f);
+    (void)rest.ReduceFromTop(18.f);
+    const IRECT hintRow = rest.ReduceFromTop(16.f);
 
-    IRECT inner = panel.GetPadded(-pad);
+    const float gap = 14.f;
+    const float cardW = (cardsRow.W() - 2.f * gap) / 3.f;
+    const IRECT inputCard(cardsRow.L, cardsRow.T, cardsRow.L + cardW, cardsRow.B);
+    const IRECT outputCard(inputCard.R + gap, cardsRow.T, inputCard.R + gap + cardW, cardsRow.B);
+    const IRECT perfCard(outputCard.R + gap, cardsRow.T, cardsRow.R, cardsRow.B);
 
-    auto headerRow = inner.ReduceFromTop(58.0f);
-    AddNamedChildControl(new IVLabelControl(headerRow, "SETTINGS", titleStyle), mControlNames.title);
-    (void)inner.ReduceFromTop(2.0f); // tight gap under title row (matches mockup)
-
-    auto closeAction = [&](IControl* pCaller) {
-      static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
-    };
-    const IRECT closeR(headerRow.R - 36.f, headerRow.T + 4.f, headerRow.R - 6.f, headerRow.T + 32.f);
-    AddNamedChildControl(new VoLumSettingsCloseControl(closeR, closeAction), mControlNames.close);
-
-    // Shared section-cap style for the three cards (gold, bold, centred).
-    const IVStyle sectionCapStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
-      IText(13.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Center, EVAlign::Top));
-
-    // ---- Footer, reserved bottom-up so the card row absorbs any extra slack ----
-    // Bottom: model information (left) + about (right). The About block needs four
-    // lines (brand + version + ecosystem + URL), so keep this row tall enough.
-    const IRECT metaRow = inner.ReduceFromBottom(64.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
-    const float modelColW = metaRow.W() * 0.46f;
-    const auto modelInfoArea = metaRow.GetFromLeft(modelColW);
-    const auto aboutArea = metaRow.GetFromRight(metaRow.W() - modelColW);
-
-    // Above it: the "real audio settings live elsewhere" hint line.
-    (void)inner.ReduceFromBottom(6.f);
-    const IRECT hintRow = inner.ReduceFromBottom(16.f);
-
-    // Above that: the keyboard shortcut cheat-sheet box (tall enough for the
-    // four-row Edit column).
-    (void)inner.ReduceFromBottom(12.f);
-    const IRECT shortcutArea = inner.ReduceFromBottom(94.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
-
-    // Hairline divider separating the interactive cards from the footer block.
-    (void)inner.ReduceFromBottom(12.f);
-    const IRECT sepRow = inner.ReduceFromBottom(1.f);
-    AddNamedChildControl(new VoLumSettingsFooterSepControl(sepRow), mControlNames.footerSep);
-    (void)inner.ReduceFromBottom(14.f);
-
-    // ---- Card row: Input calibration | Output mode | Performance ----
-    // Three equal, framed cards in one balanced row so the Performance / Lite
-    // toggle gets a real home instead of floating on the divider.
+    // --- Input calibration: dBu field, Calibrate switch, and the status line
+    // that turns a grayed-out card into an explanation (volum::InputCalibrationHelpText).
     {
-      const IRECT cardsBand = inner.GetPadded(-2.f, 0.f, -2.f, 0.f);
-      const float cardGap = 14.f;
-      const float cardW = (cardsBand.W() - 2.f * cardGap) / 3.f;
-      const float cardH = std::min(cardsBand.H(), 176.f);
-      const IRECT cardsRow = cardsBand.GetCentredInside(cardsBand.W(), cardH);
-      const float x0 = cardsRow.L;
-      const IRECT inputCard(x0, cardsRow.T, x0 + cardW, cardsRow.B);
-      const IRECT outputCard(x0 + cardW + cardGap, cardsRow.T, x0 + 2.f * cardW + cardGap, cardsRow.B);
-      const IRECT perfCard(x0 + 2.f * (cardW + cardGap), cardsRow.T, cardsRow.R, cardsRow.B);
+      const IRECT cardBody =
+        _AddCard(kTabSignal, inputCard, "Input calibration", mControlNames.inputGroupFrame, mControlNames.inputSection);
+      const float fieldH = 30.f;
+      const float switchH = NAM_SWTICH_HEIGHT;
+      const float gapY = 10.f;
+      const float helpH = 30.f;
+      IRECT stack = cardBody.GetCentredInside(cardBody.W(), fieldH + gapY + switchH + gapY + helpH);
+      const IRECT fieldR = stack.ReduceFromTop(fieldH).GetCentredInside(std::min(120.f, cardBody.W()), fieldH);
+      (void)stack.ReduceFromTop(gapY);
+      const IRECT switchR = stack.ReduceFromTop(switchH).GetCentredInside(std::min(110.f, cardBody.W()), switchH);
+      (void)stack.ReduceFromTop(gapY);
+      const IRECT helpR = stack.ReduceFromTop(helpH);
 
-      const float capH = 18.f;
-      const float capGap = 8.f;
-      auto cardInnerOf = [](const IRECT& c) { return c.GetPadded(-14.f); };
-      auto capOf = [&](const IRECT& c) { return cardInnerOf(c).GetFromTop(capH); };
-      auto bodyOf = [&](const IRECT& c) { return cardInnerOf(c).GetReducedFromTop(capH + capGap); };
-
-      // Card frames first so all interactive content paints on top of them.
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(inputCard), mControlNames.inputGroupFrame);
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(outputCard), mControlNames.outputGroupFrame);
-      AddNamedChildControl(new VoLumSettingsGroupFrameControl(perfCard), mControlNames.perfGroupFrame);
-
-      // --- Input calibration: dBu field, Calibrate switch, and a status line ---
-      // The status line is what turns a grayed-out card into an explanation; see
-      // volum::InputCalibrationHelpText.
-      {
-        const IRECT body = bodyOf(inputCard);
-        const float fieldH = 30.f;
-        const float fieldW = std::min(120.f, body.W());
-        const float switchH = NAM_SWTICH_HEIGHT;
-        const float gap = 6.f;
-        const float helpH = 16.f;
-        const float stackH = fieldH + gap + switchH + gap + helpH;
-        IRECT stack = body.GetCentredInside(body.W(), std::min(body.H(), stackH));
-        const IRECT fieldR = stack.ReduceFromTop(fieldH).GetCentredInside(fieldW, fieldH);
-        (void)stack.ReduceFromTop(gap);
-        const IRECT switchR = stack.ReduceFromTop(switchH).GetCentredInside(std::min(110.f, body.W()), switchH);
-        (void)stack.ReduceFromTop(gap);
-        const IRECT helpR = stack.ReduceFromTop(helpH);
-
-        auto* inputLevelControl =
-          AddNamedChildControl(new InputLevelControl(fieldR, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
-                               mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel);
-        inputLevelControl->SetTooltip(
-          "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
-          "enters this plugin.");
-        AddNamedChildControl(new NAMSwitchControl(switchR, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
-                             mControlNames.calibrateInput, kCtrlTagCalibrateInput);
-        const IVStyle inputHelpStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
-          IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.7f), "Josefin-Sans", EAlign::Center, EVAlign::Top));
-        AddNamedChildControl(
-          new IVLabelControl(helpR, volum::InputCalibrationHelpText(false), inputHelpStyle), mControlNames.inputHelp);
-      }
-
-      // --- Output mode: Raw / Normalized / Calibrated radios ---
-      {
-        const IRECT body = bodyOf(outputCard);
-        const float radioBandH = 56.f;
-        const IRECT radioArea = body.GetCentredInside(body.W(), std::min(body.H(), radioBandH));
-        const float buttonSize = 11.0f;
-        auto* outputModeControl =
-          AddNamedChildControl(new OutputModeControl(radioArea, kOutputMode, mRadioButtonStyle, buttonSize),
-                               mControlNames.outputMode, kCtrlTagOutputMode);
-        outputModeControl->SetTooltip(
-          "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
-          "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration (needs a model with "
-          "output-level data).");
-      }
-
-      // --- Performance: centred Lite-mode toggle + helper line ---
-      {
-        const IRECT body = bodyOf(perfCard);
-        const float liteH = 30.f;
-        const float helpH = 16.f;
-        const float gap = 10.f;
-        const float groupH = liteH + gap + helpH;
-        IRECT group = body.GetCentredInside(body.W(), std::min(body.H(), groupH));
-        const IRECT liteR = group.ReduceFromTop(liteH);
-        (void)group.ReduceFromTop(gap);
-        const IRECT helpR = group.ReduceFromTop(helpH);
-        AddNamedChildControl(new VoLumLiteModeSwitchControl(liteR, leftText), mControlNames.liteMode);
-        const IVStyle helpStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
-          IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.7f), "Josefin-Sans", EAlign::Center, EVAlign::Top));
-        AddNamedChildControl(
-          new IVLabelControl(helpR, "Lite: smaller A2 slice, lower CPU", helpStyle), mControlNames.perfHelp);
-      }
-
-      // Section caps on top of each card frame.
-      AddNamedChildControl(
-        new IVLabelControl(capOf(inputCard), "Input calibration", sectionCapStyle), mControlNames.inputSection);
-      AddNamedChildControl(
-        new IVLabelControl(capOf(outputCard), "Output mode", sectionCapStyle), mControlNames.outputSection);
-      AddNamedChildControl(
-        new IVLabelControl(capOf(perfCard), "Performance", sectionCapStyle), mControlNames.perfSection);
+      auto* inputLevelControl = _Reg(
+        kTabSignal,
+        AddNamedChildControl(new InputLevelControl(fieldR, kInputCalibrationLevel, mInputLevelBackgroundBitmap, text),
+                             mControlNames.inputCalibrationLevel, kCtrlTagInputCalibrationLevel));
+      inputLevelControl->SetTooltip(
+        "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
+        "enters this plugin.");
+      _Reg(kTabSignal, AddNamedChildControl(
+                         new NAMSwitchControl(switchR, kCalibrateInput, "Calibrate input", mStyle, mSwitchBitmap),
+                         mControlNames.calibrateInput, kCtrlTagCalibrateInput));
+      _Reg(kTabSignal, AddNamedChildControl(
+                         new IVLabelControl(helpR, volum::InputCalibrationHelpText(false), _HelpStyle(EVAlign::Top)),
+                         mControlNames.inputHelp));
     }
 
-    // Footer block: build-aware audio-settings hint, shortcut box, model info, about.
+    // --- Output mode: Raw / Normalized / Calibrated radios ---
+    {
+      const IRECT cardBody =
+        _AddCard(kTabSignal, outputCard, "Output mode", mControlNames.outputGroupFrame, mControlNames.outputSection);
+      const IRECT radioArea = cardBody.GetCentredInside(cardBody.W(), std::min(cardBody.H(), 68.f));
+      auto* outputModeControl =
+        _Reg(kTabSignal, AddNamedChildControl(new OutputModeControl(radioArea, kOutputMode, mRadioButtonStyle, 11.f),
+                                              mControlNames.outputMode, kCtrlTagOutputMode));
+      outputModeControl->SetTooltip(
+        "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
+        "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration (needs a model with "
+        "output-level data).");
+    }
+
+    // --- Performance: A2 Lite toggle + what it costs ---
+    {
+      const IRECT cardBody =
+        _AddCard(kTabSignal, perfCard, "Performance", mControlNames.perfGroupFrame, mControlNames.perfSection);
+      const float liteH = 30.f;
+      const float helpH = 22.f;
+      const float animateH = 46.f;
+      IRECT group = cardBody.GetCentredInside(cardBody.W(), liteH + 8.f + helpH + 10.f + animateH);
+      const IRECT liteR = group.ReduceFromTop(liteH);
+      (void)group.ReduceFromTop(8.f);
+      _Reg(kTabSignal, AddNamedChildControl(new VoLumLiteModeSwitchControl(liteR, leftText), mControlNames.liteMode));
+      // Short enough to fit a third of the panel: the longer wording clipped a
+      // character off each end of this card.
+      _Reg(kTabSignal,
+           AddNamedChildControl(
+             new IVLabelControl(group.ReduceFromTop(helpH), "Smaller A2 slice, lower CPU.", _HelpStyle(EVAlign::Top)),
+             mControlNames.perfHelp));
+      (void)group.ReduceFromTop(10.f);
+      _Reg(kTabSignal, AddNamedChildControl(new VoLumAnimateArtSwitchControl(
+                                              group.ReduceFromTop(animateH),
+                                              [this]() {
+                                                auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate());
+                                                return plugin ? plugin->_VolumIsAnimatePlayArt() : true;
+                                              },
+                                              [this](bool on) {
+                                                if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+                                                  plugin->_VolumSetAnimatePlayArt(on);
+                                              }),
+                                            mControlNames.animateArt));
+    }
+
 #if defined(APP_API)
     const char* audioHintStr = "Audio device / sample rate / buffer: open File > Preferences";
 #else
     const char* audioHintStr = "Audio device / sample rate / buffer: use your host's audio settings";
 #endif
-    const IVStyle hintStyle = mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
-      IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.62f), "Josefin-Sans", EAlign::Center, EVAlign::Middle));
-    AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, hintStyle), mControlNames.audioHint);
-
-    const IVStyle modelInfoStyle = leftStyle.WithValueText(leftText.WithVAlign(EVAlign::Top));
-    AddNamedChildControl(new VoLumSettingsShortcutInfoControl(shortcutArea), mControlNames.shortcutInfo);
-    AddNamedChildControl(new ModelInfoControl(modelInfoArea, modelInfoStyle), mControlNames.modelInfo);
-    {
-      const auto aboutLineText = leftText.WithAlign(EAlign::Far).WithVAlign(EVAlign::Top);
-      const IVStyle aboutStyle = leftStyle.WithValueText(aboutLineText);
-      const auto urlText = aboutLineText;
-      AddNamedChildControl(new AboutControl(aboutArea, aboutStyle, urlText), mControlNames.about);
-    }
-
-    OnResize();
+    _Reg(kTabSignal,
+         AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, _HintStyle()), mControlNames.audioHint));
   }
 
+  // ---- MIDI: which channel, which recall CC, and what each program number plays
+  //
+  // The footswitch view is the tab's body, not a footnote: choosing what program
+  // number 0..127 recalls is the whole reason a player opens this tab. The listen
+  // filter and recall CC above it are two-button / stepper choices most players
+  // never have to change.
+  void _BuildMidiTab(const IRECT& body)
+  {
+    IRECT rest = body;
+    // Taller than the old Omni stepper: the listen filter now spells out All vs
+    // one channel beside the recall CC, plus the two situations that decide which
+    // a guitarist wants.
+    const IRECT channelCard = rest.ReduceFromTop(134.f);
+    (void)rest.ReduceFromTop(14.f);
+    const IRECT mapCard = rest;
+
+    {
+      const IRECT cardBody = _AddCard(kTabMidi, channelCard, "What this VoLum listens to", mControlNames.midiGroupFrame,
+                                      mControlNames.midiSection, EAlign::Near);
+      const float gap = 20.f;
+      const float leftW = std::min(340.f, std::max(220.f, cardBody.W() * 0.55f));
+      const IRECT channelR(cardBody.L, cardBody.T, cardBody.L + leftW, cardBody.B);
+      const IRECT ccR(channelR.R + gap, cardBody.T, cardBody.R, cardBody.B);
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiChannelControl(channelR), mControlNames.midiControl));
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiRecallCcControl(ccR), mControlNames.midiRecallCc));
+    }
+    {
+      const IRECT cardBody = _AddCard(kTabMidi, mapCard, "What each program number plays",
+                                      mControlNames.midiMapGroupFrame, mControlNames.midiMapSection, EAlign::Near);
+      _Reg(kTabMidi, AddNamedChildControl(new VoLumMidiFootswitchControl(cardBody), mControlNames.midiSoundMap));
+    }
+  }
+
+  // ---- SYSTEM: this build, this library, this keyboard --------------------
+  void _BuildSystemTab(const IRECT& body)
+  {
+    const auto leftText = IText(15.f, EAlign::Near, VoLumColors::TEXT_BRIGHT);
+
+    IRECT rest = body;
+    const IRECT shortcutCard = rest.ReduceFromTop(124.f);
+    (void)rest.ReduceFromTop(10.f);
+    const IRECT midRow = rest.ReduceFromTop(volum::packui::SystemMidRowH());
+    (void)rest.ReduceFromTop(10.f);
+    const IRECT aboutCard = rest;
+
+    const float modelW = midRow.W() * 0.44f;
+    const IRECT modelCard(midRow.L, midRow.T, midRow.L + modelW, midRow.B);
+    const IRECT packCard(modelCard.R + 14.f, midRow.T, midRow.R, midRow.B);
+
+    {
+      const IRECT cardBody = _AddCard(kTabSystem, shortcutCard, "Keyboard shortcuts", mControlNames.shortcutGroupFrame,
+                                      mControlNames.shortcutSection, EAlign::Near);
+      _Reg(
+        kTabSystem, AddNamedChildControl(new VoLumSettingsShortcutInfoControl(cardBody), mControlNames.shortcutInfo));
+    }
+    {
+      const IRECT cardBody = _AddCard(kTabSystem, modelCard, "Model information", mControlNames.modelGroupFrame,
+                                      mControlNames.modelSection, EAlign::Near);
+      _Reg(kTabSystem, AddNamedChildControl(new ModelInfoControl(cardBody, mStyle.WithDrawFrame(false).WithValueText(
+                                                                             leftText.WithVAlign(EVAlign::Top))),
+                                            mControlNames.modelInfo));
+    }
+    {
+      const IRECT cardBody = _AddCard(kTabSystem, packCard, "Back up your library", mControlNames.packGroupFrame,
+                                      mControlNames.packSection, EAlign::Near);
+      _Reg(kTabSystem, AddNamedChildControl(new VoLumSettingsPackRowControl(
+                                              cardBody,
+                                              [this]() {
+                                                if (mOnExportPack)
+                                                  mOnExportPack();
+                                              },
+                                              [this]() {
+                                                if (mOnImportPack)
+                                                  mOnImportPack();
+                                              }),
+                                            mControlNames.packRow));
+    }
+    {
+      // Byte escapes, not \u: this file's narrow-literal charset is not UTF-8, so
+      // \u00b7 became one invalid byte and swallowed the rest of the caption.
+      const IRECT cardBody = _AddCard(kTabSystem, aboutCard, "VoLum \xC2\xB7 By Lum", mControlNames.aboutGroupFrame,
+                                      mControlNames.aboutSection, EAlign::Near);
+      const IText lineText = leftText.WithVAlign(EVAlign::Top);
+      _Reg(kTabSystem, AddNamedChildControl(
+                         new AboutControl(cardBody, mStyle.WithDrawFrame(false).WithValueText(lineText), lineText),
+                         mControlNames.about));
+    }
+  }
+
+  static constexpr int kTabSignal = 0;
+  static constexpr int kTabMidi = 1;
+  static constexpr int kTabSystem = 2;
+  static constexpr int kTabCount = 3;
+
+  void SetActiveTab(int tab)
+  {
+    if (tab < 0 || tab >= kTabCount || tab == mActiveTab)
+      return;
+    mActiveTab = tab;
+    if (auto* hint = GetNamedChild(mControlNames.tabHint))
+    {
+      static_cast<ITextControl*>(hint)->SetStr(kTabHints[tab]);
+      hint->SetDirty(false);
+    }
+    if (auto* strip = GetNamedChild(mControlNames.tabStrip))
+      static_cast<VoLumSettingsTabStripControl*>(strip)->SetActive(tab);
+    _ApplyTabVisibility();
+    if (auto* pGraphics = GetUI())
+      pGraphics->SetAllControlsDirty();
+  }
+
+private:
+  static constexpr const char* kTabNames[kTabCount] = {"SIGNAL", "MIDI", "SYSTEM"};
+  static constexpr const char* kTabHints[kTabCount] = {
+    "How audio gets in and out of VoLum",
+    "Which MIDI channel and recall CC this VoLum hears, and which Sound each program number plays",
+    "This build, your library, your keyboard"};
+
+  IControl* _Reg(int tab, IControl* control)
+  {
+    mTabControls[tab].push_back(control);
+    return control;
+  }
+
+  // Both tabs are built once and live in the same container, so every show path
+  // that un-hides all descendants (HideAnimated, the fade animation's final
+  // IContainerBase::Hide) has to re-assert which tab owns the body.
+  void _ApplyTabVisibility()
+  {
+    for (int tab = 0; tab < kTabCount; ++tab)
+      for (auto* control : mTabControls[tab])
+        control->Hide(tab != mActiveTab);
+  }
+
+  IVStyle _CapStyle(EAlign align) const
+  {
+    return mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+      IText(13.f, VoLumColors::GOLD, "Josefin-Bold", align, EVAlign::Middle));
+  }
+
+  IVStyle _HintStyle() const
+  {
+    return mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+      IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.68f), "Josefin-Sans", EAlign::Center, EVAlign::Middle));
+  }
+
+  IVStyle _HelpStyle(EVAlign valign) const
+  {
+    return mStyle.WithDrawFrame(false).WithShowValue(false).WithValueText(
+      IText(11.f, VoLumColors::TEXT_DIM.WithOpacity(0.72f), "Josefin-Sans", EAlign::Center, valign));
+  }
+
+  // Frame + gold section cap, returning the body rect the card's content owns.
+  // Vertical padding is tighter than horizontal so a 100 px card still fits
+  // three text rows under its cap.
+  IRECT _AddCard(int tab, const IRECT& card, const char* caption, const std::string& frameName,
+                 const std::string& capName, EAlign capAlign = EAlign::Center)
+  {
+    _Reg(tab, AddNamedChildControl(new VoLumSettingsGroupFrameControl(card), frameName));
+    const IRECT cardInner = card.GetPadded(-14.f, -12.f, -14.f, -12.f);
+    _Reg(
+      tab, AddNamedChildControl(new IVLabelControl(cardInner.GetFromTop(16.f), caption, _CapStyle(capAlign)), capName));
+    return cardInner.GetReducedFromTop(24.f);
+  }
+
+public:
   void SetModelInfo(const ModelInfo& modelInfo)
   {
     auto* modelInfoControl = static_cast<ModelInfoControl*>(GetNamedChild(mControlNames.modelInfo));
@@ -1222,6 +1496,14 @@ public:
     auto* modelInfoControl = static_cast<ModelInfoControl*>(GetNamedChild(mControlNames.modelInfo));
     assert(modelInfoControl != nullptr);
     modelInfoControl->SetCurrentLatency(report);
+  }
+
+  // The library backup row only opens the Pack modal; the plugin owns the file
+  // dialogs and the import, so it hands its two entry points down here.
+  void SetPackCallbacks(std::function<void()> onExport, std::function<void()> onImport)
+  {
+    mOnExportPack = std::move(onExport);
+    mOnImportPack = std::move(onImport);
   }
 
   // Keep the input-calibration card's status line and tooltip in step with whether
@@ -1237,6 +1519,57 @@ public:
       sw->SetTooltip(volum::InputCalibrationTooltip(available));
   }
 
+  void SetMidiCallbacks(VoLumMidiChannelControl::ChannelCallback channel,
+                        VoLumMidiRecallCcControl::CcCallback recallCc = {})
+  {
+    mMidiChannelCb = std::move(channel);
+    mMidiRecallCcCb = std::move(recallCc);
+    _ApplyMidiWiring();
+  }
+
+  // Assign/clear/swap go straight back out to the plugin, which writes the one
+  // shared midiSoundMap; the MIDI tab never keeps its own copy of the assignments.
+  void SetMidiSoundMapCallbacks(VoLumMidiFootswitchControl::AssignCallback assign,
+                                VoLumMidiFootswitchControl::ClearCallback clear)
+  {
+    mMidiAssign = std::move(assign);
+    mMidiClear = std::move(clear);
+    _ApplyMidiWiring();
+  }
+
+  void SetMidiSoundMapSwap(VoLumMidiFootswitchControl::SwapCallback swap)
+  {
+    mMidiSwap = std::move(swap);
+    _ApplyMidiWiring();
+  }
+
+  void SetMidiChannel(int channel)
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiControl))
+      midi->As<VoLumMidiChannelControl>()->SetChannel(channel);
+  }
+
+  void SetMidiRecallCc(int cc)
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiRecallCc))
+      midi->As<VoLumMidiRecallCcControl>()->SetCc(cc);
+  }
+
+  // `liveProgram` and the active pair light the LIVE switch and pick the bank the
+  // footswitch view opens on.
+  void SetMidiSoundMap(const std::vector<volum::FactoryPreset>& factory, const volum::content::Registry& registry,
+                       int liveProgram, const std::string& activeAmpId, const std::string& activePresetId)
+  {
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+      map->As<VoLumMidiFootswitchControl>()->SetData(factory, registry, liveProgram, activeAmpId, activePresetId);
+  }
+
+  void SetMidiPickerGroups(volum::PickerGroupSession* session)
+  {
+    mMidiPickerGroups = session;
+    _ApplyMidiWiring();
+  }
+
 private:
   IBitmap mBitmap;
   IBitmap mInputLevelBackgroundBitmap;
@@ -1246,6 +1579,38 @@ private:
   ISVG mCloseSVG;
   int mAnimationTime = 200;
   bool mWillHide = false;
+  std::function<void()> mOnExportPack;
+  std::function<void()> mOnImportPack;
+  VoLumMidiChannelControl::ChannelCallback mMidiChannelCb;
+  VoLumMidiRecallCcControl::CcCallback mMidiRecallCcCb;
+  VoLumMidiFootswitchControl::AssignCallback mMidiAssign;
+  VoLumMidiFootswitchControl::ClearCallback mMidiClear;
+  VoLumMidiFootswitchControl::SwapCallback mMidiSwap;
+  volum::PickerGroupSession* mMidiPickerGroups = nullptr;
+
+  void _ApplyMidiWiring()
+  {
+    if (auto* midi = GetNamedChild(mControlNames.midiControl))
+    {
+      if (mMidiChannelCb)
+        midi->As<VoLumMidiChannelControl>()->SetCallback(mMidiChannelCb);
+    }
+    if (auto* cc = GetNamedChild(mControlNames.midiRecallCc))
+    {
+      if (mMidiRecallCcCb)
+        cc->As<VoLumMidiRecallCcControl>()->SetCallback(mMidiRecallCcCb);
+    }
+    if (auto* map = GetNamedChild(mControlNames.midiSoundMap))
+    {
+      auto* soundMap = map->As<VoLumMidiFootswitchControl>();
+      if (mMidiAssign || mMidiClear)
+        soundMap->SetCallbacks(mMidiAssign, mMidiClear);
+      if (mMidiSwap)
+        soundMap->SetSwapCallback(mMidiSwap);
+      if (mMidiPickerGroups)
+        soundMap->SetPickerGroups(mMidiPickerGroups);
+    }
+  }
 
   // Names for controls
   // Make sure that these are all unique and that you use them with AddNamedChildControl
@@ -1253,11 +1618,14 @@ private:
   {
     const std::string about = "About";
     const std::string bitmap = "Bitmap";
+    const std::string title = "Title";
+    const std::string close = "Close";
+    const std::string tabStrip = "TabStrip";
+    const std::string tabHint = "TabHint";
+    const std::string tabRule = "TabRule";
     const std::string inputSection = "InputSection";
     const std::string outputSection = "OutputSection";
-    const std::string footerSep = "FooterSep";
     const std::string calibrateInput = "CalibrateInput";
-    const std::string close = "Close";
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
     const std::string modelInfo = "ModelInfo";
     const std::string outputMode = "OutputMode";
@@ -1265,13 +1633,32 @@ private:
     const std::string outputGroupFrame = "OutputGroupFrame";
     const std::string inputGroupFrame = "InputGroupFrame";
     const std::string perfGroupFrame = "PerfGroupFrame";
-    const std::string title = "Title";
+    const std::string midiGroupFrame = "MidiGroupFrame";
+    const std::string shortcutGroupFrame = "ShortcutGroupFrame";
+    const std::string shortcutSection = "ShortcutSection";
+    const std::string modelGroupFrame = "ModelGroupFrame";
+    const std::string modelSection = "ModelSection";
+    const std::string packGroupFrame = "PackGroupFrame";
+    const std::string packSection = "PackSection";
+    const std::string packRow = "PackRow";
+    const std::string aboutGroupFrame = "AboutGroupFrame";
+    const std::string aboutSection = "AboutSection";
     const std::string liteMode = "LiteMode";
     const std::string perfSection = "PerfSection";
     const std::string perfHelp = "PerfHelp";
+    const std::string animateArt = "AnimateArt";
+    const std::string midiSection = "MidiSection";
+    const std::string midiControl = "MidiControl";
+    const std::string midiRecallCc = "MidiRecallCc";
+    const std::string midiMapGroupFrame = "MidiMapGroupFrame";
+    const std::string midiMapSection = "MidiMapSection";
+    const std::string midiSoundMap = "MidiSoundMap";
     const std::string inputHelp = "InputHelp";
     const std::string audioHint = "AudioHint";
   } mControlNames;
+
+  int mActiveTab = kTabSignal;
+  std::vector<IControl*> mTabControls[kTabCount];
 
   class InputLevelControl : public IEditableTextControl
   {
@@ -1286,9 +1673,11 @@ private:
 
     void Draw(IGraphics& g) override
     {
-      g.FillRect(VoLumColors::HERO_BG, mRECT);
-      g.DrawRect(VoLumColors::FRAME, mRECT);
-      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f));
+      // SetDisabled greys through mBlend. The well has to use it or the field
+      // stays full strength next to a switch that already does.
+      g.FillRect(VoLumColors::HERO_BG, mRECT, &mBlend);
+      g.DrawRect(VoLumColors::FRAME, mRECT, &mBlend);
+      g.DrawRect(IColor(50, 200, 162, 78), mRECT.GetPadded(2.f), &mBlend);
       ITextControl::Draw(g);
     };
 
@@ -1336,26 +1725,65 @@ private:
 
       buildInfoStr.SetFormatted(100, "Version %s %s %s", verStr.Get(), PLUG()->GetArchStr(), PLUG()->GetAPIStr());
 
-      {
-        IRECT lineR(GetRECT());
-        const float capH = 20.f;
-        const float rowH = 14.f;
-        const IText capText(15.f, VoLumColors::GOLD, "Josefin-Bold", EAlign::Far, EVAlign::Top);
-        const IText rowText = mStyle.valueText.WithVAlign(EVAlign::Top);
-        AddChildControl(new IVLabelControl(lineR.ReduceFromTop(capH), "VoLum · By Lum", mStyle.WithValueText(capText)));
-        AddChildControl(
-          new IVLabelControl(lineR.ReduceFromTop(rowH), buildInfoStr.Get(), mStyle.WithValueText(rowText)));
-        const IColor urlMo = VoLumColors::GOLD_DIM;
-        const IColor urlClk = VoLumColors::GOLD;
-        AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "Built on the Neural Amp Modeler ecosystem",
-                                        "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo, urlClk));
-        AddChildControl(new IURLControl(lineR.ReduceFromTop(rowH), "github.com/guitarlum/VoLum",
-                                        "https://github.com/guitarlum/VoLum", mText, COLOR_TRANSPARENT, urlMo, urlClk));
-      }
+      const IRECT body = GetRECT();
+      const auto l = volum::LayoutAboutCard(body.W(), body.H());
+      const IText rowText = mStyle.valueText.WithVAlign(EVAlign::Top);
+      AddChildControl(new IVLabelControl(IRECT(body.L, body.T + l.versionT, body.R, body.T + l.versionB),
+                                         buildInfoStr.Get(), mStyle.WithValueText(rowText)));
+      const IColor urlMo = VoLumColors::GOLD_DIM;
+      const IColor urlClk = VoLumColors::GOLD;
+      AddChildControl(new IURLControl(IRECT(body.L, body.T + l.url1T, body.R, body.T + l.url1B),
+                                      "Built on the Neural Amp Modeler ecosystem", "https://github.com/guitarlum/VoLum",
+                                      mText, COLOR_TRANSPARENT, urlMo, urlClk));
+      AddChildControl(new IURLControl(IRECT(body.L, body.T + l.url2T, body.R, body.T + l.url2B),
+                                      "github.com/guitarlum/VoLum", "https://github.com/guitarlum/VoLum", mText,
+                                      COLOR_TRANSPARENT, urlMo, urlClk));
+
+      mUpdateNotice =
+        new VoLumUpdateNoticeControl(IRECT(body.L, body.T + l.noticeT, body.R, body.T + l.noticeB), [this]() {
+          if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+            plugin->_VolumUseAvailableUpdate();
+        });
+      AddChildControl(mUpdateNotice);
+
+      const IRECT actionRow(body.L, body.T + l.actionT, body.R, body.T + l.actionB);
+      mAutoCheck =
+        new VoLumSettingsCheckboxControl(IRECT(actionRow.L, actionRow.T, actionRow.L + l.actionSplitX, actionRow.B),
+                                         "Check for updates automatically", [this](bool on) {
+                                           if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+                                             plugin->_VolumSetAutoUpdateCheck(on);
+                                         });
+      AddChildControl(mAutoCheck);
+      AddChildControl(new IVButtonControl(
+        IRECT(actionRow.L + l.actionSplitX, actionRow.T, actionRow.R, actionRow.B),
+        [](IControl* pCaller) {
+          if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(pCaller->GetDelegate()))
+            plugin->_VolumCheckForUpdatesNow();
+        },
+        "Check now", mStyle.WithDrawFrame(true).WithValueText(rowText.WithAlign(EAlign::Center)), true));
     };
+
+    void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {},
+                       const std::string& checkError = {})
+    {
+      if (mAutoCheck)
+        mAutoCheck->SetChecked(autoCheck);
+      if (mUpdateNotice)
+        mUpdateNotice->SetUpdate(available, version, notes, checkError);
+    }
 
   private:
     IVStyle mStyle;
     IText mText;
+    VoLumUpdateNoticeControl* mUpdateNotice = nullptr;
+    VoLumSettingsCheckboxControl* mAutoCheck = nullptr;
   };
+
+public:
+  void SetUpdateInfo(bool autoCheck, bool available, const std::string& version, const std::string& notes = {},
+                     const std::string& checkError = {})
+  {
+    if (auto* about = GetNamedChild(mControlNames.about))
+      static_cast<AboutControl*>(about)->SetUpdateInfo(autoCheck, available, version, notes, checkError);
+  }
 };

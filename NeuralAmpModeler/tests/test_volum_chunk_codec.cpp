@@ -79,9 +79,9 @@ TEST_CASE("A per-amp decoder that runs out still rewrites the toggles it was han
   volum::VoLumAmpSettings target = mine;
   const int pos = volum::GetLegacyPerAmpSettings(empty, 0, target);
 
-  CHECK(pos < 0);                                        // the read failed
+  CHECK(pos < 0); // the read failed
   CHECK(target.gateThreshold == doctest::Approx(-37.5)); // numbers survive it
-  CHECK(target.noiseGateActive);                         // switches do not
+  CHECK(target.noiseGateActive); // switches do not
   CHECK(target.eqActive);
 
   // Same from a position that is already negative, which is what every amp after
@@ -140,88 +140,6 @@ TEST_CASE("Per-amp selection misaligns unless the reader consumes every serializ
   volum::GetVoLumChunkSelection(chunk, shortPos, bad);
   const bool badMatchesWrittenSelection = (bad.ampIdx == 3 && bad.speakerIdx == 2 && bad.channelIdx == 1);
   CHECK_FALSE(badMatchesWrittenSelection);
-}
-
-TEST_CASE("VoLum chunk codec round-trips current per-amp settings")
-{
-  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
-  amps[0].speakerIdx = 1;
-  amps[0].channelIdx = 2;
-  amps[0].inputLevel = 1.25;
-  amps[0].noiseGateActive = false;
-  amps[0].eqActive = true;
-  amps[0].preCompActive = true;
-  amps[0].preCompAmount = 6.5;
-  amps[0].preCompRatio = 8.0;
-  amps[0].preCompAttack = 2.5;
-  amps[0].preCompRelease = 180.0;
-  amps[0].preCompMix = 0.65;
-  amps[0].preNam1Active = true;
-  amps[0].preNam1Capture = 7;
-  amps[0].preNam2Active = true;
-  amps[0].preNam2Capture = 8;
-  amps[0].dualAmpActive = true;
-  amps[0].dualAmpRoute = 1;
-  amps[0].mainAmpPan = -0.25;
-  amps[0].supportAmpIdx = 13;
-  amps[0].supportSpeakerIdx = 2;
-  amps[0].supportChannelIdx = 1;
-  amps[0].supportInputLevel = -1.5;
-  amps[0].supportGateThreshold = -65.0;
-  amps[0].supportToneBass = 4.0;
-  amps[0].supportToneMid = 6.0;
-  amps[0].supportToneTreble = 7.0;
-  amps[0].supportOutputLevel = -6.0;
-  amps[0].supportNoiseGateActive = false;
-  amps[0].supportEqActive = true;
-  amps[0].supportAmpPan = 0.75;
-  amps[0].supportPolarityInvert = true;
-
-  MemoryChunk chunk;
-  volum::PutCurrentVoLumChunkState(chunk, {3, 2, 1}, amps, volum::kAmpCount);
-
-  volum::VoLumChunkSelection selection;
-  int pos = volum::GetVoLumChunkSelection(chunk, 0, selection);
-  CHECK(selection.ampIdx == 3);
-  CHECK(selection.speakerIdx == 2);
-  CHECK(selection.channelIdx == 1);
-
-  volum::VoLumAmpSettings loaded;
-  pos = volum::GetLegacyPerAmpSettings(chunk, pos, loaded);
-  pos = volum::GetExtendedPerAmpSettings(chunk, pos, loaded, true);
-  pos = volum::GetDualAmpPerAmpSettings(chunk, pos, loaded);
-
-  CHECK(loaded.speakerIdx == 1);
-  CHECK(loaded.channelIdx == 2);
-  CHECK(loaded.inputLevel == doctest::Approx(1.25));
-  CHECK_FALSE(loaded.noiseGateActive);
-  CHECK(loaded.eqActive);
-  CHECK(loaded.preCompActive);
-  CHECK(loaded.preCompAmount == doctest::Approx(6.5));
-  CHECK(loaded.preCompRatio == doctest::Approx(8.0));
-  CHECK(loaded.preCompAttack == doctest::Approx(2.5));
-  CHECK(loaded.preCompRelease == doctest::Approx(180.0));
-  CHECK(loaded.preCompMix == doctest::Approx(0.65));
-  CHECK(loaded.preNam1Active);
-  CHECK(loaded.preNam1Capture == 7);
-  CHECK(loaded.preNam2Active);
-  CHECK(loaded.preNam2Capture == 8);
-  CHECK(loaded.dualAmpActive);
-  CHECK(loaded.dualAmpRoute == 1);
-  CHECK(loaded.mainAmpPan == doctest::Approx(-0.25));
-  CHECK(loaded.supportAmpIdx == 13);
-  CHECK(loaded.supportSpeakerIdx == 2);
-  CHECK(loaded.supportChannelIdx == 1);
-  CHECK(loaded.supportInputLevel == doctest::Approx(-1.5));
-  CHECK(loaded.supportGateThreshold == doctest::Approx(-65.0));
-  CHECK(loaded.supportToneBass == doctest::Approx(4.0));
-  CHECK(loaded.supportToneMid == doctest::Approx(6.0));
-  CHECK(loaded.supportToneTreble == doctest::Approx(7.0));
-  CHECK(loaded.supportOutputLevel == doctest::Approx(-6.0));
-  CHECK_FALSE(loaded.supportNoiseGateActive);
-  CHECK(loaded.supportEqActive);
-  CHECK(loaded.supportAmpPan == doctest::Approx(0.75));
-  CHECK(loaded.supportPolarityInvert);
 }
 
 TEST_CASE("VoLum chunk codec round-trips every current per-amp field")
@@ -819,6 +737,27 @@ TEST_CASE("VoLum 1.2.0 id tail round-trips through the chunk")
   CHECK(out.perAmpSupportChannel[0] == 0);
 }
 
+TEST_CASE("Id tail midiRecallCc round-trips, defaults to 102, and refuses 120-127")
+{
+  volum::ChunkIdTail in;
+  in.midiRecallCc = 20;
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+  CHECK(out.midiRecallCc == 20);
+
+  nlohmann::json missing;
+  missing["v"] = volum::kVoLumIdTailSchema;
+  CHECK(volum::IdTailFromJson(missing).midiRecallCc == volum::kMidiRecallCcDefault);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 119}}).midiRecallCc == 119);
+  CHECK(volum::IdTailFromJson({{"midiRecallCc", 123}}).midiRecallCc == volum::kMidiRecallCcDefault);
+
+  nlohmann::json j = volum::IdTailToJson(in);
+  CHECK(j["midiRecallCc"] == 20);
+  CHECK(j["v"] == volum::kVoLumIdTailSchema);
+}
+
 TEST_CASE("Id tail round-trips per-amp + locked PRE pitch pedal settings")
 {
   volum::ChunkIdTail in;
@@ -1019,6 +958,65 @@ TEST_CASE("Id tail round-trips per-amp + locked POST delay tempo-sync settings")
   CHECK(out.lockedPostDelay.division == 7);
 }
 
+TEST_CASE("Id tail round-trips per-amp + locked POST chorus settings")
+{
+  // Chorus is the first pedal whose EParams sit past the frozen 1.2.2 param
+  // prefix, so the id tail is the ONLY carrier for its saved state. If these keys
+  // are dropped the whole pedal silently resets to bypassed on every reload.
+  volum::ChunkIdTail in;
+
+  in.perAmpChorus[0].present = true;
+  in.perAmpChorus[0].active = true;
+  in.perAmpChorus[0].mode = volum::kVoLumChorusModeEnsemble;
+  in.perAmpChorus[0].rate = 0.62;
+  in.perAmpChorus[0].depth = 0.31;
+  in.perAmpChorus[0].tone = 0.83;
+  in.perAmpChorus[0].width = 0.17;
+  in.perAmpChorus[0].mix = 0.94;
+  in.perAmpChorus[0].modes[volum::kVoLumChorusModeClassic] = volum::ChorusModeSnapshot{0.11, 0.22, 0.33, 0.44, 0.55};
+  in.perAmpChorus[0].modes[volum::kVoLumChorusModeClear] = volum::ChorusModeSnapshot{0.66, 0.77, 0.88, 0.99, 0.10};
+
+  in.perAmpChorus[volum::kAmpCount - 1].present = true;
+  in.perAmpChorus[volum::kAmpCount - 1].mode = volum::kVoLumChorusModeClassic;
+  in.perAmpChorus[volum::kAmpCount - 1].rate = 0.05;
+
+  in.lockedPostChorus.present = true;
+  in.lockedPostChorus.active = true;
+  in.lockedPostChorus.mode = volum::kVoLumChorusModeClear;
+  in.lockedPostChorus.mix = 0.42;
+
+  MemoryChunk chunk;
+  volum::PutChunkIdTail(chunk, in);
+
+  volum::ChunkIdTail out;
+  REQUIRE(volum::TryGetChunkIdTail(chunk, 0, static_cast<int>(chunk.bytes.size()), out));
+
+  CHECK(out.perAmpChorus[0].present);
+  CHECK(out.perAmpChorus[0].active);
+  CHECK(out.perAmpChorus[0].mode == volum::kVoLumChorusModeEnsemble);
+  CHECK(out.perAmpChorus[0].rate == doctest::Approx(0.62));
+  CHECK(out.perAmpChorus[0].depth == doctest::Approx(0.31));
+  CHECK(out.perAmpChorus[0].tone == doctest::Approx(0.83));
+  CHECK(out.perAmpChorus[0].width == doctest::Approx(0.17));
+  CHECK(out.perAmpChorus[0].mix == doctest::Approx(0.94));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClassic].rate == doctest::Approx(0.11));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClassic].width == doctest::Approx(0.44));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClear].tone == doctest::Approx(0.88));
+  CHECK(out.perAmpChorus[0].modes[volum::kVoLumChorusModeClear].mix == doctest::Approx(0.10));
+
+  CHECK(out.perAmpChorus[volum::kAmpCount - 1].present);
+  CHECK_FALSE(out.perAmpChorus[volum::kAmpCount - 1].active);
+  CHECK(out.perAmpChorus[volum::kAmpCount - 1].rate == doctest::Approx(0.05));
+
+  // Untouched amp stays absent -> chorus defaults to bypassed downstream.
+  CHECK_FALSE(out.perAmpChorus[1].present);
+
+  CHECK(out.lockedPostChorus.present);
+  CHECK(out.lockedPostChorus.active);
+  CHECK(out.lockedPostChorus.mode == volum::kVoLumChorusModeClear);
+  CHECK(out.lockedPostChorus.mix == doctest::Approx(0.42));
+}
+
 TEST_CASE("Id tail probe coexists with preceding fixed-tail bytes")
 {
   // Simulate the real layout: arbitrary fixed-tail bytes, then the id tail.
@@ -1104,6 +1102,7 @@ TEST_CASE("Empty id tail round-trips (all refs blank)")
   CHECK(out.customMainId.empty());
   CHECK(out.customSupportId.empty());
   CHECK(out.activePresetId.empty());
+  CHECK(out.midiRecallCc == volum::kMidiRecallCcDefault);
   for (int i = 0; i < volum::kAmpCount; ++i)
   {
     CHECK(out.perAmpIrId[i].empty());
@@ -1175,15 +1174,45 @@ TEST_CASE("Id tail without pitch/trem/dly keys (pre-effects schema) reads effect
     CHECK_FALSE(out.perAmpPitch[i].present);
     CHECK_FALSE(out.perAmpTremolo[i].present);
     CHECK_FALSE(out.perAmpDelay[i].present);
+    CHECK_FALSE(out.perAmpChorus[i].present);
     // Absent tails keep their bypassed-by-default field values.
     CHECK_FALSE(out.perAmpPitch[i].active);
     CHECK_FALSE(out.perAmpTremolo[i].active);
     CHECK_FALSE(out.perAmpDelay[i].sync);
+    CHECK_FALSE(out.perAmpChorus[i].active);
   }
   // Locked-effect snapshots are absent on an older tail too.
   CHECK_FALSE(out.lockedPrePitch.present);
   CHECK_FALSE(out.lockedPostTremolo.present);
   CHECK_FALSE(out.lockedPostDelay.present);
+  CHECK_FALSE(out.lockedPostChorus.present);
+}
+
+TEST_CASE("Absent chorus tail forces a dirty live scene off")
+{
+  volum::VoLumAmpSettings live;
+  live.postChorusActive = true;
+  live.postChorusMode = volum::kVoLumChorusModeClassic;
+  live.postChorusMix = 1.0;
+  live.postChorusRate = 0.9;
+
+  volum::ChorusTail missing;
+  CHECK_FALSE(missing.present);
+  volum::ApplyChorusTailToSettings(missing, live);
+  CHECK_FALSE(live.postChorusActive);
+  CHECK(live.postChorusMode == volum::kVoLumChorusModeDefault);
+  CHECK(live.postChorusMix == doctest::Approx(0.50));
+  CHECK(live.postChorusRate == doctest::Approx(0.44));
+
+  volum::ChorusTail written;
+  written.present = true;
+  written.active = true;
+  written.mode = volum::kVoLumChorusModeClear;
+  written.mix = 0.8;
+  volum::ApplyChorusTailToSettings(written, live);
+  CHECK(live.postChorusActive);
+  CHECK(live.postChorusMode == volum::kVoLumChorusModeClear);
+  CHECK(live.postChorusMix == doctest::Approx(0.8));
 }
 
 // A tremolo/pitch-aware build that predates per-mode memory wrote the effect

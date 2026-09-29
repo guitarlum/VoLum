@@ -3,7 +3,12 @@
 #include <string>
 #include <vector>
 
+#include "../VoLumPlayModel.h"
 #include "../VoLumUiSyncPlan.h"
+
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 
 // Covers VoLumUiSyncPlan.h: the pure mapping from restored backend state onto the
 // cab row / channel stepper / sidebar state the editor should show on reopen.
@@ -24,6 +29,18 @@ using volum::custom::kDirectSlot;
 
 namespace
 {
+std::filesystem::path RepoRoot()
+{
+  return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+}
+
+std::string ReadText(const std::filesystem::path& path)
+{
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 // The reporter's amp: DIRECT captures on gain stages 1 and 5 only, so the
 // stepper has two entries and channel 5 sits at position 1.
 CustomAmp MakeChannelOneAndFiveAmp()
@@ -393,4 +410,46 @@ TEST_CASE("Support focus does not change how the plan is resolved")
   CHECK(mainPlan.customChannel == supportPlan.customChannel);
   CHECK(mainPlan.cabSelectedIndex == supportPlan.cabSelectedIndex);
   CHECK(mainPlan.irCabActive == supportPlan.irCabActive);
+}
+
+TEST_CASE("Host restore derives PLAY chrome from mVolumUiMode")
+{
+  // H5: Unserialize / pack-also-settings writes mVolumUiMode then runs only
+  // _VolumSyncUiFromState, which used to refresh sidebar/hero/cabs and never
+  // hide PLAY. The surface is attached at full-window bounds, so BUILD clicks
+  // never arrive. Visibility has to be a derived consequence of the mode on
+  // this path, not something the toggle remembers.
+  const auto build = volum::PlayChromeForUiMode(volum::UiMode::Build);
+  CHECK(build.hidePlaySurface);
+  CHECK_FALSE(build.hideHeaderPlate);
+  CHECK_FALSE(build.hidePresetBar);
+  const auto play = volum::PlayChromeForUiMode(volum::UiMode::Play);
+  CHECK_FALSE(play.hidePlaySurface);
+  CHECK(play.hideHeaderPlate);
+  CHECK(play.hidePresetBar);
+
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  const auto refresh = runtime.find("void NeuralAmpModeler::_VolumRefreshPlaySurface()");
+  REQUIRE(refresh != std::string::npos);
+  const auto playOnly = runtime.find("if (mVolumUiMode != volum::UiMode::Play)", refresh);
+  REQUIRE(playOnly != std::string::npos);
+  const auto plan = runtime.find("PlayChromeForUiMode", refresh);
+  REQUIRE(plan != std::string::npos);
+  CHECK(plan < playOnly);
+
+  const auto setMode = runtime.find("void NeuralAmpModeler::_VolumSetUiMode");
+  REQUIRE(setMode != std::string::npos);
+  const auto setModeEnd = runtime.find("bool NeuralAmpModeler::_VolumStepPlaySlot", setMode);
+  REQUIRE(setModeEnd != std::string::npos);
+  CHECK(runtime.substr(setMode, setModeEnd - setMode).find("_VolumRefreshPlaySurface()") != std::string::npos);
+
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
+  const auto sync = menus.find("void NeuralAmpModeler::_VolumSyncUiFromState()");
+  REQUIRE(sync != std::string::npos);
+  const auto syncEnd = menus.find("void NeuralAmpModeler::_VolumReflectLaneIrChip", sync);
+  REQUIRE(syncEnd != std::string::npos);
+  const std::string body = menus.substr(sync, syncEnd - sync);
+  // Either call is the derived-visibility contract. RefreshPlaySurface is the
+  // one function that applies PlayChromeForUiMode, including when mode is BUILD.
+  CHECK(body.find("_VolumRefreshPlaySurface()") != std::string::npos);
 }

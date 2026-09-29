@@ -27,3 +27,7 @@ iPlug delivers MIDI to `ProcessMidiMsg` on the **audio** thread (APP drain in `A
 **Still human:** DAW MIDI routing; one visual Program Change; first Preferences device pick; Windows standalone OS-MIDI e2e needs an installed loopback port (not in CI).
 
 **1.3.0 pyramid:** decoder + handoff + headless selection in CI are mandatory. Do not treat pluginval or a physical controller as proof of the decoder.
+
+## Comments
+
+- After [What MIDI control does 1.3.0 include?](01-midi-control-scope.md): the wire is MIDI channel filter + Program Change → sound map, not Bank Select `CC0`/`CC32`. Test seams in this answer still hold. Decoder doctests should pin slot → amp + named preset (unassigned/missing = ignore), not CC0/CC32 → indices.

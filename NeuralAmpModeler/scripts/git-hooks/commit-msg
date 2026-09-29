@@ -1,0 +1,4 @@
+#!/bin/sh
+# Local commit-message scan. Installed by install-local-guards.ps1.
+ROOT=$(git rev-parse --show-toplevel)
+exec pwsh -NoProfile -File "$ROOT/NeuralAmpModeler/scripts/check-commit-msg.ps1" -MessageFile "$1"

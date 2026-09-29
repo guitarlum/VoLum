@@ -5,7 +5,7 @@
 #include <fstream>
 
 #ifdef _WIN32
- #include <stdlib.h>
+  #include <stdlib.h>
 #endif
 
 TEST_CASE("DiscoverChannels sorts by label and matches speaker prefix")
@@ -96,6 +96,22 @@ TEST_CASE("Every factory amp has a uniform channel set across all speaker cabs")
   }
 }
 
+TEST_CASE("Channel and pedal discovery read UTF-8 leaves, not native string()")
+{
+  namespace fs = std::filesystem;
+  const fs::path tmp = fs::temp_directory_path() / "volum_utf8_leaf";
+  fs::remove_all(tmp);
+  fs::create_directories(tmp / "Ampete One");
+  const fs::path nam = tmp / "Ampete One" / "V30-AA-1.nam";
+  std::ofstream(nam.string()).close();
+  CHECK(volum::PathLeafUtf8(nam) == "V30-AA-1.nam");
+  CHECK(volum::PathStemUtf8(nam) == "V30-AA-1");
+  const auto ch = volum::DiscoverChannels(tmp, "Ampete One", "V30");
+  REQUIRE(ch.size() == 1);
+  CHECK(ch[0].filename == "V30-AA-1.nam");
+  fs::remove_all(tmp);
+}
+
 #ifdef _WIN32
 TEST_CASE("VolumUserSettingsFilePath uses LOCALAPPDATA")
 {
@@ -125,5 +141,16 @@ TEST_CASE("VolumUserSettingsFilePath uses LOCALAPPDATA")
   std::error_code ec;
   REQUIRE(fs::weakly_canonical(p, ec) == fs::weakly_canonical(tmp / "VoLum" / "volum-settings.json", ec));
   REQUIRE(fs::weakly_canonical(dual, ec) == fs::weakly_canonical(tmp / "VoLum" / "volum-dual-amp-settings.json", ec));
+}
+#endif
+
+#ifdef __APPLE__
+TEST_CASE("VolumUserSettingsFilePath is under Application Support on macOS")
+{
+  const char* home = std::getenv("HOME");
+  REQUIRE(home);
+  const auto p = volum::VolumUserSettingsFilePath();
+  CHECK(p == std::filesystem::path(home) / "Library" / "Application Support" / "VoLum" / "volum-settings.json");
+  CHECK(p.generic_string().find('\\') == std::string::npos);
 }
 #endif

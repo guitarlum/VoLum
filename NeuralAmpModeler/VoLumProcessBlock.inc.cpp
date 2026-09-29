@@ -20,6 +20,23 @@ iplug::sample** NeuralAmpModeler::_VolumProcessPreChain(iplug::sample** preAmpPo
                                                         const size_t numChannelsInternal, const int nFrames,
                                                         const double sampleRate)
 {
+  // Same falling-edge clear POST already does. A bypassed pitch ring or
+  // compressor envelope must not dump into the next time the pedal turns on.
+  if (processingPlan.runPrePitch)
+    mPrePitchWasActive = true;
+  else if (mPrePitchWasActive)
+  {
+    std::unique_lock<std::mutex> lock(mPrePitchMutex, std::try_to_lock);
+    if (lock.owns_lock())
+    {
+      mPitch.Reset();
+      mPrePitchWasActive = false;
+    }
+  }
+  if (mPreCompWasActive && !processingPlan.runPreComp)
+    mPreCompressor.Reset();
+  mPreCompWasActive = processingPlan.runPreComp;
+
   if (processingPlan.runPrePitch)
   {
     // Reconfigure happens off the audio thread in OnReset. Here we only try-lock;
@@ -94,6 +111,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     mModel->process(triggerOutput[0], mOutputPointers[0], nFrames);
     if (volum::ScrubNonFiniteInPlace(mOutputPointers[0], static_cast<std::size_t>(nFrames)))
     {
+      mChorus.Reset();
       mDelay.Reset();
       mReverb.Reset();
       mTremolo.Reset();
@@ -104,6 +122,7 @@ iplug::sample** NeuralAmpModeler::_VolumProcessMainAmpChain(iplug::sample** preA
     _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, nFrames);
     if (!mPostEffectsClearedForMissingModel)
     {
+      mChorus.Reset();
       mDelay.Reset();
       mReverb.Reset();
       mTremolo.Reset();
@@ -145,9 +164,8 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   if (!processingPlan.runDualAmp)
     return nullptr;
 
-  assert(mDualSupportLaneBuffer.capacity() >= static_cast<size_t>(nFrames)
-         && "Dual-amp support scratch not pre-reserved");
-  mDualSupportLaneBuffer.resize(nFrames);
+  if (!volum::dsp_staging::ResizeScratchNoAlloc(mDualSupportLaneBuffer, static_cast<size_t>(nFrames)))
+    return nullptr;
 
   const double supportInputGain = DBToAmp(GetParam(kSupportInputLevel)->Value());
   for (size_t i = 0; i < static_cast<size_t>(nFrames); ++i)
@@ -169,6 +187,7 @@ iplug::sample* NeuralAmpModeler::_VolumProcessDualAmpSupportLane(const volum::Pr
   mSupportModel->process(supportTriggerOutput[0], supportOutputPtr, nFrames);
   if (volum::ScrubNonFiniteInPlace(supportOutputPtr, static_cast<std::size_t>(nFrames)))
   {
+    mChorus.Reset();
     mDelay.Reset();
     mReverb.Reset();
     mTremolo.Reset();
@@ -207,12 +226,15 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
   // internal lines still hold the previous tail. Without this, re-enabling the effect
   // later replays a "ghost" of whatever was playing before bypass. Mirrors how
   // _FallbackDSP already clears POST when the main model goes missing.
+  if (mPostChorusWasActive && !processingPlan.runChorus)
+    mChorus.Reset();
   if (mPostDelayWasActive && !processingPlan.runDelay)
     mDelay.Reset();
   if (mPostReverbWasActive && !processingPlan.runReverb)
     mReverb.Reset();
   if (mPostTremoloWasActive && !processingPlan.runTremolo)
     mTremolo.Reset();
+  mPostChorusWasActive = processingPlan.runChorus;
   mPostDelayWasActive = processingPlan.runDelay;
   mPostReverbWasActive = processingPlan.runReverb;
   mPostTremoloWasActive = processingPlan.runTremolo;
@@ -227,6 +249,17 @@ void NeuralAmpModeler::_VolumProcessPostChain(iplug::sample** outputs, const vol
 #endif
   if (!(postBpm > 0.0))
     postBpm = 120.0;
+
+  // Chorus runs FIRST in POST: modulating the dry amp tone before it hits the
+  // delay/reverb tails is the pedalboard order, and it keeps the repeats from
+  // smearing the chorus into mush. Processes in place on the POST bus.
+  if (processingPlan.runChorus)
+  {
+    mChorus.SetParams(GetParam(kChorusRate)->Value(), GetParam(kChorusDepth)->Value(), GetParam(kChorusTone)->Value(),
+                      GetParam(kChorusWidth)->Value(), GetParam(kChorusMix)->Value(), GetParam(kChorusMode)->Int(),
+                      sampleRate);
+    mChorus.Process(postPointers, numChannelsExternalOut, nFrames);
+  }
 
   if (processingPlan.runDelay)
   {

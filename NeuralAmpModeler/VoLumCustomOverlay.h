@@ -7,11 +7,14 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
+#include "VoLumPrePostLock.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumOverlayActionCodes.h"
 #include "VoLumPresetBar.h"
+#include "VoLumRigRepair.h" // LibraryKind for the delete-while-playing callbacks
 #include "VoLumListMenu.h"
 #include "VoLumConfirmDialog.h"
+#include "VoLumScroll.h"
 
 #include <algorithm>
 #include <cctype>
@@ -74,17 +77,43 @@ public:
   void SetConfirmCallback(ConfirmCallback cb) { mConfirm = std::move(cb); }
   void SetPrimaryActionCallback(PrimaryActionCallback cb) { mPrimaryAction = std::move(cb); }
 
+  // Asks for a name through the shared name dialog (VoLumNameDialog.h), so every
+  // name field in VoLum edits the same way. onName runs only on confirm; a cancel
+  // writes nothing. Unset (unit tests, no plugin) falls back to iPlug's text entry.
+  using NamePromptCallback = std::function<void(
+    const std::string& title, const std::string& message, const std::string& seed, std::size_t maxLen,
+    const std::string& confirmLabel, std::function<void(const std::string&)> onName, std::function<void()> onCancel)>;
+  void SetNamePromptCallback(NamePromptCallback cb) { mNamePrompt = std::move(cb); }
+
+  // Delete of an id this instance is currently playing (VoLumRigRepair.h).
+  //   planCb: asked before the delete; returns the confirm body, which names the
+  //           in-use case and where the lane is going. Planning has to happen
+  //           first, because a pedal's rig reference is its capture index and the
+  //           delete takes that with it.
+  //   applyCb: asked after the delete; moves the lane off the dead payload.
+  // Unset (unit tests, no plugin) falls back to the plain "cannot be undone" copy
+  // and no repair.
+  using RigRepairPlanCallback =
+    std::function<std::string(volum::rig::LibraryKind, const std::string& id, const std::string& displayName)>;
+  using RigRepairApplyCallback = std::function<void()>;
+  void SetRigRepairCallbacks(RigRepairPlanCallback planCb, RigRepairApplyCallback applyCb)
+  {
+    mPlanRigRepair = std::move(planCb);
+    mApplyRigRepair = std::move(applyCb);
+  }
+
   // F5 preset capture hooks (real backend). SaveCb captures the live settings
   // into a new named preset and returns its bank index; OverwriteCb replaces the
   // snapshot of preset `index`. When unset the bridge stores default settings.
   using SavePresetCallback = std::function<int(const std::string& name)>;
   using OverwritePresetCallback = std::function<void(int index)>;
   // Rename and delete go straight to the bridge rather than through the plugin, so
-  // they need the same ownership claim the other three operations make: the bank
-  // they act on is resolved from a process-global key that the most recently
-  // active editor wrote, and without a claim this editor's delete lands in another
-  // instance's bank.
-  using ClaimPresetOpsCallback = std::function<void()>;
+  // they need the owner key of the instance that owns this overlay. Resolving the
+  // bank from an ambient process-global key meant the most recently active editor
+  // decided which bank every editor acted on, and this editor's delete could land
+  // in another instance's presets. The callback returns that key (and, on the
+  // plugin side, still re-claims the capture/apply hooks).
+  using ClaimPresetOpsCallback = std::function<std::string()>;
   void SetPresetCallbacks(SavePresetCallback saveCb, OverwritePresetCallback overwriteCb,
                           ClaimPresetOpsCallback claimCb = nullptr)
   {
@@ -224,6 +253,15 @@ public:
       Hide(true);
       return;
     }
+    if (mScreen != volum::custom::Screen::Builder
+        && mManageBar.OnDown(x, y, mManageTrack.L, mManageTrack.R, mManageScrollM))
+    {
+      mManageScroll =
+        volum::scroll::ThumbYToScroll(y - mManageBar.grabDY, mManageScrollM.trackTop, mManageScrollM.trackH,
+                                      mManageScrollM.thumbH, mManageScrollM.maxScroll);
+      SetDirty(false);
+      return;
+    }
     for (const auto& hs : mHotspots)
       if (hs.first.Contains(x, y))
       {
@@ -231,6 +269,19 @@ public:
         return;
       }
   }
+
+  void OnMouseDrag(float x, float y, float, float, const IMouseMod&) override
+  {
+    if (!mManageBar.dragging)
+      return;
+    const float next = mManageBar.OnDrag(y, mManageScrollM);
+    if (next >= 0.f)
+      mManageScroll = next;
+    SetDirty(false);
+    (void)x;
+  }
+
+  void OnMouseUp(float, float, const IMouseMod&) override { mManageBar.OnUp(); }
 
   void OnMouseWheel(float x, float y, const IMouseMod&, float d) override
   {
@@ -329,15 +380,17 @@ public:
       }
   }
 
-  void OnTextEntryCompletion(const char* str, int) override
+  void OnTextEntryCompletion(const char* str, int) override { ApplyTextResult(str ? str : ""); }
+
+  void ApplyTextResult(const std::string& text)
   {
     using namespace volum::custom;
     if (IsIrValueTarget(mTextTarget))
     {
-      ApplyIrValueEntry(str ? str : "");
+      ApplyIrValueEntry(text);
       return;
     }
-    const std::string s = ClampName(str ? str : "", (std::size_t)NameEntryCap(mTextTarget));
+    const std::string s = ClampName(text, (std::size_t)NameEntryCap(mTextTarget));
     switch (mTextTarget)
     {
       case TextTarget::NewItem: // presets only (IR/pedals add via file dialog)
@@ -365,14 +418,19 @@ public:
           // Resolve the row again: mSel and mItems both date from before the field
           // opened. An entry with no id (only possible for a library written before
           // ids existed) keeps the old positional behaviour.
-          const int target = mRenameId.empty() ? mSel : RowIndexById(mRenameId);
+          const int target = volum::ResolveConfirmRowIndex(mRenameId, mSel, RowIndexById(mRenameId));
           if (target < 0)
           {
             mError = "\"" + mRenameName + "\" is no longer in your library.";
             ReloadList();
             mSel = -1;
           }
-          else if (!s.empty() && NameTaken(s, target))
+          else if (s.empty())
+          {
+            mError = "Enter a name.";
+            SetDirty(false);
+          }
+          else if (NameTaken(s, target))
             SetNameError(s);
           else
           {
@@ -543,7 +601,7 @@ private:
     {
       case ManageKind::IR: mItems = volum::custom::MockIRLibrary(); break;
       case ManageKind::Pedals: mItems = volum::custom::MockCustomPedals(); break;
-      default: mItems = volum::custom::MockPresetsForAmp(mAmpIdx); break;
+      default: mItems = volum::custom::PresetsForOwner(PresetOwnerKey()); break;
     }
     if (mSel >= (int)mItems.size())
       mSel = mItems.empty() ? -1 : (int)mItems.size() - 1;
@@ -561,7 +619,7 @@ private:
     {
       case ManageKind::IR: return volum::custom::IRIdAt(idx);
       case ManageKind::Pedals: return volum::custom::PedalIdAt(idx);
-      default: return volum::custom::PresetIdAt(idx);
+      default: return volum::custom::PresetIdAtForOwner(PresetOwnerKey(), idx);
     }
   }
 
@@ -571,7 +629,7 @@ private:
     {
       case ManageKind::IR: return volum::custom::IRIndexById(id);
       case ManageKind::Pedals: return volum::custom::PedalIndexById(id);
-      default: return volum::custom::PresetIndexById(id);
+      default: return volum::custom::PresetIndexByIdForOwner(PresetOwnerKey(), id);
     }
   }
 
@@ -586,10 +644,15 @@ private:
     mError = "Your library could not be saved - this change will be lost.";
   }
 
+  // The owner key of the preset bank this overlay acts on, re-asked every time so
+  // it cannot go stale while the panel is open (the user can switch amps behind
+  // it). Empty when no plugin is wired up, i.e. in unit tests.
+  std::string PresetOwnerKey() const { return mClaimPresetOps ? mClaimPresetOps() : std::string(); }
+
   void ClaimPresetOpsIfNeeded()
   {
     if (mManageKind == ManageKind::Presets && mClaimPresetOps)
-      mClaimPresetOps();
+      (void)mClaimPresetOps();
   }
 
   void ApplyRename(int idx, const std::string& name)
@@ -600,9 +663,19 @@ private:
     {
       case ManageKind::IR: RenameIR(idx, name); break;
       case ManageKind::Pedals: RenamePedal(idx, name); break;
-      default: RenamePreset(mAmpIdx, idx, name); break;
+      default: RenamePresetForOwner(PresetOwnerKey(), idx, name); break;
     }
     ReportLibraryWriteFailure();
+  }
+
+  volum::rig::LibraryKind RigKind() const
+  {
+    switch (mManageKind)
+    {
+      case ManageKind::IR: return volum::rig::LibraryKind::IR;
+      case ManageKind::Pedals: return volum::rig::LibraryKind::Pedal;
+      default: return volum::rig::LibraryKind::Preset;
+    }
   }
 
   void ApplyDelete(int idx)
@@ -613,9 +686,14 @@ private:
     {
       case ManageKind::IR: DeleteIR(idx); break;
       case ManageKind::Pedals: DeletePedal(idx); break;
-      default: DeletePreset(mAmpIdx, idx); break;
+      default: DeletePresetForOwner(PresetOwnerKey(), idx); break;
     }
     ReportLibraryWriteFailure();
+    // The entry is out of the catalog; now move this instance's rig off it. The
+    // library row and the sounding rig are two different things, and only fixing
+    // the first left the audio thread on a payload that no longer exists.
+    if (mApplyRigRepair)
+      mApplyRigRepair();
   }
 
   void NotifyChanged()
@@ -815,8 +893,43 @@ private:
     if (!ui)
       return;
     mTextTarget = target;
+    if (!IsIrValueTarget(target) && mNamePrompt)
+    {
+      const NamePrompt p = NamePromptFor(target);
+      mNamePrompt(
+        p.title, p.message, current, (std::size_t)NameEntryCap(target), p.confirm,
+        [this, target](const std::string& name) {
+          mTextTarget = target;
+          ApplyTextResult(name);
+        },
+        [this]() {
+          mTextTarget = TextTarget::None;
+          mTextCabSlot = -1;
+          SetDirty(false);
+        });
+      return;
+    }
     SetTextEntryLength(NameEntryCap(target));
     ui->CreateTextEntry(*this, style ? *style : mEntryText, bounds, current.c_str());
+  }
+
+  struct NamePrompt
+  {
+    std::string title, message, confirm;
+  };
+
+  NamePrompt NamePromptFor(TextTarget target) const
+  {
+    const char* item = mManageKind == ManageKind::Presets ? "preset" : mManageKind == ManageKind::IR ? "IR" : "pedal";
+    switch (target)
+    {
+      case TextTarget::NewItem: return {"New preset", "Name the new User preset.", "Save"};
+      case TextTarget::RenameItem:
+        return {std::string("Rename ") + item, "New name for \"" + mRenameName + "\".", "Rename"};
+      case TextTarget::ProfileName: return {"Amp name", "Name this custom amp.", "OK"};
+      case TextTarget::CabName: return {"Cab label", "Up to 3 characters, shown on the cab button.", "OK"};
+      default: return {"Name", "", "OK"};
+    }
   }
 
   /* ---------------- action handling ---------------- */
@@ -895,7 +1008,7 @@ private:
           // the old positional behaviour rather than becoming unusable.
           const std::string id = RowIdAt(idx);
           auto doOverwrite = [this, id, idx, nm]() {
-            const int now = id.empty() ? idx : RowIndexById(id);
+            const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));
             if (now < 0)
             {
               mError = "\"" + nm + "\" is no longer in your library.";
@@ -937,7 +1050,7 @@ private:
           // An entry with no id keeps the old positional behaviour.
           const std::string id = RowIdAt(idx);
           auto doDelete = [this, id, idx, nm]() {
-            const int now = id.empty() ? idx : RowIndexById(id);
+            const int now = volum::ResolveConfirmRowIndex(id, idx, RowIndexById(id));
             if (now < 0)
             {
               mError = "\"" + nm + "\" is no longer in your library.";
@@ -952,9 +1065,13 @@ private:
             NotifyChanged();
             SetDirty(false);
           };
+          // Asked before the delete so the copy can name the in-use case and the
+          // destination ("PRE 1 will be empty", "MAIN will fall back to ...").
+          const std::string body = mPlanRigRepair
+                                     ? mPlanRigRepair(RigKind(), id, nm)
+                                     : "Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.";
           if (mConfirm)
-            mConfirm(
-              "Delete " + std::string(ItemNoun()) + " \"" + nm + "\"? This cannot be undone.", doDelete, "Delete");
+            mConfirm(body, doDelete, "Delete");
           else
             doDelete();
         }
@@ -1000,7 +1117,10 @@ private:
         // manual mapping.
         const auto parsed = volum::custom::ParseNamFileName(base);
         const int slot = parsed.matched ? parsed.slot : volum::custom::kUnassignedSlot;
-        const int channel = parsed.matched ? parsed.channel : 0;
+        // ParseNamFileName already drops a last-token number outside 1..kMaxChannels
+        // (G65-2204 is a model code). Re-check so a draft row is never "assigned"
+        // to a channel the loader will ignore.
+        const int channel = volum::custom::ChannelAssigned(parsed.channel) ? parsed.channel : 0;
         // Keep the absolute source path so Save can copy the capture into the
         // VoLum-owned content library (F6 import). storedPath is filled on save.
         volum::custom::CustomNamFile nf;
@@ -1398,7 +1518,7 @@ private:
     {
       case ManageKind::IR: return IRNameExists(name, exceptIdx);
       case ManageKind::Pedals: return PedalNameExists(name, exceptIdx);
-      default: return PresetNameExists(mAmpIdx, name, exceptIdx);
+      default: return NameExistsCI(PresetsForOwner(PresetOwnerKey()), name, exceptIdx);
     }
   }
 
@@ -1463,6 +1583,9 @@ private:
         y += rowH;
         if (row.B < listArea.T || row.T > listArea.B)
           continue;
+        // Same rule as the builder file list: a row that runs into the footer
+        // still paints under the clip, but it does not take a click.
+        const bool rowVisible = (row.T >= listArea.T - 0.5f && row.B <= listArea.B + 0.5f);
 
         const bool sel = (i == mSel);
         if (sel)
@@ -1477,11 +1600,13 @@ private:
         float ix = row.R - iconW;
         const IRECT trash(ix, row.T, ix + iconW, row.B);
         DrawBinGlyph(g, trash, VoLumColors::CREAM_DIM);
-        AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
+        if (rowVisible)
+          AddHotspot(trash, kRowDeleteBase + i, deleteTip.c_str());
         ix -= iconW;
         const IRECT pen(ix, row.T, ix + iconW, row.B);
         DrawPenGlyph(g, pen, VoLumColors::CREAM_DIM);
-        AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
+        if (rowVisible)
+          AddHotspot(pen, kRowRenameBase + i, renameTip.c_str());
         if (mManageKind == ManageKind::IR)
         {
           ix -= iconW;
@@ -1491,14 +1616,16 @@ private:
           const volum::custom::IRShaping s = volum::custom::IRShapingAt(i);
           const bool shaped = (s.trimDb != 0.0) || (s.lowCutHz > 0.0) || (s.highCutHz > 0.0);
           DrawGearGlyph(g, gear, shaped ? VoLumColors::GOLD : VoLumColors::CREAM_DIM);
-          AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
+          if (rowVisible)
+            AddHotspot(gear, kRowIrCfgBase + i, "Level, low-cut & high-cut for this IR");
         }
         ix -= iconW;
         if (presets)
         {
           const IRECT ovr(ix, row.T, ix + iconW, row.B);
           DrawOverwriteGlyph(g, ovr, VoLumColors::CREAM_DIM);
-          AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
+          if (rowVisible)
+            AddHotspot(ovr, kRowOverwriteBase + i, "Overwrite this preset with the current settings");
           ix -= iconW;
         }
 
@@ -1527,20 +1654,19 @@ private:
         }
         g.PathClipRegion(listArea);
 
-        AddHotspot(row, kRowBase + i, rowTip);
+        if (rowVisible)
+          AddHotspot(row, kRowBase + i, rowTip);
       }
       g.PathClipRegion();
 
       if (scrollable)
       {
-        const float trackX = listArea.R - sbW - 1.f;
-        IRECT track(trackX, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
-        const float maxScroll = contentH - listArea.H();
-        const float thumbH = std::max(18.f, track.H() * (listArea.H() / contentH));
-        const float t = (maxScroll > 0.f) ? (mManageScroll / maxScroll) : 0.f;
-        const IRECT thumb(
-          track.L, track.T + (track.H() - thumbH) * t, track.R, track.T + (track.H() - thumbH) * t + thumbH);
-        DrawVoLumScrollbar(g, track, thumb);
+        mManageScrollM = volum::scroll::ComputeScroll(listArea.T, listArea.B, listArea.H(), contentH, mManageScroll);
+        mManageTrack = IRECT(listArea.R - sbW - 1.f, listArea.T + 2.f, listArea.R - 1.f, listArea.B - 2.f);
+        DrawVoLumScrollbar(
+          g, mManageTrack,
+          IRECT(mManageTrack.L, mManageScrollM.thumbY, mManageTrack.R, mManageScrollM.thumbY + mManageScrollM.thumbH),
+          mManageBar.dragging);
       }
     }
 
@@ -1655,13 +1781,16 @@ private:
 
       // channel chip
       char chLabel[12];
-      if (f.channel >= 1)
+      const bool chOk = ChannelAssigned(f.channel);
+      if (chOk)
         std::snprintf(chLabel, sizeof(chLabel), "Ch %d", f.channel);
       else
         std::snprintf(chLabel, sizeof(chLabel), "Ch -");
       g.FillRect(VoLumColors::HERO_BG, ch);
-      g.DrawRect(VoLumColors::TEAL_DIM, ch);
-      g.DrawText(IText(10.f, VoLumColors::TEXT_MED, "Josefin-Bold", EAlign::Center, EVAlign::Middle), chLabel, ch);
+      g.DrawRect(chOk ? VoLumColors::TEAL_DIM : VoLumColors::AMBER, ch);
+      g.DrawText(
+        IText(10.f, chOk ? VoLumColors::TEXT_MED : VoLumColors::AMBER, "Josefin-Bold", EAlign::Center, EVAlign::Middle),
+        chLabel, ch);
       if (rowVisible)
         AddHotspot(ch, kFileChannelBase + i, "Assign this capture to a channel");
 
@@ -1933,11 +2062,17 @@ private:
   int mPedalSlot = -1; // originating PRE NAM slot for ManageKind::Pedals
   int mBuilderEditIdx = -1; // custom-amp index being edited (-1 = new draft)
   float mManageScroll = 0.f; // Manage list scroll offset (px)
+  IRECT mManageTrack;
+  volum::scroll::ScrollMetrics mManageScrollM;
+  volum::scroll::Interaction mManageBar;
   float mBuilderFileScroll = 0.f; // builder file-manifest scroll offset (px)
 
   BuilderSavedCallback mBuilderSaved;
   ChangedCallback mChanged;
   ConfirmCallback mConfirm;
+  NamePromptCallback mNamePrompt;
+  RigRepairPlanCallback mPlanRigRepair; // see VoLumRigRepair.h
+  RigRepairApplyCallback mApplyRigRepair;
   PrimaryActionCallback mPrimaryAction;
   SavePresetCallback mSavePreset;
   OverwritePresetCallback mOverwritePreset;

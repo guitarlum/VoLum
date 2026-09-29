@@ -16,6 +16,7 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumDualAmpInput.h"
 #include "VoLumFractalArt.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cstring>
@@ -192,8 +193,7 @@ public:
         if (mDismissPickerCallback)
           mDismissPickerCallback();
         break;
-      default:
-        break;
+      default: break;
     }
 
     SetDirty(false);
@@ -419,9 +419,12 @@ private:
     g.FillRect(IColor(190, 12, 12, 18), titleStrip);
     g.DrawText(IText(10.f, accent, "Josefin-Bold", EAlign::Near, EVAlign::Middle), role,
                IRECT(r.L + 12.f, r.T + 8.f, r.R - 12.f, r.T + 24.f));
+    // The PAN knob sits on the right of this strip. Fit and draw the name in
+    // the space to its left so a long name is not painted under the knob.
+    const IRECT nameR(titleStrip.L, titleStrip.T, titleStrip.R - kPanKnobSize - 4.f, titleStrip.B);
     const IText nameText(12.f, VoLumColors::TEXT_BRIGHT, "Josefin-Bold", EAlign::Center, EVAlign::Middle);
-    const std::string fitted = FitTextToWidth(g, nameText, name, titleStrip.W() - 6.f);
-    g.DrawText(nameText, fitted.c_str(), titleStrip);
+    const std::string fitted = FitTextToWidth(g, nameText, name, nameR.W() - 6.f);
+    g.DrawText(nameText, fitted.c_str(), nameR);
   }
 
   // Trim `s` (appending an ellipsis) until it fits within maxW for the given
@@ -441,13 +444,13 @@ private:
       // Avoid leaving a dangling UTF-8 lead/continuation byte.
       while (!str.empty() && (static_cast<unsigned char>(str.back()) & 0xC0) == 0x80)
         str.pop_back();
-      const std::string cand = str + "\u2026";
+      const std::string cand = str + "\xE2\x80\xA6";
       IRECT mr;
       g.MeasureText(text, cand.c_str(), mr);
       if (mr.W() <= maxW)
         return cand;
     }
-    return str + "\u2026";
+    return str + "\xE2\x80\xA6";
   }
 
   void DrawDualHero(IGraphics& g)
@@ -537,12 +540,20 @@ public:
     (void)x;
     (void)y;
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     if (mToggleCallback)
       mToggleCallback();
     SetDirty(false);
   }
 
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
+  }
+
 private:
   IsActiveCallback mIsActiveCallback;
   ToggleCallback mToggleCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };

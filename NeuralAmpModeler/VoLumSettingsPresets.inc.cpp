@@ -5,29 +5,40 @@ void NeuralAmpModeler::_VolumInstallPresetHooks()
 {
   // Capture: sync live params into the active scene, then hand back a copy so a
   // preset records the complete current rig (incl. the id-based custom refs that
-  // live on the scene, not on params).
-  volum::custom::PresetCaptureHook() = [this]() -> volum::VoLumAmpSettings {
-    _VolumSaveCurrentToSettings();
-    return _VolumActiveScene();
-  };
-  volum::custom::PresetApplyHook() = [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); };
+  // live on the scene, not on params). Registered per instance so a later claim
+  // of the process-global pair cannot make this editor persist another scene.
+  volum::custom::InstallInstancePresetHooks(
+    this,
+    [this]() -> volum::VoLumAmpSettings {
+      _VolumSaveCurrentToSettings();
+      // Locked PRE/POST live on the overlay, not the amp slot. A preset is a
+      // snapshot of the sounding rig, so capture must overlay those blocks
+      // without mutating the slot the lock is protecting.
+      return volum::SoundingPresetScene(
+        _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
+    },
+    [this](const volum::VoLumAmpSettings& s) { _VolumApplyRecalledPreset(s); });
   volum::custom::PresetHookOwner() = this;
 }
 
 // Claims the process-global preset bridge for this instance, immediately before
 // using it.
 //
-// The bridge exists because the content layer cannot reach live params, but it is a
-// single set of globals shared by every instance in the host. Installing the hooks
-// once at construction meant the most recently created instance owned capture and
-// recall for all of them: saving a preset in the first instance stored the second
-// instance's rig, recalling in the first changed the second, and once that instance
-// was closed the hooks still held its destroyed `this`. Re-binding per operation
-// makes the caller the owner, and the caller is by definition alive.
-void NeuralAmpModeler::_VolumClaimPresetOps()
+// The bridge exists because the content layer cannot reach live params. Capture
+// and apply are keyed per instance (see InstallInstancePresetHooks); this claim
+// still publishes the process-global pair and the owner key so overlay listing
+// and the legacy index-based signatures keep a current claimant. Save, overwrite,
+// and recall wrap themselves in PresetOpScope(this) so they never persist or
+// apply through whoever last claimed the globals.
+// Returns this instance's owner key so the caller can pass it explicitly instead
+// of reading the ambient global back out. The global is still set for the legacy
+// index-based bridge signatures, but nothing in the plugin depends on it.
+std::string NeuralAmpModeler::_VolumClaimPresetOps()
 {
   _VolumInstallPresetHooks();
-  volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+  const std::string key = _VolumActiveOwnerKey();
+  volum::custom::SetActivePresetOwner(key);
+  return key;
 }
 
 void NeuralAmpModeler::_VolumRememberActivePreset()
@@ -84,6 +95,16 @@ void NeuralAmpModeler::_VolumSyncPresetOwner()
   // file remembered the selection and this function threw it away. The baseline the
   // "(unsaved)" marker diffs against is then the preset's own stored content, which
   // is the same choice the DAW-chunk restore path makes.
+  if (mVolumCustomMainIdx < 0)
+    if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+        factory && factory->id == mVolumActivePresetId)
+    {
+      mVolumRecalledSnapshot = volum::HealedFactoryPresetSettings(factory->settings);
+      mVolumRecalledSnapshotByOwner[key] = mVolumRecalledSnapshot;
+      mVolumHasRecalledSnapshot = true;
+      return;
+    }
+
   const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
   auto itBank = banks.find(key);
   if (itBank != banks.end())
@@ -113,61 +134,173 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
     return;
   volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
   auto* bar = pb->As<VoLumPresetBarControl>();
-  bar->SetList(volum::custom::MockPresetsForAmp(mVolumAmpIdx)); // clears selection + dirty
+  // Owner-explicit for the User rows: with two editors open, the ambient owner key
+  // belongs to whichever one last switched amps, so reading "the active bank"
+  // through it could show another instance's presets in this bar. The shipped
+  // Ready row is not a library item, so it is prepended here.
+  const auto* factoryPreset =
+    mVolumCustomMainIdx < 0 ? volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) : nullptr;
+  const bool hasFactory = factoryPreset != nullptr;
+  std::vector<std::string> names;
+  if (hasFactory)
+    names.push_back(factoryPreset->name);
+  const auto users = volum::custom::PresetsForOwner(_VolumActiveOwnerKey());
+  names.insert(names.end(), users.begin(), users.end());
+  bar->SetList(names); // clears selection; dirty is preserved then recomputed below
 
+  bool selected = false;
   if (mVolumHasRecalledSnapshot && !mVolumActivePresetId.empty())
   {
-    const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
-    auto it = banks.find(_VolumActiveOwnerKey());
-    bool found = false;
-    if (it != banks.end())
-      for (const auto& pr : it->second)
-        if (pr.id == mVolumActivePresetId)
-        {
-          bar->SelectName(pr.name.c_str());
-          found = true;
-          break;
-        }
-    if (found)
-      _VolumRecomputePresetDirty();
-    else
-      _VolumForgetActivePreset(); // preset was deleted out from under us
+    if (hasFactory)
+      if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+          factory && factory->id == mVolumActivePresetId)
+      {
+        bar->SelectAt(0, factory->name.c_str(), true);
+        selected = true;
+      }
+    if (!selected)
+    {
+      const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+      auto it = banks.find(_VolumActiveOwnerKey());
+      bool found = false;
+      if (it != banks.end())
+        for (int i = 0; i < static_cast<int>(it->second.size()); ++i)
+          if (const auto& pr = it->second[static_cast<size_t>(i)]; pr.id == mVolumActivePresetId)
+          {
+            bar->SelectAt(i + (hasFactory ? 1 : 0), pr.name.c_str(), false);
+            found = true;
+            break;
+          }
+      if (found)
+        selected = true;
+      else
+        _VolumForgetActivePreset(); // preset was deleted out from under us
+    }
   }
+
+  // Always: deleting the selected User preset forgets the id, SetList blanks
+  // the bar, and Default must not see a clean "No Preset" over a live sound.
+  if (volum::PresetBarNeedsDirtyRecompute(selected))
+    _VolumRecomputePresetDirty();
 }
 
-int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name)
+int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name, bool retargetLiveSlot)
 {
+  volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
-  const int idx = volum::custom::AddPreset(mVolumAmpIdx, name); // captures live via hook
+  const int idx = volum::custom::AddPresetForOwner(_VolumActiveOwnerKey(), name); // captures live via hook
   if (idx < 0)
     return idx;
   // The freshly saved preset becomes the active, clean recalled snapshot.
-  mVolumActivePresetId = volum::custom::PresetIdAt(idx);
-  mVolumRecalledSnapshot = _VolumActiveScene(); // hook already synced live -> scene
+  mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), idx);
+  mVolumRecalledSnapshot = volum::SoundingPresetScene(
+    _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
   mVolumHasRecalledSnapshot = true;
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
+  if (retargetLiveSlot)
+    _VolumReassignLivePlaySlotAfterSave();
   return idx;
 }
 
-void NeuralAmpModeler::_VolumOverwritePreset(int index)
+void NeuralAmpModeler::_VolumOverwritePreset(int index, bool retargetLiveSlot)
 {
+  volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
-  volum::custom::OverwritePreset(mVolumAmpIdx, index); // captures live via hook
-  mVolumActivePresetId = volum::custom::PresetIdAt(index);
-  mVolumRecalledSnapshot = _VolumActiveScene();
+  if (!volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index)) // captures live via hook
+    return;
+  mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), index);
+  mVolumRecalledSnapshot = volum::SoundingPresetScene(
+    _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
   mVolumHasRecalledSnapshot = true;
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
+  if (retargetLiveSlot)
+    _VolumReassignLivePlaySlotAfterSave();
 }
 
 void NeuralAmpModeler::_VolumRecallPreset(int index)
 {
+  const bool hasFactory =
+    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
+  if (hasFactory && index == 0)
+  {
+    _VolumRecallFactoryPreset();
+    return;
+  }
+  _VolumRecallUserPreset(index - (hasFactory ? 1 : 0));
+}
+
+void NeuralAmpModeler::_VolumRecallUserPreset(int index)
+{
+  volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
-  mVolumActivePresetId = volum::custom::PresetIdAt(index);
-  volum::custom::RecallPreset(mVolumAmpIdx, index); // -> apply hook -> _VolumApplyRecalledPreset
+  mVolumActivePresetId = volum::custom::PresetIdAtForOwner(_VolumActiveOwnerKey(), index);
+  if (!volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index)) // -> apply hook -> _VolumApplyRecalledPreset
+    return;
+  _VolumSyncLivePlaySlotFromActivePair();
+  _VolumRefreshPresetBar();
+  if (GetUI())
+    _VolumSyncUiFromState();
+  else
+    mVolumUiSyncPending.store(true);
+}
+
+bool NeuralAmpModeler::_VolumRecallSound(const std::string& ampId, const std::string& presetId)
+{
+  return VolumRecallSound(ampId, presetId);
+}
+
+void NeuralAmpModeler::_VolumSetMidiChannel(int channel)
+{
+  mVolumMidiChannel.store(std::clamp(channel, 0, volum::kMidiChannelCount));
+#ifdef APP_API
+  mVolumSettingsDirty = true;
+#endif
+  DirtyParametersFromUI();
+  _VolumRefreshMidiSettingsChrome();
+}
+
+void NeuralAmpModeler::_VolumSetMidiRecallCc(int cc)
+{
+  mVolumMidiRecallCc.store(volum::ClampMidiRecallCc(cc));
+#ifdef APP_API
+  mVolumSettingsDirty = true;
+#endif
+  DirtyParametersFromUI();
+  _VolumRefreshMidiSettingsChrome();
+}
+
+void NeuralAmpModeler::_VolumRefreshMidiSettingsChrome()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* raw = pGfx->GetControlWithTag(kCtrlTagSettingsBox);
+  if (!raw)
+    return;
+  auto* page = raw->As<NAMSettingsPageControl>();
+  page->SetMidiChannel(mVolumMidiChannel.load());
+  page->SetMidiRecallCc(mVolumMidiRecallCc.load());
+  // Rebuilt from the live registry every time, never cached: the map is machine
+  // global, so another instance or the PLAY rail can have changed it since the
+  // panel was last opened.
+  page->SetMidiSoundMap(mVolumFactoryPresets, volum::content::GlobalContentStore().reg(), mVolumLastRecalledPlaySlot,
+                        _VolumActiveOwnerKey(), mVolumActivePresetId);
+}
+
+void NeuralAmpModeler::_VolumRecallFactoryPreset()
+{
+  if (mVolumCustomMainIdx >= 0)
+    return;
+  const auto* preset = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+  if (!preset)
+    return;
+  mVolumActivePresetId = preset->id;
+  _VolumApplyRecalledPreset(preset->settings);
+  _VolumSyncLivePlaySlotFromActivePair();
   _VolumRefreshPresetBar();
 }
 
@@ -215,12 +348,70 @@ void NeuralAmpModeler::_VolumRecomputePresetDirty()
   if (!pb)
     return;
   auto* bar = pb->As<VoLumPresetBarControl>();
-  if (!mVolumHasRecalledSnapshot)
-  {
-    bar->SetDirtyState(false);
-    return;
-  }
+  bar->SetDirtyState(_VolumLivePresetDirty());
+}
+
+bool NeuralAmpModeler::_VolumLivePresetDirty()
+{
   _VolumSaveCurrentToSettings();
-  const bool dirty = !volum::AmpSettingsEqual(_VolumActiveScene(), mVolumRecalledSnapshot);
-  bar->SetDirtyState(dirty);
+  const auto sounding = volum::SoundingPresetScene(
+    _VolumActiveScene(), mVolumPreLocked, mVolumLiveLockedPre, mVolumPostLocked, mVolumLiveLockedPost);
+  return volum::LivePresetDirty(mVolumHasRecalledSnapshot, sounding, mVolumRecalledSnapshot);
+}
+
+void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after, volum::SaveOrigin origin)
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumNameDialog);
+  if (!raw)
+    return;
+  const auto action = volum::SaveActionForActivePreset(mVolumActivePresetId);
+  const std::string ownerKey = _VolumClaimPresetOps();
+  std::string currentName;
+  std::string currentId;
+  if (action == volum::PresetSaveAction::OverwriteUser)
+  {
+    const int idx = volum::custom::PresetIndexByIdForOwner(ownerKey, mVolumActivePresetId);
+    const auto users = volum::custom::PresetsForOwner(ownerKey);
+    if (idx >= 0 && idx < static_cast<int>(users.size()))
+    {
+      currentName = users[static_cast<size_t>(idx)];
+      currentId = mVolumActivePresetId;
+    }
+  }
+  const std::string seed = volum::SaveDialogSeedName(action, currentName);
+  VOLUM_LOG("preset", "save dialog open (" + std::string(currentId.empty() ? "new" : "may update") + ")");
+  raw->As<VoLumNameDialogControl>()->Show(
+    "Save preset", "Name this User preset.", seed, currentName,
+    [this, after, origin, currentName, currentId](const std::string& name) {
+      // The overwrite target is looked up by id now, not by an index remembered
+      // when the dialog opened: the bank can be edited or reordered in between.
+      const int overwriteIdx = volum::name_dialog::Overwrites(name, currentName)
+                                 ? volum::custom::PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)
+                                 : -1;
+      const bool retarget = volum::SaveRetargetsLiveSlot(origin);
+      bool ok = false;
+      if (overwriteIdx >= 0)
+      {
+        _VolumOverwritePreset(overwriteIdx, retarget);
+        ok = true;
+      }
+      else
+        ok = _VolumSavePresetAs(name, retarget) >= 0;
+      VOLUM_LOG("preset", std::string("save dialog commit: ") + (overwriteIdx >= 0 ? "updated '" : "saved '") + name
+                            + "'" + (ok ? "" : " (refused)"));
+      if (!ok)
+        return;
+      if (after)
+        after();
+    },
+    []() { VOLUM_LOG("preset", "save dialog cancelled: nothing written"); });
+}
+
+bool NeuralAmpModeler::_VolumHandleSaveShortcut()
+{
+  _VolumPromptSaveAs();
+  return true;
 }

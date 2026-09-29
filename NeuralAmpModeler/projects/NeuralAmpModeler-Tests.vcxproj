@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
@@ -34,6 +34,9 @@
     <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><CharacterSet>MultiByte</CharacterSet><PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(MSBuildThisFileDirectory)..\config\VoLum-release-opt.props" />
+  </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(SolutionDir)build-win\tests\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build-win\tests\$(Platform)\$(Configuration)\int\</IntDir>
   </PropertyGroup>
@@ -55,42 +58,42 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\WDL;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\WDL;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\WDL;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\WDL;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\WDL;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Tracer|x64'">
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;TRACER_BUILD;WIN32;NAM_ENABLE_A2_FAST;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)tests\third_party;$(SolutionDir)third_party\signalsmith;$(SolutionDir)..\eigen;$(SolutionDir)..\NeuralAmpModelerCore\NAM;$(SolutionDir)..\iPlug2\IPlug\APP;$(SolutionDir)..\iPlug2\WDL;$(SolutionDir)..\iPlug2\Dependencies\Extras;$(SolutionDir)..\iPlug2\Dependencies\Extras\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level3</WarningLevel>
     </ClCompile><Link><SubSystem>Console</SubSystem></Link>
   </ItemDefinitionGroup>
@@ -102,6 +105,7 @@
     <ClCompile Include="..\tests\test_volum_chunk_version.cpp" />
     <ClCompile Include="..\tests\test_volum_paths.cpp" />
     <ClCompile Include="..\tests\test_volum_settings_atomic_write.cpp" />
+    <ClCompile Include="..\tests\test_volum_update_check.cpp" />
     <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_regressions.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_sync_plan.cpp" />
@@ -112,27 +116,35 @@
     <ClCompile Include="..\tests\test_volum_amp_list_scroll.cpp" />
     <ClCompile Include="..\tests\test_volum_dual_amp_input.cpp" />
     <ClCompile Include="..\tests\test_volum_amp_catalog.cpp" />
+    <ClCompile Include="..\tests\test_volum_art_anim.cpp" />
     <ClCompile Include="..\tests\test_delay_reverb_dsp.cpp" />
     <ClCompile Include="..\tests\test_reverb_diffusion.cpp" />
+    <ClCompile Include="..\tests\test_reverb_stereo_input.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_effects.cpp" />
     <ClCompile Include="..\tests\test_golden_dsp.cpp" />
     <ClCompile Include="..\tests\test_golden_rigs.cpp" />
     <ClCompile Include="..\tests\test_golden_presets.cpp" />
+    <ClCompile Include="..\tests\test_volum_golden_render.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\dsp.cpp">
       <ObjectFileName>$(IntDir)audiodsp_dsp.obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="..\..\AudioDSPTools\dsp\Delay.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\ImpulseResponse.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />
     <ClCompile Include="..\tests\test_eparam_order.cpp" />
     <ClCompile Include="..\tests\test_tuner_dsp.cpp" />
+    <ClCompile Include="..\tests\test_volum_tuner_burst.cpp" />
     <ClCompile Include="..\tests\test_metronome_dsp.cpp" />
     <ClCompile Include="..\tests\test_tone_stack.cpp" />
+    <ClCompile Include="..\tests\test_volum_filter_core.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_pedal_captures.cpp" />
     <ClCompile Include="..\tests\test_volum_custom_content.cpp" />
     <ClCompile Include="..\tests\test_volum_content_store.cpp" />
     <ClCompile Include="..\tests\test_volum_content_crud_edge.cpp" />
+    <ClCompile Include="..\tests\test_volum_rig_repair.cpp" />
+    <ClCompile Include="..\tests\test_volum_pack.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_shaping.cpp" />
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />
@@ -143,22 +155,44 @@
     <ClCompile Include="..\tests\test_volum_state_roundtrip.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch.cpp" />
     <ClCompile Include="..\tests\test_volum_pitch_artifacts.cpp" />
+    <ClCompile Include="..\tests\test_volum_pitch_high_notes.cpp" />
+    <ClCompile Include="..\tests\test_volum_pitch_burst.cpp" />
+    <ClCompile Include="..\tests\test_volum_realtime_budget.cpp" />
+    <ClCompile Include="..\tests\test_volum_nam_exact.cpp" />
+    <ClCompile Include="..\tests\test_volum_nam_idle_skip.cpp" />
+    <ClCompile Include="..\tests\test_volum_resampling_nam.cpp" />
+    <ClCompile Include="..\tests\test_volum_self_capture_format.cpp" />
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
+    <ClCompile Include="..\tests\test_volum_chorus.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_post_lock.cpp" />
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />
     <ClCompile Include="..\tests\test_volum_knob_wheel.cpp" />
     <ClCompile Include="..\tests\test_volum_bypass_identity.cpp" />
+    <ClCompile Include="..\tests\test_volum_name_dialog.cpp" />
     <ClCompile Include="..\tests\test_volum_nan_guard.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
     <ClCompile Include="..\tests\test_volum_preset_bar.cpp" />
+    <ClCompile Include="..\tests\test_volum_factory_presets.cpp" />
+    <ClCompile Include="..\tests\test_volum_play.cpp" />
+    <ClCompile Include="..\tests\test_volum_uat_layout.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_safe_read.cpp" />
     <ClCompile Include="..\tests\test_volum_overlay_action_codes.cpp" />
     <ClCompile Include="..\tests\test_volum_numeric_entry.cpp" />
     <ClCompile Include="..\tests\test_volum_cab_step.cpp" />
     <ClCompile Include="..\tests\test_volum_wav_downmix.cpp" />
+    <ClCompile Include="..\tests\test_volum_write_debounce.cpp" />
     <ClCompile Include="..\tests\test_volum_loopback_detect.cpp" />
+    <ClCompile Include="..\tests\test_volum_midi_decoder.cpp" />
+    <ClCompile Include="..\tests\test_volum_midi_handoff.cpp" />
+    <ClCompile Include="..\tests\test_volum_midi_footswitch.cpp" />
+    <ClCompile Include="..\tests\test_volum_meter_sender.cpp" />
+    <ClCompile Include="..\tests\test_volum_meter_dirty.cpp" />
+    <ClCompile Include="..\tests\test_volum_loader_prefetch.cpp" />
+    <ClCompile Include="..\tests\test_volum_shared_dsp_cache.cpp" />
+    <ClCompile Include="..\tests\test_volum_text_fit.cpp" />
+    <ClCompile Include="..\tests\test_volum_tuner_overlay.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
@@ -177,3 +211,4 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+

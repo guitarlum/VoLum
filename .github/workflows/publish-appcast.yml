@@ -1,0 +1,61 @@
+name: Publish update appcast
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Build appcast
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          PUBLISHED_AT: ${{ github.event.release.published_at }}
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          version="${RELEASE_TAG#v}"
+          notes="$(printf '%s\n' "$RELEASE_BODY" | awk 'NF { print; exit }')"
+          asset_base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+          jq -n \
+            --arg version "$version" \
+            --arg published "${PUBLISHED_AT:0:10}" \
+            --arg url "$RELEASE_URL" \
+            --arg notes "$notes" \
+            --arg win "$asset_base/VoLum-v${version}-windows-setup.exe" \
+            --arg mac "$asset_base/VoLum-v${version}-macos-installer.dmg" \
+            '{
+              schema: 1,
+              stable: {
+                version: $version,
+                published: $published,
+                url: $url,
+                notes: $notes,
+                downloads: {win: $win, mac: $mac}
+              },
+              message: null
+            }' > site/appcast.json
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

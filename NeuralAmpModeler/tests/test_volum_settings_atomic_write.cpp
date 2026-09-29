@@ -1,9 +1,11 @@
 #include "third_party/doctest.h"
 #include "../VoLumSettingsFileIO.h"
+#include "../VoLumUpdateState.h"
 
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -43,6 +45,15 @@ bool HasAtomicTempFile(const std::filesystem::path& dir)
 
 } // namespace
 
+TEST_CASE("ReplaceFileAtomically refuses POSIX rename over a write-bit-clear file")
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsFileIO.h";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  const std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(src.find("st.permissions() & std::filesystem::perms::owner_write") != std::string::npos);
+}
+
 TEST_CASE("WriteJsonAtomically writes complete JSON and removes temp file")
 {
   const auto root = TestRoot("golden");
@@ -59,6 +70,26 @@ TEST_CASE("WriteJsonAtomically writes complete JSON and removes temp file")
   CHECK(std::filesystem::exists(path));
   CHECK_FALSE(HasAtomicTempFile(root));
   CHECK(ReadJsonFile(path) == payload);
+}
+
+TEST_CASE("WriteJsonAtomically refuses a read-only target and leaves it intact")
+{
+  // macOS CI: POSIX rename replaces a chmod u-w file. The replace helper must
+  // honor the write bit so a backup lock cannot wipe the library.
+  const auto root = TestRoot("read-only-target");
+  const auto path = root / "volum-settings.json";
+  const nlohmann::json original = {{"writer", "original"}, {"value", 1}};
+  const nlohmann::json replacement = {{"writer", "replacement"}, {"value", 2}};
+
+  std::error_code ec;
+  REQUIRE(volum::WriteJsonAtomically(path, original, ec));
+  std::filesystem::permissions(path, std::filesystem::perms::owner_read, std::filesystem::perm_options::replace);
+
+  CHECK_FALSE(volum::WriteJsonAtomically(path, replacement, ec));
+  CHECK(ec);
+  std::filesystem::permissions(path, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
+  CHECK(ReadJsonFile(path) == original);
+  CHECK_FALSE(HasAtomicTempFile(root));
 }
 
 TEST_CASE("WriteJsonAtomically leaves existing file untouched when target path is invalid")
@@ -146,5 +177,28 @@ TEST_CASE("A document containing invalid UTF-8 fails the write instead of throwi
   // The previous good file survives untouched, and no temp file is left behind.
   const nlohmann::json loaded = ReadJsonFile(path);
   CHECK(loaded == good);
+  CHECK_FALSE(HasAtomicTempFile(root));
+}
+
+TEST_CASE("Update sidecar round-trips independently of user settings")
+{
+  const auto root = TestRoot("update-sidecar");
+  const auto path = root / "volum-update-state.json";
+  volum::update::UpdateState expected;
+  expected.lastCheckUtc = 1'787'000'000;
+  expected.lastSeenVersion = "1.3.0";
+  expected.latestKnownVersion = "1.3.1";
+  expected.latestKnownUrl = "https://github.com/guitarlum/VoLum/releases/tag/v1.3.1";
+  expected.latestKnownNotes = "Maintenance release.";
+  expected.autoCheck = false;
+
+  REQUIRE(volum::update::SaveUpdateState(path, expected));
+  const auto loaded = volum::update::LoadUpdateState(path);
+  CHECK(loaded.lastCheckUtc == expected.lastCheckUtc);
+  CHECK(loaded.lastSeenVersion == expected.lastSeenVersion);
+  CHECK(loaded.latestKnownVersion == expected.latestKnownVersion);
+  CHECK(loaded.latestKnownUrl == expected.latestKnownUrl);
+  CHECK(loaded.latestKnownNotes == expected.latestKnownNotes);
+  CHECK(loaded.autoCheck == expected.autoCheck);
   CHECK_FALSE(HasAtomicTempFile(root));
 }

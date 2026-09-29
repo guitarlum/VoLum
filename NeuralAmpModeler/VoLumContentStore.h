@@ -26,19 +26,30 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <map>
+#include <mutex>
+#include <optional>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "VoLumAmpSettingsJson.h"
 #include "VoLumCustomModel.h" // volum::custom::CustomAmp + pure helpers
-#include "VoLumSettingsFileIO.h" // WriteJsonAtomically
+#include "VoLumMidi.h"
+#include "VoLumSettingsFileIO.h" // WriteJsonAtomically (also pulls in <windows.h> on Win32)
+
+#ifndef _WIN32
+  #include <fcntl.h>
+  #include <sys/file.h>
+  #include <unistd.h>
+#endif
 
 namespace volum
 {
@@ -94,11 +105,10 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
   // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
   // succeeds on an empty directory, so an entry like that could delete the
   // library's own folder rather than a capture.
-  // A payload is always a file inside a subdirectory, never a directory itself.
-  // "." and "ir" resolve to the library root and to "<base>/ir", and remove()
-  // succeeds on an empty directory, so an entry like that could delete the
-  // library's own folder rather than a capture.
   if (!path.has_parent_path() || !path.has_filename())
+    return false;
+
+  if (relPath.find(':') != std::string::npos)
     return false;
 
   for (const auto& part : path)
@@ -109,11 +119,26 @@ inline bool IsSafeStoredRelPath(const std::string& relPath)
   return true;
 }
 
+// The leaf a copied file is stored under: the user's own file name, minus the
+// one character IsSafeStoredRelPath refuses mid-path. macOS allows ':' in a name
+// (Finder shows it as '/'); stored as-is, the copy would never resolve again.
+inline std::string StoredLeafName(std::string leaf)
+{
+  std::replace(leaf.begin(), leaf.end(), ':', '_');
+  return leaf;
+}
+
 // v3 (VoLum 1.2.1) adds per-IR shaping (trimDb / lowCutHz / highCutHz) to each
 // irLibrary entry. The reader is additive/forward-tolerant (unknown keys ignored,
 // missing keys defaulted), so v2 files load unchanged and v3 files load in older
 // builds; the bump is only a marker of the new capability, not a migration gate.
-inline constexpr int kContentSchemaVersion = 3;
+//
+// v4 (VoLum 1.3.0) adds "midiSoundMap" -- the machine-global MIDI Sound
+// assignments used by MIDI and PLAY -- and stops writing "customScenes". The
+// sounding rig now lives on the VoLum instance (DAW chunk / standalone settings)
+// like a factory amp's, so a catalog write can never rewrite a sibling's live
+// knobs. A v3 file's customScenes are still read once, as a migration source.
+inline constexpr int kContentSchemaVersion = 4;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
 // so adding/removing a custom pedal never reshuffles an index a saved chunk or
@@ -386,6 +411,44 @@ inline std::string FactoryOwnerKey(int ampIdx)
   return "factory:" + std::to_string(ampIdx);
 }
 
+inline bool IsFactoryOwnerKey(const std::string& key)
+{
+  return key.rfind("factory:", 0) == 0;
+}
+
+// ---------------------------------------------------------------------------
+// MIDI sound map (1.3.0)
+// ---------------------------------------------------------------------------
+//
+// One MIDI slot points at a Sound: an amp plus a preset on that amp. `ampId` is
+// "factory:<idx>" or a custom-amp library id; `presetId` is a User preset library
+// id or a shipped Factory preset id ("factory:<idx>:v1"). A Factory preset is not
+// a library item, so it can never be found in a preset bank - it still serializes
+// here, and resolution has to know the difference (see MidiSlotState).
+//
+// The map lives with the content library so every format (standalone, VST3, AU)
+// writes it under the same lock as the catalog. The MIDI *decoder* and its Settings
+// chrome are a separate effort; this is the persistence contract they build on.
+struct MidiSoundAssignment
+{
+  std::string ampId;
+  std::string presetId;
+};
+
+// A shipped Factory preset id, e.g. "factory:7:v1". Deliberately narrower than
+// IsFactoryOwnerKey: "factory:7" is an amp, "factory:7:v1" is a preset.
+inline bool IsFactoryPresetId(const std::string& id)
+{
+  if (id.rfind("factory:", 0) != 0)
+    return false;
+  return id.find(':', 8) != std::string::npos;
+}
+
+inline std::string FactoryPresetId(int ampIdx, int version = 1)
+{
+  return "factory:" + std::to_string(ampIdx) + ":v" + std::to_string(version);
+}
+
 // ---------------------------------------------------------------------------
 // Custom-amp capture resolution (F6 DSP wiring)
 // ---------------------------------------------------------------------------
@@ -417,15 +480,205 @@ inline bool DefaultCaptureSelection(const custom::CustomAmp& amp, int& slot, int
   return true;
 }
 
+// File-less amps leave DefaultCaptureSelection's outputs untouched. A new
+// SUPPORT partner must not keep the previous partner's cab, so start from
+// DIRECT / channel 1 and only replace that when the amp has files.
+inline void CaptureSelectionOrDefault(const custom::CustomAmp& amp, int& slot, int& channel)
+{
+  slot = custom::kDirectSlot;
+  channel = 1;
+  DefaultCaptureSelection(amp, slot, channel);
+}
+
 struct Registry
 {
   std::vector<custom::CustomAmp> amps; // manifests (inline)
   std::vector<IRItem> irs; // global IR library
   std::vector<PedalItem> pedals; // global pedal library
   std::map<std::string, std::vector<Preset>> presetBanks; // ownerKey -> presets
-  std::map<std::string, VoLumAmpSettings> customScenes; // ampId -> live scene
+  std::map<int, MidiSoundAssignment> midiSoundMap; // MIDI slot -> Sound
   int nextPedalIndex = kCustomPedalIndexBase; // monotonic, never reused
+
+  // Read from a pre-1.3.0 file's "customScenes" and never written back. The
+  // sounding rig belongs to the instance now, so this is a one-way migration
+  // source the plugin drains into its own per-instance scene map.
+  std::map<std::string, VoLumAmpSettings> legacyCustomScenes;
+  // Keys this build does not understand, plus a schemaVersion newer than ours.
+  // Save writes them back so a newer library is not stripped by an older binary.
+  nlohmann::json passthrough = nlohmann::json::object();
+  int passthroughSchema = 0;
 };
+
+struct ResolvedMidiSound
+{
+  std::string ampId;
+  std::string presetId;
+  VoLumAmpSettings settings;
+};
+
+inline const MidiSoundAssignment* MidiSoundAtSlot(const Registry& r, int slot)
+{
+  if (slot < 0 || slot >= kMidiSoundSlotCount)
+    return nullptr;
+  const auto it = r.midiSoundMap.find(slot);
+  return it == r.midiSoundMap.end() ? nullptr : &it->second;
+}
+
+// Pure/headless lookup used by OnIdle, PLAY, and tests. Missing amps, missing
+// User presets, unassigned slots, and mismatched Factory ids stay no-op. Shipped
+// Ready presets (`factory:<idx>:v1`) resolve even though they are not stored in
+// the user presetBanks.
+inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int slot)
+{
+  const MidiSoundAssignment* sound = MidiSoundAtSlot(r, slot);
+  if (!sound)
+    return std::nullopt;
+
+  const int factoryIdx = FactoryAmpIndexFromId(sound->ampId);
+  bool ampKnown = factoryIdx >= 0 && factoryIdx < kAmpCount;
+  if (!ampKnown)
+  {
+    for (const auto& amp : r.amps)
+      if (amp.id == sound->ampId)
+      {
+        ampKnown = true;
+        break;
+      }
+  }
+  if (!ampKnown)
+    return std::nullopt;
+
+  if (factoryIdx >= 0 && factoryIdx < kAmpCount && sound->presetId == FactoryOwnerKey(factoryIdx) + ":v1")
+    return ResolvedMidiSound{sound->ampId, sound->presetId, VoLumAmpSettings{}};
+
+  const auto bank = r.presetBanks.find(sound->ampId);
+  if (bank == r.presetBanks.end())
+    return std::nullopt;
+  for (const auto& preset : bank->second)
+    if (preset.id == sound->presetId)
+      return ResolvedMidiSound{sound->ampId, preset.id, preset.settings};
+  return std::nullopt;
+}
+
+inline int FirstFreeMidiSoundSlot(const Registry& r)
+{
+  for (int slot = 0; slot < kMidiSoundSlotCount; ++slot)
+    if (!MidiSoundAtSlot(r, slot))
+      return slot;
+  return -1;
+}
+
+inline bool AssignMidiSound(Registry& r, int slot, const std::string& ampId, const std::string& presetId)
+{
+  if (slot < 0 || slot >= kMidiSoundSlotCount || ampId.empty() || presetId.empty())
+    return false;
+  r.midiSoundMap[slot] = MidiSoundAssignment{ampId, presetId};
+  return true;
+}
+
+inline bool ClearMidiSound(Registry& r, int slot)
+{
+  return r.midiSoundMap.erase(slot) > 0;
+}
+
+// Swap the Sounds on two program numbers. An empty number is allowed: swapping
+// with a hole moves the Sound there. Same number is a no-op. Out-of-range is
+// refused so a drag cannot invent slot 128.
+inline bool SwapMidiSoundSlots(Registry& r, int a, int b)
+{
+  if (a < 0 || a >= kMidiSoundSlotCount || b < 0 || b >= kMidiSoundSlotCount)
+    return false;
+  if (a == b)
+    return true;
+  const auto ia = r.midiSoundMap.find(a);
+  const auto ib = r.midiSoundMap.find(b);
+  const bool hasA = ia != r.midiSoundMap.end();
+  const bool hasB = ib != r.midiSoundMap.end();
+  if (!hasA && !hasB)
+    return true;
+  if (hasA && !hasB)
+  {
+    MidiSoundAssignment val = ia->second;
+    r.midiSoundMap.erase(ia);
+    r.midiSoundMap[b] = std::move(val);
+    return true;
+  }
+  if (!hasA && hasB)
+  {
+    MidiSoundAssignment val = ib->second;
+    r.midiSoundMap.erase(ib);
+    r.midiSoundMap[a] = std::move(val);
+    return true;
+  }
+  std::swap(ia->second, ib->second);
+  return true;
+}
+
+// Rotate assigned Sounds so `fromSlot` lands at the visual index of
+// `beforeSlot`. Program numbers stay; holes stay holes. `beforeSlot` == -1
+// means "after the last assigned PC".
+inline bool InsertMidiSoundAmongAssigned(Registry& r, int fromSlot, int beforeSlot)
+{
+  if (fromSlot < 0 || fromSlot >= kMidiSoundSlotCount)
+    return false;
+  if (beforeSlot != -1 && (beforeSlot < 0 || beforeSlot >= kMidiSoundSlotCount))
+    return false;
+  if (fromSlot == beforeSlot)
+    return true;
+  if (!MidiSoundAtSlot(r, fromSlot))
+    return false;
+
+  std::vector<int> pcs;
+  pcs.reserve(r.midiSoundMap.size());
+  for (const auto& kv : r.midiSoundMap)
+    pcs.push_back(kv.first);
+  std::sort(pcs.begin(), pcs.end());
+
+  const auto fromIt = std::find(pcs.begin(), pcs.end(), fromSlot);
+  if (fromIt == pcs.end())
+    return false;
+  const int fromIndex = static_cast<int>(fromIt - pcs.begin());
+  int destIndex = static_cast<int>(pcs.size());
+  if (beforeSlot >= 0)
+  {
+    const auto beforeIt = std::find(pcs.begin(), pcs.end(), beforeSlot);
+    if (beforeIt == pcs.end())
+      return false;
+    destIndex = static_cast<int>(beforeIt - pcs.begin());
+  }
+  if (fromIndex < destIndex)
+    destIndex -= 1;
+  if (fromIndex == destIndex)
+    return true;
+
+  std::vector<MidiSoundAssignment> sounds;
+  sounds.reserve(pcs.size());
+  for (int pc : pcs)
+    sounds.push_back(r.midiSoundMap[pc]);
+  const MidiSoundAssignment moving = sounds[static_cast<size_t>(fromIndex)];
+  sounds.erase(sounds.begin() + fromIndex);
+  sounds.insert(sounds.begin() + destIndex, moving);
+  for (size_t i = 0; i < pcs.size(); ++i)
+    r.midiSoundMap[pcs[i]] = sounds[i];
+  return true;
+}
+
+inline int FollowLiveSlotAfterReorder(const std::map<int, MidiSoundAssignment>& before,
+                                      const std::map<int, MidiSoundAssignment>& after, int lastSlot)
+{
+  if (lastSlot < 0)
+    return lastSlot;
+  const auto it = before.find(lastSlot);
+  if (it == before.end())
+    return lastSlot;
+  const auto now = after.find(lastSlot);
+  if (now != after.end() && now->second.ampId == it->second.ampId && now->second.presetId == it->second.presetId)
+    return lastSlot;
+  for (const auto& kv : after)
+    if (kv.second.ampId == it->second.ampId && kv.second.presetId == it->second.presetId)
+      return kv.first;
+  return lastSlot;
+}
 
 // ---------------------------------------------------------------------------
 // id minting
@@ -538,7 +791,7 @@ inline bool CustomAmpFromJson(const nlohmann::json& j, custom::CustomAmp& out)
 inline nlohmann::json RegistryToJson(const Registry& r)
 {
   nlohmann::json j;
-  j["schemaVersion"] = kContentSchemaVersion;
+  j["schemaVersion"] = r.passthroughSchema > kContentSchemaVersion ? r.passthroughSchema : kContentSchemaVersion;
   j["nextPedalIndex"] = r.nextPedalIndex;
 
   nlohmann::json amps = nlohmann::json::array();
@@ -572,12 +825,40 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   }
   j["presetBanks"] = banks;
 
-  nlohmann::json scenes = nlohmann::json::object();
-  for (const auto& sc : r.customScenes)
-    scenes[sc.first] = AmpSettingsToJson(sc.second);
-  j["customScenes"] = scenes;
+  // Deliberately no "customScenes": see kContentSchemaVersion v4. A downgrade to
+  // 1.2.x finds the key missing and falls back to per-amp defaults on first focus,
+  // which is the same thing it does for a custom amp it has never seen.
+  nlohmann::json midi = nlohmann::json::array();
+  for (const auto& slot : r.midiSoundMap)
+    midi.push_back({{"slot", slot.first}, {"ampId", slot.second.ampId}, {"presetId", slot.second.presetId}});
+  j["midiSoundMap"] = midi;
+
+  if (r.passthrough.is_object())
+  {
+    for (auto it = r.passthrough.begin(); it != r.passthrough.end(); ++it)
+    {
+      if (!j.contains(it.key()))
+        j[it.key()] = it.value();
+    }
+  }
 
   return j;
+}
+
+// legacyCustomScenes is read from "customScenes" and never written back, so a
+// JSON compare misses a drain of that map and would leave the key on disk.
+inline bool LegacyScenesEqual(const std::map<std::string, VoLumAmpSettings>& a,
+                              const std::map<std::string, VoLumAmpSettings>& b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (const auto& e : a)
+  {
+    const auto it = b.find(e.first);
+    if (it == b.end() || !volum::AmpSettingsEqual(e.second, it->second))
+      return false;
+  }
+  return true;
 }
 
 // Tolerant reader. Returns the parsed registry; `healed` (optional) is set true
@@ -586,6 +867,13 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
 {
   Registry r;
   bool h = false;
+
+  if (j.contains("schemaVersion") && j["schemaVersion"].is_number_integer())
+  {
+    const int version = j["schemaVersion"].get<int>();
+    if (version > kContentSchemaVersion)
+      r.passthroughSchema = version;
+  }
 
   if (j.contains("nextPedalIndex") && j["nextPedalIndex"].is_number_integer())
     r.nextPedalIndex = std::max(kCustomPedalIndexBase, j["nextPedalIndex"].get<int>());
@@ -687,6 +975,10 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
     }
   }
 
+  // Pre-1.3.0 shared scenes. Read (so the plugin can migrate them onto the
+  // instance) but never written back, so the first save after an upgrade drops
+  // them. Not a `healed` trigger: the key's presence is expected on an old file
+  // and does not mean anything was malformed.
   if (j.contains("customScenes") && j["customScenes"].is_object())
   {
     for (const auto& sc : j["customScenes"].items())
@@ -696,13 +988,435 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
       VoLumAmpSettings settings;
       if (AmpSettingsFromJson(sc.value(), settings))
         h = true;
-      r.customScenes[sc.key()] = settings;
+      r.legacyCustomScenes[sc.key()] = settings;
+    }
+  }
+
+  if (j.contains("midiSoundMap") && j["midiSoundMap"].is_array())
+  {
+    for (const auto& e : j["midiSoundMap"])
+    {
+      if (!e.is_object() || !e.contains("slot") || !e["slot"].is_number_integer())
+      {
+        h = true;
+        continue;
+      }
+      MidiSoundAssignment a;
+      if (e.contains("ampId") && e["ampId"].is_string())
+        a.ampId = e["ampId"].get<std::string>();
+      if (e.contains("presetId") && e["presetId"].is_string())
+        a.presetId = e["presetId"].get<std::string>();
+      // An entry with neither id is an unassigned slot, which is the same thing
+      // as no entry at all; keeping it would only make an empty map look busy.
+      if (a.ampId.empty() && a.presetId.empty())
+        continue;
+      const int slot = e["slot"].get<int>();
+      if (slot < 0 || slot >= kMidiSoundSlotCount)
+      {
+        h = true;
+        continue;
+      }
+      r.midiSoundMap[slot] = std::move(a);
+    }
+  }
+
+  if (j.is_object())
+  {
+    static const char* kKnown[] = {"schemaVersion", "nextPedalIndex", "customAmps",   "irLibrary",
+                                   "customPedals",  "presetBanks",    "customScenes", "midiSoundMap"};
+    for (auto it = j.begin(); it != j.end(); ++it)
+    {
+      bool known = false;
+      for (const char* key : kKnown)
+      {
+        if (it.key() == key)
+          known = true;
+      }
+      if (!known)
+        r.passthrough[it.key()] = it.value();
     }
   }
 
   if (healed)
     *healed = h;
   return r;
+}
+
+// ---------------------------------------------------------------------------
+// MIDI slot resolution
+// ---------------------------------------------------------------------------
+
+// What the allocation list shows for one slot. A slot whose Sound no longer
+// exists is Invalid, not empty: the number stays with the player's pedalboard and
+// the neighbour must not inherit it, so deleting content can only ever turn a row
+// red - never renumber the rows below it.
+enum class MidiSlotState
+{
+  Unassigned, // no entry: Program Change on it is ignored
+  Valid,
+  Invalid // assigned, but the amp or preset is gone (red in the list)
+};
+
+inline bool MidiAmpIdResolves(const Registry& r, const std::string& ampId, int factoryAmpCount)
+{
+  if (ampId.empty())
+    return false;
+  if (IsFactoryOwnerKey(ampId))
+  {
+    const std::string idxPart = ampId.substr(8);
+    if (idxPart.empty())
+      return false;
+    for (char c : idxPart)
+      if (!std::isdigit(static_cast<unsigned char>(c)))
+        return false;
+    const long idx = std::strtol(idxPart.c_str(), nullptr, 10);
+    return idx >= 0 && idx < static_cast<long>(factoryAmpCount);
+  }
+  for (const auto& a : r.amps)
+    if (a.id == ampId)
+      return true;
+  return false;
+}
+
+inline bool MidiPresetIdResolves(const Registry& r, const std::string& ampId, const std::string& presetId)
+{
+  if (presetId.empty())
+    return true; // amp-only Sound: nothing to resolve
+  // A Factory preset is shipped, not a library item, so it can never be looked up
+  // in a bank. It is valid as long as it belongs to the slot's amp.
+  if (IsFactoryPresetId(presetId))
+    return presetId.rfind(ampId + ":", 0) == 0;
+  const auto bank = r.presetBanks.find(ampId);
+  if (bank == r.presetBanks.end())
+    return false;
+  for (const auto& pr : bank->second)
+    if (pr.id == presetId)
+      return true;
+  return false;
+}
+
+inline MidiSlotState ResolveMidiSlot(const Registry& r, int slot, int factoryAmpCount)
+{
+  const auto it = r.midiSoundMap.find(slot);
+  if (it == r.midiSoundMap.end())
+    return MidiSlotState::Unassigned;
+  if (!MidiAmpIdResolves(r, it->second.ampId, factoryAmpCount))
+    return MidiSlotState::Invalid;
+  return MidiPresetIdResolves(r, it->second.ampId, it->second.presetId) ? MidiSlotState::Valid : MidiSlotState::Invalid;
+}
+
+// ---------------------------------------------------------------------------
+// Three-way merge by stable id
+// ---------------------------------------------------------------------------
+//
+// Two VoLums - a DAW instance and the standalone, or two DAW tracks - are two
+// writers of one `volum-content.json`. Serializing them with a lock is only half
+// the answer: whoever writes second still has a whole catalog in memory that was
+// read before the first one saved, so a plain write drops the other's work. This
+// is where an IR imported in standalone used to vanish when the DAW next saved a
+// preset.
+//
+// So a save is a merge, not a write. Three inputs:
+//
+//   disk      - what is on disk right now, read under the lock;
+//   baseline  - what this writer last read or wrote (its idea of "unchanged");
+//   current   - what this writer has in memory.
+//
+// `current` vs `baseline` says what *this* writer changed, by stable id. Only
+// those changes are replayed onto `disk`. An item this writer never touched is
+// left exactly as `disk` has it, even if `disk` is newer - so a sibling's edit is
+// not reverted by a writer that merely happened to have the item loaded. Where
+// both edited the same id, this writer wins (same-id last-writer-wins, as locked
+// in the map ticket).
+//
+// Comparison is by serialized JSON: it is exactly the state that reaches disk, so
+// two items compare equal iff writing either produces the same file. That also
+// spares every content struct an operator== that would silently rot when a field
+// is added.
+
+inline bool SameContentItem(const custom::CustomAmp& a, const custom::CustomAmp& b)
+{
+  return CustomAmpToJson(a) == CustomAmpToJson(b);
+}
+
+inline bool SameContentItem(const IRItem& a, const IRItem& b)
+{
+  return a.id == b.id && a.name == b.name && a.file == b.file && a.trimDb == b.trimDb && a.lowCutHz == b.lowCutHz
+         && a.highCutHz == b.highCutHz;
+}
+
+inline bool SameContentItem(const PedalItem& a, const PedalItem& b)
+{
+  return a.id == b.id && a.name == b.name && a.group == b.group && a.file == b.file && a.legacyIndex == b.legacyIndex;
+}
+
+inline bool SameContentItem(const Preset& a, const Preset& b)
+{
+  return a.id == b.id && a.name == b.name && AmpSettingsToJson(a.settings) == AmpSettingsToJson(b.settings);
+}
+
+inline bool SameContentItem(const MidiSoundAssignment& a, const MidiSoundAssignment& b)
+{
+  return a.ampId == b.ampId && a.presetId == b.presetId;
+}
+
+// Replay this writer's id-level changes to one library collection onto `target`.
+// Adds land at the end in `current` order; an item already in `target` keeps its
+// position so a merge never reshuffles a list the user is looking at.
+template <typename T>
+void MergeContentVector(std::vector<T>& target, const std::vector<T>& baseline, const std::vector<T>& current)
+{
+  auto findById = [](std::vector<T>& v, const std::string& id) -> T* {
+    for (auto& e : v)
+      if (e.id == id)
+        return &e;
+    return nullptr;
+  };
+  auto findConstById = [](const std::vector<T>& v, const std::string& id) -> const T* {
+    for (const auto& e : v)
+      if (e.id == id)
+        return &e;
+    return nullptr;
+  };
+
+  for (const auto& was : baseline)
+  {
+    if (findConstById(current, was.id) != nullptr)
+      continue; // still ours; not a removal
+    target.erase(
+      std::remove_if(target.begin(), target.end(), [&was](const T& e) { return e.id == was.id; }), target.end());
+  }
+
+  for (const auto& mine : current)
+  {
+    const T* was = findConstById(baseline, mine.id);
+    if (was != nullptr && SameContentItem(*was, mine))
+      continue; // we did not touch it: whatever disk says stands
+    if (T* existing = findById(target, mine.id))
+      *existing = mine;
+    else
+      target.push_back(mine);
+  }
+}
+
+inline void MergeContentPresetBanks(std::map<std::string, std::vector<Preset>>& target,
+                                    const std::map<std::string, std::vector<Preset>>& baseline,
+                                    const std::map<std::string, std::vector<Preset>>& current)
+{
+  static const std::vector<Preset> kEmpty;
+  auto bankOf = [](const std::map<std::string, std::vector<Preset>>& m,
+                   const std::string& key) -> const std::vector<Preset>& {
+    const auto it = m.find(key);
+    return it == m.end() ? kEmpty : it->second;
+  };
+
+  // Owner keys only `target` knows are a sibling's banks; leave them alone.
+  std::vector<std::string> keys;
+  for (const auto& e : baseline)
+    keys.push_back(e.first);
+  for (const auto& e : current)
+    if (baseline.find(e.first) == baseline.end())
+      keys.push_back(e.first);
+
+  for (const auto& key : keys)
+  {
+    auto& bank = target[key];
+    MergeContentVector(bank, bankOf(baseline, key), bankOf(current, key));
+    // An empty bank is how "this amp has no presets" is spelled everywhere else
+    // (see DeletePreset), so do not leave an empty array behind.
+    if (bank.empty())
+      target.erase(key);
+  }
+}
+
+inline void MergeContentMidiMap(std::map<int, MidiSoundAssignment>& target,
+                                const std::map<int, MidiSoundAssignment>& baseline,
+                                const std::map<int, MidiSoundAssignment>& current)
+{
+  for (const auto& was : baseline)
+    if (current.find(was.first) == current.end())
+      target.erase(was.first);
+
+  for (const auto& mine : current)
+  {
+    const auto was = baseline.find(mine.first);
+    if (was != baseline.end() && SameContentItem(was->second, mine.second))
+      continue;
+    target[mine.first] = mine.second;
+  }
+}
+
+// The whole registry merge. `disk` is consumed as the base so a sibling's items
+// survive; the result is what gets written and what this writer keeps in memory.
+inline Registry MergeRegistries(const Registry& disk, const Registry& baseline, const Registry& current)
+{
+  Registry out = disk;
+  MergeContentVector(out.amps, baseline.amps, current.amps);
+  MergeContentVector(out.irs, baseline.irs, current.irs);
+  MergeContentVector(out.pedals, baseline.pedals, current.pedals);
+  MergeContentPresetBanks(out.presetBanks, baseline.presetBanks, current.presetBanks);
+  MergeContentMidiMap(out.midiSoundMap, baseline.midiSoundMap, current.midiSoundMap);
+  // Monotonic and never reused: the high-water mark of everyone who ever wrote,
+  // or two writers importing a pedal each would alias one PRE capture index.
+  out.nextPedalIndex = std::max({disk.nextPedalIndex, current.nextPedalIndex, kCustomPedalIndexBase});
+  for (const auto& p : out.pedals)
+    out.nextPedalIndex = std::max(out.nextPedalIndex, p.legacyIndex + 1);
+  // A migration source, not shared state: keep whatever this writer still has to
+  // drain so a save does not lose scenes it has not migrated yet.
+  out.legacyCustomScenes = current.legacyCustomScenes;
+  out.passthroughSchema = std::max(disk.passthroughSchema, current.passthroughSchema);
+  // Unknown keys follow the same rule as the collections above: a value this
+  // writer has not changed stays as disk has it, so a sibling who edited a
+  // future field is not overwritten by the copy this writer loaded.
+  if (current.passthrough.is_object())
+  {
+    const bool baselineObject = baseline.passthrough.is_object();
+    for (auto it = current.passthrough.begin(); it != current.passthrough.end(); ++it)
+    {
+      if (baselineObject && baseline.passthrough.contains(it.key()) && baseline.passthrough[it.key()] == it.value())
+        continue;
+      out.passthrough[it.key()] = it.value();
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-process advisory lock
+// ---------------------------------------------------------------------------
+//
+// Held on a sibling lock file, never on `volum-content.json` itself: the registry
+// is replaced by rename on every write, so a lock on it would be a lock on a file
+// that no longer exists.
+//
+// The lock has to die with the process. A cookie or a pid file does not - a VoLum
+// that crashes or is force-quit while holding it leaves the library unwritable for
+// everyone until someone deletes a stale file. `LockFileEx` and `flock` are both
+// released by the kernel when the handle closes, and every handle closes when the
+// process ends, however it ends.
+class RegistryFileLock
+{
+public:
+  RegistryFileLock() = default;
+  ~RegistryFileLock() { Release(); }
+  RegistryFileLock(const RegistryFileLock&) = delete;
+  RegistryFileLock& operator=(const RegistryFileLock&) = delete;
+
+  // Blocking with a ceiling. A lock is held only across one read-merge-write, so
+  // waiting seconds means the holder is wedged, not busy; a caller that gives up
+  // reports a write failure rather than hanging the audio app's UI thread.
+  bool Acquire(const std::filesystem::path& lockFile, int timeoutMs = 4000)
+  {
+    if (Held())
+      return true;
+    if (lockFile.empty())
+      return false;
+    std::error_code ec;
+    const auto parent = lockFile.parent_path();
+    if (!parent.empty())
+      std::filesystem::create_directories(parent, ec);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    for (;;)
+    {
+      if (TryAcquireOnce(lockFile))
+        return true;
+      if (std::chrono::steady_clock::now() >= deadline)
+        return false;
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+  }
+
+  void Release()
+  {
+#ifdef _WIN32
+    if (mHandle == nullptr)
+      return;
+    OVERLAPPED ov{};
+    UnlockFileEx(static_cast<HANDLE>(mHandle), 0, 1, 0, &ov);
+    CloseHandle(static_cast<HANDLE>(mHandle));
+    mHandle = nullptr;
+#else
+    if (mFd < 0)
+      return;
+    ::flock(mFd, LOCK_UN);
+    ::close(mFd);
+    mFd = -1;
+#endif
+  }
+
+  bool Held() const
+  {
+#ifdef _WIN32
+    return mHandle != nullptr;
+#else
+    return mFd >= 0;
+#endif
+  }
+
+  // Drop the OS lock the way a crash does: the handle goes away without any
+  // orderly unlock or cleanup. Exists so a test can prove a killed holder does
+  // not stuck-lock the library; there is no production caller.
+  void SimulateProcessDeath()
+  {
+#ifdef _WIN32
+    if (mHandle == nullptr)
+      return;
+    CloseHandle(static_cast<HANDLE>(mHandle));
+    mHandle = nullptr;
+#else
+    if (mFd < 0)
+      return;
+    ::close(mFd);
+    mFd = -1;
+#endif
+  }
+
+private:
+  bool TryAcquireOnce(const std::filesystem::path& lockFile)
+  {
+#ifdef _WIN32
+    HANDLE h = CreateFileW(lockFile.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+      return false;
+    OVERLAPPED ov{};
+    if (!LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &ov))
+    {
+      CloseHandle(h);
+      return false;
+    }
+    mHandle = h;
+    return true;
+#else
+    const int fd = ::open(lockFile.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd < 0)
+      return false;
+    if (::flock(fd, LOCK_EX | LOCK_NB) != 0)
+    {
+      ::close(fd);
+      return false;
+    }
+    mFd = fd;
+    return true;
+#endif
+  }
+
+#ifdef _WIN32
+  void* mHandle = nullptr;
+#else
+  int mFd = -1;
+#endif
+};
+
+// One mutex for every ContentStore in this process. The cross-process lock is
+// per-handle and does not serialize threads inside one process (LockFileEx is
+// re-entrant for the same handle, flock's semantics are per-fd), and two plugin
+// instances on two host threads do reach the store at the same time.
+inline std::recursive_mutex& ContentStoreMutex()
+{
+  static std::recursive_mutex m;
+  return m;
 }
 
 // ---------------------------------------------------------------------------
@@ -723,6 +1437,8 @@ public:
 
   std::filesystem::path RegistryPath() const { return mBase / "volum-content.json"; }
   std::filesystem::path BackupPath() const { return mBase / "volum-content.json.bak"; }
+  // Sibling of the registry, never the registry itself: see RegistryFileLock.
+  std::filesystem::path LockPath() const { return mBase / "volum-content.lock"; }
   // Pre-migration snapshot, kept separate from the corrupt-file .bak so a later
   // parse failure cannot overwrite the last known-good pre-upgrade copy.
   std::filesystem::path MigrationBackupPath(const std::string& tag) const
@@ -751,12 +1467,48 @@ public:
     return mBase / PathFromUtf8(relPath);
   }
 
+  // Load the registry unless this process already has one in memory.
+  //
+  // Every plugin instance's constructor reaches the process-global store, and the
+  // second one calling Load() re-read the file over a live sibling's catalog: an
+  // import or a preset saved but not yet flushed simply disappeared, and the next
+  // Save() persisted the version without it. A catalog already in memory is at
+  // least as new as the file, so the second constructor has nothing to gain by
+  // reading it again.
+  //
+  // Tests and the base-dir switch still call Load() directly when re-reading is
+  // the point.
+  bool EnsureLoaded()
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    // Unflushed changes are the reason this method exists, so they veto the read
+    // on their own - not merely as a side effect of some earlier Load() having
+    // set the flag.
+    if (mLoaded || HasUnflushedChanges())
+      return true;
+    return Load();
+  }
+
+  bool IsLoaded() const { return mLoaded; }
+
+  // True when this store holds catalog changes that are not on disk yet. Used by
+  // the write-failure banner and by tests; a merge makes it false again.
+  bool HasUnflushedChanges() const
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    return !LegacyScenesEqual(mReg.legacyCustomScenes, mBaseline.legacyCustomScenes)
+           || RegistryToJson(mReg) != RegistryToJson(mBaseline);
+  }
+
   // Load the registry. Missing file -> empty registry. Unparseable / wrong-shape
   // file -> moved to .bak and we start from defaults. Returns true on a clean
   // (non-healed, non-recovered) load.
   bool Load()
   {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
     mReg = Registry{};
+    mBaseline = Registry{};
+    mLoaded = true;
     mRegistryUnreadable = false;
     // Each pending delete describes a registry we are about to throw away. A
     // delete whose Save() failed is still listed on disk, so carrying the queue
@@ -818,6 +1570,7 @@ public:
 
     bool healed = false;
     mReg = RegistryFromJson(j, &healed);
+    mBaseline = mReg;
     return !healed;
   }
 
@@ -836,24 +1589,117 @@ public:
     return failed;
   }
 
+  // Locked read-modify-write. Under one cross-process lock: re-read the file,
+  // replay this writer's id-level changes onto it (MergeRegistries), write, and
+  // adopt the merged result as both the live catalog and the new baseline.
+  //
+  // A plain write here was the two-writer bug: an IR imported in standalone was
+  // gone the next time the DAW instance saved a preset, because the DAW's copy of
+  // the catalog predated the import.
   bool Save()
   {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
     if (mBase.empty())
-      return true; // intentionally in-memory (unit tests / unconfigured store)
+    {
+      // Intentionally in-memory (unit tests / unconfigured store). Nothing can be
+      // merged, but the baseline still has to advance or every later Save would
+      // replay the whole session as a change set.
+      mBaseline = mReg;
+      return true;
+    }
     if (mRegistryUnreadable)
     {
       // See Load(): never overwrite a library we could not read.
       mLastWriteFailed = true;
       return false;
     }
+
+    // Settings-file idle path calls Save() on every flush. When this writer has
+    // nothing to flush (registry matches baseline, no pending deletes), skip the
+    // atomic rewrite — but still refuse if the on-disk library went unreadable
+    // or is not writable (Pack import uses Save() as its commit fence even when
+    // the catalog JSON is unchanged), and still materialize a missing file on
+    // first save of an empty library. Comparison, not a dirty flag —
+    // legacyCustomScenes can mutate without Save.
+    if (mPendingFileDeletes.empty() && LegacyScenesEqual(mReg.legacyCustomScenes, mBaseline.legacyCustomScenes)
+        && RegistryToJson(mReg) == RegistryToJson(mBaseline))
+    {
+      std::error_code existsEc;
+      if (std::filesystem::exists(RegistryPath(), existsEc))
+      {
+        RegistryFileLock skipLock;
+        if (!skipLock.Acquire(LockPath()))
+        {
+          mLastWriteFailed = true;
+          return false;
+        }
+        const DiskRegistry disk = ReadRegistryFromDisk();
+        if (!disk.readable)
+        {
+          mLastWriteFailed = true;
+          return false;
+        }
+        // Probe writability without rewriting: Pack overwrite of colliding
+        // payloads can leave the catalog JSON identical while still needing
+        // Save() to fail on a read-only library so swapped files roll back.
+        {
+          std::fstream probe(RegistryPath(), std::ios::in | std::ios::out | std::ios::binary);
+          if (!probe)
+          {
+            mLastWriteFailed = true;
+            return false;
+          }
+        }
+        return true;
+      }
+      // Missing registry: fall through and write the empty (or baseline-equal) file.
+    }
+
     std::error_code ec;
     std::filesystem::create_directories(mBase, ec);
-    if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(mReg), ec))
+    if (ec)
+    {
+      // No library directory means no lock file either, so fail before taking a
+      // lock we cannot hold and reporting a merge we cannot perform.
+      mLastWriteFailed = true;
+      return false;
+    }
+
+    RegistryFileLock lock;
+    if (!lock.Acquire(LockPath()))
+    {
+      // Someone is wedged holding the lock. Refusing is the honest answer: the
+      // alternative is writing without serialization, which is the defect.
+      mLastWriteFailed = true;
+      return false;
+    }
+
+    const DiskRegistry disk = ReadRegistryFromDisk();
+    if (!disk.readable)
+    {
+      // Same verdict Load() reaches, for a file that went bad after Load() read
+      // it: cloud-sync placeholder, antivirus, a permissions change, or a second
+      // VoLum that backed the file up as corrupt. The merge treats an unreadable
+      // file as "disk names nothing", and MergeContentVector keeps only the ids
+      // this writer touched, so writing here replaces a whole library with this
+      // session's edits. Refuse, and let the caller show the banner: the user
+      // loses the session's edits, not the library.
+      mLastWriteFailed = true;
+      return false;
+    }
+
+    Registry merged = MergeRegistries(disk.reg, mBaseline, mReg);
+    if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(merged), ec))
     {
       mLastWriteFailed = true;
       return false;
     }
+    mReg = std::move(merged);
+    mBaseline = mReg;
     mLastWriteFailed = false;
+    // A merged write read the file as part of doing it, so memory now matches
+    // disk and a later EnsureLoaded() has nothing to fetch.
+    mLoaded = true;
 
     // Payload files are destroyed only once the registry that no longer mentions
     // them is durable. Doing it the other way round meant a failed registry write
@@ -897,7 +1743,7 @@ public:
     if (ec)
       return {};
 
-    const std::string leaf = PathToUtf8(src.filename());
+    const std::string leaf = StoredLeafName(PathToUtf8(src.filename()));
     const std::string stored = idPrefix + "__" + leaf;
     const auto dst = dstDir / PathFromUtf8(stored);
     std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
@@ -921,6 +1767,19 @@ public:
     std::filesystem::remove(resolved, ec);
   }
 
+  // Queue a payload the committed registry still references. It is deleted by the
+  // next successful Save(), never before: see the comment there.
+  void QueueStoredFileDelete(const std::string& relPath)
+  {
+    if (relPath.empty())
+      return;
+    mPendingFileDeletes.push_back(relPath);
+  }
+
+  // True when the in-memory registry names this content-relative payload. Used by
+  // Pack import to queue deletes only for files no catalog row still references.
+  bool ReferencesStoredPath(const std::string& relPath) const { return RegistryReferences(relPath); }
+
   // -- Removal matrix (spec 3.7) ------------------------------------------------
 
   // Delete a custom pedal: drop the library entry + file, and clear every PRE
@@ -942,14 +1801,15 @@ public:
     }
     if (legacyIndex < 0)
       return;
+    // Catalog only. The sounding rig belongs to the instance now, so what happens
+    // to a PRE slot that is playing this pedal *right now* is the instance's
+    // business (see VoLumContentRemovalPlan.h), not a scene rewrite from here.
     auto clearSlots = [legacyIndex](VoLumAmpSettings& s) {
       if (s.preNam1Capture == legacyIndex)
         s.preNam1Capture = 0;
       if (s.preNam2Capture == legacyIndex)
         s.preNam2Capture = 0;
     };
-    for (auto& sc : mReg.customScenes)
-      clearSlots(sc.second);
     for (auto& bank : mReg.presetBanks)
       for (auto& pr : bank.second)
         clearSlots(pr.settings);
@@ -976,8 +1836,6 @@ public:
       if (s.supportActiveIrId == id)
         s.supportActiveIrId.clear();
     };
-    for (auto& sc : mReg.customScenes)
-      clearIr(sc.second);
     for (auto& bank : mReg.presetBanks)
       for (auto& pr : bank.second)
         clearIr(pr.settings);
@@ -1003,26 +1861,91 @@ public:
       }
     }
     mReg.presetBanks.erase(id);
-    mReg.customScenes.erase(id);
+    mReg.legacyCustomScenes.erase(id);
     auto clearSupport = [&id](VoLumAmpSettings& s) {
       if (s.supportCustomId == id)
         s.supportCustomId.clear();
     };
-    for (auto& sc : mReg.customScenes)
-      clearSupport(sc.second);
     for (auto& bank : mReg.presetBanks)
       for (auto& pr : bank.second)
         clearSupport(pr.settings);
+    // A MIDI slot pointing at this amp keeps its number and goes invalid (red) -
+    // the locked answer in the delete-while-playing ticket. Silently deleting the
+    // row would renumber the player's slots behind their back, so the assignment
+    // stays and only stops resolving. See ResolveMidiSlot.
+  }
+
+  // -- MIDI sound map ------------------------------------------------------------
+
+  // Point a slot at a Sound. Empty ampId clears the slot (unassigned), which is
+  // what "clear" means to the player - as opposed to invalid, which keeps the row.
+  void SetMidiSlot(int slot, const std::string& ampId, const std::string& presetId)
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    if (slot < 0 || slot >= kMidiSoundSlotCount)
+      return;
+    if (ampId.empty() && presetId.empty())
+    {
+      mReg.midiSoundMap.erase(slot);
+      return;
+    }
+    mReg.midiSoundMap[slot] = MidiSoundAssignment{ampId, presetId};
+  }
+
+  void ClearMidiSlot(int slot)
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    mReg.midiSoundMap.erase(slot);
+  }
+
+  // The sentence shown once after a corrupt library was moved aside. Empty when
+  // this session has not recovered a file.
+  std::string TakeCorruptRecoveryNotice()
+  {
+    std::string notice = std::move(mCorruptRecoveryNotice);
+    mCorruptRecoveryNotice.clear();
+    return notice;
   }
 
 private:
-  // Queue a payload the committed registry still references. It is deleted by the
-  // next successful Save(), never before: see the comment there.
-  void QueueStoredFileDelete(const std::string& relPath)
+  // The registry exactly as it is on disk right now, for the merge in Save().
+  //
+  // "Absent" and "unreadable" are not the same answer and must not share one.
+  // An absent file is a fresh library: merging onto nothing is correct. A file
+  // that exists but cannot be read means disk holds content we cannot see, and
+  // merging onto nothing would write this session's edits over all of it.
+  // Load() already refuses that, but its verdict only covers a file that was
+  // already bad when the store loaded - not one that goes bad afterwards, which
+  // is the common case (cloud sync, antivirus, a second VoLum backing it up).
+  struct DiskRegistry
   {
-    if (relPath.empty())
-      return;
-    mPendingFileDeletes.push_back(relPath);
+    Registry reg;
+    bool readable = true;
+  };
+
+  DiskRegistry ReadRegistryFromDisk() const
+  {
+    std::error_code ec;
+    const auto path = RegistryPath();
+    if (mBase.empty() || !std::filesystem::exists(path, ec))
+      return DiskRegistry{};
+    if (!std::filesystem::is_regular_file(path, ec))
+      return DiskRegistry{Registry{}, false};
+    std::ifstream in(path, std::ios::binary);
+    if (!in.good())
+      return DiskRegistry{Registry{}, false};
+    nlohmann::json j;
+    try
+    {
+      in >> j;
+    }
+    catch (...)
+    {
+      return DiskRegistry{Registry{}, false};
+    }
+    if (!j.is_object())
+      return DiskRegistry{Registry{}, false};
+    return DiskRegistry{RegistryFromJson(j), true};
   }
 
   // True when the registry about to be written still names this payload. Deleting
@@ -1089,21 +2012,66 @@ private:
     mPendingFileDeletes.clear();
   }
 
+  // Move `from` to `to`. A failed copy does not delete `from`: the previous
+  // backup is the file we are not allowed to lose.
+  static bool MoveFileAside(const std::filesystem::path& from, const std::filesystem::path& to)
+  {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (!ec)
+      return true;
+    ec.clear();
+    std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec)
+      return false;
+    ec.clear();
+    std::filesystem::remove(from, ec);
+    // A copy that leaves the source in place is not a move. Reporting success
+    // would let the next recovery rotate that leftover over the older backup.
+    std::error_code still;
+    const bool remains = std::filesystem::exists(from, still);
+    if (ec || still || remains)
+      return false;
+    return true;
+  }
+
   void BackupCorrupt()
   {
     std::error_code ec;
-    std::filesystem::rename(RegistryPath(), BackupPath(), ec);
-    if (ec)
+    const auto live = RegistryPath();
+    const auto bak = BackupPath();
+    const auto older = std::filesystem::path(bak.string() + ".1");
+    if (std::filesystem::exists(bak, ec))
     {
-      std::filesystem::copy_file(RegistryPath(), BackupPath(), std::filesystem::copy_options::overwrite_existing, ec);
-      std::filesystem::remove(RegistryPath(), ec);
+      std::filesystem::remove(older, ec); // a leftover .bak.1 should not block the rotate
+      if (!MoveFileAside(bak, older))
+      {
+        mCorruptRecoveryNotice =
+          "Could not read the library. The previous volum-content.json.bak could not be "
+          "moved, so the unreadable file was left in place.";
+        return;
+      }
     }
+    if (!MoveFileAside(live, bak))
+    {
+      mCorruptRecoveryNotice =
+        "Could not read the library. The unreadable file could not be moved aside and was left in place.";
+      return;
+    }
+    mCorruptRecoveryNotice =
+      "Could not read the library. The unreadable file was kept as volum-content.json.bak. "
+      "An older backup, if there was one, is volum-content.json.bak.1.";
   }
 
   std::filesystem::path mBase;
   Registry mReg;
+  // What this writer last read or wrote. The merge in Save() diffs mReg against
+  // it to learn which ids *this* writer changed; everything else belongs to disk.
+  Registry mBaseline;
+  bool mLoaded = false;
   bool mRegistryUnreadable = false;
   bool mLastWriteFailed = false;
+  std::string mCorruptRecoveryNotice;
   std::vector<std::string> mPendingFileDeletes;
 };
 

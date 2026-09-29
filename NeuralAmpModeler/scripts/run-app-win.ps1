@@ -15,11 +15,22 @@ Start-Sleep -Milliseconds 200
 # Apply our local iPlug2 patches (idempotent). See NeuralAmpModeler/iplug2-patches/README.md.
 & (Join-Path $slnDir "iplug2-patches\apply-iplug2-patches.ps1")
 
+$msbuild = $null
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-if (-not (Test-Path $vswhere)) {
-  Write-Error "vswhere.exe not found. Install Visual Studio Build Tools."
+if (Test-Path $vswhere) {
+  $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
 }
-$msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+if (-not $msbuild) {
+  foreach ($cand in @(
+      "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+      "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+    )) {
+    if (Test-Path -LiteralPath $cand) { $msbuild = $cand; break }
+  }
+}
+if (-not $msbuild) {
+  Write-Error "MSBuild.exe not found. Install Visual Studio Build Tools."
+}
 & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-app /p:Configuration=Release /p:Platform=x64 /m /v:minimal
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Build failed (exit $LASTEXITCODE)." -ForegroundColor Yellow

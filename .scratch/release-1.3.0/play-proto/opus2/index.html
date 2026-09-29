@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VoLum — PLAY surface prototype (opus round 2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Josefin+Sans:wght@300;400;600;700&family=Michroma&display=swap" rel="stylesheet">
+<style>
+/* Local product fonts win over the CDN copies when the file:// read succeeds. */
+@font-face{font-family:'Poiret One';src:url('../../../../NeuralAmpModeler/resources/fonts/PoiretOne-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Josefin Sans';src:url('../../../../NeuralAmpModeler/resources/fonts/JosefinSans-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Josefin Sans';src:url('../../../../NeuralAmpModeler/resources/fonts/JosefinSans-SemiBold.ttf') format('truetype');font-weight:600;font-display:swap}
+@font-face{font-family:'Josefin Sans';src:url('../../../../NeuralAmpModeler/resources/fonts-win/JosefinSans-Bold.ttf') format('truetype');font-weight:700;font-display:swap}
+@font-face{font-family:'Michroma';src:url('../../../../NeuralAmpModeler/resources/fonts/Michroma-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
+
+:root{
+  --ink:#111118; --void:#080a0e;
+  --gold:#fcde91; --gold-deep:#e2bd68; --brass:#b8914a;
+  --teal:#5bc4c4; --teal-dim:rgba(91,196,196,.42);
+  --cream:#e9e3d3; --cream-dim:rgba(233,227,211,.56);
+  --in:.35; --in2:.30; --peak:.5; --peak2:.45;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(1100px 620px at 50% -10%, #1a2230 0%, #0c0e14 55%, #06070a 100%);
+  font-family:'Josefin Sans',sans-serif;color:var(--cream);
+  display:flex;flex-direction:column;align-items:center;overflow:hidden;-webkit-font-smoothing:antialiased;
+}
+
+/* ════════════════ outside-the-frame lab chrome ════════════════ */
+.lab-top{width:900px;display:flex;align-items:center;justify-content:space-between;margin:10px 0 7px}
+.lab-tag{font-family:'Michroma';font-size:8.5px;letter-spacing:.32em;color:rgba(233,227,211,.30);text-transform:uppercase}
+.lab-tag b{color:rgba(252,222,145,.6);font-weight:400}
+.lbtn{
+  font-family:'Michroma';font-size:8px;letter-spacing:.2em;text-transform:uppercase;
+  background:rgba(255,255,255,.03);color:rgba(233,227,211,.45);
+  border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:7px 12px;cursor:pointer;transition:all .16s ease;
+}
+.lbtn:hover{color:var(--cream);border-color:rgba(252,222,145,.4)}
+.lbtn.on{background:linear-gradient(180deg,#f2d99e,#c8a45e);border-color:#f2d99e;color:#141118}
+.lbtn.step.done{border-color:rgba(91,196,196,.5);color:rgba(91,196,196,.9)}
+.scenes{display:flex;gap:6px}
+
+.lab-bar{
+  position:fixed;left:50%;bottom:8px;transform:translateX(-50%);width:1010px;
+  display:flex;flex-direction:column;gap:7px;padding:9px 13px;border-radius:3px;
+  background:rgba(10,12,17,.92);border:1px solid rgba(252,222,145,.16);box-shadow:0 10px 40px rgba(0,0,0,.6);
+}
+.lab-row{display:flex;align-items:center;gap:10px}
+.lab-bar .arrow{width:28px;padding:7px 0;text-align:center;font-size:12px;font-family:'Josefin Sans'}
+.lab-bar .vlabel{min-width:214px;text-align:center;line-height:1.25}
+.lab-bar .vlabel .k{font-family:'Michroma';font-size:9px;letter-spacing:.22em;color:var(--gold)}
+.lab-bar .vlabel .d{font-size:10.5px;letter-spacing:.05em;color:rgba(233,227,211,.42)}
+.lab-bar .sep{width:1px;height:26px;background:rgba(255,255,255,.09)}
+.walklab{font-family:'Michroma';font-size:7.5px;letter-spacing:.26em;color:rgba(91,196,196,.7);white-space:nowrap}
+.stateline{
+  display:flex;align-items:center;gap:0;flex-wrap:wrap;
+  font-family:'Michroma';font-size:8px;letter-spacing:.16em;color:rgba(233,227,211,.4);
+  border-top:1px solid rgba(255,255,255,.07);padding-top:7px;
+}
+.stateline .sk{color:rgba(91,196,196,.6);margin-right:6px}
+.stateline .sv{color:var(--cream);margin-right:18px}
+.stateline .sv.hot{color:var(--gold)}
+.stateline .sv.cold{color:rgba(233,227,211,.35)}
+
+/* ════════════════ 900×600 plugin chrome ════════════════ */
+#frame{
+  position:relative;width:900px;height:600px;flex:0 0 auto;
+  background:linear-gradient(180deg,#141a24 0%,#0d1017 46%,#0a0c11 100%);
+  border:1px solid rgba(252,222,145,.20);
+  box-shadow:0 0 0 1px rgba(0,0,0,.9),0 24px 64px rgba(0,0,0,.72),inset 0 0 90px rgba(0,0,0,.55);
+  overflow:hidden;user-select:none;
+}
+#frame::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:30;
+  background:radial-gradient(120% 90% at 50% 0%,rgba(91,196,196,.05),transparent 60%),
+             radial-gradient(120% 120% at 50% 110%,rgba(0,0,0,.5),transparent 62%)}
+
+.hdr{position:relative;z-index:16;height:46px;display:flex;align-items:center;padding:0 14px 0 16px;gap:14px;
+  border-bottom:1px solid rgba(91,196,196,.10);background:linear-gradient(180deg,rgba(16,22,31,.96),rgba(12,16,23,.72))}
+.brand{display:flex;flex-direction:column;line-height:1;width:148px}
+.brand .wm{font-family:'Poiret One';font-size:25px;color:var(--gold)}
+.brand .sub{font-family:'Michroma';font-size:6.5px;letter-spacing:.42em;color:rgba(252,222,145,.5);margin:3px 0 0 2px}
+.hdr-mid{flex:1;display:flex;justify-content:center}
+.midi-pill{display:flex;align-items:center;gap:8px;padding:4px 12px;border-radius:2px;
+  border:1px solid rgba(91,196,196,.20);background:rgba(91,196,196,.05)}
+.midi-pill .dot{width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 7px var(--teal)}
+.midi-pill span{font-family:'Michroma';font-size:7px;letter-spacing:.24em;color:rgba(233,227,211,.5)}
+.midi-pill b{font-family:'Michroma';font-size:7px;letter-spacing:.24em;color:var(--gold);font-weight:400}
+.hdr-right{display:flex;align-items:center;gap:11px}
+.pb{display:flex;border:1px solid rgba(252,222,145,.30);border-radius:2px;overflow:hidden;background:rgba(0,0,0,.3)}
+.pb button{font-family:'Michroma';font-size:8.5px;letter-spacing:.2em;padding:6px 13px;background:transparent;border:0;
+  color:rgba(233,227,211,.42);cursor:pointer;transition:.16s}
+.pb button.on{background:linear-gradient(180deg,#f3daa0,#c6a25c);color:#15121a}
+.pb button:not(.on):hover{color:var(--cream);background:rgba(252,222,145,.07)}
+.hdr-sep{width:1px;height:20px;background:rgba(91,196,196,.18)}
+.icobtn{background:none;border:0;cursor:pointer;padding:2px;line-height:0;position:relative;opacity:.82;transition:.16s}
+.icobtn:hover{opacity:1;transform:translateY(-1px)}
+.icobtn .badge{position:absolute;top:-1px;right:-2px;width:6px;height:6px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 6px rgba(252,222,145,.9)}
+
+/* Art Deco corner ticks */
+.deco{position:relative}
+.deco > i.ct{position:absolute;width:9px;height:9px;pointer-events:none;z-index:8}
+.deco > i.tl{top:3px;left:3px;border-left:1px solid var(--teal-dim);border-top:1px solid var(--teal-dim)}
+.deco > i.tr{top:3px;right:3px;border-right:1px solid var(--teal-dim);border-top:1px solid var(--teal-dim)}
+.deco > i.bl{bottom:3px;left:3px;border-left:1px solid var(--teal-dim);border-bottom:1px solid var(--teal-dim)}
+.deco > i.br{bottom:3px;right:3px;border-right:1px solid var(--teal-dim);border-bottom:1px solid var(--teal-dim)}
+.deco.gold > i.ct{border-color:rgba(252,222,145,.75)}
+
+/* ════════════════ meters ════════════════ */
+.mstack{display:flex;flex-direction:column;align-items:center;gap:5px}
+.mstack.h{flex-direction:row;align-items:center;gap:6px}
+.mrow{display:flex;gap:5px;align-items:flex-end}
+.mcell{display:flex;flex-direction:column;align-items:center;gap:3px}
+.mcell .ch{font-family:'Michroma';font-size:6px;letter-spacing:.1em;color:rgba(233,227,211,.42)}
+.track{position:relative;width:8px;border-radius:1px;overflow:hidden;
+  background:linear-gradient(180deg,#0a0d12,#05070a);border:1px solid rgba(91,196,196,.20)}
+.track .fill{position:absolute;left:0;right:0;bottom:0;height:calc(var(--in) * 100%);
+  background:linear-gradient(0deg,#c8a45e 0%,#fcde91 55%,#fff2cf 100%)}
+.track .fill::after{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 2px,rgba(4,6,9,.85) 2px 3px)}
+.track .pk{position:absolute;left:0;right:0;height:2px;bottom:calc(var(--peak) * 100%);background:#fff6dd;
+  box-shadow:0 0 6px rgba(252,222,145,.8)}
+.track.r .fill{height:calc(var(--in2) * 100%)}
+.track.r .pk{bottom:calc(var(--peak2) * 100%)}
+.mstack.out .track .fill{background:linear-gradient(0deg,#3f9d9d 0%,#5bc4c4 60%,#c9f2f2 100%)}
+.mstack.out .track .pk{background:#d6ffff}
+.mlab{font-family:'Josefin Sans';font-size:8.5px;color:rgba(233,227,211,.45);
+  writing-mode:vertical-rl;text-orientation:upright;line-height:1.1;letter-spacing:.02em}
+
+/* ════════════════ amp art — planted, lit by --in ════════════════ */
+.artswap{position:absolute;inset:0}
+.artlive{position:absolute;inset:0;will-change:filter}
+.artlive img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  transform:scale(var(--z,1));transform-origin:50% var(--oy,50%);display:block;
+  filter:brightness(calc(.46 + var(--in)*1.06)) saturate(calc(.78 + var(--in)*.34))}
+.artlive.lag img{filter:brightness(calc(.46 + var(--in2)*.96)) saturate(calc(.78 + var(--in2)*.30))}
+/* the house-lights scrim: quiet playing sits the cabinet back in the dark */
+.artlive::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:rgba(4,6,11,calc(.50 - var(--in)*.50))}
+.artlive.lag::before{background:rgba(4,6,11,calc(.50 - var(--in2)*.50))}
+.artlive::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(ellipse at 50% 38%,rgba(252,222,145,calc(var(--in)*.56)),transparent 70%);
+  mix-blend-mode:soft-light}
+.artlive.lag::after{
+  background:radial-gradient(ellipse at 50% 38%,rgba(91,196,196,calc(var(--in2)*.48)),transparent 70%)}
+.recall .artswap{animation:swapin 240ms cubic-bezier(.2,.7,.3,1) both}
+@keyframes swapin{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+.recall .rname{animation:rname 260ms cubic-bezier(.2,.7,.3,1) both}
+@keyframes rname{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.ampcard{position:relative;overflow:hidden;background:#080b10;border:1px solid rgba(252,222,145,.34);
+  box-shadow:0 0 0 1px rgba(252,222,145,calc(var(--in)*.55)),
+             0 0 calc(4px + var(--in)*72px) rgba(252,222,145,calc(var(--in)*.42)),
+             inset 0 0 46px rgba(0,0,0,.75)}
+.ampcard.support{border-color:rgba(91,196,196,.42);
+  box-shadow:0 0 0 1px rgba(91,196,196,calc(var(--in2)*.55)),
+             0 0 calc(4px + var(--in2)*64px) rgba(91,196,196,calc(var(--in2)*.36)),
+             inset 0 0 46px rgba(0,0,0,.75)}
+.ampcard .vig{position:absolute;inset:0;pointer-events:none;z-index:3;
+  background:radial-gradient(122% 98% at 50% 44%,transparent 50%,rgba(6,8,12,calc(.94 - var(--in)*.50)) 100%)}
+.ampcard.support .vig{
+  background:radial-gradient(122% 98% at 50% 44%,transparent 50%,rgba(6,8,12,calc(.94 - var(--in2)*.50)) 100%)}
+.amptag{position:absolute;top:6px;left:9px;z-index:6;font-family:'Michroma';font-size:6.5px;letter-spacing:.30em;
+  color:rgba(252,222,145,.92)}
+.amptag.t{color:rgba(91,196,196,.92)}
+.ampname{position:absolute;left:0;right:0;bottom:0;z-index:6;text-align:center;padding:5px 6px 6px;
+  font-family:'Josefin Sans';font-weight:600;font-size:10.5px;letter-spacing:.12em;color:rgba(233,227,211,.82);
+  background:linear-gradient(180deg,transparent,rgba(5,7,11,.92) 55%)}
+.horizon{position:absolute;left:0;right:0;bottom:0;height:2px;transform-origin:left center;
+  transform:scaleX(var(--in));z-index:7;
+  background:linear-gradient(90deg,rgba(252,222,145,.95),rgba(91,196,196,.5));box-shadow:0 0 12px rgba(252,222,145,.5)}
+.horizon.lag{transform:scaleX(var(--in2));background:linear-gradient(90deg,rgba(91,196,196,.9),rgba(252,222,145,.4))}
+
+.eyebrow{font-family:'Michroma';font-size:7px;letter-spacing:.32em;color:rgba(91,196,196,.72);text-transform:uppercase}
+.eyebrow.g{color:rgba(252,222,145,.62)}
+.hint{border:1px solid rgba(91,196,196,.20);background:rgba(9,14,20,.6);border-radius:2px;text-align:center;
+  padding:4px 0;font-size:10.5px;letter-spacing:.09em;color:rgba(233,227,211,.42)}
+.hint b{color:rgba(252,222,145,.78);font-weight:400;letter-spacing:.13em}
+.dualbadge{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border:1px solid rgba(91,196,196,.5);
+  border-radius:2px;font-family:'Michroma';font-size:6px;letter-spacing:.22em;color:rgba(91,196,196,.95);
+  background:rgba(91,196,196,.08);pointer-events:none;cursor:default}
+.unsavedbadge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid rgba(252,222,145,.5);
+  border-radius:2px;background:rgba(252,222,145,.08);font-size:9.5px;letter-spacing:.18em;
+  color:var(--gold);text-transform:uppercase}
+.unsavedbadge i{width:4px;height:4px;border-radius:50%;background:var(--gold);box-shadow:0 0 7px var(--gold)}
+.unsavedbadge.sm{font-size:8px;padding:2px 6px;letter-spacing:.2em}
+
+@keyframes justpop{0%{transform:scale(1)}35%{transform:scale(1.07)}100%{transform:scale(1)}}
+@keyframes shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-3px)}40%,60%{transform:translateX(3px)}}
+.shake{animation:shake .42s cubic-bezier(.36,.07,.19,.97) both}
+.deadtip{position:absolute;z-index:24;top:-20px;left:50%;transform:translateX(-50%);white-space:nowrap;
+  font-family:'Michroma';font-size:6px;letter-spacing:.2em;color:#e79b9b;background:rgba(30,10,12,.96);
+  border:1px solid rgba(214,120,120,.5);padding:3px 7px}
+
+/* ════════════════ THE BOTTOM BOARD (all six variants) ════════════════ */
+.boardband{display:flex;align-items:stretch;gap:9px}
+.bmeter{display:flex;align-items:center;justify-content:center}
+.bplate{position:relative;flex:1;display:flex;flex-direction:column;padding:7px 11px 9px;
+  background:linear-gradient(180deg,rgba(28,35,46,.62),rgba(11,14,20,.82)),
+             repeating-linear-gradient(90deg,rgba(255,255,255,.016) 0 1px,transparent 1px 4px);
+  border:1px solid rgba(91,196,196,.18);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 -18px 32px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.5)}
+.bhead{display:flex;align-items:center;margin-bottom:6px}
+.bhead .half{flex:1;display:flex;align-items:center;gap:9px;min-width:0}
+.bhead .halfgap{flex:0 0 11px}
+.bhead .glab{font-family:'Michroma';font-size:6.5px;letter-spacing:.30em;color:rgba(91,196,196,.78);white-space:nowrap}
+.bhead .glab.g{color:rgba(252,222,145,.72)}
+.bhead .grule{flex:1;height:1px;background:linear-gradient(90deg,rgba(91,196,196,.24),transparent)}
+.bcells{flex:1;display:flex;gap:7px;min-height:0}
+.bcells > *{flex:1;min-width:0}
+.bdiv{flex:0 0 1px !important;background:linear-gradient(180deg,transparent,rgba(91,196,196,.55),transparent);margin:0 5px}
+
+/* board style 1 — art stomp cards (A, E) */
+.stompcard{position:relative;display:flex;flex-direction:column;cursor:pointer;overflow:hidden;
+  background:linear-gradient(180deg,#111a25,#070a0f);border:1px solid rgba(91,196,196,.22);
+  box-shadow:0 4px 10px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05);
+  transition:border-color .16s,box-shadow .16s,transform .16s}
+.stompcard .pimg{flex:1;position:relative;overflow:hidden;background:#070a0e;min-height:0}
+.stompcard .pimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.30;transition:opacity .18s;
+  transform:scale(var(--z,1));transform-origin:50% var(--oy,50%)}
+.stompcard .pimg .sprite{position:absolute;inset:0;background-repeat:no-repeat;opacity:.30;transition:opacity .18s}
+.stompcard .plab{height:20px;display:flex;align-items:center;justify-content:center;
+  border-top:1px solid rgba(91,196,196,.16);background:rgba(5,7,10,.88)}
+.stompcard .plab span{font-family:'Josefin Sans';font-weight:600;font-size:8.5px;letter-spacing:.14em;
+  color:rgba(233,227,211,.40);transition:.18s}
+.stompcard .led{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;background:#232c37;
+  box-shadow:inset 0 0 3px #000;z-index:5;transition:.18s}
+.stompcard:hover{transform:translateY(-1px);border-color:rgba(91,196,196,.45)}
+.stompcard:active{transform:translateY(1px)}
+.stompcard.on{border-color:rgba(252,222,145,.62);
+  box-shadow:0 4px 14px rgba(0,0,0,.6),0 0 18px rgba(252,222,145,.13),inset 0 1px 0 rgba(252,222,145,.14)}
+.stompcard.on .pimg img,.stompcard.on .pimg .sprite{opacity:.95}
+.stompcard.on .plab{background:linear-gradient(180deg,rgba(56,42,18,.82),rgba(20,15,9,.95))}
+.stompcard.on .plab span{color:var(--gold)}
+.stompcard.on .led{background:var(--gold);box-shadow:0 0 9px rgba(252,222,145,.95),0 0 2px #fff}
+.stompcard.na{opacity:.30;cursor:not-allowed;border-style:dashed}
+.stompcard.na:hover{transform:none}
+.stompcard.just{animation:justpop 380ms ease-out}
+
+/* board style 2 — jewels (B) */
+.jewel{position:relative;cursor:pointer;text-align:center;transition:transform .18s;
+  display:flex;flex-direction:column;justify-content:center}
+.jewel .gem{position:relative;height:38px;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(91,196,196,.22);background:linear-gradient(180deg,rgba(17,26,38,.92),rgba(7,10,15,.94));
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,12px 100%,0 50%);transition:.18s}
+.jewel .gem i{width:8px;height:8px;background:#232c37;transform:rotate(45deg);box-shadow:inset 0 0 3px #000;transition:.18s}
+.jewel .jt{display:block;margin-top:8px;font-family:'Michroma';font-size:6.5px;letter-spacing:.22em;
+  color:rgba(233,227,211,.36);transition:.18s}
+.jewel:hover{transform:translateY(-2px)}
+.jewel.on .gem{border-color:rgba(252,222,145,.8);background:linear-gradient(180deg,rgba(70,52,21,.92),rgba(24,18,10,.95));
+  box-shadow:0 0 20px rgba(252,222,145,.22)}
+.jewel.on .gem i{background:var(--gold);box-shadow:0 0 10px rgba(252,222,145,.95),0 0 2px #fff}
+.jewel.on .jt{color:var(--gold)}
+.jewel.na{opacity:.28;cursor:not-allowed}
+.jewel.just .gem{animation:justpop 380ms ease-out}
+
+/* board style 3 — slim rail switches (C) */
+.railsw{position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding-top:12px;border:1px solid rgba(91,196,196,.18);border-radius:2px;
+  background:linear-gradient(180deg,rgba(20,28,39,.9),rgba(7,10,15,.94));transition:.16s}
+.railsw .cap{width:25px;height:25px;border-radius:50%;margin:0 auto 8px;
+  background:radial-gradient(circle at 36% 26%,#828b99,#3a414c 54%,#161b22);
+  box-shadow:0 2px 4px rgba(0,0,0,.9),inset 0 0 0 2px rgba(17,21,28,.92),
+             inset 0 -2px 3px rgba(0,0,0,.6),0 0 0 4px rgba(255,255,255,.035);transition:.18s}
+.railsw .rt{font-family:'Josefin Sans';font-weight:600;font-size:8.5px;letter-spacing:.15em;
+  color:rgba(233,227,211,.40);transition:.18s}
+.railsw .led{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:6px;height:6px;border-radius:50%;
+  background:#232c37;box-shadow:inset 0 0 3px #000;transition:.18s}
+.railsw:hover{border-color:rgba(91,196,196,.45);transform:translateY(-1px)}
+.railsw.on{border-color:rgba(252,222,145,.62);box-shadow:0 0 18px rgba(252,222,145,.12),inset 0 1px 0 rgba(252,222,145,.14)}
+.railsw.on .cap{background:radial-gradient(circle at 36% 26%,#f6e6bb,#ac9052 54%,#382e1b);
+  box-shadow:0 2px 4px rgba(0,0,0,.9),inset 0 0 0 2px rgba(44,35,17,.9),
+             0 0 16px rgba(252,222,145,.42),0 0 0 4px rgba(252,222,145,.07)}
+.railsw.on .rt{color:var(--gold)}
+.railsw.on .led{background:var(--gold);box-shadow:0 0 9px rgba(252,222,145,.95),0 0 2px #fff}
+.railsw.na{opacity:.30;cursor:not-allowed;border-style:dashed}
+.railsw.just{animation:justpop 380ms ease-out}
+
+/* board style 4 — engraved chips (D) */
+.echip{position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  border:1px solid rgba(91,196,196,.20);border-radius:2px;
+  background:linear-gradient(180deg,rgba(18,25,35,.86),rgba(8,11,16,.92));transition:.16s}
+.echip::before{content:'';position:absolute;left:9px;right:9px;top:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent)}
+.echip .ring{width:30px;height:30px;border-radius:50%;border:1px solid rgba(91,196,196,.32);
+  display:flex;align-items:center;justify-content:center;transition:.18s}
+.echip .ring i{width:9px;height:9px;border-radius:50%;background:#232c37;box-shadow:inset 0 0 3px #000;transition:.18s}
+.echip .et{font-family:'Michroma';font-size:7.5px;letter-spacing:.24em;color:rgba(233,227,211,.40);transition:.18s}
+.echip:hover{border-color:rgba(91,196,196,.5);transform:translateY(-1px)}
+.echip.on{border-color:rgba(252,222,145,.65);background:linear-gradient(180deg,rgba(54,41,18,.8),rgba(20,15,9,.94));
+  box-shadow:0 0 18px rgba(252,222,145,.13)}
+.echip.on .ring{border-color:rgba(252,222,145,.8)}
+.echip.on .ring i{background:var(--gold);box-shadow:0 0 9px rgba(252,222,145,.95),0 0 2px #fff}
+.echip.on .et{color:var(--gold)}
+.echip.na{opacity:.28;cursor:not-allowed;border-style:dashed}
+.echip.just{animation:justpop 380ms ease-out}
+
+/* board style 5 — chassis pedals with footswitches (F) */
+.chassis{background:linear-gradient(180deg,#2a323f 0%,#181e27 12%,#10141b 60%,#0a0d12 100%),
+         repeating-linear-gradient(90deg,rgba(255,255,255,.02) 0 1px,transparent 1px 3px);
+  border:1px solid rgba(150,165,185,.20);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -22px 36px rgba(0,0,0,.6),0 -6px 26px rgba(0,0,0,.6)}
+.chassis .screw{position:absolute;width:7px;height:7px;border-radius:50%;z-index:6;
+  background:radial-gradient(circle at 35% 30%,#7d8695,#232a34);box-shadow:0 1px 1px rgba(0,0,0,.85)}
+.chassis .screw::after{content:'';position:absolute;inset:2px 1px;border-top:1px solid rgba(0,0,0,.6)}
+.chassis .screw.a{top:5px;left:5px}.chassis .screw.b{top:5px;right:5px}
+.chassis .screw.c{bottom:5px;left:5px}.chassis .screw.d{bottom:5px;right:5px}
+.pedal{position:relative;display:flex;flex-direction:column;cursor:pointer;overflow:hidden;border-radius:2px;
+  background:linear-gradient(180deg,#141d29,#070a0f);border:1px solid rgba(91,196,196,.24);
+  box-shadow:0 4px 10px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.06);transition:.16s}
+.pedal .pengrave{height:17px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent)}
+.pedal .pengrave span{font-family:'Josefin Sans';font-weight:600;font-size:8px;letter-spacing:.16em;
+  color:rgba(233,227,211,.40);transition:.18s}
+.pedal .pimg{flex:1;position:relative;overflow:hidden;background:#070a0e;min-height:0}
+.pedal .pimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.30;transition:opacity .18s;
+  transform:scale(var(--z,1));transform-origin:50% var(--oy,50%)}
+.pedal .pimg .sprite{position:absolute;inset:0;background-repeat:no-repeat;opacity:.30;transition:opacity .18s}
+.pedal .fsw{height:30px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(180deg,#1e2732,#0a0d13);border-top:1px solid rgba(0,0,0,.75);position:relative}
+.pedal .fsw .knob{width:19px;height:19px;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,#9aa2b0,#333a46 62%,#151a21);
+  box-shadow:0 2px 5px rgba(0,0,0,.85),inset 0 -2px 3px rgba(0,0,0,.5);transition:.18s}
+.pedal .led{position:absolute;top:22px;right:6px;width:6px;height:6px;border-radius:50%;background:#232c37;
+  box-shadow:inset 0 0 3px #000;z-index:5;transition:.18s}
+.pedal:hover{transform:translateY(-1px);border-color:rgba(91,196,196,.5)}
+.pedal:active{transform:translateY(1px)}
+.pedal.on{border-color:rgba(252,222,145,.65);box-shadow:0 4px 14px rgba(0,0,0,.6),0 0 20px rgba(252,222,145,.14)}
+.pedal.on .pimg img,.pedal.on .pimg .sprite{opacity:.95}
+.pedal.on .pengrave span{color:var(--gold)}
+.pedal.on .led{background:var(--gold);box-shadow:0 0 9px rgba(252,222,145,.95),0 0 2px #fff}
+.pedal.on .fsw .knob{background:radial-gradient(circle at 34% 28%,#c0c8d4,#3f4753 62%,#191e26)}
+.pedal.na{opacity:.32;cursor:not-allowed;border-style:dashed}
+.pedal.na:hover{transform:none}
+.pedal.just{animation:justpop 380ms ease-out}
+
+/* ═══════════════ A · STAGE DOWN ═══════════════ */
+.A .stage{position:absolute;inset:46px 0 0 0;display:flex;flex-direction:column;padding:10px 12px 9px}
+.A .top{height:280px;display:flex;gap:15px}
+.A .arts{width:498px;height:100%;display:flex;gap:9px}
+.A .arts .ampcard{flex:1;height:100%}
+.A .info{flex:1;display:flex;flex-direction:column;min-width:0;padding-top:2px}
+.A .kick{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.A .kick .pulse{width:6px;height:6px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 calc(3px + var(--in)*13px) rgba(252,222,145,.95)}
+.A .pcbadge{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+.A .pcbadge .pcl{font-family:'Michroma';font-size:7px;letter-spacing:.3em;color:rgba(91,196,196,.7)}
+.A .pcbadge .pcv{font-family:'Michroma';font-size:36px;line-height:1;color:var(--gold);
+  text-shadow:0 0 26px rgba(252,222,145,.35)}
+.A .pcbadge .pcrule{flex:1;height:1px;background:linear-gradient(90deg,rgba(252,222,145,.35),transparent);align-self:center}
+.A .rname{font-family:'Poiret One';font-size:38px;line-height:1.04;color:var(--cream);
+  text-shadow:0 0 26px rgba(252,222,145,.14)}
+.A .rtag{font-size:12.5px;letter-spacing:.30em;text-transform:uppercase;color:rgba(252,222,145,.78);margin-top:5px}
+.A .rrule{height:1px;background:linear-gradient(90deg,rgba(252,222,145,.5),rgba(91,196,196,.16),transparent);margin:12px 0 10px}
+.A .rmeta{display:flex;flex-direction:column;gap:6px}
+.A .rmeta .row{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;color:rgba(233,227,211,.52)}
+.A .rmeta .row .k{font-family:'Michroma';font-size:6.5px;letter-spacing:.24em;color:rgba(91,196,196,.6);width:44px;flex:none}
+.A .rsrc{font-family:'Michroma';font-size:6.5px;letter-spacing:.22em;color:rgba(233,227,211,.28);line-height:1.9;
+  margin-top:9px}
+.A .flags{display:flex;gap:8px;margin-top:10px;align-items:center;min-height:22px}
+.A .signal{margin-top:auto;padding-bottom:2px}
+.A .signal .sl{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.A .signal .sv{font-family:'Michroma';font-size:8px;letter-spacing:.16em;color:rgba(252,222,145,.7)}
+.A .signal .strack{position:relative;height:3px;background:rgba(91,196,196,.13);overflow:hidden}
+.A .signal .sfill{position:absolute;inset:0;transform-origin:left center;transform:scaleX(var(--in));
+  background:linear-gradient(90deg,rgba(91,196,196,.7),var(--gold));box-shadow:0 0 10px rgba(252,222,145,.35)}
+
+.A .filmhead{display:flex;align-items:center;gap:10px;margin:9px 0 5px}
+.A .filmhead .rule{height:1px;flex:1;background:linear-gradient(90deg,rgba(91,196,196,.24),transparent)}
+.A .film{height:86px;display:flex;gap:8px}
+.A .tile{position:relative;flex:1;cursor:pointer;overflow:hidden;border:1px solid rgba(91,196,196,.20);
+  background:#080b10;transition:transform .18s,border-color .18s,box-shadow .18s}
+.A .tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.55;transition:opacity .18s;
+  transform:scale(var(--z,1.05));transform-origin:50% var(--oy,42%)}
+.A .tile:hover{transform:translateY(-2px);border-color:rgba(91,196,196,.55)}
+.A .tile:hover img{opacity:.85}
+.A .tile .veil{position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(6,8,12,.10) 0%,rgba(6,8,12,.55) 44%,rgba(5,7,10,.95) 100%)}
+.A .tile .pc{position:absolute;top:5px;left:8px;font-family:'Michroma';font-size:10.5px;color:rgba(252,222,145,.85)}
+.A .tile .nm{position:absolute;left:8px;right:6px;bottom:22px;font-family:'Poiret One';font-size:15.5px;color:var(--cream);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1}
+.A .tile .tg{position:absolute;left:8px;bottom:8px;font-size:8px;letter-spacing:.19em;text-transform:uppercase;
+  color:rgba(91,196,196,.75);line-height:1}
+.A .tile .dl{position:absolute;top:5px;right:6px;font-family:'Michroma';font-size:5.5px;letter-spacing:.18em;
+  color:rgba(91,196,196,.95);border:1px solid rgba(91,196,196,.45);padding:2px 4px;background:rgba(9,20,24,.7)}
+.A .tile.act{border-color:rgba(252,222,145,.9);box-shadow:0 0 0 1px rgba(252,222,145,.2),0 6px 24px rgba(0,0,0,.6)}
+.A .tile.act img{opacity:.92}
+.A .tile.act .veil{background:linear-gradient(180deg,rgba(6,8,12,0) 0%,rgba(6,8,12,.38) 44%,rgba(5,7,10,.93) 100%)}
+.A .tile.act::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;z-index:3;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+.A .tile .nowlabel{position:absolute;top:23px;left:8px;font-family:'Michroma';font-size:5.5px;letter-spacing:.26em;
+  color:rgba(252,222,145,.9)}
+.A .tile.bad{background:repeating-linear-gradient(-45deg,#0b0e14 0 7px,#090c11 7px 14px);cursor:not-allowed}
+.A .tile.bad .pc{color:rgba(233,227,211,.45)}
+.A .tile.bad .nm{font-family:'Josefin Sans';font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;
+  color:rgba(214,120,120,.85);bottom:9px}
+.A .tile.bad:hover{transform:none;border-color:rgba(214,120,120,.4)}
+.A .tile.add{flex:0 0 46px;display:flex;align-items:center;justify-content:center;border-style:dashed;
+  border-color:rgba(252,222,145,.3);background:rgba(252,222,145,.02)}
+.A .tile.add span{font-size:21px;color:rgba(252,222,145,.6);line-height:1}
+.A .tile.add:hover{background:rgba(252,222,145,.09)}
+.A .boardband{height:124px;margin-top:9px}
+
+/* ═══════════════ B · POSTER BOARD ═══════════════ */
+.B .poster{position:absolute;left:0;right:0;top:46px;height:358px;overflow:hidden}
+.B .plate{position:absolute;top:-16px;right:-40px;width:582px;height:396px;overflow:hidden;
+  -webkit-mask-image:linear-gradient(102deg,transparent 2%,rgba(0,0,0,.5) 20%,#000 46%);
+  mask-image:linear-gradient(102deg,transparent 2%,rgba(0,0,0,.5) 20%,#000 46%)}
+.B .plate::after{content:'';position:absolute;inset:0;z-index:3;
+  background:linear-gradient(0deg,rgba(8,10,14,.92) 1%,transparent 32%),
+             linear-gradient(180deg,rgba(8,10,14,.78) 0%,transparent 18%)}
+.B .plate.small{width:346px;height:322px;right:-10px;top:14px}
+.B .plateglow{position:absolute;right:-26px;top:-10px;width:556px;height:384px;pointer-events:none;z-index:1;
+  will-change:opacity;opacity:calc(.04 + var(--in)*.94);
+  background:radial-gradient(34% 42% at 58% 44%,rgba(255,204,112,.40),rgba(252,222,145,.07) 56%,transparent 74%)}
+.B .suppcard{position:absolute;right:40px;bottom:16px;width:168px;height:146px;z-index:6;overflow:hidden;
+  border:1px solid rgba(91,196,196,.5);background:#080b10;
+  box-shadow:0 0 0 1px rgba(91,196,196,calc(var(--in2)*.45)),
+             0 0 calc(6px + var(--in2)*38px) rgba(91,196,196,calc(var(--in2)*.26)),
+             0 14px 34px rgba(0,0,0,.78),inset 0 0 40px rgba(0,0,0,.7)}
+.B .platecap{position:absolute;right:40px;top:60px;z-index:6;text-align:right;
+  font-family:'Michroma';font-size:6.5px;letter-spacing:.3em;color:rgba(252,222,145,.9);
+  background:rgba(6,9,13,.72);padding:4px 7px}
+.B .postborder{position:absolute;inset:11px 30px;border:1px solid rgba(252,222,145,.16);pointer-events:none;z-index:4}
+.B .postborder::after{content:'';position:absolute;inset:5px;border:1px solid rgba(91,196,196,.1)}
+.B .spine{position:absolute;left:42px;top:14px;bottom:30px;width:52px;z-index:7;display:flex;flex-direction:column;
+  justify-content:center}
+.B .spinehead{font-family:'Michroma';font-size:5.5px;letter-spacing:.24em;color:rgba(91,196,196,.5);
+  text-align:center;margin-bottom:6px}
+.B .idx{display:flex;flex-direction:column;gap:3px}
+.B .idxi{position:relative;display:flex;align-items:center;justify-content:center;height:36px;cursor:pointer;
+  transition:.18s;border:1px solid transparent}
+.B .idxi .n{font-family:'Michroma';font-size:14px;color:rgba(233,227,211,.34);transition:.18s}
+.B .idxi:hover{border-color:rgba(91,196,196,.3)}
+.B .idxi:hover .n{color:rgba(233,227,211,.8)}
+.B .idxi.act{background:linear-gradient(90deg,rgba(252,222,145,.20),rgba(252,222,145,.02));
+  border-color:rgba(252,222,145,.55)}
+.B .idxi.act .n{color:var(--gold);font-size:17px;text-shadow:0 0 14px rgba(252,222,145,.5)}
+.B .idxi.bad{cursor:not-allowed}
+.B .idxi.bad .n{color:rgba(214,120,120,.5);text-decoration:line-through}
+.B .idxi .dt{position:absolute;right:4px;top:5px;width:4px;height:4px;background:var(--teal);transform:rotate(45deg)}
+.B .idxadd{margin-top:6px;height:24px;display:flex;align-items:center;justify-content:center;
+  border:1px dashed rgba(252,222,145,.3);color:rgba(252,222,145,.6);cursor:pointer;font-size:15px;line-height:0}
+.B .idxadd:hover{background:rgba(252,222,145,.08)}
+.B .type{position:absolute;left:112px;top:50%;transform:translateY(-52%);right:236px;z-index:5}
+.B .bhint{position:absolute;left:112px;bottom:12px;z-index:7;font-size:10px;letter-spacing:.1em;
+  color:rgba(233,227,211,.32)}
+.B .bhint b{color:rgba(252,222,145,.7);font-weight:400;letter-spacing:.14em}
+.B .kicker{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.B .kicker .rule{width:30px;height:1px;background:rgba(252,222,145,.6)}
+.B .bignum{font-family:'Michroma';font-size:98px;line-height:.84;color:var(--gold);
+  text-shadow:0 0 40px rgba(252,222,145,.26);margin:-2px 0 0 -4px}
+.B .bignum sup{font-family:'Michroma';font-size:14px;vertical-align:super;color:rgba(252,222,145,.5);
+  letter-spacing:.2em;margin-left:8px}
+.B .rname{font-family:'Poiret One';font-size:56px;line-height:.98;color:#fff8e9;margin-top:2px;
+  text-shadow:0 2px 40px rgba(0,0,0,.92),0 0 30px rgba(252,222,145,.12);white-space:nowrap}
+.B .btag{display:flex;align-items:center;gap:14px;margin-top:9px}
+.B .btag .t{font-size:13.5px;letter-spacing:.4em;text-transform:uppercase;color:var(--teal)}
+.B .btag .rule{flex:1;height:1px;background:linear-gradient(90deg,rgba(91,196,196,.45),transparent);max-width:110px}
+.B .bmeta{margin-top:12px;display:flex;gap:20px;align-items:flex-end}
+.B .bmeta div.mi{display:flex;flex-direction:column;gap:4px}
+.B .bmeta .k{font-family:'Michroma';font-size:6px;letter-spacing:.28em;color:rgba(91,196,196,.55)}
+.B .bmeta .v{font-size:11.5px;letter-spacing:.13em;color:rgba(233,227,211,.72);text-transform:uppercase}
+.B .brule{height:1px;margin:13px 0 8px;background:linear-gradient(90deg,rgba(252,222,145,.4),rgba(91,196,196,.15),transparent)}
+.B .bsrc{font-family:'Michroma';font-size:6.5px;letter-spacing:.24em;color:rgba(233,227,211,.32);line-height:1.9}
+.B .credit{position:absolute;right:40px;top:22px;z-index:7;text-align:right}
+.B .credit .c1,.B .credit .c2{background:rgba(6,9,13,.72);padding:3px 7px;display:inline-block}
+.B .credit .c1{font-family:'Michroma';font-size:6.5px;letter-spacing:.32em;color:rgba(233,227,211,.3)}
+.B .credit .c2{font-family:'Michroma';font-size:6.5px;letter-spacing:.32em;color:rgba(252,222,145,.5);margin-top:5px}
+.B .boardband{position:absolute;left:12px;right:12px;bottom:8px;height:182px}
+/* B's board is a brass jewel plate rather than the teal chassis the others use */
+.B .bplate{padding:8px 13px 11px;
+  background:linear-gradient(180deg,rgba(44,38,26,.62),rgba(14,13,11,.86)),
+             repeating-linear-gradient(90deg,rgba(252,222,145,.022) 0 1px,transparent 1px 5px);
+  border-color:rgba(252,222,145,.26)}
+.B .bplate::before{content:'';position:absolute;inset:5px;border:1px solid rgba(252,222,145,.10);pointer-events:none}
+.B .bhead .glab{color:rgba(252,222,145,.72)}
+.B .bhead .grule{background:linear-gradient(90deg,rgba(252,222,145,.24),transparent)}
+.B .jewel .gem{height:78px}
+.B .jewel .gem::before{content:'';position:absolute;inset:5px 12px;
+  border-top:1px solid rgba(255,255,255,.05);border-bottom:1px solid rgba(0,0,0,.5)}
+.B .jewel .gem i{width:13px;height:13px}
+.B .jewel .jt{margin-top:12px;font-size:8px;letter-spacing:.24em}
+.B .jewel.on .gem::before{border-top-color:rgba(252,222,145,.26)}
+
+/* ═══════════════ C · TWIN STAGE ═══════════════ */
+.C .twin{position:absolute;inset:46px 0 0 0;display:flex;flex-direction:column;padding:8px 12px 9px}
+.C .ribbon{height:44px;display:flex;gap:7px;align-items:stretch}
+.C .rlab{display:flex;align-items:center;padding-right:4px}
+.C .rcell{position:relative;flex:1;display:flex;align-items:center;gap:7px;padding:0 8px 0 6px;cursor:pointer;
+  border:1px solid rgba(91,196,196,.18);background:linear-gradient(180deg,rgba(15,21,30,.8),rgba(8,11,16,.9));
+  transition:.16s;overflow:hidden;min-width:0}
+.C .rcell .th{width:30px;height:30px;flex:none;overflow:hidden;border:1px solid rgba(91,196,196,.22);background:#070a0e}
+.C .rcell .th img{width:100%;height:100%;object-fit:cover;opacity:.65;
+  transform:scale(var(--z,1.1));transform-origin:50% var(--oy,42%)}
+.C .rcell .rn{display:flex;flex-direction:column;min-width:0;line-height:1.15}
+.C .rcell .rpc{font-family:'Michroma';font-size:8.5px;color:rgba(252,222,145,.72)}
+.C .rcell .rnm{font-size:10.5px;letter-spacing:.06em;color:rgba(233,227,211,.55);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.C .rcell:hover{border-color:rgba(91,196,196,.5)}
+.C .rcell.act{border-color:rgba(252,222,145,.85);background:linear-gradient(180deg,rgba(52,40,18,.6),rgba(14,12,9,.9));
+  box-shadow:0 0 0 1px rgba(252,222,145,.14),0 0 18px rgba(252,222,145,.10)}
+.C .rcell.act .rpc{color:var(--gold)}
+.C .rcell.act .rnm{color:var(--cream)}
+.C .rcell.act .th{border-color:rgba(252,222,145,.6)}
+.C .rcell.act .th img{opacity:.95}
+.C .rcell.act::after{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,transparent,var(--gold),transparent)}
+.C .rcell.bad{background:repeating-linear-gradient(-45deg,#0b0e14 0 7px,#090c11 7px 14px);cursor:not-allowed}
+.C .rcell.bad .rpc{color:rgba(233,227,211,.4)}
+.C .rcell.bad .rnm{color:rgba(214,120,120,.8);font-size:9px;letter-spacing:.16em;text-transform:uppercase}
+.C .rcell.add{flex:0 0 34px;justify-content:center;padding:0;border-style:dashed;border-color:rgba(252,222,145,.3);
+  color:rgba(252,222,145,.6);font-size:17px}
+.C .stagerow{flex:1;display:flex;gap:12px;margin-top:9px;min-height:0}
+.C .stagerow .ampcard{flex:1;min-width:0}
+/* a mono Sound keeps its art near native width: stretching a 214px crop to 876 turns it to mush */
+.C .stagerow.mono{justify-content:center}
+.C .stagerow.mono .ampcard{flex:0 0 var(--mw)}
+.C .nowline{height:40px;display:flex;align-items:center;gap:14px;margin-top:8px;padding:0 2px}
+.C .nowline .npc{font-family:'Michroma';font-size:24px;color:var(--gold);line-height:1;
+  text-shadow:0 0 20px rgba(252,222,145,.3)}
+.C .nowline .nnm{font-family:'Poiret One';font-size:30px;color:var(--cream);line-height:1;white-space:nowrap}
+.C .nowline .ntg{font-size:11px;letter-spacing:.30em;text-transform:uppercase;color:rgba(252,222,145,.7)}
+.C .nowline .nrule{flex:1;height:1px;background:linear-gradient(90deg,rgba(252,222,145,.4),transparent)}
+.C .boardband{height:120px;margin-top:8px}
+
+/* ═══════════════ D · THUMB RAIL ═══════════════ */
+.D .layout{position:absolute;inset:46px 0 0 0;display:flex;flex-direction:column;padding:10px 12px 9px}
+.D .upper{flex:1;display:flex;gap:10px;min-height:0}
+.D .center{position:relative;flex:1;display:flex;gap:9px;min-width:0}
+.D .center .ampcard{flex:1;min-width:0}
+/* D carries the amp names in the MAIN / SUPPORT tags so the bottom scrim stays clean */
+.D .ampname{display:none}
+.D .rail{width:172px;flex:none;display:flex;flex-direction:column;gap:6px;min-height:0}
+.D .railhead{display:flex;align-items:center;justify-content:space-between;flex:none}
+.D .thumbs{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:5px;
+  scrollbar-width:thin;scrollbar-color:rgba(252,222,145,.4) rgba(255,255,255,.04);
+  padding-right:2px}
+.D .thumbs::-webkit-scrollbar{width:6px}
+.D .thumbs::-webkit-scrollbar-thumb{background:rgba(252,222,145,.32);border-radius:3px}
+.D .thumb{position:relative;flex:0 0 54px;height:54px;cursor:pointer;overflow:hidden;display:flex;align-items:stretch;
+  border:1px solid rgba(91,196,196,.20);background:#080b10;transition:.18s}
+.D .thumb .tim{position:relative;width:46px;flex:none;overflow:hidden;background:#070a0e}
+.D .thumb .tim img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.6;transition:.18s;
+  transform:scale(var(--z,1.1));transform-origin:50% var(--oy,42%)}
+.D .thumb .tx{flex:1;min-width:0;padding:6px 5px 6px 6px;display:flex;flex-direction:column;justify-content:center;gap:2px;
+  background:linear-gradient(90deg,rgba(6,9,13,.55),rgba(6,9,13,.9))}
+.D .thumb .tpc{font-family:'Michroma';font-size:11px;color:rgba(252,222,145,.8);line-height:1}
+.D .thumb .tnm{font-family:'Poiret One';font-size:14px;color:rgba(233,227,211,.72);line-height:1.1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.D .thumb .ttg{font-size:7.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(91,196,196,.7)}
+.D .thumb:hover{border-color:rgba(91,196,196,.55)}
+.D .thumb:hover .tim img{opacity:.85}
+.D .thumb.act{border-color:rgba(252,222,145,.9);box-shadow:0 0 0 1px rgba(252,222,145,.18),0 4px 18px rgba(0,0,0,.6);
+  position:sticky;top:0;z-index:3;background:#0c1018}
+.D .thumb.act .tim img{opacity:.95}
+.D .thumb.act .tpc{color:var(--gold)}
+.D .thumb.act .tnm{color:var(--cream)}
+.D .thumb.act::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,transparent,var(--gold),transparent)}
+.D .thumb.act .live{position:absolute;right:6px;top:6px;display:flex;align-items:center;gap:4px;
+  font-family:'Michroma';font-size:5.5px;letter-spacing:.24em;color:rgba(252,222,145,.9)}
+.D .thumb.act .live i{width:4px;height:4px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 calc(2px + var(--in)*9px) var(--gold)}
+.D .thumb.bad{background:repeating-linear-gradient(-45deg,#0b0e14 0 7px,#090c11 7px 14px);cursor:not-allowed}
+.D .thumb.bad .tpc{color:rgba(233,227,211,.42)}
+.D .thumb.bad .tnm{font-family:'Josefin Sans';font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(214,120,120,.85)}
+.D .thumb.add{flex:none;height:36px;align-items:center;justify-content:center;border-style:dashed;
+  border-color:rgba(252,222,145,.45);color:var(--gold);font:700 9px/1 "Josefin Sans";letter-spacing:.18em;
+  text-transform:uppercase;background:rgba(252,222,145,.04)}
+.D .thumb.add:hover{background:rgba(252,222,145,.12);border-color:rgba(252,222,145,.7)}
+.D .overlaytype{position:absolute;left:0;right:0;bottom:0;z-index:9;pointer-events:none;
+  display:flex;align-items:baseline;gap:16px;padding:44px 16px 11px;
+  background:linear-gradient(0deg,rgba(5,7,11,.94) 12%,rgba(5,7,11,.58) 46%,transparent)}
+.D .overlaytype .opc{font-family:'Michroma';font-size:20px;letter-spacing:.1em;color:var(--gold);
+  text-shadow:0 0 22px rgba(252,222,145,.4)}
+.D .overlaytype .onm{font-family:'Poiret One';font-size:34px;color:#fff8e9;line-height:1;
+  text-shadow:0 2px 22px rgba(0,0,0,.95)}
+.D .overlaytype .otg{font-size:10.5px;letter-spacing:.32em;text-transform:uppercase;color:rgba(91,196,196,.9)}
+.D .overlaytype .orule{flex:1;height:1px;background:linear-gradient(90deg,rgba(252,222,145,.35),transparent)}
+.D .overlaytype .badges{display:flex;gap:7px;align-items:center}
+.D .boardband{height:124px;margin-top:9px}
+
+/* ═══════════════ E · FILM UNDER ART ═══════════════ */
+.E .layout{position:absolute;inset:46px 0 0 0;display:flex;flex-direction:column;padding:9px 12px}
+.E .artwide{height:298px;display:flex;gap:8px;position:relative}
+.E .artwide .ampcard{flex:1;min-width:0}
+.E .etype{position:absolute;left:16px;top:28px;z-index:9;pointer-events:none}
+.E .etype .ek{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.E .etype .ek i{width:6px;height:6px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 calc(3px + var(--in)*12px) rgba(252,222,145,.95)}
+.E .etype .epc{font-family:'Michroma';font-size:44px;line-height:.9;color:var(--gold);
+  text-shadow:0 0 30px rgba(252,222,145,.3),0 2px 18px rgba(0,0,0,.9)}
+.E .etype .enm{font-family:'Poiret One';font-size:40px;line-height:1.02;color:#fff8e9;
+  text-shadow:0 2px 26px rgba(0,0,0,.95)}
+.E .etype .etg{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:rgba(91,196,196,.9);margin-top:3px}
+.E .etype .eflags{display:flex;gap:7px;margin-top:9px;pointer-events:auto}
+.E .filmwrap{margin-top:9px;position:relative;height:92px;display:flex;flex-direction:column;
+  background:linear-gradient(180deg,rgba(9,12,18,.9),rgba(6,8,12,.95));border:1px solid rgba(91,196,196,.16);
+  padding:0 8px}
+.E .sprockets{height:9px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex:none;padding:0 2px}
+.E .sprockets.b{transform:scaleY(-1)}
+.E .sprockets i{flex:1;height:5px;background:rgba(91,196,196,.22);border-radius:1px;max-width:17px;
+  box-shadow:inset 0 0 2px rgba(0,0,0,.8)}
+.E .frames{flex:1;display:flex;gap:6px;min-height:0;padding:1px 0 2px}
+.E .frame1{position:relative;flex:1;cursor:pointer;overflow:hidden;border:1px solid rgba(91,196,196,.22);
+  background:#080b10;transition:.18s}
+.E .frame1 img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.5;transition:.18s;
+  transform:scale(var(--z,1.08));transform-origin:50% var(--oy,42%)}
+.E .frame1 .fv{position:absolute;inset:0;background:linear-gradient(90deg,rgba(5,7,11,.86),rgba(5,7,11,.28))}
+.E .frame1 .fpc{position:absolute;left:7px;top:50%;transform:translateY(-50%);font-family:'Michroma';font-size:17px;
+  color:rgba(233,227,211,.5);transition:.18s}
+.E .frame1 .fnm{position:absolute;right:6px;bottom:5px;font-size:9px;letter-spacing:.1em;
+  color:rgba(233,227,211,.48);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 40px);
+  text-align:right}
+.E .frame1:hover{border-color:rgba(91,196,196,.55)}
+.E .frame1:hover img{opacity:.75}
+.E .frame1.act{border-color:rgba(252,222,145,.9);box-shadow:0 0 0 1px rgba(252,222,145,.2)}
+.E .frame1.act img{opacity:.9}
+.E .frame1.act .fpc{color:var(--gold);font-size:20px;text-shadow:0 0 14px rgba(252,222,145,.5)}
+.E .frame1.act .fnm{color:var(--cream)}
+.E .frame1.act .fv{background:linear-gradient(90deg,rgba(5,7,11,.78),rgba(5,7,11,.1))}
+.E .frame1.bad{background:repeating-linear-gradient(-45deg,#0b0e14 0 7px,#090c11 7px 14px);cursor:not-allowed}
+.E .frame1.bad .fpc{color:rgba(233,227,211,.35)}
+.E .frame1.bad .fnm{color:rgba(214,120,120,.8);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase}
+.E .frame1.add{flex:0 0 34px;display:flex;align-items:center;justify-content:center;border-style:dashed;
+  border-color:rgba(252,222,145,.3);color:rgba(252,222,145,.6);font-size:17px}
+.E .filmtag{flex:none;margin-left:8px;font-family:'Michroma';font-size:5.5px;
+  letter-spacing:.26em;color:rgba(91,196,196,.62);white-space:nowrap}
+.E .boardband{height:126px;margin-top:8px}
+
+/* ═══════════════ F · OVERLAY RECALL ═══════════════ */
+.F .bleed{position:absolute;left:0;right:0;top:46px;bottom:140px;overflow:hidden;background:#06080c;display:flex;gap:2px}
+.F .bpane{position:relative;flex:1;overflow:hidden;min-width:0}
+.F .bpane.support{flex:0 0 40%}
+.F .bpane .vig{position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:radial-gradient(108% 92% at 50% 44%,transparent 26%,rgba(5,7,11,calc(.95 - var(--in)*.40)) 100%)}
+.F .bpane.support .vig{
+  background:radial-gradient(108% 92% at 50% 44%,transparent 26%,rgba(5,7,11,calc(.95 - var(--in2)*.40)) 100%)}
+/* the projected-film treatment: scanlines + weave keep the blown-up art from reading as a soft png */
+.F .bpane .grain{position:absolute;inset:0;z-index:4;pointer-events:none;opacity:.62;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.30) 0 1px,transparent 1px 3px),
+             repeating-linear-gradient(90deg,rgba(0,0,0,.14) 0 1px,transparent 1px 4px)}
+.F .bpane .ptag{position:absolute;left:14px;top:12px;z-index:15;font-family:'Michroma';font-size:7px;
+  letter-spacing:.30em;color:rgba(252,222,145,.92);
+  border-left:2px solid rgba(252,222,145,.7);padding:2px 0 2px 8px}
+.F .bpane.support .ptag{left:auto;right:14px;color:rgba(91,196,196,.95);border-left:0;
+  border-right:2px solid rgba(91,196,196,.7);padding:2px 8px 2px 0}
+.F .bpane.support{border-left:1px solid rgba(252,222,145,.16)}
+.F .corona{position:absolute;inset:0;z-index:5;pointer-events:none;will-change:opacity;
+  opacity:calc(.04 + var(--in)*.96);
+  background:radial-gradient(44% 52% at 50% 46%,rgba(255,206,116,.34),rgba(252,222,145,.06) 58%,transparent 78%)}
+.F .bpane.support .corona{opacity:calc(.04 + var(--in2)*.9);
+  background:radial-gradient(44% 52% at 50% 46%,rgba(120,224,224,.28),rgba(91,196,196,.06) 58%,transparent 78%)}
+/* footlight along the bottom edge of each pane — brightens, never resizes */
+.F .bpane .hz{position:absolute;left:0;right:0;bottom:0;height:2px;z-index:13;
+  opacity:calc(.16 + var(--in)*.84);
+  background:linear-gradient(90deg,transparent,rgba(252,222,145,.95) 22%,rgba(252,222,145,.95) 78%,transparent);
+  box-shadow:0 0 calc(6px + var(--in)*22px) rgba(252,222,145,.6)}
+.F .bpane.support .hz{opacity:calc(.16 + var(--in2)*.84);
+  background:linear-gradient(90deg,transparent,rgba(91,196,196,.9) 22%,rgba(91,196,196,.9) 78%,transparent);
+  box-shadow:0 0 calc(6px + var(--in2)*20px) rgba(91,196,196,.5)}
+/* the hero PNGs are BUILD crops and carry a baked tag + caption; full bleed would show them,
+   so F windows past that chrome instead of leaning on the per-Sound zoom the framed variants use */
+.F .artlive img{left:-10%;top:-14%;right:auto;bottom:auto;width:120%;height:136%;transform:none}
+.F .topscrim{position:absolute;left:0;right:0;top:0;height:112px;z-index:11;pointer-events:none;
+  background:linear-gradient(180deg,rgba(4,6,10,.90) 0%,rgba(4,6,10,.62) 46%,transparent 100%)}
+.F .botscrim{position:absolute;left:0;right:0;bottom:0;height:172px;z-index:11;pointer-events:none;
+  background:linear-gradient(0deg,rgba(4,6,10,.93) 0%,rgba(4,6,10,.66) 40%,transparent 100%)}
+.F .pills{position:absolute;left:0;right:0;top:16px;z-index:14;display:flex;justify-content:center;
+  align-items:flex-start;gap:10px}
+.F .pill{position:relative;width:46px;height:46px;border-radius:50%;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;transition:.18s;
+  border:1px solid rgba(233,227,211,.24);background:rgba(6,9,13,.58);backdrop-filter:blur(3px)}
+.F .pill .pn{font-family:'Michroma';font-size:13px;color:rgba(233,227,211,.66);transition:.18s}
+.F .pill:hover{border-color:rgba(91,196,196,.7);background:rgba(8,14,20,.8)}
+.F .pill.act{width:56px;height:56px;margin-top:-5px;border-color:rgba(252,222,145,.95);
+  background:radial-gradient(circle at 50% 40%,rgba(92,70,28,.92),rgba(10,9,7,.94));
+  box-shadow:0 0 0 1px rgba(252,222,145,.25),0 0 calc(10px + var(--in)*30px) rgba(252,222,145,calc(.25 + var(--in)*.4))}
+.F .pill.act .pn{color:var(--gold);font-size:16px}
+.F .pill.act::after{content:'';position:absolute;left:50%;bottom:-13px;transform:translateX(-50%) rotate(45deg);
+  width:6px;height:6px;border-right:1px solid rgba(252,222,145,.9);border-bottom:1px solid rgba(252,222,145,.9)}
+.F .pill.bad{cursor:not-allowed;border-style:dashed;border-color:rgba(214,120,120,.42)}
+.F .pill.bad .pn{color:rgba(214,120,120,.6);text-decoration:line-through}
+.F .pill .dt{position:absolute;bottom:5px;left:50%;transform:translateX(-50%) rotate(45deg);width:4px;height:4px;
+  background:var(--teal)}
+.F .pill.add{width:40px;height:40px;margin-top:3px;border-style:dashed;border-color:rgba(252,222,145,.32);
+  color:rgba(252,222,145,.6);font-size:16px}
+/* the hint lives in the corner block with the role tag, not across the middle of the film */
+.F .pilllab{position:absolute;left:24px;top:36px;z-index:14;
+  font-family:'Michroma';font-size:6px;letter-spacing:.30em;color:rgba(91,196,196,.66);
+  text-shadow:0 1px 8px rgba(4,6,10,.95)}
+.F .ct{z-index:13;opacity:.5}
+.F .bleed>.ct.tl{top:12px;left:12px}
+.F .bleed>.ct.tr{top:12px;right:12px}
+.F .bleed>.ct.bl{bottom:12px;left:12px}
+.F .bleed>.ct.br{bottom:12px;right:12px}
+.F .ftype{position:absolute;left:28px;bottom:20px;z-index:14}
+.F .ftype .fpc{font-family:'Michroma';font-size:14px;letter-spacing:.18em;color:rgba(252,222,145,.92)}
+.F .ftype .fnm{font-family:'Poiret One';font-size:52px;line-height:1.02;color:#fff8e9;
+  text-shadow:0 3px 30px rgba(0,0,0,.96)}
+.F .ftype .ftg{font-size:11px;letter-spacing:.38em;text-transform:uppercase;color:rgba(91,196,196,.92);margin-top:3px}
+.F .fflags{position:absolute;right:28px;bottom:24px;z-index:14;display:flex;flex-direction:column;
+  align-items:flex-end;gap:8px}
+.F .fsrc{font-family:'Michroma';font-size:6px;letter-spacing:.24em;color:rgba(233,227,211,.4);
+  text-align:right;line-height:1.9}
+.F .boardband{position:absolute;left:0;right:0;bottom:0;height:140px;gap:0}
+.F .boardband .bplate{border-left:0;border-right:0;border-bottom:0;padding:8px 14px 10px}
+.F .fmeter{display:flex;align-items:center;justify-content:center;padding:0 10px;
+  background:linear-gradient(180deg,#232a35 0%,#141a22 14%,#0b0e14 100%);
+  border-top:1px solid rgba(150,165,185,.2)}
+
+/* ═══════════════ empty scene ═══════════════ */
+.empty-wrap{position:absolute;inset:46px 0 0 0;z-index:5}
+.empty-mid{position:absolute;left:0;right:0;top:0;bottom:132px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.empty-ghost{position:absolute;width:520px;height:280px;opacity:.1;pointer-events:none;overflow:hidden;
+  animation:breathe 6.5s ease-in-out infinite;
+  -webkit-mask-image:radial-gradient(58% 62% at 50% 44%,#000 20%,transparent 78%);
+  mask-image:radial-gradient(58% 62% at 50% 44%,#000 20%,transparent 78%)}
+.empty-ghost img{width:100%;height:100%;object-fit:cover;transform:scale(1.2)}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.07}50%{transform:scale(1.04);opacity:.14}}
+.empty-title{font-family:'Poiret One';font-size:38px;color:var(--cream);position:relative}
+.empty-sub{font-size:12px;letter-spacing:.12em;color:rgba(233,227,211,.4);margin:10px 0 24px;position:relative;
+  text-align:center;line-height:1.7}
+.diamond{width:5px;height:5px;border:1px solid rgba(252,222,145,.55);transform:rotate(45deg);margin:9px auto 0}
+.addbtn{display:inline-flex;align-items:center;gap:9px;cursor:pointer;padding:11px 22px;border-radius:2px;
+  border:1px solid rgba(252,222,145,.45);background:rgba(252,222,145,.045);
+  font-family:'Michroma';font-size:9px;letter-spacing:.26em;color:var(--gold);transition:.2s}
+.addbtn:hover{background:rgba(252,222,145,.13);box-shadow:0 0 24px rgba(252,222,145,.16);transform:translateY(-1px)}
+.addbtn .plus{font-size:14px;line-height:0;font-family:'Josefin Sans'}
+.empty-board{position:absolute;left:12px;right:12px;bottom:9px;height:122px;opacity:.5}
+</style>
+</head>
+<body>
+
+<div class="lab-top">
+  <div class="lab-tag">VoLum · <b>PLAY</b> surface prototype · 900 × 600 · opus round 2</div>
+  <div class="scenes" id="scenes">
+    <button class="lbtn" data-scene="gig">Gig</button>
+    <button class="lbtn" data-scene="long">Long bank</button>
+    <button class="lbtn" data-scene="empty">Empty</button>
+  </div>
+</div>
+
+<div id="frame"></div>
+
+<div class="lab-bar">
+  <div class="lab-row">
+    <button class="lbtn arrow" id="prev">&larr;</button>
+    <div class="vlabel"><div class="k" id="vk">A · STAGE DOWN</div><div class="d" id="vd">hero + filmstrip, board at the bottom</div></div>
+    <button class="lbtn arrow" id="next">&rarr;</button>
+    <div class="sep"></div>
+    <span class="walklab">Walkthrough</span>
+    <button class="lbtn step" data-walk="1">1 · Recall 00</button>
+    <button class="lbtn step" data-walk="2">2 · Stomp CHORUS</button>
+    <button class="lbtn step" data-walk="3">3 · Recall 01 (dual)</button>
+    <button class="lbtn" data-walk="0">Reset</button>
+    <div class="sep"></div>
+    <button class="lbtn" id="pausebtn">Pause motion</button>
+  </div>
+  <div class="stateline" id="stateline"></div>
+</div>
+
+<script>
+/* ═════════════════════════ data ═════════════════════════ */
+const FX = [
+  /* card-pre-strip.png is one 480×208 sprite of four uneven PRE cards; crop rects are explicit */
+  {k:'pitch',  t:'PITCH',  g:'PRE',  art:{src:'../art/card-pre-strip.png', rect:[8,22,84,150]}},
+  {k:'comp',   t:'COMP',   g:'PRE',  art:{src:'../art/card-pre-strip.png', rect:[100,22,92,150]}},
+  {k:'nam1',   t:'NAM 1',  g:'PRE',  art:{src:'../art/hero-marshall-2204.png', z:1.45, oy:'40%'}},
+  {k:'nam2',   t:'NAM 2',  g:'PRE',  art:{src:'../art/hero-jmp-2203.png', z:1.45, oy:'42%'}, dualOnly:true},
+  {k:'chorus', t:'CHORUS', g:'POST', art:{src:'../art/card-pre-strip.png', rect:[338,22,130,150]}},
+  {k:'delay',  t:'DELAY',  g:'POST', art:{src:'../art/card-delay.png', z:1.14, oy:'44%'}},
+  {k:'revrb',  t:'REVRB',  g:'POST', art:{src:'../art/card-reverb.png', z:1.14, oy:'46%'}},
+  {k:'trem',   t:'TREM',   g:'POST', art:{src:'../art/card-trem.png', z:1.14, oy:'46%'}},
+];
+
+/* Demo Sounds exactly as the brief lists them. fx = the SAVED bypass snapshot. */
+const SOUNDS = [
+  {pc:'00', name:'THC Sunset', tag:'Crunch', cab:'V30', src:'V30-THC-3.nam', dual:false,
+   main:{art:'../art/hero-thc-sunset.png', z:1.14, oy:'50%', label:'THC Sunset'},
+   zt:1.24, oyt:'44%',
+   fx:{pitch:0,comp:1,nam1:1,nam2:0,chorus:0,delay:0,revrb:1,trem:0}},
+
+  {pc:'01', name:'Marshall 2204', tag:'Lead', cab:'G65', src:'V30-2204-1.nam  ·  G65-2203-1.nam', dual:true,
+   main:{art:'../art/hero-marshall-2204.png', z:1.28, oy:'42%', label:'Marshall 2204'},
+   supp:{art:'../art/hero-jmp-2203.png', z:1.28, oy:'44%', label:'Marshall JMP 2203'},
+   zt:1.36, oyt:'40%',
+   fx:{pitch:0,comp:0,nam1:1,nam2:1,chorus:0,delay:1,revrb:1,trem:0}},
+
+  {pc:'04', invalid:true, name:'Rig not found', tag:'Invalid'},
+
+  {pc:'07', name:'Orange ORS100', tag:'Clean', cab:'V30', src:'V30-ORS1-2.nam', dual:false,
+   main:{art:'../art/hero-jmp-2203.png', z:1.28, oy:'44%', label:'Orange ORS100'},
+   zt:1.36, oyt:'42%',
+   fx:{pitch:0,comp:1,nam1:1,nam2:0,chorus:1,delay:1,revrb:0,trem:0}},
+
+  {pc:'12', name:'Monomyth Skele1', tag:'Room', cab:'Custom IR', src:'Monomyth-Skele1.nam', dual:false, custom:true,
+   main:{art:'../art/card-reverb.png', z:1.06, oy:'48%', label:'Monomyth Skele1'},
+   zt:1.14, oyt:'48%',
+   fx:{pitch:1,comp:0,nam1:1,nam2:0,chorus:0,delay:0,revrb:1,trem:1}},
+];
+
+/* Overflow fillers for D's Long bank scene only. Same art, extra assigned PCs. */
+const EXTRA = [
+  {pc:'14', name:'THC Sunset', tag:'Crunch', dual:false,
+   main:{art:'../art/hero-thc-sunset.png', z:1.14, oy:'50%', label:'THC Sunset'}, zt:1.2, oyt:'44%',
+   fx:{pitch:0,comp:1,nam1:1,nam2:0,chorus:0,delay:0,revrb:1,trem:0}},
+  {pc:'18', name:'Marshall 2204', tag:'Lead', dual:true,
+   main:{art:'../art/hero-marshall-2204.png', z:1.28, oy:'42%', label:'Marshall 2204'},
+   supp:{art:'../art/hero-jmp-2203.png', z:1.28, oy:'44%', label:'Marshall JMP 2203'}, zt:1.3, oyt:'40%',
+   fx:{pitch:0,comp:0,nam1:1,nam2:1,chorus:0,delay:1,revrb:1,trem:0}},
+  {pc:'22', name:'Orange ORS100', tag:'Clean', dual:false,
+   main:{art:'../art/hero-jmp-2203.png', z:1.28, oy:'44%', label:'Orange ORS100'}, zt:1.3, oyt:'42%',
+   fx:{pitch:0,comp:1,nam1:1,nam2:0,chorus:1,delay:1,revrb:0,trem:0}},
+  {pc:'26', name:'Monomyth Skele1', tag:'Room', dual:false,
+   main:{art:'../art/card-reverb.png', z:1.06, oy:'48%', label:'Monomyth Skele1'}, zt:1.1, oyt:'48%',
+   fx:{pitch:1,comp:0,nam1:1,nam2:0,chorus:0,delay:0,revrb:1,trem:1}},
+  {pc:'31', name:'THC Sunset', tag:'Crunch', dual:false,
+   main:{art:'../art/hero-thc-sunset.png', z:1.14, oy:'50%', label:'THC Sunset'}, zt:1.2, oyt:'44%',
+   fx:{pitch:0,comp:1,nam1:1,nam2:0,chorus:0,delay:0,revrb:1,trem:0}},
+  {pc:'40', name:'Marshall 2204', tag:'Lead', dual:true,
+   main:{art:'../art/hero-marshall-2204.png', z:1.28, oy:'42%', label:'Marshall 2204'},
+   supp:{art:'../art/hero-jmp-2203.png', z:1.28, oy:'44%', label:'Marshall JMP 2203'}, zt:1.3, oyt:'40%',
+   fx:{pitch:0,comp:0,nam1:1,nam2:1,chorus:0,delay:1,revrb:1,trem:0}},
+  {pc:'55', name:'Orange ORS100', tag:'Clean', dual:false,
+   main:{art:'../art/hero-jmp-2203.png', z:1.28, oy:'44%', label:'Orange ORS100'}, zt:1.3, oyt:'42%',
+   fx:{pitch:0,comp:1,nam1:1,nam2:0,chorus:1,delay:1,revrb:0,trem:0}},
+  {pc:'63', name:'Monomyth Skele1', tag:'Room', dual:false,
+   main:{art:'../art/card-reverb.png', z:1.06, oy:'48%', label:'Monomyth Skele1'}, zt:1.1, oyt:'48%',
+   fx:{pitch:1,comp:0,nam1:1,nam2:0,chorus:0,delay:0,revrb:1,trem:1}},
+];
+
+const VARIANTS = {
+  A:{k:'A · STAGE DOWN',    d:'hero + type, art filmstrip, board at the bottom'},
+  B:{k:'B · POSTER BOARD',  d:'98px program number, numbered spine, jewel board'},
+  C:{k:'C · TWIN STAGE',    d:'two equal breathing heroes, thin ribbon, rail switches'},
+  D:{k:'D · THUMB RAIL',    d:'huge centre art, PC thumbs on the right, board below'},
+  E:{k:'E · FILM UNDER ART',d:'full-width art, sprocket filmstrip, board below'},
+  F:{k:'F · OVERLAY RECALL',d:'edge-to-edge art, PC pills on the art, chassis board'},
+};
+const ORDER = ['A','B','C','D','E','F'];
+
+/* ═════════════════════════ state ═════════════════════════ */
+const qs = new URLSearchParams(location.search);
+const state = {
+  variant:(qs.get('variant')||'A').toUpperCase(),
+  scene:(qs.get('scene')||'gig'),
+  active:0,
+  live:null,        /* the LIVE rig bypass state (what is sounding right now) */
+  dirty:false,      /* stomped since recall → the named Sound is (unsaved) */
+  recall:false,
+  justFx:null,
+  walk:0,
+};
+if(!VARIANTS[state.variant]) state.variant='A';
+
+const freezeQ = qs.get('freeze');
+const FREEZE = (freezeQ!==null && freezeQ!=='') ? parseFloat(freezeQ) : null;
+
+function list(){
+  return (state.variant==='D' && state.scene==='long') ? SOUNDS.concat(EXTRA) : SOUNDS;
+}
+function soundByPc(pc){ return list().findIndex(s=>s.pc===String(pc).padStart(2,'0')); }
+function cur(){ const L=list(); return L[Math.min(state.active, L.length-1)] || L[0]; }
+function isDual(){ return !!cur().dual; }
+
+function recall(i, animate){
+  const L = list();
+  const s = L[i];
+  if(!s || s.invalid) return false;          /* invalid slots do nothing */
+  state.active = i;
+  state.live = Object.assign({}, s.fx);      /* the Sound's snapshot comes back */
+  state.dirty = false;
+  state.justFx = null;
+  state.recall = !!animate;
+  return true;
+}
+function stomp(k){
+  const f = FX.find(x=>x.k===k);
+  if(f.dualOnly && !isDual()) return false;  /* NAM 2 only exists on a Dual Amp Sound */
+  state.live[k] = state.live[k] ? 0 : 1;
+  state.dirty = true;
+  state.justFx = k;
+  return true;
+}
+recall(0,false);
+
+/* ═════════════════════════ shared chrome ═════════════════════════ */
+const ico = {
+  tuner:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fcde91" stroke-width="1.35" stroke-linecap="round">
+    <path d="M8 3v7a4 4 0 0 0 8 0V3"/><path d="M12 14v7"/><path d="M9 21h6"/></svg>`,
+  metro:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fcde91" stroke-width="1.35" stroke-linejoin="round">
+    <path d="M9.5 3h5l4 18h-13z"/><path d="M6.6 15h10.8"/><path d="M15.5 6.5 9 16"/></svg>`,
+  gear:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fcde91" stroke-width="1.3">
+    <circle cx="12" cy="12" r="3.1"/>
+    <path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4"/></svg>`,
+};
+function header(){
+  return `<div class="hdr">
+    <div class="brand"><span class="wm">VoLum</span><span class="sub">NAM PLAYER</span></div>
+    <div class="hdr-mid"><div class="midi-pill"><i class="dot"></i><span>MIDI IN</span><b>CH 1</b></div></div>
+    <div class="hdr-right">
+      <div class="pb"><button class="on" data-act="play">PLAY</button><button data-act="build">BUILD</button></div>
+      <span class="hdr-sep"></span>
+      <button class="icobtn" title="Tuner">${ico.tuner}</button>
+      <button class="icobtn" title="Metronome">${ico.metro}</button>
+      <button class="icobtn" title="Settings">${ico.gear}<i class="badge"></i></button>
+    </div>
+  </div>`;
+}
+const ticks = `<i class="ct tl"></i><i class="ct tr"></i><i class="ct bl"></i><i class="ct br"></i>`;
+
+function meterIn(h){
+  return `<div class="mstack"><div class="mrow"><div class="mcell">
+    <div class="track" style="height:${h}px"><div class="fill"></div><div class="pk"></div></div>
+  </div></div><div class="mlab">IN</div></div>`;
+}
+function meterOut(h){
+  if(isDual()){
+    return `<div class="mstack out"><div class="mrow">
+      <div class="mcell"><div class="track" style="height:${h}px"><div class="fill"></div><div class="pk"></div></div><span class="ch">L</span></div>
+      <div class="mcell"><div class="track r" style="height:${h}px"><div class="fill"></div><div class="pk"></div></div><span class="ch">R</span></div>
+    </div><div class="mlab">OUT</div></div>`;
+  }
+  return `<div class="mstack out"><div class="mrow"><div class="mcell">
+    <div class="track" style="height:${h}px"><div class="fill"></div><div class="pk"></div></div>
+  </div></div><div class="mlab">OUT</div></div>`;
+}
+
+function ampArt(o, lag){
+  return `<div class="artswap"><div class="artlive ${lag?'lag':''}">
+    <img src="${o.art}" alt="" style="--z:${o.z};--oy:${o.oy}"></div></div>`;
+}
+/* role is null for a mono Sound: BUILD only tags MAIN / SUPPORT on a Dual Amp */
+function ampCard(o, role, suppFlag){
+  const supp = suppFlag===undefined ? role==='SUPPORT' : suppFlag;
+  return `<div class="ampcard ${supp?'support deco':'deco gold'}">
+    ${ampArt(o, supp)}
+    <div class="vig"></div>
+    <div class="horizon ${supp?'lag':''}"></div>
+    ${role?`<span class="amptag ${supp?'t':''}">${role}</span><div class="ampname">${o.label}</div>`:''}
+    ${ticks}
+  </div>`;
+}
+const STRIP_W = 480, STRIP_H = 208;
+function fxArtHTML(f){
+  const a = f.art;
+  if(a.rect){
+    const [x,y,w,h] = a.rect;
+    return `<div class="sprite" style="background-image:url('${a.src}');`+
+      `background-size:${(STRIP_W/w*100).toFixed(2)}% ${(STRIP_H/h*100).toFixed(2)}%;`+
+      `background-position:${(x/(STRIP_W-w)*100).toFixed(2)}% ${(y/(STRIP_H-h)*100).toFixed(2)}%"></div>`;
+  }
+  return `<img src="${a.src}" alt="" style="--z:${a.z||1};--oy:${a.oy||'50%'}">`;
+}
+
+/* ═════════════ the bottom board — one per board style ═════════════ */
+function fxCells(render){
+  const s = cur();
+  const out = [];
+  FX.forEach((f,i)=>{
+    if(i===4) out.push(`<i class="bdiv"></i>`);
+    const na = f.dualOnly && !s.dual;
+    const on = state.live[f.k] && !na;
+    out.push(render(f, on, na, state.justFx===f.k));
+  });
+  return out.join('');
+}
+function boardHead(){
+  return `<div class="bhead">
+    <div class="half"><span class="glab">Pre &nbsp;·&nbsp; stomp to bypass the live rig</span><i class="grule"></i></div>
+    <i class="halfgap"></i>
+    <div class="half"><span class="glab g">Post</span><i class="grule"></i></div>
+  </div>`;
+}
+/* meterH = pixel height of the flanking meters inside the board */
+function board(style, meterH){
+  let cells;
+  if(style==='cards'){
+    cells = fxCells((f,on,na,just)=>`<div class="stompcard ${on?'on':''} ${na?'na':''} ${just?'just':''}" data-fx="${f.k}">
+      <div class="pimg">${fxArtHTML(f)}</div><i class="led"></i>
+      <div class="plab"><span>${f.t}</span></div></div>`);
+  } else if(style==='jewels'){
+    cells = fxCells((f,on,na,just)=>`<div class="jewel ${on?'on':''} ${na?'na':''} ${just?'just':''}" data-fx="${f.k}">
+      <div class="gem"><i></i></div><span class="jt">${f.t}</span></div>`);
+  } else if(style==='rail'){
+    cells = fxCells((f,on,na,just)=>`<div class="railsw ${on?'on':''} ${na?'na':''} ${just?'just':''}" data-fx="${f.k}">
+      <i class="led"></i><div class="cap"></div><span class="rt">${f.t}</span></div>`);
+  } else if(style==='chips'){
+    cells = fxCells((f,on,na,just)=>`<div class="echip ${on?'on':''} ${na?'na':''} ${just?'just':''}" data-fx="${f.k}">
+      <div class="ring"><i></i></div><span class="et">${f.t}</span></div>`);
+  } else {
+    cells = fxCells((f,on,na,just)=>`<div class="pedal ${on?'on':''} ${na?'na':''} ${just?'just':''}" data-fx="${f.k}">
+      <div class="pengrave"><span>${f.t}</span></div>
+      <div class="pimg">${fxArtHTML(f)}</div><i class="led"></i>
+      <div class="fsw"><i class="knob"></i></div></div>`);
+  }
+  const chassis = style==='chassis';
+  return `<div class="boardband">
+    <div class="bmeter ${chassis?'fmeter':''}">${meterIn(meterH)}</div>
+    <div class="bplate ${chassis?'chassis':''} deco">
+      ${chassis?`<span class="screw a"></span><span class="screw b"></span><span class="screw c"></span><span class="screw d"></span>`:''}
+      ${boardHead()}
+      <div class="bcells">${cells}</div>
+      ${chassis?'':ticks}
+    </div>
+    <div class="bmeter ${chassis?'fmeter':''}">${meterOut(meterH)}</div>
+  </div>`;
+}
+
+/* ═══════════════ A · STAGE DOWN ═══════════════ */
+function renderA(){
+  const s = cur();
+  const tiles = SOUNDS.map((x,i)=>{
+    if(x.invalid) return `<div class="tile bad deco" data-bad="1">${ticks}
+      <span class="pc">${x.pc}</span><span class="nm">Invalid slot</span></div>`;
+    const act = i===state.active;
+    return `<div class="tile ${act?'act deco gold':'deco'}" data-sound="${i}">
+      <img src="${x.main.art}" alt="" style="--z:${x.zt};--oy:${x.oyt}">
+      <div class="veil"></div>${ticks}
+      <span class="pc">${x.pc}</span>
+      ${x.dual?`<span class="dl">DUAL</span>`:''}
+      ${act?`<span class="nowlabel">NOW PLAYING</span>`:''}
+      <span class="nm">${x.name}</span><span class="tg">${x.tag}</span></div>`;
+  }).join('');
+
+  return `${header()}
+  <div class="stage">
+    <div class="top">
+      <div class="arts">
+        ${ampCard(s.main, s.dual?'MAIN':null)}
+        ${s.dual?ampCard(s.supp,'SUPPORT'):''}
+      </div>
+      <div class="info">
+        <div class="kick"><i class="pulse"></i><span class="eyebrow g">Now playing</span></div>
+        <div class="pcbadge"><span class="pcl">PROGRAM</span><span class="pcv">${s.pc}</span><span class="pcrule"></span></div>
+        <div class="rname">${s.name}</div>
+        <div class="rtag">${s.tag}</div>
+        <div class="rrule"></div>
+        <div class="rmeta">
+          <div class="row"><span class="k">RIG</span>${s.dual?'Dual Amp · main + support':'Single amp'}</div>
+          <div class="row"><span class="k">CAB</span>${s.cab}</div>
+        </div>
+        <div class="rsrc">${s.src.replace(/\s+·\s+/,'<br>')}</div>
+        <div class="flags">
+          ${s.dual?`<span class="dualbadge">DUAL AMP</span>`:''}
+          ${state.dirty?`<span class="unsavedbadge"><i></i>unsaved</span>`:''}
+        </div>
+        <div class="signal">
+          <div class="sl"><span class="eyebrow">Input</span><span class="sv" id="sigv">—</span></div>
+          <div class="strack"><i class="sfill"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="filmhead"><span class="eyebrow">Sounds &nbsp;·&nbsp; click art to recall</span>
+      <span class="rule"></span><span class="eyebrow g">Program order</span></div>
+    <div class="film">${tiles}<div class="tile add" data-act="add"><span>+</span></div></div>
+    ${board('cards',86)}
+  </div>`;
+}
+
+/* ═══════════════ B · POSTER BOARD ═══════════════ */
+function renderB(){
+  const s = cur();
+  const idx = SOUNDS.map((x,i)=>{
+    if(x.invalid) return `<div class="idxi bad" data-bad="1"><span class="n">${x.pc}</span></div>`;
+    return `<div class="idxi ${i===state.active?'act':''}" data-sound="${i}">
+      <span class="n">${x.pc}</span>${x.dual?`<i class="dt"></i>`:''}</div>`;
+  }).join('');
+
+  /* the 214-px amp crops go soft past ~1.8×, so wide art gets the big plate and the rest a small one */
+  const wide = s.main.art.indexOf('thc') >= 0;
+  const plates = `<div class="plateglow"></div>`+
+    `<div class="plate ${wide?'':'small'}">${ampArt(s.main,false)}</div>` +
+    (s.dual
+      ? `<div class="platecap">MAIN · ${s.main.label.toUpperCase()}</div>
+         <div class="suppcard deco">
+           ${ampArt(s.supp,true)}
+           <div class="vig"></div><div class="horizon lag"></div>
+           <span class="amptag t">SUPPORT</span>
+           <div class="ampname">${s.supp.label}</div>${ticks}
+         </div>`
+      : '');
+
+  return `${header()}
+  <div class="poster">
+    ${plates}
+    <div class="postborder"></div>
+    <div class="spine">
+      <div class="spinehead">RECALL</div>
+      <div class="idx">${idx}</div>
+      <div class="idxadd" data-act="add">+</div>
+    </div>
+    <div class="credit">
+      <div class="c1">MIDI PROGRAM RECALL</div>
+      <div class="c2">${s.dual?'DUAL AMP':(s.custom?'CUSTOM CAPTURE':'BUNDLED RIG')}</div>
+    </div>
+    <div class="type">
+      <div class="kicker"><span class="rule"></span><span class="eyebrow g">Now playing</span></div>
+      <div class="bignum">${s.pc}<sup>PC</sup></div>
+      <div class="rname">${s.name}</div>
+      <div class="btag"><span class="t">${s.tag}</span><span class="rule"></span></div>
+      <div class="bmeta">
+        <div class="mi"><span class="k">CAB</span><span class="v">${s.cab}</span></div>
+        <div class="mi"><span class="k">RIG</span><span class="v">${s.dual?'DUAL AMP':'SINGLE'}</span></div>
+        ${state.dirty?`<span class="unsavedbadge"><i></i>unsaved</span>`:''}
+      </div>
+      <div class="brule"></div>
+      <div class="bsrc">${s.src.replace(/\s+·\s+/,'<br>')}</div>
+    </div>
+    <div class="bhint">Numbers at the left recall a Sound &nbsp;·&nbsp; <b>gems below stomp the live rig</b></div>
+  </div>
+  ${board('jewels',118)}`;
+}
+
+/* ═══════════════ C · TWIN STAGE ═══════════════ */
+function renderC(){
+  const s = cur();
+  const cells = SOUNDS.map((x,i)=>{
+    if(x.invalid) return `<div class="rcell bad" data-bad="1">
+      <div class="th" style="display:flex;align-items:center;justify-content:center">
+        <span style="font-family:'Michroma';font-size:11px;color:rgba(233,227,211,.28)">${x.pc}</span></div>
+      <div class="rn"><span class="rpc">PC ${x.pc}</span><span class="rnm">Invalid</span></div></div>`;
+    return `<div class="rcell ${i===state.active?'act':''}" data-sound="${i}">
+      <div class="th"><img src="${x.main.art}" alt="" style="--z:${x.zt};--oy:${x.oyt}"></div>
+      <div class="rn"><span class="rpc">${x.pc}${x.dual?' · DUAL':''}</span><span class="rnm">${x.name}</span></div></div>`;
+  }).join('');
+
+  return `${header()}
+  <div class="twin">
+    <div class="ribbon">
+      <div class="rlab"><span class="eyebrow">Recall</span></div>
+      ${cells}
+      <div class="rcell add" data-act="add">+</div>
+    </div>
+    <div class="stagerow ${s.dual?'':'mono'}" style="--mw:${s.main.art.indexOf('thc')>=0?660:470}px">
+      ${ampCard(s.main, s.dual?'MAIN':null)}
+      ${s.dual?ampCard(s.supp,'SUPPORT'):''}
+    </div>
+    <div class="nowline">
+      <span class="npc">${s.pc}</span>
+      <span class="nnm">${s.name}</span>
+      <span class="ntg">${s.tag}</span>
+      ${s.dual?`<span class="dualbadge">DUAL AMP</span>`:''}
+      ${state.dirty?`<span class="unsavedbadge sm"><i></i>unsaved</span>`:''}
+      <span class="nrule"></span>
+    </div>
+    ${board('rail',80)}
+  </div>`;
+}
+
+/* ═══════════════ D · THUMB RAIL ═══════════════ */
+function renderD(){
+  const s = cur();
+  const thumbs = list().map((x,i)=>{
+    if(x.invalid) return `<div class="thumb bad" data-bad="1">
+      <div class="tim"></div>
+      <div class="tx"><span class="tpc">${x.pc}</span><span class="tnm">Invalid slot</span></div></div>`;
+    const act = i===state.active;
+    return `<div class="thumb ${act?'act':''}" data-sound="${i}">
+      <div class="tim"><img src="${x.main.art}" alt="" style="--z:${x.zt};--oy:${x.oyt}"></div>
+      <div class="tx"><span class="tpc">${x.pc}</span><span class="tnm">${x.name}</span>
+        <span class="ttg">${x.dual?'Dual · '+x.tag:x.tag}</span></div>
+      ${act?`<span class="live"><i></i>LIVE</span>`:''}</div>`;
+  }).join('');
+
+  return `${header()}
+  <div class="layout">
+    <div class="upper">
+      <div class="center">
+        ${ampCard(s.main, s.dual?`MAIN · ${s.main.label.toUpperCase()}`:null, false)}
+        ${s.dual?ampCard(s.supp,`SUPPORT · ${s.supp.label.toUpperCase()}`, true):''}
+        <div class="overlaytype">
+          <span class="opc">${s.pc}</span>
+          <span class="onm">${s.name}</span>
+          <span class="otg">${s.tag}</span>
+          <span class="badges">
+            ${s.dual?`<span class="dualbadge">DUAL AMP</span>`:''}
+            ${state.dirty?`<span class="unsavedbadge sm"><i></i>unsaved</span>`:''}
+          </span>
+          <span class="orule"></span>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="railhead"><span class="eyebrow">Sounds</span><span class="eyebrow g">PC</span></div>
+        <div class="thumbs">${thumbs}</div>
+        <div class="thumb add" data-act="add">+ Add</div>
+      </div>
+    </div>
+    ${board('chips',84)}
+  </div>`;
+}
+
+/* ═══════════════ E · FILM UNDER ART ═══════════════ */
+function renderE(){
+  const s = cur();
+  const frames = SOUNDS.map((x,i)=>{
+    if(x.invalid) return `<div class="frame1 bad" data-bad="1">
+      <span class="fpc">${x.pc}</span><span class="fnm">Invalid</span></div>`;
+    const act = i===state.active;
+    return `<div class="frame1 ${act?'act':''}" data-sound="${i}">
+      <img src="${x.main.art}" alt="" style="--z:${x.zt};--oy:${x.oyt}">
+      <div class="fv"></div>
+      <span class="fpc">${x.pc}</span>
+      <span class="fnm">${x.name}${x.dual?' · DUAL':''}</span></div>`;
+  }).join('');
+  const holes = '<i></i>'.repeat(14);
+
+  return `${header()}
+  <div class="layout">
+    <div class="artwide">
+      ${ampCard(s.main, s.dual?'MAIN':null)}
+      ${s.dual?ampCard(s.supp,'SUPPORT'):''}
+      <div class="etype">
+        <div class="ek"><i></i><span class="eyebrow g">Now playing</span></div>
+        <div class="epc">${s.pc}</div>
+        <div class="enm">${s.name}</div>
+        <div class="etg">${s.tag}</div>
+        <div class="eflags">
+          ${s.dual?`<span class="dualbadge">DUAL AMP</span>`:''}
+          ${state.dirty?`<span class="unsavedbadge sm"><i></i>unsaved</span>`:''}
+        </div>
+      </div>
+    </div>
+    <div class="filmwrap">
+      <div class="sprockets">${holes}<span class="filmtag">PROGRAM ORDER · CLICK A FRAME TO RECALL</span></div>
+      <div class="frames">${frames}<div class="frame1 add" data-act="add">+</div></div>
+      <div class="sprockets b">${holes}</div>
+    </div>
+    ${board('cards',88)}
+  </div>`;
+}
+
+/* ═══════════════ F · OVERLAY RECALL ═══════════════ */
+function renderF(){
+  const s = cur();
+  const pills = SOUNDS.map((x,i)=>{
+    if(x.invalid) return `<div class="pill bad" data-bad="1"><span class="pn">${x.pc}</span></div>`;
+    return `<div class="pill ${i===state.active?'act':''}" data-sound="${i}">
+      <span class="pn">${x.pc}</span>${x.dual?`<i class="dt"></i>`:''}</div>`;
+  }).join('');
+
+  /* the art is blown far past its native size here, so it is treated as projected film */
+  const pane = (o, role) => {
+    const supp = role==='SUPPORT';
+    return `<div class="bpane ${supp?'support':''}">
+      ${ampArt(o, supp)}
+      <div class="corona"></div><div class="grain"></div><div class="vig"></div>
+      ${role?`<span class="ptag">${role} · ${o.label.toUpperCase()}</span>`:''}
+      <i class="hz"></i></div>`;
+  };
+
+  return `${header()}
+  <div class="bleed">
+    ${pane(s.main, s.dual?'MAIN':null)}
+    ${s.dual?pane(s.supp,'SUPPORT'):''}
+    <div class="topscrim"></div>
+    <div class="botscrim"></div>
+    <div class="pills">${pills}<div class="pill add" data-act="add">+</div></div>
+    <div class="pilllab">MIDI PROGRAM · CLICK TO RECALL</div>
+    ${ticks}
+    <div class="ftype">
+      <div class="fpc">PC ${s.pc}</div>
+      <div class="fnm">${s.name}</div>
+      <div class="ftg">${s.tag}</div>
+    </div>
+    <div class="fflags">
+      ${s.dual?`<span class="dualbadge">DUAL AMP · OUT L/R</span>`:''}
+      ${state.dirty?`<span class="unsavedbadge sm"><i></i>unsaved</span>`:''}
+      <div class="fsrc">${s.src.replace(/\s+·\s+/,'<br>')}</div>
+    </div>
+  </div>
+  ${board('chassis',88)}`;
+}
+
+/* ═══════════════ empty scene ═══════════════ */
+function renderEmpty(){
+  return `${header()}<div class="empty-wrap">
+    <div class="empty-mid">
+      <div class="empty-ghost"><img src="../art/hero-thc-sunset.png" alt=""></div>
+      <div class="empty-title">No Sounds assigned</div><div class="diamond"></div>
+      <div class="empty-sub">PLAY recalls your rigs by MIDI Program Change.<br>Add a Sound to give this stage something to light up.</div>
+      <div class="addbtn" data-act="add"><span class="plus">+</span>Add Sound</div>
+    </div>
+    <div class="empty-board">${board('cards',80)}</div>
+  </div>`;
+}
+
+/* ═════════════════════════ render ═════════════════════════ */
+const frame = document.getElementById('frame');
+const stateline = document.getElementById('stateline');
+const RENDER = {A:renderA,B:renderB,C:renderC,D:renderD,E:renderE,F:renderF};
+function render(){
+  frame.className = state.variant + (state.recall?' recall':'');
+  frame.innerHTML = state.scene==='empty' ? renderEmpty() : RENDER[state.variant]();
+  state.recall = false;
+  document.getElementById('vk').textContent = VARIANTS[state.variant].k;
+  document.getElementById('vd').textContent = VARIANTS[state.variant].d;
+  [...document.querySelectorAll('#scenes button')].forEach(b=>b.classList.toggle('on', b.dataset.scene===state.scene));
+  [...document.querySelectorAll('[data-walk]')].forEach(b=>{
+    const w = +b.dataset.walk;
+    b.classList.toggle('on', w!==0 && w===state.walk);
+    b.classList.toggle('done', w!==0 && w<state.walk);
+  });
+  const s = cur();
+  stateline.innerHTML =
+    `<span class="sk">RECALLED</span><span class="sv hot">PC ${s.pc} · ${s.name}</span>`+
+    `<span class="sk">DIRTY</span><span class="sv ${state.dirty?'hot':'cold'}">${state.dirty?'yes (unsaved)':'no'}</span>`+
+    `<span class="sk">CHORUS</span><span class="sv ${state.live.chorus?'hot':'cold'}">${state.live.chorus?'on':'off'}</span>`+
+    `<span class="sk">DUAL</span><span class="sv ${s.dual?'hot':'cold'}">${s.dual?'yes · out L/R':'no · mono'}</span>`+
+    `<span class="sk">NAM 2</span><span class="sv ${s.dual&&state.live.nam2?'hot':'cold'}">${s.dual?(state.live.nam2?'on':'off'):'n/a'}</span>`;
+  sigEl = document.getElementById('sigv'); sigShown = -99;
+  apply(lastEnv, lastEnv2, lastPeak, lastPeak2);
+  const liveThumb = frame.querySelector('.D .thumb.act');
+  if(liveThumb) liveThumb.scrollIntoView({block:'nearest'});
+}
+
+/* ═════════════════════════ interaction ═════════════════════════ */
+frame.addEventListener('click', e=>{
+  const bad = e.target.closest('[data-bad]');
+  if(bad){
+    bad.classList.remove('shake'); void bad.offsetWidth; bad.classList.add('shake');
+    if(!bad.querySelector('.deadtip')){
+      const t = document.createElement('div'); t.className='deadtip'; t.textContent='NOT RECALLABLE';
+      bad.appendChild(t); setTimeout(()=>t.remove(),1400);
+    }
+    return;
+  }
+  const snd = e.target.closest('[data-sound]');
+  if(snd){ const i=+snd.dataset.sound; if(i!==state.active){ recall(i,true); state.walk=0; render(); } return; }
+  const fx = e.target.closest('[data-fx]');
+  if(fx){ if(stomp(fx.dataset.fx)){ state.walk=0; render(); } return; }
+  const act = e.target.closest('[data-act]');
+  if(act){
+    if(act.dataset.act==='add'){ act.classList.remove('shake'); void act.offsetWidth; act.classList.add('shake'); }
+    if(act.dataset.act==='build'||act.dataset.act==='play'){
+      [...frame.querySelectorAll('.pb button')].forEach(b=>b.classList.toggle('on', b===act));
+    }
+  }
+});
+
+/* walkthrough: Recall 00 → Stomp CHORUS → Recall 01 */
+function applyWalk(n){
+  recall(soundByPc('00'), false);
+  if(n>=2) stomp('chorus');
+  if(n>=3){ recall(soundByPc('01'), false); }
+  state.walk = n;
+  state.recall = n>0;
+  render();
+}
+document.querySelector('.lab-bar').addEventListener('click', e=>{
+  const b = e.target.closest('[data-walk]'); if(!b) return;
+  applyWalk(+b.dataset.walk);
+});
+document.getElementById('scenes').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.scene=b.dataset.scene;
+  if(state.scene==='long') state.variant='D';
+  if(state.active >= list().length) recall(0, false);
+  render();
+});
+function step(d){
+  state.variant = ORDER[(ORDER.indexOf(state.variant)+d+ORDER.length)%ORDER.length];
+  if(state.active >= list().length) recall(0, false);
+  render();
+}
+document.getElementById('prev').onclick = ()=>step(-1);
+document.getElementById('next').onclick = ()=>step(1);
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft') step(-1);
+  if(e.key==='ArrowRight') step(1);
+});
+
+/* ═════════════ fake IN envelope (rAF, lighting only) ═════════════ */
+const root = document.documentElement;
+let lastEnv=.35, lastEnv2=.3, lastPeak=.45, lastPeak2=.4, raf=0, peak=.45, peak2=.4;
+let sigEl=null, sigShown=-99;
+
+function envAt(ms){
+  const s = ms/1000;
+  let v = 0.40 + 0.28*Math.sin(s*0.83) + 0.15*Math.sin(s*2.31+1.1)
+              + 0.08*Math.sin(s*5.70+0.4) + 0.04*Math.sin(s*11.3+2.2);
+  const phrase = 0.5 + 0.5*Math.sin(s*0.23-0.6);      /* silence between phrases */
+  v *= 0.20 + 0.80*Math.pow(phrase, 0.55);
+  return Math.max(0, Math.min(1, v));
+}
+/* the SUPPORT amp / right channel lags, so stereo reads */
+function lagOf(e, ms){ return Math.max(0, Math.min(1, 0.86*envAt(ms-110) + 0.06)); }
+
+function apply(e, e2, pk, pk2){
+  root.style.setProperty('--in',  e.toFixed(4));
+  root.style.setProperty('--in2', e2.toFixed(4));
+  root.style.setProperty('--peak', pk.toFixed(4));
+  root.style.setProperty('--peak2', pk2.toFixed(4));
+  if(sigEl){
+    const db = Math.round(20*Math.log10(Math.max(e,0.0004)));
+    if(db!==sigShown){ sigShown=db; sigEl.textContent = (db<=-60?'-inf':db)+' dB'; }
+  }
+}
+function tick(t){
+  const e = envAt(t), e2 = lagOf(e, t);
+  peak = Math.max(e, peak-0.0045); peak2 = Math.max(e2, peak2-0.0045);
+  lastEnv=e; lastEnv2=e2; lastPeak=peak; lastPeak2=peak2;
+  apply(e,e2,peak,peak2);
+  raf = requestAnimationFrame(tick);
+}
+function startMotion(){ if(FREEZE!==null || raf) return; raf = requestAnimationFrame(tick); }
+function stopMotion(){ if(raf){ cancelAnimationFrame(raf); raf=0; } }
+document.addEventListener('visibilitychange', ()=>{ document.hidden ? stopMotion() : startMotion(); });
+document.getElementById('pausebtn').onclick = function(){
+  if(raf){ stopMotion(); this.textContent='Resume motion'; } else { startMotion(); this.textContent='Pause motion'; }
+};
+
+if(FREEZE!==null){
+  lastEnv  = Math.max(0, Math.min(1, FREEZE));
+  lastEnv2 = Math.max(0, Math.min(1, lastEnv*0.78 + 0.05));
+  lastPeak = Math.min(1, lastEnv+0.09); lastPeak2 = Math.min(1, lastEnv2+0.09);
+  root.setAttribute('data-freeze-in', String(lastEnv));
+  document.getElementById('pausebtn').textContent = 'Frozen ' + lastEnv;
+}
+
+/* deep links for screenshots: ?sound=01 / ?pc=01 / ?walk=2 */
+const sQ = qs.get('sound') !== null ? qs.get('sound') : qs.get('pc');
+if(sQ!==null && sQ!==''){ const i = soundByPc(sQ); if(i>=0) recall(i,false); }
+const wQ = qs.get('walk');
+if(wQ!==null && wQ!==''){ applyWalk(+wQ); } else { render(); }
+apply(lastEnv,lastEnv2,lastPeak,lastPeak2);
+if(FREEZE===null) startMotion();
+</script>
+</body>
+</html>

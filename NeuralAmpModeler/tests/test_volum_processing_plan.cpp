@@ -243,6 +243,36 @@ TEST_CASE("Processing plan gates the POST tremolo behind a model and its active 
   CHECK(supportOnly.runTremolo);
 }
 
+TEST_CASE("Processing plan gates the POST chorus behind a model and its active flag")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+
+  // Chorus flag is the last argument. Default (omitted) keeps it off, which is
+  // kChorusActive false: ProcessBlock must not call mChorus.Process.
+  const auto offByDefault = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam,
+                                                     false, false, false);
+  CHECK_FALSE(offByDefault.runChorus);
+
+  const auto withMain = volum::MakeProcessingPlan(true, false, false, false, false, false, preNamActive, havePreNam,
+                                                 false, false, false, false, false, false, false, false,
+                                                 /*prePitchActive=*/false, /*tremoloActive=*/false,
+                                                 /*chorusActive=*/true);
+  CHECK(withMain.runChorus);
+
+  const auto noModel = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam,
+                                                false, false, false, false, false, false, false, false, false, false,
+                                                /*chorusActive=*/true);
+  CHECK_FALSE(noModel.runChorus);
+
+  const auto supportOnly = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam,
+                                                    false, false, false, /*dualAmpActive=*/true,
+                                                    /*haveSupportModel=*/true, false, false, false, false, false,
+                                                    /*chorusActive=*/true);
+  CHECK(supportOnly.runSupportModel);
+  CHECK(supportOnly.runChorus);
+}
+
 TEST_CASE("Processing plan never runs the support IR while the support model is silent")
 {
   const bool preNamActive[2] = {false, false};

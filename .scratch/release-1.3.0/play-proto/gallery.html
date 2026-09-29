@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VoLum PLAY — prototypes</title>
+<style>
+  :root { --bg:#0c0e13; --gold:#fcde91; --teal:#5bc4c4; --ink:#9aa0a8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0c0e13; color: #ede3d0; font-family: Georgia, serif; }
+  header { padding: 22px 28px 12px; border-bottom: 1px solid rgba(200,162,78,.2); }
+  h1 { margin: 0; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-size: 18px; }
+  p { margin: 8px 0 0; color: var(--ink); font-size: 14px; max-width: 720px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 28px; }
+  .bar button {
+    background: transparent; color: var(--teal); border: 1px solid rgba(91,196,196,.35);
+    padding: 8px 12px; cursor: pointer; letter-spacing: .06em; font-size: 12px;
+  }
+  .bar button.on { background: #e8a85c; color: #1a1208; border-color: #e8a85c; }
+  iframe { display: block; width: 100%; height: calc(100vh - 140px); border: 0; background: #08090d; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PLAY · Opus prototypes</h1>
+  <p>Round 2 starts on <b>B · poster board</b> (owner favorite so far). Arrow keys cycle A–F. Pedals stay on the bottom; amp art breathes by lighting. The narrow recall spine is the open question — look at D/E/F for other ways to pick a Sound.</p>
+</header>
+<div class="bar" id="bar"></div>
+<iframe id="frame" title="PLAY prototype"></iframe>
+<script>
+const authors = [
+  { id: "opus2", label: "Opus round 2 · six", file: "opus2/index.html", variant: "B" },
+  { id: "opus", label: "Opus round 1 · A/B/C", file: "opus/index.html" }
+];
+const bar = document.getElementById("bar");
+const frame = document.getElementById("frame");
+function show(id) {
+  const a = authors.find((x) => x.id === id) || authors[0];
+  const q = new URLSearchParams(location.search);
+  q.delete("author");
+  if (a.variant && !q.get("variant")) q.set("variant", a.variant);
+  const qs = q.toString();
+  frame.src = a.file + (qs ? "?" + qs : "");
+  [...bar.querySelectorAll("button")].forEach((b) => b.classList.toggle("on", b.dataset.id === a.id));
+}
+authors.forEach((a) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.dataset.id = a.id;
+  b.textContent = a.label;
+  b.addEventListener("click", () => show(a.id));
+  bar.appendChild(b);
+});
+show(new URLSearchParams(location.search).get("author") || "opus2");
+</script>
+</body>
+</html>

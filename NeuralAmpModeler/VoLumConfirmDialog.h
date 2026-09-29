@@ -80,7 +80,7 @@ public:
     DrawBtn(g, DeleteRect(), mConfirmLabel.c_str(), true, accent);
 
     g.DrawText(IText(9.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-               "Enter to confirm  \u00B7  Esc to cancel", box.GetPadded(-12.f).GetFromBottom(11.f));
+               "Enter to confirm  \xC2\xB7  Esc to cancel", box.GetPadded(-12.f).GetFromBottom(11.f));
   }
 
   bool OnKeyDown(float, float, const IKeyPress& key) override

@@ -1,0 +1,517 @@
+#pragma once
+
+#include "VoLumContentStore.h"
+#include "VoLumFactoryPresets.h"
+#include "VoLumMidi.h"
+#include "VoLumParams.h"
+#include "VoLumPickerGroups.h"
+#include "VoLumTriptychState.h"
+
+#include <algorithm>
+#include <array>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace volum
+{
+
+enum class UiMode
+{
+  Build,
+  Play
+};
+
+inline const char* UiModeToString(UiMode mode)
+{
+  return mode == UiMode::Play ? "play" : "build";
+}
+
+inline UiMode UiModeFromString(const std::string& value)
+{
+  return value == "play" ? UiMode::Play : UiMode::Build;
+}
+
+inline UiMode UiModeFromJson(const nlohmann::json& value, const char* key)
+{
+  if (!key || !value.is_object() || !value.contains(key) || !value[key].is_string())
+    return UiMode::Build;
+  return UiModeFromString(value[key].get<std::string>());
+}
+
+// Machine-file PLAY/BUILD is standalone-only. A plugin keeps `fallback`
+// (constructor default or the project id-tail) so a PLAY standalone quit
+// cannot open the next VST3 insert on the stage.
+inline UiMode UiModeFromMachineSettings(bool standalone, const nlohmann::json& value, UiMode fallback)
+{
+  return standalone ? UiModeFromJson(value, "volumUiMode") : fallback;
+}
+
+inline int MidiChannelFromJson(const nlohmann::json& value, int fallback = 0)
+{
+  if (!value.is_object() || !value.contains("midiCh") || !value["midiCh"].is_number_integer())
+    return fallback;
+  return std::clamp(value["midiCh"].get<int>(), 0, 16);
+}
+
+// Same split as UiMode: the listen filter in volum-settings.json is the
+// standalone window. A plugin keeps Omni (or the project id-tail) so a
+// standalone channel lock cannot move the next VST3 insert.
+inline int MidiChannelFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? MidiChannelFromJson(value, fallback) : fallback;
+}
+
+inline int MidiRecallCcFromJson(const nlohmann::json& value, int fallback = kMidiRecallCcDefault)
+{
+  if (!value.is_object() || !value.contains("midiRecallCc") || !value["midiRecallCc"].is_number_integer())
+    return fallback;
+  return ClampMidiRecallCc(value["midiRecallCc"].get<int>());
+}
+
+// Same split as midiCh: the recall CC in volum-settings.json is the standalone
+// window. A plugin keeps `fallback` (constructor default or the project id-tail)
+// so a standalone CC choice cannot move the next VST3 insert.
+inline int MidiRecallCcFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? MidiRecallCcFromJson(value, fallback) : fallback;
+}
+
+inline int LastPlaySlotFromJson(const nlohmann::json& value, int fallback = -1)
+{
+  if (!value.is_object() || !value.contains("lastPlaySlot") || !value["lastPlaySlot"].is_number_integer())
+    return fallback;
+  return std::clamp(value["lastPlaySlot"].get<int>(), -1, 127);
+}
+
+// Same split as midiCh / volumUiMode: the PLAY cursor in volum-settings.json is
+// the standalone window. A plugin keeps `fallback` (constructor -1 or the
+// project id-tail) so a standalone quit cannot move the next VST3 insert.
+inline int LastPlaySlotFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? LastPlaySlotFromJson(value, fallback) : fallback;
+}
+
+// PLAY is attached at full-window bounds. Hide/show of that surface, the BUILD
+// header plate, and the preset bar is a function of UiMode - not something a
+// caller remembers. Host restore writes mVolumUiMode and runs _VolumSyncUiFromState;
+// if that path skips this plan, PLAY left shown swallows every BUILD click.
+struct PlayChromePlan
+{
+  bool hidePlaySurface = true;
+  bool hideHeaderPlate = false;
+  bool hidePresetBar = false;
+};
+
+inline PlayChromePlan PlayChromeForUiMode(UiMode mode)
+{
+  const bool play = mode == UiMode::Play;
+  return {!play, play, play};
+}
+
+enum class UiModeTransitionAction
+{
+  RefreshOnly
+};
+
+inline UiModeTransitionAction ActionForUiModeTransition(UiMode, UiMode)
+{
+  return UiModeTransitionAction::RefreshOnly;
+}
+
+inline bool EnteringPlayDropsLocks(UiMode from, UiMode to)
+{
+  return from != UiMode::Play && to == UiMode::Play;
+}
+
+// PLAY key branch: arrows + 1-8 only. Ctrl+S, T/M/H, and plain S fall through.
+inline bool PlayBranchConsumes(bool /*ctrl*/, bool arrow, bool stompDigit)
+{
+  // Ctrl+arrows used to fall through to BUILD's amp list. PLAY owns the rail
+  // even with modifiers; Ctrl+S is not an arrow and still falls through.
+  return arrow || stompDigit;
+}
+
+// Keys that would edit the hidden BUILD rig (cab, Dual Amp, section focus,
+// selected-knob reset / exact entry). T/M/H and Ctrl+S must still reach the
+// shared handler. 8 / 13 / 0x2E are iPlug kVK_BACK / kVK_RETURN / kVK_DELETE.
+inline bool PlaySwallowsHiddenBuildEdit(bool ctrl, int vk)
+{
+  if (ctrl && (vk == 's' || vk == 'S'))
+    return false;
+  if (vk == 't' || vk == 'T' || vk == 'm' || vk == 'M' || vk == 'h' || vk == 'H')
+    return false;
+  return vk == 's' || vk == 'S' || vk == '\t' || vk == ' ' || vk == 'b' || vk == 'B' || vk == 8 || vk == 13
+         || vk == 0x2E;
+}
+
+// Stomps 1-8: NAM wells (indices 2 and 3) need a capture. Off still counts.
+inline bool PlayStompCanBypass(int stompIndex, int nam1Capture, int nam2Capture)
+{
+  if (stompIndex == 2)
+    return nam1Capture > 0;
+  if (stompIndex == 3)
+    return nam2Capture > 0;
+  return stompIndex >= 0 && stompIndex < 8;
+}
+
+// Add opens the picker on the first free program number. When every number is
+// taken, land on 0 so the picker can replace instead of swallowing the click.
+inline int AddPickerStartSlot(int firstFree)
+{
+  return firstFree < 0 ? 0 : firstFree;
+}
+
+inline void FillSoundArt(const content::Registry& registry, const std::string& owner, int& art, bool& customArt)
+{
+  const int factoryIdx = FactoryAmpIndexFromId(owner);
+  if (factoryIdx >= 0 && factoryIdx < kAmpCount)
+  {
+    art = factoryIdx;
+    customArt = false;
+    return;
+  }
+  art = 0;
+  customArt = true;
+  for (const auto& amp : registry.amps)
+    if (amp.id == owner)
+    {
+      art = amp.art;
+      return;
+    }
+}
+
+inline EVoLumSection SectionForEffectFocus(EVoLumEffectFocus f)
+{
+  switch (f)
+  {
+    case EVoLumEffectFocus::PITCH:
+    case EVoLumEffectFocus::COMP:
+    case EVoLumEffectFocus::PRE_NAM1:
+    case EVoLumEffectFocus::PRE_NAM2: return EVoLumSection::PRE;
+    case EVoLumEffectFocus::CHORUS:
+    case EVoLumEffectFocus::DELAY:
+    case EVoLumEffectFocus::REVERB:
+    case EVoLumEffectFocus::TREMOLO: return EVoLumSection::POST;
+    default: return EVoLumSection::AMP;
+  }
+}
+
+inline constexpr std::array<const char*, 8> kPlayBypassParamNames = {"PrePitchActive", "PreCompActive", "PreNam1Active",
+                                                                     "PreNam2Active",  "ChorusActive",  "DelayActive",
+                                                                     "ReverbActive",   "TremoloActive"};
+// The same eight params by index, in stomp order, so the per-tick PLAY refresh
+// reads them without a name search. test_volum_play.cpp pins each index to the
+// name its InitBool gives it.
+inline constexpr std::array<int, 8> kPlayBypassParams = {kPrePitchActive, kPreCompActive, kPreNam1Active,
+                                                         kPreNam2Active,  kChorusActive,  kDelayActive,
+                                                         kReverbActive,   kTremoloActive};
+
+inline bool IsPlaySnapshotDirty(bool hasSnapshot, const VoLumAmpSettings& live, const VoLumAmpSettings& recalled)
+{
+  return hasSnapshot && !AmpSettingsEqual(live, recalled);
+}
+
+// Default (no recalled snapshot) dirties against factory-default settings.
+inline bool LivePresetDirty(bool hasSnapshot, const VoLumAmpSettings& live, const VoLumAmpSettings& recalled)
+{
+  if (!hasSnapshot)
+    return !AmpSettingsEqual(live, VoLumAmpSettings{});
+  return IsPlaySnapshotDirty(true, live, recalled);
+}
+
+inline constexpr const char* kPlayInvalidSlotLabel = "Invalid slot";
+
+inline std::string OccupiedSlotLabel(bool valid, const std::string& presetName)
+{
+  return valid ? presetName : std::string(kPlayInvalidSlotLabel);
+}
+
+struct SoundChoice
+{
+  std::string ampId;
+  std::string presetId;
+  std::string presetName;
+  std::string ampName;
+  bool factory = false;
+  int art = 0;
+  bool customArt = false;
+
+  bool operator==(const SoundChoice& o) const
+  {
+    return ampId == o.ampId && presetId == o.presetId && presetName == o.presetName && ampName == o.ampName
+           && factory == o.factory && art == o.art && customArt == o.customArt;
+  }
+  bool operator!=(const SoundChoice& o) const { return !(*this == o); }
+};
+
+struct PlaySlot
+{
+  int slot = 0;
+  SoundChoice sound;
+  bool valid = false;
+
+  bool operator==(const PlaySlot& o) const { return slot == o.slot && sound == o.sound && valid == o.valid; }
+  bool operator!=(const PlaySlot& o) const { return !(*this == o); }
+};
+
+// Stores `value` in `member` and reports whether it was different. PLAY's
+// SetData repaints only when one of its inputs reports a change.
+template <typename T, typename U>
+bool AssignIfChanged(T& member, U&& value)
+{
+  if (member == value)
+    return false;
+  member = std::forward<U>(value);
+  return true;
+}
+
+inline std::string AmpNameForOwner(const content::Registry& registry, const std::string& owner)
+{
+  const std::string prefix = "factory:";
+  if (owner.rfind(prefix, 0) == 0)
+  {
+    try
+    {
+      const int idx = std::stoi(owner.substr(prefix.size()));
+      if (idx >= 0 && idx < kAmpCount && content::FactoryOwnerKey(idx) == owner)
+        return kAmps[idx].displayName;
+    }
+    catch (...)
+    {
+    }
+    return {};
+  }
+  for (const auto& amp : registry.amps)
+    if (amp.id == owner)
+      return amp.name;
+  return {};
+}
+
+inline std::vector<SoundChoice> BuildSoundChoices(const std::vector<FactoryPreset>& factoryPresets,
+                                                  const content::Registry& registry)
+{
+  std::vector<SoundChoice> out;
+  out.reserve(factoryPresets.size() + registry.presetBanks.size());
+  for (const auto& preset : factoryPresets)
+  {
+    if (preset.ampIdx >= 0 && preset.ampIdx < kAmpCount)
+      out.push_back({content::FactoryOwnerKey(preset.ampIdx), preset.id, preset.name, kAmps[preset.ampIdx].displayName,
+                     true, preset.ampIdx, false});
+  }
+  for (const auto& bank : registry.presetBanks)
+  {
+    const std::string ampName = AmpNameForOwner(registry, bank.first);
+    if (ampName.empty())
+      continue;
+    for (const auto& preset : bank.second)
+    {
+      int art = 0;
+      bool customArt = true;
+      FillSoundArt(registry, bank.first, art, customArt);
+      out.push_back({bank.first, preset.id, preset.name, ampName, false, art, customArt});
+    }
+  }
+  return out;
+}
+
+inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const content::Registry& registry,
+                         const std::string& ampId, const std::string& presetId, SoundChoice& out)
+{
+  if (const auto* factory = FindFactoryPresetById(factoryPresets, presetId))
+  {
+    if (ampId != content::FactoryOwnerKey(factory->ampIdx))
+      return false;
+    out = {ampId, presetId, factory->name, kAmps[factory->ampIdx].displayName, true, factory->ampIdx, false};
+    return true;
+  }
+  const std::string ampName = AmpNameForOwner(registry, ampId);
+  if (ampName.empty())
+    return false;
+  const auto bank = registry.presetBanks.find(ampId);
+  if (bank == registry.presetBanks.end())
+    return false;
+  for (const auto& preset : bank->second)
+  {
+    if (preset.id == presetId)
+    {
+      int art = 0;
+      bool customArt = true;
+      FillSoundArt(registry, ampId, art, customArt);
+      out = {ampId, presetId, preset.name, ampName, false, art, customArt};
+      return true;
+    }
+  }
+  return false;
+}
+
+// Settings VolumRecallSound will apply. Factory Ready is the shipped snapshot
+// (not noon / VoLumAmpSettings{}). ResolveMidiSound still returns empty settings
+// for factory:<n>:v1 — that lookup is identity only; this is the apply path.
+inline std::optional<VoLumAmpSettings> ResolveSoundSettings(const std::vector<FactoryPreset>& factoryPresets,
+                                                            const content::Registry& registry, const std::string& ampId,
+                                                            const std::string& presetId)
+{
+  SoundChoice choice;
+  if (!ResolveSound(factoryPresets, registry, ampId, presetId, choice))
+    return std::nullopt;
+  if (const auto* factory = FindFactoryPresetById(factoryPresets, presetId))
+    return factory->settings;
+  const auto bank = registry.presetBanks.find(ampId);
+  if (bank == registry.presetBanks.end())
+    return std::nullopt;
+  for (const auto& preset : bank->second)
+    if (preset.id == presetId)
+      return preset.settings;
+  return std::nullopt;
+}
+
+inline std::vector<PlaySlot> BuildPlaySlots(const std::vector<FactoryPreset>& factoryPresets,
+                                            const content::Registry& registry)
+{
+  std::vector<PlaySlot> out;
+  out.reserve(registry.midiSoundMap.size());
+  // The registry keys the map by slot, so iteration is already in slot order.
+  for (const auto& kv : registry.midiSoundMap)
+  {
+    PlaySlot slot;
+    slot.slot = kv.first;
+    slot.valid = ResolveSound(factoryPresets, registry, kv.second.ampId, kv.second.presetId, slot.sound);
+    if (!slot.valid)
+    {
+      slot.sound.ampId = kv.second.ampId;
+      slot.sound.presetId = kv.second.presetId;
+      slot.sound.presetName = kPlayInvalidSlotLabel;
+    }
+    out.push_back(std::move(slot));
+  }
+  return out;
+}
+
+inline int FindAssignedSlot(const std::vector<PlaySlot>& slots, const std::string& ampId, const std::string& presetId)
+{
+  for (const auto& slot : slots)
+    if (slot.valid && slot.sound.ampId == ampId && slot.sound.presetId == presetId)
+      return slot.slot;
+  return -1;
+}
+
+inline bool SoundIsAssigned(const std::vector<PlaySlot>& slots, const std::string& ampId, const std::string& presetId)
+{
+  for (const auto& slot : slots)
+  {
+    if (slot.valid && slot.sound.ampId == ampId && slot.sound.presetId == presetId)
+      return true;
+  }
+  return false;
+}
+
+// + is "Add this sound" when the live rig is not already a PLAY row, or when
+// a dirty Factory/Default must be saved as a new User Sound first.
+inline bool PlayPlusAddsHeard(bool dirty, bool factoryOrDefaultOrigin, bool liveAssigned)
+{
+  if (factoryOrDefaultOrigin && dirty)
+    return true;
+  return !liveAssigned;
+}
+
+// Save As before assign: Factory/Default that is dirty, or Default (empty id)
+// which can never be written to a MIDI slot. Clean Factory Ready can be
+// assigned as-is.
+inline bool AddHeardNeedsSaveAs(PresetSaveAction, bool dirty, bool presetIdEmpty)
+{
+  return dirty || presetIdEmpty;
+}
+
+// Add this sound can write a MIDI row only when a User Sound exists and the
+// map still has a free program number. Otherwise finish() is a silent no-op.
+inline bool AddHeardMarksLive(int firstFreeSlot, bool presetIdEmpty)
+{
+  return firstFreeSlot >= 0 && !presetIdEmpty;
+}
+
+// Who asked for a save. Ctrl+S moves the LIVE switch onto the copy it just saved;
+// Add this sound adds a switch of its own and leaves the LIVE one as it was.
+enum class SaveOrigin
+{
+  Shortcut,
+  AddSound
+};
+
+inline bool SaveRetargetsLiveSlot(SaveOrigin origin)
+{
+  return origin == SaveOrigin::Shortcut;
+}
+
+inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::string& activeAmpId,
+                               const std::string& activePresetId)
+{
+  return slot.valid && slot.slot == lastSlot && slot.sound.ampId == activeAmpId
+         && slot.sound.presetId == activePresetId;
+}
+
+// BUILD -> PLAY focus: keep the current rail row when it already is the live
+// sound (duplicate rows stay put), otherwise jump to the first assigned hit,
+// otherwise leave the cursor alone when the live pair is not on the rail.
+inline int FocusSlotForLiveSound(const std::vector<PlaySlot>& slots, int currentSlot, const std::string& ampId,
+                                 const std::string& presetId)
+{
+  for (const auto& slot : slots)
+  {
+    if (IsLastRecalledSlot(slot, currentSlot, ampId, presetId))
+      return currentSlot;
+  }
+  const int found = FindAssignedSlot(slots, ampId, presetId);
+  return found >= 0 ? found : currentSlot;
+}
+
+// The slot PLAY's up/down arrows should land on, given the slot playing now.
+//
+// Only slots a Program Change would actually recall are reachable: unassigned
+// numbers do not exist in `slots` at all, and an assigned slot whose Sound is
+// gone is skipped, exactly as ProcessMidiMsg drops a PC that will not resolve.
+// Stepping wraps, because the rail is short and a player holding Down at the
+// bottom of it means "the next one", not "nothing".
+//
+// `currentSlot` may be -1 (nothing recalled yet) or a slot that is no longer
+// reachable - cleared, or gone invalid since it was recalled - in which case the
+// step lands on the nearest reachable slot in the direction of travel.
+// Returns -1 when there is nothing to step to.
+inline int StepAssignedSlot(const std::vector<PlaySlot>& slots, int currentSlot, int dir)
+{
+  std::vector<int> reachable;
+  reachable.reserve(slots.size());
+  for (const auto& slot : slots)
+    if (slot.valid)
+      reachable.push_back(slot.slot);
+  if (reachable.empty())
+    return -1;
+  // BuildPlaySlots walks a slot-keyed map, so this is already ascending; sort
+  // anyway so the helper is honest about its own contract.
+  std::sort(reachable.begin(), reachable.end());
+
+  const int count = static_cast<int>(reachable.size());
+  const bool forward = dir >= 0;
+  if (currentSlot < 0)
+    return forward ? reachable.front() : reachable.back();
+
+  const auto at = std::find(reachable.begin(), reachable.end(), currentSlot);
+  if (at != reachable.end())
+  {
+    const int index = static_cast<int>(at - reachable.begin());
+    return reachable[static_cast<size_t>(((index + (forward ? 1 : -1)) % count + count) % count)];
+  }
+
+  // Current slot is not reachable any more: fall to the neighbour we were heading
+  // towards, wrapping when there is none on that side.
+  if (forward)
+  {
+    const auto next = std::upper_bound(reachable.begin(), reachable.end(), currentSlot);
+    return next == reachable.end() ? reachable.front() : *next;
+  }
+  const auto prev = std::lower_bound(reachable.begin(), reachable.end(), currentSlot);
+  return prev == reachable.begin() ? reachable.back() : *(prev - 1);
+}
+
+} // namespace volum
