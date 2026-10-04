@@ -1180,7 +1180,8 @@ public:
     const IRECT panel =
       rootB.GetCentredInside(static_cast<int>(rootB.W() * 0.92f), static_cast<int>(rootB.H() * 0.92f));
 
-    AddNamedChildControl(new VoLumSettingsBackdropControl(rootB, panel), mControlNames.bitmap);
+    AddNamedChildControl(
+      new VoLumSettingsBackdropControl(rootB, panel, [this]() { HideAnimated(true); }), mControlNames.bitmap);
 
     IRECT inner = panel.GetPadded(-22.f);
 

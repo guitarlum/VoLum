@@ -15,6 +15,7 @@
 // VoLumSettingsTabs.h.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumOverlayStack.h"
 #include "VoLumPackLayout.h"
 #include "VoLumSecondPress.h"
 
@@ -28,9 +29,10 @@
 class VoLumSettingsBackdropControl : public IControl
 {
 public:
-  VoLumSettingsBackdropControl(const IRECT& fullBounds, const IRECT& panelRect)
+  VoLumSettingsBackdropControl(const IRECT& fullBounds, const IRECT& panelRect, std::function<void()> onOutsideClick)
   : IControl(fullBounds)
   , mPanel(panelRect)
+  , mOnOutsideClick(std::move(onOutsideClick))
   {
     // Must receive hits: if ignored, dim/panel â€œemptyâ€ pixels fall through to main UI and can steal
     // mouse up/down when the cursor moves quickly (settings appears to close at random).
@@ -39,10 +41,11 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void)x;
-    (void)y;
     (void)mod;
     // Consume clicks on overlay shell (dim + filler); interactive children sit above in z-order.
+    // A press on the dim outside the panel also closes Settings, like the tuner and metronome.
+    if (mOnOutsideClick && volum::ui::OutsidePanelClickCloses(mPanel.L, mPanel.T, mPanel.R, mPanel.B, x, y))
+      mOnOutsideClick();
   }
 
   void Draw(IGraphics& g) override
@@ -63,6 +66,7 @@ public:
 
 private:
   IRECT mPanel;
+  std::function<void()> mOnOutsideClick;
 };
 
 /** Subtle frame behind grouped settings controls (ignores mouse so widgets on top still hit-test). */

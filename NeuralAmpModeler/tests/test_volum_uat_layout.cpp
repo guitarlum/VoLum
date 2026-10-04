@@ -320,6 +320,36 @@ TEST_CASE("AnyOverlayOpen is true when any listed tag is showing")
   CHECK(volum::ui::AnyOverlayOpen({1, 2, 3}, [](int tag) { return tag == 2; }));
 }
 
+TEST_CASE("Settings closes on a press outside its panel and keeps presses inside it")
+{
+  // The 900x600 Settings panel: 92 % of the window, centred.
+  const float l = 36.f, t = 24.f, r = 864.f, b = 576.f;
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 18.f, 300.f)); // dim margin over the amp sidebar
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 869.f, 22.f)); // header gear
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 450.f, 590.f));
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, r, 300.f)); // IRECT::Contains excludes R and B
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 450.f, b));
+  CHECK_FALSE(volum::ui::OutsidePanelClickCloses(l, t, r, b, l, t));
+  CHECK_FALSE(volum::ui::OutsidePanelClickCloses(l, t, r, b, 450.f, 300.f));
+  CHECK_FALSE(volum::ui::OutsidePanelClickCloses(l, t, r, b, r - 0.5f, b - 0.5f));
+
+  // The backdrop still swallows every press (so the amp row under the dim is
+  // never picked), and an outside press takes the same close path as X and Esc,
+  // which also resets the MIDI tab's Sound picker.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto backdrop = overlay.find("class VoLumSettingsBackdropControl");
+  REQUIRE(backdrop != std::string::npos);
+  const auto backdropEnd = overlay.find("\n};", backdrop);
+  const std::string body = overlay.substr(backdrop, backdropEnd - backdrop);
+  CHECK(body.find("mIgnoreMouse = false;") != std::string::npos);
+  CHECK(body.find("volum::ui::OutsidePanelClickCloses(mPanel.L, mPanel.T, mPanel.R, mPanel.B, x, y)")
+        != std::string::npos);
+  CHECK(body.find("mOnOutsideClick();") != std::string::npos);
+  CHECK(controls.find("new VoLumSettingsBackdropControl(rootB, panel, [this]() { HideAnimated(true); })")
+        != std::string::npos);
+}
+
 TEST_CASE("Invalid PLAY slots share one label")
 {
   const auto factory = volum::DefaultFactoryPresets();

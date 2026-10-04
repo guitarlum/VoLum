@@ -256,7 +256,7 @@ Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screen
 
 ## Einstellungen Und Sicherheit
 
-Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`. Im MIDI-Reiter schließt `Esc` zuerst einen offenen Sound-Wähler (oder bricht das Ziehen eines Schalters ab) und kehrt zur Fußschalter-Bank zurück; erst das nächste `Esc` schließt die Einstellungen. Schließen setzt den Reiter immer auf die Bankansicht zurück, damit eine halbfertige Auswahl nicht wieder erscheint. Tasten ändern den Amp und die PLAY-Leiste nicht, solange die Einstellungen offen sind.
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H`, `Esc` oder einem Klick irgendwo außerhalb des Fensters, wie beim Tuner und Metronom. Dieser Klick schließt nur die Einstellungen; er drückt nicht zusätzlich den Amp oder Regler darunter. Im MIDI-Reiter schließt `Esc` zuerst einen offenen Sound-Wähler (oder bricht das Ziehen eines Schalters ab) und kehrt zur Fußschalter-Bank zurück; erst das nächste `Esc` schließt die Einstellungen. Ein Klick außerhalb des Fensters schließt die Einstellungen sofort, auch mit offenem Sound-Wähler. Schließen setzt den Reiter immer auf die Bankansicht zurück, damit eine halbfertige Auswahl nicht wieder erscheint. Tasten ändern den Amp und die PLAY-Leiste nicht, solange die Einstellungen offen sind.
 
 Das Overlay hat drei Reiter.
 

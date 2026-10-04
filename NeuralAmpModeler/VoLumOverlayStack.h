@@ -31,6 +31,14 @@ inline constexpr const char* kChromeUnderOverlayNeedles[] = {
   "AttachControl(irMenu, kCtrlTagVoLumIrMenu)",
 };
 
+// Settings, the tuner and the metronome close on a mouse-down outside their
+// panel. The overlay consumes that click either way, so it never also lands on
+// the control underneath. Same edges as IRECT::Contains.
+inline bool OutsidePanelClickCloses(float panelL, float panelT, float panelR, float panelB, float x, float y)
+{
+  return !(x >= panelL && x < panelR && y >= panelT && y < panelB);
+}
+
 template <typename IsOpen>
 bool AnyOverlayOpen(std::initializer_list<int> tags, IsOpen&& isOpen)
 {

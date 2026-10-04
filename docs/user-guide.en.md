@@ -256,7 +256,7 @@ This covers the main playing and editing workflow. Full screen-reader support is
 
 ## Settings And Safety
 
-Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`. On the MIDI tab, `Esc` first closes an open Sound picker (or cancels a switch you are dragging) and returns to the footswitch bank; a second `Esc` closes Settings. Closing Settings always returns the tab to its bank view, so a half-finished pick does not come back. Keys do not change the amp or the PLAY rail while Settings is open.
+Open Settings with the top-right gear or `H`, and close it with the gear, `H` again, `Esc`, or a click anywhere outside the panel, like the tuner and metronome. That click only closes Settings; it does not also press the amp or control underneath. On the MIDI tab, `Esc` first closes an open Sound picker (or cancels a switch you are dragging) and returns to the footswitch bank; a second `Esc` closes Settings. A click outside the panel closes Settings straight away, picker or not. Closing Settings always returns the tab to its bank view, so a half-finished pick does not come back. Keys do not change the amp or the PLAY rail while Settings is open.
 
 The overlay has three tabs.
 

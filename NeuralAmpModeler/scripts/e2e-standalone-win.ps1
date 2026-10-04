@@ -1695,7 +1695,7 @@ function Wait-PrefsDialog {
 }
 
 function Test-Chrome {
-  Write-Host "`n[chrome] no menu bar, dark caption, Settings opens the skinned Preferences" -ForegroundColor Cyan
+  Write-Host "`n[chrome] no menu bar, dark caption, Settings opens the skinned Preferences and closes on an outside press" -ForegroundColor Cyan
   $sandbox = New-Sandbox "chrome"
   Write-SandboxAudioConfig $sandbox
   $build = [VoLumE2eChrome]::Build()
@@ -1703,6 +1703,8 @@ function Test-Chrome {
   $darkAttr = if ($build -ge 18985) { 20 } elseif ($build -ge 17763) { 19 } else { 0 }
 
   $gear = @(869, 22); $signalTab = @(300, 113); $audioDevices = @(450, 386)
+  $sidebarRow = @(20, 309)  # BUILD sidebar "Marshall 2204", under the Settings dim (panel starts at x 36)
+  $logPath = Join-Path $sandbox "VoLum\volum.log"
   $IDCANCEL = 2; $WM_COMMAND = 0x0111; $ID_PREFERENCES = 40006
   $run = Invoke-VoLumRun -SandboxRoot $sandbox -Drive {
     param($proc)
@@ -1743,6 +1745,17 @@ function Test-Chrome {
     [void][VoLumE2eChrome]::PostMessage($main, $WM_COMMAND, [IntPtr]$ID_PREFERENCES, [IntPtr]::Zero)
     $prefs = Wait-PrefsDialog $proc.Id $true
     $r.command = if ($prefs -ne [IntPtr]::Zero) { & $inspect $prefs } else { $null }
+
+    # Settings is still open. The first press on the dim over the Marshall 2204
+    # row must close it without picking that amp; the second then reaches the
+    # row, which proves Settings really closed.
+    $mainReads = { if (Test-Path $logPath) { ([regex]::Matches((Get-Content $logPath -Raw), "\[model\] MAIN read ")).Count } else { 0 } }
+    Start-Sleep -Milliseconds 500
+    $r.readsOpen = & $mainReads
+    [VoLumE2eUi]::Click($plug, $sidebarRow[0], $sidebarRow[1]); Start-Sleep -Milliseconds 1500
+    $r.readsAfterOutside = & $mainReads
+    [VoLumE2eUi]::Click($plug, $sidebarRow[0], $sidebarRow[1]); Start-Sleep -Milliseconds 2000
+    $r.readsAfterSecond = & $mainReads
     return $r
   }
   Assert-True "app opened a window" $run.started
@@ -1775,6 +1788,9 @@ function Test-Chrome {
     if ($darkAttr -and $null -ne $p.dark) { Assert-Equal "[$how] Preferences title bar is dark" 1 $p.dark }
     Assert-True "[$how] Cancel closed Preferences" $p.closed
   }
+
+  Assert-Equal "a press on the Settings dim does not pick the amp under it" $d.readsOpen $d.readsAfterOutside
+  Assert-True "that press closed Settings: the next press picks the amp" ($d.readsAfterSecond -gt $d.readsAfterOutside)
 
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 }
