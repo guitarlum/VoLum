@@ -98,6 +98,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_shared_dsp_cache.cpp
   test_volum_text_fit.cpp
   test_volum_tuner_overlay.cpp
+  test_volum_win_chrome.cpp
   "${REPO_ROOT}/AudioDSPTools/dsp/dsp.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"

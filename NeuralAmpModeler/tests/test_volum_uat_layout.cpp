@@ -102,6 +102,23 @@ TEST_CASE("tier2e the shipped 76 px About body keeps the update pill above Check
   CHECK(l.url1B <= l.url1T + 0.01f);
 }
 
+TEST_CASE("About card keeps Read the manual on the version row at every card height")
+{
+  // The two links under the version are dropped first when the card is short;
+  // the manual link sits on the version row so it survives the shipped 76 px.
+  for (const float h : {76.f, 96.f, 140.f})
+  {
+    INFO(h);
+    const auto l = volum::LayoutAboutCard(760.f, h);
+    CHECK(l.manualR == doctest::Approx(760.f));
+    CHECK(l.manualR - l.manualL == doctest::Approx(volum::kAboutManualW));
+    CHECK(l.versionR <= l.manualL - volum::kAboutGap + 0.01f);
+    CHECK(l.versionR >= 300.f); // "Version 1.3.0 x86-64 APP" keeps its room
+    CHECK(l.versionB - l.versionT == doctest::Approx(volum::kAboutRowH));
+    CHECK(l.versionB <= l.noticeT);
+  }
+}
+
 TEST_CASE("tier2e both factory and user sections start collapsed together")
 {
   volum::PickerGroupSession session;

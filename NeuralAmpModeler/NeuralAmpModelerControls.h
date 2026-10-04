@@ -1231,7 +1231,11 @@ public:
     IRECT rest = body;
     const IRECT cardsRow = rest.ReduceFromTop(196.f);
     (void)rest.ReduceFromTop(18.f);
-    const IRECT hintRow = rest.ReduceFromTop(16.f);
+#if defined(APP_API)
+    const IRECT audioRow = rest.ReduceFromTop(volum::packui::kPackRowBtnH);
+#else
+    const IRECT audioRow = rest.ReduceFromTop(16.f);
+#endif
 
     const float gap = 14.f;
     const float cardW = (cardsRow.W() - 2.f * gap) / 3.f;
@@ -1316,12 +1320,19 @@ public:
     }
 
 #if defined(APP_API)
-    const char* audioHintStr = "Audio device / sample rate / buffer: open File > Preferences";
+    // The Windows standalone has no menu bar, so this button is how Preferences opens.
+    auto* audioDevices = new VoLumSettingsActionButtonControl(
+      audioRow.GetCentredInside(220.f, audioRow.H()), "Audio & MIDI devices...", [this]() {
+        if (auto* plugin = static_cast<PLUG_CLASS_NAME*>(GetDelegate()))
+          plugin->_VolumOpenAudioPreferences();
+      });
+    audioDevices->SetTooltip("Audio driver, input and output devices, sample rate, buffer size and MIDI input port");
+    _Reg(kTabSignal, AddNamedChildControl(audioDevices, mControlNames.audioDevices));
 #else
     const char* audioHintStr = "Audio device / sample rate / buffer: use your host's audio settings";
-#endif
     _Reg(kTabSignal,
-         AddNamedChildControl(new IVLabelControl(hintRow, audioHintStr, _HintStyle()), mControlNames.audioHint));
+         AddNamedChildControl(new IVLabelControl(audioRow, audioHintStr, _HintStyle()), mControlNames.audioHint));
+#endif
   }
 
   // ---- MIDI: which channel, which recall CC, and what each program number plays
@@ -1661,6 +1672,7 @@ private:
     const std::string midiSoundMap = "MidiSoundMap";
     const std::string inputHelp = "InputHelp";
     const std::string audioHint = "AudioHint";
+    const std::string audioDevices = "AudioDevices";
   } mControlNames;
 
   int mActiveTab = kTabSignal;
@@ -1736,10 +1748,14 @@ private:
       const IRECT body = GetRECT();
       const auto l = volum::LayoutAboutCard(body.W(), body.H());
       const IText rowText = mStyle.valueText.WithVAlign(EVAlign::Top);
-      AddChildControl(new IVLabelControl(IRECT(body.L, body.T + l.versionT, body.R, body.T + l.versionB),
+      AddChildControl(new IVLabelControl(IRECT(body.L, body.T + l.versionT, body.L + l.versionR, body.T + l.versionB),
                                          buildInfoStr.Get(), mStyle.WithValueText(rowText)));
       const IColor urlMo = VoLumColors::GOLD_DIM;
       const IColor urlClk = VoLumColors::GOLD;
+      AddChildControl(
+        new IURLControl(IRECT(body.L + l.manualL, body.T + l.versionT, body.L + l.manualR, body.T + l.versionB),
+                        "Read the manual", VOLUM_MANUAL_URL,
+                        mText.WithAlign(EAlign::Far).WithFGColor(VoLumColors::GOLD), COLOR_TRANSPARENT, urlMo, urlClk));
       AddChildControl(new IURLControl(IRECT(body.L, body.T + l.url1T, body.R, body.T + l.url1B),
                                       "Built on the Neural Amp Modeler ecosystem", "https://github.com/guitarlum/VoLum",
                                       mText, COLOR_TRANSPARENT, urlMo, urlClk));

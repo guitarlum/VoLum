@@ -5,6 +5,7 @@
 #define PLUG_UNIQUE_ID 'VoLm'
 #define PLUG_MFR_ID 'Lum0'
 #define PLUG_URL_STR "https://github.com/guitarlum/VoLum"
+#define VOLUM_MANUAL_URL "https://github.com/guitarlum/VoLum/blob/main/docs/user-guide.en.md"
 #define PLUG_EMAIL_STR ""
 #define PLUG_COPYRIGHT_STR "Copyright 2024-2026 Steffen Dangmann and VoLum contributors"
 #define PLUG_CLASS_NAME NeuralAmpModeler

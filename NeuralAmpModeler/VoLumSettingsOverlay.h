@@ -317,6 +317,15 @@ private:
  *
  * No caption of its own: the SYSTEM card that hosts this control already caps it
  * with "Back up your library". */
+inline void DrawVoLumSettingsButton(IGraphics& g, const IRECT& r, const char* label, bool hover)
+{
+  g.FillRoundRect(hover ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
+  g.DrawRoundRect(hover ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, hover ? 1.3f : 1.f);
+  g.DrawText(IText(11.5f, hover ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
+                   EVAlign::Middle),
+             label, r);
+}
+
 class VoLumSettingsPackRowControl : public IControl
 {
 public:
@@ -380,16 +389,37 @@ private:
 
   static void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool hover)
   {
-    g.FillRoundRect(hover ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
-    g.DrawRoundRect(hover ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, hover ? 1.3f : 1.f);
-    g.DrawText(IText(11.5f, hover ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
-                     EVAlign::Middle),
-               label, r);
+    DrawVoLumSettingsButton(g, r, label, hover);
   }
 
   std::function<void()> mOnExport;
   std::function<void()> mOnImport;
   int mHover = 0;
+};
+
+/** One Settings action in the Pack row's button look (Audio & MIDI devices...). */
+class VoLumSettingsActionButtonControl : public IControl
+{
+public:
+  VoLumSettingsActionButtonControl(const IRECT& bounds, const char* label, std::function<void()> onClick)
+  : IControl(bounds)
+  , mLabel(label)
+  , mOnClick(std::move(onClick))
+  {
+    mIgnoreMouse = false;
+  }
+
+  void Draw(IGraphics& g) override { DrawVoLumSettingsButton(g, mRECT, mLabel.c_str(), mMouseIsOver); }
+
+  void OnMouseDown(float, float, const IMouseMod&) override
+  {
+    if (mOnClick)
+      mOnClick();
+  }
+
+private:
+  std::string mLabel;
+  std::function<void()> mOnClick;
 };
 
 class VoLumSettingsShortcutInfoControl : public IControl

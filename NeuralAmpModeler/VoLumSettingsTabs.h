@@ -285,8 +285,8 @@ public:
     g.DrawText(body, "Two VoLums on one MIDI cable: give each its own channel.",
                IRECT(mRECT.L, mRECT.T + 58.f, mRECT.R, mRECT.T + 72.f));
 #if defined(APP_API)
-    g.DrawText(
-      dim, "Pick the MIDI port under File > Preferences.", IRECT(mRECT.L, mRECT.T + 72.f, mRECT.R, mRECT.T + 86.f));
+    g.DrawText(dim, "Pick the MIDI port under SIGNAL > Audio & MIDI devices.",
+               IRECT(mRECT.L, mRECT.T + 72.f, mRECT.R, mRECT.T + 86.f));
 #else
     g.DrawText(dim, "MIDI arrives on this track's input.", IRECT(mRECT.L, mRECT.T + 72.f, mRECT.R, mRECT.T + 86.f));
 #endif

@@ -25,6 +25,7 @@
   // Standalone only: lets the Settings page report the audio device's real round-trip
   // latency instead of just our algorithmic delay. See _VolumLatencyReport.
   #include "IPlugAPP_host.h"
+  #include "resource.h" // ID_PREFERENCES: Settings opens the app host's Preferences dialog
 #endif
 
 #include "NeuralAmpModelerControls.h"
@@ -2692,6 +2693,16 @@ volum::LatencyReport NeuralAmpModeler::_VolumLatencyReport() const
   }
 #endif
   return r;
+}
+
+// Posted, not sent: Preferences is modal, and opening it from inside the click
+// that asked for it would run its message loop under IGraphics' mouse handler.
+void NeuralAmpModeler::_VolumOpenAudioPreferences()
+{
+#if defined(APP_API)
+  if (gHWND)
+    PostMessage(gHWND, WM_COMMAND, ID_PREFERENCES, 0);
+#endif
 }
 
 void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPointer, const size_t nFrames,

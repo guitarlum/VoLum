@@ -193,6 +193,7 @@
     <ClCompile Include="..\tests\test_volum_shared_dsp_cache.cpp" />
     <ClCompile Include="..\tests\test_volum_text_fit.cpp" />
     <ClCompile Include="..\tests\test_volum_tuner_overlay.cpp" />
+    <ClCompile Include="..\tests\test_volum_win_chrome.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
