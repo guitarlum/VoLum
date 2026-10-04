@@ -34,7 +34,9 @@ public static class WinShot {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   public const uint PW_RENDERFULLCONTENT = 0x00000002;
   public const int SW_RESTORE = 9;
 }
@@ -89,7 +91,10 @@ if (-not $ok) {
 # how many sampled client pixels read as "VoLum dark" so the caller can tell a
 # real render from an unrendered/uncapturable frame.
 $step = [Math]::Max(1, [int]($w / 60))
-$clientTop = [Math]::Min($h - 1, 60) # skip native title bar + menu strip
+# Skip the native title bar (and a menu strip, on builds that still have one).
+$origin = New-Object WinShot+POINT
+[WinShot]::ClientToScreen($hwnd, [ref]$origin) | Out-Null
+$clientTop = [Math]::Max(0, [Math]::Min($h - 1, $origin.Y - $rect.Top))
 $samples = 0
 $dark = 0
 $black = 0

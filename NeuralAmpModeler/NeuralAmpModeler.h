@@ -275,6 +275,8 @@ public:
   bool _VolumIsAnimatePlayArt() const { return mVolumAnimatePlayArt.load(); }
   void _VolumSaveMachineBool(const char* key, bool value);
   void _VolumCheckForUpdatesNow();
+  // Standalone: opens the app host's audio and MIDI Preferences. No-op in a plugin.
+  void _VolumOpenAudioPreferences();
   void _VolumSetAutoUpdateCheck(bool enabled);
   void _VolumUseAvailableUpdate();
   void _VolumSaveEffectSettings();

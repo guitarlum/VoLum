@@ -17,7 +17,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
-    "samplerate", "savedialog", "pack")]
+    "samplerate", "savedialog", "pack", "chrome")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -1625,6 +1625,177 @@ function Test-Pack {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: dark window chrome
+#
+# The Windows standalone has no menu bar and a dark title bar; Preferences opens
+# from Settings > SIGNAL (and from ID_PREFERENCES, which Ctrl+, sends), skinned,
+# with only the MIDI input port left of the MIDI rows. Window messages only, so it
+# runs the same on a locked desktop.
+# --------------------------------------------------------------------------
+if (-not ([System.Management.Automation.PSTypeName]'VoLumE2eChrome').Type) {
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class VoLumE2eChrome {
+  delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] public static extern int GetWindowLong(IntPtr h, int i);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
+  [DllImport("ntdll.dll")] static extern int RtlGetVersion(ref OSVERSIONINFO info);
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct OSVERSIONINFO {
+    public int size, major, minor, build, platform;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string csd;
+  }
+
+  public static int Build() {
+    var v = new OSVERSIONINFO(); v.size = Marshal.SizeOf(typeof(OSVERSIONINFO));
+    return RtlGetVersion(ref v) == 0 ? v.build : 0;
+  }
+  // Int value of a DWM attribute, or null when this Windows cannot report it.
+  public static int? Dwm(IntPtr h, int attr) {
+    int v; return DwmGetWindowAttribute(h, attr, out v, 4) == 0 ? (int?)v : null;
+  }
+  // A visible #32770 of this process with this caption.
+  public static IntPtr Dialog(int pid, string caption) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, l) => {
+      uint p; GetWindowThreadProcessId(h, out p);
+      if (p != (uint)pid || !IsWindowVisible(h)) return true;
+      var c = new StringBuilder(64); GetClassName(h, c, 64);
+      var t = new StringBuilder(128); GetWindowText(h, t, 128);
+      if (c.ToString() == "#32770" && t.ToString() == caption) { found = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+}
+'@
+}
+
+function Wait-PrefsDialog {
+  param([int]$ProcessId, [bool]$Open, [int]$TimeoutMs = 5000)
+  $end = (Get-Date).AddMilliseconds($TimeoutMs)
+  do {
+    $h = [VoLumE2eChrome]::Dialog($ProcessId, "Preferences")
+    if (($h -ne [IntPtr]::Zero) -eq $Open) { return $h }
+    Start-Sleep -Milliseconds 100
+  } while ((Get-Date) -lt $end)
+  return [VoLumE2eChrome]::Dialog($ProcessId, "Preferences")
+}
+
+function Test-Chrome {
+  Write-Host "`n[chrome] no menu bar, dark caption, Settings opens the skinned Preferences and closes on an outside press" -ForegroundColor Cyan
+  $sandbox = New-Sandbox "chrome"
+  Write-SandboxAudioConfig $sandbox
+  $build = [VoLumE2eChrome]::Build()
+  # Mirrors VoLumDarkCaptionAttribute (VoLumWinChromeModel.h).
+  $darkAttr = if ($build -ge 18985) { 20 } elseif ($build -ge 17763) { 19 } else { 0 }
+
+  $gear = @(869, 22); $signalTab = @(300, 113); $audioDevices = @(450, 386)
+  $sidebarRow = @(20, 309)  # BUILD sidebar "Marshall 2204", under the Settings dim (panel starts at x 36)
+  $logPath = Join-Path $sandbox "VoLum\volum.log"
+  $IDCANCEL = 2; $WM_COMMAND = 0x0111; $ID_PREFERENCES = 40006
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox -Drive {
+    param($proc)
+    $main = $proc.MainWindowHandle
+    $plug = [VoLumE2eUi]::PlugWindow($main)
+    if ($plug -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    $r = @{ menu = [VoLumE2eChrome]::GetMenu($main); mainDark = $null; mainCaption = $null }
+    if ($darkAttr) { $r.mainDark = [VoLumE2eChrome]::Dwm($main, $darkAttr) }
+    if ($build -ge 22000) { $r.mainCaption = [VoLumE2eChrome]::Dwm($main, 35) }
+
+    # Reads an open Preferences, then cancels it.
+    $inspect = {
+      param($prefs)
+      Start-Sleep -Milliseconds 300
+      $item = { param($id) [VoLumE2eChrome]::GetDlgItem($prefs, $id) }
+      $buf = & $item 40012
+      $p = @{
+        midiInVisible = [VoLumE2eChrome]::IsWindowVisible((& $item 40018))
+        midiOutDev = (& $item 40019); midiInChan = (& $item 40020); midiOutChan = (& $item 40021)
+        bufCount = [int][VoLumE2eChrome]::SendMessage($buf, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero)   # CB_GETCOUNT
+        bufOwnerDrawn = (([VoLumE2eChrome]::GetWindowLong($buf, -16) -band 0x0010) -ne 0)           # CBS_OWNERDRAWFIXED
+        okOwnerDrawn = (([VoLumE2eChrome]::GetWindowLong((& $item 1), -16) -band 0x000F) -eq 0x000B) # BS_OWNERDRAW
+        dark = $(if ($darkAttr) { [VoLumE2eChrome]::Dwm($prefs, $darkAttr) } else { $null })
+      }
+      [void][VoLumE2eChrome]::PostMessage($prefs, $WM_COMMAND, [IntPtr]$IDCANCEL, [IntPtr]::Zero)
+      $p.closed = ((Wait-PrefsDialog $proc.Id $false) -eq [IntPtr]::Zero)
+      return $p
+    }
+
+    # Settings > SIGNAL > Audio & MIDI devices...
+    [VoLumE2eUi]::Click($plug, $gear[0], $gear[1]); Start-Sleep -Milliseconds 700
+    [VoLumE2eUi]::Click($plug, $signalTab[0], $signalTab[1]); Start-Sleep -Milliseconds 300
+    [VoLumE2eUi]::Click($plug, $audioDevices[0], $audioDevices[1])
+    $prefs = Wait-PrefsDialog $proc.Id $true
+    $r.button = if ($prefs -ne [IntPtr]::Zero) { & $inspect $prefs } else { $null }
+
+    # The command Ctrl+, sends through the accelerator table.
+    [void][VoLumE2eChrome]::PostMessage($main, $WM_COMMAND, [IntPtr]$ID_PREFERENCES, [IntPtr]::Zero)
+    $prefs = Wait-PrefsDialog $proc.Id $true
+    $r.command = if ($prefs -ne [IntPtr]::Zero) { & $inspect $prefs } else { $null }
+
+    # Settings is still open. The first press on the dim over the Marshall 2204
+    # row must close it without picking that amp; the second then reaches the
+    # row, which proves Settings really closed.
+    $mainReads = { if (Test-Path $logPath) { ([regex]::Matches((Get-Content $logPath -Raw), "\[model\] MAIN read ")).Count } else { 0 } }
+    Start-Sleep -Milliseconds 500
+    $r.readsOpen = & $mainReads
+    [VoLumE2eUi]::Click($plug, $sidebarRow[0], $sidebarRow[1]); Start-Sleep -Milliseconds 1500
+    $r.readsAfterOutside = & $mainReads
+    [VoLumE2eUi]::Click($plug, $sidebarRow[0], $sidebarRow[1]); Start-Sleep -Milliseconds 2000
+    $r.readsAfterSecond = & $mainReads
+    return $r
+  }
+  Assert-True "app opened a window" $run.started
+  Assert-True "app closed gracefully" $run.graceful
+  $d = $run.drive
+  if (-not $d) { Assert-True "drive step ran" $false; return }
+
+  Assert-True "main window has no menu bar" ($d.menu -eq [IntPtr]::Zero)
+  if ($darkAttr -and $null -ne $d.mainDark) {
+    Assert-Equal "main title bar is dark (DWM attribute $darkAttr)" 1 $d.mainDark
+  }
+  elseif ($darkAttr) { Write-Host "  SKIP  this Windows build cannot report DWM attribute $darkAttr" -ForegroundColor Yellow }
+  else { Write-Host "  SKIP  Windows build $build has no dark title bar" -ForegroundColor Yellow }
+  if ($null -ne $d.mainCaption) {
+    Assert-Equal "Windows 11 caption is VoLum's background (0x00181111)" 0x00181111 $d.mainCaption
+  }
+
+  Assert-True "Settings > SIGNAL > Audio & MIDI devices... opened Preferences" ($null -ne $d.button)
+  Assert-True "ID_PREFERENCES (Ctrl+,) opened Preferences" ($null -ne $d.command)
+  foreach ($how in @("button", "command")) {
+    $p = $d[$how]
+    if (-not $p) { continue }
+    Assert-True "[$how] MIDI input device is offered" $p.midiInVisible
+    Assert-True "[$how] MIDI output device is gone" ($p.midiOutDev -eq [IntPtr]::Zero)
+    Assert-True "[$how] MIDI input channel is gone" ($p.midiInChan -eq [IntPtr]::Zero)
+    Assert-True "[$how] MIDI output channel is gone" ($p.midiOutChan -eq [IntPtr]::Zero)
+    Assert-Equal "[$how] rebuilt buffer-size combo still holds all 10 sizes" 10 $p.bufCount
+    Assert-True "[$how] combos are skinned (owner-drawn)" $p.bufOwnerDrawn
+    Assert-True "[$how] buttons are skinned (owner-drawn)" $p.okOwnerDrawn
+    if ($darkAttr -and $null -ne $p.dark) { Assert-Equal "[$how] Preferences title bar is dark" 1 $p.dark }
+    Assert-True "[$how] Cancel closed Preferences" $p.closed
+  }
+
+  Assert-Equal "a press on the Settings dim does not pick the amp under it" $d.readsOpen $d.readsAfterOutside
+  Assert-True "that press closed Settings: the next press picks the amp" ($d.readsAfterSecond -gt $d.readsAfterOutside)
+
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# --------------------------------------------------------------------------
 
 Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
@@ -1644,6 +1815,7 @@ if ($Scenario -in @("all", "corrupt")) { Test-Corrupt }
 if ($Scenario -in @("all", "samplerate")) { Test-SampleRate }
 if ($Scenario -in @("all", "savedialog")) { Test-SaveDialog }
 if ($Scenario -in @("all", "pack")) { Test-Pack }
+if ($Scenario -in @("all", "chrome")) { Test-Chrome }
 
 Write-Host ""
 if ($script:Failures.Count -eq 0) {

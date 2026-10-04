@@ -12,6 +12,11 @@ struct AboutLayout
 {
   float versionT = 0.f;
   float versionB = 0.f;
+  float versionR = 0.f;
+  // "Read the manual" shares the version row: the links below it are the first
+  // thing a short card drops, and the manual has to survive every card height.
+  float manualL = 0.f;
+  float manualR = 0.f;
   float url1T = 0.f;
   float url1B = 0.f;
   float url2T = 0.f;
@@ -28,6 +33,7 @@ inline constexpr float kAboutRowH = 14.f;
 inline constexpr float kAboutGap = 6.f;
 inline constexpr float kAboutActionH = 22.f;
 inline constexpr float kAboutCheckNowW = 110.f;
+inline constexpr float kAboutManualW = 130.f;
 
 inline AboutLayout LayoutAboutCard(float bodyW, float bodyH)
 {
@@ -47,6 +53,9 @@ inline AboutLayout LayoutAboutCard(float bodyW, float bodyH)
   float y = 0.f;
   l.versionT = y;
   l.versionB = y + kAboutRowH;
+  l.manualR = bodyW;
+  l.manualL = std::max(0.f, bodyW - kAboutManualW);
+  l.versionR = std::max(0.f, l.manualL - kAboutGap);
   y = l.versionB;
 
   auto placeLink = [&](float& top, float& bottom) {

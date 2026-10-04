@@ -15,6 +15,7 @@
 // VoLumSettingsTabs.h.
 
 #include "VoLumColorHelpers.h"
+#include "VoLumOverlayStack.h"
 #include "VoLumPackLayout.h"
 #include "VoLumSecondPress.h"
 
@@ -28,9 +29,10 @@
 class VoLumSettingsBackdropControl : public IControl
 {
 public:
-  VoLumSettingsBackdropControl(const IRECT& fullBounds, const IRECT& panelRect)
+  VoLumSettingsBackdropControl(const IRECT& fullBounds, const IRECT& panelRect, std::function<void()> onOutsideClick)
   : IControl(fullBounds)
   , mPanel(panelRect)
+  , mOnOutsideClick(std::move(onOutsideClick))
   {
     // Must receive hits: if ignored, dim/panel â€œemptyâ€ pixels fall through to main UI and can steal
     // mouse up/down when the cursor moves quickly (settings appears to close at random).
@@ -39,10 +41,11 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    (void)x;
-    (void)y;
     (void)mod;
     // Consume clicks on overlay shell (dim + filler); interactive children sit above in z-order.
+    // A press on the dim outside the panel also closes Settings, like the tuner and metronome.
+    if (mOnOutsideClick && volum::ui::OutsidePanelClickCloses(mPanel.L, mPanel.T, mPanel.R, mPanel.B, x, y))
+      mOnOutsideClick();
   }
 
   void Draw(IGraphics& g) override
@@ -63,6 +66,7 @@ public:
 
 private:
   IRECT mPanel;
+  std::function<void()> mOnOutsideClick;
 };
 
 /** Subtle frame behind grouped settings controls (ignores mouse so widgets on top still hit-test). */
@@ -317,6 +321,15 @@ private:
  *
  * No caption of its own: the SYSTEM card that hosts this control already caps it
  * with "Back up your library". */
+inline void DrawVoLumSettingsButton(IGraphics& g, const IRECT& r, const char* label, bool hover)
+{
+  g.FillRoundRect(hover ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
+  g.DrawRoundRect(hover ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, hover ? 1.3f : 1.f);
+  g.DrawText(IText(11.5f, hover ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
+                   EVAlign::Middle),
+             label, r);
+}
+
 class VoLumSettingsPackRowControl : public IControl
 {
 public:
@@ -380,16 +393,37 @@ private:
 
   static void _DrawBtn(IGraphics& g, const IRECT& r, const char* label, bool hover)
   {
-    g.FillRoundRect(hover ? IColor(70, 232, 168, 92) : VoLumColors::BTN_OFF_BG, r, 3.f);
-    g.DrawRoundRect(hover ? VoLumColors::AMBER : VoLumColors::FRAME, r, 3.f, nullptr, hover ? 1.3f : 1.f);
-    g.DrawText(IText(11.5f, hover ? VoLumColors::TEXT_BRIGHT : VoLumColors::CREAM, "Josefin-Bold", EAlign::Center,
-                     EVAlign::Middle),
-               label, r);
+    DrawVoLumSettingsButton(g, r, label, hover);
   }
 
   std::function<void()> mOnExport;
   std::function<void()> mOnImport;
   int mHover = 0;
+};
+
+/** One Settings action in the Pack row's button look (Audio & MIDI devices...). */
+class VoLumSettingsActionButtonControl : public IControl
+{
+public:
+  VoLumSettingsActionButtonControl(const IRECT& bounds, const char* label, std::function<void()> onClick)
+  : IControl(bounds)
+  , mLabel(label)
+  , mOnClick(std::move(onClick))
+  {
+    mIgnoreMouse = false;
+  }
+
+  void Draw(IGraphics& g) override { DrawVoLumSettingsButton(g, mRECT, mLabel.c_str(), mMouseIsOver); }
+
+  void OnMouseDown(float, float, const IMouseMod&) override
+  {
+    if (mOnClick)
+      mOnClick();
+  }
+
+private:
+  std::string mLabel;
+  std::function<void()> mOnClick;
 };
 
 class VoLumSettingsShortcutInfoControl : public IControl

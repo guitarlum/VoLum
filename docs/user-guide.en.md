@@ -256,13 +256,13 @@ This covers the main playing and editing workflow. Full screen-reader support is
 
 ## Settings And Safety
 
-Open Settings with the top-right gear or `H`, and close it with either the gear, `H` again, or `Esc`. On the MIDI tab, `Esc` first closes an open Sound picker (or cancels a switch you are dragging) and returns to the footswitch bank; a second `Esc` closes Settings. Closing Settings always returns the tab to its bank view, so a half-finished pick does not come back. Keys do not change the amp or the PLAY rail while Settings is open.
+Open Settings with the top-right gear or `H`, and close it with the gear, `H` again, `Esc`, or a click anywhere outside the panel, like the tuner and metronome. That click only closes Settings; it does not also press the amp or control underneath. On the MIDI tab, `Esc` first closes an open Sound picker (or cancels a switch you are dragging) and returns to the footswitch bank; a second `Esc` closes Settings. A click outside the panel closes Settings straight away, picker or not. Closing Settings always returns the tab to its bank view, so a half-finished pick does not come back. Keys do not change the amp or the PLAY rail while Settings is open.
 
 The overlay has three tabs.
 
 ![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
 
-**SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE, and **Animate art in PLAY**).
+**SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE, and **Animate art in PLAY**). In the standalone app, **Audio & MIDI devices...** under the cards opens the audio driver, device, and MIDI port settings (see [Standalone Audio And MIDI Settings](#standalone-audio-and-midi-settings)); the VST3 points you to your host's audio settings instead.
 
 ![VoLum Settings, MIDI tab](user-guide-settings-midi.png)
 
@@ -270,7 +270,7 @@ The overlay has three tabs.
 
 ![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)
 
-**SYSTEM** is this build and this machine: the keyboard shortcut guide (including **Ctrl+S** to save a Sound), information about the loaded model, the content library slot for moving your library between machines (Export / Import Pack), and the About block with the version and the update reminder.
+**SYSTEM** is this build and this machine: the keyboard shortcut guide (including **Ctrl+S** to save a Sound), information about the loaded model, the content library slot for moving your library between machines (Export / Import Pack), and the About block with the version, a **Read the manual** link to this guide, and the update reminder.
 
 VoLum reopens Settings on the tab you used last.
 
@@ -294,7 +294,7 @@ Assign the slots on either surface, whichever is in front of you:
 
 The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance, and the **Recall CC** (default `102`, range `0`–`119`) that recalls a Sound by value. **What each program number plays** is the footswitch view of the same assignments PLAY shows. That list is machine-global, while the listen filter and recall CC are stored per plugin instance. A new plug-in insert starts on All MIDI channels and CC `102`; it does not copy the standalone app's channel or CC. All MIDI channels is the default.
 
-An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number on the PLAY rail and on its footswitch and reads red (**Invalid slot**), because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. CC numbers `120`–`127` cannot be the recall CC: those are channel-mode messages (All Notes Off is `123`) and hosts consume them. In the standalone app, choose the MIDI input **port** under **File -> Preferences**; the channel and recall CC remain in VoLum Settings. In a DAW, route MIDI to the VoLum plugin and select the channel and recall CC in VoLum.
+An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number on the PLAY rail and on its footswitch and reads red (**Invalid slot**), because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. CC numbers `120`–`127` cannot be the recall CC: those are channel-mode messages (All Notes Off is `123`) and hosts consume them. In the standalone app, choose the MIDI input **port** under Settings > SIGNAL > **Audio & MIDI devices...**; the channel and recall CC remain on the Settings MIDI tab. In a DAW, route MIDI to the VoLum plugin and select the channel and recall CC in VoLum.
 
 MIDI input changes VoLum's AU component type from `aufx` to `aumf`. Existing AU instances may therefore need to be removed and inserted again after updating.
 
@@ -348,7 +348,7 @@ The import happens in one step. Your previous library is kept beside the new one
 
 ### Standalone Audio And MIDI Settings
 
-In the standalone app, open **File -> Preferences** or press `Ctrl+,` to choose the audio driver, separate input and output devices, sample rate, channel routing, and MIDI input port. In the VST3, use your DAW's audio and MIDI routing instead.
+In the standalone app, click **Audio & MIDI devices...** at the bottom of Settings > SIGNAL, or press `Ctrl+,`, to choose the audio driver, separate input and output devices, sample rate, channel routing, and MIDI input port. On macOS, **VoLum > Preferences...** opens the same window. The Windows window has no menu bar and a dark title bar, so the button and `Ctrl+,` are the way in there. VoLum sends no MIDI, so there is no MIDI output setting, and the MIDI channel VoLum listens on is set on the Settings MIDI tab. In the VST3, use your DAW's audio and MIDI routing instead.
 
 Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Choose one mono input channel for the guitar signal and route output L/R as needed. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size. Some drivers refuse the size you pick and grant a different one; VoLum then keeps what the driver granted, so the list and the saved setting describe what is actually running.
 

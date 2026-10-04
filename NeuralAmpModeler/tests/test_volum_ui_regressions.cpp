@@ -3137,6 +3137,8 @@ const std::vector<DblRow>& DoubleClickDecisions()
     {"VoLumSettingsOverlay.h", "VoLumSettingsCheckboxControl", DblDecision::Repeats},
     {"VoLumSettingsOverlay.h", "VoLumSettingsCloseControl", DblDecision::Drops},
     {"VoLumSettingsOverlay.h", "VoLumSettingsPackRowControl", DblDecision::Drops},
+    // One open of the modal Preferences per double-click, not two.
+    {"VoLumSettingsOverlay.h", "VoLumSettingsActionButtonControl", DblDecision::Drops},
     {"VoLumSettingsTabs.h", "VoLumSettingsTabStripControl", DblDecision::Repeats},
     {"VoLumSettingsTabs.h", "VoLumAnimateArtSwitchControl", DblDecision::Repeats},
     {"VoLumSettingsTabs.h", "VoLumMidiChannelControl", DblDecision::Repeats},

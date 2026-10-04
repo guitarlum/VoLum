@@ -102,6 +102,23 @@ TEST_CASE("tier2e the shipped 76 px About body keeps the update pill above Check
   CHECK(l.url1B <= l.url1T + 0.01f);
 }
 
+TEST_CASE("About card keeps Read the manual on the version row at every card height")
+{
+  // The two links under the version are dropped first when the card is short;
+  // the manual link sits on the version row so it survives the shipped 76 px.
+  for (const float h : {76.f, 96.f, 140.f})
+  {
+    INFO(h);
+    const auto l = volum::LayoutAboutCard(760.f, h);
+    CHECK(l.manualR == doctest::Approx(760.f));
+    CHECK(l.manualR - l.manualL == doctest::Approx(volum::kAboutManualW));
+    CHECK(l.versionR <= l.manualL - volum::kAboutGap + 0.01f);
+    CHECK(l.versionR >= 300.f); // "Version 1.3.0 x86-64 APP" keeps its room
+    CHECK(l.versionB - l.versionT == doctest::Approx(volum::kAboutRowH));
+    CHECK(l.versionB <= l.noticeT);
+  }
+}
+
 TEST_CASE("tier2e both factory and user sections start collapsed together")
 {
   volum::PickerGroupSession session;
@@ -301,6 +318,36 @@ TEST_CASE("AnyOverlayOpen is true when any listed tag is showing")
 {
   CHECK_FALSE(volum::ui::AnyOverlayOpen({1, 2, 3}, [](int) { return false; }));
   CHECK(volum::ui::AnyOverlayOpen({1, 2, 3}, [](int tag) { return tag == 2; }));
+}
+
+TEST_CASE("Settings closes on a press outside its panel and keeps presses inside it")
+{
+  // The 900x600 Settings panel: 92 % of the window, centred.
+  const float l = 36.f, t = 24.f, r = 864.f, b = 576.f;
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 18.f, 300.f)); // dim margin over the amp sidebar
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 869.f, 22.f)); // header gear
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 450.f, 590.f));
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, r, 300.f)); // IRECT::Contains excludes R and B
+  CHECK(volum::ui::OutsidePanelClickCloses(l, t, r, b, 450.f, b));
+  CHECK_FALSE(volum::ui::OutsidePanelClickCloses(l, t, r, b, l, t));
+  CHECK_FALSE(volum::ui::OutsidePanelClickCloses(l, t, r, b, 450.f, 300.f));
+  CHECK_FALSE(volum::ui::OutsidePanelClickCloses(l, t, r, b, r - 0.5f, b - 0.5f));
+
+  // The backdrop still swallows every press (so the amp row under the dim is
+  // never picked), and an outside press takes the same close path as X and Esc,
+  // which also resets the MIDI tab's Sound picker.
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsOverlay.h");
+  const std::string controls = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModelerControls.h");
+  const auto backdrop = overlay.find("class VoLumSettingsBackdropControl");
+  REQUIRE(backdrop != std::string::npos);
+  const auto backdropEnd = overlay.find("\n};", backdrop);
+  const std::string body = overlay.substr(backdrop, backdropEnd - backdrop);
+  CHECK(body.find("mIgnoreMouse = false;") != std::string::npos);
+  CHECK(body.find("volum::ui::OutsidePanelClickCloses(mPanel.L, mPanel.T, mPanel.R, mPanel.B, x, y)")
+        != std::string::npos);
+  CHECK(body.find("mOnOutsideClick();") != std::string::npos);
+  CHECK(controls.find("new VoLumSettingsBackdropControl(rootB, panel, [this]() { HideAnimated(true); })")
+        != std::string::npos);
 }
 
 TEST_CASE("Invalid PLAY slots share one label")

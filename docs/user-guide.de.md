@@ -256,13 +256,13 @@ Das deckt den wichtigsten Spiel- und Bearbeitungsablauf ab. Vollständige Screen
 
 ## Einstellungen Und Sicherheit
 
-Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H` oder `Esc`. Im MIDI-Reiter schließt `Esc` zuerst einen offenen Sound-Wähler (oder bricht das Ziehen eines Schalters ab) und kehrt zur Fußschalter-Bank zurück; erst das nächste `Esc` schließt die Einstellungen. Schließen setzt den Reiter immer auf die Bankansicht zurück, damit eine halbfertige Auswahl nicht wieder erscheint. Tasten ändern den Amp und die PLAY-Leiste nicht, solange die Einstellungen offen sind.
+Öffne Einstellungen über das Zahnrad oben rechts oder mit `H`, und schließe sie wieder mit dem Zahnrad, erneut `H`, `Esc` oder einem Klick irgendwo außerhalb des Fensters, wie beim Tuner und Metronom. Dieser Klick schließt nur die Einstellungen; er drückt nicht zusätzlich den Amp oder Regler darunter. Im MIDI-Reiter schließt `Esc` zuerst einen offenen Sound-Wähler (oder bricht das Ziehen eines Schalters ab) und kehrt zur Fußschalter-Bank zurück; erst das nächste `Esc` schließt die Einstellungen. Ein Klick außerhalb des Fensters schließt die Einstellungen sofort, auch mit offenem Sound-Wähler. Schließen setzt den Reiter immer auf die Bankansicht zurück, damit eine halbfertige Auswahl nicht wieder erscheint. Tasten ändern den Amp und die PLAY-Leiste nicht, solange die Einstellungen offen sind.
 
 Das Overlay hat drei Reiter.
 
 ![VoLum-Einstellungen, Reiter SIGNAL](user-guide-settings-signal.png)
 
-**SIGNAL** regelt, wie Audio hinein und hinaus gelangt: Eingangskalibrierung, Ausgangsmodus und Performance (FULL / LITE und **Animate art in PLAY**).
+**SIGNAL** regelt, wie Audio hinein und hinaus gelangt: Eingangskalibrierung, Ausgangsmodus und Performance (FULL / LITE und **Animate art in PLAY**). In der Standalone-App öffnet **Audio & MIDI devices...** unter den Karten die Einstellungen für Audiotreiber, Geräte und MIDI-Port (siehe [Standalone-Audio- und MIDI-Einstellungen](#standalone-audio--und-midi-einstellungen)); die VST3-Version verweist stattdessen auf die Audioeinstellungen deines Hosts.
 
 ![VoLum-Einstellungen, Reiter MIDI](user-guide-settings-midi.png)
 
@@ -270,7 +270,7 @@ Das Overlay hat drei Reiter.
 
 ![VoLum-Einstellungen, Reiter SYSTEM](user-guide-settings-system.png)
 
-**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht (einschließlich **Ctrl+S** zum Speichern eines Sounds), Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren), und den About-Block mit Version und Update-Hinweis.
+**SYSTEM** beschreibt diesen Build und diesen Rechner: Tastaturübersicht (einschließlich **Ctrl+S** zum Speichern eines Sounds), Informationen zum geladenen Modell, den Platz für die Inhaltsbibliothek, um deine Bibliothek zwischen Rechnern zu bewegen (Pack exportieren / importieren), und den About-Block mit Version, einem Link **Read the manual** zu diesem Handbuch und dem Update-Hinweis.
 
 VoLum öffnet die Einstellungen wieder auf dem zuletzt genutzten Reiter.
 
@@ -294,7 +294,7 @@ Zuweisen kannst du auf beiden Oberflächen, je nachdem, welche vor dir liegt:
 
 Die Karte **What this VoLum listens to** unter **Settings -> MIDI** wählt alle MIDI-Kanäle oder genau einen von `1`–`16` für diese Instanz, und die **Recall CC** (Standard `102`, Bereich `0`–`119`), die einen Sound über ihren Wert aufruft. **What each program number plays** ist die Fußschalter-Ansicht derselben Zuweisungen wie in PLAY. Die Liste gilt rechnerweit; Hörfilter und Recall-CC werden pro Plugin-Instanz gespeichert. Ein neuer Plugin-Insert startet auf allen MIDI-Kanälen und CC `102` und kopiert nicht Kanal oder CC der Standalone-App. Alle MIDI-Kanäle sind die Voreinstellung.
 
-Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. Ein gelöschter Sound behält auf der PLAY-Leiste und auf seinem Fußschalter seine Programmnummer und wird rot dargestellt (**Invalid slot**): Das Programm gibt es weiterhin, das Ziel dahinter nicht mehr. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. CC-Nummern `120`–`127` können nicht die Recall-CC sein: Das sind Kanalmodus-Nachrichten (All Notes Off ist `123`) und Hosts schlucken sie. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter **File -> Preferences**; Kanal und Recall-CC bleiben in den VoLum-Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst Kanal und Recall-CC in VoLum.
+Ein unbelegter Slot oder eine Zuweisung, deren Amp oder Preset gelöscht wurde, wird ignoriert; der aktuelle Sound spielt unverändert weiter. Ein gelöschter Sound behält auf der PLAY-Leiste und auf seinem Fußschalter seine Programmnummer und wird rot dargestellt (**Invalid slot**): Das Programm gibt es weiterhin, das Ziel dahinter nicht mehr. MIDI-Noten, Pitch Bend, Bank Select `CC0`/`CC32`, MIDI Learn und MIDI-Ausgabe werden nicht unterstützt. CC-Nummern `120`–`127` können nicht die Recall-CC sein: Das sind Kanalmodus-Nachrichten (All Notes Off ist `123`) und Hosts schlucken sie. In der Standalone-App wählst du den MIDI-Eingangs-**Port** unter Einstellungen > SIGNAL > **Audio & MIDI devices...**; Kanal und Recall-CC bleiben im MIDI-Reiter der Einstellungen. In einer DAW routest du MIDI zum VoLum-Plugin und wählst Kanal und Recall-CC in VoLum.
 
 Durch MIDI-Eingang ändert sich der Komponententyp von VoLums AU von `aufx` zu `aumf`. Bereits vorhandene AU-Instanzen müssen nach dem Update eventuell entfernt und neu eingesetzt werden.
 
@@ -348,7 +348,7 @@ Der Import geschieht in einem Schritt. Deine vorherige Bibliothek bleibt daneben
 
 ### Standalone-Audio- und MIDI-Einstellungen
 
-In der Standalone-App öffnest du **File -> Preferences** oder drückst `Ctrl+,`, um Audiotreiber, getrennte Ein- und Ausgabegeräte, Samplerate, Kanalrouting und MIDI-Eingangs-Port zu wählen. In der VST3-Version nutzt du stattdessen das Audio- und MIDI-Routing deiner DAW.
+In der Standalone-App klickst du unten in Einstellungen > SIGNAL auf **Audio & MIDI devices...** oder drückst `Ctrl+,`, um Audiotreiber, getrennte Ein- und Ausgabegeräte, Samplerate, Kanalrouting und MIDI-Eingangs-Port zu wählen. Unter macOS öffnet **VoLum > Preferences...** dasselbe Fenster. Das Windows-Fenster hat keine Menüleiste und eine dunkle Titelleiste; dort führen der Button und `Ctrl+,` hinein. VoLum sendet kein MIDI, daher gibt es keine MIDI-Ausgabe-Einstellung, und den MIDI-Kanal, auf dem VoLum hört, stellst du im MIDI-Reiter der Einstellungen ein. In der VST3-Version nutzt du stattdessen das Audio- und MIDI-Routing deiner DAW.
 
 Wähle Eingabe- und Ausgabegerät unabhängig voneinander. Unter macOS erscheinen Mikrofon und Lautsprecher oft als getrennte Geräte. Wähle einen Mono-Eingangskanal für das Gitarrensignal und route Output L/R nach Bedarf. Die Standalone-Bufferliste nutzt eine stabile Auswahl gängiger Pro-Audio-Größen: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 und 8192 Samples. Ältere gespeicherte Werte unterhalb der sichtbaren Liste werden auf die nächste sichtbare Größe angehoben. Manche Treiber lehnen die gewählte Größe ab und geben eine andere zurück; VoLum behält dann die vom Treiber vergebene Größe, sodass Liste und gespeicherter Wert das beschreiben, was tatsächlich läuft.
 
