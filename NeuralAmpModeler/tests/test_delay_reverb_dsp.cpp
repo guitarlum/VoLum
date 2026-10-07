@@ -599,27 +599,55 @@ TEST_CASE("Reverb: sample rate change reallocates without crash")
   REQUIRE_FALSE(hasNaN(out[0], frames));
 }
 
-TEST_CASE("Delay: Digital PingPong seeds a left-only impulse as mid right and side left")
+// A source on one side only must still bounce, and in phase: a seed split into mid
+// and side gave a right-only source opposite-polarity echoes that cancel in mono.
+TEST_CASE("Delay: Digital PingPong bounces a one-sided impulse right then left, in phase")
 {
-  dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
+  for (int side : {0, 1})
+  {
+    CAPTURE(side);
+    dsp::effect::Delay delay;
+    delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
 
-  const size_t frames = 32;
-  std::vector<double> left(frames, 0.0), right(frames, 0.0);
-  left[0] = 1.0;
-  double* inputs[2] = {left.data(), right.data()};
+    const size_t frames = 32;
+    std::vector<double> left(frames, 0.0), right(frames, 0.0);
+    (side == 0 ? left : right)[0] = 1.0;
+    double* inputs[2] = {left.data(), right.data()};
 
-  auto** out = delay.Process(inputs, 2, frames);
-  REQUIRE_FALSE(hasNaN(out[0], frames));
-  REQUIRE_FALSE(hasNaN(out[1], frames));
-  CHECK(out[1][10] == doctest::Approx(0.5).epsilon(0.05));
-  CHECK(out[0][10] == doctest::Approx(0.5).epsilon(0.05));
-  // Second repeat crosses over: each side carries the other's first repeat x feedback.
-  CHECK(out[1][20] == doctest::Approx(0.25).epsilon(0.05));
-  CHECK(out[0][20] == doctest::Approx(0.25).epsilon(0.05));
+    auto** out = delay.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    REQUIRE_FALSE(hasNaN(out[1], frames));
+    CHECK(out[1][10] == doctest::Approx(0.5).epsilon(0.05));
+    CHECK(std::abs(out[0][10]) < 1.0e-9);
+    CHECK(out[0][20] == doctest::Approx(0.25).epsilon(0.05));
+    CHECK(std::abs(out[1][20]) < 1.0e-9);
+  }
 }
 
-TEST_CASE("Delay: Analog PingPong echoes a left-only impulse on both sides")
+TEST_CASE("Delay: Analog PingPong keeps a one-sided source's echoes in phase")
+{
+  for (int side : {0, 1})
+  {
+    CAPTURE(side);
+    dsp::effect::Delay delay;
+    delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
+
+    const size_t frames = 200;
+    std::vector<double> left(frames, 0.0), right(frames, 0.0);
+    (side == 0 ? left : right)[0] = 1.0;
+    double* inputs[2] = {left.data(), right.data()};
+
+    auto** out = delay.Process(inputs, 2, frames);
+    std::vector<double> mono(frames - 1);
+    for (size_t i = 1; i < frames; ++i)
+      mono[i - 1] = out[0][i] + out[1][i];
+    const double stereo = energy(out[0] + 1, frames - 1) + energy(out[1] + 1, frames - 1);
+    REQUIRE(stereo > 0.01);
+    CHECK(energy(mono.data(), mono.size()) > stereo * 0.8);
+  }
+}
+
+TEST_CASE("Delay: Analog PingPong starts a left-only impulse on the right")
 {
   dsp::effect::Delay delay;
   delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
@@ -637,8 +665,8 @@ TEST_CASE("Delay: Analog PingPong echoes a left-only impulse on both sides")
     leftRepeatEnergy += std::abs(out[0][i]);
     rightRepeatEnergy += std::abs(out[1][i]);
   }
-  CHECK(leftRepeatEnergy > 0.1);
   CHECK(rightRepeatEnergy > 0.1);
+  CHECK(rightRepeatEnergy > leftRepeatEnergy * 2.0);
 }
 
 TEST_CASE("Delay: Digital PingPong mono-duplicated input first repeat on right")
@@ -748,28 +776,71 @@ TEST_CASE("Delay: ping-pong echoes a source that is only on the right")
 // Dual Amp's default split is MAIN hard left and a polarity-inverted SUPPORT hard
 // right: one guitar, so L and R are nearly opposite. Their mid nearly cancels; a
 // seed built from the mid alone left ping-pong almost silent next to the plain delay.
-TEST_CASE("Delay: ping-pong echoes a polarity-inverted stereo pair as loud as plain delay")
+TEST_CASE("Delay: ping-pong echoes a stereo pair within 3 dB of plain delay, either polarity")
 {
   for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
-  {
-    CAPTURE(mode);
-    const auto wetEnergy = [mode](bool pingPong) {
-      dsp::effect::Delay delay;
-      delay.SetParams(10.0, 0.5, 1.0, mode, 1000.0, 0.5, 0.0, pingPong);
-      const size_t frames = 200;
-      std::vector<double> left(frames, 0.0), right(frames, 0.0);
-      left[0] = 1.0;
-      right[0] = -0.9;
-      double* inputs[2] = {left.data(), right.data()};
-      auto** out = delay.Process(inputs, 2, frames);
-      return energy(out[0] + 1, frames - 1) + energy(out[1] + 1, frames - 1);
-    };
-    const double plain = wetEnergy(false);
-    const double pingPong = wetEnergy(true);
-    REQUIRE(plain > 0.0);
-    // Plain delay echoes both channels; ping-pong one channel per repeat: -3 dB.
-    CHECK(pingPong > plain * 0.35);
-  }
+    for (double r : {-0.9, 0.9})
+    {
+      CAPTURE(mode);
+      CAPTURE(r);
+      const auto wetEnergy = [mode, r](bool pingPong) {
+        dsp::effect::Delay delay;
+        delay.SetParams(10.0, 0.5, 1.0, mode, 1000.0, 0.5, 0.0, pingPong);
+        const size_t frames = 200;
+        std::vector<double> left(frames, 0.0), right(frames, 0.0);
+        left[0] = 1.0;
+        right[0] = r;
+        double* inputs[2] = {left.data(), right.data()};
+        auto** out = delay.Process(inputs, 2, frames);
+        return energy(out[0] + 1, frames - 1) + energy(out[1] + 1, frames - 1);
+      };
+      const double plain = wetEnergy(false);
+      const double pingPong = wetEnergy(true);
+      REQUIRE(plain > 0.0);
+      // Plain delay echoes both channels; ping-pong one channel per repeat: -3 dB.
+      CHECK(pingPong > plain * 0.35);
+    }
+}
+
+// Two amps on one guitar: R is a scaled, partly different copy of L, with or without
+// the SUPPORT polarity flip. Sustained, so the seed runs on its running correlation.
+TEST_CASE("Delay: ping-pong keeps a sustained Dual Amp pair within 3 dB of plain delay, either polarity")
+{
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
+    for (double polarity : {-1.0, 1.0})
+    {
+      CAPTURE(mode);
+      CAPTURE(polarity);
+      const size_t frames = 24000;
+      std::vector<double> left(frames), right(frames);
+      unsigned int seed = 7;
+      const auto noise = [&seed]() {
+        seed = seed * 1103515245u + 12345u;
+        return static_cast<double>((seed >> 8) & 0xFFFF) / 32767.5 - 1.0;
+      };
+      for (size_t i = 0; i < frames; ++i)
+      {
+        left[i] = 0.5 * noise();
+        right[i] = polarity * (0.8 * left[i] + 0.15 * noise());
+      }
+      const auto wetEnergy = [&](bool pingPong) {
+        dsp::effect::Delay delay;
+        delay.SetParams(100.0, 0.4, 1.0, mode, 48000.0, 0.5, 0.0, pingPong);
+        double* inputs[2] = {left.data(), right.data()};
+        auto** out = delay.Process(inputs, 2, frames);
+        double sum = 0.0;
+        for (size_t c = 0; c < 2; ++c)
+          for (size_t i = frames / 2; i < frames; ++i)
+          {
+            const double wet = out[c][i] - inputs[c][i];
+            sum += wet * wet;
+          }
+        return sum;
+      };
+      const double plain = wetEnergy(false);
+      REQUIRE(plain > 0.0);
+      CHECK(wetEnergy(true) > plain * 0.35);
+    }
 }
 
 static std::vector<double> RunOktaverbSubMode(int subMode)
