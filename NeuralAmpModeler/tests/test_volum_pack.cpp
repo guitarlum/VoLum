@@ -1447,6 +1447,38 @@ TEST_CASE("An Everything Pack with an empty MIDI map still clears stale local sl
   CHECK(reloaded.reg().midiSoundMap.empty());
 }
 
+TEST_CASE("PLAY is never pre-filled after an Everything or Reset import with an empty MIDI map")
+{
+  Library sender("prefill-empty-sender", "sender");
+  const PackContents pack = PackFrom(sender, EverythingPlan(sender.store.reg()), "{}");
+  REQUIRE(pack.ok);
+  REQUIRE(pack.includesMidiSoundMap);
+  REQUIRE(pack.library.midiSoundMap.empty());
+  const std::map<int, MidiSoundAssignment> prefill{{0, MidiSoundAssignment{"factory:12", "factory:12:v1"}}};
+
+  for (const auto verb : {ImportVerb::Overwrite, ImportVerb::Reset})
+  {
+    CAPTURE(static_cast<int>(verb));
+    Library receiver("prefill-empty-receiver", "receiver");
+    // A library from before 1.3.0: no midiSoundMap key at all.
+    auto old = volum::content::RegistryToJson(receiver.store.reg());
+    old.erase("midiSoundMap");
+    {
+      std::ofstream out(receiver.store.RegistryPath(), std::ios::binary);
+      out << old.dump(2);
+    }
+    REQUIRE(receiver.store.Load());
+    REQUIRE_FALSE(receiver.store.reg().hasMidiSoundMap);
+
+    REQUIRE(ApplyPack(receiver.store, pack, verb, true, true).ok);
+    ContentStore reloaded(receiver.base);
+    REQUIRE(reloaded.Load());
+    CHECK(reloaded.reg().hasMidiSoundMap);
+    CHECK_FALSE(reloaded.PrefillMidiSoundMapOnce(prefill));
+    CHECK(reloaded.reg().midiSoundMap.empty());
+  }
+}
+
 TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not the verbs")
 {
   // SYSTEM Pack overlay ticks alsoSettings and calls _VolumImportPack -> ApplyPack.

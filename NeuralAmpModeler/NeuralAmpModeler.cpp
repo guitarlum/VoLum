@@ -552,6 +552,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         // catalog - an import or a preset that had not reached disk yet simply
         // disappeared, and the next save persisted the version without it.
         volum::content::GlobalContentStore().EnsureLoaded();
+        // One-time: a library that never stored a PLAY board starts with five
+        // Factory Sounds. Whichever format opens the machine library first fills it.
+        // Before any other save: every write stores the key, even as [].
+        volum::content::GlobalContentStore().PrefillMidiSoundMapOnce(
+          volum::PlayPrefillAssignments(mVolumFactoryPresets));
         // One-time: auto-normalize the trim of any pre-1.2.1 IR (no stored trim)
         // so previously-imported custom IRs stop landing ~18 dB below stock cabs.
         _VolumMigrateIrTrims();

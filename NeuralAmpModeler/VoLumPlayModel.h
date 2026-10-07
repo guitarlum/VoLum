@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -384,6 +385,36 @@ inline std::optional<VoLumAmpSettings> ResolveSoundSettings(const std::vector<Fa
     if (preset.id == presetId)
       return preset.settings;
   return std::nullopt;
+}
+
+// The board a library that has never stored a PLAY map starts with. The names are
+// the contract; the id is what a switch stores.
+struct PlayPrefillSound
+{
+  int program;
+  const char* presetId;
+  const char* name;
+};
+
+inline constexpr PlayPrefillSound kPlayPrefillSounds[] = {
+  {0, "factory:12:v1", "The bestest Clean"}, {1, "factory:13:v2", "SLO Crunch"}, {2, "factory:6:v1", "Modern Rhythm"},
+  {3, "factory:8:v1", "Crack the Skye"},     {4, "factory:0:v2", "Ampete Lead"},
+};
+
+// Only the Sounds `factoryPresets` holds under their contract name. A bank without
+// the shipped file (FactoryPresetsOrFallback) gives none, so PLAY is not filled
+// with switches that read Invalid or "Factory 1".
+inline std::map<int, content::MidiSoundAssignment> PlayPrefillAssignments(
+  const std::vector<FactoryPreset>& factoryPresets)
+{
+  std::map<int, content::MidiSoundAssignment> out;
+  for (const auto& sound : kPlayPrefillSounds)
+  {
+    const auto* preset = FindFactoryPresetById(factoryPresets, sound.presetId);
+    if (preset && preset->name == sound.name)
+      out[sound.program] = {content::FactoryOwnerKey(preset->ampIdx), preset->id};
+  }
+  return out;
 }
 
 inline std::vector<PlaySlot> BuildPlaySlots(const std::vector<FactoryPreset>& factoryPresets,

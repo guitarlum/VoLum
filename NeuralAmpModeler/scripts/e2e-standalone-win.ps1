@@ -47,6 +47,11 @@ if ($storeHeader -notmatch 'kContentSchemaVersion\s*=\s*(\d+)\s*;') {
 }
 $script:ContentSchemaVersion = [int]$Matches[1]
 
+# The PLAY board a library that never stored a midiSoundMap gets, once (Get-MapKey form):
+# The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye, Ampete Lead.
+$script:PrefillMapKey = @("0:factory:12:factory:12:v1", "1:factory:13:factory:13:v2", "2:factory:6:factory:6:v1",
+  "3:factory:8:factory:8:v1", "4:factory:0:factory:0:v2") -join "|"
+
 $script:Failures = @()
 $script:Checks = 0
 
@@ -254,6 +259,23 @@ function Test-Fresh {
     Assert-True "log records startup" ($text -match "startup")
     Assert-True "log records the audio configuration" ($text -match "reset|samplerate|sample rate|block")
   }
+
+  $contentPath = Join-Path $root "content\volum-content.json"
+  $content = Read-Json $contentPath
+  Assert-True "first launch wrote volum-content.json" ($null -ne $content)
+  Assert-Equal "PLAY pre-filled with five Factory Sounds on programs 0-4" $script:PrefillMapKey (Get-MapKey $content)
+  if ($content) {
+    # A player who cleared every switch keeps the empty board.
+    $content | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue @() -Force
+    $content | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
+    $again = Invoke-VoLumRun -SandboxRoot $sandbox
+    Assert-True "relaunch with a cleared board opened" $again.started
+    Assert-True "relaunch with a cleared board closed gracefully" $again.graceful
+    $cleared = Read-Json $contentPath
+    Assert-True "cleared board keeps its midiSoundMap key" (
+      $cleared -and $cleared.PSObject.Properties.Name -contains "midiSoundMap")
+    Assert-Equal "cleared board is not pre-filled again" "" (Get-MapKey $cleared)
+  }
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
@@ -354,11 +376,12 @@ function Test-Upgrade {
   $root = Join-Path $sandbox "VoLum"
   $contentPath = Join-Path $root "content\volum-content.json"
 
-  # Rewind the seed library to exactly what 1.2.0 would have written: schema v2 and
-  # no IR shaping keys at all. Everything else (amps, pedals, presets, payloads on
-  # disk) is untouched, so this is a real upgrade rather than a synthetic fixture.
+  # Rewind the seed library to exactly what 1.2.0 would have written: schema v2, no
+  # midiSoundMap and no IR shaping keys at all. Everything else (amps, pedals, presets,
+  # payloads on disk) is untouched, so this is a real upgrade rather than a synthetic fixture.
   $reg = Read-Json $contentPath
   $reg.schemaVersion = 2
+  if ($reg.PSObject.Properties.Name -contains "midiSoundMap") { $reg.PSObject.Properties.Remove("midiSoundMap") }
   foreach ($ir in @($reg.irLibrary)) {
     foreach ($field in @("trimDb", "lowCutHz", "highCutHz")) {
       if ($ir.PSObject.Properties.Name -contains $field) { $ir.PSObject.Properties.Remove($field) }
@@ -386,10 +409,17 @@ function Test-Upgrade {
       Assert-True "pre-migration backup kept" (Test-Path (Join-Path $root "content\volum-content.json.pre-1.2.1.bak"))
     }
     Assert-True "corrupt-file backup NOT triggered" (-not (Test-Path (Join-Path $root "content\volum-content.json.bak")))
+    Assert-Equal "1.2.x library gets the PLAY pre-fill on programs 0-4" $script:PrefillMapKey (Get-MapKey $after)
   }
 
   # Second launch must be a no-op: a migration that re-runs every time would keep
-  # rewriting the library and could drift the trims.
+  # rewriting the library and could drift the trims. The pre-fill is one-time too:
+  # a switch the player moved stays moved.
+  $moved = if ($after) { @($after.midiSoundMap | Where-Object { [int]$_.slot -eq 2 })[0] } else { $null }
+  if ($moved) {
+    $moved.presetId = "factory:6:v2"
+    $after | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
+  }
   $second = Invoke-VoLumRun -SandboxRoot $sandbox
   Assert-True "second launch opened" $second.started
   $again = Read-Json $contentPath
@@ -397,6 +427,7 @@ function Test-Upgrade {
     $a = ($after.irLibrary | ConvertTo-Json -Depth 20 -Compress)
     $b = ($again.irLibrary | ConvertTo-Json -Depth 20 -Compress)
     Assert-Equal "migration is idempotent across relaunch" $a $b
+    Assert-Equal "pre-fill does not repeat over the player's edit" (Get-MapKey $after) (Get-MapKey $again)
   }
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 }
@@ -935,12 +966,17 @@ function Test-SaveDialog {
   $settingsPath = Join-Path $root "volum-settings.json"
   $logPath = Join-Path $root "volum.log"
 
-  # First launch writes a real settings file; the second opens straight into PLAY
-  # on factory amp 0 with no preset selected (the Default sound).
+  # First launch writes a real settings file and pre-fills PLAY; the second opens
+  # straight into PLAY on factory amp 0 with no preset selected (the Default sound)
+  # and an empty board, which a player gets by clearing every switch.
   $first = Invoke-VoLumRun -SandboxRoot $sandbox
   Assert-True "first launch opened a window" $first.started
   $settings = Read-Json $settingsPath
   if (-not $settings) { Assert-True "first launch wrote volum-settings.json" $false; return }
+  $content = Read-Json $contentPath
+  if (-not $content) { Assert-True "first launch wrote volum-content.json" $false; return }
+  $content | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue @() -Force
+  $content | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
   $settings | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "play" -Force
   $settings | Add-Member -NotePropertyName volumCustomMainId -NotePropertyValue "" -Force
   $settings | Add-Member -NotePropertyName volumActivePresetId -NotePropertyValue "" -Force
@@ -948,6 +984,7 @@ function Test-SaveDialog {
   $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
   $presetsBefore = (Get-PresetRows (Read-Json $contentPath)).Count
   $mapBefore = (Get-MidiMapRows (Read-Json $contentPath)).Count
+  Assert-Equal "PLAY board emptied before the Add run" 0 $mapBefore
   Remove-Item $logPath -Force -ErrorAction SilentlyContinue
 
   $addSound = @(450, 324)   # PLAY empty board: "+ Add this sound"
@@ -1590,14 +1627,14 @@ function Test-Pack {
   # Everything without the box: library only, machine and MIDI slots untouched.
   $n = Invoke-PackImportFresh "everything-nosettings" $everything $null
   Assert-PackLanded "everything-nosettings" $regA $rootA $n.reg $n.root $allAmps $allIrs $allPedals $allPresets
-  Assert-Equal "[everything-nosettings] PLAY map not applied without the box" "" (Get-MapKey $n.reg)
+  Assert-Equal "[everything-nosettings] PLAY map not applied without the box (pre-fill stays)" $script:PrefillMapKey (Get-MapKey $n.reg)
   Assert-True "[everything-nosettings] machine settings not restored" (
     $n.settings -and $n.settings.lastAmpIdx -ne $packSettings.lastAmpIdx) ("lastAmpIdx " + $n.settings.lastAmpIdx)
   if (-not $KeepSandbox) { Remove-Item $n.sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 
   $s = Invoke-PackImportFresh "sounds" $sounds $null
   Assert-PackLanded "sounds" $regA $rootA $s.reg $s.root @($ampId) @($irId) @($pedalId) @($skelId, $leadBoost.id)
-  Assert-Equal "[sounds] a Share Pack brings no MIDI slots" "" (Get-MapKey $s.reg)
+  Assert-Equal "[sounds] a Share Pack brings no MIDI slots (pre-fill stays)" $script:PrefillMapKey (Get-MapKey $s.reg)
   if (-not $KeepSandbox) { Remove-Item $s.sandbox -Recurse -Force -ErrorAction SilentlyContinue }
 
   $a = Invoke-PackImportFresh "amp" $amp $null

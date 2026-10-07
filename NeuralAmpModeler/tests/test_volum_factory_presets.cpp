@@ -454,16 +454,31 @@ TEST_CASE("A factory preset shows the name its snapshot file gives it")
   CHECK_FALSE(volum::ResolveSound(bank, registry, volum::content::FactoryOwnerKey(0), "factory:0:v1", resolved));
 }
 
-TEST_CASE("Factory Sounds are available to PLAY without seeding midiSoundMap")
+TEST_CASE("Every Factory Sound is a PLAY choice on an empty or a pre-filled board")
 {
-  volum::content::Registry registry;
-  const auto sounds = volum::BuildSoundChoices(volum_test::ShippedFactoryPresets(), registry);
-  REQUIRE(sounds.size() == std::size(kShippedFactory));
-  CHECK(sounds[0].presetName == "Ampete Rhythm");
-  CHECK(sounds[1].presetName == "Ampete Lead");
-  CHECK(sounds[0].factory);
-  CHECK(sounds[1].factory);
-  CHECK(registry.midiSoundMap.empty());
+  const auto bank = volum_test::ShippedFactoryPresets();
+  volum::content::Registry empty;
+  volum::content::Registry prefilled;
+  prefilled.midiSoundMap = volum::PlayPrefillAssignments(bank);
+  REQUIRE(prefilled.midiSoundMap.size() == 5);
+  for (const auto* registry : {&empty, &prefilled})
+  {
+    const auto sounds = volum::BuildSoundChoices(bank, *registry);
+    REQUIRE(sounds.size() == std::size(kShippedFactory));
+    CHECK(sounds[0].presetName == "Ampete Rhythm");
+    CHECK(sounds[1].presetName == "Ampete Lead");
+    CHECK(sounds[0].factory);
+    CHECK(sounds[1].factory);
+  }
+  // The five pre-filled Sounds are named presets of the shipped list.
+  for (const auto& sound : volum::kPlayPrefillSounds)
+  {
+    CAPTURE(sound.presetId);
+    const auto shipped = std::find_if(std::begin(kShippedFactory), std::end(kShippedFactory),
+                                      [&](const auto& e) { return std::string(e.first) == sound.presetId; });
+    REQUIRE(shipped != std::end(kShippedFactory));
+    CHECK(std::string(shipped->second) == sound.name);
+  }
 }
 
 TEST_CASE("Factory dirty ignores the postValid restore sentinel")
