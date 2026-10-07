@@ -69,9 +69,9 @@ Alle PRE- und POST-Pedalregler bleiben auch im Bypass editierbar, einschließlic
 
 ![VoLum Pitch-Pedal — Transpose-Modus](user-guide-pitch-transpose.png)
 
-Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus:
+Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus; ein neues Rig startet auf **OCTAVER**, damit das eingeschaltete Pedal sofort hörbar ist:
 
-- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +7) — abgestimmt auf Drop-Tunings und Capo-artige Verschiebungen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang. Die **INSTANT / POLY**-Pille wählt die Engine: **INSTANT** (Standard) ist **monophon** mit der geringsten Latenz (~8,6 ms) und dem direktesten Attack — für Einzelnoten und Lead-Linien. **POLY** ist **polyphon**: Es verfolgt ganze Akkorde (Doppelgriffe, Dreiklänge, Powerchords) mit korrekt verschobener Einzelstimme, bei etwas höherer Latenz (~14 ms) — für Riffs und Akkorde. Beide halten die Tonhöhe auch auf tiefen Drop-Tunings und erweiterten Tonumfängen sauber (bis hinunter zur 8-Saiter-F#).
+- **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +7, Start bei −2) — abgestimmt auf Drop-Tunings und Capo-artige Verschiebungen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang. Die **INSTANT / POLY**-Pille wählt die Engine: **INSTANT** (Standard) ist **monophon** mit der geringsten Latenz (~8,6 ms) und dem direktesten Attack — für Einzelnoten und Lead-Linien. **POLY** ist **polyphon**: Es verfolgt ganze Akkorde (Doppelgriffe, Dreiklänge, Powerchords) mit korrekt verschobener Einzelstimme, bei etwas höherer Latenz (~14 ms) — für Riffs und Akkorde. Beide halten die Tonhöhe auch auf tiefen Drop-Tunings und erweiterten Tonumfängen sauber (bis hinunter zur 8-Saiter-F#).
 - **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, **LEVEL** trimmt den Ausgang, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean. Einzeltöne verfolgt er über das ganze Griffbrett, bis zum 24. Bund der hohen E-Saite.
 
 ![VoLum Pitch-Pedal — Octaver-Modus](user-guide-pitch-octaver.png)
@@ -126,9 +126,9 @@ POST liegt hinter dem Amp. Der Bereich enthält in dieser Reihenfolge Chorus-, D
 **Chorus** läuft als Erstes, vor Delay und Reverb, und moduliert damit den trockenen Amp-Klang, statt die Fahnen zu verwaschen. Der **CLASSIC / WARPED / CLEAR / ENSEMBLE**-Wähler bestimmt den Charakter:
 
 - **Classic** ist ein Juno-60-Stereo-Sweep (Dreieck-Delay, links und rechts 180° versetzt).
-- **Warped** ist Tape-Wow, Drift und Flutter — die Werks-Standardstimme. Bei **MIX** 100 % bleibt kein Trockensignal übrig, das ergibt ein Vibrato.
+- **Warped** ist Tape-Wow, Drift und Flutter. Bei **MIX** 100 % bleibt kein Trockensignal übrig, das ergibt ein Vibrato.
 - **Clear** ist ein Dimension-artiger, breiter Chorus, der in Mono tonhöhenrein bleibt.
-- **Ensemble** ist ein Tri-Stereo-Rack-Chorus der 80er: drei langsame Stimmen links, Mitte und rechts.
+- **Ensemble** ist ein Tri-Stereo-Rack-Chorus der 80er: drei langsame Stimmen links, Mitte und rechts — die Werks-Standardstimme.
 
 Die Regler sind **RATE**, **DEPTH**, **TONE**, **WIDTH** und **MIX**, und jede Stimme nutzt alle fünf. DEPTH ist Verstimmung in Cent (bei Classic der Juno-Delay-Sweep). Jede Stimme mappt RATE auf ihren eigenen Hertz-Bereich. TONE ist ein 3–12-kHz-Tiefpass nur auf der Chorus-Stimme, du kannst sie also abdunkeln, ohne den trockenen Amp zu dämpfen. WIDTH bestimmt, wie weit die Modulation von links und rechts auseinanderläuft: bei 0 % laufen beide Kanäle gleich und das Ergebnis bleibt monokompatibel. Jede Stimme startet bei **MIX** 50 %. **MIX** gleitet an die Endanschläge; bei 0 % setzt sich ein bit-genauer Bypass durch, du kannst die Karte also eingeschaltet lassen und den Effekt aus dem Nichts einregeln. Dieses Pedal hat keinen Tempo-Sync.
 

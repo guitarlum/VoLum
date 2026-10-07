@@ -78,8 +78,8 @@ struct PitchTail
 {
   bool present = false;
   bool active = false;
-  int mode = 0; // 0=Transpose, 1=Octaver
-  double semitones = 0.0;
+  int mode = kVoLumPitchModeDefault; // 0=Transpose, 1=Octaver
+  double semitones = kVoLumPitchSemitonesDefault;
   double mix = 1.0;
   double octDown = 0.8;
   double octUp = 0.0;
@@ -132,11 +132,11 @@ struct ChorusTail
   bool present = false;
   bool active = false;
   int mode = kVoLumChorusModeDefault;
-  double rate = 0.44;
-  double depth = 0.36;
-  double tone = 0.21;
-  double width = 0.60;
-  double mix = 0.50;
+  double rate = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].rate;
+  double depth = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].depth;
+  double tone = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].tone;
+  double width = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].width;
+  double mix = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].mix;
   // Per-mode knob memory (Classic / Warped / Clear / Ensemble).
   ChorusModeSnapshot modes[kVoLumChorusModeCount] = {
     kVoLumChorusModeDefaults[0],
@@ -204,9 +204,9 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
   if (j.contains("active"))
     p.active = boolean(j["active"], false);
   if (j.contains("mode"))
-    p.mode = integer(j["mode"], 0);
+    p.mode = integer(j["mode"], p.mode);
   if (j.contains("semi"))
-    p.semitones = num(j["semi"], 0.0);
+    p.semitones = num(j["semi"], p.semitones);
   if (j.contains("mix"))
     p.mix = num(j["mix"], 1.0);
   if (j.contains("octDn"))
@@ -364,6 +364,32 @@ inline ChorusTail ChorusTailFromJson(const nlohmann::json& j)
   }
   c.present = true;
   return c;
+}
+
+// An absent pitch tail (pre-pitch chunk) leaves the scene's pitch fields alone.
+// A present one is applied as stored; only keys missing from it took the
+// PitchTail defaults in PitchTailFromJson.
+inline void ApplyPitchTailToSettings(const PitchTail& p, VoLumAmpSettings& s)
+{
+  if (!p.present)
+    return;
+  s.prePitchActive = p.active;
+  s.prePitchMode = std::clamp(p.mode, 0, kVoLumPitchModeCount - 1);
+  s.prePitchSemitones = std::clamp(p.semitones, -12.0, 7.0);
+  s.prePitchMix = std::clamp(p.mix, 0.0, 1.0);
+  s.prePitchOctDown = std::clamp(p.octDown, 0.0, 1.0);
+  s.prePitchOctUp = std::clamp(p.octUp, 0.0, 1.0);
+  s.prePitchDry = std::clamp(p.dry, 0.0, 1.0);
+  s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
+  s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
+  s.prePitchTransChar = std::clamp(p.transChar, 0, kVoLumPitchCharacterCount - 1);
+  for (int m = 0; m < kVoLumPitchModeCount; ++m)
+  {
+    s.prePitchModes[m].mix = std::clamp(p.modes[m].mix, 0.0, 1.0);
+    s.prePitchModes[m].dry = std::clamp(p.modes[m].dry, 0.0, 1.0);
+    s.prePitchModes[m].level = std::clamp(p.modes[m].level, -20.0, 20.0);
+    s.prePitchModes[m].voicing = std::clamp(p.modes[m].voicing, 0, 1);
+  }
 }
 
 // Older chunks omit `cho`. Overlaying that onto a live 1.3.0 instance must

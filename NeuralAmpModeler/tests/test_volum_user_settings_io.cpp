@@ -1759,3 +1759,130 @@ TEST_CASE("midiRecallCc is an additive standalone instance key (no version bump)
   REQUIRE(guard != std::string::npos);
   CHECK(scene.find("#endif", guard) > apply);
 }
+
+namespace
+{
+// A preset / scene as a pre-1.3.0 build or a 1.3.0 test build saved it: Pitch on
+// Transpose at 0 st, Chorus on WARPED, plus per-mode memory that differs per
+// slot so a shifted snapshot index would show.
+nlohmann::json StoredTranspose0WarpedJson()
+{
+  const auto warped = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeWarped];
+  nlohmann::json pitchModes = nlohmann::json::array();
+  pitchModes.push_back({{"mix", 0.7}, {"dry", 0.6}, {"level", -1.5}, {"voicing", volum::kVoLumPitchVoicingVintage}});
+  pitchModes.push_back({{"mix", 0.9}, {"dry", 0.4}, {"level", 2.0}, {"voicing", volum::kVoLumPitchVoicingModern}});
+  nlohmann::json chorusModes = nlohmann::json::array();
+  for (int m = 0; m < volum::kVoLumChorusModeCount; ++m)
+  {
+    const auto row = volum::kVoLumChorusModeDefaults[m];
+    chorusModes.push_back(
+      {{"rate", row.rate}, {"depth", row.depth}, {"tone", row.tone}, {"width", row.width}, {"mix", row.mix}});
+  }
+  chorusModes[volum::kVoLumChorusModeWarped]["rate"] = 0.15;
+  return nlohmann::json{{"prePitchActive", true},
+                        {"prePitchMode", volum::kVoLumPitchModeTranspose},
+                        {"prePitchSemitones", 0.0},
+                        {"prePitchModes", pitchModes},
+                        {"postValid", true},
+                        {"postChorusActive", true},
+                        {"postChorusMode", volum::kVoLumChorusModeWarped},
+                        {"postChorusRate", warped.rate},
+                        {"postChorusDepth", warped.depth},
+                        {"postChorusTone", warped.tone},
+                        {"postChorusWidth", warped.width},
+                        {"postChorusMix", warped.mix},
+                        {"postChorusModes", chorusModes}};
+}
+
+void CheckLoadedAsStored(const volum::VoLumAmpSettings& s)
+{
+  const auto warped = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeWarped];
+  CHECK(s.prePitchActive);
+  CHECK(s.prePitchMode == volum::kVoLumPitchModeTranspose);
+  CHECK(s.prePitchSemitones == doctest::Approx(0.0));
+  CHECK(s.prePitchModes[volum::kVoLumPitchModeTranspose].mix == doctest::Approx(0.7));
+  CHECK(s.prePitchModes[volum::kVoLumPitchModeTranspose].voicing == volum::kVoLumPitchVoicingVintage);
+  CHECK(s.prePitchModes[volum::kVoLumPitchModeOctaver].mix == doctest::Approx(0.9));
+  CHECK(s.prePitchModes[volum::kVoLumPitchModeOctaver].level == doctest::Approx(2.0));
+  CHECK(s.postChorusActive);
+  CHECK(s.postChorusMode == volum::kVoLumChorusModeWarped);
+  CHECK(s.postChorusRate == doctest::Approx(warped.rate));
+  CHECK(s.postChorusTone == doctest::Approx(warped.tone));
+  CHECK(s.postChorusWidth == doctest::Approx(warped.width));
+  CHECK(s.postChorusModes[volum::kVoLumChorusModeWarped].rate == doctest::Approx(0.15));
+  CHECK(s.postChorusModes[volum::kVoLumChorusModeEnsemble].tone
+        == doctest::Approx(volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeEnsemble].tone));
+}
+} // namespace
+
+TEST_CASE("A preset that stored Transpose 0 st and WARPED loads as stored, not as the shipped defaults")
+{
+  // The stored values must differ from the shipped defaults, or a reader that
+  // dropped these keys would still pass.
+  const volum::VoLumAmpSettings fresh;
+  REQUIRE(fresh.prePitchMode != volum::kVoLumPitchModeTranspose);
+  REQUIRE(fresh.prePitchSemitones != doctest::Approx(0.0));
+  REQUIRE(fresh.postChorusMode != volum::kVoLumChorusModeWarped);
+
+  const nlohmann::json stored = StoredTranspose0WarpedJson();
+
+  SUBCASE("preset / scene codec")
+  {
+    volum::VoLumAmpSettings s;
+    volum::AmpSettingsFromJson(stored, s);
+    CheckLoadedAsStored(s);
+
+    // Written back out and read again it still holds: the writer emits every
+    // key, including ones that equal a default.
+    volum::VoLumAmpSettings again;
+    volum::AmpSettingsFromJson(volum::AmpSettingsToJson(s), again);
+    CheckLoadedAsStored(again);
+  }
+  SUBCASE("volum-settings.json")
+  {
+    const volum::VoLumAmpSettings written[volum::kAmpCount]{};
+    nlohmann::json file = volum::VolumUserSettingsToJson(written, volum::kAmpCount, 0);
+    file["amps"].erase(volum::kAmps[1].folderName);
+    for (const auto& item : stored.items())
+      file["amps"][volum::kAmps[2].folderName][item.key()] = item.value();
+    volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+    bool healed = false;
+    volum::VolumUserSettingsFromJson(file, amps, volum::kAmpCount, nullptr, nullptr, &healed);
+    CHECK_FALSE(healed);
+    CheckLoadedAsStored(amps[2]);
+    CHECK(amps[1].prePitchMode == fresh.prePitchMode); // an amp absent from the file keeps the default
+  }
+}
+
+TEST_CASE("Pitch and chorus keys absent from a saved scene take the shipped defaults")
+{
+  // A scene saved before the pedal existed has no key for it; only then does the
+  // shipped default apply. Every other stored value still loads.
+  nlohmann::json older = StoredTranspose0WarpedJson();
+  for (const char* key : {"prePitchMode", "prePitchSemitones", "postChorusMode", "postChorusRate", "postChorusDepth",
+                          "postChorusTone", "postChorusWidth", "postChorusMix", "postChorusModes"})
+    older.erase(key);
+
+  volum::VoLumAmpSettings s;
+  volum::AmpSettingsFromJson(older, s);
+  const auto ensemble = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeEnsemble];
+  CHECK(s.prePitchActive);
+  CHECK(s.prePitchMode == volum::kVoLumPitchModeOctaver);
+  CHECK(s.prePitchSemitones == doctest::Approx(-2.0));
+  CHECK(s.prePitchModes[volum::kVoLumPitchModeOctaver].mix == doctest::Approx(0.9));
+  CHECK(s.postChorusActive);
+  CHECK(s.postChorusMode == volum::kVoLumChorusModeEnsemble);
+  CHECK(s.postChorusRate == doctest::Approx(ensemble.rate));
+  CHECK(s.postChorusTone == doctest::Approx(ensemble.tone));
+  CHECK(s.postChorusWidth == doctest::Approx(ensemble.width));
+
+  // The writer never drops a key because it equals the default, so a fresh
+  // scene saved today reloads unchanged under any later default.
+  const nlohmann::json written = volum::AmpSettingsToJson(volum::VoLumAmpSettings{});
+  for (const char* key : {"prePitchMode", "prePitchSemitones", "prePitchModes", "postChorusMode", "postChorusRate",
+                          "postChorusDepth", "postChorusTone", "postChorusWidth", "postChorusMix", "postChorusModes"})
+  {
+    CAPTURE(key);
+    CHECK(written.contains(key));
+  }
+}

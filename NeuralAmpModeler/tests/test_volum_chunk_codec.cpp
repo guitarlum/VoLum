@@ -1200,9 +1200,14 @@ TEST_CASE("Absent chorus tail forces a dirty live scene off")
   CHECK_FALSE(missing.present);
   volum::ApplyChorusTailToSettings(missing, live);
   CHECK_FALSE(live.postChorusActive);
-  CHECK(live.postChorusMode == volum::kVoLumChorusModeDefault);
-  CHECK(live.postChorusMix == doctest::Approx(0.50));
-  CHECK(live.postChorusRate == doctest::Approx(0.44));
+  // Off on ENSEMBLE with ENSEMBLE's own knob row, not WARPED's.
+  const auto ensemble = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeEnsemble];
+  CHECK(live.postChorusMode == volum::kVoLumChorusModeEnsemble);
+  CHECK(live.postChorusRate == doctest::Approx(ensemble.rate));
+  CHECK(live.postChorusDepth == doctest::Approx(ensemble.depth));
+  CHECK(live.postChorusTone == doctest::Approx(ensemble.tone));
+  CHECK(live.postChorusWidth == doctest::Approx(ensemble.width));
+  CHECK(live.postChorusMix == doctest::Approx(ensemble.mix));
 
   volum::ChorusTail written;
   written.present = true;
@@ -1213,6 +1218,56 @@ TEST_CASE("Absent chorus tail forces a dirty live scene off")
   CHECK(live.postChorusActive);
   CHECK(live.postChorusMode == volum::kVoLumChorusModeClear);
   CHECK(live.postChorusMix == doctest::Approx(0.8));
+}
+
+TEST_CASE("Pitch and chorus tails: absent keys take the shipped defaults, stored keys load as written")
+{
+  const volum::VoLumAmpSettings fresh;
+  const auto ensemble = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeEnsemble];
+  const auto warped = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeWarped];
+
+  // A tail carrying only the switch falls back to the same values a fresh scene has.
+  const auto pitchBare = volum::PitchTailFromJson(nlohmann::json{{"active", true}});
+  CHECK(pitchBare.mode == volum::kVoLumPitchModeOctaver);
+  CHECK(pitchBare.semitones == doctest::Approx(-2.0));
+  CHECK(pitchBare.mode == fresh.prePitchMode);
+  CHECK(pitchBare.semitones == doctest::Approx(fresh.prePitchSemitones));
+  const auto chorusBare = volum::ChorusTailFromJson(nlohmann::json{{"active", true}});
+  CHECK(chorusBare.mode == volum::kVoLumChorusModeEnsemble);
+  CHECK(chorusBare.rate == doctest::Approx(ensemble.rate));
+  CHECK(chorusBare.tone == doctest::Approx(ensemble.tone));
+  CHECK(chorusBare.width == doctest::Approx(ensemble.width));
+  CHECK(chorusBare.mode == fresh.postChorusMode);
+  CHECK(chorusBare.tone == doctest::Approx(fresh.postChorusTone));
+
+  // Transpose at 0 st and WARPED were the pre-1.3.0 ship values; a tail that
+  // stored them keeps them.
+  const auto pitchStored = volum::PitchTailFromJson(nlohmann::json{{"active", true}, {"mode", 0}, {"semi", 0.0}});
+  CHECK(pitchStored.mode == volum::kVoLumPitchModeTranspose);
+  CHECK(pitchStored.semitones == doctest::Approx(0.0));
+  const auto chorusStored = volum::ChorusTailFromJson(nlohmann::json{{"active", true},
+                                                                     {"mode", volum::kVoLumChorusModeWarped},
+                                                                     {"rate", warped.rate},
+                                                                     {"depth", warped.depth},
+                                                                     {"tone", warped.tone},
+                                                                     {"width", warped.width},
+                                                                     {"mix", warped.mix}});
+  volum::VoLumAmpSettings applied;
+  volum::ApplyChorusTailToSettings(chorusStored, applied);
+  CHECK(applied.postChorusMode == volum::kVoLumChorusModeWarped);
+  CHECK(applied.postChorusTone == doctest::Approx(warped.tone));
+  CHECK(applied.postChorusWidth == doctest::Approx(warped.width));
+  volum::ApplyPitchTailToSettings(pitchStored, applied);
+  CHECK(applied.prePitchMode == volum::kVoLumPitchModeTranspose);
+  CHECK(applied.prePitchSemitones == doctest::Approx(0.0));
+
+  // An absent pitch tail leaves the scene alone.
+  volum::VoLumAmpSettings untouched;
+  untouched.prePitchMode = volum::kVoLumPitchModeTranspose;
+  untouched.prePitchSemitones = 5.0;
+  volum::ApplyPitchTailToSettings(volum::PitchTail{}, untouched);
+  CHECK(untouched.prePitchMode == volum::kVoLumPitchModeTranspose);
+  CHECK(untouched.prePitchSemitones == doctest::Approx(5.0));
 }
 
 // A tremolo/pitch-aware build that predates per-mode memory wrote the effect

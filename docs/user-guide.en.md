@@ -69,9 +69,9 @@ All PRE and POST pedal controls remain editable while their block is bypassed, i
 
 ![VoLum Pitch pedal — Transpose mode](user-guide-pitch-transpose.png)
 
-The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode:
+The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode; a new rig starts on **OCTAVER**, so switching the pedal on is audible straight away:
 
-- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
+- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7, starting at −2), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
 - **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean. It follows single notes across the whole neck, up to the 24th fret of the high E.
 
 ![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
@@ -126,9 +126,9 @@ POST runs after the amp. It contains Chorus, Delay, Reverb, and Tremolo cards, i
 **Chorus** runs first, before the delay and reverb, so it modulates the dry amp tone rather than smearing the tails. The **CLASSIC / WARPED / CLEAR / ENSEMBLE** picker selects the voice:
 
 - **Classic** is a Juno-60 stereo sweep (triangle delay, left and right 180° apart).
-- **Warped** is tape wow, drift and flutter — the factory default voice. At **MIX** 100% no dry signal is left, which turns it into a vibrato.
+- **Warped** is tape wow, drift and flutter. At **MIX** 100% no dry signal is left, which turns it into a vibrato.
 - **Clear** is a Dimension-style wide chorus that stays pitch-clean in mono.
-- **Ensemble** is an 80s tri-stereo rack chorus: three slow voices on left, centre and right.
+- **Ensemble** is an 80s tri-stereo rack chorus: three slow voices on left, centre and right — the factory default voice.
 
 The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every voice uses all five. DEPTH is cents of detune (in Classic it is the Juno delay sweep). Each voice maps RATE to its own Hertz range. TONE is a 3–12 kHz low-pass on the chorus voice only, so you can darken it without dulling the dry amp. WIDTH sets how far apart the left and right modulation runs: at 0% both channels move together and the result is mono-safe. Every voice ships at **MIX** 50%. **MIX** glides onto its end stops; at 0% it settles into a bit-perfect bypass, so you can leave the card on and dial the effect in from nothing. There is no tempo sync on this pedal.
 

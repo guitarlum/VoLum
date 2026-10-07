@@ -662,9 +662,10 @@ TEST_CASE("Chorus mode names cover every mode and default safely")
   // ends up reading "Warped" while it is running something else.
   std::sort(names.begin(), names.end());
   CHECK(std::unique(names.begin(), names.end()) == names.end());
-  CHECK(std::string(volum::VoLumChorusModeName(-1)) == "Warped");
-  CHECK(std::string(volum::VoLumChorusModeName(999)) == "Warped");
-  CHECK(volum::kVoLumChorusModeDefault == volum::kVoLumChorusModeWarped);
+  // An unknown mode is named after the voice the DSP falls back to.
+  CHECK(std::string(volum::VoLumChorusModeName(-1)) == "Ensemble");
+  CHECK(std::string(volum::VoLumChorusModeName(999)) == "Ensemble");
+  CHECK(volum::kVoLumChorusModeDefault == volum::kVoLumChorusModeEnsemble);
   const auto classic = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeClassic];
   CHECK(classic.rate == doctest::Approx(0.40));
   CHECK(classic.depth == doctest::Approx(0.62));

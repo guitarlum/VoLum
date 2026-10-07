@@ -94,6 +94,11 @@ inline constexpr int kVoLumOktaverbSubModeDark = kVoLumOktaverbSubModeHalo;
 inline constexpr int kVoLumPitchModeCount = 2;
 inline constexpr int kVoLumPitchModeTranspose = 0;
 inline constexpr int kVoLumPitchModeOctaver = 1;
+// Ship defaults. Switching the pedal on blind must be audible: the Octaver at
+// its factory blend, and Transpose (mode-exclusive SEMI) two semitones down.
+// Only absent keys fall back here; stored values always load as written.
+inline constexpr int kVoLumPitchModeDefault = kVoLumPitchModeOctaver;
+inline constexpr double kVoLumPitchSemitonesDefault = -2.0;
 // PRE Pitch octaver voicing: 0=Vintage (gritty/filtered), 1=Modern (clean)
 inline constexpr int kVoLumPitchVoicingVintage = 0;
 inline constexpr int kVoLumPitchVoicingModern = 1;
@@ -233,8 +238,8 @@ struct VoLumAmpSettings
   double preNam2Level = 0.0;
   // PRE Pitch pedal (Transpose / Octaver), stored per amp like the rest of PRE.
   bool prePitchActive = false;
-  int prePitchMode = 0; // 0=Transpose, 1=Octaver
-  double prePitchSemitones = 0.0;
+  int prePitchMode = kVoLumPitchModeDefault; // 0=Transpose, 1=Octaver
+  double prePitchSemitones = kVoLumPitchSemitonesDefault;
   double prePitchMix = 1.0;
   double prePitchOctDown = 0.8; // ship audible: a sub-octave blend so enabling the octaver does something
   double prePitchOctUp = 0.0;
@@ -330,14 +335,15 @@ struct VoLumAmpSettings
 
   // Per-amp POST Chorus (first POST pedal, ahead of Delay). Same shape as the
   // tremolo block: scalars are the LIVE selected-mode values, postChorusModes[]
-  // remembers each voice's last knob row. Ships bypassed on WARPED.
+  // remembers each voice's last knob row. Ships bypassed on the default voice
+  // with that voice's own row.
   bool postChorusActive = false;
   int postChorusMode = kVoLumChorusModeDefault;
-  double postChorusRate = 0.44; // 0..1
-  double postChorusDepth = 0.36; // 0..1
-  double postChorusTone = 0.21; // 0..1
-  double postChorusWidth = 0.60; // 0..1
-  double postChorusMix = 0.50; // 0..1
+  double postChorusRate = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].rate; // 0..1
+  double postChorusDepth = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].depth; // 0..1
+  double postChorusTone = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].tone; // 0..1
+  double postChorusWidth = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].width; // 0..1
+  double postChorusMix = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].mix; // 0..1
   ChorusModeSnapshot postChorusModes[kVoLumChorusModeCount] = {
     kVoLumChorusModeDefaults[0],
     kVoLumChorusModeDefaults[1],

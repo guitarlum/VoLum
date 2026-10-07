@@ -422,8 +422,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   _SetMuteFloorDbDisplay(GetParam(kPreCompLevel));
   // PRE Pitch pedal (Transpose / Octaver), inserted at the very front of the PRE chain.
   GetParam(kPrePitchActive)->InitBool("PrePitchActive", false);
-  GetParam(kPrePitchMode)->InitEnum("PrePitchMode", volum::kVoLumPitchModeTranspose, {"Transpose", "Octaver"});
-  GetParam(kPrePitchSemitones)->InitDouble("PrePitchSemitones", 0.0, -12.0, 7.0, 1.0, "st");
+  GetParam(kPrePitchMode)->InitEnum("PrePitchMode", volum::kVoLumPitchModeDefault, {"Transpose", "Octaver"});
+  GetParam(kPrePitchSemitones)
+    ->InitDouble("PrePitchSemitones", volum::kVoLumPitchSemitonesDefault, -12.0, 7.0, 1.0, "st");
   GetParam(kPrePitchMix)->InitDouble("PrePitchMix", 1.0, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctDown)->InitDouble("PrePitchOctDown", 0.8, 0.0, 1.0, 0.01);
   GetParam(kPrePitchOctUp)->InitDouble("PrePitchOctUp", 0.0, 0.0, 1.0, 0.01);
@@ -441,15 +442,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                {"1/2", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"});
 
   // Chorus (POST) - first POST pedal, runs before Delay. Ships bypassed on the
-  // WARPED voice. All five knobs are 0..1; VoLumChorus maps them per mode.
+  // default voice with that voice's knob row. All five knobs are 0..1;
+  // VoLumChorus maps them per mode.
+  const auto& chorusDefaults = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeDefault];
   GetParam(kChorusActive)->InitBool("ChorusActive", false);
   GetParam(kChorusMode)
     ->InitEnum("ChorusMode", volum::kVoLumChorusModeDefault, {"Classic", "Warped", "Clear", "Ensemble"});
-  GetParam(kChorusRate)->InitDouble("ChorusRate", 0.44, 0.0, 1.0, 0.01);
-  GetParam(kChorusDepth)->InitDouble("ChorusDepth", 0.36, 0.0, 1.0, 0.01);
-  GetParam(kChorusTone)->InitDouble("ChorusTone", 0.21, 0.0, 1.0, 0.01);
-  GetParam(kChorusWidth)->InitDouble("ChorusWidth", 0.60, 0.0, 1.0, 0.01);
-  GetParam(kChorusMix)->InitDouble("ChorusMix", 0.50, 0.0, 1.0, 0.01);
+  GetParam(kChorusRate)->InitDouble("ChorusRate", chorusDefaults.rate, 0.0, 1.0, 0.01);
+  GetParam(kChorusDepth)->InitDouble("ChorusDepth", chorusDefaults.depth, 0.0, 1.0, 0.01);
+  GetParam(kChorusTone)->InitDouble("ChorusTone", chorusDefaults.tone, 0.0, 1.0, 0.01);
+  GetParam(kChorusWidth)->InitDouble("ChorusWidth", chorusDefaults.width, 0.0, 1.0, 0.01);
+  GetParam(kChorusMix)->InitDouble("ChorusMix", chorusDefaults.mix, 0.0, 1.0, 0.01);
   GetParam(kPreNam1Active)->InitBool("PreNam1Active", false);
   GetParam(kPreNam1Capture)->InitDouble("PreNam1Capture", 0.0, 0.0, 127.0, 1.0);
   GetParam(kPreNam1Gain)->InitDouble("PreNam1Gain", 0.0, -20.0, 20.0, 0.1, "dB");

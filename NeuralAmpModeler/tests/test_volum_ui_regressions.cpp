@@ -1106,11 +1106,30 @@ TEST_CASE("PRE Pitch per-mode switch is guarded from snapshot re-entry")
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
 
   RequireContains(header, "bool mVolumPreRestoreInProgress = false;");
-  RequireContains(header, "int mVolumPrePitchMode = volum::kVoLumPitchModeTranspose;");
+  RequireContains(header, "int mVolumPrePitchMode = volum::kVoLumPitchModeDefault;");
   RequireContains(source, "} guard(mVolumPreRestoreInProgress);");
   RequireContains(source, "if (mVolumPreRestoreInProgress)");
   RequireContains(source, "_VolumSavePrePitchModeSnapshot(oldMode);");
   RequireContains(source, "_VolumRestorePrePitchModeSnapshot(newMode);");
+}
+
+TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")
+{
+  // A fresh plugin instance runs on its EParam defaults until a scene is
+  // applied, so they must name the same constants VoLumAmpSettings{} uses
+  // (pinned to Octaver, SEMI -2 and ENSEMBLE in test_volum_factory_presets.cpp).
+  const std::string source = ReadPluginSource();
+
+  RequireContains(source, "InitEnum(\"PrePitchMode\", volum::kVoLumPitchModeDefault, {\"Transpose\", \"Octaver\"});");
+  RequireContains(source, "->InitDouble(\"PrePitchSemitones\", volum::kVoLumPitchSemitonesDefault, -12.0, 7.0");
+  RequireContains(
+    source, "const auto& chorusDefaults = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeDefault];");
+  RequireContains(source, "->InitEnum(\"ChorusMode\", volum::kVoLumChorusModeDefault,");
+  RequireContains(source, "InitDouble(\"ChorusRate\", chorusDefaults.rate,");
+  RequireContains(source, "InitDouble(\"ChorusDepth\", chorusDefaults.depth,");
+  RequireContains(source, "InitDouble(\"ChorusTone\", chorusDefaults.tone,");
+  RequireContains(source, "InitDouble(\"ChorusWidth\", chorusDefaults.width,");
+  RequireContains(source, "InitDouble(\"ChorusMix\", chorusDefaults.mix,");
 }
 
 TEST_CASE("Tremolo depth floor + Delay/Tremolo tempo sync are wired into the audio path")

@@ -71,9 +71,10 @@ inline constexpr int kVoLumChorusModeClassic = 0;
 inline constexpr int kVoLumChorusModeWarped = 1;
 inline constexpr int kVoLumChorusModeClear = 2;
 inline constexpr int kVoLumChorusModeEnsemble = 3;
-// Ships bypassed on WARPED: the widest, most obviously "chorus" voice, so the
-// first thing a user hears after switching the card on is unambiguous.
-inline constexpr int kVoLumChorusModeDefault = kVoLumChorusModeWarped;
+// Ships bypassed on ENSEMBLE: the full L/C/R spread is unambiguously "chorus"
+// the moment the card is switched on blind. Only absent keys fall back here;
+// a stored voice always loads as written.
+inline constexpr int kVoLumChorusModeDefault = kVoLumChorusModeEnsemble;
 
 inline const char* VoLumChorusModeName(int mode)
 {
@@ -82,8 +83,8 @@ inline const char* VoLumChorusModeName(int mode)
     case kVoLumChorusModeClassic: return "Classic";
     case kVoLumChorusModeWarped: return "Warped";
     case kVoLumChorusModeClear: return "Clear";
-    case kVoLumChorusModeEnsemble: return "Ensemble";
-    default: return "Warped";
+    case kVoLumChorusModeEnsemble:
+    default: return "Ensemble";
   }
 }
 

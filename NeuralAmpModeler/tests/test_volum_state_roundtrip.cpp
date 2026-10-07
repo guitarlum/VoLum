@@ -498,3 +498,130 @@ TEST_CASE("Chunk param prefix is frozen at the 1.2.2 count")
   CHECK(kVoLumChunkParamPrefixCount == 93);
   CHECK(kNumParams >= kVoLumChunkParamPrefixCount);
 }
+
+namespace
+{
+// One per-amp "pitch" object exactly as the 1.2.x writer emitted it: every key,
+// every time, with per-mode memory keyed "voice".
+nlohmann::json Pitch12x(bool active, int mode, double semi, double octDn, int tchar)
+{
+  nlohmann::json modes = nlohmann::json::array();
+  for (int m = 0; m < volum::kVoLumPitchModeCount; ++m)
+    modes.push_back({{"mix", 1.0}, {"dry", 1.0}, {"level", 0.0}, {"voice", 1}});
+  return nlohmann::json{{"active", active}, {"mode", mode},   {"semi", semi},  {"mix", 1.0},
+                        {"octDn", octDn},   {"octUp", 0.0},   {"dry", 1.0},    {"voice", 1},
+                        {"level", 0.0},     {"tchar", tchar}, {"modes", modes}};
+}
+} // namespace
+
+TEST_CASE("A 1.2.x-shaped chunk keeps its stored pitch values and opens Chorus off on ENSEMBLE")
+{
+  // A 1.2.x project stored Pitch in every amp's id-tail entry and had no Chorus
+  // at all (no "cho", schema 5). Loaded into a fresh 1.3.0 instance, whose own
+  // defaults are Octaver / SEMI -2 / ENSEMBLE, the stored pitch must win.
+  const volum::VoLumAmpSettings fresh;
+  REQUIRE(fresh.prePitchMode != volum::kVoLumPitchModeTranspose);
+  REQUIRE(fresh.prePitchSemitones != doctest::Approx(0.0));
+
+  volum::VoLumChunkSelection selection{kSelectedAmp, 2, 1};
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  volum::VoLumAmpSettings preSnapshot{};
+  volum::VoLumAmpSettings postSnapshot{};
+
+  MemoryChunk chunk;
+  chunk.PutStr("###NeuralAmpModeler###");
+  chunk.PutStr("1.2.3");
+  chunk.PutStr("C:/rigs/main.nam");
+  chunk.PutStr("C:/rigs/cab.wav");
+  for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)
+  {
+    double v = 1000.0 + i;
+    chunk.Put(&v);
+  }
+  volum::PutCurrentVoLumChunkState(chunk, selection, amps, volum::kAmpCount);
+  volum::PutPrePostLockFlags(chunk, false, false);
+  volum::PutPrePostLockSnapshots(chunk, false, false, preSnapshot, postSnapshot);
+
+  nlohmann::json tail;
+  tail["v"] = 5;
+  tail["customMainId"] = "";
+  tail["customSupportId"] = "";
+  tail["activePresetId"] = "";
+  nlohmann::json perAmp = nlohmann::json::array();
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    nlohmann::json entry = {{"ir", ""}, {"supIr", ""}, {"sup", ""}, {"supCab", -2}, {"supCh", 0}};
+    // The 1.2.x ship default on most amps, a used Octaver on the selected one, a
+    // POLY drop on another.
+    entry["pitch"] = Pitch12x(false, volum::kVoLumPitchModeTranspose, 0.0, 0.8, volum::kVoLumPitchCharacterInstant);
+    if (i == kSelectedAmp)
+      entry["pitch"] = Pitch12x(true, volum::kVoLumPitchModeOctaver, 0.0, 0.5, volum::kVoLumPitchCharacterInstant);
+    if (i == 5)
+      entry["pitch"] = Pitch12x(true, volum::kVoLumPitchModeTranspose, -7.0, 0.8, volum::kVoLumPitchCharacterPoly);
+    entry["trem"] = {{"active", false},
+                     {"mode", volum::kVoLumTremoloModeBias},
+                     {"rate", 5.0},
+                     {"depth", 0.85},
+                     {"shape", 0.0},
+                     {"mix", 1.0},
+                     {"xover", 800.0},
+                     {"sync", false},
+                     {"div", volum::kVoLumTremoloDivisionDefault}};
+    entry["dly"] = {{"sync", false}, {"div", volum::kVoLumTremoloDivisionDefault}};
+    perAmp.push_back(entry);
+  }
+  tail["perAmp"] = perAmp;
+  const std::string body = tail.dump();
+  int sentinel = volum::kVoLumIdTailSentinel;
+  int len = static_cast<int>(body.size());
+  chunk.Put(&sentinel);
+  chunk.Put(&len);
+  for (char c : body)
+    chunk.Put(&c);
+  int bypass = 0;
+  chunk.Put(&bypass);
+
+  const ParsedState got = ParseCurrentChunk(chunk);
+  REQUIRE(got.pos == chunk.Size() - kBypassBytes);
+
+  // The same two appliers UnserializeState runs over each amp's scene.
+  volum::VoLumAmpSettings scenes[volum::kAmpCount]{};
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    volum::ApplyPitchTailToSettings(got.idTail.perAmpPitch[i], scenes[i]);
+    volum::ApplyChorusTailToSettings(got.idTail.perAmpChorus[i], scenes[i]);
+  }
+
+  const auto ensemble = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeEnsemble];
+  for (int i = 0; i < volum::kAmpCount; ++i)
+  {
+    CAPTURE(i);
+    const auto& s = scenes[i];
+    if (i == kSelectedAmp)
+    {
+      CHECK(s.prePitchActive);
+      CHECK(s.prePitchMode == volum::kVoLumPitchModeOctaver);
+      CHECK(s.prePitchOctDown == doctest::Approx(0.5));
+    }
+    else if (i == 5)
+    {
+      CHECK(s.prePitchActive);
+      CHECK(s.prePitchMode == volum::kVoLumPitchModeTranspose);
+      CHECK(s.prePitchSemitones == doctest::Approx(-7.0));
+      CHECK(s.prePitchTransChar == volum::kVoLumPitchCharacterPoly);
+    }
+    else
+    {
+      CHECK_FALSE(s.prePitchActive);
+      CHECK(s.prePitchMode == volum::kVoLumPitchModeTranspose);
+      CHECK(s.prePitchSemitones == doctest::Approx(0.0));
+    }
+    // No Chorus existed in 1.2.x: it opens bypassed on the shipped voice.
+    CHECK_FALSE(got.idTail.perAmpChorus[i].present);
+    CHECK_FALSE(s.postChorusActive);
+    CHECK(s.postChorusMode == volum::kVoLumChorusModeEnsemble);
+    CHECK(s.postChorusRate == doctest::Approx(ensemble.rate));
+    CHECK(s.postChorusTone == doctest::Approx(ensemble.tone));
+    CHECK(s.postChorusWidth == doctest::Approx(ensemble.width));
+  }
+}

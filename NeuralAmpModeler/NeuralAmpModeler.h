@@ -655,7 +655,7 @@ private:
   // Live working store for PRE Pitch per-mode knob memory (PRE has no effect-
   // settings struct like POST, so the live snapshots live here). Synced to/from
   // each amp's prePitchModes via the PRE save/restore-to-slot helpers.
-  int mVolumPrePitchMode = volum::kVoLumPitchModeTranspose;
+  int mVolumPrePitchMode = volum::kVoLumPitchModeDefault;
   volum::PitchModeSnapshot mVolumPrePitchModes[volum::kVoLumPitchModeCount];
   // Set true while a PRE/amp restore is applying live params so the kPrePitchMode
   // handler does not re-enter the per-mode save/restore mid-restore.

@@ -98,6 +98,61 @@ TEST_CASE("Factory snapshot file can revoice a preset without changing its id")
   CHECK(bank[6].settings.toneMid == doctest::Approx(7.25));
 }
 
+// Default (_VolumResetAmpToFactory) assigns VoLumAmpSettings{}, and a shipped
+// Ready whose snapshot is "settings": {} inherits it, so every one of them has to
+// make a pedal audible the moment it is switched on.
+TEST_CASE("Fresh scene, Default and an empty Ready snapshot switch pedals on audibly")
+{
+  const auto temp = std::filesystem::temp_directory_path() / "volum-factory-pedal-defaults-test.json";
+  nlohmann::json root;
+  root["factory:0:v1"] = {{"name", "Ready"}, {"settings", nlohmann::json::object()}};
+  {
+    std::ofstream out(temp);
+    out << root.dump(2);
+  }
+  const auto loaded = volum::LoadFactoryPresets(temp);
+  std::error_code ec;
+  std::filesystem::remove(temp, ec);
+  REQUIRE(loaded.size() == volum::kAmpCount);
+  const auto builtIn = volum::DefaultFactoryPresets();
+  const volum::VoLumAmpSettings fresh;
+  const auto healedReady = volum::HealedFactoryPresetSettings(loaded[0].settings);
+
+  const auto ensemble = volum::kVoLumChorusModeDefaults[volum::kVoLumChorusModeEnsemble];
+  const volum::VoLumAmpSettings* scenes[] = {&fresh, &builtIn[0].settings, &loaded[0].settings, &healedReady};
+  for (const auto* s : scenes)
+  {
+    CAPTURE(s - scenes[0]);
+    CHECK_FALSE(s->prePitchActive);
+    CHECK(s->prePitchMode == volum::kVoLumPitchModeOctaver);
+    CHECK(s->prePitchSemitones == doctest::Approx(-2.0));
+    // The Octaver's own knobs keep their factory blend.
+    CHECK(s->prePitchMix == doctest::Approx(1.0));
+    CHECK(s->prePitchOctDown == doctest::Approx(0.8));
+    CHECK(s->prePitchOctUp == doctest::Approx(0.0));
+    CHECK(s->prePitchDry == doctest::Approx(1.0));
+    CHECK(s->prePitchVoicing == volum::kVoLumPitchVoicingModern);
+    CHECK(s->prePitchLevel == doctest::Approx(0.0));
+
+    CHECK_FALSE(s->postChorusActive);
+    CHECK(s->postChorusMode == volum::kVoLumChorusModeEnsemble);
+    CHECK(s->postChorusRate == doctest::Approx(ensemble.rate));
+    CHECK(s->postChorusDepth == doctest::Approx(ensemble.depth));
+    CHECK(s->postChorusTone == doctest::Approx(ensemble.tone));
+    CHECK(s->postChorusWidth == doctest::Approx(ensemble.width));
+    CHECK(s->postChorusMix == doctest::Approx(ensemble.mix));
+
+    // PRE NAM slots stay EMPTY: no capture is chosen for the user.
+    CHECK_FALSE(s->preNam1Active);
+    CHECK_FALSE(s->preNam2Active);
+    CHECK(s->preNam1Capture == 0);
+    CHECK(s->preNam2Capture == 0);
+  }
+
+  // The live POST working copy seeds the same voice.
+  CHECK(volum::VoLumEffectSettings{}.chorusMode == volum::kVoLumChorusModeEnsemble);
+}
+
 TEST_CASE("A factory preset shows the name its snapshot file gives it")
 {
   const auto temp = std::filesystem::temp_directory_path() / "volum-factory-preset-names-test.json";
