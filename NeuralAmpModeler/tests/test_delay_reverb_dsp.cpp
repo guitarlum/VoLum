@@ -599,7 +599,7 @@ TEST_CASE("Reverb: sample rate change reallocates without crash")
   REQUIRE_FALSE(hasNaN(out[0], frames));
 }
 
-TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
+TEST_CASE("Delay: Digital PingPong seeds a left-only impulse as mid right and side left")
 {
   dsp::effect::Delay delay;
   delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
@@ -612,12 +612,14 @@ TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
   auto** out = delay.Process(inputs, 2, frames);
   REQUIRE_FALSE(hasNaN(out[0], frames));
   REQUIRE_FALSE(hasNaN(out[1], frames));
-  // The seed is the L/R mid, so a left-only impulse repeats at half level on the right.
-  CHECK(std::abs(out[1][10]) == doctest::Approx(0.5).epsilon(0.05));
-  CHECK(std::abs(out[0][10]) < 0.05);
+  CHECK(out[1][10] == doctest::Approx(0.5).epsilon(0.05));
+  CHECK(out[0][10] == doctest::Approx(0.5).epsilon(0.05));
+  // Second repeat crosses over: each side carries the other's first repeat x feedback.
+  CHECK(out[1][20] == doctest::Approx(0.25).epsilon(0.05));
+  CHECK(out[0][20] == doctest::Approx(0.25).epsilon(0.05));
 }
 
-TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
+TEST_CASE("Delay: Analog PingPong echoes a left-only impulse on both sides")
 {
   dsp::effect::Delay delay;
   delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
@@ -635,7 +637,8 @@ TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
     leftRepeatEnergy += std::abs(out[0][i]);
     rightRepeatEnergy += std::abs(out[1][i]);
   }
-  CHECK(rightRepeatEnergy > leftRepeatEnergy * 2.0);
+  CHECK(leftRepeatEnergy > 0.1);
+  CHECK(rightRepeatEnergy > 0.1);
 }
 
 TEST_CASE("Delay: Digital PingPong mono-duplicated input first repeat on right")
@@ -739,6 +742,33 @@ TEST_CASE("Delay: ping-pong echoes a source that is only on the right")
     for (size_t i = 1; i < frames; ++i)
       wet += std::abs(out[0][i]) + std::abs(out[1][i]);
     CHECK(wet > 0.1);
+  }
+}
+
+// Dual Amp's default split is MAIN hard left and a polarity-inverted SUPPORT hard
+// right: one guitar, so L and R are nearly opposite. Their mid nearly cancels; a
+// seed built from the mid alone left ping-pong almost silent next to the plain delay.
+TEST_CASE("Delay: ping-pong echoes a polarity-inverted stereo pair as loud as plain delay")
+{
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
+  {
+    CAPTURE(mode);
+    const auto wetEnergy = [mode](bool pingPong) {
+      dsp::effect::Delay delay;
+      delay.SetParams(10.0, 0.5, 1.0, mode, 1000.0, 0.5, 0.0, pingPong);
+      const size_t frames = 200;
+      std::vector<double> left(frames, 0.0), right(frames, 0.0);
+      left[0] = 1.0;
+      right[0] = -0.9;
+      double* inputs[2] = {left.data(), right.data()};
+      auto** out = delay.Process(inputs, 2, frames);
+      return energy(out[0] + 1, frames - 1) + energy(out[1] + 1, frames - 1);
+    };
+    const double plain = wetEnergy(false);
+    const double pingPong = wetEnergy(true);
+    REQUIRE(plain > 0.0);
+    // Plain delay echoes both channels; ping-pong one channel per repeat: -3 dB.
+    CHECK(pingPong > plain * 0.35);
   }
 }
 
