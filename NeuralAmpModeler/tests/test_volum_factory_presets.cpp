@@ -157,11 +157,94 @@ TEST_CASE("Factory Ready dirty ignores the postValid restore sentinel")
   REQUIRE(volum::LivePresetDirty(true, live, factory[0].settings));
 }
 
-TEST_CASE("Only Ctrl+S moves the LIVE switch onto the copy it saved")
+namespace
 {
-  CHECK(volum::SaveRetargetsLiveSlot(volum::SaveOrigin::Shortcut));
-  // Add this sound on a tweaked Factory switch adds a switch; the Factory one stays.
-  CHECK_FALSE(volum::SaveRetargetsLiveSlot(volum::SaveOrigin::AddSound));
+using volum::content::MidiSoundAssignment;
+
+// A pedalboard with the Factory Sound of amp 0 on program 3 and a User Sound of
+// amp 2 on program 12.
+volum::content::Registry TwoSwitchBoard()
+{
+  volum::content::Registry reg;
+  REQUIRE(volum::content::AssignMidiSound(reg, 3, "factory:0", "factory:0:v1"));
+  REQUIRE(volum::content::AssignMidiSound(reg, 12, "factory:2", "preset_b"));
+  return reg;
+}
+
+// _VolumPromptSaveAs's commit without the dialog: decide from the LIVE switch as
+// it is at commit and the pair recorded at open, then point it at the new preset.
+void CommitSave(volum::content::Registry& reg, volum::SaveOrigin origin, volum::UiMode modeAtStart, int liveSlot,
+                const MidiSoundAssignment& editSource, const std::string& savedOwner, const std::string& savedId)
+{
+  if (volum::SaveRetargetsLiveSlot(origin, modeAtStart, volum::content::MidiSoundAtSlot(reg, liveSlot), editSource))
+    volum::content::AssignMidiSound(reg, liveSlot, savedOwner, savedId);
+}
+} // namespace
+
+TEST_CASE("A save started in BUILD leaves every PLAY switch as it was")
+{
+  // The LIVE marker stays set through BUILD, so it alone cannot license a write.
+  auto reg = TwoSwitchBoard();
+  const auto before = reg.midiSoundMap;
+  const int live = 3;
+
+  SUBCASE("Ctrl+S on another amp")
+  {
+    CommitSave(reg, volum::SaveOrigin::Shortcut, volum::UiMode::Build, live, {"factory:5", "preset_x"}, "factory:5",
+               "preset_new");
+  }
+  SUBCASE("Save As after recalling the preset that sits on the LIVE switch")
+  {
+    // BUILD recall of an assigned preset moves the LIVE marker onto its switch
+    // (_VolumSyncLivePlaySlotFromActivePair), so the pair matches exactly.
+    CommitSave(reg, volum::SaveOrigin::Shortcut, volum::UiMode::Build, live, {"factory:0", "factory:0:v1"}, "factory:0",
+               "preset_new");
+  }
+  CHECK(reg.midiSoundMap.size() == before.size());
+  for (const auto& [slot, sound] : before)
+  {
+    const auto* now = volum::content::MidiSoundAtSlot(reg, slot);
+    REQUIRE(now != nullptr);
+    CHECK(now->ampId == sound.ampId);
+    CHECK(now->presetId == sound.presetId);
+  }
+}
+
+TEST_CASE("PLAY Ctrl+S moves the LIVE switch only while it holds the Sound the edit started from")
+{
+  auto reg = TwoSwitchBoard();
+  const int live = 3;
+  const MidiSoundAssignment factoryOnLive{"factory:0", "factory:0:v1"};
+
+  SUBCASE("a tweaked Factory Sound on its LIVE switch moves that switch")
+  {
+    CommitSave(reg, volum::SaveOrigin::Shortcut, volum::UiMode::Play, live, factoryOnLive, "factory:0", "preset_new");
+    REQUIRE(volum::content::MidiSoundAtSlot(reg, live) != nullptr);
+    CHECK(volum::content::MidiSoundAtSlot(reg, live)->presetId == "preset_new");
+    CHECK(volum::content::MidiSoundAtSlot(reg, 12)->presetId == "preset_b");
+  }
+  SUBCASE("the LIVE switch was reassigned to another Sound since the edit began")
+  {
+    REQUIRE(volum::content::AssignMidiSound(reg, live, "factory:7", "preset_other"));
+    CommitSave(reg, volum::SaveOrigin::Shortcut, volum::UiMode::Play, live, factoryOnLive, "factory:0", "preset_new");
+    CHECK(volum::content::MidiSoundAtSlot(reg, live)->presetId == "preset_other");
+  }
+  SUBCASE("the LIVE switch was cleared")
+  {
+    REQUIRE(volum::content::ClearMidiSound(reg, live));
+    CommitSave(reg, volum::SaveOrigin::Shortcut, volum::UiMode::Play, live, factoryOnLive, "factory:0", "preset_new");
+    CHECK(volum::content::MidiSoundAtSlot(reg, live) == nullptr);
+  }
+  SUBCASE("Add this sound adds a switch of its own")
+  {
+    CommitSave(reg, volum::SaveOrigin::AddSound, volum::UiMode::Play, live, factoryOnLive, "factory:0", "preset_new");
+    CHECK(volum::content::MidiSoundAtSlot(reg, live)->presetId == "factory:0:v1");
+  }
+  SUBCASE("the Default sound has no preset id to match")
+  {
+    CHECK_FALSE(volum::SaveRetargetsLiveSlot(
+      volum::SaveOrigin::Shortcut, volum::UiMode::Play, volum::content::MidiSoundAtSlot(reg, live), {"factory:0", ""}));
+  }
 }
 
 TEST_CASE("Healed factory snapshot stamps postValid the way apply does")

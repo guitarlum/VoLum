@@ -1196,7 +1196,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
             pPlugin->mVolumCustomMainIdx < 0
             && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
           const int userIdx = idx - (hasFactory ? 1 : 0);
-          auto doOverwrite = [pPlugin, userIdx]() { pPlugin->_VolumOverwritePreset(userIdx); };
+          auto doOverwrite = [pPlugin, userIdx]() { pPlugin->_VolumOverwritePreset(userIdx, -1); };
           if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
             dlg->As<VoLumConfirmDialogControl>()->Show("Are you sure?",
                                                        "Overwrite preset \"" + name + "\" with the current settings?",
@@ -1375,9 +1375,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           pPlugin->_VolumPushIrShaping(true);
           pPlugin->_VolumRefreshPresetBar();
         });
-      // F5 preset capture: save-as / overwrite snapshot the live scene.
-      overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name); },
-                                  [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index); },
+      // F5 preset capture: save-as / overwrite snapshot the live scene. Manage edits
+      // the bank only; no PLAY switch moves.
+      overlay->SetPresetCallbacks([pPlugin](const std::string& name) { return pPlugin->_VolumSavePresetAs(name, -1); },
+                                  [pPlugin](int index) { pPlugin->_VolumOverwritePreset(index, -1); },
                                   [pPlugin]() { return pPlugin->_VolumClaimPresetOps(); });
       // Deleting an IR, pedal or preset this instance is playing has to move the
       // sounding rig, not only the library row.

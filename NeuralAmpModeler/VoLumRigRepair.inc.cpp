@@ -51,8 +51,13 @@ std::string NeuralAmpModeler::_VolumPlanLibraryDelete(volum::rig::LibraryKind ki
 {
   volum::rig::RigLabels labels;
   labels.factoryAmpName = volum::kAmps[std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1)].displayName;
-  mVolumPendingRigRepair =
-    volum::rig::PlanDelete(_VolumSnapshotSoundingRig(), VolumMakeLibraryItemRef(kind, id, displayName), labels);
+  auto item = VolumMakeLibraryItemRef(kind, id, displayName);
+  // Manage deletes presets from the active owner's bank (_VolumClaimPresetOps).
+  if (kind == volum::rig::LibraryKind::Preset)
+    for (const int program :
+         volum::content::MidiSlotsHoldingSound(volum::content::GlobalContentStore().reg(), _VolumActiveOwnerKey(), id))
+      item.playSwitches.push_back(volum::PlayProgramLabel(program).c_str());
+  mVolumPendingRigRepair = volum::rig::PlanDelete(_VolumSnapshotSoundingRig(), item, labels);
   return mVolumPendingRigRepair.confirmBody;
 }
 

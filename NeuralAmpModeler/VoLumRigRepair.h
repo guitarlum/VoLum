@@ -69,6 +69,9 @@ struct LibraryItemRef
   std::string id;
   int pedalCapture = -1; // pedals only
   std::string displayName; // for the confirm copy
+  // Presets only: the PLAY switches that hold it, as PLAY prints them
+  // (volum::PlayProgramLabel; this header stays free of the content model).
+  std::vector<std::string> playSwitches;
 };
 
 // Labels only the caller knows. Used for confirm copy and nothing else, so a
@@ -142,6 +145,19 @@ inline std::string PreSlotList(bool one, bool two)
 inline std::string FactoryAmpLabel(const RigLabels& labels)
 {
   return labels.factoryAmpName.empty() ? std::string("the factory amp") : labels.factoryAmpName;
+}
+
+// "03", "03 and 12", "01, 03 and 12".
+inline std::string ProgramList(const std::vector<std::string>& programs)
+{
+  std::string out;
+  for (size_t i = 0; i < programs.size(); ++i)
+  {
+    if (i > 0)
+      out += (i + 1 == programs.size()) ? " and " : ", ";
+    out += programs[i];
+  }
+  return out;
 }
 } // namespace detail
 
@@ -240,6 +256,10 @@ inline RigRepairPlan PlanDelete(const SoundingRig& rig, const LibraryItemRef& it
         plan.after.recalledPresetId.clear();
         inUse = " It is the selected preset. Your sound stays exactly as it is - only the name is forgotten.";
       }
+      // Switches keep the deleted id and read Invalid: copy only, no repair.
+      if (!item.playSwitches.empty())
+        inUse += " On PLAY " + ProgramList(item.playSwitches)
+                 + (item.playSwitches.size() == 1 ? ": it will read Invalid." : ": they will read Invalid.");
       break;
     }
   }

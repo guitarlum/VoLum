@@ -3,6 +3,7 @@
 #include <string>
 
 #include "../VoLumContentStore.h"
+#include "../VoLumPlayModel.h"
 #include "../VoLumProcessingPlan.h"
 #include "../VoLumDspStaging.h"
 #include "../VoLumRigRepair.h"
@@ -347,6 +348,50 @@ TEST_CASE("Deleting the selected preset forgets the name and changes nothing els
 
   CHECK(Contains(plan.confirmBody, "selected preset"));
   CHECK(Contains(plan.confirmBody, "only the name is forgotten"));
+}
+
+TEST_CASE("Deleting a preset that sits on PLAY switches names them in the confirmation")
+{
+  volum::content::Registry reg;
+  REQUIRE(volum::content::AssignMidiSound(reg, 12, "amp_main", "preset_lead"));
+  REQUIRE(volum::content::AssignMidiSound(reg, 3, "amp_main", "preset_lead"));
+  REQUIRE(volum::content::AssignMidiSound(reg, 5, "amp_main", "preset_other"));
+  // Same preset id under another owner is another Sound.
+  REQUIRE(volum::content::AssignMidiSound(reg, 7, "factory:1", "preset_lead"));
+
+  const auto programs = volum::content::MidiSlotsHoldingSound(reg, "amp_main", "preset_lead");
+  CHECK(programs == std::vector<int>{3, 12});
+  // The labels _VolumPlanLibraryDelete hands in: PLAY's own program format.
+  CHECK(std::string(volum::PlayProgramLabel(3).c_str()) == "03");
+  CHECK(std::string(volum::PlayProgramLabel(127).c_str()) == "127");
+  CHECK(std::string(volum::PlayProgramLabel(-1).c_str()) == "--");
+  auto item = PresetRef("preset_lead", "My Lead");
+  for (const int program : programs)
+    item.playSwitches.push_back(volum::PlayProgramLabel(program).c_str());
+
+  SoundingRig rig = FullRig();
+  rig.recalledPresetId = "preset_other";
+  const auto plan = PlanDelete(rig, item);
+  CHECK(Contains(plan.confirmBody, "On PLAY 03 and 12: they will read Invalid."));
+  CHECK(Contains(plan.confirmBody, "This cannot be undone."));
+  // Naming the switches is copy only: the delete does not touch the sounding rig.
+  CHECK_FALSE(plan.TouchesSoundingRig());
+
+  SUBCASE("one switch")
+  {
+    item.playSwitches = {"03"};
+    CHECK(Contains(PlanDelete(rig, item).confirmBody, "On PLAY 03: it will read Invalid."));
+  }
+  SUBCASE("three switches")
+  {
+    item.playSwitches = {"01", "03", "12"};
+    CHECK(Contains(PlanDelete(rig, item).confirmBody, "On PLAY 01, 03 and 12: they will read Invalid."));
+  }
+  SUBCASE("no switch says nothing about PLAY")
+  {
+    item.playSwitches.clear();
+    CHECK_FALSE(Contains(PlanDelete(rig, item).confirmBody, "PLAY"));
+  }
 }
 
 // ---------------------------------------------------------------------------

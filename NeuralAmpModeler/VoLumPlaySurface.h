@@ -1831,21 +1831,7 @@ private:
         return i;
     return -1;
   }
-  // A program number as drawn ("--", "07", "42", "127"), on the stack.
-  struct TwoDigitText
-  {
-    char s[12] = {};
-    const char* c_str() const { return s; }
-  };
-  static TwoDigitText TwoDigits(int n)
-  {
-    TwoDigitText t;
-    if (n < 0)
-      std::snprintf(t.s, sizeof(t.s), "--");
-    else
-      std::snprintf(t.s, sizeof(t.s), "%02d", n);
-    return t;
-  }
+  static volum::PlayProgramText TwoDigits(int n) { return volum::PlayProgramLabel(n); }
 
   const char* StompCaption(int i) const
   {

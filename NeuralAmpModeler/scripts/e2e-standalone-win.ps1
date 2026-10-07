@@ -1127,6 +1127,104 @@ function Test-SaveDialog {
       ("map: " + (($map | ForEach-Object { "{0}:{1}:{2}" -f $_.slot, $_.ampId, $_.presetId }) -join " | "))
   }
   if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+
+  # The LIVE marker stays set through BUILD, so only a save started in PLAY on the
+  # switch's own Sound may repoint that switch.
+  Write-Host "  [savedialog] BUILD Ctrl+S on a switch-assigned preset leaves PLAY alone" -ForegroundColor Cyan
+  $build = Invoke-SaveOnLiveSwitch -Label "BUILD save case" -SandboxName "savedialog-build" -Named "build save copy"
+  if ($build) {
+    $slot0 = $build.slot0
+    if ($slot0) {
+      Assert-Equal "BUILD save case: slot 0 amp unchanged" "factory:0" $slot0.ampId
+      Assert-Equal "BUILD save case: slot 0 still the Factory Sound" "factory:0:v1" $slot0.presetId
+    }
+  }
+
+  Write-Host "  [savedialog] PLAY Ctrl+S on a tweaked Factory switch moves that switch" -ForegroundColor Cyan
+  $play = Invoke-SaveOnLiveSwitch -Label "PLAY save case" -SandboxName "savedialog-play" -Named "play save copy" -TweakThenPlay
+  if ($play) {
+    $slot0 = $play.slot0
+    if ($slot0 -and $play.saved) {
+      Assert-Equal "PLAY save case: slot 0 amp unchanged" "factory:0" $slot0.ampId
+      Assert-Equal "PLAY save case: slot 0 now holds the saved preset" $play.saved.id $slot0.presetId
+    }
+  }
+}
+
+# One Ctrl+S save with the Factory Sound of amp 0 live on PLAY switch 0. Starts in
+# BUILD; -TweakThenPlay turns a PRE knob and presses P first, so the prompt opens in
+# PLAY on a dirty Factory Sound. Asserts the save happened and the map kept one row;
+# returns slot 0 and the saved preset row for the caller's verdict on the switch.
+function Invoke-SaveOnLiveSwitch {
+  param([string]$Label, [string]$SandboxName, [string]$Named, [switch]$TweakThenPlay)
+  $sandbox = New-Sandbox $SandboxName
+  $root = Join-Path $sandbox "VoLum"
+  Write-SandboxAudioConfig $sandbox
+  $contentPath = Join-Path $root "content\volum-content.json"
+  $settingsPath = Join-Path $root "volum-settings.json"
+  $logPath = Join-Path $root "volum.log"
+
+  $first = Invoke-VoLumRun -SandboxRoot $sandbox
+  Assert-True "${Label}: first launch opened a window" $first.started
+  $content = Read-Json $contentPath
+  if (-not $content) { Assert-True "${Label}: first launch wrote volum-content.json" $false; return $null }
+  $content | Add-Member -NotePropertyName midiSoundMap -NotePropertyValue @(
+    [pscustomobject]@{ slot = 0; ampId = "factory:0"; presetId = "factory:0:v1" }
+  ) -Force
+  $content | ConvertTo-Json -Depth 60 | Set-Content $contentPath -Encoding UTF8
+
+  $settings = Read-Json $settingsPath
+  if (-not $settings) { Assert-True "${Label}: first launch wrote volum-settings.json" $false; return $null }
+  $settings | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "build" -Force
+  $settings | Add-Member -NotePropertyName volumCustomMainId -NotePropertyValue "" -Force
+  $settings | Add-Member -NotePropertyName lastAmpIdx -NotePropertyValue 0 -Force
+  $settings | Add-Member -NotePropertyName lastPlaySlot -NotePropertyValue 0 -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetId -NotePropertyValue "factory:0:v1" -Force
+  $settings | Add-Member -NotePropertyName volumActivePresetIdByOwner -NotePropertyValue ([pscustomobject]@{
+      "factory:0" = "factory:0:v1"
+    }) -Force
+  $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+
+  $presetsBefore = (Get-PresetRows (Read-Json $contentPath)).Count
+  Remove-Item $logPath -Force -ErrorAction SilentlyContinue
+  $preKnob = @(439, 437)   # COMP INPUT under PRE focus
+  $tweak = [bool]$TweakThenPlay
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox -SettleSec 7 -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    if ($tweak) {
+      [VoLumE2eUi]::Key($h, 0x31); Start-Sleep -Milliseconds 300   # 1 = PRE
+      [VoLumE2eUi]::Click($h, $preKnob[0], $preKnob[1]); Start-Sleep -Milliseconds 300
+      for ($i = 0; $i -lt 4; $i++) { [VoLumE2eUi]::Key($h, 0x26); Start-Sleep -Milliseconds 80 }  # Up
+      [VoLumE2eUi]::Key($h, 0x50); Start-Sleep -Milliseconds 500   # P = PLAY
+    }
+    $ctrlShared = [VoLumE2eUi]::KeyMod($h, 0x53, $false, $true); Start-Sleep -Milliseconds 400   # Ctrl+S
+    [VoLumE2eUi]::Type($h, $Named); Start-Sleep -Milliseconds 200
+    [VoLumE2eUi]::Key($h, 0x0D); Start-Sleep -Milliseconds 1000
+    return @{ ctrlShared = $ctrlShared }
+  }
+  Assert-True "${Label}: app opened a window" $run.started
+  Assert-True "${Label}: app closed gracefully" $run.graceful
+  Assert-True "${Label}: Ctrl reached VoLum" ($run.drive -and $run.drive.ctrlShared)
+
+  $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
+  # Positive control: the save really happened, so the map verdict is not free.
+  Assert-Equal "${Label}: Ctrl+S opened the name dialog once" 1 ([regex]::Matches($log, "save dialog open")).Count
+  Assert-Equal "${Label}: exactly one save dialog commit" 1 ([regex]::Matches($log, "save dialog commit")).Count
+  $after = Read-Json $contentPath
+  $presetRows = Get-PresetRows $after
+  Assert-Equal "${Label}: exactly one User preset created" ($presetsBefore + 1) $presetRows.Count
+  $saved = @($presetRows | Where-Object { $_.name -ceq $Named })[0]
+  Assert-True "${Label}: preset carries the typed name" ($null -ne $saved) `
+    ("names: " + (($presetRows | ForEach-Object { $_.name }) -join ", "))
+
+  $map = Get-MidiMapRows $after
+  Assert-Equal "${Label}: map still has one row" 1 $map.Count
+  $slot0 = @($map | Where-Object { [int]$_.slot -eq 0 })[0]
+  Assert-True "${Label}: slot 0 still present" ($null -ne $slot0)
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+  return @{ slot0 = $slot0; saved = $saved }
 }
 
 # --------------------------------------------------------------------------

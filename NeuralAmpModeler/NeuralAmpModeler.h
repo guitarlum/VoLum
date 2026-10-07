@@ -478,17 +478,20 @@ public:
   void _VolumSetMidiChannel(int channel);
   void _VolumSetMidiRecallCc(int cc);
   // Save the live scene as a new named preset; returns its bank index (-1 fail).
-  int _VolumSavePresetAs(const std::string& name, bool retargetLiveSlot = true);
+  // `retargetSlot` is the PLAY switch to point at the result, -1 for none; only
+  // _VolumPromptSaveAs may pass one (volum::SaveRetargetsLiveSlot).
+  int _VolumSavePresetAs(const std::string& name, int retargetSlot);
   bool _VolumLivePresetDirty();
   void _VolumPromptSaveAs(std::function<void()> after = {}, volum::SaveOrigin origin = volum::SaveOrigin::Shortcut);
   bool _VolumHandleSaveShortcut();
-  void _VolumReassignLivePlaySlotAfterSave();
+  void _VolumReassignLivePlaySlotAfterSave(int slot);
   void _VolumSyncLivePlaySlotFromActivePair();
   void _VolumInsertPlaySound(int fromSlot, int beforeSlot);
   void _VolumAddHeardPlaySound();
   void _VolumFocusBuildEffect(int focus);
   // Overwrite preset `index` in the active bank with the live scene.
-  void _VolumOverwritePreset(int index, bool retargetLiveSlot = true);
+  // `retargetSlot` as for _VolumSavePresetAs.
+  void _VolumOverwritePreset(int index, int retargetSlot);
   // Recall preset `index`: apply its snapshot to the live chain, retain it as the
   // recalled snapshot (drives the equality-based "(unsaved)" flag), update the bar.
   void _VolumRecallPreset(int index);

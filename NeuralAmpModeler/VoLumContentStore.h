@@ -560,6 +560,18 @@ inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int 
   return std::nullopt;
 }
 
+// Every program number whose switch holds this exact Sound, ascending.
+inline std::vector<int> MidiSlotsHoldingSound(const Registry& r, const std::string& ampId, const std::string& presetId)
+{
+  std::vector<int> slots;
+  if (ampId.empty() || presetId.empty())
+    return slots;
+  for (const auto& kv : r.midiSoundMap)
+    if (kv.second.ampId == ampId && kv.second.presetId == presetId)
+      slots.push_back(kv.first);
+  return slots;
+}
+
 inline int FirstFreeMidiSoundSlot(const Registry& r)
 {
   for (int slot = 0; slot < kMidiSoundSlotCount; ++slot)

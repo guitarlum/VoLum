@@ -14,9 +14,11 @@
 #include "../VoLumScroll.h"
 #include "../VoLumStageArtCache.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -469,8 +471,82 @@ TEST_CASE("Ctrl+S always prompts and may reassign the LIVE slot only")
   REQUIRE(presets.find("_VolumPromptSaveAs()") != std::string::npos);
   REQUIRE(presets.find("SaveDialogSeedName") != std::string::npos);
   CHECK(presets.find("AssignMidiSound") == std::string::npos);
-  REQUIRE(runtime.find("_VolumReassignLivePlaySlotAfterSave") != std::string::npos);
+  REQUIRE(runtime.find("_VolumReassignLivePlaySlotAfterSave(int slot)") != std::string::npos);
   REQUIRE(runtime.find("FirstFreeMidiSoundSlot") != std::string::npos);
+
+  // The edit source and the mode are read when the prompt opens, before a new
+  // preset id is minted; the commit asks the pure rule with both.
+  const auto prompt = presets.find("void NeuralAmpModeler::_VolumPromptSaveAs");
+  REQUIRE(prompt != std::string::npos);
+  const auto show = presets.find("->Show(", prompt);
+  REQUIRE(show != std::string::npos);
+  const std::string opening = presets.substr(prompt, show - prompt);
+  CHECK(opening.find("const volum::UiMode modeAtStart = mVolumUiMode;") != std::string::npos);
+  CHECK(opening.find("const volum::content::MidiSoundAssignment editSource{ownerKey, mVolumActivePresetId};")
+        != std::string::npos);
+  CHECK(presets.find("origin, modeAtStart, volum::content::MidiSoundAtSlot(", show) != std::string::npos);
+  CHECK(presets.find("const int retargetSlot = retarget ? liveSlot : -1;", show) != std::string::npos);
+}
+
+TEST_CASE("Only the save prompt may move a PLAY switch: Manage and the preset menu pass -1")
+{
+  // No default argument: a caller that does not decide must not move a switch.
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  CHECK(header.find("int _VolumSavePresetAs(const std::string& name, int retargetSlot);") != std::string::npos);
+  CHECK(header.find("void _VolumOverwritePreset(int index, int retargetSlot);") != std::string::npos);
+
+  const std::string layout = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  CHECK(layout.find("return pPlugin->_VolumSavePresetAs(name, -1);") != std::string::npos);
+  CHECK(layout.find("pPlugin->_VolumOverwritePreset(index, -1);") != std::string::npos);
+  CHECK(layout.find("pPlugin->_VolumOverwritePreset(userIdx, -1);") != std::string::npos);
+
+  // Every call site in the plugin sources is one of these; anything else is a new
+  // path that has to decide through volum::SaveRetargetsLiveSlot first.
+  const std::vector<std::string> allowed = {
+    "_VolumSavePresetAs(const std::string& name, int retargetSlot)",
+    "_VolumOverwritePreset(int index, int retargetSlot)",
+    "_VolumSavePresetAs(name, retargetSlot)",
+    "_VolumOverwritePreset(overwriteIdx, retargetSlot)",
+    "_VolumSavePresetAs(name, -1)",
+    "_VolumOverwritePreset(index, -1)",
+    "_VolumOverwritePreset(userIdx, -1)",
+  };
+  int scanned = 0;
+  int calls = 0;
+  for (const auto& entry : std::filesystem::directory_iterator(RepoRoot() / "NeuralAmpModeler"))
+  {
+    const auto ext = entry.path().extension();
+    if (!entry.is_regular_file() || (ext != ".h" && ext != ".cpp"))
+      continue;
+    ++scanned;
+    const std::string text = ReadText(entry.path());
+    for (const char* fn : {"_VolumSavePresetAs(", "_VolumOverwritePreset("})
+      for (auto at = text.find(fn); at != std::string::npos; at = text.find(fn, at + 1))
+      {
+        ++calls;
+        const std::string call = text.substr(at, text.find(')', at) + 1 - at);
+        INFO(entry.path().filename().string() << ": " << call);
+        CHECK(std::find(allowed.begin(), allowed.end(), call) != allowed.end());
+      }
+  }
+  // .inc.cpp ends in .cpp, so the tail-included plugin bodies are in the scan:
+  // two declarations, two definitions, two prompt calls, three -1 callers.
+  CHECK(scanned > 50);
+  CHECK(calls == 9);
+}
+
+TEST_CASE("Preset delete confirmation is planned with the PLAY switches that hold it")
+{
+  const std::string repair = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumRigRepair.inc.cpp");
+  const auto plan = repair.find("std::string NeuralAmpModeler::_VolumPlanLibraryDelete(");
+  REQUIRE(plan != std::string::npos);
+  const auto end = repair.find("\n}", plan);
+  REQUIRE(end != std::string::npos);
+  const std::string body = repair.substr(plan, end - plan);
+  CHECK(body.find("item.playSwitches.push_back(volum::PlayProgramLabel(program).c_str());") != std::string::npos);
+  CHECK(body.find("MidiSlotsHoldingSound(volum::content::GlobalContentStore().reg(), _VolumActiveOwnerKey(), id)")
+        != std::string::npos);
+  CHECK(body.find("PlanDelete(_VolumSnapshotSoundingRig(), item, labels)") != std::string::npos);
 }
 
 TEST_CASE("Add this sound does not retarget the last Factory PLAY slot")
@@ -578,7 +654,8 @@ TEST_CASE("Name dialog is a view over the model: only Enter and Save commit")
   const std::string presets = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsPresets.inc.cpp");
   const auto prompt = presets.find("void NeuralAmpModeler::_VolumPromptSaveAs");
   REQUIRE(prompt != std::string::npos);
-  const auto commit = presets.find("[this, after, origin, currentName, currentId](const std::string& name)", prompt);
+  const auto commit = presets.find(
+    "[this, after, origin, currentName, currentId, modeAtStart, editSource](const std::string& name)", prompt);
   REQUIRE(commit != std::string::npos);
   CHECK(presets.find("PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)", commit) != std::string::npos);
   CHECK(presets.find("currentUserIdx", prompt) == std::string::npos);

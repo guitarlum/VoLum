@@ -184,7 +184,7 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
     _VolumRecomputePresetDirty();
 }
 
-int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name, bool retargetLiveSlot)
+int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name, int retargetSlot)
 {
   volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
@@ -199,12 +199,11 @@ int NeuralAmpModeler::_VolumSavePresetAs(const std::string& name, bool retargetL
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
-  if (retargetLiveSlot)
-    _VolumReassignLivePlaySlotAfterSave();
+  _VolumReassignLivePlaySlotAfterSave(retargetSlot);
   return idx;
 }
 
-void NeuralAmpModeler::_VolumOverwritePreset(int index, bool retargetLiveSlot)
+void NeuralAmpModeler::_VolumOverwritePreset(int index, int retargetSlot)
 {
   volum::custom::PresetOpScope op(this);
   _VolumClaimPresetOps();
@@ -217,8 +216,7 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index, bool retargetLiveSlot)
   mVolumSettingsDirty = true;
   _VolumRememberActivePreset();
   _VolumRefreshPresetBar();
-  if (retargetLiveSlot)
-    _VolumReassignLivePlaySlotAfterSave();
+  _VolumReassignLivePlaySlotAfterSave(retargetSlot);
 }
 
 void NeuralAmpModeler::_VolumRecallPreset(int index)
@@ -382,24 +380,30 @@ void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after, volum::Sa
     }
   }
   const std::string seed = volum::SaveDialogSeedName(action, currentName);
+  const volum::UiMode modeAtStart = mVolumUiMode;
+  const volum::content::MidiSoundAssignment editSource{ownerKey, mVolumActivePresetId};
   VOLUM_LOG("preset", "save dialog open (" + std::string(currentId.empty() ? "new" : "may update") + ")");
   raw->As<VoLumNameDialogControl>()->Show(
     "Save preset", "Name this User preset.", seed, currentName,
-    [this, after, origin, currentName, currentId](const std::string& name) {
+    [this, after, origin, currentName, currentId, modeAtStart, editSource](const std::string& name) {
       // The overwrite target is looked up by id now, not by an index remembered
       // when the dialog opened: the bank can be edited or reordered in between.
       const int overwriteIdx = volum::name_dialog::Overwrites(name, currentName)
                                  ? volum::custom::PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)
                                  : -1;
-      const bool retarget = volum::SaveRetargetsLiveSlot(origin);
+      const int liveSlot = mVolumLastRecalledPlaySlot;
+      const bool retarget = volum::SaveRetargetsLiveSlot(
+        origin, modeAtStart, volum::content::MidiSoundAtSlot(volum::content::GlobalContentStore().reg(), liveSlot),
+        editSource);
+      const int retargetSlot = retarget ? liveSlot : -1;
       bool ok = false;
       if (overwriteIdx >= 0)
       {
-        _VolumOverwritePreset(overwriteIdx, retarget);
+        _VolumOverwritePreset(overwriteIdx, retargetSlot);
         ok = true;
       }
       else
-        ok = _VolumSavePresetAs(name, retarget) >= 0;
+        ok = _VolumSavePresetAs(name, retargetSlot) >= 0;
       VOLUM_LOG("preset", std::string("save dialog commit: ") + (overwriteIdx >= 0 ? "updated '" : "saved '") + name
                             + "'" + (ok ? "" : " (refused)"));
       if (!ok)

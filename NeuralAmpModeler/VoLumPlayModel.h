@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <utility>
@@ -223,6 +224,24 @@ inline bool LivePresetDirty(bool hasSnapshot, const VoLumAmpSettings& live, cons
 
 inline constexpr const char* kPlayInvalidSlotLabel = "Invalid slot";
 
+// A program number as PLAY prints it ("--", "07", "42", "127"), on the stack so
+// the rail can draw it every frame without allocating.
+struct PlayProgramText
+{
+  char s[12] = {};
+  const char* c_str() const { return s; }
+};
+
+inline PlayProgramText PlayProgramLabel(int program)
+{
+  PlayProgramText t;
+  if (program < 0)
+    std::snprintf(t.s, sizeof(t.s), "--");
+  else
+    std::snprintf(t.s, sizeof(t.s), "%02d", program);
+  return t;
+}
+
 inline std::string OccupiedSlotLabel(bool valid, const std::string& presetName)
 {
   return valid ? presetName : std::string(kPlayInvalidSlotLabel);
@@ -431,7 +450,7 @@ inline bool AddHeardMarksLive(int firstFreeSlot, bool presetIdEmpty)
   return firstFreeSlot >= 0 && !presetIdEmpty;
 }
 
-// Who asked for a save. Ctrl+S moves the LIVE switch onto the copy it just saved;
+// Who asked for a save. Ctrl+S may move the LIVE switch onto the copy it just saved;
 // Add this sound adds a switch of its own and leaves the LIVE one as it was.
 enum class SaveOrigin
 {
@@ -439,9 +458,19 @@ enum class SaveOrigin
   AddSound
 };
 
-inline bool SaveRetargetsLiveSlot(SaveOrigin origin)
+// Whether a save moves the LIVE switch onto the preset it just wrote. Only a
+// Ctrl+S started in PLAY, and only while that switch still holds exactly the
+// Sound the edit started from (`editSource`, read when the prompt opened, before
+// the new preset was minted). BUILD edits the bank, never the pedalboard: the
+// LIVE marker survives BUILD, so it alone does not mean the player is on it.
+inline bool SaveRetargetsLiveSlot(SaveOrigin origin, UiMode modeAtStart,
+                                  const content::MidiSoundAssignment* liveSlotSound,
+                                  const content::MidiSoundAssignment& editSource)
 {
-  return origin == SaveOrigin::Shortcut;
+  if (origin != SaveOrigin::Shortcut || modeAtStart != UiMode::Play || !liveSlotSound)
+    return false;
+  return !editSource.presetId.empty() && liveSlotSound->ampId == editSource.ampId
+         && liveSlotSound->presetId == editSource.presetId;
 }
 
 inline bool IsLastRecalledSlot(const PlaySlot& slot, int lastSlot, const std::string& activeAmpId,
