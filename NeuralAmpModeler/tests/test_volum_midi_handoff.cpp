@@ -91,15 +91,22 @@ TEST_CASE("Headless MIDI resolution ignores unassigned missing invalid and out-o
   CHECK_FALSE(ResolveMidiSound(registry, 4).has_value());
 }
 
-TEST_CASE("Headless MIDI resolution applies a Factory Ready Sound")
+TEST_CASE("Headless MIDI resolution applies the first and second Factory Sound of an amp")
 {
   using namespace volum::content;
   Registry registry;
   REQUIRE(AssignMidiSound(registry, 8, "factory:7", "factory:7:v1"));
-  const auto ready = ResolveMidiSound(registry, 8);
-  REQUIRE(ready.has_value());
-  CHECK(ready->ampId == "factory:7");
-  CHECK(ready->presetId == "factory:7:v1");
+  REQUIRE(AssignMidiSound(registry, 9, "factory:13", "factory:13:v2"));
+  REQUIRE(AssignMidiSound(registry, 10, "factory:12", "factory:13:v2")); // another amp's preset
+  const auto first = ResolveMidiSound(registry, 8);
+  REQUIRE(first.has_value());
+  CHECK(first->ampId == "factory:7");
+  CHECK(first->presetId == "factory:7:v1");
+  const auto second = ResolveMidiSound(registry, 9);
+  REQUIRE(second.has_value());
+  CHECK(second->ampId == "factory:13");
+  CHECK(second->presetId == "factory:13:v2");
+  CHECK_FALSE(ResolveMidiSound(registry, 10).has_value());
 }
 
 TEST_CASE("MIDI listen filter in the id tail defaults to all channels and clamps to 1 through 16")

@@ -189,14 +189,17 @@ jobs:
         test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
         test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/factory-presets.json"
         test -d "$VERIFY_DIR/vst3/VoLum.vst3"
         test -d "$VERIFY_DIR/vst3/VoLumRigs"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -f "$VERIFY_DIR/vst3/VoLumRigs/factory-presets.json"
         test -d "$VERIFY_DIR/au/VoLum.component"
         test -d "$VERIFY_DIR/au/VoLumRigs"
         test -f "$VERIFY_DIR/au/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/au/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -f "$VERIFY_DIR/au/VoLumRigs/factory-presets.json"
         hdiutil detach "$VERIFY_DIR/dmg"
 
         hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
@@ -361,6 +364,7 @@ jobs:
         if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
         if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
         if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
+        if (-not (Test-Path (Join-Path $rigsPath "factory-presets.json"))) { throw "Missing Factory presets in $rigsPath" }
       shell: pwsh
 
     - name: Upload Windows release assets

@@ -214,6 +214,11 @@ try {
   if ($installedRigHash -ne $sourceRigHash) {
     throw "Upgrade did not overwrite $rigHashRelativePath with the bundled rig. Installed SHA256=$installedRigHash expected=$sourceRigHash"
   }
+  # The prior release may predate the Factory bank; the upgrade has to add it.
+  $installedFactory = Join-Path (Join-Path $installDir "VoLumRigs") "factory-presets.json"
+  if (-not (Test-Path $installedFactory)) {
+    throw "Upgrade install did not add the Factory presets: $installedFactory"
+  }
 
   Write-Host "Windows upgrade smoke OK ($FromTag -> $expectedVersion)."
 }

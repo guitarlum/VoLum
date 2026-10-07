@@ -476,6 +476,8 @@ TEST_CASE("Everything export of a factory-only library still writes settings and
   ContentStore store(TestBase("factory-only-everything"));
   store.reg().midiSoundMap[3] =
     MidiSoundAssignment{volum::content::FactoryOwnerKey(0), volum::content::FactoryOwnerKey(0) + ":v1"};
+  store.reg().midiSoundMap[4] =
+    MidiSoundAssignment{volum::content::FactoryOwnerKey(13), volum::content::FactoryPresetId(13, 2)};
   REQUIRE(store.Save());
 
   const auto plan = EverythingPlan(store.reg());
@@ -500,6 +502,9 @@ TEST_CASE("Everything export of a factory-only library still writes settings and
   CHECK(pack.includesMidiSoundMap);
   REQUIRE(pack.library.midiSoundMap.count(3) == 1);
   CHECK(pack.library.midiSoundMap.at(3).ampId == volum::content::FactoryOwnerKey(0));
+  // A Factory preset is not a library item: the switch travels by id alone.
+  REQUIRE(pack.library.midiSoundMap.count(4) == 1);
+  CHECK(pack.library.midiSoundMap.at(4).presetId == "factory:13:v2");
   CHECK(pack.settingsJson == settings);
 }
 

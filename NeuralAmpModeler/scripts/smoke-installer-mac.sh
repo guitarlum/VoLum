@@ -109,6 +109,10 @@ for required in "$VST3_PATH" "$AU_PATH" "$RIGS_PATH"; do
     exit 1
   fi
 done
+if [[ ! -f "$RIGS_PATH/factory-presets.json" ]]; then
+  echo "Expected installed Factory presets missing: $RIGS_PATH/factory-presets.json" >&2
+  exit 1
+fi
 
 pkgutil --pkg-info com.Lum.app.pkg.VoLum
 pkgutil --pkg-info com.Lum.vst3.pkg.VoLum

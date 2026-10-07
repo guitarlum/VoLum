@@ -35,6 +35,40 @@ TEST_CASE("FindRigsRootDirectory returns a rigs tree in typical dev/repo layout"
   REQUIRE(fs::is_directory(root / "Ampete One"));
 }
 
+TEST_CASE("Factory presets come from the first candidate tree that holds the file")
+{
+  namespace fs = std::filesystem;
+  const fs::path tmp = fs::temp_directory_path() / "volum_first_rigs_file";
+  fs::remove_all(tmp);
+  const fs::path beside = tmp / "beside" / "VoLumRigs";
+  const fs::path installed = tmp / "installed" / "VoLumRigs";
+  fs::create_directories(beside);
+  fs::create_directories(installed);
+  std::ofstream((installed / "factory-presets.json").string()).close();
+
+  // A 1.2.x install's tree has no file, so a newer build beside it falls through.
+  std::error_code ec;
+  CHECK(volum::FirstRigsFile({beside, installed}, "factory-presets.json")
+        == fs::weakly_canonical(installed / "factory-presets.json", ec));
+  std::ofstream((beside / "factory-presets.json").string()).close();
+  CHECK(volum::FirstRigsFile({beside, installed}, "factory-presets.json")
+        == fs::weakly_canonical(beside / "factory-presets.json", ec));
+  CHECK(volum::FirstRigsFile({tmp / "nowhere"}, "factory-presets.json").empty());
+  fs::remove_all(tmp);
+}
+
+TEST_CASE("FindFactoryPresetsFile reads the rigs root's bank, else the repo's in a dev build")
+{
+  // Bites only where an install without the file owns the rigs root (registry); CI has none.
+  namespace fs = std::filesystem;
+  const fs::path repoFile =
+    fs::path(__FILE__).parent_path().parent_path().parent_path() / "rigs" / "factory-presets.json";
+  const fs::path rootFile = volum::FindRigsRootDirectory() / "factory-presets.json";
+  std::error_code ec;
+  const fs::path expected = fs::is_regular_file(rootFile, ec) ? rootFile : repoFile;
+  CHECK(volum::FindFactoryPresetsFile() == fs::weakly_canonical(expected, ec));
+}
+
 TEST_CASE("Diezel Herbert Mk1 rig files expose 4 channels for every speaker mode")
 {
   namespace fs = std::filesystem;

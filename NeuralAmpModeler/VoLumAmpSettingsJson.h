@@ -124,8 +124,8 @@ bool SnapshotsEqual(const Snapshot (&a)[N], const Snapshot (&b)[N], Same same)
 // test_volum_user_settings_io.cpp, which keeps the JSON compare as its oracle.
 //
 // postValid is excluded: it is a restore sentinel ("POST was never written"),
-// not a knob. Live save always stamps it true; shipped Factory Ready is {}.
-// Including it made every relaunched Ready read as (unsaved).
+// not a knob. Live save always stamps it true; a shipped Factory snapshot may
+// not. Including it made every relaunched Factory preset read as (unsaved).
 inline bool AmpSettingsEqual(const VoLumAmpSettings& a, const VoLumAmpSettings& b)
 {
   // WriteAmpCoreBlock

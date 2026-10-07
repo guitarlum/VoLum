@@ -187,7 +187,7 @@ TEST_CASE("Add this sound Save As first for Default or dirty Factory")
   CHECK(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, false, true)); // clean Default
   CHECK(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, true, true)); // dirty Default
   CHECK(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, true, false)); // dirty Factory
-  CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, false, false)); // clean Factory Ready
+  CHECK_FALSE(volum::AddHeardNeedsSaveAs(A::SaveUserCopy, false, false)); // clean Factory preset
   CHECK(volum::AddHeardNeedsSaveAs(A::OverwriteUser, true, false));
   CHECK(volum::AddHeardNeedsSaveAs(A::OverwriteUser, false, true));
   CHECK(volum::AddHeardMarksLive(3, false));
@@ -354,7 +354,7 @@ TEST_CASE("Settings closes on a press outside its panel and keeps presses inside
 
 TEST_CASE("Invalid PLAY slots share one label")
 {
-  const auto factory = volum::DefaultFactoryPresets();
+  const std::vector<volum::FactoryPreset> factory;
   volum::content::Registry registry;
   volum::content::AssignMidiSound(registry, 4, "gone", "gone");
   const auto slots = volum::BuildPlaySlots(factory, registry);

@@ -58,19 +58,19 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();
-  const auto* factoryPreset =
-    mVolumCustomMainIdx < 0 ? volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) : nullptr;
-  const bool hasFactory = factoryPreset != nullptr;
-  volum::InitPickerGroups(mVolumPresetPickerGroups, hasFactory, !presets.empty());
+  const auto factory = _VolumFocusedFactoryPresets();
+  const int factoryCount = static_cast<int>(factory.size());
+  volum::InitPickerGroups(mVolumPresetPickerGroups, factoryCount > 0, !presets.empty());
   std::vector<VoLumListMenuControl::Row> rows;
   // Default is an action, not a named preset, and stays pinned above both banks.
   rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
-  if (hasFactory)
+  if (factoryCount > 0)
   {
     rows.push_back(
       {volum::PickerGroupMenuLabel(true, mVolumPresetPickerGroups.factoryOpen), -98, false, false, false, false, true});
     if (mVolumPresetPickerGroups.factoryOpen)
-      rows.push_back({factoryPreset->name, 0, false, false});
+      for (int i = 0; i < factoryCount; i++)
+        rows.push_back({factory[(size_t)i]->name, i, false, false});
   }
   if (!presets.empty())
   {
@@ -78,12 +78,12 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
       {volum::PickerGroupMenuLabel(false, mVolumPresetPickerGroups.userOpen), -97, false, false, false, false, true});
     if (mVolumPresetPickerGroups.userOpen)
       for (int i = 0; i < (int)presets.size(); i++)
-        rows.push_back({presets[(size_t)i], i + (hasFactory ? 1 : 0), false, false});
+        rows.push_back({presets[(size_t)i], i + factoryCount, false, false});
   }
   // When the rig is dirty, offer a one-click save path right in the dropdown:
   // overwrite the active named preset, or (no named preset / on Default) save a
   // new one. Saves opening the Manage panel just to commit a tweak.
-  const int activeUserIdx = activePresetIdx - (hasFactory ? 1 : 0);
+  const int activeUserIdx = activePresetIdx - factoryCount;
   const bool userActive =
     volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
     && activeUserIdx >= 0 && activeUserIdx < (int)presets.size();

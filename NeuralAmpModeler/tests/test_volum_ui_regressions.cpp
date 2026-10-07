@@ -2044,9 +2044,11 @@ TEST_CASE("Every preset operation names the owner of the bank it acts on")
   RequireContains(source, "volum::custom::OverwritePresetForOwner(_VolumActiveOwnerKey(), index)");
   RequireContains(source, "volum::custom::RecallPresetForOwner(_VolumActiveOwnerKey(), index)");
 
-  // ... and so does every read. Five: the preset bar, the preset menu, the two
-  // callbacks that bounds-check a chosen row before recalling it, and Ctrl+S.
-  CHECK(count("volum::custom::PresetsForOwner(") == 5);
+  // ... and so does every read. Six: the preset bar, the preset menu, the two
+  // callbacks that bounds-check a chosen row before recalling it, the recall that
+  // splits a row into Factory or User, and Ctrl+S.
+  CHECK(count("volum::custom::PresetsForOwner(") == 6);
+  RequireContains(source, "volum::custom::PresetsForOwner(_VolumActiveOwnerKey()).size()");
 
   // The overlay gets a key supplier, not a bare "claim" it cannot inspect, so its
   // rename/delete (which bypass the plugin) act on this instance's bank.

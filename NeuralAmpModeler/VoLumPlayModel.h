@@ -365,9 +365,9 @@ inline bool ResolveSound(const std::vector<FactoryPreset>& factoryPresets, const
   return false;
 }
 
-// Settings VolumRecallSound will apply. Factory Ready is the shipped snapshot
+// Settings VolumRecallSound will apply. A Factory preset is the shipped snapshot
 // (not noon / VoLumAmpSettings{}). ResolveMidiSound still returns empty settings
-// for factory:<n>:v1 — that lookup is identity only; this is the apply path.
+// for factory:<n>:v<N> — that lookup is identity only; this is the apply path.
 inline std::optional<VoLumAmpSettings> ResolveSoundSettings(const std::vector<FactoryPreset>& factoryPresets,
                                                             const content::Registry& registry, const std::string& ampId,
                                                             const std::string& presetId)
@@ -436,7 +436,7 @@ inline bool PlayPlusAddsHeard(bool dirty, bool factoryOrDefaultOrigin, bool live
 }
 
 // Save As before assign: Factory/Default that is dirty, or Default (empty id)
-// which can never be written to a MIDI slot. Clean Factory Ready can be
+// which can never be written to a MIDI slot. A clean Factory preset can be
 // assigned as-is.
 inline bool AddHeardNeedsSaveAs(PresetSaveAction, bool dirty, bool presetIdEmpty)
 {

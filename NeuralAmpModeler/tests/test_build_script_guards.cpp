@@ -144,3 +144,27 @@ TEST_CASE("Agent artifact-link check skips gitignored paths")
   CHECK(src.find("git check-ignore -q -- $normalized") != std::string::npos);
   CHECK(src.find("PSNativeCommandUseErrorActionPreference") != std::string::npos);
 }
+
+TEST_CASE("Every packager ships factory-presets.json beside the amp folders")
+{
+  // The packagers copy rigs/ by *.nam, so a data file at the rigs root is dropped
+  // unless named. Without it a release falls back to one default preset per amp and
+  // PLAY switches on a :v2 read Invalid; tests run from the repo and never notice.
+  const auto count = [](const std::string& src, const std::string& needle) {
+    size_t n = 0;
+    for (size_t at = src.find(needle); at != std::string::npos; at = src.find(needle, at + 1))
+      ++n;
+    return n;
+  };
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/installer/VoLum.iss"), "rigs\\factory-presets.json") == 1);
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/makezip-win.py"), "\"factory-presets.json\"") == 1);
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/package-portable.ps1"), "\\factory-presets.json\"") == 1);
+  // App bundle, VST3 install, VST3 zip, AU zip.
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/makedist-mac.sh"), "cp \"$RIGS_SRC/factory-presets.json\"") == 4);
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/makeinstaller-mac.sh"), "cp \"$RIGS_SRC/factory-presets.json\"")
+        == 1);
+
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/verify-packaging-win.ps1"), "factory-presets.json") >= 1);
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/verify-installer-win.ps1"), "factory-presets.json") >= 1);
+  CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/verify-packaging-mac.sh"), "factory-presets.json") >= 3);
+}

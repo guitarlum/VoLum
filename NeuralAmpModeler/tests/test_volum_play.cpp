@@ -4,6 +4,7 @@
 #include "VoLumChunkIdTail.h"
 #include "VoLumPlayModel.h"
 #include "VoLumScroll.h"
+#include "volum_factory_bank.h"
 
 #include <filesystem>
 #include <fstream>
@@ -320,7 +321,7 @@ TEST_CASE("Save dialog seed is New Preset or the current User name")
 
 TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC order")
 {
-  const auto factory = volum::DefaultFactoryPresets();
+  const auto factory = volum_test::ShippedFactoryPresets();
   volum::content::Registry registry;
   CHECK(volum::BuildPlaySlots(factory, registry).empty());
 
@@ -330,7 +331,7 @@ TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC
   REQUIRE(slots.size() == 2);
   CHECK(slots[0].slot == 2);
   CHECK(slots[0].valid);
-  CHECK(slots[0].sound.presetName == "Ready");
+  CHECK(slots[0].sound.presetName == "JCM800 Crunch");
   CHECK(slots[1].slot == 9);
   CHECK_FALSE(slots[1].valid);
   CHECK(slots[1].sound.presetName == "Invalid slot");
@@ -340,7 +341,7 @@ TEST_CASE("PLAY slot helper distinguishes empty assigned and invalid slots in PC
 
 TEST_CASE("User Sounds on a factory amp keep that amp's fractal art")
 {
-  const auto factory = volum::DefaultFactoryPresets();
+  const auto factory = volum_test::ShippedFactoryPresets();
   volum::content::Registry registry;
   volum::content::Preset user;
   user.id = "preset_lead";
@@ -361,7 +362,7 @@ TEST_CASE("User Sounds on a factory amp keep that amp's fractal art")
 
 TEST_CASE("PLAY arrows step only the slots a Program Change could actually recall")
 {
-  const auto factory = volum::DefaultFactoryPresets();
+  const auto factory = volum_test::ShippedFactoryPresets();
   volum::content::Registry registry;
 
   // Nothing assigned: the arrows have nowhere to go and must say so rather than
@@ -579,13 +580,14 @@ TEST_CASE("Default with no snapshot dirties against factory settings")
   CHECK(volum::LivePresetDirty(true, live, recalled));
 }
 
-TEST_CASE("Sound recall applies Factory Ready snapshot, not noon or ResolveMidiSound empty settings")
+TEST_CASE("Sound recall applies the Factory snapshot, not noon or ResolveMidiSound empty settings")
 {
-  auto factory = volum::DefaultFactoryPresets();
-  REQUIRE(factory.size() > 7);
-  factory[7].settings.toneBass = 8.25;
-  factory[7].settings.speakerIdx = 1;
-  factory[7].settings.dualAmpActive = true;
+  auto factory = volum_test::ShippedFactoryPresets();
+  auto* jcm = volum_test::FindMutableFactoryPreset(factory, "factory:7:v1");
+  REQUIRE(jcm != nullptr);
+  jcm->settings.toneBass = 8.25;
+  jcm->settings.speakerIdx = 1;
+  jcm->settings.dualAmpActive = true;
 
   volum::content::Registry registry;
   REQUIRE(volum::content::AssignMidiSound(registry, 2, "factory:7", "factory:7:v1"));
@@ -599,13 +601,13 @@ TEST_CASE("Sound recall applies Factory Ready snapshot, not noon or ResolveMidiS
 
   const auto applied = volum::ResolveSoundSettings(factory, registry, midi->ampId, midi->presetId);
   REQUIRE(applied.has_value());
-  CHECK(volum::AmpSettingsEqual(*applied, factory[7].settings));
+  CHECK(volum::AmpSettingsEqual(*applied, jcm->settings));
   CHECK_FALSE(volum::AmpSettingsEqual(*applied, midi->settings));
 }
 
 TEST_CASE("Sound recall applies User preset settings including cab Dual Amp and PRE")
 {
-  auto factory = volum::DefaultFactoryPresets();
+  auto factory = volum_test::ShippedFactoryPresets();
   volum::content::Registry registry;
   volum::content::Preset user;
   user.id = "preset_lead";
@@ -630,7 +632,7 @@ TEST_CASE("Sound recall applies User preset settings including cab Dual Amp and 
 
 TEST_CASE("Sound recall settings are nullopt for invalid and unassigned slots")
 {
-  const auto factory = volum::DefaultFactoryPresets();
+  const auto factory = volum_test::ShippedFactoryPresets();
   volum::content::Registry registry;
   REQUIRE(volum::content::AssignMidiSound(registry, 9, "missing-amp", "missing-preset"));
 

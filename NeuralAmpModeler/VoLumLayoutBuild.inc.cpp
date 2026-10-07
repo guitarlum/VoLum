@@ -1192,10 +1192,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           if (idx < 0 || presetBar->IsFactoryActive())
             return;
           const std::string name = presetBar->ActiveName();
-          const bool hasFactory =
-            pPlugin->mVolumCustomMainIdx < 0
-            && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
-          const int userIdx = idx - (hasFactory ? 1 : 0);
+          const int userIdx = idx - static_cast<int>(pPlugin->_VolumFocusedFactoryPresets().size());
           auto doOverwrite = [pPlugin, userIdx]() { pPlugin->_VolumOverwritePreset(userIdx, -1); };
           if (auto* dlg = pGfx->GetControlWithTag(kCtrlTagVoLumConfirm))
             dlg->As<VoLumConfirmDialogControl>()->Show("Are you sure?",
@@ -1213,13 +1210,11 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         // Name the owner for the bounds check, not only inside _VolumRecallPreset:
         // validating a row against one instance's bank while recalling it from
         // another's is how a stale index recalls the wrong preset. The menu's rows
-        // are the Ready row (when this amp ships one) plus the User bank, so the
-        // bound has to count both the way _VolumRecallPreset splits them.
+        // are this amp's Factory rows plus the User bank, so the bound has to count
+        // both the way _VolumRecallPreset splits them.
         const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
-        const bool hasFactory =
-          pPlugin->mVolumCustomMainIdx < 0
-          && volum::FindFactoryPresetForAmp(pPlugin->mVolumFactoryPresets, pPlugin->mVolumAmpIdx) != nullptr;
-        if (code >= 0 && code < static_cast<int>(presets.size()) + (hasFactory ? 1 : 0))
+        const int factoryCount = static_cast<int>(pPlugin->_VolumFocusedFactoryPresets().size());
+        if (code >= 0 && code < static_cast<int>(presets.size()) + factoryCount)
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
       });
       pGraphics->AttachControl(presetMenu, kCtrlTagVoLumPresetMenu)->Hide(true);

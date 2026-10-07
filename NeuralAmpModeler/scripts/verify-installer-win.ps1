@@ -63,6 +63,7 @@ if (-not (Test-Path $vst3Path)) { throw "Missing installed VST3: $vst3Path" }
 if (-not (Test-Path $rigsPath)) { throw "Missing installed VoLumRigs: $rigsPath" }
 if (-not (Test-Path $prePedalsPath)) { throw "Missing installed PrePedals folder: $prePedalsPath" }
 if (-not (Test-Path $sampleRig)) { throw "Missing installed sample rig: $sampleRig" }
+if (-not (Test-Path (Join-Path $rigsPath "factory-presets.json"))) { throw "Missing installed Factory presets in $rigsPath" }
 
 foreach ($file in $prePedalFiles) {
   $installed = Join-Path $prePedalsPath $file.Name

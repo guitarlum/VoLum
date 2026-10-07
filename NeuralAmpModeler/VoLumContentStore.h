@@ -422,7 +422,7 @@ inline bool IsFactoryOwnerKey(const std::string& key)
 //
 // One MIDI slot points at a Sound: an amp plus a preset on that amp. `ampId` is
 // "factory:<idx>" or a custom-amp library id; `presetId` is a User preset library
-// id or a shipped Factory preset id ("factory:<idx>:v1"). A Factory preset is not
+// id or a shipped Factory preset id ("factory:<idx>:v<N>"). A Factory preset is not
 // a library item, so it can never be found in a preset bank - it still serializes
 // here, and resolution has to know the difference (see MidiSlotState).
 //
@@ -526,8 +526,9 @@ inline const MidiSoundAssignment* MidiSoundAtSlot(const Registry& r, int slot)
 
 // Pure/headless lookup used by OnIdle, PLAY, and tests. Missing amps, missing
 // User presets, unassigned slots, and mismatched Factory ids stay no-op. Shipped
-// Ready presets (`factory:<idx>:v1`) resolve even though they are not stored in
-// the user presetBanks.
+// Factory presets (`factory:<idx>:v<N>`) resolve by identity only: they are not
+// in presetBanks, and this layer does not know the shipped bank, so an id the
+// bank lacks fails later in the bank-aware ResolveSound (VoLumPlayModel.h).
 inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int slot)
 {
   const MidiSoundAssignment* sound = MidiSoundAtSlot(r, slot);
@@ -548,8 +549,12 @@ inline std::optional<ResolvedMidiSound> ResolveMidiSound(const Registry& r, int 
   if (!ampKnown)
     return std::nullopt;
 
-  if (factoryIdx >= 0 && factoryIdx < kAmpCount && sound->presetId == FactoryOwnerKey(factoryIdx) + ":v1")
+  if (factoryIdx >= 0 && factoryIdx < kAmpCount && IsFactoryPresetId(sound->presetId))
+  {
+    if (sound->presetId.rfind(sound->ampId + ":v", 0) != 0)
+      return std::nullopt;
     return ResolvedMidiSound{sound->ampId, sound->presetId, VoLumAmpSettings{}};
+  }
 
   const auto bank = r.presetBanks.find(sound->ampId);
   if (bank == r.presetBanks.end())

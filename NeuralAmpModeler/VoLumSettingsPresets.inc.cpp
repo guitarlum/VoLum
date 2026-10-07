@@ -96,8 +96,8 @@ void NeuralAmpModeler::_VolumSyncPresetOwner()
   // "(unsaved)" marker diffs against is then the preset's own stored content, which
   // is the same choice the DAW-chunk restore path makes.
   if (mVolumCustomMainIdx < 0)
-    if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
-        factory && factory->id == mVolumActivePresetId)
+    if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, mVolumActivePresetId);
+        factory && factory->ampIdx == mVolumAmpIdx)
     {
       mVolumRecalledSnapshot = volum::HealedFactoryPresetSettings(factory->settings);
       mVolumRecalledSnapshotByOwner[key] = mVolumRecalledSnapshot;
@@ -137,27 +137,19 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
   // Owner-explicit for the User rows: with two editors open, the ambient owner key
   // belongs to whichever one last switched amps, so reading "the active bank"
   // through it could show another instance's presets in this bar. The shipped
-  // Ready row is not a library item, so it is prepended here.
-  const auto* factoryPreset =
-    mVolumCustomMainIdx < 0 ? volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) : nullptr;
-  const bool hasFactory = factoryPreset != nullptr;
-  std::vector<std::string> names;
-  if (hasFactory)
-    names.push_back(factoryPreset->name);
+  // Factory rows are not library items, so they are prepended here.
+  const auto factory = _VolumFocusedFactoryPresets();
   const auto users = volum::custom::PresetsForOwner(_VolumActiveOwnerKey());
-  names.insert(names.end(), users.begin(), users.end());
-  bar->SetList(names); // clears selection; dirty is preserved then recomputed below
+  bar->SetList(volum::PresetRowNames(factory, users)); // clears selection; dirty is preserved then recomputed below
 
   bool selected = false;
   if (mVolumHasRecalledSnapshot && !mVolumActivePresetId.empty())
   {
-    if (hasFactory)
-      if (const auto* factory = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
-          factory && factory->id == mVolumActivePresetId)
-      {
-        bar->SelectAt(0, factory->name.c_str(), true);
-        selected = true;
-      }
+    if (const int row = volum::FactoryPresetRow(factory, mVolumActivePresetId); row >= 0)
+    {
+      bar->SelectAt(row, factory[static_cast<size_t>(row)]->name.c_str(), true);
+      selected = true;
+    }
     if (!selected)
     {
       const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
@@ -167,7 +159,7 @@ void NeuralAmpModeler::_VolumRefreshPresetBar()
         for (int i = 0; i < static_cast<int>(it->second.size()); ++i)
           if (const auto& pr = it->second[static_cast<size_t>(i)]; pr.id == mVolumActivePresetId)
           {
-            bar->SelectAt(i + (hasFactory ? 1 : 0), pr.name.c_str(), false);
+            bar->SelectAt(i + static_cast<int>(factory.size()), pr.name.c_str(), false);
             found = true;
             break;
           }
@@ -219,16 +211,22 @@ void NeuralAmpModeler::_VolumOverwritePreset(int index, int retargetSlot)
   _VolumReassignLivePlaySlotAfterSave(retargetSlot);
 }
 
+std::vector<const volum::FactoryPreset*> NeuralAmpModeler::_VolumFocusedFactoryPresets() const
+{
+  if (mVolumCustomMainIdx >= 0)
+    return {};
+  return volum::FactoryPresetsForAmp(mVolumFactoryPresets, mVolumAmpIdx);
+}
+
 void NeuralAmpModeler::_VolumRecallPreset(int index)
 {
-  const bool hasFactory =
-    mVolumCustomMainIdx < 0 && volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx) != nullptr;
-  if (hasFactory && index == 0)
-  {
-    _VolumRecallFactoryPreset();
-    return;
-  }
-  _VolumRecallUserPreset(index - (hasFactory ? 1 : 0));
+  const auto factory = _VolumFocusedFactoryPresets();
+  const int userCount = static_cast<int>(volum::custom::PresetsForOwner(_VolumActiveOwnerKey()).size());
+  const auto row = volum::PresetRowAt(factory, userCount, index);
+  if (row.factory)
+    _VolumRecallFactoryPreset(*row.factory);
+  else if (row.userIdx >= 0)
+    _VolumRecallUserPreset(row.userIdx);
 }
 
 void NeuralAmpModeler::_VolumRecallUserPreset(int index)
@@ -289,15 +287,12 @@ void NeuralAmpModeler::_VolumRefreshMidiSettingsChrome()
                         _VolumActiveOwnerKey(), mVolumActivePresetId);
 }
 
-void NeuralAmpModeler::_VolumRecallFactoryPreset()
+void NeuralAmpModeler::_VolumRecallFactoryPreset(const volum::FactoryPreset& preset)
 {
-  if (mVolumCustomMainIdx >= 0)
+  if (mVolumCustomMainIdx >= 0 || preset.ampIdx != mVolumAmpIdx)
     return;
-  const auto* preset = volum::FindFactoryPresetForAmp(mVolumFactoryPresets, mVolumAmpIdx);
-  if (!preset)
-    return;
-  mVolumActivePresetId = preset->id;
-  _VolumApplyRecalledPreset(preset->settings);
+  mVolumActivePresetId = preset.id;
+  _VolumApplyRecalledPreset(preset.settings);
   _VolumSyncLivePlaySlotFromActivePair();
   _VolumRefreshPresetBar();
 }

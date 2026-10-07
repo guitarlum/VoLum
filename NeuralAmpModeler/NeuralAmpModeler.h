@@ -496,7 +496,9 @@ public:
   // recalled snapshot (drives the equality-based "(unsaved)" flag), update the bar.
   void _VolumRecallPreset(int index);
   void _VolumRecallUserPreset(int index);
-  void _VolumRecallFactoryPreset();
+  void _VolumRecallFactoryPreset(const volum::FactoryPreset& preset);
+  // The focused amp's Factory rows (empty while a custom amp is focused).
+  std::vector<const volum::FactoryPreset*> _VolumFocusedFactoryPresets() const;
   // Apply a recalled snapshot to the live chain and retain it (called by the
   // bridge apply hook so Manage/menu/bar recalls share one path).
   void _VolumApplyRecalledPreset(const volum::VoLumAmpSettings& s);

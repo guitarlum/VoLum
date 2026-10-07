@@ -94,7 +94,10 @@ def main():
                     print("adding " + full_dir)
                     zf.writestr(arc, "")
                 for name in filenames:
-                    if not name.lower().endswith(".nam"):
+                    shipped = name.lower().endswith(".nam") or (
+                        dirpath == rigs_root and name == "factory-presets.json"
+                    )
+                    if not shipped:
                         continue
                     full = os.path.join(dirpath, name)
                     rel_under_rigs = os.path.relpath(full, rigs_root).replace("\\", "/")

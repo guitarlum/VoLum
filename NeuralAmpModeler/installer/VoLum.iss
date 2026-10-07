@@ -63,6 +63,7 @@ Source: "..\..\rigs\Sebago Texas Flood\*.nam"; DestDir: "{app}\VoLumRigs\Sebago 
 Source: "..\..\rigs\Soldano SLO100\*.nam"; DestDir: "{app}\VoLumRigs\Soldano SLO100"; Flags: ignoreversion
 Source: "..\..\rigs\THC Sunset\*.nam"; DestDir: "{app}\VoLumRigs\THC Sunset"; Flags: ignoreversion
 Source: "..\..\rigs\PrePedals\*.nam"; DestDir: "{app}\VoLumRigs\PrePedals"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\..\rigs\factory-presets.json"; DestDir: "{app}\VoLumRigs"; Flags: ignoreversion
 
 ; Docs
 Source: "changelog.txt"; DestDir: "{app}"
