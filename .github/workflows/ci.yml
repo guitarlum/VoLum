@@ -308,6 +308,10 @@ jobs:
           [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
           [[ "$au_archs" == *arm64* && "$au_archs" == *x86_64* ]]
 
+      - name: Validate macOS AU with auval
+        timeout-minutes: 15
+        run: bash NeuralAmpModeler/scripts/validate-au-mac.sh
+
       - name: Validate macOS VST3 with pluginval
         run: bash NeuralAmpModeler/scripts/validate-vst3-mac.sh
 

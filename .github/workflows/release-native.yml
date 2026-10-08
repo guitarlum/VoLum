@@ -207,6 +207,12 @@ jobs:
         hdiutil detach "$VERIFY_DIR/installer-dmg"
       shell: bash
 
+    - name: Validate macOS AU with auval
+      if: matrix.os == 'macos-latest'
+      timeout-minutes: 15
+      run: bash NeuralAmpModeler/scripts/validate-au-mac.sh
+      shell: bash
+
     - name: Verify macOS package metadata
       if: matrix.os == 'macos-latest'
       env:
