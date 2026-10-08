@@ -405,14 +405,6 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
       mVolumSupportChannelFiles.push_back(std::move(ch.filename));
       mVolumSupportChannelLabels.push_back(std::move(ch.label));
     }
-
-    int channelIdx = std::clamp(
-      GetParam(kSupportChannelIdx)->Int(), 0, std::max(0, static_cast<int>(mVolumSupportChannelFiles.size()) - 1));
-    if (channelIdx != GetParam(kSupportChannelIdx)->Int())
-    {
-      GetParam(kSupportChannelIdx)->Set(channelIdx);
-      SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
-    }
   }
 
   if (auto* pGfx = GetUI())

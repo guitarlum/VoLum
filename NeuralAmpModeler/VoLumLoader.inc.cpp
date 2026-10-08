@@ -524,12 +524,9 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
     return;
   }
 
-  int channelIdx = std::clamp(GetParam(kSupportChannelIdx)->Int(), 0, static_cast<int>(channels.size()) - 1);
-  if (channelIdx != GetParam(kSupportChannelIdx)->Int())
-  {
-    GetParam(kSupportChannelIdx)->Set(channelIdx);
-    SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
-  }
+  // Clamp at the use site only: an AU host requires a parameter to keep the value
+  // it set (auval fails "Parameter did not retain set value when Initialized").
+  const int channelIdx = std::clamp(GetParam(kSupportChannelIdx)->Int(), 0, static_cast<int>(channels.size()) - 1);
 
   const auto rigPath = volum::content::PathFromUtf8(mVolumRigsRoot) / volum::kAmps[supportAmpIdx].folderName
                        / channels[channelIdx].filename;
