@@ -134,7 +134,7 @@ The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every v
 
 ![VoLum POST Chorus card](user-guide-chorus.png)
 
-**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. The first repeat comes from the right, the next from the left, and so on. In Dual Amp both amps echo wherever they are panned, with Ø on or off. The repeats sit a little quieter than without Ping-Pong, because each one lands on one side only. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
+**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. The first repeat comes from the right, the next from the left, and so on. In Dual Amp both amps echo wherever they are panned, with Ø on or off. The repeats sit about 3 to 7 dB quieter than without Ping-Pong, because each one lands on one side only. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
 
 Both tempo-synced POST pedals — Delay and Tremolo — share one tempo source. In a DAW they follow the host tempo; in the standalone app they follow the metronome BPM (set it in the metronome overlay, and it applies even while the metronome click is muted).
 

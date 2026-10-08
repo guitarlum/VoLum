@@ -850,20 +850,25 @@ double PingPongWetRatio(int mode, std::vector<double>& left, std::vector<double>
 } // namespace
 
 // Two different amp captures on one guitar land anywhere in L/R correlation, with
-// SUPPORT's polarity flip on or off. Ping-pong puts each repeat on one side, so it
-// sits 3 dB (fully correlated pair) to 6 dB (uncorrelated) under plain delay;
-// anything lower is the pair cancelling in the seed.
+// SUPPORT's polarity flip on or off. Ping-pong puts each repeat on one side, so its wet
+// energy is 0.25 * (1 + |rho|) of plain delay: 3 dB under for a fully correlated pair,
+// 6 dB uncorrelated. Inside the hysteresis band (-0.2 < rho < -0.05) R may keep +1, which
+// gives 0.25 * (1 - |rho|), about 7 dB under. Anything lower is the pair cancelling.
 TEST_CASE("Delay: sustained ping-pong stays within 7 dB of plain delay at any L/R correlation")
 {
   for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
-    for (double rho : {-0.95, -0.6, -0.4, -0.3, 0.0, 0.4, 0.95})
+    for (double rho : {-0.95, -0.6, -0.4, -0.3, -0.15, -0.1, 0.0, 0.4, 0.95})
     {
       CAPTURE(mode);
       CAPTURE(rho);
       const size_t frames = 24000;
       std::vector<double> left(frames), right(frames);
       FillCorrelatedPair(left, right, 0, frames, rho);
-      CHECK(PingPongWetRatio(mode, left, right, frames / 2, frames) > 0.2);
+      const bool inBand = rho > -0.2 && rho < -0.05;
+      const double expected = 0.25 * (inBand ? 1.0 - std::abs(rho) : 1.0 + std::abs(rho));
+      const double ratio = PingPongWetRatio(mode, left, right, frames / 2, frames);
+      CAPTURE(ratio);
+      CHECK(ratio > 0.8 * expected);
     }
 }
 
