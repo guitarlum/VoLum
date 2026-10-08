@@ -49,6 +49,7 @@ Single-context. `CONTEXT.md` is a lazy glossary, not a spec. See
 - Windows portable package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full zip` (the script resolves its helpers relative to the working directory, so it must run from `scripts`)
 - Windows installer package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full installer`
 - Windows standalone end-to-end scenarios: `pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1`
+- Windows standalone MIDI recall through the real WinMM stack: `pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1 -Scenario midi -RequireMidi` (needs loopMIDI with a port named `VoLum Loop`; without `-RequireMidi` a missing port is a SKIP)
 - Windows standalone rate/buffer switching stress: `pwsh NeuralAmpModeler/scripts/stress-standalone-rate-switch-win.ps1` (needs a real ASIO device)
 - macOS release-equivalent package: `bash NeuralAmpModeler/scripts/makedist-mac.sh full all`
 - Watch/dispatch CI: `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref <branch> [-Dispatch] [-NoWait]`

@@ -224,6 +224,31 @@ TEST_CASE("A Program Change moves PLAY's LIVE slot, not only the live rig")
   CHECK(body.find("mVolumLastRecalledPlaySlot = *slot") != std::string::npos);
 }
 
+TEST_CASE("Every drained MIDI recall leaves a [midi] line in volum.log")
+{
+  // e2e-standalone-win.ps1 -Scenario midi reads these lines to see which Sound a
+  // Program Change or CC recalled, and that an empty program reached VoLum.
+  const std::string source = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
+  const auto idle = source.find("void NeuralAmpModeler::OnIdle()");
+  REQUIRE(idle != std::string::npos);
+  const auto drain = source.find("mVolumMidiQueue.Drain()", idle);
+  REQUIRE(drain != std::string::npos);
+  const std::string body = source.substr(drain, 700);
+  const auto recall = body.find("_VolumRecallSound(sound->ampId, sound->presetId)");
+  REQUIRE(recall != std::string::npos);
+  const auto recalled = body.find(
+    "VOLUM_LOG(\"midi\", \"recall slot=\" + std::to_string(*slot) + \" amp=\" + sound->ampId + \" preset=\" "
+    "+ sound->presetId);");
+  REQUIRE(recalled != std::string::npos);
+  CHECK(recalled > recall);
+  const auto otherwise = body.find("else", recalled);
+  const auto ignored =
+    body.find("VOLUM_LOG(\"midi\", \"slot=\" + std::to_string(*slot) + \" has no playable Sound; ignored\");");
+  REQUIRE(otherwise != std::string::npos);
+  REQUIRE(ignored != std::string::npos);
+  CHECK(ignored > otherwise);
+}
+
 // Closest controller mock that CI can run: the same IMidiMsg a host delivers on
 // the audio thread, then the exact Decode → latest-wins queue → ResolveMidiSound
 // path ProcessMidiMsg + OnIdle use. Does not construct NeuralAmpModeler.

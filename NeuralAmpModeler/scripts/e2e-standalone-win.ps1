@@ -11,13 +11,18 @@
 # memory but lost, reset, or silently rewritten across a restart. Local-only -
 # CI runners have no audio device, so the app cannot open a stream there.
 #
+# The midi scenario needs loopMIDI (https://www.tobias-erichsen.de/software/loopmidi.html)
+# running with a port named "VoLum Loop" (-MidiPort). Without that port it prints
+# SKIP and passes; -RequireMidi turns the missing port into a failure.
+#
 #   pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1
 #   pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1 -Scenario upgrade -KeepSandbox
+#   pwsh NeuralAmpModeler/scripts/e2e-standalone-win.ps1 -Scenario midi -RequireMidi
 
 [CmdletBinding()]
 param(
   [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
-    "samplerate", "savedialog", "pack", "chrome")]
+    "samplerate", "savedialog", "pack", "chrome", "midi")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -26,7 +31,10 @@ param(
   [int]$LaunchTimeoutSec = 60,
   [switch]$KeepSandbox,
   # pack scenario: also save the export/import overlays as <ShotsDir>\06-*.png.
-  [string]$ShotsDir
+  [string]$ShotsDir,
+  # midi scenario: the loopMIDI port, found by name on both its WinMM sides.
+  [string]$MidiPort = "VoLum Loop",
+  [switch]$RequireMidi
 )
 
 $ErrorActionPreference = "Stop"
@@ -1931,6 +1939,220 @@ function Test-Chrome {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: Program Change and CC 102 through the real Windows MIDI stack
+#
+# Prerequisite: loopMIDI with a port named $MidiPort. This script writes to the
+# port's WinMM output; the standalone listens on its input, so every message
+# takes the path a pedalboard's does: RtMidi, the APP's audio callback,
+# ProcessMidiMsg, the latest-wins queue, OnIdle. OnIdle writes one [midi] line
+# per drained program to volum.log - "recall slot=N amp=.. preset=.." or
+# "slot=N has no playable Sound; ignored" - which is what is read back.
+# --------------------------------------------------------------------------
+if (-not ([System.Management.Automation.PSTypeName]'VoLumE2eMidi').Type) {
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class VoLumE2eMidi {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct MIDIOUTCAPS {
+    public ushort wMid, wPid; public uint vDriverVersion;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szPname;
+    public ushort wTechnology, wVoices, wNotes, wChannelMask; public uint dwSupport;
+  }
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct MIDIINCAPS {
+    public ushort wMid, wPid; public uint vDriverVersion;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szPname;
+    public uint dwSupport;
+  }
+  [DllImport("winmm.dll")] static extern int midiOutGetNumDevs();
+  [DllImport("winmm.dll")] static extern int midiInGetNumDevs();
+  [DllImport("winmm.dll", CharSet = CharSet.Unicode)] static extern int midiOutGetDevCapsW(IntPtr id, ref MIDIOUTCAPS c, int size);
+  [DllImport("winmm.dll", CharSet = CharSet.Unicode)] static extern int midiInGetDevCapsW(IntPtr id, ref MIDIINCAPS c, int size);
+  [DllImport("winmm.dll")] static extern int midiOutOpen(out IntPtr h, IntPtr id, IntPtr cb, IntPtr inst, int flags);
+  [DllImport("winmm.dll")] static extern int midiOutShortMsg(IntPtr h, int msg);
+  [DllImport("winmm.dll")] static extern int midiOutClose(IntPtr h);
+
+  // Device indices move whenever a device comes or goes, so ports are found by name.
+  public static int OutIndex(string name) {
+    for (int i = 0; i < midiOutGetNumDevs(); i++) {
+      var c = new MIDIOUTCAPS();
+      if (midiOutGetDevCapsW((IntPtr)i, ref c, Marshal.SizeOf(typeof(MIDIOUTCAPS))) == 0 && c.szPname == name) return i;
+    }
+    return -1;
+  }
+  public static int InIndex(string name) {
+    for (int i = 0; i < midiInGetNumDevs(); i++) {
+      var c = new MIDIINCAPS();
+      if (midiInGetDevCapsW((IntPtr)i, ref c, Marshal.SizeOf(typeof(MIDIINCAPS))) == 0 && c.szPname == name) return i;
+    }
+    return -1;
+  }
+  public static IntPtr Open(int index) {
+    IntPtr h;
+    return midiOutOpen(out h, (IntPtr)index, IntPtr.Zero, IntPtr.Zero, 0) == 0 ? h : IntPtr.Zero;
+  }
+  public static bool Send(IntPtr h, int status, int data1, int data2) {
+    return midiOutShortMsg(h, status | (data1 << 8) | (data2 << 16)) == 0;
+  }
+  public static void Close(IntPtr h) { if (h != IntPtr.Zero) midiOutClose(h); }
+}
+'@
+}
+
+function Get-MidiLogLines {
+  param([string]$LogPath)
+  if (-not (Test-Path $LogPath)) { return , @() }
+  return , @(Get-Content $LogPath | Where-Object { $_ -match '\[midi\] ' } | ForEach-Object { ($_ -split '\[midi\] ', 2)[1] })
+}
+
+# The [midi] lines written after the first $After, once one of them matches
+# $Pattern or $TimeoutMs runs out. A pattern of $null just waits $TimeoutMs, for
+# messages that must leave no line.
+function Wait-MidiLog {
+  param([string]$LogPath, [int]$After, [string]$Pattern, [int]$TimeoutMs = 5000)
+  $end = (Get-Date).AddMilliseconds($TimeoutMs)
+  do {
+    Start-Sleep -Milliseconds 100
+    $new = @((Get-MidiLogLines $LogPath) | Select-Object -Skip $After)
+    if ($Pattern -and @($new | Where-Object { $_ -match $Pattern }).Count -gt 0) { return , $new }
+  } while ((Get-Date) -lt $end)
+  return , $new
+}
+
+function Test-Midi {
+  Write-Host ("`n[midi] Program Change and CC 102 recall PLAY Sounds through loopMIDI '{0}'" -f $MidiPort) -ForegroundColor Cyan
+  $outIdx = [VoLumE2eMidi]::OutIndex($MidiPort)
+  $inIdx = [VoLumE2eMidi]::InIndex($MidiPort)
+  if ($outIdx -lt 0 -or $inIdx -lt 0) {
+    $why = "no MIDI port named '$MidiPort' (out $outIdx, in $inIdx): start loopMIDI with a port of that name"
+    if ($RequireMidi) { Assert-True "loopMIDI port '$MidiPort' is present (-RequireMidi)" $false $why }
+    else { Write-Host ("  SKIP  {0}; -RequireMidi makes this a failure" -f $why) -ForegroundColor Yellow }
+    return
+  }
+
+  $sandbox = New-Sandbox "midi"
+  Write-SandboxAudioConfig $sandbox
+  $root = Join-Path $sandbox "VoLum"
+  $logPath = Join-Path $root "volum.log"
+  $iniPath = Join-Path $root "settings.ini"
+  $settingsPath = Join-Path $root "volum-settings.json"
+  $contentPath = Join-Path $root "content\volum-content.json"
+
+  # RtMidi lists a WinMM input as "<name> <index>", and iPlug matches indev against that.
+  $indev = "{0} {1}" -f $MidiPort, $inIdx
+  Add-Content $iniPath @("[midi]", "indev=$indev", "outdev=off", "inchan=0", "outchan=0") -Encoding ASCII
+
+  # Known Factory Sounds on scattered programs; 7 is left empty on purpose.
+  $board = @{
+    3   = @("factory:12", "factory:12:v1")  # The bestest Clean
+    9   = @("factory:6", "factory:6:v1")    # Modern Rhythm
+    42  = @("factory:0", "factory:0:v2")    # Ampete Lead
+    100 = @("factory:8", "factory:8:v1")    # Crack the Skye
+    101 = @("factory:13", "factory:13:v2")  # SLO Crunch
+  }
+  $recallOf = { param([int]$slot) "^recall slot={0} amp={1} preset={2}$" -f $slot, [regex]::Escape($board[$slot][0]),
+    [regex]::Escape($board[$slot][1]) }
+  New-Item -ItemType Directory -Path (Split-Path $contentPath) -Force | Out-Null
+  [ordered]@{
+    schemaVersion = $script:ContentSchemaVersion
+    midiSoundMap  = @($board.Keys | Sort-Object | ForEach-Object {
+        [ordered]@{ slot = $_; ampId = $board[$_][0]; presetId = $board[$_][1] } })
+  } | ConvertTo-Json -Depth 10 | Set-Content $contentPath -Encoding UTF8
+  $seededMap = Get-MapKey (Read-Json $contentPath)
+
+  $out = [VoLumE2eMidi]::Open($outIdx)
+  Assert-True "opened the WinMM output of '$MidiPort'" ($out -ne [IntPtr]::Zero)
+  if ($out -eq [IntPtr]::Zero) { return }
+  $PC1 = 0xC0; $CC1 = 0xB0; $PC2 = 0xC1; $CC2 = 0xB1
+  try {
+    # Omni (no midiCh stored yet): Program Change, CC 102, an empty program, a burst.
+    $run = Invoke-VoLumRun -SandboxRoot $sandbox -Drive {
+      param($proc)
+      $r = @{}
+      $n = (Get-MidiLogLines $logPath).Count
+      [void][VoLumE2eMidi]::Send($out, $PC1, 9, 0)
+      $r.pc = Wait-MidiLog $logPath $n (& $recallOf 9)
+      $n = (Get-MidiLogLines $logPath).Count
+      [void][VoLumE2eMidi]::Send($out, $CC1, 102, 42)
+      $r.cc = Wait-MidiLog $logPath $n (& $recallOf 42)
+      $n = (Get-MidiLogLines $logPath).Count
+      [void][VoLumE2eMidi]::Send($out, $PC1, 7, 0)
+      $r.empty = Wait-MidiLog $logPath $n '^slot=7 has no playable Sound; ignored$' 3000
+      $n = (Get-MidiLogLines $logPath).Count
+      foreach ($p in @(3, 100, 9, 42, 101)) { [void][VoLumE2eMidi]::Send($out, $PC1, $p, 0) }
+      [void](Wait-MidiLog $logPath $n (& $recallOf 101))
+      # Anything still queued behind the last one would land now.
+      $r.burst = Wait-MidiLog $logPath $n $null 1500
+      return $r
+    }
+    Assert-True "app opened a window" $run.started
+    Assert-True "app closed gracefully with the MIDI port open" $run.graceful
+    $d = $run.drive
+    if (-not $d) { Assert-True "drive step ran" $false; return }
+    $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
+    Assert-True "the standalone opened '$indev'" ($log -notmatch "could not open the saved MIDI port")
+    Assert-True "settings.ini still names '$indev' (iPlug resets an unknown port to off)" (
+      (Get-Content $iniPath) -contains "indev=$indev")
+
+    Assert-True "Program Change 9 recalls program 9 (Modern Rhythm)" (@($d.pc | Where-Object { $_ -match (& $recallOf 9) }).Count -eq 1) (
+      "midi lines: " + ($d.pc -join " / "))
+    Assert-True "CC 102 value 42 recalls program 42 (Ampete Lead)" (@($d.cc | Where-Object { $_ -match (& $recallOf 42) }).Count -eq 1) (
+      "midi lines: " + ($d.cc -join " / "))
+    Assert-True "Program Change 7 reaches VoLum and is ignored: program 7 is empty" (
+      @($d.empty | Where-Object { $_ -match '^slot=7 has no playable Sound; ignored$' }).Count -eq 1) ("midi lines: " + ($d.empty -join " / "))
+    Assert-True "the empty program recalls nothing" (@($d.empty | Where-Object { $_ -match '^recall ' }).Count -eq 0) (
+      "midi lines: " + ($d.empty -join " / "))
+    $burstRecalls = @($d.burst | Where-Object { $_ -match '^recall ' })
+    Assert-True "a burst of Program Changes 3, 100, 9, 42, 101 ends on 101 (SLO Crunch)" (
+      $burstRecalls.Count -ge 1 -and $burstRecalls[-1] -match (& $recallOf 101)) ("midi lines: " + ($d.burst -join " / "))
+
+    $settings = Read-Json $settingsPath
+    Assert-Equal "saved PLAY cursor is the last program played" 101 $(if ($settings) { $settings.lastPlaySlot })
+    Assert-Equal "saved active preset is the last Sound recalled" "factory:13:v2" $(if ($settings) { $settings.volumActivePresetId })
+    Assert-Equal "MIDI recalls leave the PLAY board as seeded" $seededMap (Get-MapKey (Read-Json $contentPath))
+
+    # One channel = 2: the decoder drops channel-1 messages on the audio thread, so
+    # they leave no line at all; channel 2 still recalls.
+    if ($settings) {
+      $settings | Add-Member -NotePropertyName midiCh -NotePropertyValue 2 -Force
+      $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+    }
+    $run = Invoke-VoLumRun -SandboxRoot $sandbox -Drive {
+      param($proc)
+      $r = @{}
+      $n = (Get-MidiLogLines $logPath).Count
+      [void][VoLumE2eMidi]::Send($out, $PC1, 3, 0)
+      [void][VoLumE2eMidi]::Send($out, $CC1, 102, 9)
+      $r.ch1 = Wait-MidiLog $logPath $n $null 2000
+      $n = (Get-MidiLogLines $logPath).Count
+      [void][VoLumE2eMidi]::Send($out, $CC2, 102, 100)
+      $r.ccCh2 = Wait-MidiLog $logPath $n (& $recallOf 100)
+      $n = (Get-MidiLogLines $logPath).Count
+      [void][VoLumE2eMidi]::Send($out, $PC2, 42, 0)
+      $r.pcCh2 = Wait-MidiLog $logPath $n (& $recallOf 42)
+      return $r
+    }
+    Assert-True "[one channel 2] app opened a window" $run.started
+    Assert-True "[one channel 2] app closed gracefully with the MIDI port open" $run.graceful
+    $d = $run.drive
+    if (-not $d) { Assert-True "[one channel 2] drive step ran" $false; return }
+    Assert-Equal "[one channel 2] channel-1 Program Change 3 and CC 102 value 9 are ignored" "" ($d.ch1 -join " / ")
+    Assert-True "[one channel 2] channel-2 CC 102 value 100 recalls program 100 (Crack the Skye)" (
+      @($d.ccCh2 | Where-Object { $_ -match (& $recallOf 100) }).Count -eq 1) ("midi lines: " + ($d.ccCh2 -join " / "))
+    Assert-True "[one channel 2] channel-2 Program Change 42 recalls program 42 (Ampete Lead)" (
+      @($d.pcCh2 | Where-Object { $_ -match (& $recallOf 42) }).Count -eq 1) ("midi lines: " + ($d.pcCh2 -join " / "))
+    $settings = Read-Json $settingsPath
+    Assert-Equal "[one channel 2] One channel = 2 survives the quit" 2 $(if ($settings) { $settings.midiCh })
+    Assert-Equal "[one channel 2] saved PLAY cursor is program 42" 42 $(if ($settings) { $settings.lastPlaySlot })
+  }
+  finally {
+    [VoLumE2eMidi]::Close($out)
+  }
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# --------------------------------------------------------------------------
 
 Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
@@ -1951,6 +2173,7 @@ if ($Scenario -in @("all", "samplerate")) { Test-SampleRate }
 if ($Scenario -in @("all", "savedialog")) { Test-SaveDialog }
 if ($Scenario -in @("all", "pack")) { Test-Pack }
 if ($Scenario -in @("all", "chrome")) { Test-Chrome }
+if ($Scenario -in @("all", "midi")) { Test-Midi }
 
 Write-Host ""
 if ($script:Failures.Count -eq 0) {
