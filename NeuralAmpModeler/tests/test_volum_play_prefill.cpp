@@ -181,6 +181,47 @@ TEST_CASE("A 1.2.x library is pre-filled and keeps everything it had")
   }
 }
 
+// The constructor pre-fills before its migrations, and they read the old file: an
+// IR without trimDb is the trim migration's retry marker, and a v3 file's
+// customScenes are what a 1.2.x project's custom amp restores its knobs from. A DAW
+// scan pre-fills too, and never runs those migrations' own saves.
+TEST_CASE("Pre-filling a 1.2.x library adds the midiSoundMap key and changes nothing else")
+{
+  auto v3 = nlohmann::json::parse(kLibraryV3);
+  v3["customScenes"] = {{"amp_legacy", nlohmann::json::object()}};
+  for (const std::string& fixture : {std::string(kLibraryV2), v3.dump(2)})
+  {
+    CAPTURE(fixture);
+    const auto base = PrefillBase("key-only");
+    ContentStore store(base);
+    WriteLibrary(store, fixture);
+    store.Load();
+    REQUIRE_FALSE(store.reg().hasMidiSoundMap);
+    REQUIRE(store.PrefillMidiSoundMapOnce(ShippedPrefill()));
+
+    auto after = nlohmann::json::parse(ReadLibrary(store));
+    REQUIRE(after.contains("midiSoundMap"));
+    after.erase("midiSoundMap");
+    CHECK(after == nlohmann::json::parse(fixture));
+    CheckPrefilledBoard(MapOnDisk(base));
+  }
+}
+
+TEST_CASE("Pre-filling a 1.2.0 library leaves the trim migration's snapshot the untouched file")
+{
+  const auto base = PrefillBase("v2-snapshot");
+  ContentStore store(base);
+  WriteLibrary(store, kLibraryV2);
+  REQUIRE(store.Load());
+  REQUIRE(store.PrefillMidiSoundMapOnce(ShippedPrefill()));
+
+  // What _VolumMigrateIrTrims does next, before its own save.
+  REQUIRE(store.BackupBeforeMigration("1.2.1"));
+  std::ifstream in(store.MigrationBackupPath("1.2.1"), std::ios::binary);
+  const std::string snapshot((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(snapshot == kLibraryV2);
+}
+
 TEST_CASE("A library that stores midiSoundMap is never pre-filled")
 {
   SUBCASE("an empty map")

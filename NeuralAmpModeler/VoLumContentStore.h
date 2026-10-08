@@ -808,6 +808,14 @@ inline bool CustomAmpFromJson(const nlohmann::json& j, custom::CustomAmp& out)
   return true;
 }
 
+inline nlohmann::json MidiSoundMapToJson(const std::map<int, MidiSoundAssignment>& map)
+{
+  nlohmann::json midi = nlohmann::json::array();
+  for (const auto& slot : map)
+    midi.push_back({{"slot", slot.first}, {"ampId", slot.second.ampId}, {"presetId", slot.second.presetId}});
+  return midi;
+}
+
 inline nlohmann::json RegistryToJson(const Registry& r)
 {
   nlohmann::json j;
@@ -848,10 +856,7 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   // Deliberately no "customScenes": see kContentSchemaVersion v4. A downgrade to
   // 1.2.x finds the key missing and falls back to per-amp defaults on first focus,
   // which is the same thing it does for a custom amp it has never seen.
-  nlohmann::json midi = nlohmann::json::array();
-  for (const auto& slot : r.midiSoundMap)
-    midi.push_back({{"slot", slot.first}, {"ampId", slot.second.ampId}, {"presetId", slot.second.presetId}});
-  j["midiSoundMap"] = midi;
+  j["midiSoundMap"] = MidiSoundMapToJson(r.midiSoundMap);
 
   if (r.passthrough.is_object())
   {
@@ -1737,9 +1742,44 @@ public:
       mBaseline.hasMidiSoundMap = true;
       return false;
     }
-    mReg.midiSoundMap.insert(sounds.begin(), sounds.end());
+    std::map<int, MidiSoundAssignment> filled = mReg.midiSoundMap;
+    filled.insert(sounds.begin(), sounds.end());
+
+    std::error_code existsEc;
+    if (!std::filesystem::exists(RegistryPath(), existsEc))
+    {
+      const auto before = mReg.midiSoundMap;
+      mReg.midiSoundMap = filled;
+      mReg.hasMidiSoundMap = true;
+      if (MergeAndWrite(disk))
+        return true;
+      mReg.midiSoundMap = before;
+      mReg.hasMidiSoundMap = false;
+      return false;
+    }
+
+    // An existing library gets only the key. A full write here would run before the
+    // constructor's migrations and drop what they still read from the old file: an
+    // absent trimDb is the IR trim migration's retry marker, and a v3 file's
+    // customScenes are what a 1.2.x project's custom amp restores from.
+    nlohmann::json raw;
+    if (!ReadRegistryJson(raw))
+      return false;
+    if (!raw.contains("schemaVersion") || !raw["schemaVersion"].is_number_integer()
+        || raw["schemaVersion"].get<int>() < 3)
+      BackupBeforeMigration("1.2.1"); // the trim migration's snapshot must be the untouched file
+    raw["midiSoundMap"] = MidiSoundMapToJson(filled);
+    std::error_code writeEc;
+    if (!WriteJsonAtomically(RegistryPath(), raw, writeEc))
+    {
+      mLastWriteFailed = true;
+      return false;
+    }
+    mReg.midiSoundMap = filled;
     mReg.hasMidiSoundMap = true;
-    return MergeAndWrite(disk);
+    mBaseline.midiSoundMap = filled;
+    mBaseline.hasMidiSoundMap = true;
+    return true;
   }
 
   // Snapshot the on-disk registry once, before a migration rewrites it in place.
@@ -1957,26 +1997,34 @@ private:
   DiskRegistry ReadRegistryFromDisk() const
   {
     std::error_code ec;
-    const auto path = RegistryPath();
-    if (mBase.empty() || !std::filesystem::exists(path, ec))
+    if (mBase.empty() || !std::filesystem::exists(RegistryPath(), ec))
       return DiskRegistry{};
-    if (!std::filesystem::is_regular_file(path, ec))
+    nlohmann::json j;
+    if (!ReadRegistryJson(j))
       return DiskRegistry{Registry{}, false};
+    return DiskRegistry{RegistryFromJson(j), true};
+  }
+
+  // The existing registry file as parsed JSON; false when it is missing, not a
+  // regular file, unparseable or not an object.
+  bool ReadRegistryJson(nlohmann::json& out) const
+  {
+    std::error_code ec;
+    const auto path = RegistryPath();
+    if (mBase.empty() || !std::filesystem::is_regular_file(path, ec))
+      return false;
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
-      return DiskRegistry{Registry{}, false};
-    nlohmann::json j;
+      return false;
     try
     {
-      in >> j;
+      in >> out;
     }
     catch (...)
     {
-      return DiskRegistry{Registry{}, false};
+      return false;
     }
-    if (!j.is_object())
-      return DiskRegistry{Registry{}, false};
-    return DiskRegistry{RegistryFromJson(j), true};
+    return out.is_object();
   }
 
   // Save()'s merged write, with the cross-process lock already held by the caller.
