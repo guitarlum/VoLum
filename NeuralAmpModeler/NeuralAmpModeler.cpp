@@ -945,7 +945,10 @@ void NeuralAmpModeler::OnIdle()
       mVolumLastRecalledPlaySlot = *slot;
       // An open MIDI tab moves its LIVE lamp with the footswitch.
       _VolumRefreshMidiSettingsChrome();
+      VOLUM_LOG("midi", "recall slot=" + std::to_string(*slot) + " amp=" + sound->ampId + " preset=" + sound->presetId);
     }
+    else
+      VOLUM_LOG("midi", "slot=" + std::to_string(*slot) + " has no playable Sound; ignored");
   }
 
   mInputSender.TransmitData(*this);
