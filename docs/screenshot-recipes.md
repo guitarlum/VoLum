@@ -110,7 +110,7 @@ bring-your-own library:
   Halcyon TS engaged, Hall reverb on, Pitch/Comp off. BUILD hero, PRE, Pitch,
   Presets, Tuner, Metronome.
 - `Soldano SLO100` (13): Compressor + Klon + Halcyon TS engaged, pitch off.
-  PLAY empty / picker / board.
+  PLAY start board / picker / board.
 - `Orange ORS100 1972` (11): both NAM assigned but bypassed; Digital delay +
   Hall reverb on, tremolo off. POST / Chorus / Tremolo.
 - `Marshall 2204 1982` (7): dual-amp on with `Marshall JMP 2203` as SUPPORT;
@@ -185,20 +185,20 @@ capture with `capture-volum-canvas.ps1 -OutPath docs/user-guide-<name>.png`.
 
 | PNG | Amp / how to reach | State delta from seed | Transient step |
 | --- | --- | --- | --- |
-| `user-guide-play-empty.png` | Soldano SLO100 (`lastAmpIdx` 13, empty `midiSoundMap`) | no PLAY assignments | canvas: empty click `(10,10)` then toggle `(743, 22)` into PLAY. Fail the shot if **+** is not **+ Add this sound** or if PLAY\|BUILD words are in the header |
-| `user-guide-play-picker.png` | Soldano, after one User Sound is LIVE | map slot 0 to Crunch Rhythm | from the empty board, **+ Add this sound** `(450, 324)` once to put LIVE on the rail, then rail **+ Add Sound** `(803, 301)`. Picker: PROGRAM next-free, User heading `(450, 265)` expanded |
+| `user-guide-play-start.png` | Soldano SLO100 (`lastAmpIdx` 13), library with no `midiSoundMap` key | the PLAY pre-fill: `.ui-sandbox-launch.ps1 -Reseed` always writes a map, so close VoLum, delete the `midiSoundMap` key from `%TEMP%\volum-ui-sandbox\VoLum\content\volum-content.json`, and relaunch `.ui-sandbox-launch.ps1` without `-Reseed` | canvas: empty click `(10,10)` then toggle `(743, 22)` into PLAY. Fail the shot unless the rail holds exactly 00 The bestest Clean, 01 SLO Crunch, 02 Modern Rhythm, 03 Crack the Skye, 04 Ampete Lead, **+** reads **+ Add this sound**, and no PLAY\|BUILD words are in the header |
+| `user-guide-play-picker.png` | Soldano, after one User Sound is LIVE | map slot 0 to Crunch Rhythm | from the empty board (`.ui-sandbox-launch.ps1 -Reseed -EmptyMap`: a stored midiSoundMap key, even an empty one, is never pre-filled; a missing key is), **+ Add this sound** `(450, 324)` once to put LIVE on the rail, then rail **+ Add Sound** `(803, 301)`. Picker: PROGRAM next-free, User heading `(450, 265)` expanded |
 | `user-guide-play.png` | Soldano SLO100 | slots 0–2 = Crunch Rhythm / Lead Boost / Clean Verb, slot 0 LIVE | canvas toggle `(743, 22)` if you are in BUILD. Fail if **+** is not **+ Add Sound** or if a safety banner is visible. PLAY IN/OUT should read in the same ballpark as BUILD. Drag a rail row onto another to swap; drop in the gap to slide Sounds along existing program numbers |
 | `user-guide-main.png` | THC Sunset (seed lastAmpIdx 14, AMP view, **Sunset Crunch**) | none | click **THC Sunset** in the browser (93,565) if the custom amp is focused. Compact pill left of tuner. Fail if NAM 2 is an empty `+` or the preset bar is not Sunset Crunch |
 | `user-guide-settings-signal.png` | any | none | canvas gear `(869, 22)`; Settings opens on the tab it was left on, so click **SIGNAL** `(300, 113)` |
-| `user-guide-settings-midi.png` | any | `.ui-sandbox-launch.ps1 -Reseed`: programs 0, 1, 2, 4 assigned and 6 pointing at a preset id that does not exist (`preset_gone_forever`), so footswitch bank 1 shows assigned, empty **+** and a red **Invalid slot** switch | toggle PLAY `(743, 22)`, click rail row 00 `(800, 105)` so switch 000 lights **LIVE**, toggle back `(743, 22)`, gear `(869, 22)`, **MIDI** `(450, 113)`. Fail if a switch name is cut mid-word without an ellipsis or LIVE is missing |
+| `user-guide-settings-midi.png` | any | `.ui-sandbox-launch.ps1 -Reseed`: programs 0, 1, 2, 4 assigned and 6 pointing at a preset id that does not exist (`preset_gone_forever`), so footswitch bank 1 shows assigned, empty **+** and a red **Invalid slot** switch; switch 002 is Ampete One's first Factory preset, **Ampete Rhythm** | toggle PLAY `(743, 22)`, click rail row 00 `(800, 105)` so switch 000 lights **LIVE**, toggle back `(743, 22)`, gear `(869, 22)`, **MIDI** `(450, 113)`. Fail if a switch name is cut mid-word without an ellipsis or LIVE is missing |
 | `user-guide-settings-system.png` | any | none | from Settings, click **SYSTEM** `(600, 113)`. Both **Back up your library** help lines stay inside the card |
 | `user-guide-pre.png` | THC Sunset | `preCompActive=true` (hero keeps Comp off) | `1` then click Comp card. Fail if either NAM slot is empty |
 | `user-guide-pre-pedal.png` | THC Sunset | none | from PRE, click Klon card `(455, 230)` twice to open the capture chooser |
 | `user-guide-pitch-transpose.png` | THC Sunset | `prePitchActive=true, prePitchMode=0, prePitchSemitones=-2, prePitchTransChar=2`; Comp off; both NAM still assigned | `1` then click Pitch card `(280, 230)` |
 | `user-guide-pitch-octaver.png` | THC Sunset | `prePitchActive=true, prePitchMode=1, prePitchOctDown=0.8, prePitchVoicing=1`; Comp off; both NAM still assigned | `1` then click Pitch card `(280, 230)` |
-| `user-guide-presets.png` | THC Sunset | none (Sunset Crunch bank) | click preset bar `(539, 23)`, then expand FACTORY `(430, 88)` and USER `(430, 112)`. Menu must show Default, Ready, Sunset Crunch, Manage |
+| `user-guide-presets.png` | THC Sunset | none (Sunset Crunch bank) | click preset bar `(539, 23)`, then expand FACTORY `(430, 88)` and USER (below the two Factory rows). Menu must show Default, FACTORY Sunset Crunch and Sunset Clean, USER Sunset Crunch, Manage |
 | `user-guide-post.png` | ORS100 (lastAmpIdx 11) | none | `{ESC}` then `{UP}` to 11, `3` (POST; Delay focused). Fail if either NAM slot is an empty `+` |
-| `user-guide-chorus.png` | ORS100 | `postChorusActive=true` | `3` then `{LEFT}` (focus CHORUS) |
+| `user-guide-chorus.png` | ORS100 | `postChorusActive=true` | `3` then `{LEFT}` (focus CHORUS). The seed stores no Chorus voice, so the card opens on the default: fail if it is not ENSEMBLE |
 | `user-guide-tremolo.png` | ORS100 | `postDelayActive=false, postTremoloActive=true, postTremoloMode=1` | `3` then `{RIGHT}{RIGHT}` (focus TREM) |
 | `user-guide-dual-amp.png` | Marshall 2204 (lastAmpIdx 7) | none (dual on in sidecar) | `2` (AMP). Fail if either NAM slot is empty |
 | `user-guide-custom-amp.png` | Monomyth (`{ESC}` then 8x `{DOWN}` from Marshall 2204) | none | click pen icon (125,625) to open builder |

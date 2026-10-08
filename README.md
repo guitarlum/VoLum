@@ -12,8 +12,8 @@ VoLum is an open-source guitar amp collection for the stage, studio, and practic
 
 ## Why It Stands Out
 
-- **BUILD then PLAY in one window:** BUILD is the editor. PLAY is the stage setlist. Every bundled amp ships a Factory **Ready** snapshot you can assign without saving first.
-- **MIDI Program Change:** 128 slots, the same list PLAY shows. No Learn, no CC — pick a Sound, send a program number.
+- **BUILD then PLAY in one window:** BUILD is the editor. PLAY is the stage setlist. Every bundled amp ships one or two named Factory presets (21 in all) you can assign without saving first, and PLAY starts with five of them on programs 0-4.
+- **MIDI Program Change:** 128 slots, the same list PLAY shows. No Learn — pick a Sound, send a program number, or send the Recall CC (102) when your host does not pass Program Change on.
 - **POST Chorus:** four voices sit ahead of Delay, so modulation hits the amp before repeats and room.
 - **One Pack file:** a `.volumpack` backs up, moves, or shares the custom library (amps, IRs, pedals, presets) in one step.
 - **Update reminder only:** VoLum can tell you a newer release exists. It never downloads an update.
@@ -118,7 +118,7 @@ Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
 
 ## PLAY
 
-Once a tone exists in BUILD, switch to PLAY and assign Ready or your User presets to program numbers. The board is the setlist: click a row to recall it, or send MIDI Program Change.
+PLAY starts with five Factory Sounds on programs 0-4. Replace them or add your own: assign any Factory preset or a User preset you saved in BUILD to a program number. The board is the setlist: click a row to recall it, or send MIDI Program Change.
 
 <p align="center">
   <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
