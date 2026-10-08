@@ -134,7 +134,7 @@ Die Regler sind **RATE**, **DEPTH**, **TONE**, **WIDTH** und **MIX**, und jede S
 
 ![VoLum POST-Chorus-Karte](user-guide-chorus.png)
 
-**Delay** bietet Digital, Analog und Reverse. Die Regler sind Time, Feedback, Mix, Tone und ein modusspezifischer Charakterregler: `Grit`, `Wear` oder `Bloom`. Ping-Pong gibt es für Digital und Analog. Seine Echos starten aus der Mitte von links und rechts, so bekommen im Dual-Amp-Modus beide Amps Echos, egal wie sie gepannt sind. Mit **TEMPO SYNC** koppelst du die Wiederholungen ans Tempo: Der **TIME**-Regler wird zu einem musikalischen **DIVISION**-Stepper (1/2 bis 1/16, inklusive punktierter und Triolen-Werte).
+**Delay** bietet Digital, Analog und Reverse. Die Regler sind Time, Feedback, Mix, Tone und ein modusspezifischer Charakterregler: `Grit`, `Wear` oder `Bloom`. Ping-Pong gibt es für Digital und Analog. Die erste Wiederholung kommt von rechts, die nächste von links und so weiter. Im Dual-Amp-Modus bekommen beide Amps Echos, egal wie sie gepannt sind und ob Ø an oder aus ist. Die Wiederholungen sind etwa 3 bis 7 dB leiser als ohne Ping-Pong, weil jede nur auf einer Seite landet. Mit **TEMPO SYNC** koppelst du die Wiederholungen ans Tempo: Der **TIME**-Regler wird zu einem musikalischen **DIVISION**-Stepper (1/2 bis 1/16, inklusive punktierter und Triolen-Werte).
 
 Beide tempo-synchronisierten POST-Pedale — Delay und Tremolo — teilen sich eine Tempoquelle. Im DAW folgen sie dem Host-Tempo, in der Standalone-App dem Metronom-BPM (im Metronom-Overlay einstellbar; es gilt auch, wenn der Metronom-Klick stummgeschaltet ist).
 

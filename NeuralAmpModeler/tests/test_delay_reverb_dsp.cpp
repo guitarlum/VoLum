@@ -1,4 +1,4 @@
-﻿#include "third_party/doctest.h"
+#include "third_party/doctest.h"
 #include "../../AudioDSPTools/dsp/Delay.h"
 #include "../../AudioDSPTools/dsp/Reverb.h"
 #include "../VoLumMasterSafety.h"
@@ -599,25 +599,55 @@ TEST_CASE("Reverb: sample rate change reallocates without crash")
   REQUIRE_FALSE(hasNaN(out[0], frames));
 }
 
-TEST_CASE("Delay: Digital PingPong cross-seeds first repeat to opposite side")
+// A source on one side only must still bounce, and in phase: a seed split into mid
+// and side gave a right-only source opposite-polarity echoes that cancel in mono.
+TEST_CASE("Delay: Digital PingPong bounces a one-sided impulse right then left, in phase")
 {
-  dsp::effect::Delay delay;
-  delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
+  for (int side : {0, 1})
+  {
+    CAPTURE(side);
+    dsp::effect::Delay delay;
+    delay.SetParams(10.0, 0.5, 1.0, dsp::effect::Delay::kModeDigital, 1000.0, 0.5, 0.0, true);
 
-  const size_t frames = 32;
-  std::vector<double> left(frames, 0.0), right(frames, 0.0);
-  left[0] = 1.0;
-  double* inputs[2] = {left.data(), right.data()};
+    const size_t frames = 32;
+    std::vector<double> left(frames, 0.0), right(frames, 0.0);
+    (side == 0 ? left : right)[0] = 1.0;
+    double* inputs[2] = {left.data(), right.data()};
 
-  auto** out = delay.Process(inputs, 2, frames);
-  REQUIRE_FALSE(hasNaN(out[0], frames));
-  REQUIRE_FALSE(hasNaN(out[1], frames));
-  // The seed is the L/R mid, so a left-only impulse repeats at half level on the right.
-  CHECK(std::abs(out[1][10]) == doctest::Approx(0.5).epsilon(0.05));
-  CHECK(std::abs(out[0][10]) < 0.05);
+    auto** out = delay.Process(inputs, 2, frames);
+    REQUIRE_FALSE(hasNaN(out[0], frames));
+    REQUIRE_FALSE(hasNaN(out[1], frames));
+    CHECK(out[1][10] == doctest::Approx(0.5).epsilon(0.05));
+    CHECK(std::abs(out[0][10]) < 1.0e-9);
+    CHECK(out[0][20] == doctest::Approx(0.25).epsilon(0.05));
+    CHECK(std::abs(out[1][20]) < 1.0e-9);
+  }
 }
 
-TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
+TEST_CASE("Delay: Analog PingPong keeps a one-sided source's echoes in phase")
+{
+  for (int side : {0, 1})
+  {
+    CAPTURE(side);
+    dsp::effect::Delay delay;
+    delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
+
+    const size_t frames = 200;
+    std::vector<double> left(frames, 0.0), right(frames, 0.0);
+    (side == 0 ? left : right)[0] = 1.0;
+    double* inputs[2] = {left.data(), right.data()};
+
+    auto** out = delay.Process(inputs, 2, frames);
+    std::vector<double> mono(frames - 1);
+    for (size_t i = 1; i < frames; ++i)
+      mono[i - 1] = out[0][i] + out[1][i];
+    const double stereo = energy(out[0] + 1, frames - 1) + energy(out[1] + 1, frames - 1);
+    REQUIRE(stereo > 0.01);
+    CHECK(energy(mono.data(), mono.size()) > stereo * 0.8);
+  }
+}
+
+TEST_CASE("Delay: Analog PingPong starts a left-only impulse on the right")
 {
   dsp::effect::Delay delay;
   delay.SetParams(12.0, 0.45, 1.0, dsp::effect::Delay::kModeAnalog, 1000.0, 0.5, 0.5, true);
@@ -635,6 +665,7 @@ TEST_CASE("Delay: Analog PingPong cross-seeds opposite side")
     leftRepeatEnergy += std::abs(out[0][i]);
     rightRepeatEnergy += std::abs(out[1][i]);
   }
+  CHECK(rightRepeatEnergy > 0.1);
   CHECK(rightRepeatEnergy > leftRepeatEnergy * 2.0);
 }
 
@@ -739,6 +770,124 @@ TEST_CASE("Delay: ping-pong echoes a source that is only on the right")
     for (size_t i = 1; i < frames; ++i)
       wet += std::abs(out[0][i]) + std::abs(out[1][i]);
     CHECK(wet > 0.1);
+  }
+}
+
+// Dual Amp's default split is MAIN hard left and a polarity-inverted SUPPORT hard
+// right: one guitar, so L and R are nearly opposite. Their mid nearly cancels; a
+// seed built from the mid alone left ping-pong almost silent next to the plain delay.
+TEST_CASE("Delay: ping-pong echoes a stereo pair within 3 dB of plain delay, either polarity")
+{
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
+    for (double r : {-0.9, 0.9})
+    {
+      CAPTURE(mode);
+      CAPTURE(r);
+      const auto wetEnergy = [mode, r](bool pingPong) {
+        dsp::effect::Delay delay;
+        delay.SetParams(10.0, 0.5, 1.0, mode, 1000.0, 0.5, 0.0, pingPong);
+        const size_t frames = 200;
+        std::vector<double> left(frames, 0.0), right(frames, 0.0);
+        left[0] = 1.0;
+        right[0] = r;
+        double* inputs[2] = {left.data(), right.data()};
+        auto** out = delay.Process(inputs, 2, frames);
+        return energy(out[0] + 1, frames - 1) + energy(out[1] + 1, frames - 1);
+      };
+      const double plain = wetEnergy(false);
+      const double pingPong = wetEnergy(true);
+      REQUIRE(plain > 0.0);
+      // Plain delay echoes both channels; ping-pong one channel per repeat: -3 dB.
+      CHECK(pingPong > plain * 0.45);
+    }
+}
+
+namespace
+{
+struct PingPongNoise
+{
+  unsigned int seed;
+  double operator()()
+  {
+    seed = seed * 1103515245u + 12345u;
+    return static_cast<double>((seed >> 8) & 0xFFFF) / 32767.5 - 1.0;
+  }
+};
+
+// Equal-level pair with L/R correlation rho, as two amps on one guitar give.
+void FillCorrelatedPair(std::vector<double>& left, std::vector<double>& right, size_t from, size_t to, double rho)
+{
+  PingPongNoise a{7}, b{99};
+  for (size_t i = from; i < to; ++i)
+  {
+    const double shared = a();
+    left[i] = 0.5 * shared;
+    right[i] = 0.5 * (rho * shared + std::sqrt(1.0 - rho * rho) * b());
+  }
+}
+
+// Ping-pong wet energy over plain-delay wet energy in [from, to), both channels.
+double PingPongWetRatio(int mode, std::vector<double>& left, std::vector<double>& right, size_t from, size_t to)
+{
+  const auto wetEnergy = [&](bool pingPong) {
+    dsp::effect::Delay delay;
+    delay.SetParams(20.0, 0.4, 1.0, mode, 48000.0, 0.5, 0.0, pingPong);
+    double* inputs[2] = {left.data(), right.data()};
+    auto** out = delay.Process(inputs, 2, left.size());
+    double sum = 0.0;
+    for (size_t c = 0; c < 2; ++c)
+      for (size_t i = from; i < to; ++i)
+      {
+        const double wet = out[c][i] - inputs[c][i];
+        sum += wet * wet;
+      }
+    return sum;
+  };
+  const double plain = wetEnergy(false);
+  REQUIRE(plain > 0.0);
+  return wetEnergy(true) / plain;
+}
+} // namespace
+
+// Two different amp captures on one guitar land anywhere in L/R correlation, with
+// SUPPORT's polarity flip on or off. Ping-pong puts each repeat on one side, so its wet
+// energy is 0.25 * (1 + |rho|) of plain delay: 3 dB under for a fully correlated pair,
+// 6 dB uncorrelated. Inside the hysteresis band (-0.2 < rho < -0.05) R may keep +1, which
+// gives 0.25 * (1 - |rho|), about 7 dB under. Anything lower is the pair cancelling.
+TEST_CASE("Delay: sustained ping-pong stays within 7 dB of plain delay at any L/R correlation")
+{
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
+    for (double rho : {-0.95, -0.6, -0.4, -0.3, -0.15, -0.1, 0.0, 0.4, 0.95})
+    {
+      CAPTURE(mode);
+      CAPTURE(rho);
+      const size_t frames = 24000;
+      std::vector<double> left(frames), right(frames);
+      FillCorrelatedPair(left, right, 0, frames, rho);
+      const bool inBand = rho > -0.2 && rho < -0.05;
+      const double expected = 0.25 * (inBand ? 1.0 - std::abs(rho) : 1.0 + std::abs(rho));
+      const double ratio = PingPongWetRatio(mode, left, right, frames / 2, frames);
+      CAPTURE(ratio);
+      CHECK(ratio > 0.8 * expected);
+    }
+}
+
+// Silence between notes must not reset R's sign: the attack of the next note's
+// echoes would cancel while the weight ramps back.
+TEST_CASE("Delay: ping-pong keeps an inverted pair's sign through silence")
+{
+  for (int mode : {dsp::effect::Delay::kModeDigital, dsp::effect::Delay::kModeAnalog})
+  {
+    CAPTURE(mode);
+    const size_t note = 12000;
+    const size_t gap = 4 * 48000;
+    const size_t frames = note + gap + note;
+    std::vector<double> left(frames, 0.0), right(frames, 0.0);
+    FillCorrelatedPair(left, right, 0, note, -0.95);
+    FillCorrelatedPair(left, right, note + gap, frames, -0.95);
+    // First repeat of the second note: 20 ms delay, 10 ms of it.
+    const size_t echo = note + gap + 960;
+    CHECK(PingPongWetRatio(mode, left, right, echo, echo + 480) > 0.4);
   }
 }
 
