@@ -8,7 +8,9 @@ Draft for the GitHub release. Check asset names with `gh release view v1.3.0` be
 - **MIDI recall of complete Sounds.** Program Change (and a Recall CC for hosts that never send PC) recalls an amp with one of its presets. Settings -> MIDI shows the 128 programs as a foot controller: 16 banks of 8.
 - **Chorus.** A fourth POST pedal ahead of Delay with four voices: CLASSIC (Juno-style sweep), WARPED (tape wow and flutter), CLEAR (wide, mono-clean) and ENSEMBLE (80s tri-stereo rack).
 - **Packs.** Export and import your custom amps, IRs, pedals and presets as one `.volumpack` file: everything, just Sounds, or a whole amp.
-- **Factory presets.** Every factory amp ships with a dialled-in sound. (ONLY IF the owner's Pack is baked before release; otherwise drop this line.)
+- **Factory presets.** Every factory amp ships with one or two named, read-only presets, 21 in all. Change one and press Ctrl+S to keep your version as a User preset.
+- **PLAY starts with five Sounds.** The first time 1.3.0 opens your library, programs 0-4 hold The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye and Ampete Lead. Replace them or add your own; VoLum never fills the board again.
+- **Pedals you can hear when you switch them on.** Pitch now starts on the Octaver, Transpose starts at -2 semitones, and Chorus starts on ENSEMBLE. Your saved presets and projects keep their settings.
 - **Settings in three tabs** (SIGNAL, MIDI, SYSTEM), and an optional once-a-day update reminder.
 
 ## Fixed
@@ -20,7 +22,8 @@ Draft for the GitHub release. Check asset names with `gh release view v1.3.0` be
 ## Downloads
 
 - Windows: `VoLum-v1.3.0-windows-setup.exe` (installer) or `VoLum-v1.3.0-windows-portable.zip` (VST3 + standalone, keep `VoLumRigs` next to them).
-- macOS: `VoLum-v1.3.0-macos-installer.dmg` (standalone, VST3 and AU), or the separate standalone, VST3 and AU downloads.
+- macOS: `VoLum-v1.3.0-macos-installer.dmg` (standalone, VST3 and AU), or the separate standalone, VST3 and AU downloads. The AU passes Apple's auval validation, which Logic Pro and GarageBand run before they load a plug-in.
+- TODO(owner): Gatekeeper wording. The exact steps macOS shows when it blocks the installer, from your Mac pass (System Settings > Privacy & Security > Open Anyway).
 
 Your presets, custom content and settings carry over from 1.2.x.
 

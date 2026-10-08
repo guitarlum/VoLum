@@ -72,7 +72,7 @@ All PRE and POST pedal controls remain editable while their block is bypassed, i
 The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode; a new rig starts on **OCTAVER**, so switching the pedal on is audible straight away:
 
 - **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7, starting at −2), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
-- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean. It follows single notes across the whole neck, up to the 24th fret of the high E.
+- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean. A new rig starts with OCT DN at 80%, OCT UP off, DRY at 100%, and MODERN. It follows single notes across the whole neck, up to the 24th fret of the high E.
 
 ![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
 
@@ -144,8 +144,8 @@ Both tempo-synced POST pedals — Delay and Tremolo — share one tempo source. 
 
 **Tremolo** runs last, after Reverb, so it modulates the whole wet wash. The **OPTICAL / BIAS / HARMONIC** picker selects the voice:
 
-- **Optical** is a choppy, photocell-style amplitude gate.
-- **Bias** is a smooth, symmetric sine modulation — the classic "Bang Bang (My Baby Shot Me Down)" tremolo, and the factory default voice.
+- **Optical** is a choppy, photocell-style amplitude gate, and the factory default voice.
+- **Bias** is a smooth, symmetric sine modulation — the classic "Bang Bang (My Baby Shot Me Down)" tremolo.
 - **Harmonic** splits the signal at a crossover frequency and modulates the low and high bands in opposite phase for a phasey sweep.
 
 The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smooth sine toward a hard square), and **MIX**. In Harmonic mode an extra **X-OVER** knob sets the band-split frequency. Turn on **TEMPO SYNC** to lock the rate to the song: in a DAW it follows the host tempo, and in the standalone app it follows the metronome BPM. When sync is on, the RATE knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values). Left and right channels stay phase-linked for a coherent stereo tremolo.
@@ -162,7 +162,25 @@ Switching Chorus voice fades the old voice out before the new one fades in; swit
 
 A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, channel, all knobs, PRE pedals, POST effects, and the Dual Amp setup.
 
-Every factory amp ships one read-only Factory preset named **Ready**. That is the noon snapshot: you can assign it in PLAY without saving first. Editing Ready and saving creates a User copy; Factory rows are never overwritten or deleted.
+Every factory amp ships one or two read-only Factory presets, 21 in all, listed under **FACTORY** in the preset menu. They use only content that ships with VoLum. You can put any of them on PLAY without saving first. Change one and press **Ctrl+S** (or use **Save current as new**) and VoLum saves your version as a new User preset; Factory presets are never overwritten or deleted. The `<` / `>` arrows step through an amp's Factory presets before its User presets.
+
+| Amp | Factory presets |
+| --- | --- |
+| Ampete One | Ampete Rhythm, Ampete Lead |
+| Bad Cat Mini Cat | BadCat Crunch |
+| Brunetti XL 2 | American Lead |
+| Diezel Herbert Mk1 | Thicc Rhythm, Sanitarium |
+| Fryette Deliv. 120 | Dry Rhythm |
+| H&K TriAmp Mk2 | HiFi Heavy, HiFi Crunch |
+| Lichtlaerm Prom. | Modern Rhythm, Modern Lead |
+| Marshall 2204 | JCM800 Crunch |
+| Marshall JMP 2203 | Crack the Skye |
+| Marshall JVM | Modern British |
+| Orange OD120 | Stoner |
+| Orange ORS100 | An old Soul |
+| Sebago Texas Fl. | The bestest Clean |
+| Soldano SLO100 | SLO Lead, SLO Crunch |
+| THC Sunset | Sunset Crunch, Sunset Clean |
 
 1. Dial in a tone, then open the preset bar in the AMP header.
 2. Use **Save current as new** to store it under a name.
@@ -173,21 +191,35 @@ Every factory amp ships one read-only Factory preset named **Ready**. That is th
 
 Presets are per amp: each amp (factory or custom) keeps its own User list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
 
+Saving in BUILD (**Ctrl+S**, **Save current as new**, **Update**, or **Manage**) never changes which Sound a PLAY switch holds. Deleting a preset that sits on PLAY switches names those switches in the confirmation, for example "On PLAY 03 and 12: they will read Invalid." The switches keep their program numbers and read **Invalid slot** until you give them another Sound.
+
 ## PLAY View
 
-When the tones exist in BUILD, switch to PLAY and assign them to program numbers. Use the same header toggle: it shows faders while you are in PLAY.
+Switch to PLAY with the same header toggle: it shows faders while you are in PLAY.
 
-![VoLum PLAY empty board](user-guide-play-empty.png)
+![VoLum PLAY with its five starting Sounds](user-guide-play-start.png)
 
-A first visit with no Sounds assigned is an empty setlist, not an empty product. The live amp is still behind it. **+ Add this sound** writes what you hear onto the next free program number once it is a User Sound. Factory, Default, or an unnamed rig opens a name popup first; Default always does, and a dirty Factory does too. **Save** in that popup creates the User Sound and puts it on the rail in one step; **Cancel**, `Esc`, or a click outside writes nothing and adds nothing.
+PLAY does not start empty. The first time VoLum opens a library that has no PLAY board yet (a fresh install, or an upgrade from 1.2.x), it puts five Factory Sounds on programs `0`–`4`. Many foot controllers count their presets from 1, so there they are presets 1 to 5.
+
+| Program | Sound | Amp |
+| --- | --- | --- |
+| 0 | The bestest Clean | Sebago Texas Fl. |
+| 1 | SLO Crunch | Soldano SLO100 |
+| 2 | Modern Rhythm | Lichtlaerm Prom. |
+| 3 | Crack the Skye | Marshall JMP 2203 |
+| 4 | Ampete Lead | Ampete One |
+
+This happens once. A board you cleared or changed is never filled again, and importing a Pack that carries an empty board keeps it empty. All other program numbers start free.
+
+Replace these Sounds or add your own. To replace one, use its assign control or double-click it, or pick its program number in the **Add Sound** picker. To add one, **+ Add this sound** writes what you hear onto the next free program number (`5` on the starting board). A User Sound or an unchanged Factory preset goes straight on. Default, a changed preset, or an unnamed rig opens a name popup first. **Save** in that popup creates the User Sound and puts it on the rail in one step; **Cancel**, `Esc`, or a click outside writes nothing and adds nothing. If you clear every switch, PLAY shows an empty board with **+ Add this sound** in the middle, and the amp you are playing stays behind it.
 
 ![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
 
-**Add Sound** opens the picker. Pick the program number (next free by default, `0`–`127`; an occupied number replaces that Sound), then a Factory or User preset. Factory and User sections start open if only one exists, both collapsed if both exist, and then remember what you opened. A `+` or `-` on the left of each heading shows that the section expands. Assign **Ready** or a User preset you saved in BUILD.
+**Add Sound** opens the picker. Pick the program number (next free by default, `0`–`127`; an occupied number replaces that Sound), then a Factory or User preset. Factory and User sections start open if only one exists, both collapsed if both exist, and then remember what you opened. A `+` or `-` on the left of each heading shows that the section expands. Assign any Factory preset or a User preset you saved in BUILD.
 
 ![VoLum PLAY board](user-guide-play.png)
 
-Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** always opens the name dialog (`New Preset` on Factory/Default, the current name on a User Sound). On the same name the button reads **Update** and overwrites; a new name reads **Save** and mints a User Sound. If a rail slot is LIVE, that same program number now plays the saved Sound — Ctrl+S never invents a new number. Drag a row onto another to swap, into the gap between rows to slide Sounds along the existing program numbers, or onto the dashed Add plate to move it to the end. When every program number is taken, **+ Add this sound** opens the picker on program 0 so you can replace one. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot. PLAY IN/OUT meters use the same −70..0 dB window as BUILD.
+Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** always opens the name dialog (`New Preset` on Factory/Default, the current name on a User Sound). On the same name the button reads **Update** and overwrites; a new name reads **Save** and mints a User Sound. If the LIVE switch still holds the Sound you started editing, that same program number now plays the saved Sound, so tweaking a Factory Sound in PLAY and pressing Ctrl+S puts your copy on its switch. Ctrl+S never invents a new number, and a save started in BUILD never moves a switch. Drag a row onto another to swap, into the gap between rows to slide Sounds along the existing program numbers, or onto the dashed Add plate to move it to the end. When every program number is taken, **+ Add this sound** opens the picker on program 0 so you can replace one. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot. PLAY IN/OUT meters use the same −70..0 dB window as BUILD.
 
 The same **+** control is **Add this sound** when the live rig is not already on the rail (or a dirty Factory/Default still needs saving). It is **Add Sound** when the live Sound is already assigned and clean.
 
@@ -239,7 +271,7 @@ Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` o
 ## Keyboard Controls
 
 - `P` switches between BUILD and PLAY, in the standalone app and in plug-ins. It is ignored while a name is being typed or while Settings, Pack, or another overlay is open.
-- In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` always opens the name dialog and may reassign the LIVE program number, never a new one. While Settings, Pack, or another overlay is open, those PLAY keys are ignored so they cannot change the rail behind the window.
+- In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` always opens the name dialog and may reassign the LIVE program number (only while it still holds the Sound you edited), never a new one. While Settings, Pack, or another overlay is open, those PLAY keys are ignored so they cannot change the rail behind the window.
 - In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
 - `1` / `2` / `3` switches PRE / AMP / POST.
 - `Ctrl+S` opens the save dialog from any BUILD section (PRE, AMP, or POST), also while a knob is selected.
@@ -285,7 +317,9 @@ Fresh VST3 instances read those per-amp defaults when you add VoLum to a track. 
 
 ### MIDI Program Change And Recall CC
 
-VoLum accepts MIDI Program Change in AU and the standalone app, and a MIDI CC in every format including VST3. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. The CC's value is that same program number.
+VoLum accepts MIDI Program Change and a Sound-recall CC. Program Change reaches the standalone app and AU; in VST3 it arrives only when the host passes it on. The CC works in every format, including VST3. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. The CC's value is that same program number.
+
+Most foot controllers and multi-effects units send a Program Change when you step to one of their presets, so in the standalone app and in AU VoLum follows them as soon as their MIDI reaches it (in the standalone app, pick the controller's port under Settings > SIGNAL > **Audio & MIDI devices...**). Some VST3 hosts do not pass Program Change on to a plug-in. If VoLum in your DAW ignores your preset changes, have the controller send the Recall CC (`102` unless you changed it) with the program number as its value.
 
 Assign the slots on either surface, whichever is in front of you:
 

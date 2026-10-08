@@ -72,7 +72,7 @@ Alle PRE- und POST-Pedalregler bleiben auch im Bypass editierbar, einschließlic
 Das **PITCH**-Pedal sitzt ganz am Anfang der Signalkette. Wähle mit dem **TRANSPOSE / OCTAVER**-Umschalter den Modus; ein neues Rig startet auf **OCTAVER**, damit das eingeschaltete Pedal sofort hörbar ist:
 
 - **TRANSPOSE** verschiebt das gesamte Signal nach oben oder unten. **SEMI** legt das Intervall in Halbtönen fest (−12 bis +7, Start bei −2) — abgestimmt auf Drop-Tunings und Capo-artige Verschiebungen, **MIX** mischt das verschobene Signal mit dem Dry-Sound, und **LEVEL** trimmt den Ausgang. Die **INSTANT / POLY**-Pille wählt die Engine: **INSTANT** (Standard) ist **monophon** mit der geringsten Latenz (~8,6 ms) und dem direktesten Attack — für Einzelnoten und Lead-Linien. **POLY** ist **polyphon**: Es verfolgt ganze Akkorde (Doppelgriffe, Dreiklänge, Powerchords) mit korrekt verschobener Einzelstimme, bei etwas höherer Latenz (~14 ms) — für Riffs und Akkorde. Beide halten die Tonhöhe auch auf tiefen Drop-Tunings und erweiterten Tonumfängen sauber (bis hinunter zur 8-Saiter-F#).
-- **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, **LEVEL** trimmt den Ausgang, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean. Einzeltöne verfolgt er über das ganze Griffbrett, bis zum 24. Bund der hohen E-Saite.
+- **OCTAVER** ist ein polyphoner (akkordtauglicher) Oktaver. **OCT DN** und **OCT UP** stellen den Pegel der Unter- und Oberoktave ein, **DRY** behält dein Originalsignal in der Mischung, **LEVEL** trimmt den Ausgang, und die **VINTAGE / MODERN**-Pille wählt die Klangfarbe — Vintage fügt Grit und einen dunkleren Low-Pass für einen analogen Charakter hinzu, Modern bleibt clean. Ein neues Rig startet mit OCT DN auf 80 %, OCT UP aus, DRY auf 100 % und MODERN. Einzeltöne verfolgt er über das ganze Griffbrett, bis zum 24. Bund der hohen E-Saite.
 
 ![VoLum Pitch-Pedal — Octaver-Modus](user-guide-pitch-octaver.png)
 
@@ -144,8 +144,8 @@ Beide tempo-synchronisierten POST-Pedale — Delay und Tremolo — teilen sich e
 
 **Tremolo** läuft als Letztes, hinter dem Reverb, und moduliert so den gesamten Effektklang. Der **OPTICAL / BIAS / HARMONIC**-Wähler bestimmt den Charakter:
 
-- **Optical** ist ein hackender Photozellen-Lautstärke-Gate.
-- **Bias** ist eine weiche, symmetrische Sinus-Modulation — das klassische „Bang Bang (My Baby Shot Me Down)"-Tremolo und die Werks-Standardstimme.
+- **Optical** ist ein hackendes Photozellen-Lautstärke-Gate und die Werks-Standardstimme.
+- **Bias** ist eine weiche, symmetrische Sinus-Modulation — das klassische „Bang Bang (My Baby Shot Me Down)"-Tremolo.
 - **Harmonic** teilt das Signal an einer Trennfrequenz und moduliert tiefes und hohes Band gegenphasig für einen phasigen Sweep.
 
 Die gemeinsamen Regler sind **RATE**, **DEPTH**, **SHAPE** (formt den LFO von weichem Sinus hin zu hartem Rechteck) und **MIX**. Im Harmonic-Modus erscheint ein zusätzlicher **X-OVER**-Regler für die Trennfrequenz. Mit **TEMPO SYNC** koppelst du die Rate ans Tempo: im DAW folgt sie dem Host-Tempo, in der Standalone-App dem Metronom-BPM. Bei aktivem Sync wird der RATE-Regler zu einem musikalischen **DIVISION**-Stepper (1/2 bis 1/16, inklusive punktierter und Triolen-Werte). Linker und rechter Kanal bleiben phasengekoppelt für ein kohärentes Stereo-Tremolo.
@@ -162,7 +162,25 @@ Beim Wechsel der Chorus-Stimme wird die alte Stimme ausgeblendet, bevor die neue
 
 Ein Preset ist eine benannte Momentaufnahme des gesamten Rigs für den fokussierten Amp: Speaker/Cab, Kanal, alle Regler, PRE-Pedale, POST-Effekte und das Dual-Amp-Setup.
 
-Jeder Werk-Amp bringt ein schreibgeschütztes Werk-Preset namens **Ready** mit. Das ist der Noon-Snapshot: du kannst es in PLAY zuweisen, ohne vorher zu speichern. Wenn du Ready bearbeitest und speicherst, entsteht eine User-Kopie; Werk-Zeilen werden nie überschrieben oder gelöscht.
+Jeder Werk-Amp bringt ein oder zwei schreibgeschützte Werk-Presets mit, 21 insgesamt, im Preset-Menü unter **FACTORY**. Sie nutzen nur Inhalte, die mit VoLum ausgeliefert werden. Du kannst jedes davon in PLAY zuweisen, ohne vorher zu speichern. Änderst du eines und drückst **Ctrl+S** (oder nutzt **Save current as new**), speichert VoLum deine Fassung als neues User-Preset; Werk-Presets werden nie überschrieben oder gelöscht. Die Pfeile `<` / `>` blättern erst durch die Werk-Presets eines Amps, dann durch seine User-Presets.
+
+| Amp | Werk-Presets |
+| --- | --- |
+| Ampete One | Ampete Rhythm, Ampete Lead |
+| Bad Cat Mini Cat | BadCat Crunch |
+| Brunetti XL 2 | American Lead |
+| Diezel Herbert Mk1 | Thicc Rhythm, Sanitarium |
+| Fryette Deliv. 120 | Dry Rhythm |
+| H&K TriAmp Mk2 | HiFi Heavy, HiFi Crunch |
+| Lichtlaerm Prom. | Modern Rhythm, Modern Lead |
+| Marshall 2204 | JCM800 Crunch |
+| Marshall JMP 2203 | Crack the Skye |
+| Marshall JVM | Modern British |
+| Orange OD120 | Stoner |
+| Orange ORS100 | An old Soul |
+| Sebago Texas Fl. | The bestest Clean |
+| Soldano SLO100 | SLO Lead, SLO Crunch |
+| THC Sunset | Sunset Crunch, Sunset Clean |
 
 1. Stelle einen Sound ein und öffne die Preset-Leiste in der AMP-Kopfzeile.
 2. Mit **Save current as new** speicherst du ihn unter einem Namen.
@@ -173,21 +191,35 @@ Jeder Werk-Amp bringt ein schreibgeschütztes Werk-Preset namens **Ready** mit. 
 
 Presets sind pro Amp: Jeder Amp (Werk oder eigen) hat seine eigene User-Liste. Die Leiste zeigt **(unsaved)**, sobald das aktuelle Rig vom geladenen Preset abweicht, und wird wieder sauber, sobald das Rig wieder übereinstimmt. Die fest angeheftete Zeile **Default (factory settings)** setzt den fokussierten Amp oberhalb der Bereiche Factory und User auf seine Auslieferungswerte zurück.
 
+Speichern in BUILD (**Ctrl+S**, **Save current as new**, **Update** oder **Manage**) ändert nie, welchen Sound ein PLAY-Schalter hält. Löschst du ein Preset, das auf PLAY-Schaltern liegt, nennt die Bestätigung diese Schalter, zum Beispiel „On PLAY 03 and 12: they will read Invalid.“ Die Schalter behalten ihre Programmnummern und zeigen **Invalid slot**, bis du ihnen einen anderen Sound gibst.
+
 ## PLAY-Ansicht
 
-Wenn die Sounds in BUILD stehen, wechsle zu PLAY und weise sie Programmnummern zu. Derselbe Umschalter zeigt in PLAY die Fader.
+Wechsle mit demselben Umschalter zu PLAY; in PLAY zeigt er die Fader.
 
-![VoLum PLAY leere Leiste](user-guide-play-empty.png)
+![VoLum PLAY mit seinen fünf Start-Sounds](user-guide-play-start.png)
 
-Der erste Besuch ohne zugewiesene Sounds ist eine leere Setlist, kein leeres Produkt. Der aktuelle Amp liegt weiterhin dahinter. **+ Add this sound** schreibt das Gehörte auf die nächste freie Programmnummer, sobald es ein User-Sound ist. Factory, Default oder ein unbenanntes Rig öffnet zuerst ein Namensfeld; Default tut das immer, ein schmutziges Factory ebenfalls. **Save** in diesem Feld legt den User-Sound an und setzt ihn in einem Schritt auf die Leiste; **Cancel**, `Esc` oder ein Klick außerhalb schreibt nichts und fügt nichts hinzu.
+PLAY startet nicht leer. Wenn VoLum zum ersten Mal eine Bibliothek ohne PLAY-Board öffnet (eine Neuinstallation oder ein Update von 1.2.x), legt es fünf Werk-Sounds auf die Programme `0`–`4`. Viele Fußcontroller zählen ihre Presets ab 1; dort sind es die Presets 1 bis 5.
+
+| Programm | Sound | Amp |
+| --- | --- | --- |
+| 0 | The bestest Clean | Sebago Texas Fl. |
+| 1 | SLO Crunch | Soldano SLO100 |
+| 2 | Modern Rhythm | Lichtlaerm Prom. |
+| 3 | Crack the Skye | Marshall JMP 2203 |
+| 4 | Ampete Lead | Ampete One |
+
+Das passiert nur einmal. Ein Board, das du geleert oder geändert hast, wird nie wieder befüllt, und nach dem Import eines Packs mit leerem Board bleibt es leer. Alle anderen Programmnummern starten frei.
+
+Ersetze diese Sounds oder füge eigene hinzu. Zum Ersetzen nutzt du die Zuweisen-Schaltfläche der Zeile, einen Doppelklick oder wählst ihre Programmnummer im **Add Sound**-Wähler. Zum Hinzufügen schreibt **+ Add this sound** das Gehörte auf die nächste freie Programmnummer (`5` auf dem Start-Board). Ein User-Sound oder ein unverändertes Werk-Preset landet direkt dort. Default, ein verändertes Preset oder ein unbenanntes Rig öffnet zuerst ein Namensfeld. **Save** in diesem Feld legt den User-Sound an und setzt ihn in einem Schritt auf die Leiste; **Cancel**, `Esc` oder ein Klick außerhalb schreibt nichts und fügt nichts hinzu. Leerst du jeden Schalter, zeigt PLAY ein leeres Board mit **+ Add this sound** in der Mitte, und der Amp, den du spielst, liegt weiterhin dahinter.
 
 ![VoLum PLAY Add-Sound-Wähler](user-guide-play-picker.png)
 
-**Add Sound** öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Ein `+` oder `-` links an der Überschrift zeigt, dass der Abschnitt aufklappt. Weise **Ready** oder ein User-Preset zu, das du in BUILD gespeichert hast.
+**Add Sound** öffnet den Wähler. Wähle die Programmnummer (standardmäßig die nächste freie, `0`–`127`; eine belegte Nummer ersetzt diesen Sound) und danach ein Werk- oder User-Preset. Factory- und User-Abschnitte starten offen, wenn nur einer existiert, beide zugeklappt, wenn beide existieren, und merken sich danach, was du geöffnet hast. Ein `+` oder `-` links an der Überschrift zeigt, dass der Abschnitt aufklappt. Weise ein beliebiges Werk-Preset oder ein User-Preset zu, das du in BUILD gespeichert hast.
 
 ![VoLum PLAY-Board](user-guide-play.png)
 
-Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** öffnet immer den Namensdialog (`New Preset` bei Factory/Default, der aktuelle Name bei einem User-Sound). Beim gleichen Namen heißt die Schaltfläche **Update** und überschreibt; ein neuer Name heißt **Save** und legt einen User-Sound an. Liegt ein Slot LIVE, spielt dieselbe Programmnummer danach den gespeicherten Sound — Ctrl+S erfindet keine neue Nummer. Ziehe eine Zeile auf eine andere zum Tauschen, in die Lücke dazwischen, um Sounds entlang der bestehenden Nummern zu schieben, oder auf die gestrichelte Add-Platte, um sie ans Ende zu setzen. Wenn jede Programmnummer belegt ist, öffnet **+ Add this sound** den Wähler auf Programm 0, damit du einen Sound ersetzen kannst. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab. PLAY IN/OUT teilen das −70..0 dB-Fenster von BUILD.
+Belegte Slots sind die Setlist. Ein Klick auf eine Zeile ruft sie auf. **LIVE** ist der zuletzt aus PLAY aufgerufene Sound und bleibt beim Spielen markiert. **Ctrl+S** öffnet immer den Namensdialog (`New Preset` bei Factory/Default, der aktuelle Name bei einem User-Sound). Beim gleichen Namen heißt die Schaltfläche **Update** und überschreibt; ein neuer Name heißt **Save** und legt einen User-Sound an. Hält der LIVE-Schalter noch den Sound, den du zu bearbeiten begonnen hast, spielt dieselbe Programmnummer danach den gespeicherten Sound; veränderst du also in PLAY einen Werk-Sound und drückst Ctrl+S, liegt deine Kopie auf seinem Schalter. Ctrl+S erfindet keine neue Nummer, und ein in BUILD begonnenes Speichern verschiebt nie einen Schalter. Ziehe eine Zeile auf eine andere zum Tauschen, in die Lücke dazwischen, um Sounds entlang der bestehenden Nummern zu schieben, oder auf die gestrichelte Add-Platte, um sie ans Ende zu setzen. Wenn jede Programmnummer belegt ist, öffnet **+ Add this sound** den Wähler auf Programm 0, damit du einen Sound ersetzen kannst. Die Zuweisen-Schaltfläche oder ein Doppelklick ersetzt eine Zeile, die kleine Entfernen-Schaltfläche löscht sie. Rechtsklick auf einen Stomp springt nach BUILD mit dieser Karte. **(unsaved)** heißt, das aktuelle Rig weicht von diesem Snapshot ab. PLAY IN/OUT teilen das −70..0 dB-Fenster von BUILD.
 
 Dieselbe **+**-Schaltfläche ist **Add this sound**, wenn das aktuelle Rig nicht auf der Leiste liegt (oder ein schmutziges Factory/Default noch gespeichert werden muss). Sie ist **Add Sound**, wenn der aktuelle Sound bereits sauber zugewiesen ist.
 
@@ -239,7 +271,7 @@ Wie du eine Bibliothek auf einen anderen Rechner bringst oder einen Teil davon w
 ## Tastatur
 
 - `P` wechselt zwischen BUILD und PLAY, in der Standalone-App und im Plugin. Solange ein Name getippt wird oder Einstellungen, Pack oder ein anderes Overlay offen ist, wird die Taste ignoriert.
-- In PLAY: `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Sound und rufen ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um. `1`–`8` schalten die acht Stomps. `T`, `M` und `H` öffnen weiterhin Tuner, Metronom und Einstellungen. `Ctrl+S` öffnet immer den Namensdialog und kann die LIVE-Programmnummer neu belegen, nie eine neue erfinden. Solange Einstellungen, Pack oder ein anderes Overlay offen ist, werden diese PLAY-Tasten ignoriert, damit sie die Leiste dahinter nicht verstellen.
+- In PLAY: `Hoch` / `Runter` und `Links` / `Rechts` springen zum vorherigen oder nächsten belegten Sound und rufen ihn auf. Leere Programmnummern und Zuweisungen, deren Amp oder Preset fehlt, werden übersprungen; die Liste läuft an beiden Enden um. `1`–`8` schalten die acht Stomps. `T`, `M` und `H` öffnen weiterhin Tuner, Metronom und Einstellungen. `Ctrl+S` öffnet immer den Namensdialog und kann die LIVE-Programmnummer neu belegen (nur solange sie noch den bearbeiteten Sound hält), nie eine neue erfinden. Solange Einstellungen, Pack oder ein anderes Overlay offen ist, werden diese PLAY-Tasten ignoriert, damit sie die Leiste dahinter nicht verstellen.
 - In BUILD, ohne gewählten Regler: `Hoch` / `Runter` wechselt den Amp, `Links` / `Rechts` wechselt den Kanal in der AMP-Ansicht.
 - `1` / `2` / `3` wechselt PRE / AMP / POST.
 - `Ctrl+S` öffnet den Speichern-Dialog in jedem BUILD-Bereich (PRE, AMP oder POST), auch wenn ein Regler ausgewählt ist.
@@ -285,7 +317,9 @@ Neue VST3-Instanzen lesen diese Defaults pro Amp, wenn du VoLum auf eine Spur l�
 
 ### MIDI Program Change Und Recall-CC
 
-VoLum empfängt MIDI Program Change in AU und der Standalone-App, und eine MIDI-CC in jedem Format einschließlich VST3. Die Slots `0` bis `127` rufen Sounds auf: Jede Zuweisung verbindet einen Amp mit einem seiner benannten Presets einschließlich Cab, Kanal, PRE, POST und Dual-Amp-Setup. Der CC-Wert ist dieselbe Programmnummer.
+VoLum empfängt MIDI Program Change und eine Sound-Recall-CC. Program Change erreicht die Standalone-App und den AU; im VST3 kommt er nur an, wenn der Host ihn weiterreicht. Die CC funktioniert in jedem Format, auch im VST3. Die Slots `0` bis `127` rufen Sounds auf: Jede Zuweisung verbindet einen Amp mit einem seiner benannten Presets einschließlich Cab, Kanal, PRE, POST und Dual-Amp-Setup. Der CC-Wert ist dieselbe Programmnummer.
+
+Die meisten Fußcontroller und Multieffektgeräte senden einen Program Change, wenn du zu einem ihrer Presets schaltest; in der Standalone-App und im AU folgt VoLum ihnen deshalb, sobald ihr MIDI ankommt (in der Standalone-App wählst du dazu den Port des Controllers unter Einstellungen > SIGNAL > **Audio & MIDI devices...**). Manche VST3-Hosts reichen Program Change nicht an ein Plugin weiter. Ignoriert VoLum in deiner DAW deine Presetwechsel, lass den Controller die Recall-CC (`102`, solange du sie nicht geändert hast) mit der Programmnummer als Wert senden.
 
 Zuweisen kannst du auf beiden Oberflächen, je nachdem, welche vor dir liegt:
 
