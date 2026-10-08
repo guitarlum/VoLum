@@ -497,6 +497,9 @@ struct Registry
   std::vector<PedalItem> pedals; // global pedal library
   std::map<std::string, std::vector<Preset>> presetBanks; // ownerKey -> presets
   std::map<int, MidiSoundAssignment> midiSoundMap; // MIDI slot -> Sound
+  // The file named "midiSoundMap", even as []. Every 1.3.0 write does, so false
+  // means a fresh or pre-1.3.0 library: the one state PLAY is pre-filled from.
+  bool hasMidiSoundMap = false;
   int nextPedalIndex = kCustomPedalIndexBase; // monotonic, never reused
 
   // Read from a pre-1.3.0 file's "customScenes" and never written back. The
@@ -805,6 +808,14 @@ inline bool CustomAmpFromJson(const nlohmann::json& j, custom::CustomAmp& out)
   return true;
 }
 
+inline nlohmann::json MidiSoundMapToJson(const std::map<int, MidiSoundAssignment>& map)
+{
+  nlohmann::json midi = nlohmann::json::array();
+  for (const auto& slot : map)
+    midi.push_back({{"slot", slot.first}, {"ampId", slot.second.ampId}, {"presetId", slot.second.presetId}});
+  return midi;
+}
+
 inline nlohmann::json RegistryToJson(const Registry& r)
 {
   nlohmann::json j;
@@ -845,10 +856,7 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   // Deliberately no "customScenes": see kContentSchemaVersion v4. A downgrade to
   // 1.2.x finds the key missing and falls back to per-amp defaults on first focus,
   // which is the same thing it does for a custom amp it has never seen.
-  nlohmann::json midi = nlohmann::json::array();
-  for (const auto& slot : r.midiSoundMap)
-    midi.push_back({{"slot", slot.first}, {"ampId", slot.second.ampId}, {"presetId", slot.second.presetId}});
-  j["midiSoundMap"] = midi;
+  j["midiSoundMap"] = MidiSoundMapToJson(r.midiSoundMap);
 
   if (r.passthrough.is_object())
   {
@@ -1009,7 +1017,8 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
     }
   }
 
-  if (j.contains("midiSoundMap") && j["midiSoundMap"].is_array())
+  r.hasMidiSoundMap = j.contains("midiSoundMap");
+  if (r.hasMidiSoundMap && j["midiSoundMap"].is_array())
   {
     for (const auto& e : j["midiSoundMap"])
     {
@@ -1690,41 +1699,86 @@ public:
       mLastWriteFailed = true;
       return false;
     }
+    return MergeAndWrite(ReadRegistryFromDisk());
+  }
 
+  // The one-time PLAY pre-fill: assign `sounds` and save, but only while the
+  // library has never stored a midiSoundMap. Decided against the file under the
+  // cross-process lock and written in the same hold, because a sibling VoLum that
+  // opened at the same moment may already have filled - and its player cleared a
+  // switch - since this process loaded. Returns true when this call filled.
+  bool PrefillMidiSoundMapOnce(const std::map<int, MidiSoundAssignment>& sounds)
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    if (mReg.hasMidiSoundMap || sounds.empty())
+      return false;
+    if (mBase.empty())
+    {
+      mReg.midiSoundMap.insert(sounds.begin(), sounds.end());
+      mReg.hasMidiSoundMap = true;
+      return Save();
+    }
+    if (mRegistryUnreadable)
+      return false;
+
+    std::error_code ec;
+    std::filesystem::create_directories(mBase, ec);
+    RegistryFileLock lock;
+    if (ec || !lock.Acquire(LockPath()))
+      return false;
     const DiskRegistry disk = ReadRegistryFromDisk();
     if (!disk.readable)
+      return false;
+    if (disk.reg.hasMidiSoundMap)
     {
-      // Same verdict Load() reaches, for a file that went bad after Load() read
-      // it: cloud-sync placeholder, antivirus, a permissions change, or a second
-      // VoLum that backed the file up as corrupt. The merge treats an unreadable
-      // file as "disk names nothing", and MergeContentVector keeps only the ids
-      // this writer touched, so writing here replaces a whole library with this
-      // session's edits. Refuse, and let the caller show the banner: the user
-      // loses the session's edits, not the library.
-      mLastWriteFailed = true;
+      // Show the board the sibling wrote unless this writer has edits of its own
+      // to replay over it.
+      if (SameMidiMap(mReg.midiSoundMap, mBaseline.midiSoundMap))
+      {
+        mReg.midiSoundMap = disk.reg.midiSoundMap;
+        mBaseline.midiSoundMap = disk.reg.midiSoundMap;
+      }
+      mReg.hasMidiSoundMap = true;
+      mBaseline.hasMidiSoundMap = true;
+      return false;
+    }
+    std::map<int, MidiSoundAssignment> filled = mReg.midiSoundMap;
+    filled.insert(sounds.begin(), sounds.end());
+
+    std::error_code existsEc;
+    if (!std::filesystem::exists(RegistryPath(), existsEc))
+    {
+      const auto before = mReg.midiSoundMap;
+      mReg.midiSoundMap = filled;
+      mReg.hasMidiSoundMap = true;
+      if (MergeAndWrite(disk))
+        return true;
+      mReg.midiSoundMap = before;
+      mReg.hasMidiSoundMap = false;
       return false;
     }
 
-    Registry merged = MergeRegistries(disk.reg, mBaseline, mReg);
-    if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(merged), ec))
+    // An existing library gets only the key. A full write here would run before the
+    // constructor's migrations and drop what they still read from the old file: an
+    // absent trimDb is the IR trim migration's retry marker, and a v3 file's
+    // customScenes are what a 1.2.x project's custom amp restores from.
+    nlohmann::json raw;
+    if (!ReadRegistryJson(raw))
+      return false;
+    if (!raw.contains("schemaVersion") || !raw["schemaVersion"].is_number_integer()
+        || raw["schemaVersion"].get<int>() < 3)
+      BackupBeforeMigration("1.2.1"); // the trim migration's snapshot must be the untouched file
+    raw["midiSoundMap"] = MidiSoundMapToJson(filled);
+    std::error_code writeEc;
+    if (!WriteJsonAtomically(RegistryPath(), raw, writeEc))
     {
       mLastWriteFailed = true;
       return false;
     }
-    mReg = std::move(merged);
-    mBaseline = mReg;
-    mLastWriteFailed = false;
-    // A merged write read the file as part of doing it, so memory now matches
-    // disk and a later EnsureLoaded() has nothing to fetch.
-    mLoaded = true;
-
-    // Payload files are destroyed only once the registry that no longer mentions
-    // them is durable. Doing it the other way round meant a failed registry write
-    // left the on-disk library pointing at files VoLum had already deleted: the
-    // item came back on restart and could never load again. If this write fails
-    // the deletions stay pending, and both the entry and its file survive - which
-    // is the state the on-disk registry still describes.
-    FlushPendingFileDeletes();
+    mReg.midiSoundMap = filled;
+    mReg.hasMidiSoundMap = true;
+    mBaseline.midiSoundMap = filled;
+    mBaseline.hasMidiSoundMap = true;
     return true;
   }
 
@@ -1943,26 +1997,88 @@ private:
   DiskRegistry ReadRegistryFromDisk() const
   {
     std::error_code ec;
-    const auto path = RegistryPath();
-    if (mBase.empty() || !std::filesystem::exists(path, ec))
+    if (mBase.empty() || !std::filesystem::exists(RegistryPath(), ec))
       return DiskRegistry{};
-    if (!std::filesystem::is_regular_file(path, ec))
+    nlohmann::json j;
+    if (!ReadRegistryJson(j))
       return DiskRegistry{Registry{}, false};
+    return DiskRegistry{RegistryFromJson(j), true};
+  }
+
+  // The existing registry file as parsed JSON; false when it is missing, not a
+  // regular file, unparseable or not an object.
+  bool ReadRegistryJson(nlohmann::json& out) const
+  {
+    std::error_code ec;
+    const auto path = RegistryPath();
+    if (mBase.empty() || !std::filesystem::is_regular_file(path, ec))
+      return false;
     std::ifstream in(path, std::ios::binary);
     if (!in.good())
-      return DiskRegistry{Registry{}, false};
-    nlohmann::json j;
+      return false;
     try
     {
-      in >> j;
+      in >> out;
     }
     catch (...)
     {
-      return DiskRegistry{Registry{}, false};
+      return false;
     }
-    if (!j.is_object())
-      return DiskRegistry{Registry{}, false};
-    return DiskRegistry{RegistryFromJson(j), true};
+    return out.is_object();
+  }
+
+  // Save()'s merged write, with the cross-process lock already held by the caller.
+  bool MergeAndWrite(const DiskRegistry& disk)
+  {
+    if (!disk.readable)
+    {
+      // Same verdict Load() reaches, for a file that went bad after Load() read
+      // it: cloud-sync placeholder, antivirus, a permissions change, or a second
+      // VoLum that backed the file up as corrupt. The merge treats an unreadable
+      // file as "disk names nothing", and MergeContentVector keeps only the ids
+      // this writer touched, so writing here replaces a whole library with this
+      // session's edits. Refuse, and let the caller show the banner: the user
+      // loses the session's edits, not the library.
+      mLastWriteFailed = true;
+      return false;
+    }
+
+    std::error_code ec;
+    Registry merged = MergeRegistries(disk.reg, mBaseline, mReg);
+    if (!WriteJsonAtomically(RegistryPath(), RegistryToJson(merged), ec))
+    {
+      mLastWriteFailed = true;
+      return false;
+    }
+    merged.hasMidiSoundMap = true; // RegistryToJson always writes the key
+    mReg = std::move(merged);
+    mBaseline = mReg;
+    mLastWriteFailed = false;
+    // A merged write read the file as part of doing it, so memory now matches
+    // disk and a later EnsureLoaded() has nothing to fetch.
+    mLoaded = true;
+
+    // Payload files are destroyed only once the registry that no longer mentions
+    // them is durable. Doing it the other way round meant a failed registry write
+    // left the on-disk library pointing at files VoLum had already deleted: the
+    // item came back on restart and could never load again. If this write fails
+    // the deletions stay pending, and both the entry and its file survive - which
+    // is the state the on-disk registry still describes.
+    FlushPendingFileDeletes();
+    return true;
+  }
+
+  static bool SameMidiMap(const std::map<int, MidiSoundAssignment>& a, const std::map<int, MidiSoundAssignment>& b)
+  {
+    if (a.size() != b.size())
+      return false;
+    for (const auto& e : a)
+    {
+      const auto it = b.find(e.first);
+      if (it == b.end() || !SameContentItem(e.second, it->second))
+        return false;
+    }
+    return true;
   }
 
   // True when the registry about to be written still names this payload. Deleting
