@@ -194,15 +194,15 @@ TEST_CASE("Golden DSP: PRE effects and tone stack hashes stay stable")
 }
 
 // Digital and Analog run ping-pong on independent noise per side, so their hashes move
-// whenever the ping-pong seed does (1.3.0: L plus R weighted by their correlation).
+// whenever the ping-pong seed does (1.3.0: L plus R, R flipped while their correlation is negative).
 TEST_CASE("Golden DSP: delay mode hashes stay stable")
 {
   ExpectGoldenHash("delay-digital", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeDigital)),
                    "abfb022c399f822ee8aaac8d930170eed2cc37e795d4b8a785c991928f11a6a2",
-                   "f759344357c1d00fd7b4e0a635de4eb5fdfce6bc7fe760c516610ae3b9d63a8b");
+                   "eee2751e4c25f5a2d29d30312129521c17cf07826d5437329533264b05289eed");
   ExpectGoldenHash("delay-analog", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeAnalog)),
                    "ac3e9d18fadb531d8bf0aa66c498cf8d1d180dea650f4809c43a773afca99ac9",
-                   "11eae4f13adedf6a0ed8c911ca9acc1059f00ada30ccdf46c6e53369cad151d1");
+                   "e2eb6d2b6326fb4232145e1fafae7aec4af1529217b07a407d25745943167bec");
   ExpectGoldenHash("delay-reverse", volum::test::Sha256Hex(RunDelayGolden(dsp::effect::Delay::kModeReverse)),
                    "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4",
                    "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
