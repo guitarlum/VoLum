@@ -118,7 +118,7 @@ Jeder Amp enthält die Speaker-Modi `AMP`, `G12`, `G65` und `V30`.
 
 ## PLAY
 
-PLAY startet mit fünf Werk-Sounds auf den Programmen 0-4. Ersetze sie oder füge eigene hinzu: Weise ein beliebiges Werk-Preset oder ein in BUILD gespeichertes User-Preset einer Programmnummer zu. Das Board ist die Setlist: eine Zeile anklicken ruft sie auf, oder sende MIDI Program Change.
+PLAY startet mit fünf Werk-Sounds auf den Programmen 0-4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye und Ampete Lead. Ersetze sie oder füge eigene hinzu: Weise ein beliebiges Werk-Preset oder ein in BUILD gespeichertes User-Preset einer Programmnummer zu. Das Board ist die Setlist: eine Zeile anklicken ruft sie auf, oder sende MIDI Program Change.
 
 <p align="center">
   <img src="docs/user-guide-play.png" alt="VoLum PLAY-Board" width="820">

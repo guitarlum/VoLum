@@ -118,7 +118,7 @@ Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
 
 ## PLAY
 
-PLAY starts with five Factory Sounds on programs 0-4. Replace them or add your own: assign any Factory preset or a User preset you saved in BUILD to a program number. The board is the setlist: click a row to recall it, or send MIDI Program Change.
+PLAY starts with five Factory Sounds on programs 0-4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye, and Ampete Lead. Replace them or add your own: assign any Factory preset or a User preset you saved in BUILD to a program number. The board is the setlist: click a row to recall it, or send MIDI Program Change.
 
 <p align="center">
   <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
