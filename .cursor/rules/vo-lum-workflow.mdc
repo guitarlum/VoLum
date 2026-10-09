@@ -19,7 +19,7 @@ tests, or user-facing docs skips this loop.
    - `NeuralAmpModeler/scripts/run-tests-win.ps1` (Release x64), or the equivalent CI command you are using.
    - macOS parity: `NeuralAmpModeler/scripts/run-tests-mac.sh`; sanitizer parity: `NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`.
 2. **Build and launch the standalone app** when VoLum **UI** changed (layout, controls, styling) so you can judge the result:
-   - `NeuralAmpModeler/scripts/run-app-win.ps1` (Release x64). Close a running VoLum if postbuild cannot copy the exe.
+   - `NeuralAmpModeler/scripts/run-app-win.ps1` (Release x64). It opens a sandbox library; `-RealLibrary` only when the owner asks. Close a running VoLum if postbuild cannot copy the exe.
 3. **Append a changelog line** so you can bisect and remember intent:
    - Prefer `NeuralAmpModeler/installer/changelog.txt` (keep project style: date + short note).
    - One line per user-visible or behavior change; include breaking preset/state format bumps.
@@ -47,8 +47,10 @@ tests, or user-facing docs skips this loop.
 - **You run** builds/tests in this environment; do not only tell the user what to run.
 - After failures: diagnose, fix, retry—do not stop after one error.
 - Rebuild the standalone with `run-app-win.ps1` (it stops `VoLum` and `VoLum_x64`). If the linker reports a locked VST3, close the host DAW.
-- Never junction the main checkout's submodules into a `git worktree`. `git worktree remove --force` follows junctions and empties the main checkout (happened 2026-09-23; recovered with `git submodule update --init`). Run `git submodule update --init` inside the worktree instead.
+- Worktrees: only through `NeuralAmpModeler/scripts/worktree-win.ps1 -Add <branch>` / `-Remove <path>`. Plain `git worktree remove --force` follows junctions and empties their targets (it emptied the main checkout on 2026-09-23).
+- Merge a verified branch into `dev` with `NeuralAmpModeler/scripts/merge-verified-branch.ps1 -Branch <branch>`; it refuses without green CI on the branch head.
 - Shell is **Windows PowerShell 5.x**: chain commands with `;` plus `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`. Do not use `&&` / `||` — PowerShell 5.x rejects them as invalid statement separators.
+- Never `>` / `*>` into a file that git, clang-format or another native tool will read: Windows PowerShell writes UTF-16. Use `git diff --output=<file>`, `Out-File -Encoding utf8`, or `[IO.File]::WriteAllText`. A UTF-16 patch once applied as empty and silently dropped a fix.
 - Multi-line `git commit` messages: write the message to a temp file, then
   `git commit -F <file>`. A bash heredoc is invalid here, and a here-string
   passed to `-m` loses its line breaks and fails with pathspec errors.
