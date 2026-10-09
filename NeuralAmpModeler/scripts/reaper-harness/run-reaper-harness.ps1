@@ -1,26 +1,31 @@
 # VoLum REAPER render harness runner (Windows, headless).
 #
-# Loads VoLum as a track FX in REAPER on a test-tone track, reads the track's
-# post-FX output via an audio accessor (volum-harness.lua), and asserts the
-# plugin renders finite/bounded/non-silent audio and survives a project
-# save/reload round-trip. Version-agnostic (params resolved by name).
+# Loads VoLum as a track FX in REAPER on a test-tone track, renders the tone
+# through it with apply-FX (volum-harness.lua), and asserts the plugin renders
+# finite/bounded/non-silent audio and survives a project save/reload round-trip.
+# Further scenarios drive MIDI recall, two instances and a realtime render.
+# Version-agnostic (params resolved by name).
 #
-# NOTE: REAPER instantiates whatever VoLum.vst3 it has scanned (typically
-# %COMMONPROGRAMFILES%\VST3). For a true HEAD regression smoke, install the
-# freshly built VST3 there first. This runner verifies harness mechanics and
-# real-host audio sanity against the currently scanned build.
-#
-# Usage: pwsh NeuralAmpModeler/scripts/reaper/run-reaper-harness.ps1 [-Reaper C:\REAPER\reaper.exe]
+# Usage: pwsh NeuralAmpModeler/scripts/reaper-harness/run-reaper-harness.ps1
+#          [-Scenario core|midi-pc|midi-cc102|project-roundtrip-after-recall|two-instances|offline-vs-realtime|all]
+#          [-Sandbox] [-Reaper C:\REAPER\reaper.exe] [-TimeoutSec n] [-InstalledVst3]
 
 param(
   [string]$Reaper = "C:\REAPER\reaper.exe",
-  [int]$TimeoutSec = 120,
+  # 0 = a budget derived from the selected scenarios.
+  [int]$TimeoutSec = 0,
   # Point REAPER's VST3 scan path at the freshly built bundle for the duration of
   # the run. Without this the harness exercises whatever VoLum was last installed
   # into Program Files - which needs an elevated build to update, so on a normal
   # dev box it silently tests an older binary. Pass -InstalledVst3 to test what is
   # installed instead.
-  [switch]$InstalledVst3
+  [switch]$InstalledVst3,
+  # Comma-separated scenario names, or "all".
+  [string]$Scenario = "core",
+  # Launch REAPER with LOCALAPPDATA pointed at an empty directory, so VoLum opens a
+  # fresh library (five pre-filled Sounds on programs 0-4, default rig) and the
+  # run neither reads nor writes the real one.
+  [switch]$Sandbox
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,6 +33,29 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $harnessLua = Join-Path $here "volum-harness.lua"
 if (-not (Test-Path $Reaper)) { Write-Error "REAPER not found: $Reaper"; exit 2 }
 if (-not (Test-Path $harnessLua)) { Write-Error "harness lua missing: $harnessLua"; exit 2 }
+
+# Seconds each scenario may take, generous: every MIDI step waits for VoLum's
+# OnIdle and renders until two takes agree.
+$budget = [ordered]@{
+  "core"                           = 120
+  "midi-pc"                        = 180
+  "midi-cc102"                     = 180
+  "project-roundtrip-after-recall" = 120
+  "two-instances"                  = 150
+  "offline-vs-realtime"            = 90
+}
+$selected = @($Scenario -split '[,\s]+' | Where-Object { $_ })
+foreach ($s in $selected) {
+  if ($s -ne "all" -and -not $budget.Contains($s)) {
+    Write-Error ("unknown scenario '$s' (known: all, " + (($budget.Keys) -join ", ") + ")"); exit 2
+  }
+}
+if ($selected -contains "all") { $selected = @($budget.Keys) }
+if ($TimeoutSec -le 0) { $TimeoutSec = ($selected | ForEach-Object { $budget[$_] } | Measure-Object -Sum).Sum }
+$runCore = $selected -contains "core"
+if (-not $Sandbox -and ($selected | Where-Object { $_ -ne "core" })) {
+  Write-Output "NOTE: without -Sandbox the MIDI scenarios use (and change) your real VoLum library and last-used rig, and cannot check which Sound each program should recall."
+}
 
 $work = Join-Path $env:TEMP "volum-reaper-harness"
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
@@ -147,19 +175,33 @@ Get-Process -Name reaper -ErrorAction SilentlyContinue | Stop-Process -Force -Er
 Start-Sleep -Milliseconds 800
 "go" | Set-Content -Path (Join-Path $work "go.txt") -Encoding ASCII
 $env:VOLUM_HARNESS_DIR = $work
+$env:VOLUM_HARNESS_SCENARIOS = ($selected -join ",")
+$env:VOLUM_HARNESS_SANDBOX = $(if ($Sandbox) { "1" } else { "0" })
 $results = Join-Path $work "results.json"
-$proc = Start-Process -FilePath $Reaper -ArgumentList "-nosplash" -PassThru
-
-$deadline = (Get-Date).AddSeconds($TimeoutSec)
-while ((Get-Date) -lt $deadline -and -not (Test-Path $results)) { Start-Sleep -Milliseconds 500 }
-# results.json is written after the 3 core scenarios, then rewritten with the
-# round-trip "reloaded" entry. Give the reopen a short grace to land.
-if (Test-Path $results) {
-  $grace = (Get-Date).AddSeconds(20)
-  while ((Get-Date) -lt $grace) {
-    try { if ((Get-Content $results -Raw) -match '"reloaded"') { break } } catch {}
-    Start-Sleep -Milliseconds 500
+# VoLum resolves its library, settings and volum.log from %LOCALAPPDATA% via
+# getenv (VoLumPaths.h), and REAPER hands its environment to the plugin, so the
+# sandbox only has to be in place for the launch.
+$sandboxRoot = Join-Path $work "localappdata"
+$realLocalAppData = $env:LOCALAPPDATA
+try {
+  if ($Sandbox) {
+    New-Item -ItemType Directory -Path $sandboxRoot | Out-Null
+    $env:LOCALAPPDATA = $sandboxRoot
+    Write-Output "sandboxed LOCALAPPDATA: $sandboxRoot"
   }
+  $proc = Start-Process -FilePath $Reaper -ArgumentList "-nosplash" -PassThru
+}
+finally {
+  $env:LOCALAPPDATA = $realLocalAppData
+}
+Write-Output ("scenarios: {0} (timeout {1} s)" -f ($selected -join ","), $TimeoutSec)
+
+# The harness rewrites results.json after every scenario and marks the last
+# write "done": true.
+$deadline = (Get-Date).AddSeconds($TimeoutSec)
+while ((Get-Date) -lt $deadline) {
+  try { if ((Test-Path $results) -and ((Get-Content $results -Raw) -match '"done":\s*true')) { break } } catch {}
+  Start-Sleep -Milliseconds 500
 }
 
 # --- tear down REAPER + restore startup ---
@@ -172,17 +214,64 @@ Clear-ReaperHarnessState $reaperIni $work
 
 if (Test-Path (Join-Path $work "harness.log")) {
   Write-Output "--- harness.log (tail) ---"
-  Get-Content (Join-Path $work "harness.log") -Tail 30
+  Get-Content (Join-Path $work "harness.log") -Tail $(if ($runCore -and $selected.Count -eq 1) { 30 } else { 80 })
+}
+if ($Sandbox) {
+  $sandboxLog = Join-Path $sandboxRoot "VoLum\volum.log"
+  if (Test-Path $sandboxLog) {
+    Write-Output "--- sandbox volum.log [midi] lines ---"
+    Select-String -Path $sandboxLog -Pattern '\[midi\]' | ForEach-Object { $_.Line }
+  }
+  $library = Join-Path $sandboxRoot "VoLum\content\volum-content.json"
+  if (Test-Path $library) {
+    try {
+      $map = (Get-Content $library -Raw | ConvertFrom-Json).midiSoundMap
+      Write-Output ("sandbox library midiSoundMap entries: {0}" -f @($map).Count)
+    } catch { Write-Output "sandbox library unreadable: $library" }
+  } else {
+    Write-Output "sandbox library missing: $library (VoLum never opened a library - did it load?)"
+  }
 }
 if (-not (Test-Path $results)) { Write-Error "TIMEOUT: no results.json (REAPER did not finish the harness)"; exit 1 }
 
 $r = Get-Content $results -Raw | ConvertFrom-Json
-if (-not $r.ok) { Write-Error "harness reported failure: $($r.error)"; exit 1 }
 
 $fail = 0
 function Check([string]$name, [bool]$cond, [string]$msg) {
   if ($cond) { Write-Output "PASS  $name" } else { Write-Output "FAIL  $name -- $msg"; $script:fail++ }
 }
+
+# Scenario checks the harness judged itself (everything except core). WARN is
+# advisory - a host quirk or a product finding worth reading - and does not fail
+# the run.
+foreach ($c in @($r.checks)) {
+  if ($null -eq $c) { continue }
+  $line = "{0,-4}  {1}/{2}" -f $c.status, $c.scenario, $c.name
+  if ($c.detail) { $line += " -- " + $c.detail }
+  Write-Output $line
+  if ($c.status -eq "FAIL") { $fail++ }
+}
+if ($r.facts -and @($r.facts.PSObject.Properties).Count -gt 0) {
+  Write-Output "--- facts ---"
+  foreach ($p in $r.facts.PSObject.Properties) { Write-Output ("FACT  {0} = {1}" -f $p.Name, $p.Value) }
+}
+if (-not $r.ok) { Write-Error "harness reported failure: $($r.error)"; exit 1 }
+if (-not $r.done) {
+  if ($runCore -and $selected.Count -eq 1 -and $null -ne $r.scenarios.default) {
+    Write-Output "NOTE  the round-trip reopen did not finish before the timeout"
+  } else {
+    Write-Output "FAIL  harness did not finish within $TimeoutSec s -- results above are partial"
+    $fail++
+  }
+}
+
+if (-not $runCore) {
+  Write-Output ("fxname: " + $r.fxname)
+  if ($fail -gt 0) { Write-Error "$fail REAPER harness check(s) failed"; exit 1 }
+  Write-Output "REAPER harness: ALL CHECKS PASSED"
+  exit 0
+}
+
 $d = $r.scenarios.default
 $byp = $r.scenarios.bypassed
 $rel = $r.scenarios.reloaded
@@ -210,7 +299,7 @@ else {
   $fail++
 }
 
-Check "no NaN/Inf"    ($d.bad -eq 0 -and $rel.bad -eq 0) "non-finite samples present"
+Check "no NaN/Inf"    ($d.bad -eq 0 -and ($null -eq $rel -or $rel.bad -eq 0)) "non-finite samples present"
 Check "non-silent"    ($d.rms -gt 1e-5) "default output is silent (rms=$($d.rms))"
 Check "bounded"       ($d.peak -lt 8.0) "default peak too large ($($d.peak))"
 
