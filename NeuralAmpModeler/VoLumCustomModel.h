@@ -378,6 +378,36 @@ inline int SnapSlotForChannel(const CustomAmp& amp, int channel, int currentSlot
   return kDirectSlot; // No Cab is the last resort
 }
 
+struct CabFallback
+{
+  int slot = kDirectSlot;
+  int channel = 1;
+};
+
+// Where a lane should go when its custom IR disappears. Prefer a real cab on
+// the current gain stage, then the first real cab anywhere in the amp, and use
+// DIRECT / No Cab only when the amp has no baked-cab capture at all.
+inline CabFallback StockCabFallback(const CustomAmp& amp, int currentChannel)
+{
+  for (int slot : SlotsForChannel(amp, currentChannel))
+    if (slot != kDirectSlot)
+      return {slot, currentChannel};
+
+  for (int slot : AmpSlots(amp))
+    if (slot != kDirectSlot)
+    {
+      const auto channels = AmpSlotChannels(amp, slot);
+      if (!channels.empty())
+        return {slot, channels.front()};
+    }
+
+  const auto directChannels = AmpSlotChannels(amp, kDirectSlot);
+  int directChannel = directChannels.empty() ? 1 : directChannels.front();
+  if (std::find(directChannels.begin(), directChannels.end(), currentChannel) != directChannels.end())
+    directChannel = currentChannel;
+  return {kDirectSlot, directChannel};
+}
+
 // A custom amp needs a user-supplied name: the original .nam files are often
 // opaque codes (e.g. "2204"), so the builder default is treated as "unnamed".
 inline bool IsUnnamed(const std::string& name)

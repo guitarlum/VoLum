@@ -745,6 +745,7 @@ private:
     std::vector<std::string> skipped;
     std::vector<std::string> tooLarge;
     std::vector<std::string> failed;
+    std::string invalidIrReason;
     int added = 0;
     for (const auto& fn : files)
     {
@@ -760,15 +761,18 @@ private:
         skipped.push_back(base);
         continue;
       }
-      // Reject oversized IR captures at import (only the first ~8192 samples are
-      // ever convolved, so a huge WAV is almost always a wrong-file pick).
+      // Parse IRs before copying them into the owned library. The same WAV loader
+      // used by the convolver catches renamed junk, empty/truncated files and
+      // unsupported WAV encodings at the import boundary.
       if (mManageKind == ManageKind::IR)
       {
-        std::error_code ec;
-        const std::uintmax_t bytes = std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec);
-        if (!ec && !volum::IrFileBytesAcceptable(bytes))
+        std::string why;
+        if (!volum::IrFileValidForImport(fn.Get(), why))
         {
-          tooLarge.push_back(base);
+          if (why.find("too large") != std::string::npos)
+            tooLarge.push_back(base);
+          else if (invalidIrReason.empty())
+            invalidIrReason = why;
           continue;
         }
       }
@@ -832,6 +836,8 @@ private:
     if (!failed.empty())
       mError = failed.size() == 1 ? ("\"" + failed.front() + "\" could not be added to your library.")
                                   : (std::to_string(failed.size()) + " files could not be added to your library.");
+    else if (!invalidIrReason.empty())
+      mError = invalidIrReason;
     else if (!tooLarge.empty())
       mError = tooLarge.size() == 1 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
                                     : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");

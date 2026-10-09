@@ -134,3 +134,23 @@ TEST_CASE("Text fit memo: PLAY rail rows draw through the memo and rescale reset
   // before OnRescale runs.
   CHECK(helpers.find("style.scale = g.GetTotalScale();") != std::string::npos);
 }
+
+TEST_CASE("Text wrap keeps a long confirmation body inside the dialog width")
+{
+  const std::string message =
+    "Delete IR \"Mesa OS\"? It is convolving MAIN right now. MAIN will fall back to My Custom Amp's baked cab. "
+    "This cannot be undone.";
+  CountingMeasure measure;
+  const auto lines = volum::textfit::WrapWords(message, 210.f, measure);
+
+  REQUIRE(lines.size() >= 3);
+  std::string rebuilt;
+  for (const auto& line : lines)
+  {
+    CHECK(6.f * static_cast<float>(line.size()) <= 210.f);
+    if (!rebuilt.empty())
+      rebuilt += " ";
+    rebuilt += line;
+  }
+  CHECK(rebuilt == message);
+}

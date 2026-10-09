@@ -11,6 +11,8 @@
 // The byte threshold is intentionally generous: a 10-second stereo 24-bit 96 kHz
 // capture is ~5.8 MB, so 64 MB only ever trips on pathological / wrong-file picks.
 
+#include "../AudioDSPTools/dsp/wav.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -53,6 +55,33 @@ inline bool IrFileSizeAcceptable(const std::string& path, std::string& outMessag
   if (IrFileBytesAcceptable(bytes))
     return true;
   outMessage = IrTooLargeMessage(bytes);
+  return false;
+}
+
+// Import gate shared with the convolver: decode through the real WAV parser
+// before the file is copied into VoLum's library. Malformed RIFF/WAVE structures
+// use the established user-facing message; valid-but-unsupported WAV encodings
+// retain the parser's more specific explanation.
+inline bool IrFileValidForImport(const std::string& path, std::string& outMessage)
+{
+  if (!IrFileSizeAcceptable(path, outMessage))
+    return false;
+
+  std::vector<float> audio;
+  double sampleRate = 0.0;
+  const auto rc = dsp::wav::Load(path.c_str(), audio, sampleRate);
+  if (rc == dsp::wav::LoadReturnCode::SUCCESS)
+    return true;
+
+  switch (rc)
+  {
+    case dsp::wav::LoadReturnCode::ERROR_NOT_RIFF:
+    case dsp::wav::LoadReturnCode::ERROR_NOT_WAVE:
+    case dsp::wav::LoadReturnCode::ERROR_MISSING_FMT:
+    case dsp::wav::LoadReturnCode::ERROR_INVALID_FILE:
+    case dsp::wav::LoadReturnCode::ERROR_OTHER: outMessage = "File is not a WAV file."; break;
+    default: outMessage = dsp::wav::GetMsgForLoadReturnCode(rc); break;
+  }
   return false;
 }
 

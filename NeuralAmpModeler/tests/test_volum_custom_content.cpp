@@ -149,6 +149,33 @@ TEST_CASE("SnapSlotForChannel keeps current, prefers a real cab, No Cab last")
   REQUIRE(SnapSlotForChannel(amp, 7, 0) == kUnassignedSlot);
 }
 
+TEST_CASE("Stock cab fallback keeps the channel, then prefers any real cab, then No Cab")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::StockCabFallback;
+  using volum::custom::kDirectSlot;
+  CustomAmp amp;
+  // The IR runs through DIRECT on ch1. A stock cab also covers ch1, so deletion
+  // must keep the gain stage and land on that cab.
+  amp.files = {
+    {"d1.nam", kDirectSlot, 1}, {"v30-1.nam", 2, 1}, {"g12-2.nam", 0, 2}, {"d3.nam", kDirectSlot, 3}};
+  auto fallback = StockCabFallback(amp, 1);
+  CHECK(fallback.slot == 2);
+  CHECK(fallback.channel == 1);
+
+  // No baked cab covers ch3: move to the first real cab anywhere in the amp.
+  fallback = StockCabFallback(amp, 3);
+  CHECK(fallback.slot == 0);
+  CHECK(fallback.channel == 2);
+
+  // An amp with only DIRECT captures has no stock cab; No Cab is the last resort.
+  CustomAmp directOnly;
+  directOnly.files = {{"d1.nam", kDirectSlot, 1}, {"d3.nam", kDirectSlot, 3}};
+  fallback = StockCabFallback(directOnly, 3);
+  CHECK(fallback.slot == kDirectSlot);
+  CHECK(fallback.channel == 3);
+}
+
 TEST_CASE("ResolveLaneCabs drives the channel-first cab view")
 {
   using volum::custom::CustomAmp;

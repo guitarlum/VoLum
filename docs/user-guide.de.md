@@ -323,6 +323,8 @@ Ein eigenes IR ersetzt das Cab, deshalb braucht der aktuelle Kanal ein No-Cab-Ca
 2. Klicke **Manage custom IRs...**, dann **+ Import IR (.wav)**.
 3. Wähle das IR im **Custom IR**-Menü.
 
+VoLum prüft vor dem Kopieren in die Bibliothek, ob der Import eine lesbare WAV-Datei ist.
+
 Zum Anpassen eines IRs klickst du das **Zahnrad** in seiner Zeile unter **Manage custom IRs**: **Level**, **Low cut** und **High cut**.
 
 ### Eigene Pedale
@@ -333,7 +335,7 @@ Klicke im NAM-Pedal-Menü **Manage custom pedals...**, dann **+ Import pedal (.n
 
 ### Inhalte löschen
 
-Löschst du etwas, das gerade spielt, macht VoLum weiter: ein gelöschter Amp fällt auf einen mitgelieferten zurück, ein gelöschtes Pedal lässt seinen Slot leer, ein gelöschtes IR kehrt zum eingebauten Cab zurück. VoLum fragt vorher nach.
+Löschst du etwas, das gerade spielt, macht VoLum weiter: ein gelöschter Amp fällt auf einen mitgelieferten zurück, ein gelöschtes Pedal lässt seinen Slot leer und ein gelöschtes IR kehrt nach Möglichkeit zu einem eingebauten Cab des aktuellen Kanals zurück. VoLum fragt vorher nach.
 
 ## Sichern und Teilen mit Packs
 

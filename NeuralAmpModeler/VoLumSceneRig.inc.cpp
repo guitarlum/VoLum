@@ -1017,36 +1017,22 @@ void NeuralAmpModeler::_VolumReconcileActiveIr()
 
 void NeuralAmpModeler::_VolumFallbackToAvailableCab()
 {
-  mShouldRemoveIR = true; // audio thread drops mIR in _ApplyDSPStaging
-  _VolumActiveScene().activeIrId.clear();
-  GetParam(kIRToggle)->Set(0.0);
-  SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+  // Keep convolving until the replacement capture is staged, then retire the IR
+  // on the same audio block so deletion cannot expose the raw DIRECT capture.
+  _VolumClearIR(false, /*deferToCabSwap=*/true);
   auto* pGfx = GetUI();
   auto* row = pGfx ? pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow) : nullptr;
   if (mVolumCustomMainIdx >= 0)
   {
     const auto amp = volum::custom::CustomAmpAt(mVolumCustomMainIdx);
-    const auto slots = volum::custom::AmpSlots(amp);
-    int chosenSlot = volum::custom::kDirectSlot, sel = 0;
-    for (int s : slots) // prefer a real cab over DIRECT
-      if (s != volum::custom::kDirectSlot)
-      {
-        chosenSlot = s;
-        sel = s + 1;
-        break;
-      }
-    if (sel == 0 && !slots.empty())
-    {
-      chosenSlot = slots.front();
-      sel = (chosenSlot == volum::custom::kDirectSlot) ? 0 : chosenSlot + 1;
-    }
-    const auto chs = volum::custom::AmpSlotChannels(amp, chosenSlot);
-    const int ch = chs.empty() ? 1 : chs.front();
-    mVolumCustomMainSlot = chosenSlot;
-    mVolumCustomMainChannel = ch;
+    const auto fallback = volum::custom::StockCabFallback(amp, mVolumCustomMainChannel);
+    const int sel = fallback.slot == volum::custom::kDirectSlot ? 0 : fallback.slot + 1;
+    mVolumCustomMainSlot = fallback.slot;
+    mVolumCustomMainChannel = fallback.channel;
     mVolumSpeakerIdx = sel;
-    mVolumChannelIdx = volum::custom::ChannelStepIndex(volum::custom::AssignedChannels(amp), ch);
-    _VolumSetCustomChannelStepper(mVolumCustomMainIdx, false, ch);
+    mVolumChannelIdx =
+      volum::custom::ChannelStepIndex(volum::custom::AssignedChannels(amp), fallback.channel);
+    _VolumSetCustomChannelStepper(mVolumCustomMainIdx, false, fallback.channel);
     // The shared cab row is SUPPORT's while that lane is focused. MAIN's
     // fallback still updates MAIN's scene; it must not repaint SUPPORT's row.
     if (row && !_VolumSupportFocused())
@@ -1070,6 +1056,4 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
     }
     mVolumNeedsLoad.store(true);
   }
-  mVolumSettingsDirty = true;
-  _VolumMarkPresetDirty();
 }

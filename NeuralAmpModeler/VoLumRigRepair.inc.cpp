@@ -50,7 +50,7 @@ std::string NeuralAmpModeler::_VolumPlanLibraryDelete(volum::rig::LibraryKind ki
                                                       const std::string& displayName)
 {
   volum::rig::RigLabels labels;
-  labels.factoryAmpName = volum::kAmps[std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1)].displayName;
+  labels.factoryAmpName = _VolumMainAmpDisplayName();
   auto item = VolumMakeLibraryItemRef(kind, id, displayName);
   // Manage deletes presets from the active owner's bank (_VolumClaimPresetOps).
   if (kind == volum::rig::LibraryKind::Preset)
@@ -65,7 +65,7 @@ std::string NeuralAmpModeler::_VolumPlanLibraryReplace(volum::rig::LibraryKind k
                                                        const std::string& displayName)
 {
   volum::rig::RigLabels labels;
-  labels.factoryAmpName = volum::kAmps[std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1)].displayName;
+  labels.factoryAmpName = _VolumMainAmpDisplayName();
   mVolumPendingRigRepair =
     volum::rig::PlanReplace(_VolumSnapshotSoundingRig(), VolumMakeLibraryItemRef(kind, id, displayName), labels);
   return mVolumPendingRigRepair.confirmBody;
@@ -112,7 +112,7 @@ void NeuralAmpModeler::_VolumApplyRigRepair(const volum::rig::RigRepairPlan& pla
   // staged, so the lane moves from one coherent sound to the next instead of
   // exposing a burst of raw, cab-less amp (see VoLumDspStaging.h).
   if (plan.Has(RigRepair::ClearMainIr))
-    _VolumClearIR(false, true);
+    _VolumFallbackToAvailableCab();
   if (plan.Has(RigRepair::ClearSupportIr))
     _VolumClearIR(true, true);
   if (plan.Has(RigRepair::ReloadMainIr))

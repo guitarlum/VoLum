@@ -323,6 +323,8 @@ A custom IR replaces the cab, so the current channel needs a No Cab capture. Eve
 2. Click **Manage custom IRs...**, then **+ Import IR (.wav)**.
 3. Pick the IR from the **Custom IR** menu.
 
+VoLum checks that an import is a readable WAV before copying it into the library.
+
 To shape an IR, click the **gear** on its row in **Manage custom IRs**: **Level**, **Low cut** and **High cut**.
 
 ### Custom Pedals
@@ -333,7 +335,7 @@ In the NAM pedal menu, click **Manage custom pedals...**, then **+ Import pedal 
 
 ### Deleting Content
 
-If you delete something that is playing, VoLum moves on: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, a deleted IR returns to the stock cab. VoLum asks first.
+If you delete something that is playing, VoLum moves on: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, and a deleted IR returns to a stock cab on the current channel when one is available. VoLum asks first.
 
 ## Back Up And Share With Packs
 
