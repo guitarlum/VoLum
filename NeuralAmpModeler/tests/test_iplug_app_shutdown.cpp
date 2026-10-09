@@ -739,8 +739,10 @@ TEST_CASE("A start with no audio device keeps the settings the user already had"
   // persist the result - so starting once with the interface unplugged replaced the
   // device, channels, buffer and rate in settings.ini with defaults, permanently.
   // Plugging the interface back in did not undo it: the file no longer named it.
-  const auto guard = src.find("if (!mHaveWorkingAudioState)");
+  const auto plan = src.find("VoLumPlanFailureRestore(");
+  const auto guard = src.find("if (!restorePlan.restoreActiveState)", plan);
   const auto revert = src.find("mState = mActiveState;");
+  REQUIRE(plan != std::string::npos);
   REQUIRE(guard != std::string::npos);
   REQUIRE(revert != std::string::npos);
   CHECK(guard < revert);
@@ -749,6 +751,7 @@ TEST_CASE("A start with no audio device keeps the settings the user already had"
   const auto open = src.find("mDAC->openStream(");
   REQUIRE(open != std::string::npos);
   CHECK(src.find("mHaveWorkingAudioState = true;", open) != std::string::npos);
+  CHECK(src.find("mActiveAudioIsRuntimeFallback = mSuppressAudioStatePersistence;", open) != std::string::npos);
 }
 
 namespace
