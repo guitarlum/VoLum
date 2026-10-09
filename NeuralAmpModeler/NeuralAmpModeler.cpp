@@ -2707,9 +2707,13 @@ volum::LatencyReport NeuralAmpModeler::_VolumLatencyReport() const
 
 // Posted, not sent: Preferences is modal, and opening it from inside the click
 // that asked for it would run its message loop under IGraphics' mouse handler.
+// DialogBox eats the mouse-up, so drop the capture first. Otherwise the click
+// stays on "Audio & MIDI devices..." and every later click reopens the dialog.
 void NeuralAmpModeler::_VolumOpenAudioPreferences()
 {
 #if defined(APP_API)
+  if (auto* ui = GetUI())
+    ui->ReleaseMouseCapture();
   if (gHWND)
     PostMessage(gHWND, WM_COMMAND, ID_PREFERENCES, 0);
 #endif

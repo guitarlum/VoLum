@@ -227,7 +227,13 @@ TEST_CASE("Win chrome: Settings opens Preferences and the About card links the m
   const std::string open = Between(plug, "void NeuralAmpModeler::_VolumOpenAudioPreferences()", "\n}");
   CHECK(open.find("#if defined(APP_API)") != std::string::npos);
   // Posted: a modal dialog opened inside the click would run under the mouse handler.
-  CHECK(open.find("PostMessage(gHWND, WM_COMMAND, ID_PREFERENCES, 0);") != std::string::npos);
+  // The dialog eats the mouse-up, so the click stays captured on "Audio & MIDI
+  // devices..." and every later click reopens it. Drop the capture first.
+  const auto release = open.find("ReleaseMouseCapture()");
+  const auto post = open.find("PostMessage(gHWND, WM_COMMAND, ID_PREFERENCES, 0);");
+  CHECK(release != std::string::npos);
+  CHECK(post != std::string::npos);
+  CHECK(release < post);
 
   const std::string about = Between(controls, "class AboutControl : public IContainerBase", "void SetUpdateInfo(");
   CHECK(about.find("\"Read the manual\", VOLUM_MANUAL_URL") != std::string::npos);
