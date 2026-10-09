@@ -707,6 +707,10 @@ private:
   // Main thread only: the marks of the transaction in progress.
   std::uint32_t mVolumKeptKnobs = 0;
   bool _VolumKnobKept(int paramIdx) const { return (mVolumKeptKnobs & volum::HostKnobBit(paramIdx)) != 0; }
+  // Main thread only: true while a mode transaction recalls knobs.
+  bool mVolumModeTransactionActive = false;
+  bool _VolumRecallMayWrite(int paramIdx) const;
+  void _VolumSetDefaultKeepValue(int paramIdx, double defaultValue);
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
   // Set by OnUIOpen / cleared by OnUIClose; gates the meter work in ProcessBlock.

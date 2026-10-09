@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 
+#include "VoLumModeTransition.h"
 #include "VoLumParams.h"
 
 // Host-written per-mode knobs. A host (or an AU validator) can set a mode and the
@@ -64,13 +65,45 @@ constexpr std::uint32_t HostKnobBit(int paramIdx)
   return id < 0 ? 0u : (1u << static_cast<unsigned>(id));
 }
 
+// Knobs a mode change recalls, as marks. Reverb and Oktaverb share theirs.
+constexpr std::uint32_t HostKnobMaskForTargets(unsigned targets)
+{
+  std::uint32_t mask = 0;
+  const auto has = [targets](ModeSnapshotTarget t) { return (targets & ModeSnapshotBit(t)) != 0; };
+  if (has(ModeSnapshotTarget::PrePitch))
+    mask |= 0x0000000Fu; // ids 0-3
+  if (has(ModeSnapshotTarget::Delay))
+    mask |= 0x000003F0u; // ids 4-9
+  if (has(ModeSnapshotTarget::Reverb) || has(ModeSnapshotTarget::Oktaverb))
+    mask |= 0x00007C00u; // ids 10-14
+  if (has(ModeSnapshotTarget::Tremolo))
+    mask |= 0x000F8000u; // ids 15-19
+  if (has(ModeSnapshotTarget::Chorus))
+    mask |= 0x01F00000u; // ids 20-24
+  return mask;
+}
+
 class HostKnobMarks
 {
 public:
   void Mark(int paramIdx) noexcept { mMask.fetch_or(HostKnobBit(paramIdx), std::memory_order_release); }
   std::uint32_t Take() noexcept { return mMask.exchange(0, std::memory_order_acquire); }
+  // The host wrote this knob after the transaction took its window.
+  bool IsMarked(int paramIdx) const noexcept
+  {
+    return (mMask.load(std::memory_order_acquire) & HostKnobBit(paramIdx)) != 0;
+  }
   // A transaction that has to wait (Retry) hands its window back.
   void Return(std::uint32_t mask) noexcept { mMask.fetch_or(mask, std::memory_order_release); }
+  // Ends a transaction. Marks written while it ran were handled by the recall's own
+  // IsMarked check; only those belonging to a mode change that is still pending (or
+  // retrying) may reach the next transaction, so nothing is attributed to a later,
+  // unrelated mode change.
+  void EndTransaction(std::uint32_t retryKnobs, unsigned stillPendingTargets) noexcept
+  {
+    const std::uint32_t late = Take();
+    Return(retryKnobs | (late & HostKnobMaskForTargets(stillPendingTargets)));
+  }
 
 private:
   std::atomic<std::uint32_t> mMask{0};

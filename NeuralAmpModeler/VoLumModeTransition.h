@@ -36,6 +36,9 @@ public:
 
   unsigned Take() noexcept { return mMask.exchange(0, std::memory_order_acquire); }
 
+  // What is queued now, without consuming it.
+  unsigned Peek() const noexcept { return mMask.load(std::memory_order_acquire); }
+
   void Discard(unsigned mask) noexcept { mMask.fetch_and(~mask, std::memory_order_acq_rel); }
 
 private:

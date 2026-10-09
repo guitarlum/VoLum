@@ -1364,13 +1364,16 @@ struct HostKnobHarness
   }
 
   // OnParamChangeUI -> _VolumApplyPendingModeChanges: what OnIdle, SerializeState and
-  // OnParamReset(kReset) all run.
-  volum::PendingModeResult Apply()
+  // OnParamReset(kReset) all run. duringTransaction models the audio thread: it runs
+  // after the window was taken and before the recall.
+  template <typename DuringTransaction>
+  volum::PendingModeResult Apply(DuringTransaction&& duringTransaction)
   {
     const unsigned mask = pending.Take();
     const std::uint32_t host = marks.Take();
     const std::uint32_t kept = host & (Bit(0) | Bit(1));
-    return volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(
+    duringTransaction();
+    const auto result = volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(
       (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)) != 0, currentMode, 3,
       volum::PendingModeAction::Apply, tracked, kept,
       [this](int mode, std::uint32_t keep) {
@@ -1380,15 +1383,21 @@ struct HostKnobHarness
       },
       [this](int mode, std::uint32_t keep) {
         for (int i = 0; i < 2; ++i)
-          if ((keep & Bit(i)) == 0)
+          if ((keep & Bit(i)) == 0 && !marks.IsMarked(kKnobParam[i]))
             live[i] = slots[mode][i];
       },
       [this](int mode) {
         for (int i = 0; i < 2; ++i)
           slots[mode][i] = live[i];
       });
+    marks.EndTransaction(0, pending.Peek());
+    return result;
   }
 
+  volum::PendingModeResult Apply()
+  {
+    return Apply([] {});
+  }
   void Reset() { Apply(); }
 
   void Idle()
@@ -1495,6 +1504,39 @@ TEST_CASE("F-08 idle mode change is unchanged and a stale knob write does not ca
   CHECK(h.slots[1][1] == 0.9);
 }
 
+TEST_CASE("F-08 a knob the host writes during the transaction keeps its value and does not carry over")
+{
+  HostKnobHarness h;
+  h.HostSetMode(1);
+  // The audio thread writes knob 1 after the window was taken, before the recall.
+  h.Apply([&h] { h.HostSetKnob(1, 0.66); });
+  CHECK(h.live[0] == 0.8); // recalled
+  CHECK(h.live[1] == 0.66); // the host's late write is not overwritten by the recall
+  CHECK(h.tracked == 1);
+
+  // The late mark must not make knob 1 "host-set" in a later, unrelated mode change.
+  h.HostSetMode(2);
+  h.Idle();
+  CHECK(h.tracked == 2);
+  CHECK(h.live[0] == 0.6);
+  CHECK(h.live[1] == 0.7); // the new mode's own knob
+  CHECK(h.slots[1][1] == 0.66); // saved to the mode it was written under
+}
+
+TEST_CASE("F-08 a late knob write for a mode change that is still pending reaches its transaction")
+{
+  HostKnobHarness h;
+  h.HostSetMode(1);
+  h.Apply([&h] {
+    h.HostSetMode(2); // queued during the transaction
+    h.HostSetKnob(0, 0.44);
+  });
+  h.Idle();
+  CHECK(h.tracked == 2);
+  CHECK(h.live[0] == 0.44); // belongs to the pending change to mode 2
+  CHECK(h.live[1] == 0.7);
+  CHECK(h.slots[2][0] == 0.44);
+}
 TEST_CASE("F-08 a waiting transaction hands its host-knob window back")
 {
   volum::HostKnobMarks marks;
@@ -1546,7 +1588,10 @@ TEST_CASE("F-08 OnParamReset has no adopt path; the one transaction keeps host-w
   const std::string apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyPendingModeChanges()");
   RequireContains(apply, "mVolumHostKnobMarks.Take()");
   RequireContains(apply, "volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(");
-  RequireContains(apply, "mVolumHostKnobMarks.Return(hostKnobs)");
+  RequireContains(apply, "mVolumHostKnobMarks.EndTransaction(retryKnobs, mVolumPendingModeChanges.Peek());");
+  RequireContains(apply, "if (mVolumModeTransactionActive)");
+  const std::string mayWrite = FunctionBody(settings, "bool NeuralAmpModeler::_VolumRecallMayWrite(");
+  RequireContains(mayWrite, "mVolumHostKnobMarks.IsMarked(paramIdx)");
 
   // Every restore holds the kept knobs across SetDefault and skips them; every save
   // leaves them out of the outgoing snapshot.
@@ -1556,8 +1601,9 @@ TEST_CASE("F-08 OnParamReset has no adopt path; the one transaction keeps host-w
   {
     INFO(fn);
     const std::string body = FunctionBody(settings, std::string("void NeuralAmpModeler::") + fn + "(int");
-    RequireContains(body, "const KeptKnobHold keptKnobs(*this, mVolumKeptKnobs);");
-    RequireContains(body, "if (_VolumKnobKept(idx))");
+    RequireDoesNotContain(body, "->SetDefault(");
+    RequireContains(body, "_VolumSetDefaultKeepValue(");
+    RequireContains(body, "if (!_VolumRecallMayWrite(idx))");
   }
   for (const char* fn :
        {"_VolumSavePrePitchModeSnapshot", "_VolumSaveDelayModeSnapshot", "_VolumSaveReverbModeSnapshot",

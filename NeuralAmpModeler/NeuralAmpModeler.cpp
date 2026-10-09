@@ -1587,10 +1587,26 @@ void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource sou
 
 void NeuralAmpModeler::_VolumApplyPendingModeChanges()
 {
+  // A restore below sends parameter values, which re-enters here through
+  // OnParamChangeUI. Leave what is queued for the next idle: taking marks mid-recall
+  // would hide the host's late writes from the recall.
+  if (mVolumModeTransactionActive)
+    return;
   const unsigned pending = mVolumPendingModeChanges.Take();
   // The knobs the host wrote since the last transaction. They are consumed with the
-  // window: a write that no mode change followed does not carry into a later one.
+  // window, whether or not a mode change is pending: a write that no mode change
+  // followed does not carry into a later one (this also drops stale marks at OnIdle).
   const std::uint32_t hostKnobs = mVolumHostKnobMarks.Take();
+  struct ActiveScope
+  {
+    bool& flag;
+    explicit ActiveScope(bool& f)
+    : flag(f)
+    {
+      flag = true;
+    }
+    ~ActiveScope() { flag = false; }
+  } activeScope(mVolumModeTransactionActive);
   // Sample all current values before any restore below can change another mode
   // parameter (notably Reverb mode restore also restores its Oktaverb sub-mode).
   const int currentPitchMode = GetParam(kPrePitchMode)->Int();
@@ -1627,7 +1643,7 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
     save(mode);
     mVolumKeptKnobs = kept;
   };
-  bool anyRetry = false;
+  std::uint32_t retryKnobs = 0;
   auto apply = [&](volum::ModeSnapshotTarget target, int currentMode, int modeCount, volum::PendingModeAction action,
                    int& trackedMode, std::uint32_t kept, auto&& saveOutgoing, auto&& restoreIncoming) {
     const KeptScope scope(mVolumKeptKnobs, kept);
@@ -1638,7 +1654,7 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
     if (result == volum::PendingModeResult::Retry)
     {
       mVolumPendingModeChanges.Request(target);
-      anyRetry = true;
+      retryKnobs |= kept;
     }
     return result;
   };
@@ -1693,7 +1709,7 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
     if (oktaverbResult == volum::PendingModeResult::Retry)
     {
       mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
-      anyRetry = true;
+      retryKnobs |= reverbKnobs;
     }
   }
   apply(
@@ -1710,9 +1726,9 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
     mVolumEffectSettings.chorusMode, knobsOf({kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix}),
     [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreChorusModeSnapshot(mode); });
-  // A transaction that had to wait keeps its window: the host's knobs are still the host's.
-  if (anyRetry)
-    mVolumHostKnobMarks.Return(hostKnobs);
+  // A transaction that had to wait keeps its window; marks written during this one reach the next only for a mode
+  // change that is still pending.
+  mVolumHostKnobMarks.EndTransaction(retryKnobs, mVolumPendingModeChanges.Peek());
 }
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
