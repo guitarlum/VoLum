@@ -161,7 +161,11 @@ enum EMsgTags
 
 #include "VoLumResamplingNam.h"
 
-class NeuralAmpModeler final : public iplug::Plugin
+// iplug::Plugin behind the host-restore layer: while a thread is inside a host state
+// restore, GetUI() and iPlug's Send*FromDelegate helpers do not reach the editor for it.
+using VolumHostBase = volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>;
+
+class NeuralAmpModeler final : public VolumHostBase
 {
 public:
   NeuralAmpModeler(const iplug::InstanceInfo& info);
@@ -185,15 +189,6 @@ public:
   // Shared headless Sound recall used by MIDI and PLAY. Returns false without
   // changing the sounding rig when either id cannot be resolved.
   bool VolumRecallSound(const std::string& ampId, const std::string& presetId);
-
-  // The editor, or nullptr while this thread is inside a host state restore. Hides
-  // the base GetUI() for every call in this class: the restore applies the rig
-  // synchronously, and with no editor visible to it each applier takes its headless
-  // path instead of writing IGraphics controls from the host's thread.
-  iplug::igraphics::IGraphics* GetUI()
-  {
-    return mVolumHostRestoreGate.HidesUiFromThisThread() ? nullptr : iplug::Plugin::GetUI();
-  }
 
 private:
   // Allocates mInputPointers and mOutputPointers
@@ -642,12 +637,11 @@ private:
   std::atomic<bool> mVolumIsLoading{false};
   std::atomic<bool> mVolumMainLoadFailed{false};
   // UnserializeState runs on the host's thread and applies the rig there, with the
-  // editor hidden from that thread (mVolumHostRestoreGate). It only raises this
+  // editor hidden from that thread (RestoreGate()). It only raises this
   // flag; the next OnIdle (or OnUIOpen) re-derives every control from the live
   // state on the UI thread. The flag carries no data, so two restores before one
   // idle still cost a single resync, and a resync run twice is harmless.
   std::atomic<bool> mVolumUiSyncPending{false};
-  volum::HostRestoreGate mVolumHostRestoreGate;
   // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
   std::string mVolumPendingLibraryNotice;
   // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins

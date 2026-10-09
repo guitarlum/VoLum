@@ -344,7 +344,7 @@ constexpr const char* kVolumDiagApiName = "plugin";
 
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPresets))
+: VolumHostBase(info, MakeConfig(kNumParams, kNumPresets))
 {
   volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
   VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
@@ -1374,9 +1374,10 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
   //
   // The rig is applied synchronously, on the host's thread, so the next audio block
   // and an immediate offline render play the restored sound. The editor is hidden
-  // from this thread for the duration (GetUI() returns null here): every applier
-  // takes its headless path, and the controls are re-derived by _VolumResyncUi.
-  const volum::HostRestoreGate::Scope uiHiddenFromHostThread(mVolumHostRestoreGate);
+  // from this thread for the duration (GetUI() returns null here, and iPlug's
+  // Send*FromDelegate helpers skip their control walk): every applier takes its
+  // headless path, and the controls are re-derived by _VolumResyncUi.
+  const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());
   try
   {
     // Look for the expected header. If it's there, then we'll know what to do.

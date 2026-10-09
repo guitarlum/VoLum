@@ -44,4 +44,53 @@ private:
   std::atomic<std::thread::id> mOwner{};
 };
 
+// The base layer between the iPlug plug-in class and VoLum. GetUI() is not virtual,
+// and iPlug's own editor-delegate helpers reach the editor through mGraphics
+// directly, so hiding GetUI() alone does not stop them: SendParameterValueFromDelegate
+// (every restored parameter goes through it) walks the whole control tree. This layer
+// closes both doors for the thread inside a host restore, and only for that thread.
+//
+// Base is the plug-in class (iplug::Plugin); DelegateBase is the graphics-free
+// IEditorDelegate, whose helpers are what a plug-in without an editor would run:
+// the parameter helper only notifies OnParamChangeUI, the message helper only calls
+// OnMessage, and the control-value helper does nothing. The controls those calls
+// skipped are re-derived by the UI resync the restore requests.
+template <class Base, class DelegateBase>
+class HostRestoreDelegate : public Base
+{
+public:
+  using Base::Base;
+
+  HostRestoreGate& RestoreGate() { return mRestoreGate; }
+
+  // Hides the base GetUI() for every call made from inside the plug-in class.
+  auto* GetUI() { return mRestoreGate.HidesUiFromThisThread() ? nullptr : Base::GetUI(); }
+
+  void SendControlValueFromDelegate(int ctrlTag, double normalizedValue) override
+  {
+    if (mRestoreGate.HidesUiFromThisThread())
+      return;
+    Base::SendControlValueFromDelegate(ctrlTag, normalizedValue);
+  }
+
+  void SendControlMsgFromDelegate(int ctrlTag, int msgTag, int dataSize = 0, const void* pData = nullptr) override
+  {
+    if (mRestoreGate.HidesUiFromThisThread())
+      this->DelegateBase::SendControlMsgFromDelegate(ctrlTag, msgTag, dataSize, pData);
+    else
+      Base::SendControlMsgFromDelegate(ctrlTag, msgTag, dataSize, pData);
+  }
+
+  void SendParameterValueFromDelegate(int paramIdx, double value, bool normalized) override
+  {
+    if (mRestoreGate.HidesUiFromThisThread())
+      this->DelegateBase::SendParameterValueFromDelegate(paramIdx, value, normalized);
+    else
+      Base::SendParameterValueFromDelegate(paramIdx, value, normalized);
+  }
+
+private:
+  HostRestoreGate mRestoreGate;
+};
+
 } // namespace volum

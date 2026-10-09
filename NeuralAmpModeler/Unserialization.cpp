@@ -910,7 +910,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // so the cab row kept describing the state the chunk just replaced.
   //
   // The rig above is already applied; only the controls are left. UnserializeState
-  // runs this under mVolumHostRestoreGate, so every applier skipped the live
+  // runs this under the host restore gate, so every applier skipped the live
   // IGraphics tree (amp list, hero, cab row, channel stepper, preset bar) on the
   // host's thread. Flag a resync instead of touching it: OnIdle is this plug-in's
   // UI-thread pump, and OnUIOpen re-derives the same controls once they exist.

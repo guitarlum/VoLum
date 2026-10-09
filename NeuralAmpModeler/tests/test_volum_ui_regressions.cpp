@@ -1922,9 +1922,13 @@ TEST_CASE("Unserialize regression: host state restore applies the rig synchronou
   // with the editor hidden from that thread, so the appliers above take their
   // headless path and write no IGraphics control.
   const std::string entry = MemberFnUntilNext(source, "int NeuralAmpModeler::UnserializeState(");
-  RequireContains(entry, "const volum::HostRestoreGate::Scope uiHiddenFromHostThread(mVolumHostRestoreGate);");
+  RequireContains(entry, "const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());");
   CHECK(entry.find("uiHiddenFromHostThread") < entry.find("_UnserializeStateWithKnownVersion("));
-  RequireContains(header, "return mVolumHostRestoreGate.HidesUiFromThisThread() ? nullptr : iplug::Plugin::GetUI();");
+  // GetUI() is not virtual and iPlug's Send*FromDelegate helpers use mGraphics directly, so the
+  // class must sit on the layer that overrides all of them (behaviour: test_volum_host_restore_gate.cpp).
+  RequireContains(header, "class NeuralAmpModeler final : public VolumHostBase");
+  RequireContains(header, "volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>");
+  RequireDoesNotContain(header, "mVolumHostRestoreGate");
 }
 
 TEST_CASE("Unserialize regression: the UI resync reads live state and is idempotent")
@@ -1939,6 +1943,7 @@ TEST_CASE("Unserialize regression: the UI resync reads live state and is idempot
   RequireContains(idle, "_VolumResyncUi();");
 
   const std::string resync = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumResyncUi()");
+  RequireContains(resync, "SendCurrentParamValuesFromDelegate();");
   RequireContains(resync, "_UpdateVoLumLayout(pGfx);");
   RequireContains(resync, "_VolumRefreshSupportChannels();");
   RequireContains(resync, "_VolumRefreshPresetBar();");
