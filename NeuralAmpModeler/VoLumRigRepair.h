@@ -78,7 +78,17 @@ struct LibraryItemRef
 // headless caller may leave them empty.
 struct RigLabels
 {
-  std::string factoryAmpName; // the amp MAIN reverts to
+  // The factory amp MAIN reverts to when the custom MAIN amp is deleted. Only the
+  // custom-amp delete copy reads this.
+  std::string factoryAmpName;
+  // The amp MAIN is sounding right now (the custom amp when one is focused), which
+  // is whose baked cab a deleted IR falls back to. Only the IR delete copy reads
+  // this; the two names differ whenever MAIN is a custom amp.
+  std::string mainAmpName;
+  // False when the lane's cab fallback has no real baked cab to land on and ends
+  // on No Cab (a DIRECT-only custom amp), so the copy must not promise a cab.
+  bool mainFallbackRealCab = true;
+  bool supportFallbackRealCab = true;
 };
 
 enum class RigRepair
@@ -145,6 +155,11 @@ inline std::string PreSlotList(bool one, bool two)
 inline std::string FactoryAmpLabel(const RigLabels& labels)
 {
   return labels.factoryAmpName.empty() ? std::string("the factory amp") : labels.factoryAmpName;
+}
+
+inline std::string MainAmpLabel(const RigLabels& labels)
+{
+  return labels.mainAmpName.empty() ? std::string("the current amp") : labels.mainAmpName;
 }
 
 // "03", "03 and 12", "01, 03 and 12".
@@ -217,12 +232,22 @@ inline RigRepairPlan PlanDelete(const SoundingRig& rig, const LibraryItemRef& it
         Add(plan, RigRepair::ClearSupportIr);
         plan.after.supportActiveIrId.clear();
       }
+      const std::string mainDest = labels.mainFallbackRealCab ? MainAmpLabel(labels) + "'s baked cab" : "No Cab";
+      const std::string supportDest = labels.supportFallbackRealCab ? "its baked cab" : "No Cab";
       if (onMain && onSupport)
-        inUse = " It is convolving MAIN and SUPPORT right now. Both lanes will fall back to their baked cab.";
+      {
+        if (labels.mainFallbackRealCab && labels.supportFallbackRealCab)
+          inUse = " It is convolving MAIN and SUPPORT right now. Both lanes will fall back to their baked cab.";
+        else if (!labels.mainFallbackRealCab && !labels.supportFallbackRealCab)
+          inUse = " It is convolving MAIN and SUPPORT right now. Both lanes will fall back to No Cab.";
+        else
+          inUse = " It is convolving MAIN and SUPPORT right now. MAIN will fall back to " + mainDest
+                  + " and SUPPORT to " + supportDest + ".";
+      }
       else if (onMain)
-        inUse = " It is convolving MAIN right now. MAIN will fall back to " + FactoryAmpLabel(labels) + "'s baked cab.";
+        inUse = " It is convolving MAIN right now. MAIN will fall back to " + mainDest + ".";
       else if (onSupport)
-        inUse = " It is convolving SUPPORT right now. SUPPORT will fall back to its baked cab.";
+        inUse = " It is convolving SUPPORT right now. SUPPORT will fall back to " + supportDest + ".";
       break;
     }
     case LibraryKind::Pedal:

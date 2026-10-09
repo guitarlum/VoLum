@@ -44,11 +44,6 @@ public:
   {
     mIgnoreMouse = (mFocusCallback == nullptr && mPickerCallback == nullptr && mDualToggleCallback == nullptr
                     && mDismissPickerCallback == nullptr);
-    // Both platforms deliver the second click of a fast double-click as
-    // OnMouseDblClick, never as a second OnMouseDown. Without this the SUPPORT
-    // lane's two-click protocol is unreachable by double-clicking - which is
-    // exactly what a user tries when the first click appears to do nothing.
-    mDblAsSingleClick = true;
   }
 
   void Draw(IGraphics& g) override
@@ -146,6 +141,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
 
     volum::dualamp::LaneState state;
     state.dualActive = mDualAmpActive;
@@ -197,6 +193,16 @@ public:
     }
 
     SetDirty(false);
+  }
+
+  // Both platforms deliver the second click of a fast double-click as
+  // OnMouseDblClick, never as a second OnMouseDown. Replaying it keeps the SUPPORT
+  // lane's two-click protocol reachable by double-clicking - which is exactly what
+  // a user tries when the first click appears to do nothing.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnMouseOver(float x, float y, const IMouseMod& mod) override
@@ -500,6 +506,7 @@ private:
   DualToggleCallback mDualToggleCallback;
   DismissPickerCallback mDismissPickerCallback;
   IsPickerOpenCallback mIsPickerOpenCallback;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumSupportPolarityControl : public IControl

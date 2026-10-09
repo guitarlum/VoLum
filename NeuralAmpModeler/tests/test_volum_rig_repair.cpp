@@ -601,7 +601,9 @@ TEST_CASE("Confirm copy names the item, the in-use case, and the destination")
   CHECK(Contains(ampPlan.confirmBody, "MAIN will switch to Soldano SLO"));
   CHECK(Contains(ampPlan.confirmBody, "cannot be undone"));
 
-  const auto irPlan = PlanDelete(rig, Ir("ir_mesa", "Mesa OS"), Labels("Soldano SLO"));
+  RigLabels irLabels = Labels("Soldano SLO");
+  irLabels.mainAmpName = "Soldano SLO";
+  const auto irPlan = PlanDelete(rig, Ir("ir_mesa", "Mesa OS"), irLabels);
   CHECK(Contains(irPlan.confirmBody, "IR \"Mesa OS\""));
   CHECK(Contains(irPlan.confirmBody, "Soldano SLO's baked cab"));
 
@@ -621,4 +623,77 @@ TEST_CASE("Confirm copy names the item, the in-use case, and the destination")
   CHECK(replacePlan.confirmTitle == "Replace?");
   CHECK(Contains(replacePlan.confirmBody, "Replace custom amp \"My Plexi\""));
   CHECK_FALSE(Contains(replacePlan.confirmBody, "cannot be undone"));
+}
+
+// F-75: two different amp names. The custom-amp delete says where MAIN lands (the
+// sidebar factory amp); the IR delete says whose baked cab MAIN falls back to (the
+// amp MAIN is sounding, which is the custom amp when one is focused). One label
+// serving both made "Delete custom amp X" say "MAIN will switch to X".
+TEST_CASE("Custom-amp delete names the factory amp MAIN reverts to, not the amp being deleted")
+{
+  RigLabels labels = Labels("Soldano SLO"); // the sidebar factory amp
+  labels.mainAmpName = "My Plexi"; // what MAIN sounds like now: the deleted amp itself
+
+  const auto plan = PlanDelete(FullRig(), Amp("amp_main", "My Plexi"), labels);
+  REQUIRE(plan.Has(RigRepair::RevertMainToFactoryAmp));
+  CHECK(Contains(plan.confirmBody, "MAIN will switch to Soldano SLO"));
+  CHECK_FALSE(Contains(plan.confirmBody, "MAIN will switch to My Plexi"));
+
+  SoundingRig both = FullRig();
+  both.supportCustomAmpId = "amp_main";
+  const auto bothPlan = PlanDelete(both, Amp("amp_main", "My Plexi"), labels);
+  CHECK(Contains(bothPlan.confirmBody, "MAIN will switch to Soldano SLO and SUPPORT will switch off"));
+}
+
+TEST_CASE("IR delete names the amp MAIN is sounding, not the factory amp behind it")
+{
+  RigLabels labels = Labels("Soldano SLO");
+  labels.mainAmpName = "My Plexi"; // a custom MAIN amp in front of a factory amp
+
+  const auto plan = PlanDelete(FullRig(), Ir("ir_mesa", "Mesa OS"), labels);
+  REQUIRE(plan.Has(RigRepair::ClearMainIr));
+  CHECK(Contains(plan.confirmBody, "MAIN will fall back to My Plexi's baked cab"));
+  CHECK_FALSE(Contains(plan.confirmBody, "Soldano SLO"));
+
+  // Headless: no amp name still reads as a sentence.
+  const auto bare = PlanDelete(FullRig(), Ir("ir_mesa", "Mesa OS"));
+  CHECK(Contains(bare.confirmBody, "the current amp's baked cab"));
+}
+
+// F-76 / F-105: SUPPORT gets the same real-cab fallback as MAIN, and the dialog
+// only promises a baked cab when the fallback lands on one.
+TEST_CASE("Deleting the IR on SUPPORT repairs the SUPPORT lane and says where it lands")
+{
+  SoundingRig before = FullRig();
+  before.supportActiveIrId = "ir_orange";
+  const auto plan = PlanDelete(before, Ir("ir_orange", "Orange"), Labels("Soldano SLO"));
+  CHECK(plan.Has(RigRepair::ClearSupportIr));
+  CHECK_FALSE(plan.Has(RigRepair::ClearMainIr));
+  CHECK(Contains(plan.confirmBody, "SUPPORT will fall back to its baked cab"));
+
+  RigLabels directOnly = Labels("Soldano SLO");
+  directOnly.supportFallbackRealCab = false;
+  const auto noCab = PlanDelete(before, Ir("ir_orange", "Orange"), directOnly);
+  CHECK(Contains(noCab.confirmBody, "SUPPORT will fall back to No Cab"));
+  CHECK_FALSE(Contains(noCab.confirmBody, "baked cab"));
+}
+
+TEST_CASE("IR delete copy does not promise a baked cab when MAIN lands on No Cab")
+{
+  RigLabels labels = Labels("Soldano SLO");
+  labels.mainAmpName = "DI Only";
+  labels.mainFallbackRealCab = false;
+  const auto plan = PlanDelete(FullRig(), Ir("ir_mesa", "Mesa OS"), labels);
+  CHECK(Contains(plan.confirmBody, "MAIN will fall back to No Cab"));
+  CHECK_FALSE(Contains(plan.confirmBody, "baked cab"));
+
+  SoundingRig bothLanes = FullRig();
+  bothLanes.supportActiveIrId = "ir_mesa";
+  CHECK(Contains(PlanDelete(bothLanes, Ir("ir_mesa", "Mesa OS"), labels).confirmBody,
+                 "MAIN will fall back to No Cab and SUPPORT to its baked cab"));
+  labels.supportFallbackRealCab = false;
+  CHECK(Contains(
+    PlanDelete(bothLanes, Ir("ir_mesa", "Mesa OS"), labels).confirmBody, "Both lanes will fall back to No Cab"));
+  CHECK(Contains(
+    PlanDelete(bothLanes, Ir("ir_mesa", "Mesa OS")).confirmBody, "Both lanes will fall back to their baked cab"));
 }

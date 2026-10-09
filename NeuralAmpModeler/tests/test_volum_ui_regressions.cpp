@@ -4,6 +4,7 @@
 #include "../VoLumSecondPress.h"
 #include "../VoLumTriptychLayout.h"
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -184,6 +185,17 @@ struct OktaverbSnapshotHarness
       [this](int mode) { currentSubMode = mode; });
   }
 };
+
+// VoLumSupportPolarityControl in the same header has the same replay lines, so the
+// search stays inside the hero class.
+std::string HeroDblClickBody(const std::string& hero)
+{
+  const auto cls = hero.find("class VoLumHeroImageControl");
+  REQUIRE(cls != std::string::npos);
+  const auto dbl = hero.find("void OnMouseDblClick(", cls);
+  REQUIRE(dbl < hero.find("\nclass ", cls));
+  return hero.substr(dbl, hero.find("\n  }", dbl) - dbl);
+}
 } // namespace
 
 TEST_CASE("POST pedal cards refresh active art state from delay and reverb params")
@@ -1482,10 +1494,12 @@ TEST_CASE("PRE pedal capture menu toggles closed on second click of same pedal")
 
 TEST_CASE("PRE pedal capture menu closes from main-area outside click")
 {
-  const std::string source = ReadPluginSource(); // layout now in VoLumLayoutBuild.inc.cpp
-
-  RequireContains(source, "_ClearVoLumKnobSelection();");
-  RequireContains(source, "_VolumHidePreCaptureMenu();");
+  const std::string build = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  const auto clear = build.find("new VoLumKnobSelectionClearControl(");
+  REQUIRE(clear != std::string::npos);
+  const std::string onClear = build.substr(clear, build.find("}));", clear) - clear);
+  RequireContains(onClear, "_ClearVoLumKnobSelection();");
+  RequireContains(onClear, "for (int tag : kVoLumDropdownTags)");
 }
 
 TEST_CASE("Collapsed AMP strip block is taller than the PRE/POST blocks")
@@ -1862,8 +1876,9 @@ TEST_CASE("Deleting content that is playing moves the sounding rig, not just the
 
   // The IR teardown is deferred so the lane does not expose a burst of raw,
   // cab-less amp while the baked-cab capture loads (VoLumDspStaging.h).
-  RequireContains(source, "_VolumClearIR(false, true);");
-  RequireContains(source, "_VolumClearIR(true, true);");
+  RequireContains(source, "_VolumFallbackToAvailableCab();");
+  RequireDoesNotContain(source, "_VolumClearIR(false, true);");
+  RequireContains(source, "_VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);");
 
   // A dropped PRE slot drops the live model too: capture EMPTY, pill off.
   RequireContains(source, "_VolumSetPreNamCapture(0, 0); // EMPTY: drops the live PRE model");
@@ -2453,8 +2468,9 @@ TEST_CASE("Clamping focus off an empty SUPPORT lane re-derives the row it invali
   const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
   RequireContains(hero, "volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf)");
   // Both platforms deliver the second click of a fast double-click as
-  // OnMouseDblClick, so a two-click protocol is unreachable without this.
-  RequireContains(hero, "mDblAsSingleClick = true;");
+  // OnMouseDblClick, so a two-click protocol is unreachable without the replay.
+  RequireContains(HeroDblClickBody(hero), "if (mSecondPress.Take())");
+  RequireContains(HeroDblClickBody(hero), "OnMouseDown(x, y, mod);");
 
   // A lane whose amp the library no longer contains is not a lane either: a custom
   // support amp deleted from another instance left a stale index behind.
@@ -2500,7 +2516,7 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   // code page and can recreate the original failure under a Unicode profile.
   RequireContains(source, "mVolumRigsRoot = volum::content::PathToUtf8(root);");
   RequireContains(source, "std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad)");
-  RequireContains(overlay, "std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec)");
+  RequireContains(overlay, "IrFileValidForImport(fn.Get(), why)");
   RequireDoesNotContain(source, "std::filesystem::path(fileToLoad)");
   RequireDoesNotContain(source, "std::filesystem::path(mVolumRigsRoot)");
   RequireDoesNotContain(overlay, "std::filesystem::path(fn.Get())");
@@ -2834,7 +2850,11 @@ TEST_CASE("Hero lane clicks ask the shared Dual Amp click protocol")
   // asks: a correct protocol nobody calls is how that bug shipped.
   const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
   RequireContains(hero, "volum::dualamp::DecideHeroClick(state, hitDualChip, hitSupportHalf)");
-  RequireContains(hero, "mDblAsSingleClick = true;");
+  // Its own double-click replays as the second click of the protocol; a
+  // double-click whose first press closed a dropdown does not.
+  RequireContains(HeroDblClickBody(hero), "if (mSecondPress.Take())");
+  RequireContains(HeroDblClickBody(hero), "OnMouseDown(x, y, mod);");
+  RequireDoesNotContain(hero, "mDblAsSingleClick = true;");
 }
 
 TEST_CASE("Polarity writes the active scene, not the parked factory slot")
@@ -3231,6 +3251,45 @@ TEST_CASE("tier2f MAIN cab fallback does not paint the row while SUPPORT is focu
   RequireContains(body, "row && !_VolumSupportFocused()");
 }
 
+TEST_CASE("IR import and delete fixes are wired into their UI paths")
+{
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto validate = overlay.find("IrFileValidForImport");
+  const auto copy = overlay.find("ImportFileCopy", validate);
+  REQUIRE(validate != std::string::npos);
+  REQUIRE(copy != std::string::npos);
+  CHECK(validate < copy); // malformed files never enter the owned library
+
+  const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumConfirmDialog.h");
+  // The message is only ever drawn as the lines the clamped wrap returns, one
+  // DrawText each. Drawing mMessage itself (one clipped line) is the regression.
+  RequireContains(dialog, "volum::textfit::WrapWordsClamped(mMessage");
+  RequireContains(dialog, "for (const auto& line : lines)");
+  RequireContains(dialog, "g.DrawText(messageText, line.c_str()");
+  RequireDoesNotContain(dialog, "mMessage.c_str()");
+
+  const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumRigRepair.inc.cpp");
+  RequireContains(rig, "_VolumFallbackToAvailableCab();");
+  RequireDoesNotContain(rig, "_VolumClearIR(false, true);");
+  RequireContains(rig, "_VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);");
+  RequireDoesNotContain(rig, "_VolumClearIR(true, true);");
+  // Both plan paths take their labels from the one builder; the label behaviour
+  // itself is covered by PlanDelete tests in test_volum_rig_repair.cpp.
+  RequireContains(rig, "const volum::rig::RigLabels labels = _VolumRigLabels();");
+}
+
+TEST_CASE("F-76 SUPPORT IR fallback lands on a real cab and is shared with reconcile")
+{
+  const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSceneRig.inc.cpp");
+  const auto at = rig.find("void NeuralAmpModeler::_VolumFallbackSupportToAvailableCab(bool deferToCabSwap)");
+  REQUIRE(at != std::string::npos);
+  const std::string body = rig.substr(at);
+  RequireContains(body, "_VolumClearIR(true, deferToCabSwap);");
+  RequireContains(body, "volum::custom::StockCabFallback(amp, mVolumCustomSupportChannel)");
+  RequireContains(body, "GetParam(kSupportSpeakerIdx)->Set(1.0); // first baked cab");
+  // The sibling-delete reconcile uses the same fallback, not its own copy.
+  RequireContains(rig, "_VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);");
+}
 TEST_CASE("tier2f the hero name stops before the PAN knob")
 {
   const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");
@@ -3445,7 +3504,7 @@ enum class DblDecision
   KnobResets, // knob: double-click resets to default, gated to the knob's own press
   StockSwitch, // iPlug ISwitchControlBase already maps double-click to a click
   OwnDblClick, // deliberate double-click action of its own
-  HeroDblAsSingle, // Dual Amp click protocol, see the Hero lane test
+  OwnDblClickGated, // its own double-click action, only after its own press
   Drops, // first press opens, closes or picks; the second press is ignored
 };
 
@@ -3460,7 +3519,9 @@ struct DblRow
 const std::vector<DblRow>& DoubleClickDecisions()
 {
   static const std::vector<DblRow> rows = {
+    {"NeuralAmpModelerControls.h", "NAMCircleButtonControl", DblDecision::Repeats},
     {"NeuralAmpModelerControls.h", "NAMKnobControl", DblDecision::KnobResets},
+    {"NeuralAmpModelerControls.h", "NAMSwitchControl", DblDecision::RepeatsParam},
     {"NeuralAmpModelerControls.h", "VoLumPowerSwitchControl", DblDecision::RepeatsParam},
     {"NeuralAmpModelerControls.h", "OutputModeControl", DblDecision::StockSwitch},
     {"NeuralAmpModelerControls.h", "VoLumLiteModeSwitchControl", DblDecision::Repeats},
@@ -3471,12 +3532,13 @@ const std::vector<DblRow>& DoubleClickDecisions()
     {"VoLumCoreControls.h", "VoLumSubModePillControl", DblDecision::RepeatsParam},
     {"VoLumCustomOverlay.h", "VoLumCustomOverlayControl", DblDecision::OwnDblClick},
     {"VoLumExactEntry.h", "VoLumExactEntryControl", DblDecision::Repeats},
-    {"VoLumHero.h", "VoLumHeroImageControl", DblDecision::HeroDblAsSingle},
+    // Repeats keeps the Dual Amp two-click protocol reachable; see the Hero lane test.
+    {"VoLumHero.h", "VoLumHeroImageControl", DblDecision::Repeats},
     {"VoLumHero.h", "VoLumSupportPolarityControl", DblDecision::Repeats},
     {"VoLumKeyboardNav.h", "VoLumChannelStepControl", DblDecision::Repeats},
     {"VoLumListMenu.h", "VoLumListMenuControl", DblDecision::Drops},
     {"VoLumMidiFootswitch.h", "VoLumMidiFootswitchControl", DblDecision::OwnDblClick},
-    {"VoLumNameDialog.h", "VoLumNameDialogControl", DblDecision::OwnDblClick},
+    {"VoLumNameDialog.h", "VoLumNameDialogControl", DblDecision::OwnDblClickGated},
     {"VoLumPackOverlay.h", "VoLumPackOverlayControl", DblDecision::Repeats},
     {"VoLumPedalCardControl.h", "VoLumPedalCardControl", DblDecision::Repeats},
     {"VoLumPlaySurface.h", "VoLumModeToggleControl", DblDecision::Drops},
@@ -3498,6 +3560,7 @@ const std::vector<DblRow>& DoubleClickDecisions()
     {"VoLumTriptychMenus.h", "VoLumPreCaptureMenuControl", DblDecision::Drops},
     {"VoLumTunerMetronomeOverlay.h", "VoLumTunerControl", DblDecision::Drops},
     {"VoLumTunerMetronomeOverlay.h", "VoLumMetronomeControl", DblDecision::Repeats},
+    {"VoLumTunerMetronomeOverlay.h", "VoLumMetronomeButtonControl", DblDecision::Repeats},
   };
   return rows;
 }
@@ -3585,7 +3648,11 @@ TEST_CASE("Steppers, arrows, pills and toggles count a fast second click")
         RequireDoesNotContain(body, "OnMouseDblClick");
         break;
       case DblDecision::OwnDblClick: REQUIRE_FALSE(dbl.empty()); break;
-      case DblDecision::HeroDblAsSingle: RequireContains(body, "mDblAsSingleClick = true;"); break;
+      case DblDecision::OwnDblClickGated:
+        RequireContains(MemberBody(body, "void OnMouseDown("), "mSecondPress.Press();");
+        RequireContains(dbl, "mSecondPress.Take()");
+        RequireDoesNotContain(body, "mDblAsSingleClick = true");
+        break;
       case DblDecision::Drops:
         // The stock handler resets a bound parameter; these carry none.
         REQUIRE(dbl.empty());
@@ -3600,6 +3667,61 @@ TEST_CASE("Steppers, arrows, pills and toggles count a fast second click")
   const auto sw = icontrol.find("ISwitchControlBase::ISwitchControlBase(");
   REQUIRE(sw != std::string::npos);
   RequireContains(icontrol.substr(sw, 400), "mDblAsSingleClick = true;");
+}
+
+TEST_CASE("A double-click that closes a dropdown or overlay never presses what is underneath")
+{
+  // iPlug's stock buttons and switches (and the hero, by its own flag) replayed every
+  // double-click as a press, so the second click of a double-click that closed the
+  // tuner toggled NOISE GATE, and one on an IR dropdown row turned Dual Amp on. They
+  // carry no OnMouseDown of their own, so the decision-table scan never saw them.
+  namespace fs = std::filesystem;
+  const std::vector<std::string> stockBases = {"ISVGButtonControl",    "IVButtonControl",   "IVSwitchControl",
+                                               "IVSlideSwitchControl", "ISVGSwitchControl", "IBSwitchControl",
+                                               "IBButtonControl",      "IVToggleControl",   "ITextToggleControl"};
+  // Only used inside upstream's NAMFileBrowserControl, which VoLum never attaches.
+  const std::vector<std::string> unattached = {"NAMSquareButtonControl", "NAMFileNameControl"};
+  RequireDoesNotContain(ReadPluginSource(), "new NAMFileBrowserControl(");
+
+  std::vector<std::string> ungated;
+  int stockDerived = 0;
+  const fs::path root = RepoRoot() / "NeuralAmpModeler";
+  for (const auto& entry : fs::directory_iterator(root))
+  {
+    if (!entry.is_regular_file() || entry.path().extension() != ".h")
+      continue;
+    const std::string src = ReadText(entry.path());
+    const std::string file = entry.path().filename().string();
+    INFO(file);
+    RequireDoesNotContain(src, "mDblAsSingleClick = true");
+    for (const auto& base : stockBases)
+    {
+      const std::string needle = " : public " + base;
+      for (auto at = src.find(needle); at != std::string::npos; at = src.find(needle, at + 1))
+      {
+        const auto decl = src.rfind("\nclass ", at);
+        if (decl == std::string::npos)
+          continue;
+        const std::string cls = src.substr(decl + 7, at - decl - 7);
+        if (std::find(unattached.begin(), unattached.end(), cls) != unattached.end())
+          continue;
+        ++stockDerived;
+        bool gated = false;
+        for (const auto& row : DoubleClickDecisions())
+          gated = gated
+                  || (file == row.file && cls == row.cls
+                      && (row.decision == DblDecision::Repeats || row.decision == DblDecision::RepeatsParam));
+        const std::string body = TopLevelClassBody(src, cls);
+        if (!gated || body.find("mDblAsSingleClick = false;") == std::string::npos)
+          ungated.push_back(file + " " + cls);
+      }
+    }
+  }
+  std::string list;
+  for (const auto& u : ungated)
+    list += u + "\n";
+  CHECK_MESSAGE(ungated.empty(), list);
+  CHECK(stockDerived >= 3); // NAMCircleButtonControl, NAMSwitchControl, VoLumMetronomeButtonControl
 }
 
 TEST_CASE("Knobs keep double-click = reset to default")

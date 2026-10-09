@@ -927,14 +927,17 @@ void NeuralAmpModeler::OnIdle()
   _VolumApplyPendingDualAmpChange();
   if (mVolumSupportChannelsDirty.exchange(false, std::memory_order_acquire))
     _VolumRefreshSupportChannels();
-  if (!mVolumPendingLibraryNotice.empty())
-    if (auto* gfx = GetUI())
-    {
-      // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
-      const std::string notice = std::move(mVolumPendingLibraryNotice);
-      mVolumPendingLibraryNotice.clear();
-      _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
-    }
+  // Not while a control holds the mouse: the box drops the capture without ending a
+  // knob drag's host gesture. A capture that never ends waits only so long.
+  if (mVolumPendingLibraryNotice.empty())
+    mVolumNoticeDeferral.Reset();
+  else if (auto* gfx = GetUI(); gfx && mVolumNoticeDeferral.ShouldShow(gfx->ControlIsCaptured()))
+  {
+    // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
+    const std::string notice = std::move(mVolumPendingLibraryNotice);
+    mVolumPendingLibraryNotice.clear();
+    _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+  }
 
   // Take the audio thread's "a new main model is live" flag once per idle, with or
   // without an editor. It used to be cleared only under GetUI(), so with the window

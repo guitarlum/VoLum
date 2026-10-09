@@ -28,9 +28,7 @@ bool NeuralAmpModeler::_HandleVoLumKeyboardFocusKey(const IKeyPress& key)
     _VolumRefreshMidiSettingsChrome();
     if (auto* pGfx = GetUI())
     {
-      const int kDropdownTags[] = {
-        kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
-      for (int tag : kDropdownTags)
+      for (int tag : kVoLumDropdownTags)
         if (auto* c = pGfx->GetControlWithTag(tag))
           c->Hide(true);
       if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
