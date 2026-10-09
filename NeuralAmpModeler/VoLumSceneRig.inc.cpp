@@ -906,10 +906,10 @@ iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const
   const double trim = (support ? mSupportIrTrimLin : mIrTrimLin).load(std::memory_order_relaxed);
   const double lowHz = (support ? mSupportIrLowCutHz : mIrLowCutHz).load(std::memory_order_relaxed);
   const double highHz = (support ? mSupportIrHighCutHz : mIrHighCutHz).load(std::memory_order_relaxed);
-  auto& lowCut = support ? mSupportIrLowCut : mIrLowCut;
-  auto& highCut = support ? mSupportIrHighCut : mIrHighCut;
-  auto* shaped = volum::ApplyIrShapingLane(
-    reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim, lowHz, highHz, lowCut, highCut);
+  auto& lane = support ? mSupportIrShaping : mIrShaping;
+  const void* ir = support ? static_cast<const void*>(mSupportIR.get()) : static_cast<const void*>(mIR.get());
+  auto* shaped =
+    lane.Process(reinterpret_cast<DSP_SAMPLE**>(in), numChannels, nFrames, sampleRate, trim, lowHz, highHz, ir);
   return reinterpret_cast<iplug::sample**>(shaped);
 }
 

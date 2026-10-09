@@ -1,7 +1,27 @@
 #pragma once
 
+#include <algorithm>
+
 namespace volum
 {
+
+// SUPPORT is processed beside MAIN, never instead of it: with MAIN missing (still
+// loading, or being repaired) the block is the silent fallback. The plan and the
+// host latency both ask this, so neither claims a lane that does not run.
+inline bool SupportLaneRuns(bool dualAmpActive, bool haveMainModel, bool haveSupportModel)
+{
+  return dualAmpActive && haveMainModel && haveSupportModel;
+}
+
+// Amp part of the latency VoLum reports to the host.
+inline int AmpLatencySamples(bool haveMainModel, int mainLatency, bool dualAmpActive, bool haveSupportModel,
+                             int supportLatency)
+{
+  int latency = haveMainModel ? mainLatency : 0;
+  if (SupportLaneRuns(dualAmpActive, haveMainModel, haveSupportModel))
+    latency = std::max(latency, supportLatency);
+  return latency;
+}
 
 struct ProcessingPlan
 {
@@ -39,7 +59,7 @@ inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActiv
   plan.runPreNam[1] = preNamActive[1] && havePreNam[1];
   plan.runNoiseGate = noiseGateActive;
   plan.runMainModel = haveMainModel;
-  plan.runSupportModel = dualAmpActive && haveSupportModel;
+  plan.runSupportModel = SupportLaneRuns(dualAmpActive, haveMainModel, haveSupportModel);
   plan.runDualAmp = haveMainModel && plan.runSupportModel;
   plan.runFallback = !haveMainModel;
   plan.runToneStack = haveMainModel && toneStackActive;

@@ -119,21 +119,57 @@ TEST_CASE("Processing plan enables PRE NAM slots only when capture is loaded")
   CHECK_FALSE(plan.runReverb);
 }
 
-TEST_CASE("Processing plan enables POST delay and reverb with support model but no main model")
+TEST_CASE("Processing plan claims neither SUPPORT nor POST while MAIN is missing")
 {
+  // Dual Amp on, SUPPORT and its IR loaded, MAIN still loading. ProcessBlock only
+  // runs SUPPORT beside MAIN, so the block is the silent fallback. The plan used to
+  // say runSupportModel anyway, and the host latency counted SUPPORT for it.
   const bool preNamActive[2] = {false, false};
   const bool havePreNam[2] = {false, false};
 
-  const auto plan = volum::MakeProcessingPlan(
-    false, false, false, false, false, false, preNamActive, havePreNam, true, true, false, true, true, false);
+  const auto plan = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam, true,
+                                              true, false, /*dualAmpActive=*/true, /*haveSupportModel=*/true,
+                                              /*supportToneStackActive=*/true, /*supportIrActive=*/true,
+                                              /*haveSupportIR=*/true);
 
   CHECK_FALSE(plan.runMainModel);
-  CHECK(plan.runSupportModel);
+  CHECK(plan.runFallback);
+  CHECK_FALSE(plan.runSupportModel);
   CHECK_FALSE(plan.runDualAmp);
-  CHECK(plan.runDelay);
-  CHECK(plan.runReverb);
+  CHECK_FALSE(plan.runSupportToneStack);
+  CHECK_FALSE(plan.runSupportIR);
+  CHECK_FALSE(plan.runDelay);
+  CHECK_FALSE(plan.runReverb);
   CHECK_FALSE(plan.runToneStack);
   CHECK_FALSE(plan.runIR);
+}
+
+TEST_CASE("Host latency counts SUPPORT exactly when the plan runs it")
+{
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+  constexpr int kMain = 0;
+  constexpr int kSupport = 4096; // a resampled SUPPORT capture
+
+  // MAIN missing, SUPPORT loaded: nothing plays, so there is nothing to delay.
+  CHECK(volum::AmpLatencySamples(false, 0, true, true, kSupport) == 0);
+  CHECK(volum::AmpLatencySamples(true, kMain, true, true, kSupport) == kSupport);
+  CHECK(volum::AmpLatencySamples(true, 32, false, true, kSupport) == 32);
+  CHECK(volum::AmpLatencySamples(true, 8192, true, true, kSupport) == 8192);
+
+  for (int bits = 0; bits < 8; ++bits)
+  {
+    const bool haveMain = (bits & 1) != 0;
+    const bool dual = (bits & 2) != 0;
+    const bool haveSupport = (bits & 4) != 0;
+    const auto plan = volum::MakeProcessingPlan(
+      haveMain, false, false, false, false, false, preNamActive, havePreNam, false, false, false, dual, haveSupport);
+    const bool latencyCountsSupport =
+      volum::AmpLatencySamples(haveMain, kMain, dual, haveSupport, kSupport) == kSupport;
+    INFO("main=" << haveMain << " dual=" << dual << " support=" << haveSupport);
+    CHECK(plan.runSupportModel == latencyCountsSupport);
+    CHECK(plan.runSupportModel == plan.runDualAmp);
+  }
 }
 
 TEST_CASE("Processing plan disables support tone stack without a support model")
@@ -234,13 +270,13 @@ TEST_CASE("Processing plan gates the POST tremolo behind a model and its active 
                                                  /*prePitchActive=*/false, /*tremoloActive=*/true);
   CHECK_FALSE(noModel.runTremolo);
 
-  // Active with only a support model (no main) -> still runs on the POST bus.
+  // Only a support model (MAIN still loading): the block is silent, so nothing runs.
   const auto supportOnly = volum::MakeProcessingPlan(false, false, false, false, false, false, preNamActive, havePreNam,
                                                      false, false, false, /*dualAmpActive=*/true,
                                                      /*haveSupportModel=*/true, false, false, false,
                                                      /*prePitchActive=*/false, /*tremoloActive=*/true);
-  CHECK(supportOnly.runSupportModel);
-  CHECK(supportOnly.runTremolo);
+  CHECK_FALSE(supportOnly.runSupportModel);
+  CHECK_FALSE(supportOnly.runTremolo);
 }
 
 TEST_CASE("Processing plan gates the POST chorus behind a model and its active flag")
@@ -269,8 +305,8 @@ TEST_CASE("Processing plan gates the POST chorus behind a model and its active f
                                                      false, false, false, /*dualAmpActive=*/true,
                                                      /*haveSupportModel=*/true, false, false, false, false, false,
                                                      /*chorusActive=*/true);
-  CHECK(supportOnly.runSupportModel);
-  CHECK(supportOnly.runChorus);
+  CHECK_FALSE(supportOnly.runSupportModel);
+  CHECK_FALSE(supportOnly.runChorus);
 }
 
 TEST_CASE("Processing plan never runs the support IR while the support model is silent")

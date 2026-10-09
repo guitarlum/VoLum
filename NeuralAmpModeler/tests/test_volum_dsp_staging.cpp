@@ -3,6 +3,7 @@
 #define VOLUM_DSP_STAGING_SKIP_WDL
 #include "../VoLumDspStagingWdl.h"
 #include "../VoLumResamplingNam.h"
+#include "../../AudioDSPTools/dsp/ImpulseResponse.h"
 
 #include <array>
 #include <deque>
@@ -538,4 +539,56 @@ TEST_CASE("A Lite load prewarms only the Lite slice")
   CHECK(seen.prewarms[1] == 0);
   CHECK(seen.resets[0] >= 1);
   CHECK(seen.prewarms[0] >= 1);
+}
+
+namespace
+{
+std::unique_ptr<dsp::ImpulseResponse> MakeTestIr(double rate)
+{
+  dsp::ImpulseResponse::IRData data;
+  data.mRawAudio = {1.0f, 0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f};
+  data.mRawAudioSampleRate = 48000.0;
+  return std::make_unique<dsp::ImpulseResponse>(data, rate);
+}
+} // namespace
+
+TEST_CASE("A rate change re-stages the live IR at the new rate and leaves the live one playing")
+{
+  auto live = MakeTestIr(48000.0);
+  std::unique_ptr<dsp::ImpulseResponse> staged;
+  const auto* liveBefore = live.get();
+
+  auto replaced = volum::dsp_staging::RestageIrForSampleRate(staged, live, 96000.0);
+
+  CHECK(replaced == nullptr);
+  REQUIRE(staged != nullptr);
+  CHECK(staged->GetSampleRate() == 96000.0);
+  CHECK(live.get() == liveBefore); // the audio thread swaps it in _ApplyDSPStaging
+  CHECK(live->GetSampleRate() == 48000.0);
+}
+
+TEST_CASE("A rate change re-stages a waiting IR and hands its predecessor back to destroy after unlocking")
+{
+  auto live = MakeTestIr(48000.0);
+  auto staged = MakeTestIr(44100.0);
+  const auto* waiting = staged.get();
+
+  auto replaced = volum::dsp_staging::RestageIrForSampleRate(staged, live, 48000.0);
+
+  CHECK(replaced.get() == waiting);
+  REQUIRE(staged != nullptr);
+  CHECK(staged.get() != waiting);
+  CHECK(staged->GetSampleRate() == 48000.0);
+}
+
+TEST_CASE("An IR already at the rate, or no IR, is left alone")
+{
+  auto live = MakeTestIr(48000.0);
+  std::unique_ptr<dsp::ImpulseResponse> staged;
+  CHECK(volum::dsp_staging::RestageIrForSampleRate(staged, live, 48000.0) == nullptr);
+  CHECK(staged == nullptr);
+
+  std::unique_ptr<dsp::ImpulseResponse> none;
+  CHECK(volum::dsp_staging::RestageIrForSampleRate(staged, none, 96000.0) == nullptr);
+  CHECK(staged == nullptr);
 }
