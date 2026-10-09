@@ -57,8 +57,9 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   if (plan.includeSettings)
   {
     const auto path = volum::VolumUserSettingsFilePath();
-    if (!path.empty())
-      volum::pack::ReadWholeFile(path, settingsJson);
+    if (!path.empty() && volum::pack::ReadWholeFile(path, settingsJson))
+      settingsJson = volum::pack::SettingsWithDualAmp(
+        settingsJson, volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount));
   }
 #endif
 
@@ -217,9 +218,23 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   // and dropped its preset. Nothing outgoing is snapshotted: the file replaced it.
   if (alsoSettings && !pack.settingsJson.empty())
   {
-    _VolumLoadSettingsFromFile();
-    _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
-    _VolumApplyLiveLockSnapshots();
+    nlohmann::json dualAmpSidecar;
+    const auto dualAmpPath = volum::VolumDualAmpSettingsFilePath();
+    if (!dualAmpPath.empty() && volum::pack::DualAmpSidecarFromSettings(pack.settingsJson, dualAmpSidecar))
+    {
+      std::error_code ec;
+      if (!volum::WriteJsonAtomically(dualAmpPath, dualAmpSidecar, ec))
+        VOLUM_LOG("pack", "dual-amp settings not restored: " + ec.message());
+    }
+    {
+      // The read swaps every scene under the outgoing live params, and a load in
+      // PLAY refreshes the surface, whose dirty check snapshots live into the
+      // active scene. No snapshot until the restored scene is live.
+      volum::LiveSceneGate::Hold restoring(mVolumLiveSceneGate);
+      _VolumLoadSettingsFromFile();
+      _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
+      _VolumApplyLiveLockSnapshots();
+    }
     _VolumRefreshPrePedalCaptures();
     _VolumRefreshSupportChannels();
     mVolumDidRestorePresetSelection = false;

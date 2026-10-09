@@ -58,6 +58,7 @@
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
+#include "VoLumPackMachineSettings.h"
 #include "VoLumPeakAvgSender.h"
 
 const int kNumPresets = 1;
@@ -543,6 +544,10 @@ public:
   std::string mVolumRestoreCustomMainId;
   std::string mVolumRestorePresetId;
   bool mVolumDidRestorePresetSelection = false;
+  // Closed while a machine-settings restore has swapped the per-amp scenes under
+  // live params that still describe the outgoing rig; _VolumSaveCurrentToSettings
+  // refuses until the restored scene is live (see VoLumPackMachineSettings.h).
+  volum::LiveSceneGate mVolumLiveSceneGate;
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;

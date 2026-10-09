@@ -91,6 +91,10 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
 
 void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 {
+  // Mid-restore the live params belong to the outgoing rig, not to the scene this
+  // would write into.
+  if (!mVolumLiveSceneGate.Allows())
+    return;
   // A focused custom amp (F6) keeps its own scene on this instance, keyed by its
   // stable id. Redirect the live snapshot there so we never clobber the underlying
   // factory amp slot (mVolumAmpIdx) while a custom amp is active.
