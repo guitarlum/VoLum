@@ -1590,8 +1590,9 @@ TEST_CASE("Deleting content that is playing moves the sounding rig, not just the
 
   // The IR teardown is deferred so the lane does not expose a burst of raw,
   // cab-less amp while the baked-cab capture loads (VoLumDspStaging.h).
-  RequireContains(source, "_VolumClearIR(false, true);");
-  RequireContains(source, "_VolumClearIR(true, true);");
+  RequireContains(source, "_VolumFallbackToAvailableCab();");
+  RequireDoesNotContain(source, "_VolumClearIR(false, true);");
+  RequireContains(source, "_VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);");
 
   // A dropped PRE slot drops the live model too: capture EMPTY, pill off.
   RequireContains(source, "_VolumSetPreNamCapture(0, 0); // EMPTY: drops the live PRE model");
@@ -2229,7 +2230,7 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   // code page and can recreate the original failure under a Unicode profile.
   RequireContains(source, "mVolumRigsRoot = volum::content::PathToUtf8(root);");
   RequireContains(source, "std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad)");
-  RequireContains(overlay, "std::filesystem::file_size(volum::content::PathFromUtf8(fn.Get()), ec)");
+  RequireContains(overlay, "IrFileValidForImport(fn.Get(), why)");
   RequireDoesNotContain(source, "std::filesystem::path(fileToLoad)");
   RequireDoesNotContain(source, "std::filesystem::path(mVolumRigsRoot)");
   RequireDoesNotContain(overlay, "std::filesystem::path(fn.Get())");
@@ -2947,6 +2948,45 @@ TEST_CASE("tier2f MAIN cab fallback does not paint the row while SUPPORT is focu
   RequireContains(body, "row && !_VolumSupportFocused()");
 }
 
+TEST_CASE("IR import and delete fixes are wired into their UI paths")
+{
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto validate = overlay.find("IrFileValidForImport");
+  const auto copy = overlay.find("ImportFileCopy", validate);
+  REQUIRE(validate != std::string::npos);
+  REQUIRE(copy != std::string::npos);
+  CHECK(validate < copy); // malformed files never enter the owned library
+
+  const std::string dialog = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumConfirmDialog.h");
+  // The message is only ever drawn as the lines the clamped wrap returns, one
+  // DrawText each. Drawing mMessage itself (one clipped line) is the regression.
+  RequireContains(dialog, "volum::textfit::WrapWordsClamped(mMessage");
+  RequireContains(dialog, "for (const auto& line : lines)");
+  RequireContains(dialog, "g.DrawText(messageText, line.c_str()");
+  RequireDoesNotContain(dialog, "mMessage.c_str()");
+
+  const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumRigRepair.inc.cpp");
+  RequireContains(rig, "_VolumFallbackToAvailableCab();");
+  RequireDoesNotContain(rig, "_VolumClearIR(false, true);");
+  RequireContains(rig, "_VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);");
+  RequireDoesNotContain(rig, "_VolumClearIR(true, true);");
+  // Both plan paths take their labels from the one builder; the label behaviour
+  // itself is covered by PlanDelete tests in test_volum_rig_repair.cpp.
+  RequireContains(rig, "const volum::rig::RigLabels labels = _VolumRigLabels();");
+}
+
+TEST_CASE("F-76 SUPPORT IR fallback lands on a real cab and is shared with reconcile")
+{
+  const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSceneRig.inc.cpp");
+  const auto at = rig.find("void NeuralAmpModeler::_VolumFallbackSupportToAvailableCab(bool deferToCabSwap)");
+  REQUIRE(at != std::string::npos);
+  const std::string body = rig.substr(at);
+  RequireContains(body, "_VolumClearIR(true, deferToCabSwap);");
+  RequireContains(body, "volum::custom::StockCabFallback(amp, mVolumCustomSupportChannel)");
+  RequireContains(body, "GetParam(kSupportSpeakerIdx)->Set(1.0); // first baked cab");
+  // The sibling-delete reconcile uses the same fallback, not its own copy.
+  RequireContains(rig, "_VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);");
+}
 TEST_CASE("tier2f the hero name stops before the PAN knob")
 {
   const std::string hero = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumHero.h");

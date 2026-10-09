@@ -463,6 +463,8 @@ public:
   // Drop the custom IR convolver and select the first available real cab (one of
   // the baked cabs); only land on DIRECT / No-Cab when no real cab exists.
   void _VolumFallbackToAvailableCab();
+  void _VolumFallbackSupportToAvailableCab(bool deferToCabSwap);
+  volum::rig::RigLabels _VolumRigLabels() const;
   // Flags the header preset strip "(unsaved)" for rig edits that bypass the
   // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
   void _VolumMarkPresetDirty();
