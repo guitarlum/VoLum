@@ -787,13 +787,13 @@ function Sample-Metrics {
     if ($script:metricSamples.Count -lt 4) { return }
     $recent = @($script:metricSamples | Select-Object -Last 4)
     $checks = @(
-      @("privateBytes", [int64]$PrivateBytesGrowthMB * 1MB),
-      @("handles", [int64]$HandleGrowth),
-      @("gdi", [int64]$GdiGrowth),
-      @("user", [int64]$UserGrowth)
+      [pscustomobject]@{ name = "privateBytes"; threshold = ([int64]$PrivateBytesGrowthMB * 1MB) },
+      [pscustomobject]@{ name = "handles"; threshold = [int64]$HandleGrowth },
+      [pscustomobject]@{ name = "gdi"; threshold = [int64]$GdiGrowth },
+      [pscustomobject]@{ name = "user"; threshold = [int64]$UserGrowth }
     )
     foreach ($check in $checks) {
-      $name = $check[0]; $threshold = [int64]$check[1]
+      $name = $check.name; $threshold = [int64]$check.threshold
       if ($script:leakFlagged.ContainsKey($name)) { continue }
       $steady = $true
       for ($i = 1; $i -lt $recent.Count; $i++) {
