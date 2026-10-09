@@ -57,8 +57,9 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   if (plan.includeSettings)
   {
     const auto path = volum::VolumUserSettingsFilePath();
-    if (!path.empty())
-      volum::pack::ReadWholeFile(path, settingsJson);
+    if (!path.empty() && volum::pack::ReadWholeFile(path, settingsJson))
+      settingsJson = volum::pack::SettingsWithDualAmp(
+        settingsJson, volum::VolumDualAmpUserSettingsToJson(mVolumAmpSettings.data(), volum::kAmpCount));
   }
 #endif
 
@@ -104,7 +105,10 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
   auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
   if (pack.ok)
+  {
+    mVolumOpenedPackDualAmp.Open(pack.settingsJson);
     VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+  }
   else
     VOLUM_LOG("pack", std::string("open refused: ") + pack.error
                         + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
@@ -187,8 +191,10 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
 
   const auto result = volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath);
   static const char* kVerbLog[3] = {"overwrite", "add", "reset"};
+  for (const auto& notice : result.notices)
+    VOLUM_LOG("pack", notice);
   VOLUM_LOG("pack", std::string("import ") + kVerbLog[(int)verb] + (alsoSettings ? " +settings" : "") + ": "
-                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedIds.size()) + " replaced"
+                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedItemCount) + " replaced"
                                    : "failed: " + result.error));
   // A settings-file failure still committed the library. Reload replaced captures
   // before reporting that error, or the rig keeps playing the bytes just overwritten.
@@ -217,9 +223,26 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   // and dropped its preset. Nothing outgoing is snapshotted: the file replaced it.
   if (alsoSettings && !pack.settingsJson.empty())
   {
-    _VolumLoadSettingsFromFile();
-    _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
-    _VolumApplyLiveLockSnapshots();
+    nlohmann::json dualAmpSidecar;
+    if (mVolumOpenedPackDualAmp.For(pack.settingsJson, dualAmpSidecar))
+    {
+      const auto dualAmpPath = volum::VolumDualAmpSettingsFilePath();
+      std::error_code ec;
+      if (dualAmpPath.empty() || !volum::WriteJsonAtomically(dualAmpPath, dualAmpSidecar, ec))
+      {
+        VOLUM_LOG("pack", "dual-amp settings not restored: " + ec.message());
+        return "The library was imported, but the machine settings could not be written.";
+      }
+    }
+    {
+      // The read swaps every scene under the outgoing live params, and a load in
+      // PLAY refreshes the surface, whose dirty check snapshots live into the
+      // active scene. No snapshot until the restored scene is live.
+      volum::LiveSceneGate::Hold restoring(mVolumLiveSceneGate);
+      _VolumLoadSettingsFromFile();
+      _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
+      _VolumApplyLiveLockSnapshots();
+    }
     _VolumRefreshPrePedalCaptures();
     _VolumRefreshSupportChannels();
     mVolumDidRestorePresetSelection = false;

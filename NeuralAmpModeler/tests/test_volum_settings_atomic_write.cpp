@@ -298,11 +298,11 @@ TEST_CASE("F-12: every volum-settings.json writer goes through the locked merge"
 
   // Pack import replaces the file under the same lock.
   const std::string pack = ReadSourceText("VoLumPack.h");
-  const auto restore = pack.find("WriteWholeFile(settingsPath, packContents.settingsJson)");
+  const auto restore = pack.find("WriteWholeFile(settingsTmp, sanitizedSettings)");
   REQUIRE(restore != std::string::npos);
   const auto lock = pack.rfind("WithMachineSettingsLock(", restore);
   REQUIRE(lock != std::string::npos);
-  CHECK(restore - lock < 120);
+  CHECK(restore - lock < 200);
 }
 
 TEST_CASE("ReplaceFileAtomically refuses POSIX rename over a write-bit-clear file")

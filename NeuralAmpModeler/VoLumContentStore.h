@@ -134,10 +134,11 @@ inline std::string StoredLeafName(std::string leaf)
 // builds; the bump is only a marker of the new capability, not a migration gate.
 //
 // v4 (VoLum 1.3.0) adds "midiSoundMap" -- the machine-global MIDI Sound
-// assignments used by MIDI and PLAY -- and stops writing "customScenes". The
-// sounding rig now lives on the VoLum instance (DAW chunk / standalone settings)
-// like a factory amp's, so a catalog write can never rewrite a sibling's live
-// knobs. A v3 file's customScenes are still read once, as a migration source.
+// assignments used by MIDI and PLAY -- and stops using "customScenes" as live
+// state. The sounding rig now lives on the VoLum instance (DAW chunk / standalone
+// settings) like a factory amp's, so a catalog write can never rewrite a sibling's
+// live knobs. A v3 file's customScenes stay in the file, unchanged, as the
+// migration source every instance seeds an untouched custom amp from.
 inline constexpr int kContentSchemaVersion = 4;
 
 // Imported pedals get stable monotonic PRE-capture indices at/above this base
@@ -502,9 +503,12 @@ struct Registry
   bool hasMidiSoundMap = false;
   int nextPedalIndex = kCustomPedalIndexBase; // monotonic, never reused
 
-  // Read from a pre-1.3.0 file's "customScenes" and never written back. The
-  // sounding rig belongs to the instance now, so this is a one-way migration
-  // source the plugin drains into its own per-instance scene map.
+  // A pre-1.3.0 file's "customScenes": a read-only migration source. An instance
+  // copies an entry into its own scene map the first time it touches that amp and
+  // never writes it here. Saves carry it back to disk as read, because a DAW
+  // project only holds the migrated copy once the host saves it, and an amp no
+  // instance has touched yet has no other copy at all. Only deleting the amp
+  // drops its entry.
   std::map<std::string, VoLumAmpSettings> legacyCustomScenes;
   // Keys this build does not understand, plus a schemaVersion newer than ours.
   // Save writes them back so a newer library is not stripped by an older binary.
@@ -829,12 +833,16 @@ inline nlohmann::json RegistryToJson(const Registry& r)
 
   nlohmann::json irs = nlohmann::json::array();
   for (const auto& ir : r.irs)
-    irs.push_back({{"id", ir.id},
-                   {"name", ir.name},
-                   {"path", ir.file},
-                   {"trimDb", ir.trimDb},
-                   {"lowCutHz", ir.lowCutHz},
-                   {"highCutHz", ir.highCutHz}});
+  {
+    nlohmann::json item = {{"id", ir.id}, {"name", ir.name}, {"path", ir.file}};
+    // An absent trimDb is what marks an IR the trim migration still has to measure
+    // (see RegistryFromJson), so an uncalibrated entry must not gain one on save.
+    if (ir.trimCalibrated)
+      item["trimDb"] = ir.trimDb;
+    item["lowCutHz"] = ir.lowCutHz;
+    item["highCutHz"] = ir.highCutHz;
+    irs.push_back(std::move(item));
+  }
   j["irLibrary"] = irs;
 
   nlohmann::json peds = nlohmann::json::array();
@@ -853,9 +861,11 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   }
   j["presetBanks"] = banks;
 
-  // Deliberately no "customScenes": see kContentSchemaVersion v4. A downgrade to
-  // 1.2.x finds the key missing and falls back to per-amp defaults on first focus,
-  // which is the same thing it does for a custom amp it has never seen.
+  // Only the pre-1.3.0 scenes this file was read with; live scenes never come
+  // here (see kContentSchemaVersion v4). A library that never had them never
+  // gains the key.
+  if (!r.legacyCustomScenes.empty())
+    j["customScenes"] = CustomScenesToJson(r.legacyCustomScenes);
   j["midiSoundMap"] = MidiSoundMapToJson(r.midiSoundMap);
 
   if (r.passthrough.is_object())
@@ -868,22 +878,6 @@ inline nlohmann::json RegistryToJson(const Registry& r)
   }
 
   return j;
-}
-
-// legacyCustomScenes is read from "customScenes" and never written back, so a
-// JSON compare misses a drain of that map and would leave the key on disk.
-inline bool LegacyScenesEqual(const std::map<std::string, VoLumAmpSettings>& a,
-                              const std::map<std::string, VoLumAmpSettings>& b)
-{
-  if (a.size() != b.size())
-    return false;
-  for (const auto& e : a)
-  {
-    const auto it = b.find(e.first);
-    if (it == b.end() || !volum::AmpSettingsEqual(e.second, it->second))
-      return false;
-  }
-  return true;
 }
 
 // Tolerant reader. Returns the parsed registry; `healed` (optional) is set true
@@ -1000,10 +994,9 @@ inline Registry RegistryFromJson(const nlohmann::json& j, bool* healed = nullptr
     }
   }
 
-  // Pre-1.3.0 shared scenes. Read (so the plugin can migrate them onto the
-  // instance) but never written back, so the first save after an upgrade drops
-  // them. Not a `healed` trigger: the key's presence is expected on an old file
-  // and does not mean anything was malformed.
+  // Pre-1.3.0 shared scenes: the migration source (see Registry). Not a `healed`
+  // trigger: the key's presence is expected on an old file and does not mean
+  // anything was malformed.
   if (j.contains("customScenes") && j["customScenes"].is_object())
   {
     for (const auto& sc : j["customScenes"].items())
@@ -1287,9 +1280,23 @@ inline Registry MergeRegistries(const Registry& disk, const Registry& baseline, 
   out.nextPedalIndex = std::max({disk.nextPedalIndex, current.nextPedalIndex, kCustomPedalIndexBase});
   for (const auto& p : out.pedals)
     out.nextPedalIndex = std::max(out.nextPedalIndex, p.legacyIndex + 1);
-  // A migration source, not shared state: keep whatever this writer still has to
-  // drain so a save does not lose scenes it has not migrated yet.
-  out.legacyCustomScenes = current.legacyCustomScenes;
+  // The migration source is kept as disk has it, minus the entries this writer
+  // deleted along with their amp. An entry disk lost while its amp survived (a
+  // file written by an earlier 1.3.0 build that dropped the key) is put back from
+  // memory: nothing else holds an untouched amp's pre-upgrade knobs.
+  out.legacyCustomScenes = disk.legacyCustomScenes;
+  for (const auto& was : baseline.legacyCustomScenes)
+    if (current.legacyCustomScenes.count(was.first) == 0)
+      out.legacyCustomScenes.erase(was.first);
+  for (const auto& mine : current.legacyCustomScenes)
+  {
+    if (out.legacyCustomScenes.count(mine.first) != 0)
+      continue;
+    const bool ampSurvives =
+      std::any_of(out.amps.begin(), out.amps.end(), [&mine](const custom::CustomAmp& a) { return a.id == mine.first; });
+    if (ampSurvives)
+      out.legacyCustomScenes[mine.first] = mine.second;
+  }
   out.passthroughSchema = std::max(disk.passthroughSchema, current.passthroughSchema);
   // Unknown keys follow the same rule as the collections above: a value this
   // writer has not changed stays as disk has it, so a sibling who edited a
@@ -1522,8 +1529,7 @@ public:
   bool HasUnflushedChanges() const
   {
     std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
-    return !LegacyScenesEqual(mReg.legacyCustomScenes, mBaseline.legacyCustomScenes)
-           || RegistryToJson(mReg) != RegistryToJson(mBaseline);
+    return RegistryToJson(mReg) != RegistryToJson(mBaseline);
   }
 
   // Load the registry. Missing file -> empty registry. Unparseable / wrong-shape
@@ -1645,10 +1651,9 @@ public:
     // atomic rewrite — but still refuse if the on-disk library went unreadable
     // or is not writable (Pack import uses Save() as its commit fence even when
     // the catalog JSON is unchanged), and still materialize a missing file on
-    // first save of an empty library. Comparison, not a dirty flag —
-    // legacyCustomScenes can mutate without Save.
-    if (mPendingFileDeletes.empty() && LegacyScenesEqual(mReg.legacyCustomScenes, mBaseline.legacyCustomScenes)
-        && RegistryToJson(mReg) == RegistryToJson(mBaseline))
+    // first save of an empty library. Comparison, not a dirty flag — the
+    // registry is mutated in place by callers that never mark anything.
+    if (mPendingFileDeletes.empty() && RegistryToJson(mReg) == RegistryToJson(mBaseline))
     {
       std::error_code existsEc;
       if (std::filesystem::exists(RegistryPath(), existsEc))
@@ -1696,6 +1701,25 @@ public:
     {
       // Someone is wedged holding the lock. Refusing is the honest answer: the
       // alternative is writing without serialization, which is the defect.
+      mLastWriteFailed = true;
+      return false;
+    }
+    return MergeAndWrite(ReadRegistryFromDisk());
+  }
+
+  // Pack import already owns the library's cross-process lock across payload
+  // publication, catalog commit and transaction cleanup. Reusing that hold closes
+  // the gap that would exist if Save() released and reacquired the same lock.
+  bool SaveWithHeldLock(const RegistryFileLock& lock)
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    if (mBase.empty())
+    {
+      mBaseline = mReg;
+      return true;
+    }
+    if (!lock.Held() || mRegistryUnreadable)
+    {
       mLastWriteFailed = true;
       return false;
     }
@@ -1845,6 +1869,17 @@ public:
     if (relPath.empty())
       return;
     mPendingFileDeletes.push_back(relPath);
+  }
+
+  // A Pack backup keeps the pre-import registry usable. Reset may remove those
+  // rows from the live registry, but their payload deletes must wait until a
+  // later successful import supersedes that backup.
+  void CancelStoredFileDelete(const std::string& relPath)
+  {
+    mPendingFileDeletes.erase(
+      std::remove_if(mPendingFileDeletes.begin(), mPendingFileDeletes.end(),
+                     [&](const std::string& pending) { return SameStoredPath(pending, relPath); }),
+      mPendingFileDeletes.end());
   }
 
   // True when the in-memory registry names this content-relative payload. Used by

@@ -2306,10 +2306,10 @@ TEST_CASE("A custom SUPPORT partner is admitted to the audio graph")
   REQUIRE(request != std::string::npos);
   const std::string requestBody = loader.substr(request);
 
-  CHECK(countOf(requestBody, "mVolumSupportSelected.store(true)") == 2);
-  CHECK(countOf(requestBody, "mVolumSupportSelected.store(false)") == 5);
+  CHECK(countOf(requestBody, "_VolumSetSupportSelected(true)") == 2);
+  CHECK(countOf(requestBody, "_VolumSetSupportSelected(false)") == 5);
   CHECK(countOf(requestBody, "mShouldRemoveSupportModel.store(true)")
-        == countOf(requestBody, "mVolumSupportSelected.store(false)"));
+        == countOf(requestBody, "_VolumSetSupportSelected(false)"));
 }
 
 TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
@@ -2613,7 +2613,7 @@ TEST_CASE("tier2a model apply latches latency instead of updating it on the audi
   REQUIRE(end != std::string::npos);
   const std::string body = source.substr(apply, end - apply);
   RequireDoesNotContain(body, "_UpdateLatency()");
-  RequireContains(body, "mLatencyDirty");
+  RequireContains(body, "_VolumPublishLiveLatency();");
 }
 
 TEST_CASE("tier2a loader drain does not block on the loader mutex")

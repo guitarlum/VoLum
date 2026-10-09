@@ -470,7 +470,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   {
     if (!dualActive)
     {
-      mVolumSupportSelected.store(false);
+      _VolumSetSupportSelected(false);
       mShouldRemoveSupportModel.store(true);
       mVolumSupportIsLoading.store(false);
       mVolumLastLoadedSupportFile.clear();
@@ -488,13 +488,13 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
       rel.empty() ? std::string() : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
     if (fileToLoad.empty())
     {
-      mVolumSupportSelected.store(false);
+      _VolumSetSupportSelected(false);
       mShouldRemoveSupportModel.store(true);
       mVolumSupportIsLoading.store(false);
       mVolumLastLoadedSupportFile.clear();
       return;
     }
-    mVolumSupportSelected.store(true);
+    _VolumSetSupportSelected(true);
     mVolumSupportIsLoading.store(true);
     mVolumLastLoadedSupportFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
     _VolumQueueSupportModelLoad(fileToLoad, -1); // -1 = custom: skip factory prefetch
@@ -504,7 +504,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   const int supportAmpIdx = GetParam(kSupportAmpIdx)->Int();
   if (!dualActive || supportAmpIdx < 0 || supportAmpIdx >= volum::kAmpCount || mVolumRigsRoot.empty())
   {
-    mVolumSupportSelected.store(false);
+    _VolumSetSupportSelected(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
@@ -517,7 +517,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
                                           volum::kAmps[supportAmpIdx].folderName, volum::kSpeakerPrefixes[speakerIdx]);
   if (channels.empty())
   {
-    mVolumSupportSelected.store(false);
+    _VolumSetSupportSelected(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
@@ -534,14 +534,14 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   const std::string fileToLoad = volum::content::PathToUtf8(fs::weakly_canonical(rigPath, ec));
   if (fileToLoad.empty())
   {
-    mVolumSupportSelected.store(false);
+    _VolumSetSupportSelected(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
     return;
   }
 
-  mVolumSupportSelected.store(true);
+  _VolumSetSupportSelected(true);
   mVolumSupportIsLoading.store(true);
   mVolumLastLoadedSupportFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
   _VolumQueueSupportModelLoad(fileToLoad, supportAmpIdx);

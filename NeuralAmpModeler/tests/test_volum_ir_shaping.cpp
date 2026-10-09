@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -275,4 +276,103 @@ TEST_CASE("IR shaping DSP changes the post-IR buffer vs filters off on both lane
   // still pass a MAIN-only test.
   const double supportCut = runLane(1.0, 2000.0, 0.0, 40.0);
   CHECK(supportCut == doctest::Approx(cutLow).epsilon(1e-9));
+}
+
+namespace
+{
+constexpr double kLaneRate = 48000.0;
+constexpr int kLaneFrames = 256;
+
+// One stereo block through the lane. `level` fills both channels with a constant,
+// so the cuts are left holding non-zero history.
+std::vector<DSP_SAMPLE> RunLaneBlock(volum::IrShapingLane& lane, double level, double lowHz, double highHz,
+                                     const void* ir)
+{
+  std::vector<DSP_SAMPLE> L(kLaneFrames, static_cast<DSP_SAMPLE>(level));
+  std::vector<DSP_SAMPLE> R(kLaneFrames, static_cast<DSP_SAMPLE>(level));
+  DSP_SAMPLE* chans[2] = {L.data(), R.data()};
+  DSP_SAMPLE** out = lane.Process(chans, 2, kLaneFrames, kLaneRate, 1.0, lowHz, highHz, ir);
+  std::vector<DSP_SAMPLE> both(out[0], out[0] + kLaneFrames);
+  both.insert(both.end(), out[1], out[1] + kLaneFrames);
+  return both;
+}
+
+double PeakAbs(const std::vector<DSP_SAMPLE>& v)
+{
+  double peak = 0.0;
+  for (auto s : v)
+    peak = std::max(peak, std::fabs(static_cast<double>(s)));
+  return peak;
+}
+
+// A loud block through both cuts, so both hold history a stale replay would leak.
+void Prime(volum::IrShapingLane& lane, const void* ir)
+{
+  const auto primed = RunLaneBlock(lane, 0.9, 120.0, 6000.0, ir);
+  REQUIRE(PeakAbs(primed) > 0.1);
+}
+} // namespace
+
+TEST_CASE("A cut switched off and back on starts from silence, not the signal it last saw")
+{
+  // The cuts skip processing at 0 Hz but used to keep their history, so turning a
+  // cut back on replayed the old signal into silence: a click on the edge.
+  const int ir = 0;
+  SUBCASE("low cut")
+  {
+    volum::IrShapingLane lane;
+    Prime(lane, &ir);
+    RunLaneBlock(lane, 0.0, 0.0, 6000.0, &ir); // low cut off
+    CHECK(PeakAbs(RunLaneBlock(lane, 0.0, 120.0, 0.0, &ir)) == 0.0);
+  }
+  SUBCASE("high cut")
+  {
+    volum::IrShapingLane lane;
+    Prime(lane, &ir);
+    RunLaneBlock(lane, 0.0, 120.0, 0.0, &ir); // high cut off
+    CHECK(PeakAbs(RunLaneBlock(lane, 0.0, 0.0, 6000.0, &ir)) == 0.0);
+  }
+}
+
+TEST_CASE("A new convolver on the lane starts the cuts from silence")
+{
+  // A cab switch (or OnReset re-staging the IR at a new rate) hands the lane a
+  // different convolver; the cuts must not carry the old cab's tail into it.
+  const int oldIr = 0;
+  const int newIr = 0;
+  volum::IrShapingLane lane;
+  Prime(lane, &oldIr);
+  CHECK(PeakAbs(RunLaneBlock(lane, 0.0, 120.0, 6000.0, &newIr)) == 0.0);
+}
+
+TEST_CASE("Resetting the lane (idle block, OnReset) starts the cuts from silence")
+{
+  const int ir = 0;
+  volum::IrShapingLane lane;
+  Prime(lane, &ir);
+  lane.Reset();
+  CHECK(PeakAbs(RunLaneBlock(lane, 0.0, 120.0, 6000.0, &ir)) == 0.0);
+}
+
+TEST_CASE("With settings held still the lane is bit-identical to the plain cuts")
+{
+  // Static scenes (and the golden renders) must not move: clearing only happens on
+  // an edge, never while a cut keeps running on the same IR.
+  const int ir = 0;
+  volum::IrShapingLane lane;
+  recursive_linear_filter::HighPass hp;
+  recursive_linear_filter::LowPass lp;
+  for (int block = 0; block < 6; ++block)
+  {
+    std::vector<DSP_SAMPLE> a(kLaneFrames), b(kLaneFrames);
+    for (int i = 0; i < kLaneFrames; ++i)
+      a[static_cast<size_t>(i)] = b[static_cast<size_t>(i)] =
+        static_cast<DSP_SAMPLE>(std::sin(0.013 * (block * kLaneFrames + i)) * 0.7);
+    DSP_SAMPLE* ca[1] = {a.data()};
+    DSP_SAMPLE* cb[1] = {b.data()};
+    DSP_SAMPLE** outA = lane.Process(ca, 1, kLaneFrames, kLaneRate, 0.8, 90.0, 7000.0, &ir);
+    DSP_SAMPLE** outB = volum::ApplyIrShapingLane(cb, 1, kLaneFrames, kLaneRate, 0.8, 90.0, 7000.0, hp, lp);
+    for (int i = 0; i < kLaneFrames; ++i)
+      REQUIRE(outA[0][i] == outB[0][i]);
+  }
 }
