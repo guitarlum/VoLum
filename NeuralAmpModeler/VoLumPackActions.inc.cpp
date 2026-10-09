@@ -70,6 +70,8 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   else
   {
     fileName.Set(plan.job == volum::pack::Job::Everything ? "VoLum library.volumpack" : "VoLum pack.volumpack");
+    // The macOS panel swallows the mouse-up, which would leave this press captured.
+    GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack");
   }
   if (fileName.GetLength() == 0)
@@ -100,7 +102,11 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
   if (!harnessPath.empty())
     fileName.Set(harnessPath.c_str());
   else
+  {
+    // The macOS panel swallows the mouse-up, which would leave this press captured.
+    GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Open, "volumpack");
+  }
   if (fileName.GetLength() == 0)
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
   auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
@@ -191,8 +197,10 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
 
   const auto result = volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath);
   static const char* kVerbLog[3] = {"overwrite", "add", "reset"};
+  for (const auto& notice : result.notices)
+    VOLUM_LOG("pack", notice);
   VOLUM_LOG("pack", std::string("import ") + kVerbLog[(int)verb] + (alsoSettings ? " +settings" : "") + ": "
-                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedIds.size()) + " replaced"
+                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedItemCount) + " replaced"
                                    : "failed: " + result.error));
   // A settings-file failure still committed the library. Reload replaced captures
   // before reporting that error, or the rig keeps playing the bytes just overwritten.

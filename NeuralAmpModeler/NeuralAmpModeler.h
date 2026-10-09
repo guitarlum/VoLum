@@ -59,6 +59,7 @@
 #include "VoLumUpdateState.h"
 #include "VoLumPlayModel.h"
 #include "VoLumHeaderChrome.h"
+#include "VoLumNoticeDeferral.h"
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
@@ -144,6 +145,11 @@ enum ECtrlTags
   kCtrlTagVoLumNameDialog,
   kNumCtrlTags
 };
+
+// Every anchored dropdown. Whatever opens, closes or checks "a dropdown" walks
+// this list; a copy that missed one left the IR menu clickable over PLAY.
+inline constexpr int kVoLumDropdownTags[] = {
+  kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
 
 enum EMsgTags
 {
@@ -457,6 +463,8 @@ public:
   // Drop the custom IR convolver and select the first available real cab (one of
   // the baked cabs); only land on DIRECT / No-Cab when no real cab exists.
   void _VolumFallbackToAvailableCab();
+  void _VolumFallbackSupportToAvailableCab(bool deferToCabSwap);
+  volum::rig::RigLabels _VolumRigLabels() const;
   // Flags the header preset strip "(unsaved)" for rig edits that bypass the
   // kUI param hook (cab/channel/IR/polarity changes set members or use kDelegate).
   void _VolumMarkPresetDirty();
@@ -634,6 +642,7 @@ private:
   std::atomic<bool> mVolumUiSyncPending{false};
   // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
   std::string mVolumPendingLibraryNotice;
+  volum::ui::NoticeDeferral mVolumNoticeDeferral;
   // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins
   // handoff; content-library resolution happens in OnIdle.
   volum::MidiLatestWinsQueue mVolumMidiQueue;

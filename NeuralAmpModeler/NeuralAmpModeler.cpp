@@ -41,6 +41,7 @@
 #include "VoLumProcessIO.h"
 #include "VoLumOutputMode.h"
 #include "VoLumProcessingPlan.h"
+#include "VoLumWindowFitWin.h"
 // VoLum: chunk codec, settings I/O, and custom controls (upstream-equivalent file fence)
 #include "VoLumChunkCodec.h"
 #include "VoLumChunkIdTail.h"
@@ -939,20 +940,24 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 
 void NeuralAmpModeler::OnIdle()
 {
+
   // Host state restored into an open editor. Only consumed while an editor exists, so
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
   _VolumRebindCustomSupportIdx();
-  if (!mVolumPendingLibraryNotice.empty())
-    if (auto* gfx = GetUI())
-    {
-      // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
-      const std::string notice = std::move(mVolumPendingLibraryNotice);
-      mVolumPendingLibraryNotice.clear();
-      _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
-    }
+  // Not while a control holds the mouse: the box drops the capture without ending a
+  // knob drag's host gesture. A capture that never ends waits only so long.
+  if (mVolumPendingLibraryNotice.empty())
+    mVolumNoticeDeferral.Reset();
+  else if (auto* gfx = GetUI(); gfx && mVolumNoticeDeferral.ShouldShow(gfx->ControlIsCaptured()))
+  {
+    // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
+    const std::string notice = std::move(mVolumPendingLibraryNotice);
+    mVolumPendingLibraryNotice.clear();
+    _ShowMessageBox(gfx, notice.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+  }
 
   // Take the audio thread's "a new main model is live" flag once per idle, with or
   // without an editor. It used to be cleared only under GetUI(), so with the window
@@ -976,6 +981,11 @@ void NeuralAmpModeler::OnIdle()
       if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
         surface->As<VoLumPlaySurfaceControl>()->Tick();
   }
+
+#if defined(OS_WIN) && defined(APP_API)
+  // Keeps the corner grip from growing the window past the monitor it is on.
+  volum::ApplyWorkAreaScaleLimit(GetUI());
+#endif
 
   _VolumConsumeUpdateResult();
 

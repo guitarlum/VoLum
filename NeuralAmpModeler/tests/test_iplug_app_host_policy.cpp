@@ -240,3 +240,41 @@ TEST_CASE("APP Preferences safely reads combo text and reopens returned MIDI")
   CHECK(ok.find("mMidiIn->isPortOpen()") != std::string::npos);
   CHECK(ok.find("SelectMIDIDevice(ERoute::kInput") != std::string::npos);
 }
+
+TEST_CASE("F-99 sample-rate notice depends on the driver type")
+{
+  const std::string asio = iplug::VoLumSampleRateNoticeText(true, 96000, 88200, "VoLum");
+  CHECK(asio.find("did not accept 96000 Hz") != std::string::npos);
+  CHECK(asio.find("88200 Hz") != std::string::npos);
+  CHECK(asio.find("Device Settings") != std::string::npos);
+
+  // DirectSound/WASAPI have no driver panel: that button is disabled, so the notice
+  // must not send the user to it, and says why the rate was not used.
+  const std::string other = iplug::VoLumSampleRateNoticeText(false, 48000, 44100, "VoLum");
+  CHECK(other.find("does not offer 48000 Hz in this driver") != std::string::npos);
+  CHECK(other.find("VoLum opened it at 44100 Hz") != std::string::npos);
+  CHECK(other.find("Device Settings") == std::string::npos);
+  CHECK(other.find("ASIO") == std::string::npos);
+
+  CHECK(iplug::VoLumSampleRateNoticeText(false, 1, 2, nullptr).find("opened it at 2 Hz") != std::string::npos);
+}
+
+TEST_CASE("F-99 Preferences passes the driver type to the sample-rate notice")
+{
+  const std::string dialog = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_dialog.cpp");
+  const std::string body =
+    Between(dialog, "static void ReportSampleRateSubstitution(", "WDL_DLGRET IPlugAPPHost::PreferencesDlgProc");
+  CHECK(body.find("VoLumSampleRateNoticeText(asioDriver, requested, actual, BUNDLE_NAME)") != std::string::npos);
+  CHECK(body.find("Device Settings") == std::string::npos);
+
+  std::size_t pos = 0;
+  int calls = 0;
+  const std::string call =
+    "ReportSampleRateSubstitution(hwndDlg, _this, _this->mState.mAudioDriverType == kDeviceASIO)";
+  while ((pos = dialog.find(call, pos)) != std::string::npos)
+  {
+    ++calls;
+    pos += call.size();
+  }
+  CHECK(calls == 2); // OK and Apply
+}

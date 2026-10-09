@@ -442,9 +442,9 @@ public:
     if (!step.Contains(x, y))
       return;
     if (x < step.L + 22.f)
-      Commit(mCc == volum::kMidiRecallCcMin ? volum::kMidiRecallCcMax : mCc - 1);
+      Commit(volum::StepMidiRecallCc(mCc, -1));
     else if (x > step.R - 22.f)
-      Commit(mCc == volum::kMidiRecallCcMax ? volum::kMidiRecallCcMin : mCc + 1);
+      Commit(volum::StepMidiRecallCc(mCc, 1));
   }
 
   void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
@@ -457,13 +457,7 @@ public:
   {
     if (std::abs(d) < 0.01f || !StepperRect().Contains(x, y))
       return;
-    const int step = d > 0.f ? 1 : -1;
-    int next = mCc + step;
-    if (next < volum::kMidiRecallCcMin)
-      next = volum::kMidiRecallCcMax;
-    else if (next > volum::kMidiRecallCcMax)
-      next = volum::kMidiRecallCcMin;
-    Commit(next);
+    Commit(volum::StepMidiRecallCc(mCc, d > 0.f ? 1 : -1));
   }
 
   void OnMouseOver(float x, float y, const IMouseMod&) override

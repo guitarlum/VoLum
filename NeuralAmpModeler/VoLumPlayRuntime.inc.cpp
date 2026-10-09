@@ -20,8 +20,9 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
   mVolumUiMode = mode;
   if (auto* pGfx = GetUI())
   {
-    if (auto* menu = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
-      menu->Hide(true);
+    for (int tag : kVoLumDropdownTags)
+      if (auto* menu = pGfx->GetControlWithTag(tag))
+        menu->Hide(true);
     if (auto* overlay = pGfx->GetControlWithTag(kCtrlTagVoLumCustomOverlay))
       overlay->Hide(true);
     if (mode == volum::UiMode::Play)

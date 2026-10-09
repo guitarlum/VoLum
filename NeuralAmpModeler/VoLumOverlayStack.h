@@ -39,8 +39,8 @@ inline bool OutsidePanelClickCloses(float panelL, float panelT, float panelR, fl
   return !(x >= panelL && x < panelR && y >= panelT && y < panelB);
 }
 
-template <typename IsOpen>
-bool AnyOverlayOpen(std::initializer_list<int> tags, IsOpen&& isOpen)
+template <typename Tags, typename IsOpen>
+bool AnyTagOpen(const Tags& tags, IsOpen&& isOpen)
 {
   for (int tag : tags)
   {
@@ -48,6 +48,12 @@ bool AnyOverlayOpen(std::initializer_list<int> tags, IsOpen&& isOpen)
       return true;
   }
   return false;
+}
+
+template <typename IsOpen>
+bool AnyOverlayOpen(std::initializer_list<int> tags, IsOpen&& isOpen)
+{
+  return AnyTagOpen(tags, isOpen);
 }
 
 } // namespace ui

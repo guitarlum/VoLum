@@ -67,7 +67,7 @@ Pick an amp in the left list, or press `Up` / `Down`. A rough guide:
 
 **Channels:** every amp has two to six channels, one per captured gain setting.
 
-**Cabs:** **No Cab** (the amp alone), **G12**, **G65**, **V30**, or **Custom IR** for your own cabinet (see [Custom IRs](#custom-irs)). `S` / `Shift+S` step through them.
+**Cabs:** **No Cab** (the amp alone), **G12**, **G65**, **V30**, or **Custom IR** for your own cabinet (see [Custom IRs](#custom-irs)). `S` / `Shift+S` step through No Cab, G12, G65 and V30 (pick Custom IR with its own button).
 
 **Knobs:** **INPUT**, **GATE** (noise gate), **BASS**, **MID**, **TREBLE** and **OUTPUT**. **OUTPUT** fully down (`−∞`) mutes the amp.
 
@@ -283,6 +283,7 @@ A program number with no Sound is ignored; the current tone keeps playing.
 - **All channels** (default) suits one guitarist with one board.
 - **One channel** (`CH 1` to `CH 16`) lets two VoLums share one MIDI cable.
 - **Recall CC** sets the CC number that recalls Sounds (`0` to `119`, default `102`). Any of these, CC 0 included, can be the Recall CC.
+- **VST3:** the plugin receives MIDI on channel 1 only, so send recall messages on MIDI channel 1 (AU and standalone accept the channel set here).
 
 **What each program number plays** shows your Sounds as 16 banks of 8 switches, the same list as PLAY. Change banks with the arrows, the mouse wheel or `PageUp` / `PageDown`. Click a switch to choose its Sound, drag it to move it, or hover and click `×` to clear it.
 
@@ -323,6 +324,8 @@ A custom IR replaces the cab, so the current channel needs a No Cab capture. Eve
 2. Click **Manage custom IRs...**, then **+ Import IR (.wav)**.
 3. Pick the IR from the **Custom IR** menu.
 
+VoLum checks that an import is a readable WAV before copying it into the library.
+
 To shape an IR, click the **gear** on its row in **Manage custom IRs**: **Level**, **Low cut** and **High cut**.
 
 ### Custom Pedals
@@ -333,7 +336,7 @@ In the NAM pedal menu, click **Manage custom pedals...**, then **+ Import pedal 
 
 ### Deleting Content
 
-If you delete something that is playing, VoLum moves on: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, a deleted IR returns to the stock cab. VoLum asks first.
+If you delete something that is playing, VoLum moves on: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, and a deleted IR returns to a stock cab: cab 1 on a bundled amp, the current channel's stock cab on a custom amp, or one on another channel if the current channel has none (No Cab only if the amp has no stock cab). VoLum asks first.
 
 ## Back Up And Share With Packs
 

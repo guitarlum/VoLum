@@ -87,9 +87,11 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_play.cpp
   test_volum_play_prefill.cpp
   test_volum_uat_layout.cpp
+  test_volum_modal_input.cpp
   test_volum_chunk_safe_read.cpp
   test_volum_overlay_action_codes.cpp
   test_volum_numeric_entry.cpp
+  test_volum_window_fit.cpp
   test_volum_cab_step.cpp
   test_volum_wav_downmix.cpp
   test_volum_write_debounce.cpp
