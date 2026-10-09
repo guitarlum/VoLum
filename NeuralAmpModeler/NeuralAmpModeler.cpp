@@ -41,6 +41,7 @@
 #include "VoLumProcessIO.h"
 #include "VoLumOutputMode.h"
 #include "VoLumProcessingPlan.h"
+#include "VoLumWindowFitWin.h"
 // VoLum: chunk codec, settings I/O, and custom controls (upstream-equivalent file fence)
 #include "VoLumChunkCodec.h"
 #include "VoLumChunkIdTail.h"
@@ -918,6 +919,7 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 void NeuralAmpModeler::OnIdle()
 {
   _VolumApplyPendingModeChanges();
+
   // Host state restored into an open editor. Only consumed while an editor exists, so
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
@@ -961,6 +963,11 @@ void NeuralAmpModeler::OnIdle()
       if (auto* surface = pGfx->GetControlWithTag(kCtrlTagVoLumPlaySurface))
         surface->As<VoLumPlaySurfaceControl>()->Tick();
   }
+
+#if defined(OS_WIN) && defined(APP_API)
+  // Keeps the corner grip from growing the window past the monitor it is on.
+  volum::ApplyWorkAreaScaleLimit(GetUI());
+#endif
 
   _VolumConsumeUpdateResult();
 

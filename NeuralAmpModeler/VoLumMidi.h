@@ -32,6 +32,14 @@ inline int ClampMidiRecallCc(int cc)
   return cc;
 }
 
+// One click or wheel notch of the recall-CC stepper. Stops at both ends, so a notch
+// past 119 stays on 119 instead of jumping to 0, which sits at the opposite end of a
+// 120-value range and reads as a glitch.
+inline int StepMidiRecallCc(int cc, int delta)
+{
+  return std::clamp(cc + delta, kMidiRecallCcMin, kMidiRecallCcMax);
+}
+
 // User-facing saved channel: 0 = Omni, 1..16 = one MIDI channel. iPlug exposes
 // incoming channels as 0..15. Program Change and the recall CC share this
 // function so the channel filter and the 0-127 slot range cannot diverge.

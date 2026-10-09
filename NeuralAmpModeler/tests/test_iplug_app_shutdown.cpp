@@ -726,8 +726,10 @@ TEST_CASE("A sample rate the driver refused is explained, not just displayed")
   const auto ok = dialog.find("case IDOK:");
   REQUIRE(apply != std::string::npos);
   REQUIRE(ok != std::string::npos);
-  CHECK(dialog.find("ReportSampleRateSubstitution(hwndDlg, _this);", apply) < dialog.find("case IDCANCEL:", apply));
-  CHECK(dialog.find("ReportSampleRateSubstitution(hwndDlg, _this);", ok) < apply);
+  const std::string report =
+    "ReportSampleRateSubstitution(hwndDlg, _this, _this->mState.mAudioDriverType == kDeviceASIO);";
+  CHECK(dialog.find(report, apply) < dialog.find("case IDCANCEL:", apply));
+  CHECK(dialog.find(report, ok) < apply);
 }
 
 TEST_CASE("A start with no audio device keeps the settings the user already had")
