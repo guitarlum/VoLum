@@ -1722,21 +1722,26 @@ TEST_CASE("Deleting content leaves its MIDI slot assigned but invalid")
   CHECK(ResolveMidiSlot(store.reg(), 9, 12) == MidiSlotState::Invalid);
 }
 
-TEST_CASE("The registry no longer writes shared custom scenes")
+TEST_CASE("The registry writes back only the pre-1.3.0 scenes it was read with")
 {
   // 1.2.0 kept per-amp scenes in the library, so two instances editing the same
-  // custom amp moved each other's knobs. Scenes are per-instance state in 1.3.0;
-  // the field is read once for migration and never written again.
+  // custom amp moved each other's knobs. Scenes are per-instance state in 1.3.0,
+  // so a library that never had the key never gains it...
   Registry r;
   volum::custom::CustomAmp amp;
   amp.id = "amp_a";
   r.amps.push_back(amp);
+  CHECK_FALSE(RegistryToJson(r).contains("customScenes"));
+
+  // ...but an upgraded library keeps its old scenes verbatim: they are the only
+  // copy of a custom amp's knobs until an instance's own copy is durable.
   VoLumAmpSettings scene;
   scene.outputLevel = -3.0;
   r.legacyCustomScenes["amp_a"] = scene;
-
   const auto j = RegistryToJson(r);
-  CHECK_FALSE(j.contains("customScenes"));
+  REQUIRE(j.contains("customScenes"));
+  CHECK(j["customScenes"].size() == 1);
+  CHECK(RegistryFromJson(j).legacyCustomScenes.at("amp_a").outputLevel == doctest::Approx(-3.0));
   CHECK(j["schemaVersion"].get<int>() == kContentSchemaVersion);
 
   // A pre-1.3.0 file's scenes are still readable, so the instance that first

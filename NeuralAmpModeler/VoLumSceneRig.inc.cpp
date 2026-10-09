@@ -573,29 +573,12 @@ void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, bool support
       stepper->As<VoLumChannelStepControl>()->SetChannels(labels, sel);
 }
 
-// This instance's live scene for one custom amp. Lazily seeded from a pre-1.3.0
-// library's shared customScenes so upgrading does not reset the knobs, and from
-// the amp's factory-default settings otherwise (first focus).
-//
-// Draining the migration entry rather than copying it is deliberate: the library
-// stops writing that map, so leaving it in place would let a later focus of the
-// same amp pull stale pre-upgrade knobs over what the user has since done.
+// This instance's live scene for one custom amp; see InstanceCustomScene for why
+// the pre-1.3.0 library entry is copied and never drained.
 volum::VoLumAmpSettings& NeuralAmpModeler::_VolumCustomScene(const std::string& ampId)
 {
-  const auto existing = mVolumCustomScenes.find(ampId);
-  if (existing != mVolumCustomScenes.end())
-    return existing->second;
-
-  auto& legacy = volum::content::GlobalContentStore().reg().legacyCustomScenes;
-  const auto migrated = legacy.find(ampId);
-  if (migrated != legacy.end())
-  {
-    auto& scene = mVolumCustomScenes[ampId];
-    scene = migrated->second;
-    legacy.erase(migrated);
-    return scene;
-  }
-  return mVolumCustomScenes[ampId];
+  return volum::content::InstanceCustomScene(
+    mVolumCustomScenes, volum::content::GlobalContentStore().reg().legacyCustomScenes, ampId);
 }
 
 volum::VoLumAmpSettings& NeuralAmpModeler::_VolumActiveScene()
@@ -911,49 +894,34 @@ iplug::sample** NeuralAmpModeler::_VolumApplyIrShaping(iplug::sample** in, const
   return reinterpret_cast<iplug::sample**>(shaped);
 }
 
-// One-time migration for IRs imported before 1.2.1 (no stored trim): measure the
-// .wav's broadband energy and auto-normalize so they stop landing ~18 dB quieter
-// than the baked stock cabs. Persists so it only runs once. Missing/unreadable
-// files are marked calibrated at unity so we do not retry them every launch.
+// Auto-normalize the trim of any IR that has none yet (pre-1.2.1 imports and
+// fresh ones). volum::content::MigrateIrTrims owns the rules; this supplies the
+// .wav reader and the log.
 void NeuralAmpModeler::_VolumMigrateIrTrims()
 {
-  auto& irs = volum::content::GlobalContentStore().reg().irs;
-  bool changed = false;
-  for (auto& ir : irs)
-  {
-    if (ir.trimCalibrated)
-      continue;
-    double trimDb = 0.0;
-    const auto abs = volum::content::GlobalContentStore().ResolveStored(ir.file);
-    const std::string absUtf8 = volum::content::PathToUtf8(abs);
+  auto& store = volum::content::GlobalContentStore();
+  const auto result = volum::content::MigrateIrTrims(store, [](const std::filesystem::path& file, double& l2) {
     std::vector<float> audio;
     double fileSr = 0.0;
-    if (!abs.empty() && dsp::wav::Load(absUtf8.c_str(), audio, fileSr) == dsp::wav::LoadReturnCode::SUCCESS
-        && !audio.empty())
-    {
-      double sumSq = 0.0;
-      for (float v : audio)
-        sumSq += static_cast<double>(v) * static_cast<double>(v);
-      trimDb = volum::content::AutoNormalizeIrTrimDb(std::sqrt(sumSq));
-    }
-    ir.trimDb = trimDb;
-    ir.trimCalibrated = true;
-    changed = true;
-    VOLUM_LOG("migrate", "IR '" + ir.name + "' auto-normalized to " + std::to_string(trimDb) + " dB");
-  }
-  if (!changed)
+    if (dsp::wav::Load(volum::content::PathToUtf8(file).c_str(), audio, fileSr) != dsp::wav::LoadReturnCode::SUCCESS
+        || audio.empty())
+      return false;
+    double sumSq = 0.0;
+    for (float v : audio)
+      sumSq += static_cast<double>(v) * static_cast<double>(v);
+    l2 = std::sqrt(sumSq);
+    return true;
+  });
+  for (const auto& name : result.pendingNames)
+    VOLUM_LOG("migrate", "IR '" + name + "' unreadable; its trim is measured once it can be read");
+  if (result.calibrated.empty())
     return;
-  // This rewrites the user's library in place and cannot be undone by going back
-  // to 1.2.0 (a v2 build that re-saves drops trimDb/lowCutHz/highCutHz), so keep
-  // a one-time pre-migration copy alongside it.
-  const bool backedUp = volum::content::GlobalContentStore().BackupBeforeMigration("1.2.1");
-  volum::content::GlobalContentStore().Save();
+  for (const auto& done : result.calibrated)
+    VOLUM_LOG("migrate", "IR '" + done.first + "' auto-normalized to " + std::to_string(done.second) + " dB");
   VOLUM_LOG(
-    "migrate",
-    std::string("IR trim migration saved; pre-migration backup ")
-      + (backedUp ? "written to "
-                      + volum::content::PathToUtf8(volum::content::GlobalContentStore().MigrationBackupPath("1.2.1"))
-                  : "unavailable"));
+    "migrate", std::string("IR trim migration ") + (result.saved ? "saved" : "NOT saved") + "; pre-migration backup "
+                 + (result.backedUp ? "written to " + volum::content::PathToUtf8(store.MigrationBackupPath("1.2.1"))
+                                    : "unavailable"));
 }
 
 void NeuralAmpModeler::_VolumReconcileActiveIr()
