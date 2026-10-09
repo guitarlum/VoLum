@@ -160,8 +160,9 @@ int wmain(int argc, wchar_t** argv)
       opt.stopFile = narrow(next());
     else
     {
-      std::printf("usage: volum_glitchscan [--render <substr>] [--seconds s] [--freq hz] [--amp 0..1]\n"
-                  "                        [--tone-channel 0|1] [--wav path] [--stop-file path]\n");
+      std::printf(
+        "usage: volum_glitchscan [--render <substr>] [--seconds s] [--freq hz] [--amp 0..1]\n"
+        "                        [--tone-channel 0|1] [--wav path] [--stop-file path]\n");
       return 2;
     }
   }
@@ -189,8 +190,8 @@ int wmain(int argc, wchar_t** argv)
   renderClient->GetMixFormat(&mix);
   if (!IsFloat(mix) || mix->nChannels < 2)
   {
-    std::printf("RESULT unsupported-mix-format tag=%u ch=%u bits=%u\n", mix->wFormatTag, mix->nChannels,
-                mix->wBitsPerSample);
+    std::printf(
+      "RESULT unsupported-mix-format tag=%u ch=%u bits=%u\n", mix->wFormatTag, mix->nChannels, mix->wBitsPerSample);
     return 5;
   }
   const unsigned rate = mix->nSamplesPerSec;
@@ -283,7 +284,8 @@ int wmain(int argc, wchar_t** argv)
     const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     if (elapsed >= opt.seconds)
       break;
-    if (!opt.stopFile.empty() && (++stopCheck % 20) == 0 && GetFileAttributesA(opt.stopFile.c_str()) != INVALID_FILE_ATTRIBUTES)
+    if (!opt.stopFile.empty() && (++stopCheck % 20) == 0
+        && GetFileAttributesA(opt.stopFile.c_str()) != INVALID_FILE_ATTRIBUTES)
       break;
   }
 
