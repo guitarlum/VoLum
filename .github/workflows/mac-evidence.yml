@@ -1,0 +1,140 @@
+name: macOS release evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: "Successful ci.yml run ID whose VoLum-mac artifact should be tested (blank = latest successful dev run)"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches:
+      - feature/hunt-mac-ci
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: mac-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: Installed artifacts on Apple Silicon
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VOLUM_EVIDENCE_DIR: ${{ github.workspace }}/mac-evidence
+      VOLUM_MAC_ARTIFACT_DIR: ${{ github.workspace }}/download/VoLum-mac
+
+    steps:
+      - name: Check out evidence scripts
+        uses: actions/checkout@v4
+
+      - name: Resolve successful dev CI run
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOLUM_EVIDENCE_DIR"
+          run_id="${{ inputs.ci_run_id }}"
+          if [[ -z "$run_id" ]]; then
+            run_id="$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow ci.yml \
+              --branch dev \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')"
+          fi
+          if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+            echo "No successful dev ci.yml run found." >&2
+            exit 1
+          fi
+          conclusion="$(gh run view "$run_id" --repo "${{ github.repository }}" --json conclusion --jq .conclusion)"
+          if [[ "$conclusion" != "success" ]]; then
+            echo "CI run $run_id has conclusion '$conclusion', not success." >&2
+            exit 1
+          fi
+          if ! gh api "repos/${{ github.repository }}/actions/runs/$run_id/artifacts" \
+            --jq '.artifacts[] | select(.name == "VoLum-mac" and .expired == false) | .id' | grep -q .; then
+            echo "CI run $run_id has no unexpired VoLum-mac artifact." >&2
+            exit 1
+          fi
+          run_url="$(gh run view "$run_id" --repo "${{ github.repository }}" --json url --jq .url)"
+          head_sha="$(gh run view "$run_id" --repo "${{ github.repository }}" --json headSha --jq .headSha)"
+          {
+            echo "ci_run_id=$run_id"
+            echo "ci_run_url=$run_url"
+            echo "ci_head_sha=$head_sha"
+          } | tee "$VOLUM_EVIDENCE_DIR/source-ci-run.txt"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download existing VoLum-mac artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-mac
+          path: download/VoLum-mac
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.run_id }}
+
+      - name: Inventory downloaded artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            find "$VOLUM_MAC_ARTIFACT_DIR" -type f -print
+            echo
+            du -ah "$VOLUM_MAC_ARTIFACT_DIR"
+          } | tee "$VOLUM_EVIDENCE_DIR/artifact-inventory.log"
+
+      - name: Install package and inspect signatures
+        shell: bash
+        run: bash NeuralAmpModeler/scripts/mac-evidence/install-and-signatures.sh
+
+      - name: Check all installed Mach-O architectures
+        shell: bash
+        run: bash NeuralAmpModeler/scripts/mac-evidence/check-universal.sh
+
+      - name: Validate Intel AU under Rosetta
+        shell: bash
+        run: bash NeuralAmpModeler/scripts/mac-evidence/validate-au-rosetta.sh
+
+      - name: Launch and quit standalone
+        shell: bash
+        run: bash NeuralAmpModeler/scripts/mac-evidence/standalone-launch.sh
+
+      - name: Exercise AU and VST3 in REAPER
+        shell: bash
+        run: bash NeuralAmpModeler/scripts/mac-evidence/run-reaper.sh
+
+      - name: Summarize evidence
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# VoLum macOS release evidence"
+            echo
+            echo "- Source run: ${{ steps.source.outputs.run_id }}"
+            echo "- Runner: ${{ runner.name }} / $(uname -m) / $(sw_vers -productVersion)"
+            echo
+            for log in "$VOLUM_EVIDENCE_DIR"/*.log; do
+              [[ -f "$log" ]] || continue
+              echo "## $(basename "$log")"
+              grep -E '^(PASS|FAIL|SKIP)|AU VALIDATION SUCCEEDED|architectures?:|Signature=|Authority=|TeamIdentifier=|source=' "$log" || true
+              echo
+            done
+          } | tee "$VOLUM_EVIDENCE_DIR/SUMMARY.md"
+
+      - name: Upload macOS evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-evidence
+          path: mac-evidence/
+          if-no-files-found: error
+          retention-days: 30

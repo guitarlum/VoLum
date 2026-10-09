@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EVIDENCE_DIR="${VOLUM_EVIDENCE_DIR:?VOLUM_EVIDENCE_DIR is required}"
+LOG="$EVIDENCE_DIR/reaper-runner.log"
+WORK="$RUNNER_TEMP/volum-reaper-evidence"
+REAPER_URL="https://www.reaper.fm/files/7.x/reaper782_universal.dmg"
+MOUNT="$WORK/mount"
+REAPER_APP="$WORK/REAPER.app"
+TEST_HOME="$WORK/home"
+RESOURCE="$TEST_HOME/Library/Application Support/REAPER"
+RESULTS="$EVIDENCE_DIR/reaper-results.json"
+mkdir -p "$EVIDENCE_DIR" "$MOUNT" "$RESOURCE/Scripts"
+: > "$LOG"
+exec > >(tee -a "$LOG") 2>&1
+
+cleanup() {
+  pkill -x REAPER >/dev/null 2>&1 || true
+  hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+echo "Downloading pinned REAPER 7.82 universal build: $REAPER_URL"
+curl --fail --location --retry 3 --output "$WORK/reaper.dmg" "$REAPER_URL"
+echo "REAPER dmg sha256: $(shasum -a 256 "$WORK/reaper.dmg" | awk '{print $1}')"
+hdiutil attach "$WORK/reaper.dmg" -nobrowse -readonly -mountpoint "$MOUNT"
+SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'REAPER.app' -print -quit)"
+if [[ -z "$SOURCE_APP" ]]; then
+  echo "FAIL REAPER.app not found in pinned DMG"
+  exit 1
+fi
+ditto "$SOURCE_APP" "$REAPER_APP"
+hdiutil detach "$MOUNT"
+xattr -cr "$REAPER_APP"
+
+python3 - "$EVIDENCE_DIR/input.wav" <<'PY'
+import math, struct, sys, wave
+path = sys.argv[1]
+sr, seconds = 48000, 2.0
+with wave.open(path, "wb") as out:
+    out.setparams((1, 2, sr, int(sr * seconds), "NONE", "not compressed"))
+    frames = bytearray()
+    for i in range(int(sr * seconds)):
+        t = i / sr
+        env = math.exp(-3.0 * t)
+        sample = (
+            0.6 * math.sin(2 * math.pi * 110 * t)
+            + 0.3 * math.sin(2 * math.pi * 220 * t)
+            + 0.15 * math.sin(2 * math.pi * 330 * t)
+        ) * env * 0.8
+        frames += struct.pack("<h", max(-32767, min(32767, int(sample * 32767))))
+    out.writeframes(frames)
+PY
+
+cat > "$RESOURCE/reaper.ini" <<'INI'
+[REAPER]
+vstpath64=/Library/Audio/Plug-Ins/VST3
+warnmaxram64=0
+INI
+printf 'dofile([[%s]])\n' "$SCRIPT_DIR/reaper-evidence.lua" > "$RESOURCE/Scripts/__startup.lua"
+echo go > "$EVIDENCE_DIR/go.txt"
+
+export HOME="$TEST_HOME"
+export VOLUM_REAPER_EVIDENCE_DIR="$EVIDENCE_DIR"
+echo "Launching isolated REAPER with resource path $RESOURCE"
+"$REAPER_APP/Contents/MacOS/REAPER" -nosplash -new > "$EVIDENCE_DIR/reaper-process.log" 2>&1 &
+reaper_pid=$!
+
+deadline=$((SECONDS + 240))
+while [[ "$SECONDS" -lt "$deadline" && ! -f "$RESULTS" ]]; do
+  if ! kill -0 "$reaper_pid" 2>/dev/null; then
+    echo "FAIL REAPER exited before writing results"
+    cat "$EVIDENCE_DIR/reaper-process.log" || true
+    exit 1
+  fi
+  sleep 1
+done
+
+if [[ ! -f "$RESULTS" ]]; then
+  echo "FAIL REAPER harness timed out after 240 seconds"
+  cat "$EVIDENCE_DIR/reaper-harness.log" 2>/dev/null || true
+  exit 1
+fi
+sleep 2
+cp "$RESOURCE/reaper.ini" "$EVIDENCE_DIR/reaper.ini" 2>/dev/null || true
+cp "$RESOURCE/reaper-vstplugins64.ini" "$EVIDENCE_DIR/reaper-vstplugins64.ini" 2>/dev/null || true
+cp "$RESOURCE/reaper-auplugins64-bc.ini" "$EVIDENCE_DIR/reaper-auplugins64-bc.ini" 2>/dev/null || true
+
+python3 - "$RESULTS" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+if not data.get("ok"):
+    print("FAIL REAPER harness:", data.get("error", "unknown error"))
+    raise SystemExit(1)
+for result in data["formats"]:
+    print(
+        f"PASS {result['format']} loaded as {result['fx_name']}; "
+        f"peak={result['peak']:.6f} rms={result['rms']:.6f} finite={result['bad'] == 0}"
+    )
+    print(f"{result['pc_status']} {result['format']} Program Change 1: {result['pc_evidence']}")
+    print(f"{result['cc_status']} {result['format']} CC 102 value 2: {result['cc_evidence']}")
+    print(
+        f"PASS {result['format']} project state round-trip; "
+        f"reloaded rms={result['reloaded_rms']:.6f}"
+    )
+PY
+
+echo "PASS REAPER AU and VST3 host evidence completed"
