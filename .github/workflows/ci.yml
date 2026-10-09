@@ -40,6 +40,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test appcast note extraction
+        run: .github/scripts/test-appcast-notes.sh
+
       - name: Install clang-format
         run: |
           sudo apt-get update
