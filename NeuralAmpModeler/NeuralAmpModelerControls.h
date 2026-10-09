@@ -60,6 +60,8 @@ public:
   NAMCircleButtonControl(const IRECT& bounds, IActionFunction af, const ISVG& svg)
   : ISVGButtonControl(bounds, af, svg, svg)
   {
+    // VoLum: see VoLumSecondPress.h
+    mDblAsSingleClick = false;
   }
 
   void Draw(IGraphics& g) override
@@ -69,6 +71,21 @@ public:
 
     ISVGButtonControl::Draw(g);
   }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const auto pressed = mSecondPress.Press();
+    ISVGButtonControl::OnMouseDown(x, y, mod);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
+  }
+
+private:
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumUpdateBadgeControl : public IControl
@@ -265,6 +282,20 @@ public:
                            .WithLabelOrientation(EOrientation::South))
   , IBitmapBase(bitmap)
   {
+    // VoLum: see VoLumSecondPress.h
+    mDblAsSingleClick = false;
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const auto pressed = mSecondPress.Press();
+    IVSlideSwitchControl::OnMouseDown(x, y, mod);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      volum::ui::PressAgain(*this, x, y, mod);
   }
 
   void DrawWidget(IGraphics& g) override
@@ -333,6 +364,9 @@ public:
 
     g.DrawBitmap(mBitmap, r, 0, 0, nullptr);
   }
+
+private:
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumPowerSwitchControl : public IControl

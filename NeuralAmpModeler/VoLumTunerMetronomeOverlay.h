@@ -207,6 +207,19 @@ public:
   VoLumMetronomeButtonControl(const IRECT& bounds, IActionFunction actionFunc, const ISVG& svg)
   : ISVGButtonControl(bounds, actionFunc, svg)
   {
+    mDblAsSingleClick = false; // see VoLumSecondPress.h
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const auto pressed = mSecondPress.Press();
+    ISVGButtonControl::OnMouseDown(x, y, mod);
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void Draw(IGraphics& g) override
@@ -231,6 +244,7 @@ public:
 
 private:
   bool mActive = false;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 // =========================================================================
