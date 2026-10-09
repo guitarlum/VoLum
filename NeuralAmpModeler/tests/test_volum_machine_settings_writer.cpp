@@ -15,6 +15,7 @@
   #endif
   #include <windows.h>
 #else
+  #include <csignal>
   #include <spawn.h>
   #include <sys/wait.h>
   #include <unistd.h>
@@ -101,8 +102,21 @@ public:
       + std::wstring(kHelperTestCase, kHelperTestCase + std::char_traits<char>::length(kHelperTestCase));
     STARTUPINFOW si{};
     si.cb = sizeof(si);
-    if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &mInfo))
+    // Suspended, so the job owns the child before it runs: if this process dies
+    // without reaching ~HelperProcess, Windows still ends the child.
+    mJob = CreateJobObjectW(nullptr, nullptr);
+    if (mJob != nullptr)
+    {
+      JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+      limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+      SetInformationJobObject(mJob, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+    }
+    if (!CreateProcessW(
+          exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, nullptr, &si, &mInfo))
       return false;
+    if (mJob != nullptr)
+      AssignProcessToJobObject(mJob, mInfo.hProcess);
+    ResumeThread(mInfo.hThread);
     CloseHandle(mInfo.hThread);
     mStarted = true;
     return true;
@@ -139,6 +153,9 @@ public:
     DWORD code = 1;
     GetExitCodeProcess(mInfo.hProcess, &code);
     CloseHandle(mInfo.hProcess);
+    if (mJob != nullptr)
+      CloseHandle(mJob);
+    mJob = nullptr;
     return static_cast<int>(code);
 #else
     int status = 0;
@@ -148,12 +165,32 @@ public:
 #endif
   }
 
-  ~HelperProcess() { Wait(); }
+  // The child idles up to 30 s waiting for a "release" that an early parent
+  // failure never sends. Ends it now instead of letting teardown wait that out.
+  void Terminate()
+  {
+    if (!mStarted)
+      return;
+#if defined(_WIN32)
+    TerminateProcess(mInfo.hProcess, 1);
+#else
+    kill(mPid, SIGKILL);
+#endif
+  }
+
+  // Normal paths call Wait() after the child has exited; reaching here still
+  // started means the test failed early, so the child is killed, not awaited.
+  ~HelperProcess()
+  {
+    Terminate();
+    Wait();
+  }
 
 private:
   bool mStarted = false;
 #if defined(_WIN32)
   PROCESS_INFORMATION mInfo{};
+  HANDLE mJob = nullptr;
 #else
   pid_t mPid = 0;
 #endif
@@ -281,6 +318,63 @@ TEST_CASE("F-12: a busy settings lock keeps the change queued and retries it lat
   plugin.Queue({{"animatePlayArt", false}});
   plugin.NoteLoaded(volum::MachineSharedKeyValues(true, true, false, 12.0));
   CHECK_FALSE(plugin.HasPending());
+}
+
+TEST_CASE("F-12: a retried key does not resurrect over a newer value another writer wrote meanwhile")
+{
+  const auto root = TestRoot("retry-stale-key");
+  const auto path = root / "volum-settings.json";
+  std::error_code ec;
+  REQUIRE(volum::WriteJsonAtomically(path, StandaloneDoc(false, true, false, 12.0, 0), ec));
+  const auto shared = volum::MachineSharedKeyValues(false, true, false, 12.0);
+
+  volum::MachineSettingsWriter a; // times out, retries later
+  a.NoteLoaded(shared);
+  volum::MachineSettingsWriter b; // writes while A waits
+  b.NoteLoaded(shared);
+
+  volum::content::RegistryFileLock holder;
+  REQUIRE(holder.Acquire(volum::MachineSettingsLockPath(path)));
+  a.Queue({{"InputCalibrationLevel", -5.0}, {"liteMode", true}});
+  REQUIRE(a.FlushPending(path, 50, 0.0, ec) == volum::MachineSettingsWriter::Flush::Failed);
+  holder.Release();
+
+  // B writes a newer level, not liteMode.
+  b.Queue({{"InputCalibrationLevel", 3.0}});
+  REQUIRE(b.FlushPending(path, 50, 0.0, ec) == volum::MachineSettingsWriter::Flush::Written);
+
+  // A's retry keeps its untouched liteMode, but the level on disk is newer than A's queued one.
+  REQUIRE(a.FlushPending(path, 50, 2000.0, ec) == volum::MachineSettingsWriter::Flush::Written);
+  auto disk = ReadJsonFile(path);
+  CHECK(disk["InputCalibrationLevel"] == doctest::Approx(3.0));
+  CHECK(disk["liteMode"] == true);
+  CHECK_FALSE(a.HasPending());
+  CHECK(a.Synced()["InputCalibrationLevel"] == doctest::Approx(3.0)); // adopted, so later saves know it
+  CHECK(a.Synced()["liteMode"] == true);
+
+  // Every queued key beaten: nothing is written and the disk values win.
+  REQUIRE(holder.Acquire(volum::MachineSettingsLockPath(path)));
+  a.Queue({{"InputCalibrationLevel", 9.0}});
+  REQUIRE(a.FlushPending(path, 50, 3000.0, ec) == volum::MachineSettingsWriter::Flush::Failed);
+  holder.Release();
+  b.Queue({{"InputCalibrationLevel", 4.0}});
+  REQUIRE(b.FlushPending(path, 50, 3000.0, ec) == volum::MachineSettingsWriter::Flush::Written);
+  CHECK(a.FlushPending(path, 50, 4100.0, ec) == volum::MachineSettingsWriter::Flush::Superseded);
+  CHECK_FALSE(a.HasPending());
+  disk = ReadJsonFile(path);
+  CHECK(disk["InputCalibrationLevel"] == doctest::Approx(4.0));
+  CHECK(a.Synced()["InputCalibrationLevel"] == doctest::Approx(4.0));
+
+  // A fresh edit after the failure is the user's latest word and still wins.
+  REQUIRE(holder.Acquire(volum::MachineSettingsLockPath(path)));
+  a.Queue({{"InputCalibrationLevel", 1.0}});
+  REQUIRE(a.FlushPending(path, 50, 5000.0, ec) == volum::MachineSettingsWriter::Flush::Failed);
+  holder.Release();
+  b.Queue({{"InputCalibrationLevel", 6.0}});
+  REQUIRE(b.FlushPending(path, 50, 5000.0, ec) == volum::MachineSettingsWriter::Flush::Written);
+  a.Queue({{"InputCalibrationLevel", 2.0}});
+  REQUIRE(a.FlushPending(path, 50, 6100.0, ec) == volum::MachineSettingsWriter::Flush::Written);
+  CHECK(ReadJsonFile(path)["InputCalibrationLevel"] == doctest::Approx(2.0));
 }
 
 TEST_CASE("F-12: another process holding the settings lock delays a plugin's merge, which then keeps both writes")

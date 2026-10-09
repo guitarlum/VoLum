@@ -11,6 +11,8 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <set>
+#include <string>
 #include <system_error>
 
 #include "VoLumContentStore.h" // content::RegistryFileLock
@@ -212,6 +214,7 @@ public:
     Nothing,
     Written,
     Unreadable, // left alone and dropped, as before: the next standalone save rewrites the file
+    Superseded, // every queued key was changed on disk by another writer since; the disk values won
     Failed // still queued
   };
 
@@ -221,13 +224,19 @@ public:
   {
     mSynced = sharedValues;
     mPending = nlohmann::json::object();
+    mRetrying.clear();
   }
   const nlohmann::json& Synced() const { return mSynced; }
 
+  // A fresh edit of a key is the user's latest word and always reaches disk; only
+  // a key that already failed once is a retry, which another writer may have beaten.
   void Queue(const nlohmann::json& keys)
   {
     for (auto it = keys.begin(); it != keys.end(); ++it)
+    {
       mPending[it.key()] = it.value();
+      mRetrying.erase(it.key());
+    }
   }
   bool HasPending() const { return !mPending.empty(); }
   const nlohmann::json& Pending() const { return mPending; }
@@ -240,17 +249,61 @@ public:
     if (mPending.empty())
       return Flush::Nothing;
     bool unreadable = false;
-    if (MergeMachineSettingsKeys(settingsPath, mPending, mSynced, ec, &unreadable, lockTimeoutMs))
-    {
-      mPending = nlohmann::json::object();
-      NoteSuccess();
-      return Flush::Written;
-    }
+    bool ranLocked = false;
+    nlohmann::json toWrite = nlohmann::json::object();
+    nlohmann::json adopted = nlohmann::json::object();
+    const bool wrote = UpdateMachineSettingsFile(
+      settingsPath,
+      [&](nlohmann::json& doc, MachineSettingsRead state) {
+        ranLocked = true;
+        toWrite = nlohmann::json::object();
+        adopted = nlohmann::json::object();
+        if (state == MachineSettingsRead::Unreadable)
+        {
+          unreadable = true;
+          return false;
+        }
+        for (auto it = mPending.begin(); it != mPending.end(); ++it)
+        {
+          // A retried key whose disk value is not what this writer last saw or
+          // wrote was changed by someone else after this edit was queued: theirs
+          // is newer, so the retry must not put this one back over it.
+          if (mRetrying.count(it.key()) && mSynced.is_object() && mSynced.contains(it.key()) && doc.contains(it.key())
+              && doc[it.key()] != mSynced[it.key()])
+            adopted[it.key()] = doc[it.key()];
+          else
+            toWrite[it.key()] = it.value();
+        }
+        if (toWrite.empty())
+          return false;
+        if (!doc.contains("version"))
+          doc["version"] = kVoLumUserSettingsVersion;
+        for (auto it = toWrite.begin(); it != toWrite.end(); ++it)
+          doc[it.key()] = it.value();
+        return true;
+      },
+      ec, lockTimeoutMs);
     if (unreadable)
     {
       mPending = nlohmann::json::object();
+      mRetrying.clear();
       return Flush::Unreadable;
     }
+    if (wrote || (ranLocked && !ec))
+    {
+      if (!mSynced.is_object())
+        mSynced = nlohmann::json::object();
+      for (auto it = toWrite.begin(); it != toWrite.end(); ++it)
+        mSynced[it.key()] = it.value();
+      for (auto it = adopted.begin(); it != adopted.end(); ++it)
+        mSynced[it.key()] = it.value();
+      mPending = nlohmann::json::object();
+      mRetrying.clear();
+      NoteSuccess();
+      return wrote ? Flush::Written : Flush::Superseded;
+    }
+    for (auto it = mPending.begin(); it != mPending.end(); ++it)
+      mRetrying.insert(it.key());
     NoteFailure(nowMs);
     return Flush::Failed;
   }
@@ -291,6 +344,7 @@ private:
 
   nlohmann::json mSynced;
   nlohmann::json mPending = nlohmann::json::object();
+  std::set<std::string> mRetrying; // pending keys whose first flush failed
   double mRetryAtMs = 0.0;
   bool mFailing = false;
   bool mFailureLogged = false;
