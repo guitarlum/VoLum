@@ -583,6 +583,10 @@ function Start-VoLum {
       return $true
     }
     foreach ($d in [VoLumMonkeyWin]::ExtraWindows($script:proc.Id, [IntPtr]::Zero)) {
+      if ($d.Title -eq "VoLum" -and $d.ClassName -eq "#32770") {
+        $script:main = $d.Handle
+        return $true
+      }
       $dialog = [ordered]@{
         title = $d.Title
         class = $d.ClassName
