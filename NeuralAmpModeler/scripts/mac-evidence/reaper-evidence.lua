@@ -33,6 +33,13 @@ local function emit(ok, err)
     f:write(",\"bad\":" .. tostring(r.bad or -1))
     f:write(",\"pc_status\":" .. jstr(r.pc_status))
     f:write(",\"pc_evidence\":" .. jstr(r.pc_evidence))
+    f:write(",\"pc_presave_rms\":" .. string.format("%.8f", r.pc_presave_rms or 0))
+    f:write(",\"pc_reloaded_rms\":" .. string.format("%.8f", r.pc_reloaded_rms or 0))
+    f:write(",\"pc_roundtrip\":" .. bool(r.pc_roundtrip))
+    f:write(",\"pc_state_restored\":" .. bool(r.pc_state_restored))
+    f:write(",\"load_recall_delta\":" .. tostring(r.load_recall_delta or -1))
+    f:write(",\"no_recall_on_load\":" .. bool(r.no_recall_on_load))
+    f:write(",\"fresh_nondefault_reload\":" .. bool(r.fresh_nondefault_reload))
     f:write(",\"cc_status\":" .. jstr(r.cc_status))
     f:write(",\"cc_evidence\":" .. jstr(r.cc_evidence))
     f:write(",\"roundtrip\":" .. bool(r.roundtrip))
@@ -136,6 +143,18 @@ local function state_chunk(track)
   return chunk
 end
 
+local function midi_recall_count()
+  local home = os.getenv("HOME") or ""
+  local file = io.open(home .. "/Library/Application Support/VoLum/volum.log", "r")
+  if not file then return 0 end
+  local count = 0
+  for line in file:lines() do
+    if line:find("[midi] recall", 1, true) then count = count + 1 end
+  end
+  file:close()
+  return count
+end
+
 local function add_midi_message(track, status, data1, data2)
   local item = reaper.CreateNewMIDIItemInProj(track, 0.0, 0.5, false)
   local take = reaper.GetActiveTake(item)
@@ -221,6 +240,31 @@ local function test_format(spec)
     pc_why = "render RMS changed by more than 1% after Program Change 1"
   end
 
+  -- Save immediately after PC 1, then reopen while stopped. The VST3 wrapper's
+  -- restore guard must keep host-restored program-list values from generating a
+  -- second MIDI recall or jumping the instance to slot 0.
+  local pc_rpp = dir .. "/" .. spec.format:lower() .. "-pc1-roundtrip.rpp"
+  reaper.Main_SaveProjectEx(0, pc_rpp, 0)
+  local saved_pc_state = state_chunk(track)
+  local recalls_before_load = midi_recall_count()
+  reaper.Main_openProject("noprompt:" .. pc_rpp)
+  spin(3.0)
+  track = assert(reaper.GetTrack(0, 0), "PC-reloaded track missing")
+  item = assert(reaper.GetTrackMediaItem(track, 0), "PC-reloaded audio item missing")
+  local restored_pc_state = state_chunk(track)
+  local recalls_after_load = midi_recall_count()
+  local pc_reloaded = render_stats(track, item, spec.format .. "-pc1-reloaded")
+  local pc_tolerance = math.max(0.0001, pc_stats.rms * 0.02)
+  local pc_roundtrip = pc_reloaded.bad == 0 and math.abs(pc_reloaded.rms - pc_stats.rms) <= pc_tolerance
+  local pc_state_restored = restored_pc_state == saved_pc_state
+  local load_recall_delta = recalls_after_load - recalls_before_load
+  local no_recall_on_load = load_recall_delta == 0
+  local moved_from_slot0 = math.abs(pc_stats.rms - initial.rms) > math.max(0.0001, initial.rms * 0.01)
+  local fresh_nondefault_reload = pc_roundtrip and moved_from_slot0
+  L(("%s PC1 reload rms before=%.8f after=%.8f state_equal=%s recall_delta=%d nondefault=%s")
+    :format(spec.format, pc_stats.rms, pc_reloaded.rms, tostring(pc_state_restored),
+      load_recall_delta, tostring(fresh_nondefault_reload)))
+
   local cc_changed, cc_why =
     deliver_midi(track, item, 0xB0, 102, 2, spec.format .. " CC102=2")
   local cc_stats = render_stats(track, item, spec.format .. "-after-cc102")
@@ -243,6 +287,10 @@ local function test_format(spec)
   outcomes[#outcomes + 1] = {
     format=spec.format, fx_name=fx_name, rms=initial.rms, peak=initial.peak, bad=initial.bad,
     pc_status=pc_changed and "PASS" or "FAIL", pc_evidence=pc_why,
+    pc_presave_rms=pc_stats.rms, pc_reloaded_rms=pc_reloaded.rms,
+    pc_roundtrip=pc_roundtrip, pc_state_restored=pc_state_restored,
+    load_recall_delta=load_recall_delta, no_recall_on_load=no_recall_on_load,
+    fresh_nondefault_reload=fresh_nondefault_reload,
     cc_status=cc_changed and "PASS" or "FAIL", cc_evidence=cc_why,
     roundtrip=roundtrip, reloaded_rms=reloaded.rms
   }

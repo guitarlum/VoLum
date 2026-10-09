@@ -157,6 +157,14 @@ sleep 2
 cp "$RESOURCE/reaper.ini" "$EVIDENCE_DIR/reaper.ini" 2>/dev/null || true
 cp "$RESOURCE/reaper-vstplugins64.ini" "$EVIDENCE_DIR/reaper-vstplugins64.ini" 2>/dev/null || true
 cp "$RESOURCE/reaper-auplugins64-bc.ini" "$EVIDENCE_DIR/reaper-auplugins64-bc.ini" 2>/dev/null || true
+VOLUM_LOG="$HOME/Library/Application Support/VoLum/volum.log"
+if [[ -f "$VOLUM_LOG" ]]; then
+  cp "$VOLUM_LOG" "$EVIDENCE_DIR/volum.log"
+  echo "VoLum MIDI/program log lines:"
+  grep -E '\[midi\]|program' "$VOLUM_LOG" | sed 's/^/PROGRAM_LOG /' || true
+else
+  echo "PROGRAM_LOG unavailable: $VOLUM_LOG was not created"
+fi
 
 python3 - "$RESULTS" <<'PY'
 import json, sys
@@ -171,8 +179,29 @@ for result in data["formats"]:
         f"peak={result['peak']:.6f} rms={result['rms']:.6f} finite={result['bad'] == 0}"
     )
     print(f"{result['pc_status']} {result['format']} Program Change 1: {result['pc_evidence']}")
+    pc_roundtrip = result["pc_roundtrip"] and result["pc_state_restored"]
+    print(
+        f"{'PASS' if pc_roundtrip else 'FAIL'} {result['format']} PC 1 save/reopen: "
+        f"rms {result['pc_presave_rms']:.8f} -> {result['pc_reloaded_rms']:.8f}; "
+        f"serialized state equal={result['pc_state_restored']}"
+    )
+    print(
+        f"{'PASS' if result['no_recall_on_load'] else 'FAIL'} {result['format']} "
+        f"no load-time MIDI recall: appended recall lines={result['load_recall_delta']}"
+    )
+    print(
+        f"{'PASS' if result['fresh_nondefault_reload'] else 'FAIL'} {result['format']} "
+        "fresh non-default project stayed off slot 0 after reload"
+    )
     print(f"{result['cc_status']} {result['format']} CC 102 value 2: {result['cc_evidence']}")
-    failed = failed or result["pc_status"] == "FAIL" or result["cc_status"] == "FAIL"
+    failed = (
+        failed
+        or result["pc_status"] == "FAIL"
+        or not pc_roundtrip
+        or not result["no_recall_on_load"]
+        or not result["fresh_nondefault_reload"]
+        or result["cc_status"] == "FAIL"
+    )
     print(
         f"PASS {result['format']} project state round-trip; "
         f"reloaded rms={result['reloaded_rms']:.6f}"
