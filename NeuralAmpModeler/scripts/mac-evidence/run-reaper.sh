@@ -71,6 +71,19 @@ cat > "$RESOURCE/reaper.ini" <<'INI'
 [REAPER]
 vstpath64=/Library/Audio/Plug-Ins/VST3
 warnmaxram64=0
+splash=0
+verchk=0
+lastversion=7.82/arm64
+
+[audioconfig]
+coreaudiobs=512
+coreaudiobsuse=1
+coreaudioignorereset=0
+coreaudioignprojsr=0
+coreaudioindevnew=Null Audio Device
+coreaudiooutdevnew=Null Audio Device
+coreaudiosrate=44100
+coreaudiosrateuse=1
 INI
 printf 'dofile([[%s]])\n' "$SCRIPT_DIR/reaper-evidence.lua" > "$RESOURCE/Scripts/__startup.lua"
 echo go > "$EVIDENCE_DIR/go.txt"
