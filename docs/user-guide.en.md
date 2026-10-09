@@ -368,7 +368,7 @@ An **Everything** Pack offers three merge modes:
 
 A **Sounds** or **A whole amp** Pack always merges like Overwrite and never deletes anything.
 
-**PLAY list and machine settings:** in the standalone app, an Everything Pack restores them (last amp, scenes, Lite, calibration, MIDI slots) only if you tick **Also restore machine settings**, which starts unticked. A plug-in has no such box: there an Everything Pack always replaces your PLAY list.
+**PLAY list and machine settings:** in the standalone app, an Everything Pack restores them (last amp, scenes, Lite, calibration, Output mode, MIDI slots) only if you tick **Also restore machine settings**, which starts unticked. A plug-in has no such box: there an Everything Pack always replaces your PLAY list.
 
 Before importing, VoLum keeps your previous library as `volum-content.json.packbak`. A damaged Pack changes nothing.
 
@@ -381,7 +381,7 @@ Open Settings with the gear or `H`; close it the same way, with `Esc`, or by cli
 ![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
 
 - **Input calibration:** enter your interface's input level in dBu and switch on **Calibrate input**. This only works with captures that store their capture level; the bundled amps do not, so the card says "This model has no capture level".
-- **Output mode:** **Raw**, **Normalized** (default, similar loudness for all amps) or **Calibrated**. Calibrated needs a capture that stores its output level, so it stays off for the bundled amps.
+- **Output mode:** **Raw**, **Normalized** (default, similar loudness for all amps) or **Calibrated**. Calibrated needs a capture that stores its output level, so it stays off for the bundled amps. The standalone app keeps your choice for the next launch; in a DAW the project stores it.
 - **Performance:** **FULL** (default) or **LITE**, which uses less CPU at slightly lower quality. **Animate art in PLAY** switches the moving art on or off.
 - **Audio & MIDI devices...** (standalone only) opens the device window.
 

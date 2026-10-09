@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include "../VoLumWriteDebounce.h"
 #include "../VoLumContentStore.h"
@@ -50,7 +51,7 @@ int CountWritesDuringDrag(Debounce& d, double durationMs, double stepMs)
 
 std::filesystem::path ContentTestBase(const char* name)
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-write-debounce-tests" / name;
+  auto root = volum_test::ProcessTempRoot() / "volum-write-debounce-tests" / name;
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);

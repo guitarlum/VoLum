@@ -973,7 +973,7 @@ TEST_CASE("Global VoLum settings writes are standalone-only")
   std::string source = ReadPluginSource();
   source += "\n";
   source += ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
-  const std::string needle = "_VolumSaveSettingsToFile();";
+  const std::string needle = "_VolumSaveSettingsToFile(volum::k";
   size_t count = 0;
   size_t pos = source.find(needle);
   while (pos != std::string::npos)
@@ -1010,7 +1010,7 @@ TEST_CASE("Pack export flushes pending settings before reading disk")
   const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
   const auto exportPos = pack.find("NeuralAmpModeler::_VolumExportPack");
   REQUIRE(exportPos != std::string::npos);
-  const auto savePos = pack.find("_VolumSaveSettingsToFile();", exportPos);
+  const auto savePos = pack.find("_VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);", exportPos);
   REQUIRE(savePos != std::string::npos);
   const auto readPos = pack.find("ReadWholeFile", savePos);
   REQUIRE(readPos != std::string::npos);
@@ -1029,7 +1029,7 @@ TEST_CASE("OnIdle coalesces the deferred settings write")
   REQUIRE(dirtyPos != std::string::npos);
   const auto shouldWritePos = source.find("shouldWrite", dirtyPos);
   REQUIRE(shouldWritePos != std::string::npos);
-  const auto writePos = source.find("_VolumSaveSettingsToFile();", shouldWritePos);
+  const auto writePos = source.find("_VolumSaveSettingsToFile(volum::kMachineSettingsIdleLockMs)", shouldWritePos);
   REQUIRE(writePos != std::string::npos);
   CHECK(writePos - dirtyPos < 800);
   RequireContains(source, "VoLumWriteDebounce.h");
@@ -1046,7 +1046,7 @@ TEST_CASE("OnUIClose flushes pending calibration defaults")
   const auto body = source.substr(onUIClose, closeEnd - onUIClose);
   // Before debouncing, close saved volum-settings.json but left calibration
   // defaults pending until the next OnIdle — which never runs after close.
-  CHECK(body.find("_VolumSaveCalibrationDefaults()") != std::string::npos);
+  CHECK(body.find("_VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs)") != std::string::npos);
   CHECK(body.find("mVolumCalibrationDefaultsDirty") != std::string::npos);
 }
 
@@ -1057,7 +1057,7 @@ TEST_CASE("Only direct calibration UI edits update machine-global defaults")
   RequireContains(source, "paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel");
   RequireContains(source, "mVolumCalibrationDefaultsDirty = true;");
   RequireContains(source, "if (mVolumCalibrationDefaultsDirty)");
-  RequireContains(source, "_VolumSaveCalibrationDefaults();");
+  RequireContains(source, "_VolumSaveCalibrationDefaults(volum::kMachineSettingsIdleLockMs);");
   // DAW/project restore sets the EParams directly and must not call the writer.
   const auto loadPos = source.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
   REQUIRE(loadPos != std::string::npos);
@@ -1538,13 +1538,15 @@ TEST_CASE("SerializeState carries custom-amp scenes in the chunk, not the librar
   // belongs to the instance and travels in the DAW chunk's id tail, so a host
   // state-save must NOT write the library at all.
   const std::string source = ReadPluginSource();
+  const std::string idTail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
 
   // Single-line substrings only: file line endings differ across platforms (CRLF
   // on Windows checkouts, LF on macOS/Linux), so a multi-line "\r\n" match would
   // pass on Windows but fail on macOS CI.
   RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
   RequireContains(source, "idTail.customScenes = mVolumCustomScenes;");
-  RequireContains(source, "if (!idTail.customScenes.empty())");
+  RequireContains(idTail, "if (!t.customScenes.empty())");
+  RequireContains(source, "if (idTail.customScenesPresent)");
 
   // The instance's scene map is the only home for a custom amp's live knobs. A
   // reference to the library's map here would be the shared-state bug returning.
@@ -1905,6 +1907,99 @@ TEST_CASE("Loading DAW state into an open editor re-derives the visible selectio
   const auto clear = source.find("mVolumUiSyncPending.store(false);", openPos);
   REQUIRE(clear != std::string::npos);
   CHECK(clear < source.find("\n}", openPos));
+}
+
+TEST_CASE("Unserialize regression: host state restore applies the rig synchronously and only flags the UI")
+{
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  // The rig is applied inside the restore call, so the next audio block (and an
+  // immediate offline render) plays the restored sound and host automation that
+  // arrives after setState simply wins. Nothing is parked for a later idle.
+  const std::string restore =
+    MemberFnUntilNext(unserialize, "int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  RequireContains(restore, "_VolumRestoreFromSettings(mVolumAmpIdx);");
+  RequireContains(restore, "_VolumApplyLiveLockSnapshots();");
+  RequireContains(restore, "mVolumNeedsLoad.store(true);");
+  RequireContains(restore, "_VolumSelectCustomAmp(cmi);");
+  RequireContains(restore, "mVolumUiSyncPending.store(true);");
+  RequireDoesNotContain(restore, "_VolumSyncUiFromState();");
+  RequireDoesNotContain(restore, "_VolumResyncUi();");
+  RequireDoesNotContain(unserialize, "mVolumPendingStateRestore");
+  RequireDoesNotContain(unserialize, "mVolumStateRestorePending");
+  RequireDoesNotContain(source, "_VolumApplyPendingStateRestore");
+  RequireDoesNotContain(header, "VolumPendingStateRestore");
+  RequireDoesNotContain(header, "mVolumStateRestoreMutex");
+
+  // The UI-touching half cannot run on the host's thread: the whole restore runs
+  // with the editor hidden from that thread, so the appliers above take their
+  // headless path and write no IGraphics control.
+  const std::string entry = MemberFnUntilNext(source, "int NeuralAmpModeler::UnserializeState(");
+  RequireContains(entry, "const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());");
+  CHECK(entry.find("uiHiddenFromHostThread") < entry.find("_UnserializeStateWithKnownVersion("));
+  // GetUI() is not virtual and iPlug's Send*FromDelegate helpers use mGraphics directly, so the
+  // class must sit on the layer that overrides all of them (behaviour: test_volum_host_restore_gate.cpp).
+  RequireContains(header, "class NeuralAmpModeler final : public VolumHostBase");
+  RequireContains(header, "volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>");
+  RequireDoesNotContain(header, "mVolumHostRestoreGate");
+  RequireContains(header, "void OnRestoreStateDeferred() override { mVolumUiSyncPending.store(true); }");
+}
+
+TEST_CASE("Unserialize regression: the UI resync reads live state and is idempotent")
+{
+  const std::string source = ReadPluginSource();
+
+  // One flag, no payload: OnIdle (or OnUIOpen) re-derives every skipped control
+  // from the state as it is NOW, so a second restore before the idle, or a resync
+  // that runs twice, converges instead of replaying a stale snapshot.
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "if (GetUI() && mVolumUiSyncPending.exchange(false))");
+  RequireContains(idle, "_VolumResyncUi();");
+
+  const std::string resync = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumResyncUi()");
+  RequireContains(resync, "SendCurrentParamValuesFromDelegate();");
+  RequireContains(resync, "_UpdateVoLumLayout(pGfx);");
+  RequireContains(resync, "_VolumRefreshSupportChannels();");
+  RequireContains(resync, "_VolumRefreshPresetBar();");
+  RequireContains(resync, "_VolumSyncUiFromState();");
+  RequireDoesNotContain(resync, "mVolumRestore");
+  RequireDoesNotContain(resync, "pending");
+  RequireDoesNotContain(resync, "std::move");
+  RequireDoesNotContain(resync, "= std::");
+}
+
+TEST_CASE("Unserialize regression: an explicitly empty current chunk custom-scene map clears stale scenes")
+{
+  const std::string idTail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+  const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+
+  RequireContains(idTail, "bool customScenesPresent = false;");
+  RequireContains(idTail, "t.customScenesPresent = true;");
+  RequireContains(unserialize, "if (idTail.customScenesPresent)");
+  RequireDoesNotContain(unserialize, "if (!idTail.customScenes.empty())");
+  RequireContains(pack, "mVolumCustomScenes.clear();");
+  CHECK(pack.find("mVolumCustomScenes.clear();") < pack.find("_VolumLoadSettingsFromFile();"));
+}
+
+TEST_CASE("Unserialize regression: legacy chunks override the machine-global custom amp with factory selection")
+{
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+
+  const std::string restore =
+    MemberFnUntilNext(unserialize, "int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  RequireContains(restore, "const volum::RestoreSelection chunkSelection =");
+  RequireContains(restore, "haveIdTail ? volum::RestoreSelection{idTail.customMainId, idTail.activePresetId}");
+  RequireContains(restore, ": volum::RestoreSelection{};");
+  RequireContains(restore, "/*loadedFromChunk=*/true, chunkSelection,");
+  RequireContains(restore, "mVolumCustomMainIdx = -1;");
+  RequireContains(restore, "mVolumDidRestorePresetSelection = false;");
+  const std::string headerless =
+    unserialize.substr(unserialize.find("int NeuralAmpModeler::_UnserializeStateWithUnknownVersion("));
+  RequireContains(headerless, "mVolumCustomMainIdx = -1;");
+  RequireContains(headerless, "mVolumRestoreCustomMainId.clear();");
 }
 
 TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")
@@ -3500,4 +3595,77 @@ TEST_CASE("headless OnIdle consumes the model-loaded flag once")
   RequireContains(pendingBody, "_UpdateControlsFromModel()");
   RequireContains(pendingBody, "mVolumModelRefreshPending = false");
   CHECK(idle.find("if (mNewModelLoadedInDSP)") == std::string::npos);
+}
+
+TEST_CASE("The focused custom MAIN amp is followed by id, not by its library row")
+{
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "mVolumCustomMainId = volum::custom::CustomAmpIdAt(customIdx);");
+  const auto idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "_VolumReanchorCustomMain();");
+  const auto repair = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumRepairRigForMissingContent()");
+  const auto reanchor = repair.find("_VolumReanchorCustomMain();");
+  const auto snapshot = repair.find("_VolumSnapshotSoundingRig()");
+  REQUIRE(reanchor != std::string::npos);
+  REQUIRE(snapshot != std::string::npos);
+  CHECK(reanchor < snapshot);
+  const auto snap = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumSnapshotSoundingRig() const");
+  RequireContains(snap, "rig.mainCustomAmpId = mVolumCustomMainId;");
+}
+
+TEST_CASE("A save dialog commit refuses when a MIDI recall moved the instance to another amp")
+{
+  const std::string source = ReadPluginSource();
+  const auto prompt = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumPromptSaveAs(");
+  const auto guard = prompt.find("_VolumActiveOwnerKey() != ownerKey");
+  const auto overwrite = prompt.find("_VolumOverwritePreset(overwriteIdx");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(overwrite != std::string::npos);
+  CHECK(guard < overwrite);
+}
+
+TEST_CASE("Resyncing the SUPPORT cab row only reloads a capture that is not already live")
+{
+  const std::string source = ReadPluginSource();
+  const auto apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyUiSyncPlan(");
+  const auto lane = apply.find("supportCustomChannel = plan.customChannel;");
+  REQUIRE(lane != std::string::npos);
+  const auto laneEnd = apply.find("else", lane);
+  REQUIRE(laneEnd != std::string::npos);
+  const std::string supportBranch = apply.substr(lane, laneEnd - lane);
+  RequireContains(supportBranch.c_str(), "volum::SupportCaptureAlreadyLive(");
+}
+
+TEST_CASE("A deleted focused custom amp is left before any scene is written under its row")
+{
+  const std::string source = ReadPluginSource();
+  const auto reanchor = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReanchorCustomMain()");
+  RequireContains(reanchor, "_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
+  const auto save = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumSaveCurrentToSettings()");
+  RequireContains(save, "SceneIdForFocusedAmp(mVolumCustomMainId)");
+  RequireDoesNotContain(save.c_str(), "CustomAmpIdAt(mVolumCustomMainIdx)");
+  const auto scene = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumActiveScene()");
+  RequireContains(scene, "_VolumCustomScene(mVolumCustomMainId)");
+  const auto owner = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumActiveOwnerKey() const");
+  RequireContains(owner, "return mVolumCustomMainId;");
+  RequireContains(source, "idTail.customMainId = mVolumCustomMainIdx >= 0 ? mVolumCustomMainId : std::string();");
+}
+
+TEST_CASE("The SUPPORT lane counts as live only for a capture the loader staged")
+{
+  const std::string source = ReadPluginSource();
+  // The audio thread never touches the std::string: it publishes the path (or a clear)
+  // and OnIdle commits it into the main-thread-only mVolumLiveSupportFile.
+  const auto drain = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  RequireDoesNotContain(drain.c_str(), "mVolumLiveSupportFile");
+  RequireContains(drain, "CopyPathNoAlloc(");
+  RequireContains(drain, "mPendingSupportCapturePath");
+  const auto apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_ApplyDSPStaging()");
+  RequireDoesNotContain(apply.c_str(), "mVolumLiveSupportFile");
+  RequireContains(apply, "PublishPathNoAlloc(mPublishedSupportCapturePath, mPendingSupportCapturePath);");
+  RequireContains(apply, "PublishPathClearNoAlloc(mPublishedSupportCapturePath);");
+  const auto reap = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReapAudioThreadRetirees()");
+  RequireContains(reap, "CommitSupportLiveFile(supportCaptureAction, supportCaptureText, mVolumLiveSupportFile);");
+  RequireContains(source, "volum::SupportCaptureAlreadyLive(mVolumLiveSupportFile, wanted");
+  RequireDoesNotContain(source.c_str(), "SupportCaptureAlreadyLive(mVolumLastLoadedSupportFile");
 }

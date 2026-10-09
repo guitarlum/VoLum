@@ -1,8 +1,12 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
+#include "../VoLumMachineSettingsFile.h"
 #include "../VoLumSettingsFileIO.h"
 #include "../VoLumUpdateState.h"
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -15,7 +19,7 @@ namespace
 
 std::filesystem::path TestRoot(const char* name)
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-settings-atomic-write-tests" / name;
+  auto root = volum_test::ProcessTempRoot() / "volum-settings-atomic-write-tests" / name;
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -43,7 +47,264 @@ bool HasAtomicTempFile(const std::filesystem::path& dir)
   return false;
 }
 
+std::string ReadSourceText(const char* fileName)
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / fileName;
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  text.erase(std::remove(text.begin(), text.end(), '\r'), text.end()); // CRLF checkouts
+  return text;
+}
+
+std::string FunctionBody(const std::string& source, const char* signature)
+{
+  const auto start = source.find(signature);
+  REQUIRE(start != std::string::npos);
+  const auto end = source.find("\n}\n", start);
+  REQUIRE(end != std::string::npos);
+  return source.substr(start, end - start);
+}
+
+// The standalone's document as _VolumSaveSettingsToFile builds it: its own keys
+// plus the shared machine keys from its in-memory copy.
+nlohmann::json StandaloneDoc(bool lite, bool animate, bool calibrate, double level, int midiCh)
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  nlohmann::json j = volum::VolumUserSettingsToJson(
+    amps, volum::kAmpCount, 0, nullptr, false, false, false, nullptr, nullptr, lite, calibrate, level, animate);
+  j["midiCh"] = midiCh;
+  j["volumUiMode"] = "play";
+  return j;
+}
+
 } // namespace
+
+TEST_CASE("F-12: a standalone whole-file save keeps a plugin's newer Lite, Animate art and calibration")
+{
+  const auto root = TestRoot("two-writer-keys");
+  const auto path = root / "volum-settings.json";
+  std::error_code ec;
+
+  // Both processes start from the same file: Full, animation on, no calibration.
+  REQUIRE(volum::WriteJsonAtomically(path, StandaloneDoc(false, true, false, 12.0, 0), ec));
+  nlohmann::json standaloneSynced = volum::MachineSharedKeyValues(false, true, false, 12.0);
+  nlohmann::json pluginSynced = volum::MachineSharedKeyValues(false, true, false, 12.0);
+
+  // A VST3 instance switches to Lite, turns art animation off, sets calibration.
+  REQUIRE(volum::MergeMachineSettingsKeys(path, {{"liteMode", true}}, pluginSynced, ec));
+  REQUIRE(volum::MergeMachineSettingsKeys(path, {{"animatePlayArt", false}}, pluginSynced, ec));
+  REQUIRE(volum::MergeMachineSettingsKeys(
+    path, {{"CalibrateInput", true}, {"InputCalibrationLevel", -7.5}}, pluginSynced, ec));
+
+  // The standalone, still holding the old values in memory, saves after a MIDI change.
+  REQUIRE(volum::WriteWholeMachineSettings(path, StandaloneDoc(false, true, false, 12.0, 5), standaloneSynced, ec));
+  auto disk = ReadJsonFile(path);
+  CHECK(disk["liteMode"] == true);
+  CHECK(disk["animatePlayArt"] == false);
+  CHECK(disk["CalibrateInput"] == true);
+  CHECK(disk["InputCalibrationLevel"] == doctest::Approx(-7.5));
+  CHECK(disk["midiCh"] == 5);
+  CHECK(disk["volumUiMode"] == "play");
+
+  // A second stale save does not flip them back either.
+  REQUIRE(volum::WriteWholeMachineSettings(path, StandaloneDoc(false, true, false, 12.0, 6), standaloneSynced, ec));
+  disk = ReadJsonFile(path);
+  CHECK(disk["liteMode"] == true);
+  CHECK(disk["animatePlayArt"] == false);
+  CHECK(disk["midiCh"] == 6);
+
+  // A key the standalone did change is its to write; the others stay the plugin's.
+  REQUIRE(volum::WriteWholeMachineSettings(path, StandaloneDoc(false, true, false, -3.0, 6), standaloneSynced, ec));
+  disk = ReadJsonFile(path);
+  CHECK(disk["InputCalibrationLevel"] == doctest::Approx(-3.0));
+  CHECK(disk["liteMode"] == true);
+  CHECK(disk["CalibrateInput"] == true);
+
+  // And the plugin's next single-key merge keeps every standalone key.
+  REQUIRE(volum::MergeMachineSettingsKeys(path, {{"liteMode", false}}, pluginSynced, ec));
+  disk = ReadJsonFile(path);
+  CHECK(disk["liteMode"] == false);
+  CHECK(disk["midiCh"] == 6);
+  CHECK(disk["volumUiMode"] == "play");
+  CHECK(disk["InputCalibrationLevel"] == doctest::Approx(-3.0));
+  CHECK_FALSE(HasAtomicTempFile(root));
+}
+
+TEST_CASE("F-12: a key this process wrote on its own is no longer its stale copy")
+{
+  // The standalone's own Lite toggle merges the key at once. Its later whole-file
+  // saves must treat that value as synced, or a plugin's newer flip back would be
+  // overwritten by the standalone's in-memory Lite.
+  const auto root = TestRoot("direct-write-synced");
+  const auto path = root / "volum-settings.json";
+  std::error_code ec;
+  REQUIRE(volum::WriteJsonAtomically(path, StandaloneDoc(false, true, false, 12.0, 0), ec));
+  nlohmann::json standaloneSynced = volum::MachineSharedKeyValues(false, true, false, 12.0);
+  nlohmann::json pluginSynced = standaloneSynced;
+
+  REQUIRE(volum::MergeMachineSettingsKeys(path, {{"liteMode", true}}, standaloneSynced, ec));
+  CHECK(standaloneSynced["liteMode"] == true);
+  REQUIRE(volum::MergeMachineSettingsKeys(path, {{"liteMode", false}}, pluginSynced, ec));
+
+  REQUIRE(volum::WriteWholeMachineSettings(path, StandaloneDoc(true, true, false, 12.0, 2), standaloneSynced, ec));
+  CHECK(ReadJsonFile(path)["liteMode"] == false);
+}
+
+TEST_CASE("F-12: KeepOtherWritersMachineKeys writes only what this process changed")
+{
+  const nlohmann::json synced = volum::MachineSharedKeyValues(false, true, false, 12.0);
+  const nlohmann::json disk = {{"liteMode", true}, {"animatePlayArt", false}, {"midiCh", 9}};
+
+  nlohmann::json mine = StandaloneDoc(false, true, true, 12.0, 1);
+  volum::KeepOtherWritersMachineKeys(mine, disk, synced);
+  CHECK(mine["liteMode"] == true); // unchanged here: disk wins
+  CHECK(mine["animatePlayArt"] == false); // unchanged here: disk wins
+  CHECK(mine["CalibrateInput"] == true); // changed here: mine wins
+  CHECK(mine["InputCalibrationLevel"] == doctest::Approx(12.0)); // not on disk: mine stays
+  CHECK(mine["midiCh"] == 1); // not a shared key: the standalone owns it
+
+  // Nothing known about the last sync: the whole document is this process's.
+  nlohmann::json blind = StandaloneDoc(false, true, false, 12.0, 1);
+  volum::KeepOtherWritersMachineKeys(blind, disk, nlohmann::json());
+  CHECK(blind["liteMode"] == false);
+}
+
+TEST_CASE("F-12: settings writers wait for another process's read-merge-write")
+{
+  // Atomic replace keeps the file whole, not the writes. Another process that has
+  // read the file and is about to replace it holds the lock; a writer here that
+  // went ahead would have its key replaced by that process's older read.
+  const auto root = TestRoot("two-writer-lock");
+  const auto path = root / "volum-settings.json";
+  std::error_code ec;
+  REQUIRE(volum::WriteJsonAtomically(path, StandaloneDoc(false, true, false, 12.0, 0), ec));
+
+  SUBCASE("a plugin merge waits for the standalone's save")
+  {
+    volum::content::RegistryFileLock standalone;
+    REQUIRE(standalone.Acquire(volum::MachineSettingsLockPath(path)));
+    nlohmann::json standaloneDoc = ReadJsonFile(path);
+
+    std::atomic<bool> done{false};
+    bool ok = false;
+    std::error_code pluginEc;
+    std::thread plugin([&]() {
+      nlohmann::json synced;
+      ok = volum::MergeMachineSettingsKeys(path, {{"liteMode", true}}, synced, pluginEc);
+      done.store(true);
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    CHECK_FALSE(done.load());
+
+    standaloneDoc["midiCh"] = 5;
+    REQUIRE(volum::WriteJsonAtomically(path, standaloneDoc, ec));
+    standalone.Release();
+    plugin.join();
+
+    CHECK(ok);
+    const auto disk = ReadJsonFile(path);
+    CHECK(disk["midiCh"] == 5);
+    CHECK(disk["liteMode"] == true);
+  }
+
+  SUBCASE("a standalone save waits for a plugin's merge")
+  {
+    volum::content::RegistryFileLock plugin;
+    REQUIRE(plugin.Acquire(volum::MachineSettingsLockPath(path)));
+    nlohmann::json pluginDoc = ReadJsonFile(path);
+
+    std::atomic<bool> done{false};
+    bool ok = false;
+    std::error_code standaloneEc;
+    std::thread standalone([&]() {
+      nlohmann::json synced = volum::MachineSharedKeyValues(false, true, false, 12.0);
+      ok = volum::WriteWholeMachineSettings(path, StandaloneDoc(false, true, false, 12.0, 5), synced, standaloneEc);
+      done.store(true);
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    CHECK_FALSE(done.load());
+
+    pluginDoc["liteMode"] = true;
+    REQUIRE(volum::WriteJsonAtomically(path, pluginDoc, ec));
+    plugin.Release();
+    standalone.join();
+
+    CHECK(ok);
+    const auto disk = ReadJsonFile(path);
+    CHECK(disk["midiCh"] == 5);
+    CHECK(disk["liteMode"] == true);
+  }
+
+  SUBCASE("a wedged holder makes the write fail instead of hanging")
+  {
+    volum::content::RegistryFileLock holder;
+    REQUIRE(holder.Acquire(volum::MachineSettingsLockPath(path)));
+    const auto before = ReadJsonFile(path);
+    std::error_code lockEc;
+    CHECK_FALSE(volum::UpdateMachineSettingsFile(
+      path,
+      [](nlohmann::json& doc, volum::MachineSettingsRead) {
+        doc["liteMode"] = true;
+        return true;
+      },
+      lockEc, /*lockTimeoutMs=*/50));
+    CHECK(lockEc == std::errc::timed_out);
+    CHECK(ReadJsonFile(path) == before);
+  }
+}
+
+TEST_CASE("F-12: every volum-settings.json writer goes through the locked merge")
+{
+  const std::string scene = ReadSourceText("VoLumSettingsScene.inc.cpp");
+  const std::string save = FunctionBody(scene, "bool NeuralAmpModeler::_VolumSaveSettingsToFile(int lockTimeoutMs)");
+  CHECK(save.find("mVolumMachineSettings.WriteWhole(settingsPath, std::move(j), lockTimeoutMs") != std::string::npos);
+  CHECK(save.find("WriteJsonAtomically(settingsPath") == std::string::npos);
+
+  const std::string machineBool = FunctionBody(scene, "void NeuralAmpModeler::_VolumSaveMachineBool(");
+  CHECK(machineBool.find("mVolumMachineSettings.Queue({{key, value}});") != std::string::npos);
+  CHECK(machineBool.find("_VolumFlushMachineKeys(volum::kMachineSettingsIdleLockMs);") != std::string::npos);
+  CHECK(machineBool.find("WriteJsonAtomically") == std::string::npos);
+
+  // Only the calibration key the user edited, never both (CalibrationEdits).
+  const std::string calibration =
+    FunctionBody(scene, "void NeuralAmpModeler::_VolumSaveCalibrationDefaults(int lockTimeoutMs)");
+  CHECK(calibration.find("mVolumCalibrationEdits.TakeKeys(") != std::string::npos);
+  CHECK(calibration.find("\"CalibrateInput\"") == std::string::npos);
+  CHECK(calibration.find("WriteJsonAtomically") == std::string::npos);
+  const std::string flush = FunctionBody(scene, "bool NeuralAmpModeler::_VolumFlushMachineKeys(int lockTimeoutMs)");
+  CHECK(flush.find("mVolumMachineSettings.FlushPending(settingsPath, lockTimeoutMs") != std::string::npos);
+
+  const std::string plugin = ReadSourceText("NeuralAmpModeler.cpp");
+  const std::string paramUi = FunctionBody(plugin, "void NeuralAmpModeler::OnParamChangeUI(");
+  CHECK(paramUi.find("mVolumCalibrationEdits.Mark(/*toggleEdited=*/paramIdx == kCalibrateInput);")
+        != std::string::npos);
+  // A failed write stays pending: OnIdle re-dirties the full save and retries queued keys.
+  const std::string idle = FunctionBody(plugin, "void NeuralAmpModeler::OnIdle()");
+  CHECK(
+    idle.find("if (!_VolumSaveSettingsToFile(volum::kMachineSettingsIdleLockMs))\n        mVolumSettingsDirty = true;")
+    != std::string::npos);
+  CHECK(idle.find("mVolumMachineSettings.RetryDue(VolumWriteNowMs())") != std::string::npos);
+  const std::string dtor = FunctionBody(plugin, "NeuralAmpModeler::~NeuralAmpModeler()");
+  CHECK(dtor.find("_VolumFlushMachineKeys(volum::kMachineSettingsFinalLockMs);") != std::string::npos);
+
+  // The sync point is the load: whatever it put live is what this process "has".
+  const std::string load = FunctionBody(scene, "void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  const auto early = load.find("_VolumNoteMachineKeysSynced();\n    return;");
+  CHECK(early != std::string::npos);
+  CHECK(load.rfind("_VolumNoteMachineKeysSynced();") > load.find("catch (...)"));
+  const std::string note = FunctionBody(scene, "void NeuralAmpModeler::_VolumNoteMachineKeysSynced()");
+  CHECK(note.find("mVolumMachineSettings.NoteLoaded(") != std::string::npos);
+  CHECK(note.find("mVolumLiteMode.load(), mVolumAnimatePlayArt.load(),") != std::string::npos);
+
+  // Pack import replaces the file under the same lock.
+  const std::string pack = ReadSourceText("VoLumPack.h");
+  const auto restore = pack.find("WriteWholeFile(settingsTmp, sanitizedSettings)");
+  REQUIRE(restore != std::string::npos);
+  const auto lock = pack.rfind("WithMachineSettingsLock(", restore);
+  REQUIRE(lock != std::string::npos);
+  CHECK(restore - lock < 200);
+}
 
 TEST_CASE("ReplaceFileAtomically refuses POSIX rename over a write-bit-clear file")
 {

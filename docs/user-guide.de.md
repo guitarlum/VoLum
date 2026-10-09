@@ -368,7 +368,7 @@ Ein **Everything**-Pack bietet drei Mischmodi:
 
 Ein **Sounds**- oder **A whole amp**-Pack mischt immer wie Overwrite und löscht nie etwas.
 
-**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer.
+**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, Output mode, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer.
 
 Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.packbak` auf. Ein beschädigtes Pack ändert nichts.
 
@@ -381,7 +381,7 @@ Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.
 ![VoLum Einstellungen, SIGNAL-Tab](user-guide-settings-signal.png)
 
 - **Input calibration:** gib den Eingangspegel deines Interfaces in dBu ein und schalte **Calibrate input** ein. Das geht nur mit Captures, die ihren Aufnahmepegel mitspeichern; die mitgelieferten Amps tun das nicht, deshalb zeigt die Karte "This model has no capture level".
-- **Output mode:** **Raw**, **Normalized** (Standard, ähnliche Lautstärke für alle Amps) oder **Calibrated**. Calibrated braucht ein Capture, das seinen Ausgangspegel mitspeichert, und bleibt daher bei den mitgelieferten Amps aus.
+- **Output mode:** **Raw**, **Normalized** (Standard, ähnliche Lautstärke für alle Amps) oder **Calibrated**. Calibrated braucht ein Capture, das seinen Ausgangspegel mitspeichert, und bleibt daher bei den mitgelieferten Amps aus. Die Standalone-App behält deine Wahl für den nächsten Start; in einer DAW speichert sie das Projekt.
 - **Performance:** **FULL** (Standard) oder **LITE**, das weniger CPU braucht, bei etwas geringerer Qualität. **Animate art in PLAY** schaltet die bewegten Bilder ein oder aus.
 - **Audio & MIDI devices...** (nur Standalone) öffnet das Gerätefenster.
 

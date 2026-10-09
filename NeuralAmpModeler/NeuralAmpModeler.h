@@ -47,6 +47,7 @@
 #include "VoLumTremolo.h"
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumHostRestoreGate.h"
 #include "VoLumLatencyRequests.h"
 #include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
@@ -63,6 +64,7 @@
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumPackMachineSettings.h"
 #include "VoLumPeakAvgSender.h"
 
@@ -166,7 +168,11 @@ enum EMsgTags
 
 #include "VoLumResamplingNam.h"
 
-class NeuralAmpModeler final : public iplug::Plugin
+// iplug::Plugin behind the host-restore layer: while a thread is inside a host state
+// restore, GetUI() and iPlug's Send*FromDelegate helpers do not reach the editor for it.
+using VolumHostBase = volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>;
+
+class NeuralAmpModeler final : public VolumHostBase
 {
 public:
   NeuralAmpModeler(const iplug::InstanceInfo& info);
@@ -179,6 +185,9 @@ public:
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
+  // The wrapper's OnRestoreState() after a host setState: not run on the host's
+  // thread (it would walk every control), so request the idle resync instead.
+  void OnRestoreStateDeferred() override { mVolumUiSyncPending.store(true); }
   void OnUIOpen() override;
   void OnUIClose() override;
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }
@@ -235,6 +244,9 @@ public:
   // assume a control already holds the right value. Call this after any restore
   // (editor open, DAW chunk load, session re-focus).
   void _VolumSyncUiFromState();
+  // UI half of a host state restore, UI thread only: every control the restore had
+  // to skip, re-derived from live state (no captured snapshot, so it is idempotent).
+  void _VolumResyncUi();
   // Apply one resolved UiSyncPlan to the cab row + channel stepper, and write the
   // resolved custom routing back into the runtime caches.
   void _VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool support);
@@ -273,8 +285,11 @@ public:
   // otherwise stay stale (e.g. output stuck at silence until a manual knob nudge).
   // See volum::dsp_cache::kRestoreReappliedCaches for the locked param set.
   void _VolumApplyDspCaches();
-  void _VolumSaveSettingsToFile();
-  void _VolumSaveCalibrationDefaults();
+  // False when the write failed (e.g. the lock stayed busy); the caller keeps it pending.
+  bool _VolumSaveSettingsToFile(int lockTimeoutMs);
+  void _VolumSaveCalibrationDefaults(int lockTimeoutMs);
+  // Writes the queued single machine keys; false leaves them queued for OnIdle.
+  bool _VolumFlushMachineKeys(int lockTimeoutMs);
   void _VolumSaveLiteMode();
   void _VolumLoadSettingsFromFile();
   // VoLum: set the machine-global A2 Lite/Full mode, persist it, and reload all
@@ -285,6 +300,7 @@ public:
   void _VolumSetAnimatePlayArt(bool animate);
   bool _VolumIsAnimatePlayArt() const { return mVolumAnimatePlayArt.load(); }
   void _VolumSaveMachineBool(const char* key, bool value);
+  void _VolumNoteMachineKeysSynced();
   void _VolumCheckForUpdatesNow();
   // Standalone: opens the app host's audio and MIDI Preferences. No-op in a plugin.
   void _VolumOpenAudioPreferences();
@@ -356,6 +372,7 @@ public:
                               const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
   void _VolumRequestSupportModelLoad();
+  std::string _VolumCustomSupportCapturePath();
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
   void _VolumShowManageCustomPedals(int preSlot = -1);
@@ -415,6 +432,7 @@ public:
   // routing part must also run headless. mVolumCustomMainIdx tracks the focused
   // custom main amp (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
+  void _VolumReanchorCustomMain();
   void _VolumSetCustomChannelStepper(int customIdx, bool supportLane, int channel);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp
   // slot, or the focused custom amp's scene). activeIrId/supportActiveIrId/
@@ -585,6 +603,8 @@ private:
   // Index of the focused custom MAIN amp (display-only), or -1 when a factory
   // amp is active. Drives the custom-aware cabinet row / channel stepper.
   int mVolumCustomMainIdx = -1;
+  // Id of that amp: the row index shifts when another instance or a Pack edits the library.
+  std::string mVolumCustomMainId;
   // Selected (slot, channel) within the focused custom MAIN amp, used to resolve
   // which manifest .nam to stage. Only meaningful when mVolumCustomMainIdx >= 0.
   int mVolumCustomMainSlot = volum::custom::kDirectSlot;
@@ -630,15 +650,20 @@ private:
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
   std::string mVolumLastLoadedSupportFile;
+  // Filename of the SUPPORT capture the audio thread last made live; empty after a failed load or
+  // an unload. Main thread only: OnIdle commits it from mPublishedSupportCapturePath.
+  std::string mVolumLiveSupportFile;
   std::string mVolumRequestedMainFile;
   std::string mVolumMainLoadError;
 
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
   std::atomic<bool> mVolumMainLoadFailed{false};
-  // Set when host state was restored into an already-open editor, consumed by the
-  // next OnIdle. UnserializeState runs on the host's thread, and the applier it
-  // wants writes IGraphics controls, so the call has to cross to the UI thread.
+  // UnserializeState runs on the host's thread and applies the rig there, with the
+  // editor hidden from that thread (RestoreGate()). It only raises this
+  // flag; the next OnIdle (or OnUIOpen) re-derives every control from the live
+  // state on the UI thread. The flag carries no data, so two restores before one
+  // idle still cost a single resync, and a resync run twice is harmless.
   std::atomic<bool> mVolumUiSyncPending{false};
   // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
   std::string mVolumPendingLibraryNotice;
@@ -666,6 +691,12 @@ private:
   volum::LatencyReport mVolumLastLatencyReport{};
   bool mVolumSettingsDirty = false;
   bool mVolumCalibrationDefaultsDirty = false;
+  // This instance's machine-file writes: the shared keys as last loaded or
+  // written (the standalone's whole-file save writes only the ones it changed
+  // since), plus single keys still waiting for the lock.
+  volum::MachineSettingsWriter mVolumMachineSettings;
+  // Which calibration default the user edited; only those keys are written.
+  volum::CalibrationEdits mVolumCalibrationEdits;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
   // OnParamChange / OnParamChangeUI handlers triggered by setParam (which calls
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /
@@ -982,6 +1013,10 @@ private:
   volum::dsp_staging::RtPublishedPath mPublishedIRPath;
   char mPendingSupportIRPath[volum::dsp_staging::kRtPathCapacity]{};
   volum::dsp_staging::RtPublishedPath mPublishedSupportIRPath;
+  // The SUPPORT capture the audio thread staged / made live. Audio thread: copy into the pending
+  // buffer, then publish; OnIdle commits it into mVolumLiveSupportFile.
+  char mPendingSupportCapturePath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedSupportCapturePath;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;

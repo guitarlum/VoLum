@@ -34,6 +34,7 @@
 #include "VoLumDiagLog.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumLevelMute.h"
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumMasterSafety.h"
 #include "VoLumNanGuard.h"
 #include "VoLumPaths.h"
@@ -345,7 +346,7 @@ constexpr const char* kVolumDiagApiName = "plugin";
 
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPresets))
+: VolumHostBase(info, MakeConfig(kNumParams, kNumPresets))
 {
   volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
   VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
@@ -610,7 +611,7 @@ NeuralAmpModeler::~NeuralAmpModeler()
 
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
-  _VolumSaveSettingsToFile();
+  _VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);
   mVolumSettingsDirty = false;
   VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
 #else
@@ -627,8 +628,10 @@ NeuralAmpModeler::~NeuralAmpModeler()
   if (mVolumCalibrationDefaultsDirty)
   {
     mVolumCalibrationDefaultsDirty = false;
-    _VolumSaveCalibrationDefaults();
+    _VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs);
   }
+  // A Lite / Animate / calibration key an earlier busy lock left queued.
+  _VolumFlushMachineKeys(volum::kMachineSettingsFinalLockMs);
   VolumForgetWriteDebounce(this);
   _DeallocateIOPointers();
 }
@@ -945,7 +948,7 @@ void NeuralAmpModeler::OnIdle()
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
-    _VolumSyncUiFromState();
+    _VolumResyncUi();
   _VolumRebindCustomSupportIdx();
   // Not while a control holds the mouse: the box drops the capture without ending a
   // knob drag's host gesture. A capture that never ends waits only so long.
@@ -974,6 +977,7 @@ void NeuralAmpModeler::OnIdle()
   _VolumReapAudioThreadRetirees();
   mLatencyRequests.Service(
     [this] { return _ReportedLatencySamples(); }, [this](int latency) { _ApplyReportedLatency(latency); });
+  _VolumReanchorCustomMain();
   if (mVolumUiMode == volum::UiMode::Play)
   {
     _VolumRefreshPlaySurface();
@@ -1171,7 +1175,9 @@ void NeuralAmpModeler::OnIdle()
     {
       mVolumSettingsDirty = false;
       debounce.markWritten(nowMs);
-      _VolumSaveSettingsToFile();
+      // A busy lock: stay dirty, so the debounce retries after the next quiet window.
+      if (!_VolumSaveSettingsToFile(volum::kMachineSettingsIdleLockMs))
+        mVolumSettingsDirty = true;
     }
   }
 #endif
@@ -1185,9 +1191,11 @@ void NeuralAmpModeler::OnIdle()
     {
       mVolumCalibrationDefaultsDirty = false;
       debounce.markWritten(nowMs);
-      _VolumSaveCalibrationDefaults();
+      _VolumSaveCalibrationDefaults(volum::kMachineSettingsIdleLockMs);
     }
   }
+  else if (mVolumMachineSettings.HasPending() && mVolumMachineSettings.RetryDue(VolumWriteNowMs()))
+    _VolumFlushMachineKeys(volum::kMachineSettingsIdleLockMs);
 
   if (auto* pGfx = GetUI())
   {
@@ -1308,7 +1316,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   volum::ChunkIdTail idTail;
   idTail.midiCh = mVolumMidiChannel.load();
   idTail.midiRecallCc = mVolumMidiRecallCc.load();
-  idTail.customMainId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+  idTail.customMainId = mVolumCustomMainIdx >= 0 ? mVolumCustomMainId : std::string();
   idTail.customSupportId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
   idTail.activePresetId = mVolumActivePresetId;
   idTail.uiMode = volum::UiModeToString(mVolumUiMode);
@@ -1404,6 +1412,13 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
   // content registry, and a corrupt chunk is exactly the input most likely to
   // reach a path nobody predicted. Returning a parse failure lets the host
   // report a bad state; letting the exception out cannot be recovered from.
+  //
+  // The rig is applied synchronously, on the host's thread, so the next audio block
+  // and an immediate offline render play the restored sound. The editor is hidden
+  // from this thread for the duration (GetUI() returns null here, and iPlug's
+  // Send*FromDelegate helpers skip their control walk): every applier takes its
+  // headless path, and the controls are re-derived by _VolumResyncUi.
+  const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());
   try
   {
     // Look for the expected header. If it's there, then we'll know what to do.
@@ -1537,15 +1552,15 @@ void NeuralAmpModeler::OnUIClose()
   // Save while params are still valid (destructor may run after teardown)
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
-  _VolumSaveSettingsToFile();
-  mVolumSettingsDirty = false;
+  // If the lock stays busy the change stays pending for OnIdle and the destructor.
+  mVolumSettingsDirty = !_VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);
   VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
 #endif
   // Calibration defaults were never flushed on close before debouncing them.
   if (mVolumCalibrationDefaultsDirty)
   {
     mVolumCalibrationDefaultsDirty = false;
-    _VolumSaveCalibrationDefaults();
+    _VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs);
   }
   VolumDebounceFor(this).calibration.markWritten(VolumWriteNowMs());
 }
@@ -1566,6 +1581,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kOutputMode:
       _SetOutputGain();
       _SetSupportOutputGain();
+      // Standalone only acts on this (OnIdle under APP_API): the machine file is
+      // where its Output mode survives a relaunch.
+      if (mVolumInitComplete)
+        mVolumSettingsDirty = true;
       break;
     case kSupportOutputLevel: _SetSupportOutputGain(); break;
     // Tone stack:
@@ -1823,6 +1842,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
   if (source == EParamSource::kUI && (paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel))
   {
+    mVolumCalibrationEdits.Mark(/*toggleEdited=*/paramIdx == kCalibrateInput);
     mVolumCalibrationDefaultsDirty = true;
     VolumDebounceFor(this).calibration.dirty(VolumWriteNowMs());
   }
@@ -2066,6 +2086,11 @@ void NeuralAmpModeler::_VolumReapAudioThreadRetirees()
   for (auto& lane : lanes)
     if (lane.slot.dirty.load(std::memory_order_acquire))
       lane.text.reserve(volum::dsp_staging::kRtPathCapacity);
+  // The SUPPORT capture file is a main-thread string, not a WDL path pair.
+  std::string supportCaptureText;
+  auto supportCaptureAction = volum::dsp_staging::PublishedPathAction::None;
+  if (mPublishedSupportCapturePath.dirty.load(std::memory_order_acquire))
+    supportCaptureText.reserve(volum::dsp_staging::kRtPathCapacity);
 
   {
     std::lock_guard<std::mutex> lock(mStagingMutex);
@@ -2076,10 +2101,12 @@ void NeuralAmpModeler::_VolumReapAudioThreadRetirees()
     doomedResults.swap(mVolumSpentLoadResults);
     for (auto& lane : lanes)
       lane.action = volum::dsp_staging::TakePublishedPath(lane.slot, lane.text);
+    supportCaptureAction = volum::dsp_staging::TakePublishedPath(mPublishedSupportCapturePath, supportCaptureText);
   }
 
   for (auto& lane : lanes)
     volum::dsp_staging::ApplyPublishedPath(lane.action, lane.text, lane.paths);
+  volum::dsp_staging::CommitSupportLiveFile(supportCaptureAction, supportCaptureText, mVolumLiveSupportFile);
 }
 
 void NeuralAmpModeler::_ApplyDSPStaging()
@@ -2115,6 +2142,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     if (mShouldRemoveSupportModel)
     {
       volum::dsp_staging::RetireLiveAndStaged(mSupportModel, mStagedSupportModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedSupportCapturePath);
+      mPendingSupportCapturePath[0] = '\0';
       mShouldRemoveSupportModel = false;
       removedSupportModel = true;
     }
@@ -2152,6 +2181,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     if (mStagedSupportModel != nullptr)
     {
       volum::dsp_staging::PublishStagedModel(mSupportModel, mStagedSupportModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedSupportCapturePath, mPendingSupportCapturePath);
       appliedSupportModel = true;
     }
     for (int i = 0; i < 2; ++i)

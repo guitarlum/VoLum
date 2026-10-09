@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 #include "../VoLumAmpeteCatalog.h"
 #include "../VoLumPaths.h"
 #include <cstdlib>
@@ -11,7 +12,7 @@
 TEST_CASE("DiscoverChannels sorts by label and matches speaker prefix")
 {
   namespace fs = std::filesystem;
-  const fs::path tmp = fs::temp_directory_path() / "volum_discover_test";
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_discover_test";
   fs::remove_all(tmp);
   fs::create_directories(tmp / "Ampete One");
   std::ofstream((tmp / "Ampete One" / "V30-ZZ-2.nam").string()).close();
@@ -38,7 +39,7 @@ TEST_CASE("FindRigsRootDirectory returns a rigs tree in typical dev/repo layout"
 TEST_CASE("Factory presets come from the first candidate tree that holds the file")
 {
   namespace fs = std::filesystem;
-  const fs::path tmp = fs::temp_directory_path() / "volum_first_rigs_file";
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_first_rigs_file";
   fs::remove_all(tmp);
   const fs::path beside = tmp / "beside" / "VoLumRigs";
   const fs::path installed = tmp / "installed" / "VoLumRigs";
@@ -133,7 +134,7 @@ TEST_CASE("Every factory amp has a uniform channel set across all speaker cabs")
 TEST_CASE("Channel and pedal discovery read UTF-8 leaves, not native string()")
 {
   namespace fs = std::filesystem;
-  const fs::path tmp = fs::temp_directory_path() / "volum_utf8_leaf";
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_utf8_leaf";
   fs::remove_all(tmp);
   fs::create_directories(tmp / "Ampete One");
   const fs::path nam = tmp / "Ampete One" / "V30-AA-1.nam";
@@ -158,7 +159,7 @@ TEST_CASE("VolumUserSettingsFilePath uses LOCALAPPDATA")
   const char* prev = std::getenv("LOCALAPPDATA");
   const std::string prevStr = prev ? std::string(prev) : std::string();
 
-  const fs::path tmp = fs::temp_directory_path() / "volum_localappdata_test";
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_localappdata_test";
   fs::remove_all(tmp);
   fs::create_directories(tmp);
   const std::string la = tmp.string();

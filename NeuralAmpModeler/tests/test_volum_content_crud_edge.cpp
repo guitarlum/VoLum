@@ -10,6 +10,7 @@
 // not swallow the following readable character.
 
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <filesystem>
 #include <fstream>
@@ -25,7 +26,7 @@ namespace
 {
 std::filesystem::path CrudBase(const char* name)
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-content-crud-edge" / name;
+  auto root = volum_test::ProcessTempRoot() / "volum-content-crud-edge" / name;
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);

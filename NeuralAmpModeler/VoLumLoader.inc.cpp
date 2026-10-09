@@ -229,11 +229,13 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
       if (action == volum::dsp_staging::LoaderResultAction::RetireAndReload)
         mVolumSupportNeedsLoad.store(true);
       else if (action == volum::dsp_staging::LoaderResultAction::Ignore && !result.error.empty())
-        mShouldRemoveSupportModel.store(true);
+        mShouldRemoveSupportModel.store(true); // _ApplyDSPStaging publishes the clear for OnIdle
       else if (action == volum::dsp_staging::LoaderResultAction::Stage)
       {
         std::lock_guard<std::mutex> lock(mStagingMutex);
         volum::dsp_staging::StageIncomingModel(mStagedSupportModel, result.model, mDspGraveyard);
+        volum::dsp_staging::CopyPathNoAlloc(
+          mPendingSupportCapturePath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());
       }
       continue;
     }
@@ -459,6 +461,20 @@ void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
   _VolumQueuePreNamLoad(slot, fileToLoad);
 }
 
+std::string NeuralAmpModeler::_VolumCustomSupportCapturePath()
+{
+  const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
+  std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomSupportSlot, mVolumCustomSupportChannel);
+  if (rel.empty())
+  {
+    int s = volum::custom::kDirectSlot, c = 1;
+    if (volum::content::DefaultCaptureSelection(amp, s, c))
+      rel = volum::content::CaptureFileFor(amp, s, c);
+  }
+  return rel.empty() ? std::string()
+                     : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
+}
+
 void NeuralAmpModeler::_VolumRequestSupportModelLoad()
 {
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
@@ -476,16 +492,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
       mVolumLastLoadedSupportFile.clear();
       return;
     }
-    const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
-    std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomSupportSlot, mVolumCustomSupportChannel);
-    if (rel.empty())
-    {
-      int s = volum::custom::kDirectSlot, c = 1;
-      if (volum::content::DefaultCaptureSelection(amp, s, c))
-        rel = volum::content::CaptureFileFor(amp, s, c);
-    }
-    const std::string fileToLoad =
-      rel.empty() ? std::string() : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
+    const std::string fileToLoad = _VolumCustomSupportCapturePath();
     if (fileToLoad.empty())
     {
       _VolumSetSupportSelected(false);

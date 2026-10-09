@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 #include "../VoLumPrePedalCaptures.h"
 
 #include <filesystem>
@@ -16,7 +17,7 @@ std::filesystem::path RepoRoot()
 TEST_CASE("PrePedals discovery sorts unknown NAM captures after curated captures")
 {
   namespace fs = std::filesystem;
-  const fs::path tmp = fs::temp_directory_path() / "volum_pre_pedals_test";
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_pre_pedals_test";
   fs::remove_all(tmp);
   fs::create_directories(tmp / "PrePedals");
   std::ofstream((tmp / "PrePedals" / "20-Zed.nam").string()).close();

@@ -3,6 +3,7 @@
 // must accept them (averaging channels) instead of rejecting with ERROR_NOT_MONO.
 
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -16,7 +17,7 @@ namespace
 {
 std::filesystem::path TestDir()
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-wav-downmix-tests";
+  auto root = volum_test::ProcessTempRoot() / "volum-wav-downmix-tests";
   std::error_code ec;
   std::filesystem::create_directories(root, ec);
   return root;

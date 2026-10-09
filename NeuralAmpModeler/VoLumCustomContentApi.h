@@ -131,6 +131,25 @@ inline int CustomAmpIndexById(const std::string& id)
   return -1;
 }
 
+// Row of the focused amp after another writer may have reordered or removed rows:
+// the same row while it still names the amp, its new row when it moved, and -1
+// when the amp is gone (never a neighbour's row).
+inline int ReanchoredAmpIdx(const std::string& focusedId, int curIdx)
+{
+  if (focusedId.empty() || curIdx < 0 || CustomAmpIdAt(curIdx) == focusedId)
+    return curIdx;
+  return CustomAmpIndexById(focusedId);
+}
+
+// Id a save may write the focused amp's scene under. Scenes are keyed by id, so a
+// focused amp that merely moved rows (another amp deleted or reordered) still saves
+// under its own id at once; only an id that is gone yields empty, so a stale row can
+// never reach a neighbour.
+inline std::string SceneIdForFocusedAmp(const std::string& focusedId)
+{
+  return CustomAmpIndexById(focusedId) >= 0 ? focusedId : std::string();
+}
+
 inline CustomAmp CustomAmpAt(int idx)
 {
   const auto& amps = Store().reg().amps;
@@ -733,12 +752,17 @@ inline int AddPresetForOwner(const std::string& ownerKey, const std::string& nam
   int suffix = 2;
   auto clashes = [&](const std::string& n) {
     for (const auto& pr : bank)
-      if (pr.name == n)
+      if (NameMatchesCI(pr.name, n))
         return true;
     return false;
   };
   while (clashes(unique))
-    unique = fallback + " " + std::to_string(suffix++);
+  {
+    // The suffixed name must still fit the dialog's cap, or Ctrl+S could never
+    // match it as the preset to update.
+    const std::string tail = " " + std::to_string(suffix++);
+    unique = ClampName(fallback, kMaxPresetNameLen - tail.size()) + tail;
+  }
   content::Preset pr;
   pr.id = content::MintId(reg, "preset");
   pr.name = unique;
