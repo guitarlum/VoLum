@@ -8,8 +8,7 @@ WORK="$RUNNER_TEMP/volum-reaper-evidence"
 REAPER_URL="https://www.reaper.fm/files/7.x/reaper782_universal.dmg"
 MOUNT="$WORK/mount"
 REAPER_APP="$WORK/REAPER.app"
-TEST_HOME="$WORK/home"
-RESOURCE="$TEST_HOME/Library/Application Support/REAPER"
+RESOURCE="$HOME/Library/Application Support/REAPER"
 RESULTS="$EVIDENCE_DIR/reaper-results.json"
 mkdir -p "$EVIDENCE_DIR" "$MOUNT" "$RESOURCE/Scripts"
 : > "$LOG"
@@ -68,9 +67,8 @@ INI
 printf 'dofile([[%s]])\n' "$SCRIPT_DIR/reaper-evidence.lua" > "$RESOURCE/Scripts/__startup.lua"
 echo go > "$EVIDENCE_DIR/go.txt"
 
-export HOME="$TEST_HOME"
 export VOLUM_REAPER_EVIDENCE_DIR="$EVIDENCE_DIR"
-echo "Launching isolated REAPER with resource path $RESOURCE"
+echo "Launching REAPER with fresh-runner resource path $RESOURCE"
 "$REAPER_APP/Contents/MacOS/REAPER" -nosplash -new > "$EVIDENCE_DIR/reaper-process.log" 2>&1 &
 reaper_pid=$!
 
