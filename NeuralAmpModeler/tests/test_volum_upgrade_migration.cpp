@@ -576,3 +576,42 @@ TEST_CASE("1.2.x upgrade: an IR unreadable during the trim migration is measured
   CHECK(IrById(third, "ir_late").trimDb == doctest::Approx(impulseTrim).epsilon(1e-3));
   CHECK(IrById(third, "ir_here").trimDb == doctest::Approx(impulseTrim).epsilon(1e-3));
 }
+
+TEST_CASE("1.2.x upgrade: a library with nothing to migrate stays schema v2 on disk until its first real save")
+{
+  // The e2e upgrade scenario relies on this contract: only the IR trim migration
+  // writes at launch, so a v2 file with no IR to measure is left byte-for-byte as
+  // 1.2.x wrote it (still readable by 1.2.x, customScenes intact) and the first
+  // catalog write brings it to the current schema without losing a legacy scene.
+  const auto base = UpgradeTestBase("v2-stays-v2-until-save");
+  const std::string v2Library = R"({
+    "schemaVersion": 2,
+    "customAmps": [
+      {"id": "amp_a", "name": "Amp A", "cabNames": ["", "", ""], "art": 0,
+       "files": [{"file": "A-1.nam", "slot": -1, "channel": 1, "storedPath": "amps/amp_a__1.nam"}]}
+    ],
+    "irLibrary": [],
+    "customScenes": {"amp_a": {"bass": 6.5, "treble": 3.5, "output": -3.0}}
+  })";
+  {
+    ContentStore seed;
+    seed.SetBaseDir(base);
+    WriteFile(seed.RegistryPath(), v2Library);
+  }
+
+  ContentStore store(base);
+  store.EnsureLoaded();
+  const auto migration = MigrateIrTrims(store, MeasureWav);
+  CHECK(migration.calibrated.empty());
+  CHECK_FALSE(migration.saved);
+  REQUIRE(store.Save()); // the settings idle flush with nothing to write
+  CHECK(ReadFile(store.RegistryPath()) == v2Library);
+
+  store.reg().presetBanks["factory:0"].push_back(Preset{"preset_new", "New", {}});
+  REQUIRE(store.Save());
+  const auto saved = LibraryOnDisk(store);
+  CHECK(saved["schemaVersion"].get<int>() == kContentSchemaVersion);
+  REQUIRE(saved.contains("customScenes"));
+  CHECK(saved["customScenes"].contains("amp_a"));
+  CHECK(saved["customAmps"].size() == 1);
+}
