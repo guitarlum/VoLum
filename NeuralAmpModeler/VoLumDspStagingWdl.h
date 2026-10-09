@@ -332,4 +332,24 @@ void ApplyPublishedPath(PublishedPathAction action, const std::string& path, Pat
   }
 }
 
+// File name (no directory) of a published capture path, either separator.
+inline std::string CaptureFileName(const std::string& path)
+{
+  const size_t cut = path.find_last_of("/\\");
+  return cut == std::string::npos ? path : path.substr(cut + 1);
+}
+
+// OnIdle, main thread only: the SUPPORT capture file the audio thread last made
+// live. The audio thread only publishes the path (PublishPathNoAlloc) or a clear
+// (a failed load or an unload); the std::string lives on this side alone.
+inline void CommitSupportLiveFile(PublishedPathAction action, const std::string& publishedPath, std::string& liveFile)
+{
+  switch (action)
+  {
+    case PublishedPathAction::Commit: liveFile = CaptureFileName(publishedPath); break;
+    case PublishedPathAction::Clear: liveFile.clear(); break;
+    case PublishedPathAction::None: break;
+  }
+}
+
 } // namespace volum::dsp_staging

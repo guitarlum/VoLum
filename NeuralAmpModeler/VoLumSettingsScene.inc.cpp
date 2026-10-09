@@ -372,7 +372,7 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // 1.2.0 additive session refs (ignored by older builds): the focused custom
   // MAIN amp + active preset so the next launch re-selects them. Per-amp IR /
   // custom-support refs already round-trip inside each scene's JSON.
-  j["volumCustomMainId"] = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+  j["volumCustomMainId"] = mVolumCustomMainIdx >= 0 ? mVolumCustomMainId : std::string();
   j["volumActivePresetId"] = mVolumActivePresetId;
   // Standalone has no DAW project chunk; persist the same per-instance MIDI
   // channel field in its instance settings equivalent.
@@ -667,9 +667,8 @@ std::string NeuralAmpModeler::_VolumActiveOwnerKey() const
 {
   if (mVolumCustomMainIdx >= 0)
   {
-    const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
-    if (!id.empty())
-      return id;
+    if (!mVolumCustomMainId.empty())
+      return mVolumCustomMainId;
   }
   return volum::content::FactoryOwnerKey(mVolumAmpIdx);
 }
