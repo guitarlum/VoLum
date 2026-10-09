@@ -58,12 +58,18 @@ enum class PendingModeResult
 // already contains a not-yet-applied host request. Only the main-thread
 // transition below may change rememberedMode.
 template <typename SaveSnapshot>
-void SaveTrackedModeSnapshot(int currentParamMode, int modeCount, int& rememberedMode, SaveSnapshot&& saveSnapshot)
+void SaveTrackedModeSnapshot(int modeCount, int rememberedMode, SaveSnapshot&& saveSnapshot)
 {
-  (void) currentParamMode;
   if (modeCount <= 0)
     return;
   saveSnapshot(std::clamp(rememberedMode, 0, modeCount - 1));
+}
+
+inline PendingModeAction OktaverbPendingModeAction(bool oktaverbSelected, bool restoreInProgress)
+{
+  if (!oktaverbSelected)
+    return PendingModeAction::Drop;
+  return restoreInProgress ? PendingModeAction::Retry : PendingModeAction::Apply;
 }
 
 // Apply one per-mode snapshot transaction. The caller decides whether this
@@ -108,5 +114,21 @@ PendingModeResult ApplyPendingModeSnapshotChange(bool hasRequest, int currentPar
            std::forward<RestoreIncoming>(restoreIncoming))
            ? PendingModeResult::Applied
            : PendingModeResult::Unchanged;
+}
+
+// A parent Reverb-mode restore can rewrite the visible sub-mode parameter before
+// this nested transition runs. Reassert the applied sub-mode after restoring its
+// knobs so parameter, editor and remembered snapshot cannot disagree.
+template <typename SaveOutgoing, typename RestoreIncoming, typename SetCurrentMode>
+PendingModeResult ApplyPendingNestedModeSnapshotChange(
+  bool hasRequest, int currentParamMode, int modeCount, PendingModeAction action, int& rememberedMode,
+  SaveOutgoing&& saveOutgoing, RestoreIncoming&& restoreIncoming, SetCurrentMode&& setCurrentMode)
+{
+  const auto result = ApplyPendingModeSnapshotChange(
+    hasRequest, currentParamMode, modeCount, action, rememberedMode, std::forward<SaveOutgoing>(saveOutgoing),
+    std::forward<RestoreIncoming>(restoreIncoming));
+  if (result == PendingModeResult::Applied)
+    setCurrentMode(std::clamp(rememberedMode, 0, modeCount - 1));
+  return result;
 }
 } // namespace volum

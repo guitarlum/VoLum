@@ -159,19 +159,33 @@ struct OktaverbSnapshotHarness
   void AudioThreadReverbKnobChange(int value)
   {
     liveKnob = value;
-    volum::SaveTrackedModeSnapshot(
-      currentSubMode, 2, rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; });
+    volum::SaveTrackedModeSnapshot(2, rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; });
+  }
+
+  void AudioThreadReverbAndSubModeChange(int mode)
+  {
+    oktaverbSelected = true;
+    currentSubMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Reverb);
+    pending.Request(volum::ModeSnapshotTarget::Oktaverb);
   }
 
   volum::PendingModeResult ApplyPendingOnMainThread()
   {
     const unsigned mask = pending.Take();
-    const auto action =
-      oktaverbSelected ? volum::PendingModeAction::Apply : volum::PendingModeAction::Drop;
-    return volum::ApplyPendingModeSnapshotChange(
-      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentSubMode, 2, action,
+    const int requestedSubMode = currentSubMode;
+    if ((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)) != 0)
+    {
+      // _VolumRestoreReverbModeSnapshot(Oktaverb) restores the remembered
+      // sub-mode and its knobs before the pending nested transition runs.
+      currentSubMode = rememberedSubMode;
+      liveKnob = slots[rememberedSubMode];
+    }
+    const auto action = volum::OktaverbPendingModeAction(oktaverbSelected, false);
+    return volum::ApplyPendingNestedModeSnapshotChange(
+      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, requestedSubMode, 2, action,
       rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; },
-      [this](int slot) { liveKnob = slots[slot]; });
+      [this](int slot) { liveKnob = slots[slot]; }, [this](int mode) { currentSubMode = mode; });
   }
 };
 } // namespace
@@ -1252,6 +1266,19 @@ TEST_CASE("F-08 Oktaverb knob automation before idle saves the remembered sub-mo
   CHECK(h.liveKnob == 20);
 }
 
+TEST_CASE("F-08 simultaneous Reverb and Oktaverb changes keep parameter and knobs aligned")
+{
+  OktaverbSnapshotHarness h;
+  h.AudioThreadReverbAndSubModeChange(1);
+
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::Applied);
+  CHECK(h.currentSubMode == 1);
+  CHECK(h.rememberedSubMode == 1);
+  CHECK(h.liveKnob == 20);
+  CHECK(h.slots[0] == 10);
+  CHECK(h.slots[1] == 20);
+}
+
 TEST_CASE("F-08 stale Oktaverb request is dropped outside Oktaverb")
 {
   OktaverbSnapshotHarness h;
@@ -1294,7 +1321,10 @@ TEST_CASE("F-08 idle and serialization consume pending mode changes before savin
   CHECK(serializeApply < serializeSave);
 
   RequireContains(apply, "volum::ApplyPendingModeSnapshotChange(");
+  RequireContains(apply, "volum::ApplyPendingNestedModeSnapshotChange(");
+  RequireContains(apply, "volum::OktaverbPendingModeAction(");
   RequireContains(settings, "volum::SaveTrackedModeSnapshot(");
+  RequireContains(settings, "s.subMode = GetParam(kReverbSubMode)->Int();");
 }
 
 TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")

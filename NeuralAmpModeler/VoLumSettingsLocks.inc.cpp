@@ -379,8 +379,10 @@ void NeuralAmpModeler::_VolumSaveReverbModeSnapshot(int mode)
   s.shimmer = GetParam(kReverbShimmer)->Value();
   if (mode == volum::kVoLumReverbModeOktaverb)
     volum::SaveTrackedModeSnapshot(
-      GetParam(kReverbSubMode)->Int(), 3, s.subMode,
+      3, s.subMode,
       [this](int rememberedSubMode) { _VolumSaveOktaverbSubModeSnapshot(rememberedSubMode); });
+  else
+    s.subMode = GetParam(kReverbSubMode)->Int();
 }
 
 void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode, bool notifyUi)

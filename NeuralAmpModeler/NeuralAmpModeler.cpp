@@ -1594,6 +1594,7 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
       std::forward<decltype(saveOutgoing)>(saveOutgoing), std::forward<decltype(restoreIncoming)>(restoreIncoming));
     if (result == volum::PendingModeResult::Retry)
       mVolumPendingModeChanges.Request(target);
+    return result;
   };
 
   apply(
@@ -1613,15 +1614,19 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
     [this](int mode) { _VolumRestoreReverbModeSnapshot(mode); });
 
   auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
-  const auto oktaverbAction =
-    currentReverbMode != volum::kVoLumReverbModeOktaverb
-      ? volum::PendingModeAction::Drop
-      : (mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
-                                                                     : volum::PendingModeAction::Apply);
-  apply(
-    volum::ModeSnapshotTarget::Oktaverb, currentOktaverbMode, 3, oktaverbAction,
-    oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
-    [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode); });
+  const auto oktaverbAction = volum::OktaverbPendingModeAction(
+    currentReverbMode == volum::kVoLumReverbModeOktaverb,
+    mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress);
+  const auto oktaverbResult = volum::ApplyPendingNestedModeSnapshotChange(
+    (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentOktaverbMode, 3,
+    oktaverbAction, oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode); },
+    [this](int mode) {
+      GetParam(kReverbSubMode)->Set(static_cast<double>(mode));
+      SendParameterValueFromDelegate(kReverbSubMode, GetParam(kReverbSubMode)->GetNormalized(), true);
+    });
+  if (oktaverbResult == volum::PendingModeResult::Retry)
+    mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
   apply(
     volum::ModeSnapshotTarget::Tremolo, currentTremoloMode, volum::kVoLumTremoloModeCount,
     mVolumTremoloRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
