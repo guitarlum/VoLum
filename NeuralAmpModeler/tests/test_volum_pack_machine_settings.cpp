@@ -344,8 +344,15 @@ TEST_CASE("The plugin restores machine settings in the order the F-88 test drive
   CHECK(pick.find("mVolumOpenedPackDualAmp.Open(pack.settingsJson);") != std::string::npos);
 
   const std::string importBody = FunctionBody(actions, "std::string NeuralAmpModeler::_VolumImportPack(");
-  CHECK(importBody.find("volum::pack::ApplyPack(") < importBody.find("mVolumOpenedPackDualAmp.For("));
-  const auto sidecar = importBody.find("mVolumOpenedPackDualAmp.For(pack.settingsJson, dualAmpSidecar)");
+  // F-102: the sidecar goes into ApplyPack, which stages it before the library commit.
+  // Writing it afterwards left the library new and the sidecar the old rig's.
+  const auto sidecar = importBody.find("mVolumOpenedPackDualAmp.For(pack.settingsJson, packDualAmp.document)");
+  const auto applyCall = importBody.find("volum::pack::ApplyPack(");
+  REQUIRE(sidecar != std::string::npos);
+  REQUIRE(applyCall != std::string::npos);
+  CHECK(sidecar < applyCall);
+  CHECK(importBody.find("dualAmpSidecar);", applyCall) < importBody.find("if (result.libraryCommitted)"));
+  CHECK(importBody.find("WriteJsonAtomically") == std::string::npos);
   const auto hold = importBody.find("volum::LiveSceneGate::Hold restoring(mVolumLiveSceneGate);");
   const auto load = importBody.find("_VolumLoadSettingsFromFile();");
   const auto apply = importBody.find("_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
@@ -358,9 +365,6 @@ TEST_CASE("The plugin restores machine settings in the order the F-88 test drive
   REQUIRE(locksApplied != std::string::npos);
   REQUIRE(session != std::string::npos);
   CHECK(sidecar < hold);
-  // A sidecar that cannot be written fails the import before the restore runs.
-  const auto sidecarFailed = importBody.find("return \"The library was imported, but the machine settings", sidecar);
-  CHECK(sidecarFailed < hold);
   CHECK(hold < load);
   CHECK(load < apply);
   CHECK(apply < locksApplied);

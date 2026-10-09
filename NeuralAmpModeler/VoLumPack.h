@@ -492,6 +492,13 @@ struct PackContents
   std::map<std::string, std::string> files; // registry-relative path -> bytes
   std::string settingsJson; // "" when the Pack carries none
   bool includesMidiSoundMap = false;
+  // Set by SubsetPack when only some of an Everything Pack's items were ticked.
+  // The PLAY board in `library.midiSoundMap` is then the sender's whole board, and
+  // ApplyPack may only take the switches that belong to the ticked items.
+  bool midiSlotsPartial = false;
+  // Library entries dropped on open because their capture file is not in the Pack,
+  // worded for a row in the import preview.
+  std::vector<std::string> skipped;
 
   explicit operator bool() const { return ok; }
 };
@@ -509,6 +516,131 @@ inline std::string UserFacingPackArchiveError(const std::string& archiveError, b
     return "This Pack is damaged.";
   return "This is not a VoLum Pack.";
 }
+
+namespace detail
+{
+// The manifest's file list is checked above, but the library names its own capture
+// files, and nothing ties the two together: an entry whose capture the Pack does
+// not carry would import as an amp or IR with nothing behind it, or quietly point
+// at whatever local file happens to share that path. Such an entry is skipped and
+// reported, and everything in the Pack that pointed at it is neutralised the way
+// deleting the item does (RemoveCustomAmp / RemoveIR / RemovePedal): an amp takes
+// its preset bank with it and is dropped as a SUPPORT partner, an IR is cleared
+// from the presets that used it, a pedal's PRE slots go back to EMPTY - by capture
+// index, so the Pack's number can never land on a different local pedal - and PLAY
+// switches on a skipped amp are not imported. What was neutralised is listed on
+// the entry's own "Skip" line.
+inline std::string PlaySlotLabel(int slot)
+{
+  return (slot >= 0 && slot < 10 ? "0" : "") + std::to_string(slot);
+}
+
+inline std::string NeutralisedSuffix(size_t presets, const char* what, const std::vector<int>& slots)
+{
+  std::string s;
+  if (presets > 0)
+    s += std::string(what) + " in " + std::to_string(presets) + (presets == 1 ? " preset" : " presets");
+  if (!slots.empty())
+  {
+    if (!s.empty())
+      s += "; ";
+    s += std::string(slots.size() == 1 ? "PLAY switch " : "PLAY switches ");
+    for (size_t i = 0; i < slots.size(); ++i)
+      s += (i ? ", " : "") + PlaySlotLabel(slots[i]);
+    s += " not imported";
+  }
+  return s.empty() ? s : " (" + s + ")";
+}
+
+inline void DropEntriesWithoutPayload(PackContents& pack)
+{
+  auto& r = pack.library;
+  auto carried = [&pack](const std::string& rel) { return !rel.empty() && pack.files.count(rel) > 0; };
+  constexpr const char* kWhy = " - its file is not in the Pack";
+
+  for (auto it = r.amps.begin(); it != r.amps.end();)
+  {
+    bool missing = false;
+    for (const auto& f : it->files)
+      if (custom::FileAssigned(f) && !carried(f.storedPath))
+        missing = true;
+    if (!missing)
+    {
+      ++it;
+      continue;
+    }
+    const std::string id = it->id;
+    const std::string name = it->name;
+    r.presetBanks.erase(id);
+    size_t presets = 0;
+    for (auto& bank : r.presetBanks)
+      for (auto& pr : bank.second)
+        if (content::DropSupportPartner(pr.settings, id))
+          ++presets;
+    std::vector<int> slots;
+    for (auto slot = r.midiSoundMap.begin(); slot != r.midiSoundMap.end();)
+    {
+      if (slot->second.ampId == id)
+      {
+        slots.push_back(slot->first);
+        slot = r.midiSoundMap.erase(slot);
+      }
+      else
+        ++slot;
+    }
+    pack.skipped.push_back("Custom amp \"" + name + "\"" + kWhy
+                           + NeutralisedSuffix(presets, "SUPPORT switched off", slots));
+    it = r.amps.erase(it);
+  }
+  for (auto it = r.irs.begin(); it != r.irs.end();)
+  {
+    if (carried(it->file))
+    {
+      ++it;
+      continue;
+    }
+    size_t presets = 0;
+    for (auto& bank : r.presetBanks)
+      for (auto& pr : bank.second)
+      {
+        bool used = false;
+        for (std::string* ref : {&pr.settings.activeIrId, &pr.settings.supportActiveIrId})
+          if (*ref == it->id)
+          {
+            ref->clear();
+            used = true;
+          }
+        presets += used ? 1 : 0;
+      }
+    pack.skipped.push_back("IR \"" + it->name + "\"" + kWhy + NeutralisedSuffix(presets, "baked cab restored", {}));
+    it = r.irs.erase(it);
+  }
+  for (auto it = r.pedals.begin(); it != r.pedals.end();)
+  {
+    if (carried(it->file))
+    {
+      ++it;
+      continue;
+    }
+    size_t presets = 0;
+    if (it->legacyIndex > 0)
+      for (auto& bank : r.presetBanks)
+        for (auto& pr : bank.second)
+        {
+          bool used = false;
+          for (int* capture : {&pr.settings.preNam1Capture, &pr.settings.preNam2Capture})
+            if (*capture == it->legacyIndex)
+            {
+              *capture = 0;
+              used = true;
+            }
+          presets += used ? 1 : 0;
+        }
+    pack.skipped.push_back("Pedal \"" + it->name + "\"" + kWhy + NeutralisedSuffix(presets, "PRE slot emptied", {}));
+    it = r.pedals.erase(it);
+  }
+}
+} // namespace detail
 
 inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLikeZip = false)
 {
@@ -622,7 +754,6 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLik
         out.files[rel] = *data;
       }
     }
-
     // A Share Pack must not carry settings or a MIDI map even if something wrote
     // them: the job in the manifest is the contract with the user, so enforce it
     // here rather than trusting the payload.
@@ -639,6 +770,7 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLik
     {
       out.library.midiSoundMap.clear();
     }
+    detail::DropEntriesWithoutPayload(out); // after the board is settled: it prunes PLAY switches too
     out.library.legacyCustomScenes.clear(); // never travels: the rig belongs to the instance
   }
   catch (...)
@@ -880,6 +1012,9 @@ inline PackContents SubsetPack(const PackContents& full, const ImportTicks& tick
   for (auto f = out.files.begin(); f != out.files.end();)
     f = needed.count(f->first) ? std::next(f) : out.files.erase(f);
 
+  // The sender's PLAY board is not the ticked items' to replace: ApplyPack takes
+  // only the switches whose Sound is coming (see MergeSelectedMidiSlots).
+  out.midiSlotsPartial = full.includesMidiSoundMap && !ticks.AllSelected(full);
   return out;
 }
 
@@ -1087,6 +1222,13 @@ struct ImportResult
   explicit operator bool() const { return ok; }
 };
 
+// A second machine-settings document that has to land together with the library.
+struct MachineSidecar
+{
+  std::filesystem::path path;
+  nlohmann::json document;
+};
+
 // Failure injection for import transaction tests. Production callers leave this
 // null; tests use it to model a process dying after a live payload write.
 struct ImportTestHooks
@@ -1159,6 +1301,94 @@ inline bool ValidateMachineSettings(const std::string& text, std::string* saniti
   catch (...)
   {
     return false;
+  }
+}
+
+// Merge the Pack's pedals into `reg`. A PRE slot holds a capture *index*, and the
+// pool of custom indexes is 64..127, so an incoming pedal that needs a fresh index
+// when the pool is spent cannot be added: it is counted in the return value, never
+// given a slot past kCustomPedalIndexMax (a PRE capture param cannot hold one).
+// `remap` maps the Pack's index to the one the pedal ended up with.
+inline size_t MergePedals(content::Registry& reg, const content::Registry& incoming, bool packWins,
+                          std::vector<std::string>* replacedIds, std::map<int, int>& remap)
+{
+  size_t noRoom = 0;
+  // The Pack's counter is a hint, and only one inside the pool is taken: a spent or
+  // hand-built counter would otherwise park this library's at 128+ and refuse every
+  // pedal the user adds afterwards, for pedals that get a fresh index here anyway.
+  if (incoming.nextPedalIndex <= content::kCustomPedalIndexMax)
+    reg.nextPedalIndex = std::max(reg.nextPedalIndex, incoming.nextPedalIndex);
+  for (const auto& theirs : incoming.pedals)
+  {
+    content::PedalItem* mine = nullptr;
+    for (auto& p : reg.pedals)
+      if (p.id == theirs.id)
+      {
+        mine = &p;
+        break;
+      }
+    if (mine)
+    {
+      // Same pedal, already here. Its local index is what local presets and scenes
+      // point at, so that index survives the replace whatever the Pack says.
+      const int keep = mine->legacyIndex;
+      if (packWins)
+      {
+        *mine = theirs;
+        mine->legacyIndex = keep;
+        if (replacedIds)
+          replacedIds->push_back(theirs.id);
+      }
+      if (theirs.legacyIndex != keep)
+        remap[theirs.legacyIndex] = keep;
+      continue;
+    }
+    bool taken = false;
+    for (const auto& p : reg.pedals)
+      if (p.legacyIndex == theirs.legacyIndex)
+        taken = true;
+    content::PedalItem added = theirs;
+    if (taken || added.legacyIndex < content::kCustomPedalIndexBase
+        || added.legacyIndex > content::kCustomPedalIndexMax)
+    {
+      added.legacyIndex = std::max(reg.nextPedalIndex, content::kCustomPedalIndexBase);
+      if (added.legacyIndex > content::kCustomPedalIndexMax)
+      {
+        ++noRoom;
+        continue;
+      }
+      remap[theirs.legacyIndex] = added.legacyIndex;
+    }
+    reg.nextPedalIndex = std::max(reg.nextPedalIndex, added.legacyIndex + 1);
+    reg.pedals.push_back(added);
+  }
+  return noRoom;
+}
+
+// A partial import's share of the sender's PLAY board: the switches whose Sound is
+// one of the items that came along (a preset of an incoming bank, or an amp-only
+// Sound on an incoming custom amp). Everything else on either board is left alone;
+// the Add verb keeps mine, so it only fills switches that are free here.
+inline void MergeSelectedMidiSlots(content::Registry& reg, const content::Registry& incoming, ImportVerb verb)
+{
+  for (const auto& slot : incoming.midiSoundMap)
+  {
+    const auto& sound = slot.second;
+    bool selected = false;
+    if (!sound.presetId.empty())
+    {
+      std::string owner;
+      size_t at = 0;
+      selected = FindPreset(incoming, sound.presetId, owner, at) && owner == sound.ampId;
+    }
+    else
+      selected = FindAmp(incoming, sound.ampId) != nullptr;
+    if (!selected)
+      continue;
+    if (verb == ImportVerb::Add)
+      reg.midiSoundMap.emplace(slot.first, sound);
+    else
+      reg.midiSoundMap[slot.first] = sound;
   }
 }
 
@@ -1392,9 +1622,16 @@ inline bool RecoverInterruptedImport(content::ContentStore& store, const std::fi
 // on the next attempt; after Save it distinguishes committed files by whether the
 // durable catalog references them. The library lock remains held through catalog
 // commit, backup promotion and stage cleanup.
+//
+// `dualAmpSidecar` is the Dual Amp half of the machine settings (its own file, so
+// older builds never see dual fields in the shared one). It is written to a
+// temporary beside its target before the library is touched, so a sidecar that
+// cannot be written fails the import with nothing changed; only the final rename
+// happens after the commit.
 inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& packContents, ImportVerb verb,
                               bool alsoSettings, bool standalone, const std::filesystem::path& settingsPath = {},
-                              int lockTimeoutMs = 4000, const ImportTestHooks* testHooks = nullptr)
+                              int lockTimeoutMs = 4000, const ImportTestHooks* testHooks = nullptr,
+                              const MachineSidecar* dualAmpSidecar = nullptr)
 {
   using namespace detail;
   ImportResult out;
@@ -1436,6 +1673,53 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   {
     out.error = "Could not recover the previous interrupted Pack import.";
     return out;
+  }
+
+  // Refuse before anything is staged: a pedal that cannot get one of the 64 custom
+  // slots would leave the Pack's presets pointing at somebody else's capture.
+  {
+    content::Registry scratch;
+    scratch.pedals = store.reg().pedals;
+    scratch.nextPedalIndex = store.reg().nextPedalIndex;
+    std::map<int, int> unused;
+    const size_t noRoom = MergePedals(scratch, packContents.library, verb != ImportVerb::Add, nullptr, unused);
+    if (noRoom > 0)
+    {
+      out.error = "This Pack needs " + std::to_string(noRoom)
+                  + (noRoom == 1 ? " more custom pedal" : " more custom pedals")
+                  + " than your library has room for (the limit is "
+                  + std::to_string(content::kCustomPedalIndexMax - content::kCustomPedalIndexBase + 1)
+                  + "). Nothing was imported.";
+      return out;
+    }
+  }
+
+  // Stage the Dual Amp sidecar while nothing has changed yet. Whatever happens to
+  // the library from here on, this file is either renamed into place or removed.
+  struct TempFileGuard
+  {
+    std::filesystem::path path;
+    ~TempFileGuard()
+    {
+      std::error_code removeEc;
+      if (!path.empty())
+        std::filesystem::remove(path, removeEc);
+    }
+  } sidecarTmp;
+  const bool writeSidecar =
+    applySettings && !packContents.settingsJson.empty() && dualAmpSidecar && !dualAmpSidecar->path.empty();
+  if (writeSidecar)
+  {
+    std::filesystem::create_directories(dualAmpSidecar->path.parent_path(), ec);
+    ec.clear();
+    const auto tmp = volum::MakeAtomicJsonTempPath(dualAmpSidecar->path);
+    if (!WriteWholeFile(tmp, dualAmpSidecar->document.dump(2)))
+    {
+      std::filesystem::remove(tmp, ec);
+      out.error = "The machine settings could not be written - the import was not applied.";
+      return out;
+    }
+    sidecarTmp.path = tmp;
   }
 
   std::filesystem::create_directories(stageRoot, ec);
@@ -1656,45 +1940,8 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   // on import, and the loser's presets would silently play the winner's pedal, so
   // an incoming pedal may have to be renumbered and the Pack's own presets remapped
   // to follow it.
-  reg.nextPedalIndex = std::max(reg.nextPedalIndex, incoming.nextPedalIndex);
   std::map<int, int> pedalIndexRemap;
-  for (const auto& theirs : incoming.pedals)
-  {
-    content::PedalItem* mine = nullptr;
-    for (auto& p : reg.pedals)
-      if (p.id == theirs.id)
-      {
-        mine = &p;
-        break;
-      }
-    if (mine)
-    {
-      // Same pedal, already here. Its local index is what local presets and scenes
-      // point at, so that index survives the replace whatever the Pack says.
-      const int keep = mine->legacyIndex;
-      if (packWins)
-      {
-        *mine = theirs;
-        mine->legacyIndex = keep;
-        out.replacedIds.push_back(theirs.id);
-      }
-      if (theirs.legacyIndex != keep)
-        pedalIndexRemap[theirs.legacyIndex] = keep;
-      continue;
-    }
-    bool taken = false;
-    for (const auto& p : reg.pedals)
-      if (p.legacyIndex == theirs.legacyIndex)
-        taken = true;
-    content::PedalItem added = theirs;
-    if (taken || added.legacyIndex < content::kCustomPedalIndexBase)
-    {
-      added.legacyIndex = std::max(reg.nextPedalIndex, content::kCustomPedalIndexBase);
-      pedalIndexRemap[theirs.legacyIndex] = added.legacyIndex;
-    }
-    reg.nextPedalIndex = std::max(reg.nextPedalIndex, added.legacyIndex + 1);
-    reg.pedals.push_back(added);
-  }
+  MergePedals(reg, incoming, packWins, &out.replacedIds, pedalIndexRemap);
 
   auto remapPedals = [&pedalIndexRemap](VoLumAmpSettings& s) {
     for (int* capture : {&s.preNam1Capture, &s.preNam2Capture})
@@ -1769,7 +2016,16 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   // 6. MIDI map is library content (plugin + standalone). Machine settings file
   // stays standalone-only.
   if (packContents.includesMidiSoundMap && (alsoSettings || !standalone))
-    reg.midiSoundMap = incoming.midiSoundMap;
+  {
+    // Ticking "Also restore machine settings" is an explicit ask for the sender's
+    // whole board. Without it (always, in a plugin) a partial import must not wipe
+    // switches that have nothing to do with the items it brings.
+    const bool wholeBoard = standalone && alsoSettings;
+    if (packContents.midiSlotsPartial && !wholeBoard)
+      MergeSelectedMidiSlots(reg, incoming, verb);
+    else
+      reg.midiSoundMap = incoming.midiSoundMap;
+  }
 
   // Commit while the same cross-process lock still protects the published files,
   // the durable registry and this transaction's stage directory.
@@ -1809,17 +2065,53 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       store.RemoveStoredFile(rel);
   removeStage();
 
+  // The settings file and the Dual Amp sidecar are one machine-settings restore,
+  // but two renames cannot be one atomic step. Both happen under the
+  // machine-settings lock, the settings file first, so a plugin's single-key merge
+  // cannot land its older read on top of either. The sidecar was staged before the
+  // library commit (sidecarTmp); if its rename is what fails, the previous settings
+  // file is put back (best effort, still under the lock) so the pair is not left
+  // half old, half new.
+  const auto replaceSidecar = [&]() {
+    std::error_code sidecarEc;
+    return volum::ReplaceFileAtomically(sidecarTmp.path, dualAmpSidecar->path, sidecarEc);
+  };
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
-    // Under the machine-settings lock, so a plugin's single-key merge cannot land
-    // its older read of the file on top of the restored one.
     std::error_code settingsEc;
     const auto settingsTmp = volum::MakeAtomicJsonTempPath(settingsPath);
+    auto settingsPrev = settingsPath;
+    settingsPrev += ".pre-import";
     if (!WithMachineSettingsLock(
           settingsPath,
           [&]() {
-            return WriteWholeFile(settingsTmp, sanitizedSettings)
-                   && volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc);
+            std::error_code fsEc;
+            const bool hadPrev = std::filesystem::exists(settingsPath, fsEc);
+            if (writeSidecar && hadPrev)
+            {
+              std::filesystem::copy_file(
+                settingsPath, settingsPrev, std::filesystem::copy_options::overwrite_existing, fsEc);
+              if (fsEc)
+                return false; // cannot promise a way back, so do not start
+            }
+            const bool settingsOk = WriteWholeFile(settingsTmp, sanitizedSettings)
+                                    && volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc);
+            if (!settingsOk)
+            {
+              std::filesystem::remove(settingsPrev, fsEc);
+              return false;
+            }
+            if (writeSidecar && !replaceSidecar())
+            {
+              if (hadPrev)
+                volum::ReplaceFileAtomically(settingsPrev, settingsPath, fsEc);
+              else
+                std::filesystem::remove(settingsPath, fsEc);
+              std::filesystem::remove(settingsPrev, fsEc);
+              return false;
+            }
+            std::filesystem::remove(settingsPrev, fsEc);
+            return true;
           },
           settingsEc))
     {
@@ -1830,7 +2122,12 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       return out;
     }
   }
-
+  else if (writeSidecar && !replaceSidecar())
+  {
+    // No settings file to lock (a path-less caller): the sidecar is all there is.
+    out.error = "The library was imported, but the machine settings could not be written.";
+    return out;
+  }
   out.ok = true;
   return out;
 }

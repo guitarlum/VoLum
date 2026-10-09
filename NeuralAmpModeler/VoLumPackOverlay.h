@@ -734,8 +734,16 @@ private:
       mImportRows.push_back({false, volum::pack::ItemKind::Amp, "", false, false, "Restore",
                              "machine settings and MIDI slots", VoLumColors::AMBER});
     else if (preview.replacesMidiSoundMap)
-      mImportRows.push_back(
-        {false, volum::pack::ItemKind::Amp, "", false, false, "Replace", "MIDI slots", VoLumColors::AMBER});
+    {
+      // A partial import only brings the switches of the Sounds it ticks (ApplyPack).
+      const bool partial = !mUserTicks.AllSelected(mPack);
+      mImportRows.push_back({false, volum::pack::ItemKind::Amp, "", false, false, "Replace",
+                             partial ? "MIDI slots of the ticked Sounds" : "MIDI slots", VoLumColors::AMBER});
+    }
+    // Entries the Pack names but does not carry the files for are not importable at
+    // all, so they have no tick; say so instead of letting them vanish.
+    for (const auto& s : mPack.skipped)
+      mImportRows.push_back({false, volum::pack::ItemKind::Amp, "", false, false, "Skip", s, VoLumColors::DANGER});
     if (mImportRows.empty())
       mImportRows.push_back({false, volum::pack::ItemKind::Amp, "", false, false, "",
                              "This Pack carries nothing this build understands.", VoLumColors::TEXT_DIM});

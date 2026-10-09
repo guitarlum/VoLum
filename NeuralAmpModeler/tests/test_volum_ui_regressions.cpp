@@ -3332,15 +3332,48 @@ TEST_CASE("tier2c a plugin import preview names the MIDI map replace")
   const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackOverlay.h");
   const auto start = overlay.find("if (preview.writesSettings)");
   REQUIRE(start != std::string::npos);
-  const std::string body = overlay.substr(start, 500);
+  const std::string body = overlay.substr(start, 900);
   RequireContains(body, "preview.replacesMidiSoundMap");
   RequireContains(body, "\"MIDI slots\"");
 }
 
+TEST_CASE("F-89 a committed Pack import rebuilds the sidebar's custom-amp rows and the hero")
+{
+  // The sidebar list and the hero keep their own copy of each custom amp's name and
+  // art. An import that replaces an amp under the same id changes neither the id nor
+  // the row index, so nothing else rebuilds them: the old name and art stayed.
+  const std::string actions = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+  const auto start = actions.find("volum::pack::ApplyPack(store, pack, verb");
+  REQUIRE(start != std::string::npos);
+  const auto end = actions.find("return {};", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = actions.substr(start, end - start);
+  const auto committed = body.find("if (result.libraryCommitted)");
+  const auto failed = body.find("if (!result.ok)");
+  REQUIRE(committed != std::string::npos);
+  CHECK(committed < failed);
+  RequireContains(body.substr(committed, failed - committed), "_VolumRefreshCustomAmpSidebar();");
+
+  const auto helper = actions.find("void NeuralAmpModeler::_VolumRefreshCustomAmpSidebar()");
+  REQUIRE(helper != std::string::npos);
+  const std::string helperBody = actions.substr(helper, 1800);
+  RequireContains(helperBody, "SetCustomAmps(names, volum::custom::MockCustomAmpArts())");
+  RequireContains(helperBody, "SetCustomArt(true, volum::custom::CustomAmpArt(main))");
+  RequireContains(helperBody, "hero->SetName(");
+}
+TEST_CASE("F-31 applying a scene heals a custom SUPPORT partner that is gone before the Dual params are set")
+{
+  const std::string scene = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsScene.inc.cpp");
+  const auto heal = scene.find("volum::content::DropSupportPartner(s, orphan);");
+  const auto dualParam = scene.find("setParam(kDualAmpActive, s.dualAmpActive ? 1.0 : 0.0);");
+  REQUIRE(heal != std::string::npos);
+  REQUIRE(dualParam != std::string::npos);
+  CHECK(heal < dualParam);
+}
 TEST_CASE("tier2c a committed library reloads when the settings write fails")
 {
   const std::string actions = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
-  const auto start = actions.find("const auto result = volum::pack::ApplyPack(");
+  const auto start = actions.find("volum::pack::ApplyPack(store, pack, verb");
   REQUIRE(start != std::string::npos);
   const auto end = actions.find("return {};", start);
   REQUIRE(end != std::string::npos);

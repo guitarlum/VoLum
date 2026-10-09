@@ -303,9 +303,31 @@ TEST_CASE("F-12: every volum-settings.json writer goes through the locked merge"
   REQUIRE(restore != std::string::npos);
   const auto lock = pack.rfind("WithMachineSettingsLock(", restore);
   REQUIRE(lock != std::string::npos);
-  CHECK(restore - lock < 200);
+  CHECK(restore - lock < 1200); // the lambda opens with the F-102 settings backup
 }
 
+TEST_CASE("F-102 Pack import renames the Dual Amp sidecar under the machine-settings lock")
+{
+  // The sidecar is half of one machine-settings restore. It is staged before the
+  // library commit, but its rename belongs inside the same locked region as the
+  // settings file's, and there is no other write of it in ApplyPack.
+  const std::string pack = ReadSourceText("VoLumPack.h");
+  const auto restore = pack.find("WriteWholeFile(settingsTmp, sanitizedSettings)");
+  REQUIRE(restore != std::string::npos);
+  const auto lock = pack.rfind("WithMachineSettingsLock(", restore);
+  REQUIRE(lock != std::string::npos);
+  const auto lockEnd = pack.find("settingsEc))", restore);
+  REQUIRE(lockEnd != std::string::npos);
+  const std::string locked = pack.substr(lock, lockEnd - lock);
+  CHECK(locked.find("replaceSidecar()") != std::string::npos);
+  CHECK(locked.find("ReplaceFileAtomically(settingsTmp, settingsPath") < locked.find("replaceSidecar()"));
+  // The only other rename of the sidecar is the path-less fallback.
+  size_t renames = 0;
+  for (size_t at = pack.find("ReplaceFileAtomically(sidecarTmp.path"); at != std::string::npos;
+       at = pack.find("ReplaceFileAtomically(sidecarTmp.path", at + 1))
+    ++renames;
+  CHECK(renames == 1);
+}
 TEST_CASE("ReplaceFileAtomically refuses POSIX rename over a write-bit-clear file")
 {
   const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsFileIO.h";
