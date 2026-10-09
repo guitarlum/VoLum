@@ -104,6 +104,15 @@ TEST_CASE("F-02 WinMM MIDI identity survives port renumbering")
   CHECK(init.find("_this->ProbeMidiIO();") < init.find("_this->PopulatePreferencesDialog(hwndDlg);"));
   CHECK(dialog.find("SelectMIDIDevice(ERoute::kInput, mState.mMidiInDev.Get(), true)") != std::string::npos);
   CHECK(dialog.find("SelectMIDIDevice(ERoute::kOutput, mState.mMidiOutDev.Get(), true)") != std::string::npos);
+  const auto inputPick = Between(dialog, "case IDC_COMBO_MIDI_IN_DEV:", "case IDC_COMBO_MIDI_OUT_DEV:");
+  REQUIRE(inputPick.find("mState.mMidiInDevNameIsStable = true") != std::string::npos);
+  CHECK(inputPick.find("getComboString(mState.mMidiInDev") < inputPick.find("mState.mMidiInDevNameIsStable = true"));
+  CHECK(inputPick.find("mState.mMidiInDevNameIsStable = true") < inputPick.find("SelectMIDIDevice(ERoute::kInput"));
+  const auto outputPick = Between(dialog, "case IDC_COMBO_MIDI_OUT_DEV:", "case IDC_COMBO_MIDI_IN_CHAN:");
+  REQUIRE(outputPick.find("mState.mMidiOutDevNameIsStable = true") != std::string::npos);
+  CHECK(outputPick.find("getComboString(mState.mMidiOutDev")
+        < outputPick.find("mState.mMidiOutDevNameIsStable = true"));
+  CHECK(outputPick.find("mState.mMidiOutDevNameIsStable = true") < outputPick.find("SelectMIDIDevice(ERoute::kOutput"));
 }
 
 TEST_CASE("F-03 dialog Cancel restores MIDI without restarting unchanged audio")
