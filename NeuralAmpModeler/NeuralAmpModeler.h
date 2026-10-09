@@ -50,6 +50,7 @@
 #include "VoLumLatencyRequests.h"
 #include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
+#include "VoLumHostKnobMarks.h"
 #include "VoLumModeTransition.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
@@ -187,7 +188,6 @@ public:
   void OnParamChange(int paramIdx) override;
   void OnParamChange(int paramIdx, iplug::EParamSource source, int sampleOffset = -1) override;
   void OnParamChangeUI(int paramIdx, iplug::EParamSource source) override;
-  void OnParamReset(iplug::EParamSource source) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
   // Shared headless Sound recall used by MIDI and PLAY. Returns false without
@@ -309,8 +309,6 @@ public:
   void _VolumRestorePrePitchModeSnapshot(int mode, bool notifyUi = true);
   void _VolumQueueModeParamChange(int paramIdx, iplug::EParamSource source);
   void _VolumApplyPendingModeChanges();
-  // Initialize/reset: keep the host-set knobs and adopt the host-set modes.
-  void _VolumAdoptPendingModeChanges();
   void _VolumApplyPendingDualAmpChange();
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
@@ -703,6 +701,12 @@ private:
   // OnParamChange can run on the audio thread. It publishes only the requested
   // mode here; OnIdle / SerializeState perform the snapshot transaction.
   volum::PendingModeSnapshotChanges mVolumPendingModeChanges;
+  // Knobs the host wrote since the last mode transaction (audio thread marks, main thread takes).
+  // A transaction keeps them over the incoming mode's remembered values.
+  volum::HostKnobMarks mVolumHostKnobMarks;
+  // Main thread only: the marks of the transaction in progress.
+  std::uint32_t mVolumKeptKnobs = 0;
+  bool _VolumKnobKept(int paramIdx) const { return (mVolumKeptKnobs & volum::HostKnobBit(paramIdx)) != 0; }
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
   // Set by OnUIOpen / cleared by OnUIClose; gates the meter work in ProcessBlock.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <utility>
 
 namespace volum
@@ -119,26 +120,29 @@ PendingModeResult ApplyPendingModeSnapshotChange(bool hasRequest, int currentPar
            : PendingModeResult::Unchanged;
 }
 
-// Initialize/reset path: the host has just set every parameter (an AU validator
-// sets each one on the uninitialized unit and reads it back after Initialize), so
-// the live knobs are the truth. A pending request adopts the current mode by saving
-// those live knobs as that mode's snapshot, then re-applies the snapshot only to
-// refresh per-mode defaults; no parameter value changes. Returns NoRequest when no
-// request is pending.
-template <typename SaveLive, typename ReapplyDefaults>
-PendingModeResult AdoptPendingModeSnapshotChange(bool hasRequest, int currentParamMode, int modeCount,
-                                                 int& rememberedMode, SaveLive&& saveLive,
-                                                 ReapplyDefaults&& reapplyDefaults)
+// Same transaction as ApplyPendingModeSnapshotChange, for a host that also wrote some
+// of the mode's knobs in the same window (hostKnobs, see VoLumHostKnobMarks.h): those
+// knobs are the host's explicit values. The outgoing snapshot does not take them (they
+// were never the outgoing mode's), the incoming recall leaves them alone, and the
+// incoming mode's snapshot then adopts them. Every other knob follows the usual
+// save-outgoing / recall-incoming rule, so a reset with no knob writes recalls the
+// incoming mode's own knobs.
+// saveOutgoing(mode, hostKnobs), restoreIncoming(mode, hostKnobs), saveIncoming(mode).
+template <typename SaveOutgoing, typename RestoreIncoming, typename SaveIncoming>
+PendingModeResult ApplyPendingModeSnapshotChangeKeepingHostKnobs(bool hasRequest, int currentParamMode, int modeCount,
+                                                                 PendingModeAction action, int& rememberedMode,
+                                                                 std::uint32_t hostKnobs, SaveOutgoing&& saveOutgoing,
+                                                                 RestoreIncoming&& restoreIncoming,
+                                                                 SaveIncoming&& saveIncoming)
 {
-  if (!hasRequest || modeCount <= 0)
-    return PendingModeResult::NoRequest;
-  const int mode = std::clamp(currentParamMode, 0, modeCount - 1);
-  rememberedMode = mode;
-  saveLive(mode);
-  reapplyDefaults(mode);
-  return PendingModeResult::Applied;
+  return ApplyPendingModeSnapshotChange(
+    hasRequest, currentParamMode, modeCount, action, rememberedMode, [&](int mode) { saveOutgoing(mode, hostKnobs); },
+    [&](int mode) {
+      restoreIncoming(mode, hostKnobs);
+      if (hostKnobs != 0)
+        saveIncoming(mode);
+    });
 }
-
 // A parent Reverb-mode restore can rewrite the visible sub-mode parameter before
 // this nested transition runs. Reassert the applied sub-mode after restoring its
 // knobs so parameter, editor and remembered snapshot cannot disagree.

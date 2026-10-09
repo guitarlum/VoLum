@@ -1581,6 +1581,9 @@ void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource sou
 void NeuralAmpModeler::_VolumApplyPendingModeChanges()
 {
   const unsigned pending = mVolumPendingModeChanges.Take();
+  // The knobs the host wrote since the last transaction. They are consumed with the
+  // window: a write that no mode change followed does not carry into a later one.
+  const std::uint32_t hostKnobs = mVolumHostKnobMarks.Take();
   // Sample all current values before any restore below can change another mode
   // parameter (notably Reverb mode restore also restores its Oktaverb sub-mode).
   const int currentPitchMode = GetParam(kPrePitchMode)->Int();
@@ -1590,116 +1593,120 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
   const int currentTremoloMode = GetParam(kTremoloMode)->Int();
   const int currentChorusMode = GetParam(kChorusMode)->Int();
 
-  auto apply = [this, pending](volum::ModeSnapshotTarget target, int currentMode, int modeCount,
-                               volum::PendingModeAction action, int& trackedMode, auto&& saveOutgoing,
-                               auto&& restoreIncoming) {
-    const auto result = volum::ApplyPendingModeSnapshotChange(
-      (pending & volum::ModeSnapshotBit(target)) != 0, currentMode, modeCount, action, trackedMode,
-      std::forward<decltype(saveOutgoing)>(saveOutgoing), std::forward<decltype(restoreIncoming)>(restoreIncoming));
+  // Knob groups per target (same bits HostKnobBit assigns).
+  auto knobsOf = [hostKnobs](std::initializer_list<int> params) {
+    std::uint32_t mask = 0;
+    for (const int idx : params)
+      mask |= hostKnobs & volum::HostKnobBit(idx);
+    return mask;
+  };
+  struct KeptScope
+  {
+    std::uint32_t& slot;
+    std::uint32_t prev;
+    KeptScope(std::uint32_t& s, std::uint32_t kept)
+    : slot(s)
+    , prev(s)
+    {
+      slot = kept;
+    }
+    ~KeptScope() { slot = prev; }
+  };
+  // The snapshot of the incoming mode adopts the kept knobs, so that save runs with
+  // nothing excluded.
+  auto saveIncoming = [this](auto&& save, int mode) {
+    const std::uint32_t kept = mVolumKeptKnobs;
+    mVolumKeptKnobs = 0;
+    save(mode);
+    mVolumKeptKnobs = kept;
+  };
+  bool anyRetry = false;
+  auto apply = [&](volum::ModeSnapshotTarget target, int currentMode, int modeCount, volum::PendingModeAction action,
+                   int& trackedMode, std::uint32_t kept, auto&& saveOutgoing, auto&& restoreIncoming) {
+    const KeptScope scope(mVolumKeptKnobs, kept);
+    const auto result = volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(
+      (pending & volum::ModeSnapshotBit(target)) != 0, currentMode, modeCount, action, trackedMode, kept,
+      [&](int mode, std::uint32_t) { saveOutgoing(mode); }, [&](int mode, std::uint32_t) { restoreIncoming(mode); },
+      [&](int mode) { saveIncoming(saveOutgoing, mode); });
     if (result == volum::PendingModeResult::Retry)
+    {
       mVolumPendingModeChanges.Request(target);
+      anyRetry = true;
+    }
     return result;
   };
 
   apply(
     volum::ModeSnapshotTarget::PrePitch, currentPitchMode, volum::kVoLumPitchModeCount,
     mVolumPreRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply, mVolumPrePitchMode,
+    knobsOf({kPrePitchMix, kPrePitchDry, kPrePitchLevel, kPrePitchVoicing}),
     [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
     [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode); });
   apply(
     volum::ModeSnapshotTarget::Delay, currentDelayMode, volum::kVoLumDelayModeCount,
     mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
-    mVolumEffectSettings.delayMode, [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
+    mVolumEffectSettings.delayMode,
+    knobsOf({kDelayTime, kDelayFeedback, kDelayMix, kDelayTone, kDelayAge, kDelayPingPong}),
+    [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreDelayModeSnapshot(mode); });
+  const std::uint32_t reverbKnobs = knobsOf({kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer});
+  auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
+  // Host moved to Oktaverb, to a new sub-mode and wrote its knobs in one window: those
+  // knobs belong to the new sub-mode, not to the sub-mode that was remembered.
+  if (reverbKnobs != 0 && currentReverbMode == volum::kVoLumReverbModeOktaverb
+      && (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)) != 0
+      && (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0)
+    oktaverbMode = std::clamp(currentOktaverbMode, 0, 2);
   apply(
     volum::ModeSnapshotTarget::Reverb, currentReverbMode, volum::kVoLumReverbModeCount,
     mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
-    mVolumEffectSettings.reverbMode, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
+    mVolumEffectSettings.reverbMode, reverbKnobs, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreReverbModeSnapshot(mode); });
 
-  auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
   const auto oktaverbAction = volum::OktaverbPendingModeAction(
     currentReverbMode == volum::kVoLumReverbModeOktaverb, mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress);
-  const auto oktaverbResult = volum::ApplyPendingNestedModeSnapshotChange(
-    (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentOktaverbMode, 3,
-    oktaverbAction, oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
-    [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode); },
-    [this](int mode) {
-      GetParam(kReverbSubMode)->Set(static_cast<double>(mode));
-      SendParameterValueFromDelegate(kReverbSubMode, GetParam(kReverbSubMode)->GetNormalized(), true);
-    });
-  if (oktaverbResult == volum::PendingModeResult::Retry)
-    mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
+  {
+    const KeptScope scope(mVolumKeptKnobs, reverbKnobs);
+    const auto oktaverbResult = volum::ApplyPendingNestedModeSnapshotChange(
+      (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentOktaverbMode, 3,
+      oktaverbAction, oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
+      [this, reverbKnobs](int mode) {
+        _VolumRestoreOktaverbSubModeSnapshot(mode);
+        if (reverbKnobs != 0)
+        {
+          mVolumKeptKnobs = 0;
+          _VolumSaveOktaverbSubModeSnapshot(mode);
+          mVolumKeptKnobs = reverbKnobs;
+        }
+      },
+      [this](int mode) {
+        GetParam(kReverbSubMode)->Set(static_cast<double>(mode));
+        SendParameterValueFromDelegate(kReverbSubMode, GetParam(kReverbSubMode)->GetNormalized(), true);
+      });
+    if (oktaverbResult == volum::PendingModeResult::Retry)
+    {
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
+      anyRetry = true;
+    }
+  }
   apply(
     volum::ModeSnapshotTarget::Tremolo, currentTremoloMode, volum::kVoLumTremoloModeCount,
     mVolumTremoloRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
                                                                   : volum::PendingModeAction::Apply,
-    mVolumEffectSettings.tremoloMode, [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
+    mVolumEffectSettings.tremoloMode,
+    knobsOf({kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover}),
+    [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode); });
   apply(
     volum::ModeSnapshotTarget::Chorus, currentChorusMode, volum::kVoLumChorusModeCount,
     mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
-    mVolumEffectSettings.chorusMode, [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
+    mVolumEffectSettings.chorusMode, knobsOf({kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix}),
+    [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreChorusModeSnapshot(mode); });
+  // A transaction that had to wait keeps its window: the host's knobs are still the host's.
+  if (anyRetry)
+    mVolumHostKnobMarks.Return(hostKnobs);
 }
-
-void NeuralAmpModeler::OnParamReset(EParamSource source)
-{
-  // AUv2 Initialize and the VST3/APP start-up reset arrive here after the host has set
-  // parameters. A host-set mode must not recall that mode's remembered knobs over the
-  // knob values the host set in the same session (auval reads them back).
-  if (source == EParamSource::kReset)
-    _VolumAdoptPendingModeChanges();
-  Plugin::OnParamReset(source);
-}
-
-void NeuralAmpModeler::_VolumAdoptPendingModeChanges()
-{
-  const unsigned pending = mVolumPendingModeChanges.Take();
-  if (pending == 0)
-    return;
-  const auto requested = [pending](volum::ModeSnapshotTarget target) {
-    return (pending & volum::ModeSnapshotBit(target)) != 0;
-  };
-  const int currentPitchMode = GetParam(kPrePitchMode)->Int();
-  const int currentDelayMode = GetParam(kDelayMode)->Int();
-  const int currentReverbMode = GetParam(kReverbMode)->Int();
-  const int currentOktaverbMode = GetParam(kReverbSubMode)->Int();
-  const int currentTremoloMode = GetParam(kTremoloMode)->Int();
-  const int currentChorusMode = GetParam(kChorusMode)->Int();
-
-  volum::AdoptPendingModeSnapshotChange(
-    requested(volum::ModeSnapshotTarget::PrePitch), currentPitchMode, volum::kVoLumPitchModeCount, mVolumPrePitchMode,
-    [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
-    [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode, false); });
-  volum::AdoptPendingModeSnapshotChange(
-    requested(volum::ModeSnapshotTarget::Delay), currentDelayMode, volum::kVoLumDelayModeCount,
-    mVolumEffectSettings.delayMode, [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
-    [this](int mode) { _VolumRestoreDelayModeSnapshot(mode, false); });
-  // The sub-mode is adopted first so the Reverb transition below saves the live knobs
-  // under the host's sub-mode and re-applies that same sub-mode.
-  if ((requested(volum::ModeSnapshotTarget::Oktaverb) || requested(volum::ModeSnapshotTarget::Reverb))
-      && currentReverbMode == volum::kVoLumReverbModeOktaverb)
-  {
-    volum::AdoptPendingModeSnapshotChange(
-      true, currentOktaverbMode, 3, mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode,
-      [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
-      [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode, false); });
-  }
-  volum::AdoptPendingModeSnapshotChange(
-    requested(volum::ModeSnapshotTarget::Reverb), currentReverbMode, volum::kVoLumReverbModeCount,
-    mVolumEffectSettings.reverbMode, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
-    [this](int mode) { _VolumRestoreReverbModeSnapshot(mode, false); });
-  volum::AdoptPendingModeSnapshotChange(
-    requested(volum::ModeSnapshotTarget::Tremolo), currentTremoloMode, volum::kVoLumTremoloModeCount,
-    mVolumEffectSettings.tremoloMode, [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
-    [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode, false); });
-  volum::AdoptPendingModeSnapshotChange(
-    requested(volum::ModeSnapshotTarget::Chorus), currentChorusMode, volum::kVoLumChorusModeCount,
-    mVolumEffectSettings.chorusMode, [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
-    [this](int mode) { _VolumRestoreChorusModeSnapshot(mode, false); });
-}
-
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
   OnParamChange(paramIdx, EParamSource::kUnknown);
@@ -1709,6 +1716,9 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
 {
   (void)sampleOffset;
   _VolumQueueModeParamChange(paramIdx, source);
+  // An explicit host write of a per-mode knob: a mode change in the same window keeps it.
+  if (mVolumInitComplete && source == EParamSource::kHost)
+    mVolumHostKnobMarks.Mark(paramIdx);
 
   // Host automation lands here on the audio thread: only ask, OnIdle reports.
   if (volum::ParamAffectsReportedLatency(paramIdx))
