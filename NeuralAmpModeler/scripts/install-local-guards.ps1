@@ -7,7 +7,9 @@ $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $here "..\..")).Path
 $srcDir = Join-Path $here "git-hooks"
-$dstDir = Join-Path $repoRoot ".git\hooks"
+# In a git worktree .git is a file; ask git where the shared hooks live.
+$dstDir = (& git -C $repoRoot rev-parse --path-format=absolute --git-path hooks 2>$null)
+if (-not $dstDir) { $dstDir = Join-Path $repoRoot ".git\hooks" }
 $denyFile = Join-Path $here "vendor-denylist.txt"
 
 if (-not (Test-Path -LiteralPath $srcDir)) {
