@@ -131,7 +131,7 @@ OSA
 dismiss_reaper_dialogs > "$EVIDENCE_DIR/reaper-dialog-dismiss.log" 2>&1 &
 dialog_pid=$!
 
-deadline=$((SECONDS + 120))
+deadline=$((SECONDS + 360))
 captured=0
 while [[ "$SECONDS" -lt "$deadline" && ! -f "$RESULTS" ]]; do
   if ! kill -0 "$reaper_pid" 2>/dev/null; then
@@ -139,7 +139,7 @@ while [[ "$SECONDS" -lt "$deadline" && ! -f "$RESULTS" ]]; do
     cat "$EVIDENCE_DIR/reaper-process.log" || true
     exit 1
   fi
-  if [[ "$captured" -eq 0 && "$SECONDS" -ge $((deadline - 100)) ]]; then
+  if [[ "$captured" -eq 0 && "$SECONDS" -ge $((deadline - 340)) ]]; then
     screencapture -x "$EVIDENCE_DIR/reaper-window.png" 2>/dev/null || true
     osascript -e 'tell application "System Events" to get name of every window of process "REAPER"' \
       > "$EVIDENCE_DIR/reaper-windows.log" 2>&1 || true

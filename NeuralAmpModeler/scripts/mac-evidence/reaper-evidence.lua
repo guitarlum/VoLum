@@ -181,7 +181,9 @@ local function add_fx(track, candidates, wanted)
 end
 
 local function test_format(spec)
-  reaper.Main_OnCommand(40023, 0)
+  for index = reaper.CountTracks(0) - 1, 0, -1 do
+    reaper.DeleteTrack(reaper.GetTrack(0, index))
+  end
   reaper.GetSetProjectInfo_String(0, "RECORD_PATH", dir, true)
   reaper.InsertTrackAtIndex(0, true)
   local track = assert(reaper.GetTrack(0, 0), "track creation failed")
@@ -244,6 +246,7 @@ local function test_format(spec)
     cc_status=cc_changed and "PASS" or "SKIP", cc_evidence=cc_why,
     roundtrip=roundtrip, reloaded_rms=reloaded.rms
   }
+  reaper.TrackFX_Show(track, 0, 0)
   L(spec.format .. " complete")
 end
 
