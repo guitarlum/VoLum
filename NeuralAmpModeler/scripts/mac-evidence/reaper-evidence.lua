@@ -10,7 +10,11 @@ sf:close()
 local log = assert(io.open(dir .. "/reaper-harness.log", "w"))
 local function L(s) log:write(tostring(s) .. "\n"); log:flush() end
 local function jstr(s)
-  return '"' .. tostring(s or ""):gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n") .. '"'
+  local escaped = tostring(s or ""):gsub("\\", "\\\\"):gsub('"', '\\"')
+  escaped = escaped:gsub("[%z\1-\31]", function(c)
+    return ("\\u%04x"):format(c:byte())
+  end)
+  return '"' .. escaped .. '"'
 end
 local function bool(v) return v and "true" or "false" end
 
@@ -40,7 +44,7 @@ local function emit(ok, err)
 end
 
 local SR = 48000
-local APPLY_FX_STEREO = 40361
+local APPLY_FX = 40209 -- Item: Apply track/take FX to items
 local DELETE_ACTIVE_TAKE = 40129
 
 local function spin(seconds)
@@ -54,9 +58,11 @@ local function render_stats(track, item, label)
   reaper.SelectAllMediaItems(0, false)
   reaper.SetMediaItemSelected(item, true)
   reaper.UpdateArrange()
-  reaper.Main_OnCommand(APPLY_FX_STEREO, 0)
+  reaper.Main_OnCommand(APPLY_FX, 0)
   local take = reaper.GetActiveTake(item)
   if not take then error("apply-FX produced no take for " .. label) end
+  local source = reaper.GetMediaItemTake_Source(take)
+  local source_file = reaper.GetMediaSourceFileName(source, "")
   local aa = reaper.CreateTakeAudioAccessor(take)
   local t0 = reaper.GetAudioAccessorStartTime(aa)
   local t1 = reaper.GetAudioAccessorEndTime(aa)
@@ -74,7 +80,8 @@ local function render_stats(track, item, label)
   reaper.DestroyAudioAccessor(aa)
   reaper.Main_OnCommand(DELETE_ACTIVE_TAKE, 0)
   local rms = math.sqrt(sumsq / (ns * 2))
-  L(("stats[%s] got=%s peak=%.8f rms=%.8f bad=%d"):format(label, tostring(got), peak, rms, bad))
+  L(("stats[%s] got=%s peak=%.8f rms=%.8f bad=%d src=%s")
+    :format(label, tostring(got), peak, rms, bad, tostring(source_file)))
   return {peak=peak, rms=rms, bad=bad}
 end
 
@@ -144,6 +151,14 @@ local function test_format(spec)
   local fx, fx_name = add_fx(track, spec.candidates, spec.wanted)
   reaper.TrackFX_Show(track, fx, 3)
   spin(3.0)
+
+  reaper.TrackFX_SetEnabled(track, fx, false)
+  local bypassed = render_stats(track, item, spec.format .. "-bypassed")
+  reaper.TrackFX_SetEnabled(track, fx, true)
+  if bypassed.bad ~= 0 or bypassed.rms <= 0.00001 then
+    error(spec.format .. " bypassed render is silent; host apply-FX mechanics did not preserve the input")
+  end
+
   render_stats(track, item, spec.format .. "-warmup")
   local initial = render_stats(track, item, spec.format .. "-default")
   if initial.bad ~= 0 or initial.rms <= 0.00001 or initial.peak >= 8.0 then
