@@ -1553,22 +1553,22 @@ void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource sou
   switch (paramIdx)
   {
     case kPrePitchMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::PrePitch, GetParam(kPrePitchMode)->Int());
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::PrePitch);
       break;
     case kDelayMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Delay, GetParam(kDelayMode)->Int());
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Delay);
       break;
     case kReverbMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Reverb, GetParam(kReverbMode)->Int());
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Reverb);
       break;
     case kReverbSubMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb, GetParam(kReverbSubMode)->Int());
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
       break;
     case kTremoloMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Tremolo, GetParam(kTremoloMode)->Int());
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Tremolo);
       break;
     case kChorusMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Chorus, GetParam(kChorusMode)->Int());
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Chorus);
       break;
     default: break;
   }
@@ -1576,49 +1576,62 @@ void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource sou
 
 void NeuralAmpModeler::_VolumApplyPendingModeChanges()
 {
-  const auto pending = mVolumPendingModeChanges.Take();
-  auto apply = [this, &pending](volum::ModeSnapshotTarget target, int modeCount, bool allowed, int& trackedMode,
-                                auto&& saveOutgoing, auto&& restoreIncoming) {
-    if (!pending.Has(target))
-      return;
-    const int requestedMode = pending.Requested(target);
-    if (!allowed)
-    {
-      mVolumPendingModeChanges.Request(target, requestedMode);
-      return;
-    }
-    volum::ApplyModeSnapshotTransition(
-      requestedMode, modeCount, true, trackedMode, std::forward<decltype(saveOutgoing)>(saveOutgoing),
-      std::forward<decltype(restoreIncoming)>(restoreIncoming));
+  const unsigned pending = mVolumPendingModeChanges.Take();
+  // Sample all current values before any restore below can change another mode
+  // parameter (notably Reverb mode restore also restores its Oktaverb sub-mode).
+  const int currentPitchMode = GetParam(kPrePitchMode)->Int();
+  const int currentDelayMode = GetParam(kDelayMode)->Int();
+  const int currentReverbMode = GetParam(kReverbMode)->Int();
+  const int currentOktaverbMode = GetParam(kReverbSubMode)->Int();
+  const int currentTremoloMode = GetParam(kTremoloMode)->Int();
+  const int currentChorusMode = GetParam(kChorusMode)->Int();
+
+  auto apply = [this, pending](volum::ModeSnapshotTarget target, int currentMode, int modeCount,
+                               volum::PendingModeAction action, int& trackedMode, auto&& saveOutgoing,
+                               auto&& restoreIncoming) {
+    const auto result = volum::ApplyPendingModeSnapshotChange(
+      (pending & volum::ModeSnapshotBit(target)) != 0, currentMode, modeCount, action, trackedMode,
+      std::forward<decltype(saveOutgoing)>(saveOutgoing), std::forward<decltype(restoreIncoming)>(restoreIncoming));
+    if (result == volum::PendingModeResult::Retry)
+      mVolumPendingModeChanges.Request(target);
   };
 
   apply(
-    volum::ModeSnapshotTarget::PrePitch, volum::kVoLumPitchModeCount, !mVolumPreRestoreInProgress,
+    volum::ModeSnapshotTarget::PrePitch, currentPitchMode, volum::kVoLumPitchModeCount,
+    mVolumPreRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
     mVolumPrePitchMode, [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
     [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode); });
   apply(
-    volum::ModeSnapshotTarget::Delay, volum::kVoLumDelayModeCount, !mVolumPostRestoreInProgress,
+    volum::ModeSnapshotTarget::Delay, currentDelayMode, volum::kVoLumDelayModeCount,
+    mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
     mVolumEffectSettings.delayMode, [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreDelayModeSnapshot(mode); });
   apply(
-    volum::ModeSnapshotTarget::Reverb, volum::kVoLumReverbModeCount, !mVolumPostRestoreInProgress,
+    volum::ModeSnapshotTarget::Reverb, currentReverbMode, volum::kVoLumReverbModeCount,
+    mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
     mVolumEffectSettings.reverbMode, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreReverbModeSnapshot(mode); });
 
   auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
+  const auto oktaverbAction =
+    currentReverbMode != volum::kVoLumReverbModeOktaverb
+      ? volum::PendingModeAction::Drop
+      : (mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
+                                                                     : volum::PendingModeAction::Apply);
   apply(
-    volum::ModeSnapshotTarget::Oktaverb, 3,
-    !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress
-      && mVolumEffectSettings.reverbMode == volum::kVoLumReverbModeOktaverb,
+    volum::ModeSnapshotTarget::Oktaverb, currentOktaverbMode, 3, oktaverbAction,
     oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode); });
   apply(
-    volum::ModeSnapshotTarget::Tremolo, volum::kVoLumTremoloModeCount,
-    !mVolumTremoloRestoreInProgress && !mVolumPostRestoreInProgress, mVolumEffectSettings.tremoloMode,
+    volum::ModeSnapshotTarget::Tremolo, currentTremoloMode, volum::kVoLumTremoloModeCount,
+    mVolumTremoloRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
+                                                                 : volum::PendingModeAction::Apply,
+    mVolumEffectSettings.tremoloMode,
     [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode); });
   apply(
-    volum::ModeSnapshotTarget::Chorus, volum::kVoLumChorusModeCount, !mVolumPostRestoreInProgress,
+    volum::ModeSnapshotTarget::Chorus, currentChorusMode, volum::kVoLumChorusModeCount,
+    mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
     mVolumEffectSettings.chorusMode, [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreChorusModeSnapshot(mode); });
 }

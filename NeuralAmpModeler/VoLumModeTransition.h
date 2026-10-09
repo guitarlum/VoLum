@@ -1,9 +1,8 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <cstddef>
+#include <utility>
 
 namespace volum
 {
@@ -23,43 +22,49 @@ constexpr unsigned ModeSnapshotBit(ModeSnapshotTarget target)
   return 1u << static_cast<unsigned>(target);
 }
 
-struct PendingModeSnapshotBatch
-{
-  unsigned mask = 0;
-  std::array<int, static_cast<std::size_t>(ModeSnapshotTarget::Count)> requestedModes{};
-
-  bool Has(ModeSnapshotTarget target) const { return (mask & ModeSnapshotBit(target)) != 0; }
-  int Requested(ModeSnapshotTarget target) const { return requestedModes[static_cast<std::size_t>(target)]; }
-};
-
 // Audio-thread producer / main-thread consumer handoff. A repeated UI click +
-// host echo can enqueue the same target twice; the tracked-mode comparison in
-// ApplyModeSnapshotTransition makes the second transaction a no-op.
+// host echo can set the same bit twice; the main thread reads the current param
+// value when it consumes the bit, so no mode value is shared across threads.
 class PendingModeSnapshotChanges
 {
 public:
-  void Request(ModeSnapshotTarget target, int requestedMode) noexcept
-  {
-    mRequestedModes[static_cast<std::size_t>(target)].store(requestedMode, std::memory_order_relaxed);
-    mMask.fetch_or(ModeSnapshotBit(target), std::memory_order_release);
-  }
+  void Request(ModeSnapshotTarget target) noexcept { mMask.fetch_or(ModeSnapshotBit(target), std::memory_order_release); }
 
-  PendingModeSnapshotBatch Take() noexcept
-  {
-    PendingModeSnapshotBatch batch;
-    batch.mask = mMask.exchange(0, std::memory_order_acquire);
-    for (std::size_t i = 0; i < batch.requestedModes.size(); ++i)
-      if (batch.mask & (1u << static_cast<unsigned>(i)))
-        batch.requestedModes[i] = mRequestedModes[i].load(std::memory_order_relaxed);
-    return batch;
-  }
+  unsigned Take() noexcept { return mMask.exchange(0, std::memory_order_acquire); }
 
   void Discard(unsigned mask) noexcept { mMask.fetch_and(~mask, std::memory_order_acq_rel); }
 
 private:
   std::atomic<unsigned> mMask{0};
-  std::array<std::atomic<int>, static_cast<std::size_t>(ModeSnapshotTarget::Count)> mRequestedModes{};
 };
+
+enum class PendingModeAction
+{
+  Apply,
+  Retry,
+  Drop
+};
+
+enum class PendingModeResult
+{
+  NoRequest,
+  Applied,
+  Unchanged,
+  Retry,
+  Dropped
+};
+
+// A regular knob save must use the remembered mode even when the mode parameter
+// already contains a not-yet-applied host request. Only the main-thread
+// transition below may change rememberedMode.
+template <typename SaveSnapshot>
+void SaveTrackedModeSnapshot(int currentParamMode, int modeCount, int& rememberedMode, SaveSnapshot&& saveSnapshot)
+{
+  (void) currentParamMode;
+  if (modeCount <= 0)
+    return;
+  saveSnapshot(std::clamp(rememberedMode, 0, modeCount - 1));
+}
 
 // Apply one per-mode snapshot transaction. The caller decides whether this
 // parameter notification represents a real user/host transition; restores pass
@@ -80,5 +85,28 @@ bool ApplyModeSnapshotTransition(int requestedMode, int modeCount, bool transiti
   trackedMode = newMode;
   restoreIncoming(newMode);
   return true;
+}
+
+// Main-thread half of the handoff. currentParamMode is sampled by the consumer,
+// not carried by the audio-thread request. Drop is used for an Oktaverb request
+// observed while another Reverb mode is selected; Retry is reserved for a
+// temporary restore guard.
+template <typename SaveOutgoing, typename RestoreIncoming>
+PendingModeResult ApplyPendingModeSnapshotChange(bool hasRequest, int currentParamMode, int modeCount,
+                                                 PendingModeAction action, int& rememberedMode,
+                                                 SaveOutgoing&& saveOutgoing, RestoreIncoming&& restoreIncoming)
+{
+  if (!hasRequest)
+    return PendingModeResult::NoRequest;
+  if (action == PendingModeAction::Retry)
+    return PendingModeResult::Retry;
+  if (action == PendingModeAction::Drop)
+    return PendingModeResult::Dropped;
+
+  return ApplyModeSnapshotTransition(
+           currentParamMode, modeCount, true, rememberedMode, std::forward<SaveOutgoing>(saveOutgoing),
+           std::forward<RestoreIncoming>(restoreIncoming))
+           ? PendingModeResult::Applied
+           : PendingModeResult::Unchanged;
 }
 } // namespace volum

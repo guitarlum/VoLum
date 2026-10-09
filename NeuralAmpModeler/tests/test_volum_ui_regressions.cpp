@@ -94,6 +94,7 @@ std::string MemberFnUntilNext(const std::string& src, const char* signature)
 struct ModeSnapshotHarness
 {
   volum::PendingModeSnapshotChanges pending;
+  int currentMode = 0;
   int trackedMode = 0;
   int liveKnob = 13;
   int slots[2]{10, 20};
@@ -102,16 +103,16 @@ struct ModeSnapshotHarness
 
   void AudioThreadChange(int mode)
   {
-    pending.Request(volum::ModeSnapshotTarget::Chorus, mode);
+    currentMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Chorus);
   }
 
   void ApplyPendingOnMainThread()
   {
-    const auto batch = pending.Take();
-    if (!batch.Has(volum::ModeSnapshotTarget::Chorus))
-      return;
-    volum::ApplyModeSnapshotTransition(
-      batch.Requested(volum::ModeSnapshotTarget::Chorus), 2, true, trackedMode,
+    const unsigned mask = pending.Take();
+    volum::ApplyPendingModeSnapshotChange(
+      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus)) != 0, currentMode, 2,
+      volum::PendingModeAction::Apply, trackedMode,
       [this](int mode) {
         ++saveCalls;
         slots[mode] = liveKnob;
@@ -137,6 +138,40 @@ struct ModeSnapshotHarness
   {
     ApplyPendingOnMainThread();
     SaveCurrentToTrackedMode();
+  }
+};
+
+struct OktaverbSnapshotHarness
+{
+  volum::PendingModeSnapshotChanges pending;
+  bool oktaverbSelected = true;
+  int currentSubMode = 0;
+  int rememberedSubMode = 0;
+  int liveKnob = 13;
+  int slots[2]{10, 20};
+
+  void AudioThreadSubModeChange(int mode)
+  {
+    currentSubMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Oktaverb);
+  }
+
+  void AudioThreadReverbKnobChange(int value)
+  {
+    liveKnob = value;
+    volum::SaveTrackedModeSnapshot(
+      currentSubMode, 2, rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; });
+  }
+
+  volum::PendingModeResult ApplyPendingOnMainThread()
+  {
+    const unsigned mask = pending.Take();
+    const auto action =
+      oktaverbSelected ? volum::PendingModeAction::Apply : volum::PendingModeAction::Drop;
+    return volum::ApplyPendingModeSnapshotChange(
+      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentSubMode, 2, action,
+      rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; },
+      [this](int slot) { liveKnob = slots[slot]; });
   }
 };
 } // namespace
@@ -1187,19 +1222,79 @@ TEST_CASE("F-08 UI click and host echo apply one snapshot transaction")
   CHECK(h.restoreCalls == 1);
 }
 
-TEST_CASE("F-08 pending mode targets keep independent requested values")
+TEST_CASE("F-08 pending mode targets keep independent request bits")
 {
   volum::PendingModeSnapshotChanges pending;
-  pending.Request(volum::ModeSnapshotTarget::Delay, 2);
-  pending.Request(volum::ModeSnapshotTarget::Chorus, 3);
-  const auto batch = pending.Take();
+  pending.Request(volum::ModeSnapshotTarget::Delay);
+  pending.Request(volum::ModeSnapshotTarget::Chorus);
+  const unsigned mask = pending.Take();
 
-  CHECK(batch.Has(volum::ModeSnapshotTarget::Delay));
-  CHECK(batch.Has(volum::ModeSnapshotTarget::Chorus));
-  CHECK_FALSE(batch.Has(volum::ModeSnapshotTarget::PrePitch));
-  CHECK(batch.Requested(volum::ModeSnapshotTarget::Delay) == 2);
-  CHECK(batch.Requested(volum::ModeSnapshotTarget::Chorus) == 3);
-  CHECK(pending.Take().mask == 0);
+  CHECK((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)) != 0);
+  CHECK((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus)) != 0);
+  CHECK((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::PrePitch)) == 0);
+  CHECK(pending.Take() == 0);
+}
+
+TEST_CASE("F-08 Oktaverb knob automation before idle saves the remembered sub-mode")
+{
+  OktaverbSnapshotHarness h;
+  h.AudioThreadSubModeChange(1);
+  h.AudioThreadReverbKnobChange(14);
+
+  CHECK(h.rememberedSubMode == 0);
+  CHECK(h.slots[0] == 14);
+  CHECK(h.slots[1] == 20);
+
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::Applied);
+  CHECK(h.rememberedSubMode == 1);
+  CHECK(h.slots[0] == 14);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.liveKnob == 20);
+}
+
+TEST_CASE("F-08 stale Oktaverb request is dropped outside Oktaverb")
+{
+  OktaverbSnapshotHarness h;
+  h.oktaverbSelected = false;
+  h.AudioThreadSubModeChange(1);
+
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::Dropped);
+  CHECK(h.rememberedSubMode == 0);
+  CHECK(h.pending.Take() == 0);
+
+  // A later restore selects Oktaverb and restores its remembered S sub-mode.
+  h.oktaverbSelected = true;
+  h.currentSubMode = h.rememberedSubMode;
+  h.liveKnob = h.slots[h.rememberedSubMode];
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::NoRequest);
+  CHECK(h.currentSubMode == 0);
+  CHECK(h.liveKnob == 10);
+}
+
+TEST_CASE("F-08 idle and serialization consume pending mode changes before saving")
+{
+  const std::string source = ReadPluginSource();
+  const std::string settings =
+    ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsLocks.inc.cpp");
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  const std::string serialize = MemberFnUntilNext(source, "bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const");
+  const std::string apply =
+    MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyPendingModeChanges()");
+
+  const auto idleApply = idle.find("_VolumApplyPendingModeChanges();");
+  const auto idleSave = idle.find("_VolumSaveCurrentToSettings();");
+  REQUIRE(idleApply != std::string::npos);
+  REQUIRE(idleSave != std::string::npos);
+  CHECK(idleApply < idleSave);
+
+  const auto serializeApply = serialize.find("_VolumApplyPendingModeChanges();");
+  const auto serializeSave = serialize.find("_VolumSaveCurrentToSettings();");
+  REQUIRE(serializeApply != std::string::npos);
+  REQUIRE(serializeSave != std::string::npos);
+  CHECK(serializeApply < serializeSave);
+
+  RequireContains(apply, "volum::ApplyPendingModeSnapshotChange(");
+  RequireContains(settings, "volum::SaveTrackedModeSnapshot(");
 }
 
 TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")
