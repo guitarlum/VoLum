@@ -354,6 +354,25 @@ void NeuralAmpModeler::_VolumSyncUiFromState()
   _VolumRefreshPlaySurface();
 }
 
+// UI half of a host state restore. The restore applied the rig on the host's thread
+// with the editor hidden from it, so everything below was skipped there: the control
+// values of every parameter, the layout pass, the SUPPORT stepper, the preset bar and the sidebar/hero/cab-row sync. It
+// reads only live state, never a snapshot taken at restore time, so a restore that
+// lands again before this runs, or this running twice, converges on the same UI.
+void NeuralAmpModeler::_VolumResyncUi()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  // Every parameter helper call the restore made skipped the control tree, so push
+  // all current values to the controls (and OnParamChangeUI), the way OnUIOpen does.
+  SendCurrentParamValuesFromDelegate();
+  _UpdateVoLumLayout(pGfx);
+  _VolumRefreshSupportChannels();
+  _VolumRefreshPresetBar();
+  _VolumSyncUiFromState();
+}
+
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)
 {
   auto* pGfx = GetUI();

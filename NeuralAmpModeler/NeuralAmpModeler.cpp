@@ -346,7 +346,7 @@ constexpr const char* kVolumDiagApiName = "plugin";
 
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPresets))
+: VolumHostBase(info, MakeConfig(kNumParams, kNumPresets))
 {
   volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
   VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
@@ -925,7 +925,7 @@ void NeuralAmpModeler::OnIdle()
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
-    _VolumSyncUiFromState();
+    _VolumResyncUi();
   _VolumRebindCustomSupportIdx();
   // Not while a control holds the mouse: the box drops the capture without ending a
   // knob drag's host gesture. A capture that never ends waits only so long.
@@ -1389,6 +1389,13 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
   // content registry, and a corrupt chunk is exactly the input most likely to
   // reach a path nobody predicted. Returning a parse failure lets the host
   // report a bad state; letting the exception out cannot be recovered from.
+  //
+  // The rig is applied synchronously, on the host's thread, so the next audio block
+  // and an immediate offline render play the restored sound. The editor is hidden
+  // from this thread for the duration (GetUI() returns null here, and iPlug's
+  // Send*FromDelegate helpers skip their control walk): every applier takes its
+  // headless path, and the controls are re-derived by _VolumResyncUi.
+  const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());
   try
   {
     // Look for the expected header. If it's there, then we'll know what to do.

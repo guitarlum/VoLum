@@ -245,10 +245,15 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
       // PLAY refreshes the surface, whose dirty check snapshots live into the
       // active scene. No snapshot until the restored scene is live.
       volum::LiveSceneGate::Hold restoring(mVolumLiveSceneGate);
+      // The imported settings document is the whole machine snapshot. Current
+      // writers omit an empty custom-scene object, so clear the live map first;
+      // any scenes present in the document are then loaded back below.
+      mVolumCustomScenes.clear();
       _VolumLoadSettingsFromFile();
       _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
       _VolumApplyLiveLockSnapshots();
     }
+
     _VolumRefreshPrePedalCaptures();
     _VolumRefreshSupportChannels();
     mVolumDidRestorePresetSelection = false;

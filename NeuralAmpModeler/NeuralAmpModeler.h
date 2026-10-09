@@ -47,6 +47,7 @@
 #include "VoLumTremolo.h"
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumHostRestoreGate.h"
 #include "VoLumLatencyRequests.h"
 #include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
@@ -167,7 +168,11 @@ enum EMsgTags
 
 #include "VoLumResamplingNam.h"
 
-class NeuralAmpModeler final : public iplug::Plugin
+// iplug::Plugin behind the host-restore layer: while a thread is inside a host state
+// restore, GetUI() and iPlug's Send*FromDelegate helpers do not reach the editor for it.
+using VolumHostBase = volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>;
+
+class NeuralAmpModeler final : public VolumHostBase
 {
 public:
   NeuralAmpModeler(const iplug::InstanceInfo& info);
@@ -180,6 +185,9 @@ public:
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
+  // The wrapper's OnRestoreState() after a host setState: not run on the host's
+  // thread (it would walk every control), so request the idle resync instead.
+  void OnRestoreStateDeferred() override { mVolumUiSyncPending.store(true); }
   void OnUIOpen() override;
   void OnUIClose() override;
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }
@@ -236,6 +244,9 @@ public:
   // assume a control already holds the right value. Call this after any restore
   // (editor open, DAW chunk load, session re-focus).
   void _VolumSyncUiFromState();
+  // UI half of a host state restore, UI thread only: every control the restore had
+  // to skip, re-derived from live state (no captured snapshot, so it is idempotent).
+  void _VolumResyncUi();
   // Apply one resolved UiSyncPlan to the cab row + channel stepper, and write the
   // resolved custom routing back into the runtime caches.
   void _VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool support);
@@ -648,9 +659,11 @@ private:
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
   std::atomic<bool> mVolumMainLoadFailed{false};
-  // Set when host state was restored into an already-open editor, consumed by the
-  // next OnIdle. UnserializeState runs on the host's thread, and the applier it
-  // wants writes IGraphics controls, so the call has to cross to the UI thread.
+  // UnserializeState runs on the host's thread and applies the rig there, with the
+  // editor hidden from that thread (RestoreGate()). It only raises this
+  // flag; the next OnIdle (or OnUIOpen) re-derives every control from the live
+  // state on the UI thread. The flag carries no data, so two restores before one
+  // idle still cost a single resync, and a resync run twice is harmless.
   std::atomic<bool> mVolumUiSyncPending{false};
   // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
   std::string mVolumPendingLibraryNotice;

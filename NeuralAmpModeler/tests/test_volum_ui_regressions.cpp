@@ -1538,13 +1538,15 @@ TEST_CASE("SerializeState carries custom-amp scenes in the chunk, not the librar
   // belongs to the instance and travels in the DAW chunk's id tail, so a host
   // state-save must NOT write the library at all.
   const std::string source = ReadPluginSource();
+  const std::string idTail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
 
   // Single-line substrings only: file line endings differ across platforms (CRLF
   // on Windows checkouts, LF on macOS/Linux), so a multi-line "\r\n" match would
   // pass on Windows but fail on macOS CI.
   RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
   RequireContains(source, "idTail.customScenes = mVolumCustomScenes;");
-  RequireContains(source, "if (!idTail.customScenes.empty())");
+  RequireContains(idTail, "if (!t.customScenes.empty())");
+  RequireContains(source, "if (idTail.customScenesPresent)");
 
   // The instance's scene map is the only home for a custom amp's live knobs. A
   // reference to the library's map here would be the shared-state bug returning.
@@ -1905,6 +1907,99 @@ TEST_CASE("Loading DAW state into an open editor re-derives the visible selectio
   const auto clear = source.find("mVolumUiSyncPending.store(false);", openPos);
   REQUIRE(clear != std::string::npos);
   CHECK(clear < source.find("\n}", openPos));
+}
+
+TEST_CASE("Unserialize regression: host state restore applies the rig synchronously and only flags the UI")
+{
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+  const std::string source = ReadPluginSource();
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+
+  // The rig is applied inside the restore call, so the next audio block (and an
+  // immediate offline render) plays the restored sound and host automation that
+  // arrives after setState simply wins. Nothing is parked for a later idle.
+  const std::string restore =
+    MemberFnUntilNext(unserialize, "int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  RequireContains(restore, "_VolumRestoreFromSettings(mVolumAmpIdx);");
+  RequireContains(restore, "_VolumApplyLiveLockSnapshots();");
+  RequireContains(restore, "mVolumNeedsLoad.store(true);");
+  RequireContains(restore, "_VolumSelectCustomAmp(cmi);");
+  RequireContains(restore, "mVolumUiSyncPending.store(true);");
+  RequireDoesNotContain(restore, "_VolumSyncUiFromState();");
+  RequireDoesNotContain(restore, "_VolumResyncUi();");
+  RequireDoesNotContain(unserialize, "mVolumPendingStateRestore");
+  RequireDoesNotContain(unserialize, "mVolumStateRestorePending");
+  RequireDoesNotContain(source, "_VolumApplyPendingStateRestore");
+  RequireDoesNotContain(header, "VolumPendingStateRestore");
+  RequireDoesNotContain(header, "mVolumStateRestoreMutex");
+
+  // The UI-touching half cannot run on the host's thread: the whole restore runs
+  // with the editor hidden from that thread, so the appliers above take their
+  // headless path and write no IGraphics control.
+  const std::string entry = MemberFnUntilNext(source, "int NeuralAmpModeler::UnserializeState(");
+  RequireContains(entry, "const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());");
+  CHECK(entry.find("uiHiddenFromHostThread") < entry.find("_UnserializeStateWithKnownVersion("));
+  // GetUI() is not virtual and iPlug's Send*FromDelegate helpers use mGraphics directly, so the
+  // class must sit on the layer that overrides all of them (behaviour: test_volum_host_restore_gate.cpp).
+  RequireContains(header, "class NeuralAmpModeler final : public VolumHostBase");
+  RequireContains(header, "volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>");
+  RequireDoesNotContain(header, "mVolumHostRestoreGate");
+  RequireContains(header, "void OnRestoreStateDeferred() override { mVolumUiSyncPending.store(true); }");
+}
+
+TEST_CASE("Unserialize regression: the UI resync reads live state and is idempotent")
+{
+  const std::string source = ReadPluginSource();
+
+  // One flag, no payload: OnIdle (or OnUIOpen) re-derives every skipped control
+  // from the state as it is NOW, so a second restore before the idle, or a resync
+  // that runs twice, converges instead of replaying a stale snapshot.
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "if (GetUI() && mVolumUiSyncPending.exchange(false))");
+  RequireContains(idle, "_VolumResyncUi();");
+
+  const std::string resync = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumResyncUi()");
+  RequireContains(resync, "SendCurrentParamValuesFromDelegate();");
+  RequireContains(resync, "_UpdateVoLumLayout(pGfx);");
+  RequireContains(resync, "_VolumRefreshSupportChannels();");
+  RequireContains(resync, "_VolumRefreshPresetBar();");
+  RequireContains(resync, "_VolumSyncUiFromState();");
+  RequireDoesNotContain(resync, "mVolumRestore");
+  RequireDoesNotContain(resync, "pending");
+  RequireDoesNotContain(resync, "std::move");
+  RequireDoesNotContain(resync, "= std::");
+}
+
+TEST_CASE("Unserialize regression: an explicitly empty current chunk custom-scene map clears stale scenes")
+{
+  const std::string idTail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+  const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+
+  RequireContains(idTail, "bool customScenesPresent = false;");
+  RequireContains(idTail, "t.customScenesPresent = true;");
+  RequireContains(unserialize, "if (idTail.customScenesPresent)");
+  RequireDoesNotContain(unserialize, "if (!idTail.customScenes.empty())");
+  RequireContains(pack, "mVolumCustomScenes.clear();");
+  CHECK(pack.find("mVolumCustomScenes.clear();") < pack.find("_VolumLoadSettingsFromFile();"));
+}
+
+TEST_CASE("Unserialize regression: legacy chunks override the machine-global custom amp with factory selection")
+{
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+
+  const std::string restore =
+    MemberFnUntilNext(unserialize, "int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  RequireContains(restore, "const volum::RestoreSelection chunkSelection =");
+  RequireContains(restore, "haveIdTail ? volum::RestoreSelection{idTail.customMainId, idTail.activePresetId}");
+  RequireContains(restore, ": volum::RestoreSelection{};");
+  RequireContains(restore, "/*loadedFromChunk=*/true, chunkSelection,");
+  RequireContains(restore, "mVolumCustomMainIdx = -1;");
+  RequireContains(restore, "mVolumDidRestorePresetSelection = false;");
+  const std::string headerless =
+    unserialize.substr(unserialize.find("int NeuralAmpModeler::_UnserializeStateWithUnknownVersion("));
+  RequireContains(headerless, "mVolumCustomMainIdx = -1;");
+  RequireContains(headerless, "mVolumRestoreCustomMainId.clear();");
 }
 
 TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")
