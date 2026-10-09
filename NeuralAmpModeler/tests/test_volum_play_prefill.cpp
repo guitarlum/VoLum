@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include "../VoLumContentStore.h"
 #include "../VoLumPlayModel.h"
@@ -17,7 +18,7 @@ namespace
 {
 std::filesystem::path PrefillBase(const char* name)
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-play-prefill-tests" / name;
+  auto root = volum_test::ProcessTempRoot() / "volum-play-prefill-tests" / name;
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
