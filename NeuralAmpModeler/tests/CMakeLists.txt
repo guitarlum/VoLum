@@ -113,6 +113,7 @@ add_executable(NeuralAmpModeler-Tests
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/NoiseGate.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/activations.cpp"

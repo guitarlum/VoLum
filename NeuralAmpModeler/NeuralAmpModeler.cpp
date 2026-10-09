@@ -916,6 +916,11 @@ void NeuralAmpModeler::OnReset()
     }
     mNoiseGateTrigger.ReserveOutputs(kNumChannelsInternal, reservedT);
     mNoiseGateGain.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mNoiseGateGain.ReserveGainReduction(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateTrigger.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateGain.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateGain.ReserveGainReduction(kNumChannelsInternal, reservedT);
+    mPreCompressor.ReserveOutputs(kNumChannelsInternal, reservedT);
     mHighPass.ReserveOutputs(kNumChannelsInternal, reservedT);
     mSupportHighPass.ReserveOutputs(kNumChannelsInternal, reservedT);
     mIrShaping.Reserve(kNumChannelsInternal, reservedT);
