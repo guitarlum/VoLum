@@ -24,7 +24,7 @@ trap cleanup EXIT
 echo "Downloading pinned REAPER 7.82 universal build: $REAPER_URL"
 curl --fail --location --retry 3 --output "$WORK/reaper.dmg" "$REAPER_URL"
 echo "REAPER dmg sha256: $(shasum -a 256 "$WORK/reaper.dmg" | awk '{print $1}')"
-hdiutil attach "$WORK/reaper.dmg" -nobrowse -readonly -mountpoint "$MOUNT"
+hdiutil attach "$WORK/reaper.dmg" -acceptlicense -nobrowse -readonly -mountpoint "$MOUNT"
 SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'REAPER.app' -print -quit)"
 if [[ -z "$SOURCE_APP" ]]; then
   echo "FAIL REAPER.app not found in pinned DMG"
