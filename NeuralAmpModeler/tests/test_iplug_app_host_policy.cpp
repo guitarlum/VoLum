@@ -46,9 +46,46 @@ TEST_CASE("F-02 WinMM MIDI identity survives port renumbering")
   CHECK(iplug::VoLumResolveMidiPort("Controller 1", duplicates, true) == -1);
   CHECK(iplug::VoLumResolveMidiPort("Missing 7", unique, true) == -1);
 
-  const std::vector<std::string> numericNames{"loopMIDI Port", "loopMIDI Port 1"};
-  CHECK(iplug::VoLumResolveMidiPort("loopMIDI Port 1", numericNames, true, false) == 0);
-  CHECK(iplug::VoLumResolveMidiPort("loopMIDI Port 1", numericNames, true, true) == 1);
+  // A Preferences combo choice is already a stable name, even while the session
+  // still has an unresolved legacy setting. Both duplicate ordinals and real
+  // device names ending in a digit must therefore be looked up as stable.
+  CHECK(iplug::VoLumResolveMidiPort("Controller [2]", duplicates, true, false) == -1);
+  CHECK(iplug::VoLumResolveMidiPort("Controller [2]", duplicates, true, true) == 2);
+  const std::vector<std::string> numericNames{"Komplete Audio", "Komplete Audio 6"};
+  CHECK(iplug::VoLumResolveMidiPort("Komplete Audio 6", numericNames, true, false) == 0);
+  CHECK(iplug::VoLumResolveMidiPort("Komplete Audio 6", numericNames, true, true) == 1);
+
+  const std::vector<std::string> storedStable{"Other", "Controller [1]", "Controller [2]", "Komplete Audio 6"};
+  const std::vector<std::string> storedLegacy{"Other 0", "Controller 1", "Controller 2", "Komplete Audio 6 3"};
+  CHECK(iplug::VoLumLegacyMidiNameForStable("Komplete Audio 6", storedStable, storedLegacy, "off")
+        == "Komplete Audio 6 3");
+  CHECK(iplug::VoLumLegacyMidiNameForStable("Controller [2]", storedStable, storedLegacy, "off") == "off");
+
+  const auto firstUpgrade =
+    iplug::VoLumReconcileStoredMidiName("Komplete Audio 6 3", "", storedStable, storedLegacy, true);
+  CHECK(firstUpgrade.selectedName == "Komplete Audio 6 3");
+  CHECK_FALSE(firstUpgrade.nameIsStable);
+
+  const auto normalUpgrade =
+    iplug::VoLumReconcileStoredMidiName("Komplete Audio 6 3", "Komplete Audio 6", storedStable, storedLegacy, true);
+  CHECK(normalUpgrade.selectedName == "Komplete Audio 6");
+  CHECK(normalUpgrade.nameIsStable);
+  CHECK_FALSE(normalUpgrade.changed);
+
+  // A 1.2.x downgrade re-picked another port and left indev2 untouched.
+  const auto downgradeRepick =
+    iplug::VoLumReconcileStoredMidiName("Komplete Audio 6 3", "Other", storedStable, storedLegacy, true);
+  CHECK(downgradeRepick.selectedName == "Komplete Audio 6");
+  CHECK(downgradeRepick.nameIsStable);
+  CHECK(downgradeRepick.changed);
+
+  // Duplicate stable names are hidden from 1.2.x as off. If 1.2.x later
+  // picks one, its exact raw spelling safely replaces the stale stable key.
+  const auto collisionRepick =
+    iplug::VoLumReconcileStoredMidiName("Controller 2", "Controller [1]", storedStable, storedLegacy, true);
+  CHECK(collisionRepick.selectedName == "Controller [2]");
+  CHECK(collisionRepick.nameIsStable);
+  CHECK(collisionRepick.changed);
 
   const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
   const std::string probe =
@@ -58,11 +95,15 @@ TEST_CASE("F-02 WinMM MIDI identity survives port renumbering")
   const std::string select = Between(host, "bool IPlugAPPHost::SelectMIDIDevice", "void IPlugAPPHost::CloseAudio");
   CHECK(select.find("if(port == -1)") != std::string::npos);
   CHECK(select.find("mState.mMidiInDev.Set(OFF_TEXT)") == std::string::npos);
-  CHECK(host.find("\"namever\"") != std::string::npos);
+  CHECK(host.find("\"indev2\"") != std::string::npos);
+  CHECK(host.find("\"outdev2\"") != std::string::npos);
+  CHECK(host.find("WritePrivateProfileString(\"midi\", \"namever\", NULL") != std::string::npos);
 
   const std::string dialog = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_dialog.cpp");
   const auto init = Between(dialog, "case WM_INITDIALOG:", "case WM_DESTROY:");
   CHECK(init.find("_this->ProbeMidiIO();") < init.find("_this->PopulatePreferencesDialog(hwndDlg);"));
+  CHECK(dialog.find("SelectMIDIDevice(ERoute::kInput, mState.mMidiInDev.Get(), true)") != std::string::npos);
+  CHECK(dialog.find("SelectMIDIDevice(ERoute::kOutput, mState.mMidiOutDev.Get(), true)") != std::string::npos);
 }
 
 TEST_CASE("F-03 dialog Cancel restores MIDI without restarting unchanged audio")
@@ -113,10 +154,12 @@ TEST_CASE("F-05 automatic audio fallback is runtime-only")
   const auto runtimeFallback = iplug::VoLumPlanFailureRestore(true, false, true);
   CHECK(runtimeFallback.restoreActiveState);
   CHECK_FALSE(runtimeFallback.persistActiveState);
+  CHECK(runtimeFallback.restoreSavedFallbackRequest);
 
   const auto normalActiveState = iplug::VoLumPlanFailureRestore(true, false, false);
   CHECK(normalActiveState.restoreActiveState);
   CHECK(normalActiveState.persistActiveState);
+  CHECK_FALSE(normalActiveState.restoreSavedFallbackRequest);
 
   const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
   const auto change =
@@ -124,7 +167,12 @@ TEST_CASE("F-05 automatic audio fallback is runtime-only")
   CHECK(change.find("const AppState requestedState = mState") != std::string::npos);
   CHECK(change.find("mSuppressAudioStatePersistence = runtimeFallback") != std::string::npos);
   CHECK(change.find("mState = requestedState") != std::string::npos);
+  const auto opened = change.find("if (opened)");
+  REQUIRE(opened != std::string::npos);
+  CHECK(change.find("UpdateINI()", change.find("const bool persistFallback")) > opened);
   CHECK(host.find("mActiveAudioIsRuntimeFallback = mSuppressAudioStatePersistence") != std::string::npos);
+  CHECK(host.find("mRuntimeFallbackRequestedState = requestedState") != std::string::npos);
+  CHECK(host.find("restorePlan.restoreSavedFallbackRequest") != std::string::npos);
   CHECK(host.find("VoLumPlanFailureRestore") != std::string::npos);
 }
 

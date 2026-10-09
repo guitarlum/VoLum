@@ -2100,9 +2100,9 @@ function Test-Midi {
     $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
     Assert-True "the standalone opened '$indev'" ($log -notmatch "could not open the saved MIDI port")
     Assert-True "settings.ini migrated '$indev' to stable '$stableIndev'" (
-      (Get-Content $iniPath) -contains "indev=$stableIndev")
-    Assert-True "settings.ini marks stable MIDI names as version 2" (
-      (Get-Content $iniPath) -contains "namever=2")
+      (Get-Content $iniPath) -contains "indev2=$stableIndev")
+    Assert-True "settings.ini keeps the legacy MIDI spelling for older builds" (
+      (Get-Content $iniPath) -contains "indev=$indev")
 
     Assert-True "Program Change 9 recalls program 9 (Modern Rhythm)" (@($d.pc | Where-Object { $_ -match (& $recallOf 9) }).Count -eq 1) (
       "midi lines: " + ($d.pc -join " / "))
