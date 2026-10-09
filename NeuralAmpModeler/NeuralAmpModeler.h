@@ -13,6 +13,7 @@
 #include "Colors.h"
 #include "ToneStack.h"
 #include "VoLumIrShapingDsp.h"
+#include "VoLumResetExclusion.h"
 #include "VoLumDualAmpPlan.h"
 #include "VoLumPreEffects.h"
 #include "VoLumPitchShifter.h"
@@ -46,11 +47,14 @@
 #include "VoLumTremolo.h"
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumLatencyRequests.h"
+#include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
+#include "VoLumUpgradeMigration.h"
 #include "VoLumUpdateCheck.h"
 #include "VoLumUpdateState.h"
 #include "VoLumPlayModel.h"
@@ -58,6 +62,7 @@
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
+#include "VoLumPackMachineSettings.h"
 #include "VoLumPeakAvgSender.h"
 
 const int kNumPresets = 1;
@@ -398,10 +403,11 @@ public:
   // Lanes playing an id the import replaced move to the new payload rather than to
   // the delete fallback: a confirmed replace is not a delete.
   void _VolumReloadReplacedLibraryIds(const std::vector<std::string>& ids);
-  // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,
-  // and channel labels into the shared speaker row + channel stepper (display
-  // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
-  // (-1 = a factory amp is active).
+  // Commit a custom amp's cab/channel routing and request its capture load, then,
+  // when the editor is open, push its named cabs (empty slots disabled), Custom-IR
+  // state and channel labels into the shared speaker row + channel stepper. The
+  // routing part must also run headless. mVolumCustomMainIdx tracks the focused
+  // custom main amp (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
   void _VolumSetCustomChannelStepper(int customIdx, bool supportLane, int channel);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp
@@ -526,8 +532,8 @@ public:
   // mVolumAmpSettings[ampIdx]. Before 1.3.0 this map lived in the shared content
   // library, so one instance's catalog write moved another instance's knobs; the
   // sounding rig belongs to the instance (DAW chunk / standalone settings) now.
-  // Seeded on first touch from a pre-1.3.0 library's customScenes, so an upgrade
-  // keeps the knobs the user left behind.
+  // Seeded on first touch from a copy of a pre-1.3.0 library's customScenes, so an
+  // upgrade keeps the knobs the user left behind (volum::content::InstanceCustomScene).
   std::map<std::string, volum::VoLumAmpSettings> mVolumCustomScenes;
   volum::VoLumAmpSettings& _VolumCustomScene(const std::string& ampId);
   // The repair planned for the delete/replace the confirm dialog is asking about.
@@ -542,6 +548,11 @@ public:
   std::string mVolumRestoreCustomMainId;
   std::string mVolumRestorePresetId;
   bool mVolumDidRestorePresetSelection = false;
+  // Closed while a machine-settings restore has swapped the per-amp scenes under
+  // live params that still describe the outgoing rig; _VolumSaveCurrentToSettings
+  // refuses until the restored scene is live (see VoLumPackMachineSettings.h).
+  volum::LiveSceneGate mVolumLiveSceneGate;
+  volum::pack::PackDualAmpStash mVolumOpenedPackDualAmp;
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;
@@ -836,8 +847,13 @@ private:
 
   // Make sure that the latency is reported correctly.
   int _ReportedLatencySamples() const;
+  // Only the owner of the live model pointers may call this (see mLiveLatency).
+  void _VolumPublishLiveLatency();
+  // Recompute and report now; main thread, or OnReset after the exclusion is released.
   void _UpdateLatency();
-  void _ApplyLatchedLatency();
+  void _ApplyReportedLatency(int latency);
+  // The only writer of mVolumSupportSelected: a change is a latency input.
+  void _VolumSetSupportSelected(bool selected);
 
   // Plugin PDC plus, in the standalone, the audio device's own round trip.
   volum::LatencyReport _VolumLatencyReport() const;
@@ -948,16 +964,19 @@ private:
   bool mPostChorusWasActive = false;
   bool mPrePitchWasActive = false;
   bool mPreCompWasActive = false;
-  // Audio thread stores the sample count and sets the flag. OnIdle applies it.
-  // OnIdle must not read mModel: the audio thread owns those pointers.
-  std::atomic<int> mPendingLatency{0};
-  std::atomic<bool> mLatencyDirty{false};
+  // Latency of the live models; _ReportedLatencySamples reads this, never the pointers.
+  volum::LiveLatencySnapshot mLiveLatency;
+  // Raised from any thread when a latency input changes; OnIdle recomputes.
+  volum::LatencyRecomputeRequests mLatencyRequests;
   // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
   // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
   // The audio thread only moves unique_ptrs into the graveyards; ~ResamplingNAM
   // and ~ImpulseResponse run on OnIdle. Also covers the published path buffers.
   // Nothing is allocated or destroyed while it is held off the audio thread.
   mutable std::mutex mStagingMutex;
+  // VoLum: held by OnReset for its whole reconfiguration, try-locked by ProcessBlock.
+  // Taken before mStagingMutex on both sides.
+  volum::ResetExclusion mResetExclusion;
   // Audio thread writes, OnIdle destroys. Reserved so push_back never reallocates
   // in the callback. Overflow last-resorts to reset() on this thread.
   std::vector<std::unique_ptr<ResamplingNAM>> mDspGraveyard;
@@ -986,10 +1005,8 @@ private:
   // selected or its panel is edited; the audio thread reads them lock-free and
   // applies trim + cuts on the IR lane, after the convolver and before the DC
   // blocker. A cut Hz of 0 bypasses that filter. Not a DAW parameter.
-  recursive_linear_filter::HighPass mIrLowCut; // MAIN low-cut (high-pass)
-  recursive_linear_filter::LowPass mIrHighCut; // MAIN high-cut (low-pass)
-  recursive_linear_filter::HighPass mSupportIrLowCut; // SUPPORT low-cut
-  recursive_linear_filter::LowPass mSupportIrHighCut; // SUPPORT high-cut
+  volum::IrShapingLane mIrShaping; // MAIN low-cut (high-pass) + high-cut (low-pass)
+  volum::IrShapingLane mSupportIrShaping; // SUPPORT low-cut + high-cut
   std::atomic<double> mIrTrimLin{1.0};
   std::atomic<double> mSupportIrTrimLin{1.0};
   std::atomic<double> mIrLowCutHz{0.0};

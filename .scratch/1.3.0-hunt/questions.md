@@ -42,3 +42,33 @@ UX judgment calls and product decisions found overnight. No behavior was changed
   Add a short confirmation line (e.g. "Saved 12 presets to X.volumpack")?
 
 ### Q-09 Window can be resized past the screen (F-66 clamps it); want maximize enabled?
+
+### Q-10 Right-click acts like a left click everywhere in BUILD
+- Loads amps, switches cabs, opens the preset menu. A stray right-click changes the sound.
+  Ignore right-clicks (or give them a context menu)?
+
+### Q-11 BUILD preset < / > and the preset menu drop unsaved edits without asking (see Q-04 for PLAY)
+
+### Q-12 Small BUILD UX calls (UI tester B)
+- A fresh IR always shows a gold gear (auto-normalise trim counts as "shaped").
+- Footer shows the internal custom-amp filename (`amp_46393043_2__V30-MONO-1.nam`) and no
+  sign of an IR on SUPPORT.
+- Custom amp cab row shows "--" placeholders for missing cabs.
+- PRE pitch card reads PITCH / OCT / "+0 st" depending on the amp.
+- Save with an empty name looks enabled but does nothing.
+- LITE caption "Smaller A2 slice, lower CPU." stays visible while FULL is selected.
+
+### Q-13 Pack import preview: Overwrite names only the incoming item; Reset lists no deletions
+- Overwrite says "Replace Custom amp 'sadfsfd'" without naming the local "Monomyth Skeleton
+  Key" it replaces; Reset deleted "Sunset Crunch" with no row saying so. Show both?
+
+### Q-14 PLAY UX calls (UI tester C)
+- Custom-amp art is static and teal on both lanes (factory art moves; MAIN is gold).
+- T and M don't close what they opened (H does toggle Settings).
+- Picker: adding to off-screen program 127 gives no feedback / no scroll; typed 200 ignored
+  rather than clamped; no search or keyboard navigation.
+- Banner falls back to the amp name after clearing LIVE although the preset is loaded.
+- Factory "Ampete Lead" (04) and user "Ampete Lead" (12) look identical on the board.
+- Tab does nothing (no hint) while SUPPORT is empty; PAN has no value readout; no tap tempo.
+- CPU (one core): PLAY single 97% (art on) / 93% (off), PLAY Dual 119% / 103%, BUILD Dual 72%.
+  F-61 covers part of this; is PLAY's cost acceptable for 1.3.0?
