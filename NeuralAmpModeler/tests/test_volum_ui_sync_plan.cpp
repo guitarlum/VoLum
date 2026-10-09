@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "../VoLumContentStore.h"
 #include "../VoLumPlayModel.h"
 #include "../VoLumUiSyncPlan.h"
 
@@ -60,6 +61,23 @@ CustomAmp MakeMixedDirectAmp()
   amp.name = "Mixed";
   amp.cabNames = {"G12", "V30", "CB3"};
   amp.files = {{"AMP-1.nam", kDirectSlot, 1}, {"G12-1.nam", 0, 1}, {"G12-2.nam", 0, 2}, {"V30-2.nam", 1, 2}};
+  return amp;
+}
+
+// An imported amp whose only capture sits on cab slot 0, gain stage 2: no DIRECT
+// and no channel 1, so the loader's constructor default names nothing on it.
+CustomAmp MakeCabOneChannelTwoAmp()
+{
+  CustomAmp amp;
+  amp.id = "amp_cab1_ch2";
+  amp.name = "Cab1 Ch2";
+  amp.cabNames = {"412", "", ""};
+  CustomNamFile file;
+  file.file = "CAB1-2.nam";
+  file.slot = 0;
+  file.channel = 2;
+  file.storedPath = "amps/amp_cab1_ch2/CAB1-2.nam";
+  amp.files = {file};
   return amp;
 }
 } // namespace
@@ -371,6 +389,35 @@ TEST_CASE("Custom lane keeps a real cab selected when no IR is active")
   CHECK(plan.cabSelectedIndex == 2); // slot + 1
   CHECK(plan.irCabActive == false);
   CHECK(plan.clearOrphanedIr == false);
+}
+
+TEST_CASE("Headless custom Sound recall routes the loader to the Sound's cab and channel")
+{
+  // A PLAY recall over MIDI with the editor closed applies the Sound's scene and
+  // then has to commit this plan's routing: the .nam loader reads only that
+  // (slot, channel) pair. Left at the constructor default, it found no capture.
+  const CustomAmp amp = MakeCabOneChannelTwoAmp();
+  REQUIRE(volum::content::CaptureFileFor(amp, kDirectSlot, 1).empty());
+
+  UiSyncInput in;
+  in.customAmp = &amp;
+  in.customAmpIdx = 0;
+  in.customSlot = 0; // the Sound's cab row index 1
+  in.customChannelPos = 0; // the only gain stage, 2
+  const auto plan = MakeUiSyncPlan(in);
+  CHECK(plan.customSlot == 0);
+  CHECK(plan.customChannel == 2);
+  CHECK(plan.cabSelectedIndex == 1);
+  CHECK(plan.channelSelectedPos == 0);
+  CHECK(volum::content::CaptureFileFor(amp, plan.customSlot, plan.customChannel) == "amps/amp_cab1_ch2/CAB1-2.nam");
+
+  // A Sound saved while the row still pointed at No Cab snaps to the cab that
+  // carries the channel instead of loading nothing.
+  in.customSlot = kDirectSlot;
+  const auto snapped = MakeUiSyncPlan(in);
+  CHECK(snapped.customSlot == 0);
+  CHECK(snapped.customChannel == 2);
+  CHECK_FALSE(volum::content::CaptureFileFor(amp, snapped.customSlot, snapped.customChannel).empty());
 }
 
 TEST_CASE("Sidebar selection is exclusive between factory and custom lanes")
