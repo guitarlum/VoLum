@@ -2034,6 +2034,11 @@ void NeuralAmpModeler::_VolumReapAudioThreadRetirees()
   for (auto& lane : lanes)
     if (lane.slot.dirty.load(std::memory_order_acquire))
       lane.text.reserve(volum::dsp_staging::kRtPathCapacity);
+  // The SUPPORT capture file is a main-thread string, not a WDL path pair.
+  std::string supportCaptureText;
+  auto supportCaptureAction = volum::dsp_staging::PublishedPathAction::None;
+  if (mPublishedSupportCapturePath.dirty.load(std::memory_order_acquire))
+    supportCaptureText.reserve(volum::dsp_staging::kRtPathCapacity);
 
   {
     std::lock_guard<std::mutex> lock(mStagingMutex);
@@ -2044,10 +2049,12 @@ void NeuralAmpModeler::_VolumReapAudioThreadRetirees()
     doomedResults.swap(mVolumSpentLoadResults);
     for (auto& lane : lanes)
       lane.action = volum::dsp_staging::TakePublishedPath(lane.slot, lane.text);
+    supportCaptureAction = volum::dsp_staging::TakePublishedPath(mPublishedSupportCapturePath, supportCaptureText);
   }
 
   for (auto& lane : lanes)
     volum::dsp_staging::ApplyPublishedPath(lane.action, lane.text, lane.paths);
+  volum::dsp_staging::CommitSupportLiveFile(supportCaptureAction, supportCaptureText, mVolumLiveSupportFile);
 }
 
 void NeuralAmpModeler::_ApplyDSPStaging()
@@ -2083,6 +2090,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     if (mShouldRemoveSupportModel)
     {
       volum::dsp_staging::RetireLiveAndStaged(mSupportModel, mStagedSupportModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathClearNoAlloc(mPublishedSupportCapturePath);
+      mPendingSupportCapturePath[0] = '\0';
       mShouldRemoveSupportModel = false;
       removedSupportModel = true;
     }
@@ -2120,6 +2129,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     if (mStagedSupportModel != nullptr)
     {
       volum::dsp_staging::PublishStagedModel(mSupportModel, mStagedSupportModel, mDspGraveyard);
+      volum::dsp_staging::PublishPathNoAlloc(mPublishedSupportCapturePath, mPendingSupportCapturePath);
       appliedSupportModel = true;
     }
     for (int i = 0; i < 2; ++i)

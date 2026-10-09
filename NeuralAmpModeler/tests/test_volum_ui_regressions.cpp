@@ -3425,7 +3425,7 @@ TEST_CASE("A deleted focused custom amp is left before any scene is written unde
   const auto reanchor = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReanchorCustomMain()");
   RequireContains(reanchor, "_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
   const auto save = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumSaveCurrentToSettings()");
-  RequireContains(save, "SceneIdForFocusedRow(mVolumCustomMainId, mVolumCustomMainIdx)");
+  RequireContains(save, "SceneIdForFocusedAmp(mVolumCustomMainId)");
   RequireDoesNotContain(save.c_str(), "CustomAmpIdAt(mVolumCustomMainIdx)");
   const auto scene = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumActiveScene()");
   RequireContains(scene, "_VolumCustomScene(mVolumCustomMainId)");
@@ -3437,7 +3437,18 @@ TEST_CASE("A deleted focused custom amp is left before any scene is written unde
 TEST_CASE("The SUPPORT lane counts as live only for a capture the loader staged")
 {
   const std::string source = ReadPluginSource();
-  RequireContains(source, "mVolumLiveSupportFile = volum::dsp_staging::SupportFileAfterResult(");
+  // The audio thread never touches the std::string: it publishes the path (or a clear)
+  // and OnIdle commits it into the main-thread-only mVolumLiveSupportFile.
+  const auto drain = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumDrainLoaderResults()");
+  RequireDoesNotContain(drain.c_str(), "mVolumLiveSupportFile");
+  RequireContains(drain, "CopyPathNoAlloc(");
+  RequireContains(drain, "mPendingSupportCapturePath");
+  const auto apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_ApplyDSPStaging()");
+  RequireDoesNotContain(apply.c_str(), "mVolumLiveSupportFile");
+  RequireContains(apply, "PublishPathNoAlloc(mPublishedSupportCapturePath, mPendingSupportCapturePath);");
+  RequireContains(apply, "PublishPathClearNoAlloc(mPublishedSupportCapturePath);");
+  const auto reap = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReapAudioThreadRetirees()");
+  RequireContains(reap, "CommitSupportLiveFile(supportCaptureAction, supportCaptureText, mVolumLiveSupportFile);");
   RequireContains(source, "volum::SupportCaptureAlreadyLive(mVolumLiveSupportFile, wanted");
   RequireDoesNotContain(source.c_str(), "SupportCaptureAlreadyLive(mVolumLastLoadedSupportFile");
 }

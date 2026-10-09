@@ -209,18 +209,6 @@ inline LoaderResultAction DecideLoaderResult(bool hasModel, bool superseded, boo
   return LoaderResultAction::Stage;
 }
 
-// File the SUPPORT lane is known to be playing after a loader result. Only a staged
-// model counts; a failed load leaves nothing worth treating as live.
-inline std::string SupportFileAfterResult(LoaderResultAction action, bool hasError, const std::string& resultFile,
-                                          const std::string& previous)
-{
-  if (action == LoaderResultAction::Stage)
-    return resultFile;
-  if (action == LoaderResultAction::Ignore && hasError)
-    return {};
-  return previous;
-}
-
 // The live path of an asset, handed from the audio thread (which applies the
 // asset) to OnIdle (which owns the WDL_String). Both sides touch it under the
 // staging lock.
@@ -340,6 +328,26 @@ void ApplyPublishedPath(PublishedPathAction action, const std::string& path, Pat
       CommitStagedPathOnApply(paths);
       break;
     case PublishedPathAction::Clear: ClearLiveAndStagedPath(paths); break;
+    case PublishedPathAction::None: break;
+  }
+}
+
+// File name (no directory) of a published capture path, either separator.
+inline std::string CaptureFileName(const std::string& path)
+{
+  const size_t cut = path.find_last_of("/\\");
+  return cut == std::string::npos ? path : path.substr(cut + 1);
+}
+
+// OnIdle, main thread only: the SUPPORT capture file the audio thread last made
+// live. The audio thread only publishes the path (PublishPathNoAlloc) or a clear
+// (a failed load or an unload); the std::string lives on this side alone.
+inline void CommitSupportLiveFile(PublishedPathAction action, const std::string& publishedPath, std::string& liveFile)
+{
+  switch (action)
+  {
+    case PublishedPathAction::Commit: liveFile = CaptureFileName(publishedPath); break;
+    case PublishedPathAction::Clear: liveFile.clear(); break;
     case PublishedPathAction::None: break;
   }
 }

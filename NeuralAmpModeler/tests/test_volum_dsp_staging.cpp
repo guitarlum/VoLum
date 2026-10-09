@@ -264,15 +264,48 @@ TEST_CASE("A loader result whose rate or block is stale is dropped for reload")
   CHECK(DecideLoaderResult(true, false, false, false, false) == LoaderResultAction::Stage);
   CHECK(DecideLoaderResult(true, true, false, true, false) == LoaderResultAction::Retire);
   CHECK(DecideLoaderResult(true, false, true, false, false) == LoaderResultAction::Retire);
-  // A failed SUPPORT load must not leave the lane looking live.
-  using volum::dsp_staging::SupportFileAfterResult;
-  CHECK(SupportFileAfterResult(LoaderResultAction::Stage, false, "new.nam", "old.nam") == "new.nam");
-  CHECK(SupportFileAfterResult(LoaderResultAction::Ignore, true, "new.nam", "new.nam").empty());
-  CHECK(SupportFileAfterResult(LoaderResultAction::Retire, false, "new.nam", "old.nam") == "old.nam");
-  CHECK_FALSE(volum::SupportCaptureAlreadyLive(
-    SupportFileAfterResult(LoaderResultAction::Ignore, true, "new.nam", "new.nam"), "new.nam", true));
   CHECK(DecideLoaderResult(false, false, false, false, true) == LoaderResultAction::Ignore);
   CHECK(DecideLoaderResult(false, false, false, false, false) == LoaderResultAction::Ignore);
+}
+
+TEST_CASE("The SUPPORT live file is committed on the main thread from a published path")
+{
+  using namespace volum::dsp_staging;
+  RtPublishedPath slot;
+  std::string live = "old.nam";
+
+  // Audio side: copy-and-publish into the fixed slot only (no std::string).
+  PublishPathNoAlloc(slot, "C:/rigs/Amp One/new.nam");
+  std::string text;
+  text.reserve(kRtPathCapacity);
+  auto action = TakePublishedPath(slot, text);
+  CHECK(action == PublishedPathAction::Commit);
+  CommitSupportLiveFile(action, text, live);
+  CHECK(live == "new.nam");
+  CHECK(volum::SupportCaptureAlreadyLive(live, "new.nam", true));
+
+  // Nothing published: the committed file is kept.
+  action = TakePublishedPath(slot, text);
+  CHECK(action == PublishedPathAction::None);
+  CommitSupportLiveFile(action, text, live);
+  CHECK(live == "new.nam");
+
+  // An unload / failed load publishes a clear, so the lane no longer looks live.
+  PublishPathClearNoAlloc(slot);
+  action = TakePublishedPath(slot, text);
+  CHECK(action == PublishedPathAction::Clear);
+  CommitSupportLiveFile(action, text, live);
+  CHECK(live.empty());
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive(live, "new.nam", true));
+
+  // An unreserved scratch string leaves the publish for the next idle tick.
+  PublishPathNoAlloc(slot, "C:\\rigs\\later.nam");
+  std::string unreserved;
+  CHECK(TakePublishedPath(slot, unreserved) == PublishedPathAction::None);
+  text.clear();
+  action = TakePublishedPath(slot, text);
+  CommitSupportLiveFile(action, text, live);
+  CHECK(live == "later.nam");
 }
 
 TEST_CASE("A published NAM path copies into a fixed buffer without needing WDL")

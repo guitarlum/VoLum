@@ -141,11 +141,13 @@ inline int ReanchoredAmpIdx(const std::string& focusedId, int curIdx)
   return CustomAmpIndexById(focusedId);
 }
 
-// Id a save may write the focused row's scene under: empty when the row no longer
-// names the amp this instance focused, so a stale row can never reach a neighbour.
-inline std::string SceneIdForFocusedRow(const std::string& focusedId, int row)
+// Id a save may write the focused amp's scene under. Scenes are keyed by id, so a
+// focused amp that merely moved rows (another amp deleted or reordered) still saves
+// under its own id at once; only an id that is gone yields empty, so a stale row can
+// never reach a neighbour.
+inline std::string SceneIdForFocusedAmp(const std::string& focusedId)
 {
-  return !focusedId.empty() && CustomAmpIdAt(row) == focusedId ? focusedId : std::string();
+  return CustomAmpIndexById(focusedId) >= 0 ? focusedId : std::string();
 }
 
 inline CustomAmp CustomAmpAt(int idx)

@@ -1305,12 +1305,33 @@ TEST_CASE("A save never writes the focused amp's scene under a neighbour after a
     return a;
   };
   amps = {make("amp_a"), make("amp_b"), make("amp_c")};
-  CHECK(volum::custom::SceneIdForFocusedRow("amp_b", 1) == "amp_b");
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_b") == "amp_b");
 
-  // The focused row 1 now holds the neighbour: the save has no id to write under.
+  // The focused amp is gone: the save has no id to write under, and never a neighbour's.
   amps = {make("amp_a"), make("amp_c")};
-  CHECK(volum::custom::SceneIdForFocusedRow("amp_b", 1).empty());
-  CHECK(volum::custom::SceneIdForFocusedRow("", 1).empty());
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_b").empty());
+  CHECK(volum::custom::SceneIdForFocusedAmp("").empty());
+
+  amps = saved;
+}
+
+TEST_CASE("A save still lands on the focused amp when another amp's removal shifts its row")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  // amp_c was focused at row 2; another instance deletes amp_a, so it sits at row 1
+  // while this instance's cached row (2) is stale until the next idle.
+  amps = {make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_c") == "amp_c");
+  // Reordered the other way: still its own id, never a neighbour's.
+  amps = {make("amp_c"), make("amp_b")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_c") == "amp_c");
 
   amps = saved;
 }

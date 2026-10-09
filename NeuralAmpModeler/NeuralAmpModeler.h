@@ -626,7 +626,8 @@ private:
   std::string mVolumRigsRoot;
   std::string mVolumLastLoadedFile;
   std::string mVolumLastLoadedSupportFile;
-  // Filename of the SUPPORT capture the loader last staged successfully; empty after a failure.
+  // Filename of the SUPPORT capture the audio thread last made live; empty after a failed load or
+  // an unload. Main thread only: OnIdle commits it from mPublishedSupportCapturePath.
   std::string mVolumLiveSupportFile;
   std::string mVolumRequestedMainFile;
   std::string mVolumMainLoadError;
@@ -979,6 +980,10 @@ private:
   volum::dsp_staging::RtPublishedPath mPublishedIRPath;
   char mPendingSupportIRPath[volum::dsp_staging::kRtPathCapacity]{};
   volum::dsp_staging::RtPublishedPath mPublishedSupportIRPath;
+  // The SUPPORT capture the audio thread staged / made live. Audio thread: copy into the pending
+  // buffer, then publish; OnIdle commits it into mVolumLiveSupportFile.
+  char mPendingSupportCapturePath[volum::dsp_staging::kRtPathCapacity]{};
+  volum::dsp_staging::RtPublishedPath mPublishedSupportCapturePath;
 
   // Tone stack modules
   std::unique_ptr<dsp::tone_stack::AbstractToneStack> mToneStack;

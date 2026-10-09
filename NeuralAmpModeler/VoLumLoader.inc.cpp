@@ -226,17 +226,16 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
       const auto action = volum::dsp_staging::DecideLoaderResult(
         result.model != nullptr, false, mVolumSupportNeedsLoad.load(), rateMismatch, !result.error.empty());
-      mVolumLiveSupportFile = volum::dsp_staging::SupportFileAfterResult(
-        action, !result.error.empty(), volum::content::PathToUtf8(volum::content::PathFromUtf8(result.path).filename()),
-        mVolumLiveSupportFile);
       if (action == volum::dsp_staging::LoaderResultAction::RetireAndReload)
         mVolumSupportNeedsLoad.store(true);
       else if (action == volum::dsp_staging::LoaderResultAction::Ignore && !result.error.empty())
-        mShouldRemoveSupportModel.store(true);
+        mShouldRemoveSupportModel.store(true); // _ApplyDSPStaging publishes the clear for OnIdle
       else if (action == volum::dsp_staging::LoaderResultAction::Stage)
       {
         std::lock_guard<std::mutex> lock(mStagingMutex);
         volum::dsp_staging::StageIncomingModel(mStagedSupportModel, result.model, mDspGraveyard);
+        volum::dsp_staging::CopyPathNoAlloc(
+          mPendingSupportCapturePath, volum::dsp_staging::kRtPathCapacity, result.path.c_str());
       }
       continue;
     }
