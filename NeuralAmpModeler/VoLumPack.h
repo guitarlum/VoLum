@@ -28,6 +28,7 @@
 
 #include "VoLumContentStore.h"
 #include "VoLumPackArchive.h"
+#include "VoLumUserSettingsIO.h"
 
 namespace volum::pack
 {
@@ -416,10 +417,27 @@ inline std::vector<ArchiveEntry> BuildPackEntries(content::ContentStore& store, 
   entries.push_back({kLibraryEntry, content::RegistryToJson(PackRegistrySubset(reg, plan)).dump(2)});
   if (plan.includeSettings && !settingsJson.empty())
     entries.push_back({kSettingsEntry, settingsJson});
+  if (entries.size() + files.size() > kMaxArchiveEntries)
+  {
+    if (error)
+      *error = "Pack exceeds the 1 GiB / 4,096 files limit.";
+    return {};
+  }
+  uint64_t totalBytes = 0;
+  for (const auto& entry : entries)
+    totalBytes += static_cast<uint64_t>(entry.data.size());
 
   for (const auto& rel : files)
   {
     const auto abs = store.ResolveStored(rel);
+    std::error_code sizeEc;
+    const auto fileBytes = std::filesystem::file_size(abs, sizeEc);
+    if (!sizeEc && (fileBytes > kMaxArchiveUncompressedBytes || totalBytes > kMaxArchiveUncompressedBytes - fileBytes))
+    {
+      if (error)
+        *error = "Pack exceeds the 1 GiB / 4,096 files limit.";
+      return {};
+    }
     std::string data;
     if (abs.empty() || !ReadWholeFile(abs, data))
     {
@@ -429,13 +447,15 @@ inline std::vector<ArchiveEntry> BuildPackEntries(content::ContentStore& store, 
         *error = "Could not read \"" + rel + "\" from your library.";
       return {};
     }
+    totalBytes += static_cast<uint64_t>(data.size());
     entries.push_back({std::string(kPayloadPrefix) + rel, std::move(data)});
   }
   return entries;
 }
 
 inline bool WritePack(content::ContentStore& store, const ExportPlan& plan, const std::string& settingsJson,
-                      const std::filesystem::path& outPath, std::string* error = nullptr)
+                      const std::filesystem::path& outPath, std::string* error = nullptr,
+                      const ArchiveWriteTestHooks* testHooks = nullptr)
 {
   if (plan.Empty())
   {
@@ -446,10 +466,11 @@ inline bool WritePack(content::ContentStore& store, const ExportPlan& plan, cons
   const auto entries = BuildPackEntries(store, plan, settingsJson, error);
   if (entries.empty())
     return false;
-  if (!WriteArchiveToFile(outPath, entries))
+  std::string archiveError;
+  if (!WriteArchiveToFile(outPath, entries, testHooks, &archiveError))
   {
     if (error)
-      *error = "Could not write the Pack file.";
+      *error = archiveError.empty() ? "Could not write the Pack file." : archiveError + ".";
     return false;
   }
   return true;
@@ -480,6 +501,8 @@ struct PackContents
 inline std::string UserFacingPackArchiveError(const std::string& archiveError, bool looksLikeZip)
 {
   auto has = [&](const char* needle) { return archiveError.find(needle) != std::string::npos; };
+  if (has("too many files") || has("too large"))
+    return "This Pack exceeds the 1 GiB / 4,096 files limit.";
   if (has("truncated") || has("damaged") || has("corrupt") || has("checksum") || has("unsupported compression")
       || (looksLikeZip && !archiveError.empty()))
     return "This Pack is damaged.";
@@ -522,65 +545,107 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLik
     return out;
   }
 
-  out.contractVersion = manifest.value("contractVersion", 0);
-  if (out.contractVersion <= 0)
+  try
   {
-    out.error = "This is not a VoLum Pack.";
-    return out;
-  }
-  if (out.contractVersion > kContractVersion)
-  {
-    // Refuse by name. Guessing at a format we do not know would import a
-    // half-understood library, which is worse than not importing.
-    out.error = std::string("This Pack needs VoLum ") + kContractFirstApp + " or newer.";
-    return out;
-  }
-
-  out.job = manifest.value("job", std::string("share")) == "everything" ? Job::Everything : Job::Share;
-  bool healed = false;
-  out.library = content::RegistryFromJson(library, &healed);
-
-  // Every file the manifest promises has to be here. A truncated download that
-  // still unzips would otherwise import amps whose captures are missing.
-  if (manifest.contains("files") && manifest["files"].is_array())
-  {
-    for (const auto& f : manifest["files"])
+    auto wrongType = [](const nlohmann::json& object, const char* key, auto predicate) {
+      return object.contains(key) && !predicate(object.at(key));
+    };
+    if (wrongType(manifest, "contractVersion", [](const auto& v) { return v.is_number_integer(); })
+        || wrongType(manifest, "job", [](const auto& v) { return v.is_string(); })
+        || wrongType(manifest, "files", [](const auto& v) { return v.is_array(); })
+        || wrongType(manifest, "includesSettings", [](const auto& v) { return v.is_boolean(); })
+        || wrongType(manifest, "includesMidiSoundMap", [](const auto& v) { return v.is_boolean(); })
+        || wrongType(library, "schemaVersion", [](const auto& v) { return v.is_number_integer(); })
+        || wrongType(library, "customAmps", [](const auto& v) { return v.is_array(); })
+        || wrongType(library, "irLibrary", [](const auto& v) { return v.is_array(); })
+        || wrongType(library, "customPedals", [](const auto& v) { return v.is_array(); })
+        || wrongType(library, "presetBanks", [](const auto& v) { return v.is_object(); })
+        || wrongType(library, "midiSoundMap", [](const auto& v) { return v.is_array(); }))
     {
-      if (!f.is_string())
-        continue;
-      const std::string rel = f.get<std::string>();
-      const std::string* data = archive.Find(std::string(kPayloadPrefix) + rel);
-      if (!data)
-      {
-        out.error = "This Pack is incomplete (missing \"" + rel + "\").";
-        return out;
-      }
-      if (!content::IsSafeStoredRelPath(rel))
-      {
-        out.error = "This Pack contains an unsafe file path.";
-        return out;
-      }
-      out.files[rel] = *data;
+      out.error = "This Pack is damaged.";
+      return out;
     }
-  }
 
-  // A Share Pack must not carry settings or a MIDI map even if something wrote
-  // them: the job in the manifest is the contract with the user, so enforce it
-  // here rather than trusting the payload.
-  if (out.job == Job::Everything)
-  {
-    if (const std::string* settings = archive.Find(kSettingsEntry))
-      out.settingsJson = *settings;
-    // Presence is a promise, not a count. An Everything backup made while the
-    // MIDI map is empty must still clear stale local assignments when restored.
-    // Fall back to the old inference for a writer that omitted the manifest key.
-    out.includesMidiSoundMap = manifest.value("includesMidiSoundMap", !out.library.midiSoundMap.empty());
+    out.contractVersion = manifest.value("contractVersion", 0);
+    if (out.contractVersion <= 0)
+    {
+      out.error = "This is not a VoLum Pack.";
+      return out;
+    }
+    if (out.contractVersion > kContractVersion)
+    {
+      // Refuse by name. Guessing at a format we do not know would import a
+      // half-understood library, which is worse than not importing.
+      out.error = std::string("This Pack needs VoLum ") + kContractFirstApp + " or newer.";
+      return out;
+    }
+
+    out.job = manifest.value("job", std::string("share")) == "everything" ? Job::Everything : Job::Share;
+    bool healed = false;
+    out.library = content::RegistryFromJson(library, &healed);
+
+    // Every file the manifest promises has to be here. A truncated download that
+    // still unzips would otherwise import amps whose captures are missing.
+    if (manifest.contains("files"))
+    {
+      if (manifest["files"].size() > kMaxArchiveEntries)
+      {
+        out.error = "This Pack is damaged.";
+        return out;
+      }
+      std::set<std::string> foldedFiles;
+      for (const auto& f : manifest["files"])
+      {
+        if (!f.is_string())
+        {
+          out.error = "This Pack is damaged.";
+          return out;
+        }
+        const std::string rel = f.get<std::string>();
+        if (!foldedFiles.insert(detail::CaseFoldEntryName(rel)).second)
+        {
+          out.error = "This Pack contains file paths that differ only by case.";
+          return out;
+        }
+        const std::string* data = archive.Find(std::string(kPayloadPrefix) + rel);
+        if (!data)
+        {
+          out.error = "This Pack is incomplete (missing \"" + rel + "\").";
+          return out;
+        }
+        if (!content::IsSafeStoredRelPath(rel))
+        {
+          out.error = "This Pack contains an unsafe file path.";
+          return out;
+        }
+        out.files[rel] = *data;
+      }
+    }
+
+    // A Share Pack must not carry settings or a MIDI map even if something wrote
+    // them: the job in the manifest is the contract with the user, so enforce it
+    // here rather than trusting the payload.
+    if (out.job == Job::Everything)
+    {
+      if (const std::string* settings = archive.Find(kSettingsEntry))
+        out.settingsJson = *settings;
+      // Presence is a promise, not a count. An Everything backup made while the
+      // MIDI map is empty must still clear stale local assignments when restored.
+      // Fall back to the old inference for a writer that omitted the manifest key.
+      out.includesMidiSoundMap = manifest.value("includesMidiSoundMap", !out.library.midiSoundMap.empty());
+    }
+    else
+    {
+      out.library.midiSoundMap.clear();
+    }
+    out.library.legacyCustomScenes.clear(); // never travels: the rig belongs to the instance
   }
-  else
+  catch (...)
   {
-    out.library.midiSoundMap.clear();
+    out = PackContents{};
+    out.error = "This Pack is damaged.";
+    return out;
   }
-  out.library.legacyCustomScenes.clear(); // never travels: the rig belongs to the instance
 
   out.ok = true;
   return out;
@@ -588,6 +653,15 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLik
 
 inline PackContents OpenPack(const std::filesystem::path& path)
 {
+  std::error_code sizeEc;
+  const auto size = std::filesystem::file_size(path, sizeEc);
+  if (!sizeEc && size > kMaxArchiveFileBytes)
+  {
+    PackContents out;
+    out.detail = "Pack file is too large";
+    out.error = "This Pack is damaged.";
+    return out;
+  }
   std::string blob;
   if (!ReadWholeFile(path, blob))
   {
@@ -1005,9 +1079,20 @@ struct ImportResult
   bool libraryCommitted = false;
   std::string error;
   std::vector<std::string> replacedIds; // ids whose payload changed, for a rig reload
+  size_t replacedItemCount = 0; // all replaced preview rows, including presets
   std::filesystem::path backupPath; // the prior library file, kept
+  std::vector<std::string> notices; // recovery details for the Pack log
 
   explicit operator bool() const { return ok; }
+};
+
+// Failure injection for import transaction tests. Production callers leave this
+// null; tests use it to model a process dying after a live payload write.
+struct ImportTestHooks
+{
+  size_t interruptAfterPayloadWrites = 0;
+  size_t failBeforePayloadWrite = 0;
+  bool interruptAfterCatalogSave = false;
 };
 
 namespace detail
@@ -1025,44 +1110,303 @@ inline bool CopyPayloadFile(const std::filesystem::path& from, const std::filesy
   return !ec;
 }
 
-// Put the live tree back after a swap that must not stick. `written` is every
-// path we replaced or created; a path with a rollback copy is restored, a path
-// we minted is deleted so a failed import cannot leave the Pack's bytes behind.
-inline void RestoreSwappedPayloads(content::ContentStore& store, const std::filesystem::path& rollback,
-                                   const std::vector<std::string>& written)
+inline bool ValidateMachineSettings(const std::string& text, std::string* sanitized = nullptr)
+{
+  try
+  {
+    const auto json = nlohmann::json::parse(text);
+    if (!json.is_object())
+      return false;
+    VoLumAmpSettings amps[kAmpCount]{};
+    VoLumEffectSettings effects;
+    int lastAmp = 0;
+    bool healed = false;
+    VolumUserSettingsFromJson(json, amps, kAmpCount, &lastAmp, &effects, &healed);
+    if (sanitized)
+    {
+      static const char* kSharedMachineKeys[] = {
+        "version",
+        "lastAmpIdx",
+        "preLocked",
+        "postLocked",
+        "liteMode",
+        "animatePlayArt",
+        "CalibrateInput",
+        "InputCalibrationLevel",
+        "liveLockedPre",
+        "liveLockedPost",
+        "amps",
+        "effects",
+        "volumCustomMainId",
+        "volumActivePresetId",
+        "midiCh",
+        "midiRecallCc",
+        "volumUiMode",
+        "lastPlaySlot",
+        "volumActivePresetIdByOwner",
+        "volumCustomScenes",
+      };
+      nlohmann::json filtered = nlohmann::json::object();
+      for (const char* key : kSharedMachineKeys)
+        if (json.contains(key))
+          filtered[key] = json.at(key);
+      *sanitized = filtered.dump(2);
+    }
+    return true;
+  }
+  catch (...)
+  {
+    return false;
+  }
+}
+
+inline std::vector<std::string> CollectPayloads(const content::Registry& r)
+{
+  std::vector<std::string> paths;
+  for (const auto& a : r.amps)
+    for (const auto& f : a.files)
+      if (!f.storedPath.empty())
+        paths.push_back(f.storedPath);
+  for (const auto& ir : r.irs)
+    if (!ir.file.empty())
+      paths.push_back(ir.file);
+  for (const auto& p : r.pedals)
+    if (!p.file.empty())
+      paths.push_back(p.file);
+  return paths;
+}
+
+inline bool RegistryReferencesPath(const content::Registry& r, const std::string& rel)
+{
+  const std::string folded = CaseFoldEntryName(rel);
+  for (const auto& path : CollectPayloads(r))
+    if (CaseFoldEntryName(path) == folded)
+      return true;
+  return false;
+}
+
+inline void RemapPayloadPath(content::Registry& r, const std::string& from, const std::string& to)
+{
+  for (auto& amp : r.amps)
+    for (auto& file : amp.files)
+      if (file.storedPath == from)
+        file.storedPath = to;
+  for (auto& ir : r.irs)
+    if (ir.file == from)
+      ir.file = to;
+  for (auto& pedal : r.pedals)
+    if (pedal.file == from)
+      pedal.file = to;
+}
+
+inline bool ReadRegistryFile(const std::filesystem::path& path, content::Registry& out)
+{
+  std::string text;
+  if (!ReadWholeFile(path, text))
+    return false;
+  try
+  {
+    const auto json = nlohmann::json::parse(text);
+    if (!json.is_object())
+      return false;
+    out = content::RegistryFromJson(json);
+    return true;
+  }
+  catch (...)
+  {
+    return false;
+  }
+}
+
+inline bool QuarantineTransaction(const std::filesystem::path& stage, const std::filesystem::path& base,
+                                  std::vector<std::string>& notices)
 {
   std::error_code ec;
-  for (const auto& rel : written)
+  std::filesystem::path quarantine;
+  for (int attempt = 0; attempt < 64; ++attempt)
   {
-    const auto dst = store.ResolveStored(rel);
-    if (dst.empty())
-      continue;
-    const auto bak = rollback / content::PathFromUtf8(rel);
-    if (std::filesystem::exists(bak, ec))
-      CopyPayloadFile(bak, dst);
-    else
-      std::filesystem::remove(dst, ec);
+    quarantine = base / (".volumpack-quarantine-" + content::MintRawId("journal"));
+    if (!std::filesystem::exists(quarantine, ec))
+      break;
   }
+  ec.clear();
+  std::filesystem::rename(stage, quarantine, ec);
+  if (ec)
+    return false;
+  notices.push_back("quarantined damaged interrupted-import journal at " + quarantine.filename().string());
+  return true;
+}
+
+inline bool RecoverTransaction(content::ContentStore& store, const std::filesystem::path& transaction,
+                               const std::filesystem::path& backup, std::vector<std::string>& notices)
+{
+  std::error_code ec;
+  const auto journal = transaction / "transaction.json";
+  if (!std::filesystem::exists(journal, ec))
+  {
+    std::filesystem::remove_all(transaction, ec);
+    return !ec;
+  }
+
+  content::Registry durable;
+  std::string text;
+  std::vector<std::string> paths;
+  bool damaged = !ReadRegistryFile(store.RegistryPath(), durable) || !ReadWholeFile(journal, text);
+  if (!damaged)
+  {
+    try
+    {
+      const auto values = nlohmann::json::parse(text);
+      damaged = !values.is_array();
+      if (!damaged)
+        for (const auto& value : values)
+        {
+          if (!value.is_string())
+          {
+            damaged = true;
+            break;
+          }
+          const std::string rel = value.get<std::string>();
+          if (!content::IsSafeStoredRelPath(rel))
+          {
+            damaged = true;
+            break;
+          }
+          paths.push_back(rel);
+        }
+    }
+    catch (...)
+    {
+      damaged = true;
+    }
+  }
+  if (damaged)
+    return QuarantineTransaction(transaction, store.BaseDir(), notices);
+
+  bool anyPublishedPathCommitted = false;
+  for (const auto& rel : paths)
+    anyPublishedPathCommitted = anyPublishedPathCommitted || RegistryReferencesPath(durable, rel);
+  const auto pendingBackup = transaction / "pre-import.json";
+  content::Registry preImport;
+  const bool pendingBackupExists = std::filesystem::exists(pendingBackup, ec);
+  const bool havePendingBackup = pendingBackupExists && ReadRegistryFile(pendingBackup, preImport);
+  if (pendingBackupExists && !havePendingBackup)
+    return QuarantineTransaction(transaction, store.BaseDir(), notices);
+  const bool durableChanged =
+    havePendingBackup && content::RegistryToJson(durable) != content::RegistryToJson(preImport);
+  const bool committed = paths.empty() || anyPublishedPathCommitted || durableChanged;
+
+  if (committed)
+  {
+    if (havePendingBackup)
+    {
+      std::string bytes;
+      if (!ReadWholeFile(pendingBackup, bytes) || !WriteWholeFileAtomically(backup, bytes))
+        return false;
+    }
+  }
+  else
+  {
+    for (const auto& rel : paths)
+      if (!RegistryReferencesPath(durable, rel))
+      {
+        std::filesystem::remove(store.ResolveStored(rel), ec);
+        if (ec)
+          return false;
+      }
+  }
+
+  std::filesystem::remove_all(transaction, ec);
+  return !ec;
+}
+
+inline bool RecoverInterruptedImport(content::ContentStore& store, const std::filesystem::path& stageRoot,
+                                     const std::filesystem::path& rollback, const std::filesystem::path& backup,
+                                     std::vector<std::string>& notices)
+{
+  std::error_code ec;
+
+  // Recover transactions written by the earlier 1.3.0 implementation. Its
+  // rollback directory is safe to replay only while the catalog still equals
+  // the pre-import backup; a changed catalog means Save reached its commit.
+  if (std::filesystem::exists(rollback, ec))
+  {
+    std::string liveRegistry;
+    std::string backedRegistry;
+    const bool uncommitted = ReadWholeFile(store.RegistryPath(), liveRegistry) && ReadWholeFile(backup, backedRegistry)
+                             && liveRegistry == backedRegistry;
+    if (uncommitted)
+      for (std::filesystem::recursive_directory_iterator it(rollback, ec), end; !ec && it != end; it.increment(ec))
+        if (it->is_regular_file())
+        {
+          const auto rel = std::filesystem::relative(it->path(), rollback, ec);
+          if (ec || !CopyPayloadFile(it->path(), store.BaseDir() / rel))
+            return false;
+        }
+    if (ec)
+      return false;
+    std::filesystem::remove_all(rollback, ec);
+    if (ec)
+      return false;
+  }
+
+  if (!std::filesystem::exists(stageRoot, ec))
+    return !ec;
+
+  // Recover journals written by the first 1.3.0 development implementation.
+  // New imports use one locked child directory per transaction.
+  if (std::filesystem::exists(stageRoot / "transaction.json", ec))
+  {
+    if (!RecoverTransaction(store, stageRoot, backup, notices))
+      return false;
+    return true;
+  }
+
+  std::vector<std::filesystem::path> transactions;
+  for (std::filesystem::directory_iterator it(stageRoot, ec), end; !ec && it != end; it.increment(ec))
+    if (it->is_directory())
+      transactions.push_back(it->path());
+  if (ec)
+    return false;
+
+  for (const auto& transaction : transactions)
+  {
+    content::RegistryFileLock transactionLock;
+    if (!transactionLock.Acquire(transaction / "transaction.lock", 0))
+      continue; // a live importer owns this stage
+    transactionLock.Release();
+    if (!RecoverTransaction(store, transaction, backup, notices))
+      return false;
+  }
+  if (std::filesystem::is_empty(stageRoot, ec))
+    std::filesystem::remove(stageRoot, ec);
+  return !ec;
 }
 } // namespace detail
 
-// Validate, stage, lock, swap, persist. A Pack that fails validation changes
-// nothing. The content-store lock is taken before any live payload is touched,
-// and every overwritten file is copied to `.volumpack-rollback` first, so a
-// mid-swap write error or a failed Save can put the tree back. ContentStore::Save
-// takes its own lock handle, which cannot nest with ours (LockFileEx / flock are
-// per-handle), so we release just before Save and roll the payloads back if that
-// write fails. `lockTimeoutMs` is Save's ceiling; tests pass a short one so a
-// held lock fails immediately instead of blocking the suite.
+// Validate, stage, lock, publish copy-on-write payloads, then persist the catalog.
+// No file named by the current catalog is overwritten, so a process death before
+// Save leaves a complete old library. A journal removes orphan transaction files
+// on the next attempt; after Save it distinguishes committed files by whether the
+// durable catalog references them. The library lock remains held through catalog
+// commit, backup promotion and stage cleanup.
 inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& packContents, ImportVerb verb,
                               bool alsoSettings, bool standalone, const std::filesystem::path& settingsPath = {},
-                              int lockTimeoutMs = 4000)
+                              int lockTimeoutMs = 4000, const ImportTestHooks* testHooks = nullptr)
 {
   using namespace detail;
   ImportResult out;
   if (!packContents)
   {
     out.error = packContents.error.empty() ? "This Pack could not be read." : packContents.error;
+    return out;
+  }
+  const bool applySettings = standalone && alsoSettings;
+  std::string sanitizedSettings;
+  if (applySettings && !packContents.settingsJson.empty()
+      && !detail::ValidateMachineSettings(packContents.settingsJson, &sanitizedSettings))
+  {
+    out.error = "This Pack contains invalid machine settings.";
     return out;
   }
 
@@ -1074,113 +1418,213 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
     return out;
   }
 
-  // 1. Stage every payload file beside the library. Nothing in the live tree is
-  // touched yet, so a failure here is a no-op for the user.
-  const auto stage = base / ".volumpack-stage";
+  // 1. Take the writer lock and finish recovery from any interrupted earlier
+  // attempt before touching its stage/rollback data.
+  const auto stageRoot = base / ".volumpack-stage";
   const auto rollback = base / ".volumpack-rollback";
-  std::filesystem::remove_all(stage, ec);
-  std::filesystem::remove_all(rollback, ec);
+  const auto backup = base / "volum-content.json.packbak";
+  std::lock_guard<std::recursive_mutex> mutex(content::ContentStoreMutex());
+  content::RegistryFileLock fileLock;
+  if (!fileLock.Acquire(store.LockPath(), lockTimeoutMs))
+  {
+    out.error = "Your library is in use by another VoLum - the import was not applied.";
+    return out;
+  }
+  if (!RecoverInterruptedImport(store, stageRoot, rollback, backup, out.notices))
+  {
+    out.error = "Could not recover the previous interrupted Pack import.";
+    return out;
+  }
+
+  std::filesystem::create_directories(stageRoot, ec);
+  if (ec)
+  {
+    out.error = "Could not create the Pack staging folder.";
+    return out;
+  }
+  std::filesystem::path stage;
+  bool stageCreated = false;
+  for (int attempt = 0; attempt < 64; ++attempt)
+  {
+    stage = stageRoot / content::MintRawId("transaction");
+    if (std::filesystem::create_directory(stage, ec))
+    {
+      stageCreated = true;
+      break;
+    }
+    if (ec)
+    {
+      out.error = "Could not create the Pack transaction.";
+      return out;
+    }
+  }
+  if (!stageCreated)
+  {
+    out.error = "Could not reserve the Pack transaction.";
+    return out;
+  }
+  content::RegistryFileLock stageLock;
+  if (!stageLock.Acquire(stage / "transaction.lock", 0))
+  {
+    out.error = "Could not lock the Pack transaction.";
+    return out;
+  }
+  auto removeStage = [&]() {
+    stageLock.Release();
+    std::filesystem::remove_all(stage, ec);
+    std::error_code emptyEc;
+    if (std::filesystem::is_empty(stageRoot, emptyEc))
+      std::filesystem::remove(stageRoot, emptyEc);
+  };
+
+  // 2. Stage every payload file beside the library. Nothing in the live tree is
+  // touched yet, so a failure here is a no-op for the user.
   for (const auto& f : packContents.files)
   {
     if (!content::IsSafeStoredRelPath(f.first))
     {
-      std::filesystem::remove_all(stage, ec);
+      removeStage();
       out.error = "This Pack contains an unsafe file path.";
       return out;
     }
     if (!WriteWholeFile(stage / content::PathFromUtf8(f.first), f.second))
     {
-      std::filesystem::remove_all(stage, ec);
+      removeStage();
       out.error = "Could not stage the Pack's files.";
       return out;
     }
   }
 
-  // 2. Lock before any live path is touched. Staging lives beside the library
-  // and is discarded if we cannot have the lock.
-  std::lock_guard<std::recursive_mutex> mutex(content::ContentStoreMutex());
-  content::RegistryFileLock fileLock;
-  if (!fileLock.Acquire(store.LockPath(), lockTimeoutMs))
-  {
-    std::filesystem::remove_all(stage, ec);
-    out.error = "Your library is in use by another VoLum - the import was not applied.";
-    return out;
-  }
-
-  // 3. Back up the library file before anything replaces it.
-  const auto backup = base / "volum-content.json.packbak";
+  // 3. Stage the pre-import catalog for later backup promotion. The existing
+  // .packbak remains the last successful undo point until this import commits.
+  content::Registry olderBackupReg;
+  const bool haveOlderBackup = ReadRegistryFile(backup, olderBackupReg);
+  content::Registry preImportReg;
+  std::string preImportBytes;
+  bool havePreImport = false;
   if (std::filesystem::exists(store.RegistryPath(), ec))
   {
-    std::filesystem::remove(backup, ec);
-    std::filesystem::copy_file(store.RegistryPath(), backup, ec);
-    if (ec)
+    havePreImport =
+      ReadWholeFile(store.RegistryPath(), preImportBytes) && ReadRegistryFile(store.RegistryPath(), preImportReg);
+    if (!havePreImport || !WriteWholeFileAtomically(stage / "pre-import.json", preImportBytes))
     {
-      std::filesystem::remove_all(stage, ec);
+      removeStage();
       out.error = "Could not back up your library before importing.";
       return out;
     }
-    out.backupPath = backup;
   }
 
-  // 4. Swap the staged files into the live tree. Add never overwrites a file
-  // that is already there: Keep mine includes the bytes, not just the catalog row.
-  std::vector<std::string> swapped;
-  auto abandonSwap = [&]() {
-    detail::RestoreSwappedPayloads(store, rollback, swapped);
-    std::filesystem::remove_all(stage, ec);
-    std::filesystem::remove_all(rollback, ec);
-  };
-
+  // 4. Publish payloads copy-on-write. A conflicting live path is never replaced:
+  // the incoming catalog is remapped to a transaction-specific path, following
+  // the custom-NAM import pattern. A crash before Save therefore leaves the old
+  // catalog and every file it names intact.
+  content::Registry incoming = packContents.library;
+  std::vector<std::pair<std::string, std::string>> writes;
+  std::vector<std::string> published;
   for (const auto& f : packContents.files)
   {
-    const auto dst = store.ResolveStored(f.first);
-    if (dst.empty())
-      continue;
-    const bool existed = std::filesystem::is_regular_file(dst, ec);
-    if (verb == ImportVerb::Add && existed)
-      continue;
-
-    if (existed)
-    {
-      if (!detail::CopyPayloadFile(dst, rollback / content::PathFromUtf8(f.first)))
-      {
-        abandonSwap();
-        out.error = "Could not back up your files before importing.";
-        return out;
-      }
-    }
-
-    std::filesystem::create_directories(dst.parent_path(), ec);
-    std::filesystem::remove(dst, ec);
-    std::filesystem::rename(stage / content::PathFromUtf8(f.first), dst, ec);
+    std::string targetRel = f.first;
+    const auto originalDst = store.ResolveStored(f.first);
+    std::string existingBytes;
+    ec.clear();
+    const bool existed = !originalDst.empty() && std::filesystem::exists(originalDst, ec);
     if (ec)
     {
-      // Rename across devices can fail; a copy is still correct here.
+      removeStage();
+      out.error = "Could not inspect the Pack's destination files.";
+      return out;
+    }
+    const bool sameBytes = existed && ReadWholeFile(originalDst, existingBytes) && existingBytes == f.second;
+    if (sameBytes)
+      continue;
+    if (existed)
+    {
+      const size_t slash = f.first.find_last_of('/');
+      const std::string prefix = slash == std::string::npos ? "" : f.first.substr(0, slash + 1);
+      const std::string leaf = slash == std::string::npos ? f.first : f.first.substr(slash + 1);
+      bool found = false;
+      for (int attempt = 0; attempt < 64; ++attempt)
+      {
+        targetRel = prefix + content::MintRawId("pack") + "__" + leaf;
+        if (!std::filesystem::exists(store.ResolveStored(targetRel), ec))
+        {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+      {
+        removeStage();
+        out.error = "Could not reserve safe paths for the Pack's files.";
+        return out;
+      }
+      RemapPayloadPath(incoming, f.first, targetRel);
+    }
+    writes.push_back({f.first, targetRel});
+    published.push_back(targetRel);
+  }
+  if (!WriteWholeFileAtomically(stage / "transaction.json", nlohmann::json(published).dump()))
+  {
+    removeStage();
+    out.error = "Could not stage the Pack transaction.";
+    return out;
+  }
+
+  auto abandonPublish = [&]() {
+    for (const auto& rel : published)
+      std::filesystem::remove(store.ResolveStored(rel), ec);
+    removeStage();
+  };
+
+  size_t publishedCount = 0;
+  for (const auto& write : writes)
+  {
+    if (testHooks && testHooks->failBeforePayloadWrite == publishedCount + 1)
+    {
+      abandonPublish();
+      out.error = "Injected Pack payload write failure.";
+      return out;
+    }
+    const auto dst = store.ResolveStored(write.second);
+    std::filesystem::create_directories(dst.parent_path(), ec);
+    if (ec)
+    {
+      abandonPublish();
+      out.error = "Could not write the Pack's files into your library.";
+      return out;
+    }
+    std::filesystem::rename(stage / content::PathFromUtf8(write.first), dst, ec);
+    if (ec)
+    {
       ec.clear();
-      std::filesystem::copy_file(
-        stage / content::PathFromUtf8(f.first), dst, std::filesystem::copy_options::overwrite_existing, ec);
+      std::filesystem::copy_file(stage / content::PathFromUtf8(write.first), dst, ec);
       if (ec)
       {
-        if (existed)
-          detail::CopyPayloadFile(rollback / content::PathFromUtf8(f.first), dst);
-        else
-          std::filesystem::remove(dst, ec);
-        abandonSwap();
+        abandonPublish();
         out.error = "Could not write the Pack's files into your library.";
         return out;
       }
     }
-    swapped.push_back(f.first);
+    ++publishedCount;
+    if (testHooks && testHooks->interruptAfterPayloadWrites > 0
+        && publishedCount >= testHooks->interruptAfterPayloadWrites)
+    {
+      out.error = "Injected interrupted import.";
+      return out;
+    }
   }
-  std::filesystem::remove_all(stage, ec);
 
-  // 5. Merge the library. The in-process mutex is already held; Save will take
-  // the file lock again after we drop ours, because a second exclusive handle
-  // in this process cannot nest.
+  // 5. Merge the library while both the in-process mutex and file lock are held.
   const content::Registry priorReg = store.reg();
   auto& reg = store.reg();
-  const auto& incoming = packContents.library;
   const bool packWins = verb != ImportVerb::Add;
+  PackContents effectivePack;
+  effectivePack.ok = true;
+  effectivePack.library = incoming;
+  effectivePack.includesMidiSoundMap = packContents.includesMidiSoundMap;
+  if (!packContents.settingsJson.empty())
+    effectivePack.settingsJson = "{}";
+  out.replacedItemCount = BuildImportPreview(priorReg, effectivePack, verb, alsoSettings, standalone).replaces.size();
 
   auto mergeVector = [&](auto& mine, const auto& theirs, auto idOf) {
     for (const auto& item : theirs)
@@ -1316,56 +1760,62 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
     for (const auto& id : dropPedals)
       store.RemovePedal(id);
   }
+  if (havePreImport)
+    for (const auto& rel : CollectPayloads(preImportReg))
+      store.CancelStoredFileDelete(rel);
 
   // 6. MIDI map is library content (plugin + standalone). Machine settings file
   // stays standalone-only.
-  const bool applySettings = standalone && alsoSettings;
   if (packContents.includesMidiSoundMap && (alsoSettings || !standalone))
     reg.midiSoundMap = incoming.midiSoundMap;
 
-  // Payload files the merge made unreferenced: a replaced amp's old capture, or an
-  // Add that wrote the Pack's path while Keep mine kept the local catalog row.
-  // Only content-relative paths, and only after Save confirms the new registry -
-  // QueueStoredFileDelete + Save's flush refuse to remove anything still named.
-  auto collectPayloads = [](const content::Registry& r) {
-    std::vector<std::string> paths;
-    for (const auto& a : r.amps)
-      for (const auto& f : a.files)
-        if (!f.storedPath.empty())
-          paths.push_back(f.storedPath);
-    for (const auto& ir : r.irs)
-      if (!ir.file.empty())
-        paths.push_back(ir.file);
-    for (const auto& p : r.pedals)
-      if (!p.file.empty())
-        paths.push_back(p.file);
-    return paths;
-  };
-  for (const auto& rel : collectPayloads(priorReg))
-    if (!store.ReferencesStoredPath(rel))
-      store.QueueStoredFileDelete(rel);
-  for (const auto& rel : swapped)
-    if (!store.ReferencesStoredPath(rel))
-      store.QueueStoredFileDelete(rel);
-
-  fileLock.Release();
-  if (!store.Save())
+  // Commit while the same cross-process lock still protects the published files,
+  // the durable registry and this transaction's stage directory.
+  if (!store.SaveWithHeldLock(fileLock))
   {
-    fileLock.Acquire(store.LockPath(), lockTimeoutMs);
-    store.Load();
     store.reg() = priorReg;
-    detail::RestoreSwappedPayloads(store, rollback, swapped);
-    std::filesystem::remove_all(rollback, ec);
+    abandonPublish();
     out.error = "Your library could not be saved - the import was not applied.";
     return out;
   }
-  std::filesystem::remove_all(rollback, ec);
   out.libraryCommitted = true;
+
+  if (testHooks && testHooks->interruptAfterCatalogSave)
+  {
+    out.error = "Injected interruption after catalog save.";
+    return out; // model process death: leave the journal for durable recovery
+  }
+
+  if (havePreImport)
+  {
+    if (!WriteWholeFileAtomically(backup, preImportBytes))
+    {
+      out.error = "The library was imported, but its previous Pack backup could not be completed.";
+      return out; // recovery retries promotion from stage/pre-import.json
+    }
+    out.backupPath = backup;
+  }
+
+  // The previous backup is now superseded. Reclaim only files named by neither
+  // the newly promoted backup nor the committed live registry.
+  if (haveOlderBackup)
+    for (const auto& rel : CollectPayloads(olderBackupReg))
+      if ((!havePreImport || !RegistryReferencesPath(preImportReg, rel)) && !store.ReferencesStoredPath(rel))
+        store.RemoveStoredFile(rel);
+  for (const auto& rel : published)
+    if (!store.ReferencesStoredPath(rel))
+      store.RemoveStoredFile(rel);
+  removeStage();
 
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
-    if (!WriteWholeFile(settingsPath, packContents.settingsJson))
+    std::error_code settingsEc;
+    const auto settingsTmp = volum::MakeAtomicJsonTempPath(settingsPath);
+    if (!WriteWholeFile(settingsTmp, sanitizedSettings)
+        || !volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc))
     {
+      std::error_code removeEc;
+      std::filesystem::remove(settingsTmp, removeEc);
       out.ok = false;
       out.error = "The library was imported, but the machine settings could not be written.";
       return out;

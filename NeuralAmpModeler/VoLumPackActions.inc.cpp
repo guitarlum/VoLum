@@ -191,8 +191,10 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
 
   const auto result = volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath);
   static const char* kVerbLog[3] = {"overwrite", "add", "reset"};
+  for (const auto& notice : result.notices)
+    VOLUM_LOG("pack", notice);
   VOLUM_LOG("pack", std::string("import ") + kVerbLog[(int)verb] + (alsoSettings ? " +settings" : "") + ": "
-                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedIds.size()) + " replaced"
+                      + (result.ok ? std::string("applied, ") + std::to_string(result.replacedItemCount) + " replaced"
                                    : "failed: " + result.error));
   // A settings-file failure still committed the library. Reload replaced captures
   // before reporting that error, or the rig keeps playing the bytes just overwritten.

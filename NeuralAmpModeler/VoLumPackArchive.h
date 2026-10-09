@@ -17,20 +17,40 @@
 //
 // Tests: tests/test_volum_pack.cpp.
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "VoLumSettingsFileIO.h"
+
 namespace volum::pack
 {
+
+// ZIP32 permits much larger counts/sizes than VoLum can safely materialize in a
+// plug-in host. These ceilings still allow thousands of captures and a 1 GiB
+// library while bounding the in-memory STORE parser.
+inline constexpr size_t kMaxArchiveEntries = 4096;
+inline constexpr uint64_t kMaxArchiveUncompressedBytes = 1024ull * 1024ull * 1024ull;
+inline constexpr uint64_t kMaxArchiveFileBytes = kMaxArchiveUncompressedBytes + 32ull * 1024ull * 1024ull;
 
 struct ArchiveEntry
 {
   std::string name; // forward-slash relative path inside the archive
   std::string data;
+};
+
+// Failure injection for the archive writer. Production callers leave this null;
+// Pack regression tests use it to model failure after the temporary file is
+// complete but before it atomically replaces the destination.
+struct ArchiveWriteTestHooks
+{
+  bool failAfterDestinationOpen = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -93,6 +113,13 @@ inline constexpr uint32_t kLocalSig = 0x04034b50u;
 inline constexpr uint32_t kCentralSig = 0x02014b50u;
 inline constexpr uint32_t kEocdSig = 0x06054b50u;
 
+inline std::string CaseFoldEntryName(std::string name)
+{
+  std::transform(
+    name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return name;
+}
+
 // A name that escapes the archive root, or that a filesystem would refuse. Checked
 // on both write and read: an archive is a file from the internet, and "../" in an
 // entry name is the oldest way to make an unzip write outside its target.
@@ -128,9 +155,16 @@ inline bool SafeEntryName(const std::string& name)
 // Serialize entries into a STORE-method zip. Returns "" when an entry name is not
 // safe to write (see SafeEntryName), because a Pack we would refuse to read is not
 // a Pack worth writing.
-inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries)
+inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries, std::string* error = nullptr)
 {
   using namespace detail;
+  if (entries.size() > kMaxArchiveEntries)
+  {
+    if (error)
+      *error = "Pack exceeds the 1 GiB / 4,096 files limit";
+    return {};
+  }
+
   std::string out;
   struct Central
   {
@@ -141,11 +175,22 @@ inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries)
   };
   std::vector<Central> central;
   central.reserve(entries.size());
+  std::set<std::string> foldedNames;
+  uint64_t totalBytes = 0;
 
   for (const auto& e : entries)
   {
     if (!SafeEntryName(e.name))
       return {};
+    if (!foldedNames.insert(CaseFoldEntryName(e.name)).second)
+      return {};
+    totalBytes += static_cast<uint64_t>(e.data.size());
+    if (e.data.size() > UINT32_MAX || totalBytes > kMaxArchiveUncompressedBytes)
+    {
+      if (error)
+        *error = "Pack exceeds the 1 GiB / 4,096 files limit";
+      return {};
+    }
     const uint32_t crc = Crc32(e.data);
     const uint32_t size = static_cast<uint32_t>(e.data.size());
     const uint32_t offset = static_cast<uint32_t>(out.size());
@@ -234,6 +279,8 @@ inline ReadResult ParseArchive(const std::string& blob)
     bad.error = std::move(why);
     return bad;
   };
+  if (blob.size() > kMaxArchiveFileBytes)
+    return fail("Pack file is too large");
   if (blob.size() < 22)
     return fail("not a Pack file (too small)");
 
@@ -257,8 +304,13 @@ inline ReadResult ParseArchive(const std::string& blob)
   const uint32_t cdOffset = GetU32(blob, eocd + 16);
   if (static_cast<size_t>(cdOffset) + cdSize > blob.size())
     return fail("Pack file is truncated");
+  if (count > kMaxArchiveEntries)
+    return fail("Pack contains too many files");
 
   size_t at = cdOffset;
+  uint64_t totalBytes = 0;
+  std::set<std::string> names;
+  std::set<std::string> foldedNames;
   for (uint16_t i = 0; i < count; ++i)
   {
     if (at + 46 > blob.size() || GetU32(blob, at) != kCentralSig)
@@ -271,10 +323,12 @@ inline ReadResult ParseArchive(const std::string& blob)
     const uint16_t extraLen = GetU16(blob, at + 30);
     const uint16_t commentLen = GetU16(blob, at + 32);
     const uint32_t localOffset = GetU32(blob, at + 42);
-    if (at + 46 + nameLen > blob.size())
+    const uint64_t centralRecordSize =
+      static_cast<uint64_t>(46) + nameLen + static_cast<uint64_t>(extraLen) + commentLen;
+    if (centralRecordSize > blob.size() - at)
       return fail("Pack directory is damaged");
     const std::string name = blob.substr(at + 46, nameLen);
-    at += 46 + nameLen + extraLen + commentLen;
+    at += static_cast<size_t>(centralRecordSize);
 
     if (name.empty() || name.back() == '/')
       continue; // directory entry: nothing to extract
@@ -282,8 +336,15 @@ inline ReadResult ParseArchive(const std::string& blob)
       return fail("Pack uses an unsupported compression method");
     if (!SafeEntryName(name))
       return fail("Pack contains an unsafe file path");
+    if (!names.insert(name).second)
+      return fail("Pack contains a duplicate file entry");
+    if (!foldedNames.insert(CaseFoldEntryName(name)).second)
+      return fail("Pack contains file paths that differ only by case");
     if (csize != usize)
       return fail("Pack directory is damaged");
+    totalBytes += usize;
+    if (totalBytes > kMaxArchiveUncompressedBytes)
+      return fail("Pack expands to too large a library");
 
     // The local header repeats the name; the data follows it.
     if (static_cast<size_t>(localOffset) + 30 > blob.size() || GetU32(blob, localOffset) != kLocalSig)
@@ -293,6 +354,8 @@ inline ReadResult ParseArchive(const std::string& blob)
     const size_t dataAt = static_cast<size_t>(localOffset) + 30 + localNameLen + localExtraLen;
     if (dataAt + usize > blob.size())
       return fail("Pack file is truncated");
+    if (localNameLen != nameLen || blob.compare(static_cast<size_t>(localOffset) + 30, localNameLen, name) != 0)
+      return fail("Pack directory is damaged");
     std::string data = blob.substr(dataAt, usize);
     if (Crc32(data) != crc)
       return fail("Pack file is corrupt (checksum mismatch in \"" + name + "\")");
@@ -316,7 +379,8 @@ inline bool ReadWholeFile(const std::filesystem::path& path, std::string& out)
   return !in.bad();
 }
 
-inline bool WriteWholeFile(const std::filesystem::path& path, const std::string& data)
+inline bool WriteWholeFile(const std::filesystem::path& path, const std::string& data,
+                           const ArchiveWriteTestHooks* testHooks = nullptr)
 {
   std::error_code ec;
   const auto parent = path.parent_path();
@@ -329,21 +393,63 @@ inline bool WriteWholeFile(const std::filesystem::path& path, const std::string&
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
   if (!out.good())
     return false;
+  if (testHooks && testHooks->failAfterDestinationOpen)
+  {
+    out.close();
+    return false;
+  }
   out.write(data.data(), static_cast<std::streamsize>(data.size()));
   out.close();
   return out.good();
 }
 
-inline bool WriteArchiveToFile(const std::filesystem::path& path, const std::vector<ArchiveEntry>& entries)
+inline bool WriteWholeFileAtomically(const std::filesystem::path& path, const std::string& data,
+                                     const ArchiveWriteTestHooks* testHooks = nullptr)
 {
-  const std::string blob = BuildArchive(entries);
+  std::error_code ec;
+  const auto parent = path.parent_path();
+  if (!parent.empty())
+  {
+    std::filesystem::create_directories(parent, ec);
+    if (ec)
+      return false;
+  }
+  const auto tmp = volum::MakeAtomicJsonTempPath(path);
+  if (!WriteWholeFile(tmp, data))
+    return false;
+  if (testHooks && testHooks->failAfterDestinationOpen)
+  {
+    std::filesystem::remove(tmp, ec);
+    return false;
+  }
+  if (!volum::ReplaceFileAtomically(tmp, path, ec))
+  {
+    std::error_code removeEc;
+    std::filesystem::remove(tmp, removeEc);
+    return false;
+  }
+  return true;
+}
+
+inline bool WriteArchiveToFile(const std::filesystem::path& path, const std::vector<ArchiveEntry>& entries,
+                               const ArchiveWriteTestHooks* testHooks = nullptr, std::string* error = nullptr)
+{
+  const std::string blob = BuildArchive(entries, error);
   if (blob.empty())
     return false;
-  return WriteWholeFile(path, blob);
+  return WriteWholeFileAtomically(path, blob, testHooks);
 }
 
 inline ReadResult ReadArchiveFromFile(const std::filesystem::path& path)
 {
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(path, ec);
+  if (!ec && size > kMaxArchiveFileBytes)
+  {
+    ReadResult res;
+    res.error = "Pack file is too large";
+    return res;
+  }
   std::string blob;
   if (!ReadWholeFile(path, blob))
   {
