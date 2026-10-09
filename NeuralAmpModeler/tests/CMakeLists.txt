@@ -94,6 +94,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_write_debounce.cpp
   test_volum_loopback_detect.cpp
   test_volum_midi_decoder.cpp
+  test_volum_vst3_midi_params.cpp
   test_volum_midi_handoff.cpp
   test_volum_midi_footswitch.cpp
   test_volum_meter_sender.cpp
@@ -133,6 +134,7 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${REPO_ROOT}/iPlug2/WDL"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras/nlohmann"
+  "${REPO_ROOT}/iPlug2/Dependencies/IPlug/VST3_SDK"
 )
 
 target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
