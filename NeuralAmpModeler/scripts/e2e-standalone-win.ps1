@@ -2177,8 +2177,11 @@ function Test-Midi {
   $settingsPath = Join-Path $root "volum-settings.json"
   $contentPath = Join-Path $root "content\volum-content.json"
 
-  # RtMidi lists a WinMM input as "<name> <index>", and iPlug matches indev against that.
+  # Seed the legacy RtMidi spelling. The host migrates a unique WinMM device to
+  # its stable base name after opening it, so adding a lower-index port later
+  # cannot break the saved selection.
   $indev = "{0} {1}" -f $MidiPort, $inIdx
+  $stableIndev = $MidiPort
   Add-Content $iniPath @("[midi]", "indev=$indev", "outdev=off", "inchan=0", "outchan=0") -Encoding ASCII
 
   # Known Factory Sounds on scattered programs; 7 is left empty on purpose.
@@ -2215,6 +2218,10 @@ function Test-Midi {
       [void][VoLumE2eMidi]::Send($out, $CC1, 102, 42)
       $r.cc = Wait-MidiLog $logPath $n (& $recallOf 42)
       $n = (Get-MidiLogLines $logPath).Count
+      1..64 | ForEach-Object { [void][VoLumE2eMidi]::Send($out, 0xFE, 0, 0) }
+      [void][VoLumE2eMidi]::Send($out, $PC1, 9, 0)
+      $r.flood = Wait-MidiLog $logPath $n (& $recallOf 9)
+      $n = (Get-MidiLogLines $logPath).Count
       [void][VoLumE2eMidi]::Send($out, $PC1, 7, 0)
       $r.empty = Wait-MidiLog $logPath $n '^slot=7 has no playable Sound; ignored$' 3000
       $n = (Get-MidiLogLines $logPath).Count
@@ -2230,13 +2237,17 @@ function Test-Midi {
     if (-not $d) { Assert-True "drive step ran" $false; return }
     $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
     Assert-True "the standalone opened '$indev'" ($log -notmatch "could not open the saved MIDI port")
-    Assert-True "settings.ini still names '$indev' (iPlug resets an unknown port to off)" (
+    Assert-True "settings.ini migrated '$indev' to stable '$stableIndev'" (
+      (Get-Content $iniPath) -contains "indev2=$stableIndev")
+    Assert-True "settings.ini keeps the legacy MIDI spelling for older builds" (
       (Get-Content $iniPath) -contains "indev=$indev")
 
     Assert-True "Program Change 9 recalls program 9 (Modern Rhythm)" (@($d.pc | Where-Object { $_ -match (& $recallOf 9) }).Count -eq 1) (
       "midi lines: " + ($d.pc -join " / "))
     Assert-True "CC 102 value 42 recalls program 42 (Ampete Lead)" (@($d.cc | Where-Object { $_ -match (& $recallOf 42) }).Count -eq 1) (
       "midi lines: " + ($d.cc -join " / "))
+    Assert-True "64 Active Sensing messages cannot crowd out the following Program Change" (
+      @($d.flood | Where-Object { $_ -match (& $recallOf 9) }).Count -eq 1) ("midi lines: " + ($d.flood -join " / "))
     Assert-True "Program Change 7 reaches VoLum and is ignored: program 7 is empty" (
       @($d.empty | Where-Object { $_ -match '^slot=7 has no playable Sound; ignored$' }).Count -eq 1) ("midi lines: " + ($d.empty -join " / "))
     Assert-True "the empty program recalls nothing" (@($d.empty | Where-Object { $_ -match '^recall ' }).Count -eq 0) (
