@@ -69,28 +69,17 @@ echo go > "$EVIDENCE_DIR/go.txt"
 
 export VOLUM_REAPER_EVIDENCE_DIR="$EVIDENCE_DIR"
 echo "Launching REAPER with fresh-runner resource path $RESOURCE"
-"$REAPER_APP/Contents/MacOS/REAPER" -nosplash -new > "$EVIDENCE_DIR/reaper-process.log" 2>&1 &
+"$REAPER_APP/Contents/MacOS/REAPER" -nosplash -new "$SCRIPT_DIR/reaper-evidence.lua" \
+  > "$EVIDENCE_DIR/reaper-process.log" 2>&1 &
 reaper_pid=$!
 
 deadline=$((SECONDS + 120))
 captured=0
-dialogs_dismissed=0
 while [[ "$SECONDS" -lt "$deadline" && ! -f "$RESULTS" ]]; do
   if ! kill -0 "$reaper_pid" 2>/dev/null; then
     echo "FAIL REAPER exited before writing results"
     cat "$EVIDENCE_DIR/reaper-process.log" || true
     exit 1
-  fi
-  if [[ "$dialogs_dismissed" -eq 0 && "$SECONDS" -ge $((deadline - 115)) ]]; then
-    # "No audio device" is expected on hosted macOS. Dismiss its optional
-    # configuration sheet so REAPER can continue into __startup.lua.
-    osascript -e 'tell application "REAPER" to activate' \
-      -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
-    sleep 2
-    osascript -e 'tell application "REAPER" to activate' \
-      -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
-    echo "Dismissed optional first-run/audio-device sheets when present"
-    dialogs_dismissed=1
   fi
   if [[ "$captured" -eq 0 && "$SECONDS" -ge $((deadline - 100)) ]]; then
     screencapture -x "$EVIDENCE_DIR/reaper-window.png" 2>/dev/null || true
@@ -102,7 +91,7 @@ while [[ "$SECONDS" -lt "$deadline" && ! -f "$RESULTS" ]]; do
 done
 
 if [[ ! -f "$RESULTS" ]]; then
-  echo "SKIP REAPER AU/VST3 automation: the runner kept REAPER alive but did not execute the startup Lua script after first-run dialogs were dismissed"
+  echo "SKIP REAPER AU/VST3 automation: the runner kept REAPER alive but did not execute the startup/command-line Lua script (likely a first-run GUI gate)"
   cat "$EVIDENCE_DIR/reaper-harness.log" 2>/dev/null || true
   exit 0
 fi
