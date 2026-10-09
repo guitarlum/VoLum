@@ -2,6 +2,11 @@
 
 #include "../VoLumMidi.h"
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+
 using iplug::IMidiMsg;
 
 namespace
@@ -106,4 +111,37 @@ TEST_CASE("DecodeMidiProgramChange is a thin wrapper around DecodeMidiSoundRecal
   CHECK(volum::DecodeMidiProgramChange(pc, 0) == volum::DecodeMidiSoundRecall(pc, 0, volum::kMidiRecallCcDefault));
   CHECK(volum::DecodeMidiProgramChange(MakeCc(102, 5), 0)
         == volum::DecodeMidiSoundRecall(MakeCc(102, 5), 0, volum::kMidiRecallCcDefault));
+}
+
+TEST_CASE("F-67 recall CC stepper stops at both ends instead of wrapping")
+{
+  CHECK(volum::StepMidiRecallCc(10, 1) == 11);
+  CHECK(volum::StepMidiRecallCc(10, -1) == 9);
+  CHECK(volum::StepMidiRecallCc(volum::kMidiRecallCcMax, 1) == volum::kMidiRecallCcMax);
+  CHECK(volum::StepMidiRecallCc(volum::kMidiRecallCcMin, -1) == volum::kMidiRecallCcMin);
+  CHECK(volum::StepMidiRecallCc(volum::kMidiRecallCcMax - 1, 1) == volum::kMidiRecallCcMax);
+  // CC 0 is a legal recall CC, and the stepper can land on it.
+  CHECK(volum::StepMidiRecallCc(1, -1) == 0);
+}
+
+TEST_CASE("F-67 the recall CC control steps through StepMidiRecallCc, never wraps by hand")
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsTabs.h";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  const std::string src = ss.str();
+
+  const auto first = src.find("class VoLumMidiRecallCcControl");
+  REQUIRE(first != std::string::npos);
+  const std::string control = src.substr(first);
+
+  CHECK(control.find("Commit(volum::StepMidiRecallCc(mCc, -1))") != std::string::npos);
+  CHECK(control.find("Commit(volum::StepMidiRecallCc(mCc, 1))") != std::string::npos);
+  CHECK(control.find("StepMidiRecallCc(mCc, d > 0.f ? 1 : -1)") != std::string::npos);
+  // The old wrap sent 119 to 0 and 0 to 119.
+  CHECK(control.find("? volum::kMidiRecallCcMin : mCc + 1") == std::string::npos);
+  CHECK(control.find("? volum::kMidiRecallCcMax : mCc - 1") == std::string::npos);
+  CHECK(control.find("next = volum::kMidiRecallCcMin") == std::string::npos);
 }
