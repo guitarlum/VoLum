@@ -479,13 +479,12 @@ volum::UiSyncInput NeuralAmpModeler::_VolumMakeUiSyncInput(bool support, const v
 // a constructor default.
 void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool support)
 {
+  // Only the painting needs an editor. With the window closed (a MIDI Sound recall,
+  // a preset recall, a host session restore) the routing caches below are still the
+  // only thing that tells the loader which custom capture to stage.
   auto* pGfx = GetUI();
-  if (!pGfx)
-    return;
-  auto* spkCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow);
-  if (!spkCtrl)
-    return;
-  auto* row = spkCtrl->As<VoLumSpeakerRowControl>();
+  auto* spkCtrl = pGfx ? pGfx->GetControlWithTag(kCtrlTagVoLumSpeakerRow) : nullptr;
+  auto* row = spkCtrl ? spkCtrl->As<VoLumSpeakerRowControl>() : nullptr;
 
   // The cab row is one control shared by both lanes, showing whichever is focused.
   // Every other function that writes it checks that first (_VolumSelectIR,
@@ -498,7 +497,7 @@ void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool
   // unconditional: the background lane still has to stage its own .nam.
   const bool laneFocused = (support == _VolumSupportFocused());
 
-  if (laneFocused)
+  if (row && laneFocused)
   {
     if (plan.useFactoryCabNames)
       row->SetFactoryCabs();
@@ -515,15 +514,16 @@ void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool
   if (plan.clearOrphanedIr)
     _VolumClearIR(support, /*deferToCabSwap=*/true);
 
-  if (laneFocused)
+  if (row && laneFocused)
   {
     row->SetIrCab(plan.irCabActive, plan.irName.c_str());
     row->SetSelected(plan.cabSelectedIndex);
   }
 
   const int stepperTag = support ? kCtrlTagVoLumSupportChannelStep : kCtrlTagVoLumChannelStep;
-  if (auto* stepper = pGfx->GetControlWithTag(stepperTag))
-    stepper->As<VoLumChannelStepControl>()->SetChannels(plan.channelLabels, plan.channelSelectedPos);
+  if (pGfx)
+    if (auto* stepper = pGfx->GetControlWithTag(stepperTag))
+      stepper->As<VoLumChannelStepControl>()->SetChannels(plan.channelLabels, plan.channelSelectedPos);
 
   if (plan.sidebarCustomIdx < 0)
     return; // factory lane: routing caches are already the source of truth
@@ -549,8 +549,6 @@ void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool
 
 void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx, bool supportLane)
 {
-  if (GetUI() == nullptr)
-    return;
   const auto amp = volum::custom::CustomAmpAt(customIdx);
   _VolumApplyUiSyncPlan(volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportLane, amp)), supportLane);
 }
