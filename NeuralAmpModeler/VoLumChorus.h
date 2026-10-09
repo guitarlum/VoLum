@@ -158,6 +158,8 @@ public:
     mMode = mModeTarget;
     mDuckLevel = 1.0;
     mMinRead = 1e300;
+    mFramesProcessed = 0;
+    mModeSwitchFrame = 0;
     _ResetVoice();
     mSnap = true;
   }
@@ -165,6 +167,13 @@ public:
   // Smallest delay any voice asked for since Reset, in ms (a test probe for the
   // 1 ms floor that every excursion budget is built on).
   double MinReadDelayMs() const { return mMinRead * 1000.0 / mSampleRate; }
+
+  // The voice currently sounding; it follows the requested mode once the duck has bottomed out (a test probe).
+  int ActiveMode() const { return mMode; }
+  // Frames processed since Reset, and the frame count at which the last mode switch took effect
+  // (test probes for the duck length).
+  uint64_t FramesProcessed() const { return mFramesProcessed; }
+  uint64_t ModeSwitchFrame() const { return mModeSwitchFrame; }
 
   void Process(double** io, int numChannels, int numFrames)
   {
@@ -189,6 +198,7 @@ public:
         default: _RunEnsemble(ch, chans, n); break;
       }
       _FlushState();
+      mFramesProcessed += static_cast<uint64_t>(n);
     }
   }
 
@@ -327,9 +337,10 @@ private:
   static constexpr double kMinLineRate = 192000.0;
   static constexpr double kMixSmoothSec = 0.02;
   static constexpr double kMixSnap = 1e-4;
-  // Mode switch: the wet ducks to silence over two sub-blocks, the voice state
-  // resets while nothing of it is audible, then the new voice fades in.
-  static constexpr double kDuckDownPerSubBlock = 0.5;
+  // Mode switch: the wet ducks to silence over a fixed time (counted in samples, so it does
+  // not depend on block size or rate), the voice state resets while nothing of it is
+  // audible, then the new voice fades in.
+  static constexpr double kDuckDownSec = 0.0013;
   static constexpr double kDuckUpSec = 0.01;
   static constexpr double kWarpedFlutterHz = 9.3;
   static constexpr double kClearCross = 0.35; // Dimension-style share of the opposite voice
@@ -427,10 +438,11 @@ private:
       if (duck <= 0.0)
       {
         mMode = mModeTarget;
+        mModeSwitchFrame = mFramesProcessed;
         _ResetVoice();
       }
       else
-        duck = std::max(0.0, duck - kDuckDownPerSubBlock);
+        duck = std::max(0.0, duck - static_cast<double>(n) / (kDuckDownSec * mSampleRate));
     }
     else
       duck = std::min(1.0, duck + static_cast<double>(n) / (kDuckUpSec * mSampleRate));
@@ -787,6 +799,8 @@ private:
   double mHpX[2] = {0.0, 0.0};
   double mHpY[2] = {0.0, 0.0};
   double mMinRead = 1e300;
+  uint64_t mFramesProcessed = 0;
+  uint64_t mModeSwitchFrame = 0;
 
   // L, R and mid (ENSEMBLE centre voice) lines; power-of-two size.
   std::vector<double> mLine[3];

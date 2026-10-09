@@ -22,6 +22,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp
   test_volum_ui_sync_plan.cpp
+  test_volum_host_restore_gate.cpp
   test_volum_upgrade_migration.cpp
   test_volum_input_calibration.cpp
   test_volum_diag_log.cpp
@@ -57,6 +58,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_dsp_cache_params.cpp
   test_volum_dsp_staging.cpp
   test_volum_reset_exclusion.cpp
+  test_volum_rt_alloc.cpp
   test_volum_output_mode.cpp
   test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp
@@ -111,6 +113,7 @@ add_executable(NeuralAmpModeler-Tests
   "${REPO_ROOT}/AudioDSPTools/dsp/Delay.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/ImpulseResponse.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/Reverb.cpp"
+  "${REPO_ROOT}/AudioDSPTools/dsp/NoiseGate.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/RecursiveLinearFilter.cpp"
   "${REPO_ROOT}/AudioDSPTools/dsp/wav.cpp"
   "${REPO_ROOT}/NeuralAmpModelerCore/NAM/activations.cpp"

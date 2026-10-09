@@ -313,9 +313,11 @@ TEST_CASE("Every latency input asks the main thread to recompute, and only the m
     cpp, "void NeuralAmpModeler::_VolumPublishLiveLatency()", "int NeuralAmpModeler::_ReportedLatencySamples()");
   CHECK(At(publish, "mLiveLatency.Publish(lanes);") < At(publish, "mLatencyRequests.Request();"));
 
-  // Dual Amp, PRE NAM and PRE Pitch params: one request ahead of the switch.
+  // Dual Amp, PRE NAM and PRE Pitch params: one request ahead of the switch, in the
+  // body every param source (host, UI, MIDI) reaches.
   const std::string onParam =
-    Between(cpp, "void NeuralAmpModeler::OnParamChange(int paramIdx)", "    // Changes to the input gain");
+    Between(cpp, "void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)",
+            "    // Changes to the input gain");
   CHECK(At(onParam, "if (volum::ParamAffectsReportedLatency(paramIdx))\n    mLatencyRequests.Request();")
         < At(onParam, "switch (paramIdx)"));
 
@@ -334,7 +336,7 @@ TEST_CASE("Every latency input asks the main thread to recompute, and only the m
      "_ApplyReportedLatency(latency); });");
   // The old latch let a main-thread recompute overwrite a newer audio-thread value.
   const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
-  for (const char* latch : {"mPendingLatency", "mLatencyDirty"})
+  for (const std::string latch : {std::string("mPending") + "Latency", std::string("mLatency") + "Dirty"})
   {
     INFO(latch);
     CHECK(cpp.find(latch) == std::string::npos);

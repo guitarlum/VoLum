@@ -82,6 +82,7 @@ void VolumForgetWriteDebounce(const NeuralAmpModeler* self)
 {
   gVolumWriteDebounce.erase(self);
 }
+
 } // namespace
 
 const double kDCBlockerFrequency = 5.0;
@@ -346,7 +347,7 @@ constexpr const char* kVolumDiagApiName = "plugin";
 
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
-: Plugin(info, MakeConfig(kNumParams, kNumPresets))
+: VolumHostBase(info, MakeConfig(kNumParams, kNumPresets))
 {
   volum::diag::Log::Instance().Open(volum::VolumDiagLogFilePath());
   VOLUM_LOG("startup", std::string("VoLum ") + PLUG_VERSION_STR + " (" + kVolumDiagApiName + ") instance created");
@@ -879,8 +880,10 @@ void NeuralAmpModeler::OnReset()
       mPitch.Reset();
     }
     const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
-    mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
-    mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+    // Prepared for the reserve, not the host's reset size: the audio thread then resizes inside capacity.
+    const size_t postEffectFrames = static_cast<size_t>(reservedBlock);
+    mDelay.Prepare(postEffectChannels, postEffectFrames, sampleRate);
+    mReverb.Prepare(postEffectChannels, postEffectFrames, sampleRate);
     mTremolo.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
     mChorus.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
     mDelay.Reset();
@@ -901,6 +904,32 @@ void NeuralAmpModeler::OnReset()
     mDualMainAlignedBuffer.assign(reservedT, 0.0);
     mDualSupportAlignedBuffer.assign(reservedT, 0.0);
     _PrepareBuffers(kNumChannelsInternal, reservedT);
+    // Every DSP object's output buffers get their full-size allocation here, so a host block
+    // that grows past the reset size (but inside the reserve) never allocates in ProcessBlock.
+    mToneStack->Reserve(static_cast<int>(kNumChannelsInternal), reservedBlock);
+    if (mSupportToneStack)
+      mSupportToneStack->Reserve(static_cast<int>(kNumChannelsInternal), reservedBlock);
+    for (int i = 0; i < 2; ++i)
+    {
+      mPreEq[i].Reserve(kNumChannelsInternal, reservedT);
+      mPreInputGain[i].ReserveOutputs(kNumChannelsInternal, reservedT);
+      mPreOutputGain[i].ReserveOutputs(kNumChannelsInternal, reservedT);
+    }
+    mNoiseGateTrigger.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mNoiseGateGain.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mNoiseGateGain.ReserveGainReduction(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateTrigger.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateGain.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateGain.ReserveGainReduction(kNumChannelsInternal, reservedT);
+    mPreCompressor.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mHighPass.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportHighPass.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mIrShaping.Reserve(kNumChannelsInternal, reservedT);
+    mSupportIrShaping.Reserve(kNumChannelsInternal, reservedT);
+    if (mIR)
+      mIR->ReserveOutputs(kNumChannelsInternal, reservedT);
+    if (mSupportIR)
+      mSupportIR->ReserveOutputs(kNumChannelsInternal, reservedT);
     mTunerDSP.Reset(sampleRate);
     mMetronomeDSP.Reset(sampleRate);
   }
@@ -920,13 +949,17 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 
 void NeuralAmpModeler::OnIdle()
 {
+  _VolumApplyPendingModeChanges();
 
   // Host state restored into an open editor. Only consumed while an editor exists, so
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
   if (GetUI() && mVolumUiSyncPending.exchange(false))
-    _VolumSyncUiFromState();
+    _VolumResyncUi();
   _VolumRebindCustomSupportIdx();
+  _VolumApplyPendingDualAmpChange();
+  if (mVolumSupportChannelsDirty.exchange(false, std::memory_order_acquire))
+    _VolumRefreshSupportChannels();
   // Not while a control holds the mouse: the box drops the capture without ending a
   // knob drag's host gesture. A capture that never ends waits only so long.
   if (mVolumPendingLibraryNotice.empty())
@@ -1243,6 +1276,8 @@ void NeuralAmpModeler::OnIdle()
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
 {
+  const_cast<NeuralAmpModeler*>(this)->_VolumApplyPendingModeChanges();
+
   // Flush current live params into the active per-amp scene before serializing.
   // The scene is otherwise only synced from OnIdle (line ~2253), which needs an
   // editor / idle pump. A host that sets parameters and immediately saves state
@@ -1389,6 +1424,13 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
   // content registry, and a corrupt chunk is exactly the input most likely to
   // reach a path nobody predicted. Returning a parse failure lets the host
   // report a bad state; letting the exception out cannot be recovered from.
+  //
+  // The rig is applied synchronously, on the host's thread, so the next audio block
+  // and an immediate offline render play the restored sound. The editor is hidden
+  // from this thread for the duration (GetUI() returns null here, and iPlug's
+  // Send*FromDelegate helpers skip their control walk): every applier takes its
+  // headless path, and the controls are re-derived by _VolumResyncUi.
+  const volum::HostRestoreGate::Scope uiHiddenFromHostThread(RestoreGate());
   try
   {
     // Look for the expected header. If it's there, then we'll know what to do.
@@ -1535,8 +1577,215 @@ void NeuralAmpModeler::OnUIClose()
   VolumDebounceFor(this).calibration.markWritten(VolumWriteNowMs());
 }
 
+void NeuralAmpModeler::_VolumApplyPendingDualAmpChange()
+{
+  if (!mVolumDualAmpParamDirty.exchange(false, std::memory_order_acquire) || !mVolumInitComplete)
+    return;
+
+  const bool nowOn = GetParam(kDualAmpActive)->Bool();
+  // Uncustomised-pan heuristic: when both lanes are still centered, split them
+  // hard L/R. A user who has panned either lane keeps their layout.
+  if (nowOn && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3 && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
+  {
+    mSupportPolarityInvert.store(true);
+    _VolumActiveScene().supportPolarityInvert = true;
+    GetParam(kMainAmpPan)->Set(-1.0);
+    SendParameterValueFromDelegate(kMainAmpPan, GetParam(kMainAmpPan)->GetNormalized(), true);
+    GetParam(kSupportAmpPan)->Set(1.0);
+    SendParameterValueFromDelegate(kSupportAmpPan, GetParam(kSupportAmpPan)->GetNormalized(), true);
+
+    // Mirror MAIN's currently selected cab onto SUPPORT only when no support
+    // partner is chosen yet (don't clobber an explicitly-picked support cab).
+    if (GetParam(kSupportAmpIdx)->Int() < 0 && mVolumCustomSupportIdx < 0)
+    {
+      const int mainSpk = std::clamp(mVolumSpeakerIdx, 0, 3);
+      GetParam(kSupportSpeakerIdx)->Set(mainSpk);
+      SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
+      mVolumSupportChannelsDirty.store(true, std::memory_order_release);
+    }
+    mVolumSettingsDirty = true;
+  }
+
+  // Force focus back to MAIN when dual amp is disabled.
+  if (!nowOn)
+    mVolumDualAmpFocusedSupport = false;
+}
+
+void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource source)
+{
+  if (!mVolumInitComplete || (source != EParamSource::kUI && source != EParamSource::kHost))
+    return;
+
+  switch (paramIdx)
+  {
+    case kPrePitchMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::PrePitch); break;
+    case kDelayMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Delay); break;
+    case kReverbMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Reverb); break;
+    case kReverbSubMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb); break;
+    case kTremoloMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Tremolo); break;
+    case kChorusMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Chorus); break;
+    default: break;
+  }
+}
+
+void NeuralAmpModeler::_VolumApplyPendingModeChanges()
+{
+  // A restore below sends parameter values, which re-enters here through
+  // OnParamChangeUI. Leave what is queued for the next idle: taking marks mid-recall
+  // would hide the host's late writes from the recall.
+  if (mVolumModeTransactionActive)
+    return;
+  const unsigned pending = mVolumPendingModeChanges.Take();
+  // The knobs the host wrote since the last transaction. They are consumed with the
+  // window, whether or not a mode change is pending: a write that no mode change
+  // followed does not carry into a later one (this also drops stale marks at OnIdle).
+  const std::uint32_t hostKnobs = mVolumHostKnobMarks.Take();
+  struct ActiveScope
+  {
+    bool& flag;
+    explicit ActiveScope(bool& f)
+    : flag(f)
+    {
+      flag = true;
+    }
+    ~ActiveScope() { flag = false; }
+  } activeScope(mVolumModeTransactionActive);
+  // Sample all current values before any restore below can change another mode
+  // parameter (notably Reverb mode restore also restores its Oktaverb sub-mode).
+  const int currentPitchMode = GetParam(kPrePitchMode)->Int();
+  const int currentDelayMode = GetParam(kDelayMode)->Int();
+  const int currentReverbMode = GetParam(kReverbMode)->Int();
+  const int currentOktaverbMode = GetParam(kReverbSubMode)->Int();
+  const int currentTremoloMode = GetParam(kTremoloMode)->Int();
+  const int currentChorusMode = GetParam(kChorusMode)->Int();
+
+  // Knob groups per target (same bits HostKnobBit assigns).
+  auto knobsOf = [hostKnobs](std::initializer_list<int> params) {
+    std::uint32_t mask = 0;
+    for (const int idx : params)
+      mask |= hostKnobs & volum::HostKnobBit(idx);
+    return mask;
+  };
+  struct KeptScope
+  {
+    std::uint32_t& slot;
+    std::uint32_t prev;
+    KeptScope(std::uint32_t& s, std::uint32_t kept)
+    : slot(s)
+    , prev(s)
+    {
+      slot = kept;
+    }
+    ~KeptScope() { slot = prev; }
+  };
+  // The snapshot of the incoming mode adopts the kept knobs, so that save runs with
+  // nothing excluded.
+  auto saveIncoming = [this](auto&& save, int mode) {
+    const std::uint32_t kept = mVolumKeptKnobs;
+    mVolumKeptKnobs = 0;
+    save(mode);
+    mVolumKeptKnobs = kept;
+  };
+  std::uint32_t retryKnobs = 0;
+  auto apply = [&](volum::ModeSnapshotTarget target, int currentMode, int modeCount, volum::PendingModeAction action,
+                   int& trackedMode, std::uint32_t kept, auto&& saveOutgoing, auto&& restoreIncoming) {
+    const KeptScope scope(mVolumKeptKnobs, kept);
+    const auto result = volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(
+      (pending & volum::ModeSnapshotBit(target)) != 0, currentMode, modeCount, action, trackedMode, kept,
+      [&](int mode, std::uint32_t) { saveOutgoing(mode); }, [&](int mode, std::uint32_t) { restoreIncoming(mode); },
+      [&](int mode) { saveIncoming(saveOutgoing, mode); });
+    if (result == volum::PendingModeResult::Retry)
+    {
+      mVolumPendingModeChanges.Request(target);
+      retryKnobs |= kept;
+    }
+    return result;
+  };
+
+  apply(
+    volum::ModeSnapshotTarget::PrePitch, currentPitchMode, volum::kVoLumPitchModeCount,
+    mVolumPreRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply, mVolumPrePitchMode,
+    knobsOf({kPrePitchMix, kPrePitchDry, kPrePitchLevel, kPrePitchVoicing}),
+    [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
+    [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode); });
+  apply(
+    volum::ModeSnapshotTarget::Delay, currentDelayMode, volum::kVoLumDelayModeCount,
+    mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
+    mVolumEffectSettings.delayMode,
+    knobsOf({kDelayTime, kDelayFeedback, kDelayMix, kDelayTone, kDelayAge, kDelayPingPong}),
+    [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreDelayModeSnapshot(mode); });
+  const std::uint32_t reverbKnobs = knobsOf({kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer});
+  auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
+  // Host moved to Oktaverb, to a new sub-mode and wrote its knobs in one window: those
+  // knobs belong to the new sub-mode, not to the sub-mode that was remembered.
+  if (reverbKnobs != 0 && currentReverbMode == volum::kVoLumReverbModeOktaverb
+      && (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)) != 0
+      && (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0)
+    oktaverbMode = std::clamp(currentOktaverbMode, 0, 2);
+  apply(
+    volum::ModeSnapshotTarget::Reverb, currentReverbMode, volum::kVoLumReverbModeCount,
+    mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
+    mVolumEffectSettings.reverbMode, reverbKnobs, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreReverbModeSnapshot(mode); });
+
+  const auto oktaverbAction = volum::OktaverbPendingModeAction(
+    currentReverbMode == volum::kVoLumReverbModeOktaverb, mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress);
+  {
+    const KeptScope scope(mVolumKeptKnobs, reverbKnobs);
+    const auto oktaverbResult = volum::ApplyPendingNestedModeSnapshotChange(
+      (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentOktaverbMode, 3,
+      oktaverbAction, oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
+      [this, reverbKnobs](int mode) {
+        _VolumRestoreOktaverbSubModeSnapshot(mode);
+        if (reverbKnobs != 0)
+        {
+          mVolumKeptKnobs = 0;
+          _VolumSaveOktaverbSubModeSnapshot(mode);
+          mVolumKeptKnobs = reverbKnobs;
+        }
+      },
+      [this](int mode) {
+        GetParam(kReverbSubMode)->Set(static_cast<double>(mode));
+        SendParameterValueFromDelegate(kReverbSubMode, GetParam(kReverbSubMode)->GetNormalized(), true);
+      });
+    if (oktaverbResult == volum::PendingModeResult::Retry)
+    {
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
+      retryKnobs |= reverbKnobs;
+    }
+  }
+  apply(
+    volum::ModeSnapshotTarget::Tremolo, currentTremoloMode, volum::kVoLumTremoloModeCount,
+    mVolumTremoloRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
+                                                                  : volum::PendingModeAction::Apply,
+    mVolumEffectSettings.tremoloMode,
+    knobsOf({kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover}),
+    [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode); });
+  apply(
+    volum::ModeSnapshotTarget::Chorus, currentChorusMode, volum::kVoLumChorusModeCount,
+    mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
+    mVolumEffectSettings.chorusMode, knobsOf({kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix}),
+    [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreChorusModeSnapshot(mode); });
+  // A transaction that had to wait keeps its window; marks written during this one reach the next only for a mode
+  // change that is still pending.
+  mVolumHostKnobMarks.EndTransaction(retryKnobs, mVolumPendingModeChanges.Peek());
+}
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
+  OnParamChange(paramIdx, EParamSource::kUnknown);
+}
+
+void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)
+{
+  (void)sampleOffset;
+  _VolumQueueModeParamChange(paramIdx, source);
+  // An explicit host write of a per-mode knob: a mode change in the same window keeps it.
+  if (mVolumInitComplete && source == EParamSource::kHost)
+    mVolumHostKnobMarks.Mark(paramIdx);
+
   // Host automation lands here on the audio thread: only ask, OnIdle reports.
   if (volum::ParamAffectsReportedLatency(paramIdx))
     mLatencyRequests.Request();
@@ -1576,38 +1825,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kDualAmpActive:
       if (mVolumInitComplete)
       {
-        const bool nowOn = GetParam(kDualAmpActive)->Bool();
-        // Uncustomised-pan heuristic: when both lanes are still centered, split them
-        // hard L/R. This must fire even when a support amp is ALREADY selected -
-        // otherwise a centered MAIN + polarity-inverted SUPPORT phase-cancel to near
-        // silence (the "no sound in dual mode" case). A user who has panned either
-        // lane keeps their layout.
-        if (nowOn && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3
-            && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
-        {
-          mSupportPolarityInvert.store(true);
-          _VolumActiveScene().supportPolarityInvert = true;
-          GetParam(kMainAmpPan)->Set(-1.0);
-          SendParameterValueFromDelegate(kMainAmpPan, GetParam(kMainAmpPan)->GetNormalized(), true);
-          GetParam(kSupportAmpPan)->Set(1.0);
-          SendParameterValueFromDelegate(kSupportAmpPan, GetParam(kSupportAmpPan)->GetNormalized(), true);
-
-          // Mirror MAIN's currently selected cab onto SUPPORT only when no support
-          // partner is chosen yet (don't clobber an explicitly-picked support cab).
-          if (GetParam(kSupportAmpIdx)->Int() < 0 && mVolumCustomSupportIdx < 0)
-          {
-            const int mainSpk = std::clamp(mVolumSpeakerIdx, 0, 3);
-            GetParam(kSupportSpeakerIdx)->Set(mainSpk);
-            SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
-          }
-          mVolumSettingsDirty = true;
-        }
-
         mVolumSupportNeedsLoad.store(true);
-        // Force focus back to MAIN when dual amp is disabled.
-        if (!nowOn)
-          mVolumDualAmpFocusedSupport = false;
-        _UpdateVoLumLayout();
+        mVolumDualAmpParamDirty.store(true, std::memory_order_release);
       }
       break;
     case kMainAmpPan:
@@ -1620,19 +1839,12 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       if (mVolumInitComplete)
       {
         mVolumSupportNeedsLoad.store(true);
-        _VolumRefreshSupportChannels();
-        _UpdateVoLumLayout();
+        mVolumSupportChannelsDirty.store(true, std::memory_order_release);
       }
       break;
     case kSupportChannelIdx:
       if (mVolumInitComplete)
-      {
         mVolumSupportNeedsLoad.store(true);
-        if (auto* pGfx = GetUI())
-          if (auto* stepper = pGfx->GetControlWithTag(kCtrlTagVoLumSupportChannelStep))
-            stepper->As<VoLumChannelStepControl>()->SetChannels(
-              mVolumSupportChannelLabels, GetParam(kSupportChannelIdx)->Int());
-      }
       break;
     case kDelayActive:
     case kDelayTime:
@@ -1644,8 +1856,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       if (mVolumInitComplete && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
-        mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
-        _VolumSaveDelayModeSnapshot(std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1));
+        _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
       }
       break;
     case kReverbActive:
@@ -1659,8 +1870,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       if (mVolumInitComplete && !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-        mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-        _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1));
+        _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
       }
       break;
     case kChorusActive:
@@ -1668,12 +1878,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
       break;
     case kReverbSubMode:
-      // Do NOT write the new sub-mode to mVolumEffectSettings here. OnParamChangeUI runs after
-      // this and needs the previously selected sub-mode (held in settings) to know which slot
-      // to snapshot the current knob values into before swapping in the new slot's values.
-      // Mirrors the kDelayMode / kReverbMode pattern, which are handled UI-only for the same
-      // reason. Without this guard, switching sub-modes would overwrite the destination slot
-      // with the source slot's knobs, defeating per-sub-mode persistence.
+      // The main-thread pending handoff performs this save/restore transaction.
       break;
     case kPreNam1Capture:
     case kPreNam1Active:
@@ -1810,6 +2015,15 @@ void NeuralAmpModeler::_VolumRefreshPrePostLockChrome(int paramIdx)
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
+  _VolumApplyPendingModeChanges();
+  if (paramIdx == kDualAmpActive)
+    _VolumApplyPendingDualAmpChange();
+  if (paramIdx == kSupportAmpIdx || paramIdx == kSupportSpeakerIdx)
+  {
+    mVolumSupportChannelsDirty.exchange(false, std::memory_order_acquire);
+    _VolumRefreshSupportChannels();
+  }
+
   if (source == EParamSource::kUI && (paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel))
   {
     mVolumCalibrationEdits.Mark(/*toggleEdited=*/paramIdx == kCalibrateInput);
@@ -1844,23 +2058,9 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kSupportSpeakerIdx:
       case kSupportChannelIdx: _UpdateVoLumLayout(pGraphics); break;
       case kPrePitchMode:
-      {
-        // Switching Transpose<->Octaver saves the outgoing mode's shared knobs and
-        // recalls the incoming mode's last knobs (mirrors the POST Tremolo mode
-        // picker). Layout refresh follows for the Octaver-only knob swap.
-        if (mVolumPreRestoreInProgress)
-        {
-          _UpdateVoLumLayout(pGraphics);
-          break;
-        }
-        const int oldMode = std::clamp(mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1);
-        _VolumSavePrePitchModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1);
-        mVolumPrePitchMode = newMode;
-        _VolumRestorePrePitchModeSnapshot(newMode);
+        // Snapshot work already ran through the main-thread pending handoff.
         _UpdateVoLumLayout(pGraphics);
         break;
-      }
       case kMainAmpPan:
       case kSupportAmpPan: break;
       case kSupportNoiseGateActive:
@@ -1884,84 +2084,15 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         if (auto* c = pGraphics->GetControlWithParamIdx(kToneTreble))
           c->SetDisabled(!active);
         break;
-      case kDelayMode:
-      {
-        if (mVolumPostRestoreInProgress)
-          break;
-        const int oldMode = std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1);
-        _VolumSaveDelayModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
-        mVolumEffectSettings.delayMode = newMode;
-        _VolumRestoreDelayModeSnapshot(newMode);
-        _UpdateVoLumLayout(pGraphics);
-        break;
-      }
-      case kReverbMode:
-      {
-        if (mVolumPostRestoreInProgress)
-          break;
-        const int oldMode = std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1);
-        _VolumSaveReverbModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
-        mVolumEffectSettings.reverbMode = newMode;
-        _VolumRestoreReverbModeSnapshot(newMode);
-        _UpdateVoLumLayout(pGraphics);
-        break;
-      }
+      case kDelayMode: _UpdateVoLumLayout(pGraphics); break;
+      case kReverbMode: _UpdateVoLumLayout(pGraphics); break;
       case kReverbSubMode:
-      {
-        // Skip while a reverb mode / sub-mode restoration is in flight: the cascading
-        // setParam handlers would otherwise overwrite the freshly-loaded sub-mode
-        // snapshot with whatever knob values happened to be on screen mid-restore.
-        // Also skip when the current reverb mode is not Oktaverb, since the sub-mode
-        // pill is irrelevant outside Oktaverb and any apparent change there is just
-        // the cascade from a Hall / Plate restoration.
-        if (mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress)
-          break;
         if (GetParam(kReverbMode)->Int() != volum::kVoLumReverbModeOktaverb)
           break;
-        const int oldSubMode =
-          std::clamp(mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode, 0, 2);
-        const int newSubMode = std::clamp(GetParam(kReverbSubMode)->Int(), 0, 2);
-        // No-op if the user re-clicked the same sub-mode pill: avoids unnecessary
-        // snapshot churn that has no observable effect anyway.
-        if (newSubMode == oldSubMode)
-          break;
-        _VolumSaveOktaverbSubModeSnapshot(oldSubMode);
-        mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode = newSubMode;
-        _VolumRestoreOktaverbSubModeSnapshot(newSubMode);
         _UpdateVoLumLayout(pGraphics);
         break;
-      }
-      case kTremoloMode:
-      {
-        // Switching tremolo mode saves the outgoing mode's knobs and recalls the
-        // incoming mode's last knobs (mirrors Delay/Reverb). The mode picker also
-        // toggles the Harmonic-only X-OVER knob, so a layout refresh follows.
-        if (mVolumPostRestoreInProgress)
-          break;
-        const int oldMode = std::clamp(mVolumEffectSettings.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1);
-        _VolumSaveTremoloModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kTremoloMode)->Int(), 0, volum::kVoLumTremoloModeCount - 1);
-        mVolumEffectSettings.tremoloMode = newMode;
-        _VolumRestoreTremoloModeSnapshot(newMode);
-        _UpdateVoLumLayout(pGraphics);
-        break;
-      }
-      case kChorusMode:
-      {
-        // Same per-mode knob memory as Delay/Reverb/Tremolo. No knob appears or
-        // disappears here, but the card footer and motif still need a repaint.
-        if (mVolumPostRestoreInProgress)
-          break;
-        const int oldMode = std::clamp(mVolumEffectSettings.chorusMode, 0, volum::kVoLumChorusModeCount - 1);
-        _VolumSaveChorusModeSnapshot(oldMode);
-        const int newMode = std::clamp(GetParam(kChorusMode)->Int(), 0, volum::kVoLumChorusModeCount - 1);
-        mVolumEffectSettings.chorusMode = newMode;
-        _VolumRestoreChorusModeSnapshot(newMode);
-        _UpdateVoLumLayout(pGraphics);
-        break;
-      }
+      case kTremoloMode: _UpdateVoLumLayout(pGraphics); break;
+      case kChorusMode: _UpdateVoLumLayout(pGraphics); break;
       case kTremoloSync:
       case kDelaySync:
         // Sync swaps the free-running knob (Rate/Time) for the tempo DIVISION
@@ -2458,6 +2589,9 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
     // on Windows and was the Unicode IR load bug (AudioDSPTools #25).
     stagedIR = std::make_unique<dsp::ImpulseResponse>(irPath.Get(), sampleRate);
     wavState = stagedIR->GetWavState();
+    // Size the output for the reserved block here, off the audio thread; the first Process() then
+    // never allocates.
+    stagedIR->ReserveOutputs(kNumChannelsInternal, static_cast<size_t>(std::max(0, mReservedAudioBlockSize)));
   }
   catch (std::runtime_error& e)
   {

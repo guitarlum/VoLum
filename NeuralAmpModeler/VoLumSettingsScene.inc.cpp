@@ -3,6 +3,7 @@
 
 void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s)
 {
+  mVolumPendingModeChanges.Discard(volum::ModeSnapshotBit(volum::ModeSnapshotTarget::PrePitch));
   // Guard so the kPrePitchMode set below cannot re-enter the per-mode save /
   // restore dance and clobber the per-amp values we are loading.
   struct PreRestoreGuard
@@ -75,6 +76,11 @@ void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s
 
 void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
 {
+  mVolumPendingModeChanges.Discard(volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Tremolo)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus));
   if (!s.postValid)
   {
     const volum::VoLumAmpSettings defaults;

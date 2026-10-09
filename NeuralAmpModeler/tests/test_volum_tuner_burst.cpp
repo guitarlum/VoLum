@@ -280,12 +280,13 @@ TEST_CASE("Closing the tuner mid-analysis never publishes that snapshot after it
   for (int b = 70; b < 80; ++b)
     block(b);
   tuner.SetActive(true);
-  // 384 samples were collected before closing, so the next analysis is due 58 blocks after reopening.
-  for (int r = 0; r < 73; ++r)
+  // Reopening flushes the window, so the next analysis is due a full 4096 samples (64 blocks) after
+  // reopening and publishes 15 blocks later.
+  for (int r = 0; r < 80; ++r)
   {
     block(80 + r);
     INFO("block " << r << " after reopening");
-    CHECK(tuner.GetResult().valid == (r >= 72));
+    CHECK(tuner.GetResult().valid == (r >= 78));
   }
 }
 

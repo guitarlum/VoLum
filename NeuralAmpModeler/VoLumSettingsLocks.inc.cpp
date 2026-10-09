@@ -27,7 +27,7 @@ void NeuralAmpModeler::_VolumSavePreToSlot(volum::VoLumAmpSettings& s)
   s.preNam2Treble = GetParam(kPreNam2Treble)->Value();
   s.preNam2Level = GetParam(kPreNam2Level)->Value();
   s.prePitchActive = GetParam(kPrePitchActive)->Bool();
-  s.prePitchMode = GetParam(kPrePitchMode)->Int();
+  s.prePitchMode = mVolumPrePitchMode;
   s.prePitchSemitones = GetParam(kPrePitchSemitones)->Value();
   s.prePitchMix = GetParam(kPrePitchMix)->Value();
   s.prePitchOctDown = GetParam(kPrePitchOctDown)->Value();
@@ -47,7 +47,7 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postDelayTime = GetParam(kDelayTime)->Value();
   s.postDelayFeedback = GetParam(kDelayFeedback)->Value();
   s.postDelayMix = GetParam(kDelayMix)->Value();
-  s.postDelayMode = GetParam(kDelayMode)->Int();
+  s.postDelayMode = mVolumEffectSettings.delayMode;
   s.postDelayTone = GetParam(kDelayTone)->Value();
   s.postDelayAge = GetParam(kDelayAge)->Value();
   s.postDelayPingPong = GetParam(kDelayPingPong)->Bool();
@@ -59,10 +59,10 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postReverbTone = GetParam(kReverbTone)->Value();
   s.postReverbPreDelay = GetParam(kReverbPreDelay)->Value();
   s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
-  s.postReverbMode = GetParam(kReverbMode)->Int();
-  s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
+  s.postReverbMode = mVolumEffectSettings.reverbMode;
+  s.postReverbSubMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
   s.postTremoloActive = GetParam(kTremoloActive)->Bool();
-  s.postTremoloMode = GetParam(kTremoloMode)->Int();
+  s.postTremoloMode = mVolumEffectSettings.tremoloMode;
   s.postTremoloRate = GetParam(kTremoloRate)->Value();
   s.postTremoloDepth = GetParam(kTremoloDepth)->Value();
   s.postTremoloShape = GetParam(kTremoloShape)->Value();
@@ -71,7 +71,7 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postTremoloSync = GetParam(kTremoloSync)->Bool();
   s.postTremoloDivision = GetParam(kTremoloDivision)->Int();
   s.postChorusActive = GetParam(kChorusActive)->Bool();
-  s.postChorusMode = GetParam(kChorusMode)->Int();
+  s.postChorusMode = mVolumEffectSettings.chorusMode;
   s.postChorusRate = GetParam(kChorusRate)->Value();
   s.postChorusDepth = GetParam(kChorusDepth)->Value();
   s.postChorusTone = GetParam(kChorusTone)->Value();
@@ -117,7 +117,6 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.outputLevel = GetParam(kOutputLevel)->Value();
   s.noiseGateActive = GetParam(kNoiseGateActive)->Bool();
   s.eqActive = GetParam(kEQActive)->Bool();
-  mVolumPrePitchMode = GetParam(kPrePitchMode)->Int();
   _VolumSavePrePitchModeSnapshot(std::clamp(mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1));
   if (!mVolumPreLocked)
     _VolumSavePreToSlot(s);
@@ -149,11 +148,7 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
   mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
-  mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-  mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-  mVolumEffectSettings.tremoloMode = GetParam(kTremoloMode)->Int();
-  mVolumEffectSettings.chorusMode = GetParam(kChorusMode)->Int();
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   _VolumSaveTremoloModeSnapshot(std::clamp(mVolumEffectSettings.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1));
@@ -225,7 +220,7 @@ bool NeuralAmpModeler::_VolumIsPreDirty() const
     return !volum::PreBlockEquals(mVolumLiveLockedPre, scene);
 
   auto* self = const_cast<NeuralAmpModeler*>(this);
-  self->_VolumSavePrePitchModeSnapshot(std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1));
+  self->_VolumSavePrePitchModeSnapshot(std::clamp(self->mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1));
   volum::VoLumAmpSettings live;
   self->_VolumSavePreToSlot(live);
   return !volum::PreBlockEquals(live, scene);
@@ -238,8 +233,8 @@ bool NeuralAmpModeler::_VolumIsPostDirty() const
   if (mVolumPostLocked)
     return !volum::PostBlockEquals(mVolumLiveLockedPost, scene);
 
-  const int delayMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
-  const int reverbMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
+  const int delayMode = std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1);
+  const int reverbMode = std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1);
   self->_VolumSaveDelayModeSnapshot(delayMode);
   self->_VolumSaveReverbModeSnapshot(reverbMode);
   volum::VoLumAmpSettings live;
@@ -292,11 +287,7 @@ void NeuralAmpModeler::_VolumSaveEffectSettings()
 {
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
   mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
-  mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-  mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-  mVolumEffectSettings.tremoloMode = GetParam(kTremoloMode)->Int();
-  mVolumEffectSettings.chorusMode = GetParam(kChorusMode)->Int();
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   _VolumSaveTremoloModeSnapshot(std::clamp(mVolumEffectSettings.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1));
@@ -337,18 +328,45 @@ void NeuralAmpModeler::_VolumRestoreEffectSettings()
   _UpdateVoLumLayout();
 }
 
+// SetDefault also overwrites the live value; a mode restore re-bases the default of
+// each knob and then writes the recalled value itself, so a knob it does not write
+// (host-written) must keep what it had.
+void NeuralAmpModeler::_VolumSetDefaultKeepValue(int paramIdx, double defaultValue)
+{
+  const double live = GetParam(paramIdx)->Value();
+  GetParam(paramIdx)->SetDefault(defaultValue);
+  GetParam(paramIdx)->Set(live);
+}
+
+// Whether a recall may write this knob. Marks taken at the start of the transaction
+// (mVolumKeptKnobs) and marks the host adds while the transaction runs (IsMarked) are
+// the host's explicit values. A host write that lands between this check and the
+// write below can still be overwritten: the same race any UI-thread recall has with
+// host automation.
+bool NeuralAmpModeler::_VolumRecallMayWrite(int paramIdx) const
+{
+  if (_VolumKnobKept(paramIdx))
+    return false;
+  return !(mVolumModeTransactionActive && mVolumHostKnobMarks.IsMarked(paramIdx));
+}
 void NeuralAmpModeler::_VolumSaveDelayModeSnapshot(int mode)
 {
   auto& s = mVolumEffectSettings.delayModes[std::clamp(mode, 0, volum::kVoLumDelayModeCount - 1)];
-  s.time = GetParam(kDelayTime)->Value();
-  s.feedback = GetParam(kDelayFeedback)->Value();
-  s.mix = GetParam(kDelayMix)->Value();
-  s.tone = GetParam(kDelayTone)->Value();
-  s.age = GetParam(kDelayAge)->Value();
-  s.pingPong = GetParam(kDelayPingPong)->Bool();
+  if (!_VolumKnobKept(kDelayTime))
+    s.time = GetParam(kDelayTime)->Value();
+  if (!_VolumKnobKept(kDelayFeedback))
+    s.feedback = GetParam(kDelayFeedback)->Value();
+  if (!_VolumKnobKept(kDelayMix))
+    s.mix = GetParam(kDelayMix)->Value();
+  if (!_VolumKnobKept(kDelayTone))
+    s.tone = GetParam(kDelayTone)->Value();
+  if (!_VolumKnobKept(kDelayAge))
+    s.age = GetParam(kDelayAge)->Value();
+  if (!_VolumKnobKept(kDelayPingPong))
+    s.pingPong = GetParam(kDelayPingPong)->Bool();
 }
 
-void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
+void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode, bool notifyUi)
 {
   // Per-knob double-click "reset to default" should land on the design-guide value for the
   // CURRENT mode (e.g. Analog.age=0.5, Reverse Bloom=0.0), not the static InitDouble default.
@@ -360,16 +378,19 @@ void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
   const volum::VoLumEffectSettings designDefaults;
   const int clampedMode = std::clamp(mode, 0, volum::kVoLumDelayModeCount - 1);
   const auto& d = designDefaults.delayModes[clampedMode];
-  GetParam(kDelayTime)->SetDefault(d.time);
-  GetParam(kDelayFeedback)->SetDefault(d.feedback);
-  GetParam(kDelayMix)->SetDefault(d.mix);
-  GetParam(kDelayTone)->SetDefault(d.tone);
-  GetParam(kDelayAge)->SetDefault(d.age);
-  GetParam(kDelayPingPong)->SetDefault(d.pingPong ? 1.0 : 0.0);
+  _VolumSetDefaultKeepValue(kDelayTime, d.time);
+  _VolumSetDefaultKeepValue(kDelayFeedback, d.feedback);
+  _VolumSetDefaultKeepValue(kDelayMix, d.mix);
+  _VolumSetDefaultKeepValue(kDelayTone, d.tone);
+  _VolumSetDefaultKeepValue(kDelayAge, d.age);
+  _VolumSetDefaultKeepValue(kDelayPingPong, d.pingPong ? 1.0 : 0.0);
 
-  auto setParam = [this](int idx, double val) {
+  auto setParam = [this, notifyUi](int idx, double val) {
+    if (!_VolumRecallMayWrite(idx))
+      return;
     GetParam(idx)->Set(val);
-    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+    if (notifyUi)
+      SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   const auto& s = mVolumEffectSettings.delayModes[clampedMode];
   setParam(kDelayTime, s.time);
@@ -383,17 +404,24 @@ void NeuralAmpModeler::_VolumRestoreDelayModeSnapshot(int mode)
 void NeuralAmpModeler::_VolumSaveReverbModeSnapshot(int mode)
 {
   auto& s = mVolumEffectSettings.reverbModes[std::clamp(mode, 0, volum::kVoLumReverbModeCount - 1)];
-  s.mix = GetParam(kReverbMix)->Value();
-  s.decay = GetParam(kReverbDecay)->Value();
-  s.tone = GetParam(kReverbTone)->Value();
-  s.preDelay = GetParam(kReverbPreDelay)->Value();
-  s.shimmer = GetParam(kReverbShimmer)->Value();
-  s.subMode = GetParam(kReverbSubMode)->Int();
+  if (!_VolumKnobKept(kReverbMix))
+    s.mix = GetParam(kReverbMix)->Value();
+  if (!_VolumKnobKept(kReverbDecay))
+    s.decay = GetParam(kReverbDecay)->Value();
+  if (!_VolumKnobKept(kReverbTone))
+    s.tone = GetParam(kReverbTone)->Value();
+  if (!_VolumKnobKept(kReverbPreDelay))
+    s.preDelay = GetParam(kReverbPreDelay)->Value();
+  if (!_VolumKnobKept(kReverbShimmer))
+    s.shimmer = GetParam(kReverbShimmer)->Value();
   if (mode == volum::kVoLumReverbModeOktaverb)
-    _VolumSaveOktaverbSubModeSnapshot(s.subMode);
+    volum::SaveTrackedModeSnapshot(
+      3, s.subMode, [this](int rememberedSubMode) { _VolumSaveOktaverbSubModeSnapshot(rememberedSubMode); });
+  else
+    s.subMode = GetParam(kReverbSubMode)->Int();
 }
 
-void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
+void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode, bool notifyUi)
 {
   // Guard so the setParam cascade below cannot re-enter our own snapshot save / restore
   // logic. Without this, switching reverb modes triggers OnParamChangeUI for kReverbMix
@@ -424,31 +452,34 @@ void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
   if (clampedMode == volum::kVoLumReverbModeOktaverb)
   {
     const auto& subDefaults = designDefaults.oktaverbSubModes[restoredSubMode];
-    GetParam(kReverbMix)->SetDefault(subDefaults.mix);
-    GetParam(kReverbDecay)->SetDefault(subDefaults.decay);
-    GetParam(kReverbTone)->SetDefault(subDefaults.tone);
-    GetParam(kReverbPreDelay)->SetDefault(subDefaults.preDelay);
-    GetParam(kReverbShimmer)->SetDefault(subDefaults.shimmer);
+    _VolumSetDefaultKeepValue(kReverbMix, subDefaults.mix);
+    _VolumSetDefaultKeepValue(kReverbDecay, subDefaults.decay);
+    _VolumSetDefaultKeepValue(kReverbTone, subDefaults.tone);
+    _VolumSetDefaultKeepValue(kReverbPreDelay, subDefaults.preDelay);
+    _VolumSetDefaultKeepValue(kReverbShimmer, subDefaults.shimmer);
   }
   else
   {
-    GetParam(kReverbMix)->SetDefault(d.mix);
-    GetParam(kReverbDecay)->SetDefault(d.decay);
-    GetParam(kReverbTone)->SetDefault(d.tone);
-    GetParam(kReverbPreDelay)->SetDefault(d.preDelay);
-    GetParam(kReverbShimmer)->SetDefault(d.shimmer);
+    _VolumSetDefaultKeepValue(kReverbMix, d.mix);
+    _VolumSetDefaultKeepValue(kReverbDecay, d.decay);
+    _VolumSetDefaultKeepValue(kReverbTone, d.tone);
+    _VolumSetDefaultKeepValue(kReverbPreDelay, d.preDelay);
+    _VolumSetDefaultKeepValue(kReverbShimmer, d.shimmer);
   }
-  GetParam(kReverbSubMode)->SetDefault(static_cast<double>(restoredSubMode));
+  _VolumSetDefaultKeepValue(kReverbSubMode, static_cast<double>(restoredSubMode));
 
-  auto setParam = [this](int idx, double val) {
+  auto setParam = [this, notifyUi](int idx, double val) {
+    if (!_VolumRecallMayWrite(idx))
+      return;
     GetParam(idx)->Set(val);
-    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+    if (notifyUi)
+      SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   const auto& s = mVolumEffectSettings.reverbModes[clampedMode];
   if (clampedMode == volum::kVoLumReverbModeOktaverb)
   {
     setParam(kReverbSubMode, static_cast<double>(restoredSubMode));
-    _VolumRestoreOktaverbSubModeSnapshot(restoredSubMode);
+    _VolumRestoreOktaverbSubModeSnapshot(restoredSubMode, notifyUi);
   }
   else
   {
@@ -464,14 +495,19 @@ void NeuralAmpModeler::_VolumRestoreReverbModeSnapshot(int mode)
 void NeuralAmpModeler::_VolumSaveTremoloModeSnapshot(int mode)
 {
   auto& s = mVolumEffectSettings.tremoloModes[std::clamp(mode, 0, volum::kVoLumTremoloModeCount - 1)];
-  s.rate = GetParam(kTremoloRate)->Value();
-  s.depth = GetParam(kTremoloDepth)->Value();
-  s.shape = GetParam(kTremoloShape)->Value();
-  s.mix = GetParam(kTremoloMix)->Value();
-  s.crossover = GetParam(kTremoloCrossover)->Value();
+  if (!_VolumKnobKept(kTremoloRate))
+    s.rate = GetParam(kTremoloRate)->Value();
+  if (!_VolumKnobKept(kTremoloDepth))
+    s.depth = GetParam(kTremoloDepth)->Value();
+  if (!_VolumKnobKept(kTremoloShape))
+    s.shape = GetParam(kTremoloShape)->Value();
+  if (!_VolumKnobKept(kTremoloMix))
+    s.mix = GetParam(kTremoloMix)->Value();
+  if (!_VolumKnobKept(kTremoloCrossover))
+    s.crossover = GetParam(kTremoloCrossover)->Value();
 }
 
-void NeuralAmpModeler::_VolumRestoreTremoloModeSnapshot(int mode)
+void NeuralAmpModeler::_VolumRestoreTremoloModeSnapshot(int mode, bool notifyUi)
 {
   // Same re-entrancy guard as the reverb path: the setParam cascade below sends
   // values via SendParameterValueFromDelegate -> OnParamChangeUI for the tremolo
@@ -495,15 +531,18 @@ void NeuralAmpModeler::_VolumRestoreTremoloModeSnapshot(int mode)
   const volum::VoLumEffectSettings designDefaults;
   const int clampedMode = std::clamp(mode, 0, volum::kVoLumTremoloModeCount - 1);
   const auto& d = designDefaults.tremoloModes[clampedMode];
-  GetParam(kTremoloRate)->SetDefault(d.rate);
-  GetParam(kTremoloDepth)->SetDefault(d.depth);
-  GetParam(kTremoloShape)->SetDefault(d.shape);
-  GetParam(kTremoloMix)->SetDefault(d.mix);
-  GetParam(kTremoloCrossover)->SetDefault(d.crossover);
+  _VolumSetDefaultKeepValue(kTremoloRate, d.rate);
+  _VolumSetDefaultKeepValue(kTremoloDepth, d.depth);
+  _VolumSetDefaultKeepValue(kTremoloShape, d.shape);
+  _VolumSetDefaultKeepValue(kTremoloMix, d.mix);
+  _VolumSetDefaultKeepValue(kTremoloCrossover, d.crossover);
 
-  auto setParam = [this](int idx, double val) {
+  auto setParam = [this, notifyUi](int idx, double val) {
+    if (!_VolumRecallMayWrite(idx))
+      return;
     GetParam(idx)->Set(val);
-    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+    if (notifyUi)
+      SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   const auto& s = mVolumEffectSettings.tremoloModes[clampedMode];
   setParam(kTremoloRate, s.rate);
@@ -516,14 +555,19 @@ void NeuralAmpModeler::_VolumRestoreTremoloModeSnapshot(int mode)
 void NeuralAmpModeler::_VolumSaveChorusModeSnapshot(int mode)
 {
   auto& s = mVolumEffectSettings.chorusModes[std::clamp(mode, 0, volum::kVoLumChorusModeCount - 1)];
-  s.rate = GetParam(kChorusRate)->Value();
-  s.depth = GetParam(kChorusDepth)->Value();
-  s.tone = GetParam(kChorusTone)->Value();
-  s.width = GetParam(kChorusWidth)->Value();
-  s.mix = GetParam(kChorusMix)->Value();
+  if (!_VolumKnobKept(kChorusRate))
+    s.rate = GetParam(kChorusRate)->Value();
+  if (!_VolumKnobKept(kChorusDepth))
+    s.depth = GetParam(kChorusDepth)->Value();
+  if (!_VolumKnobKept(kChorusTone))
+    s.tone = GetParam(kChorusTone)->Value();
+  if (!_VolumKnobKept(kChorusWidth))
+    s.width = GetParam(kChorusWidth)->Value();
+  if (!_VolumKnobKept(kChorusMix))
+    s.mix = GetParam(kChorusMix)->Value();
 }
 
-void NeuralAmpModeler::_VolumRestoreChorusModeSnapshot(int mode)
+void NeuralAmpModeler::_VolumRestoreChorusModeSnapshot(int mode, bool notifyUi)
 {
   // The mode handler already bails while mVolumPostRestoreInProgress is set.
   // Nothing reads a chorus-only flag, so this restore does not keep one.
@@ -532,15 +576,18 @@ void NeuralAmpModeler::_VolumRestoreChorusModeSnapshot(int mode)
   // CURRENT chorus voice, matching the delay/reverb/tremolo behavior.
   const int clampedMode = std::clamp(mode, 0, volum::kVoLumChorusModeCount - 1);
   const auto& d = volum::kVoLumChorusModeDefaults[clampedMode];
-  GetParam(kChorusRate)->SetDefault(d.rate);
-  GetParam(kChorusDepth)->SetDefault(d.depth);
-  GetParam(kChorusTone)->SetDefault(d.tone);
-  GetParam(kChorusWidth)->SetDefault(d.width);
-  GetParam(kChorusMix)->SetDefault(d.mix);
+  _VolumSetDefaultKeepValue(kChorusRate, d.rate);
+  _VolumSetDefaultKeepValue(kChorusDepth, d.depth);
+  _VolumSetDefaultKeepValue(kChorusTone, d.tone);
+  _VolumSetDefaultKeepValue(kChorusWidth, d.width);
+  _VolumSetDefaultKeepValue(kChorusMix, d.mix);
 
-  auto setParam = [this](int idx, double val) {
+  auto setParam = [this, notifyUi](int idx, double val) {
+    if (!_VolumRecallMayWrite(idx))
+      return;
     GetParam(idx)->Set(val);
-    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+    if (notifyUi)
+      SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   const auto& s = mVolumEffectSettings.chorusModes[clampedMode];
   setParam(kChorusRate, s.rate);
@@ -553,13 +600,17 @@ void NeuralAmpModeler::_VolumRestoreChorusModeSnapshot(int mode)
 void NeuralAmpModeler::_VolumSavePrePitchModeSnapshot(int mode)
 {
   auto& s = mVolumPrePitchModes[std::clamp(mode, 0, volum::kVoLumPitchModeCount - 1)];
-  s.mix = GetParam(kPrePitchMix)->Value();
-  s.dry = GetParam(kPrePitchDry)->Value();
-  s.level = GetParam(kPrePitchLevel)->Value();
-  s.voicing = GetParam(kPrePitchVoicing)->Int();
+  if (!_VolumKnobKept(kPrePitchMix))
+    s.mix = GetParam(kPrePitchMix)->Value();
+  if (!_VolumKnobKept(kPrePitchDry))
+    s.dry = GetParam(kPrePitchDry)->Value();
+  if (!_VolumKnobKept(kPrePitchLevel))
+    s.level = GetParam(kPrePitchLevel)->Value();
+  if (!_VolumKnobKept(kPrePitchVoicing))
+    s.voicing = GetParam(kPrePitchVoicing)->Int();
 }
 
-void NeuralAmpModeler::_VolumRestorePrePitchModeSnapshot(int mode)
+void NeuralAmpModeler::_VolumRestorePrePitchModeSnapshot(int mode, bool notifyUi)
 {
   struct RestoreGuard
   {
@@ -580,14 +631,17 @@ void NeuralAmpModeler::_VolumRestorePrePitchModeSnapshot(int mode)
   // Per-knob double-click defaults: the shared pitch knobs reset to the live
   // snapshot's value for the current mode (there is no design-guide table for
   // pitch, so the recalled value IS the default).
-  GetParam(kPrePitchMix)->SetDefault(s.mix);
-  GetParam(kPrePitchDry)->SetDefault(s.dry);
-  GetParam(kPrePitchLevel)->SetDefault(s.level);
-  GetParam(kPrePitchVoicing)->SetDefault(static_cast<double>(std::clamp(s.voicing, 0, 1)));
+  _VolumSetDefaultKeepValue(kPrePitchMix, s.mix);
+  _VolumSetDefaultKeepValue(kPrePitchDry, s.dry);
+  _VolumSetDefaultKeepValue(kPrePitchLevel, s.level);
+  _VolumSetDefaultKeepValue(kPrePitchVoicing, static_cast<double>(std::clamp(s.voicing, 0, 1)));
 
-  auto setParam = [this](int idx, double val) {
+  auto setParam = [this, notifyUi](int idx, double val) {
+    if (!_VolumRecallMayWrite(idx))
+      return;
     GetParam(idx)->Set(val);
-    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+    if (notifyUi)
+      SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   setParam(kPrePitchMix, s.mix);
   setParam(kPrePitchDry, s.dry);
@@ -598,14 +652,19 @@ void NeuralAmpModeler::_VolumRestorePrePitchModeSnapshot(int mode)
 void NeuralAmpModeler::_VolumSaveOktaverbSubModeSnapshot(int subMode)
 {
   auto& s = mVolumEffectSettings.oktaverbSubModes[std::clamp(subMode, 0, 2)];
-  s.mix = GetParam(kReverbMix)->Value();
-  s.decay = GetParam(kReverbDecay)->Value();
-  s.tone = GetParam(kReverbTone)->Value();
-  s.preDelay = GetParam(kReverbPreDelay)->Value();
-  s.shimmer = GetParam(kReverbShimmer)->Value();
+  if (!_VolumKnobKept(kReverbMix))
+    s.mix = GetParam(kReverbMix)->Value();
+  if (!_VolumKnobKept(kReverbDecay))
+    s.decay = GetParam(kReverbDecay)->Value();
+  if (!_VolumKnobKept(kReverbTone))
+    s.tone = GetParam(kReverbTone)->Value();
+  if (!_VolumKnobKept(kReverbPreDelay))
+    s.preDelay = GetParam(kReverbPreDelay)->Value();
+  if (!_VolumKnobKept(kReverbShimmer))
+    s.shimmer = GetParam(kReverbShimmer)->Value();
 }
 
-void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
+void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode, bool notifyUi)
 {
   // Same RAII guard as _VolumRestoreReverbModeSnapshot: the setParam calls below send
   // values via SendParameterValueFromDelegate, which triggers OnParamChangeUI for the
@@ -626,15 +685,18 @@ void NeuralAmpModeler::_VolumRestoreOktaverbSubModeSnapshot(int subMode)
   const volum::VoLumEffectSettings designDefaults;
   const int clampedSubMode = std::clamp(subMode, 0, 2);
   const auto& d = designDefaults.oktaverbSubModes[clampedSubMode];
-  GetParam(kReverbMix)->SetDefault(d.mix);
-  GetParam(kReverbDecay)->SetDefault(d.decay);
-  GetParam(kReverbTone)->SetDefault(d.tone);
-  GetParam(kReverbPreDelay)->SetDefault(d.preDelay);
-  GetParam(kReverbShimmer)->SetDefault(d.shimmer);
+  _VolumSetDefaultKeepValue(kReverbMix, d.mix);
+  _VolumSetDefaultKeepValue(kReverbDecay, d.decay);
+  _VolumSetDefaultKeepValue(kReverbTone, d.tone);
+  _VolumSetDefaultKeepValue(kReverbPreDelay, d.preDelay);
+  _VolumSetDefaultKeepValue(kReverbShimmer, d.shimmer);
 
-  auto setParam = [this](int idx, double val) {
+  auto setParam = [this, notifyUi](int idx, double val) {
+    if (!_VolumRecallMayWrite(idx))
+      return;
     GetParam(idx)->Set(val);
-    SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
+    if (notifyUi)
+      SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);
   };
   const auto& s = mVolumEffectSettings.oktaverbSubModes[clampedSubMode];
   setParam(kReverbMix, s.mix);
