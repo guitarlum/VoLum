@@ -154,4 +154,22 @@ inline bool ParsePlayFakePeak(const char* text, float& norm)
   return true;
 }
 
+// Debug-only VOLUM_PLAY_FAKE_PEAK=strum: one strum per second, accented on beats
+// 1 and 3, each decaying 36 dB/s. Recordings that last a multiple of the bar loop
+// seamlessly.
+inline constexpr double kPlayFakeStrumBarSec = 4.0;
+
+inline bool IsPlayFakeStrum(const char* text)
+{
+  return text && std::strcmp(text, "strum") == 0;
+}
+
+inline float PlayFakeStrumNorm(double seconds)
+{
+  static constexpr float kStrumDb[4] = {-6.f, -10.f, -7.f, -11.f};
+  const double t = std::fmod(std::max(seconds, 0.0), kPlayFakeStrumBarSec);
+  const int beat = std::min(static_cast<int>(t), 3);
+  return MeterNormFromDb(kStrumDb[beat] - 36.f * static_cast<float>(t - beat));
+}
+
 } // namespace volum

@@ -390,6 +390,7 @@ bool NeuralAmpModeler::_VolumSaveSettingsToFile(int lockTimeoutMs)
   j["midiCh"] = mVolumMidiChannel.load();
   j["midiRecallCc"] = mVolumMidiRecallCc.load();
   j["volumUiMode"] = volum::UiModeToString(mVolumUiMode);
+  j[volum::kBuildTipSeenKey] = mVolumBuildTipSeen;
   // PLAY cursor: the DAW chunk already carries lastPlaySlot; standalone has no
   // chunk, so the same instance key has to live here or a relaunch starts empty.
   j["lastPlaySlot"] = mVolumLastRecalledPlaySlot;
@@ -503,6 +504,12 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     settingsPath = legacyPath;
   else
   {
+#if defined(APP_API)
+    // First launch on this machine opens on PLAY: start on its first Sound, not
+    // on a bare amp. Same path as a MIDI recall of program 0. Standalone only:
+    // in a plugin the idle drain could land after the project restore.
+    mVolumMidiQueue.Enqueue(0);
+#endif
     _VolumNoteMachineKeysSynced();
     return;
   }
@@ -528,6 +535,7 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
       &parsedLiteMode, &parsedCalibrateInput, &parsedInputCalibrationLevel, &parsedAnimatePlayArt);
     mVolumLiteMode.store(parsedLiteMode);
     mVolumAnimatePlayArt.store(parsedAnimatePlayArt);
+    mVolumBuildTipSeen = volum::BuildTipSeenFromJson(j);
     GetParam(kCalibrateInput)->Set(parsedCalibrateInput ? 1.0 : 0.0);
     GetParam(kInputCalibrationLevel)->Set(parsedInputCalibrationLevel);
     if (haveLivePreSnapshot)
@@ -606,9 +614,9 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
 
 void NeuralAmpModeler::_VolumNoteMachineKeysSynced()
 {
-  mVolumMachineSettings.NoteLoaded(volum::MachineSharedKeyValues(mVolumLiteMode.load(), mVolumAnimatePlayArt.load(),
-                                                                 GetParam(kCalibrateInput)->Bool(),
-                                                                 GetParam(kInputCalibrationLevel)->Value()));
+  mVolumMachineSettings.NoteLoaded(
+    volum::MachineSharedKeyValues(mVolumLiteMode.load(), mVolumAnimatePlayArt.load(), GetParam(kCalibrateInput)->Bool(),
+                                  GetParam(kInputCalibrationLevel)->Value(), mVolumBuildTipSeen));
 }
 
 void NeuralAmpModeler::_VolumSaveLiteMode()

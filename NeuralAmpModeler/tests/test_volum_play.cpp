@@ -6,6 +6,7 @@
 #include "VoLumScroll.h"
 #include "volum_factory_bank.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -21,7 +22,9 @@ std::string ReadPlaySource(const char* name)
   std::ifstream in(path, std::ios::binary);
   std::ostringstream ss;
   ss << in.rdbuf();
-  return ss.str();
+  std::string text = ss.str();
+  text.erase(std::remove(text.begin(), text.end(), '\r'), text.end()); // CRLF checkouts
+  return text;
 }
 } // namespace
 
@@ -59,7 +62,68 @@ TEST_CASE("PLAY rail rows compare every field, so SetData never keeps a stale ro
   CHECK(volum::PlaySlot{slotBase} == slotBase);
 }
 
-TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
+TEST_CASE("Fresh installs and 1.2.x upgrades open on PLAY with the BUILD tip")
+{
+  CHECK(volum::kFirstRunUiMode == volum::UiMode::Play);
+  // A 1.2.x volum-settings.json has no volumUiMode: the standalone keeps the
+  // constructor default instead of reading it as BUILD.
+  const nlohmann::json v12 = {{"version", 6}, {"midiCh", 0}};
+  CHECK(volum::UiModeFromMachineSettings(true, v12, volum::kFirstRunUiMode) == volum::UiMode::Play);
+  CHECK(volum::UiModeFromMachineSettings(true, nlohmann::json::object(), volum::kFirstRunUiMode)
+        == volum::UiMode::Play);
+  CHECK(volum::UiModeFromMachineSettings(true, nlohmann::json(), volum::kFirstRunUiMode) == volum::UiMode::Play);
+
+  CHECK_FALSE(volum::BuildTipSeenFromJson(v12));
+  CHECK_FALSE(volum::BuildTipSeenFromJson({{"buildTipSeen", false}}));
+  CHECK_FALSE(volum::BuildTipSeenFromJson({{"buildTipSeen", "yes"}}));
+  CHECK(volum::BuildTipSeenFromJson({{"buildTipSeen", true}}));
+
+  CHECK(volum::ShowBuildTip(volum::UiMode::Play, false));
+  CHECK_FALSE(volum::ShowBuildTip(volum::UiMode::Build, false));
+  CHECK_FALSE(volum::ShowBuildTip(volum::UiMode::Play, true));
+
+  const std::string header = ReadPlaySource("NeuralAmpModeler.h");
+  CHECK(header.find("volum::UiMode mVolumUiMode = volum::kFirstRunUiMode;") != std::string::npos);
+  // Projects saved before PLAY existed reopen in BUILD: a 1.2.x id-tail reads
+  // uiMode "build" (above), and a chunk with no id-tail at all says so explicitly.
+  const std::string unser = ReadPlaySource("Unserialization.cpp");
+  const auto noTail = unser.find("if (!haveIdTail)\n    {");
+  REQUIRE(noTail != std::string::npos);
+  const auto noTailEnd = unser.find("\n    }", noTail + 10);
+  CHECK(unser.substr(noTail, noTailEnd - noTail).find("mVolumUiMode = volum::UiMode::Build;") != std::string::npos);
+  // The first switch to BUILD, by any route, dismisses the tip for this machine.
+  const std::string runtime = ReadPlaySource("VoLumPlayRuntime.inc.cpp");
+  const auto setMode = runtime.find("void NeuralAmpModeler::_VolumSetUiMode(");
+  REQUIRE(setMode != std::string::npos);
+  const auto dismiss = runtime.find("_VolumSaveMachineBool(volum::kBuildTipSeenKey, true);", setMode);
+  REQUIRE(dismiss != std::string::npos);
+  CHECK(dismiss < runtime.find("\n}\n", setMode));
+  CHECK(runtime.find("volum::ShowBuildTip(mode, mVolumBuildTipSeen)") != std::string::npos);
+  const std::string scene = ReadPlaySource("VoLumSettingsScene.inc.cpp");
+  CHECK(scene.find("mVolumBuildTipSeen = volum::BuildTipSeenFromJson(j);") != std::string::npos);
+  // With no settings file at all the standalone starts on program 0, through the
+  // MIDI recall path; a plugin never does (its project restore comes later).
+  const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(load != std::string::npos);
+  const auto noFile = scene.find("_VolumNoteMachineKeysSynced();\n    return;", load);
+  REQUIRE(noFile != std::string::npos);
+  const std::string firstRun = scene.substr(load, noFile - load);
+  const auto app = firstRun.rfind("#if defined(APP_API)");
+  const auto enqueue = firstRun.rfind("mVolumMidiQueue.Enqueue(0);");
+  REQUIRE(app != std::string::npos);
+  REQUIRE(enqueue != std::string::npos);
+  CHECK(app < enqueue);
+  CHECK(firstRun.find("#endif", enqueue) != std::string::npos);
+  CHECK(scene.find("j[volum::kBuildTipSeenKey] = mVolumBuildTipSeen;") != std::string::npos);
+  const std::string layout = ReadPlaySource("VoLumLayoutBuild.inc.cpp");
+  const auto toggle = layout.find("AttachControl(modeToggle, kCtrlTagVoLumModeToggle)");
+  const auto tip = layout.find("AttachControl(buildTip, kCtrlTagVoLumBuildTip)");
+  REQUIRE(toggle != std::string::npos);
+  REQUIRE(tip != std::string::npos);
+  CHECK(tip > toggle);
+}
+
+TEST_CASE("PLAY mode strings default to BUILD and round-trip valid values")
 {
   CHECK(volum::UiModeFromString("") == volum::UiMode::Build);
   CHECK(volum::UiModeFromString("future") == volum::UiMode::Build);
@@ -83,6 +147,8 @@ TEST_CASE("PLAY mode defaults to BUILD and round-trips valid values")
   CHECK(volum::UiModeFromMachineSettings(true, standalone, volum::UiMode::Build) == volum::UiMode::Play);
   CHECK(volum::UiModeFromMachineSettings(false, standalone, volum::UiMode::Build) == volum::UiMode::Build);
   CHECK(volum::UiModeFromMachineSettings(false, standalone, volum::UiMode::Play) == volum::UiMode::Play);
+  CHECK(volum::UiModeFromMachineSettings(true, {{"volumUiMode", "build"}}, volum::UiMode::Play)
+        == volum::UiMode::Build);
   nlohmann::json midi = {{"midiCh", 7}};
   CHECK(volum::MidiChannelFromJson(midi) == 7);
   CHECK(volum::MidiChannelFromJson(nlohmann::json::object(), 3) == 3);

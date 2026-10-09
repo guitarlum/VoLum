@@ -36,6 +36,50 @@
  * Same 26 px ink band as tuner / metronome / gear, sitting on that right rail.
  * Z-order is fixed at the attach site in VoLumLayoutBuild.inc.cpp: this goes
  * on before the overlays, so they cover it. */
+// First-run pointer at the PLAY/BUILD switch (volum::ShowBuildTip). Clicking it
+// switches to BUILD like the switch itself.
+class VoLumBuildTipControl : public IControl
+{
+public:
+  static constexpr float kWidth = 148.f;
+
+  VoLumBuildTipControl(const IRECT& bounds, std::function<void()> onClick)
+  : IControl(bounds)
+  , mOnClick(std::move(onClick))
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IRECT pill = mRECT.GetReducedFromRight(9.f);
+    g.FillRoundRect(VoLumColors::GOLD.WithOpacity(mMouseIsOver ? 0.18f : 0.10f), pill, 4.f);
+    g.DrawRoundRect(VoLumColors::GOLD_DIM.WithOpacity(mMouseIsOver ? 0.95f : 0.75f), pill, 4.f, nullptr, 1.f);
+    g.DrawText(VoLumType::Label(12.f, VoLumColors::GOLD), "Tweak your sound", pill);
+    const float tipX = mRECT.R - 1.f;
+    const float midY = mRECT.MH();
+    g.FillTriangle(VoLumColors::GOLD_DIM, pill.R, midY - 5.f, tipX, midY, pill.R, midY + 5.f);
+  }
+
+  void OnMouseDown(float, float, const IMouseMod&) override
+  {
+    if (mOnClick)
+      mOnClick();
+  }
+  void OnMouseOver(float, float, const IMouseMod&) override
+  {
+    mMouseIsOver = true;
+    SetDirty(false);
+  }
+  void OnMouseOut() override
+  {
+    mMouseIsOver = false;
+    SetDirty(false);
+  }
+
+private:
+  std::function<void()> mOnClick;
+};
+
 class VoLumModeToggleControl : public IControl
 {
 public:
@@ -199,7 +243,9 @@ public:
     // Screenshot harness only (docs/screenshot-recipes.md): pins the IN level the
     // PLAY light sees. Inert without the variable.
     float fake = 0.f;
-    if (volum::ParsePlayFakePeak(std::getenv("VOLUM_PLAY_FAKE_PEAK"), fake))
+    const char* fakePeak = std::getenv("VOLUM_PLAY_FAKE_PEAK");
+    mFakeStrum = volum::IsPlayFakeStrum(fakePeak);
+    if (!mFakeStrum && volum::ParsePlayFakePeak(fakePeak, fake))
       mFakeInPeak = fake;
     // Same harness: VOLUM_ART_ANIM_DEBUG pins the stage art and its motion frame,
     // VOLUM_ART_ANIM_PERF shows and logs what the art costs per frame.
@@ -263,8 +309,16 @@ public:
     return rail || stomp;
   }
 
-  void SetInPeak(float peak) { mInPeak = mFakeInPeak >= 0.f ? mFakeInPeak : std::clamp(peak, 0.f, 1.f); }
-  void SetOutPeak(float peak) { mOutPeak = std::clamp(peak, 0.f, 1.f); }
+  void SetInPeak(float peak)
+  {
+    if (!mFakeStrum)
+      mInPeak = mFakeInPeak >= 0.f ? mFakeInPeak : std::clamp(peak, 0.f, 1.f);
+  }
+  void SetOutPeak(float peak)
+  {
+    if (!mFakeStrum)
+      mOutPeak = std::clamp(peak, 0.f, 1.f);
+  }
 
   void SetPickerGroups(volum::PickerGroupSession* session) { mPickerGroups = session; }
   void SetReorderCallbacks(SwapCallback swap, InsertCallback insert)
@@ -368,6 +422,11 @@ public:
     const float dt = mHaveTick ? std::chrono::duration<float>(now - mLastTick).count() : 0.f;
     mLastTick = now;
     mHaveTick = true;
+    if (mFakeStrum)
+    {
+      mFakeStrumClock += dt;
+      mInPeak = mOutPeak = volum::PlayFakeStrumNorm(mFakeStrumClock);
+    }
     mLight = volum::AdvancePlayLight(mLight, mInPeak, mOutPeak);
     volumart::AdvanceArtMotion(
       mArtMotion, mLight.energy, mLight.attack, volum::PlayBloomWeight(volum::PlayGlowAmount(mLight)), dt);
@@ -1901,6 +1960,8 @@ private:
   std::array<bool, FxCount> mFxAvailable{};
   float mRailScroll = 0.f, mRailScrollTarget = 0.f, mPickerScroll = 0.f, mPhase = 0.f, mInPeak = 0.f, mOutPeak = 0.f;
   float mFakeInPeak = -1.f; // VOLUM_PLAY_FAKE_PEAK; negative = live input
+  bool mFakeStrum = false; // VOLUM_PLAY_FAKE_PEAK=strum
+  double mFakeStrumClock = 0.0;
   volum::PlayLight mLight;
   volum::StageArtKey mStageMainKey;
   volum::StageArtKey mStageSupportKey;

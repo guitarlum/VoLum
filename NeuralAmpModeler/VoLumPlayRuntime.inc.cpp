@@ -18,6 +18,11 @@ void NeuralAmpModeler::_VolumSetUiMode(volum::UiMode mode)
   }
   _VolumClampSupportFocus();
   mVolumUiMode = mode;
+  if (mode == volum::UiMode::Build && !mVolumBuildTipSeen)
+  {
+    mVolumBuildTipSeen = true;
+    _VolumSaveMachineBool(volum::kBuildTipSeenKey, true);
+  }
   if (auto* pGfx = GetUI())
   {
     for (int tag : kVoLumDropdownTags)
@@ -195,6 +200,12 @@ void NeuralAmpModeler::_VolumRefreshPlaySurface()
   }
   if (auto* toggle = pGfx->GetControlWithTag(kCtrlTagVoLumModeToggle))
     toggle->As<VoLumModeToggleControl>()->SetMode(mode);
+  if (auto* tip = pGfx->GetControlWithTag(kCtrlTagVoLumBuildTip))
+  {
+    const bool hideTip = !volum::ShowBuildTip(mode, mVolumBuildTipSeen);
+    if (tip->IsHidden() != hideTip)
+      tip->Hide(hideTip);
+  }
   if (auto* preset = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar))
   {
     if (preset->IsHidden() != chrome.hidePresetBar)

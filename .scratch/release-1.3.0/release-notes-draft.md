@@ -1,10 +1,12 @@
 # VoLum v1.3.0 - PLAY
 
+![VoLum PLAY in Dual Amp: THC Sunset and Soldano SLO100 art moving with the guitar](https://raw.githubusercontent.com/guitarlum/VoLum/v1.3.0/docs/volum-dual-amp.gif)
+
 Draft for the GitHub release. Check asset names with `gh release view v1.3.0` before publishing.
 
 ## What's new
 
-- **PLAY mode.** A stage surface next to BUILD (press **P**): eight stomp switches, a rail of your Sounds, and amp art that moves while you play. All 15 factory amps have their own motion.
+- **VoLum now opens on PLAY.** A stage surface with eight stomp switches, a rail of your Sounds, and amp art that moves while you play; all 15 factory amps have their own motion. BUILD is one click away (or press **P**), and a "Tweak your sound" note points at the switch until you first use it. VoLum then remembers the view you left.
 - **MIDI recall of complete Sounds.** Program Change (and a Recall CC for hosts that never send PC) recalls an amp with one of its presets. Settings -> MIDI shows the 128 programs as a foot controller: 16 banks of 8.
 - **Chorus.** A fourth POST pedal ahead of Delay with four voices: CLASSIC (Juno-style sweep), WARPED (tape wow and flutter), CLEAR (wide, mono-clean) and ENSEMBLE (80s tri-stereo rack).
 - **Packs.** Export and import your custom amps, IRs, pedals and presets as one `.volumpack` file: everything, just Sounds, or a whole amp.

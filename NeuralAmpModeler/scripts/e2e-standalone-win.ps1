@@ -258,6 +258,9 @@ function Test-Fresh {
   if ($settings) {
     Assert-True "settings carry a schema version" ($null -ne $settings.version)
     Assert-True "settings carry per-amp scenes" ($null -ne $settings.amps)
+    Assert-Equal "a fresh install opens on PLAY" "play" $settings.volumUiMode
+    Assert-Equal "the Tweak your sound note is still pending" $false $settings.buildTipSeen
+    Assert-Equal "a fresh install starts on the first Factory Sound" "factory:12:v1" $settings.volumActivePresetId
   }
 
   $log = Join-Path $root "volum.log"
@@ -266,6 +269,7 @@ function Test-Fresh {
     $text = Get-Content $log -Raw
     Assert-True "log records startup" ($text -match "startup")
     Assert-True "log records the audio configuration" ($text -match "reset|samplerate|sample rate|block")
+    Assert-True "first launch recalls program 0" ($text -match "recall slot=0 amp=factory:12 preset=factory:12:v1")
   }
 
   $contentPath = Join-Path $root "content\volum-content.json"
@@ -2000,6 +2004,8 @@ function Test-Chrome {
   Write-Host "`n[chrome] no menu bar, dark caption, Settings opens the skinned Preferences and closes on an outside press" -ForegroundColor Cyan
   $sandbox = New-Sandbox "chrome"
   Write-SandboxAudioConfig $sandbox
+  # A fresh install opens on PLAY; the outside press below needs the BUILD sidebar.
+  [IO.File]::WriteAllText((Join-Path $sandbox "VoLum\volum-settings.json"), '{"volumUiMode":"build"}', (New-Object Text.UTF8Encoding $false))
   $build = [VoLumE2eChrome]::Build()
   # Mirrors VoLumDarkCaptionAttribute (VoLumWinChromeModel.h).
   $darkAttr = if ($build -ge 18985) { 20 } elseif ($build -ge 17763) { 19 } else { 0 }

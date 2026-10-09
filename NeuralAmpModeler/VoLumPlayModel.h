@@ -42,12 +42,34 @@ inline UiMode UiModeFromJson(const nlohmann::json& value, const char* key)
   return UiModeFromString(value[key].get<std::string>());
 }
 
+// A fresh install, a 1.2.x upgrade and a new plugin insert open on PLAY. A
+// project saved before PLAY existed has no uiMode in its id-tail and keeps BUILD.
+inline constexpr UiMode kFirstRunUiMode = UiMode::Play;
+
 // Machine-file PLAY/BUILD is standalone-only. A plugin keeps `fallback`
 // (constructor default or the project id-tail) so a PLAY standalone quit
-// cannot open the next VST3 insert on the stage.
+// cannot open the next VST3 insert on the stage. A file without the key (1.2.x)
+// keeps `fallback` too.
 inline UiMode UiModeFromMachineSettings(bool standalone, const nlohmann::json& value, UiMode fallback)
 {
-  return standalone ? UiModeFromJson(value, "volumUiMode") : fallback;
+  if (!standalone || !value.is_object() || !value.contains("volumUiMode"))
+    return fallback;
+  return UiModeFromJson(value, "volumUiMode");
+}
+
+// The "Tweak your sound" tip beside the PLAY/BUILD switch shows in PLAY until
+// the first switch to BUILD on this machine, then never again.
+inline constexpr const char* kBuildTipSeenKey = "buildTipSeen";
+
+inline bool BuildTipSeenFromJson(const nlohmann::json& value)
+{
+  return value.is_object() && value.contains(kBuildTipSeenKey) && value[kBuildTipSeenKey].is_boolean()
+         && value[kBuildTipSeenKey].get<bool>();
+}
+
+inline bool ShowBuildTip(UiMode mode, bool seen)
+{
+  return mode == UiMode::Play && !seen;
 }
 
 inline int MidiChannelFromJson(const nlohmann::json& value, int fallback = 0)

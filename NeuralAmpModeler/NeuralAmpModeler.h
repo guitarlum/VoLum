@@ -145,6 +145,7 @@ enum ECtrlTags
   kCtrlTagVoLumPlaySurface,
   kCtrlTagVoLumHeaderPlate,
   kCtrlTagVoLumModeToggle,
+  kCtrlTagVoLumBuildTip,
   kCtrlTagVoLumPackOverlay,
   kCtrlTagVoLumNameDialog,
   kNumCtrlTags
@@ -557,7 +558,8 @@ public:
   std::unordered_map<std::string, std::string> mVolumActivePresetIdByOwner;
   std::unordered_map<std::string, volum::VoLumAmpSettings> mVolumRecalledSnapshotByOwner;
   std::vector<volum::FactoryPreset> mVolumFactoryPresets;
-  volum::UiMode mVolumUiMode = volum::UiMode::Build;
+  volum::UiMode mVolumUiMode = volum::kFirstRunUiMode;
+  bool mVolumBuildTipSeen = false; // machine-wide, volum::kBuildTipSeenKey
   int mVolumLastRecalledPlaySlot = -1;
   volum::PickerGroupSession mVolumPresetPickerGroups;
   volum::PickerGroupSession mVolumPlayPickerGroups;
