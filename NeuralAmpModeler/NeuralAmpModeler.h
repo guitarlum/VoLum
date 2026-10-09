@@ -55,6 +55,7 @@
 #include "VoLumUpdateState.h"
 #include "VoLumPlayModel.h"
 #include "VoLumHeaderChrome.h"
+#include "VoLumNoticeDeferral.h"
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
@@ -629,6 +630,7 @@ private:
   std::atomic<bool> mVolumUiSyncPending{false};
   // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
   std::string mVolumPendingLibraryNotice;
+  volum::ui::NoticeDeferral mVolumNoticeDeferral;
   // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins
   // handoff; content-library resolution happens in OnIdle.
   volum::MidiLatestWinsQueue mVolumMidiQueue;

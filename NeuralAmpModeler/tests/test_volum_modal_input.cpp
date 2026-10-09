@@ -6,6 +6,7 @@
 
 #include "third_party/doctest.h"
 
+#include "../VoLumNoticeDeferral.h"
 #include "../VoLumOverlayStack.h"
 #include "../VoLumSecondPress.h"
 
@@ -194,7 +195,100 @@ TEST_CASE("The library notice waits until no control holds the mouse")
   // iPlug's message box releases the mouse capture, and a captured knob's host
   // gesture is only ended by the mouse-up the box swallowed.
   const std::string idle = PluginFunction(Source("NeuralAmpModeler.cpp"), "void NeuralAmpModeler::OnIdle()");
-  const std::string guard = Between(idle, "if (!mVolumPendingLibraryNotice.empty())", "_ShowMessageBox(");
-  CHECK(Contains(guard, "!gfx->ControlIsCaptured()"));
-  CHECK(guard.find("!gfx->ControlIsCaptured()") < guard.find("std::move(mVolumPendingLibraryNotice)"));
+  const std::string guard = Between(idle, "if (mVolumPendingLibraryNotice.empty())", "_ShowMessageBox(");
+  CHECK(Contains(guard, "mVolumNoticeDeferral.ShouldShow(gfx->ControlIsCaptured())"));
+  CHECK(guard.find("ShouldShow(gfx->ControlIsCaptured())") < guard.find("std::move(mVolumPendingLibraryNotice)"));
+  CHECK(Contains(guard, "mVolumNoticeDeferral.Reset();"));
+}
+
+TEST_CASE("A control that never releases the mouse cannot hold the library notice back forever")
+{
+  volum::ui::NoticeDeferral wait;
+  // Nothing captured: shown at once.
+  CHECK(wait.ShouldShowAt(false, 0.0));
+
+  // Captured: held back, but only for a bounded time.
+  CHECK_FALSE(wait.ShouldShowAt(true, 1000.0));
+  CHECK_FALSE(wait.ShouldShowAt(true, 1000.0 + volum::ui::kNoticeCaptureWaitMs - 1.0));
+  CHECK(wait.ShouldShowAt(true, 1000.0 + volum::ui::kNoticeCaptureWaitMs));
+
+  // A drag that ends restarts the wait for the next capture.
+  CHECK(wait.ShouldShowAt(false, 20000.0));
+  CHECK_FALSE(wait.ShouldShowAt(true, 21000.0));
+  CHECK_FALSE(wait.ShouldShowAt(true, 21000.0 + volum::ui::kNoticeCaptureWaitMs - 1.0));
+
+  // A short drag does not age into a long one.
+  volum::ui::NoticeDeferral drag;
+  CHECK_FALSE(drag.ShouldShowAt(true, 0.0));
+  CHECK(drag.ShouldShowAt(false, 2000.0));
+  CHECK_FALSE(drag.ShouldShowAt(true, 4000.0));
+  CHECK_FALSE(drag.ShouldShowAt(true, 8000.0));
+  CHECK(drag.ShouldShowAt(true, 9000.0));
+
+  // The wait is short enough to be noticed as "soon", long enough for a drag.
+  CHECK(volum::ui::kNoticeCaptureWaitMs >= 2000.0);
+  CHECK(volum::ui::kNoticeCaptureWaitMs <= 10000.0);
+}
+
+namespace
+{
+// A control built the way every VoLum one is: the press arms the gate, the
+// double-click replays it as a press only if the gate was armed.
+struct GatedControl
+{
+  volum::ui::SecondPressGate gate;
+  int presses = 0;
+  void OnMouseDown()
+  {
+    const auto pressed = gate.Press();
+    ++presses;
+  }
+  void OnMouseDblClick()
+  {
+    if (gate.Take())
+      OnMouseDown();
+  }
+  // The first press went to an overlay on top: this control never saw it.
+  void OverlayConsumesFirstPress() {}
+};
+} // namespace
+
+TEST_CASE("A replayed double-click does not arm the gate for a later overlay-consumed press")
+{
+  GatedControl control;
+
+  // Genuine double-click on the control: press, then the replay.
+  control.OnMouseDown();
+  control.OnMouseDblClick();
+  CHECK(control.presses == 2);
+
+  // Later an overlay takes the first press of a double-click over the same control;
+  // the second click must not reach it.
+  control.OverlayConsumesFirstPress();
+  control.OnMouseDblClick();
+  CHECK(control.presses == 2);
+
+  // The control still takes its own double-click afterwards.
+  control.OnMouseDown();
+  control.OnMouseDblClick();
+  CHECK(control.presses == 4);
+}
+
+TEST_CASE("A Take that replays nothing does not stop the next genuine press arming")
+{
+  // An own-double-click action takes the gate but never calls OnMouseDown.
+  volum::ui::SecondPressGate gate;
+  gate.ArmAt(1000.0);
+  REQUIRE(gate.TakeAt(1100.0));
+  CHECK_FALSE(gate.ConsumeReplayAt(1100.0 + volum::ui::kReplayEntryWindowMs + 1.0));
+
+  // Straight after the Take it is the replay.
+  gate.ArmAt(5000.0);
+  REQUIRE(gate.TakeAt(5100.0));
+  CHECK(gate.ConsumeReplayAt(5100.0));
+  CHECK_FALSE(gate.ConsumeReplayAt(5100.0)); // once
+
+  // A refused Take marks nothing.
+  CHECK_FALSE(gate.TakeAt(5200.0));
+  CHECK_FALSE(gate.ConsumeReplayAt(5200.0));
 }
