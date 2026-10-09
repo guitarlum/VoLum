@@ -407,11 +407,22 @@ function Test-Upgrade {
   Assert-True "upgraded registry still parses" ($null -ne $after)
   if ($after) {
     Assert-NoContentLoss $before $after
-    Assert-Equal ("registry upgraded to the current schema v{0}" -f $script:ContentSchemaVersion) `
-      $script:ContentSchemaVersion $after.schemaVersion
+    # What a launch rewrites is decided by the IR trim migration alone (MigrateIrTrims
+    # saves when it measured at least one IR). A library with nothing to measure is not
+    # rewritten at launch: a v2 file stays v2 on disk until the first real save, and
+    # the schema number is a capability marker, not a migration gate (VoLumContentStore.h
+    # kContentSchemaVersion; 265856f1 stopped the legacy-scene drain from forcing a write).
+    $measurable = @($before.irLibrary | Where-Object { $_.path -and (Test-Path (Join-Path $root ("content\" + $_.path))) }).Count
+    if ($measurable -gt 0) {
+      Assert-Equal ("registry upgraded to the current schema v{0}" -f $script:ContentSchemaVersion) `
+        $script:ContentSchemaVersion $after.schemaVersion
+    }
+    else {
+      Assert-Equal "nothing to migrate: the schema-v2 file is not rewritten at launch" 2 $after.schemaVersion
+    }
     if ($irCount -gt 0) {
       $calibrated = @($after.irLibrary | Where-Object { $null -ne $_.trimDb }).Count
-      Assert-Equal "every IR gained a measured trim" $irCount $calibrated
+      Assert-Equal "every readable IR gained a measured trim (an unreadable one stays uncalibrated)" $measurable $calibrated
       # The migration rewrites the library in place and 1.2.0 cannot read the
       # result back, so the pre-migration copy is the user's only way home.
       Assert-True "pre-migration backup kept" (Test-Path (Join-Path $root "content\volum-content.json.pre-1.2.1.bak"))
@@ -1677,6 +1688,7 @@ function Test-Pack {
     $localSha = Get-FileSha $localFile
     $packSha = Get-FileSha (Get-StoredFile $rootA $capRel)
     $verbState = @{}
+    $packbak = Join-Path $vRoot "content\volum-content.json.packbak"
     $vCap = Join-Path $e.sandbox "capture"
     $readState = {
       $r = Read-Json $vContent
@@ -1686,6 +1698,7 @@ function Test-Pack {
         sha = (Get-FileSha (Get-StoredFile $vRoot $ampPath))
         packPathExists = [bool](Test-Path (Get-StoredFile $vRoot $capRel))
         localPathExists = [bool](Test-Path (Get-StoredFile $vRoot $localRel))
+        packbakNamesLocal = [bool]((Test-Path $packbak) -and ((Get-Content $packbak -Raw) -like "*$localRel*"))
         ampPath = $ampPath }
     }
     $runV = Invoke-VoLumRun -SandboxRoot $e.sandbox -SettleSec 7 `
@@ -1727,11 +1740,19 @@ function Test-Pack {
       Assert-True "[verbs] Overwrite keeps my local-only preset" $verbState.overwrite.local
       Assert-equal "[verbs] Overwrite takes the Pack catalog path" $capRel $verbState.overwrite.ampPath
       Assert-True "[verbs] Overwrite keeps the Pack payload" $verbState.overwrite.packPathExists
-      Assert-True "[verbs] Overwrite deletes my replaced payload" (-not $verbState.overwrite.localPathExists)
+      # The replaced capture is the undo point's payload: volum-content.json.packbak (the
+      # pre-import library) still names it, so it stays until a later import supersedes
+      # that backup (VoLumPack.h ApplyPack, b7c02983 / 4e11e45c; unit test "Overwrite keeps
+      # the replaced amp's private file for the Pack backup"). Reset below must reclaim it.
+      Assert-True "[verbs] Overwrite keeps my replaced payload for the Pack backup" $verbState.overwrite.localPathExists
+      Assert-True "[verbs] Overwrite's .packbak names the replaced payload" $verbState.overwrite.packbakNamesLocal
     }
     else { Assert-True "[verbs] Overwrite ran" $false }
     if ($verbState.reset) {
       Assert-True "[verbs] Reset deletes my local-only preset" (-not $verbState.reset.local)
+      # The next import replaced the backup that named it: nothing is left behind.
+      Assert-True "[verbs] the next import reclaims my replaced payload" (-not $verbState.reset.localPathExists)
+      Assert-True "[verbs] the new .packbak no longer names it" (-not $verbState.reset.packbakNamesLocal)
       Assert-Equal "[verbs] Reset keeps the Pack's preset" "Skeleton Lead" $verbState.reset.skelName
     }
     else { Assert-True "[verbs] Reset ran" $false }
