@@ -51,6 +51,8 @@
 #include "VoLumLatencyRequests.h"
 #include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
+#include "VoLumHostKnobMarks.h"
+#include "VoLumModeTransition.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
@@ -193,6 +195,7 @@ public:
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }
 
   void OnParamChange(int paramIdx) override;
+  void OnParamChange(int paramIdx, iplug::EParamSource source, int sampleOffset = -1) override;
   void OnParamChangeUI(int paramIdx, iplug::EParamSource source) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
@@ -309,17 +312,20 @@ public:
   void _VolumSaveEffectSettings();
   void _VolumRestoreEffectSettings();
   void _VolumSaveDelayModeSnapshot(int mode);
-  void _VolumRestoreDelayModeSnapshot(int mode);
+  void _VolumRestoreDelayModeSnapshot(int mode, bool notifyUi = true);
   void _VolumSaveReverbModeSnapshot(int mode);
-  void _VolumRestoreReverbModeSnapshot(int mode);
+  void _VolumRestoreReverbModeSnapshot(int mode, bool notifyUi = true);
   void _VolumSaveOktaverbSubModeSnapshot(int subMode);
-  void _VolumRestoreOktaverbSubModeSnapshot(int subMode);
+  void _VolumRestoreOktaverbSubModeSnapshot(int subMode, bool notifyUi = true);
   void _VolumSaveTremoloModeSnapshot(int mode);
-  void _VolumRestoreTremoloModeSnapshot(int mode);
+  void _VolumRestoreTremoloModeSnapshot(int mode, bool notifyUi = true);
   void _VolumSaveChorusModeSnapshot(int mode);
-  void _VolumRestoreChorusModeSnapshot(int mode);
+  void _VolumRestoreChorusModeSnapshot(int mode, bool notifyUi = true);
   void _VolumSavePrePitchModeSnapshot(int mode);
-  void _VolumRestorePrePitchModeSnapshot(int mode);
+  void _VolumRestorePrePitchModeSnapshot(int mode, bool notifyUi = true);
+  void _VolumQueueModeParamChange(int paramIdx, iplug::EParamSource source);
+  void _VolumApplyPendingModeChanges();
+  void _VolumApplyPendingDualAmpChange();
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
   void _ClearVoLumKnobSelection();
@@ -718,6 +724,24 @@ private:
   // global mode-snapshot restore path and overwrite the per-amp values being loaded.
   bool mVolumPostRestoreInProgress = false;
   std::atomic<bool> mVolumSupportNeedsLoad{false};
+  // Host automation reaches OnParamChange on the audio thread. Directory scans,
+  // vector rewrites and the dual-amp pan/default transaction are consumed on the
+  // API idle/main thread (or immediately by OnParamChangeUI).
+  std::atomic<bool> mVolumSupportChannelsDirty{false};
+  std::atomic<bool> mVolumDualAmpParamDirty{false};
+  // OnParamChange can run on the audio thread. It publishes only the requested
+  // mode here; OnIdle / SerializeState perform the snapshot transaction.
+  volum::PendingModeSnapshotChanges mVolumPendingModeChanges;
+  // Knobs the host wrote since the last mode transaction (audio thread marks, main thread takes).
+  // A transaction keeps them over the incoming mode's remembered values.
+  volum::HostKnobMarks mVolumHostKnobMarks;
+  // Main thread only: the marks of the transaction in progress.
+  std::uint32_t mVolumKeptKnobs = 0;
+  bool _VolumKnobKept(int paramIdx) const { return (mVolumKeptKnobs & volum::HostKnobBit(paramIdx)) != 0; }
+  // Main thread only: true while a mode transaction recalls knobs.
+  bool mVolumModeTransactionActive = false;
+  bool _VolumRecallMayWrite(int paramIdx) const;
+  void _VolumSetDefaultKeepValue(int paramIdx, double defaultValue);
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
   // Set by OnUIOpen / cleared by OnUIClose; gates the meter work in ProcessBlock.

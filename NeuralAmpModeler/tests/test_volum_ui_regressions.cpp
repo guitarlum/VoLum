@@ -1,5 +1,7 @@
 #include "third_party/doctest.h"
 #include "../config.h"
+#include "../VoLumHostKnobMarks.h"
+#include "../VoLumModeTransition.h"
 #include "../VoLumSecondPress.h"
 #include "../VoLumTriptychLayout.h"
 
@@ -90,6 +92,100 @@ std::string MemberFnUntilNext(const std::string& src, const char* signature)
   REQUIRE(end != std::string::npos);
   return src.substr(start, end - start);
 }
+
+struct ModeSnapshotHarness
+{
+  volum::PendingModeSnapshotChanges pending;
+  int currentMode = 0;
+  int trackedMode = 0;
+  int liveKnob = 13;
+  int slots[2]{10, 20};
+  int saveCalls = 0;
+  int restoreCalls = 0;
+
+  void AudioThreadChange(int mode)
+  {
+    currentMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Chorus);
+  }
+
+  void ApplyPendingOnMainThread()
+  {
+    const unsigned mask = pending.Take();
+    volum::ApplyPendingModeSnapshotChange((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus)) != 0,
+                                          currentMode, 2, volum::PendingModeAction::Apply, trackedMode,
+                                          [this](int mode) {
+                                            ++saveCalls;
+                                            slots[mode] = liveKnob;
+                                          },
+                                          [this](int mode) {
+                                            ++restoreCalls;
+                                            liveKnob = slots[mode];
+                                          });
+  }
+
+  void SaveCurrentToTrackedMode() { slots[trackedMode] = liveKnob; }
+
+  void IdleTick()
+  {
+    ApplyPendingOnMainThread();
+    SaveCurrentToTrackedMode();
+  }
+
+  void Serialize()
+  {
+    ApplyPendingOnMainThread();
+    SaveCurrentToTrackedMode();
+  }
+};
+
+struct OktaverbSnapshotHarness
+{
+  volum::PendingModeSnapshotChanges pending;
+  bool oktaverbSelected = true;
+  int currentSubMode = 0;
+  int rememberedSubMode = 0;
+  int liveKnob = 13;
+  int slots[2]{10, 20};
+
+  void AudioThreadSubModeChange(int mode)
+  {
+    currentSubMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Oktaverb);
+  }
+
+  void AudioThreadReverbKnobChange(int value)
+  {
+    liveKnob = value;
+    volum::SaveTrackedModeSnapshot(2, rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; });
+  }
+
+  void AudioThreadReverbAndSubModeChange(int mode)
+  {
+    oktaverbSelected = true;
+    currentSubMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Reverb);
+    pending.Request(volum::ModeSnapshotTarget::Oktaverb);
+  }
+
+  volum::PendingModeResult ApplyPendingOnMainThread()
+  {
+    const unsigned mask = pending.Take();
+    const int requestedSubMode = currentSubMode;
+    if ((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)) != 0)
+    {
+      // _VolumRestoreReverbModeSnapshot(Oktaverb) restores the remembered
+      // sub-mode and its knobs before the pending nested transition runs.
+      currentSubMode = rememberedSubMode;
+      liveKnob = slots[rememberedSubMode];
+    }
+    const auto action = volum::OktaverbPendingModeAction(oktaverbSelected, false);
+    return volum::ApplyPendingNestedModeSnapshotChange(
+      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, requestedSubMode, 2, action,
+      rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; }, [this](int slot) { liveKnob = slots[slot]; },
+      [this](int mode) { currentSubMode = mode; });
+  }
+};
 
 // VoLumSupportPolarityControl in the same header has the same replay lines, so the
 // search stays inside the hero class.
@@ -1075,7 +1171,7 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "postGuard(mVolumPostRestoreInProgress);");
   RequireContains(source, "if (!s.postValid)");
   RequireContains(source, "const volum::VoLumAmpSettings defaults;");
-  RequireContains(source, "if (mVolumPostRestoreInProgress)");
+  RequireContains(source, "mVolumPendingModeChanges.Discard(");
   RequireContains(source, "mVolumInitComplete && !mVolumPostRestoreInProgress");
   RequireContains(source, "const int restoredDelayMode = std::clamp(s.postDelayMode");
   RequireContains(source, "const int restoredReverbMode = std::clamp(s.postReverbMode");
@@ -1092,39 +1188,432 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireDoesNotContain(source, "SetSelected(mVolumSpeakerIdx);");
 }
 
-TEST_CASE("POST Tremolo per-mode switch is guarded from snapshot re-entry")
+TEST_CASE("F-08 audio-thread mode request defers the snapshot transaction")
 {
-  // Mirrors the Reverb/Delay per-mode pattern: switching mode saves the outgoing
-  // mode's knobs and recalls the incoming mode's, wrapped in a re-entrancy guard
-  // so the setParam cascade does not overwrite the snapshot mid-restore. This is
-  // the exact bug class that previously bit Reverb (B-reverb re-entry).
-  const std::string source = ReadPluginSource();
-  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1);
 
-  RequireContains(header, "bool mVolumTremoloRestoreInProgress = false;");
-  RequireContains(source, "} guard(mVolumTremoloRestoreInProgress);");
-  RequireContains(source, "_VolumSaveTremoloModeSnapshot(oldMode);");
-  RequireContains(source, "_VolumRestoreTremoloModeSnapshot(newMode);");
-  // The mode handler skips the save/restore while a POST restore is in flight.
-  RequireContains(source, "mVolumEffectSettings.tremoloMode = newMode;");
+  CHECK(h.trackedMode == 0);
+  CHECK(h.liveKnob == 13);
+  CHECK(h.slots[0] == 10);
+  CHECK(h.slots[1] == 20);
+
+  h.ApplyPendingOnMainThread();
+  CHECK(h.trackedMode == 1);
+  CHECK(h.liveKnob == 20);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
 }
 
-TEST_CASE("PRE Pitch per-mode switch is guarded from snapshot re-entry")
+TEST_CASE("F-08 idle applies a pending mode before saving live settings")
 {
-  // PRE has no POST-style effect-settings struct, so the live per-mode snapshots
-  // live on the plugin (mVolumPrePitchModes) and the mode-switch save/restore is
-  // wrapped in its own re-entrancy guard.
-  const std::string source = ReadPluginSource();
-  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1);
+  h.IdleTick();
 
-  RequireContains(header, "bool mVolumPreRestoreInProgress = false;");
-  RequireContains(header, "int mVolumPrePitchMode = volum::kVoLumPitchModeDefault;");
-  RequireContains(source, "} guard(mVolumPreRestoreInProgress);");
-  RequireContains(source, "if (mVolumPreRestoreInProgress)");
-  RequireContains(source, "_VolumSavePrePitchModeSnapshot(oldMode);");
-  RequireContains(source, "_VolumRestorePrePitchModeSnapshot(newMode);");
+  CHECK(h.trackedMode == 1);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.liveKnob == 20);
 }
 
+TEST_CASE("F-08 serialize applies a pending mode before saving live settings")
+{
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1);
+  h.Serialize();
+
+  CHECK(h.trackedMode == 1);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.liveKnob == 20);
+}
+
+TEST_CASE("F-08 UI click and host echo apply one snapshot transaction")
+{
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1); // UI-side request
+  h.ApplyPendingOnMainThread();
+  h.AudioThreadChange(1); // echoed by the host on the processor thread
+  h.ApplyPendingOnMainThread();
+
+  CHECK(h.trackedMode == 1);
+  CHECK(h.liveKnob == 20);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.saveCalls == 1);
+  CHECK(h.restoreCalls == 1);
+}
+
+TEST_CASE("F-08 pending mode targets keep independent request bits")
+{
+  volum::PendingModeSnapshotChanges pending;
+  pending.Request(volum::ModeSnapshotTarget::Delay);
+  pending.Request(volum::ModeSnapshotTarget::Chorus);
+  const unsigned mask = pending.Take();
+
+  CHECK((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)) != 0);
+  CHECK((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus)) != 0);
+  CHECK((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::PrePitch)) == 0);
+  CHECK(pending.Take() == 0);
+}
+
+TEST_CASE("F-08 Oktaverb knob automation before idle saves the remembered sub-mode")
+{
+  OktaverbSnapshotHarness h;
+  h.AudioThreadSubModeChange(1);
+  h.AudioThreadReverbKnobChange(14);
+
+  CHECK(h.rememberedSubMode == 0);
+  CHECK(h.slots[0] == 14);
+  CHECK(h.slots[1] == 20);
+
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::Applied);
+  CHECK(h.rememberedSubMode == 1);
+  CHECK(h.slots[0] == 14);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.liveKnob == 20);
+}
+
+TEST_CASE("F-08 simultaneous Reverb and Oktaverb changes keep parameter and knobs aligned")
+{
+  OktaverbSnapshotHarness h;
+  h.AudioThreadReverbAndSubModeChange(1);
+
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::Applied);
+  CHECK(h.currentSubMode == 1);
+  CHECK(h.rememberedSubMode == 1);
+  CHECK(h.liveKnob == 20);
+  CHECK(h.slots[0] == 10);
+  CHECK(h.slots[1] == 20);
+}
+
+TEST_CASE("F-08 stale Oktaverb request is dropped outside Oktaverb")
+{
+  OktaverbSnapshotHarness h;
+  h.oktaverbSelected = false;
+  h.AudioThreadSubModeChange(1);
+
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::Dropped);
+  CHECK(h.rememberedSubMode == 0);
+  CHECK(h.pending.Take() == 0);
+
+  // A later restore selects Oktaverb and restores its remembered S sub-mode.
+  h.oktaverbSelected = true;
+  h.currentSubMode = h.rememberedSubMode;
+  h.liveKnob = h.slots[h.rememberedSubMode];
+  CHECK(h.ApplyPendingOnMainThread() == volum::PendingModeResult::NoRequest);
+  CHECK(h.currentSubMode == 0);
+  CHECK(h.liveKnob == 10);
+}
+
+TEST_CASE("F-08 idle and serialization consume pending mode changes before saving")
+{
+  const std::string source = ReadPluginSource();
+  const std::string settings = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsLocks.inc.cpp");
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  const std::string serialize =
+    MemberFnUntilNext(source, "bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const");
+  const std::string apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyPendingModeChanges()");
+
+  const auto idleApply = idle.find("_VolumApplyPendingModeChanges();");
+  const auto idleSave = idle.find("_VolumSaveCurrentToSettings();");
+  REQUIRE(idleApply != std::string::npos);
+  REQUIRE(idleSave != std::string::npos);
+  CHECK(idleApply < idleSave);
+
+  const auto serializeApply = serialize.find("_VolumApplyPendingModeChanges();");
+  const auto serializeSave = serialize.find("_VolumSaveCurrentToSettings();");
+  REQUIRE(serializeApply != std::string::npos);
+  REQUIRE(serializeSave != std::string::npos);
+  CHECK(serializeApply < serializeSave);
+
+  RequireContains(apply, "volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(");
+  RequireContains(apply, "volum::ApplyPendingNestedModeSnapshotChange(");
+  RequireContains(apply, "volum::OktaverbPendingModeAction(");
+  RequireContains(settings, "volum::SaveTrackedModeSnapshot(");
+  RequireContains(settings, "s.subMode = GetParam(kReverbSubMode)->Int();");
+}
+
+namespace
+{
+// Two Delay knobs and three modes, driven through the same marks / transaction helper
+// the plugin uses. HostKnob* is the audio-thread side, Apply the main-thread side.
+struct HostKnobHarness
+{
+  static constexpr int kKnobParam[2] = {kDelayTime, kDelayFeedback};
+  volum::PendingModeSnapshotChanges pending;
+  volum::HostKnobMarks marks;
+  int currentMode = 0;
+  int tracked = 0;
+  double live[2]{0.3, 0.4};
+  double slots[3][2]{{0.3, 0.4}, {0.8, 0.9}, {0.6, 0.7}};
+
+  static std::uint32_t Bit(int i) { return volum::HostKnobBit(kKnobParam[i]); }
+
+  void HostSetMode(int mode)
+  {
+    currentMode = mode;
+    pending.Request(volum::ModeSnapshotTarget::Delay);
+  }
+
+  void HostSetKnob(int i, double value)
+  {
+    live[i] = value;
+    marks.Mark(kKnobParam[i]);
+  }
+
+  // OnParamChangeUI -> _VolumApplyPendingModeChanges: what OnIdle, SerializeState and
+  // OnParamReset(kReset) all run. duringTransaction models the audio thread: it runs
+  // after the window was taken and before the recall.
+  template <typename DuringTransaction>
+  volum::PendingModeResult Apply(DuringTransaction&& duringTransaction)
+  {
+    const unsigned mask = pending.Take();
+    const std::uint32_t host = marks.Take();
+    const std::uint32_t kept = host & (Bit(0) | Bit(1));
+    duringTransaction();
+    const auto result = volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(
+      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)) != 0, currentMode, 3,
+      volum::PendingModeAction::Apply, tracked, kept,
+      [this](int mode, std::uint32_t keep) {
+        for (int i = 0; i < 2; ++i)
+          if ((keep & Bit(i)) == 0)
+            slots[mode][i] = live[i];
+      },
+      [this](int mode, std::uint32_t keep) {
+        for (int i = 0; i < 2; ++i)
+          if ((keep & Bit(i)) == 0 && !marks.IsMarked(kKnobParam[i]))
+            live[i] = slots[mode][i];
+      },
+      [this](int mode) {
+        for (int i = 0; i < 2; ++i)
+          slots[mode][i] = live[i];
+      });
+    marks.EndTransaction(0, pending.Peek());
+    return result;
+  }
+
+  volum::PendingModeResult Apply()
+  {
+    return Apply([] {});
+  }
+  void Reset() { Apply(); }
+
+  void Idle()
+  {
+    Apply();
+    for (int i = 0; i < 2; ++i)
+      slots[tracked][i] = live[i];
+  }
+};
+} // namespace
+
+TEST_CASE("F-08 AU Initialize: a knob the host set with its mode keeps the host value")
+{
+  // auval sets every parameter on the uninitialized AU and reads each back after
+  // AudioUnitInitialize (OnParamReset(kReset) -> _VolumApplyPendingModeChanges).
+  // Delay writes knobs before the mode in parameter order; Pitch/Tremolo/Chorus after.
+  for (const bool knobFirst : {true, false})
+  {
+    INFO("knobFirst " << knobFirst);
+    HostKnobHarness h;
+    if (knobFirst)
+    {
+      h.HostSetKnob(0, 0.55);
+      h.HostSetMode(1);
+    }
+    else
+    {
+      h.HostSetMode(1);
+      h.HostSetKnob(0, 0.55);
+    }
+    h.Reset();
+
+    CHECK(h.live[0] == 0.55); // host-set: kept (df5c7aff kept both, F-08 wants only these)
+    CHECK(h.live[1] == 0.9); // not written by the host: the new mode's own knob
+    CHECK(h.slots[1][0] == 0.55);
+    CHECK(h.slots[1][1] == 0.9);
+    CHECK(h.slots[0][0] == 0.3); // the old mode's snapshot never takes the host's value
+    CHECK(h.slots[0][1] == 0.4);
+    CHECK(h.tracked == 1);
+
+    h.Reset(); // a repeated Initialize changes nothing
+    CHECK(h.live[0] == 0.55);
+    CHECK(h.live[1] == 0.9);
+    CHECK(h.slots[1][0] == 0.55);
+    CHECK(h.slots[0][0] == 0.3);
+  }
+}
+
+TEST_CASE("F-08 repeated reset after a mode change never saves the old knobs as the new mode")
+{
+  HostKnobHarness h;
+  h.HostSetMode(1); // no knob writes
+
+  h.Reset();
+  CHECK(h.live[0] == 0.8);
+  CHECK(h.live[1] == 0.9);
+  CHECK(h.slots[0][0] == 0.3);
+  CHECK(h.slots[0][1] == 0.4);
+  CHECK(h.slots[1][0] == 0.8);
+  CHECK(h.slots[1][1] == 0.9);
+
+  h.Reset();
+  h.Reset();
+  CHECK(h.live[0] == 0.8);
+  CHECK(h.live[1] == 0.9);
+  CHECK(h.slots[0][0] == 0.3);
+  CHECK(h.slots[0][1] == 0.4);
+  CHECK(h.slots[1][0] == 0.8);
+  CHECK(h.slots[1][1] == 0.9);
+
+  // Control, df5c7aff's rule: every reset adopted the live knobs as the pending mode's
+  // snapshot. A reset before the first transaction saved the OLD knobs as the NEW mode.
+  HostKnobHarness old;
+  old.HostSetMode(1);
+  for (int i = 0; i < 2; ++i)
+    old.slots[1][i] = old.live[i];
+  CHECK(old.slots[1][0] == 0.3);
+  CHECK(old.slots[1][0] != h.slots[1][0]);
+}
+
+TEST_CASE("F-08 idle mode change is unchanged and a stale knob write does not carry over")
+{
+  HostKnobHarness h;
+  h.HostSetMode(1);
+  h.Idle();
+  CHECK(h.tracked == 1);
+  CHECK(h.live[0] == 0.8);
+  CHECK(h.slots[0][0] == 0.3);
+  CHECK(h.slots[0][1] == 0.4);
+  CHECK(h.slots[1][0] == 0.8);
+
+  // Automation of a knob of the current mode, no mode change in its window.
+  h.HostSetKnob(0, 0.7);
+  h.Idle();
+  CHECK(h.slots[1][0] == 0.7);
+
+  // A later mode change recalls the new mode's own knob: the 0.7 write is not "host-set".
+  h.HostSetMode(2);
+  h.Idle();
+  CHECK(h.tracked == 2);
+  CHECK(h.live[0] == 0.6);
+  CHECK(h.live[1] == 0.7);
+  CHECK(h.slots[1][0] == 0.7);
+  CHECK(h.slots[1][1] == 0.9);
+}
+
+TEST_CASE("F-08 a knob the host writes during the transaction keeps its value and does not carry over")
+{
+  HostKnobHarness h;
+  h.HostSetMode(1);
+  // The audio thread writes knob 1 after the window was taken, before the recall.
+  h.Apply([&h] { h.HostSetKnob(1, 0.66); });
+  CHECK(h.live[0] == 0.8); // recalled
+  CHECK(h.live[1] == 0.66); // the host's late write is not overwritten by the recall
+  CHECK(h.tracked == 1);
+
+  // The late mark must not make knob 1 "host-set" in a later, unrelated mode change.
+  h.HostSetMode(2);
+  h.Idle();
+  CHECK(h.tracked == 2);
+  CHECK(h.live[0] == 0.6);
+  CHECK(h.live[1] == 0.7); // the new mode's own knob
+  CHECK(h.slots[1][1] == 0.66); // saved to the mode it was written under
+}
+
+TEST_CASE("F-08 a late knob write for a mode change that is still pending reaches its transaction")
+{
+  HostKnobHarness h;
+  h.HostSetMode(1);
+  h.Apply([&h] {
+    h.HostSetMode(2); // queued during the transaction
+    h.HostSetKnob(0, 0.44);
+  });
+  h.Idle();
+  CHECK(h.tracked == 2);
+  CHECK(h.live[0] == 0.44); // belongs to the pending change to mode 2
+  CHECK(h.live[1] == 0.7);
+  CHECK(h.slots[2][0] == 0.44);
+}
+TEST_CASE("F-08 a waiting transaction hands its host-knob window back")
+{
+  volum::HostKnobMarks marks;
+  marks.Mark(kDelayTime);
+  marks.Mark(kReverbMix);
+  const auto taken = marks.Take();
+  CHECK(taken == (volum::HostKnobBit(kDelayTime) | volum::HostKnobBit(kReverbMix)));
+  CHECK(marks.Take() == 0);
+  marks.Return(taken);
+  CHECK(marks.Take() == taken);
+  marks.Mark(kDelayMode); // modes are not knobs
+  CHECK(marks.Take() == 0);
+}
+
+TEST_CASE("F-08 every mode knob has one host-knob id and Reverb/Oktaverb share theirs")
+{
+  for (int id = 0; id < volum::kHostKnobCount; ++id)
+  {
+    INFO("id " << id);
+    CHECK(volum::HostKnobId(volum::kHostKnobParams[id]) == id);
+  }
+  CHECK(volum::HostKnobId(kDelayMode) == -1);
+  CHECK(volum::HostKnobId(kReverbSubMode) == -1);
+  CHECK(volum::HostKnobBit(kInputLevel) == 0);
+}
+
+static std::string FunctionBody(const std::string& src, const std::string& signature)
+{
+  const auto start = src.find(signature);
+  REQUIRE(start != std::string::npos);
+  const auto end = src.find("\n}", start);
+  REQUIRE(end != std::string::npos);
+  return src.substr(start, end - start);
+}
+
+TEST_CASE("F-08 OnParamReset has no adopt path; the one transaction keeps host-written knobs")
+{
+  const std::string source = ReadPluginSource();
+  const std::string settings = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsLocks.inc.cpp");
+  RequireDoesNotContain(source, "_VolumAdoptPendingModeChanges");
+  RequireDoesNotContain(source, "AdoptPendingModeSnapshotChange");
+  RequireDoesNotContain(source, "NeuralAmpModeler::OnParamReset(");
+
+  const std::string onParam = MemberFnUntilNext(
+    source, "void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)");
+  RequireContains(onParam, "source == EParamSource::kHost");
+  RequireContains(onParam, "mVolumHostKnobMarks.Mark(paramIdx);");
+
+  const std::string apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyPendingModeChanges()");
+  RequireContains(apply, "mVolumHostKnobMarks.Take()");
+  RequireContains(apply, "volum::ApplyPendingModeSnapshotChangeKeepingHostKnobs(");
+  RequireContains(apply, "mVolumHostKnobMarks.EndTransaction(retryKnobs, mVolumPendingModeChanges.Peek());");
+  RequireContains(apply, "if (mVolumModeTransactionActive)");
+  const std::string mayWrite = FunctionBody(settings, "bool NeuralAmpModeler::_VolumRecallMayWrite(");
+  RequireContains(mayWrite, "mVolumHostKnobMarks.IsMarked(paramIdx)");
+
+  // Every restore holds the kept knobs across SetDefault and skips them; every save
+  // leaves them out of the outgoing snapshot.
+  for (const char* fn :
+       {"_VolumRestorePrePitchModeSnapshot", "_VolumRestoreDelayModeSnapshot", "_VolumRestoreReverbModeSnapshot",
+        "_VolumRestoreOktaverbSubModeSnapshot", "_VolumRestoreTremoloModeSnapshot", "_VolumRestoreChorusModeSnapshot"})
+  {
+    INFO(fn);
+    const std::string body = FunctionBody(settings, std::string("void NeuralAmpModeler::") + fn + "(int");
+    RequireDoesNotContain(body, "->SetDefault(");
+    RequireContains(body, "_VolumSetDefaultKeepValue(");
+    RequireContains(body, "if (!_VolumRecallMayWrite(idx))");
+  }
+  for (const char* fn :
+       {"_VolumSavePrePitchModeSnapshot", "_VolumSaveDelayModeSnapshot", "_VolumSaveReverbModeSnapshot",
+        "_VolumSaveOktaverbSubModeSnapshot", "_VolumSaveTremoloModeSnapshot", "_VolumSaveChorusModeSnapshot"})
+  {
+    INFO(fn);
+    const std::string body = FunctionBody(settings, std::string("void NeuralAmpModeler::") + fn + "(int");
+    RequireContains(body, "if (!_VolumKnobKept(");
+  }
+}
 TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")
 {
   // A fresh plugin instance runs on its EParam defaults until a scene is
@@ -2729,6 +3218,23 @@ TEST_CASE("tier2a model apply latches latency instead of updating it on the audi
   const std::string body = source.substr(apply, end - apply);
   RequireDoesNotContain(body, "_UpdateLatency()");
   RequireContains(body, "_VolumPublishLiveLatency();");
+}
+
+TEST_CASE("F-40 OnParamChange only latches main-thread layout and support work")
+{
+  const std::string source = ReadPluginSource();
+  const std::string body = MemberFnUntilNext(
+    source, "void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)");
+
+  RequireDoesNotContain(body, "_UpdateVoLumLayout(");
+  RequireDoesNotContain(body, "_VolumRefreshSupportChannels(");
+  RequireDoesNotContain(body, "SendParameterValueFromDelegate(");
+  RequireContains(body, "mVolumDualAmpParamDirty.store(true");
+  RequireContains(body, "mVolumSupportChannelsDirty.store(true");
+
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "_VolumApplyPendingDualAmpChange();");
+  RequireContains(idle, "_VolumRefreshSupportChannels();");
 }
 
 TEST_CASE("tier2a loader drain does not block on the loader mutex")
