@@ -1929,6 +1929,7 @@ TEST_CASE("Unserialize regression: host state restore applies the rig synchronou
   RequireContains(header, "class NeuralAmpModeler final : public VolumHostBase");
   RequireContains(header, "volum::HostRestoreDelegate<iplug::Plugin, iplug::IEditorDelegate>");
   RequireDoesNotContain(header, "mVolumHostRestoreGate");
+  RequireContains(header, "void OnRestoreStateDeferred() override { mVolumUiSyncPending.store(true); }");
 }
 
 TEST_CASE("Unserialize regression: the UI resync reads live state and is idempotent")

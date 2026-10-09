@@ -30,7 +30,15 @@ public:
     , mPrevious(gate.mOwner.exchange(std::this_thread::get_id(), std::memory_order_acq_rel))
     {
     }
-    ~Scope() { mGate.mOwner.store(mPrevious, std::memory_order_release); }
+    ~Scope()
+    {
+      mGate.mOwner.store(mPrevious, std::memory_order_release);
+      // The API wrappers (VST3 setState, AU, AAX, VST2) call OnRestoreState() on this
+      // same thread right after UnserializeState() returns. Leave a one-shot mark for
+      // that call so it is deferred like the rest of the restore's UI work.
+      if (mPrevious == std::thread::id{})
+        mGate.mTail.store(std::this_thread::get_id(), std::memory_order_release);
+    }
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
 
@@ -39,9 +47,17 @@ public:
     std::thread::id mPrevious;
   };
 
+  // True once, on the thread whose restore just ended, until it is taken.
+  bool TakeRestoreTail()
+  {
+    std::thread::id me = std::this_thread::get_id();
+    return mTail.compare_exchange_strong(me, std::thread::id{}, std::memory_order_acq_rel);
+  }
+
 private:
   // A default-constructed id compares unequal to every real thread.
   std::atomic<std::thread::id> mOwner{};
+  std::atomic<std::thread::id> mTail{};
 };
 
 // The base layer between the iPlug plug-in class and VoLum. GetUI() is not virtual,
@@ -65,6 +81,21 @@ public:
 
   // Hides the base GetUI() for every call made from inside the plug-in class.
   auto* GetUI() { return mRestoreGate.HidesUiFromThisThread() ? nullptr : Base::GetUI(); }
+
+  // Raised instead of walking the controls when a restore's own OnRestoreState() runs
+  // on the host's thread. The plug-in schedules its UI resync here.
+  virtual void OnRestoreStateDeferred() {}
+
+  // The default OnRestoreState() sends every parameter to the control tree. The API
+  // wrappers call it on the host's restore thread right after UnserializeState(),
+  // so that call is deferred; any other caller (a preset recall from the UI) runs it.
+  void OnRestoreState() override
+  {
+    if (mRestoreGate.TakeRestoreTail())
+      OnRestoreStateDeferred();
+    else
+      Base::OnRestoreState();
+  }
 
   void SendControlValueFromDelegate(int ctrlTag, double normalizedValue) override
   {

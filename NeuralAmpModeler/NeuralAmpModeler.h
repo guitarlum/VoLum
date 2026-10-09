@@ -178,6 +178,9 @@ public:
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
+  // The wrapper's OnRestoreState() after a host setState: not run on the host's
+  // thread (it would walk every control), so request the idle resync instead.
+  void OnRestoreStateDeferred() override { mVolumUiSyncPending.store(true); }
   void OnUIOpen() override;
   void OnUIClose() override;
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }

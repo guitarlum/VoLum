@@ -90,6 +90,7 @@ struct FakeEditorDelegate
   virtual void SendControlValueFromDelegate(int, double) {}
   virtual void SendControlMsgFromDelegate(int, int, int = 0, const void* = nullptr) { ++messages; }
   virtual void SendParameterValueFromDelegate(int, double, bool) { ++paramNotifications; }
+  virtual void OnRestoreState() {}
   int messages = 0;
   int paramNotifications = 0;
 };
@@ -101,6 +102,8 @@ struct FakeGraphicsPlugin : FakeEditorDelegate
   FakeGraphicsPlugin() = default;
   FakeGfx* GetUI() { return &gfx; }
   void SendControlValueFromDelegate(int, double) override { ++controlWalks; }
+  // IEditorDelegate's default: send every parameter to the control tree.
+  void OnRestoreState() override { ++restoreWalks; }
   void SendControlMsgFromDelegate(int c, int m, int s = 0, const void* d = nullptr) override
   {
     ++controlWalks;
@@ -113,9 +116,26 @@ struct FakeGraphicsPlugin : FakeEditorDelegate
   }
   FakeGfx gfx;
   int controlWalks = 0;
+  int restoreWalks = 0;
 };
 
 using GuardedPlugin = volum::HostRestoreDelegate<FakeGraphicsPlugin, FakeEditorDelegate>;
+
+// The plug-in side: a deferred OnRestoreState raises the flag OnIdle consumes.
+struct DeferringPlugin : GuardedPlugin
+{
+  void OnRestoreStateDeferred() override { resyncPending = true; }
+  void OnIdle()
+  {
+    if (resyncPending && GetUI())
+    {
+      resyncPending = false;
+      ++idleResyncs;
+    }
+  }
+  bool resyncPending = false;
+  int idleResyncs = 0;
+};
 } // namespace
 
 TEST_CASE("HostRestoreDelegate: the delegate helpers reach the controls outside a restore")
@@ -172,4 +192,54 @@ TEST_CASE("HostRestoreDelegate: the UI thread keeps its controls while another t
 
   release = true;
   host.join();
+}
+
+TEST_CASE("OnRestoreState straight after UnserializeState on the host thread walks no control; OnIdle resyncs")
+{
+  DeferringPlugin plugin;
+
+  // What VST3 setState, AU, AAX and VST2 do on the host's restore thread.
+  std::thread host([&] {
+    {
+      const volum::HostRestoreGate::Scope unserialize(plugin.RestoreGate());
+    }
+    plugin.OnRestoreState();
+  });
+  host.join();
+
+  CHECK(plugin.restoreWalks == 0);
+  CHECK(plugin.controlWalks == 0);
+  CHECK(plugin.resyncPending);
+
+  // The UI thread's next idle does the resync, once.
+  plugin.OnIdle();
+  CHECK(plugin.idleResyncs == 1);
+  plugin.OnIdle();
+  CHECK(plugin.idleResyncs == 1);
+}
+
+TEST_CASE("OnRestoreState from anywhere else still updates the controls")
+{
+  DeferringPlugin plugin;
+
+  // A preset recall on the UI thread: no restore just ended on this thread.
+  plugin.OnRestoreState();
+  CHECK(plugin.restoreWalks == 1);
+  CHECK_FALSE(plugin.resyncPending);
+
+  // The deferral is one-shot: only the call that follows the restore is deferred.
+  {
+    const volum::HostRestoreGate::Scope unserialize(plugin.RestoreGate());
+  }
+  plugin.OnRestoreState();
+  CHECK(plugin.restoreWalks == 1);
+  plugin.OnRestoreState();
+  CHECK(plugin.restoreWalks == 2);
+
+  // A restore on another thread does not defer this thread's call.
+  DeferringPlugin other;
+  std::thread host([&] { const volum::HostRestoreGate::Scope unserialize(other.RestoreGate()); });
+  host.join();
+  other.OnRestoreState();
+  CHECK(other.restoreWalks == 1);
 }
