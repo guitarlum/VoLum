@@ -317,7 +317,7 @@ Mit dem Stift- und dem Papierkorb-Symbol in der Amp-Liste bearbeitest oder lösc
 
 ![VoLum Menü für eigene IRs](user-guide-custom-ir.png)
 
-Ein eigenes IR ersetzt das Cab und braucht daher ein No-Cab-Capture. Jeder mitgelieferte Amp hat eines; ein eigener Amp hat eines, wenn eine seiner Dateien mit `AMP`, `DI` oder `DIRECT` beginnt.
+Ein eigenes IR ersetzt das Cab, deshalb braucht der aktuelle Kanal ein No-Cab-Capture. Jeder mitgelieferte Amp hat eines; nutze bei einem eigenen Amp einen Kanal mit einer Datei, die mit `AMP`, `DI` oder `DIRECT` beginnt. Auf anderen Kanälen ist die Schaltfläche Custom IR ausgegraut.
 
 1. Klicke **Custom IR** in der Cab-Reihe.
 2. Klicke **Manage custom IRs...**, dann **+ Import IR (.wav)**.

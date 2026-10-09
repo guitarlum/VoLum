@@ -317,7 +317,7 @@ Use the pen and bin icons in the amp list to edit or delete a custom amp.
 
 ![VoLum custom IR menu](user-guide-custom-ir.png)
 
-A custom IR replaces the cab, so it needs a No Cab capture. Every bundled amp has one; a custom amp has one if one of its files starts with `AMP`, `DI` or `DIRECT`.
+A custom IR replaces the cab, so the current channel needs a No Cab capture. Every bundled amp has one; on a custom amp, use a channel with a file that starts with `AMP`, `DI` or `DIRECT`. On other channels the Custom IR button is greyed out.
 
 1. Click **Custom IR** in the cab row.
 2. Click **Manage custom IRs...**, then **+ Import IR (.wav)**.
