@@ -1702,6 +1702,25 @@ public:
     return MergeAndWrite(ReadRegistryFromDisk());
   }
 
+  // Pack import already owns the library's cross-process lock across payload
+  // publication, catalog commit and transaction cleanup. Reusing that hold closes
+  // the gap that would exist if Save() released and reacquired the same lock.
+  bool SaveWithHeldLock(const RegistryFileLock& lock)
+  {
+    std::lock_guard<std::recursive_mutex> guard(ContentStoreMutex());
+    if (mBase.empty())
+    {
+      mBaseline = mReg;
+      return true;
+    }
+    if (!lock.Held() || mRegistryUnreadable)
+    {
+      mLastWriteFailed = true;
+      return false;
+    }
+    return MergeAndWrite(ReadRegistryFromDisk());
+  }
+
   // The one-time PLAY pre-fill: assign `sounds` and save, but only while the
   // library has never stored a midiSoundMap. Decided against the file under the
   // cross-process lock and written in the same hold, because a sibling VoLum that
@@ -1845,6 +1864,17 @@ public:
     if (relPath.empty())
       return;
     mPendingFileDeletes.push_back(relPath);
+  }
+
+  // A Pack backup keeps the pre-import registry usable. Reset may remove those
+  // rows from the live registry, but their payload deletes must wait until a
+  // later successful import supersedes that backup.
+  void CancelStoredFileDelete(const std::string& relPath)
+  {
+    mPendingFileDeletes.erase(
+      std::remove_if(mPendingFileDeletes.begin(), mPendingFileDeletes.end(),
+                     [&](const std::string& pending) { return SameStoredPath(pending, relPath); }),
+      mPendingFileDeletes.end());
   }
 
   // True when the in-memory registry names this content-relative payload. Used by

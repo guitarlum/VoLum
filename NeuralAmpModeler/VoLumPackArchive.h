@@ -156,11 +156,15 @@ inline bool SafeEntryName(const std::string& name)
 // Serialize entries into a STORE-method zip. Returns "" when an entry name is not
 // safe to write (see SafeEntryName), because a Pack we would refuse to read is not
 // a Pack worth writing.
-inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries)
+inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries, std::string* error = nullptr)
 {
   using namespace detail;
   if (entries.size() > kMaxArchiveEntries)
+  {
+    if (error)
+      *error = "Pack exceeds the 1 GiB / 4,096 files limit";
     return {};
+  }
 
   std::string out;
   struct Central
@@ -183,7 +187,11 @@ inline std::string BuildArchive(const std::vector<ArchiveEntry>& entries)
       return {};
     totalBytes += static_cast<uint64_t>(e.data.size());
     if (e.data.size() > UINT32_MAX || totalBytes > kMaxArchiveUncompressedBytes)
+    {
+      if (error)
+        *error = "Pack exceeds the 1 GiB / 4,096 files limit";
       return {};
+    }
     const uint32_t crc = Crc32(e.data);
     const uint32_t size = static_cast<uint32_t>(e.data.size());
     const uint32_t offset = static_cast<uint32_t>(out.size());
@@ -425,9 +433,9 @@ inline bool WriteWholeFileAtomically(const std::filesystem::path& path, const st
 }
 
 inline bool WriteArchiveToFile(const std::filesystem::path& path, const std::vector<ArchiveEntry>& entries,
-                               const ArchiveWriteTestHooks* testHooks = nullptr)
+                               const ArchiveWriteTestHooks* testHooks = nullptr, std::string* error = nullptr)
 {
-  const std::string blob = BuildArchive(entries);
+  const std::string blob = BuildArchive(entries, error);
   if (blob.empty())
     return false;
   return WriteWholeFileAtomically(path, blob, testHooks);
