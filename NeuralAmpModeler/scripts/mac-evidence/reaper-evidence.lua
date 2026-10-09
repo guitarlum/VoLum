@@ -53,6 +53,57 @@ local function spin(seconds)
   end
 end
 
+local function wav_stats(path)
+  local file = assert(io.open(path, "rb"), "cannot open rendered WAV: " .. tostring(path))
+  local bytes = file:read("*a")
+  file:close()
+  if bytes:sub(1, 4) ~= "RIFF" or bytes:sub(9, 12) ~= "WAVE" then
+    error("rendered file is not RIFF/WAVE: " .. tostring(path))
+  end
+
+  local audio_format, channels, bits, data_start, data_size
+  local pos = 13
+  while pos + 7 <= #bytes do
+    local chunk_id = bytes:sub(pos, pos + 3)
+    local chunk_size = string.unpack("<I4", bytes, pos + 4)
+    local payload = pos + 8
+    if chunk_id == "fmt " then
+      audio_format = string.unpack("<I2", bytes, payload)
+      channels = string.unpack("<I2", bytes, payload + 2)
+      bits = string.unpack("<I2", bytes, payload + 14)
+    elseif chunk_id == "data" then
+      data_start, data_size = payload, chunk_size
+    end
+    pos = payload + chunk_size + (chunk_size % 2)
+  end
+  if not audio_format or not channels or not bits or not data_start then
+    error("rendered WAV lacks fmt/data chunks: " .. tostring(path))
+  end
+
+  local width = bits // 8
+  local count = data_size // width
+  local peak, sumsq, bad = 0.0, 0.0, 0
+  local sample_pos = data_start
+  for _ = 1, count do
+    local value
+    if audio_format == 3 and bits == 32 then
+      value = string.unpack("<f", bytes, sample_pos)
+    elseif audio_format == 1 and bits == 16 then
+      value = string.unpack("<i2", bytes, sample_pos) / 32768.0
+    else
+      error(("unsupported rendered WAV format=%d bits=%d"):format(audio_format, bits))
+    end
+    if value ~= value or value == math.huge or value == -math.huge then
+      bad = bad + 1
+      value = 0.0
+    end
+    peak = math.max(peak, math.abs(value))
+    sumsq = sumsq + value * value
+    sample_pos = sample_pos + width
+  end
+  return {peak=peak, rms=math.sqrt(sumsq / count), bad=bad, samples=count, channels=channels}
+end
+
 local function render_stats(track, item, label)
   reaper.SetMediaTrackInfo_Value(track, "B_MUTE", 0)
   reaper.SetOnlyTrackSelected(track)
@@ -69,28 +120,14 @@ local function render_stats(track, item, label)
   if not take then error("stereo stem render produced no take for " .. label) end
   local source = reaper.GetMediaItemTake_Source(take)
   local source_file = reaper.GetMediaSourceFileName(source, "")
-  local aa = reaper.CreateTakeAudioAccessor(take)
-  local t0 = reaper.GetAudioAccessorStartTime(aa)
-  local t1 = reaper.GetAudioAccessorEndTime(aa)
-  local ns = math.floor(math.min(2.0, math.max(0.1, t1 - t0)) * SR)
-  local buf = reaper.new_array(ns * 2)
-  buf.clear()
-  local got = reaper.GetAudioAccessorSamples(aa, SR, 2, t0, ns, buf)
-  local peak, sumsq, bad = 0.0, 0.0, 0
-  for _, value in ipairs(buf.table()) do
-    local v = value or 0.0
-    if v ~= v or v == math.huge or v == -math.huge then bad = bad + 1; v = 0 end
-    peak = math.max(peak, math.abs(v))
-    sumsq = sumsq + v * v
-  end
-  reaper.DestroyAudioAccessor(aa)
-  local rms = math.sqrt(sumsq / (ns * 2))
-  L(("stats[%s] got=%s peak=%.8f rms=%.8f bad=%d src=%s")
-    :format(label, tostring(got), peak, rms, bad, tostring(source_file)))
+  local measured = wav_stats(source_file)
+  L(("stats[%s] samples=%d channels=%d peak=%.8f rms=%.8f bad=%d src=%s")
+    :format(label, measured.samples, measured.channels, measured.peak, measured.rms,
+      measured.bad, tostring(source_file)))
   reaper.DeleteTrack(rendered_track)
   reaper.SetMediaTrackInfo_Value(track, "B_MUTE", 0)
   reaper.SetOnlyTrackSelected(track)
-  return {peak=peak, rms=rms, bad=bad}
+  return measured
 end
 
 local function state_chunk(track)
@@ -113,20 +150,17 @@ local function add_midi_message(track, status, data1, data2)
   return item
 end
 
-local function deliver_midi(track, status, data1, data2, label)
+local function deliver_midi(track, audio_item, status, data1, data2, label)
   local before = state_chunk(track)
   local midi_item = add_midi_message(track, status, data1, data2)
-  reaper.SetEditCurPos(0, false, false)
-  reaper.OnPlayButton()
-  spin(1.5)
-  reaper.OnStopButton()
+  render_stats(track, audio_item, label .. "-offline")
   spin(1.0)
   local after = state_chunk(track)
   reaper.DeleteTrackMediaItem(track, midi_item)
   local moved = before ~= after
-  L(("%s state changed=%s transport=%.3f"):format(label, tostring(moved), reaper.GetPlayPosition()))
-  return moved, moved and "serialized plugin state changed after MIDI playback"
-    or "runner playback produced no observable serialized-state change"
+  L(("%s state changed=%s"):format(label, tostring(moved)))
+  return moved, moved and "serialized plugin state changed after offline MIDI render"
+    or "offline MIDI render produced no observable serialized-state change"
 end
 
 local function add_fx(track, candidates, wanted)
@@ -177,14 +211,16 @@ local function test_format(spec)
     error(spec.format .. " output failed finite/non-silent/bounded check")
   end
 
-  local pc_changed, pc_why = deliver_midi(track, 0xC0, 1, 0, spec.format .. " Program Change 1")
+  local pc_changed, pc_why =
+    deliver_midi(track, item, 0xC0, 1, 0, spec.format .. " Program Change 1")
   local pc_stats = render_stats(track, item, spec.format .. "-after-pc1")
   if not pc_changed and math.abs(pc_stats.rms - initial.rms) > initial.rms * 0.01 then
     pc_changed = true
     pc_why = "render RMS changed by more than 1% after Program Change 1"
   end
 
-  local cc_changed, cc_why = deliver_midi(track, 0xB0, 102, 2, spec.format .. " CC102=2")
+  local cc_changed, cc_why =
+    deliver_midi(track, item, 0xB0, 102, 2, spec.format .. " CC102=2")
   local cc_stats = render_stats(track, item, spec.format .. "-after-cc102")
   if not cc_changed and math.abs(cc_stats.rms - pc_stats.rms) > math.max(0.00001, pc_stats.rms * 0.01) then
     cc_changed = true
