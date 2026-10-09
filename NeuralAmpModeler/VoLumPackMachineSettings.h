@@ -6,7 +6,8 @@
 // state lives in a sidecar (volum-dual-amp-settings.json) so that older builds
 // never see dual fields in the shared file, so the main file alone carries no Dual
 // partner. The Pack carries the sidecar inside settings.json under one additive
-// key; an older build ignores it and keeps the receiver's own sidecar.
+// key; an older build ignores it and keeps the receiver's own sidecar. This build
+// takes the key out when the Pack is opened, so it never reaches the main file.
 //
 // Restoring onto a running standalone swaps every per-amp scene and the focused
 // amp under live params that still describe the outgoing rig. Any live -> scene
@@ -76,19 +77,59 @@ inline std::string SettingsWithDualAmp(const std::string& settingsJson, const nl
   }
 }
 
-// Import: the sidecar document a Pack's settings carry, or false for a Pack from a
-// build that did not carry one (the receiver's own sidecar then stays).
-inline bool DualAmpSidecarFromSettings(const std::string& settingsJson, nlohmann::json& sidecar)
+// Open: take the key out of the Pack's settings, because ApplyPack writes that
+// document verbatim as the main file and a key-preserving save would keep it
+// there. Returns the sidecar, or false for a Pack from a build that did not carry
+// one (the receiver's own sidecar then stays). A malformed key is still removed.
+inline bool TakeDualAmpSidecar(std::string& settingsJson, nlohmann::json& sidecar)
 {
-  const nlohmann::json j = nlohmann::json::parse(settingsJson, nullptr, /*allow_exceptions=*/false);
+  nlohmann::json j = nlohmann::json::parse(settingsJson, nullptr, /*allow_exceptions=*/false);
   if (!j.is_object())
     return false;
   const auto it = j.find(kPackDualAmpSettingsKey);
-  if (it == j.end() || !it->is_object() || !it->contains("amps") || !(*it)["amps"].is_object())
+  if (it == j.end())
     return false;
-  sidecar = *it;
-  return true;
+  const bool valid = it->is_object() && it->contains("amps") && (*it)["amps"].is_object();
+  nlohmann::json taken = std::move(*it);
+  j.erase(kPackDualAmpSettingsKey);
+  try
+  {
+    settingsJson = j.dump(2);
+  }
+  catch (const std::exception&)
+  {
+    return false;
+  }
+  if (valid)
+    sidecar = std::move(taken);
+  return valid;
 }
+
+// The sidecar taken from the opened Pack, held until the import. It belongs to the
+// Pack whose (stripped) settings it was taken from and to no other.
+class PackDualAmpStash
+{
+public:
+  void Open(std::string& packSettingsJson)
+  {
+    mSettingsJson.clear();
+    mSidecar = nlohmann::json();
+    if (TakeDualAmpSidecar(packSettingsJson, mSidecar))
+      mSettingsJson = packSettingsJson;
+  }
+
+  bool For(const std::string& packSettingsJson, nlohmann::json& sidecar) const
+  {
+    if (mSidecar.is_null() || packSettingsJson.empty() || packSettingsJson != mSettingsJson)
+      return false;
+    sidecar = mSidecar;
+    return true;
+  }
+
+private:
+  std::string mSettingsJson;
+  nlohmann::json mSidecar;
+};
 
 } // namespace pack
 } // namespace volum

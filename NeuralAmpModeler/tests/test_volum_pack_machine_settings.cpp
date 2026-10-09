@@ -6,14 +6,17 @@
 #include <string>
 
 #include "../VoLumAmpSettingsJson.h"
+#include "../VoLumPack.h"
 #include "../VoLumPackMachineSettings.h"
 #include "../VoLumUserSettingsIO.h"
 #include "../VoLumWriteDebounce.h"
 
 using volum::LiveSceneGate;
 using volum::VoLumAmpSettings;
-using volum::pack::DualAmpSidecarFromSettings;
+using volum::pack::kPackDualAmpSettingsKey;
+using volum::pack::PackDualAmpStash;
 using volum::pack::SettingsWithDualAmp;
+using volum::pack::TakeDualAmpSidecar;
 
 namespace
 {
@@ -78,13 +81,16 @@ struct Standalone
     return SettingsWithDualAmp(mainFile, volum::VolumDualAmpUserSettingsToJson(amps, volum::kAmpCount));
   }
 
-  // _VolumImportPack with "Also restore machine settings": ApplyPack writes the
-  // Pack's document as the main file, then the restore runs in this order.
-  void ImportEverythingWithSettings(const std::string& packSettings, bool playMode)
+  // _VolumPickPack, then _VolumImportPack with "Also restore machine settings":
+  // ApplyPack writes the Pack's document as the main file, then the restore runs in
+  // this order.
+  void ImportEverythingWithSettings(std::string packSettings, bool playMode)
   {
+    PackDualAmpStash opened;
+    opened.Open(packSettings);
     mainFile = packSettings;
     nlohmann::json sidecar;
-    if (DualAmpSidecarFromSettings(packSettings, sidecar))
+    if (opened.For(packSettings, sidecar))
       sidecarFile = sidecar.dump();
     {
       LiveSceneGate::Hold restoring(gate);
@@ -174,6 +180,7 @@ TEST_CASE("Everything import with machine settings persists the Pack's last amp 
 
   CHECK(receiver.ampIdx == kAmpeteOne);
   CHECK(volum::AmpSettingsEqual(receiver.live, AmpeteLeadScene()));
+  CHECK_FALSE(nlohmann::json::parse(receiver.mainFile).contains(kPackDualAmpSettingsKey));
 
   // The pending debounced save and the idle snapshots run after the restore.
   receiver.IdleTick(100.0);
@@ -240,13 +247,69 @@ TEST_CASE("The Pack's Dual Amp key is additive: amps untouched, no heal, no dual
   CHECK_FALSE(loaded[kAmpeteOne].dualAmpActive); // the main reader never takes dual from the Pack key
 
   nlohmann::json extracted;
-  REQUIRE(DualAmpSidecarFromSettings(merged.dump(), extracted));
+  std::string text = merged.dump();
+  REQUIRE(TakeDualAmpSidecar(text, extracted));
   CHECK(extracted == sidecar);
+  CHECK(nlohmann::json::parse(text) == main);
 
-  CHECK_FALSE(DualAmpSidecarFromSettings(main.dump(), extracted));
-  CHECK_FALSE(DualAmpSidecarFromSettings("not json", extracted));
-  CHECK_FALSE(DualAmpSidecarFromSettings("{\"volumDualAmpSettings\":{\"amps\":[]}}", extracted));
+  text = main.dump();
+  CHECK_FALSE(TakeDualAmpSidecar(text, extracted));
+  CHECK(text == main.dump());
+  text = "not json";
+  CHECK_FALSE(TakeDualAmpSidecar(text, extracted));
+  CHECK(text == "not json");
+  // A malformed key is no sidecar, and still never reaches the main file.
+  text = "{\"lastAmpIdx\":1,\"volumDualAmpSettings\":{\"amps\":[]}}";
+  CHECK_FALSE(TakeDualAmpSidecar(text, extracted));
+  CHECK(nlohmann::json::parse(text) == nlohmann::json::parse("{\"lastAmpIdx\":1}"));
   CHECK(SettingsWithDualAmp("not json", sidecar) == "not json");
+}
+
+TEST_CASE("Opening a Pack keeps its Dual Amp key out of the main settings file ApplyPack writes")
+{
+  VoLumAmpSettings amps[volum::kAmpCount]{};
+  amps[kAmpeteOne] = AmpeteLeadScene();
+  const nlohmann::json main =
+    volum::VolumUserSettingsToJson(amps, volum::kAmpCount, kAmpeteOne, nullptr, /*includeDualAmp=*/false);
+  const nlohmann::json sidecar = volum::VolumDualAmpUserSettingsToJson(amps, volum::kAmpCount);
+
+  volum::pack::PackContents pack;
+  pack.ok = true;
+  pack.job = volum::pack::Job::Everything;
+  pack.settingsJson = SettingsWithDualAmp(main.dump(), sidecar);
+  PackDualAmpStash opened;
+  opened.Open(pack.settingsJson);
+
+  const auto base = std::filesystem::temp_directory_path() / "volum-pack-machine-settings" / "apply";
+  std::error_code ec;
+  std::filesystem::remove_all(base, ec);
+  std::filesystem::create_directories(base, ec);
+  REQUIRE_FALSE(ec);
+  volum::content::ContentStore store(base);
+  REQUIRE(store.Save());
+  const auto settingsPath = base / "volum-settings.json";
+  const auto result =
+    volum::pack::ApplyPack(store, pack, volum::pack::ImportVerb::Overwrite, true, /*standalone=*/true, settingsPath);
+  REQUIRE(result.ok);
+
+  std::string written;
+  REQUIRE(volum::pack::ReadWholeFile(settingsPath, written));
+  const nlohmann::json landed = nlohmann::json::parse(written);
+  CHECK_FALSE(landed.contains(kPackDualAmpSettingsKey));
+  CHECK(landed["amps"] == main["amps"]);
+
+  nlohmann::json restored;
+  REQUIRE(opened.For(pack.settingsJson, restored));
+  CHECK(restored == sidecar);
+  // Only the Pack it was taken from gets it back.
+  CHECK_FALSE(opened.For("{\"lastAmpIdx\":3}", restored));
+  CHECK_FALSE(opened.For("", restored));
+
+  // A Pack from a build that did not carry Dual state clears what the last one held.
+  std::string olderPack = main.dump();
+  opened.Open(olderPack);
+  CHECK_FALSE(opened.For(olderPack, restored));
+  std::filesystem::remove_all(base, ec);
 }
 
 TEST_CASE("LiveSceneGate holds nest and release")
@@ -277,8 +340,12 @@ TEST_CASE("The plugin restores machine settings in the order the F-88 test drive
   const std::string exportBody = FunctionBody(actions, "std::string NeuralAmpModeler::_VolumExportPack(");
   CHECK(exportBody.find("volum::pack::SettingsWithDualAmp(") != std::string::npos);
 
+  const std::string pick = FunctionBody(actions, "volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()");
+  CHECK(pick.find("mVolumOpenedPackDualAmp.Open(pack.settingsJson);") != std::string::npos);
+
   const std::string importBody = FunctionBody(actions, "std::string NeuralAmpModeler::_VolumImportPack(");
-  const auto sidecar = importBody.find("volum::pack::DualAmpSidecarFromSettings(pack.settingsJson");
+  CHECK(importBody.find("volum::pack::ApplyPack(") < importBody.find("mVolumOpenedPackDualAmp.For("));
+  const auto sidecar = importBody.find("mVolumOpenedPackDualAmp.For(pack.settingsJson, dualAmpSidecar)");
   const auto hold = importBody.find("volum::LiveSceneGate::Hold restoring(mVolumLiveSceneGate);");
   const auto load = importBody.find("_VolumLoadSettingsFromFile();");
   const auto apply = importBody.find("_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
@@ -291,6 +358,9 @@ TEST_CASE("The plugin restores machine settings in the order the F-88 test drive
   REQUIRE(locksApplied != std::string::npos);
   REQUIRE(session != std::string::npos);
   CHECK(sidecar < hold);
+  // A sidecar that cannot be written fails the import before the restore runs.
+  const auto sidecarFailed = importBody.find("return \"The library was imported, but the machine settings", sidecar);
+  CHECK(sidecarFailed < hold);
   CHECK(hold < load);
   CHECK(load < apply);
   CHECK(apply < locksApplied);

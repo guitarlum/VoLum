@@ -548,6 +548,7 @@ public:
   // live params that still describe the outgoing rig; _VolumSaveCurrentToSettings
   // refuses until the restored scene is live (see VoLumPackMachineSettings.h).
   volum::LiveSceneGate mVolumLiveSceneGate;
+  volum::pack::PackDualAmpStash mVolumOpenedPackDualAmp;
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;

@@ -105,7 +105,10 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
   auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
   if (pack.ok)
+  {
+    mVolumOpenedPackDualAmp.Open(pack.settingsJson);
     VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+  }
   else
     VOLUM_LOG("pack", std::string("open refused: ") + pack.error
                         + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
@@ -219,12 +222,15 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   if (alsoSettings && !pack.settingsJson.empty())
   {
     nlohmann::json dualAmpSidecar;
-    const auto dualAmpPath = volum::VolumDualAmpSettingsFilePath();
-    if (!dualAmpPath.empty() && volum::pack::DualAmpSidecarFromSettings(pack.settingsJson, dualAmpSidecar))
+    if (mVolumOpenedPackDualAmp.For(pack.settingsJson, dualAmpSidecar))
     {
+      const auto dualAmpPath = volum::VolumDualAmpSettingsFilePath();
       std::error_code ec;
-      if (!volum::WriteJsonAtomically(dualAmpPath, dualAmpSidecar, ec))
+      if (dualAmpPath.empty() || !volum::WriteJsonAtomically(dualAmpPath, dualAmpSidecar, ec))
+      {
         VOLUM_LOG("pack", "dual-amp settings not restored: " + ec.message());
+        return "The library was imported, but the machine settings could not be written.";
+      }
     }
     {
       // The read swaps every scene under the outgoing live params, and a load in
