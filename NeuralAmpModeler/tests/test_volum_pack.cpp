@@ -2057,8 +2057,8 @@ TEST_CASE("Reset keeps every payload named by the current Pack backup")
   IRItem local;
   local.id = "local_ir";
   local.name = "Local only";
-  local.file = receiver.store.ImportFileCopy(WriteSrc(receiver.base / "incoming", "Local.wav", "RIFF-local"),
-                                             "ir", "local_ir");
+  local.file =
+    receiver.store.ImportFileCopy(WriteSrc(receiver.base / "incoming", "Local.wav", "RIFF-local"), "ir", "local_ir");
   REQUIRE_FALSE(local.file.empty());
   receiver.store.reg().irs.push_back(local);
   REQUIRE(receiver.store.Save());

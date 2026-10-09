@@ -115,9 +115,8 @@ inline constexpr uint32_t kEocdSig = 0x06054b50u;
 
 inline std::string CaseFoldEntryName(std::string name)
 {
-  std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
+  std::transform(
+    name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return name;
 }
 

@@ -432,8 +432,7 @@ inline std::vector<ArchiveEntry> BuildPackEntries(content::ContentStore& store, 
     const auto abs = store.ResolveStored(rel);
     std::error_code sizeEc;
     const auto fileBytes = std::filesystem::file_size(abs, sizeEc);
-    if (!sizeEc
-        && (fileBytes > kMaxArchiveUncompressedBytes || totalBytes > kMaxArchiveUncompressedBytes - fileBytes))
+    if (!sizeEc && (fileBytes > kMaxArchiveUncompressedBytes || totalBytes > kMaxArchiveUncompressedBytes - fileBytes))
     {
       if (error)
         *error = "Pack exceeds the 1 GiB / 4,096 files limit.";
@@ -1126,11 +1125,25 @@ inline bool ValidateMachineSettings(const std::string& text, std::string* saniti
     if (sanitized)
     {
       static const char* kSharedMachineKeys[] = {
-        "version",          "lastAmpIdx",          "preLocked",           "postLocked",
-        "liteMode",         "animatePlayArt",      "CalibrateInput",      "InputCalibrationLevel",
-        "liveLockedPre",    "liveLockedPost",      "amps",                "effects",
-        "volumCustomMainId", "volumActivePresetId", "midiCh",              "midiRecallCc",
-        "volumUiMode",      "lastPlaySlot",        "volumActivePresetIdByOwner",
+        "version",
+        "lastAmpIdx",
+        "preLocked",
+        "postLocked",
+        "liteMode",
+        "animatePlayArt",
+        "CalibrateInput",
+        "InputCalibrationLevel",
+        "liveLockedPre",
+        "liveLockedPost",
+        "amps",
+        "effects",
+        "volumCustomMainId",
+        "volumActivePresetId",
+        "midiCh",
+        "midiRecallCc",
+        "volumUiMode",
+        "lastPlaySlot",
+        "volumActivePresetIdByOwner",
         "volumCustomScenes",
       };
       nlohmann::json filtered = nlohmann::json::object();
@@ -1308,8 +1321,8 @@ inline bool RecoverTransaction(content::ContentStore& store, const std::filesyst
 }
 
 inline bool RecoverInterruptedImport(content::ContentStore& store, const std::filesystem::path& stageRoot,
-                                      const std::filesystem::path& rollback, const std::filesystem::path& backup,
-                                      std::vector<std::string>& notices)
+                                     const std::filesystem::path& rollback, const std::filesystem::path& backup,
+                                     std::vector<std::string>& notices)
 {
   std::error_code ec;
 
@@ -1491,8 +1504,8 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   bool havePreImport = false;
   if (std::filesystem::exists(store.RegistryPath(), ec))
   {
-    havePreImport = ReadWholeFile(store.RegistryPath(), preImportBytes)
-                    && ReadRegistryFile(store.RegistryPath(), preImportReg);
+    havePreImport =
+      ReadWholeFile(store.RegistryPath(), preImportBytes) && ReadRegistryFile(store.RegistryPath(), preImportReg);
     if (!havePreImport || !WriteWholeFileAtomically(stage / "pre-import.json", preImportBytes))
     {
       removeStage();
@@ -1611,8 +1624,7 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   effectivePack.includesMidiSoundMap = packContents.includesMidiSoundMap;
   if (!packContents.settingsJson.empty())
     effectivePack.settingsJson = "{}";
-  out.replacedItemCount =
-    BuildImportPreview(priorReg, effectivePack, verb, alsoSettings, standalone).replaces.size();
+  out.replacedItemCount = BuildImportPreview(priorReg, effectivePack, verb, alsoSettings, standalone).replaces.size();
 
   auto mergeVector = [&](auto& mine, const auto& theirs, auto idOf) {
     for (const auto& item : theirs)
