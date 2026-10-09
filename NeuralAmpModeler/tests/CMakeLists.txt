@@ -131,6 +131,7 @@ target_include_directories(NeuralAmpModeler-Tests PRIVATE
   "${REPO_ROOT}/iPlug2/WDL"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras"
   "${REPO_ROOT}/iPlug2/Dependencies/Extras/nlohmann"
+  "${REPO_ROOT}/iPlug2/Dependencies/IPlug/VST3_SDK"
 )
 
 target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
