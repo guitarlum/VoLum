@@ -69,7 +69,7 @@ Wähle einen Amp in der linken Liste oder drücke `Up` / `Down`. Zur Orientierun
 
 **Cabs:** **No Cab** (nur der Amp), **G12**, **G65**, **V30** oder **Custom IR** für dein eigenes Cab (siehe [Eigene IRs](#eigene-irs)). `S` / `Shift+S` schalten durch.
 
-**Regler:** **INPUT**, **GATE** (Noise Gate), **BASS**, **MID**, **TREBLE** und **OUTPUT**. **OUTPUT** ganz zu (`-∞ dB`) schaltet den Amp stumm.
+**Regler:** **INPUT**, **GATE** (Noise Gate), **BASS**, **MID**, **TREBLE** und **OUTPUT**. **OUTPUT** ganz zu (`−∞`) schaltet den Amp stumm.
 
 Alle mitgelieferten Amps, Cabs und PRE-Pedale sind NAM-A2-Captures. Kommt dein Rechner nicht mit, probiere **LITE** in den [Einstellungen](#signal-tab).
 
@@ -86,7 +86,7 @@ PRE-Pedale liegen vor dem Amp: **PITCH**, **COMP**, **NAM 1**, **NAM 2**. Klicke
 Wähle **TRANSPOSE** oder **OCTAVER** (Standard).
 
 - **TRANSPOSE** verschiebt dein ganzes Signal für Drop-Tunings. **SEMI** geht von −12 bis +7 Halbtönen (Start bei −2), **MIX** mischt deinen trockenen Ton dazu, **LEVEL** stellt den Ausgang ein. **INSTANT** (Standard) ist für Einzeltöne und Leads, mit der geringsten Latenz; **POLY** ist für Akkorde, mit etwas mehr Latenz.
-- **OCTAVER** fügt Oktaven hinzu und folgt Akkorden. **OCT DN**, **OCT UP** und **DRY** stellen die Lautstärke von unterer Oktave, oberer Oktave und deinem eigenen Ton ein. **VINTAGE** klingt rauer und dunkler, **MODERN** bleibt sauber.
+- **OCTAVER** fügt Oktaven hinzu und folgt Akkorden. **OCT DN**, **OCT UP** und **DRY** stellen die Lautstärke von unterer Oktave, oberer Oktave und deinem eigenen Ton ein; **LEVEL** stellt den Ausgang ein. **VINTAGE** klingt rauer und dunkler, **MODERN** bleibt sauber.
 
 ![VoLum Pitch-Pedal im Octaver-Modus](user-guide-pitch-octaver.png)
 
@@ -114,7 +114,7 @@ POST-Effekte liegen hinter dem Amp: **CHORUS**, **DELAY**, **REVERB**, **TREM**.
 
 ![VoLum Chorus-Karte](user-guide-chorus.png)
 
-Chorus läuft direkt nach dem Amp, vor Delay und Reverb.
+Chorus läuft direkt nach Amp und Cab, vor Delay, Reverb und Tremolo.
 
 - **CLASSIC:** ein Stereo-Sweep im Stil des Juno-60.
 - **WARPED:** Band-Wow-und-Flutter; bei **MIX** 100 % wird daraus ein Vibrato.
@@ -128,7 +128,7 @@ Die Regler sind **RATE**, **DEPTH**, **TONE**, **WIDTH** (0 % ist mono) und **MI
 Wähle **DIGITAL**, **ANALOG** oder **REVERSE**. Die Regler sind **TIME**, **FEEDBACK**, **MIX**, **TONE** und dazu **GRIT**, **WEAR** oder **BLOOM** für den Charakter des Modus.
 
 - **PING-PONG** (Digital und Analog) lässt die Echos zwischen links und rechts springen. Sie klingen etwas leiser als das normale Delay.
-- **TEMPO SYNC** macht aus **TIME** einen Notenwert (**DIVISION**), von 1/2 bis 1/16.
+- **TEMPO SYNC** macht aus **TIME** einen Notenwert (**DIVISION**): 1/2, 1/4, 1/4., 1/4T, 1/8, 1/8., 1/8T, 1/16.
 
 ### Reverb
 
@@ -140,7 +140,7 @@ Wähle **HALL**, **PLATE** oder **OKTAVERB**. Die Regler sind **MIX**, **DECAY**
 
 Tremolo läuft ganz zuletzt und pulsiert daher alles, auch den Hall.
 
-- **OPTICAL** (Standard): ein hackiges Pulsieren.
+- **OPTICAL** (Standard): ein abgehacktes Pulsieren.
 - **BIAS:** ein weicher, gleichmäßiger Puls.
 - **HARMONIC:** Bässe und Höhen pulsieren abwechselnd; **X-OVER** legt die Trennung fest.
 
@@ -246,13 +246,13 @@ Viele Fußcontroller zählen ab 1; dort sind das die Presets 1 bis 5. Das passie
 - **Sound aufrufen:** Zeile anklicken, Pfeiltasten nutzen oder MIDI senden.
 - **LIVE** markiert den zuletzt aufgerufenen Sound.
 - **Stomps:** schalten Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb und Tremolo ein und aus. Klicke sie oder drücke `1` bis `8`. Rechtsklick auf einen Stomp öffnet dieses Pedal in BUILD.
-- **Anpassen und speichern:** ändere einen Sound und drücke **Strg+S**. Deine gespeicherte Version nimmt seinen Platz auf dem LIVE-Schalter ein, so wird ein geänderter Werk-Sound zu deiner eigenen Kopie.
+- **Anpassen und speichern:** ändere einen Sound und drücke **Strg+S**. Hält der LIVE-Schalter noch den Sound, von dem du ausgegangen bist, nimmt deine gespeicherte Version seinen Platz ein; so wird ein geänderter Werk-Sound zu deiner eigenen Kopie.
 
 ### Sounds hinzufügen, ersetzen und anordnen
 
 ![VoLum PLAY-Auswahl Add Sound](user-guide-play-picker.png)
 
-- **+ Add this sound** legt, was du hörst, auf die nächste freie Programmnummer. Hat es noch keinen Namen, öffnet sich zuerst das Namensfeld.
+- **+ Add this sound** legt, was du hörst, auf die nächste freie Programmnummer (sind alle 128 belegt, öffnet es stattdessen die Auswahl). Hat es noch keinen Namen, öffnet sich zuerst das Namensfeld.
 - **+ Add Sound** öffnet die Auswahl: wähle eine **PROGRAM**-Nummer, dann ein Werk- oder User-Preset.
 - **Ersetzen:** Zeile doppelklicken. **Leeren:** ihr `×` klicken. **Umsortieren:** eine Zeile auf eine andere ziehen zum Tauschen, oder zwischen zwei Zeilen zum Verschieben.
 
@@ -282,11 +282,11 @@ Eine Programmnummer ohne Sound wird ignoriert; der aktuelle Sound spielt weiter.
 
 - **All channels** (Standard) passt für einen Gitarristen mit einem Board.
 - **One channel** (`CH 1` bis `CH 16`) lässt zwei VoLums ein MIDI-Kabel teilen.
-- **Recall CC** legt die CC-Nummer fest, die Sounds aufruft (`0` bis `119`, Standard `102`).
+- **Recall CC** legt die CC-Nummer fest, die Sounds aufruft (`0` bis `119`, Standard `102`). Jede davon, auch CC 0, kann der Recall CC sein.
 
 **What each program number plays** zeigt deine Sounds als 16 Bänke mit je 8 Schaltern, dieselbe Liste wie in PLAY. Wechsle die Bank mit den Pfeilen, dem Mausrad oder `PageUp` / `PageDown`. Klicke einen Schalter, um seinen Sound zu wählen, zieh ihn zum Verschieben, oder fahr darüber und klicke `×` zum Leeren.
 
-VoLum nutzt keine MIDI-Noten, kein Pitch Bend, kein Bank Select, kein MIDI Learn und keine MIDI-Ausgabe.
+VoLum wechselt keine Bänke per Bank Select (CC 0/32) und nutzt keine MIDI-Noten, kein Pitch Bend, kein MIDI Learn und keine MIDI-Ausgabe.
 
 ## Tuner und Metronom
 
@@ -317,7 +317,7 @@ Mit dem Stift- und dem Papierkorb-Symbol in der Amp-Liste bearbeitest oder lösc
 
 ![VoLum Menü für eigene IRs](user-guide-custom-ir.png)
 
-Ein eigenes IR ersetzt das Cab und braucht daher ein No-Cab-Capture. Jeder mitgelieferte Amp hat eines; ein eigener Amp hat eines, wenn du eine `DIRECT`-Datei hinzugefügt hast.
+Ein eigenes IR ersetzt das Cab und braucht daher ein No-Cab-Capture. Jeder mitgelieferte Amp hat eines; ein eigener Amp hat eines, wenn eine seiner Dateien mit `AMP`, `DI` oder `DIRECT` beginnt.
 
 1. Klicke **Custom IR** in der Cab-Reihe.
 2. Klicke **Manage custom IRs...**, dann **+ Import IR (.wav)**.
@@ -361,9 +361,11 @@ Ein **Everything**-Pack bietet drei Mischmodi:
 
 - **Overwrite:** die Version aus dem Pack gewinnt. Deine anderen Teile bleiben.
 - **Add:** deine Version gewinnt. Nur neue Teile kommen dazu.
-- **Reset:** das Pack ersetzt deine Bibliothek; alles, was nicht darin ist, wird gelöscht.
+- **Reset:** das Pack ersetzt deine Bibliothek; alles, was nicht darin ist, wird gelöscht. Nur möglich, solange alles angehakt ist.
 
 Ein **Sounds**- oder **A whole amp**-Pack mischt immer wie Overwrite und löscht nie etwas.
+
+**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer.
 
 Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.packbak` auf. Ein beschädigtes Pack ändert nichts.
 
@@ -376,7 +378,7 @@ Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.
 ![VoLum Einstellungen, SIGNAL-Tab](user-guide-settings-signal.png)
 
 - **Input calibration:** gib den Eingangspegel deines Interfaces in dBu ein und schalte **Calibrate input** ein. Das geht nur mit Captures, die ihren Aufnahmepegel mitspeichern; die mitgelieferten Amps tun das nicht, deshalb zeigt die Karte "This model has no capture level".
-- **Output mode:** **Raw**, **Normalized** (Standard, ähnliche Lautstärke für alle Amps) oder **Calibrated**.
+- **Output mode:** **Raw**, **Normalized** (Standard, ähnliche Lautstärke für alle Amps) oder **Calibrated**. Calibrated braucht ein Capture, das seinen Ausgangspegel mitspeichert, und bleibt daher bei den mitgelieferten Amps aus.
 - **Performance:** **FULL** (Standard) oder **LITE**, das weniger CPU braucht, bei etwas geringerer Qualität. **Animate art in PLAY** schaltet die bewegten Bilder ein oder aus.
 - **Audio & MIDI devices...** (nur Standalone) öffnet das Gerätefenster.
 
@@ -457,6 +459,7 @@ Tasten wirken, solange kein Textfeld offen ist.
 - **Dual Amp klingt dünn:** schalte **Ø** auf der SUPPORT-Seite um.
 - **Fußcontroller in der DAW ignoriert:** sende den Recall CC (102) statt Program Change und prüfe den Kanal im MIDI-Tab.
 - **Interface beim Start nicht angeschlossen:** VoLum öffnet ohne Audio. Schließ das Interface an und starte VoLum neu.
+- **Windows: kein 48 kHz am Interface:** manche Interfaces (zum Beispiel das UA-2X2) bieten mit DirectSound kein 48 kHz an. Nimm stattdessen ASIO, mit dem Treiber des Herstellers oder ASIO4ALL.
 - **Windows: VoLum meldet, dass schon eine Kopie läuft:** beende diese Kopie im Task-Manager und starte VoLum neu.
 - **macOS: ein AU aus einer älteren VoLum-Version verhält sich nach dem Update seltsam:** entferne es von der Spur und füge es neu ein.
 - **macOS: das Plug-in erscheint nach der Installation aus einem Zip nicht:** siehe [README](../README.de.md#wichtiger-sicherheitshinweis).

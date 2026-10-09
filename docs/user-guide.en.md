@@ -69,7 +69,7 @@ Pick an amp in the left list, or press `Up` / `Down`. A rough guide:
 
 **Cabs:** **No Cab** (the amp alone), **G12**, **G65**, **V30**, or **Custom IR** for your own cabinet (see [Custom IRs](#custom-irs)). `S` / `Shift+S` step through them.
 
-**Knobs:** **INPUT**, **GATE** (noise gate), **BASS**, **MID**, **TREBLE** and **OUTPUT**. **OUTPUT** fully down (`-∞ dB`) mutes the amp.
+**Knobs:** **INPUT**, **GATE** (noise gate), **BASS**, **MID**, **TREBLE** and **OUTPUT**. **OUTPUT** fully down (`−∞`) mutes the amp.
 
 All bundled amps, cabs and PRE pedals are NAM A2 captures. If your computer struggles, try **LITE** in [Settings](#signal-tab).
 
@@ -86,7 +86,7 @@ PRE pedals sit in front of the amp: **PITCH**, **COMP**, **NAM 1**, **NAM 2**. C
 Pick **TRANSPOSE** or **OCTAVER** (the default).
 
 - **TRANSPOSE** shifts your whole signal for drop tunings. **SEMI** goes from −12 to +7 semitones (starts at −2), **MIX** blends in your dry tone, **LEVEL** sets the output. **INSTANT** (default) is for single notes and leads, with the lowest latency; **POLY** is for chords, with a little more latency.
-- **OCTAVER** adds octaves and follows chords. **OCT DN**, **OCT UP** and **DRY** set the levels of octave down, octave up and your own note. **VINTAGE** is gritty and darker, **MODERN** stays clean.
+- **OCTAVER** adds octaves and follows chords. **OCT DN**, **OCT UP** and **DRY** set the levels of octave down, octave up and your own note; **LEVEL** sets the output. **VINTAGE** is gritty and darker, **MODERN** stays clean.
 
 ![VoLum Pitch pedal in Octaver mode](user-guide-pitch-octaver.png)
 
@@ -114,7 +114,7 @@ POST effects sit after the amp: **CHORUS**, **DELAY**, **REVERB**, **TREM**. Cli
 
 ![VoLum Chorus card](user-guide-chorus.png)
 
-Chorus runs right after the amp, before Delay and Reverb.
+Chorus runs right after the amp and cab, before Delay, Reverb and Tremolo.
 
 - **CLASSIC:** a Juno-60 style stereo sweep.
 - **WARPED:** tape wow and flutter; at **MIX** 100% it becomes a vibrato.
@@ -128,7 +128,7 @@ The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH** (0% is mono) and **MIX**.
 Pick **DIGITAL**, **ANALOG** or **REVERSE**. The knobs are **TIME**, **FEEDBACK**, **MIX**, **TONE**, plus **GRIT**, **WEAR** or **BLOOM** for the mode's character.
 
 - **PING-PONG** (Digital and Analog) bounces the repeats between left and right. They sound a little quieter than the plain delay.
-- **TEMPO SYNC** turns **TIME** into a note **DIVISION**, from 1/2 to 1/16.
+- **TEMPO SYNC** turns **TIME** into a note **DIVISION**: 1/2, 1/4, 1/4., 1/4T, 1/8, 1/8., 1/8T, 1/16.
 
 ### Reverb
 
@@ -246,13 +246,13 @@ Many foot controllers count from 1, so on those they are presets 1 to 5. This ha
 - **Recall a Sound:** click its row, use the arrow keys, or send MIDI.
 - **LIVE** marks the Sound you recalled last.
 - **Stomps:** turn Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb and Tremolo on and off. Click them or press `1` to `8`. Right-click a stomp to edit that pedal in BUILD.
-- **Tweak and save:** change a Sound and press **Ctrl+S**. Your saved version takes the place of the Sound on the LIVE switch, so a changed Factory Sound becomes your own copy.
+- **Tweak and save:** change a Sound and press **Ctrl+S**. If the LIVE switch still holds the Sound you started from, your saved version takes its place, so a changed Factory Sound becomes your own copy.
 
 ### Add, Replace And Arrange Sounds
 
 ![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
 
-- **+ Add this sound** puts what you hear on the next free program number. If it has no name yet, the name box opens first.
+- **+ Add this sound** puts what you hear on the next free program number (when all 128 are taken, it opens the picker instead). If it has no name yet, the name box opens first.
 - **+ Add Sound** opens the picker: choose a **PROGRAM** number, then a Factory or User preset.
 - **Replace:** double-click a row. **Clear:** click its `×`. **Reorder:** drag a row onto another to swap, or between rows to move it.
 
@@ -282,11 +282,11 @@ A program number with no Sound is ignored; the current tone keeps playing.
 
 - **All channels** (default) suits one guitarist with one board.
 - **One channel** (`CH 1` to `CH 16`) lets two VoLums share one MIDI cable.
-- **Recall CC** sets the CC number that recalls Sounds (`0` to `119`, default `102`).
+- **Recall CC** sets the CC number that recalls Sounds (`0` to `119`, default `102`). Any of these, CC 0 included, can be the Recall CC.
 
 **What each program number plays** shows your Sounds as 16 banks of 8 switches, the same list as PLAY. Change banks with the arrows, the mouse wheel or `PageUp` / `PageDown`. Click a switch to choose its Sound, drag it to move it, or hover and click `×` to clear it.
 
-VoLum does not use MIDI notes, pitch bend, Bank Select, MIDI Learn or MIDI output.
+VoLum does not switch banks with Bank Select (CC 0/32) messages, and does not use MIDI notes, pitch bend, MIDI Learn or MIDI output.
 
 ## Tuner And Metronome
 
@@ -317,7 +317,7 @@ Use the pen and bin icons in the amp list to edit or delete a custom amp.
 
 ![VoLum custom IR menu](user-guide-custom-ir.png)
 
-A custom IR replaces the cab, so it needs a No Cab capture. Every bundled amp has one; a custom amp has one if you added a `DIRECT` file.
+A custom IR replaces the cab, so it needs a No Cab capture. Every bundled amp has one; a custom amp has one if one of its files starts with `AMP`, `DI` or `DIRECT`.
 
 1. Click **Custom IR** in the cab row.
 2. Click **Manage custom IRs...**, then **+ Import IR (.wav)**.
@@ -361,9 +361,11 @@ An **Everything** Pack offers three merge modes:
 
 - **Overwrite:** the Pack's version wins. Your other items stay.
 - **Add:** your version wins. Only new items are added.
-- **Reset:** the Pack replaces your library; anything not in it is deleted.
+- **Reset:** the Pack replaces your library; anything not in it is deleted. Only available while every item is ticked.
 
 A **Sounds** or **A whole amp** Pack always merges like Overwrite and never deletes anything.
+
+**PLAY list and machine settings:** in the standalone app, an Everything Pack restores them (last amp, scenes, Lite, calibration, MIDI slots) only if you tick **Also restore machine settings**, which starts unticked. A plug-in has no such box: there an Everything Pack always replaces your PLAY list.
 
 Before importing, VoLum keeps your previous library as `volum-content.json.packbak`. A damaged Pack changes nothing.
 
@@ -376,7 +378,7 @@ Open Settings with the gear or `H`; close it the same way, with `Esc`, or by cli
 ![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
 
 - **Input calibration:** enter your interface's input level in dBu and switch on **Calibrate input**. This only works with captures that store their capture level; the bundled amps do not, so the card says "This model has no capture level".
-- **Output mode:** **Raw**, **Normalized** (default, similar loudness for all amps) or **Calibrated**.
+- **Output mode:** **Raw**, **Normalized** (default, similar loudness for all amps) or **Calibrated**. Calibrated needs a capture that stores its output level, so it stays off for the bundled amps.
 - **Performance:** **FULL** (default) or **LITE**, which uses less CPU at slightly lower quality. **Animate art in PLAY** switches the moving art on or off.
 - **Audio & MIDI devices...** (standalone only) opens the device window.
 
@@ -457,6 +459,7 @@ Keys work when no text box is open.
 - **Dual Amp sounds thin:** toggle **Ø** on the SUPPORT side.
 - **Foot controller ignored in a DAW:** send the Recall CC (102) instead of Program Change, and check the channel on the MIDI tab.
 - **Interface unplugged at start:** VoLum opens without audio. Connect the interface and restart VoLum.
+- **Windows: no 48 kHz on your interface:** some interfaces (for example the UA-2X2) offer no 48 kHz with DirectSound. Use ASIO instead, with the vendor's driver or ASIO4ALL.
 - **Windows: VoLum says another copy is already running:** end that copy in Task Manager and start VoLum again.
 - **macOS: an AU from an older VoLum misbehaves after updating:** remove it from the track and insert it again.
 - **macOS: the plug-in does not show up after installing from a zip:** see the [README](../README.md#important-security-notice).

@@ -19,7 +19,7 @@ VoLum runs on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpMo
 - **BUILD, then PLAY, in one window:** shape a tone in BUILD, play your Sounds in PLAY. Every bundled amp ships one or two Factory presets (21 in all) that you can put on PLAY without saving first. PLAY starts with five of them on programs 0 to 4.
 - **MIDI recall without Learn:** 128 program numbers, the same list PLAY shows. Send Program Change, or the Recall CC (102) when your host does not pass Program Change on.
 - **Dual Amp:** two amps at once, each with its own channel, cab or IR, knobs and pan.
-- **POST Chorus:** four voices, right after the amp and ahead of Delay and Reverb.
+- **POST Chorus:** four modes, right after the amp and cab, ahead of Delay, Reverb and Tremolo.
 - **One Pack file:** a `.volumpack` backs up, moves or shares your custom amps, IRs, pedals and presets in one step.
 - **Update reminder only:** VoLum can tell you a newer release exists. It never downloads anything itself.
 
