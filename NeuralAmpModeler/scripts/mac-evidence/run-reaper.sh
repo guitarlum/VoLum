@@ -40,6 +40,14 @@ ditto "$SOURCE_APP" "$REAPER_APP"
 hdiutil detach "$MOUNT"
 xattr -cr "$REAPER_APP"
 
+REAPER_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$REAPER_APP/Contents/Info.plist")"
+echo "REAPER bundle id: $REAPER_BUNDLE_ID"
+bash "$SCRIPT_DIR/tcc-pregrant.sh" kTCCServiceMicrophone "$REAPER_BUNDLE_ID" 0
+{
+  echo "===== Available audio devices ====="
+  system_profiler SPAudioDataType
+} > "$EVIDENCE_DIR/audio-devices.log" 2>&1 || true
+
 python3 - "$EVIDENCE_DIR/input.wav" <<'PY'
 import math, struct, sys, wave
 path = sys.argv[1]

@@ -104,6 +104,12 @@ jobs:
         shell: bash
         run: bash NeuralAmpModeler/scripts/mac-evidence/validate-au-rosetta.sh
 
+      - name: Pre-grant standalone microphone access
+        shell: bash
+        run: |
+          bash NeuralAmpModeler/scripts/mac-evidence/tcc-pregrant.sh \
+            kTCCServiceMicrophone com.Lum.app.VoLum 0
+
       - name: Launch and quit standalone
         shell: bash
         run: bash NeuralAmpModeler/scripts/mac-evidence/standalone-launch.sh
