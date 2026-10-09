@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <filesystem>
 #include <vector>
@@ -1209,7 +1210,7 @@ TEST_CASE("Saving a preset into an on-disk library returns the row it wrote")
   namespace fs = std::filesystem;
   auto& store = volum::content::GlobalContentStore();
   const auto savedReg = store.reg();
-  const fs::path base = fs::temp_directory_path() / "volum-add-preset-on-disk";
+  const fs::path base = volum_test::ProcessTempRoot() / "volum-add-preset-on-disk";
   std::error_code ec;
   fs::remove_all(base, ec);
   fs::create_directories(base, ec);

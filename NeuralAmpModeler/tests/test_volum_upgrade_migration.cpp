@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <filesystem>
 #include <fstream>
@@ -18,7 +19,7 @@ namespace
 {
 std::filesystem::path UpgradeTestBase(const char* name)
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-upgrade-migration-tests" / name;
+  auto root = volum_test::ProcessTempRoot() / "volum-upgrade-migration-tests" / name;
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);

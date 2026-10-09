@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 #include "../VoLumAmpSettingsJson.h"
 #include "../VoLumPlayModel.h" // MidiChannel/MidiRecallCc machine-settings readers
 #include "../VoLumUserSettingsIO.h"
@@ -97,7 +98,7 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
 
 TEST_CASE("Broken user settings JSON leaves defaults in place")
 {
-  const auto root = std::filesystem::temp_directory_path() / "volum-user-settings-broken-json-test";
+  const auto root = volum_test::ProcessTempRoot() / "volum-user-settings-broken-json-test";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
