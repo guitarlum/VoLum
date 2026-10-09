@@ -320,17 +320,27 @@ inline std::vector<SoundChoice> BuildSoundChoices(const std::vector<FactoryPrese
       out.push_back({content::FactoryOwnerKey(preset.ampIdx), preset.id, preset.name, kAmps[preset.ampIdx].displayName,
                      true, preset.ampIdx, false});
   }
-  for (const auto& bank : registry.presetBanks)
+  // Factory amps in amp order, then custom amps in library order. The bank map
+  // is keyed by owner string, which would put factory:10 before factory:2.
+  std::vector<std::string> owners;
+  for (int i = 0; i < kAmpCount; ++i)
+    owners.push_back(content::FactoryOwnerKey(i));
+  for (const auto& amp : registry.amps)
+    owners.push_back(amp.id);
+  for (const auto& owner : owners)
   {
-    const std::string ampName = AmpNameForOwner(registry, bank.first);
+    const auto bank = registry.presetBanks.find(owner);
+    if (bank == registry.presetBanks.end())
+      continue;
+    const std::string ampName = AmpNameForOwner(registry, owner);
     if (ampName.empty())
       continue;
-    for (const auto& preset : bank.second)
+    for (const auto& preset : bank->second)
     {
       int art = 0;
       bool customArt = true;
-      FillSoundArt(registry, bank.first, art, customArt);
-      out.push_back({bank.first, preset.id, preset.name, ampName, false, art, customArt});
+      FillSoundArt(registry, owner, art, customArt);
+      out.push_back({owner, preset.id, preset.name, ampName, false, art, customArt});
     }
   }
   return out;

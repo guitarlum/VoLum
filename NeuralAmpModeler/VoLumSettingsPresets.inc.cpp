@@ -380,7 +380,14 @@ void NeuralAmpModeler::_VolumPromptSaveAs(std::function<void()> after, volum::Sa
   VOLUM_LOG("preset", "save dialog open (" + std::string(currentId.empty() ? "new" : "may update") + ")");
   raw->As<VoLumNameDialogControl>()->Show(
     "Save preset", "Name this User preset.", seed, currentName,
-    [this, after, origin, currentName, currentId, modeAtStart, editSource](const std::string& name) {
+    [this, after, origin, currentName, currentId, modeAtStart, editSource, ownerKey](const std::string& name) {
+      // A MIDI recall can move this instance to another amp while the dialog is
+      // open; the live sound would then be captured into the wrong amp's bank.
+      if (_VolumActiveOwnerKey() != ownerKey)
+      {
+        VOLUM_LOG("preset", "save dialog commit refused: the amp changed while it was open");
+        return;
+      }
       // The overwrite target is looked up by id now, not by an index remembered
       // when the dialog opened: the bank can be edited or reordered in between.
       const int overwriteIdx = volum::name_dialog::Overwrites(name, currentName)

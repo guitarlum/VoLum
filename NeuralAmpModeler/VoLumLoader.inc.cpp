@@ -459,6 +459,20 @@ void NeuralAmpModeler::_VolumRequestPreNamLoad(int slot)
   _VolumQueuePreNamLoad(slot, fileToLoad);
 }
 
+std::string NeuralAmpModeler::_VolumCustomSupportCapturePath()
+{
+  const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
+  std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomSupportSlot, mVolumCustomSupportChannel);
+  if (rel.empty())
+  {
+    int s = volum::custom::kDirectSlot, c = 1;
+    if (volum::content::DefaultCaptureSelection(amp, s, c))
+      rel = volum::content::CaptureFileFor(amp, s, c);
+  }
+  return rel.empty() ? std::string()
+                     : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
+}
+
 void NeuralAmpModeler::_VolumRequestSupportModelLoad()
 {
   const bool dualActive = GetParam(kDualAmpActive)->Bool();
@@ -476,16 +490,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
       mVolumLastLoadedSupportFile.clear();
       return;
     }
-    const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
-    std::string rel = volum::content::CaptureFileFor(amp, mVolumCustomSupportSlot, mVolumCustomSupportChannel);
-    if (rel.empty())
-    {
-      int s = volum::custom::kDirectSlot, c = 1;
-      if (volum::content::DefaultCaptureSelection(amp, s, c))
-        rel = volum::content::CaptureFileFor(amp, s, c);
-    }
-    const std::string fileToLoad =
-      rel.empty() ? std::string() : volum::content::PathToUtf8(volum::content::GlobalContentStore().ResolveStored(rel));
+    const std::string fileToLoad = _VolumCustomSupportCapturePath();
     if (fileToLoad.empty())
     {
       mVolumSupportSelected.store(false);

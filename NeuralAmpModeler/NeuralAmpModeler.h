@@ -346,6 +346,7 @@ public:
                               const size_t numChannelsExternalOut, const int nFrames, const double sampleRate);
   void _VolumLoaderThreadMain();
   void _VolumRequestSupportModelLoad();
+  std::string _VolumCustomSupportCapturePath();
   void _VolumSetPreNamCapture(int slot, int captureIdx);
   void _VolumShowPreCaptureMenu(int slot, const iplug::igraphics::IRECT& anchorRect);
   void _VolumShowManageCustomPedals(int preSlot = -1);
@@ -405,6 +406,7 @@ public:
   // routing part must also run headless. mVolumCustomMainIdx tracks the focused
   // custom main amp (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
+  void _VolumReanchorCustomMain();
   void _VolumSetCustomChannelStepper(int customIdx, bool supportLane, int channel);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp
   // slot, or the focused custom amp's scene). activeIrId/supportActiveIrId/
@@ -573,6 +575,8 @@ private:
   // Index of the focused custom MAIN amp (display-only), or -1 when a factory
   // amp is active. Drives the custom-aware cabinet row / channel stepper.
   int mVolumCustomMainIdx = -1;
+  // Id of that amp: the row index shifts when another instance or a Pack edits the library.
+  std::string mVolumCustomMainId;
   // Selected (slot, channel) within the focused custom MAIN amp, used to resolve
   // which manifest .nam to stage. Only meaningful when mVolumCustomMainIdx >= 0.
   int mVolumCustomMainSlot = volum::custom::kDirectSlot;

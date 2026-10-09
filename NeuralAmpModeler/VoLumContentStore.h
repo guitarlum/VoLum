@@ -694,10 +694,22 @@ inline int FollowLiveSlotAfterReorder(const std::map<int, MidiSoundAssignment>& 
   const auto now = after.find(lastSlot);
   if (now != after.end() && now->second.ampId == it->second.ampId && now->second.presetId == it->second.presetId)
     return lastSlot;
+  // With duplicates on the board, the row the Sound moved to is the one that did
+  // not already hold it before the reorder.
+  int firstMatch = -1;
   for (const auto& kv : after)
-    if (kv.second.ampId == it->second.ampId && kv.second.presetId == it->second.presetId)
+  {
+    if (kv.second.ampId != it->second.ampId || kv.second.presetId != it->second.presetId)
+      continue;
+    const auto was = before.find(kv.first);
+    const bool heldBefore =
+      was != before.end() && was->second.ampId == kv.second.ampId && was->second.presetId == kv.second.presetId;
+    if (!heldBefore)
       return kv.first;
-  return lastSlot;
+    if (firstMatch < 0)
+      firstMatch = kv.first;
+  }
+  return firstMatch >= 0 ? firstMatch : lastSlot;
 }
 
 // ---------------------------------------------------------------------------

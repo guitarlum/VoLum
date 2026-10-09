@@ -927,6 +927,7 @@ void NeuralAmpModeler::OnIdle()
   _VolumReapAudioThreadRetirees();
   if (mLatencyDirty.exchange(false, std::memory_order_acquire))
     _ApplyLatchedLatency();
+  _VolumReanchorCustomMain();
   if (mVolumUiMode == volum::UiMode::Play)
   {
     _VolumRefreshPlaySurface();

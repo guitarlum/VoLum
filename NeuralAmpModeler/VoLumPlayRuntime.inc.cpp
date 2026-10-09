@@ -335,6 +335,7 @@ bool NeuralAmpModeler::VolumRecallSound(const std::string& ampId, const std::str
       return false;
     mVolumAmpIdx = factoryAmp;
     mVolumCustomMainIdx = -1;
+    mVolumCustomMainId.clear();
     _VolumRestoreFromSettings(factoryAmp);
     _VolumRefreshChannels();
     mVolumNeedsLoad.store(true);

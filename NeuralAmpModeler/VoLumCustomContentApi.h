@@ -131,6 +131,17 @@ inline int CustomAmpIndexById(const std::string& id)
   return -1;
 }
 
+// Row of the focused amp after another writer may have reordered or removed rows.
+// Stays on curIdx while it still names the amp, and also when the amp is gone, so
+// the caller can see the loss instead of silently inheriting a neighbour.
+inline int ReanchoredAmpIdx(const std::string& focusedId, int curIdx)
+{
+  if (focusedId.empty() || curIdx < 0 || CustomAmpIdAt(curIdx) == focusedId)
+    return curIdx;
+  const int moved = CustomAmpIndexById(focusedId);
+  return moved >= 0 ? moved : curIdx;
+}
+
 inline CustomAmp CustomAmpAt(int idx)
 {
   const auto& amps = Store().reg().amps;
@@ -733,12 +744,17 @@ inline int AddPresetForOwner(const std::string& ownerKey, const std::string& nam
   int suffix = 2;
   auto clashes = [&](const std::string& n) {
     for (const auto& pr : bank)
-      if (pr.name == n)
+      if (NameMatchesCI(pr.name, n))
         return true;
     return false;
   };
   while (clashes(unique))
-    unique = fallback + " " + std::to_string(suffix++);
+  {
+    // The suffixed name must still fit the dialog's cap, or Ctrl+S could never
+    // match it as the preset to update.
+    const std::string tail = " " + std::to_string(suffix++);
+    unique = ClampName(fallback, kMaxPresetNameLen - tail.size()) + tail;
+  }
   content::Preset pr;
   pr.id = content::MintId(reg, "preset");
   pr.name = unique;

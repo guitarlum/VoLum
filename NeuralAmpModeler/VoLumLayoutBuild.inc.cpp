@@ -151,7 +151,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
           // partner. Keep the row-index caches valid before the repair runs, since
           // the repair reads them (and the rows below the deleted one shifted up).
           if (mVolumCustomMainIdx == target)
+          {
             mVolumCustomMainIdx = -1;
+            mVolumCustomMainId.clear();
+          }
           else if (mVolumCustomMainIdx > target)
             --mVolumCustomMainIdx;
           if (mVolumCustomSupportIdx == target)

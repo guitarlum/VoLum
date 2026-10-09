@@ -657,3 +657,46 @@ TEST_CASE("PLAY chrome hide flags are a function of UiMode")
   CHECK(play.hidePresetBar);
   CHECK(play.hideHeaderPlate == (volum::UiMode::Play == volum::UiMode::Play));
 }
+
+TEST_CASE("User Sounds in the pickers follow amp order, not owner-key string order")
+{
+  const auto factory = volum_test::ShippedFactoryPresets();
+  volum::content::Registry registry;
+  volum::custom::CustomAmp second;
+  second.id = "amp_bbbbbbbb";
+  second.name = "Second";
+  volum::custom::CustomAmp first;
+  first.id = "amp_zzzzzzzz";
+  first.name = "First";
+  registry.amps = {first, second};
+  for (const char* owner : {"factory:10", "factory:2", "amp_bbbbbbbb", "amp_zzzzzzzz", "factory:1"})
+  {
+    volum::content::Preset user;
+    user.id = std::string("preset_") + owner;
+    user.name = owner;
+    registry.presetBanks[owner] = {user};
+  }
+
+  std::vector<std::string> owners;
+  for (const auto& c : volum::BuildSoundChoices(factory, registry))
+    if (!c.factory)
+      owners.push_back(c.ampId);
+  const std::vector<std::string> expected{"factory:1", "factory:2", "factory:10", "amp_zzzzzzzz", "amp_bbbbbbbb"};
+  CHECK(owners == expected);
+}
+
+TEST_CASE("The live PLAY row follows its Sound to the empty switch, not onto a duplicate")
+{
+  volum::content::Registry registry;
+  REQUIRE(volum::content::AssignMidiSound(registry, 3, "factory:0", "a"));
+  REQUIRE(volum::content::AssignMidiSound(registry, 7, "factory:0", "a"));
+  REQUIRE(volum::content::AssignMidiSound(registry, 5, "factory:1", "b"));
+
+  auto before = registry.midiSoundMap;
+  REQUIRE(volum::content::SwapMidiSoundSlots(registry, 3, 9));
+  CHECK(volum::content::FollowLiveSlotAfterReorder(before, registry.midiSoundMap, 3) == 9);
+
+  before = registry.midiSoundMap;
+  REQUIRE(volum::content::SwapMidiSoundSlots(registry, 9, 5));
+  CHECK(volum::content::FollowLiveSlotAfterReorder(before, registry.midiSoundMap, 9) == 5);
+}

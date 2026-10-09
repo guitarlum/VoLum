@@ -3379,3 +3379,42 @@ TEST_CASE("headless OnIdle consumes the model-loaded flag once")
   RequireContains(pendingBody, "mVolumModelRefreshPending = false");
   CHECK(idle.find("if (mNewModelLoadedInDSP)") == std::string::npos);
 }
+
+TEST_CASE("The focused custom MAIN amp is followed by id, not by its library row")
+{
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "mVolumCustomMainId = volum::custom::CustomAmpIdAt(customIdx);");
+  const auto idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "_VolumReanchorCustomMain();");
+  const auto repair = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumRepairRigForMissingContent()");
+  const auto reanchor = repair.find("_VolumReanchorCustomMain();");
+  const auto snapshot = repair.find("_VolumSnapshotSoundingRig()");
+  REQUIRE(reanchor != std::string::npos);
+  REQUIRE(snapshot != std::string::npos);
+  CHECK(reanchor < snapshot);
+  const auto snap = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumSnapshotSoundingRig() const");
+  RequireContains(snap, "rig.mainCustomAmpId = mVolumCustomMainId;");
+}
+
+TEST_CASE("A save dialog commit refuses when a MIDI recall moved the instance to another amp")
+{
+  const std::string source = ReadPluginSource();
+  const auto prompt = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumPromptSaveAs(");
+  const auto guard = prompt.find("_VolumActiveOwnerKey() != ownerKey");
+  const auto overwrite = prompt.find("_VolumOverwritePreset(overwriteIdx");
+  REQUIRE(guard != std::string::npos);
+  REQUIRE(overwrite != std::string::npos);
+  CHECK(guard < overwrite);
+}
+
+TEST_CASE("Resyncing the SUPPORT cab row only reloads a capture that is not already live")
+{
+  const std::string source = ReadPluginSource();
+  const auto apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyUiSyncPlan(");
+  const auto lane = apply.find("supportCustomChannel = plan.customChannel;");
+  REQUIRE(lane != std::string::npos);
+  const auto laneEnd = apply.find("else", lane);
+  REQUIRE(laneEnd != std::string::npos);
+  const std::string supportBranch = apply.substr(lane, laneEnd - lane);
+  RequireContains(supportBranch.c_str(), "volum::SupportCaptureAlreadyLive(");
+}

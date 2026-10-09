@@ -12,7 +12,7 @@ volum::rig::SoundingRig NeuralAmpModeler::_VolumSnapshotSoundingRig() const
   volum::rig::SoundingRig rig;
   rig.factoryAmpIdx = mVolumAmpIdx;
   if (mVolumCustomMainIdx >= 0)
-    rig.mainCustomAmpId = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
+    rig.mainCustomAmpId = mVolumCustomMainId;
   rig.dualAmpActive = GetParam(kDualAmpActive)->Bool();
   if (mVolumCustomSupportIdx >= 0)
     rig.supportCustomAmpId = volum::custom::CustomAmpIdAt(mVolumCustomSupportIdx);
@@ -164,6 +164,7 @@ void NeuralAmpModeler::_VolumRepairRigForMissingContent()
   // A sibling instance deleted content this one is still playing. Nothing rewrote
   // our rig at the time - by design, the RAM copy is allowed to keep sounding - so
   // reconcile now, at the first moment we need the id again.
+  _VolumReanchorCustomMain();
   const auto rig = _VolumSnapshotSoundingRig();
   volum::rig::RigRepairPlan plan;
   plan.after = rig;

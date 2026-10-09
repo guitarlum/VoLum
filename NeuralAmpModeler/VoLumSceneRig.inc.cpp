@@ -325,6 +325,7 @@ void NeuralAmpModeler::_VolumSelectFactoryAmp(int ampIdx, bool snapshotOutgoing)
     _VolumSaveCurrentToSettings();
   mVolumAmpIdx = ampIdx;
   mVolumCustomMainIdx = -1; // back on a factory amp
+  mVolumCustomMainId.clear();
   _VolumRestoreFromSettings(ampIdx);
   _VolumRefreshChannels();
   mVolumNeedsLoad.store(true);
@@ -394,6 +395,7 @@ void NeuralAmpModeler::_VolumSelectCustomAmp(int customIdx)
   if (mVolumInitComplete)
     _VolumSaveCurrentToSettings();
   mVolumCustomMainIdx = customIdx;
+  mVolumCustomMainId = volum::custom::CustomAmpIdAt(customIdx);
   // Point the preset bank at this custom amp's owner key and drop any recalled
   // preset carried over from the previous amp.
   _VolumSyncPresetOwner();
@@ -535,7 +537,10 @@ void NeuralAmpModeler::_VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool
     mVolumCustomSupportChannel = plan.customChannel;
     _VolumActiveScene().supportCustomSlot = plan.customSlot;
     _VolumActiveScene().supportCustomChannel = plan.customChannel;
-    mVolumSupportNeedsLoad.store(true);
+    const std::string wanted =
+      volum::content::PathToUtf8(volum::content::PathFromUtf8(_VolumCustomSupportCapturePath()).filename());
+    if (!volum::SupportCaptureAlreadyLive(mVolumLastLoadedSupportFile, wanted, mVolumSupportSelected.load()))
+      mVolumSupportNeedsLoad.store(true);
   }
   else
   {
@@ -551,6 +556,17 @@ void NeuralAmpModeler::_VolumApplyCustomMainCabs(int customIdx, bool supportLane
 {
   const auto amp = volum::custom::CustomAmpAt(customIdx);
   _VolumApplyUiSyncPlan(volum::MakeUiSyncPlan(_VolumMakeUiSyncInput(supportLane, amp)), supportLane);
+}
+
+void NeuralAmpModeler::_VolumReanchorCustomMain()
+{
+  const int idx = volum::custom::ReanchoredAmpIdx(mVolumCustomMainId, mVolumCustomMainIdx);
+  if (idx == mVolumCustomMainIdx)
+    return;
+  mVolumCustomMainIdx = idx;
+  if (auto* pGfx = GetUI())
+    if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+      al->As<VoLumAmpListControl>()->SetCustomSelected(idx);
 }
 
 void NeuralAmpModeler::_VolumSetCustomChannelStepper(int customIdx, bool supportLane, int channel)
