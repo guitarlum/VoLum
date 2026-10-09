@@ -101,9 +101,10 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   volum::VoLumAmpSettings* target = &mVolumAmpSettings[mVolumAmpIdx];
   if (mVolumCustomMainIdx >= 0)
   {
-    const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
-    if (!id.empty())
-      target = &_VolumCustomScene(id);
+    const std::string id = volum::custom::SceneIdForFocusedRow(mVolumCustomMainId, mVolumCustomMainIdx);
+    if (id.empty())
+      return; // the row names another amp now; the next idle re-anchors it
+    target = &_VolumCustomScene(id);
   }
   auto& s = *target;
   s.speakerIdx = mVolumSpeakerIdx;

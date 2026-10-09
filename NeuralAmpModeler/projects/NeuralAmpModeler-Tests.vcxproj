@@ -150,6 +150,7 @@
     <ClCompile Include="..\tests\test_volum_processing_plan.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_staging.cpp" />
+    <ClCompile Include="..\tests\test_volum_reset_exclusion.cpp" />
     <ClCompile Include="..\tests\test_volum_output_mode.cpp" />
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />
@@ -174,6 +175,7 @@
     <ClCompile Include="..\tests\test_volum_nan_guard.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
+    <ClCompile Include="..\tests\test_iplug_app_host_policy.cpp" />
     <ClCompile Include="..\tests\test_volum_preset_bar.cpp" />
     <ClCompile Include="..\tests\test_volum_factory_presets.cpp" />
     <ClCompile Include="..\tests\test_volum_play.cpp" />

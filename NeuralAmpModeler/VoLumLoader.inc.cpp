@@ -226,6 +226,9 @@ void NeuralAmpModeler::_VolumDrainLoaderResults()
 
       const auto action = volum::dsp_staging::DecideLoaderResult(
         result.model != nullptr, false, mVolumSupportNeedsLoad.load(), rateMismatch, !result.error.empty());
+      mVolumLiveSupportFile = volum::dsp_staging::SupportFileAfterResult(
+        action, !result.error.empty(), volum::content::PathToUtf8(volum::content::PathFromUtf8(result.path).filename()),
+        mVolumLiveSupportFile);
       if (action == volum::dsp_staging::LoaderResultAction::RetireAndReload)
         mVolumSupportNeedsLoad.store(true);
       else if (action == volum::dsp_staging::LoaderResultAction::Ignore && !result.error.empty())
@@ -484,7 +487,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   {
     if (!dualActive)
     {
-      mVolumSupportSelected.store(false);
+      _VolumSetSupportSelected(false);
       mShouldRemoveSupportModel.store(true);
       mVolumSupportIsLoading.store(false);
       mVolumLastLoadedSupportFile.clear();
@@ -493,13 +496,13 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
     const std::string fileToLoad = _VolumCustomSupportCapturePath();
     if (fileToLoad.empty())
     {
-      mVolumSupportSelected.store(false);
+      _VolumSetSupportSelected(false);
       mShouldRemoveSupportModel.store(true);
       mVolumSupportIsLoading.store(false);
       mVolumLastLoadedSupportFile.clear();
       return;
     }
-    mVolumSupportSelected.store(true);
+    _VolumSetSupportSelected(true);
     mVolumSupportIsLoading.store(true);
     mVolumLastLoadedSupportFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
     _VolumQueueSupportModelLoad(fileToLoad, -1); // -1 = custom: skip factory prefetch
@@ -509,7 +512,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   const int supportAmpIdx = GetParam(kSupportAmpIdx)->Int();
   if (!dualActive || supportAmpIdx < 0 || supportAmpIdx >= volum::kAmpCount || mVolumRigsRoot.empty())
   {
-    mVolumSupportSelected.store(false);
+    _VolumSetSupportSelected(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
@@ -522,7 +525,7 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
                                           volum::kAmps[supportAmpIdx].folderName, volum::kSpeakerPrefixes[speakerIdx]);
   if (channels.empty())
   {
-    mVolumSupportSelected.store(false);
+    _VolumSetSupportSelected(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
@@ -539,14 +542,14 @@ void NeuralAmpModeler::_VolumRequestSupportModelLoad()
   const std::string fileToLoad = volum::content::PathToUtf8(fs::weakly_canonical(rigPath, ec));
   if (fileToLoad.empty())
   {
-    mVolumSupportSelected.store(false);
+    _VolumSetSupportSelected(false);
     mShouldRemoveSupportModel.store(true);
     mVolumSupportIsLoading.store(false);
     mVolumLastLoadedSupportFile.clear();
     return;
   }
 
-  mVolumSupportSelected.store(true);
+  _VolumSetSupportSelected(true);
   mVolumSupportIsLoading.store(true);
   mVolumLastLoadedSupportFile = volum::content::PathToUtf8(volum::content::PathFromUtf8(fileToLoad).filename());
   _VolumQueueSupportModelLoad(fileToLoad, supportAmpIdx);

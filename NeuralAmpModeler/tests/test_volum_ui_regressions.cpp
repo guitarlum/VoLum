@@ -2306,10 +2306,10 @@ TEST_CASE("A custom SUPPORT partner is admitted to the audio graph")
   REQUIRE(request != std::string::npos);
   const std::string requestBody = loader.substr(request);
 
-  CHECK(countOf(requestBody, "mVolumSupportSelected.store(true)") == 2);
-  CHECK(countOf(requestBody, "mVolumSupportSelected.store(false)") == 5);
+  CHECK(countOf(requestBody, "_VolumSetSupportSelected(true)") == 2);
+  CHECK(countOf(requestBody, "_VolumSetSupportSelected(false)") == 5);
   CHECK(countOf(requestBody, "mShouldRemoveSupportModel.store(true)")
-        == countOf(requestBody, "mVolumSupportSelected.store(false)"));
+        == countOf(requestBody, "_VolumSetSupportSelected(false)"));
 }
 
 TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
@@ -2613,7 +2613,7 @@ TEST_CASE("tier2a model apply latches latency instead of updating it on the audi
   REQUIRE(end != std::string::npos);
   const std::string body = source.substr(apply, end - apply);
   RequireDoesNotContain(body, "_UpdateLatency()");
-  RequireContains(body, "mLatencyDirty");
+  RequireContains(body, "_VolumPublishLiveLatency();");
 }
 
 TEST_CASE("tier2a loader drain does not block on the loader mutex")
@@ -3417,4 +3417,27 @@ TEST_CASE("Resyncing the SUPPORT cab row only reloads a capture that is not alre
   REQUIRE(laneEnd != std::string::npos);
   const std::string supportBranch = apply.substr(lane, laneEnd - lane);
   RequireContains(supportBranch.c_str(), "volum::SupportCaptureAlreadyLive(");
+}
+
+TEST_CASE("A deleted focused custom amp is left before any scene is written under its row")
+{
+  const std::string source = ReadPluginSource();
+  const auto reanchor = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumReanchorCustomMain()");
+  RequireContains(reanchor, "_VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);");
+  const auto save = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumSaveCurrentToSettings()");
+  RequireContains(save, "SceneIdForFocusedRow(mVolumCustomMainId, mVolumCustomMainIdx)");
+  RequireDoesNotContain(save.c_str(), "CustomAmpIdAt(mVolumCustomMainIdx)");
+  const auto scene = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumActiveScene()");
+  RequireContains(scene, "_VolumCustomScene(mVolumCustomMainId)");
+  const auto owner = MemberFnUntilNext(source, "NeuralAmpModeler::_VolumActiveOwnerKey() const");
+  RequireContains(owner, "return mVolumCustomMainId;");
+  RequireContains(source, "idTail.customMainId = mVolumCustomMainIdx >= 0 ? mVolumCustomMainId : std::string();");
+}
+
+TEST_CASE("The SUPPORT lane counts as live only for a capture the loader staged")
+{
+  const std::string source = ReadPluginSource();
+  RequireContains(source, "mVolumLiveSupportFile = volum::dsp_staging::SupportFileAfterResult(");
+  RequireContains(source, "volum::SupportCaptureAlreadyLive(mVolumLiveSupportFile, wanted");
+  RequireDoesNotContain(source.c_str(), "SupportCaptureAlreadyLive(mVolumLastLoadedSupportFile");
 }

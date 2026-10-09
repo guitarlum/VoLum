@@ -1285,11 +1285,32 @@ TEST_CASE("The focused custom amp keeps its identity when the library rows move"
   // A Pack Reset reordered the library and put a different amp at the old row.
   amps = {make("amp_c"), make("amp_x"), make("amp_b")};
   CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == 2);
-  // Gone: stay put so the caller can notice, never adopt a neighbour's id.
+  // Gone (another instance deleted it): -1, never a neighbour's row.
   amps = {make("amp_c"), make("amp_x")};
-  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == 1);
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == -1);
   CHECK(volum::custom::ReanchoredAmpIdx("", 1) == 1);
   CHECK(volum::custom::ReanchoredAmpIdx("amp_b", -1) == -1);
+
+  amps = saved;
+}
+
+TEST_CASE("A save never writes the focused amp's scene under a neighbour after another instance deletes it")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  amps = {make("amp_a"), make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedRow("amp_b", 1) == "amp_b");
+
+  // The focused row 1 now holds the neighbour: the save has no id to write under.
+  amps = {make("amp_a"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedRow("amp_b", 1).empty());
+  CHECK(volum::custom::SceneIdForFocusedRow("", 1).empty());
 
   amps = saved;
 }
