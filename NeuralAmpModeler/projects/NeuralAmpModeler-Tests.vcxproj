@@ -133,6 +133,7 @@
     <ClCompile Include="..\..\AudioDSPTools\dsp\Delay.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\ImpulseResponse.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\Reverb.cpp" />
+    <ClCompile Include="..\..\AudioDSPTools\dsp\NoiseGate.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\tests\test_keyboard_steps.cpp" />
     <ClCompile Include="..\tests\test_eparam_order.cpp" />
@@ -153,6 +154,7 @@
     <ClCompile Include="..\tests\test_volum_dsp_cache_params.cpp" />
     <ClCompile Include="..\tests\test_volum_dsp_staging.cpp" />
     <ClCompile Include="..\tests\test_volum_reset_exclusion.cpp" />
+    <ClCompile Include="..\tests\test_volum_rt_alloc.cpp" />
     <ClCompile Include="..\tests\test_volum_output_mode.cpp" />
     <ClCompile Include="..\tests\test_volum_master_safety.cpp" />
     <ClCompile Include="..\tests\test_volum_chunk_codec.cpp" />

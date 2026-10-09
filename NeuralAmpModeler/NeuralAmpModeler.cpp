@@ -880,8 +880,10 @@ void NeuralAmpModeler::OnReset()
       mPitch.Reset();
     }
     const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
-    mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
-    mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+    // Prepared for the reserve, not the host's reset size: the audio thread then resizes inside capacity.
+    const size_t postEffectFrames = static_cast<size_t>(reservedBlock);
+    mDelay.Prepare(postEffectChannels, postEffectFrames, sampleRate);
+    mReverb.Prepare(postEffectChannels, postEffectFrames, sampleRate);
     mTremolo.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
     mChorus.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
     mDelay.Reset();
@@ -902,6 +904,32 @@ void NeuralAmpModeler::OnReset()
     mDualMainAlignedBuffer.assign(reservedT, 0.0);
     mDualSupportAlignedBuffer.assign(reservedT, 0.0);
     _PrepareBuffers(kNumChannelsInternal, reservedT);
+    // Every DSP object's output buffers get their full-size allocation here, so a host block
+    // that grows past the reset size (but inside the reserve) never allocates in ProcessBlock.
+    mToneStack->Reserve(static_cast<int>(kNumChannelsInternal), reservedBlock);
+    if (mSupportToneStack)
+      mSupportToneStack->Reserve(static_cast<int>(kNumChannelsInternal), reservedBlock);
+    for (int i = 0; i < 2; ++i)
+    {
+      mPreEq[i].Reserve(kNumChannelsInternal, reservedT);
+      mPreInputGain[i].ReserveOutputs(kNumChannelsInternal, reservedT);
+      mPreOutputGain[i].ReserveOutputs(kNumChannelsInternal, reservedT);
+    }
+    mNoiseGateTrigger.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mNoiseGateGain.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mNoiseGateGain.ReserveGainReduction(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateTrigger.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateGain.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportNoiseGateGain.ReserveGainReduction(kNumChannelsInternal, reservedT);
+    mPreCompressor.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mHighPass.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mSupportHighPass.ReserveOutputs(kNumChannelsInternal, reservedT);
+    mIrShaping.Reserve(kNumChannelsInternal, reservedT);
+    mSupportIrShaping.Reserve(kNumChannelsInternal, reservedT);
+    if (mIR)
+      mIR->ReserveOutputs(kNumChannelsInternal, reservedT);
+    if (mSupportIR)
+      mSupportIR->ReserveOutputs(kNumChannelsInternal, reservedT);
     mTunerDSP.Reset(sampleRate);
     mMetronomeDSP.Reset(sampleRate);
   }
@@ -2561,6 +2589,9 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath, bo
     // on Windows and was the Unicode IR load bug (AudioDSPTools #25).
     stagedIR = std::make_unique<dsp::ImpulseResponse>(irPath.Get(), sampleRate);
     wavState = stagedIR->GetWavState();
+    // Size the output for the reserved block here, off the audio thread; the first Process() then
+    // never allocates.
+    stagedIR->ReserveOutputs(kNumChannelsInternal, static_cast<size_t>(std::max(0, mReservedAudioBlockSize)));
   }
   catch (std::runtime_error& e)
   {

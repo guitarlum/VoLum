@@ -45,9 +45,16 @@ public:
   // while one is running starts in the block after that one publishes; further dues until then merge.
   static constexpr int kSliceTausPerFrame = 2;
 
+  // Above this rate the input is averaged down so the 2048-lag YIN window still spans the
+  // lowest string: a 192 kHz low E (82.41 Hz) has a 2330-sample period.
+  static constexpr double kMaxAnalysisRate = 100000.0;
+
   void Reset(double sampleRate)
   {
-    mSampleRate = static_cast<float>(sampleRate);
+    mDecimation = sampleRate > kMaxAnalysisRate ? static_cast<int>(std::ceil(sampleRate / 96000.0)) : 1;
+    mSampleRate = static_cast<float>(sampleRate / mDecimation);
+    mDecimAcc = 0.f;
+    mDecimCount = 0;
     mWritePos = 0;
     mSamplesCollected = 0;
     mNextTau = 0;
@@ -68,12 +75,10 @@ public:
       return;
     }
 
+    if (!mWasActive)
+      _FlushForOpen();
     for (int i = 0; i < nFrames; ++i)
-    {
-      mBuffer[mWritePos] = input[i];
-      mWritePos = (mWritePos + 1) % kBufferSize;
-      ++mSamplesCollected;
-    }
+      _Push(input[i]);
     _Analyze(nFrames);
   }
 
@@ -85,12 +90,10 @@ public:
       return;
     }
 
+    if (!mWasActive)
+      _FlushForOpen();
     for (int i = 0; i < nFrames; ++i)
-    {
-      mBuffer[mWritePos] = static_cast<float>(input[i]);
-      mWritePos = (mWritePos + 1) % kBufferSize;
-      ++mSamplesCollected;
-    }
+      _Push(static_cast<float>(input[i]));
     _Analyze(nFrames);
   }
 
@@ -238,6 +241,33 @@ private:
     return vaddq_f32(acc, vmulq_f32(diff, diff));
   }
 #endif
+
+  // The tuner does not listen while closed, so the ring holds audio from before it was closed.
+  // Drop it, and the partial decimation frame, so the first reading comes from fresh audio.
+  void _FlushForOpen()
+  {
+    std::memset(mBuffer, 0, sizeof(mBuffer));
+    mWritePos = 0;
+    mSamplesCollected = 0;
+    mDecimAcc = 0.f;
+    mDecimCount = 0;
+  }
+
+  void _Push(float sample)
+  {
+    if (mDecimation > 1)
+    {
+      mDecimAcc += sample;
+      if (++mDecimCount < mDecimation)
+        return;
+      sample = mDecimAcc / static_cast<float>(mDecimation);
+      mDecimAcc = 0.f;
+      mDecimCount = 0;
+    }
+    mBuffer[mWritePos] = sample;
+    mWritePos = (mWritePos + 1) % kBufferSize;
+    ++mSamplesCollected;
+  }
 
   void _Analyze(int nFrames)
   {
@@ -418,7 +448,10 @@ private:
   bool mAnalysisDue = false;
   bool mWasActive = false;
   int mTestTausPerBlock = 0;
-  float mSampleRate = 48000.f;
+  int mDecimation = 1; // input samples averaged into one analysis sample
+  float mDecimAcc = 0.f;
+  int mDecimCount = 0;
+  float mSampleRate = 48000.f; // analysis rate: the input rate divided by mDecimation
   float mSmoothedFreq = 0.f;
   bool mSmoothedValid = false;
   int mInvalidDetections = 0;

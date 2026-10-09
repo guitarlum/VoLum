@@ -32,6 +32,14 @@ public:
     _Refresh();
   }
 
+  // Size the three filters' outputs for numFrames up front (off the audio thread).
+  void Reserve(size_t numChannels, size_t numFrames)
+  {
+    mBassFilter.ReserveOutputs(numChannels, numFrames);
+    mMidFilter.ReserveOutputs(numChannels, numFrames);
+    mTrebleFilter.ReserveOutputs(numChannels, numFrames);
+  }
+
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
   {
     DSP_SAMPLE** bass = mBassFilter.Process(inputs, numChannels, numFrames);
@@ -115,8 +123,6 @@ public:
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, const size_t numChannels, const size_t numFrames) override
   {
     _PrepareBuffers(numChannels, numFrames);
-    if (mDriven.size() < numChannels)
-      mDriven.resize(numChannels);
 
     if (mSampleRate <= 0.0)
       mSampleRate = 48000.0;
@@ -210,6 +216,15 @@ public:
     }
 
     return _GetPointers();
+  }
+
+protected:
+  // The per-channel scratch is sized here too, so ReserveOutputs() leaves Process() nothing to allocate.
+  void _PrepareBuffers(const size_t numChannels, const size_t numFrames) override
+  {
+    DSP::_PrepareBuffers(numChannels, numFrames);
+    if (mDriven.size() < numChannels)
+      mDriven.resize(numChannels);
   }
 
 private:

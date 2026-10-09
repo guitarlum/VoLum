@@ -2,6 +2,7 @@
 #include "../../AudioDSPTools/dsp/Delay.h"
 #include "../../AudioDSPTools/dsp/Reverb.h"
 #include "../VoLumMasterSafety.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -1376,4 +1377,66 @@ TEST_CASE("Delay: Reverse and Digital RMS match within 0.5 dB at same Mix")
   // below the forward modes the way it did under the old crossfade law.
   const double dropDb = 20.0 * std::log10(rmsReverse / rmsDigital);
   CHECK(dropDb > -3.0); // far better than the old law which silently dropped ~5+ dB
+}
+
+// F-17: the Analog chorus tap reaches up to 9 ms past the Time setting. At the 2000 ms ceiling that
+// used to wrap the 2 s ring, so the tap read 4-9 ms behind the write head: the input came back
+// almost immediately instead of 2 s later.
+TEST_CASE("Delay: Analog at 2000 ms with full modulation reads the right sample, not the write head")
+{
+  const double sr = 48000.0;
+  const size_t block = 1024;
+  dsp::effect::Delay delay;
+  delay.Prepare(1, block, sr);
+  delay.SetParams(2000.0, 0.0, 1.0, dsp::effect::Delay::kModeAnalog, sr, 0.5, 1.0, false);
+
+  const size_t total = static_cast<size_t>(2.05 * sr);
+  std::vector<double> in(total, 0.0);
+  in[0] = 1.0;
+  std::vector<double> out;
+  out.reserve(total);
+  for (size_t at = 0; at < total; at += block)
+  {
+    const size_t n = std::min(block, total - at);
+    double* ptr = in.data() + at;
+    auto** res = delay.Process(&ptr, 1, n);
+    out.insert(out.end(), res[0], res[0] + n);
+  }
+
+  // Dry impulse only; nothing returns before the echo is due.
+  double early = 0.0;
+  for (size_t i = 1; i < static_cast<size_t>(1.9 * sr); ++i)
+    early = std::max(early, std::abs(out[i]));
+  CHECK(early < 1e-9);
+  // The echo lands 2000 ms + the chorus offset (4..9 ms) after the impulse.
+  double echo = 0.0;
+  for (size_t i = static_cast<size_t>(2.0 * sr); i < total; ++i)
+    echo = std::max(echo, std::abs(out[i]));
+  CHECK(echo > 0.01);
+}
+
+// F-18: Time goes to 2000 ms, but the reverse slice was capped at half the 2 s ring (1000 ms).
+TEST_CASE("Delay: Reverse honours the full 2000 ms Time")
+{
+  const double sr = 48000.0;
+  const size_t block = 1024;
+  dsp::effect::Delay delay;
+  delay.Prepare(1, block, sr);
+  delay.SetParams(2000.0, 0.0, 1.0, dsp::effect::Delay::kModeReverse, sr, 0.5, 0.0, false);
+
+  const size_t total = static_cast<size_t>(2.2 * sr);
+  std::vector<double> in(total, 0.5);
+  double firstWet = -1.0;
+  for (size_t at = 0; at < total; at += block)
+  {
+    const size_t n = std::min(block, total - at);
+    double* ptr = in.data() + at;
+    auto** res = delay.Process(&ptr, 1, n);
+    for (size_t i = 0; i < n && firstWet < 0.0; ++i)
+      if (std::abs(res[0][i] - 0.5) > 1e-6)
+        firstWet = static_cast<double>(at + i) / sr;
+  }
+  // The first slice can only launch once a full 2000 ms has been captured.
+  CHECK(firstWet >= 1.99);
+  CHECK(firstWet < 2.1);
 }
