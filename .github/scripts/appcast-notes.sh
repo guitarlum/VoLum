@@ -48,4 +48,6 @@ perl -CSDA -Mutf8 -e '
     print "$line\n";
     last;
   }
+  # Drain the rest so a large body does not break the writer'"'"'s pipe.
+  1 while <STDIN>;
 '

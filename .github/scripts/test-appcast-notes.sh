@@ -60,4 +60,7 @@ long_note="$(printf 'a%.0s' {1..130})"
 capped_note="$(printf 'a%.0s' {1..117})..."
 assert_notes "caps long notes at 120 characters" "$long_note" "$capped_note"
 
+large_tail="$(head -c 300000 /dev/zero | tr '\0' 'x')"
+assert_notes "large body keeps the writer's pipe intact" $'## H\nFirst line\n'"$large_tail" "First line"
+
 printf 'All appcast note tests passed.\n'
