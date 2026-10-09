@@ -355,7 +355,7 @@ void NeuralAmpModeler::_VolumApplyDspCaches()
   }
 }
 
-void NeuralAmpModeler::_VolumSaveSettingsToFile()
+bool NeuralAmpModeler::_VolumSaveSettingsToFile(int lockTimeoutMs)
 {
   _VolumSaveEffectSettings();
   mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
@@ -382,6 +382,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // PLAY cursor: the DAW chunk already carries lastPlaySlot; standalone has no
   // chunk, so the same instance key has to live here or a relaunch starts empty.
   j["lastPlaySlot"] = mVolumLastRecalledPlaySlot;
+  // Output mode is a param the DAW project stores; the standalone has no project.
+  j[volum::kOutputModeMachineKey] = GetParam(kOutputMode)->Int();
   // 1.2.1: the same selection for every amp, not only the focused one. The single
   // key above describes whichever amp was in focus when the file was written, so
   // every other amp reopened reading "No Preset" - and an exit from an amp with
@@ -408,24 +410,28 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   if (settingsPath.empty())
   {
     if (mVolumRigsRoot.empty())
-      return;
+      return true;
     settingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-settings.json";
     dualAmpSettingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
+  // A plugin instance may have merged Lite / Animate art / calibration into the
+  // file since this process last read or wrote those keys. Its value stays unless
+  // this process changed the key itself.
   std::error_code ec;
-  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+  if (!mVolumMachineSettings.WriteWhole(settingsPath, std::move(j), lockTimeoutMs, VolumWriteNowMs(), ec))
   {
-    std::cerr << "VoLum: write failed for settings file: " << settingsPath.string() << " (" << ec.message() << ")"
-              << std::endl;
-    return;
+    if (mVolumMachineSettings.TakeFailureToLog())
+      std::cerr << "VoLum: settings file not written yet, will retry: " << settingsPath.string() << " (" << ec.message()
+                << ")" << std::endl;
+    return false;
   }
 
   if (!volum::WriteJsonAtomically(dualAmpSettingsPath, dualAmpJson, ec))
   {
     std::cerr << "VoLum: write failed for dual-amp settings file: " << dualAmpSettingsPath.string() << " ("
               << ec.message() << ")" << std::endl;
-    return;
+    return false;
   }
 
   // Persist the shared content library too. Since 1.3.0 the scenes travel above,
@@ -433,44 +439,37 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // is a locked read-modify-write merge, so doing it here cannot drop a sibling's
   // items. No-op when no base dir is set.
   volum::content::GlobalContentStore().Save();
+  return true;
 }
 
-void NeuralAmpModeler::_VolumSaveCalibrationDefaults()
+void NeuralAmpModeler::_VolumSaveCalibrationDefaults(int lockTimeoutMs)
+{
+  // Multiple plugin instances in one host, and the standalone, may edit this
+  // machine-global default. Only direct UI edits mark mVolumCalibrationEdits;
+  // project/preset restores never do.
+  mVolumMachineSettings.Queue(
+    mVolumCalibrationEdits.TakeKeys(GetParam(kCalibrateInput)->Bool(), GetParam(kInputCalibrationLevel)->Value()));
+  _VolumFlushMachineKeys(lockTimeoutMs);
+}
+
+bool NeuralAmpModeler::_VolumFlushMachineKeys(int lockTimeoutMs)
 {
   namespace fs = std::filesystem;
   const fs::path settingsPath = volum::VolumUserSettingsFilePath();
   if (settingsPath.empty())
-    return;
-
-  // Multiple plugin instances in one host may edit this machine-global default.
-  // Only direct UI edits call this function; project/preset restores never do.
-  static std::mutex calibrationSettingsMutex;
-  std::lock_guard<std::mutex> lock(calibrationSettingsMutex);
-
-  nlohmann::json j = nlohmann::json::object();
+    return true;
   std::error_code ec;
-  if (fs::exists(settingsPath, ec))
+  switch (mVolumMachineSettings.FlushPending(settingsPath, lockTimeoutMs, VolumWriteNowMs(), ec))
   {
-    try
-    {
-      std::ifstream in(settingsPath);
-      in >> j;
-      if (!j.is_object())
-        return;
-    }
-    catch (...)
-    {
-      std::cerr << "VoLum: calibration defaults not saved because volum-settings.json is unreadable" << std::endl;
-      return;
-    }
+    case volum::MachineSettingsWriter::Flush::Unreadable:
+      std::cerr << "VoLum: machine settings not saved because volum-settings.json is unreadable" << std::endl;
+      return false;
+    case volum::MachineSettingsWriter::Flush::Failed:
+      if (mVolumMachineSettings.TakeFailureToLog())
+        std::cerr << "VoLum: machine settings not written yet, will retry (" << ec.message() << ")" << std::endl;
+      return false;
+    default: return true;
   }
-
-  if (!j.contains("version"))
-    j["version"] = volum::kVoLumUserSettingsVersion;
-  j["CalibrateInput"] = GetParam(kCalibrateInput)->Bool();
-  j["InputCalibrationLevel"] = GetParam(kInputCalibrationLevel)->Value();
-  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
-    std::cerr << "VoLum: calibration defaults write failed: " << ec.message() << std::endl;
 }
 
 void NeuralAmpModeler::_VolumLoadSettingsFromFile()
@@ -492,7 +491,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   else if (!legacyPath.empty() && fs::exists(legacyPath))
     settingsPath = legacyPath;
   else
+  {
+    _VolumNoteMachineKeysSynced();
     return;
+  }
 
   try
   {
@@ -530,6 +532,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     mVolumMidiChannel.store(volum::MidiChannelFromMachineSettings(true, j, mVolumMidiChannel.load()));
     mVolumMidiRecallCc.store(volum::MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load()));
     mVolumLastRecalledPlaySlot = volum::LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot);
+    // Plugins skip this: the host project owns kOutputMode, and a new insert
+    // starts at the param default rather than at the standalone's choice.
+    GetParam(kOutputMode)->Set(volum::OutputModeFromMachineSettings(true, j, GetParam(kOutputMode)->Int()));
+    SendParameterValueFromDelegate(kOutputMode, GetParam(kOutputMode)->GetNormalized(), true);
     // Pack import-with-settings writes uiMode here without going through the
     // toggle. Derive PLAY chrome now so the surface cannot stay shown over BUILD.
     _VolumRefreshPlaySurface();
@@ -584,6 +590,14 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   {
     std::cerr << "Failed to read volum-settings.json" << std::endl;
   }
+  _VolumNoteMachineKeysSynced();
+}
+
+void NeuralAmpModeler::_VolumNoteMachineKeysSynced()
+{
+  mVolumMachineSettings.NoteLoaded(volum::MachineSharedKeyValues(mVolumLiteMode.load(), mVolumAnimatePlayArt.load(),
+                                                                 GetParam(kCalibrateInput)->Bool(),
+                                                                 GetParam(kInputCalibrationLevel)->Value()));
 }
 
 void NeuralAmpModeler::_VolumSaveLiteMode()
@@ -593,37 +607,10 @@ void NeuralAmpModeler::_VolumSaveLiteMode()
 
 void NeuralAmpModeler::_VolumSaveMachineBool(const char* key, bool value)
 {
-  namespace fs = std::filesystem;
-  const fs::path settingsPath = volum::VolumUserSettingsFilePath();
-  if (settingsPath.empty())
-    return;
-
   // Same read-merge-write as calibration: a plugin Lite click must not dump
   // standalone PLAY/BUILD, midiCh, midiRecallCc, lastPlaySlot, or scenes into the shared machine file.
-  static std::mutex machineBoolSettingsMutex;
-  std::lock_guard<std::mutex> lock(machineBoolSettingsMutex);
-
-  nlohmann::json j = nlohmann::json::object();
-  std::error_code ec;
-  if (fs::exists(settingsPath, ec))
-  {
-    try
-    {
-      std::ifstream in(settingsPath);
-      in >> j;
-      if (!j.is_object())
-        return;
-    }
-    catch (...)
-    {
-      std::cerr << "VoLum: " << key << " not saved because volum-settings.json is unreadable" << std::endl;
-      return;
-    }
-  }
-
-  j = volum::MergeMachineBoolIntoSettings(std::move(j), key, value);
-  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
-    std::cerr << "VoLum: " << key << " write failed: " << ec.message() << std::endl;
+  mVolumMachineSettings.Queue({{key, value}});
+  _VolumFlushMachineKeys(volum::kMachineSettingsIdleLockMs);
 }
 
 void NeuralAmpModeler::_VolumSetAnimatePlayArt(bool animate)

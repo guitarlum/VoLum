@@ -17,6 +17,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_version.cpp
   test_volum_paths.cpp
   test_volum_settings_atomic_write.cpp
+  test_volum_machine_settings_writer.cpp
   test_volum_update_check.cpp
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp

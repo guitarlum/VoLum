@@ -1702,6 +1702,71 @@ TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not t
   }
 }
 
+TEST_CASE("F-12: the Pack settings restore waits for the machine-settings lock and never writes around it")
+{
+  Library sender("settings-lock-sender", "sender");
+  const nlohmann::json settings = {{"version", 6}, {"liteMode", true}};
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), settings.dump());
+  REQUIRE(pack.ok);
+
+  Library receiver("settings-lock-recv", "recv");
+  const auto settingsPath = receiver.base / "volum-settings.json";
+  REQUIRE(WriteWholeFile(settingsPath, "{\"version\":6}"));
+
+  {
+    // Another process is in the middle of its read-merge-write.
+    volum::content::RegistryFileLock holder;
+    REQUIRE(holder.Acquire(volum::MachineSettingsLockPath(settingsPath)));
+    const auto blocked = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath);
+    CHECK_FALSE(blocked.ok);
+    std::string during;
+    REQUIRE(ReadWholeFile(settingsPath, during));
+    CHECK(during == "{\"version\":6}");
+  }
+
+  const auto freed = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath);
+  REQUIRE_MESSAGE(freed.ok, freed.error);
+  std::string after;
+  REQUIRE(ReadWholeFile(settingsPath, after));
+  CHECK(nlohmann::json::parse(after)["liteMode"] == true);
+}
+
+TEST_CASE("F-63: an Everything Pack restores the standalone's Output mode with the machine settings")
+{
+  // The settings document travels verbatim, so the optional outputMode key rides
+  // along. A Pack made before the key existed restores as Normalized.
+  Library sender("output-mode-sender", "sender");
+  REQUIRE(sender.store.Save());
+
+  SUBCASE("a Raw standalone comes back Raw")
+  {
+    const nlohmann::json settings = {{"version", 6}, {volum::kOutputModeMachineKey, volum::kOutputModeRaw}};
+    const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), settings.dump());
+    REQUIRE(pack.ok);
+    Library receiver("output-mode-recv", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath).ok);
+    std::string got;
+    REQUIRE(ReadWholeFile(settingsPath, got));
+    CHECK(volum::OutputModeFromMachineSettings(true, nlohmann::json::parse(got), volum::kOutputModeNormalized)
+          == volum::kOutputModeRaw);
+  }
+
+  SUBCASE("an older Pack without the key restores Normalized")
+  {
+    const nlohmann::json settings = {{"version", 6}, {"liteMode", true}};
+    const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), settings.dump());
+    REQUIRE(pack.ok);
+    Library receiver("output-mode-recv-old", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath).ok);
+    std::string got;
+    REQUIRE(ReadWholeFile(settingsPath, got));
+    CHECK(volum::OutputModeFromMachineSettings(true, nlohmann::json::parse(got), volum::kOutputModeRaw)
+          == volum::kOutputModeNormalized);
+  }
+}
+
 TEST_CASE("Invalid restored settings are refused before library or settings changes")
 {
   Library sender("invalid-settings-sender", "sender");

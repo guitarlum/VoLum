@@ -973,7 +973,7 @@ TEST_CASE("Global VoLum settings writes are standalone-only")
   std::string source = ReadPluginSource();
   source += "\n";
   source += ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
-  const std::string needle = "_VolumSaveSettingsToFile();";
+  const std::string needle = "_VolumSaveSettingsToFile(volum::k";
   size_t count = 0;
   size_t pos = source.find(needle);
   while (pos != std::string::npos)
@@ -1010,7 +1010,7 @@ TEST_CASE("Pack export flushes pending settings before reading disk")
   const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
   const auto exportPos = pack.find("NeuralAmpModeler::_VolumExportPack");
   REQUIRE(exportPos != std::string::npos);
-  const auto savePos = pack.find("_VolumSaveSettingsToFile();", exportPos);
+  const auto savePos = pack.find("_VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);", exportPos);
   REQUIRE(savePos != std::string::npos);
   const auto readPos = pack.find("ReadWholeFile", savePos);
   REQUIRE(readPos != std::string::npos);
@@ -1029,7 +1029,7 @@ TEST_CASE("OnIdle coalesces the deferred settings write")
   REQUIRE(dirtyPos != std::string::npos);
   const auto shouldWritePos = source.find("shouldWrite", dirtyPos);
   REQUIRE(shouldWritePos != std::string::npos);
-  const auto writePos = source.find("_VolumSaveSettingsToFile();", shouldWritePos);
+  const auto writePos = source.find("_VolumSaveSettingsToFile(volum::kMachineSettingsIdleLockMs)", shouldWritePos);
   REQUIRE(writePos != std::string::npos);
   CHECK(writePos - dirtyPos < 800);
   RequireContains(source, "VoLumWriteDebounce.h");
@@ -1046,7 +1046,7 @@ TEST_CASE("OnUIClose flushes pending calibration defaults")
   const auto body = source.substr(onUIClose, closeEnd - onUIClose);
   // Before debouncing, close saved volum-settings.json but left calibration
   // defaults pending until the next OnIdle — which never runs after close.
-  CHECK(body.find("_VolumSaveCalibrationDefaults()") != std::string::npos);
+  CHECK(body.find("_VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs)") != std::string::npos);
   CHECK(body.find("mVolumCalibrationDefaultsDirty") != std::string::npos);
 }
 
@@ -1057,7 +1057,7 @@ TEST_CASE("Only direct calibration UI edits update machine-global defaults")
   RequireContains(source, "paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel");
   RequireContains(source, "mVolumCalibrationDefaultsDirty = true;");
   RequireContains(source, "if (mVolumCalibrationDefaultsDirty)");
-  RequireContains(source, "_VolumSaveCalibrationDefaults();");
+  RequireContains(source, "_VolumSaveCalibrationDefaults(volum::kMachineSettingsIdleLockMs);");
   // DAW/project restore sets the EParams directly and must not call the writer.
   const auto loadPos = source.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
   REQUIRE(loadPos != std::string::npos);

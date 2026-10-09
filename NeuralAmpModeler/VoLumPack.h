@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "VoLumContentStore.h"
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumPackArchive.h"
 #include "VoLumUserSettingsIO.h"
 
@@ -1145,6 +1146,7 @@ inline bool ValidateMachineSettings(const std::string& text, std::string* saniti
         "lastPlaySlot",
         "volumActivePresetIdByOwner",
         "volumCustomScenes",
+        kOutputModeMachineKey, // the standalone's Output mode travels with the machine settings
       };
       nlohmann::json filtered = nlohmann::json::object();
       for (const char* key : kSharedMachineKeys)
@@ -1809,10 +1811,17 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
 
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
+    // Under the machine-settings lock, so a plugin's single-key merge cannot land
+    // its older read of the file on top of the restored one.
     std::error_code settingsEc;
     const auto settingsTmp = volum::MakeAtomicJsonTempPath(settingsPath);
-    if (!WriteWholeFile(settingsTmp, sanitizedSettings)
-        || !volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc))
+    if (!WithMachineSettingsLock(
+          settingsPath,
+          [&]() {
+            return WriteWholeFile(settingsTmp, sanitizedSettings)
+                   && volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc);
+          },
+          settingsEc))
     {
       std::error_code removeEc;
       std::filesystem::remove(settingsTmp, removeEc);

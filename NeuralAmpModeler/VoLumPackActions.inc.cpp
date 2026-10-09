@@ -44,16 +44,16 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   _VolumSaveCurrentToSettings();
   if (mVolumSettingsDirty || VolumDebounceFor(this).settings.isDirty())
   {
-    mVolumSettingsDirty = false;
     VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
-    _VolumSaveSettingsToFile();
+    mVolumSettingsDirty = !_VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);
   }
   if (mVolumCalibrationDefaultsDirty || VolumDebounceFor(this).calibration.isDirty())
   {
     mVolumCalibrationDefaultsDirty = false;
     VolumDebounceFor(this).calibration.markWritten(VolumWriteNowMs());
-    _VolumSaveCalibrationDefaults();
+    _VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs);
   }
+  _VolumFlushMachineKeys(volum::kMachineSettingsFinalLockMs);
   if (plan.includeSettings)
   {
     const auto path = volum::VolumUserSettingsFilePath();
