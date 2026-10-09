@@ -60,8 +60,7 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postReverbPreDelay = GetParam(kReverbPreDelay)->Value();
   s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
   s.postReverbMode = mVolumEffectSettings.reverbMode;
-  s.postReverbSubMode =
-    mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
+  s.postReverbSubMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
   s.postTremoloActive = GetParam(kTremoloActive)->Bool();
   s.postTremoloMode = mVolumEffectSettings.tremoloMode;
   s.postTremoloRate = GetParam(kTremoloRate)->Value();
@@ -220,8 +219,7 @@ bool NeuralAmpModeler::_VolumIsPreDirty() const
     return !volum::PreBlockEquals(mVolumLiveLockedPre, scene);
 
   auto* self = const_cast<NeuralAmpModeler*>(this);
-  self->_VolumSavePrePitchModeSnapshot(
-    std::clamp(self->mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1));
+  self->_VolumSavePrePitchModeSnapshot(std::clamp(self->mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1));
   volum::VoLumAmpSettings live;
   self->_VolumSavePreToSlot(live);
   return !volum::PreBlockEquals(live, scene);
@@ -383,8 +381,7 @@ void NeuralAmpModeler::_VolumSaveReverbModeSnapshot(int mode)
   s.shimmer = GetParam(kReverbShimmer)->Value();
   if (mode == volum::kVoLumReverbModeOktaverb)
     volum::SaveTrackedModeSnapshot(
-      3, s.subMode,
-      [this](int rememberedSubMode) { _VolumSaveOktaverbSubModeSnapshot(rememberedSubMode); });
+      3, s.subMode, [this](int rememberedSubMode) { _VolumSaveOktaverbSubModeSnapshot(rememberedSubMode); });
   else
     s.subMode = GetParam(kReverbSubMode)->Int();
 }

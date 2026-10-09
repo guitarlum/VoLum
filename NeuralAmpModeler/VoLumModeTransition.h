@@ -28,7 +28,10 @@ constexpr unsigned ModeSnapshotBit(ModeSnapshotTarget target)
 class PendingModeSnapshotChanges
 {
 public:
-  void Request(ModeSnapshotTarget target) noexcept { mMask.fetch_or(ModeSnapshotBit(target), std::memory_order_release); }
+  void Request(ModeSnapshotTarget target) noexcept
+  {
+    mMask.fetch_or(ModeSnapshotBit(target), std::memory_order_release);
+  }
 
   unsigned Take() noexcept { return mMask.exchange(0, std::memory_order_acquire); }
 
@@ -109,9 +112,9 @@ PendingModeResult ApplyPendingModeSnapshotChange(bool hasRequest, int currentPar
   if (action == PendingModeAction::Drop)
     return PendingModeResult::Dropped;
 
-  return ApplyModeSnapshotTransition(
-           currentParamMode, modeCount, true, rememberedMode, std::forward<SaveOutgoing>(saveOutgoing),
-           std::forward<RestoreIncoming>(restoreIncoming))
+  return ApplyModeSnapshotTransition(currentParamMode, modeCount, true, rememberedMode,
+                                     std::forward<SaveOutgoing>(saveOutgoing),
+                                     std::forward<RestoreIncoming>(restoreIncoming))
            ? PendingModeResult::Applied
            : PendingModeResult::Unchanged;
 }
@@ -120,13 +123,14 @@ PendingModeResult ApplyPendingModeSnapshotChange(bool hasRequest, int currentPar
 // this nested transition runs. Reassert the applied sub-mode after restoring its
 // knobs so parameter, editor and remembered snapshot cannot disagree.
 template <typename SaveOutgoing, typename RestoreIncoming, typename SetCurrentMode>
-PendingModeResult ApplyPendingNestedModeSnapshotChange(
-  bool hasRequest, int currentParamMode, int modeCount, PendingModeAction action, int& rememberedMode,
-  SaveOutgoing&& saveOutgoing, RestoreIncoming&& restoreIncoming, SetCurrentMode&& setCurrentMode)
+PendingModeResult ApplyPendingNestedModeSnapshotChange(bool hasRequest, int currentParamMode, int modeCount,
+                                                       PendingModeAction action, int& rememberedMode,
+                                                       SaveOutgoing&& saveOutgoing, RestoreIncoming&& restoreIncoming,
+                                                       SetCurrentMode&& setCurrentMode)
 {
-  const auto result = ApplyPendingModeSnapshotChange(
-    hasRequest, currentParamMode, modeCount, action, rememberedMode, std::forward<SaveOutgoing>(saveOutgoing),
-    std::forward<RestoreIncoming>(restoreIncoming));
+  const auto result = ApplyPendingModeSnapshotChange(hasRequest, currentParamMode, modeCount, action, rememberedMode,
+                                                     std::forward<SaveOutgoing>(saveOutgoing),
+                                                     std::forward<RestoreIncoming>(restoreIncoming));
   if (result == PendingModeResult::Applied)
     setCurrentMode(std::clamp(rememberedMode, 0, modeCount - 1));
   return result;

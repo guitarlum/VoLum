@@ -76,12 +76,11 @@ void NeuralAmpModeler::_VolumRestorePreFromSlot(const volum::VoLumAmpSettings& s
 
 void NeuralAmpModeler::_VolumRestorePostFromSlot(volum::VoLumAmpSettings& s)
 {
-  mVolumPendingModeChanges.Discard(
-    volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)
-    | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)
-    | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)
-    | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Tremolo)
-    | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus));
+  mVolumPendingModeChanges.Discard(volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Delay)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Reverb)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Tremolo)
+                                   | volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus));
   if (!s.postValid)
   {
     const volum::VoLumAmpSettings defaults;

@@ -1532,8 +1532,7 @@ void NeuralAmpModeler::_VolumApplyPendingDualAmpChange()
   const bool nowOn = GetParam(kDualAmpActive)->Bool();
   // Uncustomised-pan heuristic: when both lanes are still centered, split them
   // hard L/R. A user who has panned either lane keeps their layout.
-  if (nowOn && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3
-      && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
+  if (nowOn && std::abs(GetParam(kMainAmpPan)->Value()) < 1e-3 && std::abs(GetParam(kSupportAmpPan)->Value()) < 1e-3)
   {
     mSupportPolarityInvert.store(true);
     _VolumActiveScene().supportPolarityInvert = true;
@@ -1566,24 +1565,12 @@ void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource sou
 
   switch (paramIdx)
   {
-    case kPrePitchMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::PrePitch);
-      break;
-    case kDelayMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Delay);
-      break;
-    case kReverbMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Reverb);
-      break;
-    case kReverbSubMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb);
-      break;
-    case kTremoloMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Tremolo);
-      break;
-    case kChorusMode:
-      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Chorus);
-      break;
+    case kPrePitchMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::PrePitch); break;
+    case kDelayMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Delay); break;
+    case kReverbMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Reverb); break;
+    case kReverbSubMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb); break;
+    case kTremoloMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Tremolo); break;
+    case kChorusMode: mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Chorus); break;
     default: break;
   }
 }
@@ -1613,8 +1600,8 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
 
   apply(
     volum::ModeSnapshotTarget::PrePitch, currentPitchMode, volum::kVoLumPitchModeCount,
-    mVolumPreRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply,
-    mVolumPrePitchMode, [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
+    mVolumPreRestoreInProgress ? volum::PendingModeAction::Retry : volum::PendingModeAction::Apply, mVolumPrePitchMode,
+    [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
     [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode); });
   apply(
     volum::ModeSnapshotTarget::Delay, currentDelayMode, volum::kVoLumDelayModeCount,
@@ -1629,8 +1616,7 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
 
   auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
   const auto oktaverbAction = volum::OktaverbPendingModeAction(
-    currentReverbMode == volum::kVoLumReverbModeOktaverb,
-    mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress);
+    currentReverbMode == volum::kVoLumReverbModeOktaverb, mVolumReverbRestoreInProgress || mVolumPostRestoreInProgress);
   const auto oktaverbResult = volum::ApplyPendingNestedModeSnapshotChange(
     (pending & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, currentOktaverbMode, 3,
     oktaverbAction, oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
@@ -1644,9 +1630,8 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
   apply(
     volum::ModeSnapshotTarget::Tremolo, currentTremoloMode, volum::kVoLumTremoloModeCount,
     mVolumTremoloRestoreInProgress || mVolumPostRestoreInProgress ? volum::PendingModeAction::Retry
-                                                                 : volum::PendingModeAction::Apply,
-    mVolumEffectSettings.tremoloMode,
-    [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
+                                                                  : volum::PendingModeAction::Apply,
+    mVolumEffectSettings.tremoloMode, [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
     [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode); });
   apply(
     volum::ModeSnapshotTarget::Chorus, currentChorusMode, volum::kVoLumChorusModeCount,
@@ -1731,8 +1716,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
       if (mVolumInitComplete && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
-        _VolumSaveDelayModeSnapshot(
-          std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
+        _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
       }
       break;
     case kReverbActive:
@@ -1746,8 +1730,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
       if (mVolumInitComplete && !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-        _VolumSaveReverbModeSnapshot(
-          std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
+        _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
       }
       break;
     case kChorusActive:
@@ -1960,23 +1943,15 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         if (auto* c = pGraphics->GetControlWithParamIdx(kToneTreble))
           c->SetDisabled(!active);
         break;
-      case kDelayMode:
-        _UpdateVoLumLayout(pGraphics);
-        break;
-      case kReverbMode:
-        _UpdateVoLumLayout(pGraphics);
-        break;
+      case kDelayMode: _UpdateVoLumLayout(pGraphics); break;
+      case kReverbMode: _UpdateVoLumLayout(pGraphics); break;
       case kReverbSubMode:
         if (GetParam(kReverbMode)->Int() != volum::kVoLumReverbModeOktaverb)
           break;
         _UpdateVoLumLayout(pGraphics);
         break;
-      case kTremoloMode:
-        _UpdateVoLumLayout(pGraphics);
-        break;
-      case kChorusMode:
-        _UpdateVoLumLayout(pGraphics);
-        break;
+      case kTremoloMode: _UpdateVoLumLayout(pGraphics); break;
+      case kChorusMode: _UpdateVoLumLayout(pGraphics); break;
       case kTremoloSync:
       case kDelaySync:
         // Sync swaps the free-running knob (Rate/Time) for the tempo DIVISION

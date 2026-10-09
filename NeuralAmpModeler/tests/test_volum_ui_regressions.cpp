@@ -110,23 +110,19 @@ struct ModeSnapshotHarness
   void ApplyPendingOnMainThread()
   {
     const unsigned mask = pending.Take();
-    volum::ApplyPendingModeSnapshotChange(
-      (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus)) != 0, currentMode, 2,
-      volum::PendingModeAction::Apply, trackedMode,
-      [this](int mode) {
-        ++saveCalls;
-        slots[mode] = liveKnob;
-      },
-      [this](int mode) {
-        ++restoreCalls;
-        liveKnob = slots[mode];
-      });
+    volum::ApplyPendingModeSnapshotChange((mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Chorus)) != 0,
+                                          currentMode, 2, volum::PendingModeAction::Apply, trackedMode,
+                                          [this](int mode) {
+                                            ++saveCalls;
+                                            slots[mode] = liveKnob;
+                                          },
+                                          [this](int mode) {
+                                            ++restoreCalls;
+                                            liveKnob = slots[mode];
+                                          });
   }
 
-  void SaveCurrentToTrackedMode()
-  {
-    slots[trackedMode] = liveKnob;
-  }
+  void SaveCurrentToTrackedMode() { slots[trackedMode] = liveKnob; }
 
   void IdleTick()
   {
@@ -184,8 +180,8 @@ struct OktaverbSnapshotHarness
     const auto action = volum::OktaverbPendingModeAction(oktaverbSelected, false);
     return volum::ApplyPendingNestedModeSnapshotChange(
       (mask & volum::ModeSnapshotBit(volum::ModeSnapshotTarget::Oktaverb)) != 0, requestedSubMode, 2, action,
-      rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; },
-      [this](int slot) { liveKnob = slots[slot]; }, [this](int mode) { currentSubMode = mode; });
+      rememberedSubMode, [this](int slot) { slots[slot] = liveKnob; }, [this](int slot) { liveKnob = slots[slot]; },
+      [this](int mode) { currentSubMode = mode; });
   }
 };
 } // namespace
@@ -1301,12 +1297,11 @@ TEST_CASE("F-08 stale Oktaverb request is dropped outside Oktaverb")
 TEST_CASE("F-08 idle and serialization consume pending mode changes before saving")
 {
   const std::string source = ReadPluginSource();
-  const std::string settings =
-    ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsLocks.inc.cpp");
+  const std::string settings = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSettingsLocks.inc.cpp");
   const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
-  const std::string serialize = MemberFnUntilNext(source, "bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const");
-  const std::string apply =
-    MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyPendingModeChanges()");
+  const std::string serialize =
+    MemberFnUntilNext(source, "bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const");
+  const std::string apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyPendingModeChanges()");
 
   const auto idleApply = idle.find("_VolumApplyPendingModeChanges();");
   const auto idleSave = idle.find("_VolumSaveCurrentToSettings();");
@@ -2833,8 +2828,8 @@ TEST_CASE("tier2a model apply latches latency instead of updating it on the audi
 TEST_CASE("F-40 OnParamChange only latches main-thread layout and support work")
 {
   const std::string source = ReadPluginSource();
-  const std::string body =
-    MemberFnUntilNext(source, "void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)");
+  const std::string body = MemberFnUntilNext(
+    source, "void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)");
 
   RequireDoesNotContain(body, "_UpdateVoLumLayout(");
   RequireDoesNotContain(body, "_VolumRefreshSupportChannels(");
