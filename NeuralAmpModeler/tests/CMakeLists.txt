@@ -55,6 +55,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_processing_plan.cpp
   test_volum_dsp_cache_params.cpp
   test_volum_dsp_staging.cpp
+  test_volum_reset_exclusion.cpp
   test_volum_output_mode.cpp
   test_volum_master_safety.cpp
   test_volum_chunk_codec.cpp

@@ -13,6 +13,7 @@
 #include "Colors.h"
 #include "ToneStack.h"
 #include "VoLumIrShapingDsp.h"
+#include "VoLumResetExclusion.h"
 #include "VoLumDualAmpPlan.h"
 #include "VoLumPreEffects.h"
 #include "VoLumPitchShifter.h"
@@ -46,6 +47,8 @@
 #include "VoLumTremolo.h"
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumLatencyRequests.h"
+#include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
@@ -827,8 +830,13 @@ private:
 
   // Make sure that the latency is reported correctly.
   int _ReportedLatencySamples() const;
+  // Only the owner of the live model pointers may call this (see mLiveLatency).
+  void _VolumPublishLiveLatency();
+  // Recompute and report now; main thread, or OnReset after the exclusion is released.
   void _UpdateLatency();
-  void _ApplyLatchedLatency();
+  void _ApplyReportedLatency(int latency);
+  // The only writer of mVolumSupportSelected: a change is a latency input.
+  void _VolumSetSupportSelected(bool selected);
 
   // Plugin PDC plus, in the standalone, the audio device's own round trip.
   volum::LatencyReport _VolumLatencyReport() const;
@@ -939,16 +947,19 @@ private:
   bool mPostChorusWasActive = false;
   bool mPrePitchWasActive = false;
   bool mPreCompWasActive = false;
-  // Audio thread stores the sample count and sets the flag. OnIdle applies it.
-  // OnIdle must not read mModel: the audio thread owns those pointers.
-  std::atomic<int> mPendingLatency{0};
-  std::atomic<bool> mLatencyDirty{false};
+  // Latency of the live models; _ReportedLatencySamples reads this, never the pointers.
+  volum::LiveLatencySnapshot mLiveLatency;
+  // Raised from any thread when a latency input changes; OnIdle recomputes.
+  volum::LatencyRecomputeRequests mLatencyRequests;
   // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
   // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
   // The audio thread only moves unique_ptrs into the graveyards; ~ResamplingNAM
   // and ~ImpulseResponse run on OnIdle. Also covers the published path buffers.
   // Nothing is allocated or destroyed while it is held off the audio thread.
   mutable std::mutex mStagingMutex;
+  // VoLum: held by OnReset for its whole reconfiguration, try-locked by ProcessBlock.
+  // Taken before mStagingMutex on both sides.
+  volum::ResetExclusion mResetExclusion;
   // Audio thread writes, OnIdle destroys. Reserved so push_back never reallocates
   // in the callback. Overflow last-resorts to reset() on this thread.
   std::vector<std::unique_ptr<ResamplingNAM>> mDspGraveyard;
@@ -977,10 +988,8 @@ private:
   // selected or its panel is edited; the audio thread reads them lock-free and
   // applies trim + cuts on the IR lane, after the convolver and before the DC
   // blocker. A cut Hz of 0 bypasses that filter. Not a DAW parameter.
-  recursive_linear_filter::HighPass mIrLowCut; // MAIN low-cut (high-pass)
-  recursive_linear_filter::LowPass mIrHighCut; // MAIN high-cut (low-pass)
-  recursive_linear_filter::HighPass mSupportIrLowCut; // SUPPORT low-cut
-  recursive_linear_filter::LowPass mSupportIrHighCut; // SUPPORT high-cut
+  volum::IrShapingLane mIrShaping; // MAIN low-cut (high-pass) + high-cut (low-pass)
+  volum::IrShapingLane mSupportIrShaping; // SUPPORT low-cut + high-cut
   std::atomic<double> mIrTrimLin{1.0};
   std::atomic<double> mSupportIrTrimLin{1.0};
   std::atomic<double> mIrLowCutHz{0.0};
