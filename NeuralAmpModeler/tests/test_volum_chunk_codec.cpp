@@ -1375,6 +1375,27 @@ TEST_CASE("ResolveRestoreSelection: no chunk (standalone launch) uses the settin
   CHECK(sel.activePresetId == "preset_settings");
 }
 
+TEST_CASE("Id-tail decode distinguishes an explicitly empty custom-scene map from an absent legacy key")
+{
+  const auto legacy = volum::IdTailFromJson({{"v", 5}});
+  CHECK_FALSE(legacy.customScenesPresent);
+  CHECK(legacy.customScenes.empty());
+
+  const auto currentOmitted = volum::IdTailFromJson({{"v", volum::kVoLumIdTailSchema}});
+  CHECK(currentOmitted.customScenesPresent);
+  CHECK(currentOmitted.customScenes.empty());
+
+  const auto currentExplicit = volum::IdTailFromJson(
+    {{"v", volum::kVoLumIdTailSchema}, {"customScenes", nlohmann::json::object()}});
+  CHECK(currentExplicit.customScenesPresent);
+  CHECK(currentExplicit.customScenes.empty());
+
+  // Presence is decode-only. Keeping the existing omission for an empty map
+  // preserves serialized bytes for the same state.
+  volum::ChunkIdTail empty;
+  CHECK_FALSE(volum::IdTailToJson(empty).contains("customScenes"));
+}
+
 TEST_CASE("ValidateRestoreSelection keeps a selection the content store still resolves")
 {
   const auto sel = volum::ValidateRestoreSelection({"amp_a", "preset_a"}, true, true);

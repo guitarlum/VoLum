@@ -171,6 +171,10 @@ struct ChunkIdTail
   // 1.3.0: this instance's live scene per custom amp id. Previously shared through
   // the content library, where one instance's catalog write moved another's knobs.
   std::map<std::string, VoLumAmpSettings> customScenes;
+  // Decode-only presence bit. An explicitly stored empty object means "clear this
+  // instance's scenes"; a missing key in an older tail means "leave them alone".
+  // IdTailToJson deliberately ignores this bit, so it cannot change chunk bytes.
+  bool customScenesPresent = false;
 
   ChunkIdTail()
   {
@@ -484,6 +488,12 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   ChunkIdTail t;
   if (!j.is_object())
     return t;
+  // Schema 6 introduced per-instance custom scenes. Its writer keeps omitting an
+  // empty object for byte compatibility, so schema >= 6 itself makes that empty
+  // map authoritative. Older tails with no key retain the instance's migration
+  // fallback.
+  if (j.contains("v") && j["v"].is_number_integer() && j["v"].get<int>() >= 6)
+    t.customScenesPresent = true;
   auto str = [](const nlohmann::json& v) { return v.is_string() ? v.get<std::string>() : std::string(); };
   if (j.contains("midiCh") && j["midiCh"].is_number_integer())
     t.midiCh = std::clamp(j["midiCh"].get<int>(), 0, 16);
@@ -535,7 +545,10 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   if (j.contains("lockedPostChorus"))
     t.lockedPostChorus = ChorusTailFromJson(j["lockedPostChorus"]);
   if (j.contains("customScenes"))
+  {
+    t.customScenesPresent = true;
     t.customScenes = CustomScenesFromJson(j["customScenes"]);
+  }
   return t;
 }
 

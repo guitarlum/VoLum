@@ -195,7 +195,7 @@ TEST_CASE("ProcessMidiMsg is an integer-only RT handoff")
   const std::string beginNeedle = "void NeuralAmpModeler::ProcessMidiMsg";
   const auto begin = source.find(beginNeedle);
   REQUIRE(begin != std::string::npos);
-  const auto end = source.find("void NeuralAmpModeler::OnIdle", begin);
+  const auto end = source.find("void NeuralAmpModeler::_VolumApplyPendingStateRestore", begin);
   REQUIRE(end != std::string::npos);
   const std::string body = source.substr(begin, end - begin);
 

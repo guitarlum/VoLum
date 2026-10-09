@@ -797,95 +797,29 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
       mVolumUiMode = volum::UiModeFromString(idTail.uiMode);
-      // 1.3.0: the project's own custom-amp scenes. Installed before the custom
-      // re-focus below, which reads them through _VolumCustomScene. An older chunk
-      // has none, and the first focus then migrates whatever the pre-1.3.0 shared
-      // library still holds for that amp.
-      if (!idTail.customScenes.empty())
-        mVolumCustomScenes = idTail.customScenes;
     }
 
-    // Scoped rather than assigned: UnserializeState now catches exceptions instead
-    // of letting them reach the host, and a throw between these two points used to
-    // leave the flag false for the life of the instance. That silently switches off
-    // SUPPORT/PRE model loading, latency reporting, settings persistence and
-    // preset-dirty tracking - a quieter failure than the crash it replaced.
+    // The host owns this callback's thread. Record the resolved selection and let
+    // OnIdle (or OnUIOpen) do every rig/UI mutation on the main thread. Empty is
+    // authoritative even without an id tail: a pre-1.2 project is a factory-amp
+    // project and must not inherit volum-settings.json's machine-global custom amp.
+    const volum::RestoreSelection chunkSelection =
+      haveIdTail ? volum::RestoreSelection{idTail.customMainId, idTail.activePresetId}
+                 : volum::RestoreSelection{};
+    const volum::RestoreSelection restored = volum::ResolveRestoreSelection(
+      /*loadedFromChunk=*/true, chunkSelection, {mVolumRestoreCustomMainId, mVolumRestorePresetId});
     {
-      struct InitCompleteScope
-      {
-        bool& flag;
-        explicit InitCompleteScope(bool& f)
-        : flag(f)
-        {
-          flag = false;
-        }
-        ~InitCompleteScope() { flag = true; }
-      } initScope(mVolumInitComplete);
-      _VolumRestoreFromSettings(mVolumAmpIdx);
-      _VolumApplyLiveLockSnapshots();
-      _VolumRefreshChannels();
-      mVolumNeedsLoad.store(true);
-    }
-
-    // After base restore, re-focus a custom MAIN amp recorded in the id tail so
-    // its scene + cabs + .nam load (the binary per-amp array only covers factory
-    // amps). Custom support is resolved by _VolumApplyAmpSettings from the
-    // restored scene's supportCustomId.
-    if (haveIdTail)
-    {
-      // Seed the deferred editor-open restore with the CHUNK's selection so
-      // OnUIOpen -> _VolumRestoreSessionSelection re-applies THIS project's custom
-      // amp/preset to the freshly built UI. The constructor already primed these
-      // members from volum-settings.json (the machine-global last pick); for a
-      // plugin that source is wrong, so the chunk wins - even when empty (a
-      // factory-amp project must not resurrect the settings' custom amp). Resetting
-      // the one-shot guard lets the restore run again after this state load. This
-      // fixes "VST3/AU reopen drops the focused custom amp" (the immediate select
-      // below only reaches the UI when an editor already exists at load time).
-      const volum::RestoreSelection restored = volum::ResolveRestoreSelection(
-        /*loadedFromChunk=*/true, {idTail.customMainId, idTail.activePresetId},
-        {mVolumRestoreCustomMainId, mVolumRestorePresetId});
-      mVolumRestoreCustomMainId = restored.customMainId;
-      mVolumRestorePresetId = restored.activePresetId;
-      mVolumDidRestorePresetSelection = false;
-      VOLUM_LOG("chunk", "id tail: customMain='" + restored.customMainId + "' preset='" + restored.activePresetId
-                           + "' ampIdx=" + std::to_string(mVolumAmpIdx));
-
-      const int cmi = volum::custom::CustomAmpIndexById(idTail.customMainId);
-      if (cmi >= 0)
-        _VolumSelectCustomAmp(cmi); // applies the custom scene + cabs + .nam load
-      _VolumSyncPresetOwner(); // publish the focused amp's owner key (also clears preset)
-      // Restore the active-preset label if it still exists in this amp's bank.
-      // The dirty baseline must be the preset's STORED content, not the restored
-      // live scene: a project saved with unsaved edits on top of a preset must
-      // reopen as dirty (mirrors the standalone session-restore fix).
-      if (!idTail.activePresetId.empty())
-      {
-        if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, idTail.activePresetId))
-        {
-          mVolumActivePresetId = factory->id;
-          mVolumRecalledSnapshot = factory->settings;
-          mVolumHasRecalledSnapshot = true;
-          _VolumRememberActivePreset();
-        }
-        else
-        {
-          const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
-          auto it = banks.find(_VolumActiveOwnerKey());
-          if (it != banks.end())
-            for (const auto& pr : it->second)
-              if (pr.id == idTail.activePresetId)
-              {
-                mVolumActivePresetId = pr.id;
-                mVolumRecalledSnapshot = pr.settings;
-                mVolumHasRecalledSnapshot = true;
-                _VolumRememberActivePreset();
-                break;
-              }
-        }
-      }
-      mVolumLastRecalledPlaySlot = idTail.lastPlaySlot;
-      _VolumRefreshPresetBar();
+      std::lock_guard<std::mutex> lock(mVolumStateRestoreMutex);
+      mVolumPendingStateRestore = {};
+      mVolumPendingStateRestore.applyRigState = true;
+      mVolumPendingStateRestore.hasIdTail = haveIdTail;
+      mVolumPendingStateRestore.customMainId = restored.customMainId;
+      mVolumPendingStateRestore.activePresetId = restored.activePresetId;
+      mVolumPendingStateRestore.lastPlaySlot = idTail.lastPlaySlot;
+      mVolumPendingStateRestore.replaceCustomScenes = idTail.customScenesPresent;
+      if (idTail.customScenesPresent)
+        mVolumPendingStateRestore.customScenes = idTail.customScenes;
+      mVolumStateRestorePending.store(true, std::memory_order_release);
     }
   }
 
@@ -918,5 +852,15 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
     return -1;
   }
   _UnserializeApplyConfig(config);
+  // Headerless NAM-era chunks carry parameters only. They still authoritatively
+  // mean "no custom VoLum amp", but must not run the per-amp rig restore because
+  // there is no such block to apply.
+  {
+    std::lock_guard<std::mutex> lock(mVolumStateRestoreMutex);
+    mVolumPendingStateRestore = {};
+    mVolumPendingStateRestore.applyRigState = false;
+    mVolumStateRestorePending.store(true, std::memory_order_release);
+  }
+  mVolumUiSyncPending.store(true);
   return pos;
 }

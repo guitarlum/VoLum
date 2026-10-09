@@ -217,6 +217,10 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   // and dropped its preset. Nothing outgoing is snapshotted: the file replaced it.
   if (alsoSettings && !pack.settingsJson.empty())
   {
+    // The imported settings document is the whole machine snapshot. Current
+    // writers omit an empty custom-scene object, so clear the live map first;
+    // any scenes present in the document are then loaded back below.
+    mVolumCustomScenes.clear();
     _VolumLoadSettingsFromFile();
     _VolumSelectFactoryAmp(mVolumAmpIdx, /*snapshotOutgoing=*/false);
     _VolumApplyLiveLockSnapshots();

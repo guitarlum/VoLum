@@ -1369,13 +1369,14 @@ TEST_CASE("VST3/AU reopen routes the chunk's custom amp + preset through the def
   // cannot silently drop it back to the immediate-select-only path.
   const std::string plugin = ReadPluginSource();
   RequireContains(plugin, "const volum::RestoreSelection restored = volum::ResolveRestoreSelection(");
-  RequireContains(plugin, "mVolumRestoreCustomMainId = restored.customMainId;");
-  RequireContains(plugin, "mVolumRestorePresetId = restored.activePresetId;");
+  RequireContains(plugin, "mVolumPendingStateRestore.customMainId = restored.customMainId;");
+  RequireContains(plugin, "mVolumRestoreCustomMainId = pending.customMainId;");
+  RequireContains(plugin, "mVolumRestorePresetId = pending.activePresetId;");
   RequireContains(plugin, "mVolumDidRestorePresetSelection = false;");
   // Second stage: the editor-open consumer drops ids the content store cannot
   // resolve, so a deleted custom amp cannot leave an ownerless preset label.
   RequireContains(plugin, "volum::ValidateRestoreSelection(");
-  RequireContains(plugin, "mVolumLastRecalledPlaySlot = idTail.lastPlaySlot;");
+  RequireContains(plugin, "mVolumLastRecalledPlaySlot = pending.lastPlaySlot;");
 }
 
 TEST_CASE("AMP rotated spine is drawn directly, not cached behind a layer")
@@ -1524,13 +1525,15 @@ TEST_CASE("SerializeState carries custom-amp scenes in the chunk, not the librar
   // belongs to the instance and travels in the DAW chunk's id tail, so a host
   // state-save must NOT write the library at all.
   const std::string source = ReadPluginSource();
+  const std::string idTail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
 
   // Single-line substrings only: file line endings differ across platforms (CRLF
   // on Windows checkouts, LF on macOS/Linux), so a multi-line "\r\n" match would
   // pass on Windows but fail on macOS CI.
   RequireContains(source, "const_cast<NeuralAmpModeler*>(this)->_VolumSaveCurrentToSettings();");
   RequireContains(source, "idTail.customScenes = mVolumCustomScenes;");
-  RequireContains(source, "if (!idTail.customScenes.empty())");
+  RequireContains(idTail, "if (!t.customScenes.empty())");
+  RequireContains(source, "if (pending.replaceCustomScenes)");
 
   // The instance's scene map is the only home for a custom amp's live knobs. A
   // reference to the library's map here would be the shared-state bug returning.
@@ -1890,6 +1893,53 @@ TEST_CASE("Loading DAW state into an open editor re-derives the visible selectio
   const auto clear = source.find("mVolumUiSyncPending.store(false);", openPos);
   REQUIRE(clear != std::string::npos);
   CHECK(clear < source.find("\n}", openPos));
+}
+
+TEST_CASE("Unserialize regression: host state restore defers rig and UI work to the main thread")
+{
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+  const std::string source = ReadPluginSource();
+
+  const std::string restore = MemberFnUntilNext(
+    unserialize, "int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  RequireContains(restore, "mVolumStateRestorePending.store(true");
+  RequireDoesNotContain(restore, "_VolumRefreshChannels();");
+  RequireDoesNotContain(restore, "_VolumSelectCustomAmp(");
+
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "_VolumApplyPendingStateRestore();");
+  const std::string apply = MemberFnUntilNext(
+    source, "void NeuralAmpModeler::_VolumApplyPendingStateRestore()");
+  RequireContains(apply, "_VolumRefreshChannels();");
+  RequireContains(apply, "_VolumSelectCustomAmp(cmi);");
+}
+
+TEST_CASE("Unserialize regression: an explicitly empty current chunk custom-scene map clears stale scenes")
+{
+  const std::string idTail = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumChunkIdTail.h");
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+  const std::string pack = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPackActions.inc.cpp");
+
+  RequireContains(idTail, "bool customScenesPresent = false;");
+  RequireContains(idTail, "t.customScenesPresent = true;");
+  RequireContains(unserialize, "if (idTail.customScenesPresent)");
+  RequireDoesNotContain(unserialize, "if (!idTail.customScenes.empty())");
+  RequireContains(pack, "mVolumCustomScenes.clear();");
+  CHECK(pack.find("mVolumCustomScenes.clear();") < pack.find("_VolumLoadSettingsFromFile();"));
+}
+
+TEST_CASE("Unserialize regression: legacy chunks override the machine-global custom amp with factory selection")
+{
+  const std::string unserialize = ReadText(RepoRoot() / "NeuralAmpModeler" / "Unserialization.cpp");
+
+  const std::string restore = MemberFnUntilNext(
+    unserialize, "int NeuralAmpModeler::_UnserializeStateWithKnownVersion(");
+  RequireContains(restore, "const volum::RestoreSelection chunkSelection =");
+  RequireContains(restore, "haveIdTail ? volum::RestoreSelection{idTail.customMainId, idTail.activePresetId}");
+  RequireContains(restore, ": volum::RestoreSelection{};");
+  RequireContains(restore, "/*loadedFromChunk=*/true, chunkSelection,");
+  RequireContains(unserialize, "mVolumPendingStateRestore.applyRigState = false;");
+  RequireContains(unserialize, "int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(");
 }
 
 TEST_CASE("Forcing DIRECT for a custom IR reads the persisted channel position, not the runtime cache")

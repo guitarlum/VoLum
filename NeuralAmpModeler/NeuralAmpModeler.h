@@ -617,6 +617,21 @@ private:
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
   std::atomic<bool> mVolumMainLoadFailed{false};
+  struct VolumPendingStateRestore
+  {
+    bool applyRigState = false;
+    bool hasIdTail = false;
+    std::string customMainId;
+    std::string activePresetId;
+    int lastPlaySlot = -1;
+    bool replaceCustomScenes = false;
+    std::map<std::string, volum::VoLumAmpSettings> customScenes;
+  };
+  std::mutex mVolumStateRestoreMutex;
+  VolumPendingStateRestore mVolumPendingStateRestore;
+  // UnserializeState records only the intent. OnIdle/OnUIOpen consume it on the
+  // main thread before touching rig vectors, custom selection, or IGraphics.
+  std::atomic<bool> mVolumStateRestorePending{false};
   // Set when host state was restored into an already-open editor, consumed by the
   // next OnIdle. UnserializeState runs on the host's thread, and the applier it
   // wants writes IGraphics controls, so the call has to cross to the UI thread.
@@ -813,6 +828,8 @@ private:
   int _UnserializeStateWithKnownVersion(const iplug::IByteChunk& chunk, int startPos);
   // Hopefully 0.7.3-0.7.8, but no gurantees
   int _UnserializeStateWithUnknownVersion(const iplug::IByteChunk& chunk, int startPos);
+  // Consume the rig/UI portion of a host state restore on the main thread.
+  void _VolumApplyPendingStateRestore();
 
   // Update all controls that depend on a model
   void _UpdateControlsFromModel();

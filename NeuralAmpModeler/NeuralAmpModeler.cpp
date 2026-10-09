@@ -895,8 +895,109 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
     mVolumMidiQueue.Enqueue(*slot);
 }
 
+void NeuralAmpModeler::_VolumApplyPendingStateRestore()
+{
+  if (!mVolumStateRestorePending.exchange(false, std::memory_order_acquire))
+    return;
+
+  VolumPendingStateRestore pending;
+  {
+    std::lock_guard<std::mutex> lock(mVolumStateRestoreMutex);
+    pending = std::move(mVolumPendingStateRestore);
+  }
+
+  // Install the project's custom scenes before re-focusing its custom amp below.
+  // Schema-6 empty is authoritative; older tails leave the migration fallback.
+  if (pending.replaceCustomScenes)
+    mVolumCustomScenes = std::move(pending.customScenes);
+
+  // The binary per-amp block always describes a factory amp. Drop any custom
+  // focus left by the previous state before applying it; a valid id-tail custom
+  // selection is re-focused below.
+  mVolumCustomMainIdx = -1;
+
+  // Headerless NAM-era chunks carry parameters but no per-amp rig block. Keep
+  // those decoded parameters; versioned VoLum chunks apply their carried scene.
+  // Scoped rather than assigned: a throw between these two points must not leave
+  // loading, persistence, latency and dirty tracking disabled for the instance.
+  if (pending.applyRigState)
+  {
+    struct InitCompleteScope
+    {
+      bool& flag;
+      explicit InitCompleteScope(bool& f)
+      : flag(f)
+      {
+        flag = false;
+      }
+      ~InitCompleteScope() { flag = true; }
+    } initScope(mVolumInitComplete);
+    _VolumRestoreFromSettings(mVolumAmpIdx);
+    _VolumApplyLiveLockSnapshots();
+    _VolumRefreshChannels();
+    mVolumNeedsLoad.store(true);
+  }
+
+  // Seed editor-open from the chunk, including an empty (factory) selection.
+  // Legacy chunks have no id tail, so their documented selection is factory,
+  // never the machine-global custom amp read from volum-settings.json.
+  mVolumRestoreCustomMainId = pending.customMainId;
+  mVolumRestorePresetId = pending.activePresetId;
+  mVolumDidRestorePresetSelection = false;
+
+  if (!pending.hasIdTail)
+  {
+    // Presets did not exist in this chunk schema. Do not leave a custom amp's
+    // label/baseline visible after the authoritative factory selection lands.
+    volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
+    mVolumActivePresetId.clear();
+    mVolumHasRecalledSnapshot = false;
+    _VolumRefreshPresetBar();
+    return;
+  }
+
+  VOLUM_LOG("chunk", "id tail: customMain='" + pending.customMainId + "' preset='" + pending.activePresetId
+                       + "' ampIdx=" + std::to_string(mVolumAmpIdx));
+
+  const int cmi = volum::custom::CustomAmpIndexById(pending.customMainId);
+  if (cmi >= 0)
+    _VolumSelectCustomAmp(cmi);
+  _VolumSyncPresetOwner();
+
+  // Restore the active-preset label against the preset's stored content. A
+  // project saved with edits on top of a preset must reopen as dirty.
+  if (!pending.activePresetId.empty())
+  {
+    if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, pending.activePresetId))
+    {
+      mVolumActivePresetId = factory->id;
+      mVolumRecalledSnapshot = factory->settings;
+      mVolumHasRecalledSnapshot = true;
+      _VolumRememberActivePreset();
+    }
+    else
+    {
+      const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+      auto it = banks.find(_VolumActiveOwnerKey());
+      if (it != banks.end())
+        for (const auto& pr : it->second)
+          if (pr.id == pending.activePresetId)
+          {
+            mVolumActivePresetId = pr.id;
+            mVolumRecalledSnapshot = pr.settings;
+            mVolumHasRecalledSnapshot = true;
+            _VolumRememberActivePreset();
+            break;
+          }
+    }
+  }
+  mVolumLastRecalledPlaySlot = pending.lastPlaySlot;
+  _VolumRefreshPresetBar();
+}
+
 void NeuralAmpModeler::OnIdle()
 {
+  _VolumApplyPendingStateRestore();
   // Host state restored into an open editor. Only consumed while an editor exists, so
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
@@ -1391,6 +1492,7 @@ void NeuralAmpModeler::OnUIOpen()
 {
   Plugin::OnUIOpen();
   mVolumEditorOpen.store(true, std::memory_order_release);
+  _VolumApplyPendingStateRestore();
 
   if (mModel != nullptr)
   {
