@@ -21,6 +21,9 @@ public:
     mSampleRate = sampleRate;
     mMaxBlockSize = maxBlockSize;
   };
+  // VoLum: size every output buffer for numFrames up front (off the audio thread), so Process()
+  // calls up to that size never allocate. numChannels must be the count Process() will use.
+  virtual void Reserve(const int /*numChannels*/, const int /*numFrames*/) {}
   // Set the various parameters of your tone stack by name.
   // Call this during OnParamChange()
   virtual void SetParam(const std::string name, const double val) = 0;
@@ -44,6 +47,7 @@ public:
 
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, const int numChannels, const int numFrames) override;
   void Reset(const double sampleRate, const int maxBlockSize) override;
+  void Reserve(const int numChannels, const int numFrames) override;
   // :param val: Assumed to be between 0 and 10, 5 is "noon"
   void SetParam(const std::string name, const double val) override;
 

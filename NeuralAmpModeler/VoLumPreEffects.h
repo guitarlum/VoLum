@@ -32,6 +32,14 @@ public:
     _Refresh();
   }
 
+  // Size the three filters' outputs for numFrames up front (off the audio thread).
+  void Reserve(size_t numChannels, size_t numFrames)
+  {
+    mBassFilter.ReserveOutputs(numChannels, numFrames);
+    mMidFilter.ReserveOutputs(numChannels, numFrames);
+    mTrebleFilter.ReserveOutputs(numChannels, numFrames);
+  }
+
   DSP_SAMPLE** Process(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
   {
     DSP_SAMPLE** bass = mBassFilter.Process(inputs, numChannels, numFrames);

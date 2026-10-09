@@ -71,6 +71,13 @@ public:
     return ApplyIrShapingLane(in, numChannels, nFrames, sampleRate, trimLin, lowHz, highHz, mLowCut, mHighCut);
   }
 
+  // Size both cut filters' outputs for numFrames up front (off the audio thread).
+  void Reserve(const size_t numChannels, const size_t numFrames)
+  {
+    mLowCut.ReserveOutputs(numChannels, numFrames);
+    mHighCut.ReserveOutputs(numChannels, numFrames);
+  }
+
   // Every block the lane does not run, and on OnReset.
   void Reset()
   {

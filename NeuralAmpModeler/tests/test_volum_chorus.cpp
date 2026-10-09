@@ -913,3 +913,49 @@ TEST_CASE("Legacy effects JSON without chorusActive seeds from amp postChorusAct
   CHECK(loaded.chorusActive == true);
   CHECK(volum::VoLumEffectChorusActiveParam(loaded) == 1.0);
 }
+
+// F-22: the mode-switch duck used to be two sub-blocks, so its length followed the host block size
+// (a 1-frame callback ducked in 2 samples) and the sample rate. It is now a fixed time.
+namespace
+{
+double DuckMs(double sr, int block)
+{
+  ChorusDSP chorus;
+  chorus.Prepare(sr, block, 2);
+  chorus.SetParams(0.5, 0.5, 0.5, 0.5, 1.0, ChorusDSP::kClassic, sr);
+  std::vector<double> l(4096), r(4096);
+  for (size_t i = 0; i < l.size(); ++i)
+    l[i] = r[i] = 0.3 * std::sin(2.0 * M_PI * 220.0 * static_cast<double>(i) / sr);
+  const auto run = [&](size_t frames) {
+    for (size_t at = 0; at < frames; at += static_cast<size_t>(block))
+    {
+      double* io[2] = {l.data() + at, r.data() + at};
+      chorus.Process(io, 2, std::min<int>(block, static_cast<int>(frames - at)));
+    }
+  };
+  run(2048);
+  const uint64_t requested = chorus.FramesProcessed();
+  chorus.SetParams(0.5, 0.5, 0.5, 0.5, 1.0, ChorusDSP::kEnsemble, sr);
+  run(4096);
+  REQUIRE(chorus.ActiveMode() == ChorusDSP::kEnsemble);
+  return static_cast<double>(chorus.ModeSwitchFrame() - requested) * 1000.0 / sr;
+}
+} // namespace
+
+TEST_CASE("Chorus: the mode-switch duck is a fixed time, whatever the block size or sample rate")
+{
+  const double reference = DuckMs(48000.0, 1024);
+  CHECK(reference > 0.9);
+  CHECK(reference < 1.8);
+  // Same time in ms: sub-block granularity (32 frames) is the only slack.
+  for (int block : {1, 7, 32, 256, 1024})
+  {
+    INFO("block " << block);
+    CHECK(std::abs(DuckMs(48000.0, block) - reference) < 0.7);
+  }
+  for (double sr : {44100.0, 96000.0})
+  {
+    INFO("rate " << sr);
+    CHECK(std::abs(DuckMs(sr, 128) - reference) < 0.4);
+  }
+}
