@@ -933,36 +933,7 @@ void NeuralAmpModeler::_VolumReconcileActiveIr()
   // support lane on the bare raw amp.
   if (!scene.supportActiveIrId.empty() && volum::custom::IRIndexById(scene.supportActiveIrId) < 0)
   {
-    _VolumClearIR(true);
-    if (mVolumCustomSupportIdx >= 0)
-    {
-      const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
-      const auto slots = volum::custom::AmpSlots(amp);
-      int chosen = volum::custom::kDirectSlot;
-      for (int s : slots) // prefer a real cab over DIRECT
-        if (s != volum::custom::kDirectSlot)
-        {
-          chosen = s;
-          break;
-        }
-      if (chosen == volum::custom::kDirectSlot && !slots.empty())
-        chosen = slots.front();
-      const auto chs = volum::custom::AmpSlotChannels(amp, chosen);
-      mVolumCustomSupportSlot = chosen;
-      mVolumCustomSupportChannel = chs.empty() ? 1 : volum::custom::SnapChannel(chs, mVolumCustomSupportChannel);
-      scene.supportCustomSlot = mVolumCustomSupportSlot;
-      scene.supportCustomChannel = mVolumCustomSupportChannel;
-      mVolumSupportNeedsLoad.store(true);
-      if (_VolumSupportFocused())
-        _VolumApplyFocusedLaneCabs();
-    }
-    else if (GetParam(kSupportAmpIdx)->Int() >= 0)
-    {
-      GetParam(kSupportSpeakerIdx)->Set(1.0); // first baked cab
-      SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
-      _VolumRefreshSupportChannels();
-      mVolumSupportNeedsLoad.store(true);
-    }
+    _VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);
   }
 
   const std::string id = scene.activeIrId;
@@ -998,8 +969,7 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
     mVolumCustomMainSlot = fallback.slot;
     mVolumCustomMainChannel = fallback.channel;
     mVolumSpeakerIdx = sel;
-    mVolumChannelIdx =
-      volum::custom::ChannelStepIndex(volum::custom::AssignedChannels(amp), fallback.channel);
+    mVolumChannelIdx = volum::custom::ChannelStepIndex(volum::custom::AssignedChannels(amp), fallback.channel);
     _VolumSetCustomChannelStepper(mVolumCustomMainIdx, false, fallback.channel);
     // The shared cab row is SUPPORT's while that lane is focused. MAIN's
     // fallback still updates MAIN's scene; it must not repaint SUPPORT's row.
@@ -1023,5 +993,34 @@ void NeuralAmpModeler::_VolumFallbackToAvailableCab()
       row->As<VoLumSpeakerRowControl>()->SetSelected(sel);
     }
     mVolumNeedsLoad.store(true);
+  }
+}
+
+// SUPPORT's twin of _VolumFallbackToAvailableCab. A custom IR had forced the lane
+// onto its DIRECT (cab-less) capture, so retiring it must land on a real cab too:
+// the current gain stage's stock cab if there is one, else the first real cab in
+// the amp, and No Cab only for an amp that has none. Factory partners go to cab 1.
+void NeuralAmpModeler::_VolumFallbackSupportToAvailableCab(bool deferToCabSwap)
+{
+  _VolumClearIR(true, deferToCabSwap);
+  if (mVolumCustomSupportIdx >= 0)
+  {
+    auto& scene = _VolumActiveScene();
+    const auto amp = volum::custom::CustomAmpAt(mVolumCustomSupportIdx);
+    const auto fallback = volum::custom::StockCabFallback(amp, mVolumCustomSupportChannel);
+    mVolumCustomSupportSlot = fallback.slot;
+    mVolumCustomSupportChannel = fallback.channel;
+    scene.supportCustomSlot = mVolumCustomSupportSlot;
+    scene.supportCustomChannel = mVolumCustomSupportChannel;
+    mVolumSupportNeedsLoad.store(true);
+    if (_VolumSupportFocused())
+      _VolumApplyFocusedLaneCabs();
+  }
+  else if (GetParam(kSupportAmpIdx)->Int() >= 0)
+  {
+    GetParam(kSupportSpeakerIdx)->Set(1.0); // first baked cab
+    SendParameterValueFromDelegate(kSupportSpeakerIdx, GetParam(kSupportSpeakerIdx)->GetNormalized(), true);
+    _VolumRefreshSupportChannels();
+    mVolumSupportNeedsLoad.store(true);
   }
 }

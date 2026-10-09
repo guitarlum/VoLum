@@ -745,7 +745,7 @@ private:
     std::vector<std::string> skipped;
     std::vector<std::string> tooLarge;
     std::vector<std::string> failed;
-    std::string invalidIrReason;
+    std::vector<std::pair<std::string, std::string>> invalidIrs; // name, reason
     int added = 0;
     for (const auto& fn : files)
     {
@@ -771,8 +771,8 @@ private:
         {
           if (why.find("too large") != std::string::npos)
             tooLarge.push_back(base);
-          else if (invalidIrReason.empty())
-            invalidIrReason = why;
+          else
+            invalidIrs.emplace_back(base, why);
           continue;
         }
       }
@@ -836,11 +836,8 @@ private:
     if (!failed.empty())
       mError = failed.size() == 1 ? ("\"" + failed.front() + "\" could not be added to your library.")
                                   : (std::to_string(failed.size()) + " files could not be added to your library.");
-    else if (!invalidIrReason.empty())
-      mError = invalidIrReason;
-    else if (!tooLarge.empty())
-      mError = tooLarge.size() == 1 ? ("\"" + tooLarge.front() + "\" is too large for an IR - skipped.")
-                                    : (std::to_string(tooLarge.size()) + " files were too large for IRs - skipped.");
+    else if (!tooLarge.empty() || !invalidIrs.empty())
+      mError = volum::IrImportRejectionSummary(tooLarge, invalidIrs);
     else if (!skipped.empty())
       mError = skipped.size() == 1 ? ("\"" + skipped.front() + "\" already exists - skipped.")
                                    : (std::to_string(skipped.size()) + " names already existed - skipped.");

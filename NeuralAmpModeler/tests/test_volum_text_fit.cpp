@@ -154,3 +154,30 @@ TEST_CASE("Text wrap keeps a long confirmation body inside the dialog width")
   }
   CHECK(rebuilt == message);
 }
+
+TEST_CASE("Text wrap: overflow past the message area ends the last visible line in an ellipsis")
+{
+  std::string message;
+  for (int i = 0; i < 40; ++i)
+    message += "word" + std::to_string(i) + " ";
+  message += "end.";
+  CountingMeasure measure;
+  const std::string ellipsis = "\xE2\x80\xA6";
+
+  const auto lines = volum::textfit::WrapWordsClamped(message, 210.f, 6, measure);
+  REQUIRE(lines.size() == 6);
+  CHECK(lines.back().size() >= ellipsis.size());
+  CHECK(lines.back().compare(lines.back().size() - ellipsis.size(), ellipsis.size(), ellipsis) == 0);
+  for (const auto& line : lines)
+    CHECK(6.f * static_cast<float>(line.size()) <= 210.f);
+  // The visible lines are the start of the message, in order.
+  CHECK(lines.front().rfind("word0 word1", 0) == 0);
+
+  // Copy that fits is returned whole, with no ellipsis.
+  const auto fits = volum::textfit::WrapWordsClamped("Delete IR \"A\"? This cannot be undone.", 210.f, 6, measure);
+  CHECK(fits.size() <= 6);
+  for (const auto& line : fits)
+    CHECK(line.find(ellipsis) == std::string::npos);
+  // Several lines are the point: one clipped line is the regression this guards.
+  CHECK(volum::textfit::WrapWordsClamped(message, 210.f, 6, measure).size() > 1);
+}

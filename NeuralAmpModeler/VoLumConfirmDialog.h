@@ -72,12 +72,13 @@ public:
                box.GetPadded(-16.f).GetFromTop(22.f));
     const IRECT msgR = box.GetPadded(-16.f, -40.f, -16.f, -72.f);
     const IText messageText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
-    const auto lines = volum::textfit::WrapWords(mMessage, msgR.W(), [&](const char* text) {
+    constexpr float lineH = 16.f;
+    const size_t maxLines = static_cast<size_t>(msgR.H() / lineH);
+    const auto lines = volum::textfit::WrapWordsClamped(mMessage, msgR.W(), maxLines, [&](const char* text) {
       IRECT measured;
       g.MeasureText(messageText, text, measured);
       return measured.W();
     });
-    constexpr float lineH = 16.f;
     const float textTop = msgR.MH() - 0.5f * lineH * static_cast<float>(lines.size());
     g.PathClipRegion(msgR);
     float lineTop = textTop;

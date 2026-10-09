@@ -46,11 +46,31 @@ static volum::rig::LibraryItemRef VolumMakeLibraryItemRef(volum::rig::LibraryKin
   return item;
 }
 
+// Names and destinations for the confirm copy. The two amp names are different
+// questions: factoryAmpName is where a deleted custom MAIN amp lands (the sidebar
+// factory amp), mainAmpName is whose baked cab a deleted IR falls back to (the amp
+// MAIN is sounding now, custom or not).
+volum::rig::RigLabels NeuralAmpModeler::_VolumRigLabels() const
+{
+  volum::rig::RigLabels labels;
+  labels.factoryAmpName = volum::kAmps[std::clamp(mVolumAmpIdx, 0, volum::kAmpCount - 1)].displayName;
+  labels.mainAmpName = _VolumMainAmpDisplayName();
+  if (mVolumCustomMainIdx >= 0)
+    labels.mainFallbackRealCab =
+      volum::custom::StockCabFallback(volum::custom::CustomAmpAt(mVolumCustomMainIdx), mVolumCustomMainChannel).slot
+      != volum::custom::kDirectSlot;
+  if (mVolumCustomSupportIdx >= 0)
+    labels.supportFallbackRealCab =
+      volum::custom::StockCabFallback(volum::custom::CustomAmpAt(mVolumCustomSupportIdx), mVolumCustomSupportChannel)
+        .slot
+      != volum::custom::kDirectSlot;
+  return labels;
+}
+
 std::string NeuralAmpModeler::_VolumPlanLibraryDelete(volum::rig::LibraryKind kind, const std::string& id,
                                                       const std::string& displayName)
 {
-  volum::rig::RigLabels labels;
-  labels.factoryAmpName = _VolumMainAmpDisplayName();
+  const volum::rig::RigLabels labels = _VolumRigLabels();
   auto item = VolumMakeLibraryItemRef(kind, id, displayName);
   // Manage deletes presets from the active owner's bank (_VolumClaimPresetOps).
   if (kind == volum::rig::LibraryKind::Preset)
@@ -64,8 +84,7 @@ std::string NeuralAmpModeler::_VolumPlanLibraryDelete(volum::rig::LibraryKind ki
 std::string NeuralAmpModeler::_VolumPlanLibraryReplace(volum::rig::LibraryKind kind, const std::string& id,
                                                        const std::string& displayName)
 {
-  volum::rig::RigLabels labels;
-  labels.factoryAmpName = _VolumMainAmpDisplayName();
+  const volum::rig::RigLabels labels = _VolumRigLabels();
   mVolumPendingRigRepair =
     volum::rig::PlanReplace(_VolumSnapshotSoundingRig(), VolumMakeLibraryItemRef(kind, id, displayName), labels);
   return mVolumPendingRigRepair.confirmBody;
@@ -114,7 +133,7 @@ void NeuralAmpModeler::_VolumApplyRigRepair(const volum::rig::RigRepairPlan& pla
   if (plan.Has(RigRepair::ClearMainIr))
     _VolumFallbackToAvailableCab();
   if (plan.Has(RigRepair::ClearSupportIr))
-    _VolumClearIR(true, true);
+    _VolumFallbackSupportToAvailableCab(/*deferToCabSwap=*/true);
   if (plan.Has(RigRepair::ReloadMainIr))
     _VolumApplyActiveIr(plan.after.activeIrId, false);
   if (plan.Has(RigRepair::ReloadSupportIr))

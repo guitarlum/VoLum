@@ -335,7 +335,7 @@ Klicke im NAM-Pedal-Menü **Manage custom pedals...**, dann **+ Import pedal (.n
 
 ### Inhalte löschen
 
-Löschst du etwas, das gerade spielt, macht VoLum weiter: ein gelöschter Amp fällt auf einen mitgelieferten zurück, ein gelöschtes Pedal lässt seinen Slot leer und ein gelöschtes IR kehrt nach Möglichkeit zu einem eingebauten Cab des aktuellen Kanals zurück. VoLum fragt vorher nach.
+Löschst du etwas, das gerade spielt, macht VoLum weiter: ein gelöschter Amp fällt auf einen mitgelieferten zurück, ein gelöschtes Pedal lässt seinen Slot leer und ein gelöschtes IR kehrt zu einem eingebauten Cab zurück: Cab 1 bei einem mitgelieferten Amp, bei einem eigenen Amp das eingebaute Cab des aktuellen Kanals oder eins auf einem anderen Kanal, falls dieser Kanal keins hat (No Cab nur, wenn der Amp kein eingebautes Cab hat). VoLum fragt vorher nach.
 
 ## Sichern und Teilen mit Packs
 

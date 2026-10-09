@@ -67,6 +67,23 @@ std::vector<std::string> WrapWords(const std::string& text, float maxW, Measure&
   return lines;
 }
 
+// WrapWords limited to what a fixed-height message area can show. Text that does
+// not fit is cut at the last visible line, which ends in an ellipsis, so a long
+// confirmation never just stops mid-sentence at the clip edge.
+template <typename Measure>
+std::vector<std::string> WrapWordsClamped(const std::string& text, float maxW, size_t maxLines, Measure&& measure)
+{
+  auto lines = WrapWords(text, maxW, measure);
+  if (maxLines == 0 || lines.size() <= maxLines)
+    return lines;
+  std::string tail;
+  for (size_t i = maxLines - 1; i < lines.size(); ++i)
+    tail += (tail.empty() ? "" : " ") + lines[i];
+  lines.resize(maxLines);
+  lines.back() = Fit(tail.c_str(), maxW, measure);
+  return lines;
+}
+
 // Everything the measured width depends on besides the string: font face and
 // size, alignment, rotation, the width to fit and the backing pixel scale
 // (NanoVG rounds glyph metrics at the device scale).

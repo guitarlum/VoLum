@@ -335,7 +335,7 @@ In the NAM pedal menu, click **Manage custom pedals...**, then **+ Import pedal 
 
 ### Deleting Content
 
-If you delete something that is playing, VoLum moves on: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, and a deleted IR returns to a stock cab on the current channel when one is available. VoLum asks first.
+If you delete something that is playing, VoLum moves on: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, and a deleted IR returns to a stock cab: cab 1 on a bundled amp, the current channel's stock cab on a custom amp, or one on another channel if the current channel has none (No Cab only if the amp has no stock cab). VoLum asks first.
 
 ## Back Up And Share With Packs
 
