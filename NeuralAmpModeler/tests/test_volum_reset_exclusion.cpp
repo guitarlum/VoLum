@@ -3,6 +3,7 @@
 #define VOLUM_DSP_STAGING_SKIP_WDL
 #include "../VoLumDspStagingWdl.h"
 #include "../VoLumChorus.h"
+#include "../VoLumLatencySnapshot.h"
 #include "../VoLumResetExclusion.h"
 #include "../../AudioDSPTools/dsp/Delay.h"
 
@@ -52,6 +53,23 @@ size_t At(const std::string& text, const std::string& needle)
   return pos;
 }
 
+// Joins clang-format's wrapped lines so a pin survives re-wrapping.
+std::string Unwrapped(const std::string& text)
+{
+  std::string out;
+  for (size_t i = 0; i < text.size(); ++i)
+  {
+    if (text[i] != '\n')
+    {
+      out += text[i];
+      continue;
+    }
+    while (i + 1 < text.size() && text[i + 1] == ' ')
+      ++i;
+  }
+  return out;
+}
+
 std::string PluginCpp()
 {
   return ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.cpp");
@@ -65,6 +83,12 @@ std::string ProcessBlockBody()
 std::string OnResetBody()
 {
   return Between(PluginCpp(), "void NeuralAmpModeler::OnReset()", "void NeuralAmpModeler::ProcessMidiMsg(");
+}
+
+std::string LatencyBody()
+{
+  return Unwrapped(Between(PluginCpp(), "int NeuralAmpModeler::_ReportedLatencySamples() const",
+                           "void NeuralAmpModeler::_ApplyLatchedLatency()"));
 }
 
 // The objects OnReset re-prepares and ProcessBlock runs, with the plugin's locking.
@@ -250,8 +274,103 @@ TEST_CASE("Host latency asks the plan's SUPPORT rule instead of the Dual Amp tog
 {
   // Dual Amp with SUPPORT loaded but MAIN missing reported SUPPORT's latency for a
   // block that plays silence. AmpLatencySamples is pinned in test_volum_processing_plan.cpp.
-  const std::string body = Between(PluginCpp(), "int NeuralAmpModeler::_ReportedLatencySamples() const",
-                                   "void NeuralAmpModeler::_ApplyLatchedLatency()");
-  At(body, "volum::AmpLatencySamples(mModel != nullptr,");
+  const std::string body = LatencyBody();
+  At(body, "volum::AmpLatencySamples(lanes.main != kNoModel,");
+  At(body, "haveSupportModel, lanes.support);");
   CHECK(body.find("GetParam(kDualAmpActive)->Bool() && mSupportModel") == std::string::npos);
+}
+
+TEST_CASE("Host latency reads the published lane snapshot, never the live model pointers")
+{
+  // _UpdateLatency runs outside the reset exclusion (after OnReset unlocks, and from
+  // OnParamChange) while ProcessBlock may publish or retire those models.
+  const std::string body = LatencyBody();
+  At(body, "const volum::LaneLatencies lanes = mLiveLatency.Read();");
+  for (const char* live : {"mModel", "mSupportModel", "mPreModel"})
+  {
+    INFO(live);
+    CHECK(body.find(live) == std::string::npos);
+  }
+
+  const std::string reset = OnResetBody();
+  const auto lock = At(reset, "mResetExclusion.BeginReset();");
+  const auto publish = At(reset, "_VolumPublishLiveLatency();");
+  CHECK(lock < publish);
+  CHECK(At(reset, "_ResetModelAndIR(") < publish);
+  CHECK(publish < At(reset, "mMetronomeDSP.Reset(sampleRate);\n  }\n  _UpdateLatency();"));
+
+  const std::string staging =
+    Between(PluginCpp(), "void NeuralAmpModeler::_ApplyDSPStaging()", "void NeuralAmpModeler::_ResetModelAndIR(");
+  CHECK(At(staging, "_VolumPublishLiveLatency();") < At(staging, "mPendingLatency.store(_ReportedLatencySamples()"));
+}
+
+TEST_CASE("Host latency and ProcessBlock share one SUPPORT selected-and-loaded rule")
+{
+  // A deselected SUPPORT stays loaded until its removal is staged; latency still
+  // counted it while ProcessBlock already played MAIN alone.
+  const std::string latency = LatencyBody();
+  At(latency, "volum::HaveSelectedSupportModel(mVolumSupportSelected.load(std::memory_order_relaxed), lanes.support "
+              "!= kNoModel)");
+  At(ProcessBlockBody(), "volum::HaveSelectedSupportModel(supportAmpSelected, mSupportModel != nullptr)");
+}
+
+TEST_CASE("Latency snapshot starts empty and round-trips each lane")
+{
+  volum::LiveLatencySnapshot snapshot;
+  const auto empty = snapshot.Read();
+  CHECK(empty.main == volum::LaneLatencies::kNoModel);
+  CHECK(empty.support == volum::LaneLatencies::kNoModel);
+  CHECK(empty.pre[0] == volum::LaneLatencies::kNoModel);
+  CHECK(empty.pre[1] == volum::LaneLatencies::kNoModel);
+
+  volum::LaneLatencies lanes;
+  lanes.main = 0; // loaded at the native rate: present, zero latency
+  lanes.support = 37;
+  lanes.pre[1] = 1234;
+  snapshot.Publish(lanes);
+  const auto read = snapshot.Read();
+  CHECK(read.main == 0);
+  CHECK(read.support == 37);
+  CHECK(read.pre[0] == volum::LaneLatencies::kNoModel);
+  CHECK(read.pre[1] == 1234);
+
+  lanes.main = 1 << 20;
+  snapshot.Publish(lanes);
+  CHECK(snapshot.Read().main == volum::LiveLatencySnapshot::kMaxLatency);
+}
+
+TEST_CASE("A latency snapshot read never mixes lanes from two publishes")
+{
+  volum::LaneLatencies a;
+  a.main = 11;
+  a.support = 12;
+  a.pre[0] = 13;
+  a.pre[1] = 14;
+  volum::LaneLatencies b;
+  b.main = 21;
+  b.support = volum::LaneLatencies::kNoModel;
+  b.pre[0] = 23;
+  b.pre[1] = volum::LaneLatencies::kNoModel;
+
+  volum::LiveLatencySnapshot snapshot;
+  snapshot.Publish(a);
+  std::atomic<bool> done{false};
+  std::thread publisher([&] {
+    for (int i = 0; i < 200000; ++i)
+      snapshot.Publish(i % 2 ? a : b);
+    done.store(true);
+  });
+  int torn = 0;
+  long reads = 0;
+  while (!done.load())
+  {
+    const auto r = snapshot.Read();
+    const bool isA = r.main == a.main && r.support == a.support && r.pre[0] == a.pre[0] && r.pre[1] == a.pre[1];
+    const bool isB = r.main == b.main && r.support == b.support && r.pre[0] == b.pre[0] && r.pre[1] == b.pre[1];
+    torn += (isA || isB) ? 0 : 1;
+    ++reads;
+  }
+  publisher.join();
+  CHECK(reads > 0);
+  CHECK(torn == 0);
 }

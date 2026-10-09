@@ -678,7 +678,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // while the plan refused to run it. mVolumSupportSelected is maintained by
   // _VolumRequestSupportModelLoad, which owns that decision for both lanes.
   const bool supportAmpSelected = mVolumSupportSelected.load(std::memory_order_relaxed);
-  const bool haveSupportModel = supportAmpSelected && (mSupportModel != nullptr);
+  const bool haveSupportModel = volum::HaveSelectedSupportModel(supportAmpSelected, mSupportModel != nullptr);
   const bool supportToneStackActive = GetParam(kSupportEQActive)->Bool();
   const bool preNamActive[2] = {GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam2Active)->Bool()};
   const bool havePreNam[2] = {mPreModel[0] != nullptr, mPreModel[1] != nullptr};
@@ -856,6 +856,7 @@ void NeuralAmpModeler::OnReset()
     // If there is a model or IR loaded, they need to be checked for resampling.
     const int reservedBlock = volum::dsp_staging::ReservedAudioBlockSize(maxBlockSize);
     _ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));
+    _VolumPublishLiveLatency();
     mToneStack->Reset(sampleRate, maxBlockSize);
     if (mSupportToneStack)
       mSupportToneStack->Reset(sampleRate, maxBlockSize);
@@ -2148,6 +2149,9 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     }
   }
 
+  if (removedMainModel || appliedMainModel || removedSupportModel || appliedSupportModel || removedPreModel[0]
+      || appliedPreModel[0] || removedPreModel[1] || appliedPreModel[1])
+    _VolumPublishLiveLatency();
   if (removedMainModel || appliedMainModel)
   {
     mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
@@ -2605,17 +2609,32 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
   }
 }
 
+void NeuralAmpModeler::_VolumPublishLiveLatency()
+{
+  volum::LaneLatencies lanes;
+  if (mModel)
+    lanes.main = mModel->GetLatency();
+  if (mSupportModel)
+    lanes.support = mSupportModel->GetLatency();
+  for (int i = 0; i < 2; ++i)
+    if (mPreModel[i])
+      lanes.pre[i] = mPreModel[i]->GetLatency();
+  mLiveLatency.Publish(lanes);
+}
+
 int NeuralAmpModeler::_ReportedLatencySamples() const
 {
+  const volum::LaneLatencies lanes = mLiveLatency.Read();
+  constexpr int kNoModel = volum::LaneLatencies::kNoModel;
   int preLatency = 0;
   const bool preNam1ShouldLoad =
     volum::ShouldLoadPrePedalCapture(GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam1Capture)->Int());
   const bool preNam2ShouldLoad =
     volum::ShouldLoadPrePedalCapture(GetParam(kPreNam2Active)->Bool(), GetParam(kPreNam2Capture)->Int());
-  if (preNam1ShouldLoad && mPreModel[0])
-    preLatency += mPreModel[0]->GetLatency();
-  if (preNam2ShouldLoad && mPreModel[1])
-    preLatency += mPreModel[1]->GetLatency();
+  if (preNam1ShouldLoad && lanes.pre[0] != kNoModel)
+    preLatency += lanes.pre[0];
+  if (preNam2ShouldLoad && lanes.pre[1] != kNoModel)
+    preLatency += lanes.pre[1];
   // PRE Pitch pedal reports the granular engine latency (dry is delayed to match)
   // so the host can compensate via PDC. Compute from the CURRENT params (mode +
   // character) rather than mPitch.Latency(): the live member is only refreshed on
@@ -2631,9 +2650,10 @@ int NeuralAmpModeler::_ReportedLatencySamples() const
     preLatency += dsp::effect::VoLumPitch::LatencyFor(pitchMode, pitchChar, GetSampleRate());
   }
 
-  const int ampLatency =
-    volum::AmpLatencySamples(mModel != nullptr, mModel ? mModel->GetLatency() : 0, GetParam(kDualAmpActive)->Bool(),
-                             mSupportModel != nullptr, mSupportModel ? mSupportModel->GetLatency() : 0);
+  const bool haveSupportModel =
+    volum::HaveSelectedSupportModel(mVolumSupportSelected.load(std::memory_order_relaxed), lanes.support != kNoModel);
+  const int ampLatency = volum::AmpLatencySamples(
+    lanes.main != kNoModel, lanes.main, GetParam(kDualAmpActive)->Bool(), haveSupportModel, lanes.support);
   // Other things that add latency here...
   return preLatency + ampLatency;
 }

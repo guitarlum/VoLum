@@ -172,6 +172,28 @@ TEST_CASE("Host latency counts SUPPORT exactly when the plan runs it")
   }
 }
 
+TEST_CASE("A loaded but deselected SUPPORT adds no host latency")
+{
+  CHECK(volum::HaveSelectedSupportModel(true, true));
+  CHECK_FALSE(volum::HaveSelectedSupportModel(false, true));
+  CHECK_FALSE(volum::HaveSelectedSupportModel(true, false));
+  CHECK_FALSE(volum::HaveSelectedSupportModel(false, false));
+
+  constexpr int kMain = 32;
+  constexpr int kSupport = 4096;
+  const bool preNamActive[2] = {false, false};
+  const bool havePreNam[2] = {false, false};
+  for (const bool selected : {false, true})
+  {
+    const bool haveSupport = volum::HaveSelectedSupportModel(selected, /*supportLoaded=*/true);
+    const auto plan = volum::MakeProcessingPlan(
+      true, false, false, false, false, false, preNamActive, havePreNam, false, false, false, true, haveSupport);
+    INFO("selected=" << selected);
+    CHECK(plan.runSupportModel == selected);
+    CHECK(volum::AmpLatencySamples(true, kMain, true, haveSupport, kSupport) == (selected ? kSupport : kMain));
+  }
+}
+
 TEST_CASE("Processing plan disables support tone stack without a support model")
 {
   const bool preNamActive[2] = {false, false};

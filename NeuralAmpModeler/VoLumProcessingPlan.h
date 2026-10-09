@@ -8,6 +8,13 @@ namespace volum
 // SUPPORT is processed beside MAIN, never instead of it: with MAIN missing (still
 // loading, or being repaired) the block is the silent fallback. The plan and the
 // host latency both ask this, so neither claims a lane that does not run.
+// A SUPPORT model counts only while the rig still selects it: a deselected partner
+// stays loaded until its removal is staged, and the audio path already ignores it.
+inline bool HaveSelectedSupportModel(bool supportSelected, bool supportLoaded)
+{
+  return supportSelected && supportLoaded;
+}
+
 inline bool SupportLaneRuns(bool dualAmpActive, bool haveMainModel, bool haveSupportModel)
 {
   return dualAmpActive && haveMainModel && haveSupportModel;
