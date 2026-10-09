@@ -143,6 +143,31 @@ local function state_chunk(track)
   return chunk
 end
 
+local function plugin_state_chunk(track)
+  local chunk = state_chunk(track)
+  local lines, depth, collecting = {}, 0, false
+  for line in (chunk .. "\n"):gmatch("(.-)\r?\n") do
+    if not collecting and (line:match("^%s*<AU%s") or line:match("^%s*<VST%s")) then
+      collecting = true
+      depth = 1
+    elseif collecting then
+      if line:match("^%s*<") then depth = depth + 1 end
+      if line:match("^%s*>%s*$") then depth = depth - 1 end
+    end
+    if collecting then
+      lines[#lines + 1] = line
+      if depth == 0 then return table.concat(lines, "\n") end
+    end
+  end
+  error("serialized AU/VST plug-in block not found in track state")
+end
+
+local function write_text(path, text)
+  local file = assert(io.open(path, "w"))
+  file:write(text)
+  file:close()
+end
+
 local function midi_recall_count()
   local home = os.getenv("HOME") or ""
   local file = io.open(home .. "/Library/Application Support/VoLum/volum.log", "r")
@@ -245,15 +270,18 @@ local function test_format(spec)
   -- second MIDI recall or jumping the instance to slot 0.
   local pc_rpp = dir .. "/" .. spec.format:lower() .. "-pc1-roundtrip.rpp"
   reaper.Main_SaveProjectEx(0, pc_rpp, 0)
-  local saved_pc_state = state_chunk(track)
+  local saved_pc_state = plugin_state_chunk(track)
+  write_text(dir .. "/" .. spec.format:lower() .. "-pc1-state-before.txt", saved_pc_state)
   local recalls_before_load = midi_recall_count()
   reaper.Main_openProject("noprompt:" .. pc_rpp)
   spin(3.0)
   track = assert(reaper.GetTrack(0, 0), "PC-reloaded track missing")
   item = assert(reaper.GetTrackMediaItem(track, 0), "PC-reloaded audio item missing")
-  local restored_pc_state = state_chunk(track)
-  local recalls_after_load = midi_recall_count()
+  local restored_pc_state = plugin_state_chunk(track)
+  write_text(dir .. "/" .. spec.format:lower() .. "-pc1-state-after.txt", restored_pc_state)
   local pc_reloaded = render_stats(track, item, spec.format .. "-pc1-reloaded")
+  spin(1.0)
+  local recalls_after_load = midi_recall_count()
   local pc_tolerance = math.max(0.0001, pc_stats.rms * 0.02)
   local pc_roundtrip = pc_reloaded.bad == 0 and math.abs(pc_reloaded.rms - pc_stats.rms) <= pc_tolerance
   local pc_state_restored = restored_pc_state == saved_pc_state
