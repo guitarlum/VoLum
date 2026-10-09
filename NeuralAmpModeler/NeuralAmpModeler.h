@@ -51,6 +51,7 @@
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
+#include "VoLumUpgradeMigration.h"
 #include "VoLumUpdateCheck.h"
 #include "VoLumUpdateState.h"
 #include "VoLumPlayModel.h"
@@ -58,6 +59,7 @@
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
+#include "VoLumPackMachineSettings.h"
 #include "VoLumPeakAvgSender.h"
 
 const int kNumPresets = 1;
@@ -527,8 +529,8 @@ public:
   // mVolumAmpSettings[ampIdx]. Before 1.3.0 this map lived in the shared content
   // library, so one instance's catalog write moved another instance's knobs; the
   // sounding rig belongs to the instance (DAW chunk / standalone settings) now.
-  // Seeded on first touch from a pre-1.3.0 library's customScenes, so an upgrade
-  // keeps the knobs the user left behind.
+  // Seeded on first touch from a copy of a pre-1.3.0 library's customScenes, so an
+  // upgrade keeps the knobs the user left behind (volum::content::InstanceCustomScene).
   std::map<std::string, volum::VoLumAmpSettings> mVolumCustomScenes;
   volum::VoLumAmpSettings& _VolumCustomScene(const std::string& ampId);
   // The repair planned for the delete/replace the confirm dialog is asking about.
@@ -543,6 +545,11 @@ public:
   std::string mVolumRestoreCustomMainId;
   std::string mVolumRestorePresetId;
   bool mVolumDidRestorePresetSelection = false;
+  // Closed while a machine-settings restore has swapped the per-amp scenes under
+  // live params that still describe the outgoing rig; _VolumSaveCurrentToSettings
+  // refuses until the restored scene is live (see VoLumPackMachineSettings.h).
+  volum::LiveSceneGate mVolumLiveSceneGate;
+  volum::pack::PackDualAmpStash mVolumOpenedPackDualAmp;
   void _VolumHidePreCaptureMenu();
   int _VolumGetPreCaptureCount() const;
   const char* _VolumGetPreCaptureLabel(int captureIdx) const;
