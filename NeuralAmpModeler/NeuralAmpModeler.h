@@ -274,6 +274,7 @@ public:
   void _VolumSetAnimatePlayArt(bool animate);
   bool _VolumIsAnimatePlayArt() const { return mVolumAnimatePlayArt.load(); }
   void _VolumSaveMachineBool(const char* key, bool value);
+  void _VolumNoteMachineKeysSynced();
   void _VolumCheckForUpdatesNow();
   // Standalone: opens the app host's audio and MIDI Preferences. No-op in a plugin.
   void _VolumOpenAudioPreferences();
@@ -646,6 +647,9 @@ private:
   volum::LatencyReport mVolumLastLatencyReport{};
   bool mVolumSettingsDirty = false;
   bool mVolumCalibrationDefaultsDirty = false;
+  // volum::kMachineSharedKeys as this process last loaded or wrote them. The
+  // standalone's whole-file save writes only the ones it changed since.
+  nlohmann::json mVolumMachineKeysSynced;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
   // OnParamChange / OnParamChangeUI handlers triggered by setParam (which calls
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /

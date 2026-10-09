@@ -382,6 +382,8 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
   // PLAY cursor: the DAW chunk already carries lastPlaySlot; standalone has no
   // chunk, so the same instance key has to live here or a relaunch starts empty.
   j["lastPlaySlot"] = mVolumLastRecalledPlaySlot;
+  // Output mode is a param the DAW project stores; the standalone has no project.
+  j[volum::kOutputModeMachineKey] = GetParam(kOutputMode)->Int();
   // 1.2.1: the same selection for every amp, not only the focused one. The single
   // key above describes whichever amp was in focus when the file was written, so
   // every other amp reopened reading "No Preset" - and an exit from an amp with
@@ -413,8 +415,11 @@ void NeuralAmpModeler::_VolumSaveSettingsToFile()
     dualAmpSettingsPath = volum::content::PathFromUtf8(mVolumRigsRoot) / "volum-dual-amp-settings.json";
   }
 
+  // A plugin instance may have merged Lite / Animate art / calibration into the
+  // file since this process last read or wrote those keys. Its value stays unless
+  // this process changed the key itself.
   std::error_code ec;
-  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+  if (!volum::WriteWholeMachineSettings(settingsPath, std::move(j), mVolumMachineKeysSynced, ec))
   {
     std::cerr << "VoLum: write failed for settings file: " << settingsPath.string() << " (" << ec.message() << ")"
               << std::endl;
@@ -442,34 +447,18 @@ void NeuralAmpModeler::_VolumSaveCalibrationDefaults()
   if (settingsPath.empty())
     return;
 
-  // Multiple plugin instances in one host may edit this machine-global default.
-  // Only direct UI edits call this function; project/preset restores never do.
-  static std::mutex calibrationSettingsMutex;
-  std::lock_guard<std::mutex> lock(calibrationSettingsMutex);
-
-  nlohmann::json j = nlohmann::json::object();
+  // Multiple plugin instances in one host, and the standalone, may edit this
+  // machine-global default. Only direct UI edits call this function;
+  // project/preset restores never do.
+  const nlohmann::json keys = {{"CalibrateInput", GetParam(kCalibrateInput)->Bool()},
+                               {"InputCalibrationLevel", GetParam(kInputCalibrationLevel)->Value()}};
   std::error_code ec;
-  if (fs::exists(settingsPath, ec))
-  {
-    try
-    {
-      std::ifstream in(settingsPath);
-      in >> j;
-      if (!j.is_object())
-        return;
-    }
-    catch (...)
-    {
-      std::cerr << "VoLum: calibration defaults not saved because volum-settings.json is unreadable" << std::endl;
-      return;
-    }
-  }
-
-  if (!j.contains("version"))
-    j["version"] = volum::kVoLumUserSettingsVersion;
-  j["CalibrateInput"] = GetParam(kCalibrateInput)->Bool();
-  j["InputCalibrationLevel"] = GetParam(kInputCalibrationLevel)->Value();
-  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+  bool unreadable = false;
+  if (volum::MergeMachineSettingsKeys(settingsPath, keys, mVolumMachineKeysSynced, ec, &unreadable))
+    return;
+  if (unreadable)
+    std::cerr << "VoLum: calibration defaults not saved because volum-settings.json is unreadable" << std::endl;
+  else
     std::cerr << "VoLum: calibration defaults write failed: " << ec.message() << std::endl;
 }
 
@@ -492,7 +481,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   else if (!legacyPath.empty() && fs::exists(legacyPath))
     settingsPath = legacyPath;
   else
+  {
+    _VolumNoteMachineKeysSynced();
     return;
+  }
 
   try
   {
@@ -530,6 +522,10 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
     mVolumMidiChannel.store(volum::MidiChannelFromMachineSettings(true, j, mVolumMidiChannel.load()));
     mVolumMidiRecallCc.store(volum::MidiRecallCcFromMachineSettings(true, j, mVolumMidiRecallCc.load()));
     mVolumLastRecalledPlaySlot = volum::LastPlaySlotFromMachineSettings(true, j, mVolumLastRecalledPlaySlot);
+    // Plugins skip this: the host project owns kOutputMode, and a new insert
+    // starts at the param default rather than at the standalone's choice.
+    GetParam(kOutputMode)->Set(volum::OutputModeFromMachineSettings(true, j, GetParam(kOutputMode)->Int()));
+    SendParameterValueFromDelegate(kOutputMode, GetParam(kOutputMode)->GetNormalized(), true);
     // Pack import-with-settings writes uiMode here without going through the
     // toggle. Derive PLAY chrome now so the surface cannot stay shown over BUILD.
     _VolumRefreshPlaySurface();
@@ -584,6 +580,14 @@ void NeuralAmpModeler::_VolumLoadSettingsFromFile()
   {
     std::cerr << "Failed to read volum-settings.json" << std::endl;
   }
+  _VolumNoteMachineKeysSynced();
+}
+
+void NeuralAmpModeler::_VolumNoteMachineKeysSynced()
+{
+  mVolumMachineKeysSynced =
+    volum::MachineSharedKeyValues(mVolumLiteMode.load(), mVolumAnimatePlayArt.load(), GetParam(kCalibrateInput)->Bool(),
+                                  GetParam(kInputCalibrationLevel)->Value());
 }
 
 void NeuralAmpModeler::_VolumSaveLiteMode()
@@ -600,29 +604,14 @@ void NeuralAmpModeler::_VolumSaveMachineBool(const char* key, bool value)
 
   // Same read-merge-write as calibration: a plugin Lite click must not dump
   // standalone PLAY/BUILD, midiCh, midiRecallCc, lastPlaySlot, or scenes into the shared machine file.
-  static std::mutex machineBoolSettingsMutex;
-  std::lock_guard<std::mutex> lock(machineBoolSettingsMutex);
-
-  nlohmann::json j = nlohmann::json::object();
+  const nlohmann::json keys = {{key, value}};
   std::error_code ec;
-  if (fs::exists(settingsPath, ec))
-  {
-    try
-    {
-      std::ifstream in(settingsPath);
-      in >> j;
-      if (!j.is_object())
-        return;
-    }
-    catch (...)
-    {
-      std::cerr << "VoLum: " << key << " not saved because volum-settings.json is unreadable" << std::endl;
-      return;
-    }
-  }
-
-  j = volum::MergeMachineBoolIntoSettings(std::move(j), key, value);
-  if (!volum::WriteJsonAtomically(settingsPath, j, ec))
+  bool unreadable = false;
+  if (volum::MergeMachineSettingsKeys(settingsPath, keys, mVolumMachineKeysSynced, ec, &unreadable))
+    return;
+  if (unreadable)
+    std::cerr << "VoLum: " << key << " not saved because volum-settings.json is unreadable" << std::endl;
+  else
     std::cerr << "VoLum: " << key << " write failed: " << ec.message() << std::endl;
 }
 

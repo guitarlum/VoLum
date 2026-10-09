@@ -34,6 +34,7 @@
 #include "VoLumDiagLog.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumLevelMute.h"
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumMasterSafety.h"
 #include "VoLumNanGuard.h"
 #include "VoLumPaths.h"
@@ -1511,6 +1512,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kOutputMode:
       _SetOutputGain();
       _SetSupportOutputGain();
+      // Standalone only acts on this (OnIdle under APP_API): the machine file is
+      // where its Output mode survives a relaunch.
+      if (mVolumInitComplete)
+        mVolumSettingsDirty = true;
       break;
     case kSupportOutputLevel: _SetSupportOutputGain(); break;
     // Tone stack:

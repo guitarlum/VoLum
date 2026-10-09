@@ -1549,6 +1549,42 @@ TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not t
   }
 }
 
+TEST_CASE("F-63: an Everything Pack restores the standalone's Output mode with the machine settings")
+{
+  // The settings document travels verbatim, so the optional outputMode key rides
+  // along. A Pack made before the key existed restores as Normalized.
+  Library sender("output-mode-sender", "sender");
+  REQUIRE(sender.store.Save());
+
+  SUBCASE("a Raw standalone comes back Raw")
+  {
+    const nlohmann::json settings = {{"version", 6}, {volum::kOutputModeMachineKey, volum::kOutputModeRaw}};
+    const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), settings.dump());
+    REQUIRE(pack.ok);
+    Library receiver("output-mode-recv", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath).ok);
+    std::string got;
+    REQUIRE(ReadWholeFile(settingsPath, got));
+    CHECK(volum::OutputModeFromMachineSettings(true, nlohmann::json::parse(got), volum::kOutputModeNormalized)
+          == volum::kOutputModeRaw);
+  }
+
+  SUBCASE("an older Pack without the key restores Normalized")
+  {
+    const nlohmann::json settings = {{"version", 6}, {"liteMode", true}};
+    const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), settings.dump());
+    REQUIRE(pack.ok);
+    Library receiver("output-mode-recv-old", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath).ok);
+    std::string got;
+    REQUIRE(ReadWholeFile(settingsPath, got));
+    CHECK(volum::OutputModeFromMachineSettings(true, nlohmann::json::parse(got), volum::kOutputModeRaw)
+          == volum::kOutputModeNormalized);
+  }
+}
+
 TEST_CASE("Reset without the settings box can leave a MIDI slot invalid, never renumbered")
 {
   // The locked answer: numbers stay, a missing Sound goes red. Wiping the row

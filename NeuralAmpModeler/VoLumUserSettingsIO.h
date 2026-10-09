@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumOutputMode.h"
 
 #if __has_include(<nlohmann/json.hpp>)
   #include <nlohmann/json.hpp>
@@ -792,6 +793,74 @@ inline nlohmann::json MergeLiteModeIntoSettings(nlohmann::json j, bool liteMode)
 inline nlohmann::json MergeAnimatePlayArtIntoSettings(nlohmann::json j, bool animatePlayArt)
 {
   return MergeMachineBoolIntoSettings(std::move(j), "animatePlayArt", animatePlayArt);
+}
+
+// Keys a plugin instance merges into the machine file on its own
+// (_VolumSaveMachineBool, _VolumSaveCalibrationDefaults). The standalone's
+// whole-file save carries them too, from values that are only as new as its own
+// last load or write of each key.
+inline constexpr const char* kMachineSharedKeys[] = {
+  "liteMode", "animatePlayArt", "CalibrateInput", "InputCalibrationLevel"};
+
+inline nlohmann::json MachineSharedKeyValues(const nlohmann::json& doc)
+{
+  nlohmann::json out = nlohmann::json::object();
+  if (!doc.is_object())
+    return out;
+  for (const char* key : kMachineSharedKeys)
+    if (doc.contains(key))
+      out[key] = doc[key];
+  return out;
+}
+
+inline nlohmann::json MachineSharedKeyValues(bool liteMode, bool animatePlayArt, bool calibrateInput,
+                                             double inputCalibrationLevel)
+{
+  return {{"liteMode", liteMode},
+          {"animatePlayArt", animatePlayArt},
+          {"CalibrateInput", calibrateInput},
+          {"InputCalibrationLevel", inputCalibrationLevel}};
+}
+
+// `synced` holds each shared key as this process last loaded or wrote it. A
+// shared key in `mine` that still equals that value was not changed here, so the
+// value on disk wins: a plugin's newer Lite / Animate art / calibration survives a
+// standalone save that only moved a knob. A key changed here is written.
+inline void KeepOtherWritersMachineKeys(nlohmann::json& mine, const nlohmann::json& disk, const nlohmann::json& synced)
+{
+  if (!mine.is_object() || !disk.is_object())
+    return;
+  for (const char* key : kMachineSharedKeys)
+  {
+    if (!disk.contains(key) || !mine.contains(key))
+      continue;
+    const bool changedHere = !synced.is_object() || !synced.contains(key) || synced[key] != mine[key];
+    if (!changedHere)
+      mine[key] = disk[key];
+  }
+}
+
+// Output mode (Raw / Normalized / Calibrated) is a plugin param. In a DAW the
+// project owns it; the standalone has no project, so it keeps the choice under
+// this optional key. A missing key (files from before 1.3.0) or a bad value reads
+// as the default.
+inline constexpr const char* kOutputModeMachineKey = "outputMode";
+
+inline int OutputModeFromJson(const nlohmann::json& value)
+{
+  if (!value.is_object() || !value.contains(kOutputModeMachineKey) || !value[kOutputModeMachineKey].is_number_integer())
+    return kOutputModeDefault;
+  const long long mode = value[kOutputModeMachineKey].get<long long>();
+  if (mode < 0 || mode >= kOutputModeCount)
+    return kOutputModeDefault;
+  return static_cast<int>(mode);
+}
+
+// A plugin keeps `fallback` (the param as the host project or a new insert has
+// it): a standalone Raw choice must not move the next VST3 insert.
+inline int OutputModeFromMachineSettings(bool standalone, const nlohmann::json& value, int fallback)
+{
+  return standalone ? OutputModeFromJson(value) : fallback;
 }
 
 inline nlohmann::json VolumUserSettingsToJson(const VoLumAmpSettings* ampSettings, int ampCount, int lastAmpIdx,

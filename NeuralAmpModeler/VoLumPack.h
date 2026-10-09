@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "VoLumContentStore.h"
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumPackArchive.h"
 
 namespace volum::pack
@@ -1364,7 +1365,11 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
 
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
-    if (!WriteWholeFile(settingsPath, packContents.settingsJson))
+    // Under the machine-settings lock, so a plugin's single-key merge cannot land
+    // its older read of the file on top of the restored one.
+    std::error_code lockEc;
+    if (!WithMachineSettingsLock(
+          settingsPath, [&]() { return WriteWholeFile(settingsPath, packContents.settingsJson); }, lockEc))
     {
       out.ok = false;
       out.error = "The library was imported, but the machine settings could not be written.";
