@@ -24,9 +24,59 @@ std::filesystem::path Vst3Dir()
 }
 
 // The three ways hosts compute data / 127 for a VST3 MIDI parameter.
-double FloatQuotient(int data) { return static_cast<float>(data) / 127.f; }
-double FloatRoundedDouble(int data) { return static_cast<float>(data / 127.); }
-double DoubleQuotient(int data) { return data / 127.; }
+double FloatQuotient(int data)
+{
+  return static_cast<float>(data) / 127.f;
+}
+double FloatRoundedDouble(int data)
+{
+  return static_cast<float>(data / 127.);
+}
+double DoubleQuotient(int data)
+{
+  return data / 127.;
+}
+
+// The decode the processor used before 1.3.0, kept here only to show what it got wrong.
+int TruncatingDecode(double value)
+{
+  return static_cast<int>(value * 127.);
+}
+
+// IPlugVST3ProcessorBase's program-parameter path for one channel, feeding VoLum's recall decoder and handoff.
+struct ProgramParamProcessor
+{
+  static constexpr double kSampleRate = 48000.;
+  static constexpr int kBlock = 512;
+
+  iplug::VST3ProgramRestoreGuard guard;
+  volum::MidiLatestWinsQueue recalls;
+
+  void SetState() { guard.Arm(); }
+
+  // One process() call carrying a host change of the channel-1 program parameter, or none if program < 0.
+  void Process(int program, bool transportRunning = false, bool offline = false)
+  {
+    if (program >= 0)
+    {
+      IMidiMsg msg;
+      if (iplug::VST3ProgramParamToMidi(
+            iplug::kVST3MIDIProgramParamStartIdx, FloatQuotient(program), 0, transportRunning, offline, guard, msg)
+          == iplug::EVST3ProgramParamResult::kProgramChange)
+      {
+        if (const auto slot = volum::DecodeMidiSoundRecall(msg, 1, volum::kMidiRecallCcDefault))
+          recalls.Enqueue(*slot);
+      }
+    }
+    guard.EndBlock(kBlock, kSampleRate, transportRunning, offline);
+  }
+
+  void ProcessSilence(double seconds, bool transportRunning = false)
+  {
+    for (int i = 0; i < static_cast<int>(seconds * kSampleRate / kBlock) + 1; ++i)
+      Process(-1, transportRunning);
+  }
+};
 } // namespace
 
 TEST_CASE("VST3 MIDI value decode returns every 7-bit value from float and double normalized values")
@@ -38,6 +88,20 @@ TEST_CASE("VST3 MIDI value decode returns every 7-bit value from float and doubl
     CHECK(iplug::VST3NormalizedToMIDI7Bit(FloatRoundedDouble(data)) == data);
     CHECK(iplug::VST3NormalizedToMIDI7Bit(DoubleQuotient(data)) == data);
   }
+}
+
+TEST_CASE("VST3 MIDI value decode fixes the 7-bit values the old truncating decode lost from float")
+{
+  int truncatingWrong = 0;
+  int roundingWrong = 0;
+  for (int data = 0; data <= 127; ++data)
+  {
+    truncatingWrong += TruncatingDecode(FloatQuotient(data)) != data;
+    roundingWrong += iplug::VST3NormalizedToMIDI7Bit(FloatQuotient(data)) != data;
+  }
+  CHECK(TruncatingDecode(FloatQuotient(1)) == 0);
+  CHECK(truncatingWrong == 67);
+  CHECK(roundingWrong == 0);
 }
 
 TEST_CASE("VST3 MIDI value decode clamps out-of-range and NaN values")
@@ -96,6 +160,110 @@ TEST_CASE("VST3 program-change parameters sit after the CC block of all 16 chann
   CHECK(iplug::VST3MIDIProgramParamChannel(iplug::kMIDICCParamStartIdx, 16) == -1);
 }
 
+TEST_CASE("VST3 project reload: a host restoring the program parameter does not overwrite the restored Sound")
+{
+  ProgramParamProcessor processor;
+
+  SUBCASE("fresh instance, REAPER restores the last program before the first block")
+  {
+    processor.Process(5);
+    CHECK_FALSE(processor.recalls.Drain().has_value());
+  }
+  SUBCASE("setState, then Cubase's program 0 a few blocks later")
+  {
+    processor.ProcessSilence(2.);
+    processor.SetState();
+    processor.Process(-1);
+    processor.Process(-1);
+    processor.Process(0);
+    CHECK_FALSE(processor.recalls.Drain().has_value());
+  }
+
+  processor.ProcessSilence(iplug::VST3ProgramRestoreGuard::kWindowSeconds);
+  CHECK_FALSE(processor.guard.IsArmed());
+  processor.Process(3);
+  CHECK(processor.recalls.Drain() == 3);
+}
+
+TEST_CASE("VST3 Program Change from MIDI recalls during playback and offline render, even right after setState")
+{
+  ProgramParamProcessor processor;
+  processor.SetState();
+
+  SUBCASE("playing")
+  {
+    processor.Process(7, true);
+    CHECK(processor.recalls.Drain() == 7);
+  }
+  SUBCASE("offline render")
+  {
+    processor.Process(7, false, true);
+    CHECK(processor.recalls.Drain() == 7);
+  }
+
+  // The first playing or offline block ends the restore window, so a stopped-transport change recalls too.
+  CHECK_FALSE(processor.guard.IsArmed());
+  processor.Process(9);
+  CHECK(processor.recalls.Drain() == 9);
+}
+
+TEST_CASE("VST3 the same Program Change twice recalls twice when the host delivers it twice")
+{
+  ProgramParamProcessor processor;
+  processor.ProcessSilence(1.);
+
+  processor.Process(4);
+  CHECK(processor.recalls.Drain() == 4);
+  processor.Process(4);
+  CHECK(processor.recalls.Drain() == 4);
+  processor.Process(4, true);
+  CHECK(processor.recalls.Drain() == 4);
+}
+
+TEST_CASE("VST3 restore guard re-arms on every setState and only for the restore window")
+{
+  ProgramParamProcessor processor;
+  CHECK(processor.guard.IsArmed());
+  processor.ProcessSilence(iplug::VST3ProgramRestoreGuard::kWindowSeconds);
+  CHECK_FALSE(processor.guard.IsArmed());
+
+  processor.SetState();
+  CHECK(processor.guard.IsArmed());
+  processor.ProcessSilence(iplug::VST3ProgramRestoreGuard::kWindowSeconds / 4.);
+  CHECK(processor.guard.IsArmed());
+  processor.ProcessSilence(iplug::VST3ProgramRestoreGuard::kWindowSeconds);
+  CHECK_FALSE(processor.guard.IsArmed());
+
+  IMidiMsg msg;
+  CHECK(
+    iplug::VST3ProgramParamToMidi(iplug::kVST3MIDIProgramParamStartIdx - 1, 0.5, 0, false, false, processor.guard, msg)
+    == iplug::EVST3ProgramParamResult::kNotProgramParam);
+}
+
+TEST_CASE("VST3 processor and plug-in state restore are wired to the program restore guard")
+{
+  const std::string processor = ReadText(Vst3Dir() / "IPlugVST3_ProcessorBase.cpp");
+  REQUIRE_FALSE(processor.empty());
+  CHECK(
+    processor.find("VST3ProgramParamToMidi(idx, value, offsetSamples, GetTransportIsRunning(), GetRenderingOffline(), "
+                   "mProgramRestoreGuard, msg)")
+    != std::string::npos);
+  CHECK(processor.find("mProgramRestoreGuard.Absorbs(GetTransportIsRunning(), GetRenderingOffline())")
+        != std::string::npos);
+  CHECK(processor.find("mProgramRestoreGuard.EndBlock(data.numSamples, setup.sampleRate") != std::string::npos);
+
+  for (const char* file : {"IPlugVST3.cpp", "IPlugVST3_Processor.cpp"})
+  {
+    CAPTURE(file);
+    const std::string src = ReadText(Vst3Dir() / file);
+    const auto arm = src.find("ArmProgramRestoreGuard();");
+    const auto setState = src.find("IPlugVST3State::SetState(this, pState)");
+    REQUIRE(arm != std::string::npos);
+    REQUIRE(setState != std::string::npos);
+    CHECK(arm < setState);
+  }
+}
+
 TEST_CASE("VST3 processor decodes Program Change, aftertouch and CC with the rounding helper")
 {
   const std::string src = ReadText(Vst3Dir() / "IPlugVST3_ProcessorBase.cpp");
@@ -125,8 +293,11 @@ TEST_CASE("VST3 controller gives each MIDI channel unit a program list and maps 
   const std::string parameter = ReadText(Vst3Dir() / "IPlugVST3_Parameter.h");
   const auto programParamClass = parameter.find("class IPlugVST3MIDIProgramParameter");
   REQUIRE(programParamClass != std::string::npos);
-  const std::string programParamBody = parameter.substr(programParamClass, 1500);
+  const auto programParamEnd = parameter.find("\n};", programParamClass);
+  REQUIRE(programParamEnd != std::string::npos);
+  const std::string programParamBody = parameter.substr(programParamClass, programParamEnd - programParamClass);
   CHECK(programParamBody.find("ParameterInfo::kIsProgramChange") != std::string::npos);
+  CHECK(programParamBody.find("ParameterInfo::kCanAutomate") == std::string::npos);
   CHECK(programParamBody.find("info.stepCount = kVST3MIDIProgramCount - 1;") != std::string::npos);
   CHECK(programParamBody.find("info.id = kVST3MIDIProgramParamStartIdx + channel;") != std::string::npos);
 
