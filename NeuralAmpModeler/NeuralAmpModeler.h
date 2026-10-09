@@ -47,6 +47,7 @@
 #include "VoLumTremolo.h"
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumHostRestoreGate.h"
 #include "VoLumLatencyRequests.h"
 #include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
@@ -185,6 +186,15 @@ public:
   // changing the sounding rig when either id cannot be resolved.
   bool VolumRecallSound(const std::string& ampId, const std::string& presetId);
 
+  // The editor, or nullptr while this thread is inside a host state restore. Hides
+  // the base GetUI() for every call in this class: the restore applies the rig
+  // synchronously, and with no editor visible to it each applier takes its headless
+  // path instead of writing IGraphics controls from the host's thread.
+  iplug::igraphics::IGraphics* GetUI()
+  {
+    return mVolumHostRestoreGate.HidesUiFromThisThread() ? nullptr : iplug::Plugin::GetUI();
+  }
+
 private:
   // Allocates mInputPointers and mOutputPointers
   void _AllocateIOPointers(const size_t nChans);
@@ -229,6 +239,9 @@ public:
   // assume a control already holds the right value. Call this after any restore
   // (editor open, DAW chunk load, session re-focus).
   void _VolumSyncUiFromState();
+  // UI half of a host state restore, UI thread only: every control the restore had
+  // to skip, re-derived from live state (no captured snapshot, so it is idempotent).
+  void _VolumResyncUi();
   // Apply one resolved UiSyncPlan to the cab row + channel stepper, and write the
   // resolved custom routing back into the runtime caches.
   void _VolumApplyUiSyncPlan(const volum::UiSyncPlan& plan, bool support);
@@ -628,25 +641,13 @@ private:
   std::atomic<bool> mVolumNeedsLoad{false};
   std::atomic<bool> mVolumIsLoading{false};
   std::atomic<bool> mVolumMainLoadFailed{false};
-  struct VolumPendingStateRestore
-  {
-    bool applyRigState = false;
-    bool hasIdTail = false;
-    std::string customMainId;
-    std::string activePresetId;
-    int lastPlaySlot = -1;
-    bool replaceCustomScenes = false;
-    std::map<std::string, volum::VoLumAmpSettings> customScenes;
-  };
-  std::mutex mVolumStateRestoreMutex;
-  VolumPendingStateRestore mVolumPendingStateRestore;
-  // UnserializeState records only the intent. OnIdle/OnUIOpen consume it on the
-  // main thread before touching rig vectors, custom selection, or IGraphics.
-  std::atomic<bool> mVolumStateRestorePending{false};
-  // Set when host state was restored into an already-open editor, consumed by the
-  // next OnIdle. UnserializeState runs on the host's thread, and the applier it
-  // wants writes IGraphics controls, so the call has to cross to the UI thread.
+  // UnserializeState runs on the host's thread and applies the rig there, with the
+  // editor hidden from that thread (mVolumHostRestoreGate). It only raises this
+  // flag; the next OnIdle (or OnUIOpen) re-derives every control from the live
+  // state on the UI thread. The flag carries no data, so two restores before one
+  // idle still cost a single resync, and a resync run twice is harmless.
   std::atomic<bool> mVolumUiSyncPending{false};
+  volum::HostRestoreGate mVolumHostRestoreGate;
   // Corrupt-library recovery notice taken in OnUIOpen, shown by the next OnIdle.
   std::string mVolumPendingLibraryNotice;
   // Audio-thread MIDI ingress. Only an int crosses this capacity-one latest-wins
@@ -839,8 +840,6 @@ private:
   int _UnserializeStateWithKnownVersion(const iplug::IByteChunk& chunk, int startPos);
   // Hopefully 0.7.3-0.7.8, but no gurantees
   int _UnserializeStateWithUnknownVersion(const iplug::IByteChunk& chunk, int startPos);
-  // Consume the rig/UI portion of a host state restore on the main thread.
-  void _VolumApplyPendingStateRestore();
 
   // Update all controls that depend on a model
   void _UpdateControlsFromModel();

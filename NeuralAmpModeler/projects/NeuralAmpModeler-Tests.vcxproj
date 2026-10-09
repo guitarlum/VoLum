@@ -109,6 +109,7 @@
     <ClCompile Include="..\tests\test_volum_user_settings_io.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_regressions.cpp" />
     <ClCompile Include="..\tests\test_volum_ui_sync_plan.cpp" />
+    <ClCompile Include="..\tests\test_volum_host_restore_gate.cpp" />
     <ClCompile Include="..\tests\test_volum_upgrade_migration.cpp" />
     <ClCompile Include="..\tests\test_volum_input_calibration.cpp" />
     <ClCompile Include="..\tests\test_volum_diag_log.cpp" />

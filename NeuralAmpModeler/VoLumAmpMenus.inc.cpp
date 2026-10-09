@@ -1,4 +1,4 @@
-﻿// VoLumAmpMenus.inc.cpp: factory reset + preset/support-amp menu + dual-amp focus member functions
+// VoLumAmpMenus.inc.cpp: factory reset + preset/support-amp menu + dual-amp focus member functions
 // Extracted from NeuralAmpModeler.cpp for file-size hygiene. Tail-#included
 // into the NeuralAmpModeler translation unit; not a separate build target.
 
@@ -352,6 +352,22 @@ void NeuralAmpModeler::_VolumSyncUiFromState()
   // chrome from mVolumUiMode here means a host restore cannot forget it; nothing
   // else on this path touched PLAY at all.
   _VolumRefreshPlaySurface();
+}
+
+// UI half of a host state restore. The restore applied the rig on the host's thread
+// with the editor hidden from it, so everything below was skipped there: the layout
+// pass, the SUPPORT stepper, the preset bar and the sidebar/hero/cab-row sync. It
+// reads only live state, never a snapshot taken at restore time, so a restore that
+// lands again before this runs, or this running twice, converges on the same UI.
+void NeuralAmpModeler::_VolumResyncUi()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  _UpdateVoLumLayout(pGfx);
+  _VolumRefreshSupportChannels();
+  _VolumRefreshPresetBar();
+  _VolumSyncUiFromState();
 }
 
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)

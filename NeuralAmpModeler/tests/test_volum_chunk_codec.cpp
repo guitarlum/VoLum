@@ -1385,8 +1385,8 @@ TEST_CASE("Id-tail decode distinguishes an explicitly empty custom-scene map fro
   CHECK(currentOmitted.customScenesPresent);
   CHECK(currentOmitted.customScenes.empty());
 
-  const auto currentExplicit = volum::IdTailFromJson(
-    {{"v", volum::kVoLumIdTailSchema}, {"customScenes", nlohmann::json::object()}});
+  const auto currentExplicit =
+    volum::IdTailFromJson({{"v", volum::kVoLumIdTailSchema}, {"customScenes", nlohmann::json::object()}});
   CHECK(currentExplicit.customScenesPresent);
   CHECK(currentExplicit.customScenes.empty());
 
