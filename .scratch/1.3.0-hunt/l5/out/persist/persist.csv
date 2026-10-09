@@ -1,0 +1,8 @@
+"what","ok","detail"
+"1 ASIO 256@44100 persisted after Apply+OK+close","True","[audio] driver=1 indev=ASIO4ALL v2 outdev=ASIO4ALL v2 in1=1 in2=1 out1=2 out2=2 buffer=256 sr=44100 [midi] indev=off outdev=off inchan=0 outchan=0"
+"2a relaunch opened ASIO 44100/256","True","2026-10-09 08:46:39.075  [audio] stream open: 44100 Hz, buffer 256, requested 44100 Hz"
+"2b DS 512@44100 persisted","True","[audio] driver=0 indev=Line (UA-2X2) outdev=Speakers (UA-2X2) in1=1 in2=1 out1=2 out2=2 buffer=512 sr=44100 [midi] indev=off outdev=off inchan=0 outchan=0"
+"3a relaunch opened DS 44100/512","True","2026-10-09 08:46:56.017  [audio] stream open: 44100 Hz, buffer 512, requested 44100 Hz"
+"3b OK-only switch to ASIO opened 48000/128 and audio runs","True","2026-10-09 08:47:09.047  [audio] stream open: 48000 Hz, buffer 128, requested 48000 Hz cpu=86.4"
+"3c ASIO 128@48000 persisted, routing still OUT 2","True","[audio] driver=1 indev=ASIO4ALL v2 outdev=ASIO4ALL v2 in1=1 in2=1 out1=2 out2=2 buffer=128 sr=48000 [midi] indev=off outdev=off inchan=0 outchan=0"
+"3d normal close exit code 0","True","code=0 exit=0.27s"

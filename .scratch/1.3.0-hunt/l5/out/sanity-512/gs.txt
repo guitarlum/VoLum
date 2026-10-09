@@ -1,0 +1,2 @@
+START unix_ms=1791526612754 device='Speakers (UA-2X2)' rate=48000 ch=2 freq=200.0 amp=0.250
+RESULT ok frames=960480 discontinuities=1 silent_packets=0 wav=C:\dev\VoLum\.scratch\1.3.0-hunt\l5\out\sanity-512\rec.wav

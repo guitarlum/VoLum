@@ -20,6 +20,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Test appcast note extraction
+        run: .github/scripts/test-appcast-notes.sh
+
       - name: Build appcast
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -30,7 +36,7 @@ jobs:
           set -euo pipefail
           mkdir -p site
           version="${RELEASE_TAG#v}"
-          notes="$(printf '%s\n' "$RELEASE_BODY" | awk 'NF { print; exit }')"
+          notes="$(printf '%s\n' "$RELEASE_BODY" | .github/scripts/appcast-notes.sh)"
           asset_base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
           jq -n \
             --arg version "$version" \

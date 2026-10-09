@@ -116,7 +116,7 @@ bring-your-own library:
 - `Marshall 2204 1982` (7): dual-amp on with `Marshall JMP 2203` as SUPPORT;
   both NAM assigned but bypassed.
 - Custom library: amp "Monomyth Skeleton Key" (DIRECT + V30 on ch1, G12 on ch2),
-  pedal "5000$ Klon", IR "Marshall 4x12 / Royer", SLO100 User bank plus THC
+  pedal "5000$ Klon", IR "Marshall 4x12 _ Royer", SLO100 User bank plus THC
   **Sunset Crunch**.
 
 ## 2. Geometry
