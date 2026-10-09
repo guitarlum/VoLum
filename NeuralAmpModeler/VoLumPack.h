@@ -523,8 +523,35 @@ namespace detail
 // files, and nothing ties the two together: an entry whose capture the Pack does
 // not carry would import as an amp or IR with nothing behind it, or quietly point
 // at whatever local file happens to share that path. Such an entry is skipped and
-// reported, and an amp that goes takes its preset bank with it, since those
-// presets have nowhere to live.
+// reported, and everything in the Pack that pointed at it is neutralised the way
+// deleting the item does (RemoveCustomAmp / RemoveIR / RemovePedal): an amp takes
+// its preset bank with it and is dropped as a SUPPORT partner, an IR is cleared
+// from the presets that used it, a pedal's PRE slots go back to EMPTY - by capture
+// index, so the Pack's number can never land on a different local pedal - and PLAY
+// switches on a skipped amp are not imported. What was neutralised is listed on
+// the entry's own "Skip" line.
+inline std::string PlaySlotLabel(int slot)
+{
+  return (slot >= 0 && slot < 10 ? "0" : "") + std::to_string(slot);
+}
+
+inline std::string NeutralisedSuffix(size_t presets, const char* what, const std::vector<int>& slots)
+{
+  std::string s;
+  if (presets > 0)
+    s += std::string(what) + " in " + std::to_string(presets) + (presets == 1 ? " preset" : " presets");
+  if (!slots.empty())
+  {
+    if (!s.empty())
+      s += "; ";
+    s += std::string(slots.size() == 1 ? "PLAY switch " : "PLAY switches ");
+    for (size_t i = 0; i < slots.size(); ++i)
+      s += (i ? ", " : "") + PlaySlotLabel(slots[i]);
+    s += " not imported";
+  }
+  return s.empty() ? s : " (" + s + ")";
+}
+
 inline void DropEntriesWithoutPayload(PackContents& pack)
 {
   auto& r = pack.library;
@@ -542,8 +569,27 @@ inline void DropEntriesWithoutPayload(PackContents& pack)
       ++it;
       continue;
     }
-    pack.skipped.push_back("Custom amp \"" + it->name + "\"" + kWhy);
-    r.presetBanks.erase(it->id);
+    const std::string id = it->id;
+    const std::string name = it->name;
+    r.presetBanks.erase(id);
+    size_t presets = 0;
+    for (auto& bank : r.presetBanks)
+      for (auto& pr : bank.second)
+        if (content::DropSupportPartner(pr.settings, id))
+          ++presets;
+    std::vector<int> slots;
+    for (auto slot = r.midiSoundMap.begin(); slot != r.midiSoundMap.end();)
+    {
+      if (slot->second.ampId == id)
+      {
+        slots.push_back(slot->first);
+        slot = r.midiSoundMap.erase(slot);
+      }
+      else
+        ++slot;
+    }
+    pack.skipped.push_back("Custom amp \"" + name + "\"" + kWhy
+                           + NeutralisedSuffix(presets, "SUPPORT switched off", slots));
     it = r.amps.erase(it);
   }
   for (auto it = r.irs.begin(); it != r.irs.end();)
@@ -553,7 +599,20 @@ inline void DropEntriesWithoutPayload(PackContents& pack)
       ++it;
       continue;
     }
-    pack.skipped.push_back("IR \"" + it->name + "\"" + kWhy);
+    size_t presets = 0;
+    for (auto& bank : r.presetBanks)
+      for (auto& pr : bank.second)
+      {
+        bool used = false;
+        for (std::string* ref : {&pr.settings.activeIrId, &pr.settings.supportActiveIrId})
+          if (*ref == it->id)
+          {
+            ref->clear();
+            used = true;
+          }
+        presets += used ? 1 : 0;
+      }
+    pack.skipped.push_back("IR \"" + it->name + "\"" + kWhy + NeutralisedSuffix(presets, "baked cab restored", {}));
     it = r.irs.erase(it);
   }
   for (auto it = r.pedals.begin(); it != r.pedals.end();)
@@ -563,7 +622,21 @@ inline void DropEntriesWithoutPayload(PackContents& pack)
       ++it;
       continue;
     }
-    pack.skipped.push_back("Pedal \"" + it->name + "\"" + kWhy);
+    size_t presets = 0;
+    if (it->legacyIndex > 0)
+      for (auto& bank : r.presetBanks)
+        for (auto& pr : bank.second)
+        {
+          bool used = false;
+          for (int* capture : {&pr.settings.preNam1Capture, &pr.settings.preNam2Capture})
+            if (*capture == it->legacyIndex)
+            {
+              *capture = 0;
+              used = true;
+            }
+          presets += used ? 1 : 0;
+        }
+    pack.skipped.push_back("Pedal \"" + it->name + "\"" + kWhy + NeutralisedSuffix(presets, "PRE slot emptied", {}));
     it = r.pedals.erase(it);
   }
 }
@@ -681,8 +754,6 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLik
         out.files[rel] = *data;
       }
     }
-    detail::DropEntriesWithoutPayload(out);
-
     // A Share Pack must not carry settings or a MIDI map even if something wrote
     // them: the job in the manifest is the contract with the user, so enforce it
     // here rather than trusting the payload.
@@ -699,6 +770,7 @@ inline PackContents ReadPackFromArchive(const ReadResult& archive, bool looksLik
     {
       out.library.midiSoundMap.clear();
     }
+    detail::DropEntriesWithoutPayload(out); // after the board is settled: it prunes PLAY switches too
     out.library.legacyCustomScenes.clear(); // never travels: the rig belongs to the instance
   }
   catch (...)
@@ -1993,11 +2065,13 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       store.RemoveStoredFile(rel);
   removeStage();
 
-  // The settings file and the Dual Amp sidecar are one machine-settings restore:
-  // both are replaced under the machine-settings lock, the file first, so a
-  // plugin's single-key merge cannot land its older read on top of either, and
-  // neither lands without the other. The sidecar was staged before the library
-  // commit (sidecarTmp); only its rename happens here.
+  // The settings file and the Dual Amp sidecar are one machine-settings restore,
+  // but two renames cannot be one atomic step. Both happen under the
+  // machine-settings lock, the settings file first, so a plugin's single-key merge
+  // cannot land its older read on top of either. The sidecar was staged before the
+  // library commit (sidecarTmp); if its rename is what fails, the previous settings
+  // file is put back (best effort, still under the lock) so the pair is not left
+  // half old, half new.
   const auto replaceSidecar = [&]() {
     std::error_code sidecarEc;
     return volum::ReplaceFileAtomically(sidecarTmp.path, dualAmpSidecar->path, sidecarEc);
@@ -2006,12 +2080,38 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
   {
     std::error_code settingsEc;
     const auto settingsTmp = volum::MakeAtomicJsonTempPath(settingsPath);
+    auto settingsPrev = settingsPath;
+    settingsPrev += ".pre-import";
     if (!WithMachineSettingsLock(
           settingsPath,
           [&]() {
-            return WriteWholeFile(settingsTmp, sanitizedSettings)
-                   && volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc)
-                   && (!writeSidecar || replaceSidecar());
+            std::error_code fsEc;
+            const bool hadPrev = std::filesystem::exists(settingsPath, fsEc);
+            if (writeSidecar && hadPrev)
+            {
+              std::filesystem::copy_file(
+                settingsPath, settingsPrev, std::filesystem::copy_options::overwrite_existing, fsEc);
+              if (fsEc)
+                return false; // cannot promise a way back, so do not start
+            }
+            const bool settingsOk = WriteWholeFile(settingsTmp, sanitizedSettings)
+                                    && volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc);
+            if (!settingsOk)
+            {
+              std::filesystem::remove(settingsPrev, fsEc);
+              return false;
+            }
+            if (writeSidecar && !replaceSidecar())
+            {
+              if (hadPrev)
+                volum::ReplaceFileAtomically(settingsPrev, settingsPath, fsEc);
+              else
+                std::filesystem::remove(settingsPath, fsEc);
+              std::filesystem::remove(settingsPrev, fsEc);
+              return false;
+            }
+            std::filesystem::remove(settingsPrev, fsEc);
+            return true;
           },
           settingsEc))
     {
@@ -2028,7 +2128,6 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
     out.error = "The library was imported, but the machine settings could not be written.";
     return out;
   }
-
   out.ok = true;
   return out;
 }

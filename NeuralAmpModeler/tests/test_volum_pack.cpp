@@ -2748,6 +2748,24 @@ TEST_CASE("F-52 a Pack import never mints a custom pedal slot past 127")
 TEST_CASE("F-53 a library entry whose capture file is not in the Pack is skipped and reported")
 {
   Library lib("missing-capture", "a");
+  // Things in the library that lean on the amp, the IR and the pedal: a factory
+  // amp's preset that uses all three, and PLAY switches on the custom amp.
+  {
+    Preset leaner;
+    leaner.id = "preset_leaner";
+    leaner.name = "Leaner";
+    leaner.settings.activeIrId = "ir_one";
+    leaner.settings.supportActiveIrId = "ir_one";
+    leaner.settings.preNam2Capture = kCustomPedalIndexBase;
+    leaner.settings.dualAmpActive = true;
+    leaner.settings.supportAmpIdx = -1;
+    leaner.settings.supportCustomId = "amp_one";
+    lib.store.reg().presetBanks["factory:4"] = {leaner};
+    lib.store.reg().midiSoundMap[3] = MidiSoundAssignment{"amp_one", "preset_one"};
+    lib.store.reg().midiSoundMap[4] = MidiSoundAssignment{"factory:4", "preset_leaner"};
+    lib.store.reg().midiSoundMap[7] = MidiSoundAssignment{"amp_one", ""};
+    REQUIRE(lib.store.Save());
+  }
   std::string err;
   const auto good = BuildPackEntries(lib.store, EverythingPlan(lib.store.reg()), "", &err);
   REQUIRE_FALSE(good.empty());
@@ -2784,6 +2802,12 @@ TEST_CASE("F-53 a library entry whose capture file is not in the Pack is skipped
     CHECK(pack.library.amps.size() == 1);
     REQUIRE(pack.skipped.size() == 1);
     CHECK(Mentions(pack.skipped, "IR \"Mesa OS\""));
+    // Nothing in the Pack still names it: those presets are back on the baked cab.
+    CHECK(Mentions(pack.skipped, "baked cab restored in 2 presets"));
+    CHECK(pack.library.presetBanks.at("amp_one")[0].settings.activeIrId.empty());
+    const auto& leaner = pack.library.presetBanks.at("factory:4")[0].settings;
+    CHECK(leaner.activeIrId.empty());
+    CHECK(leaner.supportActiveIrId.empty());
   }
 
   SUBCASE("a pedal without its file")
@@ -2792,6 +2816,20 @@ TEST_CASE("F-53 a library entry whose capture file is not in the Pack is skipped
     REQUIRE(pack.ok);
     CHECK(pack.library.pedals.empty());
     CHECK(Mentions(pack.skipped, "Pedal \"Klon\""));
+    CHECK(Mentions(pack.skipped, "PRE slot emptied in 2 presets"));
+    CHECK(pack.library.presetBanks.at("amp_one")[0].settings.preNam1Capture == 0);
+    CHECK(pack.library.presetBanks.at("factory:4")[0].settings.preNam2Capture == 0);
+
+    // The skipped pedal's number must not land on a different local pedal.
+    Library receiver("missing-pedal-recv", "recv");
+    receiver.store.reg().presetBanks.clear();
+    receiver.store.reg().pedals[0].id = "local_pedal";
+    receiver.store.reg().pedals[0].legacyIndex = kCustomPedalIndexBase;
+    REQUIRE(receiver.store.Save());
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, false).ok);
+    for (const auto& bank : receiver.store.reg().presetBanks)
+      for (const auto& pr : bank.second)
+        CHECK(pr.settings.preNam1Capture != kCustomPedalIndexBase);
   }
 
   SUBCASE("an amp without its file leaves with its preset bank")
@@ -2802,6 +2840,17 @@ TEST_CASE("F-53 a library entry whose capture file is not in the Pack is skipped
     CHECK(pack.library.presetBanks.count("amp_one") == 0);
     CHECK(Mentions(pack.skipped, "Custom amp \"Plexi\""));
     CHECK(pack.library.irs.size() == 1);
+
+    // The skipped amp is not a SUPPORT partner any more, and its PLAY switches are
+    // not imported (the switch on another amp's preset stays).
+    CHECK(Mentions(pack.skipped, "SUPPORT switched off in 1 preset"));
+    CHECK(Mentions(pack.skipped, "PLAY switches 03, 07 not imported"));
+    const auto& leaner = pack.library.presetBanks.at("factory:4")[0].settings;
+    CHECK(leaner.supportCustomId.empty());
+    CHECK_FALSE(leaner.dualAmpActive);
+    CHECK(pack.library.midiSoundMap.count(3) == 0);
+    CHECK(pack.library.midiSoundMap.count(7) == 0);
+    CHECK(pack.library.midiSoundMap.count(4) == 1);
 
     Library receiver("missing-capture-recv", "recv");
     receiver.store.reg().amps.clear();
@@ -2884,6 +2933,38 @@ TEST_CASE("F-102 the Dual Amp sidecar is staged before the library commit")
     REQUIRE(ReadWholeFile(sidecar.path, text));
     CHECK(nlohmann::json::parse(text) == nlohmann::json::parse("{\"amps\":{}}"));
     CHECK(strayTemps(receiver.base) == 0);
+  }
+
+  SUBCASE("a sidecar rename that fails puts the previous settings file back")
+  {
+    Library receiver("sidecar-rename-fail", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    REQUIRE(WriteWholeFile(settingsPath, "{\"midiCh\":3}"));
+    // A folder where the sidecar file belongs: staging beside it works, the final
+    // rename onto it cannot.
+    MachineSidecar sidecar{receiver.base / "volum-dual-amp-settings.json", doc};
+    std::filesystem::create_directories(sidecar.path);
+    const auto result =
+      ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath, 4000, nullptr, &sidecar);
+    CHECK_FALSE(result.ok);
+    CHECK(result.libraryCommitted); // the library is in; only the machine pair failed
+    CHECK(Mentions({result.error}, "machine settings"));
+    std::string text;
+    REQUIRE(ReadWholeFile(settingsPath, text));
+    CHECK(nlohmann::json::parse(text) == nlohmann::json::parse("{\"midiCh\":3}")); // not the Pack's
+    CHECK(strayTemps(receiver.base) == 0);
+    CHECK_FALSE(std::filesystem::exists(settingsPath.string() + ".pre-import"));
+  }
+
+  SUBCASE("a sidecar rename that fails leaves no settings file where there was none")
+  {
+    Library receiver("sidecar-rename-fail-new", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    MachineSidecar sidecar{receiver.base / "volum-dual-amp-settings.json", doc};
+    std::filesystem::create_directories(sidecar.path);
+    CHECK_FALSE(
+      ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath, 4000, nullptr, &sidecar).ok);
+    CHECK_FALSE(std::filesystem::exists(settingsPath));
   }
 
   SUBCASE("unticked machine settings leave the sidecar alone")

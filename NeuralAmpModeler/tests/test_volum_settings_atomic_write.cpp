@@ -303,7 +303,7 @@ TEST_CASE("F-12: every volum-settings.json writer goes through the locked merge"
   REQUIRE(restore != std::string::npos);
   const auto lock = pack.rfind("WithMachineSettingsLock(", restore);
   REQUIRE(lock != std::string::npos);
-  CHECK(restore - lock < 200);
+  CHECK(restore - lock < 1200); // the lambda opens with the F-102 settings backup
 }
 
 TEST_CASE("F-102 Pack import renames the Dual Amp sidecar under the machine-settings lock")
