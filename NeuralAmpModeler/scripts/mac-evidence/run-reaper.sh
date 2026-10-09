@@ -178,7 +178,10 @@ for result in data["formats"]:
         f"PASS {result['format']} loaded as {result['fx_name']}; "
         f"peak={result['peak']:.6f} rms={result['rms']:.6f} finite={result['bad'] == 0}"
     )
-    print(f"{result['pc_status']} {result['format']} Program Change 1: {result['pc_evidence']}")
+    print(
+        f"{result['pc_status']} {result['format']} offline-render Program Change 1: "
+        f"{result['pc_evidence']}"
+    )
     pc_roundtrip = result["pc_roundtrip"] and result["pc_state_restored"]
     print(
         f"{'PASS' if pc_roundtrip else 'FAIL'} {result['format']} PC 1 save/reopen: "
@@ -193,6 +196,18 @@ for result in data["formats"]:
         f"{'PASS' if result['fresh_nondefault_reload'] else 'FAIL'} {result['format']} "
         "fresh non-default project stayed off slot 0 after reload"
     )
+    print(
+        f"{result['playback_reload_status']} {result['format']} save while playing/reopen: "
+        f"{result['playback_reload_evidence']}"
+    )
+    print(
+        f"{result['delayed_pc_status']} {result['format']} delayed stopped PC 1: "
+        f"{result['delayed_pc_evidence']}"
+    )
+    print(
+        f"{result['repeat_pc_status']} {result['format']} repeated PC 1: "
+        f"{result['repeat_pc_evidence']}"
+    )
     print(f"{result['cc_status']} {result['format']} CC 102 value 2: {result['cc_evidence']}")
     failed = (
         failed
@@ -200,6 +215,9 @@ for result in data["formats"]:
         or not pc_roundtrip
         or not result["no_recall_on_load"]
         or not result["fresh_nondefault_reload"]
+        or result["playback_reload_status"] == "FAIL"
+        or result["delayed_pc_status"] == "FAIL"
+        or result["repeat_pc_status"] == "FAIL"
         or result["cc_status"] == "FAIL"
     )
     print(

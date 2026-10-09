@@ -40,6 +40,12 @@ local function emit(ok, err)
     f:write(",\"load_recall_delta\":" .. tostring(r.load_recall_delta or -1))
     f:write(",\"no_recall_on_load\":" .. bool(r.no_recall_on_load))
     f:write(",\"fresh_nondefault_reload\":" .. bool(r.fresh_nondefault_reload))
+    f:write(",\"playback_reload_status\":" .. jstr(r.playback_reload_status))
+    f:write(",\"playback_reload_evidence\":" .. jstr(r.playback_reload_evidence))
+    f:write(",\"delayed_pc_status\":" .. jstr(r.delayed_pc_status))
+    f:write(",\"delayed_pc_evidence\":" .. jstr(r.delayed_pc_evidence))
+    f:write(",\"repeat_pc_status\":" .. jstr(r.repeat_pc_status))
+    f:write(",\"repeat_pc_evidence\":" .. jstr(r.repeat_pc_evidence))
     f:write(",\"cc_status\":" .. jstr(r.cc_status))
     f:write(",\"cc_evidence\":" .. jstr(r.cc_evidence))
     f:write(",\"roundtrip\":" .. bool(r.roundtrip))
@@ -180,6 +186,29 @@ local function midi_recall_count()
   return count
 end
 
+local function midi_recall_slots()
+  local home = os.getenv("HOME") or ""
+  local file = io.open(home .. "/Library/Application Support/VoLum/volum.log", "r")
+  if not file then return {} end
+  local slots = {}
+  for line in file:lines() do
+    local slot = line:match("%[midi%] recall slot=(%d+)")
+    if slot then slots[#slots + 1] = tonumber(slot) end
+  end
+  file:close()
+  return slots
+end
+
+local function recall_delta_for_slot(before, expected)
+  local after = midi_recall_slots()
+  local values, valid = {}, #after > #before
+  for i = #before + 1, #after do
+    values[#values + 1] = tostring(after[i])
+    if after[i] ~= expected then valid = false end
+  end
+  return valid, after, table.concat(values, ",")
+end
+
 local function add_midi_message(track, status, data1, data2)
   local item = reaper.CreateNewMIDIItemInProj(track, 0.0, 0.5, false)
   local take = reaper.GetActiveTake(item)
@@ -293,6 +322,59 @@ local function test_format(spec)
     :format(spec.format, pc_stats.rms, pc_reloaded.rms, tostring(pc_state_restored),
       load_recall_delta, tostring(fresh_nondefault_reload)))
 
+  -- Save while transport is actively playing, then reopen stopped. Hosted
+  -- runners may not provide a clocked audio device, in which case this check is
+  -- reported as NOT COVERED rather than inferred from an idle save.
+  local playback_reload_status = "NOT COVERED"
+  local playback_reload_evidence = "REAPER transport did not enter playing state"
+  reaper.SetEditCurPos(0.25, false, false)
+  reaper.OnPlayButton()
+  spin(1.0)
+  if (reaper.GetPlayState() & 1) ~= 0 then
+    local playback_rpp = dir .. "/" .. spec.format:lower() .. "-playing-save.rpp"
+    reaper.Main_SaveProjectEx(0, playback_rpp, 0)
+    local playback_saved_state = plugin_state_chunk(track)
+    reaper.OnStopButton()
+    local playback_recalls_before = midi_recall_count()
+    reaper.Main_openProject("noprompt:" .. playback_rpp)
+    spin(3.0)
+    track = assert(reaper.GetTrack(0, 0), "playback-reloaded track missing")
+    item = assert(reaper.GetTrackMediaItem(track, 0), "playback-reloaded audio item missing")
+    local playback_restored_state = plugin_state_chunk(track)
+    local playback_reloaded = render_stats(track, item, spec.format .. "-playing-save-reloaded")
+    spin(1.0)
+    local playback_recall_delta = midi_recall_count() - playback_recalls_before
+    local playback_rms_ok =
+      math.abs(playback_reloaded.rms - pc_stats.rms) <= math.max(0.0001, pc_stats.rms * 0.02)
+    local playback_ok = playback_saved_state == playback_restored_state
+      and playback_recall_delta == 0 and playback_rms_ok
+    playback_reload_status = playback_ok and "PASS" or "FAIL"
+    playback_reload_evidence =
+      ("state_equal=%s rms=%.8f expected=%.8f recall_delta=%d")
+      :format(tostring(playback_saved_state == playback_restored_state),
+        playback_reloaded.rms, pc_stats.rms, playback_recall_delta)
+  else
+    reaper.OnStopButton()
+  end
+  L(("%s playing-save reload %s: %s")
+    :format(spec.format, playback_reload_status, playback_reload_evidence))
+
+  -- More than two wall-clock seconds after project load, while stopped, send
+  -- the same PC twice. Each event must independently reach VoLum.
+  reaper.OnStopButton()
+  spin(2.1)
+  local delayed_before = midi_recall_slots()
+  deliver_midi(track, item, 0xC0, 1, 0, spec.format .. " delayed Program Change 1")
+  local delayed_ok, delayed_after, delayed_slots = recall_delta_for_slot(delayed_before, 1)
+  local delayed_pc_status = delayed_ok and "PASS" or "FAIL"
+  local delayed_pc_evidence = "new recall slots=[" .. delayed_slots .. "] after >2 s stopped"
+  deliver_midi(track, item, 0xC0, 1, 0, spec.format .. " repeated Program Change 1")
+  local repeat_ok, _, repeat_slots = recall_delta_for_slot(delayed_after, 1)
+  local repeat_pc_status = repeat_ok and "PASS" or "FAIL"
+  local repeat_pc_evidence = "second event recall slots=[" .. repeat_slots .. "]"
+  L(("%s delayed PC %s; repeated PC %s")
+    :format(spec.format, delayed_pc_evidence, repeat_pc_evidence))
+
   local cc_changed, cc_why =
     deliver_midi(track, item, 0xB0, 102, 2, spec.format .. " CC102=2")
   local cc_stats = render_stats(track, item, spec.format .. "-after-cc102")
@@ -319,6 +401,10 @@ local function test_format(spec)
     pc_roundtrip=pc_roundtrip, pc_state_restored=pc_state_restored,
     load_recall_delta=load_recall_delta, no_recall_on_load=no_recall_on_load,
     fresh_nondefault_reload=fresh_nondefault_reload,
+    playback_reload_status=playback_reload_status,
+    playback_reload_evidence=playback_reload_evidence,
+    delayed_pc_status=delayed_pc_status, delayed_pc_evidence=delayed_pc_evidence,
+    repeat_pc_status=repeat_pc_status, repeat_pc_evidence=repeat_pc_evidence,
     cc_status=cc_changed and "PASS" or "FAIL", cc_evidence=cc_why,
     roundtrip=roundtrip, reloaded_rms=reloaded.rms
   }
