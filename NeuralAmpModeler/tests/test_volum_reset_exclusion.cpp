@@ -3,6 +3,7 @@
 #define VOLUM_DSP_STAGING_SKIP_WDL
 #include "../VoLumDspStagingWdl.h"
 #include "../VoLumChorus.h"
+#include "../VoLumLatencyRequests.h"
 #include "../VoLumLatencySnapshot.h"
 #include "../VoLumResetExclusion.h"
 #include "../../AudioDSPTools/dsp/Delay.h"
@@ -88,7 +89,7 @@ std::string OnResetBody()
 std::string LatencyBody()
 {
   return Unwrapped(Between(PluginCpp(), "int NeuralAmpModeler::_ReportedLatencySamples() const",
-                           "void NeuralAmpModeler::_ApplyLatchedLatency()"));
+                           "void NeuralAmpModeler::_VolumSetSupportSelected("));
 }
 
 // The objects OnReset re-prepares and ProcessBlock runs, with the plugin's locking.
@@ -282,8 +283,8 @@ TEST_CASE("Host latency asks the plan's SUPPORT rule instead of the Dual Amp tog
 
 TEST_CASE("Host latency reads the published lane snapshot, never the live model pointers")
 {
-  // _UpdateLatency runs outside the reset exclusion (after OnReset unlocks, and from
-  // OnParamChange) while ProcessBlock may publish or retire those models.
+  // The report is computed outside the reset exclusion (after OnReset unlocks, from
+  // OnUIOpen and OnIdle) while ProcessBlock may publish or retire those models.
   const std::string body = LatencyBody();
   At(body, "const volum::LaneLatencies lanes = mLiveLatency.Read();");
   for (const char* live : {"mModel", "mSupportModel", "mPreModel"})
@@ -301,7 +302,165 @@ TEST_CASE("Host latency reads the published lane snapshot, never the live model 
 
   const std::string staging =
     Between(PluginCpp(), "void NeuralAmpModeler::_ApplyDSPStaging()", "void NeuralAmpModeler::_ResetModelAndIR(");
-  CHECK(At(staging, "_VolumPublishLiveLatency();") < At(staging, "mPendingLatency.store(_ReportedLatencySamples()"));
+  At(staging, "_VolumPublishLiveLatency();");
+}
+
+TEST_CASE("Every latency input asks the main thread to recompute, and only the main thread reports")
+{
+  const std::string cpp = PluginCpp();
+  // Each publish asks, so the audio thread never latches a value of its own.
+  const std::string publish = Between(
+    cpp, "void NeuralAmpModeler::_VolumPublishLiveLatency()", "int NeuralAmpModeler::_ReportedLatencySamples()");
+  CHECK(At(publish, "mLiveLatency.Publish(lanes);") < At(publish, "mLatencyRequests.Request();"));
+
+  // Dual Amp, PRE NAM and PRE Pitch params: one request ahead of the switch.
+  const std::string onParam =
+    Between(cpp, "void NeuralAmpModeler::OnParamChange(int paramIdx)", "    // Changes to the input gain");
+  CHECK(At(onParam, "if (volum::ParamAffectsReportedLatency(paramIdx))\n    mLatencyRequests.Request();")
+        < At(onParam, "switch (paramIdx)"));
+
+  // SUPPORT selection: one writer, which asks whenever the selection changes.
+  const std::string setter =
+    Between(cpp, "void NeuralAmpModeler::_VolumSetSupportSelected(", "void NeuralAmpModeler::_UpdateLatency()");
+  At(setter, "if (mVolumSupportSelected.exchange(selected) != selected)\n    mLatencyRequests.Request();");
+  const std::string loader = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLoader.inc.cpp");
+  CHECK(loader.find("mVolumSupportSelected.store(") == std::string::npos);
+  At(loader, "_VolumSetSupportSelected(false);");
+  At(loader, "_VolumSetSupportSelected(true);");
+
+  const std::string idle = Between(cpp, "void NeuralAmpModeler::OnIdle()", "bool NeuralAmpModeler::SerializeState(");
+  At(Unwrapped(idle),
+     "mLatencyRequests.Service([this] { return _ReportedLatencySamples(); }, [this](int latency) { "
+     "_ApplyReportedLatency(latency); });");
+  // The old latch let a main-thread recompute overwrite a newer audio-thread value.
+  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  for (const char* latch : {"mPendingLatency", "mLatencyDirty"})
+  {
+    INFO(latch);
+    CHECK(cpp.find(latch) == std::string::npos);
+    CHECK(header.find(latch) == std::string::npos);
+  }
+}
+
+TEST_CASE("The latency-input param list covers every param the latency report reads")
+{
+  const std::string body = LatencyBody();
+  const std::string requests = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLatencyRequests.h");
+  const std::string list = Between(requests, "inline bool ParamAffectsReportedLatency(", "default: return false;");
+  int reads = 0;
+  for (size_t pos = body.find("GetParam(k"); pos != std::string::npos; pos = body.find("GetParam(k", pos + 1))
+  {
+    const size_t start = pos + std::string("GetParam(").size();
+    const std::string param = body.substr(start, body.find(')', start) - start);
+    INFO(param);
+    CHECK(list.find("case " + param + ":") != std::string::npos);
+    ++reads;
+  }
+  CHECK(reads >= 8);
+
+  CHECK(volum::ParamAffectsReportedLatency(kDualAmpActive));
+  CHECK(volum::ParamAffectsReportedLatency(kPreNam2Capture));
+  CHECK(volum::ParamAffectsReportedLatency(kPrePitchTransChar));
+  CHECK_FALSE(volum::ParamAffectsReportedLatency(kMainAmpPan));
+  CHECK_FALSE(volum::ParamAffectsReportedLatency(kSupportAmpIdx));
+}
+
+namespace
+{
+struct HostLatency
+{
+  int reported = -1;
+  int reports = 0;
+};
+
+int ComputeLatency(const volum::LiveLatencySnapshot& snapshot)
+{
+  return std::max(0, snapshot.Read().main);
+}
+} // namespace
+
+TEST_CASE("A model published during a main-thread recompute is still reported (lost update)")
+{
+  volum::LiveLatencySnapshot snapshot;
+  volum::LatencyRecomputeRequests requests;
+  HostLatency host;
+  auto apply = [&](int latency) {
+    host.reported = latency;
+    ++host.reports;
+  };
+  auto publish = [&](int mainLatency) {
+    volum::LaneLatencies lanes;
+    lanes.main = mainLatency;
+    snapshot.Publish(lanes);
+    requests.Request();
+  };
+
+  CHECK_FALSE(requests.Service([&] { return ComputeLatency(snapshot); }, apply));
+
+  publish(64);
+  // The main thread reads the old snapshot, then the audio thread publishes a new
+  // model before the recompute is reported.
+  CHECK(requests.Service(
+    [&] {
+      const int seen = ComputeLatency(snapshot);
+      publish(4096);
+      return seen;
+    },
+    apply));
+  CHECK(host.reported == 64);
+  CHECK(requests.Pending());
+
+  CHECK(requests.Service([&] { return ComputeLatency(snapshot); }, apply));
+  CHECK(host.reported == 4096);
+  CHECK_FALSE(requests.Pending());
+  CHECK_FALSE(requests.Service([&] { return ComputeLatency(snapshot); }, apply));
+  CHECK(host.reports == 2);
+}
+
+TEST_CASE("A selection or param change with no model swap still reaches the host")
+{
+  // Dual Amp off / SUPPORT deselected: ProcessBlock drops SUPPORT at once and no
+  // model is retired, so the request is the only thing that re-reports latency.
+  volum::LatencyRecomputeRequests requests;
+  bool supportPlays = true;
+  int reported = -1;
+  auto compute = [&] { return supportPlays ? 4096 : 32; };
+  auto apply = [&](int latency) { reported = latency; };
+  requests.Request();
+  CHECK(requests.Service(compute, apply));
+  CHECK(reported == 4096);
+
+  supportPlays = false;
+  requests.Request();
+  CHECK(requests.Service(compute, apply));
+  CHECK(reported == 32);
+}
+
+TEST_CASE("Concurrent publishes always end with the newest latency reported")
+{
+  volum::LiveLatencySnapshot snapshot;
+  volum::LatencyRecomputeRequests requests;
+  std::atomic<bool> done{false};
+  constexpr int kPublishes = 100000;
+  std::thread audio([&] {
+    for (int i = 1; i <= kPublishes; ++i)
+    {
+      volum::LaneLatencies lanes;
+      lanes.main = i % volum::LiveLatencySnapshot::kMaxLatency;
+      snapshot.Publish(lanes);
+      requests.Request();
+    }
+    done.store(true);
+  });
+  int reported = -1;
+  auto compute = [&] { return ComputeLatency(snapshot); };
+  auto apply = [&](int latency) { reported = latency; };
+  while (!done.load())
+    requests.Service(compute, apply);
+  audio.join();
+  requests.Service(compute, apply);
+  CHECK_FALSE(requests.Pending());
+  CHECK(reported == kPublishes % volum::LiveLatencySnapshot::kMaxLatency);
 }
 
 TEST_CASE("Host latency and ProcessBlock share one SUPPORT selected-and-loaded rule")
@@ -309,8 +468,9 @@ TEST_CASE("Host latency and ProcessBlock share one SUPPORT selected-and-loaded r
   // A deselected SUPPORT stays loaded until its removal is staged; latency still
   // counted it while ProcessBlock already played MAIN alone.
   const std::string latency = LatencyBody();
-  At(latency, "volum::HaveSelectedSupportModel(mVolumSupportSelected.load(std::memory_order_relaxed), lanes.support "
-              "!= kNoModel)");
+  At(latency,
+     "volum::HaveSelectedSupportModel(mVolumSupportSelected.load(std::memory_order_relaxed), lanes.support "
+     "!= kNoModel)");
   At(ProcessBlockBody(), "volum::HaveSelectedSupportModel(supportAmpSelected, mSupportModel != nullptr)");
 }
 

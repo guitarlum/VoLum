@@ -944,8 +944,8 @@ void NeuralAmpModeler::OnIdle()
   // Runs after the sync above so the restore stays the first thing an idle does;
   // freeing a few megabytes can wait a tick, a stale editor cannot.
   _VolumReapAudioThreadRetirees();
-  if (mLatencyDirty.exchange(false, std::memory_order_acquire))
-    _ApplyLatchedLatency();
+  mLatencyRequests.Service(
+    [this] { return _ReportedLatencySamples(); }, [this](int latency) { _ApplyReportedLatency(latency); });
   if (mVolumUiMode == volum::UiMode::Play)
   {
     _VolumRefreshPlaySurface();
@@ -1519,6 +1519,9 @@ void NeuralAmpModeler::OnUIClose()
 
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
+  // Host automation lands here on the audio thread: only ask, OnIdle reports.
+  if (volum::ParamAffectsReportedLatency(paramIdx))
+    mLatencyRequests.Request();
   switch (paramIdx)
   {
     // Changes to the input gain
@@ -1655,7 +1658,6 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       if (mVolumInitComplete)
       {
         mVolumPreNeedsLoad[0].store(true);
-        _UpdateLatency();
       }
       break;
     case kPreNam2Capture:
@@ -1663,17 +1665,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       if (mVolumInitComplete)
       {
         mVolumPreNeedsLoad[1].store(true);
-        _UpdateLatency();
       }
-      break;
-    case kPrePitchActive:
-    case kPrePitchMode:
-    case kPrePitchTransChar:
-      // Toggling the pitch engine, switching Transpose/Octaver, or changing the
-      // transpose CHARACTER (Instant ~8.6 ms / Poly ~14 ms) all change reported
-      // (PDC) latency, so re-report it to the host.
-      if (mVolumInitComplete)
-        _UpdateLatency();
       break;
     case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
     default: break;
@@ -2154,25 +2146,11 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     _VolumPublishLiveLatency();
   if (removedMainModel || appliedMainModel)
   {
-    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
-    mLatencyDirty.store(true, std::memory_order_release);
     _SetInputGain();
     _SetOutputGain();
   }
   if (removedSupportModel || appliedSupportModel)
-  {
-    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
-    mLatencyDirty.store(true, std::memory_order_release);
     _SetSupportOutputGain();
-  }
-  for (int i = 0; i < 2; ++i)
-  {
-    if (removedPreModel[i] || appliedPreModel[i])
-    {
-      mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
-      mLatencyDirty.store(true, std::memory_order_release);
-    }
-  }
 }
 
 // Main thread: land the shaping push a deferred cab switch held back, once the audio
@@ -2620,6 +2598,7 @@ void NeuralAmpModeler::_VolumPublishLiveLatency()
     if (mPreModel[i])
       lanes.pre[i] = mPreModel[i]->GetLatency();
   mLiveLatency.Publish(lanes);
+  mLatencyRequests.Request();
 }
 
 int NeuralAmpModeler::_ReportedLatencySamples() const
@@ -2658,20 +2637,19 @@ int NeuralAmpModeler::_ReportedLatencySamples() const
   return preLatency + ampLatency;
 }
 
-void NeuralAmpModeler::_ApplyLatchedLatency()
+void NeuralAmpModeler::_VolumSetSupportSelected(bool selected)
 {
-  const int latency = mPendingLatency.load(std::memory_order_relaxed);
-  if (GetLatency() != latency)
-    SetLatency(latency);
-  _VolumRefreshLatencyReport(/*force=*/true);
+  if (mVolumSupportSelected.exchange(selected) != selected)
+    mLatencyRequests.Request();
 }
 
 void NeuralAmpModeler::_UpdateLatency()
 {
-  const int latency = _ReportedLatencySamples();
-  mPendingLatency.store(latency, std::memory_order_relaxed);
-  mLatencyDirty.store(false, std::memory_order_relaxed);
+  _ApplyReportedLatency(_ReportedLatencySamples());
+}
 
+void NeuralAmpModeler::_ApplyReportedLatency(int latency)
+{
   // Feels weird to have to do this.
   if (GetLatency() != latency)
   {

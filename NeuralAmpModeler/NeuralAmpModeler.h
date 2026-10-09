@@ -47,6 +47,7 @@
 #include "VoLumTremolo.h"
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
+#include "VoLumLatencyRequests.h"
 #include "VoLumLatencySnapshot.h"
 #include "VoLumMidi.h"
 #include "VoLumProcessingPlan.h"
@@ -824,8 +825,11 @@ private:
   int _ReportedLatencySamples() const;
   // Only the owner of the live model pointers may call this (see mLiveLatency).
   void _VolumPublishLiveLatency();
+  // Recompute and report now; main thread, or OnReset after the exclusion is released.
   void _UpdateLatency();
-  void _ApplyLatchedLatency();
+  void _ApplyReportedLatency(int latency);
+  // The only writer of mVolumSupportSelected: a change is a latency input.
+  void _VolumSetSupportSelected(bool selected);
 
   // Plugin PDC plus, in the standalone, the audio device's own round trip.
   volum::LatencyReport _VolumLatencyReport() const;
@@ -936,12 +940,10 @@ private:
   bool mPostChorusWasActive = false;
   bool mPrePitchWasActive = false;
   bool mPreCompWasActive = false;
-  // Audio thread stores the sample count and sets the flag. OnIdle applies it.
-  // OnIdle must not read mModel: the audio thread owns those pointers.
-  std::atomic<int> mPendingLatency{0};
-  std::atomic<bool> mLatencyDirty{false};
   // Latency of the live models; _ReportedLatencySamples reads this, never the pointers.
   volum::LiveLatencySnapshot mLiveLatency;
+  // Raised from any thread when a latency input changes; OnIdle recomputes.
+  volum::LatencyRecomputeRequests mLatencyRequests;
   // Serializes non-audio writes (_StageModel / _StageIR) and OnIdle graveyard
   // reaping against the audio-thread pointer moves in _ApplyDSPStaging / drain.
   // The audio thread only moves unique_ptrs into the graveyards; ~ResamplingNAM
