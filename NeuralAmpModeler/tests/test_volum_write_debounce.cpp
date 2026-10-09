@@ -126,7 +126,7 @@ TEST_CASE("ContentStore Save returns early when registry matches baseline")
   CHECK_FALSE(store.HasUnflushedChanges());
 }
 
-TEST_CASE("ContentStore Save rewrites when a drained legacy scene is the only change")
+TEST_CASE("ContentStore Save rewrites when a removed legacy scene is the only change")
 {
   using namespace volum::content;
   const auto base = ContentTestBase("save-legacy-drain");

@@ -51,6 +51,7 @@
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
 #include "VoLumContentStore.h" // 1.2.0 custom-content backend (F5-F8) + kDirectSlot
+#include "VoLumUpgradeMigration.h"
 #include "VoLumUpdateCheck.h"
 #include "VoLumUpdateState.h"
 #include "VoLumPlayModel.h"
@@ -526,8 +527,8 @@ public:
   // mVolumAmpSettings[ampIdx]. Before 1.3.0 this map lived in the shared content
   // library, so one instance's catalog write moved another instance's knobs; the
   // sounding rig belongs to the instance (DAW chunk / standalone settings) now.
-  // Seeded on first touch from a pre-1.3.0 library's customScenes, so an upgrade
-  // keeps the knobs the user left behind.
+  // Seeded on first touch from a copy of a pre-1.3.0 library's customScenes, so an
+  // upgrade keeps the knobs the user left behind (volum::content::InstanceCustomScene).
   std::map<std::string, volum::VoLumAmpSettings> mVolumCustomScenes;
   volum::VoLumAmpSettings& _VolumCustomScene(const std::string& ampId);
   // The repair planned for the delete/replace the confirm dialog is asking about.
