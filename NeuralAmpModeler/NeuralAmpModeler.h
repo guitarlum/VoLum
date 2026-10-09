@@ -140,6 +140,11 @@ enum ECtrlTags
   kNumCtrlTags
 };
 
+// Every anchored dropdown. Whatever opens, closes or checks "a dropdown" walks
+// this list; a copy that missed one left the IR menu clickable over PLAY.
+inline constexpr int kVoLumDropdownTags[] = {
+  kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
+
 enum EMsgTags
 {
   // These tags are used from UI -> DSP

@@ -56,15 +56,10 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   const auto framePerf = volum::frameperf::AttachBeginIfRequested(pGraphics);
   pGraphics->AttachControl(new VoLumKnobSelectionClearControl(IRECT(mainL, b.T, mainR, b.B), [this]() {
     _ClearVoLumKnobSelection();
-    _VolumHidePreCaptureMenu();
-    _VolumHideSupportAmpMenu();
     if (auto* pGfx = GetUI())
-    {
-      if (auto* ir = pGfx->GetControlWithTag(kCtrlTagVoLumIrMenu))
-        ir->Hide(true);
-      if (auto* pm = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
-        pm->Hide(true);
-    }
+      for (int tag : kVoLumDropdownTags)
+        if (auto* menu = pGfx->GetControlWithTag(tag))
+          menu->Hide(true);
   }));
 
   // Sidebar: logo
@@ -1125,9 +1120,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       gearArea,
       [pGraphics, pPlugin](IControl* pCaller) {
         pPlugin->_VolumRefreshMidiSettingsChrome();
-        const int kDropdownTags[] = {
-          kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
-        for (int tag : kDropdownTags)
+        for (int tag : kVoLumDropdownTags)
           if (auto* c = pGraphics->GetControlWithTag(tag))
             c->Hide(true);
         if (auto* surface = pGraphics->GetControlWithTag(kCtrlTagVoLumPlaySurface))
@@ -1495,13 +1488,17 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     {
       bool overlayOpen = false;
       if (auto* pGfx = GetUI())
-        overlayOpen = volum::ui::AnyOverlayOpen(
-          {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
-           kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome, kCtrlTagVoLumPresetMenu},
-          [&](int tag) {
-            auto* c = pGfx->GetControlWithTag(tag);
-            return c && !c->IsHidden();
-          });
+      {
+        auto isOpen = [&](int tag) {
+          auto* c = pGfx->GetControlWithTag(tag);
+          return c && !c->IsHidden();
+        };
+        overlayOpen =
+          volum::ui::AnyOverlayOpen({kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay,
+                                     kCtrlTagVoLumConfirm, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome},
+                                    isOpen)
+          || volum::ui::AnyTagOpen(kVoLumDropdownTags, isOpen);
+      }
       if (!overlayOpen)
       {
         _VolumSetUiMode(mVolumUiMode == volum::UiMode::Play ? volum::UiMode::Build : volum::UiMode::Play);
@@ -1573,8 +1570,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
       if (stack.settings)
         if (auto* settings = pGfx->GetControlWithTag(kCtrlTagSettingsBox))
           stack.settingsMidiBoard = settings->As<NAMSettingsPageControl>()->MidiBanksPageable();
-      stack.dropdown = isOpen(kCtrlTagVoLumPresetMenu) || isOpen(kCtrlTagVoLumIrMenu)
-                       || isOpen(kCtrlTagVoLumPreCaptureMenu) || isOpen(kCtrlTagVoLumSupportAmpMenu);
+      stack.dropdown = volum::ui::AnyTagOpen(kVoLumDropdownTags, isOpen);
       stack.knobSelected = mVolumSelectedKnobParamIdx != kNoParameter;
 
       const KeyKind kind = volum::keyboard::ClassifyVk(key.VK);
@@ -1641,9 +1637,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
               return true;
             case OverlayId::Dropdown:
             {
-              const int kDropdownTags[] = {
-                kCtrlTagVoLumPresetMenu, kCtrlTagVoLumIrMenu, kCtrlTagVoLumPreCaptureMenu, kCtrlTagVoLumSupportAmpMenu};
-              for (int tag : kDropdownTags)
+              for (int tag : kVoLumDropdownTags)
                 if (hideTag(tag))
                   return true;
               return true;

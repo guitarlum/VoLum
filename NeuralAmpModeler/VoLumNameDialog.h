@@ -18,6 +18,7 @@
 #include "VoLumConfirmDialog.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumNameDialogModel.h"
+#include "VoLumSecondPress.h"
 
 #include <cctype>
 #include <chrono>
@@ -181,9 +182,19 @@ public:
     return true;
   }
 
-  void OnMouseDown(float x, float y, const IMouseMod& mod) override { Press(x, y, mod, false); }
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const auto pressed = mSecondPress.Press();
+    Press(x, y, mod, false);
+  }
 
-  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override { Press(x, y, mod, true); }
+  // The dialog opens on a mouse-down, so the second click of the double-click
+  // that opened it arrives here: on Cancel, Save or outside the box.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      Press(x, y, mod, true);
+  }
 
   void OnMouseDrag(float x, float y, float, float, const IMouseMod&) override
   {
@@ -253,6 +264,7 @@ private:
     mOnSave = std::move(onSave);
     mOnCancel = std::move(onCancel);
     mSelecting = false;
+    mSecondPress = {};
     IControl::Hide(false);
     if (mScrim)
     {
@@ -405,6 +417,7 @@ private:
   std::string mTitle, mMessage, mConfirmLabel;
   volum::name_dialog::State mModel;
   volum::name_dialog::ClickTracker mClicks;
+  volum::ui::SecondPressGate mSecondPress;
   std::chrono::steady_clock::time_point mInputAt{};
   int mBlinkPhase = 0;
   bool mSelecting = false;

@@ -734,6 +734,8 @@ private:
     const char* ext = (mManageKind == ManageKind::IR) ? "wav" : "nam";
     WDL_String path;
     std::vector<WDL_String> files;
+    // The macOS panel swallows the mouse-up, which would leave this press captured.
+    ui->ReleaseMouseCapture();
     ui->PromptForFiles(path, files, ext); // multi-select; each entry is a full path
     if (files.empty())
       return;
@@ -1097,6 +1099,8 @@ private:
         return;
       WDL_String path;
       std::vector<WDL_String> files;
+      // The macOS panel swallows the mouse-up, which would leave this press captured.
+      ui->ReleaseMouseCapture();
       ui->PromptForFiles(path, files, "nam"); // multi-select .nam captures
       int added = 0;
       for (const auto& fn : files)

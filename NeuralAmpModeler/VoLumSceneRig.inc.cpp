@@ -626,6 +626,14 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
   const std::string rel = volum::custom::IRFileAt(irIdx);
   if (id.empty() || rel.empty())
     return;
+  // Recall and restore run from OnIdle. A modal box there pumps the timer that
+  // calls OnIdle again, so only a user's own pick gets one.
+  auto refuse = [&](const std::string& why) {
+    VOLUM_LOG("ir", std::string("refused ") + (support ? "[support] " : "[main] ") + rel + ": " + why);
+    if (interactive)
+      if (auto* pGfx = GetUI())
+        _ShowMessageBox(pGfx, why.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
+  };
   // A custom IR convolves the amp's DIRECT (raw) capture. A custom amp with no
   // DIRECT capture has nothing to feed the IR, so refuse the selection (the cab
   // row already greys the button out; this guards the menu/dialog/restore paths).
@@ -652,12 +660,9 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
         _VolumActiveScene().supportActiveIrId.clear();
       else
         _VolumActiveScene().activeIrId.clear();
-      if (interactive)
-        if (auto* pGfx = GetUI())
-          _ShowMessageBox(pGfx,
-                          "This channel has no DIRECT capture, so a custom IR has no raw signal to "
-                          "convolve.\n\nSwitch to a channel with a DIRECT (AMP-/DI-) capture to use a custom IR.",
-                          "Impulse Response", EMsgBoxType::kMB_OK);
+      refuse(
+        "This channel has no DIRECT capture, so a custom IR has no raw signal to "
+        "convolve.\n\nSwitch to a channel with a DIRECT (AMP-/DI-) capture to use a custom IR.");
       return;
     }
   }
@@ -669,8 +674,7 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
   std::string sizeWhy;
   if (!volum::IrFileSizeAcceptable(absUtf8, sizeWhy))
   {
-    if (auto* pGfx = GetUI())
-      _ShowMessageBox(pGfx, sizeWhy.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
+    refuse(sizeWhy);
     return;
   }
   WDL_String p(absUtf8.c_str());
@@ -678,12 +682,7 @@ void NeuralAmpModeler::_VolumSelectIR(int irIdx, bool support, bool interactive)
   if (loadRc != dsp::wav::LoadReturnCode::SUCCESS)
   {
     // VoLum: surface why the IR did not activate instead of failing silently.
-    if (auto* pGfx = GetUI())
-    {
-      const std::string msg =
-        "VoLum could not load this impulse response.\n\n" + dsp::wav::GetMsgForLoadReturnCode(loadRc);
-      _ShowMessageBox(pGfx, msg.c_str(), "Impulse Response", EMsgBoxType::kMB_OK);
-    }
+    refuse("VoLum could not load this impulse response.\n\n" + dsp::wav::GetMsgForLoadReturnCode(loadRc));
     return;
   }
   // Picking an IR again while a cab swap is still waiting cancels that swap. The

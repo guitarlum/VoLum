@@ -12,6 +12,8 @@
 // dropdown on the first press, and the second must not toggle the pedal underneath.
 // Windows only pairs two clicks that hit the same window; VoLum is one window, so a
 // control replays a double-click as a press only when it took the first press too.
+// iPlug's stock buttons and switches set mDblAsSingleClick, which replays every
+// double-click as a press; VoLum's clear it and use this gate instead.
 
 #include <chrono>
 

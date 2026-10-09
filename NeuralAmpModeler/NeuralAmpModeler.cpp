@@ -903,8 +903,10 @@ void NeuralAmpModeler::OnIdle()
   if (GetUI() && mVolumUiSyncPending.exchange(false))
     _VolumSyncUiFromState();
   _VolumRebindCustomSupportIdx();
+  // Not while a control holds the mouse: the box drops the capture without ending a
+  // knob drag's host gesture.
   if (!mVolumPendingLibraryNotice.empty())
-    if (auto* gfx = GetUI())
+    if (auto* gfx = GetUI(); gfx && !gfx->ControlIsCaptured())
     {
       // Taken before the box opens: it is modal and pumps the timer that calls OnIdle.
       const std::string notice = std::move(mVolumPendingLibraryNotice);
