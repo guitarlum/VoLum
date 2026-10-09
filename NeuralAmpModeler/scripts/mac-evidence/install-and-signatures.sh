@@ -9,10 +9,7 @@ mkdir -p "$EVIDENCE_DIR"
 : > "$LOG"
 exec > >(tee -a "$LOG") 2>&1
 
-DMG="$(find "$ARTIFACT_DIR" -type f -name '*-macos-installer.dmg' -print -quit)"
-if [[ -z "$DMG" ]]; then
-  DMG="$(find "$ARTIFACT_DIR" -type f -name '*.dmg' -print -quit)"
-fi
+DMG="$(find "$ARTIFACT_DIR" -type f -name '*-mac.dmg' -print -quit)"
 if [[ -z "$DMG" ]]; then
   echo "FAIL no installer DMG under $ARTIFACT_DIR"
   exit 1
