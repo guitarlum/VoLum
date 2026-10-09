@@ -24,7 +24,14 @@ trap cleanup EXIT
 echo "Downloading pinned REAPER 7.82 universal build: $REAPER_URL"
 curl --fail --location --retry 3 --output "$WORK/reaper.dmg" "$REAPER_URL"
 echo "REAPER dmg sha256: $(shasum -a 256 "$WORK/reaper.dmg" | awk '{print $1}')"
-hdiutil attach "$WORK/reaper.dmg" -acceptlicense -nobrowse -readonly -mountpoint "$MOUNT"
+set +o pipefail
+yes | hdiutil attach "$WORK/reaper.dmg" -nobrowse -readonly -mountpoint "$MOUNT"
+attach_ec=${PIPESTATUS[1]}
+set -o pipefail
+if [[ "$attach_ec" -ne 0 ]]; then
+  echo "FAIL the pinned REAPER image license could not be accepted noninteractively"
+  exit "$attach_ec"
+fi
 SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'REAPER.app' -print -quit)"
 if [[ -z "$SOURCE_APP" ]]; then
   echo "FAIL REAPER.app not found in pinned DMG"
