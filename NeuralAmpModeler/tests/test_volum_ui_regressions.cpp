@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "../config.h"
+#include "../VoLumModeTransition.h"
 #include "../VoLumSecondPress.h"
 #include "../VoLumTriptychLayout.h"
 
@@ -1063,7 +1064,7 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "postGuard(mVolumPostRestoreInProgress);");
   RequireContains(source, "if (!s.postValid)");
   RequireContains(source, "const volum::VoLumAmpSettings defaults;");
-  RequireContains(source, "if (mVolumPostRestoreInProgress)");
+  RequireContains(source, "externalTransition && !mVolumPostRestoreInProgress");
   RequireContains(source, "mVolumInitComplete && !mVolumPostRestoreInProgress");
   RequireContains(source, "const int restoredDelayMode = std::clamp(s.postDelayMode");
   RequireContains(source, "const int restoredReverbMode = std::clamp(s.postReverbMode");
@@ -1091,10 +1092,9 @@ TEST_CASE("POST Tremolo per-mode switch is guarded from snapshot re-entry")
 
   RequireContains(header, "bool mVolumTremoloRestoreInProgress = false;");
   RequireContains(source, "} guard(mVolumTremoloRestoreInProgress);");
-  RequireContains(source, "_VolumSaveTremoloModeSnapshot(oldMode);");
-  RequireContains(source, "_VolumRestoreTremoloModeSnapshot(newMode);");
-  // The mode handler skips the save/restore while a POST restore is in flight.
-  RequireContains(source, "mVolumEffectSettings.tremoloMode = newMode;");
+  RequireContains(source, "externalTransition && !mVolumTremoloRestoreInProgress && !mVolumPostRestoreInProgress");
+  RequireContains(source, "_VolumSaveTremoloModeSnapshot(mode);");
+  RequireContains(source, "_VolumRestoreTremoloModeSnapshot(mode, false);");
 }
 
 TEST_CASE("PRE Pitch per-mode switch is guarded from snapshot re-entry")
@@ -1108,9 +1108,67 @@ TEST_CASE("PRE Pitch per-mode switch is guarded from snapshot re-entry")
   RequireContains(header, "bool mVolumPreRestoreInProgress = false;");
   RequireContains(header, "int mVolumPrePitchMode = volum::kVoLumPitchModeDefault;");
   RequireContains(source, "} guard(mVolumPreRestoreInProgress);");
-  RequireContains(source, "if (mVolumPreRestoreInProgress)");
-  RequireContains(source, "_VolumSavePrePitchModeSnapshot(oldMode);");
-  RequireContains(source, "_VolumRestorePrePitchModeSnapshot(newMode);");
+  RequireContains(source, "externalTransition && !mVolumPreRestoreInProgress");
+  RequireContains(source, "_VolumSavePrePitchModeSnapshot(mode);");
+  RequireContains(source, "_VolumRestorePrePitchModeSnapshot(mode, false);");
+}
+
+TEST_CASE("F-08 headless mode transition preserves outgoing and recalls incoming snapshots")
+{
+  struct Snapshot
+  {
+    int knob = 0;
+  };
+
+  Snapshot slots[2]{{10}, {20}};
+  int trackedMode = 0;
+  int liveKnob = 13;
+  const bool changed = volum::ApplyModeSnapshotTransition(
+    1, 2, true, trackedMode, [&](int mode) { slots[mode].knob = liveKnob; },
+    [&](int mode) { liveKnob = slots[mode].knob; });
+
+  CHECK(changed);
+  CHECK(trackedMode == 1);
+  CHECK(slots[0].knob == 13);
+  CHECK(liveKnob == 20);
+
+  // A state restore has already decoded both snapshots and the live knob. Its
+  // mode notification must not perform a transition over that restored data.
+  const Snapshot restoredSlots[2]{{31}, {41}};
+  slots[0] = restoredSlots[0];
+  slots[1] = restoredSlots[1];
+  trackedMode = 0;
+  liveKnob = 37;
+  CHECK_FALSE(volum::ApplyModeSnapshotTransition(
+    1, 2, false, trackedMode, [&](int mode) { slots[mode].knob = liveKnob; },
+    [&](int mode) { liveKnob = slots[mode].knob; }));
+  CHECK(trackedMode == 0);
+  CHECK(liveKnob == 37);
+  CHECK(slots[0].knob == 31);
+  CHECK(slots[1].knob == 41);
+}
+
+TEST_CASE("F-08 mode snapshots run outside OnParamChangeUI and skip state restore")
+{
+  const std::string source = ReadPluginSource();
+  const std::string transition =
+    MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumHandleModeParamChange(");
+  const std::string ui = MemberFnUntilNext(source, "void NeuralAmpModeler::OnParamChangeUI(");
+
+  RequireContains(transition, "source == EParamSource::kUI || source == EParamSource::kHost");
+  RequireContains(transition, "case kPrePitchMode:");
+  RequireContains(transition, "case kDelayMode:");
+  RequireContains(transition, "case kReverbMode:");
+  RequireContains(transition, "case kReverbSubMode:");
+  RequireContains(transition, "case kTremoloMode:");
+  RequireContains(transition, "case kChorusMode:");
+  RequireContains(transition, "mVolumModeParamSyncPending.fetch_or");
+  RequireDoesNotContain(ui, "_VolumSavePrePitchModeSnapshot");
+  RequireDoesNotContain(ui, "_VolumSaveDelayModeSnapshot");
+  RequireDoesNotContain(ui, "_VolumSaveReverbModeSnapshot");
+  RequireDoesNotContain(ui, "_VolumSaveOktaverbSubModeSnapshot");
+  RequireDoesNotContain(ui, "_VolumSaveTremoloModeSnapshot");
+  RequireDoesNotContain(ui, "_VolumSaveChorusModeSnapshot");
 }
 
 TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")
@@ -2588,6 +2646,28 @@ TEST_CASE("tier2a model apply latches latency instead of updating it on the audi
   const std::string body = source.substr(apply, end - apply);
   RequireDoesNotContain(body, "_UpdateLatency()");
   RequireContains(body, "mLatencyDirty");
+}
+
+TEST_CASE("F-40 OnParamChange only latches main-thread layout support and latency work")
+{
+  const std::string source = ReadPluginSource();
+  const std::string body =
+    MemberFnUntilNext(source, "void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)");
+
+  RequireDoesNotContain(body, "_UpdateVoLumLayout(");
+  RequireDoesNotContain(body, "_VolumRefreshSupportChannels(");
+  RequireDoesNotContain(body, "_UpdateLatency(");
+  RequireDoesNotContain(body, "SendParameterValueFromDelegate(");
+  RequireContains(body, "mVolumDualAmpParamDirty.store(true");
+  RequireContains(body, "mVolumSupportChannelsDirty.store(true");
+  RequireContains(body, "mLatencyRecomputePending.store(true");
+  RequireContains(body, "mLatencyDirty.store(true");
+
+  const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
+  RequireContains(idle, "_VolumApplyPendingDualAmpChange();");
+  RequireContains(idle, "_VolumRefreshSupportChannels();");
+  RequireContains(idle, "mLatencyRecomputePending.exchange(false");
+  RequireContains(idle, "_UpdateLatency();");
 }
 
 TEST_CASE("tier2a loader drain does not block on the loader mutex")
