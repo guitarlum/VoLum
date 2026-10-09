@@ -30,20 +30,22 @@
 -- ("1" when LOCALAPPDATA is a fresh library, so the five pre-filled Sounds on
 -- programs 0-4 are known).
 
-local function getenv(name)
-  local ok, v = pcall(function() return reaper.GetExtState("VOLUM_HARNESS", name) end)
-  if ok and v ~= nil and v ~= "" then return v end
-  return os.getenv(name)
+local function readOneLine(path)
+  local fh = io.open(path, "r")
+  if not fh then return nil end
+  local line = fh:read("*l")
+  fh:close()
+  return line
 end
 
-local dir = getenv("VOLUM_HARNESS_DIR")
--- Sentinel gate: do nothing unless the runner asked for a run.
-if not dir or dir == "" then return end
-local sentinel = dir .. "\\go.txt"
+-- Sentinel gate: C:\REAPER\Scripts\__startup.lua dofiles this script when go.txt exists.
+local sentinel = "C:\\REAPER\\Scripts\\volum-harness-go.txt"
 local f = io.open(sentinel, "r")
 if not f then return end
+local dir = f:read("*l")
 f:close()
-os.remove(sentinel) -- one run per arm, even if a later REAPER launch re-runs startup
+os.remove(sentinel)
+if not dir or dir == "" then return end
 
 local logPath = dir .. "\\harness.log"
 local resPath = dir .. "\\results.json"
@@ -57,12 +59,11 @@ end
 
 local selected = {}
 do
-  local list = getenv("VOLUM_HARNESS_SCENARIOS")
-  if not list or list == "" then list = "core" end
+  local list = readOneLine(dir .. "\\scenarios.txt") or "core"
   for name in list:gmatch("[^,%s]+") do selected[name] = true end
 end
 local function wants(name) return selected["all"] or selected[name] end
-local sandbox = getenv("VOLUM_HARNESS_SANDBOX") == "1"
+local sandbox = readOneLine(dir .. "\\sandbox.txt") == "1"
 
 local SR = 48000
 local APPLY_FX_STEREO = 40361 -- Item: Apply track/take FX to items (stereo output)
@@ -144,21 +145,12 @@ end
 -- a time shift, which is what lets a realtime capture be compared with an offline
 -- render) and a brightness figure (first-difference energy over energy, left
 -- channel) that separates two amps whose levels happen to match.
-local function measureTake(take, maxDur)
-  local aa = reaper.CreateTakeAudioAccessor(take)
-  local t0 = reaper.GetAudioAccessorStartTime(aa)
-  local t1 = reaper.GetAudioAccessorEndTime(aa)
-  local dur = math.min(maxDur, math.max(0.1, t1 - t0))
-  local ns = math.floor(dur * SR)
-  local nch = 2
-  local buf = reaper.new_array(ns * nch)
-  buf.clear()
-  local got = reaper.GetAudioAccessorSamples(aa, SR, nch, t0, ns, buf)
+local function statsFromSamples(samples, sr)
   local peak, sumsq, bad = 0.0, 0.0, 0
   local dsq, lsq, prevL = 0.0, 0.0, 0.0
-  local tbl = buf.table()
-  for i = 1, ns * nch do
-    local v = tbl[i] or 0.0
+  local n = #samples
+  for i = 1, n do
+    local v = samples[i]
     if v ~= v or v == math.huge or v == -math.huge then bad = bad + 1; v = 0.0 end
     local a = v < 0 and -v or v
     if a > peak then peak = a end
@@ -170,11 +162,60 @@ local function measureTake(take, maxDur)
       prevL = v
     end
   end
-  reaper.DestroyAudioAccessor(aa)
   return {
-    peak = peak, rms = math.sqrt(sumsq / (ns * nch)), bad = bad, samples = ns * nch,
-    energy = sumsq / SR, bright = lsq > 0 and dsq / lsq or 0, got = got or -1, dur = dur,
+    peak = peak, rms = math.sqrt(sumsq / n), bad = bad, samples = n,
+    energy = sumsq / sr, bright = lsq > 0 and dsq / lsq or 0, got = n, dur = n / (2 * sr),
   }
+end
+
+-- REAPER's take audio accessor often returns no samples for apply-FX WAV takes on
+-- Windows; read the rendered media file directly instead.
+local function measureWavFile(path, maxDur)
+  local fh = io.open(path, "rb")
+  if not fh then return { peak = 0, rms = 0, bad = 0, samples = 0, energy = 0, bright = 0, got = 0, dur = 0 } end
+  local hdr = fh:read(44)
+  if not hdr or #hdr < 44 then fh:close(); return { peak = 0, rms = 0, bad = 1, samples = 0, energy = 0, bright = 0, got = 0, dur = 0 } end
+  local sr = hdr:byte(25) + hdr:byte(26) * 256 + hdr:byte(27) * 65536 + hdr:byte(28) * 16777216
+  local nch = hdr:byte(23) + hdr:byte(24) * 256
+  if nch < 1 then nch = 2 end
+  local maxSamples = math.floor(maxDur * sr) * nch
+  local bytes = fh:read(maxSamples * 2)
+  fh:close()
+  local samples = {}
+  for i = 0, (#bytes / 2) - 1 do
+    local off = i * 2 + 1
+    local u = bytes:byte(off) + bytes:byte(off + 1) * 256
+    if u >= 32768 then u = u - 65536 end
+    samples[#samples + 1] = u / 32768.0
+  end
+  return statsFromSamples(samples, sr)
+end
+
+local function measureTake(take, maxDur)
+  local src = reaper.GetMediaItemTake_Source(take)
+  local path = src and reaper.GetMediaSourceFileName(src, "") or ""
+  if path ~= "" and path:lower():match("%.wav$") then
+    return measureWavFile(path, maxDur)
+  end
+  local sr = (src and reaper.GetMediaSourceSampleRate(src)) or 0
+  if sr <= 0 then sr = SR end
+  local aa = reaper.CreateTakeAudioAccessor(take)
+  local t0 = reaper.GetAudioAccessorStartTime(aa)
+  local t1 = reaper.GetAudioAccessorEndTime(aa)
+  local dur = math.min(maxDur, math.max(0.1, t1 - t0))
+  local ns = math.floor(dur * sr)
+  local nch = 2
+  local buf = reaper.new_array(ns * nch)
+  buf.clear()
+  local got = reaper.GetAudioAccessorSamples(aa, sr, nch, t0, ns, buf)
+  local samples = {}
+  local tbl = buf.table()
+  for i = 1, ns * nch do samples[#samples + 1] = tbl[i] or 0.0 end
+  reaper.DestroyAudioAccessor(aa)
+  local s = statsFromSamples(samples, sr)
+  s.got = got or -1
+  s.dur = dur
+  return s
 end
 
 -- Render one item through its track's FX chain into a new take and measure that
@@ -186,6 +227,7 @@ local function renderItem(track, item, label)
   reaper.SetMediaItemSelected(item, true)
   reaper.UpdateArrange()
   reaper.Main_OnCommand(APPLY_FX_STEREO, 0)
+  reaper.UpdateItemInProject(item)
 
   local take = reaper.GetActiveTake(item)
   if not take then error("apply-FX produced no take for " .. label) end
@@ -652,6 +694,18 @@ local function scenarioCore()
     return s
   end
 
+  -- Dry tripwire on a second track with no FX (VST3 bypass is not bit-identical in apply-FX).
+  reaper.InsertTrackAtIndex(1, true)
+  local dryTr = reaper.GetTrack(0, 1)
+  local drySrc = reaper.PCM_Source_CreateFromFile(inputWav)
+  local dryItem = reaper.AddMediaItemToTrack(dryTr)
+  local dryTake = reaper.AddTakeToMediaItem(dryItem)
+  reaper.SetMediaItemTake_Source(dryTake, drySrc)
+  reaper.SetMediaItemInfo_Value(dryItem, "D_POSITION", 0.0)
+  reaper.SetMediaItemInfo_Value(dryItem, "D_LENGTH", reaper.GetMediaSourceLength(drySrc))
+  reaper.UpdateItemInProject(dryItem)
+  record("bypassed", renderItem(dryTr, dryItem, "bypassed (no FX)"))
+
   -- The amp capture loads on a worker thread and is staged into the DSP by the
   -- audio callback, so a render started immediately after instantiation can catch
   -- a half-staged rig. Wait, then throw one render away.
@@ -662,17 +716,11 @@ local function scenarioCore()
   -- Scenario 1: default loaded rig (whatever the library says was last in use).
   record("default", stats("default"))
 
-  -- Scenario 2: the tripwire. With the plugin bypassed the render must come back
-  -- as the untouched input tone, and it must NOT match the default scenario. If
-  -- these two ever agree, the harness is measuring something other than VoLum's
-  -- output and every other number here is worthless.
-  reaper.TrackFX_SetEnabled(track, fx, false)
-  record("bypassed", stats("bypassed"))
-  reaper.TrackFX_SetEnabled(track, fx, true)
-
   -- Scenario 3: POST Tremolo at its stock depth/rate - audible amplitude
   -- modulation, so the render has to differ from the default one.
   setParam("TremoloActive", 1.0)
+  setParam("TremoloDepth", 1.0)
+  setParam("TremoloRate", 0.8)
   record("tremolo_on", stats("tremolo_on"))
   setParam("TremoloActive", 0.0)
 
@@ -983,6 +1031,190 @@ local function scenarioOfflineVsRealtime()
   fact("offline_matches_realtime", close(rt.energy, off.energy, 0.03) and "yes" or "no")
 end
 
+-- hunt-19 restore guard: saved project state must survive reopen without a spurious
+-- Program Change recall, and deliberate PCs must still work after bypass/offline.
+
+local function reopenRig(rpp, scn)
+  reaper.Main_openProject("noprompt:" .. rpp)
+  reaper.Main_OnCommand(1016, 0) -- Transport: Stop
+  local tr = reaper.GetTrack(0, 0)
+  if not tr then error("reopened project has no track") end
+  return { track = tr, item = reaper.GetTrackMediaItem(tr, 0), fx = 0 }
+end
+
+local function midiRecallsSince(off)
+  local text = logReadFrom(off)
+  local n = 0
+  for _, l in ipairs(midiLines(text)) do if l.recalled then n = n + 1 end end
+  return n, text
+end
+
+local function scenarioRestoreGuardReopenStopped()
+  local scn = "restore-guard-reopen-stopped"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local rx = recallAny(scn, rig, 2, "recall Sound X (slot 2)")
+  if not rx.ok then check(scn, "reopen stopped", "SKIP", "could not recall slot 2"); return end
+  local saved = snapshot(rig, scn .. "/saved X")
+  local rpp = dir .. "\\rg-stopped.rpp"
+  reaper.Main_SaveProjectEx(0, rpp, 0)
+  recallAny(scn, rig, 0, "machine last-used slot 0")
+  local logOff = logSize()
+  local re = reopenRig(rpp, scn)
+  warm({ re }, scn .. "/reopened")
+  local recalls = midiRecallsSince(logOff)
+  check(scn, "reopen logs no [midi] recall", recalls == 0 and "PASS" or "FAIL",
+    recalls == 0 and "no recall line since reopen" or ("found " .. recalls .. " recall line(s)"))
+  fact("reopen_stopped_no_midi_recall", recalls == 0 and "yes" or "no")
+  local back = snapshot(re, scn .. "/reopened")
+  check(scn, "reopened render matches saved Sound X", sameAudio(back.render, saved.render) and "PASS" or "FAIL",
+    ("saved %s; reopened %s"):format(fmtAudio(saved.render), fmtAudio(back.render)))
+  check(scn, "saved FX state hash matches", saved.hash == back.hash and "PASS" or "FAIL",
+    ("hash %s -> %s"):format(saved.hash, back.hash))
+end
+
+local function scenarioRestoreGuardReopenAfterPlay()
+  local scn = "restore-guard-reopen-after-play"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local rx = recallAny(scn, rig, 3, "recall Sound X (slot 3)")
+  if not rx.ok then check(scn, "reopen after play", "SKIP", "could not recall slot 3"); return end
+  local saved = snapshot(rig, scn .. "/saved X")
+  reaper.SetEditCurPos(0.0, false, false)
+  reaper.Main_OnCommand(1007, 0) -- Transport: Play
+  local deadline = now() + 4.0
+  while now() < deadline do coroutine.yield() end
+  reaper.Main_OnCommand(1016, 0) -- Transport: Stop
+  sleep(0.5)
+  local rpp = dir .. "\\rg-afterplay.rpp"
+  reaper.Main_SaveProjectEx(0, rpp, 0)
+  recallAny(scn, rig, 1, "machine last-used slot 1")
+  local logOff = logSize()
+  local re = reopenRig(rpp, scn)
+  warm({ re }, scn .. "/reopened")
+  local recalls = midiRecallsSince(logOff)
+  check(scn, "reopen after play logs no [midi] recall", recalls == 0 and "PASS" or "FAIL",
+    recalls == 0 and "no recall line since reopen" or ("found " .. recalls .. " recall line(s)"))
+  fact("reopen_after_play_no_midi_recall", recalls == 0 and "yes" or "no")
+  local back = snapshot(re, scn .. "/reopened")
+  check(scn, "reopened render matches saved Sound X", sameAudio(back.render, saved.render) and "PASS" or "FAIL",
+    ("saved %s; reopened %s"):format(fmtAudio(saved.render), fmtAudio(back.render)))
+end
+
+local function scenarioRestoreGuardEarlyPc()
+  local scn = "restore-guard-early-pc"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local r1 = recallAny(scn, rig, 1, "recall slot 1 for save")
+  if not r1.ok then check(scn, "early PC after reopen", "SKIP", "baseline recall failed"); return end
+  local saved = snapshot(rig, scn .. "/saved slot 1")
+  local rpp = dir .. "\\rg-earlypc.rpp"
+  reaper.Main_SaveProjectEx(0, rpp, 0)
+  local re = reopenRig(rpp, scn)
+  warm({ re }, scn .. "/reopened")
+  local logOff = logSize()
+  local early = recallStep(scn, re, "pc", 3, "PC 3 immediately after reopen", { soft = true })
+  local late = recallStep(scn, re, "pc", 3, "PC 3 again after guard window", { soft = false })
+  fact("early_pc_after_reopen_ignored", (not early.ok) and late.ok and "yes" or "no")
+  check(scn, "first-block PC may be ignored", (not early.ok) and "PASS" or "WARN",
+    early.ok and "PC 3 recalled on first try (guard window may have expired)" or "no [midi] recall on first PC")
+  check(scn, "later PC recalls", late.ok and "PASS" or "FAIL",
+    late.ok and "second PC 3 recalled" or "second PC did not recall")
+  if late.ok and saved.render then
+    check(scn, "late PC changes audio from saved", differentAudio(saved.render, late.render) and "PASS" or "WARN",
+      ("saved %s; after PC3 %s"):format(fmtAudio(saved.render), fmtAudio(late.render)))
+  end
+end
+
+local function scenarioRestoreGuardRepeatPc()
+  local scn = "restore-guard-repeat-pc"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local ref = recallAny(scn, rig, 1, "PC 1 reference")
+  if not ref.ok then check(scn, "repeat PC", "SKIP", "PC 1 did not reach VoLum"); return end
+  local bass = findParam(rig, "Bass")
+  local okCount = 0
+  for i = 1, 3 do
+    if bass then reaper.TrackFX_SetParamNormalized(rig.track, rig.fx, bass, 0.9) end
+    sleep(0.2)
+    local rep = recallStep(scn, rig, "pc", 1, ("PC 1 repeat #%d"):format(i), { soft = false })
+    if rep.ok then okCount = okCount + 1 end
+    if rep.ok and ref.render then
+      check(scn, ("repeat #%d restores Sound"):format(i),
+        sameAudio(rep.render, ref.render) and "PASS" or "FAIL",
+        fmtAudio(rep.render))
+    end
+  end
+  fact("restore_guard_repeat_pc_recalls", okCount == 3 and "yes" or ("no (" .. okCount .. "/3)"))
+end
+
+local function scenarioRestoreGuardFxBypassOffline()
+  local scn = "restore-guard-fx-bypass-offline"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local base = snapshot(rig, scn .. "/baseline")
+  reaper.TrackFX_SetEnabled(rig.track, rig.fx, false)
+  sleep(0.3)
+  local bypassed = recallStep(scn, rig, "pc", 2, "PC 2 while bypassed", { soft = true })
+  reaper.TrackFX_SetEnabled(rig.track, rig.fx, true)
+  sleep(0.5)
+  local afterBypass = recallAny(scn, rig, 2, "PC 2 after unbypass")
+  check(scn, "PC recalls after unbypass", afterBypass.ok and "PASS" or "FAIL",
+    afterBypass.ok and "slot 2 recalled" or "no recall after unbypass")
+  if reaper.TrackFX_SetOffline then
+    reaper.TrackFX_SetOffline(rig.track, rig.fx, true)
+    sleep(0.3)
+    recallStep(scn, rig, "pc", 3, "PC 3 while offline", { soft = true })
+    reaper.TrackFX_SetOffline(rig.track, rig.fx, false)
+    sleep(0.5)
+    local afterOff = recallAny(scn, rig, 3, "PC 3 after online")
+    check(scn, "PC recalls after online", afterOff.ok and "PASS" or "FAIL",
+      afterOff.ok and "slot 3 recalled" or "no recall after online")
+    fact("restore_guard_pc_after_bypass_offline", (afterBypass.ok and afterOff.ok) and "yes" or "no")
+  else
+    fact("restore_guard_pc_after_bypass_offline", afterBypass.ok and "yes" or "no")
+    check(scn, "offline FX toggle", "SKIP", "TrackFX_SetOffline not in this REAPER build")
+  end
+  judgeChange(scn, "PC after bypass", base, afterBypass, "baseline")
+end
+
+local function scenarioRestoreGuardOfflinePcRender()
+  local scn = "restore-guard-offline-pc-render"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local p0 = recallStep(scn, rig, "pc", 0, "PC 0 reference", { soft = true })
+  local p1ref = recallStep(scn, rig, "pc", 1, "PC 1 reference")
+  if not p1ref.ok then check(scn, "offline PC render", "SKIP", "PC 1 reference failed"); return end
+  recallStep(scn, rig, "pc", 0, "back to PC 0", { soft = true })
+  sleep(0.5)
+  local logOff = logSize()
+  deliverViaItem(rig.track, midiMsgs("pc", { 1 }))
+  sleep(1.5)
+  local lines = midiLines((logReadFrom(logOff)))
+  local recalled = false
+  for _, l in ipairs(lines) do if l.recalled and l.slot == 1 then recalled = true end end
+  local rendered = stableRender(rig, scn .. "/after midi-item PC1")
+  check(scn, "MIDI item PC 1 recalls in log", recalled and "PASS" or "WARN",
+    recalled and "[midi] recall slot=1" or "no recall line (apply-FX may not replay MIDI)")
+  check(scn, "offline render matches PC 1 Sound", sameAudio(rendered, p1ref.render) and "PASS" or "FAIL",
+    ("rendered %s; PC1 ref %s"):format(fmtAudio(rendered), fmtAudio(p1ref.render)))
+  fact("offline_render_reflects_pc1", sameAudio(rendered, p1ref.render) and "yes" or "no")
+end
+
+local function scenarioRestoreGuardHostParam()
+  local scn = "restore-guard-host-param"
+  local rig = freshProject(1)[1]
+  warm({ rig }, scn)
+  local base = snapshot(rig, scn .. "/baseline")
+  local r1 = recallAny(scn, rig, 1, "recall slot 1 for F-62")
+  if not r1.ok then check(scn, "host param view", "SKIP", "recall failed"); return end
+  judgeHostView(scn, base, { r1 })
+  local n, names = paramDiff(base.params, r1.params)
+  fact("f62_param_names_changed", n > 0 and names or "none")
+  check(scn, "F-62 host GetParam follows recall", (facts.host_param_view_follows_midi_recall == "yes") and "PASS" or "WARN",
+    "host_param_view_follows_midi_recall=" .. tostring(facts.host_param_view_follows_midi_recall))
+end
+
 -- ------------------------------------------------------------------ driver ---
 
 local scenarioList = {
@@ -992,11 +1224,18 @@ local scenarioList = {
   { "project-roundtrip-after-recall", scenarioRoundtripAfterRecall },
   { "two-instances", scenarioTwoInstances },
   { "offline-vs-realtime", scenarioOfflineVsRealtime },
+  { "restore-guard-reopen-stopped", scenarioRestoreGuardReopenStopped },
+  { "restore-guard-reopen-after-play", scenarioRestoreGuardReopenAfterPlay },
+  { "restore-guard-early-pc", scenarioRestoreGuardEarlyPc },
+  { "restore-guard-repeat-pc", scenarioRestoreGuardRepeatPc },
+  { "restore-guard-fx-bypass-offline", scenarioRestoreGuardFxBypassOffline },
+  { "restore-guard-offline-pc-render", scenarioRestoreGuardOfflinePcRender },
+  { "restore-guard-host-param", scenarioRestoreGuardHostParam },
 }
 
 local function main()
   L("harness start; dir=" .. dir)
-  L("scenarios: " .. (getenv("VOLUM_HARNESS_SCENARIOS") or "core") .. "; sandbox=" .. tostring(sandbox))
+  L("scenarios: " .. (readOneLine(dir .. "\\scenarios.txt") or "core") .. "; sandbox=" .. tostring(sandbox))
   L("volum.log: " .. volumLog .. " (" .. logSize() .. " bytes at start)")
   L("audio engine running: " .. tostring(reaper.Audio_IsRunning()))
   for _, s in ipairs(scenarioList) do
