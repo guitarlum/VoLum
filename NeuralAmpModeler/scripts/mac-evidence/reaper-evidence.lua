@@ -155,8 +155,8 @@ local function deliver_midi(track, audio_item, status, data1, data2, label)
   local midi_item = add_midi_message(track, status, data1, data2)
   render_stats(track, audio_item, label .. "-offline")
   spin(1.0)
-  local after = state_chunk(track)
   reaper.DeleteTrackMediaItem(track, midi_item)
+  local after = state_chunk(track)
   local moved = before ~= after
   L(("%s state changed=%s"):format(label, tostring(moved)))
   return moved, moved and "serialized plugin state changed after offline MIDI render"
@@ -242,8 +242,8 @@ local function test_format(spec)
 
   outcomes[#outcomes + 1] = {
     format=spec.format, fx_name=fx_name, rms=initial.rms, peak=initial.peak, bad=initial.bad,
-    pc_status=pc_changed and "PASS" or "SKIP", pc_evidence=pc_why,
-    cc_status=cc_changed and "PASS" or "SKIP", cc_evidence=cc_why,
+    pc_status=pc_changed and "PASS" or "FAIL", pc_evidence=pc_why,
+    cc_status=cc_changed and "PASS" or "FAIL", cc_evidence=cc_why,
     roundtrip=roundtrip, reloaded_rms=reloaded.rms
   }
   reaper.TrackFX_Show(track, 0, 0)

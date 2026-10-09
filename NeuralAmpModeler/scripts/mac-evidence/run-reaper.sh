@@ -164,6 +164,7 @@ data = json.load(open(sys.argv[1], encoding="utf-8"))
 if not data.get("ok"):
     print("FAIL REAPER harness:", data.get("error", "unknown error"))
     raise SystemExit(1)
+failed = False
 for result in data["formats"]:
     print(
         f"PASS {result['format']} loaded as {result['fx_name']}; "
@@ -171,10 +172,13 @@ for result in data["formats"]:
     )
     print(f"{result['pc_status']} {result['format']} Program Change 1: {result['pc_evidence']}")
     print(f"{result['cc_status']} {result['format']} CC 102 value 2: {result['cc_evidence']}")
+    failed = failed or result["pc_status"] == "FAIL" or result["cc_status"] == "FAIL"
     print(
         f"PASS {result['format']} project state round-trip; "
         f"reloaded rms={result['reloaded_rms']:.6f}"
     )
+if failed:
+    raise SystemExit("one or more REAPER MIDI recall checks failed")
 PY
 
 echo "PASS REAPER AU and VST3 host evidence completed"
