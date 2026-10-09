@@ -119,6 +119,26 @@ PendingModeResult ApplyPendingModeSnapshotChange(bool hasRequest, int currentPar
            : PendingModeResult::Unchanged;
 }
 
+// Initialize/reset path: the host has just set every parameter (an AU validator
+// sets each one on the uninitialized unit and reads it back after Initialize), so
+// the live knobs are the truth. A pending request adopts the current mode by saving
+// those live knobs as that mode's snapshot, then re-applies the snapshot only to
+// refresh per-mode defaults; no parameter value changes. Returns NoRequest when no
+// request is pending.
+template <typename SaveLive, typename ReapplyDefaults>
+PendingModeResult AdoptPendingModeSnapshotChange(bool hasRequest, int currentParamMode, int modeCount,
+                                                 int& rememberedMode, SaveLive&& saveLive,
+                                                 ReapplyDefaults&& reapplyDefaults)
+{
+  if (!hasRequest || modeCount <= 0)
+    return PendingModeResult::NoRequest;
+  const int mode = std::clamp(currentParamMode, 0, modeCount - 1);
+  rememberedMode = mode;
+  saveLive(mode);
+  reapplyDefaults(mode);
+  return PendingModeResult::Applied;
+}
+
 // A parent Reverb-mode restore can rewrite the visible sub-mode parameter before
 // this nested transition runs. Reassert the applied sub-mode after restoring its
 // knobs so parameter, editor and remembered snapshot cannot disagree.

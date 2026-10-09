@@ -181,6 +181,7 @@ public:
   void OnParamChange(int paramIdx) override;
   void OnParamChange(int paramIdx, iplug::EParamSource source, int sampleOffset = -1) override;
   void OnParamChangeUI(int paramIdx, iplug::EParamSource source) override;
+  void OnParamReset(iplug::EParamSource source) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
   // Shared headless Sound recall used by MIDI and PLAY. Returns false without
@@ -302,6 +303,8 @@ public:
   void _VolumRestorePrePitchModeSnapshot(int mode, bool notifyUi = true);
   void _VolumQueueModeParamChange(int paramIdx, iplug::EParamSource source);
   void _VolumApplyPendingModeChanges();
+  // Initialize/reset: keep the host-set knobs and adopt the host-set modes.
+  void _VolumAdoptPendingModeChanges();
   void _VolumApplyPendingDualAmpChange();
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);

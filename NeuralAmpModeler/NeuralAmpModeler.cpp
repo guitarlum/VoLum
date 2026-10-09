@@ -1640,6 +1640,63 @@ void NeuralAmpModeler::_VolumApplyPendingModeChanges()
     [this](int mode) { _VolumRestoreChorusModeSnapshot(mode); });
 }
 
+void NeuralAmpModeler::OnParamReset(EParamSource source)
+{
+  // AUv2 Initialize and the VST3/APP start-up reset arrive here after the host has set
+  // parameters. A host-set mode must not recall that mode's remembered knobs over the
+  // knob values the host set in the same session (auval reads them back).
+  if (source == EParamSource::kReset)
+    _VolumAdoptPendingModeChanges();
+  Plugin::OnParamReset(source);
+}
+
+void NeuralAmpModeler::_VolumAdoptPendingModeChanges()
+{
+  const unsigned pending = mVolumPendingModeChanges.Take();
+  if (pending == 0)
+    return;
+  const auto requested = [pending](volum::ModeSnapshotTarget target) {
+    return (pending & volum::ModeSnapshotBit(target)) != 0;
+  };
+  const int currentPitchMode = GetParam(kPrePitchMode)->Int();
+  const int currentDelayMode = GetParam(kDelayMode)->Int();
+  const int currentReverbMode = GetParam(kReverbMode)->Int();
+  const int currentOktaverbMode = GetParam(kReverbSubMode)->Int();
+  const int currentTremoloMode = GetParam(kTremoloMode)->Int();
+  const int currentChorusMode = GetParam(kChorusMode)->Int();
+
+  volum::AdoptPendingModeSnapshotChange(
+    requested(volum::ModeSnapshotTarget::PrePitch), currentPitchMode, volum::kVoLumPitchModeCount, mVolumPrePitchMode,
+    [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
+    [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode, false); });
+  volum::AdoptPendingModeSnapshotChange(
+    requested(volum::ModeSnapshotTarget::Delay), currentDelayMode, volum::kVoLumDelayModeCount,
+    mVolumEffectSettings.delayMode, [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreDelayModeSnapshot(mode, false); });
+  // The sub-mode is adopted first so the Reverb transition below saves the live knobs
+  // under the host's sub-mode and re-applies that same sub-mode.
+  if ((requested(volum::ModeSnapshotTarget::Oktaverb) || requested(volum::ModeSnapshotTarget::Reverb))
+      && currentReverbMode == volum::kVoLumReverbModeOktaverb)
+  {
+    volum::AdoptPendingModeSnapshotChange(
+      true, currentOktaverbMode, 3, mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode,
+      [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
+      [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode, false); });
+  }
+  volum::AdoptPendingModeSnapshotChange(
+    requested(volum::ModeSnapshotTarget::Reverb), currentReverbMode, volum::kVoLumReverbModeCount,
+    mVolumEffectSettings.reverbMode, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreReverbModeSnapshot(mode, false); });
+  volum::AdoptPendingModeSnapshotChange(
+    requested(volum::ModeSnapshotTarget::Tremolo), currentTremoloMode, volum::kVoLumTremoloModeCount,
+    mVolumEffectSettings.tremoloMode, [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode, false); });
+  volum::AdoptPendingModeSnapshotChange(
+    requested(volum::ModeSnapshotTarget::Chorus), currentChorusMode, volum::kVoLumChorusModeCount,
+    mVolumEffectSettings.chorusMode, [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreChorusModeSnapshot(mode, false); });
+}
+
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
   OnParamChange(paramIdx, EParamSource::kUnknown);

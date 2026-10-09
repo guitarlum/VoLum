@@ -1322,6 +1322,83 @@ TEST_CASE("F-08 idle and serialization consume pending mode changes before savin
   RequireContains(settings, "s.subMode = GetParam(kReverbSubMode)->Int();");
 }
 
+TEST_CASE("F-08 AU Initialize keeps every host-set knob when the host also set a mode")
+{
+  // auval sets every parameter on the uninitialized AU, calls AudioUnitInitialize
+  // (IPlugAU::DoInitialize -> OnParamReset(kReset)) and reads each one back. The
+  // deferred mode transaction used to run there and recall the new mode's
+  // remembered knobs over the values the host had just set.
+  for (unsigned t = 0; t < static_cast<unsigned>(volum::ModeSnapshotTarget::Count); ++t)
+  {
+    const auto target = static_cast<volum::ModeSnapshotTarget>(t);
+    INFO("target " << t);
+    const int hostMode = 1;
+    const int hostKnob = 7;
+
+    // Old behavior: the transaction recalls the incoming mode's knob.
+    {
+      int tracked = 0;
+      int liveKnob = hostKnob;
+      int slots[3]{10, 20, 30};
+      volum::ApplyPendingModeSnapshotChange(
+        true, hostMode, 3, volum::PendingModeAction::Apply, tracked, [&](int mode) { slots[mode] = liveKnob; },
+        [&](int mode) { liveKnob = slots[mode]; });
+      CHECK(liveKnob == 20);
+    }
+
+    // Initialize path: the host's knob survives and becomes the mode's snapshot.
+    volum::PendingModeSnapshotChanges pending;
+    pending.Request(target);
+    const unsigned mask = pending.Take();
+    int tracked = 0;
+    int liveKnob = hostKnob;
+    int slots[3]{10, 20, 30};
+    int defaultsFor = -1;
+    const auto result = volum::AdoptPendingModeSnapshotChange((mask & volum::ModeSnapshotBit(target)) != 0, hostMode, 3,
+                                                              tracked, [&](int mode) { slots[mode] = liveKnob; },
+                                                              [&](int mode) {
+                                                                defaultsFor = mode;
+                                                                liveKnob = slots[mode];
+                                                              });
+    CHECK(result == volum::PendingModeResult::Applied);
+    CHECK(liveKnob == hostKnob);
+    CHECK(slots[hostMode] == hostKnob);
+    CHECK(slots[0] == 10);
+    CHECK(tracked == hostMode);
+    CHECK(defaultsFor == hostMode);
+    CHECK(pending.Take() == 0);
+  }
+
+  int tracked = 0;
+  CHECK(volum::AdoptPendingModeSnapshotChange(
+          false, 1, 3, tracked, [](int) { FAIL("no request"); }, [](int) {})
+        == volum::PendingModeResult::NoRequest);
+}
+
+TEST_CASE("F-08 OnParamReset(kReset) adopts host-set modes instead of recalling their knobs")
+{
+  const std::string source = ReadPluginSource();
+  const std::string reset = MemberFnUntilNext(source, "void NeuralAmpModeler::OnParamReset(EParamSource source)");
+  const auto adopt = reset.find("_VolumAdoptPendingModeChanges();");
+  const auto base = reset.find("Plugin::OnParamReset(source);");
+  REQUIRE(adopt != std::string::npos);
+  REQUIRE(base != std::string::npos);
+  CHECK(adopt < base);
+  RequireContains(reset, "source == EParamSource::kReset");
+  RequireDoesNotContain(reset, "_VolumApplyPendingModeChanges(");
+
+  const std::string body = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumAdoptPendingModeChanges()");
+  RequireDoesNotContain(body, "ApplyPendingModeSnapshotChange(");
+  RequireDoesNotContain(body, "->Set(");
+  RequireDoesNotContain(body, "SendParameterValueFromDelegate(");
+  for (const char* restore :
+       {"_VolumRestorePrePitchModeSnapshot(mode, false)", "_VolumRestoreDelayModeSnapshot(mode, false)",
+        "_VolumRestoreReverbModeSnapshot(mode, false)", "_VolumRestoreOktaverbSubModeSnapshot(mode, false)",
+        "_VolumRestoreTremoloModeSnapshot(mode, false)", "_VolumRestoreChorusModeSnapshot(mode, false)"})
+    RequireContains(body, restore);
+  RequireContains(body, "volum::AdoptPendingModeSnapshotChange(");
+}
+
 TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")
 {
   // A fresh plugin instance runs on its EParam defaults until a scene is
