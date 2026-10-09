@@ -376,6 +376,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-vst3-sdk.sh master
+
       - name: Measure doctest coverage (Clang source-based)
         run: bash NeuralAmpModeler/scripts/run-coverage-mac.sh
 
