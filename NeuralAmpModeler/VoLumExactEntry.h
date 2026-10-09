@@ -35,6 +35,11 @@ public:
 
   void Draw(IGraphics& g) override
   {
+    // Esc inside the number box ends iPlug2's text entry without telling this control,
+    // so the panel stayed up with nothing to type into and the next click went to it
+    // (to close it) instead of to what was under the pointer. The dismissal marks every
+    // control dirty, so this runs on the next frame.
+    SyncTextEntryState();
     if (mHide)
       return;
 
@@ -72,6 +77,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     const auto pressed = mSecondPress.Press();
+    SyncTextEntryState();
     if (mHide)
       return;
 

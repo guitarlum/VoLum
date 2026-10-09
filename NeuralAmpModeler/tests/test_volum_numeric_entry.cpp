@@ -1,6 +1,7 @@
 #include "third_party/doctest.h"
 
 #include "../VoLumNumericEntry.h"
+#include "../../iPlug2/IGraphics/Controls/ITextEntryKeyFilter.h"
 
 #include <filesystem>
 #include <fstream>
@@ -135,4 +136,65 @@ TEST_CASE("A list-valued parameter refuses text that is not one of its own value
 
   CHECK(src.find("pParam->MapDisplayText(str ? str : \"\", &mapped)") != std::string::npos);
   CHECK(src.find("pParam->StringToValue(") == std::string::npos);
+}
+
+TEST_CASE("F-77 a comma typed into a numeric entry is a decimal separator")
+{
+  // The key filter in iPlug2's ITextEntryControl let only '.' through, so the comma of
+  // "7,5" was dropped and 75 clamped to the top of the range.
+  CHECK(iplug::igraphics::NormalizeDecimalSeparatorKey(',') == '.');
+  CHECK(iplug::igraphics::NormalizeDecimalSeparatorKey('.') == '.');
+  CHECK(iplug::igraphics::NormalizeDecimalSeparatorKey('7') == '7');
+  CHECK(iplug::igraphics::NormalizeDecimalSeparatorKey('-') == '-');
+  CHECK(iplug::igraphics::NormalizeDecimalSeparatorKey(0) == 0);
+
+  // Pasted text bypasses the key filter; the parse on our side takes the comma too.
+  double out = 0.0;
+  REQUIRE(volum::ParseNumericEntry("7,5", out));
+  CHECK(out == doctest::Approx(7.5));
+}
+
+TEST_CASE("F-77 the numeric key filter applies the comma rule to double parameters")
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "iPlug2" / "IGraphics"
+                    / "Controls" / "ITextEntryControl.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  const std::string src = ss.str();
+
+  const auto doubles = src.find("case IParam::kTypeDouble:");
+  REQUIRE(doubles != std::string::npos);
+  const auto normalise = src.find("stbKey = NormalizeDecimalSeparatorKey(stbKey);", doubles);
+  const auto accept = src.find("stbKey == '.'", doubles);
+  REQUIRE(normalise != std::string::npos);
+  REQUIRE(accept != std::string::npos);
+  CHECK(normalise < accept); // converted before the filter decides
+}
+
+TEST_CASE("F-77 Esc in the number box closes the exact-entry panel with it")
+{
+  // Esc inside the box ends iPlug2's text entry without telling the panel, which stayed
+  // up and ate the next click. The panel notices on its next draw or click.
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumExactEntry.h";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  const std::string src = ss.str();
+
+  const auto draw = src.find("void Draw(IGraphics& g) override");
+  REQUIRE(draw != std::string::npos);
+  const auto drawSync = src.find("SyncTextEntryState();", draw);
+  const auto drawHide = src.find("if (mHide)", draw);
+  REQUIRE(drawSync != std::string::npos);
+  CHECK(drawSync < drawHide);
+
+  const auto down = src.find("void OnMouseDown(", draw);
+  REQUIRE(down != std::string::npos);
+  const auto downSync = src.find("SyncTextEntryState();", down);
+  const auto downHide = src.find("if (mHide)", down);
+  REQUIRE(downSync != std::string::npos);
+  CHECK(downSync < downHide);
 }

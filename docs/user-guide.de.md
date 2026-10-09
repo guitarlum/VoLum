@@ -67,7 +67,7 @@ Wähle einen Amp in der linken Liste oder drücke `Up` / `Down`. Zur Orientierun
 
 **Kanäle:** jeder Amp hat zwei bis sechs Kanäle, einen pro aufgenommener Gain-Einstellung.
 
-**Cabs:** **No Cab** (nur der Amp), **G12**, **G65**, **V30** oder **Custom IR** für dein eigenes Cab (siehe [Eigene IRs](#eigene-irs)). `S` / `Shift+S` schalten durch.
+**Cabs:** **No Cab** (nur der Amp), **G12**, **G65**, **V30** oder **Custom IR** für dein eigenes Cab (siehe [Eigene IRs](#eigene-irs)). `S` / `Shift+S` schalten durch No Cab, G12, G65 und V30 (Custom IR wählst du mit seiner eigenen Schaltfläche).
 
 **Regler:** **INPUT**, **GATE** (Noise Gate), **BASS**, **MID**, **TREBLE** und **OUTPUT**. **OUTPUT** ganz zu (`−∞`) schaltet den Amp stumm.
 
@@ -283,6 +283,7 @@ Eine Programmnummer ohne Sound wird ignoriert; der aktuelle Sound spielt weiter.
 - **All channels** (Standard) passt für einen Gitarristen mit einem Board.
 - **One channel** (`CH 1` bis `CH 16`) lässt zwei VoLums ein MIDI-Kabel teilen.
 - **Recall CC** legt die CC-Nummer fest, die Sounds aufruft (`0` bis `119`, Standard `102`). Jede davon, auch CC 0, kann der Recall CC sein.
+- **VST3:** das Plugin empfängt MIDI nur auf Kanal 1, sende Recall-Nachrichten also auf MIDI-Kanal 1 (AU und Standalone akzeptieren den hier eingestellten Kanal).
 
 **What each program number plays** zeigt deine Sounds als 16 Bänke mit je 8 Schaltern, dieselbe Liste wie in PLAY. Wechsle die Bank mit den Pfeilen, dem Mausrad oder `PageUp` / `PageDown`. Klicke einen Schalter, um seinen Sound zu wählen, zieh ihn zum Verschieben, oder fahr darüber und klicke `×` zum Leeren.
 
