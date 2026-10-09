@@ -33,8 +33,6 @@ VoLum ist eine Gitarren-Amp-Sammlung für Bühne, Studio und Übungstisch. In **
 4. **Sound speichern.** Drücke **Strg+S**, gib einen Namen ein und drücke Enter.
 5. **Spielen.** Drücke **P**, um zu PLAY zu wechseln. Fünf Sounds liegen schon auf den Programmen 0 bis 4. Klicke einen an oder schalte mit den Pfeiltasten oder einem MIDI-Fußcontroller durch.
 
-Die mitgelieferten Amps wurden mit einem Interface-Eingangspegel um +4 dBu aufgenommen. Stell dein Interface ähnlich ein, dann kommst du den Aufnahmen am nächsten.
-
 ## Die BUILD-Ansicht
 
 ![VoLum BUILD-Ansicht](user-guide-main.png)
@@ -394,7 +392,7 @@ Ein Pack ist eine `.volumpack`-Datei mit deinen eigenen Amps, IRs, Pedalen und P
 
 Wähle, was hinein soll:
 
-- **Everything:** deine ganze Bibliothek. Aus der Standalone-App kommen auch deine Rechner-Einstellungen und deine MIDI-Programmliste mit.
+- **Everything:** deine ganze Bibliothek und deine PLAY-Programmliste. Aus der Standalone-App kommen auch deine Rechner-Einstellungen mit.
 - **Sounds:** hake Presets an. Deine PLAY-Sounds stehen oben, in Programmreihenfolge.
 - **A whole amp:** ein eigener Amp mit allen darauf gespeicherten Presets.
 
@@ -416,7 +414,7 @@ Ein **Sounds**- oder **A whole amp**-Pack mischt immer wie Overwrite und bietet 
 
 In der Standalone-App bietet ein Everything-Pack außerdem **Also restore machine settings** (letzter Amp, Einstellungen pro Amp, Lite, Eingangskalibrierung und MIDI-Programmliste).
 
-Deine vorherige Bibliothek bleibt als `volum-content.json.pre-import.bak` erhalten. Ein beschädigtes Pack ändert nichts und meldet **This Pack is damaged.** Ein Pack aus einer neueren VoLum-Version wird abgelehnt.
+Deine vorherige Bibliothek bleibt daneben als `volum-content.json.packbak` erhalten. Ein beschädigtes Pack ändert nichts und meldet **This Pack is damaged.** Ein Pack aus einer neueren VoLum-Version wird abgelehnt.
 
 ## Einstellungen
 

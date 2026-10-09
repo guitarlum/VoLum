@@ -45,7 +45,7 @@ Nicht jedes Release enthält jedes Paket. Öffne die Release-Seite und wähle da
 Die Signierung der VoLum-Releases ist noch im Aufbau. Siehe die [Code-Signing-Policy](CODE_SIGNING.md).
 
 - **Windows:** SmartScreen kann vor einem unbekannten Herausgeber warnen. Wenn du der Quelle vertraust, wähle **Weitere Informationen -> Trotzdem ausführen**.
-- **macOS:** Gatekeeper kann App oder Installer blockieren. Versuche sie einmal zu öffnen, geh dann zu **Systemeinstellungen -> Datenschutz & Sicherheit** und klicke **Trotzdem öffnen**. Auf älteren macOS-Versionen geht auch **Rechtsklick -> Öffnen**.
+- **macOS:** Gatekeeper kann App oder Installer blockieren. Versuche sie einmal zu öffnen, geh dann zu **Systemeinstellungen -> Datenschutz & Sicherheit** und klicke **Trotzdem öffnen**.
 - **macOS-Plug-in-Zips:** zeigt die DAW das Plug-in nach einem Rescan immer noch nicht, entferne die Quarantäne-Markierung:
 
 ```bash

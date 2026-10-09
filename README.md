@@ -45,7 +45,7 @@ Not every release has every asset. Open the release page and pick the package fo
 VoLum release signing is still being set up. See the [code signing policy](CODE_SIGNING.md).
 
 - **Windows:** SmartScreen may warn about an unknown publisher. If you trust the source, choose **More info -> Run anyway**.
-- **macOS:** Gatekeeper may block the app or installer. Try to open it once, then go to **System Settings -> Privacy & Security** and click **Open Anyway**. On older macOS versions, **right-click -> Open** also works.
+- **macOS:** Gatekeeper may block the app or installer. Try to open it once, then go to **System Settings -> Privacy & Security** and click **Open Anyway**.
 - **macOS plug-in zips:** if your DAW still hides the plug-in after a rescan, remove the quarantine flag:
 
 ```bash

@@ -33,8 +33,6 @@ VoLum is a guitar amp collection for the stage, the studio and the practice desk
 4. **Save the tone.** Press **Ctrl+S**, type a name and press Enter.
 5. **Play it.** Press **P** to switch to PLAY. Five Sounds are ready on programs 0 to 4. Click one to play it, or step through them with the arrow keys or a MIDI foot controller.
 
-The bundled amps were captured with the interface input around +4 dBu. Set your interface to a similar level for the closest match.
-
 ## The BUILD Screen
 
 ![VoLum BUILD screen](user-guide-main.png)
@@ -394,7 +392,7 @@ A Pack is one `.volumpack` file with your custom amps, IRs, pedals and presets. 
 
 Choose what goes in:
 
-- **Everything:** your whole library. From the standalone app it also carries your machine settings and MIDI program list.
+- **Everything:** your whole library and your PLAY program list. From the standalone app it also carries your machine settings.
 - **Sounds:** tick presets. Your PLAY Sounds are listed first, in program order.
 - **A whole amp:** a custom amp with every preset saved on it.
 
@@ -416,7 +414,7 @@ A **Sounds** or **A whole amp** Pack always merges like Overwrite and never offe
 
 In the standalone app, an Everything Pack also offers **Also restore machine settings** (last amp, per-amp settings, Lite, input calibration and MIDI program list).
 
-Your previous library is kept as `volum-content.json.pre-import.bak`. A damaged Pack changes nothing and says **This Pack is damaged.** A Pack from a newer VoLum is refused.
+Your previous library is kept next to it as `volum-content.json.packbak`. A damaged Pack changes nothing and says **This Pack is damaged.** A Pack from a newer VoLum is refused.
 
 ## Settings
 
