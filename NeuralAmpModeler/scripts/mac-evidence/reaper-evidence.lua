@@ -44,8 +44,7 @@ local function emit(ok, err)
 end
 
 local SR = 48000
-local APPLY_FX = 40209 -- Item: Apply track/take FX to items
-local DELETE_ACTIVE_TAKE = 40129
+local RENDER_STEREO_STEM = 41719 -- Render selected area of tracks to stereo stem tracks (and mute originals)
 
 local function spin(seconds)
   local until_time = reaper.time_precise() + seconds
@@ -55,12 +54,19 @@ local function spin(seconds)
 end
 
 local function render_stats(track, item, label)
-  reaper.SelectAllMediaItems(0, false)
-  reaper.SetMediaItemSelected(item, true)
+  reaper.SetMediaTrackInfo_Value(track, "B_MUTE", 0)
+  reaper.SetOnlyTrackSelected(track)
+  reaper.GetSet_LoopTimeRange(true, false, 0.0, 2.0, false)
   reaper.UpdateArrange()
-  reaper.Main_OnCommand(APPLY_FX, 0)
-  local take = reaper.GetActiveTake(item)
-  if not take then error("apply-FX produced no take for " .. label) end
+  reaper.Main_OnCommand(RENDER_STEREO_STEM, 0)
+  local rendered_track = reaper.GetSelectedTrack(0, 0)
+  if not rendered_track or rendered_track == track then
+    error("stereo stem render produced no track for " .. label)
+  end
+  local rendered_item = reaper.GetTrackMediaItem(rendered_track, 0)
+  if not rendered_item then error("stereo stem render produced no item for " .. label) end
+  local take = reaper.GetActiveTake(rendered_item)
+  if not take then error("stereo stem render produced no take for " .. label) end
   local source = reaper.GetMediaItemTake_Source(take)
   local source_file = reaper.GetMediaSourceFileName(source, "")
   local aa = reaper.CreateTakeAudioAccessor(take)
@@ -78,10 +84,12 @@ local function render_stats(track, item, label)
     sumsq = sumsq + v * v
   end
   reaper.DestroyAudioAccessor(aa)
-  reaper.Main_OnCommand(DELETE_ACTIVE_TAKE, 0)
   local rms = math.sqrt(sumsq / (ns * 2))
   L(("stats[%s] got=%s peak=%.8f rms=%.8f bad=%d src=%s")
     :format(label, tostring(got), peak, rms, bad, tostring(source_file)))
+  reaper.DeleteTrack(rendered_track)
+  reaper.SetMediaTrackInfo_Value(track, "B_MUTE", 0)
+  reaper.SetOnlyTrackSelected(track)
   return {peak=peak, rms=rms, bad=bad}
 end
 
@@ -144,9 +152,13 @@ local function test_format(spec)
   reaper.InsertTrackAtIndex(0, true)
   local track = assert(reaper.GetTrack(0, 0), "track creation failed")
   reaper.SetOnlyTrackSelected(track)
+  reaper.SetMediaTrackInfo_Value(track, "D_VOL", 1.0)
+  reaper.SetMediaTrackInfo_Value(track, "B_MUTE", 0)
   reaper.SetEditCurPos(0, false, false)
   if (reaper.InsertMedia(dir .. "/input.wav", 0) or 0) < 1 then error("input.wav insert failed") end
   local item = assert(reaper.GetTrackMediaItem(track, 0), "audio item missing")
+  reaper.SetMediaItemInfo_Value(item, "D_VOL", 1.0)
+  reaper.SetMediaItemInfo_Value(item, "B_MUTE", 0)
 
   local fx, fx_name = add_fx(track, spec.candidates, spec.wanted)
   reaper.TrackFX_Show(track, fx, 3)
