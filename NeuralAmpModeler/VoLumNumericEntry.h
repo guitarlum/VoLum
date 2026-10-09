@@ -30,6 +30,15 @@ inline bool IsUnitChar(char c)
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '%' || c == '/';
 }
 
+// Whether the full-window exact-entry panel should still take mouse clicks. Once the
+// number box it opened has ended (Esc ends it without telling the panel), the panel
+// is stale: a click must fall through to the control underneath instead of landing on
+// a panel that is about to hide itself, which swallowed the first click after Esc.
+inline bool ExactEntryTakesClicks(bool panelWasEditing, bool textEntryIsThisPanel)
+{
+  return !panelWasEditing || textEntryIsThisPanel;
+}
+
 // Parses a typed value. Returns false - leaving out untouched - for anything that is
 // not a finite number, so the caller can keep the parameter where it was rather than
 // applying a fallback the user never asked for.

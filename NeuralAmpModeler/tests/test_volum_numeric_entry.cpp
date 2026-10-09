@@ -198,3 +198,28 @@ TEST_CASE("F-77 Esc in the number box closes the exact-entry panel with it")
   REQUIRE(downSync != std::string::npos);
   CHECK(downSync < downHide);
 }
+
+TEST_CASE("F-77 the first click after Esc reaches the control underneath, with no draw in between")
+{
+  // Not editing yet (panel just shown) or the box is this panel's own: it takes clicks.
+  CHECK(volum::ExactEntryTakesClicks(false, false));
+  CHECK(volum::ExactEntryTakesClicks(true, true));
+  // Esc ended the box: the panel thought it was editing but iPlug2's text entry is no
+  // longer ours. It must stop hit-testing at once, so the click falls through.
+  CHECK_FALSE(volum::ExactEntryTakesClicks(true, false));
+
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumExactEntry.h";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  const std::string src = ss.str();
+
+  const auto hit = src.find("bool IsHit(float x, float y) const override");
+  REQUIRE(hit != std::string::npos);
+  const auto rule = src.find("volum::ExactEntryTakesClicks(mEditing, inEntry == this)", hit);
+  const auto base = src.find("IControl::IsHit(x, y)", hit);
+  REQUIRE(rule != std::string::npos);
+  REQUIRE(base != std::string::npos);
+  CHECK(rule < base);
+}
