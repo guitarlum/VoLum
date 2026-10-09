@@ -14,55 +14,55 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 - Severity: wrong-behavior
 - Repro: custom amp whose only capture is CAB1/channel 2; preset on PLAY slot 12; plugin editor closed; CC 102 = 12
 - Expected / Actual: custom Sound loads / `_VolumApplyCustomMainCabs()` returns early without UI, loader uses stale DIRECT/ch1 (VoLumPlayRuntime.inc.cpp:310-359, VoLumSceneRig.inc.cpp:386-408,550-555)
-- Disposition: open (worker hunt-01)
+- Disposition: fixed (merged into dev 97f858af; CI 37879465244 green)
 
 ### F-02 WinMM port renumbering clears the saved MIDI input
 - Source: L1 MIDI hunter (high)
 - Severity: data-loss (setting)
 - Repro: select "Controller 2"; another MIDI device with a lower index appears; restart: selection becomes off and is written to settings.ini
 - Expected / Actual: same controller reconnects or the saved selection is kept / port set to off and persisted (iPlug2 IPlugAPP_host.cpp:116-120,299-334,405-438)
-- Disposition: open (worker hunt-02, iPlug2)
+- Disposition: fix-pending-verify (hunt-02 29ca2278 FAIL by 0436a709; rework ec6dfc54 + iPlug2 f94f4eb7; re-verify 0436a709; CI 37896570821)
 
 ### F-03 Cancel in the device dialog does not restore the previous MIDI port
 - Source: L1 MIDI hunter (high)
 - Severity: wrong-behavior
 - Repro: port A active; pick B in the dialog; Cancel; B stays open. Also OK after a MIDI-only change restarts audio
-- Disposition: open (worker hunt-02, iPlug2)
+- Disposition: fix-pending-verify (hunt-02 29ca2278 FAIL by 0436a709; rework ec6dfc54 + iPlug2 f94f4eb7; re-verify 0436a709; CI 37896570821)
 
 ### F-04 A flood of unsupported MIDI can drop the following Sound recall
 - Source: L1 MIDI hunter (medium)
 - Severity: glitch
 - Repro: >32 notes / active sensing then PC 9 immediately; 32-entry queue overflows before VoLum filters
-- Disposition: open (worker hunt-02, iPlug2)
+- Disposition: fix-pending-verify (hunt-02 29ca2278 FAIL by 0436a709; rework ec6dfc54 + iPlug2 f94f4eb7; re-verify 0436a709; CI 37896570821)
 
 ### F-05 An unplugged audio interface is replaced by the default device and persisted
 - Source: L1 MIDI hunter (high); contradicts docs/user-guide.en.md:389-391
 - Severity: data-loss (setting)
 - Repro: save external interface; quit; unplug (default device present); launch; reconnect; relaunch: interface setting lost
-- Disposition: open (worker hunt-02, iPlug2)
+- Disposition: fix-pending-verify (hunt-02 29ca2278 FAIL by 0436a709; rework ec6dfc54 + iPlug2 f94f4eb7; re-verify 0436a709; CI 37896570821)
 
 ### F-06 Both outputs routed to one physical channel drops the left side
 - Source: L1 MIDI hunter (high)
 - Severity: wrong-behavior
 - Repro: output L and R both on channel 1 (or mono device); R overwrites L (IPlugAPP_host.cpp:967-995,1225-1234)
-- Disposition: open (worker hunt-02, iPlug2)
+- Disposition: fix-pending-verify (hunt-02 29ca2278 FAIL by 0436a709; rework ec6dfc54 + iPlug2 f94f4eb7; re-verify 0436a709; CI 37896570821)
 
 ### F-07 Clamped channels / driver-granted buffer not reflected in UI and settings.ini
 - Source: L1 MIDI hunter (medium)
 - Severity: wrong-behavior (cosmetic)
-- Disposition: open (worker hunt-02, iPlug2)
+- Disposition: fix-pending-verify (hunt-02 29ca2278 FAIL by 0436a709; rework ec6dfc54 + iPlug2 f94f4eb7; re-verify 0436a709; CI 37896570821)
 
 ### F-08 Host mode change with the editor closed overwrites that mode's saved knobs
 - Source: L1 state hunter 97bca9ee (high). Pitch/Delay/Reverb/Tremolo/Chorus
 - Severity: data-loss
 - Repro: two Chorus modes with different knobs; close editor; automate Chorus Mode; save/reload project: new mode's snapshot = old knobs (NeuralAmpModeler.cpp:1778-1947 UI-only path; VoLumSettingsLocks.inc.cpp:91-166)
-- Disposition: open (hunt-03 params path)
+- Disposition: rework (08c6e5cf fixes Pitch/Delay/Reverb mode/Tremolo/Chorus; re-verify a6f0d11d FAIL: Oktaverb sub-mode snapshot still overwritten by a knob change before idle, stale Oktaverb requests re-applied after restore, tests drive a test-local harness; resumed 6e59de48)
 
 ### F-09 1.2.x custom-scene lazy migration can delete the only durable copy
 - Source: state hunter (high)
 - Severity: data-loss
 - Repro: 1.2.3 library with custom scene + old project; open in 1.3.0; close DAW without saving; reopen: scene gone (VoLumSceneRig.inc.cpp:578-600 erase; ContentStore no longer writes legacy customScenes)
-- Disposition: open
+- Disposition: fix-pending-verify (hunt-11 265856f1 opus 021addf6: library writes legacy customScenes back unchanged, merge keeps disk copy unless this writer deleted the amp, instances copy instead of move, unreadable IR stays uncalibrated; 4 tests red 26/58 -> green; verifier bb23893d (gpt); CI 37896275378)
 
 ### F-10 An empty custom-scene map in a current-schema chunk cannot clear stale instance scenes
 - Source: state hunter (high); also Everything Pack "restore machine settings"
@@ -190,7 +190,7 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 
 ### F-36 Guide says only the standalone Everything export carries MIDI slots; the plugin does too
 - Source: preset hunter. Severity: docs (guide line 363)
-- Disposition: fix-pending-merge (feature/hunt-docs f66ea3bf; docs verifier 610360a5)
+- Disposition: fixed (docs merged 07bf039b)
 
 ### F-37 OnReset rebuilds live DSP (NAM, chorus, delay, reverb, scratch) while ProcessBlock uses it (AU/AAX)
 - Source: L1 thread hunter fa9cbea8 (high on AU)
@@ -211,7 +211,7 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 ### F-40 VST3 OnParamChange on the audio thread walks the UI, scans disk, calls SetLatency (Dual Amp, support amp, PRE pitch/NAM)
 - Source: thread hunter (high). NeuralAmpModeler.cpp:1566,1574-1579,1634-1657
 - Severity: crash / hang
-- Disposition: open (hunt-03 params path)
+- Disposition: fix-pending-verify (rework 08c6e5cf: F-40 kept + latency safety + immediate Dual Amp update; re-verify a6f0d11d; CI 37890075013)
 
 ### F-41 Name dialog acts on the second click of the double-click that opened it (cancels, or saves unconfirmed)
 - Source: L1 modal hunter 8f62a8ee (high). VoLumNameDialog.h:184-186,275-297
@@ -248,12 +248,12 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 ### F-47 First save after a 1.2.x upgrade drops custom-amp scenes for every amp not focused that session
 - Source: L1 pack hunter 0de494ea (high); same root as F-09
 - Severity: data-loss
-- Disposition: open (hunt-11 scene migration)
+- Disposition: fix-pending-verify (hunt-11 265856f1 opus 021addf6: library writes legacy customScenes back unchanged, merge keeps disk copy unless this writer deleted the amp, instances copy instead of move, unreadable IR stays uncalibrated; 4 tests red 26/58 -> green; verifier bb23893d (gpt); CI 37896275378)
 
 ### F-48 An unreadable IR during trim migration is marked calibrated at 0 dB forever
 - Source: pack hunter (high). VoLumSceneRig.inc.cpp:916-952
 - Severity: wrong-behavior
-- Disposition: open (hunt-11 scene migration)
+- Disposition: fix-pending-verify (hunt-11 265856f1 opus 021addf6: library writes legacy customScenes back unchanged, merge keeps disk copy unless this writer deleted the amp, instances copy instead of move, unreadable IR stays uncalibrated; 4 tests red 26/58 -> green; verifier bb23893d (gpt); CI 37896275378)
 
 ### F-49 A crash mid Pack import leaves replaced captures; the next import deletes the only rollback
 - Source: pack hunter (high)
@@ -297,7 +297,7 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 
 ### F-57 Guide names the import backup volum-content.json.pre-import.bak; code writes .packbak
 - Source: pack hunter. Severity: docs
-- Disposition: fix-pending-merge (feature/hunt-docs f66ea3bf; docs verifier 610360a5)
+- Disposition: fixed (docs merged 07bf039b)
 
 ### F-58 PLAY banner amp name draws through "(unsaved)" with long preset names
 - Source: UI hunter (high). VoLumPlaySurface.h DrawStage
@@ -329,7 +329,7 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 ### F-64 Update check: appcast 404 (Pages not enabled), message blames the connection, notes would show "## What's Changed"
 - Source: UI tester A b1787d8d. Update check is new in 1.3.0; repo has_pages=false, so publish-appcast.yml's deploy step will fail at release. First non-empty body line is a markdown heading on every release.
 - Severity: release risk
-- Disposition: open (owner action before release: Settings > Pages > Source "GitHub Actions" -> Q-07. hunt-17: workflow picks the first non-heading, non-empty line and strips markdown; message wording for unreadable vs offline if the HTTP layer can tell)
+- Disposition: workflow notes fixed (fc843df1); Pages is owner action Q-07; message wording deferred (nit). Was: (owner action before release: Settings > Pages > Source "GitHub Actions" -> Q-07. hunt-17: workflow picks the first non-heading, non-empty line and strips markdown; message wording for unreadable vs offline if the HTTP layer can tell)
 
 ### F-65 DirectSound offers no 48 kHz on the UA-2X2 (RtAudio capture probe checks only legacy format flags)
 - Source: UI tester A. iPlug2 fork RtAudio.cpp ~5774-5791. ASIO4ALL offers 48k.
@@ -346,7 +346,7 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 
 ### F-68 Guide :307 and changelog say Settings reopens on the last tab; only true within a session
 - Source: UI tester A. Severity: docs
-- Disposition: open (docs lane: "during a session"; persistence is Q-03)
+- Disposition: fixed (docs merged 07bf039b no longer claim it; persistence is Q-03)
 
 ### F-69 Audio & MIDI dialog centres on the screen, not over VoLum
 - Source: UI tester A. Severity: cosmetic (iPlug2 APP host)
@@ -356,6 +356,134 @@ Format: see `spec.md`. Every entry needs a final Disposition other than `open`.
 - Source: UI tester A. Severity: cosmetic/docs
 - Disposition: open (hunt-18 shortcut card + filter description; docs lane for recipes)
 
+### F-72 VST3 ignores MIDI Program Change in REAPER (macOS CI, reproducible); AU and CC 102 work
+- Source: mac evidence phase 2 a6e3835a, run 37873627110 (feature/hunt-mac-ci fb03dc43). VST3 PC 1: state and RMS unchanged; VST3 CC 102=2, AU PC 1, AU CC 102 all recall.
+- Suspects: (a) iPlug2 fork IPlugVST3_ProcessorBase.cpp:334 decodes PC as (int)(value*127.), which truncates 1/127 in float to 0 (slot 0, possibly the current Sound -> no change); same truncation for aftertouch; (b) REAPER delivers VST3 PC only to a kIsProgramChange parameter (iPlug kPresetParam exists only with NPresets>0), not via IMidiMapping kCtrlProgramChange.
+- Severity: wrong-behavior, headline 1.3.0 feature in plugin hosts
+- Disposition: fix-pending-verify (hunt-19 2696f8dd + iPlug2 410255270: per-channel VST3 program lists + getUnitByBus + rounding; verifier 20ac1d0a FAIL: reload-delivered program param recalls (Cubase dummy PC); resumed 0b7b707e for an idempotent reload guard; rework 993e49a3 + iPlug2 1e0d6b85e drops kCanAutomate (verifier: spec-correct) + adds VST3ProgramRestoreGuard; re-verify 20ac1d0a FAIL: missing ProcessContext reuses stale kPlaying, Arm/EndBlock race loses a re-arm, zero-frame/suspended processing leaves the guard armed forever, tests only cover a model helper; resumed 0b7b707e again; mac evidence phase 3 a6e3835a on 993e49a3 (run 37894739681) PASS: REAPER macOS delivers VST3 PC 1 without kCanAutomate, AU + VST3 PC1/CC102/reload all recall and reopen without a `[midi] recall` line; then REAPER Windows + one mac evidence re-run on the reworked guard)
+
+### F-73 IR import accepts non-WAV files (junk renamed .wav, 0-byte, header-only, .txt); error only when picked
+- Source: UI tester B 1c820716 (5/5). VoLumCustomOverlay.h ~800-843 checks size only (VoLumIrFileGuard.h:23).
+- Severity: wrong-behavior
+- Disposition: open (hunt-20 IR: validate at import with the existing "File is not a WAV file." message, don't copy)
+
+### F-74 Confirm dialog body is one clipped centred line (IR delete question cut on both sides)
+- Source: UI tester B. VoLumConfirmDialog.h:73-77. Severity: UX
+- Disposition: open (hunt-20: wrap the body)
+
+### F-75 IR-delete confirm names the last factory amp ("Soldano SLO100") while MAIN is a custom amp
+- Source: UI tester B; VoLumRigRepair.inc.cpp:53. Severity: wrong-behavior
+- Disposition: open (hunt-20)
+
+### F-76 Deleting the playing IR on a custom amp leaves MAIN on No Cab instead of the stock cab
+- Source: UI tester B (2/2). Guide: "a deleted IR returns to the stock cab". Severity: wrong-behavior
+- Disposition: open (hunt-20)
+
+### F-77 Exact-value entry drops the decimal comma ("7,5" -> 75 -> clamps 10.0); first Esc only clears text, next click swallowed
+- Source: UI tester B (2/2). iPlug2 fork IGraphicsWin.cpp ~757-799 keystroke filter. Severity: wrong-behavior (German users)
+- Disposition: open (hunt-21 iPlug2 text entry: accept ',' as decimal, one Esc cancels)
+
+### F-78 Custom amp row "Monomyth Skelet" cut without ellipsis
+- Source: UI tester B. Severity: cosmetic
+- Disposition: open (hunt-18)
+
+### F-79 Preset name length cap counts bytes (umlauts/CJK get fewer chars); CJK glyphs missing in the font
+- Source: UI tester B. Severity: cosmetic/UX
+- Disposition: open (hunt-18: count code points; missing CJK glyphs reported, post-1.3.0)
+
+### F-80 POST card labels touch their LED; Delay DIVISION/FEEDBACK and Oktaverb PRE-DLY/INTENSITY crowd
+- Source: UI tester B. Severity: cosmetic
+- Disposition: open (hunt-18 if a layout constant; else post-1.3.0)
+
+### F-81 Keyboard-hint footer shows internal param names ("ReverbMix", "DelayTime") and goes stale after card focus
+- Source: UI tester B. Severity: UX
+- Disposition: open (hunt-18: display labels; clear on focus change)
+
+### F-82 Manage overwrite icon moves the selection dot even when the overwrite is cancelled
+- Source: UI tester B. Severity: UX
+- Disposition: open (hunt-18)
+
+### F-83 Guide says S / Shift+S step through Custom IR; VoLumCabStep.h deliberately cycles the four fixed slots
+- Source: UI tester B. Severity: docs
+- Disposition: open (docs touch-up batch)
+
+### F-84 Test flakes under full-suite load: test_volum_realtime_budget.cpp:247 (passes alone), test_volum_pack.cpp:808 (transient)
+- Source: hunt-03 worker 6e59de48. Severity: test reliability (CI risk)
+- Disposition: open (verifier a6f0d11d: pre-existing. realtime budget = wall-clock limit under load; pack test uses fixed %TEMP%\volum-pack-tests\<name> shared by all worktrees -> add PID. hunt-22 test hygiene)
+
+### F-85 scripts/check-local-guards.ps1:12 assumes .git is a directory (wrong in git worktrees)
+- Source: hunt-03 worker. Severity: tooling
+- Disposition: fixed (merged 362bbb13)
+
+### F-86 iPlug2 IPlugAPP_dialog.cpp:360-365 writes into reserved-but-unresized std::string storage (UB)
+- Source: hunt-02 worker b0b7ac3a. Severity: latent crash
+- Disposition: confirmed by verifier 0436a709; folded into hunt-02 rework
+
+### F-87 VST3 MIDI is channel 1 only: VST3_NUM_MIDI_IN_CHANS / VST3_NUM_CC_CHANS=16 in config.h never reach the iPlug2 VST3 sources
+- Source: hunt-19 worker 0b7b707e, confirmed by verifier 20ac1d0a (pre-existing: CC 102 on channels 2-16 already broken in VST3) (compile-time probe printed 1; built plugin reports event bus channelCount=1). 'One channel = N' (N>1) and recall from other channels cannot work in VST3.
+- Severity: wrong-behavior (VST3)
+- Disposition: open (after hunt-19 REAPER check: define both macros in VST3 project settings (Windows props + Mac xcconfig), verify with REAPER harness; adds ~2000 host-visible MIDI params -> host check; else document 'VST3: channel 1' in the guide)
+
+### F-88 Pack import with "Also restore machine settings" saves the old live sound over the restored amp
+- Source: UI tester C a9f7d217 (2/2: Reset and Overwrite with the box). Restored scene equals the outgoing THC Sunset scene field for field; Dual partner dropped; persists after relaunch. VoLumPackActions.inc.cpp:212-218 already comments on this failure (9dc4500d); suspect the debounced settings save (19be2b67).
+- Severity: data-loss
+- Disposition: open (hunt-23, top priority; coordinate with settings unit 60ec32a7 F-12)
+
+### F-89 Sidebar keeps the old custom-amp name and art after an import replaces that amp (same id)
+- Source: UI tester C (2/2). Severity: wrong-behavior
+- Disposition: open (hunt-09 pack/repair)
+
+### F-90 Each Tab onto a custom SUPPORT lane reloads its capture from disk
+- Source: UI tester C (10/10). Factory SUPPORT and custom MAIN don't reload. Possible audio glitch (unheard).
+- Severity: wrong-behavior
+- Disposition: open (hunt-08 selection/idle)
+
+### F-91 BUILD footer shows the internal custom capture filename (amp_..._import_..._AMP-MJVM-5.nam) instead of the stored original `file`
+- Source: UI testers B and C. Severity: cosmetic
+- Disposition: open (hunt-18)
+
+### F-92 Custom amp: after visiting a cabless-only channel, channel 1 stays on No Cab (plays the cabless import, not the G12 capture)
+- Source: UI tester C (p2-004). Severity: wrong-behavior (unconfirmed 1/1)
+- Disposition: open (hunt-08 selection/idle: confirm and fix)
+
+### F-93 _ReportedLatencySamples counts SUPPORT whenever mSupportModel is loaded; ProcessBlock also requires mVolumSupportSelected
+- Source: hunt-05 worker a24a992c. Severity: wrong latency report (loaded but unselected SUPPORT)
+- Disposition: confirmed by verifier f37a0a68; folded into hunt-05 rework
+
+### F-94 _UpdateLatency / _VolumRefreshLatencyReport touch UI and host from OnReset (AAX runs OnReset on the audio thread)
+- Source: hunt-05 worker. Severity: realtime (AAX only)
+- Disposition: open (check whether VoLum ships AAX; if not, reported only)
+
+### F-95 (likely harness) Standalone exits without a window for ~93 s after a 15-min monkey run (31 failed launches, then OK)
+- Source: monkey runner 724038e9, seed 130201 then 130301 (`C:\dev\VoLum-wtmonkey\.monkey-runs\custom-play-130301`). No dump, no log error; the 977-event run that followed was clean.
+- Likely cause: the single-instance guard (iPlug2 IPlugAPP_main.cpp:55-97) refuses to start while another VoLum holds the mutex: the previous Kill()ed process still tearing down its audio driver, or another agent's VoLum window (FindWindow matches any "VoLum"). Start-VoLum closes the "still running" dialog without logging its title.
+- Severity: harness / environment unless it reproduces after a normal close
+- Disposition: reported (harness follow-up: wait for every VoLum process to exit before relaunching, log startup dialog titles; L5 27d02eef: 0/12 refusals after a normal close, old process gone in 0.26-0.52 s -> harness Kill() teardown, not product)
+
 ### F-71 (unconfirmed) Import preview listed 7 replacements, volum.log said "3 replaced"
 - Source: UI tester A (seen once). Severity: unknown
 - Disposition: open (hunt-14 pack robustness: check preview vs apply counting)
+
+### F-96 Two e2e scenarios read custom scenes from volum-content.json customScenes, but 1.3.0 keeps them in volum-settings.json (checks pass without testing anything)
+- Source: hunt-11 worker 021addf6 (NeuralAmpModeler/scripts/e2e-standalone-win.ps1; exact lines from verifier bb23893d). Severity: test gap
+- Disposition: open (fix with a GUI e2e run after hunt-11 lands)
+
+### F-97 Dual Amp on/off clicks every time (Support lane switched in with no crossfade)
+- Source: L5 audio lane 27d02eef (real loopback, DirectSound 512, Marshall 2204 + THC Sunset SUPPORT, 200 Hz tone; keys 2 then Space). 6/6: one-sample step 10-15x the surrounding level; tone control clean. Evidence .scratch/1.3.0-hunt/l5/out/scan-ds512/isolated.txt. NeuralAmpModeler.cpp Dual decision follows the param directly.
+- Severity: glitch
+- Disposition: open (hunt-24: short equal-power crossfade on Dual toggle; guarded: golden renders must stay bit-identical; report-only if they move)
+
+### F-98 (low confidence) Smaller steps on COMP / POST pedal toggles and sidebar amp switches
+- Source: L5. COMP 3/4, POST pedal 2/4, amp switch 4/8; steps 3-7x surrounding level, control clean. Measured under heavy build load.
+- Severity: glitch (low confidence)
+- Disposition: reported (re-measure with tools/glitchscan when the machine is idle; fold into hunt-24 if the Dual crossfade pattern applies)
+
+### F-99 DirectSound on the UA-2X2 offers no 48 kHz; switching from ASIO@48k shows a notice pointing to the disabled ASIO Device Settings button
+- Source: L5 4/4. Preferences lists 11025/22050/44100/96000 under DirectSound; 48000 opens at 44100. Evidence l5/out/switch/applies.csv, l5/out/sanity-512/volum.log.
+- Severity: UX (rate list comes from the driver probe; the notice text is ours)
+- Disposition: open (small: notice wording should depend on the driver type; queue with hunt-13 or a standalone-host follow-up after hunt-02 lands)
+
+### F-100 DirectSound drops or repeats blocks during steady play (quiet phase jumps)
+- Source: L5 2/2 runs (3.6-4.2 s; ~40 s, ~75 s), DirectSound 512 under heavy build load; control clean.
+- Severity: glitch (DirectSound only, likely load)
+- Disposition: reported (re-check on an idle machine; ASIO is the recommended driver)

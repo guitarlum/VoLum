@@ -10,7 +10,9 @@ if ($env:CI -or $env:GITHUB_ACTIONS -eq "true") { exit 0 }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $here "..\..")).Path
 $denyFile = Join-Path $here "vendor-denylist.txt"
-$hookDir = Join-Path $repoRoot ".git\hooks"
+# In a git worktree .git is a file; ask git where the shared hooks live.
+$hookDir = (& git -C $repoRoot rev-parse --path-format=absolute --git-path hooks 2>$null)
+if (-not $hookDir) { $hookDir = Join-Path $repoRoot ".git\hooks" }
 
 $problems = @()
 if (-not (Test-Path -LiteralPath $denyFile)) {
