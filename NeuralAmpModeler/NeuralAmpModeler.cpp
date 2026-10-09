@@ -639,6 +639,13 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   const size_t numChannelsExternalOut = (size_t)NOutChansConnected();
   const size_t numChannelsInternal = kNumChannelsInternal;
   const size_t numFrames = (size_t)nFrames;
+  // VoLum: OnReset is re-preparing the chain on another thread (AUv2). Never wait for it.
+  const auto resetLock = mResetExclusion.TryBeginBlock();
+  if (!resetLock.owns_lock())
+  {
+    volum::process_io::ClearBuffers(outputs, numFrames, numChannelsExternalOut);
+    return;
+  }
   const double sampleRate = GetSampleRate();
 
   // Host grew past the off-thread reserve, or OnReset has not run yet.
@@ -672,7 +679,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // while the plan refused to run it. mVolumSupportSelected is maintained by
   // _VolumRequestSupportModelLoad, which owns that decision for both lanes.
   const bool supportAmpSelected = mVolumSupportSelected.load(std::memory_order_relaxed);
-  const bool haveSupportModel = supportAmpSelected && (mSupportModel != nullptr);
+  const bool haveSupportModel = volum::HaveSelectedSupportModel(supportAmpSelected, mSupportModel != nullptr);
   const bool supportToneStackActive = GetParam(kSupportEQActive)->Bool();
   const bool preNamActive[2] = {GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam2Active)->Bool()};
   const bool havePreNam[2] = {mPreModel[0] != nullptr, mPreModel[1] != nullptr};
@@ -687,6 +694,11 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     preNamActive, havePreNam, GetParam(kDelayActive)->Bool(), GetParam(kReverbActive)->Bool(), mTunerDSP.IsActive(),
     dualAmpActive, haveSupportModel, supportToneStackActive, supportIrActive, mSupportIR != nullptr,
     GetParam(kPrePitchActive)->Bool(), GetParam(kTremoloActive)->Bool(), GetParam(kChorusActive)->Bool());
+  // VoLum: an IR lane's cuts start from silence the next time it convolves.
+  if (!processingPlan.runIR)
+    mIrShaping.Reset();
+  if (!processingPlan.runSupportIR)
+    mSupportIrShaping.Reset();
   preAmpPointers = _VolumProcessPreChain(preAmpPointers, processingPlan, numChannelsInternal, nFrames, sampleRate);
 
   const bool dualScratchReady =
@@ -818,70 +830,77 @@ void NeuralAmpModeler::OnReset()
 {
   const auto sampleRate = GetSampleRate();
   const int maxBlockSize = GetBlockSize();
-
-  // Tail is because the HPF DC blocker has a decay.
-  // 10 cycles should be enough to pass the VST3 tests checking tail behavior.
-  // I'm ignoring the model & IR, but it's not the end of the world.
-  const int tailCycles = 10;
-  SetTailSize(tailCycles * (int)(sampleRate / kDCBlockerFrequency));
-  mInputSender.Reset(sampleRate);
-  mOutputSender.Reset(sampleRate);
-  mOutputSenderR.Reset(sampleRate);
-  const recursive_linear_filter::HighPassParams highPassParams(sampleRate, kDCBlockerFrequency);
-  mHighPass.SetParams(highPassParams);
-  mSupportHighPass.SetParams(highPassParams);
-  mMasterSafetyHoldSamples = 0;
-  mMasterSafetyEngaged.store(false);
-  // Cap a deferred IR removal at ~2 seconds of audio, expressed in blocks so the
-  // audio thread only has to count. A capture that never loads must not leave the
-  // IR convolving forever - that would be a worse artifact than the gap it avoids.
-  mVolumDeferredIrMaxBlocks.store(
-    std::max(1, static_cast<int>(std::ceil(2.0 * sampleRate / std::max(1, maxBlockSize)))));
-  // If there is a model or IR loaded, they need to be checked for resampling.
-  const int reservedBlock = volum::dsp_staging::ReservedAudioBlockSize(maxBlockSize);
-  _ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));
-  mToneStack->Reset(sampleRate, maxBlockSize);
-  if (mSupportToneStack)
-    mSupportToneStack->Reset(sampleRate, maxBlockSize);
-  mDualMainLatencyDelay.Reset();
-  mDualSupportLatencyDelay.Reset();
-  mDualMainLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
-  mDualSupportLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
-  mPrePitchWasActive = false;
-  mPreCompWasActive = false;
-  for (int i = 0; i < 2; ++i)
-    mPreEq[i].Reset(sampleRate, maxBlockSize);
-  mPreCompressor.Reset();
   {
-    std::lock_guard<std::mutex> lock(mPrePitchMutex);
-    mPitch.Configure(sampleRate, maxBlockSize);
-    mPitch.Reset();
+    // VoLum: ProcessBlock outputs silence until this scope ends. No host calls inside it.
+    const auto resetLock = mResetExclusion.BeginReset();
+
+    // Tail is because the HPF DC blocker has a decay.
+    // 10 cycles should be enough to pass the VST3 tests checking tail behavior.
+    // I'm ignoring the model & IR, but it's not the end of the world.
+    const int tailCycles = 10;
+    SetTailSize(tailCycles * (int)(sampleRate / kDCBlockerFrequency));
+    mInputSender.Reset(sampleRate);
+    mOutputSender.Reset(sampleRate);
+    mOutputSenderR.Reset(sampleRate);
+    const recursive_linear_filter::HighPassParams highPassParams(sampleRate, kDCBlockerFrequency);
+    mHighPass.SetParams(highPassParams);
+    mSupportHighPass.SetParams(highPassParams);
+    mIrShaping.Reset();
+    mSupportIrShaping.Reset();
+    mMasterSafetyHoldSamples = 0;
+    mMasterSafetyEngaged.store(false);
+    // Cap a deferred IR removal at ~2 seconds of audio, expressed in blocks so the
+    // audio thread only has to count. A capture that never loads must not leave the
+    // IR convolving forever - that would be a worse artifact than the gap it avoids.
+    mVolumDeferredIrMaxBlocks.store(
+      std::max(1, static_cast<int>(std::ceil(2.0 * sampleRate / std::max(1, maxBlockSize)))));
+    // If there is a model or IR loaded, they need to be checked for resampling.
+    const int reservedBlock = volum::dsp_staging::ReservedAudioBlockSize(maxBlockSize);
+    _ResetModelAndIR(sampleRate, volum::dsp_staging::NamResetBlockSize(maxBlockSize));
+    _VolumPublishLiveLatency();
+    mToneStack->Reset(sampleRate, maxBlockSize);
+    if (mSupportToneStack)
+      mSupportToneStack->Reset(sampleRate, maxBlockSize);
+    mDualMainLatencyDelay.Reset();
+    mDualSupportLatencyDelay.Reset();
+    mDualMainLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
+    mDualSupportLatencyDelay.Reserve(volum::DualAmpDelayLine<sample>::kLatencyReserve);
+    mPrePitchWasActive = false;
+    mPreCompWasActive = false;
+    for (int i = 0; i < 2; ++i)
+      mPreEq[i].Reset(sampleRate, maxBlockSize);
+    mPreCompressor.Reset();
+    {
+      std::lock_guard<std::mutex> lock(mPrePitchMutex);
+      mPitch.Configure(sampleRate, maxBlockSize);
+      mPitch.Reset();
+    }
+    const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
+    mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+    mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
+    mTremolo.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
+    mChorus.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
+    mDelay.Reset();
+    mReverb.Reset();
+    mTremolo.Reset();
+    mChorus.Reset();
+    mPostDelayWasActive = false;
+    mPostReverbWasActive = false;
+    mPostTremoloWasActive = false;
+    mPostChorusWasActive = false;
+    mPostEffectsClearedForMissingModel = false;
+    // Hosts grow the callback without OnReset. Reserve the pitch-sized cap so
+    // ProcessBlock can resize within capacity; past that it dry-passes.
+    mReservedAudioBlockSize = reservedBlock;
+    const size_t reservedT = static_cast<size_t>(reservedBlock);
+    mDualMainLaneBuffer.assign(reservedT, 0.0);
+    mDualSupportLaneBuffer.assign(reservedT, 0.0);
+    mDualMainAlignedBuffer.assign(reservedT, 0.0);
+    mDualSupportAlignedBuffer.assign(reservedT, 0.0);
+    _PrepareBuffers(kNumChannelsInternal, reservedT);
+    mTunerDSP.Reset(sampleRate);
+    mMetronomeDSP.Reset(sampleRate);
   }
-  const size_t postEffectChannels = std::max<size_t>(1, static_cast<size_t>(NOutChansConnected()));
-  mDelay.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
-  mReverb.Prepare(postEffectChannels, static_cast<size_t>(maxBlockSize), sampleRate);
-  mTremolo.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
-  mChorus.Prepare(sampleRate, maxBlockSize, static_cast<int>(postEffectChannels));
-  mDelay.Reset();
-  mReverb.Reset();
-  mTremolo.Reset();
-  mChorus.Reset();
-  mPostDelayWasActive = false;
-  mPostReverbWasActive = false;
-  mPostTremoloWasActive = false;
-  mPostChorusWasActive = false;
-  mPostEffectsClearedForMissingModel = false;
-  // Hosts grow the callback without OnReset. Reserve the pitch-sized cap so
-  // ProcessBlock can resize within capacity; past that it dry-passes.
-  mReservedAudioBlockSize = reservedBlock;
-  const size_t reservedT = static_cast<size_t>(reservedBlock);
-  mDualMainLaneBuffer.assign(reservedT, 0.0);
-  mDualSupportLaneBuffer.assign(reservedT, 0.0);
-  mDualMainAlignedBuffer.assign(reservedT, 0.0);
-  mDualSupportAlignedBuffer.assign(reservedT, 0.0);
-  _PrepareBuffers(kNumChannelsInternal, reservedT);
-  mTunerDSP.Reset(sampleRate);
-  mMetronomeDSP.Reset(sampleRate);
   _UpdateLatency();
   VOLUM_LOG("audio", "reset: " + std::to_string(static_cast<int>(sampleRate)) + " Hz, block "
                        + std::to_string(maxBlockSize) + ", in " + std::to_string(NInChansConnected()) + " / out "
@@ -930,13 +949,8 @@ void NeuralAmpModeler::OnIdle()
   // Runs after the sync above so the restore stays the first thing an idle does;
   // freeing a few megabytes can wait a tick, a stale editor cannot.
   _VolumReapAudioThreadRetirees();
-  if (mLatencyDirty.exchange(false, std::memory_order_acquire))
-  {
-    if (mLatencyRecomputePending.exchange(false, std::memory_order_acquire))
-      _UpdateLatency();
-    else
-      _ApplyLatchedLatency();
-  }
+  mLatencyRequests.Service(
+    [this] { return _ReportedLatencySamples(); }, [this](int latency) { _ApplyReportedLatency(latency); });
   if (mVolumUiMode == volum::UiMode::Play)
   {
     _VolumRefreshPlaySurface();
@@ -1651,6 +1665,9 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
   (void)sampleOffset;
   _VolumQueueModeParamChange(paramIdx, source);
 
+  // Host automation lands here on the audio thread: only ask, OnIdle reports.
+  if (volum::ParamAffectsReportedLatency(paramIdx))
+    mLatencyRequests.Request();
   switch (paramIdx)
   {
     // Changes to the input gain
@@ -1745,8 +1762,6 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
       if (mVolumInitComplete)
       {
         mVolumPreNeedsLoad[0].store(true);
-        mLatencyRecomputePending.store(true, std::memory_order_release);
-        mLatencyDirty.store(true, std::memory_order_release);
       }
       break;
     case kPreNam2Capture:
@@ -1754,20 +1769,6 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
       if (mVolumInitComplete)
       {
         mVolumPreNeedsLoad[1].store(true);
-        mLatencyRecomputePending.store(true, std::memory_order_release);
-        mLatencyDirty.store(true, std::memory_order_release);
-      }
-      break;
-    case kPrePitchActive:
-    case kPrePitchMode:
-    case kPrePitchTransChar:
-      // Toggling the pitch engine, switching Transpose/Octaver, or changing the
-      // transpose CHARACTER (Instant ~8.6 ms / Poly ~14 ms) all change reported
-      // (PDC) latency, so re-report it to the host.
-      if (mVolumInitComplete)
-      {
-        mLatencyRecomputePending.store(true, std::memory_order_release);
-        mLatencyDirty.store(true, std::memory_order_release);
       }
       break;
     case kVoLumAmpeteRig: break; // handled by callback-based channel stepper
@@ -2178,27 +2179,16 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     }
   }
 
+  if (removedMainModel || appliedMainModel || removedSupportModel || appliedSupportModel || removedPreModel[0]
+      || appliedPreModel[0] || removedPreModel[1] || appliedPreModel[1])
+    _VolumPublishLiveLatency();
   if (removedMainModel || appliedMainModel)
   {
-    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
-    mLatencyDirty.store(true, std::memory_order_release);
     _SetInputGain();
     _SetOutputGain();
   }
   if (removedSupportModel || appliedSupportModel)
-  {
-    mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
-    mLatencyDirty.store(true, std::memory_order_release);
     _SetSupportOutputGain();
-  }
-  for (int i = 0; i < 2; ++i)
-  {
-    if (removedPreModel[i] || appliedPreModel[i])
-    {
-      mPendingLatency.store(_ReportedLatencySamples(), std::memory_order_relaxed);
-      mLatencyDirty.store(true, std::memory_order_release);
-    }
-  }
 }
 
 // Main thread: land the shaping push a deferred cab switch held back, once the audio
@@ -2274,6 +2264,9 @@ void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBl
 {
   // Inspecting staged pointers needs the staging mutex because _StageModel /
   // _StageIR can write them from a non-audio thread (UnserializeState path).
+  // Declared before the lock so the IRs a re-stage replaces die after unlocking.
+  std::unique_ptr<dsp::ImpulseResponse> replacedIr;
+  std::unique_ptr<dsp::ImpulseResponse> replacedSupportIr;
   std::lock_guard<std::mutex> lock(mStagingMutex);
 
   // Model
@@ -2304,24 +2297,8 @@ void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBl
   }
 
   // IR
-  if (mStagedIR != nullptr)
-  {
-    const double irSampleRate = mStagedIR->GetSampleRate();
-    if (irSampleRate != sampleRate)
-    {
-      const auto irData = mStagedIR->GetData();
-      mStagedIR = std::make_unique<dsp::ImpulseResponse>(irData, sampleRate);
-    }
-  }
-  else if (mIR != nullptr)
-  {
-    const double irSampleRate = mIR->GetSampleRate();
-    if (irSampleRate != sampleRate)
-    {
-      const auto irData = mIR->GetData();
-      mStagedIR = std::make_unique<dsp::ImpulseResponse>(irData, sampleRate);
-    }
-  }
+  replacedIr = volum::dsp_staging::RestageIrForSampleRate(mStagedIR, mIR, sampleRate);
+  replacedSupportIr = volum::dsp_staging::RestageIrForSampleRate(mStagedSupportIR, mSupportIR, sampleRate);
 }
 
 void NeuralAmpModeler::_SetInputGain()
@@ -2648,17 +2625,33 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
   }
 }
 
+void NeuralAmpModeler::_VolumPublishLiveLatency()
+{
+  volum::LaneLatencies lanes;
+  if (mModel)
+    lanes.main = mModel->GetLatency();
+  if (mSupportModel)
+    lanes.support = mSupportModel->GetLatency();
+  for (int i = 0; i < 2; ++i)
+    if (mPreModel[i])
+      lanes.pre[i] = mPreModel[i]->GetLatency();
+  mLiveLatency.Publish(lanes);
+  mLatencyRequests.Request();
+}
+
 int NeuralAmpModeler::_ReportedLatencySamples() const
 {
+  const volum::LaneLatencies lanes = mLiveLatency.Read();
+  constexpr int kNoModel = volum::LaneLatencies::kNoModel;
   int preLatency = 0;
   const bool preNam1ShouldLoad =
     volum::ShouldLoadPrePedalCapture(GetParam(kPreNam1Active)->Bool(), GetParam(kPreNam1Capture)->Int());
   const bool preNam2ShouldLoad =
     volum::ShouldLoadPrePedalCapture(GetParam(kPreNam2Active)->Bool(), GetParam(kPreNam2Capture)->Int());
-  if (preNam1ShouldLoad && mPreModel[0])
-    preLatency += mPreModel[0]->GetLatency();
-  if (preNam2ShouldLoad && mPreModel[1])
-    preLatency += mPreModel[1]->GetLatency();
+  if (preNam1ShouldLoad && lanes.pre[0] != kNoModel)
+    preLatency += lanes.pre[0];
+  if (preNam2ShouldLoad && lanes.pre[1] != kNoModel)
+    preLatency += lanes.pre[1];
   // PRE Pitch pedal reports the granular engine latency (dry is delayed to match)
   // so the host can compensate via PDC. Compute from the CURRENT params (mode +
   // character) rather than mPitch.Latency(): the live member is only refreshed on
@@ -2674,42 +2667,27 @@ int NeuralAmpModeler::_ReportedLatencySamples() const
     preLatency += dsp::effect::VoLumPitch::LatencyFor(pitchMode, pitchChar, GetSampleRate());
   }
 
-  int ampLatency = 0;
-  if (mModel)
-  {
-    ampLatency = mModel->GetLatency();
-  }
-  if (GetParam(kDualAmpActive)->Bool() && mSupportModel)
-  {
-    ampLatency = std::max(ampLatency, mSupportModel->GetLatency());
-  }
+  const bool haveSupportModel =
+    volum::HaveSelectedSupportModel(mVolumSupportSelected.load(std::memory_order_relaxed), lanes.support != kNoModel);
+  const int ampLatency = volum::AmpLatencySamples(
+    lanes.main != kNoModel, lanes.main, GetParam(kDualAmpActive)->Bool(), haveSupportModel, lanes.support);
   // Other things that add latency here...
   return preLatency + ampLatency;
 }
 
-void NeuralAmpModeler::_ApplyLatchedLatency()
+void NeuralAmpModeler::_VolumSetSupportSelected(bool selected)
 {
-  const int latency = mPendingLatency.load(std::memory_order_relaxed);
-  if (GetLatency() != latency)
-    SetLatency(latency);
-  _VolumRefreshLatencyReport(/*force=*/true);
+  if (mVolumSupportSelected.exchange(selected) != selected)
+    mLatencyRequests.Request();
 }
 
 void NeuralAmpModeler::_UpdateLatency()
 {
-  // Clear before computing so a model publish that races this main-thread pass
-  // sets the flag again and is consumed by the next idle instead of being lost.
-  mLatencyDirty.exchange(false, std::memory_order_acquire);
-  int latency = 0;
-  {
-    // _ApplyDSPStaging moves these live model pointers under the same mutex.
-    // Parameter-driven recomputes run on the main thread, so hold it only for
-    // the pointer/latency reads and release it before calling the host.
-    std::lock_guard<std::mutex> lock(mStagingMutex);
-    latency = _ReportedLatencySamples();
-  }
-  mPendingLatency.store(latency, std::memory_order_relaxed);
+  _ApplyReportedLatency(_ReportedLatencySamples());
+}
 
+void NeuralAmpModeler::_ApplyReportedLatency(int latency)
+{
   // Feels weird to have to do this.
   if (GetLatency() != latency)
   {

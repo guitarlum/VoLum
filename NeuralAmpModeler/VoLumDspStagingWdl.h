@@ -153,6 +153,20 @@ template <typename T>
   return ReplaceStaged(staged, std::unique_ptr<T>{});
 }
 
+// OnReset, under the staging lock, once per IR lane (MAIN and SUPPORT): the IR that
+// plays next (the staged one, else the live one) is re-staged at the new rate. A
+// convolver left at the old rate plays its cab pitched and filtered wrong. Returns
+// the predecessor for the caller to destroy after unlocking.
+template <typename IR>
+[[nodiscard]] std::unique_ptr<IR> RestageIrForSampleRate(std::unique_ptr<IR>& staged, const std::unique_ptr<IR>& live,
+                                                         double sampleRate)
+{
+  IR* source = staged ? staged.get() : live.get();
+  if (source == nullptr || source->GetSampleRate() == sampleRate)
+    return nullptr;
+  return ReplaceStaged(staged, std::make_unique<IR>(source->GetData(), sampleRate));
+}
+
 // Loader results the audio thread has drained. Their strings and the container
 // itself are freed in OnIdle, so a processed batch is swapped into an empty slot.
 constexpr size_t kSpentLoaderBatchSlots = 4;

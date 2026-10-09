@@ -2520,10 +2520,10 @@ TEST_CASE("A custom SUPPORT partner is admitted to the audio graph")
   REQUIRE(request != std::string::npos);
   const std::string requestBody = loader.substr(request);
 
-  CHECK(countOf(requestBody, "mVolumSupportSelected.store(true)") == 2);
-  CHECK(countOf(requestBody, "mVolumSupportSelected.store(false)") == 5);
+  CHECK(countOf(requestBody, "_VolumSetSupportSelected(true)") == 2);
+  CHECK(countOf(requestBody, "_VolumSetSupportSelected(false)") == 5);
   CHECK(countOf(requestBody, "mShouldRemoveSupportModel.store(true)")
-        == countOf(requestBody, "mVolumSupportSelected.store(false)"));
+        == countOf(requestBody, "_VolumSetSupportSelected(false)"));
 }
 
 TEST_CASE("The audio-thread loader drain does no diagnostic-log file I/O")
@@ -2827,10 +2827,10 @@ TEST_CASE("tier2a model apply latches latency instead of updating it on the audi
   REQUIRE(end != std::string::npos);
   const std::string body = source.substr(apply, end - apply);
   RequireDoesNotContain(body, "_UpdateLatency()");
-  RequireContains(body, "mLatencyDirty");
+  RequireContains(body, "_VolumPublishLiveLatency();");
 }
 
-TEST_CASE("F-40 OnParamChange only latches main-thread layout support and latency work")
+TEST_CASE("F-40 OnParamChange only latches main-thread layout and support work")
 {
   const std::string source = ReadPluginSource();
   const std::string body =
@@ -2838,18 +2838,13 @@ TEST_CASE("F-40 OnParamChange only latches main-thread layout support and latenc
 
   RequireDoesNotContain(body, "_UpdateVoLumLayout(");
   RequireDoesNotContain(body, "_VolumRefreshSupportChannels(");
-  RequireDoesNotContain(body, "_UpdateLatency(");
   RequireDoesNotContain(body, "SendParameterValueFromDelegate(");
   RequireContains(body, "mVolumDualAmpParamDirty.store(true");
   RequireContains(body, "mVolumSupportChannelsDirty.store(true");
-  RequireContains(body, "mLatencyRecomputePending.store(true");
-  RequireContains(body, "mLatencyDirty.store(true");
 
   const std::string idle = MemberFnUntilNext(source, "void NeuralAmpModeler::OnIdle()");
   RequireContains(idle, "_VolumApplyPendingDualAmpChange();");
   RequireContains(idle, "_VolumRefreshSupportChannels();");
-  RequireContains(idle, "mLatencyRecomputePending.exchange(false");
-  RequireContains(idle, "_UpdateLatency();");
 }
 
 TEST_CASE("tier2a loader drain does not block on the loader mutex")

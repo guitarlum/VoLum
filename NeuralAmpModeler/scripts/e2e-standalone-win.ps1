@@ -22,7 +22,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
-    "samplerate", "savedialog", "pack", "chrome", "midi")]
+    "samplerate", "savedialog", "pack", "packrestore", "chrome", "midi")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -1768,6 +1768,144 @@ function Test-Pack {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: Everything import with machine settings onto a running rig (F-88)
+#
+# The sender saves its Everything Pack in PLAY on Ampete One, with a scene of its
+# own and Dual on with Soldano as SUPPORT. The receiver runs THC Sunset in BUILD
+# with Klon and Halcyon on. Reset + "Also restore machine settings" must leave
+# Ampete One with the Pack's scene and Dual partner, after the receiver's own
+# saves and a relaunch, and keep the Pack's Dual key out of volum-settings.json.
+# The broken build folded the outgoing THC sound into Ampete One's scene while
+# the PLAY surface refreshed mid-restore, and a Pack carried no Dual state.
+# --------------------------------------------------------------------------
+function Test-PackRestore {
+  Write-Host "`n[packrestore] Everything + machine settings from PLAY keeps the Pack's scene and Dual partner" -ForegroundColor Cyan
+  $ui = $script:PackUi
+  $seed = Join-Path (Split-Path -Parent $slnDir) "docs\screenshot-seed"
+  $dualKey = "volumDualAmpSettings"
+  $seedInto = {
+    param([string]$Sandbox, [scriptblock]$Settings, [scriptblock]$Dual)
+    $root = Join-Path $Sandbox "VoLum"
+    Copy-Item (Join-Path $seed "content") $root -Recurse -Force
+    $s = Read-Json (Join-Path $seed "volum-settings.json")
+    & $Settings $s
+    $s | ConvertTo-Json -Depth 100 | Set-Content (Join-Path $root "volum-settings.json") -Encoding UTF8
+    $d = Read-Json (Join-Path $seed "volum-dual-amp-settings.json")
+    if ($Dual) { & $Dual $d }
+    $d | ConvertTo-Json -Depth 100 | Set-Content (Join-Path $root "volum-dual-amp-settings.json") -Encoding UTF8
+    Write-SandboxAudioConfig $Sandbox
+    return $root
+  }
+
+  $sandA = New-Sandbox "packrestore-source"
+  $rootA = & $seedInto $sandA {
+    param($s)
+    $s.lastAmpIdx = 0
+    $s | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "play" -Force
+    $s | Add-Member -NotePropertyName lastPlaySlot -NotePropertyValue (-1) -Force
+    $s.volumActivePresetId = ""
+    $a = $s.amps.'Ampete One'
+    $a.channel = 1
+    $a.preNam1Active = $true
+    $a.preNam1Capture = 2
+    $a.preNam2Active = $false
+    $a.postDelayActive = $true
+    $a.postTremoloActive = $false
+  } {
+    param($d)
+    $a = $d.amps.'Ampete One'
+    $a.dualAmpActive = $true
+    $a.supportAmp = 13
+    $a.supportChannel = 2
+  }
+  $packDir = Join-Path $sandA "packs"
+  New-Item -ItemType Directory -Path $packDir -Force | Out-Null
+  $packPath = Join-Path $packDir "everything-play.volumpack"
+  $runA = Invoke-VoLumRun -SandboxRoot $sandA -SettleSec 7 -Environment @{ VOLUM_PACK_SAVE_PATH = $packPath } -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    Invoke-PackClick $h $ui.gear
+    Invoke-PackClick $h $ui.system
+    Invoke-PackClick $h $ui.export
+    Invoke-PackClick $h $ui.go 900
+    $until = (Get-Date).AddSeconds(6)
+    while (-not (Test-Path $packPath) -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 100 }
+  }
+  Assert-True "[packrestore] sender opened" $runA.started
+  Assert-True "[packrestore] sender closed gracefully" $runA.graceful
+  Assert-True "[packrestore] sender wrote the Everything Pack" (Test-Path $packPath)
+  if (-not (Test-Path $packPath)) {
+    if (-not $KeepSandbox) { Remove-Item $sandA -Recurse -Force -ErrorAction SilentlyContinue }
+    return
+  }
+  $packSettings = (Read-PackArchive $packPath)["settings.json"] | ConvertFrom-Json
+  Assert-True "[packrestore] the Pack carries machine settings" ($null -ne $packSettings)
+  if (-not $packSettings) { return }
+  Assert-Equal "[packrestore] the Pack was saved in PLAY" "play" $packSettings.volumUiMode
+  Assert-Equal "[packrestore] the Pack was saved on Ampete One" 0 $packSettings.lastAmpIdx
+  $packScene = $packSettings.amps.'Ampete One'
+  $packDual = $(if ($packSettings.$dualKey) { $packSettings.$dualKey.amps.'Ampete One' })
+  Assert-True "[packrestore] the Pack carries Ampete One's Dual partner" (
+    $packDual -and $packDual.dualAmpActive -and $packDual.supportAmp -eq 13) ("Dual " + (ConvertTo-Canon $packDual))
+
+  $sandB = New-Sandbox "packrestore-receiver"
+  $rootB = & $seedInto $sandB {
+    param($s)
+    $s | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "build" -Force
+  } $null
+  $thcLive = (Read-Json (Join-Path $rootB "volum-settings.json")).amps.'THC Sunset'
+  Assert-Equal "[packrestore] the receiver starts on THC Sunset" 14 (Read-Json (Join-Path $rootB "volum-settings.json")).lastAmpIdx
+  Assert-True "[packrestore] the Pack's Ampete One scene differs from the receiver's THC sound" (
+    (ConvertTo-Canon $packScene) -ne (ConvertTo-Canon $thcLive))
+
+  $runB = Invoke-VoLumRun -SandboxRoot $sandB -SettleSec 7 -Environment @{ VOLUM_PACK_OPEN_PATH = $packPath } -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    Invoke-PackClick $h $ui.gear
+    Invoke-PackClick $h $ui.system
+    Invoke-PackClick $h $ui.import 900
+    Invoke-PackClick $h $ui.verbReset
+    Invoke-PackClick $h $ui.alsoSettings
+    Invoke-PackClick $h $ui.go 1500
+    # Past the 2 s debounce ceiling, so the receiver's own settings save has run.
+    Start-Sleep -Seconds 3
+  }
+  Assert-True "[packrestore] receiver opened" $runB.started
+  Assert-True "[packrestore] receiver closed gracefully" $runB.graceful
+  $logPath = Join-Path $rootB "volum.log"
+  $log = $(if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" })
+  Assert-True "[packrestore] log records the Reset settings import" ($log -match "\[pack\] import reset \+settings: applied")
+
+  $runC = Invoke-VoLumRun -SandboxRoot $sandB -SettleSec 7
+  Assert-True "[packrestore] receiver relaunched" $runC.started
+  Assert-True "[packrestore] receiver closed gracefully after the relaunch" $runC.graceful
+
+  $settingsPath = Join-Path $rootB "volum-settings.json"
+  $settings = Read-Json $settingsPath
+  $dual = Read-Json (Join-Path $rootB "volum-dual-amp-settings.json")
+  if (-not $settings -or -not $dual) {
+    Assert-True "[packrestore] receiver settings readable" $false
+  }
+  else {
+    Assert-Equal "[packrestore] Ampete One stays the focused amp" 0 $settings.lastAmpIdx
+    Assert-Equal "[packrestore] Ampete One keeps the Pack's scene" (ConvertTo-Canon $packScene) (ConvertTo-Canon $settings.amps.'Ampete One')
+    Assert-Equal "[packrestore] every amp's scene is the Pack's" (ConvertTo-Canon $packSettings.amps) (ConvertTo-Canon $settings.amps)
+    Assert-True "[packrestore] the Pack's Dual key stays out of volum-settings.json" (
+      -not (Get-Content $settingsPath -Raw).Contains('"' + $dualKey + '"'))
+    $ampete = $dual.amps.'Ampete One'
+    Assert-True "[packrestore] Ampete One keeps Dual on" ($ampete -and $ampete.dualAmpActive)
+    Assert-Equal "[packrestore] Ampete One keeps Soldano as SUPPORT" 13 $(if ($ampete) { $ampete.supportAmp })
+    Assert-Equal "[packrestore] the Dual sidecar is the Pack's" (ConvertTo-Canon $packDual) (ConvertTo-Canon $ampete)
+  }
+  if (-not $KeepSandbox) {
+    Remove-Item $sandA -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $sandB -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+# --------------------------------------------------------------------------
 # Scenario: dark window chrome
 #
 # The Windows standalone has no menu bar and a dark title bar; Preferences opens
@@ -2039,8 +2177,11 @@ function Test-Midi {
   $settingsPath = Join-Path $root "volum-settings.json"
   $contentPath = Join-Path $root "content\volum-content.json"
 
-  # RtMidi lists a WinMM input as "<name> <index>", and iPlug matches indev against that.
+  # Seed the legacy RtMidi spelling. The host migrates a unique WinMM device to
+  # its stable base name after opening it, so adding a lower-index port later
+  # cannot break the saved selection.
   $indev = "{0} {1}" -f $MidiPort, $inIdx
+  $stableIndev = $MidiPort
   Add-Content $iniPath @("[midi]", "indev=$indev", "outdev=off", "inchan=0", "outchan=0") -Encoding ASCII
 
   # Known Factory Sounds on scattered programs; 7 is left empty on purpose.
@@ -2077,6 +2218,10 @@ function Test-Midi {
       [void][VoLumE2eMidi]::Send($out, $CC1, 102, 42)
       $r.cc = Wait-MidiLog $logPath $n (& $recallOf 42)
       $n = (Get-MidiLogLines $logPath).Count
+      1..64 | ForEach-Object { [void][VoLumE2eMidi]::Send($out, 0xFE, 0, 0) }
+      [void][VoLumE2eMidi]::Send($out, $PC1, 9, 0)
+      $r.flood = Wait-MidiLog $logPath $n (& $recallOf 9)
+      $n = (Get-MidiLogLines $logPath).Count
       [void][VoLumE2eMidi]::Send($out, $PC1, 7, 0)
       $r.empty = Wait-MidiLog $logPath $n '^slot=7 has no playable Sound; ignored$' 3000
       $n = (Get-MidiLogLines $logPath).Count
@@ -2092,13 +2237,17 @@ function Test-Midi {
     if (-not $d) { Assert-True "drive step ran" $false; return }
     $log = if (Test-Path $logPath) { Get-Content $logPath -Raw } else { "" }
     Assert-True "the standalone opened '$indev'" ($log -notmatch "could not open the saved MIDI port")
-    Assert-True "settings.ini still names '$indev' (iPlug resets an unknown port to off)" (
+    Assert-True "settings.ini migrated '$indev' to stable '$stableIndev'" (
+      (Get-Content $iniPath) -contains "indev2=$stableIndev")
+    Assert-True "settings.ini keeps the legacy MIDI spelling for older builds" (
       (Get-Content $iniPath) -contains "indev=$indev")
 
     Assert-True "Program Change 9 recalls program 9 (Modern Rhythm)" (@($d.pc | Where-Object { $_ -match (& $recallOf 9) }).Count -eq 1) (
       "midi lines: " + ($d.pc -join " / "))
     Assert-True "CC 102 value 42 recalls program 42 (Ampete Lead)" (@($d.cc | Where-Object { $_ -match (& $recallOf 42) }).Count -eq 1) (
       "midi lines: " + ($d.cc -join " / "))
+    Assert-True "64 Active Sensing messages cannot crowd out the following Program Change" (
+      @($d.flood | Where-Object { $_ -match (& $recallOf 9) }).Count -eq 1) ("midi lines: " + ($d.flood -join " / "))
     Assert-True "Program Change 7 reaches VoLum and is ignored: program 7 is empty" (
       @($d.empty | Where-Object { $_ -match '^slot=7 has no playable Sound; ignored$' }).Count -eq 1) ("midi lines: " + ($d.empty -join " / "))
     Assert-True "the empty program recalls nothing" (@($d.empty | Where-Object { $_ -match '^recall ' }).Count -eq 0) (
@@ -2172,6 +2321,7 @@ if ($Scenario -in @("all", "corrupt")) { Test-Corrupt }
 if ($Scenario -in @("all", "samplerate")) { Test-SampleRate }
 if ($Scenario -in @("all", "savedialog")) { Test-SaveDialog }
 if ($Scenario -in @("all", "pack")) { Test-Pack }
+if ($Scenario -in @("all", "packrestore")) { Test-PackRestore }
 if ($Scenario -in @("all", "chrome")) { Test-Chrome }
 if ($Scenario -in @("all", "midi")) { Test-Midi }
 

@@ -302,20 +302,17 @@ TEST_CASE("Every MIDI port open in the app host is guarded against throwing")
 {
   const std::string src = ReadForkAppHostSource();
 
-  // The fallback exists and turns the failing direction off for this session.
+  // The fallback exists and leaves the port closed for this session.
   CHECK(src.find("auto openOrTurnOff") != std::string::npos);
-  CHECK(src.find("mState.mMidiInDev.Set(OFF_TEXT)") != std::string::npos);
-  CHECK(src.find("mState.mMidiOutDev.Set(OFF_TEXT)") != std::string::npos);
 
-  // And does NOT write that to settings.ini. The usual cause is transient - a DAW
-  // still quitting, a vendor control panel, a second VoLum - and persisting "off"
-  // on the first failure turned a few seconds of contention into permanent loss of
-  // the user's MIDI configuration, with nothing on screen to explain it. The
-  // catch block must contain no UpdateINI() call.
+  // It neither changes nor writes the requested controller. The usual cause is
+  // transient, and even opening Preferences must not turn that into saved "off".
   const auto catchStart = src.find("catch (RtMidiError& e)");
   REQUIRE(catchStart != std::string::npos);
   const auto catchEnd = src.find("};", catchStart);
   REQUIRE(catchEnd != std::string::npos);
+  CHECK(src.find("mState.mMidiInDev.Set(OFF_TEXT)", catchStart) > catchEnd);
+  CHECK(src.find("mState.mMidiOutDev.Set(OFF_TEXT)", catchStart) > catchEnd);
   CHECK(src.find("UpdateINI()", catchStart) > catchEnd);
 
   // The forms that shipped unguarded are now all inside the guard, on both
@@ -364,7 +361,7 @@ TEST_CASE("The ASIO input resolution never rewrites the saved input device")
 
   // The one INI write left in TryToChangeAudio is the pre-existing
   // device-disappeared reset, which genuinely has new state to record.
-  const std::string signature = "bool IPlugAPPHost::TryToChangeAudio()";
+  const std::string signature = "bool IPlugAPPHost::TryToChangeAudio(bool explicitUserChange)";
   const auto tryToChange = src.find(signature);
   REQUIRE(tryToChange != std::string::npos);
   // The next member definition, whichever one it is - anchoring on a particular
@@ -378,17 +375,16 @@ TEST_CASE("The ASIO input resolution never rewrites the saved input device")
   CHECK(iniWrites == 1);
 }
 
-TEST_CASE("A driver-renegotiated buffer size is adopted only when the UI can represent it")
+TEST_CASE("A driver-renegotiated buffer size is adopted and represented by the UI")
 {
   const std::string src = ReadForkAppHostSource();
 
   const auto writeback = src.find("mState.mBufferSize = mBufferSize;");
   REQUIRE(writeback != std::string::npos);
 
-  // Guarded on an exact round-trip through the dialog's size list, so a driver that
-  // negotiates e.g. 480 leaves the stored request alone rather than having it
-  // rounded up to a size nothing ever offered.
-  CHECK(src.find("if (mBufferSize != iovs && NormalizeAPPBufferSize(mBufferSize) == mBufferSize)") < writeback);
+  CHECK(src.find("const bool bufferCorrected = mBufferSize != iovs;") < writeback);
+  const std::string dialog = ReadForkAppDialogSource();
+  CHECK(dialog.find("VoLumBufferSizeChoices(mState.mBufferSize)") != std::string::npos);
 
   // And it lands before the active-state snapshot, or mActiveState would keep
   // restoring the refused request on the next failure rollback.
@@ -743,8 +739,10 @@ TEST_CASE("A start with no audio device keeps the settings the user already had"
   // persist the result - so starting once with the interface unplugged replaced the
   // device, channels, buffer and rate in settings.ini with defaults, permanently.
   // Plugging the interface back in did not undo it: the file no longer named it.
-  const auto guard = src.find("if (!mHaveWorkingAudioState)");
+  const auto plan = src.find("VoLumPlanFailureRestore(");
+  const auto guard = src.find("if (!restorePlan.restoreActiveState)", plan);
   const auto revert = src.find("mState = mActiveState;");
+  REQUIRE(plan != std::string::npos);
   REQUIRE(guard != std::string::npos);
   REQUIRE(revert != std::string::npos);
   CHECK(guard < revert);
@@ -753,6 +751,7 @@ TEST_CASE("A start with no audio device keeps the settings the user already had"
   const auto open = src.find("mDAC->openStream(");
   REQUIRE(open != std::string::npos);
   CHECK(src.find("mHaveWorkingAudioState = true;", open) != std::string::npos);
+  CHECK(src.find("mActiveAudioIsRuntimeFallback = mSuppressAudioStatePersistence;", open) != std::string::npos);
 }
 
 namespace
