@@ -38,7 +38,14 @@ if [[ -z "$pid" ]]; then
 fi
 
 echo "VoLum pid=$pid; observing for 15 seconds"
-sleep 15
+# Hosted runners present the first-use microphone consent alert. Deny it with
+# Escape so the screenshot proves the app reached its own UI, not only the TCC
+# prompt. Escape is a no-op in VoLum itself if the alert is absent.
+sleep 2
+osascript -e 'tell application "VoLum" to activate' \
+  -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
+echo "Dismissed the optional first-use microphone prompt when present"
+sleep 13
 if ! kill -0 "$pid" 2>/dev/null; then
   echo "FAIL VoLum exited during the 15-second launch window"
   exit 1
