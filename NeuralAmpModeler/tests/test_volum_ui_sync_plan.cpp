@@ -500,3 +500,12 @@ TEST_CASE("Host restore derives PLAY chrome from mVolumUiMode")
   // one function that applies PlayChromeForUiMode, including when mode is BUILD.
   CHECK(body.find("_VolumRefreshPlaySurface()") != std::string::npos);
 }
+
+TEST_CASE("A cab-row resync does not re-stage a SUPPORT capture that is already live")
+{
+  CHECK(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "amp_1_AMP-5.nam", true));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "amp_1_G12-5.nam", true));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "amp_1_AMP-5.nam", false));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("", "", true));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "", true));
+}

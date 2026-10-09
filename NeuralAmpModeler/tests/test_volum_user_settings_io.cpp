@@ -1,8 +1,10 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 #include "../VoLumAmpSettingsJson.h"
 #include "../VoLumPlayModel.h" // MidiChannel/MidiRecallCc machine-settings readers
 #include "../VoLumUserSettingsIO.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -97,7 +99,7 @@ TEST_CASE("VolumUserSettings JSON roundtrip preserves amp state")
 
 TEST_CASE("Broken user settings JSON leaves defaults in place")
 {
-  const auto root = std::filesystem::temp_directory_path() / "volum-user-settings-broken-json-test";
+  const auto root = volum_test::ProcessTempRoot() / "volum-user-settings-broken-json-test";
   std::error_code ec;
   std::filesystem::remove_all(root, ec);
   std::filesystem::create_directories(root, ec);
@@ -1133,6 +1135,104 @@ TEST_CASE("Legacy user settings without calibration keys retain defaults")
   REQUIRE_FALSE(healed);
   CHECK_FALSE(calibrate);
   CHECK(level == doctest::Approx(12.0));
+}
+
+namespace
+{
+std::string ReadSceneSource()
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / "VoLumSettingsScene.inc.cpp";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+  return text;
+}
+} // namespace
+
+// F-63: the standalone has no project to store kOutputMode, so its machine file
+// carries it. Built the way _VolumSaveSettingsToFile builds it.
+TEST_CASE("F-63: standalone Output mode round-trips through the machine settings file")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  for (int mode = 0; mode < volum::kOutputModeCount; ++mode)
+  {
+    nlohmann::json j = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0, nullptr, false);
+    j[volum::kOutputModeMachineKey] = mode;
+    const nlohmann::json reread = nlohmann::json::parse(j.dump(2));
+    CHECK(volum::OutputModeFromMachineSettings(true, reread, volum::kOutputModeDefault) == mode);
+
+    // Additive: the settings reader neither heals nor minds the key.
+    bool healed = true;
+    volum::VolumUserSettingsFromJson(reread, amps, volum::kAmpCount, nullptr, nullptr, &healed);
+    CHECK_FALSE(healed);
+  }
+  CHECK(volum::kVoLumUserSettingsVersion == 6);
+
+  // The standalone writes the key and reads it back at startup.
+  const std::string scene = ReadSceneSource();
+  const auto save = scene.find("bool NeuralAmpModeler::_VolumSaveSettingsToFile(int lockTimeoutMs)");
+  REQUIRE(save != std::string::npos);
+  const auto saveEnd = scene.find("\n}\n", save);
+  CHECK(scene.find("j[volum::kOutputModeMachineKey] = GetParam(kOutputMode)->Int();", save) < saveEnd);
+}
+
+TEST_CASE("F-63: a machine settings file without outputMode loads as Normalized")
+{
+  volum::VoLumAmpSettings amps[volum::kAmpCount]{};
+  const nlohmann::json older = volum::VolumUserSettingsToJson(amps, volum::kAmpCount, 0);
+  REQUIRE_FALSE(older.contains(volum::kOutputModeMachineKey));
+  CHECK(volum::OutputModeFromMachineSettings(true, older, volum::kOutputModeRaw) == volum::kOutputModeNormalized);
+  CHECK(volum::kOutputModeDefault == volum::kOutputModeNormalized);
+  // The default comes from the missing key, not from a reader that never looks.
+  nlohmann::json raw = older;
+  raw[volum::kOutputModeMachineKey] = volum::kOutputModeRaw;
+  CHECK(volum::OutputModeFromMachineSettings(true, raw, volum::kOutputModeNormalized) == volum::kOutputModeRaw);
+
+  for (const nlohmann::json bad :
+       {nlohmann::json(-1), nlohmann::json(3), nlohmann::json("Raw"), nlohmann::json(0.5), nlohmann::json(nullptr)})
+  {
+    nlohmann::json j = older;
+    j[volum::kOutputModeMachineKey] = bad;
+    CHECK(volum::OutputModeFromMachineSettings(true, j, volum::kOutputModeRaw) == volum::kOutputModeNormalized);
+  }
+}
+
+TEST_CASE("F-63: plugin instances ignore the machine outputMode")
+{
+  // In a DAW the host project owns kOutputMode, and a new insert starts at the
+  // param default. A standalone Raw choice must not leak into either.
+  nlohmann::json j = {{volum::kOutputModeMachineKey, volum::kOutputModeRaw}};
+  CHECK(volum::OutputModeFromMachineSettings(false, j, volum::kOutputModeNormalized) == volum::kOutputModeNormalized);
+  CHECK(volum::OutputModeFromMachineSettings(false, j, volum::kOutputModeCalibrated) == volum::kOutputModeCalibrated);
+  CHECK(volum::OutputModeFromMachineSettings(true, j, volum::kOutputModeCalibrated) == volum::kOutputModeRaw);
+
+  // The load applies it only inside the standalone (APP_API) block, and a
+  // standalone Output mode click is what schedules the save.
+  const std::string scene = ReadSceneSource();
+  const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
+  REQUIRE(load != std::string::npos);
+  const auto appBlock = scene.find("#if defined(APP_API)", load);
+  REQUIRE(appBlock != std::string::npos);
+  const auto appEnd = scene.find("#endif", appBlock);
+  REQUIRE(appEnd != std::string::npos);
+  const auto apply = scene.find("OutputModeFromMachineSettings(true, j, GetParam(kOutputMode)->Int())", load);
+  REQUIRE(apply != std::string::npos);
+  CHECK(apply > appBlock);
+  CHECK(apply < appEnd);
+  CHECK(scene.find("OutputModeFromMachineSettings(") == apply);
+  CHECK(scene.find("OutputModeFromMachineSettings(", apply + 1) == std::string::npos);
+
+  const auto pluginPath = std::filesystem::path(__FILE__).parent_path().parent_path() / "NeuralAmpModeler.cpp";
+  std::ifstream in(pluginPath, std::ios::binary);
+  REQUIRE(in);
+  std::string plugin((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  plugin.erase(std::remove(plugin.begin(), plugin.end(), '\r'), plugin.end());
+  const auto outputModeCase = plugin.find("    case kOutputMode:\n");
+  REQUIRE(outputModeCase != std::string::npos);
+  const auto caseEnd = plugin.find("break;", outputModeCase);
+  CHECK(plugin.substr(outputModeCase, caseEnd - outputModeCase).find("mVolumSettingsDirty = true;")
+        != std::string::npos);
 }
 
 TEST_CASE("Malformed calibration defaults heal safely")

@@ -101,9 +101,10 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   volum::VoLumAmpSettings* target = &mVolumAmpSettings[mVolumAmpIdx];
   if (mVolumCustomMainIdx >= 0)
   {
-    const std::string id = volum::custom::CustomAmpIdAt(mVolumCustomMainIdx);
-    if (!id.empty())
-      target = &_VolumCustomScene(id);
+    const std::string id = volum::custom::SceneIdForFocusedAmp(mVolumCustomMainId);
+    if (id.empty())
+      return; // the focused amp is gone; the next idle leaves it for the factory amp
+    target = &_VolumCustomScene(id);
   }
   auto& s = *target;
   s.speakerIdx = mVolumSpeakerIdx;

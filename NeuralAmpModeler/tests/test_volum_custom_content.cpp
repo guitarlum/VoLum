@@ -1,9 +1,11 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <filesystem>
 #include <vector>
 
 #include "../VoLumCustomContentApi.h"
+#include "../VoLumNameDialogModel.h"
 
 // Covers the production (speaker x channel) snap helpers backing the 1.2.0
 // BYO-amp builder and main-view focus behavior, plus the registry-backed
@@ -1236,7 +1238,7 @@ TEST_CASE("Saving a preset into an on-disk library returns the row it wrote")
   namespace fs = std::filesystem;
   auto& store = volum::content::GlobalContentStore();
   const auto savedReg = store.reg();
-  const fs::path base = fs::temp_directory_path() / "volum-add-preset-on-disk";
+  const fs::path base = volum_test::ProcessTempRoot() / "volum-add-preset-on-disk";
   std::error_code ec;
   fs::remove_all(base, ec);
   fs::create_directories(base, ec);
@@ -1264,4 +1266,100 @@ TEST_CASE("Saving a preset into an on-disk library returns the row it wrote")
   store.SetBaseDir({});
   store.reg() = savedReg;
   fs::remove_all(base, ec);
+}
+
+TEST_CASE("AddPreset keeps a de-duplicated name inside the dialog cap")
+{
+  volum::custom::SetActivePresetOwner("test:dedup-cap");
+  const std::string full(volum::custom::kMaxPresetNameLen, 'x');
+  const int a = volum::custom::AddPresetForOwner("test:dedup-cap", full);
+  const int b = volum::custom::AddPresetForOwner("test:dedup-cap", full);
+  REQUIRE(a == 0);
+  REQUIRE(b == 1);
+  const auto list = volum::custom::PresetsForOwner("test:dedup-cap");
+  CHECK(list[1].size() <= volum::custom::kMaxPresetNameLen);
+  CHECK(list[1].size() == volum::custom::kMaxPresetNameLen);
+  CHECK(list[1].substr(list[1].size() - 2) == " 2");
+  // The dialog seeds with the clamped name; it must still select Update.
+  CHECK(volum::name_dialog::Overwrites(list[1], list[1]));
+}
+
+TEST_CASE("AddPreset treats names that differ only by case as duplicates")
+{
+  volum::custom::SetActivePresetOwner("test:dedup-ci");
+  volum::custom::AddPresetForOwner("test:dedup-ci", "Lead");
+  volum::custom::AddPresetForOwner("test:dedup-ci", "lead");
+  const auto list = volum::custom::PresetsForOwner("test:dedup-ci");
+  REQUIRE(list.size() == 2);
+  CHECK(list[1] == "lead 2");
+}
+
+TEST_CASE("The focused custom amp keeps its identity when the library rows move")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  amps = {make("amp_a"), make("amp_b"), make("amp_c")};
+
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_c", 2) == 2);
+  // Another instance deleted the row above: the same amp is one row up.
+  amps = {make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_c", 2) == 1);
+  // A Pack Reset reordered the library and put a different amp at the old row.
+  amps = {make("amp_c"), make("amp_x"), make("amp_b")};
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == 2);
+  // Gone (another instance deleted it): -1, never a neighbour's row.
+  amps = {make("amp_c"), make("amp_x")};
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == -1);
+  CHECK(volum::custom::ReanchoredAmpIdx("", 1) == 1);
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", -1) == -1);
+
+  amps = saved;
+}
+
+TEST_CASE("A save never writes the focused amp's scene under a neighbour after another instance deletes it")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  amps = {make("amp_a"), make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_b") == "amp_b");
+
+  // The focused amp is gone: the save has no id to write under, and never a neighbour's.
+  amps = {make("amp_a"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_b").empty());
+  CHECK(volum::custom::SceneIdForFocusedAmp("").empty());
+
+  amps = saved;
+}
+
+TEST_CASE("A save still lands on the focused amp when another amp's removal shifts its row")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  // amp_c was focused at row 2; another instance deletes amp_a, so it sits at row 1
+  // while this instance's cached row (2) is stale until the next idle.
+  amps = {make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_c") == "amp_c");
+  // Reordered the other way: still its own id, never a neighbour's.
+  amps = {make("amp_c"), make("amp_b")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_c") == "amp_c");
+
+  amps = saved;
 }

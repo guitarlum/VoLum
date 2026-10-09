@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <filesystem>
 #include <fstream>
@@ -101,7 +102,7 @@ TEST_CASE("A model whose input_level_dbu is null counts as uncalibrated")
   REQUIRE(at != std::string::npos);
   body.replace(at, key.size(), "\"input_level_dbu\": null");
 
-  const auto tmp = std::filesystem::temp_directory_path() / "volum-input-cal-null.nam";
+  const auto tmp = volum_test::ProcessTempRoot() / "volum-input-cal-null.nam";
   {
     std::ofstream out(tmp, std::ios::binary);
     out << body;

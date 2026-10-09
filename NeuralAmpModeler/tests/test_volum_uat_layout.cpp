@@ -655,7 +655,8 @@ TEST_CASE("Name dialog is a view over the model: only Enter and Save commit")
   const auto prompt = presets.find("void NeuralAmpModeler::_VolumPromptSaveAs");
   REQUIRE(prompt != std::string::npos);
   const auto commit = presets.find(
-    "[this, after, origin, currentName, currentId, modeAtStart, editSource](const std::string& name)", prompt);
+    "[this, after, origin, currentName, currentId, modeAtStart, editSource, ownerKey](const std::string& name)",
+    prompt);
   REQUIRE(commit != std::string::npos);
   CHECK(presets.find("PresetIndexByIdForOwner(_VolumActiveOwnerKey(), currentId)", commit) != std::string::npos);
   CHECK(presets.find("currentUserIdx", prompt) == std::string::npos);

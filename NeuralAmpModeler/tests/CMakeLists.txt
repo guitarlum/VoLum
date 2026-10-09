@@ -17,6 +17,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_version.cpp
   test_volum_paths.cpp
   test_volum_settings_atomic_write.cpp
+  test_volum_machine_settings_writer.cpp
   test_volum_update_check.cpp
   test_volum_user_settings_io.cpp
   test_volum_ui_regressions.cpp
@@ -90,6 +91,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_safe_read.cpp
   test_volum_overlay_action_codes.cpp
   test_volum_numeric_entry.cpp
+  test_volum_window_fit.cpp
   test_volum_cab_step.cpp
   test_volum_wav_downmix.cpp
   test_volum_write_debounce.cpp

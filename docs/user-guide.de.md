@@ -67,7 +67,7 @@ Wähle einen Amp in der linken Liste oder drücke `Up` / `Down`. Zur Orientierun
 
 **Kanäle:** jeder Amp hat zwei bis sechs Kanäle, einen pro aufgenommener Gain-Einstellung.
 
-**Cabs:** **No Cab** (nur der Amp), **G12**, **G65**, **V30** oder **Custom IR** für dein eigenes Cab (siehe [Eigene IRs](#eigene-irs)). `S` / `Shift+S` schalten durch.
+**Cabs:** **No Cab** (nur der Amp), **G12**, **G65**, **V30** oder **Custom IR** für dein eigenes Cab (siehe [Eigene IRs](#eigene-irs)). `S` / `Shift+S` schalten durch No Cab, G12, G65 und V30 (Custom IR wählst du mit seiner eigenen Schaltfläche).
 
 **Regler:** **INPUT**, **GATE** (Noise Gate), **BASS**, **MID**, **TREBLE** und **OUTPUT**. **OUTPUT** ganz zu (`−∞`) schaltet den Amp stumm.
 
@@ -283,6 +283,7 @@ Eine Programmnummer ohne Sound wird ignoriert; der aktuelle Sound spielt weiter.
 - **All channels** (Standard) passt für einen Gitarristen mit einem Board.
 - **One channel** (`CH 1` bis `CH 16`) lässt zwei VoLums ein MIDI-Kabel teilen.
 - **Recall CC** legt die CC-Nummer fest, die Sounds aufruft (`0` bis `119`, Standard `102`). Jede davon, auch CC 0, kann der Recall CC sein.
+- **VST3:** das Plugin empfängt MIDI nur auf Kanal 1, sende Recall-Nachrichten also auf MIDI-Kanal 1 (AU und Standalone akzeptieren den hier eingestellten Kanal).
 
 **What each program number plays** zeigt deine Sounds als 16 Bänke mit je 8 Schaltern, dieselbe Liste wie in PLAY. Wechsle die Bank mit den Pfeilen, dem Mausrad oder `PageUp` / `PageDown`. Klicke einen Schalter, um seinen Sound zu wählen, zieh ihn zum Verschieben, oder fahr darüber und klicke `×` zum Leeren.
 
@@ -367,7 +368,7 @@ Ein **Everything**-Pack bietet drei Mischmodi:
 
 Ein **Sounds**- oder **A whole amp**-Pack mischt immer wie Overwrite und löscht nie etwas.
 
-**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer. Nimmst du vorher einzelne Haken weg, kommen nur die PLAY-Schalter der Sounds hinein, die du behältst; deine übrigen Schalter bleiben (**Also restore machine settings** stellt weiterhin die ganze Liste des Packs wieder her).
+**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, Output mode, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer. Nimmst du vorher einzelne Haken weg, kommen nur die PLAY-Schalter der Sounds hinein, die du behältst; deine übrigen Schalter bleiben (**Also restore machine settings** stellt weiterhin die ganze Liste des Packs wieder her).
 
 Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.packbak` auf. Ein beschädigtes Pack ändert nichts.
 
@@ -380,7 +381,7 @@ Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.
 ![VoLum Einstellungen, SIGNAL-Tab](user-guide-settings-signal.png)
 
 - **Input calibration:** gib den Eingangspegel deines Interfaces in dBu ein und schalte **Calibrate input** ein. Das geht nur mit Captures, die ihren Aufnahmepegel mitspeichern; die mitgelieferten Amps tun das nicht, deshalb zeigt die Karte "This model has no capture level".
-- **Output mode:** **Raw**, **Normalized** (Standard, ähnliche Lautstärke für alle Amps) oder **Calibrated**. Calibrated braucht ein Capture, das seinen Ausgangspegel mitspeichert, und bleibt daher bei den mitgelieferten Amps aus.
+- **Output mode:** **Raw**, **Normalized** (Standard, ähnliche Lautstärke für alle Amps) oder **Calibrated**. Calibrated braucht ein Capture, das seinen Ausgangspegel mitspeichert, und bleibt daher bei den mitgelieferten Amps aus. Die Standalone-App behält deine Wahl für den nächsten Start; in einer DAW speichert sie das Projekt.
 - **Performance:** **FULL** (Standard) oder **LITE**, das weniger CPU braucht, bei etwas geringerer Qualität. **Animate art in PLAY** schaltet die bewegten Bilder ein oder aus.
 - **Audio & MIDI devices...** (nur Standalone) öffnet das Gerätefenster.
 

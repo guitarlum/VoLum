@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "golden_helpers.h"
+#include "VoLumBurstTiming.h"
 
 #define DR_WAV_IMPLEMENTATION
 #include "third_party/dr_wav.h"
@@ -94,7 +95,8 @@ std::vector<float> ReadMonoFloatWav(const std::filesystem::path& path)
   unsigned int channels = 0;
   unsigned int sampleRate = 0;
   drwav_uint64 frames = 0;
-  float* data = drwav_open_file_and_read_pcm_frames_f32(path.string().c_str(), &channels, &sampleRate, &frames, nullptr);
+  float* data =
+    drwav_open_file_and_read_pcm_frames_f32(path.string().c_str(), &channels, &sampleRate, &frames, nullptr);
   REQUIRE(data != nullptr);
   REQUIRE(channels == 1);
   REQUIRE(sampleRate == kSampleRate);
@@ -250,18 +252,22 @@ TEST_CASE("A2 detector rejects non-A2 WaveNet configs (strict, no false positive
 
 TEST_CASE("A2 core load and prewarm timing is visible in test logs")
 {
+  // Thread CPU time: on a loaded machine the wall clock also counts paging and other processes.
   const auto rigPath = RepoRoot() / "rigs/Ampete One/AMP-Ampt-1.nam";
   const auto start = std::chrono::steady_clock::now();
+  const double cpu0 = volum_test::ThreadCpuUs();
   auto model = nam::get_dsp(rigPath);
   REQUIRE(model != nullptr);
   model->Reset(static_cast<double>(kSampleRate), kBlockSize);
+  const double cpuMs = (volum_test::ThreadCpuUs() - cpu0) / 1000.0;
   const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
 
-  std::cout << "A2 load+prewarm " << rigPath.filename().string() << ": " << elapsed.count() << " ms" << std::endl;
+  std::cout << "A2 load+prewarm " << rigPath.filename().string() << ": " << cpuMs << " ms CPU, " << elapsed.count()
+            << " ms wall" << std::endl;
 #if defined(VOLUM_TEST_SANITIZERS)
-  CHECK(elapsed < std::chrono::seconds(15));
+  CHECK(cpuMs < 15000.0);
 #else
-  CHECK(elapsed < std::chrono::seconds(5));
+  CHECK(cpuMs < 5000.0);
 #endif
 }
 
@@ -336,21 +342,22 @@ TEST_CASE("A2 Lite slice differs from Full and is cheaper to run")
     slimmable->SetSlimmableSize(size);
     model->Reset(static_cast<double>(kSampleRate), kBlockSize);
     const int blocks = static_cast<int>(kFrames / kBlockSize);
-    const auto start = std::chrono::steady_clock::now();
+    const double start = volum_test::ThreadCpuUs();
     for (int b = 0; b < blocks; ++b)
       model->process(&inPtr, &outPtr, kBlockSize);
-    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+    return volum_test::ThreadCpuUs() - start;
   };
 
   benchmark(1.0); // warm caches
-  const auto fullUs = benchmark(1.0);
+  const double fullUs = benchmark(1.0);
   benchmark(0.0); // warm caches
-  const auto liteUs = benchmark(0.0);
+  const double liteUs = benchmark(0.0);
 
-  const double fullMs = fullUs.count() / 1000.0;
-  const double liteMs = liteUs.count() / 1000.0;
-  std::cout << "A2 throughput (" << (kFrames) << " frames): Full(channels_8)=" << fullMs << " ms, Lite(channels_3)="
-            << liteMs << " ms, speedup=" << (fullMs / std::max(liteMs, 1e-6)) << "x" << std::endl;
+  const double fullMs = fullUs / 1000.0;
+  const double liteMs = liteUs / 1000.0;
+  std::cout << "A2 throughput (" << (kFrames) << " frames): Full(channels_8)=" << fullMs
+            << " ms, Lite(channels_3)=" << liteMs << " ms, speedup=" << (fullMs / std::max(liteMs, 1e-6)) << "x"
+            << std::endl;
 
   CHECK(liteMs < fullMs); // Lite is cheaper
 }

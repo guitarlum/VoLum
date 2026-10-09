@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include "VoLumCustomContentApi.h"
 #include "VoLumFactoryPresets.h"
@@ -68,7 +69,7 @@ nlohmann::json KeysWithPrefix(const nlohmann::json& settings, const std::string&
 
 std::vector<volum::FactoryPreset> LoadJson(const nlohmann::json& root, const char* tempName)
 {
-  const auto temp = std::filesystem::temp_directory_path() / tempName;
+  const auto temp = volum_test::ProcessTempRoot() / tempName;
   {
     std::ofstream out(temp);
     out << root.dump(2);
@@ -361,7 +362,7 @@ TEST_CASE("Factory file loads by id, in version order, and drops what it cannot 
   CHECK(bank[3].id == "factory:3:v10");
   CHECK(volum::FactoryPresetsForAmp(bank, 2).empty());
 
-  CHECK(volum::LoadFactoryPresets(std::filesystem::temp_directory_path() / "volum-no-such-factory.json").empty());
+  CHECK(volum::LoadFactoryPresets(volum_test::ProcessTempRoot() / "volum-no-such-factory.json").empty());
 }
 
 TEST_CASE("Without a readable Factory file every amp keeps a v1 that resolves")

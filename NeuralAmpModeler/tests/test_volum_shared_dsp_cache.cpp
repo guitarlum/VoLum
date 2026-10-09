@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include "../VoLumSharedDspCache.h"
 
@@ -75,7 +76,7 @@ public:
   explicit ScratchDir(const char* tag)
   {
     static std::atomic<int> counter{0};
-    dir = fs::temp_directory_path()
+    dir = volum_test::ProcessTempRoot()
           / ("volum-dsp-cache-" + std::string(tag) + "-"
              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-"
              + std::to_string(counter++));

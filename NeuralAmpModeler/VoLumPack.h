@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "VoLumContentStore.h"
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumPackArchive.h"
 #include "VoLumUserSettingsIO.h"
 
@@ -1215,6 +1216,7 @@ inline bool ValidateMachineSettings(const std::string& text, std::string* saniti
         "lastPlaySlot",
         "volumActivePresetIdByOwner",
         "volumCustomScenes",
+        kOutputModeMachineKey, // the standalone's Output mode travels with the machine settings
       };
       nlohmann::json filtered = nlohmann::json::object();
       for (const char* key : kSharedMachineKeys)
@@ -1991,12 +1993,27 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       store.RemoveStoredFile(rel);
   removeStage();
 
+  // The settings file and the Dual Amp sidecar are one machine-settings restore:
+  // both are replaced under the machine-settings lock, the file first, so a
+  // plugin's single-key merge cannot land its older read on top of either, and
+  // neither lands without the other. The sidecar was staged before the library
+  // commit (sidecarTmp); only its rename happens here.
+  const auto replaceSidecar = [&]() {
+    std::error_code sidecarEc;
+    return volum::ReplaceFileAtomically(sidecarTmp.path, dualAmpSidecar->path, sidecarEc);
+  };
   if (applySettings && !packContents.settingsJson.empty() && !settingsPath.empty())
   {
     std::error_code settingsEc;
     const auto settingsTmp = volum::MakeAtomicJsonTempPath(settingsPath);
-    if (!WriteWholeFile(settingsTmp, sanitizedSettings)
-        || !volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc))
+    if (!WithMachineSettingsLock(
+          settingsPath,
+          [&]() {
+            return WriteWholeFile(settingsTmp, sanitizedSettings)
+                   && volum::ReplaceFileAtomically(settingsTmp, settingsPath, settingsEc)
+                   && (!writeSidecar || replaceSidecar());
+          },
+          settingsEc))
     {
       std::error_code removeEc;
       std::filesystem::remove(settingsTmp, removeEc);
@@ -2005,14 +2022,11 @@ inline ImportResult ApplyPack(content::ContentStore& store, const PackContents& 
       return out;
     }
   }
-  if (writeSidecar)
+  else if (writeSidecar && !replaceSidecar())
   {
-    std::error_code sidecarEc;
-    if (!volum::ReplaceFileAtomically(sidecarTmp.path, dualAmpSidecar->path, sidecarEc))
-    {
-      out.error = "The library was imported, but the machine settings could not be written.";
-      return out;
-    }
+    // No settings file to lock (a path-less caller): the sidecar is all there is.
+    out.error = "The library was imported, but the machine settings could not be written.";
+    return out;
   }
 
   out.ok = true;
