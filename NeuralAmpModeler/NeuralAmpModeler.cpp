@@ -35,7 +35,6 @@
 #include "VoLumIrFileGuard.h"
 #include "VoLumLevelMute.h"
 #include "VoLumMasterSafety.h"
-#include "VoLumModeTransition.h"
 #include "VoLumNanGuard.h"
 #include "VoLumPaths.h"
 #include "VoLumPrePedalCaptures.h"
@@ -82,11 +81,6 @@ void VolumForgetWriteDebounce(const NeuralAmpModeler* self)
   gVolumWriteDebounce.erase(self);
 }
 
-constexpr unsigned kModeSyncPrePitch = 1u << 0;
-constexpr unsigned kModeSyncDelay = 1u << 1;
-constexpr unsigned kModeSyncReverb = 1u << 2;
-constexpr unsigned kModeSyncTremolo = 1u << 3;
-constexpr unsigned kModeSyncChorus = 1u << 4;
 } // namespace
 
 const double kDCBlockerFrequency = 5.0;
@@ -904,6 +898,7 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 
 void NeuralAmpModeler::OnIdle()
 {
+  _VolumApplyPendingModeChanges();
   // Host state restored into an open editor. Only consumed while an editor exists, so
   // a request that arrives with the window closed is still waiting for the OnUIOpen
   // that will run the same applier.
@@ -913,7 +908,6 @@ void NeuralAmpModeler::OnIdle()
   _VolumApplyPendingDualAmpChange();
   if (mVolumSupportChannelsDirty.exchange(false, std::memory_order_acquire))
     _VolumRefreshSupportChannels();
-  _VolumFlushModeParamSync();
   if (!mVolumPendingLibraryNotice.empty())
     if (auto* gfx = GetUI())
     {
@@ -1222,6 +1216,8 @@ void NeuralAmpModeler::OnIdle()
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
 {
+  const_cast<NeuralAmpModeler*>(this)->_VolumApplyPendingModeChanges();
+
   // Flush current live params into the active per-amp scene before serializing.
   // The scene is otherwise only synced from OnIdle (line ~2253), which needs an
   // editor / idle pump. A host that sets parameters and immediately saves state
@@ -1549,123 +1545,82 @@ void NeuralAmpModeler::_VolumApplyPendingDualAmpChange()
     mVolumDualAmpFocusedSupport = false;
 }
 
-void NeuralAmpModeler::_VolumHandleModeParamChange(int paramIdx, EParamSource source)
+void NeuralAmpModeler::_VolumQueueModeParamChange(int paramIdx, EParamSource source)
 {
-  const bool externalTransition =
-    mVolumInitComplete && (source == EParamSource::kUI || source == EParamSource::kHost);
-  bool changed = false;
-  unsigned syncMask = 0;
+  if (!mVolumInitComplete || (source != EParamSource::kUI && source != EParamSource::kHost))
+    return;
 
   switch (paramIdx)
   {
     case kPrePitchMode:
-      changed = volum::ApplyModeSnapshotTransition(
-        GetParam(kPrePitchMode)->Int(), volum::kVoLumPitchModeCount,
-        externalTransition && !mVolumPreRestoreInProgress, mVolumPrePitchMode,
-        [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
-        [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode, false); });
-      syncMask = kModeSyncPrePitch;
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::PrePitch, GetParam(kPrePitchMode)->Int());
       break;
     case kDelayMode:
-      changed = volum::ApplyModeSnapshotTransition(
-        GetParam(kDelayMode)->Int(), volum::kVoLumDelayModeCount,
-        externalTransition && !mVolumPostRestoreInProgress, mVolumEffectSettings.delayMode,
-        [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
-        [this](int mode) { _VolumRestoreDelayModeSnapshot(mode, false); });
-      syncMask = kModeSyncDelay;
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Delay, GetParam(kDelayMode)->Int());
       break;
     case kReverbMode:
-      changed = volum::ApplyModeSnapshotTransition(
-        GetParam(kReverbMode)->Int(), volum::kVoLumReverbModeCount,
-        externalTransition && !mVolumPostRestoreInProgress, mVolumEffectSettings.reverbMode,
-        [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
-        [this](int mode) { _VolumRestoreReverbModeSnapshot(mode, false); });
-      syncMask = kModeSyncReverb;
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Reverb, GetParam(kReverbMode)->Int());
       break;
     case kReverbSubMode:
-    {
-      auto& trackedSubMode =
-        mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
-      changed = volum::ApplyModeSnapshotTransition(
-        GetParam(kReverbSubMode)->Int(), 3,
-        externalTransition && !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress
-          && GetParam(kReverbMode)->Int() == volum::kVoLumReverbModeOktaverb,
-        trackedSubMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
-        [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode, false); });
-      syncMask = kModeSyncReverb;
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Oktaverb, GetParam(kReverbSubMode)->Int());
       break;
-    }
     case kTremoloMode:
-      changed = volum::ApplyModeSnapshotTransition(
-        GetParam(kTremoloMode)->Int(), volum::kVoLumTremoloModeCount,
-        externalTransition && !mVolumTremoloRestoreInProgress && !mVolumPostRestoreInProgress,
-        mVolumEffectSettings.tremoloMode, [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
-        [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode, false); });
-      syncMask = kModeSyncTremolo;
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Tremolo, GetParam(kTremoloMode)->Int());
       break;
     case kChorusMode:
-      changed = volum::ApplyModeSnapshotTransition(
-        GetParam(kChorusMode)->Int(), volum::kVoLumChorusModeCount,
-        externalTransition && !mVolumPostRestoreInProgress, mVolumEffectSettings.chorusMode,
-        [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
-        [this](int mode) { _VolumRestoreChorusModeSnapshot(mode, false); });
-      syncMask = kModeSyncChorus;
+      mVolumPendingModeChanges.Request(volum::ModeSnapshotTarget::Chorus, GetParam(kChorusMode)->Int());
       break;
     default: break;
   }
-
-  if (changed)
-    mVolumModeParamSyncPending.fetch_or(syncMask, std::memory_order_release);
 }
 
-void NeuralAmpModeler::_VolumFlushModeParamSync()
+void NeuralAmpModeler::_VolumApplyPendingModeChanges()
 {
-  const unsigned pending = mVolumModeParamSyncPending.exchange(0, std::memory_order_acquire);
-  auto sync = [this](int paramIdx) {
-    SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
+  const auto pending = mVolumPendingModeChanges.Take();
+  auto apply = [this, &pending](volum::ModeSnapshotTarget target, int modeCount, bool allowed, int& trackedMode,
+                                auto&& saveOutgoing, auto&& restoreIncoming) {
+    if (!pending.Has(target))
+      return;
+    const int requestedMode = pending.Requested(target);
+    if (!allowed)
+    {
+      mVolumPendingModeChanges.Request(target, requestedMode);
+      return;
+    }
+    volum::ApplyModeSnapshotTransition(
+      requestedMode, modeCount, true, trackedMode, std::forward<decltype(saveOutgoing)>(saveOutgoing),
+      std::forward<decltype(restoreIncoming)>(restoreIncoming));
   };
 
-  if (pending & kModeSyncPrePitch)
-  {
-    sync(kPrePitchMix);
-    sync(kPrePitchDry);
-    sync(kPrePitchLevel);
-    sync(kPrePitchVoicing);
-  }
-  if (pending & kModeSyncDelay)
-  {
-    sync(kDelayTime);
-    sync(kDelayFeedback);
-    sync(kDelayMix);
-    sync(kDelayTone);
-    sync(kDelayAge);
-    sync(kDelayPingPong);
-  }
-  if (pending & kModeSyncReverb)
-  {
-    sync(kReverbMix);
-    sync(kReverbDecay);
-    sync(kReverbTone);
-    sync(kReverbPreDelay);
-    sync(kReverbShimmer);
-    sync(kReverbSubMode);
-  }
-  if (pending & kModeSyncTremolo)
-  {
-    sync(kTremoloRate);
-    sync(kTremoloDepth);
-    sync(kTremoloShape);
-    sync(kTremoloMix);
-    sync(kTremoloCrossover);
-  }
-  if (pending & kModeSyncChorus)
-  {
-    sync(kChorusRate);
-    sync(kChorusDepth);
-    sync(kChorusTone);
-    sync(kChorusWidth);
-    sync(kChorusMix);
-  }
+  apply(
+    volum::ModeSnapshotTarget::PrePitch, volum::kVoLumPitchModeCount, !mVolumPreRestoreInProgress,
+    mVolumPrePitchMode, [this](int mode) { _VolumSavePrePitchModeSnapshot(mode); },
+    [this](int mode) { _VolumRestorePrePitchModeSnapshot(mode); });
+  apply(
+    volum::ModeSnapshotTarget::Delay, volum::kVoLumDelayModeCount, !mVolumPostRestoreInProgress,
+    mVolumEffectSettings.delayMode, [this](int mode) { _VolumSaveDelayModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreDelayModeSnapshot(mode); });
+  apply(
+    volum::ModeSnapshotTarget::Reverb, volum::kVoLumReverbModeCount, !mVolumPostRestoreInProgress,
+    mVolumEffectSettings.reverbMode, [this](int mode) { _VolumSaveReverbModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreReverbModeSnapshot(mode); });
+
+  auto& oktaverbMode = mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
+  apply(
+    volum::ModeSnapshotTarget::Oktaverb, 3,
+    !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress
+      && mVolumEffectSettings.reverbMode == volum::kVoLumReverbModeOktaverb,
+    oktaverbMode, [this](int mode) { _VolumSaveOktaverbSubModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreOktaverbSubModeSnapshot(mode); });
+  apply(
+    volum::ModeSnapshotTarget::Tremolo, volum::kVoLumTremoloModeCount,
+    !mVolumTremoloRestoreInProgress && !mVolumPostRestoreInProgress, mVolumEffectSettings.tremoloMode,
+    [this](int mode) { _VolumSaveTremoloModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreTremoloModeSnapshot(mode); });
+  apply(
+    volum::ModeSnapshotTarget::Chorus, volum::kVoLumChorusModeCount, !mVolumPostRestoreInProgress,
+    mVolumEffectSettings.chorusMode, [this](int mode) { _VolumSaveChorusModeSnapshot(mode); },
+    [this](int mode) { _VolumRestoreChorusModeSnapshot(mode); });
 }
 
 void NeuralAmpModeler::OnParamChange(int paramIdx)
@@ -1676,7 +1631,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int sampleOffset)
 {
   (void)sampleOffset;
-  _VolumHandleModeParamChange(paramIdx, source);
+  _VolumQueueModeParamChange(paramIdx, source);
 
   switch (paramIdx)
   {
@@ -1741,8 +1696,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
       if (mVolumInitComplete && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
-        mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
-        _VolumSaveDelayModeSnapshot(std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1));
+        _VolumSaveDelayModeSnapshot(
+          std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
       }
       break;
     case kReverbActive:
@@ -1756,8 +1711,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
       if (mVolumInitComplete && !mVolumReverbRestoreInProgress && !mVolumPostRestoreInProgress)
       {
         mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-        mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-        _VolumSaveReverbModeSnapshot(std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1));
+        _VolumSaveReverbModeSnapshot(
+          std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
       }
       break;
     case kChorusActive:
@@ -1765,8 +1720,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx, EParamSource source, int samp
         mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
       break;
     case kReverbSubMode:
-      // _VolumHandleModeParamChange performed the complete save/restore
-      // transaction before this switch, including in headless host automation.
+      // The main-thread pending handoff performs this save/restore transaction.
       break;
     case kPreNam1Capture:
     case kPreNam1Active:
@@ -1919,7 +1873,7 @@ void NeuralAmpModeler::_VolumRefreshPrePostLockChrome(int paramIdx)
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
-  _VolumFlushModeParamSync();
+  _VolumApplyPendingModeChanges();
   if (paramIdx == kDualAmpActive)
     _VolumApplyPendingDualAmpChange();
   if (paramIdx == kSupportAmpIdx || paramIdx == kSupportSpeakerIdx)
@@ -1961,7 +1915,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kSupportSpeakerIdx:
       case kSupportChannelIdx: _UpdateVoLumLayout(pGraphics); break;
       case kPrePitchMode:
-        // Snapshot work already ran in the UI-independent OnParamChange path.
+        // Snapshot work already ran through the main-thread pending handoff.
         _UpdateVoLumLayout(pGraphics);
         break;
       case kMainAmpPan:
@@ -2728,7 +2682,14 @@ void NeuralAmpModeler::_UpdateLatency()
   // Clear before computing so a model publish that races this main-thread pass
   // sets the flag again and is consumed by the next idle instead of being lost.
   mLatencyDirty.exchange(false, std::memory_order_acquire);
-  const int latency = _ReportedLatencySamples();
+  int latency = 0;
+  {
+    // _ApplyDSPStaging moves these live model pointers under the same mutex.
+    // Parameter-driven recomputes run on the main thread, so hold it only for
+    // the pointer/latency reads and release it before calling the host.
+    std::lock_guard<std::mutex> lock(mStagingMutex);
+    latency = _ReportedLatencySamples();
+  }
   mPendingLatency.store(latency, std::memory_order_relaxed);
 
   // Feels weird to have to do this.

@@ -27,7 +27,7 @@ void NeuralAmpModeler::_VolumSavePreToSlot(volum::VoLumAmpSettings& s)
   s.preNam2Treble = GetParam(kPreNam2Treble)->Value();
   s.preNam2Level = GetParam(kPreNam2Level)->Value();
   s.prePitchActive = GetParam(kPrePitchActive)->Bool();
-  s.prePitchMode = GetParam(kPrePitchMode)->Int();
+  s.prePitchMode = mVolumPrePitchMode;
   s.prePitchSemitones = GetParam(kPrePitchSemitones)->Value();
   s.prePitchMix = GetParam(kPrePitchMix)->Value();
   s.prePitchOctDown = GetParam(kPrePitchOctDown)->Value();
@@ -47,7 +47,7 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postDelayTime = GetParam(kDelayTime)->Value();
   s.postDelayFeedback = GetParam(kDelayFeedback)->Value();
   s.postDelayMix = GetParam(kDelayMix)->Value();
-  s.postDelayMode = GetParam(kDelayMode)->Int();
+  s.postDelayMode = mVolumEffectSettings.delayMode;
   s.postDelayTone = GetParam(kDelayTone)->Value();
   s.postDelayAge = GetParam(kDelayAge)->Value();
   s.postDelayPingPong = GetParam(kDelayPingPong)->Bool();
@@ -59,10 +59,11 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postReverbTone = GetParam(kReverbTone)->Value();
   s.postReverbPreDelay = GetParam(kReverbPreDelay)->Value();
   s.postReverbShimmer = GetParam(kReverbShimmer)->Value();
-  s.postReverbMode = GetParam(kReverbMode)->Int();
-  s.postReverbSubMode = GetParam(kReverbSubMode)->Int();
+  s.postReverbMode = mVolumEffectSettings.reverbMode;
+  s.postReverbSubMode =
+    mVolumEffectSettings.reverbModes[volum::kVoLumReverbModeOktaverb].subMode;
   s.postTremoloActive = GetParam(kTremoloActive)->Bool();
-  s.postTremoloMode = GetParam(kTremoloMode)->Int();
+  s.postTremoloMode = mVolumEffectSettings.tremoloMode;
   s.postTremoloRate = GetParam(kTremoloRate)->Value();
   s.postTremoloDepth = GetParam(kTremoloDepth)->Value();
   s.postTremoloShape = GetParam(kTremoloShape)->Value();
@@ -71,7 +72,7 @@ void NeuralAmpModeler::_VolumSavePostToSlot(volum::VoLumAmpSettings& s)
   s.postTremoloSync = GetParam(kTremoloSync)->Bool();
   s.postTremoloDivision = GetParam(kTremoloDivision)->Int();
   s.postChorusActive = GetParam(kChorusActive)->Bool();
-  s.postChorusMode = GetParam(kChorusMode)->Int();
+  s.postChorusMode = mVolumEffectSettings.chorusMode;
   s.postChorusRate = GetParam(kChorusRate)->Value();
   s.postChorusDepth = GetParam(kChorusDepth)->Value();
   s.postChorusTone = GetParam(kChorusTone)->Value();
@@ -112,7 +113,6 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
   s.outputLevel = GetParam(kOutputLevel)->Value();
   s.noiseGateActive = GetParam(kNoiseGateActive)->Bool();
   s.eqActive = GetParam(kEQActive)->Bool();
-  mVolumPrePitchMode = GetParam(kPrePitchMode)->Int();
   _VolumSavePrePitchModeSnapshot(std::clamp(mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1));
   if (!mVolumPreLocked)
     _VolumSavePreToSlot(s);
@@ -144,11 +144,7 @@ void NeuralAmpModeler::_VolumSaveCurrentToSettings()
 
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
   mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
-  mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-  mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-  mVolumEffectSettings.tremoloMode = GetParam(kTremoloMode)->Int();
-  mVolumEffectSettings.chorusMode = GetParam(kChorusMode)->Int();
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   _VolumSaveTremoloModeSnapshot(std::clamp(mVolumEffectSettings.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1));
@@ -220,7 +216,8 @@ bool NeuralAmpModeler::_VolumIsPreDirty() const
     return !volum::PreBlockEquals(mVolumLiveLockedPre, scene);
 
   auto* self = const_cast<NeuralAmpModeler*>(this);
-  self->_VolumSavePrePitchModeSnapshot(std::clamp(GetParam(kPrePitchMode)->Int(), 0, volum::kVoLumPitchModeCount - 1));
+  self->_VolumSavePrePitchModeSnapshot(
+    std::clamp(self->mVolumPrePitchMode, 0, volum::kVoLumPitchModeCount - 1));
   volum::VoLumAmpSettings live;
   self->_VolumSavePreToSlot(live);
   return !volum::PreBlockEquals(live, scene);
@@ -233,8 +230,8 @@ bool NeuralAmpModeler::_VolumIsPostDirty() const
   if (mVolumPostLocked)
     return !volum::PostBlockEquals(mVolumLiveLockedPost, scene);
 
-  const int delayMode = std::clamp(GetParam(kDelayMode)->Int(), 0, volum::kVoLumDelayModeCount - 1);
-  const int reverbMode = std::clamp(GetParam(kReverbMode)->Int(), 0, volum::kVoLumReverbModeCount - 1);
+  const int delayMode = std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1);
+  const int reverbMode = std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1);
   self->_VolumSaveDelayModeSnapshot(delayMode);
   self->_VolumSaveReverbModeSnapshot(reverbMode);
   volum::VoLumAmpSettings live;
@@ -287,11 +284,7 @@ void NeuralAmpModeler::_VolumSaveEffectSettings()
 {
   mVolumEffectSettings.delayActive = GetParam(kDelayActive)->Bool();
   mVolumEffectSettings.chorusActive = GetParam(kChorusActive)->Bool();
-  mVolumEffectSettings.delayMode = GetParam(kDelayMode)->Int();
   mVolumEffectSettings.reverbActive = GetParam(kReverbActive)->Bool();
-  mVolumEffectSettings.reverbMode = GetParam(kReverbMode)->Int();
-  mVolumEffectSettings.tremoloMode = GetParam(kTremoloMode)->Int();
-  mVolumEffectSettings.chorusMode = GetParam(kChorusMode)->Int();
   _VolumSaveDelayModeSnapshot(std::clamp(mVolumEffectSettings.delayMode, 0, volum::kVoLumDelayModeCount - 1));
   _VolumSaveReverbModeSnapshot(std::clamp(mVolumEffectSettings.reverbMode, 0, volum::kVoLumReverbModeCount - 1));
   _VolumSaveTremoloModeSnapshot(std::clamp(mVolumEffectSettings.tremoloMode, 0, volum::kVoLumTremoloModeCount - 1));

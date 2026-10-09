@@ -90,6 +90,55 @@ std::string MemberFnUntilNext(const std::string& src, const char* signature)
   REQUIRE(end != std::string::npos);
   return src.substr(start, end - start);
 }
+
+struct ModeSnapshotHarness
+{
+  volum::PendingModeSnapshotChanges pending;
+  int trackedMode = 0;
+  int liveKnob = 13;
+  int slots[2]{10, 20};
+  int saveCalls = 0;
+  int restoreCalls = 0;
+
+  void AudioThreadChange(int mode)
+  {
+    pending.Request(volum::ModeSnapshotTarget::Chorus, mode);
+  }
+
+  void ApplyPendingOnMainThread()
+  {
+    const auto batch = pending.Take();
+    if (!batch.Has(volum::ModeSnapshotTarget::Chorus))
+      return;
+    volum::ApplyModeSnapshotTransition(
+      batch.Requested(volum::ModeSnapshotTarget::Chorus), 2, true, trackedMode,
+      [this](int mode) {
+        ++saveCalls;
+        slots[mode] = liveKnob;
+      },
+      [this](int mode) {
+        ++restoreCalls;
+        liveKnob = slots[mode];
+      });
+  }
+
+  void SaveCurrentToTrackedMode()
+  {
+    slots[trackedMode] = liveKnob;
+  }
+
+  void IdleTick()
+  {
+    ApplyPendingOnMainThread();
+    SaveCurrentToTrackedMode();
+  }
+
+  void Serialize()
+  {
+    ApplyPendingOnMainThread();
+    SaveCurrentToTrackedMode();
+  }
+};
 } // namespace
 
 TEST_CASE("POST pedal cards refresh active art state from delay and reverb params")
@@ -1064,7 +1113,7 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireContains(source, "postGuard(mVolumPostRestoreInProgress);");
   RequireContains(source, "if (!s.postValid)");
   RequireContains(source, "const volum::VoLumAmpSettings defaults;");
-  RequireContains(source, "externalTransition && !mVolumPostRestoreInProgress");
+  RequireContains(source, "mVolumPendingModeChanges.Discard(");
   RequireContains(source, "mVolumInitComplete && !mVolumPostRestoreInProgress");
   RequireContains(source, "const int restoredDelayMode = std::clamp(s.postDelayMode");
   RequireContains(source, "const int restoredReverbMode = std::clamp(s.postReverbMode");
@@ -1081,94 +1130,76 @@ TEST_CASE("Per-amp POST restore is guarded from mode snapshot re-entry")
   RequireDoesNotContain(source, "SetSelected(mVolumSpeakerIdx);");
 }
 
-TEST_CASE("POST Tremolo per-mode switch is guarded from snapshot re-entry")
+TEST_CASE("F-08 audio-thread mode request defers the snapshot transaction")
 {
-  // Mirrors the Reverb/Delay per-mode pattern: switching mode saves the outgoing
-  // mode's knobs and recalls the incoming mode's, wrapped in a re-entrancy guard
-  // so the setParam cascade does not overwrite the snapshot mid-restore. This is
-  // the exact bug class that previously bit Reverb (B-reverb re-entry).
-  const std::string source = ReadPluginSource();
-  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1);
 
-  RequireContains(header, "bool mVolumTremoloRestoreInProgress = false;");
-  RequireContains(source, "} guard(mVolumTremoloRestoreInProgress);");
-  RequireContains(source, "externalTransition && !mVolumTremoloRestoreInProgress && !mVolumPostRestoreInProgress");
-  RequireContains(source, "_VolumSaveTremoloModeSnapshot(mode);");
-  RequireContains(source, "_VolumRestoreTremoloModeSnapshot(mode, false);");
+  CHECK(h.trackedMode == 0);
+  CHECK(h.liveKnob == 13);
+  CHECK(h.slots[0] == 10);
+  CHECK(h.slots[1] == 20);
+
+  h.ApplyPendingOnMainThread();
+  CHECK(h.trackedMode == 1);
+  CHECK(h.liveKnob == 20);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
 }
 
-TEST_CASE("PRE Pitch per-mode switch is guarded from snapshot re-entry")
+TEST_CASE("F-08 idle applies a pending mode before saving live settings")
 {
-  // PRE has no POST-style effect-settings struct, so the live per-mode snapshots
-  // live on the plugin (mVolumPrePitchModes) and the mode-switch save/restore is
-  // wrapped in its own re-entrancy guard.
-  const std::string source = ReadPluginSource();
-  const std::string header = ReadText(RepoRoot() / "NeuralAmpModeler" / "NeuralAmpModeler.h");
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1);
+  h.IdleTick();
 
-  RequireContains(header, "bool mVolumPreRestoreInProgress = false;");
-  RequireContains(header, "int mVolumPrePitchMode = volum::kVoLumPitchModeDefault;");
-  RequireContains(source, "} guard(mVolumPreRestoreInProgress);");
-  RequireContains(source, "externalTransition && !mVolumPreRestoreInProgress");
-  RequireContains(source, "_VolumSavePrePitchModeSnapshot(mode);");
-  RequireContains(source, "_VolumRestorePrePitchModeSnapshot(mode, false);");
+  CHECK(h.trackedMode == 1);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.liveKnob == 20);
 }
 
-TEST_CASE("F-08 headless mode transition preserves outgoing and recalls incoming snapshots")
+TEST_CASE("F-08 serialize applies a pending mode before saving live settings")
 {
-  struct Snapshot
-  {
-    int knob = 0;
-  };
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1);
+  h.Serialize();
 
-  Snapshot slots[2]{{10}, {20}};
-  int trackedMode = 0;
-  int liveKnob = 13;
-  const bool changed = volum::ApplyModeSnapshotTransition(
-    1, 2, true, trackedMode, [&](int mode) { slots[mode].knob = liveKnob; },
-    [&](int mode) { liveKnob = slots[mode].knob; });
-
-  CHECK(changed);
-  CHECK(trackedMode == 1);
-  CHECK(slots[0].knob == 13);
-  CHECK(liveKnob == 20);
-
-  // A state restore has already decoded both snapshots and the live knob. Its
-  // mode notification must not perform a transition over that restored data.
-  const Snapshot restoredSlots[2]{{31}, {41}};
-  slots[0] = restoredSlots[0];
-  slots[1] = restoredSlots[1];
-  trackedMode = 0;
-  liveKnob = 37;
-  CHECK_FALSE(volum::ApplyModeSnapshotTransition(
-    1, 2, false, trackedMode, [&](int mode) { slots[mode].knob = liveKnob; },
-    [&](int mode) { liveKnob = slots[mode].knob; }));
-  CHECK(trackedMode == 0);
-  CHECK(liveKnob == 37);
-  CHECK(slots[0].knob == 31);
-  CHECK(slots[1].knob == 41);
+  CHECK(h.trackedMode == 1);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.liveKnob == 20);
 }
 
-TEST_CASE("F-08 mode snapshots run outside OnParamChangeUI and skip state restore")
+TEST_CASE("F-08 UI click and host echo apply one snapshot transaction")
 {
-  const std::string source = ReadPluginSource();
-  const std::string transition =
-    MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumHandleModeParamChange(");
-  const std::string ui = MemberFnUntilNext(source, "void NeuralAmpModeler::OnParamChangeUI(");
+  ModeSnapshotHarness h;
+  h.AudioThreadChange(1); // UI-side request
+  h.ApplyPendingOnMainThread();
+  h.AudioThreadChange(1); // echoed by the host on the processor thread
+  h.ApplyPendingOnMainThread();
 
-  RequireContains(transition, "source == EParamSource::kUI || source == EParamSource::kHost");
-  RequireContains(transition, "case kPrePitchMode:");
-  RequireContains(transition, "case kDelayMode:");
-  RequireContains(transition, "case kReverbMode:");
-  RequireContains(transition, "case kReverbSubMode:");
-  RequireContains(transition, "case kTremoloMode:");
-  RequireContains(transition, "case kChorusMode:");
-  RequireContains(transition, "mVolumModeParamSyncPending.fetch_or");
-  RequireDoesNotContain(ui, "_VolumSavePrePitchModeSnapshot");
-  RequireDoesNotContain(ui, "_VolumSaveDelayModeSnapshot");
-  RequireDoesNotContain(ui, "_VolumSaveReverbModeSnapshot");
-  RequireDoesNotContain(ui, "_VolumSaveOktaverbSubModeSnapshot");
-  RequireDoesNotContain(ui, "_VolumSaveTremoloModeSnapshot");
-  RequireDoesNotContain(ui, "_VolumSaveChorusModeSnapshot");
+  CHECK(h.trackedMode == 1);
+  CHECK(h.liveKnob == 20);
+  CHECK(h.slots[0] == 13);
+  CHECK(h.slots[1] == 20);
+  CHECK(h.saveCalls == 1);
+  CHECK(h.restoreCalls == 1);
+}
+
+TEST_CASE("F-08 pending mode targets keep independent requested values")
+{
+  volum::PendingModeSnapshotChanges pending;
+  pending.Request(volum::ModeSnapshotTarget::Delay, 2);
+  pending.Request(volum::ModeSnapshotTarget::Chorus, 3);
+  const auto batch = pending.Take();
+
+  CHECK(batch.Has(volum::ModeSnapshotTarget::Delay));
+  CHECK(batch.Has(volum::ModeSnapshotTarget::Chorus));
+  CHECK_FALSE(batch.Has(volum::ModeSnapshotTarget::PrePitch));
+  CHECK(batch.Requested(volum::ModeSnapshotTarget::Delay) == 2);
+  CHECK(batch.Requested(volum::ModeSnapshotTarget::Chorus) == 3);
+  CHECK(pending.Take().mask == 0);
 }
 
 TEST_CASE("A new instance's Pitch and Chorus EParams start on the shipped scene defaults")

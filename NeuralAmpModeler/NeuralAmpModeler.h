@@ -47,6 +47,7 @@
 #include "VoLumChorus.h"
 #include "VoLumLatencyReport.h"
 #include "VoLumMidi.h"
+#include "VoLumModeTransition.h"
 #include "VoLumProcessingPlan.h"
 #include "VoLumUiSyncPlan.h"
 #include "VoLumDspStagingWdl.h"
@@ -294,8 +295,8 @@ public:
   void _VolumRestoreChorusModeSnapshot(int mode, bool notifyUi = true);
   void _VolumSavePrePitchModeSnapshot(int mode);
   void _VolumRestorePrePitchModeSnapshot(int mode, bool notifyUi = true);
-  void _VolumHandleModeParamChange(int paramIdx, iplug::EParamSource source);
-  void _VolumFlushModeParamSync();
+  void _VolumQueueModeParamChange(int paramIdx, iplug::EParamSource source);
+  void _VolumApplyPendingModeChanges();
   void _VolumApplyPendingDualAmpChange();
   void _SelectVoLumKnob(int paramIdx);
   bool _SelectAdjacentVoLumKnob(int currentParamIdx, int direction);
@@ -676,9 +677,9 @@ private:
   // API idle/main thread (or immediately by OnParamChangeUI).
   std::atomic<bool> mVolumSupportChannelsDirty{false};
   std::atomic<bool> mVolumDualAmpParamDirty{false};
-  // Restored mode-knob values are written synchronously for DSP, then their UI
-  // notifications are deferred because SendParameterValueFromDelegate is not RT-safe.
-  std::atomic<unsigned> mVolumModeParamSyncPending{0};
+  // OnParamChange can run on the audio thread. It publishes only the requested
+  // mode here; OnIdle / SerializeState perform the snapshot transaction.
+  volum::PendingModeSnapshotChanges mVolumPendingModeChanges;
   std::atomic<bool> mVolumSupportIsLoading{false};
   std::atomic<bool> mVolumDualAmpOutputHot{false};
   // Set by OnUIOpen / cleared by OnUIClose; gates the meter work in ProcessBlock.
@@ -943,8 +944,8 @@ private:
   bool mPostChorusWasActive = false;
   bool mPrePitchWasActive = false;
   bool mPreCompWasActive = false;
-  // Audio thread stores the sample count and sets the flag. OnIdle applies it.
-  // OnIdle must not read mModel: the audio thread owns those pointers.
+  // Audio-thread model swaps publish a complete count here. Parameter-driven
+  // recomputes read the live model pointers under mStagingMutex on the main thread.
   std::atomic<int> mPendingLatency{0};
   std::atomic<bool> mLatencyDirty{false};
   // Distinguishes a parameter-driven latency recompute from a model-swap value

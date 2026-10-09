@@ -228,6 +228,8 @@ bool NeuralAmpModeler::_VolumUserToggleParam(int paramIdx)
   GetParam(paramIdx)->Set(next ? 1.0 : 0.0);
   SendParameterValueFromDelegate(paramIdx, GetParam(paramIdx)->GetNormalized(), true);
   OnParamChange(paramIdx);
+  if (paramIdx == kDualAmpActive)
+    _VolumApplyPendingDualAmpChange();
   // The mouse paths historically called this; the keyboard path skipped it,
   // which is exactly the dual/COMP/DELAY/REVERB "keyboard toggle doesn't mark
   // dirty" bug. Centralising it here keeps both inputs in lock-step.

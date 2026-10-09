@@ -128,6 +128,7 @@ void NeuralAmpModeler::_VolumApplyRigRepair(const volum::rig::RigRepairPlan& pla
       GetParam(kDualAmpActive)->Set(0.0);
       SendParameterValueFromDelegate(kDualAmpActive, 0.0, true);
       OnParamChange(kDualAmpActive);
+      _VolumApplyPendingDualAmpChange();
     }
     _VolumClampSupportFocus();
   }
