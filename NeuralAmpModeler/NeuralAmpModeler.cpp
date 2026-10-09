@@ -949,7 +949,6 @@ void NeuralAmpModeler::_VolumApplyPendingStateRestore()
   {
     // Presets did not exist in this chunk schema. Do not leave a custom amp's
     // label/baseline visible after the authoritative factory selection lands.
-    volum::custom::SetActivePresetOwner(_VolumActiveOwnerKey());
     mVolumActivePresetId.clear();
     mVolumHasRecalledSnapshot = false;
     _VolumRefreshPresetBar();
