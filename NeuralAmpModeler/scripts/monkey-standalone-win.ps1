@@ -479,6 +479,8 @@ function Restore-WerDumps {
 }
 
 $script:proc = $null
+$script:runProcesses = New-Object Collections.ArrayList
+$script:startupDialogs = @()
 $script:main = [IntPtr]::Zero
 $script:actionIndex = -1
 $script:currentAction = $null
@@ -562,6 +564,7 @@ function Add-MonkeyFlag {
 }
 
 function Start-VoLum {
+  $script:startupDialogs = @()
   $psi = New-Object Diagnostics.ProcessStartInfo
   $psi.FileName = (Resolve-Path -LiteralPath $Exe).Path
   $psi.UseShellExecute = $false
@@ -569,6 +572,7 @@ function Start-VoLum {
   $psi.EnvironmentVariables["VOLUM_PACK_SAVE_PATH"] = (Join-Path $OutDir "monkey.volumpack")
   $psi.EnvironmentVariables["VOLUM_PACK_OPEN_PATH"] = (Join-Path $OutDir "monkey.volumpack")
   $script:proc = [Diagnostics.Process]::Start($psi)
+  [void]$script:runProcesses.Add($script:proc)
   [IO.File]::WriteAllText((Join-Path $OutDir "pid.txt"), [string]$script:proc.Id, (New-Object Text.ASCIIEncoding))
   $deadline = (Get-Date).AddSeconds(25)
   while ((Get-Date) -lt $deadline) {
@@ -579,6 +583,13 @@ function Start-VoLum {
       return $true
     }
     foreach ($d in [VoLumMonkeyWin]::ExtraWindows($script:proc.Id, [IntPtr]::Zero)) {
+      $dialog = [ordered]@{
+        title = $d.Title
+        class = $d.ClassName
+        text = $d.StaticText
+      }
+      $script:startupDialogs += [pscustomobject]$dialog
+      Add-MonkeyFlag "startup-dialog" $dialog
       [VoLumMonkeyWin]::CloseDialog($d.Handle)
     }
     Start-Sleep -Milliseconds 200
@@ -591,10 +602,34 @@ function Start-VoLum {
   return $false
 }
 
+function Wait-RunProcessesExited {
+  param([int] $TimeoutSeconds = 15)
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  do {
+    $alive = @()
+    foreach ($p in $script:runProcesses) {
+      try {
+        $p.Refresh()
+        if (-not $p.HasExited) { $alive += $p }
+      }
+      catch {}
+    }
+    if ($alive.Count -eq 0) { return $true }
+    Start-Sleep -Milliseconds 100
+  } while ((Get-Date) -lt $deadline)
+
+  Add-MonkeyFlag "process-exit-timeout" ([ordered]@{
+    waitedSeconds = $TimeoutSeconds
+    processIds = @($alive | ForEach-Object { $_.Id })
+  })
+  return $false
+}
+
 function Stop-VoLum {
   if (Test-ProcessAlive) {
-    try { $script:proc.Kill(); $script:proc.WaitForExit(5000) | Out-Null } catch {}
+    try { $script:proc.Kill() } catch {}
   }
+  [void](Wait-RunProcessesExited 15)
   $script:proc = $null
   $script:main = [IntPtr]::Zero
 }
@@ -606,7 +641,10 @@ function Restart-VoLum {
   $script:leakFlagged = @{}
   Start-Sleep -Milliseconds 500
   if (-not (Start-VoLum)) {
-    Add-MonkeyFlag "restart-failed" ([ordered]@{ restart = $script:restarts })
+    Add-MonkeyFlag "restart-failed" ([ordered]@{
+      restart = $script:restarts
+      startupDialogs = $script:startupDialogs
+    })
     return $false
   }
   return $true
@@ -846,7 +884,10 @@ if ($Replay) {
 try {
   $script:werSnapshot = Enable-WerDumps $dumpsDir
   if (-not (Start-VoLum)) {
-    Add-MonkeyFlag "launch-failed" ([ordered]@{ exe = $Exe })
+    Add-MonkeyFlag "launch-failed" ([ordered]@{
+      exe = $Exe
+      startupDialogs = $script:startupDialogs
+    })
   }
   else {
     Sample-Metrics
