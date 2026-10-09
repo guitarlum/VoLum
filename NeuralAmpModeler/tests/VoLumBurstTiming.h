@@ -87,6 +87,12 @@ public:
     mSavedPriority = GetThreadPriority(GetCurrentThread());
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
   #if defined(THREAD_POWER_THROTTLING_CURRENT_VERSION)
+    mSavedThrottling.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+    if (!GetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &mSavedThrottling, sizeof(mSavedThrottling)))
+    {
+      mSavedThrottling = {};
+      mSavedThrottling.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+    }
     THREAD_POWER_THROTTLING_STATE state{};
     state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
     state.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
@@ -109,9 +115,7 @@ public:
     if (mSavedAffinity != 0)
       SetThreadAffinityMask(GetCurrentThread(), mSavedAffinity);
   #if defined(THREAD_POWER_THROTTLING_CURRENT_VERSION)
-    THREAD_POWER_THROTTLING_STATE state{};
-    state.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
-    SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &state, sizeof(state));
+    SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &mSavedThrottling, sizeof(mSavedThrottling));
   #endif
     SetThreadPriority(GetCurrentThread(), mSavedPriority);
 #elif defined(__APPLE__)
@@ -160,6 +164,9 @@ private:
 
   int mSavedPriority = THREAD_PRIORITY_NORMAL;
   DWORD_PTR mSavedAffinity = 0;
+  #if defined(THREAD_POWER_THROTTLING_CURRENT_VERSION)
+  THREAD_POWER_THROTTLING_STATE mSavedThrottling{};
+  #endif
 #elif defined(__APPLE__)
   qos_class_t mSavedQos = QOS_CLASS_DEFAULT;
   int mSavedRelPriority = 0;
