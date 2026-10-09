@@ -2,51 +2,58 @@
 
 # VoLum
 
+**Open-source guitar amps for the stage, the studio and the practice desk.**
+
+![VoLum Dual Amp: THC Sunset and Soldano SLO100 art reacting to the guitar](docs/volum-dual-amp.gif)
+
+VoLum runs on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core but is its own focused app: 15 curated amps, PRE pedals (Pitch with Transpose and Octaver, a compressor, two NAM pedal slots), Dual Amp, POST chorus, delay, reverb and tremolo, your own amps, IRs and pedals, per-amp presets, a PLAY view for MIDI foot controllers, a tuner and a metronome. Use it as a standalone app, as a VST3, or as an AU on macOS.
+
+[Download VoLum](https://github.com/guitarlum/VoLum/releases) or read the [user guide](docs/user-guide.en.md).
+
 <p align="center">
-  <img src="docs/user-guide-main.png" alt="VoLum BUILD editor" width="820">
+  <img src="docs/user-guide-main.png" alt="VoLum BUILD screen" width="820">
 </p>
-
-VoLum is an open-source guitar amp collection for the stage, studio, and practice desk. It uses the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, but ships as its own focused app: 15 curated amps, built-in PRE pedals (including a Transpose/Octaver pitch pedal), Dual Amp, POST delay/reverb/tremolo, your own amp/IR/pedal imports, per-amp presets, a tuner, a metronome, and a fast dark UI for standalone use or VST3 hosts.
-
-[Download VoLum](https://github.com/guitarlum/VoLum/releases) or jump to the [user guide](docs/user-guide.en.md).
 
 ## Why It Stands Out
 
-- **BUILD then PLAY in one window:** BUILD is the editor. PLAY is the stage setlist. Every bundled amp ships one or two named Factory presets (21 in all) you can assign without saving first, and PLAY starts with five of them on programs 0-4.
-- **MIDI Program Change:** 128 slots, the same list PLAY shows. No Learn — pick a Sound, send a program number, or send the Recall CC (102) when your host does not pass Program Change on.
-- **POST Chorus:** four voices sit ahead of Delay, so modulation hits the amp before repeats and room.
-- **One Pack file:** a `.volumpack` backs up, moves, or shares the custom library (amps, IRs, pedals, presets) in one step.
-- **Update reminder only:** VoLum can tell you a newer release exists. It never downloads an update.
+- **BUILD, then PLAY, in one window:** shape a tone in BUILD, play your Sounds in PLAY. Every bundled amp ships one or two Factory presets (21 in all) that you can put on PLAY without saving first. PLAY starts with five of them on programs 0 to 4.
+- **MIDI recall without Learn:** 128 program numbers, the same list PLAY shows. Send Program Change, or the Recall CC (102) when your host does not pass Program Change on.
+- **Dual Amp:** two amps at once, each with its own channel, cab or IR, knobs and pan.
+- **POST Chorus:** four voices ahead of Delay and Reverb, so the modulation hits the amp before the echoes and the room.
+- **One Pack file:** a `.volumpack` backs up, moves or shares your custom amps, IRs, pedals and presets in one step.
+- **Update reminder only:** VoLum can tell you a newer release exists. It never downloads anything itself.
 
 ## Download
 
 [![Build status](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)
 
-Use **[Releases](https://github.com/guitarlum/VoLum/releases)** for stable packages. Use **[Actions -> CI](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)** only for preview builds from the latest development state.
+Get stable packages from **[Releases](https://github.com/guitarlum/VoLum/releases)**. **[Actions -> CI](https://github.com/guitarlum/VoLum/actions/workflows/ci.yml)** has preview builds of the latest development state only.
 
-| Platform | Recommended asset | When to choose it |
+| Platform | Asset | When to choose it |
 | --- | --- | --- |
-| Windows | `VoLum-vX.Y.Z-windows-setup.exe` | Easiest install: standalone app, VST3, and bundled rigs. |
+| Windows | `VoLum-vX.Y.Z-windows-setup.exe` | Easiest install: standalone app, VST3 and bundled rigs. |
 | Windows | `VoLum-vX.Y.Z-windows-portable.zip` | Portable or scripted setup. Keep `VoLum.vst3` and `VoLumRigs` together. |
-| macOS | `VoLum-vX.Y.Z-macos-installer.dmg` | Easiest install when available. Contains `VoLum Installer.pkg`. |
+| macOS | `VoLum-vX.Y.Z-macos-installer.dmg` | Easiest install: standalone app, VST3, AU and bundled rigs. |
 | macOS | `VoLum-vX.Y.Z-macos-standalone.dmg` | Standalone app only. |
-| macOS | `VoLum-vX.Y.Z-macos-vst3.zip` | Manual VST3 install. VoLum is VST3, so it does not appear in Logic Pro. |
+| macOS | `VoLum-vX.Y.Z-macos-vst3.zip` | Manual VST3 install. |
+| macOS | `VoLum-vX.Y.Z-macos-component.zip` | Manual AU install, for Logic Pro and GarageBand. |
 
-Releases may not include every asset type. Open the release page and pick the package that matches your system.
+Not every release has every asset. Open the release page and pick the package for your system.
 
 ## Important Security Notice
 
 VoLum release signing is still being set up. See the [code signing policy](CODE_SIGNING.md).
 
-- **Windows:** SmartScreen may warn that the app is from an unknown publisher. If you trust the build source, choose **More info -> Run anyway**.
-- **macOS:** Gatekeeper may block unsigned or non-notarized builds. Use **right-click -> Open** on the app or installer, or **System Settings -> Privacy & Security -> Open Anyway**.
-- **macOS VST3 zip:** if your DAW still hides the plugin after a rescan, remove quarantine:
+- **Windows:** SmartScreen may warn about an unknown publisher. If you trust the source, choose **More info -> Run anyway**.
+- **macOS:** Gatekeeper may block the app or installer. Try to open it once, then go to **System Settings -> Privacy & Security** and click **Open Anyway**. On older macOS versions, **right-click -> Open** also works.
+- **macOS plug-in zips:** if your DAW still hides the plug-in after a rescan, remove the quarantine flag:
 
 ```bash
 xattr -cr ~/Library/Audio/Plug-Ins/VST3/VoLum.vst3
+xattr -cr ~/Library/Audio/Plug-Ins/Components/VoLum.component
 ```
 
-Preview builds from CI are development artifacts and should be treated as unsigned test builds.
+Treat preview builds from CI as unsigned test builds.
 
 ## Quick Install
 
@@ -62,7 +69,7 @@ The VST3 finds the bundled rigs automatically.
 
 ### Windows Portable
 
-Unzip `VoLum-vX.Y.Z-windows-portable.zip`. For standalone, run `VoLum_x64.exe`. For VST3, copy both folders into your VST3 scan path:
+Unzip `VoLum-vX.Y.Z-windows-portable.zip`. For the standalone app, run `VoLum_x64.exe`. For the VST3, copy both folders into your VST3 folder:
 
 ```text
 C:\Program Files\Common Files\VST3\
@@ -72,15 +79,15 @@ C:\Program Files\Common Files\VST3\
 
 ### macOS Installer
 
-Open `VoLum-vX.Y.Z-macos-installer.dmg`, then run `VoLum Installer.pkg`. The installer can place the standalone app, VST3, and bundled rigs for you.
+Open `VoLum-vX.Y.Z-macos-installer.dmg` and run `VoLum Installer.pkg`. It installs the standalone app, the VST3, the AU and the bundled rigs.
 
 ### macOS Standalone
 
-Open `VoLum-vX.Y.Z-macos-standalone.dmg`, drag `VoLum.app` to **Applications**, then launch it. The app includes the bundled rigs.
+Open `VoLum-vX.Y.Z-macos-standalone.dmg`, drag `VoLum.app` to **Applications** and start it. The app includes the bundled rigs.
 
 ### macOS VST3 Zip
 
-Unzip `VoLum-vX.Y.Z-macos-vst3.zip`, then place both `VoLum.vst3` and `VoLumRigs` in your VST3 folder:
+Unzip `VoLum-vX.Y.Z-macos-vst3.zip` and put both `VoLum.vst3` and `VoLumRigs` in your VST3 folder:
 
 ```text
 ~/Library/Audio/Plug-Ins/VST3/
@@ -88,11 +95,23 @@ Unzip `VoLum-vX.Y.Z-macos-vst3.zip`, then place both `VoLum.vst3` and `VoLumRigs
   VoLumRigs/
 ```
 
-Rescan plugins in your DAW. Use a VST3-capable host such as REAPER, Ableton Live, Cubase, Studio One, or Bitwig.
+Rescan plug-ins in your DAW.
+
+### macOS AU Zip
+
+Unzip `VoLum-vX.Y.Z-macos-component.zip` and put both `VoLum.component` and `VoLumRigs` in your Components folder:
+
+```text
+~/Library/Audio/Plug-Ins/Components/
+  VoLum.component/
+  VoLumRigs/
+```
+
+Restart your DAW so it finds the new AU.
 
 ### Linux
 
-VoLum does not currently provide a native Linux build. Some users have reported that the Windows VST3 works well on Linux through [yabridge](https://github.com/robbert-vdh/yabridge), but that path is not officially tested by VoLum.
+There is no native Linux build. Some users report that the Windows VST3 works well on Linux through [yabridge](https://github.com/robbert-vdh/yabridge), but VoLum does not test that path.
 
 ## Bundled Amps
 
@@ -114,11 +133,11 @@ VoLum does not currently provide a native Linux build. Some users have reported 
 | Soldano SLO100 | 3 |
 | THC Sunset | 5 |
 
-Each amp ships with `AMP`, `G12`, `G65`, and `V30` speaker modes.
+Every amp has four cab choices: **No Cab** (the amp alone), **G12**, **G65** and **V30**. You can also load your own cabinet IR.
 
 ## PLAY
 
-PLAY starts with five Factory Sounds on programs 0-4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye, and Ampete Lead. Replace them or add your own: assign any Factory preset or a User preset you saved in BUILD to a program number. The board is the setlist: click a row to recall it, or send MIDI Program Change.
+PLAY starts with five Factory Sounds on programs 0 to 4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye and Ampete Lead. Replace them or add your own: put any Factory preset, or a User preset you saved in BUILD, on a program number. Click a row to play it, or recall it from a MIDI foot controller.
 
 <p align="center">
   <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
@@ -126,14 +145,13 @@ PLAY starts with five Factory Sounds on programs 0-4: The bestest Clean, SLO Cru
 
 ## Learn More
 
-- [User guide](docs/user-guide.en.md): interface, Dual Amp, PRE pedals, POST effects, custom content, presets, tuner, metronome, keyboard controls, and settings.
-- [Developer guide](NeuralAmpModeler/README.md): build, test, packaging, and architecture notes.
-- [Report a bug or request a feature](https://github.com/guitarlum/VoLum/issues/new/choose): use the **Bug report** template for crashes or wrong behavior, and **Feature request** for ideas.
-- Settings are stored locally at `%LOCALAPPDATA%\VoLum\volum-settings.json` on Windows and `~/Library/Application Support/VoLum/volum-settings.json` on macOS.
+- [User guide](docs/user-guide.en.md): BUILD and PLAY, amps and cabs, pedals and effects, Dual Amp, presets, MIDI, your own content, Packs, settings and keyboard shortcuts.
+- [Developer guide](NeuralAmpModeler/README.md): build, test, packaging and architecture notes.
+- [Report a bug or request a feature](https://github.com/guitarlum/VoLum/issues/new/choose): use **Bug report** for crashes or wrong behaviour and **Feature request** for ideas.
 
 ## Credits
 
 - [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) by Steven Atkinson
-- [NeuralAmpModelerPlugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin), the original plugin shell VoLum grew from
-- [iPlug2](https://iplug2.github.io), the plugin framework
+- [NeuralAmpModelerPlugin](https://github.com/sdatkinson/NeuralAmpModelerPlugin), the original plug-in shell VoLum grew from
+- [iPlug2](https://iplug2.github.io), the plug-in framework
 - Amp profiles by Lum

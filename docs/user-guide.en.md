@@ -2,167 +2,209 @@
 
 **Languages:** English | [Deutsch](user-guide.de.md)
 
-This guide explains the current VoLum interface after installation. For downloads, unsigned-build warnings, and install paths, see the [main README](../README.md).
+VoLum is a guitar amp collection for the stage, the studio and the practice desk. You shape a tone in **BUILD** and play your Sounds in **PLAY**. This guide covers VoLum 1.3. For downloads and installation, see the [README](../README.md).
 
 ## Contents
 
-- [BUILD](#build)
-- [Choose An Amp](#choose-an-amp)
-- [PRE Section](#pre-section)
+- [Quick Start](#quick-start)
+- [The BUILD Screen](#the-build-screen)
+- [Amps And Cabs](#amps-and-cabs)
+- [PRE Pedals](#pre-pedals)
+- [POST Effects](#post-effects)
 - [Dual Amp](#dual-amp)
-- [POST Section](#post-section)
 - [Presets](#presets)
-- [PLAY View](#play-view)
-- [Custom Content (Bring Your Own)](#custom-content-bring-your-own)
+- [PLAY](#play)
+- [MIDI Foot Controllers](#midi-foot-controllers)
 - [Tuner And Metronome](#tuner-and-metronome)
-- [Keyboard Controls](#keyboard-controls)
-- [Settings And Safety](#settings-and-safety)
+- [Your Own Amps, IRs And Pedals](#your-own-amps-irs-and-pedals)
+- [Back Up And Share With Packs](#back-up-and-share-with-packs)
+- [Settings](#settings)
+- [Using VoLum In A DAW](#using-volum-in-a-daw)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Troubleshooting](#troubleshooting)
+- [Where VoLum Keeps Your Files](#where-volum-keeps-your-files)
 - [Report A Bug Or Request A Feature](#report-a-bug-or-request-a-feature)
 
-## BUILD
+## Quick Start
 
-![VoLum BUILD editor](user-guide-main.png)
+1. **Connect your guitar.** In the standalone app, open Settings (the gear, top right), stay on **SIGNAL** and click **Audio & MIDI devices...**. Pick your audio interface, one mono input for the guitar, and your outputs. In a DAW, put VoLum on a track that records your guitar input.
+2. **Pick an amp** in the left list, then a channel and a cab.
+3. **Add pedals and effects.** Click **PRE** for pedals in front of the amp, **POST** for chorus, delay, reverb and tremolo.
+4. **Save the tone.** Press **Ctrl+S**, type a name and press Enter.
+5. **Play it.** Press **P** to switch to PLAY. Five Sounds are ready on programs 0 to 4. Click one to play it, or step through them with the arrow keys or a MIDI foot controller.
 
-BUILD is the editor. Dial the amp, pedals, and a named preset here, then switch to PLAY to put those Sounds on the stage.
+The bundled amps were captured with the interface input around +4 dBu. Set your interface to a similar level for the closest match.
 
-1. **Amp browser:** choose one of the bundled amps.
-2. **Amp panel:** see the focused amp. In Dual Amp mode it splits into MAIN and SUPPORT.
-3. **Channel and cab controls:** pick the gain-stage channel, then the speaker cab (`AMP`/`No Cab`, `G12`, `G65`, `V30`). For custom amps the channel comes first: the row shows only the cabs that exist for the selected channel, and switching channel keeps your cab when it still fits or snaps to an available one.
-4. **Knob row:** edit the focused amp, PRE pedal, or POST effect.
-5. **PRE | AMP | POST strip:** open one section at a time.
-6. **Toolbar:** PLAY/BUILD, tuner, metronome, and settings live in the top-right corner.
+## The BUILD Screen
 
-The header toggle next to tuner, metronome, and Settings always shows the **other** mode (the stomp ring while you are in BUILD, faders while you are in PLAY). In BUILD the preset name sits in the center; in PLAY that slot stays empty. Hover says where the click goes. Each plug-in instance remembers its mode in the project; a new insert starts in BUILD and does not follow the standalone window. The standalone app remembers its last mode. Entering PLAY never recalls or changes a sound. PRE/POST lock is BUILD-only and drops when you enter PLAY.
+![VoLum BUILD screen](user-guide-main.png)
 
-The bundled NAM profiles were captured with the interface input set around +4 dBu. Use a similar pro-line input level into VoLum for the closest match to the captured tones. Every bundled amp, cab, and PRE NAM capture is a NAM Architecture 2 (A2) profile, trained to its best fit between 700 and 1200 epochs. VoLum plays the full A2 slice by default; the optional Lite mode is described under Settings.
+BUILD is where you make a tone.
 
-VoLum saves most playing choices per amp. When you come back to an amp, it restores the speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
+1. **Amp list:** the 15 bundled amps, then your own amps under **CUSTOM**.
+2. **Amp panel:** the amp you are editing. With Dual Amp on, it splits into **MAIN** and **SUPPORT**.
+3. **Channel and cab row:** the channel stepper and the cab buttons.
+4. **Knob row:** the knobs of the amp, pedal or effect you selected.
+5. **PRE | AMP | POST strip:** opens one section at a time. Keys `1`, `2` and `3` do the same.
+6. **Toolbar (top right):** the PLAY/BUILD switch, tuner, metronome and Settings gear.
 
-## Choose An Amp
+The preset name sits in the middle of the header, with `<` and `>` to step through presets.
 
-Use the left sidebar for the 15 bundled amps. Each amp has four speaker modes and its own number of gain-stage channels. VoLum loads models in the background, so returning to a previously loaded amp is quick.
+The PLAY/BUILD switch always shows where a click takes you: a ring of stomps in BUILD, faders in PLAY. Hover it to read the destination. `P` does the same from the keyboard.
 
-Short orientation:
+**Knobs:** drag a knob or use the mouse wheel. Double-click resets it. Click a knob to select it, then use the arrow keys (see [Keyboard Shortcuts](#keyboard-shortcuts)). Pedal and effect knobs stay editable while the pedal is off, so you can set it up before you switch it on.
 
-- **Cleans, blues, and dynamic boutique:** Sebago Texas Flood (a Dumble Steel String Singer-style pedal platform), THC Sunset, Bad Cat Mini Cat.
+### Each Amp Remembers Its Rig
+
+VoLum remembers your cab, channel, knobs, PRE pedals, POST effects and Dual Amp setup separately for every amp. Switch back to an amp and everything is where you left it.
+
+To keep the same pedals or effects while you try different amps, click the **lock** in the PRE or POST header:
+
+- While locked, PRE (or POST) stays as it is when you switch amps.
+- When the locked pedals differ from what this amp has stored, a **Store** arrow appears. Click it to save them to this amp only.
+- Click the lock again to unlock. The amp returns to its own stored pedals. Unsaved changes in the locked section are dropped.
+- Switching to PLAY keeps what you hear: VoLum stores the locked section to the current amp and turns the lock off.
+
+## Amps And Cabs
+
+Pick an amp in the left list, or press `Up` / `Down` when no knob is selected. A rough guide:
+
+- **Clean, blues and boutique:** Sebago Texas Flood (a Dumble Steel String Singer-style pedal platform), THC Sunset, Bad Cat Mini Cat.
 - **Vintage and classic-rock crunch:** Orange ORS100, Orange OD120, Marshall JMP 2203, Marshall 2204.
 - **Modern and high gain:** Soldano SLO100, Diezel Herbert, Marshall JVM, H&K TriAmp, Fryette Deliverance, Lichtlaerm Prometheus, Brunetti XL 2.
 - **Do-it-all:** Ampete One pairs an American and a British voice in one amp.
 
-Amp EQ and pedal EQ are extra tone-shaping controls. They do not need to match the physical knob positions used during profiling.
+**Channels:** every amp has two to six channels, one per captured gain setting. Step through them with the channel arrows, or `Left` / `Right` in the AMP section.
 
-The amp **OUTPUT** knob keeps unity at `0.0 dB`. Turn it fully counter-clockwise to `-∞ dB` to mute the amp output completely.
+**Cabs:** pick **No Cab** (the amp alone), **G12**, **G65**, **V30**, or **Custom IR** to load your own cabinet impulse response (see [Custom IRs](#custom-irs)). `S` steps to the next cab, `Shift+S` back.
 
-## PRE Section
+**Knobs:** **INPUT**, **GATE** (noise gate threshold), **BASS**, **MID**, **TREBLE** and **OUTPUT**. The EQ knobs are extra tone shaping; they do not have to match the knob settings used when the amp was captured. **OUTPUT** is unity at `0.0 dB`; turned fully down it reads `-∞ dB` and mutes the amp.
+
+Every bundled amp, cab and PRE pedal capture is a NAM Architecture 2 (A2) profile. If your computer struggles, try **LITE** in [Settings](#signal-tab).
+
+## PRE Pedals
 
 ![VoLum PRE section](user-guide-pre.png)
 
-PRE runs before the amp. It contains a pitch pedal, a compressor, and two assignable NAM pedal slots.
-All PRE and POST pedal controls remain editable while their block is bypassed, including by mouse wheel, so you can prepare settings before engaging the effect.
+PRE pedals sit in front of the amp, in this order: **PITCH**, **COMP**, **NAM 1**, **NAM 2**.
 
-1. Click **PRE**.
-2. Click **PITCH**, **COMP**, **NAM 1**, or **NAM 2** to focus a card.
-3. Use the knob row for that card.
-4. Click a focused NAM card again to choose a capture.
+1. Click **PRE** (or press `1`).
+2. Click a pedal card to select it.
+3. Switch it on with the LED on the card, or press `Space` (`B` in a plug-in).
+4. Set it up in the knob row.
 
-### Pitch (Transpose + Octaver)
+### Pitch
 
-![VoLum Pitch pedal — Transpose mode](user-guide-pitch-transpose.png)
+![VoLum Pitch pedal in Transpose mode](user-guide-pitch-transpose.png)
 
-The **PITCH** pedal sits at the very front of the chain. Use the **TRANSPOSE / OCTAVER** picker to pick a mode; a new rig starts on **OCTAVER**, so switching the pedal on is audible straight away:
+Pick the mode with **TRANSPOSE** / **OCTAVER**. A new rig starts on **OCTAVER**.
 
-- **TRANSPOSE** shifts the whole signal up or down. **SEMI** sets the interval in semitones (−12 to +7, starting at −2), tuned for drop tunings and capo-style shifts, **MIX** blends the shifted signal with your dry tone, and **LEVEL** trims the output. The **INSTANT / POLY** pill picks the engine: **INSTANT** (the default) is **monophonic** with the lowest latency (~8.6 ms) and the tightest attack — use it for single notes and lead lines. **POLY** is **polyphonic**: it tracks whole chords (dyads, triads, power chords) with every voice shifted correctly, at slightly higher latency (~14 ms) — use it for riffs and chords. Both hold pitch cleanly on low drop-tuned and extended-range strings (down to 8-string F#).
-- **OCTAVER** is a polyphonic (chord-friendly) octave generator. **OCT DN** and **OCT UP** set the level of the down- and up-octave voices, **DRY** keeps your original note in the blend, **LEVEL** trims the output, and the **VINTAGE / MODERN** pill chooses the voicing — Vintage adds grit and a darker low-pass for an analog feel, Modern stays clean. A new rig starts with OCT DN at 80%, OCT UP off, DRY at 100%, and MODERN. It follows single notes across the whole neck, up to the 24th fret of the high E.
+- **TRANSPOSE** shifts your whole signal for drop tunings and capo-style shifts. **SEMI** sets the interval from −12 to +7 semitones (it starts at −2). **MIX** blends in your dry tone and **LEVEL** sets the output. Choose the engine with **INSTANT** / **POLY**:
+  - **INSTANT** (default) is for single notes and leads: lowest latency (about 8.6 ms) and the tightest attack.
+  - **POLY** is for chords and riffs: every note of the chord is shifted, at about 14 ms latency.
+- **OCTAVER** adds octaves and follows chords. **OCT DN** and **OCT UP** set the octave-down and octave-up levels, **DRY** your original note, and **LEVEL** the output. **VINTAGE** adds grit and a darker tone, **MODERN** stays clean. It starts with OCT DN at 80%, OCT UP off, DRY at 100% and MODERN, and tracks single notes up to the 24th fret of the high E.
 
-![VoLum Pitch pedal — Octaver mode](user-guide-pitch-octaver.png)
+![VoLum Pitch pedal in Octaver mode](user-guide-pitch-octaver.png)
 
-The pitch engine is a low-latency time-domain shifter built for guitar: it tracks fast and holds its tuning steady through a long sustain instead of drifting off-pitch as the note rings. VoLum reports its pitch latency to your host for plugin delay compensation so the shifted signal stays time-aligned with the rest of your mix; the amount depends on the Transpose engine (about 8.6 ms in INSTANT, about 14 ms in POLY) and is re-reported when you switch engine or mode.
+Both modes hold their tuning through long sustain and work down to the low F# of an 8-string. In a DAW, VoLum reports the pitch delay to the host, so the track stays in time.
 
-![VoLum PRE pedal capture chooser](user-guide-pre-pedal.png)
+### Compressor
 
-Pedal captures are grouped by type and sorted from lower to higher gain. Your own imported captures appear under a **CUSTOM** group at the bottom of the same list. Good starting points:
+**COMP** evens out your picking. **INPUT** sets how hard it compresses, **ATTACK** and **RELEASE** how fast it reacts and lets go, and **OUTPUT** the level. **OUTPUT** fully down (`-∞ dB`) mutes it.
+
+### NAM Pedals
+
+![VoLum PRE pedal capture menu](user-guide-pre-pedal.png)
+
+**NAM 1** and **NAM 2** each hold a captured drive, boost or fuzz pedal. Both start empty. Click an empty card to open the capture menu; on a card that already holds a pedal, click once to select it and again to open the menu. Captures are grouped (Klon, TS / Boost, Distortion, Fuzz) and sorted from less to more gain. Your own pedals appear under **CUSTOM** at the bottom.
+
+Good starting points:
 
 - Clean or low-gain amps: Nuke, Bender, Myth, Mash.
 - Edge-of-breakup amps: Revival Drive.
-- Mid/high-gain amps: Klon, TS, TS+, Fatbee.
+- Mid- and high-gain amps: Klon, TS, TS+, Fatbee.
 
-PRE settings are saved per amp.
+The knobs are **GAIN**, **BASS**, **MID**, **MID Hz**, **TREBLE** and **LEVEL**. **LEVEL** fully down (`-∞ dB`) mutes the pedal.
 
-Click the **lock** icon in the PRE header to carry the current PRE scene as a global overlay while you switch amps. While locked, PRE does not load from other amps and your live PRE tweaks are not written into their stored settings. If the live scene differs from the active amp's saved PRE, a **Store** arrow appears — click it to commit the overlay to the current amp only. Click the lock again to unlock; VoLum silently restores this amp's saved PRE scene and drops any unsaved overlay changes.
-
-The compressor **OUTPUT** knob and both NAM pedal **LEVEL** knobs mute their stage completely at the fully counter-clockwise `-∞ dB` setting.
-
-## Dual Amp
-
-![VoLum Dual Amp view](user-guide-dual-amp.png)
-
-Dual Amp combines the main amp with a support amp.
-
-1. Open the AMP view.
-2. Click the split-panel **Dual Amp** button.
-3. Click the SUPPORT side to choose the second amp.
-4. Click MAIN or SUPPORT to focus a lane.
-5. Set speaker, channel, knobs, and pan for the focused lane.
-
-The support lane has a `Ø` polarity button. It is on by default for new Dual Amp setups because some centered amp stacks sum better that way. If a stack sounds thin or phasey, try toggling `Ø`, then check both lanes use the intended speaker and channel.
-
-Each lane keeps its own speaker/cab, channel, and custom IR. Focus a lane, then set its cab or custom IR; the other lane is left untouched. A custom amp used as the SUPPORT partner remembers its cab and channel along with the rest of the rig — across preset recall, app restarts, and DAW projects.
-
-VoLum aligns MAIN and SUPPORT NAM latency before panning and summing.
-
-The SUPPORT lane **OUTPUT** knob also mutes that lane completely at the fully counter-clockwise `-∞ dB` setting.
-
-## POST Section
+## POST Effects
 
 ![VoLum POST section](user-guide-post.png)
 
-POST runs after the amp. It contains Chorus, Delay, Reverb, and Tremolo cards, in that order.
+POST effects sit after the amp, in this order: **CHORUS**, **DELAY**, **REVERB**, **TREM**.
 
-1. Click **POST**.
-2. Click **CHORUS**, **DELAY**, **REVERB**, or **TREM**.
-3. Use the card button or spacebar to enable it.
-4. Edit the focused card in the knob row.
+1. Click **POST** (or press `3`).
+2. Click an effect card to select it.
+3. Switch it on with the LED on the card, or press `Space` (`B` in a plug-in).
+4. Pick a mode at the top of the knob row and set the knobs.
 
-**Chorus** runs first, before the delay and reverb, so it modulates the dry amp tone rather than smearing the tails. The **CLASSIC / WARPED / CLEAR / ENSEMBLE** picker selects the voice:
+Each effect remembers its knob settings per mode, so you can try another mode and come back without losing anything. Changing mode never drags the old echoes or reverb tail into the new one.
 
-- **Classic** is a Juno-60 stereo sweep (triangle delay, left and right 180° apart).
-- **Warped** is tape wow, drift and flutter. At **MIX** 100% no dry signal is left, which turns it into a vibrato.
-- **Clear** is a Dimension-style wide chorus that stays pitch-clean in mono.
-- **Ensemble** is an 80s tri-stereo rack chorus: three slow voices on left, centre and right — the factory default voice.
+### Chorus
 
-The knobs are **RATE**, **DEPTH**, **TONE**, **WIDTH**, and **MIX**, and every voice uses all five. DEPTH is cents of detune (in Classic it is the Juno delay sweep). Each voice maps RATE to its own Hertz range. TONE is a 3–12 kHz low-pass on the chorus voice only, so you can darken it without dulling the dry amp. WIDTH sets how far apart the left and right modulation runs: at 0% both channels move together and the result is mono-safe. Every voice ships at **MIX** 50%. **MIX** glides onto its end stops; at 0% it settles into a bit-perfect bypass, so you can leave the card on and dial the effect in from nothing. There is no tempo sync on this pedal.
+![VoLum Chorus card](user-guide-chorus.png)
 
-![VoLum POST Chorus card](user-guide-chorus.png)
+Chorus runs before Delay and Reverb, so it colours the amp and not the echoes. Pick a voice:
 
-**Delay** offers Digital, Analog, and Reverse modes. The knobs are Time, Feedback, Mix, Tone, and a mode-specific character control: `Grit`, `Wear`, or `Bloom`. Ping-Pong is available for Digital and Analog. The first repeat comes from the right, the next from the left, and so on. In Dual Amp both amps echo wherever they are panned, with Ø on or off. The repeats sit about 3 to 7 dB quieter than without Ping-Pong, because each one lands on one side only. Turn on **TEMPO SYNC** to lock the repeats to the beat: the **TIME** knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values).
+- **CLASSIC:** a Juno-60 style stereo sweep.
+- **WARPED:** tape wow and flutter. At **MIX** 100% it becomes a vibrato.
+- **CLEAR:** a wide Dimension-style chorus that stays in tune in mono.
+- **ENSEMBLE** (default): an 80s rack chorus with three voices across left, centre and right.
 
-Both tempo-synced POST pedals — Delay and Tremolo — share one tempo source. In a DAW they follow the host tempo; in the standalone app they follow the metronome BPM (set it in the metronome overlay, and it applies even while the metronome click is muted).
+The knobs are **RATE**, **DEPTH**, **TONE** (darkens the chorus only, not your dry tone), **WIDTH** (0% is mono-safe) and **MIX**. Every voice starts at **MIX** 50%. At **MIX** 0% the chorus is fully out of the signal, so you can leave it on and fade it in. Chorus has no tempo sync.
 
-**Reverb** offers Hall, Plate, and Oktaverb. Hall and Plate cover classic ambience. Oktaverb adds `HALO`, `SHIMMER`, and `BLOOM` pitch-wash voices with an Intensity knob.
+### Delay
 
-`PRE-DLY` sets how long the reverb waits before it starts. Since 1.2.1 that is the whole story: the wet signal begins exactly there. Earlier versions had a built-in delay of their own before any reverb arrived, so the knob only ever added to it — which is why new patches now default to a short 10 ms rather than the 20–30 ms that used to be hidden inside it. Your saved presets keep the values you gave them.
+Pick **DIGITAL**, **ANALOG** or **REVERSE**. The knobs are **TIME**, **FEEDBACK**, **MIX**, **TONE**, and a character knob per mode: **GRIT** (Digital), **WEAR** (Analog) or **BLOOM** (Reverse).
 
-**Tremolo** runs last, after Reverb, so it modulates the whole wet wash. The **OPTICAL / BIAS / HARMONIC** picker selects the voice:
+- **PING-PONG** (Digital and Analog) bounces the repeats right, left, right. They sit about 3 to 7 dB quieter than the plain delay, because each repeat plays on one side only. It works with Dual Amp however the amps are panned.
+- **TEMPO SYNC** locks the repeats to the tempo. **TIME** becomes a **DIVISION** stepper: 1/2, 1/4, 1/4., 1/4T, 1/8, 1/8., 1/8T, 1/16.
 
-- **Optical** is a choppy, photocell-style amplitude gate, and the factory default voice.
-- **Bias** is a smooth, symmetric sine modulation — the classic "Bang Bang (My Baby Shot Me Down)" tremolo.
-- **Harmonic** splits the signal at a crossover frequency and modulates the low and high bands in opposite phase for a phasey sweep.
+### Reverb
 
-The shared knobs are **RATE**, **DEPTH**, **SHAPE** (morphs the LFO from a smooth sine toward a hard square), and **MIX**. In Harmonic mode an extra **X-OVER** knob sets the band-split frequency. Turn on **TEMPO SYNC** to lock the rate to the song: in a DAW it follows the host tempo, and in the standalone app it follows the metronome BPM. When sync is on, the RATE knob becomes a musical **DIVISION** stepper (1/2 down to 1/16, including dotted and triplet values). Left and right channels stay phase-linked for a coherent stereo tremolo.
+Pick **HALL**, **PLATE** or **OKTAVERB**. The knobs are **MIX**, **DECAY**, **TONE** and **PRE-DLY** (the gap before the reverb starts, 10 ms by default). **OKTAVERB** adds pitch-shifted shimmer with three voices, **HALO**, **SHIMMER** and **BLOOM**, and an **INTENSITY** knob.
 
-![VoLum POST Tremolo card](user-guide-tremolo.png)
+### Tremolo
 
-The LED on each card shows whether it is active. Click the LED to bypass that pedal, the same way the collapsed strip does. The label shows the current mode or preset summary. POST settings are saved per amp, just like PRE. Use the **lock** icon in the POST header the same way as PRE to carry one chorus/delay/reverb/tremolo scene while browsing amps; use the **Store** arrow when it appears to save the overlay to the current amp. Unlock restores this amp's saved POST scene without confirmation. Double-click a POST knob to restore that knob's default.
+![VoLum Tremolo card](user-guide-tremolo.png)
 
-Switching Chorus voice fades the old voice out before the new one fades in; switching Delay mode, Ping-Pong, Reverb mode, or Oktaverb voice clears the old tail so repeats and ambience from the previous mode do not leak into the new one. Each POST pedal also remembers its own knob positions per mode, so stepping through the voices and back leaves your settings where you left them.
+Tremolo runs last, so it pulses the whole sound including the reverb. Pick a voice:
+
+- **OPTICAL** (default): a choppy, photocell-style throb.
+- **BIAS:** a smooth, even sine pulse.
+- **HARMONIC:** splits the sound into lows and highs that pulse in turn. The extra **X-OVER** knob sets the split frequency.
+
+The knobs are **RATE**, **DEPTH**, **SHAPE** (from smooth sine to hard square) and **MIX**. **TEMPO SYNC** turns **RATE** into a **DIVISION** stepper, like the delay.
+
+### Tempo
+
+Delay and Tremolo share one tempo. In a DAW they follow the song tempo. In the standalone app they follow the metronome BPM, even while the click is off.
+
+## Dual Amp
+
+![VoLum Dual Amp](user-guide-dual-amp.png)
+
+Dual Amp plays two amps at once: **MAIN** and **SUPPORT**.
+
+1. Open the AMP section (`2`).
+2. Click the split-panel **Dual Amp** button ("Switch to Dual Amp"). `Space` (`B` in a plug-in) does the same.
+3. Click the SUPPORT side (**Choose support amp**) and pick the second amp from the list. **(none)** at the top empties the lane again.
+4. Click MAIN or SUPPORT (or press `Tab`) to choose which amp the cab row and knob row edit.
+
+Each lane has its own channel, cab or custom IR, knobs, and a small **PAN** knob in its title strip. When you first switch Dual Amp on, MAIN goes hard left and SUPPORT hard right.
+
+The SUPPORT lane has a **Ø** (polarity) button, on by default. Some amp pairs sound fuller with it on, others with it off. If the pair sounds thin or hollow, toggle **Ø**.
+
+The SUPPORT **OUTPUT** knob fully down (`-∞ dB`) mutes that lane. VoLum lines up the timing of both amps before it mixes them.
 
 ## Presets
 
-![VoLum preset manager](user-guide-presets.png)
+![VoLum preset menu](user-guide-presets.png)
 
-A preset is a named snapshot of the whole rig for the focused amp: speaker/cab, channel, all knobs, PRE pedals, POST effects, and the Dual Amp setup.
+A preset stores the whole rig of one amp: cab, channel, knobs, PRE pedals, POST effects and Dual Amp setup. Each amp has its own list.
 
-Every factory amp ships one or two read-only Factory presets, 21 in all, listed under **FACTORY** in the preset menu. They use only content that ships with VoLum. You can put any of them on PLAY without saving first. Change one and press **Ctrl+S** (or use **Save current as new**) and VoLum saves your version as a new User preset; Factory presets are never overwritten or deleted. The `<` / `>` arrows step through an amp's Factory presets before its User presets.
+### Factory Presets
+
+Every bundled amp comes with one or two Factory presets, 21 in all. They are read-only and use only content that ships with VoLum. You can put any of them on PLAY without saving first.
 
 | Amp | Factory presets |
 | --- | --- |
@@ -182,24 +224,41 @@ Every factory amp ships one or two read-only Factory presets, 21 in all, listed 
 | Soldano SLO100 | SLO Lead, SLO Crunch |
 | THC Sunset | Sunset Crunch, Sunset Clean |
 
-1. Dial in a tone, then open the preset bar in the AMP header.
-2. Use **Save current as new** to store it under a name.
-3. Cycle saved presets in place with the `<` / `>` arrows, or pick one from the list.
-4. **Update** overwrites the selected preset with the live rig (it asks first); **Rename** and **Delete** manage the list.
+### Save A Preset
 
-**Save current as new**, **Ctrl+S**, and PLAY's **+ Add this sound** all open the same name popup. Its confirm button reads **Update** while the name you type is the selected User preset's own name (that overwrites it) and **Save** for any other name (that creates a new preset). It switches as you type. `Enter` or that button saves. **Cancel**, `Esc`, or a click outside the popup closes it and writes nothing. Name fields work like any Windows text box: `Ctrl+Backspace` and `Ctrl+Delete` delete a whole word, `Ctrl+Left` / `Right` jump word by word (add `Shift` to select), double-click selects a word and triple-click everything, dragging selects, and `Ctrl+Z` / `Ctrl+Y` undo and redo. Manage's New and Rename and the amp builder's names use the same field.
+Press **Ctrl+S** in any BUILD section. A name box opens:
 
-Presets are per amp: each amp (factory or custom) keeps its own User list. The bar shows **(unsaved)** whenever the live rig differs from the recalled preset, and clears as soon as the rig matches it again. The pinned **Default (factory settings)** row resets the focused amp to its shipped defaults above the Factory and User sections.
+- On a Factory preset, Default or an unnamed rig, it suggests **New Preset**. **Save** creates a new User preset. Factory presets are never overwritten.
+- On one of your User presets, it suggests that preset's name. The button reads **Update**, and saving overwrites it. Type another name and the button changes to **Save**, which creates a new preset.
+- A User preset may share a Factory preset's name; it is listed under **USER**. If the name is taken a second time, VoLum adds a number, for example "SLO Lead 2".
 
-Saving in BUILD (**Ctrl+S**, **Save current as new**, **Update**, or **Manage**) never changes which Sound a PLAY switch holds. Deleting a preset that sits on PLAY switches names those switches in the confirmation, for example "On PLAY 03 and 12: they will read Invalid." The switches keep their program numbers and read **Invalid slot** until you give them another Sound.
+`Enter` saves. **Cancel**, `Esc` or a click outside the box closes it without saving. Name boxes edit like any text box: `Ctrl+Backspace` deletes a word, `Ctrl+Left` / `Ctrl+Right` jump by word (add `Shift` to select), double-click selects a word, and `Ctrl+Z` / `Ctrl+Y` undo and redo.
 
-## PLAY View
+### The Preset Menu
 
-Switch to PLAY with the same header toggle: it shows faders while you are in PLAY.
+Click the preset name in the header to open the menu:
+
+- **Default (factory settings)** resets the amp to its shipped settings.
+- **FACTORY** and **USER** list the presets. Click a heading to open or close it.
+- **Overwrite "name"** saves the current rig into the User preset you are on, after asking.
+- **Save current as new...** opens the name box.
+- **Manage presets...** opens a panel with all User presets of this amp. **+ Save current as new** adds one. Each row has icons to overwrite, rename and delete. Double-click a row to load it.
+
+The `<` / `>` arrows step through the amp's Factory presets, then its User presets. **(unsaved)** after the name means you changed something since you loaded the preset. It goes away when the rig matches again.
+
+Saving in BUILD never changes which Sound sits on a PLAY switch. If you delete a preset that is on PLAY, the confirmation names those switches (for example "On PLAY 03 and 12: they will read Invalid."). They keep their program numbers and show **Invalid slot** until you give them another Sound.
+
+## PLAY
+
+PLAY is your stage view: your Sounds on a list, eight stomp switches, and the amp art. Switch with `P` or the PLAY/BUILD switch. Switching never changes what you hear.
+
+A **Sound** is an amp with one of its presets. Each Sound sits on a program number from 0 to 127, the same numbers a MIDI foot controller sends.
+
+### The Five Starting Sounds
 
 ![VoLum PLAY with its five starting Sounds](user-guide-play-start.png)
 
-PLAY does not start empty. The first time VoLum opens a library that has no PLAY board yet (a fresh install, or an upgrade from 1.2.x), it puts five Factory Sounds on programs `0`–`4`. Many foot controllers count their presets from 1, so there they are presets 1 to 5.
+The first time VoLum 1.3 opens your library, PLAY gets five Factory Sounds:
 
 | Program | Sound | Amp |
 | --- | --- | --- |
@@ -209,204 +268,280 @@ PLAY does not start empty. The first time VoLum opens a library that has no PLAY
 | 3 | Crack the Skye | Marshall JMP 2203 |
 | 4 | Ampete Lead | Ampete One |
 
-This happens once. A board you cleared or changed is never filled again, and importing a Pack that carries an empty board keeps it empty. All other program numbers start free.
+Many foot controllers count from 1, so there these are presets 1 to 5. This happens only once. A board you have changed or cleared is never filled again.
 
-Replace these Sounds or add your own. To replace one, use its assign control or double-click it, or pick its program number in the **Add Sound** picker. To add one, **+ Add this sound** writes what you hear onto the next free program number (`5` on the starting board). A User Sound or an unchanged Factory preset goes straight on. Default, a changed preset, or an unnamed rig opens a name popup first. **Save** in that popup creates the User Sound and puts it on the rail in one step; **Cancel**, `Esc`, or a click outside writes nothing and adds nothing. If you clear every switch, PLAY shows an empty board with **+ Add this sound** in the middle, and the amp you are playing stays behind it.
-
-![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
-
-**Add Sound** opens the picker. Pick the program number (next free by default, `0`–`127`; an occupied number replaces that Sound), then a Factory or User preset. Factory and User sections start open if only one exists, both collapsed if both exist, and then remember what you opened. A `+` or `-` on the left of each heading shows that the section expands. Assign any Factory preset or a User preset you saved in BUILD.
+### Play Your Sounds
 
 ![VoLum PLAY board](user-guide-play.png)
 
-Assigned slots are the setlist. Click a row to recall it. **LIVE** is the last Sound recalled from PLAY and stays marked while you play. **Ctrl+S** always opens the name dialog (`New Preset` on Factory/Default, the current name on a User Sound). On the same name the button reads **Update** and overwrites; a new name reads **Save** and mints a User Sound. If the LIVE switch still holds the Sound you started editing, that same program number now plays the saved Sound, so tweaking a Factory Sound in PLAY and pressing Ctrl+S puts your copy on its switch. Ctrl+S never invents a new number, and a save started in BUILD never moves a switch. Drag a row onto another to swap, into the gap between rows to slide Sounds along the existing program numbers, or onto the dashed Add plate to move it to the end. When every program number is taken, **+ Add this sound** opens the picker on program 0 so you can replace one. Use the assign control or double-click to replace a row, and the small remove button to clear it. Right-click a stomp to jump to BUILD with that card selected. **(unsaved)** means the live rig no longer matches that snapshot. PLAY IN/OUT meters use the same −70..0 dB window as BUILD.
+- **Recall a Sound:** click its row, press `Up` / `Down` (or `Left` / `Right`), or send MIDI. The arrow keys skip empty and broken entries and wrap around at the ends.
+- **LIVE** marks the Sound you recalled last. **(unsaved)** means you changed it since.
+- **Stomps:** the eight switches turn Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb and Tremolo on and off. Click them or press `1` to `8`. They change nothing else. An empty NAM slot does nothing. Right-click a stomp to edit that pedal in BUILD.
+- **Tweak and save:** change a Sound in BUILD or with the stomps, then press **Ctrl+S**. If the LIVE switch still holds the Sound you started from, your saved version takes its place. That way a changed Factory Sound becomes your own copy on the same switch. Ctrl+S never picks a new program number.
 
-The same **+** control is **Add this sound** when the live rig is not already on the rail (or a dirty Factory/Default still needs saving). It is **Add Sound** when the live Sound is already assigned and clean.
+### Add, Replace And Arrange Sounds
 
-`Up` / `Down` and `Left` / `Right` step to the previous or next assigned slot and recall it. Keys `1` through `8` toggle the eight stomps left to right. Empty program numbers are skipped, as are assignments whose amp or preset is missing, and the list wraps at both ends.
+![VoLum PLAY Add Sound picker](user-guide-play-picker.png)
 
-The eight stomp buttons are performance bypasses for Pitch, Comp, NAM 1, NAM 2, Chorus, Delay, Reverb, and Tremolo. Click to bypass, right-click to jump to BUILD with that card selected. An empty NAM slot does not take a bypass click. They change only those effect bypass states. Amp, cab, channel, and other rig values stay untouched. MIDI listen channel, the Sound-recall CC, and AU `aufx` → `aumf` are under Settings → MIDI.
+The **+** button at the end of the list changes with what you are playing:
 
-The stage art lights up and moves while you play, and settles back to the still BUILD picture when you stop. How far it moves follows how hard you play: the H&K TriAmp's knot carries three beams of light, one per channel, and the Soldano's lighthouse turns its beams across the sea. Custom-amp art turns slowly and breathes. Every factory amp has its own motion. To keep every art still (and save a little CPU), turn off **Settings → SIGNAL → Performance → Animate art in PLAY**.
+- **+ Add this sound** puts what you hear on the next free program number. A User Sound or an unchanged Factory preset goes straight on. If the rig has no name yet, or you changed a Factory preset, the name box opens first; **Save** creates the User Sound and adds it in one step. The Factory Sound keeps its own row.
+- **+ Add Sound** appears when what you hear is already on the list. It opens the picker: choose a **PROGRAM** number (the next free one by default; a taken number shows what it replaces), then a Factory or User preset.
 
-## Custom Content (Bring Your Own)
+To replace a Sound, double-click its row or use its assign button. To clear a row, click its small `×`. Drag a row onto another row to swap them, between two rows to slide the Sounds along, or onto the dashed **Add** plate to move it to the end. If every program number is taken, **+** opens the picker on program 0.
 
-VoLum can load your own NAM amp captures, impulse responses, and pedal captures. Imported files are copied into a VoLum-owned content library, so they keep working after you move or delete the originals, and every format sees the same library:
+If you clear every row, PLAY shows **No Sounds assigned** with a **+** button in the middle. The amp you were playing keeps sounding.
 
-- **Windows:** `%LOCALAPPDATA%\VoLum\content`
-- **macOS:** `~/Library/Application Support/VoLum/content`
+### Moving Art
 
-**Custom amps.** Click the **+** in the CUSTOM section of the amp browser to open the builder. Name the amp, add one or more `.nam` files, and assign each to a cab slot and channel (files named `PREFIX-CODE-CHANNEL.nam` auto-fill). Every file is a discrete captured snapshot of one gain stage/cab combination; VoLum switches between them and does not infer a continuous gain knob from a multi-capture folder. Both NAM Architecture 1 (A1) and Architecture 2 (A2) captures load, including files selected from Windows usernames/folders or filenames containing non-ASCII characters. On **Save**, VoLum copies and validates every capture before committing the amp. If one file cannot be copied or parsed, the whole save is cancelled, the builder stays open, and the failing filename is shown; valid captures are never silently saved as an amp that still plays the previous factory model. Saved custom amps appear in the CUSTOM list and load and play exactly like factory amps — including as the dual-amp SUPPORT partner. Use the pen/bin icons to edit or delete one. If a previously imported file later goes missing or becomes corrupt, the footer reports the failed load and names the last known-good capture that remains active.
+The amp art lights up and moves while you play and returns to its still picture when you stop. The harder you play, the more it moves. Every bundled amp has its own motion; custom amps slowly turn and breathe. To keep the art still and save a little CPU, turn off **Animate art in PLAY** in [Settings](#signal-tab).
 
-![VoLum custom amp builder](user-guide-custom-amp.png)
+## MIDI Foot Controllers
 
-**Custom IRs.** A custom IR convolves the amp's **DIRECT** (amp-only) capture — the raw amp with no speaker baked in. It never applies on top of the speaker already baked into CB1/CB2/CB3 captures. It is meant for a custom amp that includes a DIRECT capture; selecting the **Custom IR** cab switches the amp to its DIRECT/No Cab capture first. A custom amp built only from full amp-plus-cab captures has no raw signal for an IR to shape — on a channel with no DIRECT capture the **Custom IR** and **No Cab** buttons are greyed out (hover for the reason) and cannot be selected; switch to a channel that has a DIRECT capture to use them. In the speaker row, choose the **Custom IR** cab, then import a `.wav` impulse response from its dropdown. The custom IR belongs to the **focused lane**: in Dual Amp mode the MAIN and SUPPORT lanes each carry their own custom IR, so changing one never affects the other. Impulse responses are short cabinet captures — only the first fraction of a second is used — so VoLum rejects very large WAV files (a whole song picked by mistake) with a message instead of loading them. Custom IRs are automatically level-matched on import so they sit at roughly stock-cab loudness instead of arriving much quieter. To fine-tune one, open **Manage custom IRs** and click the **gear** on its row: a small panel lets you adjust **Level** (±24 dB), a **Low cut**, and a **High cut**. Use the **+/−** buttons to step through the usual values — a button greys out once that value reaches the end of its range — or click the number to type an exact one. Typed values are free rather than restricted to the stepper's steps, so `2.5k`, `-3 dB` and `137` all work, and `0` or `off` disables either cut. The panel stays open until you click outside it. These settings are stored with the IR in your library, so they follow it everywhere it is used (both lanes), and a gear shown in gold marks an IR you have shaped.
+A foot controller recalls your PLAY Sounds:
 
-Custom names (amps, IRs, pedals, and presets) have sensible length limits so they always fit their labels — long names are capped as you type.
+- **Program Change N** recalls the Sound on program N.
+- **CC 102 with value N** does the same. Use it if your DAW does not pass Program Change on to plug-ins.
 
-![VoLum custom IR manager](user-guide-custom-ir.png)
+Program numbers run from 0 to 127. A number with no Sound, or with a deleted Sound, is ignored and the current tone keeps playing.
 
-**Custom pedals.** In the PRE NAM-capture dropdown, the **CUSTOM** group lets you import and manage your own `.nam` pedal captures; an imported capture loads into its PRE slot like a factory one.
+### Connect The Controller
 
-![VoLum custom pedal manager](user-guide-custom-pedal.png)
+- **Standalone:** pick the controller's MIDI input in **Settings > SIGNAL > Audio & MIDI devices...**.
+- **DAW:** route the controller's MIDI to the VoLum track. The standalone app and the AU always receive Program Change. Some VST3 hosts do not pass it on; then send the Recall CC instead.
 
-If VoLum cannot read the library file, it keeps that file as `volum-content.json.bak` (an older backup moves to `volum-content.json.bak.1`) and says so, over the VoLum window, the next time a window opens. Deleting a custom amp from the list says so when the save does not reach disk.
-
-The content library is shared across all open instances and tracks. In a DAW, the project stores stable references (ids) to your custom amps, IRs, pedals, and the active preset, so reopening a project restores them as long as the items still exist in your library. Two VoLums may edit the library at the same time — the standalone app and one in your DAW, or two tracks — and each one only writes its own changes, so importing an IR in one window can no longer be undone by the other window saving a preset.
-
-Deleting something that is currently playing moves that lane in the same action, in the window you deleted it in: a deleted main amp falls back to the factory amp shown in the list, a deleted pedal leaves its PRE slot empty, a deleted IR returns to the amp's built-in cabinet, and a deleted preset is forgotten. The confirmation tells you what is playing and where it will go before you agree. Enter agrees even when the pointer is not over that window. Another open VoLum keeps playing what it already has until it next needs the deleted item.
-
-See [Content Library Packs](#content-library-packs) for moving a library to another machine or sharing part of it.
-
-## Tuner And Metronome
-
-![VoLum tuner overlay](user-guide-tuner.png)
-
-Open the tuner from the toolbar. While it is open, VoLum mutes the guitar so you can tune silently. The metronome click still plays. Click outside it or press `Esc` to close.
-
-![VoLum metronome controls](user-guide-metronome.png)
-
-Open the metronome from the toolbar. You can enable it, set BPM with `+` / `-` or direct entry, adjust volume, and choose `1/4`, `2/4`, `3/4`, `4/4`, or `6/8`.
-
-## Keyboard Controls
-
-- `P` switches between BUILD and PLAY, in the standalone app and in plug-ins. It is ignored while a name is being typed or while Settings, Pack, or another overlay is open.
-- In PLAY: `Up` / `Down` and `Left` / `Right` step to the previous or next assigned Sound and recall it. Empty program numbers and assignments whose amp or preset is missing are skipped, and the list wraps at both ends. `1`–`8` toggle the eight stomps. `T`, `M`, and `H` still open the tuner, metronome, and Settings. `Ctrl+S` always opens the name dialog and may reassign the LIVE program number (only while it still holds the Sound you edited), never a new one. While Settings, Pack, or another overlay is open, those PLAY keys are ignored so they cannot change the rail behind the window.
-- In BUILD, no knob selected: `Up` / `Down` changes amp, `Left` / `Right` changes channel in AMP view.
-- `1` / `2` / `3` switches PRE / AMP / POST.
-- `Ctrl+S` opens the save dialog from any BUILD section (PRE, AMP, or POST), also while a knob is selected.
-- Buttons, arrows, and steppers count every click, however fast you click. Double-clicking a knob restores its default.
-- `Tab` / `Shift+Tab` moves focus inside the current section; `Left` / `Right` also moves focus in PRE/POST.
-- `Enter` edits the focused target. In the standalone app, `Space` toggles its on/off state. In plug-ins, `B` toggles it so `Space` remains available for DAW Play/Stop.
-- `S` cycles speaker/cab for the focused amp lane; `Shift+S` goes backward.
-- `T` opens the tuner; `M` opens the metronome; `H` opens Settings and closes it again.
-- Selected knob: `Up` / `Down` adjusts, `Left` / `Right` selects another knob, `Shift` makes smaller steps.
-- `Enter` enters an exact value, `Delete` / `Backspace` resets, `Esc` leaves knob edit.
-- In the exact-value box a comma counts as a decimal point, and the unit the readout shows (`dB`, `%`, `ms`, `Hz`, `s`, `st`) may be typed after the number. Anything that is not a number leaves the control where it was; a number outside the range clamps to the nearest end.
-
-This covers the main playing and editing workflow. Full screen-reader support is not implemented yet.
-
-## Settings And Safety
-
-Open Settings with the top-right gear or `H`, and close it with the gear, `H` again, `Esc`, or a click anywhere outside the panel, like the tuner and metronome. That click only closes Settings; it does not also press the amp or control underneath. On the MIDI tab, `Esc` first closes an open Sound picker (or cancels a switch you are dragging) and returns to the footswitch bank; a second `Esc` closes Settings. A click outside the panel closes Settings straight away, picker or not. Closing Settings always returns the tab to its bank view, so a half-finished pick does not come back. Keys do not change the amp or the PLAY rail while Settings is open.
-
-The overlay has three tabs.
-
-![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
-
-**SIGNAL** is how audio gets in and out: input calibration, output mode, and performance (FULL / LITE, and **Animate art in PLAY**). In the standalone app, **Audio & MIDI devices...** under the cards opens the audio driver, device, and MIDI port settings (see [Standalone Audio And MIDI Settings](#standalone-audio-and-midi-settings)); the VST3 points you to your host's audio settings instead.
+### The MIDI Tab
 
 ![VoLum Settings, MIDI tab](user-guide-settings-midi.png)
 
-**MIDI** is what this VoLum listens to and which Sound each Program Change plays. The listen filter defaults to **All MIDI channels** (MIDI calls this Omni). Leave it there for one guitarist and one pedalboard; lock an instance to channel `1`–`16` only when two VoLums share a cable. Beside it, **Recall CC** defaults to `102`: that CC's value is the program number, so one controller covers all 128 slots. Use it when Program Change never arrives. Below, the footswitch bank shows the same assignments as the PLAY rail, so a Sound you assign to a switch here appears on the PLAY rail and the other way round.
+**What this VoLum listens to:**
 
-![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)
+- **All channels** (the default; MIDI calls this Omni) is right for one guitarist with one board.
+- **One channel** with a channel from `CH 1` to `CH 16` lets two VoLums share one MIDI cable.
+- **Recall CC** sets the CC number that recalls Sounds: `0` to `119`, default `102`.
 
-**SYSTEM** is this build and this machine: the keyboard shortcut guide (including **Ctrl+S** to save a Sound), information about the loaded model, the content library slot for moving your library between machines (Export / Import Pack), and the About block with the version, a **Read the manual** link to this guide, and the update reminder.
+**What each program number plays** shows your Sounds like a foot controller: 16 banks of 8 switches. Bank 1 holds programs 0 to 7, bank 2 holds 8 to 15, and so on up to bank 16 (120 to 127). It is the same list as PLAY; a change here shows up there and the other way round.
 
-VoLum reopens Settings on the tab you used last.
+- Change banks with the arrows next to **BANK**, the mouse wheel, `PageUp` / `PageDown`, or the 16 dots (a lit dot means the bank has Sounds).
+- Click a switch to choose its Sound. Hover a switch and click `×` to clear it.
+- Drag a switch onto another to swap them, or onto an empty switch to move it. While dragging, hover an arrow or a dot to change bank.
+- The switch of the LIVE Sound is lit **LIVE**. A switch whose Sound was deleted is red.
 
-VoLum stores user settings automatically:
+The PLAY list is shared by every VoLum on your computer. The listen setting and Recall CC belong to each plug-in instance; a new instance starts on All channels and CC 102.
 
-- **Windows:** `%LOCALAPPDATA%\VoLum\volum-settings.json`
-- **macOS:** `~/Library/Application Support/VoLum/volum-settings.json`
+VoLum does not use MIDI notes, pitch bend, Bank Select (CC 0/32), MIDI Learn or MIDI output. CC 120 to 127 cannot be the Recall CC, because hosts reserve them.
 
-Use the standalone app as your tone library editor. It writes the global per-amp defaults in this file, including speaker, channel, knobs, PRE pedals, POST effects, and Dual Amp setup.
+On macOS, MIDI input makes the AU an "aumf" (music effect) instead of an "aufx" (effect). If an AU instance from an older VoLum misbehaves after updating, remove it and insert it again.
 
-Fresh VST3 instances read those per-amp defaults when you add VoLum to a track. They do not inherit the standalone app's PLAY/BUILD mode, MIDI listen channel, or recall CC: a new insert starts in BUILD on All MIDI channels and CC `102` until the project saves those per instance. After that, the DAW project owns that plugin instance. Reaper, Cubase, Live, and other hosts save and recall the VST3 state with the project and with their normal plugin preset systems. VST3 instances do not write global per-amp scenes, so two tracks cannot overwrite each other's rigs. Input calibration and A2 Lite are the deliberate exceptions described below: a direct edit becomes the machine default, while saved project state still wins for everything else when that project is restored.
+## Tuner And Metronome
 
-### MIDI Program Change And Recall CC
+![VoLum tuner](user-guide-tuner.png)
 
-VoLum accepts MIDI Program Change and a Sound-recall CC. Program Change reaches the standalone app and AU; in VST3 it arrives only when the host passes it on. The CC works in every format, including VST3. Slots `0` through `127` recall Sounds: each assignment combines one amp with one of that amp's named presets, including its cab, channel, PRE, POST, and Dual Amp setup. The CC's value is that same program number.
+Open the tuner with its toolbar button or `T`. While it is open, your guitar is muted so you can tune silently; the metronome keeps clicking. Close it with `Esc` or a click outside.
 
-Most foot controllers and multi-effects units send a Program Change when you step to one of their presets, so in the standalone app and in AU VoLum follows them as soon as their MIDI reaches it (in the standalone app, pick the controller's port under Settings > SIGNAL > **Audio & MIDI devices...**). Some VST3 hosts do not pass Program Change on to a plug-in. If VoLum in your DAW ignores your preset changes, have the controller send the Recall CC (`102` unless you changed it) with the program number as its value.
+![VoLum metronome](user-guide-metronome.png)
 
-Assign the slots on either surface, whichever is in front of you:
+Open the metronome with its toolbar button or `M`. Switch it on, set the tempo with `+` / `-` or type a value (30 to 300 BPM, default 120), set the volume, and choose `1/4`, `2/4`, `3/4`, `4/4` or `6/8`.
 
-- In **PLAY**, **+** is **Add this sound** when the live rig is not on the rail, or **Add Sound** when it already is. Add this sound writes the live User Sound onto the next free program number and marks that row LIVE. If the LIVE row plays a Factory Sound you have changed, Add this sound saves your version under a new name onto the next free program number, and the Factory Sound keeps its row. Add Sound opens the picker on the next free program number (you can change that number first). Click an assigned row to recall it, use the assign control or double-click to replace the Sound, or tap `×` to clear it.
-- In **Settings -> MIDI**, the same assignments are laid out like a MIDI foot controller: 16 banks of 8 switches. Switch 1–8 on bank 1 sends program `0`–`7`, bank 2 sends `8`–`15`, and so on up to bank 16 (`120`–`127`). Each switch shows its program number on an LED readout, the Sound, its amp, and the amp's art; an empty switch shows **+**. Page with the arrows beside **BANK**, the mouse wheel, `PageUp` / `PageDown`, or the 16 bank dots (a lit dot means that bank has Sounds). The tab opens on the bank holding the LIVE Sound, whose switch is outlined and lit **LIVE**; if nothing has been recalled yet, it opens on the first bank that has Sounds. Click a switch to pick its Sound. Drag a switch onto another to swap the two Sounds, or onto an empty switch to move it there; while dragging, hover an arrow or a bank dot to page, so a Sound can go to any program number. Hover a switch and click `×` to clear it. There is only one set of assignments: both surfaces read and write the same ones.
+## Your Own Amps, IRs And Pedals
 
-The **Settings -> MIDI** card **What this VoLum listens to** chooses all MIDI channels or exactly one of `1`–`16` for this instance, and the **Recall CC** (default `102`, range `0`–`119`) that recalls a Sound by value. **What each program number plays** is the footswitch view of the same assignments PLAY shows. That list is machine-global, while the listen filter and recall CC are stored per plugin instance. A new plug-in insert starts on All MIDI channels and CC `102`; it does not copy the standalone app's channel or CC. All MIDI channels is the default.
+VoLum loads your own NAM captures and impulse responses. Imports are copied into VoLum's own library, so they keep working if you move or delete the originals. The standalone app and every plug-in share this library.
 
-An unassigned slot or an assignment whose amp or preset was deleted is ignored, so the current sound keeps playing. A deleted Sound keeps its program number on the PLAY rail and on its footswitch and reads red (**Invalid slot**), because the program still exists even though the thing it pointed at does not. MIDI notes, pitch bend, Bank Select `CC0`/`CC32`, MIDI Learn, and MIDI output are not supported. CC numbers `120`–`127` cannot be the recall CC: those are channel-mode messages (All Notes Off is `123`) and hosts consume them. In the standalone app, choose the MIDI input **port** under Settings > SIGNAL > **Audio & MIDI devices...**; the channel and recall CC remain on the Settings MIDI tab. In a DAW, route MIDI to the VoLum plugin and select the channel and recall CC in VoLum.
+### Custom Amps
 
-MIDI input changes VoLum's AU component type from `aufx` to `aumf`. Existing AU instances may therefore need to be removed and inserted again after updating.
+![VoLum custom amp builder](user-guide-custom-amp.png)
 
-### Update Checks And Privacy
+1. Click **+** in the **CUSTOM** part of the amp list ("Create a custom amp").
+2. Name the amp and click **+ Add .nam files**.
+3. Give each file a cab slot and a channel. Files named like `V30-MyAmp-2.nam` fill this in for you: the first part is the cab (`AMP`, `DI` or `DIRECT` for no cab, `G12`, `G65`, `V30`), the last number is the channel.
+4. Click **Save amp**.
 
-The standalone app and plug-in check for a newer stable VoLum release at most once every 24 hours. A gold dot on the Settings gear means an update is available. Open Settings to read the reminder; the dot stays until you use the update row or **Check now**. The update row opens the release page in your browser. VoLum only notifies you: it never downloads or installs an update.
+Each file is one captured channel-and-cab combination; VoLum switches between them. Both NAM A1 and A2 captures work. If any file cannot be read, nothing is saved and the builder names the file.
 
-**Check for updates automatically** is on by default and can be switched off in Settings; **Check now** sits on the same row. Each check is a plain HTTPS GET of `https://guitarlum.github.io/VoLum/appcast.json`, with no query string, telemetry, or VoLum-generated identifier. The 24-hour throttle and reminder are stored separately in `volum-update-state.json` beside the main settings file. A check that cannot reach the server, or that gets an answer VoLum cannot read, says so on the About card and does not start that 24-hour wait.
+Custom amps play like bundled ones, also as the Dual Amp SUPPORT. Use the pen and bin icons in the amp list to edit or delete one. If a file goes missing later, the footer says so and VoLum keeps the last capture that worked.
 
-### Input Calibration
+### Custom IRs
 
-The **Input calibration** card describes your audio interface's analog level at digital 0 dBFS. Enter the interface value in dBu and enable **Calibrate input**. When the loaded NAM capture contains an input-calibration value, VoLum offsets the AMP Input gain so the model sees the level used during capture; models without that metadata leave the calibration controls unavailable.
+![VoLum custom IR menu](user-guide-custom-ir.png)
 
-The Calibrate switch and dBu value are machine-global startup defaults. A direct edit in standalone, VST3, or AU writes those two values to `volum-settings.json`, so a new instance starts calibrated the same way. A DAW project's saved plugin state remains authoritative when reopened and can intentionally use different calibration values.
+A custom IR is your own speaker cabinet. It replaces the cab, so it needs an amp-only (No Cab) capture: every bundled amp has one, and custom amps have one if you added a `DIRECT` file. Where there is none, **Custom IR** and **No Cab** are greyed out; hover them to see why.
 
-### A2 Lite Mode (Performance)
+1. Click **Custom IR** in the cab row.
+2. In the menu, click **Manage custom IRs...**, then **+ Import IR (.wav)**.
+3. Pick the IR from the **Custom IR** menu.
 
-The Settings overlay's **Performance** card has a **FULL / LITE** switch; the active mode is highlighted (FULL is the default), so you can always see which quality mode is running. Lite trades a little quality for lower CPU. VoLum's A2 amp and pedal captures are packed so each file holds both a full-size version and a smaller "Lite" version. Switch to Lite and VoLum runs the smaller version on every NAM lane: both PRE NAM pedals, the main amp, and the dual-amp support lane. Lite does not change the separate Pitch/Octaver DSP, so bypass Pitch/Octaver or use a larger audio buffer if that effect is the CPU bottleneck.
+Each Dual Amp lane has its own custom IR. VoLum sets imported IRs to a similar loudness as the stock cabs and refuses very large files (a whole song picked by mistake).
 
-Lite mode is a per-computer preference: it is saved in `volum-settings.json`, not in the project, so it stays on for every project and DAW session on that machine, and a project saved on a fast computer still plays Lite on a slow one. A Lite toggle from standalone or a plug-in writes only that key, the same way calibration does, so it cannot move PLAY/BUILD, the MIDI listen channel, the recall CC, or per-amp scenes. Captures that are not A2 containers (older single-size models and most custom imports) are unaffected, so the switch simply does nothing for them. Default is Full.
+To fine-tune an IR, click the **gear** on its row in **Manage custom IRs**. **Level** (±24 dB), **Low cut** (20 to 800 Hz) and **High cut** (1 to 20 kHz) step with **+** / **−**, or click a value and type it, for example `2.5k` or `-3 dB`. `0` or `off` switches a cut off. These settings travel with the IR wherever you use it. A gold gear marks a shaped IR.
 
-Under it, **Animate art in PLAY** (**OFF / ON**, default ON) decides whether the PLAY stage art moves while you play. It changes only the picture, never the sound, and is saved per computer in `volum-settings.json` the same way as Lite.
+### Custom Pedals
 
-### Content Library Packs
+![VoLum custom pedal menu](user-guide-custom-pedal.png)
+
+In the NAM pedal capture menu, click **Manage custom pedals...**, then **+ Import pedal (.nam)**. Imported pedals appear under **CUSTOM** in the same menu.
+
+### Deleting Content
+
+If you delete something that is playing, VoLum moves on in the same step: a deleted amp falls back to a bundled one, a deleted pedal leaves its slot empty, a deleted IR returns to the amp's own cab. The confirmation tells you what will happen first. Another open VoLum keeps playing until it next needs the deleted item.
+
+## Back Up And Share With Packs
 
 ![VoLum Pack export](user-guide-pack-export.png)
 
-The **Back up your library** card on the SYSTEM tab has **Export Pack...** and **Import Pack...**. A Pack is one `.volumpack` file holding the custom amps, IRs, pedals, and presets you chose together with their capture files, so you can back up your library, move it to another machine, or hand part of it to somebody else.
+A Pack is one `.volumpack` file with your custom amps, IRs, pedals and presets. Use it to back up your library, move it to another computer, or share part of it. Open **Settings > SYSTEM** and use **Export Pack...** or **Import Pack...** on the **Back up your library** card.
 
-**Export** offers three scopes:
+### Export
 
-- **Everything** — the whole library. In the standalone app it also carries your machine settings and MIDI slots.
-- **Sounds** — tick named presets. Each row names the amp it belongs to, and PLAY assignments sit at the top in Program Change order, with their number. A ticked Sound brings every IR, pedal, and dual-amp partner it needs.
-- **A whole amp** — tick a custom amp and every preset saved on it travels with it.
+Choose what goes in:
 
-Requirements you did not tick are named in the highlighted band under the list and cannot be left behind: a Pack that referenced content it did not carry would import as a broken amp. A preset on a *factory* amp brings its custom IR and pedal but no amp entry, because the factory capture already ships with VoLum.
+- **Everything:** your whole library. From the standalone app it also carries your machine settings and MIDI program list.
+- **Sounds:** tick presets. Your PLAY Sounds are listed first, in program order.
+- **A whole amp:** a custom amp with every preset saved on it.
+
+The **ALSO INCLUDING** band lists what your choice needs, like an IR or a pedal. It always travels along, so nothing arrives broken. A preset on a bundled amp brings its custom IR and pedal, but no amp, because the other computer has the bundled amp already.
+
+### Import
 
 ![VoLum Pack import preview](user-guide-pack-import.png)
 
-**Import** lists every amp, IR, pedal, and preset in the file as its own tick, all on by default, and the header counts presets alongside the rest. Untick anything you do not want; ticking a preset also ticks and locks the IR, pedal, and partner amp it needs, and unticking an amp drops that amp's presets. Overwrite and Add always apply to the ticked subset. **Reset** is offered only when every item is still ticked, so a partial import cannot wipe the rest of your library. The preview names what is added, what is replaced, what shares a name with something you already have (both are kept — names are labels, ids are identity), and what your rig is playing right now and would therefore reload. In the plugin, an Everything Pack also names that it replaces your MIDI slots. Export stays off until you tick a Sound or an amp; Everything is the backup and stays available. An Everything Pack additionally offers three ways to resolve conflicts:
+The preview lists every item in the Pack, all ticked. Untick what you do not want; anything a ticked preset needs stays ticked. Each row says what will happen: **Add**, **Replace**, **Keep mine**, **Reloads** (it is playing now) or **Skip**. An item with the same name as one of yours is added beside it, and both are kept.
 
-- **Overwrite** — the Pack wins where the two disagree; anything of yours the Pack does not mention stays.
-- **Add** — yours wins where the two disagree; only genuinely new items are added.
-- **Reset** — the Pack replaces your library; items not in it are deleted.
+An **Everything** Pack offers three ways to merge:
 
-A Pack somebody shared with you merges by id like Overwrite and does not offer Reset, so a Pack from a friend can never wipe your collection.
+- **Overwrite:** the Pack wins where both have an item. Your other items stay.
+- **Add:** your version wins. Only new items are added.
+- **Reset:** the Pack replaces your library. Items not in the Pack are deleted. Only offered while every item is ticked.
 
-**Also restore machine settings** is a separate tick box, only offered in the standalone app and only for an Everything Pack. It restores the last amp, per-amp knob positions, Lite mode, input calibration, and MIDI slots. Plug-ins never write those, so they never offer the box either.
+A **Sounds** or **A whole amp** Pack always merges like Overwrite and never offers Reset, so a Pack from a friend cannot wipe your library.
 
-The import happens in one step. Your previous library is kept beside the new one as `volum-content.json.pre-import.bak`, a damaged or truncated Pack changes nothing at all and says **This Pack is damaged.**, and a Pack written by a newer VoLum than yours is refused by name instead of being half-read. Where you keep your own version of an item, the preview shows your name for it. Capture, IR, and pedal files that the import leaves unused (the old files of a replaced amp, for example) are removed from your library folder; nothing outside it is touched, and nothing any item still uses. PRE slot numbers are local to your machine, so an imported pedal whose slot is already taken is renumbered and the Pack's own presets follow it.
+In the standalone app, an Everything Pack also offers **Also restore machine settings** (last amp, per-amp settings, Lite, input calibration and MIDI program list).
 
-### Standalone Audio And MIDI Settings
+Your previous library is kept as `volum-content.json.pre-import.bak`. A damaged Pack changes nothing and says **This Pack is damaged.** A Pack from a newer VoLum is refused.
 
-In the standalone app, click **Audio & MIDI devices...** at the bottom of Settings > SIGNAL, or press `Ctrl+,`, to choose the audio driver, separate input and output devices, sample rate, channel routing, and MIDI input port. On macOS, **VoLum > Preferences...** opens the same window. The Windows window has no menu bar and a dark title bar, so the button and `Ctrl+,` are the way in there. VoLum sends no MIDI, so there is no MIDI output setting, and the MIDI channel VoLum listens on is set on the Settings MIDI tab. In the VST3, use your DAW's audio and MIDI routing instead.
+## Settings
 
-Pick an input device and an output device independently. On macOS, built-in microphone and speakers are often listed as separate devices. Choose one mono input channel for the guitar signal and route output L/R as needed. The standalone buffer list uses a stable set of common pro-audio sizes: 48, 64, 96, 128, 256, 512, 1024, 2048, 4096, and 8192 samples. Older saved settings below the visible range are moved up to the next listed size. Some drivers refuse the size you pick and grant a different one; VoLum then keeps what the driver granted, so the list and the saved setting describe what is actually running.
+Open Settings with the gear or `H`. Close it with the gear, the X, `H`, `Esc`, or a click outside the panel. Settings has three tabs and reopens on the one you used last.
 
-If you select a driver that has no usable device, such as ASIO on a laptop without an ASIO interface, VoLum shows an error and reverts to the previous working audio settings instead of closing.
+### SIGNAL Tab
 
-If the problem is there from the start - your interface is unplugged, or switched off - there is nothing to revert to, so VoLum keeps your settings exactly as they are and opens without audio. Connect the interface and start VoLum again and your setup is where you left it.
+![VoLum Settings, SIGNAL tab](user-guide-settings-signal.png)
 
-If VoLum ever refuses to start and says another copy is already running, that copy really is still there and ending it in Task Manager will let the next launch through. A copy that Windows still lists but has already exited no longer blocks anything.
+- **Input calibration:** enter your interface's input level in dBu and switch on **Calibrate input**. VoLum then drives the amp as hard as during the capture. This needs a capture that records its capture level. The bundled amps do not, so for them the card reads "This model has no capture level".
+- **Output mode:** **Raw** leaves the level alone, **Normalized** (default) brings all amps to a similar loudness, **Calibrated** matches your input calibration (only for captures that carry an output level).
+- **Performance:** **FULL** (default) or **LITE**. LITE runs a smaller version of the A2 captures on every amp and NAM pedal lane, for less CPU at slightly lower quality. It does not affect the Pitch pedal or older non-A2 captures. **Animate art in PLAY** (default ON) switches the moving art on or off; the sound is not affected.
+- **Audio & MIDI devices...** (standalone only) opens the audio and MIDI device window. In a plug-in, use your DAW's audio settings.
 
-The sample rate VoLum displays is the one the driver is actually running. Some interfaces take their rate from their own control panel or an external clock and will not change it on request; VoLum shows you what happened rather than what it asked for, and tells you when the rate you picked was refused and which one is in use instead. Change the rate in your interface's control panel while VoLum is open and it follows, reopening the stream at the new rate. If a rate saved from a previous session is not available on the current device, VoLum picks the nearest one that is and saves that instead.
+LITE and Animate art are saved for your computer, not per project. Input calibration is the default for every new VoLum on this computer.
 
-The **Latency** line in the standalone reports the round trip you actually hear — VoLum's own processing delay plus the latency your audio driver reports — whenever the driver reports one. ASIO drivers do. WASAPI and DirectSound usually do not, and in that case VoLum shows only its own delay plus the buffer size and states that the real round trip is higher, rather than presenting a guess as a number: the difference is not small, and a plausible-looking figure would be worse than none. Most of the round trip belongs to the driver and the buffer size, so a smaller buffer or a better driver moves it far more than any VoLum setting does.
+### MIDI Tab
 
-VoLum's own delay is legitimately **0.0 ms** when your captures run at the host sample rate with no pitch shifting, however many NAM blocks are enabled — amp and pedal captures need no lookahead, so they add no delay. It becomes non-zero when a capture's sample rate differs from the host's (resampling, around 1.4 ms at 44.1 kHz) or when the PITCH pedal is on (about 8.6 ms in INSTANT, 14 ms in POLY). In a plugin the host owns the audio device, so the same line shows only VoLum's own delay, which your DAW compensates for automatically.
+See [MIDI Foot Controllers](#the-midi-tab).
 
-VoLum also runs an always-on final output safety stage after Delay and Reverb. Normal playing is unchanged. If a hot rig and heavy POST effects create runaway peaks, the OUT meter turns red and the footer shows `Output safety active - lower output or wet mix`. Lower Output, Delay Mix, or Reverb Mix if you see that often.
+### SYSTEM Tab
+
+![VoLum Settings, SYSTEM tab](user-guide-settings-system.png)
+
+- **Keyboard shortcuts:** a short list of keys.
+- **Model information:** details of the loaded capture.
+- **Back up your library:** **Export Pack...** and **Import Pack...** (see [Packs](#back-up-and-share-with-packs)).
+- **About:** version, a **Read the manual** link to this guide, **Check for updates automatically** and **Check now**.
+
+### Update Checks And Privacy
+
+VoLum checks for a new release at most once a day. A gold dot on the gear means one is available; open Settings to read it and follow the link to the release page. VoLum never downloads or installs anything itself.
+
+The check is a plain request for `https://guitarlum.github.io/VoLum/appcast.json`, with no tracking and no identifier. Turn it off with **Check for updates automatically**.
+
+### Audio & MIDI Devices (Standalone)
+
+Open the window with **Audio & MIDI devices...** on the SIGNAL tab. On Windows, `Ctrl+,` also works; on macOS, **VoLum > Preferences...**.
+
+- Choose the driver, the input and output devices (they can differ), the sample rate, the buffer size and the MIDI input.
+- Use one mono input channel for the guitar.
+- Buffer sizes are 48, 64, 96, 128, 256, 512, 1024, 2048, 4096 and 8192 samples. If the driver grants a different size, VoLum shows and keeps what is really running.
+- The sample rate shown is the one the driver really runs. If your interface refuses a rate, VoLum tells you which one it uses instead.
+
+The **Latency** line shows what you hear when the driver reports its own delay (ASIO does). Otherwise it shows VoLum's part plus the buffer, and says the real figure is higher. VoLum itself adds no delay unless a capture runs at a different sample rate than your interface (about 1.4 ms at 44.1 kHz) or the Pitch pedal is on.
+
+## Using VoLum In A DAW
+
+- VoLum runs as a VST3 plug-in, and as an AU on macOS. Logic Pro and GarageBand need the AU.
+- **Your standalone tones are the starting point.** A new plug-in instance starts with the per-amp settings you made in the standalone app. From then on, the DAW project stores that instance's settings. Plug-ins never write per-amp settings back, so two tracks cannot overwrite each other's tones.
+- **Per computer:** LITE and Animate art are not stored in projects, so a project made on a fast computer still runs LITE on a slow one. Input calibration changed in any VoLum becomes the default for new instances; a saved project keeps its own.
+- **Per instance:** BUILD or PLAY, the MIDI listen setting and the Recall CC. A new instance starts in BUILD, on All channels and CC 102.
+- **Shared:** the custom library and the PLAY program list. A project stores references to your custom amps, IRs, pedals and presets and finds them again as long as they are still in your library.
+- In a plug-in, `B` switches the selected pedal on and off, so `Space` stays free for your DAW's play/stop.
+- VoLum reports its delay to the DAW, which compensates for it automatically.
+
+## Keyboard Shortcuts
+
+Keys work when no text box is open. While Settings, a Pack window or another panel is open, keys do not change the amp or PLAY behind it.
+
+**Everywhere**
+
+| Key | Action |
+| --- | --- |
+| `P` | Switch between BUILD and PLAY |
+| `T` / `M` / `H` | Tuner / metronome / Settings |
+| `Ctrl+S` | Save a preset or Sound |
+| `Esc` | Close the open panel or menu |
+
+**BUILD**
+
+| Key | Action |
+| --- | --- |
+| `1` / `2` / `3` | Open PRE / AMP / POST |
+| `Up` / `Down` | Previous / next amp |
+| `Left` / `Right` | AMP: previous / next channel. PRE and POST: previous / next pedal |
+| `Tab` / `Shift+Tab` | Next / previous pedal; in Dual Amp, switch between MAIN and SUPPORT |
+| `S` / `Shift+S` | Next / previous cab (AMP section) |
+| `Enter` | Select a knob of the selected pedal or amp |
+| `Space` (standalone), `B` (plug-in) | Switch the selected pedal on or off; in the AMP section, Dual Amp |
+
+**Selected knob**
+
+| Key | Action |
+| --- | --- |
+| `Up` / `Down` | Turn the knob (`Shift` for small steps) |
+| `Left` / `Right` | Select the previous / next knob |
+| `Enter` | Type an exact value |
+| `Delete` / `Backspace` | Reset to default |
+| `Esc` | Deselect the knob |
+
+When typing a value, a comma works as a decimal point and you may add the unit (`dB`, `%`, `ms`, `Hz`, `s`, `st`). Values outside the range snap to the nearest end.
+
+**PLAY**
+
+| Key | Action |
+| --- | --- |
+| `Up` / `Down`, `Left` / `Right` | Previous / next Sound |
+| `1` to `8` | Toggle the eight stomps, left to right |
+
+**Settings MIDI tab:** `PageUp` / `PageDown` change bank. `Esc` first closes an open Sound picker, then Settings.
+
+Full screen-reader support is not available yet.
+
+## Troubleshooting
+
+- **"Output safety active - lower output or wet mix" in the footer, red OUT meter:** VoLum's output limiter caught runaway peaks. Lower the amp **OUTPUT**, Delay **MIX** or Reverb **MIX**.
+- **No sound with the tuner open:** that is on purpose; close the tuner.
+- **Dual Amp sounds thin:** toggle **Ø** on the SUPPORT lane.
+- **Foot controller ignored in a DAW:** send the Recall CC (102) instead of Program Change, and check the channel on the MIDI tab.
+- **The driver you picked has no device** (for example ASIO without an ASIO interface): VoLum shows an error and goes back to the last working setup.
+- **Interface unplugged at start:** VoLum opens without audio and keeps your settings. Connect the interface and restart VoLum.
+- **Windows: VoLum says another copy is already running:** that copy really is still open. End it in Task Manager and start VoLum again.
+- **macOS: the plug-in does not show up after installing from the zip:** see the [README](../README.md#important-security-notice).
+
+## Where VoLum Keeps Your Files
+
+| What | Windows | macOS |
+| --- | --- | --- |
+| Settings | `%LOCALAPPDATA%\VoLum\volum-settings.json` | `~/Library/Application Support/VoLum/volum-settings.json` |
+| Custom library | `%LOCALAPPDATA%\VoLum\content` | `~/Library/Application Support/VoLum/content` |
+| Diagnostic log | `%LOCALAPPDATA%\VoLum\volum.log` | `~/Library/Application Support/VoLum/volum.log` |
+
+If VoLum cannot read the library, it keeps the damaged file as `volum-content.json.bak` and tells you the next time a window opens. The log is small, trims itself, and records startup, the audio setup, every amp and IR load, and any errors.
 
 ## Report A Bug Or Request A Feature
 
-Open an [issue on GitHub](https://github.com/guitarlum/VoLum/issues/new/choose). Use the **Bug report** template for crashes or wrong behavior, and **Feature request** for ideas.
-
-VoLum keeps a small diagnostic log that is useful to attach:
-
-- **Windows:** `%LOCALAPPDATA%\VoLum\volum.log`
-- **macOS:** `~/Library/Application Support/VoLum/volum.log`
-
-It records startup and version, the sample rate and buffer size in use, every amp and IR load with its file path and the reason for any failure, and library upgrades. It has a size cap and trims itself, so there is nothing to switch on or clean up.
+Open an [issue on GitHub](https://github.com/guitarlum/VoLum/issues/new/choose). Use **Bug report** for crashes or wrong behaviour and **Feature request** for ideas. Attach `volum.log` (see [Where VoLum Keeps Your Files](#where-volum-keeps-your-files)) if you can.
