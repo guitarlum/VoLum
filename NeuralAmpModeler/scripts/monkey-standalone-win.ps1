@@ -17,6 +17,8 @@ param(
   [string] $SourceLibrary = "",
   [switch] $DryRun,
   [string] $Replay = "",
+  [ValidateSet("default", "keyboard-heavy", "mouse-heavy", "overlay-heavy", "play-heavy")]
+  [string] $EventMix = "default",
   [ValidateRange(1, 32768)][int] $PrivateBytesGrowthMB = 512,
   [ValidateRange(1, 1000000)][int] $HandleGrowth = 1000,
   [ValidateRange(1, 1000000)][int] $GdiGrowth = 500,
@@ -40,16 +42,24 @@ if (-not $OutDir) { $OutDir = Join-Path $env:TEMP "volum-hunt\monkey\$stamp-$see
 $sandboxWasDefault = -not $Sandbox
 if (-not $Sandbox) { $Sandbox = Join-Path $OutDir "sandbox" }
 
-Write-Host "MONKEY seed=$seedValue duration=${DurationMin}m"
+Write-Host "MONKEY seed=$seedValue duration=${DurationMin}m mix=$EventMix"
 Write-Host "MONKEY out=$OutDir"
 
 $rng = New-Object System.Random $seedValue
 $script:dryT = 0
 $nextProbe = 45 + $rng.Next(11)
-$keyChoices = @(
+$defaultKeyChoices = @(
   "Esc", "Enter", "Tab", "Space", "Left", "Right", "Up", "Down",
   "1", "2", "3", "t", "m", "p", "Ctrl+S", "Ctrl+Z", "Delete",
   "a", "b", "c", "f", "g", "n", "r", "s", "x"
+)
+$keyboardKeyChoices = @(
+  "t", "m", "h", "p", "Space", "b", "Tab", "s", "1", "2", "3",
+  "Left", "Right", "Up", "Down", "Esc", "Enter", "Ctrl+S"
+)
+$playKeyChoices = @(
+  "p", "Space", "1", "2", "3", "Left", "Right", "Up", "Down",
+  "Enter", "Esc", "Tab"
 )
 
 function Get-MonkeyPoint {
@@ -58,7 +68,27 @@ function Get-MonkeyPoint {
   $Height = [Math]::Max(40, $Height)
   $pick = $rng.Next(100)
   $region = "uniform"
-  if ($pick -lt 20) {
+  if ($EventMix -eq "overlay-heavy" -and $pick -lt 30) {
+    $region = "top-right"
+    $x = $rng.Next([int]($Width * 0.78), [Math]::Max([int]($Width * 0.78) + 1, [int]($Width * 0.98)))
+    $y = $rng.Next(3, [Math]::Max(4, [int]($Height * 0.09)))
+  }
+  elseif ($EventMix -eq "overlay-heavy" -and $pick -lt 60) {
+    $region = "overlay"
+    $x = $rng.Next([int]($Width * 0.48), [Math]::Max([int]($Width * 0.48) + 1, [int]($Width * 0.98)))
+    $y = $rng.Next([int]($Height * 0.08), [Math]::Max([int]($Height * 0.08) + 1, [int]($Height * 0.92)))
+  }
+  elseif ($EventMix -eq "play-heavy" -and $pick -lt 35) {
+    $region = "play-toggle"
+    $x = $rng.Next([int]($Width * 0.79), [Math]::Max([int]($Width * 0.79) + 1, [int]($Width * 0.86)))
+    $y = $rng.Next(3, [Math]::Max(4, [int]($Height * 0.09)))
+  }
+  elseif ($EventMix -eq "play-heavy" -and $pick -lt 65) {
+    $region = "play-surface"
+    $x = $rng.Next([int]($Width * 0.18), [Math]::Max([int]($Width * 0.18) + 1, [int]($Width * 0.98)))
+    $y = $rng.Next([int]($Height * 0.10), [Math]::Max([int]($Height * 0.10) + 1, [int]($Height * 0.92)))
+  }
+  elseif ($pick -lt 20) {
     $region = "top"
     $x = $rng.Next(4, $Width - 4)
     $y = $rng.Next(4, [Math]::Max(5, [int]($Height * 0.11)))
@@ -98,16 +128,23 @@ function New-MonkeyAction {
   $p = Get-MonkeyPoint $Width $Height
   $kind = "left"
   $extra = [ordered]@{ region = $p[2] }
-  if ($roll -lt 38) {
+  $thresholds = switch ($EventMix) {
+    "keyboard-heavy" { @(18, 23, 26, 32, 38) }
+    "mouse-heavy"    { @(35, 47, 55, 82, 100) }
+    "overlay-heavy"  { @(48, 58, 62, 74, 82) }
+    "play-heavy"     { @(42, 50, 53, 63, 70) }
+    default          { @(38, 46, 52, 73, 84) }
+  }
+  if ($roll -lt $thresholds[0]) {
     $kind = "left"
   }
-  elseif ($roll -lt 46) {
+  elseif ($roll -lt $thresholds[1]) {
     $kind = "double"
   }
-  elseif ($roll -lt 52) {
+  elseif ($roll -lt $thresholds[2]) {
     $kind = "right"
   }
-  elseif ($roll -lt 73) {
+  elseif ($roll -lt $thresholds[3]) {
     $kind = "drag"
     $dx = $rng.Next(-80, 81)
     $dy = $rng.Next(-70, 71)
@@ -116,13 +153,18 @@ function New-MonkeyAction {
     $extra.y2 = [Math]::Max(2, [Math]::Min($Height - 3, $p[1] + $dy))
     $extra.steps = $rng.Next(3, 10)
   }
-  elseif ($roll -lt 84) {
+  elseif ($roll -lt $thresholds[4]) {
     $kind = "wheel"
     $extra.delta = @(120, -120, 240, -240, 360, -360)[$rng.Next(6)]
   }
   else {
     $kind = "key"
-    $extra.key = $keyChoices[$rng.Next($keyChoices.Count)]
+    $choices = switch ($EventMix) {
+      "keyboard-heavy" { $keyboardKeyChoices }
+      "play-heavy" { $playKeyChoices }
+      default { $defaultKeyChoices }
+    }
+    $extra.key = $choices[$rng.Next($choices.Count)]
   }
   $extra.pauseMs = $rng.Next(70, 251)
   $a = [ordered]@{ t = $script:dryT; kind = $kind; x = [int]$p[0]; y = [int]$p[1]; extra = $extra }
@@ -380,6 +422,7 @@ $runInfo = [ordered]@{
   sandbox = $Sandbox
   sourceLibrary = $SourceLibrary
   replay = $Replay
+  eventMix = $EventMix
   startedUtc = [DateTime]::UtcNow.ToString("o")
 }
 $runInfo | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $OutDir "run.json") -Encoding UTF8
@@ -734,6 +777,7 @@ function Sample-Metrics {
     $sample = [pscustomobject][ordered]@{
       t = $script:runWatch.ElapsedMilliseconds
       privateBytes = [int64]$script:proc.PrivateMemorySize64
+      workingSet = [int64]$script:proc.WorkingSet64
       handles = [int]$script:proc.HandleCount
       gdi = [int][VoLumMonkeyWin]::GdiObjects($script:proc)
       user = [int][VoLumMonkeyWin]::UserObjects($script:proc)
@@ -899,6 +943,7 @@ $summary = [ordered]@{
   requestedDurationMin = $DurationMin
   elapsedSeconds = [Math]::Round($script:runWatch.Elapsed.TotalSeconds, 3)
   replay = $Replay
+  eventMix = $EventMix
   actions = $actionsDone
   restarts = $script:restarts
   flags = $script:flagCount
