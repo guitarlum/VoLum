@@ -151,6 +151,24 @@ bool Mentions(const std::vector<std::string>& list, const std::string& needle)
   return std::any_of(
     list.begin(), list.end(), [&needle](const std::string& s) { return s.find(needle) != std::string::npos; });
 }
+
+void ReplaceAllSameSize(std::string& blob, const std::string& from, const std::string& to)
+{
+  REQUIRE(from.size() == to.size());
+  size_t at = 0;
+  while ((at = blob.find(from, at)) != std::string::npos)
+  {
+    blob.replace(at, from.size(), to);
+    at += to.size();
+  }
+}
+
+void PutU32At(std::string& blob, size_t at, uint32_t value)
+{
+  REQUIRE(at + 4 <= blob.size());
+  for (int i = 0; i < 4; ++i)
+    blob[at + i] = static_cast<char>((value >> (8 * i)) & 0xff);
+}
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -230,6 +248,48 @@ TEST_CASE("An entry name that escapes the archive root is refused on write and o
   blob.replace(at, 19, "payload/amps/../../x");
   const auto read = ParseArchive(blob);
   CHECK_FALSE(read.ok);
+}
+
+TEST_CASE("A crafted Pack cannot repeat or case-collide archive entries")
+{
+  SUBCASE("duplicate central-directory names are rejected")
+  {
+    std::string blob = BuildArchive({{"payload/A.nam", "one"}, {"payload/B.nam", "two"}});
+    REQUIRE_FALSE(blob.empty());
+    ReplaceAllSameSize(blob, "payload/B.nam", "payload/A.nam");
+    const auto read = ParseArchive(blob);
+    CHECK_FALSE(read.ok);
+    CHECK(Mentions({read.error}, "duplicate"));
+  }
+
+  SUBCASE("paths differing only by case are rejected")
+  {
+    std::string blob = BuildArchive({{"payload/Foo.nam", "one"}, {"payload/Bar.nam", "two"}});
+    REQUIRE_FALSE(blob.empty());
+    ReplaceAllSameSize(blob, "payload/Bar.nam", "payload/foo.nam");
+    const auto read = ParseArchive(blob);
+    CHECK_FALSE(read.ok);
+    CHECK(Mentions({read.error}, "case"));
+  }
+}
+
+TEST_CASE("Archive entry count and total expanded bytes are bounded")
+{
+  std::vector<ArchiveEntry> many;
+  for (size_t i = 0; i <= kMaxArchiveEntries; ++i)
+    many.push_back({"payload/" + std::to_string(i), ""});
+  CHECK(BuildArchive(many).empty());
+
+  std::string blob = BuildArchive({{"payload/a", "x"}});
+  REQUIRE_FALSE(blob.empty());
+  const size_t central = blob.rfind("PK\x01\x02");
+  REQUIRE(central != std::string::npos);
+  const uint32_t tooLarge = static_cast<uint32_t>(kMaxArchiveUncompressedBytes + 1);
+  PutU32At(blob, central + 20, tooLarge);
+  PutU32At(blob, central + 24, tooLarge);
+  const auto read = ParseArchive(blob);
+  CHECK_FALSE(read.ok);
+  CHECK(Mentions({read.error}, "too large"));
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +514,22 @@ TEST_CASE("Export refuses when a capture file is missing rather than packing a h
   CHECK_FALSE(std::filesystem::exists(out));
 }
 
+TEST_CASE("A failed export leaves an existing destination byte-for-byte intact")
+{
+  Library lib("export-atomic-failure");
+  const auto out = lib.base / "existing.volumpack";
+  REQUIRE(WriteWholeFile(out, "KEEP-THIS-PACK"));
+
+  ArchiveWriteTestHooks hooks;
+  hooks.failAfterDestinationOpen = true;
+  std::string err;
+  CHECK_FALSE(WritePack(lib.store, EverythingPlan(lib.store.reg()), "", out, &err, &hooks));
+
+  std::string after;
+  REQUIRE(ReadWholeFile(out, after));
+  CHECK(after == "KEEP-THIS-PACK");
+}
+
 TEST_CASE("Sounds export of a custom-amp preset writes the owner amp into the Pack")
 {
   Library lib("export-owner-amp");
@@ -558,6 +634,46 @@ TEST_CASE("A newer contract is refused by name; an older one always imports")
     REQUIRE(contents.ok);
     CHECK(contents.library.amps.size() == 1);
   }
+}
+
+TEST_CASE("Wrong manifest and library JSON types never escape Pack open")
+{
+  Library lib("wrong-json-types");
+  std::string err;
+  const auto good = BuildPackEntries(lib.store, EverythingPlan(lib.store.reg()), "{}", &err);
+  REQUIRE_FALSE(good.empty());
+
+  int variant = 0;
+  auto wrong = [&](const char* entryName, const char* key, const nlohmann::json& value) {
+    auto entries = good;
+    for (auto& e : entries)
+      if (e.name == entryName)
+      {
+        auto j = nlohmann::json::parse(e.data);
+        j[key] = value;
+        e.data = j.dump();
+      }
+    const auto path = lib.base / ("wrong-" + std::to_string(variant++) + ".volumpack");
+    REQUIRE(WriteWholeFile(path, BuildArchive(entries)));
+    bool escaped = false;
+    PackContents result;
+    try
+    {
+      result = OpenPack(path);
+    }
+    catch (...)
+    {
+      escaped = true;
+    }
+    CHECK_FALSE(escaped);
+    CHECK_FALSE(result.ok);
+    CHECK(result.error == "This Pack is damaged.");
+  };
+
+  wrong(kManifestEntry, "contractVersion", nlohmann::json::array());
+  wrong(kManifestEntry, "job", nlohmann::json::object());
+  wrong(kManifestEntry, "includesMidiSoundMap", "yes");
+  wrong(kLibraryEntry, "amps", "not-an-array");
 }
 
 TEST_CASE("A Pack whose manifest promises a file it does not carry is incomplete")
@@ -1549,6 +1665,30 @@ TEST_CASE("Machine settings and the MIDI map ride the standalone checkbox, not t
   }
 }
 
+TEST_CASE("Invalid restored settings are refused before library or settings changes")
+{
+  Library sender("invalid-settings-sender", "sender");
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), "{not-json");
+  REQUIRE(pack.ok);
+
+  Library receiver("invalid-settings-receiver", "receiver");
+  const auto settingsPath = receiver.base / "volum-settings.json";
+  REQUIRE(WriteWholeFile(settingsPath, "{\"version\":6}"));
+  const std::string registryBefore = volum::content::RegistryToJson(receiver.store.reg()).dump();
+
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath);
+  CHECK_FALSE(result.ok);
+  CHECK_FALSE(result.libraryCommitted);
+  CHECK(volum::content::RegistryToJson(receiver.store.reg()).dump() == registryBefore);
+
+  std::string settingsAfter;
+  REQUIRE(ReadWholeFile(settingsPath, settingsAfter));
+  CHECK(settingsAfter == "{\"version\":6}");
+  std::string captureAfter;
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampStoredPath), captureAfter));
+  CHECK(captureAfter == "NAM-amp-receiver");
+}
+
 TEST_CASE("Reset without the settings box can leave a MIDI slot invalid, never renumbered")
 {
   // The locked answer: numbers stay, a missing Sound goes red. Wiping the row
@@ -1702,6 +1842,49 @@ TEST_CASE("A mid-swap write error restores the file that already landed")
   CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-rollback"));
 }
 
+TEST_CASE("Two interrupted imports cannot discard the original payload rollback")
+{
+  CollidingPair first("interrupt-first", "NAM-amp-first", "RIFF-ir-first");
+  CollidingPair second("interrupt-second", "NAM-amp-second", "RIFF-ir-second");
+  CollidingPair receiver("interrupt-receiver", "NAM-amp-original", "RIFF-ir-original");
+
+  auto open = [](CollidingPair& source) {
+    std::string err;
+    const auto out = source.base / "out.volumpack";
+    REQUIRE_MESSAGE(WritePack(source.store, EverythingPlan(source.store.reg()), "", out, &err), err);
+    return OpenPack(out);
+  };
+  const auto firstPack = open(first);
+  const auto secondPack = open(second);
+  REQUIRE(firstPack.ok);
+  REQUIRE(secondPack.ok);
+
+  ImportTestHooks interrupt;
+  interrupt.interruptAfterPayloadWrites = 1;
+  CHECK_FALSE(ApplyPack(receiver.store, firstPack, ImportVerb::Overwrite, false, true, {}, 4000, &interrupt).ok);
+  CHECK_FALSE(ApplyPack(receiver.store, secondPack, ImportVerb::Overwrite, false, true, {}, 4000, &interrupt).ok);
+
+  std::string body;
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampRel), body));
+  CHECK(body == "NAM-amp-original");
+
+  const auto result = ApplyPack(receiver.store, secondPack, ImportVerb::Overwrite, false, true);
+  REQUIRE_MESSAGE(result.ok, result.error);
+  REQUIRE(std::filesystem::exists(result.backupPath));
+  // The pre-import catalog backup remains usable because its original payload
+  // was never overwritten or deleted by either interrupted attempt.
+  REQUIRE(ReadWholeFile(receiver.store.ResolveStored(receiver.ampRel), body));
+  CHECK(body == "NAM-amp-original");
+
+  ContentStore reloaded(receiver.base);
+  REQUIRE(reloaded.Load());
+  const auto* imported = volum::pack::detail::FindAmp(reloaded.reg(), "amp_one");
+  REQUIRE(imported);
+  REQUIRE_FALSE(imported->files.empty());
+  REQUIRE(ReadWholeFile(reloaded.ResolveStored(imported->files[0].storedPath), body));
+  CHECK(body == "NAM-amp-second");
+}
+
 TEST_CASE("A successful import leaves the prior library in a backup")
 {
   Library sender("backup-sender", "sender");
@@ -1721,6 +1904,21 @@ TEST_CASE("A successful import leaves the prior library in a backup")
   // And no staging directory is left behind.
   CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-stage"));
   CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-rollback"));
+}
+
+TEST_CASE("Apply replacement count matches every replacement row in the preview")
+{
+  Library sender("replace-count-sender", "sender");
+  Library receiver("replace-count-receiver", "receiver");
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()));
+  REQUIRE(pack.ok);
+  const auto preview = BuildImportPreview(receiver.store.reg(), pack, ImportVerb::Overwrite, false, true);
+  REQUIRE(preview.replaces.size() == 4);
+
+  const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true);
+  REQUIRE_MESSAGE(result.ok, result.error);
+  CHECK(result.replacedItemCount == preview.replaces.size());
+  CHECK(result.replacedIds.size() == 3); // only payload-bearing ids need a live rig reload
 }
 
 TEST_CASE("An import is a catalog writer: a sibling's unflushed item survives it")
@@ -1990,7 +2188,7 @@ TEST_CASE("Keep mine names the local item, not the Pack's")
   CHECK_FALSE(Mentions({pr->localLabel}, "Skeleton Lead"));
 }
 
-TEST_CASE("Import removes unreferenced payloads and never a file two items still share")
+TEST_CASE("Import keeps backup payloads and never deletes a file two items still share")
 {
   // Receiver has amp_one at path A and a second amp that also names path A.
   // Overwriting amp_one with a Pack that points at path B must delete nothing at A
@@ -2013,7 +2211,7 @@ TEST_CASE("Import removes unreferenced payloads and never a file two items still
   REQUIRE(pack.ok);
   REQUIRE(pack.library.amps[0].files[0].storedPath != sharedPath);
 
-  SUBCASE("Overwrite drops the replaced amp's private file but keeps a shared one")
+  SUBCASE("Overwrite keeps the replaced amp's private file for the Pack backup")
   {
     // Give amp_one a private capture that only it names; partner keeps sharedPath.
     const auto privateSrc = WriteSrc(receiver.base / "incoming", "Private.nam", "PRIVATE-BYTES");
@@ -2028,7 +2226,7 @@ TEST_CASE("Import removes unreferenced payloads and never a file two items still
 
     ContentStore reloaded(receiver.base);
     REQUIRE(reloaded.Load());
-    CHECK_FALSE(std::filesystem::exists(reloaded.ResolveStored(privatePath))); // unreferenced
+    CHECK(std::filesystem::exists(reloaded.ResolveStored(privatePath))); // volum-content.json.packbak still names it
     CHECK(std::filesystem::exists(reloaded.ResolveStored(sharedPath))); // amp_two still names it
     REQUIRE(reloaded.ReferencesStoredPath(sharedPath));
     const auto* one = volum::pack::detail::FindAmp(reloaded.reg(), "amp_one");
