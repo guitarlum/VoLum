@@ -15,6 +15,10 @@ mkdir -p "$EVIDENCE_DIR" "$MOUNT" "$RESOURCE/Scripts"
 exec > >(tee -a "$LOG") 2>&1
 
 cleanup() {
+  if [[ -n "${dialog_pid:-}" ]]; then
+    kill "$dialog_pid" >/dev/null 2>&1 || true
+    pkill -P "$dialog_pid" >/dev/null 2>&1 || true
+  fi
   pkill -x REAPER >/dev/null 2>&1 || true
   hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
 }
@@ -43,6 +47,7 @@ xattr -cr "$REAPER_APP"
 REAPER_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$REAPER_APP/Contents/Info.plist")"
 echo "REAPER bundle id: $REAPER_BUNDLE_ID"
 bash "$SCRIPT_DIR/tcc-pregrant.sh" kTCCServiceMicrophone "$REAPER_BUNDLE_ID" 0
+bash "$SCRIPT_DIR/tcc-pregrant.sh" kTCCServiceAccessibility /usr/bin/osascript 1
 {
   echo "===== Available audio devices ====="
   system_profiler SPAudioDataType
@@ -90,9 +95,41 @@ echo go > "$EVIDENCE_DIR/go.txt"
 
 export VOLUM_REAPER_EVIDENCE_DIR="$EVIDENCE_DIR"
 echo "Launching REAPER with fresh-runner resource path $RESOURCE"
-"$REAPER_APP/Contents/MacOS/REAPER" -nosplash -new "$SCRIPT_DIR/reaper-evidence.lua" \
-  > "$EVIDENCE_DIR/reaper-process.log" 2>&1 &
+"$REAPER_APP/Contents/MacOS/REAPER" -nosplash -new > "$EVIDENCE_DIR/reaper-process.log" 2>&1 &
 reaper_pid=$!
+
+dismiss_reaper_dialogs() {
+  for _ in $(seq 1 30); do
+    result="$(osascript <<'OSA' 2>&1
+tell application "System Events"
+  if exists process "REAPER" then
+    tell process "REAPER"
+      repeat with candidateWindow in windows
+        if exists sheet 1 of candidateWindow then
+          if exists button "No" of sheet 1 of candidateWindow then
+            click button "No" of sheet 1 of candidateWindow
+            return "clicked sheet No"
+          end if
+        end if
+        if exists button "No" of candidateWindow then
+          click button "No" of candidateWindow
+          return "clicked window No"
+        end if
+      end repeat
+    end tell
+  end if
+  return "not found"
+end tell
+OSA
+)"
+    echo "$result"
+    [[ "$result" == clicked* ]] && return 0
+    sleep 1
+  done
+  echo "No dismissible REAPER dialog was found"
+}
+dismiss_reaper_dialogs > "$EVIDENCE_DIR/reaper-dialog-dismiss.log" 2>&1 &
+dialog_pid=$!
 
 deadline=$((SECONDS + 120))
 captured=0
