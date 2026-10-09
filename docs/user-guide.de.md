@@ -355,7 +355,7 @@ Ein Pack ist eine `.volumpack`-Datei mit deinen eigenen Amps, IRs, Pedalen und P
 
 ![VoLum Pack-Import-Vorschau](user-guide-pack-import.png)
 
-Die Vorschau listet alles im Pack. Entferne den Haken bei dem, was du nicht willst. Jede Zeile sagt, was passiert: **Add**, **Replace**, **Keep mine**, **Reloads** (spielt gerade) oder **Skip**.
+Die Vorschau listet alles im Pack. Entferne den Haken bei dem, was du nicht willst. Jede Zeile sagt, was passiert: **Add**, **Replace**, **Keep mine**, **Reloads** (spielt gerade) oder **Skip**. Ein Eintrag, dessen Datei das Pack nicht mitbringt, steht ebenfalls als **Skip** da und wird nicht importiert. Deine Bibliothek fasst bis zu 64 eigene Pedale; ein Pack, das mehr Plätze braucht, als noch frei sind, wird abgelehnt, bevor sich etwas ändert.
 
 VoLum erkennt ein Teil an seiner Identität, nicht an seinem Namen. Enthält das Pack genau das Teil, das du schon hast (zum Beispiel deinen eigenen Amp aus einer Sicherung), entscheidet der Mischmodus, welche Version gewinnt. Ein anderes Teil, das nur denselben Namen wie eines von dir trägt, kommt daneben dazu, und du behältst beide.
 
@@ -367,7 +367,7 @@ Ein **Everything**-Pack bietet drei Mischmodi:
 
 Ein **Sounds**- oder **A whole amp**-Pack mischt immer wie Overwrite und löscht nie etwas.
 
-**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer.
+**PLAY-Liste und Rechner-Einstellungen:** in der Standalone-App stellt ein Everything-Pack sie (letzter Amp, Szenen, Lite, Kalibrierung, MIDI-Slots) nur wieder her, wenn du **Also restore machine settings** anhakst; der Haken ist anfangs aus. Ein Plug-in hat dieses Feld nicht: dort ersetzt ein Everything-Pack deine PLAY-Liste immer. Nimmst du vorher einzelne Haken weg, kommen nur die PLAY-Schalter der Sounds hinein, die du behältst; deine übrigen Schalter bleiben (**Also restore machine settings** stellt weiterhin die ganze Liste des Packs wieder her).
 
 Vor dem Import bewahrt VoLum deine bisherige Bibliothek als `volum-content.json.packbak` auf. Ein beschädigtes Pack ändert nichts.
 

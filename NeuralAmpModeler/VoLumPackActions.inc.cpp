@@ -114,6 +114,8 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
   {
     mVolumOpenedPackDualAmp.Open(pack.settingsJson);
     VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+    for (const auto& skipped : pack.skipped)
+      VOLUM_LOG("pack", "skipped on open: " + skipped);
   }
   else
     VOLUM_LOG("pack", std::string("open refused: ") + pack.error
@@ -144,6 +146,37 @@ std::vector<std::string> NeuralAmpModeler::_VolumSoundingLibraryIds() const
         add(p.id);
   add(rig.recalledPresetId);
   return ids;
+}
+
+void NeuralAmpModeler::_VolumRefreshCustomAmpSidebar()
+{
+  // The sidebar list and the hero keep their own copy of each custom amp's name and
+  // art, taken when the row was last built. An import that replaces an amp under the
+  // same id changes neither the id nor the row index, so nothing else rebuilds them.
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  const auto& names = volum::custom::MockCustomAmps();
+  const int main = mVolumCustomMainIdx;
+  const bool mainValid = main >= 0 && main < static_cast<int>(names.size());
+  if (auto* al = pGfx->GetControlWithTag(kCtrlTagVoLumAmpList))
+  {
+    auto* list = al->As<VoLumAmpListControl>();
+    list->SetCustomAmps(names, volum::custom::MockCustomAmpArts());
+    if (mainValid)
+      list->SetCustomSelected(main);
+  }
+  if (!mainValid)
+    return;
+  if (auto* heroCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumHeroImage))
+  {
+    auto* hero = heroCtrl->As<VoLumHeroImageControl>();
+    hero->SetCustomArt(true, volum::custom::CustomAmpArt(main));
+    hero->SetName(names[static_cast<size_t>(main)].c_str());
+  }
+  if (auto* nameCtrl = pGfx->GetControlWithTag(kCtrlTagVoLumSubRowText))
+    if (mVolumExpandedSection == EVoLumSection::AMP)
+      nameCtrl->As<VoLumSubRowTextControl>()->SetName(names[static_cast<size_t>(main)].c_str(), true);
 }
 
 void NeuralAmpModeler::_VolumReloadReplacedLibraryIds(const std::vector<std::string>& ids)
@@ -195,7 +228,27 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   const std::filesystem::path settingsPath;
 #endif
 
-  const auto result = volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath);
+  // The Dual Amp sidecar travels inside the Pack's settings. It goes into ApplyPack
+  // so it is staged before the library commit; writing it afterwards left a window
+  // in which the library was new and the sidecar still the old rig's.
+  const volum::pack::MachineSidecar* dualAmpSidecar = nullptr;
+#if defined(APP_API)
+  volum::pack::MachineSidecar packDualAmp;
+  if (alsoSettings && !pack.settingsJson.empty()
+      && mVolumOpenedPackDualAmp.For(pack.settingsJson, packDualAmp.document))
+  {
+    packDualAmp.path = volum::VolumDualAmpSettingsFilePath();
+    if (packDualAmp.path.empty())
+    {
+      VOLUM_LOG("pack", "dual-amp settings not restored: no settings folder");
+      return "The machine settings could not be written - the import was not applied.";
+    }
+    dualAmpSidecar = &packDualAmp;
+  }
+#endif
+
+  const auto result =
+    volum::pack::ApplyPack(store, pack, verb, alsoSettings, standalone, settingsPath, 4000, nullptr, dualAmpSidecar);
   static const char* kVerbLog[3] = {"overwrite", "add", "reset"};
   for (const auto& notice : result.notices)
     VOLUM_LOG("pack", notice);
@@ -208,6 +261,7 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   {
     _VolumMigrateIrTrims();
     _VolumRepairRigForMissingContent(); // Reset can delete an id this rig was playing
+    _VolumRefreshCustomAmpSidebar(); // names and art the import replaced, amps it added or removed
     _VolumReloadReplacedLibraryIds(result.replacedIds);
     _VolumReconcileActiveIr();
     _VolumPushIrShaping(false);
@@ -229,17 +283,6 @@ std::string NeuralAmpModeler::_VolumImportPack(const volum::pack::PackContents& 
   // and dropped its preset. Nothing outgoing is snapshotted: the file replaced it.
   if (alsoSettings && !pack.settingsJson.empty())
   {
-    nlohmann::json dualAmpSidecar;
-    if (mVolumOpenedPackDualAmp.For(pack.settingsJson, dualAmpSidecar))
-    {
-      const auto dualAmpPath = volum::VolumDualAmpSettingsFilePath();
-      std::error_code ec;
-      if (dualAmpPath.empty() || !volum::WriteJsonAtomically(dualAmpPath, dualAmpSidecar, ec))
-      {
-        VOLUM_LOG("pack", "dual-amp settings not restored: " + ec.message());
-        return "The library was imported, but the machine settings could not be written.";
-      }
-    }
     {
       // The read swaps every scene under the outgoing live params, and a load in
       // PLAY refreshes the surface, whose dirty check snapshots live into the

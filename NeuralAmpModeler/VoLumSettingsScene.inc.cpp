@@ -222,6 +222,11 @@ void NeuralAmpModeler::_VolumApplyAmpSettings(volum::VoLumAmpSettings& s)
   mVolumSpeakerIdx = s.speakerIdx;
   mVolumChannelIdx = s.channelIdx;
 
+  // A scene whose custom SUPPORT partner is gone (deleted in a sibling instance, or
+  // by a Pack Reset) must not come back as Dual Amp on with an empty SUPPORT lane.
+  if (const std::string orphan = s.supportCustomId; !orphan.empty() && volum::custom::CustomAmpIndexById(orphan) < 0)
+    volum::content::DropSupportPartner(s, orphan);
+
   auto setParam = [this](int idx, double val) {
     GetParam(idx)->Set(val);
     SendParameterValueFromDelegate(idx, GetParam(idx)->GetNormalized(), true);

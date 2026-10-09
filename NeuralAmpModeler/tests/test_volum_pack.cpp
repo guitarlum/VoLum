@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -1431,9 +1432,9 @@ TEST_CASE("Unticking a custom amp drops every preset it owns but not factory-own
 {
   Library lib("import-drop-owner-bank", "sender");
   Preset second = lib.store.reg().presetBanks["amp_one"][0];
-  second.id = "preset_two";
+  second.id = "preset_factory";
   second.name = "Clean";
-  lib.store.reg().presetBanks["amp_one"].push_back(second);
+  lib.store.reg().presetBanks["factory:4"].push_back(second);
 
   Preset factory;
   factory.id = "preset_factory";
@@ -2470,5 +2471,362 @@ TEST_CASE("Import keeps backup payloads and never deletes a file two items still
     CHECK(std::filesystem::exists(reloaded.ResolveStored(sharedPath)));
     // The Pack's payload was written to a new path, then dropped as unreferenced.
     CHECK_FALSE(std::filesystem::exists(reloaded.ResolveStored(sender.ampStoredPath)));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// hunt-09 pack repair: F-28, F-52, F-53, F-102
+// ---------------------------------------------------------------------------
+
+namespace
+{
+// A sender whose Pack, once only `preset_one` is ticked, leaves something behind
+// (an unrelated IR), so the import is genuinely partial. Its board has one switch
+// for the ticked Sound, one for a factory amp, one for an unticked preset of a factory amp.
+struct PartialPlaySetup
+{
+  Library sender;
+  PackContents pack;
+  ImportTicks closed;
+
+  PartialPlaySetup()
+  : sender("partial-play-sender", "sender")
+  {
+    IRItem extra;
+    extra.id = "ir_extra";
+    extra.name = "Unrelated IR";
+    extra.file =
+      sender.store.ImportFileCopy(WriteSrc(sender.base / "incoming", "Extra.wav", "RIFF-extra"), "ir", "ir_extra");
+    sender.store.reg().irs.push_back(extra);
+    Preset second;
+    second.id = "preset_factory";
+    second.name = "Rhythm";
+    sender.store.reg().presetBanks["factory:4"].push_back(second);
+    sender.store.reg().midiSoundMap[5] = MidiSoundAssignment{"amp_one", "preset_one"};
+    sender.store.reg().midiSoundMap[6] = MidiSoundAssignment{"factory:2", ""};
+    sender.store.reg().midiSoundMap[8] = MidiSoundAssignment{"factory:4", "preset_factory"};
+    sender.store.reg().midiSoundMap[9] = MidiSoundAssignment{"amp_one", "preset_one"};
+    REQUIRE(sender.store.Save());
+
+    const auto full = PackFrom(sender, EverythingPlan(sender.store.reg()), "{}");
+    REQUIRE(full.ok);
+    REQUIRE(full.includesMidiSoundMap);
+    ImportTicks user;
+    user.ampIds = {"amp_one"};
+    user.presetIds = {"preset_one"};
+    closed = ApplyCompanionLock(full.library, user);
+    REQUIRE_FALSE(closed.AllSelected(full));
+    pack = SubsetPack(full, closed);
+  }
+};
+
+void SeedReceiverBoard(Library& receiver)
+{
+  receiver.store.reg().midiSoundMap[1] = MidiSoundAssignment{"factory:2", ""};
+  receiver.store.reg().midiSoundMap[5] = MidiSoundAssignment{"factory:3", ""};
+  receiver.store.reg().midiSoundMap[8] = MidiSoundAssignment{"factory:4", ""};
+  REQUIRE(receiver.store.Save());
+}
+} // namespace
+
+TEST_CASE("F-28 a partial Everything import takes only the PLAY switches of the ticked items")
+{
+  PartialPlaySetup setup;
+  REQUIRE(setup.pack.midiSlotsPartial);
+
+  SUBCASE("Overwrite in a plugin: ticked Sound's switches win, every other switch stays")
+  {
+    Library receiver("partial-play-overwrite", "recv");
+    SeedReceiverBoard(receiver);
+    REQUIRE(ApplyPack(receiver.store, setup.pack, ImportVerb::Overwrite, false, /*standalone=*/false).ok);
+
+    ContentStore reloaded(receiver.base);
+    REQUIRE(reloaded.Load());
+    const auto& map = reloaded.reg().midiSoundMap;
+    CHECK(map.at(1).ampId == "factory:2"); // not the Pack's to touch
+    CHECK(map.at(8).ampId == "factory:4"); // the Pack's switch 8 is an unticked preset
+    CHECK(map.count(6) == 0); // a factory-amp switch is not a ticked item
+    REQUIRE(map.count(5) == 1);
+    CHECK(map.at(5).ampId == "amp_one");
+    CHECK(map.at(5).presetId == "preset_one");
+    REQUIRE(map.count(9) == 1);
+    CHECK(map.at(9).presetId == "preset_one");
+  }
+
+  SUBCASE("Add keeps mine: only free switches are filled")
+  {
+    Library receiver("partial-play-add", "recv");
+    SeedReceiverBoard(receiver);
+    REQUIRE(ApplyPack(receiver.store, setup.pack, ImportVerb::Add, false, /*standalone=*/false).ok);
+
+    ContentStore reloaded(receiver.base);
+    REQUIRE(reloaded.Load());
+    const auto& map = reloaded.reg().midiSoundMap;
+    CHECK(map.at(1).ampId == "factory:2");
+    CHECK(map.at(5).ampId == "factory:3"); // occupied here: mine stays
+    CHECK(map.at(8).ampId == "factory:4");
+    REQUIRE(map.count(9) == 1); // free here: filled
+    CHECK(map.at(9).presetId == "preset_one");
+  }
+
+  SUBCASE("Ticking Also restore machine settings asks for the sender's whole board")
+  {
+    Library receiver("partial-play-whole", "recv");
+    SeedReceiverBoard(receiver);
+    REQUIRE(ApplyPack(receiver.store, setup.pack, ImportVerb::Overwrite, true, /*standalone=*/true).ok);
+
+    ContentStore reloaded(receiver.base);
+    REQUIRE(reloaded.Load());
+    CHECK(reloaded.reg().midiSoundMap.count(1) == 0);
+    CHECK(reloaded.reg().midiSoundMap.count(6) == 1);
+    CHECK(reloaded.reg().midiSoundMap.count(8) == 1);
+  }
+
+  SUBCASE("Ticking everything is not partial and replaces the board as before")
+  {
+    const auto full = PackFrom(setup.sender, EverythingPlan(setup.sender.store.reg()), "{}");
+    const auto all = SubsetPack(full, AllTicks(full));
+    CHECK_FALSE(all.midiSlotsPartial);
+    Library receiver("partial-play-all", "recv");
+    SeedReceiverBoard(receiver);
+    REQUIRE(ApplyPack(receiver.store, all, ImportVerb::Overwrite, false, /*standalone=*/false).ok);
+    ContentStore reloaded(receiver.base);
+    REQUIRE(reloaded.Load());
+    CHECK(reloaded.reg().midiSoundMap.count(1) == 0);
+    CHECK(reloaded.reg().midiSoundMap.count(6) == 1);
+  }
+}
+
+TEST_CASE("F-52 a Pack import never mints a custom pedal slot past 127")
+{
+  auto maxIndex = [](const Registry& r) {
+    int hi = 0;
+    for (const auto& p : r.pedals)
+      hi = std::max(hi, p.legacyIndex);
+    return hi;
+  };
+
+  Library sender("pedal-cap-sender", "sender");
+  sender.store.reg().pedals[0].id = "pedal_new"; // new here; its index 64 is taken here
+  sender.store.reg().pedals[0].name = "New Klon";
+  sender.store.reg().presetBanks["amp_one"][0].settings.preNam1Capture = kCustomPedalIndexBase;
+  REQUIRE(sender.store.Save());
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()));
+  REQUIRE(pack.ok);
+
+  SUBCASE("a spent pool refuses the whole import and changes nothing")
+  {
+    Library receiver("pedal-cap-full", "recv");
+    receiver.store.reg().nextPedalIndex = volum::content::kCustomPedalIndexMax + 1;
+    REQUIRE(receiver.store.Save());
+    const std::string before = volum::content::RegistryToJson(receiver.store.reg()).dump();
+
+    const auto result = ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true);
+    CHECK_FALSE(result.ok);
+    CHECK_FALSE(result.libraryCommitted);
+    CHECK(Mentions({result.error}, "pedal"));
+    CHECK(Mentions({result.error}, "Nothing was imported"));
+    CHECK(volum::content::RegistryToJson(receiver.store.reg()).dump() == before);
+    CHECK(maxIndex(receiver.store.reg()) <= volum::content::kCustomPedalIndexMax);
+    CHECK_FALSE(std::filesystem::exists(receiver.base / ".volumpack-stage"));
+  }
+
+  SUBCASE("one slot left takes one pedal; a second one is refused, not minted at 128")
+  {
+    Library receiver("pedal-cap-last", "recv");
+    receiver.store.reg().nextPedalIndex = volum::content::kCustomPedalIndexMax; // 127 is the last free index
+    REQUIRE(receiver.store.Save());
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true).ok);
+    CHECK(maxIndex(receiver.store.reg()) == volum::content::kCustomPedalIndexMax);
+
+    // A second new pedal now has no slot left.
+    Library second("pedal-cap-second", "sender2");
+    second.store.reg().pedals[0].id = "pedal_newer";
+    second.store.reg().pedals[0].name = "Newer Klon";
+    REQUIRE(second.store.Save());
+    const auto pack2 = PackFrom(second, EverythingPlan(second.store.reg()));
+    REQUIRE(pack2.ok);
+    const auto refused = ApplyPack(receiver.store, pack2, ImportVerb::Overwrite, false, true);
+    CHECK_FALSE(refused.ok);
+    CHECK(maxIndex(receiver.store.reg()) == volum::content::kCustomPedalIndexMax);
+  }
+
+  SUBCASE("a pedal already here is replaced in place even when the pool is spent")
+  {
+    Library same("pedal-cap-same-sender", "sender");
+    const auto samePack = PackFrom(same, EverythingPlan(same.store.reg()));
+    REQUIRE(samePack.ok);
+    Library receiver("pedal-cap-same", "recv");
+    receiver.store.reg().nextPedalIndex = volum::content::kCustomPedalIndexMax + 1;
+    REQUIRE(receiver.store.Save());
+    CHECK(ApplyPack(receiver.store, samePack, ImportVerb::Overwrite, false, true).ok);
+  }
+
+  SUBCASE("an index outside the pool in a hand-built Pack is re-minted inside it")
+  {
+    auto handBuilt = pack;
+    handBuilt.library.pedals[0].legacyIndex = 500;
+    handBuilt.library.nextPedalIndex = 9000;
+    handBuilt.library.presetBanks["amp_one"][0].settings.preNam1Capture = 500;
+    Library receiver("pedal-cap-hand", "recv");
+    REQUIRE(ApplyPack(receiver.store, handBuilt, ImportVerb::Overwrite, false, true).ok);
+    CHECK(maxIndex(receiver.store.reg()) <= volum::content::kCustomPedalIndexMax);
+    CHECK(receiver.store.reg().nextPedalIndex <= volum::content::kCustomPedalIndexMax + 1);
+    const auto& reg = receiver.store.reg();
+    const auto* added = volum::pack::detail::FindPedal(reg, "pedal_new");
+    REQUIRE(added);
+    CHECK(reg.presetBanks.at("amp_one")[0].settings.preNam1Capture == added->legacyIndex);
+  }
+}
+
+TEST_CASE("F-53 a library entry whose capture file is not in the Pack is skipped and reported")
+{
+  Library lib("missing-capture", "a");
+  std::string err;
+  const auto good = BuildPackEntries(lib.store, EverythingPlan(lib.store.reg()), "", &err);
+  REQUIRE_FALSE(good.empty());
+
+  // Drop one payload from both the archive and the manifest's promise, so the
+  // existing "incomplete Pack" check passes and only the library still names it.
+  auto without = [&](const std::string& prefix) {
+    auto entries = good;
+    std::string dropped;
+    for (const auto& e : entries)
+      if (e.name.rfind(std::string(kPayloadPrefix) + prefix, 0) == 0)
+        dropped = e.name.substr(std::strlen(kPayloadPrefix));
+    REQUIRE_FALSE(dropped.empty());
+    entries.erase(
+      std::remove_if(entries.begin(), entries.end(),
+                     [&](const ArchiveEntry& e) { return e.name == std::string(kPayloadPrefix) + dropped; }),
+      entries.end());
+    for (auto& e : entries)
+      if (e.name == kManifestEntry)
+      {
+        auto j = nlohmann::json::parse(e.data);
+        auto& files = j["files"];
+        files.erase(std::remove(files.begin(), files.end(), dropped), files.end());
+        e.data = j.dump();
+      }
+    return ReadPackFromArchive(ParseArchive(BuildArchive(entries)));
+  };
+
+  SUBCASE("an IR without its file")
+  {
+    const auto pack = without("ir/");
+    REQUIRE(pack.ok);
+    CHECK(pack.library.irs.empty());
+    CHECK(pack.library.amps.size() == 1);
+    REQUIRE(pack.skipped.size() == 1);
+    CHECK(Mentions(pack.skipped, "IR \"Mesa OS\""));
+  }
+
+  SUBCASE("a pedal without its file")
+  {
+    const auto pack = without("pedals/");
+    REQUIRE(pack.ok);
+    CHECK(pack.library.pedals.empty());
+    CHECK(Mentions(pack.skipped, "Pedal \"Klon\""));
+  }
+
+  SUBCASE("an amp without its file leaves with its preset bank")
+  {
+    const auto pack = without("amps/");
+    REQUIRE(pack.ok);
+    CHECK(pack.library.amps.empty());
+    CHECK(pack.library.presetBanks.count("amp_one") == 0);
+    CHECK(Mentions(pack.skipped, "Custom amp \"Plexi\""));
+    CHECK(pack.library.irs.size() == 1);
+
+    Library receiver("missing-capture-recv", "recv");
+    receiver.store.reg().amps.clear();
+    receiver.store.reg().presetBanks.clear();
+    REQUIRE(receiver.store.Save());
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true).ok);
+    CHECK(receiver.store.reg().amps.empty()); // nothing half-imported
+  }
+
+  SUBCASE("a Pack that carries everything it names skips nothing")
+  {
+    const auto pack = ReadPackFromArchive(ParseArchive(BuildArchive(good)));
+    REQUIRE(pack.ok);
+    CHECK(pack.skipped.empty());
+    CHECK(pack.library.amps.size() == 1);
+  }
+}
+
+TEST_CASE("F-102 the Dual Amp sidecar is staged before the library commit")
+{
+  Library sender("sidecar-sender", "sender");
+  const auto pack = PackFrom(sender, EverythingPlan(sender.store.reg()), "{\"midiCh\":9}");
+  REQUIRE(pack.ok);
+  const nlohmann::json doc = {{"amps", {{"1", {{"dualAmpActive", true}}}}}};
+
+  auto strayTemps = [](const std::filesystem::path& dir) {
+    size_t n = 0;
+    for (const auto& e : std::filesystem::directory_iterator(dir))
+      if (e.path().filename().string().find(".tmp.") != std::string::npos)
+        ++n;
+    return n;
+  };
+
+  SUBCASE("both machine files land with the library")
+  {
+    Library receiver("sidecar-ok", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    MachineSidecar sidecar{receiver.base / "volum-dual-amp-settings.json", doc};
+    const auto result =
+      ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath, 4000, nullptr, &sidecar);
+    REQUIRE(result.ok);
+    std::string text;
+    REQUIRE(ReadWholeFile(sidecar.path, text));
+    CHECK(nlohmann::json::parse(text) == doc);
+    CHECK(std::filesystem::exists(settingsPath));
+    CHECK(strayTemps(receiver.base) == 0);
+  }
+
+  SUBCASE("a sidecar that cannot be written refuses the import before anything changes")
+  {
+    Library receiver("sidecar-blocked", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    REQUIRE(WriteWholeFile(receiver.base / "blocker", "a file where a folder should be"));
+    MachineSidecar sidecar{receiver.base / "blocker" / "volum-dual-amp-settings.json", doc};
+    const std::string before = volum::content::RegistryToJson(receiver.store.reg()).dump();
+
+    const auto result =
+      ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath, 4000, nullptr, &sidecar);
+    CHECK_FALSE(result.ok);
+    CHECK_FALSE(result.libraryCommitted);
+    CHECK(volum::content::RegistryToJson(receiver.store.reg()).dump() == before);
+    ContentStore reloaded(receiver.base);
+    REQUIRE(reloaded.Load());
+    CHECK(volum::content::RegistryToJson(reloaded.reg()).dump() == before);
+    CHECK_FALSE(std::filesystem::exists(settingsPath));
+    CHECK(strayTemps(receiver.base) == 0);
+  }
+
+  SUBCASE("a library write that fails leaves the old sidecar and no temp behind")
+  {
+    Library receiver("sidecar-lib-fail", "recv");
+    const auto settingsPath = receiver.base / "volum-settings.json";
+    MachineSidecar sidecar{receiver.base / "volum-dual-amp-settings.json", doc};
+    REQUIRE(WriteWholeFile(sidecar.path, "{\"amps\":{}}"));
+    ImportTestHooks fail;
+    fail.failBeforePayloadWrite = 1;
+    CHECK_FALSE(
+      ApplyPack(receiver.store, pack, ImportVerb::Overwrite, true, true, settingsPath, 4000, &fail, &sidecar).ok);
+    std::string text;
+    REQUIRE(ReadWholeFile(sidecar.path, text));
+    CHECK(nlohmann::json::parse(text) == nlohmann::json::parse("{\"amps\":{}}"));
+    CHECK(strayTemps(receiver.base) == 0);
+  }
+
+  SUBCASE("unticked machine settings leave the sidecar alone")
+  {
+    Library receiver("sidecar-unticked", "recv");
+    MachineSidecar sidecar{receiver.base / "volum-dual-amp-settings.json", doc};
+    REQUIRE(ApplyPack(receiver.store, pack, ImportVerb::Overwrite, false, true, receiver.base / "s.json", 4000, nullptr,
+                      &sidecar)
+              .ok);
+    CHECK_FALSE(std::filesystem::exists(sidecar.path));
   }
 }

@@ -403,6 +403,62 @@ TEST_CASE("Removal matrix: deleting a custom amp cascades its bank and clears su
   CHECK(store.reg().presetBanks.at("factory:2")[0].settings.supportCustomId.empty());
 }
 
+// F-31: a stored rig whose custom SUPPORT partner is deleted must not keep Dual Amp
+// on with an empty SUPPORT lane.
+TEST_CASE("Removal matrix: deleting a custom amp turns Dual off in rigs that used it as SUPPORT")
+{
+  ContentStore store;
+  volum::custom::CustomAmp support;
+  support.id = "amp_support";
+  store.reg().amps.push_back(support);
+
+  auto dualRig = [](const std::string& id, const std::string& supportId, int supportFactoryIdx) {
+    Preset pr;
+    pr.id = id;
+    pr.name = id;
+    pr.settings.dualAmpActive = true;
+    pr.settings.supportAmpIdx = supportFactoryIdx;
+    pr.settings.supportCustomId = supportId;
+    pr.settings.supportCustomSlot = 1;
+    pr.settings.supportCustomChannel = 2;
+    return pr;
+  };
+  store.reg().presetBanks["factory:2"] = {
+    dualRig("on_deleted", "amp_support", -1), dualRig("on_other", "amp_other", -1), dualRig("on_factory", "", 3)};
+  Preset single;
+  single.id = "single";
+  single.name = "single";
+  single.settings.supportCustomId = "amp_support"; // stale id on a rig that is not Dual
+  store.reg().presetBanks["factory:2"].push_back(single);
+
+  store.RemoveCustomAmp("amp_support");
+
+  const auto& bank = store.reg().presetBanks.at("factory:2");
+  CHECK_FALSE(bank[0].settings.dualAmpActive);
+  CHECK(bank[0].settings.supportCustomId.empty());
+  CHECK(bank[0].settings.supportCustomSlot == volum::custom::kUnassignedSlot);
+  CHECK(bank[0].settings.supportCustomChannel == 0);
+  // A different custom partner, or a factory one, is a real Dual rig still.
+  CHECK(bank[1].settings.dualAmpActive);
+  CHECK(bank[1].settings.supportCustomId == "amp_other");
+  CHECK(bank[2].settings.dualAmpActive);
+  CHECK(bank[2].settings.supportAmpIdx == 3);
+  CHECK(bank[3].settings.supportCustomId.empty());
+}
+
+TEST_CASE("DropSupportPartner heals one stored rig and reports whether it referenced the amp")
+{
+  VoLumAmpSettings s;
+  s.dualAmpActive = true;
+  s.supportCustomId = "amp_gone";
+  CHECK_FALSE(volum::content::DropSupportPartner(s, "amp_else"));
+  CHECK_FALSE(volum::content::DropSupportPartner(s, ""));
+  CHECK(s.dualAmpActive);
+  CHECK(volum::content::DropSupportPartner(s, "amp_gone"));
+  CHECK_FALSE(s.dualAmpActive);
+  CHECK(s.supportCustomId.empty());
+}
+
 // Regression: RemoveCustomAmp must delete the copied .nam by its resolvable
 // `storedPath`, not the display-leaf `file`. Deleting by leaf silently resolves
 // to the wrong path and orphans the imported file on disk.

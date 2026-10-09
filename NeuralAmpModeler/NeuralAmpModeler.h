@@ -395,6 +395,9 @@ public:
   // an id this instance is still playing has disappeared from the library. Called
   // on the next moment this instance needs that id.
   void _VolumRepairRigForMissingContent();
+  // Rebuild the sidebar's custom-amp rows (name, art) and the focused custom amp's
+  // hero from the registry, after a Pack import changed what is in it.
+  void _VolumRefreshCustomAmpSidebar();
 
   // --- Pack export / import (Gear -> Settings) ---------------------------------
   // The Pack modal asks the questions; these three do the IO. Export/import

@@ -355,7 +355,7 @@ A Pack is one `.volumpack` file with your custom amps, IRs, pedals and presets. 
 
 ![VoLum Pack import preview](user-guide-pack-import.png)
 
-The preview lists everything in the Pack. Untick what you do not want. Each row says what will happen: **Add**, **Replace**, **Keep mine**, **Reloads** (playing now) or **Skip**.
+The preview lists everything in the Pack. Untick what you do not want. Each row says what will happen: **Add**, **Replace**, **Keep mine**, **Reloads** (playing now) or **Skip**. An entry whose file the Pack does not carry is listed as **Skip** too and is not imported. Your library holds up to 64 custom pedals; a Pack that needs more slots than are left is refused before anything changes.
 
 VoLum knows an item by its identity, not its name. If the Pack holds the very same item you already have (for example, your own amp from a backup), the merge mode decides which version wins. A different item that only shares a name with one of yours is added beside it, and you keep both.
 
@@ -367,7 +367,7 @@ An **Everything** Pack offers three merge modes:
 
 A **Sounds** or **A whole amp** Pack always merges like Overwrite and never deletes anything.
 
-**PLAY list and machine settings:** in the standalone app, an Everything Pack restores them (last amp, scenes, Lite, calibration, MIDI slots) only if you tick **Also restore machine settings**, which starts unticked. A plug-in has no such box: there an Everything Pack always replaces your PLAY list.
+**PLAY list and machine settings:** in the standalone app, an Everything Pack restores them (last amp, scenes, Lite, calibration, MIDI slots) only if you tick **Also restore machine settings**, which starts unticked. A plug-in has no such box: there an Everything Pack always replaces your PLAY list. If you untick some items first, only the PLAY switches that hold the Sounds you kept are imported and your other switches stay (**Also restore machine settings** still restores the Pack's whole list).
 
 Before importing, VoLum keeps your previous library as `volum-content.json.packbak`. A damaged Pack changes nothing.
 

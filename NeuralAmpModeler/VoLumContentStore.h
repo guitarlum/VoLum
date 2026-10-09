@@ -1327,6 +1327,25 @@ inline Registry MergeRegistries(const Registry& disk, const Registry& baseline, 
 // everyone until someone deletes a stale file. `LockFileEx` and `flock` are both
 // released by the kernel when the handle closes, and every handle closes when the
 // process ends, however it ends.
+// A stored rig whose Dual Amp SUPPORT partner was the custom amp `id`, which is
+// gone. A custom partner is saved with supportAmpIdx = -1, so clearing the id alone
+// left Dual Amp on with an empty SUPPORT lane (silent half of the rig, no way to
+// tell from the preset). Dual goes off with the partner, the same answer the live
+// rig gets from a delete (VoLumRigRepair.h DropSupportLane). A factory partner
+// (supportAmpIdx >= 0) stays: Dual is still a real rig without the custom amp.
+// Returns true when the rig referenced `id`.
+inline bool DropSupportPartner(VoLumAmpSettings& s, const std::string& id)
+{
+  if (id.empty() || s.supportCustomId != id)
+    return false;
+  s.supportCustomId.clear();
+  s.supportCustomSlot = custom::kUnassignedSlot;
+  s.supportCustomChannel = 0;
+  if (s.dualAmpActive && s.supportAmpIdx < 0)
+    s.dualAmpActive = false;
+  return true;
+}
+
 class RegistryFileLock
 {
 public:
@@ -1968,13 +1987,9 @@ public:
     }
     mReg.presetBanks.erase(id);
     mReg.legacyCustomScenes.erase(id);
-    auto clearSupport = [&id](VoLumAmpSettings& s) {
-      if (s.supportCustomId == id)
-        s.supportCustomId.clear();
-    };
     for (auto& bank : mReg.presetBanks)
       for (auto& pr : bank.second)
-        clearSupport(pr.settings);
+        DropSupportPartner(pr.settings, id);
     // A MIDI slot pointing at this amp keeps its number and goes invalid (red) -
     // the locked answer in the delete-while-playing ticket. Silently deleting the
     // row would renumber the player's slots behind their back, so the assignment
