@@ -610,7 +610,7 @@ NeuralAmpModeler::~NeuralAmpModeler()
 
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
-  _VolumSaveSettingsToFile();
+  _VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);
   mVolumSettingsDirty = false;
   VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
 #else
@@ -627,8 +627,10 @@ NeuralAmpModeler::~NeuralAmpModeler()
   if (mVolumCalibrationDefaultsDirty)
   {
     mVolumCalibrationDefaultsDirty = false;
-    _VolumSaveCalibrationDefaults();
+    _VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs);
   }
+  // A Lite / Animate / calibration key an earlier busy lock left queued.
+  _VolumFlushMachineKeys(volum::kMachineSettingsFinalLockMs);
   VolumForgetWriteDebounce(this);
   _DeallocateIOPointers();
 }
@@ -1120,7 +1122,9 @@ void NeuralAmpModeler::OnIdle()
     {
       mVolumSettingsDirty = false;
       debounce.markWritten(nowMs);
-      _VolumSaveSettingsToFile();
+      // A busy lock: stay dirty, so the debounce retries after the next quiet window.
+      if (!_VolumSaveSettingsToFile(volum::kMachineSettingsIdleLockMs))
+        mVolumSettingsDirty = true;
     }
   }
 #endif
@@ -1134,9 +1138,11 @@ void NeuralAmpModeler::OnIdle()
     {
       mVolumCalibrationDefaultsDirty = false;
       debounce.markWritten(nowMs);
-      _VolumSaveCalibrationDefaults();
+      _VolumSaveCalibrationDefaults(volum::kMachineSettingsIdleLockMs);
     }
   }
+  else if (mVolumMachineSettings.HasPending() && mVolumMachineSettings.RetryDue(VolumWriteNowMs()))
+    _VolumFlushMachineKeys(volum::kMachineSettingsIdleLockMs);
 
   if (auto* pGfx = GetUI())
   {
@@ -1486,15 +1492,15 @@ void NeuralAmpModeler::OnUIClose()
   // Save while params are still valid (destructor may run after teardown)
   _VolumSaveCurrentToSettings();
 #ifdef APP_API
-  _VolumSaveSettingsToFile();
-  mVolumSettingsDirty = false;
+  // If the lock stays busy the change stays pending for OnIdle and the destructor.
+  mVolumSettingsDirty = !_VolumSaveSettingsToFile(volum::kMachineSettingsFinalLockMs);
   VolumDebounceFor(this).settings.markWritten(VolumWriteNowMs());
 #endif
   // Calibration defaults were never flushed on close before debouncing them.
   if (mVolumCalibrationDefaultsDirty)
   {
     mVolumCalibrationDefaultsDirty = false;
-    _VolumSaveCalibrationDefaults();
+    _VolumSaveCalibrationDefaults(volum::kMachineSettingsFinalLockMs);
   }
   VolumDebounceFor(this).calibration.markWritten(VolumWriteNowMs());
 }
@@ -1784,6 +1790,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
   if (source == EParamSource::kUI && (paramIdx == kCalibrateInput || paramIdx == kInputCalibrationLevel))
   {
+    mVolumCalibrationEdits.Mark(/*toggleEdited=*/paramIdx == kCalibrateInput);
     mVolumCalibrationDefaultsDirty = true;
     VolumDebounceFor(this).calibration.dirty(VolumWriteNowMs());
   }

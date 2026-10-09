@@ -58,6 +58,7 @@
 #include "VoLumOverlayStack.h"
 #include "VoLumRigRepair.h" // 1.3.0 delete / Pack-replace of a sounding library id
 #include "VoLumPack.h" // 1.3.0 .volumpack export / import
+#include "VoLumMachineSettingsFile.h"
 #include "VoLumPeakAvgSender.h"
 
 const int kNumPresets = 1;
@@ -262,8 +263,11 @@ public:
   // otherwise stay stale (e.g. output stuck at silence until a manual knob nudge).
   // See volum::dsp_cache::kRestoreReappliedCaches for the locked param set.
   void _VolumApplyDspCaches();
-  void _VolumSaveSettingsToFile();
-  void _VolumSaveCalibrationDefaults();
+  // False when the write failed (e.g. the lock stayed busy); the caller keeps it pending.
+  bool _VolumSaveSettingsToFile(int lockTimeoutMs);
+  void _VolumSaveCalibrationDefaults(int lockTimeoutMs);
+  // Writes the queued single machine keys; false leaves them queued for OnIdle.
+  bool _VolumFlushMachineKeys(int lockTimeoutMs);
   void _VolumSaveLiteMode();
   void _VolumLoadSettingsFromFile();
   // VoLum: set the machine-global A2 Lite/Full mode, persist it, and reload all
@@ -647,9 +651,12 @@ private:
   volum::LatencyReport mVolumLastLatencyReport{};
   bool mVolumSettingsDirty = false;
   bool mVolumCalibrationDefaultsDirty = false;
-  // volum::kMachineSharedKeys as this process last loaded or wrote them. The
-  // standalone's whole-file save writes only the ones it changed since.
-  nlohmann::json mVolumMachineKeysSynced;
+  // This instance's machine-file writes: the shared keys as last loaded or
+  // written (the standalone's whole-file save writes only the ones it changed
+  // since), plus single keys still waiting for the lock.
+  volum::MachineSettingsWriter mVolumMachineSettings;
+  // Which calibration default the user edited; only those keys are written.
+  volum::CalibrationEdits mVolumCalibrationEdits;
   // Set true while _VolumRestoreReverbModeSnapshot is mid-flight so the cascading
   // OnParamChange / OnParamChangeUI handlers triggered by setParam (which calls
   // SendParameterValueFromDelegate -> OnParamChangeUI) don't re-enter snapshot save /

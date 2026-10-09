@@ -1170,7 +1170,7 @@ TEST_CASE("F-63: standalone Output mode round-trips through the machine settings
 
   // The standalone writes the key and reads it back at startup.
   const std::string scene = ReadSceneSource();
-  const auto save = scene.find("void NeuralAmpModeler::_VolumSaveSettingsToFile()");
+  const auto save = scene.find("bool NeuralAmpModeler::_VolumSaveSettingsToFile(int lockTimeoutMs)");
   REQUIRE(save != std::string::npos);
   const auto saveEnd = scene.find("\n}\n", save);
   CHECK(scene.find("j[volum::kOutputModeMachineKey] = GetParam(kOutputMode)->Int();", save) < saveEnd);

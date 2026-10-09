@@ -256,20 +256,36 @@ TEST_CASE("F-12: settings writers wait for another process's read-merge-write")
 TEST_CASE("F-12: every volum-settings.json writer goes through the locked merge")
 {
   const std::string scene = ReadSourceText("VoLumSettingsScene.inc.cpp");
-  const std::string save = FunctionBody(scene, "void NeuralAmpModeler::_VolumSaveSettingsToFile()");
-  CHECK(save.find("volum::WriteWholeMachineSettings(settingsPath, std::move(j), mVolumMachineKeysSynced, ec)")
-        != std::string::npos);
+  const std::string save = FunctionBody(scene, "bool NeuralAmpModeler::_VolumSaveSettingsToFile(int lockTimeoutMs)");
+  CHECK(save.find("mVolumMachineSettings.WriteWhole(settingsPath, std::move(j), lockTimeoutMs") != std::string::npos);
   CHECK(save.find("WriteJsonAtomically(settingsPath") == std::string::npos);
 
   const std::string machineBool = FunctionBody(scene, "void NeuralAmpModeler::_VolumSaveMachineBool(");
-  CHECK(machineBool.find("volum::MergeMachineSettingsKeys(settingsPath, keys, mVolumMachineKeysSynced")
-        != std::string::npos);
+  CHECK(machineBool.find("mVolumMachineSettings.Queue({{key, value}});") != std::string::npos);
+  CHECK(machineBool.find("_VolumFlushMachineKeys(volum::kMachineSettingsIdleLockMs);") != std::string::npos);
   CHECK(machineBool.find("WriteJsonAtomically") == std::string::npos);
 
-  const std::string calibration = FunctionBody(scene, "void NeuralAmpModeler::_VolumSaveCalibrationDefaults()");
-  CHECK(calibration.find("volum::MergeMachineSettingsKeys(settingsPath, keys, mVolumMachineKeysSynced")
-        != std::string::npos);
+  // Only the calibration key the user edited, never both (CalibrationEdits).
+  const std::string calibration =
+    FunctionBody(scene, "void NeuralAmpModeler::_VolumSaveCalibrationDefaults(int lockTimeoutMs)");
+  CHECK(calibration.find("mVolumCalibrationEdits.TakeKeys(") != std::string::npos);
+  CHECK(calibration.find("\"CalibrateInput\"") == std::string::npos);
   CHECK(calibration.find("WriteJsonAtomically") == std::string::npos);
+  const std::string flush = FunctionBody(scene, "bool NeuralAmpModeler::_VolumFlushMachineKeys(int lockTimeoutMs)");
+  CHECK(flush.find("mVolumMachineSettings.FlushPending(settingsPath, lockTimeoutMs") != std::string::npos);
+
+  const std::string plugin = ReadSourceText("NeuralAmpModeler.cpp");
+  const std::string paramUi = FunctionBody(plugin, "void NeuralAmpModeler::OnParamChangeUI(");
+  CHECK(paramUi.find("mVolumCalibrationEdits.Mark(/*toggleEdited=*/paramIdx == kCalibrateInput);")
+        != std::string::npos);
+  // A failed write stays pending: OnIdle re-dirties the full save and retries queued keys.
+  const std::string idle = FunctionBody(plugin, "void NeuralAmpModeler::OnIdle()");
+  CHECK(
+    idle.find("if (!_VolumSaveSettingsToFile(volum::kMachineSettingsIdleLockMs))\n        mVolumSettingsDirty = true;")
+    != std::string::npos);
+  CHECK(idle.find("mVolumMachineSettings.RetryDue(VolumWriteNowMs())") != std::string::npos);
+  const std::string dtor = FunctionBody(plugin, "NeuralAmpModeler::~NeuralAmpModeler()");
+  CHECK(dtor.find("_VolumFlushMachineKeys(volum::kMachineSettingsFinalLockMs);") != std::string::npos);
 
   // The sync point is the load: whatever it put live is what this process "has".
   const std::string load = FunctionBody(scene, "void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
@@ -277,8 +293,8 @@ TEST_CASE("F-12: every volum-settings.json writer goes through the locked merge"
   CHECK(early != std::string::npos);
   CHECK(load.rfind("_VolumNoteMachineKeysSynced();") > load.find("catch (...)"));
   const std::string note = FunctionBody(scene, "void NeuralAmpModeler::_VolumNoteMachineKeysSynced()");
-  CHECK(note.find("mVolumLiteMode.load(), mVolumAnimatePlayArt.load(), GetParam(kCalibrateInput)->Bool()")
-        != std::string::npos);
+  CHECK(note.find("mVolumMachineSettings.NoteLoaded(") != std::string::npos);
+  CHECK(note.find("mVolumLiteMode.load(), mVolumAnimatePlayArt.load(),") != std::string::npos);
 
   // Pack import replaces the file under the same lock.
   const std::string pack = ReadSourceText("VoLumPack.h");
