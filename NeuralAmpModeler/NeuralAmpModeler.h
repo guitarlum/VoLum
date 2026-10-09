@@ -403,10 +403,11 @@ public:
   // Lanes playing an id the import replaced move to the new payload rather than to
   // the delete fallback: a confirmed replace is not a delete.
   void _VolumReloadReplacedLibraryIds(const std::vector<std::string>& ids);
-  // Push a custom main amp's named cabs (empty slots disabled), Custom-IR state,
-  // and channel labels into the shared speaker row + channel stepper (display
-  // only; no model load). mVolumCustomMainIdx tracks the focused custom main amp
-  // (-1 = a factory amp is active).
+  // Commit a custom amp's cab/channel routing and request its capture load, then,
+  // when the editor is open, push its named cabs (empty slots disabled), Custom-IR
+  // state and channel labels into the shared speaker row + channel stepper. The
+  // routing part must also run headless. mVolumCustomMainIdx tracks the focused
+  // custom main amp (-1 = a factory amp is active).
   void _VolumApplyCustomMainCabs(int customIdx, bool supportLane = false);
   void _VolumSetCustomChannelStepper(int customIdx, bool supportLane, int channel);
   // F7 custom IR: the mutable settings of the currently active lane (factory amp

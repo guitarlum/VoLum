@@ -2505,7 +2505,7 @@ TEST_CASE("Custom sidebar selection re-derives the focused lane's cab row")
   const std::string select = MemberFnUntilNext(ReadPluginSource(), "void NeuralAmpModeler::_VolumSelectCustomAmp(");
   RequireContains(select, "_VolumApplyCustomMainCabs(customIdx);");
 
-  // The headless early-return also calls ApplyCustomMainCabs (a no-op without UI).
+  // The headless early-return also calls ApplyCustomMainCabs (routing only, no paint).
   // The focused-lane rederive has to run on the UI path after that return, or a
   // SUPPORT-focused sidebar click still leaves the previous partner on the row.
   const auto noUi = select.find("if (!pGfx)");
@@ -2513,6 +2513,32 @@ TEST_CASE("Custom sidebar selection re-derives the focused lane's cab row")
   const auto noUiReturn = select.find("return;", noUi);
   REQUIRE(noUiReturn != std::string::npos);
   REQUIRE(select.find("_VolumApplyFocusedLaneCabs();", noUiReturn) != std::string::npos);
+}
+
+TEST_CASE("Custom lane routing commits with the editor closed")
+{
+  // With no editor, a MIDI Sound recall of a custom amp (and a preset recall or a
+  // host session restore) left mVolumCustomMainSlot/Channel at DIRECT / 1: both
+  // appliers returned on a null GetUI() ahead of the routing write, so the loader
+  // staged the wrong capture or none. The plugin class is not linked into this
+  // binary and the plan is covered in test_volum_ui_sync_plan.cpp, so this pins
+  // that nothing editor-gated stands between the plan and the routing write.
+  const std::string source = ReadPluginSource();
+  const std::string cabs = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyCustomMainCabs(");
+  RequireDoesNotContain(cabs, "GetUI()");
+  RequireDoesNotContain(cabs, "return;");
+  RequireContains(cabs, "_VolumApplyUiSyncPlan(");
+
+  const std::string apply = MemberFnUntilNext(source, "void NeuralAmpModeler::_VolumApplyUiSyncPlan(");
+  const auto commit = apply.find("mVolumCustomMainSlot = plan.customSlot;");
+  REQUIRE(commit != std::string::npos);
+  const auto factoryExit = apply.find("if (plan.sidebarCustomIdx < 0)");
+  REQUIRE(factoryExit != std::string::npos);
+  REQUIRE(factoryExit < commit);
+  const std::string beforeCommit = apply.substr(0, commit);
+  INFO("the factory-lane exit must be the only return ahead of the routing write");
+  CHECK(beforeCommit.find("return;") == beforeCommit.find("return;", factoryExit));
+  RequireContains(apply.substr(commit), "mVolumNeedsLoad.store(true);");
 }
 
 TEST_CASE("Hero lane clicks ask the shared Dual Amp click protocol")
