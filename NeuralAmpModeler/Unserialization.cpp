@@ -944,6 +944,7 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
   mVolumDidRestorePresetSelection = false;
   mVolumActivePresetId.clear();
   mVolumHasRecalledSnapshot = false;
+  mVolumUiMode = volum::UiMode::Build;
   mVolumUiSyncPending.store(true);
   return pos;
 }

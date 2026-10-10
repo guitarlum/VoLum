@@ -154,8 +154,9 @@ inline bool ParsePlayFakePeak(const char* text, float& norm)
   return true;
 }
 
-// Debug-only VOLUM_PLAY_FAKE_PEAK=strum: one strum per second, accented on beats
-// 1 and 3, each decaying 36 dB/s. Recordings that last a multiple of the bar loop
+// VOLUM_PLAY_FAKE_PEAK=strum, for docs captures from Release builds; it drives the
+// meters and art only, never audio. One strum per second, accented on beats 1 and
+// 3, each decaying 36 dB/s. Recordings that last a multiple of the bar loop
 // seamlessly.
 inline constexpr double kPlayFakeStrumBarSec = 4.0;
 

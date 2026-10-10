@@ -85,12 +85,18 @@ TEST_CASE("Fresh installs and 1.2.x upgrades open on PLAY with the BUILD tip")
   const std::string header = ReadPlaySource("NeuralAmpModeler.h");
   CHECK(header.find("volum::UiMode mVolumUiMode = volum::kFirstRunUiMode;") != std::string::npos);
   // Projects saved before PLAY existed reopen in BUILD: a 1.2.x id-tail reads
-  // uiMode "build" (above), and a chunk with no id-tail at all says so explicitly.
+  // uiMode "build" (above), and a chunk with no id-tail at all says so explicitly,
+  // as does a headerless NAM-era chunk.
   const std::string unser = ReadPlaySource("Unserialization.cpp");
   const auto noTail = unser.find("if (!haveIdTail)\n    {");
   REQUIRE(noTail != std::string::npos);
   const auto noTailEnd = unser.find("\n    }", noTail + 10);
   CHECK(unser.substr(noTail, noTailEnd - noTail).find("mVolumUiMode = volum::UiMode::Build;") != std::string::npos);
+  const auto headerless = unser.find("int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(");
+  REQUIRE(headerless != std::string::npos);
+  const auto headerlessEnd = unser.find("\n}\n", headerless);
+  CHECK(unser.substr(headerless, headerlessEnd - headerless).find("mVolumUiMode = volum::UiMode::Build;")
+        != std::string::npos);
   // The first switch to BUILD, by any route, dismisses the tip for this machine.
   const std::string runtime = ReadPlaySource("VoLumPlayRuntime.inc.cpp");
   const auto setMode = runtime.find("void NeuralAmpModeler::_VolumSetUiMode(");
