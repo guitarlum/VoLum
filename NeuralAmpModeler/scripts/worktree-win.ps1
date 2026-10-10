@@ -15,7 +15,7 @@
 #   pwsh NeuralAmpModeler/scripts/worktree-win.ps1 -Remove C:\dev\VoLum-hunt-30-foo -DeleteBranch
 #
 # -Remove refuses uncommitted tracked or untracked changes unless -Force.
-# -DeleteBranch uses `git branch -d`, which keeps a branch that is not merged.
+# -DeleteBranch deletes the branch only when origin/<Base> (default dev) contains it.
 [CmdletBinding()]
 param(
   [string] $Add,
@@ -136,8 +136,11 @@ for ($i = 0; $i -lt 3 -and (Test-Path -LiteralPath $target); $i++) {
 Invoke-Git -C $main worktree prune
 
 if ($DeleteBranch -and $wt.Branch) {
-  & git -C $main branch -d $wt.Branch
-  if ($LASTEXITCODE -ne 0) { Write-Warning "kept branch $($wt.Branch): not merged (delete it by hand if that is intended)" }
+  # Merged means "in origin/<Base>": git branch -d would compare against whatever
+  # the main checkout happens to have checked out.
+  & git -C $main merge-base --is-ancestor "refs/heads/$($wt.Branch)" "refs/remotes/origin/$Base"
+  if ($LASTEXITCODE -eq 0) { Invoke-Git -C $main branch -D $wt.Branch }
+  else { Write-Warning "kept branch $($wt.Branch): not in origin/$Base (delete it by hand if that is intended)" }
 }
 
 $lost = & git -C $main submodule status | Where-Object { $_ -match '^-' }
