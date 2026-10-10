@@ -28,10 +28,10 @@ VoLum ist eine Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. In **
 ## Schnellstart
 
 1. **Gitarre anschließen.** Öffne in der Standalone-App die Einstellungen (das Zahnrad oben rechts), bleib auf **SIGNAL** und klicke **Audio & MIDI devices...**. Wähle dein Audio-Interface, einen Mono-Eingang für die Gitarre und deine Ausgänge. In einer DAW legst du VoLum auf eine Spur, die deine Gitarre aufnimmt.
-2. **Amp wählen** in der linken Liste, dann Kanal und Cab.
-3. **Pedale und Effekte hinzufügen.** Klicke **PRE** für Pedale vor dem Amp, **POST** für Chorus, Delay, Reverb und Tremolo.
-4. **Sound speichern.** Drücke **Strg+S**, gib einen Namen ein und drücke Enter.
-5. **Spielen.** Drücke **P**, um zu PLAY zu wechseln. Fünf Sounds liegen schon auf den Programmen 0 bis 4. Klicke einen an oder schalte mit den Pfeiltasten oder einem MIDI-Fußcontroller durch.
+2. **Spielen.** VoLum öffnet in PLAY, fünf Sounds liegen schon auf den Programmen 0 bis 4. Klicke einen an oder schalte mit den Pfeiltasten oder einem MIDI-Fußcontroller durch.
+3. **Sound anpassen.** Klicke den Schalter oben rechts oder drücke **P**, um BUILD zu öffnen. Beim ersten Mal zeigt ein Hinweis **Tweak your sound** darauf. Wähle einen Amp in der linken Liste, dann Kanal und Cab.
+4. **Pedale und Effekte hinzufügen.** Klicke **PRE** für Pedale vor dem Amp, **POST** für Chorus, Delay, Reverb und Tremolo.
+5. **Sound speichern.** Drücke **Strg+S**, gib einen Namen ein und drücke Enter. Zurück in PLAY legt **+ Add this sound** ihn auf die nächste freie Programmnummer.
 
 ## Die BUILD-Ansicht
 
@@ -219,7 +219,7 @@ Löschst du ein Preset, das auf PLAY liegt, zeigen seine Schalter **Invalid slot
 
 ## PLAY
 
-PLAY ist deine Bühnenansicht: deine Sounds, acht Stomp-Schalter und das Amp-Bild. Wechsle mit `P` oder dem PLAY/BUILD-Umschalter; der Wechsel ändert nie, was du hörst.
+PLAY ist deine Bühnenansicht: deine Sounds, acht Stomp-Schalter und das Amp-Bild. VoLum öffnet darin und merkt sich danach die Ansicht, in der du aufgehört hast. Wechsle mit `P` oder dem PLAY/BUILD-Umschalter; der Wechsel ändert nie, was du hörst.
 
 Ein **Sound** ist ein Amp mit einem seiner Presets. Jeder Sound liegt auf einer Programmnummer von 0 bis 127, den Nummern, die ein MIDI-Fußcontroller sendet.
 

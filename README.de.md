@@ -4,23 +4,22 @@
 
 **Open-Source-Gitarren-Amps für Bühne, Studio und Übungsplatz.**
 
-![VoLum Dual Amp: die Bilder von THC Sunset und Soldano SLO100 reagieren auf die Gitarre](docs/volum-dual-amp.gif)
+![VoLum PLAY mit Dual Amp: die Bilder von THC Sunset und Soldano SLO100 bewegen sich mit der Gitarre](docs/volum-dual-amp.gif)
 
-VoLum nutzt den [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, ist aber eine eigene, fokussierte App: 15 kuratierte Amps, PRE-Pedale (Pitch mit Transpose und Octaver, ein Kompressor, zwei NAM-Pedal-Slots), Dual Amp, POST-Chorus, -Delay, -Reverb und -Tremolo, deine eigenen Amps, IRs und Pedale, Presets pro Amp, eine PLAY-Ansicht für MIDI-Fußcontroller, ein Tuner und ein Metronom. Nutze es als Standalone-App, als VST3 oder unter macOS als AU.
+VoLum öffnet in **PLAY**: rechts deine Sounds, darunter acht Fußschalter und dazu Amp-Bilder, die sich mit deinem Spiel bewegen. Klicke einen Sound an oder schalte mit einem MIDI-Fußcontroller durch, schalte Pedale ein und aus und spiel. Fünf Werk-Sounds liegen auf den Programmen 0 bis 4 bereit, du kannst also ab der ersten Minute spielen.
+
+Willst du einen Sound ändern, wechsle zu **BUILD**. Ein Hinweis **Tweak your sound** zeigt auf den Schalter, bis du ihn einmal benutzt hast.
 
 [VoLum herunterladen](https://github.com/guitarlum/VoLum/releases) oder das [Benutzerhandbuch](docs/user-guide.de.md) lesen.
 
-<p align="center">
-  <img src="docs/user-guide-main.png" alt="VoLum BUILD-Ansicht" width="820">
-</p>
-
 ## Was VoLum Besonders Macht
 
-- **Erst BUILD, dann PLAY, in einem Fenster:** in BUILD baust du einen Sound, in PLAY spielst du deine Sounds. Jeder mitgelieferte Amp bringt ein oder zwei Werk-Presets mit (21 insgesamt), die du ohne Speichern auf PLAY legen kannst. PLAY startet mit fünf davon auf den Programmen 0 bis 4.
+- **Zum Spielen gemacht:** PLAY ist das ganze Rig auf einem Bildschirm: deine Sounds, PRE- und POST-Fußschalter, die Meter, der Tuner und das Metronom.
 - **MIDI-Aufruf ohne Learn:** 128 Programmnummern, dieselbe Liste wie in PLAY. Sende Program Change, oder den Recall CC (102), wenn dein Host Program Change nicht weitergibt.
 - **Dual Amp:** zwei Amps gleichzeitig, jeder mit eigenem Kanal, Cab oder IR, eigenen Reglern und Panorama.
-- **POST-Chorus:** vier Modi, direkt nach Amp und Cab, vor Delay, Reverb und Tremolo.
-- **Eine Pack-Datei:** ein `.volumpack` sichert, zieht um oder teilt deine eigenen Amps, IRs, Pedale und Presets in einem Schritt.
+- **15 kuratierte Amps, 21 Werk-Presets:** leg jedes davon ohne Speichern auf PLAY.
+- **Eigene Inhalte:** lade eigene NAM-Amps, IRs und Pedale. Ein `.volumpack` sichert, zieht um oder teilt alles in einer Datei.
+- **Standalone, VST3 und AU:** läuft auf dem [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, unter Windows und macOS.
 - **Nur Update-Hinweis:** VoLum kann dir sagen, dass es eine neuere Version gibt. Es lädt nie selbst etwas herunter.
 
 ## Download
@@ -135,12 +134,16 @@ Es gibt keinen nativen Linux-Build. Einige Nutzer berichten, dass das Windows-VS
 
 Jeder Amp hat vier Cab-Optionen: **No Cab** (nur der Amp), **G12**, **G65** und **V30**. Du kannst auch dein eigenes Cab-IR laden.
 
-## PLAY
+## Deine Sounds
 
-PLAY startet mit fünf Werk-Sounds auf den Programmen 0 bis 4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye und Ampete Lead. Ersetze sie oder füge eigene hinzu: leg ein beliebiges Werk-Preset oder ein in BUILD gespeichertes User-Preset auf eine Programmnummer. Klicke eine Zeile an, um sie zu spielen, oder ruf sie mit einem MIDI-Fußcontroller auf.
+PLAY startet mit fünf Werk-Sounds auf den Programmen 0 bis 4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye und Ampete Lead. Ersetze sie oder füge eigene hinzu: leg ein beliebiges Werk-Preset oder ein in BUILD gespeichertes User-Preset auf eine Programmnummer.
+
+## BUILD
+
+In BUILD formst du einen Sound: wähle Amp und Kanal, ein Cab oder dein eigenes IR, stell die Regler ein, füge PRE-Pedale (Pitch mit Transpose und Octaver, ein Kompressor, zwei NAM-Pedal-Slots) und POST-Chorus, -Delay, -Reverb und -Tremolo hinzu und speichere alles als Preset. Mit `P` oder dem Schalter oben rechts wechselst du hin und her; der Wechsel ändert nie, was du hörst.
 
 <p align="center">
-  <img src="docs/user-guide-play.png" alt="VoLum PLAY-Board" width="820">
+  <img src="docs/user-guide-main.png" alt="VoLum BUILD-Ansicht" width="820">
 </p>
 
 ## Mehr Erfahren

@@ -861,6 +861,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // label/baseline behind after the authoritative factory selection lands.
       mVolumActivePresetId.clear();
       mVolumHasRecalledSnapshot = false;
+      // Neither did PLAY: the project reopens where it was made.
+      mVolumUiMode = volum::UiMode::Build;
     }
     else
     {
@@ -942,6 +944,7 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
   mVolumDidRestorePresetSelection = false;
   mVolumActivePresetId.clear();
   mVolumHasRecalledSnapshot = false;
+  mVolumUiMode = volum::UiMode::Build;
   mVolumUiSyncPending.store(true);
   return pos;
 }

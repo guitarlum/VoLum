@@ -151,6 +151,29 @@ TEST_CASE("F-12: a key this process wrote on its own is no longer its stale copy
   CHECK(ReadJsonFile(path)["liteMode"] == false);
 }
 
+TEST_CASE("The BUILD tip a plugin dismissed stays dismissed after a standalone save")
+{
+  const auto root = TestRoot("build-tip-seen");
+  const auto path = root / "volum-settings.json";
+  std::error_code ec;
+  nlohmann::json first = StandaloneDoc(false, true, false, 12.0, 0);
+  first["buildTipSeen"] = false;
+  REQUIRE(volum::WriteJsonAtomically(path, first, ec));
+  nlohmann::json standaloneSynced = volum::MachineSharedKeyValues(false, true, false, 12.0, false);
+  nlohmann::json pluginSynced = standaloneSynced;
+
+  // A VST3 instance switches to BUILD for the first time.
+  REQUIRE(volum::MergeMachineSettingsKeys(path, {{"buildTipSeen", true}}, pluginSynced, ec));
+
+  // The standalone, still showing the tip in memory, saves after a MIDI change.
+  nlohmann::json stale = StandaloneDoc(false, true, false, 12.0, 3);
+  stale["buildTipSeen"] = false;
+  REQUIRE(volum::WriteWholeMachineSettings(path, stale, standaloneSynced, ec));
+  const auto disk = ReadJsonFile(path);
+  CHECK(disk["buildTipSeen"] == true);
+  CHECK(disk["midiCh"] == 3);
+}
+
 TEST_CASE("F-12: KeepOtherWritersMachineKeys writes only what this process changed")
 {
   const nlohmann::json synced = volum::MachineSharedKeyValues(false, true, false, 12.0);

@@ -28,10 +28,10 @@ VoLum is a guitar amp collection for the stage, the studio and the practice desk
 ## Quick Start
 
 1. **Connect your guitar.** In the standalone app, open Settings (the gear, top right), stay on **SIGNAL** and click **Audio & MIDI devices...**. Pick your audio interface, one mono input for the guitar, and your outputs. In a DAW, put VoLum on a track that records your guitar.
-2. **Pick an amp** in the left list, then a channel and a cab.
-3. **Add pedals and effects.** Click **PRE** for pedals in front of the amp, **POST** for chorus, delay, reverb and tremolo.
-4. **Save the tone.** Press **Ctrl+S**, type a name and press Enter.
-5. **Play it.** Press **P** to switch to PLAY. Five Sounds are ready on programs 0 to 4. Click one, or step through them with the arrow keys or a MIDI foot controller.
+2. **Play.** VoLum opens on PLAY with five Sounds ready on programs 0 to 4. Click one, or step through them with the arrow keys or a MIDI foot controller.
+3. **Tweak your sound.** Click the switch at the top right, or press **P**, to open BUILD. The first time, a **Tweak your sound** note points at it. Pick an amp in the left list, then a channel and a cab.
+4. **Add pedals and effects.** Click **PRE** for pedals in front of the amp, **POST** for chorus, delay, reverb and tremolo.
+5. **Save the tone.** Press **Ctrl+S**, type a name and press Enter. Back in PLAY, **+ Add this sound** puts it on the next free program number.
 
 ## The BUILD Screen
 
@@ -219,7 +219,7 @@ If you delete a preset that is on PLAY, its switches show **Invalid slot** until
 
 ## PLAY
 
-PLAY is your stage view: your Sounds, eight stomp switches and the amp art. Switch with `P` or the PLAY/BUILD switch; switching never changes what you hear.
+PLAY is your stage view: your Sounds, eight stomp switches and the amp art. VoLum opens on it and then remembers the view you left. Switch with `P` or the PLAY/BUILD switch; switching never changes what you hear.
 
 A **Sound** is an amp with one of its presets. Each Sound sits on a program number from 0 to 127, the numbers a MIDI foot controller sends.
 

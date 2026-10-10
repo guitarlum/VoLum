@@ -4,23 +4,22 @@
 
 **Open-source guitar amps for the stage, the studio and the practice desk.**
 
-![VoLum Dual Amp: THC Sunset and Soldano SLO100 art reacting to the guitar](docs/volum-dual-amp.gif)
+![VoLum PLAY in Dual Amp: THC Sunset and Soldano SLO100 art moving with the guitar](docs/volum-dual-amp.gif)
 
-VoLum runs on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core but is its own focused app: 15 curated amps, PRE pedals (Pitch with Transpose and Octaver, a compressor, two NAM pedal slots), Dual Amp, POST chorus, delay, reverb and tremolo, your own amps, IRs and pedals, per-amp presets, a PLAY view for MIDI foot controllers, a tuner and a metronome. Use it as a standalone app, as a VST3, or as an AU on macOS.
+VoLum opens on **PLAY**: your Sounds on the right, eight stomp switches below, and amp art that moves with your playing. Click a Sound or step through them from a MIDI foot controller, switch pedals on and off, and play. Five Factory Sounds are ready on programs 0 to 4, so there is something to play from the first minute.
+
+When you want to change a tone, switch to **BUILD**. A **Tweak your sound** note points at the switch until you have used it once.
 
 [Download VoLum](https://github.com/guitarlum/VoLum/releases) or read the [user guide](docs/user-guide.en.md).
 
-<p align="center">
-  <img src="docs/user-guide-main.png" alt="VoLum BUILD screen" width="820">
-</p>
-
 ## Why It Stands Out
 
-- **BUILD, then PLAY, in one window:** shape a tone in BUILD, play your Sounds in PLAY. Every bundled amp ships one or two Factory presets (21 in all) that you can put on PLAY without saving first. PLAY starts with five of them on programs 0 to 4.
+- **Made for playing:** PLAY is the whole rig on one screen: your Sounds, PRE and POST stomp switches, the meters, the tuner and the metronome.
 - **MIDI recall without Learn:** 128 program numbers, the same list PLAY shows. Send Program Change, or the Recall CC (102) when your host does not pass Program Change on.
 - **Dual Amp:** two amps at once, each with its own channel, cab or IR, knobs and pan.
-- **POST Chorus:** four modes, right after the amp and cab, ahead of Delay, Reverb and Tremolo.
-- **One Pack file:** a `.volumpack` backs up, moves or shares your custom amps, IRs, pedals and presets in one step.
+- **15 curated amps, 21 Factory presets:** put any of them on PLAY without saving first.
+- **Your own content:** load your own NAM amps, IRs and pedals. A `.volumpack` backs up, moves or shares all of it in one file.
+- **Standalone, VST3 and AU:** runs on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, on Windows and macOS.
 - **Update reminder only:** VoLum can tell you a newer release exists. It never downloads anything itself.
 
 ## Download
@@ -135,12 +134,16 @@ There is no native Linux build. Some users report that the Windows VST3 works we
 
 Every amp has four cab choices: **No Cab** (the amp alone), **G12**, **G65** and **V30**. You can also load your own cabinet IR.
 
-## PLAY
+## Your Sounds
 
-PLAY starts with five Factory Sounds on programs 0 to 4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye and Ampete Lead. Replace them or add your own: put any Factory preset, or a User preset you saved in BUILD, on a program number. Click a row to play it, or recall it from a MIDI foot controller.
+PLAY starts with five Factory Sounds on programs 0 to 4: The bestest Clean, SLO Crunch, Modern Rhythm, Crack the Skye and Ampete Lead. Replace them or add your own: put any Factory preset, or a User preset you saved in BUILD, on a program number.
+
+## BUILD
+
+BUILD is where you shape a tone: pick an amp and channel, a cab or your own IR, set the knobs, add PRE pedals (Pitch with Transpose and Octaver, a compressor, two NAM pedal slots) and POST Chorus, Delay, Reverb and Tremolo, then save it as a preset. Press `P` or use the switch at the top right to go back and forth; switching never changes what you hear.
 
 <p align="center">
-  <img src="docs/user-guide-play.png" alt="VoLum PLAY board" width="820">
+  <img src="docs/user-guide-main.png" alt="VoLum BUILD screen" width="820">
 </p>
 
 ## Learn More

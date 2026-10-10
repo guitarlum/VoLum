@@ -1091,6 +1091,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
                                                 [this](volum::UiMode mode) { _VolumSetUiMode(mode); });
   modeToggle->SetMode(mVolumUiMode);
   pGraphics->AttachControl(modeToggle, kCtrlTagVoLumModeToggle);
+  // PLAY hides the preset bar, so the tip has the header to the toggle's left.
+  auto* buildTip = new VoLumBuildTipControl(
+    IRECT(header.toggleL - 6.f - VoLumBuildTipControl::kWidth, header.inkT, header.toggleL - 6.f, header.inkB),
+    [this]() { _VolumSetUiMode(volum::UiMode::Build); });
+  pGraphics->AttachControl(buildTip, kCtrlTagVoLumBuildTip);
+  buildTip->Hide(!volum::ShowBuildTip(mVolumUiMode, mVolumBuildTipSeen));
 
   // Toolbar buttons (top-right of main panel): Tuner | Metronome | Gear
   {

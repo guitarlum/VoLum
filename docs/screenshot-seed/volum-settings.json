@@ -1,4 +1,6 @@
 ﻿{
+    "volumUiMode":  "build",
+    "buildTipSeen":  true,
     "amps":  {
                  "Ampete One":  {
                                     "activeIrId":  "",

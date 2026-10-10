@@ -800,7 +800,7 @@ inline nlohmann::json MergeAnimatePlayArtIntoSettings(nlohmann::json j, bool ani
 // whole-file save carries them too, from values that are only as new as its own
 // last load or write of each key.
 inline constexpr const char* kMachineSharedKeys[] = {
-  "liteMode", "animatePlayArt", "CalibrateInput", "InputCalibrationLevel"};
+  "liteMode", "animatePlayArt", "CalibrateInput", "InputCalibrationLevel", "buildTipSeen"};
 
 inline nlohmann::json MachineSharedKeyValues(const nlohmann::json& doc)
 {
@@ -814,12 +814,13 @@ inline nlohmann::json MachineSharedKeyValues(const nlohmann::json& doc)
 }
 
 inline nlohmann::json MachineSharedKeyValues(bool liteMode, bool animatePlayArt, bool calibrateInput,
-                                             double inputCalibrationLevel)
+                                             double inputCalibrationLevel, bool buildTipSeen = false)
 {
   return {{"liteMode", liteMode},
           {"animatePlayArt", animatePlayArt},
           {"CalibrateInput", calibrateInput},
-          {"InputCalibrationLevel", inputCalibrationLevel}};
+          {"InputCalibrationLevel", inputCalibrationLevel},
+          {"buildTipSeen", buildTipSeen}};
 }
 
 // `synced` holds each shared key as this process last loaded or wrote it. A

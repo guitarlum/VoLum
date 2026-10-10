@@ -293,6 +293,41 @@ TEST_CASE("VOLUM_PLAY_FAKE_PEAK takes dBFS or the meter norm")
   CHECK_FALSE(volum::ParsePlayFakePeak("-12x", norm));
 }
 
+TEST_CASE("VOLUM_PLAY_FAKE_PEAK=strum plays a looping four-strum bar")
+{
+  CHECK(volum::IsPlayFakeStrum("strum"));
+  CHECK_FALSE(volum::IsPlayFakeStrum(nullptr));
+  CHECK_FALSE(volum::IsPlayFakeStrum("strumming"));
+  float norm = -1.f;
+  CHECK_FALSE(volum::ParsePlayFakePeak("strum", norm));
+
+  // Each strum starts loud and has decayed well down before the next.
+  CHECK(volum::PlayFakeStrumNorm(0.0) == doctest::Approx(volum::MeterNormFromDb(-6.f)));
+  CHECK(volum::PlayFakeStrumNorm(0.99) < volum::PlayFakeStrumNorm(0.0));
+  CHECK(volum::PlayFakeStrumNorm(1.0) == doctest::Approx(volum::MeterNormFromDb(-10.f)));
+  CHECK(volum::PlayFakeStrumNorm(1.0) > volum::PlayFakeStrumNorm(0.99));
+  // The bar loops.
+  CHECK(volum::PlayFakeStrumNorm(4.5) == doctest::Approx(volum::PlayFakeStrumNorm(0.5)));
+
+  // Driven through the light, every strum lands a pick and moves the art.
+  volum::PlayLight light;
+  int picks = 0;
+  bool wasPicking = false;
+  for (int i = 0; i < 240; ++i)
+  {
+    light = volum::AdvancePlayLight(light, volum::PlayFakeStrumNorm(i / 60.0), volum::PlayFakeStrumNorm(i / 60.0));
+    const bool picking = light.attack > 0.3f;
+    if (picking && !wasPicking)
+      ++picks;
+    wasPicking = picking;
+  }
+  CHECK(picks == 4);
+  CHECK(light.energy > 0.f);
+
+  const std::string play = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlaySurface.h");
+  CHECK(play.find("mInPeak = mOutPeak = volum::PlayFakeStrumNorm(mFakeStrumClock)") != std::string::npos);
+}
+
 TEST_CASE("PLAY stage art cache is keyed by art and pixel size")
 {
   // Default 900x600 window: the paint rect is 662x312 in mono, 309x312 per lane in dual.

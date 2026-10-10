@@ -3424,9 +3424,9 @@ TEST_CASE("tier2d PLAY SetData follows the pressed Sound and OnMouseOut cancels 
   REQUIRE(dataEnd != std::string::npos);
   const std::string setBody = play.substr(data, dataEnd - data);
   RequireContains(setBody, "mSlots[static_cast<size_t>(i)].slot == mPressSlot");
-  const auto firstOut = play.find("void OnMouseOut() override");
-  REQUIRE(firstOut != std::string::npos);
-  const auto out = play.find("void OnMouseOut() override", firstOut + 1);
+  const auto surface = play.find("class VoLumPlaySurfaceControl");
+  REQUIRE(surface != std::string::npos);
+  const auto out = play.find("void OnMouseOut() override", surface);
   REQUIRE(out != std::string::npos);
   const std::string outBody = play.substr(out, 400);
   RequireContains(outBody, "mDragging = false");
@@ -3872,6 +3872,7 @@ const std::vector<DblRow>& DoubleClickDecisions()
     {"VoLumNameDialog.h", "VoLumNameDialogControl", DblDecision::OwnDblClickGated},
     {"VoLumPackOverlay.h", "VoLumPackOverlayControl", DblDecision::Repeats},
     {"VoLumPedalCardControl.h", "VoLumPedalCardControl", DblDecision::Repeats},
+    {"VoLumPlaySurface.h", "VoLumBuildTipControl", DblDecision::Drops},
     {"VoLumPlaySurface.h", "VoLumModeToggleControl", DblDecision::Drops},
     {"VoLumPlaySurface.h", "VoLumPlaySurfaceControl", DblDecision::Repeats},
     {"VoLumPresetBar.h", "VoLumPresetBarControl", DblDecision::Repeats},

@@ -1212,13 +1212,13 @@ TEST_CASE("F-63: plugin instances ignore the machine outputMode")
   const std::string scene = ReadSceneSource();
   const auto load = scene.find("void NeuralAmpModeler::_VolumLoadSettingsFromFile()");
   REQUIRE(load != std::string::npos);
-  const auto appBlock = scene.find("#if defined(APP_API)", load);
+  const auto apply = scene.find("OutputModeFromMachineSettings(true, j, GetParam(kOutputMode)->Int())", load);
+  REQUIRE(apply != std::string::npos);
+  const auto appBlock = scene.rfind("#if defined(APP_API)", apply);
   REQUIRE(appBlock != std::string::npos);
   const auto appEnd = scene.find("#endif", appBlock);
   REQUIRE(appEnd != std::string::npos);
-  const auto apply = scene.find("OutputModeFromMachineSettings(true, j, GetParam(kOutputMode)->Int())", load);
-  REQUIRE(apply != std::string::npos);
-  CHECK(apply > appBlock);
+  CHECK(appBlock > load);
   CHECK(apply < appEnd);
   CHECK(scene.find("OutputModeFromMachineSettings(") == apply);
   CHECK(scene.find("OutputModeFromMachineSettings(", apply + 1) == std::string::npos);
