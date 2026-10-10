@@ -29,7 +29,7 @@ if (-not (Test-Path $gif)) { $fail.Add("missing docs/volum-dual-amp.gif") }
 elseif ((Get-Item $gif).Length -gt 8MB) { $fail.Add("docs/volum-dual-amp.gif is over 8 MB") }
 foreach ($r in @("README.md", "README.de.md")) {
   $head = ((Get-Text $r) -split "`n" | Select-Object -First 15) -join "`n"
-  if ($head -notmatch 'volum-dual-amp\.gif') { $fail.Add("$r: GIF not in the first 15 lines") }
+  if ($head -notmatch 'volum-dual-amp\.gif') { $fail.Add("${r}: GIF not in the first 15 lines") }
 }
 if ((Get-Text ".scratch/release-1.3.0/release-notes-draft.md") -notmatch 'volum-dual-amp\.gif') {
   $fail.Add("release-notes draft does not show the GIF")
@@ -58,6 +58,11 @@ if ($Quick) {
   if ($fail.Count -gt 0) { Write-Host "VERIFY (quick) FAIL"; $fail | ForEach-Object { Write-Host "- $_" }; exit 1 }
   Write-Host "VERIFY (quick) OK"; exit 0
 }
+
+# Every app, REAPER and e2e launch below inherits this; the real library must never be touched.
+$realLocalAppData = $env:LOCALAPPDATA
+$env:LOCALAPPDATA = Join-Path ([IO.Path]::GetTempPath()) "volum-hunt-verify"
+New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
 
 function Invoke-Step([string]$Name, [scriptblock]$Body) {
   Write-Host "=== $Name"
@@ -98,6 +103,7 @@ try {
   $env:LOCALAPPDATA = $profile
   Invoke-Step "stress rate switch ($asioName on UA-2X2)" { pwsh (Join-Path $scripts "stress-standalone-rate-switch-win.ps1") }
 } finally { $env:LOCALAPPDATA = $saved }
+$env:LOCALAPPDATA = $realLocalAppData
 
 $devSha = (git -C $root rev-parse refs/remotes/origin/dev).Trim()
 $run = gh run list --repo guitarlum/VoLum --branch dev --workflow ci.yml --limit 1 --json headSha,conclusion,status | ConvertFrom-Json

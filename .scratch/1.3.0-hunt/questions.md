@@ -72,3 +72,21 @@ UX judgment calls and product decisions found overnight. No behavior was changed
 - Tab does nothing (no hint) while SUPPORT is empty; PAN has no value readout; no tap tempo.
 - CPU (one core): PLAY single 97% (art on) / 93% (off), PLAY Dual 119% / 103%, BUILD Dual 72%.
   F-61 covers part of this; is PLAY's cost acceptable for 1.3.0?
+
+## Q-15 hunt-13 input: four small UX defaults (taken, change if you disagree)
+1. P with any dropdown open does nothing (matches the preset menu). Alternative: close the dropdown and switch mode.
+2. IR load failures during MIDI/host recall only go to volum.log, no pop-up. Alternative: also a footer alert.
+3. Output mode control and the Settings "Check now" button still treat a double-click as a press (left as is).
+4. Unused NAMSquareButtonControl / NAMFileNameControl are exempt from the double-click gate.
+
+## Q-16 VST3 restore guard: first-block Program Change after a long suspension (default taken: accept)
+The hunt-19 guard ignores the host's restore Program Change for 0.5 s from the first audio block after a project load. If the host stays suspended after loading, a Program Change you send deliberately in that very first block is also ignored; sending it again works. Starting the clock at load time instead would let REAPER/Cubase's restore Program Change overwrite the saved sound again (the original F-72 bug). Default: keep it, document as a known limitation.
+
+## Q-17 hunt-08 selection/presets: three small UX defaults (taken, change if you disagree)
+1. A MIDI recall that switches amp while the Save dialog is open: Enter now refuses quietly (logged) instead of saving into the wrong amp. Alternative: close the dialog on recall.
+2. F-92: coming back from a channel that only has a No Cab capture keeps No Cab (existing design, pinned by a test). Alternative: remember the chosen cab per channel.
+3. Typing `lead` while the active preset is `Lead` saves a new `lead 2` (names compare case-insensitively). Alternative: treat it as Update of the active preset.
+
+## Q-18 hunt-18 small UI: two defaults (taken, change if you disagree)
+1. The Recall CC stepper now stops at 0 and 119; the MIDI channel stepper still wraps CH 16 -> CH 1. Alternative: clamp the channel stepper too.
+2. The resize grip can no longer grow the standalone past the monitor work area, but a window that is already larger (e.g. moved to a smaller monitor) is not shrunk automatically.
