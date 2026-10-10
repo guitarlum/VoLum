@@ -77,6 +77,19 @@ The wrong default is a swarm. The right default is: this chat stays small, the w
 
 **Parallel workers** only for `ready-for-agent` tickets whose allowed paths do not overlap. Otherwise serial: one claimed ticket, one writer.
 
+## Keep the coordinator cheap
+
+Every coordinator turn resends its whole context, and every finished subagent or shell is one more turn. The 1.3.0 hunt (2026-10-09) spent most of its tokens on a 22-hour coordinator woken about 170 times, not on the workers.
+
+- **Fresh chat.** Planning or grilling ends by writing `loop.md`, spec and `verify.ps1`; the loop runs in a new chat. When the coordinator's context gets long, append a Ledger row and continue in another new chat: `loop.md` holds everything.
+- **Cheap seat.** The coordinator mostly does bookkeeping; run it on a cheaper model at low effort. Hard fixes and cold verifiers get the strong models.
+- **Fewer wakes.** Spawn parallel Tasks in the foreground, in one message: their results come back in one turn. Use `run_in_background` only for long jobs while the coordinator has other work.
+- **Receipts, not reports.** A worker's final message lands verbatim in the coordinator's context. Full reports go to `.scratch/<slug>/reports/<id>.md`; read one only when triaging it.
+- **Workers own CI.** The worker pushes, dispatches and waits on `NeuralAmpModeler/scripts/ci-watch.ps1`, and reports a green run id. The coordinator merges with `NeuralAmpModeler/scripts/merge-verified-branch.ps1` and makes worktrees with `NeuralAmpModeler/scripts/worktree-win.ps1`, never by hand.
+- **Bounded.** `loop.md` names a cut-off time or a maximum number of units. Triage at kickoff: crash, hang, stuck UI and data loss get the full worker, verifier and CI path; polish goes to a list.
+- **At most 4 builds at once** (9 caused LNK1000) and one real-input desktop driver.
+- **The writer gets the verifier's checklist** in its brief (formatting, thread ownership, every Apply/OK/Cancel path), so review rounds find bugs rather than misses.
+
 ## Release dispatch
 
 For “wayfinder the minor, then I’m going to bed.” The 1.3.0 bugs were missing predicates, missing verifiers, and grilling UAT in the same window — not “too many features in one night.” Quality still needs a cold writer and a cold reviewer **per spec**. Cursor already spawns those; you do not need 13 tabs if this chat only dispatches.
@@ -98,8 +111,11 @@ SCOPE        paths it may write; paths it must not; exclusive branch or worktree
 CONTEXT      pointers to spec, ticket, loop.md — paste upstream facts the child cannot see
 ACCEPTANCE   checkable lines from the ticket
 VERIFY       the Predicate command from loop.md. A -Filter subset is partial only.
+             Then push, dispatch and wait on ci-watch.ps1 until green.
+CHECKLIST    what the verifier will reject (formatting, threads, every dialog path)
 FORBIDDEN    no force-push, no golden retune, no product calls, no fixes outside SCOPE
-REPORT       status, paths, what you ran, verdict vs VERIFY, follow-ups
+REPORT       full report to .scratch/<slug>/reports/<id>.md. Final message, at most
+             10 lines: status, branch + head sha, green CI run id, report path, blockers.
 ```
 
 ## Each iteration
@@ -108,7 +124,7 @@ REPORT       status, paths, what you ran, verdict vs VERIFY, follow-ups
 2. Escalate and **stop** on: a new product call not in the locked spec/map; new sound / golden retune; irreversible git (force-push, hard reset); a real dead end. Do not ping for reversible mechanics.
 3. Pick implementer: this chat if the unit is small or needs the live exe here; otherwise spawn a **worker** with the brief above.
 4. Run the **Predicate** command from `loop.md`. A `-Filter` subset may guide the edit; it does not close the loop. Then spawn a **verifier** on the actual diff + the Predicate output. If the verifier finds a real defect, it is not done — fix (same writer) and verify again. Do not skip the verifier because a subset passed. Write `## Verifier`.
-5. If it advanced: append a ledger row; commit that unit if the user wants commits as you go.
+5. If it advanced: append a ledger row; merge the unit with `NeuralAmpModeler/scripts/merge-verified-branch.ps1 -Branch <branch>` (or commit it, if the user wants commits as you go).
 6. If it did not: revert the attempt; ledger row with predicate=no; try another approach. Do not relax the predicate.
 7. Repeat until every Predicate line passes, a verifier has accepted the last unit against the current `worktree_hash`, **and** (spec mode) no `ready-for-agent` / `claimed` tickets remain.
 

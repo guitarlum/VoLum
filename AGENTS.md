@@ -44,7 +44,9 @@ Single-context. `CONTEXT.md` is a lazy glossary, not a spec. See
 - Windows tests: `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` (`-Asan` = AddressSanitizer build with the macOS sanitizer job's exclusions; run it before pushing DSP or buffer code)
 - macOS tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh`
 - macOS sanitizer tests: `bash NeuralAmpModeler/scripts/run-tests-mac.sh --sanitize`
-- Windows app smoke check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1`
+- Windows app smoke check: `pwsh NeuralAmpModeler/scripts/run-app-win.ps1` (sandbox library; `-RealLibrary` for the owner's)
+- Worktrees: `pwsh NeuralAmpModeler/scripts/worktree-win.ps1 -Add <branch>` / `-Remove <path> [-DeleteBranch]`
+- Merge a CI-green branch into dev: `pwsh NeuralAmpModeler/scripts/merge-verified-branch.ps1 -Branch <branch> [-DryRun]`
 - Windows screenshot / click harness: `pwsh NeuralAmpModeler/scripts/win-screenshot.ps1`, `win-click.ps1`, `win-key.ps1` (recipes in `docs/screenshot-recipes.md`; debug-only `VOLUM_SEED_CUSTOM_AMPS=N` for sidebar overflow)
 - Windows portable package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full zip` (the script resolves its helpers relative to the working directory, so it must run from `scripts`)
 - Windows installer package: `cd NeuralAmpModeler\scripts; cmd /c makedist-win.bat full installer`

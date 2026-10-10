@@ -47,7 +47,9 @@ VoLum is an independent NAM-based amp collection app. It still keeps selected up
 | `scripts/run-tests-mac.sh`                | Build and run the same doctest suite with CMake/clang on macOS                                                                                                                    |
 | `scripts/run-tests-mac.sh --sanitize`     | Run the macOS doctest suite with ASan/UBSan                                                                                                                                        |
 | `scripts/run-coverage-mac.sh`             | Measure Clang source-based line/region coverage of the doctest suite (VoLum + AudioDSPTools); prints a summary and writes an HTML report to `build-tests-mac/coverage-html/`        |
-| `scripts/run-app-win.ps1`                 | Build and launch the standalone (for UI iteration)                                                                                                                                |
+| `scripts/run-app-win.ps1`                 | Build and launch the standalone (for UI iteration) on a sandbox library; `-RealLibrary` uses yours                                                                                |
+| `scripts/worktree-win.ps1`                | Add a worktree with its own submodules, or remove one after unlinking junctions                                                                                                   |
+| `scripts/merge-verified-branch.ps1`       | Merge a branch into `dev` after checking its CI is green on the head commit, then push                                                                                            |
 | `scripts/validate-vst3-win.ps1`           | Validate the built Windows VST3 with pluginval and the Steinberg validator when available                                                                                         |
 | `scripts/validate-vst3-mac.sh`            | Validate the built macOS VST3 with pluginval and the Steinberg validator when available                                                                                           |
 
