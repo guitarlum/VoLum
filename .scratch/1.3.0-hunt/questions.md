@@ -90,3 +90,6 @@ The hunt-19 guard ignores the host's restore Program Change for 0.5 s from the f
 ## Q-18 hunt-18 small UI: two defaults (taken, change if you disagree)
 1. The Recall CC stepper now stops at 0 and 119; the MIDI channel stepper still wraps CH 16 -> CH 1. Alternative: clamp the channel stepper too.
 2. The resize grip can no longer grow the standalone past the monitor work area, but a window that is already larger (e.g. moved to a smaller monitor) is not shrunk automatically.
+
+## Owner decision (11/10/2026)
+All defaults in Q-01..Q-18 ship as-is in 1.3.0 (Q-07 GitHub Pages is done). The alternatives are revisited in 1.3.1.
