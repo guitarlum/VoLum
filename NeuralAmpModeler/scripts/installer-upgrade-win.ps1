@@ -1,10 +1,10 @@
 # Prove this run's Windows installer upgrades the published 1.2.x releases cleanly.
 #
 # CI only. It installs into Program Files and Common Files\VST3, runs the real
-# uninstaller and writes a VoLum library under %LOCALAPPDATA%. On a developer machine
-# that replaces the installed VoLum and puts the real library in reach, so it refuses
-# unless GITHUB_ACTIONS=true or -IKnowThisIsAThrowawayVm is passed, before anything
-# is downloaded, installed or written.
+# uninstaller, allows desktop apps microphone access and writes a VoLum library under
+# %LOCALAPPDATA%. On a developer machine that replaces the installed VoLum and puts
+# the real library in reach, so it refuses unless GITHUB_ACTIONS=true or
+# -IKnowThisIsAThrowawayVm is passed, before anything is downloaded, installed or written.
 #
 # One job, both legs in sequence (v1.2.3, then v1.2.2) rather than a matrix: the job
 # is looked up by its exact name, which a matrix suffix would change. A runner cannot
@@ -34,8 +34,9 @@
 #   6. Silent uninstall: program folder, VST3, uninstall entry and rigs registry key
 #      gone, library hash unchanged.
 #
-# The standalone needs an audio endpoint and OpenGL 2.0 to open its window; the CI
-# job provisions a virtual audio cable and Mesa before calling this.
+# The standalone needs OpenGL 2.0 and an audio device it may capture from to open its
+# window and close cleanly: the CI job provisions Mesa and a virtual audio cable before
+# calling this, and this script allows desktop apps microphone access.
 #
 #   pwsh NeuralAmpModeler/scripts/installer-upgrade-win.ps1 -ArtifactDir <VoLum-win artifact>
 
@@ -49,9 +50,10 @@ param(
 )
 
 if ($env:GITHUB_ACTIONS -ne "true" -and -not $IKnowThisIsAThrowawayVm) {
-  Write-Host "REFUSED: installer-upgrade-win.ps1 installs VoLum into Program Files, uninstalls it and writes"
-  Write-Host "a VoLum library under %LOCALAPPDATA%. It runs on GitHub Actions (GITHUB_ACTIONS=true) or with"
-  Write-Host "-IKnowThisIsAThrowawayVm on a machine you are prepared to lose. Nothing was changed."
+  Write-Host "REFUSED: installer-upgrade-win.ps1 installs VoLum into Program Files, uninstalls it, allows desktop"
+  Write-Host "apps microphone access and writes a VoLum library under %LOCALAPPDATA%. It runs on GitHub Actions"
+  Write-Host "(GITHUB_ACTIONS=true) or with -IKnowThisIsAThrowawayVm on a machine you are prepared to lose."
+  Write-Host "Nothing was changed."
   exit 2
 }
 
@@ -308,31 +310,6 @@ public static class VoLumUpgradeUi
     return s.ToString();
   }
 }
-
-public static class VoLumUpgradeAudio
-{
-  [StructLayout(LayoutKind.Sequential)]
-  private struct WaveFormat
-  {
-    public ushort wFormatTag, nChannels;
-    public uint nSamplesPerSec, nAvgBytesPerSec;
-    public ushort nBlockAlign, wBitsPerSample, cbSize;
-  }
-  [DllImport("winmm.dll")] private static extern int waveInOpen(out IntPtr h, uint device, ref WaveFormat f, IntPtr cb, IntPtr inst, uint flags);
-  [DllImport("winmm.dll")] private static extern int waveInClose(IntPtr h);
-
-  // 0 when the default capture device opens as 16-bit PCM at this rate and width.
-  public static int OpenDefaultCapture(uint rate, ushort channels)
-  {
-    var f = new WaveFormat { wFormatTag = 1, nChannels = channels, nSamplesPerSec = rate, wBitsPerSample = 16 };
-    f.nBlockAlign = (ushort)(channels * 2);
-    f.nAvgBytesPerSec = rate * f.nBlockAlign;
-    IntPtr h;
-    int r = waveInOpen(out h, 0xFFFFFFFF, ref f, IntPtr.Zero, IntPtr.Zero, 0);
-    if (r == 0) waveInClose(h);
-    return r;
-  }
-}
 '@
 
 function Write-AudioEndpoints {
@@ -356,8 +333,10 @@ function Write-AudioEndpoints {
   }
 }
 
-# The standalone opens the default capture device, and Windows only lets a desktop app
-# capture when microphone access is allowed. A refused open is a modal Audio Error.
+# The standalone opens the default capture device. Windows lets a desktop app capture
+# only while the user allows microphone access, which the hosted runner's user denies;
+# the refused open is a modal Audio Error that blocks every graceful close. It applies
+# to processes started afterwards.
 function Grant-DesktopMicrophoneAccess {
   $consent = "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
   foreach ($key in @("HKLM:\$consent", "HKCU:\$consent", "HKCU:\$consent\NonPackaged")) {
@@ -603,13 +582,7 @@ try {
   Write-AudioEndpoints
   Assert-True "Windows Audio service is running" ($null -ne $audio -and $audio.Status -eq "Running")
   Assert-True "an audio device exists for the standalone to open" ($sound.Count -gt 0)
-  Write-Host ("  default capture at 48 kHz mono before granting access: waveInOpen {0}" -f [VoLumUpgradeAudio]::OpenDefaultCapture(48000, 1))
   Grant-DesktopMicrophoneAccess
-  foreach ($rate in @(44100, 48000)) {
-    Write-Host ("  default capture at {0} Hz mono: waveInOpen {1}" -f $rate, [VoLumUpgradeAudio]::OpenDefaultCapture([uint32]$rate, 1))
-  }
-  $capture = [VoLumUpgradeAudio]::OpenDefaultCapture(48000, 1)
-  Assert-Equal "the default capture device opens at 48 kHz (the e2e sandboxes ask for it)" 0 $capture
 
   $oldSetups = [ordered]@{}
   foreach ($tag in $FromTags) {
