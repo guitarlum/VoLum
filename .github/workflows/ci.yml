@@ -190,6 +190,34 @@ jobs:
             NeuralAmpModeler/build-win/installer/VoLum-Setup.exe
           if-no-files-found: error
 
+  windows-installer-upgrade:
+    name: Windows installer upgrade
+    # No windows_only filter: it runs whenever the Windows job produced VoLum-win.
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifacts (VoLum-win)
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-win
+          path: ${{ runner.temp }}/VoLum-win
+
+      - name: Install Mesa software OpenGL (the standalone needs OpenGL 2.0)
+        uses: ssciwr/setup-mesa-dist-win@2dfeaebfa514f74c2b8cd8d27108c31486d33e72 # v3.0.0
+
+      - name: Install a virtual audio device (VB-Cable)
+        uses: LABSN/sound-ci-helpers@d08c889a7bba7d9b1b059f8f76dac4672ea3a9cf # v1
+
+      - name: Upgrade v1.2.3 and v1.2.2 to this run's installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./NeuralAmpModeler/scripts/installer-upgrade-win.ps1 -ArtifactDir "${{ runner.temp }}/VoLum-win"
+        shell: pwsh
+
   macos:
     name: macOS (tests + full distribution + plugin validation)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
