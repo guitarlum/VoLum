@@ -39,3 +39,4 @@ Escalate and stop on new product, new sound / golden retune, irreversible git, o
 | When | What changed | Predicate moved |
 | --- | --- | --- |
 | 11/10 22:45 | Loop written. Owner enabled GitHub Pages (source: GitHub Actions); the github-pages environment only admits branch `main`, so a tag rule `v*` is needed (owner asked to add it). Local dev is 1 commit ahead of origin (`22b65a02`, hunt ledger, .scratch only); the first merge pushes it. Real library baseline 2026-10-09 20:24:21.703. | no |
+| 11/10 22:55 | Owner approved: tag rule `v*` added to the github-pages environment (now `main` branch + `v*` tag), so the release appcast deploy is admitted. | no |
