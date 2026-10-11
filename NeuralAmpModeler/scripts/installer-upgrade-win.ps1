@@ -308,7 +308,71 @@ public static class VoLumUpgradeUi
     return s.ToString();
   }
 }
+
+public static class VoLumUpgradeAudio
+{
+  [StructLayout(LayoutKind.Sequential)]
+  private struct WaveFormat
+  {
+    public ushort wFormatTag, nChannels;
+    public uint nSamplesPerSec, nAvgBytesPerSec;
+    public ushort nBlockAlign, wBitsPerSample, cbSize;
+  }
+  [DllImport("winmm.dll")] private static extern int waveInOpen(out IntPtr h, uint device, ref WaveFormat f, IntPtr cb, IntPtr inst, uint flags);
+  [DllImport("winmm.dll")] private static extern int waveInClose(IntPtr h);
+
+  // 0 when the default capture device opens as 16-bit PCM at this rate and width.
+  public static int OpenDefaultCapture(uint rate, ushort channels)
+  {
+    var f = new WaveFormat { wFormatTag = 1, nChannels = channels, nSamplesPerSec = rate, wBitsPerSample = 16 };
+    f.nBlockAlign = (ushort)(channels * 2);
+    f.nAvgBytesPerSec = rate * f.nBlockAlign;
+    IntPtr h;
+    int r = waveInOpen(out h, 0xFFFFFFFF, ref f, IntPtr.Zero, IntPtr.Zero, 0);
+    if (r == 0) waveInClose(h);
+    return r;
+  }
+}
 '@
+
+function Write-AudioEndpoints {
+  foreach ($flow in @("Render", "Capture")) {
+    $root = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\$flow"
+    foreach ($ep in Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue) {
+      $state = (Get-ItemProperty -LiteralPath $ep.PSPath -Name DeviceState -ErrorAction SilentlyContinue).DeviceState
+      $props = Get-ItemProperty -LiteralPath (Join-Path $ep.PSPath "Properties") -ErrorAction SilentlyContinue
+      $name = $null
+      $fmt = $null
+      if ($props) {
+        $name = $props."{a45c254e-df1c-4efd-8020-67d146a850e0},2"
+        $fmt = $props."{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0"
+      }
+      $format = ""
+      if ($fmt -is [byte[]] -and $fmt.Length -ge 24) {
+        $format = "{0} ch, {1} Hz, {2} bit" -f [BitConverter]::ToUInt16($fmt, 10), [BitConverter]::ToUInt32($fmt, 12), [BitConverter]::ToUInt16($fmt, 22)
+      }
+      Write-Host ("  {0} endpoint '{1}': state {2}, {3}" -f $flow, $name, $state, $format)
+    }
+  }
+}
+
+# The standalone opens the default capture device, and Windows only lets a desktop app
+# capture when microphone access is allowed. A refused open is a modal Audio Error.
+function Grant-DesktopMicrophoneAccess {
+  $consent = "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+  foreach ($key in @("HKLM:\$consent", "HKCU:\$consent", "HKCU:\$consent\NonPackaged")) {
+    $was = "(unset)"
+    if (Test-Path $key) {
+      $v = (Get-ItemProperty -Path $key -Name Value -ErrorAction SilentlyContinue).Value
+      if ($v) { $was = $v }
+    }
+    else {
+      New-Item -Path $key -Force | Out-Null
+    }
+    Set-ItemProperty -Path $key -Name Value -Value "Allow" -Type String
+    Write-Host ("  microphone access {0}: {1} -> Allow" -f $key, $was)
+  }
+}
 
 # DirectSound on the default devices, as e2e-standalone-win.ps1 seeds its sandboxes.
 function Write-AudioConfig {
@@ -536,8 +600,16 @@ try {
   }
   $sound = @(Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue)
   foreach ($s in $sound) { Write-Host ("  sound device: {0} ({1})" -f $s.Name, $s.Status) }
+  Write-AudioEndpoints
   Assert-True "Windows Audio service is running" ($null -ne $audio -and $audio.Status -eq "Running")
   Assert-True "an audio device exists for the standalone to open" ($sound.Count -gt 0)
+  Write-Host ("  default capture at 48 kHz mono before granting access: waveInOpen {0}" -f [VoLumUpgradeAudio]::OpenDefaultCapture(48000, 1))
+  Grant-DesktopMicrophoneAccess
+  foreach ($rate in @(44100, 48000)) {
+    Write-Host ("  default capture at {0} Hz mono: waveInOpen {1}" -f $rate, [VoLumUpgradeAudio]::OpenDefaultCapture([uint32]$rate, 1))
+  }
+  $capture = [VoLumUpgradeAudio]::OpenDefaultCapture(48000, 1)
+  Assert-Equal "the default capture device opens at 48 kHz (the e2e sandboxes ask for it)" 0 $capture
 
   $oldSetups = [ordered]@{}
   foreach ($tag in $FromTags) {
