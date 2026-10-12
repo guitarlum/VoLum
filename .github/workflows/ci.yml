@@ -423,6 +423,51 @@ jobs:
           path: ${{ runner.temp }}/volum-installer-upgrade-mac/diagnostics/
           if-no-files-found: warn
 
+  macos-standalone-e2e:
+    name: macOS standalone e2e
+    # No windows_only filter: it runs whenever the macOS job produced VoLum-mac.
+    needs: macos
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifacts (VoLum-mac)
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-mac
+          path: ${{ runner.temp }}/VoLum-mac
+
+      - name: Setup Python3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the e2e helpers (python-rtmidi, Quartz, Pillow)
+        run: python -m pip install python-rtmidi pyobjc-framework-Quartz pillow
+        shell: bash
+
+      - name: Fresh, upgrade, MIDI and screenshot scenarios
+        run: bash NeuralAmpModeler/scripts/e2e-standalone-mac.sh --artifact-dir "${{ runner.temp }}/VoLum-mac"
+        shell: bash
+
+      - name: Upload macOS standalone e2e screenshots (mac-e2e-shots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-e2e-shots
+          path: ${{ runner.temp }}/volum-e2e-standalone-mac/shots/
+          if-no-files-found: warn
+
+      - name: Upload macOS standalone e2e diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-standalone-e2e
+          path: ${{ runner.temp }}/volum-e2e-standalone-mac/diagnostics/
+          if-no-files-found: warn
+
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
