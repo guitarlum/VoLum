@@ -393,6 +393,36 @@ jobs:
           path: NeuralAmpModeler/build-mac/out/
           if-no-files-found: error
 
+  macos-installer-upgrade:
+    name: macOS installer upgrade
+    # No windows_only filter: it runs whenever the macOS job produced VoLum-mac.
+    needs: macos
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifacts (VoLum-mac)
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-mac
+          path: ${{ runner.temp }}/VoLum-mac
+
+      - name: Upgrade v1.2.3 and v1.2.2 to this run's installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash NeuralAmpModeler/scripts/installer-upgrade-mac.sh --artifact-dir "${{ runner.temp }}/VoLum-mac"
+        shell: bash
+
+      - name: Upload macOS installer upgrade diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-installer-upgrade
+          path: ${{ runner.temp }}/volum-installer-upgrade-mac/diagnostics/
+          if-no-files-found: warn
+
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
