@@ -33,8 +33,7 @@
 #      is hashed.
 #   3. Install this run's package over it: app, VST3 and AU report the new version,
 #      the four receipts carry it, every rig file the package ships is present with
-#      the repo's bytes, both library hashes are unchanged, and auval -v finds and
-#      validates the new AU.
+#      the repo's bytes, and both library hashes are unchanged.
 #   4. Gatekeeper (first leg only): quarantined copies of this run's DMG, package and
 #      installed app go through spctl --assess; the verbatim output is written to the
 #      job summary. Recorded, not asserted: the build is ad-hoc signed, not notarized.
@@ -43,6 +42,8 @@
 #      process was started, no VoLum crash report appears under any
 #      DiagnosticReports folder, its library still parses, and the runner's own
 #      library mirror is unchanged.
+#   6. auval -v finds and validates the new AU. It runs last because the AU it loads
+#      uses the runner's real HOME and so opens (and migrates) the mirrored library.
 #
 # Answering alerts and reading window names goes through System Events, so the
 # runner must grant UI scripting; without it the main-window check fails.
@@ -598,7 +599,6 @@ run_leg() {
   assert_bundled_rigs "after the upgrade"
   assert_tree_unchanged "seeded library" "$seed_lib" "$seed_hash" "by the upgrade"
   assert_tree_unchanged "runner library" "$REAL_LIBRARY" "$real_hash" "by the upgrade"
-  assert_auval
 
   if [[ $GATEKEEPER_DONE -eq 0 ]]; then
     record_gatekeeper
@@ -611,6 +611,8 @@ run_leg() {
   check "content/volum-content.json still has a schema version after the $new run" \
     "$(truth content_has_schema "$seed_lib/content/volum-content.json")"
   assert_tree_unchanged "runner library" "$REAL_LIBRARY" "$real_hash" "by the temp-HOME $new run"
+
+  assert_auval
   return 0
 }
 
