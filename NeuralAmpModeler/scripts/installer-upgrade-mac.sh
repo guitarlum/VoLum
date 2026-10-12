@@ -24,8 +24,10 @@
 #      app, VST3 and AU report the old version (CFBundleShortVersionString), and the
 #      app, VST3, AU and rigs receipts carry it.
 #   2. Seed a 1.2.x library: run the installed old standalone's binary with HOME set
-#      to a temp folder (VoLum resolves every library path from $HOME) and quit it
-#      with an AppleScript quit, so its shutdown save writes the library. The result
+#      to a temp folder (VoLum resolves every library path from $HOME), see its main
+#      window, and quit it with the quit Apple event addressed to its pid, so its
+#      shutdown save writes the library. Any alert is answered with OK, logged and
+#      listed in the job summary, as a user would click it away. The result
 #      is mirrored into the runner's own ~/Library/Application Support/VoLum, where an
 #      installer that touched user data would hit it, and every file of both copies
 #      is hashed.
@@ -37,9 +39,13 @@
 #      installed app go through spctl --assess; the verbatim output is written to the
 #      job summary. Recorded, not asserted: the build is ad-hoc signed, not notarized.
 #   5. Run the installed new standalone's binary once against the seeded temp HOME,
-#      quit it the same way: it exits by itself, no VoLum crash report appears under
-#      any DiagnosticReports folder, its library still parses, and the runner's own
+#      quit it the same way: it exits by itself and not by a signal, no other VoLum
+#      process was started, no VoLum crash report appears under any
+#      DiagnosticReports folder, its library still parses, and the runner's own
 #      library mirror is unchanged.
+#
+# Answering alerts and reading window names goes through System Events, so the
+# runner must grant UI scripting; without it the main-window check fails.
 #
 #   bash NeuralAmpModeler/scripts/installer-upgrade-mac.sh --artifact-dir <VoLum-mac artifact>
 
@@ -97,6 +103,8 @@ MOUNTS=""
 LAUNCHED_PID=""
 CREATED_REAL_LIBRARY=0
 GATEKEEPER_DONE=0
+NOTICES=""
+WINDOWS_SEEN=""
 
 check() {
   local what="$1" ok="$2" detail="${3:-}"
@@ -254,7 +262,8 @@ PY
 }
 
 install_pkg() {
-  local pkg="$1" label="$2" choices="$WORK/$label-choices.plist" ids code
+  local pkg="$1" label="$2" ids code
+  local choices="$WORK/$label-choices.plist"
   ids="$(write_choices "$pkg" "$choices")" || { echo "  could not read the choices of $pkg"; return 1; }
   echo "  $label: sudo installer -pkg \"$pkg\" -target / (choices: $ids)"
   sudo installer -pkg "$pkg" -target / -applyChoiceChangesXML "$choices" 2>&1 | tee "$DIAG/$label-installer.log" | sed 's/^/    /'
@@ -298,32 +307,114 @@ crash_reports_since() {
   done
 }
 
-# Run the installed standalone's binary with HOME=$2 and quit it through an AppleScript
-# quit, which NSApplication turns into terminate: and the app's own shutdown path.
+other_volum_pids() {
+  pgrep -x VoLum 2>/dev/null | grep -vx "${1:-none}" | tr '\n' ' ' | sed 's/ $//'
+}
+
+write_ui_scripts() {
+  # Lists the process's windows and answers every alert (a window with an OK
+  # button) with OK, printing what it said. The main window has no OK button.
+  cat > "$WORK/answer-alerts.applescript" <<'APPLESCRIPT'
+on run argv
+  set thePid to (item 1 of argv) as integer
+  set report to ""
+  with timeout of 20 seconds
+    tell application "System Events"
+      set procs to (every process whose unix id is thePid)
+      if procs is {} then return "no process " & thePid
+      set p to item 1 of procs
+      repeat with w in (every window of p)
+        set wname to ""
+        try
+          set wname to (name of w) as text
+        end try
+        if exists button "OK" of w then
+          set msg to ""
+          try
+            set AppleScript's text item delimiters to " | "
+            set msg to (value of every static text of w) as text
+            set AppleScript's text item delimiters to ""
+          end try
+          click button "OK" of w
+          set report to report & "alert: " & msg & linefeed
+        else
+          set report to report & "window: " & wname & linefeed
+        end if
+      end repeat
+    end tell
+  end timeout
+  return report
+end run
+APPLESCRIPT
+  # The quit Apple event, addressed to this exact process rather than to whichever
+  # VoLum LaunchServices resolves by name (it starts one, with the real HOME, when
+  # it does not count the directly launched binary as running).
+  cat > "$WORK/quit-pid.js" <<'JXA'
+ObjC.import('AppKit');
+function run(argv) {
+  const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(parseInt(argv[0], 10));
+  if (app.isNil()) return 'not a registered application';
+  return app.terminate ? 'quit sent' : 'quit not sent';
+}
+JXA
+}
+
+# Answers alerts of $1 and prints its window names; records each alert once.
+answer_alerts() {
+  local pid="$1" label="$2" result line
+  result="$(osascript "$WORK/answer-alerts.applescript" "$pid" 2>&1)"
+  WINDOWS_SEEN="$(echo "$result" | sed -n 's/^window: //p')"
+  while IFS= read -r line; do
+    case "$line" in
+      alert:*)
+        echo "    $line (answered OK)"
+        echo "::warning title=VoLum alert during $label::${line#alert: }"
+        NOTICES="$NOTICES- $label: ${line#alert: }"$'\n'
+        ;;
+      window:*|"") ;;
+      *) echo "    System Events: $line" ;;
+    esac
+  done <<< "$result"
+}
+
+# Run the installed standalone's binary with HOME=$2 and quit it with the quit Apple
+# event, which NSApplication turns into terminate: and the app's own shutdown path.
+# Alerts are answered with OK first, as a user would, and reported.
 launch_and_quit() {
-  local version="$1" home="$2" label="$3" marker="$WORK/$label.marker" out="$DIAG/$label-stdout.log"
-  local lib="$home/Library/Application Support/VoLum" alive=1 waited=0 exited=0 code="" quit_out reports
+  local version="$1" home="$2" label="$3"
+  local marker="$WORK/$label.marker" out="$DIAG/$label-stdout.log" lib="$home/Library/Application Support/VoLum"
+  local alive=1 waited=0 exited=0 code="" quit_out reports attempt others main_window=0
   touch "$marker"
   sleep 1
   echo "  $label: HOME=$home $APP_BIN"
   HOME="$home" "$APP_BIN" > "$out" 2>&1 &
   LAUNCHED_PID=$!
+  WINDOWS_SEEN=""
   while [[ $waited -lt $LAUNCH_SETTLE_SEC ]]; do
     if ! running "$LAUNCHED_PID"; then alive=0; break; fi
     sleep 1
     waited=$((waited + 1))
+    if [[ $((waited % 5)) -eq 0 ]]; then
+      answer_alerts "$LAUNCHED_PID" "$label"
+      echo "$WINDOWS_SEEN" | grep -qx 'VoLum' && main_window=1
+    fi
   done
   check "$version standalone is still running ${LAUNCH_SETTLE_SEC} s after launch on the temp HOME" "$alive"
+  check "$version standalone opened its main window" "$main_window" "windows: $(echo "$WINDOWS_SEEN" | one_line)"
   screencapture -x "$DIAG/$label.png" >/dev/null 2>&1 || true
 
   if [[ $alive -eq 1 ]]; then
-    quit_out="$(osascript -e 'with timeout of 30 seconds' -e 'tell application "VoLum" to quit' -e 'end timeout' 2>&1)"
-    echo "    AppleScript quit: ${quit_out:-sent}"
-    waited=0
-    while [[ $waited -lt $QUIT_TIMEOUT_SEC ]]; do
-      if ! running "$LAUNCHED_PID"; then exited=1; break; fi
-      sleep 1
-      waited=$((waited + 1))
+    for attempt in 1 2 3; do
+      answer_alerts "$LAUNCHED_PID" "$label"
+      quit_out="$(osascript -l JavaScript "$WORK/quit-pid.js" "$LAUNCHED_PID" 2>&1)"
+      echo "    quit Apple event to pid $LAUNCHED_PID (attempt $attempt): $quit_out"
+      waited=0
+      while [[ $waited -lt 20 ]]; do
+        if ! running "$LAUNCHED_PID"; then exited=1; break; fi
+        sleep 1
+        waited=$((waited + 1))
+      done
+      [[ $exited -eq 1 ]] && break
     done
   else
     exited=1
@@ -333,21 +424,30 @@ launch_and_quit() {
     code=$?
     echo "    exit status $code after ${waited} s"
   else
-    echo "    still running ${QUIT_TIMEOUT_SEC} s after the AppleScript quit; killed"
+    echo "    still running after three quit attempts; killed"
+    screencapture -x "$DIAG/$label-stuck.png" >/dev/null 2>&1 || true
     kill -9 "$LAUNCHED_PID" 2>/dev/null || true
     wait "$LAUNCHED_PID" 2>/dev/null || true
   fi
-  LAUNCHED_PID=""
   if [[ $alive -eq 1 ]]; then
-    check "$version standalone exits on its own within ${QUIT_TIMEOUT_SEC} s of an AppleScript quit" "$exited"
+    check "$version standalone exits on its own after the quit Apple event" "$exited"
   fi
   check "$version standalone was not killed by a signal (exit status '$code')" "$([[ -n "$code" && $code -lt 128 ]] && echo 1 || echo 0)"
+  others="$(other_volum_pids "$LAUNCHED_PID")"
+  check "no other VoLum process was started by the $version run" "$([[ -z "$others" ]] && echo 1 || echo 0)" \
+    "$(ps -o pid=,lstart=,command= -p "${others// /,}" 2>/dev/null | one_line)"
+  [[ -n "$others" ]] && kill -9 $others 2>/dev/null
+  LAUNCHED_PID=""
   sleep 10
   reports="$(crash_reports_since "$marker" "$home")"
   check "no VoLum crash report under DiagnosticReports after the $version run" "$([[ -z "$reports" ]] && echo 1 || echo 0)" "$(echo "$reports" | one_line)"
   if [[ -d "$lib" ]]; then
     mkdir -p "$DIAG/$label-library"
     cp "$lib"/*.log "$lib"/*.json "$lib"/*.ini "$DIAG/$label-library/" 2>/dev/null || true
+  fi
+  if [[ -d "$REAL_LIBRARY" ]]; then
+    mkdir -p "$DIAG/$label-runner-library"
+    cp "$REAL_LIBRARY"/*.log "$REAL_LIBRARY"/*.ini "$DIAG/$label-runner-library/" 2>/dev/null || true
   fi
 }
 
@@ -516,6 +616,7 @@ run_leg() {
 
 rm -rf "$WORK"
 mkdir -p "$DIAG"
+write_ui_scripts
 
 if [[ -z "$ARTIFACT_DIR" || ! -d "$ARTIFACT_DIR" ]]; then
   echo "ERROR: pass --artifact-dir: the downloaded VoLum-mac artifact of this run." >&2
@@ -583,6 +684,20 @@ for tag in $FROM_TAGS; do
     CREATED_REAL_LIBRARY=0
   fi
 done
+
+if [[ -n "$NOTICES" ]]; then
+  echo
+  echo "Alerts the standalone showed (answered OK):"
+  printf '%s' "$NOTICES" | sed 's/^/  /'
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    {
+      echo "### Alerts the standalone showed (answered OK)"
+      echo
+      printf '%s' "$NOTICES"
+      echo
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
+fi
 
 echo
 if [[ $FAILED -eq 0 ]]; then
