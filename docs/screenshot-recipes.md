@@ -47,6 +47,14 @@ dialogs come back. Every export, open and import also logs a `[pack]` line in
 `volum.log`. `e2e-standalone-win.ps1 -Scenario pack -ShotsDir <dir>` drives the
 whole round trip this way and saves the overlays as `06-*.png`.
 
+macOS standalone shots come from CI, not from a desktop: the `macOS standalone e2e`
+job (`NeuralAmpModeler/scripts/e2e-standalone-mac.sh`, CI or `--throwaway-vm` only)
+launches the installed app on an empty temp `HOME` and uploads artifact
+`mac-e2e-shots`: `01-play` (with the "Tweak your sound" note), `02-build` (P key),
+`03-settings-signal`, `04-settings-midi`, `05-settings-system`. They are
+`screencapture -l` window captures (title bar included, non-Retina 1x); clicks use
+the canvas points above, mapped onto the window's bottom 900x600 points.
+
 Pack Open/Save dialogs are separate `#32770` windows. Default `ui-drive.ps1`
 ForceFront cancels iPlug `PromptForFile` and the import overlay shows **No Pack
 opened.** Write the seed Pack first, then
