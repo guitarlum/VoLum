@@ -501,7 +501,7 @@ test_shots() {
   LEG="shots"
   echo
   echo "[shots] PLAY with the Tweak your sound note, BUILD (P), Settings SIGNAL / MIDI / SYSTEM"
-  local home="$WORK/shots/home" lib name
+  local home="$WORK/shots-home" lib name
   lib="$(library_of "$home")"
   mkdir -p "$SHOTS"
   SCREEN_ACCESS="$(helper screen-access 2>/dev/null || echo unknown)"
@@ -548,7 +548,7 @@ test_upgrade() {
   # What 1.2.0 would have written: schema v2, no midiSoundMap and no IR shaping keys.
   helper rewind-v2 "$content" "ir_e2e_cab" "ir/ir_e2e_cab__cab.wav"
   cp "$content" "$before"
-  measurable="$(helper measurable "$before")"
+  measurable="$(helper measurable "$content")"
   echo "  rewound: schema $(json_get "$before" schemaVersion), midiSoundMap $(truth helper has-key "$before" midiSoundMap | sed 's/1/present/; s/0/absent/'), $(helper count "$before" irLibrary) IR(s), $measurable readable"
 
   run_volum "$home" "upgrade"
