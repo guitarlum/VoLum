@@ -1,6 +1,6 @@
 # 01 Windows installer upgrade job
 
-Status: ready-for-agent
+Status: resolved
 
 ## Scope
 

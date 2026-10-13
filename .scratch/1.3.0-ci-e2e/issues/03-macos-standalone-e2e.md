@@ -1,6 +1,6 @@
 # 03 macOS standalone e2e job
 
-Status: ready-for-agent (after 02: it reuses the installed 1.3.0 app or the built .app)
+Status: resolved
 
 ## Scope
 

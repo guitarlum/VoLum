@@ -1,6 +1,6 @@
 # 02 macOS installer upgrade job
 
-Status: ready-for-agent
+Status: resolved
 
 ## Scope
 

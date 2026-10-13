@@ -538,3 +538,10 @@ From hunt-03 verify round 5 (4cdd2f3e) at bd5c82dc: NeuralAmpModeler.cpp:1802-18
 - IPlugAU.cpp:1502 tests `!UnserializeState(chunk, 0)`, but VoLum's readers return -1 for a truncated or rejected chunk (Unserialization.cpp ~532, ~626, ~932), so the AU reports noErr and runs OnRestoreState on an instance that applied nothing. The instance keeps its constructor state, which since 895eff72 means PLAY like any new insert, instead of the BUILD a legacy project would get. The project's sound is lost either way. Found by the GPT cold verify of the PLAY-default branch. Also: the restore-path tests pin source text because no test can instantiate the plugin.
 - Fix (iPlug2 fork): `if (UnserializeState(chunk, 0) < 0)`; check the VST3 and CLAP setState paths for the same pattern.
 - Disposition: deferred to 1.3.1 (pre-existing, corrupt chunks only).
+
+### F-113 macOS standalone fails to open audio on the first launch over a 1.2.x settings.ini
+- Source: 1.3.0 CI installer upgrade, run 38198542144 (job 114655847979), both v1.2.3 and v1.2.2 legs. Overnight summary: `.scratch/1.3.0-ci-e2e/morning.md`.
+- Severity: wrong-behavior
+- Repro: install 1.2.3 or 1.2.2, let that standalone write `settings.ini` (`driver=0`, `indev`/`outdev` = Apple Virtual Sound Device, `in1=1`, `out1=1`, `out2=2`, `sr=48000`, `buffer=512`), then launch 1.3.0 against the same `HOME`.
+- Expected / Actual: 1.3.0 opens the stream the way 1.2.x just did on that runner / `volum.log` says `RtApiCore::probeDeviceOpen: the device (0) does not support the requested channel count`, then `audio failure: Audio device failed to open. Reverting to the previous working settings.` A modal Audio Error is answered OK. The window still appears (PLAY, five Factory Sounds) and the process quits with no crash report. "device (0)" looks like an index lookup instead of the named device. Suspect `IPlugAPP_host.cpp` device lookup (iPlug2 commits since v1.2.3 include `4a9af5d04`, `f94f4eb7f`, `8376f6e7c`, `05eca3e58`); not confirmed.
+- Disposition: deferred to 1.3.1. Not a crash, hang, stuck UI, or confirmed library data loss, so 1.3.0 CI records it as a warning and does not fail the installer job.
