@@ -38,7 +38,8 @@
 #      installed app go through spctl --assess; the verbatim output is written to the
 #      job summary. Recorded, not asserted: the build is ad-hoc signed, not notarized.
 #   5. Run the installed new standalone's binary once against the seeded temp HOME,
-#      quit it the same way: it exits by itself and not by a signal, no other VoLum
+#      quit it the same way: its volum.log shows it opened the audio device the old
+#      build saved, it exits by itself and not by a signal, no other VoLum
 #      process was started, no VoLum crash report appears under any
 #      DiagnosticReports folder, its library still parses, and the runner's own
 #      library mirror is unchanged.
@@ -456,6 +457,14 @@ json_ok() {
   python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "$1" 2>/dev/null
 }
 
+# The volum.log lines written by the $1 standalone's last launch; empty when it never
+# logged its start, so an older version's lines cannot stand in for it.
+last_launch_log() {
+  local version="$1" log="$2"
+  [[ -f "$log" ]] || return 0
+  awk -v start="VoLum $version (standalone) instance created" 'index($0, start) { found = 1; buf = "" } found { buf = buf $0 "\n" } END { printf "%s", buf }' "$log"
+}
+
 content_has_schema() {
   python3 -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("schemaVersion") is not None else 1)' "$1" 2>/dev/null
 }
@@ -607,6 +616,11 @@ run_leg() {
 
   echo "  the installed $new standalone on the seeded $old library"
   launch_and_quit "$new" "$seed_home" "$tag-upgraded"
+  local launch_log
+  launch_log="$(last_launch_log "$new" "$seed_lib/volum.log")"
+  check "the $new standalone opened the audio device $old saved" \
+    "$(echo "$launch_log" | grep -q '\[audio\] stream open:' && ! echo "$launch_log" | grep -q 'stream open failed' && echo 1 || echo 0)" \
+    "$(echo "$launch_log" | grep '\[audio\]' | one_line)"
   check "volum-settings.json still parses after the $new run" "$(truth json_ok "$seed_lib/volum-settings.json")"
   check "content/volum-content.json still has a schema version after the $new run" \
     "$(truth content_has_schema "$seed_lib/content/volum-content.json")"
@@ -641,6 +655,7 @@ echo "  this run's DMG: $NEW_DMG ($NEW_VERSION)"
 echo "  from:           $FROM_TAGS"
 echo "  library:        $REAL_LIBRARY"
 sw_vers | sed 's/^/  /'
+system_profiler SPAudioDataType > "$DIAG/audio-devices.txt" 2>&1 || true
 
 mount_dmg "$NEW_DMG" "$WORK/new-dmg" || { echo "ERROR: could not mount $NEW_DMG" >&2; exit 1; }
 NEW_PKG="$WORK/new-dmg/VoLum Installer.pkg"
