@@ -202,6 +202,30 @@ TEST_CASE("F-06 shared physical output receives the stereo average")
   CHECK(callback.find("pluginOuts >= 2 && !stereo.shared") != std::string::npos);
 }
 
+TEST_CASE("F-113 a saved audio device name resolves to the id with that direction")
+{
+  // The macOS runner lists an output-only and an input-only device that are both
+  // "Apple Virtual Sound Device" once the manufacturer prefix is stripped.
+  const std::vector<std::string> names{"Apple Virtual Sound Device", "Apple Virtual Sound Device", "BlackHole 2ch"};
+  const std::vector<uint32_t> inputs{1, 2};
+  const std::vector<uint32_t> outputs{0, 2};
+  CHECK(iplug::VoLumFindAudioDevice("Apple Virtual Sound Device", names, inputs) == 1);
+  CHECK(iplug::VoLumFindAudioDevice("Apple Virtual Sound Device", names, outputs) == 0);
+  CHECK(iplug::VoLumFindAudioDevice("BlackHole 2ch", names, inputs) == 2);
+  CHECK(iplug::VoLumFindAudioDevice("BlackHole 2ch", names, outputs) == 2);
+  CHECK(iplug::VoLumFindAudioDevice("Unplugged", names, inputs) == -1);
+
+  // A device whose probe failed is in no direction list; it still resolves by name.
+  CHECK(iplug::VoLumFindAudioDevice("Busy ASIO", {"Busy ASIO", "Other"}, {1}) == 0);
+
+  const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
+  CHECK(host.find("GetAudioDeviceIdx(mState.mAudioInDev.Get(), ERoute::kInput)") != std::string::npos);
+  CHECK(host.find("GetAudioDeviceIdx(mState.mAudioOutDev.Get(), ERoute::kOutput)") != std::string::npos);
+  const auto lookup = Between(host, "int IPlugAPPHost::GetAudioDeviceIdx", "int IPlugAPPHost::GetMIDIPortNumber");
+  CHECK(lookup.find("VoLumFindAudioDevice") != std::string::npos);
+  CHECK(lookup.find("mAudioInputDevs : mAudioOutputDevs") != std::string::npos);
+}
+
 TEST_CASE("F-07 granted channels and nonstandard buffer remain representable")
 {
   const auto failedProbe = iplug::VoLumPlanProbeChannel(7, 0);
