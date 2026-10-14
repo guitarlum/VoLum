@@ -457,11 +457,12 @@ json_ok() {
   python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "$1" 2>/dev/null
 }
 
-# The volum.log lines written by the $1 standalone's last launch.
+# The volum.log lines written by the $1 standalone's last launch; empty when it never
+# logged its start, so an older version's lines cannot stand in for it.
 last_launch_log() {
   local version="$1" log="$2"
   [[ -f "$log" ]] || return 0
-  awk -v start="VoLum $version (standalone) instance created" 'index($0, start) { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$log"
+  awk -v start="VoLum $version (standalone) instance created" 'index($0, start) { found = 1; buf = "" } found { buf = buf $0 "\n" } END { printf "%s", buf }' "$log"
 }
 
 content_has_schema() {
