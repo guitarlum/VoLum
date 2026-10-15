@@ -221,7 +221,10 @@ jobs:
   macos:
     name: macOS (tests + full distribution + plugin validation)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
-    runs-on: macos-latest
+    # macos-latest is macOS 26, whose paravirtual GPU aborts pluginval inside
+    # AppleParavirtCommandBuffer while the editor is open. macOS 15 runs the
+    # same editor tests. Do not move these jobs back to macos-latest.
+    runs-on: macos-15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -396,8 +399,9 @@ jobs:
   macos-installer-upgrade:
     name: macOS installer upgrade
     # No windows_only filter: it runs whenever the macOS job produced VoLum-mac.
+    # macos-15: same virtual-GPU reason as the macOS job above.
     needs: macos
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - name: Check out repository
@@ -426,8 +430,9 @@ jobs:
   macos-standalone-e2e:
     name: macOS standalone e2e
     # No windows_only filter: it runs whenever the macOS job produced VoLum-mac.
+    # macos-15: same virtual-GPU reason as the macOS job above.
     needs: macos
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Check out repository

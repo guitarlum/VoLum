@@ -168,3 +168,23 @@ TEST_CASE("Every packager ships factory-presets.json beside the amp folders")
   CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/verify-installer-win.ps1"), "factory-presets.json") >= 1);
   CHECK(count(ReadRepoFile("NeuralAmpModeler/scripts/verify-packaging-mac.sh"), "factory-presets.json") >= 3);
 }
+
+TEST_CASE("macOS CI keeps the pluginval editor run off the macOS 26 GPU")
+{
+  // macos-latest is macOS 26. Its paravirtual GPU aborts pluginval while the
+  // editor is open, and that editor run is the Mac GUI coverage. The jobs stay
+  // on macos-15, and the script must not answer the crash by skipping the GUI.
+  const std::string workflow = ReadRepoFile(".github/workflows/ci.yml");
+  const auto job = workflow.find("name: macOS (tests + full distribution + plugin validation)");
+  REQUIRE(job != std::string::npos);
+  const auto next = workflow.find("\n  macos-installer-upgrade:", job);
+  REQUIRE(next != std::string::npos);
+  const auto body = workflow.substr(job, next - job);
+  CHECK(body.find("runs-on: macos-15") != std::string::npos);
+  CHECK(body.find("runs-on: macos-latest") == std::string::npos);
+  CHECK(body.find("validate-vst3-mac.sh") != std::string::npos);
+
+  const std::string script = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-mac.sh");
+  CHECK(script.find("--skip-gui-tests") == std::string::npos);
+  CHECK(script.find("--validate-in-process") != std::string::npos);
+}
