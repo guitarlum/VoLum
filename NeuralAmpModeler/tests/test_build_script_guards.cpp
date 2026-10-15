@@ -194,6 +194,20 @@ TEST_CASE("macOS CI keeps the pluginval editor run off the macOS 26 GPU")
   CHECK(retry.find("for attempt in") != std::string::npos);
 }
 
+TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step exit")
+{
+  // pluginval.exe is a GUI-subsystem binary: run with & PowerShell does not
+  // wait, and CI reported success with the log cut off at the Editor test.
+  const std::string script = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-win.ps1");
+  CHECK(script.find("& $pluginval.FullName") == std::string::npos);
+  CHECK(script.find("Start-Process -FilePath $pluginval.FullName") != std::string::npos);
+  CHECK(script.find("-Wait -PassThru") != std::string::npos);
+  CHECK(script.find("Completed tests in pluginval / Editor Automation") != std::string::npos);
+  CHECK(script.find("^SUCCESS") != std::string::npos);
+  CHECK(script.find("--validate-in-process") != std::string::npos);
+  CHECK(script.find("--skip-gui-tests") == std::string::npos);
+}
+
 TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
 {
   // The build steps are gated on matrix.os. Pinning the runner to macos-15

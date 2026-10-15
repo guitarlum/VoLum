@@ -72,8 +72,25 @@ if (-not $pluginval) {
 }
 
 Write-Host "Validating VST3 with pluginval: $Vst3Path"
-& $pluginval.FullName --validate-in-process --strictness-level 10 --output-dir $outputDir $Vst3Path
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# pluginval.exe is a GUI-subsystem binary. Called with &, PowerShell neither
+# waits for it nor sees its exit code, and on CI the step ended mid-Editor test
+# while still reporting success. Wait explicitly and require the final verdict.
+$stdout = Join-Path $outputDir "pluginval-stdout.txt"
+$stderr = Join-Path $outputDir "pluginval-stderr.txt"
+$pluginvalArgs = @("--validate-in-process", "--strictness-level", "10", "--output-dir", "`"$outputDir`"", "`"$Vst3Path`"")
+$proc = Start-Process -FilePath $pluginval.FullName -ArgumentList $pluginvalArgs -Wait -PassThru -NoNewWindow `
+  -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+Get-Content $stdout
+Get-Content $stderr
+$log = Get-Content $stdout -Raw
+if ($proc.ExitCode -ne 0) {
+  Write-Host "pluginval exited with $($proc.ExitCode)" -ForegroundColor Red
+  exit $proc.ExitCode
+}
+if ($log -notmatch "Completed tests in pluginval / Editor Automation" -or $log -notmatch "(?m)^SUCCESS\s*$") {
+  Write-Host "pluginval exited 0 without completing Editor Automation and reporting SUCCESS." -ForegroundColor Red
+  exit 1
+}
 
 $sdkRoot = Join-Path $RepoRoot "iPlug2\Dependencies\IPlug\VST3_SDK"
 $steinbergValidator = $null
