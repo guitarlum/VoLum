@@ -154,13 +154,12 @@ TEST_CASE("SnapSlotForChannel keeps current, prefers a real cab, No Cab last")
 TEST_CASE("Stock cab fallback keeps the channel, then prefers any real cab, then No Cab")
 {
   using volum::custom::CustomAmp;
-  using volum::custom::StockCabFallback;
   using volum::custom::kDirectSlot;
+  using volum::custom::StockCabFallback;
   CustomAmp amp;
   // The IR runs through DIRECT on ch1. A stock cab also covers ch1, so deletion
   // must keep the gain stage and land on that cab.
-  amp.files = {
-    {"d1.nam", kDirectSlot, 1}, {"v30-1.nam", 2, 1}, {"g12-2.nam", 0, 2}, {"d3.nam", kDirectSlot, 3}};
+  amp.files = {{"d1.nam", kDirectSlot, 1}, {"v30-1.nam", 2, 1}, {"g12-2.nam", 0, 2}, {"d3.nam", kDirectSlot, 3}};
   auto fallback = StockCabFallback(amp, 1);
   CHECK(fallback.slot == 2);
   CHECK(fallback.channel == 1);
