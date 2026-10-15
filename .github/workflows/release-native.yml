@@ -41,7 +41,11 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Prepare release metadata
         id: prepare
@@ -100,9 +104,11 @@ jobs:
       # leg on the first failure avoids uploading a half-broken release.
       fail-fast: true
       matrix:
-        os: [macos-latest, windows-latest]
+        # macos-15 matches CI. macos-latest (macOS 26) aborts an editor run in its
+        # virtual GPU, so the shipped Mac build is the one the editor tests ran on.
+        os: [macos-15, windows-latest]
         include:
-          - os: macos-latest
+          - os: macos-15
             build_dir: build-mac
           - os: windows-latest
             build_dir: build-win
@@ -112,7 +118,11 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: refs/tags/${{ needs.prepare_release.outputs.release_tag }}
-        submodules: recursive
+        submodules: false
+
+    - name: Check out submodules
+      run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+      shell: bash
 
     - name: Get VST3 SDK
       run: |

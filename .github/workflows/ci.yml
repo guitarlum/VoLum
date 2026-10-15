@@ -77,7 +77,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Build NAMCore tools
         working-directory: NeuralAmpModelerCore
@@ -102,7 +106,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
@@ -229,7 +237,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Get VST3 SDK
         run: |
@@ -482,7 +494,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Get VST3 SDK
         run: |

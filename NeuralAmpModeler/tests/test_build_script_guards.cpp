@@ -183,8 +183,13 @@ TEST_CASE("macOS CI keeps the pluginval editor run off the macOS 26 GPU")
   CHECK(body.find("runs-on: macos-15") != std::string::npos);
   CHECK(body.find("runs-on: macos-latest") == std::string::npos);
   CHECK(body.find("validate-vst3-mac.sh") != std::string::npos);
+  CHECK(body.find("checkout-submodules.sh") != std::string::npos);
 
   const std::string script = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-mac.sh");
   CHECK(script.find("--skip-gui-tests") == std::string::npos);
   CHECK(script.find("--validate-in-process") != std::string::npos);
+
+  const std::string retry = ReadRepoFile("NeuralAmpModeler/scripts/checkout-submodules.sh");
+  CHECK(retry.find("git submodule update --init --recursive") != std::string::npos);
+  CHECK(retry.find("for attempt in") != std::string::npos);
 }
