@@ -2,7 +2,7 @@
 
 ![VoLum PLAY in Dual Amp: amp art moving with the guitar](https://raw.githubusercontent.com/guitarlum/VoLum/v1.3.0/docs/volum-dual-amp.gif)
 
-**Your amps, on stage.** VoLum now opens on PLAY: your favourite Sounds on a pedalboard, one stomp away, with amp art that moves as you play.
+**Your amps, on stage.** VoLum now opens on PLAY: your Sounds on a pedalboard, with amp art that moves as you play.
 
 ### New
 
