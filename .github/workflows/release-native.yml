@@ -127,9 +127,6 @@ jobs:
   build:
     name: Build
     needs: prepare_release
-    # A rebuild uploads the missing Mac assets onto the existing draft. The
-    # Windows assets from the first run stay put.
-    if: ${{ inputs.rebuild_assets != true || matrix.os == 'macos-15' }}
     runs-on: ${{matrix.os}}
     strategy:
       # A release is shipped as a single multi-platform unit. Aborting the other
@@ -138,12 +135,8 @@ jobs:
       matrix:
         # macos-15 matches CI. macos-latest (macOS 26) aborts an editor run in its
         # virtual GPU, so the shipped Mac build is the one the editor tests ran on.
-        os: [macos-15, windows-latest]
-        include:
-          - os: macos-15
-            build_dir: build-mac
-          - os: windows-latest
-            build_dir: build-win
+        # A rebuild uploads only the Mac assets onto the existing draft.
+        include: ${{ fromJSON(inputs.rebuild_assets == true && '[{"os":"macos-15","build_dir":"build-mac"}]' || '[{"os":"macos-15","build_dir":"build-mac"},{"os":"windows-latest","build_dir":"build-win"}]') }}
 
     steps:
     - name: Check out repository

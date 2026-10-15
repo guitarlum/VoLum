@@ -202,4 +202,5 @@ TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
   CHECK(workflow.find("matrix.os == 'macos-15'") != std::string::npos);
   CHECK(workflow.find("matrix.os == 'macos-latest'") == std::string::npos);
   CHECK(workflow.find("rebuild_assets") != std::string::npos);
+  CHECK(workflow.find("[{\"os\":\"macos-15\",\"build_dir\":\"build-mac\"}]") != std::string::npos);
 }
