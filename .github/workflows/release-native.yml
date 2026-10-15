@@ -41,7 +41,11 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Prepare release metadata
         id: prepare
@@ -100,9 +104,11 @@ jobs:
       # leg on the first failure avoids uploading a half-broken release.
       fail-fast: true
       matrix:
-        os: [macos-latest, windows-latest]
+        # macos-15 matches CI. macos-latest (macOS 26) aborts an editor run in its
+        # virtual GPU, so the shipped Mac build is the one the editor tests ran on.
+        os: [macos-15, windows-latest]
         include:
-          - os: macos-latest
+          - os: macos-15
             build_dir: build-mac
           - os: windows-latest
             build_dir: build-win
@@ -112,7 +118,11 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: refs/tags/${{ needs.prepare_release.outputs.release_tag }}
-        submodules: recursive
+        submodules: false
+
+    - name: Check out submodules
+      run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+      shell: bash
 
     - name: Get VST3 SDK
       run: |
@@ -189,19 +199,28 @@ jobs:
         test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
         test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/factory-presets.json"
         test -d "$VERIFY_DIR/vst3/VoLum.vst3"
         test -d "$VERIFY_DIR/vst3/VoLumRigs"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -f "$VERIFY_DIR/vst3/VoLumRigs/factory-presets.json"
         test -d "$VERIFY_DIR/au/VoLum.component"
         test -d "$VERIFY_DIR/au/VoLumRigs"
         test -f "$VERIFY_DIR/au/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
         test -f "$VERIFY_DIR/au/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
+        test -f "$VERIFY_DIR/au/VoLumRigs/factory-presets.json"
         hdiutil detach "$VERIFY_DIR/dmg"
 
         hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
         test -f "$VERIFY_DIR/installer-dmg/VoLum Installer.pkg"
         hdiutil detach "$VERIFY_DIR/installer-dmg"
+      shell: bash
+
+    - name: Validate macOS AU with auval
+      if: matrix.os == 'macos-latest'
+      timeout-minutes: 15
+      run: bash NeuralAmpModeler/scripts/validate-au-mac.sh
       shell: bash
 
     - name: Verify macOS package metadata
@@ -361,6 +380,7 @@ jobs:
         if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
         if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
         if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
+        if (-not (Test-Path (Join-Path $rigsPath "factory-presets.json"))) { throw "Missing Factory presets in $rigsPath" }
       shell: pwsh
 
     - name: Upload Windows release assets

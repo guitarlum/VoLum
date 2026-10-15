@@ -1,0 +1,761 @@
+=== build dev e858a96d 2026-10-09T07:50:06
+No patches in C:\dev\VoLum\NeuralAmpModeler\iplug2-patches; nothing to apply.
+MSBuild version 17.14.40+3e7442088 for .NET Framework
+
+  NeuralAmpModeler.cpp
+C:\dev\VoLum\NeuralAmpModeler\Colors.h(78,75): warning C4305: 'argument': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\Colors.h(80,89): warning C4305: 'argument': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\Colors.h(81,94): warning C4305: 'argument': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(111,24): warning C4305: 'argument': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(143,84): warning C4244: 'argument': conversion from 'Eigen::Index' to 'long', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(149,38): warning C4244: 'argument': conversion from 'Eigen::Index' to 'long', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(156,38): warning C4244: 'argument': conversion from 'Eigen::Index' to 'long', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(228,21): warning C4305: 'initializing': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(229,21): warning C4305: 'initializing': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModelerCore\NAM\activations.h(268,26): warning C4305: 'initializing': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\iPlug2\IGraphics\Controls\IVTabbedPagesControl.h(38,38): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(97,25): warning C4305: '=': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(220,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(224,37): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(327,43): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(331,44): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(682,104): warning C4305: 'argument': truncation from 'double' to 'float' [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(1181,94): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\NeuralAmpModeler\NeuralAmpModelerControls.h(1181,57): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56): warning C4244: 'argument': conversion from 'const double' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+      C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56):
+      the template instantiation context (the oldest one first) is
+          C:\dev\VoLum\NeuralAmpModeler\VoLumResamplingNam.h(247,62):
+          see reference to class template instantiation 'std::optional<dsp::ResamplingContainer<double,1,12>>' being compiled
+          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\optional(227,26):
+          see reference to alias template instantiation 'std::_SMF_control<std::_Optional_construct_base<_Ty>,_Ty>' being compiled
+          with
+          [
+              _Ty=dsp::ResamplingContainer<double,1,12>
+          ]
+          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xsmf_control.h(159,22):
+          see reference to alias template instantiation 'std::_SMF_control_move_assign<std::_Optional_construct_base<_Ty>,_Ty>' being compiled
+          with
+          [
+              _Ty=dsp::ResamplingContainer<double,1,12>
+          ]
+          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xsmf_control.h(152,19):
+          see reference to variable template 'const bool conjunction_v<std::is_trivially_destructible<dsp::ResamplingContainer<double,1,12> >,std::is_trivially_move_constructible<dsp::ResamplingContainer<double,1,12> >,std::is_trivially_move_assignable<dsp::ResamplingContainer<double,1,12> > >' being compiled
+          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\xsmf_control.h(152,19):
+          see reference to class template instantiation 'dsp::ResamplingContainer<double,1,12>' being compiled
+          C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(103,8):
+          while compiling class template member function 'void dsp::ResamplingContainer<double,1,12>::Reset(double,int)'
+              C:\dev\VoLum\NeuralAmpModeler\VoLumResamplingNam.h(142,24):
+              see the first reference to 'dsp::ResamplingContainer<double,1,12>::Reset' in 'ResamplingNAM::Reset'
+          C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(133,26):
+          see reference to function template instantiation 'std::unique_ptr<dsp::LanczosResampler<T,1,12>,std::default_delete<dsp::LanczosResampler<T,1,12>>> std::make_unique<dsp::LanczosResampler<T,1,12>,double&,const double&,0>(double &,const double &)' being compiled
+          with
+          [
+              T=double
+          ]
+  
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56): warning C4244: 'argument': conversion from 'TargetType' to 'float', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56): warning C4244:         with [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56): warning C4244:         [ [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56): warning C4244:             TargetType=__std_tzdb_epoch_milli [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\include\memory(3630,56): warning C4244:         ] [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(278,45): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+      C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(278,45):
+      the template instantiation context (the oldest one first) is
+          C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(276,8):
+          while compiling class template member function 'void dsp::ResamplingContainer<double,1,12>::ClearBuffers(void)'
+              C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(107,19):
+              see the first reference to 'dsp::ResamplingContainer<double,1,12>::ClearBuffers' in 'dsp::ResamplingContainer<double,1,12>::Reset'
+              C:\dev\VoLum\NeuralAmpModeler\VoLumResamplingNam.h(142,24):
+              see the first reference to 'dsp::ResamplingContainer<double,1,12>::Reset' in 'ResamplingNAM::Reset'
+  
+C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(280,42): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(281,43): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+  
+C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\Dependencies\LanczosResampler.h(310,25): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data [C:\dev\VoLum\NeuralAmpModeler\projects\NeuralAmpModeler-app.vcxproj]
+  (compiling source file '../NeuralAmpModeler.cpp')
+      C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\Dependencies\LanczosResampler.h(310,25):
+      the template instantiation context (the oldest one first) is
+          C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(168,8):
+          while compiling class template member function 'void dsp::ResamplingContainer<double,1,12>::ProcessBlock(T **,T **,int,std::function<void (T **,T **,int)>)'
+          with
+          [
+              T=double
+          ]
+              C:\dev\VoLum\NeuralAmpModeler\VoLumResamplingNam.h(102,35):
+              see the first reference to 'dsp::ResamplingContainer<double,1,12>::ProcessBlock' in 'ResamplingNAM::process::<lambda_1>::operator ()'
+          C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(170,5):
+          see reference to class template instantiation 'dsp::LanczosResampler<T,1,12>' being compiled
+          with
+          [
+              T=double
+          ]
+          C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\Dependencies\LanczosResampler.h(307,15):
+          while compiling class template member function 'void dsp::LanczosResampler<T,1,12>::ReadSamples(double,T **,int) const'
+          with
+          [
+              T=double
+          ]
+              C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\Dependencies\LanczosResampler.h(231,18):
+              see the first reference to 'dsp::LanczosResampler<T,1,12>::ReadSamples' in 'dsp::LanczosResampler<T,1,12>::PopBlock'
+          with
+          [
+              T=double
+          ]
+              C:\dev\VoLum\AudioDSPTools\dsp\ResamplingContainer\ResamplingContainer.h(180,31):
+              see the first reference to 'dsp::LanczosResampler<T,1,12>::PopBlock' in 'dsp::ResamplingContainer<double,1,12>::ProcessBlock'
+          with
+          [
+              T=double
+          ]
+              C:\dev\VoLum\NeuralAmpModeler\VoLumResamplingNam.h(102,35):
+              see the first reference to 'dsp::ResamplingContainer<double,1,12>::ProcessBlock' in 'ResamplingNAM::process::<lambda_1>::operator ()'
+  
+  Generating code
+  Previous IPDB and IOBJ mismatch, fall back to full compilation.
+  All 33282 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  NeuralAmpModeler-app.vcxproj -> C:\dev\VoLum\NeuralAmpModeler\build-win\app\x64\Release\VoLum.exe
+  POSTBUILD SCRIPT VARIABLES -----------------------------------------------------
+  FORMAT ".exe" 
+  NAME "VoLum" 
+  PLATFORM "x64" 
+  COPY_VST2 "1" 
+  BUILT_BINARY "C:\dev\VoLum\NeuralAmpModeler\build-win\app\x64\Release\VoLum.exe" 
+  VST2_32_PATH "C:\Program Files (x86)\VstPlugins" 
+  VST2_64_PATH "C:\Program Files\VstPlugins"  
+  VST3_32_PATH "C:\Program Files (x86)\Common Files\VST3" 
+  VST3_64_PATH "C:\Program Files\Common Files\VST3" 
+  BUILD_DIR "C:\dev\VoLum\NeuralAmpModeler\build-win"
+  VST_ICON "C:\dev\VoLum\NeuralAmpModeler\projects\..\..\iPlug2\Scripts\icons\VST_Logo_Steinberg.ico" 
+  AAX_ICON "C:\dev\VoLum\NeuralAmpModeler\projects\..\..\iPlug2\Dependencies\IPlug\AAX_SDK\Utilities\PlugIn.ico" 
+  CREATE_BUNDLE_SCRIPT "C:\dev\VoLum\NeuralAmpModeler\projects\..\..\iPlug2\Scripts\create_bundle.bat"
+  END POSTBUILD SCRIPT VARIABLES -----------------------------------------------------
+          1 file(s) copied.
+=== build exit 0
+=== e2e all 2026-10-09T07:53:22
+VoLum standalone end-to-end scenarios
+  exe:  C:\dev\VoLum\NeuralAmpModeler\build-win\app\x64\Release\VoLum.exe
+  seed: C:\Users\SteffenDangmann\AppData\Local\VoLum
+
+[fresh] first launch with no existing state
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully
+  PASS  volum-settings.json written on first run
+  PASS  settings carry a schema version
+  PASS  settings carry per-amp scenes
+  PASS  diagnostic log created
+  PASS  log records startup
+  PASS  log records the audio configuration
+  PASS  first launch wrote volum-content.json
+  PASS  PLAY pre-filled with five Factory Sounds on programs 0-4
+
+RtAudio Version 5.1.0
+  PASS  relaunch with a cleared board opened
+  PASS  relaunch with a cleared board closed gracefully
+  PASS  cleared board keeps its midiSoundMap key
+  PASS  cleared board is not pre-filled again
+
+[roundtrip] existing library survives launch and quit
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully
+  PASS  content registry still parses
+  PASS  no amps lost across launch
+  PASS  no irs lost across launch
+  PASS  no pedals lost across launch
+  PASS  no scenes lost across launch
+  PASS  no presetBanks lost across launch
+  PASS  midiSoundMap survives quit including invalid slot
+  PASS  IR 'Marshall 4x12 _ Royer' keeps lowCutHz
+  PASS  IR 'Marshall 4x12 _ Royer' keeps highCutHz
+  PASS  amp 'sadfsfd' keeps its slot/channel map
+  PASS  settings still parse
+  PASS  selection 'volumCustomMainId' survives
+  PASS  selection 'volumActivePresetId' survives
+  PASS  selection 'lastAmpIdx' survives
+  PASS  amp 'Ampete One' keeps speaker
+  PASS  amp 'Ampete One' keeps channel
+  PASS  amp 'Ampete One' keeps activeIrId
+  PASS  amp 'Ampete One' keeps supportActiveIrId
+  PASS  amp 'Bad Cat mini Cat' keeps speaker
+  PASS  amp 'Bad Cat mini Cat' keeps channel
+  PASS  amp 'Bad Cat mini Cat' keeps activeIrId
+  PASS  amp 'Bad Cat mini Cat' keeps supportActiveIrId
+  PASS  amp 'Brunetti XL 2' keeps speaker
+  PASS  amp 'Brunetti XL 2' keeps channel
+  PASS  amp 'Brunetti XL 2' keeps activeIrId
+  PASS  amp 'Brunetti XL 2' keeps supportActiveIrId
+  PASS  amp 'Diezel Herbert Mk1' keeps speaker
+  PASS  amp 'Diezel Herbert Mk1' keeps channel
+  PASS  amp 'Diezel Herbert Mk1' keeps activeIrId
+  PASS  amp 'Diezel Herbert Mk1' keeps supportActiveIrId
+  PASS  amp 'Fryette Deliverance 120' keeps speaker
+  PASS  amp 'Fryette Deliverance 120' keeps channel
+  PASS  amp 'Fryette Deliverance 120' keeps activeIrId
+  PASS  amp 'Fryette Deliverance 120' keeps supportActiveIrId
+  PASS  amp 'H&K TriAmp Mk2' keeps speaker
+  PASS  amp 'H&K TriAmp Mk2' keeps channel
+  PASS  amp 'H&K TriAmp Mk2' keeps activeIrId
+  PASS  amp 'H&K TriAmp Mk2' keeps supportActiveIrId
+  PASS  amp 'Lichtlaerm Prometheus' keeps speaker
+  PASS  amp 'Lichtlaerm Prometheus' keeps channel
+  PASS  amp 'Lichtlaerm Prometheus' keeps activeIrId
+  PASS  amp 'Lichtlaerm Prometheus' keeps supportActiveIrId
+  PASS  amp 'Marshall 2204 1982' keeps speaker
+  PASS  amp 'Marshall 2204 1982' keeps channel
+  PASS  amp 'Marshall 2204 1982' keeps activeIrId
+  PASS  amp 'Marshall 2204 1982' keeps supportActiveIrId
+  PASS  amp 'Marshall JMP 2203 1976' keeps speaker
+  PASS  amp 'Marshall JMP 2203 1976' keeps channel
+  PASS  amp 'Marshall JMP 2203 1976' keeps activeIrId
+  PASS  amp 'Marshall JMP 2203 1976' keeps supportActiveIrId
+  PASS  amp 'Marshall JVM 210H OD1' keeps speaker
+  PASS  amp 'Marshall JVM 210H OD1' keeps channel
+  PASS  amp 'Marshall JVM 210H OD1' keeps activeIrId
+  PASS  amp 'Marshall JVM 210H OD1' keeps supportActiveIrId
+  PASS  amp 'Orange OD120 1975' keeps speaker
+  PASS  amp 'Orange OD120 1975' keeps channel
+  PASS  amp 'Orange OD120 1975' keeps activeIrId
+  PASS  amp 'Orange OD120 1975' keeps supportActiveIrId
+  PASS  amp 'Orange ORS100 1972' keeps speaker
+  PASS  amp 'Orange ORS100 1972' keeps channel
+  PASS  amp 'Orange ORS100 1972' keeps activeIrId
+  PASS  amp 'Orange ORS100 1972' keeps supportActiveIrId
+  PASS  amp 'Sebago Texas Flood' keeps speaker
+  PASS  amp 'Sebago Texas Flood' keeps channel
+  PASS  amp 'Sebago Texas Flood' keeps activeIrId
+  PASS  amp 'Sebago Texas Flood' keeps supportActiveIrId
+  PASS  amp 'Soldano SLO100' keeps speaker
+  PASS  amp 'Soldano SLO100' keeps channel
+  PASS  amp 'Soldano SLO100' keeps activeIrId
+  PASS  amp 'Soldano SLO100' keeps supportActiveIrId
+  PASS  amp 'THC Sunset' keeps speaker
+  PASS  amp 'THC Sunset' keeps channel
+  PASS  amp 'THC Sunset' keeps activeIrId
+  PASS  amp 'THC Sunset' keeps supportActiveIrId
+
+[custom] custom MAIN amp on its upper channel with an active IR
+  SKIP  no stored scene for amp amp_46393043
+
+[brokenrefs] scenes pointing at content that is gone
+
+RtAudio Version 5.1.0
+  PASS  app opens with unresolvable references
+  PASS  app closed gracefully
+  PASS  settings still parse
+  PASS  unknown custom amp id dropped
+  PASS  preset id of the unknown amp dropped
+  PASS  unknown IR id dropped from the lane
+  PASS  library survived the bad references
+  SKIP  seed library has no custom amp with a stored scene
+
+[future] library from a newer build (A/B downgrade)
+
+RtAudio Version 5.1.0
+  PASS  app opens on a newer-schema library
+  PASS  app closed gracefully
+  PASS  newer library not treated as corrupt
+  PASS  newer library still parses
+  PASS  no amps lost across launch
+  PASS  no irs lost across launch
+  PASS  no pedals lost across launch
+  PASS  no scenes lost across launch
+  PASS  no presetBanks lost across launch
+
+[upgrade] 1.2.0 schema-v2 library upgraded in place
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully
+  PASS  upgraded registry still parses
+  PASS  no amps lost across launch
+  PASS  no irs lost across launch
+  PASS  no pedals lost across launch
+  PASS  no scenes lost across launch
+  PASS  no presetBanks lost across launch
+  PASS  registry upgraded to the current schema v4
+  PASS  every IR gained a measured trim
+  PASS  pre-migration backup kept
+  PASS  corrupt-file backup NOT triggered
+  PASS  1.2.x library gets the PLAY pre-fill on programs 0-4
+
+RtAudio Version 5.1.0
+  PASS  second launch opened
+  PASS  migration is idempotent across relaunch
+  PASS  pre-fill does not repeat over the player's edit
+
+[presets] every amp's selected preset survives a restart
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully
+  PASS  settings rewritten on shutdown
+  PASS  settings still parse
+  PASS  per-amp preset map written back
+  PASS  focused amp keeps its preset
+  PASS  amp never visited keeps its preset
+  PASS  single-id key still names the focused amp's preset
+
+[corrupt] truncated content registry
+
+RtAudio Version 5.1.0
+  PASS  recovery notice shown once
+  PASS  recovery notice waits for the window
+  PASS  recovery notice names the .bak
+  PASS  app still opens with an unreadable library
+  PASS  app closed gracefully
+  PASS  unreadable library moved aside as .bak
+
+[samplerate] settings.ini names a rate the device does not offer
+
+RtAudio Version 5.1.0
+  PASS  app opens despite an unopenable stored rate
+  PASS  app closed gracefully
+  PASS  stream opened at a real rate, not the stored one
+  PASS  settings.ini records the rate the driver opened
+
+[savedialog] PLAY Add this sound: Cancel writes nothing, Save adds one Sound
+
+RtAudio Version 5.1.0
+  PASS  first launch opened a window
+  PASS  PLAY board emptied before the Add run
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully
+  PASS  Add opened the name dialog 8 times
+  PASS  Cancel x5, Esc and outside click each cancelled
+  PASS  exactly one commit (Enter)
+  PASS  no preset written by 7 cancelled dialogs
+  PASS  no PLAY slot written by 7 cancelled dialogs
+  PASS  Save created exactly one preset
+  PASS  Ctrl reached VoLum for Ctrl+Backspace
+  PASS  preset carries the typed name, last word removed by Ctrl+Backspace
+  PASS  Save added exactly one PLAY slot
+  PASS  the PLAY slot is the saved preset
+  [savedialog] BUILD Ctrl+S from PRE / POST, with and without a selected knob
+
+RtAudio Version 5.1.0
+  PASS  BUILD run opened a window
+  PASS  BUILD run closed gracefully
+  PASS  Ctrl reached VoLum (AttachThreadInput)
+  PASS  Ctrl+S opened the dialog from PRE, PRE knob, POST, POST knob
+  PASS  each BUILD dialog cancelled with Esc
+  PASS  cancelled BUILD dialogs wrote no preset
+  [savedialog] Add this sound on a tweaked Factory switch adds a new switch
+
+RtAudio Version 5.1.0
+  PASS  Factory case: first launch opened a window
+  PASS  Factory case: seeded one PLAY row
+
+RtAudio Version 5.1.0
+  PASS  Factory case: app opened a window
+  PASS  Factory case: app closed gracefully
+  PASS  Factory case: dirty Add opened the name dialog once
+  PASS  Factory case: exactly one save dialog commit
+  PASS  Factory case: exactly one User preset created
+  PASS  Factory case: preset carries the typed name
+  PASS  Factory case: map gained exactly one row
+  PASS  Factory case: slot 0 still present
+  PASS  Factory case: slot 0 amp stays Factory
+  PASS  Factory case: slot 0 preset stays Factory Sound
+  PASS  Factory case: new map row points at the saved User preset
+  [savedialog] BUILD Ctrl+S on a switch-assigned preset leaves PLAY alone
+
+RtAudio Version 5.1.0
+  PASS  BUILD save case: first launch opened a window
+
+RtAudio Version 5.1.0
+  PASS  BUILD save case: app opened a window
+  PASS  BUILD save case: app closed gracefully
+  PASS  BUILD save case: Ctrl reached VoLum
+  PASS  BUILD save case: Ctrl+S opened the name dialog once
+  PASS  BUILD save case: exactly one save dialog commit
+  PASS  BUILD save case: exactly one User preset created
+  PASS  BUILD save case: preset carries the typed name
+  PASS  BUILD save case: map still has one row
+  PASS  BUILD save case: slot 0 still present
+  PASS  BUILD save case: slot 0 amp unchanged
+  PASS  BUILD save case: slot 0 still the Factory Sound
+  [savedialog] PLAY Ctrl+S on a tweaked Factory switch moves that switch
+
+RtAudio Version 5.1.0
+  PASS  PLAY save case: first launch opened a window
+
+RtAudio Version 5.1.0
+  PASS  PLAY save case: app opened a window
+  PASS  PLAY save case: app closed gracefully
+  PASS  PLAY save case: Ctrl reached VoLum
+  PASS  PLAY save case: Ctrl+S opened the name dialog once
+  PASS  PLAY save case: exactly one save dialog commit
+  PASS  PLAY save case: exactly one User preset created
+  PASS  PLAY save case: preset carries the typed name
+  PASS  PLAY save case: map still has one row
+  PASS  PLAY save case: slot 0 still present
+  PASS  PLAY save case: slot 0 amp unchanged
+  PASS  PLAY save case: slot 0 now holds the saved preset
+
+[pack] export Everything / Sounds / A whole amp, import each into a fresh library
+
+RtAudio Version 5.1.0
+  PASS  source opened
+  PASS  source closed gracefully
+  PASS  zero-tick Sounds export wrote nothing
+  PASS  four Packs written through Export...
+  PASS  log records four exports
+  PASS  PLAY Sounds export order is program number
+  PASS  Everything manifest job
+  PASS  Everything carries settings and the MIDI map
+  PASS  Everything carries every preset
+  PASS  Everything carries the PLAY map
+  PASS  Sounds manifest job
+  PASS  Sounds carries the two ticked presets
+  PASS  Sounds pulls the custom-amp owner
+  PASS  Sounds pulls Lead Boost's IR
+  PASS  Sounds pulls Skeleton Lead's pedal
+  PASS  Sounds carries no settings
+  PASS  Sounds carries no MIDI map
+  PASS  Amp manifest job
+  PASS  Amp carries the amp
+  PASS  Amp carries its bank
+  PASS  Amp pulls its preset's pedal
+  PASS  Amp carries no IR
+
+RtAudio Version 5.1.0
+  PASS  [everything] receiver opened
+  PASS  [everything] receiver closed gracefully
+  PASS  [everything] custom amp 'Monomyth Skeleton Key' imported
+  PASS  [everything] custom amp 'Monomyth Skeleton Key' identical
+  PASS  [everything] capture 'amps/amp_46393043_d__AMP-MONO-1.nam' on disk with the same bytes
+  PASS  [everything] capture 'amps/amp_46393043_2__V30-MONO-1.nam' on disk with the same bytes
+  PASS  [everything] capture 'amps/amp_46393043_0__G12-MONO-2.nam' on disk with the same bytes
+  PASS  [everything] IR 'Marshall 4x12 _ Royer' imported
+  PASS  [everything] IR 'Marshall 4x12 _ Royer' identical
+  PASS  [everything] IR file 'ir/ir_dc5abc89__Marshall 4x12 _ Royer.wav' on disk with the same bytes
+  PASS  [everything] pedal '5000$ Klon' imported
+  PASS  [everything] pedal '5000$ Klon' identical
+  PASS  [everything] pedal file 'pedals/pedal_8009a3cf__5000-Klon.nam' on disk with the same bytes
+  PASS  [everything] preset 'Lead Boost' imported
+  PASS  [everything] preset 'Lead Boost' stays on its amp
+  PASS  [everything] preset 'Lead Boost' keeps its name
+  PASS  [everything] preset 'Lead Boost' keeps its settings
+  PASS  [everything] preset 'Crunch Rhythm' imported
+  PASS  [everything] preset 'Crunch Rhythm' stays on its amp
+  PASS  [everything] preset 'Crunch Rhythm' keeps its name
+  PASS  [everything] preset 'Crunch Rhythm' keeps its settings
+  PASS  [everything] preset 'Clean Verb' imported
+  PASS  [everything] preset 'Clean Verb' stays on its amp
+  PASS  [everything] preset 'Clean Verb' keeps its name
+  PASS  [everything] preset 'Clean Verb' keeps its settings
+  PASS  [everything] preset 'Sunset Crunch' imported
+  PASS  [everything] preset 'Sunset Crunch' stays on its amp
+  PASS  [everything] preset 'Sunset Crunch' keeps its name
+  PASS  [everything] preset 'Sunset Crunch' keeps its settings
+  PASS  [everything] preset 'Skeleton Lead' imported
+  PASS  [everything] preset 'Skeleton Lead' stays on its amp
+  PASS  [everything] preset 'Skeleton Lead' keeps its name
+  PASS  [everything] preset 'Skeleton Lead' keeps its settings
+  PASS  [everything] no other custom amps
+  PASS  [everything] no other IRs
+  PASS  [everything] no other pedals
+  PASS  [everything] no other presets
+  PASS  [everything] PLAY map restored
+  PASS  [everything] machine setting 'lastAmpIdx' restored
+  PASS  [everything] machine setting 'volumCustomMainId' restored
+  PASS  [everything] machine setting 'volumActivePresetId' restored
+  PASS  [everything] machine setting 'liteMode' restored
+  PASS  [everything] per-amp scenes restored
+  PASS  [everything] POST effects restored
+  PASS  [everything] log records the settings import
+
+RtAudio Version 5.1.0
+  PASS  [everything-nosettings] receiver opened
+  PASS  [everything-nosettings] receiver closed gracefully
+  PASS  [everything-nosettings] custom amp 'Monomyth Skeleton Key' imported
+  PASS  [everything-nosettings] custom amp 'Monomyth Skeleton Key' identical
+  PASS  [everything-nosettings] capture 'amps/amp_46393043_d__AMP-MONO-1.nam' on disk with the same bytes
+  PASS  [everything-nosettings] capture 'amps/amp_46393043_2__V30-MONO-1.nam' on disk with the same bytes
+  PASS  [everything-nosettings] capture 'amps/amp_46393043_0__G12-MONO-2.nam' on disk with the same bytes
+  PASS  [everything-nosettings] IR 'Marshall 4x12 _ Royer' imported
+  PASS  [everything-nosettings] IR 'Marshall 4x12 _ Royer' identical
+  PASS  [everything-nosettings] IR file 'ir/ir_dc5abc89__Marshall 4x12 _ Royer.wav' on disk with the same bytes
+  PASS  [everything-nosettings] pedal '5000$ Klon' imported
+  PASS  [everything-nosettings] pedal '5000$ Klon' identical
+  PASS  [everything-nosettings] pedal file 'pedals/pedal_8009a3cf__5000-Klon.nam' on disk with the same bytes
+  PASS  [everything-nosettings] preset 'Lead Boost' imported
+  PASS  [everything-nosettings] preset 'Lead Boost' stays on its amp
+  PASS  [everything-nosettings] preset 'Lead Boost' keeps its name
+  PASS  [everything-nosettings] preset 'Lead Boost' keeps its settings
+  PASS  [everything-nosettings] preset 'Crunch Rhythm' imported
+  PASS  [everything-nosettings] preset 'Crunch Rhythm' stays on its amp
+  PASS  [everything-nosettings] preset 'Crunch Rhythm' keeps its name
+  PASS  [everything-nosettings] preset 'Crunch Rhythm' keeps its settings
+  PASS  [everything-nosettings] preset 'Clean Verb' imported
+  PASS  [everything-nosettings] preset 'Clean Verb' stays on its amp
+  PASS  [everything-nosettings] preset 'Clean Verb' keeps its name
+  PASS  [everything-nosettings] preset 'Clean Verb' keeps its settings
+  PASS  [everything-nosettings] preset 'Sunset Crunch' imported
+  PASS  [everything-nosettings] preset 'Sunset Crunch' stays on its amp
+  PASS  [everything-nosettings] preset 'Sunset Crunch' keeps its name
+  PASS  [everything-nosettings] preset 'Sunset Crunch' keeps its settings
+  PASS  [everything-nosettings] preset 'Skeleton Lead' imported
+  PASS  [everything-nosettings] preset 'Skeleton Lead' stays on its amp
+  PASS  [everything-nosettings] preset 'Skeleton Lead' keeps its name
+  PASS  [everything-nosettings] preset 'Skeleton Lead' keeps its settings
+  PASS  [everything-nosettings] no other custom amps
+  PASS  [everything-nosettings] no other IRs
+  PASS  [everything-nosettings] no other pedals
+  PASS  [everything-nosettings] no other presets
+  PASS  [everything-nosettings] PLAY map not applied without the box (pre-fill stays)
+  PASS  [everything-nosettings] machine settings not restored
+
+RtAudio Version 5.1.0
+  PASS  [sounds] receiver opened
+  PASS  [sounds] receiver closed gracefully
+  PASS  [sounds] custom amp 'Monomyth Skeleton Key' imported
+  PASS  [sounds] custom amp 'Monomyth Skeleton Key' identical
+  PASS  [sounds] capture 'amps/amp_46393043_d__AMP-MONO-1.nam' on disk with the same bytes
+  PASS  [sounds] capture 'amps/amp_46393043_2__V30-MONO-1.nam' on disk with the same bytes
+  PASS  [sounds] capture 'amps/amp_46393043_0__G12-MONO-2.nam' on disk with the same bytes
+  PASS  [sounds] IR 'Marshall 4x12 _ Royer' imported
+  PASS  [sounds] IR 'Marshall 4x12 _ Royer' identical
+  PASS  [sounds] IR file 'ir/ir_dc5abc89__Marshall 4x12 _ Royer.wav' on disk with the same bytes
+  PASS  [sounds] pedal '5000$ Klon' imported
+  PASS  [sounds] pedal '5000$ Klon' identical
+  PASS  [sounds] pedal file 'pedals/pedal_8009a3cf__5000-Klon.nam' on disk with the same bytes
+  PASS  [sounds] preset 'Skeleton Lead' imported
+  PASS  [sounds] preset 'Skeleton Lead' stays on its amp
+  PASS  [sounds] preset 'Skeleton Lead' keeps its name
+  PASS  [sounds] preset 'Skeleton Lead' keeps its settings
+  PASS  [sounds] preset 'Lead Boost' imported
+  PASS  [sounds] preset 'Lead Boost' stays on its amp
+  PASS  [sounds] preset 'Lead Boost' keeps its name
+  PASS  [sounds] preset 'Lead Boost' keeps its settings
+  PASS  [sounds] no other custom amps
+  PASS  [sounds] no other IRs
+  PASS  [sounds] no other pedals
+  PASS  [sounds] no other presets
+  PASS  [sounds] a Share Pack brings no MIDI slots (pre-fill stays)
+
+RtAudio Version 5.1.0
+  PASS  [amp] receiver opened
+  PASS  [amp] receiver closed gracefully
+  PASS  [amp] custom amp 'Monomyth Skeleton Key' imported
+  PASS  [amp] custom amp 'Monomyth Skeleton Key' identical
+  PASS  [amp] capture 'amps/amp_46393043_d__AMP-MONO-1.nam' on disk with the same bytes
+  PASS  [amp] capture 'amps/amp_46393043_2__V30-MONO-1.nam' on disk with the same bytes
+  PASS  [amp] capture 'amps/amp_46393043_0__G12-MONO-2.nam' on disk with the same bytes
+  PASS  [amp] pedal '5000$ Klon' imported
+  PASS  [amp] pedal '5000$ Klon' identical
+  PASS  [amp] pedal file 'pedals/pedal_8009a3cf__5000-Klon.nam' on disk with the same bytes
+  PASS  [amp] preset 'Skeleton Lead' imported
+  PASS  [amp] preset 'Skeleton Lead' stays on its amp
+  PASS  [amp] preset 'Skeleton Lead' keeps its name
+  PASS  [amp] preset 'Skeleton Lead' keeps its settings
+  PASS  [amp] no other custom amps
+  PASS  [amp] no other IRs
+  PASS  [amp] no other pedals
+  PASS  [amp] no other presets
+
+RtAudio Version 5.1.0
+  PASS  [verbs] app opened
+  PASS  [verbs] app closed gracefully
+  PASS  [verbs] Add keeps my preset name
+  PASS  [verbs] Add keeps my capture bytes
+  PASS  [verbs] Add keeps my local-only preset
+  PASS  [verbs] Add keeps my catalog path
+  PASS  [verbs] Add deletes the unreferenced Pack payload
+  PASS  [verbs] Add keeps my payload file
+  PASS  [verbs] Overwrite takes the Pack's name
+  PASS  [verbs] Overwrite takes the Pack's capture bytes
+  PASS  [verbs] Overwrite keeps my local-only preset
+  PASS  [verbs] Overwrite takes the Pack catalog path
+  PASS  [verbs] Overwrite keeps the Pack payload
+  PASS  [verbs] Overwrite deletes my replaced payload
+  PASS  [verbs] Reset deletes my local-only preset
+  PASS  [verbs] Reset keeps the Pack's preset
+  PASS  [verbs after Reset] custom amp 'Monomyth Skeleton Key' imported
+  PASS  [verbs after Reset] custom amp 'Monomyth Skeleton Key' identical
+  PASS  [verbs after Reset] capture 'amps/amp_46393043_d__AMP-MONO-1.nam' on disk with the same bytes
+  PASS  [verbs after Reset] capture 'amps/amp_46393043_2__V30-MONO-1.nam' on disk with the same bytes
+  PASS  [verbs after Reset] capture 'amps/amp_46393043_0__G12-MONO-2.nam' on disk with the same bytes
+  PASS  [verbs after Reset] IR 'Marshall 4x12 _ Royer' imported
+  PASS  [verbs after Reset] IR 'Marshall 4x12 _ Royer' identical
+  PASS  [verbs after Reset] IR file 'ir/ir_dc5abc89__Marshall 4x12 _ Royer.wav' on disk with the same bytes
+  PASS  [verbs after Reset] pedal '5000$ Klon' imported
+  PASS  [verbs after Reset] pedal '5000$ Klon' identical
+  PASS  [verbs after Reset] pedal file 'pedals/pedal_8009a3cf__5000-Klon.nam' on disk with the same bytes
+  PASS  [verbs after Reset] preset 'Lead Boost' imported
+  PASS  [verbs after Reset] preset 'Lead Boost' stays on its amp
+  PASS  [verbs after Reset] preset 'Lead Boost' keeps its name
+  PASS  [verbs after Reset] preset 'Lead Boost' keeps its settings
+  PASS  [verbs after Reset] preset 'Crunch Rhythm' imported
+  PASS  [verbs after Reset] preset 'Crunch Rhythm' stays on its amp
+  PASS  [verbs after Reset] preset 'Crunch Rhythm' keeps its name
+  PASS  [verbs after Reset] preset 'Crunch Rhythm' keeps its settings
+  PASS  [verbs after Reset] preset 'Clean Verb' imported
+  PASS  [verbs after Reset] preset 'Clean Verb' stays on its amp
+  PASS  [verbs after Reset] preset 'Clean Verb' keeps its name
+  PASS  [verbs after Reset] preset 'Clean Verb' keeps its settings
+  PASS  [verbs after Reset] preset 'Sunset Crunch' imported
+  PASS  [verbs after Reset] preset 'Sunset Crunch' stays on its amp
+  PASS  [verbs after Reset] preset 'Sunset Crunch' keeps its name
+  PASS  [verbs after Reset] preset 'Sunset Crunch' keeps its settings
+  PASS  [verbs after Reset] preset 'Skeleton Lead' imported
+  PASS  [verbs after Reset] preset 'Skeleton Lead' stays on its amp
+  PASS  [verbs after Reset] preset 'Skeleton Lead' keeps its name
+  PASS  [verbs after Reset] preset 'Skeleton Lead' keeps its settings
+  PASS  [verbs after Reset] no other custom amps
+  PASS  [verbs after Reset] no other IRs
+  PASS  [verbs after Reset] no other pedals
+  PASS  [verbs after Reset] no other presets
+
+RtAudio Version 5.1.0
+  PASS  [corrupt] receiver opened
+  PASS  [corrupt] receiver closed gracefully
+  PASS  [corrupt] refusal logged with Pack copy
+  PASS  [corrupt] refusal log keeps the technical reason
+  PASS  [corrupt] no import ran
+  PASS  [corrupt] library holds nothing
+  PASS  [corrupt] no payload file written
+
+[chrome] no menu bar, dark caption, Settings opens the skinned Preferences and closes on an outside press
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully
+  PASS  main window has no menu bar
+  PASS  main title bar is dark (DWM attribute 20)
+  PASS  Settings > SIGNAL > Audio & MIDI devices... opened Preferences
+  PASS  ID_PREFERENCES (Ctrl+,) opened Preferences
+  PASS  [button] MIDI input device is offered
+  PASS  [button] MIDI output device is gone
+  PASS  [button] MIDI input channel is gone
+  PASS  [button] MIDI output channel is gone
+  PASS  [button] rebuilt buffer-size combo still holds all 10 sizes
+  PASS  [button] combos are skinned (owner-drawn)
+  PASS  [button] buttons are skinned (owner-drawn)
+  PASS  [button] Preferences title bar is dark
+  PASS  [button] Cancel closed Preferences
+  PASS  [command] MIDI input device is offered
+  PASS  [command] MIDI output device is gone
+  PASS  [command] MIDI input channel is gone
+  PASS  [command] MIDI output channel is gone
+  PASS  [command] rebuilt buffer-size combo still holds all 10 sizes
+  PASS  [command] combos are skinned (owner-drawn)
+  PASS  [command] buttons are skinned (owner-drawn)
+  PASS  [command] Preferences title bar is dark
+  PASS  [command] Cancel closed Preferences
+  PASS  a press on the Settings dim does not pick the amp under it
+  PASS  that press closed Settings: the next press picks the amp
+
+[midi] Program Change and CC 102 recall PLAY Sounds through loopMIDI 'VoLum Loop'
+  PASS  opened the WinMM output of 'VoLum Loop'
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully with the MIDI port open
+  PASS  the standalone opened 'VoLum Loop 0'
+  PASS  settings.ini still names 'VoLum Loop 0' (iPlug resets an unknown port to off)
+  PASS  Program Change 9 recalls program 9 (Modern Rhythm)
+  PASS  CC 102 value 42 recalls program 42 (Ampete Lead)
+  PASS  Program Change 7 reaches VoLum and is ignored: program 7 is empty
+  PASS  the empty program recalls nothing
+  PASS  a burst of Program Changes 3, 100, 9, 42, 101 ends on 101 (SLO Crunch)
+  PASS  saved PLAY cursor is the last program played
+  PASS  saved active preset is the last Sound recalled
+  PASS  MIDI recalls leave the PLAY board as seeded
+
+RtAudio Version 5.1.0
+  PASS  [one channel 2] app opened a window
+  PASS  [one channel 2] app closed gracefully with the MIDI port open
+  PASS  [one channel 2] channel-1 Program Change 3 and CC 102 value 9 are ignored
+  PASS  [one channel 2] channel-2 CC 102 value 100 recalls program 100 (Crack the Skye)
+  PASS  [one channel 2] channel-2 Program Change 42 recalls program 42 (Ampete Lead)
+  PASS  [one channel 2] One channel = 2 survives the quit
+  PASS  [one channel 2] saved PLAY cursor is program 42
+
+ALL PASS  451 checks
+=== e2e all exit 0
+=== e2e midi 2026-10-09T07:59:07
+VoLum standalone end-to-end scenarios
+  exe:  C:\dev\VoLum\NeuralAmpModeler\build-win\app\x64\Release\VoLum.exe
+  seed: C:\Users\SteffenDangmann\AppData\Local\VoLum
+
+[midi] Program Change and CC 102 recall PLAY Sounds through loopMIDI 'VoLum Loop'
+  PASS  opened the WinMM output of 'VoLum Loop'
+
+RtAudio Version 5.1.0
+  PASS  app opened a window
+  PASS  app closed gracefully with the MIDI port open
+  PASS  the standalone opened 'VoLum Loop 0'
+  PASS  settings.ini still names 'VoLum Loop 0' (iPlug resets an unknown port to off)
+  PASS  Program Change 9 recalls program 9 (Modern Rhythm)
+  PASS  CC 102 value 42 recalls program 42 (Ampete Lead)
+  PASS  Program Change 7 reaches VoLum and is ignored: program 7 is empty
+  PASS  the empty program recalls nothing
+  PASS  a burst of Program Changes 3, 100, 9, 42, 101 ends on 101 (SLO Crunch)
+  PASS  saved PLAY cursor is the last program played
+  PASS  saved active preset is the last Sound recalled
+  PASS  MIDI recalls leave the PLAY board as seeded
+
+RtAudio Version 5.1.0
+  PASS  [one channel 2] app opened a window
+  PASS  [one channel 2] app closed gracefully with the MIDI port open
+  PASS  [one channel 2] channel-1 Program Change 3 and CC 102 value 9 are ignored
+  PASS  [one channel 2] channel-2 CC 102 value 100 recalls program 100 (Crack the Skye)
+  PASS  [one channel 2] channel-2 Program Change 42 recalls program 42 (Ampete Lead)
+  PASS  [one channel 2] One channel = 2 survives the quit
+  PASS  [one channel 2] saved PLAY cursor is program 42
+
+ALL PASS  20 checks
+=== e2e midi exit 0 2026-10-09T07:59:44

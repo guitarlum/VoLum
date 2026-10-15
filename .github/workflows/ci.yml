@@ -3,8 +3,14 @@ name: CI
 # pull_request: runs when a PR to dev/main is opened/updated.
 # push: dev is the integration gate, main is the release branch gate.
 # release/**: rehearse the full matrix on release branches before promoting to main.
+# workflow_dispatch windows_only: Windows tests + installer + zip, no macOS/pluginval/smokes.
 on:
   workflow_dispatch:
+    inputs:
+      windows_only:
+        description: 'Windows tests + installer + zip only (skip macOS, coverage, NAMCore, pluginval, smokes)'
+        type: boolean
+        default: false
   push:
     branches:
       - dev
@@ -26,12 +32,16 @@ env:
 jobs:
   formatting:
     name: Formatting
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
+
+      - name: Test appcast note extraction
+        run: .github/scripts/test-appcast-notes.sh
 
       - name: Install clang-format
         run: |
@@ -45,7 +55,7 @@ jobs:
             BASE="${{ github.event.pull_request.base.sha }}"
           else
             BASE="${{ github.event.before }}"
-            if [[ "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
               BASE="HEAD^"
             fi
           fi
@@ -61,12 +71,17 @@ jobs:
 
   namcore:
     name: NAMCore regression tests
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Build NAMCore tools
         working-directory: NeuralAmpModelerCore
@@ -91,7 +106,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
@@ -136,6 +155,12 @@ jobs:
       - name: Verify Windows installer layout
         run: ./NeuralAmpModeler/scripts/verify-installer-win.ps1 -RunSilentInstall
         shell: pwsh
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+
+      - name: Verify Windows installer exists
+        run: ./NeuralAmpModeler/scripts/verify-installer-win.ps1
+        shell: pwsh
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_only }}
 
       - name: Build Windows portable zip
         run: |
@@ -148,14 +173,17 @@ jobs:
         shell: pwsh
 
       - name: Validate Windows VST3 with pluginval
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         run: ./NeuralAmpModeler/scripts/validate-vst3-win.ps1
         shell: pwsh
 
       - name: Smoke Windows standalone audio config
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         run: ./NeuralAmpModeler/scripts/smoke-standalone-audio-config-win.ps1
         shell: pwsh
 
       - name: Smoke Windows upgrade install
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./NeuralAmpModeler/scripts/smoke-upgrade-install-win.ps1
@@ -170,14 +198,50 @@ jobs:
             NeuralAmpModeler/build-win/installer/VoLum-Setup.exe
           if-no-files-found: error
 
+  windows-installer-upgrade:
+    name: Windows installer upgrade
+    # No windows_only filter: it runs whenever the Windows job produced VoLum-win.
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifacts (VoLum-win)
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-win
+          path: ${{ runner.temp }}/VoLum-win
+
+      - name: Install Mesa software OpenGL (the standalone needs OpenGL 2.0)
+        uses: ssciwr/setup-mesa-dist-win@2dfeaebfa514f74c2b8cd8d27108c31486d33e72 # v3.0.0
+
+      - name: Install a virtual audio device (VB-Cable)
+        uses: LABSN/sound-ci-helpers@d08c889a7bba7d9b1b059f8f76dac4672ea3a9cf # v1
+
+      - name: Upgrade v1.2.3 and v1.2.2 to this run's installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./NeuralAmpModeler/scripts/installer-upgrade-win.ps1 -ArtifactDir "${{ runner.temp }}/VoLum-win"
+        shell: pwsh
+
   macos:
     name: macOS (tests + full distribution + plugin validation)
-    runs-on: macos-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    # macos-latest is macOS 26, whose paravirtual GPU aborts pluginval inside
+    # AppleParavirtCommandBuffer while the editor is open. macOS 15 runs the
+    # same editor tests. Do not move these jobs back to macos-latest.
+    runs-on: macos-15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
 
       - name: Get VST3 SDK
         run: |
@@ -290,6 +354,10 @@ jobs:
           [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
           [[ "$au_archs" == *arm64* && "$au_archs" == *x86_64* ]]
 
+      - name: Validate macOS AU with auval
+        timeout-minutes: 15
+        run: bash NeuralAmpModeler/scripts/validate-au-mac.sh
+
       - name: Validate macOS VST3 with pluginval
         run: bash NeuralAmpModeler/scripts/validate-vst3-mac.sh
 
@@ -340,14 +408,102 @@ jobs:
           path: NeuralAmpModeler/build-mac/out/
           if-no-files-found: error
 
+  macos-installer-upgrade:
+    name: macOS installer upgrade
+    # No windows_only filter: it runs whenever the macOS job produced VoLum-mac.
+    # macos-15: same virtual-GPU reason as the macOS job above.
+    needs: macos
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifacts (VoLum-mac)
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-mac
+          path: ${{ runner.temp }}/VoLum-mac
+
+      - name: Upgrade v1.2.3 and v1.2.2 to this run's installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash NeuralAmpModeler/scripts/installer-upgrade-mac.sh --artifact-dir "${{ runner.temp }}/VoLum-mac"
+        shell: bash
+
+      - name: Upload macOS installer upgrade diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-installer-upgrade
+          path: ${{ runner.temp }}/volum-installer-upgrade-mac/diagnostics/
+          if-no-files-found: warn
+
+  macos-standalone-e2e:
+    name: macOS standalone e2e
+    # No windows_only filter: it runs whenever the macOS job produced VoLum-mac.
+    # macos-15: same virtual-GPU reason as the macOS job above.
+    needs: macos
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifacts (VoLum-mac)
+        uses: actions/download-artifact@v4
+        with:
+          name: VoLum-mac
+          path: ${{ runner.temp }}/VoLum-mac
+
+      - name: Setup Python3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the e2e helpers (python-rtmidi, Quartz, Pillow)
+        run: python -m pip install python-rtmidi pyobjc-framework-Quartz pillow
+        shell: bash
+
+      - name: Fresh, upgrade, MIDI and screenshot scenarios
+        run: bash NeuralAmpModeler/scripts/e2e-standalone-mac.sh --artifact-dir "${{ runner.temp }}/VoLum-mac"
+        shell: bash
+
+      - name: Upload macOS standalone e2e screenshots (mac-e2e-shots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-e2e-shots
+          path: ${{ runner.temp }}/volum-e2e-standalone-mac/shots/
+          if-no-files-found: warn
+
+      - name: Upload macOS standalone e2e diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-standalone-e2e
+          path: ${{ runner.temp }}/volum-e2e-standalone-mac/diagnostics/
+          if-no-files-found: warn
+
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    continue-on-error: true
     runs-on: macos-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
+
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-vst3-sdk.sh master
 
       - name: Measure doctest coverage (Clang source-based)
         run: bash NeuralAmpModeler/scripts/run-coverage-mac.sh

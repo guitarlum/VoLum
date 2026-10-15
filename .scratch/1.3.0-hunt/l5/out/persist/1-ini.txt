@@ -1,0 +1,15 @@
+[audio]
+driver=1
+indev=ASIO4ALL v2
+outdev=ASIO4ALL v2
+in1=1
+in2=1
+out1=2
+out2=2
+buffer=256
+sr=44100
+[midi]
+indev=off
+outdev=off
+inchan=0
+outchan=0

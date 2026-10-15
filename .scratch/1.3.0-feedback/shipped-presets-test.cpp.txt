@@ -1,0 +1,39 @@
+// Append to NeuralAmpModeler/tests/test_volum_factory_presets.cpp when the Pack is baked.
+// Needs: #include "VoLumContentStore.h" (kCustomPedalIndexBase) - already pulled in via VoLumCustomContentApi.h.
+
+namespace
+{
+std::filesystem::path ShippedFactoryPresetsPath()
+{
+  auto dir = std::filesystem::path(__FILE__).parent_path();
+  for (int up = 0; up < 6; ++up, dir = dir.parent_path())
+    if (std::filesystem::exists(dir / "rigs" / "factory-presets.json"))
+      return dir / "rigs" / "factory-presets.json";
+  return {};
+}
+} // namespace
+
+TEST_CASE("Every shipped factory preset is a baked sound that uses bundled content only")
+{
+  // 1.3.0 ships the owner's own sound per amp (ticket 15), not the empty "Ready" placeholder, and a
+  // factory preset must open on any machine, so it may not point at a custom IR, pedal or amp.
+  const auto path = ShippedFactoryPresetsPath();
+  REQUIRE_FALSE(path.empty());
+  const auto bank = volum::LoadFactoryPresets(path);
+  REQUIRE(bank.size() == volum::kAmpCount);
+  const volum::VoLumAmpSettings defaults;
+  for (const auto& preset : bank)
+  {
+    CAPTURE(preset.id);
+    CAPTURE(preset.name);
+    CHECK(preset.name != volum::kFactoryPresetDisplayName);
+    CHECK_FALSE(volum::AmpSettingsEqual(preset.settings, defaults));
+    CHECK(preset.settings.activeIrId.empty());
+    CHECK(preset.settings.supportActiveIrId.empty());
+    CHECK(preset.settings.supportCustomId.empty());
+    if (preset.settings.preNam1Active)
+      CHECK(preset.settings.preNam1Capture < volum::content::kCustomPedalIndexBase);
+    if (preset.settings.preNam2Active)
+      CHECK(preset.settings.preNam2Capture < volum::content::kCustomPedalIndexBase);
+  }
+}

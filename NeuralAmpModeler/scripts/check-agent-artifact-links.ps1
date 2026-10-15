@@ -78,6 +78,17 @@ try
 
       if ($hasRoot)
       {
+        # Gitignored trees (training outputs, local caches) are allowed to be
+        # named even when they are not on disk. Native git exit 1 means "not
+        # ignored"; do not let that trip ErrorActionPreference in pwsh 7.
+        $nativeErr = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        # Submodule paths print `fatal: Pathspec ... is in submodule` and exit 128.
+        & git check-ignore -q -- $normalized 2>$null
+        $ignored = ($LASTEXITCODE -eq 0)
+        $PSNativeCommandUseErrorActionPreference = $nativeErr
+        if ($ignored) { continue }
+
         # A path into the repo: resolve it directly (may be a directory).
         $probe = Join-Path $repoRoot ($normalized -replace "/", "\")
         if (-not (Test-Path $probe))

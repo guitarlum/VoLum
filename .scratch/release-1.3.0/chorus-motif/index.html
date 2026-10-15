@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VoLum — Chorus card motif round 4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Josefin+Sans:wght@400;600;700&family=Michroma&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:'Poiret One';src:url('../../../NeuralAmpModeler/resources/fonts/PoiretOne-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Josefin Sans';src:url('../../../NeuralAmpModeler/resources/fonts/JosefinSans-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Josefin Sans';src:url('../../../NeuralAmpModeler/resources/fonts/JosefinSans-SemiBold.ttf') format('truetype');font-weight:600;font-display:swap}
+@font-face{font-family:'Josefin Sans';src:url('../../../NeuralAmpModeler/resources/fonts-win/JosefinSans-Bold.ttf') format('truetype');font-weight:700;font-display:swap}
+
+:root{
+  --gold:#fcde91; --teal:#5bc4c4; --teal-line:rgb(120,210,220);
+  --cream:#e9e3d3; --cream-dim:rgba(233,227,211,.56); --frame:rgba(120,160,180,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:radial-gradient(1100px 620px at 50% -8%, #1a2230 0%, #0c0e14 55%, #06070a 100%);color:var(--cream);font-family:'Josefin Sans',sans-serif}
+body{padding:18px 22px 48px;display:flex;flex-direction:column;align-items:center}
+.lab{width:1100px}
+.lab-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.brand{font-family:'Poiret One';font-size:28px;color:var(--gold);letter-spacing:.04em}
+.sub{font-family:'Michroma';font-size:8px;letter-spacing:.38em;color:rgba(252,222,145,.48);margin-top:4px}
+.tag{font-family:'Michroma';font-size:8px;letter-spacing:.26em;color:rgba(233,227,211,.32);text-transform:uppercase;text-align:right;line-height:1.7}
+.tag b{color:rgba(252,222,145,.7);font-weight:400}
+h2{font-family:'Michroma';font-size:9px;letter-spacing:.32em;color:var(--gold);margin:20px 0 8px;font-weight:400}
+.lede{font-size:13px;color:var(--cream-dim);max-width:860px;line-height:1.45;margin-bottom:10px}
+.lede em{color:var(--cream);font-style:normal}
+.row{display:flex;gap:18px;align-items:flex-start}
+.note{font-size:11.5px;color:rgba(233,227,211,.4);line-height:1.4;max-width:240px;padding-top:8px}
+.note b{color:rgba(252,222,145,.7);font-weight:600}
+
+.post{width:480px;height:208px;position:relative;background:linear-gradient(180deg,#161c26,#0d1118);border:1px solid var(--frame)}
+.post .hdr{position:absolute;left:10px;top:5px;font-weight:700;font-size:10px;color:rgba(252,222,145,.72)}
+.post .cards{position:absolute;left:14px;top:24px;display:flex;gap:10px}
+
+.card{position:relative;width:105.5px;height:176px;background:linear-gradient(180deg,#141820,#0b0e13);border:1px solid rgba(91,196,196,.38);border-radius:4px}
+.card.gold{border-color:rgba(252,222,145,.78);box-shadow:0 0 0 2.5px rgba(232,168,92,.17)}
+.card.dim{border-color:rgba(80,90,100,.55)}
+.card canvas{position:absolute;left:2px;top:2px;width:101.5px;height:152px}
+.card .foot{position:absolute;left:8px;right:18px;bottom:5px;font-weight:700;font-size:10px;color:var(--cream);white-space:nowrap;overflow:hidden}
+.card.dim .foot{color:var(--cream-dim)}
+.card .led{position:absolute;right:8px;bottom:8px;width:9px;height:9px;border-radius:50%;background:var(--teal-line);box-shadow:0 0 6px rgba(120,210,220,.7)}
+.card.dim .led{background:#2a3034;box-shadow:none}
+.card .ct{position:absolute;width:8px;height:8px;pointer-events:none}
+.card .tl{top:4px;left:4px;border-left:1px solid;border-top:1px solid;border-color:inherit}
+.card .tr{top:4px;right:4px;border-right:1px solid;border-top:1px solid;border-color:inherit}
+.card .bl{bottom:4px;left:4px;border-left:1px solid;border-bottom:1px solid;border-color:inherit}
+.card .br{bottom:4px;right:4px;border-right:1px solid;border-bottom:1px solid;border-color:inherit}
+
+.gallery{display:flex;flex-wrap:wrap;gap:14px}
+.gcap{font-family:'Michroma';font-size:7.5px;letter-spacing:.18em;color:rgba(233,227,211,.4);text-align:center;margin-top:7px;line-height:1.45;max-width:188px}
+.gcard{width:188px;height:230px}
+.gcard canvas{width:184px;height:206px}
+
+.quiet{width:116px;height:140px;position:relative;background:linear-gradient(180deg,#141820,#0c1016);border:1px solid var(--frame)}
+.quiet .qh{position:absolute;left:8px;top:6px;font-weight:700;font-size:10px;color:rgba(252,222,145,.7)}
+.quiet .uline{position:absolute;left:6px;right:6px;top:26px;height:1px;background:rgba(91,196,196,.28)}
+.qslot{position:absolute;left:2px;right:2px;height:26px;display:flex;align-items:center;gap:4px;padding:0 4px 0 6px}
+.qslot canvas{width:20px;height:20px;flex:0 0 20px}
+.qslot .ql{font-weight:700;font-size:10px;color:var(--cream);flex:1}
+.qslot .pill{width:22px;height:14px;border-radius:8px;border:1px solid var(--frame);background:#080a0e;position:relative;flex:0 0 22px}
+.qslot .pill i{position:absolute;top:2px;width:9px;height:9px;border-radius:50%;background:#9aa0a4}
+.qslot .pill.off i{left:2px}
+.qslot .pill.on{border-color:rgba(252,222,145,.45)}
+.qslot .pill.on i{right:2px;left:auto;background:var(--gold)}
+.qslot.on .edge{position:absolute;left:1px;top:2px;bottom:2px;width:3px;background:var(--teal)}
+
+.zoom{display:flex;flex-wrap:wrap;gap:14px}
+.zbox{width:80px;height:80px;background:#0b0e13;border:1px solid rgba(91,196,196,.28);display:flex;align-items:center;justify-content:center}
+.zbox canvas{width:20px;height:20px;image-rendering:pixelated;transform:scale(4)}
+</style>
+</head>
+<body>
+<div class="lab">
+  <div class="lab-top">
+    <div>
+      <div class="brand">VoLum</div>
+      <div class="sub">Chorus motif · round 4 · wormhole</div>
+    </div>
+    <div class="tag">Throwaway · not product C++<br><b>Ticket 14</b> · one family glyph first<br>Gold gated &gt; 40 px · not a waveform</div>
+  </div>
+
+  <p class="lede">Wormhole: signal goes in one mouth, comes out the other slightly displaced. <em>Straight lines and nested rings</em> — a tunnel, not an LFO. Click one into POST.</p>
+
+  <h2>Four-card POST · Chorus focused</h2>
+  <div class="row">
+    <div class="post"><div class="hdr">POST</div><div class="cards" id="post-cards"></div></div>
+    <p class="note"><b>Locked.</b> Same drawing at card and Quiet 20 px. Gold only when bigger than 40 px. Quiet label stays <b>CHORUS</b>.</p>
+  </div>
+
+  <h2>Pick a throat</h2>
+  <div class="gallery" id="gallery"></div>
+
+  <h2>Quiet 20 px · and ×4</h2>
+  <div class="row">
+    <div>
+      <div class="quiet" id="quiet"></div>
+      <div class="gcap">Product size</div>
+    </div>
+    <div class="zoom" id="zoom"></div>
+  </div>
+</div>
+<script>
+const TEAL=[120,210,220], MID=[100,180,200], DIM=[80,150,170], BLUE=[150,205,245];
+const GOLD=[200,165,87], GOLDHI=[252,222,145];
+const rgba=(c,a)=>`rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+
+const FAMILIES = [
+  { id:'throat', title:'THROAT', blurb:'Wireframe hyperboloid — twist in straight lines' },
+  { id:'well',   title:'RING WELL', blurb:'Concentric mouths receding to gold' },
+  { id:'gate',   title:'GATE', blurb:'Nested diamonds, stargate stack' },
+  { id:'lens',   title:'LENS', blurb:'One mouth, gold event horizon' },
+];
+let selected = 'throat';
+
+function hidpi(canvas, cssW, cssH){
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  return canvas.getContext('2d');
+}
+function bloom(ctx,x,y,r,col,a){
+  const g=ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0,rgba(col,a)); g.addColorStop(1,rgba(col,0));
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
+function ellipsePt(e, a){
+  return { x: e.cx + e.rx * Math.cos(a), y: e.cy + e.ry * Math.sin(a) };
+}
+function strokeEllipse(ctx, e, segs){
+  ctx.beginPath();
+  for (let i=0;i<=segs;i++){
+    const p = ellipsePt(e, (i/segs)*Math.PI*2);
+    if (i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+  }
+  ctx.closePath(); ctx.stroke();
+}
+function lerpE(a,b,t){
+  return { cx:a.cx+(b.cx-a.cx)*t, cy:a.cy+(b.cy-a.cy)*t, rx:a.rx+(b.rx-a.rx)*t, ry:a.ry+(b.ry-a.ry)*t };
+}
+
+function mouths(w,h,big){
+  const front = { cx:w*0.50, cy:h*(big?0.70:0.68), rx:w*(big?0.40:0.38), ry:h*(big?0.13:0.14) };
+  const back  = { cx:w*0.50, cy:h*(big?0.28:0.32), rx:w*(big?0.11:0.14), ry:h*(big?0.045:0.06) };
+  return {front, back};
+}
+
+function drawThroat(ctx,w,h,dimmed){
+  const am=dimmed?0.28:1, big=Math.min(w,h)>40;
+  const {front, back} = mouths(w,h,big);
+  if (big) bloom(ctx, back.cx, back.cy, Math.min(w,h)*0.42, GOLD, 0.14*am);
+  const nLat = big?5:3, nGen = big?14:6, twist = 0.55;
+  const segs = big?48:16;
+  ctx.lineJoin='round';
+  for (let i=0;i<nLat;i++){
+    const t=i/(nLat-1);
+    const e=lerpE(front, back, t);
+    const col = t>0.72 ? (big?GOLD:TEAL) : mix(TEAL, BLUE, t);
+    ctx.strokeStyle=rgba(col, (0.35+0.55*t)*am);
+    ctx.lineWidth = big ? (t>0.8?2.2:1.35) : 1.15;
+    strokeEllipse(ctx, e, segs);
+  }
+  for (let i=0;i<nGen;i++){
+    const a0 = (i/nGen)*Math.PI*2;
+    const a1 = a0 + twist;
+    const p0 = ellipsePt(front, a0), p1 = ellipsePt(back, a1);
+    ctx.strokeStyle=rgba(mix(DIM,TEAL,i%2?0.4:0.85), 0.55*am);
+    ctx.lineWidth = big?1.15:0.95;
+    ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
+  }
+  ctx.strokeStyle=rgba(TEAL,0.95*am); ctx.lineWidth=big?2.3:1.4;
+  strokeEllipse(ctx, front, segs);
+  if (big){
+    ctx.strokeStyle=rgba(GOLDHI,0.95*am); ctx.lineWidth=1.8;
+    strokeEllipse(ctx, back, segs);
+    ctx.fillStyle=rgba(GOLDHI,0.95*am);
+    ctx.beginPath(); ctx.arc(back.cx, back.cy, 2.8, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle=rgba(TEAL,0.95*am);
+    ctx.beginPath(); ctx.arc(back.cx, back.cy, 1.5, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawWell(ctx,w,h,dimmed){
+  const am=dimmed?0.28:1, big=Math.min(w,h)>40;
+  const {front, back} = mouths(w,h,big);
+  if (big) bloom(ctx, back.cx, back.cy, Math.min(w,h)*0.48, TEAL, 0.12*am);
+  const n = big?7:4, segs=big?48:16;
+  for (let i=0;i<n;i++){
+    const t=i/(n-1);
+    const e=lerpE(front, back, t*t);
+    const col = t>0.7 ? (big?GOLD:TEAL) : mix(TEAL, BLUE, t);
+    ctx.strokeStyle=rgba(col, (0.4+0.55*t)*am);
+    ctx.lineWidth = big ? (2.4 - t*1.2) : 1.2;
+    strokeEllipse(ctx, e, segs);
+  }
+  if (big){
+    bloom(ctx, back.cx, back.cy, 16, GOLD, 0.28*am);
+    ctx.fillStyle=rgba(GOLDHI,0.95*am);
+    ctx.beginPath(); ctx.arc(back.cx, back.cy, 3.2, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle=rgba(TEAL,0.95*am);
+    ctx.beginPath(); ctx.arc(back.cx, back.cy, 1.6, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function diamondPath(ctx,cx,cy,rw,rh){
+  ctx.beginPath();
+  ctx.moveTo(cx, cy-rh); ctx.lineTo(cx+rw, cy); ctx.lineTo(cx, cy+rh); ctx.lineTo(cx-rw, cy);
+  ctx.closePath();
+}
+function drawGate(ctx,w,h,dimmed){
+  const am=dimmed?0.28:1, big=Math.min(w,h)>40;
+  const n = big?5:3;
+  if (big) bloom(ctx, w*0.5, h*0.42, Math.min(w,h)*0.5, TEAL, 0.10*am);
+  for (let i=0;i<n;i++){
+    const t=i/(n-1);
+    const cx=w*0.5, cy=h*(0.68 - t*0.36);
+    const rw=w*(0.40 - t*0.28), rh=h*(0.22 - t*0.14);
+    diamondPath(ctx,cx,cy,rw,rh);
+    const col = t>0.65 ? (big?GOLDHI:TEAL) : mix(TEAL, BLUE, t);
+    ctx.strokeStyle=rgba(col, (0.45+0.5*t)*am);
+    ctx.lineWidth = big ? (2.2 - t*0.8) : 1.2;
+    ctx.stroke();
+  }
+  if (big){
+    diamondPath(ctx, w*0.5, h*0.32, w*0.07, h*0.05);
+    ctx.fillStyle=rgba(GOLD,0.35*am); ctx.fill();
+    ctx.fillStyle=rgba(GOLDHI,0.95*am);
+    ctx.beginPath(); ctx.arc(w*0.5, h*0.32, 2.6, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle=rgba(TEAL,0.95*am);
+    ctx.beginPath(); ctx.arc(w*0.5, h*0.38, 1.5, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawLens(ctx,w,h,dimmed){
+  const am=dimmed?0.28:1, big=Math.min(w,h)>40;
+  const cx=w*0.5, cy=h*0.5;
+  const R=Math.min(w,h)*(big?0.34:0.36);
+  if (big) bloom(ctx,cx,cy,R*1.5,TEAL,0.12*am);
+  const rings = big ? [1, 0.72, 0.48, 0.26] : [1, 0.62, 0.28];
+  rings.forEach((s,i)=>{
+    const last = i===rings.length-1;
+    ctx.beginPath(); ctx.ellipse(cx, cy, R*s, R*s*0.72, 0, 0, Math.PI*2);
+    ctx.strokeStyle=rgba(last && big ? GOLDHI : mix(TEAL,BLUE,i*0.3), (0.55+i*0.12)*am);
+    ctx.lineWidth = big ? (last?2.2:1.6) : 1.25;
+    ctx.stroke();
+  });
+  if (big){
+    bloom(ctx,cx,cy,18,GOLD,0.28*am);
+    ctx.fillStyle=rgba(GOLDHI,0.95*am);
+    ctx.beginPath(); ctx.arc(cx,cy,3.4,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=rgba(GOLD,0.5*am); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.ellipse(cx, cy, R*1.12, R*1.12*0.72, 0, 0, Math.PI*2); ctx.stroke();
+  } else {
+    ctx.fillStyle=rgba(TEAL,0.95*am);
+    ctx.beginPath(); ctx.arc(cx,cy,1.7,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawDelay(ctx,w,h,dimmed){
+  const am=dimmed?0.28:1, big=Math.min(w,h)>40, cy=h/2, taps=5, tapW=w/taps;
+  if (big) bloom(ctx,w*0.14,cy,w*0.5,TEAL,0.09*am);
+  ctx.strokeStyle=rgba(DIM,0.3*am); ctx.lineWidth=0.5;
+  ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(w,cy); ctx.stroke();
+  for (let t=0;t<taps;t++){
+    const decay=1-t/taps*0.72, ampY=h*0.36*decay, baseX=t*tapW, first=t===0;
+    ctx.beginPath();
+    for (let j=0;j<=40;j++){
+      const t1=j/40, x=baseX+t1*tapW, env=Math.sin(t1*Math.PI);
+      const y=cy+Math.sin(t1*Math.PI*2*3)*ampY*env;
+      if(j===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle=rgba(first&&big?GOLDHI:(t%2?MID:TEAL),(0.5+0.4*decay)*am);
+    ctx.lineWidth=(big?1.9:1.4)*decay; ctx.stroke();
+  }
+}
+function drawReverb(ctx,w,h,dimmed){
+  const am=dimmed?0.4:1, big=Math.min(w,h)>40;
+  if (big) bloom(ctx,w/2,h*0.6,Math.min(w,h)*0.6,TEAL,0.1*am);
+  const scale=Math.min(w,h), sizeFactor=Math.max(0.18,Math.min(1,scale/150));
+  const count=Math.max(180,Math.floor(2200*sizeFactor*sizeFactor));
+  const pts=[]; for(let f=0.05;f<=0.95;f+=0.18) pts.push({x:w*f,y:h});
+  let rng=54321;
+  for(let i=0;i<count;i++){
+    rng=(rng*1103515245+12345)>>>0;
+    const p=pts[rng%pts.length], rad=((rng%360)*Math.PI)/180, len=(2+(rng%4))*Math.max(0.55,sizeFactor);
+    const nx=p.x+len*Math.cos(rad), ny=p.y+len*Math.sin(rad);
+    if(nx>=0&&nx<=w&&ny>=0&&ny<=h){
+      const col=i<count*0.03?TEAL:(i<count*0.14?MID:DIM);
+      ctx.strokeStyle=rgba(col,am); ctx.lineWidth=i<count*0.02?1.6:1;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(nx,ny); ctx.stroke();
+      pts.push({x:nx,y:ny});
+    }
+  }
+}
+function drawTrem(ctx,w,h,dimmed){
+  const am=dimmed?0.28:1, big=Math.min(w,h)>40, cy=h/2, n=17, span=w*0.7, x0=w*0.15, slot=span/n, bw=slot*0.62;
+  for(let i=0;i<n;i++){
+    const t=i/(n-1), lfo=0.2+0.8*(0.5+0.5*Math.sin(t*Math.PI*2*2-Math.PI/2));
+    const bh=h*0.4*lfo, bx=x0+i*slot+(slot-bw)*0.5;
+    ctx.fillStyle=rgba(i%2?TEAL:MID,0.84*am); ctx.fillRect(bx,cy-bh,bw,bh*2);
+  }
+  ctx.strokeStyle=rgba(big?GOLDHI:TEAL,0.82*am); ctx.lineWidth=1.4;
+  ctx.beginPath();
+  for(let s=0;s<=80;s++){
+    const t=s/80,x=x0+t*span,lfo=0.2+0.8*(0.5+0.5*Math.sin(t*Math.PI*2*2-Math.PI/2));
+    const y=cy-h*0.4*lfo; if(s===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+
+const DRAW = {throat:drawThroat, well:drawWell, gate:drawGate, lens:drawLens};
+
+function paint(canvas, kind, family, dimmed){
+  const w=parseFloat(canvas.style.width)||canvas.clientWidth;
+  const h=parseFloat(canvas.style.height)||canvas.clientHeight;
+  const ctx=hidpi(canvas,w,h);
+  ctx.clearRect(0,0,w,h);
+  if(kind==='delay') drawDelay(ctx,w,h,dimmed);
+  else if(kind==='reverb') drawReverb(ctx,w,h,dimmed);
+  else if(kind==='trem') drawTrem(ctx,w,h,dimmed);
+  else (DRAW[family]||drawThroat)(ctx,w,h,dimmed);
+}
+
+function cardEl({kind, family, foot, gold, dim, wide}){
+  const el=document.createElement('div');
+  el.className='card'+(gold?' gold':'')+(dim?' dim':'')+(wide?' gcard':'');
+  el.innerHTML=`<i class="ct tl"></i><i class="ct tr"></i><i class="ct bl"></i><i class="ct br"></i>
+    <canvas></canvas><div class="foot">${foot}</div><div class="led"></div>`;
+  const cv=el.querySelector('canvas');
+  if(wide){ cv.style.width='184px'; cv.style.height='206px'; }
+  else { cv.style.width='101.5px'; cv.style.height='152px'; }
+  paint(cv, kind, family, dim);
+  return el;
+}
+
+function render(){
+  const post=document.getElementById('post-cards');
+  post.innerHTML='';
+  post.appendChild(cardEl({kind:'chorus', family:selected, foot:'Warped · 0.55', gold:true}));
+  post.appendChild(cardEl({kind:'delay', foot:'Digital · 320 ms', dim:true}));
+  post.appendChild(cardEl({kind:'reverb', foot:'Hall · 20 %', dim:true}));
+  post.appendChild(cardEl({kind:'trem', foot:'Bias · 5.0 Hz', dim:true}));
+
+  const gal=document.getElementById('gallery');
+  gal.innerHTML='';
+  FAMILIES.forEach(f=>{
+    const wrap=document.createElement('div');
+    const c=cardEl({kind:'chorus', family:f.id, foot:f.title, gold:f.id===selected, wide:true});
+    c.style.cursor='pointer';
+    c.onclick=()=>{ selected=f.id; render(); };
+    wrap.appendChild(c);
+    const cap=document.createElement('div'); cap.className='gcap';
+    cap.innerHTML=`${f.title}<br>${f.blurb}`;
+    wrap.appendChild(cap);
+    gal.appendChild(wrap);
+  });
+
+  const q=document.getElementById('quiet');
+  q.innerHTML=`<div class="qh">POST</div><div class="uline"></div>`;
+  [
+    {kind:'chorus', family:selected, label:'CHORUS', on:true},
+    {kind:'delay', label:'DELAY', on:false},
+    {kind:'reverb', label:'REVERB', on:false},
+    {kind:'trem', label:'TREM', on:false},
+  ].forEach((s,i)=>{
+    const row=document.createElement('div');
+    row.className='qslot'+(s.on?' on':'');
+    row.style.top=(28+i*26)+'px';
+    row.innerHTML=`${s.on?'<div class="edge"></div>':''}<canvas></canvas><div class="ql">${s.label}</div>
+      <div class="pill ${s.on?'on':'off'}"><i></i></div>`;
+    const cv=row.querySelector('canvas');
+    cv.style.width='20px'; cv.style.height='20px';
+    paint(cv,s.kind,s.family,!s.on);
+    q.appendChild(row);
+  });
+
+  const zoom=document.getElementById('zoom');
+  zoom.innerHTML='';
+  FAMILIES.forEach(f=>{
+    const wrap=document.createElement('div'); wrap.style.textAlign='center';
+    const box=document.createElement('div'); box.className='zbox';
+    const cv=document.createElement('canvas');
+    cv.style.width='20px'; cv.style.height='20px';
+    cv.style.imageRendering='pixelated'; cv.style.transform='scale(4)';
+    paint(cv,'chorus',f.id,false);
+    box.appendChild(cv); wrap.appendChild(box);
+    const cap=document.createElement('div'); cap.className='gcap'; cap.textContent=f.title;
+    wrap.appendChild(cap); zoom.appendChild(wrap);
+  });
+}
+document.fonts.ready.then(render);
+</script>
+</body>
+</html>

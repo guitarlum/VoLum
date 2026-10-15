@@ -2,11 +2,12 @@
 #include "../VoLumTunerDSP.h"
 
 #include <cmath>
+#include <random>
 #include <string>
 #include <vector>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
 
 static std::vector<float> GenerateSine(float freq, float sampleRate, int numSamples, float amplitude = 0.5f)
@@ -113,6 +114,29 @@ TEST_CASE("TunerDSP: no valid result on silence")
   CHECK_FALSE(result.valid);
 }
 
+TEST_CASE("tier2h tuner noise above the silence floor stays invalid")
+{
+  volum::TunerDSP tuner;
+  tuner.Reset(48000.0);
+  tuner.SetActive(true);
+
+  std::mt19937 rng(1);
+  std::uniform_real_distribution<float> dist(-1.f, 1.f);
+  std::vector<float> noise(volum::TunerDSP::kBufferSize);
+  for (float& sample : noise)
+    sample = dist(rng);
+  double energy = 0.0;
+  for (float sample : noise)
+    energy += static_cast<double>(sample) * sample;
+  const float rms = static_cast<float>(std::sqrt(energy / static_cast<double>(noise.size())));
+  const float gain = 0.001f / rms;
+  for (float& sample : noise)
+    sample *= gain;
+
+  tuner.Process(noise.data(), static_cast<int>(noise.size()));
+  CHECK_FALSE(tuner.GetResult().valid);
+}
+
 TEST_CASE("TunerDSP: NoteName covers all 12 notes")
 {
   const char* expected[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
@@ -121,4 +145,71 @@ TEST_CASE("TunerDSP: NoteName covers all 12 notes")
 
   CHECK(std::string(volum::TunerDSP::NoteName(-1)) == "?");
   CHECK(std::string(volum::TunerDSP::NoteName(12)) == "?");
+}
+
+// F-19: at 192 kHz the low E period (2330 samples) is past the 2047-lag YIN window.
+// A plucked string: the fundamental plus its first harmonics.
+static std::vector<float> GenerateString(float freq, float sampleRate, int numSamples)
+{
+  std::vector<float> buf(numSamples, 0.f);
+  for (int k = 1; k <= 6; ++k)
+    for (int i = 0; i < numSamples; ++i)
+      buf[i] += 0.25f * std::sin(2.f * static_cast<float>(M_PI) * freq * k * i / sampleRate) / static_cast<float>(k);
+  return buf;
+}
+
+TEST_CASE("TunerDSP: reads the low E at 192 kHz")
+{
+  volum::TunerDSP tuner;
+  tuner.Reset(192000.0);
+  tuner.SetActive(true);
+
+  auto signal = GenerateString(82.41f, 192000.f, 24000);
+  tuner.Process(signal.data(), 24000);
+
+  auto result = tuner.GetResult();
+  REQUIRE(result.valid);
+  CHECK(result.frequency == doctest::Approx(82.41f).epsilon(0.03));
+  CHECK(result.noteIndex == 4); // E
+  CHECK(result.octave == 2);
+}
+
+TEST_CASE("TunerDSP: reads A4 at 176.4 kHz and 384 kHz")
+{
+  for (double rate : {176400.0, 384000.0})
+  {
+    volum::TunerDSP tuner;
+    tuner.Reset(rate);
+    tuner.SetActive(true);
+    auto signal = GenerateSine(440.f, static_cast<float>(rate), static_cast<int>(rate * 0.2));
+    tuner.Process(signal.data(), static_cast<int>(signal.size()));
+    const auto result = tuner.GetResult();
+    INFO("rate " << rate);
+    REQUIRE(result.valid);
+    CHECK(result.frequency == doctest::Approx(440.f).epsilon(0.02));
+  }
+}
+
+// F-20: audio from before the tuner was closed must not be analysed after it reopens.
+TEST_CASE("TunerDSP: reopening analyses fresh audio only")
+{
+  volum::TunerDSP tuner;
+  tuner.Reset(48000.0);
+  tuner.SetActive(true);
+
+  // 7000 samples of A4, in blocks that leave 2000 samples of the next analysis window collected.
+  const auto a4 = GenerateSine(440.f, 48000.f, 1000);
+  for (int i = 0; i < 7; ++i)
+    tuner.Process(a4.data(), 1000);
+  REQUIRE(tuner.GetResult().valid);
+
+  tuner.SetActive(false);
+  tuner.Process(a4.data(), 1000); // the audio thread keeps calling while the tuner is closed
+  tuner.SetActive(true);
+
+  // 2200 fresh samples of silence are not a full window, so nothing may be published.
+  const std::vector<float> silence(1100, 0.f);
+  tuner.Process(silence.data(), 1100);
+  tuner.Process(silence.data(), 1100);
+  CHECK_FALSE(tuner.GetResult().valid);
 }

@@ -22,6 +22,8 @@ alwaysApply: false
 - `volum::SoftSafetyClip` maps NaN / +/-Inf to 0. Final-bus contract.
 - Legacy `_StageModel` / `_StageIR` writes are serialized against the audio-thread move in `_ApplyDSPStaging` via `mStagingMutex`. VoLum worker-queue drain still runs lock-free on the audio thread.
 - Dual-amp scratch buffers (`mDualMainLaneBuffer`, `mDualSupportLaneBuffer`, `mDualMainAlignedBuffer`, `mDualSupportAlignedBuffer`) are pre-reserved in `OnReset` so `ProcessBlock` never allocates on the audio thread.
+- The audio thread never destroys a model, IR, loader result or string: outgoing objects go to `mDspGraveyard` / `mIrGraveyard` / `mVolumSpentLoadResults` and live paths are published through `RtPublishedPath`; `_VolumReapAudioThreadRetirees` (OnIdle) frees and commits them. Off-thread code never allocates or destroys while holding `mStagingMutex` (`ReplaceStaged` hands the predecessor back).
+- Every NAM `Reset` uses `volum::dsp_staging::NamResetBlockSize(host)`, never the 8192 scratch reserve (`ReservedAudioBlockSize`). NAM ring buffers walk their whole reset size, so an oversized reset costs 4-7x CPU per block (the 1.3.0 crackle). A host block past the reset size is split by `ProcessNamInChunks`. Owned by `test_volum_realtime_budget.cpp`.
 
 ## Dependencies
 
@@ -37,3 +39,5 @@ alwaysApply: false
 - PRE NAM captures: `VoLumPrePedalCaptures.h`, `test_volum_pre_pedal_captures.cpp`, and the PRE section of `test_nam_rigs.cpp`; new files under `rigs/PrePedals/` must discover, load, and package.
 - Master safety / NaN containment: `test_volum_master_safety.cpp` and `test_volum_nan_guard.cpp`.
 - Bypass identity: `test_volum_bypass_identity.cpp`.
+- Realtime cost of the NAM chain (real rigs, Full + Lite, 64/128 frames): `test_volum_realtime_budget.cpp`. Never loosen its thresholds to make a change pass; a failure there is audible crackle.
+- Sound of every shipped chain (amps Full + Lite, default V30 captures, PRE pedals and slot, tone stack, IR, pitch, every POST mode, 44.1/96 kHz through `ResamplingNAM`) plus a SHA-256 of every bundled `.nam`: `test_volum_golden_render.cpp` against `NeuralAmpModeler/tests/golden/`. A failure means the sound changed. Intended change: `NeuralAmpModeler/scripts/regen-golden-renders.ps1 -Reason "<change>" -Groups <groups that should move>` (a moved group not listed fails), then a changelog line containing that reason (`check-golden-changelog.ps1`). Never widen its tolerances to pass.

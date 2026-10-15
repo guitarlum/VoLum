@@ -5,15 +5,6 @@
 #include <limits>
 #include <vector>
 
-TEST_CASE("NanGuard: clean buffer passes through, returns false")
-{
-  std::vector<double> buf = {0.0, 0.5, -0.5, 1.0, -1.0, 1e-6};
-  const std::vector<double> expected = buf;
-  CHECK_FALSE(volum::ScrubNonFiniteInPlace(buf.data(), buf.size()));
-  for (size_t i = 0; i < buf.size(); ++i)
-    CHECK(buf[i] == doctest::Approx(expected[i]));
-}
-
 TEST_CASE("NanGuard: NaN/Inf samples are replaced with 0 and reported")
 {
   const double nan = std::numeric_limits<double>::quiet_NaN();

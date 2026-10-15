@@ -11,6 +11,7 @@
 
 #include "VoLumColorHelpers.h"
 #include "VoLumNumericEntry.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,6 +35,11 @@ public:
 
   void Draw(IGraphics& g) override
   {
+    // Esc inside the number box ends iPlug2's text entry without telling this control,
+    // so the panel stayed up with nothing to type into and the next click went to it
+    // (to close it) instead of to what was under the pointer. The dismissal marks every
+    // control dirty, so this runs on the next frame.
+    SyncTextEntryState();
     if (mHide)
       return;
 
@@ -68,8 +74,22 @@ public:
                "Type a number, press Enter to apply, Esc to cancel", hintRect);
   }
 
+  // Hit-tests at the moment of the click, which can come before the draw that hides a
+  // panel whose number box Esc has just ended. Without this the click is routed to the
+  // panel and swallowed (IGraphics::OnMouseDown captures the hit control).
+  bool IsHit(float x, float y) const override
+  {
+    const auto* ui = GetUI();
+    auto* inEntry = ui ? const_cast<IGraphics*>(ui)->GetControlInTextEntry() : nullptr;
+    if (!volum::ExactEntryTakesClicks(mEditing, inEntry == this))
+      return false;
+    return IControl::IsHit(x, y);
+  }
+
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    const auto pressed = mSecondPress.Press();
+    SyncTextEntryState();
     if (mHide)
       return;
 
@@ -87,6 +107,13 @@ public:
 
     if (!mEditing && GetEntryRect().Contains(x, y))
       StartEntry();
+  }
+
+  // Bound to the knob being edited, so the stock double-click would reset it.
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   void OnTextEntryCompletion(const char* str, int /*valIdx*/) override
@@ -239,6 +266,7 @@ private:
   std::string mLabel;
   std::string mRangeText;
   bool mEditing = false;
+  volum::ui::SecondPressGate mSecondPress;
 };
 
 class VoLumParamValueControl : public IControl

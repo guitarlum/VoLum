@@ -64,6 +64,16 @@ inline bool ReplaceFileAtomically(const std::filesystem::path& tmp, const std::f
   }
   return false;
 #else
+  // rename(2) replaces a read-only target when the directory is writable. A
+  // backup agent or chmod u-w on the library file must still block the write.
+  std::error_code permEc;
+  const auto st = std::filesystem::status(target, permEc);
+  if (!permEc && std::filesystem::is_regular_file(st)
+      && (st.permissions() & std::filesystem::perms::owner_write) == std::filesystem::perms::none)
+  {
+    ec = std::make_error_code(std::errc::permission_denied);
+    return false;
+  }
   std::filesystem::rename(tmp, target, ec);
   return !ec;
 #endif

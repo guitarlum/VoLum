@@ -6,7 +6,7 @@
 // VoLumParams.h has no IGraphics/iPlug dependency, so it is safe in a test TU.
 #include "../VoLumParams.h"
 
-TEST_CASE("EParam: core amp params at expected indices")
+TEST_CASE("EParam indices are contiguous from kInputLevel through kNumParams")
 {
   CHECK(kInputLevel == 0);
   CHECK(kNoiseGateThreshold == 1);
@@ -14,26 +14,17 @@ TEST_CASE("EParam: core amp params at expected indices")
   CHECK(kToneMid == 3);
   CHECK(kToneTreble == 4);
   CHECK(kOutputLevel == 5);
-}
 
-TEST_CASE("EParam: delay params are contiguous after IRToggle")
-{
   CHECK(kDelayActive == kIRToggle + 1);
   CHECK(kDelayTime == kDelayActive + 1);
   CHECK(kDelayFeedback == kDelayTime + 1);
   CHECK(kDelayMix == kDelayFeedback + 1);
   CHECK(kDelayMode == kDelayMix + 1);
-}
 
-TEST_CASE("EParam: delay staging params follow DelayMode")
-{
   CHECK(kDelayTone == kDelayMode + 1);
   CHECK(kDelayAge == kDelayTone + 1);
   CHECK(kDelayPingPong == kDelayAge + 1);
-}
 
-TEST_CASE("EParam: reverb params follow delay")
-{
   CHECK(kReverbActive == kDelayPingPong + 1);
   CHECK(kReverbMix == kReverbActive + 1);
   CHECK(kReverbDecay == kReverbMix + 1);
@@ -41,23 +32,14 @@ TEST_CASE("EParam: reverb params follow delay")
   CHECK(kReverbPreDelay == kReverbTone + 1);
   CHECK(kReverbShimmer == kReverbPreDelay + 1);
   CHECK(kReverbMode == kReverbShimmer + 1);
-}
 
-TEST_CASE("EParam: reverb staging params follow ReverbMode")
-{
   CHECK(kReverbSubMode == kReverbMode + 1);
-}
 
-TEST_CASE("EParam: boost params follow reverb staging")
-{
   CHECK(kBoostActive == kReverbSubMode + 1);
   CHECK(kBoostDrive == kBoostActive + 1);
   CHECK(kBoostTone == kBoostDrive + 1);
   CHECK(kBoostLevel == kBoostTone + 1);
-}
 
-TEST_CASE("EParam: calibration params at end before kNumParams")
-{
   CHECK(kPreCompActive == kBoostLevel + 1);
   CHECK(kPreCompAmount == kPreCompActive + 1);
   CHECK(kPreCompRatio == kPreCompAmount + 1);
@@ -100,12 +82,8 @@ TEST_CASE("EParam: calibration params at end before kNumParams")
   CHECK(kSupportNoiseGateActive == kSupportOutputLevel + 1);
   CHECK(kSupportEQActive == kSupportNoiseGateActive + 1);
   CHECK(kSupportAmpPan == kSupportEQActive + 1);
-  // 1.2.0: per-lane support custom IR toggle appended at the very end.
   CHECK(kSupportIRToggle == kSupportAmpPan + 1);
-}
 
-TEST_CASE("EParam: PRE Pitch pedal params appended after SupportIRToggle")
-{
   CHECK(kPrePitchActive == kSupportIRToggle + 1);
   CHECK(kPrePitchMode == kPrePitchActive + 1);
   CHECK(kPrePitchSemitones == kPrePitchMode + 1);
@@ -115,10 +93,7 @@ TEST_CASE("EParam: PRE Pitch pedal params appended after SupportIRToggle")
   CHECK(kPrePitchDry == kPrePitchOctUp + 1);
   CHECK(kPrePitchVoicing == kPrePitchDry + 1);
   CHECK(kPrePitchLevel == kPrePitchVoicing + 1);
-}
 
-TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchLevel")
-{
   CHECK(kTremoloActive == kPrePitchLevel + 1);
   CHECK(kTremoloMode == kTremoloActive + 1);
   CHECK(kTremoloRate == kTremoloMode + 1);
@@ -128,21 +103,21 @@ TEST_CASE("EParam: POST Tremolo pedal params appended after PrePitchLevel")
   CHECK(kTremoloCrossover == kTremoloMix + 1);
   CHECK(kTremoloSync == kTremoloCrossover + 1);
   CHECK(kTremoloDivision == kTremoloSync + 1);
-}
 
-TEST_CASE("EParam: PRE Pitch transpose character appended after TremoloDivision")
-{
-  // Drop/Fast transpose engine character; appended to keep prior indices stable.
   CHECK(kPrePitchTransChar == kTremoloDivision + 1);
-}
 
-TEST_CASE("EParam: Delay tempo sync/division appended at the very end")
-{
-  // Delay tempo sync mirrors the Tremolo Sync/Division pair; appended last to
-  // keep all prior serialized indices stable.
   CHECK(kDelaySync == kPrePitchTransChar + 1);
   CHECK(kDelayDivision == kDelaySync + 1);
-  CHECK(kNumParams == kDelayDivision + 1);
+
+  CHECK(kChorusActive == kDelayDivision + 1);
+  CHECK(kChorusMode == kChorusActive + 1);
+  CHECK(kChorusRate == kChorusMode + 1);
+  CHECK(kChorusDepth == kChorusRate + 1);
+  CHECK(kChorusTone == kChorusDepth + 1);
+  CHECK(kChorusWidth == kChorusTone + 1);
+  CHECK(kChorusMix == kChorusWidth + 1);
+  CHECK(kNumParams == kChorusMix + 1);
+  CHECK(kChorusActive >= kVoLumChunkParamPrefixCount);
 }
 
 TEST_CASE("EParam: total count is stable")
@@ -156,5 +131,10 @@ TEST_CASE("EParam: total count is stable")
   // Crossover, Sync, Division): 81 -> 90.
   // Transpose-engine rework appended kPrePitchTransChar (Drop/Instant): 90 -> 91.
   // Delay tempo sync appended kDelaySync + kDelayDivision: 91 -> 93.
-  CHECK(kNumParams == 93);
+  // POST Chorus pedal appended 7 params (Active, Mode, Rate, Depth, Tone, Width,
+  // Mix): 93 -> 100. The chunk prefix stays frozen at 93 - anything past it is
+  // id-tail JSON only, which is what makes this append safe for 1.2.2 readers.
+  CHECK(kNumParams == 100);
+  CHECK(kVoLumChunkParamPrefixCount == 93);
+  CHECK(kNumParams >= kVoLumChunkParamPrefixCount);
 }

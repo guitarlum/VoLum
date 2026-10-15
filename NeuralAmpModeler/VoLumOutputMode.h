@@ -76,4 +76,18 @@ inline double ComputeOutputModeGainDb(double knobDb, int outputMode, const Outpu
   return knobDb;
 }
 
+// Grow a radio's per-state disabled flags to `numStates`, new slots enabled.
+// WDL_TypedBuf::Resize does not zero what it adds, so the Calibrated lock read
+// garbage `true` for Raw and Normalized and left the radio stuck on Normalized.
+template <typename DisabledBuf>
+void EnsureRadioDisabledStates(DisabledBuf& disabled, int numStates)
+{
+  const int old = disabled.GetSize();
+  if (old >= numStates)
+    return;
+  disabled.Resize(numStates);
+  for (int i = old; i < numStates; ++i)
+    disabled.Get()[i] = false;
+}
+
 } // namespace volum

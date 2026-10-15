@@ -3,7 +3,13 @@
 #include <string>
 #include <vector>
 
+#include "../VoLumContentStore.h"
+#include "../VoLumPlayModel.h"
 #include "../VoLumUiSyncPlan.h"
+
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 
 // Covers VoLumUiSyncPlan.h: the pure mapping from restored backend state onto the
 // cab row / channel stepper / sidebar state the editor should show on reopen.
@@ -24,6 +30,18 @@ using volum::custom::kDirectSlot;
 
 namespace
 {
+std::filesystem::path RepoRoot()
+{
+  return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+}
+
+std::string ReadText(const std::filesystem::path& path)
+{
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 // The reporter's amp: DIRECT captures on gain stages 1 and 5 only, so the
 // stepper has two entries and channel 5 sits at position 1.
 CustomAmp MakeChannelOneAndFiveAmp()
@@ -43,6 +61,23 @@ CustomAmp MakeMixedDirectAmp()
   amp.name = "Mixed";
   amp.cabNames = {"G12", "V30", "CB3"};
   amp.files = {{"AMP-1.nam", kDirectSlot, 1}, {"G12-1.nam", 0, 1}, {"G12-2.nam", 0, 2}, {"V30-2.nam", 1, 2}};
+  return amp;
+}
+
+// An imported amp whose only capture sits on cab slot 0, gain stage 2: no DIRECT
+// and no channel 1, so the loader's constructor default names nothing on it.
+CustomAmp MakeCabOneChannelTwoAmp()
+{
+  CustomAmp amp;
+  amp.id = "amp_cab1_ch2";
+  amp.name = "Cab1 Ch2";
+  amp.cabNames = {"412", "", ""};
+  CustomNamFile file;
+  file.file = "CAB1-2.nam";
+  file.slot = 0;
+  file.channel = 2;
+  file.storedPath = "amps/amp_cab1_ch2/CAB1-2.nam";
+  amp.files = {file};
   return amp;
 }
 } // namespace
@@ -356,6 +391,35 @@ TEST_CASE("Custom lane keeps a real cab selected when no IR is active")
   CHECK(plan.clearOrphanedIr == false);
 }
 
+TEST_CASE("Headless custom Sound recall routes the loader to the Sound's cab and channel")
+{
+  // A PLAY recall over MIDI with the editor closed applies the Sound's scene and
+  // then has to commit this plan's routing: the .nam loader reads only that
+  // (slot, channel) pair. Left at the constructor default, it found no capture.
+  const CustomAmp amp = MakeCabOneChannelTwoAmp();
+  REQUIRE(volum::content::CaptureFileFor(amp, kDirectSlot, 1).empty());
+
+  UiSyncInput in;
+  in.customAmp = &amp;
+  in.customAmpIdx = 0;
+  in.customSlot = 0; // the Sound's cab row index 1
+  in.customChannelPos = 0; // the only gain stage, 2
+  const auto plan = MakeUiSyncPlan(in);
+  CHECK(plan.customSlot == 0);
+  CHECK(plan.customChannel == 2);
+  CHECK(plan.cabSelectedIndex == 1);
+  CHECK(plan.channelSelectedPos == 0);
+  CHECK(volum::content::CaptureFileFor(amp, plan.customSlot, plan.customChannel) == "amps/amp_cab1_ch2/CAB1-2.nam");
+
+  // A Sound saved while the row still pointed at No Cab snaps to the cab that
+  // carries the channel instead of loading nothing.
+  in.customSlot = kDirectSlot;
+  const auto snapped = MakeUiSyncPlan(in);
+  CHECK(snapped.customSlot == 0);
+  CHECK(snapped.customChannel == 2);
+  CHECK_FALSE(volum::content::CaptureFileFor(amp, snapped.customSlot, snapped.customChannel).empty());
+}
+
 TEST_CASE("Sidebar selection is exclusive between factory and custom lanes")
 {
   const CustomAmp amp = MakeChannelOneAndFiveAmp();
@@ -393,4 +457,55 @@ TEST_CASE("Support focus does not change how the plan is resolved")
   CHECK(mainPlan.customChannel == supportPlan.customChannel);
   CHECK(mainPlan.cabSelectedIndex == supportPlan.cabSelectedIndex);
   CHECK(mainPlan.irCabActive == supportPlan.irCabActive);
+}
+
+TEST_CASE("Host restore derives PLAY chrome from mVolumUiMode")
+{
+  // H5: Unserialize / pack-also-settings writes mVolumUiMode then runs only
+  // _VolumSyncUiFromState, which used to refresh sidebar/hero/cabs and never
+  // hide PLAY. The surface is attached at full-window bounds, so BUILD clicks
+  // never arrive. Visibility has to be a derived consequence of the mode on
+  // this path, not something the toggle remembers.
+  const auto build = volum::PlayChromeForUiMode(volum::UiMode::Build);
+  CHECK(build.hidePlaySurface);
+  CHECK_FALSE(build.hideHeaderPlate);
+  CHECK_FALSE(build.hidePresetBar);
+  const auto play = volum::PlayChromeForUiMode(volum::UiMode::Play);
+  CHECK_FALSE(play.hidePlaySurface);
+  CHECK(play.hideHeaderPlate);
+  CHECK(play.hidePresetBar);
+
+  const std::string runtime = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumPlayRuntime.inc.cpp");
+  const auto refresh = runtime.find("void NeuralAmpModeler::_VolumRefreshPlaySurface()");
+  REQUIRE(refresh != std::string::npos);
+  const auto playOnly = runtime.find("if (mVolumUiMode != volum::UiMode::Play)", refresh);
+  REQUIRE(playOnly != std::string::npos);
+  const auto plan = runtime.find("PlayChromeForUiMode", refresh);
+  REQUIRE(plan != std::string::npos);
+  CHECK(plan < playOnly);
+
+  const auto setMode = runtime.find("void NeuralAmpModeler::_VolumSetUiMode");
+  REQUIRE(setMode != std::string::npos);
+  const auto setModeEnd = runtime.find("bool NeuralAmpModeler::_VolumStepPlaySlot", setMode);
+  REQUIRE(setModeEnd != std::string::npos);
+  CHECK(runtime.substr(setMode, setModeEnd - setMode).find("_VolumRefreshPlaySurface()") != std::string::npos);
+
+  const std::string menus = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumAmpMenus.inc.cpp");
+  const auto sync = menus.find("void NeuralAmpModeler::_VolumSyncUiFromState()");
+  REQUIRE(sync != std::string::npos);
+  const auto syncEnd = menus.find("void NeuralAmpModeler::_VolumReflectLaneIrChip", sync);
+  REQUIRE(syncEnd != std::string::npos);
+  const std::string body = menus.substr(sync, syncEnd - sync);
+  // Either call is the derived-visibility contract. RefreshPlaySurface is the
+  // one function that applies PlayChromeForUiMode, including when mode is BUILD.
+  CHECK(body.find("_VolumRefreshPlaySurface()") != std::string::npos);
+}
+
+TEST_CASE("A cab-row resync does not re-stage a SUPPORT capture that is already live")
+{
+  CHECK(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "amp_1_AMP-5.nam", true));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "amp_1_G12-5.nam", true));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "amp_1_AMP-5.nam", false));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("", "", true));
+  CHECK_FALSE(volum::SupportCaptureAlreadyLive("amp_1_AMP-5.nam", "", true));
 }

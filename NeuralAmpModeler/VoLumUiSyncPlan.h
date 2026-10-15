@@ -47,6 +47,14 @@ inline int DirectChannelForIr(const custom::CustomAmp& amp, int currentChannel)
   return custom::SnapChannel(direct, currentChannel);
 }
 
+// True when the custom SUPPORT lane already has `wantedFile` staged, so a cab-row
+// resync (Tab onto the lane, a preset recall) has nothing to reload from disk.
+inline bool SupportCaptureAlreadyLive(const std::string& lastLoadedFile, const std::string& wantedFile,
+                                      bool supportSelected)
+{
+  return supportSelected && !wantedFile.empty() && lastLoadedFile == wantedFile;
+}
+
 // Backend state for the focused lane, as it stands after settings/chunk restore.
 struct UiSyncInput
 {

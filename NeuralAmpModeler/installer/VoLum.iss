@@ -5,8 +5,8 @@ AppCopyright=Copyright (C) 2026 Lum
 AppPublisher=Lum
 AppPublisherURL=https://github.com/guitarlum/VoLum
 AppSupportURL=https://github.com/guitarlum/VoLum
-AppVersion=1.2.3
-VersionInfoVersion=1.2.3
+AppVersion=1.3.0
+VersionInfoVersion=1.3.0
 DefaultDirName={autopf}\VoLum
 DefaultGroupName=VoLum
 Compression=lzma2
@@ -63,6 +63,7 @@ Source: "..\..\rigs\Sebago Texas Flood\*.nam"; DestDir: "{app}\VoLumRigs\Sebago 
 Source: "..\..\rigs\Soldano SLO100\*.nam"; DestDir: "{app}\VoLumRigs\Soldano SLO100"; Flags: ignoreversion
 Source: "..\..\rigs\THC Sunset\*.nam"; DestDir: "{app}\VoLumRigs\THC Sunset"; Flags: ignoreversion
 Source: "..\..\rigs\PrePedals\*.nam"; DestDir: "{app}\VoLumRigs\PrePedals"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\..\rigs\factory-presets.json"; DestDir: "{app}\VoLumRigs"; Flags: ignoreversion
 
 ; Docs
 Source: "changelog.txt"; DestDir: "{app}"

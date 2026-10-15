@@ -40,6 +40,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
     _HideControlGroup(pGfx, "TREMOLO_XOVER", true);
     _HideControlGroup(pGfx, "TREMOLO_SYNC", true);
     _HideControlGroup(pGfx, "TREMOLO_POWER", true);
+    _HideControlGroup(pGfx, "CHORUS_KNOBS", true);
+    _HideControlGroup(pGfx, "CHORUS_POWER", true);
     _HideControlGroup(pGfx, "COMP_KNOBS", true);
     _HideControlGroup(pGfx, "COMP_POWER", true);
     _HideControlGroup(pGfx, "PRE_NAM1_KNOBS", true);
@@ -177,6 +179,11 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         _HideControlGroup(pGfx, "PRE_NAM2_POWER", false);
         _HideControlGroup(pGfx, "PRE_NAM2_KNOBS", false);
         break;
+      case EVoLumEffectFocus::CHORUS:
+        // Every voice uses the same five knobs, so there is no per-mode swap here.
+        _HideControlGroup(pGfx, "CHORUS_POWER", false);
+        _HideControlGroup(pGfx, "CHORUS_KNOBS", false);
+        break;
       case EVoLumEffectFocus::TREMOLO:
       {
         const bool sync = GetParam(kTremoloSync)->Bool();
@@ -262,6 +269,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         subText->SetName("Delay", false);
       else if (mVolumFocusedEffect == EVoLumEffectFocus::TREMOLO)
         subText->SetName("Tremolo", false);
+      else if (mVolumFocusedEffect == EVoLumEffectFocus::CHORUS)
+        subText->SetName("Chorus", false);
     }
 
     // Inform the Triptych of the current states
@@ -310,6 +319,8 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           volum::triptych_layout::ComputeFrames(volum::triptych_layout::FromRect(tripBounds), EVoLumSection::POST);
         const auto cards = volum::triptych_layout::ComputePostCards(frames.post);
 
+        if (auto* chorusCard = pGfx->GetControlWithTag(kCtrlTagVoLumChorusCard))
+          chorusCard->SetTargetAndDrawRECTs(cards.chorus.As<IRECT>());
         if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
           delayCard->SetTargetAndDrawRECTs(cards.delay.As<IRECT>());
         if (auto* reverbCard = pGfx->GetControlWithTag(kCtrlTagVoLumReverbCard))
@@ -320,8 +331,20 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
           linkCard->SetTargetAndDrawRECTs(cards.connector1.As<IRECT>());
         if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector2))
           linkCard->SetTargetAndDrawRECTs(cards.connector2.As<IRECT>());
+        if (auto* linkCard = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector3))
+          linkCard->SetTargetAndDrawRECTs(cards.connector3.As<IRECT>());
       }
 
+      if (auto* chorusCard = pGfx->GetControlWithTag(kCtrlTagVoLumChorusCard))
+      {
+        chorusCard->Hide(!postExpanded);
+        if (postExpanded)
+        {
+          auto* card = chorusCard->As<VoLumPedalCardControl>();
+          card->SetFocused(mVolumFocusedEffect == EVoLumEffectFocus::CHORUS);
+          card->SetActiveState(GetParam(kChorusActive)->Bool());
+        }
+      }
       if (auto* delayCard = pGfx->GetControlWithTag(kCtrlTagVoLumDelayCard))
       {
         delayCard->Hide(!postExpanded);
@@ -357,6 +380,10 @@ void NeuralAmpModeler::_UpdateVoLumLayout(iplug::igraphics::IGraphics* pGfx)
         chain->Hide(!postExpanded);
       }
       if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector2))
+      {
+        chain->Hide(!postExpanded);
+      }
+      if (auto* chain = pGfx->GetControlWithTag(kCtrlTagVoLumChainConnector3))
       {
         chain->Hide(!postExpanded);
       }

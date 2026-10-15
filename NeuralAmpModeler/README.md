@@ -6,14 +6,14 @@ This is the build and architecture reference for contributors. For download and 
 
 VoLum is an independent NAM-based amp collection app. It still keeps selected upstream-compatible files and paths so future NAM Plugin fixes can be cherry-picked, but the shipped product is the curated VoLum workflow.
 
-| Area | VoLum 1.2 behavior |
+| Area | Current behavior (1.2.2 shipped; 1.3.0 work on `dev`) |
 | --- | --- |
-| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. All captures are NAM Architecture 2 (A2) packed containers, played at full size (A2-Lite opt-in is backlog `F4`). |
-| **Rig building** | PRE compressor + two NAM pedal slots, AMP controls, Dual Amp, and POST Delay/Reverb in the triptych UI. |
+| **Amp catalog** | 15 bundled amps with sidebar browsing, 4 speaker modes, and per-amp channel steppers. All captures are NAM Architecture 2 (A2) packed containers, played at full size. Settings has an opt-in A2-Lite switch (shipped in 1.2.0 as `F4`). |
+| **Rig building** | PRE pitch (Transpose INSTANT/POLY + Octaver) + compressor + two NAM pedal slots, AMP controls, Dual Amp, and POST Delay/Reverb/Tremolo in the triptych UI. |
 | **Custom content (BYO)** | Import your own NAM amp captures (A1 or A2), IRs, and pedal captures into a VoLum-owned content library (`volum-content.json`); referenced from DAW projects by stable opaque ids. |
-| **Presets** | Per-amp named snapshots of the full rig (capture/recall/overwrite/rename/delete) with an exact-compare "(unsaved)" indicator. |
-| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, Dual Amp, custom-IR/support ids, and the active preset stored in user profile JSON; VST3 also serializes state (chunk 1.2.0 with an append-only id tail). |
-| **Practice tools** | Chromatic tuner and metronome in standalone and VST3. |
+| **Presets** | Per-amp named snapshots of the full rig (capture/recall/overwrite/rename/delete) with an exact-compare "(unsaved)" indicator. Active preset id is remembered per amp. |
+| **Persistence** | Per-amp speaker, channel, knobs, PRE, POST, Dual Amp, custom-IR/support ids, and the active preset stored in user profile JSON; VST3/AU also serialize state (chunk 1.2.0 with an append-only id tail). |
+| **Practice tools** | Chromatic tuner and metronome in standalone, VST3, and AU. |
 | **Keyboard workflow** | Section switching, focus movement, knob edit mode, exact entry, toggles, tuner/metronome/settings shortcuts. |
 | **Runtime behavior** | Background model loading, per-amp DSP cache, NAM output NaN scrub, and final-bus output safety. |
 | **UI** | 900x600 dark UI with amp gallery, procedural art, grouped knobs, pedal cards, and settings overlay. |
@@ -47,7 +47,9 @@ VoLum is an independent NAM-based amp collection app. It still keeps selected up
 | `scripts/run-tests-mac.sh`                | Build and run the same doctest suite with CMake/clang on macOS                                                                                                                    |
 | `scripts/run-tests-mac.sh --sanitize`     | Run the macOS doctest suite with ASan/UBSan                                                                                                                                        |
 | `scripts/run-coverage-mac.sh`             | Measure Clang source-based line/region coverage of the doctest suite (VoLum + AudioDSPTools); prints a summary and writes an HTML report to `build-tests-mac/coverage-html/`        |
-| `scripts/run-app-win.ps1`                 | Build and launch the standalone (for UI iteration)                                                                                                                                |
+| `scripts/run-app-win.ps1`                 | Build and launch the standalone (for UI iteration) on a sandbox library; `-RealLibrary` uses yours                                                                                |
+| `scripts/worktree-win.ps1`                | Add a worktree with its own submodules, or remove one after unlinking junctions                                                                                                   |
+| `scripts/merge-verified-branch.ps1`       | Merge a branch into `dev` after checking its CI is green on the head commit, then push                                                                                            |
 | `scripts/validate-vst3-win.ps1`           | Validate the built Windows VST3 with pluginval and the Steinberg validator when available                                                                                         |
 | `scripts/validate-vst3-mac.sh`            | Validate the built macOS VST3 with pluginval and the Steinberg validator when available                                                                                           |
 

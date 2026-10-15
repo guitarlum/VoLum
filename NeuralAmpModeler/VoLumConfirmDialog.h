@@ -70,17 +70,30 @@ public:
 
     g.DrawText(IText(15.f, accent, "Josefin-Bold", EAlign::Center, EVAlign::Top), mTitle.c_str(),
                box.GetPadded(-16.f).GetFromTop(22.f));
-    const IRECT msgR = box.GetPadded(-16.f, -38.f, -16.f, -64.f);
+    const IRECT msgR = box.GetPadded(-16.f, -40.f, -16.f, -72.f);
+    const IText messageText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle);
+    constexpr float lineH = 16.f;
+    const size_t maxLines = static_cast<size_t>(msgR.H() / lineH);
+    const auto lines = volum::textfit::WrapWordsClamped(mMessage, msgR.W(), maxLines, [&](const char* text) {
+      IRECT measured;
+      g.MeasureText(messageText, text, measured);
+      return measured.W();
+    });
+    const float textTop = msgR.MH() - 0.5f * lineH * static_cast<float>(lines.size());
     g.PathClipRegion(msgR);
-    g.DrawText(
-      IText(11.f, VoLumColors::CREAM, "Josefin-Sans", EAlign::Center, EVAlign::Middle), mMessage.c_str(), msgR);
+    float lineTop = textTop;
+    for (const auto& line : lines)
+    {
+      g.DrawText(messageText, line.c_str(), IRECT(msgR.L, lineTop, msgR.R, lineTop + lineH));
+      lineTop += lineH;
+    }
     g.PathClipRegion();
 
     DrawBtn(g, CancelRect(), "Cancel", false, accent);
     DrawBtn(g, DeleteRect(), mConfirmLabel.c_str(), true, accent);
 
     g.DrawText(IText(9.f, VoLumColors::TEXT_DIM, "Josefin-Sans", EAlign::Center, EVAlign::Middle),
-               "Enter to confirm  \u00B7  Esc to cancel", box.GetPadded(-12.f).GetFromBottom(11.f));
+               "Enter to confirm  \xC2\xB7  Esc to cancel", box.GetPadded(-12.f).GetFromBottom(11.f));
   }
 
   bool OnKeyDown(float, float, const IKeyPress& key) override
@@ -125,7 +138,7 @@ public:
 private:
   IRECT BoxRect() const
   {
-    const float w = 444.f, h = 168.f;
+    const float w = 444.f, h = 220.f;
     return IRECT(mRECT.MW() - w / 2.f, mRECT.MH() - h / 2.f, mRECT.MW() + w / 2.f, mRECT.MH() + h / 2.f);
   }
   IRECT CancelRect() const

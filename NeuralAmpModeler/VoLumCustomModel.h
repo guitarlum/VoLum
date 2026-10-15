@@ -37,11 +37,20 @@ inline constexpr int kUnassignedSlot = -2; // file not yet assigned to a slot
 inline constexpr int kNumCabSlots = 3; // renameable cab slots per custom amp
 inline constexpr int kMaxChannels = 8; // hard channel cap
 
+// True when `channel` is a gain stage the loader and the Builder both honour.
+// Filename auto-fill, FileAssigned, SaveDisabledReason, and AssignedChannels
+// must all use this; a number outside 1..kMaxChannels is a model code (or
+// junk), not a channel the MAIN loader will ever stage.
+inline bool ChannelAssigned(int channel)
+{
+  return channel >= 1 && channel <= kMaxChannels;
+}
+
 struct CustomNamFile
 {
   std::string file; // display leaf, e.g. "G65-Plexi-Ch2.nam" (dedup/parse)
   int slot = kUnassignedSlot; // kDirectSlot, 0..kNumCabSlots-1, or kUnassignedSlot
-  int channel = 0; // gain stage (>= 1); 0 means unassigned
+  int channel = 0; // gain stage (1..kMaxChannels); 0 means unassigned
   std::string storedPath; // registry-relative resolvable path ("amps/..."); set on save
   std::string sourcePath; // absolute source path (builder draft only; transient, not saved)
 };
@@ -69,10 +78,10 @@ inline bool SlotAssigned(int slot)
   return slot == kDirectSlot || (slot >= 0 && slot < kNumCabSlots);
 }
 
-// True once a file has both a slot and a real channel assigned.
+// True once a file has both a slot and a channel the loader will use.
 inline bool FileAssigned(const CustomNamFile& f)
 {
-  return f.channel >= 1 && SlotAssigned(f.slot);
+  return ChannelAssigned(f.channel) && SlotAssigned(f.slot);
 }
 
 // Display label for a slot within an amp ("DIRECT" or the cab-slot name).
@@ -295,14 +304,15 @@ inline int MaxAssignedChannel(const CustomAmp& amp)
 // Sorted, de-duplicated gain-stage channels that carry at least one assigned
 // file anywhere in the amp. Used so the coverage grid shows only the channels
 // actually present (e.g. a Fryette with only channels 3 & 4 shows just "3"/"4"
-// instead of an empty 1..4 range that looks like missing content). Capped at
-// kMaxChannels; empty when no file is assigned yet.
+// instead of an empty 1..4 range that looks like missing content). Empty when
+// no file is assigned yet. FileAssigned is the only bound: a channel the
+// loader will not stage is not "present".
 inline std::vector<int> AssignedChannels(const CustomAmp& amp)
 {
   std::vector<int> out;
   for (const auto& f : amp.files)
   {
-    if (!FileAssigned(f) || f.channel < 1 || f.channel > kMaxChannels)
+    if (!FileAssigned(f))
       continue;
     if (std::find(out.begin(), out.end(), f.channel) == out.end())
       out.push_back(f.channel);
@@ -366,6 +376,36 @@ inline int SnapSlotForChannel(const CustomAmp& amp, int channel, int currentSlot
     if (s != kDirectSlot)
       return s; // prefer a real cab
   return kDirectSlot; // No Cab is the last resort
+}
+
+struct CabFallback
+{
+  int slot = kDirectSlot;
+  int channel = 1;
+};
+
+// Where a lane should go when its custom IR disappears. Prefer a real cab on
+// the current gain stage, then the first real cab anywhere in the amp, and use
+// DIRECT / No Cab only when the amp has no baked-cab capture at all.
+inline CabFallback StockCabFallback(const CustomAmp& amp, int currentChannel)
+{
+  for (int slot : SlotsForChannel(amp, currentChannel))
+    if (slot != kDirectSlot)
+      return {slot, currentChannel};
+
+  for (int slot : AmpSlots(amp))
+    if (slot != kDirectSlot)
+    {
+      const auto channels = AmpSlotChannels(amp, slot);
+      if (!channels.empty())
+        return {slot, channels.front()};
+    }
+
+  const auto directChannels = AmpSlotChannels(amp, kDirectSlot);
+  int directChannel = directChannels.empty() ? 1 : directChannels.front();
+  if (std::find(directChannels.begin(), directChannels.end(), currentChannel) != directChannels.end())
+    directChannel = currentChannel;
+  return {kDirectSlot, directChannel};
 }
 
 // A custom amp needs a user-supplied name: the original .nam files are often
@@ -462,10 +502,22 @@ inline ParsedNam ParseNamFileName(const std::string& filename)
     }
   if (numeric)
   {
-    int ch = 0;
+    // Factory files are PREFIX-CODE-CHANNEL (G65-2204-3) or PREFIX-CHANNEL
+    // (AMP-Ampt-1). A two-token PREFIX-CODE name (G65-2204) has a numeric last
+    // token that is a model code, not a gain stage. Only 1..kMaxChannels is a
+    // channel; anything larger stays 0 so the row remains unassigned.
+    unsigned int ch = 0;
     for (char c : last)
-      ch = ch * 10 + (c - '0');
-    r.channel = ch;
+    {
+      ch = ch * 10u + static_cast<unsigned int>(c - '0');
+      if (ch > static_cast<unsigned int>(kMaxChannels))
+      {
+        ch = 0;
+        break;
+      }
+    }
+    if (ChannelAssigned(static_cast<int>(ch)))
+      r.channel = static_cast<int>(ch);
   }
   return r;
 }
@@ -579,6 +631,15 @@ inline std::string ClampName(const std::string& s, std::size_t maxChars)
   return Utf8Prefix(s, maxChars);
 }
 
+inline std::string NormalizePresetName(const char* str)
+{
+  std::string name = str ? str : "";
+  const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+  name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
+  name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
+  return ClampName(name, kMaxPresetNameLen);
+}
+
 // Short pill label for a custom capture name. Names longer than maxChars bytes
 // are clipped to maxChars + a single-glyph ellipsis so they fit the tiny Amp-view
 // quiet-slot pill instead of overflowing into the neighbouring pill. Curated
@@ -587,7 +648,7 @@ inline std::string ShortCaptureLabel(const std::string& name, std::size_t maxCha
 {
   if (name.size() <= maxChars)
     return name;
-  return Utf8Prefix(name, maxChars) + "\u2026";
+  return Utf8Prefix(name, maxChars) + "\xE2\x80\xA6";
 }
 
 // Case-insensitive name comparison + within-list uniqueness check. Names must be

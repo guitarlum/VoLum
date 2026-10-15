@@ -33,7 +33,11 @@ param(
   [int] $ExitSeconds = 15,
   # Defaults to the local Release build. Point it at an unpacked portable zip to
   # stress the binary that will actually ship, which is where the report came from.
-  [string] $Exe
+  [string] $Exe,
+  # A settings.ini to seed the sandbox with instead of the machine's own. Needed on
+  # a rig with output 1 cabled into input 1 (loopback-latency-win.ps1): the sweep
+  # runs with audio live, so the seed must route output away from channel 1.
+  [string] $SeedIni
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,7 +47,7 @@ $slnDir = (Resolve-Path (Join-Path $here "..")).Path
 $exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $slnDir "build-win\app\x64\Release\VoLum.exe" }
 $procName = [System.IO.Path]::GetFileNameWithoutExtension($exe)
 
-$realSettings = Join-Path $env:LOCALAPPDATA "VoLum\settings.ini"
+$realSettings = if ($SeedIni) { (Resolve-Path $SeedIni).Path } else { Join-Path $env:LOCALAPPDATA "VoLum\settings.ini" }
 $sandbox = Join-Path ([System.IO.Path]::GetTempPath()) ("volum-stress-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 8))
 $sandboxData = Join-Path $sandbox "VoLum"
 $settingsPath = Join-Path $sandboxData "settings.ini"
@@ -113,6 +117,20 @@ function Get-Title {
 function Find-MainWindow {
   $main = [VoLumStressWin32]::FindWindow("#32770", "VoLum")
   return $main
+}
+
+# WaitForInputIdle returns before the main dialog exists, and on a loaded machine the
+# window can be several seconds behind it; a fixed sleep killed healthy launches.
+function Wait-MainWindow {
+  param([System.Diagnostics.Process] $Proc, [int] $TimeoutSec = 30)
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  while ((Get-Date) -lt $deadline -and -not $Proc.HasExited) {
+    Close-Notices | Out-Null
+    $main = Find-MainWindow
+    if ($main -ne [IntPtr]::Zero) { return $main }
+    Start-Sleep -Milliseconds 250
+  }
+  return [IntPtr]::Zero
 }
 
 # The rate notice, the audio error and the graphics error are all modal and would
@@ -210,7 +228,7 @@ Start-Sleep -Milliseconds 300
 New-Item -ItemType Directory -Force -Path $sandboxData | Out-Null
 if (Test-Path $realSettings) {
   Copy-Item $realSettings $settingsPath
-  Write-Host "Seeded sandbox from the machine's own audio settings."
+  Write-Host "Seeded sandbox from $realSettings"
 }
 else {
   Write-Host "No machine settings to seed from; VoLum will pick its defaults."
@@ -229,10 +247,10 @@ try {
 
     $proc = Start-Process $exe -PassThru
     try { $proc.WaitForInputIdle(60000) | Out-Null } catch { }
+    $main = Wait-MainWindow $proc
     Start-Sleep -Seconds 2
     Close-Notices | Out-Null
 
-    $main = Find-MainWindow
     if ($main -eq [IntPtr]::Zero) {
       Fail "cycle ${cycle}: the VoLum window never appeared"
       Get-Process $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -337,12 +355,10 @@ try {
   Write-Host "=== relaunch after the sweep ==="
   $proc = Start-Process $exe -PassThru
   try { $proc.WaitForInputIdle(60000) | Out-Null } catch { }
-  Start-Sleep -Seconds 2
+  $relaunched = Wait-MainWindow $proc
   Close-Notices | Out-Null
 
-  # Parenthesised: "Find-MainWindow -eq ..." would pass -eq to the function as an
-  # argument and test the truthiness of whatever came back.
-  if ((Find-MainWindow) -eq [IntPtr]::Zero) {
+  if ($relaunched -eq [IntPtr]::Zero) {
     Fail "the relaunch did not produce a window"
   }
   else {

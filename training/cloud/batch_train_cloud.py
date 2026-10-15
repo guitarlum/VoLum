@@ -3,8 +3,8 @@ RunPod batch trainer for the VoLum A2 retrain (runs on the pod).
 
 LOCKED RECIPE (A2, batch_size=16, epochs=700, best-fit, packed
 SlimmableContainer export, escalation safety net). Capture/base dirs are
-env-configurable for the pod layout (network volume at /workspace). See
-docs/a2-training-runbook.md for the why and training/cloud/README.md for how.
+env-configurable for the pod layout (network volume at /workspace). Recipe
+rationale: Cursor skill `a2-training`. Ops: training/cloud/README.md.
 
 Env:
   CAP_DIR   (default /workspace/captures)  dir with capture WAVs + T3K-sweep-v3.wav

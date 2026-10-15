@@ -1,6 +1,6 @@
 # F14 — In-app update notifier
 
-Plan a subtle, opt-out update notification for standalone and plugin builds. Design is **settled** (resolved in a grilling session); this ticket exists to schedule and implement it, not to re-open the design. Target candidate: 1.3.0 — see `docs/design/1.3.0-release-scope.md`.
+Plan a subtle, opt-out update notification for standalone and plugin builds. Design is **settled** (resolved in a grilling session); this ticket exists to schedule and implement it, not to re-open the design.
 
 ## Problem
 

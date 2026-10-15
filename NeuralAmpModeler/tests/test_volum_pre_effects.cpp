@@ -4,11 +4,183 @@
 #define _USE_MATH_DEFINES
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+  #define M_PI 3.14159265358979323846
 #endif
+
+namespace
+{
+// VoLumCompressor before the fet-reuse / 0 dB pow trims: fet() evaluated again in the wet
+// path and pow() on every sample. Keep the expressions as they were; the live compressor must
+// match it bit for bit.
+class ReferenceCompressor
+{
+public:
+  void SetParams(double amount, double attackMs, double releaseMs, double mix, double levelDb, double sampleRate)
+  {
+    mAmount = std::clamp(amount, 0.0, 10.0);
+    mAttackMs = std::clamp(attackMs, 0.02, 30.0);
+    mReleaseMs = std::clamp(releaseMs, 20.0, 1100.0);
+    mMix = std::clamp(mix, 0.0, 1.0);
+    const double clampedLevelDb = std::clamp(levelDb, -20.0, 20.0);
+    mLevel = volum::IsLevelMuteValue(clampedLevelDb, -20.0)
+               ? 0.0
+               : std::pow(10.0, (clampedLevelDb + dsp::effect::VoLumCompressor::kUnityOutputCalibrationDb) / 20.0);
+    if (mSampleRate != sampleRate)
+    {
+      mSampleRate = sampleRate;
+      mEnvelope = 0.0;
+      mEnvelopeSlow = 0.0;
+    }
+  }
+
+  void Process(DSP_SAMPLE** inputs, DSP_SAMPLE** outputs, size_t numChannels, size_t numFrames)
+  {
+    if (mSampleRate <= 0.0)
+      mSampleRate = 48000.0;
+    const double inputDriveDb = mAmount * 2.4;
+    const double inputDriveGain = std::pow(10.0, inputDriveDb / 20.0);
+    const double thresholdDb = -22.0 + (10.0 - mAmount) * 0.6;
+    const double softKneeDb = 6.0;
+    const double makeupDb = mAmount * 0.55;
+    const double makeup = std::pow(10.0, makeupDb / 20.0);
+    const double attack = std::exp(-1.0 / ((mAttackMs / 1000.0) * mSampleRate));
+    const double releaseFast = std::exp(-1.0 / ((mReleaseMs / 1000.0) * mSampleRate));
+    const double releaseSlow = std::exp(-1.0 / ((mReleaseMs * 4.0 / 1000.0) * mSampleRate));
+    constexpr double kFetA = 1.0;
+    constexpr double kFetB = 0.06;
+    const double fetTanhB = std::tanh(kFetB);
+    auto fet = [&](double x) {
+      const double drive = 1.0 + (inputDriveGain - 1.0) * 0.5;
+      return std::tanh(kFetA * drive * x + kFetB) - fetTanhB;
+    };
+
+    for (size_t s = 0; s < numFrames; ++s)
+    {
+      double detector = 0.0;
+      for (size_t c = 0; c < numChannels; ++c)
+      {
+        const double driven = fet(static_cast<double>(inputs[c][s]) * inputDriveGain);
+        detector = std::max(detector, std::abs(driven));
+      }
+      const double targetEnv = detector;
+      const double coeff = targetEnv > mEnvelope ? attack : releaseFast;
+      mEnvelope = coeff * mEnvelope + (1.0 - coeff) * targetEnv;
+      const double slowCoeff = targetEnv > mEnvelopeSlow ? attack : releaseSlow;
+      mEnvelopeSlow = slowCoeff * mEnvelopeSlow + (1.0 - slowCoeff) * targetEnv;
+      const double envForGr = std::max(mEnvelope, mEnvelopeSlow);
+      const double envDb = 20.0 * std::log10(std::max(envForGr, 1.0e-9));
+
+      double gainDb = 0.0;
+      const double over = envDb - thresholdDb;
+      if (over > softKneeDb * 0.5)
+      {
+        gainDb = -(over - over / dsp::effect::VoLumCompressor::kFixedRatio);
+      }
+      else if (over > -softKneeDb * 0.5)
+      {
+        const double slope = 1.0 - 1.0 / dsp::effect::VoLumCompressor::kFixedRatio;
+        const double kneeOver = over;
+        gainDb = -slope * (kneeOver + softKneeDb * 0.5) * (kneeOver + softKneeDb * 0.5) / (2.0 * softKneeDb);
+      }
+      if (gainDb == 0.0)
+        ++belowKneeSamples;
+      else
+        ++compressingSamples;
+
+      const double gain = std::pow(10.0, gainDb / 20.0) * makeup;
+      for (size_t c = 0; c < numChannels; ++c)
+      {
+        const double dry = static_cast<double>(inputs[c][s]);
+        const double driven = fet(dry * inputDriveGain);
+        const double wet = driven * gain * mLevel;
+        double out = dry * (1.0 - mMix) + wet * mMix;
+        if (!std::isfinite(out))
+          out = 0.0;
+        outputs[c][s] = static_cast<DSP_SAMPLE>(out);
+      }
+    }
+  }
+
+  size_t belowKneeSamples = 0;
+  size_t compressingSamples = 0;
+
+private:
+  double mSampleRate = 0.0;
+  double mAmount = 3.0;
+  double mAttackMs = 0.4;
+  double mReleaseMs = 250.0;
+  double mMix = 1.0;
+  double mLevel = 1.0;
+  double mEnvelope = 0.0;
+  double mEnvelopeSlow = 0.0;
+};
+} // namespace
+
+TEST_CASE("VoLumCompressor output is bit-identical to the pre-trim compressor")
+{
+  // Loud bursts separated by near-silence so the envelope falls below the knee (the skipped
+  // pow) and climbs back over it; params change mid-stream; mono and stereo.
+  struct Settings
+  {
+    double amount, attackMs, releaseMs, mix, levelDb;
+  };
+  const Settings settings[] = {
+    {7.25, 0.38, 185.0, 0.82, 1.5}, {0.0, 0.02, 20.0, 1.0, 0.0},  {10.0, 1.0, 1100.0, 1.0, -20.0},
+    {3.0, 0.4, 250.0, 0.5, 6.0},    {5.5, 30.0, 60.0, 1.0, 20.0},
+  };
+  constexpr double sampleRate = 48000.0;
+  constexpr size_t frames = 256;
+  constexpr size_t blocks = 1500;
+  for (size_t numChannels : {size_t(1), size_t(2)})
+  {
+    dsp::effect::VoLumCompressor live;
+    ReferenceCompressor ref;
+    std::vector<std::vector<DSP_SAMPLE>> in(numChannels, std::vector<DSP_SAMPLE>(frames));
+    std::vector<std::vector<DSP_SAMPLE>> refOut(numChannels, std::vector<DSP_SAMPLE>(frames));
+    size_t frame = 0;
+    bool allSame = true;
+    size_t firstMismatchBlock = 0;
+    for (size_t b = 0; b < blocks; ++b)
+    {
+      const Settings& p = settings[(b / 150) % (sizeof(settings) / sizeof(settings[0]))];
+      live.SetParams(p.amount, 4.0, p.attackMs, p.releaseMs, p.mix, p.levelDb, sampleRate);
+      ref.SetParams(p.amount, p.attackMs, p.releaseMs, p.mix, p.levelDb, sampleRate);
+      for (size_t i = 0; i < frames; ++i, ++frame)
+      {
+        const double t = static_cast<double>(frame) / sampleRate;
+        // 0.1 s loud, then 0.4 s at about -120 dBFS.
+        const double level = (static_cast<size_t>(t * 10.0) % 5 == 0) ? 0.8 : 1.0e-6;
+        for (size_t c = 0; c < numChannels; ++c)
+          in[c][i] = static_cast<DSP_SAMPLE>(level * std::sin(2.0 * M_PI * (150.0 + 90.0 * c) * t + 0.3 * c));
+      }
+      std::vector<DSP_SAMPLE*> inPtrs(numChannels), refPtrs(numChannels);
+      for (size_t c = 0; c < numChannels; ++c)
+      {
+        inPtrs[c] = in[c].data();
+        refPtrs[c] = refOut[c].data();
+      }
+      ref.Process(inPtrs.data(), refPtrs.data(), numChannels, frames);
+      DSP_SAMPLE** out = live.Process(inPtrs.data(), numChannels, frames);
+      for (size_t c = 0; c < numChannels; ++c)
+      {
+        if (allSame && std::memcmp(out[c], refOut[c].data(), frames * sizeof(DSP_SAMPLE)) != 0)
+        {
+          allSame = false;
+          firstMismatchBlock = b;
+        }
+      }
+    }
+    INFO("channels=" << numChannels << " first mismatch block=" << firstMismatchBlock);
+    CHECK(allSame);
+    // Both branches of the gain computation must have run, or the lock covers only one.
+    CHECK(ref.belowKneeSamples > 1000);
+    CHECK(ref.compressingSamples > 1000);
+  }
+}
 
 TEST_CASE("VoLumPreEq noon settings preserve finite audio")
 {

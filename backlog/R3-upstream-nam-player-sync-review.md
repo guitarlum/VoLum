@@ -41,7 +41,7 @@ Do NOT blindly merge; this is a curate-and-cherry-pick review, not a fast-forwar
   in the upstream-equivalent files (`VoLum*.inc.cpp`, `NeuralAmpModeler.cpp`, etc.).
 - Explicitly confirm whether upstream changed anything about the A2 export format
   or container defaults since we set our `PackedWaveNet.export()` pipeline (see
-  `docs/a2-training-runbook.md`), so our shipped rigs stay format-current.
+  the `a2-training` skill), so our shipped rigs stay format-current.
 
 ## Acceptance Criteria
 

@@ -330,6 +330,7 @@ if [ -d "$RIGS_SRC" ] && [ -d "$APP" ]; then
     mkdir -p "$APP/Contents/Resources/VoLumRigs/$amp_name"
     cp "$amp_dir"*.nam "$APP/Contents/Resources/VoLumRigs/$amp_name/" 2>/dev/null || true
   done
+  cp "$RIGS_SRC/factory-presets.json" "$APP/Contents/Resources/VoLumRigs/" || exit 1
 fi
 
 # Same sibling layout as the portable VST3 zip: ~/Library/Audio/Plug-Ins/VST3/VoLumRigs next to VoLum.vst3
@@ -344,6 +345,7 @@ if [ -d "$RIGS_SRC" ] && [ -d "$VST3" ]; then
     mkdir -p "$VST3_PARENT/VoLumRigs/$amp_name"
     cp "$amp_dir"*.nam "$VST3_PARENT/VoLumRigs/$amp_name/" 2>/dev/null || true
   done
+  cp "$RIGS_SRC/factory-presets.json" "$VST3_PARENT/VoLumRigs/" || exit 1
 elif [ -d "$VST3" ] && [ ! -d "$RIGS_SRC" ]; then
   echo "WARNING: rigs directory not found: $RIGS_SRC (VST3 install has no VoLumRigs copy)"
 fi
@@ -555,6 +557,7 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
         mkdir -p "build-mac/vst3-zip/VoLumRigs/$amp_name"
         cp "$amp_dir"*.nam "build-mac/vst3-zip/VoLumRigs/$amp_name/" 2>/dev/null || true
       done
+      cp "$RIGS_SRC/factory-presets.json" build-mac/vst3-zip/VoLumRigs/ || exit 1
     else
       echo "WARNING: rigs directory not found: $RIGS_SRC"
     fi
@@ -587,6 +590,7 @@ if [ $BUILD_INSTALLER == 0 ] || [ $PACKAGE_ZIP == 1 ]; then
           mkdir -p "build-mac/au-zip/VoLumRigs/$amp_name"
           cp "$amp_dir"*.nam "build-mac/au-zip/VoLumRigs/$amp_name/" 2>/dev/null || true
         done
+        cp "$RIGS_SRC/factory-presets.json" build-mac/au-zip/VoLumRigs/ || exit 1
       fi
 
       echo "zipping AU package..."

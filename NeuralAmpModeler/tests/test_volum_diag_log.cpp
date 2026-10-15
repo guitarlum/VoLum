@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <chrono>
 #include <filesystem>
@@ -18,7 +19,7 @@ namespace
 std::filesystem::path TempBase(const char* leaf)
 {
   const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-  auto p = std::filesystem::temp_directory_path() / ("volum-log-" + std::string(leaf) + "-" + std::to_string(stamp));
+  auto p = volum_test::ProcessTempRoot() / ("volum-log-" + std::string(leaf) + "-" + std::to_string(stamp));
   std::filesystem::remove_all(p);
   std::filesystem::create_directories(p);
   return p;

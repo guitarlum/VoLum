@@ -33,17 +33,25 @@ public static class VoLumCanvasCap
   [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
   [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
 
+  // An exact title match wins over a substring one: an editor or browser window
+  // showing a VoLum file also contains "VoLum" in its title, and grabbing that
+  // instead of the plugin silently produces a blank white "canvas".
   public static IntPtr FindByTitleSubstring(string sub)
   {
-    IntPtr found = IntPtr.Zero;
+    IntPtr exact = IntPtr.Zero;
+    IntPtr loose = IntPtr.Zero;
     EnumWindows((h, __) => {
       var sb = new StringBuilder(256);
       GetWindowText(h, sb, 256);
       string t = sb.ToString();
-      if (!string.IsNullOrEmpty(t) && t.IndexOf(sub, StringComparison.OrdinalIgnoreCase) >= 0) { found = h; return false; }
+      if (string.IsNullOrEmpty(t))
+        return true;
+      if (string.Equals(t, sub, StringComparison.OrdinalIgnoreCase)) { exact = h; return false; }
+      if (loose == IntPtr.Zero && t.IndexOf(sub, StringComparison.OrdinalIgnoreCase) >= 0)
+        loose = h;
       return true;
     }, IntPtr.Zero);
-    return found;
+    return exact != IntPtr.Zero ? exact : loose;
   }
 
   public static void SaveCanvasPng(IntPtr hwnd, string path)

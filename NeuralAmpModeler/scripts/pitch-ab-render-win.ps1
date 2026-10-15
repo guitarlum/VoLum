@@ -55,23 +55,40 @@ function Find-VsDevCmd {
   throw "Could not find vcvars64.bat - install the VS 2022 C++ build tools."
 }
 
-# Compile the baseline revision's header into a parallel namespace so both engines can
-# coexist in one binary. Rewriting the namespace is the whole trick: the file is
-# otherwise byte-identical to what that revision shipped.
+# Compile the baseline revision's headers into a parallel namespace so both engines can
+# coexist in one binary. Rewriting the namespace is the whole trick: the files are
+# otherwise byte-identical to what that revision shipped. The engine has been one header
+# (up to 1.3.0) or several VoLumPitch*.h siblings; every sibling that exists at the
+# baseline is copied too, with its includes pointed at the copies, so the baseline never
+# compiles against the working tree's voice or tracker.
 $extraDefines = ""
 if (-not [string]::IsNullOrWhiteSpace($Baseline)) {
-  $baselineHeader = Join-Path (Join-Path $repo "NeuralAmpModeler\tools\pitch-ab") "baseline_pitch.h"
+  $abDir = Join-Path $repo "NeuralAmpModeler\tools\pitch-ab"
+  $siblings = @("VoLumPitchKernels.h", "VoLumPitchTracker.h", "VoLumPitchVoice.h")
   Push-Location $repo
   try {
     $text = & git show "${Baseline}:NeuralAmpModeler/VoLumPitchShifter.h" 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "git show ${Baseline}:NeuralAmpModeler/VoLumPitchShifter.h failed: $text" }
+    $found = @{}
+    foreach ($s in $siblings) {
+      $t = & git show "${Baseline}:NeuralAmpModeler/$s" 2>$null | Out-String
+      if ($LASTEXITCODE -eq 0) { $found[$s] = $t }
+    }
   }
   finally { Pop-Location }
   if ($text -notmatch 'namespace\s+effect') { throw "Baseline header has no 'namespace effect' - refusing to emit a bogus variant." }
-  $text = $text -replace 'namespace\s+effect', 'namespace effect_baseline'
-  Set-Content -Path $baselineHeader -Value $text -NoNewline
+  function Convert-BaselineHeader([string]$t) {
+    $t = $t -replace 'namespace\s+effect\b', 'namespace effect_baseline'
+    $t = $t -replace 'VOLUM_PITCH_SSE2', 'VOLUM_PITCH_BASELINE_SSE2'
+    foreach ($s in $siblings) { $t = $t.Replace("#include `"$s`"", "#include `"baseline_$s`"") }
+    return $t
+  }
+  foreach ($s in $found.Keys) {
+    Set-Content -Path (Join-Path $abDir "baseline_$s") -Value (Convert-BaselineHeader $found[$s]) -NoNewline
+  }
+  Set-Content -Path (Join-Path $abDir "baseline_pitch.h") -Value (Convert-BaselineHeader $text) -NoNewline
   $extraDefines = "/DVOLUM_PITCH_AB_BASELINE"
-  Write-Host "Baseline '$Baseline' -> tools/pitch-ab/baseline_pitch.h (namespace effect_baseline)"
+  Write-Host "Baseline '$Baseline' -> tools/pitch-ab/baseline_*.h (namespace effect_baseline, $($found.Count) siblings)"
 }
 
 if ($Rebuild -and (Test-Path $exe)) { Remove-Item $exe -Force }

@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "VoLumPaths.h"
+
 namespace volum
 {
 
@@ -63,22 +65,17 @@ inline const char* PrePedalCaptureGroupLabel(PrePedalCaptureGroup group)
 {
   switch (group)
   {
-    case PrePedalCaptureGroup::Klon:
-      return "Klon";
-    case PrePedalCaptureGroup::TsBoost:
-      return "TS / Boost";
-    case PrePedalCaptureGroup::Distortion:
-      return "Distortion";
-    case PrePedalCaptureGroup::Fuzz:
-      return "Fuzz";
-    default:
-      return "Other";
+    case PrePedalCaptureGroup::Klon: return "Klon";
+    case PrePedalCaptureGroup::TsBoost: return "TS / Boost";
+    case PrePedalCaptureGroup::Distortion: return "Distortion";
+    case PrePedalCaptureGroup::Fuzz: return "Fuzz";
+    default: return "Other";
   }
 }
 
 inline std::string PrePedalCaptureFallbackLabelFromFilename(const std::filesystem::path& path)
 {
-  return path.stem().string();
+  return volum::PathStemUtf8(path);
 }
 
 inline std::vector<PrePedalCapture> DiscoverPrePedalCaptures(const std::filesystem::path& rigsRoot)
@@ -96,13 +93,12 @@ inline std::vector<PrePedalCapture> DiscoverPrePedalCaptures(const std::filesyst
     if (!entry.is_regular_file(ec) || entry.path().extension() != ".nam")
       continue;
 
-    const std::string filename = entry.path().filename().string();
+    const std::string filename = volum::PathLeafUtf8(entry.path());
     if (const auto* metadata = GetPrePedalCaptureMetadata(filename))
       captures.push_back({filename, metadata->label, metadata->shortLabel, metadata->group, metadata->sortRank});
     else
-      captures.push_back(
-        {filename, PrePedalCaptureFallbackLabelFromFilename(entry.path()),
-         PrePedalCaptureFallbackLabelFromFilename(entry.path()), PrePedalCaptureGroup::None, 10000});
+      captures.push_back({filename, PrePedalCaptureFallbackLabelFromFilename(entry.path()),
+                          PrePedalCaptureFallbackLabelFromFilename(entry.path()), PrePedalCaptureGroup::None, 10000});
   }
 
   std::sort(captures.begin(), captures.end(), [](const PrePedalCapture& a, const PrePedalCapture& b) {
@@ -122,6 +118,35 @@ inline int ClampPreCaptureIndex(int captureIdx, int captureCount)
 inline bool ShouldLoadPrePedalCapture(bool active, int captureIdx)
 {
   return active && captureIdx > kPreCaptureEmptyIndex;
+}
+
+// PLAY availability: a capture is on the slot even when bypass has unloaded it.
+inline bool PlayNamCaptureAssigned(int captureIdx)
+{
+  return captureIdx > kPreCaptureEmptyIndex;
+}
+
+// What a click on a PRE NAM pedal card should do.
+//
+// The card's footer reads "Click to change" whenever the slot is empty, but the
+// picker used to be gated on the card already being focused, so that first
+// click only moved focus and changed nothing. Same affordance lie as the empty
+// Dual Amp SUPPORT lane: art promising an action the gesture does not perform.
+// An empty slot offers exactly one action, so it opens the picker straight
+// away. A slot that already holds a capture keeps focus-then-change, so one
+// stray click cannot replace a capture that is in use.
+enum class CaptureCardClick
+{
+  FocusOnly,
+  OpenPicker,
+  FocusThenOpenPicker,
+};
+
+inline CaptureCardClick DecideCaptureCardClick(bool cardFocused, bool slotHasCapture)
+{
+  if (cardFocused)
+    return CaptureCardClick::OpenPicker;
+  return slotHasCapture ? CaptureCardClick::FocusOnly : CaptureCardClick::FocusThenOpenPicker;
 }
 
 } // namespace volum

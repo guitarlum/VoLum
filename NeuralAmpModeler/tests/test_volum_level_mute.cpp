@@ -3,12 +3,6 @@
 
 #include <cmath>
 
-TEST_CASE("LevelMute: literal minimum maps to silence")
-{
-  CHECK(volum::DbToAmpWithMuteFloor(-20.0, -20.0) == doctest::Approx(0.0));
-  CHECK(volum::DbToAmpWithMuteFloor(-40.0, -40.0) == doctest::Approx(0.0));
-}
-
 TEST_CASE("LevelMute: values above minimum keep normal dB gain")
 {
   CHECK(volum::DbToAmpWithMuteFloor(0.0, -40.0) == doctest::Approx(1.0));

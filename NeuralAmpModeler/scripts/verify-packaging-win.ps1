@@ -38,6 +38,11 @@ if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
 if (-not (Test-Path $prePedalsPath)) { throw "Missing PrePedals folder: $prePedalsPath" }
 if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
 if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
+$factoryPresets = Join-Path $rigsPath "factory-presets.json"
+if (-not (Test-Path $factoryPresets)) { throw "Missing Factory presets: $factoryPresets" }
+if ((Get-FileHash $factoryPresets).Hash -ne (Get-FileHash (Join-Path $RepoRoot "rigs\factory-presets.json")).Hash) {
+  throw "Packaged Factory presets differ from rigs\factory-presets.json"
+}
 
 if (Test-Path $prePedalsSource) {
   Get-ChildItem $prePedalsSource -Filter "*.nam" -File | ForEach-Object {

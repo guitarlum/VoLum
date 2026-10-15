@@ -9,6 +9,7 @@
 #include "VoLumCabStep.h"
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomModel.h"
+#include "VoLumSecondPress.h"
 
 #include <algorithm>
 #include <cmath>
@@ -245,6 +246,7 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     (void)mod;
+    const auto pressed = mSecondPress.Press();
     ClearVoLumKnobSelection(this);
 
     if (mIrBtnRect.Contains(x, y))
@@ -268,6 +270,12 @@ public:
         return;
       }
     }
+  }
+
+  void OnMouseDblClick(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSecondPress.Take())
+      OnMouseDown(x, y, mod);
   }
 
   // Keyboard equivalent of clicking the next cab button (the S shortcut). Runs the
@@ -333,7 +341,7 @@ private:
     // Utf8Prefix, not substr: an IR named with non-ASCII characters would otherwise
     // be cut mid-sequence, and the label is drawn from the same string that gets
     // persisted.
-    return volum::custom::Utf8Prefix(mIrName, 11) + "\u2026";
+    return volum::custom::Utf8Prefix(mIrName, 11) + "\xE2\x80\xA6";
   }
 
   // No Cab (index 0) is gated by DIRECT availability on the current channel; cab
@@ -401,4 +409,5 @@ private:
   std::string mNoCabDisabledHint;
   ChangeCallback mCallback;
   IrMenuCallback mIrMenuCb;
+  volum::ui::SecondPressGate mSecondPress;
 };

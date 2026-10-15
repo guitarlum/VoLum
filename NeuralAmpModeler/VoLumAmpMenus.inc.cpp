@@ -1,6 +1,8 @@
-// VoLumAmpMenus.inc.cpp: factory reset + preset/support-amp menu + dual-amp focus member functions
+﻿// VoLumAmpMenus.inc.cpp: factory reset + preset/support-amp menu + dual-amp focus member functions
 // Extracted from NeuralAmpModeler.cpp for file-size hygiene. Tail-#included
 // into the NeuralAmpModeler translation unit; not a separate build target.
+
+#include "VoLumDualAmpInput.h"
 
 void NeuralAmpModeler::_VolumResetAmpToFactory()
 {
@@ -34,45 +36,62 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   auto* bar = pGfx->GetControlWithTag(kCtrlTagVoLumPresetBar);
   if (!raw || !bar)
     return;
+  if (volum::ui::AnyOverlayOpen(
+        {kCtrlTagSettingsBox, kCtrlTagVoLumPackOverlay, kCtrlTagVoLumCustomOverlay, kCtrlTagVoLumConfirm,
+         kCtrlTagVoLumNameDialog, kCtrlTagVoLumTuner, kCtrlTagVoLumMetronome},
+        [&](int tag) {
+          auto* c = pGfx->GetControlWithTag(tag);
+          return c && !c->IsHidden();
+        }))
+    return;
   if (!raw->IsHidden())
   {
     raw->Hide(true);
     return;
   }
 
-  // Reading the bank is an owner-keyed operation too: MockPresetsForAmp ignores its
-  // ampIdx and indexes through the process-global key, so without a claim this menu
-  // can list another instance's presets - and the row the user then picks is applied
-  // as a bare index into this instance's bank.
-  _VolumClaimPresetOps();
-  const auto presets = volum::custom::MockPresetsForAmp(mVolumAmpIdx);
+  // Reading the bank is an owner-keyed operation too, so name the owner: indexing
+  // through the ambient process-global key let this menu list another instance's
+  // presets, and the row the user then picked was applied as a bare index into
+  // this instance's bank.
+  const auto presets = volum::custom::PresetsForOwner(_VolumClaimPresetOps());
   auto* presetBar = bar->As<VoLumPresetBarControl>();
   const bool dirty = presetBar->IsEditDirty();
   const int activePresetIdx = presetBar->ActiveIndex();
+  const auto factory = _VolumFocusedFactoryPresets();
+  const int factoryCount = static_cast<int>(factory.size());
+  volum::InitPickerGroups(mVolumPresetPickerGroups, factoryCount > 0, !presets.empty());
   std::vector<VoLumListMenuControl::Row> rows;
-  if (presets.empty())
+  // Default is an action, not a named preset, and stays pinned above both banks.
+  rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
+  if (factoryCount > 0)
   {
-    // No presets to come back from, so the reset-to-factory row is pointless.
-    rows.push_back({"No presets yet", -99, false, true}); // dim hint
+    rows.push_back(
+      {volum::PickerGroupMenuLabel(true, mVolumPresetPickerGroups.factoryOpen), -98, false, false, false, false, true});
+    if (mVolumPresetPickerGroups.factoryOpen)
+      for (int i = 0; i < factoryCount; i++)
+        rows.push_back({factory[(size_t)i]->name, i, false, false});
   }
-  else
+  if (!presets.empty())
   {
-    // Pinned reset-to-factory row at the top, separated by a divider.
-    rows.push_back({"Default (factory settings)", VoLumListMenuControl::kDefault, true, false, true});
-    for (int i = 0; i < (int)presets.size(); i++)
-      rows.push_back({presets[(size_t)i], i, false, false});
+    rows.push_back(
+      {volum::PickerGroupMenuLabel(false, mVolumPresetPickerGroups.userOpen), -97, false, false, false, false, true});
+    if (mVolumPresetPickerGroups.userOpen)
+      for (int i = 0; i < (int)presets.size(); i++)
+        rows.push_back({presets[(size_t)i], i + factoryCount, false, false});
   }
   // When the rig is dirty, offer a one-click save path right in the dropdown:
   // overwrite the active named preset, or (no named preset / on Default) save a
   // new one. Saves opening the Manage panel just to commit a tweak.
-  if (dirty)
-  {
-    if (activePresetIdx >= 0 && activePresetIdx < (int)presets.size())
-      rows.push_back({"Overwrite \"" + presets[(size_t)activePresetIdx] + "\"", VoLumListMenuControl::kOverwrite, true,
-                      false, true});
-    else
-      rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
-  }
+  const int activeUserIdx = activePresetIdx - factoryCount;
+  const bool userActive =
+    volum::SaveActionForActivePreset(mVolumActivePresetId) == volum::PresetSaveAction::OverwriteUser
+    && activeUserIdx >= 0 && activeUserIdx < (int)presets.size();
+  if (userActive)
+    rows.push_back(
+      {"Overwrite \"" + presets[(size_t)activeUserIdx] + "\"", VoLumListMenuControl::kOverwrite, true, false, true});
+  if (dirty || userActive)
+    rows.push_back({"Save current as new...", VoLumListMenuControl::kSaveAsNew, true, false, true});
   rows.push_back({"Manage presets...", VoLumListMenuControl::kManage, true, false});
 
   auto* menu = raw->As<VoLumListMenuControl>();
@@ -87,6 +106,13 @@ void NeuralAmpModeler::_VolumShowPresetMenu()
   menu->SetMenuRect(IRECT(l, top, l + w, top + h));
   const int selected = bar->As<VoLumPresetBarControl>()->ActiveIndex();
   menu->SetRows(rows, selected);
+  menu->SetHeaderCallback([this](int code) {
+    volum::TogglePickerGroup(mVolumPresetPickerGroups, code == -98);
+    if (auto* pGfx = GetUI())
+      if (auto* raw = pGfx->GetControlWithTag(kCtrlTagVoLumPresetMenu))
+        raw->Hide(true);
+    _VolumShowPresetMenu();
+  });
   menu->Hide(false);
 }
 
@@ -232,12 +258,10 @@ void NeuralAmpModeler::_VolumSetSupportCustom(int customIdx)
   _VolumActiveScene().supportCustomId = volum::custom::CustomAmpIdAt(customIdx);
   {
     const auto amp = volum::custom::CustomAmpAt(customIdx);
-    int s = volum::custom::kDirectSlot, c = 1;
-    if (volum::content::DefaultCaptureSelection(amp, s, c))
-    {
-      mVolumCustomSupportSlot = s;
-      mVolumCustomSupportChannel = c;
-    }
+    int s = 0, c = 0;
+    volum::content::CaptureSelectionOrDefault(amp, s, c);
+    mVolumCustomSupportSlot = s;
+    mVolumCustomSupportChannel = c;
     // Persist the freshly resolved cab/channel so it round-trips like MAIN.
     _VolumActiveScene().supportCustomSlot = mVolumCustomSupportSlot;
     _VolumActiveScene().supportCustomChannel = mVolumCustomSupportChannel;
@@ -322,6 +346,31 @@ void NeuralAmpModeler::_VolumSyncUiFromState()
 
   // Cab row + channel stepper for the focused lane.
   _VolumApplyFocusedLaneCabs();
+
+  // PLAY covers the whole window, so a restore that lands BUILD while the surface
+  // is still shown hands every click to a hidden-in-spirit overlay. Deriving the
+  // chrome from mVolumUiMode here means a host restore cannot forget it; nothing
+  // else on this path touched PLAY at all.
+  _VolumRefreshPlaySurface();
+}
+
+// UI half of a host state restore. The restore applied the rig on the host's thread
+// with the editor hidden from it, so everything below was skipped there: the control
+// values of every parameter, the layout pass, the SUPPORT stepper, the preset bar and the sidebar/hero/cab-row sync. It
+// reads only live state, never a snapshot taken at restore time, so a restore that
+// lands again before this runs, or this running twice, converges on the same UI.
+void NeuralAmpModeler::_VolumResyncUi()
+{
+  auto* pGfx = GetUI();
+  if (!pGfx)
+    return;
+  // Every parameter helper call the restore made skipped the control tree, so push
+  // all current values to the controls (and OnParamChangeUI), the way OnUIOpen does.
+  SendCurrentParamValuesFromDelegate();
+  _UpdateVoLumLayout(pGfx);
+  _VolumRefreshSupportChannels();
+  _VolumRefreshPresetBar();
+  _VolumSyncUiFromState();
 }
 
 void NeuralAmpModeler::_VolumReflectLaneIrChip(bool support)
@@ -375,14 +424,6 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
       mVolumSupportChannelFiles.push_back(std::move(ch.filename));
       mVolumSupportChannelLabels.push_back(std::move(ch.label));
     }
-
-    int channelIdx = std::clamp(
-      GetParam(kSupportChannelIdx)->Int(), 0, std::max(0, static_cast<int>(mVolumSupportChannelFiles.size()) - 1));
-    if (channelIdx != GetParam(kSupportChannelIdx)->Int())
-    {
-      GetParam(kSupportChannelIdx)->Set(channelIdx);
-      SendParameterValueFromDelegate(kSupportChannelIdx, GetParam(kSupportChannelIdx)->GetNormalized(), true);
-    }
   }
 
   if (auto* pGfx = GetUI())
@@ -391,6 +432,14 @@ void NeuralAmpModeler::_VolumRefreshSupportChannels()
       stepper->As<VoLumChannelStepControl>()->SetChannels(
         mVolumSupportChannelLabels, GetParam(kSupportChannelIdx)->Int());
   }
+}
+
+void NeuralAmpModeler::_VolumRebindCustomSupportIdx()
+{
+  const std::string& id = _VolumActiveScene().supportCustomId;
+  if (id.empty() || !volum::content::GlobalContentStore().IsLoaded())
+    return;
+  mVolumCustomSupportIdx = volum::custom::CustomAmpIndexById(id);
 }
 
 bool NeuralAmpModeler::_VolumHasSupportAmp()
@@ -407,20 +456,21 @@ bool NeuralAmpModeler::_VolumHasSupportAmp()
 
 void NeuralAmpModeler::_VolumClampSupportFocus()
 {
-  const bool clamped = volum::dualamp::ClampSupportFocus(mVolumDualAmpFocusedSupport, _VolumHasSupportAmp());
-  if (clamped == mVolumDualAmpFocusedSupport)
-    return;
-
-  mVolumDualAmpFocusedSupport = clamped;
-
-  // Moving focus is only half the job. The cab row is shared by both lanes and every
-  // write to it is now conditioned on which lane is focused, so a clamp that only
-  // flipped the flag left the row still describing SUPPORT while MAIN was focused -
-  // the exact state that guard exists to prevent, and a click on a cab then edited
-  // MAIN with an index from the support amp's layout. Re-derive here so no caller
-  // has to remember: _VolumApplyFocusedLaneCabs does not call _UpdateVoLumLayout,
-  // so there is no re-entrancy back into this.
-  _VolumApplyFocusedLaneCabs();
+  // Moving focus is only half the job. The cab row is shared by both lanes and
+  // every write to it is conditioned on which lane is focused, so a clamp that
+  // only flipped the flag left the row still describing SUPPORT while MAIN was
+  // focused - the exact state this guard exists to prevent, and a click on a cab
+  // then edited MAIN with an index from the support amp's layout.
+  //
+  // CommitFocus returns both halves so no caller has to remember the second one,
+  // and it only reports rederiveCabs when the clamp actually moved the flag -
+  // layout calls this on every pass and must not restage cabs each time.
+  // _VolumApplyFocusedLaneCabs does not call _UpdateVoLumLayout, so there is no
+  // re-entrancy back into this.
+  const auto commit =
+    volum::dualamp::CommitFocus(mVolumDualAmpFocusedSupport, mVolumDualAmpFocusedSupport, _VolumHasSupportAmp());
+  volum::dualamp::ApplyFocusCommit(
+    commit, [this](bool f) { mVolumDualAmpFocusedSupport = f; }, [this] { _VolumApplyFocusedLaneCabs(); });
 }
 
 void NeuralAmpModeler::_VolumApplyDualAmpFocus()
@@ -432,7 +482,7 @@ void NeuralAmpModeler::_VolumApplyDualAmpFocus()
   _VolumClampSupportFocus();
 
   // Sync the speaker row to the focused lane (cab selection is per-amp). Lane belonging on the
-  // SUPPORT amp-row knobs is conveyed by their teal pointer dot + teal value text — set once at
+  // SUPPORT amp-row knobs is conveyed by their teal pointer dot + teal value text â€” set once at
   // attach time, no per-frame retoggling needed here.
   auto* pGfx = GetUI();
   if (!pGfx)

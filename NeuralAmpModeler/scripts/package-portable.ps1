@@ -33,6 +33,7 @@ Get-ChildItem $rigsDir -Directory | ForEach-Object {
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     Get-ChildItem $_.FullName -Filter *.nam -File | Copy-Item -Destination $dest
 }
+Copy-Item "$rigsDir\factory-presets.json" "$outDir\VoLum\VoLumRigs\"
 
 # Copy changelog
 Copy-Item "$repoRoot\NeuralAmpModeler\installer\changelog.txt" "$outDir\VoLum\"

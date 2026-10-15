@@ -1,13 +1,17 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
+#include <filesystem>
 #include <vector>
 
 #include "../VoLumCustomContentApi.h"
+#include "../VoLumNameDialogModel.h"
 
 // Covers the production (speaker x channel) snap helpers backing the 1.2.0
 // BYO-amp builder and main-view focus behavior, plus the registry-backed
 // projection/mutation API in VoLumCustomContentApi.h.
 
+using volum::custom::ChannelStepIndex;
 using volum::custom::SnapChannel;
 using volum::custom::SpeakerEnabled;
 
@@ -18,45 +22,42 @@ TEST_CASE("SpeakerEnabled reflects whether a slot has any captures")
   REQUIRE(SpeakerEnabled(std::vector<int>{2, 3}) == true);
 }
 
-TEST_CASE("SnapChannel keeps the current channel when it is still available")
+TEST_CASE("SnapChannel and ChannelStepIndex")
 {
-  REQUIRE(SnapChannel(std::vector<int>{1, 2, 3}, 2) == 2);
-  REQUIRE(SnapChannel(std::vector<int>{1, 2}, 1) == 1);
-}
+  SUBCASE("keep current when still available")
+  {
+    REQUIRE(SnapChannel(std::vector<int>{1, 2, 3}, 2) == 2);
+    REQUIRE(SnapChannel(std::vector<int>{1, 2}, 1) == 1);
+  }
 
-TEST_CASE("SnapChannel falls back to the first available channel")
-{
-  // Current channel 3 is not available on a {1,2} slot -> snap to first (1).
-  REQUIRE(SnapChannel(std::vector<int>{1, 2}, 3) == 1);
-  // Current channel 1 not available on a {2,3} slot -> snap to first (2).
-  REQUIRE(SnapChannel(std::vector<int>{2, 3}, 1) == 2);
-}
+  SUBCASE("fallback to first available")
+  {
+    REQUIRE(SnapChannel(std::vector<int>{1, 2}, 3) == 1);
+    REQUIRE(SnapChannel(std::vector<int>{2, 3}, 1) == 2);
+  }
 
-TEST_CASE("SnapChannel returns -1 for an empty/disabled speaker slot")
-{
-  REQUIRE(SnapChannel(std::vector<int>{}, 1) == -1);
-  REQUIRE(SnapChannel(std::vector<int>{}, 0) == -1);
-}
+  SUBCASE("empty slot returns -1")
+  {
+    REQUIRE(SnapChannel(std::vector<int>{}, 1) == -1);
+    REQUIRE(SnapChannel(std::vector<int>{}, 0) == -1);
+  }
 
-TEST_CASE("ChannelStepIndex maps a channel number to its stepper position")
-{
-  using volum::custom::ChannelStepIndex;
-  // A Fryette-style amp that only ships channels {3,4}: channel 3 -> row 0, 4 -> row 1.
-  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 3) == 0);
-  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 4) == 1);
-  REQUIRE(ChannelStepIndex(std::vector<int>{1, 2, 3}, 3) == 2);
-}
+  SUBCASE("ChannelStepIndex maps a channel number to its stepper position")
+  {
+    REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 3) == 0);
+    REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 4) == 1);
+    REQUIRE(ChannelStepIndex(std::vector<int>{1, 2, 3}, 3) == 2);
+  }
 
-TEST_CASE("ChannelStepIndex defaults to row 0 when the channel is absent/empty")
-{
-  using volum::custom::ChannelStepIndex;
-  REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 1) == 0); // not present -> 0
-  REQUIRE(ChannelStepIndex(std::vector<int>{}, 2) == 0); // empty slot -> 0
+  SUBCASE("ChannelStepIndex absent/empty -> 0")
+  {
+    REQUIRE(ChannelStepIndex(std::vector<int>{3, 4}, 1) == 0);
+    REQUIRE(ChannelStepIndex(std::vector<int>{}, 2) == 0);
+  }
 }
 
 TEST_CASE("SnapChannel + ChannelStepIndex preserve a higher gain stage across a cab switch")
 {
-  using volum::custom::ChannelStepIndex;
   // On channel 4, switch to a cab slot that also covers {3,4}: keep 4 (row 1),
   // do NOT snap back to channel 3 / row 0 (item: cab/IR switch must keep channel).
   const std::vector<int> newSlot{3, 4};
@@ -70,7 +71,7 @@ TEST_CASE("ShortCaptureLabel truncates long custom names to 5 chars + ellipsis")
   using volum::custom::ShortCaptureLabel;
   REQUIRE(ShortCaptureLabel("OD") == "OD"); // short names pass through
   REQUIRE(ShortCaptureLabel("BOOST") == "BOOST"); // exactly 5 -> unchanged
-  REQUIRE(ShortCaptureLabel("Klon Centaur") == std::string("Klon ") + "\u2026"); // > 5 -> clipped
+  REQUIRE(ShortCaptureLabel("Klon Centaur") == std::string("Klon ") + "\xE2\x80\xA6"); // > 5 -> clipped
 }
 
 TEST_CASE("HasDirectCapture is true only when a DIRECT (cab-less) capture exists")
@@ -148,6 +149,32 @@ TEST_CASE("SnapSlotForChannel keeps current, prefers a real cab, No Cab last")
 
   // Channel with nothing assigned -> no change sentinel.
   REQUIRE(SnapSlotForChannel(amp, 7, 0) == kUnassignedSlot);
+}
+
+TEST_CASE("Stock cab fallback keeps the channel, then prefers any real cab, then No Cab")
+{
+  using volum::custom::CustomAmp;
+  using volum::custom::kDirectSlot;
+  using volum::custom::StockCabFallback;
+  CustomAmp amp;
+  // The IR runs through DIRECT on ch1. A stock cab also covers ch1, so deletion
+  // must keep the gain stage and land on that cab.
+  amp.files = {{"d1.nam", kDirectSlot, 1}, {"v30-1.nam", 2, 1}, {"g12-2.nam", 0, 2}, {"d3.nam", kDirectSlot, 3}};
+  auto fallback = StockCabFallback(amp, 1);
+  CHECK(fallback.slot == 2);
+  CHECK(fallback.channel == 1);
+
+  // No baked cab covers ch3: move to the first real cab anywhere in the amp.
+  fallback = StockCabFallback(amp, 3);
+  CHECK(fallback.slot == 0);
+  CHECK(fallback.channel == 2);
+
+  // An amp with only DIRECT captures has no stock cab; No Cab is the last resort.
+  CustomAmp directOnly;
+  directOnly.files = {{"d1.nam", kDirectSlot, 1}, {"d3.nam", kDirectSlot, 3}};
+  fallback = StockCabFallback(directOnly, 3);
+  CHECK(fallback.slot == kDirectSlot);
+  CHECK(fallback.channel == 3);
 }
 
 TEST_CASE("ResolveLaneCabs drives the channel-first cab view")
@@ -288,12 +315,14 @@ using volum::custom::AmpSlotChannels;
 using volum::custom::AmpSlots;
 using volum::custom::AssignedChannels;
 using volum::custom::CellFileCount;
+using volum::custom::ChannelAssigned;
 using volum::custom::CustomAmp;
 using volum::custom::FileAssigned;
 using volum::custom::FileIsDuplicate;
 using volum::custom::HasDuplicate;
 using volum::custom::IsDirectSlot;
 using volum::custom::kDirectSlot;
+using volum::custom::kMaxChannels;
 using volum::custom::kUnassignedSlot;
 using volum::custom::MaxAssignedChannel;
 using volum::custom::NormalizeCabName;
@@ -308,13 +337,18 @@ TEST_CASE("IsDirectSlot recognises the amp-only DIRECT slot")
   REQUIRE(IsDirectSlot(kUnassignedSlot) == false);
 }
 
-TEST_CASE("FileAssigned requires both a real slot and a real channel")
+TEST_CASE("FileAssigned requires both a real slot and a channel the loader will use")
 {
   REQUIRE(FileAssigned({"a.nam", kDirectSlot, 1}) == true);
   REQUIRE(FileAssigned({"b.nam", 0, 2}) == true);
   REQUIRE(FileAssigned({"c.nam", kUnassignedSlot, 0}) == false); // no slot, no channel
   REQUIRE(FileAssigned({"d.nam", 0, 0}) == false); // missing channel
   REQUIRE(FileAssigned({"e.nam", kUnassignedSlot, 2}) == false); // missing slot
+  REQUIRE(ChannelAssigned(kMaxChannels) == true);
+  REQUIRE(FileAssigned({"f.nam", kDirectSlot, kMaxChannels}) == true);
+  REQUIRE(ChannelAssigned(kMaxChannels + 1) == false);
+  REQUIRE(FileAssigned({"g.nam", kDirectSlot, kMaxChannels + 1}) == false);
+  REQUIRE(FileAssigned({"G65-2204.nam", 1, 2204}) == false);
 }
 
 TEST_CASE("AmpSlots lists DIRECT first then populated cab slots in order")
@@ -354,14 +388,6 @@ TEST_CASE("Cab rename keeps file links intact (files reference slots, not names)
   amp.cabNames[0] = "XYZ"; // rename slot 0
   REQUIRE(SlotLabel(amp, 0) == "XYZ");
   REQUIRE(AmpSlotChannels(amp, 0) == std::vector<int>{1}); // link survives the rename
-}
-
-TEST_CASE("NormalizeCabName uppercases, strips spaces, caps at 3 chars")
-{
-  REQUIRE(NormalizeCabName("g65") == "G65");
-  REQUIRE(NormalizeCabName("  v 30 ") == "V30");
-  REQUIRE(NormalizeCabName("greenback") == "GRE");
-  REQUIRE(NormalizeCabName("   ").empty());
 }
 
 TEST_CASE("A cab name capped mid-glyph never yields invalid UTF-8")
@@ -449,7 +475,7 @@ TEST_CASE("A pill label truncated mid-glyph never yields invalid UTF-8")
 {
   using volum::custom::ShortCaptureLabel;
   const std::string euro = "\xE2\x82\xAC";
-  const std::string ellipsis = "\u2026";
+  const std::string ellipsis = "\xE2\x80\xA6";
 
   // Cap 5 lands inside the second euro sign; it is dropped rather than split.
   CHECK(ShortCaptureLabel(euro + euro + euro) == euro + ellipsis);
@@ -495,6 +521,21 @@ TEST_CASE("AssignedChannels is empty when nothing is assigned")
   CHECK(AssignedChannels(amp).empty());
 }
 
+TEST_CASE("A channel above kMaxChannels is not assigned, not saveable, and not a loader channel")
+{
+  // G65-2204.nam auto-fill used to write channel 2204. FileAssigned said yes,
+  // AssignedChannels dropped it, Save was enabled, MAIN loaded nothing.
+  CustomAmp amp;
+  amp.name = "My amp";
+  amp.files = {{"G65-2204.nam", 1, 2204}};
+  REQUIRE_FALSE(FileAssigned(amp.files[0]));
+  REQUIRE(UnassignedCount(amp) == 1);
+  REQUIRE(AssignedChannels(amp).empty());
+  REQUIRE(AmpSlotChannels(amp, 1).empty());
+  REQUIRE(MaxAssignedChannel(amp) == 0);
+  REQUIRE(SaveDisabledReason(amp) == "Assign every file a cab + channel");
+}
+
 TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate states")
 {
   // Name gate first: empty and the builder default both read as unnamed.
@@ -528,6 +569,7 @@ TEST_CASE("SaveDisabledReason gates name, empty, unassigned, and duplicate state
 
 TEST_CASE("ParseNamFileName auto-fills slot/channel/cab from the factory convention")
 {
+  using volum::custom::ChannelAssigned;
   using volum::custom::kDirectSlot;
   using volum::custom::ParseNamFileName;
 
@@ -559,6 +601,34 @@ TEST_CASE("ParseNamFileName auto-fills slot/channel/cab from the factory convent
   auto noCh = ParseNamFileName("G65-foo-bar.nam");
   REQUIRE(noCh.matched);
   REQUIRE(noCh.channel == 0);
+
+  // Two-token PREFIX-CODE (the shipped Marshall JMP 2204 style): last token is a
+  // model code, not a gain stage. Slot still auto-fills; channel stays unassigned
+  // so SaveDisabledReason and the loader agree the file is not ready.
+  auto modelCode = ParseNamFileName("G65-2204.nam");
+  REQUIRE(modelCode.matched);
+  REQUIRE(modelCode.slot == 1);
+  REQUIRE(modelCode.cabName == "G65");
+  REQUIRE(modelCode.channel == 0);
+  REQUIRE_FALSE(ChannelAssigned(modelCode.channel));
+
+  auto deluxe = ParseNamFileName("G12-Deluxe-1959.nam");
+  REQUIRE(deluxe.matched);
+  REQUIRE(deluxe.slot == 0);
+  REQUIRE(deluxe.channel == 0);
+
+  auto bassman = ParseNamFileName("AMP-Bassman-1962.nam");
+  REQUIRE(bassman.matched);
+  REQUIRE(bassman.slot == kDirectSlot);
+  REQUIRE(bassman.channel == 0);
+
+  auto chNine = ParseNamFileName("AMP-Test-9.nam");
+  REQUIRE(chNine.matched);
+  REQUIRE(chNine.channel == 0);
+
+  auto chEight = ParseNamFileName("AMP-Test-8.nam");
+  REQUIRE(chEight.matched);
+  REQUIRE(chEight.channel == 8);
 }
 
 TEST_CASE("Name uniqueness is case-insensitive within a content type")
@@ -989,6 +1059,92 @@ TEST_CASE("The newest claim owns the preset hooks, and a departing owner clears 
   CHECK(volum::AmpSettingsEqual(bank[(size_t)j].settings, volum::VoLumAmpSettings{}));
 }
 
+TEST_CASE("Two claimants cannot make one editor persist or apply the other's scene")
+{
+  using namespace volum::custom;
+
+  PresetHooksByInstance().clear();
+  PresetCaptureHook() = nullptr;
+  PresetApplyHook() = nullptr;
+  PresetHookOwner() = nullptr;
+  struct ResetPresetHooks
+  {
+    ~ResetPresetHooks()
+    {
+      PresetHooksByInstance().clear();
+      PresetCaptureHook() = nullptr;
+      PresetApplyHook() = nullptr;
+      PresetHookOwner() = nullptr;
+    }
+  } reset;
+
+  int instanceA = 0;
+  int instanceB = 0;
+
+  volum::VoLumAmpSettings sceneA;
+  sceneA.toneBass = 1.5;
+  volum::VoLumAmpSettings sceneB;
+  sceneB.toneBass = 9.5;
+
+  volum::VoLumAmpSettings appliedA;
+  volum::VoLumAmpSettings appliedB;
+  int applyA = 0;
+  int applyB = 0;
+
+  InstallInstancePresetHooks(
+    &instanceA, [&sceneA]() { return sceneA; },
+    [&](const volum::VoLumAmpSettings& s) {
+      appliedA = s;
+      ++applyA;
+    });
+  InstallInstancePresetHooks(
+    &instanceB, [&sceneB]() { return sceneB; },
+    [&](const volum::VoLumAmpSettings& s) {
+      appliedB = s;
+      ++applyB;
+    });
+  // B claimed last: the process-global pair is B's. That is the bug if capture
+  // still reads it.
+  REQUIRE(PresetHookOwner() == &instanceB);
+  REQUIRE(PresetCaptureHook()().toneBass == doctest::Approx(9.5));
+
+  SetActivePresetOwner("test:n6-two-claimants");
+
+  {
+    PresetOpScope op(&instanceA);
+    const int i = AddPresetForOwner("test:n6-two-claimants", "From A");
+    REQUIRE(i >= 0);
+    const auto& bank = volum::content::GlobalContentStore().reg().presetBanks.at("test:n6-two-claimants");
+    CHECK(bank[(size_t)i].settings.toneBass == doctest::Approx(1.5));
+
+    sceneA.toneBass = 3.25;
+    REQUIRE(OverwritePresetForOwner("test:n6-two-claimants", i));
+    CHECK(bank[(size_t)i].settings.toneBass == doctest::Approx(3.25));
+
+    REQUIRE(RecallPresetForOwner("test:n6-two-claimants", i));
+    CHECK(applyA == 1);
+    CHECK(applyB == 0);
+    CHECK(appliedA.toneBass == doctest::Approx(3.25));
+  }
+
+  // Unscoped while editors are registered: refuse, do not silently take B.
+  const auto sizeBefore = volum::content::GlobalContentStore().reg().presetBanks["test:n6-two-claimants"].size();
+  CHECK(AddPresetForOwner("test:n6-two-claimants", "Stolen") == -1);
+  CHECK(volum::content::GlobalContentStore().reg().presetBanks["test:n6-two-claimants"].size() == sizeBefore);
+  CHECK_FALSE(OverwritePresetForOwner("test:n6-two-claimants", 0));
+  CHECK_FALSE(RecallPresetForOwner("test:n6-two-claimants", 0));
+  CHECK(applyB == 0);
+
+  int stranger = 0;
+  {
+    PresetOpScope op(&stranger);
+    CHECK(AddPresetForOwner("test:n6-two-claimants", "Stranger") == -1);
+  }
+
+  ClearPresetHooksIfOwnedBy(&instanceA);
+  ClearPresetHooksIfOwnedBy(&instanceB);
+}
+
 // Destructive confirmations name an item but used to remember only its row. The
 // library is process-global, so a second plugin editor can remove an earlier row
 // while a prompt is open, after which the remembered position belongs to a
@@ -1069,4 +1225,140 @@ TEST_CASE("RemoveCustomAmp keeps names and art ids aligned")
 
   volum::custom::RemoveCustomAmp(99999); // out of range no-op
   REQUIRE(volum::custom::MockCustomAmpArts().size() == volum::custom::MockCustomAmps().size());
+}
+
+TEST_CASE("Saving a preset into an on-disk library returns the row it wrote")
+{
+  // Save() replaces the registry with the merge of disk and memory. The index
+  // used to be read through a reference into the registry it replaced, so on a
+  // real library it came back -1 (or garbage) for a preset that was written and
+  // PLAY's save-then-add never added the Sound. The in-memory store never merges,
+  // which is why only a base dir shows it.
+  namespace fs = std::filesystem;
+  auto& store = volum::content::GlobalContentStore();
+  const auto savedReg = store.reg();
+  const fs::path base = volum_test::ProcessTempRoot() / "volum-add-preset-on-disk";
+  std::error_code ec;
+  fs::remove_all(base, ec);
+  fs::create_directories(base, ec);
+  store.SetBaseDir(base);
+  store.reg() = {};
+  store.Save();
+  auto& hooks = volum::custom::PresetHooksByInstance();
+  const auto savedHooks = hooks;
+  hooks.clear();
+
+  const std::string owner = "test:add-preset-on-disk";
+  for (const char* name : {"Lead", "Crunch", "Clean"})
+  {
+    CAPTURE(name);
+    const int idx = volum::custom::AddPresetForOwner(owner, name);
+    REQUIRE(idx >= 0);
+    const auto names = volum::custom::PresetsForOwner(owner);
+    REQUIRE(idx < static_cast<int>(names.size()));
+    CHECK(names[static_cast<size_t>(idx)] == name);
+    CHECK_FALSE(volum::custom::PresetIdAtForOwner(owner, idx).empty());
+  }
+  CHECK(volum::custom::PresetsForOwner(owner).size() == 3);
+
+  hooks = savedHooks;
+  store.SetBaseDir({});
+  store.reg() = savedReg;
+  fs::remove_all(base, ec);
+}
+
+TEST_CASE("AddPreset keeps a de-duplicated name inside the dialog cap")
+{
+  volum::custom::SetActivePresetOwner("test:dedup-cap");
+  const std::string full(volum::custom::kMaxPresetNameLen, 'x');
+  const int a = volum::custom::AddPresetForOwner("test:dedup-cap", full);
+  const int b = volum::custom::AddPresetForOwner("test:dedup-cap", full);
+  REQUIRE(a == 0);
+  REQUIRE(b == 1);
+  const auto list = volum::custom::PresetsForOwner("test:dedup-cap");
+  CHECK(list[1].size() <= volum::custom::kMaxPresetNameLen);
+  CHECK(list[1].size() == volum::custom::kMaxPresetNameLen);
+  CHECK(list[1].substr(list[1].size() - 2) == " 2");
+  // The dialog seeds with the clamped name; it must still select Update.
+  CHECK(volum::name_dialog::Overwrites(list[1], list[1]));
+}
+
+TEST_CASE("AddPreset treats names that differ only by case as duplicates")
+{
+  volum::custom::SetActivePresetOwner("test:dedup-ci");
+  volum::custom::AddPresetForOwner("test:dedup-ci", "Lead");
+  volum::custom::AddPresetForOwner("test:dedup-ci", "lead");
+  const auto list = volum::custom::PresetsForOwner("test:dedup-ci");
+  REQUIRE(list.size() == 2);
+  CHECK(list[1] == "lead 2");
+}
+
+TEST_CASE("The focused custom amp keeps its identity when the library rows move")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  amps = {make("amp_a"), make("amp_b"), make("amp_c")};
+
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_c", 2) == 2);
+  // Another instance deleted the row above: the same amp is one row up.
+  amps = {make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_c", 2) == 1);
+  // A Pack Reset reordered the library and put a different amp at the old row.
+  amps = {make("amp_c"), make("amp_x"), make("amp_b")};
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == 2);
+  // Gone (another instance deleted it): -1, never a neighbour's row.
+  amps = {make("amp_c"), make("amp_x")};
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", 1) == -1);
+  CHECK(volum::custom::ReanchoredAmpIdx("", 1) == 1);
+  CHECK(volum::custom::ReanchoredAmpIdx("amp_b", -1) == -1);
+
+  amps = saved;
+}
+
+TEST_CASE("A save never writes the focused amp's scene under a neighbour after another instance deletes it")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  amps = {make("amp_a"), make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_b") == "amp_b");
+
+  // The focused amp is gone: the save has no id to write under, and never a neighbour's.
+  amps = {make("amp_a"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_b").empty());
+  CHECK(volum::custom::SceneIdForFocusedAmp("").empty());
+
+  amps = saved;
+}
+
+TEST_CASE("A save still lands on the focused amp when another amp's removal shifts its row")
+{
+  auto& amps = volum::custom::Store().reg().amps;
+  const auto saved = amps;
+  auto make = [](const char* id) {
+    volum::custom::CustomAmp a;
+    a.id = id;
+    a.name = id;
+    return a;
+  };
+  // amp_c was focused at row 2; another instance deletes amp_a, so it sits at row 1
+  // while this instance's cached row (2) is stale until the next idle.
+  amps = {make("amp_b"), make("amp_c")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_c") == "amp_c");
+  // Reordered the other way: still its own id, never a neighbour's.
+  amps = {make("amp_c"), make("amp_b")};
+  CHECK(volum::custom::SceneIdForFocusedAmp("amp_c") == "amp_c");
+
+  amps = saved;
 }

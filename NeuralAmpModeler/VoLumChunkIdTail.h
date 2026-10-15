@@ -27,9 +27,13 @@
 // strings and so never travelled in the binary per-amp block), plus the focused
 // custom MAIN / SUPPORT amp ids and the active preset id for the focused amp.
 
+#include <algorithm>
+#include <map>
 #include <string>
 
+#include "VoLumAmpSettingsJson.h" // CustomScenesToJson / CustomScenesFromJson
 #include "VoLumAmpeteCatalog.h"
+#include "VoLumMidi.h"
 
 #if __has_include(<nlohmann/json.hpp>)
   #include <nlohmann/json.hpp>
@@ -55,7 +59,16 @@ inline constexpr int kVoLumIdTailSentinel = 0x564C4944;
 // division) and the live-locked POST delay snapshot ("lockedPostDelay"). The
 // delay's other params still travel in the binary per-amp block; only the
 // appended sync/division pair needs the tail. Informational only.
-inline constexpr int kVoLumIdTailSchema = 5;
+// Schema 6 (1.3.0): MIDI per-instance input channel (`midiCh`, 0=Omni, 1..16),
+// Sound-recall CC (`midiRecallCc`, default 102, 0-119; additive, older files
+// default), PLAY/BUILD mode (`uiMode`), per-amp POST Chorus (`cho`) and the
+// live-locked POST chorus snapshot (`lockedPostChorus`), plus "customScenes",
+// the focused-custom-amp live knobs that used to live in the shared content
+// library and belong to the project now, the same way a factory amp's scene does.
+// Chorus EParams sit past the frozen 1.2.2 chunk prefix, so the tail is the ONLY
+// place its saved values travel - never as extra prefix doubles.
+// Informational only.
+inline constexpr int kVoLumIdTailSchema = 6;
 
 // PRE Pitch pedal per-amp settings. Carried in the JSON id tail (not the binary
 // per-amp block) so the byte-counted size detectors stay untouched. `present`
@@ -65,10 +78,10 @@ struct PitchTail
 {
   bool present = false;
   bool active = false;
-  int mode = 0; // 0=Transpose, 1=Octaver
-  double semitones = 0.0;
+  int mode = kVoLumPitchModeDefault; // 0=Transpose, 1=Octaver
+  double semitones = kVoLumPitchSemitonesDefault;
   double mix = 1.0;
-  double octDown = 0.0;
+  double octDown = 0.8;
   double octUp = 0.0;
   double dry = 1.0;
   int voicing = 1; // 0=Vintage, 1=Modern
@@ -110,11 +123,38 @@ struct DelayTail
   int division = kVoLumTremoloDivisionDefault;
 };
 
+// POST Chorus pedal per-amp settings. Chorus params live PAST the frozen 1.2.2
+// prefix, so unlike Delay/Reverb nothing about this pedal is in the binary block:
+// the whole knob row travels here. `present` distinguishes "written by a
+// chorus-aware build" from "absent" (older chunk -> chorus defaults = bypassed).
+struct ChorusTail
+{
+  bool present = false;
+  bool active = false;
+  int mode = kVoLumChorusModeDefault;
+  double rate = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].rate;
+  double depth = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].depth;
+  double tone = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].tone;
+  double width = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].width;
+  double mix = kVoLumChorusModeDefaults[kVoLumChorusModeDefault].mix;
+  // Per-mode knob memory (Classic / Warped / Clear / Ensemble).
+  ChorusModeSnapshot modes[kVoLumChorusModeCount] = {
+    kVoLumChorusModeDefaults[0],
+    kVoLumChorusModeDefaults[1],
+    kVoLumChorusModeDefaults[2],
+    kVoLumChorusModeDefaults[3],
+  };
+};
+
 struct ChunkIdTail
 {
+  int midiCh = 0; // per-instance MIDI channel (0=Omni, 1..16)
+  int midiRecallCc = kMidiRecallCcDefault; // per-instance Sound-recall CC (0-119)
   std::string customMainId; // focused custom MAIN amp id ("" = factory main)
   std::string customSupportId; // custom dual SUPPORT partner id ("" = factory/none)
   std::string activePresetId; // recalled preset id for the focused amp ("" = none)
+  std::string uiMode = "build"; // "play" | "build"; per plugin instance
+  int lastPlaySlot = -1; // last recalled PLAY / MIDI program number, or -1
   std::string perAmpIrId[kAmpCount]; // factory amp -> active custom IR cab id
   std::string perAmpSupportIrId[kAmpCount]; // factory amp -> SUPPORT lane custom IR id
   std::string perAmpSupportId[kAmpCount]; // factory amp -> custom support partner id
@@ -126,6 +166,15 @@ struct ChunkIdTail
   TremoloTail lockedPostTremolo; // live-locked POST tremolo snapshot (present iff POST locked + written)
   DelayTail perAmpDelay[kAmpCount]; // factory amp -> POST Delay tempo-sync settings
   DelayTail lockedPostDelay; // live-locked POST delay sync snapshot (present iff POST locked + written)
+  ChorusTail perAmpChorus[kAmpCount]; // factory amp -> POST Chorus pedal settings
+  ChorusTail lockedPostChorus; // live-locked POST chorus snapshot (present iff POST locked + written)
+  // 1.3.0: this instance's live scene per custom amp id. Previously shared through
+  // the content library, where one instance's catalog write moved another's knobs.
+  std::map<std::string, VoLumAmpSettings> customScenes;
+  // Decode-only presence bit. An explicitly stored empty object means "clear this
+  // instance's scenes"; a missing key in an older tail means "leave them alone".
+  // IdTailToJson deliberately ignores this bit, so it cannot change chunk bytes.
+  bool customScenesPresent = false;
 
   ChunkIdTail()
   {
@@ -159,13 +208,13 @@ inline PitchTail PitchTailFromJson(const nlohmann::json& j)
   if (j.contains("active"))
     p.active = boolean(j["active"], false);
   if (j.contains("mode"))
-    p.mode = integer(j["mode"], 0);
+    p.mode = integer(j["mode"], p.mode);
   if (j.contains("semi"))
-    p.semitones = num(j["semi"], 0.0);
+    p.semitones = num(j["semi"], p.semitones);
   if (j.contains("mix"))
     p.mix = num(j["mix"], 1.0);
   if (j.contains("octDn"))
-    p.octDown = num(j["octDn"], 0.0);
+    p.octDown = num(j["octDn"], 0.8);
   if (j.contains("octUp"))
     p.octUp = num(j["octUp"], 0.0);
   if (j.contains("dry"))
@@ -262,6 +311,113 @@ inline TremoloTail TremoloTailFromJson(const nlohmann::json& j)
   return t;
 }
 
+inline nlohmann::json ChorusTailToJson(const ChorusTail& c)
+{
+  nlohmann::json modes = nlohmann::json::array();
+  for (int i = 0; i < kVoLumChorusModeCount; ++i)
+    modes.push_back({{"rate", c.modes[i].rate},
+                     {"depth", c.modes[i].depth},
+                     {"tone", c.modes[i].tone},
+                     {"width", c.modes[i].width},
+                     {"mix", c.modes[i].mix}});
+  return nlohmann::json{{"active", c.active}, {"mode", c.mode},   {"rate", c.rate}, {"depth", c.depth},
+                        {"tone", c.tone},     {"width", c.width}, {"mix", c.mix},   {"modes", modes}};
+}
+
+inline ChorusTail ChorusTailFromJson(const nlohmann::json& j)
+{
+  ChorusTail c;
+  if (!j.is_object())
+    return c;
+  auto num = [](const nlohmann::json& v, double d) { return v.is_number() ? v.get<double>() : d; };
+  auto integer = [](const nlohmann::json& v, int d) { return v.is_number_integer() ? v.get<int>() : d; };
+  auto boolean = [](const nlohmann::json& v, bool d) { return v.is_boolean() ? v.get<bool>() : d; };
+  if (j.contains("active"))
+    c.active = boolean(j["active"], false);
+  if (j.contains("mode"))
+    c.mode = integer(j["mode"], kVoLumChorusModeDefault);
+  if (j.contains("rate"))
+    c.rate = num(j["rate"], c.rate);
+  if (j.contains("depth"))
+    c.depth = num(j["depth"], c.depth);
+  if (j.contains("tone"))
+    c.tone = num(j["tone"], c.tone);
+  if (j.contains("width"))
+    c.width = num(j["width"], c.width);
+  if (j.contains("mix"))
+    c.mix = num(j["mix"], c.mix);
+  if (j.contains("modes") && j["modes"].is_array())
+  {
+    const auto& arr = j["modes"];
+    for (int i = 0; i < kVoLumChorusModeCount && i < static_cast<int>(arr.size()); ++i)
+    {
+      const auto& m = arr[i];
+      if (!m.is_object())
+        continue;
+      if (m.contains("rate"))
+        c.modes[i].rate = num(m["rate"], c.modes[i].rate);
+      if (m.contains("depth"))
+        c.modes[i].depth = num(m["depth"], c.modes[i].depth);
+      if (m.contains("tone"))
+        c.modes[i].tone = num(m["tone"], c.modes[i].tone);
+      if (m.contains("width"))
+        c.modes[i].width = num(m["width"], c.modes[i].width);
+      if (m.contains("mix"))
+        c.modes[i].mix = num(m["mix"], c.modes[i].mix);
+    }
+  }
+  c.present = true;
+  return c;
+}
+
+// An absent pitch tail (pre-pitch chunk) leaves the scene's pitch fields alone.
+// A present one is applied as stored; only keys missing from it took the
+// PitchTail defaults in PitchTailFromJson.
+inline void ApplyPitchTailToSettings(const PitchTail& p, VoLumAmpSettings& s)
+{
+  if (!p.present)
+    return;
+  s.prePitchActive = p.active;
+  s.prePitchMode = std::clamp(p.mode, 0, kVoLumPitchModeCount - 1);
+  s.prePitchSemitones = std::clamp(p.semitones, -12.0, 7.0);
+  s.prePitchMix = std::clamp(p.mix, 0.0, 1.0);
+  s.prePitchOctDown = std::clamp(p.octDown, 0.0, 1.0);
+  s.prePitchOctUp = std::clamp(p.octUp, 0.0, 1.0);
+  s.prePitchDry = std::clamp(p.dry, 0.0, 1.0);
+  s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
+  s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
+  s.prePitchTransChar = std::clamp(p.transChar, 0, kVoLumPitchCharacterCount - 1);
+  for (int m = 0; m < kVoLumPitchModeCount; ++m)
+  {
+    s.prePitchModes[m].mix = std::clamp(p.modes[m].mix, 0.0, 1.0);
+    s.prePitchModes[m].dry = std::clamp(p.modes[m].dry, 0.0, 1.0);
+    s.prePitchModes[m].level = std::clamp(p.modes[m].level, -20.0, 20.0);
+    s.prePitchModes[m].voicing = std::clamp(p.modes[m].voicing, 0, 1);
+  }
+}
+
+// Older chunks omit `cho`. Overlaying that onto a live 1.3.0 instance must
+// force chorus off rather than leaving the current scene's chorus running.
+inline void ApplyChorusTailToSettings(const ChorusTail& c, VoLumAmpSettings& s)
+{
+  const ChorusTail src = c.present ? c : ChorusTail{};
+  s.postChorusActive = src.active;
+  s.postChorusMode = std::clamp(src.mode, 0, kVoLumChorusModeCount - 1);
+  s.postChorusRate = std::clamp(src.rate, 0.0, 1.0);
+  s.postChorusDepth = std::clamp(src.depth, 0.0, 1.0);
+  s.postChorusTone = std::clamp(src.tone, 0.0, 1.0);
+  s.postChorusWidth = std::clamp(src.width, 0.0, 1.0);
+  s.postChorusMix = std::clamp(src.mix, 0.0, 1.0);
+  for (int m = 0; m < kVoLumChorusModeCount; ++m)
+  {
+    s.postChorusModes[m].rate = std::clamp(src.modes[m].rate, 0.0, 1.0);
+    s.postChorusModes[m].depth = std::clamp(src.modes[m].depth, 0.0, 1.0);
+    s.postChorusModes[m].tone = std::clamp(src.modes[m].tone, 0.0, 1.0);
+    s.postChorusModes[m].width = std::clamp(src.modes[m].width, 0.0, 1.0);
+    s.postChorusModes[m].mix = std::clamp(src.modes[m].mix, 0.0, 1.0);
+  }
+}
+
 inline nlohmann::json DelayTailToJson(const DelayTail& d)
 {
   return nlohmann::json{{"sync", d.sync}, {"div", d.division}};
@@ -284,9 +440,13 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
 {
   nlohmann::json j;
   j["v"] = kVoLumIdTailSchema;
+  j["midiCh"] = std::clamp(t.midiCh, 0, 16);
+  j["midiRecallCc"] = ClampMidiRecallCc(t.midiRecallCc);
   j["customMainId"] = t.customMainId;
   j["customSupportId"] = t.customSupportId;
   j["activePresetId"] = t.activePresetId;
+  j["uiMode"] = t.uiMode == "play" ? "play" : "build";
+  j["lastPlaySlot"] = t.lastPlaySlot;
   nlohmann::json perAmp = nlohmann::json::array();
   for (int i = 0; i < kAmpCount; ++i)
   {
@@ -301,6 +461,8 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
       entry["trem"] = TremoloTailToJson(t.perAmpTremolo[i]);
     if (t.perAmpDelay[i].present)
       entry["dly"] = DelayTailToJson(t.perAmpDelay[i]);
+    if (t.perAmpChorus[i].present)
+      entry["cho"] = ChorusTailToJson(t.perAmpChorus[i]);
     perAmp.push_back(entry);
   }
   j["perAmp"] = perAmp;
@@ -310,6 +472,12 @@ inline nlohmann::json IdTailToJson(const ChunkIdTail& t)
     j["lockedPostTremolo"] = TremoloTailToJson(t.lockedPostTremolo);
   if (t.lockedPostDelay.present)
     j["lockedPostDelay"] = DelayTailToJson(t.lockedPostDelay);
+  if (t.lockedPostChorus.present)
+    j["lockedPostChorus"] = ChorusTailToJson(t.lockedPostChorus);
+  // Omitted entirely when this project never focused a custom amp, so a chunk
+  // written on factory amps is byte-identical to a 1.2.x one apart from the schema.
+  if (!t.customScenes.empty())
+    j["customScenes"] = CustomScenesToJson(t.customScenes);
   return j;
 }
 
@@ -320,13 +488,27 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
   ChunkIdTail t;
   if (!j.is_object())
     return t;
+  // Schema 6 introduced per-instance custom scenes. Its writer keeps omitting an
+  // empty object for byte compatibility, so schema >= 6 itself makes that empty
+  // map authoritative. Older tails with no key retain the instance's migration
+  // fallback.
+  if (j.contains("v") && j["v"].is_number_integer() && j["v"].get<int>() >= 6)
+    t.customScenesPresent = true;
   auto str = [](const nlohmann::json& v) { return v.is_string() ? v.get<std::string>() : std::string(); };
+  if (j.contains("midiCh") && j["midiCh"].is_number_integer())
+    t.midiCh = std::clamp(j["midiCh"].get<int>(), 0, 16);
+  if (j.contains("midiRecallCc") && j["midiRecallCc"].is_number_integer())
+    t.midiRecallCc = ClampMidiRecallCc(j["midiRecallCc"].get<int>());
   if (j.contains("customMainId"))
     t.customMainId = str(j["customMainId"]);
   if (j.contains("customSupportId"))
     t.customSupportId = str(j["customSupportId"]);
   if (j.contains("activePresetId"))
     t.activePresetId = str(j["activePresetId"]);
+  if (j.contains("uiMode"))
+    t.uiMode = str(j["uiMode"]) == "play" ? "play" : "build";
+  if (j.contains("lastPlaySlot") && j["lastPlaySlot"].is_number_integer())
+    t.lastPlaySlot = std::clamp(j["lastPlaySlot"].get<int>(), -1, 127);
   if (j.contains("perAmp") && j["perAmp"].is_array())
   {
     const auto& arr = j["perAmp"];
@@ -350,6 +532,8 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
         t.perAmpTremolo[i] = TremoloTailFromJson(arr[i]["trem"]);
       if (arr[i].contains("dly"))
         t.perAmpDelay[i] = DelayTailFromJson(arr[i]["dly"]);
+      if (arr[i].contains("cho"))
+        t.perAmpChorus[i] = ChorusTailFromJson(arr[i]["cho"]);
     }
   }
   if (j.contains("lockedPrePitch"))
@@ -358,6 +542,13 @@ inline ChunkIdTail IdTailFromJson(const nlohmann::json& j)
     t.lockedPostTremolo = TremoloTailFromJson(j["lockedPostTremolo"]);
   if (j.contains("lockedPostDelay"))
     t.lockedPostDelay = DelayTailFromJson(j["lockedPostDelay"]);
+  if (j.contains("lockedPostChorus"))
+    t.lockedPostChorus = ChorusTailFromJson(j["lockedPostChorus"]);
+  if (j.contains("customScenes"))
+  {
+    t.customScenesPresent = true;
+    t.customScenes = CustomScenesFromJson(j["customScenes"]);
+  }
   return t;
 }
 

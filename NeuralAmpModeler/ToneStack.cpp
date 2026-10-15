@@ -19,6 +19,13 @@ void dsp::tone_stack::BasicNamToneStack::Reset(const double sampleRate, const in
   SetParam("treble", mTrebleVal);
 }
 
+void dsp::tone_stack::BasicNamToneStack::Reserve(const int numChannels, const int numFrames)
+{
+  mToneBass.ReserveOutputs(numChannels, numFrames);
+  mToneMid.ReserveOutputs(numChannels, numFrames);
+  mToneTreble.ReserveOutputs(numChannels, numFrames);
+}
+
 void dsp::tone_stack::BasicNamToneStack::SetParam(const std::string name, const double val)
 {
   if (name == "bass")

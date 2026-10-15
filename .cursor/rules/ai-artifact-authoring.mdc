@@ -24,6 +24,8 @@ Rank by delivery reliability per token spent, not by what is easiest to write.
    known *before* any file is touched: shell syntax, git remote, branch flow,
    "you run the builds". Every line here is paid in every session.
 5. **`AGENTS.md`** - routing index and command list. No detailed guidance.
+6. **`CONTEXT.md`** - glossary of product nouns, created lazily when a term is
+   actually resolved. Never a spec, never file paths, never feature plans.
 
 ## Anti-patterns
 

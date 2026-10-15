@@ -1,7 +1,34 @@
 #pragma once
 
+#include <algorithm>
+
 namespace volum
 {
+
+// SUPPORT is processed beside MAIN, never instead of it: with MAIN missing (still
+// loading, or being repaired) the block is the silent fallback. The plan and the
+// host latency both ask this, so neither claims a lane that does not run.
+// A SUPPORT model counts only while the rig still selects it: a deselected partner
+// stays loaded until its removal is staged, and the audio path already ignores it.
+inline bool HaveSelectedSupportModel(bool supportSelected, bool supportLoaded)
+{
+  return supportSelected && supportLoaded;
+}
+
+inline bool SupportLaneRuns(bool dualAmpActive, bool haveMainModel, bool haveSupportModel)
+{
+  return dualAmpActive && haveMainModel && haveSupportModel;
+}
+
+// Amp part of the latency VoLum reports to the host.
+inline int AmpLatencySamples(bool haveMainModel, int mainLatency, bool dualAmpActive, bool haveSupportModel,
+                             int supportLatency)
+{
+  int latency = haveMainModel ? mainLatency : 0;
+  if (SupportLaneRuns(dualAmpActive, haveMainModel, haveSupportModel))
+    latency = std::max(latency, supportLatency);
+  return latency;
+}
 
 struct ProcessingPlan
 {
@@ -17,6 +44,7 @@ struct ProcessingPlan
   bool runSupportToneStack = false;
   bool runIR = false;
   bool runSupportIR = false;
+  bool runChorus = false;
   bool runDelay = false;
   bool runReverb = false;
   bool runTremolo = false;
@@ -26,10 +54,10 @@ struct ProcessingPlan
 inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActive, bool toneStackActive, bool irActive,
                                          bool haveIR, bool preCompActive, const bool preNamActive[2],
                                          const bool havePreNam[2], bool delayActive, bool reverbActive,
-                                         bool tunerActive, bool dualAmpActive = false,
-                                         bool haveSupportModel = false, bool supportToneStackActive = false,
-                                         bool supportIrActive = false, bool haveSupportIR = false,
-                                         bool prePitchActive = false, bool tremoloActive = false)
+                                         bool tunerActive, bool dualAmpActive = false, bool haveSupportModel = false,
+                                         bool supportToneStackActive = false, bool supportIrActive = false,
+                                         bool haveSupportIR = false, bool prePitchActive = false,
+                                         bool tremoloActive = false, bool chorusActive = false)
 {
   ProcessingPlan plan;
   plan.runPrePitch = prePitchActive;
@@ -38,13 +66,14 @@ inline ProcessingPlan MakeProcessingPlan(bool haveMainModel, bool noiseGateActiv
   plan.runPreNam[1] = preNamActive[1] && havePreNam[1];
   plan.runNoiseGate = noiseGateActive;
   plan.runMainModel = haveMainModel;
-  plan.runSupportModel = dualAmpActive && haveSupportModel;
+  plan.runSupportModel = SupportLaneRuns(dualAmpActive, haveMainModel, haveSupportModel);
   plan.runDualAmp = haveMainModel && plan.runSupportModel;
   plan.runFallback = !haveMainModel;
   plan.runToneStack = haveMainModel && toneStackActive;
   plan.runSupportToneStack = plan.runSupportModel && supportToneStackActive;
   plan.runIR = haveMainModel && irActive && haveIR;
   plan.runSupportIR = plan.runSupportModel && supportIrActive && haveSupportIR;
+  plan.runChorus = (haveMainModel || plan.runSupportModel) && chorusActive;
   plan.runDelay = (haveMainModel || plan.runSupportModel) && delayActive;
   plan.runReverb = (haveMainModel || plan.runSupportModel) && reverbActive;
   plan.runTremolo = (haveMainModel || plan.runSupportModel) && tremoloActive;

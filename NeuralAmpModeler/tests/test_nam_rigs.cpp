@@ -1,4 +1,5 @@
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -57,7 +58,7 @@ TEST_CASE("Load Ampete NAM via nam::get_dsp(path)")
 TEST_CASE("Custom NAM transaction accepts a capture through the production parser")
 {
   namespace fs = std::filesystem;
-  const fs::path base = fs::temp_directory_path() / "volum-custom-nam-parser-test";
+  const fs::path base = volum_test::ProcessTempRoot() / "volum-custom-nam-parser-test";
   std::error_code ec;
   fs::remove_all(base, ec);
   volum::content::ContentStore store(base);

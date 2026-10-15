@@ -124,6 +124,7 @@ if [[ -d "$RIGS_SRC" ]]; then
     mkdir -p "$RIGS_TMP/VoLumRigs/$dirname"
     cp "$ampdir"*.nam "$RIGS_TMP/VoLumRigs/$dirname/" 2>/dev/null || true
   done
+  cp "$RIGS_SRC/factory-presets.json" "$RIGS_TMP/VoLumRigs/" || exit 1
   pkgbuild --root "$RIGS_TMP" --identifier "com.Lum.rigs.pkg.${PRODUCT_NAME}" --version "$VERSION" --install-location "/Library/Application Support/${PRODUCT_NAME}" "${PKG_DIR}/${PRODUCT_NAME}_RIGS.pkg"
   rm -rf "$RIGS_TMP"
 else

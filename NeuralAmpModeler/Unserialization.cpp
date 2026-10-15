@@ -546,19 +546,12 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
 
   if (version >= volum::ChunkVersion(1, 2, 0))
   {
-    // Current layout. SerializeParams() writes ALL kNumParams param doubles, so
-    // the reader MUST consume exactly that many to keep `pos` aligned for the
-    // per-amp block that follows. Earlier releases used a hand-maintained name
-    // list (_GetConfigFrom_0_9_0, 71 entries ending at SupportAmpPan). 1.2.0
-    // appended ~22 params (kSupportIRToggle, PRE Pitch, Tremolo, Delay sync/div)
-    // WITHOUT extending that list, so the reader stopped 22 doubles short and the
-    // per-amp selection/scene then read raw param bytes as garbage -> VST3/AU
-    // "state resets to default on every load" (standalone was unaffected: it
-    // restores from volum-settings.json in the ctor, not from the DAW chunk).
-    // Read by LIVE param name so this reader can never drift from the enum again.
+    // Frozen 1.2.2 prefix (93 doubles), not live kNumParams. Extra EParams are
+    // restored from id-tail JSON after this read. A 1.2.2 plugin opening a
+    // later save therefore still lands on the per-amp tail.
     std::vector<std::string> paramNames;
-    paramNames.reserve(kNumParams);
-    for (int i = 0; i < kNumParams; ++i)
+    paramNames.reserve(kVoLumChunkParamPrefixCount);
+    for (int i = 0; i < kVoLumChunkParamPrefixCount; ++i)
       paramNames.push_back(GetParam(i)->GetName());
     pos = _UnserializePathsAndExpectedKeys(chunk, pos, config, paramNames);
   }
@@ -612,7 +605,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     assert(false);
   }
   VOLUM_LOG("chunk", "decoded state written by version " + versionStr + " (" + std::to_string(chunk.Size())
-                       + " bytes, this build reads " + std::to_string(kNumParams) + " params)");
+                       + " bytes, this build reads " + std::to_string(kVoLumChunkParamPrefixCount)
+                       + " prefix params, kNumParams=" + std::to_string(kNumParams) + ")");
   // v0.9.0 migration: applied for ALL pre-0.9.0 chunks regardless of which
   // _GetConfigFrom_X_X_X path produced the dict above. Each pre-0.9.0 loader's per-version
   // _UpdateConfigFrom only chains backwards (predecessor), so this single call is what
@@ -713,8 +707,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // detect that case and skip the snapshot read (live PRE/POST then come up
     // empty exactly like before — pre-existing limitation, not a new regression).
     if (haveSelection && pos >= 0
-        && volum::ChunkHasPrePostLockSnapshots(remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked,
-                                               pendingPostLocked))
+        && volum::ChunkHasPrePostLockSnapshots(
+          remainingPerAmpBytes, volum::kAmpCount, pendingPreLocked, pendingPostLocked))
     {
       pos = volum::GetPrePostLockSnapshots(
         chunk, pos, pendingPreLocked, pendingPostLocked, pendingLockedPre, pendingLockedPost);
@@ -751,25 +745,7 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     {
       pos = idTailPos;
       auto applyPitchTail = [](const volum::PitchTail& p, volum::VoLumAmpSettings& s) {
-        if (!p.present)
-          return;
-        s.prePitchActive = p.active;
-        s.prePitchMode = std::clamp(p.mode, 0, volum::kVoLumPitchModeCount - 1);
-        s.prePitchSemitones = std::clamp(p.semitones, -12.0, 7.0);
-        s.prePitchMix = std::clamp(p.mix, 0.0, 1.0);
-        s.prePitchOctDown = std::clamp(p.octDown, 0.0, 1.0);
-        s.prePitchOctUp = std::clamp(p.octUp, 0.0, 1.0);
-        s.prePitchDry = std::clamp(p.dry, 0.0, 1.0);
-        s.prePitchVoicing = std::clamp(p.voicing, 0, 1);
-        s.prePitchLevel = std::clamp(p.level, -20.0, 20.0);
-        s.prePitchTransChar = std::clamp(p.transChar, 0, volum::kVoLumPitchCharacterCount - 1);
-        for (int m = 0; m < volum::kVoLumPitchModeCount; ++m)
-        {
-          s.prePitchModes[m].mix = std::clamp(p.modes[m].mix, 0.0, 1.0);
-          s.prePitchModes[m].dry = std::clamp(p.modes[m].dry, 0.0, 1.0);
-          s.prePitchModes[m].level = std::clamp(p.modes[m].level, -20.0, 20.0);
-          s.prePitchModes[m].voicing = std::clamp(p.modes[m].voicing, 0, 1);
-        }
+        volum::ApplyPitchTailToSettings(p, s);
       };
       auto applyDelayTail = [](const volum::DelayTail& d, volum::VoLumAmpSettings& s) {
         if (!d.present)
@@ -798,6 +774,9 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
           s.postTremoloModes[m].crossover = std::clamp(t.modes[m].crossover, 200.0, 2000.0);
         }
       };
+      auto applyChorusTail = [](const volum::ChorusTail& c, volum::VoLumAmpSettings& s) {
+        volum::ApplyChorusTailToSettings(c, s);
+      };
       for (int i = 0; i < volum::kAmpCount; ++i)
       {
         mVolumAmpSettings[i].activeIrId = idTail.perAmpIrId[i];
@@ -808,11 +787,23 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
         applyPitchTail(idTail.perAmpPitch[i], mVolumAmpSettings[i]);
         applyTremoloTail(idTail.perAmpTremolo[i], mVolumAmpSettings[i]);
         applyDelayTail(idTail.perAmpDelay[i], mVolumAmpSettings[i]);
+        applyChorusTail(idTail.perAmpChorus[i], mVolumAmpSettings[i]);
       }
       applyPitchTail(idTail.lockedPrePitch, mVolumLiveLockedPre);
       applyTremoloTail(idTail.lockedPostTremolo, mVolumLiveLockedPost);
       applyDelayTail(idTail.lockedPostDelay, mVolumLiveLockedPost);
+      mVolumMidiChannel.store(idTail.midiCh);
+      mVolumMidiRecallCc.store(idTail.midiRecallCc);
+      applyChorusTail(idTail.lockedPostChorus, mVolumLiveLockedPost);
       mVolumActivePresetId = idTail.activePresetId;
+      mVolumUiMode = volum::UiModeFromString(idTail.uiMode);
+      // 1.3.0: the project's own custom-amp scenes. Installed before the custom
+      // re-focus below, which reads them through _VolumCustomScene. An older chunk
+      // has none, and the first focus then migrates whatever the pre-1.3.0 shared
+      // library still holds for that amp. A current-schema tail with an empty map is
+      // authoritative and clears scenes left over in this instance.
+      if (idTail.customScenesPresent)
+        mVolumCustomScenes = idTail.customScenes;
     }
 
     // Scoped rather than assigned: UnserializeState now catches exceptions instead
@@ -820,6 +811,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // leave the flag false for the life of the instance. That silently switches off
     // SUPPORT/PRE model loading, latency reporting, settings persistence and
     // preset-dirty tracking - a quieter failure than the crash it replaced.
+    //
+    // The binary per-amp block always describes a factory amp, so the previous
+    // state's custom focus is dropped first; a valid id-tail custom selection is
+    // re-focused below.
+    mVolumCustomMainIdx = -1;
     {
       struct InitCompleteScope
       {
@@ -837,27 +833,39 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       mVolumNeedsLoad.store(true);
     }
 
+    // Seed the deferred editor-open restore with the CHUNK's selection so
+    // OnUIOpen -> _VolumRestoreSessionSelection re-applies THIS project's custom
+    // amp/preset to the freshly built UI. The constructor already primed these
+    // members from volum-settings.json (the machine-global last pick); for a
+    // plugin that source is wrong, so the chunk wins - even when empty (a
+    // factory-amp project must not resurrect the settings' custom amp). That holds
+    // without an id tail too: a chunk that predates it is a factory-amp project.
+    // Resetting the one-shot guard lets the restore run again after this state
+    // load. This fixes "VST3/AU reopen drops the focused custom amp" (the immediate
+    // select below only reaches the UI when an editor already exists at load time).
+    const volum::RestoreSelection chunkSelection =
+      haveIdTail ? volum::RestoreSelection{idTail.customMainId, idTail.activePresetId} : volum::RestoreSelection{};
+    const volum::RestoreSelection restored = volum::ResolveRestoreSelection(
+      /*loadedFromChunk=*/true, chunkSelection, {mVolumRestoreCustomMainId, mVolumRestorePresetId});
+    mVolumRestoreCustomMainId = restored.customMainId;
+    mVolumRestorePresetId = restored.activePresetId;
+    mVolumDidRestorePresetSelection = false;
+
     // After base restore, re-focus a custom MAIN amp recorded in the id tail so
     // its scene + cabs + .nam load (the binary per-amp array only covers factory
     // amps). Custom support is resolved by _VolumApplyAmpSettings from the
     // restored scene's supportCustomId.
-    if (haveIdTail)
+    if (!haveIdTail)
     {
-      // Seed the deferred editor-open restore with the CHUNK's selection so
-      // OnUIOpen -> _VolumRestoreSessionSelection re-applies THIS project's custom
-      // amp/preset to the freshly built UI. The constructor already primed these
-      // members from volum-settings.json (the machine-global last pick); for a
-      // plugin that source is wrong, so the chunk wins - even when empty (a
-      // factory-amp project must not resurrect the settings' custom amp). Resetting
-      // the one-shot guard lets the restore run again after this state load. This
-      // fixes "VST3/AU reopen drops the focused custom amp" (the immediate select
-      // below only reaches the UI when an editor already exists at load time).
-      const volum::RestoreSelection restored = volum::ResolveRestoreSelection(
-        /*loadedFromChunk=*/true, {idTail.customMainId, idTail.activePresetId},
-        {mVolumRestoreCustomMainId, mVolumRestorePresetId});
-      mVolumRestoreCustomMainId = restored.customMainId;
-      mVolumRestorePresetId = restored.activePresetId;
-      mVolumDidRestorePresetSelection = false;
+      // Presets did not exist in this chunk schema. Do not leave a custom amp's
+      // label/baseline behind after the authoritative factory selection lands.
+      mVolumActivePresetId.clear();
+      mVolumHasRecalledSnapshot = false;
+      // Neither did PLAY: the project reopens where it was made.
+      mVolumUiMode = volum::UiMode::Build;
+    }
+    else
+    {
       VOLUM_LOG("chunk", "id tail: customMain='" + restored.customMainId + "' preset='" + restored.activePresetId
                            + "' ampIdx=" + std::to_string(mVolumAmpIdx));
 
@@ -871,19 +879,30 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
       // reopen as dirty (mirrors the standalone session-restore fix).
       if (!idTail.activePresetId.empty())
       {
-        const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
-        auto it = banks.find(_VolumActiveOwnerKey());
-        if (it != banks.end())
-          for (const auto& pr : it->second)
-            if (pr.id == idTail.activePresetId)
-            {
-              mVolumActivePresetId = pr.id;
-              mVolumRecalledSnapshot = pr.settings;
-              mVolumHasRecalledSnapshot = true;
-              _VolumRememberActivePreset();
-              break;
-            }
+        if (const auto* factory = volum::FindFactoryPresetById(mVolumFactoryPresets, idTail.activePresetId))
+        {
+          mVolumActivePresetId = factory->id;
+          mVolumRecalledSnapshot = factory->settings;
+          mVolumHasRecalledSnapshot = true;
+          _VolumRememberActivePreset();
+        }
+        else
+        {
+          const auto& banks = volum::content::GlobalContentStore().reg().presetBanks;
+          auto it = banks.find(_VolumActiveOwnerKey());
+          if (it != banks.end())
+            for (const auto& pr : it->second)
+              if (pr.id == idTail.activePresetId)
+              {
+                mVolumActivePresetId = pr.id;
+                mVolumRecalledSnapshot = pr.settings;
+                mVolumHasRecalledSnapshot = true;
+                _VolumRememberActivePreset();
+                break;
+              }
+        }
       }
+      mVolumLastRecalledPlaySlot = idTail.lastPlaySlot;
       _VolumRefreshPresetBar();
     }
   }
@@ -892,12 +911,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   // window up, undo, host preset switching - and that path never reached the applier,
   // so the cab row kept describing the state the chunk just replaced.
   //
-  // Requested rather than run here. This function executes on whichever thread the
-  // host chose to restore state on, and the applier walks the live IGraphics tree:
-  // it mutates the amp list, hero, cab row and channel stepper, and can rescan a rig
-  // directory into shared channel vectors. Doing that while the editor draws or
-  // handles a click on the UI thread is a data race. OnIdle is this plug-in's
-  // UI-thread pump, and OnUIOpen runs the same applier once the controls exist.
+  // The rig above is already applied; only the controls are left. UnserializeState
+  // runs this under the host restore gate, so every applier skipped the live
+  // IGraphics tree (amp list, hero, cab row, channel stepper, preset bar) on the
+  // host's thread. Flag a resync instead of touching it: OnIdle is this plug-in's
+  // UI-thread pump, and OnUIOpen re-derives the same controls once they exist.
   mVolumUiSyncPending.store(true);
 
   return pos;
@@ -917,5 +935,16 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
     return -1;
   }
   _UnserializeApplyConfig(config);
+  // Headerless NAM-era chunks carry parameters only, so there is no per-amp rig block
+  // to apply. They still authoritatively mean "no custom VoLum amp": a chunk this
+  // old must not inherit volum-settings.json's machine-global custom amp.
+  mVolumCustomMainIdx = -1;
+  mVolumRestoreCustomMainId.clear();
+  mVolumRestorePresetId.clear();
+  mVolumDidRestorePresetSelection = false;
+  mVolumActivePresetId.clear();
+  mVolumHasRecalledSnapshot = false;
+  mVolumUiMode = volum::UiMode::Build;
+  mVolumUiSyncPending.store(true);
   return pos;
 }

@@ -14,7 +14,8 @@
 //              _A_baseline / _B_current pairs for direct comparison.
 //
 // Everything is rendered 100% wet and mono at 48 kHz: dry blend would mask exactly
-// the artifacts you are trying to hear.
+// the artifacts you are trying to hear. The one exception, OCTdefault, is the Octaver at
+// its factory settings (dry included), meant to be fed into an amp capture.
 //
 // Usage: driven by NeuralAmpModeler/scripts/pitch-ab-render-win.ps1. Run directly as
 //   volum_pitch_ab.exe <outDir> [inputWav]
@@ -115,9 +116,10 @@ void WriteWav(const std::string& name, const std::vector<double>& x)
 
 // ---------- synthetic sources ----------
 
-void AddPluck(std::vector<double>& v, double f0, double amp, double tau, size_t start)
+// B = string stiffness (inharmonicity; grows with fret height), vibCents = 5.5 Hz vibrato depth.
+void AddPluck(std::vector<double>& v, double f0, double amp, double tau, size_t start, double B = 0.0004,
+              double vibCents = 0.0)
 {
-  const double B = 0.0004; // steel-string inharmonicity
   for (int h = 1; h <= 16; ++h)
   {
     const double fh = f0 * h * std::sqrt(1.0 + B * h * h);
@@ -125,11 +127,13 @@ void AddPluck(std::vector<double>& v, double f0, double amp, double tau, size_t 
       break;
     const double a = amp / h;
     const double hTau = tau / (1.0 + 0.6 * (h - 1));
-    const double phase = 0.37 * h + 0.11 * f0;
+    double ph = 0.37 * h + 0.11 * f0;
     for (size_t i = start; i < v.size(); ++i)
     {
       const double t = static_cast<double>(i - start) / kSR;
-      v[i] += a * std::exp(-t / hTau) * std::sin(2.0 * kPi * fh * t + phase);
+      const double vib = vibCents == 0.0 ? 1.0 : std::pow(2.0, vibCents / 1200.0 * std::sin(2.0 * kPi * 5.5 * t));
+      ph += 2.0 * kPi * fh * vib / kSR;
+      v[i] += a * std::exp(-t / hTau) * std::sin(ph);
     }
   }
 }
@@ -148,16 +152,40 @@ void Normalize(std::vector<double>& v, double peak)
 // Templated on the engine so the current tree and a baseline revision - which live in
 // different namespaces - go through identical code. Anything else invites an
 // accidental difference in the harness being mistaken for a difference in the engine.
-template <typename PitchT>
-std::vector<double> Render(const std::vector<double>& in, typename PitchT::Mode mode, double semitones,
-                           typename PitchT::Character character)
+enum class JobMode
 {
+  Transpose,
+  Octaver
+};
+enum class JobChar
+{
+  Drop,
+  Instant,
+  Poly
+};
+
+struct Job
+{
+  std::string label;
+  JobMode mode;
+  double semitones;
+  JobChar character; // Transpose only; the Octaver always runs DROP voices
+  double octDown = 0.0;
+  double octUp = 0.0;
+  double dry = 0.0; // Octaver dry. 0 keeps the render fully wet so the dry cannot mask an artifact.
+};
+
+template <typename PitchT>
+std::vector<double> Render(const std::vector<double>& in, const Job& job)
+{
+  using C = typename PitchT::Character;
+  const auto mode = job.mode == JobMode::Octaver ? PitchT::Mode::Octaver : PitchT::Mode::Transpose;
+  const C character =
+    job.character == JobChar::Drop ? C::Drop : (job.character == JobChar::Instant ? C::Instant : C::Poly);
   PitchT pitch;
   pitch.Configure(kSR, static_cast<int>(kBlock));
-  const double octDown = (mode == PitchT::Mode::Octaver) ? 1.0 : 0.0;
-  const double octUp = 0.0;
-  // mix = 1.0: fully wet. Any dry blend hides the artifact under the clean signal.
-  pitch.SetParams(mode, semitones, 1.0, octDown, octUp, 1.0, PitchT::Voicing::Modern, 0.0, character);
+  // Transpose mix = 1.0: fully wet. Any dry blend hides the artifact under the clean signal.
+  pitch.SetParams(mode, job.semitones, 1.0, job.octDown, job.octUp, job.dry, PitchT::Voicing::Modern, 0.0, character);
   pitch.Reset();
 
   std::vector<double> out;
@@ -173,13 +201,6 @@ std::vector<double> Render(const std::vector<double>& in, typename PitchT::Mode 
   }
   return out;
 }
-
-struct Job
-{
-  std::string label;
-  bool octaver;
-  double semitones;
-};
 
 } // namespace
 
@@ -225,12 +246,35 @@ int main(int argc, char** argv)
     Normalize(v, 0.5);
     sources.emplace_back("chordE", std::move(v));
   }
+  // Upper-fret lick on the plain high E (12th-19th fret, stiffness of a fretted plain string), the
+  // last note held with vibrato: where the pitch tracker used to fall off its 600 Hz ceiling.
+  {
+    const double notes[6] = {659.26, 739.99, 880.00, 987.77, 880.00, 1174.66};
+    std::vector<double> v(static_cast<size_t>(3.4 * kSR), 0.0);
+    for (int k = 0; k < 5; ++k)
+      AddPluck(v, notes[k], 1.0, 0.8, static_cast<size_t>((0.05 + 0.35 * k) * kSR), 0.0004);
+    AddPluck(v, notes[5], 1.0, 1.2, static_cast<size_t>(1.85 * kSR), 0.0006, 30.0);
+    Normalize(v, 0.5);
+    sources.emplace_back("highlick", std::move(v));
+  }
 
   // Transpose is limited to -12..+7 by kPrePitchSemitones in NeuralAmpModeler.cpp;
   // rendering outside that range would be judging sounds no user can dial in.
-  const std::vector<Job> jobs = {{"POLY-12", false, -12.0}, {"POLY-07", false, -7.0}, {"POLY-05", false, -5.0},
-                                 {"POLY+02", false, 2.0},   {"POLY+05", false, 5.0},  {"POLY+07", false, 7.0},
-                                 {"OCTdn", true, 0.0}};
+  const std::vector<Job> jobs = {
+    {"POLY-12", JobMode::Transpose, -12.0, JobChar::Poly},
+    {"POLY-07", JobMode::Transpose, -7.0, JobChar::Poly},
+    {"POLY-05", JobMode::Transpose, -5.0, JobChar::Poly},
+    {"POLY+02", JobMode::Transpose, 2.0, JobChar::Poly},
+    {"POLY+05", JobMode::Transpose, 5.0, JobChar::Poly},
+    {"POLY+07", JobMode::Transpose, 7.0, JobChar::Poly},
+    {"INST-12", JobMode::Transpose, -12.0, JobChar::Instant},
+    {"INST+07", JobMode::Transpose, 7.0, JobChar::Instant},
+    {"DROP-12", JobMode::Transpose, -12.0, JobChar::Drop},
+    {"OCTdn", JobMode::Octaver, 0.0, JobChar::Drop, 1.0, 0.0, 0.0},
+    {"OCTup", JobMode::Octaver, 0.0, JobChar::Drop, 0.0, 1.0, 0.0},
+    // Factory defaults, dry included: what a player hears into the amp.
+    {"OCTdefault", JobMode::Octaver, 0.0, JobChar::Drop, 0.8, 0.0, 1.0},
+  };
 
   using Pitch = dsp::effect::VoLumPitch;
 #ifdef VOLUM_PITCH_AB_BASELINE
@@ -245,13 +289,9 @@ int main(int argc, char** argv)
     WriteWav(src.first + "_00dry", src.second);
     for (const Job& job : jobs)
     {
-      const auto mode = job.octaver ? Pitch::Mode::Octaver : Pitch::Mode::Transpose;
-      const auto character = job.octaver ? Pitch::Character::Drop : Pitch::Character::Poly;
-      const std::vector<double> cur = Render<Pitch>(src.second, mode, job.semitones, character);
+      const std::vector<double> cur = Render<Pitch>(src.second, job);
 #ifdef VOLUM_PITCH_AB_BASELINE
-      const auto bMode = job.octaver ? Base::Mode::Octaver : Base::Mode::Transpose;
-      const auto bChar = job.octaver ? Base::Character::Drop : Base::Character::Poly;
-      WriteWav(src.first + "_" + job.label + "_A_baseline", Render<Base>(src.second, bMode, job.semitones, bChar));
+      WriteWav(src.first + "_" + job.label + "_A_baseline", Render<Base>(src.second, job));
       WriteWav(src.first + "_" + job.label + "_B_current", cur);
 #else
       WriteWav(src.first + "_" + job.label, cur);

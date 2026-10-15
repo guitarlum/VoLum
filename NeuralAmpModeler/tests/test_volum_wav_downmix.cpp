@@ -3,10 +3,12 @@
 // must accept them (averaging channels) instead of rejecting with ERROR_NOT_MONO.
 
 #include "third_party/doctest.h"
+#include "VoLumTestTempDir.h"
 
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <vector>
 
 #include "../../AudioDSPTools/dsp/wav.h"
@@ -15,7 +17,7 @@ namespace
 {
 std::filesystem::path TestDir()
 {
-  auto root = std::filesystem::temp_directory_path() / "volum-wav-downmix-tests";
+  auto root = volum_test::ProcessTempRoot() / "volum-wav-downmix-tests";
   std::error_code ec;
   std::filesystem::create_directories(root, ec);
   return root;
@@ -96,4 +98,43 @@ TEST_CASE("Mono WAV is unchanged by the downmix path")
   CHECK(sampleRate == doctest::Approx(44100.0));
   CHECK(audio[0] == doctest::Approx(0.5).epsilon(0.01));
   CHECK(audio[1] == doctest::Approx(-0.5).epsilon(0.01));
+}
+
+TEST_CASE("WAV loader opens a UTF-8 path with non-ASCII directory names")
+{
+  // AudioDSPTools #25 / v0.1.2: ifstream(const char*) uses the ANSI code page on
+  // Windows, so a UTF-8 IR path fails to open. Load() must take a UTF-8 char*
+  // and open via filesystem::path. This is also the VoLum IR-load gate:
+  // ImpulseResponse and _StageIR pass that same UTF-8 char* through.
+#ifdef _WIN32
+  const auto emojiDir = std::filesystem::path(L"volum-ir-\U0001F3B8");
+#else
+  const auto emojiDir = std::filesystem::path("volum-ir-\xF0\x9F\x8E\xB8");
+#endif
+  const auto root = TestDir() / emojiDir;
+  std::error_code ec;
+  std::filesystem::create_directories(root, ec);
+  REQUIRE_FALSE(ec);
+
+  const std::vector<std::int16_t> interleaved = {16384};
+  const auto asciiPath = WritePcm16Wav("unicode-src.wav", 1, 48000, interleaved);
+  const auto unicodePath = root / "ir.wav";
+  std::filesystem::copy_file(asciiPath, unicodePath, std::filesystem::copy_options::overwrite_existing, ec);
+  REQUIRE_FALSE(ec);
+
+  const auto utf8 = [](const std::filesystem::path& p) {
+    const auto u8 = p.u8string();
+    return std::string(u8.begin(), u8.end());
+  }(unicodePath);
+
+  std::vector<float> audio;
+  double sampleRate = 0.0;
+  const auto rc = dsp::wav::Load(utf8.c_str(), audio, sampleRate);
+
+  std::filesystem::remove_all(root, ec);
+
+  REQUIRE(rc == dsp::wav::LoadReturnCode::SUCCESS);
+  REQUIRE(audio.size() == 1);
+  CHECK(sampleRate == doctest::Approx(48000.0));
+  CHECK(audio[0] == doctest::Approx(0.5).epsilon(0.01));
 }

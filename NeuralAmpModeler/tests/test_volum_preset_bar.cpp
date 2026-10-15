@@ -1,5 +1,7 @@
 #include "third_party/doctest.h"
 
+#include "VoLumAmpSettingsJson.h"
+#include "VoLumPlayModel.h"
 #include "VoLumPresetStep.h"
 
 #include <initializer_list>
@@ -70,4 +72,22 @@ TEST_CASE("Stepping stays in range for every start, direction and bank size")
       }
     }
   }
+}
+
+TEST_CASE("SetList must preserve dirty so deleting the selected User preset keeps (unsaved)")
+{
+  REQUIRE(volum::PresetBarSetListPreservesDirty());
+}
+
+TEST_CASE("Preset bar recomputes dirty even when nothing is selected")
+{
+  // After Manage-delete: Forget clears the id, SetList blanks the bar, and the
+  // old Refresh skipped recompute because no row was selected. Default then
+  // discarded the live sound the confirm promised to keep.
+  REQUIRE(volum::PresetBarNeedsDirtyRecompute(false));
+  REQUIRE(volum::PresetBarNeedsDirtyRecompute(true));
+
+  volum::VoLumAmpSettings live;
+  live.toneBass = 8.0;
+  REQUIRE(volum::LivePresetDirty(false, live, {}));
 }

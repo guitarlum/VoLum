@@ -1,0 +1,183 @@
+#include "third_party/doctest.h"
+
+#include "../VoLumTextFit.h"
+
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace
+{
+std::string ReadPluginText(const char* name)
+{
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path() / name;
+  std::ifstream in(path, std::ios::binary);
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+// Stand-in for MeasureText: 6 units per byte, so a width limit trims a known
+// number of bytes. Counts every call.
+struct CountingMeasure
+{
+  int calls = 0;
+  float operator()(const char* s)
+  {
+    ++calls;
+    return 6.f * static_cast<float>(std::string(s).size());
+  }
+};
+
+// FitTextToWidth's loop as it was before the memo (VoLumColorHelpers.h at
+// 837eb3b1), kept as the oracle for the shared helper.
+template <typename Measure>
+std::string OldFitTextToWidth(const char* s, float maxW, Measure&& measure)
+{
+  if (!s || !*s)
+    return "";
+  std::string str = s;
+  if (measure(str.c_str()) <= maxW)
+    return str;
+  while (str.size() > 1)
+  {
+    str.pop_back();
+    while (!str.empty() && (static_cast<unsigned char>(str.back()) & 0xC0) == 0x80)
+      str.pop_back();
+    const std::string cand = str + "\xE2\x80\xA6";
+    if (measure(cand.c_str()) <= maxW)
+      return cand;
+  }
+  return str + "\xE2\x80\xA6";
+}
+
+volum::textfit::FitStyle Style(float maxW, float size = 17.f, const char* font = "Poiret-One", float scale = 1.f)
+{
+  volum::textfit::FitStyle st;
+  st.font = font;
+  st.size = size;
+  st.maxW = maxW;
+  st.scale = scale;
+  return st;
+}
+} // namespace
+
+TEST_CASE("Text fit: shared trim loop returns what FitTextToWidth returned")
+{
+  const std::vector<std::string> texts = {"", "Clean", "Crunch Rhythm With The Long Lead Channel",
+                                          "Caf\xC3\xA9 \xE2\x80\x94 Sm\xC3\xB6rg\xC3\xA5sbord Lead", "x"};
+  for (const auto& t : texts)
+    for (float w : {0.f, 6.f, 20.f, 60.f, 105.f, 400.f})
+    {
+      CountingMeasure a, b;
+      INFO(t << " @ " << w);
+      CHECK(volum::textfit::Fit(t.c_str(), w, a) == OldFitTextToWidth(t.c_str(), w, b));
+      CHECK(a.calls == b.calls);
+    }
+  CountingMeasure m;
+  CHECK(volum::textfit::Fit(nullptr, 50.f, m).empty());
+  CHECK(m.calls == 0);
+}
+
+TEST_CASE("Text fit memo: same inputs do not re-measure; any key change does")
+{
+  const char* name = "Crunch Rhythm With The Long Lead Channel";
+  volum::textfit::Memo memo;
+  CountingMeasure m;
+
+  const std::string first = memo.Get(name, Style(105.f), m);
+  const int measuredOnce = m.calls;
+  CHECK(measuredOnce > 1); // the name overflows, so the trim loop ran
+  CHECK(first == volum::textfit::Fit(name, 105.f, CountingMeasure{}));
+
+  // Every later frame with the same row: no measuring at all.
+  for (int frame = 0; frame < 100; ++frame)
+    CHECK(memo.Get(name, Style(105.f), m) == first);
+  CHECK(m.calls == measuredOnce);
+
+  // Hover narrows the amp line: new width, new fit.
+  const std::string narrower = memo.Get(name, Style(61.f), m);
+  CHECK(m.calls > measuredOnce);
+  CHECK(narrower == volum::textfit::Fit(name, 61.f, CountingMeasure{}));
+
+  auto remeasures = [&](const char* s, const volum::textfit::FitStyle& st) {
+    const int before = m.calls;
+    const std::string got = memo.Get(s, st, m);
+    CHECK(got == volum::textfit::Fit(s, st.maxW, CountingMeasure{}));
+    return m.calls > before;
+  };
+  CHECK(remeasures(name, Style(105.f))); // width back
+  CHECK_FALSE(remeasures(name, Style(105.f))); // unchanged
+  CHECK(remeasures("Lead Boost", Style(105.f))); // renamed in SetData
+  CHECK(remeasures("Lead Boost", Style(105.f, 18.f))); // font size
+  CHECK(remeasures("Lead Boost", Style(105.f, 18.f, "Michroma"))); // font face
+  CHECK(remeasures("Lead Boost", Style(105.f, 18.f, "Michroma", 2.f))); // rescale
+  auto aligned = Style(105.f, 18.f, "Michroma", 2.f);
+  aligned.align = 2;
+  CHECK(remeasures("Lead Boost", aligned));
+  CHECK_FALSE(remeasures("Lead Boost", aligned));
+  memo.Reset();
+  CHECK(remeasures("Lead Boost", aligned)); // OnRescale reset
+}
+
+TEST_CASE("Text fit memo: PLAY rail rows draw through the memo and rescale resets it")
+{
+  const std::string play = ReadPluginText("VoLumPlaySurface.h");
+  const std::string helpers = ReadPluginText("VoLumColorHelpers.h");
+  CHECK(play.find("FitTextToWidth(memo, g, t, s, r.W())") != std::string::npos);
+  CHECK(play.find("rowText.name.Reset();") != std::string::npos);
+  CHECK(play.find("rowText.amp.Reset();") != std::string::npos);
+  CHECK(play.find("const std::string fitted = FitTextToWidth(g, t, s, r.W());") == std::string::npos);
+  // The memo key carries the backing scale, so a DPI change re-measures even
+  // before OnRescale runs.
+  CHECK(helpers.find("style.scale = g.GetTotalScale();") != std::string::npos);
+}
+
+TEST_CASE("Text wrap keeps a long confirmation body inside the dialog width")
+{
+  const std::string message =
+    "Delete IR \"Mesa OS\"? It is convolving MAIN right now. MAIN will fall back to My Custom Amp's baked cab. "
+    "This cannot be undone.";
+  CountingMeasure measure;
+  const auto lines = volum::textfit::WrapWords(message, 210.f, measure);
+
+  REQUIRE(lines.size() >= 3);
+  std::string rebuilt;
+  for (const auto& line : lines)
+  {
+    CHECK(6.f * static_cast<float>(line.size()) <= 210.f);
+    if (!rebuilt.empty())
+      rebuilt += " ";
+    rebuilt += line;
+  }
+  CHECK(rebuilt == message);
+}
+
+TEST_CASE("Text wrap: overflow past the message area ends the last visible line in an ellipsis")
+{
+  std::string message;
+  for (int i = 0; i < 40; ++i)
+    message += "word" + std::to_string(i) + " ";
+  message += "end.";
+  CountingMeasure measure;
+  const std::string ellipsis = "\xE2\x80\xA6";
+
+  const auto lines = volum::textfit::WrapWordsClamped(message, 210.f, 6, measure);
+  REQUIRE(lines.size() == 6);
+  CHECK(lines.back().size() >= ellipsis.size());
+  CHECK(lines.back().compare(lines.back().size() - ellipsis.size(), ellipsis.size(), ellipsis) == 0);
+  for (const auto& line : lines)
+    CHECK(6.f * static_cast<float>(line.size()) <= 210.f);
+  // The visible lines are the start of the message, in order.
+  CHECK(lines.front().rfind("word0 word1", 0) == 0);
+
+  // Copy that fits is returned whole, with no ellipsis.
+  const auto fits = volum::textfit::WrapWordsClamped("Delete IR \"A\"? This cannot be undone.", 210.f, 6, measure);
+  CHECK(fits.size() <= 6);
+  for (const auto& line : fits)
+    CHECK(line.find(ellipsis) == std::string::npos);
+  // Several lines are the point: one clipped line is the regression this guards.
+  CHECK(volum::textfit::WrapWordsClamped(message, 210.f, 6, measure).size() > 1);
+}

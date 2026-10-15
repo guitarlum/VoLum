@@ -3,5 +3,7 @@
 # git apply matches context lines byte for byte, so a patch checked out with CRLF
 # on Windows stops applying to the LF sources it was generated from.
 *.patch text eol=lf
+# Parallel branches all add their line at the top; keep every side's lines.
+NeuralAmpModeler/installer/changelog.txt merge=union
 *.ps1 text eol=crlf
 *.bat text eol=crlf
