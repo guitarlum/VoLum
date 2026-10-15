@@ -193,3 +193,13 @@ TEST_CASE("macOS CI keeps the pluginval editor run off the macOS 26 GPU")
   CHECK(retry.find("git submodule update --init --recursive") != std::string::npos);
   CHECK(retry.find("for attempt in") != std::string::npos);
 }
+
+TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
+{
+  // The build steps are gated on matrix.os. Pinning the runner to macos-15
+  // without the same gate skips the Mac build and still reports success.
+  const std::string workflow = ReadRepoFile(".github/workflows/release-native.yml");
+  CHECK(workflow.find("matrix.os == 'macos-15'") != std::string::npos);
+  CHECK(workflow.find("matrix.os == 'macos-latest'") == std::string::npos);
+  CHECK(workflow.find("rebuild_assets") != std::string::npos);
+}
