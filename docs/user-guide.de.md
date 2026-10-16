@@ -324,7 +324,7 @@ Ein eigenes IR ersetzt das Cab, deshalb braucht der aktuelle Kanal ein No-Cab-Ca
 2. Klicke **Manage custom IRs...**, dann **+ Import IR (.wav)**.
 3. Wähle das IR im **Custom IR**-Menü.
 
-VoLum prüft vor dem Kopieren in die Bibliothek, ob der Import eine lesbare WAV-Datei ist.
+VoLum prüft vor dem Kopieren in die Bibliothek, ob der Import eine lesbare WAV-Datei ist. Du kannst mehrere Dateien auf einmal wählen. Lange Dateinamen werden in der Mitte gekürzt, damit `Cab_..._1` und `Cab_..._2` unterscheidbar bleiben; ein schon vergebener Name bekommt eine Nummer, und übersprungen wird nur eine Datei, die schon in deiner Bibliothek ist. Eigene Pedale funktionieren genauso.
 
 Zum Anpassen eines IRs klickst du das **Zahnrad** in seiner Zeile unter **Manage custom IRs**: **Level**, **Low cut** und **High cut**.
 

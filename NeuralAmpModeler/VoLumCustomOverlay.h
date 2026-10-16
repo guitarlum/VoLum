@@ -7,6 +7,8 @@
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomContentApi.h"
 #include "VoLumFractalArt.h"
+#include "VoLumHarnessEnv.h"
+#include "VoLumImportNaming.h"
 #include "VoLumPrePostLock.h"
 #include "VoLumIrFileGuard.h"
 #include "VoLumOverlayActionCodes.h"
@@ -734,33 +736,51 @@ private:
     const char* ext = (mManageKind == ManageKind::IR) ? "wav" : "nam";
     WDL_String path;
     std::vector<WDL_String> files;
-    // The macOS panel swallows the mouse-up, which would leave this press captured.
-    ui->ReleaseMouseCapture();
-    ui->PromptForFiles(path, files, ext); // multi-select; each entry is a full path
+    const auto harnessPaths = volum::SplitHarnessPaths(volum::HarnessEnv("VOLUM_IMPORT_OPEN_PATHS"));
+    if (!harnessPaths.empty())
+    {
+      for (const auto& p : harnessPaths)
+        files.emplace_back(p.c_str());
+    }
+    else
+    {
+      // The macOS panel swallows the mouse-up, which would leave this press captured.
+      ui->ReleaseMouseCapture();
+      ui->PromptForFiles(path, files, ext); // multi-select; each entry is a full path
+    }
     if (files.empty())
       return;
 
-    // Each file's display name defaults to its filename (minus extension); the
-    // exact filename is stored alongside. Duplicate names (case-insensitive) are
-    // skipped - including duplicates within the same batch, since the library
-    // grows as we add - and reported together.
-    std::vector<std::string> skipped;
+    // Each file's display name defaults to its filename (minus extension), cut in
+    // the middle when long; the exact filename is stored alongside. A name already
+    // in the list (case-insensitive) gets a number - within the same batch too,
+    // since the library grows as we add. Only a byte-identical file is skipped.
+    std::vector<std::pair<std::string, std::string>> renamed; // wanted, given
+    std::vector<std::pair<std::string, std::string>> duplicates; // file, library name
     std::vector<std::string> tooLarge;
     std::vector<std::string> failed;
     std::vector<std::pair<std::string, std::string>> invalidIrs; // name, reason
+    bool pedalSlotsFull = false;
     int added = 0;
     for (const auto& fn : files)
     {
       if (!fn.GetLength())
         continue;
-      // Cap the imported display name (the filename base) so a very long file
-      // name does not overflow the IR/pedal list and chip labels.
-      const std::string base = volum::custom::ClampName(BaseName(fn.Get()), volum::custom::kMaxCustomNameLen);
-      if (base.empty())
+      const std::string wanted = volum::custom::MiddleEllipsize(BaseName(fn.Get()), volum::custom::kMaxCustomNameLen);
+      if (wanted.empty())
         continue;
-      if (NameTaken(base, -1))
+      const std::string identical = IdenticalLibraryItemName(fn.Get());
+      if (!identical.empty())
       {
-        skipped.push_back(base);
+        duplicates.emplace_back(wanted, identical);
+        continue;
+      }
+      const std::string base =
+        volum::custom::UniqueImportName(BaseName(fn.Get()), volum::custom::kMaxCustomNameLen,
+                                        [this](const std::string& n) { return NameTaken(n, -1); });
+      if (base.empty())
+      {
+        failed.push_back(wanted);
         continue;
       }
       // Parse IRs before copying them into the owned library. The same WAV loader
@@ -820,12 +840,14 @@ private:
         {
           store.RemoveStoredFile(rel);
           if (slotsFull)
-            mError = "Custom pedal slots are full - delete a pedal first.";
+            pedalSlotsFull = true;
           else
             failed.push_back(base);
           continue;
         }
       }
+      if (base != wanted)
+        renamed.emplace_back(wanted, base);
       ++added;
     }
 
@@ -838,13 +860,12 @@ private:
     if (!failed.empty())
       mError = failed.size() == 1 ? ("\"" + failed.front() + "\" could not be added to your library.")
                                   : (std::to_string(failed.size()) + " files could not be added to your library.");
+    else if (pedalSlotsFull)
+      mError = "Custom pedal slots are full - delete a pedal first.";
     else if (!tooLarge.empty() || !invalidIrs.empty())
       mError = volum::IrImportRejectionSummary(tooLarge, invalidIrs);
-    else if (!skipped.empty())
-      mError = skipped.size() == 1 ? ("\"" + skipped.front() + "\" already exists - skipped.")
-                                   : (std::to_string(skipped.size()) + " names already existed - skipped.");
     else
-      mError.clear();
+      mError = volum::custom::ImportOutcomeSummary(renamed, duplicates);
     SetDirty(false);
   }
 
@@ -1527,6 +1548,28 @@ private:
       case ManageKind::Pedals: return PedalNameExists(name, exceptIdx);
       default: return NameExistsCI(PresetsForOwner(PresetOwnerKey()), name, exceptIdx);
     }
+  }
+
+  // Name of the IR / pedal in the library whose stored file has the same bytes as
+  // `src`, or "" when there is none.
+  std::string IdenticalLibraryItemName(const char* src) const
+  {
+    auto& store = volum::content::GlobalContentStore();
+    std::vector<std::filesystem::path> stored;
+    std::vector<std::string> names;
+    const auto collect = [&](const auto& items) {
+      for (const auto& it : items)
+      {
+        stored.push_back(store.ResolveStored(it.file));
+        names.push_back(it.name);
+      }
+    };
+    if (mManageKind == ManageKind::IR)
+      collect(store.reg().irs);
+    else if (mManageKind == ManageKind::Pedals)
+      collect(store.reg().pedals);
+    const int at = volum::custom::FindIdenticalFile(volum::content::PathFromUtf8(src), stored);
+    return at < 0 ? std::string() : names[(size_t)at];
   }
 
   void SetNameError(const std::string& name)
