@@ -193,3 +193,82 @@ TEST_CASE("macOS CI keeps the pluginval editor run off the macOS 26 GPU")
   CHECK(retry.find("git submodule update --init --recursive") != std::string::npos);
   CHECK(retry.find("for attempt in") != std::string::npos);
 }
+
+TEST_CASE("Metal NanoVG flush never hands the paravirtual GPU an empty command buffer")
+{
+  // macOS VMs (CI, and users running VoLum in one) abort in
+  // AppleParavirtCommandBuffer endCurrentChunk when a command buffer or encoder
+  // ends with no work. The flush used to enqueue its buffer before knowing it had
+  // a target and return without committing it when no drawable came back.
+  const std::string mtl = ReadRepoFile("iPlug2/Dependencies/IGraphics/MetalNanoVG/src/nanovg_mtl.m");
+  const auto begin = mtl.find("- (void)renderFlush {");
+  REQUIRE(begin != std::string::npos);
+  const auto end = mtl.find("- (int)renderGetTextureSizeForImage", begin);
+  REQUIRE(end != std::string::npos);
+  const std::string flush = mtl.substr(begin, end - begin);
+
+  CHECK(flush.find("[commandBuffer enqueue]") == std::string::npos);
+  CHECK(flush.find("_buffers->ncalls == 0 && !_clearBufferOnFlush") != std::string::npos);
+  const auto drawable = flush.find("_metalLayer.nextDrawable");
+  const auto create = flush.find("[_commandQueue commandBuffer]");
+  REQUIRE(drawable != std::string::npos);
+  REQUIRE(create != std::string::npos);
+  CHECK(drawable < create);
+  // Every early return before the commit gives the frame slot back.
+  const auto commit = flush.find("[commandBuffer commit]");
+  REQUIRE(commit != std::string::npos);
+  size_t returns = 0, cancels = 0;
+  for (auto p = flush.find("return;"); p != std::string::npos && p < commit; p = flush.find("return;", p + 1))
+    ++returns;
+  for (auto p = flush.find("[self renderCancel];"); p != std::string::npos && p < commit;
+       p = flush.find("[self renderCancel];", p + 1))
+    ++cancels;
+  CHECK(returns > 0);
+  CHECK(returns == cancels);
+  // The per-frame sync was an empty blit on unified memory; readback syncs only
+  // where a discrete GPU needs it.
+  CHECK(flush.find("synchronizeResource") == std::string::npos);
+  const auto read = mtl.find("void mnvgReadPixels(");
+  REQUIRE(read != std::string::npos);
+  const std::string readBody = mtl.substr(read, mtl.find("enum MNVGTarget mnvgTarget()", read) - read);
+  CHECK(readBody.find("!mtl.metalLayer.device.hasUnifiedMemory") != std::string::npos);
+  CHECK(readBody.find("synchronizeResource") != std::string::npos);
+
+  const auto cancel = mtl.find("- (void)renderCancel {");
+  REQUIRE(cancel != std::string::npos);
+  CHECK(mtl.substr(cancel, 200).find("_clearBufferOnFlush = NO;") != std::string::npos);
+}
+
+TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step exit")
+{
+  // pluginval.exe is a GUI-subsystem binary: run with & PowerShell does not
+  // wait, and CI reported success with the log cut off at the Editor test.
+  const std::string script = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-win.ps1");
+  CHECK(script.find("& $pluginval.FullName") == std::string::npos);
+  CHECK(script.find("Start-Process -FilePath $pluginval.FullName") != std::string::npos);
+  CHECK(script.find("-Wait -PassThru") != std::string::npos);
+  CHECK(script.find("Completed tests in pluginval / Editor Automation") != std::string::npos);
+  CHECK(script.find("^SUCCESS") != std::string::npos);
+  CHECK(script.find("--validate-in-process") != std::string::npos);
+  CHECK(script.find("--skip-gui-tests") == std::string::npos);
+
+  // The runner has no OpenGL 2 driver; the GL2 editor needs Mesa first.
+  const std::string workflow = ReadRepoFile(".github/workflows/ci.yml");
+  const auto job = workflow.find("name: Windows (tests + installer + portable zip + plugin validation)");
+  REQUIRE(job != std::string::npos);
+  const auto mesa = workflow.find("ssciwr/setup-mesa-dist-win", job);
+  const auto validate = workflow.find("validate-vst3-win.ps1", job);
+  REQUIRE(validate != std::string::npos);
+  CHECK(mesa < validate);
+}
+
+TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
+{
+  // The build steps are gated on matrix.os. Pinning the runner to macos-15
+  // without the same gate skips the Mac build and still reports success.
+  const std::string workflow = ReadRepoFile(".github/workflows/release-native.yml");
+  CHECK(workflow.find("matrix.os == 'macos-15'") != std::string::npos);
+  CHECK(workflow.find("matrix.os == 'macos-latest'") == std::string::npos);
+  CHECK(workflow.find("rebuild_assets") != std::string::npos);
+  CHECK(workflow.find("[{\"os\":\"macos-15\",\"build_dir\":\"build-mac\"}]") != std::string::npos);
+}

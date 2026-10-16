@@ -12,17 +12,17 @@ Tick `[x]` when it works. Anything odd: one line under Findings, and keep going.
 
 ## Release blockers (5 min)
 
-- [ ] **Enable GitHub Pages (Q-07).** Repo Settings > Pages > Source: "GitHub Actions".
-  Without it the appcast deploy fails and every 1.3.0 user sees "Could not check for
-  updates".
+- [x] **Enable GitHub Pages (Q-07).** Done: Pages builds from workflows and the
+  `github-pages` environment accepts `main` and `v*` tags.
 - [ ] **Skim the defaults in `.scratch/1.3.0-hunt/questions.md` (Q-01..Q-18).** Every one
   shipped with the default named there; only reply on the ones you disagree with.
 
 ## Mac pass (about 35 min)
 
-Build: in Safari on the MacBook open
-[CI run 38013121147](https://github.com/guitarlum/VoLum/actions/runs/38013121147) (final
-`dev`), download the `VoLum-mac` artifact, unzip it, and use the `...-macos-installer.dmg`.
+Build: the release asset `VoLum-v1.3.0-macos-installer.dmg` from the
+[v1.3.0 release](https://github.com/guitarlum/VoLum/releases/tag/v1.3.0) (while it is a
+draft, open it from the Releases page signed in). Do not use an older CI artifact: those
+predate the audio-device fix.
 Hardware: HX Stomp XL over one USB cable as audio interface and MIDI. On the HX, Global
 Settings > MIDI/Tempo: MIDI Over USB On, PC Send On, channel 1.
 
@@ -39,15 +39,18 @@ Settings > MIDI/Tempo: MIDI Over USB On, PC Send On, channel 1.
   Amp in PLAY (Tab): both lanes audible, no click when toggling.
 - [ ] **4. Retina look.** Glance at BUILD, PLAY (art moves while you play, P toggles),
   Settings SIGNAL/MIDI/SYSTEM, the MIDI footswitch board, a Dual Amp lane. Expect: crisp
-  text, nothing clipped. Screenshot anything odd.
+  text, nothing clipped. Screenshot anything odd. Then minimise the window, switch to
+  another Space and back, and close and reopen the AU editor a few times: the editor redraws
+  every time, never freezes or goes blank (1.3.0 changed how the Metal renderer skips frames
+  it cannot draw).
 - [ ] **5. Standalone MIDI with the HX.** Settings > MIDI: assign 3 Sounds to programs 0-2.
   Turn the HX preset knob through 01A/01B/01C: VoLum follows, the LIVE lamp moves. "One
   channel" = 2: VoLum ignores the HX; set it back to All. Pull the USB cable while running,
   replug, reselect the device: no crash. Quit: the app exits.
 - [ ] **6. AU in Reaper with the HX (quick).** VoLum (AU) on a track with HX audio in and HX
   MIDI as track input. HX presets switch the Sound. Save, quit Reaper, reopen: same Sound.
-- [ ] **7. Small Mac-only paths.** Settings > SYSTEM > Check now gives a clear answer (needs
-  Pages from the blocker above). About > "Read the manual" opens the browser.
+- [ ] **7. Small Mac-only paths.** Settings > SYSTEM > Check now gives a clear answer
+  (before publish: "Could not check"; after publish: up to date). About > "Read the manual" opens the browser.
 - [ ] **8. Pack from Windows to Mac.** Copy `presetSounds.volumpack` to the Mac, Settings >
   SYSTEM > Import Pack. Expect: all presets, with names and art.
 
@@ -57,14 +60,20 @@ The overnight lane could not elevate, so the real installer was never run over a
 version. This laptop still has 1.2.1 installed (backup:
 `.scratch/1.3.0-hunt/l6/backup-initial-121/`).
 
-- [ ] **1. Upgrade install.** Download `VoLum-windows` from the CI run above, run
-  `VoLum-Setup.exe` (accept UAC). Expect: no error, `C:\Program Files\VoLum\VoLum.exe` and
+- [ ] **1. Upgrade install.** Download the release asset `VoLum-v1.3.0-windows-setup.exe`
+  from the v1.3.0 draft and run it (accept UAC). Expect: no error, `C:\Program Files\VoLum\VoLum.exe` and
   the VST3 report 1.3.0, one "VoLum" entry in Apps (no duplicate 1.2.1 entry).
 - [ ] **2. Your normal library.** Launch from the Start menu. Your custom amps, presets and
   settings are intact; PLAY is not re-filled (your test builds already created a MIDI map).
 - [ ] **3. Reaper VST3 project from 1.2.x.** Open an existing project that uses VoLum: same
   Sound and knobs as before.
-- [ ] **4. (Optional) Uninstall and reinstall.** Apps > VoLum > Uninstall: program and VST3
+- [ ] **4. Portable next to the install (the 1.2.3 placeholder-pedal report).** Unzip
+  `VoLum-v1.3.0-windows-portable.zip` to a folder of its own and run its `VoLum.exe` while
+  the installed 1.3.0 is still there. Open the PRE pedal menu. Expect: the real factory
+  pedals (no "Klon - Gold Horse", "TS - Green Drive" or the other old placeholders), and
+  a pedal you switch on is audible. `%LOCALAPPDATA%\VoLum\volum.log` has a
+  `[startup] rigs root:` line pointing at the portable's own `VoLumRigs`.
+- [ ] **5. (Optional) Uninstall and reinstall.** Apps > VoLum > Uninstall: program and VST3
   gone, your library in `%LOCALAPPDATA%\VoLum` stays. Reinstall to keep using it.
 
 ## Findings
