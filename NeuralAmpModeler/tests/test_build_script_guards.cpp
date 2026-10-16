@@ -225,7 +225,18 @@ TEST_CASE("Metal NanoVG flush never hands the paravirtual GPU an empty command b
     ++cancels;
   CHECK(returns > 0);
   CHECK(returns == cancels);
-  CHECK(flush.find("colorTexture.storageMode == MTLStorageModeManaged") != std::string::npos);
+  // The per-frame sync was an empty blit on unified memory; readback syncs only
+  // where a discrete GPU needs it.
+  CHECK(flush.find("synchronizeResource") == std::string::npos);
+  const auto read = mtl.find("void mnvgReadPixels(");
+  REQUIRE(read != std::string::npos);
+  const std::string readBody = mtl.substr(read, mtl.find("enum MNVGTarget mnvgTarget()", read) - read);
+  CHECK(readBody.find("!mtl.metalLayer.device.hasUnifiedMemory") != std::string::npos);
+  CHECK(readBody.find("synchronizeResource") != std::string::npos);
+
+  const auto cancel = mtl.find("- (void)renderCancel {");
+  REQUIRE(cancel != std::string::npos);
+  CHECK(mtl.substr(cancel, 200).find("_clearBufferOnFlush = NO;") != std::string::npos);
 }
 
 TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step exit")

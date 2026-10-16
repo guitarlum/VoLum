@@ -63,8 +63,11 @@ git -C iPlug2 status --short
 - `03f58f630 MetalNanoVG: never leave the paravirtual GPU an empty command
   buffer` (branch `volum/metal-flush-hardening`) — The Metal flush resolves its
   target before creating a command buffer, commits every buffer it creates,
-  skips frames with nothing to draw, and only synchronizes managed textures.
-  macOS VMs aborted in `AppleParavirtCommandBuffer endCurrentChunk` without it.
+  and skips frames with nothing to draw. macOS VMs aborted in
+  `AppleParavirtCommandBuffer endCurrentChunk` without it.
+- `b98aacb44 MetalNanoVG: drop the per-frame sync blit; drain frames before
+  teardown` (same branch) — Pixel readback syncs managed textures itself, and
+  only on a discrete GPU; closing the editor waits for frames in flight.
 
 ## Working-tree patches
 
