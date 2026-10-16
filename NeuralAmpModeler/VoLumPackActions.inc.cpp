@@ -6,26 +6,7 @@
 //
 // Tail-included by NeuralAmpModeler.cpp.
 
-namespace
-{
-// Test harness only: VOLUM_PACK_SAVE_PATH / VOLUM_PACK_OPEN_PATH stand in for the
-// native Save / Open dialog, which nothing can drive on a locked workstation
-// (e2e-standalone-win.ps1 -Scenario pack). Unset or empty, the dialog runs.
-std::string VolumPackDialogOverride(const char* name)
-{
-#if defined(OS_WIN)
-  const std::wstring wideName(name, name + std::strlen(name));
-  wchar_t buf[2048] = {};
-  const DWORD len = GetEnvironmentVariableW(wideName.c_str(), buf, 2048);
-  if (len == 0 || len >= 2048)
-    return {};
-  return volum::content::PathToUtf8(std::filesystem::path(buf));
-#else
-  const char* v = std::getenv(name);
-  return v ? std::string(v) : std::string();
-#endif
-}
-} // namespace
+#include "VoLumHarnessEnv.h"
 
 std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelection& selection)
 {
@@ -64,7 +45,7 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
 #endif
 
   WDL_String fileName, dir;
-  const std::string harnessPath = VolumPackDialogOverride("VOLUM_PACK_SAVE_PATH");
+  const std::string harnessPath = volum::HarnessEnv("VOLUM_PACK_SAVE_PATH");
   if (!harnessPath.empty())
     fileName.Set(harnessPath.c_str());
   else
@@ -98,7 +79,7 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
 volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
 {
   WDL_String fileName, dir;
-  const std::string harnessPath = VolumPackDialogOverride("VOLUM_PACK_OPEN_PATH");
+  const std::string harnessPath = volum::HarnessEnv("VOLUM_PACK_OPEN_PATH");
   if (!harnessPath.empty())
     fileName.Set(harnessPath.c_str());
   else
