@@ -82,34 +82,8 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
   mVolumPreCaptureShortLabels.clear();
   mVolumPreCaptureGroups.clear();
 
-  auto addMockCaptures = [&]() {
-    struct MockCapture
-    {
-      const char* label;
-      const char* shortLabel;
-      volum::PrePedalCaptureGroup group;
-    };
-    const MockCapture captures[] = {
-      {"Klon - Gold Horse", "Klon", volum::PrePedalCaptureGroup::Klon},
-      {"TS - Green Drive", "TS", volum::PrePedalCaptureGroup::TsBoost},
-      {"Fuzz - Velvet Doom", "Fuzz", volum::PrePedalCaptureGroup::Fuzz},
-      {"Nuke - Petty Push", "Nuke", volum::PrePedalCaptureGroup::Fuzz},
-      {"Boost - Clean Lift", "Boost", volum::PrePedalCaptureGroup::TsBoost},
-    };
-    for (const auto& capture : captures)
-    {
-      mVolumPreCaptureFiles.emplace_back();
-      mVolumPreCaptureLabels.emplace_back(capture.label);
-      mVolumPreCaptureShortLabels.emplace_back(capture.shortLabel);
-      mVolumPreCaptureGroups.emplace_back(capture.group);
-    }
-  };
-
   if (mVolumRigsRoot.empty())
-  {
-    addMockCaptures();
     return;
-  }
 
   const auto captures = volum::DiscoverPrePedalCaptures(volum::content::PathFromUtf8(mVolumRigsRoot));
   for (const auto& capture : captures)
@@ -119,9 +93,6 @@ void NeuralAmpModeler::_VolumRefreshPrePedalCaptures()
     mVolumPreCaptureShortLabels.push_back(capture.shortLabel);
     mVolumPreCaptureGroups.push_back(capture.group);
   }
-
-  if (mVolumPreCaptureLabels.empty())
-    addMockCaptures();
 }
 
 const char* NeuralAmpModeler::_VolumGetPreCaptureLabel(int captureIdx) const
