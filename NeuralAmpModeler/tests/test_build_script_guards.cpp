@@ -194,6 +194,40 @@ TEST_CASE("macOS CI keeps the pluginval editor run off the macOS 26 GPU")
   CHECK(retry.find("for attempt in") != std::string::npos);
 }
 
+TEST_CASE("Metal NanoVG flush never hands the paravirtual GPU an empty command buffer")
+{
+  // macOS VMs (CI, and users running VoLum in one) abort in
+  // AppleParavirtCommandBuffer endCurrentChunk when a command buffer or encoder
+  // ends with no work. The flush used to enqueue its buffer before knowing it had
+  // a target and return without committing it when no drawable came back.
+  const std::string mtl = ReadRepoFile("iPlug2/Dependencies/IGraphics/MetalNanoVG/src/nanovg_mtl.m");
+  const auto begin = mtl.find("- (void)renderFlush {");
+  REQUIRE(begin != std::string::npos);
+  const auto end = mtl.find("- (int)renderGetTextureSizeForImage", begin);
+  REQUIRE(end != std::string::npos);
+  const std::string flush = mtl.substr(begin, end - begin);
+
+  CHECK(flush.find("[commandBuffer enqueue]") == std::string::npos);
+  CHECK(flush.find("_buffers->ncalls == 0 && !_clearBufferOnFlush") != std::string::npos);
+  const auto drawable = flush.find("_metalLayer.nextDrawable");
+  const auto create = flush.find("[_commandQueue commandBuffer]");
+  REQUIRE(drawable != std::string::npos);
+  REQUIRE(create != std::string::npos);
+  CHECK(drawable < create);
+  // Every early return before the commit gives the frame slot back.
+  const auto commit = flush.find("[commandBuffer commit]");
+  REQUIRE(commit != std::string::npos);
+  size_t returns = 0, cancels = 0;
+  for (auto p = flush.find("return;"); p != std::string::npos && p < commit; p = flush.find("return;", p + 1))
+    ++returns;
+  for (auto p = flush.find("[self renderCancel];"); p != std::string::npos && p < commit;
+       p = flush.find("[self renderCancel];", p + 1))
+    ++cancels;
+  CHECK(returns > 0);
+  CHECK(returns == cancels);
+  CHECK(flush.find("colorTexture.storageMode == MTLStorageModeManaged") != std::string::npos);
+}
+
 TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step exit")
 {
   // pluginval.exe is a GUI-subsystem binary: run with & PowerShell does not

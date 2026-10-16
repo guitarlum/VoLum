@@ -60,6 +60,11 @@ git -C iPlug2 status --short
   and bounds plugin teardown with a watchdog of its own. Also folds in the
   former working-tree patch exposing `GetIOBufferSize()` and
   `GetStreamLatencyFrames()`.
+- `03f58f630 MetalNanoVG: never leave the paravirtual GPU an empty command
+  buffer` (branch `volum/metal-flush-hardening`) — The Metal flush resolves its
+  target before creating a command buffer, commits every buffer it creates,
+  skips frames with nothing to draw, and only synchronizes managed textures.
+  macOS VMs aborted in `AppleParavirtCommandBuffer endCurrentChunk` without it.
 
 ## Working-tree patches
 
