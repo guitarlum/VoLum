@@ -515,6 +515,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     auto root = volum::FindRigsRootDirectory();
     if (!root.empty())
       mVolumRigsRoot = volum::content::PathToUtf8(root);
+    VOLUM_LOG("startup", mVolumRigsRoot.empty() ? std::string("rigs root: none found")
+                                                : "rigs root: " + mVolumRigsRoot
+                                                    + (volum::IsCompleteRigsRoot(root) ? "" : " (no pedal captures)"));
     mVolumFactoryPresets = volum::FactoryPresetsOrFallback(volum::LoadFactoryPresets(volum::FindFactoryPresetsFile()));
     // 1.2.0: bind + load the all-format custom-content library (F5-F8). The base
     // dir is VoLum-owned and writable from standalone/VST3/AU; fall back to a

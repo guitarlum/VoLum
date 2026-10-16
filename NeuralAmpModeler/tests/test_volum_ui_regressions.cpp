@@ -2813,6 +2813,12 @@ TEST_CASE("Custom NAM save and async load failures cannot masquerade as success"
   // boundary. Reconstructing with path(std::string) invokes the Windows ANSI
   // code page and can recreate the original failure under a Unicode profile.
   RequireContains(source, "mVolumRigsRoot = volum::content::PathToUtf8(root);");
+  // A rigs tree without pedal captures used to fill the PRE menu with named
+  // placeholders that load nothing ("Klon - Gold Horse"); users switched them on
+  // and heard no change. An empty tree lists EMPTY and the custom pedals only.
+  RequireDoesNotContain(source, "Gold Horse");
+  RequireDoesNotContain(source, "addMockCaptures");
+  RequireContains(source, "\"rigs root: \"");
   RequireContains(source, "std::filesystem::is_regular_file(volum::content::PathFromUtf8(fileToLoad)");
   RequireContains(overlay, "IrFileValidForImport(fn.Get(), why)");
   RequireDoesNotContain(source, "std::filesystem::path(fileToLoad)");

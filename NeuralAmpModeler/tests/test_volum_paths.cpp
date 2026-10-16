@@ -36,6 +36,48 @@ TEST_CASE("FindRigsRootDirectory returns a rigs tree in typical dev/repo layout"
   REQUIRE(fs::is_directory(root / "Ampete One"));
 }
 
+TEST_CASE("Rigs root skips a tree without pedal captures for a complete one")
+{
+  // A leftover or older install (amps, no PrePedals captures) used to win just by
+  // existing; the pedal menu then had nothing real to load.
+  namespace fs = std::filesystem;
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_pick_rigs_root";
+  fs::remove_all(tmp);
+  const fs::path stale = tmp / "stale" / "VoLumRigs";
+  const fs::path portable = tmp / "portable" / "VoLumRigs";
+  fs::create_directories(stale / "Ampete One");
+  fs::create_directories(stale / "PrePedals");
+  fs::create_directories(portable / "Ampete One");
+  fs::create_directories(portable / "PrePedals");
+  std::ofstream((portable / "PrePedals" / "FX-Minotaur-Klon-1.nam").string()).close();
+
+  std::error_code ec;
+  CHECK_FALSE(volum::IsCompleteRigsRoot(stale));
+  CHECK(volum::IsCompleteRigsRoot(portable));
+  CHECK(volum::PickRigsRoot({tmp / "nowhere", stale, portable}) == fs::weakly_canonical(portable, ec));
+
+  // Nothing complete: the first existing tree still serves its amps.
+  CHECK(volum::PickRigsRoot({tmp / "nowhere", stale}) == fs::weakly_canonical(stale, ec));
+  CHECK(volum::PickRigsRoot({tmp / "nowhere"}).empty());
+
+  // A factory bank alone also marks VoLum's own tree.
+  std::ofstream((stale / "factory-presets.json").string()).close();
+  CHECK(volum::IsCompleteRigsRoot(stale));
+  fs::remove_all(tmp);
+}
+
+TEST_CASE("Windows rigs candidates put the tree beside the binary before the registry")
+{
+  namespace fs = std::filesystem;
+  const fs::path moduleDir = fs::path("D:") / "Portable" / "VoLum";
+  const fs::path registryRoot = fs::path("C:") / "Program Files" / "VoLum" / "VoLumRigs";
+  const auto candidates = volum::WindowsRigsCandidates(moduleDir, registryRoot);
+  REQUIRE(candidates.size() >= 3);
+  CHECK(candidates.front() == moduleDir / "VoLumRigs");
+  CHECK(candidates.back() == registryRoot);
+  CHECK(volum::WindowsRigsCandidates({}, registryRoot) == std::vector<fs::path>{registryRoot});
+}
+
 TEST_CASE("Factory presets come from the first candidate tree that holds the file")
 {
   namespace fs = std::filesystem;

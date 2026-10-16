@@ -67,19 +67,39 @@ inline std::filesystem::path RegistryRigsRootFromInstaller()
 }
 #endif
 
-// Bundled rigs candidates: registry (installer VST3), then walk up from this module (VST3 DLL or
-// standalone .exe — not the host process), then CWD ./VoLumRigs or ./rigs (dev uses repo rigs/).
-// registryFirst=false moves the Windows registry root behind the module walk.
-inline std::vector<std::filesystem::path> RigsRootCandidates(bool registryFirst = true)
+// Windows order: walk up from the module's folder, then the installer's registry root. The
+// tree beside the binary comes first so a portable build never runs on another install's
+// rigs; the registry root serves the VST3 installed under Common Files.
+inline std::vector<std::filesystem::path> WindowsRigsCandidates(const std::filesystem::path& moduleDir,
+                                                                const std::filesystem::path& registryRoot)
+{
+  namespace fs = std::filesystem;
+  std::vector<fs::path> candidates;
+  if (!moduleDir.empty())
+  {
+    fs::path d = moduleDir;
+    for (int depth = 0; depth < 12; ++depth)
+    {
+      candidates.push_back(d / "VoLumRigs");
+      candidates.push_back(d / "rigs");
+      d = d.parent_path();
+    }
+  }
+  if (!registryRoot.empty())
+    candidates.push_back(registryRoot);
+  return candidates;
+}
+
+// Bundled rigs candidates: the module (VST3 DLL or standalone .exe — not the host process)
+// and, on Windows, the installer's registry root; then CWD ./VoLumRigs or ./rigs (dev uses
+// repo rigs/).
+inline std::vector<std::filesystem::path> RigsRootCandidates()
 {
   namespace fs = std::filesystem;
   std::vector<fs::path> candidates;
 
 #ifdef _WIN32
-  const fs::path regRoot = RegistryRigsRootFromInstaller();
-  if (registryFirst && !regRoot.empty())
-    candidates.push_back(regRoot);
-
+  fs::path moduleDir;
   HMODULE hMod = nullptr;
   if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                          reinterpret_cast<LPCWSTR>(&RigsRootCandidates), &hMod)
@@ -88,20 +108,10 @@ inline std::vector<std::filesystem::path> RigsRootCandidates(bool registryFirst 
     wchar_t module[MAX_PATH];
     const DWORD n = GetModuleFileNameW(hMod, module, MAX_PATH);
     if (n > 0 && n < MAX_PATH)
-    {
-      fs::path d = fs::path(module).parent_path();
-      for (int depth = 0; depth < 12; ++depth)
-      {
-        candidates.push_back(d / "VoLumRigs");
-        candidates.push_back(d / "rigs");
-        d = d.parent_path();
-      }
-    }
+      moduleDir = fs::path(module).parent_path();
   }
-  if (!registryFirst && !regRoot.empty())
-    candidates.push_back(regRoot);
+  candidates = WindowsRigsCandidates(moduleDir, RegistryRigsRootFromInstaller());
 #elif defined(__APPLE__)
-  (void)registryFirst;
   {
     fs::path modulePath;
     Dl_info info{};
@@ -146,17 +156,48 @@ inline std::vector<std::filesystem::path> RigsRootCandidates(bool registryFirst 
   return candidates;
 }
 
-inline std::filesystem::path FindRigsRootDirectory()
+// A tree that holds VoLum's own content, not just a folder with the right name. A
+// leftover or older install without the pedal captures must not shadow a complete one.
+inline bool IsCompleteRigsRoot(const std::filesystem::path& dir)
 {
   namespace fs = std::filesystem;
   std::error_code ec;
-  for (const auto& c : RigsRootCandidates())
+  if (fs::is_regular_file(dir / "factory-presets.json", ec))
+    return true;
+  const fs::path pre = dir / "PrePedals";
+  if (!fs::is_directory(pre, ec))
+    return false;
+  for (const auto& entry : fs::directory_iterator(pre, ec))
+  {
+    if (entry.is_regular_file(ec) && entry.path().extension() == ".nam")
+      return true;
+  }
+  return false;
+}
+
+// First complete candidate; else the first existing directory, so a bare tree still
+// serves its amps.
+inline std::filesystem::path PickRigsRoot(const std::vector<std::filesystem::path>& candidates)
+{
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  fs::path firstDir;
+  for (const auto& c : candidates)
   {
     const auto norm = c.lexically_normal();
-    if (fs::is_directory(norm, ec))
+    if (!fs::is_directory(norm, ec))
+      continue;
+    if (IsCompleteRigsRoot(norm))
       return fs::weakly_canonical(norm, ec);
+    if (firstDir.empty())
+      firstDir = norm;
   }
-  return {};
+  return firstDir.empty() ? fs::path{} : fs::weakly_canonical(firstDir, ec);
+}
+
+inline std::filesystem::path FindRigsRootDirectory()
+{
+  return PickRigsRoot(RigsRootCandidates());
 }
 
 // First `dir / leaf` that is a regular file, in candidate order; empty if none.
@@ -179,7 +220,7 @@ inline std::filesystem::path FirstRigsFile(const std::vector<std::filesystem::pa
 // binary before the registry, so a newer portable or dev build still finds its bank.
 inline std::filesystem::path FindFactoryPresetsFile()
 {
-  auto dirs = RigsRootCandidates(false);
+  auto dirs = RigsRootCandidates();
   if (const auto root = FindRigsRootDirectory(); !root.empty())
     dirs.insert(dirs.begin(), root);
   return FirstRigsFile(dirs, "factory-presets.json");
