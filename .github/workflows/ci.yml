@@ -172,6 +172,12 @@ jobs:
         run: ./NeuralAmpModeler/scripts/verify-packaging-win.ps1
         shell: pwsh
 
+      # The editor is NanoVG on OpenGL 2. The hosted runner only has the GDI
+      # OpenGL 1.1 driver, so pluginval's Editor test crashes without Mesa.
+      - name: Install Mesa software OpenGL (the editor needs OpenGL 2.0)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+        uses: ssciwr/setup-mesa-dist-win@2dfeaebfa514f74c2b8cd8d27108c31486d33e72 # v3.0.0
+
       - name: Validate Windows VST3 with pluginval
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
         run: ./NeuralAmpModeler/scripts/validate-vst3-win.ps1

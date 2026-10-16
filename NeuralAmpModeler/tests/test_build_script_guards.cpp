@@ -206,6 +206,15 @@ TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step 
   CHECK(script.find("^SUCCESS") != std::string::npos);
   CHECK(script.find("--validate-in-process") != std::string::npos);
   CHECK(script.find("--skip-gui-tests") == std::string::npos);
+
+  // The runner has no OpenGL 2 driver; the GL2 editor needs Mesa first.
+  const std::string workflow = ReadRepoFile(".github/workflows/ci.yml");
+  const auto job = workflow.find("name: Windows (tests + installer + portable zip + plugin validation)");
+  REQUIRE(job != std::string::npos);
+  const auto mesa = workflow.find("ssciwr/setup-mesa-dist-win", job);
+  const auto validate = workflow.find("validate-vst3-win.ps1", job);
+  REQUIRE(validate != std::string::npos);
+  CHECK(mesa < validate);
 }
 
 TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
