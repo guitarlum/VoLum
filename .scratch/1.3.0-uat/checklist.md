@@ -39,7 +39,10 @@ Settings > MIDI/Tempo: MIDI Over USB On, PC Send On, channel 1.
   Amp in PLAY (Tab): both lanes audible, no click when toggling.
 - [ ] **4. Retina look.** Glance at BUILD, PLAY (art moves while you play, P toggles),
   Settings SIGNAL/MIDI/SYSTEM, the MIDI footswitch board, a Dual Amp lane. Expect: crisp
-  text, nothing clipped. Screenshot anything odd.
+  text, nothing clipped. Screenshot anything odd. Then minimise the window, switch to
+  another Space and back, and close and reopen the AU editor a few times: the editor redraws
+  every time, never freezes or goes blank (1.3.0 changed how the Metal renderer skips frames
+  it cannot draw).
 - [ ] **5. Standalone MIDI with the HX.** Settings > MIDI: assign 3 Sounds to programs 0-2.
   Turn the HX preset knob through 01A/01B/01C: VoLum follows, the LIVE lamp moves. "One
   channel" = 2: VoLum ignores the HX; set it back to All. Pull the USB cable while running,
@@ -64,7 +67,13 @@ version. This laptop still has 1.2.1 installed (backup:
   settings are intact; PLAY is not re-filled (your test builds already created a MIDI map).
 - [ ] **3. Reaper VST3 project from 1.2.x.** Open an existing project that uses VoLum: same
   Sound and knobs as before.
-- [ ] **4. (Optional) Uninstall and reinstall.** Apps > VoLum > Uninstall: program and VST3
+- [ ] **4. Portable next to the install (the 1.2.3 placeholder-pedal report).** Unzip
+  `VoLum-v1.3.0-windows-portable.zip` to a folder of its own and run its `VoLum.exe` while
+  the installed 1.3.0 is still there. Open the PRE pedal menu. Expect: the real factory
+  pedals (no "Klon - Gold Horse", "TS - Green Drive" or the other old placeholders), and
+  a pedal you switch on is audible. `%LOCALAPPDATA%\VoLum\volum.log` has a
+  `[startup] rigs root:` line pointing at the portable's own `VoLumRigs`.
+- [ ] **5. (Optional) Uninstall and reinstall.** Apps > VoLum > Uninstall: program and VST3
   gone, your library in `%LOCALAPPDATA%\VoLum` stays. Reinstall to keep using it.
 
 ## Findings

@@ -18,14 +18,15 @@
 
 - The Octaver tracks the whole neck: no more wobble on high notes into a high-gain amp.
 - Lighter on CPU and memory, especially with the window closed or several instances running.
-- The standalone holds on to your audio interface and MIDI controller across restarts, unplugs and new devices.
+- The standalone holds on to your audio interface and MIDI controller across restarts, even when it was unplugged at launch or you added new devices.
 - DAW projects reopen on the Sound you saved, and Program Change now reaches the VST3 in REAPER.
+- The portable build uses its own amps and pedals, even on a PC with an older VoLum installed.
 
 ### Get it
 
 - **Windows:** `VoLum-v1.3.0-windows-setup.exe`, or `VoLum-v1.3.0-windows-portable.zip`.
 - **macOS:** `VoLum-v1.3.0-macos-installer.dmg` (standalone, VST3 and AU). VoLum is not notarized yet: if macOS blocks it, go to System Settings > Privacy & Security and click **Open Anyway**.
 
-Your 1.2.x presets, custom amps and settings come along automatically.
+Your 1.2.x presets, custom amps and settings come along automatically. Going back to 1.2.x afterwards loses your PLAY board.
 
 **Full Changelog**: https://github.com/guitarlum/VoLum/compare/v1.2.3...v1.3.0
